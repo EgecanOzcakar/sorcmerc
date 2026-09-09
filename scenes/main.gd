@@ -23,6 +23,7 @@ var _disengage = false
 var _mode := "idle"          # idle | cone | target
 var _tgt_kind := ""          # attack | sacred | shove_* | heal | heal2 | help
 var _cone_level := 1
+var _armed := ""             # a confirm-guarded verb waiting for its second press
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 
@@ -250,7 +251,9 @@ func _end_turn() -> void:
 
 # Verb-level menu. Buttons are numbered [1]..[9]; End turn is [0].
 # Verbs that need a target enter "target" mode — hover a token for its %, click to apply.
-func _build_hero_menu(h) -> void:
+func _build_hero_menu(h, keep_armed := false) -> void:
+	if not keep_armed:
+		_armed = ""
 	_mode = "idle"
 	_tgt_kind = ""
 	var opts: Array = []
@@ -275,12 +278,12 @@ func _build_hero_menu(h) -> void:
 			opts.append(["Sacred Flame", func(): _enter_target(h, "sacred")])
 		if not live_allies.is_empty() and not foes.is_empty():
 			opts.append(["Help an ally", func(): _enter_target(h, "help")])
-		opts.append(["Dodge", func(): _hero_simple(h, "dodge")])
-		opts.append(["Dash (+%d move)" % h.speed, func(): _hero_simple(h, "dash")])
+		opts.append(_confirm_opt(h, "dodge", "Dodge", func(): _hero_simple(h, "dodge")))
+		opts.append(_confirm_opt(h, "dash", "Dash (+%d move)" % h.speed, func(): _hero_simple(h, "dash")))
 
 	if not cb.bonus_used:
 		if h.second_wind != "" and not h.used_second_wind:
-			opts.append(["Second Wind (heal)", func(): _hero_bonus(h, "sw")])
+			opts.append(_confirm_opt(h, "sw", "Second Wind (heal)", func(): _hero_bonus(h, "sw")))
 		if "healing_word" in h.spells and h.slots1 + h.slots2 > 0:
 			if cb.combatants.any(func(a): return a.team == "party" and a != h and not a.is_dead()):
 				opts.append(["Healing Word", func(): _enter_target(h, "heal")])
@@ -294,9 +297,18 @@ func _build_hero_menu(h) -> void:
 	if cb.move_left > 0:
 		opts.append(["Disengage: %s" % ("ON" if _disengage else "off"), func(): _toggle_disengage(h)])
 
-	opts.append(["End turn", _end_turn])
+	if not cb.action_used and (not cb.is_over()):
+		opts.append(_confirm_opt(h, "end", "End turn (action unspent!)", _end_turn))
+	else:
+		opts.append(["End turn", _end_turn])
 	_set_buttons(opts)
 	_board.queue_redraw()
+
+# A two-press guard: first press arms and relabels, second press fires.
+func _confirm_opt(h, key: String, label: String, fn: Callable) -> Array:
+	if _armed == key:
+		return ["✓ Confirm: %s" % label, func(): _armed = ""; fn.call()]
+	return [label, func(): _armed = key; _build_hero_menu(h, true)]
 
 func _toggle_disengage(h) -> void:
 	_disengage = not _disengage
@@ -429,6 +441,7 @@ func _hero_bonus(h, kind) -> void:
 	_after_hero_action(h)
 
 func _after_hero_action(h) -> void:
+	_armed = ""
 	_flush_log()
 	_refresh()
 	if cb.is_over():
@@ -589,6 +602,13 @@ class Board extends Control:
 	func flash(_hx: Vector2i) -> void:
 		pass  # target flash handled per-token on hp change
 
+	# zoom keeping the hex under `sp` (screen point) roughly fixed
+	func _zoom_at(sp: Vector2, factor: float) -> void:
+		var anchor := Hex.from_pixel(sp - _origin, main.hex_px)
+		main.set_zoom(main._zoom * factor)
+		_layout()
+		main.pan_by(sp - (_origin + Hex.to_pixel(anchor, main.hex_px)))
+
 	func _layout() -> void:
 		var mn := Vector2(1e9, 1e9)
 		var mx := Vector2(-1e9, -1e9)
@@ -596,6 +616,10 @@ class Board extends Control:
 			var p := Hex.to_pixel(hx, main.hex_px)
 			mn = mn.min(p); mx = mx.max(p)
 		var span := mx - mn
+		# keep the board from being panned entirely off-screen
+		var lim := (size + span) * 0.5 - Vector2(90, 60)
+		lim = lim.max(Vector2.ZERO)
+		main._pan = main._pan.clamp(-lim, lim)
 		_origin = (size - span) * 0.5 - mn + main._pan
 
 	func _pix(hx: Vector2i) -> Vector2:
@@ -658,9 +682,9 @@ class Board extends Control:
 				main.board_hex_hovered(hx)
 		elif e is InputEventMouseButton and e.pressed:
 			if e.button_index == MOUSE_BUTTON_WHEEL_UP:
-				main.set_zoom(main._zoom * 1.1)
+				_zoom_at(e.position, 1.1)
 			elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-				main.set_zoom(main._zoom / 1.1)
+				_zoom_at(e.position, 1.0 / 1.1)
 			elif e.button_index == MOUSE_BUTTON_RIGHT:
 				main.board_cancel()
 			elif e.button_index == MOUSE_BUTTON_LEFT:
