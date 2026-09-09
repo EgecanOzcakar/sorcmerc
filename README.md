@@ -34,8 +34,11 @@ alias godot='flatpak run org.godotengine.Godot'
 
 Play (needs a display):
 
-Board controls: mouse wheel or `+` / `-` to zoom, drag (middle/right button) or arrow
-keys to pan, `0` to reset.
+Controls: number keys `1`–`9` pick the action, `0` ends the turn. Default click on
+the board is Move (blue tiles); actions that need a target enter an aim mode where
+hovering a token shows the hit / save / shove odds and a click applies it (`Esc` or
+right-click cancels). Mouse wheel or `+` / `-` zooms (UI text scales with it), drag
+or arrow keys pan, `Home` resets the view.
 
 ```sh
 godot --path .                       # opens the editor

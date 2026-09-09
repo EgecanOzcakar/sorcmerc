@@ -28,9 +28,14 @@ func _run() -> void:
 			continue
 		if main.cb.is_over():
 			break
-		# board-driven modes: move / cone need a hex click, not a button
-		if main._mode == "move" or main._mode == "cone":
+		# board-driven modes: aiming / cone need a hex click, not a button
+		if main._mode == "cone" or main._mode == "target":
 			_board_click()
+			idle = 0
+			continue
+		# in idle, sometimes just walk toward a foe (exercises default click-to-move)
+		if main._mode == "idle" and main.cb.current().team == "party" and _presses % 4 == 0 and main.cb.move_left > 0:
+			_move_click()
 			idle = 0
 			continue
 		var btns = _buttons()
@@ -62,27 +67,38 @@ func _board_click() -> void:
 	var h = cb.current()
 	var foes = cb.enemies_of(h)
 	if main._mode == "cone":
-		_picked["Burning"] = true
+		_picked["cone"] = true
 		if not foes.is_empty():
 			main.board_hex_clicked(foes[0].pos)
 		else:
 			main.board_cancel()
 		return
-	# move: step toward the nearest foe as far as the field allows
-	_picked["Move"] = true
+	# target mode: click the first valid target, else cancel
+	_picked["target:" + main._tgt_kind] = true
+	for c in cb.combatants:
+		if main._valid_target(h, c):
+			main.board_hex_clicked(c.pos)
+			return
+	main.board_cancel()
+
+func _move_click() -> void:
+	_presses += 1
+	_picked["move"] = true
+	var cb = main.cb
+	var h = cb.current()
+	var foes = cb.enemies_of(h)
+	if foes.is_empty():
+		return
 	var field = cb.move_field(h)
 	var goal = h.pos
-	if not foes.is_empty():
-		var best = 1 << 30
-		for hx in field:
-			var d = Hex.distance(hx, foes[0].pos)
-			if d < best:
-				best = d
-				goal = hx
+	var best = 1 << 30
+	for hx in field:
+		var d = Hex.distance(hx, foes[0].pos)
+		if d < best:
+			best = d
+			goal = hx
 	if goal != h.pos:
 		main.board_hex_clicked(goal)
-	else:
-		main.board_cancel()
 
 func _buttons() -> Array:
 	var out: Array = []
@@ -94,7 +110,7 @@ func _buttons() -> Array:
 # Rotate through verbs rather than mashing Attack, so every path gets exercised.
 func _press(btns: Array) -> void:
 	var pick: Button = null
-	var wanted = ["Shove", "Burning Hands", "Healing Word", "Second Wind", "Sacred Flame", "Dodge", "Dash", "Move", "Attack"]
+	var wanted = ["Shove", "Burning Hands", "Healing Word", "Second Wind", "Sacred Flame", "Dodge", "Dash", "Attack"]
 	var verb = wanted[_presses % wanted.size()]
 	for b in btns:
 		if verb in b.text:

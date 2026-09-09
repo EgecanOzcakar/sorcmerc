@@ -20,7 +20,9 @@ var _seed: int = 0
 var _busy = false
 var _advancing = false
 var _disengage = false
-var _mode := "idle"          # idle | move | cone
+var _mode := "idle"          # idle | cone | target
+var _tgt_kind := ""          # attack | sacred | shove_prone | shove_push | shove_brazier | heal
+var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 
 @onready var _header := Label.new()
@@ -29,6 +31,7 @@ var _anim := 1.0             # animation speed multiplier (huge when FAST)
 @onready var _actor := Label.new()
 @onready var _buttons := HFlowContainer.new()
 @onready var _logbox := RichTextLabel.new()
+@onready var _cap := Label.new()
 
 # --- palette --------------------------------------------------------------
 const COL_BG := Color("14161c")
@@ -67,7 +70,7 @@ func _ready() -> void:
 	# --- the action log: big, centred, shiny --------------------------
 	var logwrap := PanelContainer.new()
 	logwrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	logwrap.custom_minimum_size = Vector2(820, 240)
+	logwrap.custom_minimum_size = Vector2(820, 210)
 	var glow := StyleBoxFlat.new()
 	glow.bg_color = Color("0c0e15")
 	glow.set_corner_radius_all(14)
@@ -80,12 +83,10 @@ func _ready() -> void:
 	var logcol := VBoxContainer.new()
 	logcol.add_theme_constant_override("separation", 4)
 	logwrap.add_child(logcol)
-	var cap := Label.new()
-	cap.text = "»   A C T I O N   L O G   «"
-	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cap.add_theme_font_size_override("font_size", 12)
-	cap.add_theme_color_override("font_color", Color("c8a75a"))
-	logcol.add_child(cap)
+	_cap.text = "»   A C T I O N   L O G   «"
+	_cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cap.add_theme_color_override("font_color", Color("c8a75a"))
+	logcol.add_child(_cap)
 	_logbox.bbcode_enabled = true
 	_logbox.scroll_following = true
 	_logbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -105,7 +106,7 @@ func _ready() -> void:
 	_board.clip_contents = true
 	_board.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_board.custom_minimum_size = Vector2(0, 180)
+	_board.custom_minimum_size = Vector2(0, 240)
 	root.add_child(_board)
 
 	_actor.add_theme_font_size_override("font_size", 16)
@@ -116,10 +117,25 @@ func _ready() -> void:
 	root.add_child(_buttons)
 
 	set_process(true)
+	_apply_ui_scale()
 	_new_game()
+
+# Font sizes across the whole combat UI track the zoom level.
+func _apply_ui_scale() -> void:
+	var u := clampf(_zoom, 0.9, 1.4)
+	_header.add_theme_font_size_override("font_size", int(22 * u))
+	_actor.add_theme_font_size_override("font_size", int(16 * u))
+	_cap.add_theme_font_size_override("font_size", int(12 * u))
+	_order.add_theme_font_size_override("normal_font_size", int(14 * u))
+	_order.add_theme_font_size_override("bold_font_size", int(14 * u))
+	_logbox.add_theme_font_size_override("normal_font_size", int(17 * u))
+	_logbox.add_theme_font_size_override("bold_font_size", int(17 * u))
+	for b in _buttons.get_children():
+		b.add_theme_font_size_override("font_size", int(14 * u))
 
 func set_zoom(z: float) -> void:
 	_zoom = clampf(z, 0.45, 3.0)
+	_apply_ui_scale()
 	if _board:
 		_board.queue_redraw()
 
@@ -134,11 +150,26 @@ func _unhandled_key_input(e: InputEvent) -> void:
 	match e.keycode:
 		KEY_EQUAL, KEY_KP_ADD: set_zoom(_zoom * 1.1)
 		KEY_MINUS, KEY_KP_SUBTRACT: set_zoom(_zoom / 1.1)
-		KEY_0: _zoom = 1.0; _pan = Vector2.ZERO; _board.queue_redraw()
+		KEY_HOME: _zoom = 1.0; _pan = Vector2.ZERO; _apply_ui_scale(); _board.queue_redraw()
 		KEY_LEFT: pan_by(Vector2(40, 0))
 		KEY_RIGHT: pan_by(Vector2(-40, 0))
 		KEY_UP: pan_by(Vector2(0, 40))
 		KEY_DOWN: pan_by(Vector2(0, -40))
+		KEY_ESCAPE, KEY_B: board_cancel()
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
+			_press_hotkey(e.keycode - KEY_1)
+		KEY_0:
+			_press_hotkey(-1)  # last button (End turn / Cancel)
+
+func _press_hotkey(idx: int) -> void:
+	if _busy:
+		return
+	var kids := _buttons.get_children()
+	if kids.is_empty():
+		return
+	var b = kids[kids.size() - 1] if idx < 0 else (kids[idx] if idx < kids.size() else null)
+	if b and not b.disabled:
+		b.pressed.emit()
 
 func _build_theme() -> void:
 	var th := Theme.new()
@@ -210,27 +241,27 @@ func _end_turn() -> void:
 
 # --- hero menu ---------------------------------------------------------
 
+# Verb-level menu. Buttons are numbered [1]..[9]; End turn is [0].
+# Verbs that need a target enter "target" mode — hover a token for its %, click to apply.
 func _build_hero_menu(h) -> void:
+	_mode = "idle"
+	_tgt_kind = ""
 	var opts: Array = []
 	var foes: Array = cb.enemies_of(h)
+	var adj_foes := foes.filter(func(f): return Hex.distance(f.pos, h.pos) <= 1)
 
 	if not cb.action_used:
-		for f in foes:
-			if cb.in_reach(h, f):
-				var pct = int(round(cb.hit_chance(h, f) * 100.0))
-				opts.append(["Attack %s  (%d%%)" % [f.cname.split(" ")[0], pct], func(): _hero_attack(h, f)])
-		if h.athletics > 0:
-			for f in foes:
-				if Hex.distance(f.pos, h.pos) <= 1:
-					opts.append(["Shove %s → prone" % f.cname.split(" ")[0], func(): _hero_shove(h, f, "prone")])
-					opts.append(["Shove %s → back" % f.cname.split(" ")[0], func(): _hero_shove(h, f, "push")])
-					if cb.adjacent_to_brazier(f):
-						opts.append(["Shove %s → brazier 🔥" % f.cname.split(" ")[0], func(): _hero_shove(h, f, "brazier")])
+		if foes.any(func(f): return cb.in_reach(h, f)):
+			opts.append(["Attack", func(): _enter_target(h, "attack")])
+		if h.athletics > 0 and not adj_foes.is_empty():
+			opts.append(["Shove → prone", func(): _enter_target(h, "shove_prone")])
+			opts.append(["Shove → back", func(): _enter_target(h, "shove_push")])
+			if adj_foes.any(func(f): return cb.adjacent_to_brazier(f)):
+				opts.append(["Shove → brazier", func(): _enter_target(h, "shove_brazier")])
 		if "burning_hands" in h.spells and h.slots1 + h.slots2 > 0:
 			opts.append(["Burning Hands (aim…)", func(): _enter_cone(h)])
-		if "sacred_flame" in h.spells:
-			for f in foes:
-				opts.append(["Sacred Flame %s" % f.cname.split(" ")[0], func(): _hero_cast_target(h, f, "sf")])
+		if "sacred_flame" in h.spells and not foes.is_empty():
+			opts.append(["Sacred Flame", func(): _enter_target(h, "sacred")])
 		opts.append(["Dodge", func(): _hero_simple(h, "dodge")])
 		opts.append(["Dash (+%d move)" % h.speed, func(): _hero_simple(h, "dash")])
 
@@ -238,21 +269,14 @@ func _build_hero_menu(h) -> void:
 		if h.second_wind != "" and not h.used_second_wind:
 			opts.append(["Second Wind (heal)", func(): _hero_bonus(h, "sw")])
 		if "healing_word" in h.spells and h.slots1 + h.slots2 > 0:
-			for a in cb.combatants:
-				if a.team == "party" and a != h and not a.is_dead():
-					opts.append(["Healing Word → %s" % a.cname.split(" ")[0], func(): _hero_heal(h, a)])
+			if cb.combatants.any(func(a): return a.team == "party" and a != h and not a.is_dead()):
+				opts.append(["Healing Word", func(): _enter_target(h, "heal")])
 
 	if cb.move_left > 0:
-		var verb = "Moving… (click a tile)" if _mode == "move" else "Move (%d)" % cb.move_left
-		opts.append([verb, func(): _toggle_move(h)])
 		opts.append(["Disengage: %s" % ("ON" if _disengage else "off"), func(): _toggle_disengage(h)])
 
-	opts.append(["— End turn —", _end_turn])
+	opts.append(["End turn", _end_turn])
 	_set_buttons(opts)
-
-func _toggle_move(h) -> void:
-	_mode = "idle" if _mode == "move" else "move"
-	_build_hero_menu(h)
 	_board.queue_redraw()
 
 func _toggle_disengage(h) -> void:
@@ -261,14 +285,45 @@ func _toggle_disengage(h) -> void:
 
 func _enter_cone(h) -> void:
 	_mode = "cone"
-	_actor.text = "%s — aim Burning Hands: hover a direction, click to cast.  (right-click cancels)" % h.cname
-	_set_buttons([["Cancel", func(): _cancel_cone(h)]])
+	_actor.text = "%s — aim Burning Hands: hover a direction, click to cast.  (Esc / right-click cancels)" % h.cname
+	_set_buttons([["Cancel", func(): board_cancel()]])
 	_board.queue_redraw()
 
-func _cancel_cone(h) -> void:
-	_mode = "idle"
-	_build_hero_menu(h)
+func _enter_target(h, kind: String) -> void:
+	_mode = "target"
+	_tgt_kind = kind
+	_actor.text = "%s — %s: hover a target for the odds, click to apply.  (Esc / right-click cancels)" % [h.cname, _tgt_label(kind)]
+	_set_buttons([["Cancel", func(): board_cancel()]])
 	_board.queue_redraw()
+
+func _tgt_label(kind: String) -> String:
+	match kind:
+		"attack": return "Attack"
+		"sacred": return "Sacred Flame"
+		"shove_prone": return "Shove to prone"
+		"shove_push": return "Shove back"
+		"shove_brazier": return "Shove into the brazier"
+		"heal": return "Healing Word"
+	return kind
+
+# Is `c` a legal target for the pending verb?
+func _valid_target(h, c) -> bool:
+	match _tgt_kind:
+		"attack": return c.team != h.team and c.conscious() and cb.in_reach(h, c)
+		"sacred": return c.team != h.team and c.conscious() and Hex.distance(h.pos, c.pos) <= Encounter.RANGE_SPELL_LONG
+		"shove_prone", "shove_push": return c.team != h.team and c.conscious() and Hex.distance(h.pos, c.pos) <= 1
+		"shove_brazier": return c.team != h.team and c.conscious() and Hex.distance(h.pos, c.pos) <= 1 and cb.adjacent_to_brazier(c)
+		"heal": return c.team == h.team and c != h and not c.is_dead()
+	return false
+
+# The number shown over a valid target while aiming.
+func target_readout(h, c) -> String:
+	match _tgt_kind:
+		"attack": return "%d%%" % int(round(cb.hit_chance(h, c) * 100.0))
+		"sacred": return "%d%%" % int(round(cb.save_fail_chance(c, h.save_dc, true) * 100.0))
+		"shove_prone", "shove_push", "shove_brazier": return "%d%%" % int(round(cb.shove_chance(h, c) * 100.0))
+		"heal": return "revive" if c.is_down() else "≈5 HP"
+	return ""
 
 # board callbacks -------------------------------------------------------
 
@@ -278,49 +333,53 @@ func board_hex_clicked(hx: Vector2i) -> void:
 	var h = cb.current()
 	if h.team != "party" or not h.conscious():
 		return
-	if _mode == "move":
-		if cb.move_field(h).has(hx) and hx != h.pos:
-			_board.slide_from(h)
-			cb.move_to(h, hx, _disengage)
-			_mode = "idle" if cb.move_left == 0 else "move"
-			_after_hero_action(h)
-	elif _mode == "cone":
+	if _mode == "cone":
 		var dir = Hex.direction_to(h.pos, hx)
 		if dir != Vector2i.ZERO:
-			cb.cast_burning_hands(h, dir)
 			_mode = "idle"
+			cb.cast_burning_hands(h, dir)
 			_after_hero_action(h)
-	elif _mode == "idle" and not cb.action_used:
-		for f in cb.enemies_of(h):
-			if f.pos == hx and cb.in_reach(h, f):
-				_hero_attack(h, f)
+	elif _mode == "target":
+		for c in cb.combatants:
+			if c.pos == hx and _valid_target(h, c):
+				_apply_target(h, c)
 				return
+	else:  # idle — default click is Move
+		if cb.move_left > 0 and hx != h.pos and cb.move_field(h).has(hx):
+			_board.slide_from(h)
+			cb.move_to(h, hx, _disengage)
+			_after_hero_action(h)
 
-func board_hex_hovered(_hx: Vector2i) -> void:
-	if _mode == "cone":
+func _apply_target(h, c) -> void:
+	_mode = "idle"
+	var kind := _tgt_kind
+	_tgt_kind = ""
+	match kind:
+		"attack":
+			_board.flash(c.pos)
+			cb.resolve_attack(h, c)
+		"sacred":
+			cb.cast_sacred_flame(h, c)
+		"shove_prone":
+			cb.act_shove(h, c, "prone")
+		"shove_push":
+			cb.act_shove(h, c, "push")
+		"shove_brazier":
+			cb.act_shove(h, c, "brazier")
+		"heal":
+			cb.cast_healing_word(h, c)
+	_after_hero_action(h)
+
+func board_hex_hovered(hx: Vector2i) -> void:
+	_hover_hex = hx
+	if _mode == "cone" or _mode == "target":
 		_board.queue_redraw()
 
 func board_cancel() -> void:
-	if _mode != "idle":
-		_mode = "idle"
-		if cb and cb.current().team == "party":
-			_build_hero_menu(cb.current())
-		_board.queue_redraw()
+	if _mode != "idle" and cb and not cb.is_over() and cb.current().team == "party":
+		_build_hero_menu(cb.current())
 
 # hero actions ---------------------------------------------------------
-
-func _hero_attack(h, f) -> void:
-	_board.flash(f.pos)
-	cb.resolve_attack(h, f)
-	_after_hero_action(h)
-
-func _hero_shove(h, f, mode) -> void:
-	cb.act_shove(h, f, mode)
-	_after_hero_action(h)
-
-func _hero_cast_target(h, f, _which) -> void:
-	cb.cast_sacred_flame(h, f)
-	_after_hero_action(h)
 
 func _hero_simple(h, kind) -> void:
 	if kind == "dodge":
@@ -328,16 +387,11 @@ func _hero_simple(h, kind) -> void:
 	elif kind == "dash":
 		cb.action_used = true
 		cb.move_left += h.speed
-		_mode = "move"
 	_after_hero_action(h)
 
 func _hero_bonus(h, kind) -> void:
 	if kind == "sw":
 		cb.act_second_wind(h)
-	_after_hero_action(h)
-
-func _hero_heal(h, a) -> void:
-	cb.cast_healing_word(h, a)
 	_after_hero_action(h)
 
 func _after_hero_action(h) -> void:
@@ -348,8 +402,6 @@ func _after_hero_action(h) -> void:
 		return
 	if cb.action_used and cb.bonus_used and cb.move_left == 0:
 		_end_turn()
-	elif _mode == "cone":
-		pass
 	else:
 		_build_hero_menu(h)
 
@@ -358,11 +410,20 @@ func _after_hero_action(h) -> void:
 func _set_buttons(opts: Array) -> void:
 	for c in _buttons.get_children():
 		c.queue_free()
-	for o in opts:
+	var count := opts.size()
+	for i in count:
 		var b := Button.new()
-		b.text = o[0]
-		b.pressed.connect(o[1])
+		if count == 1:
+			b.text = "[Esc] %s" % opts[i][0]
+		elif i == count - 1:
+			b.text = "[0] %s" % opts[i][0]
+		elif i < 9:
+			b.text = "[%d] %s" % [i + 1, opts[i][0]]
+		else:
+			b.text = opts[i][0]
+		b.pressed.connect(opts[i][1])
 		_buttons.add_child(b)
+	_apply_ui_scale()
 
 func _refresh() -> void:
 	_header.text = "THE SUNKEN SHRINE   ·   Round %d   ·   seed %d" % [cb.round_num, _seed]
@@ -377,17 +438,18 @@ func _refresh() -> void:
 		if c.is_dead():
 			nm = "[s]%s[/s]" % nm
 		parts.append("[color=%s]%s(%d)[/color]" % [col, nm, c.init_roll])
-	_order.text = "[b]ORDER[/b]  " + "   ".join(parts) + "     [color=#5a6070]· scroll/± zoom · drag pan · 0 reset ·[/color]"
+	_order.text = "[b]ORDER[/b]  " + "   ".join(parts) + "     [color=#5a6070]· 1-9 actions · scroll/± zoom · drag/arrows pan · Home reset ·[/color]"
 
 	var cur = cb.current()
-	if cur and cur.team == "party" and cur.conscious() and _mode != "cone":
-		_actor.text = "%s  ·  AC %d  ·  HP %d/%d  ·  slots %d/%d  ·  %s%smove %d" % [
+	if cur and cur.team == "party" and cur.conscious() and _mode == "idle":
+		var hint := "  ·  click a blue tile to move" if cb.move_left > 0 else ""
+		_actor.text = "%s  ·  AC %d  ·  HP %d/%d  ·  slots %d/%d  ·  %s%smove %d%s" % [
 			cur.cname, cb.effective_ac(cur), cur.hp, cur.max_hp, cur.slots1, cur.slots2,
 			"" if cb.action_used else "[action] ",
 			"" if cb.bonus_used else "[bonus] ",
-			cb.move_left,
+			cb.move_left, hint,
 		]
-	elif _mode != "cone":
+	elif _mode == "idle":
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
 	_board.queue_redraw()
 
@@ -550,7 +612,7 @@ class Board extends Control:
 		var cone_hexes := {}
 		var cur = cb.current()
 		var hero_turn: bool = cur and cur.team == "party" and cur.conscious()
-		if hero_turn and main._mode == "move":
+		if hero_turn and main._mode == "idle" and cb.move_left > 0:
 			field = cb.move_field(cur)
 			for hx in field:
 				if not cb.provokers_for(cur, hx).is_empty():
@@ -583,13 +645,30 @@ class Board extends Control:
 			if cb.is_cover(hx):
 				draw_string(ThemeDB.fallback_font, c - Vector2(s - 6, -s + 12), "cover", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("7fa6a6"))
 
-		# targetable outlines
-		if hero_turn and main._mode == "idle" and not cb.action_used:
+		# targeting overlay — outline valid targets, float their odds, hovered one brighter
+		if hero_turn and main._mode == "target":
+			for c in cb.combatants:
+				if not main._valid_target(cur, c):
+					continue
+				var tp := _origin + Hex.to_pixel(c.pos, s)
+				var hot: bool = c.pos == _hover
+				var poly := _hex_poly(tp, s - 3.0)
+				poly.append(poly[0])
+				var oc: Color = main.COL_TARGET
+				draw_polyline(poly, oc if hot else Color(oc.r, oc.g, oc.b, 0.45), 3.0 if hot else 2.0)
+				var txt: String = main.target_readout(cur, c)
+				var fs := int((20 if hot else 15) * fz)
+				var w := ThemeDB.fallback_font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+				var chip := tp + Vector2(-w / 2.0, -s - 4.0)
+				draw_rect(Rect2(chip - Vector2(5, fs), Vector2(w + 10, fs + 8)), Color(0, 0, 0, 0.72))
+				draw_string(ThemeDB.fallback_font, chip, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
+					Color("ffe27a") if hot else Color("d7d7cf"))
+		elif hero_turn and main._mode == "idle" and not cb.action_used:
 			for f in cb.enemies_of(cur):
 				if cb.in_reach(cur, f):
 					var poly := _hex_poly(_origin + Hex.to_pixel(f.pos, s), s - 3.0)
 					poly.append(poly[0])
-					draw_polyline(poly, main.COL_TARGET, 2.0)
+					draw_polyline(poly, Color(main.COL_TARGET.r, main.COL_TARGET.g, main.COL_TARGET.b, 0.30), 1.5)
 
 		# tokens
 		for c in cb.combatants:

@@ -156,6 +156,27 @@ func hit_chance(attacker, target, opts := {}) -> float:
 		p = p * p
 	return p
 
+# Probability `target` FAILS a DC `dc` DEX save (what a caster wants). UI-only.
+func save_fail_chance(target, dc: int, ignore_cover := false) -> float:
+	var bonus: int = target.dex_save
+	if is_cover(target.pos) and not ignore_cover:
+		bonus += 2
+	var p_make: float = clampf((21.0 - (dc - bonus)) / 20.0, 0.0, 1.0)
+	if target.has("dodging"):
+		p_make = 1.0 - (1.0 - p_make) * (1.0 - p_make)
+	return 1.0 - p_make
+
+# Probability a Shove by `attacker` beats `target`'s contest (ties lose). UI-only.
+func shove_chance(attacker, target) -> float:
+	var am: int = attacker.athletics
+	var dm: int = maxi(target.athletics, target.acro)
+	var wins := 0
+	for a in range(1, 21):
+		for d in range(1, 21):
+			if a + am > d + dm:
+				wins += 1
+	return wins / 400.0
+
 # --- attack ------------------------------------------------------------
 
 func _attack_mode(attacker, target, opts := {}) -> int:
