@@ -21,7 +21,8 @@ var _busy = false
 var _advancing = false
 var _disengage = false
 var _mode := "idle"          # idle | cone | target
-var _tgt_kind := ""          # attack | sacred | shove_prone | shove_push | shove_brazier | heal
+var _tgt_kind := ""          # attack | sacred | shove_* | heal | heal2 | help
+var _cone_level := 1
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 
@@ -250,6 +251,8 @@ func _build_hero_menu(h) -> void:
 	var foes: Array = cb.enemies_of(h)
 	var adj_foes := foes.filter(func(f): return Hex.distance(f.pos, h.pos) <= 1)
 
+	var live_allies: Array = cb.combatants.filter(func(a): return a.team == "party" and a != h and a.conscious())
+
 	if not cb.action_used:
 		if foes.any(func(f): return cb.in_reach(h, f)):
 			opts.append(["Attack", func(): _enter_target(h, "attack")])
@@ -259,9 +262,13 @@ func _build_hero_menu(h) -> void:
 			if adj_foes.any(func(f): return cb.adjacent_to_brazier(f)):
 				opts.append(["Shove → brazier", func(): _enter_target(h, "shove_brazier")])
 		if "burning_hands" in h.spells and h.slots1 + h.slots2 > 0:
-			opts.append(["Burning Hands (aim…)", func(): _enter_cone(h)])
+			opts.append(["Burning Hands (aim…)", func(): _enter_cone(h, 1)])
+			if h.slots2 > 0:
+				opts.append(["Burning Hands ★2 (aim…)", func(): _enter_cone(h, 2)])
 		if "sacred_flame" in h.spells and not foes.is_empty():
 			opts.append(["Sacred Flame", func(): _enter_target(h, "sacred")])
+		if not live_allies.is_empty() and not foes.is_empty():
+			opts.append(["Help an ally", func(): _enter_target(h, "help")])
 		opts.append(["Dodge", func(): _hero_simple(h, "dodge")])
 		opts.append(["Dash (+%d move)" % h.speed, func(): _hero_simple(h, "dash")])
 
@@ -271,6 +278,12 @@ func _build_hero_menu(h) -> void:
 		if "healing_word" in h.spells and h.slots1 + h.slots2 > 0:
 			if cb.combatants.any(func(a): return a.team == "party" and a != h and not a.is_dead()):
 				opts.append(["Healing Word", func(): _enter_target(h, "heal")])
+				if h.slots2 > 0:
+					opts.append(["Healing Word ★2", func(): _enter_target(h, "heal2")])
+		if h.cunning_action:
+			if not h.has("hidden"):
+				opts.append(["Hide (bonus)", func(): _hero_bonus(h, "hide")])
+			opts.append(["Dash (bonus, +%d)" % h.speed, func(): _hero_bonus(h, "cdash")])
 
 	if cb.move_left > 0:
 		opts.append(["Disengage: %s" % ("ON" if _disengage else "off"), func(): _toggle_disengage(h)])
@@ -283,9 +296,11 @@ func _toggle_disengage(h) -> void:
 	_disengage = not _disengage
 	_build_hero_menu(h)
 
-func _enter_cone(h) -> void:
+func _enter_cone(h, level: int) -> void:
 	_mode = "cone"
-	_actor.text = "%s — aim Burning Hands: hover a direction, click to cast.  (Esc / right-click cancels)" % h.cname
+	_cone_level = level
+	_actor.text = "%s — aim Burning Hands%s: hover a direction, click to cast.  (Esc / right-click cancels)" % [
+		h.cname, "  ★2" if level >= 2 else ""]
 	_set_buttons([["Cancel", func(): board_cancel()]])
 	_board.queue_redraw()
 
@@ -304,6 +319,8 @@ func _tgt_label(kind: String) -> String:
 		"shove_push": return "Shove back"
 		"shove_brazier": return "Shove into the brazier"
 		"heal": return "Healing Word"
+		"heal2": return "Healing Word ★2"
+		"help": return "Help"
 	return kind
 
 # Is `c` a legal target for the pending verb?
@@ -313,7 +330,8 @@ func _valid_target(h, c) -> bool:
 		"sacred": return c.team != h.team and c.conscious() and Hex.distance(h.pos, c.pos) <= Encounter.RANGE_SPELL_LONG
 		"shove_prone", "shove_push": return c.team != h.team and c.conscious() and Hex.distance(h.pos, c.pos) <= 1
 		"shove_brazier": return c.team != h.team and c.conscious() and Hex.distance(h.pos, c.pos) <= 1 and cb.adjacent_to_brazier(c)
-		"heal": return c.team == h.team and c != h and not c.is_dead()
+		"heal", "heal2": return c.team == h.team and c != h and not c.is_dead()
+		"help": return c.team == h.team and c != h and c.conscious()
 	return false
 
 # The number shown over a valid target while aiming.
@@ -323,6 +341,8 @@ func target_readout(h, c) -> String:
 		"sacred": return "%d%%" % int(round(cb.save_fail_chance(c, h.save_dc, true) * 100.0))
 		"shove_prone", "shove_push", "shove_brazier": return "%d%%" % int(round(cb.shove_chance(h, c) * 100.0))
 		"heal": return "revive" if c.is_down() else "≈5 HP"
+		"heal2": return "revive" if c.is_down() else "≈8 HP"
+		"help": return "advantage"
 	return ""
 
 # board callbacks -------------------------------------------------------
@@ -337,7 +357,7 @@ func board_hex_clicked(hx: Vector2i) -> void:
 		var dir = Hex.direction_to(h.pos, hx)
 		if dir != Vector2i.ZERO:
 			_mode = "idle"
-			cb.cast_burning_hands(h, dir)
+			cb.cast_burning_hands(h, dir, _cone_level)
 			_after_hero_action(h)
 	elif _mode == "target":
 		for c in cb.combatants:
@@ -368,6 +388,10 @@ func _apply_target(h, c) -> void:
 			cb.act_shove(h, c, "brazier")
 		"heal":
 			cb.cast_healing_word(h, c)
+		"heal2":
+			cb.cast_healing_word(h, c, 2)
+		"help":
+			cb.act_help(h, c)
 	_after_hero_action(h)
 
 func board_hex_hovered(hx: Vector2i) -> void:
@@ -392,6 +416,10 @@ func _hero_simple(h, kind) -> void:
 func _hero_bonus(h, kind) -> void:
 	if kind == "sw":
 		cb.act_second_wind(h)
+	elif kind == "hide":
+		cb.act_hide(h)
+	elif kind == "cdash":
+		cb.act_cunning_dash(h)
 	_after_hero_action(h)
 
 func _after_hero_action(h) -> void:

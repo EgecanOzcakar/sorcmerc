@@ -31,6 +31,8 @@ func _init() -> void:
 	test_alcove_cover()
 	test_reach_and_range()
 	test_move_budget()
+	test_help_grants_advantage()
+	test_hide_enables_advantage()
 	test_mercy_rule()
 	test_encounter_resolves_many_seeds()
 
@@ -233,6 +235,31 @@ func _mercy_setup(s: int):
 	g.pos = Vector2i(4, 1)
 	p.pos = Vector2i(5, 1); p.statuses["down"] = true; p.hp = 0; p.death_f = 0
 	return c
+
+func test_help_grants_advantage() -> void:
+	var cb = _sandbox()
+	var vera = _find(cb, "vera"); var ilsa = _find(cb, "ilsa"); var grull = _find(cb, "grull")
+	vera.pos = Vector2i(4, 1); grull.pos = Vector2i(4, 2); ilsa.pos = Vector2i(4, 0)
+	cb.act_help(ilsa, vera)
+	check(vera.has("helped"), "Help sets the flag on the ally")
+	check(cb._attack_mode(vera, grull) == Dice.ADV, "a helped attacker rolls with advantage")
+	cb.resolve_attack(vera, grull)
+	check(not vera.has("helped"), "the granted advantage is spent by the attack")
+
+func test_hide_enables_advantage() -> void:
+	var cb = _sandbox()
+	var pike = _find(cb, "pike"); var grull = _find(cb, "grull")
+	pike.pos = Vector2i(2, 1); grull.pos = Vector2i(7, 1)   # in bow range, not adjacent
+	pike.stealth = 40                                        # guaranteed success
+	check(cb.act_hide(pike), "high Stealth always hides")
+	check(pike.has("hidden"), "hidden flag set")
+	check(cb._attack_mode(pike, grull) == Dice.ADV, "hidden -> advantage on the attack")
+	cb.resolve_attack(pike, grull)
+	check(not pike.has("hidden"), "attacking breaks hidden")
+	# a doomed Stealth roll fails
+	var cb2 = _sandbox()
+	var pk = _find(cb2, "pike"); pk.stealth = -40
+	check(not cb2.act_hide(pk), "hopeless Stealth fails to hide")
 
 func test_mercy_rule() -> void:
 	# a conscious Vera is reachable this turn -> Grull leaves the downed Pike alone

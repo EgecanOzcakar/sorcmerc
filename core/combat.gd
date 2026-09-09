@@ -84,6 +84,7 @@ func begin_turn() -> void:
 	_sneak_used_turn = false
 	c.statuses.erase("dodging")
 	c.statuses.erase("reacted")
+	c.statuses.erase("helped")  # granted advantage expires if unused by your turn
 	if c.is_down():
 		_death_save(c)
 
@@ -196,6 +197,8 @@ func _attack_mode(attacker, target, opts := {}) -> int:
 		dis = true
 	if attacker.has("hidden"):
 		adv = true
+	if attacker.has("helped"):
+		adv = true
 	if opts.get("advantage", false):
 		adv = true
 	return Dice.combine(adv, dis)
@@ -237,6 +240,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 			dmg += out.surprise
 		out.damage = dmg
 	attacker.statuses.erase("hidden")
+	if not opts.get("opportunity", false):
+		attacker.statuses.erase("helped")  # the granted advantage is spent
 	_log_attack(out, opts.get("opportunity", false))
 	if hit:
 		_apply_damage(target, out.damage)
@@ -376,6 +381,33 @@ func act_dodge(c) -> void:
 	c.statuses["dodging"] = true
 	action_used = true
 	log.append("%s takes the Dodge action." % c.cname)
+
+# Help: the named ally's next attack roll (before your next turn) has advantage.
+func act_help(helper, ally) -> void:
+	action_used = true
+	ally.statuses["helped"] = true
+	log.append("%s helps %s — advantage on their next attack." % [helper.cname, ally.cname])
+
+# Hide: Stealth vs the best enemy passive Perception. On success you're hidden
+# (attacks against you have disadvantage; your next attack has advantage).
+func act_hide(c) -> bool:
+	bonus_used = true
+	var dc: int = 0
+	for e in enemies_of(c):
+		dc = maxi(dc, e.passive_perception)
+	var roll: int = Dice.d20(rng).nat + c.stealth
+	if roll >= dc:
+		c.statuses["hidden"] = true
+		log.append("%s slips out of sight — Stealth %d vs %d." % [c.cname, roll, dc])
+		return true
+	log.append("%s fails to hide — Stealth %d vs %d." % [c.cname, roll, dc])
+	return false
+
+# Cunning Action: a bonus-action Dash (Rogue).
+func act_cunning_dash(c) -> void:
+	bonus_used = true
+	move_left += c.speed
+	log.append("%s darts ahead — Cunning Action Dash." % c.cname)
 
 func act_shove(attacker, target, choice: String) -> Dictionary:
 	action_used = true

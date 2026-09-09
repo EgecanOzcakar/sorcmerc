@@ -52,8 +52,8 @@ func _run() -> void:
 	print("seed=%d presses=%d rounds=%d outcome=%s %s" % [
 		main._seed, _presses, main.cb.round_num, res, "OK" if ok else "*** WEDGED ***",
 	])
+	print("  exercised: ", _picked.keys())
 	if not ok:
-		print("  verbs: ", _picked.keys())
 		for c in main.cb.combatants:
 			var st = "dead" if c.is_dead() else ("down" if c.is_down() else "%d/%d" % [c.hp, c.max_hp])
 			print("  %-13s %-7s @%v" % [c.cname, st, c.pos])
@@ -110,7 +110,8 @@ func _buttons() -> Array:
 # Rotate through verbs rather than mashing Attack, so every path gets exercised.
 func _press(btns: Array) -> void:
 	var pick: Button = null
-	var wanted = ["Shove", "Burning Hands", "Healing Word", "Second Wind", "Sacred Flame", "Dodge", "Dash", "Attack"]
+	var wanted = ["Attack", "Shove", "Attack", "Burning Hands", "Healing Word", "Attack", "Help", "Hide",
+		"Second Wind", "Attack", "Sacred Flame", "Dodge", "Attack", "Dash"]
 	var verb = wanted[_presses % wanted.size()]
 	for b in btns:
 		if verb in b.text:
