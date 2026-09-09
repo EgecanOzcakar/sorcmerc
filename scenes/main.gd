@@ -10,6 +10,7 @@ const Encounter = preload("res://core/encounter.gd")
 var cb
 var _seed: int = 0
 var _busy = false
+var _advancing = false
 var _disengage = false
 
 @onready var _header = Label.new()
@@ -48,7 +49,9 @@ func _ready() -> void:
 	_new_game()
 
 func _new_game() -> void:
-	_seed = int(Time.get_unix_time_from_system()) & 0xFFFFFF
+	# SORCMERC_SEED reproduces an exact fight; unset = a fresh one.
+	var env := OS.get_environment("SORCMERC_SEED")
+	_seed = int(env) if env != "" else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)
 	cb = Combat.new(RNG.new(_seed), Encounter.all())
 	_logbox.text = ""
 	_flush_log()
@@ -58,6 +61,12 @@ func _new_game() -> void:
 # --- turn driver ----------------------------------------------------------
 
 func _advance() -> void:
+	# Re-entrancy guard: _advance suspends on AI turns, and _end_turn is called from
+	# button handlers. Two live copies would race cb.turn_idx and strand the player
+	# on a menu belonging to a combatant whose turn already passed.
+	if _advancing:
+		return
+	_advancing = true
 	while not cb.is_over():
 		var c = cb.current()
 		cb.begin_turn()
@@ -80,7 +89,9 @@ func _advance() -> void:
 		# conscious hero: hand control to the player
 		_disengage = false
 		_build_hero_menu(c)
+		_advancing = false
 		return
+	_advancing = false
 	_finish()
 
 func _end_turn() -> void:

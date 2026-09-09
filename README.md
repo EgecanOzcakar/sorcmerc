@@ -41,7 +41,10 @@ Headless checks (no display):
 ```sh
 godot --headless --path . -s tests/test_combat.gd     # assertions
 godot --headless --path . -s tests/autoplay.gd -- 42  # narrated fight, seed 42
+SORCMERC_SEED=5 godot --headless --path . -s tests/drive_ui.gd  # robot presses real buttons
 ```
+
+`SORCMERC_SEED` also works on the game itself, to replay an exact fight.
 
 ## Status
 
