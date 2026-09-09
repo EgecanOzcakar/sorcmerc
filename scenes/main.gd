@@ -33,6 +33,7 @@ var _anim := 1.0             # animation speed multiplier (huge when FAST)
 @onready var _buttons := HFlowContainer.new()
 @onready var _logbox := RichTextLabel.new()
 @onready var _cap := Label.new()
+@onready var _logwrap := PanelContainer.new()
 
 # --- palette --------------------------------------------------------------
 const COL_BG := Color("14161c")
@@ -69,9 +70,9 @@ func _ready() -> void:
 	root.add_child(_header)
 
 	# --- the action log: big, centred, shiny --------------------------
-	var logwrap := PanelContainer.new()
-	logwrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	logwrap.custom_minimum_size = Vector2(820, 210)
+	_logwrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var logwrap := _logwrap
+	logwrap.custom_minimum_size = Vector2(min(820.0, size.x * 0.72), 210)
 	var glow := StyleBoxFlat.new()
 	glow.bg_color = Color("0c0e15")
 	glow.set_corner_radius_all(14)
@@ -157,6 +158,7 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		KEY_UP: pan_by(Vector2(0, 40))
 		KEY_DOWN: pan_by(Vector2(0, -40))
 		KEY_ESCAPE, KEY_B: board_cancel()
+		KEY_R: if cb and cb.is_over(): _new_game()
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 			_press_hotkey(e.keycode - KEY_1)
 		KEY_0:
@@ -169,7 +171,7 @@ func _press_hotkey(idx: int) -> void:
 	if kids.is_empty():
 		return
 	var b = kids[kids.size() - 1] if idx < 0 else (kids[idx] if idx < kids.size() else null)
-	if b and not b.disabled:
+	if b is Button and not b.disabled:
 		b.pressed.emit()
 
 func _build_theme() -> void:
@@ -189,12 +191,16 @@ func _build_theme() -> void:
 	th.set_color("font_hover_color", "Button", Color("ffffff"))
 	theme = th
 
-func _new_game() -> void:
+func _new_game(forced := 0) -> void:
 	var env := OS.get_environment("SORCMERC_SEED")
-	_seed = int(env) if env != "" else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)
+	if forced > 0:
+		_seed = forced
+	else:
+		_seed = int(env) if env != "" else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)
 	cb = Combat.new(RNG.new(_seed), Encounter.all())
 	_logbox.text = ""
 	_logged = 0
+	_last_round = 1
 	_board.reset(cb)
 	_flush_log()
 	_refresh()
@@ -456,8 +462,11 @@ func _set_buttons(opts: Array) -> void:
 func _refresh() -> void:
 	_header.text = "THE SUNKEN SHRINE   ·   Round %d   ·   seed %d" % [cb.round_num, _seed]
 
+	var n: int = cb.order.size()
+	var ci: int = cb.order.find(cb.current())
 	var parts: Array = []
-	for c in cb.order:
+	for i in n:
+		var c = cb.order[i]
 		var nm = c.cname.split(" ")[0]
 		var col = "#8fdc97" if c.team == "party" else "#e58a84"
 		if c == cb.current():
@@ -465,25 +474,37 @@ func _refresh() -> void:
 			col = "#ffe27a"
 		if c.is_dead():
 			nm = "[s]%s[/s]" % nm
-		parts.append("[color=%s]%s(%d)[/color]" % [col, nm, c.init_roll])
+		var slot: int = i - ci
+		if slot < 0:
+			slot += n
+		var chunk := "[color=%s]%s(%d)[/color]" % [col, nm, c.init_roll]
+		if slot >= 1 and slot <= 3:
+			chunk = "[b]%s[/b]" % chunk
+		parts.append(chunk)
 	_order.text = "[b]ORDER[/b]  " + "   ".join(parts) + "     [color=#5a6070]· 1-9 actions · scroll/± zoom · drag/arrows pan · Home reset ·[/color]"
 
 	var cur = cb.current()
 	if cur and cur.team == "party" and cur.conscious() and _mode == "idle":
 		var hint := "  ·  click a blue tile to move" if cb.move_left > 0 else ""
-		_actor.text = "%s  ·  AC %d  ·  HP %d/%d  ·  slots %d/%d  ·  %s%smove %d%s" % [
+		var before = cb.order[(ci - 1 + n) % n]
+		var again := "  ·  you act again after %s" % before.cname.split(" ")[0] if before != cur else ""
+		_actor.text = "%s  ·  AC %d  ·  HP %d/%d  ·  slots %d/%d  ·  %s%smove %d%s%s" % [
 			cur.cname, cb.effective_ac(cur), cur.hp, cur.max_hp, cur.slots1, cur.slots2,
 			"" if cb.action_used else "[action] ",
 			"" if cb.bonus_used else "[bonus] ",
-			cb.move_left, hint,
+			cb.move_left, hint, again,
 		]
 	elif _mode == "idle":
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
 	_board.queue_redraw()
 
 var _logged = 0
+var _last_round = 1
 
 func _flush_log() -> void:
+	if cb.round_num != _last_round:
+		_last_round = cb.round_num
+		_logbox.append_text("\n[color=#6a6f80]─────────   ROUND %d   ─────────[/color]\n" % _last_round)
 	while _logged < cb.log.size():
 		var line: String = cb.log[_logged]
 		var col := "#e9e9df"
@@ -512,7 +533,21 @@ func _finish() -> void:
 	var res: String = cb.outcome()
 	_flush_log()
 	_refresh()
-	_set_buttons([["New encounter", _new_game]])
+	for c in _buttons.get_children():
+		c.queue_free()
+	var seed_edit := LineEdit.new()
+	seed_edit.text = str(_seed)
+	seed_edit.custom_minimum_size.x = 130
+	_buttons.add_child(seed_edit)
+	var replay := Button.new()
+	replay.text = "Replay seed"
+	replay.pressed.connect(func(): _new_game(maxi(1, int(seed_edit.text))))
+	_buttons.add_child(replay)
+	var fresh := Button.new()
+	fresh.text = "New encounter  (R)"
+	fresh.pressed.connect(func(): _new_game())
+	_buttons.add_child(fresh)
+	_apply_ui_scale()
 	_actor.text = "  ***  %s  in %d rounds  ***  " % [res.to_upper(), cb.round_num]
 	_logbox.append_text("\n[b][color=%s]%s in %d rounds.[/color][/b]\n" % [
 		"#7dff9d" if res == "Victory" else "#ff5a4a", res, cb.round_num,
@@ -521,6 +556,10 @@ func _finish() -> void:
 func _process(dt: float) -> void:
 	if _board:
 		_board.tick(dt * _anim)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and _logwrap:
+		_logwrap.custom_minimum_size.x = min(820.0, size.x * 0.72)
 
 # =====================================================================
 #  Board — the hex map. Draws tiles, tokens, HP bars, highlights, juice.
