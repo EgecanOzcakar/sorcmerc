@@ -21,9 +21,18 @@ func _run() -> void:
 	while _presses < MAX_PRESSES:
 		await process_frame
 		if main.cb == null:
+			idle += 1
+			if idle > 120:
+				print("*** main.cb never initialised — script broken? ***")
+				quit(1)
 			continue
 		if main.cb.is_over():
 			break
+		# board-driven modes: move / cone need a hex click, not a button
+		if main._mode == "move" or main._mode == "cone":
+			_board_click()
+			idle = 0
+			continue
 		var btns = _buttons()
 		if btns.is_empty():
 			idle += 1
@@ -42,8 +51,38 @@ func _run() -> void:
 		print("  verbs: ", _picked.keys())
 		for c in main.cb.combatants:
 			var st = "dead" if c.is_dead() else ("down" if c.is_down() else "%d/%d" % [c.hp, c.max_hp])
-			print("  %-13s %-7s zone%d" % [c.cname, st, c.zone])
+			print("  %-13s %-7s @%v" % [c.cname, st, c.pos])
 	quit(0 if ok else 1)
+
+const Hex = preload("res://core/hex.gd")
+
+func _board_click() -> void:
+	_presses += 1
+	var cb = main.cb
+	var h = cb.current()
+	var foes = cb.enemies_of(h)
+	if main._mode == "cone":
+		_picked["Burning"] = true
+		if not foes.is_empty():
+			main.board_hex_clicked(foes[0].pos)
+		else:
+			main.board_cancel()
+		return
+	# move: step toward the nearest foe as far as the field allows
+	_picked["Move"] = true
+	var field = cb.move_field(h)
+	var goal = h.pos
+	if not foes.is_empty():
+		var best = 1 << 30
+		for hx in field:
+			var d = Hex.distance(hx, foes[0].pos)
+			if d < best:
+				best = d
+				goal = hx
+	if goal != h.pos:
+		main.board_hex_clicked(goal)
+	else:
+		main.board_cancel()
 
 func _buttons() -> Array:
 	var out: Array = []
@@ -55,7 +94,7 @@ func _buttons() -> Array:
 # Rotate through verbs rather than mashing Attack, so every path gets exercised.
 func _press(btns: Array) -> void:
 	var pick: Button = null
-	var wanted = ["Shove", "Burning Hands", "Healing Word", "Second Wind", "Sacred Flame", "Dodge", "Dash", "→", "←", "Attack"]
+	var wanted = ["Shove", "Burning Hands", "Healing Word", "Second Wind", "Sacred Flame", "Dodge", "Dash", "Move", "Attack"]
 	var verb = wanted[_presses % wanted.size()]
 	for b in btns:
 		if verb in b.text:

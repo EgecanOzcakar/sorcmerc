@@ -3,28 +3,53 @@
 extends RefCounted
 
 const Dice = preload("res://core/dice.gd")
+const Hex = preload("res://core/hex.gd")
+const Encounter = preload("res://core/encounter.gd")
 
-const ZONE_NAMES := ["Threshold", "Brazier Hall", "Alcove"]
-const ALCOVE := 2
 const MAX_ROUNDS := 60  # safety guard; a real fight ends in ~4-6
 
 var rng
 var combatants: Array = []
+var board: Dictionary = {}
 var order: Array = []
 var turn_idx: int = 0
 var round_num: int = 1
 var log: Array[String] = []
 
 # per-turn resource state (combat-design.md §10 risk 3 — model it explicitly)
-var move_used = false
+var move_left: int = 0        # move points remaining this turn
 var action_used = false
 var bonus_used = false
 var _sneak_used_turn = false
 
-func _init(_rng, _combatants: Array) -> void:
+func _init(_rng, _combatants: Array, _board: Dictionary = {}) -> void:
 	rng = _rng
 	combatants = _combatants
+	board = _board if not _board.is_empty() else Encounter.board()
 	_roll_initiative()
+
+# --- board -----------------------------------------------------------
+
+func passable(p: Vector2i) -> bool:
+	return p in board["hexes"]
+
+func is_cover(p: Vector2i) -> bool:
+	return p in board["cover"]
+
+func region_at(p: Vector2i) -> String:
+	return Encounter.region_at(p)
+
+func _blockers(mover) -> Array:
+	return combatants.filter(func(c): return c != mover and c.conscious()).map(func(c): return c.pos)
+
+func _hex_free(p: Vector2i, ignore = null) -> bool:
+	for c in combatants:
+		if c != ignore and c.conscious() and c.pos == p:
+			return false
+	return true
+
+func adjacent_to_brazier(c) -> bool:
+	return Hex.distance(c.pos, board["brazier"]) <= 1
 
 func _roll_initiative() -> void:
 	for c in combatants:
@@ -50,7 +75,7 @@ func current():
 
 func begin_turn() -> void:
 	var c = current()
-	move_used = false
+	move_left = c.speed
 	action_used = false
 	bonus_used = false
 	_sneak_used_turn = false
@@ -58,6 +83,10 @@ func begin_turn() -> void:
 	c.statuses.erase("reacted")
 	if c.is_down():
 		_death_save(c)
+
+func begin_turn_for(c) -> void:
+	# test/tooling helper: prime this turn's move points for an arbitrary combatant.
+	move_left = c.speed
 
 func end_turn() -> void:
 	current().has_acted = true
@@ -98,15 +127,22 @@ func enemies_of(c) -> Array:
 func allies_of(c) -> Array:
 	return combatants.filter(func(o): return o.team == c.team and o != c and o.conscious())
 
-func zone_has_enemy(c) -> bool:
+func adjacent_enemy(c) -> bool:
 	for o in enemies_of(c):
-		if o.zone == c.zone:
+		if Hex.distance(o.pos, c.pos) <= 1:
 			return true
 	return false
 
+# Can `attacker` reach `target` with a weapon attack right now?
+func in_reach(attacker, target) -> bool:
+	var d := Hex.distance(attacker.pos, target.pos)
+	if attacker.ranged:
+		return d <= attacker.atk_range
+	return d <= Encounter.REACH_MELEE
+
 func effective_ac(c) -> int:
 	var ac: int = c.ac
-	if c.zone == ALCOVE:
+	if is_cover(c.pos):
 		ac += 2  # half cover
 	return ac
 
@@ -125,7 +161,7 @@ func hit_chance(attacker, target, opts := {}) -> float:
 func _attack_mode(attacker, target, opts := {}) -> int:
 	var adv = false
 	var dis = false
-	if attacker.ranged and zone_has_enemy(attacker):
+	if attacker.ranged and adjacent_enemy(attacker):
 		dis = true
 	if target.has("prone"):
 		if attacker.ranged:
@@ -146,11 +182,13 @@ func _sneak_ok(attacker, target, mode: int) -> bool:
 	if mode == Dice.ADV:
 		return true
 	for a in allies_of(attacker):
-		if a.zone == target.zone:
+		if Hex.distance(a.pos, target.pos) <= 1:
 			return true
 	return false
 
 func resolve_attack(attacker, target, opts := {}) -> Dictionary:
+	if not opts.get("opportunity", false) and not in_reach(attacker, target):
+		return {"error": "out of range"}
 	var notation: String = opts.get("damage", attacker.damage)
 	var mode = _attack_mode(attacker, target, opts)
 	var r = Dice.d20(rng, mode)
@@ -260,19 +298,35 @@ func heal(c, amount: int) -> void:
 
 # --- movement -------------------------------------------------------
 
-func move_to(mover, dest: int, disengage := false) -> void:
-	dest = clampi(dest, 0, 2)
-	if dest == mover.zone:
+# Hexes reachable by `mover` with the move points left this turn.
+func move_field(mover) -> Dictionary:
+	return Hex.reachable(passable, mover.pos, move_left, _blockers(mover))
+
+# Hostiles that would get an opportunity attack if `mover` walked to `dest` now.
+func provokers_for(mover, dest: Vector2i) -> Array:
+	return enemies_of(mover).filter(func(f):
+		return Hex.distance(f.pos, mover.pos) <= 1 and Hex.distance(f.pos, dest) > 1 and not f.has("reacted"))
+
+func move_to(mover, dest: Vector2i, disengage := false) -> void:
+	if dest == mover.pos:
 		return
+	var field := move_field(mover)
+	if not field.has(dest):
+		return  # out of range / blocked — UI never offers this; guard for AI + tests
+	var from: Vector2i = mover.pos
+	# ponytail: OA on start-vs-end adjacency only, not each hex the path crosses.
 	if not disengage:
 		for f in enemies_of(mover):
-			if f.zone == mover.zone and not f.has("reacted"):
+			if Hex.distance(f.pos, from) <= 1 and Hex.distance(f.pos, dest) > 1 and not f.has("reacted"):
 				f.statuses["reacted"] = true
 				resolve_attack(f, mover, {"opportunity": true})
 				if mover.is_down() or mover.is_dead():
 					return
-	mover.zone = dest
-	log.append("%s moves to %s." % [mover.cname, ZONE_NAMES[dest]])
+	var before_region := region_at(from)
+	mover.pos = dest
+	move_left -= field[dest]
+	if region_at(dest) != before_region:
+		log.append("%s moves to the %s." % [mover.cname, region_at(dest)])
 
 # --- actions -------------------------------------------------------
 
@@ -293,12 +347,16 @@ func act_shove(attacker, target, choice: String) -> Dictionary:
 			target.statuses["prone"] = true
 			log.append("%s shoves %s prone (%d vs %d)." % [attacker.cname, target.cname, a, d])
 		"push":
-			var dir = signi(target.zone - attacker.zone)
-			if dir == 0:
-				dir = 1
-			target.zone = clampi(target.zone + dir, 0, 2)
-			log.append("%s shoves %s into %s." % [attacker.cname, target.cname, ZONE_NAMES[target.zone]])
+			var dest = target.pos + Hex.direction_to(attacker.pos, target.pos)
+			if passable(dest) and _hex_free(dest, target):
+				target.pos = dest
+				log.append("%s shoves %s back into the %s." % [attacker.cname, target.cname, region_at(dest)])
+			else:
+				target.statuses["prone"] = true
+				log.append("%s shoves %s — no room to push, %s falls prone." % [attacker.cname, target.cname, target.cname])
 		"brazier":
+			if not adjacent_to_brazier(target):
+				return {"success": true}
 			var burn = Dice.roll(rng, "2d6")
 			log.append("%s shoves %s into the brazier — 2d6 = %d fire." % [attacker.cname, target.cname, burn])
 			_apply_damage(target, burn)
@@ -328,7 +386,7 @@ func cast_healing_word(caster, target, level := 1) -> void:
 	log.append("%s casts Healing Word on %s." % [caster.cname, target.cname])
 	heal(target, amt)
 
-func cast_burning_hands(caster, level := 1) -> void:
+func cast_burning_hands(caster, dir: Vector2i, level := 1) -> void:
 	if not "burning_hands" in caster.spells:
 		return
 	if level >= 2 and caster.slots2 > 0:
@@ -340,9 +398,10 @@ func cast_burning_hands(caster, level := 1) -> void:
 		return
 	action_used = true
 	var notation = "%dd6" % (2 + level)
-	log.append("%s casts Burning Hands — everyone else in %s makes a DC %d save." % [caster.cname, ZONE_NAMES[caster.zone], caster.save_dc])
+	var wedge := Hex.cone(caster.pos, dir, Encounter.CONE_BURNING_HANDS)
+	log.append("%s casts Burning Hands — a cone of flame, DC %d save." % [caster.cname, caster.save_dc])
 	for c in combatants:
-		if c == caster or not c.conscious() or c.zone != caster.zone:
+		if c == caster or not c.conscious() or not (c.pos in wedge):
 			continue
 		var dmg = Dice.roll(rng, notation)
 		var saved = _saving_throw(c, caster.save_dc)
@@ -365,7 +424,7 @@ func cast_sacred_flame(caster, target) -> void:
 
 func _saving_throw(c, dc: int, ignore_cover := false) -> bool:
 	var bonus: int = c.dex_save
-	if c.zone == ALCOVE and not ignore_cover:
+	if is_cover(c.pos) and not ignore_cover:
 		bonus += 2
 	var mode = Dice.ADV if c.has("dodging") else Dice.NORMAL
 	return Dice.d20(rng, mode).nat + bonus >= dc

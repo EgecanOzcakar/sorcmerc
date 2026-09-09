@@ -9,13 +9,14 @@ var ac: int
 var max_hp: int
 var hp: int
 var init_mod: int = 0
-var speed_zones: int = 1
-var zone: int = 0
+var speed: int = 4          # move points (hexes) per turn
+var pos: Vector2i = Vector2i.ZERO
 
 # attack
 var atk_bonus: int = 0
 var damage: String = "1d4"
 var ranged: bool = false
+var atk_range: int = 1     # hexes; melee = 1, shortbow set in encounter.gd
 var crit_range: int = 20  # Vera crits on 19
 
 # checks / spellcasting
@@ -65,8 +66,8 @@ func conscious() -> bool:
 func clone() -> RefCounted:
 	var c = get_script().new()
 	for prop in [
-		"id","cname","team","ac","max_hp","hp","init_mod","speed_zones","zone",
-		"atk_bonus","damage","ranged","crit_range","save_dc","dex_save","athletics",
+		"id","cname","team","ac","max_hp","hp","init_mod","speed","pos",
+		"atk_bonus","damage","ranged","atk_range","crit_range","save_dc","dex_save","athletics",
 		"acro","stealth","passive_perception","sneak_attack","nimble_escape",
 		"surprise_attack","second_wind","action_surge","cunning_action","slots1","slots2",
 	]:

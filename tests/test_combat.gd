@@ -8,6 +8,7 @@ const Combat = preload("res://core/combat.gd")
 const AI = preload("res://core/ai.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Combatant = preload("res://core/combatant.gd")
+const Hex = preload("res://core/hex.gd")
 
 var _pass = 0
 var _fail = 0
@@ -28,6 +29,8 @@ func _init() -> void:
 	test_move_provokes_unless_disengage()
 	test_healing_word_clears_death()
 	test_alcove_cover()
+	test_reach_and_range()
+	test_move_budget()
 	test_encounter_resolves_many_seeds()
 
 	print("test_combat: %d passed, %d failed" % [_pass, _fail])
@@ -77,47 +80,56 @@ func test_burning_hands_hits_allies_not_caster() -> void:
 	var ilsa = _find(cb, "ilsa")
 	var vera = _find(cb, "vera")
 	var snik = _find(cb, "snik")
-	ilsa.zone = 1
-	vera.zone = 1
-	snik.zone = 1
+	ilsa.pos = Vector2i(4, 1)
+	vera.pos = Vector2i(5, 1)   # east of Ilsa — in the cone
+	snik.pos = Vector2i(5, 0)   # also east — in the cone
 	var vera_before = vera.hp
 	var ilsa_before = ilsa.hp
-	cb.cast_burning_hands(ilsa)
+	cb.cast_burning_hands(ilsa, Vector2i(1, 0))  # facing east
 	check(ilsa.hp == ilsa_before, "burning hands does not hit the caster")
-	check(vera.hp < vera_before, "burning hands hits an ally in the zone")
+	check(vera.hp < vera_before, "burning hands hits an ally in the cone")
+
+	var cb2 = _sandbox()
+	var i2 = _find(cb2, "ilsa"); var v2 = _find(cb2, "vera")
+	i2.pos = Vector2i(4, 1); v2.pos = Vector2i(3, 1)   # west — behind the cone
+	var vb = v2.hp
+	cb2.cast_burning_hands(i2, Vector2i(1, 0))
+	check(v2.hp == vb, "burning hands spares a creature outside the cone")
 
 func test_move_provokes_unless_disengage() -> void:
-	var cb = _sandbox()
-	var pike = _find(cb, "pike")
-	var grull = _find(cb, "grull")
-	pike.zone = 1
-	grull.zone = 1
-	# run many seeds: at least one OA must land
+	# Pike adjacent to Grull, steps away out of adjacency.
 	var landed = false
 	for s in range(1, 40):
 		var c = _sandbox(s)
-		var p = _find(c, "pike")
-		var g = _find(c, "grull")
-		p.zone = 1
-		g.zone = 1
+		var p = _find(c, "pike"); var g = _find(c, "grull")
+		p.pos = Vector2i(4, 1); g.pos = Vector2i(5, 1)
+		c.begin_turn_for(p)
 		var before = p.hp
-		c.move_to(p, 0)
+		c.move_to(p, Vector2i(2, 1))   # 2 hexes west, breaks adjacency
 		if p.hp < before:
 			landed = true
-	check(landed, "moving out of an occupied zone provokes (some seed lands the OA)")
+	check(landed, "moving out of adjacency provokes (some seed lands the OA)")
 
 	var safe = true
 	for s in range(1, 40):
 		var c = _sandbox(s)
-		var p = _find(c, "pike")
-		var g = _find(c, "grull")
-		p.zone = 1
-		g.zone = 1
+		var p = _find(c, "pike"); var g = _find(c, "grull")
+		p.pos = Vector2i(4, 1); g.pos = Vector2i(5, 1)
+		c.begin_turn_for(p)
 		var before = p.hp
-		c.move_to(p, 0, true)  # disengage
+		c.move_to(p, Vector2i(2, 1), true)  # disengage
 		if p.hp < before:
 			safe = false
 	check(safe, "Disengage prevents the opportunity attack")
+
+	# staying adjacent (sidestep) does not provoke
+	var c3 = _sandbox()
+	var p3 = _find(c3, "pike"); var g3 = _find(c3, "grull")
+	p3.pos = Vector2i(4, 1); g3.pos = Vector2i(5, 1)
+	c3.begin_turn_for(p3)
+	var b3 = p3.hp
+	c3.move_to(p3, Vector2i(5, 0))   # still adjacent to Grull
+	check(p3.hp == b3, "sidestep while staying adjacent does not provoke")
 
 func test_healing_word_clears_death() -> void:
 	var cb = _sandbox()
@@ -135,10 +147,62 @@ func test_healing_word_clears_death() -> void:
 func test_alcove_cover() -> void:
 	var cb = _sandbox()
 	var kritch = _find(cb, "kritch")
-	kritch.zone = 0
+	kritch.pos = Vector2i(4, 1)
 	var open_ac = cb.effective_ac(kritch)
-	kritch.zone = 2
-	check(cb.effective_ac(kritch) == open_ac + 2, "Alcove grants +2 AC")
+	kritch.pos = Vector2i(8, 1)   # Alcove — a cover hex
+	check(cb.effective_ac(kritch) == open_ac + 2, "cover hex grants +2 AC")
+	check(cb._saving_throw(kritch, 100) == false, "cover hex still fails an impossible DC")  # smoke
+	# sacred flame ignores cover: compare save bonus paths
+	kritch.pos = Vector2i(8, 1)
+	var cover_saves = 0
+	var open_saves = 0
+	for s in range(1, 200):
+		var c = _sandbox(s)
+		var k = _find(c, "kritch")
+		k.pos = Vector2i(8, 1)
+		if c._saving_throw(k, 13): cover_saves += 1
+		if c._saving_throw(k, 13, true): open_saves += 1
+	check(cover_saves > open_saves, "cover raises DEX saves; ignore_cover removes it (%d vs %d)" % [cover_saves, open_saves])
+
+func test_reach_and_range() -> void:
+	var cb = _sandbox()
+	var vera = _find(cb, "vera")   # melee
+	var pike = _find(cb, "pike")   # ranged, range 6
+	var grull = _find(cb, "grull")
+	vera.pos = Vector2i(0, 1)
+	grull.pos = Vector2i(3, 1)     # distance 3
+	check(cb.resolve_attack(vera, grull).has("error"), "melee attack at distance 3 is rejected")
+	grull.pos = Vector2i(1, 1)     # distance 1
+	check(not cb.resolve_attack(vera, grull).has("error"), "melee attack at distance 1 resolves")
+
+	pike.pos = Vector2i(0, 1)
+	grull.pos = Vector2i(6, 1)     # distance 6
+	check(not cb.resolve_attack(pike, grull).has("error"), "ranged attack within range resolves")
+	grull.pos = Vector2i(8, 1)     # distance 8 (> 6)
+	check(cb.resolve_attack(pike, grull).has("error"), "ranged attack beyond range is rejected")
+
+	# ranged with an adjacent hostile -> disadvantage
+	pike.pos = Vector2i(4, 1)
+	var snik = _find(cb, "snik")
+	snik.pos = Vector2i(4, 0)      # adjacent to Pike
+	grull.pos = Vector2i(6, 1)
+	check(cb._attack_mode(pike, grull) == Dice.DIS, "ranged while adjacent to a hostile is at disadvantage")
+
+func test_move_budget() -> void:
+	var cb = _sandbox()
+	var vera = _find(cb, "vera")
+	vera.speed = 4
+	# park everyone else far away
+	for c in cb.combatants:
+		if c != vera:
+			c.pos = Vector2i(8, c.pos.y % 3)
+	vera.pos = Vector2i(0, 1)
+	cb.begin_turn_for(vera)
+	cb.move_to(vera, Vector2i(5, 1))   # distance 5 > speed 4
+	check(vera.pos == Vector2i(0, 1), "move beyond the speed budget is rejected")
+	cb.move_to(vera, Vector2i(3, 1))   # distance 3 <= 4
+	check(vera.pos == Vector2i(3, 1), "move within budget succeeds")
+	check(cb.move_left == 1, "move points decremented by path cost")
 
 func test_encounter_resolves_many_seeds() -> void:
 	var wins = 0

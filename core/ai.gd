@@ -1,8 +1,8 @@
-# Monster AI = the literal priority list from combat-design.md §7.
+# Monster AI = the literal priority list from combat-design.md §7, on the hex grid.
 # Also a simple auto-pilot for the party, used by headless playthrough / demo mode.
 extends RefCounted
 
-const Dice = preload("res://core/dice.gd")
+const Hex = preload("res://core/hex.gd")
 
 static func take_turn(cb, actor) -> void:
 	if not actor.conscious():
@@ -12,48 +12,80 @@ static func take_turn(cb, actor) -> void:
 	else:
 		_party_auto(cb, actor)
 
-# --- foes ---------------------------------------------------------------
+# --- hex movement helpers --------------------------------------------
+
+static func _nearest(from: Vector2i, list: Array):
+	var best = null
+	var best_d := 1 << 30
+	for c in list:
+		var d: int = Hex.distance(from, c.pos)
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
+
+# Step as far as this turn's move points allow toward `goal`; returns nothing,
+# mutates via cb.move_to. `score` picks the destination among reachable hexes.
+static func _move_by(cb, m, score: Callable, disengage := false) -> void:
+	var field: Dictionary = cb.move_field(m)
+	var best: Vector2i = m.pos
+	var best_s: float = score.call(m.pos)
+	for h in field:
+		var s: float = score.call(h)
+		if s > best_s:
+			best_s = s
+			best = h
+	if best != m.pos:
+		cb.move_to(m, best, disengage)
+
+static func _toward(goal: Vector2i) -> Callable:
+	return func(h: Vector2i) -> float: return -float(Hex.distance(h, goal))
+
+static func _away(threats: Array) -> Callable:
+	return func(h: Vector2i) -> float:
+		var m := 1 << 30
+		for t in threats:
+			m = mini(m, Hex.distance(h, t.pos))
+		return float(m)
+
+# --- foes ------------------------------------------------------------
 
 static func _foe_turn(cb, m) -> void:
 	var pcs: Array = cb.combatants.filter(func(c): return c.team == "party" and c.conscious())
 	if pcs.is_empty():
 		return
 
-	var here: Array = pcs.filter(func(c): return c.zone == m.zone)
-	if not here.is_empty():
-		here.sort_custom(func(a, b): return a.hp < b.hp if a.hp != b.hp else a.ac < b.ac)
-		cb.resolve_attack(m, here[0])
+	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1)
+	if not adj.is_empty():
+		adj.sort_custom(func(a, b): return a.hp < b.hp if a.hp != b.hp else a.ac < b.ac)
+		cb.resolve_attack(m, adj[0])
 		if m.nimble_escape and m.hp * 2 <= m.max_hp:
-			var dir = _away_from(m, here[0])
-			if dir != 0:
-				cb.move_to(m, m.zone + dir, true)  # Nimble Escape = bonus Disengage
+			_move_by(cb, m, _away(pcs), true)  # Nimble Escape = bonus Disengage
 		return
 
 	if m.ranged:
-		pcs.sort_custom(func(a, b): return a.hp < b.hp)
-		cb.resolve_attack(m, pcs[0])
+		# Kritch: keep clear, stay in range, shoot the softest target.
+		var near = _nearest(m.pos, pcs)
+		var d := Hex.distance(m.pos, near.pos)
+		if d <= 1:
+			_move_by(cb, m, _away(pcs), true)
+		elif d > m.atk_range:
+			_move_by(cb, m, _toward(near.pos))
+		var shootable: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.atk_range and Hex.distance(c.pos, m.pos) > 1)
+		if not shootable.is_empty():
+			shootable.sort_custom(func(a, b): return a.hp < b.hp)
+			cb.resolve_attack(m, shootable[0])
 		return
 
-	# move one zone toward the nearest zone holding a conscious PC, then swing if arrived
-	pcs.sort_custom(func(a, b): return absi(a.zone - m.zone) < absi(b.zone - m.zone))
-	var step = signi(pcs[0].zone - m.zone)
-	if step != 0:
-		cb.move_to(m, m.zone + step)
-	var now: Array = pcs.filter(func(c): return c.zone == m.zone and c.conscious())
+	# melee, nobody adjacent: close on the nearest PC, then swing if we arrived
+	var target = _nearest(m.pos, pcs)
+	_move_by(cb, m, _toward(target.pos))
+	var now: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1 and c.conscious())
 	if not now.is_empty() and m.conscious():
 		now.sort_custom(func(a, b): return a.hp < b.hp)
 		cb.resolve_attack(m, now[0])
 
-static func _away_from(m, threat) -> int:
-	if m.zone == threat.zone:
-		if m.zone == 0:
-			return 1
-		if m.zone == 2:
-			return -1
-		return 1
-	return signi(m.zone - threat.zone)
-
-# --- party autopilot (demo / test only) --------------------------------
+# --- party autopilot (demo / test only) ----------------------------
 
 static func _party_auto(cb, h) -> void:
 	var foes: Array = cb.enemies_of(h)
@@ -66,28 +98,33 @@ static func _party_auto(cb, h) -> void:
 		if not downed.is_empty():
 			cb.cast_healing_word(h, downed[0])
 
-	# close distance if nobody to hit here and not a ranged attacker
-	var here: Array = foes.filter(func(c): return c.zone == h.zone)
-	if here.is_empty() and not h.ranged:
-		foes.sort_custom(func(a, b): return absi(a.zone - h.zone) < absi(b.zone - h.zone))
-		var step = signi(foes[0].zone - h.zone)
-		if step != 0:
-			cb.move_to(cb, h) if false else cb.move_to(h, h.zone + step)
-		here = cb.enemies_of(h).filter(func(c): return c.zone == h.zone)
+	# close distance if nothing is in reach and we're not a shooter
+	var reach: Array = foes.filter(func(c): return cb.in_reach(h, c))
+	if reach.is_empty() and not h.ranged:
+		var t = _nearest(h.pos, foes)
+		_move_by(cb, h, _toward(t.pos))
+		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
 
-	# caster: burning hands if it catches 2+ foes and no ally in zone
+	# caster: burning hands if a cone catches 2+ foes and no ally
 	if "burning_hands" in h.spells and h.slots1 + h.slots2 > 0:
-		var foes_here = cb.enemies_of(h).filter(func(c): return c.zone == h.zone)
-		var allies_here = cb.allies_of(h).filter(func(c): return c.zone == h.zone)
-		if foes_here.size() >= 2 and allies_here.is_empty():
-			cb.cast_burning_hands(h)
+		var best_dir := Vector2i.ZERO
+		var best_net := 1
+		for d in Hex.DIRS:
+			var wedge := Hex.cone(h.pos, d, 2)
+			var f: int = cb.enemies_of(h).filter(func(c): return c.pos in wedge).size()
+			var a: int = cb.allies_of(h).filter(func(c): return c.pos in wedge).size()
+			if f - a > best_net:
+				best_net = f - a
+				best_dir = d
+		if best_dir != Vector2i.ZERO:
+			cb.cast_burning_hands(h, best_dir)
 			return
 
-	var targets: Array = here if not here.is_empty() else foes
+	var targets: Array = reach if not reach.is_empty() else foes
 	if targets.is_empty():
 		return
 	targets.sort_custom(func(a, b): return a.hp < b.hp)
-	if h.ranged or not here.is_empty():
+	if cb.in_reach(h, targets[0]):
 		cb.resolve_attack(h, targets[0])
 	elif "sacred_flame" in h.spells:
 		cb.cast_sacred_flame(h, targets[0])
