@@ -421,8 +421,7 @@ func _apply_target(h, c) -> void:
 
 func board_hex_hovered(hx: Vector2i) -> void:
 	_hover_hex = hx
-	if _mode == "cone" or _mode == "target":
-		_board.queue_redraw()
+	_board.queue_redraw()
 
 func board_cancel() -> void:
 	if _mode != "idle" and cb and not cb.is_over() and cb.current().team == "party":
@@ -867,6 +866,53 @@ class Board extends Control:
 				line, HORIZONTAL_ALIGNMENT_LEFT, -1, int(12 * fz), lcol)
 			draw_string(ThemeDB.fallback_font, Vector2(anchor.x - total_w / 2.0, anchor.y - 6),
 				verdict, HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * fz), vcol)
+
+		# --- hover stat card ------------------------------------------
+		if main._mode == "idle":
+			for c in cb.combatants:
+				if c.pos == _hover and not c.is_dead():
+					_stat_card(c, fz)
+					break
+
+	func _stat_card(c, fz: float) -> void:
+		var lines: Array = [
+			c.cname,
+			"AC %d   HP %d/%d" % [cb.effective_ac(c), c.hp, c.max_hp],
+			"speed %d   %s" % [c.speed, cb.region_at(c.pos)],
+		]
+		var st: Array = []
+		for s in ["prone", "hidden", "dodging", "helped"]:
+			if c.has(s): st.append(s)
+		if c.is_down(): st.append("down %d/%d" % [c.death_s, c.death_f])
+		if cb.is_cover(c.pos): st.append("cover")
+		if not st.is_empty(): lines.append(" · ".join(st))
+		var kit: Array = []
+		if c.sneak_attack != "": kit.append("Sneak Attack")
+		if c.nimble_escape: kit.append("Nimble Escape")
+		if c.cunning_action: kit.append("Cunning Action")
+		if c.second_wind != "": kit.append("Second Wind")
+		if c.action_surge: kit.append("Action Surge")
+		if c.surprise_attack != "": kit.append("Surprise Attack")
+		for sp in c.spells: kit.append(sp.capitalize().replace("_", " "))
+		if not kit.is_empty(): lines.append(", ".join(kit))
+
+		var fs := int(12 * clampf(fz, 0.9, 1.3))
+		var pad := 8.0
+		var w := 0.0
+		for l in lines:
+			w = maxf(w, ThemeDB.fallback_font.get_string_size(l, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+		var lh := fs + 5.0
+		var box := Vector2(w + pad * 2, lines.size() * lh + pad * 2)
+		var p: Vector2 = _tok.get(c.id, _pix(c.pos)) + Vector2(main.hex_px * 0.8, -box.y * 0.5)
+		p.x = clampf(p.x, 4, size.x - box.x - 4)
+		p.y = clampf(p.y, 4, size.y - box.y - 4)
+		draw_rect(Rect2(p, box), Color(0.05, 0.06, 0.09, 0.94))
+		draw_rect(Rect2(p, box), Color("6f5a30"), false, 1.0)
+		for i in lines.size():
+			var col := Color("f0e6cf") if i == 0 else Color("c2c5cf")
+			if i == lines.size() - 1 and not lines[i].begins_with(c.cname): col = Color("8fb7d8")
+			draw_string(ThemeDB.fallback_font, p + Vector2(pad, pad + fs + i * lh),
+				lines[i], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 	func _initials(nm: String) -> String:
 		var w := nm.split(" ", false)

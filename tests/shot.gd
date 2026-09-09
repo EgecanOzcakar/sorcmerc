@@ -14,6 +14,13 @@ func _init() -> void:
 	for i in 20:
 		await process_frame
 	await create_timer(0.8).timeout
+	if OS.get_environment("SHOT_HOVER") != "":
+		var c = main.cb.combatants[int(OS.get_environment("SHOT_HOVER"))]
+		var ev := InputEventMouseMotion.new()
+		ev.position = main._board._pix(c.pos)
+		main._board._gui_input(ev)
+		main._board.queue_redraw()
+		await process_frame
 	RenderingServer.force_draw()
 	await process_frame
 	var img := root.get_viewport().get_texture().get_image()
