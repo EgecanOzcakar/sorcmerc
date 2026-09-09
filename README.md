@@ -34,6 +34,9 @@ alias godot='flatpak run org.godotengine.Godot'
 
 Play (needs a display):
 
+Board controls: mouse wheel or `+` / `-` to zoom, drag (middle/right button) or arrow
+keys to pan, `0` to reset.
+
 ```sh
 godot --path .                       # opens the editor
 godot --path . scenes/main.tscn      # runs the game directly

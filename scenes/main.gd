@@ -8,7 +8,11 @@ const AI = preload("res://core/ai.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Hex = preload("res://core/hex.gd")
 
-const HEX_SIZE := 34.0
+const HEX_BASE := 34.0
+var _zoom := 1.0
+var _pan := Vector2.ZERO
+var hex_px: float:
+	get: return HEX_BASE * _zoom
 const FAST := false  # set by _ready from SORCMERC_FAST
 
 var cb
@@ -88,6 +92,28 @@ func _ready() -> void:
 
 	set_process(true)
 	_new_game()
+
+func set_zoom(z: float) -> void:
+	_zoom = clampf(z, 0.45, 3.0)
+	if _board:
+		_board.queue_redraw()
+
+func pan_by(delta: Vector2) -> void:
+	_pan += delta
+	if _board:
+		_board.queue_redraw()
+
+func _unhandled_key_input(e: InputEvent) -> void:
+	if not (e is InputEventKey and e.pressed):
+		return
+	match e.keycode:
+		KEY_EQUAL, KEY_KP_ADD: set_zoom(_zoom * 1.1)
+		KEY_MINUS, KEY_KP_SUBTRACT: set_zoom(_zoom / 1.1)
+		KEY_0: _zoom = 1.0; _pan = Vector2.ZERO; _board.queue_redraw()
+		KEY_LEFT: pan_by(Vector2(40, 0))
+		KEY_RIGHT: pan_by(Vector2(-40, 0))
+		KEY_UP: pan_by(Vector2(0, 40))
+		KEY_DOWN: pan_by(Vector2(0, -40))
 
 func _build_theme() -> void:
 	var th := Theme.new()
@@ -326,7 +352,7 @@ func _refresh() -> void:
 		if c.is_dead():
 			nm = "[s]%s[/s]" % nm
 		parts.append("[color=%s]%s(%d)[/color]" % [col, nm, c.init_roll])
-	_order.text = "[b]ORDER[/b]  " + "   ".join(parts)
+	_order.text = "[b]ORDER[/b]  " + "   ".join(parts) + "     [color=#5a6070]· scroll/± zoom · drag pan · 0 reset ·[/color]"
 
 	var cur = cb.current()
 	if cur and cur.team == "party" and cur.conscious() and _mode != "cone":
@@ -399,13 +425,13 @@ class Board extends Control:
 		var mn := Vector2(1e9, 1e9)
 		var mx := Vector2(-1e9, -1e9)
 		for hx in cb.board["hexes"]:
-			var p := Hex.to_pixel(hx, main.HEX_SIZE)
+			var p := Hex.to_pixel(hx, main.hex_px)
 			mn = mn.min(p); mx = mx.max(p)
 		var span := mx - mn
-		_origin = (size - span) * 0.5 - mn
+		_origin = (size - span) * 0.5 - mn + main._pan
 
 	func _pix(hx: Vector2i) -> Vector2:
-		return _origin + Hex.to_pixel(hx, main.HEX_SIZE)
+		return _origin + Hex.to_pixel(hx, main.hex_px)
 
 	func _hex_poly(center: Vector2, s: float) -> PackedVector2Array:
 		var pts := PackedVector2Array()
@@ -455,21 +481,29 @@ class Board extends Control:
 		if cb == null:
 			return
 		if e is InputEventMouseMotion:
-			var hx := Hex.from_pixel(e.position - _origin, main.HEX_SIZE)
+			if e.button_mask & (MOUSE_BUTTON_MASK_MIDDLE | MOUSE_BUTTON_MASK_RIGHT):
+				main.pan_by(e.relative)
+				return
+			var hx := Hex.from_pixel(e.position - _origin, main.hex_px)
 			if hx != _hover:
 				_hover = hx
 				main.board_hex_hovered(hx)
 		elif e is InputEventMouseButton and e.pressed:
-			if e.button_index == MOUSE_BUTTON_RIGHT:
+			if e.button_index == MOUSE_BUTTON_WHEEL_UP:
+				main.set_zoom(main._zoom * 1.1)
+			elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				main.set_zoom(main._zoom / 1.1)
+			elif e.button_index == MOUSE_BUTTON_RIGHT:
 				main.board_cancel()
 			elif e.button_index == MOUSE_BUTTON_LEFT:
-				main.board_hex_clicked(Hex.from_pixel(e.position - _origin, main.HEX_SIZE))
+				main.board_hex_clicked(Hex.from_pixel(e.position - _origin, main.hex_px))
 
 	func _draw() -> void:
 		if cb == null:
 			return
 		_layout()
-		var s: float = main.HEX_SIZE
+		var s: float = main.hex_px
+		var fz := clampf(main._zoom, 0.75, 1.7)   # font scale, gentler than the hex scale
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 350.0)
 
 		var field := {}
@@ -534,12 +568,12 @@ class Board extends Control:
 			draw_circle(p, rad, base)
 			draw_arc(p, rad, 0, TAU, 24, base.darkened(0.4), 2.0)
 			var initials: String = _initials(c.cname)
-			draw_string(ThemeDB.fallback_font, p - Vector2(rad * 0.55, -5), initials,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("101216"))
+			draw_string(ThemeDB.fallback_font, p - Vector2(rad * 0.55, -5 * fz), initials,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * fz), Color("101216"))
 			var glyph := _glyph(c)
 			if glyph != "":
 				draw_string(ThemeDB.fallback_font, p + Vector2(rad * 0.1, -rad * 0.65), glyph,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("101216"))
+					HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * fz), Color("101216"))
 
 			# hp bar
 			var hv: float = _hp.get(c.id, float(c.hp))
@@ -551,8 +585,8 @@ class Board extends Control:
 			if frac < 0.33: hpcol = Color("d15750")
 			elif frac < 0.66: hpcol = Color("d9a441")
 			draw_rect(Rect2(br.position, Vector2(br.size.x * frac, br.size.y)), hpcol)
-			draw_string(ThemeDB.fallback_font, br.position + Vector2(0, 20),
-				"%d/%d" % [c.hp, c.max_hp], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("c9ccd6"))
+			draw_string(ThemeDB.fallback_font, br.position + Vector2(0, 12 + 8 * fz),
+				"%d/%d" % [c.hp, c.max_hp], HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * fz), Color("c9ccd6"))
 
 			var tags := ""
 			if c.has("prone"): tags += "↓"
@@ -560,7 +594,7 @@ class Board extends Control:
 			if c.is_down(): tags += " ✗%d/%d" % [c.death_s, c.death_f]
 			if tags != "":
 				draw_string(ThemeDB.fallback_font, p + Vector2(-rad, -rad - 4), tags,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("e6c15a"))
+					HORIZONTAL_ALIGNMENT_LEFT, -1, int(12 * fz), Color("e6c15a"))
 
 		# floating damage
 		for f in _floats:
