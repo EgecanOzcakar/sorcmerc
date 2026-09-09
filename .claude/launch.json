@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sorcmerc",
+      "runtimeExecutable": "flatpak",
+      "runtimeArgs": ["run", "org.godotengine.Godot", "--path", ".", "scenes/main.tscn"],
+      "port": 0
+    }
+  ]
+}
