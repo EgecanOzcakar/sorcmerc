@@ -64,6 +64,37 @@ func _ready() -> void:
 	_header.add_theme_font_size_override("font_size", 22)
 	root.add_child(_header)
 
+	# --- the action log: big, centred, shiny --------------------------
+	var logwrap := PanelContainer.new()
+	logwrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	logwrap.custom_minimum_size = Vector2(820, 240)
+	var glow := StyleBoxFlat.new()
+	glow.bg_color = Color("0c0e15")
+	glow.set_corner_radius_all(14)
+	glow.set_border_width_all(2)
+	glow.border_color = Color("6f5a30")
+	glow.shadow_color = Color(0.95, 0.78, 0.42, 0.22)
+	glow.shadow_size = 16
+	glow.set_content_margin_all(16)
+	logwrap.add_theme_stylebox_override("panel", glow)
+	var logcol := VBoxContainer.new()
+	logcol.add_theme_constant_override("separation", 4)
+	logwrap.add_child(logcol)
+	var cap := Label.new()
+	cap.text = "»   A C T I O N   L O G   «"
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cap.add_theme_font_size_override("font_size", 12)
+	cap.add_theme_color_override("font_color", Color("c8a75a"))
+	logcol.add_child(cap)
+	_logbox.bbcode_enabled = true
+	_logbox.scroll_following = true
+	_logbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_logbox.add_theme_font_size_override("normal_font_size", 18)
+	_logbox.add_theme_font_size_override("bold_font_size", 18)
+	_logbox.add_theme_color_override("default_color", Color("e9e9df"))
+	logcol.add_child(_logbox)
+	root.add_child(logwrap)
+
 	_order.bbcode_enabled = true
 	_order.fit_content = true
 	_order.scroll_active = false
@@ -74,7 +105,7 @@ func _ready() -> void:
 	_board.clip_contents = true
 	_board.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_board.custom_minimum_size = Vector2(0, 300)
+	_board.custom_minimum_size = Vector2(0, 180)
 	root.add_child(_board)
 
 	_actor.add_theme_font_size_override("font_size", 16)
@@ -83,12 +114,6 @@ func _ready() -> void:
 	_buttons.add_theme_constant_override("h_separation", 6)
 	_buttons.add_theme_constant_override("v_separation", 6)
 	root.add_child(_buttons)
-
-	_logbox.bbcode_enabled = true
-	_logbox.scroll_following = true
-	_logbox.custom_minimum_size = Vector2(0, 150)
-	_logbox.add_theme_color_override("default_color", Color(0.85, 0.85, 0.8))
-	root.add_child(_logbox)
 
 	set_process(true)
 	_new_game()
@@ -371,12 +396,26 @@ var _logged = 0
 func _flush_log() -> void:
 	while _logged < cb.log.size():
 		var line: String = cb.log[_logged]
-		var col = "#d8d8d0"
-		if "CRIT" in line: col = "#ff5a4a"
-		elif "is dead" in line or "has died" in line: col = "#ff8866"
-		elif "revives" in line or "nat 20" in line: col = "#7dff9d"
-		elif "misses" in line or "turned aside" in line: col = "#8a8a84"
-		_logbox.append_text("[color=%s]%s[/color]\n" % [col, line])
+		var col := "#e9e9df"
+		var bold := false
+		if "CRIT" in line:
+			col = "#ff6a4a"; bold = true
+		elif "is dead" in line or "has died" in line:
+			col = "#ff8866"; bold = true
+		elif "revives" in line or "nat 20" in line:
+			col = "#8dffb0"; bold = true
+		elif "falls unconscious" in line:
+			col = "#ffab5c"
+		elif "misses" in line or "turned aside" in line:
+			col = "#7f7f79"
+		elif " hits " in line or " CRITS " in line:
+			col = "#ffe0a0"
+		elif "casts" in line or "calls" in line or "Second Wind" in line or "healed" in line:
+			col = "#9fd0ff"
+		elif "Initiative:" in line:
+			col = "#c8a75a"
+		var body := "[b]%s[/b]" % line if bold else line
+		_logbox.append_text("[color=%s]%s[/color]\n" % [col, body])
 		_logged += 1
 
 func _finish() -> void:
