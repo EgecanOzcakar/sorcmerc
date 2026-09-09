@@ -36,6 +36,9 @@ func passable(p: Vector2i) -> bool:
 func is_cover(p: Vector2i) -> bool:
 	return p in board["cover"]
 
+func _rough() -> Array:
+	return board.get("rough", [])
+
 func region_at(p: Vector2i) -> String:
 	return Encounter.region_at(p)
 
@@ -321,12 +324,24 @@ func heal(c, amount: int) -> void:
 
 # Hexes reachable by `mover` with the move points left this turn.
 func move_field(mover) -> Dictionary:
-	return Hex.reachable(passable, mover.pos, move_left, _blockers(mover))
+	return Hex.reachable(passable, mover.pos, move_left, _blockers(mover), _rough())
 
-# Hostiles that would get an opportunity attack if `mover` walked to `dest` now.
+# The shortest route `mover` would walk to `dest`.
+func move_path(mover, dest: Vector2i) -> Array:
+	return Hex.path_to(passable, mover.pos, dest, _blockers(mover), _rough())
+
+# Hostiles that get an opportunity attack somewhere along `mover`'s walk to `dest`.
 func provokers_for(mover, dest: Vector2i) -> Array:
-	return enemies_of(mover).filter(func(f):
-		return Hex.distance(f.pos, mover.pos) <= 1 and Hex.distance(f.pos, dest) > 1 and not f.has("reacted"))
+	var path := move_path(mover, dest)
+	var out: Array = []
+	for f in enemies_of(mover):
+		if f.has("reacted") or f in out:
+			continue
+		for i in range(path.size() - 1):
+			if Hex.distance(f.pos, path[i]) <= 1 and Hex.distance(f.pos, path[i + 1]) > 1:
+				out.append(f)
+				break
+	return out
 
 func move_to(mover, dest: Vector2i, disengage := false) -> void:
 	if dest == mover.pos:
@@ -335,14 +350,12 @@ func move_to(mover, dest: Vector2i, disengage := false) -> void:
 	if not field.has(dest):
 		return  # out of range / blocked — UI never offers this; guard for AI + tests
 	var from: Vector2i = mover.pos
-	# ponytail: OA on start-vs-end adjacency only, not each hex the path crosses.
 	if not disengage:
-		for f in enemies_of(mover):
-			if Hex.distance(f.pos, from) <= 1 and Hex.distance(f.pos, dest) > 1 and not f.has("reacted"):
-				f.statuses["reacted"] = true
-				resolve_attack(f, mover, {"opportunity": true})
-				if mover.is_down() or mover.is_dead():
-					return
+		for f in provokers_for(mover, dest):
+			f.statuses["reacted"] = true
+			resolve_attack(f, mover, {"opportunity": true})
+			if mover.is_down() or mover.is_dead():
+				return
 	var before_region := region_at(from)
 	mover.pos = dest
 	move_left -= field[dest]

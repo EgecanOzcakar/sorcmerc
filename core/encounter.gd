@@ -33,6 +33,7 @@ static func board() -> Dictionary:
 		"hexes": _room(),
 		"brazier": BRAZIER,
 		"cover": [Vector2i(8, 0), Vector2i(8, 1), Vector2i(8, 2)],  # the Alcove
+		"rough": [Vector2i(4, 1), Vector2i(6, 1)],                  # scorched ground either side of the brazier
 	}
 
 static func region_at(p: Vector2i) -> String:

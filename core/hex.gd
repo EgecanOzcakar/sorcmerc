@@ -31,23 +31,61 @@ static func direction_to(a: Vector2i, b: Vector2i) -> Vector2i:
 			best = d
 	return best
 
-# BFS flood-fill of movement. `passable` is Callable(Vector2i)->bool (board shape),
-# `blocked` are hexes you may not enter (occupied). You may still END adjacent to
-# a blocked hex — they just aren't steppable. Returns {Vector2i: cost}.
-static func reachable(passable: Callable, start: Vector2i, steps: int, blocked: Array) -> Dictionary:
-	var seen := {start: 0}
-	var frontier := [start]
-	while not frontier.is_empty():
-		var cur = frontier.pop_front()
-		var cost: int = seen[cur]
+# Dijkstra flood-fill of movement. `passable` is Callable(Vector2i)->bool (board
+# shape), `blocked` are hexes you may not enter (occupied), `rough` hexes cost 2
+# to enter. You may still END adjacent to a blocked hex — it just isn't steppable.
+# Returns {Vector2i: cost}.
+static func reachable(passable: Callable, start: Vector2i, steps: int, blocked: Array, rough: Array = []) -> Dictionary:
+	var dist := {start: 0}
+	var q: Array = [start]
+	while not q.is_empty():
+		var bi := 0
+		for i in range(1, q.size()):
+			if dist[q[i]] < dist[q[bi]]:
+				bi = i
+		var cur = q.pop_at(bi)
+		var cost: int = dist[cur]
 		if cost >= steps:
 			continue
 		for n in neighbors(cur):
-			if seen.has(n) or n in blocked or not passable.call(n):
+			if n in blocked or not passable.call(n):
 				continue
-			seen[n] = cost + 1
-			frontier.append(n)
-	return seen
+			var nd: int = cost + (2 if n in rough else 1)
+			if nd <= steps and (not dist.has(n) or nd < dist[n]):
+				dist[n] = nd
+				if not n in q:
+					q.append(n)
+	return dist
+
+# Shortest-cost path start→dest (inclusive) as a Vector2i list, or [] if none.
+# Used for path-aware opportunity attacks.
+static func path_to(passable: Callable, start: Vector2i, dest: Vector2i, blocked: Array, rough: Array = []) -> Array:
+	var dist := {start: 0}
+	var prev := {}
+	var q: Array = [start]
+	while not q.is_empty():
+		var bi := 0
+		for i in range(1, q.size()):
+			if dist[q[i]] < dist[q[bi]]:
+				bi = i
+		var cur = q.pop_at(bi)
+		if cur == dest:
+			break
+		for n in neighbors(cur):
+			if n in blocked or not passable.call(n):
+				continue
+			var nd: int = dist[cur] + (2 if n in rough else 1)
+			if not dist.has(n) or nd < dist[n]:
+				dist[n] = nd
+				prev[n] = cur
+				if not n in q:
+					q.append(n)
+	if dest != start and not prev.has(dest):
+		return []
+	var path: Array = [dest]
+	while path[0] != start:
+		path.push_front(prev[path[0]])
+	return path
 
 # Hexes in a ~120° wedge centred on `dir`, out to `length`. Excludes `origin`.
 static func cone(origin: Vector2i, dir: Vector2i, length: int) -> Array:

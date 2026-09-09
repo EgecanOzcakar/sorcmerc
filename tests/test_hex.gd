@@ -53,6 +53,19 @@ func _init() -> void:
 	for h in r3:
 		check(absi(h.x) <= 1, "flood respects impassable hexes")
 
+	# rough terrain costs 2 to enter
+	var rough := [Vector2i(1, 0)]
+	var rr := Hex.reachable(open, o, 2, [], rough)
+	check(rr[Vector2i(1, 0)] == 2, "rough hex costs 2")
+	check(rr.has(Vector2i(2, 0)) == false, "can't afford past a rough hex on 2 points")
+	check(rr[Vector2i(0, 1)] == 1, "non-rough neighbour still costs 1")
+
+	# path_to: shortest route, routes around rough when cheaper
+	var p := Hex.path_to(open, o, Vector2i(3, 0), [])
+	check(p.size() == 4 and p[0] == o and p[3] == Vector2i(3, 0), "path_to endpoints + length")
+	check(Hex.path_to(open, o, Vector2i(5, 0), [Vector2i(1, 0), Vector2i(1, -1), Vector2i(2, -1)]).size() > 0, "path_to finds a way around blockers")
+	check(Hex.path_to(func(x): return x == o, o, Vector2i(4, 0), []).is_empty(), "path_to returns [] when unreachable")
+
 	check(Hex.line(o, Vector2i(3, 0)).size() == 4, "line inclusive endpoints")
 	check(Hex.from_pixel(Hex.to_pixel(Vector2i(2, -1), 20.0), 20.0) == Vector2i(2, -1), "pixel round-trips")
 

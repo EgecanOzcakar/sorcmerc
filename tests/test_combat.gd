@@ -131,6 +131,25 @@ func test_move_provokes_unless_disengage() -> void:
 	c3.move_to(p3, Vector2i(5, 0))   # still adjacent to Grull
 	check(p3.hp == b3, "sidestep while staying adjacent does not provoke")
 
+	# path-aware: walking THROUGH a second hostile's reach provokes from it too
+	var provs := 0
+	for s in range(1, 40):
+		var c = _sandbox(s)
+		var p = _find(c, "pike"); var g = _find(c, "grull"); var v = _find(c, "vess")
+		p.pos = Vector2i(2, 1); g.pos = Vector2i(2, 0); v.pos = Vector2i(4, 0)
+		# park the rest far away so only Grull + Vess can threaten
+		for o in c.combatants:
+			if o.id in ["snik", "kritch", "vera", "ilsa"]:
+				o.pos = Vector2i(8, 2)
+		c.begin_turn_for(p)   # Pike speed 5
+		# route (2,1)->(3,1)->(4,1)->(5,1): passes adjacent to Grull then Vess
+		check(c.provokers_for(p, Vector2i(5, 1)).size() == 2, "both hostiles along the path provoke")
+		var before = p.hp
+		c.move_to(p, Vector2i(5, 1))
+		if p.hp < before:
+			provs += 1
+	check(provs > 0, "path-aware OA lands over several seeds")
+
 func test_healing_word_clears_death() -> void:
 	var cb = _sandbox()
 	var pike = _find(cb, "pike")
