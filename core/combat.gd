@@ -247,7 +247,15 @@ func _log_attack(o: Dictionary, oa: bool) -> void:
 	var tag = "OA " if oa else ""
 	var roll_s = "d20[%s]%+d = %d vs AC %d" % [dice_s, o.bonus, o.total, o.ac]
 	if not o.hit:
-		log.append("%s%s attacks %s — %s, misses." % [tag, o.attacker, o.target, roll_s])
+		if o.nat == 1:
+			var flavs := [
+				"the blow sails wide.", "a clumsy swing finds only air.",
+				"the strike fumbles at the last inch.", "%s twists clear untouched." % o.target,
+			]
+			var pick: int = (str(o.attacker).hash() + round_num) % flavs.size()
+			log.append("%s%s misses %s badly — nat 1, %s" % [tag, o.attacker, o.target, flavs[pick]])
+		else:
+			log.append("%s%s attacks %s — %s, misses." % [tag, o.attacker, o.target, roll_s])
 		return
 	var extra = ""
 	if o.sneak > 0:

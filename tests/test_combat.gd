@@ -31,6 +31,7 @@ func _init() -> void:
 	test_alcove_cover()
 	test_reach_and_range()
 	test_move_budget()
+	test_mercy_rule()
 	test_encounter_resolves_many_seeds()
 
 	print("test_combat: %d passed, %d failed" % [_pass, _fail])
@@ -222,6 +223,40 @@ func test_move_budget() -> void:
 	cb.move_to(vera, Vector2i(3, 1))   # distance 3 <= 4
 	check(vera.pos == Vector2i(3, 1), "move within budget succeeds")
 	check(cb.move_left == 1, "move points decremented by path cost")
+
+func _mercy_setup(s: int):
+	var c = _sandbox(s)
+	for o in c.combatants:
+		if o.id in ["snik", "vess", "kritch", "ilsa"]:
+			o.pos = Vector2i(0, 0)   # out of the picture
+	var g = _find(c, "grull"); var p = _find(c, "pike")
+	g.pos = Vector2i(4, 1)
+	p.pos = Vector2i(5, 1); p.statuses["down"] = true; p.hp = 0; p.death_f = 0
+	return c
+
+func test_mercy_rule() -> void:
+	# a conscious Vera is reachable this turn -> Grull leaves the downed Pike alone
+	var spared := true
+	for s in range(1, 25):
+		var c = _mercy_setup(s)
+		_find(c, "vera").pos = Vector2i(2, 1)   # 2 hexes off, reachable at speed 4
+		c.begin_turn_for(_find(c, "grull"))
+		AI._foe_turn(c, _find(c, "grull"))
+		if _find(c, "pike").death_f > 0:
+			spared = false
+	check(spared, "MERCY: foe won't finish a downed PC while it can still engage a conscious one")
+
+	# Vera unreachable -> the downed Pike is fair game
+	var finished := false
+	for s in range(1, 25):
+		var c = _mercy_setup(s)
+		var g = _find(c, "grull"); g.speed = 1
+		_find(c, "vera").pos = Vector2i(0, 2)   # far, unreachable at speed 1
+		c.begin_turn_for(g)
+		AI._foe_turn(c, g)
+		if _find(c, "pike").death_f > 0:
+			finished = true
+	check(finished, "no conscious PC in reach -> foe attacks the downed one (some seed lands it)")
 
 func test_encounter_resolves_many_seeds() -> void:
 	var wins = 0

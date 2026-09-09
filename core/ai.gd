@@ -4,6 +4,11 @@ extends RefCounted
 
 const Hex = preload("res://core/hex.gd")
 
+# combat-design.md §7 rule 5: foes won't execute a downed PC while they could
+# instead engage a conscious one this turn. The difference between tense and
+# feels-bad — flip to false to let monsters finish people off.
+const MERCY := true
+
 static func take_turn(cb, actor) -> void:
 	if not actor.conscious():
 		return
@@ -38,6 +43,19 @@ static func _move_by(cb, m, score: Callable, disengage := false) -> void:
 	if best != m.pos:
 		cb.move_to(m, best, disengage)
 
+# Could `m` land an attack on `c` this turn (already in range, or by moving)?
+static func _can_engage(cb, m, c) -> bool:
+	if cb.in_reach(m, c):
+		return true
+	for h in cb.move_field(m):
+		var d: int = Hex.distance(h, c.pos)
+		if m.ranged:
+			if d > 1 and d <= m.atk_range:
+				return true
+		elif d <= 1:
+			return true
+	return false
+
 static func _toward(goal: Vector2i) -> Callable:
 	return func(h: Vector2i) -> float: return -float(Hex.distance(h, goal))
 
@@ -62,6 +80,15 @@ static func _foe_turn(cb, m) -> void:
 		if m.nimble_escape and m.hp * 2 <= m.max_hp:
 			_move_by(cb, m, _away(pcs), true)  # Nimble Escape = bonus Disengage
 		return
+
+	# no conscious PC adjacent — a downed neighbour gets finished only if we
+	# couldn't have engaged a conscious PC this turn (mercy rule, §7 rule 5)
+	var downed_adj: Array = cb.combatants.filter(func(c):
+		return c.team == "party" and c.is_down() and Hex.distance(c.pos, m.pos) <= 1)
+	if not downed_adj.is_empty():
+		if not MERCY or not pcs.any(func(c): return _can_engage(cb, m, c)):
+			cb.resolve_attack(m, downed_adj[0])
+			return
 
 	if m.ranged:
 		# Kritch: keep clear, stay in range, shoot the softest target.
