@@ -196,6 +196,11 @@ func test_reach_and_range() -> void:
 	check(cb.resolve_attack(vera, grull).has("error"), "melee attack at distance 3 is rejected")
 	grull.pos = Vector2i(1, 1)     # distance 1
 	check(not cb.resolve_attack(vera, grull).has("error"), "melee attack at distance 1 resolves")
+	check(cb.action_used, "a weapon attack consumes the Action")
+	var oa = _sandbox()
+	_find(oa, "grull").pos = Vector2i(1, 1); _find(oa, "vera").pos = Vector2i(1, 1)
+	oa.resolve_attack(_find(oa, "grull"), _find(oa, "vera"), {"opportunity": true})
+	check(not oa.action_used, "an opportunity attack is free")
 
 	pike.pos = Vector2i(0, 1)
 	grull.pos = Vector2i(6, 1)     # distance 6

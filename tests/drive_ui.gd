@@ -28,6 +28,8 @@ func _run() -> void:
 			continue
 		if main.cb.is_over():
 			break
+		if main._busy:
+			continue
 		# board-driven modes: aiming / cone need a hex click, not a button
 		if main._mode == "cone" or main._mode == "target":
 			_board_click()

@@ -216,6 +216,8 @@ func _sneak_ok(attacker, target, mode: int) -> bool:
 func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	if not opts.get("opportunity", false) and not in_reach(attacker, target):
 		return {"error": "out of range"}
+	if not opts.get("opportunity", false):
+		action_used = true   # a weapon attack is the Action; OAs are free
 	var notation: String = opts.get("damage", attacker.damage)
 	var mode = _attack_mode(attacker, target, opts)
 	var r = Dice.d20(rng, mode)

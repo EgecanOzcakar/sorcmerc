@@ -9,6 +9,7 @@ const Encounter = preload("res://core/encounter.gd")
 const Hex = preload("res://core/hex.gd")
 
 const HEX_BASE := 34.0
+const REVEAL_PAUSE := 0.75  # beat to read the attack roll (0 under SORCMERC_FAST)
 var _zoom := 1.0
 var _pan := Vector2.ZERO
 var hex_px: float:
@@ -394,8 +395,14 @@ func _apply_target(h, c) -> void:
 	_tgt_kind = ""
 	match kind:
 		"attack":
-			_board.flash(c.pos)
-			cb.resolve_attack(h, c)
+			_busy = true
+			var res = cb.resolve_attack(h, c)
+			if typeof(res) == TYPE_DICTIONARY and not res.has("error"):
+				_board.show_reveal(c.id, res)
+				await get_tree().create_timer(REVEAL_PAUSE / _anim).timeout
+			_busy = false
+			_after_hero_action(h)
+			return
 		"sacred":
 			cb.cast_sacred_flame(h, c)
 		"shove_prone":
@@ -586,6 +593,7 @@ class Board extends Control:
 	var _floats: Array = []   # {pos: Vector2, text, color, age}
 	var _flash := {}     # id -> ttl
 	var _hover := Vector2i(999, 999)
+	var _reveal = null   # {tid, dice, nat, bonus, total, ac, hit, crit, age}
 
 	func reset(_cb) -> void:
 		cb = _cb
@@ -601,6 +609,16 @@ class Board extends Control:
 
 	func flash(_hx: Vector2i) -> void:
 		pass  # target flash handled per-token on hp change
+
+	func show_reveal(tid: String, res: Dictionary) -> void:
+		_reveal = {
+			"tid": tid, "dice": res.get("dice", []), "nat": res.get("nat", 0),
+			"bonus": res.get("bonus", 0), "total": res.get("total", 0), "ac": res.get("ac", 0),
+			"hit": res.get("hit", false), "crit": res.get("crit", false), "age": 0.0,
+		}
+		if res.get("hit", false):
+			_flash[tid] = 0.35
+		queue_redraw()
 
 	# zoom keeping the hex under `sp` (screen point) roughly fixed
 	func _zoom_at(sp: Vector2, factor: float) -> void:
@@ -655,6 +673,10 @@ class Board extends Control:
 		for f in _floats:
 			f.age += dt; dirty = true
 		_floats = _floats.filter(func(f): return f.age < 1.1)
+		if _reveal != null:
+			_reveal.age += dt; dirty = true
+			if _reveal.age > 1.4:
+				_reveal = null
 		for id in _flash.keys():
 			_flash[id] -= dt
 			if _flash[id] <= 0.0:
@@ -811,6 +833,40 @@ class Board extends Control:
 			col.a = 1.0 - f.age / 1.1
 			draw_string(ThemeDB.fallback_font, f.pos + Vector2(-8, -(20.0 + f.age * 34.0)), f.text,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 18, col)
+
+		# --- attack roll reveal (dice + verdict over the target) ---------
+		if _reveal != null and _tok.has(_reveal.tid):
+			var a := clampf(1.0 - (_reveal.age - 0.9) / 0.5, 0.0, 1.0)   # hold, then fade
+			var anchor: Vector2 = _tok[_reveal.tid] + Vector2(0, -s * 1.7)
+			var dice: Array = _reveal.dice
+			var box := 30.0 * fz
+			var total_w: float = dice.size() * (box + 6.0) - 6.0
+			var x := anchor.x - total_w / 2.0
+			for d in dice:
+				var counts: bool = int(d) == int(_reveal.nat)
+				var bg := Color("2a2f3d")
+				bg.a = a
+				draw_rect(Rect2(x, anchor.y, box, box), bg)
+				var edge := (Color("ffe27a") if counts else Color("6a6f80"))
+				edge.a = a
+				draw_rect(Rect2(x, anchor.y, box, box), edge, false, 2.0)
+				var dc := (Color("ffffff") if counts else Color("7f8494"))
+				dc.a = a
+				draw_string(ThemeDB.fallback_font, Vector2(x + box * 0.22, anchor.y + box * 0.72),
+					str(d), HORIZONTAL_ALIGNMENT_LEFT, -1, int(16 * fz), dc)
+				if not counts:
+					var sl := Color("d15750"); sl.a = a
+					draw_line(Vector2(x + 3, anchor.y + box - 3), Vector2(x + box - 3, anchor.y + 3), sl, 2.0)
+				x += box + 6.0
+			var verdict := "CRIT!" if _reveal.crit else ("HIT" if _reveal.hit else "MISS")
+			var vcol := Color("ff6a4a") if _reveal.crit else (Color("8dffb0") if _reveal.hit else Color("8a8a84"))
+			vcol.a = a
+			var line := "d20 %+d = %d  vs AC %d" % [_reveal.bonus, _reveal.total, _reveal.ac]
+			var lcol := Color("cfd2db"); lcol.a = a
+			draw_string(ThemeDB.fallback_font, Vector2(anchor.x - total_w / 2.0, anchor.y + box + 16 * fz),
+				line, HORIZONTAL_ALIGNMENT_LEFT, -1, int(12 * fz), lcol)
+			draw_string(ThemeDB.fallback_font, Vector2(anchor.x - total_w / 2.0, anchor.y - 6),
+				verdict, HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * fz), vcol)
 
 	func _initials(nm: String) -> String:
 		var w := nm.split(" ", false)
