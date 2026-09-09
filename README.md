@@ -58,13 +58,21 @@ SORCMERC_SEED=5 SORCMERC_FAST=1 godot --headless --path . -s tests/drive_ui.gd  
 
 ## Status
 
-- Rules core: complete and tested (605 assertions across hex + combat; encounter resolves
-  across 200 seeds, ~92% party win on autopilot, avg ~8.5 rounds — tune in `core/encounter.gd`).
-- UI: hex board with drawn tokens (initials + class glyph + HP bar), styled buttons,
-  turn ring, brazier glow, click-to-move with opportunity-attack warnings, a live
-  Burning Hands cone preview, HP-bar tweens and floating damage numbers.
-- Not done: sprite art, sound, roll-animation pacing, the campaign layer.
-  See `docs/combat-design.md` §9 and `docs/superpowers/specs/2026-09-09-hex-combat-design.md`.
+- Rules core: complete and tested (663 assertions across hex + combat; encounter resolves
+  across 200 seeds, ~93% party win on autopilot, avg ~8.8 rounds — tune in `core/encounter.gd`).
+  Verbs: Attack, Shove (prone / back / brazier), Burning Hands (aimed cone, upcastable),
+  Sacred Flame, Healing Word (upcastable), Second Wind, Dodge, Dash, Disengage, Help,
+  Hide + Cunning Action (Pike). Difficult terrain flanks the brazier; opportunity attacks
+  are path-aware; a mercy-rule constant governs finishing off downed PCs.
+- UI: hex board with drawn tokens (initials + class glyph + tweened HP bar), a large glowing
+  action log with round dividers, number-key actions, click-to-move with provoke warnings,
+  hover-to-aim (hit / save / shove odds float over targets), a live Burning Hands cone preview,
+  an attack-roll reveal (dice faces, discarded die struck, HIT/MISS/CRIT), a hover stat card,
+  turn lookahead in the ribbon, confirm guards on Dodge/Dash/Second Wind, zoom-to-cursor with
+  UI text scaling, pan clamp, and a seed-replay finish screen.
+- Not done: sprite art, sound, the campaign layer, paced per-action enemy turns.
+  See `docs/combat-design.md` §9, `docs/improvements.md`, and
+  `docs/superpowers/specs/2026-09-09-hex-combat-design.md`.
 
 ## The encounter
 

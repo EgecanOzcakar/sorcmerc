@@ -1,4 +1,15 @@
-# Improvement backlog — parallel-agent ready
+# Improvement backlog
+
+**Status (2026-09-10):** M1–M6 and U1–U8 all implemented in one sequenced pass
+(the shared files `combat.gd` / `main.gd` made real parallelism counterproductive).
+P1 (split `main.gd`) was skipped — it only existed to enable parallel UI agents.
+A latent bug was fixed along the way: a weapon attack didn't consume the Action,
+so the UI allowed repeated attacks in one turn.
+
+Everything below is the original plan, kept for reference.
+
+---
+
 
 Each item is scoped to a small set of files with an explicit acceptance check so
 independent agents can work in parallel. Contention is called out per item.
