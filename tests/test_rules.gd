@@ -6,11 +6,13 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Grants = preload("res://core/rules/grants.gd")
 const Choice = preload("res://core/rules/choice.gd")
 const Bundles = preload("res://core/rules/bundles.gd")
-const Character = preload("res://core/character.gd")
 const PassAbilities = preload("res://core/rules/pass_abilities.gd")
 const PassProfs = preload("res://core/rules/pass_profs.gd")
 const PassDefense = preload("res://core/rules/pass_defense.gd")
 const PassPools = preload("res://core/rules/pass_pools.gd")
+const Presets = preload("res://core/presets.gd")
+const Character = preload("res://core/character.gd")
+const Resolved = preload("res://core/rules/resolved.gd")
 
 var _pass = 0
 var _fail = 0
@@ -38,6 +40,9 @@ func _init() -> void:
 	test_ac()
 	test_speed()
 	test_pools()
+	test_presets_match_encounter()
+	test_presets_have_no_pending_and_no_warnings()
+	test_sheet_is_cached_and_retroactive()
 
 	print("test_rules: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -424,3 +429,84 @@ func test_pools() -> void:
 			psi = p
 	check(int(psi.get("max", -1)) == 6, "psi warrior 5 has 6 psionic energy dice")
 	check(int(psi.get("die_size", -1)) == 8, "psi warrior 5 psionic die is d8")
+
+# --- step 6: resolved + resolve + pass_pending ---------------------------
+# The highest-value test in F2: three sheets built through the resolver against
+# encounter.gd's hand-authored numbers (sheet / authored):
+#
+#   vera  AC 18/18  HP 28/28  +5/+5  1d8+3   init 1/0  DEX save 1/1  athletics 5/5
+#   pike  AC 15/15  HP 21/21  +5/+5  1d6+3   init 3/3  DEX save 5/3  stealth 7/7
+#   ilsa  AC 16/16  HP 21/22  +3/+3  1d6+1   init 1/1  DEX save 1/1  DC 13/13  slots 4/2
+#
+# Three differences are tuning decisions, not port bugs:
+#  * Ilsa HP 21 vs 22 — cleric 3 with CON 12 on averages is exactly 21. Within +/-1.
+#  * Pike DEX save +5 vs +3 — rogue *is* proficient in DEX saves; the hand-authored
+#    Pike simply never got the proficiency. The sheet is correct; foes' burning-hands
+#    odds against Pike drop accordingly.
+#  * Speed 30 ft = 5 hexes for all three; Vera and Ilsa were authored at 4 (spec §2.5).
+#    adapter.gd's FT_PER_HEX is the knob; the 200-seed sweep is re-baselined at step 8.
+# Vera takes Interception rather than Defense so AC lands on 18, not 19.
+
+const TARGETS := {
+	"vera": {"ac": 18, "max_hp": 28, "to_hit": 5, "damage": "1d8+3", "crit_range": 19},
+	"pike": {"ac": 15, "max_hp": 21, "to_hit": 5, "damage": "1d6+3", "crit_range": 20},
+	"ilsa": {"ac": 16, "max_hp": 22, "to_hit": 3, "damage": "1d6+1", "crit_range": 20,
+		"slots1": 4, "slots2": 2, "save_dc": 13},
+}
+
+func _near(a: int, b: int) -> bool:
+	return absi(a - b) <= 1
+
+func test_presets_match_encounter() -> void:
+	for ch in Presets.party():
+		var s: Resolved = ch.sheet()
+		var t: Dictionary = TARGETS[ch.id]
+		check(_near(s.ac, int(t["ac"])), "%s AC %d vs authored %d" % [ch.id, s.ac, int(t["ac"])])
+		check(_near(s.max_hp, int(t["max_hp"])), "%s HP %d vs authored %d" % [ch.id, s.max_hp, int(t["max_hp"])])
+		check(not s.attacks.is_empty(), "%s has an attack" % ch.id)
+		var a: Dictionary = s.attacks[0]
+		check(_near(int(a["to_hit"]), int(t["to_hit"])),
+			"%s to-hit %+d vs authored %+d" % [ch.id, int(a["to_hit"]), int(t["to_hit"])])
+		check(a["notation"] == t["damage"],
+			"%s damage %s vs authored %s" % [ch.id, a["notation"], t["damage"]])
+		if t.has("save_dc"):
+			check(int(s.spellcasting["save_dc"]) == int(t["save_dc"]),
+				"%s save DC %d vs authored %d" % [ch.id, int(s.spellcasting["save_dc"]), int(t["save_dc"])])
+			check(int(s.spellcasting["slots"][0]) == int(t["slots1"]), "%s has %d first-level slots" % [ch.id, int(t["slots1"])])
+			check(int(s.spellcasting["slots"][1]) == int(t["slots2"]), "%s has %d second-level slots" % [ch.id, int(t["slots2"])])
+
+	# the kit each hero's hardcoded Combatant flags stood for
+	var v: Resolved = Presets.vera().sheet()
+	check(v.has_feature("champion-improved-critical"), "Vera crits on 19 via Improved Critical")
+	check(v.has_feature("fighter-second-wind"), "Vera has Second Wind")
+	check(v.has_feature("fighter-action-surge"), "Vera has Action Surge")
+	var p: Resolved = Presets.pike().sheet()
+	check(p.has_feature("rogue-sneak-attack"), "Pike has Sneak Attack")
+	check(p.has_feature("rogue-cunning-action"), "Pike has Cunning Action")
+	check(int(p.skills["stealth"]) == 7, "Pike stealth = +3 DEX + 2 PB + 2 expertise (got %d)" % int(p.skills["stealth"]))
+	check(p.passive_perception == 12, "Pike passive perception 12 (got %d)" % p.passive_perception)
+	var i: Resolved = Presets.ilsa().sheet()
+	check("sacred-flame" in i.spellcasting["cantrips"], "Ilsa knows Sacred Flame")
+
+func test_presets_have_no_pending_and_no_warnings() -> void:
+	for ch in Presets.party():
+		var s: Resolved = ch.sheet()
+		for x in s.pending:
+			printerr("    %s pending: %s %s" % [ch.id, x["type"], x["key"]])
+		check(s.pending.is_empty(), "%s is fully decided (%d pending)" % [ch.id, s.pending.size()])
+		# bundle-choice warnings are the known v1 scope cut (spec §2.3): starting-equipment
+		# bundles are not exported, so every class emits them. Everything else must be clean.
+		var real: Array = []
+		for w in s.warnings:
+			if not w.begins_with("bundle-choice"):
+				real.append(w)
+		for w in real:
+			printerr("    %s warning: %s" % [ch.id, w])
+		check(real.is_empty(), "%s resolves with no warnings beyond bundle-choice (%d)" % [ch.id, real.size()])
+
+func test_sheet_is_cached_and_retroactive() -> void:
+	var ch: Character = Presets.vera()
+	check(ch.sheet() == ch.sheet(), "sheet() is cached")
+	var before: int = ch.sheet().ac
+	ch.decide("fighting-style-choice:class:fighter:0", {"type": "fighting-style-choice", "styles": ["defense"]})
+	check(ch.sheet().ac == before + 1, "swapping Interception for Defense re-resolves and raises AC by 1")

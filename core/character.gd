@@ -1,6 +1,5 @@
 # The persistable build. Everything else about a character is derived from this
 # by core/rules/resolve.gd and cached in `_sheet`.
-class_name Character
 extends RefCounted
 
 var id: String
@@ -17,8 +16,19 @@ var pools: Dictionary = {}              # pool_id -> current uses
 var hp_current: int = -1                # -1 = full
 var prepared: Array[String] = []
 
+const Resolve = preload("res://core/rules/resolve.gd")
+const Resolved = preload("res://core/rules/resolved.gd")
+
 var _sheet = null
 var _dirty := true
+
+# Cached. Nothing else may call Resolve.resolve() — a level-20 resolve is a few ms
+# and must never land in _process or a UI redraw (spec §11).
+func sheet() -> Resolved:
+	if _dirty or _sheet == null:
+		_sheet = Resolve.resolve(self)
+		_dirty = false
+	return _sheet
 
 func level() -> int:
 	return levels.size()
