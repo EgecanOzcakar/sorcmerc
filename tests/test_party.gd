@@ -3,8 +3,6 @@
 extends SceneTree
 
 const Party = preload("res://core/party.gd")
-const Presets = preload("res://core/presets.gd")
-const Character = preload("res://core/character.gd")
 const Adapter = preload("res://core/adapter.gd")
 
 var _pass = 0
@@ -17,30 +15,13 @@ func check(cond: bool, label: String) -> void:
 		_fail += 1
 		printerr("  FAIL: ", label)
 
-# Two extra fixtures built the presets.gd way — no creator UI involved.
-func _barb(id: String, name: String) -> Character:
-	var ch := Character.new()
-	ch.id = id
-	ch.cname = name
-	ch.species_id = "dwarf"
-	ch.background_id = "soldier"
-	ch.base_abilities = {"str": 15, "dex": 12, "con": 14, "int": 8, "wis": 10, "cha": 10}
-	ch.add_level("barbarian", -1)
-	ch.add_level("barbarian", -1)
-	ch.decide("asi:background:soldier:0", {"type": "asi", "allocation": {"str": 2, "con": 1}})
-	ch.decide("skill-choice:class:barbarian:0", {"type": "skill-choice", "skills": ["athletics", "survival"]})
-	ch.decide("weapon-mastery-choice:class:barbarian:0",
-		{"type": "weapon-mastery-choice", "weaponIds": ["greataxe", "handaxe"]})
-	ch.equipped = ["greataxe", "hide-armor"]
-	return ch
-
 func _init() -> void:
 	var p := Party.new()
 
 	# --- roster + auto-activation up to the cap --------------------------
-	var five := Presets.party()
-	five.append(_barb("thrun", "Thrun Stonefist"))
-	five.append(_barb("gera", "Gera Ashvein"))
+	# Presets' Vera/Pike/Ilsa plus two characters built through the resolve
+	# pipeline by hand — no creator UI, no disk.
+	var five := Party.demo_roster()
 	check(five.size() == 5, "5 fixture characters")
 	for ch in five:
 		check(p.add_member(ch), "add_member %s" % ch.id)
