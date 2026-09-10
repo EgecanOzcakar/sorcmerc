@@ -83,8 +83,8 @@ static func _budget(party_characters: Array, difficulty: String) -> float:
 #
 # TUNING — 40-seed sweeps per boss (tests/test_scaler.gd), level-3 preset party,
 # measured 2026-09-10 mid-session while T20/T21 were still editing combat/ai, so
-# read these as a spread, not a calibration: oni 65%, assassin 35%, mammoth 22%,
-# arrow-chief 67%, shop-captain 7% — pooled ~39% against a 77% hard node. The
+# read these as a spread, not a calibration: oni 50%, assassin 35%, mammoth 22%,
+# arrow-chief 68%, shop-captain 8% — pooled 36.5% against a 58% hard node. The
 # spread is power.gd's known ceiling amplified: a lone big bruiser (mammoth, oni)
 # prices near the whole budget and then plays like one focus-fired target, so the
 # escort it leaves room for is what actually decides the fight. Re-run and retune

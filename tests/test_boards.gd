@@ -116,7 +116,7 @@ func test_explosive_barrel_burns_its_neighbours() -> void:
 
 func test_every_combat_node_has_a_board() -> void:
 	var Campaign = load("res://core/campaign.gd")
-	for n in Campaign.POOL + [Campaign.BOSS]:
+	for n in Campaign.POOL + Campaign.BOSS_POOL:
 		if n.get("kind", "") != "combat":
 			continue
 		check(n.get("theme", "") in Encounter.THEMES, "%s names a real board (%s)" % [n["id"], n.get("theme", "")])
