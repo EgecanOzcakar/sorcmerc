@@ -457,6 +457,55 @@ authored underneath it.
   editing `combat.gd`/`combatant.gd` — dispatching T17/T18/T21 now since none
   of them touch those two files.
 
+## T22 — progression: species/class/subclass unlocks (locked 2026-09-10, model-only dispatch now)
+
+Full spec from the user, all ids verified against the real data:
+
+**Starting open — species:** `human`, `orc` ("half-orc"), `elf`, `dwarf`, each with
+every one of their lineages already open (`elf` has `drow`/`high-elf`/`wood-elf`;
+the other three have none, so this is a no-op for them). **Locked, cost lifetime
+XP:** `aasimar`, `dragonborn`, `gnome`, `goliath`, `tiefling` — unlocking one opens
+all of its lineages too, no separate lineage currency.
+
+**Starting open — classes**, each with exactly 2 of its 4 subclasses pre-chosen:
+`cleric` (`lifedomain`, `lightdomain`) · `warlock` (`archfeypatron`, `fiendpatron`)
+· `wizard` (`abjurer`, `evoker`) · `barbarian` (`berserker`, `zealot`) · `ranger`
+(`gloomstalker`, `hunter`). **Locked, cost lifetime XP:** `bard`, `druid`,
+`fighter`, `monk`, `paladin`, `rogue`, `sorcerer` — note Fighter and Rogue (the
+original MVP heroes' classes) are *not* in the starting set; the presets/creator
+will need to treat them as already-unlocked for existing save compatibility, see
+below. **Species cost less than classes** — every species threshold sits below
+every class threshold, not just paired lower.
+
+Thresholds (lifetime XP — accumulates across every character/run ever played,
+not one character's level track, so these are deliberately multi-run goals):
+- Species: 3,000 / 6,000 / 9,000 / 12,000 / 15,000 (order: pick one, document it
+  as tunable — no ordering was specified).
+- Classes: 20,000 / 30,000 / 40,000 / 50,000 / 60,000 / 70,000 / 80,000 (same).
+
+**Subclass unlocks, two-tier:** unlocking a class for the first time (starting
+*or* via lifetime XP) lets the player choose 2 of its 4 subclasses for free, as
+part of that same unlock. The other 2 cost a new **class experience** currency —
+a per-class counter, separate from lifetime XP, fed by playing that class (a
+character's normal XP gain also adds to their class's class-XP pool). Flat
+5,000 class-XP per remaining subclass, either order, for every class (the 5
+starting classes' un-chosen 2 subclasses included — e.g. Cleric's Trickery/War
+domains cost class-XP from the start, even though Cleric itself needs no unlock).
+
+**Scope for this dispatch:** the model and a standalone viewer only —
+`core/progression.gd` (lifetime XP tracking is separate from `Character.xp`;
+it's a `user://progression.json` local total, same file-format convention as
+`core/achievements.gd`), unlock/threshold logic for species/classes, per-class
+class-XP tracking and subclass unlock logic, a viewer panel. **Wiring the
+actual gates into `scenes/creator/creator.gd`'s pickers (grey out locked
+options, "unlocks at N XP") is deferred** until T17 (still in flight, reuses
+the creator as a child scene) lands — same deferred-hook pattern T19 used.
+Also flag, don't silently fix: existing character saves / the 3 presets use
+Fighter (Vera) and Rogue (Pike), which aren't in the starting-open class list —
+the model should treat an already-existing character's class as always valid
+regardless of unlock state (never retroactively invalidate a save), only the
+*creator's* class picker enforces the gate on new characters.
+
 ## T18 — a boss pool (locked 2026-09-10, spec'd now, **held until T16 lands**)
 
 `core/campaign.gd`'s `BOSS` is a single fixed node (T12 flagged this itself).
