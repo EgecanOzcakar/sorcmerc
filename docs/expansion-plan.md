@@ -204,4 +204,19 @@ graph above. Each phase gated on review.
   running as one background agent. This is likely the last agent of this
   session's run; it's the capstone screen exercising the whole game loop.
 
+- 2026-09-10: Dispatched **F1b — bestiary expansion** (background agent): check
+  dnd-maintainer for monster/statblock data first; if absent, source a 2024 SRD
+  monster dataset from GitHub. Data-only — extracts to a drop-in-compatible
+  superset of `data/monsters.json`'s current schema, CR 0–10ish, basic-attack
+  numbers for everything with special abilities mapped to `data/effects/
+  features.json` only where cheap. Reports (doesn't implement) the wiring change
+  `scaler.gd`/`encounter.gd` need to pick it up.
+  **Amendment mid-task:** every monster must carry a `faction`/group tag
+  (goblinoid, undead, beast, cultist, dragon, etc.) so a future scaler revision
+  can compose only ecologically/thematically coherent rosters — no dragon
+  sharing a fight with a goblin. This is a requirement for whoever next revises
+  `core/scaler.gd`'s monster selection (currently draws from a small flat pool;
+  T8's 4-archetype version had nothing to be incoherent about) — record it as
+  an open follow-up, not yet implemented.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
