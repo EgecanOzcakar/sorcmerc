@@ -244,10 +244,31 @@ func _on_create_new() -> void:
 	# exist yet.
 	_hint.text = "Character creator (T1) not wired up yet."
 
+const PROFILE_SCENE := "res://scenes/profile/profile.tscn"
+
+# T3's profile, opened as a full-screen overlay so the party state stays live.
+# The profile can spend resources / damage the character, so we re-read on close.
 func _on_view_profile(id: String) -> void:
-	# TODO(T3): change_scene_to_file("res://scenes/profile/profile.tscn") with the
-	# selected character. That scene does not exist yet — checked 2026-09-10.
-	_hint.text = "Profile screen (T3) not wired up yet — %s." % party.summary(id).get("name", id)
+	var ch = party.get_member(id)
+	if ch == null:
+		return
+	if not ResourceLoader.exists(PROFILE_SCENE):
+		_hint.text = "Profile screen (T3) not available yet."
+		return
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var prof = load(PROFILE_SCENE).instantiate()
+	overlay.add_child(prof)
+	prof.set_character(ch)
+	var back := Button.new()
+	back.text = "←  Back to party"
+	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	back.offset_left = -180; back.offset_top = 12; back.offset_right = -16
+	back.pressed.connect(func():
+		overlay.queue_free()
+		_refresh())
+	overlay.add_child(back)
 
 # --- theme (mirrors scenes/main.gd's) -------------------------------------
 
