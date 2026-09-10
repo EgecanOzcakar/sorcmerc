@@ -14,6 +14,23 @@ const Save = preload("res://core/character_save.gd")
 # hp_roll sentinel: the resolver substitutes die/2+1 (spec §4, save format's -1).
 const AVERAGE := -1
 
+# The 5e cumulative XP table: XP_TABLE[n] is the total XP needed to reach level n+1.
+const XP_TABLE := [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
+	85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000]
+const MAX_LEVEL := 20
+
+static func xp_for_level(level: int) -> int:
+	return int(XP_TABLE[clampi(level, 1, MAX_LEVEL) - 1])
+
+static func can_level_up(ch) -> bool:
+	return ch.level() < MAX_LEVEL and int(ch.xp) >= xp_for_level(ch.level() + 1)
+
+# 0 when already eligible (or at the cap) — the UI shows "need N more XP" while > 0.
+static func xp_to_next(ch) -> int:
+	if can_level_up(ch) or ch.level() >= MAX_LEVEL:
+		return 0
+	return xp_for_level(ch.level() + 1) - int(ch.xp)
+
 static func add_level(ch, class_id := "", hp_roll := AVERAGE) -> void:
 	ch.add_level(class_id if class_id != "" else ch.class_id(), hp_roll)
 

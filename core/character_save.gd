@@ -20,7 +20,9 @@
 #   "inventory": [{"item_id": "dagger", "quantity": 1}],
 #   "pools": {"second-wind": 1},      // campaign state: uses REMAINING
 #   "hp_current": -1,                 // -1 = full
-#   "prepared": ["cure-wounds"]
+#   "prepared": ["cure-wounds"],
+#   "xp": 900,                        // banked XP (T10); Leveling gates level-up on it
+#   "dead": false                     // died this run; revived by Party.resurrect
 # }
 #
 # Unknown extra keys are ignored on load, so a later track may add its own without
@@ -60,6 +62,8 @@ static func to_dict(ch) -> Dictionary:
 		"pools": ch.pools.duplicate(),
 		"hp_current": ch.hp_current,
 		"prepared": ch.prepared.duplicate(),
+		"xp": ch.xp,
+		"dead": ch.dead,
 	}
 
 # null when the dictionary is not a character save.
@@ -93,6 +97,8 @@ static func from_dict(d: Dictionary):
 		ch.pools[k] = int(d["pools"][k])
 	ch.hp_current = int(d.get("hp_current", -1))
 	ch.prepared.assign(d.get("prepared", []))
+	ch.xp = int(d.get("xp", 0))
+	ch.dead = bool(d.get("dead", false))
 	return ch
 
 # Returns the path written, or "" on failure.

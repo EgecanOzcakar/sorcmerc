@@ -90,6 +90,8 @@ func test_combat() -> void:
 	c.finish_combat({"outcome": "Victory", "xp": 300, "gold": 40, "loot": ["dagger"],
 		"deaths": ["pike"], "kills": ["kritch", "kritch", "snik"]})
 	check(c.xp == 300, "xp is banked on the campaign")
+	for ch in c.party.roster:
+		check(ch.xp == 100, "%s got an even share of the 300 XP" % ch.id)
 	check(c.party.gold == gold + 40, "gold is banked on the party")
 	check(c.party.stash_count("dagger") == 1, "loot lands in the stash")
 	check(not c.party.is_active("pike"), "the dead are benched")

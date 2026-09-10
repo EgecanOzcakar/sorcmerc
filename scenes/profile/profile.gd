@@ -7,6 +7,7 @@ extends Control
 const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Presets = preload("res://core/presets.gd")
+const Leveling = preload("res://core/leveling.gd")
 
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
 const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
@@ -136,10 +137,19 @@ func _header() -> Control:
 	box.add_child(lv)
 	_fields["classes"] = lv
 
+	var need := Leveling.xp_to_next(_ch)
+	var xp := Label.new()
+	xp.text = "%d XP" % int(_ch.xp) if need == 0 else "%d XP  ·  need %d more" % [int(_ch.xp), need]
+	xp.add_theme_color_override("font_color", COL_DIM)
+	box.add_child(xp)
+	_fields["xp"] = xp
+
 	var b := Button.new()
 	b.text = "Level up"
+	b.disabled = need > 0
 	b.pressed.connect(_level_up)
 	box.add_child(b)
+	_fields["level_up_btn"] = b
 	return box
 
 func _class_line(s) -> String:

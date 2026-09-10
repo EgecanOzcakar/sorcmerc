@@ -62,7 +62,7 @@ var party
 var stage := 0
 var node: Dictionary = {}
 var state := "picking"        # picking | visiting | combat | won | lost
-var xp := 0                   # banked here: Character has no xp field yet
+var xp := 0                   # run total, for the header; the real bank is ch.xp
 var log: Array = []
 var rng
 
@@ -114,6 +114,7 @@ func finish_combat(result: Dictionary) -> void:
 		say("The party falls. The road ends here.")
 		return
 	xp += int(result.get("xp", 0))
+	_split_xp(int(result.get("xp", 0)))
 	party.add_gold(int(result.get("gold", 0)) + int(node.get("gold", 0)))
 	for item in result.get("loot", []):
 		party.stash_add(String(item))
@@ -125,6 +126,15 @@ func finish_combat(result: Dictionary) -> void:
 	for line in Quest.record_kills(party, result.get("kills", []), rng):
 		say(line)
 	state = "visiting"   # the after-action panel; leave() moves on
+
+# Split evenly among whoever was in the fight; the remainder is dropped.
+func _split_xp(total: int) -> void:
+	var fighters: Array = party.party_characters()
+	if fighters.is_empty() or total <= 0:
+		return
+	var share: int = total / fighters.size()
+	for ch in fighters:
+		ch.xp += share
 
 # --- treasure -------------------------------------------------------------
 
