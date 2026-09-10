@@ -61,6 +61,8 @@ func _init() -> void:
 	test_short_rest_pool_unaffected()
 	test_bardic_inspiration()
 	test_arcane_recovery()
+	test_short_rest_wakes_the_stable()
+	test_zero_hp_combatant_starts_down()
 
 	print("test_rest_mechanics: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -210,3 +212,31 @@ func test_arcane_recovery() -> void:
 	Adapter.rest(short_ch, "short-rest")
 	check(int(short_ch.pools.get(Adapter.ARCANE_RECOVERY_POOL, 0)) == 3,
 		"a short rest does not touch the charge pool either way (it was already full)")
+
+# A character who ended a fight stabilised at 0 HP (survived, not healed) used to
+# carry that 0 straight into the next fight and act as if fully conscious there —
+# RAW says a stable creature regains 1 HP after an hour, which a short rest is.
+func test_short_rest_wakes_the_stable() -> void:
+	var ch = build("human", "fighter", "soldier", 3)
+	ch.hp_current = 0
+	Adapter.rest(ch, "short-rest")
+	check(ch.hp_current == 1, "a short rest wakes a stable 0-HP character to 1 HP")
+
+	ch.hp_current = 5
+	Adapter.rest(ch, "short-rest")
+	check(ch.hp_current == 5, "a short rest doesn't touch HP for anyone above 0")
+
+	ch.hp_current = 0
+	Adapter.rest(ch, "long-rest")
+	check(ch.hp_current == -1, "a long rest still fully heals (the usual -1 sentinel), unaffected")
+
+# Backstop in Adapter.to_combatant: however a 0-HP character reaches a fresh
+# fight (skipped rest, an edge case, whatever), they must start "down" so
+# combat.gd's death-save loop fires instead of them acting normally at 0 HP.
+func test_zero_hp_combatant_starts_down() -> void:
+	var ch = build("human", "fighter", "soldier", 3)
+	ch.hp_current = 0
+	var c = Adapter.to_combatant(ch, "party", Vector2i.ZERO)
+	check(c.hp == 0, "the combatant really does start at 0 HP")
+	check(c.is_down(), "...and starts flagged down, not silently conscious")
+	check(not c.conscious(), "so it can't act until a death save (or a heal) revives it")

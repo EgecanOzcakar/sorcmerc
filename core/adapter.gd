@@ -105,6 +105,15 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 	c.ac = s.ac
 	c.max_hp = s.max_hp
 	c.hp = ch.hp_current if ch.hp_current >= 0 else s.max_hp
+	# A character who was stabilised (not healed) at 0 HP in a previous fight
+	# carries that 0 into this one — combat.gd's death-save loop only fires off
+	# the "down" status, never off hp alone, so without this they'd stand and
+	# act as if fully conscious at 0 HP. Rest (adapter.rest) is the real fix —
+	# a stable creature regains 1 HP after an hour, RAW — this is the backstop
+	# for any path that hands over a 0-HP character without an intervening rest.
+	if c.hp <= 0:
+		c.hp = 0
+		c.statuses["down"] = true
 	c.init_mod = s.initiative
 	c.speed = hexes(int(s.speeds.get("walk", 30)))
 
@@ -252,8 +261,15 @@ static func rest(ch, kind: String) -> void:
 		ch.pools[ARCANE_RECOVERY_POOL] = arcane_recovery_max(ch)
 		ch.slots_used.clear()
 		ch.hp_current = -1
-	elif _is_warlock(s):
-		ch.slots_used.clear()   # Pact Magic: slots also come back on a short rest
+	else:
+		if _is_warlock(s):
+			ch.slots_used.clear()   # Pact Magic: slots also come back on a short rest
+		# RAW: a stable creature (0 HP, survived the fight) regains 1 HP after an
+		# hour — a short rest is that hour. Without this they'd carry 0 HP into
+		# the next fight and need to_combatant's "down" backstop just to not act
+		# like a fully conscious combatant.
+		if int(ch.hp_current) == 0:
+			ch.hp_current = 1
 	ch.dirty()
 
 # What T7 persists when a fight ends: HP, spent slots, spent pool uses.
