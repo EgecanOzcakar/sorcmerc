@@ -178,7 +178,7 @@ func _node_card(index: int, node: Dictionary) -> Control:
 	var col := VBoxContainer.new()
 	panel.add_child(col)
 	var title := Label.new()
-	title.text = node["title"]
+	title.text = "%s  %s" % [Icons.node_glyph(node["kind"]), node["title"]]
 	title.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	title.add_theme_color_override("font_color", KIND_COL.get(node["kind"], COL_DIM))
 	col.add_child(title)
@@ -201,7 +201,7 @@ func _node_panel() -> Control:
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
 	var title := Label.new()
-	title.text = run.node.get("title", "")
+	title.text = "%s  %s" % [Icons.node_glyph(run.node.get("kind", "")), run.node.get("title", "")]
 	title.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	title.add_theme_color_override("font_color", COL_GOLD)
 	col.add_child(title)

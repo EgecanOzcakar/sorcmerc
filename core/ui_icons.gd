@@ -63,7 +63,7 @@ static func dark_theme(compact := false) -> Theme:
 const CLASS_GLYPHS := {
 	"barbarian": "⚒",   # crossed tools — the axe mark
 	"bard": "♫",
-	"cleric": "✝",
+	"cleric": "☩",   # a cross of crosses — reads apart from the rogue's dagger
 	"druid": "☘",
 	"fighter": "⚔",
 	"monk": "✺",        # ki burst
@@ -93,6 +93,13 @@ static func primary_class(sheet) -> String:
 # Heroes carry a resolved sheet; monsters do not and get no class mark.
 static func combatant_glyph(c) -> String:
 	return class_glyph(primary_class(c.sheet)) if c.sheet != null else ""
+
+# --- campaign map nodes ----------------------------------------------------
+const NODE_GLYPHS := {"combat": "⚔", "treasure": "◆", "merchant": "⚖", "rest": "♨",
+	"boss": "★"}
+
+static func node_glyph(kind: String) -> String:
+	return String(NODE_GLYPHS.get(kind, "·"))
 
 # --- spell schools ---------------------------------------------------------
 const SCHOOL_GLYPHS := {
