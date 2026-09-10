@@ -3,6 +3,7 @@
 extends Control
 
 const AI = preload("res://core/ai.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
@@ -288,16 +289,20 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	var opts: Array = []
 	for v in cb.available(h):
 		var label: String = _verb_label(h, v)
+		var tip: String = _verb_tooltip(v)
 		match v.get("targeting", "self"):
 			"enemy", "ally":
-				opts.append([label + "…", func(): _enter_target(h, v)])
+				opts.append([label + "…", func(): _enter_target(h, v), tip])
 			"direction":
-				opts.append([label + " (aim…)", func(): _enter_cone(h, v)])
+				opts.append([label + " (aim…)", func(): _enter_cone(h, v), tip])
 			_:
 				if _costly(v):
-					opts.append(_confirm_opt(h, v["id"], label, func(): cb.perform(h, v); _after_hero_action(h)))
+					var opt := _confirm_opt(h, v["id"], label, func(): cb.perform(h, v); _after_hero_action(h))
+					opt.append(tip)
+					opts.append(opt)
 				else:
-					opts.append([label, func(): cb.perform(h, v); _after_hero_action(h)])
+					var fn := func(): cb.perform(h, v); _after_hero_action(h)
+					opts.append([label, fn, tip])
 
 	if h.econ["action"] > 0 and not cb.is_over():
 		opts.append(_confirm_opt(h, "end", "End turn (action unspent!)", _end_turn))
@@ -316,6 +321,47 @@ func _verb_label(h, v: Dictionary) -> String:
 	if v.has("pool"):
 		label += " %d/%d" % [h.pool_left(v["pool"]), int(h.pools[v["pool"]]["max"])]
 	return label
+
+# Hover text for an action button. A spell gets its real SRD description
+# (data/spells.json — class features carry no prose at all, SCHEMA gap #4, so
+# there's nothing to quote for them); everything else gets a short line
+# synthesized from the verb's own resolved numbers — cheap, and honest about
+# only describing what's actually there instead of needing hand-authored
+# blurbs for ~30 features before this could ship at all.
+const KIND_BLURB := {
+	"dodge": "Until your next turn, attacks against you have disadvantage and you have advantage on DEX saves.",
+	"dash": "Gain extra movement equal to your speed.",
+	"disengage": "Your movement doesn't provoke opportunity attacks this turn.",
+	"hide": "Make a Stealth check to become hidden from enemies who can't see you.",
+	"help": "Grant an ally advantage on their next check or attack roll.",
+	"shove": "Contested Athletics check: knock the target prone or push it back.",
+	"smash": "Destroy a barrel or crate within reach.",
+}
+
+func _verb_tooltip(v: Dictionary) -> String:
+	if v.has("spell"):
+		var desc := String(Catalog.spell(v["spell"]).get("description", ""))
+		return desc if desc != "" else KIND_BLURB.get(v["kind"], "")
+	if KIND_BLURB.has(v["kind"]):
+		return KIND_BLURB[v["kind"]]
+	var bits: Array = []
+	if v.has("dice_count") and v.has("dice_sides"):
+		var bonus: int = int(v.get("dice_bonus", v.get("bonus_damage", 0)))
+		bits.append("%dd%d%s %s" % [int(v["dice_count"]), int(v["dice_sides"]),
+			("+%d" % bonus) if bonus > 0 else "", v.get("damage_type", "damage")])
+	if v.has("heal_count"):
+		var hb: int = int(v.get("heal_bonus", 0))
+		bits.append("Heal %dd%d%s" % [int(v["heal_count"]), int(v.get("heal_sides", 8)),
+			("+%d" % hb) if hb > 0 else ""])
+	if v.has("save"):
+		bits.append("DC %d %s save" % [int(v.get("save_dc", 0)), String(v["save"]).to_upper()])
+	if not v.get("conditions", []).is_empty():
+		bits.append("Inflicts: %s" % ", ".join(v["conditions"]))
+	if v.has("amount") and not v.has("dice_count"):
+		bits.append(str(int(v["amount"])))
+	if not v.get("resist", []).is_empty():
+		bits.append("Resist: %s" % ", ".join(v["resist"]))
+	return ". ".join(bits)
 
 # Two-press confirm on anything that burns a limited resource, plus the two
 # turn-enders that are easy to misclick.
@@ -444,6 +490,8 @@ func _set_buttons(opts: Array) -> void:
 		else:
 			b.text = opts[i][0]
 		b.pressed.connect(opts[i][1])
+		if opts[i].size() > 2 and String(opts[i][2]) != "":
+			b.tooltip_text = opts[i][2]   # native hover popup — what the verb actually does
 		_buttons.add_child(b)
 	_apply_ui_scale()
 
