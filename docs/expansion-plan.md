@@ -98,5 +98,17 @@ graph above. Each phase gated on review.
   `docs/superpowers/specs/2026-09-10-rules-engine-design.md`.
 - 2026-09-10: F2 (engine implementation, 9-step build sequence per the spec's
   §10, each step tested + committed) dispatched as a background agent.
+- 2026-09-10: F2 complete — all 9 steps done and committed (`680202d`..`dfb0bf1`).
+  `core/rules/*` (catalog, grants, choice, bundles, resolved, resolve, 7 passes,
+  effects, power), `core/character.gd`, `core/adapter.gd`, `core/presets.gd`,
+  `data/monsters.json`, `data/third-caster-slots.json`, `data/effects/*.json`,
+  `tests/test_rules.gd` (499 assertions). Full suite green: hex 66 / combat 597 /
+  rules 499. Sheet-built party vs hand-authored: 187W/13L @ 8.4 rounds (93.5%) vs
+  186W/14L @ 8.8 (93.0%) — close enough to call re-baselined, not regressed.
+  Fixed the two §11 structural debts (combat.gd no longer preloads encounter.gd;
+  board is now a required Combat.new arg carrying reach_melee/cone_burning_hands/
+  region_at). `Combatant` kept, not replaced — `Adapter.to_combatant` /
+  `from_monster` / `write_back` are the seam T7/T8 build on.
+  Pushed to origin (`github.com/EgecanOzcakar/sorcmerc`, private).
 
 This is a multi-week build; phases 0–1 are the critical path and land first.
