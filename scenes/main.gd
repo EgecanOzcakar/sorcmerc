@@ -559,6 +559,8 @@ class Board extends Control:
 	var _flash := {}     # id -> ttl
 	var _hover := Vector2i(999, 999)
 	var _reveal = null   # {tid, dice, nat, bonus, total, ac, hit, crit, age}
+	var _barks := {}     # id -> {text, age}; drained from cb.barks (T26)
+	const BARK_TTL := 2.2
 
 	func reset(_cb) -> void:
 		cb = _cb
@@ -566,6 +568,7 @@ class Board extends Control:
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
 			_hp[c.id] = float(c.hp)
+		_barks.clear()
 		queue_redraw()
 
 	func slide_from(c) -> void:
@@ -638,6 +641,16 @@ class Board extends Control:
 		for f in _floats:
 			f.age += dt; dirty = true
 		_floats = _floats.filter(func(f): return f.age < 1.1)
+		# T26 barks: drain the queue, age them out. One line per speaker at a time.
+		while not cb.barks.is_empty():
+			var b: Dictionary = cb.barks.pop_front()
+			_barks[b["id"]] = {"text": String(b["text"]), "age": 0.0}
+			dirty = true
+		for id in _barks.keys():
+			_barks[id].age += dt
+			if _barks[id].age > BARK_TTL:
+				_barks.erase(id)
+			dirty = true
 		if _reveal != null:
 			_reveal.age += dt; dirty = true
 			if _reveal.age > 1.4:
@@ -819,6 +832,14 @@ class Board extends Control:
 			if c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
 			if tags != "":
 				_centered(tags, p + Vector2(0, -rad - 10), int(13 * fz), Color("e6c15a"))
+
+		# T26 barks — plain text over the speaker's hex, fading out at the end
+		for id in _barks:
+			var bk: Dictionary = _barks[id]
+			var col := Color("ffe9b0")
+			col.a = clampf((BARK_TTL - bk.age) / 0.5, 0.0, 1.0)
+			_centered(String(bk.text), _tok.get(id, Vector2.ZERO) + Vector2(0, -s * 1.15),
+				int(14 * fz), col)
 
 		# floating damage
 		for f in _floats:

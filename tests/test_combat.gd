@@ -45,6 +45,7 @@ func _init() -> void:
 	test_action_surge_full_turn()
 	test_spell_slot_spend()
 	test_reaction_and_concentration()
+	test_barks()
 
 	print("test_combat: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -551,3 +552,64 @@ func _find(cb: Combat, id: String) -> Combatant:
 		if c.id == id:
 			return c
 	return null
+
+# T26 barks: cosmetic only — these assert the queue, not any rule.
+func test_barks() -> void:
+	var Barks = load("res://core/barks.gd")
+	check(Barks.pool_for("foe", "goblinoid", "hit") != Barks.pool_for("foe", "", "hit"),
+		"a faction pool differs from the generic one")
+	check(Barks.pool_for("foe", "nosuchfaction", "hit") == Barks.FOE_GENERIC["hit"],
+		"an unknown faction falls back to generic")
+	check(not Barks.pool_for("party", "", "kill").is_empty(), "party has a kill pool")
+
+	var had := OS.get_environment("SORCMERC_FAST")
+	OS.set_environment("SORCMERC_FAST", "")   # barks are off in the suite's own mode
+	var cb := _sandbox()
+	var hero = cb.team_of("party")[0]
+
+	cb._bark_rng = _lucky_rng()
+	cb.bark(hero, "hit")
+	check(cb.barks.size() == 1 and cb.barks[0]["id"] == hero.id, "a hit trigger queues a bark")
+	check(cb.barks[0]["text"] in Barks.PARTY["hit"], "the line comes from the party hit pool")
+
+	cb.barks.clear()
+	cb._bark_rng = _lucky_rng()
+	hero.hp = hero.max_hp
+	cb._apply_damage(hero, hero.max_hp - 1)
+	check(cb.barks.size() == 1 and cb.barks[0]["id"] == hero.id, "crossing 25% HP barks")
+	cb.barks.clear()
+	cb._bark_rng = _lucky_rng()
+	cb._apply_damage(hero, 0)   # already under the line — no second low-HP bark
+	check(cb.barks.is_empty(), "low HP barks once, on the crossing")
+
+	cb.barks.clear()
+	cb._bark_rng = RNG.new(7)
+	for i in 300:
+		cb.bark(hero, "hit")
+	check(cb.barks.size() > 0 and cb.barks.size() <= cb.BARK_QUEUE_MAX,
+		"an undrained queue stays capped (%d)" % cb.barks.size())
+
+	var a := _sandbox(1234)
+	var b := _sandbox(1234)
+	var same := true
+	for i in 50:
+		a.bark(a.team_of("party")[0], "crit")
+		b.bark(b.team_of("party")[0], "crit")
+	for i in a.barks.size():
+		if b.barks.size() <= i or a.barks[i]["text"] != b.barks[i]["text"]:
+			same = false
+	check(same and a.barks.size() == b.barks.size(), "same seed -> same barks")
+
+	OS.set_environment("SORCMERC_FAST", "1")
+	var fast := _sandbox()
+	fast.bark(fast.team_of("party")[0], "crit")
+	fast._apply_damage(fast.team_of("party")[0], 1)
+	check(fast.barks.is_empty(), "no barks generated under SORCMERC_FAST")
+	OS.set_environment("SORCMERC_FAST", had)
+
+# First seed whose opening d100 lands inside the bark chance, so a trigger is sure to speak.
+func _lucky_rng():
+	var s := 1
+	while RNG.new(s).roll_die(100) > load("res://core/barks.gd").CHANCE_PCT:
+		s += 1
+	return RNG.new(s)
