@@ -179,5 +179,23 @@ graph above. Each phase gated on review.
   build against next) and **T2** (level-up, reusing creator.gd's generic
   pending-choice renderer) running in parallel. T5+T9 (campaign map + quests)
   wait for T7+T8's real interface before dispatch, rather than stubbing a guess.
+- 2026-09-10: T2 (level-up) and T7+T8 (encounter/scaler) complete, verified,
+  pushed. **1925 assertions across 9 suites green.**
+  - T2: `core/leveling.gd` + a level-up overlay reusing the creator's generic
+    pending-choice renderer; preview-then-confirm; HP defaults to average.
+  - T7: `Encounter.build(spec, party_combatants, board={}) -> Combat` and
+    `Encounter.resolve_outcome(cb, party) -> {outcome, xp, gold, loot, deaths,
+    kills}` — `kills` is monster ids, added for T9's kill-count quests. `spec =
+    {"monsters":[{"id","count","mult"}], "mult", "seed"}`. XP/gold report, don't
+    bank (T5's job); loot is `[]` until T6 adds a loot table.
+  - T8: `Scaler.roster_for(party_characters, difficulty, quest_bias={}) ->
+    spec` (quest_bias weights an id into the mix, doesn't replace it). Tuned:
+    L3 preset party — easy 94% / normal 78% / hard 50.5% (targets 90/75/50,
+    close enough). L8 — 88% / 66% / 38% (curve degrades with only 4 monster
+    archetypes; documented ceiling in `scaler.gd` — a real bestiary fixes it,
+    not more constants).
+  - `scenes/main.gd` now takes injectable `party` / `spec` / `difficulty` and
+    fills `result` on fight end — this is T5's hook to launch combat and read
+    the outcome back.
 
 This is a multi-week build; phases 0–1 are the critical path and land first.
