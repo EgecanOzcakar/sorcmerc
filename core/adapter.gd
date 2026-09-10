@@ -37,11 +37,60 @@ static func _is_warlock(s) -> bool:
 
 # Features the export gives no resource-pool grant for (SCHEMA gap #4) default
 # to short-rest in _finish_verbs/rest() below, which is RAW-correct for Second
-# Wind, Action Surge, Channel Divinity and Wild Shape. These two are the
-# exceptions — long-rest only. (Bardic Inspiration actually becomes short-rest
-# too from level 5's Font of Inspiration; not worth level-gating here yet —
-# long-rest-always is the conservative, never-too-generous default.)
+# Wind, Action Surge, Channel Divinity and Wild Shape. wizard-arcane-recovery is
+# always long-rest; bard-bardic-inspiration is long-rest until level 5's Font of
+# Inspiration flips it to short-rest — _synthetic_regen() below is where that
+# one feature-specific exception lives, everything else uses the flat default.
 const LONG_REST_ONLY_FEATURES := ["bard-bardic-inspiration", "wizard-arcane-recovery"]
+const FONT_OF_INSPIRATION_LEVEL := 5
+
+static func _synthetic_regen(pool_id: String, sheet) -> String:
+	if pool_id == "bard-bardic-inspiration" and sheet != null and sheet.class_level("bard") >= FONT_OF_INSPIRATION_LEVEL:
+		return "short-rest"
+	return "long-rest" if pool_id in LONG_REST_ONLY_FEATURES else "short-rest"
+
+# Arcane Recovery doesn't fit the combat-verb effect system at all (it's
+# explicitly out-of-combat), so it isn't a data/effects/features.json entry —
+# it's modelled directly here as its own small mechanic, same numbers as both
+# 2024 RAW and BG3 ("charges" == "sum of restored slot levels", same formula):
+# ceil(wizard level / 2) charges, 1 per slot level restored, capped at slot 5,
+# refills on a long rest, spendable once per day (== between long rests).
+const ARCANE_RECOVERY_POOL := "wizard-arcane-recovery"
+const ARCANE_RECOVERY_MAX_SLOT := 5
+
+static func arcane_recovery_max(ch) -> int:
+	var lvl: int = ch.sheet().class_level("wizard")
+	return ceili(lvl / 2.0) if lvl > 0 else 0
+
+# `restore_levels`: which slot levels to refund, e.g. [1, 1, 2] = two 1st- and
+# one 2nd-level slot (cost 4 charges). Refuses and changes nothing if the party
+# can't afford it, a level is above the cap, or the character has no slot of
+# that level to refund in the first place.
+static func arcane_recovery(ch, restore_levels: Array) -> bool:
+	var cost := 0
+	for lvl in restore_levels:
+		cost += int(lvl)
+	if cost <= 0 or cost > int(ch.pools.get(ARCANE_RECOVERY_POOL, 0)):
+		return false
+	var full := _full_slots(ch.sheet())
+	var remaining := full.duplicate()
+	for i in mini(9, ch.slots_used.size()):
+		remaining[i] = maxi(0, remaining[i] - int(ch.slots_used[i]))
+	var refund := {}
+	for lvl in restore_levels:
+		var i: int = int(lvl) - 1
+		if i < 0 or i >= 9 or int(lvl) > ARCANE_RECOVERY_MAX_SLOT:
+			return false
+		refund[i] = int(refund.get(i, 0)) + 1
+		if remaining[i] + refund[i] > full[i]:
+			return false   # no spent slot of this level left to refund
+	while ch.slots_used.size() < 9:
+		ch.slots_used.append(0)
+	for i in refund:
+		ch.slots_used[i] = maxi(0, int(ch.slots_used[i]) - refund[i])
+	ch.pools[ARCANE_RECOVERY_POOL] = int(ch.pools[ARCANE_RECOVERY_POOL]) - cost
+	ch.dirty()
+	return true
 
 static func to_combatant(ch, team: String, pos: Vector2i):
 	var s = ch.sheet()
@@ -111,7 +160,7 @@ static func _finish_verbs(c, saved_pools: Dictionary) -> void:
 			v["radius"] = area_hexes(int(v["size_ft"]))
 		if v.has("pool") and not c.pools.has(v["pool"]):
 			var n := int(v.get("uses", 1))
-			var regen := "long-rest" if v["pool"] in LONG_REST_ONLY_FEATURES else "short-rest"
+			var regen := _synthetic_regen(v["pool"], c.sheet)
 			c.pools[v["pool"]] = {"cur": int(saved_pools.get(v["pool"], n)), "max": n, "regen": regen}
 		# ponytail: hex-targeted areas (fireball) need an aiming mode no shipping
 		# build uses yet — drop them rather than offer a verb the UI can't point.
@@ -151,9 +200,10 @@ static func rest(ch, kind: String) -> void:
 			ch.pools[p["id"]] = int(p["max"])
 	for v in Effects.verbs_for(s):
 		if v.has("pool") and s.pool_max(v["pool"]) == 0:
-			if kind == "long-rest" or not v["pool"] in LONG_REST_ONLY_FEATURES:
+			if kind == "long-rest" or _synthetic_regen(v["pool"], s) == "short-rest":
 				ch.pools[v["pool"]] = int(v.get("uses", 1))   # synthetic pool
 	if kind == "long-rest":
+		ch.pools[ARCANE_RECOVERY_POOL] = arcane_recovery_max(ch)
 		ch.slots_used.clear()
 		ch.hp_current = -1
 	elif _is_warlock(s):

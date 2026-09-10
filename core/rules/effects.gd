@@ -91,7 +91,7 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 		if e.has("dice"):
 			var d: Dictionary = e["dice"]
 			v["dice_count"] = scale(d.get("count", 1), sheet)
-			v["dice_sides"] = int(d.get("sides", 6))
+			v["dice_sides"] = scale(d.get("sides", 6), sheet)
 			v["dice_bonus"] = scale(d.get("plus", 0), sheet)
 		if e.has("bonus_damage"):
 			v["bonus_damage"] = scale(e["bonus_damage"], sheet)

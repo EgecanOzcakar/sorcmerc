@@ -317,6 +317,9 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			actor.statuses[v.get("status", v["id"])] = {
 				"bonus_damage": int(v.get("bonus_damage", 0)), "resist": v.get("resist", [])}
 			log.append("%s — %s!" % [actor.cname, v["label"]])
+		"ally_buff":
+			target.statuses[v.get("status", v["id"])] = {"dice_sides": int(v.get("dice_sides", 6))}
+			log.append("%s inspires %s." % [actor.cname, target.cname])
 		"attack_modifier":
 			actor.statuses["reckless"] = true
 			log.append("%s attacks recklessly." % actor.cname)
@@ -489,13 +492,15 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var mode = _attack_mode(attacker, target, opts)
 	var r = Dice.d20(rng, mode)
 	var nat: int = r.nat
-	var total: int = nat + attacker.atk_bonus
+	var insp: int = _consume_inspired(attacker)
+	var atk_bonus: int = attacker.atk_bonus + insp
+	var total: int = nat + atk_bonus
 	var ac = effective_ac(target)
 	var crit: bool = nat >= attacker.crit_range
 	var hit: bool = crit or (nat != 1 and total >= ac)
 	var out = {
 		"attacker": attacker.cname, "target": target.cname,
-		"nat": nat, "dice": r.dice, "bonus": attacker.atk_bonus, "total": total, "ac": ac,
+		"nat": nat, "dice": r.dice, "bonus": atk_bonus, "total": total, "ac": ac,
 		"hit": hit, "crit": crit, "damage": 0, "extras": [], "mode": mode,
 	}
 	if hit:
@@ -712,8 +717,20 @@ func act_shove(attacker, target, choice: String) -> Dictionary:
 	return {"success": true}
 
 func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false) -> bool:
-	var bonus: int = int(c.saves.get(ability, 0))
+	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c)
 	if is_cover(c.pos) and not ignore_cover:
 		bonus += 2
 	var mode = Dice.ADV if c.has("dodging") else Dice.NORMAL
 	return Dice.d20(rng, mode).nat + bonus >= dc
+
+# Bardic Inspiration (and anything shaped like it): a one-shot die added to the
+# bearer's own next attack or save, auto-applied — this engine has no reaction
+# prompts (combat-design.md §2), so "would you like to use it?" isn't a question.
+func _consume_inspired(c) -> int:
+	if not c.has("inspired"):
+		return 0
+	var sides: int = int(c.statuses["inspired"].get("dice_sides", 6))
+	c.statuses.erase("inspired")
+	var bonus: int = rng.roll_die(sides)
+	log.append("%s's inspiration adds %d." % [c.cname, bonus])
+	return bonus
