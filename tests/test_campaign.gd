@@ -92,6 +92,14 @@ func test_generated_routes() -> void:
 				for n in stage:
 					check(Campaign.STAGE_POSITIONS[i] in n["stage_position"],
 						"seed %d: %s is eligible for stage %d" % [s, n["id"], i])
+		var kinds := {}
+		for i in c.route.size() - 1:
+			var fights: Array = c.route[i].filter(func(n): return n["kind"] == "combat")
+			check(fights.size() >= 1 and fights.size() < c.route[i].size(),
+				"seed %d stage %d offers both a fight and a road round it" % [s, i])
+			for n in c.route[i]:
+				kinds[n["kind"]] = true
+		check(kinds.size() == 4, "seed %d walks all four node kinds before the boss" % s)
 		var givers := 0
 		for i in c.route.size() - 1:
 			for n in c.route[i]:

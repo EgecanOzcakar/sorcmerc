@@ -23,6 +23,7 @@ const STAGE_POSITIONS := ["early", "mid", "mid", "late"]   # + the boss stage
 const STAGE_COUNT := 5                                     # STAGE_POSITIONS + boss
 const PICK_MIN := 2
 const PICK_MAX := 3
+const SUPPORT_KINDS := ["merchant", "rest", "treasure"]   # one per stage, dealt out
 
 const POOL := [
 	# --- combat: early ----------------------------------------------------
@@ -160,38 +161,59 @@ func _init(p, seed_value := 0) -> void:
 
 # --- the route ------------------------------------------------------------
 
-# Deterministic in `r`: same seed, same route.
+# Deterministic in `r`: same seed, same route. Every stage is one "support" node
+# (shop / camp / loot — pacing, and a road that is not a fight) plus 1-2 fights;
+# the support kinds are dealt out so all three show up across the four stages.
 static func build_route(r) -> Array:
+	var support := _deal_support(r)
 	var out: Array = []
-	for pos in STAGE_POSITIONS:
-		out.append(_pick_stage(r, String(pos)))
+	for i in STAGE_POSITIONS.size():
+		out.append(_pick_stage(r, String(STAGE_POSITIONS[i]), String(support[i])))
 	_ensure_giver(r, out)
 	out.append([BOSS])
 	return out
 
-static func _pick_stage(r, pos: String) -> Array:
-	var eligible: Array = POOL.filter(func(n): return pos in n["stage_position"])
+# One of each non-combat kind, shuffled, then a repeat to fill the fourth stage.
+static func _deal_support(r) -> Array:
+	var kinds := SUPPORT_KINDS.duplicate()
+	var out: Array = []
+	while not kinds.is_empty():
+		out.append(kinds.pop_at(r.roll_die(kinds.size()) - 1))
+	while out.size() < STAGE_POSITIONS.size():
+		out.append(SUPPORT_KINDS[r.roll_die(SUPPORT_KINDS.size()) - 1])
+	return out
+
+static func _pick_stage(r, pos: String, support_kind: String) -> Array:
+	var support := _eligible(pos, support_kind)
+	var fights := _eligible(pos, "combat")
+	var picked: Array = [support.pop_at(r.roll_die(support.size()) - 1)]
 	var want: int = PICK_MIN + r.roll_die(PICK_MAX - PICK_MIN + 1) - 1
-	var picked: Array = []
-	while picked.size() < want and not eligible.is_empty():
-		picked.append(eligible.pop_at(r.roll_die(eligible.size()) - 1))
+	while picked.size() < want and not fights.is_empty():
+		picked.insert(r.roll_die(picked.size() + 1) - 1,
+			fights.pop_at(r.roll_die(fights.size()) - 1))
 	return picked
 
-# The one invariant selection can violate: no quest-giving merchant before the
-# boss. Drop one into a stage it is eligible for, over a random slot.
+static func _eligible(pos: String, kind: String) -> Array:
+	return POOL.filter(func(n): return n["kind"] == kind and pos in n["stage_position"])
+
+# The one invariant selection can violate: quests are only offered by two named
+# merchants (quest.gd's giver_node_ids), so a route needs one of them before the
+# boss. Swap it in over whichever merchant the route already has.
 static func _ensure_giver(r, out: Array) -> void:
-	for st in out:
-		for n in st:
-			if n["id"] in GIVER_IDS:
-				return
-	var givers: Array = POOL.filter(func(n): return n["id"] in GIVER_IDS)
-	var giver: Dictionary = givers[r.roll_die(givers.size()) - 1]
-	var slots: Array = []
+	var merchants: Array = []        # [stage index, slot index]
 	for i in out.size():
-		if STAGE_POSITIONS[i] in giver["stage_position"]:
-			slots.append(i)
-	var st: Array = out[slots[r.roll_die(slots.size()) - 1]]
-	st[r.roll_die(st.size()) - 1] = giver
+		for j in out[i].size():
+			if out[i][j]["id"] in GIVER_IDS:
+				return
+			if out[i][j]["kind"] == "merchant":
+				merchants.append([i, j])
+	if merchants.is_empty():
+		return
+	var at: Array = merchants[r.roll_die(merchants.size()) - 1]
+	var givers: Array = _eligible(String(STAGE_POSITIONS[at[0]]), "merchant").filter(
+		func(n): return n["id"] in GIVER_IDS)
+	if not givers.is_empty():
+		out[at[0]][at[1]] = givers[r.roll_die(givers.size()) - 1]
 
 func options() -> Array:
 	return route[stage] if stage < route.size() else []

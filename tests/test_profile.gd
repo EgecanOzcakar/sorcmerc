@@ -26,6 +26,7 @@ func _screen(ch):
 func _init() -> void:
 	_sheet_mirror()
 	_equip()
+	_unidentified()
 	_resources()
 	_pact()
 	print("test_profile: %d passed, %d failed" % [_pass, _fail])
@@ -122,6 +123,39 @@ func _equip() -> void:
 	p2.toggle_equip("plate")
 	check(not "plate" in pike.equipped, "equipping what the party does not carry is a no-op")
 	p2.queue_free()
+
+# T13: an unidentified item is a mystery in the stash panel — no name, no Equip
+# button, and toggle_equip refuses it. A scroll clears it up on the spot.
+func _unidentified() -> void:
+	var pike = Presets.pike()
+	var pty = Party.new()
+	pty.add_member(pike)
+	pty.stash_add("cloak-of-elvenkind", 1, false)
+	var p = load("res://scenes/profile/profile.tscn").instantiate()
+	root.add_child(p)
+	p.set_party(pty)
+	p.set_character(pike)
+
+	var row: String = p.field("item_cloak-of-elvenkind")
+	var label: String = p._fields["item_cloak-of-elvenkind"].get_parent().get_child(0).text
+	check(row != "", "the mystery still renders a row")
+	check(label == "Unidentified item (uncommon)",
+		"it shows rarity only, no name (got %s)" % label)
+	check(not p._fields.has("equip_btn_cloak-of-elvenkind"), "no Equip button on a mystery")
+
+	p.toggle_equip("cloak-of-elvenkind")
+	check(not "cloak-of-elvenkind" in pike.equipped, "equipping an unidentified item is refused")
+	check(pty.stash_count("cloak-of-elvenkind") == 1, "and the refusal left the stash alone")
+
+	pty.stash_add(Party.IDENTIFY_SCROLL)
+	p.set_party(pty)
+	check(pty.use_identification_scroll("cloak-of-elvenkind"), "the scroll reveals it")
+	p.set_party(pty)
+	var known: String = p._fields["item_cloak-of-elvenkind"].get_parent().get_child(0).text
+	check(known.begins_with("Cloak"), "the identified item shows its real name (got %s)" % known)
+	p.toggle_equip("cloak-of-elvenkind")
+	check(pty.stash_count("cloak-of-elvenkind") == 0, "an identified magic item can be taken")
+	p.queue_free()
 
 # HP and pools are editable, and a long rest restores both.
 func _resources() -> void:

@@ -71,7 +71,7 @@ func test_catalog_loads() -> void:
 		"backgrounds.json": 16, "feats.json": 74, "fighting-styles.json": 10,
 		"spells.json": 146, "weapons.json": 39, "armor.json": 13,
 		# magic items: 262 exported + the game-authored scroll-of-resurrection
-		"magic-items.json": 263, "conditions.json": 15, "skills.json": 18,
+		"magic-items.json": 264, "conditions.json": 15, "skills.json": 18,
 	}
 	for f in counts:
 		var a = Catalog.all(f)
