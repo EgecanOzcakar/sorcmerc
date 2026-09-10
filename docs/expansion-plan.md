@@ -344,6 +344,27 @@ a mystery (rarity hint only, no name/effect) in the profile's stash panel.
   functions (T12: route generation/`STAGES`; T13: treasure-loot identification
   flag, rest-node Identify action, shop stock) — same file-sharing discipline
   as the T10/T11 pair, flagged explicitly to both agents.
+- 2026-09-10: Identification DC made rarity-dependent (done directly, small):
+  target success rate by tier (uncommon 90%, rare 80%, very-rare 60%,
+  legendary 35%, artifact 15%), DC solved backward from the target against
+  the examining character's real Arcana bonus. Scroll path unaffected
+  (always succeeds, no roll). `Campaign.identify_dc(item_id, bonus)`.
+
+## T15 — UI/graphics polish pass (locked 2026-09-10)
+
+"Top notch" visual polish across the existing shape-based (no sprites)
+language, explicitly **not** character portraits/models — those are added
+manually later. Scope: a shared icon/glyph system (`core/ui_icons.gd` or
+similar) — a distinct glyph per class (extending the 3-class glyph idea
+already in `main.gd`'s combat tokens to all 12), a glyph per spell school (8),
+a glyph per condition/status (the 15 from T14, several already have ad-hoc
+unicode marks scattered around — consolidate), and a **rarity color ramp**
+(common/uncommon/rare/very-rare/legendary/artifact) applied everywhere an
+item's name renders (shop, stash, profile) — plus a typography/spacing
+consistency pass across all 5 screens (combat, creator, profile, party,
+campaign), which were built by different agents across this session and may
+have drifted despite sharing `Creator.dark_theme()`.
+
 - 2026-09-10: **T12 and T13 complete.** T12: `STAGES` replaced by a 35-template
   `POOL` + a fixed `BOSS`, seed-generated per run (route RNG is a separate
   stream off the same seed, so it doesn't perturb combat/loot rolls); both
