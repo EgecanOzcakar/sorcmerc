@@ -9,6 +9,8 @@ const Bundles = preload("res://core/rules/bundles.gd")
 const Character = preload("res://core/character.gd")
 const PassAbilities = preload("res://core/rules/pass_abilities.gd")
 const PassProfs = preload("res://core/rules/pass_profs.gd")
+const PassDefense = preload("res://core/rules/pass_defense.gd")
+const PassPools = preload("res://core/rules/pass_pools.gd")
 
 var _pass = 0
 var _fail = 0
@@ -32,6 +34,10 @@ func _init() -> void:
 	test_abilities()
 	test_profs()
 	test_expertise_and_half_proficiency()
+	test_hp()
+	test_ac()
+	test_speed()
+	test_pools()
 
 	print("test_rules: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -295,3 +301,126 @@ func test_expertise_and_half_proficiency() -> void:
 	check(int(fsk["skills"]["acrobatics"]) == 2, "Remarkable Athlete adds ceil(3/2)=2 to a non-proficient DEX skill")
 	check(int(fsk["skills"]["athletics"]) == 6, "no half-PB where already proficient (+3 STR +3 PB)")
 	check(int(fsk["skills"]["arcana"]) == 0, "Remarkable Athlete does not touch INT skills")
+
+# --- step 5: pass_defense + pass_pools -----------------------------------
+
+func _build(cid: String, n: int, abil: Dictionary, decisions := {}) -> Character:
+	var ch := Character.new()
+	ch.species_id = "human"; ch.background_id = "soldier"
+	ch.base_abilities = abil
+	for i in n:
+		ch.add_level(cid, -1)
+	for k in decisions:
+		ch.decide(k, decisions[k])
+	return ch
+
+func test_hp() -> void:
+	var abil := {"str": 16, "dex": 14, "con": 14, "int": 10, "wis": 10, "cha": 10}  # CON +2
+	var f1 := _build("fighter", 1, abil)
+	var b1: Array = Bundles.collect(f1)["bundles"]
+	check(PassDefense.hp(b1, [-1], 2, 1) == 12, "fighter 1: d10 max + 2 CON = 12")
+
+	var f5 := _build("fighter", 5, abil)
+	var b5: Array = Bundles.collect(f5)["bundles"]
+	# average: 10+2 then 4x(6+2) = 44
+	check(PassDefense.hp(b5, [-1, -1, -1, -1, -1], 2, 5) == 44, "fighter 5 on averages = 44")
+	check(PassDefense.hp(b5, [-1, 10, 10, 10, 10], 2, 5) == 60, "fighter 5 with max rolls = 60")
+
+	var w20 := _build("wizard", 20, abil)
+	var b20: Array = Bundles.collect(w20)["bundles"]
+	var rolls: Array = []
+	for i in 20:
+		rolls.append(-1)
+	# d6: 6+2 then 19x(4+2) = 122
+	check(PassDefense.hp(b20, rolls, 2, 20) == 122, "wizard 20 on averages = 122")
+
+	# Dwarf hp-bonus is +1 per level
+	var d := _build("fighter", 5, abil)
+	d.species_id = "dwarf"
+	var db: Array = Bundles.collect(d)["bundles"]
+	check(PassDefense.hp(db, [-1, -1, -1, -1, -1], 2, 5) == 49, "dwarf fighter 5 = 44 + 5 hp-bonus")
+
+func test_ac() -> void:
+	# Barbarian unarmored: 10 + DEX + CON
+	var abil := {"str": 16, "dex": 14, "con": 16, "int": 10, "wis": 14, "cha": 10}
+	var bb := _build("barbarian", 1, abil)
+	var b: Array = Bundles.collect(bb)["bundles"]
+	var a: Dictionary = PassAbilities.resolve(abil, b, bb.choices)["abilities"]
+	check(int(PassDefense.ac(b, a, null)["ac"]) == 15, "barbarian unarmored AC = 10 + 2 DEX + 3 CON")
+
+	# Monk unarmored: 10 + DEX + WIS
+	var mk := _build("monk", 1, abil)
+	var mb: Array = Bundles.collect(mk)["bundles"]
+	var ma: Dictionary = PassAbilities.resolve(abil, mb, mk.choices)["abilities"]
+	check(int(PassDefense.ac(mb, ma, null)["ac"]) == 14, "monk unarmored AC = 10 + 2 DEX + 2 WIS")
+
+	# Armored: chain mail (16, no DEX) + shield
+	var f := _build("fighter", 1, abil)
+	var fb: Array = Bundles.collect(f)["bundles"]
+	var fa: Dictionary = PassAbilities.resolve(abil, fb, f.choices)["abilities"]
+	check(int(PassDefense.ac(fb, fa, {"totalBase": 16, "shieldBonus": 2})["ac"]) == 18,
+		"chain mail + shield = 18")
+	check(int(PassDefense.ac(fb, fa, null)["ac"]) == 12, "unequipped armored calc falls back to 10 + DEX")
+
+func test_speed() -> void:
+	var h := _build("fighter", 1, {"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10})
+	check(int(PassDefense.speed(Bundles.collect(h)["bundles"])["walk"]) == 30, "human walk 30 ft")
+
+	# Elf lineage grants a climb/swim walk-equivalent in some species; assert the
+	# second pass at least never invents a mode with no walk speed.
+	var s := PassDefense.speed([{"source": {"origin": "species", "id": "x"},
+		"grants": [{"type": "speed", "mode": "climb", "value": "walk-equivalent"}]}])
+	check(s.is_empty(), "walk-equivalent with no walk speed is dropped")
+	var s2 := PassDefense.speed([{"source": {"origin": "species", "id": "x"},
+		"grants": [{"type": "speed", "mode": "walk", "value": 30},
+			{"type": "speed", "mode": "climb", "value": "walk-equivalent"}]}])
+	check(int(s2["climb"]) == 30, "walk-equivalent resolves to the walk speed")
+
+func test_pools() -> void:
+	var abil := {"str": 16, "dex": 14, "con": 14, "int": 10, "wis": 14, "cha": 14}
+	# Rage: 2/3/4/5/6 at barbarian 1/3/6/12/17
+	for pair in [[1, 2], [2, 2], [3, 3], [5, 3], [6, 4], [11, 4], [12, 5], [16, 5], [17, 6], [20, 6]]:
+		var ch := _build("barbarian", pair[0], abil)
+		var pools: Array = PassPools.resolve(Bundles.collect(ch)["bundles"])["pools"]
+		var mx := -1
+		for p in pools:
+			if p["id"] == "rage":
+				mx = int(p["max"])
+		check(mx == pair[1], "barbarian %d rages = %d (got %d)" % [pair[0], pair[1], mx])
+
+	# class-level pools
+	var monk := _build("monk", 7, abil)
+	var mp: Array = PassPools.resolve(Bundles.collect(monk)["bundles"])["pools"]
+	var focus := -1
+	for p in mp:
+		if p["id"] == "focus-points":
+			focus = int(p["max"])
+	check(focus == 7, "monk 7 has 7 focus points")
+
+	var sorc := _build("sorcerer", 5, abil)
+	var sp: Array = PassPools.resolve(Bundles.collect(sorc)["bundles"])["pools"]
+	var sorcery := -1
+	for p in sp:
+		if p["id"] == "sorcery-points":
+			sorcery = int(p["max"])
+	check(sorcery == 5, "sorcerer 5 has 5 sorcery points")
+
+	# proficiency-bonus pool
+	var pal := _build("paladin", 9, abil)
+	var pp: Array = PassPools.resolve(Bundles.collect(pal)["bundles"])["pools"]
+	var cd := -1
+	for p in pp:
+		if p["id"] == "channel-divinity":
+			cd = int(p["max"])
+	check(cd == 4, "paladin 9 Channel Divinity = PB 4")
+
+	# dieSizeSteps, on a level-steps pool
+	var ek := _build("fighter", 5, abil)
+	ek.decide("subclass:class:fighter:0", {"type": "subclass", "subclassId": "psiwarrior"})
+	var ep: Array = PassPools.resolve(Bundles.collect(ek)["bundles"])["pools"]
+	var psi := {}
+	for p in ep:
+		if p["id"] == "psionic-energy":
+			psi = p
+	check(int(psi.get("max", -1)) == 6, "psi warrior 5 has 6 psionic energy dice")
+	check(int(psi.get("die_size", -1)) == 8, "psi warrior 5 psionic die is d8")
