@@ -30,6 +30,7 @@ func _init() -> void:
 	test_advantage_beats_normal()
 	test_crit_doubles_dice_not_mod()
 	test_burning_hands_hits_allies_not_caster()
+	test_scorching_ray_fires_three_rays()
 	test_move_provokes_unless_disengage()
 	test_healing_word_clears_death()
 	test_alcove_cover()
@@ -112,6 +113,23 @@ func test_burning_hands_hits_allies_not_caster() -> void:
 	var vb = v2.hp
 	cb2.perform(i2, _verb(cb2, i2, "burning-hands"), Vector2i(1, 0))
 	check(v2.hp == vb, "burning hands spares a creature outside the cone")
+
+# Scorching Ray is 3 independent attack rolls from one cast, not one hit.
+func test_scorching_ray_fires_three_rays() -> void:
+	var cb = _sandbox()
+	var ilsa = _find(cb, "ilsa")
+	var grull = _find(cb, "grull")   # tougher target — no overkill clamping to muddy the sum
+	ilsa.pos = Vector2i(4, 1)
+	grull.pos = Vector2i(6, 1)
+	var v := {"id": "test-scorching-ray", "kind": "spell", "spell": "scorching-ray",
+		"label": "Scorching Ray", "cost": "action", "slot_level": 1, "shape": "single",
+		"targeting": "enemy", "range_ft": 120, "attack_bonus": 20,   # always hits, for a clean count
+		"dice_count": 2, "dice_sides": 6, "damage_type": "fire", "rays": 3}
+	var before: int = grull.hp
+	var res := cb.perform(ilsa, v, grull)
+	check(int(res.get("hits", 0)) == 3, "all 3 rays land at a guaranteed-hit bonus")
+	check(before - grull.hp == int(res["damage"]), "total damage is the sum of all landed rays")
+	check(before - grull.hp >= 6, "3 rays of at-least-2d6 each land for real damage, not one roll's worth")
 
 func test_move_provokes_unless_disengage() -> void:
 	# Pike adjacent to Grull, steps away out of adjacency.

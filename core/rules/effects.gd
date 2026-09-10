@@ -150,6 +150,11 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 	}
 	if m.has("attack"):   # a spell attack rolls to hit instead of forcing a save
 		v["attack_bonus"] = int(sheet.spellcasting.get("attack_bonus", 0))
+	if m.has("rays"):     # Scorching Ray: several independent attack rolls, one cast
+		var rays := int(m["rays"])
+		if up > 0 and m.has("upcast"):
+			rays += up * int(m["upcast"]["per_level"].get("rays", 0))
+		v["rays"] = rays
 	if m.has("damage"):
 		var d: Dictionary = m["damage"][0]
 		var n := int(d.get("count", 1))

@@ -560,15 +560,25 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 
 func _spell_hit(c, v: Dictionary, notation: String, dc: int) -> Dictionary:
 	if v.has("attack_bonus"):
-		var r = Dice.d20(rng)
-		var crit: bool = r.nat == 20
-		var hit: bool = crit or (r.nat != 1 and r.nat + int(v["attack_bonus"]) >= effective_ac(c))
-		var d := Dice.roll(rng, notation, crit) if hit else 0
-		log.append("  d20[%d]%+d vs AC %d — %s%s." % [r.nat, int(v["attack_bonus"]), effective_ac(c),
-			"hit for %d" % d if hit else "miss", " (CRIT)" if crit else ""])
-		if hit:
-			_apply_damage(c, d, v.get("damage_type", ""))
-		return {"hit": hit, "damage": d}
+		# Scorching Ray etc.: several independent attack rolls from one cast, all
+		# at this same target (RAW also lets you split rays across several
+		# targets — not modeled, the targeting UI only ever resolves one hex).
+		var rays: int = int(v.get("rays", 1))
+		var hits := 0
+		var total := 0
+		for i in rays:
+			var r = Dice.d20(rng)
+			var crit: bool = r.nat == 20
+			var hit: bool = crit or (r.nat != 1 and r.nat + int(v["attack_bonus"]) >= effective_ac(c))
+			var d := Dice.roll(rng, notation, crit) if hit else 0
+			var tag := " ray %d/%d" % [i + 1, rays] if rays > 1 else ""
+			log.append("  d20[%d]%+d vs AC %d%s — %s%s." % [r.nat, int(v["attack_bonus"]), effective_ac(c),
+				tag, "hit for %d" % d if hit else "miss", " (CRIT)" if crit else ""])
+			if hit:
+				hits += 1
+				total += d
+				_apply_damage(c, d, v.get("damage_type", ""))
+		return {"hit": hits > 0, "damage": total, "hits": hits}
 	var dmg := Dice.roll(rng, notation)
 	var saved := false
 	if v.get("save", "") != "":

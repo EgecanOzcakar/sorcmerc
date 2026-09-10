@@ -6,6 +6,12 @@
     "damage": [{"count": 3, "sides": 6, "type": "fire"}],
     "upcast": {"per_level": {"count": 1, "sides": 6}}
   },
+  "scorching-ray": {
+    "cost": "action", "shape": "single", "range_ft": 120, "attack": "ranged",
+    "damage": [{"count": 2, "sides": 6, "type": "fire"}],
+    "rays": 3,
+    "upcast": {"per_level": {"count": 0, "rays": 1}}
+  },
   "sacred-flame": {
     "cost": "action", "shape": "single", "range_ft": 60, "save": "dex", "ignores_cover": true,
     "damage": [{"count": 1, "sides": 8, "type": "radiant"}],
