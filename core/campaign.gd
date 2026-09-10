@@ -54,9 +54,10 @@ const STAGES := [
 	],
 ]
 
-# What a merchant sells: a handful of ids out of data/weapons.json + armor.json.
-# Price is the data cost, flat. No haggling, no stock depletion.
+# What a merchant sells: a handful of ids out of data/weapons.json + armor.json,
+# priced by item_price() below. No haggling, no stock depletion.
 const STOCK := ["shortsword", "longsword", "greataxe", "shortbow", "leather", "chain-shirt", "shield"]
+const SCROLL := "scroll-of-resurrection"
 const SELL_RATE := 0.5
 
 var party
@@ -181,14 +182,23 @@ func rest(kind: String) -> void:
 
 # --- merchant -------------------------------------------------------------
 
+# The steel and straps, plus — at some merchants — the one consumable that
+# matters: a Scroll of Resurrection. Keyed off the node id, so a given merchant
+# either has one or never does.
+func stock_ids() -> Array:
+	var ids: Array = STOCK.duplicate()
+	if String(node.get("id", "")).hash() % 3 == 0:
+		ids.append(SCROLL)
+	return ids
+
 func stock() -> Array:
 	var out: Array = []
-	for id in STOCK:
+	for id in stock_ids():
 		out.append({"item_id": id, "name": item_name(id), "price": item_price(id)})
 	return out
 
 func buy(item_id: String) -> bool:
-	if node.get("kind", "") != "merchant" or not item_id in STOCK:
+	if node.get("kind", "") != "merchant" or not item_id in stock_ids():
 		return false
 	if not party.spend_gold(item_price(item_id)):
 		return false
@@ -197,7 +207,9 @@ func buy(item_id: String) -> bool:
 	return true
 
 func sell(item_id: String) -> bool:
-	if node.get("kind", "") != "merchant" or not party.stash_remove(item_id):
+	if node.get("kind", "") != "merchant" or item_price(item_id) <= 0:
+		return false      # artifacts and unknown junk have no market
+	if not party.stash_remove(item_id):
 		return false
 	var paid := maxi(1, int(item_price(item_id) * SELL_RATE))
 	party.add_gold(paid)
@@ -223,14 +235,42 @@ func turn_in(quest: Dictionary) -> bool:
 	say("Quest complete: %s (+%d gp)" % [quest["title"], int(quest["reward"].get("gold", 0))])
 	return true
 
-# --- item lookup ----------------------------------------------------------
+# --- item lookup & pricing ------------------------------------------------
+#
+# Mundane gear: the SRD `costGp` straight out of weapons/armor.json — already
+# power-correlated inside its one (common) tier, so no second heuristic.
+# Magic items: the export carries no structured power data (structuredBonuses is
+# null on every entry, SCHEMA gap), so rarity is all there is. Price grows
+# polynomially with the tier index: BASE * (index + 1) ^ EXPONENT, tuned so
+# uncommon ≈ 256 gp, rare ≈ 2916, very-rare ≈ 16384, legendary ≈ 62500 gp.
+# Artifacts are priced 0 — not for sale, not sellable.
+
+const MAGIC_BASE := 4
+const MAGIC_EXPONENT := 6
+const RARITY_TIERS := ["common", "uncommon", "rare", "very-rare", "legendary"]
+const VARIES_TIER := 2        # "varies" items (no single rarity) price as rare
 
 static func item_data(item_id: String) -> Dictionary:
-	var d: Dictionary = Catalog.weapon(item_id)
-	return d if not d.is_empty() else Catalog.armor(item_id)
+	for file in ["weapons.json", "armor.json", "magic-items.json"]:
+		var d: Dictionary = Catalog.index(file).get(item_id, {})
+		if not d.is_empty():
+			return d
+	return {}
 
 static func item_name(item_id: String) -> String:
 	return String(item_data(item_id).get("name", item_id.capitalize()))
 
+# 0 = not tradeable (artifacts, and anything the catalog has never heard of).
 static func item_price(item_id: String) -> int:
-	return maxi(1, int(round(float(item_data(item_id).get("costGp", 5)))))
+	var d := item_data(item_id)
+	if d.has("costGp"):
+		return maxi(1, int(round(float(d["costGp"]))))
+	if not d.has("rarity"):
+		return 0
+	var rarity := String(d["rarity"])
+	if rarity == "artifact":
+		return 0
+	var tier: int = RARITY_TIERS.find(rarity)
+	if tier < 0:
+		tier = VARIES_TIER
+	return MAGIC_BASE * int(pow(tier + 1, MAGIC_EXPONENT))

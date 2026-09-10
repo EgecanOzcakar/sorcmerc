@@ -171,7 +171,7 @@ func test_merchant() -> void:
 	var c := _campaign()
 	c.enter(_find(c, "merchant"))
 	var stock := c.stock()
-	check(stock.size() == Campaign.STOCK.size(), "the shop lists its stock")
+	check(stock.size() == c.stock_ids().size(), "the shop lists its stock")
 	for e in stock:
 		check(e["price"] > 0 and e["name"] != e["item_id"], "%s has a real name and price" % e["item_id"])
 
@@ -187,6 +187,37 @@ func test_merchant() -> void:
 	check(c.party.gold == gold - Campaign.item_price("longsword") + maxi(1,
 		int(Campaign.item_price("longsword") * Campaign.SELL_RATE)), "selling pays half")
 	check(not c.sell("longsword"), "cannot sell what you do not have")
+
+	# T10 pricing: mundane gear at its SRD cost, magic items by rarity tier.
+	check(Campaign.item_price("longsword") == 15, "a longsword costs its SRD 15 gp")
+	check(Campaign.item_price("dagger") < Campaign.item_price("longsword"),
+		"mundane prices stay power-correlated")
+	check(Campaign.item_price("plate") > Campaign.item_price("leather"), "plate beats leather")
+	var uncommon := Campaign.item_price("adamantine-armor")
+	var rare := Campaign.item_price("scroll-of-resurrection")
+	var very_rare := Campaign.item_price("ammunition-of-slaying")
+	var legendary := Campaign.item_price("apparatus-of-the-crab")
+	check(uncommon >= 100 and uncommon <= 300, "uncommon lands in 100-300 gp (got %d)" % uncommon)
+	check(rare >= 1000 and rare <= 5000, "rare lands in 1000-5000 gp (got %d)" % rare)
+	check(very_rare >= 10000 and very_rare <= 30000, "very-rare lands in 10k-30k (got %d)" % very_rare)
+	check(legendary >= 50000, "legendary is 50k+ (got %d)" % legendary)
+	check(uncommon < rare and rare < very_rare and very_rare < legendary, "the tiers are ordered")
+	check(Campaign.item_price("no-such-item") == 0, "an unknown item has no price")
+
+	# The scroll is stocked at some merchants and buyable there.
+	var scrolls := 0
+	for s in Campaign.STAGES:
+		for n in s:
+			if n["kind"] != "merchant":
+				continue
+			var m := Campaign.new(c.party)
+			m.node = n
+			if Campaign.SCROLL in m.stock_ids():
+				scrolls += 1
+				m.party.add_gold(rare)
+				check(m.buy(Campaign.SCROLL), "the scroll can be bought where it is stocked")
+				check(m.party.stash_count(Campaign.SCROLL) == 1, "and lands in the stash")
+	check(scrolls > 0, "at least one merchant on the route stocks the scroll")
 
 func test_quest_flow() -> void:
 	var c := _campaign()
