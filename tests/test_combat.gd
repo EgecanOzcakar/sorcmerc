@@ -446,6 +446,9 @@ func test_rage_full_turn() -> void:
 		if r.get("hit", false):
 			hits += 1
 			check(r["damage"] >= 3, "a raging hit carries the +2 damage")
+			var rage_extra: Array = r["extras"].filter(func(e): return e["label"] == "raging")
+			check(rage_extra.size() == 1 and int(rage_extra[0]["amount"]) == 2,
+				"...and it's a labeled +2 raging extra, not silently folded into the total")
 		check(b2.econ["action"] == 0, "the swing spent the Action, not the Bonus")
 	check(hits > 0, "some seed lands the raging swing")
 	# and rage resistance halves physical damage

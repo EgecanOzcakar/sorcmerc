@@ -755,13 +755,16 @@ func _react(c, trigger: String, dmg: int) -> int:
 			log.append("%s — %s, halving the blow." % [c.cname, v["label"]])
 	return dmg
 
-# Damage a held buff adds to a melee swing (Rage).
-func _buff_damage(attacker) -> int:
-	var n := 0
-	for s in attacker.statuses.values():
-		if s is Dictionary:
-			n += int(s.get("bonus_damage", 0))
-	return n
+# Damage a held buff adds to a melee swing (Rage), extras-shaped so the log
+# labels it the same way a passive-damage rider is — not silently folded into
+# the total with nothing to say where it came from.
+func _buff_damage_extras(attacker) -> Array:
+	var out: Array = []
+	for id in attacker.statuses:
+		var s = attacker.statuses[id]
+		if s is Dictionary and int(s.get("bonus_damage", 0)) != 0:
+			out.append({"amount": int(s["bonus_damage"]), "label": id})
+	return out
 
 func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var oa: bool = opts.get("opportunity", false)
@@ -802,10 +805,10 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		var dmg: int = dmg_detail["total"]
 		out["dmg_detail"] = dmg_detail
 		out.extras = _passive_damage(attacker, target, mode, crit)
+		if not attacker.ranged:
+			out.extras.append_array(_buff_damage_extras(attacker))
 		for e in out.extras:
 			dmg += int(e["amount"])
-		if not attacker.ranged:
-			dmg += _buff_damage(attacker)
 		out.damage = dmg
 	if hit:
 		out.damage = _react(target, "hit_by_attack", out.damage)
