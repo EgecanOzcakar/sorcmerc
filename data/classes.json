@@ -1,0 +1,5724 @@
+[
+  {
+    "id": "barbarian",
+    "name": "Barbarian",
+    "primaryAbility": "str",
+    "hitDie": 12,
+    "savingThrows": [
+      "str",
+      "con"
+    ],
+    "spellcastingAbility": null,
+    "armorProficiencies": [
+      "light",
+      "medium",
+      "shields"
+    ],
+    "weaponProficiencies": [
+      "simple",
+      "martial"
+    ],
+    "toolProficiencies": [],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 2,
+      "from": [
+        "animalhandling",
+        "athletics",
+        "intimidation",
+        "nature",
+        "perception",
+        "survival"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "str"
+      ],
+      "secondaryAbility": "con",
+      "suggestedBackground": "soldier"
+    },
+    "spellSlots": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 12
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "light"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "medium"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "shields"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "simple"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "martial"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "str"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "con"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:barbarian:0",
+          "count": 2,
+          "from": [
+            "athletics",
+            "animalhandling",
+            "intimidation",
+            "nature",
+            "perception",
+            "survival"
+          ]
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-rage"
+          }
+        },
+        {
+          "type": "resource-pool",
+          "poolId": "rage",
+          "max": {
+            "mode": "level-steps",
+            "classId": "barbarian",
+            "steps": [
+              {
+                "minLevel": 1,
+                "value": 2
+              },
+              {
+                "minLevel": 3,
+                "value": 3
+              },
+              {
+                "minLevel": 6,
+                "value": 4
+              },
+              {
+                "minLevel": 12,
+                "value": 5
+              },
+              {
+                "minLevel": 17,
+                "value": 6
+              }
+            ]
+          },
+          "regen": "long-rest"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-unarmored-defense"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-weapon-mastery"
+          }
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "unarmored",
+            "formula": "barbarian"
+          }
+        },
+        {
+          "type": "weapon-mastery-choice",
+          "key": "weapon-mastery-choice:class:barbarian:0",
+          "count": 2
+        },
+        {
+          "type": "bundle-choice",
+          "key": "bundle-choice:class:barbarian:0",
+          "category": "loadout",
+          "bundleIds": [
+            "barbarian-loadout"
+          ]
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-reckless-attack"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-danger-sense"
+          }
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "barbarian",
+          "key": "subclass:class:barbarian:0"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-primal-knowledge"
+          }
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:barbarian:1",
+          "count": 1,
+          "from": [
+            "athletics",
+            "animalhandling",
+            "intimidation",
+            "nature",
+            "perception",
+            "survival"
+          ]
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:barbarian:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:barbarian:0",
+          "from": null,
+          "category": "general"
+        },
+        {
+          "type": "weapon-mastery-choice",
+          "key": "weapon-mastery-choice:class:barbarian:1",
+          "count": 1
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-extra-attack"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-fast-movement"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-feral-instinct"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-instinctive-pounce"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:barbarian:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:barbarian:1",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-brutal-strike"
+          }
+        }
+      ],
+      [
+        {
+          "type": "weapon-mastery-choice",
+          "key": "weapon-mastery-choice:class:barbarian:2",
+          "count": 1
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-relentless-rage"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:barbarian:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:barbarian:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-improved-brutal-strike"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-persistent-rage"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:barbarian:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:barbarian:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-improved-brutal-strike-2"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-indomitable-might"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-epic-boon"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "barbarian-primal-champion"
+          }
+        }
+      ]
+    ]
+  },
+  {
+    "id": "bard",
+    "name": "Bard",
+    "primaryAbility": "cha",
+    "hitDie": 8,
+    "savingThrows": [
+      "dex",
+      "cha"
+    ],
+    "spellcastingAbility": "cha",
+    "armorProficiencies": [
+      "light"
+    ],
+    "weaponProficiencies": [
+      "simple",
+      "handcrossbow",
+      "longsword",
+      "rapier",
+      "shortsword"
+    ],
+    "toolProficiencies": [],
+    "toolChoices": {
+      "count": 3,
+      "from": [
+        "bagpipes",
+        "drum",
+        "dulcimer",
+        "flute",
+        "lute",
+        "lyre",
+        "horn",
+        "panflute",
+        "shawm",
+        "viol"
+      ]
+    },
+    "skillChoice": {
+      "count": 3,
+      "from": null
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "cha"
+      ],
+      "secondaryAbility": "dex",
+      "suggestedBackground": "entertainer"
+    },
+    "spellSlots": [
+      [
+        2
+      ],
+      [
+        3
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3
+      ],
+      [
+        4,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        2,
+        1,
+        1
+      ]
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 8
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "light"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "simple"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "handcrossbow"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "longsword"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "rapier"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "shortsword"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "dex"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "cha"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:bard:0",
+          "count": 3,
+          "from": null
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "tool",
+          "key": "tool-choice:class:bard:1",
+          "count": 3,
+          "from": [
+            "bagpipes",
+            "drum",
+            "dulcimer",
+            "flute",
+            "lute",
+            "lyre",
+            "horn",
+            "panflute",
+            "shawm",
+            "viol"
+          ]
+        },
+        {
+          "type": "spellcasting",
+          "ability": "cha",
+          "source": "class"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "bard-bardic-inspiration"
+          }
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "armored"
+          }
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:0",
+          "count": 2,
+          "spellList": "bard",
+          "spellLevel": 0
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:3",
+          "count": 4,
+          "spellList": "bard",
+          "spellLevel": 1
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "bard-jack-of-all-trades"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "bard-song-of-rest"
+          }
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:4",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 1
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "bard",
+          "key": "subclass:class:bard:0"
+        },
+        {
+          "type": "expertise-choice",
+          "key": "expertise-choice:class:bard:0",
+          "count": 2,
+          "from": null,
+          "fromTools": []
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:5",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 2
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:bard:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:bard:0",
+          "from": null,
+          "category": "general"
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:1",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 0
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:6",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 2
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "bard-font-of-inspiration"
+          }
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:7",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 3
+        }
+      ],
+      [
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:8",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 3
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "bard-countercharm"
+          }
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:9",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 4
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:bard:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:bard:1",
+          "from": null,
+          "category": "general"
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:10",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 4
+        }
+      ],
+      [
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:11",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 5
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "bard-magical-secrets"
+          }
+        },
+        {
+          "type": "expertise-choice",
+          "key": "expertise-choice:class:bard:1",
+          "count": 2,
+          "from": null,
+          "fromTools": []
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:2",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 0
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:12",
+          "count": 2,
+          "spellList": "bard",
+          "spellLevel": 5
+        }
+      ],
+      [
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:13",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 6
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:bard:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:bard:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:14",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 7
+        }
+      ],
+      [
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:15",
+          "count": 2,
+          "spellList": "bard",
+          "spellLevel": 7
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "bard-superior-inspiration"
+          }
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:16",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 8
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:bard:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:bard:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:17",
+          "count": 1,
+          "spellList": "bard",
+          "spellLevel": 9
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "bard-words-of-creation"
+          }
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:bard:18",
+          "count": 2,
+          "spellList": "bard",
+          "spellLevel": 9
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:bard:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:bard:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "bard-epic-boon"
+          }
+        }
+      ]
+    ]
+  },
+  {
+    "id": "cleric",
+    "name": "Cleric",
+    "primaryAbility": "wis",
+    "hitDie": 8,
+    "savingThrows": [
+      "wis",
+      "cha"
+    ],
+    "spellcastingAbility": "wis",
+    "armorProficiencies": [
+      "light",
+      "medium",
+      "shields"
+    ],
+    "weaponProficiencies": [
+      "simple"
+    ],
+    "toolProficiencies": [],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 2,
+      "from": [
+        "history",
+        "insight",
+        "medicine",
+        "persuasion",
+        "religion"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "wis"
+      ],
+      "secondaryAbility": "con",
+      "suggestedBackground": "acolyte"
+    },
+    "spellSlots": [
+      [
+        2
+      ],
+      [
+        3
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3
+      ],
+      [
+        4,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        2,
+        1,
+        1
+      ]
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 8
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "light"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "medium"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "shields"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "simple"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "wis"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "cha"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:cleric:0",
+          "count": 2,
+          "from": [
+            "history",
+            "insight",
+            "medicine",
+            "persuasion",
+            "religion"
+          ]
+        },
+        {
+          "type": "spellcasting",
+          "ability": "wis",
+          "source": "class"
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:cleric:0",
+          "count": 3,
+          "spellList": "cleric",
+          "spellLevel": 0
+        },
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:cleric:0",
+          "options": [
+            {
+              "optionId": "protector",
+              "featureId": "cleric-divine-order-protector",
+              "grants": [
+                {
+                  "type": "proficiency",
+                  "category": "weapon",
+                  "id": "martial"
+                },
+                {
+                  "type": "proficiency",
+                  "category": "armor",
+                  "id": "heavy"
+                }
+              ]
+            },
+            {
+              "optionId": "thaumaturge",
+              "featureId": "cleric-divine-order-thaumaturge",
+              "grants": [
+                {
+                  "type": "spell-choice",
+                  "key": "spell-choice:class:cleric:1",
+                  "count": 1,
+                  "spellList": "cleric",
+                  "spellLevel": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "armored"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "cleric-channel-divinity"
+          }
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "cleric",
+          "key": "subclass:class:cleric:0"
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:cleric:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:cleric:0",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "cleric-smite-undead"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:cleric:1",
+          "options": [
+            {
+              "optionId": "divine-strike",
+              "featureId": "cleric-blessed-strikes-divine-strike",
+              "grants": []
+            },
+            {
+              "optionId": "potent-spellcasting",
+              "featureId": "cleric-blessed-strikes-potent-spellcasting",
+              "grants": []
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:cleric:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:cleric:1",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "cleric-divine-intervention"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:cleric:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:cleric:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:cleric:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:cleric:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "cleric-channel-divinity-3"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:cleric:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:cleric:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "cleric-greater-divine-intervention"
+          }
+        }
+      ]
+    ]
+  },
+  {
+    "id": "druid",
+    "name": "Druid",
+    "primaryAbility": "wis",
+    "hitDie": 8,
+    "savingThrows": [
+      "int",
+      "wis"
+    ],
+    "spellcastingAbility": "wis",
+    "armorProficiencies": [
+      "light",
+      "medium-nonmetal",
+      "shields-nonmetal"
+    ],
+    "weaponProficiencies": [
+      "club",
+      "dagger",
+      "dart",
+      "javelin",
+      "mace",
+      "quarterstaff",
+      "scimitar",
+      "sickle",
+      "sling",
+      "spear"
+    ],
+    "toolProficiencies": [
+      "herbalismkit"
+    ],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 2,
+      "from": [
+        "arcana",
+        "animalhandling",
+        "insight",
+        "medicine",
+        "nature",
+        "perception",
+        "religion",
+        "survival"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "wis"
+      ],
+      "secondaryAbility": "con",
+      "suggestedBackground": "hermit"
+    },
+    "spellSlots": [
+      [
+        2
+      ],
+      [
+        3
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3
+      ],
+      [
+        4,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        2,
+        1,
+        1
+      ]
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 8
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "light"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "medium-nonmetal"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "shields-nonmetal"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "club"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "dagger"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "dart"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "javelin"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "mace"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "quarterstaff"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "scimitar"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "sickle"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "sling"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "spear"
+        },
+        {
+          "type": "proficiency",
+          "category": "tool",
+          "id": "herbalismkit"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "int"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "wis"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:druid:0",
+          "count": 2,
+          "from": [
+            "arcana",
+            "animalhandling",
+            "insight",
+            "medicine",
+            "nature",
+            "perception",
+            "religion",
+            "survival"
+          ]
+        },
+        {
+          "type": "spellcasting",
+          "ability": "wis",
+          "source": "class"
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:druid:0",
+          "count": 2,
+          "spellList": "druid",
+          "spellLevel": 0
+        },
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:druid:0",
+          "options": [
+            {
+              "optionId": "magician",
+              "featureId": "druid-primal-order-magician",
+              "grants": [
+                {
+                  "type": "spell-choice",
+                  "key": "spell-choice:class:druid:2",
+                  "count": 1,
+                  "spellList": "druid",
+                  "spellLevel": 0
+                }
+              ]
+            },
+            {
+              "optionId": "warden",
+              "featureId": "druid-primal-order-warden",
+              "grants": [
+                {
+                  "type": "proficiency",
+                  "category": "weapon",
+                  "id": "martial"
+                },
+                {
+                  "type": "proficiency",
+                  "category": "armor",
+                  "id": "medium"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "armored"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "druid-wild-shape"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "druid-wild-companion"
+          }
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "druid",
+          "key": "subclass:class:druid:0"
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:druid:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:druid:0",
+          "from": null,
+          "category": "general"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "druid-wild-shape-improvement-1"
+          }
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:druid:1",
+          "count": 1,
+          "spellList": "druid",
+          "spellLevel": 0
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "druid-wild-resurgence"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:druid:1",
+          "options": [
+            {
+              "optionId": "potent-spellcasting",
+              "featureId": "druid-elemental-fury-potent-spellcasting",
+              "grants": []
+            },
+            {
+              "optionId": "primal-strike",
+              "featureId": "druid-elemental-fury-primal-strike",
+              "grants": []
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:druid:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:druid:1",
+          "from": null,
+          "category": "general"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "druid-wild-shape-improvement-2"
+          }
+        }
+      ],
+      [],
+      [],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:druid:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:druid:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "druid-improved-elemental-fury"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:druid:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:druid:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "druid-beast-spells"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:druid:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:druid:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "druid-archdruid"
+          }
+        }
+      ]
+    ]
+  },
+  {
+    "id": "fighter",
+    "name": "Fighter",
+    "primaryAbility": "str",
+    "hitDie": 10,
+    "savingThrows": [
+      "str",
+      "con"
+    ],
+    "spellcastingAbility": null,
+    "armorProficiencies": [
+      "light",
+      "medium",
+      "heavy",
+      "shields"
+    ],
+    "weaponProficiencies": [
+      "simple",
+      "martial"
+    ],
+    "toolProficiencies": [],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 2,
+      "from": [
+        "acrobatics",
+        "animalhandling",
+        "athletics",
+        "history",
+        "insight",
+        "intimidation",
+        "perception",
+        "survival"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "str",
+        "dex"
+      ],
+      "secondaryAbility": "con",
+      "suggestedBackground": "soldier"
+    },
+    "spellSlots": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 10
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "light"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "medium"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "heavy"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "shields"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "simple"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "martial"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "str"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "con"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:fighter:0",
+          "count": 2,
+          "from": [
+            "acrobatics",
+            "animalhandling",
+            "athletics",
+            "history",
+            "insight",
+            "intimidation",
+            "perception",
+            "survival"
+          ]
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "armored"
+          }
+        },
+        {
+          "type": "fighting-style-choice",
+          "key": "fighting-style-choice:class:fighter:0",
+          "count": 1,
+          "from": [
+            "archery",
+            "blind-fighting",
+            "defense",
+            "dueling",
+            "great-weapon-fighting",
+            "interception",
+            "protection",
+            "thrown-weapon-fighting",
+            "two-weapon-fighting",
+            "unarmed-fighting"
+          ]
+        },
+        {
+          "type": "weapon-mastery-choice",
+          "key": "weapon-mastery-choice:class:fighter:0",
+          "count": 3
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "fighter-second-wind"
+          }
+        },
+        {
+          "type": "bundle-choice",
+          "key": "bundle-choice:class:fighter:0",
+          "category": "loadout",
+          "bundleIds": [
+            "fighter-chainmail",
+            "fighter-archer-kit"
+          ]
+        },
+        {
+          "type": "bundle-choice",
+          "key": "bundle-choice:class:fighter:1",
+          "category": "melee-weapon",
+          "bundleIds": [
+            "martial-weapon-and-shield",
+            "two-martial-weapons"
+          ]
+        },
+        {
+          "type": "bundle-choice",
+          "key": "bundle-choice:class:fighter:2",
+          "category": "ranged-weapon",
+          "bundleIds": [
+            "light-crossbow-kit",
+            "two-handaxes"
+          ]
+        },
+        {
+          "type": "bundle-choice",
+          "key": "bundle-choice:class:fighter:3",
+          "category": "pack",
+          "bundleIds": [
+            "dungeoneers-pack",
+            "explorers-pack"
+          ]
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "fighter-action-surge"
+          }
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "fighter",
+          "key": "subclass:class:fighter:0"
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:fighter:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:fighter:0",
+          "from": null,
+          "category": "general"
+        },
+        {
+          "type": "weapon-mastery-choice",
+          "key": "weapon-mastery-choice:class:fighter:1",
+          "count": 1
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "fighter-extra-attack"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:fighter:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:fighter:1",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:fighter:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:fighter:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "fighter-indomitable"
+          }
+        }
+      ],
+      [
+        {
+          "type": "weapon-mastery-choice",
+          "key": "weapon-mastery-choice:class:fighter:2",
+          "count": 1
+        }
+      ],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [
+        {
+          "type": "weapon-mastery-choice",
+          "key": "weapon-mastery-choice:class:fighter:3",
+          "count": 1
+        }
+      ],
+      [],
+      [],
+      [],
+      []
+    ]
+  },
+  {
+    "id": "monk",
+    "name": "Monk",
+    "primaryAbility": "dex",
+    "hitDie": 8,
+    "savingThrows": [
+      "str",
+      "dex"
+    ],
+    "spellcastingAbility": null,
+    "armorProficiencies": [],
+    "weaponProficiencies": [
+      "simple",
+      "shortsword"
+    ],
+    "toolProficiencies": [],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 2,
+      "from": [
+        "acrobatics",
+        "athletics",
+        "history",
+        "insight",
+        "religion",
+        "stealth"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "dex"
+      ],
+      "secondaryAbility": "wis",
+      "suggestedBackground": "hermit"
+    },
+    "spellSlots": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 8
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "simple"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "shortsword"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "str"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "dex"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:monk:0",
+          "count": 2,
+          "from": [
+            "acrobatics",
+            "athletics",
+            "history",
+            "insight",
+            "religion",
+            "stealth"
+          ]
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-martial-arts"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-unarmored-defense"
+          }
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "unarmored",
+            "formula": "monk"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-focus-points"
+          }
+        },
+        {
+          "type": "resource-pool",
+          "poolId": "focus-points",
+          "max": {
+            "mode": "class-level",
+            "classId": "monk"
+          },
+          "regen": "short-rest"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-flurry-of-blows"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-patient-defense"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-step-of-the-wind"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-unarmored-movement"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-uncanny-metabolism"
+          }
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "monk",
+          "key": "subclass:class:monk:0"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-deflect-attacks"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:monk:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:monk:0",
+          "from": null,
+          "category": "general"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-slow-fall"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-extra-attack"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-stunning-strike"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-empowered-strikes"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-evasion"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-stillness-of-mind"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:monk:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:monk:1",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-acrobatic-movement"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-heightened-focus"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-self-restoration"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:monk:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:monk:2",
+          "from": null,
+          "category": "general"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-disciplined-survivor"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-perfect-focus"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-diamond-soul"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-superior-defense"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:monk:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:monk:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-body-and-mind"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:monk:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:monk:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "monk-epic-boon"
+          }
+        }
+      ]
+    ]
+  },
+  {
+    "id": "paladin",
+    "name": "Paladin",
+    "primaryAbility": "str",
+    "hitDie": 10,
+    "savingThrows": [
+      "wis",
+      "cha"
+    ],
+    "spellcastingAbility": "cha",
+    "armorProficiencies": [
+      "light",
+      "medium",
+      "heavy",
+      "shields"
+    ],
+    "weaponProficiencies": [
+      "simple",
+      "martial"
+    ],
+    "toolProficiencies": [],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 2,
+      "from": [
+        "athletics",
+        "insight",
+        "intimidation",
+        "medicine",
+        "persuasion",
+        "religion"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "str"
+      ],
+      "secondaryAbility": "cha",
+      "suggestedBackground": "noble"
+    },
+    "spellSlots": [
+      [],
+      [
+        2
+      ],
+      [
+        3
+      ],
+      [
+        3
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3
+      ],
+      [
+        4,
+        3,
+        3
+      ],
+      [
+        4,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2
+      ]
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 10
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "light"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "medium"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "heavy"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "shields"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "simple"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "martial"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "wis"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "cha"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:paladin:0",
+          "count": 2,
+          "from": [
+            "athletics",
+            "insight",
+            "intimidation",
+            "medicine",
+            "persuasion",
+            "religion"
+          ]
+        },
+        {
+          "type": "spellcasting",
+          "ability": "cha",
+          "source": "class"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-lay-on-hands"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-divine-sense"
+          }
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "armored"
+          }
+        },
+        {
+          "type": "weapon-mastery-choice",
+          "key": "weapon-mastery-choice:class:paladin:0",
+          "count": 2
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:paladin:0",
+          "count": 2,
+          "spellList": "paladin",
+          "spellLevel": 1
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-divine-smite"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-channel-divinity"
+          }
+        },
+        {
+          "type": "resource-pool",
+          "poolId": "channel-divinity",
+          "max": {
+            "mode": "proficiency-bonus",
+            "classId": "paladin"
+          },
+          "regen": "short-rest"
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "paladin",
+          "key": "subclass:class:paladin:0"
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:paladin:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:paladin:0",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-extra-attack"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-faithful-steed"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-aura-of-protection"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:paladin:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:paladin:1",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-abjure-foes"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-aura-of-courage"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-radiant-strikes"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:paladin:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:paladin:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-restoring-touch"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:paladin:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:paladin:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-aura-expansion"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:paladin:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:paladin:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "paladin-epic-boon"
+          }
+        }
+      ]
+    ]
+  },
+  {
+    "id": "ranger",
+    "name": "Ranger",
+    "primaryAbility": "dex",
+    "hitDie": 10,
+    "savingThrows": [
+      "str",
+      "dex"
+    ],
+    "spellcastingAbility": "wis",
+    "armorProficiencies": [
+      "light",
+      "medium",
+      "shields"
+    ],
+    "weaponProficiencies": [
+      "simple",
+      "martial"
+    ],
+    "toolProficiencies": [],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 3,
+      "from": [
+        "animalhandling",
+        "athletics",
+        "insight",
+        "investigation",
+        "nature",
+        "perception",
+        "stealth",
+        "survival"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "dex"
+      ],
+      "secondaryAbility": "wis",
+      "suggestedBackground": "guide"
+    },
+    "spellSlots": [
+      [],
+      [
+        2
+      ],
+      [
+        3
+      ],
+      [
+        3
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3
+      ],
+      [
+        4,
+        3,
+        3
+      ],
+      [
+        4,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2
+      ]
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 10
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "light"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "medium"
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "shields"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "simple"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "martial"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "str"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "dex"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:ranger:0",
+          "count": 3,
+          "from": [
+            "animalhandling",
+            "athletics",
+            "insight",
+            "investigation",
+            "nature",
+            "perception",
+            "stealth",
+            "survival"
+          ]
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-favored-enemy"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-weapon-mastery"
+          }
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "armored"
+          }
+        },
+        {
+          "type": "weapon-mastery-choice",
+          "key": "weapon-mastery-choice:class:ranger:0",
+          "count": 2
+        }
+      ],
+      [
+        {
+          "type": "spellcasting",
+          "ability": "wis",
+          "source": "class"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-deft-explorer"
+          }
+        },
+        {
+          "type": "fighting-style-choice",
+          "key": "fighting-style-choice:class:ranger:0",
+          "count": 1,
+          "from": [
+            "archery",
+            "blind-fighting",
+            "defense",
+            "dueling",
+            "great-weapon-fighting",
+            "interception",
+            "protection",
+            "thrown-weapon-fighting",
+            "two-weapon-fighting",
+            "unarmed-fighting"
+          ]
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:ranger:0",
+          "count": 2,
+          "spellList": "ranger",
+          "spellLevel": 1
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "ranger",
+          "key": "subclass:class:ranger:0"
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:ranger:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:ranger:0",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-extra-attack"
+          }
+        }
+      ],
+      [
+        {
+          "type": "expertise-choice",
+          "key": "expertise-choice:class:ranger:0",
+          "count": 2,
+          "from": null,
+          "fromTools": []
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-roving"
+          }
+        },
+        {
+          "type": "speed",
+          "mode": "climb",
+          "value": "walk-equivalent"
+        },
+        {
+          "type": "speed",
+          "mode": "swim",
+          "value": "walk-equivalent"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:ranger:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:ranger:1",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-conjure-barrage"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-tireless"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:ranger:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:ranger:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-relentless-hunter"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-natures-veil"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:ranger:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:ranger:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-conjure-volley"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-swift-quiver"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:ranger:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:ranger:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "ranger-epic-boon"
+          }
+        }
+      ]
+    ]
+  },
+  {
+    "id": "rogue",
+    "name": "Rogue",
+    "primaryAbility": "dex",
+    "hitDie": 8,
+    "savingThrows": [
+      "dex",
+      "int"
+    ],
+    "spellcastingAbility": null,
+    "armorProficiencies": [
+      "light"
+    ],
+    "weaponProficiencies": [
+      "simple",
+      "handcrossbow",
+      "longsword",
+      "rapier",
+      "shortsword"
+    ],
+    "toolProficiencies": [
+      "thievestools"
+    ],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 4,
+      "from": [
+        "acrobatics",
+        "athletics",
+        "deception",
+        "insight",
+        "intimidation",
+        "investigation",
+        "perception",
+        "performance",
+        "persuasion",
+        "sleightofhand",
+        "stealth"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "dex"
+      ],
+      "secondaryAbility": "int",
+      "suggestedBackground": "criminal"
+    },
+    "spellSlots": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 8
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "light"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "simple"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "handcrossbow"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "longsword"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "rapier"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "shortsword"
+        },
+        {
+          "type": "proficiency",
+          "category": "tool",
+          "id": "thievestools"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "dex"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "int"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:rogue:0",
+          "count": 4,
+          "from": [
+            "acrobatics",
+            "athletics",
+            "deception",
+            "insight",
+            "intimidation",
+            "investigation",
+            "perception",
+            "performance",
+            "persuasion",
+            "sleightofhand",
+            "stealth"
+          ]
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "armored"
+          }
+        },
+        {
+          "type": "expertise-choice",
+          "key": "expertise-choice:class:rogue:0",
+          "count": 2,
+          "from": null,
+          "fromTools": [
+            "thievestools"
+          ]
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "rogue-sneak-attack"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "rogue-thieves-cant"
+          }
+        },
+        {
+          "type": "weapon-mastery-choice",
+          "key": "weapon-mastery-choice:class:rogue:0",
+          "count": 2
+        },
+        {
+          "type": "bundle-choice",
+          "key": "bundle-choice:class:rogue:0",
+          "category": "loadout",
+          "bundleIds": [
+            "rogue-loadout"
+          ]
+        },
+        {
+          "type": "bundle-choice",
+          "key": "bundle-choice:class:rogue:1",
+          "category": "melee-weapon",
+          "bundleIds": [
+            "rogue-rapier",
+            "rogue-shortsword-melee"
+          ]
+        },
+        {
+          "type": "bundle-choice",
+          "key": "bundle-choice:class:rogue:2",
+          "category": "ranged-weapon",
+          "bundleIds": [
+            "rogue-shortbow-kit",
+            "rogue-shortsword-ranged"
+          ]
+        },
+        {
+          "type": "bundle-choice",
+          "key": "bundle-choice:class:rogue:3",
+          "category": "pack",
+          "bundleIds": [
+            "burglars-pack",
+            "dungeoneers-pack",
+            "explorers-pack"
+          ]
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "rogue-cunning-action"
+          }
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "rogue",
+          "key": "subclass:class:rogue:0"
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:rogue:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:rogue:0",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "rogue-uncanny-dodge"
+          }
+        }
+      ],
+      [
+        {
+          "type": "expertise-choice",
+          "key": "expertise-choice:class:rogue:1",
+          "count": 2,
+          "from": null,
+          "fromTools": [
+            "thievestools"
+          ]
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "rogue-evasion"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:rogue:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:rogue:1",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:rogue:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:rogue:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+    ]
+  },
+  {
+    "id": "sorcerer",
+    "name": "Sorcerer",
+    "primaryAbility": "cha",
+    "hitDie": 6,
+    "savingThrows": [
+      "con",
+      "cha"
+    ],
+    "spellcastingAbility": "cha",
+    "armorProficiencies": [],
+    "weaponProficiencies": [
+      "dagger",
+      "dart",
+      "sling",
+      "quarterstaff",
+      "lightcrossbow"
+    ],
+    "toolProficiencies": [],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 2,
+      "from": [
+        "arcana",
+        "deception",
+        "insight",
+        "intimidation",
+        "persuasion",
+        "religion"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "cha"
+      ],
+      "secondaryAbility": "con",
+      "suggestedBackground": "sage"
+    },
+    "spellSlots": [
+      [
+        2
+      ],
+      [
+        3
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3
+      ],
+      [
+        4,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        2,
+        1,
+        1
+      ]
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 6
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "dagger"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "dart"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "sling"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "quarterstaff"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "lightcrossbow"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "con"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "cha"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:sorcerer:0",
+          "count": 2,
+          "from": [
+            "arcana",
+            "deception",
+            "insight",
+            "intimidation",
+            "persuasion",
+            "religion"
+          ]
+        },
+        {
+          "type": "spellcasting",
+          "ability": "cha",
+          "source": "class"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "sorcerer-innate-sorcery"
+          }
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "armored"
+          }
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:sorcerer:0",
+          "count": 4,
+          "spellList": "sorcerer",
+          "spellLevel": 0
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:sorcerer:1",
+          "count": 2,
+          "spellList": "sorcerer",
+          "spellLevel": 1
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "sorcerer-font-of-magic"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "sorcerer-metamagic"
+          }
+        },
+        {
+          "type": "resource-pool",
+          "poolId": "sorcery-points",
+          "max": {
+            "mode": "class-level",
+            "classId": "sorcerer"
+          },
+          "regen": "long-rest"
+        },
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:sorcerer:0",
+          "options": [
+            {
+              "optionId": "careful-spell",
+              "featureId": "metamagic-careful-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-careful-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "distant-spell",
+              "featureId": "metamagic-distant-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-distant-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "empowered-spell",
+              "featureId": "metamagic-empowered-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-empowered-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "extended-spell",
+              "featureId": "metamagic-extended-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-extended-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "heightened-spell",
+              "featureId": "metamagic-heightened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-heightened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "quickened-spell",
+              "featureId": "metamagic-quickened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-quickened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "seeking-spell",
+              "featureId": "metamagic-seeking-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-seeking-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "subtle-spell",
+              "featureId": "metamagic-subtle-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-subtle-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "transmuted-spell",
+              "featureId": "metamagic-transmuted-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-transmuted-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "twinned-spell",
+              "featureId": "metamagic-twinned-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-twinned-spell"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:sorcerer:1",
+          "options": [
+            {
+              "optionId": "careful-spell",
+              "featureId": "metamagic-careful-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-careful-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "distant-spell",
+              "featureId": "metamagic-distant-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-distant-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "empowered-spell",
+              "featureId": "metamagic-empowered-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-empowered-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "extended-spell",
+              "featureId": "metamagic-extended-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-extended-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "heightened-spell",
+              "featureId": "metamagic-heightened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-heightened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "quickened-spell",
+              "featureId": "metamagic-quickened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-quickened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "seeking-spell",
+              "featureId": "metamagic-seeking-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-seeking-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "subtle-spell",
+              "featureId": "metamagic-subtle-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-subtle-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "transmuted-spell",
+              "featureId": "metamagic-transmuted-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-transmuted-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "twinned-spell",
+              "featureId": "metamagic-twinned-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-twinned-spell"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "sorcerer",
+          "key": "subclass:class:sorcerer:0"
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:sorcerer:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:sorcerer:0",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "sorcerer-sorcery-incarnate"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:sorcerer:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:sorcerer:1",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "sorcerer-metamagic-options"
+          }
+        },
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:sorcerer:2",
+          "options": [
+            {
+              "optionId": "careful-spell",
+              "featureId": "metamagic-careful-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-careful-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "distant-spell",
+              "featureId": "metamagic-distant-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-distant-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "empowered-spell",
+              "featureId": "metamagic-empowered-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-empowered-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "extended-spell",
+              "featureId": "metamagic-extended-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-extended-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "heightened-spell",
+              "featureId": "metamagic-heightened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-heightened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "quickened-spell",
+              "featureId": "metamagic-quickened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-quickened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "seeking-spell",
+              "featureId": "metamagic-seeking-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-seeking-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "subtle-spell",
+              "featureId": "metamagic-subtle-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-subtle-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "transmuted-spell",
+              "featureId": "metamagic-transmuted-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-transmuted-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "twinned-spell",
+              "featureId": "metamagic-twinned-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-twinned-spell"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:sorcerer:3",
+          "options": [
+            {
+              "optionId": "careful-spell",
+              "featureId": "metamagic-careful-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-careful-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "distant-spell",
+              "featureId": "metamagic-distant-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-distant-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "empowered-spell",
+              "featureId": "metamagic-empowered-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-empowered-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "extended-spell",
+              "featureId": "metamagic-extended-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-extended-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "heightened-spell",
+              "featureId": "metamagic-heightened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-heightened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "quickened-spell",
+              "featureId": "metamagic-quickened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-quickened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "seeking-spell",
+              "featureId": "metamagic-seeking-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-seeking-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "subtle-spell",
+              "featureId": "metamagic-subtle-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-subtle-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "transmuted-spell",
+              "featureId": "metamagic-transmuted-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-transmuted-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "twinned-spell",
+              "featureId": "metamagic-twinned-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-twinned-spell"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:sorcerer:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:sorcerer:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:sorcerer:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:sorcerer:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "sorcerer-arcane-apotheosis"
+          }
+        },
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:sorcerer:4",
+          "options": [
+            {
+              "optionId": "careful-spell",
+              "featureId": "metamagic-careful-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-careful-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "distant-spell",
+              "featureId": "metamagic-distant-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-distant-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "empowered-spell",
+              "featureId": "metamagic-empowered-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-empowered-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "extended-spell",
+              "featureId": "metamagic-extended-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-extended-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "heightened-spell",
+              "featureId": "metamagic-heightened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-heightened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "quickened-spell",
+              "featureId": "metamagic-quickened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-quickened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "seeking-spell",
+              "featureId": "metamagic-seeking-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-seeking-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "subtle-spell",
+              "featureId": "metamagic-subtle-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-subtle-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "transmuted-spell",
+              "featureId": "metamagic-transmuted-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-transmuted-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "twinned-spell",
+              "featureId": "metamagic-twinned-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-twinned-spell"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:sorcerer:5",
+          "options": [
+            {
+              "optionId": "careful-spell",
+              "featureId": "metamagic-careful-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-careful-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "distant-spell",
+              "featureId": "metamagic-distant-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-distant-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "empowered-spell",
+              "featureId": "metamagic-empowered-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-empowered-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "extended-spell",
+              "featureId": "metamagic-extended-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-extended-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "heightened-spell",
+              "featureId": "metamagic-heightened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-heightened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "quickened-spell",
+              "featureId": "metamagic-quickened-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-quickened-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "seeking-spell",
+              "featureId": "metamagic-seeking-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-seeking-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "subtle-spell",
+              "featureId": "metamagic-subtle-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-subtle-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "transmuted-spell",
+              "featureId": "metamagic-transmuted-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-transmuted-spell"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "twinned-spell",
+              "featureId": "metamagic-twinned-spell",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "metamagic-twinned-spell"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:sorcerer:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:sorcerer:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "sorcerer-sorcerous-restoration"
+          }
+        }
+      ]
+    ]
+  },
+  {
+    "id": "warlock",
+    "name": "Warlock",
+    "primaryAbility": "cha",
+    "hitDie": 8,
+    "savingThrows": [
+      "wis",
+      "cha"
+    ],
+    "spellcastingAbility": "cha",
+    "armorProficiencies": [
+      "light"
+    ],
+    "weaponProficiencies": [
+      "simple"
+    ],
+    "toolProficiencies": [],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 2,
+      "from": [
+        "arcana",
+        "deception",
+        "history",
+        "intimidation",
+        "investigation",
+        "nature",
+        "religion"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "cha"
+      ],
+      "secondaryAbility": "con",
+      "suggestedBackground": "charlatan"
+    },
+    "spellSlots": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+    ],
+    "pactMagic": [
+      {
+        "count": 1,
+        "slotLevel": 1
+      },
+      {
+        "count": 2,
+        "slotLevel": 1
+      },
+      {
+        "count": 2,
+        "slotLevel": 2
+      },
+      {
+        "count": 2,
+        "slotLevel": 2
+      },
+      {
+        "count": 2,
+        "slotLevel": 3
+      },
+      {
+        "count": 2,
+        "slotLevel": 3
+      },
+      {
+        "count": 2,
+        "slotLevel": 4
+      },
+      {
+        "count": 2,
+        "slotLevel": 4
+      },
+      {
+        "count": 2,
+        "slotLevel": 5
+      },
+      {
+        "count": 2,
+        "slotLevel": 5
+      },
+      {
+        "count": 3,
+        "slotLevel": 5
+      },
+      {
+        "count": 3,
+        "slotLevel": 5
+      },
+      {
+        "count": 3,
+        "slotLevel": 5
+      },
+      {
+        "count": 3,
+        "slotLevel": 5
+      },
+      {
+        "count": 3,
+        "slotLevel": 5
+      },
+      {
+        "count": 3,
+        "slotLevel": 5
+      },
+      {
+        "count": 4,
+        "slotLevel": 5
+      },
+      {
+        "count": 4,
+        "slotLevel": 5
+      },
+      {
+        "count": 4,
+        "slotLevel": 5
+      },
+      {
+        "count": 4,
+        "slotLevel": 5
+      }
+    ],
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 8
+        },
+        {
+          "type": "proficiency",
+          "category": "armor",
+          "id": "light"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "simple"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "wis"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "cha"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:warlock:0",
+          "count": 2,
+          "from": [
+            "arcana",
+            "deception",
+            "history",
+            "intimidation",
+            "investigation",
+            "nature",
+            "religion"
+          ]
+        },
+        {
+          "type": "spellcasting",
+          "ability": "cha",
+          "source": "class"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "warlock-eldritch-invocations"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "warlock-magical-cunning"
+          }
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "armored"
+          }
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:warlock:0",
+          "count": 2,
+          "spellList": "warlock",
+          "spellLevel": 0
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:warlock:1",
+          "count": 2,
+          "spellList": "warlock",
+          "spellLevel": 1
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "warlock-pact-magic-enhancement"
+          }
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "warlock",
+          "key": "subclass:class:warlock:0"
+        },
+        {
+          "type": "feature-choice",
+          "key": "feature-choice:class:warlock:0",
+          "options": [
+            {
+              "optionId": "blade",
+              "featureId": "warlock-pact-of-the-blade",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "warlock-pact-of-the-blade"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "chain",
+              "featureId": "warlock-pact-of-the-chain",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "warlock-pact-of-the-chain"
+                  }
+                }
+              ]
+            },
+            {
+              "optionId": "tome",
+              "featureId": "warlock-pact-of-the-tome",
+              "grants": [
+                {
+                  "type": "feature",
+                  "feature": {
+                    "id": "warlock-pact-of-the-tome"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:warlock:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:warlock:0",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:warlock:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:warlock:1",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "warlock-mystic-arcanum-6"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:warlock:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:warlock:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "warlock-mystic-arcanum-7"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "warlock-mystic-arcanum-8"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:warlock:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:warlock:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "warlock-mystic-arcanum-9"
+          }
+        }
+      ],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:warlock:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:warlock:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "warlock-eldritch-master"
+          }
+        }
+      ]
+    ]
+  },
+  {
+    "id": "wizard",
+    "name": "Wizard",
+    "primaryAbility": "int",
+    "hitDie": 6,
+    "savingThrows": [
+      "int",
+      "wis"
+    ],
+    "spellcastingAbility": "int",
+    "armorProficiencies": [],
+    "weaponProficiencies": [
+      "dagger",
+      "dart",
+      "sling",
+      "quarterstaff",
+      "lightcrossbow"
+    ],
+    "toolProficiencies": [],
+    "toolChoices": null,
+    "skillChoice": {
+      "count": 2,
+      "from": [
+        "arcana",
+        "history",
+        "insight",
+        "investigation",
+        "medicine",
+        "religion"
+      ]
+    },
+    "quickBuild": {
+      "highestAbility": [
+        "int"
+      ],
+      "secondaryAbility": "con",
+      "suggestedBackground": "sage"
+    },
+    "spellSlots": [
+      [
+        2
+      ],
+      [
+        3
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        4,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3
+      ],
+      [
+        4,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        1,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        1,
+        1,
+        1
+      ],
+      [
+        4,
+        3,
+        3,
+        3,
+        3,
+        2,
+        2,
+        1,
+        1
+      ]
+    ],
+    "pactMagic": null,
+    "levels": [
+      [
+        {
+          "type": "hit-die",
+          "die": 6
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "dagger"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "dart"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "sling"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "quarterstaff"
+        },
+        {
+          "type": "proficiency",
+          "category": "weapon",
+          "id": "lightcrossbow"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "int"
+        },
+        {
+          "type": "proficiency",
+          "category": "saving-throw",
+          "id": "wis"
+        },
+        {
+          "type": "proficiency-choice",
+          "category": "skill",
+          "key": "skill-choice:class:wizard:0",
+          "count": 2,
+          "from": [
+            "arcana",
+            "history",
+            "insight",
+            "investigation",
+            "medicine",
+            "religion"
+          ]
+        },
+        {
+          "type": "spellcasting",
+          "ability": "int",
+          "source": "class"
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "wizard-arcane-recovery"
+          }
+        },
+        {
+          "type": "armor-class",
+          "calculation": {
+            "mode": "armored"
+          }
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:wizard:0",
+          "count": 3,
+          "spellList": "wizard",
+          "spellLevel": 0
+        },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:wizard:1",
+          "count": 6,
+          "spellList": "wizard",
+          "spellLevel": 1
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "wizard-scholar"
+          }
+        }
+      ],
+      [
+        {
+          "type": "subclass",
+          "classId": "wizard",
+          "key": "subclass:class:wizard:0"
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:wizard:0",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:wizard:0",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "wizard-memorize-spell"
+          }
+        }
+      ],
+      [],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:wizard:1",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:wizard:1",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:wizard:2",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:wizard:2",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [],
+      [],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:wizard:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:wizard:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "wizard-spell-mastery"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:wizard:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:wizard:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "wizard-signature-spells"
+          }
+        }
+      ]
+    ]
+  }
+]

@@ -1,0 +1,145 @@
+[
+  {
+    "id": "padded",
+    "name": "Padded Armor",
+    "category": "light",
+    "baseAc": 11,
+    "maxDexBonus": null,
+    "stealthDisadvantage": true,
+    "strengthRequirement": 0,
+    "weight": 8,
+    "costGp": 5
+  },
+  {
+    "id": "leather",
+    "name": "Leather Armor",
+    "category": "light",
+    "baseAc": 11,
+    "maxDexBonus": null,
+    "stealthDisadvantage": false,
+    "strengthRequirement": 0,
+    "weight": 10,
+    "costGp": 10
+  },
+  {
+    "id": "studded-leather",
+    "name": "Studded Leather Armor",
+    "category": "light",
+    "baseAc": 12,
+    "maxDexBonus": null,
+    "stealthDisadvantage": false,
+    "strengthRequirement": 0,
+    "weight": 13,
+    "costGp": 45
+  },
+  {
+    "id": "hide",
+    "name": "Hide Armor",
+    "category": "medium",
+    "baseAc": 12,
+    "maxDexBonus": 2,
+    "stealthDisadvantage": false,
+    "strengthRequirement": 0,
+    "weight": 12,
+    "costGp": 10
+  },
+  {
+    "id": "chain-shirt",
+    "name": "Chain Shirt",
+    "category": "medium",
+    "baseAc": 13,
+    "maxDexBonus": 2,
+    "stealthDisadvantage": false,
+    "strengthRequirement": 0,
+    "weight": 20,
+    "costGp": 50
+  },
+  {
+    "id": "scale-mail",
+    "name": "Scale Mail",
+    "category": "medium",
+    "baseAc": 14,
+    "maxDexBonus": 2,
+    "stealthDisadvantage": true,
+    "strengthRequirement": 0,
+    "weight": 45,
+    "costGp": 50
+  },
+  {
+    "id": "breastplate",
+    "name": "Breastplate",
+    "category": "medium",
+    "baseAc": 14,
+    "maxDexBonus": 2,
+    "stealthDisadvantage": false,
+    "strengthRequirement": 0,
+    "weight": 20,
+    "costGp": 400
+  },
+  {
+    "id": "half-plate",
+    "name": "Half Plate",
+    "category": "medium",
+    "baseAc": 15,
+    "maxDexBonus": 2,
+    "stealthDisadvantage": true,
+    "strengthRequirement": 0,
+    "weight": 40,
+    "costGp": 750
+  },
+  {
+    "id": "ring-mail",
+    "name": "Ring Mail",
+    "category": "heavy",
+    "baseAc": 14,
+    "maxDexBonus": 0,
+    "stealthDisadvantage": true,
+    "strengthRequirement": 0,
+    "weight": 40,
+    "costGp": 30
+  },
+  {
+    "id": "chain-mail",
+    "name": "Chain Mail",
+    "category": "heavy",
+    "baseAc": 16,
+    "maxDexBonus": 0,
+    "stealthDisadvantage": true,
+    "strengthRequirement": 13,
+    "weight": 55,
+    "costGp": 75
+  },
+  {
+    "id": "splint",
+    "name": "Splint Armor",
+    "category": "heavy",
+    "baseAc": 17,
+    "maxDexBonus": 0,
+    "stealthDisadvantage": true,
+    "strengthRequirement": 15,
+    "weight": 60,
+    "costGp": 200
+  },
+  {
+    "id": "plate",
+    "name": "Plate Armor",
+    "category": "heavy",
+    "baseAc": 18,
+    "maxDexBonus": 0,
+    "stealthDisadvantage": true,
+    "strengthRequirement": 15,
+    "weight": 65,
+    "costGp": 1500
+  },
+  {
+    "id": "shield",
+    "name": "Shield",
+    "category": "shield",
+    "baseAc": 2,
+    "maxDexBonus": null,
+    "stealthDisadvantage": false,
+    "strengthRequirement": 0,
+    "weight": 6,
+    "costGp": 10
+  }
+]

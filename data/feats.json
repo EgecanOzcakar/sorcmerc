@@ -1,0 +1,2309 @@
+[
+  {
+    "id": "alert",
+    "name": "Alert",
+    "description": "Gain a bonus to Initiative rolls equal to your Proficiency Bonus. You can also swap Initiative with a willing ally if neither of you has the Incapacitated condition.",
+    "category": "origin",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-alert"
+        }
+      }
+    ]
+  },
+  {
+    "id": "crafter",
+    "name": "Crafter",
+    "description": "Gain proficiency with three Artisan's Tools of your choice. When you buy nonmagical equipment, you get a 20 percent discount. You can craft mundane items faster during Long Rests with these tools.",
+    "category": "origin",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-crafter"
+        }
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "tool",
+        "key": "tool-choice:feat:crafter:0",
+        "count": 3,
+        "from": [
+          "smithstools",
+          "brewersupplies",
+          "masonstools",
+          "calligrapherstools",
+          "carpentertools",
+          "cartographerstools",
+          "cobblerstools",
+          "cooksutensils",
+          "glassblowerstools",
+          "jewelerstools",
+          "leatherworkerstools",
+          "painterstools",
+          "potterstools",
+          "tinkerstools",
+          "weaverstools",
+          "woodcarverstools"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "healer",
+    "name": "Healer",
+    "description": "Gain proficiency with the Healer's Kit. As a Utilize action, you can expend one use of a Healer's Kit to restore Hit Points to a creature equal to 1d6 + 4 + its character level. A creature can benefit only once per Short Rest.",
+    "category": "origin",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-healer"
+        }
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "herbalismkit"
+      }
+    ]
+  },
+  {
+    "id": "lucky",
+    "name": "Lucky",
+    "description": "You have a number of Luck Points equal to your Proficiency Bonus, regained on a Long Rest. Spend a Luck Point to roll a d20 and replace your attack roll, ability check, or saving throw — or to force an attacker to reroll an attack against you.",
+    "category": "origin",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-lucky"
+        }
+      }
+    ]
+  },
+  {
+    "id": "magic-initiate",
+    "name": "Magic Initiate",
+    "description": "Choose a class: Bard, Cleric, Druid, Sorcerer, Warlock, or Wizard. You learn two cantrips and one 1st-level spell from that class's spell list. You can cast the 1st-level spell once without a spell slot, regaining the ability to do so on a Long Rest. Your spellcasting ability for these spells is the same as the chosen class.",
+    "category": "origin",
+    "prerequisites": [],
+    "repeatable": true,
+    "grants": [
+      {
+        "type": "feature-choice",
+        "key": "feature-choice:feat:magic-initiate:0",
+        "options": [
+          {
+            "optionId": "bard",
+            "featureId": "feat-magic-initiate-bard",
+            "grants": [
+              {
+                "type": "spellcasting",
+                "ability": "cha",
+                "source": "feat"
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-bard-cantrip:0",
+                "count": 2,
+                "spellList": "bard",
+                "spellLevel": 0
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-bard-spell:0",
+                "count": 1,
+                "spellList": "bard",
+                "spellLevel": 1
+              }
+            ]
+          },
+          {
+            "optionId": "cleric",
+            "featureId": "feat-magic-initiate-cleric",
+            "grants": [
+              {
+                "type": "spellcasting",
+                "ability": "wis",
+                "source": "feat"
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-cleric-cantrip:0",
+                "count": 2,
+                "spellList": "cleric",
+                "spellLevel": 0
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-cleric-spell:0",
+                "count": 1,
+                "spellList": "cleric",
+                "spellLevel": 1
+              }
+            ]
+          },
+          {
+            "optionId": "druid",
+            "featureId": "feat-magic-initiate-druid",
+            "grants": [
+              {
+                "type": "spellcasting",
+                "ability": "wis",
+                "source": "feat"
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-druid-cantrip:0",
+                "count": 2,
+                "spellList": "druid",
+                "spellLevel": 0
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-druid-spell:0",
+                "count": 1,
+                "spellList": "druid",
+                "spellLevel": 1
+              }
+            ]
+          },
+          {
+            "optionId": "sorcerer",
+            "featureId": "feat-magic-initiate-sorcerer",
+            "grants": [
+              {
+                "type": "spellcasting",
+                "ability": "cha",
+                "source": "feat"
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-sorcerer-cantrip:0",
+                "count": 2,
+                "spellList": "sorcerer",
+                "spellLevel": 0
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-sorcerer-spell:0",
+                "count": 1,
+                "spellList": "sorcerer",
+                "spellLevel": 1
+              }
+            ]
+          },
+          {
+            "optionId": "warlock",
+            "featureId": "feat-magic-initiate-warlock",
+            "grants": [
+              {
+                "type": "spellcasting",
+                "ability": "cha",
+                "source": "feat"
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-warlock-cantrip:0",
+                "count": 2,
+                "spellList": "warlock",
+                "spellLevel": 0
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-warlock-spell:0",
+                "count": 1,
+                "spellList": "warlock",
+                "spellLevel": 1
+              }
+            ]
+          },
+          {
+            "optionId": "wizard",
+            "featureId": "feat-magic-initiate-wizard",
+            "grants": [
+              {
+                "type": "spellcasting",
+                "ability": "int",
+                "source": "feat"
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-wizard-cantrip:0",
+                "count": 2,
+                "spellList": "wizard",
+                "spellLevel": 0
+              },
+              {
+                "type": "spell-choice",
+                "key": "spell-choice:feat:magic-initiate-wizard-spell:0",
+                "count": 1,
+                "spellList": "wizard",
+                "spellLevel": 1
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "musician",
+    "name": "Musician",
+    "description": "Gain proficiency with three Musical Instruments of your choice. As part of a Short or Long Rest, you can play one of these instruments and give Heroic Inspiration to allies (up to your Proficiency Bonus) who hear you.",
+    "category": "origin",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-musician"
+        }
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "tool",
+        "key": "tool-choice:feat:musician:0",
+        "count": 3,
+        "from": [
+          "bagpipes",
+          "drum",
+          "dulcimer",
+          "flute",
+          "lute",
+          "lyre",
+          "horn",
+          "panflute",
+          "shawm",
+          "viol"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "savage-attacker",
+    "name": "Savage Attacker",
+    "description": "Once per turn when you hit a target with a weapon, you can roll the weapon's damage dice twice and use either roll against the target.",
+    "category": "origin",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-savage-attacker"
+        }
+      }
+    ]
+  },
+  {
+    "id": "skilled",
+    "name": "Skilled",
+    "description": "Gain proficiency in any combination of three skills or tools of your choice.",
+    "category": "origin",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "proficiency-choice",
+        "category": "skill",
+        "key": "skill-choice:feat:skilled:0",
+        "count": 3,
+        "from": null
+      }
+    ]
+  },
+  {
+    "id": "tavern-brawler",
+    "name": "Tavern Brawler",
+    "description": "Your Unarmed Strike's damage die becomes 1d4. Once per turn, when you hit with an Unarmed Strike or an Improvised Weapon, you can reroll the damage die and use either result. You also gain proficiency with Improvised Weapons.",
+    "category": "origin",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-tavern-brawler"
+        }
+      }
+    ]
+  },
+  {
+    "id": "tough",
+    "name": "Tough",
+    "description": "Your Hit Point maximum increases by an amount equal to twice your character level when you take this feat, and it increases by 2 again whenever you gain a level.",
+    "category": "origin",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-tough"
+        }
+      },
+      {
+        "type": "hp-bonus",
+        "perLevel": 2
+      }
+    ]
+  },
+  {
+    "id": "archery",
+    "name": "Archery",
+    "description": null,
+    "category": "fighting-style",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "fighting-style-archery"
+        }
+      }
+    ]
+  },
+  {
+    "id": "defense",
+    "name": "Defense",
+    "description": null,
+    "category": "fighting-style",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "fighting-style-defense"
+        }
+      },
+      {
+        "type": "ac-bonus",
+        "bonus": 1
+      }
+    ]
+  },
+  {
+    "id": "dueling",
+    "name": "Dueling",
+    "description": null,
+    "category": "fighting-style",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "fighting-style-dueling"
+        }
+      }
+    ]
+  },
+  {
+    "id": "great-weapon-fighting",
+    "name": "Great Weapon Fighting",
+    "description": null,
+    "category": "fighting-style",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "fighting-style-great-weapon-fighting"
+        }
+      }
+    ]
+  },
+  {
+    "id": "protection",
+    "name": "Protection",
+    "description": null,
+    "category": "fighting-style",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "fighting-style-protection"
+        }
+      }
+    ]
+  },
+  {
+    "id": "two-weapon-fighting",
+    "name": "Two-Weapon Fighting",
+    "description": null,
+    "category": "fighting-style",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "fighting-style-two-weapon-fighting"
+        }
+      }
+    ]
+  },
+  {
+    "id": "blind-fighting",
+    "name": "Blind Fighting",
+    "description": null,
+    "category": "fighting-style",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "fighting-style-blind-fighting"
+        }
+      }
+    ]
+  },
+  {
+    "id": "interception",
+    "name": "Interception",
+    "description": null,
+    "category": "fighting-style",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "fighting-style-interception"
+        }
+      }
+    ]
+  },
+  {
+    "id": "thrown-weapon-fighting",
+    "name": "Thrown Weapon Fighting",
+    "description": null,
+    "category": "fighting-style",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "fighting-style-thrown-weapon-fighting"
+        }
+      }
+    ]
+  },
+  {
+    "id": "unarmed-fighting",
+    "name": "Unarmed Fighting",
+    "description": null,
+    "category": "fighting-style",
+    "prerequisites": [],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "fighting-style-unarmed-fighting"
+        }
+      }
+    ]
+  },
+  {
+    "id": "actor",
+    "name": "Actor",
+    "description": "Increase your Charisma score by 1. You gain advantage on Deception and Performance checks when trying to pass yourself off as a different person, and you can mimic the speech of another person or the sounds made by other creatures.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-actor"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:actor:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "cha"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "athlete",
+    "name": "Athlete",
+    "description": "Increase your Strength or Dexterity score by 1. Rising from prone costs only 5 feet of movement, climbing doesn't cost extra movement, and you can make a running jump after moving only 5 feet.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-athlete"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:athlete:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "charger",
+    "name": "Charger",
+    "description": "Increase your Strength or Dexterity score by 1. When you take the Dash action, your speed increases by an extra 10 feet. If you move at least 10 feet in a straight line before hitting with a melee attack, you can deal +1d8 extra damage or push the target 10 feet.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-charger"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:charger:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "chef",
+    "name": "Chef",
+    "description": "Increase your Constitution or Wisdom score by 1. Gain proficiency with Cook's Utensils. During a Short Rest, you can cook food to grant allies +1d8 extra HP per spent Hit Die. During a Long Rest, you can create treats equal to your Proficiency Bonus that grant Temporary HP as a Bonus Action.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-chef"
+        }
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "cooksutensils"
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:chef:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "con",
+          "wis"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "crossbow-expert",
+    "name": "Crossbow Expert",
+    "description": "Increase your Dexterity score by 1. You ignore the loading property of crossbows, being within 5 feet of an enemy doesn't impose disadvantage on your ranged attack rolls, and when you attack with a one-handed weapon you can use a Bonus Action to attack with a Hand Crossbow.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-crossbow-expert"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:crossbow-expert:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "crusher",
+    "name": "Crusher",
+    "description": "Increase your Strength or Constitution score by 1. Once per turn when you deal Bludgeoning damage, you can move the target 5 feet to an unoccupied space. When you score a critical hit dealing Bludgeoning damage, attack rolls against the target have advantage until the start of your next turn.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-crusher"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:crusher:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "con"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "defensive-duelist",
+    "name": "Defensive Duelist",
+    "description": "Increase your Dexterity score by 1. When you are wielding a Finesse weapon with which you are proficient and another creature hits you with a melee attack, you can use your reaction to add your Proficiency Bonus to your AC for that attack.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-defensive-duelist"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:defensive-duelist:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dual-wielder",
+    "name": "Dual Wielder",
+    "description": "Increase your Strength or Dexterity score by 1. You gain a +1 bonus to AC while wielding separate melee weapons in each hand. You can use two-weapon fighting even when your one-handed melee weapons aren't Light, and you can draw or stow two weapons at once.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-dual-wielder"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:dual-wielder:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "durable",
+    "name": "Durable",
+    "description": "Increase your Constitution score by 1. As a Bonus Action, you can expend one of your Hit Dice, roll it, and regain Hit Points equal to the roll. You also gain advantage on Death Saving Throws.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-durable"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:durable:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "con"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "elemental-adept",
+    "name": "Elemental Adept",
+    "description": "Increase your Intelligence, Wisdom, or Charisma score by 1. Spells you cast ignore resistance to damage of the chosen damage type (Acid, Cold, Fire, Lightning, or Thunder). In addition, when you roll damage for a spell of that type, you can treat any 1 on a damage die as a 2.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": true,
+    "grants": [
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:elemental-adept:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "int",
+          "wis",
+          "cha"
+        ]
+      },
+      {
+        "type": "feature-choice",
+        "key": "feature-choice:feat:elemental-adept:0",
+        "options": [
+          {
+            "optionId": "acid",
+            "featureId": "feat-elemental-adept-acid",
+            "grants": []
+          },
+          {
+            "optionId": "cold",
+            "featureId": "feat-elemental-adept-cold",
+            "grants": []
+          },
+          {
+            "optionId": "fire",
+            "featureId": "feat-elemental-adept-fire",
+            "grants": []
+          },
+          {
+            "optionId": "lightning",
+            "featureId": "feat-elemental-adept-lightning",
+            "grants": []
+          },
+          {
+            "optionId": "thunder",
+            "featureId": "feat-elemental-adept-thunder",
+            "grants": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "fey-touched",
+    "name": "Fey Touched",
+    "description": "Increase Intelligence, Wisdom, or Charisma by 1. Learn Misty Step and one 1st-level spell of your choice from the Divination or Enchantment school. You can cast each once per Long Rest without spending a spell slot.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-fey-touched"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:fey-touched:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "int",
+          "wis",
+          "cha"
+        ]
+      },
+      {
+        "type": "spell",
+        "spellId": "misty-step",
+        "alwaysPrepared": true
+      }
+    ]
+  },
+  {
+    "id": "grappler",
+    "name": "Grappler",
+    "description": "Increase your Strength or Dexterity score by 1. You have advantage on attack rolls against a creature grappled by you. When you hit a creature with an Unarmed Strike on your turn, you can deal damage and also grapple the target as part of the same action.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-grappler"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:grappler:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "great-weapon-master",
+    "name": "Great Weapon Master",
+    "description": "Increase your Strength score by 1. On your turn, when you score a critical hit with a melee weapon or reduce a creature to 0 HP, you can make one melee weapon attack as a Bonus Action. Heavy weapons add your Proficiency Bonus to damage rolls on your turn.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-great-weapon-master"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:great-weapon-master:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "heavily-armored",
+    "name": "Heavily Armored",
+    "description": "Increase your Strength or Constitution score by 1. You gain proficiency with Heavy Armor.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-heavily-armored"
+        }
+      },
+      {
+        "type": "proficiency",
+        "category": "armor",
+        "id": "heavy"
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:heavily-armored:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "con"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "heavy-armor-master",
+    "name": "Heavy Armor Master",
+    "description": "Increase your Strength or Constitution score by 1. While wearing Heavy Armor, nonmagical Slashing, Piercing, and Bludgeoning damage you take is reduced by an amount equal to your Proficiency Bonus.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-heavy-armor-master"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:heavy-armor-master:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "con"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "inspiring-leader",
+    "name": "Inspiring Leader",
+    "description": "Increase your Wisdom or Charisma score by 1. At the end of a Short or Long Rest, you can give a speech to grant up to six allies Temporary Hit Points equal to your character level plus your Wisdom or Charisma modifier.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-inspiring-leader"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:inspiring-leader:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "wis",
+          "cha"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "keen-mind",
+    "name": "Keen Mind",
+    "description": "Increase your Intelligence score by 1. You gain proficiency in Arcana, History, Investigation, Nature, or Religion. You can take the Study action as a Bonus Action.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-keen-mind"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:keen-mind:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "int"
+        ]
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "skill",
+        "key": "skill-choice:feat:keen-mind:0",
+        "count": 1,
+        "from": [
+          "arcana",
+          "history",
+          "investigation",
+          "nature",
+          "religion"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "lightly-armored",
+    "name": "Lightly Armored",
+    "description": "Increase your Strength or Dexterity score by 1. You gain proficiency with Light Armor and Shields.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-lightly-armored"
+        }
+      },
+      {
+        "type": "proficiency",
+        "category": "armor",
+        "id": "light"
+      },
+      {
+        "type": "proficiency",
+        "category": "armor",
+        "id": "shields"
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:lightly-armored:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mage-slayer",
+    "name": "Mage Slayer",
+    "description": "Increase your Strength or Dexterity score by 1. When a creature within 5 feet casts a spell, you can use your reaction to make a melee attack. Creatures damaged by you have disadvantage on concentration saves. Once per Long Rest, you can automatically succeed on a save against a spell.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-mage-slayer"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:mage-slayer:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "medium-armor-master",
+    "name": "Medium Armor Master",
+    "description": "Increase your Strength or Dexterity score by 1. Wearing Medium Armor doesn't impose disadvantage on your Stealth checks, and you can add up to +3 (instead of +2) from Dexterity to your AC when wearing Medium Armor.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-medium-armor-master"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:medium-armor-master:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "moderately-armored",
+    "name": "Moderately Armored",
+    "description": "Increase your Strength or Dexterity score by 1. You gain proficiency with Medium Armor and Shields.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-moderately-armored"
+        }
+      },
+      {
+        "type": "proficiency",
+        "category": "armor",
+        "id": "medium"
+      },
+      {
+        "type": "proficiency",
+        "category": "armor",
+        "id": "shields"
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:moderately-armored:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "mounted-combatant",
+    "name": "Mounted Combatant",
+    "description": "Increase Strength, Dexterity, or Wisdom by 1. You have advantage on melee attack rolls against unmounted creatures smaller than your mount. You can force an attack targeted at your mount to hit you instead, and your mount gains Evasion.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-mounted-combatant"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:mounted-combatant:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex",
+          "wis"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "observant",
+    "name": "Observant",
+    "description": "Increase Intelligence or Wisdom by 1. You gain proficiency in Insight, Investigation, or Perception. You can take the Search action as a Bonus Action.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-observant"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:observant:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "int",
+          "wis"
+        ]
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "skill",
+        "key": "skill-choice:feat:observant:0",
+        "count": 1,
+        "from": [
+          "insight",
+          "investigation",
+          "perception"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "piercer",
+    "name": "Piercer",
+    "description": "Increase Strength or Dexterity by 1. Once per turn when you deal Piercing damage, you can reroll one of the damage dice. When you score a critical hit dealing Piercing damage, roll one additional damage die.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-piercer"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:piercer:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "poisoner",
+    "name": "Poisoner",
+    "description": "Increase Dexterity or Intelligence by 1. You gain proficiency with Poisoner's Kit. Weapons ignore Poison resistance. You can apply poison to a weapon as a Bonus Action (DC 14 CON save or take 2d8 Poison damage and become Poisoned).",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-poisoner"
+        }
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "poisonerskit"
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:poisoner:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "dex",
+          "int"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "polearm-master",
+    "name": "Polearm Master",
+    "description": "Increase Strength or Dexterity by 1. When you attack with a Glaive, Halberd, Quarterstaff, or Spear, you can use a Bonus Action to make a melee strike with the butt end (1d4 damage). You provoke opportunity attacks when enemies enter your reach.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-polearm-master"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:polearm-master:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "resilient",
+    "name": "Resilient",
+    "description": "Choose one ability score: Strength, Dexterity, Constitution, Intelligence, Wisdom, or Charisma. Increase that score by 1 and gain proficiency in saving throws using that ability.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": true,
+    "grants": [
+      {
+        "type": "feature-choice",
+        "key": "feature-choice:feat:resilient:0",
+        "options": [
+          {
+            "optionId": "strength",
+            "featureId": "feat-resilient-strength",
+            "grants": [
+              {
+                "type": "ability-bonus",
+                "ability": "str",
+                "bonus": 1
+              },
+              {
+                "type": "proficiency",
+                "category": "saving-throw",
+                "id": "str"
+              }
+            ]
+          },
+          {
+            "optionId": "dexterity",
+            "featureId": "feat-resilient-dexterity",
+            "grants": [
+              {
+                "type": "ability-bonus",
+                "ability": "dex",
+                "bonus": 1
+              },
+              {
+                "type": "proficiency",
+                "category": "saving-throw",
+                "id": "dex"
+              }
+            ]
+          },
+          {
+            "optionId": "constitution",
+            "featureId": "feat-resilient-constitution",
+            "grants": [
+              {
+                "type": "ability-bonus",
+                "ability": "con",
+                "bonus": 1
+              },
+              {
+                "type": "proficiency",
+                "category": "saving-throw",
+                "id": "con"
+              }
+            ]
+          },
+          {
+            "optionId": "intelligence",
+            "featureId": "feat-resilient-intelligence",
+            "grants": [
+              {
+                "type": "ability-bonus",
+                "ability": "int",
+                "bonus": 1
+              },
+              {
+                "type": "proficiency",
+                "category": "saving-throw",
+                "id": "int"
+              }
+            ]
+          },
+          {
+            "optionId": "wisdom",
+            "featureId": "feat-resilient-wisdom",
+            "grants": [
+              {
+                "type": "ability-bonus",
+                "ability": "wis",
+                "bonus": 1
+              },
+              {
+                "type": "proficiency",
+                "category": "saving-throw",
+                "id": "wis"
+              }
+            ]
+          },
+          {
+            "optionId": "charisma",
+            "featureId": "feat-resilient-charisma",
+            "grants": [
+              {
+                "type": "ability-bonus",
+                "ability": "cha",
+                "bonus": 1
+              },
+              {
+                "type": "proficiency",
+                "category": "saving-throw",
+                "id": "cha"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ritual-caster",
+    "name": "Ritual Caster",
+    "description": "Increase Intelligence, Wisdom, or Charisma by 1. You can cast any ritual spell from your class spell list or ritual spells you know as rituals without extending the casting time.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-ritual-caster"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:ritual-caster:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "int",
+          "wis",
+          "cha"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "sentinel",
+    "name": "Sentinel",
+    "description": "Increase Strength or Dexterity by 1. When you hit a creature with an opportunity attack, its speed becomes 0. Creatures provoke opportunity attacks even if they Disengage, and you can strike enemies that attack allies within 5 feet.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-sentinel"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:sentinel:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "shadow-touched",
+    "name": "Shadow Touched",
+    "description": "Increase Intelligence, Wisdom, or Charisma by 1. Learn Invisibility and one 1st-level Illusion or Necromancy spell. You can cast each once per Long Rest without a spell slot.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-shadow-touched"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:shadow-touched:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "int",
+          "wis",
+          "cha"
+        ]
+      },
+      {
+        "type": "spell",
+        "spellId": "invisibility",
+        "alwaysPrepared": true
+      }
+    ]
+  },
+  {
+    "id": "sharpshooter",
+    "name": "Sharpshooter",
+    "description": "Increase Dexterity by 1. Attacking at long range doesn't impose disadvantage on ranged attack rolls, your ranged weapon attacks ignore half cover and three-quarters cover, and being within 5 feet of an enemy doesn't impose disadvantage on your ranged weapon attacks.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-sharpshooter"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:sharpshooter:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "shield-master",
+    "name": "Shield Master",
+    "description": "Increase Strength by 1. While wielding a Shield, if you hit a creature with a melee attack on your turn, you can push the target 5 feet or knock it Prone as part of the attack. You can also add your Shield's AC bonus to DEX saves against single-target effects.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-shield-master"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:shield-master:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "skill-expert",
+    "name": "Skill Expert",
+    "description": "Increase one ability score of your choice by 1. Gain proficiency in one skill of your choice, and gain Expertise (double proficiency) in one skill in which you are proficient.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-skill-expert"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:skill-expert:0",
+        "count": 1,
+        "bonus": 1,
+        "from": null
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "skill",
+        "key": "skill-choice:feat:skill-expert:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "expertise-choice",
+        "key": "expertise-choice:feat:skill-expert:0",
+        "count": 1,
+        "from": null,
+        "fromTools": []
+      }
+    ]
+  },
+  {
+    "id": "skulker",
+    "name": "Skulker",
+    "description": "Increase Dexterity by 1. You gain Blindsight out to 10 feet. You can hide when lightly obscured, and missing a ranged attack while hidden does not reveal your position.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-skulker"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:skulker:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "slasher",
+    "name": "Slasher",
+    "description": "Increase Strength or Dexterity by 1. Once per turn when you deal Slashing damage, you can reduce the target's speed by 10 feet. Critical hits with Slashing damage impose disadvantage on the target's attack rolls until your next turn.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-slasher"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:slasher:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "speedy",
+    "name": "Speedy",
+    "description": "Increase Dexterity or Constitution by 1. Your speed increases by 10 feet, moving through difficult terrain doesn't cost extra movement, and opportunity attacks against you have disadvantage.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-speedy"
+        }
+      },
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 10
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:speedy:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "dex",
+          "con"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "spell-sniper",
+    "name": "Spell Sniper",
+    "description": "Increase Intelligence, Wisdom, or Charisma by 1. Ranged spell attacks ignore half cover and three-quarters cover, casting ranged spells within 5 feet doesn't impose disadvantage, and your ranged spells have their range doubled (if at least 10 feet).",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-spell-sniper"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:spell-sniper:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "int",
+          "wis",
+          "cha"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "telekinetic",
+    "name": "Telekinetic",
+    "description": "Increase Intelligence, Wisdom, or Charisma by 1. You learn Mage Hand (invisible range 60 ft). As a Bonus Action, you can telekinetically shove a creature within 30 feet 5 feet toward or away from you (DC = 8 + PB + ability mod).",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-telekinetic"
+        }
+      },
+      {
+        "type": "spell",
+        "spellId": "mage-hand",
+        "alwaysPrepared": true
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:telekinetic:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "int",
+          "wis",
+          "cha"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "telepathic",
+    "name": "Telepathic",
+    "description": "Increase Intelligence, Wisdom, or Charisma by 1. You can speak telepathically to any creature you can see within 60 feet. You can cast Detect Thoughts once per Long Rest without a spell slot.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-telepathic"
+        }
+      },
+      {
+        "type": "spell",
+        "spellId": "detect-thoughts",
+        "alwaysPrepared": true
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:telepathic:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "int",
+          "wis",
+          "cha"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "war-caster",
+    "name": "War Caster",
+    "description": "Increase Intelligence, Wisdom, or Charisma by 1. You have advantage on CON saves to maintain concentration. You can perform somatic components while holding weapons or shields, and you can cast a single-target spell as an opportunity attack.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-war-caster"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:war-caster:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "int",
+          "wis",
+          "cha"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "weapon-master",
+    "name": "Weapon Master",
+    "description": "Increase Strength or Dexterity by 1. You gain Weapon Mastery with four weapons of your choice.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-weapon-master"
+        }
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:weapon-master:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "martial-weapon-training",
+    "name": "Martial Weapon Training",
+    "description": "Increase Strength or Dexterity by 1. You gain proficiency with all Martial weapons.",
+    "category": "general",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 4
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-martial-weapon-training"
+        }
+      },
+      {
+        "type": "proficiency",
+        "category": "weapon",
+        "id": "martial"
+      },
+      {
+        "type": "ability-choice",
+        "key": "ability-choice:feat:martial-weapon-training:0",
+        "count": 1,
+        "bonus": 1,
+        "from": [
+          "str",
+          "dex"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "boon-of-combat-prowess",
+    "name": "Boon of Combat Prowess",
+    "description": "When you miss with an attack roll, you can hit instead. Once per turn.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-combat-prowess"
+        }
+      }
+    ]
+  },
+  {
+    "id": "boon-of-dimensional-travel",
+    "name": "Boon of Dimensional Travel",
+    "description": "Immediately after you take the Attack action or cast a spell, you can teleport up to 30 feet to an unoccupied space.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-dimensional-travel"
+        }
+      }
+    ]
+  },
+  {
+    "id": "boon-of-energy-resistance",
+    "name": "Boon of Energy Resistance",
+    "description": "Gain resistance to two damage types of your choice: Acid, Cold, Fire, Lightning, Necrotic, Poison, Psychic, Radiant, or Thunder.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-energy-resistance"
+        }
+      }
+    ]
+  },
+  {
+    "id": "boon-of-fate",
+    "name": "Boon of Fate",
+    "description": "When you or another creature within 60 feet makes a d20 test, you can roll a d10 and add or subtract it from the result. Once per rest.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-fate"
+        }
+      }
+    ]
+  },
+  {
+    "id": "boon-of-fortitude",
+    "name": "Boon of Fortitude",
+    "description": "Your Hit Point maximum increases by 40. When you regain Hit Points, you regain an additional 2d20 Hit Points once per turn.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-fortitude"
+        }
+      },
+      {
+        "type": "hp-bonus",
+        "perLevel": 0
+      }
+    ]
+  },
+  {
+    "id": "boon-of-irresistible-offense",
+    "name": "Boon of Irresistible Offense",
+    "description": "Your bludgeoning, piercing, and slashing damage ignores resistances. Critical hits deal additional damage equal to your ability modifier.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-irresistible-offense"
+        }
+      }
+    ]
+  },
+  {
+    "id": "boon-of-night-spirit",
+    "name": "Boon of Night Spirit",
+    "description": "While in Dim Light or Darkness, you can become Invisible as a Bonus Action, and you gain resistance to all damage except Force and Radiant.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-night-spirit"
+        }
+      }
+    ]
+  },
+  {
+    "id": "boon-of-recovery",
+    "name": "Boon of Recovery",
+    "description": "When you drop to 0 Hit Points, you can instantly regain half your Hit Point maximum instead. Once per Long Rest.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-recovery"
+        }
+      }
+    ]
+  },
+  {
+    "id": "boon-of-skill",
+    "name": "Boon of Skill",
+    "description": "Gain proficiency in all skills, and gain Expertise in one skill of your choice.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-skill"
+        }
+      },
+      {
+        "type": "expertise-choice",
+        "key": "expertise-choice:feat:boon-of-skill:0",
+        "count": 1,
+        "from": null,
+        "fromTools": []
+      }
+    ]
+  },
+  {
+    "id": "boon-of-speed",
+    "name": "Boon of Speed",
+    "description": "Your speed increases by 30 feet. As a Bonus Action, you can take the Disengage action.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-speed"
+        }
+      },
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 30
+      }
+    ]
+  },
+  {
+    "id": "boon-of-spell-recall",
+    "name": "Boon of Spell Recall",
+    "description": "Whenever you cast a spell using a 1st through 4th-level spell slot, roll 1d4. On a 1, the spell slot is not expended.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-spell-recall"
+        }
+      }
+    ]
+  },
+  {
+    "id": "boon-of-truesight",
+    "name": "Boon of Truesight",
+    "description": "You gain Truesight out to a range of 60 feet.",
+    "category": "epic",
+    "prerequisites": [
+      {
+        "type": "level-minimum",
+        "level": 19
+      }
+    ],
+    "repeatable": false,
+    "grants": [
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-boon-of-truesight"
+        }
+      }
+    ]
+  }
+]

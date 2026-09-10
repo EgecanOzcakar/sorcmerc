@@ -1,0 +1,3999 @@
+[
+  {
+    "id": "berserker",
+    "name": "Path of the Berserker",
+    "description": "For some Barbarians, rage is a means to an end — that end being violence. The Path of the Berserker is a path of untrammeled fury, slick with blood.",
+    "classId": "barbarian",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "berserker-frenzy"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "berserker-mindless-rage"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "berserker-retaliation"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "berserker-intimidating-presence"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "wildheart",
+    "name": "Path of the Wild Heart",
+    "description": "Barbarians who follow the Path of the Wild Heart view themselves as kin to animals. They learn magical means to communicate with animals, and some can temporarily take on animal characteristics.",
+    "classId": "barbarian",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "speak-with-animals",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wildheart-rage-of-the-wilds"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wildheart-aspect-of-the-wilds"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "commune-with-nature",
+            "alwaysPrepared": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "worldtree",
+    "name": "Path of the World Tree",
+    "description": "Barbarians who follow the Path of the World Tree connect with the cosmic tree Yggdrasil through their Rage. This connection grants them incredible vitality and the ability to manifest the power of the tree.",
+    "classId": "barbarian",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "worldtree-vitality-of-the-tree"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "worldtree-branches-of-the-tree"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "worldtree-battering-roots"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "zealot",
+    "name": "Path of the Zealot",
+    "description": "Barbarians who walk the Path of the Zealot receive boons from a god or pantheon. These warriors channel divine power in their Rage, and some are so suffused with holy power that they are hard to kill.",
+    "classId": "barbarian",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "damage-choice",
+            "key": "damage-choice:class:barbarian:0",
+            "count": 1,
+            "from": [
+              "radiant",
+              "necrotic"
+            ],
+            "featureIdPrefix": "zealot-divine-fury"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "zealot-warrior-of-the-gods"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "zealot-fanatical-focus"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "zealot-zealous-presence"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "collegedance",
+    "name": "College of Dance",
+    "description": "Bards of the College of Dance know that the Words of Creation can't be contained in speech or song alone; they are uttered by the movements of celestial bodies and the dance of creatures great and small.",
+    "classId": "bard",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegedance-inspirational-dance"
+            }
+          },
+          {
+            "type": "armor-class",
+            "calculation": {
+              "mode": "unarmored",
+              "formula": "dance"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegedance-unarmored-defense"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegedance-frolicking-steps"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegedance-dance-of-victory"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "collegeglamour",
+    "name": "College of Glamour",
+    "description": "The College of Glamour traces its origins to the beguiling magic of the Feywild. Bards who attend this college are trained in the ways of enchantment and illusion, and they learn to use their captivating artistry to influence minds and dazzle the senses.",
+    "classId": "bard",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegeglamour-mantle-of-inspiration"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegeglamour-enthralling-performance"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegeglamour-mantle-of-majesty"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "collegelore",
+    "name": "College of Lore",
+    "description": "Bards of the College of Lore know something about most things, collecting bits of knowledge from sources as diverse as scholarly tomes and peasant tales. Whether singing folk ballads in taverns or elaborate compositions in royal courts, these Bards use their gifts to hold audiences spellbound.",
+    "classId": "bard",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "proficiency-choice",
+            "category": "skill",
+            "key": "skill-choice:subclass:collegelore:0",
+            "count": 3,
+            "from": null
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegelore-cutting-words"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegelore-magical-secrets"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "collegevalor",
+    "name": "College of Valor",
+    "description": "Bards of the College of Valor are daring skalds whose tales keep alive the memory of the great heroes of the past, and thereby inspire a new generation of heroes. These Bards gather in mead halls or around great bonfires to sing the deeds of the mighty.",
+    "classId": "bard",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "proficiency",
+            "category": "armor",
+            "id": "medium"
+          },
+          {
+            "type": "proficiency",
+            "category": "armor",
+            "id": "shields"
+          },
+          {
+            "type": "proficiency",
+            "category": "weapon",
+            "id": "martial"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegevalor-combat-inspiration"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegevalor-extra-attack"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "lifedomain",
+    "name": "Life Domain",
+    "description": "The Life Domain focuses on the vibrant positive energy — one of the fundamental forces of the universe — that sustains all life. Clerics who tap into this domain are exceptional healers among the servants of the gods.",
+    "classId": "cleric",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "proficiency",
+            "category": "armor",
+            "id": "heavy"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "lifedomain-disciple-of-life"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "lifedomain-preserve-life"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "aid",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "bless",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "cure-wounds",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "lesser-restoration",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "mass-healing-word",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "revivify",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "lifedomain-blessed-healer"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "aura-of-life",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "death-ward",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "greater-restoration",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "mass-cure-wounds",
+            "alwaysPrepared": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "lightdomain",
+    "name": "Light Domain",
+    "description": "Gods of light promote the ideals of rebirth and renewal, truth, vigilance, and beauty, often using the symbol of the sun. The Light Domain is associated with light, healing, truth, and fire.",
+    "classId": "cleric",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "light",
+            "alwaysPrepared": false
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "lightdomain-warding-flare"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "lightdomain-radiance-of-the-dawn"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "burning-hands",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "faerie-fire",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "scorching-ray",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "see-invisibility",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "daylight",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "fireball",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "lightdomain-improved-warding-flare"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "arcane-eye",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "wall-of-fire",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "flame-strike",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "scrying",
+            "alwaysPrepared": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "trickerydomain",
+    "name": "Trickery Domain",
+    "description": "Gods of trickery are mischief-makers and instigators who stand as a constant challenge to the accepted order among both gods and mortals. Clerics of these gods are a disruptive force in the world, puncturing pride, mocking tyrants, stealing from the rich, and undermining evil.",
+    "classId": "cleric",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "trickerydomain-blessing-of-the-trickster"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "trickerydomain-invoke-duplicity"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "charm-person",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "disguise-self",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "invisibility",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "pass-without-trace",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "hypnotic-pattern",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "nondetection",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "trickerydomain-tricksters-transposition"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "confusion",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "dimension-door",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "dominate-person",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "modify-memory",
+            "alwaysPrepared": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "wardomain",
+    "name": "War Domain",
+    "description": "War has many manifestations. It can make heroes of ordinary people. It can be desperate and horrific, with acts of cruelty and cowardice eclipsing instances of excellence and courage. In either case, the gods of war watch over warriors and reward them for their great deeds.",
+    "classId": "cleric",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "proficiency",
+            "category": "armor",
+            "id": "heavy"
+          },
+          {
+            "type": "proficiency",
+            "category": "weapon",
+            "id": "martial"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wardomain-war-priest"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "war-priest",
+            "max": {
+              "mode": "proficiency-bonus",
+              "classId": "cleric"
+            },
+            "regen": "long-rest"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wardomain-guided-strike"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "guiding-bolt",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "magic-weapon",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "shield-of-faith",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "spiritual-weapon",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "crusaders-mantle",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "spirit-guardians",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wardomain-war-gods-blessing"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "fire-shield",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "freedom-of-movement",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "hold-monster",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "steel-wind-strike",
+            "alwaysPrepared": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "circleland",
+    "name": "Circle of the Land",
+    "description": "The Circle of the Land is made up of mystics and sages who safeguard ancient knowledge and rites through a vast oral tradition. These Druids meet within sacred circles of trees or standing stones to whisper primal secrets in Druidic.",
+    "classId": "druid",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circleland-lands-aid"
+            }
+          },
+          {
+            "type": "feature-choice",
+            "key": "feature-choice:subclass:circleland:0",
+            "options": [
+              {
+                "optionId": "arid",
+                "featureId": "circleland-land-arid",
+                "grants": [
+                  {
+                    "type": "spell",
+                    "spellId": "fire-bolt",
+                    "alwaysPrepared": false
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "burning-hands",
+                    "alwaysPrepared": true
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "blur",
+                    "alwaysPrepared": true
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "fireball",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 5
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "blight",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 7
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "wall-of-stone",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 9
+                  }
+                ]
+              },
+              {
+                "optionId": "polar",
+                "featureId": "circleland-land-polar",
+                "grants": [
+                  {
+                    "type": "spell",
+                    "spellId": "ray-of-frost",
+                    "alwaysPrepared": false
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "fog-cloud",
+                    "alwaysPrepared": true
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "hold-person",
+                    "alwaysPrepared": true
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "sleet-storm",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 5
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "ice-storm",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 7
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "cone-of-cold",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 9
+                  }
+                ]
+              },
+              {
+                "optionId": "temperate",
+                "featureId": "circleland-land-temperate",
+                "grants": [
+                  {
+                    "type": "spell",
+                    "spellId": "shocking-grasp",
+                    "alwaysPrepared": false
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "sleep",
+                    "alwaysPrepared": true
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "misty-step",
+                    "alwaysPrepared": true
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "lightning-bolt",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 5
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "freedom-of-movement",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 7
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "tree-stride",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 9
+                  }
+                ]
+              },
+              {
+                "optionId": "tropical",
+                "featureId": "circleland-land-tropical",
+                "grants": [
+                  {
+                    "type": "spell",
+                    "spellId": "acid-splash",
+                    "alwaysPrepared": false
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "ray-of-sickness",
+                    "alwaysPrepared": true
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "web",
+                    "alwaysPrepared": true
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "stinking-cloud",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 5
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "polymorph",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 7
+                  },
+                  {
+                    "type": "spell",
+                    "spellId": "insect-plague",
+                    "alwaysPrepared": true,
+                    "minClassLevel": 9
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circleland-natural-recovery"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circleland-natures-ward"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "circlemoon",
+    "name": "Circle of the Moon",
+    "description": "Druids of the Circle of the Moon are fierce guardians of the wilds. Their order gathers under the full moon to share news and trade warnings. They haunt the deepest parts of the wilderness, where they might go for weeks on end before crossing paths with another humanoid creature.",
+    "classId": "druid",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlemoon-circle-forms"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlemoon-improved-wild-shape"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlemoon-improved-circle-forms"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlemoon-elemental-wild-shape"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "circlesea",
+    "name": "Circle of the Sea",
+    "description": "Druids of the Circle of the Sea draw on the tempestuous forces of oceans and storms. Some of these Druids are coastal sentinels, defenders of fishing communities, and sailors who ply their trade on the open sea.",
+    "classId": "druid",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlesea-wrath-of-the-sea"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "speed",
+            "mode": "swim",
+            "value": "walk-equivalent"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlesea-aquatic-affinity"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlesea-stormborn"
+            }
+          },
+          {
+            "type": "speed",
+            "mode": "fly",
+            "value": 30,
+            "condition": "not-enclosed"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "circlestars",
+    "name": "Circle of the Stars",
+    "description": "The Circle of the Stars allows Druids to draw power from constellations. These Druids have tracked heavenly patterns since time immemorial, cataloging their observations and learning to call upon the constellations for aid.",
+    "classId": "druid",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlestars-star-map"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlestars-starry-form"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlestars-cosmic-omen"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "cosmic-omen-use",
+            "max": {
+              "mode": "fixed",
+              "value": 1
+            },
+            "regen": "long-rest"
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlestars-twinkling-constellations"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "champion",
+    "name": "Champion",
+    "description": "The archetypal Champion focuses on the development of raw physical power honed to deadly perfection. Those who model themselves on this archetype combine rigorous training with physical excellence to deal devastating blows.",
+    "classId": "fighter",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "champion-improved-critical"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "champion-remarkable-athlete"
+            }
+          },
+          {
+            "type": "ability-check-bonus",
+            "abilities": [
+              "str",
+              "dex",
+              "con"
+            ],
+            "value": "half-proficiency",
+            "onlyWhenNotProficient": true,
+            "featureId": "champion-remarkable-athlete"
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "fighting-style-choice",
+            "key": "fighting-style-choice:class:fighter:1",
+            "count": 1,
+            "from": [
+              "archery",
+              "blind-fighting",
+              "defense",
+              "dueling",
+              "great-weapon-fighting",
+              "interception",
+              "protection",
+              "thrown-weapon-fighting",
+              "two-weapon-fighting",
+              "unarmed-fighting"
+            ]
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "champion-superior-critical"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 18,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "champion-survivor"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "battlemaster",
+    "name": "Battle Master",
+    "description": "Those who emulate the Battle Master archetype employ martial techniques passed down through generations. A Battle Master uses superiority dice to fuel special maneuvers that grant tactical advantage in combat.",
+    "classId": "fighter",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "battlemaster-combat-superiority"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "battlemaster-know-your-enemy"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "battlemaster-improved-combat-superiority"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "battlemaster-relentless"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 18,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "battlemaster-superior-combat-superiority"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "eldritchknight",
+    "name": "Eldritch Knight",
+    "description": "The Eldritch Knight combines martial prowess with careful study of magic. These fighters learn to cast spells from the wizard spell list, weaving magic into their weapon strikes and defenses.",
+    "classId": "fighter",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "eldritchknight-spellcasting"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "eldritchknight-war-magic"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "eldritchknight-eldritch-strike"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "eldritchknight-arcane-charge"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 18,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "eldritchknight-improved-war-magic"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "psiwarrior",
+    "name": "Psi Warrior",
+    "description": "Psi Warriors awaken the power of the mind to augment their physical might. Their psionic abilities make them formidable combatants, and they can push their power further by expending Psionic Energy Dice to empower their attacks and defenses.",
+    "classId": "fighter",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "psiwarrior-psionic-power"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "psionic-energy",
+            "max": {
+              "mode": "level-steps",
+              "classId": "fighter",
+              "steps": [
+                {
+                  "minLevel": 3,
+                  "value": 4
+                },
+                {
+                  "minLevel": 5,
+                  "value": 6
+                },
+                {
+                  "minLevel": 9,
+                  "value": 8
+                },
+                {
+                  "minLevel": 13,
+                  "value": 10
+                },
+                {
+                  "minLevel": 17,
+                  "value": 12
+                }
+              ]
+            },
+            "regen": {
+              "mode": "compound",
+              "shortRestAmount": 1
+            },
+            "dieSizeSteps": [
+              {
+                "minLevel": 3,
+                "dieSize": 6
+              },
+              {
+                "minLevel": 5,
+                "dieSize": 8
+              },
+              {
+                "minLevel": 11,
+                "dieSize": 10
+              },
+              {
+                "minLevel": 17,
+                "dieSize": 12
+              }
+            ]
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "telekinetic-movement-use",
+            "max": {
+              "mode": "fixed",
+              "value": 1
+            },
+            "regen": "short-rest"
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "psiwarrior-telekinetic-adept",
+              "saveDC": {
+                "dcAbility": "int"
+              }
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "psi-powered-leap-use",
+            "max": {
+              "mode": "fixed",
+              "value": 1
+            },
+            "regen": "short-rest"
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "psychic"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "psiwarrior-guarded-mind"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "psiwarrior-bulwark-of-force"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 18,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "psiwarrior-telekinetic-master"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "warriorofmercy",
+    "name": "Warrior of Mercy",
+    "description": "Warriors of Mercy manipulate the life force of others. These Monks are wandering physicians, healing the sick and aiding the needy or, when the situation demands, using their power to kill.",
+    "classId": "monk",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofmercy-implements-of-mercy"
+            }
+          },
+          {
+            "type": "proficiency",
+            "category": "skill",
+            "id": "insight"
+          },
+          {
+            "type": "proficiency",
+            "category": "skill",
+            "id": "medicine"
+          },
+          {
+            "type": "proficiency",
+            "category": "tool",
+            "id": "herbalismkit"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofmercy-hand-of-healing"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofmercy-hand-of-harm"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofmercy-physicians-touch",
+              "saveDC": {
+                "dcAbility": "wis"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "warriorofshadow",
+    "name": "Warrior of Shadow",
+    "description": "Warriors of Shadow practice stealth and deception. These Monks use Shadow Arts and Shadow Step to move through darkness and strike without warning.",
+    "classId": "monk",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofshadow-shadow-arts"
+            }
+          },
+          {
+            "type": "spellcasting",
+            "ability": "wis",
+            "source": "class"
+          },
+          {
+            "type": "spell",
+            "spellId": "minor-illusion",
+            "alwaysPrepared": true,
+            "ability": "wis"
+          },
+          {
+            "type": "spell",
+            "spellId": "darkness",
+            "alwaysPrepared": true,
+            "ability": "wis"
+          },
+          {
+            "type": "spell",
+            "spellId": "darkvision",
+            "alwaysPrepared": true,
+            "ability": "wis"
+          },
+          {
+            "type": "spell",
+            "spellId": "pass-without-trace",
+            "alwaysPrepared": true,
+            "ability": "wis"
+          },
+          {
+            "type": "spell",
+            "spellId": "silence",
+            "alwaysPrepared": true,
+            "ability": "wis"
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofshadow-shadow-step"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "warriorofelements",
+    "name": "Warrior of the Elements",
+    "description": "Warriors of the Elements channel the power of the four elements — air, earth, fire, and water — through their Unarmored body.",
+    "classId": "monk",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofelements-elemental-attunement"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofelements-manipulate-elements"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofelements-elemental-burst",
+              "saveDC": {
+                "dcAbility": "wis"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "warrioropenhand",
+    "name": "Warrior of the Open Hand",
+    "description": "Warriors of the Open Hand are the ultimate masters of martial arts combat, whether armed or unarmed. They learn techniques to push and trip their opponents, manipulate ki to heal damage to their bodies, and practice advanced meditation.",
+    "classId": "monk",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warrioropenhand-open-hand-technique",
+              "saveDC": {
+                "dcAbility": "wis"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warrioropenhand-wholeness-of-body"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "oathofdevotion",
+    "name": "Oath of Devotion",
+    "description": "The Oath of Devotion binds a Paladin to the loftiest ideals of justice, virtue, and order. Sometimes called cavaliers, white knights, or holy warriors, these Paladins meet the ideal of the knight in shining armor.",
+    "classId": "paladin",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofdevotion-sacred-weapon"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "protection-from-evil-and-good",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "shield-of-faith",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "aid",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "zone-of-truth",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofdevotion-aura-of-devotion"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "beacon-of-hope",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "dispel-magic",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 13,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "freedom-of-movement",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "guardian-of-faith",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofdevotion-smite-of-protection"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "commune",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "flame-strike",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 20,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofdevotion-holy-nimbus"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "oathofglory",
+    "name": "Oath of Glory",
+    "description": "Paladins who take the Oath of Glory believe they and their companions are fated to achieve glory through deeds of heroism. They train diligently and encourage their companions to push themselves to be all they can be.",
+    "classId": "paladin",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofglory-peerless-athlete"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofglory-inspiring-smite"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "guiding-bolt",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "heroism",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "enhance-ability",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "magic-weapon",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofglory-aura-of-alacrity"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "haste",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "protection-from-energy",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 13,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "compulsion",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "freedom-of-movement",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofglory-glorious-defense"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "legend-lore",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "yolandes-regal-presence",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 20,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofglory-living-legend"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "oathofancients",
+    "name": "Oath of the Ancients",
+    "description": "The Oath of the Ancients is as old as the first elves who marveled at the stars and the ancient fey who roamed through the forest glades. Paladins who swear this oath cast their lot with the side of the light in the cosmic struggle against darkness.",
+    "classId": "paladin",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofancients-natures-wrath",
+              "saveDC": {
+                "dcAbility": "cha"
+              }
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "ensnaring-strike",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "speak-with-animals",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "misty-step",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "moonbeam",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofancients-aura-of-warding"
+            }
+          },
+          {
+            "type": "resistance",
+            "damageType": "necrotic"
+          },
+          {
+            "type": "resistance",
+            "damageType": "psychic"
+          },
+          {
+            "type": "resistance",
+            "damageType": "radiant"
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "plant-growth",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "protection-from-energy",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 13,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "ice-storm",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "stoneskin",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofancients-undying-sentinel"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "commune-with-nature",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "tree-stride",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 20,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofancients-elder-champion"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "oathofvengeance",
+    "name": "Oath of Vengeance",
+    "description": "The Oath of Vengeance is a solemn commitment to punish those who have committed a grievous sin. When evil forces slaughter helpless villagers, when an entire people turns against the will of the gods, when a thieves' guild grows too violent and powerful, when a dragon rampages through the countryside — at times like these, a Paladin arises to restore justice.",
+    "classId": "paladin",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofvengeance-vow-of-enmity"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "bane",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "hunters-mark",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "hold-person",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "misty-step",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofvengeance-relentless-avenger"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "haste",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "protection-from-energy",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 13,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "banishment",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "dimension-door",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofvengeance-soul-of-vengeance"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "hold-monster",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "scrying",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 20,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "oathofvengeance-avenging-angel"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "beastmaster",
+    "name": "Beast Master",
+    "description": "The Beast Master subclass forges a primal bond with an animal, and that bond — the ranger and the beast acting as one — lets the ranger do exceptional things. The subclass features give the ranger powerful options in combat, exploration, and social situations.",
+    "classId": "ranger",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "beastmaster-primal-companion"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "beastmaster-exceptional-training"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "feywanderer",
+    "name": "Fey Wanderer",
+    "description": "A magic well beyond the mere Fey touched some Rangers, infusing them with a supernatural allure and inspiring them with the magic of the Feywild. Rangers who follow the Fey Wanderer path wield a combination of their Ranger abilities and Feywild magic.",
+    "classId": "ranger",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "feywanderer-dreadful-strikes"
+            }
+          },
+          {
+            "type": "proficiency-choice",
+            "category": "skill",
+            "key": "skill-choice:subclass:feywanderer:0",
+            "count": 1,
+            "from": [
+              "deception",
+              "performance",
+              "persuasion"
+            ]
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "feywanderer-otherworldly-glamour"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "charm-person",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "misty-step",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "feywanderer-beguiling-twist"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "summon-fey",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 13,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "dimension-door",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "mislead",
+            "alwaysPrepared": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "gloomstalker",
+    "name": "Gloom Stalker",
+    "description": "Gloom Stalkers are at home in the darkest places: deep under the earth, in gloomy alleyways, in primeval forests, and wherever else the light dims. Most folk enter such places with trepidation, but a Gloom Stalker ventures into the darkness with purpose.",
+    "classId": "ranger",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gloomstalker-dread-ambusher"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gloomstalker-umbral-sight"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "disguise-self",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "rope-trick",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gloomstalker-iron-mind"
+            }
+          },
+          {
+            "type": "proficiency",
+            "category": "saving-throw",
+            "id": "wis"
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "fear",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 13,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "greater-invisibility",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "seeming",
+            "alwaysPrepared": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "hunter",
+    "name": "Hunter",
+    "description": "You stalk prey in the wilds and elsewhere, using your abilities as a Hunter to protect nature and people everywhere. As you hone your skills, you learn specialized techniques for fighting the monsters that threaten the wilds.",
+    "classId": "ranger",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "hunter-hunters-lore"
+            }
+          },
+          {
+            "type": "feature-choice",
+            "key": "feature-choice:subclass:hunter:0",
+            "options": [
+              {
+                "optionId": "colossus-slayer",
+                "featureId": "hunter-hunters-prey-colossus-slayer",
+                "grants": []
+              },
+              {
+                "optionId": "horde-breaker",
+                "featureId": "hunter-hunters-prey-horde-breaker",
+                "grants": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "feature-choice",
+            "key": "feature-choice:subclass:hunter:1",
+            "options": [
+              {
+                "optionId": "escape-the-horde",
+                "featureId": "hunter-defensive-tactics-escape-the-horde",
+                "grants": []
+              },
+              {
+                "optionId": "multiattack-defense",
+                "featureId": "hunter-defensive-tactics-multiattack-defense",
+                "grants": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "thief",
+    "name": "Thief",
+    "description": "You hone your skills in the larcenous arts. Burglars, bandits, cutpurses, and other criminals typically follow this archetype, but so do Rogues who prefer to think of themselves as professional treasure seekers, explorers, delvers, and investigators.",
+    "classId": "rogue",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "thief-fast-hands"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "thief-second-story-work"
+            }
+          },
+          {
+            "type": "speed",
+            "mode": "climb",
+            "value": "walk-equivalent"
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "skill-expertise",
+            "skill": "stealth"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "thief-supreme-sneak"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "assassin",
+    "name": "Assassin",
+    "description": "You hone your skills in the grim art of death. Assassins learn to dispatch foes quickly and to infiltrate dangerous locations, often making use of disguises and poisons.",
+    "classId": "rogue",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "proficiency",
+            "category": "tool",
+            "id": "disguisekit"
+          },
+          {
+            "type": "proficiency",
+            "category": "tool",
+            "id": "poisonerskit"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "assassin-assassinate"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "skill-expertise",
+            "skill": "deception"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "assassin-infiltration-expertise"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "arcanetrickster",
+    "name": "Arcane Trickster",
+    "description": "Some Rogues enhance their fine-honed skills of stealth and agility with magic, learning tricks of enchantment and illusion. These Rogues include pickpockets and burglars, but also swindlers, tricksters, and a few who are called, with some affection, 'lovable scoundrels.'",
+    "classId": "rogue",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "spellcasting",
+            "ability": "int",
+            "source": "class"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "arcanetrickster-mage-hand-legerdemain"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "arcanetrickster-magical-ambush"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "soulknife",
+    "name": "Soulknife",
+    "description": "A Soulknife strikes with the mind, cutting through barriers both physical and psychic. These Rogues discover psionic power within themselves and learn to augment their skills with it.",
+    "classId": "rogue",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "soulknife-psionic-power"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "psionic-energy",
+            "max": {
+              "mode": "level-steps",
+              "classId": "rogue",
+              "steps": [
+                {
+                  "minLevel": 3,
+                  "value": 4
+                },
+                {
+                  "minLevel": 5,
+                  "value": 6
+                },
+                {
+                  "minLevel": 9,
+                  "value": 8
+                },
+                {
+                  "minLevel": 13,
+                  "value": 10
+                },
+                {
+                  "minLevel": 17,
+                  "value": 12
+                }
+              ]
+            },
+            "regen": {
+              "mode": "compound",
+              "shortRestAmount": 1
+            },
+            "dieSizeSteps": [
+              {
+                "minLevel": 3,
+                "dieSize": 6
+              },
+              {
+                "minLevel": 5,
+                "dieSize": 8
+              },
+              {
+                "minLevel": 11,
+                "dieSize": 10
+              },
+              {
+                "minLevel": 17,
+                "dieSize": 12
+              }
+            ]
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "soulknife-psychic-blades"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "soulknife-soul-blades"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "aberrantsorcery",
+    "name": "Aberrant Sorcery",
+    "description": "An alien influence has wrapped its tendrils around your soul, warping your sorcery. Perhaps you were exposed to a Far Realm phenomenon, or maybe you were born somewhere that was touched by the Far Realm.",
+    "classId": "sorcerer",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "aberrantsorcery-telepathic-speech"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "arms-of-hadar",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "calm-emotions",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "detect-thoughts",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "dissonant-whispers",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "mind-sliver",
+            "alwaysPrepared": false
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "hunger-of-hadar",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "sending",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "aberrantsorcery-psionic-sorcery"
+            }
+          },
+          {
+            "type": "resistance",
+            "damageType": "psychic"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "aberrantsorcery-psychic-defenses"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "evards-black-tentacles",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "summon-aberration",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "rarys-telepathic-bond",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "telekinesis",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "aberrantsorcery-revelation-in-flesh"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 18,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "aberrantsorcery-warping-implosion"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "clockworksorcery",
+    "name": "Clockwork Sorcery",
+    "description": "The cosmic force of order has suffused you with magic. That power arises from the plane of Mechanus or a realm like it — a clockwork cosmos of perfect law and order.",
+    "classId": "sorcerer",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "clockworksorcery-restore-balance"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "aid",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "alarm",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "lesser-restoration",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "protection-from-evil-and-good",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "dispel-magic",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "protection-from-energy",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "clockworksorcery-bastion-of-law"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "freedom-of-movement",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "summon-construct",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "greater-restoration",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "wall-of-force",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "clockworksorcery-trance-of-order"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 18,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "clockworksorcery-clockwork-cavalcade"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "draconicsorcery",
+    "name": "Draconic Sorcery",
+    "description": "Your innate magic comes from the gift of a dragon. Perhaps an ancestor was ensorcelled by a dragon, or you ingested dragon blood, or your birth was prophesied. Whatever the origin, your lineage shows through in the draconic magic you wield.",
+    "classId": "sorcerer",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "hp-bonus",
+            "perLevel": 1
+          },
+          {
+            "type": "armor-class",
+            "calculation": {
+              "mode": "natural",
+              "baseAc": 13
+            }
+          },
+          {
+            "type": "proficiency",
+            "category": "language",
+            "id": "draconic"
+          },
+          {
+            "type": "feature-choice",
+            "key": "feature-choice:subclass:draconicsorcery:0",
+            "options": [
+              {
+                "optionId": "black",
+                "featureId": "draconicsorcery-dragon-ancestor-black",
+                "grants": []
+              },
+              {
+                "optionId": "blue",
+                "featureId": "draconicsorcery-dragon-ancestor-blue",
+                "grants": []
+              },
+              {
+                "optionId": "brass",
+                "featureId": "draconicsorcery-dragon-ancestor-brass",
+                "grants": []
+              },
+              {
+                "optionId": "bronze",
+                "featureId": "draconicsorcery-dragon-ancestor-bronze",
+                "grants": []
+              },
+              {
+                "optionId": "copper",
+                "featureId": "draconicsorcery-dragon-ancestor-copper",
+                "grants": []
+              },
+              {
+                "optionId": "gold",
+                "featureId": "draconicsorcery-dragon-ancestor-gold",
+                "grants": []
+              },
+              {
+                "optionId": "green",
+                "featureId": "draconicsorcery-dragon-ancestor-green",
+                "grants": []
+              },
+              {
+                "optionId": "red",
+                "featureId": "draconicsorcery-dragon-ancestor-red",
+                "grants": []
+              },
+              {
+                "optionId": "silver",
+                "featureId": "draconicsorcery-dragon-ancestor-silver",
+                "grants": []
+              },
+              {
+                "optionId": "white",
+                "featureId": "draconicsorcery-dragon-ancestor-white",
+                "grants": []
+              }
+            ]
+          },
+          {
+            "type": "spell",
+            "spellId": "alter-self",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "chromatic-orb",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "command",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "dragons-breath",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "fear",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "fly",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "draconicsorcery-elemental-affinity"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "arcane-eye",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "charm-monster",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "legend-lore",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "summon-dragon",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "draconicsorcery-dragon-wings"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 18,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "draconicsorcery-dragon-companion"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "wildmagicsorcery",
+    "name": "Wild Magic Sorcery",
+    "description": "Your innate magic comes from the forces of chaos that underlie the order of creation. You might have endured exposure to raw magic, or you were simply born in the midst of a magical disturbance.",
+    "classId": "sorcerer",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wildmagicsorcery-wild-magic-surge"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wildmagicsorcery-tides-of-chaos"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wildmagicsorcery-bend-luck"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wildmagicsorcery-controlled-chaos"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 18,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wildmagicsorcery-tamed-surge"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "archfeypatron",
+    "name": "The Archfey Patron",
+    "description": "Your patron is a lord or lady of the fey, a creature of legend who holds secrets that were forgotten before the mortal races were born. This being's motivations are often inscrutable, and sometimes whimsical, and might involve the your ruin or your saving grace.",
+    "classId": "warlock",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "archfeypatron-steps-of-the-fey"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "calm-emotions",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "faerie-fire",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "misty-step",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "phantasmal-force",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "sleep",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "blink",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "plant-growth",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "archfeypatron-misty-escape"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "misty-escape",
+            "max": {
+              "mode": "proficiency-bonus",
+              "classId": "warlock"
+            },
+            "regen": "long-rest"
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "dominate-beast",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "greater-invisibility",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "dominate-person",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "seeming",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "archfeypatron-beguiling-defenses"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "archfeypatron-bewitching-magic"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "celestialpatron",
+    "name": "The Celestial Patron",
+    "description": "Your pact draws on the power of the Upper Planes, the realms of everlasting bliss. You might have saved a celestial's life, proved yourself worthy in a divine test, or your bloodline carries a trace of celestial power.",
+    "classId": "warlock",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "proficiency",
+            "category": "skill",
+            "id": "religion"
+          },
+          {
+            "type": "spell",
+            "spellId": "light",
+            "alwaysPrepared": false
+          },
+          {
+            "type": "spell",
+            "spellId": "sacred-flame",
+            "alwaysPrepared": false
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "celestialpatron-healing-light"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "healing-light",
+            "max": {
+              "mode": "class-level-plus",
+              "classId": "warlock",
+              "offset": 1
+            },
+            "regen": "long-rest"
+          },
+          {
+            "type": "spell",
+            "spellId": "aid",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "cure-wounds",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "guiding-bolt",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "lesser-restoration",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "daylight",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "revivify",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "radiant"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "celestialpatron-radiant-soul"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "guardian-of-faith",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "wall-of-fire",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "greater-restoration",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "summon-celestial",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "celestialpatron-celestial-resilience"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "celestialpatron-searing-vengeance"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "fiendpatron",
+    "name": "The Fiend Patron",
+    "description": "You have made a pact with a fiend from the lower planes of existence, a being whose aims are evil, even if you strive against those aims. Such entities desire the corruption or destruction of all things.",
+    "classId": "warlock",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "fiendpatron-dark-ones-blessing"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "burning-hands",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "command",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "scorching-ray",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "suggestion",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "fireball",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "stinking-cloud",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "fiendpatron-dark-ones-own-luck"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "dark-ones-own-luck",
+            "max": {
+              "mode": "proficiency-bonus",
+              "classId": "warlock"
+            },
+            "regen": "short-rest"
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "fire-shield",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "wall-of-fire",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "geas",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "insect-plague",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "fiendpatron-fiendish-resilience"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "fiendpatron-hurl-through-hell"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "greatoldonepatron",
+    "name": "The Great Old One Patron",
+    "description": "Your patron is a mysterious entity whose nature is utterly foreign to the fabric of reality. It might come from the Far Realm, the space beyond reality, or it could be one of the elder gods known only in legends.",
+    "classId": "warlock",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "proficiency-choice",
+            "category": "skill",
+            "key": "skill-choice:subclass:greatoldonepatron:1",
+            "count": 1,
+            "from": [
+              "arcana",
+              "history",
+              "intimidation",
+              "nature",
+              "religion",
+              "survival"
+            ]
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "greatoldonepatron-awakened-mind"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "detect-thoughts",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "dissonant-whispers",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "hideous-laughter",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "phantasmal-force",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 5,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "clairvoyance",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "hunger-of-hadar",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "greatoldonepatron-clairvoyant-combatant"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "clairvoyant-combatant",
+            "max": {
+              "mode": "proficiency-bonus",
+              "classId": "warlock"
+            },
+            "regen": "long-rest"
+          }
+        ]
+      },
+      {
+        "classLevel": 7,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "confusion",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "summon-aberration",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 9,
+        "grants": [
+          {
+            "type": "spell",
+            "spellId": "modify-memory",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "telekinesis",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "greatoldonepatron-eldritch-hex"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "eldritch-hex",
+            "max": {
+              "mode": "fixed",
+              "value": 1
+            },
+            "regen": "long-rest"
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "greatoldonepatron-create-thrall"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "abjurer",
+    "name": "School of Abjuration",
+    "description": "The School of Abjuration emphasizes magic that blocks, banishes, or protects. Detractors of this school say that its adherents are cowardly — that abjuration is the magic of hiding behind walls and barriers. Practitioners clarify that no one wants to be behind a wall more than the enemy.",
+    "classId": "wizard",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "abjurer-abjuration-savant"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "abjurer-arcane-ward"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "abjurer-projected-ward"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "abjurer-spellbreaker"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "counterspell",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "dispel-magic",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "abjurer-spell-resistance"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "diviner",
+    "name": "School of Divination",
+    "description": "The counsel of a Diviner is sought by royalty and commoners alike, for all seek a clearer window onto the future and a better understanding of the past. Diviners learn to peer through the veil of time and space to detect threats and gather information.",
+    "classId": "wizard",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "diviner-divination-savant"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "diviner-portent"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "portent",
+            "max": {
+              "mode": "level-steps",
+              "classId": "wizard",
+              "steps": [
+                {
+                  "minLevel": 3,
+                  "value": 2
+                },
+                {
+                  "minLevel": 14,
+                  "value": 3
+                }
+              ]
+            },
+            "regen": "long-rest"
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "diviner-expert-divination"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "diviner-the-third-eye"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "diviner-greater-portent"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "evoker",
+    "name": "School of Evocation",
+    "description": "You focus your study on magic that creates powerful elemental effects such as bitter cold, searing flame, rolling thunder, crackling lightning, and burning acid. Some evokers find employment in military forces, serving as artillery to blast enemy armies from afar.",
+    "classId": "wizard",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "evoker-evocation-savant"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "evoker-potent-cantrip"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "evoker-sculpt-spells"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "evoker-empowered-evocation"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "evoker-overchannel"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "illusionist",
+    "name": "School of Illusion",
+    "description": "You focus your studies on magic that dazzles the senses, befuddles the mind, and tricks even the wisest folk. Your magic is subtle, but the illusions crafted by your keen mind make the impossible seem real.",
+    "classId": "wizard",
+    "levels": [
+      {
+        "classLevel": 3,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "illusionist-illusion-savant"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "illusionist-improved-illusions"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "illusionist-phantasmal-creatures"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "summon-beast",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "summon-fey",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 10,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "illusionist-illusory-self"
+            }
+          },
+          {
+            "type": "resource-pool",
+            "poolId": "illusory-self",
+            "max": {
+              "mode": "fixed",
+              "value": 1
+            },
+            "regen": "short-rest"
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "illusionist-illusory-reality"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

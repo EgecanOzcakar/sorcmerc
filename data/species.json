@@ -1,0 +1,1165 @@
+[
+  {
+    "id": "human",
+    "name": "Human",
+    "size": "medium",
+    "speed": 30,
+    "languages": [
+      "common"
+    ],
+    "languageChoices": 2,
+    "traits": [
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 30
+      },
+      {
+        "type": "proficiency",
+        "category": "language",
+        "id": "common"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:species:human:0",
+        "count": 2,
+        "from": null
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "skill",
+        "key": "skill-choice:species:human:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "human-resourceful"
+        }
+      },
+      {
+        "type": "feat-choice",
+        "key": "feat-choice:species:human:0",
+        "from": null,
+        "category": "origin"
+      }
+    ],
+    "lineages": []
+  },
+  {
+    "id": "dwarf",
+    "name": "Dwarf",
+    "size": "medium",
+    "speed": 30,
+    "languages": [
+      "common"
+    ],
+    "languageChoices": 2,
+    "traits": [
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 30
+      },
+      {
+        "type": "proficiency",
+        "category": "language",
+        "id": "common"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:species:dwarf:0",
+        "count": 2,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "dwarf-darkvision"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "dwarf-dwarven-resilience"
+        }
+      },
+      {
+        "type": "resistance",
+        "damageType": "poison"
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "dwarf-stonecunning"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "dwarf-dwarven-toughness"
+        }
+      },
+      {
+        "type": "hp-bonus",
+        "perLevel": 1
+      }
+    ],
+    "lineages": []
+  },
+  {
+    "id": "elf",
+    "name": "Elf",
+    "size": "medium",
+    "speed": 30,
+    "languages": [
+      "common"
+    ],
+    "languageChoices": 2,
+    "traits": [
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 30
+      },
+      {
+        "type": "proficiency",
+        "category": "language",
+        "id": "common"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:species:elf:0",
+        "count": 2,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "elf-darkvision"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "elf-fey-ancestry"
+        }
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "skill",
+        "key": "skill-choice:species:elf:0",
+        "count": 1,
+        "from": [
+          "insight",
+          "perception",
+          "survival"
+        ]
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "elf-trance"
+        }
+      },
+      {
+        "type": "lineage-choice",
+        "key": "lineage-choice:species:elf:0",
+        "speciesId": "elf",
+        "from": [
+          "drow",
+          "high-elf",
+          "wood-elf"
+        ]
+      }
+    ],
+    "lineages": [
+      {
+        "id": "drow",
+        "name": "Drow",
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "elf-drow-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "elf-drow-dancing-lights"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "dancing-lights",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "elf-drow-faerie-fire"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "faerie-fire",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "elf-drow-darkness"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "darkness",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "id": "high-elf",
+        "name": "High Elf",
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "elf-high-elf-cantrip"
+            }
+          },
+          {
+            "type": "spell-choice",
+            "key": "spell-choice:species:elf:0",
+            "count": 1,
+            "spellList": "wizard",
+            "spellLevel": 0
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "elf-high-elf-detect-magic"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "detect-magic",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "elf-high-elf-misty-step"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "misty-step",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "id": "wood-elf",
+        "name": "Wood Elf",
+        "grants": [
+          {
+            "type": "speed",
+            "mode": "walk",
+            "value": 35
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "elf-wood-elf-druidcraft"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "druidcraft",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "elf-wood-elf-longstrider"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "longstrider",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "elf-wood-elf-pass-without-trace"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "pass-without-trace",
+            "alwaysPrepared": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "gnome",
+    "name": "Gnome",
+    "size": "small",
+    "speed": 30,
+    "languages": [
+      "common"
+    ],
+    "languageChoices": 2,
+    "traits": [
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 30
+      },
+      {
+        "type": "proficiency",
+        "category": "language",
+        "id": "common"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:species:gnome:0",
+        "count": 2,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "gnome-darkvision"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "gnome-gnomish-cunning"
+        }
+      },
+      {
+        "type": "lineage-choice",
+        "key": "lineage-choice:species:gnome:0",
+        "speciesId": "gnome",
+        "from": [
+          "forest",
+          "rock"
+        ]
+      }
+    ],
+    "lineages": [
+      {
+        "id": "forest",
+        "name": "Forest Gnome",
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gnome-forest-minor-illusion"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "minor-illusion",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gnome-forest-speak-with-animals"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "speak-with-animals",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gnome-forest-misty-step"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "misty-step",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "id": "rock",
+        "name": "Rock Gnome",
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gnome-rock-mending"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "mending",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gnome-rock-prestidigitation"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "prestidigitation",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gnome-rock-animate-objects"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "animate-objects",
+            "alwaysPrepared": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "halfling",
+    "name": "Halfling",
+    "size": "small",
+    "speed": 30,
+    "languages": [
+      "common"
+    ],
+    "languageChoices": 2,
+    "traits": [
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 30
+      },
+      {
+        "type": "proficiency",
+        "category": "language",
+        "id": "common"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:species:halfling:0",
+        "count": 2,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "halfling-brave"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "halfling-halfling-nimbleness"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "halfling-lucky"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "halfling-naturally-stealthy"
+        }
+      }
+    ],
+    "lineages": []
+  },
+  {
+    "id": "aasimar",
+    "name": "Aasimar",
+    "size": "medium",
+    "speed": 30,
+    "languages": [
+      "common"
+    ],
+    "languageChoices": 2,
+    "traits": [
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 30
+      },
+      {
+        "type": "proficiency",
+        "category": "language",
+        "id": "common"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:species:aasimar:0",
+        "count": 2,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "aasimar-darkvision"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "aasimar-celestial-resistance"
+        }
+      },
+      {
+        "type": "resistance",
+        "damageType": "necrotic"
+      },
+      {
+        "type": "resistance",
+        "damageType": "radiant"
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "aasimar-healing-hands"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "aasimar-light-bearer"
+        }
+      },
+      {
+        "type": "spell",
+        "spellId": "light",
+        "alwaysPrepared": true
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "aasimar-celestial-revelation"
+        }
+      }
+    ],
+    "lineages": []
+  },
+  {
+    "id": "dragonborn",
+    "name": "Dragonborn",
+    "size": "medium",
+    "speed": 30,
+    "languages": [
+      "common"
+    ],
+    "languageChoices": 2,
+    "traits": [
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 30
+      },
+      {
+        "type": "proficiency",
+        "category": "language",
+        "id": "common"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:species:dragonborn:0",
+        "count": 2,
+        "from": null
+      },
+      {
+        "type": "lineage-choice",
+        "key": "lineage-choice:species:dragonborn:0",
+        "speciesId": "dragonborn",
+        "from": [
+          "chromatic-black",
+          "chromatic-blue",
+          "chromatic-green",
+          "chromatic-red",
+          "chromatic-white",
+          "metallic-brass",
+          "metallic-bronze",
+          "metallic-copper",
+          "metallic-gold",
+          "metallic-silver"
+        ]
+      }
+    ],
+    "lineages": [
+      {
+        "id": "chromatic-black",
+        "name": "Chromatic (Black)",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "acid"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-breath-chromatic-black"
+            }
+          }
+        ]
+      },
+      {
+        "id": "chromatic-blue",
+        "name": "Chromatic (Blue)",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "lightning"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-breath-chromatic-blue"
+            }
+          }
+        ]
+      },
+      {
+        "id": "chromatic-green",
+        "name": "Chromatic (Green)",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "poison"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-breath-chromatic-green"
+            }
+          }
+        ]
+      },
+      {
+        "id": "chromatic-red",
+        "name": "Chromatic (Red)",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "fire"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-breath-chromatic-red"
+            }
+          }
+        ]
+      },
+      {
+        "id": "chromatic-white",
+        "name": "Chromatic (White)",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "cold"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-breath-chromatic-white"
+            }
+          }
+        ]
+      },
+      {
+        "id": "metallic-brass",
+        "name": "Metallic (Brass)",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "fire"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-breath-metallic-brass"
+            }
+          }
+        ]
+      },
+      {
+        "id": "metallic-bronze",
+        "name": "Metallic (Bronze)",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "lightning"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-breath-metallic-bronze"
+            }
+          }
+        ]
+      },
+      {
+        "id": "metallic-copper",
+        "name": "Metallic (Copper)",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "acid"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-breath-metallic-copper"
+            }
+          }
+        ]
+      },
+      {
+        "id": "metallic-gold",
+        "name": "Metallic (Gold)",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "fire"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-breath-metallic-gold"
+            }
+          }
+        ]
+      },
+      {
+        "id": "metallic-silver",
+        "name": "Metallic (Silver)",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "cold"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-darkvision"
+            }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "dragonborn-breath-metallic-silver"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "goliath",
+    "name": "Goliath",
+    "size": "medium",
+    "speed": 35,
+    "languages": [
+      "common"
+    ],
+    "languageChoices": 2,
+    "traits": [
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 35
+      },
+      {
+        "type": "proficiency",
+        "category": "language",
+        "id": "common"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:species:goliath:0",
+        "count": 2,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "goliath-large-form"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "goliath-powerful-build"
+        }
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "athletics"
+      },
+      {
+        "type": "lineage-choice",
+        "key": "lineage-choice:species:goliath:0",
+        "speciesId": "goliath",
+        "from": [
+          "cloud",
+          "fire",
+          "frost",
+          "hill",
+          "stone",
+          "storm"
+        ]
+      }
+    ],
+    "lineages": [
+      {
+        "id": "cloud",
+        "name": "Cloud Giant",
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "goliath-giant-ancestry-cloud"
+            }
+          }
+        ]
+      },
+      {
+        "id": "fire",
+        "name": "Fire Giant",
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "goliath-giant-ancestry-fire"
+            }
+          }
+        ]
+      },
+      {
+        "id": "frost",
+        "name": "Frost Giant",
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "goliath-giant-ancestry-frost"
+            }
+          }
+        ]
+      },
+      {
+        "id": "hill",
+        "name": "Hill Giant",
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "goliath-giant-ancestry-hill"
+            }
+          }
+        ]
+      },
+      {
+        "id": "stone",
+        "name": "Stone Giant",
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "goliath-giant-ancestry-stone"
+            }
+          }
+        ]
+      },
+      {
+        "id": "storm",
+        "name": "Storm Giant",
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "goliath-giant-ancestry-storm"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "orc",
+    "name": "Orc",
+    "size": "medium",
+    "speed": 30,
+    "languages": [
+      "common"
+    ],
+    "languageChoices": 2,
+    "traits": [
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 30
+      },
+      {
+        "type": "proficiency",
+        "category": "language",
+        "id": "common"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:species:orc:0",
+        "count": 2,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "orc-adrenaline-rush"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "orc-darkvision"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "orc-powerful-build"
+        }
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "orc-relentless-endurance"
+        }
+      }
+    ],
+    "lineages": []
+  },
+  {
+    "id": "tiefling",
+    "name": "Tiefling",
+    "size": "medium",
+    "speed": 30,
+    "languages": [
+      "common"
+    ],
+    "languageChoices": 2,
+    "traits": [
+      {
+        "type": "speed",
+        "mode": "walk",
+        "value": 30
+      },
+      {
+        "type": "proficiency",
+        "category": "language",
+        "id": "common"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:species:tiefling:0",
+        "count": 2,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "tiefling-darkvision"
+        }
+      },
+      {
+        "type": "lineage-choice",
+        "key": "lineage-choice:species:tiefling:0",
+        "speciesId": "tiefling",
+        "from": [
+          "abyssal",
+          "chthonic",
+          "infernal"
+        ]
+      }
+    ],
+    "lineages": [
+      {
+        "id": "abyssal",
+        "name": "Abyssal",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "poison"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "tiefling-fiendish-legacy-abyssal"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "hold-person",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "ray-of-sickness",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "poison-spray",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "id": "chthonic",
+        "name": "Chthonic",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "necrotic"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "tiefling-fiendish-legacy-chthonic"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "ray-of-enfeeblement",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "false-life",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "chill-touch",
+            "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "id": "infernal",
+        "name": "Infernal",
+        "grants": [
+          {
+            "type": "resistance",
+            "damageType": "fire"
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "tiefling-fiendish-legacy-infernal"
+            }
+          },
+          {
+            "type": "spell",
+            "spellId": "darkness",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "hellish-rebuke",
+            "alwaysPrepared": true
+          },
+          {
+            "type": "spell",
+            "spellId": "fire-bolt",
+            "alwaysPrepared": true
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,1011 @@
+[
+  {
+    "id": "acolyte",
+    "name": "Acolyte",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "int",
+        "wis",
+        "cha"
+      ]
+    },
+    "skillProficiencies": [
+      "insight",
+      "religion"
+    ],
+    "toolProficiencies": [
+      "calligrapherstools"
+    ],
+    "originFeat": null,
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:acolyte:0",
+        "points": 3,
+        "from": [
+          "int",
+          "wis",
+          "cha"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "insight"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "religion"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "calligrapherstools"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:acolyte:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-magic-initiate-cleric"
+        }
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "artisan",
+    "name": "Artisan",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "str",
+        "dex",
+        "int"
+      ]
+    },
+    "skillProficiencies": [
+      "investigation",
+      "persuasion"
+    ],
+    "toolProficiencies": [],
+    "originFeat": "crafter",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:artisan:0",
+        "points": 3,
+        "from": [
+          "str",
+          "dex",
+          "int"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "investigation"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "persuasion"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "tool",
+        "key": "tool-choice:background:artisan:0",
+        "count": 1,
+        "from": [
+          "smithstools",
+          "brewersupplies",
+          "masonstools",
+          "calligrapherstools",
+          "carpentertools",
+          "cartographerstools",
+          "cobblerstools",
+          "cooksutensils",
+          "glassblowerstools",
+          "jewelerstools",
+          "leatherworkerstools",
+          "painterstools",
+          "potterstools",
+          "tinkerstools",
+          "weaverstools",
+          "woodcarverstools"
+        ]
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:artisan:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "crafter"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "charlatan",
+    "name": "Charlatan",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "dex",
+        "con",
+        "cha"
+      ]
+    },
+    "skillProficiencies": [
+      "deception",
+      "sleightofhand"
+    ],
+    "toolProficiencies": [
+      "forgerykit"
+    ],
+    "originFeat": "skilled",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:charlatan:0",
+        "points": 3,
+        "from": [
+          "dex",
+          "con",
+          "cha"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "deception"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "sleightofhand"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "forgerykit"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:charlatan:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "skilled"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "criminal",
+    "name": "Criminal",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "dex",
+        "con",
+        "int"
+      ]
+    },
+    "skillProficiencies": [
+      "sleightofhand",
+      "stealth"
+    ],
+    "toolProficiencies": [
+      "thievestools"
+    ],
+    "originFeat": "alert",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:criminal:0",
+        "points": 3,
+        "from": [
+          "dex",
+          "con",
+          "int"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "sleightofhand"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "stealth"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "thievestools"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:criminal:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "alert"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "entertainer",
+    "name": "Entertainer",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "str",
+        "dex",
+        "cha"
+      ]
+    },
+    "skillProficiencies": [
+      "acrobatics",
+      "performance"
+    ],
+    "toolProficiencies": [],
+    "originFeat": "musician",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:entertainer:0",
+        "points": 3,
+        "from": [
+          "str",
+          "dex",
+          "cha"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "acrobatics"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "performance"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "tool",
+        "key": "tool-choice:background:entertainer:0",
+        "count": 1,
+        "from": [
+          "bagpipes",
+          "drum",
+          "dulcimer",
+          "flute",
+          "lute",
+          "lyre",
+          "horn",
+          "panflute",
+          "shawm",
+          "viol"
+        ]
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:entertainer:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "musician"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "farmer",
+    "name": "Farmer",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "str",
+        "con",
+        "wis"
+      ]
+    },
+    "skillProficiencies": [
+      "animalhandling",
+      "nature"
+    ],
+    "toolProficiencies": [
+      "carpentertools"
+    ],
+    "originFeat": "tough",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:farmer:0",
+        "points": 3,
+        "from": [
+          "str",
+          "con",
+          "wis"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "animalhandling"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "nature"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "carpentertools"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:farmer:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "tough"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "guard",
+    "name": "Guard",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "str",
+        "int",
+        "wis"
+      ]
+    },
+    "skillProficiencies": [
+      "athletics",
+      "perception"
+    ],
+    "toolProficiencies": [],
+    "originFeat": "alert",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:guard:0",
+        "points": 3,
+        "from": [
+          "str",
+          "int",
+          "wis"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "athletics"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "perception"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "tool",
+        "key": "tool-choice:background:guard:0",
+        "count": 1,
+        "from": [
+          "gaming-set-dice",
+          "gaming-set-cards",
+          "gaming-set-dragonchess",
+          "gaming-set-three-dragon-ante"
+        ]
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:guard:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "alert"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "guide",
+    "name": "Guide",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "dex",
+        "con",
+        "wis"
+      ]
+    },
+    "skillProficiencies": [
+      "stealth",
+      "survival"
+    ],
+    "toolProficiencies": [
+      "cartographerstools"
+    ],
+    "originFeat": null,
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:guide:0",
+        "points": 3,
+        "from": [
+          "dex",
+          "con",
+          "wis"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "stealth"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "survival"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "cartographerstools"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:guide:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-magic-initiate-druid"
+        }
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "hermit",
+    "name": "Hermit",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "con",
+        "wis",
+        "cha"
+      ]
+    },
+    "skillProficiencies": [
+      "medicine",
+      "religion"
+    ],
+    "toolProficiencies": [
+      "herbalismkit"
+    ],
+    "originFeat": "healer",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:hermit:0",
+        "points": 3,
+        "from": [
+          "con",
+          "wis",
+          "cha"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "medicine"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "religion"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "herbalismkit"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:hermit:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "healer"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "merchant",
+    "name": "Merchant",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "con",
+        "int",
+        "cha"
+      ]
+    },
+    "skillProficiencies": [
+      "animalhandling",
+      "persuasion"
+    ],
+    "toolProficiencies": [
+      "navigatorstools"
+    ],
+    "originFeat": "lucky",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:merchant:0",
+        "points": 3,
+        "from": [
+          "con",
+          "int",
+          "cha"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "animalhandling"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "persuasion"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "navigatorstools"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:merchant:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "lucky"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "noble",
+    "name": "Noble",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "str",
+        "int",
+        "cha"
+      ]
+    },
+    "skillProficiencies": [
+      "history",
+      "persuasion"
+    ],
+    "toolProficiencies": [],
+    "originFeat": "skilled",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:noble:0",
+        "points": 3,
+        "from": [
+          "str",
+          "int",
+          "cha"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "history"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "persuasion"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "tool",
+        "key": "tool-choice:background:noble:0",
+        "count": 1,
+        "from": [
+          "gaming-set-dice",
+          "gaming-set-cards",
+          "gaming-set-dragonchess",
+          "gaming-set-three-dragon-ante"
+        ]
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:noble:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "skilled"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "sage",
+    "name": "Sage",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "con",
+        "int",
+        "wis"
+      ]
+    },
+    "skillProficiencies": [
+      "arcana",
+      "history"
+    ],
+    "toolProficiencies": [
+      "calligrapherstools"
+    ],
+    "originFeat": null,
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:sage:0",
+        "points": 3,
+        "from": [
+          "con",
+          "int",
+          "wis"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "arcana"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "history"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "calligrapherstools"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:sage:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feature",
+        "feature": {
+          "id": "feat-magic-initiate-wizard"
+        }
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "sailor",
+    "name": "Sailor",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "str",
+        "dex",
+        "con"
+      ]
+    },
+    "skillProficiencies": [
+      "acrobatics",
+      "perception"
+    ],
+    "toolProficiencies": [
+      "navigatorstools"
+    ],
+    "originFeat": "tavern-brawler",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:sailor:0",
+        "points": 3,
+        "from": [
+          "str",
+          "dex",
+          "con"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "acrobatics"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "perception"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "navigatorstools"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:sailor:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "tavern-brawler"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "scribe",
+    "name": "Scribe",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "dex",
+        "int",
+        "wis"
+      ]
+    },
+    "skillProficiencies": [
+      "investigation",
+      "perception"
+    ],
+    "toolProficiencies": [
+      "calligrapherstools"
+    ],
+    "originFeat": "skilled",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:scribe:0",
+        "points": 3,
+        "from": [
+          "dex",
+          "int",
+          "wis"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "investigation"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "perception"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "calligrapherstools"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:scribe:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "skilled"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "soldier",
+    "name": "Soldier",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "str",
+        "dex",
+        "con"
+      ]
+    },
+    "skillProficiencies": [
+      "athletics",
+      "intimidation"
+    ],
+    "toolProficiencies": [],
+    "originFeat": "savage-attacker",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:soldier:0",
+        "points": 3,
+        "from": [
+          "str",
+          "dex",
+          "con"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "athletics"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "intimidation"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "tool",
+        "key": "tool-choice:background:soldier:0",
+        "count": 1,
+        "from": [
+          "gaming-set-dice",
+          "gaming-set-cards",
+          "gaming-set-dragonchess",
+          "gaming-set-three-dragon-ante"
+        ]
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:soldier:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "savage-attacker"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  },
+  {
+    "id": "wayfarer",
+    "name": "Wayfarer",
+    "abilityScoreOptions": {
+      "points": 3,
+      "from": [
+        "dex",
+        "wis",
+        "cha"
+      ]
+    },
+    "skillProficiencies": [
+      "insight",
+      "stealth"
+    ],
+    "toolProficiencies": [
+      "thievestools"
+    ],
+    "originFeat": "lucky",
+    "grants": [
+      {
+        "type": "asi",
+        "key": "asi:background:wayfarer:0",
+        "points": 3,
+        "from": [
+          "dex",
+          "wis",
+          "cha"
+        ]
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "insight"
+      },
+      {
+        "type": "proficiency",
+        "category": "skill",
+        "id": "stealth"
+      },
+      {
+        "type": "proficiency",
+        "category": "tool",
+        "id": "thievestools"
+      },
+      {
+        "type": "proficiency-choice",
+        "category": "language",
+        "key": "language-choice:background:wayfarer:0",
+        "count": 1,
+        "from": null
+      },
+      {
+        "type": "feat",
+        "featId": "lucky"
+      }
+    ],
+    "startingEquipment": null,
+    "startingGold": null
+  }
+]
