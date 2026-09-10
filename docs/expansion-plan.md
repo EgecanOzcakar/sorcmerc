@@ -53,7 +53,8 @@ F1 export ─┬─> F2 character model ─┬─> F3 action economy ─┬─> 
 | **T5** | **Campaign map** — node graph (start → branching combat/treasure/merchant/rest → boss), party token moves node→node, per-node resolution; combat nodes hand off to the combat scene and await an outcome. | `core/campaign.gd`, `scenes/campaign/*` | T4 |
 | **T6** | **Node types** — merchant (buy/sell vs SRD prices), treasure (loot tables), rest (short/long rest recovery). | `core/nodes/*`, `scenes/campaign/*` | T5, F1 |
 | **T7** | **Combat ↔ campaign integration** — `encounter.gd` builds an encounter from a spec + the live party instead of hardcoding; combat returns deaths / loot / XP; the combat UI takes party characters. | `core/encounter.gd`, `scenes/main.gd` | F3, T5 |
-| **T8** | **Encounter scaler / difficulty** — given the live party (levels, gear, features, resources → a power budget), generate the enemy roster for a node. Difficulty tiers tuned so autopilot party win-rate is ~90% (easy) / ~75% (normal) / ~50% (hard); tune enemy count, HP, AC, to-hit, damage, and kit, verified against the 200-seed sweep in `tests/test_combat.gd`. | `core/scaler.gd`, `core/encounter.gd` | F2, F3, T7 |
+| **T8** | **Encounter scaler / difficulty** — given the live party (levels, gear, features, resources → a power budget), generate the enemy roster for a node. Difficulty tiers tuned so autopilot party win-rate is ~90% (easy) / ~75% (normal) / ~50% (hard); tune enemy count, HP, AC, to-hit, damage, and kit, verified against the 200-seed sweep in `tests/test_combat.gd`. Must accept a quest-bias hint from T9 (see below). | `core/scaler.gd`, `core/encounter.gd` | F2, F3, T7 |
+| **T9** | **Quest system + quest log panel** — see design below. A simple, linear, node-scoped quest layer: a merchant node can offer a kill-count or item-collect quest; later combat nodes on the same route bias their spawns toward an unfulfilled quest's target monster; a quest log panel on the campaign screen shows active/complete quests and progress. | `core/quest.gd`, `core/quest_log.gd`, `scenes/campaign/quest_panel.gd` | T4 (party holds the log), T5 (hosts the panel), T7 (spawn bias hook), T8 (folds the bias into the roster) |
 
 ## Realistic phasing (what can actually run in parallel)
 
@@ -76,6 +77,47 @@ Each phase ends with a review gate before the next starts.
   cheap to include).
 - **Heroes:** Vera / Pike / Ilsa are rebuilt through the creator as preset builds;
   a new game starts by building your own party.
+
+## T9 design sketch — quests (locked 2026-09-10, kept deliberately simple)
+
+**Quest shape** (`core/quest.gd`, a plain data class, matches the `resolved.gd`/
+`grants.gd` style — no inheritance hierarchy for two quest types):
+```
+id, giver_node_id, title, kind: "kill_count" | "collect_item",
+target_monster_id, target_item_id (only for collect_item — the drop the kills yield),
+required: int, progress: int, state: "offered" | "active" | "complete" | "turned_in",
+reward: {gold: int, item_id: String (optional)}
+```
+- **kill_count** — progress += 1 per kill of `target_monster_id`, tracked from combat's
+  outcome (kill log already exists in `combat.gd`'s log; T7's write-back is where this
+  taps in).
+- **collect_item** — `target_item_id` drops from `target_monster_id` at a drop chance
+  (a new small table, e.g. `data/loot-drops.json`, or a flat rate to start — 50%);
+  progress is actual items collected, not kills, so "I killed 5 goblins but only have
+  3 ears" is the intended, expected texture, not a bug.
+
+**Offer/turn-in:** merchant nodes (T6) can offer one canned quest from a short curated
+list (hand-authored, not procedurally generated — "bring me N goblin ears", "clear N
+wolves from the road"); accepting adds it to the party's quest log (`core/party.gd`
+gains a `quests: Array` — T4's file, small additive change) in `"active"` state.
+Turning in (back at the giver, or a follow-up node) needs `progress >= required`;
+pays the reward, sets `"turned_in"`.
+
+**The spawn-bias hook (the part that touches encounter generation):** a node's combat
+spec (T7) checks the party's active quests before building its roster; if an active
+quest's `target_monster_id` isn't yet fulfilled, the scaler (T8) is told to include
+extra copies of that monster in the next 1-2 combat nodes on the route — a bias
+weight, not a hard override, so it composes with difficulty tuning rather than
+fighting it. `core/scaler.gd` takes an optional `quest_bias: {monster_id: weight}`
+parameter; T9 supplies it, T8 just has to honor it.
+
+**Quest log panel** (`scenes/campaign/quest_panel.gd`, part of T5's screen): active
+quests with "N/required", complete-but-not-turned-in flagged, a turned-in history
+collapsed by default. Programmatic UI, same dark theme as the other new scenes.
+
+**Deliberately not built:** branching dialogue, quest chains/prerequisites, failure
+states, timed quests, procedurally generated quest text. If the curated list runs dry
+that's a content problem to solve with more entries, not a generator.
 
 ## Execution
 
