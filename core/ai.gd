@@ -77,17 +77,32 @@ static func _use_kit(cb, m) -> void:
 		if not sw.is_empty():
 			cb.perform(m, sw)
 
-# A breath weapon / gaze / roar: a limited-use save_effect is worth more than one
-# swing, so a foe leads with it whenever something is in range.
-static func _use_save_effect(cb, m) -> bool:
-	var v := _kind(cb, m, "save_effect")
-	if v.is_empty():
-		return false
-	for c in cb.enemies_of(m):
-		if cb.legal_target(m, v, c):
-			cb.perform(m, v, c)
-			return true
+# T21: a breath weapon / gaze / web is worth more than one swing, so a foe leads with
+# an offensive verb off its own statblock instead of plain-attacking whenever one is
+# legal. The whole rule, deliberately dumb (combat-design.md §10 risk 2 — no AI creep):
+# available() already hides what's unaffordable or spent, condition-inflicting verbs
+# go first, then first-eligible wins, aimed at the softest legal target.
+# The BASIC verbs available() also offers (Shove &c.) stay out of it — that's tactics,
+# not a special attack, and the party autopilot doesn't use them either.
+static func _use_special(cb, m, targets: Array) -> bool:
+	var verbs: Array = cb.available(m).filter(func(v):
+		return v.get("targeting", "self") == "enemy" and not m.verb(v["id"]).is_empty())
+	verbs.sort_custom(func(a, b):
+		return a.get("conditions", []).size() > b.get("conditions", []).size())
+	for v in verbs:
+		var legal: Array = targets.filter(func(c): return cb.legal_target(m, v, c))
+		if legal.is_empty():
+			continue
+		legal.sort_custom(func(a, b): return a.hp < b.hp)
+		cb.perform(m, v, legal[0])
+		return true
 	return false
+
+# Hit `targets` (already in the caller's preference order) — the special first,
+# the plain swing at the head of the list otherwise.
+static func _strike(cb, m, targets: Array) -> void:
+	if not _use_special(cb, m, targets):
+		cb.resolve_attack(m, targets[0])
 
 static func _toward(goal: Vector2i) -> Callable:
 	return func(h: Vector2i) -> float: return -float(Hex.distance(h, goal))
@@ -106,13 +121,11 @@ static func _foe_turn(cb, m) -> void:
 	if pcs.is_empty():
 		return
 	_use_kit(cb, m)
-	if _use_save_effect(cb, m):
-		return
 
 	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1)
 	if not adj.is_empty():
 		adj.sort_custom(func(a, b): return a.hp < b.hp if a.hp != b.hp else a.ac < b.ac)
-		cb.resolve_attack(m, adj[0])
+		_strike(cb, m, adj)
 		if m.hp * 2 <= m.max_hp:
 			# Nimble Escape and friends: a bonus-action Disengage, then back off
 			var esc := _pick(cb, m, func(v): return v["kind"] == "disengage" and v["cost"] == "bonus")
@@ -141,16 +154,20 @@ static func _foe_turn(cb, m) -> void:
 		var shootable: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.atk_range and Hex.distance(c.pos, m.pos) > 1)
 		if not shootable.is_empty():
 			shootable.sort_custom(func(a, b): return a.hp < b.hp)
-			cb.resolve_attack(m, shootable[0])
+			_strike(cb, m, shootable)
 		return
 
 	# melee, nobody adjacent: close on the nearest PC, then swing if we arrived
 	var target = _nearest(m.pos, pcs)
 	_move_by(cb, m, _toward(target.pos))
 	var now: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1 and c.conscious())
-	if not now.is_empty() and m.conscious():
+	if not m.conscious():
+		return
+	if not now.is_empty():
 		now.sort_custom(func(a, b): return a.hp < b.hp)
-		cb.resolve_attack(m, now[0])
+		_strike(cb, m, now)
+	else:
+		_use_special(cb, m, pcs)   # closed, but not close enough to swing — a gaze still reaches
 
 # --- party autopilot (demo / test only) ----------------------------
 
