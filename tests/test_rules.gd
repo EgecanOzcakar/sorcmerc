@@ -13,6 +13,7 @@ const PassPools = preload("res://core/rules/pass_pools.gd")
 const Presets = preload("res://core/presets.gd")
 const Character = preload("res://core/character.gd")
 const Resolved = preload("res://core/rules/resolved.gd")
+const Dice = preload("res://core/dice.gd")
 
 var _pass = 0
 var _fail = 0
@@ -43,6 +44,8 @@ func _init() -> void:
 	test_presets_match_encounter()
 	test_presets_have_no_pending_and_no_warnings()
 	test_sheet_is_cached_and_retroactive()
+	test_attacks()
+	test_spell_slots()
 
 	print("test_rules: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -510,3 +513,102 @@ func test_sheet_is_cached_and_retroactive() -> void:
 	var before: int = ch.sheet().ac
 	ch.decide("fighting-style-choice:class:fighter:0", {"type": "fighting-style-choice", "styles": ["defense"]})
 	check(ch.sheet().ac == before + 1, "swapping Interception for Defense re-resolves and raises AC by 1")
+
+# --- step 7: pass_gear + pass_spells -------------------------------------
+
+func _gear(ch: Character) -> Resolved:
+	return ch.sheet()
+
+func test_attacks() -> void:
+	var abil := {"str": 16, "dex": 18, "con": 14, "int": 10, "wis": 10, "cha": 10}
+	var ch := _build("fighter", 1, abil)
+	ch.equipped = ["longsword"]
+	var a: Array = ch.sheet().attacks
+	check(a.size() == 1 and a[0]["ability"] == "str", "a plain melee weapon uses STR")
+	check(int(a[0]["to_hit"]) == 5, "longsword +3 STR + 2 PB")
+	check(a[0]["notation"] == "1d8+3", "longsword damage 1d8+3")
+	check(a[0]["versatile_notation"] == "1d10+3", "longsword versatile 1d10+3")
+
+	# finesse takes the better of STR / DEX
+	ch.equipped = ["rapier"]; ch.dirty()
+	a = ch.sheet().attacks
+	check(a[0]["ability"] == "dex" and int(a[0]["to_hit"]) == 6, "finesse uses DEX +4 when it beats STR")
+
+	# ranged always uses DEX; archery adds +2
+	ch.equipped = ["shortbow"]; ch.dirty()
+	a = ch.sheet().attacks
+	check(a[0]["ability"] == "dex" and int(a[0]["to_hit"]) == 6, "shortbow uses DEX")
+	check(int(a[0]["normal_ft"]) == 80, "shortbow normal range 80 ft")
+	ch.decide("fighting-style-choice:class:fighter:0", {"type": "fighting-style-choice", "styles": ["archery"]})
+	check(int(ch.sheet().attacks[0]["to_hit"]) == 8, "archery adds +2 to a ranged attack")
+
+	# dueling: +2 damage with a single one-handed melee weapon
+	ch.equipped = ["longsword"]; ch.dirty()
+	ch.decide("fighting-style-choice:class:fighter:0", {"type": "fighting-style-choice", "styles": ["dueling"]})
+	check(ch.sheet().attacks[0]["notation"] == "1d8+5", "dueling adds +2 damage")
+
+	# unarmed with nothing equipped: 1d1+STR, so Dice.parse never sees a bare "1"
+	var bare := _build("fighter", 1, abil)
+	a = bare.sheet().attacks
+	check(a.size() == 1 and a[0]["id"] == "unarmed-strike", "no weapon -> an unarmed strike")
+	check(a[0]["notation"] == "1d1+3", "plain unarmed strike is 1d1+STR (spec 2.4)")
+	check(Dice.parse(a[0]["notation"]) == {"count": 1, "sides": 1, "mod": 3}, "Dice.parse accepts it")
+
+	# monk martial arts die scales with monk level
+	for pair in [[1, 6], [4, 6], [5, 8], [11, 10], [17, 12]]:
+		var m := _build("monk", pair[0], abil)
+		var ma: Array = m.sheet().attacks
+		check(int(ma[0]["dice_sides"]) == pair[1], "monk %d unarmed die d%d" % [pair[0], pair[1]])
+	var m5 := _build("monk", 5, abil)
+	check(m5.sheet().attacks[0]["ability"] == "dex", "a monk swings with the better of STR/DEX")
+
+	# non-proficient body armor blocks casting and flags disadvantage
+	var w := _build("wizard", 3, abil)
+	w.equipped = ["plate"]
+	var ws := w.sheet()
+	check(ws.cannot_cast and ws.disadvantage_from_armor, "plate on a wizard blocks casting")
+
+func test_spell_slots() -> void:
+	var abil := {"str": 10, "dex": 12, "con": 12, "int": 16, "wis": 16, "cha": 16}
+	for pair in [[1, [2]], [3, [4, 2]], [5, [4, 3, 2]], [11, [4, 3, 3, 3, 2, 1]],
+			[20, [4, 3, 3, 3, 3, 2, 2, 1, 1]]]:
+		var w := _build("wizard", pair[0], abil)
+		var slots: Array = w.sheet().spellcasting["slots"]
+		var want: Array = pair[1].duplicate()
+		while want.size() < 9:
+			want.append(0)
+		check(slots == want, "wizard %d slots %s (got %s)" % [pair[0], str(want), str(slots)])
+
+	# warlock pact magic replaces the slot table
+	var wl := _build("warlock", 5, abil)
+	var ws: Dictionary = wl.sheet().spellcasting
+	check(int(ws["pact"]["count"]) == 2 and int(ws["pact"]["slotLevel"]) == 3, "warlock 5 = 2 slots at level 3")
+	var empty := true
+	for n in ws["slots"]:
+		if int(n) != 0:
+			empty = false
+	check(empty, "a warlock has no ordinary slot table")
+
+	# Eldritch Knight falls back to the local third-caster table
+	var ek := _build("fighter", 7, abil)
+	ek.decide("subclass:class:fighter:0", {"type": "subclass", "subclassId": "eldritchknight"})
+	var es: Dictionary = ek.sheet().spellcasting
+	check(int(es["slots"][0]) == 4 and int(es["slots"][1]) == 2, "EK 7 gets 4/2 from third-caster-slots.json")
+	check(es["ability"] == "int", "EK casts off INT")
+
+	# prepared casters get a prepared count; known casters do not
+	var cl := _build("cleric", 5, abil)
+	check(int(cl.sheet().spellcasting["prepared_count"]) == 8, "cleric 5 with WIS +3 prepares 8")
+	var sorc := _build("sorcerer", 5, abil)
+	check(int(sorc.sheet().spellcasting["prepared_count"]) == 0, "a sorcerer has no prepared count")
+
+	# a non-caster has no spellcasting block at all
+	var bb := _build("barbarian", 3, abil)
+	check(bb.sheet().spellcasting.is_empty(), "a barbarian casts nothing")
+
+	# Arcane Trickster reads the same table from the rogue side
+	var at := _build("rogue", 7, abil)
+	at.decide("subclass:class:rogue:0", {"type": "subclass", "subclassId": "arcanetrickster"})
+	var ats: Dictionary = at.sheet().spellcasting
+	check(int(ats["slots"][0]) == 4 and int(ats["slots"][1]) == 2, "arcane trickster 7 gets 4/2")
+	check(int(ats["save_dc"]) == 14, "AT 7 save DC = 8 + 3 PB + 3 INT")

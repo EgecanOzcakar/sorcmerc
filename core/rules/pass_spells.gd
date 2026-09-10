@@ -8,38 +8,53 @@ const Catalog = preload("res://core/rules/catalog.gd")
 
 const PREPARED_CASTERS := ["cleric", "druid", "wizard", "paladin", "ranger"]
 
+# SCHEMA gap #5, worse than the spec assumed: fighter/rogue have `spellSlots: []`,
+# Arcane Trickster carries a subclass-origin `spellcasting` grant but Eldritch Knight
+# carries none at all — only a `eldritchknight-spellcasting` feature. So the third
+# casters are named here rather than detected, and their slots come from
+# data/third-caster-slots.json. Ask F1 to emit the EK grant and this table shrinks
+# to a slot-table lookup.
+const THIRD_CASTERS := {
+	"arcanetrickster": {"ability": "int", "classId": "rogue"},
+	"eldritchknight": {"ability": "int", "classId": "fighter"},
+}
+
+static func _third_caster(bundles: Array) -> Dictionary:
+	for b in bundles:
+		if b["source"]["origin"] == "subclass" and THIRD_CASTERS.has(b["source"]["id"]):
+			return THIRD_CASTERS[b["source"]["id"]]
+	return {}
+
 # {} when the character casts nothing. {spellcasting: Dictionary, warnings: [String]}
 static func resolve(bundles: Array, abilities: Dictionary, pb: int, level: int) -> Dictionary:
 	var warns: Array[String] = []
 	var casting := Bundles.of_type(bundles, "spellcasting")
 	var spells := Bundles.of_type(bundles, "spell")
 	var choices := Bundles.of_type(bundles, "spell-choice")
-	if casting.is_empty() and spells.is_empty() and choices.is_empty():
+	var third := _third_caster(bundles)
+	if casting.is_empty() and spells.is_empty() and choices.is_empty() and third.is_empty():
 		return {"spellcasting": {}, "warnings": warns}
 
 	var ability := ""
-	var save_dc := 0
-	var attack_bonus := 0
 	var class_id := ""
-	var third_caster := false
 	var ability_mod := 0
 	if not casting.is_empty():
 		var primary: Dictionary = casting[0]
 		for tg in casting:
-			if tg["grant"]["source"] == "class":
+			if tg["grant"]["source"] == "class" and tg["source"]["origin"] == "class":
 				primary = tg
 				break
 		ability = primary["grant"]["ability"]
-		ability_mod = int(abilities[ability]["mod"])
-		save_dc = 8 + pb + ability_mod
-		attack_bonus = pb + ability_mod
 		var src: Dictionary = primary["source"]
 		if src["origin"] == "class":
 			class_id = src["id"]
-		elif src["origin"] == "subclass":
-			class_id = src["classId"]
-			third_caster = Catalog.spell_slots(class_id, 1).is_empty() \
-				and Catalog.spell_slots(class_id, 20).is_empty()
+	if class_id == "" and not third.is_empty():
+		ability = third["ability"]
+		class_id = third["classId"]
+	if ability != "":
+		ability_mod = int(abilities[ability]["mod"])
+	var save_dc: int = 8 + pb + ability_mod if ability != "" else 0
+	var attack_bonus: int = pb + ability_mod if ability != "" else 0
 
 	var cantrips: Array = []
 	var known: Array = []
@@ -76,7 +91,7 @@ static func resolve(bundles: Array, abilities: Dictionary, pb: int, level: int) 
 	var pact := Catalog.pact_magic(class_id, level) if is_warlock else {}
 	var slots: Array[int] = [] as Array[int]
 	if not is_warlock and class_id != "":
-		slots = Catalog.third_caster_slots(class_level) if third_caster else Catalog.spell_slots(class_id, level)
+		slots = Catalog.third_caster_slots(class_level) if not third.is_empty() else Catalog.spell_slots(class_id, level)
 	while slots.size() < 9:
 		slots.append(0)
 
