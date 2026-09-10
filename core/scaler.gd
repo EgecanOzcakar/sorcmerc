@@ -7,24 +7,29 @@
 # more honest kind of harder; the multiplier only closes what the bodies cannot.
 #
 # TUNING — 200-seed autoplay sweeps (tests/test_scaler.gd), level-3 preset party
-# (Vera/Pike/Ilsa, team score 46.6), re-measured 2026-09-10 after T16 wired the
-# 316-entry bestiary and its condition attacks in. One roster per seed, each its
-# own faction, so this is the shipped distribution and not one warband repeated:
-#   easy   TIER 0.73 -> avg 3.9 foes x0.90 : 185W/15L  (92.5%)  avg 7.4 rounds
-#   normal TIER 1.00 -> avg 4.6 foes x0.93 : 147W/53L  (73.5%)  avg 9.2 rounds
-#   hard   TIER 1.47 -> avg 5.6 foes x1.03 :  95W/105L (47.5%)  avg 10.9 rounds
-# Level-8 party (the presets levelled to 8, score 107.8), 60 seeds: 93 / 75 / 43%
-# (was 89 / 69 / 39 against the four archetypes).
-# T8's TIER numbers were 1.11/1.36/1.55: a real bestiary is far deadlier per point
-# of power.gd score than four archetypes were — multiattacks, riders that poison
-# and paralyse, and pack tactics all land harder in play than estimate() prices
-# them. CURVE went 0.75 -> 0.90 for the same reason: with real monsters the pool
-# now has bodies big enough to keep up with a level-8 party.
+# (Vera/Pike/Ilsa, team score 46.6), re-measured 2026-09-10 after T23 taught
+# power.gd to price control (DENIAL/CTRL_WEIGHT) and advantage. One roster per
+# seed, each its own faction, so this is the shipped distribution and not one
+# warband repeated:
+#   easy   TIER 0.85 -> avg 4.1 foes x0.88 : 181W/19L  (90.5%)  avg 8.6 rounds
+#   normal TIER 1.06 -> avg 4.4 foes x0.94 : 151W/49L  (75.5%)  avg 9.7 rounds
+#   hard   TIER 1.50 -> avg 5.6 foes x0.99 :  98W/102L (49.0%)  avg 10.0 rounds
+# Level-8 party (the presets levelled to 8, score 107.8), 60 seeds: 88 / 73 / 52%
+# (was 93 / 75 / 43 before T23).
+# TIER rose across the board (0.73/1.00/1.47 -> 0.85/1.06/1.50) because pricing
+# control raised what a bestiary roster costs, so the same budget now buys fewer
+# bodies; the tiers had to buy more to stay on target. CURVE stays 0.90 — level 8
+# still tracks level 3 within ~3 points. TIER is steep here: hard 1.47/1.48/1.50/
+# 1.51/1.55 measured 53.5/54.0/49.0/47.5/48.0%, the mult knob being lumpy, so do
+# not read a 2-point miss as a knob that wants turning.
 #
-# Known ceiling: power.gd still underprices control, so TIER carries the
-# correction rather than the estimator being right. Rates land within ~3 points of
-# target at both level 3 and level 8 now. Re-run the sweep after touching power.gd,
-# the bestiary's features, adapter.gd's FT_PER_HEX/RANGE_CAP, or any verb.
+# Known ceiling: what power.gd still misprices is chaff vs chunk, not control —
+# an 11-hp hobgoblin's damage is priced for a whole fight it does not survive,
+# while a 32-hp multiattacking thug is priced like ~1.6 of them and plays like
+# four. That is the boss spread's remaining outliers (see boss_for below), and it
+# needs a survival term in estimate(), not another constant. Re-run the sweep
+# after touching power.gd, the bestiary's features, adapter.gd's FT_PER_HEX/
+# RANGE_CAP, or any verb.
 extends RefCounted
 
 const Adapter = preload("res://core/adapter.gd")
@@ -32,7 +37,7 @@ const Encounter = preload("res://core/encounter.gd")
 const Power = preload("res://core/rules/power.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
-const TIER := {"easy": 0.73, "normal": 1.00, "hard": 1.47}
+const TIER := {"easy": 0.85, "normal": 1.06, "hard": 1.50}
 const REF_SCORE := 46.6   # the level-3 preset party — where TIER was calibrated
 const CURVE := 0.90       # budget grows sublinearly with party power (see the header)
 const MAX_FOES := 8
@@ -82,14 +87,18 @@ static func _budget(party_characters: Array, difficulty: String) -> float:
 # difficulty, theme}.
 #
 # TUNING — 40-seed sweeps per boss (tests/test_scaler.gd), level-3 preset party,
-# measured 2026-09-10 mid-session while T20/T21 were still editing combat/ai, so
-# read these as a spread, not a calibration: oni 50%, assassin 35%, mammoth 22%,
-# arrow-chief 68%, shop-captain 8% — pooled 36.5% against a 58% hard node. The
-# spread is power.gd's known ceiling amplified: a lone big bruiser (mammoth, oni)
-# prices near the whole budget and then plays like one focus-fired target, so the
-# escort it leaves room for is what actually decides the fight. Re-run and retune
-# BOSS_LEAD_SHARE with the rest of the scaler once combat/ai settle.
-const BOSS_LEAD_SHARE := 0.45   # how much of the fight the boss itself is
+# re-measured 2026-09-10 with T23's control pricing: oni 35%, assassin 30%,
+# mammoth 60%, arrow-chief 37.5%, shop-captain 15% — pooled 35.5% against a 49%
+# hard node (was 50/35/22/68/8, pooled 36.5%). Pricing control shrank the spread
+# from 60 points to 45: the control-heavy escorts (grappling toads, web-shooting
+# spiders, paralytic touches) now cost what they play like, so the fights that
+# fielded them (mammoth, assassin) stopped being losses on arrival.
+# BOSS_LEAD_SHARE went 0.45 -> 0.40 for the last of it — a smaller lead slice
+# spends the budget on escort bodies instead of one more pumped stat block, and
+# the pumped stat block is what power.gd overprices. What is left (mammoth 60 vs
+# shop-captain 15) is the chaff-vs-chunk ceiling in the header above, not the
+# lead share; fix that in estimate(), don't chase it with this constant.
+const BOSS_LEAD_SHARE := 0.40   # how much of the fight the boss itself is
 const BOSS_MULT_MAX := 3.0      # +6 AC / +8 to-hit / +8 dmg / 3x HP at the ceiling
 static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0) -> Dictionary:
 	var budget := _budget(party_characters, String(boss.get("difficulty", "hard")))

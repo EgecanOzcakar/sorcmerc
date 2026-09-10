@@ -26,6 +26,7 @@ func check(cond: bool, label: String) -> void:
 		printerr("  FAIL: ", label)
 
 func _init() -> void:
+	test_control_pricing()
 	test_spec_shape()
 	test_quest_bias()
 	test_monotone_difficulty()
@@ -34,6 +35,21 @@ func _init() -> void:
 	test_boss_pool()
 	print("test_scaler: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# T23 — the same body priced with a full lockout, a half-turn debuff and nothing
+# at all: control must be worth something, and a lockout must be worth the most.
+func test_control_pricing() -> void:
+	var plain := _scored("goblin", [])
+	var frighten := _scored("goblin", ["monster-frightful-presence"])
+	var knock := _scored("goblin", ["monster-knockdown"])
+	var stun := _scored("goblin", ["monster-stunning-blow"])
+	check(frighten > plain, "a control effect is worth more than none (%.1f > %.1f)" % [frighten, plain])
+	check(stun > knock and knock > frighten,
+		"the more of a turn it denies, the more it scores (stun %.1f > prone %.1f > fright %.1f)" % [
+			stun, knock, frighten])
+
+func _scored(id: String, features: Array) -> float:
+	return Power.estimate(Encounter.spawn(id, 1.0, "foe", Vector2i.ZERO, 0, features))["score"]
 
 func test_spec_shape() -> void:
 	var spec = Scaler.roster_for(Presets.party(), "normal")

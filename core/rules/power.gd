@@ -10,6 +10,19 @@ const ROUNDS := 4        # the fight length resources are amortized over
 
 const TIER := {"easy": 0.55, "normal": 0.85, "hard": 1.15}  # calibration knobs, expected to move
 
+# T23 — how much of a turn each condition denies the target it lands on. 1.0 is a
+# full lockout (the target does nothing at all), 0.5 is about half a turn's worth
+# of effectiveness gone (disadvantage on everything, or a movement lock), and the
+# small ones are a nuisance tax. Anything unlisted is priced as a nuisance.
+const DENIAL := {
+	"paralyzed": 1.0, "stunned": 1.0, "unconscious": 1.0, "petrified": 1.0,
+	"incapacitated": 0.9, "restrained": 0.6, "blinded": 0.5, "charmed": 0.5,
+	"prone": 0.35, "frightened": 0.3, "poisoned": 0.3, "grappled": 0.3,
+	"deafened": 0.05,
+}
+const DENIAL_OTHER := 0.25
+const CTRL_WEIGHT := 36.0  # a full lockout that lands every round, before land odds
+
 static func p_hit(to_hit: int, ac: int, crit_range: int = 20) -> float:
 	var need: int = ac - to_hit
 	var p: float = clampf((21.0 - need) / 20.0, 0.05, 0.95)
@@ -33,11 +46,18 @@ static func estimate(c) -> Dictionary:
 	for v in c.verbs:
 		if v["kind"] == "attacks_per_action":
 			per_action = maxi(per_action, int(v["value"]))
+	# Advantage is damage, not control: it re-rolls every attack the body makes.
+	# ponytail: priced as if its `requires` (an ally next to the target) always
+	# holds — true for the pack monsters that carry it, optimistic for a lone one.
+	var adv := 1.0
+	for v in c.verbs:
+		if v["kind"] == "attack_modifier" and v.get("self", "") == "adv":
+			adv = 2.0
 	if not attacks.is_empty():
 		var a: Dictionary = attacks[0]
 		var d := _avg_of(a)
-		var p := p_hit(int(a.get("to_hit", c.atk_bonus)), REF_AC, c.crit_range)
-		var crit: float = (21.0 - c.crit_range) / 20.0
+		var p := 1.0 - pow(1.0 - p_hit(int(a.get("to_hit", c.atk_bonus)), REF_AC, c.crit_range), adv)
+		var crit: float = 1.0 - pow(1.0 - (21.0 - c.crit_range) / 20.0, adv)
 		dpr = per_action * (p * d + crit * d * 0.5)
 
 	var control := 0.0
@@ -52,11 +72,14 @@ static func estimate(c) -> Dictionary:
 			"grant_action":
 				dpr += dpr * share / ROUNDS
 			"save_effect":
-				control += 3.0 * share
+				control += _control_value(v.get("conditions", []), c, share,
+					String(v.get("trigger", "")) == "on_weapon_hit")
+				dpr += _save_damage(v, c, share)
 			"grant_verb":
 				control += 0.5 * share
 			"attack_modifier":
-				control += 0.5 * share
+				if v.get("self", "") != "adv":
+					control += 0.5 * share   # priced above as dpr when it is advantage
 	# A caster's action is spent EITHER swinging or casting, so a cantrip replaces the
 	# weapon action rather than stacking on it, and a leveled spell only contributes the
 	# margin over that action, amortized across ROUNDS.
@@ -84,6 +107,36 @@ static func estimate(c) -> Dictionary:
 
 	return {"dpr": dpr, "ehp": ehp, "control": control,
 		"score": sqrt(maxf(0.0, dpr) * maxf(0.0, ehp)) * (1.0 + 0.08 * control)}
+
+# T23 — what a save-or-suffer effect is worth: how much of a turn it denies, times
+# how often it actually lands (the save, and the attack roll first if it is an
+# on-hit rider), times the share of the fight it is available for. The worst
+# condition on the list is the one that decides the price; a rider that also
+# poisons is not twice the stun.
+static func _control_value(conditions, c, share: float, on_hit: bool) -> float:
+	var worst := 0.0
+	for cid in conditions:
+		worst = maxf(worst, float(DENIAL.get(cid, DENIAL_OTHER)))
+	if worst <= 0.0:
+		return 0.0
+	var land := 1.0 - p_save(c.save_dc, REF_SAVE)
+	if on_hit:
+		land *= p_hit(c.atk_bonus, REF_AC, c.crit_range)
+	return CTRL_WEIGHT * worst * land * share
+
+# A save_effect carrying dice is damage as well as control (breath weapons, poison
+# riders) — priced at what lands, so dropping the old flat control score for them
+# does not drop the monster's damage on the floor.
+static func _save_damage(v: Dictionary, c, share: float) -> float:
+	if int(v.get("dice_count", 0)) <= 0:
+		return 0.0
+	var d := avg(int(v["dice_count"]), int(v.get("dice_sides", 6)), int(v.get("dice_bonus", 0)))
+	var land := 1.0 - p_save(c.save_dc, REF_SAVE)
+	if v.get("halve_damage", false):
+		land += (1.0 - land) * 0.5
+	if String(v.get("trigger", "")) == "on_weapon_hit":
+		land *= p_hit(c.atk_bonus, REF_AC, c.crit_range)
+	return d * land * share
 
 static func _avg_of(a: Dictionary) -> float:
 	if int(a.get("dice_sides", 0)) > 0:
@@ -113,7 +166,7 @@ static func _spell_power(sid: String, c) -> Dictionary:
 		elif m.has("attack"):
 			landed = p_hit(c.save_dc - 8, REF_AC)
 		per_cast += amount * targets * landed
-	var ctrl: float = 3.0 * minf(1.0, uses / ROUNDS) if m.has("conditions") else 0.0
+	var ctrl := _control_value(m.get("conditions", []), c, minf(1.0, uses / ROUNDS), false)
 	return {"per_cast": per_cast, "uses": uses, "level": lvl, "control": ctrl}
 
 static func team_score(combatants: Array) -> float:
