@@ -766,4 +766,96 @@ way, reconciled by hand if they collide.
   added — flagged, not done. **Full suite: 23 test files (test_bestiary
   reports OK, not a count), 0 failures; all four `drive_*` smoke scripts pass.**
 
+## T23 — power.gd control-underpricing retune (locked 2026-09-10, dispatched now)
+
+Known ceiling since T16/T18: `Power.estimate()` scores raw damage/HP/AC well
+but undervalues a save-or-suffer control effect (stun, paralyze, restrain,
+frighten, knock-prone, grapple) relative to a monster that just hits harder —
+that's why the boss pool's measured win rates spread from 8% (shop-captain,
+an escort-heavy elite) to 68% (arrow-chief) despite all being budgeted the
+same way. Add a control-effect bonus to the score (scaled by how much of the
+target's turn it denies — a full lockout like stun/paralyze scores highest,
+a save-negates-half debuff like frightened scores lowest), then re-run the
+existing 40-seed sweeps (scaler.gd's own TUNING method) for easy/normal/hard
+AND the boss pool, retuning `TIER`/`CURVE`/`MULT_*` and each `BOSS_POOL`
+`win_rate` to hit the same 90/75/50% targets with a tighter boss spread.
+Update scaler.gd's header comment with the new measured numbers.
+
+File ownership: `core/rules/power.gd`, `core/scaler.gd`, `tests/test_scaler.gd`,
+and ONLY the `"win_rate"` leaf values inside `campaign.gd`'s `BOSS_POOL`
+entries (feeds `Campaign.BOSS_REF_WIN_RATE`'s XP-multiplier math directly) —
+nothing else in campaign.gd, which T25 (settlements) is editing concurrently
+in unrelated regions.
+
+## T24 — Nick weapon mastery + two-weapon fighting (locked 2026-09-10, dispatched now)
+
+The last unimplemented 2024 mastery property. Needs minimal two-weapon
+fighting first: a character may equip a second *light* weapon off-hand; the
+bonus-action off-hand attack deals no ability-mod damage bonus unless a
+feature grants one (standard 2024 TWF rule). Nick's actual effect: if the
+main-hand weapon has the Nick property, the off-hand attack folds into the
+Attack action itself (once per turn) instead of costing the bonus action —
+reuse the `opts["free"]` pattern Cleave's second swing already established
+in `combat.gd` rather than inventing a new mechanism. Player characters only;
+monster statblocks that already hint at two attacks use their own
+`attacks` array and don't need this system.
+
+File ownership: `core/combat.gd` (mastery dispatcher + off-hand verb),
+`core/character.gd` (an off-hand equip field), `core/adapter.gd` (off-hand
+verb generation), a minimal equip-UI touch in `scenes/profile/profile.gd` if
+the existing equip flow doesn't already generalize, `tests/test_weapon_mastery.gd`.
+
+## T25 — settlements: sized NPC services (locked 2026-09-10, spec from the user, dispatched now)
+
+The existing "merchant" node kind (`wayside-camp`, `hollow-market`,
+`pack-mule`, `tinkers-wagon`, `shuttered-shop`, `caravanserai`) becomes a
+sized settlement: every one has a **Generalist** (today's flat `STOCK` list,
+unchanged); a **village** adds one specialist; a **town** adds two to three.
+Specialists: **Weaponsmith** (full `data/weapons.json`), **Armorsmith** (full
+`data/armor.json`), **Alchemist** (`potions-of-healing` + the general potion
+list off `data/magic-items.json`), **Librarian** (the three scroll ids, plus
+a discounted/no-roll identify-on-request using the existing `identify_check`
+flow), **Healer** (flat gold for an instant full heal + clear-all-conditions,
+distinct from a free rest node), **Innkeeper** (the quest-giver role —
+replaces the hardcoded `GIVER_IDS` constant; any settlement carrying an
+Innkeeper can `offer()` a quest, and `_ensure_giver()`'s "one giver before
+the boss" invariant, already tested, must keep holding). Hand-author size +
+services per existing node to fit its flavor (a "camp" stays a Generalist
+only; "hollow-market"/"caravanserai" read as the two towns) — the agent has
+discretion on the exact assignment as long as sizes strictly nest
+(Generalist ⊂ village's add ⊂ town's add) and at least one Innkeeper survives
+early enough for `_ensure_giver()`. Each NPC gets one short hand-authored
+flavor line shown in their shop tab — flavor only, no branching, not the
+narrative system (still explicitly not being built). UI: the existing
+merchant panel gains a tab per service present, Generalist first; buy/sell
+still routes through the existing `item_price()`/`buy()`/`sell()`.
+
+File ownership: `core/campaign.gd` (POOL merchant entries, new
+service/catalog data, buy/offer logic — but NOT the `BOSS_POOL` `win_rate`
+values, T23 owns those), `scenes/campaign/*` (the shop panel), `core/quest.gd`
+if the giver check is cleaner to move there, `tests/test_campaign.gd` +
+`tests/test_quest.gd`.
+
+## T26 — combat flavor: party/enemy barks (locked 2026-09-10, spec from the user, dispatched now)
+
+One-line, hand-authored bark pools (NOT the narrative system — no branching,
+no state) keyed by trigger: landing a hit, a crit, a kill, dropping to low
+HP, going down, winning the fight. Separate party/foe pools; foe barks reuse
+the T16 faction tags for cheap variety (a goblinoid bark reads differently
+from a bandit's). `combat.gd` fires a bark at the relevant trigger points
+through a small queue/callback the board scene drains each frame — never
+gates or slows combat resolution. Fire probabilistically (~15–25% per
+trigger, not every hit — that's spam), seeded off the combat's own RNG
+stream so headless/test runs stay reproducible; skip entirely under
+`SORCMERC_FAST`/headless, matching how this codebase already gates other
+cosmetic-only systems. UI: a short-lived floating label over the
+combatant's hex sprite (plain Label, no bubble art — matches the project's
+"shapes, not sprites" placeholder aesthetic), a few seconds then cleared.
+
+File ownership: `core/combat.gd` (trigger hookpoints) + a new small bark data
+file, and the combat board's rendering script — READ scenes/game/*.gd and
+scenes/main.gd first to find which one actually owns hex-sprite rendering
+post-T17 rather than assuming; don't touch `core/campaign.gd` (T25's) or
+`core/rules/power.gd` (T23's).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
