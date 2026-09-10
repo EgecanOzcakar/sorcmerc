@@ -9,6 +9,7 @@ const Campaign = preload("res://core/campaign.gd")
 const Party = preload("res://core/party.gd")
 const Quest = preload("res://core/quest.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
+const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 
 const COL_BG := Color("14161c")
 const COL_CARD := Color("1b1f29")
@@ -79,6 +80,10 @@ func _ready() -> void:
 	pbtn.text = "Party"
 	pbtn.pressed.connect(_open_party)
 	footer.add_child(pbtn)
+	var sbtn := Button.new()
+	sbtn.text = "⚙  Settings"
+	sbtn.pressed.connect(func(): SettingsOverlay.toggle(self))
+	footer.add_child(sbtn)
 
 	_refresh()
 
