@@ -198,4 +198,10 @@ graph above. Each phase gated on review.
     fills `result` on fight end — this is T5's hook to launch combat and read
     the outcome back.
 
+- 2026-09-10: Phase 4 dispatched — **T5+T9** (campaign map + quest system,
+  combined; includes a minimal/lite T6 — simple treasure/merchant/rest node
+  resolution, not a full SRD shop economy, which stays future content work)
+  running as one background agent. This is likely the last agent of this
+  session's run; it's the capstone screen exercising the whole game loop.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
