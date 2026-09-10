@@ -148,6 +148,16 @@ func destroy_object(o: Dictionary) -> void:
 		if c.conscious() and Hex.distance(c.pos, o["pos"]) <= 1:
 			_apply_damage(c, dmg, String(h.get("damage_type", "")))
 
+# AoE damage claims destructible terrain caught in it too, not just whoever's
+# standing there — a barrel in a fireball's blast shouldn't survive it just
+# because "smash" is normally its own separate action. duplicate() first:
+# destroy_object mutates the same array objects() hands back.
+func _destroy_in_area(hexes: Array) -> void:
+	for o in objects().duplicate():
+		if int(o.get("hp", 0)) > 0 and o["pos"] in hexes:
+			log.append("The %s is caught in the blast and comes apart." % o["type"])
+			destroy_object(o)
+
 func _roll_initiative() -> void:
 	for c in combatants:
 		c.init_roll = Dice.d20(rng).nat + c.init_mod
@@ -543,6 +553,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 			if c == caster or not c.conscious() or not (c.pos in wedge):
 				continue
 			_spell_hit(c, v, notation, dc)
+		_destroy_in_area(wedge)
 		return {}
 	log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
 	return _spell_hit(target, v, notation, dc)

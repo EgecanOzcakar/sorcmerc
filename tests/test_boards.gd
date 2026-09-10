@@ -25,6 +25,7 @@ func _init() -> void:
 	test_hazards_where_expected()
 	test_barrel_blocks_until_smashed()
 	test_explosive_barrel_burns_its_neighbours()
+	test_cone_spell_destroys_a_barrel_in_its_blast()
 	test_every_combat_node_has_a_board()
 	print("test_boards: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -113,6 +114,23 @@ func test_explosive_barrel_burns_its_neighbours() -> void:
 	check(bystander.hp < hp_before[1], "so does the hex on the other side")
 	check(far.hp == hp_before[2], "someone across the camp does not")
 	check(cb.passable(keg["pos"]), "the keg's hex is clear")
+
+# A barrel doesn't need "smash" specifically to go — any AoE that reaches its
+# hex claims it too, the same way a real explosion would.
+func test_cone_spell_destroys_a_barrel_in_its_blast() -> void:
+	var cb := _combat("merchant-shop")
+	var barrel: Dictionary = cb.objects().filter(func(o): return o["type"] == "barrel")[0]
+	var hero = cb.combatants[0]
+	hero.pos = barrel["pos"] + Vector2i(0, 1)
+	cb.begin_turn_for(hero)
+	var v := {"id": "test-cone", "kind": "spell", "spell": "burning-hands", "label": "Burning Hands",
+		"cost": "action", "slot_level": 0, "shape": "cone", "targeting": "direction",
+		"range_ft": 15, "radius": 2, "dice_count": 3, "dice_sides": 6, "damage_type": "fire",
+		"save": "dex", "save_dc": 13, "half_on_save": true}
+	var dir: Vector2i = barrel["pos"] - hero.pos
+	cb.cast(hero, v, dir)
+	check(cb.object_at(barrel["pos"]).is_empty(), "the barrel in the cone's blast is destroyed")
+	check(cb.passable(barrel["pos"]), "and its hex clears")
 
 func test_every_combat_node_has_a_board() -> void:
 	var Campaign = load("res://core/campaign.gd")
