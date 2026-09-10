@@ -11,7 +11,7 @@ func _init() -> void:
 	var args = OS.get_cmdline_user_args()
 	var sd = int(args[0]) if args.size() > 0 else 1337
 	var rng = RNG.new(sd)
-	var cb = Combat.new(rng, Encounter.all())
+	var cb = Combat.new(rng, Encounter.all(), Encounter.board())
 
 	print("=== The Sunken Shrine   seed=%d ===" % sd)
 	var last_round = 0

@@ -14,6 +14,11 @@ const Presets = preload("res://core/presets.gd")
 const Character = preload("res://core/character.gd")
 const Resolved = preload("res://core/rules/resolved.gd")
 const Dice = preload("res://core/dice.gd")
+const Adapter = preload("res://core/adapter.gd")
+const Combat = preload("res://core/combat.gd")
+const Encounter = preload("res://core/encounter.gd")
+const AI = preload("res://core/ai.gd")
+const RNG = preload("res://core/rng.gd")
 
 var _pass = 0
 var _fail = 0
@@ -46,6 +51,8 @@ func _init() -> void:
 	test_sheet_is_cached_and_retroactive()
 	test_attacks()
 	test_spell_slots()
+	test_adapter()
+	test_sheet_party_sweep()
 
 	print("test_rules: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -612,3 +619,90 @@ func test_spell_slots() -> void:
 	var ats: Dictionary = at.sheet().spellcasting
 	check(int(ats["slots"][0]) == 4 and int(ats["slots"][1]) == 2, "arcane trickster 7 gets 4/2")
 	check(int(ats["save_dc"]) == 14, "AT 7 save DC = 8 + 3 PB + 3 INT")
+
+# --- step 8: adapter.gd --------------------------------------------------
+
+const START := {"vera": Vector2i(2, 0), "pike": Vector2i(2, 2), "ilsa": Vector2i(1, 1),
+	"grull": Vector2i(4, 1), "snik": Vector2i(4, 0), "vess": Vector2i(5, 0), "kritch": Vector2i(7, 1)}
+
+func _sheet_party() -> Array:
+	var out: Array = []
+	for ch in Presets.party():
+		out.append(Adapter.to_combatant(ch, "party", START[ch.id]))
+	return out
+
+func _json_foes() -> Array:
+	var out: Array = []
+	for m in Catalog.all("monsters.json"):
+		out.append(Adapter.from_monster(m, "foe", START[m["id"]]))
+	return out
+
+func test_adapter() -> void:
+	check(Adapter.hexes(30) == 5, "30 ft = 5 hexes")
+	check(Adapter.hexes(5) == 1, "a 5 ft reach still costs a hex")
+	var by_id := {}
+	for c in _sheet_party():
+		by_id[c.id] = c
+
+	var v = by_id["vera"]
+	check(v.ac == 18 and v.max_hp == 28, "adapted Vera: AC 18, HP 28")
+	check(v.atk_bonus == 5 and v.damage == "1d8+3", "adapted Vera swings +5 / 1d8+3")
+	check(v.crit_range == 19, "Improved Critical becomes crit_range 19")
+	check(v.second_wind == "1d10+3" and v.action_surge, "Vera's kit survives the adapter")
+	check(not v.ranged and v.atk_range == 1, "a longsword is melee reach 1")
+
+	var p = by_id["pike"]
+	check(p.sneak_attack == "2d6" and p.cunning_action, "Pike's kit survives the adapter")
+	check(p.ranged and p.atk_range == Adapter.RANGE_CAP,
+		"an 80 ft shortbow clamps to RANGE_CAP %d hexes (got %d)" % [Adapter.RANGE_CAP, p.atk_range])
+	check(p.dex_save == 5, "dex_save aliases saves[\"dex\"]")
+
+	var i = by_id["ilsa"]
+	check(i.save_dc == 13, "adapted Ilsa's save DC is 13")
+	check(i.slots1 == 4 and i.slots2 == 2, "slots1/slots2 alias slots[0]/[1]")
+	check("burning_hands" in i.spells and "sacred_flame" in i.spells and "healing_word" in i.spells,
+		"Ilsa's three legacy spells resolve from the sheet (got %s)" % str(i.spells))
+
+	# monsters need no Character
+	var g = _json_foes()[0]
+	check(g.id == "grull" and g.max_hp == 27 and g.dex_save == 2 and g.surprise_attack == "2d6",
+		"from_monster builds a Combatant off a statblock")
+	check(g.sheet == null, "a monster has no sheet")
+
+	# write_back persists hp and pools, not statuses
+	var ch: Character = Presets.vera()
+	var c = Adapter.to_combatant(ch, "party", Vector2i.ZERO)
+	c.hp = 7
+	c.statuses["prone"] = true
+	Adapter.write_back(c, ch)
+	check(ch.hp_current == 7, "write_back persists HP")
+	check(Adapter.to_combatant(ch, "party", Vector2i.ZERO).hp == 7, "the next fight starts at the carried HP")
+
+# The 200-seed sweep re-run on a sheet-built party. Win-rate is RE-BASELINED here,
+# not asserted equal (spec §11 "the re-tuning cliff"). Numbers at the time of writing:
+#   hand-authored party (tests/test_combat.gd): 186 win / 14 loss, avg 8.8 rounds
+#   sheet-built party (this test):              187 win / 13 loss, avg 8.4 rounds
+# The party got faster (speed 4 -> 5 hexes for Vera and Ilsa), Pike's bow reaches
+# 8 hexes instead of 6, and Pike now has his real +5 DEX save. T8 owns re-tuning.
+func test_sheet_party_sweep() -> void:
+	var wins := 0
+	var rounds := 0
+	var runs := 200
+	for s in range(1, runs + 1):
+		var roster: Array = _sheet_party()
+		roster.append_array(_json_foes())
+		var cb = Combat.new(RNG.new(s), roster, Encounter.board())
+		var guard := 0
+		while not cb.is_over() and guard < 5000:
+			var actor = cb.current()
+			cb.begin_turn()
+			AI.take_turn(cb, actor)
+			cb.end_turn()
+			guard += 1
+		check(cb.outcome() != "ongoing", "seed %d terminates with a winner" % s)
+		rounds += cb.round_num
+		if cb.outcome() == "Victory":
+			wins += 1
+	print("  sheet-built party over %d seeds: %d win / %d loss, avg %.1f rounds" % [
+		runs, wins, runs - wins, float(rounds) / runs])
+	check(wins > 0 and wins < runs, "the sheet-built fight is not a foregone conclusion either way")

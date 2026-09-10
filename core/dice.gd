@@ -13,11 +13,18 @@ static func d20(rng, mode: int = NORMAL) -> Dictionary:
 	return {"nat": nat, "dice": [a, b]}
 
 # "2d6+3" / "d20" / "1d8-1" -> {"count": int, "sides": int, "mod": int}
+# A bare number ("1", "-2") is a flat modifier with no dice — the resolver's plain
+# unarmed strike used to emit one, and a nonsense string must not kill a fight.
 static func parse(notation: String) -> Dictionary:
+	var n := notation.strip_edges().to_lower()
+	if n.is_valid_int():
+		return {"count": 0, "sides": 0, "mod": int(n)}
 	var re = RegEx.new()
 	re.compile("^(\\d*)d(\\d+)([+-]\\d+)?$")
-	var m = re.search(notation.strip_edges().to_lower())
-	assert(m != null, "bad dice notation: " + notation)
+	var m = re.search(n)
+	if m == null:
+		push_error("bad dice notation: " + notation)
+		return {"count": 0, "sides": 0, "mod": 0}
 	var cs = m.get_string(1)
 	var ms = m.get_string(3)
 	return {

@@ -4,7 +4,6 @@ extends RefCounted
 
 const Dice = preload("res://core/dice.gd")
 const Hex = preload("res://core/hex.gd")
-const Encounter = preload("res://core/encounter.gd")
 
 const MAX_ROUNDS := 60  # safety guard; a real fight ends in ~4-6
 
@@ -22,10 +21,10 @@ var action_used = false
 var bonus_used = false
 var _sneak_used_turn = false
 
-func _init(_rng, _combatants: Array, _board: Dictionary = {}) -> void:
+func _init(_rng, _combatants: Array, _board: Dictionary) -> void:
 	rng = _rng
 	combatants = _combatants
-	board = _board if not _board.is_empty() else Encounter.board()
+	board = _board
 	_roll_initiative()
 
 # --- board -----------------------------------------------------------
@@ -40,7 +39,8 @@ func _rough() -> Array:
 	return board.get("rough", [])
 
 func region_at(p: Vector2i) -> String:
-	return Encounter.region_at(p)
+	var f = board.get("region_at")
+	return f.call(p) if f is Callable else ""
 
 func _blockers(mover) -> Array:
 	return combatants.filter(func(c): return c != mover and c.conscious()).map(func(c): return c.pos)
@@ -142,7 +142,7 @@ func in_reach(attacker, target) -> bool:
 	var d := Hex.distance(attacker.pos, target.pos)
 	if attacker.ranged:
 		return d <= attacker.atk_range
-	return d <= Encounter.REACH_MELEE
+	return d <= int(board.get("reach_melee", 1))
 
 func effective_ac(c) -> int:
 	var ac: int = c.ac
@@ -474,7 +474,7 @@ func cast_burning_hands(caster, dir: Vector2i, level := 1) -> void:
 		return
 	action_used = true
 	var notation = "%dd6" % (2 + level)
-	var wedge := Hex.cone(caster.pos, dir, Encounter.CONE_BURNING_HANDS)
+	var wedge := Hex.cone(caster.pos, dir, int(board.get("cone_burning_hands", 2)))
 	log.append("%s casts Burning Hands — a cone of flame, DC %d save." % [caster.cname, caster.save_dc])
 	for c in combatants:
 		if c == caster or not c.conscious() or not (c.pos in wedge):

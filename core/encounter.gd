@@ -34,6 +34,11 @@ static func board() -> Dictionary:
 		"brazier": BRAZIER,
 		"cover": [Vector2i(8, 0), Vector2i(8, 1), Vector2i(8, 2)],  # the Alcove
 		"rough": [Vector2i(4, 1), Vector2i(6, 1)],                  # scorched ground either side of the brazier
+		# The turn resolver reads these off the board rather than preloading this file,
+		# so T7/T8 can hand it a generated encounter instead.
+		"reach_melee": REACH_MELEE,
+		"cone_burning_hands": CONE_BURNING_HANDS,
+		"region_at": region_at,
 	}
 
 static func region_at(p: Vector2i) -> String:

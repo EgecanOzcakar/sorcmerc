@@ -56,7 +56,9 @@ static func pike() -> Character:
 	return ch
 
 static func ilsa() -> Character:
-	# Cleric 3 (Life Domain) — chain shirt + shield, mace. Save DC 13, slots 4/2.
+	# Cleric 3 (Light Domain) — chain shirt + shield, mace. Save DC 13, slots 4/2.
+	# Light Domain because it grants Burning Hands always-prepared, which is the kit
+	# encounter.gd hand-authored for Ilsa.
 	var ch := _base("ilsa", "Ilsa Vane", "human", "acolyte",
 		{"str": 12, "dex": 12, "con": 12, "int": 10, "wis": 14, "cha": 12}, "cleric", 3)
 	ch.decide("asi:background:acolyte:0", {"type": "asi", "allocation": {"wis": 2, "cha": 1}})
@@ -66,8 +68,9 @@ static func ilsa() -> Character:
 	ch.decide("feature-choice:class:cleric:0", {"type": "feature-choice", "optionId": "protector"})
 	ch.decide("spell-choice:class:cleric:0",
 		{"type": "spell-choice", "spellIds": ["sacred-flame", "guidance", "light"]})
-	ch.decide("subclass:class:cleric:0", {"type": "subclass", "subclassId": "lifedomain"})
+	ch.decide("subclass:class:cleric:0", {"type": "subclass", "subclassId": "lightdomain"})
 	ch.equipped = ["mace", "chain-shirt", "shield"]
+	ch.prepared = ["healing-word"]
 	return ch
 
 static func party() -> Array:

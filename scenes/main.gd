@@ -199,7 +199,7 @@ func _new_game(forced := 0) -> void:
 		_seed = forced
 	else:
 		_seed = int(env) if env != "" else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)
-	cb = Combat.new(RNG.new(_seed), Encounter.all())
+	cb = Combat.new(RNG.new(_seed), Encounter.all(), Encounter.board())
 	_logbox.text = ""
 	_logged = 0
 	_last_round = 1

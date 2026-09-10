@@ -21,7 +21,7 @@ var crit_range: int = 20  # Vera crits on 19
 
 # checks / spellcasting
 var save_dc: int = 0
-var dex_save: int = 0
+var saves: Dictionary = {}          # "str" -> total save bonus
 var athletics: int = 0
 var acro: int = 0
 var stealth: int = 0
@@ -35,8 +35,25 @@ var second_wind: String = ""        # e.g. "1d10+3"
 var action_surge: bool = false
 var cunning_action: bool = false
 var spells: Array = []              # "burning_hands" | "healing_word" | "sacred_flame"
-var slots1: int = 0
-var slots2: int = 0
+var attacks: Array = []             # from the sheet; [0] backs atk_bonus/damage
+var features: Dictionary = {}       # feature_id -> true
+var verbs: Array = []               # resolved combat verbs (F3)
+var pools: Dictionary = {}          # pool_id -> {cur, max, regen}
+var spell_ids: Array[String] = []   # castable-now spells
+var slots: Array[int] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+var econ: Dictionary = {}           # per-turn action economy (F3)
+var sheet = null                    # ResolvedCharacter; null for monsters
+
+# Read-only-ish aliases so combat.gd keeps compiling until F3 deletes the call sites.
+var dex_save: int:
+	get: return int(saves.get("dex", 0))
+	set(v): saves["dex"] = v
+var slots1: int:
+	get: return slots[0]
+	set(v): slots[0] = v
+var slots2: int:
+	get: return slots[1]
+	set(v): slots[1] = v
 
 # runtime
 var statuses: Dictionary = {}       # "prone" | "dodging" | "hidden" | "down" | "stable" | "dead" | "reacted"
@@ -69,8 +86,16 @@ func clone() -> RefCounted:
 		"id","cname","team","ac","max_hp","hp","init_mod","speed","pos",
 		"atk_bonus","damage","ranged","atk_range","crit_range","save_dc","dex_save","athletics",
 		"acro","stealth","passive_perception","sneak_attack","nimble_escape",
-		"surprise_attack","second_wind","action_surge","cunning_action","slots1","slots2",
+		"surprise_attack","second_wind","action_surge","cunning_action","sheet",
 	]:
 		c.set(prop, get(prop))
 	c.spells = spells.duplicate()
+	c.saves = saves.duplicate()
+	c.slots = slots.duplicate()
+	c.attacks = attacks.duplicate(true)
+	c.features = features.duplicate()
+	c.verbs = verbs.duplicate(true)
+	c.pools = pools.duplicate(true)
+	c.spell_ids = spell_ids.duplicate()
+	c.econ = econ.duplicate(true)
 	return c
