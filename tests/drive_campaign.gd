@@ -45,6 +45,8 @@ func press(node: Node, label: String) -> bool:
 func _run() -> void:
 	await process_frame
 	await process_frame
+	# T10: a leftover autosave makes the screen ask first. Always start fresh here.
+	press(main, "Begin a new run")
 	var steps := 0
 	while steps < MAX_STEPS and main.run.state in ["picking", "visiting", "combat"]:
 		steps += 1

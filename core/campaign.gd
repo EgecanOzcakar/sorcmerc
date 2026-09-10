@@ -86,6 +86,7 @@ func enter(i: int) -> Dictionary:
 	say("→ %s" % node["title"])
 	if node["kind"] == "treasure":
 		_take_treasure()
+	_autosave()
 	return node
 
 func leave() -> void:
@@ -97,9 +98,15 @@ func leave() -> void:
 	if state == "won":
 		say("The road ends. The party lives.")
 		_conclude()
+	_autosave()
 
 func say(line: String) -> void:
 	log.append(line)
+
+# Every state-mutating method ends here: one rolling slot, overwritten each time.
+# load()d rather than preloaded — campaign_save.gd preloads this file.
+func _autosave() -> void:
+	load("res://core/campaign_save.gd").save(self)
 
 # The run is over, win or lose: the dead come back for free (T10's locked rule).
 func _conclude() -> void:
@@ -115,6 +122,7 @@ func resurrect(dead_id: String, method: String, caster_id: String = "") -> bool:
 	if not Party.resurrect(party, dead_id, method, caster_id):
 		return false
 	say("%s is brought back at 1 HP (−%d gp)." % [dead_id, Party.REVIVE_COST])
+	_autosave()
 	return true
 
 # --- combat ---------------------------------------------------------------
@@ -134,6 +142,7 @@ func finish_combat(result: Dictionary) -> void:
 		state = "lost"
 		say("The party falls. The road ends here.")
 		_conclude()
+		_autosave()
 		return
 	xp += int(result.get("xp", 0))
 	_split_xp(int(result.get("xp", 0)))
@@ -151,6 +160,7 @@ func finish_combat(result: Dictionary) -> void:
 	for line in Quest.record_kills(party, result.get("kills", []), rng):
 		say(line)
 	state = "visiting"   # the after-action panel; leave() moves on
+	_autosave()
 
 # Split evenly among whoever was in the fight; the remainder is dropped.
 func _split_xp(total: int) -> void:
@@ -179,6 +189,7 @@ func rest(kind: String) -> void:
 	for ch in party.party_characters():
 		Adapter.rest(ch, kind)
 	say("The party takes a %s." % kind.replace("-", " "))
+	_autosave()
 
 # --- merchant -------------------------------------------------------------
 
@@ -204,6 +215,7 @@ func buy(item_id: String) -> bool:
 		return false
 	party.stash_add(item_id)
 	say("Bought %s for %d gp." % [item_name(item_id), item_price(item_id)])
+	_autosave()
 	return true
 
 func sell(item_id: String) -> bool:
@@ -214,6 +226,7 @@ func sell(item_id: String) -> bool:
 	var paid := maxi(1, int(item_price(item_id) * SELL_RATE))
 	party.add_gold(paid)
 	say("Sold %s for %d gp." % [item_name(item_id), paid])
+	_autosave()
 	return true
 
 # --- quests (merchants only) ----------------------------------------------
@@ -227,12 +240,14 @@ func accept(quest: Dictionary) -> bool:
 	if node.get("kind", "") != "merchant" or not Quest.accept(party, quest):
 		return false
 	say("Quest accepted: %s" % quest["title"])
+	_autosave()
 	return true
 
 func turn_in(quest: Dictionary) -> bool:
 	if node.get("kind", "") != "merchant" or not Quest.turn_in(party, quest):
 		return false
 	say("Quest complete: %s (+%d gp)" % [quest["title"], int(quest["reward"].get("gold", 0))])
+	_autosave()
 	return true
 
 # --- item lookup & pricing ------------------------------------------------

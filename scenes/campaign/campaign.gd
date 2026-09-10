@@ -6,6 +6,7 @@
 extends Control
 
 const Campaign = preload("res://core/campaign.gd")
+const CampaignSave = preload("res://core/campaign_save.gd")
 const Party = preload("res://core/party.gd")
 const Quest = preload("res://core/quest.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
@@ -36,6 +37,7 @@ var _combat_overlay: Control = null
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	theme = Creator.dark_theme()
+	var injected := party != null
 	if party == null:
 		party = Party.new()
 		for ch in Party.demo_roster():
@@ -86,6 +88,35 @@ func _ready() -> void:
 	footer.add_child(sbtn)
 
 	_refresh()
+	if not injected and CampaignSave.has_save():
+		_offer_continue()
+
+# No main menu exists yet (deliberately out of scope): when the scene is run on its
+# own and an autosave is sitting there, ask once, over the fresh demo run.
+func _offer_continue() -> void:
+	var overlay := PanelContainer.new()
+	overlay.set_anchors_preset(Control.PRESET_CENTER)
+	overlay.add_theme_stylebox_override("panel", _box(COL_CARD, COL_GOLD))
+	add_child(overlay)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	overlay.add_child(col)
+	col.add_child(_caption("A   R U N   I S   S A V E D"))
+	var cont := Button.new()
+	cont.text = "Resume the last run"
+	cont.pressed.connect(func():
+		var saved = CampaignSave.load_latest()
+		overlay.queue_free()
+		if saved == null:
+			return
+		run = saved
+		party = run.party
+		_refresh())
+	col.add_child(cont)
+	var fresh := Button.new()
+	fresh.text = "Begin a new run"
+	fresh.pressed.connect(func(): overlay.queue_free())
+	col.add_child(fresh)
 
 func _column(title: String, body: VBoxContainer, stretch: float) -> Control:
 	var wrap := VBoxContainer.new()
