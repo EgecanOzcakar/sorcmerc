@@ -103,5 +103,63 @@ func _init() -> void:
 	check(cbs[1].pos == Vector2i(1, 0), "to_combatants applies positions in order")
 	check(p.to_combatants([]).size() == chars.size(), "missing positions default, not crash")
 
+	test_death()
 	print("test_party: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# T10: the dead stay benched until a Revivify or a scroll (300 gp either way),
+# and come back for free when the run concludes.
+func test_death() -> void:
+	var p := Party.new()
+	for ch in Party.demo_roster():
+		p.add_member(ch)
+	var ilsa = p.get_member("ilsa")
+	var vera = p.get_member("vera")
+	ilsa.prepared.append(Party.REVIVE_SPELL)
+	for _i in 2:                      # level 5: the first level with 3rd-level slots
+		ilsa.add_level("cleric")
+
+	vera.dead = true
+	p.bench("vera")
+	check(not p.activate("vera"), "a dead member cannot be activated")
+	check(not p.is_active("vera"), "the refusal changed nothing")
+	check(not p.swap("ilsa", "vera"), "a dead member cannot be swapped in either")
+
+	check(not Party.can_resurrect(p), "no gold, no resurrection")
+	p.add_gold(1000)
+	check(Party.resurrection_caster(p) == "ilsa", "Ilsa knows Revivify and has a 3rd+ slot")
+	check(not Party.has_resurrection_scroll(p), "no scroll in the stash")
+	check(Party.can_resurrect(p), "a caster plus 300 gp is enough")
+	check(not Party.resurrect(p, "ilsa", "spell"), "cannot resurrect the living")
+	check(not Party.resurrect(p, "vera", "prayer"), "unknown methods are refused")
+	check(not Party.resurrect(p, "vera", "scroll"), "cannot read a scroll you do not have")
+	check(p.gold == 1000 and vera.dead, "every refusal left the state alone")
+
+	check(Party.resurrect(p, "vera", "spell", "ilsa"), "Revivify raises the dead")
+	check(not vera.dead and vera.hp_current == 1, "back at 1 HP")
+	check(p.gold == 1000 - Party.REVIVE_COST, "300 gp paid")
+	check(not p.is_active("vera"), "the raised stay benched until reactivated")
+	check(p.activate("vera"), "and can now be reactivated")
+	var spent := 0
+	for i in range(Party.REVIVE_SLOT - 1, ilsa.slots_used.size()):
+		spent += int(ilsa.slots_used[i])
+	check(spent == 1, "one slot of level 3+ was spent")
+
+	# the scroll path
+	vera.dead = true
+	p.bench("vera")
+	p.stash_add(Party.REVIVE_SCROLL)
+	check(Party.has_resurrection_scroll(p), "scroll in the stash")
+	check(Party.resurrect(p, "vera", "scroll"), "the scroll raises the dead")
+	check(not vera.dead and p.stash_count(Party.REVIVE_SCROLL) == 0, "the scroll is consumed")
+	check(p.gold == 1000 - 2 * Party.REVIVE_COST, "the scroll costs 300 gp too")
+
+	# end of run: everyone comes back free
+	vera.dead = true
+	ilsa.dead = true
+	ilsa.hp_current = 0
+	var gold: int = p.gold
+	Party.auto_revive_all(p)
+	check(not vera.dead and not ilsa.dead, "the run's end revives everyone")
+	check(ilsa.hp_current == 1, "revived at 1 HP, not full")
+	check(p.gold == gold, "the free revival costs nothing")

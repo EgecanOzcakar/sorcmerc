@@ -48,7 +48,8 @@ func is_active(id: String) -> bool:
 	return id in active
 
 func activate(id: String) -> bool:
-	if is_active(id) or get_member(id) == null or active.size() >= MAX_ACTIVE:
+	var ch = get_member(id)
+	if is_active(id) or ch == null or ch.dead or active.size() >= MAX_ACTIVE:
 		return false
 	active.append(id)
 	return true
@@ -62,7 +63,8 @@ func bench(id: String) -> bool:
 # Swap a benched member in for an active one (the UI's slot click).
 func swap(active_id: String, bench_id: String) -> bool:
 	var i := active.find(active_id)
-	if i < 0 or is_active(bench_id) or get_member(bench_id) == null:
+	var ch = get_member(bench_id)
+	if i < 0 or is_active(bench_id) or ch == null or ch.dead:
 		return false
 	active[i] = bench_id
 	return true
@@ -121,6 +123,93 @@ func stash_remove(item_id: String, quantity := 1) -> bool:
 				stash.erase(e)
 			return true
 	return false
+
+# --- death & resurrection -------------------------------------------------
+# 300 gp either way (Revivify's diamond, abstracted to coin — no material item).
+# Statics taking the party, so a scene can ask "can I?" without holding a member.
+
+const REVIVE_SPELL := "revivify"
+const REVIVE_SCROLL := "scroll-of-resurrection"
+const REVIVE_COST := 300
+const REVIVE_SLOT := 3        # Revivify is 3rd level: any free slot of 3+ pays for it
+
+static func _knows(ch, spell_id: String) -> bool:
+	if spell_id in ch.prepared:
+		return true
+	var sc: Dictionary = ch.sheet().spellcasting
+	if sc.is_empty():
+		return false
+	if spell_id in sc.get("always_prepared", []) or spell_id in sc.get("cantrips", []):
+		return true
+	for k in sc.get("known", []):
+		if String(k["id"]) == spell_id:
+			return true
+	return false
+
+# Lowest free slot level >= REVIVE_SLOT (1-based), or 0 when there is none.
+static func _free_slot(ch) -> int:
+	var full: Array = Adapter._full_slots(ch.sheet())
+	for i in range(REVIVE_SLOT - 1, full.size()):
+		var used: int = int(ch.slots_used[i]) if i < ch.slots_used.size() else 0
+		if int(full[i]) - used > 0:
+			return i + 1
+	return 0
+
+# Who can cast it right now: active, alive, knows it, has the slot. "" if nobody.
+static func resurrection_caster(party) -> String:
+	for ch in party.party_characters():
+		if not ch.dead and _knows(ch, REVIVE_SPELL) and _free_slot(ch) > 0:
+			return ch.id
+	return ""
+
+static func has_resurrection_scroll(party) -> bool:
+	return party.stash_count(REVIVE_SCROLL) > 0
+
+static func can_resurrect(party) -> bool:
+	return party.gold >= REVIVE_COST \
+		and (resurrection_caster(party) != "" or has_resurrection_scroll(party))
+
+# method: "spell" (spends caster_id's slot) or "scroll" (consumes the stash item).
+# Refuses and changes nothing unless the whole cost is payable.
+static func resurrect(party, dead_id: String, method: String, caster_id: String = "") -> bool:
+	var target = party.get_member(dead_id)
+	if target == null or not target.dead or party.gold < REVIVE_COST:
+		return false
+	var caster = null
+	var slot := 0
+	if method == "spell":
+		caster = party.get_member(caster_id if caster_id != "" else resurrection_caster(party))
+		if caster == null or caster.dead or not _knows(caster, REVIVE_SPELL):
+			return false
+		slot = _free_slot(caster)
+		if slot == 0:
+			return false
+	elif method == "scroll":
+		if not has_resurrection_scroll(party):
+			return false
+	else:
+		return false
+
+	party.spend_gold(REVIVE_COST)
+	if method == "spell":
+		while caster.slots_used.size() < slot:
+			caster.slots_used.append(0)
+		caster.slots_used[slot - 1] = int(caster.slots_used[slot - 1]) + 1
+		caster.dirty()
+	else:
+		party.stash_remove(REVIVE_SCROLL, 1)
+	target.dead = false
+	target.hp_current = 1
+	target.dirty()
+	return true
+
+# End of a run: death is a within-run cost, not permanent. Leaves the benching alone.
+static func auto_revive_all(party) -> void:
+	for ch in party.roster:
+		if ch.dead:
+			ch.dead = false
+			ch.hp_current = maxi(1, ch.hp_current)
+			ch.dirty()
 
 # --- display --------------------------------------------------------------
 

@@ -109,6 +109,10 @@ func _refresh() -> void:
 	_header.text = "»   S T A G E   %d / %d   ·   %d gp   ·   %d XP   «" % [
 		mini(run.stage + 1, Campaign.STAGES.size()), Campaign.STAGES.size(), party.gold, run.xp]
 
+	var fallen: Array = party.roster.filter(func(ch): return ch.dead)
+	if not fallen.is_empty():
+		_body.add_child(_fallen_panel(fallen))
+
 	match run.state:
 		"picking":
 			for i in run.options().size():
@@ -213,6 +217,35 @@ func _merchant_ui(col: VBoxContainer) -> void:
 		b.text = "Turn in:  %s   (+%d gp)" % [q["title"], int(q["reward"].get("gold", 0))]
 		b.pressed.connect(func(): run.turn_in(q); _refresh())
 		col.add_child(b)
+
+# The fallen: Revivify from an active caster, or burn a Scroll of Resurrection.
+# 300 gp either way; both bring the target back benched at 1 HP.
+func _fallen_panel(fallen: Array) -> Control:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _box(COL_CARD, COL_FOE))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	panel.add_child(col)
+	col.add_child(_caption("T H E   F A L L E N   ·   %d gp to raise one" % Party.REVIVE_COST))
+	var caster := Party.resurrection_caster(party)
+	var scroll := Party.has_resurrection_scroll(party)
+	for ch in fallen:
+		col.add_child(_dim("%s lies dead." % ch.cname))
+		if caster != "":
+			var b := Button.new()
+			b.text = "Revivify  %s   (%s casts, −%d gp)" % [ch.cname, caster, Party.REVIVE_COST]
+			b.disabled = not Party.can_resurrect(party)
+			b.pressed.connect(func(): run.resurrect(ch.id, "spell", caster); _refresh())
+			col.add_child(b)
+		if scroll:
+			var b2 := Button.new()
+			b2.text = "Read the Scroll of Resurrection over %s   (−%d gp)" % [ch.cname, Party.REVIVE_COST]
+			b2.disabled = not Party.can_resurrect(party)
+			b2.pressed.connect(func(): run.resurrect(ch.id, "scroll"); _refresh())
+			col.add_child(b2)
+		if caster == "" and not scroll:
+			col.add_child(_dim("No one can raise them — no Revivify, no scroll."))
+	return panel
 
 func _end_panel() -> Control:
 	var panel := PanelContainer.new()

@@ -246,7 +246,7 @@ numerically, via `exhaustionPenalty()`). All other conditions are name + prose o
 }
 ```
 
-## magic-items.json — array, 262 records
+## magic-items.json — array, 263 records
 
 ```
 {
@@ -260,6 +260,10 @@ numerically, via `exhaustionPenalty()`). All other conditions are name + prose o
   "structuredBonuses": null           // GAP — always null; effects are prose only
 }
 ```
+
+One entry is game-authored rather than exported: `scroll-of-resurrection` (rare,
+`wondrous-item`) — the consumable half of T10's resurrection rule. Re-running the
+F1 export must keep it.
 
 ## skills.json — object keyed by id, 18 entries
 

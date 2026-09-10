@@ -19,16 +19,17 @@ const RNG = preload("res://core/rng.gd")
 const STAGES := [
 	[
 		{"id": "road-ambush", "kind": "combat", "title": "Ambush on the road",
-			"desc": "Something is moving in the gorse. Fight through.", "difficulty": "normal"},
+			"desc": "Something is moving in the gorse. Fight through.", "difficulty": "normal",
+				"theme": "forest-clearing"},
 		{"id": "wayside-camp", "kind": "merchant", "title": "The wayside camp",
 			"desc": "A pedlar, a fire, and work for anyone with a sword."},
 	],
 	[
 		{"id": "warband-camp", "kind": "combat", "title": "The warband camp (hard)",
 			"desc": "More of them, and they are awake — but the camp is full of coin.",
-			"difficulty": "hard", "gold": 90},
+			"difficulty": "hard", "gold": 90, "theme": "goblin-camp"},
 		{"id": "ridge-path", "kind": "combat", "title": "Skirt the ridge",
-			"desc": "The long way round. Fewer of them.", "difficulty": "easy"},
+			"desc": "The long way round. Fewer of them.", "difficulty": "easy", "theme": "goblin-camp"},
 		{"id": "milestone-camp", "kind": "rest", "title": "Camp by the milestone",
 			"desc": "Cold, dry, and safe enough to sleep."},
 	],
@@ -40,7 +41,7 @@ const STAGES := [
 	],
 	[
 		{"id": "warrens", "kind": "combat", "title": "Into the warrens",
-			"desc": "Low tunnels and too many corners.", "difficulty": "normal"},
+			"desc": "Low tunnels and too many corners.", "difficulty": "normal", "theme": "frozen-cave"},
 		{"id": "falls-hoard", "kind": "treasure", "title": "The hoard behind the falls",
 			"desc": "Wet, cold, and worth the swim.", "gold": 110, "item_id": "chain-shirt"},
 		{"id": "falls-camp", "kind": "rest", "title": "Camp behind the falls",
@@ -49,7 +50,7 @@ const STAGES := [
 	[
 		{"id": "sunken-shrine", "kind": "combat", "title": "THE SUNKEN SHRINE",
 			"desc": "Whatever has been calling them lives down here.",
-			"difficulty": "hard", "boss": true, "gold": 250},
+			"difficulty": "hard", "boss": true, "gold": 250, "theme": "sunken-shrine"},
 	],
 ]
 
@@ -94,16 +95,35 @@ func leave() -> void:
 	state = "won" if stage >= STAGES.size() else "picking"
 	if state == "won":
 		say("The road ends. The party lives.")
+		_conclude()
 
 func say(line: String) -> void:
 	log.append(line)
+
+# The run is over, win or lose: the dead come back for free (T10's locked rule).
+func _conclude() -> void:
+	var Party = load("res://core/party.gd")
+	for ch in party.roster:
+		if ch.dead:
+			say("%s is carried home and revived." % ch.id)
+	Party.auto_revive_all(party)
+
+# Revivify or a Scroll of Resurrection, 300 gp either way. The scene's button.
+func resurrect(dead_id: String, method: String, caster_id: String = "") -> bool:
+	var Party = load("res://core/party.gd")
+	if not Party.resurrect(party, dead_id, method, caster_id):
+		return false
+	say("%s is brought back at 1 HP (−%d gp)." % [dead_id, Party.REVIVE_COST])
+	return true
 
 # --- combat ---------------------------------------------------------------
 
 # Quest bias goes in here: unfulfilled targets show up more often from now on.
 func combat_spec() -> Dictionary:
-	return Scaler.roster_for(party.party_characters(), node.get("difficulty", "normal"),
+	var spec: Dictionary = Scaler.roster_for(party.party_characters(), node.get("difficulty", "normal"),
 		Quest.bias(party))
+	spec["theme"] = node.get("theme", "sunken-shrine")   # T11: which board this fight is on
+	return spec
 
 # `result` is Encounter.resolve_outcome()'s dict, straight off scenes/main.gd.
 func finish_combat(result: Dictionary) -> void:
@@ -112,6 +132,7 @@ func finish_combat(result: Dictionary) -> void:
 	if result.get("outcome", "") != "Victory":
 		state = "lost"
 		say("The party falls. The road ends here.")
+		_conclude()
 		return
 	xp += int(result.get("xp", 0))
 	_split_xp(int(result.get("xp", 0)))
@@ -121,8 +142,11 @@ func finish_combat(result: Dictionary) -> void:
 	say("Victory. +%d XP, +%d gold." % [int(result.get("xp", 0)),
 		int(result.get("gold", 0)) + int(node.get("gold", 0))])
 	for id in result.get("deaths", []):
+		var fallen = party.get_member(id)
+		if fallen != null:
+			fallen.dead = true
 		if party.bench(id):
-			say("%s is carried off the field and sits out the rest of the run." % id)
+			say("%s falls. Only a resurrection brings them back before the road ends." % id)
 	for line in Quest.record_kills(party, result.get("kills", []), rng):
 		say(line)
 	state = "visiting"   # the after-action panel; leave() moves on

@@ -95,6 +95,8 @@ func test_combat() -> void:
 	check(c.party.gold == gold + 40, "gold is banked on the party")
 	check(c.party.stash_count("dagger") == 1, "loot lands in the stash")
 	check(not c.party.is_active("pike"), "the dead are benched")
+	check(c.party.get_member("pike").dead, "the dead are flagged dead")
+	check(not c.party.activate("pike"), "and cannot walk back into the party")
 	check(Quest.get_quest(c.party, "kritch-bounty")["progress"] == 2, "kills feed quest progress")
 	check(c.state == "visiting", "after the fight the node shows its after-action panel")
 	c.leave()
@@ -116,6 +118,37 @@ func test_defeat() -> void:
 	check(c.state == "lost", "a defeat ends the run")
 	c.leave()
 	check(c.state == "lost" and c.stage == 0, "a lost run does not advance")
+
+	# Death is a within-run cost: a concluded run (won or lost) revives everyone free.
+	var c2 := _campaign()
+	c2.enter(_find(c2, "combat"))
+	c2.finish_combat({"outcome": "Victory", "xp": 0, "gold": 0, "loot": [], "deaths": ["vera"],
+		"kills": []})
+	check(c2.party.get_member("vera").dead, "vera died mid-run")
+	c2.stage = Campaign.STAGES.size() - 1
+	c2.state = "visiting"
+	c2.leave()
+	check(c2.state == "won" and not c2.party.get_member("vera").dead,
+		"winning the run revives the fallen for free")
+	var c3 := _campaign()
+	c3.enter(_find(c3, "combat"))
+	c3.party.get_member("pike").dead = true
+	c3.finish_combat({"outcome": "Defeat", "xp": 0, "gold": 0, "loot": [], "deaths": [], "kills": []})
+	check(not c3.party.get_member("pike").dead, "losing the run revives the fallen too")
+
+	# The resurrection path through the campaign.
+	var c4 := _campaign()
+	var ilsa = c4.party.get_member("ilsa")
+	ilsa.prepared.append(Party.REVIVE_SPELL)
+	for _i in 2:
+		ilsa.add_level("cleric")
+	c4.enter(_find(c4, "combat"))
+	c4.finish_combat({"outcome": "Victory", "xp": 0, "gold": 0, "loot": [], "deaths": ["vera"],
+		"kills": []})
+	check(not c4.resurrect("vera", "spell"), "no gold, no resurrection")
+	c4.party.add_gold(400)
+	check(c4.resurrect("vera", "spell", "ilsa"), "the campaign can raise the fallen")
+	check(not c4.party.get_member("vera").dead and c4.party.gold == 100, "raised, and 300 gp poorer")
 
 # --- rest / merchant ------------------------------------------------------
 
