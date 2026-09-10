@@ -2,11 +2,21 @@
 # All rules live in core/. Built programmatically so it needs no editor work.
 extends Control
 
-const RNG = preload("res://core/rng.gd")
-const Combat = preload("res://core/combat.gd")
 const AI = preload("res://core/ai.gd")
 const Encounter = preload("res://core/encounter.gd")
+const Scaler = preload("res://core/scaler.gd")
+const Party = preload("res://core/party.gd")
+const Presets = preload("res://core/presets.gd")
 const Hex = preload("res://core/hex.gd")
+
+# What T5 injects before the scene runs: the live party, the node's spec (empty ->
+# the scaler sizes one) and its difficulty. `result` is resolve_outcome() once the
+# fight is over — deaths / xp / gold / loot for the campaign layer.
+var party                       # core/party.gd; a Presets demo party when null
+var spec: Dictionary = {}
+var difficulty := "normal"
+var result: Dictionary = {}
+var _own_party := false
 
 const HEX_BASE := 34.0
 const REVEAL_PAUSE := 0.75  # beat to read the attack roll (0 under SORCMERC_FAST)
@@ -197,7 +207,18 @@ func _new_game(forced := 0) -> void:
 		_seed = forced
 	else:
 		_seed = int(env) if env != "" else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)
-	cb = Combat.new(RNG.new(_seed), Encounter.all(), Encounter.board())
+	if _own_party:
+		party = null    # a demo party is rebuilt per fight, so replays start fresh
+	if party == null:   # standalone: the three presets
+		_own_party = true
+		party = Party.new()
+		for ch in Presets.party():
+			party.add_member(ch)
+	var chars: Array = party.party_characters()
+	var sp: Dictionary = (spec if not spec.is_empty() else Scaler.roster_for(chars, difficulty)).duplicate(true)
+	sp["seed"] = _seed
+	result = {}
+	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS), Encounter.board())
 	_logbox.text = ""
 	_logged = 0
 	_last_round = 1
@@ -488,6 +509,7 @@ func _flush_log() -> void:
 		_logged += 1
 
 func _finish() -> void:
+	result = Encounter.resolve_outcome(cb, party)   # writes HP/pools/slots back to the party
 	var res: String = cb.outcome()
 	_flush_log()
 	_refresh()
@@ -510,6 +532,8 @@ func _finish() -> void:
 	_logbox.append_text("\n[b][color=%s]%s in %d rounds.[/color][/b]\n" % [
 		"#7dff9d" if res == "Victory" else "#ff5a4a", res, cb.round_num,
 	])
+	if res == "Victory":
+		_logbox.append_text("[color=#c8a75a]+%d XP, +%d gold.[/color]\n" % [result["xp"], result["gold"]])
 
 func _process(dt: float) -> void:
 	if _board:
