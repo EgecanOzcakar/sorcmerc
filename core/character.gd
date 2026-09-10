@@ -12,6 +12,8 @@ var choices: Dictionary = {}            # choice_key -> decision
 var feats: Array[String] = []
 var equipped: Array[String] = []        # weapon/armor ids worn or wielded
                                         # everything unequipped lives in Party.stash
+var offhand: String = ""                # id of the light weapon wielded off-hand;
+                                        # also present in `equipped` (T24)
 var pools: Dictionary = {}              # pool_id -> current uses
 var slots_used: Array[int] = []         # spell slots spent, per level; cleared by a long rest
 var hp_current: int = -1                # -1 = full
@@ -21,6 +23,7 @@ var dead: bool = false                  # died in a fight; benched until revived
 
 const Resolve = preload("res://core/rules/resolve.gd")
 const Resolved = preload("res://core/rules/resolved.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 var _sheet = null
 var _dirty := true
@@ -55,4 +58,23 @@ func add_level(cid: String, hp_roll: int = -1) -> void:
 	_dirty = true
 
 func dirty() -> void:
+	_dirty = true
+
+# Two-weapon fighting (T24): only a Light weapon may be wielded off-hand. Equips it
+# too if it isn't already worn, so both hands resolve into `sheet().attacks`.
+# ponytail: no Dual Wielder feat — that's the one thing that lifts the Light gate.
+func is_light(item_id: String) -> bool:
+	return "light" in Catalog.weapon(item_id).get("properties", [])
+
+func equip_offhand(item_id: String) -> bool:
+	if not is_light(item_id):
+		return false
+	if not item_id in equipped:
+		equipped.append(item_id)
+	offhand = item_id
+	_dirty = true
+	return true
+
+func unequip_offhand() -> void:
+	offhand = ""
 	_dirty = true

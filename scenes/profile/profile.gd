@@ -418,6 +418,14 @@ func _item_row(v: VBoxContainer, iid: String, def: Dictionary, kind: String, qty
 		return
 	if kind == "unknown":
 		return
+	# T24: a Light weapon already in hand can be moved to the off-hand slot.
+	if equipped and kind == "weapon" and _ch.is_light(iid):
+		var o := Button.new()
+		o.text = "Main hand" if _ch.offhand == iid else "Off-hand"
+		o.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+		o.pressed.connect(toggle_offhand.bind(iid))
+		h.add_child(o)
+		_fields["offhand_btn_" + iid] = o
 	var b := Button.new()
 	b.text = "Unequip" if equipped else "Equip"
 	b.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
@@ -425,12 +433,22 @@ func _item_row(v: VBoxContainer, iid: String, def: Dictionary, kind: String, qty
 	h.add_child(b)
 	_fields["equip_btn_" + iid] = b
 
+# Public for the same reason toggle_equip is: tests drive it without a button.
+func toggle_offhand(item_id: String) -> void:
+	if _ch.offhand == item_id:
+		_ch.unequip_offhand()
+	else:
+		_ch.equip_offhand(item_id)
+	_render()
+
 # Public so tests can drive it without a button press. Moves one unit between the
 # character's `equipped` and the party's shared stash. Refuses to equip an item that
 # is still unidentified — the guard lives here so every caller is covered.
 func toggle_equip(item_id: String) -> void:
 	if item_id in _ch.equipped:
 		_ch.equipped.erase(item_id)
+		if _ch.offhand == item_id:
+			_ch.unequip_offhand()
 		party().stash_add(item_id)
 	elif party().stash_count(item_id, true) > 0 and party().stash_remove(item_id):
 		_ch.equipped.append(item_id)

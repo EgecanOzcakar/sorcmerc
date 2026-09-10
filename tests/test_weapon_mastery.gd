@@ -7,6 +7,8 @@ const Dice = preload("res://core/dice.gd")
 const Combat = preload("res://core/combat.gd")
 const Combatant = preload("res://core/combatant.gd")
 const Hex = preload("res://core/hex.gd")
+const Adapter = preload("res://core/adapter.gd")
+const Presets = preload("res://core/presets.gd")
 
 var _pass = 0
 var _fail = 0
@@ -27,6 +29,10 @@ func _init() -> void:
 	test_topple()
 	test_vex()
 	test_unknown_mastery_does_nothing()
+	test_offhand_must_be_light()
+	test_offhand_attack_drops_the_ability_mod()
+	test_nick_folds_the_offhand_swing_into_the_attack_action()
+	test_no_offhand_no_verb()
 	print("test_weapon_mastery: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -166,3 +172,67 @@ func test_unknown_mastery_does_nothing() -> void:
 	var hp: int = b.hp
 	_swing(cb, a, b, false)
 	check(b.hp == hp, "and nothing to a miss")
+
+# --- two-weapon fighting + Nick (T24) ---------------------------------
+
+func _verb(c, id: String) -> Dictionary:
+	for v in c.verbs:
+		if v["id"] == id:
+			return v
+	return {}
+
+# A dual-wielder and a target beside them, built through the real resolve path.
+func _dual(ch, offhand: String) -> Array:
+	check(ch.equip_offhand(offhand), "%s can be wielded off-hand" % offhand)
+	var a = Adapter.to_combatant(ch, "party", Vector2i(2, 1))
+	var b = _guy("ogre", "foe", Vector2i(3, 1))
+	var cb = Combat.new(RNG.new(7), [a, b], _board())
+	cb.begin_turn_for(a)
+	cb.begin_turn_for(b)
+	return [cb, a, b]
+
+func test_offhand_must_be_light() -> void:
+	var ch = Presets.vera()
+	check(not ch.equip_offhand("greatsword"), "a non-light weapon is refused off-hand")
+	check(ch.offhand == "", "and nothing is equipped")
+	check(ch.equip_offhand("dagger"), "a light weapon is accepted")
+	check("dagger" in ch.equipped, "equipping it off-hand also puts it in hand")
+
+func test_offhand_attack_drops_the_ability_mod() -> void:
+	var d = _dual(Presets.vera(), "dagger"); var cb: Combat = d[0]; var a = d[1]; var b = d[2]
+	check(a.attacks[0]["id"] == "longsword", "the main hand stays attacks[0]")
+	var v := _verb(a, "offhand_attack")
+	check(not v.is_empty(), "dual-wielding grants an off-hand attack verb")
+	check(v["damage"] == "1d4", "no ability modifier on the off-hand damage (%s)" % v.get("damage", ""))
+	check(v["cost"] == "bonus", "without Nick it costs the bonus action")
+
+	a.atk_bonus = 40
+	v["to_hit"] = 40
+	var r = cb.perform(a, v, b)
+	check(r.get("hit", false), "the off-hand swing lands")
+	check(int(a.econ["bonus"]) == 0, "and spends the bonus action")
+	check(int(a.econ["action"]) == 1, "leaving the Attack action untouched")
+	check(cb.available(a).any(func(x): return x["id"] == "attack"), "which is still offered")
+
+func test_nick_folds_the_offhand_swing_into_the_attack_action() -> void:
+	var ch = Presets.pike()
+	ch.equipped.assign(["dagger", "studded-leather"])   # dagger carries Nick, and Pike knows it
+	var d = _dual(ch, "shortsword"); var cb: Combat = d[0]; var a = d[1]; var b = d[2]
+	var v := _verb(a, "offhand_attack")
+	check(not v.is_empty(), "the off-hand verb is there")
+	check(v["cost"] == "free", "Nick makes the off-hand swing cost nothing")
+
+	a.atk_bonus = 40
+	v["to_hit"] = 40
+	cb.perform(a, v, b)
+	check(int(a.econ["bonus"]) == 1, "the bonus action is still free after a Nick swing")
+	check(int(a.econ["action"]) == 1, "and so is the action")
+	check(not cb.available(a).any(func(x): return x["id"] == "offhand_attack"),
+		"but only once per turn")
+	cb.begin_turn_for(a)
+	check(cb.available(a).any(func(x): return x["id"] == "offhand_attack"),
+		"and it comes back next turn")
+
+func test_no_offhand_no_verb() -> void:
+	var a = Adapter.to_combatant(Presets.vera(), "party", Vector2i(2, 1))
+	check(_verb(a, "offhand_attack").is_empty(), "one weapon, no off-hand verb")

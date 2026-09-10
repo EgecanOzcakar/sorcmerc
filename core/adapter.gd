@@ -4,6 +4,7 @@ extends RefCounted
 
 const Combatant = preload("res://core/combatant.gd")
 const Effects = preload("res://core/rules/effects.gd")
+const PassGear = preload("res://core/rules/pass_gear.gd")
 
 # The two calibration knobs. Feet are the rules' unit; hexes are the board's.
 # Changing either re-tunes every encounter — re-run the seed sweep in
@@ -108,8 +109,9 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 	c.speed = hexes(int(s.speeds.get("walk", 30)))
 
 	c.attacks = s.attacks.duplicate(true)
-	if not s.attacks.is_empty():
-		var a: Dictionary = s.attacks[0]
+	var offhand := _take_offhand(c.attacks, ch.offhand)   # main hand must stay attacks[0]
+	if not c.attacks.is_empty():
+		var a: Dictionary = c.attacks[0]
 		c.atk_bonus = int(a["to_hit"])
 		c.damage = a["notation"]
 		c.ranged = a["range"] == "ranged"
@@ -146,8 +148,52 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 
 	c.verbs = Effects.verbs_for(s)
 	c.verbs.append_array(Effects.spell_verbs_for(s, castable, full_slots))
+	var twf := _offhand_verb(offhand, c.attacks, s)
+	if not twf.is_empty():
+		c.verbs.append(twf)
 	_finish_verbs(c, ch.pools)
 	return c
+
+# --- two-weapon fighting (T24) ----------------------------------------
+#
+# `attacks` already carries one entry per equipped weapon (pass_gear.gd); the
+# off-hand one just has to stop being attacks[0], which is the main hand
+# everywhere else in combat.gd. Returns it (and leaves it last), {} if there is
+# no second weapon to swing.
+const TWF_STYLE := "two-weapon-fighting"
+
+static func _take_offhand(attacks: Array, offhand_id: String) -> Dictionary:
+	if offhand_id == "":
+		return {}
+	for i in attacks.size():
+		if String(attacks[i]["id"]) == offhand_id:
+			var a: Dictionary = attacks[i]
+			attacks.remove_at(i)
+			attacks.append(a)
+			return a
+	return {}
+
+# The 2024 rule: the off-hand swing drops the ability modifier from its damage,
+# unless the Two-Weapon Fighting style puts it back. Nick (main hand) makes the
+# swing free and part of the Attack action instead of a bonus action.
+static func _offhand_verb(offhand: Dictionary, attacks: Array, s) -> Dictionary:
+	if offhand.is_empty() or attacks.is_empty():
+		return {}
+	var main: Dictionary = attacks[0]
+	if String(main["id"]) == String(offhand["id"]) or String(main["id"]) == "unarmed-strike":
+		return {}   # no main-hand weapon: not dual-wielding
+	var dmg := int(offhand["dmg_bonus"]) if TWF_STYLE in s.fighting_styles else 0
+	var nick: bool = String(main.get("mastery", "")) == "nick"
+	var reach := 1
+	if offhand["range"] == "ranged":
+		reach = mini(RANGE_CAP, hexes(int(offhand["normal_ft"])))
+	return {
+		"id": "offhand_attack", "label": "Off-hand: %s" % offhand["name"],
+		"kind": "offhand_attack", "cost": "free" if nick else "bonus",
+		"once_per": "turn", "targeting": "enemy", "range": reach,
+		"to_hit": int(offhand["to_hit"]),
+		"damage": PassGear.notation(int(offhand["dice_count"]), int(offhand["dice_sides"]), dmg),
+	}
 
 # Feet -> hexes for every verb, and a pool for the features the export grants none
 # (Second Wind, Action Surge — effects.gd keys those on the feature id).

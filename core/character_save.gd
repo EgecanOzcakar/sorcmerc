@@ -58,6 +58,7 @@ static func to_dict(ch) -> Dictionary:
 		"choices": ch.choices.duplicate(true),
 		"feats": ch.feats.duplicate(),
 		"equipped": ch.equipped.duplicate(),
+		"offhand": ch.offhand,
 		"pools": ch.pools.duplicate(),
 		"hp_current": ch.hp_current,
 		"prepared": ch.prepared.duplicate(),
@@ -90,6 +91,7 @@ static func from_dict(d: Dictionary):
 				alloc[a] = int(alloc[a])
 	ch.feats.assign(d.get("feats", []))
 	ch.equipped.assign(d.get("equipped", []))
+	ch.offhand = String(d.get("offhand", ""))
 	for k in d.get("pools", {}):
 		ch.pools[k] = int(d["pools"][k])
 	ch.hp_current = int(d.get("hp_current", -1))

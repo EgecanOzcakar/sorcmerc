@@ -6,6 +6,9 @@ const Dice = preload("res://core/dice.gd")
 const Hex = preload("res://core/hex.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Ach = preload("res://core/achievements.gd")
+const Barks = preload("res://core/barks.gd")
+const Rng = preload("res://core/rng.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 const FT_PER_HEX := 6  # adapter.gd's convention
 
@@ -34,11 +37,36 @@ var log: Array[String] = []
 # messy one; "down" itself is erased the moment someone gets back up.
 var downed: Dictionary = {}
 
+# T26 barks: a cosmetic side channel. Entries are {"id": combatant id, "text": line};
+# the board scene drains it each frame. Nothing in this file reads it back.
+var barks: Array = []
+const BARK_QUEUE_MAX := 8   # nobody draining (headless, campaign) must not grow it
+var _bark_rng = null         # null under SORCMERC_FAST — barks skipped entirely
+
 func _init(_rng, _combatants: Array, _board: Dictionary) -> void:
 	rng = _rng
 	combatants = _combatants
 	board = _board
+	# Own stream, seeded off the combat seed: reproducible per seed, and a fast/headless
+	# run (which skips barks) still rolls the *fight* identically to a played one.
+	if OS.get_environment("SORCMERC_FAST") == "":
+		_bark_rng = Rng.new((rng.seed_value ^ 0x5EEDBA12) & 0xFFFFFFFF)
 	_roll_initiative()
+
+# Fire a bark for `c` on `trigger` ("hit" | "crit" | "kill" | "low_hp" | "down" |
+# "victory"). Cosmetic: never gates, never touches the combat RNG, never fails loudly.
+func bark(c, trigger: String) -> void:
+	if _bark_rng == null or c == null:
+		return
+	var faction := ""
+	if c.team != "party" and c.src_id != "":
+		faction = String(Catalog.monster(c.src_id).get("faction", ""))
+	var text := Barks.line(_bark_rng, c.team, faction, trigger)
+	if text == "":
+		return
+	barks.append({"id": c.id, "text": text})
+	if barks.size() > BARK_QUEUE_MAX:
+		barks.pop_front()
 
 # --- board -----------------------------------------------------------
 
@@ -297,7 +325,7 @@ const BASIC := [
 # Feature kinds that are a button. The rest are passive: passive_damage folds into
 # resolve_attack, attacks_per_action into new_turn(), reaction fires on its trigger.
 const OFFERABLE := ["heal_self", "heal_ally", "self_buff", "ally_buff", "grant_action",
-	"attack_modifier", "save_effect", "spell"]
+	"attack_modifier", "save_effect", "spell", "offhand_attack"]
 
 func _basic(id: String) -> Dictionary:
 	for b in BASIC:
@@ -382,7 +410,7 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 				return false
 			if _source_of(actor, "cannot_target_source") == c:
 				return false  # charmed
-			if v["kind"] == "attack":
+			if v["kind"] == "attack" or (v["kind"] == "offhand_attack" and int(v.get("range", 1)) <= 1):
 				return in_reach(actor, c)
 			if v.get("choice", "") == "brazier" and not adjacent_to_hazard(c):
 				return false
@@ -410,6 +438,12 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 		actor.pools[v["pool"]]["cur"] = actor.pool_left(v["pool"]) - 1
 	match kind:
 		"attack": return resolve_attack(actor, target)
+		"offhand_attack":
+			# Costs its own bonus action (or nothing, with Nick) — never an Attack-action
+			# swing, so it rides the same "free" path Cleave's second swing uses. Mastery
+			# is read off the main hand, so the off-hand swing carries none.
+			return resolve_attack(actor, target, {"free": true, "no_mastery": true,
+				"damage": v["damage"], "atk_bonus": int(v["to_hit"])})
 		"shove": return act_shove(actor, target, v.get("choice", "prone"))
 		"smash": return act_smash(actor)
 		"help": act_help(actor, target)
@@ -729,7 +763,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var r = Dice.d20(rng, mode)
 	var nat: int = r.nat
 	var insp: int = _consume_inspired(attacker)
-	var atk_bonus: int = attacker.atk_bonus + insp - _d20_penalty(attacker)
+	var atk_bonus: int = int(opts.get("atk_bonus", attacker.atk_bonus)) + insp - _d20_penalty(attacker)
 	var total: int = nat + atk_bonus
 	var ac = effective_ac(target)
 	var crit: bool = nat >= attacker.crit_range
@@ -763,6 +797,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		_apply_damage(target, out.damage, _damage_type(attacker))
 		if target.conscious():
 			_hit_riders(attacker, target)
+		bark(attacker, "kill" if target.is_dead() else ("crit" if crit else "hit"))
 	if not opts.get("no_mastery", false):
 		_mastery_rider(attacker, target, hit)
 	return out
@@ -772,9 +807,9 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 # pass_gear.gd already wrote the mastery id onto the attack only if the wielder
 # knows it ("" otherwise), so this is one reader off attacks[0] — the same
 # attack combat.gd swings with everywhere else. Auto-applied, no prompt (§2),
-# same call T14's conditions made. Nick is not implemented: it modifies the
-# Two-Weapon Fighting bonus attack, and this engine has no offhand-attack verb
-# to fold into the Attack action.
+# same call T14's conditions made. Nick rides no hit at all: adapter.gd reads the
+# main hand's mastery when it builds the off-hand verb and prices that verb "free"
+# + once-per-turn, folding it into the Attack action (T24).
 
 func _mastery(c) -> String:
 	return str(c.attacks[0].get("mastery", "")) if not c.attacks.is_empty() else ""
@@ -904,6 +939,9 @@ func _apply_damage(target, dmg: int, dtype := "") -> void:
 		return
 	var before: int = target.hp
 	target.hp -= dmg
+	# bark only on the crossing into the last quarter, not every hit below it
+	if target.hp > 0 and before * 4 >= target.max_hp and target.hp * 4 < target.max_hp:
+		bark(target, "low_hp")
 	if target.hp <= 0:
 		var overkill: int = -target.hp
 		target.hp = 0
@@ -917,12 +955,19 @@ func _apply_damage(target, dmg: int, dtype := "") -> void:
 			target.death_s = 0
 			target.death_f = 0
 			log.append("%s falls unconscious." % target.cname)
+			bark(target, "down")
 
 func _kill(c) -> void:
 	c.statuses["dead"] = true
 	c.statuses.erase("down")
 	c.hp = 0
 	log.append("%s is dead." % c.cname)
+	bark(c, "down")
+	if _team_out(c.team):   # that was the last of them — the winners get a word in
+		for w in combatants:
+			if w.team != c.team and w.conscious():
+				bark(w, "victory")
+				break
 
 func _death_save(c) -> void:
 	var r = Dice.d20(rng)
