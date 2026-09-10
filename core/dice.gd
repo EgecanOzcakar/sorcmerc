@@ -35,12 +35,24 @@ static func parse(notation: String) -> Dictionary:
 
 # crit=true rolls the dice portion twice (not the modifier) — 5e RAW.
 static func roll(rng, notation: String, crit: bool = false) -> int:
+	return roll_detailed(rng, notation, crit)["total"]
+
+# Same roll, keeping the individual dice — so a hit roll ("d20[13]+5 = 18") and
+# its damage roll can both show their own breakdown in the log instead of
+# damage collapsing into one flat number that looks like it might just be
+# reusing the to-hit bonus. {"sides": int, "rolls": [each die], "mod": int,
+# "total": int} — "rolls" is empty for a flat/no-dice notation (an unarmed
+# strike's "1", say), so the caller can fall back to a plain number.
+static func roll_detailed(rng, notation: String, crit: bool = false) -> Dictionary:
 	var p = parse(notation)
 	var n: int = p.count * (2 if crit else 1)
+	var rolls: Array[int] = []
 	var total: int = p.mod
 	for i in n:
-		total += rng.roll_die(p.sides)
-	return maxi(0, total)
+		var r: int = rng.roll_die(p.sides)
+		rolls.append(r)
+		total += r
+	return {"sides": p.sides, "rolls": rolls, "mod": p.mod, "total": maxi(0, total)}
 
 static func combine(adv: bool, dis: bool) -> int:
 	if adv and not dis:

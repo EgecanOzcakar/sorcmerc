@@ -787,7 +787,9 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		"hit": hit, "crit": crit, "damage": 0, "extras": [], "mode": mode,
 	}
 	if hit:
-		var dmg = Dice.roll(rng, notation, crit)
+		var dmg_detail := Dice.roll_detailed(rng, notation, crit)
+		var dmg: int = dmg_detail["total"]
+		out["dmg_detail"] = dmg_detail
 		out.extras = _passive_damage(attacker, target, mode, crit)
 		for e in out.extras:
 			dmg += int(e["amount"])
@@ -921,7 +923,28 @@ func _log_attack(o: Dictionary, oa: bool) -> void:
 	for e in o.extras:
 		extra += " +%d %s" % [int(e["amount"]), str(e["label"]).to_lower()]
 	var word = "CRITS" if o.crit else "hits"
-	log.append("%s%s %s %s — %s, %d damage%s." % [tag, o.attacker, word, o.target, roll_s, o.damage, extra])
+	# The damage roll gets its own d[rolls]+mod breakdown, same as the hit roll
+	# above — so it reads as its own separate roll, not the to-hit bonus reused.
+	var dmg_s := _dmg_roll_string(o.get("dmg_detail", {}))
+	var base: int = int(o.dmg_detail["total"]) if o.has("dmg_detail") else o.damage
+	var dmg_line: String = "%s damage" % dmg_s if dmg_s != "" else "%d damage" % o.damage
+	dmg_line += extra
+	if base != int(o.damage):
+		dmg_line += " (%d total)" % o.damage
+	log.append("%s%s %s %s — %s, %s." % [tag, o.attacker, word, o.target, roll_s, dmg_line])
+
+# "1d6[4]+2 = 6" / "2d6[4,3]+2 = 9" — "" when the notation had no dice (a flat
+# modifier like an unarmed strike's "1"), so the caller falls back to a bare number.
+func _dmg_roll_string(d: Dictionary) -> String:
+	var rolls: Array = d.get("rolls", [])
+	if rolls.is_empty():
+		return ""
+	var sides: int = int(d.get("sides", 0))
+	var mod: int = int(d.get("mod", 0))
+	var rolls_s := ",".join(rolls.map(func(r): return str(r)))
+	var count_s := "" if rolls.size() == 1 else str(rolls.size())
+	return "%sd%d[%s]%s = %d" % [count_s, sides, rolls_s,
+		("%+d" % mod) if mod != 0 else "", int(d.get("total", 0))]
 
 # --- damage / death --------------------------------------------------
 
