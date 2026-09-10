@@ -414,6 +414,31 @@ editor on the same files — the agent reports back the exact trigger points
 (file, call site, achievement id) as a worklist for a quick follow-up once
 the dust settles.
 
+## T20 — weapon mastery mechanics (locked 2026-09-10, dispatched now)
+
+F2's original port scoped weapon mastery to "which masteries a character
+knows" only — the eight 2024 mastery properties (Cleave, Graze, Nick, Push,
+Sap, Slow, Topple, Vex) were never mechanically wired. Same shape as T14's
+condition engine: a generic reader off each weapon's `mastery` field (already
+in the `weapons.json` export), auto-applied on a weapon attack's resolution
+(no reaction prompt, matching this engine's whole design) — Cleave (hit a
+second adjacent creature), Graze (still deal ability-mod damage on a miss),
+Nick (a second light-weapon attack folded into the same Attack action, not a
+bonus action), Push (shove 10ft on hit), Sap (disadvantage on the target's
+next attack), Slow (-10ft speed until your next turn), Topple (CON save or
+prone), Vex (advantage on your next attack against that target). `combat.gd`
+is currently free (T16 finished touching it in Phase 1) — safe to run now.
+
+## T21 — AI prioritizes special attacks (locked 2026-09-10, **held until T16 lands**)
+
+`core/ai.gd`'s monster turn logic (`_use_kit`/`_foe_turn`) should reach for a
+strong/special verb (a condition-inflicting attack, an AoE, a buff) over a
+plain basic attack when one is legally available and tactically sound, not
+default to basic-attack-always. **Held until T16's Phase 1 (special-attack
+tagging) and Phase 2 (scaler) both fully land** — the AI needs the final,
+stable set of what monsters can actually do, not a partial pass still being
+authored underneath it.
+
 ## T18 — a boss pool (locked 2026-09-10, spec'd now, **held until T16 lands**)
 
 `core/campaign.gd`'s `BOSS` is a single fixed node (T12 flagged this itself).
