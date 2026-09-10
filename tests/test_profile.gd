@@ -6,6 +6,7 @@ const Presets = preload("res://core/presets.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Character = preload("res://core/character.gd")
 const Party = preload("res://core/party.gd")
+const Ach = preload("res://core/achievements.gd")
 
 var _pass := 0
 var _fail := 0
@@ -23,12 +24,29 @@ func _screen(ch):
 	p.set_character(ch)
 	return p
 
+# Equipping a legendary item from the stash unlocks the achievement.
+func _equip_legendary() -> void:
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Ach.PATH))
+	Ach._current = Ach.load_state()
+	var pike = Presets.pike()
+	var pty = Party.new()
+	pty.add_member(pike)
+	pty.stash_add("armor-of-invulnerability")
+	var p = _screen(pike)
+	p.set_party(pty)
+	p.toggle_equip("armor-of-invulnerability")
+	check("armor-of-invulnerability" in pike.equipped, "the legendary item equips")
+	check(Ach.is_unlocked("equip_legendary"), "equipping it unlocks equip_legendary")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Ach.PATH))
+	Ach._current = Ach.load_state()
+
 func _init() -> void:
 	_sheet_mirror()
 	_equip()
 	_unidentified()
 	_resources()
 	_pact()
+	_equip_legendary()
 	print("test_profile: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

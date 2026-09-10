@@ -8,6 +8,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Presets = preload("res://core/presets.gd")
 const Leveling = preload("res://core/leveling.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
 const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
@@ -433,6 +434,8 @@ func toggle_equip(item_id: String) -> void:
 		party().stash_add(item_id)
 	elif party().stash_count(item_id, true) > 0 and party().stash_remove(item_id):
 		_ch.equipped.append(item_id)
+		if Icons.rarity_of(item_id) == "legendary":
+			Ach.unlock("equip_legendary")
 	else:
 		return
 	_ch.dirty()
