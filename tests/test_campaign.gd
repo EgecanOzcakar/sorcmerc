@@ -286,9 +286,11 @@ func test_rest() -> void:
 	c.rest("long-rest")
 	check(ch.hp_current == -1, "a long rest restores HP (the sheet's full-HP sentinel)")
 	check(ch.slots_used.is_empty(), "a long rest restores spell slots")
+	var max_hp: int = ch.sheet().max_hp
 	ch.hp_current = 3
 	c.rest("short-rest")
-	check(ch.hp_current == 3, "a short rest does not heal to full")
+	check(ch.hp_current == 3 + ceili((max_hp - 3) / 2.0),
+		"a short rest heals half the missing HP, not all of it (no Hit Dice pool to spend instead)")
 
 func test_merchant() -> void:
 	var c := _campaign()
@@ -453,6 +455,14 @@ func test_identification() -> void:
 	c._take_treasure()
 	check(c.party.stash_count("handaxe", true) == 1, "mundane loot needs no identifying")
 	check(Campaign.is_magic(MYSTERY) and not Campaign.is_magic("handaxe"), "is_magic splits the two")
+
+	# a found identification scroll is never itself a mystery -- it'd otherwise
+	# take an identify roll (or a second copy of itself) just to use it at all
+	c.node["item_id"] = Campaign.IDENTIFY_SCROLL
+	c._take_treasure()
+	check(c.party.stash_count(Campaign.IDENTIFY_SCROLL, true) == 1,
+		"a found identify scroll lands already identified")
+	check(Campaign.is_magic(Campaign.IDENTIFY_SCROLL), "...even though it's still a real magic item")
 
 	# the check is a rest-node action only
 	var d := _campaign()

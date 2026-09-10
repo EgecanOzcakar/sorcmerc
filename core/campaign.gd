@@ -511,7 +511,11 @@ func _take_treasure() -> void:
 		_find_item(IDENTIFY_SCROLL)
 
 func _find_item(item_id: String) -> void:
-	var magic := is_magic(item_id)
+	# A found Scroll of Identification is never itself a mystery — it would take
+	# an identify roll (or another copy of itself) just to find out it's the
+	# thing that already says what it is on the label. Everything else found
+	# unidentified still goes through the normal Arcana/scroll flow.
+	var magic := is_magic(item_id) and item_id != IDENTIFY_SCROLL
 	party.stash_add(item_id, 1, not magic)
 	_note_rarity(item_id)
 	# The journal is bbcode; the ramp tints the name so a legendary drop reads as one.
