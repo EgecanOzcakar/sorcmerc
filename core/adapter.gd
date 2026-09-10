@@ -264,12 +264,15 @@ static func rest(ch, kind: String) -> void:
 	else:
 		if _is_warlock(s):
 			ch.slots_used.clear()   # Pact Magic: slots also come back on a short rest
-		# RAW: a stable creature (0 HP, survived the fight) regains 1 HP after an
-		# hour — a short rest is that hour. Without this they'd carry 0 HP into
-		# the next fight and need to_combatant's "down" backstop just to not act
-		# like a fully conscious combatant.
-		if int(ch.hp_current) == 0:
-			ch.hp_current = 1
+		# ponytail: RAW short-rest healing is "spend Hit Dice you choose to
+		# spend" — this project tracks no Hit Dice pool/UI for that, so a short
+		# rest instead restores half of missing HP outright (rounded up), full
+		# HP staying a long-rest-only thing. Covers the 0-HP/stable case too
+		# (half of a nonzero gap is always >= 1) without a separate special case.
+		var cur: int = ch.hp_current if ch.hp_current >= 0 else s.max_hp
+		var missing: int = s.max_hp - cur
+		if missing > 0:
+			ch.hp_current = cur + ceili(missing / 2.0)
 	ch.dirty()
 
 # What T7 persists when a fight ends: HP, spent slots, spent pool uses.

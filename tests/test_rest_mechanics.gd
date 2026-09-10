@@ -218,13 +218,15 @@ func test_arcane_recovery() -> void:
 # RAW says a stable creature regains 1 HP after an hour, which a short rest is.
 func test_short_rest_wakes_the_stable() -> void:
 	var ch = build("human", "fighter", "soldier", 3)
+	var max_hp: int = ch.sheet().max_hp
 	ch.hp_current = 0
 	Adapter.rest(ch, "short-rest")
-	check(ch.hp_current == 1, "a short rest wakes a stable 0-HP character to 1 HP")
+	check(ch.hp_current == ceili(max_hp / 2.0),
+		"a short rest heals half of missing HP, rounded up (no Hit Dice pool to spend instead)")
 
-	ch.hp_current = 5
+	ch.hp_current = max_hp   # already full: nothing left to round up into existing
 	Adapter.rest(ch, "short-rest")
-	check(ch.hp_current == 5, "a short rest doesn't touch HP for anyone above 0")
+	check(ch.hp_current == max_hp, "a short rest doesn't overheal someone already at full")
 
 	ch.hp_current = 0
 	Adapter.rest(ch, "long-rest")
