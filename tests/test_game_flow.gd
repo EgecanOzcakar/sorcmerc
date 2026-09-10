@@ -9,6 +9,8 @@ const CampaignSave = preload("res://core/campaign_save.gd")
 const Party = preload("res://core/party.gd")
 const Settings = preload("res://core/settings.gd")
 const Game = preload("res://scenes/game/game.gd")
+const CharacterSave = preload("res://core/character_save.gd")
+const Presets = preload("res://core/presets.gd")
 
 var _pass := 0
 var _fail := 0
@@ -93,5 +95,22 @@ func _init() -> void:
 	check(String(lines[lines.size() - 1]).begins_with("Carried home:"), "loot is the last line")
 
 	CampaignSave.clear()
+
+	# --- a new run starts fresh, whatever shape the barracks saved you in ---
+	CharacterSave.delete("vera-hp-test")
+	var hurt = Presets.vera()
+	hurt.id = "vera-hp-test"
+	hurt.hp_current = 1
+	CharacterSave.save(hurt)
+	var game = load("res://scenes/game/game.tscn").instantiate()
+	root.add_child(game)
+	game.show_party_setup()
+	var screen = game._screen.get_child(0)
+	var loaded = screen.party.get_member("vera-hp-test")
+	check(loaded != null, "the saved character loads into party setup")
+	check(loaded.hp_current == -1, "a new run resets HP to full (the usual -1 sentinel)")
+	game.queue_free()
+	CharacterSave.delete("vera-hp-test")
+
 	print("test_game_flow: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

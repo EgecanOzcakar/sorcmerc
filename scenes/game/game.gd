@@ -88,7 +88,8 @@ func show_party_setup() -> void:
 	var party := Party.new()
 	for ch in CharacterSave.load_all():
 		ch.dead = false                  # the barracks is for the living
-		party.add_member(ch)
+		ch.hp_current = -1               # ...and rested up — a new run starts at full HP,
+		party.add_member(ch)             # not however hurt/downed they were saved
 	var wrap := Control.new()
 	var screen = load(PARTY_SCENE).instantiate()
 	screen.party = party
