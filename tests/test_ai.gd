@@ -28,6 +28,7 @@ func _init() -> void:
 	test_condition_verb_wins_the_tie()
 	test_never_specials_a_downed_pc()
 	test_falls_back_to_the_swing()
+	test_no_second_helping_of_the_same_condition()
 	print("test_ai: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -105,3 +106,14 @@ func test_falls_back_to_the_swing() -> void:
 	f[1].atk_bonus = 20
 	AI.take_turn(cb, f[1])
 	check(f[2].hp < 200, "it swings")
+
+# Two web uses, one already-webbed target: the second shot isn't wasted on it.
+func test_no_second_helping_of_the_same_condition() -> void:
+	var f := _fight("giant-spider", Vector2i(0, 1))
+	var cb: Combat = f[0]
+	AI.take_turn(cb, f[1])
+	check(f[2].has("restrained"), "webbed on the first turn")
+	cb.begin_turn_for(f[1])
+	AI.take_turn(cb, f[1])
+	check(f[1].pool_left("monster-web-shot") == 1, "the second web is held, not re-applied")
+	check(f[2].hp < 200, "it bit instead")

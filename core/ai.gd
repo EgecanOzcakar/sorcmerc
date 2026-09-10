@@ -77,6 +77,12 @@ static func _use_kit(cb, m) -> void:
 		if not sw.is_empty():
 			cb.perform(m, sw)
 
+# Don't web the already-webbed: a target carrying every condition a verb inflicts
+# gains nothing from a second helping of it.
+static func _redundant(c, v: Dictionary) -> bool:
+	var conds: Array = v.get("conditions", [])
+	return not conds.is_empty() and conds.all(func(cond): return c.has(cond))
+
 # T21: a breath weapon / gaze / web is worth more than one swing, so a foe leads with
 # an offensive verb off its own statblock instead of plain-attacking whenever one is
 # legal. The whole rule, deliberately dumb (combat-design.md §10 risk 2 — no AI creep):
@@ -90,7 +96,8 @@ static func _use_special(cb, m, targets: Array) -> bool:
 	verbs.sort_custom(func(a, b):
 		return a.get("conditions", []).size() > b.get("conditions", []).size())
 	for v in verbs:
-		var legal: Array = targets.filter(func(c): return cb.legal_target(m, v, c))
+		var legal: Array = targets.filter(func(c):
+			return cb.legal_target(m, v, c) and not _redundant(c, v))
 		if legal.is_empty():
 			continue
 		legal.sort_custom(func(a, b): return a.hp < b.hp)
