@@ -353,7 +353,15 @@ func rest(kind: String) -> void:
 # so the Arcana check is offered at rest nodes only. A failed examination is final
 # for this node — walking on and camping again is another chance.
 
-const IDENTIFY_DC := 15
+# Target success rate by rarity — rarer items are genuinely harder to puzzle
+# out. The DC is solved backward from the target (same linear d20+mod-vs-DC
+# model as hit_chance/save_fail_chance elsewhere) so the stated rate holds for
+# whichever character is examining, not just a "typical" one; the resolved DC
+# is shown in the log line so it never reads as an opaque coin flip.
+const IDENTIFY_TARGET := {
+	"uncommon": 0.90, "rare": 0.80, "very-rare": 0.60, "legendary": 0.35, "artifact": 0.15,
+}
+const IDENTIFY_DEFAULT_TARGET := 0.80   # "varies"/unlisted rarity falls back to rare's odds
 const IDENTIFY_SCROLL := "scroll-of-identification"
 const SCROLL_DROP_ONE_IN := 4        # a hoard sometimes also holds an identify scroll
 
@@ -374,7 +382,13 @@ func arcana_bonus(char_id: String) -> int:
 	var ch = party.get_member(char_id)
 	return int(ch.sheet().skills.get("arcana", 0)) if ch != null else 0
 
-# d20 + Arcana vs DC 15, one attempt per item per rest node.
+# The DC that gives `bonus` the rarity's target success rate (see IDENTIFY_TARGET).
+static func identify_dc(item_id: String, bonus: int) -> int:
+	var rarity := String(item_data(item_id).get("rarity", ""))
+	var target: float = IDENTIFY_TARGET.get(rarity, IDENTIFY_DEFAULT_TARGET)
+	return clampi(roundi(21.0 + bonus - 20.0 * target), 1, 30)
+
+# d20 + Arcana vs a rarity-scaled DC, one attempt per item per rest node.
 func identify_check(item_id: String, char_id: String) -> bool:
 	var ch = party.get_member(char_id)
 	if node.get("kind", "") != "rest" or ch == null or item_id in identify_failed:
@@ -382,16 +396,16 @@ func identify_check(item_id: String, char_id: String) -> bool:
 	if party.stash_count(item_id) - party.stash_count(item_id, true) < 1:
 		return false
 	var bonus := arcana_bonus(char_id)
+	var dc := identify_dc(item_id, bonus)
 	var nat: int = int(Dice.d20(rng)["nat"])
 	var total := nat + bonus
-	if total < IDENTIFY_DC:
+	if total < dc:
 		identify_failed.append(item_id)
-		say("%s examines it and learns nothing (%d+%d vs DC %d)." % [ch.cname, nat, bonus, IDENTIFY_DC])
+		say("%s examines it and learns nothing (%d+%d vs DC %d)." % [ch.cname, nat, bonus, dc])
 		_autosave()
 		return false
 	party.stash_identify(item_id)
-	say("%s identifies it: %s (%d+%d vs DC %d)." % [ch.cname, item_name(item_id), nat, bonus,
-		IDENTIFY_DC])
+	say("%s identifies it: %s (%d+%d vs DC %d)." % [ch.cname, item_name(item_id), nat, bonus, dc])
 	_autosave()
 	return true
 

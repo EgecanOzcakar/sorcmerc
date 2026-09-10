@@ -347,7 +347,7 @@ func test_identification() -> void:
 			check(not e.identify_check(MYSTERY, who), "no retry at the same camp")
 			e.enter(0)
 			check(e.identify_failed.is_empty(), "a new node is a fresh chance")
-	print("  arcana DC %d over 40 seeds: %d identified, %d failed" % [Campaign.IDENTIFY_DC, hits, misses])
+	print("  arcana (uncommon, 90%% target) over 40 seeds: %d identified, %d failed" % [hits, misses])
 	check(hits > 0 and misses > 0, "both outcomes are reachable (%d/%d)" % [hits, misses])
 
 	# the scroll: no roll, no rest, always works, always consumed

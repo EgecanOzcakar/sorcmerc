@@ -259,23 +259,25 @@ func _merchant_ui(col: VBoxContainer) -> void:
 		b.pressed.connect(func(): run.turn_in(q); _refresh())
 		col.add_child(b)
 
-# Examining loot over the short rest: DC 15 Intelligence (Arcana), one attempt per
-# item per camp. The party's best arcanist does the examining — nobody sits their
-# wizard out of this, so there is no chooser, just the one button.
+# Examining loot over the short rest: Intelligence (Arcana) vs a DC that scales
+# with the item's rarity (rarer = harder — see Campaign.IDENTIFY_TARGET), one
+# attempt per item per camp. The party's best arcanist does the examining —
+# nobody sits their wizard out of this, so there is no chooser, just the button.
 func _identify_ui(col: VBoxContainer) -> void:
 	var mysteries: Array = party.unidentified()
 	if mysteries.is_empty():
 		return
-	col.add_child(_caption("U N I D E N T I F I E D   ·   DC %d Arcana" % Campaign.IDENTIFY_DC))
+	col.add_child(_caption("U N I D E N T I F I E D   ·   Arcana check"))
 	var who := run.arcana_examiner()
 	for e in mysteries:
 		var id := String(e["item_id"])
 		if who == "":
 			col.add_child(_dim("%s — nobody is awake to examine it." % Campaign.mystery_name(id)))
 			continue
+		var bonus := run.arcana_bonus(who)
 		var b := Button.new()
-		b.text = "Examine  %s   (%s, Arcana %+d)" % [Campaign.mystery_name(id),
-			party.get_member(who).cname, run.arcana_bonus(who)]
+		b.text = "Examine  %s   (%s, Arcana %+d vs DC %d)" % [Campaign.mystery_name(id),
+			party.get_member(who).cname, bonus, Campaign.identify_dc(id, bonus)]
 		b.disabled = id in run.identify_failed
 		if b.disabled:
 			b.text += "   — nothing learned here"
