@@ -310,17 +310,56 @@ matching `character_save.gd` schema change. Bundled into the same T10 dispatch
 as the XP/death/shop/autosave work since both already touch `character.gd` and
 `party.gd` — two agents editing those concurrently would collide.
 
-## Post-T5+T9 gap survey (for later, not all queued)
+## Post-T5+T9 gap survey — dispositions (locked 2026-09-10)
 
-Asked-for survey of what's still missing for a full-scale CRPG, beyond the T10
-items above: bestiary (316 monsters) not wired into the scaler yet, no per-node
-combat terrain variety (one hand-authored room), no equip-from-stash link on
-the profile screen, no multiclassing, no meta-progression across runs (open
-question, not decided), no map variety beyond the one 5-stage route, no
-narrative/dialogue layer (quests are mechanical only), no settings/options
-screen, no tutorial/onboarding, no magic-item identify mechanic (fine to skip),
-status effects stay combat's flag set only (no poison/disease/long-term
-conditions). Sound/art remain deliberately deferred.
+- **Meta-progression across runs**: explicitly a TODO, not implemented yet.
+  Note it as a future roguelike-unlock layer (persistent currency/unlocks that
+  survive a run ending) — no design committed, just don't let it get lost.
+- **Narrative/dialogue layer**: explicitly a TODO, not implemented yet. Quests
+  stay mechanical-only for now.
+- **Map variety**: to be randomized — each campaign generates a different
+  route/order rather than always playing the one fixed `STAGES` sequence.
+  **Queued as T12, dispatched after T11 lands** (T11 is mid-flight authoring
+  per-node `theme` keys against the current fixed `STAGES` shape; randomizing
+  route generation changes that shape and would collide if run concurrently).
+- **Magic item identification**: unidentified on pickup; unequippable until
+  identified via a relevant DC check or an Identification Scroll (buyable or
+  found as treasure). **Queued as T13, dispatched after T10 lands** (T10 is
+  mid-flight rewriting the shared-stash item shape and the profile screen's
+  equip flow right now — identification adds an `identified` flag to that same
+  shape, so it has to build on T10's landed work, not race it).
+- **Settings/options overlay**: toggleable, doesn't touch T10/T11's files —
+  dispatched now, in parallel, see below.
+- Bestiary→scaler wiring, per-node terrain (T11 is doing this now), equip-from-
+  stash (T10 is doing this now), multiclassing, tutorial/onboarding, magic-item
+  identify (see above — now scoped), status effects beyond the combat flag set:
+  tracked, most already queued into a named sub-project above.
+
+## T14 — status conditions engine (dispatched now, parallel to T10/T11)
+
+The user asked to verify the real 2024 condition meanings and implement the
+mechanics. Good news: `data/conditions.json` (F1's export) already holds
+exactly the 15 official 2024 conditions with accurate prose, matched against
+the real rules by inspection — no re-research needed. Better news:
+`data/effects/conditions.json` (sorcmerc-authored, already exists) already has
+every condition's *structured* mechanical numbers (attacks-against adv/dis,
+own-attacks dis, auto-fail-saves, no-action/bonus/reaction, speed-zero,
+resist-all, auto-crit-within-reach, exhaustion's per-level d20/speed penalty).
+**What's missing is `combat.gd` actually reading that data** — today only
+prone/dodging/hidden/helped are hand-coded ad-hoc; the other 11 conditions'
+structured effects are inert. T14 wires them into `_attack_mode`,
+`_saving_throw`, action/bonus/reaction gating in `available()`/`perform()`,
+speed/movement, damage resistance, and exhaustion's roll penalty + level-6
+death — a generic reader over `data/effects/conditions.json`, not per-condition
+special-case code. combat.gd isn't touched by T10 or T11, so no file conflict.
+
+## Settings overlay (dispatched now, parallel to T10/T11)
+
+A toggleable panel, reachable from the combat and campaign screens: animation-
+speed (the existing `SORCMERC_FAST`-style tween toggle, promoted to a real
+in-game setting), default difficulty for new campaigns, a "clear autosave"
+utility action. Persisted to `user://settings.json`. No audio settings — there's
+no sound system yet, a volume slider would control nothing.
 
 ## T11 — combat board variety + interactables (locked 2026-09-10)
 
