@@ -398,6 +398,26 @@ Wire them in:
   a broader, multiattack-carrying monster pool changes the curve T8 tuned
   against 4 simple archetypes; retune the multiplier constants if needed.
 
+## T18 — a boss pool (locked 2026-09-10, spec'd now, **held until T16 lands**)
+
+`core/campaign.gd`'s `BOSS` is a single fixed node (T12 flagged this itself).
+Two boss archetypes, per the user: **(a)** a rarer/stronger bestiary monster
+that already carries a real special attack from T16's Phase 1 tagging — picked
+from CR bands appropriate to a run's climax, not the same tier as regular
+combat nodes; **(b)** an "elite" version of an ordinary monster (their own
+example: a goblin archer) pumped up via the scaler's existing `mult` stat-
+multiplier mechanism (already how difficulty scaling works — reuse it, don't
+build a second buff system) plus maybe an extra action or two, so a familiar
+early threat can return as a genuine capstone fight. Build a small boss pool
+(mixing both archetypes), seed-picked the same deterministic way the rest of
+the route already is, replacing the single fixed `BOSS` node.
+
+**Held until T16 lands** — this needs T16's Phase 1 tagging to know which
+bestiary monsters actually carry a special attack worth spotlighting as a
+boss, and needs to reuse whatever difficulty-multiplier constants T16's
+Phase 2 retunes. Dispatching now would mean rebuilding on top of numbers
+that are about to change under it.
+
 ## T17 — the New Game flow (locked 2026-09-10, spec'd now, **held until T15 lands**)
 
 Every piece exists (creator, party manager, campaign map, combat) but nothing
