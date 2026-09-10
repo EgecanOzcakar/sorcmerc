@@ -43,7 +43,9 @@ func _ready() -> void:
 		for ch in Party.demo_roster():
 			party.add_member(ch)
 		party.add_gold(120)
-	run = Campaign.new(party)
+	# T12: the route is seed-generated, so honour SORCMERC_SEED here the way
+	# scenes/main.gd does for fights — a replayed run walks the same road.
+	run = Campaign.new(party, int(OS.get_environment("SORCMERC_SEED")))
 
 	var bg := ColorRect.new()
 	bg.color = COL_BG

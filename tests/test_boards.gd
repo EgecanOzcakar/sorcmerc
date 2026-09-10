@@ -125,13 +125,13 @@ func test_every_combat_node_has_a_board() -> void:
 	for ch in Presets.party():
 		party.add_member(ch)
 	var run = Campaign.new(party, 3)
-	while run.options().filter(func(n): return n["kind"] == "combat").is_empty():
-		run.stage += 1               # T12: the route is generated; find a stage that fights
-	for i in run.options().size():
-			var picked: Dictionary = run.enter(i)
-			check(run.combat_spec().get("theme", "") == picked["theme"],
-				"combat_spec carries the node's theme")
-			break
+	for i in run.options().size():        # T12: whichever fight this seed's stage 0 offers
+		if run.options()[i]["kind"] != "combat":
+			continue
+		var picked: Dictionary = run.enter(i)
+		check(run.combat_spec().get("theme", "") == picked["theme"],
+			"combat_spec carries the node's theme")
+		break
 
 # --- helpers ----------------------------------------------------------
 

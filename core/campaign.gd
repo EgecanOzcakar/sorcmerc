@@ -166,9 +166,13 @@ func _init(p, seed_value := 0) -> void:
 # the support kinds are dealt out so all three show up across the four stages.
 static func build_route(r) -> Array:
 	var support := _deal_support(r)
+	var used := {}                   # no node template twice on one route
 	var out: Array = []
 	for i in STAGE_POSITIONS.size():
-		out.append(_pick_stage(r, String(STAGE_POSITIONS[i]), String(support[i])))
+		var stage_nodes := _pick_stage(r, String(STAGE_POSITIONS[i]), String(support[i]), used)
+		for n in stage_nodes:
+			used[n["id"]] = true
+		out.append(stage_nodes)
 	_ensure_giver(r, out)
 	out.append([BOSS])
 	return out
@@ -183,9 +187,11 @@ static func _deal_support(r) -> Array:
 		out.append(SUPPORT_KINDS[r.roll_die(SUPPORT_KINDS.size()) - 1])
 	return out
 
-static func _pick_stage(r, pos: String, support_kind: String) -> Array:
-	var support := _eligible(pos, support_kind)
-	var fights := _eligible(pos, "combat")
+static func _pick_stage(r, pos: String, support_kind: String, used: Dictionary) -> Array:
+	var support := _eligible(pos, support_kind, used)
+	if support.is_empty():           # a thin position: repeat rather than fail
+		support = _eligible(pos, support_kind)
+	var fights := _eligible(pos, "combat", used)
 	var picked: Array = [support.pop_at(r.roll_die(support.size()) - 1)]
 	var want: int = PICK_MIN + r.roll_die(PICK_MAX - PICK_MIN + 1) - 1
 	while picked.size() < want and not fights.is_empty():
@@ -193,8 +199,8 @@ static func _pick_stage(r, pos: String, support_kind: String) -> Array:
 			fights.pop_at(r.roll_die(fights.size()) - 1))
 	return picked
 
-static func _eligible(pos: String, kind: String) -> Array:
-	return POOL.filter(func(n): return n["kind"] == kind and pos in n["stage_position"])
+static func _eligible(pos: String, kind: String, used: Dictionary = {}) -> Array:
+	return POOL.filter(func(n): return n["kind"] == kind and pos in n["stage_position"] and not used.has(n["id"]))
 
 # The one invariant selection can violate: quests are only offered by two named
 # merchants (quest.gd's giver_node_ids), so a route needs one of them before the

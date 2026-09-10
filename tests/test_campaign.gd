@@ -74,16 +74,17 @@ func test_generated_routes() -> void:
 		signatures[_signature(c)] = true
 		check(_route(s) != null and _signature(_route(s)) == _signature(c),
 			"seed %d reproduces the same route" % s)
+		var ids := {}
+		var total := 0
 		for i in c.route.size():
 			var stage: Array = c.route[i]
-			var ids := {}
 			for n in stage:
 				ids[n["id"]] = true
 				seen_ids[n["id"]] = true
+				total += 1
 				if n["kind"] == "combat":
 					check(n["theme"] in Encounter.THEMES,
 						"seed %d: %s names a real board" % [s, n["id"]])
-			check(ids.size() == stage.size(), "seed %d stage %d has no duplicate node" % [s, i])
 			if i == c.route.size() - 1:
 				check(stage.size() == 1 and stage[0]["kind"] == "combat" and stage[0].get("boss", false),
 					"seed %d ends on exactly one boss fight" % s)
@@ -92,6 +93,7 @@ func test_generated_routes() -> void:
 				for n in stage:
 					check(Campaign.STAGE_POSITIONS[i] in n["stage_position"],
 						"seed %d: %s is eligible for stage %d" % [s, n["id"], i])
+		check(ids.size() == total, "seed %d shows no node template twice on one route" % s)
 		var kinds := {}
 		for i in c.route.size() - 1:
 			var fights: Array = c.route[i].filter(func(n): return n["kind"] == "combat")
