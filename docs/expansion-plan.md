@@ -157,5 +157,21 @@ graph above. Each phase gated on review.
   input until T1's format lands), T4 (party manager, same caveat) running in
   parallel as background agents. Each instructed not to touch the others' files
   and to report status here rather than editing this doc directly.
+- 2026-09-10: Phase 2 complete. T1/T3/T4 landed clean. F3 replaced the whole
+  action-economy surface: `Combatant.econ` (action/bonus/reaction/move/attacks),
+  `combat.available/legal_target/perform` as the one verb interface (monsters and
+  heroes both shop it — nothing in `combat.gd` names a class or spell by id
+  anymore), real pool/slot spend + short/long rest, auto-resolved reactions,
+  concentration. `scenes/main.gd`'s menu now renders `cb.available(h)` directly.
+  Verified locally: 1641 assertions across 6 suites green, `drive_ui` +
+  `drive_creator` clean. **200-seed sweep is now 200W/0L @ 8.1 rounds** — the
+  party finally using its real kit (actual Cure Wounds, repeatable Second Wind)
+  made the hand-tuned Sunken Shrine trivial. This is the headline reason T8
+  (scaler) is next, not a follow-up. Pushed.
+  Known content gaps carried forward: `healing-word` isn't in the F1 export
+  (Ilsa's heal is Cure Wounds — an action at touch range, not a bonus at 60ft);
+  hex-targeted AoE spells (Fireball-shaped) are dropped at the adapter for lack
+  of an aiming mode; `data/monsters.json` only has the four Sunken Shrine foes —
+  T8 scales counts/numbers on those, a real bestiary is future content work.
 
 This is a multi-week build; phases 0–1 are the critical path and land first.
