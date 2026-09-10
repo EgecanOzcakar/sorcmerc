@@ -24,6 +24,8 @@ window/size/viewport_width=1280
 window/size/viewport_height=800
 window/size/window_width_override=0
 window/size/window_height_override=0
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [rendering]
 
