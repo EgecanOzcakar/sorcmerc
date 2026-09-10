@@ -908,4 +908,32 @@ switching and victory/defeat/level-up stingers — campaign.gd already has 3
 agents' worth of accumulated changes this session; keep this diff additive
 and narrow, don't reformat surrounding code.
 
+- 2026-09-10: **T23–T27 all complete.** T23: `power.gd` now prices save-or-suffer
+  control by denial severity (stun/paralyze full weight down to deafened
+  near-zero) instead of a flat constant; retuned `scaler.gd`'s `TIER`/
+  `BOSS_LEAD_SHARE` back to the 90/75/50% targets, boss win-rate spread
+  tightened from 60 points (8–68%) to 45 (15–60%). Honestly surfaced a new
+  ceiling instead of papering over it: mammoth (60%) vs shop-captain (15%) is
+  a "chaff vs. chunk" mispricing — a lone tough bruiser prices for a fight it
+  doesn't survive — needs a survival/attrition scoring term, logged as the
+  next tuning target, not improvised. T24: two-weapon fighting (an off-hand
+  light-weapon slot, a no-ability-mod bonus-action off-hand attack) plus Nick
+  mastery folding that attack into the Attack action via the same `free`
+  mechanism Cleave uses — the last of the 8 2024 weapon masteries. T25: the
+  6 merchant nodes are now sized settlements (camp/village/town) with real
+  service tabs — Generalist everywhere, Weaponsmith/Armorsmith/Alchemist/
+  Librarian/Healer/Innkeeper spread across village/town per node, one
+  flavor line per NPC, `GIVER_IDS` replaced by "has an Innkeeper." T26:
+  hand-authored one-line combat barks (hit/crit/kill/low-HP/down/victory),
+  faction-flavored for foes, floating over the hex sprite in `scenes/main.gd`'s
+  `Board`, 20% fire rate off a private reproducible RNG stream so seeded runs
+  never desync, fully skipped under headless/fast mode. T27: procedurally
+  synthesized placeholder audio (`tools/gen_audio.py`, stdlib only) — 14 SFX
+  stings reusing T26's exact bark trigger points, plus one ambient loop per
+  environment theme with a shared combat-tension layer that fades in/out on
+  top of it; `sfx_volume`/`music_volume` sliders in the settings overlay.
+  Also fixed directly: the `equip_legendary` achievement hookup T19 had
+  flagged as out of its file scope. **Full suite: 23 test files (test_bestiary
+  reports OK), 0 failures; all four `drive_*` smoke scripts pass.** Pushed.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
