@@ -13,6 +13,7 @@ extends RefCounted
 const Quest = preload("res://core/quest.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Icons = preload("res://core/ui_icons.gd")
 const RNG = preload("res://core/rng.gd")
 const Dice = preload("res://core/dice.gd")
 
@@ -334,7 +335,8 @@ func _take_treasure() -> void:
 func _find_item(item_id: String) -> void:
 	var magic := is_magic(item_id)
 	party.stash_add(item_id, 1, not magic)
-	say("Found: %s." % (mystery_name(item_id) if magic else item_name(item_id)))
+	# The journal is bbcode; the ramp tints the name so a legendary drop reads as one.
+	say("Found: %s." % Icons.item_bb(item_id, mystery_name(item_id) if magic else item_name(item_id)))
 
 # --- rest -----------------------------------------------------------------
 

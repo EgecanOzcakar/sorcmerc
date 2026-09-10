@@ -6,16 +6,15 @@
 extends Control
 
 const Party = preload("res://core/party.gd")
+const Icons = preload("res://core/ui_icons.gd")
 
-# Palette lifted from scenes/main.gd — kept local so the party screen doesn't
-# preload the whole combat script for four colours.
-const COL_BG := Color("14161c")
-const COL_CARD := Color("1b1f29")
+const COL_BG := Icons.COL_BG
+const COL_CARD := Icons.COL_PANEL
 const COL_CARD_SEL := Color("2b3040")
-const COL_EDGE := Color("39404f")
-const COL_GOLD := Color("c8a75a")
-const COL_DIM := Color("8f95a3")
-const COL_PARTY := Color("5fbf6a")
+const COL_EDGE := Icons.COL_EDGE
+const COL_GOLD := Icons.COL_GOLD
+const COL_DIM := Icons.COL_MUTED
+const COL_PARTY := Icons.COL_PARTY
 
 var party: Party                          # injected by T5, or a demo roster
 var _selected := ""                       # roster id armed for a slot click
@@ -52,12 +51,12 @@ func _ready() -> void:
 	var header := Label.new()
 	header.text = "»   T H E   P A R T Y   «"
 	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	header.add_theme_font_size_override("font_size", 22)
+	header.add_theme_font_size_override("font_size", Icons.FS_TITLE)
 	header.add_theme_color_override("font_color", COL_GOLD)
 	root.add_child(header)
 
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint.add_theme_font_size_override("font_size", 13)
+	_hint.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	_hint.add_theme_color_override("font_color", COL_DIM)
 	root.add_child(_hint)
 
@@ -78,7 +77,7 @@ func _column(title: String, body: VBoxContainer, stretch: float) -> Control:
 	wrap.size_flags_stretch_ratio = stretch
 	var cap := Label.new()
 	cap.text = title
-	cap.add_theme_font_size_override("font_size", 13)
+	cap.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 	cap.add_theme_color_override("font_color", COL_GOLD)
 	wrap.add_child(cap)
 	var scroll := ScrollContainer.new()
@@ -98,14 +97,14 @@ func _footer() -> Control:
 	panel.add_child(row)
 
 	_purse.add_theme_color_override("font_color", COL_GOLD)
-	_purse.add_theme_font_size_override("font_size", 16)
+	_purse.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	row.add_child(_purse)
 
 	_stash.bbcode_enabled = true
 	_stash.fit_content = true
 	_stash.scroll_active = false
 	_stash.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_stash.add_theme_font_size_override("normal_font_size", 14)
+	_stash.add_theme_font_size_override("normal_font_size", Icons.FS_SMALL)
 	row.add_child(_stash)
 
 	var create := Button.new()
@@ -137,8 +136,11 @@ func _refresh() -> void:
 	else:
 		var parts := []
 		for e in party.stash:
-			parts.append("%s ×%d" % [String(e["item_id"]).capitalize(), int(e["quantity"])])
-		_stash.text = "[color=#c9ccd6]Stash:[/color] [color=#8f95a3]%s[/color]" % ", ".join(parts)
+			var id := String(e["item_id"])
+			var nm: String = id.capitalize() if Party.is_identified(e) \
+				else "Unidentified (%s)" % Icons.rarity_of(id)
+			parts.append(Icons.item_bb(id, "%s ×%d" % [nm, int(e["quantity"])]))
+		_stash.text = "[color=%s]Stash:[/color] %s" % [Icons.COL_BODY.to_html(false), ", ".join(parts)]
 
 	if _selected == "":
 		_hint.text = "Click a roster member to pick them up, then click a party slot to place or swap them."
@@ -192,7 +194,8 @@ func _slot(index: int, sm: Dictionary) -> Control:
 		b.text = "%d.  — empty —" % (index + 1)
 		b.add_theme_color_override("font_color", COL_DIM)
 	else:
-		b.text = "%d.  %s   —   %s %d   ·   AC %d   ·   HP %d/%d" % [index + 1, sm["name"],
+		b.text = "%d.  %s  %s   —   %s %d   ·   AC %d   ·   HP %d/%d" % [index + 1,
+			Icons.class_glyph(sm["class_id"]), sm["name"],
 			sm["class_name"], sm["level"], sm["ac"], sm["hp"], sm["max_hp"]]
 	b.pressed.connect(func(): _on_slot(index))
 	return b
@@ -202,15 +205,15 @@ func _summary_label(sm: Dictionary) -> Control:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 0)
 	var name_l := Label.new()
-	name_l.text = sm["name"]
-	name_l.add_theme_font_size_override("font_size", 16)
+	name_l.text = "%s  %s" % [Icons.class_glyph(sm["class_id"]), sm["name"]]
+	name_l.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	if sm["active"]:
 		name_l.add_theme_color_override("font_color", COL_PARTY)
 	col.add_child(name_l)
 	var stats := Label.new()
 	stats.text = "%s %d   ·   AC %d   ·   HP %d/%d" % [sm["class_name"], sm["level"],
 		sm["ac"], sm["hp"], sm["max_hp"]]
-	stats.add_theme_font_size_override("font_size", 13)
+	stats.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	stats.add_theme_color_override("font_color", COL_DIM)
 	col.add_child(stats)
 	return col
@@ -283,18 +286,4 @@ func _box(bg: Color, edge: Color) -> StyleBoxFlat:
 	return s
 
 func _build_theme() -> void:
-	var th := Theme.new()
-	var mk := func(bg: Color) -> StyleBoxFlat:
-		var s := StyleBoxFlat.new()
-		s.bg_color = bg
-		s.set_corner_radius_all(6)
-		s.content_margin_left = 10; s.content_margin_right = 10
-		s.content_margin_top = 6; s.content_margin_bottom = 6
-		return s
-	th.set_stylebox("normal", "Button", mk.call(Color("2b3040")))
-	th.set_stylebox("hover", "Button", mk.call(Color("3a4152")))
-	th.set_stylebox("pressed", "Button", mk.call(Color("4a5570")))
-	th.set_stylebox("disabled", "Button", mk.call(Color("22252e")))
-	th.set_color("font_color", "Button", Color("e6e8ee"))
-	th.set_color("font_hover_color", "Button", Color("ffffff"))
-	theme = th
+	theme = Icons.dark_theme()

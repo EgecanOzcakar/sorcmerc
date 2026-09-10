@@ -12,13 +12,15 @@ const Quest = preload("res://core/quest.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 
-const COL_BG := Color("14161c")
-const COL_CARD := Color("1b1f29")
-const COL_EDGE := Color("39404f")
-const COL_GOLD := Color("c8a75a")
-const COL_DIM := Color("8f95a3")
-const COL_PARTY := Color("5fbf6a")
-const COL_FOE := Color("d15750")
+const Icons = preload("res://core/ui_icons.gd")
+
+const COL_BG := Icons.COL_BG
+const COL_CARD := Icons.COL_PANEL
+const COL_EDGE := Icons.COL_EDGE
+const COL_GOLD := Icons.COL_GOLD
+const COL_DIM := Icons.COL_MUTED
+const COL_PARTY := Icons.COL_PARTY
+const COL_FOE := Icons.COL_FOE
 
 const KIND_COL := {"combat": COL_FOE, "treasure": COL_GOLD, "merchant": Color("8fb7d8"),
 	"rest": COL_PARTY}
@@ -60,7 +62,7 @@ func _ready() -> void:
 	add_child(root)
 
 	_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_header.add_theme_font_size_override("font_size", 22)
+	_header.add_theme_font_size_override("font_size", Icons.FS_TITLE)
 	_header.add_theme_color_override("font_color", COL_GOLD)
 	root.add_child(_header)
 
@@ -74,7 +76,7 @@ func _ready() -> void:
 	_journal.bbcode_enabled = true
 	_journal.scroll_following = true
 	_journal.custom_minimum_size = Vector2(0, 96)
-	_journal.add_theme_font_size_override("normal_font_size", 13)
+	_journal.add_theme_font_size_override("normal_font_size", Icons.FS_SMALL)
 	root.add_child(_journal)
 
 	var footer := HBoxContainer.new()
@@ -126,7 +128,7 @@ func _column(title: String, body: VBoxContainer, stretch: float) -> Control:
 	wrap.size_flags_stretch_ratio = stretch
 	var cap := Label.new()
 	cap.text = title
-	cap.add_theme_font_size_override("font_size", 13)
+	cap.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 	cap.add_theme_color_override("font_color", COL_GOLD)
 	wrap.add_child(cap)
 	var scroll := ScrollContainer.new()
@@ -167,7 +169,7 @@ func _refresh() -> void:
 	_refresh_quests()
 	var lines: Array = []
 	for line in run.log:
-		lines.append("[color=#c9ccd6]%s[/color]" % line)
+		lines.append("[color=%s]%s[/color]" % [Icons.COL_BODY.to_html(false), line])
 	_journal.text = "\n".join(lines)
 
 func _node_card(index: int, node: Dictionary) -> Control:
@@ -177,12 +179,12 @@ func _node_card(index: int, node: Dictionary) -> Control:
 	panel.add_child(col)
 	var title := Label.new()
 	title.text = node["title"]
-	title.add_theme_font_size_override("font_size", 17)
+	title.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	title.add_theme_color_override("font_color", KIND_COL.get(node["kind"], COL_DIM))
 	col.add_child(title)
 	var desc := Label.new()
 	desc.text = "%s  ·  %s" % [node["kind"], node.get("desc", "")]
-	desc.add_theme_font_size_override("font_size", 13)
+	desc.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	desc.add_theme_color_override("font_color", COL_DIM)
 	col.add_child(desc)
 	var go := Button.new()
@@ -200,7 +202,7 @@ func _node_panel() -> Control:
 	panel.add_child(col)
 	var title := Label.new()
 	title.text = run.node.get("title", "")
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	title.add_theme_color_override("font_color", COL_GOLD)
 	col.add_child(title)
 
@@ -226,6 +228,7 @@ func _merchant_ui(col: VBoxContainer) -> void:
 	for e in run.stock():
 		var b := Button.new()
 		b.text = "Buy  %s   —   %d gp" % [e["name"], e["price"]]
+		b.add_theme_color_override("font_color", Icons.item_color(String(e["item_id"])))
 		b.disabled = party.gold < int(e["price"])
 		b.pressed.connect(func(): run.buy(String(e["item_id"])); _refresh())
 		col.add_child(b)
@@ -239,6 +242,7 @@ func _merchant_ui(col: VBoxContainer) -> void:
 				else Campaign.mystery_name(id)
 			b.text = "Sell  %s ×%d   —   %d gp" % [nm, int(e["quantity"]),
 				maxi(1, int(Campaign.item_price(id) * Campaign.SELL_RATE))]
+			b.add_theme_color_override("font_color", Icons.item_color(id))
 			b.pressed.connect(func(): run.sell(id); _refresh())
 			col.add_child(b)
 
@@ -322,7 +326,7 @@ func _end_panel() -> Control:
 	var l := Label.new()
 	l.text = "The road is walked. %d XP, %d gp." % [run.xp, party.gold] if won \
 		else "The party falls. The run ends here."
-	l.add_theme_font_size_override("font_size", 18)
+	l.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	l.add_theme_color_override("font_color", COL_PARTY if won else COL_FOE)
 	col.add_child(l)
 	var again := Button.new()
@@ -344,7 +348,7 @@ func _refresh_quests() -> void:
 		var l := Label.new()
 		l.text = Quest.describe(q)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.add_theme_font_size_override("font_size", 14)
+		l.add_theme_font_size_override("font_size", Icons.FS_BODY)
 		l.add_theme_color_override("font_color", COL_GOLD if q["state"] == "complete" else COL_PARTY)
 		_quests.add_child(l)
 
@@ -362,7 +366,7 @@ func _refresh_quests() -> void:
 func _caption(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 12)
+	l.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 	l.add_theme_color_override("font_color", COL_GOLD)
 	return l
 
@@ -370,7 +374,7 @@ func _dim(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_font_size_override("font_size", 13)
+	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	l.add_theme_color_override("font_color", COL_DIM)
 	return l
 

@@ -31,9 +31,33 @@ const COL_FOE := Color("d15750")
 # One size per UI role, shared by all five screens.
 const FS_TITLE := 22      # the screen's one headline
 const FS_HEAD := 17       # section / card title
-const FS_BODY := 14       # default running text and button labels
+const FS_BODY := 15       # default running text and button labels
 const FS_SMALL := 13      # secondary rows, hints, journal
 const FS_CAPTION := 12    # the »  S P A C E D  « panel captions
+
+# The one button/label theme every screen wears. `compact` is the inline-control
+# variant (the profile's ± / equip buttons sit inside text rows).
+static func dark_theme(compact := false) -> Theme:
+	var th := Theme.new()
+	var pad := 3 if compact else 6
+	var mk := func(bg: Color) -> StyleBoxFlat:
+		var s := StyleBoxFlat.new()
+		s.bg_color = bg
+		s.set_corner_radius_all(6)
+		s.content_margin_left = 10; s.content_margin_right = 10
+		s.content_margin_top = pad; s.content_margin_bottom = pad
+		return s
+	th.set_stylebox("normal", "Button", mk.call(Color("2b3040")))
+	th.set_stylebox("hover", "Button", mk.call(Color("3a4152")))
+	th.set_stylebox("pressed", "Button", mk.call(Color("4a5570")))
+	th.set_stylebox("disabled", "Button", mk.call(Color("22252e")))
+	th.set_color("font_color", "Button", Color("e6e8ee"))
+	th.set_color("font_hover_color", "Button", Color("ffffff"))
+	th.set_color("font_color", "Label", COL_TEXT)
+	th.set_font_size("font_size", "Button", FS_BODY)
+	th.set_font_size("font_size", "Label", FS_BODY)
+	th.set_stylebox("normal", "LineEdit", mk.call(Color("22252e")))
+	return th
 
 # --- class glyphs ----------------------------------------------------------
 const CLASS_GLYPHS := {

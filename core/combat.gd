@@ -127,15 +127,35 @@ func current():
 
 func begin_turn() -> void:
 	var c = current()
-	c.new_turn()   # action/bonus/reaction/move + turn-long statuses (spec §7)
-	_auto_stand(c)
+	begin_turn_for(c)
 	if c.is_down():
 		_death_save(c)
 
 func begin_turn_for(c) -> void:
-	# test/tooling helper: give an arbitrary combatant a fresh turn's economy.
-	c.new_turn()
+	c.new_turn()   # action/bonus/reaction/move + turn-long statuses (spec §7)
+	_expire_conditions(c)
+	_regenerate(c)
 	_auto_stand(c)
+
+# A condition applied with duration "round" lasts until the bearer's next turn:
+# one lost turn, never a permanent lockout (nothing else in the engine ends them).
+func _expire_conditions(c) -> void:
+	for id in c.statuses.keys():
+		var s = c.statuses[id]
+		if s is Dictionary and s.has("until_tick") and _tick() > int(s["until_tick"]):
+			c.statuses.erase(id)
+			log.append("%s shakes off %s." % [c.cname, id])
+
+func _tick() -> int:
+	return round_num * maxi(1, order.size()) + turn_idx
+
+# Trolls and friends: a heal_self verb with trigger start_of_turn, no button.
+func _regenerate(c) -> void:
+	if not c.conscious():
+		return
+	for v in c.verbs:
+		if v["kind"] == "heal_self" and v.get("trigger", "") == "start_of_turn" and c.hp < c.max_hp:
+			heal(c, int(v.get("amount", 0)))
 
 # Standing up from prone is free-ish and automatic at the top of your own turn
 # (no "spend your whole move lying there" busywork) but still costs half your
@@ -316,6 +336,9 @@ func _spend(actor, cost: String) -> bool:
 func _offerable(actor, v: Dictionary) -> bool:
 	if not actor.conscious():
 		return false
+	if v.get("trigger", "") in ["passive", "start_of_turn"] \
+			or (v.get("trigger", "") == "on_weapon_hit" and v["kind"] == "save_effect" and not v.has("pool")):
+		return false   # fires from resolve_attack / begin_turn, never a button
 	if not can_spend(actor, v.get("cost", "action")):
 		return false
 	if v.get("once_per", "") == "turn" and actor.econ.get("used", {}).has(v["id"]):
@@ -418,10 +441,24 @@ func _save_effect(actor, v: Dictionary, target) -> Dictionary:
 	var saved := _saving_throw(target, actor.save_dc, v.get("save", "dex"))
 	log.append("%s uses %s on %s — %s the save." % [
 		actor.cname, v["label"], target.cname, "makes" if saved else "fails"])
+	var dmg := 0
+	if int(v.get("dice_count", 0)) > 0:
+		dmg = Dice.roll(rng, "%dd%d" % [int(v["dice_count"]), int(v["dice_sides"])])
+		if saved:
+			dmg = dmg / 2 if v.get("halve_damage", false) else 0
 	if not saved:
 		for cond in v.get("conditions", []):
-			apply_condition(target, cond, actor)
-	return {"saved": saved}
+			apply_condition(target, cond, actor, v.get("duration", ""))
+	if dmg > 0:
+		_apply_damage(target, dmg, v.get("damage_type", ""))
+	return {"saved": saved, "damage": dmg}
+
+# save_effect verbs that ride a weapon hit (a poison bite, a ghoul's paralysis).
+# Pooled ones (Stunning Strike) stay a button — the pool is the player's to spend.
+func _hit_riders(attacker, target) -> void:
+	for v in attacker.verbs:
+		if v["kind"] == "save_effect" and v.get("trigger", "") == "on_weapon_hit" and not v.has("pool"):
+			_save_effect(attacker, v, target)
 
 # --- spells ------------------------------------------------------------
 
@@ -531,14 +568,17 @@ func gain_exhaustion(c, levels := 1) -> int:
 	return lvl
 
 # Apply a named condition. charmed/frightened remember who caused them.
-func apply_condition(target, cond: String, source = null) -> void:
-	var e := Effects.condition(cond)
-	if source != null and (e.get("cannot_target_source", false) or e.get("cannot_approach_source", false)):
-		target.statuses[cond] = {"source": source}
-	elif cond == "exhaustion":
+func apply_condition(target, cond: String, source = null, duration := "") -> void:
+	if cond == "exhaustion":
 		gain_exhaustion(target)
-	else:
-		target.statuses[cond] = true
+		return
+	var e := Effects.condition(cond)
+	var s := {}
+	if source != null and (e.get("cannot_target_source", false) or e.get("cannot_approach_source", false)):
+		s["source"] = source
+	if duration == "round":
+		s["until_tick"] = _tick()
+	target.statuses[cond] = s if not s.is_empty() else true
 
 func _source_of(c, key: String):
 	for id in c.statuses:
@@ -583,6 +623,11 @@ func _attack_mode(attacker, target, opts := {}) -> int:
 		dis = dis or o == "dis"
 	if opts.get("advantage", false):
 		adv = true
+	# passive attack_modifier: Pack Tactics and friends, no button, no action
+	for v in attacker.verbs:
+		if v["kind"] == "attack_modifier" and v.get("trigger", "") == "passive" \
+				and v.get("self", "") == "adv" and _requires_met(attacker, target, Dice.combine(adv, dis), v.get("requires", [])):
+			adv = true
 	return Dice.combine(adv, dis)
 
 # Paralyzed/unconscious: any melee hit from within reach is a crit.
@@ -608,6 +653,9 @@ func _requires_met(attacker, target, mode: int, reqs: Array) -> bool:
 			"advantage_or_ally_adjacent":
 				if mode != Dice.ADV and not allies_of(attacker).any(
 						func(a): return Hex.distance(a.pos, target.pos) <= 1):
+					return false
+			"ally_adjacent_to_target":
+				if not allies_of(attacker).any(func(a): return Hex.distance(a.pos, target.pos) <= 1):
 					return false
 	return true
 
@@ -698,6 +746,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	_log_attack(out, oa)
 	if hit:
 		_apply_damage(target, out.damage, _damage_type(attacker))
+		if target.conscious():
+			_hit_riders(attacker, target)
 	return out
 
 func _damage_type(attacker) -> String:

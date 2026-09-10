@@ -77,6 +77,18 @@ static func _use_kit(cb, m) -> void:
 		if not sw.is_empty():
 			cb.perform(m, sw)
 
+# A breath weapon / gaze / roar: a limited-use save_effect is worth more than one
+# swing, so a foe leads with it whenever something is in range.
+static func _use_save_effect(cb, m) -> bool:
+	var v := _kind(cb, m, "save_effect")
+	if v.is_empty():
+		return false
+	for c in cb.enemies_of(m):
+		if cb.legal_target(m, v, c):
+			cb.perform(m, v, c)
+			return true
+	return false
+
 static func _toward(goal: Vector2i) -> Callable:
 	return func(h: Vector2i) -> float: return -float(Hex.distance(h, goal))
 
@@ -94,6 +106,8 @@ static func _foe_turn(cb, m) -> void:
 	if pcs.is_empty():
 		return
 	_use_kit(cb, m)
+	if _use_save_effect(cb, m):
+		return
 
 	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1)
 	if not adj.is_empty():

@@ -85,7 +85,7 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 			"label": verb_label(fid), "targeting": e.get("targeting", TARGETING.get(e["kind"], "self"))}
 		for k in ["trigger", "once_per", "requires", "verbs", "status", "duration", "resist",
 				"save", "conditions", "shape", "range_ft", "halve_damage", "self",
-				"attacks_against", "extra_attacks", "value"]:
+				"attacks_against", "extra_attacks", "value", "damage_type"]:
 			if e.has(k):
 				v[k] = e[k]
 		if e.has("dice"):

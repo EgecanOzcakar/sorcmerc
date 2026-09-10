@@ -9,6 +9,7 @@ const Party = preload("res://core/party.gd")
 const Presets = preload("res://core/presets.gd")
 const Hex = preload("res://core/hex.gd")
 const Settings = preload("res://core/settings.gd")
+const Icons = preload("res://core/ui_icons.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 
 # What T5 injects before the scene runs: the live party, the node's spec (empty ->
@@ -47,8 +48,8 @@ var _anim := 1.0             # animation speed multiplier (huge when FAST)
 @onready var _cap := Label.new()
 @onready var _logwrap := PanelContainer.new()
 
-# --- palette --------------------------------------------------------------
-const COL_BG := Color("14161c")
+# --- palette (core/ui_icons.gd is the source; board-only tints stay here) ---
+const COL_BG := Icons.COL_BG
 const COL_HEX := Color("232733")
 const COL_HEX_EDGE := Color("39404f")
 const COL_BRAZIER := Color("6b2f1c")
@@ -61,8 +62,12 @@ const PALETTES := {"shrine": COL_HEX, "camp": Color("2a2a26"), "city": Color("2c
 const COL_MOVE := Color(0.30, 0.55, 0.95, 0.35)
 const COL_TARGET := Color(0.95, 0.35, 0.30, 0.9)
 const COL_CONE := Color(0.98, 0.55, 0.15, 0.30)
-const COL_PARTY := Color("5fbf6a")
-const COL_FOE := Color("d15750")
+const COL_GOLD_EDGE := Icons.COL_GOLD_EDGE
+const COL_HEAD := Icons.COL_HEAD
+const COL_BODY := Icons.COL_BODY
+const COL_ACCENT := Icons.COL_ACCENT
+const COL_PARTY := Icons.COL_PARTY
+const COL_FOE := Icons.COL_FOE
 
 func _ready() -> void:
 	_anim = Settings.anim()   # the in-game setting, or SORCMERC_FAST when set
@@ -85,7 +90,8 @@ func _ready() -> void:
 	add_child(bg)
 	move_child(bg, 0)
 
-	_header.add_theme_font_size_override("font_size", 22)
+	_header.add_theme_font_size_override("font_size", Icons.FS_TITLE)
+	_header.add_theme_color_override("font_color", Icons.COL_HEAD)
 	root.add_child(_header)
 
 	# --- the action log: big, centred, shiny --------------------------
@@ -93,10 +99,10 @@ func _ready() -> void:
 	var logwrap := _logwrap
 	logwrap.custom_minimum_size = Vector2(min(820.0, size.x * 0.72), 210)
 	var glow := StyleBoxFlat.new()
-	glow.bg_color = Color("0c0e15")
+	glow.bg_color = Icons.COL_INK
 	glow.set_corner_radius_all(14)
 	glow.set_border_width_all(2)
-	glow.border_color = Color("6f5a30")
+	glow.border_color = Icons.COL_GOLD_EDGE
 	glow.shadow_color = Color(0.95, 0.78, 0.42, 0.22)
 	glow.shadow_size = 16
 	glow.set_content_margin_all(16)
@@ -106,14 +112,14 @@ func _ready() -> void:
 	logwrap.add_child(logcol)
 	_cap.text = "»   A C T I O N   L O G   «"
 	_cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_cap.add_theme_color_override("font_color", Color("c8a75a"))
+	_cap.add_theme_color_override("font_color", Icons.COL_GOLD)
 	logcol.add_child(_cap)
 	_logbox.bbcode_enabled = true
 	_logbox.scroll_following = true
 	_logbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_logbox.add_theme_font_size_override("normal_font_size", 18)
 	_logbox.add_theme_font_size_override("bold_font_size", 18)
-	_logbox.add_theme_color_override("default_color", Color("e9e9df"))
+	_logbox.add_theme_color_override("default_color", Icons.COL_TEXT)
 	logcol.add_child(_logbox)
 	root.add_child(logwrap)
 
@@ -130,7 +136,8 @@ func _ready() -> void:
 	_board.custom_minimum_size = Vector2(0, 240)
 	root.add_child(_board)
 
-	_actor.add_theme_font_size_override("font_size", 16)
+	_actor.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	_actor.add_theme_color_override("font_color", Icons.COL_BODY)
 	root.add_child(_actor)
 
 	_buttons.add_theme_constant_override("h_separation", 6)
@@ -144,15 +151,15 @@ func _ready() -> void:
 # Font sizes across the whole combat UI track the zoom level.
 func _apply_ui_scale() -> void:
 	var u := clampf(_zoom, 0.9, 1.4)
-	_header.add_theme_font_size_override("font_size", int(22 * u))
-	_actor.add_theme_font_size_override("font_size", int(16 * u))
-	_cap.add_theme_font_size_override("font_size", int(12 * u))
-	_order.add_theme_font_size_override("normal_font_size", int(14 * u))
-	_order.add_theme_font_size_override("bold_font_size", int(14 * u))
-	_logbox.add_theme_font_size_override("normal_font_size", int(17 * u))
-	_logbox.add_theme_font_size_override("bold_font_size", int(17 * u))
+	_header.add_theme_font_size_override("font_size", int(Icons.FS_TITLE * u))
+	_actor.add_theme_font_size_override("font_size", int(Icons.FS_HEAD * u))
+	_cap.add_theme_font_size_override("font_size", int(Icons.FS_CAPTION * u))
+	_order.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
+	_order.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
+	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_HEAD * u))
+	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_HEAD * u))
 	for b in _buttons.get_children():
-		b.add_theme_font_size_override("font_size", int(14 * u))
+		b.add_theme_font_size_override("font_size", int(Icons.FS_BODY * u))
 
 func set_zoom(z: float) -> void:
 	_zoom = clampf(z, 0.45, 3.0)
@@ -195,21 +202,7 @@ func _press_hotkey(idx: int) -> void:
 		b.pressed.emit()
 
 func _build_theme() -> void:
-	var th := Theme.new()
-	var mk := func(bg: Color) -> StyleBoxFlat:
-		var s := StyleBoxFlat.new()
-		s.bg_color = bg
-		s.set_corner_radius_all(6)
-		s.content_margin_left = 10; s.content_margin_right = 10
-		s.content_margin_top = 6; s.content_margin_bottom = 6
-		return s
-	th.set_stylebox("normal", "Button", mk.call(Color("2b3040")))
-	th.set_stylebox("hover", "Button", mk.call(Color("3a4152")))
-	th.set_stylebox("pressed", "Button", mk.call(Color("4a5570")))
-	th.set_stylebox("disabled", "Button", mk.call(Color("22252e")))
-	th.set_color("font_color", "Button", Color("e6e8ee"))
-	th.set_color("font_hover_color", "Button", Color("ffffff"))
-	theme = th
+	theme = Icons.dark_theme()
 
 func _new_game(forced := 0) -> void:
 	var env := OS.get_environment("SORCMERC_SEED")
@@ -798,10 +791,15 @@ class Board extends Control:
 			var initials: String = _initials(c.cname)
 			draw_string(ThemeDB.fallback_font, p - Vector2(rad * 0.55, -5 * fz), initials,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * fz), Color("101216"))
+			# class mark as a small badge pinned to the token's shoulder — legible
+			# against the token fill, and it never collides with the initials.
 			var glyph := _glyph(c)
 			if glyph != "":
-				draw_string(ThemeDB.fallback_font, p + Vector2(rad * 0.1, -rad * 0.65), glyph,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * fz), Color("101216"))
+				var bc := p + Vector2(-rad * 0.72, -rad * 0.72)
+				var brad := rad * 0.46
+				draw_circle(bc, brad, base.darkened(0.62))
+				draw_arc(bc, brad, 0, TAU, 16, base.lightened(0.15), 1.5)
+				_centered(glyph, bc, int(14 * fz), Color("f0e6cf"))
 
 			# hp bar
 			var hv: float = _hp.get(c.id, float(c.hp))
@@ -816,13 +814,11 @@ class Board extends Control:
 			draw_string(ThemeDB.fallback_font, br.position + Vector2(0, 12 + 8 * fz),
 				"%d/%d" % [c.hp, c.max_hp], HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * fz), Color("c9ccd6"))
 
-			var tags := ""
-			if c.has("prone"): tags += "↓"
-			if c.has("hidden"): tags += "👁"
-			if c.is_down(): tags += " ✗%d/%d" % [c.death_s, c.death_f]
+			# condition strip, centred over the token (the shoulder is the class badge's)
+			var tags: String = Icons.status_glyphs(c)
+			if c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
 			if tags != "":
-				draw_string(ThemeDB.fallback_font, p + Vector2(-rad, -rad - 4), tags,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, int(12 * fz), Color("e6c15a"))
+				_centered(tags, p + Vector2(0, -rad - 10), int(13 * fz), Color("e6c15a"))
 
 		# floating damage
 		for f in _floats:
@@ -879,9 +875,9 @@ class Board extends Control:
 			"speed %d   %s" % [c.speed, cb.region_at(c.pos)],
 		]
 		var st: Array = []
-		for s in ["prone", "hidden", "dodging", "helped"]:
-			if c.has(s): st.append(s)
-		if c.is_down(): st.append("down %d/%d" % [c.death_s, c.death_f])
+		for s in Icons.CONDITION_ORDER:
+			if s != "down" and c.has(s): st.append("%s %s" % [Icons.condition_glyph(s), s])
+		if c.is_down(): st.append("%s down %d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f])
 		if cb.is_cover(c.pos): st.append("cover")
 		if not st.is_empty(): lines.append(" · ".join(st))
 		var kit: Array = []
@@ -900,12 +896,18 @@ class Board extends Control:
 		p.x = clampf(p.x, 4, size.x - box.x - 4)
 		p.y = clampf(p.y, 4, size.y - box.y - 4)
 		draw_rect(Rect2(p, box), Color(0.05, 0.06, 0.09, 0.94))
-		draw_rect(Rect2(p, box), Color("6f5a30"), false, 1.0)
+		draw_rect(Rect2(p, box), main.COL_GOLD_EDGE, false, 1.0)
 		for i in lines.size():
-			var col := Color("f0e6cf") if i == 0 else Color("c2c5cf")
-			if i == lines.size() - 1 and not lines[i].begins_with(c.cname): col = Color("8fb7d8")
+			var col: Color = main.COL_HEAD if i == 0 else main.COL_BODY
+			if i == lines.size() - 1 and not lines[i].begins_with(c.cname): col = main.COL_ACCENT
 			draw_string(ThemeDB.fallback_font, p + Vector2(pad, pad + fs + i * lh),
 				lines[i], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+
+	# draw_string with the string's own width taken out, so `at` is its centre.
+	func _centered(text: String, at: Vector2, fs: int, col: Color) -> void:
+		var f := ThemeDB.fallback_font
+		var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		draw_string(f, at - Vector2(w * 0.5, -fs * 0.36), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 	func _initials(nm: String) -> String:
 		var w := nm.split(" ", false)
@@ -913,9 +915,6 @@ class Board extends Control:
 			return (w[0][0] + w[1][0]).to_upper()
 		return nm.substr(0, 2).to_upper()
 
+	# A hero's class mark, whatever class the creator made them — monsters get none.
 	func _glyph(c) -> String:
-		match c.id:
-			"vera", "grull": return "⚔"
-			"pike", "kritch": return "➶"
-			"ilsa": return "✦"
-			_: return ""
+		return Icons.combatant_glyph(c)

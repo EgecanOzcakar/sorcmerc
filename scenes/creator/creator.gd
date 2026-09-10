@@ -12,16 +12,17 @@ const Character = preload("res://core/character.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Save = preload("res://core/character_save.gd")
 const Presets = preload("res://core/presets.gd")
+const Icons = preload("res://core/ui_icons.gd")
 
 signal character_created(ch)
 
-# --- palette (scenes/main.gd's) -------------------------------------------
-const COL_BG := Color("14161c")
-const COL_PANEL := Color("1b1e28")
-const COL_GOLD := Color("c8a75a")
-const COL_TEXT := Color("e9e9df")
-const COL_DIM := Color("8b90a0")
-const COL_WARN := Color("d15750")
+# --- palette (core/ui_icons.gd's) -----------------------------------------
+const COL_BG := Icons.COL_BG
+const COL_PANEL := Icons.COL_PANEL
+const COL_GOLD := Icons.COL_GOLD
+const COL_TEXT := Icons.COL_TEXT
+const COL_DIM := Icons.COL_MUTED
+const COL_WARN := Icons.COL_FOE
 
 const ABILS := ["str", "dex", "con", "int", "wis", "cha"]
 const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
@@ -286,9 +287,10 @@ func _ready() -> void:
 	root.add_theme_constant_override("separation", 8)
 	add_child(root)
 
-	_title.add_theme_font_size_override("font_size", 24)
+	_title.add_theme_font_size_override("font_size", Icons.FS_TITLE)
 	_title.add_theme_color_override("font_color", COL_GOLD)
 	root.add_child(_title)
+	_crumbs.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	_crumbs.add_theme_color_override("font_color", COL_DIM)
 	root.add_child(_crumbs)
 
@@ -343,32 +345,16 @@ func _panel_style() -> StyleBoxFlat:
 	s.bg_color = COL_PANEL
 	s.set_corner_radius_all(10)
 	s.set_border_width_all(1)
-	s.border_color = Color("39404f")
+	s.border_color = Icons.COL_EDGE
 	s.set_content_margin_all(12)
 	return s
 
 func _build_theme() -> void:
 	theme = dark_theme()
 
-# Static so other screens (scenes/creator/levelup.gd) share one copy.
+# Static so other screens (scenes/creator/levelup.gd, campaign.gd) share one copy.
 static func dark_theme() -> Theme:
-	var th := Theme.new()
-	var mk := func(bg: Color) -> StyleBoxFlat:
-		var s := StyleBoxFlat.new()
-		s.bg_color = bg
-		s.set_corner_radius_all(6)
-		s.content_margin_left = 10; s.content_margin_right = 10
-		s.content_margin_top = 6; s.content_margin_bottom = 6
-		return s
-	th.set_stylebox("normal", "Button", mk.call(Color("2b3040")))
-	th.set_stylebox("hover", "Button", mk.call(Color("3a4152")))
-	th.set_stylebox("pressed", "Button", mk.call(Color("4a5570")))
-	th.set_stylebox("disabled", "Button", mk.call(Color("22252e")))
-	th.set_color("font_color", "Button", Color("e6e8ee"))
-	th.set_color("font_hover_color", "Button", Color("ffffff"))
-	th.set_color("font_color", "Label", COL_TEXT)
-	th.set_stylebox("normal", "LineEdit", mk.call(Color("22252e")))
-	return th
+	return Icons.dark_theme()
 
 # --- navigation -----------------------------------------------------------
 
@@ -435,7 +421,7 @@ func _refresh_summary() -> void:
 func _head(text: String) -> void:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 17)
+	l.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	l.add_theme_color_override("font_color", COL_GOLD)
 	_body.add_child(l)
 
@@ -443,6 +429,7 @@ func _note(text: String, col: Color = COL_DIM) -> void:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	l.add_theme_color_override("font_color", col)
 	_body.add_child(l)
 
@@ -517,8 +504,8 @@ func _build_class() -> void:
 	var f := _flow()
 	for c in Catalog.all("classes.json"):
 		var cid: String = c["id"]
-		_opt(f, c["name"], ch.class_id() == cid, func(): _set_class(cid),
-			"  d%d" % int(c["hitDie"]))
+		_opt(f, "%s  %s" % [Icons.class_glyph(cid), c["name"]], ch.class_id() == cid,
+			func(): _set_class(cid), "  d%d" % int(c["hitDie"]))
 	if ch.class_id() != "":
 		var src := Catalog.class_src(ch.class_id())
 		var q: Dictionary = src["quickBuild"]
@@ -765,7 +752,18 @@ func _choice_widget(p: Dictionary) -> void:
 		var extra := ""
 		if allows_repeat(p) and count > 0:
 			extra = "  +%d" % count
-		_opt(f, o["label"], count > 0, func(): _pick(p, o["id"]), extra)
+		var b := _opt(f, _decorate(p, String(o["id"]), String(o["label"])), count > 0,
+			func(): _pick(p, o["id"]), extra)
+		if p["type"] == "spell-choice":
+			b.tooltip_text = "%s spell" % humanize(Icons.spell_school(String(o["id"])))
+
+# A pick's icon, where the option has one: spells wear their school's mark.
+func _decorate(p: Dictionary, id: String, label: String) -> String:
+	if p["type"] == "spell-choice":
+		return "%s  %s" % [Icons.school_glyph(Icons.spell_school(id)), label]
+	if p["type"] == "subclass":
+		return "%s  %s" % [Icons.class_glyph(ch.class_id()), label]
+	return label
 
 func _pick(p: Dictionary, id: String) -> void:
 	var picks := picks_from_decision(p, ch.choices.get(p["key"]))
@@ -780,8 +778,9 @@ func _sheet_bbcode(full: bool) -> String:
 	var sub := ""
 	if sheet.subclasses.has(ch.class_id()):
 		sub = " (%s)" % humanize(sheet.subclasses[ch.class_id()])
-	var s := "[b][color=#c8a75a]%s[/color][/b]\n%s %s%s %d\n\n" % [ch.cname,
-		humanize(ch.species_id) if ch.species_id != "" else "—", cls, sub, max(1, sheet.level)]
+	var s := "[b][color=#c8a75a]%s[/color][/b]\n%s %s %s%s %d\n\n" % [ch.cname,
+		humanize(ch.species_id) if ch.species_id != "" else "—",
+		Icons.class_glyph(ch.class_id()), cls, sub, max(1, sheet.level)]
 	s += "[b]AC[/b] %d   [b]HP[/b] %d   [b]Speed[/b] %d ft   [b]PB[/b] +%d   [b]Init[/b] %+d\n\n" % [
 		sheet.ac, sheet.max_hp, int(sheet.speeds.get("walk", 30)), sheet.proficiency_bonus, sheet.initiative]
 	var ab: Array = []
@@ -818,11 +817,11 @@ func _sheet_bbcode(full: bool) -> String:
 		if full:
 			var known: Array = []
 			for k in sc.get("cantrips", []):
-				known.append(humanize(k))
+				known.append(Icons.spell_bb(k, humanize(k)))
 			for k in sc.get("known", []):
-				known.append(humanize(k["id"]))
+				known.append(Icons.spell_bb(k["id"], humanize(k["id"])))
 			for k in sc.get("always_prepared", []):
-				known.append(humanize(k))
+				known.append(Icons.spell_bb(k, humanize(k)))
 			if known:
 				s += "  spells: %s\n" % ", ".join(known)
 	if full:

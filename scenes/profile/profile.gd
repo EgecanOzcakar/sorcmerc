@@ -12,18 +12,16 @@ const Leveling = preload("res://core/leveling.gd")
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
 const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
 
-# ponytail: palette + button theme duplicated from scenes/main.gd (its constants live
-# on a Control script we don't want to preload). Extract to scenes/ui_theme.gd when a
-# third scene needs them.
-const COL_BG := Color("14161c")
-const COL_PANEL := Color("0c0e15")
-const COL_EDGE := Color("6f5a30")
-const COL_GOLD := Color("c8a75a")
-const COL_TEXT := Color("f0e6cf")
-const COL_DIM := Color("c2c5cf")
-const COL_ACCENT := Color("8fb7d8")
+const COL_BG := Icons.COL_BG
+const COL_PANEL := Icons.COL_INK
+const COL_EDGE := Icons.COL_GOLD_EDGE
+const COL_GOLD := Icons.COL_GOLD
+const COL_TEXT := Icons.COL_HEAD
+const COL_DIM := Icons.COL_BODY
+const COL_ACCENT := Icons.COL_ACCENT
 
 const Party = preload("res://core/party.gd")
+const Icons = preload("res://core/ui_icons.gd")
 
 var _ch                                 # core/character.gd
 var _party                              # core/party.gd — the shared stash (T10)
@@ -70,21 +68,7 @@ func field(key: String) -> String:
 	return _fields[key].text if _fields.has(key) else ""
 
 func _build_theme() -> void:
-	var th := Theme.new()
-	var mk := func(c: Color) -> StyleBoxFlat:
-		var s := StyleBoxFlat.new()
-		s.bg_color = c
-		s.set_corner_radius_all(6)
-		s.content_margin_left = 8; s.content_margin_right = 8
-		s.content_margin_top = 3; s.content_margin_bottom = 3
-		return s
-	th.set_stylebox("normal", "Button", mk.call(Color("2b3040")))
-	th.set_stylebox("hover", "Button", mk.call(Color("3a4152")))
-	th.set_stylebox("pressed", "Button", mk.call(Color("4a5570")))
-	th.set_stylebox("disabled", "Button", mk.call(Color("22252e")))
-	th.set_color("font_color", "Button", Color("e6e8ee"))
-	th.set_color("font_hover_color", "Button", Color("ffffff"))
-	theme = th
+	theme = Icons.dark_theme(true)   # compact: the +/- and equip buttons sit inside text rows
 
 # --- rendering ---------------------------------------------------------------
 
@@ -133,12 +117,13 @@ func _header() -> Control:
 	var name_col := VBoxContainer.new()
 	var nm := Label.new()
 	nm.text = _ch.cname
-	nm.add_theme_font_size_override("font_size", 24)
+	nm.add_theme_font_size_override("font_size", Icons.FS_TITLE)
 	nm.add_theme_color_override("font_color", COL_TEXT)
 	name_col.add_child(nm)
 	var sub := Label.new()
 	sub.text = "%s · %s" % [_title(_ch.species_id), _title(_ch.background_id)]
-	sub.add_theme_color_override("font_color", COL_DIM)
+	sub.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	sub.add_theme_color_override("font_color", Icons.COL_MUTED)
 	name_col.add_child(sub)
 	box.add_child(name_col)
 
@@ -148,7 +133,7 @@ func _header() -> Control:
 
 	var lv := Label.new()
 	lv.text = _class_line(s)
-	lv.add_theme_font_size_override("font_size", 18)
+	lv.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	lv.add_theme_color_override("font_color", COL_GOLD)
 	box.add_child(lv)
 	_fields["classes"] = lv
@@ -156,7 +141,8 @@ func _header() -> Control:
 	var need := Leveling.xp_to_next(_ch)
 	var xp := Label.new()
 	xp.text = "%d XP" % int(_ch.xp) if need == 0 else "%d XP  ·  need %d more" % [int(_ch.xp), need]
-	xp.add_theme_color_override("font_color", COL_DIM)
+	xp.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	xp.add_theme_color_override("font_color", Icons.COL_MUTED)
 	box.add_child(xp)
 	_fields["xp"] = xp
 
@@ -173,7 +159,7 @@ func _class_line(s) -> String:
 	for cid in s.class_levels:
 		var sub: String = s.subclasses.get(cid, "")
 		var label: String = _title(cid) if sub == "" else "%s (%s)" % [_title(cid), _title(sub)]
-		parts.append("%s %d" % [label, s.class_levels[cid]])
+		parts.append("%s %s %d" % [Icons.class_glyph(cid), label, s.class_levels[cid]])
 	return " / ".join(parts) if not parts.is_empty() else "Level 0"
 
 const LEVELUP_SCENE := "res://scenes/creator/levelup.tscn"
@@ -216,7 +202,7 @@ func _panel(col: VBoxContainer, title: String) -> VBoxContainer:
 	p.add_child(v)
 	var cap := Label.new()
 	cap.text = "»  " + title.to_upper() + "  «"
-	cap.add_theme_font_size_override("font_size", 12)
+	cap.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 	cap.add_theme_color_override("font_color", COL_GOLD)
 	v.add_child(cap)
 	return v
@@ -240,7 +226,7 @@ func _row(box: VBoxContainer, left: String, right: String, key := "", tint := CO
 func _btn(h: HBoxContainer, text: String, fn: Callable) -> void:
 	var b := Button.new()
 	b.text = text
-	b.add_theme_font_size_override("font_size", 12)
+	b.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 	b.pressed.connect(fn)
 	h.add_child(b)
 
@@ -271,7 +257,7 @@ func _defense(col: VBoxContainer, s) -> void:
 	_row(v, "Proficiency", _sign(s.proficiency_bonus), "pb")
 	_row(v, "Passive Perception", str(s.passive_perception), "passive_perception")
 	if s.disadvantage_from_armor:
-		_row(v, "Armor", "non-proficient: disadvantage", "", Color("d15750"))
+		_row(v, "Armor", "non-proficient: disadvantage", "", Icons.COL_FOE)
 	if not s.resistances.is_empty():
 		_row(v, "Resistances", ", ".join(s.resistances), "resistances", COL_ACCENT)
 
@@ -422,6 +408,7 @@ func _item_row(v: VBoxContainer, iid: String, def: Dictionary, kind: String, qty
 	if kind == "armor":
 		tag = str(def.get("category", "armor"))
 	var h := _row(v, nm, tag, "item_" + iid, COL_TEXT if equipped else COL_DIM)
+	h.get_child(0).add_theme_color_override("font_color", Icons.item_color(iid))
 	if not identified:
 		if party().stash_count(Party.IDENTIFY_SCROLL, true) > 0:
 			_btn(h, "Read identify scroll", func():
@@ -432,7 +419,7 @@ func _item_row(v: VBoxContainer, iid: String, def: Dictionary, kind: String, qty
 		return
 	var b := Button.new()
 	b.text = "Unequip" if equipped else "Equip"
-	b.add_theme_font_size_override("font_size", 12)
+	b.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 	b.pressed.connect(toggle_equip.bind(iid))
 	h.add_child(b)
 	_fields["equip_btn_" + iid] = b
