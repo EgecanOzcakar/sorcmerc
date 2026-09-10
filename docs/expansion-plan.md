@@ -350,6 +350,75 @@ a mystery (rarity hint only, no name/effect) in the profile's stash panel.
   the examining character's real Arcana bonus. Scroll path unaffected
   (always succeeds, no roll). `Campaign.identify_dc(item_id, bonus)`.
 
+## T16 — bestiary special attacks + full bestiary in the scaler (locked 2026-09-10, dispatched now)
+
+Expanded per the user's follow-up ask: almost every monster should have more
+than a basic attack, checked against the real source data, not invented —
+folded into one dispatch with the scaler wiring since both touch
+`data/bestiary.json` and running them concurrently would collide.
+
+**Phase 1 — special/condition-inflicting attacks.** F1b's own extraction
+already documents exactly what was flattened away per monster (each entry's
+`_notes` field: poison, paralysis, frightful presence, grapple/constrict, web,
+stunning, charm, breath weapons, regeneration, pack tactics, etc.) — that's
+the worklist. Re-fetch the same source F1b used (`5e-bits/5e-database`, the
+commit pinned in `data/SCHEMA.md`'s bestiary section) into `/tmp` to read each
+monster's real ability text rather than inventing effects. Don't hand-author
+316 bespoke abilities — D&D's own special attacks cluster into a fairly small
+set of recurring patterns, so build a **reusable template library** in
+`data/effects/features.json` (extending what's already there —
+`monster-multiattack-2/3`, `monster-surprise-attack`, `goblin-nimble-escape`)
+for the common patterns (poison bite/sting, paralytic touch, frightful
+presence, grapple+constrict, web/entangle, stunning strike, charm gaze/song,
+regeneration, pack tactics, a simple innate ranged save-attack for casters),
+using T14's existing `save_effect`/`apply_condition` machinery — then tag a
+broad set of `bestiary.json` entries with the matching template ids in their
+`features` array. Report actual coverage achieved honestly rather than
+claiming "almost every" if the pass falls short — breadth over exhaustive
+depth, matching F1b's own stated ceiling.
+
+**Phase 2 — wire the (now more dangerous) bestiary into the scaler.**
+`core/scaler.gd` still only draws from the 4 original hand-tuned monsters.
+Wire them in:
+- `Scaler.roster_for()` gains an optional faction/theme hint; with none given
+  it seed-picks one coherent faction from the bestiary and builds the roster
+  from monsters within that faction only (never mixing, e.g., a dragon with a
+  goblin) — reusing the existing bodies+multiplier tuning methodology (`power.
+  gd`'s estimate, the same win-rate-targeting approach T8 already validated),
+  not reinventing it.
+- Board theme ↔ faction pairing: T11's per-node `theme` (goblin-camp, frozen-
+  cave, city-square, ...) suggests a natural faction filter (goblin-camp →
+  goblinoid, etc.) — wire that mapping so a themed board usually gets a
+  thematically matching roster.
+- **The Sunken Shrine boss fight stays pinned to its original 4 monsters** —
+  the 200-seed sweep and every difficulty target this session tuned against
+  is anchored there; don't disturb it. Bestiary variety applies to every other
+  combat node.
+- Re-run and report the difficulty-tier win-rate sweep after wiring this in —
+  a broader, multiattack-carrying monster pool changes the curve T8 tuned
+  against 4 simple archetypes; retune the multiplier constants if needed.
+
+## T17 — the New Game flow (locked 2026-09-10, spec'd now, **held until T15 lands**)
+
+Every piece exists (creator, party manager, campaign map, combat) but nothing
+routes them into one playable loop — `project.godot`'s entry point is still
+the raw combat screen with a demo party. Design: a new top-level scene becomes
+the real entry point — Title/Continue (autosave detection, already half-built
+in `campaign.gd`'s Resume/New-Run choice, hoisted up a level) → party setup
+(create via the creator, or manage an existing roster) → confirm → the
+campaign map → play → one of three end states: **Victory** (boss beaten),
+**Retire** (a new player-initiated "leave the dungeon with what you have"
+option, available only between nodes — a new `Campaign` state, not available
+mid-node/mid-combat, banks everything as-is and auto-revives like a win does),
+**Defeat** (whole party dead — the existing "lost" state) — all three funnel
+to a run-summary screen, then back to the hub with the roster persisted for
+next time.
+
+**Held, not dispatched, because T15 (UI polish) is actively editing all five
+screens right now** — a routing/navigation pass touches the same five files
+for a different reason, and running both concurrently is a much worse
+collision than anything managed so far this session. Dispatch once T15 reports.
+
 ## T15 — UI/graphics polish pass (locked 2026-09-10)
 
 "Top notch" visual polish across the existing shape-based (no sprites)
