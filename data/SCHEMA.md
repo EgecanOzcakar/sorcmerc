@@ -332,14 +332,22 @@ that is how ranged foes exist at all, since the engine doesn't switch weapons
 mid-fight (35 such entries; `kritch` in `monsters.json` is the hand-authored
 precedent).
 
-Only three trait shapes are mapped to `features`: `goblin-nimble-escape`,
-`monster-surprise-attack` (both pre-existing) and the new
-`monster-multiattack-2` / `monster-multiattack-3` in `effects/features.json`
-(`{"kind": "attacks_per_action", "value": N}` — the same shape as
-`fighter-extra-attack`). 132 entries carry at least one feature. Everything else —
-legendary/lair actions, recharge breath weapons, innate spellcasting, pack tactics,
-poison/rider damage, secondary actions — is **flattened away** and listed verbatim
-in that entry's `_notes` string. 35 entries have nothing skipped at all.
+Traits map to `features` through a small **template library** in
+`effects/features.json` (T16): `monster-multiattack-2/3`, the condition riders
+that fire off a weapon hit (`monster-poison-bite`, `-venom-sting`,
+`-paralytic-touch`, `-stunning-blow`, `-blinding-attack`, `-knockdown`,
+`-grappling-attack`, `-constrict`, `-life-drain`, `-elemental-rider`,
+`-charge`), the limited-use actions (`monster-breath-weapon[-greater]`,
+`-innate-bolt`, `-web-shot`, `-frightful-presence`, `-charm-gaze`,
+`-petrifying-gaze`) and the two passives (`monster-pack-tactics`,
+`-regeneration`). **250 of 316 entries carry at least one feature; 184 carry a
+special/condition ability beyond multiattack.** A tagged entry also gains a
+`save_dc` (the statblock's own highest DC, else 8+PB+best mod) — riders and
+gaze/breath actions roll against it. At most 3 templates are tagged per monster,
+so the biggest statblocks are still simplified; legendary/lair actions, real
+spellcasting, recharge timing, damage immunities and the flavour traits (Keen
+Smell, Amorphous, Sunlight Sensitivity...) remain **flattened away**, listed in
+each entry's `_notes` alongside an `implemented:` list of what now works.
 
 **CR coverage:** CR 0 (26) · 1/8 (21) · 1/4 (36) · 1/2 (40) · 1 (26) · 2 (45) ·
 3 (26) · 4 (17) · 5 (30) · 6 (12) · 7 (8) · 8 (12) · 9 (11) · 10 (6). CR > 10 was

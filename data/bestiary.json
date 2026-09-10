@@ -79,7 +79,10 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-pack-tactics"
+    ],
     "cr": 0,
     "xp": 10,
     "size": "Small",
@@ -108,7 +111,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Pack Tactics"
+    "_notes": "implemented: Pack Tactics"
   },
   {
     "id": "badger",
@@ -564,7 +567,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 0,
     "xp": 10,
     "size": "Medium",
@@ -592,7 +598,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Charge; Sure-Footed"
+    "_notes": "implemented: Charge, Sure-Footed"
   },
   {
     "id": "hawk",
@@ -671,7 +677,10 @@
       "wis": 0,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-poison-bite"
+    ],
     "cr": 0,
     "xp": 10,
     "size": "Tiny",
@@ -706,7 +715,7 @@
       "charmed",
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Telepathic Bond"
+    "_notes": "implemented: Bite; not modeled: Telepathic Bond"
   },
   {
     "id": "hyena",
@@ -731,7 +740,10 @@
       "wis": 1,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-pack-tactics"
+    ],
     "cr": 0,
     "xp": 10,
     "size": "Medium",
@@ -759,7 +771,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Pack Tactics"
+    "_notes": "implemented: Pack Tactics"
   },
   {
     "id": "jackal",
@@ -784,7 +796,10 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-pack-tactics"
+    ],
     "cr": 0,
     "xp": 10,
     "size": "Small",
@@ -812,7 +827,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Hearing and Smell; Pack Tactics"
+    "_notes": "implemented: Pack Tactics; not modeled: Keen Hearing and Smell"
   },
   {
     "id": "lemure",
@@ -954,7 +969,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-grappling-attack"
+    ],
     "cr": 0,
     "xp": 10,
     "size": "Small",
@@ -984,7 +1002,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Hold Breath; Underwater Camouflage; Water Breathing; action: Ink Cloud"
+    "_notes": "implemented: Tentacles; not modeled: Hold Breath; Underwater Camouflage; Water Breathing; action: Ink Cloud"
   },
   {
     "id": "owl",
@@ -1064,7 +1082,10 @@
       "wis": -2,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 9,
+    "features": [
+      "monster-charge"
+    ],
     "cr": 0,
     "xp": 10,
     "size": "Tiny",
@@ -1093,7 +1114,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Blood Frenzy; Water Breathing"
+    "_notes": "implemented: Blood Frenzy; not modeled: Water Breathing"
   },
   {
     "id": "rat",
@@ -1226,7 +1247,10 @@
       "wis": -1,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 9,
+    "features": [
+      "monster-poison-bite"
+    ],
     "cr": 0,
     "xp": 10,
     "size": "Tiny",
@@ -1254,7 +1278,8 @@
     "resist": [],
     "immune": [],
     "vulnerable": [],
-    "cond_immune": []
+    "cond_immune": [],
+    "_notes": "implemented: Sting"
   },
   {
     "id": "spider",
@@ -1279,7 +1304,10 @@
       "wis": 0,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 9,
+    "features": [
+      "monster-poison-bite"
+    ],
     "cr": 0,
     "xp": 10,
     "size": "Tiny",
@@ -1309,7 +1337,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Spider Climb; Web Sense; Web Walker"
+    "_notes": "implemented: Bite; not modeled: Spider Climb; Web Sense; Web Walker"
   },
   {
     "id": "vulture",
@@ -1334,7 +1362,10 @@
       "wis": 1,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-pack-tactics"
+    ],
     "cr": 0,
     "xp": 10,
     "size": "Medium",
@@ -1363,7 +1394,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Sight and Smell; Pack Tactics"
+    "_notes": "implemented: Pack Tactics; not modeled: Keen Sight and Smell"
   },
   {
     "id": "weasel",
@@ -1546,7 +1577,10 @@
       "wis": 2,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-pack-tactics"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Small",
@@ -1575,7 +1609,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Sight; Pack Tactics"
+    "_notes": "implemented: Pack Tactics; not modeled: Keen Sight"
   },
   {
     "id": "camel",
@@ -1705,7 +1739,10 @@
       "wis": 1,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-elemental-rider"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Tiny",
@@ -1736,7 +1773,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Flyby; extra damage on Bite: 3d4 poison"
+    "_notes": "implemented: Bite; not modeled: Flyby"
   },
   {
     "id": "giant-crab",
@@ -1761,7 +1798,10 @@
       "wis": -1,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-grappling-attack"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Medium",
@@ -1791,7 +1831,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious"
+    "_notes": "implemented: Claw; not modeled: Amphibious"
   },
   {
     "id": "giant-rat",
@@ -1816,7 +1856,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-pack-tactics"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Small",
@@ -1845,7 +1888,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Smell; Pack Tactics"
+    "_notes": "implemented: Pack Tactics; not modeled: Keen Smell"
   },
   {
     "id": "giant-rat-diseased",
@@ -1870,7 +1913,11 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-pack-tactics",
+      "monster-life-drain"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Small",
@@ -1899,7 +1946,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Smell; Pack Tactics"
+    "_notes": "implemented: Pack Tactics, Bite; not modeled: Keen Smell"
   },
   {
     "id": "giant-weasel",
@@ -2030,7 +2077,10 @@
       "wis": -2,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 9,
+    "features": [
+      "monster-pack-tactics"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Small",
@@ -2059,7 +2109,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Sunlight Sensitivity; Pack Tactics"
+    "_notes": "implemented: Pack Tactics; not modeled: Sunlight Sensitivity"
   },
   {
     "id": "kobold-archer",
@@ -2084,7 +2134,10 @@
       "wis": -2,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 9,
+    "features": [
+      "monster-pack-tactics"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Small",
@@ -2113,7 +2166,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Sunlight Sensitivity; Pack Tactics",
+    "_notes": "implemented: Pack Tactics; not modeled: Sunlight Sensitivity",
     "variant_of": "kobold"
   },
   {
@@ -2139,7 +2192,10 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Medium",
@@ -2167,7 +2223,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Hearing and Smell"
+    "_notes": "implemented: Bite; not modeled: Keen Hearing and Smell"
   },
   {
     "id": "merfolk",
@@ -2246,7 +2302,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Medium",
@@ -2274,7 +2333,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Beast of Burden; Sure-Footed"
+    "_notes": "implemented: Sure-Footed; not modeled: Beast of Burden"
   },
   {
     "id": "noble",
@@ -2352,7 +2411,10 @@
       "wis": 0,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-poison-bite"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Tiny",
@@ -2381,7 +2443,8 @@
     "resist": [],
     "immune": [],
     "vulnerable": [],
-    "cond_immune": []
+    "cond_immune": [],
+    "_notes": "implemented: Bite"
   },
   {
     "id": "pony",
@@ -2512,7 +2575,10 @@
       "wis": 0,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-pack-tactics"
+    ],
     "cr": 0.125,
     "xp": 25,
     "size": "Medium",
@@ -2540,7 +2606,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Pack Tactics"
+    "_notes": "implemented: Pack Tactics"
   },
   {
     "id": "acolyte",
@@ -2565,7 +2631,10 @@
       "wis": 2,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-innate-bolt"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Medium",
@@ -2593,7 +2662,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Spellcasting"
+    "_notes": "implemented: Spellcasting"
   },
   {
     "id": "axe-beak",
@@ -2723,7 +2792,10 @@
       "wis": -1,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Medium",
@@ -2751,7 +2823,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Charge; Relentless"
+    "_notes": "implemented: Charge; not modeled: Relentless"
   },
   {
     "id": "constrictor-snake",
@@ -2776,7 +2848,10 @@
       "wis": 0,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-constrict"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Large",
@@ -2806,7 +2881,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Bite"
+    "_notes": "implemented: Constrict; not modeled: action: Bite"
   },
   {
     "id": "draft-horse",
@@ -2883,8 +2958,10 @@
       "wis": -1,
       "cha": -4
     },
+    "save_dc": 11,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-poison-bite"
     ],
     "cr": 0.25,
     "xp": 25,
@@ -2922,7 +2999,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: action: Bite; action: Fetid Cloud"
+    "_notes": "implemented: Fetid Cloud; not modeled: action: Bite"
   },
   {
     "id": "drow",
@@ -2947,7 +3024,11 @@
       "wis": 0,
       "cha": 1
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-innate-bolt",
+      "monster-poison-bite"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Medium",
@@ -2976,7 +3057,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Fey Ancestry; Innate Spellcasting; Sunlight Sensitivity"
+    "_notes": "implemented: Innate Spellcasting, Hand Crossbow; not modeled: Fey Ancestry; Sunlight Sensitivity"
   },
   {
     "id": "drow-archer",
@@ -3001,7 +3082,11 @@
       "wis": 0,
       "cha": 1
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-innate-bolt",
+      "monster-poison-bite"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Medium",
@@ -3030,7 +3115,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Fey Ancestry; Innate Spellcasting; Sunlight Sensitivity",
+    "_notes": "implemented: Innate Spellcasting, Hand Crossbow; not modeled: Fey Ancestry; Sunlight Sensitivity",
     "variant_of": "drow"
   },
   {
@@ -3056,7 +3141,10 @@
       "wis": 0,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Large",
@@ -3084,7 +3172,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Charge; action: Ram"
+    "_notes": "implemented: Charge; not modeled: action: Ram"
   },
   {
     "id": "flying-sword",
@@ -3287,7 +3375,10 @@
       "wis": -2,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-venom-sting"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Small",
@@ -3316,7 +3407,8 @@
     "resist": [],
     "immune": [],
     "vulnerable": [],
-    "cond_immune": []
+    "cond_immune": [],
+    "_notes": "implemented: Bite"
   },
   {
     "id": "giant-frog",
@@ -3341,7 +3433,11 @@
       "wis": 0,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-constrict",
+      "monster-grappling-attack"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Medium",
@@ -3371,7 +3467,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; Standing Leap; action: Swallow"
+    "_notes": "implemented: Bite, Swallow; not modeled: Amphibious; Standing Leap"
   },
   {
     "id": "giant-lizard",
@@ -3505,7 +3601,10 @@
       "wis": 0,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-venom-sting"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Medium",
@@ -3534,7 +3633,8 @@
     "resist": [],
     "immune": [],
     "vulnerable": [],
-    "cond_immune": []
+    "cond_immune": [],
+    "_notes": "implemented: Bite"
   },
   {
     "id": "giant-wolf-spider",
@@ -3559,7 +3659,10 @@
       "wis": 1,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-poison-bite"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Medium",
@@ -3590,7 +3693,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Spider Climb; Web Sense; Web Walker"
+    "_notes": "implemented: Bite; not modeled: Spider Climb; Web Sense; Web Walker"
   },
   {
     "id": "goblin",
@@ -3782,7 +3885,10 @@
       "wis": 2,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Medium",
@@ -3811,7 +3917,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Smell; Pounce; action: Claw"
+    "_notes": "implemented: Pounce; not modeled: Keen Smell; action: Claw"
   },
   {
     "id": "pseudodragon",
@@ -3836,7 +3942,10 @@
       "wis": 1,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-poison-bite"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Tiny",
@@ -3867,7 +3976,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Senses; Magic Resistance; Limited Telepathy; action: Sting"
+    "_notes": "implemented: Sting; not modeled: Keen Senses; Magic Resistance; Limited Telepathy"
   },
   {
     "id": "riding-horse",
@@ -4065,7 +4174,10 @@
       "wis": 1,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-poison-bite"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Tiny",
@@ -4094,7 +4206,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Heart Sight; action: Invisibility"
+    "_notes": "implemented: Shortbow; not modeled: action: Heart Sight; action: Invisibility"
   },
   {
     "id": "sprite-archer",
@@ -4119,7 +4231,10 @@
       "wis": 1,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-poison-bite"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Tiny",
@@ -4148,7 +4263,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Heart Sight; action: Invisibility",
+    "_notes": "implemented: Shortbow; not modeled: action: Heart Sight; action: Invisibility",
     "variant_of": "sprite"
   },
   {
@@ -4174,7 +4289,12 @@
       "wis": 0,
       "cha": 1
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-innate-bolt",
+      "monster-elemental-rider",
+      "monster-breath-weapon"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Small",
@@ -4209,7 +4329,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Death Burst; Innate Spellcasting; action: Steam Breath; extra damage on Claws: 1d4 fire"
+    "_notes": "implemented: Innate Spellcasting, Claws, Steam Breath; not modeled: Death Burst"
   },
   {
     "id": "swarm-of-bats",
@@ -4496,7 +4616,11 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-pack-tactics",
+      "monster-knockdown"
+    ],
     "cr": 0.25,
     "xp": 50,
     "size": "Medium",
@@ -4524,7 +4648,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Hearing and Smell; Pack Tactics"
+    "_notes": "implemented: Pack Tactics, Bite; not modeled: Keen Hearing and Smell"
   },
   {
     "id": "zombie",
@@ -4774,7 +4898,10 @@
       "wis": 1,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-constrict"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Small",
@@ -4803,7 +4930,8 @@
     "resist": [],
     "immune": [],
     "vulnerable": [],
-    "cond_immune": []
+    "cond_immune": [],
+    "_notes": "implemented: Bite"
   },
   {
     "id": "crocodile",
@@ -4828,7 +4956,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-constrict"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Large",
@@ -4857,7 +4988,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Hold Breath"
+    "_notes": "implemented: Bite; not modeled: Hold Breath"
   },
   {
     "id": "darkmantle",
@@ -4882,7 +5013,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-blinding-attack"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Small",
@@ -4912,7 +5046,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Echolocation; False Appearance; action: Darkness Aura"
+    "_notes": "implemented: Crush; not modeled: Echolocation; False Appearance; action: Darkness Aura"
   },
   {
     "id": "deep-gnome-svirfneblin",
@@ -4937,7 +5071,11 @@
       "wis": 0,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-innate-bolt",
+      "monster-poison-bite"
+    ],
     "cr": 0.5,
     "xp": 50,
     "size": "Small",
@@ -4966,7 +5104,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Stone Camouflage; Gnome Cunning; Innate Spellcasting"
+    "_notes": "implemented: Innate Spellcasting, Poisoned Dart; not modeled: Stone Camouflage; Gnome Cunning"
   },
   {
     "id": "deep-gnome-svirfneblin-archer",
@@ -4991,7 +5129,11 @@
       "wis": 0,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-innate-bolt",
+      "monster-poison-bite"
+    ],
     "cr": 0.5,
     "xp": 50,
     "size": "Small",
@@ -5020,7 +5162,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Stone Camouflage; Gnome Cunning; Innate Spellcasting",
+    "_notes": "implemented: Innate Spellcasting, Poisoned Dart; not modeled: Stone Camouflage; Gnome Cunning",
     "variant_of": "deep-gnome-svirfneblin"
   },
   {
@@ -5046,7 +5188,12 @@
       "wis": 0,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-blinding-attack",
+      "monster-innate-bolt",
+      "monster-breath-weapon"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Small",
@@ -5082,7 +5229,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Death Burst; Innate Spellcasting; action: Blinding Breath"
+    "_notes": "implemented: Death Burst, Innate Spellcasting, Blinding Breath"
   },
   {
     "id": "giant-goat",
@@ -5107,7 +5254,10 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Large",
@@ -5135,7 +5285,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Charge; Sure-Footed"
+    "_notes": "implemented: Charge, Sure-Footed"
   },
   {
     "id": "giant-sea-horse",
@@ -5160,7 +5310,10 @@
       "wis": 1,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Large",
@@ -5189,7 +5342,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Charge; Water Breathing"
+    "_notes": "implemented: Charge; not modeled: Water Breathing"
   },
   {
     "id": "giant-wasp",
@@ -5214,7 +5367,10 @@
       "wis": 0,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-venom-sting"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Medium",
@@ -5243,7 +5399,8 @@
     "resist": [],
     "immune": [],
     "vulnerable": [],
-    "cond_immune": []
+    "cond_immune": [],
+    "_notes": "implemented: Sting"
   },
   {
     "id": "gnoll",
@@ -5268,7 +5425,10 @@
       "wis": 0,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-charge"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Medium",
@@ -5297,7 +5457,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Rampage; action: Bite"
+    "_notes": "implemented: Rampage; not modeled: action: Bite"
   },
   {
     "id": "gnoll-archer",
@@ -5377,7 +5537,10 @@
       "wis": -2,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-elemental-rider"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Medium",
@@ -5418,7 +5581,7 @@
       "frightened",
       "prone"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Amorphous; Corrode Metal; False Appearance; extra damage on Pseudopod: 2d6 acid"
+    "_notes": "implemented: Pseudopod; not modeled: Amorphous; Corrode Metal; False Appearance"
   },
   {
     "id": "hobgoblin",
@@ -5552,7 +5715,12 @@
       "wis": 0,
       "cha": 1
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-innate-bolt",
+      "monster-elemental-rider",
+      "monster-breath-weapon"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Small",
@@ -5590,7 +5758,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Death Burst; False Appearance; Innate Spellcasting; action: Frost Breath; extra damage on Claws: 1d4 cold"
+    "_notes": "implemented: Innate Spellcasting, Claws, Frost Breath; not modeled: Death Burst; False Appearance"
   },
   {
     "id": "lizardfolk",
@@ -5671,7 +5839,12 @@
       "wis": 0,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-innate-bolt",
+      "monster-elemental-rider",
+      "monster-breath-weapon"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Small",
@@ -5708,7 +5881,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Death Burst; False Appearance; Innate Spellcasting; action: Fire Breath; extra damage on Claws: 1d4 fire"
+    "_notes": "implemented: Innate Spellcasting, Claws, Fire Breath; not modeled: Death Burst; False Appearance"
   },
   {
     "id": "magmin",
@@ -5845,7 +6018,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-pack-tactics"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Medium",
@@ -5874,7 +6050,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Pack Tactics; Water Breathing"
+    "_notes": "implemented: Pack Tactics; not modeled: Water Breathing"
   },
   {
     "id": "rust-monster",
@@ -5953,8 +6129,10 @@
       "wis": 1,
       "cha": -1
     },
+    "save_dc": 11,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-charge"
     ],
     "cr": 0.5,
     "xp": 100,
@@ -5985,7 +6163,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Blood Frenzy; Limited Amphibiousness; Shark Telepathy; action: Bite; action: Claws"
+    "_notes": "implemented: Blood Frenzy; not modeled: Limited Amphibiousness; Shark Telepathy; action: Bite; action: Claws"
   },
   {
     "id": "satyr",
@@ -6643,8 +6821,10 @@
       "wis": 0,
       "cha": 0
     },
+    "save_dc": 12,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-pack-tactics"
     ],
     "cr": 0.5,
     "xp": 100,
@@ -6673,7 +6853,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Pack Tactics"
+    "_notes": "implemented: Pack Tactics"
   },
   {
     "id": "thug-archer",
@@ -6698,8 +6878,10 @@
       "wis": 0,
       "cha": 0
     },
+    "save_dc": 12,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-pack-tactics"
     ],
     "cr": 0.5,
     "xp": 100,
@@ -6728,7 +6910,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Pack Tactics",
+    "_notes": "implemented: Pack Tactics",
     "variant_of": "thug"
   },
   {
@@ -6754,7 +6936,10 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Large",
@@ -6782,7 +6967,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Trampling Charge"
+    "_notes": "implemented: Trampling Charge"
   },
   {
     "id": "warhorse-skeleton",
@@ -6867,7 +7052,10 @@
       "wis": 0,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 0.5,
     "xp": 100,
     "size": "Large",
@@ -6896,7 +7084,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Hearing and Smell"
+    "_notes": "implemented: Bite; not modeled: Keen Hearing and Smell"
   },
   {
     "id": "animated-armor",
@@ -6989,7 +7177,10 @@
       "wis": 2,
       "cha": 3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-breath-weapon"
+    ],
     "cr": 1,
     "xp": 100,
     "size": "Medium",
@@ -7023,7 +7214,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Breath Weapons"
+    "_notes": "implemented: Breath Weapons"
   },
   {
     "id": "brown-bear",
@@ -7160,7 +7351,10 @@
       "wis": 2,
       "cha": 3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-breath-weapon"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Medium",
@@ -7194,7 +7388,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Breath Weapons"
+    "_notes": "implemented: Breath Weapons"
   },
   {
     "id": "death-dog",
@@ -7219,8 +7413,11 @@
       "wis": 1,
       "cha": -2
     },
+    "save_dc": 12,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-stunning-blow",
+      "monster-poison-bite"
     ],
     "cr": 1,
     "xp": 200,
@@ -7250,7 +7447,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Two-Headed"
+    "_notes": "implemented: Two-Headed, Bite"
   },
   {
     "id": "dire-wolf",
@@ -7275,7 +7472,11 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-pack-tactics",
+      "monster-knockdown"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Large",
@@ -7303,7 +7504,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Hearing and Smell; Pack Tactics"
+    "_notes": "implemented: Pack Tactics, Bite; not modeled: Keen Hearing and Smell"
   },
   {
     "id": "dryad",
@@ -7328,7 +7529,10 @@
       "wis": 2,
       "cha": 4
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-innate-bolt"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Medium",
@@ -7357,7 +7561,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Innate Spellcasting; Magic Resistance; Speak with Beasts and Plants; Tree Stride; action: Fey Charm"
+    "_notes": "implemented: Innate Spellcasting; not modeled: Magic Resistance; Speak with Beasts and Plants; Tree Stride; action: Fey Charm"
   },
   {
     "id": "duergar",
@@ -7382,7 +7586,10 @@
       "wis": 0,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-paralytic-touch"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Medium",
@@ -7413,7 +7620,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Duergar Resilience; Sunlight Sensitivity; action: Enlarge; action: Javelin; action: Invisibility"
+    "_notes": "implemented: Duergar Resilience; not modeled: Sunlight Sensitivity; action: Enlarge; action: Javelin; action: Invisibility"
   },
   {
     "id": "ghoul",
@@ -7438,7 +7645,10 @@
       "wis": 0,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-paralytic-touch"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Medium",
@@ -7473,7 +7683,7 @@
       "charmed",
       "exhaustion"
     ],
-    "_notes": "flattened to basic attacks; not modeled: action: Claws"
+    "_notes": "implemented: Claws"
   },
   {
     "id": "giant-eagle",
@@ -7554,7 +7764,10 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-charge"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Large",
@@ -7582,7 +7795,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Rampage"
+    "_notes": "implemented: Rampage"
   },
   {
     "id": "giant-octopus",
@@ -7607,7 +7820,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 16,
+    "features": [
+      "monster-constrict"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Large",
@@ -7637,7 +7853,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Hold Breath; Underwater Camouflage; Water Breathing; action: Ink Cloud"
+    "_notes": "implemented: Tentacles; not modeled: Hold Breath; Underwater Camouflage; Water Breathing; action: Ink Cloud"
   },
   {
     "id": "giant-spider",
@@ -7662,7 +7878,11 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-poison-bite",
+      "monster-web-shot"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Large",
@@ -7693,7 +7913,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Spider Climb; Web Sense; Web Walker; action: Web"
+    "_notes": "implemented: Bite, Web; not modeled: Spider Climb; Web Sense; Web Walker"
   },
   {
     "id": "giant-toad",
@@ -7718,7 +7938,11 @@
       "wis": 0,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-constrict",
+      "monster-grappling-attack"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Large",
@@ -7748,7 +7972,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; Standing Leap; action: Swallow; extra damage on Bite: 1d10 poison"
+    "_notes": "implemented: Bite, Swallow; not modeled: Amphibious; Standing Leap"
   },
   {
     "id": "giant-vulture",
@@ -7773,8 +7997,10 @@
       "wis": 1,
       "cha": -2
     },
+    "save_dc": 12,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-pack-tactics"
     ],
     "cr": 1,
     "xp": 200,
@@ -7804,7 +8030,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Sight and Smell; Pack Tactics; action: Beak"
+    "_notes": "implemented: Pack Tactics; not modeled: Keen Sight and Smell; action: Beak"
   },
   {
     "id": "harpy",
@@ -7829,8 +8055,10 @@
       "wis": 0,
       "cha": 1
     },
+    "save_dc": 11,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-charm-gaze"
     ],
     "cr": 1,
     "xp": 200,
@@ -7860,7 +8088,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Club; action: Luring Song"
+    "_notes": "implemented: Luring Song; not modeled: action: Club"
   },
   {
     "id": "hippogriff",
@@ -7941,7 +8169,10 @@
       "wis": 1,
       "cha": 2
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-venom-sting"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Tiny",
@@ -7979,7 +8210,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Shapechanger; Devil's Sight; Magic Resistance; action: Invisibility"
+    "_notes": "implemented: Sting (Bite in Beast Form); not modeled: Shapechanger; Devil's Sight; Magic Resistance; action: Invisibility"
   },
   {
     "id": "lion",
@@ -8004,7 +8235,11 @@
       "wis": 1,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-pack-tactics",
+      "monster-knockdown"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Large",
@@ -8032,7 +8267,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Smell; Pack Tactics; Pounce; Running Leap; action: Claw"
+    "_notes": "implemented: Pack Tactics, Pounce; not modeled: Keen Smell; Running Leap; action: Claw"
   },
   {
     "id": "quasit",
@@ -8057,7 +8292,11 @@
       "wis": 0,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-poison-bite",
+      "monster-frightful-presence"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Tiny",
@@ -8095,7 +8334,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Shapechanger; Magic Resistance; action: Scare; action: Invisibility"
+    "_notes": "implemented: Claw (Bite in Beast Form), Scare; not modeled: Shapechanger; Magic Resistance; action: Invisibility"
   },
   {
     "id": "specter",
@@ -8120,7 +8359,10 @@
       "wis": 0,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-life-drain"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Medium",
@@ -8170,7 +8412,7 @@
       "restrained",
       "unconscious"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Incorporeal Movement; Sunlight Sensitivity"
+    "_notes": "implemented: Life Drain; not modeled: Incorporeal Movement; Sunlight Sensitivity"
   },
   {
     "id": "spy",
@@ -8306,7 +8548,10 @@
       "wis": -2,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-charge"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Medium",
@@ -8349,7 +8594,7 @@
       "restrained",
       "stunned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Blood Frenzy; Swarm; Water Breathing"
+    "_notes": "implemented: Blood Frenzy; not modeled: Swarm; Water Breathing"
   },
   {
     "id": "tiger",
@@ -8374,7 +8619,10 @@
       "wis": 1,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 1,
     "xp": 200,
     "size": "Large",
@@ -8403,7 +8651,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Smell; Pounce; action: Claw"
+    "_notes": "implemented: Pounce; not modeled: Keen Smell; action: Claw"
   },
   {
     "id": "ankheg",
@@ -8428,7 +8676,10 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-grappling-attack"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Large",
@@ -8459,7 +8710,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Acid Spray; extra damage on Bite: 1d6 acid"
+    "_notes": "implemented: Bite, Acid Spray"
   },
   {
     "id": "awakened-tree",
@@ -8542,7 +8793,10 @@
       "wis": 1,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-elemental-rider"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -8575,7 +8829,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Heated Body; Heated Weapons; Illumination; extra damage on Warhammer: 1d6 fire"
+    "_notes": "implemented: Warhammer; not modeled: Heated Body; Heated Weapons; Illumination"
   },
   {
     "id": "bandit-captain",
@@ -8655,7 +8909,10 @@
       "wis": 0,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-charge"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -8683,7 +8940,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Reckless"
+    "_notes": "implemented: Reckless"
   },
   {
     "id": "black-dragon-wyrmling",
@@ -8708,7 +8965,11 @@
       "wis": 2,
       "cha": 3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-elemental-rider",
+      "monster-breath-weapon"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -8742,7 +9003,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; action: Acid Breath; extra damage on Bite: 1d4 acid"
+    "_notes": "implemented: Bite, Acid Breath; not modeled: Amphibious"
   },
   {
     "id": "bronze-dragon-wyrmling",
@@ -8767,7 +9028,10 @@
       "wis": 2,
       "cha": 4
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-breath-weapon"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -8801,7 +9065,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; action: Breath Weapons"
+    "_notes": "implemented: Breath Weapons; not modeled: Amphibious"
   },
   {
     "id": "centaur",
@@ -8826,8 +9090,10 @@
       "wis": 1,
       "cha": 0
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-charge"
     ],
     "cr": 2,
     "xp": 450,
@@ -8856,7 +9122,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Charge; action: Pike"
+    "_notes": "implemented: Charge; not modeled: action: Pike"
   },
   {
     "id": "centaur-archer",
@@ -8937,8 +9203,10 @@
       "wis": 1,
       "cha": 2
     },
+    "save_dc": 11,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-innate-bolt"
     ],
     "cr": 2,
     "xp": 450,
@@ -8967,7 +9235,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Dark Devotion; Spellcasting"
+    "_notes": "implemented: Spellcasting; not modeled: Dark Devotion"
   },
   {
     "id": "druid",
@@ -8992,7 +9260,10 @@
       "wis": 2,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-innate-bolt"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -9020,7 +9291,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Spellcasting"
+    "_notes": "implemented: Spellcasting"
   },
   {
     "id": "ettercap",
@@ -9045,8 +9316,11 @@
       "wis": 1,
       "cha": -1
     },
+    "save_dc": 11,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-poison-bite",
+      "monster-web-shot"
     ],
     "cr": 2,
     "xp": 450,
@@ -9077,7 +9351,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Spider Climb; Web Sense; Web Walker; action: Claws; action: Web; extra damage on Bite: 1d8 poison"
+    "_notes": "implemented: Bite, Web; not modeled: Spider Climb; Web Sense; Web Walker; action: Claws"
   },
   {
     "id": "gargoyle",
@@ -9167,7 +9441,10 @@
       "wis": -2,
       "cha": -5
     },
-    "features": [],
+    "save_dc": 15,
+    "features": [
+      "monster-constrict"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Large",
@@ -9203,7 +9480,7 @@
       "frightened",
       "prone"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Ooze Cube; Transparent; action: Engulf"
+    "_notes": "implemented: Engulf; not modeled: Ooze Cube; Transparent"
   },
   {
     "id": "ghast",
@@ -9228,7 +9505,11 @@
       "wis": 0,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-poison-bite",
+      "monster-paralytic-touch"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -9265,7 +9546,7 @@
       "charmed",
       "exhaustion"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Stench; Turn Defiance; action: Claws"
+    "_notes": "implemented: Stench, Claws; not modeled: Turn Defiance"
   },
   {
     "id": "giant-boar",
@@ -9290,7 +9571,10 @@
       "wis": -2,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Large",
@@ -9318,7 +9602,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Charge; Relentless"
+    "_notes": "implemented: Charge; not modeled: Relentless"
   },
   {
     "id": "giant-constrictor-snake",
@@ -9343,7 +9627,10 @@
       "wis": 0,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 16,
+    "features": [
+      "monster-constrict"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Huge",
@@ -9373,7 +9660,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Bite"
+    "_notes": "implemented: Constrict; not modeled: action: Bite"
   },
   {
     "id": "giant-elk",
@@ -9398,7 +9685,10 @@
       "wis": 2,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Huge",
@@ -9426,7 +9716,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Charge; action: Ram"
+    "_notes": "implemented: Charge; not modeled: action: Ram"
   },
   {
     "id": "gibbering-mouther",
@@ -9451,8 +9741,11 @@
       "wis": 0,
       "cha": -2
     },
+    "save_dc": 13,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-knockdown",
+      "monster-blinding-attack"
     ],
     "cr": 2,
     "xp": 450,
@@ -9485,7 +9778,7 @@
     "cond_immune": [
       "prone"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Aberrant Ground; Gibbering; action: Blinding Spittle"
+    "_notes": "implemented: Bites, Blinding Spittle; not modeled: Aberrant Ground; Gibbering"
   },
   {
     "id": "green-dragon-wyrmling",
@@ -9510,7 +9803,11 @@
       "wis": 2,
       "cha": 3
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-elemental-rider",
+      "monster-breath-weapon"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -9546,7 +9843,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; action: Poison Breath; extra damage on Bite: 1d6 poison"
+    "_notes": "implemented: Bite, Poison Breath; not modeled: Amphibious"
   },
   {
     "id": "grick",
@@ -9687,7 +9984,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-charge"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Large",
@@ -9716,7 +10016,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Blood Frenzy; Water Breathing"
+    "_notes": "implemented: Blood Frenzy; not modeled: Water Breathing"
   },
   {
     "id": "merrow",
@@ -9798,7 +10098,11 @@
       "wis": 1,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-grappling-attack",
+      "monster-elemental-rider"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -9831,7 +10135,7 @@
     "cond_immune": [
       "prone"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Shapechanger; Adhesive (Object Form Only); False Appearance (Object Form Only); Grappler; action: Pseudopod; extra damage on Bite: 1d8 acid"
+    "_notes": "implemented: Adhesive (Object Form Only), Grappler, Bite; not modeled: Shapechanger; False Appearance (Object Form Only); action: Pseudopod"
   },
   {
     "id": "minotaur-skeleton",
@@ -9856,7 +10160,10 @@
       "wis": -1,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Large",
@@ -9892,7 +10199,7 @@
       "exhaustion",
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Charge; action: Gore"
+    "_notes": "implemented: Charge; not modeled: action: Gore"
   },
   {
     "id": "ochre-jelly",
@@ -9917,7 +10224,10 @@
       "wis": -2,
       "cha": -5
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-elemental-rider"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Large",
@@ -9959,7 +10269,7 @@
       "frightened",
       "prone"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Amorphous; Spider Climb; Split; extra damage on Pseudopod: 1d6 acid"
+    "_notes": "implemented: Pseudopod; not modeled: Amorphous; Spider Climb; Split"
   },
   {
     "id": "ogre",
@@ -10259,7 +10569,10 @@
       "wis": 3,
       "cha": 1
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-innate-bolt"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -10287,7 +10600,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Divine Eminence; Spellcasting"
+    "_notes": "implemented: Spellcasting; not modeled: Divine Eminence"
   },
   {
     "id": "rhinoceros",
@@ -10312,7 +10625,10 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 15,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Large",
@@ -10340,7 +10656,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Charge"
+    "_notes": "implemented: Charge"
   },
   {
     "id": "saber-toothed-tiger",
@@ -10365,7 +10681,10 @@
       "wis": 1,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Large",
@@ -10393,7 +10712,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Smell; Pounce; action: Bite"
+    "_notes": "implemented: Pounce; not modeled: Keen Smell; action: Bite"
   },
   {
     "id": "sea-hag",
@@ -10473,7 +10792,10 @@
       "wis": 2,
       "cha": 4
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-breath-weapon"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -10506,7 +10828,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Breath Weapons"
+    "_notes": "implemented: Breath Weapons"
   },
   {
     "id": "swarm-of-poisonous-snakes",
@@ -10531,7 +10853,10 @@
       "wis": 0,
       "cha": -4
     },
-    "features": [],
+    "save_dc": 10,
+    "features": [
+      "monster-venom-sting"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -10574,7 +10899,7 @@
       "restrained",
       "stunned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Swarm"
+    "_notes": "implemented: Bites; not modeled: Swarm"
   },
   {
     "id": "wererat-human",
@@ -10885,7 +11210,11 @@
       "wis": 2,
       "cha": 2
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-elemental-rider",
+      "monster-breath-weapon"
+    ],
     "cr": 2,
     "xp": 450,
     "size": "Medium",
@@ -10920,7 +11249,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Cold Breath; extra damage on Bite: 1d4 cold"
+    "_notes": "implemented: Bite, Cold Breath"
   },
   {
     "id": "will-o-wisp",
@@ -11018,7 +11347,11 @@
       "wis": -1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-petrifying-gaze",
+      "monster-elemental-rider"
+    ],
     "cr": 3,
     "xp": 700,
     "size": "Medium",
@@ -11047,7 +11380,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Petrifying Gaze; extra damage on Bite: 2d6 poison"
+    "_notes": "implemented: Petrifying Gaze, Bite"
   },
   {
     "id": "bearded-devil",
@@ -11072,8 +11405,10 @@
       "wis": 2,
       "cha": 0
     },
+    "save_dc": 12,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-poison-bite"
     ],
     "cr": 3,
     "xp": 700,
@@ -11111,7 +11446,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Devil's Sight; Magic Resistance; Steadfast; action: Beard"
+    "_notes": "implemented: Beard; not modeled: Devil's Sight; Magic Resistance; Steadfast"
   },
   {
     "id": "blue-dragon-wyrmling",
@@ -11136,7 +11471,11 @@
       "wis": 2,
       "cha": 4
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-elemental-rider",
+      "monster-breath-weapon"
+    ],
     "cr": 3,
     "xp": 700,
     "size": "Medium",
@@ -11170,7 +11509,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Lightning Breath; extra damage on Bite: 1d6 lightning"
+    "_notes": "implemented: Bite, Lightning Breath"
   },
   {
     "id": "doppelganger",
@@ -11254,8 +11593,11 @@
       "wis": -1,
       "cha": -4
     },
+    "save_dc": 12,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-grappling-attack",
+      "monster-venom-sting"
     ],
     "cr": 3,
     "xp": 700,
@@ -11285,7 +11627,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Claw"
+    "_notes": "implemented: Claw, Sting"
   },
   {
     "id": "gold-dragon-wyrmling",
@@ -11310,7 +11652,10 @@
       "wis": 2,
       "cha": 5
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-breath-weapon"
+    ],
     "cr": 3,
     "xp": 700,
     "size": "Medium",
@@ -11344,7 +11689,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; action: Breath Weapons"
+    "_notes": "implemented: Breath Weapons; not modeled: Amphibious"
   },
   {
     "id": "green-hag",
@@ -11369,7 +11714,10 @@
       "wis": 2,
       "cha": 2
     },
-    "features": [],
+    "save_dc": 20,
+    "features": [
+      "monster-innate-bolt"
+    ],
     "cr": 3,
     "xp": 700,
     "size": "Medium",
@@ -11398,7 +11746,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; Innate Spellcasting; Mimicry; action: Illusory Appearance; action: Invisible Passage"
+    "_notes": "implemented: Innate Spellcasting; not modeled: Amphibious; Mimicry; action: Illusory Appearance; action: Invisible Passage"
   },
   {
     "id": "hell-hound",
@@ -11423,7 +11771,12 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-pack-tactics",
+      "monster-elemental-rider",
+      "monster-breath-weapon"
+    ],
     "cr": 3,
     "xp": 700,
     "size": "Medium",
@@ -11454,7 +11807,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Hearing and Smell; Pack Tactics; action: Fire Breath; extra damage on Bite: 2d6 fire"
+    "_notes": "implemented: Pack Tactics, Bite, Fire Breath; not modeled: Keen Hearing and Smell"
   },
   {
     "id": "killer-whale",
@@ -11759,7 +12112,11 @@
       "wis": 3,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-knockdown",
+      "monster-charge"
+    ],
     "cr": 3,
     "xp": 700,
     "size": "Large",
@@ -11788,7 +12145,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Charge; Labyrinthine Recall; Reckless; action: Gore"
+    "_notes": "implemented: Charge, Reckless; not modeled: Labyrinthine Recall; action: Gore"
   },
   {
     "id": "mummy",
@@ -11813,8 +12170,11 @@
       "wis": 2,
       "cha": 1
     },
+    "save_dc": 12,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-life-drain",
+      "monster-frightful-presence"
     ],
     "cr": 3,
     "xp": 700,
@@ -11857,7 +12217,7 @@
       "paralyzed",
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: action: Dreadful Glare; extra damage on Rotting Fist: 3d6 necrotic"
+    "_notes": "implemented: Rotting Fist, Dreadful Glare"
   },
   {
     "id": "nightmare",
@@ -11882,7 +12242,10 @@
       "wis": 1,
       "cha": 2
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-elemental-rider"
+    ],
     "cr": 3,
     "xp": 700,
     "size": "Large",
@@ -11913,7 +12276,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Confer Fire Resistance; Illumination; action: Ethereal Stride; extra damage on Hooves: 2d6 fire"
+    "_notes": "implemented: Hooves; not modeled: Confer Fire Resistance; Illumination; action: Ethereal Stride"
   },
   {
     "id": "owlbear",
@@ -11994,7 +12357,10 @@
       "wis": 0,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 11,
+    "features": [
+      "monster-venom-sting"
+    ],
     "cr": 3,
     "xp": 700,
     "size": "Large",
@@ -12024,7 +12390,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Ethereal Jaunt; Spider Climb; Web Walker"
+    "_notes": "implemented: Bite; not modeled: Ethereal Jaunt; Spider Climb; Web Walker"
   },
   {
     "id": "veteran",
@@ -12329,8 +12695,10 @@
       "wis": 1,
       "cha": 2
     },
+    "save_dc": 13,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-life-drain"
     ],
     "cr": 3,
     "xp": 700,
@@ -12368,7 +12736,7 @@
       "exhaustion",
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Sunlight Sensitivity; action: Life Drain"
+    "_notes": "implemented: Life Drain; not modeled: Sunlight Sensitivity"
   },
   {
     "id": "wight-archer",
@@ -12458,7 +12826,12 @@
       "wis": 1,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-pack-tactics",
+      "monster-knockdown",
+      "monster-breath-weapon"
+    ],
     "cr": 3,
     "xp": 700,
     "size": "Large",
@@ -12488,7 +12861,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Hearing and Smell; Pack Tactics; Snow Camouflage; action: Cold Breath"
+    "_notes": "implemented: Pack Tactics, Bite, Cold Breath; not modeled: Keen Hearing and Smell; Snow Camouflage"
   },
   {
     "id": "black-pudding",
@@ -12513,7 +12886,10 @@
       "wis": -2,
       "cha": -5
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-elemental-rider"
+    ],
     "cr": 4,
     "xp": 1100,
     "size": "Large",
@@ -12554,7 +12930,7 @@
       "frightened",
       "prone"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Amorphous; Corrosive Form; Spider Climb; Split; extra damage on Pseudopod: 4d8 acid"
+    "_notes": "implemented: Pseudopod; not modeled: Amorphous; Corrosive Form; Spider Climb; Split"
   },
   {
     "id": "chuul",
@@ -12579,8 +12955,10 @@
       "wis": 0,
       "cha": -3
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-grappling-attack"
     ],
     "cr": 4,
     "xp": 1100,
@@ -12615,7 +12993,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; Sense Magic; action: Tentacles"
+    "_notes": "implemented: Pincer, Tentacles; not modeled: Amphibious; Sense Magic"
   },
   {
     "id": "couatl",
@@ -12640,7 +13018,12 @@
       "wis": 7,
       "cha": 6
     },
-    "features": [],
+    "save_dc": 15,
+    "features": [
+      "monster-innate-bolt",
+      "monster-poison-bite",
+      "monster-constrict"
+    ],
     "cr": 4,
     "xp": 1100,
     "size": "Medium",
@@ -12675,7 +13058,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Innate Spellcasting; Magic Weapons; Shielded Mind; action: Bite; action: Change Shape"
+    "_notes": "implemented: Innate Spellcasting, Bite, Constrict; not modeled: Magic Weapons; Shielded Mind; action: Change Shape"
   },
   {
     "id": "elephant",
@@ -12700,7 +13083,10 @@
       "wis": 0,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 12,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 4,
     "xp": 1100,
     "size": "Huge",
@@ -12728,7 +13114,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Trampling Charge; action: Gore"
+    "_notes": "implemented: Trampling Charge; not modeled: action: Gore"
   },
   {
     "id": "ettin",
@@ -12753,8 +13139,10 @@
       "wis": 0,
       "cha": -1
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-stunning-blow"
     ],
     "cr": 4,
     "xp": 1100,
@@ -12784,7 +13172,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Two Heads; Wakeful; action: Morningstar"
+    "_notes": "implemented: Two Heads; not modeled: Wakeful; action: Morningstar"
   },
   {
     "id": "ghost",
@@ -12809,7 +13197,10 @@
       "wis": 1,
       "cha": 3
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-frightful-presence"
+    ],
     "cr": 4,
     "xp": 1100,
     "size": "Medium",
@@ -12859,7 +13250,7 @@
       "prone",
       "restrained"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Ethereal Sight; Incorporeal Movement; action: Etherealness; action: Horrifying Visage; action: Possession"
+    "_notes": "implemented: Horrifying Visage; not modeled: Ethereal Sight; Incorporeal Movement; action: Etherealness; action: Possession"
   },
   {
     "id": "lamia",
@@ -12884,8 +13275,10 @@
       "wis": 2,
       "cha": 3
     },
+    "save_dc": 13,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-innate-bolt"
     ],
     "cr": 4,
     "xp": 1100,
@@ -12915,7 +13308,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Innate Spellcasting; action: Dagger; action: Intoxicating Touch"
+    "_notes": "implemented: Innate Spellcasting; not modeled: action: Dagger; action: Intoxicating Touch"
   },
   {
     "id": "red-dragon-wyrmling",
@@ -12940,7 +13333,11 @@
       "wis": 2,
       "cha": 4
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-elemental-rider",
+      "monster-breath-weapon"
+    ],
     "cr": 4,
     "xp": 1100,
     "size": "Medium",
@@ -12974,7 +13371,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Fire Breath; extra damage on Bite: 1d6 fire"
+    "_notes": "implemented: Bite, Fire Breath"
   },
   {
     "id": "succubus-incubus",
@@ -12999,7 +13396,10 @@
       "wis": 1,
       "cha": 5
     },
-    "features": [],
+    "save_dc": 15,
+    "features": [
+      "monster-life-drain"
+    ],
     "cr": 4,
     "xp": 1100,
     "size": "Medium",
@@ -13035,7 +13435,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Telepathic Bond; Shapechanger; action: Charm; action: Draining Kiss; action: Etherealness"
+    "_notes": "implemented: Draining Kiss; not modeled: Telepathic Bond; Shapechanger; action: Charm; action: Etherealness"
   },
   {
     "id": "wereboar-boar",
@@ -13060,7 +13460,10 @@
       "wis": 0,
       "cha": -1
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 4,
     "xp": 1100,
     "size": "Medium",
@@ -13090,7 +13493,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Shapechanger; Charge (Boar or Hybrid Form Only); Relentless"
+    "_notes": "implemented: Charge (Boar or Hybrid Form Only); not modeled: Shapechanger; Relentless"
   },
   {
     "id": "wereboar-human",
@@ -13172,8 +13575,10 @@
       "wis": 0,
       "cha": -1
     },
+    "save_dc": 13,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-knockdown"
     ],
     "cr": 4,
     "xp": 1100,
@@ -13204,7 +13609,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Shapechanger; Charge (Boar or Hybrid Form Only); Relentless; action: Tusks"
+    "_notes": "implemented: Charge (Boar or Hybrid Form Only); not modeled: Shapechanger; Relentless; action: Tusks"
   },
   {
     "id": "weretiger-human",
@@ -13346,8 +13751,10 @@
       "wis": 1,
       "cha": 0
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-knockdown"
     ],
     "cr": 4,
     "xp": 1100,
@@ -13379,7 +13786,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Shapechanger; Keen Hearing and Smell; Pounce; action: Claw; action: Scimitar"
+    "_notes": "implemented: Pounce; not modeled: Shapechanger; Keen Hearing and Smell; action: Claw; action: Scimitar"
   },
   {
     "id": "weretiger-hybrid-archer",
@@ -13463,7 +13870,10 @@
       "wis": 1,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 4,
     "xp": 1100,
     "size": "Medium",
@@ -13494,7 +13904,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Shapechanger; Keen Hearing and Smell; Pounce; action: Claw"
+    "_notes": "implemented: Pounce; not modeled: Shapechanger; Keen Hearing and Smell; action: Claw"
   },
   {
     "id": "air-elemental",
@@ -13519,8 +13929,10 @@
       "wis": 0,
       "cha": -2
     },
+    "save_dc": 13,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-knockdown"
     ],
     "cr": 5,
     "xp": 1800,
@@ -13565,7 +13977,7 @@
       "restrained",
       "unconscious"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Air Form; action: Whirlwind"
+    "_notes": "implemented: Whirlwind; not modeled: Air Form"
   },
   {
     "id": "barbed-devil",
@@ -13719,7 +14131,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 16,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 5,
     "xp": 1800,
     "size": "Large",
@@ -13750,7 +14165,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Standing Leap; action: Deadly Leap"
+    "_notes": "implemented: Deadly Leap; not modeled: Standing Leap"
   },
   {
     "id": "earth-elemental",
@@ -13982,8 +14397,11 @@
       "wis": 0,
       "cha": -2
     },
+    "save_dc": 16,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-constrict",
+      "monster-grappling-attack"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14013,7 +14431,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Hold Breath; action: Tail"
+    "_notes": "implemented: Bite, Tail; not modeled: Hold Breath"
   },
   {
     "id": "giant-shark",
@@ -14038,7 +14456,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 17,
+    "features": [
+      "monster-charge"
+    ],
     "cr": 5,
     "xp": 1800,
     "size": "Huge",
@@ -14067,7 +14488,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Blood Frenzy; Water Breathing"
+    "_notes": "implemented: Blood Frenzy; not modeled: Water Breathing"
   },
   {
     "id": "gladiator",
@@ -14092,8 +14513,10 @@
       "wis": 1,
       "cha": 2
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-knockdown"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14122,7 +14545,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Brave; Brute; Parry; action: Shield Bash"
+    "_notes": "implemented: Shield Bash; not modeled: Brave; Brute; Parry"
   },
   {
     "id": "gorgon",
@@ -14147,7 +14570,11 @@
       "wis": 1,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 16,
+    "features": [
+      "monster-knockdown",
+      "monster-breath-weapon"
+    ],
     "cr": 5,
     "xp": 1800,
     "size": "Large",
@@ -14178,7 +14605,7 @@
     "cond_immune": [
       "petrified"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Trampling Charge; action: Hooves; action: Petrifying Breath"
+    "_notes": "implemented: Trampling Charge, Petrifying Breath; not modeled: action: Hooves"
   },
   {
     "id": "half-red-dragon-veteran",
@@ -14203,8 +14630,10 @@
       "wis": 0,
       "cha": 0
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-breath-weapon"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14237,7 +14666,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Shortsword; action: Fire Breath"
+    "_notes": "implemented: Fire Breath; not modeled: action: Shortsword"
   },
   {
     "id": "half-red-dragon-veteran-archer",
@@ -14262,8 +14691,10 @@
       "wis": 0,
       "cha": 0
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-breath-weapon"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14296,7 +14727,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Shortsword; action: Fire Breath",
+    "_notes": "implemented: Fire Breath; not modeled: action: Shortsword",
     "variant_of": "half-red-dragon-veteran"
   },
   {
@@ -14431,7 +14862,10 @@
       "wis": 2,
       "cha": 3
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-innate-bolt"
+    ],
     "cr": 5,
     "xp": 1800,
     "size": "Medium",
@@ -14466,7 +14900,7 @@
     "cond_immune": [
       "charmed"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Innate Spellcasting; Magic Resistance; Night Hag Items; action: Change Shape; action: Etherealness; action: Nightmare Haunting"
+    "_notes": "implemented: Innate Spellcasting; not modeled: Magic Resistance; Night Hag Items; action: Change Shape; action: Etherealness; action: Nightmare Haunting"
   },
   {
     "id": "otyugh",
@@ -14491,8 +14925,12 @@
       "wis": 1,
       "cha": -2
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-poison-bite",
+      "monster-constrict",
+      "monster-grappling-attack"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14522,7 +14960,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Limited Telepathy; action: Tentacle; action: Tentacle Slam"
+    "_notes": "implemented: Bite, Tentacle, Tentacle Slam; not modeled: Limited Telepathy"
   },
   {
     "id": "roper",
@@ -14547,8 +14985,11 @@
       "wis": 3,
       "cha": -2
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-constrict",
+      "monster-grappling-attack"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14579,7 +15020,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: False Appearance; Grasping Tendrils; Spider Climb; action: Tendril; action: Reel"
+    "_notes": "implemented: Tendril, Reel; not modeled: False Appearance; Grasping Tendrils; Spider Climb"
   },
   {
     "id": "salamander",
@@ -14604,8 +15045,11 @@
       "wis": 0,
       "cha": 1
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-elemental-rider",
+      "monster-constrict"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14641,7 +15085,7 @@
       "cold"
     ],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Heated Body; Heated Weapons; action: Spear; extra damage on Tail: 2d6 fire"
+    "_notes": "implemented: Spear, Tail; not modeled: Heated Body; Heated Weapons"
   },
   {
     "id": "shambling-mound",
@@ -14666,8 +15110,11 @@
       "wis": 0,
       "cha": -3
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-grappling-attack",
+      "monster-constrict"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14707,7 +15154,7 @@
       "blinded",
       "exhaustion"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Lightning Absorption; action: Engulf"
+    "_notes": "implemented: Multiattack, Engulf; not modeled: Lightning Absorption"
   },
   {
     "id": "triceratops",
@@ -14732,7 +15179,10 @@
       "wis": 0,
       "cha": -3
     },
-    "features": [],
+    "save_dc": 13,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 5,
     "xp": 1800,
     "size": "Huge",
@@ -14760,7 +15210,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Trampling Charge; action: Stomp"
+    "_notes": "implemented: Trampling Charge; not modeled: action: Stomp"
   },
   {
     "id": "troll",
@@ -14785,8 +15235,10 @@
       "wis": -1,
       "cha": -2
     },
+    "save_dc": 16,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-regeneration"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14816,7 +15268,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Smell; Regeneration; action: Bite"
+    "_notes": "implemented: Regeneration; not modeled: Keen Smell; action: Bite"
   },
   {
     "id": "unicorn",
@@ -14841,8 +15293,11 @@
       "wis": 3,
       "cha": 3
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-knockdown",
+      "monster-innate-bolt"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14878,7 +15333,7 @@
       "paralyzed",
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Charge; Innate Spellcasting; Magic Resistance; Magic Weapons; Legendary Actions; action: Horn; action: Healing Touch; action: Teleport"
+    "_notes": "implemented: Charge, Innate Spellcasting; not modeled: Magic Resistance; Magic Weapons; Legendary Actions; action: Horn; action: Healing Touch; action: Teleport"
   },
   {
     "id": "vampire-spawn",
@@ -14903,8 +15358,11 @@
       "wis": 3,
       "cha": 1
     },
+    "save_dc": 13,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-regeneration",
+      "monster-constrict"
     ],
     "cr": 5,
     "xp": 1800,
@@ -14937,7 +15395,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Regeneration; Spider Climb; Vampire Weaknesses; action: Claws; extra damage on Bite: 2d6 necrotic"
+    "_notes": "implemented: Regeneration, Bite; not modeled: Spider Climb; Vampire Weaknesses; action: Claws"
   },
   {
     "id": "water-elemental",
@@ -14962,8 +15420,10 @@
       "wis": 0,
       "cha": -1
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-constrict"
     ],
     "cr": 5,
     "xp": 1800,
@@ -15008,7 +15468,7 @@
       "restrained",
       "unconscious"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Water Form; Freeze; action: Whelm"
+    "_notes": "implemented: Whelm; not modeled: Water Form; Freeze"
   },
   {
     "id": "werebear-bear",
@@ -15206,7 +15666,10 @@
       "wis": 2,
       "cha": 2
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-life-drain"
+    ],
     "cr": 5,
     "xp": 1800,
     "size": "Medium",
@@ -15255,7 +15718,7 @@
       "prone",
       "restrained"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Incorporeal Movement; Sunlight Sensitivity; action: Create Specter"
+    "_notes": "implemented: Life Drain; not modeled: Incorporeal Movement; Sunlight Sensitivity; action: Create Specter"
   },
   {
     "id": "xorn",
@@ -15340,8 +15803,10 @@
       "wis": 2,
       "cha": 0
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-breath-weapon-greater"
     ],
     "cr": 6,
     "xp": 2300,
@@ -15372,7 +15837,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Horns; action: Claws; action: Fire Breath"
+    "_notes": "implemented: Fire Breath; not modeled: action: Horns; action: Claws"
   },
   {
     "id": "drider",
@@ -15397,8 +15862,11 @@
       "wis": 2,
       "cha": 1
     },
+    "save_dc": 13,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-innate-bolt",
+      "monster-elemental-rider"
     ],
     "cr": 6,
     "xp": 2300,
@@ -15429,7 +15897,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Fey Ancestry; Innate Spellcasting; Spider Climb; Sunlight Sensitivity; Web Walker; action: Longsword; extra damage on Bite: 2d8 poison"
+    "_notes": "implemented: Innate Spellcasting, Bite, Longbow; not modeled: Fey Ancestry; Spider Climb; Sunlight Sensitivity; Web Walker; action: Longsword"
   },
   {
     "id": "drider-archer",
@@ -15454,8 +15922,11 @@
       "wis": 2,
       "cha": 1
     },
+    "save_dc": 13,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-innate-bolt",
+      "monster-elemental-rider"
     ],
     "cr": 6,
     "xp": 2300,
@@ -15486,7 +15957,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Fey Ancestry; Innate Spellcasting; Spider Climb; Sunlight Sensitivity; Web Walker; action: Longsword; extra damage on Bite: 2d8 poison",
+    "_notes": "implemented: Innate Spellcasting, Bite, Longbow; not modeled: Fey Ancestry; Spider Climb; Sunlight Sensitivity; Web Walker; action: Longsword",
     "variant_of": "drider"
   },
   {
@@ -15582,7 +16053,10 @@
       "wis": 4,
       "cha": 0
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-innate-bolt"
+    ],
     "cr": 6,
     "xp": 2300,
     "size": "Medium",
@@ -15610,7 +16084,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Spellcasting"
+    "_notes": "implemented: Spellcasting"
   },
   {
     "id": "mammoth",
@@ -15635,7 +16109,10 @@
       "wis": 0,
       "cha": -2
     },
-    "features": [],
+    "save_dc": 18,
+    "features": [
+      "monster-knockdown"
+    ],
     "cr": 6,
     "xp": 2300,
     "size": "Huge",
@@ -15663,7 +16140,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Trampling Charge; action: Gore"
+    "_notes": "implemented: Trampling Charge; not modeled: action: Gore"
   },
   {
     "id": "medusa",
@@ -15688,8 +16165,11 @@
       "wis": 1,
       "cha": 2
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-petrifying-gaze",
+      "monster-elemental-rider"
     ],
     "cr": 6,
     "xp": 2300,
@@ -15719,7 +16199,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Petrifying Gaze; action: Shortsword; extra damage on Snake Hair: 4d6 poison"
+    "_notes": "implemented: Petrifying Gaze, Snake Hair, Longbow; not modeled: action: Shortsword"
   },
   {
     "id": "medusa-archer",
@@ -15744,8 +16224,11 @@
       "wis": 1,
       "cha": 2
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-petrifying-gaze",
+      "monster-elemental-rider"
     ],
     "cr": 6,
     "xp": 2300,
@@ -15775,7 +16258,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Petrifying Gaze; action: Shortsword; extra damage on Snake Hair: 4d6 poison",
+    "_notes": "implemented: Petrifying Gaze, Snake Hair, Longbow; not modeled: action: Shortsword",
     "variant_of": "medusa"
   },
   {
@@ -15801,8 +16284,11 @@
       "wis": 4,
       "cha": 2
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-poison-bite",
+      "monster-stunning-blow"
     ],
     "cr": 6,
     "xp": 2300,
@@ -15842,7 +16328,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Magic Resistance; action: Beak; action: Spores; action: Stunning Screech"
+    "_notes": "implemented: Spores, Stunning Screech; not modeled: Magic Resistance; action: Beak"
   },
   {
     "id": "wyvern",
@@ -15867,8 +16353,10 @@
       "wis": 1,
       "cha": -2
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-venom-sting"
     ],
     "cr": 6,
     "xp": 2300,
@@ -15899,7 +16387,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Bite; action: Stinger"
+    "_notes": "implemented: Stinger; not modeled: action: Bite"
   },
   {
     "id": "young-brass-dragon",
@@ -15924,8 +16412,10 @@
       "wis": 3,
       "cha": 5
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-breath-weapon-greater"
     ],
     "cr": 6,
     "xp": 2300,
@@ -15960,7 +16450,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Claw; action: Breath Weapons"
+    "_notes": "implemented: Breath Weapons; not modeled: action: Claw"
   },
   {
     "id": "young-white-dragon",
@@ -15985,8 +16475,11 @@
       "wis": 3,
       "cha": 4
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-elemental-rider",
+      "monster-breath-weapon-greater"
     ],
     "cr": 6,
     "xp": 2300,
@@ -16022,7 +16515,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Ice Walk; action: Claw; action: Cold Breath; extra damage on Bite: 1d8 cold"
+    "_notes": "implemented: Bite, Cold Breath; not modeled: Ice Walk; action: Claw"
   },
   {
     "id": "giant-ape",
@@ -16158,8 +16651,11 @@
       "wis": 4,
       "cha": 5
     },
+    "save_dc": 13,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-innate-bolt",
+      "monster-regeneration"
     ],
     "cr": 7,
     "xp": 2900,
@@ -16190,7 +16686,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Innate Spellcasting; Magic Weapons; Regeneration; action: Claw (Oni Form Only); action: Change Shape"
+    "_notes": "implemented: Innate Spellcasting, Regeneration; not modeled: Magic Weapons; action: Claw (Oni Form Only); action: Change Shape"
   },
   {
     "id": "shield-guardian",
@@ -16215,8 +16711,10 @@
       "wis": 0,
       "cha": -4
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-regeneration"
     ],
     "cr": 7,
     "xp": 2900,
@@ -16255,7 +16753,7 @@
       "paralyzed",
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Bound; Regeneration; Spell Storing; Shield"
+    "_notes": "implemented: Regeneration; not modeled: Bound; Spell Storing; Shield"
   },
   {
     "id": "stone-giant",
@@ -16280,8 +16778,10 @@
       "wis": 4,
       "cha": -1
     },
+    "save_dc": 17,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-knockdown"
     ],
     "cr": 7,
     "xp": 2900,
@@ -16311,7 +16811,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Stone Camouflage; Rock Catching"
+    "_notes": "implemented: Rock; not modeled: Stone Camouflage; Rock Catching"
   },
   {
     "id": "stone-giant-archer",
@@ -16393,8 +16893,11 @@
       "wis": 3,
       "cha": 5
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-elemental-rider",
+      "monster-breath-weapon-greater"
     ],
     "cr": 7,
     "xp": 2900,
@@ -16429,7 +16932,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; action: Claw; action: Acid Breath; extra damage on Bite: 1d8 acid"
+    "_notes": "implemented: Bite, Acid Breath; not modeled: Amphibious; action: Claw"
   },
   {
     "id": "young-copper-dragon",
@@ -16454,8 +16957,10 @@
       "wis": 4,
       "cha": 5
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-breath-weapon-greater"
     ],
     "cr": 7,
     "xp": 2900,
@@ -16490,7 +16995,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Claw; action: Breath Weapons"
+    "_notes": "implemented: Breath Weapons; not modeled: action: Claw"
   },
   {
     "id": "assassin",
@@ -16515,8 +17020,10 @@
       "wis": 0,
       "cha": 0
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-venom-sting"
     ],
     "cr": 8,
     "xp": 3900,
@@ -16547,7 +17054,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Assassinate; Evasion; Sneak Attack (1/Turn); extra damage on Shortsword: 7d6 poison"
+    "_notes": "implemented: Shortsword, Light Crossbow; not modeled: Assassinate; Evasion; Sneak Attack (1/Turn)"
   },
   {
     "id": "assassin-archer",
@@ -16572,8 +17079,10 @@
       "wis": 0,
       "cha": 0
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-venom-sting"
     ],
     "cr": 8,
     "xp": 3900,
@@ -16604,7 +17113,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Assassinate; Evasion; Sneak Attack (1/Turn); extra damage on Shortsword: 7d6 poison",
+    "_notes": "implemented: Shortsword, Light Crossbow; not modeled: Assassinate; Evasion; Sneak Attack (1/Turn)",
     "variant_of": "assassin"
   },
   {
@@ -16630,8 +17139,10 @@
       "wis": 4,
       "cha": 5
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-constrict"
     ],
     "cr": 8,
     "xp": 3900,
@@ -16669,7 +17180,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Devil's Sight; Magic Resistance; Unnerving Mask; action: Animate Chains"
+    "_notes": "implemented: Chain; not modeled: Devil's Sight; Magic Resistance; Unnerving Mask; action: Animate Chains"
   },
   {
     "id": "cloaker",
@@ -16694,8 +17205,11 @@
       "wis": 1,
       "cha": 2
     },
+    "save_dc": 16,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-blinding-attack",
+      "monster-frightful-presence"
     ],
     "cr": 8,
     "xp": 3900,
@@ -16726,7 +17240,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Damage Transfer; False Appearance; Light Sensitivity; action: Tail; action: Moan; action: Phantasms"
+    "_notes": "implemented: Bite, Moan; not modeled: Damage Transfer; False Appearance; Light Sensitivity; action: Tail; action: Phantasms"
   },
   {
     "id": "frost-giant",
@@ -16864,8 +17378,10 @@
       "wis": 4,
       "cha": 1
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-poison-bite"
     ],
     "cr": 8,
     "xp": 3900,
@@ -16904,7 +17420,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Magic Resistance; Stench; action: Claws"
+    "_notes": "implemented: Stench; not modeled: Magic Resistance; action: Claws"
   },
   {
     "id": "hydra",
@@ -16929,8 +17445,10 @@
       "wis": 0,
       "cha": -2
     },
+    "save_dc": 16,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-stunning-blow"
     ],
     "cr": 8,
     "xp": 3900,
@@ -16961,7 +17479,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Hold Breath; Multiple Heads; Reactive Heads; Wakeful"
+    "_notes": "implemented: Multiple Heads; not modeled: Hold Breath; Reactive Heads; Wakeful"
   },
   {
     "id": "spirit-naga",
@@ -16986,7 +17504,11 @@
       "wis": 5,
       "cha": 6
     },
-    "features": [],
+    "save_dc": 14,
+    "features": [
+      "monster-innate-bolt",
+      "monster-venom-sting"
+    ],
     "cr": 8,
     "xp": 3900,
     "size": "Large",
@@ -17020,7 +17542,7 @@
       "charmed",
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Rejuvenation; Spellcasting"
+    "_notes": "implemented: Spellcasting, Bite; not modeled: Rejuvenation"
   },
   {
     "id": "tyrannosaurus-rex",
@@ -17045,8 +17567,10 @@
       "wis": 1,
       "cha": -1
     },
+    "save_dc": 17,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-constrict"
     ],
     "cr": 8,
     "xp": 3900,
@@ -17075,7 +17599,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Tail"
+    "_notes": "implemented: Bite; not modeled: action: Tail"
   },
   {
     "id": "young-bronze-dragon",
@@ -17100,8 +17624,10 @@
       "wis": 4,
       "cha": 6
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-breath-weapon-greater"
     ],
     "cr": 8,
     "xp": 3900,
@@ -17136,7 +17662,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; action: Claw; action: Breath Weapons"
+    "_notes": "implemented: Breath Weapons; not modeled: Amphibious; action: Claw"
   },
   {
     "id": "young-green-dragon",
@@ -17161,8 +17687,11 @@
       "wis": 4,
       "cha": 5
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-elemental-rider",
+      "monster-breath-weapon-greater"
     ],
     "cr": 8,
     "xp": 3900,
@@ -17199,7 +17728,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; action: Claw; action: Poison Breath; extra damage on Bite: 2d6 poison"
+    "_notes": "implemented: Bite, Poison Breath; not modeled: Amphibious; action: Claw"
   },
   {
     "id": "bone-devil",
@@ -17224,8 +17753,10 @@
       "wis": 6,
       "cha": 7
     },
+    "save_dc": 14,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-venom-sting"
     ],
     "cr": 9,
     "xp": 5000,
@@ -17264,7 +17795,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Devil's Sight; Magic Resistance; action: Claw; extra damage on Sting: 5d6 poison"
+    "_notes": "implemented: Sting; not modeled: Devil's Sight; Magic Resistance; action: Claw"
   },
   {
     "id": "clay-golem",
@@ -17289,8 +17820,10 @@
       "wis": -1,
       "cha": -5
     },
+    "save_dc": 15,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-life-drain"
     ],
     "cr": 9,
     "xp": 5000,
@@ -17332,7 +17865,7 @@
       "petrified",
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Acid Absorption; Berserk; Immutable Form; Magic Resistance; Magic Weapons; action: Haste"
+    "_notes": "implemented: Slam; not modeled: Acid Absorption; Berserk; Immutable Form; Magic Resistance; Magic Weapons; action: Haste"
   },
   {
     "id": "cloud-giant",
@@ -17357,8 +17890,10 @@
       "wis": 7,
       "cha": 7
     },
+    "save_dc": 20,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-innate-bolt"
     ],
     "cr": 9,
     "xp": 5000,
@@ -17387,7 +17922,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Smell; Innate Spellcasting"
+    "_notes": "implemented: Innate Spellcasting; not modeled: Keen Smell"
   },
   {
     "id": "cloud-giant-archer",
@@ -17412,8 +17947,10 @@
       "wis": 7,
       "cha": 7
     },
+    "save_dc": 20,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-innate-bolt"
     ],
     "cr": 9,
     "xp": 5000,
@@ -17442,7 +17979,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Keen Smell; Innate Spellcasting",
+    "_notes": "implemented: Innate Spellcasting; not modeled: Keen Smell",
     "variant_of": "cloud-giant"
   },
   {
@@ -17581,8 +18118,11 @@
       "wis": 7,
       "cha": 7
     },
+    "save_dc": 16,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-innate-bolt",
+      "monster-grappling-attack"
     ],
     "cr": 9,
     "xp": 5000,
@@ -17621,7 +18161,7 @@
     "cond_immune": [
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Innate Spellcasting; Magic Resistance; action: Fist"
+    "_notes": "implemented: Innate Spellcasting, Pincer; not modeled: Magic Resistance; action: Fist"
   },
   {
     "id": "treant",
@@ -17767,8 +18307,11 @@
       "wis": 5,
       "cha": 7
     },
+    "save_dc": 16,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-elemental-rider",
+      "monster-breath-weapon-greater"
     ],
     "cr": 9,
     "xp": 5000,
@@ -17803,7 +18346,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Claw; action: Lightning Breath; extra damage on Bite: 1d10 lightning"
+    "_notes": "implemented: Bite, Lightning Breath; not modeled: action: Claw"
   },
   {
     "id": "young-silver-dragon",
@@ -17828,8 +18371,10 @@
       "wis": 4,
       "cha": 8
     },
+    "save_dc": 17,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-breath-weapon-greater"
     ],
     "cr": 9,
     "xp": 5000,
@@ -17863,7 +18408,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Claw; action: Breath Weapons"
+    "_notes": "implemented: Breath Weapons; not modeled: action: Claw"
   },
   {
     "id": "aboleth",
@@ -17945,8 +18490,11 @@
       "wis": 9,
       "cha": 9
     },
+    "save_dc": 17,
     "features": [
-      "monster-multiattack-2"
+      "monster-multiattack-2",
+      "monster-innate-bolt",
+      "monster-elemental-rider"
     ],
     "cr": 10,
     "xp": 5900,
@@ -17984,7 +18532,7 @@
       "exhaustion",
       "frightened"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Angelic Weapons; Innate Spellcasting; Magic Resistance; action: Healing Touch; action: Change Shape; extra damage on Mace: 4d8 radiant"
+    "_notes": "implemented: Innate Spellcasting, Mace; not modeled: Angelic Weapons; Magic Resistance; action: Healing Touch; action: Change Shape"
   },
   {
     "id": "guardian-naga",
@@ -18009,7 +18557,11 @@
       "wis": 8,
       "cha": 8
     },
-    "features": [],
+    "save_dc": 16,
+    "features": [
+      "monster-innate-bolt",
+      "monster-venom-sting"
+    ],
     "cr": 10,
     "xp": 5900,
     "size": "Large",
@@ -18043,7 +18595,7 @@
       "charmed",
       "poisoned"
     ],
-    "_notes": "flattened to basic attacks; not modeled: Rejuvenation; Spellcasting; action: Spit Poison"
+    "_notes": "implemented: Spellcasting, Bite, Spit Poison; not modeled: Rejuvenation"
   },
   {
     "id": "stone-golem",
@@ -18135,8 +18687,10 @@
       "wis": 5,
       "cha": 9
     },
+    "save_dc": 17,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-breath-weapon-greater"
     ],
     "cr": 10,
     "xp": 5900,
@@ -18171,7 +18725,7 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: Amphibious; action: Claw; action: Breath Weapons"
+    "_notes": "implemented: Breath Weapons; not modeled: Amphibious; action: Claw"
   },
   {
     "id": "young-red-dragon",
@@ -18196,8 +18750,11 @@
       "wis": 4,
       "cha": 8
     },
+    "save_dc": 17,
     "features": [
-      "monster-multiattack-3"
+      "monster-multiattack-3",
+      "monster-elemental-rider",
+      "monster-breath-weapon-greater"
     ],
     "cr": 10,
     "xp": 5900,
@@ -18232,6 +18789,6 @@
     ],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "flattened to basic attacks; not modeled: action: Claw; action: Fire Breath; extra damage on Bite: 1d6 fire"
+    "_notes": "implemented: Bite, Fire Breath; not modeled: action: Claw"
   }
 ]

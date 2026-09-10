@@ -38,6 +38,227 @@
     "kind": "attacks_per_action",
     "value": 3
   },
+  "_note_monsters": "T16: reusable monster templates. Riders (trigger on_weapon_hit, no pool) fire automatically from combat.resolve_attack; `duration: round` conditions lapse at the victim's next turn. Numbers are plain — a monster has no sheet to scale against.",
+  "monster-poison-bite": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "save": "con",
+    "conditions": [
+      "poisoned"
+    ],
+    "duration": "round",
+    "damage_type": "poison",
+    "dice": {
+      "count": 1,
+      "sides": 6
+    }
+  },
+  "monster-venom-sting": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "save": "con",
+    "conditions": [
+      "poisoned"
+    ],
+    "duration": "round",
+    "damage_type": "poison",
+    "dice": {
+      "count": 2,
+      "sides": 6
+    }
+  },
+  "monster-paralytic-touch": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "save": "con",
+    "conditions": [
+      "paralyzed"
+    ],
+    "duration": "round"
+  },
+  "monster-stunning-blow": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "save": "con",
+    "conditions": [
+      "stunned"
+    ],
+    "duration": "round"
+  },
+  "monster-grappling-attack": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "save": "str",
+    "conditions": [
+      "grappled"
+    ],
+    "duration": "round"
+  },
+  "monster-constrict": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "save": "str",
+    "conditions": [
+      "restrained"
+    ],
+    "duration": "round",
+    "damage_type": "bludgeoning",
+    "dice": {
+      "count": 1,
+      "sides": 6
+    }
+  },
+  "monster-knockdown": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "save": "str",
+    "conditions": [
+      "prone"
+    ],
+    "duration": "round"
+  },
+  "monster-blinding-attack": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "save": "con",
+    "conditions": [
+      "blinded"
+    ],
+    "duration": "round"
+  },
+  "monster-life-drain": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "save": "con",
+    "damage_type": "necrotic",
+    "dice": {
+      "count": 2,
+      "sides": 6
+    }
+  },
+  "monster-elemental-rider": {
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "dice": {
+      "count": 1,
+      "sides": 6
+    }
+  },
+  "monster-charge": {
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "dice": {
+      "count": 1,
+      "sides": 8
+    }
+  },
+  "monster-frightful-presence": {
+    "kind": "save_effect",
+    "cost": "action",
+    "save": "wis",
+    "range_ft": 60,
+    "conditions": [
+      "frightened"
+    ],
+    "duration": "round",
+    "uses": 1
+  },
+  "monster-charm-gaze": {
+    "kind": "save_effect",
+    "cost": "action",
+    "save": "wis",
+    "range_ft": 30,
+    "conditions": [
+      "charmed"
+    ],
+    "duration": "round",
+    "uses": 1
+  },
+  "monster-petrifying-gaze": {
+    "kind": "save_effect",
+    "cost": "action",
+    "save": "con",
+    "range_ft": 30,
+    "conditions": [
+      "restrained"
+    ],
+    "duration": "round",
+    "uses": 1
+  },
+  "monster-web-shot": {
+    "kind": "save_effect",
+    "cost": "action",
+    "save": "dex",
+    "range_ft": 30,
+    "conditions": [
+      "restrained"
+    ],
+    "duration": "round",
+    "uses": 2
+  },
+  "monster-breath-weapon": {
+    "kind": "save_effect",
+    "cost": "action",
+    "save": "dex",
+    "range_ft": 30,
+    "halve_damage": true,
+    "uses": 1,
+    "dice": {
+      "count": 4,
+      "sides": 6
+    }
+  },
+  "monster-breath-weapon-greater": {
+    "kind": "save_effect",
+    "cost": "action",
+    "save": "dex",
+    "range_ft": 30,
+    "halve_damage": true,
+    "uses": 1,
+    "dice": {
+      "count": 8,
+      "sides": 6
+    }
+  },
+  "monster-innate-bolt": {
+    "kind": "save_effect",
+    "cost": "action",
+    "save": "dex",
+    "range_ft": 60,
+    "halve_damage": true,
+    "uses": 2,
+    "dice": {
+      "count": 3,
+      "sides": 6
+    }
+  },
+  "monster-pack-tactics": {
+    "kind": "attack_modifier",
+    "cost": "none",
+    "trigger": "passive",
+    "requires": [
+      "ally_adjacent_to_target"
+    ],
+    "self": "adv"
+  },
+  "monster-regeneration": {
+    "kind": "heal_self",
+    "cost": "none",
+    "trigger": "start_of_turn",
+    "amount": 5
+  },
   "goblin-nimble-escape": {
     "kind": "grant_verb",
     "cost": "bonus",
