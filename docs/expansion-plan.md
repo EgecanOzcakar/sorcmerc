@@ -439,6 +439,24 @@ tagging) and Phase 2 (scaler) both fully land** — the AI needs the final,
 stable set of what monsters can actually do, not a partial pass still being
 authored underneath it.
 
+- 2026-09-10: **T16 complete, both phases.** Phase 1: 20 reusable ability
+  templates authored from the real SRD text (re-fetched, not invented),
+  250/316 bestiary entries now have something beyond a basic attack (184
+  gained a real condition/special attack this pass) — coverage reported
+  honestly as short of "almost every," with the remainder mostly CR-0 trivial
+  statblocks. Fixed a real bug as a byproduct: `apply_condition` had no
+  duration handling at all, so a monster's paralyze/stun could lock a PC out
+  permanently — round-durationed conditions now lapse at the bearer's next
+  turn. Phase 2: `Scaler.roster_for()` draws one coherent faction from the
+  full bestiary, theme-paired to board (goblin-camp→goblinoid, etc.), quest
+  bias still gets its named monster mixed in; the Sunken Shrine boss node is
+  untouched and the 200-seed sweep is byte-identical (200W/0L, 8.1 rounds).
+  Retuned difficulty constants and posted new measured win rates in
+  `core/scaler.gd`'s header (the bestiary is meaningfully deadlier per power
+  point than the 4 originals were). T20 (weapon mastery) still actively
+  editing `combat.gd`/`combatant.gd` — dispatching T17/T18/T21 now since none
+  of them touch those two files.
+
 ## T18 — a boss pool (locked 2026-09-10, spec'd now, **held until T16 lands**)
 
 `core/campaign.gd`'s `BOSS` is a single fixed node (T12 flagged this itself).
