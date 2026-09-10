@@ -269,6 +269,90 @@ numerically, via `exhaustionPenalty()`). All other conditions are name + prose o
 
 ---
 
+## bestiary.json — array, 316 records (F1b)
+
+The expanded monster pool. **Same per-entry shape as `data/monsters.json`** (which
+keeps the four hand-tuned Sunken Shrine foes and is left untouched) plus inert
+metadata fields, so `Adapter.from_monster` reads it unchanged — it copies known
+keys onto `Combatant` and silently ignores the rest.
+
+**Source:** [`5e-bits/5e-database`](https://github.com/5e-bits/5e-database)
+`src/2014/en/5e-SRD-Monsters.json` @ commit `edc5a53c05097a4d9727aeedb6426003a6ffad74`
+(the same repo and pin `dnd-maintainer/scripts/data/` uses for equipment/magic items).
+Repo code MIT; **the game content is SRD 5.1, © Wizards of the Coast, released under
+the Open Gaming License v1.0a**. The repo's 2024 (SRD 5.2) monster file exists but
+still holds only 3 statblocks, so the 2014 SRD set was used; for CR 0–10 classics the
+two revisions' numbers are near-identical.
+
+Fields the engine consumes (identical to `monsters.json`): `id`, `cname`, `ac`,
+`max_hp`, `init_mod`, `speed` (hexes, `round(ft/6)` — the adapter's `FT_PER_HEX`),
+`atk_bonus`, `damage`, `ranged`, `atk_range` (hexes, capped at 8), `athletics`,
+`acro`, `stealth`, `passive_perception`, `saves` (all six abilities: ability mod, or
+the proficient save bonus where the statblock has one), `features` (ids into
+`effects/features.json`).
+
+Metadata fields (currently inert — nothing in `core/` reads them yet):
+
+| field | meaning |
+|-------|---------|
+| `cr`, `xp` | challenge rating (0–10) and XP award |
+| `size`, `type` | SRD size / creature type |
+| `faction` | **encounter-coherence tag** — see below |
+| `habitat` | rough terrain hint: `cave`, `dungeon`, `forest`, `water`, `wild`, `any` |
+| `attack_name`, `damage_type`, `hit_dice` | flavor / future use |
+| `abilities` | the six raw ability scores |
+| `speeds_ft` | every movement mode in feet (`walk`, `fly`, `swim`, `burrow`, `climb`) |
+| `senses` | darkvision/blindsight/tremorsense + passive perception |
+| `resist`, `immune`, `vulnerable`, `cond_immune` | damage/condition lists — **data only**; the engine applies resistance via statuses (rage), so these do nothing until wired |
+| `variant_of` | present on `*-archer` entries: the id of the melee statblock they came from |
+| `_notes` | what was flattened away (see below) |
+
+**Faction tagging (for coherent rosters).** `faction` groups monsters that plausibly
+fight together, so a later scaler pass can draw "a goblinoid warband" instead of
+mixing a dragon with a goblin. Derived from the SRD creature type + subtype, with
+name overrides for the obvious warband families: `goblinoid` (goblin/hobgoblin/
+bugbear), `orc`, `kobold`, `gnoll`, `lizardfolk`, `sahuagin`, `drow`, `duergar`,
+`merfolk`, `grimlock`, `bullywug`, `troglodyte`, `kuo-toa`, `bandit` (bandits/thugs/
+spies/assassins/scouts/berserkers), `cultist` (cultists/priests/acolytes/mages),
+`soldier` (knights/guards/veterans/nobles), `tribal`, `townsfolk`; otherwise the
+creature type itself — `beast`, `undead`, `dragon`, `fiend` (or `demon`/`devil` by
+subtype), `celestial`, `fey`, `elemental`, `giant`, `construct`, `ooze`, `plant`,
+`aberration`, `monstrosity`, `swarm`, `humanoid`. `habitat` is a coarse keyword guess,
+a hint for flavor, not a rule.
+
+**Mechanical depth (deliberate ceiling).** Every entry is accurate on core numbers and
+one basic attack: the statblock's best **melee** attack (versatile damage taken
+two-handed). Where a statblock also has a ranged attack, a second entry
+`<id>-archer` is emitted with the same body and the ranged attack as its primary —
+that is how ranged foes exist at all, since the engine doesn't switch weapons
+mid-fight (35 such entries; `kritch` in `monsters.json` is the hand-authored
+precedent).
+
+Only three trait shapes are mapped to `features`: `goblin-nimble-escape`,
+`monster-surprise-attack` (both pre-existing) and the new
+`monster-multiattack-2` / `monster-multiattack-3` in `effects/features.json`
+(`{"kind": "attacks_per_action", "value": N}` — the same shape as
+`fighter-extra-attack`). 132 entries carry at least one feature. Everything else —
+legendary/lair actions, recharge breath weapons, innate spellcasting, pack tactics,
+poison/rider damage, secondary actions — is **flattened away** and listed verbatim
+in that entry's `_notes` string. 35 entries have nothing skipped at all.
+
+**CR coverage:** CR 0 (26) · 1/8 (21) · 1/4 (36) · 1/2 (40) · 1 (26) · 2 (45) ·
+3 (26) · 4 (17) · 5 (30) · 6 (12) · 7 (8) · 8 (12) · 9 (11) · 10 (6). CR > 10 was
+dropped this pass.
+
+**Not wired.** Nothing loads this file yet — deliberately, since `core/scaler.gd`'s
+difficulty tuning was calibrated against exactly four archetypes. The one-line change
+that would light it up is in `core/rules/catalog.gd`:
+
+```gdscript
+static func monster(id: String) -> Dictionary: return index("monsters.json").get(id, index("bestiary.json").get(id, {}))
+```
+
+`tests/test_bestiary.gd` asserts every entry parses, carries every field the four
+`monsters.json` entries have, has a unique id, and spawns into a `Combatant` with
+resolvable verbs.
+
 ## Gaps (data genuinely absent in dnd-maintainer — not invented here)
 
 1. **Background starting equipment & gold** — `backgrounds.json.startingEquipment` / `.startingGold`

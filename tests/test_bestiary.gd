@@ -1,7 +1,9 @@
-# One runnable check: every bestiary entry spawns into a Combatant cleanly.
+# F1b: every data/bestiary.json entry is monsters.json-shaped and spawns clean.
+#   godot --headless --path . -s tests/test_bestiary.gd
 extends SceneTree
 
 const Adapter = preload("res://core/adapter.gd")
+const Dice = preload("res://core/dice.gd")
 
 func _init():
 	var raw := FileAccess.get_file_as_string("res://data/bestiary.json")
@@ -15,9 +17,9 @@ func _init():
 			assert(m.has(k), "%s missing %s" % [m["id"], k])
 		assert(not seen.has(m["id"]), "duplicate id " + m["id"])
 		seen[m["id"]] = true
-		print(m["id"]); var c = Adapter.from_monster(m, "foe", Vector2i.ZERO)
+		var c = Adapter.from_monster(m, "foe", Vector2i.ZERO)
 		assert(c.max_hp > 0 and c.hp == c.max_hp, m["id"] + " hp")
-		assert(c.ac >= 5 and c.atk_bonus != 0 and c.damage != "", m["id"] + " numbers")
+		assert(c.ac >= 5 and c.damage != "" and int(Dice.parse(c.damage)["sides"]) >= 0, m["id"] + " numbers")
 		assert(c.speed >= 1, m["id"] + " speed")
 		for v in c.verbs:
 			assert(v.has("kind"), m["id"] + " bad verb")

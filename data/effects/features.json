@@ -11,6 +11,8 @@
     "requires": ["target_has_not_acted"],
     "dice": {"count": 2, "sides": 6}
   },
+  "monster-multiattack-2": {"kind": "attacks_per_action", "value": 2},
+  "monster-multiattack-3": {"kind": "attacks_per_action", "value": 3},
   "goblin-nimble-escape": {
     "kind": "grant_verb", "cost": "bonus", "verbs": ["disengage", "hide"]
   },
