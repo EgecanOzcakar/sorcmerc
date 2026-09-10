@@ -106,7 +106,7 @@ func _find(c: Campaign, kind: String) -> int:
 		for i in opts.size():
 			if opts[i]["kind"] != kind:
 				continue
-			if kind != "merchant" or opts[i]["id"] in Campaign.GIVER_IDS:
+			if kind != "merchant" or Campaign.has_service(opts[i], "innkeeper"):
 				return i
 		c.stage += 1
 	check(false, "the route has no %s node" % kind)

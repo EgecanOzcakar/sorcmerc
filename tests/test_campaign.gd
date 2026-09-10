@@ -34,6 +34,7 @@ func _init() -> void:
 	test_defeat()
 	test_rest()
 	test_merchant()
+	test_settlements()
 	test_quest_flow()
 	test_identification()
 	test_full_run()
@@ -107,9 +108,9 @@ func test_generated_routes() -> void:
 		var givers := 0
 		for i in c.route.size() - 1:
 			for n in c.route[i]:
-				if n["kind"] == "merchant" and n["id"] in Campaign.GIVER_IDS:
+				if Campaign.has_service(n, "innkeeper"):
 					givers += 1
-		check(givers > 0, "seed %d offers a quest-giving merchant before the boss" % s)
+		check(givers > 0, "seed %d offers a settlement with an Innkeeper before the boss" % s)
 	check(signatures.size() >= seeds.size() - 1, "different seeds produce different routes")
 	check(seen_ids.size() >= 20, "the pool is deep enough for real variety (saw %d templates)"
 		% seen_ids.size())
@@ -340,6 +341,82 @@ func test_merchant() -> void:
 			check(m.party.stash_count(Campaign.SCROLL) == 1, "and lands in the stash")
 	check(scrolls > 0, "at least one merchant in the pool stocks the scroll")
 
+# --- T25: sized settlements ------------------------------------------------
+
+func test_settlements() -> void:
+	var innkeepers := 0
+	for n in Campaign.POOL:
+		if n["kind"] != "merchant":
+			continue
+		var size := String(n.get("size", ""))
+		check(Campaign.SIZE_SPECIALISTS.has(size), "%s names a real size" % n["id"])
+		var want: Array = Campaign.SIZE_SPECIALISTS.get(size, [0, 0])
+		var specialists: Array = n.get("services", [])
+		check(specialists.size() >= int(want[0]) and specialists.size() <= int(want[1]),
+			"%s: a %s carries %d-%d specialists (has %d)" % [n["id"], size, want[0], want[1],
+				specialists.size()])
+		var services := Campaign.node_services(n)
+		check(services[0] == "generalist", "%s puts the Generalist first" % n["id"])
+		check(services.size() == specialists.size() + 1, "%s: Generalist plus its specialists" % n["id"])
+		for s in services:
+			check(s in Campaign.SERVICE_ORDER, "%s: %s is a real service" % [n["id"], s])
+			check(String(n.get("npcs", {}).get(s, "")) != "", "%s: %s has a flavour line" % [n["id"], s])
+		if Campaign.has_service(n, "innkeeper"):
+			innkeepers += 1
+	check(innkeepers > 0, "somebody on the road keeps an inn")
+
+	# Every quest's giver is a settlement with an Innkeeper (replaces GIVER_IDS).
+	for q in Quest.CURATED:
+		var giver: Array = Campaign.POOL.filter(func(n): return n["id"] == q["giver_node_id"])
+		check(giver.size() == 1 and Campaign.has_service(giver[0], "innkeeper"),
+			"%s is given by an Innkeeper" % q["id"])
+
+	# Catalogs: Generalist is unchanged, specialists widen it.
+	var c := _campaign()
+	c.node = _pool("hollow-market")
+	for id in Campaign.STOCK:
+		check(id in c.service_stock_ids("generalist"), "the Generalist still stocks %s" % id)
+	check(c.service_stock_ids("weaponsmith").size() > Campaign.STOCK.size(),
+		"the Weaponsmith sells the whole weapon catalog")
+	check("greatsword" in c.service_stock_ids("weaponsmith"), "including one the Generalist lacks")
+	check("plate" in c.service_stock_ids("armorsmith"), "the Armorsmith sells the whole armour catalog")
+	check(c.service_stock_ids("healer").is_empty(), "the Healer sells no goods")
+	check("plate" in c.shop_ids() and "greatsword" in c.shop_ids(), "the settlement sells both")
+	c.party.add_gold(Campaign.item_price("plate"))
+	check(c.buy("plate"), "a specialist's stock is buyable")
+
+	var alch := _campaign()
+	alch.node = _pool("shuttered-shop")
+	var potions := alch.service_stock_ids("alchemist")
+	check("potions-of-healing" in potions and "potion-of-flying" in potions, "the Alchemist sells potions")
+	check(not "plate" in alch.shop_ids(), "a village without an Armorsmith sells no plate")
+
+	# Healer, Librarian, Innkeeper: the three that are not just a catalog.
+	var t := _campaign()
+	t.node = _pool("caravanserai")
+	var ch = t.party.party_characters()[0]
+	ch.hp_current = 1
+	check(not t.heal_party(), "the healer wants paying")
+	t.party.add_gold(Campaign.HEALER_GP + Campaign.IDENTIFY_FEE_GP)
+	check(t.heal_party() and ch.hp_current == -1, "the healer puts the party back to full")
+	t.party.stash_add(MYSTERY, 1, false)
+	check(t.identify_for_fee(MYSTERY), "the librarian identifies for a flat fee, no roll")
+	check(t.party.stash_count(MYSTERY, true) == 1, "and the item is known")
+	check(not t.identify_for_fee(MYSTERY), "nothing left to read")
+	check(t.offer().is_empty(), "no Innkeeper here, no work")
+	var camp := _campaign()
+	camp.node = _pool("pack-mule")
+	check(camp.offer().is_empty(), "a Generalist-only camp offers no quests")
+	check(not camp.heal_party() and not camp.identify_for_fee(MYSTERY),
+		"and has neither healer nor librarian")
+
+func _pool(id: String) -> Dictionary:
+	for n in Campaign.POOL:
+		if n["id"] == id:
+			return n
+	check(false, "no pool node %s" % id)
+	return {}
+
 func test_quest_flow() -> void:
 	var c := _campaign()
 	c.enter(_find(c, "combat"))
@@ -503,7 +580,7 @@ func _find_giver(c: Campaign) -> int:
 	while c.stage < c.route.size():
 		var opts := c.options()
 		for i in opts.size():
-			if opts[i]["id"] in Campaign.GIVER_IDS:
+			if Campaign.has_service(opts[i], "innkeeper"):
 				return i
 		c.stage += 1
 	check(false, "the route has no quest-giving merchant")

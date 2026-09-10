@@ -82,19 +82,50 @@ const POOL := [
 	{"id": "rearguard", "kind": "combat", "stage_position": ["late"],
 		"title": "The pack's rearguard", "desc": "Left behind to buy their chief an hour.",
 		"difficulty": "hard", "gold": 85, "theme": "goblin-camp"},
-	# --- merchants (the two quest-givers first) ---------------------------
+	# --- settlements (T25: every one has a Generalist; size adds specialists) --
 	{"id": "wayside-camp", "kind": "merchant", "stage_position": ["early", "mid"],
-		"title": "The wayside camp", "desc": "A pedlar, a fire, and work for anyone with a sword."},
+		"title": "The wayside camp", "desc": "A pedlar, a fire, and work for anyone with a sword.",
+		"size": "village", "services": ["innkeeper"],
+		"npcs": {
+			"generalist": "\"Everything on the blanket is for sale. The blanket isn't.\"",
+			"innkeeper": "\"Sit. Eat. There's work, if your sword still bites.\"",
+		}},
 	{"id": "hollow-market", "kind": "merchant", "stage_position": ["mid", "late"],
-		"title": "The Hollow Market", "desc": "Steel, straps and rumours, all overpriced."},
+		"title": "The Hollow Market", "desc": "Steel, straps and rumours, all overpriced.",
+		"size": "town", "services": ["weaponsmith", "armorsmith", "innkeeper"],
+		"npcs": {
+			"generalist": "\"Overpriced, aye. Nearest rival's four days that way.\"",
+			"weaponsmith": "\"I don't ask what you did with the last one.\"",
+			"armorsmith": "\"Straps fail before plate does. Buy straps.\"",
+			"innkeeper": "\"Rumours are free. The ones worth coin, I write down.\"",
+		}},
 	{"id": "pack-mule", "kind": "merchant", "stage_position": ["early"],
-		"title": "The pack mule", "desc": "One man, one mule, everything strapped to it."},
+		"title": "The pack mule", "desc": "One man, one mule, everything strapped to it.",
+		"size": "camp", "services": [],
+		"npcs": {"generalist": "\"If it's not on the mule, I haven't got it.\""}},
 	{"id": "tinkers-wagon", "kind": "merchant", "stage_position": ["early", "mid"],
-		"title": "The tinker's wagon", "desc": "He mends kettles. He also sells edges."},
+		"title": "The tinker's wagon", "desc": "He mends kettles. He also sells edges.",
+		"size": "village", "services": ["weaponsmith"],
+		"npcs": {
+			"generalist": "\"Kettles, pots, pans — and the pans are honest.\"",
+			"weaponsmith": "\"Same hammer, same anvil. Only the shape changes.\"",
+		}},
 	{"id": "shuttered-shop", "kind": "merchant", "stage_position": ["mid", "late"],
-		"title": "The shuttered shop", "desc": "Knock twice. He opens for coin."},
+		"title": "The shuttered shop", "desc": "Knock twice. He opens for coin.",
+		"size": "village", "services": ["alchemist"],
+		"npcs": {
+			"generalist": "\"Quick, now. I like the shutters closed.\"",
+			"alchemist": "\"Red for wounds. The rest, read the label twice.\"",
+		}},
 	{"id": "caravanserai", "kind": "merchant", "stage_position": ["late"],
-		"title": "The caravanserai", "desc": "The last honest stock before the shrine."},
+		"title": "The caravanserai", "desc": "The last honest stock before the shrine.",
+		"size": "town", "services": ["armorsmith", "librarian", "healer"],
+		"npcs": {
+			"generalist": "\"Last honest counter on this road. Spend well.\"",
+			"armorsmith": "\"Go down there in leather and you stay down there.\"",
+			"librarian": "\"Hand it here. I've read worse handwriting than a wizard's.\"",
+			"healer": "\"Lie down, bite this, and don't watch.\"",
+		}},
 	# --- treasure ---------------------------------------------------------
 	{"id": "broken-cart", "kind": "treasure", "stage_position": ["early", "mid"],
 		"title": "The broken cart", "desc": "Someone else's bad day.",
@@ -189,10 +220,6 @@ const BOSS_REF_WIN_RATE := 0.70
 # power.gd/BOSS_LEAD_SHARE.
 const BOSS_XP_MULT_CAP := 2.5
 
-# Quests are only ever offered by these merchants (quest.gd's giver_node_ids), so
-# a route without one of them has nowhere to pick up work — see _ensure_giver().
-const GIVER_IDS := ["wayside-camp", "hollow-market"]
-
 # The run is over in these; nothing moves the road on afterwards.
 const TERMINAL := ["won", "lost", "retired"]
 
@@ -202,6 +229,25 @@ const STOCK := ["shortsword", "longsword", "greataxe", "shortbow", "leather", "c
 const SCROLL := "scroll-of-resurrection"
 const SELL_RATE := 0.5
 const BIG_SPENDER_GP := 1000   # T19: merchant spend in one run that earns big_spender
+
+# T25 — a merchant node is a settlement. Everyone has a Generalist (STOCK above,
+# unchanged); "size" is flavour shorthand for how many specialists sit on top of
+# it (camp 0, village 1, town 2-3 — SIZE_SPECIALISTS is the invariant tests read).
+# Each specialist just widens the catalog the shop panel shows, except:
+#   innkeeper — the quest-giver role (replaced the old hardcoded GIVER_IDS)
+#   healer    — flat gold, no catalog (heal_party())
+#   librarian — scrolls, plus a flat-fee no-roll identify (identify_for_fee())
+const SERVICE_ORDER := ["generalist", "weaponsmith", "armorsmith", "alchemist",
+	"librarian", "healer", "innkeeper"]
+const SERVICE_NAMES := {
+	"generalist": "Generalist", "weaponsmith": "Weaponsmith", "armorsmith": "Armorsmith",
+	"alchemist": "Alchemist", "librarian": "Librarian", "healer": "Healer",
+	"innkeeper": "Innkeeper",
+}
+const SIZE_SPECIALISTS := {"camp": [0, 0], "village": [1, 1], "town": [2, 3]}
+const SCROLL_IDS := ["spell-scroll", "scroll-of-resurrection", "scroll-of-identification"]
+const HEALER_GP := 120          # flat, whole party, instant — the paid version of a long rest
+const IDENTIFY_FEE_GP := 60     # librarian: no roll, no rest, cheaper than burning a scroll
 
 var party
 var stage := 0
@@ -262,14 +308,14 @@ static func _pick_stage(r, pos: String, support_kind: String, used: Dictionary) 
 static func _eligible(pos: String, kind: String, used: Dictionary = {}) -> Array:
 	return POOL.filter(func(n): return n["kind"] == kind and pos in n["stage_position"] and not used.has(n["id"]))
 
-# The one invariant selection can violate: quests are only offered by two named
-# merchants (quest.gd's giver_node_ids), so a route needs one of them before the
-# boss. Swap it in over whichever merchant the route already has.
+# The one invariant selection can violate: quests are only offered by settlements
+# carrying an Innkeeper (quest.gd's giver_node_ids), so a route needs one of them
+# before the boss. Swap it in over whichever merchant the route already has.
 static func _ensure_giver(r, out: Array) -> void:
 	var merchants: Array = []        # [stage index, slot index]
 	for i in out.size():
 		for j in out[i].size():
-			if out[i][j]["id"] in GIVER_IDS:
+			if has_service(out[i][j], "innkeeper"):
 				return
 			if out[i][j]["kind"] == "merchant":
 				merchants.append([i, j])
@@ -277,7 +323,7 @@ static func _ensure_giver(r, out: Array) -> void:
 		return
 	var at: Array = merchants[r.roll_die(merchants.size()) - 1]
 	var givers: Array = _eligible(String(STAGE_POSITIONS[at[0]]), "merchant").filter(
-		func(n): return n["id"] in GIVER_IDS)
+		func(n): return has_service(n, "innkeeper"))
 	if not givers.is_empty():
 		out[at[0]][at[1]] = givers[r.roll_die(givers.size()) - 1]
 
@@ -574,13 +620,86 @@ func stock_ids() -> Array:
 	return ids
 
 func stock() -> Array:
+	return service_stock("generalist")
+
+# --- T25: settlement services --------------------------------------------
+
+# Generalist always first, then the node's hand-authored specialists in SERVICE_ORDER.
+static func node_services(n: Dictionary) -> Array:
+	if n.get("kind", "") != "merchant":
+		return []
+	return SERVICE_ORDER.filter(func(s): return s == "generalist" or s in n.get("services", []))
+
+static func has_service(n: Dictionary, service: String) -> bool:
+	return service in node_services(n)
+
+func services() -> Array:
+	return node_services(node)
+
+func offers(service: String) -> bool:
+	return has_service(node, service)
+
+# One hand-authored line per NPC, shown in their tab. Flavour only.
+func npc_line(service: String) -> String:
+	return String(node.get("npcs", {}).get(service, ""))
+
+# Which catalog a service shows. Healer and Innkeeper sell no goods.
+func service_stock_ids(service: String) -> Array:
+	match service:
+		"generalist": return stock_ids()
+		"weaponsmith": return Catalog.index("weapons.json").keys()
+		"armorsmith": return Catalog.index("armor.json").keys()
+		"alchemist": return potion_ids()
+		"librarian": return SCROLL_IDS.duplicate()
+	return []
+
+static func potion_ids() -> Array:
+	return Catalog.index("magic-items.json").keys().filter(
+		func(id): return String(id).begins_with("potion"))
+
+func service_stock(service: String) -> Array:
 	var out: Array = []
-	for id in stock_ids():
+	for id in service_stock_ids(service):
 		out.append({"item_id": id, "name": item_name(id), "price": item_price(id)})
 	return out
 
+# Everything this settlement will sell, across every service it has.
+func shop_ids() -> Array:
+	var seen := {}
+	for s in services():
+		for id in service_stock_ids(s):
+			seen[id] = true
+	return seen.keys()
+
+# The Healer: flat gold, whole party back to full, instantly — the paid shortcut
+# past a rest node. ponytail: "clear all conditions" is a no-op today because
+# adapter.write_back() already drops statuses when a fight ends; wire it here if
+# conditions ever start persisting between nodes.
+func heal_party() -> bool:
+	if not offers("healer") or not party.spend_gold(HEALER_GP):
+		return false
+	for ch in party.roster:
+		if not ch.dead:
+			ch.hp_current = -1
+			ch.dirty()
+	say("The healer works down the line. Everyone stands up whole (−%d gp)." % HEALER_GP)
+	_autosave()
+	return true
+
+# The Librarian: what identify_with_scroll() does, for a fee instead of a scroll.
+func identify_for_fee(item_id: String) -> bool:
+	if not offers("librarian") or party.stash_count(item_id, true) >= party.stash_count(item_id):
+		return false
+	if not party.spend_gold(IDENTIFY_FEE_GP):
+		return false
+	party.stash_identify(item_id)
+	Ach.unlock("identify_item")
+	say("The librarian reads it off in a breath: %s (−%d gp)." % [item_name(item_id), IDENTIFY_FEE_GP])
+	_autosave()
+	return true
+
 func buy(item_id: String) -> bool:
-	if node.get("kind", "") != "merchant" or not item_id in stock_ids():
+	if node.get("kind", "") != "merchant" or not item_id in shop_ids():
 		return false
 	if not party.spend_gold(item_price(item_id)):
 		return false
@@ -604,10 +723,10 @@ func sell(item_id: String) -> bool:
 	_autosave()
 	return true
 
-# --- quests (merchants only) ----------------------------------------------
+# --- quests (settlements with an Innkeeper) --------------------------------
 
 func offer() -> Dictionary:
-	if node.get("kind", "") != "merchant":
+	if not offers("innkeeper"):
 		return {}
 	return Quest.offer_for(party, String(node["id"]))
 

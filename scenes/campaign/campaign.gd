@@ -257,45 +257,83 @@ func _node_panel() -> Control:
 	col.add_child(on)
 	return panel
 
+# T25 — a settlement is one tab per service it carries, Generalist always first.
+# Every tab buys/sells through the same run.buy()/run.sell(); the only difference
+# is which catalog it shows. The NPC's one flavour line heads their tab.
 func _merchant_ui(col: VBoxContainer) -> void:
-	col.add_child(_caption("F O R   S A L E   ·   %d gp in purse" % party.gold))
-	for e in run.stock():
+	col.add_child(_caption("%s   ·   %d gp in purse" % [
+		String(run.node.get("size", "camp")).to_upper(), party.gold]))
+	var tabs := TabContainer.new()
+	tabs.custom_minimum_size = Vector2(0, 300)
+	col.add_child(tabs)
+	for service in run.services():
+		var page := VBoxContainer.new()
+		page.name = String(Campaign.SERVICE_NAMES.get(service, service))
+		tabs.add_child(page)
+		var line := run.npc_line(service)
+		if line != "":
+			page.add_child(_dim(line))
+		_service_page(service, page)
+
+func _service_page(service: String, page: VBoxContainer) -> void:
+	for e in run.service_stock(service):
 		var b := Button.new()
 		b.text = "Buy  %s   —   %d gp" % [e["name"], e["price"]]
 		b.add_theme_color_override("font_color", Icons.item_color(String(e["item_id"])))
-		b.disabled = party.gold < int(e["price"])
+		b.disabled = party.gold < int(e["price"]) or int(e["price"]) <= 0
 		b.pressed.connect(func(): run.buy(String(e["item_id"])); _refresh())
-		col.add_child(b)
+		page.add_child(b)
 
-	if not party.stash.is_empty():
-		col.add_child(_caption("Y O U R   S T A S H"))
-		for e in party.stash:
-			var id := String(e["item_id"])
+	match service:
+		"generalist":
+			if not party.stash.is_empty():
+				page.add_child(_caption("Y O U R   S T A S H"))
+				for e in party.stash:
+					var id := String(e["item_id"])
+					var b := Button.new()
+					var nm: String = Campaign.item_name(id) if Party.is_identified(e) \
+						else Campaign.mystery_name(id)
+					b.text = "Sell  %s ×%d   —   %d gp" % [nm, int(e["quantity"]),
+						maxi(1, int(Campaign.item_price(id) * Campaign.SELL_RATE))]
+					b.add_theme_color_override("font_color", Icons.item_color(id))
+					b.pressed.connect(func(): run.sell(id); _refresh())
+					page.add_child(b)
+		"librarian":
+			page.add_child(_caption("R E A D I N G S   ·   %d gp, no roll" % Campaign.IDENTIFY_FEE_GP))
+			var mysteries: Array = party.unidentified()
+			if mysteries.is_empty():
+				page.add_child(_dim("Nothing of yours needs reading."))
+			for e in mysteries:
+				var id := String(e["item_id"])
+				var b := Button.new()
+				b.text = "Identify  %s   —   %d gp" % [Campaign.mystery_name(id),
+					Campaign.IDENTIFY_FEE_GP]
+				b.disabled = party.gold < Campaign.IDENTIFY_FEE_GP
+				b.pressed.connect(func(): run.identify_for_fee(id); _refresh())
+				page.add_child(b)
+		"healer":
 			var b := Button.new()
-			var nm: String = Campaign.item_name(id) if Party.is_identified(e) \
-				else Campaign.mystery_name(id)
-			b.text = "Sell  %s ×%d   —   %d gp" % [nm, int(e["quantity"]),
-				maxi(1, int(Campaign.item_price(id) * Campaign.SELL_RATE))]
-			b.add_theme_color_override("font_color", Icons.item_color(id))
-			b.pressed.connect(func(): run.sell(id); _refresh())
-			col.add_child(b)
-
-	col.add_child(_caption("W O R K"))
-	var offer := run.offer()
-	if offer.is_empty():
-		col.add_child(_dim("Nothing else needs doing here."))
-	else:
-		var b := Button.new()
-		b.text = "Accept:  %s   (%d gp)" % [offer["title"], int(offer["reward"].get("gold", 0))]
-		b.pressed.connect(func(): run.accept(offer); _refresh())
-		col.add_child(b)
-	for q in Quest.active(party):
-		if not Quest.can_turn_in(q):
-			continue
-		var b := Button.new()
-		b.text = "Turn in:  %s   (+%d gp)" % [q["title"], int(q["reward"].get("gold", 0))]
-		b.pressed.connect(func(): run.turn_in(q); _refresh())
-		col.add_child(b)
+			b.text = "Tend the whole party   —   %d gp" % Campaign.HEALER_GP
+			b.disabled = party.gold < Campaign.HEALER_GP
+			b.pressed.connect(func(): run.heal_party(); _refresh())
+			page.add_child(b)
+		"innkeeper":
+			page.add_child(_caption("W O R K"))
+			var offer := run.offer()
+			if offer.is_empty():
+				page.add_child(_dim("Nothing else needs doing here."))
+			else:
+				var b := Button.new()
+				b.text = "Accept:  %s   (%d gp)" % [offer["title"], int(offer["reward"].get("gold", 0))]
+				b.pressed.connect(func(): run.accept(offer); _refresh())
+				page.add_child(b)
+			for q in Quest.active(party):
+				if not Quest.can_turn_in(q):
+					continue
+				var b := Button.new()
+				b.text = "Turn in:  %s   (+%d gp)" % [q["title"], int(q["reward"].get("gold", 0))]
+				b.pressed.connect(func(): run.turn_in(q); _refresh())
+				page.add_child(b)
 
 # Examining loot over the short rest: Intelligence (Arcana) vs a DC that scales
 # with the item's rarity (rarer = harder — see Campaign.IDENTIFY_TARGET), one
