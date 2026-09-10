@@ -14,6 +14,35 @@ const RANGE_CAP := 8       # ranged attacks clamped to this many hexes
 static func hexes(ft: int) -> int:
 	return maxi(1, roundi(float(ft) / FT_PER_HEX))
 
+# Warlock Pact Magic slots are a single-level pool (all slots cast at
+# `slotLevel`), so they slot cleanly into the normal 9-level slots array at
+# that index rather than needing a parallel tracking field. `pass_spells.gd`
+# leaves `slots` all-zero for a warlock and reports `pact` separately — this
+# is where the two get merged back into one array for combat to spend from.
+static func _full_slots(s) -> Array[int]:
+	var slots: Array[int] = []
+	for n in s.spellcasting.get("slots", []):
+		slots.append(int(n))
+	while slots.size() < 9:
+		slots.append(0)
+	var pact: Dictionary = s.spellcasting.get("pact", {})
+	if not pact.is_empty():
+		var lvl := int(pact.get("slotLevel", 1))
+		if lvl >= 1 and lvl <= 9:
+			slots[lvl - 1] = int(pact.get("count", 0))
+	return slots
+
+static func _is_warlock(s) -> bool:
+	return s.spellcasting.get("class_id", "") == "warlock" and not s.spellcasting.get("pact", {}).is_empty()
+
+# Features the export gives no resource-pool grant for (SCHEMA gap #4) default
+# to short-rest in _finish_verbs/rest() below, which is RAW-correct for Second
+# Wind, Action Surge, Channel Divinity and Wild Shape. These two are the
+# exceptions — long-rest only. (Bardic Inspiration actually becomes short-rest
+# too from level 5's Font of Inspiration; not worth level-gating here yet —
+# long-rest-always is the conservative, never-too-generous default.)
+const LONG_REST_ONLY_FEATURES := ["bard-bardic-inspiration", "wizard-arcane-recovery"]
+
 static func to_combatant(ch, team: String, pos: Vector2i):
 	var s = ch.sheet()
 	var c = Combatant.new()
@@ -50,11 +79,8 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 	for p in s.pools:
 		c.pools[p["id"]] = {"cur": int(ch.pools.get(p["id"], p["max"])), "max": int(p["max"]),
 			"regen": p["regen"]}
-	var slots: Array[int] = []
-	for n in s.spellcasting.get("slots", []):
-		slots.append(int(n))
-	while slots.size() < 9:
-		slots.append(0)
+	var full_slots := _full_slots(s)
+	var slots := full_slots.duplicate()
 	for i in mini(9, ch.slots_used.size()):
 		slots[i] = maxi(0, slots[i] - int(ch.slots_used[i]))
 	c.slots = slots
@@ -70,7 +96,7 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 	c.spell_ids = castable
 
 	c.verbs = Effects.verbs_for(s)
-	c.verbs.append_array(Effects.spell_verbs_for(s, castable))
+	c.verbs.append_array(Effects.spell_verbs_for(s, castable, full_slots))
 	_finish_verbs(c, ch.pools)
 	return c
 
@@ -85,8 +111,8 @@ static func _finish_verbs(c, saved_pools: Dictionary) -> void:
 			v["radius"] = area_hexes(int(v["size_ft"]))
 		if v.has("pool") and not c.pools.has(v["pool"]):
 			var n := int(v.get("uses", 1))
-			c.pools[v["pool"]] = {"cur": int(saved_pools.get(v["pool"], n)), "max": n,
-				"regen": "short-rest"}
+			var regen := "long-rest" if v["pool"] in LONG_REST_ONLY_FEATURES else "short-rest"
+			c.pools[v["pool"]] = {"cur": int(saved_pools.get(v["pool"], n)), "max": n, "regen": regen}
 		# ponytail: hex-targeted areas (fireball) need an aiming mode no shipping
 		# build uses yet — drop them rather than offer a verb the UI can't point.
 		if v.get("targeting", "") != "hex":
@@ -125,10 +151,13 @@ static func rest(ch, kind: String) -> void:
 			ch.pools[p["id"]] = int(p["max"])
 	for v in Effects.verbs_for(s):
 		if v.has("pool") and s.pool_max(v["pool"]) == 0:
-			ch.pools[v["pool"]] = int(v.get("uses", 1))   # synthetic pool, short-rest
+			if kind == "long-rest" or not v["pool"] in LONG_REST_ONLY_FEATURES:
+				ch.pools[v["pool"]] = int(v.get("uses", 1))   # synthetic pool
 	if kind == "long-rest":
 		ch.slots_used.clear()
 		ch.hp_current = -1
+	elif _is_warlock(s):
+		ch.slots_used.clear()   # Pact Magic: slots also come back on a short rest
 	ch.dirty()
 
 # What T7 persists when a fight ends: HP, spent slots, spent pool uses.
@@ -137,7 +166,7 @@ static func write_back(c, ch) -> void:
 	ch.hp_current = c.hp
 	for pid in c.pools:
 		ch.pools[pid] = int(c.pools[pid]["cur"])
-	var full: Array = c.sheet.spellcasting.get("slots", []) if c.sheet else []
+	var full: Array = _full_slots(c.sheet) if c.sheet else []
 	var used: Array[int] = []
 	for i in full.size():
 		used.append(maxi(0, int(full[i]) - int(c.slots[i])))

@@ -111,12 +111,15 @@ const TARGETING := {"heal_ally": "ally", "ally_buff": "ally", "save_effect": "en
 
 # One verb per castable spell, per slot level it can be cast at. Ranges stay in FEET
 # here — adapter.gd owns the hex conversion (spec §2.5).
-static func spell_verbs_for(sheet, spell_ids: Array) -> Array:
+static func spell_verbs_for(sheet, spell_ids: Array, slots_override: Array = []) -> Array:
 	var out: Array = []
 	var sc: Dictionary = sheet.spellcasting
 	if sc.is_empty():
 		return out
-	var slots: Array = sc.get("slots", [])
+	# Pact Magic slots live in `pact`, not `slots` (spec §2.5 / adapter._full_slots
+	# merges them for combat) — a warlock with no override here would see 0 slots
+	# at every level and get no cast verbs at all.
+	var slots: Array = slots_override if not slots_override.is_empty() else sc.get("slots", [])
 	var abil_mod: int = sheet.mod(sc.get("ability", "wis"))
 	for sid in spell_ids:
 		var m := spell(sid)
