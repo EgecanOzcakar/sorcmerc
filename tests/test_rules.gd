@@ -54,10 +54,10 @@ func _init() -> void:
 	test_attacks()
 	test_spell_slots()
 	test_adapter()
-	test_sheet_party_sweep()
 	test_effects_data_is_valid()
 	test_effects_reproduce_the_hardcoded_kit()
 	test_spell_mechanics_merge()
+	test_spell_verbs()
 	test_power_ranks_the_heroes()
 
 	print("test_rules: %d passed, %d failed" % [_pass, _fail])
@@ -654,25 +654,35 @@ func test_adapter() -> void:
 	check(v.ac == 18 and v.max_hp == 28, "adapted Vera: AC 18, HP 28")
 	check(v.atk_bonus == 5 and v.damage == "1d8+3", "adapted Vera swings +5 / 1d8+3")
 	check(v.crit_range == 19, "Improved Critical becomes crit_range 19")
-	check(v.second_wind == "1d10+3" and v.action_surge, "Vera's kit survives the adapter")
+	check(not v.verb("fighter-second-wind").is_empty() and not v.verb("fighter-action-surge").is_empty(),
+		"Vera's kit survives the adapter as verbs")
+	check(v.pool_left("fighter-second-wind") == 2 and v.pool_left("fighter-action-surge") == 1,
+		"the features with no exported resource-pool get a synthetic one")
 	check(not v.ranged and v.atk_range == 1, "a longsword is melee reach 1")
 
 	var p = by_id["pike"]
-	check(p.sneak_attack == "2d6" and p.cunning_action, "Pike's kit survives the adapter")
+	check(int(p.verb("rogue-sneak-attack")["dice_count"]) == 2, "Pike still sneak-attacks for 2d6")
+	check(p.verb("rogue-cunning-action")["cost"] == "bonus", "Cunning Action is a bonus-cost verb")
 	check(p.ranged and p.atk_range == Adapter.RANGE_CAP,
 		"an 80 ft shortbow clamps to RANGE_CAP %d hexes (got %d)" % [Adapter.RANGE_CAP, p.atk_range])
-	check(p.dex_save == 5, "dex_save aliases saves[\"dex\"]")
+	check(int(p.saves["dex"]) == 5, "all six saves come across, not just DEX")
 
 	var i = by_id["ilsa"]
 	check(i.save_dc == 13, "adapted Ilsa's save DC is 13")
-	check(i.slots1 == 4 and i.slots2 == 2, "slots1/slots2 alias slots[0]/[1]")
-	check("burning_hands" in i.spells and "sacred_flame" in i.spells and "healing_word" in i.spells,
-		"Ilsa's three legacy spells resolve from the sheet (got %s)" % str(i.spells))
+	check(i.slots[0] == 4 and i.slots[1] == 2, "Ilsa's slots come across")
+	var spell_ids: Array = i.verbs.filter(func(v): return v["kind"] == "spell").map(func(v): return v["id"])
+	check("burning-hands" in spell_ids and "sacred-flame" in spell_ids and "cure-wounds" in spell_ids,
+		"Ilsa's spells become castable verbs (got %s)" % str(spell_ids))
+	check("burning-hands@2" in spell_ids, "and one upcast verb per slot level she owns")
+	check(int(i.verb("burning-hands")["range"]) == 1 and int(i.verb("burning-hands")["radius"]) == 2,
+		"a 15 ft cone is a 2-hex wedge")
 
 	# monsters need no Character
 	var g = _json_foes()[0]
-	check(g.id == "grull" and g.max_hp == 27 and g.dex_save == 2 and g.surprise_attack == "2d6",
+	check(g.id == "grull" and g.max_hp == 27 and int(g.saves["dex"]) == 2,
 		"from_monster builds a Combatant off a statblock")
+	check(int(g.verb("monster-surprise-attack")["dice_count"]) == 2,
+		"a monster's kit is verbs too — no sheet required")
 	check(g.sheet == null, "a monster has no sheet")
 
 	# write_back persists hp and pools, not statuses
@@ -684,34 +694,8 @@ func test_adapter() -> void:
 	check(ch.hp_current == 7, "write_back persists HP")
 	check(Adapter.to_combatant(ch, "party", Vector2i.ZERO).hp == 7, "the next fight starts at the carried HP")
 
-# The 200-seed sweep re-run on a sheet-built party. Win-rate is RE-BASELINED here,
-# not asserted equal (spec §11 "the re-tuning cliff"). Numbers at the time of writing:
-#   hand-authored party (tests/test_combat.gd): 186 win / 14 loss, avg 8.8 rounds
-#   sheet-built party (this test):              187 win / 13 loss, avg 8.4 rounds
-# The party got faster (speed 4 -> 5 hexes for Vera and Ilsa), Pike's bow reaches
-# 8 hexes instead of 6, and Pike now has his real +5 DEX save. T8 owns re-tuning.
-func test_sheet_party_sweep() -> void:
-	var wins := 0
-	var rounds := 0
-	var runs := 200
-	for s in range(1, runs + 1):
-		var roster: Array = _sheet_party()
-		roster.append_array(_json_foes())
-		var cb = Combat.new(RNG.new(s), roster, Encounter.board())
-		var guard := 0
-		while not cb.is_over() and guard < 5000:
-			var actor = cb.current()
-			cb.begin_turn()
-			AI.take_turn(cb, actor)
-			cb.end_turn()
-			guard += 1
-		check(cb.outcome() != "ongoing", "seed %d terminates with a winner" % s)
-		rounds += cb.round_num
-		if cb.outcome() == "Victory":
-			wins += 1
-	print("  sheet-built party over %d seeds: %d win / %d loss, avg %.1f rounds" % [
-		runs, wins, runs - wins, float(rounds) / runs])
-	check(wins > 0 and wins < runs, "the sheet-built fight is not a foregone conclusion either way")
+# The 200-seed sweep lives in tests/test_combat.gd only: since F3, encounter.gd
+# builds its party through Presets + Adapter, so both sweeps were the same run.
 
 # --- step 9: effects.gd + power.gd ---------------------------------------
 
@@ -735,8 +719,8 @@ func test_effects_reproduce_the_hardcoded_kit() -> void:
 			"rogue %d sneak attack %dd6 (got %dd%d)" % [pair[0], pair[1], int(v["dice_count"]), int(v["dice_sides"])])
 	var pk: Character = Presets.pike()
 	check(_verb(pk, "rogue-sneak-attack")["once_per"] == "turn", "sneak attack is once per turn")
-	check(Adapter.to_combatant(pk, "party", Vector2i.ZERO).sneak_attack == "2d6",
-		"the data verb and the legacy flag agree at rogue 3")
+	check(int(Adapter.to_combatant(pk, "party", Vector2i.ZERO).verb("rogue-sneak-attack")["dice_count"]) == 2,
+		"the adapter carries the resolved dice count onto the combatant")
 
 	var f := _build("fighter", 3, {"str": 16, "dex": 12, "con": 14, "int": 10, "wis": 12, "cha": 10})
 	var sw := _verb(f, "fighter-second-wind")
@@ -779,6 +763,29 @@ func test_spell_mechanics_merge() -> void:
 		"cure wounds is authored where the regex parse gave nothing usable")
 	check(Effects.spell("guidance").is_empty(), "a non-combat spell is not castable in a fight")
 	check(Effects.spell("light").is_empty(), "neither is Light")
+
+# F3: the numeric verbs combat.gd actually eats. Ranges stay in feet here — the
+# adapter owns the hex conversion.
+func test_spell_verbs() -> void:
+	var ilsa: Character = Presets.ilsa()
+	var vs := Effects.spell_verbs_for(ilsa.sheet(), ilsa.sheet().spellcasting["cantrips"] + ["burning-hands", "cure-wounds"])
+	var by_id := {}
+	for v in vs:
+		by_id[v["id"]] = v
+	check(by_id.has("burning-hands") and by_id.has("burning-hands@2"),
+		"one verb per slot level a caster can spend (got %s)" % str(by_id.keys()))
+	check(not by_id.has("sacred-flame@1"), "a cantrip is never upcast")
+	var bh: Dictionary = by_id["burning-hands"]
+	check(bh["cost"] == "action" and int(bh["slot_level"]) == 1, "burning hands: action, level-1 slot")
+	check(bh["targeting"] == "direction" and int(bh["size_ft"]) == 15, "a cone is aimed, 15 ft")
+	check(int(bh["dice_count"]) == 3 and int(by_id["burning-hands@2"]["dice_count"]) == 4,
+		"upcasting adds a die")
+	check(int(bh["save_dc"]) == 13 and bh["save"] == "dex", "the caster's DC rides on the verb")
+	var cw: Dictionary = by_id["cure-wounds"]
+	check(cw["targeting"] == "ally" and int(cw["heal_count"]) == 2 and int(cw["heal_bonus"]) == 3,
+		"cure wounds heals 2d8 + the casting mod at an ally")
+	check(by_id["sacred-flame"]["ignores_cover"], "sacred flame still ignores cover")
+	check(not by_id.has("guidance"), "a non-combat spell produces no verb")
 
 func test_power_ranks_the_heroes() -> void:
 	var scores := {}

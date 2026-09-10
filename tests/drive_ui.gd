@@ -36,7 +36,7 @@ func _run() -> void:
 			idle = 0
 			continue
 		# in idle, sometimes just walk toward a foe (exercises default click-to-move)
-		if main._mode == "idle" and main.cb.current().team == "party" and _presses % 4 == 0 and main.cb.move_left > 0:
+		if main._mode == "idle" and main.cb.current().team == "party" and _presses % 4 == 0 and main.cb.current().econ["move_left"] > 0:
 			_move_click()
 			idle = 0
 			continue
@@ -76,7 +76,7 @@ func _board_click() -> void:
 			main.board_cancel()
 		return
 	# target mode: click the first valid target, else cancel
-	_picked["target:" + main._tgt_kind] = true
+	_picked["target:" + str(main._tgt_verb.get("id", "?"))] = true
 	for c in cb.combatants:
 		if main._valid_target(h, c):
 			main.board_hex_clicked(c.pos)
@@ -112,8 +112,9 @@ func _buttons() -> Array:
 # Rotate through verbs rather than mashing Attack, so every path gets exercised.
 func _press(btns: Array) -> void:
 	var pick: Button = null
-	var wanted = ["Attack", "Shove", "Attack", "Burning Hands", "Healing Word", "Attack", "Help", "Hide",
-		"Second Wind", "Attack", "Sacred Flame", "Dodge", "Attack", "Dash"]
+	var wanted = ["Attack", "Shove", "Attack", "Burning Hands", "Cure Wounds", "Attack", "Help", "Hide",
+		"Second Wind", "Attack", "Sacred Flame", "Dodge", "Attack", "Dash", "Attack", "Disengage",
+		"Attack", "Action Surge"]
 	var verb = wanted[_presses % wanted.size()]
 	for b in btns:
 		if verb in b.text:

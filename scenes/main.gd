@@ -20,10 +20,8 @@ var cb
 var _seed: int = 0
 var _busy = false
 var _advancing = false
-var _disengage = false
 var _mode := "idle"          # idle | cone | target
-var _tgt_kind := ""          # attack | sacred | shove_* | heal | heal2 | help
-var _cone_level := 1
+var _tgt_verb: Dictionary = {}   # the verb being aimed, straight from cb.available()
 var _armed := ""             # a confirm-guarded verb waiting for its second press
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
@@ -233,7 +231,6 @@ func _advance() -> void:
 			_busy = false
 			cb.end_turn()
 			continue
-		_disengage = false
 		_mode = "idle"
 		_build_hero_menu(c)
 		_advancing = false
@@ -251,59 +248,49 @@ func _end_turn() -> void:
 # --- hero menu ---------------------------------------------------------
 
 # Verb-level menu. Buttons are numbered [1]..[9]; End turn is [0].
+# Everything on it comes from cb.available(h) — no hero, class or spell is named here.
 # Verbs that need a target enter "target" mode — hover a token for its %, click to apply.
 func _build_hero_menu(h, keep_armed := false) -> void:
 	if not keep_armed:
 		_armed = ""
 	_mode = "idle"
-	_tgt_kind = ""
+	_tgt_verb = {}
 	var opts: Array = []
-	var foes: Array = cb.enemies_of(h)
-	var adj_foes := foes.filter(func(f): return Hex.distance(f.pos, h.pos) <= 1)
+	for v in cb.available(h):
+		var label: String = _verb_label(h, v)
+		match v.get("targeting", "self"):
+			"enemy", "ally":
+				opts.append([label + "…", func(): _enter_target(h, v)])
+			"direction":
+				opts.append([label + " (aim…)", func(): _enter_cone(h, v)])
+			_:
+				if _costly(v):
+					opts.append(_confirm_opt(h, v["id"], label, func(): cb.perform(h, v); _after_hero_action(h)))
+				else:
+					opts.append([label, func(): cb.perform(h, v); _after_hero_action(h)])
 
-	var live_allies: Array = cb.combatants.filter(func(a): return a.team == "party" and a != h and a.conscious())
-
-	if not cb.action_used:
-		if foes.any(func(f): return cb.in_reach(h, f)):
-			opts.append(["Attack", func(): _enter_target(h, "attack")])
-		if h.athletics > 0 and not adj_foes.is_empty():
-			opts.append(["Shove → prone", func(): _enter_target(h, "shove_prone")])
-			opts.append(["Shove → back", func(): _enter_target(h, "shove_push")])
-			if adj_foes.any(func(f): return cb.adjacent_to_brazier(f)):
-				opts.append(["Shove → brazier", func(): _enter_target(h, "shove_brazier")])
-		if "burning_hands" in h.spells and h.slots1 + h.slots2 > 0:
-			opts.append(["Burning Hands (aim…)", func(): _enter_cone(h, 1)])
-			if h.slots2 > 0:
-				opts.append(["Burning Hands ★2 (aim…)", func(): _enter_cone(h, 2)])
-		if "sacred_flame" in h.spells and not foes.is_empty():
-			opts.append(["Sacred Flame", func(): _enter_target(h, "sacred")])
-		if not live_allies.is_empty() and not foes.is_empty():
-			opts.append(["Help an ally", func(): _enter_target(h, "help")])
-		opts.append(_confirm_opt(h, "dodge", "Dodge", func(): _hero_simple(h, "dodge")))
-		opts.append(_confirm_opt(h, "dash", "Dash (+%d move)" % h.speed, func(): _hero_simple(h, "dash")))
-
-	if not cb.bonus_used:
-		if h.second_wind != "" and not h.used_second_wind:
-			opts.append(_confirm_opt(h, "sw", "Second Wind (heal)", func(): _hero_bonus(h, "sw")))
-		if "healing_word" in h.spells and h.slots1 + h.slots2 > 0:
-			if cb.combatants.any(func(a): return a.team == "party" and a != h and not a.is_dead()):
-				opts.append(["Healing Word", func(): _enter_target(h, "heal")])
-				if h.slots2 > 0:
-					opts.append(["Healing Word ★2", func(): _enter_target(h, "heal2")])
-		if h.cunning_action:
-			if not h.has("hidden"):
-				opts.append(["Hide (bonus)", func(): _hero_bonus(h, "hide")])
-			opts.append(["Dash (bonus, +%d)" % h.speed, func(): _hero_bonus(h, "cdash")])
-
-	if cb.move_left > 0:
-		opts.append(["Disengage: %s" % ("ON" if _disengage else "off"), func(): _toggle_disengage(h)])
-
-	if not cb.action_used and (not cb.is_over()):
+	if h.econ["action"] > 0 and not cb.is_over():
 		opts.append(_confirm_opt(h, "end", "End turn (action unspent!)", _end_turn))
 	else:
 		opts.append(["End turn", _end_turn])
 	_set_buttons(opts)
 	_board.queue_redraw()
+
+# The cost tag is what tells a bonus-action Dash from the Attack-action one.
+func _verb_label(h, v: Dictionary) -> String:
+	var label: String = v["label"]
+	if v["kind"] == "dash":
+		label += " (+%d move)" % h.speed
+	if v.get("cost", "action") != "action":
+		label += " [%s]" % v["cost"]
+	if v.has("pool"):
+		label += " %d/%d" % [h.pool_left(v["pool"]), int(h.pools[v["pool"]]["max"])]
+	return label
+
+# Two-press confirm on anything that burns a limited resource, plus the two
+# turn-enders that are easy to misclick.
+func _costly(v: Dictionary) -> bool:
+	return v.has("pool") or int(v.get("slot_level", 0)) > 0 or v["kind"] in ["dodge", "dash"]
 
 # A two-press guard: first press arms and relabels, second press fires.
 func _confirm_opt(h, key: String, label: String, fn: Callable) -> Array:
@@ -311,57 +298,42 @@ func _confirm_opt(h, key: String, label: String, fn: Callable) -> Array:
 		return ["✓ Confirm: %s" % label, func(): _armed = ""; fn.call()]
 	return [label, func(): _armed = key; _build_hero_menu(h, true)]
 
-func _toggle_disengage(h) -> void:
-	_disengage = not _disengage
-	_build_hero_menu(h)
-
-func _enter_cone(h, level: int) -> void:
+func _enter_cone(h, v: Dictionary) -> void:
 	_mode = "cone"
-	_cone_level = level
-	_actor.text = "%s — aim Burning Hands%s: hover a direction, click to cast.  (Esc / right-click cancels)" % [
-		h.cname, "  ★2" if level >= 2 else ""]
+	_tgt_verb = v
+	_actor.text = "%s — aim %s: hover a direction, click to cast.  (Esc / right-click cancels)" % [
+		h.cname, v["label"]]
 	_set_buttons([["Cancel", func(): board_cancel()]])
 	_board.queue_redraw()
 
-func _enter_target(h, kind: String) -> void:
+func _enter_target(h, v: Dictionary) -> void:
 	_mode = "target"
-	_tgt_kind = kind
-	_actor.text = "%s — %s: hover a target for the odds, click to apply.  (Esc / right-click cancels)" % [h.cname, _tgt_label(kind)]
+	_tgt_verb = v
+	_actor.text = "%s — %s: hover a target for the odds, click to apply.  (Esc / right-click cancels)" % [
+		h.cname, v["label"]]
 	_set_buttons([["Cancel", func(): board_cancel()]])
 	_board.queue_redraw()
-
-func _tgt_label(kind: String) -> String:
-	match kind:
-		"attack": return "Attack"
-		"sacred": return "Sacred Flame"
-		"shove_prone": return "Shove to prone"
-		"shove_push": return "Shove back"
-		"shove_brazier": return "Shove into the brazier"
-		"heal": return "Healing Word"
-		"heal2": return "Healing Word ★2"
-		"help": return "Help"
-	return kind
 
 # Is `c` a legal target for the pending verb?
 func _valid_target(h, c) -> bool:
-	match _tgt_kind:
-		"attack": return c.team != h.team and c.conscious() and cb.in_reach(h, c)
-		"sacred": return c.team != h.team and c.conscious() and Hex.distance(h.pos, c.pos) <= Encounter.RANGE_SPELL_LONG
-		"shove_prone", "shove_push": return c.team != h.team and c.conscious() and Hex.distance(h.pos, c.pos) <= 1
-		"shove_brazier": return c.team != h.team and c.conscious() and Hex.distance(h.pos, c.pos) <= 1 and cb.adjacent_to_brazier(c)
-		"heal", "heal2": return c.team == h.team and c != h and not c.is_dead()
-		"help": return c.team == h.team and c != h and c.conscious()
-	return false
+	return not _tgt_verb.is_empty() and cb.legal_target(h, _tgt_verb, c)
 
 # The number shown over a valid target while aiming.
 func target_readout(h, c) -> String:
-	match _tgt_kind:
+	var v := _tgt_verb
+	match v["kind"]:
 		"attack": return "%d%%" % int(round(cb.hit_chance(h, c) * 100.0))
-		"sacred": return "%d%%" % int(round(cb.save_fail_chance(c, h.save_dc, true) * 100.0))
-		"shove_prone", "shove_push", "shove_brazier": return "%d%%" % int(round(cb.shove_chance(h, c) * 100.0))
-		"heal": return "revive" if c.is_down() else "≈5 HP"
-		"heal2": return "revive" if c.is_down() else "≈8 HP"
+		"shove": return "%d%%" % int(round(cb.shove_chance(h, c) * 100.0))
 		"help": return "advantage"
+	if v.has("heal_count") or v["kind"] in ["heal_self", "heal_ally"]:
+		if c.is_down():
+			return "revive"
+		var n := int(v.get("heal_count", v.get("dice_count", 1)))
+		var s := int(v.get("heal_sides", v.get("dice_sides", 8)))
+		return "≈%d HP" % int(n * (s + 1) / 2.0 + int(v.get("heal_bonus", v.get("dice_bonus", 0))))
+	if v.get("save", "") != "":
+		return "%d%%" % int(round(cb.save_fail_chance(c, int(v.get("save_dc", h.save_dc)),
+			v["save"], v.get("ignores_cover", false)) * 100.0))
 	return ""
 
 # board callbacks -------------------------------------------------------
@@ -376,7 +348,9 @@ func board_hex_clicked(hx: Vector2i) -> void:
 		var dir = Hex.direction_to(h.pos, hx)
 		if dir != Vector2i.ZERO:
 			_mode = "idle"
-			cb.cast_burning_hands(h, dir, _cone_level)
+			var v := _tgt_verb
+			_tgt_verb = {}
+			cb.perform(h, v, dir)
 			_after_hero_action(h)
 	elif _mode == "target":
 		for c in cb.combatants:
@@ -384,39 +358,21 @@ func board_hex_clicked(hx: Vector2i) -> void:
 				_apply_target(h, c)
 				return
 	else:  # idle — default click is Move
-		if cb.move_left > 0 and hx != h.pos and cb.move_field(h).has(hx):
+		if h.econ["move_left"] > 0 and hx != h.pos and cb.move_field(h).has(hx):
 			_board.slide_from(h)
-			cb.move_to(h, hx, _disengage)
+			cb.move_to(h, hx)
 			_after_hero_action(h)
 
 func _apply_target(h, c) -> void:
 	_mode = "idle"
-	var kind := _tgt_kind
-	_tgt_kind = ""
-	match kind:
-		"attack":
-			_busy = true
-			var res = cb.resolve_attack(h, c)
-			if typeof(res) == TYPE_DICTIONARY and not res.has("error"):
-				_board.show_reveal(c.id, res)
-				await get_tree().create_timer(REVEAL_PAUSE / _anim).timeout
-			_busy = false
-			_after_hero_action(h)
-			return
-		"sacred":
-			cb.cast_sacred_flame(h, c)
-		"shove_prone":
-			cb.act_shove(h, c, "prone")
-		"shove_push":
-			cb.act_shove(h, c, "push")
-		"shove_brazier":
-			cb.act_shove(h, c, "brazier")
-		"heal":
-			cb.cast_healing_word(h, c)
-		"heal2":
-			cb.cast_healing_word(h, c, 2)
-		"help":
-			cb.act_help(h, c)
+	var v := _tgt_verb
+	_tgt_verb = {}
+	var res = cb.perform(h, v, c)
+	if v["kind"] == "attack" and typeof(res) == TYPE_DICTIONARY and not res.has("error"):
+		_busy = true
+		_board.show_reveal(c.id, res)
+		await get_tree().create_timer(REVEAL_PAUSE / _anim).timeout
+		_busy = false
 	_after_hero_action(h)
 
 func board_hex_hovered(hx: Vector2i) -> void:
@@ -429,23 +385,6 @@ func board_cancel() -> void:
 
 # hero actions ---------------------------------------------------------
 
-func _hero_simple(h, kind) -> void:
-	if kind == "dodge":
-		cb.act_dodge(h)
-	elif kind == "dash":
-		cb.action_used = true
-		cb.move_left += h.speed
-	_after_hero_action(h)
-
-func _hero_bonus(h, kind) -> void:
-	if kind == "sw":
-		cb.act_second_wind(h)
-	elif kind == "hide":
-		cb.act_hide(h)
-	elif kind == "cdash":
-		cb.act_cunning_dash(h)
-	_after_hero_action(h)
-
 func _after_hero_action(h) -> void:
 	_armed = ""
 	_flush_log()
@@ -453,7 +392,7 @@ func _after_hero_action(h) -> void:
 	if cb.is_over():
 		_finish()
 		return
-	if cb.action_used and cb.bonus_used and cb.move_left == 0:
+	if h.econ["action"] <= 0 and h.econ["bonus"] <= 0 and h.econ["move_left"] <= 0:
 		_end_turn()
 	else:
 		_build_hero_menu(h)
@@ -504,14 +443,14 @@ func _refresh() -> void:
 
 	var cur = cb.current()
 	if cur and cur.team == "party" and cur.conscious() and _mode == "idle":
-		var hint := "  ·  click a blue tile to move" if cb.move_left > 0 else ""
+		var hint := "  ·  click a blue tile to move" if cur.econ["move_left"] > 0 else ""
 		var before = cb.order[(ci - 1 + n) % n]
 		var again := "  ·  you act again after %s" % before.cname.split(" ")[0] if before != cur else ""
 		_actor.text = "%s  ·  AC %d  ·  HP %d/%d  ·  slots %d/%d  ·  %s%smove %d%s%s" % [
-			cur.cname, cb.effective_ac(cur), cur.hp, cur.max_hp, cur.slots1, cur.slots2,
-			"" if cb.action_used else "[action] ",
-			"" if cb.bonus_used else "[bonus] ",
-			cb.move_left, hint, again,
+			cur.cname, cb.effective_ac(cur), cur.hp, cur.max_hp, cur.slots[0], cur.slots[1],
+			"[action] " if cur.econ["action"] > 0 else "",
+			"[bonus] " if cur.econ["bonus"] > 0 else "",
+			cur.econ["move_left"], hint, again,
 		]
 	elif _mode == "idle":
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
@@ -724,7 +663,7 @@ class Board extends Control:
 		var cone_hexes := {}
 		var cur = cb.current()
 		var hero_turn: bool = cur and cur.team == "party" and cur.conscious()
-		if hero_turn and main._mode == "idle" and cb.move_left > 0:
+		if hero_turn and main._mode == "idle" and cur.econ["move_left"] > 0:
 			field = cb.move_field(cur)
 			for hx in field:
 				if not cb.provokers_for(cur, hx).is_empty():
@@ -732,7 +671,7 @@ class Board extends Control:
 		if hero_turn and main._mode == "cone":
 			var dir := Hex.direction_to(cur.pos, _hover)
 			if dir != Vector2i.ZERO:
-				for hx in Hex.cone(cur.pos, dir, Encounter.CONE_BURNING_HANDS):
+				for hx in Hex.cone(cur.pos, dir, int(main._tgt_verb.get("radius", 2))):
 					cone_hexes[hx] = true
 
 		# tiles
@@ -775,7 +714,7 @@ class Board extends Control:
 				draw_rect(Rect2(chip - Vector2(5, fs), Vector2(w + 10, fs + 8)), Color(0, 0, 0, 0.72))
 				draw_string(ThemeDB.fallback_font, chip, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
 					Color("ffe27a") if hot else Color("d7d7cf"))
-		elif hero_turn and main._mode == "idle" and not cb.action_used:
+		elif hero_turn and main._mode == "idle" and cur.econ["action"] > 0:
 			for f in cb.enemies_of(cur):
 				if cb.in_reach(cur, f):
 					var poly := _hex_poly(_origin + Hex.to_pixel(f.pos, s), s - 3.0)
@@ -887,13 +826,8 @@ class Board extends Control:
 		if cb.is_cover(c.pos): st.append("cover")
 		if not st.is_empty(): lines.append(" · ".join(st))
 		var kit: Array = []
-		if c.sneak_attack != "": kit.append("Sneak Attack")
-		if c.nimble_escape: kit.append("Nimble Escape")
-		if c.cunning_action: kit.append("Cunning Action")
-		if c.second_wind != "": kit.append("Second Wind")
-		if c.action_surge: kit.append("Action Surge")
-		if c.surprise_attack != "": kit.append("Surprise Attack")
-		for sp in c.spells: kit.append(sp.capitalize().replace("_", " "))
+		for v in c.verbs:
+			if not v["label"] in kit: kit.append(v["label"])
 		if not kit.is_empty(): lines.append(", ".join(kit))
 
 		var fs := int(12 * clampf(fz, 0.9, 1.3))

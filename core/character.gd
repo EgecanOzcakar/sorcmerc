@@ -13,6 +13,7 @@ var feats: Array[String] = []
 var equipped: Array[String] = []        # weapon/armor ids worn or wielded
 var inventory: Array[Dictionary] = []   # [{item_id, quantity}]
 var pools: Dictionary = {}              # pool_id -> current uses
+var slots_used: Array[int] = []         # spell slots spent, per level; cleared by a long rest
 var hp_current: int = -1                # -1 = full
 var prepared: Array[String] = []
 

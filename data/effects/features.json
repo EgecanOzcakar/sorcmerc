@@ -6,6 +6,14 @@
     "requires": ["advantage_or_ally_adjacent", "not_disadvantage"],
     "dice": {"sides": 6, "count": {"by": "class_level", "class": "rogue", "formula": "ceil_half"}}
   },
+  "monster-surprise-attack": {
+    "kind": "passive_damage", "cost": "none", "trigger": "on_weapon_hit",
+    "requires": ["target_has_not_acted"],
+    "dice": {"count": 2, "sides": 6}
+  },
+  "goblin-nimble-escape": {
+    "kind": "grant_verb", "cost": "bonus", "verbs": ["disengage", "hide"]
+  },
   "rogue-cunning-action": {
     "kind": "grant_verb", "cost": "bonus", "verbs": ["dash", "disengage", "hide"]
   },

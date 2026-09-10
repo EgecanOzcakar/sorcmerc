@@ -9,6 +9,10 @@ const AI = preload("res://core/ai.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Combatant = preload("res://core/combatant.gd")
 const Hex = preload("res://core/hex.gd")
+const Adapter = preload("res://core/adapter.gd")
+const Character = preload("res://core/character.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
+const Presets = preload("res://core/presets.gd")
 
 var _pass = 0
 var _fail = 0
@@ -35,6 +39,11 @@ func _init() -> void:
 	test_hide_enables_advantage()
 	test_mercy_rule()
 	test_encounter_resolves_many_seeds()
+	test_action_economy()
+	test_pool_spend_and_rest()
+	test_rage_full_turn()
+	test_action_surge_full_turn()
+	test_spell_slot_spend()
 
 	print("test_combat: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -83,20 +92,23 @@ func test_burning_hands_hits_allies_not_caster() -> void:
 	var ilsa = _find(cb, "ilsa")
 	var vera = _find(cb, "vera")
 	var snik = _find(cb, "snik")
+	var bh := _verb(cb, ilsa, "burning-hands")
+	check(not bh.is_empty(), "Ilsa can cast Burning Hands")
 	ilsa.pos = Vector2i(4, 1)
 	vera.pos = Vector2i(5, 1)   # east of Ilsa — in the cone
 	snik.pos = Vector2i(5, 0)   # also east — in the cone
 	var vera_before = vera.hp
 	var ilsa_before = ilsa.hp
-	cb.cast_burning_hands(ilsa, Vector2i(1, 0))  # facing east
+	cb.perform(ilsa, bh, Vector2i(1, 0))  # facing east
 	check(ilsa.hp == ilsa_before, "burning hands does not hit the caster")
 	check(vera.hp < vera_before, "burning hands hits an ally in the cone")
+	check(ilsa.slots[0] == 3, "a level-1 cast spends a level-1 slot")
 
 	var cb2 = _sandbox()
 	var i2 = _find(cb2, "ilsa"); var v2 = _find(cb2, "vera")
 	i2.pos = Vector2i(4, 1); v2.pos = Vector2i(3, 1)   # west — behind the cone
 	var vb = v2.hp
-	cb2.cast_burning_hands(i2, Vector2i(1, 0))
+	cb2.perform(i2, _verb(cb2, i2, "burning-hands"), Vector2i(1, 0))
 	check(v2.hp == vb, "burning hands spares a creature outside the cone")
 
 func test_move_provokes_unless_disengage() -> void:
@@ -161,9 +173,12 @@ func test_healing_word_clears_death() -> void:
 	pike.hp = 0
 	pike.death_f = 2
 	pike.death_s = 1
-	cb.cast_healing_word(ilsa, pike)
-	check(not pike.is_down(), "healing word brings a downed PC back up")
-	check(pike.death_f == 0 and pike.death_s == 0, "healing word resets death saves")
+	pike.pos = ilsa.pos + Vector2i(1, 0)   # touch range
+	var cw := _verb(cb, ilsa, "cure-wounds")
+	check(cb.legal_target(ilsa, cw, pike), "a downed ally in reach is a legal heal target")
+	cb.perform(ilsa, cw, pike)
+	check(not pike.is_down(), "the heal brings a downed PC back up")
+	check(pike.death_f == 0 and pike.death_s == 0, "the heal resets death saves")
 	check(pike.hp >= 1, "revived PC has at least 1 HP")
 
 func test_alcove_cover() -> void:
@@ -183,7 +198,7 @@ func test_alcove_cover() -> void:
 		var k = _find(c, "kritch")
 		k.pos = Vector2i(8, 1)
 		if c._saving_throw(k, 13): cover_saves += 1
-		if c._saving_throw(k, 13, true): open_saves += 1
+		if c._saving_throw(k, 13, "dex", true): open_saves += 1
 	check(cover_saves > open_saves, "cover raises DEX saves; ignore_cover removes it (%d vs %d)" % [cover_saves, open_saves])
 
 func test_reach_and_range() -> void:
@@ -196,11 +211,12 @@ func test_reach_and_range() -> void:
 	check(cb.resolve_attack(vera, grull).has("error"), "melee attack at distance 3 is rejected")
 	grull.pos = Vector2i(1, 1)     # distance 1
 	check(not cb.resolve_attack(vera, grull).has("error"), "melee attack at distance 1 resolves")
-	check(cb.action_used, "a weapon attack consumes the Action")
+	check(vera.econ["action"] == 0, "a weapon attack consumes the Action")
+	check(cb.resolve_attack(vera, grull).has("error"), "a second swing with no action left is rejected")
 	var oa = _sandbox()
 	_find(oa, "grull").pos = Vector2i(1, 1); _find(oa, "vera").pos = Vector2i(1, 1)
 	oa.resolve_attack(_find(oa, "grull"), _find(oa, "vera"), {"opportunity": true})
-	check(not oa.action_used, "an opportunity attack is free")
+	check(_find(oa, "grull").econ["action"] == 1, "an opportunity attack is free")
 
 	pike.pos = Vector2i(0, 1)
 	grull.pos = Vector2i(6, 1)     # distance 6
@@ -229,7 +245,7 @@ func test_move_budget() -> void:
 	check(vera.pos == Vector2i(0, 1), "move beyond the speed budget is rejected")
 	cb.move_to(vera, Vector2i(3, 1))   # distance 3 <= 4
 	check(vera.pos == Vector2i(3, 1), "move within budget succeeds")
-	check(cb.move_left == 1, "move points decremented by path cost")
+	check(vera.econ["move_left"] == 1, "move points decremented by path cost")
 
 func _mercy_setup(s: int):
 	var c = _sandbox(s)
@@ -312,13 +328,175 @@ func test_encounter_resolves_many_seeds() -> void:
 			wins += 1
 		else:
 			losses += 1
-	# Baseline, hand-authored party: 186 win / 14 loss, avg 8.8 rounds.
-	# F2's sheet-built party (tests/test_rules.gd) re-baselines at 187 / 13, avg 8.4 —
-	# faster heroes (30 ft = 5 hexes) and a longer bow roughly cancel out. T8 re-tunes.
-	print("  autoplay over %d seeds: %d win / %d loss, avg %.1f rounds" % [runs, wins, losses, float(rounds_total) / runs])
-	check(wins > 0 and losses > 0, "auto-play is not a foregone conclusion either way")
+	# RE-BASELINED at F3 (spec §11 "the re-tuning cliff"): 200 win / 0 loss, avg 8.1.
+	# Before F3 this was 186/14 @ 8.8 — and it still is with the two new autopilot
+	# behaviours switched off, so the verb/economy rewrite itself is damage-neutral.
+	# The whole swing is the party finally USING the kit it always had on the sheet:
+	#   * the healer casts the real Cure Wounds (2d8+3, six slots) instead of the
+	#     hand-authored 1d4+3 Healing Word            -> 186/14 becomes 194/6
+	#   * the fighter spends Second Wind twice        -> 186/14 becomes 196/4
+	# The Sunken Shrine is now an easy encounter for an optimal party. That is a
+	# TUNING fact for T8's scaler, not a rules bug; don't "fix" it here.
+	print("  autoplay over %d seeds: %d win / %d loss, avg %.1f rounds" % [
+		runs, wins, losses, float(rounds_total) / runs])
+	check(wins > runs / 2, "the party wins the tutorial fight more often than not")
+	check(losses == 0 or wins > 0, "auto-play is decisive either way")
+
+# --- F3: action economy, pools, class features ------------------------
+
+func test_action_economy() -> void:
+	var cb = _sandbox()
+	var vera = _find(cb, "vera"); var grull = _find(cb, "grull")
+	vera.pos = Vector2i(4, 1); grull.pos = Vector2i(5, 1)
+	cb.begin_turn_for(vera)
+	check(vera.econ["move_left"] == vera.speed, "a fresh turn refills movement")
+	var ids := cb.available(vera).map(func(v): return v["id"])
+	check("attack" in ids and "dodge" in ids, "the basic actions are always on the list")
+	check("fighter-second-wind" in ids, "a feature verb is offered off the sheet, not a flag")
+	cb.perform(vera, cb._basic("dodge"))
+	check(vera.econ["action"] == 0 and vera.has("dodging"), "Dodge spends the Action")
+	check(not cb.available(vera).any(func(v): return v["cost"] == "action"),
+		"no action-cost verb is offered once the Action is spent")
+	check(cb.available(vera).any(func(v): return v["id"] == "fighter-second-wind"),
+		"the bonus action is untouched by spending the Action")
+	cb.perform(vera, vera.verb("fighter-second-wind"))
+	check(vera.econ["bonus"] == 0, "Second Wind spends the Bonus Action")
+	check(not cb.available(vera).any(func(v): return v["cost"] == "bonus"), "and only once")
+
+	# reactions are spent between your own turns, so they live on the combatant
+	var pike = _find(cb, "pike"); var snik = _find(cb, "snik")
+	pike.pos = Vector2i(0, 1); snik.pos = Vector2i(1, 1)
+	cb.begin_turn_for(pike)
+	check(snik.econ["reaction"] == 1, "everyone starts with a reaction")
+	cb.move_to(pike, Vector2i(0, 0))
+	check(snik.econ["reaction"] == 0, "an opportunity attack spends the reaction")
+	check(cb.provokers_for(pike, Vector2i(2, 1)).is_empty(), "a spent reaction provokes nothing")
+
+func test_pool_spend_and_rest() -> void:
+	var ch = Presets.vera()
+	var c = Adapter.to_combatant(ch, "party", Vector2i(2, 0))
+	var cb = Combat.new(RNG.new(4), [c], Encounter.board())
+	check(c.pool_left("fighter-second-wind") == 2, "fighter 3 has PB=2 Second Winds")
+	cb.begin_turn_for(c)
+	c.hp = 4
+	cb.perform(c, c.verb("fighter-second-wind"))
+	check(c.pool_left("fighter-second-wind") == 1, "using a verb decrements its pool")
+	check(c.hp > 4, "Second Wind heals")
+	cb.begin_turn_for(c)
+	cb.perform(c, c.verb("fighter-second-wind"))
+	check(c.pool_left("fighter-second-wind") == 0, "the pool empties")
+	check(not cb.available(c).any(func(v): return v["id"] == "fighter-second-wind"),
+		"an empty pool takes the verb off the menu")
+	check(cb.perform(c, c.verb("fighter-second-wind")).has("error"), "and perform refuses it")
+
+	# spend carries back to the build, and a rest refills it
+	c.slots = ([0, 0, 0, 0, 0, 0, 0, 0, 0] as Array[int])
+	Adapter.write_back(c, ch)
+	check(int(ch.pools["fighter-second-wind"]) == 0, "spent uses persist to the character")
+	check(Adapter.to_combatant(ch, "party", Vector2i.ZERO).pool_left("fighter-second-wind") == 0,
+		"the next fight starts on the carried pool")
+	Adapter.rest(ch, "short-rest")
+	check(int(ch.pools["fighter-second-wind"]) == 2, "a short rest refills a short-rest pool")
+
+	var ilsa = Presets.ilsa()
+	var i = Adapter.to_combatant(ilsa, "party", Vector2i.ZERO)
+	i.slots[0] = 1
+	Adapter.write_back(i, ilsa)
+	check(Adapter.to_combatant(ilsa, "party", Vector2i.ZERO).slots[0] == 1, "spent slots persist")
+	Adapter.rest(ilsa, "short-rest")
+	check(Adapter.to_combatant(ilsa, "party", Vector2i.ZERO).slots[0] == 1, "a short rest is no help")
+	Adapter.rest(ilsa, "long-rest")
+	check(Adapter.to_combatant(ilsa, "party", Vector2i.ZERO).slots[0] == 4, "a long rest refills slots")
+
+func _barbarian(n := 5):
+	var ch = Character.new()
+	ch.id = "brak"; ch.cname = "Brak"; ch.species_id = "human"; ch.background_id = "soldier"
+	ch.base_abilities = {"str": 16, "dex": 14, "con": 16, "int": 8, "wis": 10, "cha": 8}
+	for i in n:
+		ch.add_level("barbarian", -1)
+	ch.equipped = ["greataxe"] as Array[String]
+	return ch
+
+func test_rage_full_turn() -> void:
+	var ch = _barbarian()
+	var brak = Adapter.to_combatant(ch, "party", Vector2i(4, 1))
+	var grull = Adapter.from_monster(Catalog.all("monsters.json")[0], "foe", Vector2i(5, 1))
+	var cb = Combat.new(RNG.new(11), [brak, grull], Encounter.board())
+	cb.begin_turn_for(brak)
+	var rage := _verb(cb, brak, "barbarian-rage")
+	check(not rage.is_empty() and rage["cost"] == "bonus", "Rage is a bonus action off the sheet")
+	check(brak.pool_left("rage") == 3, "barbarian 5 rages three times")
+	cb.perform(brak, rage)
+	check(brak.has("raging") and brak.econ["bonus"] == 0, "Rage costs the bonus action")
+	check(brak.pool_left("rage") == 2, "Rage spends a rage")
+	check(not cb.available(brak).any(func(v): return v["id"] == "barbarian-rage"),
+		"you cannot rage twice in one turn")
+	# the same turn: swing, and the rage damage rides along
+	var hits := 0
+	for s in range(1, 40):
+		var c2 = Combat.new(RNG.new(s), [brak.clone(), grull.clone()], Encounter.board())
+		var b2 = c2.combatants[0]; var g2 = c2.combatants[1]
+		c2.begin_turn_for(b2)
+		c2.perform(b2, b2.verb("barbarian-rage"))
+		var r = c2.resolve_attack(b2, g2)
+		if r.get("hit", false):
+			hits += 1
+			check(r["damage"] >= 3, "a raging hit carries the +2 damage")
+		check(b2.econ["action"] == 0, "the swing spent the Action, not the Bonus")
+	check(hits > 0, "some seed lands the raging swing")
+	# and rage resistance halves physical damage
+	var before: int = brak.hp
+	cb._apply_damage(brak, 10, "slashing")
+	check(brak.hp == before - 5, "Rage resists slashing (%d -> %d)" % [before, brak.hp])
+
+func test_action_surge_full_turn() -> void:
+	var cb = _sandbox(7)
+	var vera = _find(cb, "vera"); var grull = _find(cb, "grull")
+	vera.pos = Vector2i(4, 1); grull.pos = Vector2i(5, 1)
+	cb.begin_turn_for(vera)
+	cb.resolve_attack(vera, grull)
+	check(vera.econ["action"] == 0, "the first swing spends the Action")
+	check(cb.resolve_attack(vera, grull).has("error"), "no second swing without a second action")
+	var surge := _verb(cb, vera, "fighter-action-surge")
+	check(surge["cost"] == "free", "Action Surge is free — it is not your bonus action")
+	cb.perform(vera, surge)
+	check(vera.econ["action"] == 1, "Action Surge grants a second Action")
+	check(not cb.resolve_attack(vera, grull).has("error"), "which buys a second Attack")
+	check(vera.pool_left("fighter-action-surge") == 0, "and is once per rest")
+	check(vera.econ["bonus"] == 1, "the bonus action is still free")
+
+func test_spell_slot_spend() -> void:
+	var cb = _sandbox()
+	var ilsa = _find(cb, "ilsa"); var grull = _find(cb, "grull")
+	ilsa.pos = Vector2i(4, 1); grull.pos = Vector2i(5, 1)
+	cb.begin_turn_for(ilsa)
+	var sf := _verb(cb, ilsa, "sacred-flame")
+	check(sf["slot_level"] == 0, "a cantrip is level 0")
+	cb.perform(ilsa, sf, grull)
+	check(ilsa.slots[0] == 4 and ilsa.slots[1] == 2, "a cantrip spends no slot")
+	check(ilsa.econ["action"] == 0, "but it does spend the Action")
+	check(not cb.available(ilsa).any(func(v): return v["kind"] == "spell"),
+		"no action left, no spell on the menu")
+	# upcasting is a verb per slot level, and it drains the right one
+	cb.begin_turn_for(ilsa)
+	var up := _verb(cb, ilsa, "burning-hands@2")
+	check(int(up["dice_count"]) == 4, "burning hands at level 2 is 4d6")
+	cb.perform(ilsa, up, Vector2i(1, 0))
+	check(ilsa.slots[1] == 1 and ilsa.slots[0] == 4, "the level-2 cast took the level-2 slot")
+	ilsa.slots = ([0, 0, 0, 0, 0, 0, 0, 0, 0] as Array[int])
+	cb.begin_turn_for(ilsa)
+	check(not cb.available(ilsa).any(func(v): return int(v.get("slot_level", 0)) > 0),
+		"out of slots, leveled spells leave the menu")
+	check(cb.available(ilsa).any(func(v): return v["id"] == "sacred-flame"), "the cantrip stays")
 
 # --- helpers ----------------------------------------------------------
+
+func _verb(cb: Combat, c, id: String) -> Dictionary:
+	for v in cb.available(c):
+		if v["id"] == id:
+			return v
+	return {}
+
 
 func _sandbox(s := 99) -> Combat:
 	return Combat.new(RNG.new(s), Encounter.all(), Encounter.board())

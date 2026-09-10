@@ -2,13 +2,17 @@
 # Numbers live here and nowhere else; tune by editing this file.
 extends RefCounted
 
-const Combatant = preload("res://core/combatant.gd")
+const Adapter = preload("res://core/adapter.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
+const Presets = preload("res://core/presets.gd")
 
 # --- ranges (hexes) — tune here ---------------------------------------
 const REACH_MELEE := 1
-const RANGE_SHORTBOW := 6
-const CONE_BURNING_HANDS := 2        # wedge length
-const RANGE_SPELL_LONG := 12         # sacred flame / healing word — whole map
+
+# Where each combatant starts. Ranges, kit and numbers come from the sheet
+# (core/presets.gd) and data/monsters.json — this file owns the room.
+const START := {"vera": Vector2i(2, 0), "pike": Vector2i(2, 2), "ilsa": Vector2i(1, 1),
+	"grull": Vector2i(4, 1), "snik": Vector2i(4, 0), "vess": Vector2i(5, 0), "kritch": Vector2i(7, 1)}
 
 # --- the room ---------------------------------------------------------
 # Flat-top axial hexes, laid left->right along +q:
@@ -37,7 +41,6 @@ static func board() -> Dictionary:
 		# The turn resolver reads these off the board rather than preloading this file,
 		# so T7/T8 can hand it a generated encounter instead.
 		"reach_melee": REACH_MELEE,
-		"cone_burning_hands": CONE_BURNING_HANDS,
 		"region_at": region_at,
 	}
 
@@ -48,66 +51,17 @@ static func region_at(p: Vector2i) -> String:
 		return "Brazier Hall"
 	return "Alcove"
 
-static func _make(d: Dictionary):
-	var c = Combatant.new()
-	for k in d:
-		c.set(k, d[k])
-	c.hp = d.get("hp", d["max_hp"])
-	return c
-
 static func party() -> Array:
-	return [
-		_make({
-			"id": "vera", "cname": "Vera Kord", "team": "party",
-			"ac": 18, "max_hp": 28, "init_mod": 0, "pos": Vector2i(2, 0), "speed": 4,
-			"atk_bonus": 5, "damage": "1d8+3", "crit_range": 19,
-			"athletics": 5, "dex_save": 1,
-			"second_wind": "1d10+3", "action_surge": true,
-		}),
-		_make({
-			"id": "pike", "cname": "Pike Sallow", "team": "party",
-			"ac": 15, "max_hp": 21, "init_mod": 3, "pos": Vector2i(2, 2), "speed": 5,
-			"atk_bonus": 5, "damage": "1d6+3", "ranged": true, "atk_range": RANGE_SHORTBOW,
-			"sneak_attack": "2d6", "cunning_action": true,
-			"stealth": 7, "acro": 5, "dex_save": 3, "passive_perception": 12,
-		}),
-		_make({
-			"id": "ilsa", "cname": "Ilsa Vane", "team": "party",
-			"ac": 16, "max_hp": 22, "init_mod": 1, "pos": Vector2i(1, 1), "speed": 4,
-			"atk_bonus": 3, "damage": "1d6+1",
-			"save_dc": 13, "dex_save": 1,
-			"spells": ["burning_hands", "healing_word", "sacred_flame"],
-			"slots1": 4, "slots2": 2,
-		}),
-	]
+	var out: Array = []
+	for ch in Presets.party():
+		out.append(Adapter.to_combatant(ch, "party", START[ch.id]))
+	return out
 
 static func monsters() -> Array:
-	return [
-		_make({
-			"id": "grull", "cname": "Grull", "team": "foe",
-			"ac": 16, "max_hp": 27, "init_mod": 2, "pos": Vector2i(4, 1), "speed": 4,
-			"atk_bonus": 4, "damage": "2d8+2", "athletics": 6, "acro": 2, "dex_save": 2,
-			"surprise_attack": "2d6",
-		}),
-		_make({
-			"id": "snik", "cname": "Snik", "team": "foe",
-			"ac": 15, "max_hp": 7, "init_mod": 2, "pos": Vector2i(4, 0), "speed": 5,
-			"atk_bonus": 4, "damage": "1d6+2", "acro": 4, "dex_save": 2,
-			"nimble_escape": true, "stealth": 6,
-		}),
-		_make({
-			"id": "vess", "cname": "Vess", "team": "foe",
-			"ac": 15, "max_hp": 7, "init_mod": 2, "pos": Vector2i(5, 0), "speed": 5,
-			"atk_bonus": 4, "damage": "1d6+2", "acro": 4, "dex_save": 2,
-			"nimble_escape": true, "stealth": 6,
-		}),
-		_make({
-			"id": "kritch", "cname": "Kritch", "team": "foe",
-			"ac": 15, "max_hp": 7, "init_mod": 2, "pos": Vector2i(7, 1), "speed": 5,
-			"atk_bonus": 4, "damage": "1d6+2", "ranged": true, "atk_range": RANGE_SHORTBOW,
-			"acro": 4, "dex_save": 2, "nimble_escape": true, "stealth": 6,
-		}),
-	]
+	var out: Array = []
+	for m in Catalog.all("monsters.json"):
+		out.append(Adapter.from_monster(m, "foe", START[m["id"]]))
+	return out
 
 static func all() -> Array:
 	var a = party()

@@ -12,8 +12,12 @@
     "atk_range": 1,
     "athletics": 6,
     "acro": 2,
-    "saves": { "dex": 2 },
-    "surprise_attack": "2d6"
+    "saves": {
+      "dex": 2
+    },
+    "features": [
+      "monster-surprise-attack"
+    ]
   },
   {
     "id": "snik",
@@ -28,8 +32,12 @@
     "atk_range": 1,
     "acro": 4,
     "stealth": 6,
-    "saves": { "dex": 2 },
-    "nimble_escape": true
+    "saves": {
+      "dex": 2
+    },
+    "features": [
+      "goblin-nimble-escape"
+    ]
   },
   {
     "id": "vess",
@@ -44,8 +52,12 @@
     "atk_range": 1,
     "acro": 4,
     "stealth": 6,
-    "saves": { "dex": 2 },
-    "nimble_escape": true
+    "saves": {
+      "dex": 2
+    },
+    "features": [
+      "goblin-nimble-escape"
+    ]
   },
   {
     "id": "kritch",
@@ -60,7 +72,11 @@
     "atk_range": 6,
     "acro": 4,
     "stealth": 6,
-    "saves": { "dex": 2 },
-    "nimble_escape": true
+    "saves": {
+      "dex": 2
+    },
+    "features": [
+      "goblin-nimble-escape"
+    ]
   }
 ]

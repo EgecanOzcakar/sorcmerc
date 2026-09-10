@@ -55,6 +55,8 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 		slots.append(int(n))
 	while slots.size() < 9:
 		slots.append(0)
+	for i in mini(9, ch.slots_used.size()):
+		slots[i] = maxi(0, slots[i] - int(ch.slots_used[i]))
 	c.slots = slots
 
 	var castable: Array[String] = []
@@ -68,33 +70,38 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 	c.spell_ids = castable
 
 	c.verbs = Effects.verbs_for(s)
-	_legacy_kit(c, s)
+	c.verbs.append_array(Effects.spell_verbs_for(s, castable))
+	_finish_verbs(c, ch.pools)
 	return c
 
-# F3 replaces all of this with verbs off data/effects/features.json (spec §6).
-# Until then the adapter fills the flat kit flags combat.gd still reads, so a
-# sheet-built party fights exactly like the hand-authored one.
-static func _legacy_kit(c, s) -> void:
-	var rogue: int = s.class_level("rogue")
-	if s.has_feature("rogue-sneak-attack") and rogue > 0:
-		c.sneak_attack = "%dd6" % ceili(rogue / 2.0)
-	c.cunning_action = s.has_feature("rogue-cunning-action")
-	c.nimble_escape = s.has_feature("goblin-nimble-escape")
-	var fighter: int = s.class_level("fighter")
-	if s.has_feature("fighter-second-wind"):
-		c.second_wind = "1d10+%d" % fighter
-	c.action_surge = s.has_feature("fighter-action-surge")
-	# cure-wounds stands in for healing_word: healing-word is absent from the export.
-	const LEGACY_SPELLS := {"burning-hands": "burning_hands", "cure-wounds": "healing_word",
-		"sacred-flame": "sacred_flame"}
-	for sid in c.spell_ids:
-		if LEGACY_SPELLS.has(sid):
-			c.spells.append(LEGACY_SPELLS[sid])
+# Feet -> hexes for every verb, and a pool for the features the export grants none
+# (Second Wind, Action Surge — effects.gd keys those on the feature id).
+static func _finish_verbs(c, saved_pools: Dictionary) -> void:
+	var keep: Array = []
+	for v in c.verbs:
+		if v.has("range_ft"):
+			v["range"] = mini(RANGE_CAP, hexes(int(v["range_ft"])))
+		if int(v.get("size_ft", 0)) > 0:
+			v["radius"] = area_hexes(int(v["size_ft"]))
+		if v.has("pool") and not c.pools.has(v["pool"]):
+			var n := int(v.get("uses", 1))
+			c.pools[v["pool"]] = {"cur": int(saved_pools.get(v["pool"], n)), "max": n,
+				"regen": "short-rest"}
+		# ponytail: hex-targeted areas (fireball) need an aiming mode no shipping
+		# build uses yet — drop them rather than offer a verb the UI can't point.
+		if v.get("targeting", "") != "hex":
+			keep.append(v)
+	c.verbs = keep
+
+# Areas floor rather than round: a 15 ft cone stays the 2-hex wedge the room was
+# tuned around, where roundi() would widen it to 3.
+static func area_hexes(ft: int) -> int:
+	return maxi(1, ft / FT_PER_HEX)
 
 static func from_monster(m: Dictionary, team: String, pos: Vector2i):
 	var c = Combatant.new()
 	for k in m:
-		if k in ["attacks", "features", "pools", "saves", "spells"]:
+		if k in ["attacks", "features", "pools", "saves"]:
 			continue
 		c.set(k, m[k])
 	c.team = team
@@ -105,8 +112,24 @@ static func from_monster(m: Dictionary, team: String, pos: Vector2i):
 	c.attacks = m.get("attacks", []).duplicate(true)
 	for fid in m.get("features", []):
 		c.features[fid] = true
-	c.spells = m.get("spells", []).duplicate()
+	c.verbs = Effects.verbs_for(null, c.features.keys())
+	_finish_verbs(c, {})
 	return c
+
+# Short/long rest: refill the pools that regain on it, all spell slots on a long
+# rest, and HP on a long rest. T6's rest node is the caller.
+static func rest(ch, kind: String) -> void:
+	var s = ch.sheet()
+	for p in s.pools:
+		if kind == "long-rest" or p["regen"] == "short-rest":
+			ch.pools[p["id"]] = int(p["max"])
+	for v in Effects.verbs_for(s):
+		if v.has("pool") and s.pool_max(v["pool"]) == 0:
+			ch.pools[v["pool"]] = int(v.get("uses", 1))   # synthetic pool, short-rest
+	if kind == "long-rest":
+		ch.slots_used.clear()
+		ch.hp_current = -1
+	ch.dirty()
 
 # What T7 persists when a fight ends: HP, spent slots, spent pool uses.
 # Statuses and position belong to the fight and are dropped.
@@ -114,4 +137,9 @@ static func write_back(c, ch) -> void:
 	ch.hp_current = c.hp
 	for pid in c.pools:
 		ch.pools[pid] = int(c.pools[pid]["cur"])
+	var full: Array = c.sheet.spellcasting.get("slots", []) if c.sheet else []
+	var used: Array[int] = []
+	for i in full.size():
+		used.append(maxi(0, int(full[i]) - int(c.slots[i])))
+	ch.slots_used = used
 	ch.dirty()

@@ -56,6 +56,27 @@ static func _can_engage(cb, m, c) -> bool:
 			return true
 	return false
 
+# --- verb helpers: the AI shops the same list the UI renders ----------
+
+static func _pick(cb, m, test: Callable) -> Dictionary:
+	for v in cb.available(m):
+		if test.call(v):
+			return v
+	return {}
+
+static func _kind(cb, m, kind: String) -> Dictionary:
+	return _pick(cb, m, func(v): return v["kind"] == kind)
+
+# A cheap self-buff (Rage) and a heal at low HP: the whole of the AI's kit use.
+static func _use_kit(cb, m) -> void:
+	var buff := _kind(cb, m, "self_buff")
+	if not buff.is_empty():
+		cb.perform(m, buff)
+	if m.hp * 2 <= m.max_hp:
+		var sw := _kind(cb, m, "heal_self")
+		if not sw.is_empty():
+			cb.perform(m, sw)
+
 static func _toward(goal: Vector2i) -> Callable:
 	return func(h: Vector2i) -> float: return -float(Hex.distance(h, goal))
 
@@ -72,13 +93,18 @@ static func _foe_turn(cb, m) -> void:
 	var pcs: Array = cb.combatants.filter(func(c): return c.team == "party" and c.conscious())
 	if pcs.is_empty():
 		return
+	_use_kit(cb, m)
 
 	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1)
 	if not adj.is_empty():
 		adj.sort_custom(func(a, b): return a.hp < b.hp if a.hp != b.hp else a.ac < b.ac)
 		cb.resolve_attack(m, adj[0])
-		if m.nimble_escape and m.hp * 2 <= m.max_hp:
-			_move_by(cb, m, _away(pcs), true)  # Nimble Escape = bonus Disengage
+		if m.hp * 2 <= m.max_hp:
+			# Nimble Escape and friends: a bonus-action Disengage, then back off
+			var esc := _pick(cb, m, func(v): return v["kind"] == "disengage" and v["cost"] == "bonus")
+			if not esc.is_empty():
+				cb.perform(m, esc)
+				_move_by(cb, m, _away(pcs), true)
 		return
 
 	# no conscious PC adjacent — a downed neighbour gets finished only if we
@@ -118,12 +144,15 @@ static func _party_auto(cb, h) -> void:
 	var foes: Array = cb.enemies_of(h)
 	if foes.is_empty():
 		return
+	_use_kit(cb, h)
 
-	# healer: revive a downed ally first (bonus action, still attack after)
-	if "healing_word" in h.spells and h.slots1 + h.slots2 > 0:
-		var downed: Array = cb.combatants.filter(func(c): return c.team == "party" and c.is_down())
-		if not downed.is_empty():
-			cb.cast_healing_word(h, downed[0])
+	# healer: a downed ally in range comes first
+	var heal := _pick(cb, h, func(v): return v.has("heal_count") or v["kind"] == "heal_ally")
+	if not heal.is_empty():
+		for c in cb.combatants:
+			if c.team == h.team and c.is_down() and cb.legal_target(h, heal, c):
+				cb.perform(h, heal, c)
+				break
 
 	# close distance if nothing is in reach and we're not a shooter
 	var reach: Array = foes.filter(func(c): return cb.in_reach(h, c))
@@ -132,19 +161,20 @@ static func _party_auto(cb, h) -> void:
 		_move_by(cb, h, _toward(t.pos))
 		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
 
-	# caster: burning hands if a cone catches 2+ foes and no ally
-	if "burning_hands" in h.spells and h.slots1 + h.slots2 > 0:
+	# caster: a cone spell if the wedge catches 2+ foes and no ally
+	var cone := _pick(cb, h, func(v): return v.get("targeting", "") == "direction")
+	if not cone.is_empty():
 		var best_dir := Vector2i.ZERO
 		var best_net := 1
 		for d in Hex.DIRS:
-			var wedge := Hex.cone(h.pos, d, 2)
+			var wedge := Hex.cone(h.pos, d, int(cone.get("radius", 2)))
 			var f: int = cb.enemies_of(h).filter(func(c): return c.pos in wedge).size()
 			var a: int = cb.allies_of(h).filter(func(c): return c.pos in wedge).size()
 			if f - a > best_net:
 				best_net = f - a
 				best_dir = d
 		if best_dir != Vector2i.ZERO:
-			cb.cast_burning_hands(h, best_dir)
+			cb.perform(h, cone, best_dir)
 			return
 
 	var targets: Array = reach if not reach.is_empty() else foes
@@ -153,5 +183,8 @@ static func _party_auto(cb, h) -> void:
 	targets.sort_custom(func(a, b): return a.hp < b.hp)
 	if cb.in_reach(h, targets[0]):
 		cb.resolve_attack(h, targets[0])
-	elif "sacred_flame" in h.spells:
-		cb.cast_sacred_flame(h, targets[0])
+		return
+	# no weapon reach: a single-target attack spell (a cantrip needs no slot)
+	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy")
+	if not bolt.is_empty() and cb.legal_target(h, bolt, targets[0]):
+		cb.perform(h, bolt, targets[0])

@@ -15,12 +15,6 @@ var turn_idx: int = 0
 var round_num: int = 1
 var log: Array[String] = []
 
-# per-turn resource state (combat-design.md §10 risk 3 — model it explicitly)
-var move_left: int = 0        # move points remaining this turn
-var action_used = false
-var bonus_used = false
-var _sneak_used_turn = false
-
 func _init(_rng, _combatants: Array, _board: Dictionary) -> void:
 	rng = _rng
 	combatants = _combatants
@@ -78,19 +72,13 @@ func current():
 
 func begin_turn() -> void:
 	var c = current()
-	move_left = c.speed
-	action_used = false
-	bonus_used = false
-	_sneak_used_turn = false
-	c.statuses.erase("dodging")
-	c.statuses.erase("reacted")
-	c.statuses.erase("helped")  # granted advantage expires if unused by your turn
+	c.new_turn()   # action/bonus/reaction/move + turn-long statuses (spec §7)
 	if c.is_down():
 		_death_save(c)
 
 func begin_turn_for(c) -> void:
-	# test/tooling helper: prime this turn's move points for an arbitrary combatant.
-	move_left = c.speed
+	# test/tooling helper: give an arbitrary combatant a fresh turn's economy.
+	c.new_turn()
 
 func end_turn() -> void:
 	current().has_acted = true
@@ -160,9 +148,9 @@ func hit_chance(attacker, target, opts := {}) -> float:
 		p = p * p
 	return p
 
-# Probability `target` FAILS a DC `dc` DEX save (what a caster wants). UI-only.
-func save_fail_chance(target, dc: int, ignore_cover := false) -> float:
-	var bonus: int = target.dex_save
+# Probability `target` FAILS a DC `dc` save (what a caster wants). UI-only.
+func save_fail_chance(target, dc: int, ability := "dex", ignore_cover := false) -> float:
+	var bonus: int = int(target.saves.get(ability, 0))
 	if is_cover(target.pos) and not ignore_cover:
 		bonus += 2
 	var p_make: float = clampf((21.0 - (dc - bonus)) / 20.0, 0.0, 1.0)
@@ -180,6 +168,228 @@ func shove_chance(attacker, target) -> float:
 			if a + am > d + dm:
 				wins += 1
 	return wins / 400.0
+
+# --- action economy + verbs (spec §6/§7) -------------------------------
+#
+# Everything a combatant can do is a verb: the core actions below, plus the
+# feature- and spell-derived verbs adapter.gd resolved onto `actor.verbs`.
+# Nothing in this file names a hero, a class or a spell.
+
+const BASIC := [
+	{"id": "attack", "label": "Attack", "kind": "attack", "cost": "action", "targeting": "enemy", "range": 1},
+	{"id": "shove_prone", "label": "Shove → prone", "kind": "shove", "choice": "prone",
+		"cost": "action", "targeting": "enemy", "range": 1},
+	{"id": "shove_push", "label": "Shove → back", "kind": "shove", "choice": "push",
+		"cost": "action", "targeting": "enemy", "range": 1},
+	{"id": "shove_brazier", "label": "Shove → brazier", "kind": "shove", "choice": "brazier",
+		"cost": "action", "targeting": "enemy", "range": 1},
+	{"id": "help", "label": "Help an ally", "kind": "help", "cost": "action", "targeting": "ally", "range": 1},
+	{"id": "dodge", "label": "Dodge", "kind": "dodge", "cost": "action", "targeting": "self"},
+	{"id": "dash", "label": "Dash", "kind": "dash", "cost": "action", "targeting": "self"},
+	{"id": "disengage", "label": "Disengage", "kind": "disengage", "cost": "action", "targeting": "self"},
+	{"id": "hide", "label": "Hide", "kind": "hide", "cost": "action", "targeting": "self"},
+]
+
+# Feature kinds that are a button. The rest are passive: passive_damage folds into
+# resolve_attack, attacks_per_action into new_turn(), reaction fires on its trigger.
+const OFFERABLE := ["heal_self", "heal_ally", "self_buff", "ally_buff", "grant_action",
+	"attack_modifier", "save_effect", "spell"]
+
+func _basic(id: String) -> Dictionary:
+	for b in BASIC:
+		if b["id"] == id:
+			return b
+	return {}
+
+# Every verb `actor` can use right now (spec §6). scenes/main.gd renders this list;
+# ai.gd scores it.
+func available(actor) -> Array:
+	var out: Array = []
+	for b in BASIC:
+		if _offerable(actor, b):
+			out.append(b.duplicate())
+	for v in actor.verbs:
+		if v["kind"] == "grant_verb":
+			for name in v.get("verbs", []):
+				var g: Dictionary = _basic(name).duplicate()
+				if g.is_empty():
+					continue
+				g["id"] = "%s:%s" % [v["id"], name]
+				g["cost"] = v["cost"]
+				if v.has("pool"):
+					g["pool"] = v["pool"]
+				if _offerable(actor, g):
+					out.append(g)
+		elif v["kind"] in OFFERABLE and _offerable(actor, v):
+			out.append(v.duplicate())
+	return out
+
+func can_spend(actor, cost: String) -> bool:
+	return cost in ["free", "none", ""] or int(actor.econ.get(cost, 0)) > 0
+
+func _spend(actor, cost: String) -> bool:
+	if not can_spend(actor, cost):
+		return false
+	if cost in ["action", "bonus", "reaction"]:
+		actor.econ[cost] = int(actor.econ[cost]) - 1
+	return true
+
+func _offerable(actor, v: Dictionary) -> bool:
+	if not actor.conscious():
+		return false
+	if not can_spend(actor, v.get("cost", "action")):
+		return false
+	if v.get("once_per", "") == "turn" and actor.econ.get("used", {}).has(v["id"]):
+		return false
+	if v.has("pool") and actor.pool_left(v["pool"]) <= 0:
+		return false
+	var slot := int(v.get("slot_level", 0))
+	if slot > 0:
+		if slot > actor.slots.size() or actor.slots[slot - 1] <= 0:
+			return false
+		# a bonus-action leveled spell forbids a leveled spell with your action (§7)
+		if v["cost"] == "action" and actor.econ.get("cast_bonus_spell", false):
+			return false
+	match v["kind"]:
+		"hide": return not actor.has("hidden")
+		"dodge": return not actor.has("dodging")
+		"disengage": return not actor.has("disengaged")
+		"dash": return true
+		"self_buff": return not actor.has(v.get("status", v["id"]))
+		"attack_modifier", "grant_action": return true
+		"shove": if actor.athletics <= 0: return false
+	match v.get("targeting", "self"):
+		"enemy": return enemies_of(actor).any(func(e): return legal_target(actor, v, e))
+		"ally": return combatants.any(func(a): return a != actor and legal_target(actor, v, a))
+		"direction": return not enemies_of(actor).is_empty()
+	return true
+
+# Is `c` a legal target for `v` cast/swung by `actor` right now?
+func legal_target(actor, v: Dictionary, c) -> bool:
+	match v.get("targeting", "self"):
+		"enemy":
+			if c.team == actor.team or not c.conscious():
+				return false
+			if v["kind"] == "attack":
+				return in_reach(actor, c)
+			if v.get("choice", "") == "brazier" and not adjacent_to_brazier(c):
+				return false
+			return Hex.distance(actor.pos, c.pos) <= int(v.get("range", 1))
+		"ally":
+			if c.team != actor.team or c == actor or c.is_dead():
+				return false
+			if not (v.has("heal_count") or v["kind"] in ["heal_ally", "ally_buff"]) and not c.conscious():
+				return false
+			return Hex.distance(actor.pos, c.pos) <= int(v.get("range", 1))
+		"self":
+			return c == actor
+	return false
+
+# Run a verb. `target` is a Combatant, a direction (Vector2i) or null.
+func perform(actor, v: Dictionary, target = null) -> Dictionary:
+	var kind: String = v["kind"]
+	if kind != "attack" and not _spend(actor, v.get("cost", "action")):
+		return {"error": "no %s left" % v.get("cost", "action")}
+	if v.get("once_per", "") == "turn":
+		actor.econ["used"][v["id"]] = true
+	if v.has("pool"):
+		if actor.pool_left(v["pool"]) <= 0:
+			return {"error": "pool empty"}
+		actor.pools[v["pool"]]["cur"] = actor.pool_left(v["pool"]) - 1
+	match kind:
+		"attack": return resolve_attack(actor, target)
+		"shove": return act_shove(actor, target, v.get("choice", "prone"))
+		"help": act_help(actor, target)
+		"dodge": act_dodge(actor)
+		"hide": act_hide(actor)
+		"dash":
+			actor.econ["move_left"] = int(actor.econ.get("move_left", 0)) + actor.speed
+			log.append("%s dashes — +%d move." % [actor.cname, actor.speed])
+		"disengage":
+			actor.statuses["disengaged"] = true
+			log.append("%s disengages." % actor.cname)
+		"heal_self", "heal_ally":
+			var who = actor if kind == "heal_self" else target
+			log.append("%s uses %s." % [actor.cname, v["label"]])
+			heal(who, Dice.roll(rng, "%dd%d+%d" % [int(v.get("dice_count", 1)),
+				int(v.get("dice_sides", 10)), int(v.get("dice_bonus", 0))]))
+		"self_buff":
+			actor.statuses[v.get("status", v["id"])] = {
+				"bonus_damage": int(v.get("bonus_damage", 0)), "resist": v.get("resist", [])}
+			log.append("%s — %s!" % [actor.cname, v["label"]])
+		"attack_modifier":
+			actor.statuses["reckless"] = true
+			log.append("%s attacks recklessly." % actor.cname)
+		"grant_action":
+			actor.econ["action"] = int(actor.econ["action"]) + int(v.get("amount", 1))
+			actor.econ["attacks_left"] = int(actor.econ["attacks_left"]) + int(v.get("extra_attacks", 0))
+			log.append("%s — %s!" % [actor.cname, v["label"]])
+		"save_effect": return _save_effect(actor, v, target)
+		"spell": return cast(actor, v, target)
+	return {}
+
+func _save_effect(actor, v: Dictionary, target) -> Dictionary:
+	var saved := _saving_throw(target, actor.save_dc, v.get("save", "dex"))
+	log.append("%s uses %s on %s — %s the save." % [
+		actor.cname, v["label"], target.cname, "makes" if saved else "fails"])
+	if not saved:
+		for cond in v.get("conditions", []):
+			target.statuses[cond] = true
+	return {"saved": saved}
+
+# --- spells ------------------------------------------------------------
+
+# `target` is a Combatant (single / ally) or a direction (cone).
+func cast(caster, v: Dictionary, target) -> Dictionary:
+	var lvl := int(v.get("slot_level", 0))
+	if lvl > 0:
+		if lvl > caster.slots.size() or caster.slots[lvl - 1] <= 0:
+			return {"error": "no slot"}
+		caster.slots[lvl - 1] -= 1
+		if v["cost"] == "bonus":
+			caster.econ["cast_bonus_spell"] = true
+	if v.has("heal_count"):
+		log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
+		heal(target, Dice.roll(rng, "%dd%d+%d" % [int(v["heal_count"]), int(v["heal_sides"]),
+			int(v.get("heal_bonus", 0))]))
+		return {}
+	if not v.has("dice_count"):
+		return {}
+	var notation := "%dd%d" % [int(v["dice_count"]), int(v["dice_sides"])]
+	var dc := int(v.get("save_dc", caster.save_dc))
+	if v.get("targeting", "") == "direction":
+		var wedge := Hex.cone(caster.pos, target, int(v.get("radius", 2)))
+		log.append("%s casts %s — DC %d save." % [caster.cname, v["label"], dc])
+		for c in combatants:
+			if c == caster or not c.conscious() or not (c.pos in wedge):
+				continue
+			_spell_hit(c, v, notation, dc)
+		return {}
+	log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
+	return _spell_hit(target, v, notation, dc)
+
+func _spell_hit(c, v: Dictionary, notation: String, dc: int) -> Dictionary:
+	if v.has("attack_bonus"):
+		var r = Dice.d20(rng)
+		var crit: bool = r.nat == 20
+		var hit: bool = crit or (r.nat != 1 and r.nat + int(v["attack_bonus"]) >= effective_ac(c))
+		var d := Dice.roll(rng, notation, crit) if hit else 0
+		log.append("  d20[%d]%+d vs AC %d — %s%s." % [r.nat, int(v["attack_bonus"]), effective_ac(c),
+			"hit for %d" % d if hit else "miss", " (CRIT)" if crit else ""])
+		if hit:
+			_apply_damage(c, d, v.get("damage_type", ""))
+		return {"hit": hit, "damage": d}
+	var dmg := Dice.roll(rng, notation)
+	var saved := false
+	if v.get("save", "") != "":
+		saved = _saving_throw(c, dc, v["save"], v.get("ignores_cover", false))
+		if saved:
+			dmg = (dmg / 2) if v.get("half_on_save", false) else 0
+	log.append("  %s %s the save — %d %s." % [c.cname, "makes" if saved else "fails", dmg,
+		v.get("damage_type", "damage")])
+	if dmg > 0:
+		_apply_damage(c, dmg, v.get("damage_type", ""))
+	return {"saved": saved, "damage": dmg}
 
 # --- attack ------------------------------------------------------------
 
@@ -199,25 +409,64 @@ func _attack_mode(attacker, target, opts := {}) -> int:
 		adv = true
 	if attacker.has("helped"):
 		adv = true
+	if attacker.has("reckless") or target.has("reckless"):
+		adv = true
 	if opts.get("advantage", false):
 		adv = true
 	return Dice.combine(adv, dis)
 
-func _sneak_ok(attacker, target, mode: int) -> bool:
-	if attacker.sneak_attack == "" or _sneak_used_turn or mode == Dice.DIS:
-		return false
-	if mode == Dice.ADV:
-		return true
-	for a in allies_of(attacker):
-		if Hex.distance(a.pos, target.pos) <= 1:
-			return true
-	return false
+# The `requires` vocabulary of a passive_damage verb (data/effects/features.json).
+func _requires_met(attacker, target, mode: int, reqs: Array) -> bool:
+	for r in reqs:
+		match r:
+			"not_disadvantage":
+				if mode == Dice.DIS:
+					return false
+			"target_has_not_acted":
+				if target.has_acted:
+					return false
+			"advantage_or_ally_adjacent":
+				if mode != Dice.ADV and not allies_of(attacker).any(
+						func(a): return Hex.distance(a.pos, target.pos) <= 1):
+					return false
+	return true
+
+# Extra dice a hit adds — Sneak Attack, a goblin's Surprise Attack. [{label, amount}]
+func _passive_damage(attacker, target, mode: int, crit: bool) -> Array:
+	var out: Array = []
+	for v in attacker.verbs:
+		if v["kind"] != "passive_damage" or v.get("trigger", "") != "on_weapon_hit":
+			continue
+		if v.get("once_per", "") == "turn" and attacker.econ.get("used", {}).has(v["id"]):
+			continue
+		if not _requires_met(attacker, target, mode, v.get("requires", [])):
+			continue
+		if v.get("once_per", "") == "turn":
+			attacker.econ["used"][v["id"]] = true
+		out.append({"label": v["label"], "amount": Dice.roll(rng,
+			"%dd%d" % [int(v["dice_count"]), int(v["dice_sides"])], crit)})
+	return out
+
+# Damage a held buff adds to a melee swing (Rage).
+func _buff_damage(attacker) -> int:
+	var n := 0
+	for s in attacker.statuses.values():
+		if s is Dictionary:
+			n += int(s.get("bonus_damage", 0))
+	return n
 
 func resolve_attack(attacker, target, opts := {}) -> Dictionary:
-	if not opts.get("opportunity", false) and not in_reach(attacker, target):
+	var oa: bool = opts.get("opportunity", false)
+	if not oa and not in_reach(attacker, target):
 		return {"error": "out of range"}
-	if not opts.get("opportunity", false):
-		action_used = true   # a weapon attack is the Action; OAs are free
+	if not oa:
+		# the Attack action buys `attacks_per_action` swings; OAs are free (§7)
+		if int(attacker.econ.get("attacks_left", 0)) > 0:
+			attacker.econ["attacks_left"] = int(attacker.econ["attacks_left"]) - 1
+		elif _spend(attacker, "action"):
+			attacker.econ["attacks_left"] = int(attacker.econ.get("attacks_per_action", 1)) - 1
+		else:
+			return {"error": "no action left"}
 	var notation: String = opts.get("damage", attacker.damage)
 	var mode = _attack_mode(attacker, target, opts)
 	var r = Dice.d20(rng, mode)
@@ -229,25 +478,26 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var out = {
 		"attacker": attacker.cname, "target": target.cname,
 		"nat": nat, "dice": r.dice, "bonus": attacker.atk_bonus, "total": total, "ac": ac,
-		"hit": hit, "crit": crit, "damage": 0, "sneak": 0, "surprise": 0, "mode": mode,
+		"hit": hit, "crit": crit, "damage": 0, "extras": [], "mode": mode,
 	}
 	if hit:
 		var dmg = Dice.roll(rng, notation, crit)
-		if _sneak_ok(attacker, target, mode):
-			out.sneak = Dice.roll(rng, attacker.sneak_attack, crit)
-			dmg += out.sneak
-			_sneak_used_turn = true
-		if attacker.surprise_attack != "" and not target.has_acted:
-			out.surprise = Dice.roll(rng, attacker.surprise_attack, crit)
-			dmg += out.surprise
+		out.extras = _passive_damage(attacker, target, mode, crit)
+		for e in out.extras:
+			dmg += int(e["amount"])
+		if not attacker.ranged:
+			dmg += _buff_damage(attacker)
 		out.damage = dmg
 	attacker.statuses.erase("hidden")
-	if not opts.get("opportunity", false):
+	if not oa:
 		attacker.statuses.erase("helped")  # the granted advantage is spent
-	_log_attack(out, opts.get("opportunity", false))
+	_log_attack(out, oa)
 	if hit:
-		_apply_damage(target, out.damage)
+		_apply_damage(target, out.damage, _damage_type(attacker))
 	return out
+
+func _damage_type(attacker) -> String:
+	return str(attacker.attacks[0].get("damage_type", "")) if not attacker.attacks.is_empty() else ""
 
 func _log_attack(o: Dictionary, oa: bool) -> void:
 	var dice_s = str(o.dice[0]) if o.dice.size() == 1 else "%d̶%d" % [o.dice[0], o.dice[1]]
@@ -265,16 +515,24 @@ func _log_attack(o: Dictionary, oa: bool) -> void:
 			log.append("%s%s attacks %s — %s, misses." % [tag, o.attacker, o.target, roll_s])
 		return
 	var extra = ""
-	if o.sneak > 0:
-		extra += " +%d sneak" % o.sneak
-	if o.surprise > 0:
-		extra += " +%d surprise" % o.surprise
+	for e in o.extras:
+		extra += " +%d %s" % [int(e["amount"]), str(e["label"]).to_lower()]
 	var word = "CRITS" if o.crit else "hits"
 	log.append("%s%s %s %s — %s, %d damage%s." % [tag, o.attacker, word, o.target, roll_s, o.damage, extra])
 
 # --- damage / death --------------------------------------------------
 
-func _apply_damage(target, dmg: int) -> void:
+func _resists(c, dtype: String) -> bool:
+	if dtype == "":
+		return false
+	for s in c.statuses.values():
+		if s is Dictionary and dtype in s.get("resist", []):
+			return true
+	return false
+
+func _apply_damage(target, dmg: int, dtype := "") -> void:
+	if _resists(target, dtype):
+		dmg = dmg / 2
 	if target.is_down():
 		target.death_f += 1 if dmg > 0 else 0
 		if target.death_f >= 3:
@@ -339,7 +597,8 @@ func heal(c, amount: int) -> void:
 
 # Hexes reachable by `mover` with the move points left this turn.
 func move_field(mover) -> Dictionary:
-	return Hex.reachable(passable, mover.pos, move_left, _blockers(mover), _rough())
+	return Hex.reachable(passable, mover.pos, int(mover.econ.get("move_left", 0)),
+		_blockers(mover), _rough())
 
 # The shortest route `mover` would walk to `dest`.
 func move_path(mover, dest: Vector2i) -> Array:
@@ -350,7 +609,7 @@ func provokers_for(mover, dest: Vector2i) -> Array:
 	var path := move_path(mover, dest)
 	var out: Array = []
 	for f in enemies_of(mover):
-		if f.has("reacted") or f in out:
+		if not can_spend(f, "reaction") or f in out:
 			continue
 		for i in range(path.size() - 1):
 			if Hex.distance(f.pos, path[i]) <= 1 and Hex.distance(f.pos, path[i + 1]) > 1:
@@ -365,15 +624,15 @@ func move_to(mover, dest: Vector2i, disengage := false) -> void:
 	if not field.has(dest):
 		return  # out of range / blocked — UI never offers this; guard for AI + tests
 	var from: Vector2i = mover.pos
-	if not disengage:
+	if not disengage and not mover.has("disengaged"):
 		for f in provokers_for(mover, dest):
-			f.statuses["reacted"] = true
+			_spend(f, "reaction")
 			resolve_attack(f, mover, {"opportunity": true})
 			if mover.is_down() or mover.is_dead():
 				return
 	var before_region := region_at(from)
 	mover.pos = dest
-	move_left -= field[dest]
+	mover.econ["move_left"] = int(mover.econ.get("move_left", 0)) - field[dest]
 	if region_at(dest) != before_region:
 		log.append("%s moves to the %s." % [mover.cname, region_at(dest)])
 
@@ -381,19 +640,16 @@ func move_to(mover, dest: Vector2i, disengage := false) -> void:
 
 func act_dodge(c) -> void:
 	c.statuses["dodging"] = true
-	action_used = true
 	log.append("%s takes the Dodge action." % c.cname)
 
 # Help: the named ally's next attack roll (before your next turn) has advantage.
 func act_help(helper, ally) -> void:
-	action_used = true
 	ally.statuses["helped"] = true
 	log.append("%s helps %s — advantage on their next attack." % [helper.cname, ally.cname])
 
 # Hide: Stealth vs the best enemy passive Perception. On success you're hidden
 # (attacks against you have disadvantage; your next attack has advantage).
 func act_hide(c) -> bool:
-	bonus_used = true
 	var dc: int = 0
 	for e in enemies_of(c):
 		dc = maxi(dc, e.passive_perception)
@@ -405,14 +661,7 @@ func act_hide(c) -> bool:
 	log.append("%s fails to hide — Stealth %d vs %d." % [c.cname, roll, dc])
 	return false
 
-# Cunning Action: a bonus-action Dash (Rogue).
-func act_cunning_dash(c) -> void:
-	bonus_used = true
-	move_left += c.speed
-	log.append("%s darts ahead — Cunning Action Dash." % c.cname)
-
 func act_shove(attacker, target, choice: String) -> Dictionary:
-	action_used = true
 	var a = Dice.d20(rng).nat + attacker.athletics
 	var d = Dice.d20(rng).nat + maxi(target.athletics, target.acro)
 	if a <= d:
@@ -438,68 +687,8 @@ func act_shove(attacker, target, choice: String) -> Dictionary:
 			_apply_damage(target, burn)
 	return {"success": true}
 
-func act_second_wind(c) -> void:
-	if c.second_wind == "" or c.used_second_wind:
-		return
-	c.used_second_wind = true
-	bonus_used = true
-	var amt = Dice.roll(rng, c.second_wind)
-	log.append("%s uses Second Wind." % c.cname)
-	heal(c, amt)
-
-func cast_healing_word(caster, target, level := 1) -> void:
-	if not "healing_word" in caster.spells:
-		return
-	if level >= 2 and caster.slots2 > 0:
-		caster.slots2 -= 1
-	elif caster.slots1 > 0:
-		caster.slots1 -= 1
-		level = 1
-	else:
-		return
-	bonus_used = true
-	var amt = Dice.roll(rng, "1d4+3") + (level - 1) * Dice.roll(rng, "1d4")
-	log.append("%s casts Healing Word on %s." % [caster.cname, target.cname])
-	heal(target, amt)
-
-func cast_burning_hands(caster, dir: Vector2i, level := 1) -> void:
-	if not "burning_hands" in caster.spells:
-		return
-	if level >= 2 and caster.slots2 > 0:
-		caster.slots2 -= 1
-	elif caster.slots1 > 0:
-		caster.slots1 -= 1
-		level = 1
-	else:
-		return
-	action_used = true
-	var notation = "%dd6" % (2 + level)
-	var wedge := Hex.cone(caster.pos, dir, int(board.get("cone_burning_hands", 2)))
-	log.append("%s casts Burning Hands — a cone of flame, DC %d save." % [caster.cname, caster.save_dc])
-	for c in combatants:
-		if c == caster or not c.conscious() or not (c.pos in wedge):
-			continue
-		var dmg = Dice.roll(rng, notation)
-		var saved = _saving_throw(c, caster.save_dc)
-		var final = (dmg / 2) if saved else dmg
-		log.append("  %s %s the save — %d fire." % [c.cname, "makes" if saved else "fails", final])
-		_apply_damage(c, final)
-
-func cast_sacred_flame(caster, target) -> void:
-	if not "sacred_flame" in caster.spells:
-		return
-	action_used = true
-	var dmg = Dice.roll(rng, "1d8")
-	var saved = _saving_throw(target, caster.save_dc, true)
-	log.append("%s calls Sacred Flame on %s — %s the save%s." % [
-		caster.cname, target.cname, "makes" if saved else "fails",
-		"" if saved else ", %d radiant" % dmg,
-	])
-	if not saved:
-		_apply_damage(target, dmg)
-
-func _saving_throw(c, dc: int, ignore_cover := false) -> bool:
-	var bonus: int = c.dex_save
+func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false) -> bool:
+	var bonus: int = int(c.saves.get(ability, 0))
 	if is_cover(c.pos) and not ignore_cover:
 		bonus += 2
 	var mode = Dice.ADV if c.has("dodging") else Dice.NORMAL
