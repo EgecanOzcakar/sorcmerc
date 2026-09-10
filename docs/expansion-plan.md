@@ -747,4 +747,23 @@ way, reconciled by hand if they collide.
   (`drive_ui`, `drive_creator`, `drive_campaign`, `drive_game`) pass against
   the fully-merged tree.
 
+- 2026-09-10: **Boss XP scaling, fantasy enemy names, and both deferred hookups
+  complete.** Boss fights now pay bonus XP scaled by how much harder they play
+  than the curve's middle (`avg(easy, hard)` measured win rate over the boss's
+  own, capped 1.0–2.5x — `Campaign.BOSS_REF_WIN_RATE`/`BOSS_XP_MULT_CAP`).
+  Humanoid foes (`data/bestiary.json` `type=="humanoid"`) spawn as
+  "<name> the <Species>" out of a faction-keyed fantasy name pool
+  (`core/enemy_names.gd`), deterministic per seed/spawn so a reload names the
+  same goblin the same thing. T19 (achievements) and T22 (progression) are
+  both wired into real gameplay now, not just modeled: victory unlocks
+  first_victory/hard_flawless/campaign_clear/etc., death-saves/resurrection/
+  identification/spending all fire their achievement ids, and campaign XP
+  banks account-wide lifetime XP plus per-class class-XP into `Progression`,
+  with `creator.gd` greying out locked species/classes/subclasses and showing
+  their real unlock cost, including the "pick 2 free subclasses" flow on a
+  class's first unlock. One achievement (`equip_legendary`) still needs a
+  one-line hook in `scenes/profile/profile.gd`'s `toggle_equip()`, not yet
+  added — flagged, not done. **Full suite: 23 test files (test_bestiary
+  reports OK, not a count), 0 failures; all four `drive_*` smoke scripts pass.**
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
