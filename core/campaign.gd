@@ -17,6 +17,8 @@ const Icons = preload("res://core/ui_icons.gd")
 const RNG = preload("res://core/rng.gd")
 const Dice = preload("res://core/dice.gd")
 const Settings = preload("res://core/settings.gd")
+const Ach = preload("res://core/achievements.gd")
+const Progression = preload("res://core/progression.gd")
 
 # T12 — the route is generated, not fixed. POOL is every node template; each one
 # carries the stage positions it is eligible for. _build_route() seed-picks 2-3
@@ -199,6 +201,7 @@ const TERMINAL := ["won", "lost", "retired"]
 const STOCK := ["shortsword", "longsword", "greataxe", "shortbow", "leather", "chain-shirt", "shield"]
 const SCROLL := "scroll-of-resurrection"
 const SELL_RATE := 0.5
+const BIG_SPENDER_GP := 1000   # T19: merchant spend in one run that earns big_spender
 
 var party
 var stage := 0
@@ -302,6 +305,7 @@ func leave() -> void:
 	state = "won" if stage >= route.size() else "picking"
 	if state == "won":
 		say("The road ends. The party lives.")
+		Ach.unlock("campaign_clear")
 		_conclude()
 	_autosave()
 
@@ -313,6 +317,7 @@ func retire() -> bool:
 	node = {}
 	state = "retired"
 	say("The party turns back, purses full. The run ends on their terms.")
+	Ach.unlock("retire_run")
 	_conclude()
 	_autosave()
 	return true
@@ -376,9 +381,16 @@ func finish_combat(result: Dictionary) -> void:
 	var earned_xp: int = roundi(int(result.get("xp", 0)) * _xp_mult())
 	xp += earned_xp
 	_split_xp(earned_xp)
+	Ach.unlock("first_victory")
+	# "Nobody downed" is the real bar: a hero who hit 0 HP and got healed back up
+	# still counts against it (combat.gd's `downed`, carried by resolve_outcome).
+	if node_difficulty() == "hard" and result.get("deaths", []).is_empty() \
+			and result.get("downed", []).is_empty():
+		Ach.unlock("hard_flawless")
 	party.add_gold(int(result.get("gold", 0)) + int(node.get("gold", 0)))
 	for item in result.get("loot", []):
 		party.stash_add(String(item))
+		_note_rarity(String(item))
 	say("Victory. +%d XP, +%d gold." % [earned_xp,
 		int(result.get("gold", 0)) + int(node.get("gold", 0))])
 	for id in result.get("deaths", []):
@@ -409,6 +421,20 @@ func _split_xp(total: int) -> void:
 	var share: int = total / fighters.size()
 	for ch in fighters:
 		ch.xp += share
+	_bank_progression(total, fighters, share)
+
+# T22: the same XP also feeds the machine-wide meta-progression. Lifetime XP is
+# account-scoped, so the party's whole haul lands once — not once per character —
+# while each fighter's share feeds every class they hold levels in.
+func _bank_progression(total: int, fighters: Array, share: int) -> void:
+	Progression.add_lifetime_xp(total)
+	for ch in fighters:
+		var seen := {}
+		for l in ch.levels:
+			var cid: String = String(l["class_id"])
+			if not seen.has(cid):
+				seen[cid] = true
+				Progression.add_class_xp(cid, share)
 
 # --- treasure -------------------------------------------------------------
 
@@ -425,8 +451,17 @@ func _take_treasure() -> void:
 func _find_item(item_id: String) -> void:
 	var magic := is_magic(item_id)
 	party.stash_add(item_id, 1, not magic)
+	_note_rarity(item_id)
 	# The journal is bbcode; the ramp tints the name so a legendary drop reads as one.
 	say("Found: %s." % Icons.item_bb(item_id, mystery_name(item_id) if magic else item_name(item_id)))
+
+# T19: anything of very rare quality or better landing in the stash, however it got
+# there (hoard or monster drop). Identified or not — you looted it either way.
+const GREAT_RARITIES := ["very-rare", "legendary", "artifact"]
+
+static func _note_rarity(item_id: String) -> void:
+	if String(item_data(item_id).get("rarity", "")) in GREAT_RARITIES:
+		Ach.unlock("loot_very_rare")
 
 # --- rest -----------------------------------------------------------------
 
@@ -472,6 +507,7 @@ const IDENTIFY_SCROLL := "scroll-of-identification"
 const SCROLL_DROP_ONE_IN := 4        # a hoard sometimes also holds an identify scroll
 
 var identify_failed: Array = []      # item ids already flubbed at this node
+var spent: int = 0                   # gp handed to merchants this run (T19: big_spender)
 
 # Whose Arcana the examination uses: the best of the active party. "" if nobody.
 func arcana_examiner() -> String:
@@ -511,6 +547,7 @@ func identify_check(item_id: String, char_id: String) -> bool:
 		_autosave()
 		return false
 	party.stash_identify(item_id)
+	Ach.unlock("identify_item")
 	say("%s identifies it: %s (%d+%d vs DC %d)." % [ch.cname, item_name(item_id), nat, bonus, dc])
 	_autosave()
 	return true
@@ -519,6 +556,7 @@ func identify_check(item_id: String, char_id: String) -> bool:
 func identify_with_scroll(item_id: String) -> bool:
 	if not party.use_identification_scroll(item_id):
 		return false
+	Ach.unlock("identify_item")
 	say("The Scroll of Identification crumbles: %s." % item_name(item_id))
 	_autosave()
 	return true
@@ -547,6 +585,10 @@ func buy(item_id: String) -> bool:
 	if not party.spend_gold(item_price(item_id)):
 		return false
 	party.stash_add(item_id)
+	spent += item_price(item_id)
+	if spent >= BIG_SPENDER_GP:
+		Ach.unlock("big_spender")
+	_note_rarity(item_id)
 	say("Bought %s for %d gp." % [item_name(item_id), item_price(item_id)])
 	_autosave()
 	return true

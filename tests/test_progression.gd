@@ -5,6 +5,10 @@ extends SceneTree
 
 const Prog = preload("res://core/progression.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Campaign = preload("res://core/campaign.gd")
+const Party = preload("res://core/party.gd")
+const Presets = preload("res://core/presets.gd")
+const Creator = preload("res://scenes/creator/creator.gd")
 
 var _pass = 0
 var _fail = 0
@@ -25,6 +29,10 @@ func _init() -> void:
 	test_class_xp_subclasses()
 	test_round_trip()
 	test_unknown_ids()
+	_wipe()
+	test_campaign_banks_xp()
+	_wipe()
+	test_creator_gates()
 	await test_viewer()
 	_wipe()
 	print("test_progression: %d passed, %d failed" % [_pass, _fail])
@@ -150,6 +158,54 @@ func test_unknown_ids() -> void:
 	check(not Prog.is_subclass_unlocked("nonesuch"), "unknown subclass is locked")
 	check(Prog.subclass_remaining("nonesuch") == 0, "unknown subclass has no price")
 	check(Prog.add_lifetime_xp(-100) == 0, "negative XP is ignored")
+
+# The wiring: a campaign victory's XP has to land here too, once for the account
+# and per-class for whoever was in the fight.
+func test_campaign_banks_xp() -> void:
+	var p := Party.new()
+	for ch in Presets.party():
+		p.add_member(ch)
+	var c := Campaign.new(p, 99)
+	var fighters: Array = c.party.party_characters()
+	check(fighters.size() == 3, "the preset party fields 3")
+	c.finish_combat({"outcome": "Victory", "xp": 300, "gold": 0})
+	check(Prog.lifetime_xp_total() == 300, "the whole haul banks once as lifetime XP")
+	for ch in fighters:
+		check(Prog.class_xp_of(ch.class_id()) == 100,
+			"%s's share feeds %s's class XP" % [ch.id, ch.class_id()])
+	c.finish_combat({"outcome": "Victory", "xp": 300, "gold": 0})
+	check(Prog.lifetime_xp_total() == 600, "a second win adds, never resets")
+	check(Prog.load_state().lifetime_xp == 600, "and it is on disk, not just in memory")
+	check(Prog.class_xp_of("cleric") == 200, "class XP accumulates across fights")
+	# A loss banks nothing.
+	c.finish_combat({"outcome": "Defeat", "xp": 300, "gold": 0})
+	check(Prog.lifetime_xp_total() == 600, "a defeat banks no XP")
+
+# The creator's gate: locked options carry a price, open ones carry nothing.
+func test_creator_gates() -> void:
+	check(Creator.lock_note("species", "human") == "", "a day-one species is open")
+	check(Creator.lock_note("class", "cleric") == "", "a day-one class is open")
+	check(Creator.lock_note("subclass", "lifedomain") == "", "its free subclass is open")
+	var note := Creator.lock_note("species", "gnome")
+	check(note.contains(str(Prog.species_cost("gnome"))) and note.contains("lifetime XP"),
+		"a locked species quotes its lifetime-XP price: %s" % note)
+	check(Creator.lock_note("class", "rogue").contains(str(Prog.class_cost("rogue"))),
+		"a locked class quotes its lifetime-XP price")
+	check(Creator.lock_note("subclass", "wardomain").contains("class XP"),
+		"a paid subclass quotes class XP")
+	Prog.add_lifetime_xp(Prog.species_cost("gnome"))
+	check(Creator.lock_note("species", "gnome") == "", "crossing the threshold opens it")
+	check(Creator.lock_note("class", "rogue") != "", "the classes are still out of reach")
+	Prog.add_lifetime_xp(Prog.class_cost("rogue"))
+	check(Creator.lock_note("class", "rogue") == "", "the class opens at its threshold")
+	check(Creator.lock_note("subclass", "thief") != "",
+		"but its subclasses stay shut until the 2 free picks are made")
+	Prog.unlock_class("rogue", ["thief", "soulknife"])
+	check(Creator.lock_note("subclass", "thief") == "", "a free pick opens")
+	check(Creator.lock_note("subclass", "assassin") != "", "the other 2 still cost class XP")
+	Prog.add_class_xp("rogue", Prog.SUBCLASS_COST)
+	check(Creator.lock_note("subclass", Prog.paid_subclasses("rogue")[0]) == "",
+		"class XP opens the next one")
 
 func test_viewer() -> void:
 	var v = load("res://scenes/progression/progression.tscn").instantiate()

@@ -13,6 +13,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Save = preload("res://core/character_save.gd")
 const Presets = preload("res://core/presets.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const Prog = preload("res://core/progression.gd")
 
 signal character_created(ch)
 
@@ -193,6 +194,28 @@ static func toggle(p: Dictionary, picks: Array, id: String) -> Array:
 		out.remove_at(0)
 	return out
 
+# T22 gate: "" when the meta-progression has this option open, otherwise the short
+# line its greyed-out button wears. Costs come from core/progression.gd, never from
+# here. `kind` is "species" | "class" | "subclass".
+#
+# This only answers "may the creator offer this to a NEW character?" — an existing
+# save keeps whatever it was built with (see progression.gd's header).
+static func lock_note(kind: String, id: String) -> String:
+	match kind:
+		"species":
+			if not Prog.is_species_unlocked(id):
+				return _price("lifetime XP", Prog.species_cost(id) - Prog.lifetime_xp_total())
+		"class":
+			if not Prog.is_class_unlocked(id):
+				return _price("lifetime XP", Prog.class_cost(id) - Prog.lifetime_xp_total())
+		"subclass":
+			if not Prog.is_subclass_unlocked(id):
+				return _price("class XP", Prog.subclass_remaining(id))
+	return ""
+
+static func _price(currency: String, remaining: int) -> String:
+	return "locked — %d more %s" % [remaining, currency] if remaining > 0 else "locked"
+
 static func humanize(id: String) -> String:
 	return id.replace("-", " ").replace("_", " ").capitalize()
 
@@ -260,6 +283,7 @@ var ch
 var _step := 0
 var _abil_mode := "array"     # array | pointbuy
 var _confirmed = null         # the Character handed back
+var _free_picks: Array = []   # T22: the 2 subclasses a freshly unlocked class owes
 
 var _title := Label.new()
 var _crumbs := Label.new()
@@ -449,6 +473,16 @@ func _opt(parent: Control, label: String, on: bool, cb: Callable, extra := "") -
 	parent.add_child(b)
 	return b
 
+# Grey out an option the meta-progression hasn't opened, with its price. No-op on
+# an empty note, so callers can pass lock_note() straight through.
+func _gate(b: Button, note: String) -> void:
+	if note == "":
+		return
+	b.disabled = true
+	b.text += "  · " + note
+	b.add_theme_color_override("font_color", COL_DIM)
+	b.add_theme_color_override("font_disabled_color", COL_DIM)
+
 # 1. basics ---------------------------------------------------------------
 
 func _build_basics() -> void:
@@ -465,8 +499,10 @@ func _build_basics() -> void:
 	var f := _flow()
 	for s in Catalog.all("species.json"):
 		var sid: String = s["id"]
-		_opt(f, s["name"], ch.species_id == sid, func(): _set_species(sid),
+		var b := _opt(f, s["name"], ch.species_id == sid, func(): _set_species(sid),
 			"  (%d ft)" % int(s["speed"]))
+		if ch.species_id != sid:   # never take away what this character already is
+			_gate(b, lock_note("species", sid))
 	if ch.species_id != "":
 		var src := Catalog.species_src(ch.species_id)
 		_note("Size %s · speed %d ft · languages: %s" % [src["size"], int(src["speed"]),
@@ -504,8 +540,11 @@ func _build_class() -> void:
 	var f := _flow()
 	for c in Catalog.all("classes.json"):
 		var cid: String = c["id"]
-		_opt(f, "%s  %s" % [Icons.class_glyph(cid), c["name"]], ch.class_id() == cid,
+		var b := _opt(f, "%s  %s" % [Icons.class_glyph(cid), c["name"]], ch.class_id() == cid,
 			func(): _set_class(cid), "  d%d" % int(c["hitDie"]))
+		if ch.class_id() != cid:
+			_gate(b, lock_note("class", cid))
+	_build_free_picks()
 	if ch.class_id() != "":
 		var src := Catalog.class_src(ch.class_id())
 		var q: Dictionary = src["quickBuild"]
@@ -518,6 +557,33 @@ func _build_class() -> void:
 		_note("Armor: %s · Weapons: %s" % [
 			", ".join(src["armorProficiencies"]) if src["armorProficiencies"] else "none",
 			", ".join(src["weaponProficiencies"]) if src["weaponProficiencies"] else "none"])
+
+# T22: buying a class with lifetime XP comes with 2 of its 4 subclasses, free and
+# permanent. Until they are named none of the class's subclasses read as unlocked,
+# so the choice lives right here, next to the class that owes it.
+func _build_free_picks() -> void:
+	var cid: String = ch.class_id()
+	if cid == "" or not Prog.awaits_picks(cid):
+		return
+	_head("Free subclasses — pick 2")
+	_note("%s came with 2 of its 4 subclasses. The other 2 cost %d class XP each, earned by playing it."
+		% [humanize(cid), Prog.SUBCLASS_COST])
+	var f := _flow()
+	for s in Catalog.subclasses_of(cid):
+		_opt(f, String(Catalog.subclass_src(s).get("name", humanize(s))), s in _free_picks,
+			func(): _toggle_free_pick(s))
+	var confirm := _opt(_flow(), "Confirm these 2 (permanent)", false, func():
+		if Prog.unlock_class(cid, _free_picks):
+			_free_picks.clear()
+		_refresh())
+	confirm.disabled = _free_picks.size() != 2
+
+func _toggle_free_pick(sid: String) -> void:
+	if sid in _free_picks:
+		_free_picks.erase(sid)
+	elif _free_picks.size() < 2:
+		_free_picks.append(sid)
+	_refresh()
 
 func _set_class(cid: String) -> void:
 	if ch.class_id() == cid:
