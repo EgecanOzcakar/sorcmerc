@@ -95,6 +95,10 @@ func _ready() -> void:
 	footer.add_child(sbtn)
 
 	_refresh()
+	# A run saved mid-fight comes back to the fight — otherwise the map sits on
+	# "Fighting…" with nothing to fight.
+	if run.state == "combat" and not run.node.is_empty():
+		_launch_combat()
 	if not injected and CampaignSave.has_save():
 		_offer_continue()
 

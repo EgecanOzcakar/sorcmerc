@@ -5,6 +5,7 @@
 #   godot --headless --path . -s tests/drive_game.gd
 extends SceneTree
 
+const Campaign = preload("res://core/campaign.gd")
 const Party = preload("res://core/party.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
 const CharacterSave = preload("res://core/character_save.gd")
@@ -145,6 +146,29 @@ func _run() -> void:
 	if not _text_on_screen("S O R C M E R C"):
 		fail("the title is not back up")
 
+	# --- resume: a half-walked run is offered at the front door ------------
+	# Saved standing on a fight: the harder half of resuming — the map has to put
+	# the combat screen back up rather than sit on "Fighting…".
+	var saved := Campaign.new(assembled, 11)
+	for i in saved.options().size():
+		if saved.options()[i]["kind"] == "combat":
+			saved.enter(i)
+			break
+	CampaignSave.save(saved)
+	main.show_title()
+	await process_frame
+	press("Resume the last run")
+	await process_frame
+	await process_frame
+	var resumed = find_node(main, "res://scenes/campaign/campaign.gd")
+	if resumed == null:
+		fail("Resume did not open the campaign map")
+	elif resumed.run.stage != saved.stage or resumed.run.node.get("id", "") != saved.node.get("id", ""):
+		fail("Resume did not restore the saved run's position")
+	elif resumed._combat == null:
+		fail("resuming mid-fight did not put the combat screen back up")
+
+	CampaignSave.clear()
 	CharacterSave.delete(SLUG)
 	_done()
 
