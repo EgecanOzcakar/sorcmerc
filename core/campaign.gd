@@ -208,16 +208,17 @@ const BOSS_POOL := [
 ]
 
 # Reference win rate a boss's XP bonus is measured against: the average of the
-# scaler's own easy/hard sweep results (92.5%/47.5%, scaler.gd's TUNING header)
-# rather than normal's own 73.5% — CURVE was calibrated so normal sits near that
-# average already, and it keeps this constant tied to the two extremes instead
-# of a third independently-drifting number. A boss under this rate is harder
-# than the curve's middle, and earns XP in proportion.
-const BOSS_REF_WIN_RATE := 0.70
-# ponytail: the win_rate spread above is power.gd's known control-underpricing
-# ceiling showing through (shop-captain 8% vs arrow-chief 68%) — cap the bonus
-# so that ceiling doesn't turn into a runaway XP multiplier. Retune alongside
-# power.gd/BOSS_LEAD_SHARE.
+# scaler's own easy/hard sweep results (90.5%/49.0% as of T23's control-pricing
+# retune, scaler.gd's TUNING header) rather than normal's own 75.5% — CURVE was
+# calibrated so normal sits near that average already, and it keeps this
+# constant tied to the two extremes instead of a third independently-drifting
+# number. A boss under this rate is harder than the curve's middle, and earns
+# XP in proportion.
+const BOSS_REF_WIN_RATE := 0.698
+# ponytail: the win_rate spread above is power.gd's known chaff-vs-chunk
+# mispricing (T23: a lone big bruiser like the mammoth prices for a fight it
+# doesn't survive) — cap the bonus so that ceiling doesn't turn into a
+# runaway XP multiplier. Retune alongside power.gd/BOSS_LEAD_SHARE.
 const BOSS_XP_MULT_CAP := 2.5
 
 # The run is over in these; nothing moves the road on afterwards.
