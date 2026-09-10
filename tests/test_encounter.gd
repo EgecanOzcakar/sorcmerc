@@ -25,6 +25,7 @@ func _init() -> void:
 	test_mult_scales_the_instance_not_the_data()
 	test_outcome_victory()
 	test_outcome_defeat_and_deaths()
+	test_humanoid_foe_names()
 	print("test_encounter: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -36,6 +37,20 @@ func _combatants(chars: Array) -> Array:
 	for i in chars.size():
 		out.append(Adapter.to_combatant(chars[i], "party", Encounter.PARTY_STARTS[i]))
 	return out
+
+# A humanoid foe gets a fantasy name, not a bare species label; a non-humanoid
+# foe and a party member are untouched; two copies in the same fight differ.
+func test_humanoid_foe_names() -> void:
+	var goblin_a = Encounter.spawn("goblin", 1.0, "foe", Vector2i(1, 0), 1)
+	var goblin_b = Encounter.spawn("goblin", 1.0, "foe", Vector2i(2, 0), 2)
+	check(goblin_a.cname.contains(" the Goblin"), "a humanoid foe is named \"<name> the <species>\"")
+	check(goblin_a.cname != "Goblin the Goblin", "the name half isn't just the species again")
+	check(goblin_a.cname != goblin_b.cname, "two goblins in one fight get different names")
+	var again = Encounter.spawn("goblin", 1.0, "foe", Vector2i(1, 0), 1)
+	check(again.cname == goblin_a.cname, "the same seed/spot names the same goblin the same way")
+
+	var beast = Encounter.spawn("grull", 1.0, "foe", Vector2i.ZERO)
+	check(not beast.cname.contains(" the "), "a non-humanoid foe keeps its plain species name")
 
 func test_build_spec() -> void:
 	var chars := _chars()

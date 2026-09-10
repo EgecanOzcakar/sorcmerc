@@ -8,6 +8,7 @@ const Presets = preload("res://core/presets.gd")
 const Combat = preload("res://core/combat.gd")
 const Hex = preload("res://core/hex.gd")
 const Power = preload("res://core/rules/power.gd")
+const EnemyNames = preload("res://core/enemy_names.gd")
 
 # --- ranges (hexes) — tune here ---------------------------------------
 const REACH_MELEE := 1
@@ -236,6 +237,13 @@ static func spawn(id: String, mult: float, team: String, pos: Vector2i, n := 0, 
 	c.src_id = id
 	if n > 0:
 		c.id = "%s-%d" % [id, n]
+	# Named humanoid foes ("Grix the Goblin") instead of a bare species label —
+	# deterministic per (monster, copy, spawn hex) so a reload of the same seed
+	# still shows the same names.
+	if team == "foe" and String(m.get("type", "")) == "humanoid":
+		var who := EnemyNames.name_for(String(m.get("faction", "")), "%s|%d|%s" % [id, n, pos])
+		c.cname = "%s the %s" % [who, c.cname]
+	elif n > 0:
 		c.cname = "%s %d" % [c.cname, n]
 	if not is_equal_approx(mult, 1.0):
 		_scale(c, mult)
@@ -315,4 +323,5 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 		"loot": loot,
 		"deaths": deaths,
 		"kills": kills,   # source monster ids, for T9's kill-count quests
+		"downed": cb.downed.keys(),   # T19: party ids that hit 0 HP, even if they got back up
 	}
