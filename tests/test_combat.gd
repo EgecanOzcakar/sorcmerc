@@ -44,6 +44,7 @@ func _init() -> void:
 	test_rage_full_turn()
 	test_action_surge_full_turn()
 	test_spell_slot_spend()
+	test_reaction_and_concentration()
 
 	print("test_combat: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -489,7 +490,49 @@ func test_spell_slot_spend() -> void:
 		"out of slots, leveled spells leave the menu")
 	check(cb.available(ilsa).any(func(v): return v["id"] == "sacred-flame"), "the cantrip stays")
 
+func test_reaction_and_concentration() -> void:
+	# Uncanny Dodge: a reaction that fires by itself, no prompt (spec §7)
+	var ch = Character.new()
+	ch.id = "sly"; ch.cname = "Sly"; ch.species_id = "human"; ch.background_id = "criminal"
+	ch.base_abilities = {"str": 10, "dex": 16, "con": 12, "int": 12, "wis": 10, "cha": 12}
+	for i in 5:
+		ch.add_level("rogue", -1)
+	ch.equipped = ["dagger", "studded-leather"] as Array[String]
+	var sly = Adapter.to_combatant(ch, "party", Vector2i(4, 1))
+	var grull = Adapter.from_monster(Catalog.all("monsters.json")[0], "foe", Vector2i(5, 1))
+	check(not sly.verb("rogue-uncanny-dodge").is_empty(), "rogue 5 has Uncanny Dodge")
+	check(not cb_of(sly).available(sly).any(func(v): return v["id"] == "rogue-uncanny-dodge"),
+		"a reaction is never a button — it fires on its trigger")
+	var halved := 0
+	for seed_i in range(1, 60):
+		var c2 = Combat.new(RNG.new(seed_i), [sly.clone(), grull.clone()], Encounter.board())
+		var s2 = c2.combatants[0]; var g2 = c2.combatants[1]
+		c2.begin_turn_for(g2)
+		var before: int = s2.hp
+		var r = c2.resolve_attack(g2, s2)
+		if r.get("hit", false):
+			check(before - s2.hp == int(r["damage"]), "the logged damage is what landed")
+			check(s2.econ["reaction"] == 0, "the reaction was spent")
+			halved += 1
+	check(halved > 0, "some seed lands a hit for Uncanny Dodge to halve")
+
+	# Concentration: one spell at a time, dropped on a failed CON save after damage
+	var cb = _sandbox()
+	var ilsa = _find(cb, "ilsa")
+	cb.begin_turn_for(ilsa)
+	var v: Dictionary = ilsa.verb("burning-hands").duplicate()
+	v["concentration"] = true
+	cb.perform(ilsa, v, Vector2i(1, 0))
+	check(ilsa.statuses.get("concentrating") == "burning-hands", "casting sets concentration")
+	ilsa.max_hp = 500; ilsa.hp = 500
+	cb._apply_damage(ilsa, 60)                 # DC 30 — nobody makes that
+	check(not ilsa.has("concentrating"), "damage breaks concentration on a failed CON save")
+
 # --- helpers ----------------------------------------------------------
+
+func cb_of(c) -> Combat:
+	return Combat.new(RNG.new(1), [c], Encounter.board())
+
 
 func _verb(cb: Combat, c, id: String) -> Dictionary:
 	for v in cb.available(c):

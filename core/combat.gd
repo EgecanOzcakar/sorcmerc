@@ -348,6 +348,10 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		caster.slots[lvl - 1] -= 1
 		if v["cost"] == "bonus":
 			caster.econ["cast_bonus_spell"] = true
+	if v.get("concentration", false):
+		if caster.has("concentrating"):
+			log.append("%s drops concentration on their earlier spell." % caster.cname)
+		caster.statuses["concentrating"] = v["spell"]
 	if v.has("heal_count"):
 		log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
 		heal(target, Dice.roll(rng, "%dd%d+%d" % [int(v["heal_count"]), int(v["heal_sides"]),
@@ -447,6 +451,20 @@ func _passive_damage(attacker, target, mode: int, crit: bool) -> Array:
 			"%dd%d" % [int(v["dice_count"]), int(v["dice_sides"])], crit)})
 	return out
 
+# Reactions stay auto-resolved with zero prompts (spec §7). Returns the damage
+# after any reaction that modifies it. One trigger is authored today; another is
+# a features.json entry plus a call site.
+func _react(c, trigger: String, dmg: int) -> int:
+	for v in c.verbs:
+		if v["kind"] != "reaction" or v.get("trigger", "") != trigger:
+			continue
+		if not _spend(c, "reaction"):
+			continue
+		if v.get("halve_damage", false):
+			dmg = dmg / 2
+			log.append("%s — %s, halving the blow." % [c.cname, v["label"]])
+	return dmg
+
 # Damage a held buff adds to a melee swing (Rage).
 func _buff_damage(attacker) -> int:
 	var n := 0
@@ -488,6 +506,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		if not attacker.ranged:
 			dmg += _buff_damage(attacker)
 		out.damage = dmg
+	if hit:
+		out.damage = _react(target, "hit_by_attack", out.damage)
 	attacker.statuses.erase("hidden")
 	if not oa:
 		attacker.statuses.erase("helped")  # the granted advantage is spent
@@ -533,6 +553,10 @@ func _resists(c, dtype: String) -> bool:
 func _apply_damage(target, dmg: int, dtype := "") -> void:
 	if _resists(target, dtype):
 		dmg = dmg / 2
+	if dmg > 0 and target.has("concentrating"):
+		if not _saving_throw(target, maxi(10, dmg / 2), "con"):
+			log.append("%s loses concentration." % target.cname)
+			target.statuses.erase("concentrating")
 	if target.is_down():
 		target.death_f += 1 if dmg > 0 else 0
 		if target.death_f >= 3:
