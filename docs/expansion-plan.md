@@ -709,4 +709,42 @@ way, reconciled by hand if they collide.
   assertions across 16 test files, 0 failures.** `drive_ui`/`drive_creator`/
   `drive_campaign` all clean. Pushed.
 
+- 2026-09-10: **T17, T18, T20, T21, T22 all complete**, landing in quick
+  succession after T16. T17 (new game flow): `scenes/game/game.gd`+`.tscn` is
+  now the top-level scene (`project.godot`'s `run/main_scene` repointed),
+  routing Title → Party Setup → Campaign → one of Won/Retired/Lost →
+  Summary → hub; `Campaign.retire()` added (guarded to `state=="picking"`,
+  reuses the existing auto-revive-at-end path). T18 (boss pool): 6 bosses —
+  the original Sunken Shrine plus 3 bestiary monsters (oni, assassin,
+  mammoth) and 2 "elite simple creature" bosses (arrow chief, shop captain)
+  built by buffing an ordinary statblock, reusing the scaler's existing
+  multiplier knob (`boss_for()`, `BOSS_LEAD_SHARE`, `BOSS_MULT_MAX`). T20
+  (weapon mastery): all 8 2024 mastery properties (Cleave, Graze, Nick*,
+  Push, Sap, Slow, Topple, Vex) wired as a rider dispatcher in `combat.gd`;
+  *Nick explicitly not implemented — it needs a two-weapon-fighting system
+  this codebase doesn't have yet, tracked as a follow-up, not silently
+  dropped. T21 (AI special-attack priority): monsters now prefer any
+  available non-basic verb (spell/feature/mastery rider) over a plain
+  attack; caught its own bug pre-ship — a naive filter let Shove win out
+  over real attacks, hard-mode win rate cratered to ~50%, fixed by
+  excluding `BASIC` verbs from the "special" candidate pool, back to parity.
+  T22 (meta-progression unlocks): `core/progression.gd`, spec exactly as the
+  user gave it — human/half-orc/elf/dwarf (+ their existing lineages) and
+  cleric(life/light)/warlock(archfey/fiend)/wizard(abjurer/evoker)/
+  barbarian(berserker/zealot)/ranger(gloom stalker/hunter) start open;
+  everything else costs lifetime XP (species cheaper than classes, gnome
+  3000 up through goliath 12000; rogue 20000 up through sorcerer 80000);
+  first unlock of a class grants a pick of 2 subclasses free, the rest cost
+  a per-class "class experience" resource (5000 each). Model + a standalone
+  viewer scene only — **not yet wired into gameplay**: nothing calls
+  `add_lifetime_xp`/`add_class_xp` from `campaign.gd`'s XP split, and
+  `creator.gd`'s pickers don't gate on it yet. Same for T19 (achievements,
+  landed earlier this wave): tracking/persistence exists but no `unlock()`
+  call sites exist in combat/campaign/leveling/party yet. Both are the
+  natural next dispatch, flagged rather than started.
+  **Full suite verified clean with all of T16–T22 merged: 22 test files,
+  3754 assertions, 0 failures.** All four `drive_*` headless smoke scripts
+  (`drive_ui`, `drive_creator`, `drive_campaign`, `drive_game`) pass against
+  the fully-merged tree.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
