@@ -52,7 +52,9 @@ static func armor(id: String) -> Dictionary: return _one("armor.json", id)
 static func magic_item(id: String) -> Dictionary: return _one("magic-items.json", id)
 static func spell(id: String) -> Dictionary: return _one("spells.json", id)
 static func condition(id: String) -> Dictionary: return _one("conditions.json", id)
-static func monster(id: String) -> Dictionary: return _one("monsters.json", id)
+static func monster(id: String) -> Dictionary:
+	var r = index("monsters.json").get(id)
+	return r if r != null else _one("bestiary.json", id)
 static func skills() -> Dictionary: return index("skills.json")
 
 static func subclasses_of(class_id: String) -> Array:

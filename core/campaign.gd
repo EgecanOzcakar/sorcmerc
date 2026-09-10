@@ -278,9 +278,12 @@ func resurrect(dead_id: String, method: String, caster_id: String = "") -> bool:
 
 # Quest bias goes in here: unfulfilled targets show up more often from now on.
 func combat_spec() -> Dictionary:
+	var theme: String = String(node.get("theme", "sunken-shrine"))
+	# T16: theme picks the faction; the run seed + node id keeps the roster stable
+	# across a reload of the same node.
 	var spec: Dictionary = Scaler.roster_for(party.party_characters(), node.get("difficulty", "normal"),
-		Quest.bias(party))
-	spec["theme"] = node.get("theme", "sunken-shrine")   # T11: which board this fight is on
+		Quest.bias(party), theme, rng.seed_value + hash(node.get("id", "")))
+	spec["theme"] = theme   # T11: which board this fight is on
 	return spec
 
 # `result` is Encounter.resolve_outcome()'s dict, straight off scenes/main.gd.

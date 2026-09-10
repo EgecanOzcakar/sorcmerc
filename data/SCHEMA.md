@@ -353,13 +353,14 @@ each entry's `_notes` alongside an `implemented:` list of what now works.
 3 (26) · 4 (17) · 5 (30) · 6 (12) · 7 (8) · 8 (12) · 9 (11) · 10 (6). CR > 10 was
 dropped this pass.
 
-**Not wired.** Nothing loads this file yet — deliberately, since `core/scaler.gd`'s
-difficulty tuning was calibrated against exactly four archetypes. The one-line change
-that would light it up is in `core/rules/catalog.gd`:
-
-```gdscript
-static func monster(id: String) -> Dictionary: return index("monsters.json").get(id, index("bestiary.json").get(id, {}))
-```
+**Wired (T16).** `Catalog.monster()` falls back to this file, so `Encounter.spawn`
+takes any bestiary id. `Scaler.roster_for(party, difficulty, bias, theme, seed)`
+builds every non-shrine fight from a single `faction` — board theme picks it
+(`goblin-camp` -> goblinoid, `frozen-cave` -> giant, `city-square`/`merchant-shop`
+-> bandit, `forest-clearing` -> beast), otherwise the seed does. `sunken-shrine`
+maps to nothing on purpose: those fights stay the four hand-tuned `monsters.json`
+archetypes the difficulty targets are anchored to. TIER/CURVE were re-measured
+against the new pool — see `core/scaler.gd`'s header.
 
 `tests/test_bestiary.gd` asserts every entry parses, carries every field the four
 `monsters.json` entries have, has a unique id, and spawns into a `Combatant` with

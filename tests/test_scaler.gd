@@ -82,11 +82,17 @@ func test_higher_level_party() -> void:
 
 # --- helpers ----------------------------------------------------------
 
+# T16: one roster per seed, each its own faction — the shipped distribution, not
+# one lucky warband repeated 200 times.
 func _sweep(chars: Array, difficulty: String, seeds: int) -> Dictionary:
-	var spec: Dictionary = Scaler.roster_for(chars, difficulty)
 	var wins := 0
 	var rounds := 0
+	var foes := 0
+	var mult := 0.0
 	for s in range(1, seeds + 1):
+		var spec: Dictionary = Scaler.roster_for(chars, difficulty, {}, "", s)
+		foes += _total(spec)
+		mult += float(spec["monsters"][0]["mult"])
 		var sp: Dictionary = spec.duplicate(true)
 		sp["seed"] = s
 		var cb = Encounter.build(sp, _party_at(chars))
@@ -101,8 +107,8 @@ func _sweep(chars: Array, difficulty: String, seeds: int) -> Dictionary:
 		if cb.outcome() == "Victory":
 			wins += 1
 	var rate := 100.0 * wins / seeds
-	print("    %-7s %d foes x%.2f -> %dW/%dL (%.1f%%) avg %.1f rounds" % [
-		difficulty, _total(spec), float(spec["monsters"][0]["mult"]), wins, seeds - wins,
+	print("    %-7s avg %.1f foes x%.2f -> %dW/%dL (%.1f%%) avg %.1f rounds" % [
+		difficulty, float(foes) / seeds, mult / seeds, wins, seeds - wins,
 		rate, float(rounds) / seeds])
 	return {"rate": rate, "wins": wins}
 
