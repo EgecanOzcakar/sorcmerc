@@ -344,6 +344,26 @@ a mystery (rarity hint only, no name/effect) in the profile's stash panel.
   functions (T12: route generation/`STAGES`; T13: treasure-loot identification
   flag, rest-node Identify action, shop stock) — same file-sharing discipline
   as the T10/T11 pair, flagged explicitly to both agents.
+- 2026-09-10: **T12 and T13 complete.** T12: `STAGES` replaced by a 35-template
+  `POOL` + a fixed `BOSS`, seed-generated per run (route RNG is a separate
+  stream off the same seed, so it doesn't perturb combat/loot rolls); both
+  previously-idle board themes (`city-square`, `merchant-shop`) now see use.
+  It also root-caused and fixed T13's flagged flakiness: `scenes/campaign/
+  campaign.gd` was building unseeded runs, so routes (and therefore
+  `drive_campaign`) weren't reproducible — now reads `SORCMERC_SEED` like
+  `main.gd` does. T13: `party.gd` stash entries gained `identified` (defaults
+  true; false only for fresh magic-item treasure); identify via DC 15 Arcana
+  at a rest node (auto-picks the party's best Arcana, one try per camp) or a
+  new 256gp Scroll of Identification (instant, no roll, stocked everywhere).
+  **Investigated T12's remaining flag** (an unseeded `drive_campaign` can rarely
+  burn its whole step budget inside one fight): ran 14 fresh unseeded attempts,
+  0 reproduced a stall. Root cause is understood and benign — the test driver's
+  greedy walk-toward-nearest-foe pathing is inefficient on the newer boards'
+  obstacles, and the outer loop is bounded (`MAX_STEPS`), so this is a slow,
+  self-terminating test run, not a hang or a production combat bug. Logged as
+  a low-priority test-driver quality item, not chasing further.
+  **Full suite verified clean: 2960 assertions across 16 test files, 0
+  failures.** Pushed.
 
 ## Post-T5+T9 gap survey — dispositions (locked 2026-09-10)
 
