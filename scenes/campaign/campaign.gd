@@ -277,7 +277,7 @@ func _identify_ui(col: VBoxContainer) -> void:
 		var bonus := run.arcana_bonus(who)
 		var b := Button.new()
 		b.text = "Examine  %s   (%s, Arcana %+d vs DC %d)" % [Campaign.mystery_name(id),
-			party.get_member(who).cname, bonus, Campaign.identify_dc(id, bonus)]
+			party.get_member(who).cname, bonus, Campaign.identify_dc(id)]
 		b.disabled = id in run.identify_failed
 		if b.disabled:
 			b.text += "   — nothing learned here"

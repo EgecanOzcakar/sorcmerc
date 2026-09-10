@@ -353,15 +353,29 @@ func rest(kind: String) -> void:
 # so the Arcana check is offered at rest nodes only. A failed examination is final
 # for this node — walking on and camping again is another chance.
 
-# Target success rate by rarity — rarer items are genuinely harder to puzzle
-# out. The DC is solved backward from the target (same linear d20+mod-vs-DC
-# model as hit_chance/save_fail_chance elsewhere) so the stated rate holds for
-# whichever character is examining, not just a "typical" one; the resolved DC
-# is shown in the log line so it never reads as an opaque coin flip.
+# DC is fixed per rarity, not per examiner — a real item has one difficulty to
+# puzzle out, the same for everyone (matches how the rest of 5e's DCs work).
+# Calibrated once against a reference +2 Arcana examiner (REFERENCE_ARCANA_BONUS)
+# so the target rate below (rarer = harder) holds for a typical character;
+# anyone better or worse than reference does correspondingly better or worse,
+# same as real play. DC = 21 + REFERENCE_ARCANA_BONUS - 20*target, same linear
+# d20+mod-vs-DC model as hit_chance/save_fail_chance elsewhere, rounded and
+# clamped to a sane DC range.
+const REFERENCE_ARCANA_BONUS := 2
 const IDENTIFY_TARGET := {
 	"uncommon": 0.90, "rare": 0.80, "very-rare": 0.60, "legendary": 0.35, "artifact": 0.15,
 }
 const IDENTIFY_DEFAULT_TARGET := 0.80   # "varies"/unlisted rarity falls back to rare's odds
+
+# {rarity: dc} — uncommon 5, rare 7, very-rare 11, legendary 16, artifact 20 at
+# the +2 reference. Hand-computed from IDENTIFY_TARGET so it stays a plain
+# const (no runtime derivation); re-derive by hand if either constant above
+# changes rather than letting the two drift apart silently.
+const IDENTIFY_DC := {
+	"uncommon": 5, "rare": 7, "very-rare": 11, "legendary": 16, "artifact": 20,
+}
+const IDENTIFY_DEFAULT_DC := 7   # matches IDENTIFY_DEFAULT_TARGET (rare's odds)
+
 const IDENTIFY_SCROLL := "scroll-of-identification"
 const SCROLL_DROP_ONE_IN := 4        # a hoard sometimes also holds an identify scroll
 
@@ -382,13 +396,13 @@ func arcana_bonus(char_id: String) -> int:
 	var ch = party.get_member(char_id)
 	return int(ch.sheet().skills.get("arcana", 0)) if ch != null else 0
 
-# The DC that gives `bonus` the rarity's target success rate (see IDENTIFY_TARGET).
-static func identify_dc(item_id: String, bonus: int) -> int:
+# The item's fixed identification DC (rarity-based, calibrated at the +2
+# reference examiner — see IDENTIFY_DC above).
+static func identify_dc(item_id: String) -> int:
 	var rarity := String(item_data(item_id).get("rarity", ""))
-	var target: float = IDENTIFY_TARGET.get(rarity, IDENTIFY_DEFAULT_TARGET)
-	return clampi(roundi(21.0 + bonus - 20.0 * target), 1, 30)
+	return int(IDENTIFY_DC.get(rarity, IDENTIFY_DEFAULT_DC))
 
-# d20 + Arcana vs a rarity-scaled DC, one attempt per item per rest node.
+# d20 + Arcana vs the item's fixed rarity DC, one attempt per item per rest node.
 func identify_check(item_id: String, char_id: String) -> bool:
 	var ch = party.get_member(char_id)
 	if node.get("kind", "") != "rest" or ch == null or item_id in identify_failed:
@@ -396,7 +410,7 @@ func identify_check(item_id: String, char_id: String) -> bool:
 	if party.stash_count(item_id) - party.stash_count(item_id, true) < 1:
 		return false
 	var bonus := arcana_bonus(char_id)
-	var dc := identify_dc(item_id, bonus)
+	var dc := identify_dc(item_id)
 	var nat: int = int(Dice.d20(rng)["nat"])
 	var total := nat + bonus
 	if total < dc:

@@ -7,6 +7,7 @@ const Party = preload("res://core/party.gd")
 const Quest = preload("res://core/quest.gd")
 const Presets = preload("res://core/presets.gd")
 const Encounter = preload("res://core/encounter.gd")
+const Dice = preload("res://core/dice.gd")
 
 var _pass = 0
 var _fail = 0
@@ -349,6 +350,34 @@ func test_identification() -> void:
 			check(e.identify_failed.is_empty(), "a new node is a fresh chance")
 	print("  arcana (uncommon, 90%% target) over 40 seeds: %d identified, %d failed" % [hits, misses])
 	check(hits > 0 and misses > 0, "both outcomes are reachable (%d/%d)" % [hits, misses])
+
+	# DC is fixed per rarity (not per examiner) and rises with rarity
+	check(Campaign.identify_dc("adamantine-armor") == 5, "uncommon DC (got %d)" % Campaign.identify_dc("adamantine-armor"))
+	check(Campaign.identify_dc("amulet-of-health") == 7, "rare DC (got %d)" % Campaign.identify_dc("amulet-of-health"))
+	check(Campaign.identify_dc("ammunition-of-slaying") == 11,
+		"very-rare DC (got %d)" % Campaign.identify_dc("ammunition-of-slaying"))
+	check(Campaign.identify_dc("apparatus-of-the-crab") == 16,
+		"legendary DC (got %d)" % Campaign.identify_dc("apparatus-of-the-crab"))
+	var dcs := [Campaign.identify_dc("adamantine-armor"), Campaign.identify_dc("amulet-of-health"),
+		Campaign.identify_dc("ammunition-of-slaying"), Campaign.identify_dc("apparatus-of-the-crab")]
+	check(dcs[0] < dcs[1] and dcs[1] < dcs[2] and dcs[2] < dcs[3], "DC strictly rises with rarity")
+
+	# ratios at the +2 reference examiner should land near each rarity's stated target
+	for pair in [["amulet-of-health", "rare", 0.80], ["ammunition-of-slaying", "very-rare", 0.60]]:
+		var item: String = pair[0]
+		var target: float = pair[2]
+		var ok := 0
+		var n := 200
+		for s in range(1, n + 1):
+			var r = load("res://core/rng.gd").new(s)
+			if int(Dice.d20(r)["nat"]) + Campaign.REFERENCE_ARCANA_BONUS >= Campaign.identify_dc(item):
+				ok += 1
+			r = null
+		var rate := float(ok) / n
+		print("  %s (%s) at +%d ref: %.0f%% over %d rolls (target %.0f%%)" %
+			[item, pair[1], Campaign.REFERENCE_ARCANA_BONUS, rate * 100.0, n, target * 100.0])
+		check(absf(rate - target) < 0.12, "%s ratio close to its %.0f%% target (got %.0f%%)" %
+			[pair[1], target * 100.0, rate * 100.0])
 
 	# the scroll: no roll, no rest, always works, always consumed
 	var f := _campaign()
