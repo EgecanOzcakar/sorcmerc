@@ -2,6 +2,7 @@
 extends RefCounted
 
 var id: String
+var src_id: String   # monsters.json id this was spawned from ("" for heroes)
 var cname: String
 var team: String  # "party" | "foe"
 
@@ -91,7 +92,7 @@ func conscious() -> bool:
 func clone() -> RefCounted:
 	var c = get_script().new()
 	for prop in [
-		"id","cname","team","ac","max_hp","hp","init_mod","speed","pos",
+		"id","src_id","cname","team","ac","max_hp","hp","init_mod","speed","pos",
 		"atk_bonus","damage","ranged","atk_range","crit_range","save_dc","athletics",
 		"acro","stealth","passive_perception","sheet",
 	]:

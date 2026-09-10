@@ -143,3 +143,12 @@ static func write_back(c, ch) -> void:
 		used.append(maxi(0, int(full[i]) - int(c.slots[i])))
 	ch.slots_used = used
 	ch.dirty()
+
+# The batch T7 calls when a fight ends: match combatants to Characters by id.
+static func write_back_all(combatants: Array, characters: Array) -> void:
+	var by_id := {}
+	for ch in characters:
+		by_id[ch.id] = ch
+	for c in combatants:
+		if by_id.has(c.id):
+			write_back(c, by_id[c.id])
