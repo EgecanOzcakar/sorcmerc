@@ -86,7 +86,13 @@ func _ready() -> void:
 	var bg := ColorRect.new()
 	bg.color = COL_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.z_index = -10
+	# move_child(bg, 0) below is enough to keep it behind this scene's own
+	# content (earlier siblings draw first/behind). A negative z_index isn't
+	# scoped to local siblings — it's global across the canvas layer — so it
+	# was pushing this "opaque background" behind whatever scene is UNDER this
+	# one too (the campaign screen, when combat is shown as an overlay),
+	# letting that screen's own log text bleed through wherever the combat UI
+	# has empty space instead of being properly blacked out.
 	add_child(bg)
 	move_child(bg, 0)
 
