@@ -310,6 +310,35 @@ matching `character_save.gd` schema change. Bundled into the same T10 dispatch
 as the XP/death/shop/autosave work since both already touch `character.gd` and
 `party.gd` — two agents editing those concurrently would collide.
 
+## T12 — randomized map routes (locked 2026-09-10, dispatched now that T11 has landed)
+
+`STAGES` becomes a **pool** of node templates per stage-position (early/mid/
+late), each tagged with kind (combat/merchant/treasure/rest) and a board theme
+(reusing T11's 6 registered themes — including city-square and merchant-shop,
+currently authored but unused). `Campaign.new(party, seed)` seed-picks 2-3
+eligible templates per stage from the pool (same `RNG` convention as the rest
+of the game — deterministic per seed) instead of always offering the one fixed
+list. Invariants preserved: 5 stages, the last is always exactly the boss (not
+a choice), at least one merchant appears before the boss (quests need a
+giver), difficulty/gold/gear flavor stays in the spirit of what T11/T5+T9
+authored. Pool should be meaningfully larger than today's node count so two
+seeds produce visibly different routes.
+
+## T13 — magic item identification (locked 2026-09-10, dispatched now that T10 has landed)
+
+Unidentified on pickup **from treasure only** — a merchant sells you a labeled
+item, so shop purchases are pre-identified; only loot is mysterious.
+Unequippable while unidentified (`party.stash` entries for magic items gain an
+`identified: bool`; mundane weapons/armor have no such state, always usable).
+Two ways to identify: **(a)** the real 5e optional rule — DC 15 Intelligence
+(Arcana) check, made "during a short rest spent examining the item," so this
+only offers at a **rest node**, using the examining character's real Arcana
+skill from their resolved sheet; **(b)** a new **Identification Scroll**
+consumable (buyable at merchants + occasional treasure drop, matching the
+Scroll of Resurrection precedent T10 just built) — instantly identifies one
+item, usable any time, not gated to a rest node. An unidentified item shows as
+a mystery (rarity hint only, no name/effect) in the profile's stash panel.
+
 ## Post-T5+T9 gap survey — dispositions (locked 2026-09-10)
 
 - **Meta-progression across runs**: explicitly a TODO, not implemented yet.
@@ -402,5 +431,38 @@ way, reconciled by hand if they collide.
   mid-flight: T11 also touches `combat.gd` (interactables/objects/smash verb),
   not T14 alone as first briefed — sent as an amendment, both should still land
   additively in different regions of the file.
+- 2026-09-10: **T11 and T14 complete.** T11: 6 board themes, barrel/torch/
+  brazier interactables generalized (`Encounter.board_for(theme)`), a `smash`
+  verb; `adjacent_to_brazier` renamed `adjacent_to_hazard`/`adjacent_hazard`
+  (API change, noted). T14: all 15 real 2024 conditions wired generically off
+  `data/effects/conditions.json`; deafened and blinded's sight-check half are
+  legitimately inert (no ability-check system exists to fail). Flagged two open
+  design calls rather than deciding silently: prone had no stand-up action
+  (closed same day, see below), and "down" is deliberately not aliased to
+  "unconscious" (would change death dynamics).
+- 2026-09-10: **Prone auto-stand implemented directly** (not dispatched — small,
+  well-scoped, combat.gd was free): standing is automatic at the top of your
+  turn, costs half speed, discountable via a data-driven `stand_cost_mult` on
+  a feature (none grants one yet — a test fixture proves the hook works).
+- 2026-09-10: **Settings overlay complete.** `user://settings.json`, reachable
+  via `F1` in combat / a footer button in the campaign screen. Animation-speed
+  toggle wired into `main.gd`'s real tween timing (env var still wins for
+  headless tests). Gracefully degrades its "clear autosave" button while
+  `campaign_save.gd` didn't exist yet (T10 was still building it).
+- 2026-09-10: **T10 complete** — all 5 sections landed: per-character XP +
+  real 5e level-up gating; death/resurrection (Revivify or a new
+  Scroll-of-Resurrection item, both 300gp, auto-revive at run end);
+  `Character.inventory` deleted, profile screen equips from the shared
+  `party.stash`; shop pricing (SRD cost for mundane gear; magic items
+  `4 * (tier+1)^6` — sanity-checked: uncommon 256gp, rare 2916gp, very-rare
+  16384gp, legendary 62500gp, artifacts not for sale); `core/campaign_save.gd`
+  autosaves after every state-mutating `Campaign` method, a Resume/New-Run
+  choice on the campaign screen. Caught and fixed one thing T10 correctly
+  flagged as not its own bug: a test-fixture feature entry from the same-day
+  prone-auto-stand commit failed the effects validator (missing `kind`) —
+  fixed by renaming to the established `_`-prefix "not a real entry" convention.
+  **Full suite verified clean after all five agents' work merged: 2946
+  assertions across 16 test files, 0 failures.** `drive_ui`/`drive_creator`/
+  `drive_campaign` all clean. Pushed.
 
 This is a multi-week build; phases 0–1 are the critical path and land first.
