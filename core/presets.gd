@@ -70,7 +70,8 @@ static func ilsa() -> Character:
 		{"type": "spell-choice", "spellIds": ["sacred-flame", "guidance", "light"]})
 	ch.decide("subclass:class:cleric:0", {"type": "subclass", "subclassId": "lightdomain"})
 	ch.equipped = ["mace", "chain-shirt", "shield"]
-	ch.prepared = ["healing-word"]
+	# healing-word is not in the 146-spell export; cure-wounds is the catalogued stand-in.
+	ch.prepared = ["cure-wounds"]
 	return ch
 
 static func party() -> Array:

@@ -1,0 +1,54 @@
+{
+  "_note": "sorcmerc-authored. A feature with no entry here is a flavor feature: it shows on the sheet and does nothing in combat. `kind` is a closed vocabulary (spec A0 §6); scaling is {by: class_level|pb|ability_mod, [class], [steps]|[formula]}.",
+
+  "rogue-sneak-attack": {
+    "kind": "passive_damage", "cost": "none", "trigger": "on_weapon_hit", "once_per": "turn",
+    "requires": ["advantage_or_ally_adjacent", "not_disadvantage"],
+    "dice": {"sides": 6, "count": {"by": "class_level", "class": "rogue", "formula": "ceil_half"}}
+  },
+  "rogue-cunning-action": {
+    "kind": "grant_verb", "cost": "bonus", "verbs": ["dash", "disengage", "hide"]
+  },
+  "rogue-uncanny-dodge": {
+    "kind": "reaction", "cost": "reaction", "trigger": "hit_by_attack", "halve_damage": true
+  },
+  "fighter-second-wind": {
+    "kind": "heal_self", "cost": "bonus",
+    "uses": {"by": "pb"},
+    "dice": {"count": 1, "sides": 10, "plus": {"by": "class_level", "class": "fighter"}}
+  },
+  "fighter-action-surge": {
+    "kind": "grant_action", "cost": "free", "amount": 1,
+    "uses": {"by": "class_level", "class": "fighter", "steps": [{"min": 2, "value": 1}, {"min": 17, "value": 2}]}
+  },
+  "fighter-extra-attack": {"kind": "attacks_per_action", "value": 2},
+  "barbarian-extra-attack": {"kind": "attacks_per_action", "value": 2},
+  "monk-extra-attack": {"kind": "attacks_per_action", "value": 2},
+  "barbarian-rage": {
+    "kind": "self_buff", "cost": "bonus", "pool": "rage", "duration": "encounter", "status": "raging",
+    "bonus_damage": {"by": "class_level", "class": "barbarian",
+      "steps": [{"min": 1, "value": 2}, {"min": 9, "value": 3}, {"min": 16, "value": 4}]},
+    "resist": ["bludgeoning", "piercing", "slashing"]
+  },
+  "barbarian-reckless-attack": {
+    "kind": "attack_modifier", "cost": "free", "duration": "turn",
+    "self": "adv", "attacks_against": "adv"
+  },
+  "monk-flurry-of-blows": {
+    "kind": "grant_action", "cost": "bonus", "pool": "focus-points", "amount": 0, "extra_attacks": 2
+  },
+  "monk-patient-defense": {
+    "kind": "grant_verb", "cost": "bonus", "pool": "focus-points", "verbs": ["disengage", "dodge"]
+  },
+  "monk-step-of-the-wind": {
+    "kind": "grant_verb", "cost": "bonus", "pool": "focus-points", "verbs": ["dash", "disengage"]
+  },
+  "monk-stunning-strike": {
+    "kind": "save_effect", "cost": "none", "trigger": "on_weapon_hit", "pool": "focus-points",
+    "save": "con", "conditions": ["stunned"], "duration": "round"
+  },
+  "cleric-channel-divinity": {
+    "kind": "save_effect", "cost": "action", "pool": "channel-divinity",
+    "save": "wis", "shape": "single", "range_ft": 30, "conditions": ["frightened"], "duration": "encounter"
+  }
+}

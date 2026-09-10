@@ -1,0 +1,23 @@
+{
+  "_note": "sorcmerc-authored numbers for conditions.json's prose-only entries. combat.gd's `statuses` Dictionary is already the storage; this gives the ids meaning.",
+
+  "prone":       {"attacks_against": {"melee": "adv", "ranged": "dis"}, "own_attacks": "dis", "stand_costs": "half_move"},
+  "restrained":  {"attacks_against": "adv", "own_attacks": "dis", "speed": 0, "saves": {"dex": "dis"}},
+  "grappled":    {"speed": 0},
+  "frightened":  {"own_attacks": "dis", "own_checks": "dis", "cannot_approach_source": true},
+  "blinded":     {"attacks_against": "adv", "own_attacks": "dis", "auto_fail": ["sight"]},
+  "deafened":    {"auto_fail": ["hearing"]},
+  "charmed":     {"cannot_target_source": true},
+  "poisoned":    {"own_attacks": "dis", "own_checks": "dis"},
+  "incapacitated": {"no_action": true, "no_bonus": true, "no_reaction": true},
+  "stunned":     {"no_action": true, "no_bonus": true, "no_reaction": true, "speed": 0,
+                  "attacks_against": "adv", "auto_fail_saves": ["str", "dex"]},
+  "paralyzed":   {"no_action": true, "no_bonus": true, "no_reaction": true, "speed": 0,
+                  "attacks_against": "adv", "auto_fail_saves": ["str", "dex"], "auto_crit_within_ft": 5},
+  "petrified":   {"no_action": true, "speed": 0, "attacks_against": "adv",
+                  "auto_fail_saves": ["str", "dex"], "resist_all": true},
+  "unconscious": {"no_action": true, "no_bonus": true, "no_reaction": true, "speed": 0,
+                  "attacks_against": "adv", "auto_fail_saves": ["str", "dex"], "auto_crit_within_ft": 5},
+  "invisible":   {"attacks_against": "dis", "own_attacks": "adv"},
+  "exhaustion":  {"per_level": {"d20_penalty": 2, "speed_penalty_ft": 5}, "max_level": 6}
+}

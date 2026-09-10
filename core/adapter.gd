@@ -3,6 +3,7 @@
 extends RefCounted
 
 const Combatant = preload("res://core/combatant.gd")
+const Effects = preload("res://core/rules/effects.gd")
 
 # The two calibration knobs. Feet are the rules' unit; hexes are the board's.
 # Changing either re-tunes every encounter — re-run the seed sweep in
@@ -66,6 +67,7 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 			castable.append(sid)
 	c.spell_ids = castable
 
+	c.verbs = Effects.verbs_for(s)
 	_legacy_kit(c, s)
 	return c
 
@@ -82,7 +84,8 @@ static func _legacy_kit(c, s) -> void:
 	if s.has_feature("fighter-second-wind"):
 		c.second_wind = "1d10+%d" % fighter
 	c.action_surge = s.has_feature("fighter-action-surge")
-	const LEGACY_SPELLS := {"burning-hands": "burning_hands", "healing-word": "healing_word",
+	# cure-wounds stands in for healing_word: healing-word is absent from the export.
+	const LEGACY_SPELLS := {"burning-hands": "burning_hands", "cure-wounds": "healing_word",
 		"sacred-flame": "sacred_flame"}
 	for sid in c.spell_ids:
 		if LEGACY_SPELLS.has(sid):

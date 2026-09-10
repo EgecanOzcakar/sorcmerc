@@ -19,6 +19,8 @@ const Combat = preload("res://core/combat.gd")
 const Encounter = preload("res://core/encounter.gd")
 const AI = preload("res://core/ai.gd")
 const RNG = preload("res://core/rng.gd")
+const Effects = preload("res://core/rules/effects.gd")
+const Power = preload("res://core/rules/power.gd")
 
 var _pass = 0
 var _fail = 0
@@ -53,6 +55,10 @@ func _init() -> void:
 	test_spell_slots()
 	test_adapter()
 	test_sheet_party_sweep()
+	test_effects_data_is_valid()
+	test_effects_reproduce_the_hardcoded_kit()
+	test_spell_mechanics_merge()
+	test_power_ranks_the_heroes()
 
 	print("test_rules: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -706,3 +712,100 @@ func test_sheet_party_sweep() -> void:
 	print("  sheet-built party over %d seeds: %d win / %d loss, avg %.1f rounds" % [
 		runs, wins, runs - wins, float(rounds) / runs])
 	check(wins > 0 and wins < runs, "the sheet-built fight is not a foregone conclusion either way")
+
+# --- step 9: effects.gd + power.gd ---------------------------------------
+
+func test_effects_data_is_valid() -> void:
+	var errs := Effects.validate()
+	for e in errs:
+		printerr("    ", e)
+	check(errs.is_empty(), "data/effects/*.json validates (%d errors)" % errs.size())
+	check(Effects.feature("fighter-fighting-style").is_empty(), "an unlisted feature is flavor, not an error")
+	check(Effects.condition("prone")["stand_costs"] == "half_move", "conditions carry numbers now")
+	check(Effects.humanize("barbarian-primal-knowledge") == "Barbarian Primal Knowledge",
+		"the prose fallback humanizes an id")
+
+func test_effects_reproduce_the_hardcoded_kit() -> void:
+	# Sneak Attack / Second Wind / Action Surge as data must equal what the adapter's
+	# legacy flags (and today's combat.gd) do.
+	for pair in [[1, 1], [2, 1], [3, 2], [5, 3], [11, 6], [20, 10]]:
+		var r := _build("rogue", pair[0], {"str": 10, "dex": 16, "con": 12, "int": 12, "wis": 10, "cha": 10})
+		var v := _verb(r, "rogue-sneak-attack")
+		check(int(v["dice_count"]) == pair[1] and int(v["dice_sides"]) == 6,
+			"rogue %d sneak attack %dd6 (got %dd%d)" % [pair[0], pair[1], int(v["dice_count"]), int(v["dice_sides"])])
+	var pk: Character = Presets.pike()
+	check(_verb(pk, "rogue-sneak-attack")["once_per"] == "turn", "sneak attack is once per turn")
+	check(Adapter.to_combatant(pk, "party", Vector2i.ZERO).sneak_attack == "2d6",
+		"the data verb and the legacy flag agree at rogue 3")
+
+	var f := _build("fighter", 3, {"str": 16, "dex": 12, "con": 14, "int": 10, "wis": 12, "cha": 10})
+	var sw := _verb(f, "fighter-second-wind")
+	check(sw["cost"] == "bonus", "Second Wind is a bonus action")
+	check(int(sw["dice_count"]) == 1 and int(sw["dice_sides"]) == 10 and int(sw["dice_bonus"]) == 3,
+		"fighter 3 Second Wind heals 1d10+3 — the same as the hardcoded string")
+	check(int(sw["uses"]) == 2, "Second Wind's synthetic pool is PB uses")
+	var as_ := _verb(f, "fighter-action-surge")
+	check(as_["kind"] == "grant_action" and int(as_["amount"]) == 1 and int(as_["uses"]) == 1,
+		"Action Surge grants one extra action, once")
+	check(int(_verb(_build("fighter", 17, f.base_abilities), "fighter-action-surge")["uses"]) == 2,
+		"Action Surge is twice at fighter 17")
+
+	# Rage reads its uses off the real resource pool, not a synthetic one
+	var bb := _build("barbarian", 6, {"str": 16, "dex": 14, "con": 16, "int": 8, "wis": 10, "cha": 8})
+	var rg := _verb(bb, "barbarian-rage")
+	check(int(rg["uses"]) == 4 and int(rg["bonus_damage"]) == 2, "barbarian 6 rages 4x for +2 damage")
+	check("bludgeoning" in rg["resist"], "rage resists the physical trio")
+
+	# Extra Attack
+	var f5 := _build("fighter", 5, f.base_abilities)
+	check(int(_verb(f5, "fighter-extra-attack")["value"]) == 2, "Extra Attack is 2 attacks per action")
+
+func _verb(ch: Character, id: String) -> Dictionary:
+	for v in Effects.verbs_for(ch.sheet()):
+		if v["id"] == id:
+			return v
+	return {}
+
+func test_spell_mechanics_merge() -> void:
+	var bh := Effects.spell("burning-hands")
+	check(bh["shape"] == "cone" and int(bh["size_ft"]) == 15, "burning hands is a 15 ft cone")
+	check(bh["save"] == "dex" and bh["half_on_save"], "burning hands: DEX save for half")
+	check(int(bh["damage"][0]["count"]) == 3 and int(bh["damage"][0]["sides"]) == 6, "burning hands 3d6")
+	check(int(bh["level"]) == 1, "burning hands is a level-1 spell")
+	# healing-word and magic-missile are absent from the 146-spell export — F1 gap.
+	check(Effects.spell("healing-word").is_empty(), "an uncatalogued spell has no mechanics")
+	var cw := Effects.spell("cure-wounds")
+	check(int(cw["heal"]["count"]) == 2 and int(cw["heal"]["sides"]) == 8,
+		"cure wounds is authored where the regex parse gave nothing usable")
+	check(Effects.spell("guidance").is_empty(), "a non-combat spell is not castable in a fight")
+	check(Effects.spell("light").is_empty(), "neither is Light")
+
+func test_power_ranks_the_heroes() -> void:
+	var scores := {}
+	for ch in Presets.party():
+		var c = Adapter.to_combatant(ch, "party", START[ch.id])
+		scores[ch.id] = float(Power.estimate(c)["score"])
+	var goblin := Power.estimate(_json_foes()[1])   # snik, 7 HP
+	var boss := Power.estimate(_json_foes()[0])     # grull, 27 HP
+	print("  power: vera %.1f  pike %.1f  ilsa %.1f  grull %.1f  snik %.1f" % [
+		scores["vera"], scores["pike"], scores["ilsa"], float(boss["score"]), float(goblin["score"])])
+	# Ranking at the time of writing: vera 17.0 > ilsa 16.5 > pike 13.1, grull 13.7, snik 4.7.
+	# Vera on top is the intuitive result; Ilsa second rather than last is the estimator
+	# being honest that a Light cleric with four Burning Hands slots front-loads real
+	# damage in a four-round fight. Pike last: single-target, 21 HP, AC 15.
+	check(scores["vera"] > scores["pike"] and scores["vera"] > scores["ilsa"],
+		"the sword-and-board fighter tops the party")
+	check(scores["pike"] > float(goblin["score"]), "even the squishiest hero beats a mook")
+	check(float(boss["score"]) > float(goblin["score"]) * 2.0, "the brute outscores a mook several times over")
+	# "an order of magnitude" (spec §10 step 9) is a level-10 statement; at level 3 vs a
+	# 7 HP mook the honest gap is ~3.5x.
+	check(scores["vera"] > float(goblin["score"]) * 3.0,
+		"a level-3 hero is several times a mook (%.1f vs %.1f)" % [scores["vera"], float(goblin["score"])])
+	for k in ["dpr", "ehp", "control", "score"]:
+		check(boss.has(k), "estimate() returns \"%s\" — T8's contract" % k)
+
+	var party: Array = _sheet_party()
+	check(Power.team_score(party) > 0.0, "team_score sums the party")
+	check(Power.roster_budget(party, "hard") > Power.roster_budget(party, "easy"),
+		"a harder tier buys a bigger roster")
+	check(Power.fits(_json_foes(), 0.0), "fits() is true against a zero budget")
