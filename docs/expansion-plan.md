@@ -93,5 +93,10 @@ graph above. Each phase gated on review.
 ### Status log
 - 2026-09-10: Phase 0 dispatched — F1 (data export) and A0 (engine architecture
   spec) running as parallel background agents.
+- 2026-09-10: F1 complete, committed (`25b8d06`) — `data/*.json` + `SCHEMA.md`.
+- 2026-09-10: A0 complete, committed (`329c3ec`) —
+  `docs/superpowers/specs/2026-09-10-rules-engine-design.md`.
+- 2026-09-10: F2 (engine implementation, 9-step build sequence per the spec's
+  §10, each step tested + committed) dispatched as a background agent.
 
 This is a multi-week build; phases 0–1 are the critical path and land first.
