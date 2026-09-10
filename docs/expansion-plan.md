@@ -236,4 +236,36 @@ graph above. Each phase gated on review.
   have no mechanical effect at all yet (flavour-only, SCHEMA gap #4). 13 new
   assertions in `tests/test_rest_mechanics.gd`. Pushed.
 
+- 2026-09-10: **T5+T9 complete** — `core/campaign.gd` (5-stage route: combat/
+  merchant/rest/treasure nodes, boss at the end) + `core/quest.gd` (4 curated
+  quests, kill-count and item-collect, spawn-bias proven end to end through
+  `Campaign.combat_spec()`) + `scenes/campaign/campaign.gd` (map, quest log
+  panel, shop, rest, combat handoff via `scenes/main.gd`'s injectable party/
+  spec/difficulty). `core/party.gd` gained one field, `quests: Array`. Not
+  done: XP banked on the run not the character (no xp field on `Character`
+  yet — Leveling wiring is the follow-up), no campaign-progress save/load, shop
+  is a flat-price stub, no loot rarity, deaths bench rather than kill.
+  **F1b complete** — `data/bestiary.json`, 316 SRD monsters (5e-bits/5e-database,
+  OGL 1.0a, CR 0–10), every entry tagged `faction`+`habitat` per the coherence
+  requirement (no dragon sharing a roster with a goblin). Kept separate from
+  `data/monsters.json` (the 4 hand-tuned originals) — wiring one-liner
+  documented in `data/SCHEMA.md`, not yet made. `scaler.gd` still only draws
+  from the original 4; using the bestiary + faction-gating the draw is a real
+  follow-up tuning pass, not done here.
+  2455+ assertions green across 12 suites; `drive_ui`/`drive_creator`/
+  `drive_campaign` all clean. Pushed.
+- 2026-09-10: Researched Bardic Inspiration + Arcane Recovery via the BG3 wiki
+  (user's ask) and implemented both per the user's picks: Bardic Inspiration =
+  flat use-counts by level tier (3/4/5 at L1/5/10, not Charisma-modifier-based),
+  die 1d6→1d8→1d10, long-rest until L5 then short-rest (Font of Inspiration).
+  Arcane Recovery = a charge pool (`ceil(wizard level/2)`, long-rest refill, 1
+  charge per slot level restored, capped at slot 5) — mathematically identical
+  to tabletop RAW, just phrased as BG3's "charges." Along the way, found and
+  fixed a second real bug: `combat.gd`'s `perform()` had no case at all for the
+  `"ally_buff"` verb kind (it was offerable/targetable but silently did
+  nothing) — added, with auto-apply-and-consume on the bearer's next attack/
+  save (no reaction prompt, matching the engine's design). Arcane Recovery has
+  no UI yet (needs a "pick which slots" control) — flagged for the profile
+  screen. 37 assertions in `tests/test_rest_mechanics.gd` (was 13). Pushed.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
