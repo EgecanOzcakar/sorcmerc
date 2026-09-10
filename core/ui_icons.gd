@@ -150,11 +150,15 @@ const CONDITION_GLYPHS := {
 	"dodging": "◈",
 	"helped": "✚",
 	"down": "✗",
+	"reckless": "⚔",      # Reckless Attack — no glyph meant no feedback the button did anything
+	"sapped": "↯̸",        # weapon mastery Sap
+	"slowed": "⇣",        # weapon mastery Slow
 }
 # Fixed render order so a token's tag strip doesn't reshuffle between frames.
 const CONDITION_ORDER := ["down", "unconscious", "paralyzed", "petrified", "stunned",
 	"incapacitated", "restrained", "grappled", "prone", "frightened", "charmed",
-	"poisoned", "blinded", "deafened", "exhaustion", "invisible", "hidden", "dodging", "helped"]
+	"poisoned", "blinded", "deafened", "exhaustion", "invisible", "hidden", "dodging", "helped",
+	"reckless", "sapped", "slowed"]
 
 static func condition_glyph(id: String) -> String:
 	return String(CONDITION_GLYPHS.get(id, "•"))

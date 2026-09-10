@@ -8,6 +8,7 @@ const Combat = preload("res://core/combat.gd")
 const Combatant = preload("res://core/combatant.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Hex = preload("res://core/hex.gd")
+const Icons = preload("res://core/ui_icons.gd")
 
 var _pass = 0
 var _fail = 0
@@ -29,6 +30,7 @@ func _init() -> void:
 	test_exhaustion()
 	test_charmed_and_frightened()
 	test_auto_stand_from_prone()
+	test_reckless_has_a_status_glyph()
 	print("test_conditions: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -179,3 +181,19 @@ func test_auto_stand_from_prone() -> void:
 	var cb2 = Combat.new(RNG.new(7), [c, _guy("foe2", "foe", Vector2i(4, 1))], Encounter.board())
 	cb2.begin_turn_for(c)
 	check(c.econ["move_left"] == c.speed, "a 0-cost discount feature leaves move untouched")
+
+# Reckless Attack (and the other engine-only flags: Sap/Slow) used to have no
+# glyph, so going reckless gave the player zero visible feedback that pressing
+# the button had done anything at all.
+func test_reckless_has_a_status_glyph() -> void:
+	var a = _guy("hero", "party", Vector2i(4, 0))
+	check(Icons.status_glyphs(a) == "", "no glyph before going reckless")
+	a.statuses["reckless"] = true
+	check(Icons.status_glyphs(a).contains(Icons.condition_glyph("reckless")),
+		"reckless shows up in the token's status strip")
+	a.statuses.erase("reckless")
+	a.statuses["sapped"] = true
+	check(Icons.status_glyphs(a).contains(Icons.condition_glyph("sapped")), "so does sapped")
+	a.statuses.erase("sapped")
+	a.statuses["slowed"] = true
+	check(Icons.status_glyphs(a).contains(Icons.condition_glyph("slowed")), "so does slowed")

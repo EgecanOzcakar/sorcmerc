@@ -195,7 +195,7 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		KEY_F1: SettingsOverlay.toggle(self, func(): _anim = Settings.anim())
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 			_press_hotkey(e.keycode - KEY_1)
-		KEY_0:
+		KEY_0, KEY_SPACE:
 			_press_hotkey(-1)  # last button (End turn / Cancel)
 
 func _press_hotkey(idx: int) -> void:
