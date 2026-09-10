@@ -110,5 +110,10 @@ graph above. Each phase gated on review.
   region_at). `Combatant` kept, not replaced — `Adapter.to_combatant` /
   `from_monster` / `write_back` are the seam T7/T8 build on.
   Pushed to origin (`github.com/EgecanOzcakar/sorcmerc`, private).
+- 2026-09-10: Phase 2 dispatched — F3 (action economy), T1 (character creator,
+  owns the character save/load format), T3 (profile manager, in-memory Character
+  input until T1's format lands), T4 (party manager, same caveat) running in
+  parallel as background agents. Each instructed not to touch the others' files
+  and to report status here rather than editing this doc directly.
 
 This is a multi-week build; phases 0–1 are the critical path and land first.
