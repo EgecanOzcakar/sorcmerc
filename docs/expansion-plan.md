@@ -268,4 +268,89 @@ graph above. Each phase gated on review.
   no UI yet (needs a "pick which slots" control) — flagged for the profile
   screen. 37 assertions in `tests/test_rest_mechanics.gd` (was 13). Pushed.
 
+## T10 — XP economy, death/resurrection, autosave, shop pricing (locked 2026-09-10)
+
+Closes gaps T5+T9 flagged. Decisions:
+
+- **XP** is banked per `Character` (`ch.xp`), split evenly among the party members
+  active in that fight when `resolve_outcome.xp` is banked. The real 5e cumulative
+  XP table gates `Leveling.can_level_up(ch)` — Level Up is disabled until crossed.
+- **Death**: a `Character.dead` flag, set from `resolve_outcome.deaths`. A dead
+  character is benched and can't be reactivated into the active party normally.
+  Revival: (a) **Revivify** — already in the spell export — cast by any active
+  party member who knows it and has a free 3rd-level+ slot, or (b) a new
+  **Scroll of Resurrection** consumable (same effect; purchasable at merchants +
+  occasional treasure drop). Both cost **300gp** from the party stash (Revivify's
+  real material cost, abstracted to gold, no diamond item) and bring the target
+  back at 1 HP. **Any character still dead when a run concludes (win or lose)
+  is auto-revived for free** — death is a within-run cost, not permanent across
+  runs.
+- **Shop pricing**: mundane weapons/armor already carry an SRD `cost` that's
+  power-correlated within their one rarity tier (common) — reuse it directly
+  rather than inventing a parallel power formula. Magic items have no structured
+  power data (F1 gap), so they price by **rarity tier alone**, polynomially
+  between tiers (tier index → price ∝ index^E for a documented constant E and
+  base — tune for plausible gp bands, artifacts not for sale). Sell price stays
+  a flat fraction of buy price (`SELL_RATE`, already built).
+- **Autosave**: after every state-mutating `Campaign` method (enter/leave a
+  node, combat resolved, rest taken, shop transaction, quest accept/turn-in) —
+  a single rolling `user://` slot, not a save-slot manager. `CampaignSave.
+  load_latest()` for the load path; since there's no top-level hub scene yet,
+  `scenes/campaign/campaign.gd` gets a minimal Continue-vs-New-Game choice at
+  its own entry point (a real main menu is separate future work).
+
+**T10 amendment, folded in (locked 2026-09-10):** inventory becomes **one pool
+for the whole party** (`core/party.gd`'s `stash`, which already exists), not a
+per-character list. `Character.inventory` is dropped entirely; `Character.
+equipped` stays (what that character currently has worn/wielded). Equip pulls
+an item out of the party's shared stash onto the viewed character; unequip
+returns it to the shared stash. This is T3's profile-screen inventory panel
+rewritten to read/write `party.stash` instead of `ch.inventory`, plus the
+matching `character_save.gd` schema change. Bundled into the same T10 dispatch
+as the XP/death/shop/autosave work since both already touch `character.gd` and
+`party.gd` — two agents editing those concurrently would collide.
+
+## Post-T5+T9 gap survey (for later, not all queued)
+
+Asked-for survey of what's still missing for a full-scale CRPG, beyond the T10
+items above: bestiary (316 monsters) not wired into the scaler yet, no per-node
+combat terrain variety (one hand-authored room), no equip-from-stash link on
+the profile screen, no multiclassing, no meta-progression across runs (open
+question, not decided), no map variety beyond the one 5-stage route, no
+narrative/dialogue layer (quests are mechanical only), no settings/options
+screen, no tutorial/onboarding, no magic-item identify mechanic (fine to skip),
+status effects stay combat's flag set only (no poison/disease/long-term
+conditions). Sound/art remain deliberately deferred.
+
+## T11 — combat board variety + interactables (locked 2026-09-10)
+
+Right now every fight uses the one hand-authored Sunken Shrine room. Design:
+
+- **5-6 board themes**, each a hex layout + palette: keep Sunken Shrine (ruin/
+  dungeon) as-is; add Goblin Camp (enemy camp — open clearing), City Square
+  (urban — stalls as cover), Forest Clearing (trees as cover/blocking, dense
+  undergrowth as rough terrain), Frozen Cave (ice as rough/hazard terrain,
+  stalactites as cover), Merchant Shop Interior (tight room, shelves as cover)
+  — the last matching the user's own example scenes.
+- **Interactables**, generalized from the existing brazier: a board carries a
+  list of typed objects. **Barrel/crate**: a destructible obstacle (blocks
+  movement, has HP, attackable) — an `explosive: bool` flag reuses the existing
+  shove-into-brazier fire mechanic (2d6 fire in a radius) when destroyed, so no
+  new damage mechanic is invented, just generalized. **Torch**: purely
+  decorative (a lit, pulsing hex, matching the brazier's existing glow
+  animation) — no new mechanic; a `ponytail:` note flags "could ignite adjacent
+  flammable terrain" as a future addition, not built now.
+- **Board selection per node**: each combat node in `campaign.gd`'s route gets
+  a `theme` hint (simple, authored, not derived dynamically from monster
+  habitat — that coupling isn't worth it yet) that `Encounter.build()` uses to
+  pick the board instead of always defaulting to the Sunken Shrine.
+- Rendering: `Board._draw()` generalizes its single hardcoded brazier-drawing
+  path into "draw each interactable by type," with a distinct shape/color per
+  type — still shapes, no sprites, matching this project's established look.
+
+Dispatched alongside T10; both touch `core/campaign.gd` in different, additive
+regions (T10: autosave calls at the end of state-mutating methods; T11: a
+`theme` field read in `combat_spec()`) — flagged to both agents to keep it that
+way, reconciled by hand if they collide.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
