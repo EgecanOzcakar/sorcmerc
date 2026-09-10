@@ -33,6 +33,7 @@ func _init() -> void:
 	test_rest()
 	test_merchant()
 	test_quest_flow()
+	test_identification()
 	test_full_run()
 	print("test_campaign: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -287,6 +288,87 @@ func test_quest_flow() -> void:
 	check(c2.party.gold > gold, "the reward is paid")
 
 # The whole loop, model-only: walk every stage taking the first node, faking each fight.
+# T13 — identification. Loot is a mystery until examined (DC 15 Arcana, at a rest
+# node only) or a Scroll of Identification is burned on it (any time, no roll).
+const MYSTERY := "cloak-of-elvenkind"
+
+func test_identification() -> void:
+	# treasure: a magic item arrives unidentified, mundane steel arrives as itself
+	var c := _campaign()
+	c.node = {"kind": "treasure", "id": "hoard", "gold": 0, "item_id": MYSTERY}
+	c._take_treasure()
+	check(c.party.stash_count(MYSTERY) == 1, "the magic item lands in the stash")
+	check(c.party.stash_count(MYSTERY, true) == 0, "and lands unidentified")
+	check(c.party.unidentified().size() >= 1, "it shows up as a mystery")
+	check(Campaign.mystery_name(MYSTERY) == "Unidentified item (uncommon)",
+		"a mystery shows its rarity and nothing else (got %s)" % Campaign.mystery_name(MYSTERY))
+	c.node["item_id"] = "handaxe"
+	c._take_treasure()
+	check(c.party.stash_count("handaxe", true) == 1, "mundane loot needs no identifying")
+	check(Campaign.is_magic(MYSTERY) and not Campaign.is_magic("handaxe"), "is_magic splits the two")
+
+	# the check is a rest-node action only
+	var d := _campaign()
+	d.party.stash_add(MYSTERY, 1, false)
+	d.node = {"kind": "merchant", "id": "shop"}
+	check(not d.identify_check(MYSTERY, d.arcana_examiner()), "no examining at a merchant")
+	d.node = {"kind": "rest", "id": "camp"}
+	check(not d.identify_check("handaxe", d.arcana_examiner()), "nothing to identify on mundane gear")
+	check(not d.identify_check(MYSTERY, "nobody"), "a stranger cannot examine it")
+
+	# both outcomes are reachable across seeds, and a failure is final for this camp
+	var hits := 0
+	var misses := 0
+	for seed_value in range(1, 41):
+		var e := _campaign()
+		e.rng = load("res://core/rng.gd").new(seed_value)
+		e.party.stash_add(MYSTERY, 1, false)
+		e.node = {"kind": "rest", "id": "camp"}
+		var who := e.arcana_examiner()
+		check(who != "", "somebody in the party can examine it")
+		if e.identify_check(MYSTERY, who):
+			hits += 1
+			check(e.party.stash_count(MYSTERY, true) == 1, "a success identifies the item")
+			check(not e.identify_check(MYSTERY, who), "nothing left to identify")
+		else:
+			misses += 1
+			check(e.party.stash_count(MYSTERY, true) == 0, "a failure leaves it a mystery")
+			check(MYSTERY in e.identify_failed, "the failure is recorded for this camp")
+			check(not e.identify_check(MYSTERY, who), "no retry at the same camp")
+			e.enter(0)
+			check(e.identify_failed.is_empty(), "a new node is a fresh chance")
+	print("  arcana DC %d over 40 seeds: %d identified, %d failed" % [Campaign.IDENTIFY_DC, hits, misses])
+	check(hits > 0 and misses > 0, "both outcomes are reachable (%d/%d)" % [hits, misses])
+
+	# the scroll: no roll, no rest, always works, always consumed
+	var f := _campaign()
+	f.party.stash_add(MYSTERY, 1, false)
+	f.node = {}
+	check(not f.identify_with_scroll(MYSTERY), "no scroll, no shortcut")
+	f.party.stash_add(Campaign.IDENTIFY_SCROLL)
+	check(f.identify_with_scroll(MYSTERY), "the scroll works anywhere, with no roll")
+	check(f.party.stash_count(MYSTERY, true) == 1, "the item is identified")
+	check(f.party.stash_count(Campaign.IDENTIFY_SCROLL) == 0, "the scroll is consumed")
+
+	# stocked at every merchant, priced by the shared formula, and a treasure drop
+	var price := Campaign.item_price(Campaign.IDENTIFY_SCROLL)
+	check(price == 256, "the scroll prices as an uncommon item (got %d)" % price)
+	check(price < Campaign.item_price(Campaign.SCROLL), "cheaper than the resurrection scroll")
+	var g := _campaign()
+	g.enter(_find(g, "merchant"))
+	check(Campaign.IDENTIFY_SCROLL in g.stock_ids(), "the merchant stocks it")
+	g.party.add_gold(price)
+	check(g.buy(Campaign.IDENTIFY_SCROLL), "and sells it")
+	check(g.party.stash_count(Campaign.IDENTIFY_SCROLL, true) == 1, "a purchase is pre-identified")
+	var drops := 0
+	for seed_value in range(1, 21):
+		var h := _campaign()
+		h.rng = load("res://core/rng.gd").new(seed_value)
+		h.node = {"kind": "treasure", "id": "hoard", "gold": 0}
+		h._take_treasure()
+		drops += h.party.stash_count(Campaign.IDENTIFY_SCROLL)
+	check(drops > 0 and drops < 20, "the scroll drops from hoards sometimes, not always (%d/20)" % drops)
+
 func test_full_run() -> void:
 	var c := _campaign()
 	var stages := 0

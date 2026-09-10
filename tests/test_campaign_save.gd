@@ -87,7 +87,7 @@ func _init() -> void:
 	resumed.finish_combat({"outcome": "Victory", "xp": 200, "gold": 30, "loot": [],
 		"deaths": [], "kills": []})
 	resumed.leave()
-	check(resumed.stage == 1 and resumed.state == "picking", "and carries on down the road")
+	check(resumed.stage == c2.stage + 1 and resumed.state == "picking", "and carries on down the road")
 
 	# The screen's own Continue-vs-New-Game choice is driven by tests/drive_campaign.gd
 	# ("Begin a new run") — instantiating campaign.tscn from a -s script hangs headless.
@@ -98,10 +98,17 @@ func _done() -> void:
 	print("test_campaign_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
+# T12: the route is generated per seed — walk forward to the first stage that
+# offers this kind. "merchant" seeks a quest-giving one, the test accepts a quest.
 func _find(c: Campaign, kind: String) -> int:
-	var opts := c.options()
-	for i in opts.size():
-		if opts[i]["kind"] == kind:
-			return i
-	check(false, "stage %d has no %s node" % [c.stage, kind])
+	while c.stage < c.route.size():
+		var opts := c.options()
+		for i in opts.size():
+			if opts[i]["kind"] != kind:
+				continue
+			if kind != "merchant" or opts[i]["id"] in Campaign.GIVER_IDS:
+				return i
+		c.stage += 1
+	check(false, "the route has no %s node" % kind)
+	c.stage = 0
 	return 0
