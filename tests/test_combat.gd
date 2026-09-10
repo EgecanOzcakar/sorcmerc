@@ -38,6 +38,7 @@ func _init() -> void:
 	test_move_budget()
 	test_help_grants_advantage()
 	test_hide_enables_advantage()
+	test_hidden_is_untargetable()
 	test_mercy_rule()
 	test_encounter_resolves_many_seeds()
 	test_action_economy()
@@ -301,6 +302,23 @@ func test_hide_enables_advantage() -> void:
 	var cb2 = _sandbox()
 	var pk = _find(cb2, "pike"); pk.stealth = -40
 	check(not cb2.act_hide(pk), "hopeless Stealth fails to hide")
+
+# RAW: hidden means unseen, and you can't target what you can't perceive.
+func test_hidden_is_untargetable() -> void:
+	var cb = _sandbox()
+	var pike = _find(cb, "pike"); var grull = _find(cb, "grull"); var snik = _find(cb, "snik")
+	pike.pos = Vector2i(2, 1); grull.pos = Vector2i(3, 1); snik.pos = Vector2i(9, 9)
+	pike.stealth = 40
+	check(cb.act_hide(pike), "pike hides")
+	check(not cb.enemies_of(grull).any(func(c): return c.id == "pike"),
+		"a hidden combatant drops out of the opposing side's candidate list")
+	var atk := {"id": "attack", "kind": "attack", "targeting": "enemy"}
+	check(not cb.legal_target(grull, atk, pike), "...and can't be targeted directly")
+	check(cb.available(grull).filter(func(v): return v["kind"] == "attack").is_empty(),
+		"grull has nothing in reach to swing at (pike was its only adjacent foe)")
+	# unrelated third party, never hidden, is unaffected
+	check(cb.enemies_of(pike).any(func(c): return c.id == "grull"),
+		"pike's own targeting of the (unhidden) grull is untouched")
 
 func test_mercy_rule() -> void:
 	# a conscious Vera is reachable this turn -> Grull leaves the downed Pike alone

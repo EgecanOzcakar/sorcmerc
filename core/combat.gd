@@ -265,7 +265,11 @@ func team_of(team: String) -> Array:
 	return combatants.filter(func(c): return c.team == team)
 
 func enemies_of(c) -> Array:
-	return combatants.filter(func(o): return o.team != c.team and o.conscious())
+	# Hidden (successfully used Hide) means unseen — RAW, you can't target what
+	# you can't perceive. This is the shared choke point for targeting on both
+	# sides: the player's target list (legal_target/available route through
+	# it) and the AI's own candidate gathering (ai.gd's reach/cone lists).
+	return combatants.filter(func(o): return o.team != c.team and o.conscious() and not o.has("hidden"))
 
 func allies_of(c) -> Array:
 	return combatants.filter(func(o): return o.team == c.team and o != c and o.conscious())
@@ -426,7 +430,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 func legal_target(actor, v: Dictionary, c) -> bool:
 	match v.get("targeting", "self"):
 		"enemy":
-			if c.team == actor.team or not c.conscious():
+			if c.team == actor.team or not c.conscious() or c.has("hidden"):
 				return false
 			if _source_of(actor, "cannot_target_source") == c:
 				return false  # charmed
