@@ -219,4 +219,21 @@ graph above. Each phase gated on review.
   T8's 4-archetype version had nothing to be incoherent about) — record it as
   an open follow-up, not yet implemented.
 
+- 2026-09-10: Rest-mechanics audit (done directly, not dispatched — read-heavy,
+  small contained fix). Checked every class's short/long-rest resource against
+  the real 2024 rules. Found and fixed a real bug: **Warlock Pact Magic slots
+  were computed by `pass_spells.gd` but never read by `adapter.to_combatant`**
+  — a Warlock had zero castable leveled spells in combat (cantrips only). Fixed
+  by merging pact slots into the normal 9-level slots array at `pact.slotLevel`
+  (`Adapter._full_slots()`), and made them refill on a short rest too (the one
+  real 5e exception). Also fixed: synthetic pools for features the export gives
+  no resource-pool grant for (Second Wind/Action Surge/Channel Divinity/Wild
+  Shape — correctly short-rest; Bardic Inspiration/Arcane Recovery — were
+  wrongly defaulting to short-rest, now long-rest). Confirmed correct and
+  untouched: Rage/Sorcery Points (long-rest), Ki-aka-Focus-Points/Paladin
+  Channel Divinity (short-rest, real pool grants in the data). Separate,
+  pre-existing gap noted but not built: Bardic Inspiration and Arcane Recovery
+  have no mechanical effect at all yet (flavour-only, SCHEMA gap #4). 13 new
+  assertions in `tests/test_rest_mechanics.gd`. Pushed.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
