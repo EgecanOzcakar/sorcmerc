@@ -53,6 +53,7 @@ F1 export ─┬─> F2 character model ─┬─> F3 action economy ─┬─> 
 | **T5** | **Campaign map** — node graph (start → branching combat/treasure/merchant/rest → boss), party token moves node→node, per-node resolution; combat nodes hand off to the combat scene and await an outcome. | `core/campaign.gd`, `scenes/campaign/*` | T4 |
 | **T6** | **Node types** — merchant (buy/sell vs SRD prices), treasure (loot tables), rest (short/long rest recovery). | `core/nodes/*`, `scenes/campaign/*` | T5, F1 |
 | **T7** | **Combat ↔ campaign integration** — `encounter.gd` builds an encounter from a spec + the live party instead of hardcoding; combat returns deaths / loot / XP; the combat UI takes party characters. | `core/encounter.gd`, `scenes/main.gd` | F3, T5 |
+| **T8** | **Encounter scaler / difficulty** — given the live party (levels, gear, features, resources → a power budget), generate the enemy roster for a node. Difficulty tiers tuned so autopilot party win-rate is ~90% (easy) / ~75% (normal) / ~50% (hard); tune enemy count, HP, AC, to-hit, damage, and kit, verified against the 200-seed sweep in `tests/test_combat.gd`. | `core/scaler.gd`, `core/encounter.gd` | F2, F3, T7 |
 
 ## Realistic phasing (what can actually run in parallel)
 
@@ -86,7 +87,11 @@ Phase 0 (now, parallel):
 
 Phase 1: **F2** implement the engine against A0 + F1. Review gate.
 
-Phase 2+: F3 / T1 / T3 / T4 parallel, then T2 / T5, then T6 / T7 — per the graph
-above. Each phase gated on review.
+Phase 2+: F3 / T1 / T3 / T4 parallel, then T2 / T5, then T6 / T7 / T8 — per the
+graph above. Each phase gated on review.
+
+### Status log
+- 2026-09-10: Phase 0 dispatched — F1 (data export) and A0 (engine architecture
+  spec) running as parallel background agents.
 
 This is a multi-week build; phases 0–1 are the critical path and land first.
