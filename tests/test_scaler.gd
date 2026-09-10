@@ -10,6 +10,7 @@ const Scaler = preload("res://core/scaler.gd")
 const Presets = preload("res://core/presets.gd")
 const Power = preload("res://core/rules/power.gd")
 const Campaign = preload("res://core/campaign.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 const SEEDS := 200
 const TARGET := {"easy": 90.0, "normal": 75.0, "hard": 50.0}
@@ -28,6 +29,7 @@ func check(cond: bool, label: String) -> void:
 func _init() -> void:
 	test_control_pricing()
 	test_spec_shape()
+	test_forest_beasts_stay_on_land()
 	test_quest_bias()
 	test_monotone_difficulty()
 	test_win_rates()
@@ -61,6 +63,18 @@ func test_spec_shape() -> void:
 	var cb = Encounter.build(spec, _party_at(Presets.party()))
 	check(cb.team_of("foe").size() == _total(spec), "build() spawns exactly the spec's foes")
 	check(Scaler.roster_for([], "normal")["monsters"].size() > 0, "an empty party still gets a roster")
+
+# A Killer Whale showing up alongside a Giant Elk on a forest board was exactly
+# this: "beast" is the one faction that spans two habitats (forest/water), and
+# nothing filtered on the water half when the theme is landlocked.
+func test_forest_beasts_stay_on_land() -> void:
+	for seed_value in range(1, 41):
+		var spec = Scaler.roster_for(Presets.party(), "normal", {}, "forest-clearing", seed_value)
+		for m in spec["monsters"]:
+			var habitat: String = String(Catalog.monster(m["id"]).get("habitat", "any"))
+			check(habitat in ["forest", "any"],
+				"seed %d: %s (habitat %s) has no business in a forest-clearing roster"
+					% [seed_value, m["id"], habitat])
 
 func test_quest_bias() -> void:
 	var plain = _counts(Scaler.roster_for(Presets.party(), "normal"))

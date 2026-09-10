@@ -9670,7 +9670,7 @@
     "init_mod": 3,
     "speed": 10,
     "atk_bonus": 6,
-    "damage": "4d8+4",
+    "damage": "2d6+4",
     "ranged": false,
     "atk_range": 1,
     "athletics": 4,
@@ -9716,7 +9716,7 @@
     "immune": [],
     "vulnerable": [],
     "cond_immune": [],
-    "_notes": "implemented: Charge; not modeled: action: Ram"
+    "_notes": "implemented: Ram (base attack), knockdown on hit; not modeled: Charge (+2d6 bonus damage if it moved 20ft straight first)"
   },
   {
     "id": "gibbering-mouther",

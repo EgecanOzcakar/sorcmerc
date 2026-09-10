@@ -56,6 +56,12 @@ const THEME_FACTION := {
 	"sunken-shrine": "", "goblin-camp": "goblinoid", "frozen-cave": "giant",
 	"city-square": "bandit", "forest-clearing": "beast", "merchant-shop": "bandit",
 }
+# Most factions are already habitat-uniform (every "goblinoid" is "cave", every
+# "giant" is "wild", ...) so pairing by faction alone is enough. "beast" is the
+# one exception — it spans both "forest" (69 entries) and "water" (18), which is
+# how a Killer Whale ended up in the same roster as a Giant Elk on a forest
+# board. Only themes whose faction actually needs the extra split are listed.
+const THEME_HABITAT := {"forest-clearing": "forest"}
 const FACTIONS := ["goblinoid", "beast", "undead", "bandit", "giant", "kobold",
 	"orc", "gnoll", "cultist", "soldier", "monstrosity", "fey", "elemental", "construct"]
 const ROSTER_KINDS := 3   # distinct ids in one faction roster
@@ -154,7 +160,9 @@ static func _faction_order(theme: String, seed: int, budget: float) -> Array:
 		else FACTIONS[absi(seed) % FACTIONS.size()]
 	if fac == "":
 		return MIX.duplicate()
-	var pool: Array = _faction_pool(fac).filter(func(e): return float(e["score"]) <= budget * BIGGEST_SHARE)
+	var need_habitat: String = String(THEME_HABITAT.get(theme, ""))
+	var pool: Array = _faction_pool(fac).filter(
+		func(e): return _in_budget_and_habitat(e, budget, need_habitat))
 	if pool.is_empty():
 		return MIX.duplicate()
 	var start: int = absi(seed) % maxi(1, pool.size() / 2)
@@ -162,6 +170,11 @@ static func _faction_order(theme: String, seed: int, budget: float) -> Array:
 	for i in mini(ROSTER_KINDS, pool.size()):
 		out.append(pool[(start + i) % pool.size()]["id"])
 	return out
+
+static func _in_budget_and_habitat(e: Dictionary, budget: float, need_habitat: String) -> bool:
+	if float(e["score"]) > budget * BIGGEST_SHARE:
+		return false
+	return need_habitat == "" or String(e["habitat"]) in [need_habitat, "any"]
 
 static func _faction_pool(fac: String) -> Array:
 	if not _fac_cache.has(fac):
@@ -171,7 +184,8 @@ static func _faction_pool(fac: String) -> Array:
 				continue
 			var c = Encounter.spawn(m["id"], 1.0, "foe", Vector2i.ZERO)
 			if c != null:
-				out.append({"id": m["id"], "score": Power.estimate(c)["score"]})
+				out.append({"id": m["id"], "score": Power.estimate(c)["score"],
+					"habitat": m.get("habitat", "any")})
 		out.sort_custom(func(a, b): return float(a["score"]) > float(b["score"]))
 		_fac_cache[fac] = out
 	return _fac_cache[fac]
