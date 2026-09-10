@@ -6,7 +6,9 @@
 #   "format": "sorcmerc-settings",  // literal, checked on load
 #   "version": 1,                   // bump only on an incompatible change
 #   "anim_speed_multiplier": 1.0,   // 1.0 normal, higher = faster tweens/pauses
-#   "default_difficulty": "normal"  // "easy" | "normal" | "hard"
+#   "default_difficulty": "normal", // "easy" | "normal" | "hard"
+#   "sfx_volume": 80,               // 0-100, the "SFX" audio bus (T27)
+#   "music_volume": 80              // 0-100, the "Music" audio bus (T27)
 # }
 #
 # Read it with Settings.current() — loaded once, cached; save() writes the cache
@@ -19,9 +21,12 @@ const FORMAT := "sorcmerc-settings"
 const VERSION := 1
 const DIFFICULTIES := ["easy", "normal", "hard"]
 const FAST := 999.0   # what SORCMERC_FAST has always meant: no waiting
+const DEFAULT_VOLUME := 80.0   # both audio sliders, 0-100
 
 var anim_speed_multiplier := 1.0
 var default_difficulty := "normal"
+var sfx_volume := DEFAULT_VOLUME
+var music_volume := DEFAULT_VOLUME
 
 static var _current = null
 
@@ -39,12 +44,16 @@ static func load_settings():
 		s.anim_speed_multiplier = maxf(1.0, float(d.get("anim_speed_multiplier", 1.0)))
 		var diff := String(d.get("default_difficulty", "normal"))
 		s.default_difficulty = diff if diff in DIFFICULTIES else "normal"
+		s.sfx_volume = clampf(float(d.get("sfx_volume", DEFAULT_VOLUME)), 0.0, 100.0)
+		s.music_volume = clampf(float(d.get("music_volume", DEFAULT_VOLUME)), 0.0, 100.0)
 	return s
 
 static func to_dict(s) -> Dictionary:
 	return {"format": FORMAT, "version": VERSION,
 		"anim_speed_multiplier": s.anim_speed_multiplier,
-		"default_difficulty": s.default_difficulty}
+		"default_difficulty": s.default_difficulty,
+		"sfx_volume": s.sfx_volume,
+		"music_volume": s.music_volume}
 
 # Returns the path written, or "" on failure.
 static func save_settings(s = null) -> String:

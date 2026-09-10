@@ -19,6 +19,7 @@ const Dice = preload("res://core/dice.gd")
 const Settings = preload("res://core/settings.gd")
 const Ach = preload("res://core/achievements.gd")
 const Progression = preload("res://core/progression.gd")
+const Sound = preload("res://core/audio.gd")
 
 # T12 — the route is generated, not fixed. POOL is every node template; each one
 # carries the stage positions it is eligible for. _build_route() seed-picks 2-3
@@ -339,7 +340,13 @@ func enter(i: int) -> Dictionary:
 	identify_failed.clear()          # a new camp is a new chance to examine
 	state = "combat" if node["kind"] == "combat" else "visiting"
 	say("→ %s" % node["title"])
+	# T27: the bed follows the place, the tension layer follows the fight.
+	Sound.set_environment(String(node.get("theme", "")) if node["kind"] == "combat" else "settlement")
+	Sound.set_combat(node["kind"] == "combat")
+	if node["kind"] == "rest":
+		Sound.play_sfx("rest")
 	if node["kind"] == "treasure":
+		Sound.play_sfx("pickup")
 		_take_treasure()
 	_autosave()
 	return node
@@ -419,12 +426,15 @@ func combat_spec() -> Dictionary:
 func finish_combat(result: Dictionary) -> void:
 	if result.is_empty():
 		return
+	Sound.set_combat(false)   # T27: the fight is over either way
 	if result.get("outcome", "") != "Victory":
+		Sound.play_sfx("defeat")
 		state = "lost"
 		say("The party falls. The road ends here.")
 		_conclude()
 		_autosave()
 		return
+	Sound.play_sfx("victory")   # T27
 	var earned_xp: int = roundi(int(result.get("xp", 0)) * _xp_mult())
 	xp += earned_xp
 	_split_xp(earned_xp)
@@ -466,8 +476,13 @@ func _split_xp(total: int) -> void:
 	if fighters.is_empty() or total <= 0:
 		return
 	var share: int = total / fighters.size()
+	var Leveling = load("res://core/leveling.gd")
 	for ch in fighters:
+		var was_ready: bool = Leveling.can_level_up(ch)
 		ch.xp += share
+		# T27: one chime the moment this haul pushed somebody over the next level.
+		if not was_ready and Leveling.can_level_up(ch):
+			Sound.play_sfx("level_up")
 	_bank_progression(total, fighters, share)
 
 # T22: the same XP also feeds the machine-wide meta-progression. Lifetime XP is
@@ -518,6 +533,7 @@ func rest(kind: String) -> void:
 	var Adapter = load("res://core/adapter.gd")
 	for ch in party.party_characters():
 		Adapter.rest(ch, kind)
+	Sound.play_sfx("rest")   # T27
 	say("The party takes a %s." % kind.replace("-", " "))
 	_autosave()
 
@@ -594,6 +610,7 @@ func identify_check(item_id: String, char_id: String) -> bool:
 		_autosave()
 		return false
 	party.stash_identify(item_id)
+	Sound.play_sfx("identify")   # T27
 	Ach.unlock("identify_item")
 	say("%s identifies it: %s (%d+%d vs DC %d)." % [ch.cname, item_name(item_id), nat, bonus, dc])
 	_autosave()
@@ -603,6 +620,7 @@ func identify_check(item_id: String, char_id: String) -> bool:
 func identify_with_scroll(item_id: String) -> bool:
 	if not party.use_identification_scroll(item_id):
 		return false
+	Sound.play_sfx("identify")   # T27
 	Ach.unlock("identify_item")
 	say("The Scroll of Identification crumbles: %s." % item_name(item_id))
 	_autosave()
@@ -694,6 +712,7 @@ func identify_for_fee(item_id: String) -> bool:
 	if not party.spend_gold(IDENTIFY_FEE_GP):
 		return false
 	party.stash_identify(item_id)
+	Sound.play_sfx("identify")   # T27
 	Ach.unlock("identify_item")
 	say("The librarian reads it off in a breath: %s (−%d gp)." % [item_name(item_id), IDENTIFY_FEE_GP])
 	_autosave()
@@ -705,6 +724,7 @@ func buy(item_id: String) -> bool:
 	if not party.spend_gold(item_price(item_id)):
 		return false
 	party.stash_add(item_id)
+	Sound.play_sfx("buy")   # T27
 	spent += item_price(item_id)
 	if spent >= BIG_SPENDER_GP:
 		Ach.unlock("big_spender")
@@ -741,6 +761,7 @@ func accept(quest: Dictionary) -> bool:
 func turn_in(quest: Dictionary) -> bool:
 	if node.get("kind", "") != "merchant" or not Quest.turn_in(party, quest):
 		return false
+	Sound.play_sfx("quest")   # T27
 	say("Quest complete: %s (+%d gp)" % [quest["title"], int(quest["reward"].get("gold", 0))])
 	_autosave()
 	return true

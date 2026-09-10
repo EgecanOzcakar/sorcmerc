@@ -10,6 +10,7 @@ extends Control
 
 const Settings = preload("res://core/settings.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
+const Sound = preload("res://core/audio.gd")
 const CAMPAIGN_SAVE := "res://core/campaign_save.gd"
 
 const COL_BG := Color("14161c")
@@ -79,6 +80,15 @@ func _ready() -> void:
 		_apply())
 	col.add_child(fast)
 
+	col.add_child(_volume_row("Sound effects", _s.sfx_volume, func(v: float):
+		_s.sfx_volume = v
+		Sound.set_sfx_volume(v)
+		_apply()))
+	col.add_child(_volume_row("Music", _s.music_volume, func(v: float):
+		_s.music_volume = v
+		Sound.set_music_volume(v)
+		_apply()))
+
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	var lbl := Label.new()
@@ -108,6 +118,34 @@ func _ready() -> void:
 	close.text = "Close"
 	close.pressed.connect(queue_free)
 	col.add_child(close)
+
+# T27: one 0-100 audio slider. `on_value` gets the new value (already stepped),
+# and is responsible for writing it through to settings + the bus.
+func _volume_row(label: String, value: float, on_value: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var lbl := Label.new()
+	lbl.text = label
+	lbl.custom_minimum_size = Vector2(140, 0)
+	lbl.add_theme_color_override("font_color", COL_DIM)
+	row.add_child(lbl)
+	var slider := HSlider.new()
+	slider.min_value = 0
+	slider.max_value = 100
+	slider.step = 5
+	slider.value = value
+	slider.custom_minimum_size = Vector2(150, 0)
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(slider)
+	var pct := Label.new()
+	pct.text = "%d%%" % int(value)
+	pct.custom_minimum_size = Vector2(44, 0)
+	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	row.add_child(pct)
+	slider.value_changed.connect(func(v: float):
+		pct.text = "%d%%" % int(v)
+		on_value.call(v))
+	return row
 
 func _apply() -> void:
 	Settings.save_settings(_s)

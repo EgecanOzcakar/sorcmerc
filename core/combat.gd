@@ -7,6 +7,7 @@ const Hex = preload("res://core/hex.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Ach = preload("res://core/achievements.gd")
 const Barks = preload("res://core/barks.gd")
+const Sound = preload("res://core/audio.gd")
 const Rng = preload("res://core/rng.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
@@ -53,9 +54,18 @@ func _init(_rng, _combatants: Array, _board: Dictionary) -> void:
 		_bark_rng = Rng.new((rng.seed_value ^ 0x5EEDBA12) & 0xFFFFFFFF)
 	_roll_initiative()
 
+# T27: the same moments the barks fire on are the moments the SFX fire on, so the
+# sound hangs off this one function rather than a second set of hookpoints.
+# Empty = that trigger has no sting. Audio is a no-op headlessly.
+const BARK_SFX := {"hit": "hit", "crit": "crit", "kill": "kill", "down": "kill",
+	"low_hp": "", "victory": "victory"}
+
 # Fire a bark for `c` on `trigger` ("hit" | "crit" | "kill" | "low_hp" | "down" |
 # "victory"). Cosmetic: never gates, never touches the combat RNG, never fails loudly.
 func bark(c, trigger: String) -> void:
+	var sound: String = BARK_SFX.get(trigger, "")
+	if sound != "":
+		Sound.play_sfx(sound)   # before the returns below: sound plays even in a fast run
 	if _bark_rng == null or c == null:
 		return
 	var faction := ""
@@ -512,6 +522,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		caster.slots[lvl - 1] -= 1
 		if v["cost"] == "bonus":
 			caster.econ["cast_bonus_spell"] = true
+	Sound.play_sfx("cast")   # T27: past the slot check, so a refused cast is silent
 	if v.get("concentration", false):
 		if caster.has("concentrating"):
 			log.append("%s drops concentration on their earlier spell." % caster.cname)
@@ -997,6 +1008,7 @@ func _death_save(c) -> void:
 func heal(c, amount: int) -> void:
 	if c.is_dead():
 		return
+	Sound.play_sfx("heal")   # T27
 	var revived = c.is_down()
 	if revived:
 		c.statuses.erase("down")
