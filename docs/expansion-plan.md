@@ -339,6 +339,12 @@ Scroll of Resurrection precedent T10 just built) — instantly identifies one
 item, usable any time, not gated to a rest node. An unidentified item shows as
 a mystery (rarity hint only, no name/effect) in the profile's stash panel.
 
+- 2026-09-10: T12 and T13 dispatched in parallel (both blockers, T11 and T10,
+  had landed and been verified). Both touch `core/campaign.gd` in different
+  functions (T12: route generation/`STAGES`; T13: treasure-loot identification
+  flag, rest-node Identify action, shop stock) — same file-sharing discipline
+  as the T10/T11 pair, flagged explicitly to both agents.
+
 ## Post-T5+T9 gap survey — dispositions (locked 2026-09-10)
 
 - **Meta-progression across runs**: explicitly a TODO, not implemented yet.
