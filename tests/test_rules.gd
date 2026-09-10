@@ -4,6 +4,7 @@ extends SceneTree
 
 const Catalog = preload("res://core/rules/catalog.gd")
 const Grants = preload("res://core/rules/grants.gd")
+const Choice = preload("res://core/rules/choice.gd")
 
 var _pass = 0
 var _fail = 0
@@ -19,6 +20,7 @@ func _init() -> void:
 	test_catalog_loads()
 	test_catalog_grants_validate()
 	test_schema_covers_catalog()
+	test_choice_keys()
 
 	print("test_rules: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -70,3 +72,32 @@ func test_schema_covers_catalog() -> void:
 		check(seen.has(t), "SCHEMA type \"%s\" appears in the catalog" % t)
 	for t in seen:
 		check(Grants.SCHEMA.has(t), "catalog type \"%s\" is in SCHEMA" % t)
+
+# --- step 2: choice.gd ---------------------------------------------------
+
+func test_choice_keys() -> void:
+	var k := Choice.make("skill-choice", "class", "fighter", 0)
+	check(k == "skill-choice:class:fighter:0", "make() renders the four segments")
+	check(Choice.parse(k) == {"category": "skill-choice", "origin": "class", "id": "fighter", "index": 0},
+		"parse() round-trips make()")
+	check(Choice.parse("skill-choice:class:fighter").is_empty(), "3 segments rejected")
+	check(Choice.parse("nope:class:fighter:0").is_empty(), "bad category rejected")
+	check(Choice.parse("asi:elf:fighter:0").is_empty(), "bad origin rejected")
+	check(Choice.parse("asi:class:fighter:x").is_empty(), "non-numeric index rejected")
+	check(Choice.companion("asi:class:fighter:0", "feat-choice") == "feat-choice:class:fighter:0",
+		"companion() swaps only the category")
+
+	# every key the export actually emits must parse
+	var bad: Array[String] = []
+	var n := 0
+	for f in Grants.GRANT_FILES:
+		for g in Grants.catalog_grants(f):
+			if not g.has("key"):
+				continue
+			n += 1
+			if Choice.parse(g["key"]).is_empty():
+				bad.append("%s: %s" % [f, g["key"]])
+	for b in bad:
+		printerr("    ", b)
+	check(n > 200, "the catalog carries choice keys (%d)" % n)
+	check(bad.is_empty(), "every exported choice key parses (%d bad)" % bad.size())
