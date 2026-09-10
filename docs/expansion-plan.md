@@ -858,4 +858,54 @@ scenes/main.gd first to find which one actually owns hex-sprite rendering
 post-T17 rather than assuming; don't touch `core/campaign.gd` (T25's) or
 `core/rules/power.gd` (T23's).
 
+## T27 — procedural sound: SFX + adaptive environment/combat music (locked 2026-09-10, dispatched now)
+
+Placeholder audio, generated not sourced (same "shapes, not sprites" ceiling
+as every other asset in this project — real audio can replace it later, same
+as character models). A one-time Python script (stdlib `wave` only, no deps)
+synthesizes short WAV files, committed as binary assets under
+`res://assets/audio/{sfx,music}/`.
+
+**SFX** — one-shot stings for: attack hit, crit, kill, spell cast, heal,
+level-up, victory fanfare, defeat stinger, UI click/confirm, shop buy,
+identify success, quest complete, item pickup, rest chime. Reuse T26's
+EXISTING bark trigger points in `combat.gd` (`Combat.bark(c, trigger)` —
+hit/crit/kill/low_hp/down/victory) as the SFX trigger points too, rather than
+adding a second, parallel set of hookpoints for the same moments — additive
+calls alongside the existing bark calls, not a rewrite of them.
+
+**Music** — not N separate full tracks. ONE short ambient loop per
+environment (the 6 combat board themes from T11, plus a settlement/hub loop
+and a title-screen loop — reuse `Encounter.THEMES` as the theme list, don't
+invent a new one) as the constant "bed," plus ONE shared combat-tension
+layer (percussion/bass ostinato) that fades in on top of whichever bed is
+currently playing when state is actively fighting, and fades out otherwise
+— so combat music is "the current place, now under threat," not a hard cut
+to a different track. Crossfade beds on a theme change (leaving one node's
+board for another's).
+
+**Playback** — an autoload singleton (Godot-idiomatic: register it in
+`project.godot`'s `[autoload]` section) since `core/*.gd` is pure logic
+exercised headlessly by the test suite and can't itself hold
+`AudioStreamPlayer` nodes. MUST no-op safely under a headless test run —
+verify this explicitly (Godot's null audio driver should tolerate `play()`
+calls with no output, but confirm rather than assume) and MUST NOT change
+what any existing test asserts.
+
+**Settings** — `core/settings.gd` gains `sfx_volume`/`music_volume` (0-100,
+default ~80 each), persisted the same way `anim_speed_multiplier` already is;
+two Godot audio buses ("SFX", "Music") so the sliders just set bus
+`volume_db`. Add two sliders to the existing settings overlay next to the
+animation-speed control.
+
+File ownership: a new `tools/gen_audio.py` (or `scripts/`, agent's call) +
+the generated asset files, a new autoload singleton script (`core/audio.gd`
+or similar), `project.godot`'s `[autoload]` section, `core/settings.gd`
+(additive fields), the settings overlay scene (2 new sliders), and additive
+calls in `core/combat.gd` alongside T26's existing bark call sites (do not
+restructure those) plus `core/campaign.gd` for node-arrival music-theme
+switching and victory/defeat/level-up stingers — campaign.gd already has 3
+agents' worth of accumulated changes this session; keep this diff additive
+and narrow, don't reformat surrounding code.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
