@@ -16,6 +16,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const RNG = preload("res://core/rng.gd")
 const Dice = preload("res://core/dice.gd")
+const Settings = preload("res://core/settings.gd")
 
 # T12 — the route is generated, not fixed. POOL is every node template; each one
 # carries the stage positions it is eligible for. _build_route() seed-picks 2-3
@@ -129,14 +130,49 @@ const POOL := [
 		"title": "The chapel floor", "desc": "Cold flagstones, thick doors, no windows."},
 ]
 
-# The last stage is never a choice: one boss, always.
+# The last stage is never a choice — but T18 made it not always the same fight.
+# BOSS is the original, hand-tuned shrine fight (the four monsters.json archetypes,
+# no lead); the rest of BOSS_POOL comes in two shapes:
+#   "bestiary" — a rare, high-CR monster that carries a real special attack
+#                (data/bestiary.json `_notes: implemented: …`), on a board whose
+#                faction (scaler.THEME_FACTION) matches it, so its escort is its kin.
+#   "elite"    — an ordinary early monster pumped into boss territory by the
+#                scaler's own mult knob plus one extra attack (scaler.boss_for).
+# build_route() seed-picks one, the same way it picks everything else.
 const BOSS := {"id": "sunken-shrine", "kind": "combat", "stage_position": ["boss"],
 	"title": "THE SUNKEN SHRINE", "desc": "Whatever has been calling them lives down here.",
-	"difficulty": "hard", "boss": true, "gold": 250, "theme": "sunken-shrine"}
+	"difficulty": "hard", "boss": true, "archetype": "classic", "gold": 250, "theme": "sunken-shrine"}
+
+const BOSS_POOL := [
+	BOSS,
+	{"id": "the-oni", "kind": "combat", "stage_position": ["boss"],
+		"title": "THE ONI OF THE DEEP ICE", "desc": "It has worn a friendlier face all week.",
+		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
+		"theme": "frozen-cave", "lead": "oni"},
+	{"id": "the-assassin", "kind": "combat", "stage_position": ["boss"],
+		"title": "THE KNIFE IN THE SQUARE", "desc": "Whoever paid the warband is here to collect.",
+		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
+		"theme": "city-square", "lead": "assassin"},
+	{"id": "the-mammoth", "kind": "combat", "stage_position": ["boss"],
+		"title": "THE THING IN THE TREELINE", "desc": "The forest has been getting out of its way.",
+		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
+		"theme": "forest-clearing", "lead": "mammoth"},
+	{"id": "the-arrow-chief", "kind": "combat", "stage_position": ["boss"],
+		"title": "THE ARROW-CHIEF", "desc": "The little archer from the road. He has been eating well.",
+		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
+		"theme": "goblin-camp", "lead": "goblin-archer", "lead_features": ["monster-multiattack-2"]},
+	{"id": "the-shop-captain", "kind": "combat", "stage_position": ["boss"],
+		"title": "THE CAPTAIN COMES BACK", "desc": "He took the shop once. This time he brought the company.",
+		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
+		"theme": "merchant-shop", "lead": "bandit", "lead_features": ["monster-multiattack-2"]},
+]
 
 # Quests are only ever offered by these merchants (quest.gd's giver_node_ids), so
 # a route without one of them has nowhere to pick up work — see _ensure_giver().
 const GIVER_IDS := ["wayside-camp", "hollow-market"]
+
+# The run is over in these; nothing moves the road on afterwards.
+const TERMINAL := ["won", "lost", "retired"]
 
 # What a merchant sells: a handful of ids out of data/weapons.json + armor.json,
 # priced by item_price() below. No haggling, no stock depletion.
@@ -147,7 +183,7 @@ const SELL_RATE := 0.5
 var party
 var stage := 0
 var node: Dictionary = {}
-var state := "picking"        # picking | visiting | combat | won | lost
+var state := "picking"        # picking | visiting | combat | won | lost | retired
 var xp := 0                   # run total, for the header; the real bank is ch.xp
 var log: Array = []
 var rng
@@ -175,7 +211,7 @@ static func build_route(r) -> Array:
 			used[n["id"]] = true
 		out.append(stage_nodes)
 	_ensure_giver(r, out)
-	out.append([BOSS])
+	out.append([BOSS_POOL[r.roll_die(BOSS_POOL.size()) - 1]])   # T18: which boss, this run
 	return out
 
 # One of each non-combat kind, shuffled, then a repeat to fill the fourth stage.
@@ -239,7 +275,7 @@ func enter(i: int) -> Dictionary:
 	return node
 
 func leave() -> void:
-	if state == "lost":
+	if state in TERMINAL:
 		return
 	node = {}
 	stage += 1
@@ -248,6 +284,18 @@ func leave() -> void:
 		say("The road ends. The party lives.")
 		_conclude()
 	_autosave()
+
+# T17 — walk away between nodes with everything already banked. Only ever legal
+# while picking: never mid-visit, never mid-fight. Wraps up like a win does.
+func retire() -> bool:
+	if state != "picking":
+		return false
+	node = {}
+	state = "retired"
+	say("The party turns back, purses full. The run ends on their terms.")
+	_conclude()
+	_autosave()
+	return true
 
 func say(line: String) -> void:
 	log.append(line)
@@ -276,13 +324,22 @@ func resurrect(dead_id: String, method: String, caster_id: String = "") -> bool:
 
 # --- combat ---------------------------------------------------------------
 
+# What this fight is worth: the node's authored difficulty, or — when a node
+# doesn't name one — the player's setting. The one place that default is read.
+func node_difficulty() -> String:
+	return String(node.get("difficulty", Settings.current().default_difficulty))
+
 # Quest bias goes in here: unfulfilled targets show up more often from now on.
 func combat_spec() -> Dictionary:
 	var theme: String = String(node.get("theme", "sunken-shrine"))
 	# T16: theme picks the faction; the run seed + node id keeps the roster stable
 	# across a reload of the same node.
-	var spec: Dictionary = Scaler.roster_for(party.party_characters(), node.get("difficulty", "normal"),
-		Quest.bias(party), theme, rng.seed_value + hash(node.get("id", "")))
+	var seed: int = rng.seed_value + hash(node.get("id", ""))
+	# T18: a boss with a named lead is built round that lead; everything else
+	# (including the classic shrine boss) is a plain faction roster.
+	var spec: Dictionary = Scaler.boss_for(party.party_characters(), node, seed) if node.has("lead") \
+		else Scaler.roster_for(party.party_characters(), node_difficulty(),
+			Quest.bias(party), theme, seed)
 	spec["theme"] = theme   # T11: which board this fight is on
 	return spec
 

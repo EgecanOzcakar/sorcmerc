@@ -63,19 +63,69 @@ static var _fac_cache := {}   # faction -> [{id, score}], strongest first
 # to be in the roster, and a snik among sahuagin is not a coherent warband.
 static func roster_for(party_characters: Array, difficulty: String, quest_bias: Dictionary = {},
 		theme: String = "", seed: int = 0) -> Dictionary:
+	var budget := _budget(party_characters, difficulty)
+	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() else _faction_order(theme, seed, budget))
+
+static func _budget(party_characters: Array, difficulty: String) -> float:
 	var party: Array = []
 	for ch in party_characters:
 		party.append(Adapter.to_combatant(ch, "party", Vector2i.ZERO))
 	var team: float = maxf(1.0, Power.team_score(party))
-	var budget: float = REF_SCORE * pow(team / REF_SCORE, CURVE) * float(TIER.get(difficulty, TIER["normal"]))
+	return REF_SCORE * pow(team / REF_SCORE, CURVE) * float(TIER.get(difficulty, TIER["normal"]))
 
-	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() else _faction_order(theme, seed, budget))
+# T18 — a boss fight: the same budget and the same MULT knob, aimed differently.
+# One named lead (campaign.gd's BOSS_POOL entry) is pumped until it alone is worth
+# BOSS_LEAD_SHARE of the budget — capped at BOSS_MULT_MAX, which is what makes an
+# "elite" goblin archer a boss rather than a goblin archer with a title — and the
+# rest of the budget buys its escort out of the theme's faction, exactly as a
+# normal roster does. `boss` is the node dict: {lead, lead_count, lead_features,
+# difficulty, theme}.
+#
+# TUNING — 40-seed sweeps per boss (tests/test_scaler.gd), level-3 preset party,
+# measured 2026-09-10 mid-session while T20/T21 were still editing combat/ai, so
+# read these as a spread, not a calibration: oni 65%, assassin 35%, mammoth 22%,
+# arrow-chief 67%, shop-captain 7% — pooled ~39% against a 77% hard node. The
+# spread is power.gd's known ceiling amplified: a lone big bruiser (mammoth, oni)
+# prices near the whole budget and then plays like one focus-fired target, so the
+# escort it leaves room for is what actually decides the fight. Re-run and retune
+# BOSS_LEAD_SHARE with the rest of the scaler once combat/ai settle.
+const BOSS_LEAD_SHARE := 0.45   # how much of the fight the boss itself is
+const BOSS_MULT_MAX := 3.0      # +6 AC / +8 to-hit / +8 dmg / 3x HP at the ceiling
+static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0) -> Dictionary:
+	var budget := _budget(party_characters, String(boss.get("difficulty", "hard")))
+	var lead := String(boss.get("lead", ""))
+	var count: int = maxi(1, int(boss.get("lead_count", 1)))
+	var extras: Array = boss.get("lead_features", [])
+	var mult := MULT_MIN
+	while mult < BOSS_MULT_MAX and _lead_score(lead, count, mult, extras) < budget * BOSS_LEAD_SHARE:
+		mult += MULT_STEP
+	mult = snappedf(minf(mult, BOSS_MULT_MAX), 0.01)
+	var entry := {"id": lead, "count": count, "mult": mult}
+	if not extras.is_empty():
+		entry["features"] = extras
+	var rest: float = budget - _lead_score(lead, count, mult, extras)
+	var monsters: Array = [entry]
+	# The escort is the lead's kin but never the lead itself — two entries of one id
+	# would spawn two combatants sharing an id.
+	var order: Array = _faction_order(String(boss.get("theme", "")), seed, rest).filter(
+		func(id): return id != lead)
+	if rest > 0.0 and not order.is_empty():
+		monsters.append_array(_build(rest, order, MAX_FOES - count)["monsters"])
+	return {"monsters": monsters}
+
+static func _lead_score(id: String, count: int, mult: float, extras: Array) -> float:
+	var roster: Array = []
+	for i in count:
+		var c = Encounter.spawn(id, mult, "foe", Vector2i.ZERO, 0, extras)
+		if c != null:
+			roster.append(c)
+	return Power.team_score(roster)
 
 # Bodies first, then the stat multiplier for whatever the bodies missed.
-static func _build(budget: float, order: Array) -> Dictionary:
+static func _build(budget: float, order: Array, max_foes: int = MAX_FOES) -> Dictionary:
 	var counts := {}
 	var n := 0
-	while n < MAX_FOES:
+	while n < max_foes:
 		var id: String = order[n % order.size()]
 		counts[id] = int(counts.get(id, 0)) + 1
 		n += 1

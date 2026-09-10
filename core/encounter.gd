@@ -214,7 +214,7 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 		var mult: float = float(e.get("mult", spec.get("mult", 1.0)))
 		for n in count:
 			var pos: Vector2i = spots[i] if i < spots.size() else PARTY_STARTS[0]
-			var c = spawn(e["id"], mult, "foe", pos, n + 1 if count > 1 else 0)
+			var c = spawn(e["id"], mult, "foe", pos, n + 1 if count > 1 else 0, e.get("features", []))
 			if c != null:
 				all_c.append(c)
 			i += 1
@@ -223,10 +223,15 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 	return Combat.new(RNG.new(sd if sd > 0 else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)),
 		all_c, b)
 
-static func spawn(id: String, mult: float, team: String, pos: Vector2i, n := 0):
+# `extra_features` (T18) bolts feature ids onto this one spawn — how a boss gets a
+# second attack out of the existing verb machinery instead of a second stat block.
+static func spawn(id: String, mult: float, team: String, pos: Vector2i, n := 0, extra_features: Array = []):
 	var m: Dictionary = Catalog.monster(id)
 	if m.is_empty():
 		return null
+	if not extra_features.is_empty():
+		m = m.duplicate(true)
+		m["features"] = m.get("features", []) + extra_features
 	var c = Adapter.from_monster(m, team, pos)
 	c.src_id = id
 	if n > 0:

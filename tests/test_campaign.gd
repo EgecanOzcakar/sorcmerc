@@ -28,6 +28,7 @@ func _campaign() -> Campaign:
 func _init() -> void:
 	test_route()
 	test_generated_routes()
+	test_boss_pool()
 	test_treasure()
 	test_combat()
 	test_defeat()
@@ -113,6 +114,52 @@ func test_generated_routes() -> void:
 	check(seen_ids.size() >= 20, "the pool is deep enough for real variety (saw %d templates)"
 		% seen_ids.size())
 
+# --- T18: the boss is seed-picked out of a pool ---------------------------
+
+func test_boss_pool() -> void:
+	check(Campaign.BOSS in Campaign.BOSS_POOL, "the classic Sunken Shrine boss is still in the pool")
+	var archetypes := {}
+	for b in Campaign.BOSS_POOL:
+		archetypes[b.get("archetype", "")] = true
+		check(b.get("boss", false) and b["kind"] == "combat" and b["stage_position"] == ["boss"],
+			"%s is a boss combat node" % b["id"])
+		check(b["theme"] in Encounter.THEMES, "%s names a real board" % b["id"])
+		check(int(b.get("gold", 0)) > 0 and b.get("difficulty", "") == "hard",
+			"%s pays a boss purse and fights at boss difficulty" % b["id"])
+		if b.get("archetype", "") == "elite":
+			check(b.has("lead") and not b.get("lead_features", []).is_empty(),
+				"%s is an ordinary monster with an extra attack bolted on" % b["id"])
+		# every entry resolves to a buildable spec, with the lead actually on the board
+		var c := _route(4)
+		c.node = b
+		var spec := c.combat_spec()
+		check(not spec["monsters"].is_empty(), "%s produces a roster" % b["id"])
+		var party: Array = []
+		for i in c.party.party_characters().size():
+			party.append(load("res://core/adapter.gd").to_combatant(
+				c.party.party_characters()[i], "party", Encounter.PARTY_STARTS[i]))
+		var cb = Encounter.build(spec, party)
+		check(cb.team_of("foe").size() >= 2, "%s builds a real board" % b["id"])
+		if b.has("lead"):
+			var leads: Array = cb.team_of("foe").filter(func(f): return f.src_id == b["lead"])
+			check(leads.size() == int(b.get("lead_count", 1)), "%s spawns its lead" % b["id"])
+		var ids := {}
+		for f in cb.team_of("foe"):
+			check(not ids.has(f.id), "%s spawns no two foes with one id (%s)" % [b["id"], f.id])
+			ids[f.id] = true
+	check(archetypes.has("classic") and archetypes.has("bestiary") and archetypes.has("elite"),
+		"the pool mixes both new archetypes with the classic boss")
+
+	# seed-picked, reproducibly, and not always the same one
+	var picked := {}
+	for s in range(1, 41):
+		var boss: Dictionary = _route(s).route[-1][0]
+		check(_route(s).route[-1][0]["id"] == boss["id"], "seed %d picks the same boss twice" % s)
+		check(boss in Campaign.BOSS_POOL, "seed %d's boss comes out of the pool" % s)
+		picked[boss["id"]] = int(picked.get(boss["id"], 0)) + 1
+	check(picked.size() == Campaign.BOSS_POOL.size(),
+		"40 seeds reach every boss in the pool (saw %d of %d)" % [picked.size(), Campaign.BOSS_POOL.size()])
+
 func _route(seed_value: int) -> Campaign:
 	var p := Party.new()
 	for ch in Presets.party():
@@ -168,9 +215,9 @@ func test_combat() -> void:
 	# The boss node carries its own purse on top of the fight's.
 	var c2 := _campaign()
 	c2.stage = c2.route.size() - 1
-	c2.enter(0)
+	var boss := c2.enter(0)
 	c2.finish_combat({"outcome": "Victory", "xp": 10, "gold": 10, "loot": [], "deaths": [], "kills": []})
-	check(c2.party.gold == 10 + int(Campaign.BOSS["gold"]), "node gold is added to fight gold")
+	check(c2.party.gold == 10 + int(boss["gold"]), "node gold is added to fight gold")
 	c2.leave()
 	check(c2.state == "won", "clearing the last stage wins the run")
 
