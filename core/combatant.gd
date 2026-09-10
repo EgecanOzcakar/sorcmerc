@@ -12,6 +12,7 @@ var hp: int
 var init_mod: int = 0
 var speed: int = 4          # move points (hexes) per turn
 var pos: Vector2i = Vector2i.ZERO
+var size: String = "Medium"  # bestiary.json's; Push spares Huge and bigger
 
 # attack
 var atk_bonus: int = 0
@@ -92,7 +93,7 @@ func conscious() -> bool:
 func clone() -> RefCounted:
 	var c = get_script().new()
 	for prop in [
-		"id","src_id","cname","team","ac","max_hp","hp","init_mod","speed","pos",
+		"id","src_id","cname","team","ac","max_hp","hp","init_mod","speed","pos","size",
 		"atk_bonus","damage","ranged","atk_range","crit_range","save_dc","athletics",
 		"acro","stealth","passive_perception","sheet",
 	]:

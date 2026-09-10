@@ -15,6 +15,8 @@ const ENGINE_CONDS := {
 	"hidden": {"own_attacks": "adv"},
 	"helped": {"own_attacks": "adv"},
 	"reckless": {"own_attacks": "adv", "attacks_against": "adv"},
+	"sapped": {"own_attacks": "dis"},    # weapon mastery Sap
+	"slowed": {"speed_penalty_ft": 10},  # weapon mastery Slow
 }
 
 const MAX_ROUNDS := 60  # safety guard; a real fight ends in ~4-6
@@ -621,6 +623,9 @@ func _attack_mode(attacker, target, opts := {}) -> int:
 		var o = e.get("own_attacks", "")
 		adv = adv or o == "adv"
 		dis = dis or o == "dis"
+	var vx = attacker.statuses.get("vex")
+	if vx is Dictionary and vx.get("target") == target:
+		adv = true   # weapon mastery Vex
 	if opts.get("advantage", false):
 		adv = true
 	# passive attack_modifier: Pack Tactics and friends, no button, no action
@@ -699,13 +704,14 @@ func _buff_damage(attacker) -> int:
 
 func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var oa: bool = opts.get("opportunity", false)
-	if _no_economy(attacker, "action" if not oa else "reaction"):
+	var free: bool = oa or opts.get("free", false)   # Cleave's second swing costs nothing
+	if _no_economy(attacker, "action" if not free else "reaction"):
 		return {"error": "cannot act"}   # ai.gd swings without asking available()
 	if _source_of(attacker, "cannot_target_source") == target:
 		return {"error": "charmed"}
-	if not oa and not in_reach(attacker, target):
+	if not free and not in_reach(attacker, target):
 		return {"error": "out of range"}
-	if not oa:
+	if not free:
 		# the Attack action buys `attacks_per_action` swings; OAs are free (§7)
 		if int(attacker.econ.get("attacks_left", 0)) > 0:
 			attacker.econ["attacks_left"] = int(attacker.econ["attacks_left"]) - 1
@@ -741,14 +747,106 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	if hit:
 		out.damage = _react(target, "hit_by_attack", out.damage)
 	attacker.statuses.erase("hidden")
-	if not oa:
+	attacker.statuses.erase("sapped")   # Sap is spent on the next roll, hit or miss
+	var vx = attacker.statuses.get("vex")
+	if vx is Dictionary and vx.get("target") == target:
+		attacker.statuses.erase("vex")
+	if not free:
 		attacker.statuses.erase("helped")  # the granted advantage is spent
 	_log_attack(out, oa)
 	if hit:
 		_apply_damage(target, out.damage, _damage_type(attacker))
 		if target.conscious():
 			_hit_riders(attacker, target)
+	if not opts.get("no_mastery", false):
+		_mastery_rider(attacker, target, hit)
 	return out
+
+# --- weapon mastery (2024 PHB) ----------------------------------------
+#
+# pass_gear.gd already wrote the mastery id onto the attack only if the wielder
+# knows it ("" otherwise), so this is one reader off attacks[0] — the same
+# attack combat.gd swings with everywhere else. Auto-applied, no prompt (§2),
+# same call T14's conditions made. Nick is not implemented: it modifies the
+# Two-Weapon Fighting bonus attack, and this engine has no offhand-attack verb
+# to fold into the Attack action.
+
+func _mastery(c) -> String:
+	return str(c.attacks[0].get("mastery", "")) if not c.attacks.is_empty() else ""
+
+# The weapon's damage modifier (Graze's damage, the part Cleave's second swing drops).
+func _weapon_mod(c) -> int:
+	return int(c.attacks[0].get("dmg_bonus", 0)) if not c.attacks.is_empty() else 0
+
+func _weapon_dice(c) -> String:
+	if c.attacks.is_empty():
+		return c.damage
+	var a: Dictionary = c.attacks[0]
+	return "%dd%d" % [int(a.get("dice_count", 1)), int(a.get("dice_sides", 6))]
+
+# No weapon carries a save DC of its own; a proficient wielder's atk_bonus is
+# already ability mod + proficiency, so 8 + atk_bonus is the RAW formula.
+func _weapon_dc(c) -> int:
+	return 8 + c.atk_bonus
+
+# Statuses that should survive the bearer's next turn expire a full cycle out —
+# _expire_conditions only runs at the bearer's own begin_turn, so "round" (this
+# tick) would clear them before they ever bite.
+func _next_round_tick() -> int:
+	return _tick() + maxi(1, order.size())
+
+func _mastery_rider(attacker, target, hit: bool) -> void:
+	var m := _mastery(attacker)
+	if m == "" or hit == (m == "graze"):
+		return   # graze rides a miss, every other mastery rides a hit
+	match m:
+		"graze":
+			var dmg := _weapon_mod(attacker)
+			if dmg > 0:
+				log.append("%s grazes %s for %d." % [attacker.cname, target.cname, dmg])
+				_apply_damage(target, dmg, _damage_type(attacker))
+		"cleave":
+			for o in enemies_of(attacker):
+				if o != target and Hex.distance(o.pos, target.pos) <= 1 and in_reach(attacker, o):
+					log.append("%s cleaves on into %s." % [attacker.cname, o.cname])
+					resolve_attack(attacker, o, {"free": true, "no_mastery": true,
+						"damage": _weapon_dice(attacker)})
+					break
+		"push":
+			# ponytail: Huge+ shrug it off; bestiary size is the only size model here.
+			if target.conscious() and not target.size in ["Huge", "Gargantuan"]:
+				if _push_away(attacker, target, hexes_from_ft(10)) > 0:
+					log.append("%s drives %s back." % [attacker.cname, target.cname])
+		"sap":
+			if target.conscious():
+				target.statuses["sapped"] = {"until_tick": _next_round_tick()}
+				log.append("%s saps %s — disadvantage on its next attack." % [attacker.cname, target.cname])
+		"slow":
+			if target.conscious():
+				target.statuses["slowed"] = {"until_tick": _next_round_tick()}   # refresh, never stack
+				log.append("%s slows %s — -10 ft of speed." % [attacker.cname, target.cname])
+		"topple":
+			if target.conscious():
+				var dc := _weapon_dc(attacker)
+				if _saving_throw(target, dc, "con"):
+					log.append("%s keeps its feet (DC %d CON)." % [target.cname, dc])
+				else:
+					apply_condition(target, "prone")
+					log.append("%s topples %s prone (DC %d CON)." % [attacker.cname, target.cname, dc])
+		"vex":
+			if target.conscious():
+				attacker.statuses["vex"] = {"target": target, "until_tick": _next_round_tick()}
+				log.append("%s has %s's measure — advantage on the next swing." % [attacker.cname, target.cname])
+
+func _push_away(attacker, target, hexes: int) -> int:
+	var moved := 0
+	for _i in hexes:
+		var dest: Vector2i = target.pos + Hex.direction_to(attacker.pos, target.pos)
+		if not passable(dest) or not _hex_free(dest, target):
+			break
+		target.pos = dest
+		moved += 1
+	return moved
 
 func _damage_type(attacker) -> String:
 	return str(attacker.attacks[0].get("damage_type", "")) if not attacker.attacks.is_empty() else ""

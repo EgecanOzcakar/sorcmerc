@@ -336,6 +336,8 @@ func test_encounter_resolves_many_seeds() -> void:
 	#   * the healer casts the real Cure Wounds (2d8+3, six slots) instead of the
 	#     hand-authored 1d4+3 Healing Word            -> 186/14 becomes 194/6
 	#   * the fighter spends Second Wind twice        -> 186/14 becomes 196/4
+	# T20 (weapon mastery wired up) moved it again: 198/2 @ 7.8 — faster fights,
+	# both sides now getting graze/topple/vex out of the weapons they carry.
 	# The Sunken Shrine is now an easy encounter for an optimal party. That is a
 	# TUNING fact for T8's scaler, not a rules bug; don't "fix" it here.
 	print("  autoplay over %d seeds: %d win / %d loss, avg %.1f rounds" % [
