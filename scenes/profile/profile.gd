@@ -150,9 +150,20 @@ func _class_line(s) -> String:
 		parts.append("%s %d" % [label, s.class_levels[cid]])
 	return " / ".join(parts) if not parts.is_empty() else "Level 0"
 
-# T2 owns the real level-up flow; this scene only reserves the button.
+const LEVELUP_SCENE := "res://scenes/creator/levelup.tscn"
+
+# T2's level-up, as a full-screen overlay over the sheet (the party screen opens
+# the profile the same way). It mutates the same build, so closing just re-renders.
 func _level_up() -> void:
-	print("[profile] Level up is T2's flow — not wired yet.")
+	if not ResourceLoader.exists(LEVELUP_SCENE):
+		return
+	var overlay = load(LEVELUP_SCENE).instantiate()
+	add_child(overlay)
+	overlay.set_character(_ch)
+	overlay.finished.connect(func(_leveled):
+		overlay.queue_free()
+		_ch.dirty()
+		_render())
 
 # --- panels ------------------------------------------------------------------
 

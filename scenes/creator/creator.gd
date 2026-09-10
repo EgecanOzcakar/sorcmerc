@@ -348,6 +348,10 @@ func _panel_style() -> StyleBoxFlat:
 	return s
 
 func _build_theme() -> void:
+	theme = dark_theme()
+
+# Static so other screens (scenes/creator/levelup.gd) share one copy.
+static func dark_theme() -> Theme:
 	var th := Theme.new()
 	var mk := func(bg: Color) -> StyleBoxFlat:
 		var s := StyleBoxFlat.new()
@@ -364,7 +368,7 @@ func _build_theme() -> void:
 	th.set_color("font_hover_color", "Button", Color("ffffff"))
 	th.set_color("font_color", "Label", COL_TEXT)
 	th.set_stylebox("normal", "LineEdit", mk.call(Color("22252e")))
-	theme = th
+	return th
 
 # --- navigation -----------------------------------------------------------
 

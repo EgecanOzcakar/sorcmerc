@@ -57,6 +57,8 @@ func _init() -> void:
 	_climb("wizard", "sage")
 	_presets()
 	_preview()
+	_screen()
+	_from_profile()
 	print("test_leveling: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -131,6 +133,56 @@ func _presets() -> void:
 			check(after.features.has(f), "%s keeps feature %s" % [who, f])
 		for e in before.equipment:
 			check(after.equipment.size() >= before.equipment.size(), "%s keeps equipment" % who)
+
+# The overlay: preview -> commit -> answer pending through its own buttons -> Done.
+func _screen() -> void:
+	var ch = Presets.vera()
+	var before: int = ch.sheet().max_hp
+	var scr = load("res://scenes/creator/levelup.tscn").instantiate()
+	root.add_child(scr)
+	scr.set_character(ch)
+	check(ch.level() == 3, "screen does not level on open")
+	scr.commit()
+	check(ch.level() == 4, "commit adds the level")
+	check(ch.sheet().max_hp > before, "committing raises max HP")
+	var seen := 0
+	for _step in 40:
+		var pend: Array = Leveling.pending(ch)
+		if pend.is_empty():
+			break
+		seen += 1
+		for id in autopick(pend[0], ch.sheet()):
+			scr._pick(pend[0], id)
+	check(seen > 0, "Vera's level 4 raised at least one choice")
+	check(Leveling.can_finalize(ch), "the screen's own buttons resolve them")
+	var done := [false]
+	scr.finished.connect(func(leveled): done[0] = leveled)
+	scr._on_confirm()
+	check(done[0], "Done reports the level was taken")
+	scr.queue_free()
+
+# The profile's button opens the overlay and the profile re-renders on close.
+func _from_profile() -> void:
+	var ch = Presets.pike()
+	var p = load("res://scenes/profile/profile.tscn").instantiate()
+	root.add_child(p)
+	p.set_character(ch)
+	p._level_up()
+	var scr = null
+	for c in p.get_children():
+		if c.has_method("commit"):
+			scr = c
+	check(scr != null, "profile opens the level-up overlay")
+	if scr == null:
+		return
+	scr.commit()
+	resolve_all(ch, "pike via profile")
+	scr._on_confirm()
+	check(p.field("classes").contains("4"), "profile re-renders at the new level (got %s)"
+		% p.field("classes"))
+	check(p.field("hp") == "%d/%d" % [ch.sheet().max_hp, ch.sheet().max_hp],
+		"profile shows the new max HP")
+	p.queue_free()
 
 # preview() must not mutate the character it previews.
 func _preview() -> void:
