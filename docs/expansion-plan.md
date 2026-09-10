@@ -353,4 +353,10 @@ regions (T10: autosave calls at the end of state-mutating methods; T11: a
 `theme` field read in `combat_spec()`) — flagged to both agents to keep it that
 way, reconciled by hand if they collide.
 
+- 2026-09-10: T10 (xp/death/resurrection/shared inventory/shop pricing/autosave)
+  and T11 (board variety + interactables) dispatched in parallel — file
+  ownership split explicitly (T10: character.gd, party.gd, adapter.gd, profile
+  inventory panel, campaign shop/rest/xp/death; T11: encounter.gd boards,
+  campaign STAGES theme keys only, main.gd board rendering).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
