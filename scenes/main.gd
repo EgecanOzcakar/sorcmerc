@@ -815,7 +815,9 @@ class Board extends Control:
 			if not obj.is_empty():
 				_draw_object(obj, c, s, pulse)
 
-		# targeting overlay — outline valid targets, float their odds, hovered one brighter
+		# the valid-target ring stays here, under the tokens — it just traces the
+		# hex edge, which reads fine as "this hex is targetable," not a card that
+		# needs to sit on top of anything.
 		if hero_turn and main._mode == "target":
 			for c in cb.combatants:
 				if not main._valid_target(cur, c):
@@ -826,13 +828,6 @@ class Board extends Control:
 				poly.append(poly[0])
 				var oc: Color = main.COL_TARGET
 				draw_polyline(poly, oc if hot else Color(oc.r, oc.g, oc.b, 0.45), 3.0 if hot else 2.0)
-				var txt: String = main.target_readout(cur, c)
-				var fs := int((20 if hot else 15) * fz)
-				var w := ThemeDB.fallback_font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-				var chip := tp + Vector2(-w / 2.0, -s - 4.0)
-				draw_rect(Rect2(chip - Vector2(5, fs), Vector2(w + 10, fs + 8)), Color(0, 0, 0, 0.72))
-				draw_string(ThemeDB.fallback_font, chip, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
-					Color("ffe27a") if hot else Color("d7d7cf"))
 		elif hero_turn and main._mode == "idle" and cur.econ["action"] > 0:
 			for f in cb.enemies_of(cur):
 				if cb.in_reach(cur, f):
@@ -886,6 +881,23 @@ class Board extends Control:
 			if c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
 			if tags != "":
 				_centered(tags, p + Vector2(0, -rad - 10), int(13 * fz), Color("e6c15a"))
+
+		# the odds chip itself draws last of the per-target overlay — after every
+		# token's own circle/badge/HP bar/condition tags, which used to be drawn
+		# on top of it and could cover the readout depending on hex spacing.
+		if hero_turn and main._mode == "target":
+			for c in cb.combatants:
+				if not main._valid_target(cur, c):
+					continue
+				var tp := _origin + Hex.to_pixel(c.pos, s)
+				var hot: bool = c.pos == _hover
+				var txt: String = main.target_readout(cur, c)
+				var fs := int((20 if hot else 15) * fz)
+				var w := ThemeDB.fallback_font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+				var chip := tp + Vector2(-w / 2.0, -s - 4.0)
+				draw_rect(Rect2(chip - Vector2(5, fs), Vector2(w + 10, fs + 8)), Color(0, 0, 0, 0.72))
+				draw_string(ThemeDB.fallback_font, chip, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
+					Color("ffe27a") if hot else Color("d7d7cf"))
 
 		# T26 barks — plain text over the speaker's hex, fading out at the end
 		for id in _barks:
