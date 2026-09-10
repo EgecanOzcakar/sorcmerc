@@ -397,5 +397,10 @@ way, reconciled by hand if they collide.
   ownership split explicitly (T10: character.gd, party.gd, adapter.gd, profile
   inventory panel, campaign shop/rest/xp/death; T11: encounter.gd boards,
   campaign STAGES theme keys only, main.gd board rendering).
+- 2026-09-10: T14 (status conditions engine) and the settings overlay dispatched
+  in parallel with T10/T11 — 4 agents running concurrently. Corrected T14
+  mid-flight: T11 also touches `combat.gd` (interactables/objects/smash verb),
+  not T14 alone as first briefed — sent as an amendment, both should still land
+  additively in different regions of the file.
 
 This is a multi-week build; phases 0–1 are the critical path and land first.
