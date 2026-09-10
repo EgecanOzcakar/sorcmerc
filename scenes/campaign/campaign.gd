@@ -39,7 +39,9 @@ var _combat_overlay: Control = null
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	theme = Creator.dark_theme()
-	var injected := party != null
+	var injected := party != null or run != null
+	if run != null:                 # T17: the hub hands a loaded/resumed run straight in
+		party = run.party
 	if party == null:
 		party = Party.new()
 		for ch in Party.demo_roster():
@@ -47,7 +49,8 @@ func _ready() -> void:
 		party.add_gold(120)
 	# T12: the route is seed-generated, so honour SORCMERC_SEED here the way
 	# scenes/main.gd does for fights — a replayed run walks the same road.
-	run = Campaign.new(party, int(OS.get_environment("SORCMERC_SEED")))
+	if run == null:
+		run = Campaign.new(party, int(OS.get_environment("SORCMERC_SEED")))
 
 	var bg := ColorRect.new()
 	bg.color = COL_BG
@@ -157,6 +160,7 @@ func _refresh() -> void:
 		"picking":
 			for i in run.options().size():
 				_body.add_child(_node_card(i, run.options()[i]))
+			_body.add_child(_retire_card())
 		"visiting":
 			_body.add_child(_node_panel())
 		"combat":
@@ -191,6 +195,32 @@ func _node_card(index: int, node: Dictionary) -> Control:
 	go.text = "Take this road"
 	go.pressed.connect(func(): _enter(index))
 	col.add_child(go)
+	return panel
+
+# T17 — the fourth road: none of them. Only ever offered while picking (the
+# model refuses it anywhere else), and armed by a second press so nobody ends a
+# good run with a stray click.
+var _retire_armed := false
+
+func _retire_card() -> Control:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _box(COL_CARD, COL_GOLD if _retire_armed else COL_EDGE))
+	var col := VBoxContainer.new()
+	panel.add_child(col)
+	var title := Label.new()
+	title.text = "⌂  Retire from the road"
+	title.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	title.add_theme_color_override("font_color", COL_GOLD)
+	col.add_child(title)
+	col.add_child(_dim("Walk home with the gold, XP and loot you have. The run ends here."))
+	var b := Button.new()
+	b.text = "Yes — end the run now" if _retire_armed else "Retire…"
+	b.pressed.connect(func():
+		if _retire_armed:
+			run.retire()
+		_retire_armed = not _retire_armed
+		_refresh())
+	col.add_child(b)
 	return panel
 
 # The node you are standing on: its kind's controls, then Continue.
@@ -319,12 +349,13 @@ func _fallen_panel(fallen: Array) -> Control:
 
 func _end_panel() -> Control:
 	var panel := PanelContainer.new()
-	var won: bool = run.state == "won"
+	var won: bool = run.state in ["won", "retired"]
 	panel.add_theme_stylebox_override("panel", _box(COL_CARD, COL_PARTY if won else COL_FOE))
 	var col := VBoxContainer.new()
 	panel.add_child(col)
 	var l := Label.new()
-	l.text = "The road is walked. %d XP, %d gp." % [run.xp, party.gold] if won \
+	l.text = "The road is walked. %d XP, %d gp." % [run.xp, party.gold] if run.state == "won" \
+		else "Retired. %d XP, %d gp brought home." % [run.xp, party.gold] if run.state == "retired" \
 		else "The party falls. The run ends here."
 	l.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	l.add_theme_color_override("font_color", COL_PARTY if won else COL_FOE)
@@ -392,6 +423,7 @@ func _box(bg: Color, edge: Color) -> StyleBoxFlat:
 const COMBAT_SCENE := "res://scenes/main.tscn"
 
 func _enter(index: int) -> void:
+	_retire_armed = false
 	var node := run.enter(index)
 	if not node.is_empty() and run.state == "combat":
 		_launch_combat()
@@ -406,7 +438,7 @@ func _launch_combat() -> void:
 	_combat = load(COMBAT_SCENE).instantiate()
 	_combat.party = party
 	_combat.spec = run.combat_spec()
-	_combat.difficulty = run.node.get("difficulty", "normal")
+	_combat.difficulty = run.node_difficulty()
 	_combat_overlay.add_child(_combat)
 
 	# Wait out the fight — main.gd fills `result` in its _finish().

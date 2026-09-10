@@ -241,11 +241,28 @@ func _on_slot(index: int) -> void:
 	_selected = ""
 	_refresh()
 
+const CREATOR_SCENE := "res://scenes/creator/creator.tscn"
+
+# T17: the creator as a full-screen overlay, same shape as the profile below.
+# It saves the character itself; we only take the one it hands back.
 func _on_create_new() -> void:
-	# TODO(T1): change_scene_to_file("res://scenes/creator/creator.tscn") and add
-	# the resulting Character via party.add_member(). The creator scene does not
-	# exist yet.
-	_hint.text = "Character creator (T1) not wired up yet."
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var creator = load(CREATOR_SCENE).instantiate()
+	overlay.add_child(creator)
+	creator.character_created.connect(func(ch):
+		party.add_member(ch)          # auto-activates while there is a free slot
+		overlay.queue_free()
+		_refresh())
+	var back := Button.new()
+	back.text = "←  Cancel"
+	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	back.offset_left = -180; back.offset_top = 12; back.offset_right = -16
+	back.pressed.connect(func():
+		overlay.queue_free()
+		_refresh())
+	overlay.add_child(back)
 
 const PROFILE_SCENE := "res://scenes/profile/profile.tscn"
 

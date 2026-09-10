@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="sorcmerc"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/game/game.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [display]

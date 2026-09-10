@@ -9,6 +9,8 @@ const Party = preload("res://core/party.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 
+const SLUG := "drive-gamesworth"
+
 var main
 var _presses := 0
 var _fail := 0
@@ -16,6 +18,7 @@ var _fail := 0
 func _init() -> void:
 	OS.set_environment("SORCMERC_FAST", "1")
 	CampaignSave.clear()                 # a saved run would change the title screen
+	CharacterSave.delete(SLUG)           # and a leftover from an earlier walk
 	main = load("res://scenes/game/game.tscn").instantiate()
 	root.add_child(main)
 	_run()
@@ -95,10 +98,13 @@ func _run() -> void:
 	await process_frame
 	if party_screen.party.roster.size() != before + 1:
 		fail("the created character never reached the roster")
-	if CharacterSave.load_slug("drive-gamesworth") == null:
+	if CharacterSave.load_slug(SLUG) == null:
 		fail("the created character never saved")
 
 	# --- into the run -----------------------------------------------------
+	# The party screen is freed the moment the campaign replaces it, so hold on
+	# to the assembled party itself, not the screen.
+	var assembled = party_screen.party
 	press("Begin the run")
 	await process_frame
 	await process_frame
@@ -106,7 +112,7 @@ func _run() -> void:
 	if campaign == null:
 		fail("Begin the run did not reach the campaign map")
 		return _done()
-	if campaign.party != party_screen.party:
+	if campaign.party != assembled:
 		fail("the campaign is not running the party we assembled")
 	if campaign.run.state != "picking":
 		fail("the run did not start between nodes")
@@ -139,7 +145,7 @@ func _run() -> void:
 	if not _text_on_screen("S O R C M E R C"):
 		fail("the title is not back up")
 
-	CharacterSave.delete("drive-gamesworth")
+	CharacterSave.delete(SLUG)
 	_done()
 
 func _text_on_screen(needle: String, node: Node = null) -> bool:
