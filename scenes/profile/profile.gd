@@ -406,17 +406,28 @@ func _inventory(col: VBoxContainer, s) -> void:
 		if def.is_empty():
 			def = Catalog.index("magic-items.json").get(iid, {})
 			kind = "unknown"
-		_item_row(stash, iid, def, kind, int(e["quantity"]), false)
+		_item_row(stash, iid, def, kind, int(e["quantity"]), false, Party.is_identified(e))
 
+# T13: an unidentified item shows as a mystery — rarity only, no name, no Equip.
+# Reading a Scroll of Identification here works any time; the DC 15 Arcana check
+# is the rest node's business (it is made "during a short rest").
 func _item_row(v: VBoxContainer, iid: String, def: Dictionary, kind: String, qty: int,
-		equipped: bool) -> void:
+		equipped: bool, identified := true) -> void:
 	var nm: String = def.get("name", _title(iid))
+	if not identified:
+		nm = "Unidentified item (%s)" % str(def.get("rarity", "unknown"))
 	if qty > 1:
 		nm += " ×%d" % qty
 	var tag := kind
 	if kind == "armor":
 		tag = str(def.get("category", "armor"))
 	var h := _row(v, nm, tag, "item_" + iid, COL_TEXT if equipped else COL_DIM)
+	if not identified:
+		if party().stash_count(Party.IDENTIFY_SCROLL, true) > 0:
+			_btn(h, "Read identify scroll", func():
+				party().use_identification_scroll(iid)
+				_render())
+		return
 	if kind == "unknown":
 		return
 	var b := Button.new()
@@ -427,12 +438,13 @@ func _item_row(v: VBoxContainer, iid: String, def: Dictionary, kind: String, qty
 	_fields["equip_btn_" + iid] = b
 
 # Public so tests can drive it without a button press. Moves one unit between the
-# character's `equipped` and the party's shared stash.
+# character's `equipped` and the party's shared stash. Refuses to equip an item that
+# is still unidentified — the guard lives here so every caller is covered.
 func toggle_equip(item_id: String) -> void:
 	if item_id in _ch.equipped:
 		_ch.equipped.erase(item_id)
 		party().stash_add(item_id)
-	elif party().stash_remove(item_id):
+	elif party().stash_count(item_id, true) > 0 and party().stash_remove(item_id):
 		_ch.equipped.append(item_id)
 	else:
 		return

@@ -12,7 +12,10 @@ const MAX_ACTIVE := 4
 var roster: Array = []            # Character, in recruitment order
 var active: Array[String] = []    # character ids, in marching order (<= MAX_ACTIVE)
 var gold: int = 0
-var stash: Array[Dictionary] = [] # [{item_id, quantity}] — shared, not equipped
+# [{item_id, quantity, identified}] — shared, not equipped. `identified` is true for
+# everything except a magic item straight out of treasure (T13); mundane gear never
+# carries an unidentified stack, so the flag is uniform but only ever false for magic.
+var stash: Array[Dictionary] = []
 var quests: Array = []            # T9's quest log — dicts owned by core/quest.gd
 
 # --- roster ---------------------------------------------------------------
@@ -98,31 +101,69 @@ func spend_gold(n: int) -> bool:
 	gold -= n
 	return true
 
-func stash_add(item_id: String, quantity := 1) -> void:
+# Identified and unidentified units of the same item stack separately.
+func stash_add(item_id: String, quantity := 1, identified := true) -> void:
 	if quantity <= 0:
 		return
 	for e in stash:
-		if e["item_id"] == item_id:
+		if e["item_id"] == item_id and is_identified(e) == identified:
 			e["quantity"] = int(e["quantity"]) + quantity
 			return
-	stash.append({"item_id": item_id, "quantity": quantity})
+	stash.append({"item_id": item_id, "quantity": quantity, "identified": identified})
 
-func stash_count(item_id: String) -> int:
+static func is_identified(entry: Dictionary) -> bool:
+	return bool(entry.get("identified", true))
+
+func stash_count(item_id: String, identified_only := false) -> int:
+	var n := 0
 	for e in stash:
-		if e["item_id"] == item_id:
-			return int(e["quantity"])
-	return 0
+		if e["item_id"] == item_id and (is_identified(e) or not identified_only):
+			n += int(e["quantity"])
+	return n
 
+# Spends identified units first — you use what you know before what you don't.
 func stash_remove(item_id: String, quantity := 1) -> bool:
 	if quantity <= 0 or stash_count(item_id) < quantity:
 		return false
-	for e in stash:
-		if e["item_id"] == item_id:
-			e["quantity"] = int(e["quantity"]) - quantity
+	var left := quantity
+	for known in [true, false]:
+		for e in stash.duplicate():
+			if left <= 0:
+				return true
+			if e["item_id"] != item_id or is_identified(e) != known:
+				continue
+			var take: int = mini(left, int(e["quantity"]))
+			e["quantity"] = int(e["quantity"]) - take
+			left -= take
 			if int(e["quantity"]) <= 0:
 				stash.erase(e)
+	return true
+
+# --- identification (T13) -------------------------------------------------
+
+const IDENTIFY_SCROLL := "scroll-of-identification"
+
+# The stash entries still a mystery — what the identify UIs list.
+func unidentified() -> Array:
+	return stash.filter(func(e): return not is_identified(e))
+
+# Move one unit of item_id from its unidentified stack to its identified one.
+func stash_identify(item_id: String) -> bool:
+	for e in stash:
+		if e["item_id"] == item_id and not is_identified(e):
+			e["quantity"] = int(e["quantity"]) - 1
+			if int(e["quantity"]) <= 0:
+				stash.erase(e)
+			stash_add(item_id, 1, true)
 			return true
 	return false
+
+# Burn one (already identified) Scroll of Identification: no roll, any time.
+func use_identification_scroll(item_id: String) -> bool:
+	if stash_count(IDENTIFY_SCROLL, true) < 1 or not stash_identify(item_id):
+		return false
+	stash_remove(IDENTIFY_SCROLL, 1)
+	return true
 
 # --- death & resurrection -------------------------------------------------
 # 300 gp either way (Revivify's diamond, abstracted to coin — no material item).

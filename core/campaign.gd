@@ -14,45 +14,127 @@ const Quest = preload("res://core/quest.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const RNG = preload("res://core/rng.gd")
+const Dice = preload("res://core/dice.gd")
 
-# The route. Each entry is one stage's node choices; the last stage is the boss.
-const STAGES := [
-	[
-		{"id": "road-ambush", "kind": "combat", "title": "Ambush on the road",
-			"desc": "Something is moving in the gorse. Fight through.", "difficulty": "normal",
-				"theme": "forest-clearing"},
-		{"id": "wayside-camp", "kind": "merchant", "title": "The wayside camp",
-			"desc": "A pedlar, a fire, and work for anyone with a sword."},
-	],
-	[
-		{"id": "warband-camp", "kind": "combat", "title": "The warband camp (hard)",
-			"desc": "More of them, and they are awake — but the camp is full of coin.",
-			"difficulty": "hard", "gold": 90, "theme": "goblin-camp"},
-		{"id": "ridge-path", "kind": "combat", "title": "Skirt the ridge",
-			"desc": "The long way round. Fewer of them.", "difficulty": "easy", "theme": "goblin-camp"},
-		{"id": "milestone-camp", "kind": "rest", "title": "Camp by the milestone",
-			"desc": "Cold, dry, and safe enough to sleep."},
-	],
-	[
-		{"id": "hollow-market", "kind": "merchant", "title": "The Hollow Market",
-			"desc": "Steel, straps and rumours, all overpriced."},
-		{"id": "broken-cart", "kind": "treasure", "title": "The broken cart",
-			"desc": "Someone else's bad day.", "gold": 60, "item_id": "handaxe"},
-	],
-	[
-		{"id": "warrens", "kind": "combat", "title": "Into the warrens",
-			"desc": "Low tunnels and too many corners.", "difficulty": "normal", "theme": "frozen-cave"},
-		{"id": "falls-hoard", "kind": "treasure", "title": "The hoard behind the falls",
-			"desc": "Wet, cold, and worth the swim.", "gold": 110, "item_id": "chain-shirt"},
-		{"id": "falls-camp", "kind": "rest", "title": "Camp behind the falls",
-			"desc": "Loud, but nothing can hear you either."},
-	],
-	[
-		{"id": "sunken-shrine", "kind": "combat", "title": "THE SUNKEN SHRINE",
-			"desc": "Whatever has been calling them lives down here.",
-			"difficulty": "hard", "boss": true, "gold": 250, "theme": "sunken-shrine"},
-	],
+# T12 — the route is generated, not fixed. POOL is every node template; each one
+# carries the stage positions it is eligible for. _build_route() seed-picks 2-3
+# per stage out of the eligible templates, then bolts the boss on the end.
+const STAGE_POSITIONS := ["early", "mid", "mid", "late"]   # + the boss stage
+const STAGE_COUNT := 5                                     # STAGE_POSITIONS + boss
+const PICK_MIN := 2
+const PICK_MAX := 3
+
+const POOL := [
+	# --- combat: early ----------------------------------------------------
+	{"id": "road-ambush", "kind": "combat", "stage_position": ["early"],
+		"title": "Ambush on the road", "desc": "Something is moving in the gorse. Fight through.",
+		"difficulty": "normal", "theme": "forest-clearing"},
+	{"id": "gorse-scouts", "kind": "combat", "stage_position": ["early"],
+		"title": "Scouts in the gorse", "desc": "Two of them, and neither has seen you yet.",
+		"difficulty": "easy", "theme": "forest-clearing"},
+	{"id": "toll-bridge", "kind": "combat", "stage_position": ["early", "mid"],
+		"title": "The toll bridge", "desc": "They want coin. You have a sword.",
+		"difficulty": "normal", "gold": 40, "theme": "city-square"},
+	{"id": "burnt-farm", "kind": "combat", "stage_position": ["early"],
+		"title": "The burnt farm", "desc": "Whoever did this is still in the yard.",
+		"difficulty": "easy", "theme": "forest-clearing"},
+	{"id": "ridge-path", "kind": "combat", "stage_position": ["early", "mid"],
+		"title": "Skirt the ridge", "desc": "The long way round. Fewer of them.",
+		"difficulty": "easy", "theme": "goblin-camp"},
+	{"id": "market-brawl", "kind": "combat", "stage_position": ["early"],
+		"title": "Brawl in the square", "desc": "It started over a mule. It will not end there.",
+		"difficulty": "normal", "gold": 50, "theme": "city-square"},
+	# --- combat: mid ------------------------------------------------------
+	{"id": "warband-camp", "kind": "combat", "stage_position": ["mid"],
+		"title": "The warband camp (hard)",
+		"desc": "More of them, and they are awake — but the camp is full of coin.",
+		"difficulty": "hard", "gold": 90, "theme": "goblin-camp"},
+	{"id": "warrens", "kind": "combat", "stage_position": ["mid"],
+		"title": "Into the warrens", "desc": "Low tunnels and too many corners.",
+		"difficulty": "normal", "theme": "frozen-cave"},
+	{"id": "shop-raid", "kind": "combat", "stage_position": ["mid"],
+		"title": "They came for the shop", "desc": "The tinker is under his own counter. Earn the stock.",
+		"difficulty": "normal", "gold": 60, "theme": "merchant-shop"},
+	{"id": "ice-gully", "kind": "combat", "stage_position": ["mid", "late"],
+		"title": "The ice gully", "desc": "No cover, no footing, and they are above you.",
+		"difficulty": "hard", "gold": 80, "theme": "frozen-cave"},
+	{"id": "palisade", "kind": "combat", "stage_position": ["mid"],
+		"title": "Over the palisade", "desc": "Sharpened stakes and a sleeping watch.",
+		"difficulty": "normal", "theme": "goblin-camp"},
+	{"id": "market-gate", "kind": "combat", "stage_position": ["mid"],
+		"title": "The market gate", "desc": "A toll-taker with too few friends.",
+		"difficulty": "easy", "theme": "city-square"},
+	# --- combat: late -----------------------------------------------------
+	{"id": "shrine-steps", "kind": "combat", "stage_position": ["late"],
+		"title": "The shrine steps", "desc": "The last of them, camped on holy ground.",
+		"difficulty": "hard", "gold": 100, "theme": "sunken-shrine"},
+	{"id": "deep-warren", "kind": "combat", "stage_position": ["late"],
+		"title": "The deep warren", "desc": "The ice hums. Something down there answers it.",
+		"difficulty": "hard", "gold": 95, "theme": "frozen-cave"},
+	{"id": "burned-quarter", "kind": "combat", "stage_position": ["late"],
+		"title": "The burned quarter", "desc": "They took the town first. Take it back.",
+		"difficulty": "normal", "gold": 70, "theme": "city-square"},
+	{"id": "rearguard", "kind": "combat", "stage_position": ["late"],
+		"title": "The pack's rearguard", "desc": "Left behind to buy their chief an hour.",
+		"difficulty": "hard", "gold": 85, "theme": "goblin-camp"},
+	# --- merchants (the two quest-givers first) ---------------------------
+	{"id": "wayside-camp", "kind": "merchant", "stage_position": ["early", "mid"],
+		"title": "The wayside camp", "desc": "A pedlar, a fire, and work for anyone with a sword."},
+	{"id": "hollow-market", "kind": "merchant", "stage_position": ["mid", "late"],
+		"title": "The Hollow Market", "desc": "Steel, straps and rumours, all overpriced."},
+	{"id": "pack-mule", "kind": "merchant", "stage_position": ["early"],
+		"title": "The pack mule", "desc": "One man, one mule, everything strapped to it."},
+	{"id": "tinkers-wagon", "kind": "merchant", "stage_position": ["early", "mid"],
+		"title": "The tinker's wagon", "desc": "He mends kettles. He also sells edges."},
+	{"id": "shuttered-shop", "kind": "merchant", "stage_position": ["mid", "late"],
+		"title": "The shuttered shop", "desc": "Knock twice. He opens for coin."},
+	{"id": "caravanserai", "kind": "merchant", "stage_position": ["late"],
+		"title": "The caravanserai", "desc": "The last honest stock before the shrine."},
+	# --- treasure ---------------------------------------------------------
+	{"id": "broken-cart", "kind": "treasure", "stage_position": ["early", "mid"],
+		"title": "The broken cart", "desc": "Someone else's bad day.",
+		"gold": 60, "item_id": "handaxe"},
+	{"id": "dead-scout", "kind": "treasure", "stage_position": ["early"],
+		"title": "The dead scout", "desc": "Face down, purse untouched.",
+		"gold": 40, "item_id": "dagger"},
+	{"id": "cairn-cache", "kind": "treasure", "stage_position": ["early", "mid"],
+		"title": "The cairn cache", "desc": "Stones stacked by someone who meant to come back.",
+		"gold": 75, "item_id": "leather"},
+	{"id": "collapsed-shrine", "kind": "treasure", "stage_position": ["mid"],
+		"title": "The collapsed shrine", "desc": "Half a roof, and offerings nobody dared take.",
+		"gold": 90, "item_id": "shield"},
+	{"id": "falls-hoard", "kind": "treasure", "stage_position": ["mid", "late"],
+		"title": "The hoard behind the falls", "desc": "Wet, cold, and worth the swim.",
+		"gold": 110, "item_id": "chain-shirt"},
+	{"id": "drowned-barge", "kind": "treasure", "stage_position": ["late"],
+		"title": "The drowned barge", "desc": "Still moored. Still loaded.",
+		"gold": 120, "item_id": "longsword"},
+	{"id": "tax-strongbox", "kind": "treasure", "stage_position": ["late"],
+		"title": "The tax strongbox", "desc": "Nobody left alive to collect it.",
+		"gold": 140, "item_id": "shortbow"},
+	# --- rest -------------------------------------------------------------
+	{"id": "milestone-camp", "kind": "rest", "stage_position": ["early", "mid"],
+		"title": "Camp by the milestone", "desc": "Cold, dry, and safe enough to sleep."},
+	{"id": "hayloft", "kind": "rest", "stage_position": ["early"],
+		"title": "The hayloft", "desc": "Dusty, warm, and one ladder to defend."},
+	{"id": "ferry-hut", "kind": "rest", "stage_position": ["early", "mid"],
+		"title": "The ferryman's hut", "desc": "He is long gone. The stove is not."},
+	{"id": "watchfire", "kind": "rest", "stage_position": ["mid", "late"],
+		"title": "The watchfire", "desc": "Somebody else's fire, still burning. Take the watch."},
+	{"id": "falls-camp", "kind": "rest", "stage_position": ["mid", "late"],
+		"title": "Camp behind the falls", "desc": "Loud, but nothing can hear you either."},
+	{"id": "chapel-floor", "kind": "rest", "stage_position": ["late"],
+		"title": "The chapel floor", "desc": "Cold flagstones, thick doors, no windows."},
 ]
+
+# The last stage is never a choice: one boss, always.
+const BOSS := {"id": "sunken-shrine", "kind": "combat", "stage_position": ["boss"],
+	"title": "THE SUNKEN SHRINE", "desc": "Whatever has been calling them lives down here.",
+	"difficulty": "hard", "boss": true, "gold": 250, "theme": "sunken-shrine"}
+
+# Quests are only ever offered by these merchants (quest.gd's giver_node_ids), so
+# a route without one of them has nowhere to pick up work — see _ensure_giver().
+const GIVER_IDS := ["wayside-camp", "hollow-market"]
 
 # What a merchant sells: a handful of ids out of data/weapons.json + armor.json,
 # priced by item_price() below. No haggling, no stock depletion.
@@ -67,21 +149,59 @@ var state := "picking"        # picking | visiting | combat | won | lost
 var xp := 0                   # run total, for the header; the real bank is ch.xp
 var log: Array = []
 var rng
+var route: Array = []         # this run's stages, generated from the seed
 
 func _init(p, seed_value := 0) -> void:
 	party = p
 	rng = RNG.new(seed_value)
+	# Its own stream off the same seed: route generation must not shift the
+	# loot/quest rolls the run rng makes, and both stay reproducible.
+	route = build_route(RNG.new(rng.seed_value))
 
 # --- the route ------------------------------------------------------------
 
+# Deterministic in `r`: same seed, same route.
+static func build_route(r) -> Array:
+	var out: Array = []
+	for pos in STAGE_POSITIONS:
+		out.append(_pick_stage(r, String(pos)))
+	_ensure_giver(r, out)
+	out.append([BOSS])
+	return out
+
+static func _pick_stage(r, pos: String) -> Array:
+	var eligible: Array = POOL.filter(func(n): return pos in n["stage_position"])
+	var want: int = PICK_MIN + r.roll_die(PICK_MAX - PICK_MIN + 1) - 1
+	var picked: Array = []
+	while picked.size() < want and not eligible.is_empty():
+		picked.append(eligible.pop_at(r.roll_die(eligible.size()) - 1))
+	return picked
+
+# The one invariant selection can violate: no quest-giving merchant before the
+# boss. Drop one into a stage it is eligible for, over a random slot.
+static func _ensure_giver(r, out: Array) -> void:
+	for st in out:
+		for n in st:
+			if n["id"] in GIVER_IDS:
+				return
+	var givers: Array = POOL.filter(func(n): return n["id"] in GIVER_IDS)
+	var giver: Dictionary = givers[r.roll_die(givers.size()) - 1]
+	var slots: Array = []
+	for i in out.size():
+		if STAGE_POSITIONS[i] in giver["stage_position"]:
+			slots.append(i)
+	var st: Array = out[slots[r.roll_die(slots.size()) - 1]]
+	st[r.roll_die(st.size()) - 1] = giver
+
 func options() -> Array:
-	return STAGES[stage] if stage < STAGES.size() else []
+	return route[stage] if stage < route.size() else []
 
 func enter(i: int) -> Dictionary:
 	var opts := options()
 	if state != "picking" or i < 0 or i >= opts.size():
 		return {}
 	node = opts[i]
+	identify_failed.clear()          # a new camp is a new chance to examine
 	state = "combat" if node["kind"] == "combat" else "visiting"
 	say("→ %s" % node["title"])
 	if node["kind"] == "treasure":
@@ -94,7 +214,7 @@ func leave() -> void:
 		return
 	node = {}
 	stage += 1
-	state = "won" if stage >= STAGES.size() else "picking"
+	state = "won" if stage >= route.size() else "picking"
 	if state == "won":
 		say("The road ends. The party lives.")
 		_conclude()
@@ -173,12 +293,20 @@ func _split_xp(total: int) -> void:
 
 # --- treasure -------------------------------------------------------------
 
+# Loot is the only source of mysteries: a magic item out of a hoard arrives
+# unidentified (T13), mundane steel arrives as itself. Merchants label what they sell.
 func _take_treasure() -> void:
 	party.add_gold(int(node.get("gold", 0)))
 	say("+%d gold." % int(node.get("gold", 0)))
 	if node.has("item_id"):
-		party.stash_add(String(node["item_id"]))
-		say("Found: %s." % item_name(String(node["item_id"])))
+		_find_item(String(node["item_id"]))
+	if rng.roll_die(SCROLL_DROP_ONE_IN) == 1:
+		_find_item(IDENTIFY_SCROLL)
+
+func _find_item(item_id: String) -> void:
+	var magic := is_magic(item_id)
+	party.stash_add(item_id, 1, not magic)
+	say("Found: %s." % (mystery_name(item_id) if magic else item_name(item_id)))
 
 # --- rest -----------------------------------------------------------------
 
@@ -191,6 +319,62 @@ func rest(kind: String) -> void:
 	say("The party takes a %s." % kind.replace("-", " "))
 	_autosave()
 
+# --- identification (T13) -------------------------------------------------
+#
+# The real 5e optional rule: identifying by examination happens over a short rest,
+# so the Arcana check is offered at rest nodes only. A failed examination is final
+# for this node — walking on and camping again is another chance.
+
+const IDENTIFY_DC := 15
+const IDENTIFY_SCROLL := "scroll-of-identification"
+const SCROLL_DROP_ONE_IN := 4        # a hoard sometimes also holds an identify scroll
+
+var identify_failed: Array = []      # item ids already flubbed at this node
+
+# Whose Arcana the examination uses: the best of the active party. "" if nobody.
+func arcana_examiner() -> String:
+	var best := ""
+	var best_bonus := -99
+	for ch in party.party_characters():
+		var b := int(ch.sheet().skills.get("arcana", 0))
+		if b > best_bonus:
+			best_bonus = b
+			best = ch.id
+	return best
+
+func arcana_bonus(char_id: String) -> int:
+	var ch = party.get_member(char_id)
+	return int(ch.sheet().skills.get("arcana", 0)) if ch != null else 0
+
+# d20 + Arcana vs DC 15, one attempt per item per rest node.
+func identify_check(item_id: String, char_id: String) -> bool:
+	var ch = party.get_member(char_id)
+	if node.get("kind", "") != "rest" or ch == null or item_id in identify_failed:
+		return false
+	if party.stash_count(item_id) - party.stash_count(item_id, true) < 1:
+		return false
+	var bonus := arcana_bonus(char_id)
+	var nat: int = int(Dice.d20(rng)["nat"])
+	var total := nat + bonus
+	if total < IDENTIFY_DC:
+		identify_failed.append(item_id)
+		say("%s examines it and learns nothing (%d+%d vs DC %d)." % [ch.cname, nat, bonus, IDENTIFY_DC])
+		_autosave()
+		return false
+	party.stash_identify(item_id)
+	say("%s identifies it: %s (%d+%d vs DC %d)." % [ch.cname, item_name(item_id), nat, bonus,
+		IDENTIFY_DC])
+	_autosave()
+	return true
+
+# The scroll: no roll, no rest needed. Profile screen's stash panel drives this.
+func identify_with_scroll(item_id: String) -> bool:
+	if not party.use_identification_scroll(item_id):
+		return false
+	say("The Scroll of Identification crumbles: %s." % item_name(item_id))
+	_autosave()
+	return true
+
 # --- merchant -------------------------------------------------------------
 
 # The steel and straps, plus — at some merchants — the one consumable that
@@ -198,6 +382,7 @@ func rest(kind: String) -> void:
 # either has one or never does.
 func stock_ids() -> Array:
 	var ids: Array = STOCK.duplicate()
+	ids.append(IDENTIFY_SCROLL)       # cheap and always worth carrying: every merchant has one
 	if String(node.get("id", "")).hash() % 3 == 0:
 		ids.append(SCROLL)
 	return ids
@@ -271,6 +456,13 @@ static func item_data(item_id: String) -> Dictionary:
 		if not d.is_empty():
 			return d
 	return {}
+
+static func is_magic(item_id: String) -> bool:
+	return Catalog.index("magic-items.json").has(item_id)
+
+# What an unidentified item shows as: its rarity, nothing else.
+static func mystery_name(item_id: String) -> String:
+	return "Unidentified item (%s)" % String(item_data(item_id).get("rarity", "unknown"))
 
 static func item_name(item_id: String) -> String:
 	return String(item_data(item_id).get("name", item_id.capitalize()))

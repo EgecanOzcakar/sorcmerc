@@ -106,7 +106,7 @@ func _run() -> void:
 	if not _did.has("Take a long rest"):
 		fail("never rested")
 	print("drive_campaign: %d presses, stage %d/%d, state=%s, %d gp, %d XP, %d quests — %s" % [
-		_presses, main.run.stage, main.run.STAGES.size(), main.run.state,
+		_presses, main.run.stage, main.run.route.size(), main.run.state,
 		main.party.gold, main.run.xp, main.party.quests.size(),
 		"OK" if _fail == 0 else "*** %d FAILED ***" % _fail])
 	print("  exercised: ", _did.keys())

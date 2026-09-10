@@ -2891,5 +2891,16 @@
     "variantOf": null,
     "description": "Scroll\n A single-use scroll bearing the words of Revivify. Reading it returns one creature that died within the last minute to life with 1 Hit Point. The scroll crumbles to ash as the words are spoken.",
     "structuredBonuses": null
+  },
+  {
+    "id": "scroll-of-identification",
+    "name": "Scroll of Identification",
+    "category": "wondrous-item",
+    "rarity": "uncommon",
+    "attunement": false,
+    "attunementNote": null,
+    "variantOf": null,
+    "description": "Scroll\n A single-use scroll bearing the words of Identify. Reading it reveals the properties of one magic item you are holding, with no check required. The scroll crumbles to ash as the words are spoken.",
+    "structuredBonuses": null
   }
 ]

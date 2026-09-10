@@ -6,6 +6,7 @@ const Campaign = preload("res://core/campaign.gd")
 const Party = preload("res://core/party.gd")
 const Quest = preload("res://core/quest.gd")
 const Presets = preload("res://core/presets.gd")
+const Encounter = preload("res://core/encounter.gd")
 
 var _pass = 0
 var _fail = 0
@@ -25,6 +26,7 @@ func _campaign() -> Campaign:
 
 func _init() -> void:
 	test_route()
+	test_generated_routes()
 	test_treasure()
 	test_combat()
 	test_defeat()
@@ -39,32 +41,80 @@ func _init() -> void:
 
 func test_route() -> void:
 	var c := _campaign()
-	check(Campaign.STAGES.size() >= 4, "the route has 4+ stages")
+	check(c.route.size() == Campaign.STAGE_COUNT, "the route has %d stages" % Campaign.STAGE_COUNT)
 	var kinds := {}
-	for stage in Campaign.STAGES:
-		check(stage.size() >= 1 and stage.size() <= 3, "a stage offers 1-3 nodes")
-		for n in stage:
-			check(n["kind"] in ["combat", "treasure", "merchant", "rest"], "%s has a known kind" % n["id"])
-			kinds[n["kind"]] = true
-			if n["kind"] == "combat":
-				check(n.get("difficulty", "") in ["easy", "normal", "hard"], "%s has a difficulty" % n["id"])
-	check(kinds.size() == 4, "all four node kinds appear on the route")
-	var last: Array = Campaign.STAGES[Campaign.STAGES.size() - 1]
-	check(last.size() == 1 and last[0]["kind"] == "combat" and last[0].get("boss", false),
-		"the route ends on a boss fight")
+	for n in Campaign.POOL:
+		check(n["kind"] in ["combat", "treasure", "merchant", "rest"], "%s has a known kind" % n["id"])
+		kinds[n["kind"]] = true
+		check(not n["stage_position"].is_empty(), "%s is eligible somewhere" % n["id"])
+		for pos in n["stage_position"]:
+			check(pos in Campaign.STAGE_POSITIONS, "%s names a real stage position" % n["id"])
+		if n["kind"] == "combat":
+			check(n.get("difficulty", "") in ["easy", "normal", "hard"], "%s has a difficulty" % n["id"])
+	check(kinds.size() == 4, "all four node kinds are in the pool")
 
 	check(c.stage == 0 and c.state == "picking", "a fresh campaign starts at stage 0")
-	check(c.options().size() == Campaign.STAGES[0].size(), "options() is the current stage")
+	check(c.options().size() == c.route[0].size(), "options() is the current stage")
 	check(c.enter(9).is_empty(), "an out-of-range choice is refused")
-	check(c.enter(0)["id"] == Campaign.STAGES[0][0]["id"], "enter picks the node")
+	check(c.enter(0)["id"] == c.route[0][0]["id"], "enter picks the node")
 	check(c.enter(1).is_empty(), "cannot enter a second node on the same stage")
 	c.state = "visiting"
 	c.leave()
 	check(c.stage == 1 and c.state == "picking", "leave advances the stage")
 
+# --- T12: the route is generated per seed ---------------------------------
+
+func test_generated_routes() -> void:
+	var seeds := [1, 7, 42, 99, 1234, 55555, 8, 313, 2024, 77]
+	var seen_ids := {}
+	var signatures := {}
+	for s in seeds:
+		var c := _route(s)
+		signatures[_signature(c)] = true
+		check(_route(s) != null and _signature(_route(s)) == _signature(c),
+			"seed %d reproduces the same route" % s)
+		for i in c.route.size():
+			var stage: Array = c.route[i]
+			var ids := {}
+			for n in stage:
+				ids[n["id"]] = true
+				seen_ids[n["id"]] = true
+				if n["kind"] == "combat":
+					check(n["theme"] in Encounter.THEMES,
+						"seed %d: %s names a real board" % [s, n["id"]])
+			check(ids.size() == stage.size(), "seed %d stage %d has no duplicate node" % [s, i])
+			if i == c.route.size() - 1:
+				check(stage.size() == 1 and stage[0]["kind"] == "combat" and stage[0].get("boss", false),
+					"seed %d ends on exactly one boss fight" % s)
+			else:
+				check(stage.size() >= 2 and stage.size() <= 3, "seed %d stage %d offers 2-3 nodes" % [s, i])
+				for n in stage:
+					check(Campaign.STAGE_POSITIONS[i] in n["stage_position"],
+						"seed %d: %s is eligible for stage %d" % [s, n["id"], i])
+		var givers := 0
+		for i in c.route.size() - 1:
+			for n in c.route[i]:
+				if n["kind"] == "merchant" and n["id"] in Campaign.GIVER_IDS:
+					givers += 1
+		check(givers > 0, "seed %d offers a quest-giving merchant before the boss" % s)
+	check(signatures.size() >= seeds.size() - 1, "different seeds produce different routes")
+	check(seen_ids.size() >= 20, "the pool is deep enough for real variety (saw %d templates)"
+		% seen_ids.size())
+
+func _route(seed_value: int) -> Campaign:
+	var p := Party.new()
+	for ch in Presets.party():
+		p.add_member(ch)
+	return Campaign.new(p, seed_value)
+
+func _signature(c: Campaign) -> String:
+	var out: Array = []
+	for stage in c.route:
+		out.append(",".join(stage.map(func(n): return String(n["id"]))))
+	return "|".join(out)
+
 func test_treasure() -> void:
 	var c := _campaign()
-	c.stage = 2
 	var i := _find(c, "treasure")
 	var n: Dictionary = c.options()[i]
 	c.enter(i)
@@ -99,25 +149,27 @@ func test_combat() -> void:
 	check(not c.party.activate("pike"), "and cannot walk back into the party")
 	check(Quest.get_quest(c.party, "kritch-bounty")["progress"] == 2, "kills feed quest progress")
 	check(c.state == "visiting", "after the fight the node shows its after-action panel")
+	var was: int = c.stage
 	c.leave()
-	check(c.stage == 1, "the route advances past the fight")
+	check(c.stage == was + 1, "the route advances past the fight")
 
 	# The boss node carries its own purse on top of the fight's.
 	var c2 := _campaign()
-	c2.stage = Campaign.STAGES.size() - 1
+	c2.stage = c2.route.size() - 1
 	c2.enter(0)
 	c2.finish_combat({"outcome": "Victory", "xp": 10, "gold": 10, "loot": [], "deaths": [], "kills": []})
-	check(c2.party.gold == 10 + int(Campaign.STAGES[c2.stage][0]["gold"]), "node gold is added to fight gold")
+	check(c2.party.gold == 10 + int(Campaign.BOSS["gold"]), "node gold is added to fight gold")
 	c2.leave()
 	check(c2.state == "won", "clearing the last stage wins the run")
 
 func test_defeat() -> void:
 	var c := _campaign()
 	c.enter(_find(c, "combat"))
+	var was: int = c.stage
 	c.finish_combat({"outcome": "Defeat", "xp": 0, "gold": 0, "loot": [], "deaths": ["vera"], "kills": []})
 	check(c.state == "lost", "a defeat ends the run")
 	c.leave()
-	check(c.state == "lost" and c.stage == 0, "a lost run does not advance")
+	check(c.state == "lost" and c.stage == was, "a lost run does not advance")
 
 	# Death is a within-run cost: a concluded run (won or lost) revives everyone free.
 	var c2 := _campaign()
@@ -125,7 +177,7 @@ func test_defeat() -> void:
 	c2.finish_combat({"outcome": "Victory", "xp": 0, "gold": 0, "loot": [], "deaths": ["vera"],
 		"kills": []})
 	check(c2.party.get_member("vera").dead, "vera died mid-run")
-	c2.stage = Campaign.STAGES.size() - 1
+	c2.stage = c2.route.size() - 1
 	c2.state = "visiting"
 	c2.leave()
 	check(c2.state == "won" and not c2.party.get_member("vera").dead,
@@ -154,7 +206,6 @@ func test_defeat() -> void:
 
 func test_rest() -> void:
 	var c := _campaign()
-	c.stage = 1
 	c.enter(_find(c, "rest"))
 	var ch = c.party.party_characters()[0]
 	ch.hp_current = 1
@@ -206,27 +257,26 @@ func test_merchant() -> void:
 
 	# The scroll is stocked at some merchants and buyable there.
 	var scrolls := 0
-	for s in Campaign.STAGES:
-		for n in s:
-			if n["kind"] != "merchant":
-				continue
-			var m := Campaign.new(c.party)
-			m.node = n
-			if Campaign.SCROLL in m.stock_ids():
-				scrolls += 1
-				m.party.add_gold(rare)
-				check(m.buy(Campaign.SCROLL), "the scroll can be bought where it is stocked")
-				check(m.party.stash_count(Campaign.SCROLL) == 1, "and lands in the stash")
-	check(scrolls > 0, "at least one merchant on the route stocks the scroll")
+	for n in Campaign.POOL:
+		if n["kind"] != "merchant":
+			continue
+		var m := Campaign.new(c.party)
+		m.node = n
+		if Campaign.SCROLL in m.stock_ids():
+			scrolls += 1
+			m.party.add_gold(rare)
+			check(m.buy(Campaign.SCROLL), "the scroll can be bought where it is stocked")
+			check(m.party.stash_count(Campaign.SCROLL) == 1, "and lands in the stash")
+	check(scrolls > 0, "at least one merchant in the pool stocks the scroll")
 
 func test_quest_flow() -> void:
 	var c := _campaign()
 	c.enter(_find(c, "combat"))
 	check(c.offer().is_empty(), "combat nodes offer no quests")
 	var c2 := _campaign()
-	c2.enter(_find(c2, "merchant"))
+	c2.enter(_find_giver(c2))
 	var q := c2.offer()
-	check(not q.is_empty(), "the merchant offers a quest")
+	check(not q.is_empty(), "the quest-giving merchant offers a quest")
 	check(c2.accept(q), "accept at the merchant")
 	check(c2.party.quests.size() == 1, "the quest is in the party log")
 	check(not c2.turn_in(q), "cannot turn in an unfinished quest")
@@ -249,18 +299,35 @@ func test_full_run() -> void:
 		c.leave()
 		stages += 1
 	check(c.state == "won", "the run can be completed")
-	check(stages == Campaign.STAGES.size(), "every stage was walked once")
+	check(stages == Campaign.STAGE_COUNT, "every stage was walked once")
 	check(c.xp > 0 and c.party.gold > 0, "the run banked xp and gold")
 	check(c.log.size() >= stages, "the run journal recorded each node")
 
 # --- helpers --------------------------------------------------------------
 
+# T12: the route is generated, so a kind is no longer at a known stage — walk
+# forward (moving `c.stage`) to the first stage that offers one.
 func _find(c: Campaign, kind: String) -> int:
-	var opts := c.options()
-	for i in opts.size():
-		if opts[i]["kind"] == kind:
-			return i
-	check(false, "stage %d has no %s node" % [c.stage, kind])
+	while c.stage < c.route.size():
+		var opts := c.options()
+		for i in opts.size():
+			if opts[i]["kind"] == kind:
+				return i
+		c.stage += 1
+	check(false, "the route has no %s node" % kind)
+	c.stage = 0
+	return 0
+
+# The route always plants one merchant that hands out quests; find it.
+func _find_giver(c: Campaign) -> int:
+	while c.stage < c.route.size():
+		var opts := c.options()
+		for i in opts.size():
+			if opts[i]["id"] in Campaign.GIVER_IDS:
+				return i
+		c.stage += 1
+	check(false, "the route has no quest-giving merchant")
+	c.stage = 0
 	return 0
 
 func _count(spec: Dictionary, id: String) -> int:

@@ -104,6 +104,7 @@ func _init() -> void:
 	check(p.to_combatants([]).size() == chars.size(), "missing positions default, not crash")
 
 	test_death()
+	test_identification()
 	print("test_party: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -163,3 +164,38 @@ func test_death() -> void:
 	check(not vera.dead and not ilsa.dead, "the run's end revives everyone")
 	check(ilsa.hp_current == 1, "revived at 1 HP, not full")
 	check(p.gold == gold, "the free revival costs nothing")
+
+# T13: identified/unidentified units of one item stack apart, identified spend first,
+# and a Scroll of Identification burns itself to reveal one item.
+func test_identification() -> void:
+	var p := Party.new()
+	p.stash_add("longsword")
+	check(Party.is_identified(p.stash[0]), "a plain stash_add is identified")
+	check(p.stash[0].has("identified"), "every entry carries the flag")
+
+	p.stash_add("cloak-of-elvenkind", 1, false)
+	p.stash_add("cloak-of-elvenkind", 1, false)
+	check(p.stash_count("cloak-of-elvenkind") == 2, "unidentified units stack together")
+	check(p.stash_count("cloak-of-elvenkind", true) == 0, "none of them count as identified")
+	check(p.unidentified().size() == 1, "one mystery entry")
+
+	check(p.stash_identify("cloak-of-elvenkind"), "identify one unit")
+	check(p.stash_count("cloak-of-elvenkind") == 2, "the total is unchanged")
+	check(p.stash_count("cloak-of-elvenkind", true) == 1, "exactly one is now known")
+	check(p.stash.size() == 3, "the known unit split into its own entry")
+	check(not p.stash_identify("longsword"), "nothing to identify on a mundane item")
+
+	# removal spends what you know first
+	check(p.stash_remove("cloak-of-elvenkind"), "remove one cloak")
+	check(p.stash_count("cloak-of-elvenkind", true) == 0, "the identified one went first")
+	check(p.stash_count("cloak-of-elvenkind") == 1, "the mystery is still there")
+
+	# the scroll: always works, always consumed, and must itself be identified
+	p.stash_add(Party.IDENTIFY_SCROLL, 1, false)
+	check(not p.use_identification_scroll("cloak-of-elvenkind"), "an unread scroll cannot be read")
+	p.stash_add(Party.IDENTIFY_SCROLL, 1, true)
+	check(p.use_identification_scroll("cloak-of-elvenkind"), "the scroll identifies with no roll")
+	check(p.stash_count("cloak-of-elvenkind", true) == 1, "the cloak is known")
+	check(p.stash_count(Party.IDENTIFY_SCROLL, true) == 0, "the scroll is consumed")
+	check(p.stash_count(Party.IDENTIFY_SCROLL) == 1, "the unidentified one is untouched")
+	check(not p.use_identification_scroll("cloak-of-elvenkind"), "nothing left to identify")

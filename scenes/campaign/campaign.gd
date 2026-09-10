@@ -143,7 +143,7 @@ func _refresh() -> void:
 		c.queue_free()
 		_body.remove_child(c)
 	_header.text = "»   S T A G E   %d / %d   ·   %d gp   ·   %d XP   «" % [
-		mini(run.stage + 1, Campaign.STAGES.size()), Campaign.STAGES.size(), party.gold, run.xp]
+		mini(run.stage + 1, Campaign.STAGE_COUNT), Campaign.STAGE_COUNT, party.gold, run.xp]
 
 	var fallen: Array = party.roster.filter(func(ch): return ch.dead)
 	if not fallen.is_empty():
@@ -209,6 +209,7 @@ func _node_panel() -> Control:
 				b.text = "Take a %s" % kind.replace("-", " ")
 				b.pressed.connect(func(): run.rest(kind); _refresh())
 				col.add_child(b)
+			_identify_ui(col)
 		"merchant":
 			_merchant_ui(col)
 
@@ -232,7 +233,9 @@ func _merchant_ui(col: VBoxContainer) -> void:
 		for e in party.stash:
 			var id := String(e["item_id"])
 			var b := Button.new()
-			b.text = "Sell  %s ×%d   —   %d gp" % [Campaign.item_name(id), int(e["quantity"]),
+			var nm: String = Campaign.item_name(id) if Party.is_identified(e) \
+				else Campaign.mystery_name(id)
+			b.text = "Sell  %s ×%d   —   %d gp" % [nm, int(e["quantity"]),
 				maxi(1, int(Campaign.item_price(id) * Campaign.SELL_RATE))]
 			b.pressed.connect(func(): run.sell(id); _refresh())
 			col.add_child(b)
@@ -252,6 +255,29 @@ func _merchant_ui(col: VBoxContainer) -> void:
 		var b := Button.new()
 		b.text = "Turn in:  %s   (+%d gp)" % [q["title"], int(q["reward"].get("gold", 0))]
 		b.pressed.connect(func(): run.turn_in(q); _refresh())
+		col.add_child(b)
+
+# Examining loot over the short rest: DC 15 Intelligence (Arcana), one attempt per
+# item per camp. The party's best arcanist does the examining — nobody sits their
+# wizard out of this, so there is no chooser, just the one button.
+func _identify_ui(col: VBoxContainer) -> void:
+	var mysteries: Array = party.unidentified()
+	if mysteries.is_empty():
+		return
+	col.add_child(_caption("U N I D E N T I F I E D   ·   DC %d Arcana" % Campaign.IDENTIFY_DC))
+	var who := run.arcana_examiner()
+	for e in mysteries:
+		var id := String(e["item_id"])
+		if who == "":
+			col.add_child(_dim("%s — nobody is awake to examine it." % Campaign.mystery_name(id)))
+			continue
+		var b := Button.new()
+		b.text = "Examine  %s   (%s, Arcana %+d)" % [Campaign.mystery_name(id),
+			party.get_member(who).cname, run.arcana_bonus(who)]
+		b.disabled = id in run.identify_failed
+		if b.disabled:
+			b.text += "   — nothing learned here"
+		b.pressed.connect(func(): run.identify_check(id, who); _refresh())
 		col.add_child(b)
 
 # The fallen: Revivify from an active caster, or burn a Scroll of Resurrection.

@@ -8,7 +8,7 @@
 # {
 #   "format": "sorcmerc-campaign",     // literal, checked on load
 #   "version": 1,                      // bump only on an incompatible change
-#   "stage": 2,                        // index into Campaign.STAGES
+#   "stage": 2,                        // index into the run's generated route
 #   "node_id": "hollow-market",        // "" when standing between nodes
 #   "state": "picking",                // picking | visiting | combat | won | lost
 #   "xp": 400,                         // the run's XP total (the bank is per-character)
@@ -18,7 +18,7 @@
 #     "roster": [ <core/character_save.gd's to_dict, one per member> ],
 #     "active": ["vera", "pike"],      // ids, marching order
 #     "gold": 120,
-#     "stash": [{"item_id": "dagger", "quantity": 1}],
+#     "stash": [{"item_id": "dagger", "quantity": 1, "identified": true}],
 #     "quests": [ <core/quest.gd dicts, stored verbatim> ]
 #   }
 # }
@@ -70,7 +70,8 @@ static func from_dict(d: Dictionary):
 	party.active.assign(pd.get("active", []))
 	party.gold = int(pd.get("gold", 0))
 	for e in pd.get("stash", []):
-		party.stash_add(String(e["item_id"]), int(e.get("quantity", 1)))
+		party.stash_add(String(e["item_id"]), int(e.get("quantity", 1)),
+			bool(e.get("identified", true)))
 	party.quests = _ints(pd.get("quests", []))
 
 	var campaign := Campaign.new(party, int(d.get("seed", 1)))
@@ -78,7 +79,7 @@ static func from_dict(d: Dictionary):
 	campaign.state = String(d.get("state", "picking"))
 	campaign.xp = int(d.get("xp", 0))
 	campaign.log.assign(d.get("log", []))
-	campaign.node = _node(campaign.stage, String(d.get("node_id", "")))
+	campaign.node = _node(campaign, String(d.get("node_id", "")))
 	return campaign
 
 # JSON gives every number back as a float; quest counters are compared as ints.
@@ -94,10 +95,12 @@ static func _ints(quests: Array) -> Array:
 		out.append(c)
 	return out
 
-static func _node(stage: int, node_id: String) -> Dictionary:
-	if node_id == "" or stage < 0 or stage >= Campaign.STAGES.size():
+# T12: the route is regenerated from the saved seed, so the stage's nodes are the
+# same ones the run offered — look the id up there, not in a fixed table.
+static func _node(campaign, node_id: String) -> Dictionary:
+	if node_id == "" or campaign.stage < 0 or campaign.stage >= campaign.route.size():
 		return {}
-	for n in Campaign.STAGES[stage]:
+	for n in campaign.route[campaign.stage]:
 		if n["id"] == node_id:
 			return n
 	return {}

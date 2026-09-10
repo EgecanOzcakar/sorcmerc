@@ -116,18 +116,22 @@ func test_explosive_barrel_burns_its_neighbours() -> void:
 
 func test_every_combat_node_has_a_board() -> void:
 	var Campaign = load("res://core/campaign.gd")
-	for stage in Campaign.STAGES:
-		for n in stage:
-			if n.get("kind", "") != "combat":
-				continue
-			check(n.get("theme", "") in Encounter.THEMES, "%s names a real board (%s)" % [n["id"], n.get("theme", "")])
+	for n in Campaign.POOL + [Campaign.BOSS]:
+		if n.get("kind", "") != "combat":
+			continue
+		check(n.get("theme", "") in Encounter.THEMES, "%s names a real board (%s)" % [n["id"], n.get("theme", "")])
 	var Party = load("res://core/party.gd")
 	var party = Party.new()
 	for ch in Presets.party():
 		party.add_member(ch)
 	var run = Campaign.new(party, 3)
-	run.enter(0)   # stage 0's combat node
-	check(run.combat_spec().get("theme", "") == "forest-clearing", "combat_spec carries the node's theme")
+	while run.options().filter(func(n): return n["kind"] == "combat").is_empty():
+		run.stage += 1               # T12: the route is generated; find a stage that fights
+	for i in run.options().size():
+			var picked: Dictionary = run.enter(i)
+			check(run.combat_spec().get("theme", "") == picked["theme"],
+				"combat_spec carries the node's theme")
+			break
 
 # --- helpers ----------------------------------------------------------
 
