@@ -260,6 +260,7 @@ func _on_view_profile(id: String) -> void:
 	add_child(overlay)
 	var prof = load(PROFILE_SCENE).instantiate()
 	overlay.add_child(prof)
+	prof.set_party(party)          # equip pulls from the shared stash, not the character
 	prof.set_character(ch)
 	var back := Button.new()
 	back.text = "←  Back to party"

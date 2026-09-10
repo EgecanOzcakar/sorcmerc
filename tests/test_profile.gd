@@ -5,6 +5,7 @@ extends SceneTree
 const Presets = preload("res://core/presets.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Character = preload("res://core/character.gd")
+const Party = preload("res://core/party.gd")
 
 var _pass := 0
 var _fail := 0
@@ -88,12 +89,39 @@ func _equip() -> void:
 	check(not p._fields.has("attack_longsword"), "unequipped weapon leaves the attack list")
 	check(vera.sheet().attacks.size() == 1, "unarmed strike is the only attack left")
 
+	# T10: everything unequipped went to the party's shared stash, not the character.
+	var pty = p.party()
+	check(pty.stash_count("shield") == 1 and pty.stash_count("chain-mail") == 1
+		and pty.stash_count("longsword") == 1, "unequipped gear lands in the party stash")
+
 	p.toggle_equip("chain-mail")
 	p.toggle_equip("shield")
 	p.toggle_equip("longsword")
 	check(p.field("ac") == str(armored), "re-equipping restores AC")
 	check(p._fields.has("attack_longsword"), "re-equipping restores the attack row")
+	check(pty.stash.is_empty(), "re-equipping empties the stash again")
 	p.queue_free()
+
+	# An injected party is the one that gets equipped from.
+	var pike = Presets.pike()
+	var shared = Party.new()
+	shared.add_member(pike)
+	shared.stash_add("greataxe")
+	var p2 = load("res://scenes/profile/profile.tscn").instantiate()
+	root.add_child(p2)
+	p2.set_party(shared)
+	p2.set_character(pike)
+	check(p2._fields.has("item_greataxe"), "the stash is rendered on the sheet")
+	p2.toggle_equip("greataxe")
+	check("greataxe" in pike.equipped and shared.stash_count("greataxe") == 0,
+		"equipping pulls the item out of the shared stash")
+	check(p2._fields.has("attack_greataxe"), "and it shows up as an attack")
+	p2.toggle_equip("greataxe")
+	check(not "greataxe" in pike.equipped and shared.stash_count("greataxe") == 1,
+		"unequipping returns it to the shared stash")
+	p2.toggle_equip("plate")
+	check(not "plate" in pike.equipped, "equipping what the party does not carry is a no-op")
+	p2.queue_free()
 
 # HP and pools are editable, and a long rest restores both.
 func _resources() -> void:

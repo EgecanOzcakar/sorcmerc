@@ -16,8 +16,8 @@
 #   "levels": [{"class_id": "fighter", "hp_roll": -1}],   // ordered; -1 = average HP
 #   "choices": {"skill-choice:class:fighter:0": {"type":"skill-choice","skills":["perception","insight"]}},
 #   "feats": ["alert"],               // feats taken outside a feat-choice grant
-#   "equipped": ["longsword", "chain-mail", "shield"],
-#   "inventory": [{"item_id": "dagger", "quantity": 1}],
+#   "equipped": ["longsword", "chain-mail", "shield"],   // unequipped gear is the party's,
+#                                                        // not the character's (Party.stash)
 #   "pools": {"second-wind": 1},      // campaign state: uses REMAINING
 #   "hp_current": -1,                 // -1 = full
 #   "prepared": ["cure-wounds"],
@@ -58,7 +58,6 @@ static func to_dict(ch) -> Dictionary:
 		"choices": ch.choices.duplicate(true),
 		"feats": ch.feats.duplicate(),
 		"equipped": ch.equipped.duplicate(),
-		"inventory": ch.inventory.duplicate(true),
 		"pools": ch.pools.duplicate(),
 		"hp_current": ch.hp_current,
 		"prepared": ch.prepared.duplicate(),
@@ -91,8 +90,6 @@ static func from_dict(d: Dictionary):
 				alloc[a] = int(alloc[a])
 	ch.feats.assign(d.get("feats", []))
 	ch.equipped.assign(d.get("equipped", []))
-	for i in d.get("inventory", []):
-		ch.inventory.append({"item_id": String(i["item_id"]), "quantity": int(i.get("quantity", 1))})
 	for k in d.get("pools", {}):
 		ch.pools[k] = int(d["pools"][k])
 	ch.hp_current = int(d.get("hp_current", -1))

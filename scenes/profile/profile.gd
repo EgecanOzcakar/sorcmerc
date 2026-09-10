@@ -23,7 +23,10 @@ const COL_TEXT := Color("f0e6cf")
 const COL_DIM := Color("c2c5cf")
 const COL_ACCENT := Color("8fb7d8")
 
+const Party = preload("res://core/party.gd")
+
 var _ch                                 # core/character.gd
+var _party                              # core/party.gd — the shared stash (T10)
 var _fields: Dictionary = {}            # key -> Label, for tests
 var _body: HBoxContainer
 var _chrome := false
@@ -48,6 +51,19 @@ func set_character(ch) -> void:
 
 func character():
 	return _ch
+
+# The party whose stash this screen equips from. Injected by the party/campaign
+# screens; standalone it falls back to a one-character demo party.
+func set_party(p) -> void:
+	_party = p
+	if _chrome:
+		_render()
+
+func party():
+	if _party == null:
+		_party = Party.new()
+		_party.add_member(_ch)
+	return _party
 
 # The rendered text of a field, for tests: field("ac"), field("skill_stealth"), ...
 func field(key: String) -> String:
@@ -368,42 +384,57 @@ func _features(col: VBoxContainer, s) -> void:
 
 # --- inventory ---------------------------------------------------------------
 
+# Worn/wielded (off the sheet), then the party's shared stash. Equipping moves an
+# item out of the stash onto this character; unequipping puts it back.
 func _inventory(col: VBoxContainer, s) -> void:
-	var v := _panel(col, "Inventory")
+	var v := _panel(col, "Equipped")
 	if s.equipment.is_empty():
-		_row(v, "—", "empty")
+		_row(v, "—", "nothing worn")
 	for it in s.equipment:
-		var iid: String = it["item_id"]
-		var nm: String = it["def"].get("name", _title(iid))
-		var qty: int = int(it["quantity"])
-		if qty > 1:
-			nm += " ×%d" % qty
-		var tag: String = it["kind"]
-		if it["kind"] == "armor":
-			tag = str(it["def"].get("category", "armor"))
-		var h := _row(v, nm, tag, "item_" + iid, COL_TEXT if it["equipped"] else COL_DIM)
-		if it["kind"] == "unknown":
-			continue
-		var b := Button.new()
-		b.text = "Unequip" if it["equipped"] else "Equip"
-		b.add_theme_font_size_override("font_size", 12)
-		b.pressed.connect(toggle_equip.bind(iid))
-		h.add_child(b)
-		_fields["equip_btn_" + iid] = b
+		_item_row(v, String(it["item_id"]), it["def"], String(it["kind"]), int(it["quantity"]), true)
 
-# Public so tests can drive it without a button press.
+	var stash := _panel(col, "Party stash")
+	if party().stash.is_empty():
+		_row(stash, "—", "empty")
+	for e in party().stash:
+		var iid := String(e["item_id"])
+		var def: Dictionary = Catalog.index("weapons.json").get(iid, {})
+		var kind := "weapon"
+		if def.is_empty():
+			def = Catalog.index("armor.json").get(iid, {})
+			kind = "armor"
+		if def.is_empty():
+			def = Catalog.index("magic-items.json").get(iid, {})
+			kind = "unknown"
+		_item_row(stash, iid, def, kind, int(e["quantity"]), false)
+
+func _item_row(v: VBoxContainer, iid: String, def: Dictionary, kind: String, qty: int,
+		equipped: bool) -> void:
+	var nm: String = def.get("name", _title(iid))
+	if qty > 1:
+		nm += " ×%d" % qty
+	var tag := kind
+	if kind == "armor":
+		tag = str(def.get("category", "armor"))
+	var h := _row(v, nm, tag, "item_" + iid, COL_TEXT if equipped else COL_DIM)
+	if kind == "unknown":
+		return
+	var b := Button.new()
+	b.text = "Unequip" if equipped else "Equip"
+	b.add_theme_font_size_override("font_size", 12)
+	b.pressed.connect(toggle_equip.bind(iid))
+	h.add_child(b)
+	_fields["equip_btn_" + iid] = b
+
+# Public so tests can drive it without a button press. Moves one unit between the
+# character's `equipped` and the party's shared stash.
 func toggle_equip(item_id: String) -> void:
 	if item_id in _ch.equipped:
 		_ch.equipped.erase(item_id)
-		# equipped-but-not-carried items only exist on `equipped`; keep them in the bag
-		# so unequipping doesn't delete the item.
-		var carried := false
-		for row in _ch.inventory:
-			if row["item_id"] == item_id:
-				carried = true
-		if not carried:
-			_ch.inventory.append({"item_id": item_id, "quantity": 1})
-	else:
+		party().stash_add(item_id)
+	elif party().stash_remove(item_id):
 		_ch.equipped.append(item_id)
+	else:
+		return
 	_ch.dirty()
 	_render()

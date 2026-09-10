@@ -1,7 +1,8 @@
 # Equipment resolution + attacks. Ported from dnd-maintainer src/lib/resolver/equipment.ts.
 # v1 scope: weapons.json + armor.json only. The export ships no gear/packs/bundles
 # (SCHEMA gaps #1, #2, #6), so bundle-choice resolves to a warning and unknown item
-# ids become inert inventory rows.
+# ids become inert rows. Only `ch.equipped` is a character's — everything else the
+# party is carrying lives in Party.stash (T10), which the sheet knows nothing about.
 extends RefCounted
 
 const Bundles = preload("res://core/rules/bundles.gd")
@@ -14,11 +15,6 @@ static func equipment(ch, bundles: Array) -> Dictionary:
 	var items: Array = []
 	var qty := {}
 	var order: Array = []
-	for row in ch.inventory:
-		var iid: String = row["item_id"]
-		if not qty.has(iid):
-			order.append(iid)
-		qty[iid] = int(qty.get(iid, 0)) + int(row.get("quantity", 1))
 	for iid in ch.equipped:
 		if not qty.has(iid):
 			order.append(iid)

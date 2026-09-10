@@ -11,7 +11,7 @@ var levels: Array[Dictionary] = []      # [{class_id, hp_roll}] ordered; hp_roll
 var choices: Dictionary = {}            # choice_key -> decision
 var feats: Array[String] = []
 var equipped: Array[String] = []        # weapon/armor ids worn or wielded
-var inventory: Array[Dictionary] = []   # [{item_id, quantity}]
+                                        # everything unequipped lives in Party.stash
 var pools: Dictionary = {}              # pool_id -> current uses
 var slots_used: Array[int] = []         # spell slots spent, per level; cleared by a long rest
 var hp_current: int = -1                # -1 = full
