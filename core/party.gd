@@ -6,6 +6,7 @@ extends RefCounted
 const Adapter = preload("res://core/adapter.gd")
 const Character = preload("res://core/character.gd")
 const Presets = preload("res://core/presets.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const MAX_ACTIVE := 4
 
@@ -242,6 +243,7 @@ static func resurrect(party, dead_id: String, method: String, caster_id: String 
 	target.dead = false
 	target.hp_current = 1
 	target.dirty()
+	Ach.unlock("resurrect_ally")   # T19 — spell or scroll, both route through here
 	return true
 
 # End of a run: death is a within-run cost, not permanent. Leaves the benching alone.

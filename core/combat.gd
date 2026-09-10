@@ -5,6 +5,7 @@ extends RefCounted
 const Dice = preload("res://core/dice.gd")
 const Hex = preload("res://core/hex.gd")
 const Effects = preload("res://core/rules/effects.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const FT_PER_HEX := 6  # adapter.gd's convention
 
@@ -28,6 +29,10 @@ var order: Array = []
 var turn_idx: int = 0
 var round_num: int = 1
 var log: Array[String] = []
+# T19: party combatant ids that hit 0 HP at any point this fight. Read back out by
+# encounter.resolve_outcome() so campaign.gd can tell a flawless hard win from a
+# messy one; "down" itself is erased the moment someone gets back up.
+var downed: Dictionary = {}
 
 func _init(_rng, _combatants: Array, _board: Dictionary) -> void:
 	rng = _rng
@@ -902,6 +907,8 @@ func _apply_damage(target, dmg: int, dtype := "") -> void:
 	if target.hp <= 0:
 		var overkill: int = -target.hp
 		target.hp = 0
+		if target.team == "party":
+			downed[target.id] = true
 		if target.team == "foe" or overkill >= target.max_hp:
 			_kill(target)
 		else:
@@ -925,6 +932,7 @@ func _death_save(c) -> void:
 		c.death_f = 0
 		c.hp = 1
 		log.append("%s's eyes snap open — nat 20, up at 1 HP!" % c.cname)
+		_survived_down(c)
 		return
 	if r.nat == 1:
 		c.death_f += 2
@@ -937,6 +945,7 @@ func _death_save(c) -> void:
 	elif c.death_s >= 3:
 		c.statuses["stable"] = true
 		log.append("%s stabilises, still unconscious." % c.cname)
+		_survived_down(c)
 	else:
 		log.append("%s death save: rolled %d  [%d ok / %d fail]" % [c.cname, r.nat, c.death_s, c.death_f])
 
@@ -951,6 +960,13 @@ func heal(c, amount: int) -> void:
 		c.death_f = 0
 	c.hp = mini(c.max_hp, maxi(c.hp, 0) + amount)
 	log.append("%s %s — %d HP (%d/%d)." % [c.cname, "revives" if revived else "is healed", amount, c.hp, c.max_hp])
+	if revived:
+		_survived_down(c)
+
+# T19: a hero who went to 0 HP and came back — stabilised, nat-20'd, or healed.
+func _survived_down(c) -> void:
+	if c.team == "party":
+		Ach.unlock("death_save")
 
 # --- movement -------------------------------------------------------
 

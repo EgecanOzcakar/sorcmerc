@@ -10,6 +10,8 @@
 extends RefCounted
 
 const Save = preload("res://core/character_save.gd")
+const Ach = preload("res://core/achievements.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 # hp_roll sentinel: the resolver substitutes die/2+1 (spec §4, save format's -1).
 const AVERAGE := -1
@@ -33,12 +35,41 @@ static func xp_to_next(ch) -> int:
 
 static func add_level(ch, class_id := "", hp_roll := AVERAGE) -> void:
 	ch.add_level(class_id if class_id != "" else ch.class_id(), hp_roll)
+	milestones(ch)
 
 static func pending(ch) -> Array:
 	return ch.sheet().pending
 
 static func decide(ch, key: String, decision: Dictionary) -> void:
 	ch.decide(key, decision)
+	milestones(ch)   # a spell picked here can be the 5th-level one
+
+# T19: the achievements a character's own sheet can prove. Idempotent, so every
+# mutating entry point here can call it. preview() deliberately does NOT — it
+# levels a throwaway clone, and looking at level 5 is not reaching it.
+static func milestones(ch) -> void:
+	var lvl: int = ch.level()
+	if lvl >= 5:
+		Ach.unlock("level_5")
+	if lvl >= MAX_LEVEL:
+		Ach.unlock("level_20")
+	if _knows_high_spell(ch):
+		Ach.unlock("spell_5th")
+
+# Both halves of the split: a known-caster's `known` list carries its own level,
+# a prepared caster (cleric/wizard) only ever names ids, so those cost a lookup.
+static func _knows_high_spell(ch) -> bool:
+	var sc: Dictionary = ch.sheet().spellcasting
+	if sc.is_empty():
+		return false
+	for k in sc.get("known", []):
+		if int(k.get("level", 0)) >= 5:
+			return true
+	var spells: Dictionary = Catalog.index("spells.json")
+	for id in Array(sc.get("always_prepared", [])) + Array(ch.prepared):
+		if int(spells.get(id, {}).get("level", 0)) >= 5:
+			return true
+	return false
 
 static func can_finalize(ch) -> bool:
 	return ch.sheet().pending.is_empty()
@@ -47,7 +78,7 @@ static func can_finalize(ch) -> bool:
 # save-round-trip clone. Drives the level-up screen's "here's what you get" panel.
 static func preview(ch, class_id := "") -> Dictionary:
 	var probe = Save.from_dict(Save.to_dict(ch))
-	add_level(probe, class_id)
+	probe.add_level(class_id if class_id != "" else probe.class_id(), AVERAGE)   # not add_level(): no milestones off a preview
 	return gains(ch.sheet(), probe.sheet())
 
 # before/after are Resolved sheets. Only the things a player reads on level-up.
