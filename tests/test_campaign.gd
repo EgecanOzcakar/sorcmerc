@@ -218,7 +218,19 @@ func test_combat() -> void:
 	var boss := c2.enter(0)
 	c2.finish_combat({"outcome": "Victory", "xp": 10, "gold": 10, "loot": [], "deaths": [], "kills": []})
 	check(c2.party.gold == 10 + int(boss["gold"]), "node gold is added to fight gold")
+	var expect_mult: float = clampf(Campaign.BOSS_REF_WIN_RATE / float(boss["win_rate"]),
+		1.0, Campaign.BOSS_XP_MULT_CAP)
+	check(c2.xp == roundi(10 * expect_mult),
+		"a harder-than-average boss (win_rate %.2f) pays out %.2fx XP" % [boss["win_rate"], expect_mult])
+	check(expect_mult >= 1.0 and expect_mult <= Campaign.BOSS_XP_MULT_CAP,
+		"boss XP multiplier never drops below 1x or exceeds the cap")
 	c2.leave()
+
+	# A plain (non-boss) node never applies the boss multiplier.
+	var c3 := _campaign()
+	c3.enter(_find(c3, "combat"))
+	c3.finish_combat({"outcome": "Victory", "xp": 50, "gold": 0, "loot": [], "deaths": [], "kills": []})
+	check(c3.xp == 50, "a non-boss fight pays plain XP")
 	check(c2.state == "won", "clearing the last stage wins the run")
 
 func test_defeat() -> void:

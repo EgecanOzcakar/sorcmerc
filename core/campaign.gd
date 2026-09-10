@@ -141,31 +141,51 @@ const POOL := [
 # build_route() seed-picks one, the same way it picks everything else.
 const BOSS := {"id": "sunken-shrine", "kind": "combat", "stage_position": ["boss"],
 	"title": "THE SUNKEN SHRINE", "desc": "Whatever has been calling them lives down here.",
-	"difficulty": "hard", "boss": true, "archetype": "classic", "gold": 250, "theme": "sunken-shrine"}
+	"difficulty": "hard", "boss": true, "archetype": "classic", "gold": 250,
+	"theme": "sunken-shrine", "win_rate": 0.475}
 
+# win_rate is each boss's measured sweep result (scaler.gd's TUNING header, T18)
+# — how much harder it plays than a plain "hard" node. finish_combat() turns the
+# gap under BOSS_REF_WIN_RATE into bonus XP (see there); a boss with no win_rate
+# (there is none currently) would just award the plain amount.
 const BOSS_POOL := [
 	BOSS,
 	{"id": "the-oni", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE ONI OF THE DEEP ICE", "desc": "It has worn a friendlier face all week.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "frozen-cave", "lead": "oni"},
+		"theme": "frozen-cave", "lead": "oni", "win_rate": 0.50},
 	{"id": "the-assassin", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE KNIFE IN THE SQUARE", "desc": "Whoever paid the warband is here to collect.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "city-square", "lead": "assassin"},
+		"theme": "city-square", "lead": "assassin", "win_rate": 0.35},
 	{"id": "the-mammoth", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE THING IN THE TREELINE", "desc": "The forest has been getting out of its way.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "forest-clearing", "lead": "mammoth"},
+		"theme": "forest-clearing", "lead": "mammoth", "win_rate": 0.22},
 	{"id": "the-arrow-chief", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE ARROW-CHIEF", "desc": "The little archer from the road. He has been eating well.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
-		"theme": "goblin-camp", "lead": "goblin-archer", "lead_features": ["monster-multiattack-2"]},
+		"theme": "goblin-camp", "lead": "goblin-archer", "lead_features": ["monster-multiattack-2"],
+		"win_rate": 0.68},
 	{"id": "the-shop-captain", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE CAPTAIN COMES BACK", "desc": "He took the shop once. This time he brought the company.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
-		"theme": "merchant-shop", "lead": "bandit", "lead_features": ["monster-multiattack-2"]},
+		"theme": "merchant-shop", "lead": "bandit", "lead_features": ["monster-multiattack-2"],
+		"win_rate": 0.08},
 ]
+
+# Reference win rate a boss's XP bonus is measured against: the average of the
+# scaler's own easy/hard sweep results (92.5%/47.5%, scaler.gd's TUNING header)
+# rather than normal's own 73.5% — CURVE was calibrated so normal sits near that
+# average already, and it keeps this constant tied to the two extremes instead
+# of a third independently-drifting number. A boss under this rate is harder
+# than the curve's middle, and earns XP in proportion.
+const BOSS_REF_WIN_RATE := 0.70
+# ponytail: the win_rate spread above is power.gd's known control-underpricing
+# ceiling showing through (shop-captain 8% vs arrow-chief 68%) — cap the bonus
+# so that ceiling doesn't turn into a runaway XP multiplier. Retune alongside
+# power.gd/BOSS_LEAD_SHARE.
+const BOSS_XP_MULT_CAP := 2.5
 
 # Quests are only ever offered by these merchants (quest.gd's giver_node_ids), so
 # a route without one of them has nowhere to pick up work — see _ensure_giver().
@@ -353,12 +373,13 @@ func finish_combat(result: Dictionary) -> void:
 		_conclude()
 		_autosave()
 		return
-	xp += int(result.get("xp", 0))
-	_split_xp(int(result.get("xp", 0)))
+	var earned_xp: int = roundi(int(result.get("xp", 0)) * _xp_mult())
+	xp += earned_xp
+	_split_xp(earned_xp)
 	party.add_gold(int(result.get("gold", 0)) + int(node.get("gold", 0)))
 	for item in result.get("loot", []):
 		party.stash_add(String(item))
-	say("Victory. +%d XP, +%d gold." % [int(result.get("xp", 0)),
+	say("Victory. +%d XP, +%d gold." % [earned_xp,
 		int(result.get("gold", 0)) + int(node.get("gold", 0))])
 	for id in result.get("deaths", []):
 		var fallen = party.get_member(id)
@@ -370,6 +391,15 @@ func finish_combat(result: Dictionary) -> void:
 		say(line)
 	state = "visiting"   # the after-action panel; leave() moves on
 	_autosave()
+
+# A boss node's win_rate under BOSS_REF_WIN_RATE means it plays harder than
+# the curve's middle; the shortfall becomes bonus XP, capped at BOSS_XP_MULT_CAP.
+# Every non-boss node (no "win_rate" key) gets a plain 1.0.
+func _xp_mult() -> float:
+	if not node.get("boss", false) or not node.has("win_rate"):
+		return 1.0
+	var wr: float = maxf(float(node["win_rate"]), 0.01)
+	return clampf(BOSS_REF_WIN_RATE / wr, 1.0, BOSS_XP_MULT_CAP)
 
 # Split evenly among whoever was in the fight; the remainder is dropped.
 func _split_xp(total: int) -> void:
