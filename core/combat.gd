@@ -128,12 +128,33 @@ func current():
 func begin_turn() -> void:
 	var c = current()
 	c.new_turn()   # action/bonus/reaction/move + turn-long statuses (spec §7)
+	_auto_stand(c)
 	if c.is_down():
 		_death_save(c)
 
 func begin_turn_for(c) -> void:
 	# test/tooling helper: give an arbitrary combatant a fresh turn's economy.
 	c.new_turn()
+	_auto_stand(c)
+
+# Standing up from prone is free-ish and automatic at the top of your own turn
+# (no "spend your whole move lying there" busywork) but still costs half your
+# speed, per RAW — deducted from this turn's move budget before anything else
+# touches it. A feature can shrink the cost via a data-driven multiplier
+# (stand_cost_mult on the feature's effects.json entry); nothing grants one
+# yet, so the discount is 0% until something does.
+func _auto_stand(c) -> void:
+	if not c.has("prone"):
+		return
+	c.statuses.erase("prone")
+	var mult := 1.0
+	for fid in c.features:
+		var e := Effects.feature(fid)
+		if e.has("stand_cost_mult"):
+			mult = minf(mult, float(e["stand_cost_mult"]))
+	var cost: int = int(c.speed * 0.5 * mult)
+	c.econ["move_left"] = maxi(0, int(c.econ.get("move_left", 0)) - cost)
+	log.append("%s scrambles up off the ground (-%d move)." % [c.cname, cost])
 
 func end_turn() -> void:
 	current().has_acted = true

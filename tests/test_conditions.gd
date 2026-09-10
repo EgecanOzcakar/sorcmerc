@@ -28,6 +28,7 @@ func _init() -> void:
 	test_paralyzed_auto_crit()
 	test_exhaustion()
 	test_charmed_and_frightened()
+	test_auto_stand_from_prone()
 	print("test_conditions: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -159,3 +160,22 @@ func test_charmed_and_frightened() -> void:
 	check(cb.move_field(a).keys().all(func(h): return Hex.distance(h, b.pos) >= d0),
 		"frightened is offered no hex closer to its fear source")
 	check(cb._attack_mode(a, b) == Dice.DIS, "frightened attacks at disadvantage")
+
+func test_auto_stand_from_prone() -> void:
+	var a = _guy("hero", "party", Vector2i(4, 0))
+	var b = _guy("ogre", "foe", Vector2i(4, 1))
+	a.statuses["prone"] = true
+	var cb = Combat.new(RNG.new(7), [a, b], Encounter.board())
+	cb.begin_turn_for(a)
+	check(not a.has("prone"), "standing at the top of your turn clears prone")
+	var half: int = a.speed / 2
+	check(a.econ["move_left"] == a.speed - half,
+		"standing costs half speed (%d of %d)" % [half, a.speed])
+
+	# a feature that discounts the cost
+	var c = _guy("scout", "party", Vector2i(4, 0))
+	c.statuses["prone"] = true
+	c.features["test-nimble-stand"] = true
+	var cb2 = Combat.new(RNG.new(7), [c, _guy("foe2", "foe", Vector2i(4, 1))], Encounter.board())
+	cb2.begin_turn_for(c)
+	check(c.econ["move_left"] == c.speed, "a 0-cost discount feature leaves move untouched")

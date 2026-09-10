@@ -239,5 +239,9 @@
         }
       ]
     }
+  },
+  "test-nimble-stand": {
+    "_note": "Test-only fixture for the stand_cost_mult hook (tests/test_conditions.gd). No real feature grants a stand-up discount yet — this proves the mechanism works once one does.",
+    "stand_cost_mult": 0
   }
 }
