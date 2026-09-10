@@ -398,6 +398,22 @@ Wire them in:
   a broader, multiattack-carrying monster pool changes the curve T8 tuned
   against 4 simple archetypes; retune the multiplier constants if needed.
 
+## T19 — local achievements (locked 2026-09-10, dispatched now, model-only)
+
+Simple, locally-tracked achievements (unlocked/timestamped, persisted to
+`user://achievements.json` — this machine's user profile, not per-save, not
+online) for milestones like first combat won, a character reaching level 5/20,
+equipping a legendary item, resurrecting a fallen ally, identifying a magic
+item, completing a full run, winning a hard fight clean (nobody downed), etc.
+**Model + a standalone viewer panel only, dispatched now** — building the
+model is fully additive (`core/achievements.gd`, a new scene), no collision
+risk. **Wiring the actual unlock calls into `combat.gd`/`campaign.gd`/
+`leveling.gd`/`party.gd` is deliberately deferred** until T15 and T16 (both
+actively editing those files right now) land, to avoid a third concurrent
+editor on the same files — the agent reports back the exact trigger points
+(file, call site, achievement id) as a worklist for a quick follow-up once
+the dust settles.
+
 ## T18 — a boss pool (locked 2026-09-10, spec'd now, **held until T16 lands**)
 
 `core/campaign.gd`'s `BOSS` is a single fixed node (T12 flagged this itself).
