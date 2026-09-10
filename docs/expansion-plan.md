@@ -173,5 +173,11 @@ graph above. Each phase gated on review.
   hex-targeted AoE spells (Fireball-shaped) are dropped at the adapter for lack
   of an aiming mode; `data/monsters.json` only has the four Sunken Shrine foes —
   T8 scales counts/numbers on those, a real bestiary is future content work.
+- 2026-09-10: Phase 3 dispatched — **T7+T8** (encounter-from-spec + difficulty
+  scaler, combined for interface coupling: `Encounter.build(spec, party, board)`
+  and `Scaler.roster_for(party, difficulty, quest_bias)` are the contracts T5/T9
+  build against next) and **T2** (level-up, reusing creator.gd's generic
+  pending-choice renderer) running in parallel. T5+T9 (campaign map + quests)
+  wait for T7+T8's real interface before dispatch, rather than stubbing a guess.
 
 This is a multi-week build; phases 0–1 are the critical path and land first.
