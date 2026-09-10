@@ -4,6 +4,18 @@ extends RefCounted
 
 const Dice = preload("res://core/dice.gd")
 const Hex = preload("res://core/hex.gd")
+const Effects = preload("res://core/rules/effects.gd")
+
+const FT_PER_HEX := 6  # adapter.gd's convention
+
+# Engine-only states that behave like conditions but aren't the official 15, so
+# they can't live in data/effects/conditions.json (validated against the catalog).
+const ENGINE_CONDS := {
+	"dodging": {"attacks_against": "dis"},
+	"hidden": {"own_attacks": "adv"},
+	"helped": {"own_attacks": "adv"},
+	"reckless": {"own_attacks": "adv", "attacks_against": "adv"},
+}
 
 const MAX_ROUNDS := 60  # safety guard; a real fight ends in ~4-6
 
@@ -24,7 +36,7 @@ func _init(_rng, _combatants: Array, _board: Dictionary) -> void:
 # --- board -----------------------------------------------------------
 
 func passable(p: Vector2i) -> bool:
-	return p in board["hexes"]
+	return p in board["hexes"] and not object_at(p).get("blocks_movement", false)
 
 func is_cover(p: Vector2i) -> bool:
 	return p in board["cover"]
@@ -45,8 +57,51 @@ func _hex_free(p: Vector2i, ignore = null) -> bool:
 			return false
 	return true
 
-func adjacent_to_brazier(c) -> bool:
-	return Hex.distance(c.pos, board["brazier"]) <= 1
+# --- interactables (T11) ---------------------------------------------
+# board["objects"]: [{type, pos, hazard?: {dice, damage_type}, hp?, blocks_movement?,
+# explosive?}]. The Sunken Shrine's brazier is one of these.
+
+func objects() -> Array:
+	return board.get("objects", [])
+
+func object_at(p: Vector2i) -> Dictionary:
+	for o in objects():
+		if o["pos"] == p:
+			return o
+	return {}
+
+# The hazard `c` is standing next to — the brazier, a campfire. {} if none.
+func adjacent_hazard(c) -> Dictionary:
+	for o in objects():
+		if o.has("hazard") and Hex.distance(c.pos, o["pos"]) <= 1:
+			return o
+	return {}
+
+func adjacent_to_hazard(c) -> bool:
+	return not adjacent_hazard(c).is_empty()
+
+# A destructible neighbour (barrel, crate). {} if none.
+func smashable_near(c) -> Dictionary:
+	for o in objects():
+		if int(o.get("hp", 0)) > 0 and Hex.distance(c.pos, o["pos"]) <= 1:
+			return o
+	return {}
+
+func destroy_object(o: Dictionary) -> void:
+	var arr: Array = objects()
+	for i in arr.size():
+		if arr[i]["pos"] == o["pos"]:
+			arr.remove_at(i)
+			break
+	if not o.get("explosive", false):
+		return
+	var h: Dictionary = o.get("hazard", {})
+	var dmg := Dice.roll(rng, String(h.get("dice", "2d6")))
+	log.append("The %s bursts — %d %s to everything beside it." % [o["type"], dmg,
+		h.get("damage_type", "fire")])
+	for c in combatants:
+		if c.conscious() and Hex.distance(c.pos, o["pos"]) <= 1:
+			_apply_damage(c, dmg, String(h.get("damage_type", "")))
 
 func _roll_initiative() -> void:
 	for c in combatants:
@@ -183,6 +238,7 @@ const BASIC := [
 		"cost": "action", "targeting": "enemy", "range": 1},
 	{"id": "shove_brazier", "label": "Shove → brazier", "kind": "shove", "choice": "brazier",
 		"cost": "action", "targeting": "enemy", "range": 1},
+	{"id": "smash", "label": "Smash it", "kind": "smash", "cost": "action", "targeting": "object", "range": 1},
 	{"id": "help", "label": "Help an ally", "kind": "help", "cost": "action", "targeting": "ally", "range": 1},
 	{"id": "dodge", "label": "Dodge", "kind": "dodge", "cost": "action", "targeting": "self"},
 	{"id": "dash", "label": "Dash", "kind": "dash", "cost": "action", "targeting": "self"},
@@ -225,7 +281,9 @@ func available(actor) -> Array:
 	return out
 
 func can_spend(actor, cost: String) -> bool:
-	return cost in ["free", "none", ""] or int(actor.econ.get(cost, 0)) > 0
+	if cost in ["free", "none", ""]:
+		return true
+	return not _no_economy(actor, cost) and int(actor.econ.get(cost, 0)) > 0
 
 func _spend(actor, cost: String) -> bool:
 	if not can_spend(actor, cost):
@@ -262,6 +320,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 		"enemy": return enemies_of(actor).any(func(e): return legal_target(actor, v, e))
 		"ally": return combatants.any(func(a): return a != actor and legal_target(actor, v, a))
 		"direction": return not enemies_of(actor).is_empty()
+		"object": return not smashable_near(actor).is_empty()
 	return true
 
 # Is `c` a legal target for `v` cast/swung by `actor` right now?
@@ -270,9 +329,11 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 		"enemy":
 			if c.team == actor.team or not c.conscious():
 				return false
+			if _source_of(actor, "cannot_target_source") == c:
+				return false  # charmed
 			if v["kind"] == "attack":
 				return in_reach(actor, c)
-			if v.get("choice", "") == "brazier" and not adjacent_to_brazier(c):
+			if v.get("choice", "") == "brazier" and not adjacent_to_hazard(c):
 				return false
 			return Hex.distance(actor.pos, c.pos) <= int(v.get("range", 1))
 		"ally":
@@ -299,6 +360,7 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 	match kind:
 		"attack": return resolve_attack(actor, target)
 		"shove": return act_shove(actor, target, v.get("choice", "prone"))
+		"smash": return act_smash(actor)
 		"help": act_help(actor, target)
 		"dodge": act_dodge(actor)
 		"hide": act_hide(actor)
@@ -337,7 +399,7 @@ func _save_effect(actor, v: Dictionary, target) -> Dictionary:
 		actor.cname, v["label"], target.cname, "makes" if saved else "fails"])
 	if not saved:
 		for cond in v.get("conditions", []):
-			target.statuses[cond] = true
+			apply_condition(target, cond, actor)
 	return {"saved": saved}
 
 # --- spells ------------------------------------------------------------
@@ -398,6 +460,89 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int) -> Dictionary:
 		_apply_damage(c, dmg, v.get("damage_type", ""))
 	return {"saved": saved, "damage": dmg}
 
+# --- conditions (data/effects/conditions.json) --------------------------
+#
+# One reader; every resolution point below asks it instead of naming a status.
+# exhaustion is the odd shape: {"level": N} with per-level numbers, scaled here.
+
+func _cond_effects(c) -> Array:
+	var out: Array = []
+	for id in c.statuses:
+		var e: Dictionary = Effects.condition(id)
+		if e.is_empty():
+			e = ENGINE_CONDS.get(id, {})
+		if e.is_empty():
+			continue
+		if e.has("per_level"):
+			var lvl := exhaustion_level(c)
+			if lvl <= 0:
+				continue
+			var scaled := {}
+			for k in e["per_level"]:
+				scaled[k] = int(e["per_level"][k]) * lvl
+			out.append(scaled)
+		else:
+			out.append(e)
+	return out
+
+func hexes_from_ft(ft: int) -> int:
+	return roundi(float(ft) / FT_PER_HEX)
+
+func exhaustion_level(c) -> int:
+	var s = c.statuses.get("exhaustion", {})
+	return int(s.get("level", 0)) if s is Dictionary else 0
+
+# Every d20 the creature rolls: attacks and saves (this engine has no other checks).
+func _d20_penalty(c) -> int:
+	var p := 0
+	for e in _cond_effects(c):
+		p += int(e.get("d20_penalty", 0))
+	return p
+
+# The one entry point that inflicts exhaustion. Level `max_level` kills.
+func gain_exhaustion(c, levels := 1) -> int:
+	var lvl := exhaustion_level(c) + levels
+	c.statuses["exhaustion"] = {"level": lvl}
+	log.append("%s gains exhaustion (level %d)." % [c.cname, lvl])
+	if lvl >= int(Effects.condition("exhaustion").get("max_level", 6)):
+		log.append("%s collapses, spent." % c.cname)
+		_kill(c)
+	return lvl
+
+# Apply a named condition. charmed/frightened remember who caused them.
+func apply_condition(target, cond: String, source = null) -> void:
+	var e := Effects.condition(cond)
+	if source != null and (e.get("cannot_target_source", false) or e.get("cannot_approach_source", false)):
+		target.statuses[cond] = {"source": source}
+	elif cond == "exhaustion":
+		gain_exhaustion(target)
+	else:
+		target.statuses[cond] = true
+
+func _source_of(c, key: String):
+	for id in c.statuses:
+		if Effects.condition(id).get(key, false) and c.statuses[id] is Dictionary:
+			return c.statuses[id].get("source")
+	return null
+
+# Movement left this turn after speed-zeroing conditions and exhaustion.
+func move_left(c) -> int:
+	var mv := int(c.econ.get("move_left", 0))
+	for e in _cond_effects(c):
+		if e.has("speed") and int(e["speed"]) == 0:
+			return 0
+		mv -= hexes_from_ft(int(e.get("speed_penalty_ft", 0)))
+	return maxi(0, mv)
+
+func _no_economy(actor, cost: String) -> bool:
+	var key: String = {"action": "no_action", "bonus": "no_bonus", "reaction": "no_reaction"}.get(cost, "")
+	if key == "":
+		return false
+	for e in _cond_effects(actor):
+		if e.get(key, false):
+			return true
+	return false
+
 # --- attack ------------------------------------------------------------
 
 func _attack_mode(attacker, target, opts := {}) -> int:
@@ -405,22 +550,29 @@ func _attack_mode(attacker, target, opts := {}) -> int:
 	var dis = false
 	if attacker.ranged and adjacent_enemy(attacker):
 		dis = true
-	if target.has("prone"):
-		if attacker.ranged:
-			dis = true
-		else:
-			adv = true
-	if target.has("dodging"):
-		dis = true
-	if attacker.has("hidden"):
-		adv = true
-	if attacker.has("helped"):
-		adv = true
-	if attacker.has("reckless") or target.has("reckless"):
-		adv = true
+	for e in _cond_effects(target):
+		var a = e.get("attacks_against", "")
+		if a is Dictionary:
+			a = a.get("ranged" if attacker.ranged else "melee", "")
+		adv = adv or a == "adv"
+		dis = dis or a == "dis"
+	for e in _cond_effects(attacker):
+		var o = e.get("own_attacks", "")
+		adv = adv or o == "adv"
+		dis = dis or o == "dis"
 	if opts.get("advantage", false):
 		adv = true
 	return Dice.combine(adv, dis)
+
+# Paralyzed/unconscious: any melee hit from within reach is a crit.
+func _auto_crit(attacker, target) -> bool:
+	if attacker.ranged:
+		return false
+	for e in _cond_effects(target):
+		var ft := int(e.get("auto_crit_within_ft", 0))
+		if ft > 0 and Hex.distance(attacker.pos, target.pos) <= hexes_from_ft(ft):
+			return true
+	return false
 
 # The `requires` vocabulary of a passive_damage verb (data/effects/features.json).
 func _requires_met(attacker, target, mode: int, reqs: Array) -> bool:
@@ -478,6 +630,10 @@ func _buff_damage(attacker) -> int:
 
 func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var oa: bool = opts.get("opportunity", false)
+	if _no_economy(attacker, "action" if not oa else "reaction"):
+		return {"error": "cannot act"}   # ai.gd swings without asking available()
+	if _source_of(attacker, "cannot_target_source") == target:
+		return {"error": "charmed"}
 	if not oa and not in_reach(attacker, target):
 		return {"error": "out of range"}
 	if not oa:
@@ -493,11 +649,13 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var r = Dice.d20(rng, mode)
 	var nat: int = r.nat
 	var insp: int = _consume_inspired(attacker)
-	var atk_bonus: int = attacker.atk_bonus + insp
+	var atk_bonus: int = attacker.atk_bonus + insp - _d20_penalty(attacker)
 	var total: int = nat + atk_bonus
 	var ac = effective_ac(target)
 	var crit: bool = nat >= attacker.crit_range
 	var hit: bool = crit or (nat != 1 and total >= ac)
+	if hit and not crit and _auto_crit(attacker, target):
+		crit = true
 	var out = {
 		"attacker": attacker.cname, "target": target.cname,
 		"nat": nat, "dice": r.dice, "bonus": atk_bonus, "total": total, "ac": ac,
@@ -548,6 +706,9 @@ func _log_attack(o: Dictionary, oa: bool) -> void:
 # --- damage / death --------------------------------------------------
 
 func _resists(c, dtype: String) -> bool:
+	for e in _cond_effects(c):
+		if e.get("resist_all", false):
+			return true
 	if dtype == "":
 		return false
 	for s in c.statuses.values():
@@ -626,8 +787,15 @@ func heal(c, amount: int) -> void:
 
 # Hexes reachable by `mover` with the move points left this turn.
 func move_field(mover) -> Dictionary:
-	return Hex.reachable(passable, mover.pos, int(mover.econ.get("move_left", 0)),
-		_blockers(mover), _rough())
+	var field := Hex.reachable(passable, mover.pos, move_left(mover), _blockers(mover), _rough())
+	# frightened: you can never end a step closer to what scares you
+	var fear = _source_of(mover, "cannot_approach_source")
+	if fear != null:
+		var d0 := Hex.distance(mover.pos, fear.pos)
+		for h in field.keys():
+			if Hex.distance(h, fear.pos) < d0:
+				field.erase(h)
+	return field
 
 # The shortest route `mover` would walk to `dest`.
 func move_path(mover, dest: Vector2i) -> Array:
@@ -709,19 +877,37 @@ func act_shove(attacker, target, choice: String) -> Dictionary:
 				target.statuses["prone"] = true
 				log.append("%s shoves %s — no room to push, %s falls prone." % [attacker.cname, target.cname, target.cname])
 		"brazier":
-			if not adjacent_to_brazier(target):
+			var haz := adjacent_hazard(target)
+			if haz.is_empty():
 				return {"success": true}
-			var burn = Dice.roll(rng, "2d6")
-			log.append("%s shoves %s into the brazier — 2d6 = %d fire." % [attacker.cname, target.cname, burn])
+			var notation: String = String(haz["hazard"].get("dice", "2d6"))
+			var burn = Dice.roll(rng, notation)
+			log.append("%s shoves %s into the %s — %s = %d fire." % [attacker.cname, target.cname,
+				haz["type"], notation, burn])
 			_apply_damage(target, burn)
 	return {"success": true}
 
+# A barrel or crate: one action, no roll, the hex clears. Explosive ones burst.
+func act_smash(actor) -> Dictionary:
+	var o := smashable_near(actor)
+	if o.is_empty():
+		return {"error": "nothing to smash"}
+	log.append("%s smashes the %s apart." % [actor.cname, o["type"]])
+	destroy_object(o)
+	return {"smashed": o["type"]}
+
 func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false) -> bool:
-	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c)
+	var adv: bool = c.has("dodging")
+	var dis := false
+	for e in _cond_effects(c):
+		if ability in e.get("auto_fail_saves", []):
+			log.append("%s can't resist — the %s save fails automatically." % [c.cname, ability.to_upper()])
+			return false
+		dis = dis or e.get("saves", {}).get(ability, "") == "dis"
+	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c) - _d20_penalty(c)
 	if is_cover(c.pos) and not ignore_cover:
 		bonus += 2
-	var mode = Dice.ADV if c.has("dodging") else Dice.NORMAL
-	return Dice.d20(rng, mode).nat + bonus >= dc
+	return Dice.d20(rng, Dice.combine(adv, dis)).nat + bonus >= dc
 
 # Bardic Inspiration (and anything shaped like it): a one-shot die added to the
 # bearer's own next attack or save, auto-applied — this engine has no reaction

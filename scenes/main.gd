@@ -8,6 +8,8 @@ const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Presets = preload("res://core/presets.gd")
 const Hex = preload("res://core/hex.gd")
+const Settings = preload("res://core/settings.gd")
+const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 
 # What T5 injects before the scene runs: the live party, the node's spec (empty ->
 # the scaler sizes one) and its difficulty. `result` is resolve_outcome() once the
@@ -51,6 +53,11 @@ const COL_HEX := Color("232733")
 const COL_HEX_EDGE := Color("39404f")
 const COL_BRAZIER := Color("6b2f1c")
 const COL_COVER := Color("2a3a3a")
+const COL_PROP := Color("4a3826")       # barrels, crates, fountains
+const COL_TORCH := Color("ffd98a")
+# T11: per-theme floor tint, palette only — no mechanical difference.
+const PALETTES := {"shrine": COL_HEX, "camp": Color("2a2a26"), "city": Color("2c2c33"),
+	"forest": Color("1f2a22"), "ice": Color("222c36"), "shop": Color("2b2620")}
 const COL_MOVE := Color(0.30, 0.55, 0.95, 0.35)
 const COL_TARGET := Color(0.95, 0.35, 0.30, 0.9)
 const COL_CONE := Color(0.98, 0.55, 0.15, 0.30)
@@ -58,7 +65,9 @@ const COL_PARTY := Color("5fbf6a")
 const COL_FOE := Color("d15750")
 
 func _ready() -> void:
-	_anim = 999.0 if OS.get_environment("SORCMERC_FAST") != "" else 1.0
+	_anim = Settings.anim()   # the in-game setting, or SORCMERC_FAST when set
+	if spec.is_empty():       # standalone: no campaign node dictating difficulty
+		difficulty = Settings.current().default_difficulty
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_theme()
 
@@ -169,6 +178,7 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		KEY_DOWN: pan_by(Vector2(0, -40))
 		KEY_ESCAPE, KEY_B: board_cancel()
 		KEY_R: if cb and cb.is_over(): _new_game()
+		KEY_F1: SettingsOverlay.toggle(self, func(): _anim = Settings.anim())
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 			_press_hotkey(e.keycode - KEY_1)
 		KEY_0:
@@ -218,7 +228,7 @@ func _new_game(forced := 0) -> void:
 	var sp: Dictionary = (spec if not spec.is_empty() else Scaler.roster_for(chars, difficulty)).duplicate(true)
 	sp["seed"] = _seed
 	result = {}
-	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS), Encounter.board())
+	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS))   # sp["theme"] picks the board
 	_logbox.text = ""
 	_logged = 0
 	_last_round = 1
@@ -674,6 +684,26 @@ class Board extends Control:
 			elif e.button_index == MOUSE_BUTTON_LEFT:
 				main.board_hex_clicked(Hex.from_pixel(e.position - _origin, main.hex_px))
 
+	# T11 interactables: shapes only, no sprites. Hazards pulse (the hex fill already
+	# glows), props get a crate mark, torches a small bright flame.
+	# ponytail: a torch could ignite adjacent flammable terrain — not built.
+	func _draw_object(o: Dictionary, c: Vector2, s: float, pulse: float) -> void:
+		match String(o["type"]):
+			"torch":
+				draw_circle(c, s * 0.16, main.COL_TORCH.lerp(Color("ff9d3d"), pulse))
+				draw_circle(c, s * 0.30, Color(1.0, 0.78, 0.45, 0.12 + 0.10 * pulse))
+			"fountain":
+				draw_circle(c, s * 0.45, Color("3d5566"))
+				draw_arc(c, s * 0.45, 0, TAU, 20, Color("6f97ad"), 2.0)
+			_:
+				if o.has("hazard") and not o.get("blocks_movement", false):
+					draw_circle(c, s * 0.22, Color("ffcf7a").lerp(Color("ff6a2a"), pulse))
+					return
+				var r := s * 0.42
+				draw_rect(Rect2(c - Vector2(r, r), Vector2(r * 2, r * 2)), Color("6b5236"))
+				draw_line(c - Vector2(r, 0), c + Vector2(r, 0),
+					Color("ff8c42") if o.get("explosive", false) else Color("3a2c1c"), 2.0)
+
 	func _draw() -> void:
 		if cb == null:
 			return
@@ -702,9 +732,12 @@ class Board extends Control:
 		for hx in cb.board["hexes"]:
 			var c := _origin + Hex.to_pixel(hx, s)
 			var poly := _hex_poly(c, s - 2.0)
-			var fill: Color = main.COL_HEX
-			if hx == cb.board["brazier"]:
+			var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
+			var obj: Dictionary = cb.object_at(hx)
+			if obj.has("hazard") and not obj.get("blocks_movement", false):
 				fill = main.COL_BRAZIER.lerp(Color("d9622e"), pulse)
+			elif obj.get("blocks_movement", false):
+				fill = main.COL_PROP
 			elif cb.is_cover(hx):
 				fill = main.COL_COVER
 			draw_colored_polygon(poly, fill)
@@ -719,6 +752,8 @@ class Board extends Control:
 				draw_string(ThemeDB.fallback_font, c - Vector2(6, -5), "⚠", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("ffcf47"))
 			if cb.is_cover(hx):
 				draw_string(ThemeDB.fallback_font, c - Vector2(s - 6, -s + 12), "cover", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("7fa6a6"))
+			if not obj.is_empty():
+				_draw_object(obj, c, s, pulse)
 
 		# targeting overlay — outline valid targets, float their odds, hovered one brighter
 		if hero_turn and main._mode == "target":

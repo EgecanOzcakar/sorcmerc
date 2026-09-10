@@ -47,7 +47,12 @@ func test_build_spec() -> void:
 	check(ids.size() == _uniq(ids).size(), "duplicate spawns get unique ids (%s)" % str(ids))
 	check(cb.team_of("foe").all(func(c): return c.src_id in ["snik", "grull"]),
 		"every spawn remembers its monsters.json id")
-	check(cb.board.has("brazier"), "an empty board argument falls back to the Sunken Shrine")
+	check(cb.board.get("palette", "") == "shrine", "an empty board argument falls back to the Sunken Shrine")
+	var camp = Encounter.build({"monsters": [{"id": "snik", "count": 2}], "seed": 5,
+		"theme": "goblin-camp"}, _combatants(chars))
+	check(camp.board.get("palette", "") == "camp", "spec[\"theme\"] picks the board")
+	check(camp.team_of("foe").all(func(f): return camp.passable(f.pos)),
+		"no foe spawns inside a blocking prop")
 	check(Encounter.build({"monsters": [{"id": "nosuch", "count": 2}], "seed": 1},
 		_combatants(chars)).team_of("foe").is_empty(), "an unknown monster id spawns nothing")
 	# same seed, same spec -> same fight

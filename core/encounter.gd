@@ -38,13 +38,32 @@ static func _room() -> Array:
 static func board() -> Dictionary:
 	return shrine_board()
 
+# --- T11: board themes ------------------------------------------------
+# A board is {hexes, cover, rough, objects, palette, reach_melee, region_at}.
+# `objects` are the interactables combat.gd reads: {type, pos, hazard?, hp?,
+# blocks_movement?, explosive?}. A hazard object is shovable-into (2d6 fire);
+# an hp object can be smashed (one action); explosive ones burst on death.
+const THEMES := ["sunken-shrine", "goblin-camp", "city-square", "forest-clearing",
+	"frozen-cave", "merchant-shop"]
+
+static func board_for(theme: String) -> Dictionary:
+	match theme:
+		"goblin-camp": return goblin_camp_board()
+		"city-square": return city_square_board()
+		"forest-clearing": return forest_clearing_board()
+		"frozen-cave": return frozen_cave_board()
+		"merchant-shop": return merchant_shop_board()
+	return shrine_board()
+
 # Same dict; named so build()'s `board` parameter can still reach the default.
 static func shrine_board() -> Dictionary:
 	return {
 		"hexes": _room(),
-		"brazier": BRAZIER,
+		"objects": [{"type": "brazier", "pos": BRAZIER,
+			"hazard": {"dice": "2d6", "damage_type": "fire"}}],
 		"cover": [Vector2i(8, 0), Vector2i(8, 1), Vector2i(8, 2)],  # the Alcove
 		"rough": [Vector2i(4, 1), Vector2i(6, 1)],                  # scorched ground either side of the brazier
+		"palette": "shrine",
 		# The turn resolver reads these off the board rather than preloading this file,
 		# so T7/T8 can hand it a generated encounter instead.
 		"reach_melee": REACH_MELEE,
@@ -57,6 +76,97 @@ static func region_at(p: Vector2i) -> String:
 	if p.x <= 6:
 		return "Brazier Hall"
 	return "Alcove"
+
+static func _rect(q0: int, q1: int, r0: int, r1: int) -> Array:
+	var h: Array = []
+	for q in range(q0, q1 + 1):
+		for r in range(r0, r1 + 1):
+			h.append(Vector2i(q, r))
+	return h
+
+# Open clearing, a campfire in the middle and the warband's stores stacked around it.
+static func goblin_camp_board() -> Dictionary:
+	return {
+		"hexes": _rect(0, 6, 0, 3),
+		"objects": [
+			{"type": "campfire", "pos": Vector2i(3, 1), "hazard": {"dice": "2d6", "damage_type": "fire"}},
+			{"type": "crate", "pos": Vector2i(2, 3), "hp": 6, "blocks_movement": true},
+			{"type": "crate", "pos": Vector2i(5, 0), "hp": 6, "blocks_movement": true},
+			{"type": "barrel", "pos": Vector2i(4, 3), "hp": 5, "blocks_movement": true,
+				"explosive": true, "hazard": {"dice": "2d6", "damage_type": "fire"}},
+			{"type": "torch", "pos": Vector2i(6, 2)},
+		],
+		"cover": [Vector2i(1, 3), Vector2i(6, 0)],      # hide tents
+		"rough": [Vector2i(3, 0), Vector2i(3, 2)],      # ash and cook-pots
+		"palette": "camp",
+		"reach_melee": REACH_MELEE,
+		"region_at": func(p: Vector2i) -> String: return "the treeline" if p.x <= 2 else "the camp",
+	}
+
+# Market day. Stalls give cover, the fountain is solid stone, lamps burn on the corners.
+static func city_square_board() -> Dictionary:
+	return {
+		"hexes": _rect(0, 6, 0, 3),
+		"objects": [
+			{"type": "fountain", "pos": Vector2i(3, 1), "blocks_movement": true},
+			{"type": "fountain", "pos": Vector2i(3, 2), "blocks_movement": true},
+			{"type": "crate", "pos": Vector2i(5, 2), "hp": 6, "blocks_movement": true},
+			{"type": "torch", "pos": Vector2i(0, 2)},
+			{"type": "torch", "pos": Vector2i(6, 1)},
+		],
+		"cover": [Vector2i(1, 0), Vector2i(1, 3), Vector2i(5, 0), Vector2i(5, 3)],  # market stalls
+		"rough": [],                                    # cobblestone: palette only
+		"palette": "city",
+		"reach_melee": REACH_MELEE,
+		"region_at": func(p: Vector2i) -> String: return "the stalls" if p.x <= 2 else "the square",
+	}
+
+static func forest_clearing_board() -> Dictionary:
+	var h := _rect(0, 6, 0, 3)
+	h.erase(Vector2i(0, 0))
+	h.erase(Vector2i(6, 3))
+	return {
+		"hexes": h,
+		"objects": [],
+		"cover": [Vector2i(2, 0), Vector2i(1, 2), Vector2i(4, 3), Vector2i(5, 1)],  # trees
+		"rough": [Vector2i(2, 1), Vector2i(3, 3), Vector2i(4, 0)],                  # undergrowth
+		"palette": "forest",
+		"reach_melee": REACH_MELEE,
+		"region_at": func(p: Vector2i) -> String: return "the treeline" if p.x <= 2 else "the clearing",
+	}
+
+# Two chambers joined by a crawl, the floor sheeted in ice.
+static func frozen_cave_board() -> Dictionary:
+	var h := _rect(0, 2, 0, 2)
+	h.append(Vector2i(3, 1))
+	h.append_array(_rect(4, 6, 0, 2))
+	h.append(Vector2i(7, 1))
+	h.append(Vector2i(8, 1))
+	return {
+		"hexes": h,
+		"objects": [{"type": "torch", "pos": Vector2i(4, 1)}],
+		"cover": [Vector2i(0, 0), Vector2i(6, 2), Vector2i(8, 1)],                  # stalactite columns
+		"rough": [Vector2i(1, 1), Vector2i(4, 0), Vector2i(5, 2)],                  # ice
+		"palette": "ice",
+		"reach_melee": REACH_MELEE,
+		"region_at": func(p: Vector2i) -> String: return "the outer chamber" if p.x <= 3 else "the deep hollow",
+	}
+
+# A tight room: shelves down the walls, stock stacked in the aisle.
+static func merchant_shop_board() -> Dictionary:
+	return {
+		"hexes": _rect(0, 4, 0, 3),
+		"objects": [
+			{"type": "barrel", "pos": Vector2i(3, 0), "hp": 6, "blocks_movement": true},
+			{"type": "barrel", "pos": Vector2i(3, 3), "hp": 6, "blocks_movement": true},
+			{"type": "torch", "pos": Vector2i(0, 1)},
+		],
+		"cover": [Vector2i(4, 0), Vector2i(4, 3), Vector2i(0, 3)],   # shelves
+		"rough": [],
+		"palette": "shop",
+		"reach_melee": REACH_MELEE,
+		"region_at": func(p: Vector2i) -> String: return "the counter" if p.x <= 1 else "the back room",
+	}
 
 static func party() -> Array:
 	var out: Array = []
@@ -95,7 +205,7 @@ const GOLD_PER_POWER := 0.6
 # `mult` is T8's difficulty knob; it scales the spawned instance, never
 # data/monsters.json.
 static func build(spec: Dictionary, party_combatants: Array, board: Dictionary = {}) -> Combat:
-	var b: Dictionary = board if not board.is_empty() else shrine_board()
+	var b: Dictionary = board if not board.is_empty() else board_for(String(spec.get("theme", "")))
 	var all_c: Array = party_combatants.duplicate()
 	var spots := _foe_spots(b, party_combatants)
 	var i := 0
@@ -149,10 +259,12 @@ static func _bump(notation: String, by: int) -> String:
 # than camping the far cover.
 static func _foe_spots(b: Dictionary, party_c: Array) -> Array:
 	var taken: Array = party_c.map(func(c): return c.pos)
+	var blocked: Array = b.get("objects", []).filter(
+		func(o): return o.get("blocks_movement", false)).map(func(o): return o["pos"])
 	var out: Array = []
 	var far: Array = []
 	for h in b["hexes"]:
-		if h in taken:
+		if h in taken or h in blocked:
 			continue
 		var d := 99
 		for p in taken:
