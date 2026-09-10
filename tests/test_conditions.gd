@@ -175,7 +175,7 @@ func test_auto_stand_from_prone() -> void:
 	# a feature that discounts the cost
 	var c = _guy("scout", "party", Vector2i(4, 0))
 	c.statuses["prone"] = true
-	c.features["test-nimble-stand"] = true
+	c.features["_test-nimble-stand"] = true
 	var cb2 = Combat.new(RNG.new(7), [c, _guy("foe2", "foe", Vector2i(4, 1))], Encounter.board())
 	cb2.begin_turn_for(c)
 	check(c.econ["move_left"] == c.speed, "a 0-cost discount feature leaves move untouched")
