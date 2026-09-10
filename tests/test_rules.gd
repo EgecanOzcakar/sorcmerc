@@ -7,6 +7,8 @@ const Grants = preload("res://core/rules/grants.gd")
 const Choice = preload("res://core/rules/choice.gd")
 const Bundles = preload("res://core/rules/bundles.gd")
 const Character = preload("res://core/character.gd")
+const PassAbilities = preload("res://core/rules/pass_abilities.gd")
+const PassProfs = preload("res://core/rules/pass_profs.gd")
 
 var _pass = 0
 var _fail = 0
@@ -27,6 +29,9 @@ func _init() -> void:
 	test_bundles_subclass_is_retroactive()
 	test_bundles_min_class_level_gate()
 	test_no_nested_expansion()
+	test_abilities()
+	test_profs()
+	test_expertise_and_half_proficiency()
 
 	print("test_rules: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -193,3 +198,100 @@ func test_no_nested_expansion() -> void:
 	for x in offenders:
 		printerr("    ", x)
 	check(offenders.is_empty(), "no feature-choice option nests an expanding grant (%d)" % offenders.size())
+
+# --- step 4: pass_abilities + pass_profs ---------------------------------
+
+func _resolved_abilities(ch: Character) -> Dictionary:
+	return PassAbilities.resolve(ch.base_abilities, Bundles.collect(ch)["bundles"], ch.choices)
+
+func test_abilities() -> void:
+	var ch := _fighter(1)
+	ch.base_abilities = {"str": 15, "dex": 14, "con": 13, "int": 12, "wis": 10, "cha": 8}
+	var a: Dictionary = _resolved_abilities(ch)["abilities"]
+	check(int(a["str"]["total"]) == 15 and int(a["str"]["mod"]) == 2, "str 15 -> +2")
+	check(int(a["wis"]["mod"]) == 0, "wis 10 -> +0")
+	check(int(a["cha"]["mod"]) == -1, "cha 8 -> -1")
+	check(int(a["con"]["mod"]) == 1, "con 13 -> +1")
+
+	# the soldier background's 3-point ASI
+	ch.decide("asi:background:soldier:0", {"type": "asi", "allocation": {"str": 2, "con": 1}})
+	a = _resolved_abilities(ch)["abilities"]
+	check(int(a["str"]["total"]) == 17 and int(a["str"]["mod"]) == 3, "background ASI +2 str -> 17 (+3)")
+	check(int(a["con"]["total"]) == 14, "background ASI +1 con -> 14")
+
+	# over-allocation is skipped with a warning
+	ch.decide("asi:background:soldier:0", {"type": "asi", "allocation": {"str": 3, "con": 3}})
+	var r := _resolved_abilities(ch)
+	check(int(r["abilities"]["str"]["total"]) == 15, "over-allocated ASI is skipped")
+	check(r["warnings"].size() == 1, "over-allocated ASI warns")
+
+	# out-of-pool allocation is skipped (soldier's pool is str/dex/con)
+	ch.decide("asi:background:soldier:0", {"type": "asi", "allocation": {"int": 3}})
+	r = _resolved_abilities(ch)
+	check(int(r["abilities"]["int"]["total"]) == 12, "out-of-pool ASI is skipped")
+	check(r["warnings"].size() == 1, "out-of-pool ASI warns")
+
+	# cap 20
+	ch.base_abilities["str"] = 19
+	ch.decide("asi:background:soldier:0", {"type": "asi", "allocation": {"str": 2, "con": 1}})
+	a = _resolved_abilities(ch)["abilities"]
+	check(int(a["str"]["total"]) == 20 and int(a["str"]["mod"]) == 5, "ability total caps at 20")
+
+func test_profs() -> void:
+	var ch := _fighter(1)
+	ch.base_abilities = {"str": 16, "dex": 14, "con": 14, "int": 10, "wis": 12, "cha": 8}
+	ch.decide("skill-choice:class:fighter:0", {"type": "skill-choice", "skills": ["athletics", "perception"]})
+	var b: Array = Bundles.collect(ch)["bundles"]
+	var a: Dictionary = PassAbilities.resolve(ch.base_abilities, b, ch.choices)["abilities"]
+	var pb := Bundles.proficiency_bonus(1)
+	check(pb == 2, "PB at level 1 is 2")
+
+	var s := PassProfs.saves(a, b, pb, ch.choices)
+	check(s["save_prof"]["str"] and s["save_prof"]["con"], "fighter is proficient in STR and CON saves")
+	check(not s["save_prof"]["dex"], "fighter is not proficient in DEX saves")
+	check(int(s["saves"]["str"]) == 5, "STR save = +3 mod + 2 PB")
+	check(int(s["saves"]["dex"]) == 2, "DEX save = +2 mod, no PB")
+
+	var sk := PassProfs.skills(a, b, pb, ch.choices)
+	check(sk["skill_prof"]["athletics"] == "prof", "chosen skill is proficient")
+	check(int(sk["skills"]["athletics"]) == 5, "athletics = +3 STR + 2 PB")
+	check(sk["skill_prof"]["intimidation"] == "prof", "background skill is proficient")
+	check(sk["skill_prof"]["arcana"] == "none", "an ungranted skill is not proficient")
+	check(int(sk["skills"]["arcana"]) == 0, "arcana = +0 INT")
+
+	var p := PassProfs.proficiencies(b, ch.choices)
+	check("heavy" in p["armor"] and "shields" in p["armor"], "fighter armor proficiencies")
+	check("martial" in p["weapon"], "fighter weapon proficiencies")
+	check("common" in p["language"], "human speaks common")
+	var pending_types: Array = []
+	for x in p["pending"]:
+		pending_types.append(x["type"])
+	check("language-choice" in pending_types, "undecided language choices are pending")
+
+func test_expertise_and_half_proficiency() -> void:
+	# Rogue 1: expertise doubles PB on the two chosen skills.
+	var ch := Character.new()
+	ch.species_id = "human"; ch.background_id = "soldier"
+	ch.base_abilities = {"str": 10, "dex": 17, "con": 12, "int": 12, "wis": 12, "cha": 10}
+	ch.add_level("rogue", -1)
+	ch.decide("skill-choice:class:rogue:0", {"type": "skill-choice", "skills": ["stealth", "acrobatics", "perception", "deception"]})
+	ch.decide("expertise-choice:class:rogue:0", {"type": "expertise-choice", "skills": ["stealth"], "tools": []})
+	var b: Array = Bundles.collect(ch)["bundles"]
+	var a: Dictionary = PassAbilities.resolve(ch.base_abilities, b, ch.choices)["abilities"]
+	var sk := PassProfs.skills(a, b, 2, ch.choices)
+	check(sk["skill_prof"]["stealth"] == "expert", "expertise recorded")
+	check(int(sk["skills"]["stealth"]) == 7, "stealth = +3 DEX + 2 PB + 2 expertise")
+	check(int(sk["skills"]["acrobatics"]) == 5, "acrobatics = +3 DEX + 2 PB (no expertise)")
+
+	# Champion 7's Remarkable Athlete: half PB (rounded up) on STR/DEX/CON checks,
+	# only where not already proficient.
+	var f := _fighter(7)
+	f.base_abilities = {"str": 16, "dex": 10, "con": 14, "int": 10, "wis": 10, "cha": 10}
+	f.decide("subclass:class:fighter:0", {"type": "subclass", "subclassId": "champion"})
+	f.decide("skill-choice:class:fighter:0", {"type": "skill-choice", "skills": ["athletics", "perception"]})
+	var fb: Array = Bundles.collect(f)["bundles"]
+	var fa: Dictionary = PassAbilities.resolve(f.base_abilities, fb, f.choices)["abilities"]
+	var fsk := PassProfs.skills(fa, fb, 3, f.choices)
+	check(int(fsk["skills"]["acrobatics"]) == 2, "Remarkable Athlete adds ceil(3/2)=2 to a non-proficient DEX skill")
+	check(int(fsk["skills"]["athletics"]) == 6, "no half-PB where already proficient (+3 STR +3 PB)")
+	check(int(fsk["skills"]["arcana"]) == 0, "Remarkable Athlete does not touch INT skills")

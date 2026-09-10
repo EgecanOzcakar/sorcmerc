@@ -208,6 +208,14 @@ static func _of_type(bundles: Array, t: String) -> Array:
 				out.append({"grant": g, "source": b["source"]})
 	return out
 
+# Level accounting lives here because class_level() does.
+static func proficiency_bonus(level: int) -> int:
+	if level < 5: return 2
+	if level < 9: return 3
+	if level < 13: return 4
+	if level < 17: return 5
+	return 6
+
 # Counts class-origin bundles — one per class level.
 static func class_level(bundles: Array, cid: String) -> int:
 	var n := 0
