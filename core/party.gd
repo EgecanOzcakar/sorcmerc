@@ -13,6 +13,7 @@ var roster: Array = []            # Character, in recruitment order
 var active: Array[String] = []    # character ids, in marching order (<= MAX_ACTIVE)
 var gold: int = 0
 var stash: Array[Dictionary] = [] # [{item_id, quantity}] — shared, not equipped
+var quests: Array = []            # T9's quest log — dicts owned by core/quest.gd
 
 # --- roster ---------------------------------------------------------------
 
