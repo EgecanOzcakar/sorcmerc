@@ -1407,4 +1407,119 @@ File ownership: `core/scaler.gd`, `tests/test_scaler.gd`, and ONLY the
 (nothing else in that file — it has several other agents' worth of
 accumulated work in unrelated regions).
 
+**T36/T38 completion (2026-09-11):** SPAWN_GAP raised 3→6 and TIER retuned
+in the same push (`526cc2d`, `0547d51`, pushed to master). 200-seed sweeps
+after retune: easy 91.0% (target 90), normal 74.0% (target 75), hard 51.5%
+(target 50) — all in band. Level-8 sweep still ordered (91.7/73.3/58.3).
+Boss pool 24.0% pooled (in the 15–85% climax band); TIER moved
+0.85/1.06/1.50 → 1.00/1.35/1.80, nothing else changed. Full 32-file
+headless suite green. Two items flagged, not fixed (outside T38's scope):
+`Campaign.BOSS_REF_WIN_RATE` (0.698) is stale against the new easy/hard
+average (0.7125) — cosmetic, feeds an XP-bonus comment; and the
+`sunken-shrine` boss node measures a real outlier at 6.0% (was 24.5%)
+because it maps to no faction and always fields `MAX_FOES` of the
+hand-tuned MIX — a `THEME_FACTION`/`MAX_FOES` fix, not a `TIER` one.
+Neither blocks anything; picked up later if it matters in play.
+
+## T39 — Surprise + Scouting → deployment control (locked 2026-09-11, dispatched now)
+
+Closes a real 5e rules gap (Surprise was never implemented) and gives T30's
+existing scouting flavor a mechanical payoff, per direct user request
+("go ahead with 1+2" on the two recommended options together).
+
+**Surprise (5e 2024 rule, adapted):** at the moment a combat node is
+entered, roll a single group Stealth check for the party (highest-Stealth
+member's roll, matching how other party-wide checks in this codebase are
+resolved — reuse whatever pattern T30's scouting check already uses, don't
+invent a new one) against the encounter's average foe passive Perception
+(10 + their Perception mod, averaged across the spawned roster, matching
+how `core/scaler.gd`/`core/encounter.gd` already aggregate roster stats
+elsewhere). Beat it: party is unseen at combat start. This is a **surprise
+round**, not RAW's "surprised combatants act last" — simplest to build on
+this engine's existing initiative/turn-order in `core/combat.gd`: the foe
+team skips its first turn entirely (no free attacks against it to hand
+back later, no bonus-action edge cases). Miss it: normal combat start, no
+effect either way (not a penalty — 5e doesn't punish a failed Stealth
+check beyond "no surprise").
+
+**Scouting integration:** if the party already passed T30's Survival
+scouting check for this node, that guarantees the Stealth check succeeds
+outright (skip the roll, go straight to "party unseen") — a successful
+scout should never be worse than not scouting, and this makes scouting
+worth doing instead of pure flavor text.
+
+**Deployment control (the actual payoff):** when the party is unseen at
+combat start (whether by guaranteed scout or a lucky Stealth roll), let
+the player freely place party members among the party's normal starting
+hexes (swap positions) before round 1 begins — not new hexes, just control
+over which party member stands where relative to the (still-hidden-intent)
+foe layout. No UI for arbitrary placement; a simple "swap two party
+members" control on the existing pre-combat screen is enough. When the
+party is NOT unseen, skip straight to combat as today (no regression).
+
+File ownership: new logic lives in `core/encounter.gd` (the Stealth-vs-PP
+check, an `unseen: bool` on the build result) and `core/combat.gd` (skip
+the foe team's first turn when unseen) — do not touch `core/scaler.gd` or
+`core/campaign.gd`'s `BOSS_POOL` (T38 just landed there). UI: whichever
+scene currently handles the pre-combat screen (likely `scenes/main.gd` or
+a campaign/encounter-entry scene — locate it, don't guess) gets the swap
+control, gated on `unseen`. Add tests alongside the existing
+`tests/test_encounter.gd`/`tests/test_combat.gd` suites, seeded like
+everything else in this codebase.
+
+## T40 — retune win-rate targets to 95/85/75 (locked 2026-09-11, dispatched now)
+
+Direct user request: raise the calibrated win-rate targets in
+`tests/test_scaler.gd`'s `TARGET` (currently `{"easy": 90.0, "normal": 75.0,
+"hard": 50.0}`, just re-hit by T38) to **easy 95%, normal 85%, hard 75%**.
+Easier across the board, not a shape change — same `BAND := 10.0` unless
+the new targets can't fit inside it (report if so rather than silently
+widening the band).
+
+Method: identical to T38/T23 — real 200-seed sweeps via
+`tests/test_scaler.gd`'s own existing `_sweep`, retune `core/scaler.gd`'s
+`TIER` (and `CURVE`/`MULT_*` only if `TIER` alone can't hit all three),
+update the header TUNING comment with the new measured numbers. Also
+re-sweep and update `core/campaign.gd`'s `BOSS_POOL` `win_rate` leaves
+(bosses get relatively easier too) and flag `Campaign.BOSS_REF_WIN_RATE`
+(T38 already found this stale — fold the fix in here). Level-8 sweep must
+stay ordered and neither end a foregone conclusion, same as `test_win_rates`
+requires today.
+
+File ownership: `core/scaler.gd`, `tests/test_scaler.gd` (`TARGET` values
+and the sweep), and ONLY the `"win_rate"` leaves + `BOSS_REF_WIN_RATE` in
+`core/campaign.gd`. T39 (Surprise/deployment) is running concurrently in
+`core/encounter.gd`/`core/combat.gd`/`scenes/main.gd`/
+`scenes/campaign/campaign.gd` — disjoint files, no coordination needed;
+`test_scaler.gd`'s sweep calls `Encounter.build` directly and never sets
+an "unseen" flag, so it doesn't exercise T39's surprise-round logic either
+way.
+
+**T39 completion (2026-09-11):** landed as `bba1873`. `core/combat.gd` gained
+`unseen`/`skips_turn(c)`/`begin_surprise_round()`, riding the existing
+dead/stable skip loop in `end_turn()` so every driver honors it uniformly.
+`core/encounter.gd` gained `surprise_check(cb, scouted_ahead)`: best-party
+Stealth vs. average foe passive Perception, rolled off a seed-derived
+stream so it never perturbs the fight's own RNG; `scouted_ahead` (read from
+`Campaign.scouted` before `run.enter()` clears it) auto-succeeds. `scenes/
+main.gd` added a `"deploy"` mode with swap-position buttons before combat
+starts when unseen. Full 25-file suite green (0 failures); `drive_deploy.gd`
+added as a scene-driver smoke test (not in the automated test loop, run
+explicitly). One known gap, left out of scope: reloading a saved mid-combat
+node loses the guaranteed-ambush-from-scouting, since `Campaign.scouted` is
+already cleared by then and isn't persisted separately — flagged, not
+blocking, revisit if it matters in play.
+
+**T40 completion (2026-09-11):** landed as `741a91b`. `TIER` moved
+1.00/1.35/1.80 → **0.96/1.10/1.32** (from T38's numbers); `CURVE`/`MULT_*`/
+`BAND` untouched. 200-seed (level-3) / 60-seed (level-8) measured win
+rates: easy 94.5/95.0%, normal 83.5/88.3%, hard 75.0/78.3% — all within
+1.5 points of the 95/85/75 target, level-8 order preserved. Boss pool
+45.0% pooled (was 24.0%, still inside the 15–85% band); `sunken-shrine`'s
+outlier jumped 6.0%→47.0% as a side effect (still not "fixed" per T38's
+note — the `THEME_FACTION` gap remains, just less painful at this TIER).
+`Campaign.BOSS_REF_WIN_RATE` corrected 0.698→0.8475 with a comment to
+re-derive it on every future TIER retune, closing the staleness T38
+flagged. Full suite: 25 files, 4930 checks, 0 failures.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
