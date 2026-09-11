@@ -2530,4 +2530,15 @@ sequence at a few animation-progress timestamps, same discipline O11/O12/
 O14 used) and describing what the motion looks like, not just that tests
 pass — juice is inherently a visual judgment call tests can't fully cover.
 
+**Scope addition (2026-09-11, mid-dispatch):** a sixth piece, direct from
+the user — a camera "focus" punch-in on the attacker/defender pair
+during the resolution beat. `scenes/main.gd` already has a real zoom/pan
+mechanism (`_zoom`, `_pan`, `set_zoom()`, `_zoom_at()`, already wired
+into the board's projection and font scaling for manual scroll-zoom) —
+reuse it rather than building a new camera system: tween `_zoom` up and
+`_pan` toward the attacker/defender midpoint for the resolution window,
+then ease back to whatever the player had set (save/restore or blend
+additively, don't clobber their manual view). Same `_fx_on` gate, same
+outcome-parity bar as the other five.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
