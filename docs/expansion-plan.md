@@ -2789,4 +2789,48 @@ before-merge pattern as every other art branch this session. Report
 back with an actual screenshot of the composed sheet/rendered frame,
 not just "it built" — same visual-proof discipline as O11/O12/T46.
 
+**Monster-coverage plan (locked 2026-09-11):** LPC's rig is humanoid-
+only (one body skeleton, layered equipment) — it does not cover most of
+the ~316-entry bestiary. Tier the art source by **faction**
+(`core/scaler.gd`'s existing `FACTIONS`), not by literal monster id, so
+plugging in a second source later is "add a lookup table," not a
+rework:
+1. **LPC-composed sprites** for humanoid-shaped factions: `goblinoid`,
+   `orc`, `kobold`, `gnoll`, `bandit`, `soldier`, `cultist`, and
+   humanoid undead (skeleton/zombie, if an LPC fork covers them —
+   check during T48 below rather than assuming).
+2. **A separate non-humanoid creature pack** (T48, below) for `beast`,
+   `giant`, `monstrosity`, `fey`, `elemental`, `construct`, and
+   dragon-shaped entries — LPC cannot represent these, forcing them
+   onto its rig would look wrong, not just imperfect.
+3. **The existing flat vector token stays the permanent fallback**, not
+   a temporary stopgap — `core/ui_icons.gd`'s `combatant_glyph()`/
+   `FOE_GLYPHS` already picks a creature-type symbol for anything
+   without a match. No free source will ever hit 316/316 coverage; ship
+   humanoids first, keep the graceful fallback for the rest, iterate.
+
+## T48 — spike: non-humanoid monster art source (locked 2026-09-11, dispatched now)
+
+Companion to T47's monster-coverage plan, tier 2. Research-only (same
+shape as O10/T46): search itch.io/OpenGameArt/Kenney for a CC0/CC-BY
+pixel-art creature/bestiary pack — beasts (wolves, bears, spiders),
+giants, oozes/monstrosities, fey, elementals, constructs, dragon-shaped
+things — at a scale/style that can sit next to LPC's 64×64 humanoid
+sprites without looking like two different games glued together (doesn't
+need to be LPC-compatible frame-for-frame, just a plausible pixel-art
+neighbor: similar pixel density, similar palette weight, similar top-
+down/RPG-Maker-ish perspective — not painted/photographic like the
+overworld's current art, and not isometric tile art).
+
+Cross-reference candidates against `core/scaler.gd`'s actual faction
+list and `data/monsters.json`'s creature types for real coverage —
+report which factions a candidate pack actually covers, not just "it's
+a monster pack." Report a shortlist (aim 3-5) with license confirmation
+per candidate, a style-compatibility judgment (does it actually sit
+next to LPC characters, or clash), and a coverage table (which of
+beast/giant/monstrosity/fey/elemental/construct/dragon it fills). Same
+honesty bar as every prior spike: say plainly if coverage is partial or
+if the best candidates are a style mismatch, don't oversell. Research/
+reporting only — no integration, no branch, no code changes.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
