@@ -2468,4 +2468,66 @@ Two real, smaller follow-ups surfaced along the way, not yet actioned:
    would fix it, deliberately left alone since the brief said keep that
    logic intact).
 
+## T44 — Darkest Dungeon-style combat juice (locked 2026-09-11, dispatched now, own branch)
+
+Direct user request, scoped via Q&A: procedural motion on the *existing*
+flat token art (not new hand-painted character art — that needs a paid
+AI art service or commissioned work and is explicitly out of scope for
+this entry), landing on `scenes/main.gd`'s hex combat board (not the
+open-world map). Four beats: melee attack (hit vs. miss reads
+differently), spell cast (tinted by school), a successful save/dodge, and
+crit/big-hit impact.
+
+**What already exists (read before building — do not duplicate)**:
+`scenes/main.gd`'s `Board` class already has real infrastructure this
+extends rather than replaces —
+- `play_fx(kind, id, from_hx, to_hx, hexes)` + `_draw_fx()`: a melee lunge
+  (sine-curve push toward the target and back, `_lunge(id)`), a ranged
+  projectile line, and a spell ring/AoE-hex glow. `_attack_fx()` in the
+  main script already picks the right `kind` per verb and calls this.
+- `_flash` (per-token white flash on hp change) and `_floats` (floating
+  damage numbers) already exist and fire on hp changes.
+- `show_reveal()` + `REVEAL_PAUSE` already pop a HIT/MISS/CRIT/SAVED/
+  FAILED-SAVE readout with a beat to read it, gated on `_fx_on` (off
+  under `SORCMERC_FAST`/headless — keep that gate, tests must stay fast).
+
+**What's missing, this entry's actual scope**:
+1. **Hit-stop**: a brief (~80-120ms) full animation freeze at the moment
+   of impact on a crit (and optionally a solid hit) — DD's signature
+   "this one landed" beat. Distinct from `REVEAL_PAUSE`'s slower popup
+   read time; this is a snap, not a pause to read text.
+2. **Screen/board shake**: a small random-offset jitter applied to the
+   board's draw origin for a few frames, scaled by damage (light on a
+   normal hit, stronger on a crit) — reuse the same `age`/`ttl` fx-timer
+   shape `play_fx`'s entries already use, don't invent a second timer
+   system.
+3. **Defender recoil**: a small positional nudge away from the attacker
+   on a hit (distinct from `_flash`'s color change), similar shape to
+   `_lunge()` but for the target, not the attacker, and much smaller.
+4. **Dodge/save sidestep**: on a miss or a successful save, the DEFENDER
+   gets its own brief motion (a sidestep/duck, not just "nothing drawn")
+   so a miss reads as an active dodge, not an absence of an event.
+5. **Spell-school tinting**: `play_fx`'s "spell" case currently draws a
+   fixed blue-ish color regardless of school — read `core/ui_icons.gd`'s
+   `SCHOOL_COLORS` (already used elsewhere for spell UI) and tint the
+   cast glow/ring by the spell's actual school instead.
+
+File ownership: `scenes/main.gd`'s `Board` class (`play_fx`/`_draw_fx`/
+`_lunge`/`reset`/hp-change handling) and `_attack_fx()` only — this is a
+big shared file with many other systems in it, stay inside those
+functions. Keep everything gated on `_fx_on` exactly as today (no new
+animation may run under `SORCMERC_FAST`/headless, or every existing
+timing-sensitive test breaks). Full suite + all `drive_*` (especially
+`drive_ui.gd`, which plays out real fights) must stay green — these are
+purely cosmetic additions, they must not change combat outcomes, timing
+under fast-mode, or any headless-observable state.
+
+**Branch**: own branch, not master directly (`feature/combat-juice` or
+similar) — user asked for this explicitly, same review-before-merge
+pattern used for the isometric art spikes. Verify by actually running
+the game (`godot --path . scenes/main.tscn` or a scripted screenshot
+sequence at a few animation-progress timestamps, same discipline O11/O12/
+O14 used) and describing what the motion looks like, not just that tests
+pass — juice is inherently a visual judgment call tests can't fully cover.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
