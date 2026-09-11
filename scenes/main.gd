@@ -1006,21 +1006,20 @@ class Board extends Control:
 	# Purely a _draw()-time view transform: hex.gd still speaks flat-top axial
 	# pixels, we just tilt the plane those pixels live on. Linear, so projecting
 	# an offset and adding it to a projected centre == projecting the world point.
-	# ponytail: one fixed camera angle, no rotation. Add a matrix if the camera
-	# ever needs to orbit.
-	# The classic 2:1 iso matrix — rotate the ground plane 45°, halve its height:
-	#   sx = (x - y) * ISO_X,  sy = (x + y) * ISO_Y
-	const ISO_X := 1.05
-	const ISO_Y := 0.525
-	const ISO_SQUASH := 2.0 * ISO_Y   # how much a world y-extent shrinks on screen
+	# The camera: yaw the ground plane by ISO_YAW, then squash it vertically —
+	# ISO_SQUASH is the sine of the pitch, so 0.45 ≈ looking down from ~27°,
+	# the flat wide RTS angle rather than a steep 45° overhead.
+	# ponytail: fixed camera. Make these vars if it ever needs to orbit/tilt.
+	const ISO_YAW := 35.0
+	const ISO_SQUASH := 0.38
+	const ISO_GAIN := 1.85    # the whole plane, scaled to fill the viewport
 
 	func _iso(v: Vector2) -> Vector2:
-		return Vector2((v.x - v.y) * ISO_X, (v.x + v.y) * ISO_Y)
+		var r := v.rotated(deg_to_rad(ISO_YAW)) * ISO_GAIN
+		return Vector2(r.x, r.y * ISO_SQUASH)
 
 	func _iso_inv(v: Vector2) -> Vector2:
-		var a := v.x / (2.0 * ISO_X)
-		var b := v.y / (2.0 * ISO_Y)
-		return Vector2(a + b, b - a)
+		return Vector2(v.x, v.y / ISO_SQUASH).rotated(-deg_to_rad(ISO_YAW)) / ISO_GAIN
 
 	func _pix(hx: Vector2i) -> Vector2:
 		return _origin + _iso(Hex.to_pixel(hx, main.hex_px))
@@ -1123,6 +1122,78 @@ class Board extends Control:
 			elif e.button_index == MOUSE_BUTTON_LEFT:
 				main.board_hex_clicked(_unpix(e.position))
 
+	# Stable per-hex noise: same hex, same salt -> same value, every frame. No RNG
+	# state, so nothing here can perturb the game's seeded rolls.
+	static func _rand(hx: Vector2i, salt: int) -> float:
+		var n: int = hash(Vector3i(hx.x, hx.y, salt))
+		return float(n % 4096) / 4096.0 if n >= 0 else float(-n % 4096) / 4096.0
+
+	# What KIND of ground this is, for the seam test — "" is plain floor.
+	func _terrain(hx: Vector2i) -> String:
+		var o: Dictionary = cb.object_at(hx)
+		if o.has("hazard") and not o.get("blocks_movement", false):
+			return "hazard"
+		if o.get("blocks_movement", false):
+			return "prop"
+		return "cover" if cb.is_cover(hx) else ""
+
+	# How thickly each theme is planted. Cosmetic only — foliage is never
+	# consulted by movement, targeting or line of sight, it is picked from the
+	# hex's own hash at draw time and never stored.
+	const FLORA := {"forest": 0.55, "camp": 0.22, "shrine": 0.12, "ice": 0.14,
+		"city": 0.0, "shop": 0.0}
+	const FLORA_COL := {"forest": "3f6b3a", "camp": "5c5f33", "shrine": "3a5548",
+		"ice": "5d7a84", "city": "3f5240", "shop": "3f5240"}
+
+	# {} for bare ground, else the plant to draw. Cover hexes always get one —
+	# the thing you are hiding behind should be visible.
+	func _foliage_at(hx: Vector2i, c: Vector2, s: float) -> Dictionary:
+		var pal := String(cb.board.get("palette", "shrine"))
+		var r := _rand(hx, 5)
+		var cover: bool = cb.is_cover(hx)
+		if not cover and r > float(FLORA.get(pal, 0.1)):
+			return {}
+		var off := _iso(Vector2(_rand(hx, 6) - 0.5, _rand(hx, 7) - 0.5) * s * 0.7)
+		return {"at": c + off, "kind": "tree" if _rand(hx, 8) > 0.55 else "bush",
+			"col": Color(String(FLORA_COL.get(pal, "3f5240"))),
+			"scale": (0.85 + 0.45 * _rand(hx, 9)) * (1.15 if cover else 1.0)}
+
+	# A combatant: a standing figure rather than a poker chip — a tapered torso
+	# out of the hex, a head above it. Still flat shapes, still one silhouette for
+	# everyone; the class/creature glyph on the chest is what tells them apart.
+	# ponytail: no per-unit art. That is the sprite track's job, not this one.
+	const FIGURE := [Vector2(-0.30, -0.02), Vector2(-0.80, -0.72), Vector2(-0.66, -1.18),
+		Vector2(0.66, -1.18), Vector2(0.80, -0.72), Vector2(0.30, -0.02)]
+
+	func _draw_figure(foot: Vector2, rad: float, base: Color, down: bool) -> void:
+		var sy := 0.45 if down else 1.0     # the unconscious slump into a heap
+		var body := PackedVector2Array()
+		for o in FIGURE:
+			body.append(foot + Vector2(o.x * rad, o.y * rad * sy))
+		draw_colored_polygon(body, base)
+		var edge := body.duplicate()
+		edge.append(edge[0])
+		draw_polyline(edge, base.darkened(0.45), 2.0)
+		var head := foot + Vector2(0, -1.46 * rad * sy)
+		draw_circle(head, rad * 0.31, base.lightened(0.10))
+		draw_arc(head, rad * 0.31, 0, TAU, 16, base.darkened(0.45), 2.0)
+
+	# A plant: flat shapes only, standing upright out of a projected shadow.
+	func _draw_foliage(d: Dictionary, s: float) -> void:
+		var at: Vector2 = d["at"]
+		var k: float = float(d["scale"]) * s
+		var col: Color = d["col"]
+		draw_colored_polygon(_disc(at, k * 0.30), Color(0, 0, 0, 0.25))
+		if String(d["kind"]) == "tree":
+			draw_line(at, at - Vector2(0, k * 0.62), Color("3a2c1c"), maxf(1.5, k * 0.09))
+			for o in [Vector2(0, -0.95), Vector2(-0.24, -0.66), Vector2(0.24, -0.70)]:
+				draw_circle(at + o * k, k * 0.30, col)
+			draw_circle(at + Vector2(-0.10, -1.02) * k, k * 0.20, col.lightened(0.16))
+		else:
+			for o in [Vector2(-0.20, -0.16), Vector2(0.20, -0.16), Vector2(0, -0.34)]:
+				draw_circle(at + o * k, k * 0.24, col)
+			draw_circle(at + Vector2(-0.06, -0.38) * k, k * 0.15, col.lightened(0.14))
+
 	# T11 interactables: shapes only, no sprites. Hazards pulse (the hex fill already
 	# glows), props get a crate mark, torches a small bright flame.
 	# ponytail: a torch could ignite adjacent flammable terrain — not built.
@@ -1174,6 +1245,7 @@ class Board extends Control:
 					cone_hexes[hx] = true
 
 		# tiles
+		var decor: Array = []   # foliage, drawn after every tile so it can overhang
 		for hx in cb.board["hexes"]:
 			var c := _pix(hx)
 			var poly := _hex_poly(c, s - 2.0)
@@ -1185,20 +1257,41 @@ class Board extends Control:
 				fill = main.COL_PROP
 			elif cb.is_cover(hx):
 				fill = main.COL_COVER
-			draw_colored_polygon(poly, fill)
+			# Ground, in two layers: a per-hex tinted slab so the field isn't one
+			# flat colour, then a lighter patch drifting off-centre. Neighbouring
+			# tiles overlap in tone, which is what stops the borders reading as
+			# hard-cut diamonds without needing an actual texture.
+			var v := _rand(hx, 1)
+			draw_colored_polygon(poly, fill.lightened(0.09 * v).darkened(0.07 * (1.0 - v)))
+			draw_colored_polygon(_disc(c + _iso(Vector2(_rand(hx, 2) - 0.5, _rand(hx, 3) - 0.5) * s * 0.6),
+				s * (0.45 + 0.30 * _rand(hx, 4))), Color(fill.lightened(0.09), 0.28))
 			if field.has(hx) and hx != cur.pos:
 				draw_colored_polygon(poly, main.COL_MOVE)
 			if cone_hexes.has(hx):
 				draw_colored_polygon(poly, main.COL_CONE)
+			# Only the outline of a terrain CHANGE is drawn at full strength; seams
+			# between two plain tiles stay a whisper, so same-terrain runs blend.
 			var edge := _hex_poly(c, s - 2.0)
 			edge.append(edge[0])
-			draw_polyline(edge, main.COL_HEX_EDGE, 1.5)
+			var seam: bool = _terrain(hx) != ""
+			for n in Hex.neighbors(hx):
+				if not n in cb.board["hexes"] or _terrain(n) != _terrain(hx):
+					seam = true
+			draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.9 if seam else 0.22), 1.5)
+			if obj.is_empty():
+				var d := _foliage_at(hx, c, s)
+				if not d.is_empty():
+					decor.append(d)
 			if provoke.has(hx):
 				draw_string(ThemeDB.fallback_font, c - Vector2(6, -5), "⚠", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("ffcf47"))
 			if cb.is_cover(hx):
 				draw_string(ThemeDB.fallback_font, c + Vector2(-s * 0.5, s * ISO_SQUASH - 3), "cover", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("7fa6a6"))
 			if not obj.is_empty():
 				_draw_object(obj, c, s, pulse)
+
+		decor.sort_custom(func(a, b): return a["at"].y < b["at"].y)
+		for d in decor:
+			_draw_foliage(d, s)
 
 		# the valid-target ring stays here, under the tokens — it just traces the
 		# hex edge, which reads fine as "this hex is targetable," not a card that
@@ -1245,11 +1338,9 @@ class Board extends Control:
 					Color(1.0, 0.886, 0.478, 0.25 + 0.75 * bl), 2.5 + bl * 3.0)
 				draw_polyline(_disc(p, rad + 12.0 + bl * 6.0, true),
 					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0)
-			draw_line(p, tp, base.darkened(0.55), 3.0)   # the "post" it stands on
-			draw_circle(tp, rad * 0.8, base)
-			draw_arc(tp, rad * 0.8, 0, TAU, 24, base.darkened(0.4), 2.0)
+			_draw_figure(p, rad, base, c.is_down())
 			# The token's mark: class glyph for heroes, creature-type glyph for foes.
-			_centered(_glyph(c), tp, int(24 * fz), Color("101216"))
+			_centered(_glyph(c), tp, int(21 * fz), Color("101216"))
 
 			# hp bar
 			var hv: float = _hp.get(c.id, float(c.hp))
