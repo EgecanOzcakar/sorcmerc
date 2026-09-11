@@ -2127,4 +2127,52 @@ stay as they are (O10's #5 token question is unresolved, out of scope
 here). Full suite + `drive_world` must stay green — a visual change
 should not break the headless logic tests, which don't inspect pixels.
 
+## O12 — swap Town Pack buildings for medieval art + denser ground tiles (locked 2026-09-11, dispatched now)
+
+Direct user feedback on O11's actual rendered result (screenshotted and
+reviewed): the Town Pack's buildings read as a modern city (brick
+rowhouses, plate-glass), not a fantasy-medieval setting — "too modern."
+Separately: the ground tiles should be smaller/denser for a higher-
+quality look at the current camera distance.
+
+**Building swap — researched and license-verified 2026-09-11:**
+[rubberduck's isometric medieval building series](https://opengameart.org/content/isometric-medieval-buildings)
+(part 1, 2 buildings) +
+[part 2](https://opengameart.org/content/isometric-medieval-buildings-2)
+(3 more) — both CC0 confirmed directly on their pages, hand-painted
+digital isometric art (not pixel-art tofu), **128x64 tile format**
+(matches the Town Pack's own `BUILDING` tile size already wired into
+`_draw_building()`, so the slicing math mostly carries over), each
+building shipped with sun/cloudy/no-shadow renders and a snowy variant —
+5 distinct medieval building designs total across both packs, same
+author/style/quality, no mismatch risk. This replaces
+`assets/world/town/buildings.png` (the modern Town Pack) — remove it and
+its License.txt, replace with the new pack's files under
+`assets/world/town/`, update `assets/world/README.md`'s paper trail.
+Rework `_draw_building()`'s tile-picking only as much as the new sheet
+layout requires (read the actual downloaded files before assuming the
+old `BUILDING_STYLES`/`BUILDING_PAIRS`/slicing constants still apply —
+they were sized for the old sheet's 216-type grid, this pack is a
+handful of standalone building sprites, not a grid to index into).
+
+**Ground tile density:** `scenes/world/world.gd`'s `CELL := 90.0` (world
+units per tile) reads coarse at the default camera distance. Lower it
+(try something in the 45-60 range — pick empirically by rendering
+`tests/shot_world.gd` and judging the result, don't guess a number and
+ship it blind) so more, smaller tiles fill the same view for a denser,
+higher-quality look. This roughly quadruples the cell count in the same
+viewport at half the CELL size, so `MAX_CELLS` (currently 900, the
+far-zoom fallback threshold) needs raising to match — recompute what a
+reasonable default-zoom view actually needs (O11's own math: ~255 cells
+at `CELL=90`, `_zoom=1.0`) and set `MAX_CELLS` so the fallback still only
+triggers when meaningfully zoomed out, not at the new default.
+
+Same branch as O11 (`feature/overworld-art-packs`), same worktree if
+still live — this is a direct continuation, not a fresh spike. Re-render
+`tests/shot_world.gd` (non-headless: `godot --path . -s tests/
+shot_world.gd`, headless mode hangs on the viewport-texture capture here)
+at default zoom and at least one zoomed-in level, actually look at the
+PNG before calling this done. Full suite + drive_world green. Push the
+branch again; still not merged to master without explicit sign-off.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
