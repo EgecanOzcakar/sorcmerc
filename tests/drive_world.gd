@@ -114,8 +114,33 @@ func _run() -> void:
 	await _settlement_visit(p)
 	await _hostile_settlement(p)
 	await _pursuit_at_8x(p)
+	await _party_and_quests()
 	_exit_to_title()
 	_done()
+
+# --- party/profile/inventory + quest log HUD buttons -------------------
+func _party_and_quests() -> void:
+	screen._open_party()
+	if screen._party_overlay == null:
+		fail("Party did not open an overlay")
+	elif not screen.world.clock.is_paused():
+		fail("opening Party did not pause the clock")
+	screen._close_party()
+	if screen._party_overlay != null:
+		fail("closing Party left the overlay up")
+	if screen.world.clock.is_paused():
+		fail("closing Party did not resume the clock")
+
+	screen._toggle_quests()
+	if screen._quest_panel == null:
+		fail("Quests did not open a panel")
+	elif not screen.world.clock.is_paused():
+		fail("opening Quests did not pause the clock")
+	screen._toggle_quests()   # toggles closed
+	if screen._quest_panel != null:
+		fail("toggling Quests again did not close it")
+	if screen.world.clock.is_paused():
+		fail("closing Quests did not resume the clock")
 
 # --- O9 item 3: a chase at 8x still catches ---------------------------------
 # Pursuer and quarry move at the same World.SPEED, so a pursuit holds its gap

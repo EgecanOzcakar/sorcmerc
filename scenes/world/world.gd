@@ -75,6 +75,8 @@ var _visit: Dictionary = {}      # the open market, or {}
 var _visit_panel: Control = null
 var _visit_log: Label = null
 var _left: Object = null         # the settlement just left; no re-entry until out of range
+var _party_overlay: Control = null   # T3's party/profile/inventory screen, full-screen
+var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.active/describe
 
 func _ready() -> void:
 	if world == null:
@@ -141,6 +143,14 @@ func _build_hud() -> void:
 	_clock_lbl = Label.new()
 	_clock_lbl.add_theme_color_override("font_color", Icons.COL_GOLD)
 	bar.add_child(_clock_lbl)
+	var party_btn := Button.new()
+	party_btn.text = "Party"
+	party_btn.pressed.connect(_open_party)
+	bar.add_child(party_btn)
+	var quests_btn := Button.new()
+	quests_btn.text = "Quests"
+	quests_btn.pressed.connect(_toggle_quests)
+	bar.add_child(quests_btn)
 	var title := Button.new()
 	title.text = "←  Title"
 	title.pressed.connect(_leave_world)
@@ -168,7 +178,7 @@ func _leave_world() -> void:
 # clock (it paused it); letting the button resume the world underneath an open
 # panel desynced the label and set the map running behind it.
 func _toggle_pause() -> void:
-	if not _visit.is_empty():
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null:
 		return
 	if world.clock.is_paused():
 		world.clock.resume()
@@ -177,10 +187,106 @@ func _toggle_pause() -> void:
 	_pause_btn.text = "Resume" if world.clock.is_paused() else "Pause"
 
 func _cycle_speed() -> void:
-	if not _visit.is_empty():
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null:
 		return
 	world.clock.cycle_speed()
 	_speed_btn.text = "%dx" % int(world.clock.speed)   # every WorldClock.SPEEDS entry is a whole number
+
+# --- party / profile / inventory ----------------------------------------
+#
+# Reuses T3's scenes/party/party.tscn as-is (per-character profile/inventory is
+# already one click deeper from there) — same overlay shape campaign.gd's own
+# _open_party() uses. Pauses the clock while open: browsing gear shouldn't cost
+# world-time or let a hunt close in behind the menu.
+
+const PARTY_SCENE := "res://scenes/party/party.tscn"
+
+func _open_party() -> void:
+	if _combat != null or not _visit.is_empty() or _party_overlay != null:
+		return
+	world.clock.pause()
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	_party_overlay = overlay
+	var screen = load(PARTY_SCENE).instantiate()
+	screen.party = party
+	overlay.add_child(screen)
+	var back := Button.new()
+	back.text = "←  Back to the map"
+	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	back.offset_left = -220; back.offset_top = 12; back.offset_right = -16
+	back.pressed.connect(_close_party)
+	overlay.add_child(back)
+
+func _close_party() -> void:
+	if _party_overlay != null:
+		_party_overlay.queue_free()
+		_party_overlay = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+# --- quest log ------------------------------------------------------------
+#
+# Same data campaign.gd's own quest panel reads (Quest.active/describe) — an
+# inline toggle rather than a full-screen overlay, since it's just a list.
+
+func _toggle_quests() -> void:
+	if _quest_panel != null:
+		_close_quests()
+		return
+	if _combat != null or not _visit.is_empty() or _party_overlay != null:
+		return
+	world.clock.pause()
+	_build_quest_panel()
+
+func _close_quests() -> void:
+	if _quest_panel != null:
+		_quest_panel.queue_free()
+		_quest_panel = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+func _build_quest_panel() -> void:
+	if _quest_panel != null:
+		_quest_panel.queue_free()
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = size * 0.5 - Vector2(200, 160)
+	panel.custom_minimum_size = Vector2(400, 320)
+	add_child(panel)
+	_quest_panel = panel
+	var box := VBoxContainer.new()
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "Quest log"
+	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	box.add_child(title)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(380, 240)
+	box.add_child(scroll)
+	var rows := VBoxContainer.new()
+	scroll.add_child(rows)
+	var live: Array = Quest.active(party)
+	if live.is_empty():
+		var none := Label.new()
+		none.text = "No quests. Settlements have work."
+		none.add_theme_color_override("font_color", Icons.COL_MUTED)
+		rows.add_child(none)
+	for q in live:
+		var l := Label.new()
+		l.text = Quest.describe(q)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.add_theme_color_override("font_color",
+			Icons.COL_GOLD if q["state"] == "complete" else Icons.COL_PARTY)
+		rows.add_child(l)
+
+	var close := Button.new()
+	close.text = "Close"
+	close.pressed.connect(_close_quests)
+	box.add_child(close)
 
 # --- O4: encounter trigger + combat hand-off ---------------------------
 
