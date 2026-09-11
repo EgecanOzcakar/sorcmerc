@@ -74,6 +74,8 @@ func bark(c, trigger: String) -> void:
 	var text := Barks.line(_bark_rng, c.team, faction, trigger)
 	if text == "":
 		return
+	# T31: a line never fires silently — pair it with this speaker's gibberish stinger.
+	Sound.play_bark(Barks.voice(c.team, faction) + str(_bark_rng.roll_die(Barks.VARIANTS)))
 	barks.append({"id": c.id, "text": text})
 	if barks.size() > BARK_QUEUE_MAX:
 		barks.pop_front()

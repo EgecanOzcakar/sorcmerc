@@ -93,6 +93,19 @@ static func line(rng, team: String, faction: String, trigger: String) -> String:
 		return ""
 	return String(pool[rng.roll_die(pool.size()) - 1])
 
+# T31 — which gibberish voice speaks the line. Four archetypes, VARIANTS files
+# each (assets/audio/barks/<voice><n>.wav, written by tools/gen_audio.py).
+const VARIANTS := 3
+const VOICE := {
+	"goblinoid": "squeak", "beast": "squeak",
+	"cultist": "deep", "undead": "deep", "dragon": "deep",
+}
+
+static func voice(team: String, faction: String) -> String:
+	if team == "party":
+		return "hero"
+	return String(VOICE.get(faction, "gruff"))   # bandit + anything unlisted
+
 static func pool_for(team: String, faction: String, trigger: String) -> Array:
 	if team == "party":
 		return PARTY.get(trigger, [])

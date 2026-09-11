@@ -36,6 +36,18 @@ func _init() -> void:
 		if s != null:
 			check(s.loop_end == s.data.size() / 2, "bed %s loops over its whole length" % theme)
 	check(a._stream("res://assets/audio/sfx/nope.wav", false) == null, "missing file -> null")
+	# T31: every voice barks.gd can name has all its variants on disk.
+	var Barks = load("res://core/barks.gd")
+	var voices := ["hero", "gruff"]
+	for f in Barks.VOICE:
+		if not String(Barks.VOICE[f]) in voices:
+			voices.append(String(Barks.VOICE[f]))
+	check(Barks.voice("party", "") == "hero" and Barks.voice("foe", "nope") == "gruff",
+		"voice() falls back sanely")
+	for v in voices:
+		for n in range(1, Barks.VARIANTS + 1):
+			var s = a._stream(Audio.BARK_DIR + "%s%d.wav" % [v, n], false)
+			check(s != null and s.data.size() > 1000, "bark %s%d parses" % [v, n])
 	# Every trigger combat.gd maps to a sting must name a real asset.
 	for trigger in Combat.BARK_SFX:
 		var id: String = Combat.BARK_SFX[trigger]
@@ -43,6 +55,7 @@ func _init() -> void:
 	# The statics are safe with no autoload running — this is what every headless
 	# test run does when combat.gd fires a bark.
 	Audio.play_sfx("hit")
+	Audio.play_bark("hero1")
 	Audio.set_environment("frozen-cave")
 	Audio.set_combat(true)
 	Audio.set_sfx_volume(80.0)

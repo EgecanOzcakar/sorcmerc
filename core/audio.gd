@@ -4,6 +4,7 @@
 #
 #   const Sound = preload("res://core/audio.gd")
 #   Sound.play_sfx("hit")                  one-shot, ids = assets/audio/sfx/*.wav
+#   Sound.play_bark("hero1")               T31 voice stinger, assets/audio/barks/*.wav
 #   Sound.set_environment("frozen-cave")   crossfade the ambient bed (theme ids =
 #                                          Encounter.THEMES, plus settlement/title)
 #   Sound.set_combat(true)                 fade the shared tension layer in over it
@@ -22,6 +23,7 @@
 extends Node
 
 const SFX_DIR := "res://assets/audio/sfx/"
+const BARK_DIR := "res://assets/audio/barks/"
 const MUSIC_DIR := "res://assets/audio/music/"
 const MIX_RATE := 22050
 const FADE := 1.0            # seconds, bed crossfade and tension fade
@@ -44,7 +46,12 @@ var _theme := ""
 
 static func play_sfx(id: String) -> void:
 	if _i != null:
-		_i._play_sfx(id)
+		_i._play_one_shot(SFX_DIR + id + ".wav")
+
+# T31: the gibberish stinger paired with a text bark. Same voices/bus as the SFX.
+static func play_bark(id: String) -> void:
+	if _i != null:
+		_i._play_one_shot(BARK_DIR + id + ".wav")
 
 static func set_environment(theme: String) -> void:
 	if _i != null:
@@ -78,8 +85,8 @@ func _ready() -> void:
 	_tension = _player("Music", QUIET_DB)
 	_i = self
 
-func _play_sfx(id: String) -> void:
-	var stream = _stream(SFX_DIR + id + ".wav", false)
+func _play_one_shot(path: String) -> void:
+	var stream = _stream(path, false)
 	if stream == null:
 		return
 	var p: AudioStreamPlayer = _voices[_next_voice]

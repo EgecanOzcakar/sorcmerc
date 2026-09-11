@@ -6,6 +6,8 @@ Stdlib only (wave/struct/math/random). Writes mono 16-bit 22050 Hz WAVs:
     assets/audio/sfx/*.wav     one-shot stings
     assets/audio/music/*.wav   one loopable ambient bed per Encounter.THEMES
                                (+ settlement, title) and one combat tension layer
+    assets/audio/barks/*.wav   T31 "symphonic gibberish" voice stingers, a few
+                               variants per voice archetype (core/barks.gd picks)
 
 Same ceiling as every other asset here: shapes, not sprites. Run once:
 
@@ -275,6 +277,54 @@ def tension():
     return b
 
 
+# --- T31 bark stingers ----------------------------------------------------
+#
+# Don't-Starve-style nonsense "speech": a handful of short pitched syllables
+# stepping around a scale, each with vibrato and a formant-ish second partial.
+# No words, no phonemes — pitch contour is all the character there is.
+
+SCALE = (0, 2, 3, 5, 7, 10)  # minor pentatonic-ish; any step sounds intentional
+
+
+def syllable(b, start, dur, f0, f1, amp, kind, vib_hz, vib_depth):
+    n = max(1, int(dur * SR))
+    i0 = int(start * SR)
+    phase = ph2 = 0.0
+    for i in range(n):
+        u = i / n
+        t = i / SR
+        f = f0 * (f1 / f0) ** u * (1.0 + vib_depth * math.sin(2.0 * math.pi * vib_hz * t))
+        phase += 2.0 * math.pi * f / SR
+        ph2 += 2.0 * math.pi * f * 2.5 / SR          # nasal partial = the "voice"
+        env = min(1.0, u / 0.12, (1.0 - u) / 0.25)   # short attack, soft release
+        _add(b, i0 + i, (_wave(kind, phase) + 0.3 * _wave("sine", ph2)) * amp * env)
+
+
+# voice -> (root midi, syllables, syllable secs, gap secs, wave, vibrato hz, depth)
+VOICES = {
+    "hero":   (62, 4, 0.10, 0.02, "tri", 11.0, 0.020),
+    "gruff":  (48, 3, 0.13, 0.03, "saw", 7.0, 0.015),
+    "squeak": (76, 5, 0.07, 0.015, "square", 16.0, 0.035),
+    "deep":   (40, 3, 0.17, 0.04, "sine", 5.0, 0.012),
+}
+BARK_VARIANTS = 3
+
+
+def gibberish(voice, variant):
+    root, count, dur, gap, kind, vib, depth = VOICES[voice]
+    random.seed("%s%d" % (voice, variant))
+    b = buf(count * (dur + gap) + 0.08)
+    t = 0.0
+    step = random.randrange(len(SCALE))
+    for i in range(count):
+        step = max(0, min(len(SCALE) - 1, step + random.choice((-2, -1, 1, 1, 2))))
+        n = root + SCALE[step] + 12 * (i == count - 1 and random.random() < 0.5)
+        bend = midi(n + random.choice((-2, 0, 0, 2)))
+        syllable(b, t, dur, midi(n), bend, 0.42, kind, vib, depth)
+        t += dur + gap
+    return b
+
+
 def main():
     random.seed(2027)
     total = count = 0
@@ -288,6 +338,11 @@ def main():
         count += 1
     total += write(os.path.join(ROOT, "assets", "audio", "music", "tension.wav"), tension())
     count += 1
+    for voice in sorted(VOICES):
+        for v in range(1, BARK_VARIANTS + 1):
+            p = os.path.join(ROOT, "assets", "audio", "barks", "%s%d.wav" % (voice, v))
+            total += write(p, gibberish(voice, v), fade_edges=0.02)
+            count += 1
     print("wrote %d files, %.1f KB" % (count, total / 1024.0))
 
 
