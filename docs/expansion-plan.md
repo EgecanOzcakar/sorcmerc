@@ -2912,4 +2912,25 @@ or similar), same review-before-merge pattern as every other art
 branch. Render and describe real screenshots, same discipline as every
 other visual entry in this doc — "it runs" is not sufficient proof.
 
+**T49 completion (2026-09-11):** landed on `feature/procedural-creatures`
+(pushed, not merged). `core/procedural_creature.gd`: a seeded blob body
+(radius perturbed by 3 harmonics, no two outlines match) plus one of 6
+archetype silhouettes (beast/giant/ooze/dragon/construct/fey) built from
+three primitives (blob/tapered-limb/box), keyed off faction/creature-
+type via `FACTION_SHAPE` (unknown falls back to beast). Move/attack/
+death timing mirrors `Board.tick()`'s existing beat shapes (same lunge
+curve as `_lunge()`) so it won't clash in feel once wired in. Verified
+visually by me directly, not just the report: idle reads as six clearly
+distinct, honestly-simple archetype shapes (winged purple dragon, blocky
+grey construct, big-headed pink fey, orange four-legged beast, olive
+giant, green ooze skirt) — better than "crude" as feared, genuinely
+readable and a little charming. Attack frame confirmed lunging off the
+ground shadow, sheared toward the target. One real bug caught by
+actually looking at the death frames (not just trusting the code): the
+first death pass rotated bodies about their feet, cartwheeling wide
+silhouettes into neighbouring tokens — fixed with a shear + capped
+spread instead, documented in the file. `tests/test_procedural_creature.gd`:
+47/47. Full suite green. Not yet wired into `scenes/main.gd`'s real
+combat (out of scope, same "spike only" boundary as T47).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
