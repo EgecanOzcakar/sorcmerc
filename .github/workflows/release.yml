@@ -60,7 +60,7 @@ jobs:
             "${{ steps.pick.outputs.outdir }}/index.html"
 
       - name: Push to itch.io
-        uses: manleydev/butler-publish-itchio-action@v1
+        uses: yeslayla/butler-publish-itchio-action@v1.2.0
         env:
           BUTLER_CREDENTIALS: ${{ secrets.BUTLER_API_KEY }}
           CHANNEL: ${{ steps.pick.outputs.channel }}
