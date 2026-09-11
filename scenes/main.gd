@@ -14,6 +14,7 @@ const Hex = preload("res://core/hex.gd")
 const Settings = preload("res://core/settings.gd")
 const Tutorial = preload("res://core/tutorial.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const LpcArt = preload("res://core/lpc_art.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 
 # What T5 injects before the scene runs: the live party, the node's spec (empty ->
@@ -166,6 +167,9 @@ func _ready() -> void:
 	col.add_child(_hint)
 
 	_board.main = self
+	# Pixel art must not be filtered into mush at non-integer zoom. Glyphs are
+	# rasterised at their own size and sampled 1:1, so this costs the text nothing.
+	_board.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_board.clip_contents = true
 	_board.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1296,6 +1300,76 @@ class Board extends Control:
 		if dirty:
 			queue_redraw()
 
+	# HP bar + condition strip: identical for a sprite and for a vector token, so
+	# both paths call this rather than keeping two copies in step by hand.
+	func _draw_token_hud(c, p: Vector2, tp: Vector2, s: float, rad: float, fz: float) -> void:
+		var hv: float = _hp.get(c.id, float(c.hp))
+		var bw := s * 1.2
+		var br := Rect2(p.x - bw / 2.0, p.y + rad * ISO_SQUASH + 4.0, bw, 6.0)
+		draw_rect(br, Color("0c0d11"))
+		var frac := clampf(hv / float(c.max_hp), 0.0, 1.0)
+		var hpcol := Color("5fbf6a")
+		if frac < 0.33: hpcol = Color("d15750")
+		elif frac < 0.66: hpcol = Color("d9a441")
+		draw_rect(Rect2(br.position, Vector2(br.size.x * frac, br.size.y)), hpcol)
+		draw_string(ThemeDB.fallback_font, br.position + Vector2(0, 12 + 8 * fz),
+			"%d/%d" % [c.hp, c.max_hp], HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * fz), Color("c9ccd6"))
+
+		# condition strip, centred over the token (the shoulder is the class badge's)
+		var tags: String = Icons.status_glyphs(c)
+		if c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
+		if tags != "":
+			_centered(tags, tp + Vector2(0, -rad * 0.8 - 10), int(13 * fz), Color("e6c15a"))
+
+	# The LPC sprite for `c`, if there is one. Returns false when there isn't, and
+	# the caller draws its vector token instead.
+	#
+	# There is no separate animation clock here on purpose: the frame comes out of
+	# the same `_fx` melee entry that `_lunge()` already reads, so the swing, the
+	# lunge and the damage number stay locked together and nothing new has to be
+	# ticked. Idle is frame 0 — in both rigs that is the rest pose the attack
+	# leaves from.
+	func _draw_sprite(c, p: Vector2, s: float, tint: Color) -> bool:
+		var sf: SpriteFrames = LpcArt.frames(LpcArt.loadout_for(c))
+		if sf == null:
+			return false
+		var facing := "right" if c.team == "party" else "left"
+		var phase := -1.0
+		for f in _fx:
+			if f.kind == "melee" and f.id == c.id:
+				phase = clampf(f.age / f.ttl, 0.0, 1.0)
+				facing = LpcArt.facing_between(_pix(f.from), _pix(f.to))
+		var pick: Array = LpcArt.row_for(sf, facing)
+		var anim: String = pick[0]
+		var count := sf.get_frame_count(anim)
+		var idx := 0 if phase < 0.0 else clampi(int(phase * count), 0, count - 1)
+		var tex := sf.get_frame_texture(anim, idx)
+		# 64px art on a 34px hex: the same fit the T47 preview was judged at, with
+		# the frame's ground row (54) landing on the token's own hex point.
+		var sc := s / 26.0
+		var w := 64.0 * sc
+		var at := p - Vector2(32.0 * sc, 54.0 * sc)
+		# Down: no lift, greyed and half-faded, same read as the flattened vector
+		# token. ponytail: no death/hurt rows exist in the vendored art, so a KO is
+		# a tint, not an animation — revisit if a death row is ever vendored.
+		var col := tint if c.is_down() else Color.WHITE
+		if _flash.has(c.id):
+			col = col.lerp(Color.WHITE, clampf(_flash[c.id] / 0.35, 0, 1) * 0.85)
+		if c.is_down():
+			col.a = 0.55
+			at.y += 12.0 * sc
+		if pick[1]:
+			# Mirror (merc_01 only ships the right-facing row). It has to be a draw
+			# transform about the token's own x: a negative-width Rect2 does NOT
+			# flip, it gets normalised and lands one full sprite-width to the right.
+			draw_set_transform(p, 0.0, Vector2(-1.0, 1.0))
+			draw_texture_rect(tex, Rect2(Vector2(-w * 0.5, at.y - p.y), Vector2(w, 64.0 * sc)),
+				false, col)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		else:
+			draw_texture_rect(tex, Rect2(at, Vector2(w, 64.0 * sc)), false, col)
+		return true
+
 	func _spawn_float(c, amount: float) -> void:
 		var band := Color("ffd24a")
 		if amount >= 12: band = Color("ff5a4a")
@@ -1532,6 +1606,14 @@ class Board extends Control:
 					Color(1.0, 0.886, 0.478, 0.25 + 0.75 * bl), 2.5 + bl * 3.0, true)
 				draw_polyline(_disc(p, rad + 12.0 + bl * 6.0, true),
 					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0, true)
+			# Tier 1: a composited LPC sprite, if this combatant has one. It
+			# replaces the drawn disc and its glyph only — shadow, active ring,
+			# flash, HP bar, condition tags and the _tok/_lunge positioning above
+			# are shared with the vector token below, which still draws everyone
+			# the art doesn't cover.
+			if _draw_sprite(c, p, s, base):
+				_draw_token_hud(c, p, tp, s, rad, fz)
+				continue
 			# The token is shaded like a ball: hotspot toward the light, falling
 			# off to a darker rim, with a bright sliver of rim light on the lit
 			# side and a dark contact line on the far one.
@@ -1548,25 +1630,7 @@ class Board extends Control:
 					Color(1, 1, 1, 0.26), 2.0, true)
 			# The token's mark: class glyph for heroes, creature-type glyph for foes.
 			_centered(_glyph(c), tp, int(24 * fz), Color("101216"))
-
-			# hp bar
-			var hv: float = _hp.get(c.id, float(c.hp))
-			var bw := s * 1.2
-			var br := Rect2(p.x - bw / 2.0, p.y + rad * ISO_SQUASH + 4.0, bw, 6.0)
-			draw_rect(br, Color("0c0d11"))
-			var frac := clampf(hv / float(c.max_hp), 0.0, 1.0)
-			var hpcol := Color("5fbf6a")
-			if frac < 0.33: hpcol = Color("d15750")
-			elif frac < 0.66: hpcol = Color("d9a441")
-			draw_rect(Rect2(br.position, Vector2(br.size.x * frac, br.size.y)), hpcol)
-			draw_string(ThemeDB.fallback_font, br.position + Vector2(0, 12 + 8 * fz),
-				"%d/%d" % [c.hp, c.max_hp], HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * fz), Color("c9ccd6"))
-
-			# condition strip, centred over the token (the shoulder is the class badge's)
-			var tags: String = Icons.status_glyphs(c)
-			if c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
-			if tags != "":
-				_centered(tags, tp + Vector2(0, -rad * 0.8 - 10), int(13 * fz), Color("e6c15a"))
+			_draw_token_hud(c, p, tp, s, rad, fz)
 
 		_draw_fx(s)   # projectiles / spell flashes sit over the tokens
 

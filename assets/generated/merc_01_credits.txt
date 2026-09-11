@@ -1,0 +1,54 @@
+LPC art used by merc_01
+
+weapon/sword/dagger
+  authors:  bluecarrot16, Johannes Sjölund (wulax), Matthew Krohn (makrohn)
+  licenses: OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0
+  https://opengameart.org/content/lpc-medieval-fantasy-character-sprites
+  https://opengameart.org/content/lpc-extended-weapon-animations
+
+body/bodies/male
+  authors:  bluecarrot16, Benjamin K. Smith (BenCreating), Evert, Eliza Wyatt (ElizaWy), TheraHedwig, MuffinElZangano, Durrani, Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+  licenses: CC-BY-SA 3.0, GPL 3.0
+  notes:    see details at https://opengameart.org/content/lpc-character-bases; 'Thick' Male Revised Run/Climb by JaidynReiman (based on ElizaWy's LPC Revised)
+  https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  https://opengameart.org/content/lpc-medieval-fantasy-character-sprites
+  https://opengameart.org/content/lpc-male-jumping-animation-by-durrani
+  https://opengameart.org/content/lpc-runcycle-and-diagonal-walkcycle
+  https://opengameart.org/content/lpc-revised-character-basics
+  https://opengameart.org/content/lpc-be-seated
+  https://opengameart.org/content/lpc-runcycle-for-male-muscular-and-pregnant-character-bases-with-modular-heads
+  https://opengameart.org/content/lpc-jump-expanded
+  https://opengameart.org/content/lpc-character-bases
+
+legs/pants/male
+  authors:  bluecarrot16, JaidynReiman, Eliza Wyatt (ElizaWy), Matthew Krohn (makrohn), Johannes Sjölund (wulax)
+  licenses: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+  notes:    original male pants by wulax, recolors and edits to v3 base by bluecarrot16, climb/jump/run/sit/emotes/revised combat by JaidynReiman based on ElizaWy's LPC Revised
+  https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  https://opengameart.org/content/lpc-medieval-fantasy-character-sprites
+  https://opengameart.org/content/lpc-expanded-pants
+
+feet/boots
+  authors:  bluecarrot16, Nila122
+  licenses: OGA-BY 3.0, CC-BY-SA 3.0, GPL 2.0, GPL 3.0
+  notes:    original by Nila122, edited for male and v3 bases by bluecarrot16
+  https://opengameart.org/content/lpc-clothes-and-hair
+
+torso/chainmail
+  authors:  Johannes Sjölund (wulax)
+  licenses: OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0
+  notes:    minor edits by bluecarrot16
+  https://opengameart.org/content/lpc-medieval-fantasy-character-sprites
+
+head/heads/human/male
+  authors:  bluecarrot16, Benjamin K. Smith (BenCreating), Stephen Challener (Redshrike)
+  licenses: OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0
+  notes:    original head by Redshrike, tweaks by BenCreating, modular version by bluecarrot16
+  https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  https://opengameart.org/content/lpc-character-bases
+
+hair/plain
+  authors:  Manuel Riecke (MrBeast), Joe White
+  licenses: CC-BY-SA 3.0, GPL 3.0
+  https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  https://opengameart.org/content/ponytail-and-plain-hairstyles
