@@ -86,7 +86,7 @@ def compose(loadout: dict) -> Image.Image:
     return sheet
 
 
-def credits(loadout: dict) -> str:
+def _rows_for(loadout: dict) -> list:
     """Longest-prefix match of each layer path against the vendored CREDITS rows."""
     rows = list(csv.DictReader(open(PARTS / "CREDITS.csv")))
     out = []
@@ -94,9 +94,13 @@ def credits(loadout: dict) -> str:
         hits = [r for r in rows if layer["path"].startswith(r["filename"])]
         assert hits, "no CREDITS.csv row for " + layer["path"]
         row = max(hits, key=lambda r: len(r["filename"]))
-        if row in out:
-            continue
-        out.append(row)
+        if row not in out:
+            out.append(row)
+    return out
+
+
+def credits(loadout: dict) -> str:
+    out = _rows_for(loadout)
     lines = ["LPC art used by %s" % loadout["id"], ""]
     for r in out:
         urls = [r[k] for k in r if k.startswith("url") and r[k]]
@@ -106,6 +110,38 @@ def credits(loadout: dict) -> str:
         if r["notes"]:
             lines.append("  notes:    %s" % r["notes"])
         lines += ["  %s" % u for u in urls] + [""]
+    return "\n".join(lines)
+
+
+def aggregate_credits(loadouts: list) -> str:
+    """assets/generated/credits.txt: what the in-game credits screen shows.
+
+    Every author of every vendored part, deduplicated (the same people appear in
+    half a dozen rows), plus the per-source license/URL list the attribution
+    clauses actually require. Built here rather than parsed in GDScript at
+    runtime - the data is generated, so dedup where it is generated.
+    """
+    rows, authors = [], set()
+    for loadout in loadouts:
+        for r in _rows_for(loadout):
+            if r not in rows:
+                rows.append(r)
+            for a in r["authors"].split(","):
+                if a.strip():
+                    authors.add(a.strip())
+    licenses = sorted({l.strip() for r in rows for l in r["licenses"].split(",") if l.strip()})
+    lines = ["Character and creature pixel art comes from the Liberated Pixel Cup",
+             "(LPC) asset ecosystem, and is used under %s." % ", ".join(licenses),
+             "Full license texts ship in the LICENSES/ folder of the source repo.",
+             "", "ARTISTS", ""]
+    lines += ["  " + a for a in sorted(authors, key=str.lower)]
+    lines += ["", "PARTS USED", ""]
+    for r in rows:
+        urls = [r[k] for k in r if k.startswith("url") and r[k]]
+        lines += ["  %s" % r["filename"],
+                  "    %s" % r["authors"],
+                  "    %s" % r["licenses"]]
+        lines += ["    %s" % u for u in urls] + [""]
     return "\n".join(lines)
 
 
@@ -151,3 +187,7 @@ if __name__ == "__main__":
     paths = sys.argv[1:] or sorted(str(p) for p in (ROOT / "data/lpc").glob("*.json"))
     for p in paths:
         main(p)
+    # The credits screen covers everything vendored, not just what was rebuilt.
+    every = [json.loads(p.read_text()) for p in sorted((ROOT / "data/lpc").glob("*.json"))]
+    (OUT / "credits.txt").write_text(aggregate_credits(every))
+    print("credits.txt: %d loadouts" % len(every))

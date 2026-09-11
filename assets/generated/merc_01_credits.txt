@@ -7,7 +7,7 @@ weapon/sword/dagger
   https://opengameart.org/content/lpc-extended-weapon-animations
 
 body/bodies/male
-  authors:  bluecarrot16, Benjamin K. Smith (BenCreating), Evert, Eliza Wyatt (ElizaWy), TheraHedwig, MuffinElZangano, Durrani, Johannes Sj?lund (wulax), Stephen Challener (Redshrike)
+  authors:  bluecarrot16, Benjamin K. Smith (BenCreating), Evert, Eliza Wyatt (ElizaWy), TheraHedwig, MuffinElZangano, Durrani, Johannes Sjölund (wulax), Stephen Challener (Redshrike)
   licenses: CC-BY-SA 3.0, GPL 3.0
   notes:    see details at https://opengameart.org/content/lpc-character-bases; 'Thick' Male Revised Run/Climb by JaidynReiman (based on ElizaWy's LPC Revised)
   https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
@@ -21,7 +21,7 @@ body/bodies/male
   https://opengameart.org/content/lpc-character-bases
 
 legs/pants/male
-  authors:  bluecarrot16, JaidynReiman, ElizaWy, Matthew Krohn (makrohn), Johannes Sjölund (wulax)
+  authors:  bluecarrot16, JaidynReiman, Eliza Wyatt (ElizaWy), Matthew Krohn (makrohn), Johannes Sjölund (wulax)
   licenses: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
   notes:    original male pants by wulax, recolors and edits to v3 base by bluecarrot16, climb/jump/run/sit/emotes/revised combat by JaidynReiman based on ElizaWy's LPC Revised
   https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles

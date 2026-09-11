@@ -110,6 +110,13 @@ func _ready() -> void:
 	wipe.pressed.connect(_clear_autosave)
 	col.add_child(wipe)
 
+	# The LPC art is CC-BY-SA/GPL/OGA-BY: crediting its authors is a license
+	# obligation, so it gets a reachable screen, not a line in a README.
+	var art := Button.new()
+	art.text = "Art credits"
+	art.pressed.connect(_show_credits)
+	col.add_child(art)
+
 	_note.add_theme_color_override("font_color", COL_DIM)
 	_note.add_theme_font_size_override("font_size", 12)
 	col.add_child(_note)
@@ -146,6 +153,55 @@ func _volume_row(label: String, value: float, on_value: Callable) -> HBoxContain
 		pct.text = "%d%%" % int(v)
 		on_value.call(v))
 	return row
+
+# Art credits: the generated, author-deduplicated list from lpc_compose.py, shown
+# verbatim in a scrollable panel. No parsing here on purpose — if the art changes,
+# regenerating the file is the whole update.
+const CREDITS_TXT := "res://assets/generated/credits.txt"
+
+func _show_credits() -> void:
+	var body := FileAccess.get_file_as_string(CREDITS_TXT)
+	if body.is_empty():
+		_note.text = "No credits file — run tools/lpc_compose.py."
+		return
+	# A CenterContainer, not PRESET_CENTER: the preset anchors the top-left at the
+	# middle of the screen because the panel has no size yet when it is applied.
+	var wrap := CenterContainer.new()
+	wrap.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(wrap)
+	var over := PanelContainer.new()
+	var box := StyleBoxFlat.new()
+	box.bg_color = COL_CARD
+	box.set_corner_radius_all(10)
+	box.set_border_width_all(1)
+	box.border_color = COL_EDGE
+	box.set_content_margin_all(16)
+	over.add_theme_stylebox_override("panel", box)
+	over.custom_minimum_size = Vector2(560, 460)
+	wrap.add_child(over)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	over.add_child(col)
+	var cap := Label.new()
+	cap.text = "»   A R T   C R E D I T S   «"
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cap.add_theme_color_override("font_color", COL_GOLD)
+	col.add_child(cap)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(scroll)
+	var text := Label.new()
+	text.text = body
+	text.add_theme_font_size_override("font_size", 12)
+	text.add_theme_color_override("font_color", COL_DIM)
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text.custom_minimum_size = Vector2(520, 0)
+	scroll.add_child(text)
+	var close := Button.new()
+	close.text = "Close"
+	close.pressed.connect(wrap.queue_free)
+	col.add_child(close)
 
 func _apply() -> void:
 	Settings.save_settings(_s)
