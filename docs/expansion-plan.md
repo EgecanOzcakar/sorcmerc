@@ -1282,4 +1282,31 @@ File ownership: a new measurement script under `tests/` (not a permanent
 logic, weapon/spell data, or anything else — this is range/movement/board-
 size tuning only.
 
+- 2026-09-11: **T34 and T35 complete.** T34: `Resolved.choice_points` sits
+  alongside `pending` (built by re-running the same pending-resolution pass
+  with an empty choices dict and keeping decided-or-pending entries — no new
+  enumeration code, `pending` itself untouched byte-for-byte), and creator.gd/
+  levelup.gd render an already-decided choice as a `✓`-marked, still-clickable
+  widget instead of it vanishing once answered. Verified downstream safety
+  empirically (swapping a subclass re-resolves clean) and caught a real
+  either-or-pair bug in the process (an ASI and its paired feat-choice could
+  otherwise both get satisfied at once). T35 (a measurement spike, explicitly
+  not a balance change to ship): 150-seed sweeps found the melee-closes-fast
+  problem's premise doesn't hold up — ~80% of attacks by combatants that
+  actually HAVE a ranged option already happen at 2+ hexes, at baseline and
+  under every candidate tried (FT_PER_HEX 8/10, wider boards, a SPAWN_GAP
+  diagnostic). The 32.5% *overall* ranged-attack share is roster composition
+  (most bestiary bodies are melee-only), not geometry — confirmed by a 15%
+  (forest-clearing, all-beast) to 46% (goblin-camp, archers) per-theme spread
+  on the SAME board size. Neither candidate moved the ranged-share needle;
+  FT_PER_HEX just made fights longer with a 7-point win-rate cost, wider
+  boards were geometrically inert because `_foe_spots` spawns foes at exactly
+  `SPAWN_GAP` regardless of how much room exists past that. Real numbers
+  handed back, nothing adopted — see the branches `t35-candidate-a-ft8`,
+  `t35-candidate-a-ft10`, `t35-candidate-b-wide-boards`,
+  `t35-diagnostic-spawn-gap` (each one commit, cherry-pick or discard).
+  **Full suite: 25 test files, 0 failures; all four `drive_*` smoke scripts
+  pass.** Pushed (T34 + T35's throwaway sweep script only — the candidate
+  branches are not merged, by design).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
