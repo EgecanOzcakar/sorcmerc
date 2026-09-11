@@ -9,5 +9,8 @@
     { "path": "head/heads/human/male/light", "z": 100 },
     { "path": "hair/plain/male/dark_brown", "z": 120 },
     { "path": "weapon/sword/dagger/dagger", "z": 140 }
+  ],
+  "animations": [
+    { "name": "slash_right", "row": 14, "frames": 6, "speed": 12.0 }
   ]
 }

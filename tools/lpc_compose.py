@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""Compose one LPC character sheet + credits + Godot SpriteFrames (T47 step 3/4).
+"""Compose an LPC sheet + credits + Godot SpriteFrames (T47 steps 3/4, T50).
 
-    tools/lpc_compose.py data/lpc/merc_01.json
+    tools/lpc_compose.py [data/lpc/merc_01.json ...]      (no args = all of them)
 
 Reads a loadout, stacks the vendored part sheets from assets/lpc/ and writes
     assets/generated/<id>.png     the composed sheet
-    assets/generated/<id>.tres    SpriteFrames, slash_right only (spike)
+    assets/generated/<id>.tres    SpriteFrames, one animation per declared row
     assets/generated/<id>_credits.txt
+
+Two kinds of loadout, same schema, no special cases: a humanoid is 8 layers
+off the universal 13x46 rig (merc_01.json), a creature is one layer off a
+4-row monster sheet (bat/slime/ghost.json). What makes that work is that
+*nothing about the grid is hardcoded* - the loadout names its own rows and
+frame counts, because the two rigs do not share them (see below).
 
 Where the numbers come from (all verified against the upstream repo, not the
 wiki): sanderfrenken/Universal-LPC-Spritesheet-Character-Generator @ 675e21e.
@@ -24,10 +30,25 @@ wiki): sanderfrenken/Universal-LPC-Spritesheet-Character-Generator @ 675e21e.
   sorted here, which is what puts e.g. the dagger's "behind" sheet (z 9) under
   the body (z 10) while the dagger itself (z 140) sits over everything.
 
-ponytail: only universal 64px layers. Weapons whose slash lives in a separate
-oversized sheet (`custom_animation: slash_128 / slash_oversize`, e.g. the
-arming sword and longsword) need a 128/192 canvas and are skipped for the
-spike - the dagger is universal-only. Add that when the roster needs polearms.
+The [LPC] Monsters pack (opengameart.org/content/lpc-monsters) shares the
+64px cell and the n/w/s/e row order and nothing else:
+
+* One file per creature, no layer stack and no zPos anywhere - so a creature
+  is simply a one-entry `layers` list; the z-sorting generalizes for free.
+* 4 rows total (attack only, rows 0-3 = n/w/s/e), NOT the humanoid's 21/46-row
+  universal layout. Verified by pixel-matching the author's own bat_attack-w
+  and slime_attack-w GIFs against the sheets: bat_attack-w is exactly row 1,
+  cols 1-6. A humanoid row index (slash-e = 14) on these sheets is off-sheet
+  or empty, hence the emptiness assert in compose().
+* Column count varies per creature AND per row - bat 7, ghost 6, slime 6 on
+  n/s but 8 on w/e (the extra frames are the spit projectile). There is no
+  one frame-count table to share with the humanoid rig.
+
+ponytail: only 64px cells. Both the humanoid's oversize weapon sheets
+(`custom_animation: slash_128 / slash_oversize`, e.g. arming sword) and this
+pack's man_eater_flower (768x512 = 128px cells) need a bigger canvas plus
+centring offsets; `frame` is already per-loadout, but mixing cell sizes in one
+loadout is not handled. Add when the roster needs polearms or the flower.
 """
 import csv
 import json
@@ -40,22 +61,28 @@ ROOT = Path(__file__).resolve().parent.parent
 PARTS = ROOT / "assets/lpc"
 OUT = ROOT / "assets/generated"
 
-FRAME = 64
-COLS = 13
-SLASH_E_ROW = 14      # animationRowsLayout["slash-e"]
-SLASH_FRAMES = 6
+FRAME = 64            # loadouts may override; every sheet vendored so far is 64
 
 
 def compose(loadout: dict) -> Image.Image:
+    frame = loadout.get("frame", FRAME)
     layers = [(l["z"], PARTS / (l["path"] + ".png")) for l in loadout["layers"]]
     imgs = [(z, Image.open(p).convert("RGBA")) for z, p in sorted(layers)]
     w = max(i.width for _, i in imgs)
     h = max(i.height for _, i in imgs)
-    assert w == FRAME * COLS, "unexpected sheet width %d" % w
-    assert h % FRAME == 0 and h // FRAME > SLASH_E_ROW, "sheet too short: %d" % h
+    assert w % frame == 0 and h % frame == 0, "sheet is not a %d grid: %dx%d" % (frame, w, h)
     sheet = Image.new("RGBA", (w, h))
     for _, img in imgs:
-        sheet.alpha_composite(img)
+        assert img.width % frame == 0 and img.height % frame == 0, "off-grid layer"
+        sheet.alpha_composite(img)     # all LPC layers share the origin, no offsets
+    # Every declared frame must exist and have pixels in it - the one check that
+    # catches a loadout pointing at the wrong row (a humanoid row index on a
+    # creature sheet used to slice silently-empty regions).
+    for anim in loadout["animations"]:
+        for i in range(anim["frames"]):
+            box = (i * frame, anim["row"] * frame, (i + 1) * frame, (anim["row"] + 1) * frame)
+            assert box[2] <= w and box[3] <= h, "%s frame %d is off-sheet" % (anim["name"], i)
+            assert sheet.crop(box).getbbox(), "%s frame %d is empty" % (anim["name"], i)
     return sheet
 
 
@@ -82,22 +109,28 @@ def credits(loadout: dict) -> str:
     return "\n".join(lines)
 
 
-def sprite_frames(sheet_res: str) -> str:
-    """A SpriteFrames .tres with slash_right sliced out of the composed sheet."""
-    y = SLASH_E_ROW * FRAME
-    subs = "\n".join(
-        '[sub_resource type="AtlasTexture" id="slash_right_%d"]\n'
-        'atlas = ExtResource("1")\n'
-        'region = Rect2(%d, %d, %d, %d)\n' % (i, i * FRAME, y, FRAME, FRAME)
-        for i in range(SLASH_FRAMES))
-    frames = ", ".join(
-        '{\n"duration": 1.0,\n"texture": SubResource("slash_right_%d")\n}' % i
-        for i in range(SLASH_FRAMES))
+def sprite_frames(loadout: dict, sheet_res: str) -> str:
+    """A SpriteFrames .tres, one animation per row declared by the loadout."""
+    frame = loadout.get("frame", FRAME)
+    subs, anims, n = [], [], 0
+    for anim in loadout["animations"]:
+        ids = []
+        for i in range(anim["frames"]):
+            ids.append("%s_%d" % (anim["name"], i))
+            subs.append('[sub_resource type="AtlasTexture" id="%s"]\n'
+                        'atlas = ExtResource("1")\n'
+                        'region = Rect2(%d, %d, %d, %d)\n'
+                        % (ids[-1], i * frame, anim["row"] * frame, frame, frame))
+            n += 1
+        anims.append('{\n"frames": [%s],\n"loop": %s,\n"name": &"%s",\n"speed": %s\n}'
+                     % (", ".join('{\n"duration": 1.0,\n"texture": SubResource("%s")\n}' % i
+                                  for i in ids),
+                        "true" if anim.get("loop") else "false",
+                        anim["name"], anim.get("speed", 12.0)))
     return ('[gd_resource type="SpriteFrames" load_steps=%d format=3]\n\n'
             '[ext_resource type="Texture2D" path="%s" id="1"]\n\n%s\n'
-            '[resource]\nanimations = [{\n"frames": [%s],\n'
-            '"loop": false,\n"name": &"slash_right",\n"speed": 12.0\n}]\n'
-            % (SLASH_FRAMES + 2, sheet_res, subs, frames))
+            '[resource]\nanimations = [%s]\n'
+            % (n + 2, sheet_res, "\n".join(subs), ", ".join(anims)))
 
 
 def main(path: str) -> None:
@@ -108,10 +141,13 @@ def main(path: str) -> None:
     sheet.save(OUT / (name + ".png"))
     (OUT / (name + "_credits.txt")).write_text(credits(loadout))
     (OUT / (name + ".tres")).write_text(
-        sprite_frames("res://assets/generated/%s.png" % name))
-    print("%s.png %dx%d  + .tres (slash_right, %d frames) + _credits.txt"
-          % (name, sheet.width, sheet.height, SLASH_FRAMES))
+        sprite_frames(loadout, "res://assets/generated/%s.png" % name))
+    print("%s.png %dx%d  + .tres [%s] + _credits.txt"
+          % (name, sheet.width, sheet.height,
+             ", ".join("%s x%d" % (a["name"], a["frames"]) for a in loadout["animations"])))
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "data/lpc/merc_01.json"))
+    paths = sys.argv[1:] or sorted(str(p) for p in (ROOT / "data/lpc").glob("*.json"))
+    for p in paths:
+        main(p)
