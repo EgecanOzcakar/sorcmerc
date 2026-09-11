@@ -1068,4 +1068,24 @@ whichever scene plays them per T26/T27):
 File ownership is split cleanly (main.gd / campaign.gd+quest.gd / audio.gd
 +barks.gd) so these three can run fully in parallel with no collision.
 
+- 2026-09-11: **T29-T31 complete**, plus the opportunity-check UI wiring/
+  persistence T30 flagged as its own gap. T29: turn-order tiles show
+  initiative *and* HP (HP-only was tried, corrected back per direct
+  feedback — the strip's actual sequence was always initiative order,
+  cb.order, never touched either way), attack-result popups lead with
+  HIT/MISS/CRIT/SAVED over the raw d20, action buttons scroll instead of
+  overflowing, number hotkeys work mid-targeting, a real defeat animation
+  (board shake, red wash, shockwave ring), debug buttons hidden outside
+  `OS.is_debug_build()`, a melee/ranged weapon toggle, per-slot-level
+  caster resource pips, and tooltips now show prose *and* real damage
+  dice for every verb that was missing either. T30: POOL nearly doubled
+  (35→62 templates), a Perception/Survival opportunity check after combat
+  or in a treasure room (bonus gold, or a preview of the next stage's
+  fights), wired into the visiting-node UI and carried by
+  campaign_save.gd. T31: every text bark (T26) now pairs with a short
+  synthesized "symphonic gibberish" stinger (4 voice archetypes x 3
+  variants, Don't Starve-style), reusing T27's synthesis approach and the
+  existing bark trigger points — no new hookpoints. **Full suite: 24 test
+  files, 0 failures; drive_ui/drive_campaign both pass.** Pushed.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
