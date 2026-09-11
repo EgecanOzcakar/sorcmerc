@@ -682,12 +682,19 @@ func _draw_settlement(s, at: Vector2) -> void:
 	var pair: int = absi(hash(s.id))
 	var blocks := [Vector2(0, 0), Vector2(-0.5, 0.35), Vector2(0.5, 0.3)] if big \
 		else [Vector2(0, 0), Vector2(0.45, 0.3)]
+	var h := r * (3.2 if big else 2.8)
+	# BUILDING_ANCHOR sits near the sprite's bottom (112 of 120px tall), so a house
+	# drawn at `base` reads as mostly-above it — a cluster whose bases sit on the
+	# ring reads as pushed toward the ring's back half. Nudge every base down by
+	# the gap between the anchor and the sprite's true vertical centre so the
+	# cluster's visual mass, not its ground corner, is what centres on the ring.
+	var vcenter := Vector2(0.0, (BUILDING_ANCHOR.y - BUILDING.y * 0.5) * 0.3 * h / BUILDING.y)
 	var bases: Array = []
 	for b in blocks:
-		bases.append(at + _iso(b * r))
+		bases.append(at + _iso(b * r) + vcenter)
 	bases.sort_custom(func(a, b): return a.y < b.y)
 	for k in bases.size():
-		_draw_building(bases[k], r * (3.2 if big else 2.8), style + k, pair + k)
+		_draw_building(bases[k], h, style + k, pair + k)
 	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), s.sname,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
 
