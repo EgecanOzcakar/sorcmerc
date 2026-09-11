@@ -2067,4 +2067,28 @@ license confirmation for each, plus a recommendation, back to the user;
 the user decides what (if anything) gets integrated next, same as how the
 combat-board sprite spike was handled.
 
+**O10 completion (2026-09-11):** research delivered, nothing integrated
+(as scoped — this was reporting-only). Five CC0 candidates found, all
+license-confirmed directly on their asset pages:
+1. Screaming Brain Studios — **Isometric Tiles: Overworld Pack**
+   (itch.io/screamingbrainstudios), 360 tiles (grass/forest/water,
+   flat+thick renders) — the recommended lead: built specifically for an
+   overworld, not combat or generic top-down.
+2. Screaming Brain Studios — **Isometric Tiles: Town Pack**, 443 tiles,
+   same author/grid/style as #1 — settlements, no style-mismatch risk.
+3. Kenney — **Isometric Roads**, 95 files CC0 — fills the road-tile gap
+   #1 doesn't cover.
+4. Kenney — **Isometric Tiles Landscape**, 128 tiles CC0 — an older,
+   flatter-style alternative/backup to #1.
+5. Kenney — **Board Game Icons** (or the sibling **Board Game Pack**) for
+   party/caravan tokens — CC0 confirmed, but whether either actually
+   contains simple colorable pawn shapes vs. just dice/card iconography
+   was NOT confirmed from the page alone; flagged as needing a direct
+   look at the downloaded sheet before committing.
+
+Recommendation: lead with #1 + #2 (same author, same grid, eliminates
+mismatch risk) plus #3 for roads. #5 is the open item — a five-minute
+visual check, not a licensing risk. Awaiting user decision on what (if
+anything) to integrate; no branch, no download yet.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
