@@ -2197,4 +2197,13 @@ toward the back half of the faction ring rather than centered (the
 sprites rise up-and-left from their ground-corner anchor) — not worth
 its own pass yet.
 
+**Follow-up fix (2026-09-11):** the ring-centering nit above, fixed
+directly (`5d8260c` on `feature/overworld-art-packs`). `BUILDING_ANCHOR`
+sits near the sprite's bottom, so a house drawn at its footprint point
+reads as mostly rising above it; nudged every base down by a fraction of
+the anchor-to-vertical-centre gap. The correction was tuned empirically
+against real renders — a full correction overshot the house below the
+ring, 0.3 of it reads centered — not derived by formula, since "looks
+centered" is a visual call. Full suite + all `drive_*` green.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
