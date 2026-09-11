@@ -1556,4 +1556,26 @@ only — coordinate with nothing else since no other agent currently owns
 it), `core/campaign_save.gd`. Full suite + all `drive_*` smoke tests green
 before reporting done.
 
+**T41 completion (2026-09-11):** landed as `777e0e0`. All three items were
+real, root-caused, not just papered over:
+1. `drive_campaign`'s 8 failures were the driver's own fault, not a
+   campaign bug — its hand-rolled fighter (walk + `] Attack`, no spells,
+   no heals) lost the now-unavoidable stage-0 combat (T12 made stage 0
+   combat-only) and the run never got past it. Fixed by driving the fight
+   with the real `AI.take_turn` instead; also handles T39's deploy mode.
+   Now reaches stage 5/5, state=won.
+2. `sunken-shrine` had no `THEME_FACTION` entry, so it always fell
+   through to the hand-tuned MIX (max foes, full budget into mult) —
+   the actual cause of its wild swings across every TIER retune. Mapped
+   to `"undead"` (measured against `"cultist"`, rejected): 47.0%→64.5%,
+   mid-range against hard's 75% target. `BOSS.win_rate` and both TUNING
+   comments updated to match.
+3. Scout-guaranteed-ambush now survives save/load: `Campaign.node_scouted`
+   is computed before `scouted` is cleared, persisted in
+   `campaign_save.gd`, and both combat-launch sites read it directly
+   instead of threading a local through a call argument.
+
+Full suite green (25 test files, 0 failures) and all 5 `drive_*` smoke
+tests OK, `drive_campaign` included (previously always lost at stage 0).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
