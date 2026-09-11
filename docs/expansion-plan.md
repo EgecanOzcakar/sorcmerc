@@ -1714,4 +1714,35 @@ untouched. No spatial query/serialization added (deliberately — O4/O5
 need proximity checks, O7 needs persistence; both are that phase's job,
 a linear scan over 3-6 parties needs no index yet).
 
+**O2/O3 completion (2026-09-11, landed together):** both built in parallel
+against O1, no collision.
+
+O2 (`e641747`) — `scenes/world/world.tscn`+`.gd`, runnable standalone
+(`godot --path . scenes/world/world.tscn`). Isometric ground as tessellating
+projected quads (discs like combat's hexes overlapped into domes at this
+scale — quads fixed it), tokens matching the combat board's flat-base +
+camera-facing-ball look. Camera: drag pans, wheel zooms about the cursor
+(0.25-2.5x clamped), right-click sets the player's goal (goal ringed gold),
+a Pause/Resume button + Day/HH:MM readout. Deliberately duplicated (not
+extracted) `scenes/main.gd`'s ~25 lines of iso-projection math rather than
+touching that file, which this phase couldn't edit — flagged as the
+extract-to-`core/iso.gd` upgrade path once a phase is free to touch
+`main.gd`. `tests/drive_world.gd`: OK — caught one real bug along the way
+(`zoom_at()` panning without recomputing `_origin`, stale on the next
+`_unpix`), fixed before landing.
+
+O3 (`dc4c7a3`) — `core/world_ai.gd`: `WorldAI.patrol/wander/hunt` assign a
+party's goal-producing behavior; `WorldAI.update(world, delta)` drives all
+of them, called from `_process` next to `world.tick()`. Monster/civilized
+split: `CIVILIZED := ["soldier"]`, everything else in `Scaler.FACTIONS`
+hunts; hostility is one-directional for now (monsters hunt civilized
+parties/settlements/the player, civilized parties never hunt each other) —
+defend/flee behaviors are a later addition, not built yet. AI state lives
+on `RoamingParty.ai` (one additive field on O1's class), not a side table,
+so O5 can remove dead parties without separate cleanup. `tests/
+test_world_ai.gd`: 35 passed.
+
+Full suite: 26 test files, 0 failures; all 5 `drive_*` smoke tests
+(including the new `drive_world`) OK.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
