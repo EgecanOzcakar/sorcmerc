@@ -35,6 +35,7 @@ func _init() -> void:
 	test_creator_gates()
 	await test_viewer()
 	_wipe()
+	test_playtest_build_unlocks_everything()
 	print("test_progression: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -206,6 +207,24 @@ func test_creator_gates() -> void:
 	Prog.add_class_xp("rogue", Prog.SUBCLASS_COST)
 	check(Creator.lock_note("subclass", Prog.paid_subclasses("rogue")[0]) == "",
 		"class XP opens the next one")
+
+# SORCMERC_PLAYTEST=1 mirrors what a "playtest" export-preset feature tag does
+# at runtime (a live custom_features flag can't be forced from a headless test
+# run) -- everything opens, no locked-anything left, subclasses included.
+func test_playtest_build_unlocks_everything() -> void:
+	check(not Prog.is_class_unlocked("rogue"), "rogue is locked in a normal build (sanity check)")
+	OS.set_environment("SORCMERC_PLAYTEST", "1")
+	check(Prog.is_species_unlocked("dragonborn"), "every species opens")
+	check(Prog.is_lineage_unlocked("elf", "drow"), "and every lineage with it")
+	check(Prog.is_class_unlocked("rogue") and Prog.is_class_unlocked("sorcerer"),
+		"every class opens, XP threshold or not")
+	check(not Prog.awaits_picks("rogue"),
+		"...and never dangles a forced pick-2 flow just to get there")
+	check(Prog.is_subclass_unlocked("thief") and Prog.is_subclass_unlocked("assassin"),
+		"every subclass opens too, free and paid alike")
+	check(Prog.current().lifetime_xp == 0, "none of this touches the actual saved progress")
+	OS.set_environment("SORCMERC_PLAYTEST", "")
+	check(not Prog.is_class_unlocked("rogue"), "and it's gone the moment the flag is")
 
 func test_viewer() -> void:
 	var v = load("res://scenes/progression/progression.tscn").instantiate()

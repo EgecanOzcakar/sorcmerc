@@ -1,0 +1,58 @@
+name: Build and publish to itch.io
+
+# Two channels, one workflow: a `test*` tag ships the Playtest export (every
+# species/class/subclass unlocked, core/progression.gd's "playtest" custom
+# feature check) to the web-playtest channel; any other tag ships the normal
+# Release export (real lifetime-XP gating) to the web channel. Push a tag to
+# trigger it — nothing runs on ordinary commits.
+#
+#   git tag v0.1.0 && git push origin v0.1.0        # -> web (locked progression)
+#   git tag test-2026-09-11 && git push origin test-2026-09-11   # -> web-playtest (all unlocked)
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "test*"
+
+jobs:
+  export-and-publish:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.7.2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick the channel + export preset for this tag
+        id: pick
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == test* ]]; then
+            echo "preset=Web (Playtest)" >> "$GITHUB_OUTPUT"
+            echo "channel=web-playtest" >> "$GITHUB_OUTPUT"
+            echo "outdir=build/web-playtest" >> "$GITHUB_OUTPUT"
+          else
+            echo "preset=Web (Release)" >> "$GITHUB_OUTPUT"
+            echo "channel=web" >> "$GITHUB_OUTPUT"
+            echo "outdir=build/web-release" >> "$GITHUB_OUTPUT"
+          fi
+
+      # godot-ci's image ships Godot + every export template pre-installed at
+      # /root/.local/share/godot/export_templates/ -- nothing to download here.
+      - name: Import resources once
+        run: godot --headless --path . --import || true
+
+      - name: Export
+        run: |
+          mkdir -p "${{ steps.pick.outputs.outdir }}"
+          godot --headless --path . --export-release "${{ steps.pick.outputs.preset }}" \
+            "${{ steps.pick.outputs.outdir }}/index.html"
+
+      - name: Push to itch.io
+        uses: manleydev/butler-publish-itchio-action@v1
+        env:
+          BUTLER_CREDENTIALS: ${{ secrets.BUTLER_API_KEY }}
+          CHANNEL: ${{ steps.pick.outputs.channel }}
+          ITCH_GAME: sorcmerc
+          ITCH_USER: nacege
+          PACKAGE: ${{ steps.pick.outputs.outdir }}
+          VERSION: ${{ github.ref_name }}

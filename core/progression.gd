@@ -156,8 +156,17 @@ static func class_xp_of(class_id: String) -> int:
 static func species_cost(id: String) -> int:
 	return int(SPECIES_COST.get(id, 0))
 
+# Export presets tag a "playtest" build via custom_features — everything opens
+# for friends trying the game early, with the real lifetime/class-XP gates back
+# in force the moment a release build (no such feature) is exported. Doesn't
+# touch saved progress either way: it's a check here, not a write anywhere.
+# SORCMERC_PLAYTEST=1 forces it the same way SORCMERC_FAST/_SEED do elsewhere —
+# a real export can't be spun up from a headless test run to prove the branch.
+static func _playtest_build() -> bool:
+	return OS.has_feature("playtest") or OS.get_environment("SORCMERC_PLAYTEST") == "1"
+
 static func is_species_unlocked(id: String) -> bool:
-	if id in STARTING_SPECIES:
+	if _playtest_build() or id in STARTING_SPECIES:
 		return true
 	return SPECIES_COST.has(id) and current().lifetime_xp >= species_cost(id)
 
@@ -176,7 +185,7 @@ static func class_cost(id: String) -> int:
 	return int(CLASS_COST.get(id, 0))
 
 static func is_class_unlocked(id: String) -> bool:
-	if STARTING_CLASSES.has(id):
+	if _playtest_build() or STARTING_CLASSES.has(id):
 		return true
 	return CLASS_COST.has(id) and current().lifetime_xp >= class_cost(id)
 
@@ -188,8 +197,12 @@ static func free_subclasses(class_id: String) -> Array:
 		return STARTING_CLASSES[class_id]
 	return current().chosen.get(class_id, [])
 
-# True while an unlocked class has yet to name its 2 free subclasses.
+# True while an unlocked class has yet to name its 2 free subclasses. Never
+# true in a playtest build -- forcing a pick-2 flow to get "everything open"
+# would defeat the point.
 static func awaits_picks(class_id: String) -> bool:
+	if _playtest_build():
+		return false
 	return is_class_unlocked(class_id) and free_subclasses(class_id).is_empty()
 
 # Records the 2 free picks that come with a lifetime-XP class unlock. Rejects a
@@ -221,6 +234,8 @@ static func is_subclass_unlocked(id: String) -> bool:
 	var src = Catalog.index("subclasses.json").get(id)
 	if src == null:
 		return false
+	if _playtest_build():
+		return true
 	var class_id := String(src.get("classId", ""))
 	if id in free_subclasses(class_id):
 		return true

@@ -2,7 +2,9 @@
 .godot/
 /android/
 /build/
-export_presets.cfg
+# export_presets.cfg is committed on purpose: CI (release.yml) needs it to
+# know what/how to export. It carries no secrets — the itch.io key is a
+# GitHub Actions secret, never in this file.
 *.translation
 combat_screen.png*
 icon_sheet.png
