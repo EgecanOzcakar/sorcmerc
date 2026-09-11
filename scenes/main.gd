@@ -1158,26 +1158,6 @@ class Board extends Control:
 			"col": Color(String(FLORA_COL.get(pal, "3f5240"))),
 			"scale": (0.85 + 0.45 * _rand(hx, 9)) * (1.15 if cover else 1.0)}
 
-	# A combatant: a standing figure rather than a poker chip — a tapered torso
-	# out of the hex, a head above it. Still flat shapes, still one silhouette for
-	# everyone; the class/creature glyph on the chest is what tells them apart.
-	# ponytail: no per-unit art. That is the sprite track's job, not this one.
-	const FIGURE := [Vector2(-0.30, -0.02), Vector2(-0.80, -0.72), Vector2(-0.66, -1.18),
-		Vector2(0.66, -1.18), Vector2(0.80, -0.72), Vector2(0.30, -0.02)]
-
-	func _draw_figure(foot: Vector2, rad: float, base: Color, down: bool) -> void:
-		var sy := 0.45 if down else 1.0     # the unconscious slump into a heap
-		var body := PackedVector2Array()
-		for o in FIGURE:
-			body.append(foot + Vector2(o.x * rad, o.y * rad * sy))
-		draw_colored_polygon(body, base)
-		var edge := body.duplicate()
-		edge.append(edge[0])
-		draw_polyline(edge, base.darkened(0.45), 2.0)
-		var head := foot + Vector2(0, -1.46 * rad * sy)
-		draw_circle(head, rad * 0.31, base.lightened(0.10))
-		draw_arc(head, rad * 0.31, 0, TAU, 16, base.darkened(0.45), 2.0)
-
 	# A plant: flat shapes only, standing upright out of a projected shadow.
 	func _draw_foliage(d: Dictionary, s: float) -> void:
 		var at: Vector2 = d["at"]
@@ -1325,9 +1305,10 @@ class Board extends Control:
 				base = base.lerp(Color.WHITE, clampf(_flash[c.id] / 0.35, 0, 1))
 			var rad := s * 0.62
 			# The token stands ON its hex: a flat shadow ellipse marks the footprint,
-			# the disc itself floats a little above it.
-			var lift := Vector2(0, -rad * 0.55)
-			var tp := p + lift
+			# the disc itself floats a little above it. Unconscious, it drops onto
+			# the ground — no lift, and flat to the board plane like everything
+			# else lying on it.
+			var tp := p if c.is_down() else p + Vector2(0, -rad * 0.55)
 			draw_colored_polygon(_disc(p, rad * 0.92), Color(0, 0, 0, 0.28))
 			if c == cur:
 				# A real blink: the ring breathes in alpha, width AND radius, with a
@@ -1338,9 +1319,15 @@ class Board extends Control:
 					Color(1.0, 0.886, 0.478, 0.25 + 0.75 * bl), 2.5 + bl * 3.0)
 				draw_polyline(_disc(p, rad + 12.0 + bl * 6.0, true),
 					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0)
-			_draw_figure(p, rad, base, c.is_down())
+			if c.is_down():
+				draw_colored_polygon(_disc(p, rad * 0.8), base)
+				draw_polyline(_disc(p, rad * 0.8, true), base.darkened(0.4), 2.0)
+			else:
+				draw_line(p, tp, base.darkened(0.55), 3.0)   # the "post" it stands on
+				draw_circle(tp, rad * 0.8, base)
+				draw_arc(tp, rad * 0.8, 0, TAU, 24, base.darkened(0.4), 2.0)
 			# The token's mark: class glyph for heroes, creature-type glyph for foes.
-			_centered(_glyph(c), tp, int(21 * fz), Color("101216"))
+			_centered(_glyph(c), tp, int(24 * fz), Color("101216"))
 
 			# hp bar
 			var hv: float = _hp.get(c.id, float(c.hp))
