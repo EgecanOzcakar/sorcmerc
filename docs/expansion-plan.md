@@ -1522,4 +1522,38 @@ note — the `THEME_FACTION` gap remains, just less painful at this TIER).
 re-derive it on every future TIER retune, closing the staleness T38
 flagged. Full suite: 25 files, 4930 checks, 0 failures.
 
+## T41 — bug/gap cleanup: drive_campaign failures, shrine outlier, scout persistence (locked 2026-09-11, dispatched now)
+
+Three real, previously-flagged-but-not-fixed items, bundled since they're
+small and disjoint:
+
+1. **`drive_campaign`'s 8 failures** — reported "pre-existing" and waved
+   through by three separate agents (T34, T38, T40) without ever being
+   root-caused. Run `SORCMERC_SEED=5 SORCMERC_FAST=1 godot --headless
+   --path . -s tests/drive_campaign.gd` and actually chase why: "the quest
+   never made it into the party log as active", "never bought anything",
+   "never rested", ending `state=lost` at stage 0/5. Find the real cause
+   (a driver script bug vs. an actual campaign-flow bug) and fix it, or
+   report back precisely why it can't be fixed if it turns out to be a
+   stale/obsolete driver script.
+2. **`sunken-shrine` boss node win-rate outlier** — flagged by T38, still
+   present after T40 (bounced 6.0%→47.0% purely as a side effect of the
+   TIER retune, never actually addressed). It maps to no `THEME_FACTION`
+   and so always spawns `Scaler.MAX_FOES` of the hand-tuned `MIX` with the
+   whole difficulty budget poured into `mult`. Give it a real faction/
+   habitat mapping (or a dedicated smaller roster) so it scales like the
+   other boss nodes instead of swinging wildly with every TIER change.
+3. **T39 scout-guarantee lost on reload** — `Campaign.scouted` is cleared
+   by `run.enter()` before a mid-combat save's reload re-reads it, so a
+   guaranteed ambush from a prior successful scout doesn't survive a save/
+   load. Persist whatever's needed (likely a small addition to
+   `core/campaign_save.gd`) so reloading a scouted combat node still
+   guarantees the surprise check.
+
+File ownership: `tests/drive_campaign.gd` (read/diagnose, fix only if the
+driver itself is wrong), `core/campaign.gd`, `core/scaler.gd` (item 2
+only — coordinate with nothing else since no other agent currently owns
+it), `core/campaign_save.gd`. Full suite + all `drive_*` smoke tests green
+before reporting done.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
