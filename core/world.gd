@@ -60,6 +60,7 @@ class RoamingParty extends RefCounted:
 	var is_player := false
 	var goal: Vector2            # O3 drives this; O1 just steers toward it
 	var speed := SPEED
+	var ai := {}                 # O3's behavior + its state; see core/world_ai.gd
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String, is_player_v := false) -> void:
 		id = id_v
