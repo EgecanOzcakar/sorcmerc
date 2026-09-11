@@ -61,6 +61,32 @@ const ZOOM_MAX := 2.5
 const CELL := 90.0          # ground patch size, in world units
 const MAX_CELLS := 900      # cap the ground loop when zoomed far out
 
+# O11 art. Screaming Brain Studios' Isometric Tiles Overworld/Town packs, CC0 —
+# see assets/world/README.md for provenance and the one edit made to the files.
+const TerrainTex := preload("res://assets/world/overworld/terrain.png")
+const ForestTex := preload("res://assets/world/overworld/forest.png")
+const BuildingTex := preload("res://assets/world/town/buildings.png")
+
+const TILE := Vector2(256, 128)   # one ground diamond in the Overworld sheets
+const TILE_COLS := 3              # both sheets are 3x6 tiles
+# The subsets of each 18-tile sheet the ground draws from. Both are deliberately
+# narrow: the cell a tile lands in is picked by hash, with no terrain data behind
+# it, so anything outside one colour family (the sheets' sand, bare rock and clay
+# rows) tiles as a loud checkerboard instead of as one meadow. Forest is the one
+# break in family, and is supposed to read as one.
+const GRASS := [0, 1, 2, 9, 10]
+const FOREST := [0, 1, 2, 3, 4, 5]
+const WOODED := 0.78              # above this, a cell draws from FOREST
+
+const BUILDING := Vector2(64, 96) # one wall tile in the Town sheet
+# The sheet is 8 rows (4 styles, each doubled for the left/right tile offset) by
+# 18 columns (9 left+right corner pairs). Only the first two styles are drawn:
+# the pack is a modern-city set, and rows 4-8 are plate glass and painted
+# render, which no amount of distance reads as a fantasy town. Rows 0-4 are
+# brick and stone and do.
+const BUILDING_STYLES := 2
+const BUILDING_PAIRS := 6         # the brick/stone corners; 6-8 are siding and shop glass
+
 var world: World
 var party: Party            # injected by whoever opens the map, or a demo roster
 var _combat = null          # the live scenes/main.tscn instance, while fighting
@@ -598,9 +624,12 @@ func _draw() -> void:
 		else:
 			_draw_party(d["p"], d["at"])
 
-# The same two-layer treatment the combat board gives a hex — a tinted slab, then
-# a lighter blob drifting off-centre — on a coarse grid of the ground plane, so
-# neighbouring patches overlap in tone instead of reading as hard-cut diamonds.
+# O11: one Overworld Pack tile per ground cell, on the same grid the procedural
+# patches used. ISO_YAW is 35°, not the 45° the art is drawn for, so a cell lands
+# on screen as a sheared parallelogram rather than a 2:1 diamond — the tile is
+# mapped onto it by an affine transform (its diamond's corners to the cell's
+# corners) instead of being blitted upright. The projection stays the contract;
+# the art bends to it, so tiles line up with the camera and click-to-move math.
 func _draw_ground() -> void:
 	var mn := Vector2(1e9, 1e9)
 	var mx := Vector2(-1e9, -1e9)
@@ -610,31 +639,28 @@ func _draw_ground() -> void:
 	var i0 := int(floor(mn.x / CELL)); var i1 := int(ceil(mx.x / CELL))
 	var j0 := int(floor(mn.y / CELL)); var j1 := int(ceil(mx.y / CELL))
 	if (i1 - i0 + 1) * (j1 - j0 + 1) > MAX_CELLS:   # far-out zoom: don't paint the world
-		draw_rect(Rect2(Vector2.ZERO, size), Color("2b3a2a"))
+		draw_rect(Rect2(Vector2.ZERO, size), Color("4a5333"))   # the tiles' own average
 		return
+	# The cell's two projected edges. _iso is linear, so these are the same for
+	# every cell and the whole grid is one transform plus a translation per tile.
+	var ex := _iso(Vector2(CELL, 0)) * _zoom
+	var ey := _iso(Vector2(0, CELL)) * _zoom
+	draw_set_transform_matrix(Transform2D((ex + ey) / TILE.x, (ey - ex) / TILE.y, _origin))
 	for i in range(i0, i1 + 1):
 		for j in range(j0, j1 + 1):
 			var cell := Vector2i(i, j)
-			var c := _pix(Vector2(i + 0.5, j + 0.5) * CELL)
-			var v := _rand(cell, 1)
-			var tint := Color("35462f").lightened(0.06 * v).darkened(0.05 * (1.0 - v))
-			# The patch itself tessellates exactly (a projected square, like the
-			# board's hexes) — anything with a rim would show its own edge where it
-			# overlapped its neighbour. The shading is the mottle on top.
-			var quad := PackedVector2Array()
-			for corner in [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]:
-				quad.append(_pix((Vector2(i, j) + corner) * CELL))
-			draw_colored_polygon(quad, tint)
-			var r := CELL * 0.72 * _zoom
-			var blob := c + _iso(Vector2(_rand(cell, 2) - 0.5, _rand(cell, 3) - 0.5) * CELL * 0.7) * _zoom
-			var br := r * (0.45 + 0.35 * _rand(cell, 4))
-			var wash := tint.lightened(0.10) if v > 0.5 else tint.darkened(0.10)
-			for k in 3:   # feathered out, so the patches blend instead of tiling visibly
-				draw_colored_polygon(_ring(blob, br * (0.55 + 0.225 * k)),
-					Color(wash.r, wash.g, wash.b, 0.09))
+			var wooded: bool = _rand(cell, 5) > WOODED
+			var pool: Array = FOREST if wooded else GRASS
+			var idx: int = pool[int(_rand(cell, 1) * pool.size()) % pool.size()]
+			draw_texture_rect_region(ForestTex if wooded else TerrainTex,
+				Rect2(Vector2(i + j, j - i - 1) * TILE * 0.5, TILE),
+				Rect2(Vector2(idx % TILE_COLS, idx / TILE_COLS) * TILE, TILE))
+	draw_set_transform_matrix(Transform2D.IDENTITY)
 
-# A landmark, not art: a shaded footprint plus one block per building, taller and
-# wider for a city than a town.
+# O11: Town Pack buildings on the same footprint the blocks stood on — a city
+# gets three, a town two, painter-sorted among themselves. The footprint ring
+# stays: every faction's walls are the same stone, and faction is the one thing
+# the map still has to read at a glance.
 func _draw_settlement(s, at: Vector2) -> void:
 	var col := faction_color(s.faction)
 	var big: bool = s.kind == "city"
@@ -642,18 +668,31 @@ func _draw_settlement(s, at: Vector2) -> void:
 	_soft_shadow(at, r * 0.9)
 	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
 	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
+	# Style off the faction so a faction's towns look like each other, pair off the
+	# id so two of its towns are not the same building twice.
+	var style: int = absi(hash(s.faction))
+	var pair: int = absi(hash(s.id))
 	var blocks := [Vector2(0, 0), Vector2(-0.5, 0.35), Vector2(0.5, 0.3)] if big \
 		else [Vector2(0, 0), Vector2(0.45, 0.3)]
+	var bases: Array = []
 	for b in blocks:
-		var base: Vector2 = at + _iso(b * r)
-		var w := r * (0.38 if big else 0.34)
-		var h := r * (1.05 if big else 0.75)
-		draw_colored_polygon(PackedVector2Array([
-			base + Vector2(-w, 0), base + Vector2(w, 0),
-			base + Vector2(w, -h), base + Vector2(-w, -h)]), col.darkened(0.12))
-		draw_line(base + Vector2(-w, -h), base + Vector2(w, -h), col.lightened(0.35), 2.0)
+		bases.append(at + _iso(b * r))
+	bases.sort_custom(func(a, b): return a.y < b.y)
+	for k in bases.size():
+		_draw_building(bases[k], r * (1.5 if big else 1.3), style + k, pair + k)
 	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), s.sname,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
+
+# One building: the Town Pack's walls are modular left/right halves that meet at
+# the near corner, so a pair drawn shoulder to shoulder is a whole corner of a
+# house. `base` is that near corner, i.e. the point standing on the ground.
+func _draw_building(base: Vector2, h: float, style: int, pair: int) -> void:
+	var w := h * BUILDING.x / BUILDING.y
+	var src := Vector2((pair % BUILDING_PAIRS) * 2, (style % BUILDING_STYLES) * 2) * BUILDING
+	draw_texture_rect_region(BuildingTex, Rect2(base - Vector2(w, h), Vector2(w, h)),
+		Rect2(src, BUILDING))
+	draw_texture_rect_region(BuildingTex, Rect2(base - Vector2(0, h), Vector2(w, h)),
+		Rect2(src + Vector2(BUILDING.x, 0), BUILDING))
 
 # A circular token, the same ball shading the combat board's char tokens use.
 func _draw_party(p, at: Vector2) -> void:
