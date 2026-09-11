@@ -46,6 +46,8 @@ static func to_dict(campaign) -> Dictionary:
 		"node_id": String(campaign.node.get("id", "")),
 		"state": campaign.state,
 		"xp": campaign.xp,
+		"short_rests_used": campaign.short_rests_used,
+		"long_rests_used": campaign.long_rests_used,
 		"seed": int(campaign.rng.seed_value),
 		"log": campaign.log.duplicate(),
 		"party": {
@@ -78,6 +80,8 @@ static func from_dict(d: Dictionary):
 	campaign.stage = int(d.get("stage", 0))
 	campaign.state = String(d.get("state", "picking"))
 	campaign.xp = int(d.get("xp", 0))
+	campaign.short_rests_used = int(d.get("short_rests_used", 0))
+	campaign.long_rests_used = int(d.get("long_rests_used", 0))
 	campaign.log.assign(d.get("log", []))
 	campaign.node = _node(campaign, String(d.get("node_id", "")))
 	return campaign

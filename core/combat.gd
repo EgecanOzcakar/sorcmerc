@@ -442,7 +442,7 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 		"ally":
 			if c.team != actor.team or c == actor or c.is_dead():
 				return false
-			if not (v.has("heal_count") or v["kind"] in ["heal_ally", "ally_buff"]) and not c.conscious():
+			if not (v.has("heal_count") or v["kind"] in ["heal_ally", "ally_buff", "help"]) and not c.conscious():
 				return false
 			return Hex.distance(actor.pos, c.pos) <= int(v.get("range", 1))
 		"self":
@@ -1096,6 +1096,8 @@ func move_path(mover, dest: Vector2i) -> Array:
 
 # Hostiles that get an opportunity attack somewhere along `mover`'s walk to `dest`.
 func provokers_for(mover, dest: Vector2i) -> Array:
+	if mover.has("hidden"):
+		return []   # unseen means unreacted-to: nobody can ready an OA on what they can't see
 	var path := move_path(mover, dest)
 	var out: Array = []
 	for f in enemies_of(mover):
@@ -1134,6 +1136,9 @@ func act_dodge(c) -> void:
 
 # Help: the named ally's next attack roll (before your next turn) has advantage.
 func act_help(helper, ally) -> void:
+	if ally.is_down():
+		heal(ally, 1)   # First Aid: stir a downed ally back to their feet on 1 HP
+		return
 	ally.statuses["helped"] = true
 	log.append("%s helps %s — advantage on their next attack." % [helper.cname, ally.cname])
 

@@ -256,6 +256,8 @@ var stage := 0
 var node: Dictionary = {}
 var state := "picking"        # picking | visiting | combat | won | lost | retired
 var xp := 0                   # run total, for the header; the real bank is ch.xp
+var short_rests_used := 0
+var long_rests_used := 0
 var log: Array = []
 var rng
 var route: Array = []         # this run's stages, generated from the seed
@@ -273,11 +275,20 @@ func _init(p, seed_value := 0) -> void:
 # (shop / camp / loot — pacing, and a road that is not a fight) plus 1-2 fights;
 # the support kinds are dealt out so all three show up across the four stages.
 static func build_route(r) -> Array:
-	var support := _deal_support(r)
+	# The opening stage is combat-only (see _pick_stage below) and never spends
+	# a dealt support kind, so only the remaining stages need one each — which
+	# divides evenly, one of each of the 3 SUPPORT_KINDS per remaining stage.
+	var support := _deal_support(r, STAGE_POSITIONS.size() - 1)
 	var used := {}                   # no node template twice on one route
 	var out: Array = []
 	for i in STAGE_POSITIONS.size():
-		var stage_nodes := _pick_stage(r, String(STAGE_POSITIONS[i]), String(support[i]), used)
+		# The opening stage is a straight fight, no road-not-taken options —
+		# nothing to shop for or rest from before you've even swung once.
+		var stage_nodes: Array
+		if i == 0:
+			stage_nodes = _pick_stage(r, String(STAGE_POSITIONS[i]), "", used, true)
+		else:
+			stage_nodes = _pick_stage(r, String(STAGE_POSITIONS[i]), String(support[i - 1]), used)
 		for n in stage_nodes:
 			used[n["id"]] = true
 		out.append(stage_nodes)
@@ -285,23 +296,30 @@ static func build_route(r) -> Array:
 	out.append([BOSS_POOL[r.roll_die(BOSS_POOL.size()) - 1]])   # T18: which boss, this run
 	return out
 
-# One of each non-combat kind, shuffled, then a repeat to fill the fourth stage.
-static func _deal_support(r) -> Array:
+# One of each non-combat kind, shuffled, then repeats if there are more slots
+# than kinds (there normally aren't — 3 kinds, 3 non-opening stages).
+static func _deal_support(r, count: int) -> Array:
 	var kinds := SUPPORT_KINDS.duplicate()
 	var out: Array = []
 	while not kinds.is_empty():
 		out.append(kinds.pop_at(r.roll_die(kinds.size()) - 1))
-	while out.size() < STAGE_POSITIONS.size():
+	while out.size() < count:
 		out.append(SUPPORT_KINDS[r.roll_die(SUPPORT_KINDS.size()) - 1])
 	return out
 
-static func _pick_stage(r, pos: String, support_kind: String, used: Dictionary) -> Array:
+static func _pick_stage(r, pos: String, support_kind: String, used: Dictionary,
+		combat_only := false) -> Array:
+	var fights := _eligible(pos, "combat", used)
+	var want: int = PICK_MIN + r.roll_die(PICK_MAX - PICK_MIN + 1) - 1
+	if combat_only:
+		var picked_fights: Array = []
+		while picked_fights.size() < want and not fights.is_empty():
+			picked_fights.append(fights.pop_at(r.roll_die(fights.size()) - 1))
+		return picked_fights
 	var support := _eligible(pos, support_kind, used)
 	if support.is_empty():           # a thin position: repeat rather than fail
 		support = _eligible(pos, support_kind)
-	var fights := _eligible(pos, "combat", used)
 	var picked: Array = [support.pop_at(r.roll_die(support.size()) - 1)]
-	var want: int = PICK_MIN + r.roll_die(PICK_MAX - PICK_MIN + 1) - 1
 	while picked.size() < want and not fights.is_empty():
 		picked.insert(r.roll_die(picked.size() + 1) - 1,
 			fights.pop_at(r.roll_die(fights.size()) - 1))
@@ -531,15 +549,35 @@ static func _note_rarity(item_id: String) -> void:
 
 # --- rest -----------------------------------------------------------------
 
-func rest(kind: String) -> void:
+const MAX_SHORT_RESTS := 2   # per run -- rest is a resource now, not a free reset
+const MAX_LONG_RESTS := 1
+
+func short_rests_left() -> int:
+	return maxi(0, MAX_SHORT_RESTS - short_rests_used)
+
+func long_rests_left() -> int:
+	return maxi(0, MAX_LONG_RESTS - long_rests_used)
+
+func rest(kind: String) -> bool:
 	if node.get("kind", "") != "rest":
-		return
+		return false
+	if kind == "long-rest":
+		if long_rests_left() <= 0:
+			say("No long rests left this run.")
+			return false
+		long_rests_used += 1
+	else:
+		if short_rests_left() <= 0:
+			say("No short rests left this run.")
+			return false
+		short_rests_used += 1
 	var Adapter = load("res://core/adapter.gd")
 	for ch in party.party_characters():
 		Adapter.rest(ch, kind)
 	Sound.play_sfx("rest")   # T27
 	say("The party takes a %s." % kind.replace("-", " "))
 	_autosave()
+	return true
 
 # --- identification (T13) -------------------------------------------------
 #
@@ -777,11 +815,14 @@ func turn_in(quest: Dictionary) -> bool:
 # Magic items: the export carries no structured power data (structuredBonuses is
 # null on every entry, SCHEMA gap), so rarity is all there is. Price grows
 # polynomially with the tier index: BASE * (index + 1) ^ EXPONENT, tuned so
-# uncommon ≈ 256 gp, rare ≈ 2916, very-rare ≈ 16384, legendary ≈ 62500 gp.
+# common ≈ 25 gp (the one common-rarity item, potion-of-climbing, priced at
+# 4 gp under the old constants read as a rounding error, not an item), uncommon
+# ≈ 400, rare ≈ 2025, very-rare ≈ 6400, legendary ≈ 15625 gp — EXPONENT dropped
+# from 6 so the curve doesn't run away at the top end the way it used to.
 # Artifacts are priced 0 — not for sale, not sellable.
 
-const MAGIC_BASE := 4
-const MAGIC_EXPONENT := 6
+const MAGIC_BASE := 25
+const MAGIC_EXPONENT := 4
 const RARITY_TIERS := ["common", "uncommon", "rare", "very-rare", "legendary"]
 const VARIES_TIER := 2        # "varies" items (no single rarity) price as rare
 

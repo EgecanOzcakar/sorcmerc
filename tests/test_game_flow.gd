@@ -41,6 +41,7 @@ func _init() -> void:
 	# --- retire: only while picking --------------------------------------
 	var c := _campaign()
 	check(c.state == "picking", "a fresh run is picking")
+	c.stage = 1   # stage 0 is combat-only now, no merchant to stand on
 	c.enter(_find(c, "merchant"))
 	check(c.state == "visiting", "standing on a merchant")
 	check(not c.retire(), "cannot retire mid-visit")

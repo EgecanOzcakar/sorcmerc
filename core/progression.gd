@@ -39,7 +39,7 @@ const PATH := "user://progression.json"
 const FORMAT := "sorcmerc-progression"
 const VERSION := 1
 
-const SUBCLASS_COST := 5000   # class XP, flat, for each of a class's other 2
+const SUBCLASS_COST := 2500   # class XP, flat, for each of a class's other 2
 
 # Open from day one, with every one of their lineages.
 const STARTING_SPECIES := ["human", "orc", "elf", "dwarf"]
@@ -50,11 +50,11 @@ const STARTING_SPECIES := ["human", "orc", "elf", "dwarf"]
 # flashy lineages (dragonborn, goliath) come next, and the celestial-blooded
 # aasimar is the rarest thing on the list, so it costs the most.
 const SPECIES_COST := {
-	"gnome": 3000,
-	"tiefling": 6000,
-	"dragonborn": 9000,
-	"goliath": 12000,
-	"aasimar": 15000,
+	"gnome": 1500,
+	"tiefling": 3000,
+	"dragonborn": 4500,
+	"goliath": 6000,
+	"aasimar": 7500,
 }
 
 # Open from day one, each with exactly 2 of its 4 subclasses pre-chosen.
@@ -71,13 +71,13 @@ const STARTING_CLASSES := {
 # player re-opens familiar ground early, then the rest by how many moving parts
 # they ask a new player to juggle, ending on the sorcerer's metamagic economy.
 const CLASS_COST := {
-	"rogue": 20000,
-	"fighter": 30000,
-	"bard": 40000,
-	"monk": 50000,
-	"druid": 60000,
-	"paladin": 70000,
-	"sorcerer": 80000,
+	"rogue": 10000,
+	"fighter": 15000,
+	"bard": 20000,
+	"monk": 25000,
+	"druid": 30000,
+	"paladin": 35000,
+	"sorcerer": 40000,
 }
 
 var lifetime_xp := 0

@@ -37,6 +37,8 @@ func _init() -> void:
 	test_reach_and_range()
 	test_move_budget()
 	test_help_grants_advantage()
+	test_help_revives_a_downed_ally()
+	test_hidden_mover_provokes_nothing()
 	test_hide_enables_advantage()
 	test_hidden_is_untargetable()
 	test_mercy_rule()
@@ -287,6 +289,30 @@ func test_help_grants_advantage() -> void:
 	check(cb._attack_mode(vera, grull) == Dice.ADV, "a helped attacker rolls with advantage")
 	cb.resolve_attack(vera, grull)
 	check(not vera.has("helped"), "the granted advantage is spent by the attack")
+
+# Help on a downed ally is First Aid, not "advantage on their next attack" --
+# they have no next attack to grant it to.
+func test_help_revives_a_downed_ally() -> void:
+	var cb = _sandbox()
+	var ilsa = _find(cb, "ilsa"); var pike = _find(cb, "pike")
+	ilsa.pos = Vector2i(4, 1); pike.pos = Vector2i(4, 2)
+	pike.statuses["down"] = true; pike.hp = 0; pike.death_s = 1; pike.death_f = 1
+	var atk := {"id": "attack", "kind": "help", "targeting": "ally"}
+	check(cb.legal_target(ilsa, atk, pike), "a downed ally is a legal Help target")
+	cb.act_help(ilsa, pike)
+	check(pike.hp == 1, "Help stirs them back up on 1 HP")
+	check(not pike.is_down(), "...and they're no longer down")
+	check(pike.death_s == 0 and pike.death_f == 0, "death saves reset like any other heal")
+
+# Hidden means unseen -- nobody can react to a mover they never noticed leave.
+func test_hidden_mover_provokes_nothing() -> void:
+	var cb = _sandbox()
+	var pike = _find(cb, "pike"); var grull = _find(cb, "grull")
+	pike.pos = Vector2i(2, 1); grull.pos = Vector2i(3, 1)
+	pike.stealth = 40
+	check(cb.act_hide(pike), "pike hides")
+	check(cb.provokers_for(pike, Vector2i(2, 5)).is_empty(),
+		"a hidden mover triggers no opportunity attacks, however far they walk")
 
 func test_hide_enables_advantage() -> void:
 	var cb = _sandbox()

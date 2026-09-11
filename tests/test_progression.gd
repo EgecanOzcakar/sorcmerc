@@ -78,7 +78,7 @@ func test_costs_ordered() -> void:
 	check(dearest_species < cheapest_class, "every species costs less than every class")
 
 func test_species_threshold() -> void:
-	Prog.add_lifetime_xp(2999)
+	Prog.add_lifetime_xp(Prog.species_cost("gnome") - 1)
 	check(not Prog.is_species_unlocked("gnome"), "one XP short is still locked")
 	check(not Prog.unlock_species("gnome"), "unlock_species reports the shortfall")
 	Prog.add_lifetime_xp(1)
@@ -116,10 +116,10 @@ func test_class_xp_subclasses() -> void:
 	check(Prog.subclass_remaining(paid[0]) == 1, "remaining counts down")
 	Prog.add_class_xp("cleric", 1)
 	check(Prog.class_xp_of("cleric") == Prog.SUBCLASS_COST, "class XP accumulates")
-	check(Prog.is_subclass_unlocked(paid[0]), "5000 class XP buys the first")
-	check(not Prog.is_subclass_unlocked(paid[1]), "the second needs 5000 more")
+	check(Prog.is_subclass_unlocked(paid[0]), "SUBCLASS_COST class XP buys the first")
+	check(not Prog.is_subclass_unlocked(paid[1]), "the second needs SUBCLASS_COST more")
 	Prog.add_class_xp("cleric", Prog.SUBCLASS_COST)
-	check(Prog.is_subclass_unlocked(paid[1]), "10000 buys both")
+	check(Prog.is_subclass_unlocked(paid[1]), "2x SUBCLASS_COST buys both")
 	check(Prog.class_xp_of("wizard") == 0, "class XP does not leak between classes")
 	check(not Prog.is_subclass_unlocked("diviner"), "another class stays locked")
 

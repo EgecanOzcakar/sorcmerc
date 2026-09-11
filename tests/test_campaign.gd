@@ -8,6 +8,7 @@ const Quest = preload("res://core/quest.gd")
 const Presets = preload("res://core/presets.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Dice = preload("res://core/dice.gd")
+const CampaignSave = preload("res://core/campaign_save.gd")
 
 var _pass = 0
 var _fail = 0
@@ -33,6 +34,7 @@ func _init() -> void:
 	test_combat()
 	test_defeat()
 	test_rest()
+	test_rest_is_limited_per_run()
 	test_merchant()
 	test_settlements()
 	test_quest_flow()
@@ -98,8 +100,12 @@ func test_generated_routes() -> void:
 						"seed %d: %s is eligible for stage %d" % [s, n["id"], i])
 		check(ids.size() == total, "seed %d shows no node template twice on one route" % s)
 		var kinds := {}
+		check(c.route[0].all(func(n): return n["kind"] == "combat"),
+			"seed %d's opening stage is combat-only, no road-not-taken options" % s)
 		for i in c.route.size() - 1:
 			var fights: Array = c.route[i].filter(func(n): return n["kind"] == "combat")
+			if i == 0:
+				continue   # the opening stage is deliberately all-combat, checked above
 			check(fights.size() >= 1 and fights.size() < c.route[i].size(),
 				"seed %d stage %d offers both a fight and a road round it" % [s, i])
 			for n in c.route[i]:
@@ -292,6 +298,23 @@ func test_rest() -> void:
 	check(ch.hp_current == 3 + ceili((max_hp - 3) / 2.0),
 		"a short rest heals half the missing HP, not all of it (no Hit Dice pool to spend instead)")
 
+# Rest is a limited resource: 2 short + 1 long per run, not a free reset.
+func test_rest_is_limited_per_run() -> void:
+	var c := _campaign()
+	c.enter(_find(c, "rest"))
+	check(c.long_rests_left() == 1 and c.short_rests_left() == 2, "a fresh run starts with the full budget")
+	check(c.rest("long-rest"), "the one long rest succeeds")
+	check(c.long_rests_left() == 0, "...and it's spent")
+	check(not c.rest("long-rest"), "a second long rest this run is refused")
+	check(c.rest("short-rest") and c.rest("short-rest"), "both short rests succeed")
+	check(c.short_rests_left() == 0, "...and both are spent")
+	check(not c.rest("short-rest"), "a third short rest this run is refused")
+
+	# and it survives an autosave/resume round trip
+	var d = CampaignSave.from_dict(CampaignSave.to_dict(c))
+	check(d.long_rests_used == 1 and d.short_rests_used == 2,
+		"rest counters persist across a save/load")
+
 func test_merchant() -> void:
 	var c := _campaign()
 	c.enter(_find(c, "merchant"))
@@ -318,15 +341,18 @@ func test_merchant() -> void:
 	check(Campaign.item_price("dagger") < Campaign.item_price("longsword"),
 		"mundane prices stay power-correlated")
 	check(Campaign.item_price("plate") > Campaign.item_price("leather"), "plate beats leather")
+	var common := Campaign.item_price("potion-of-climbing")
 	var uncommon := Campaign.item_price("adamantine-armor")
 	var rare := Campaign.item_price("scroll-of-resurrection")
 	var very_rare := Campaign.item_price("ammunition-of-slaying")
 	var legendary := Campaign.item_price("apparatus-of-the-crab")
-	check(uncommon >= 100 and uncommon <= 300, "uncommon lands in 100-300 gp (got %d)" % uncommon)
-	check(rare >= 1000 and rare <= 5000, "rare lands in 1000-5000 gp (got %d)" % rare)
-	check(very_rare >= 10000 and very_rare <= 30000, "very-rare lands in 10k-30k (got %d)" % very_rare)
-	check(legendary >= 50000, "legendary is 50k+ (got %d)" % legendary)
-	check(uncommon < rare and rare < very_rare and very_rare < legendary, "the tiers are ordered")
+	check(common >= 20 and common <= 30, "common lands in the 20-30 gp band (got %d)" % common)
+	check(uncommon >= 300 and uncommon <= 600, "uncommon lands in 300-600 gp (got %d)" % uncommon)
+	check(rare >= 1500 and rare <= 3000, "rare lands in 1500-3000 gp (got %d)" % rare)
+	check(very_rare >= 5000 and very_rare <= 10000, "very-rare lands in 5k-10k (got %d)" % very_rare)
+	check(legendary >= 12000 and legendary <= 25000, "legendary lands in 12k-25k (got %d)" % legendary)
+	check(common < uncommon and uncommon < rare and rare < very_rare and very_rare < legendary,
+		"the tiers are ordered")
 	check(Campaign.item_price("no-such-item") == 0, "an unknown item has no price")
 
 	# The scroll is stocked at some merchants and buyable there.
@@ -537,7 +563,7 @@ func test_identification() -> void:
 
 	# stocked at every merchant, priced by the shared formula, and a treasure drop
 	var price := Campaign.item_price(Campaign.IDENTIFY_SCROLL)
-	check(price == 256, "the scroll prices as an uncommon item (got %d)" % price)
+	check(price == 400, "the scroll prices as an uncommon item (got %d)" % price)
 	check(price < Campaign.item_price(Campaign.SCROLL), "cheaper than the resurrection scroll")
 	var g := _campaign()
 	g.enter(_find(g, "merchant"))
