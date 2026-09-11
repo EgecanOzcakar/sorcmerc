@@ -119,12 +119,7 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 
 	c.attacks = s.attacks.duplicate(true)
 	var offhand := _take_offhand(c.attacks, ch.offhand)   # main hand must stay attacks[0]
-	if not c.attacks.is_empty():
-		var a: Dictionary = c.attacks[0]
-		c.atk_bonus = int(a["to_hit"])
-		c.damage = a["notation"]
-		c.ranged = a["range"] == "ranged"
-		c.atk_range = mini(RANGE_CAP, hexes(int(a["normal_ft"]))) if c.ranged else 1
+	_apply_main_attack(c)
 	c.crit_range = 19 if s.has_feature("champion-improved-critical") else 20
 
 	c.saves = s.saves.duplicate()
@@ -162,6 +157,30 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 		c.verbs.append(twf)
 	_finish_verbs(c, ch.pools)
 	return c
+
+# Every derived attack stat combat.gd swings with comes off attacks[0], so
+# "which weapon am I using" is just "which attack is first" — one writer here.
+static func _apply_main_attack(c) -> void:
+	if c.attacks.is_empty():
+		return
+	var a: Dictionary = c.attacks[0]
+	c.atk_bonus = int(a["to_hit"])
+	c.damage = a["notation"]
+	c.ranged = a["range"] == "ranged"
+	c.atk_range = mini(RANGE_CAP, hexes(int(a["normal_ft"]))) if c.ranged else 1
+
+# T29: the melee/ranged toggle. Moves the named attack to the front and
+# recomputes; false if this combatant has no such attack.
+# ponytail: if the chosen weapon is also the off-hand one the off-hand verb
+# still exists (built once, at adapter time) — a cosmetic duplicate at worst.
+static func set_main_attack(c, attack_id: String) -> bool:
+	for i in c.attacks.size():
+		if String(c.attacks[i].get("id", "")) == attack_id:
+			if i > 0:
+				c.attacks.insert(0, c.attacks.pop_at(i))
+			_apply_main_attack(c)
+			return true
+	return false
 
 # --- two-weapon fighting (T24) ----------------------------------------
 #

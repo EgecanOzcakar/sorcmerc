@@ -8,6 +8,7 @@ const Icons = preload("res://core/ui_icons.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Presets = preload("res://core/presets.gd")
 const Party = preload("res://core/party.gd")
+const Adapter = preload("res://core/adapter.gd")
 
 const NAMES := {"Kaelin Vore": "#8fdc97", "Grull": "#e58a84"}
 
@@ -28,6 +29,9 @@ func _init() -> void:
 	test_verbs()
 	test_plain_and_safety()
 	test_glyphs()
+	test_reveal_head()
+	test_tooltips_name_their_dice()
+	test_attack_swap()
 	print("test_ui_log: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -74,9 +78,49 @@ func test_plain_and_safety() -> void:
 	check(_plain(out) == "Grull hits Grull for 5 damage", "overlap-safe")
 
 func test_glyphs() -> void:
+	for c in _fight().combatants:
+		check(Icons.combatant_glyph(c) != "", "%s has a token glyph" % c.cname)
+
+func _fight():
 	var p := Party.new()
 	for ch in Presets.party():
 		p.add_member(ch)
-	var cb = Encounter.build({"seed": 7}, p.to_combatants(Encounter.PARTY_STARTS))
+	return Encounter.build({"seed": 7}, p.to_combatants(Encounter.PARTY_STARTS))
+
+# T29: the popup leads with the outcome, never the raw d20.
+func test_reveal_head() -> void:
+	check(Main._reveal_head({"hit": false, "damage": 0})[0] == "MISS", "miss reads MISS")
+	check("HIT" in Main._reveal_head({"hit": true, "damage": 7})[0], "hit reads HIT")
+	check("7" in Main._reveal_head({"hit": true, "damage": 7})[0], "hit shows the damage")
+	check("CRIT" in Main._reveal_head({"hit": true, "crit": true, "damage": 12})[0], "crit reads CRIT")
+	check("SAVED" in Main._reveal_head({"saved": true, "damage": 3})[0], "made save reads SAVED")
+	check("FAILED" in Main._reveal_head({"saved": false, "damage": 9})[0], "failed save reads FAILED")
+
+# T29: every verb gets a tooltip, and every damaging one names its dice.
+func test_tooltips_name_their_dice() -> void:
+	var re := RegEx.create_from_string(r"\d+d\d+")
+	var cb = _fight()
 	for c in cb.combatants:
-		check(Icons.combatant_glyph(c) != "", "%s has a token glyph" % c.cname)
+		for v in cb.available(c):
+			var tip: String = Main._verb_tooltip(c, v)
+			check(tip.strip_edges() != "", "%s: %s has a tooltip" % [c.cname, v["label"]])
+			if v["kind"] == "attack":
+				check(re.search(tip) != null, "%s: Attack names its dice" % c.cname)
+			elif v.has("dice_count") or v.has("heal_count"):
+				check(re.search(tip) != null, "%s: %s names its dice" % [c.cname, v["label"]])
+
+# T29: the melee/ranged toggle rewrites the stats the Attack verb swings with.
+func test_attack_swap() -> void:
+	var c = _fight().combatants[0]
+	c.attacks = [
+		{"id": "sword", "name": "Sword", "to_hit": 5, "notation": "1d8+3", "range": "melee", "normal_ft": 5},
+		{"id": "bow", "name": "Bow", "to_hit": 7, "notation": "1d6+4", "range": "ranged", "normal_ft": 80},
+	]
+	Adapter.set_main_attack(c, "sword")
+	check(not c.ranged and c.atk_range == 1 and c.damage == "1d8+3", "melee main hand")
+	var other := Main._attack_swap(c)
+	check(other.get("id") == "bow", "the swap offers the ranged weapon")
+	check(Adapter.set_main_attack(c, "bow"), "switching to the bow works")
+	check(c.ranged and c.atk_range > 1 and c.atk_bonus == 7 and c.damage == "1d6+4", "ranged stats applied")
+	check(Main._attack_swap(c).get("id") == "sword", "and the swap offers the sword back")
+	check(not Adapter.set_main_attack(c, "trebuchet"), "an unequipped weapon is refused")

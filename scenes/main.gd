@@ -3,7 +3,9 @@
 extends Control
 
 const AI = preload("res://core/ai.gd")
+const Adapter = preload("res://core/adapter.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Effects = preload("res://core/rules/effects.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
@@ -37,6 +39,7 @@ var _tgt_verb: Dictionary = {}   # the verb being aimed, straight from cb.availa
 var _armed := ""             # a confirm-guarded verb waiting for its second press
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
+var _slot_max := {}          # id -> slots at the start of the fight (for the pips)
 var _fx_on := false           # attack animations: off under SORCMERC_FAST / headless
 
 @onready var _header := Label.new()
@@ -45,6 +48,7 @@ var _fx_on := false           # attack animations: off under SORCMERC_FAST / hea
 @onready var _board := Board.new()
 @onready var _actor := Label.new()
 @onready var _buttons := HFlowContainer.new()
+@onready var _bscroll := ScrollContainer.new()
 @onready var _logbox := RichTextLabel.new()
 @onready var _cap := Label.new()
 @onready var _logwrap := PanelContainer.new()
@@ -172,7 +176,13 @@ func _ready() -> void:
 
 	_buttons.add_theme_constant_override("h_separation", 6)
 	_buttons.add_theme_constant_override("v_separation", 6)
-	col.add_child(_buttons)
+	_buttons.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# T29: the row wraps, and once it's wrapped past BUTTON_ROWS it scrolls —
+	# a caster with 20 verbs used to push the rest off the bottom of the screen.
+	_bscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_bscroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_bscroll.add_child(_buttons)
+	col.add_child(_bscroll)
 
 	set_process(true)
 	_apply_ui_scale()
@@ -223,6 +233,11 @@ func _unhandled_key_input(e: InputEvent) -> void:
 func _press_hotkey(idx: int) -> void:
 	if _busy:
 		return
+	# T29: while aiming, the number keys still address the verb menu — drop out
+	# of targeting first instead of indexing into the lone [Esc] Cancel button.
+	if idx >= 0 and _mode != "idle" and cb and not cb.is_over() \
+			and cb.current().team == "party" and cb.current().conscious():
+		_build_hero_menu(cb.current())
 	var kids := _buttons.get_children()
 	if kids.is_empty():
 		return
@@ -251,6 +266,9 @@ func _new_game(forced := 0) -> void:
 	sp["seed"] = _seed
 	result = {}
 	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS))   # sp["theme"] picks the board
+	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
+	for c in cb.combatants:
+		_slot_max[c.id] = c.slots.duplicate()
 	_logbox.text = ""
 	_logged = 0
 	_last_round = 1
@@ -321,7 +339,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	var opts: Array = []
 	for v in cb.available(h):
 		var label: String = _verb_label(h, v)
-		var tip: String = _verb_tooltip(v)
+		var tip: String = _verb_tooltip(h, v)
 		match v.get("targeting", "self"):
 			"enemy", "ally":
 				opts.append([label + "…", func(): _enter_target(h, v), tip])
@@ -336,6 +354,15 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 					var fn := func(): cb.perform(h, v); _after_hero_action(h)
 					opts.append([label, fn, tip])
 
+	# T29: melee/ranged toggle — only offered to someone carrying both.
+	var swap := _attack_swap(h)
+	if not swap.is_empty():
+		opts.append(["⇄ Wield %s" % swap["name"],
+			func(): Adapter.set_main_attack(h, String(swap["id"])); _build_hero_menu(h),
+			"Your Attack action switches to %s (%s): %+d to hit, %s %s damage. Free." % [
+				swap["name"], swap["range"], int(swap["to_hit"]), swap["notation"],
+				swap.get("damage_type", "")]])
+
 	if h.econ["action"] > 0 and not cb.is_over():
 		opts.append(_confirm_opt(h, "end", "End turn (action unspent!)", _end_turn))
 	else:
@@ -343,9 +370,22 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	_set_buttons(opts)
 	_board.queue_redraw()
 
+# The other weapon this character could be swinging: the first equipped attack
+# of the opposite range class. {} unless they carry both melee and ranged.
+static func _attack_swap(h) -> Dictionary:
+	if h.attacks.size() < 2:
+		return {}
+	var cur := String(h.attacks[0].get("range", ""))
+	for a in h.attacks:
+		if String(a.get("range", "")) != cur:
+			return a
+	return {}
+
 # The cost tag is what tells a bonus-action Dash from the Attack-action one.
 func _verb_label(h, v: Dictionary) -> String:
 	var label: String = v["label"]
+	if v["kind"] == "attack" and not h.attacks.is_empty():
+		label += " (%s)" % h.attacks[0].get("name", "unarmed")   # which weapon is up
 	if v["kind"] == "dash":
 		label += " (+%d move)" % h.speed
 	if v.get("cost", "action") != "action":
@@ -368,32 +408,74 @@ const KIND_BLURB := {
 	"help": "Grant an ally advantage on their next check or attack roll.",
 	"shove": "Contested Athletics check: knock the target prone or push it back.",
 	"smash": "Destroy a barrel or crate within reach.",
+	"attack": "Swing the weapon in your main hand.",
+	"offhand_attack": "A second swing with your off-hand weapon.",
+	"heal_self": "Patch yourself up.",
+	"heal_ally": "Restore an ally's hit points.",
+	"self_buff": "A boon on yourself.",
+	"ally_buff": "A boon on an ally.",
+	"attack_modifier": "Attack with advantage — until your next turn, attacks against you have advantage too.",
+	"grant_action": "Gain extra actions this turn.",
+	"save_effect": "The target rolls a saving throw or suffers the effect.",
+	"spell": "Cast the spell.",
 }
 
-func _verb_tooltip(v: Dictionary) -> String:
+# Prose first (a spell's own SRD text, else the kind blurb), then the resolved
+# numbers. Anything that deals or heals damage always names its dice (T29).
+static func _verb_tooltip(h, v: Dictionary) -> String:
+	var head := ""
 	if v.has("spell"):
-		var desc := String(Catalog.spell(v["spell"]).get("description", ""))
-		return desc if desc != "" else KIND_BLURB.get(v["kind"], "")
-	if KIND_BLURB.has(v["kind"]):
-		return KIND_BLURB[v["kind"]]
+		head = String(Catalog.spell(v["spell"]).get("description", ""))
+	if head == "":
+		head = String(KIND_BLURB.get(v["kind"], ""))
 	var bits: Array = []
+	match String(v["kind"]):
+		"attack":
+			var a: Dictionary = h.attacks[0] if not h.attacks.is_empty() else {}
+			bits.append("%s: %+d to hit, %s %s" % [a.get("name", "Unarmed strike"),
+				int(h.atk_bonus), h.damage, a.get("damage_type", "damage")])
+			bits.append("reach %d hex%s" % [h.atk_range, "" if h.atk_range == 1 else "es"])
+		"offhand_attack":
+			bits.append("%+d to hit, %s damage" % [int(v.get("to_hit", 0)), v.get("damage", "")])
+		"grant_action":
+			bits.append("+%d action" % int(v.get("amount", 1)))
 	if v.has("dice_count") and v.has("dice_sides"):
 		var bonus: int = int(v.get("dice_bonus", v.get("bonus_damage", 0)))
-		bits.append("%dd%d%s %s" % [int(v["dice_count"]), int(v["dice_sides"]),
-			("+%d" % bonus) if bonus > 0 else "", v.get("damage_type", "damage")])
+		var notation := "%dd%d%s" % [int(v["dice_count"]), int(v["dice_sides"]),
+			("+%d" % bonus) if bonus > 0 else ""]
+		if v["kind"] in ["heal_self", "heal_ally"]:
+			bits.append("Heals %s HP" % notation)
+		else:
+			bits.append("%s %s" % [notation, v.get("damage_type", "damage")])
+	if int(v.get("rays", 1)) > 1:
+		bits.append("%d rays, each rolled to hit" % int(v["rays"]))
 	if v.has("heal_count"):
 		var hb: int = int(v.get("heal_bonus", 0))
-		bits.append("Heal %dd%d%s" % [int(v["heal_count"]), int(v.get("heal_sides", 8)),
+		bits.append("Heals %dd%d%s HP" % [int(v["heal_count"]), int(v.get("heal_sides", 8)),
 			("+%d" % hb) if hb > 0 else ""])
-	if v.has("save"):
-		bits.append("DC %d %s save" % [int(v.get("save_dc", 0)), String(v["save"]).to_upper()])
+	if String(v.get("save", "")) != "":
+		bits.append("DC %d %s save%s" % [int(v.get("save_dc", 0)), String(v["save"]).to_upper(),
+			" for half" if v.get("half_on_save", false) else ""])
 	if not v.get("conditions", []).is_empty():
 		bits.append("Inflicts: %s" % ", ".join(v["conditions"]))
-	if v.has("amount") and not v.has("dice_count"):
-		bits.append(str(int(v["amount"])))
+	if int(v.get("bonus_damage", 0)) > 0 and not v.has("dice_count"):
+		bits.append("+%d damage on your hits" % int(v["bonus_damage"]))
+	if int(v.get("extra_attacks", 0)) > 0:
+		bits.append("+%d attack%s" % [int(v["extra_attacks"]), "" if int(v["extra_attacks"]) == 1 else "s"])
+	if v.has("amount") and not v.has("dice_count") and v["kind"] != "grant_action":
+		bits.append("%d" % int(v["amount"]))
 	if not v.get("resist", []).is_empty():
 		bits.append("Resist: %s" % ", ".join(v["resist"]))
-	return ". ".join(bits)
+	if int(v.get("slot_level", 0)) > 0:
+		bits.append("level %d slot" % int(v["slot_level"]))
+	if v.has("pool"):
+		bits.append("%d of %d uses left" % [h.pool_left(v["pool"]), int(h.pools[v["pool"]]["max"])])
+	if String(v.get("cost", "action")) != "action":
+		bits.append("%s action" % String(v["cost"]).capitalize() if v["cost"] != "free" else "free")
+	var tail := " · ".join(bits)
+	if head == "" or tail == "":
+		return head + tail
+	return "%s\n%s" % [head, tail]
 
 # Two-press confirm on anything that burns a limited resource, plus the two
 # turn-enders that are easy to misclick.
@@ -480,12 +562,28 @@ func _apply_target(h, c) -> void:
 	_tgt_verb = {}
 	var res = cb.perform(h, v, c)
 	_attack_fx(h, c, v)
-	if v["kind"] == "attack" and typeof(res) == TYPE_DICTIONARY and not res.has("error"):
+	# T29: any resolved roll pops the reveal, not just weapon attacks.
+	if typeof(res) == TYPE_DICTIONARY and (res.has("hit") or res.has("saved")):
 		_busy = true
-		_board.show_reveal(c.id, res)
+		_board.show_reveal(c.id, res, _reveal_head(res))
 		await get_tree().create_timer(REVEAL_PAUSE / _anim).timeout
 		_busy = false
 	_after_hero_action(h)
+
+# The popup's primary readout: the outcome and the damage, never the raw d20
+# (that stays as the small line under the dice). -> [text, color]
+static func _reveal_head(res: Dictionary) -> Array:
+	var dmg := int(res.get("damage", 0))
+	var tail := "  %d" % dmg if dmg > 0 else ""
+	if res.has("hit"):
+		if not res["hit"]:
+			return ["MISS", Color("8a8a84")]
+		if res.get("crit", false):
+			return ["CRIT!" + tail, Color("ff6a4a")]
+		return ["HIT" + tail, Color("8dffb0")]
+	if res.get("saved", false):
+		return [("SAVED" + tail) if dmg > 0 else "SAVED", Color("8fb7d8")]
+	return ["FAILED SAVE" + tail, Color("ffc46a")]
 
 func board_hex_hovered(hx: Vector2i) -> void:
 	_hover_hex = hx
@@ -555,8 +653,10 @@ func _refresh() -> void:
 		var hint := "  ·  click a blue tile to move" if cur.econ["move_left"] > 0 else ""
 		var before = cb.order[(ci - 1 + n) % n]
 		var again := "  ·  you act again after %s" % before.cname.split(" ")[0] if before != cur else ""
-		_actor.text = "%s  ·  AC %d  ·  HP %d/%d  ·  slots %d/%d  ·  %s%smove %d%s%s" % [
-			cur.cname, cb.effective_ac(cur), cur.hp, cur.max_hp, cur.slots[0], cur.slots[1],
+		var res := _resources(cur)
+		_actor.text = "%s  ·  AC %d  ·  HP %d/%d  ·  %s%s%smove %d%s%s" % [
+			cur.cname, cb.effective_ac(cur), cur.hp, cur.max_hp,
+			res + "  ·  " if res != "" else "",
 			"[action] " if cur.econ["action"] > 0 else "",
 			"[bonus] " if cur.econ["bonus"] > 0 else "",
 			cur.econ["move_left"], hint, again,
@@ -564,6 +664,24 @@ func _refresh() -> void:
 	elif _mode == "idle":
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
 	_board.queue_redraw()
+
+# T29 spellcaster resources: one pip row per slot level the caster actually has
+# (● unspent, ○ spent) plus every feature pool by name, replacing the old
+# "slots 2/3" counter that only ever reported level-1 slots.
+func _resources(c) -> String:
+	var bits: Array = []
+	var maxes: Array = _slot_max.get(c.id, [])
+	for i in c.slots.size():
+		var mx: int = int(maxes[i]) if i < maxes.size() else int(c.slots[i])
+		if mx <= 0:
+			continue
+		var left: int = int(c.slots[i])
+		bits.append("L%d %s%s" % [i + 1, "●".repeat(left), "○".repeat(maxi(0, mx - left))])
+	for pid in c.pools:
+		var p: Dictionary = c.pools[pid]
+		if int(p["max"]) > 0:
+			bits.append("%s %d/%d" % [Effects.verb_label(pid), int(p["cur"]), int(p["max"])])
+	return "  ".join(bits)
 
 # One tile per combatant in initiative order: glyph over short name, team-tinted,
 # the current turn boxed in gold and the dead greyed out.
@@ -594,16 +712,30 @@ func _build_order_strip() -> void:
 		g.add_theme_color_override("font_color", tint)
 		tv.add_child(g)
 		var nm := Label.new()
-		nm.text = "%s (%d)" % [c.cname.split(" ")[0], c.init_roll]
+		nm.text = c.cname.split(" ")[0]
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		nm.add_theme_font_size_override("font_size", int(Icons.FS_SMALL * u))
 		nm.add_theme_color_override("font_color", tint if c == cb.current() else Icons.COL_BODY)
 		tv.add_child(nm)
+		# T29: current HP, not the initiative roll — the order is already the order.
+		var hp := Label.new()
+		hp.text = "%d/%d" % [c.hp, c.max_hp]
+		hp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hp.add_theme_font_size_override("font_size", int(Icons.FS_SMALL * u))
+		hp.add_theme_color_override("font_color", _hp_color(c))
+		tv.add_child(hp)
 		if c.is_dead():
 			tile.modulate = Color(1, 1, 1, 0.35)
 		elif c.is_down():
 			tile.modulate = Color(1, 1, 1, 0.6)
 		_order.add_child(tile)
+
+# Same three bands the token HP bar uses.
+static func _hp_color(c) -> Color:
+	var frac := float(c.hp) / maxf(1.0, float(c.max_hp))
+	if frac < 0.33: return Color("d15750")
+	if frac < 0.66: return Color("d9a441")
+	return Color("5fbf6a")
 
 var _logged = 0
 var _last_round = 1
@@ -701,22 +833,25 @@ func _flush_log() -> void:
 func _finish() -> void:
 	result = Encounter.resolve_outcome(cb, party)   # writes HP/pools/slots back to the party
 	var res: String = cb.outcome()
+	if res == "Defeat":
+		_board.play_defeat()
 	_flush_log()
 	_refresh()
 	for c in _buttons.get_children():
 		c.queue_free()
-	var seed_edit := LineEdit.new()
-	seed_edit.text = str(_seed)
-	seed_edit.custom_minimum_size.x = 130
-	_buttons.add_child(seed_edit)
-	var replay := Button.new()
-	replay.text = "Replay seed"
-	replay.pressed.connect(func(): _new_game(maxi(1, int(seed_edit.text))))
-	_buttons.add_child(replay)
-	var fresh := Button.new()
-	fresh.text = "New encounter  (R)"
-	fresh.pressed.connect(func(): _new_game())
-	_buttons.add_child(fresh)
+	if OS.is_debug_build():   # T29: replay/reseed are dev tools, not shipped UI
+		var seed_edit := LineEdit.new()
+		seed_edit.text = str(_seed)
+		seed_edit.custom_minimum_size.x = 130
+		_buttons.add_child(seed_edit)
+		var replay := Button.new()
+		replay.text = "Replay seed"
+		replay.pressed.connect(func(): _new_game(maxi(1, int(seed_edit.text))))
+		_buttons.add_child(replay)
+		var fresh := Button.new()
+		fresh.text = "New encounter  (R)"
+		fresh.pressed.connect(func(): _new_game())
+		_buttons.add_child(fresh)
 	_apply_ui_scale()
 	_actor.text = "  ***  %s  in %d rounds  ***  " % [res.to_upper(), cb.round_num]
 	_logbox.append_text("\n[b][color=%s]%s in %d rounds.[/color][/b]\n" % [
@@ -725,9 +860,15 @@ func _finish() -> void:
 	if res == "Victory":
 		_logbox.append_text("[color=#c8a75a]+%d XP, +%d gold.[/color]\n" % [result["xp"], result["gold"]])
 
+const BUTTON_ROWS := 3
+
 func _process(dt: float) -> void:
 	if _board:
 		_board.tick(dt * _anim)
+	if _bscroll:   # grow with the wrapped rows, up to BUTTON_ROWS, then scroll
+		var row := _buttons.get_theme_default_font_size() * 2.6 + 6.0
+		_bscroll.custom_minimum_size.y = minf(_buttons.get_combined_minimum_size().y,
+			row * BUTTON_ROWS)
 
 func _log_width() -> float:
 	return clampf(size.x * 0.26, 260.0, 380.0)
@@ -754,6 +895,29 @@ class Board extends Control:
 	# T28 attack FX, cosmetic only: {kind, id, from, to, hexes, age, ttl}
 	var _fx: Array = []
 	const FX_TTL := {"melee": 0.30, "ranged": 0.34, "spell": 0.45}
+	var _defeat := -1.0   # T29: seconds since the party wipe, -1 = not wiped
+
+	func play_defeat() -> void:
+		_defeat = 0.0
+		queue_redraw()
+
+	# The wipe: the board lurches, a blood-red wash floods in behind a shockwave
+	# ring, and DEFEAT slams down over it.
+	func _draw_defeat(fz: float) -> void:
+		var t := _defeat
+		var wash := clampf(t / 0.9, 0.0, 1.0)
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.30, 0.02, 0.03, 0.62 * wash))
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.0, 0.0, 0.0, 0.35 * wash))
+		var mid := size * 0.5
+		if t < 0.9:                       # shockwave out of the centre
+			var k := t / 0.9
+			draw_arc(mid, size.x * 0.75 * k, 0, TAU, 48,
+				Color(1.0, 0.42, 0.30, 0.55 * (1.0 - k)), 6.0 * (1.0 - k))
+		var slam := 1.0 + 2.2 * pow(1.0 - clampf(t / 0.30, 0.0, 1.0), 2)
+		_centered("D E F E A T", mid, int(54 * fz * slam),
+			Color(0.92, 0.22, 0.18, clampf(t / 0.12, 0.0, 1.0)))
+		_centered("the party falls…", mid + Vector2(0, 46 * fz), int(16 * fz),
+			Color(0.86, 0.74, 0.68, clampf((t - 0.6) / 0.7, 0.0, 1.0)))
 
 	# Queued by main only when FX are on (never under SORCMERC_FAST/headless).
 	func play_fx(kind: String, id: String, from_hx: Vector2i, to_hx: Vector2i, hexes: Array = []) -> void:
@@ -791,6 +955,7 @@ class Board extends Control:
 
 	func reset(_cb) -> void:
 		cb = _cb
+		_defeat = -1.0
 		_tok.clear(); _hp.clear(); _floats.clear(); _flash.clear()
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
@@ -805,11 +970,11 @@ class Board extends Control:
 	func flash(_hx: Vector2i) -> void:
 		pass  # target flash handled per-token on hp change
 
-	func show_reveal(tid: String, res: Dictionary) -> void:
+	func show_reveal(tid: String, res: Dictionary, head: Array) -> void:
 		_reveal = {
 			"tid": tid, "dice": res.get("dice", []), "nat": res.get("nat", 0),
 			"bonus": res.get("bonus", 0), "total": res.get("total", 0), "ac": res.get("ac", 0),
-			"hit": res.get("hit", false), "crit": res.get("crit", false), "age": 0.0,
+			"head": String(head[0]), "hcol": head[1] as Color, "age": 0.0,
 		}
 		if res.get("hit", false):
 			_flash[tid] = 0.35
@@ -878,6 +1043,8 @@ class Board extends Control:
 			if _barks[id].age > BARK_TTL:
 				_barks.erase(id)
 			dirty = true
+		if _defeat >= 0.0 and _defeat < 3.0:
+			_defeat += dt; dirty = true
 		for f in _fx:
 			f.age += dt; dirty = true
 		_fx = _fx.filter(func(f): return f.age < f.ttl)
@@ -944,6 +1111,9 @@ class Board extends Control:
 		if cb == null:
 			return
 		_layout()
+		if _defeat >= 0.0 and _defeat < 0.6:     # screen shake on the wipe
+			var m := (1.0 - _defeat / 0.6) * 10.0
+			_origin += Vector2(randf_range(-m, m), randf_range(-m, m))
 		var s: float = main.hex_px
 		var fz := clampf(main._zoom, 0.75, 1.7)   # font scale, gentler than the hex scale
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 350.0)
@@ -1089,14 +1259,21 @@ class Board extends Control:
 			draw_string(ThemeDB.fallback_font, f.pos + Vector2(-8, -(20.0 + f.age * 34.0)), f.text,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 18, col)
 
-		# --- attack roll reveal (dice + verdict over the target) ---------
+		# --- roll reveal: the OUTCOME first, dice detail underneath ------
 		if _reveal != null and _tok.has(_reveal.tid):
 			var a := clampf(1.0 - (_reveal.age - 0.9) / 0.5, 0.0, 1.0)   # hold, then fade
 			var anchor: Vector2 = _tok[_reveal.tid] + Vector2(0, -s * 1.7)
+			# the headline punches in over the first 0.12s, then settles
+			var pop := 1.0 + 0.35 * clampf(1.0 - _reveal.age / 0.12, 0.0, 1.0)
+			var hcol: Color = _reveal.hcol
+			hcol.a = a
+			_centered(String(_reveal.head), anchor + Vector2(0, -14 * fz),
+				int(26 * fz * pop), hcol)
 			var dice: Array = _reveal.dice
-			var box := 30.0 * fz
-			var total_w: float = dice.size() * (box + 6.0) - 6.0
+			var box := 22.0 * fz
+			var total_w: float = maxf(0.0, dice.size() * (box + 5.0) - 5.0)
 			var x := anchor.x - total_w / 2.0
+			anchor.y += 10.0 * fz
 			for d in dice:
 				var counts: bool = int(d) == int(_reveal.nat)
 				var bg := Color("2a2f3d")
@@ -1107,21 +1284,20 @@ class Board extends Control:
 				draw_rect(Rect2(x, anchor.y, box, box), edge, false, 2.0)
 				var dc := (Color("ffffff") if counts else Color("7f8494"))
 				dc.a = a
-				draw_string(ThemeDB.fallback_font, Vector2(x + box * 0.22, anchor.y + box * 0.72),
-					str(d), HORIZONTAL_ALIGNMENT_LEFT, -1, int(16 * fz), dc)
+				draw_string(ThemeDB.fallback_font, Vector2(x + box * 0.26, anchor.y + box * 0.72),
+					str(d), HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * fz), dc)
 				if not counts:
 					var sl := Color("d15750"); sl.a = a
 					draw_line(Vector2(x + 3, anchor.y + box - 3), Vector2(x + box - 3, anchor.y + 3), sl, 2.0)
-				x += box + 6.0
-			var verdict := "CRIT!" if _reveal.crit else ("HIT" if _reveal.hit else "MISS")
-			var vcol := Color("ff6a4a") if _reveal.crit else (Color("8dffb0") if _reveal.hit else Color("8a8a84"))
-			vcol.a = a
-			var line := "d20 %+d = %d  vs AC %d" % [_reveal.bonus, _reveal.total, _reveal.ac]
-			var lcol := Color("cfd2db"); lcol.a = a
-			draw_string(ThemeDB.fallback_font, Vector2(anchor.x - total_w / 2.0, anchor.y + box + 16 * fz),
-				line, HORIZONTAL_ALIGNMENT_LEFT, -1, int(12 * fz), lcol)
-			draw_string(ThemeDB.fallback_font, Vector2(anchor.x - total_w / 2.0, anchor.y - 6),
-				verdict, HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * fz), vcol)
+				x += box + 5.0
+			if not dice.is_empty():
+				var lcol := Color("9aa0ae"); lcol.a = a
+				_centered("d20 %+d = %d  vs AC %d" % [_reveal.bonus, _reveal.total, _reveal.ac],
+					anchor + Vector2(0, box + 14 * fz), int(11 * fz), lcol)
+
+		if _defeat >= 0.0:
+			_draw_defeat(fz)
+			return   # nothing hovers over a wipe
 
 		# --- hover stat card ------------------------------------------
 		if main._mode == "idle":
