@@ -122,17 +122,6 @@ func _ready() -> void:
 			party.add_member(ch)
 	set_process(true)
 	_build_hud()
-	# O13 autosave. Every meaningful map event ends by tearing down a direct child
-	# of this node — the market panel on Leave (and on every rebuild), the combat
-	# overlay when a fight resolves, the party/quest overlays on close — so one
-	# signal covers them all without a timer, a poll, or an edit to any of those
-	# functions (this phase owns only _ready/_leave_world).
-	# ponytail: saves a little more often than the events strictly need (a buy
-	# rebuilds the panel); the file is ~10 KB. Hook the events directly the day
-	# scenes/world/world.gd is in scope for wider edits.
-	child_exiting_tree.connect(func(_c):
-		if not is_queued_for_deletion():     # the screen itself going: _leave_world
-			WorldSave.save(world, party))    # already saved, and opinion is reset by now
 
 # Hand-placed stand-ins so the scene has something to render and move. Real
 # spawning is a later phase's job (O3 onward).
@@ -417,6 +406,8 @@ func _launch_combat(foe) -> void:
 	else:
 		_retreat()
 	world.clock.resume()
+	WorldSave.save(world, party)   # O13 autosave: a fight is the biggest thing that
+	                               # happens to a run — never re-fight it after a crash
 
 # O9 item 2: a won fight has to actually pay, or the run is a dead end. The same
 # four things core/campaign.gd's finish_combat() banks, minus the linear run's own
@@ -499,6 +490,7 @@ func _close_visit() -> void:
 		_visit_panel = null
 	world.clock.resume()
 	_pause_btn.text = "Pause"
+	WorldSave.save(world, party)   # O13 autosave: the purse and the shelf both moved
 
 func _buy(item_id: String) -> void:
 	if Visit.buy(_visit, party, item_id):

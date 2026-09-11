@@ -168,6 +168,12 @@ func _run() -> void:
 				% [resumed_world.party.gold, purse])
 		if resumed_world.world.settlements.is_empty():
 			fail("the resumed map has no settlements")
+		# ...and back out of it: a live map left mounted keeps ticking under the rest
+		# of this walk (parties march, a hunt can open a whole combat scene), which
+		# is nobody's idea of a controlled test.
+		resumed_world._leave_world()
+		await process_frame
+		await process_frame
 
 	# --- the same walk with the debug flag on: the linear route ------------
 	OS.set_environment("SORCMERC_LINEAR_CAMPAIGN", "1")
