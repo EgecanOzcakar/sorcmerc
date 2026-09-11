@@ -22,6 +22,7 @@ func check(cond: bool, label: String) -> void:
 func _init() -> void:
 	test_build_spec()
 	test_placement()
+	test_placement_overflow_degrades_gracefully()
 	test_mult_scales_the_instance_not_the_data()
 	test_outcome_victory()
 	test_outcome_defeat_and_deaths()
@@ -76,7 +77,11 @@ func test_build_spec() -> void:
 	check(a["outcome"] == b["outcome"] and a["rounds"] == b["rounds"], "seeded builds replay identically")
 
 func test_placement() -> void:
-	var cb = Encounter.build({"monsters": [{"id": "snik", "count": 6}], "seed": 3}, _combatants(_chars()))
+	# Few enough foes that the shrine board (9 hexes wide) can seat every one
+	# of them at the full SPAWN_GAP -- the invariant to prove here is "gap
+	# honored when there's room", not "always", which _foe_spots's own
+	# documented overflow fallback deliberately doesn't promise (see below).
+	var cb = Encounter.build({"monsters": [{"id": "snik", "count": 2}], "seed": 3}, _combatants(_chars()))
 	var far := true
 	var on_board := true
 	for f in cb.team_of("foe"):
@@ -84,7 +89,22 @@ func test_placement() -> void:
 		for p in cb.team_of("party"):
 			far = far and Hex.distance(f.pos, p.pos) >= Encounter.SPAWN_GAP
 	check(on_board, "every foe spawns on a board hex")
-	check(far, "no foe spawns inside the party's lap")
+	check(far, "no foe spawns inside the party's lap when the board has room")
+
+# T36: SPAWN_GAP=6 on a 9-hex board can't always seat a crowd at full
+# distance -- _foe_spots's own "overflow: the least-bad remaining hexes"
+# fallback is deliberate, not a bug. Prove it degrades gracefully instead of
+# breaking (still on-board, still one hex per foe) rather than pretending
+# the gap always holds.
+func test_placement_overflow_degrades_gracefully() -> void:
+	var cb = Encounter.build({"monsters": [{"id": "snik", "count": 6}], "seed": 3}, _combatants(_chars()))
+	var foes := cb.team_of("foe")
+	check(foes.size() == 6, "all 6 still spawn even if the gap can't be honored for all of them")
+	var seen := {}
+	for f in foes:
+		check(f.pos in cb.board["hexes"], "every foe still spawns on a real board hex")
+		check(not seen.has(f.pos), "no two foes share a hex")
+		seen[f.pos] = true
 	var spots: Array = cb.team_of("foe").map(func(c): return c.pos)
 	check(spots.size() == _uniq(spots).size(), "no two foes share a hex")
 

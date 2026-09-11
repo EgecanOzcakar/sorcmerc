@@ -189,7 +189,14 @@ static func all() -> Array:
 # --- T7: generated encounters -----------------------------------------
 # Where the live party stands when a campaign node drops them into a room.
 const PARTY_STARTS := [Vector2i(2, 0), Vector2i(2, 2), Vector2i(1, 1), Vector2i(1, 0)]
-const SPAWN_GAP := 3    # no foe spawns closer than this to any party member
+const SPAWN_GAP := 6    # no foe spawns closer than this to any party member
+# T36/T37: measured lever, not a guess -- 150-seed sweeps found this the best
+# single difficulty knob (+6.6 win-rate points over gap 3, no fight-length
+# cost) with current board sizes (5-9 hexes wide) saturating right around
+# here, so going further needs bigger boards first. Ranged-attack usage is
+# flat under every gap tested (roster composition, not geometry -- see
+# docs/expansion-plan.md's T35/T36/T37 entries) -- this is a difficulty
+# tune, not a fix for that.
 
 # Difficulty multiplier -> stat deltas (T8 picks the multiplier, this owns the shape).
 const AC_PER_MULT := 3

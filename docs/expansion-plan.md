@@ -1379,4 +1379,32 @@ baseline when done (both constants untouched), one branch/commit per
 combination tested, matching how T35/T36 organized their candidates — do
 not land a chosen combination on master.
 
+## T38 — retune scaler.gd's TIER after adopting SPAWN_GAP=6 (locked 2026-09-11, dispatched now)
+
+`core/encounter.gd`'s `SPAWN_GAP` was just raised 3 → 6 on master, adopting
+T36's measured best single difficulty lever (+6.6 win-rate points, no
+fight-length cost, real numbers from a 150-seed sweep — see the T35/T36/T37
+entries above). That measurement is honest about what it does: it's a
+difficulty shift, and `core/scaler.gd`'s `TIER`/`CURVE` constants were
+calibrated (T23) against the OLD gap of 3. `tests/test_scaler.gd`'s
+calibrated win-rate sweeps confirm the drift directly: normal now measures
+86.5% against a 75%±10 target, hard 68.5% against 50%±10 — both outside
+band.
+
+Retune `TIER` (and `CURVE`/`MULT_*` only if `TIER` alone can't bring all
+three difficulty bands back in range) the same way T23 did: real 200-seed
+sweeps via `tests/test_scaler.gd`'s own existing sweep method (do not
+build new tooling, that test file already measures exactly what's needed),
+targeting 90/75/50% for easy/normal/hard with SPAWN_GAP now fixed at 6.
+Also re-sweep and update every `BOSS_POOL` entry's `win_rate` field in
+`core/campaign.gd` (feeds `Campaign.BOSS_REF_WIN_RATE`'s XP-bonus math
+directly) since boss fights are affected by the same spawn-distance change.
+Update `core/scaler.gd`'s header TUNING comment with the new measured
+numbers, matching its own established documentation style.
+
+File ownership: `core/scaler.gd`, `tests/test_scaler.gd`, and ONLY the
+`"win_rate"` leaf values inside `core/campaign.gd`'s `BOSS_POOL` entries
+(nothing else in that file — it has several other agents' worth of
+accumulated work in unrelated regions).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
