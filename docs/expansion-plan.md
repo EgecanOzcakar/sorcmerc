@@ -936,4 +936,54 @@ and narrow, don't reformat surrounding code.
   flagged as out of its file scope. **Full suite: 23 test files (test_bestiary
   reports OK), 0 failures; all four `drive_*` smoke scripts pass.** Pushed.
 
+## T28 — combat UI overhaul: layout, icons, animation, log color (locked 2026-09-11, spec from the user, dispatched now)
+
+Five pieces, all in `scenes/main.gd` (one agent, one file — splitting would just
+cause merge pain), reported together as one "the combat screen is getting hard
+to read" complaint:
+
+1. **Layout, to stop overlap when zoomed.** The action log moves from a
+   centered top panel to a **left sidebar** (fixed-width column). The turn
+   order bar moves to the **top**, rendered as icons (not the current plain
+   name-and-number text) — larger, with each combatant's short name under
+   its icon, current turn visually marked. Root layout goes from a single
+   `VBoxContainer` to an `HBoxContainer` (log sidebar | right column: order
+   bar → board → actor status → action buttons).
+2. **Token icons over initials.** The hex board currently draws two-letter
+   initials on each token (`_initials(c.cname)`); replace with
+   `Icons.class_glyph(class_id)` for party members and
+   `Icons.combatant_glyph(c)` for foes — both already exist in
+   `core/ui_icons.gd`, this is a rendering swap, not new icon data. Sized
+   larger than the initials were.
+3. **A more obvious "your turn" indicator.** `Board._draw()` already pulses
+   a gold ring around the current combatant (`sin(Time...)`-driven line
+   width) — make it a real blink (alpha or scale pulsing on the ring/token
+   itself), it reads as too subtle currently.
+4. **Attack animations.** Nothing currently animates a hit beyond the
+   existing dice-reveal popup and floating damage numbers — enemy actions
+   are hard to track turn-to-turn as a result. Add three kinds, keyed off
+   whatever `resolve_attack()`/`cast()` already return to the UI layer
+   (the same data `show_reveal()` already consumes, extended if needed):
+   melee (a brief lunge — tween the attacker's token toward the target and
+   back), ranged (a projectile dot/line traveling attacker → target),
+   spell (a radial flash at the target, or swept along a cone's hexes for
+   an AoE). Keep these cosmetic-only and skip them under
+   `SORCMERC_FAST`/headless, matching how T26/T27's cosmetic systems
+   already gate on that.
+5. **Log colorization.** `_logbox` is already a `RichTextLabel` with
+   `bbcode_enabled = true` — a plain line with no bolded/colored word
+   (an actor name, a move, a plain narration line) is hard to visually
+   parse against ones that already highlight hits/damage. Add a
+   presentation-layer colorizer applied when combat's own log lines are
+   copied into `_logbox` (wherever `_flush_log()` reads `cb.log` today) —
+   NOT in `core/combat.gd`, which stays plain-text/bbcode-free as a model
+   layer. Recognize and tint: combatant names, dice notation (`d20[...]`,
+   `NdM`), numbers immediately before "damage"/"HP"/"gold", and a small
+   set of verbs (hits/misses/CRITS/moves/casts/uses).
+
+File ownership: `scenes/main.gd` only (its `Board` inner class included).
+Do not touch `core/combat.gd`'s log content/format — only how the UI layer
+renders lines already produced. `core/ui_icons.gd` may gain a helper if
+useful but its existing glyph functions should already cover this.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
