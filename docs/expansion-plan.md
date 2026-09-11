@@ -986,4 +986,24 @@ Do not touch `core/combat.gd`'s log content/format — only how the UI layer
 renders lines already produced. `core/ui_icons.gd` may gain a helper if
 useful but its existing glyph functions should already cover this.
 
+- 2026-09-11: **T28 complete.** Root layout is now an `HBoxContainer`: a
+  fixed-width gold-bordered action log sits as a left sidebar (was a
+  centered top panel prone to overlap when zoomed), the right column runs
+  title → turn-order strip → board → actor status → buttons. The turn
+  order strip is icon tiles (class glyph for heroes, a new creature-type
+  glyph map for foes — `Icons.combatant_glyph()` extended, 9 types so far,
+  falls back to a plain melee/ranged mark) with the name and initiative
+  underneath, current turn gold-boxed, dead/downed dimmed. Board tokens
+  swapped two-letter initials for the same glyphs, larger. The current-turn
+  ring is now a real blink, not just a pulsing line width. Attack FX added
+  (melee lunge, ranged projectile, spell ring), cosmetic-only and skipped
+  under `SORCMERC_FAST`/headless like T26/T27's systems — AI turns fire one
+  FX per combatant that lost HP that turn (a HP-snapshot heuristic, not a
+  true per-attack event, flagged as the honest ceiling: AI has no attack
+  callback to hook precisely). The log now colorizes combatant names, dice
+  notation, damage/HP/gold numbers, and hit/miss/crit/move/cast verbs —
+  purely presentational, `core/combat.gd`'s log text is untouched.
+  **Full suite: 24 test files (new `test_ui_log.gd`, 25 checks), 0 failures;
+  all four `drive_*` smoke scripts pass.** Pushed.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
