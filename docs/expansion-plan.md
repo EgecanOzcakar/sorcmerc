@@ -1137,4 +1137,42 @@ tutorial encounter (in campaign.gd or a new small file, agent's call).
   steps as pure data. **Full suite: 24 test files, 0 failures;
   drive_ui/drive_game both pass.** Pushed.
 
+## T33 — author combat mechanics for the missing spells (locked 2026-09-11, dispatched now)
+
+Of the 146 catalogued spells, only 8 have a hand-authored combat mechanics
+override (`data/effects/spells.json`) and 50 more have usable *raw* mechanics
+(the regex prose-parse happened to produce something), so a caster's action
+bar silently drops roughly 88 spells — several of them common, expected
+combat/support picks: Bless, Aid, Shield of Faith, Spiritual Weapon, Magic
+Weapon, Fire Shield, Revivify, Mass Cure Wounds, Greater/Lesser Restoration,
+Confusion, Faerie Fire, and more. `Effects.spell_verbs_for` already silently
+skips anything `Effects.spell()` can't merge into a `cost` + damage/heal/
+conditions dict — that's correct behavior for a genuinely non-combat spell
+(Message, Scrying, Disguise Self, ...), the bug is that it's ALSO silently
+eating spells that should be castable.
+
+Scope this in two tiers:
+1. **Straightforward** — damage spells (single-target or AoE, save-or-half
+   or spell-attack) and enemy-debuff spells (a save inflicting a real
+   condition from `data/effects/conditions.json`'s 15) fit the existing
+   `cast()`/`_spell_hit()` shape exactly like `scorching-ray`/`burning-hands`
+   already do. Author these directly, following `data/effects/spells.json`'s
+   existing entries and its own `_note` header for the schema.
+2. **Needs new plumbing, do NOT force it** — ally-targeted buffs (Bless,
+   Shield of Faith, Aid raising max HP, Magic Weapon enchanting a weapon for
+   its duration) don't fit `cast()`'s current model at all (`_spell_hit`'s
+   conditions branch assumes a save-or-suffer effect on an ENEMY, not a
+   granted buff on a cast target); summons, and anything with a duration
+   that outlives one cast, are the same story. List these explicitly in the
+   report rather than half-implementing a buff system under this task's
+   scope — that's real design work for a follow-up, not something to
+   improvise inside a content-authoring pass.
+
+File ownership: `data/effects/spells.json` (additions only, don't touch the
+8 existing entries), and `tests/test_rules.gd`/`tests/test_combat.gd` for
+coverage. Touch `core/combat.gd`/`core/rules/effects.gd` ONLY if a
+straightforward (tier 1) spell genuinely needs a trivial, already-established
+extension (e.g. a new `shape` value already handled elsewhere) — anything
+bigger belongs in the tier-2 follow-up list, not this pass.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
