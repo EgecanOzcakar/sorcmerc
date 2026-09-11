@@ -1,4 +1,4 @@
-# World map art (O11, buildings re-done in O12)
+# World map art (O11, buildings re-done in O12, party tokens O14)
 
 Everything here is **CC0 1.0 / Public Domain** — no attribution is required;
 this note is the paper trail the expansion plan asks for. Each pack's own
@@ -9,6 +9,7 @@ this note is the paper trail the expansion plan asks for. Each pack's own
 | `overworld/terrain.png` | [Isometric Tiles: Overworld Pack](https://screamingbrainstudios.itch.io/iso-overworld-pack) | Screaming Brain Studios | `Overworld - Large/Flat/Overworld - Terrain 1 - Flat 256x128.png` |
 | `overworld/forest.png` | same | same | `Overworld - Large/Flat/Overworld - Forest - Flat 256x128.png` |
 | `town/buildings.png` | [Isometric medieval buildings](https://opengameart.org/content/isometric-medieval-buildings) + [part 2](https://opengameart.org/content/isometric-medieval-buildings-2) | rubberduck | the `128x64_shaded` frames `00`–`03` of all 5 buildings, out of both `*_single.zip` downloads |
+| `tokens/pawn.png` | [Board Game Pack](https://kenney.nl/assets/boardgame-pack) | Kenney | `PNG/Pieces (White)/pieceWhite_border00.png` |
 
 ## The edits made to the files
 
@@ -48,3 +49,26 @@ variants (above), the `.blend` sources, the Overworld pack's `Thick` variants
 (a visible soil edge double-draws at the seams on a tessellated grid) and its
 water tiles (`core/world.gd` has no terrain map, so the ground is a hashed
 grass/forest mix — water lands with terrain data, not before).
+
+**Party tokens (O14).** O10 left open whether Kenney's board-game art has real
+pawn shapes or only dice/card iconography. Both packs were downloaded and
+looked at: **Board Game Icons** is pure UI iconography (card/dice/turn symbols,
+a flat `pawn.png` glyph among them) — not token art. **Board Game Pack** does
+have it: `PNG/Pieces (<colour>)` ships 19 flat-shaded board pieces (pawn, tall
+pawn, meeple, house, rook, wagon, boat, plane, train, flag) in 7 colours x 3
+variants (`single` plain, `border` with a rim + drop shadow, `multi`).
+
+Taken: the classic pawn, `border` variant, in **White** — its art is flat
+`#f3f3f3` with a darker rim, so one file tints to any faction colour via
+`draw_texture_rect`'s modulate and the per-colour folders are not needed (the
+faction palette in `world.gd`'s `faction_color()` is hash-derived and wouldn't
+map onto 7 fixed colours anyway). The only edit is a **crop to the sprite's
+alpha bounding box** (64x64 -> 30x53, `PAWN` in `world.gd`), so the draw rect
+is the silhouette itself and the token's feet land on the party's ground point.
+No rescaling, no recolouring.
+
+Unused, and why: the other 18 piece shapes (nothing in `core/world.gd`
+distinguishes a caravan from a warband yet — one silhouette is the whole
+vocabulary the map has), the 6 coloured folders and the `single`/`multi`
+variants (tinting one white sprite covers it), the Board Game Icons pack
+entirely, and the packs' dice/card/chip art (no board-game UI here).

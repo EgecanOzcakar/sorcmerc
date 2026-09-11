@@ -96,6 +96,12 @@ const BUILDING_ANCHOR := Vector2(64, 112)
 const BUILDING_STYLES := 5        # sheet columns: which building
 const BUILDING_PAIRS := 4         # sheet rows: which way it faces
 
+# O14: Kenney's Board Game Pack pawn, cropped to its own silhouette. Its art is
+# flat near-white (243,243,243) with a darker rim, so one file tints to every
+# faction — no per-colour sheet variant needed. PAWN.y/PAWN.x is its aspect.
+const PawnTex := preload("res://assets/world/tokens/pawn.png")
+const PAWN := Vector2(30, 53)
+
 var world: World
 var party: Party            # injected by whoever opens the map, or a demo roster
 var _combat = null          # the live scenes/main.tscn instance, while fighting
@@ -820,15 +826,16 @@ func _draw_building(base: Vector2, h: float, style: int, pair: int) -> void:
 	draw_texture_rect_region(BuildingTex,
 		Rect2(base - BUILDING_ANCHOR * (h / BUILDING.y), cell), Rect2(src, BUILDING))
 
-# A circular token, the same ball shading the combat board's char tokens use.
+# O14: a board-game pawn standing on the party's position, tinted to its faction.
+# `at` is the ground point, so the sprite hangs above it rather than centring on
+# it, the way a building sits on its near corner. Sizes are the old ball token's
+# radii kept as the token's half-width, so parties read at the same scale as before.
 func _draw_party(p, at: Vector2) -> void:
 	var col := faction_color(p.faction, p.is_player)
 	var rad := (11.0 if p.is_player else 9.0) * _zoom
+	var h := rad * 2.0 * PAWN.y / PAWN.x
 	_soft_shadow(at, rad * 0.8)
-	_fan(at + _iso(LIGHT) * rad * 0.62, _ring(at, rad * 1.25),
-		col.darkened(0.45), col.darkened(0.70))          # the flat base ring
-	_fan(at + LIGHT * rad * 0.62, _ring(at, rad, false),
-		col.lightened(0.26), col.darkened(0.20))         # the ball, facing the camera
-	draw_polyline(_ring(at, rad, false, true), col.darkened(0.45), 1.5, true)
-	if p.is_player:
+	if p.is_player:   # under the sprite, so the ring's far arc reads as behind the pawn
 		draw_polyline(_ring(at, rad * 1.7), Icons.COL_GOLD, 1.5, true)
+	draw_texture_rect(PawnTex, Rect2(at - Vector2(rad, h - rad * 0.22),
+		Vector2(rad * 2.0, h)), false, col)
