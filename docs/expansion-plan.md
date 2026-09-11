@@ -2612,4 +2612,42 @@ effort, zero license risk) or fall back to a paid AI-generation service
 if an exact one-look-per-class set is a hard requirement — no free
 source checked delivers that.
 
+## T46 — spike: HEROES 99 animated pixel character pack (locked 2026-09-11, dispatched now)
+
+User-supplied lead: https://au-pixel.itch.io/heroes99. Confirmed by
+direct research already: real product, layered composable pixel-art
+characters (skin/face/hair/clothing/weapon, 23 hairstyles x 10 palettes,
+17 outfits x 8 palettes, 5 weapon types), 32px, Final-Fantasy/Fire-
+Emblem-like style, real animations (idle/run/dash/3-combo attack/cast/
+block/dodge-roll/crouch/hurt/jump). License: commercial + modification
+allowed, no reselling raw assets, explicitly **no AI training** on the
+assets — fine for our purposes (we'd be compositing/using them, not
+training a model). Full pack: $15 (sale)/$25. A **free** single demo
+character exists too — same real animation set (idle/run/dash/attack/
+hurt/jump) plus a portrait, genuinely usable, not a teaser.
+
+On "a non-AI API": no hosted/scriptable API exists for this asset —
+checked the one companion tool that exists (an unofficial "Character
+Assembler," hyperdoxical.itch.io), which is a Windows-only GUI .exe,
+interactive one-at-a-time, not automatable. That's not actually needed,
+though: the asset itself is just layered transparent PNGs in a known
+z-order (skin → face → hair → clothing → weapon). Compositing that
+ourselves in a small script is straightforward and genuinely
+"non-AI" (pure deterministic image layering) — likely less work than
+integrating a third-party tool, and it's exactly the kind of thing a
+spike should confirm by actually trying it, not assume.
+
+**Spike scope**: download the FREE demo character (itch.io "name your
+own price" — reuse O11's proven headless-download recipe, no purchase
+needed for this phase), inspect the actual sheet layout (frame counts/
+sizes per animation, confirm license terms hold as researched), and
+report back a concrete plan for wiring animated sprite-sheet playback
+into `scenes/main.gd`'s combat tokens (currently flat vector-drawn
+circles/balls) — what changes, roughly how big a lift, and whether the
+full paid pack (for class/hair/weapon variety across the roster) is
+worth buying once the pipeline is proven on the one free character.
+Research/reporting only — no purchase, no code changes, no branch;
+downloading the free demo asset itself for inspection is fine (same as
+every prior art spike's "look at the real files" step).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
