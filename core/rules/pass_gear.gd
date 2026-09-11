@@ -28,6 +28,8 @@ static func equipment(ch, bundles: Array) -> Dictionary:
 			kind = "armor"
 		if def.is_empty():
 			kind = "unknown"
+			warns.append("equipped item \"%s\" matches neither weapons.json nor armor.json — "
+				% iid + "it will sit inert (no attack/AC contribution)")
 		items.append({"item_id": iid, "def": def, "kind": kind, "quantity": qty[iid],
 			"equipped": iid in ch.equipped, "source": {"origin": "item", "id": iid}})
 

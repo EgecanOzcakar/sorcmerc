@@ -22,7 +22,8 @@
 #     threshold is crossed — nothing is spent, so an unlock is permanent.
 #   * unlocking a class grants 2 free subclass picks out of its 4:
 #     unlock_class(id, [a, b]) records them. The other 2 cost class XP,
-#     5,000 each, a per-class counter fed by playing that class.
+#     SUBCLASS_COST each (2,500 as of the direct-feedback halving), a
+#     per-class counter fed by playing that class.
 #
 # A class whose threshold is crossed is already unlocked; its 2 free picks stay
 # pending until unlock_class() is called, and until then none of its subclasses

@@ -1,5 +1,14 @@
 # Improvement backlog
 
+**SUPERSEDED (2026-09-11):** this whole document predates the CRPG expansion
+(docs/expansion-plan.md) and its "Deliberately skipped" list below is now
+wrong in several places, not just historical — concentration is fully wired
+(146 spells tagged, `core/combat.gd`), sound/music landed (T27), and
+grapple/exhaustion/resistances/temp HP/two-weapon fighting are all
+implemented (the conditions engine, T24). Read `docs/expansion-plan.md` for
+the current state; this file is kept only as an archive of the original MVP
+plan, not as a source of truth on what exists today.
+
 **Status (2026-09-10):** M1–M6 and U1–U8 all implemented in one sequenced pass
 (the shared files `combat.gd` / `main.gd` made real parallelism counterproductive).
 P1 (split `main.gd`) was skipped — it only existed to enable parallel UI agents.
