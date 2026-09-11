@@ -2987,4 +2987,43 @@ existing `test_lpc_spike.gd`-style headless validation extended for the
 new loadouts. Push the branch when done; still not merged to master
 without explicit sign-off.
 
+**T50 completion (2026-09-12):** landed on `feature/lpc-pipeline`
+(pushed, not merged). Real assessment, not assumed: [LPC] Monsters'
+z-order model generalized for free (no layers/zPos on creature sheets,
+so a creature loadout is just a one-entry list), but the grid did not —
+these are 4-row attack-only sheets with per-row-varying column counts
+(e.g. ghost 6 cols n/s but 8 on w/e for a spit projectile), a different
+row space from the humanoid's 21/46-row universal layout, not a subset
+of it. `tools/lpc_compose.py` now has no hardcoded grid constants;
+loadouts declare their own `{row, frames, speed}` per animation, one
+code path for both humanoid and creature loadouts. Added a real
+on-sheet-and-non-empty frame guard, verified to actually fire three
+ways (caught exactly the kind of silent-garbage-output bug the old
+fixed-grid assumptions would have produced). `merc_01.png` byte-
+identical after the refactor — the regression check that generalizing
+didn't disturb T47's humanoid work.
+
+Composed and rendered 3 real creatures (bat/ghost/slime) on the actual
+combat board — verified by me directly: ghost reads strongly (pale
+wraith, glowing red eyes, tattered hem), slime sits correctly on its
+tile, bat is honestly too small/floaty to read as a combatant at hex
+scale (flagged, not hidden — flyers need a per-unit anchor/scale, not
+the humanoid's foot-anchor, when step 6 wires this into real combat).
+`test_lpc_spike.gd` now data-driven over every `data/lpc/*.json`
+loadout: 207/207 passed.
+
+**Corrected faction coverage** (T48's "small beasts, one ooze, one
+undead" was directionally right but imprecise): real count is ~20 of
+316 bestiary entries, concentrated in ooze (3/4 — slime covers Gray
+Ooze/Ochre Jelly/Black Pudding by recolor), scattered beast (~8/87:
+bat/snake/bee variants), swarm-of-Tiny-beasts (3/10, not previously
+credited), undead (~4/17: Ghost outright plus Specter/Shadow/Will-o'-
+Wisp recolors — skeletons/zombies belong to the *humanoid* LPC pipeline
+instead), and plant (2/6, needs oversize-cell work first, not done).
+**Confirmed zero, not assumed**: giant/dragon/fey/elemental/construct/
+monstrosity/fiend/celestial (108 entries) — every roster checked by
+name against the pack's actual contents, nothing recolors into a fit.
+That gap is a sourcing/commissioning problem now, not a pipeline
+limitation — the pipeline itself is no longer what's blocking it.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
