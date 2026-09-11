@@ -1175,4 +1175,27 @@ straightforward (tier 1) spell genuinely needs a trivial, already-established
 extension (e.g. a new `shape` value already handled elsewhere) — anything
 bigger belongs in the tier-2 follow-up list, not this pass.
 
+- 2026-09-11: **T33 complete**, plus a repo-health audit and its fixes. T33
+  found a bigger problem than the one it was sent for: the ~50 spells
+  believed to already have "usable raw mechanics" actually didn't — the SRD
+  export writes `dice`/`halfOnSave`/`area`, `_spell_verb` reads `count`/
+  `sides`/`half_on_save`/`shape`, so Lightning Bolt, Blight, Cone of Cold,
+  Guiding Bolt and more were silently resolving as 1d6 single-target with no
+  shape. Fixed those plus a genuine engine gap (`cast()` ignored `conditions`
+  entirely, so no damage-less save-or-condition spell did anything) and
+  authored 19 new spells with real SRD numbers — 8 cantrips, 8 leveled
+  damage spells (single/AoE, both save types), 3 save-or-condition. Cataloged
+  a long, honest tier-2 list of what still needs real new plumbing (ally
+  buffs, summons, multi-target heals, resurrection, persistent battlefield
+  areas, line-shaped AoE, multi-turn control) rather than forcing any of it
+  in. Separately: a read-only repo audit found 5 items, 4 fixed directly (an
+  unknown-equipped-item now warns instead of silently going inert, a stale
+  progression.gd comment, a fully rewritten README reflecting the actual
+  current scope, a superseded-banner on the old pre-expansion improvements.md)
+  and 1 confirmed non-issue-for-now and documented (concentration-break
+  cleanup — checked against what T33 actually shipped: nothing outlives a
+  broken concentration today, since every condition it grants is already
+  capped at one round). **Full suite: 24 test files, 0 failures; drive_ui
+  passes.** Pushed.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
