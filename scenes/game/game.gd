@@ -12,6 +12,8 @@ const Campaign = preload("res://core/campaign.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
+const Presets = preload("res://core/presets.gd")
+const Scaler = preload("res://core/scaler.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const Tutorial = preload("res://core/tutorial.gd")
@@ -62,6 +64,7 @@ func show_title() -> void:
 		col.add_child(_button("▶  Resume the last run", _resume))
 	col.add_child(_button("✦  New run", show_party_setup))
 	col.add_child(_button("❖  Tutorial", show_tutorial))
+	col.add_child(_button("⚔  Random battle (debug)", show_random_battle))
 	var roster := CharacterSave.list_slugs().size()
 	col.add_child(_dim("%d character(s) in the barracks." % roster))
 	col.add_child(_button("⚙  Settings", func(): SettingsOverlay.toggle(self)))
@@ -94,6 +97,45 @@ func show_tutorial() -> void:
 	combat.spec = Tutorial.SPEC.duplicate(true)
 	combat.difficulty = Tutorial.DIFFICULTY
 	combat.tutorial = true
+	var wrap := Control.new()
+	wrap.add_child(combat)
+	var back := Button.new()
+	back.text = "←  Title"
+	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	back.offset_left = -160; back.offset_top = 12; back.offset_right = -16
+	back.pressed.connect(show_title)
+	wrap.add_child(back)
+	_swap(wrap)
+
+# --- random battle (debug) -------------------------------------------------
+#
+# T42: a quick way to drop into a fight without a whole run, for debugging.
+# Cycles through 4 fixed theme/difficulty combos rather than rolling one, so
+# a bug seen on press N is the same fight again on the next press N presses
+# later — reproducible, not "try again and hope".
+
+const TEST_FIGHTS := [
+	{"theme": "goblin-camp", "difficulty": "normal"},
+	{"theme": "forest-clearing", "difficulty": "easy"},
+	{"theme": "frozen-cave", "difficulty": "hard"},
+	{"theme": "sunken-shrine", "difficulty": "normal"},
+]
+var _test_fight_i := 0
+
+func show_random_battle() -> void:
+	var fight: Dictionary = TEST_FIGHTS[_test_fight_i % TEST_FIGHTS.size()]
+	_test_fight_i += 1
+	var party := Party.new()
+	for ch in Presets.party():
+		party.add_member(ch)
+	var chars: Array = party.party_characters()
+	var spec := Scaler.roster_for(chars, fight["difficulty"], {}, fight["theme"])
+	spec["theme"] = fight["theme"]
+
+	var combat = load(COMBAT_SCENE).instantiate()
+	combat.party = party
+	combat.spec = spec
+	combat.difficulty = fight["difficulty"]
 	var wrap := Control.new()
 	wrap.add_child(combat)
 	var back := Button.new()

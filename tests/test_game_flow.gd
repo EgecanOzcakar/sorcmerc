@@ -155,5 +155,21 @@ func _tutorial_checks() -> void:
 	check(combat.cb != null and not combat.cb.is_over(), "the fight underneath was never touched")
 	game2.queue_free()
 
+	# T42: the title screen's debug "Random battle" cycles a fixed list rather
+	# than rolling one, so consecutive presses are the deterministic sequence.
+	var game3 = load("res://scenes/game/game.tscn").instantiate()
+	root.add_child(game3)
+	await process_frame
+	var seen: Array = []
+	for n in Game.TEST_FIGHTS.size() * 2:
+		game3.show_random_battle()
+		await process_frame
+		var combat3 = game3._screen.get_child(0)
+		check(combat3.cb != null and not combat3.cb.is_over(), "random battle #%d starts a live fight" % n)
+		seen.append(combat3.spec["theme"])
+	check(seen == seen.slice(0, Game.TEST_FIGHTS.size()) + seen.slice(0, Game.TEST_FIGHTS.size()),
+		"the sequence repeats exactly, not just eventually reusing themes (%s)" % str(seen))
+	game3.queue_free()
+
 	print("test_game_flow: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
