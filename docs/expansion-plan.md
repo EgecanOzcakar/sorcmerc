@@ -2581,4 +2581,25 @@ already picks a class/creature-type glyph. Gate on `_fx_on` like
 everything else; must not change combat outcomes/timing under
 `SORCMERC_FAST`/headless. Own branch, same as T44, reviewed before merge.
 
+**Phase A completion (2026-09-11):** researched, nothing integrated
+(research-only as scoped). Real class list confirmed from
+`data/classes.json` (12: barbarian/bard/cleric/druid/fighter/monk/
+paladin/ranger/rogue/sorcerer/warlock/wizard). Honest finding, even
+under the loosened style bar: no clean, ready-made 12-for-12 CC0/CC-BY
+class-portrait set exists. Best real candidate — Hyptosis's "200 Free
+Lorestrome Portraits" (OpenGameArt, CC0 confirmed) — is a large generic
+bust dump with no class tagging; usable but needs ~an hour of manual
+curation to hand-pick/crop one look per class, not a drop-in mapping the
+way `ui_icons.gd`'s glyph lookup is. Other candidates checked and
+rejected: Ravenmore's Fantasy Portrait Pack (CC-BY, real, but a *species*
+pack — 4 races, 0/12 classes); Gordy Higgins' Public Domain Fantasy Art
+Pack (genuine public domain, but mixed content, not class-focused).
+Flagged: a "RPG Class Portrait Pack" that kept surfacing in search
+results does not actually exist at the claimed URLs — a search-tool
+fabrication, don't chase it again. Recommendation, awaiting user
+decision: hand-curate 12 portraits from the Hyptosis CC0 set (free, real
+effort, zero license risk) or fall back to a paid AI-generation service
+if an exact one-look-per-class set is a hard requirement — no free
+source checked delivers that.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
