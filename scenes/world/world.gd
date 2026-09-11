@@ -17,6 +17,7 @@ extends Control
 
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
+const WorldBattle = preload("res://core/world_battle.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
@@ -84,6 +85,10 @@ func _process(delta: float) -> void:
 	world.tick(delta)
 	WorldAI.update(world, delta)
 	_check_encounter()
+	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not
+	# while the player's own fight has the map frozen.
+	if _combat == null and not world.clock.is_paused():
+		WorldBattle.check(world, ENCOUNTER_RADIUS, encounter_spec)
 	if _clock_lbl != null:
 		_clock_lbl.text = "Day %d  %02d:%02d" % [
 			int(world.clock.elapsed / 1440.0) + 1,

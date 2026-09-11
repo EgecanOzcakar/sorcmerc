@@ -1770,4 +1770,31 @@ drive_world.gd` extended (proximity triggers a real `main.tscn` with a live
 clock resumes, player marches again). Full suite: 26 test files, 0 failures; all
 6 `drive_*` OK.
 
+**O5 completion (2026-09-11):** new `core/world_battle.gd` (~100 lines) plus two
+lines in `scenes/world/world.gd`'s `_process`; O4's trigger, `core/world_ai.gd`,
+`core/campaign.gd` and `scenes/main.gd` untouched. It lives in `core/` and not in
+the map scene because none of it is rendering — it is exactly `test_scaler.gd`'s
+`_sweep` loop (`Encounter.build`, `begin_turn`/`AI.take_turn`/`end_turn` to
+`is_over()`, `outcome()`), so it is testable without a `Control`. The one thing it
+does not own is the faction→roster mapping: O4's `encounter_spec()` comes in as a
+`Callable` (`WorldBattle.check(world, ENCOUNTER_RADIUS, encounter_spec)`) rather
+than being re-derived, so both sides of an NPC fight roll the same rosters a
+player ambush would. `Encounter.build()` only builds the foe side, so side A is
+spawned as `"party"`-team combatants on the board's first free hexes (reusing
+`Encounter._foe_spots(board, [])`) and `build()` then places side B at least
+`SPAWN_GAP` away from them, on the attacker's theme board; a `Victory` is side A's
+win. Seed is `hash("a.id|b.id")`, so the same two bands always resolve the same
+way. A fight that runs out combat.gd's `MAX_ROUNDS` ("ongoing") is decided on
+survivors, then on remaining HP — never a coin flip. The loser is removed from
+`world.parties` outright and the winner walks away untouched: no wound/scale
+carry-over, deliberately (O7 owns persistent consequences). Hostility is checked
+both directions (`world_ai.gd`'s is one-directional), the scan is O(n²) over 3-8
+parties once a frame per O1's "no index yet" note, and player-involved pairs are
+skipped entirely so O4's trigger still owns them. `tests/test_world_battle.gd`:
+16 passed (one survivor removed, deterministic per seed, civilized-vs-civilized
+peace, a mixed scene where the player's ambusher is left for O4, out-of-radius
+peace). `tests/drive_world.gd` extended with the live case (two NPC bands close
+on the map, one dies, no combat scene, clock never pauses). Full suite: 28 test
+files, 0 failures; all 6 `drive_*` OK.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.

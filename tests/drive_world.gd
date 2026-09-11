@@ -94,7 +94,30 @@ func _run() -> void:
 		fail("zoom fell below ZOOM_MIN")
 	await step(2)     # a frame at min zoom, to exercise the far-out ground path
 	await _encounter_handoff(p)
+	await _offscreen_battle(p)
 	_done()
+
+# --- O5: two NPC parties meeting resolve off-screen, no scene, no pause -----
+func _offscreen_battle(p) -> void:
+	var World = load("res://core/world.gd")
+	var away: Vector2 = p.position + Vector2(4000, 4000)     # nowhere near the player
+	var a = screen.world.add_party(World.RoamingParty.new("raid-band", away, "bandit"))
+	var b = screen.world.add_party(World.RoamingParty.new("garrison", away + Vector2(40, 0), "soldier"))
+	a.goal = b.position
+	b.goal = b.position
+	var n: int = screen.world.parties.size()
+	await step(6)     # 0.6s x 40 u/s closes the 40-unit gap into the radius
+	if screen.world.parties.size() != n - 1:
+		fail("the NPC meeting did not resolve to exactly one dead party (%d -> %d)"
+			% [n, screen.world.parties.size()])
+	if screen.world.parties.has(a) == screen.world.parties.has(b):
+		fail("exactly one of the two bands should be left standing")
+	if screen._combat != null:
+		fail("an NPC-vs-NPC battle launched a combat scene")
+	if screen.world.clock.is_paused():
+		fail("an NPC-vs-NPC battle paused the world clock")
+	if screen.world.player() == null:
+		fail("the player was caught up in an off-screen battle")
 
 # --- O4: proximity triggers a real fight, winning clears the party ------
 func _encounter_handoff(p) -> void:
