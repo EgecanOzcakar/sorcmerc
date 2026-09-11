@@ -20,6 +20,10 @@ var _presses := 0
 var _fail := 0
 
 func _init() -> void:
+	# O17: this process's own autosave slots, so a concurrent godot run cannot
+	# clobber them. randi() as well as the pid: under a sandboxed (flatpak)
+	# godot every process sees pid 3, so the pid alone is not unique.
+	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
 	OS.set_environment("SORCMERC_FAST", "1")
 	OS.set_environment("SORCMERC_LINEAR_CAMPAIGN", "")   # normal play, whatever the shell said
 	CampaignSave.clear()                 # a saved run would change the title screen

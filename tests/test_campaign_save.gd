@@ -25,6 +25,10 @@ func _campaign() -> Campaign:
 	return Campaign.new(p, 99)
 
 func _init() -> void:
+	# O17: this process's own autosave slots, so a concurrent godot run cannot
+	# clobber them. randi() as well as the pid: under a sandboxed (flatpak)
+	# godot every process sees pid 3, so the pid alone is not unique.
+	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
 	CampaignSave.clear()
 	check(CampaignSave.load_latest() == null, "no autosave, no campaign")
 
@@ -68,11 +72,11 @@ func _init() -> void:
 	check(second.stage == c.stage and second.stage != back.stage, "the slot is overwritten")
 
 	# A corrupt or missing file is "no autosave", never a crash.
-	var f := FileAccess.open(CampaignSave.PATH, FileAccess.WRITE)
+	var f := FileAccess.open(CampaignSave.path(), FileAccess.WRITE)
 	f.store_string("{not json at all")
 	f.close()
 	check(CampaignSave.load_latest() == null, "a corrupt autosave loads as null")
-	f = FileAccess.open(CampaignSave.PATH, FileAccess.WRITE)
+	f = FileAccess.open(CampaignSave.path(), FileAccess.WRITE)
 	f.store_string('{"format": "something-else"}')
 	f.close()
 	check(CampaignSave.load_latest() == null, "a foreign file loads as null")

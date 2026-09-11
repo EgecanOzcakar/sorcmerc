@@ -22,6 +22,10 @@ var _quiet := false      # a retried attempt's failures are counted, not printed
 var _did := {}
 
 func _init() -> void:
+	# O17: this process's own autosave slots, so a concurrent godot run cannot
+	# clobber them. randi() as well as the pid: under a sandboxed (flatpak)
+	# godot every process sees pid 3, so the pid alone is not unique.
+	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
 	OS.set_environment("SORCMERC_FAST", "1")   # the combat screen skips its pauses
 	_attempts()
 

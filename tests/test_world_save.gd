@@ -46,6 +46,10 @@ func _party() -> Party:
 	return p
 
 func _init() -> void:
+	# O17: this process's own autosave slots, so a concurrent godot run cannot
+	# clobber them. randi() as well as the pid: under a sandboxed (flatpak)
+	# godot every process sees pid 3, so the pid alone is not unique.
+	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
 	WorldSave.clear()
 	check(WorldSave.load_latest() == null, "no autosave, no world")
 	check(not WorldSave.has_save(), "cleared slot reports no save")

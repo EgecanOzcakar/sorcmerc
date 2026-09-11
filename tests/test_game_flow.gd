@@ -45,6 +45,10 @@ func _find(c: Campaign, kind: String) -> int:
 	return -1
 
 func _init() -> void:
+	# O17: this process's own autosave slots, so a concurrent godot run cannot
+	# clobber them. randi() as well as the pid: under a sandboxed (flatpak)
+	# godot every process sees pid 3, so the pid alone is not unique.
+	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
 	CampaignSave.clear()
 
 	# --- retire: only while picking --------------------------------------

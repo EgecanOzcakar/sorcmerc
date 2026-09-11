@@ -7,7 +7,7 @@
 # Loading also re-applies the saved faction opinion (it is process-global state in
 # core/faction_opinion.gd, so there is nowhere else to put it).
 #
-# user://autosave/world.json:
+# user://autosave/world.json (or $SORCMERC_SAVE_DIR/world.json):
 #
 # {
 #   "format": "sorcmerc-world",       // literal, checked on load
@@ -40,10 +40,22 @@ const Party = preload("res://core/party.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 
-const DIR := "user://autosave"
-const PATH := DIR + "/world.json"
+const DEFAULT_DIR := "user://autosave"
 const FORMAT := "sorcmerc-world"
 const VERSION := 1
+
+# O17: same env override as campaign_save.gd — user:// is shared by every godot
+# process on the machine, so concurrent runs need their own directory.
+static var _dir := ""
+
+static func dir() -> String:
+	if _dir == "":
+		var env := OS.get_environment("SORCMERC_SAVE_DIR")
+		_dir = env if env != "" else DEFAULT_DIR
+	return _dir
+
+static func path() -> String:
+	return dir() + "/world.json"
 
 static func to_dict(world, party = null) -> Dictionary:
 	var settlements: Array = []
@@ -197,24 +209,24 @@ static func _dec(v):
 static func save(world, party = null) -> void:
 	if world == null:
 		return
-	DirAccess.make_dir_recursive_absolute(DIR)
-	var f := FileAccess.open(PATH, FileAccess.WRITE)
+	DirAccess.make_dir_recursive_absolute(dir())
+	var f := FileAccess.open(path(), FileAccess.WRITE)
 	if f == null:
-		push_warning("cannot write %s" % PATH)
+		push_warning("cannot write %s" % path())
 		return
 	f.store_string(JSON.stringify(to_dict(world, party), "  "))
 	f.close()
 
 # Never crashes on a missing or corrupt file — a bad autosave is just "no autosave".
 static func load_latest():
-	if not FileAccess.file_exists(PATH):
+	if not FileAccess.file_exists(path()):
 		return null
-	var d = JSON.parse_string(FileAccess.get_file_as_string(PATH))
+	var d = JSON.parse_string(FileAccess.get_file_as_string(path()))
 	return from_dict(d) if d is Dictionary else null
 
 static func has_save() -> bool:
-	return FileAccess.file_exists(PATH)
+	return FileAccess.file_exists(path())
 
 static func clear() -> void:
-	if FileAccess.file_exists(PATH):
-		DirAccess.remove_absolute(PATH)
+	if FileAccess.file_exists(path()):
+		DirAccess.remove_absolute(path())
