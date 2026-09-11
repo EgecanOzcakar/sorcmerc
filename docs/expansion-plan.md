@@ -2416,4 +2416,30 @@ drive_world/drive_game pairs, 0 collisions) — proof, not just "tests
 pass." Full suite green sequentially, verified independently by me as
 well as by the agent.
 
+**O15 completion (2026-09-11):** landed as `a493557`. `World.waters`
+(plain `{position, radius}` blobs, not a new class — `water_depth()` is
+the only reader) and a hand-placed lake northwest of Riverhold plus a
+river (overlapping blobs along a polyline) draining past it down to
+Ashfell. `_draw_ground()` picks the Water sheet's tile pair within a
+shoreline band, blended the same way `WOODED` already blends the forest
+edge. Landed together with two real UI bugs caught from actually playing
+the build (not part of O15's own scope, fixed opportunistically in the
+same commit since they were in the same file): the settlement-visit and
+quest-log panels were rendering off-screen (`PRESET_CENTER` anchor +
+manual centering math double-offsetting — the anchor call re-centers and
+resets offsets, then the position line centered it a second time on top),
+and the player's token stayed visible on the map while its own market
+panel was open. Verified visually (a throwaway script that walks the
+player into a settlement and screenshots it): panel now centered with a
+working Leave button, player token hidden, water visible. Full suite +
+all `drive_*` green.
+
+**Separately (2026-09-11):** a git hook (`.githooks/post-merge`/
+`post-checkout`, opt-in per clone via `git config core.hooksPath
+.githooks`, documented in README) now runs `godot --headless --import`
+automatically after every pull/checkout, so new or changed assets (art
+packs, the bundled font) can't silently leave a stale `.godot/imported/`
+cache the way the DejaVu font and the O11-O15 art packs did — that
+error class shouldn't recur for anyone who's run the one-time opt-in.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
