@@ -2541,4 +2541,37 @@ then ease back to whatever the player had set (save/restore or blend
 additively, don't clobber their manual view). Same `_fx_on` gate, same
 outcome-parity bar as the other five.
 
+## T45 — attacker/defender portrait reveal (locked 2026-09-11, spike dispatched now)
+
+What the user actually meant by "focus animations on the attacker and
+the defender": a large character-portrait popup shown for BOTH combatants
+when an attack resolves, in a Darkest-Dungeon-esque painted/illustrated
+style (reference image supplied by the user: a full-body armored knight,
+ink linework, desaturated muted palette, dramatic side lighting) —
+distinct from T44's board-level camera/motion juice, which continues
+separately and unblocked by this.
+
+**Phase A (dispatched now) — art spike, CC0/licensed first per user's
+choice.** Search itch.io/OpenGameArt/Kenney and similar sources (same
+license rigor as every prior asset spike: confirm CC0/CC-BY directly on
+the asset page, note count/style/resolution, direct link) for fantasy
+character PORTRAIT art — bust or full-body, one look per class/species
+archetype (fighter, cleric, rogue, wizard, etc. — the party's own
+`core/rules/catalog.gd` class list is the real target set, not an
+arbitrary number). Report a shortlist with license confirmation and a
+recommendation; do not integrate anything yet — this is research only,
+matching O10's shape. Realistic expectation, state plainly in the
+report: an exact style match to the reference (that specific painted-
+gothic look) is unlikely at CC0 quality — say so if the best candidates
+are a looser stylistic fit rather than pretending otherwise.
+
+**Phase B (after Phase A, not yet dispatched) — wire it in.** Extend
+`scenes/main.gd`'s `show_reveal()`/`REVEAL_PAUSE` popup (which already
+shows HIT/MISS/CRIT/SAVED text for both hero and monster actions) to
+also show attacker + defender portrait art side by side, picked by
+class/species the same way `core/ui_icons.gd`'s `combatant_glyph()`
+already picks a class/creature-type glyph. Gate on `_fx_on` like
+everything else; must not change combat outcomes/timing under
+`SORCMERC_FAST`/headless. Own branch, same as T44, reviewed before merge.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
