@@ -1006,4 +1006,66 @@ useful but its existing glyph functions should already cover this.
   **Full suite: 24 test files (new `test_ui_log.gd`, 25 checks), 0 failures;
   all four `drive_*` smoke scripts pass.** Pushed.
 
+## T29-T31 — feedback batch round 2 (locked 2026-09-11, dispatched now)
+
+A large batch of direct user feedback. Handled directly already (separate
+commit): hidden-mover-no-OA, Help-revives-downed-ally-1HP, magic item price
+retune (common in 20-30gp, exponent 6→4), opening stage combat-only, rest
+capped at 2 short/1 long per run, lifetime/class XP thresholds halved. Also
+already-confirmed-correct-as-is, no change needed: ranged disadvantage when
+adjacent (already implemented), attack-FX kind already keyed off the verb's
+own type not the caster's class, BG3 does not revive on long rest either
+(researched — it's a paid NPC/scroll/spell action there too, matching this
+project's existing model).
+
+Remaining, split by file ownership into 3 parallel dispatches:
+
+**T29 — combat screen round 2** (`scenes/main.gd`, following directly on
+T28's sidebar/icon/animation work):
+- Turn-order strip shows current HP instead of initiative number.
+- The floating combat-result popup shows HIT/MISS/save-result or the
+  damage number as the primary readout, not the raw d20 value (the dice
+  breakdown can stay as secondary/smaller if it still fits).
+- Action buttons that overflow the bottom bar must stay reachable (scroll
+  or wrap) instead of becoming invisible/unplayable past some count.
+- Number-key hotkeys must still work to switch between different actions
+  while in targeting/aiming mode, not just before it.
+- A dramatic defeat animation/effect when the party is wiped (state
+  becomes "lost"), not just a plain text/state change.
+- Hide the debug-only "Replay seed" / "New encounter" buttons whenever
+  `OS.is_debug_build()` is false (a real exported release build).
+- Melee vs. ranged attack toggle: a character carrying both a melee and a
+  ranged weapon option should be able to pick which one their basic
+  Attack verb uses, rather than being locked to whichever one `adapter.gd`
+  happened to put in `attacks[0]`.
+- General pass on how spellcaster resources (slots, pools) are shown —
+  the ask was open-ended ("generally improve"), use judgment.
+- Add the missing action/spell tooltip descriptions this session's own
+  earlier tooltip pass (`_verb_tooltip`) left uncovered, and make sure
+  every tooltip that deals damage shows its actual dice notation, not
+  just a mechanical summary with the number buried in it.
+
+**T30 — route variety + post-combat/treasure opportunities**
+(`core/campaign.gd`, `core/quest.gd`):
+- Much more route/node variety — the `POOL` constant's template count is
+  the lever; add meaningfully more combat/merchant/rest/treasure templates
+  (varied titles/flavor, following the existing hand-authored style) so a
+  route doesn't feel like the same handful of stops reshuffled.
+- After combat, or in treasure rooms, add skill-check-gated opportunities
+  (a Survival/Perception/etc. check unlocking a bonus find, a shortcut, a
+  warning about the next fight, your call on the concrete shape) — reuse
+  the existing check-roll patterns already in this file (`identify_check`
+  is one) rather than inventing a new one.
+
+**T31 — Don't-Starve-style barks** (`core/audio.gd`, `core/barks.gd`,
+whichever scene plays them per T26/T27):
+- The existing text barks (T26) get a paired short "symphonic gibberish"
+  stinger (procedurally synthesized, matching T27's synthesis approach —
+  a brief pitched warble/blip per bark, not real voice acting) instead of
+  firing silently. Reuse `tools/gen_audio.py`'s approach for any new
+  audio assets needed.
+
+File ownership is split cleanly (main.gd / campaign.gd+quest.gd / audio.gd
++barks.gd) so these three can run fully in parallel with no collision.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
