@@ -1088,4 +1088,38 @@ File ownership is split cleanly (main.gd / campaign.gd+quest.gd / audio.gd
   existing bark trigger points — no new hookpoints. **Full suite: 24 test
   files, 0 failures; drive_ui/drive_campaign both pass.** Pushed.
 
+## T32 — a guided tutorial fight (locked 2026-09-11, dispatched now)
+
+A first-time-friendly on-ramp: one small, hand-authored, easy combat encounter,
+reachable directly from the title screen, with a step-by-step walkthrough of
+the combat GUI before/during the first couple of turns.
+
+**The fight itself:** deliberately simple and safe — a single weak, low-CR
+foe (a lone goblin or similar, easy difficulty, no special mechanics the
+tutorial hasn't explained yet), a small 1-2 character party (reuse existing
+presets rather than inventing new characters), on a plain board. The goal is
+a fight nobody can meaningfully lose while they're still reading callouts,
+not a real difficulty test.
+
+**Entry point:** `scenes/game/game.gd`'s title screen gets a "Tutorial"
+option alongside "New run" that launches straight into the fixed encounter
+(no party setup screen — party is pre-made).
+
+**The walkthrough:** a step-based overlay in the combat scene (gated behind
+a flag, off by default for every normal fight) that highlights and explains,
+in order: the action log (what it's for, where it lives now — left sidebar
+per T28), the turn-order strip (whose turn, HP, what the icons mean), the
+hex board (movement, targeting, the blue move-field, the odds chip), a
+combatant's HP bar/status glyphs, the action button row (hotkeys, cost tags,
+the tooltips T29 already added), and the actor status line (action/bonus/
+move economy). Each step: a short explanation, a "Next" (and "Skip
+tutorial") control, blocking normal play input until dismissed. Once the
+walkthrough finishes, the fight plays exactly like a normal one — same
+combat.gd, same rules, nothing special about how it resolves.
+
+File ownership: `scenes/game/game.gd` (title screen entry), `scenes/main.gd`
+(the walkthrough overlay — additive, gated behind a flag, must not change
+default combat behavior), and a small new data/const block for the fixed
+tutorial encounter (in campaign.gd or a new small file, agent's call).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
