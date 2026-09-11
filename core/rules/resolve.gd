@@ -108,6 +108,24 @@ static func resolve(ch) -> Resolved:
 	r.pending.append_array(profs["pending"])
 	r.warnings.append_array(pd["warnings"])
 
+	# 10b. every choice point, decided or not: the same passes run as if nothing had
+	# been decided, then each entry tagged with whether a matching decision exists.
+	# Warnings are dropped — pass 10 already reported them.
+	var every: Array = PassPending.resolve(b, {}, r.skill_prof, r.proficiencies["weapon"],
+		collected["expanded_feats"])["pending"]
+	every.append_array(PassProfs.proficiencies(b, {})["pending"])
+	var open_keys: Array = []
+	for p in r.pending:
+		open_keys.append(p["key"])
+	for p in every:
+		var dec = ch.choices.get(p["key"])
+		p["decided"] = dec != null and dec.get("type") == p["type"]
+		# Open or answered only. An either-or alternative the other half already
+		# satisfied (the ASI <-> feat-choice pair) is neither, and offering it would
+		# let the UI satisfy both — which pass_pending reports as a BUG.
+		if p["decided"] or p["key"] in open_keys:
+			r.choice_points.append(p)
+
 	# non-proficient body armor: no casting, disadvantage on STR/DEX checks and all attacks
 	if armor_ac != null and armor_ac["non_proficient_body"]:
 		r.disadvantage_from_armor = true

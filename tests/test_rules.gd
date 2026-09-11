@@ -50,6 +50,7 @@ func _init() -> void:
 	test_pools()
 	test_presets_match_encounter()
 	test_presets_have_no_pending_and_no_warnings()
+	test_choice_points_keep_decided_choices()
 	test_unknown_equipped_item_warns()
 	test_sheet_is_cached_and_retroactive()
 	test_attacks()
@@ -522,6 +523,71 @@ func test_presets_have_no_pending_and_no_warnings() -> void:
 		for w in real:
 			printerr("    %s warning: %s" % [ch.id, w])
 		check(real.is_empty(), "%s resolves with no warnings beyond bundle-choice (%d)" % [ch.id, real.size()])
+
+# T34: a decided choice stays listed in `choice_points` (it only leaves `pending`),
+# and re-deciding it overwrites the old answer on the next resolve.
+func test_choice_points_keep_decided_choices() -> void:
+	var ch = Presets.vera()
+	var s: Resolved = ch.sheet()
+	check(s.pending.is_empty(), "vera starts fully decided")
+	check(not s.choice_points.is_empty(), "a fully decided build still lists its choice points")
+	var keys: Array = []
+	for p in s.choice_points:
+		keys.append(p["key"])
+	for p in s.pending:
+		check(p["key"] in keys, "pending entry %s is also a choice point" % p["key"])
+
+	# choice_points is exactly "open or answered": a suppressed either-or alternative
+	# (the feat half of a taken ASI) must not be offered, or both could be satisfied.
+	for c in Presets.party():
+		var cs: Resolved = c.sheet()
+		var open_keys: Array = []
+		for p in cs.pending:
+			open_keys.append(p["key"])
+		for p in cs.choice_points:
+			check(p["decided"] or p["key"] in open_keys,
+				"%s: choice point %s is either decided or pending" % [c.id, p["key"]])
+
+	var skill_cp := {}
+	for p in s.choice_points:
+		if p["type"] == "skill-choice" and p["decided"] and int(p["count"]) >= 1:
+			skill_cp = p
+			break
+	check(not skill_cp.is_empty(), "vera's skill choice is listed as decided")
+	if skill_cp.is_empty():
+		return
+
+	var was: Array = ch.choices[skill_cp["key"]]["skills"]
+	var pool: Array = skill_cp["from"] if skill_cp["from"] != null else Catalog.skills().keys()
+	var fresh: Array = []
+	for sk in pool:
+		if not sk in was and fresh.size() < int(skill_cp["count"]):
+			fresh.append(sk)
+	check(fresh.size() == int(skill_cp["count"]), "there is a different set of skills to swap to")
+	ch.decide(skill_cp["key"], {"type": "skill-choice", "skills": fresh})
+	var s2: Resolved = ch.sheet()
+	check(s2.pending.is_empty(), "re-deciding leaves nothing pending (%d)" % s2.pending.size())
+	for sk in fresh:
+		check(s2.skill_prof.get(sk, "none") != "none", "the new pick %s is proficient" % sk)
+	for sk in was:
+		if not sk in fresh:
+			check(s2.skill_prof.get(sk, "none") == "none", "the old pick %s was dropped" % sk)
+	var still := false
+	for p in s2.choice_points:
+		if p["key"] == skill_cp["key"]:
+			still = p["decided"]
+	check(still, "the re-decided choice is still listed, still decided")
+
+	# and an undecided build lists the very same choice point, flagged open
+	var blank = Presets.vera()
+	blank.choices.erase(skill_cp["key"])
+	blank.dirty()
+	var open_cp := {}
+	for p in blank.sheet().choice_points:
+		if p["key"] == skill_cp["key"]:
+			open_cp = p
+	check(not open_cp.is_empty() and not open_cp["decided"],
+		"clearing the decision flips the same choice point back to open")
 
 # An equipped id matching neither weapons.json nor armor.json used to sit
 # inert with no diagnostic -- a typo'd/stale id silently lost a gear slot.

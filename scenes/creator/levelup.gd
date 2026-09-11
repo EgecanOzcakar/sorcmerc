@@ -161,18 +161,24 @@ func _gains_panel(g: Dictionary) -> void:
 		_note("%d choice(s) to make." % int(g["choices"]))
 
 func _choices() -> void:
-	var pend := Leveling.pending(_ch)
-	if pend.is_empty():
-		_head("Nothing left to choose")
-		return
 	var sheet = _ch.sheet()
-	for p in pend:
+	if Leveling.pending(_ch).is_empty():
+		_head("Nothing left to choose")
+	# Open choices first, then the ones already made — those stay on screen and
+	# editable instead of vanishing the moment they resolve (T34).
+	var pts: Array = []
+	for want_decided in [false, true]:
+		for p in sheet.choice_points:
+			if bool(p.get("decided", false)) == want_decided:
+				pts.append(p)
+	for p in pts:
 		var picks := Creator.picks_from_decision(p, _ch.choices.get(p["key"]))
 		var n := Creator.pick_count(p)
 		var src: Dictionary = p["source"]
-		_head("%s — pick %d  (%d chosen)" % [
+		_head("%s%s — pick %d  (%d chosen)" % ["✓ " if p.get("decided", false) else "",
 			Creator.humanize(p["type"]).replace(" choice", ""), n, picks.size()])
-		_note("from %s %s" % [src["origin"], Creator.humanize(src["id"])])
+		_note("from %s %s%s" % [src["origin"], Creator.humanize(src["id"]),
+			"  ·  already chosen, click to change" if p.get("decided", false) else ""])
 		var f := HFlowContainer.new()
 		f.add_theme_constant_override("h_separation", 6)
 		f.add_theme_constant_override("v_separation", 6)

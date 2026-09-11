@@ -508,7 +508,7 @@ func _build_basics() -> void:
 		_note("Size %s · speed %d ft · languages: %s" % [src["size"], int(src["speed"]),
 			", ".join(src["languages"])])
 	# lineage / sub-species, when the data has one
-	for p in _pending_of(["lineage-choice"]):
+	for p in _choice_points_of(["lineage-choice"]):
 		_choice_widget(p)
 
 	_head("Load a preset")
@@ -701,10 +701,12 @@ func _build_choices() -> void:
 			humanize(src["originFeat"]) if src["originFeat"] != null else "none"])
 
 	_head("Choices")
-	var pend := _pending_of([])
-	if pend.is_empty():
-		_note("Nothing left to choose.")
-	for p in pend:
+	var pts := _choice_points_of([])
+	if pts.is_empty():
+		_note("Nothing to choose.")
+	elif ch.sheet().pending.is_empty():
+		_note("Nothing left to choose — the ones below are made and can be changed.")
+	for p in pts:
 		_choice_widget(p)
 
 func _set_background(bid: String) -> void:
@@ -787,19 +789,22 @@ func _build_review() -> void:
 	r.add_theme_color_override("default_color", COL_TEXT)
 	r.text = _sheet_bbcode(true)
 	_body.add_child(r)
-	if not sheet.pending.is_empty():
-		_head("Unmade choices")
-		for p in sheet.pending:
+	if not sheet.choice_points.is_empty():
+		_head("Unmade choices" if not sheet.pending.is_empty() else "Choices")
+		for p in _choice_points_of([]):
 			_choice_widget(p)
 
-# --- pending choice widgets ----------------------------------------------
+# --- choice widgets -------------------------------------------------------
 
-# Pending entries, optionally filtered to a set of types.
-func _pending_of(types: Array) -> Array:
+# Every choice point the build has reached, optionally filtered to a set of types.
+# Still-open ones first so the screen reads top-down as "what's left, then what you
+# already picked" (and so a driver pressing the first matching option hits an open one).
+func _choice_points_of(types: Array) -> Array:
 	var out: Array = []
-	for p in ch.sheet().pending:
-		if types.is_empty() or p["type"] in types:
-			out.append(p)
+	for want_decided in [false, true]:
+		for p in ch.sheet().choice_points:
+			if bool(p.get("decided", false)) == want_decided and (types.is_empty() or p["type"] in types):
+				out.append(p)
 	return out
 
 func _choice_widget(p: Dictionary) -> void:
@@ -807,8 +812,10 @@ func _choice_widget(p: Dictionary) -> void:
 	var picks := picks_from_decision(p, ch.choices.get(p["key"]))
 	var n := pick_count(p)
 	var src: Dictionary = p["source"]
-	_head("%s — pick %d  (%d chosen)" % [humanize(p["type"]).replace(" choice", ""), n, picks.size()])
-	_note("from %s %s" % [src["origin"], humanize(src["id"])])
+	_head("%s%s — pick %d  (%d chosen)" % ["✓ " if p.get("decided", false) else "",
+		humanize(p["type"]).replace(" choice", ""), n, picks.size()])
+	_note("from %s %s%s" % [src["origin"], humanize(src["id"]),
+		"  ·  already chosen, click to change" if p.get("decided", false) else ""])
 	var f := _flow()
 	var opts := options_for(p, sheet)
 	if opts.is_empty():

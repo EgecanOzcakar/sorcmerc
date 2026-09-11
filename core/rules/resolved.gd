@@ -43,6 +43,10 @@ var equipment: Array = []
 
 # build state
 var pending: Array = []
+# Every choice point this build has reached, decided or not — pending entries plus
+# the ones already answered, each with a `decided` flag. Superset of `pending`,
+# in the same shape, so the creator can reopen a made choice (T34).
+var choice_points: Array = []
 var warnings: Array[String] = []
 
 func mod(a: String) -> int:

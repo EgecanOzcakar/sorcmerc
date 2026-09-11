@@ -65,6 +65,28 @@ func settle_choices(types: Array = []) -> void:
 			fail("no button on screen for %s (%s)" % [p["type"], p["key"]])
 			return
 
+# T34: once every choice on this step is made, the widgets must still be there,
+# marked "✓", and pressing an unpicked option must change the stored decision.
+func reopen_a_decided_choice() -> void:
+	var kids: Array = main._body.get_children()
+	for i in kids.size():
+		if not (kids[i] is Label and kids[i].text.begins_with("✓ ")):
+			continue
+		for j in range(i + 1, kids.size()):
+			if not kids[j] is HFlowContainer:
+				continue
+			var before: Dictionary = main.ch.choices.duplicate(true)
+			for b in _buttons(kids[j]):
+				if not b.disabled and not b.text.begins_with("● "):
+					_presses += 1
+					b.pressed.emit()
+					if main.ch.choices == before:
+						fail("re-pressing a decided choice (%s) changed nothing" % kids[i].text)
+					return
+			fail("decided choice %s offers no alternative to press" % kids[i].text)
+			return
+	fail("no already-decided choice rendered on the choices step")
+
 func _run() -> void:
 	await process_frame
 	await process_frame
@@ -99,6 +121,7 @@ func _run() -> void:
 	if not press("Sage"):
 		fail("no background button")
 	settle_choices()
+	reopen_a_decided_choice()
 	next_step()
 	if main._step != 4:
 		fail("stuck on choices: " + main._status.text)
