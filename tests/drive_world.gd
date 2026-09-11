@@ -1,6 +1,7 @@
-# O2 — scene-driver smoke test for the open-world map screen: it renders, the
-# clock runs, a right-click moves the player party, pause stops it, and the
-# camera pans/zooms without crashing.
+# O2/O4 — scene-driver smoke test for the open-world map screen: it renders, the
+# clock runs, a right-click moves the player party, pause stops it, the camera
+# pans/zooms without crashing, and closing on a hostile party hands off to a real
+# scenes/main.tscn fight that freezes the map until it is won.
 #   godot --headless --path . -s tests/drive_world.gd
 extends SceneTree
 
@@ -92,7 +93,73 @@ func _run() -> void:
 	if screen._zoom < screen.ZOOM_MIN:
 		fail("zoom fell below ZOOM_MIN")
 	await step(2)     # a frame at min zoom, to exercise the far-out ground path
+	await _encounter_handoff(p)
 	_done()
+
+# --- O4: proximity triggers a real fight, winning clears the party ------
+func _encounter_handoff(p) -> void:
+	var foe = null
+	for q in screen.world.parties:
+		if not q.is_player and q.faction != "soldier":
+			foe = q
+			break
+	if foe == null:
+		fail("no hostile party in the demo world to be ambushed by")
+		return
+
+	# Walk them together: just outside the radius, then inside it.
+	p.position = Vector2.ZERO
+	screen.world.set_goal(p, Vector2.ZERO)
+	foe.position = Vector2(screen.ENCOUNTER_RADIUS + 10.0, 0)
+	foe.goal = Vector2.ZERO
+	screen._check_encounter()
+	if screen._combat != null:
+		fail("combat launched while the parties were still apart")
+		return
+	await step(4)     # 0.4s x 40 u/s closes the last 10 units and then some
+	if screen._combat == null:
+		fail("closing inside ENCOUNTER_RADIUS did not launch a fight")
+		return
+
+	# A real scenes/main.tscn with a real roster and a live Encounter behind it.
+	if screen._combat.spec.get("monsters", []).is_empty():
+		fail("the fight got an empty spec: %s" % [screen._combat.spec])
+	if screen._combat.cb == null or screen._combat.cb.combatants.is_empty():
+		fail("no live combat (Encounter-built Combat) inside the combat scene")
+	else:
+		var foes: Array = screen._combat.cb.combatants.filter(func(c): return c.team == "foe")
+		if foes.is_empty():
+			fail("the live combat has no foes from the encountered party")
+	if not screen.world.clock.is_paused():
+		fail("the world clock kept running during the fight")
+	var frozen: Vector2 = foe.position
+	await step(5)
+	if not foe.position.is_equal_approx(frozen):
+		fail("parties kept moving on the map during the fight")
+
+	# Win it the way scenes/main.gd's _finish() does — fill `result`.
+	screen._combat.result = {"outcome": "Victory", "xp": 10, "gold": 5}
+	await step(4)
+	if screen._combat != null:
+		fail("the combat scene was never torn down after the fight")
+	if screen.world.parties.has(foe):
+		fail("the defeated party is still on the map")
+	if screen.world.clock.is_paused():
+		fail("the world clock did not resume after the fight")
+
+	# A faction with no board of its own still gets a roster and a board.
+	var World = load("res://core/world.gd")
+	var spec: Dictionary = screen.encounter_spec(
+		World.RoamingParty.new("cult", Vector2.ZERO, "cultist"))
+	if spec.get("monsters", []).is_empty() or spec.get("theme", "") != screen.DEFAULT_THEME:
+		fail("themeless faction got no usable spec: %s" % [spec])
+
+	# ...and the map still runs: the player marches again.
+	var back: Vector2 = p.position
+	screen.world.set_goal(p, back + Vector2(200, 0))
+	await step(5)
+	if p.position.is_equal_approx(back):
+		fail("the map is not playable again after combat")
 
 func _done() -> void:
 	print("drive_world: %s" % ["OK" if _fail == 0 else "*** %d FAILED ***" % _fail])

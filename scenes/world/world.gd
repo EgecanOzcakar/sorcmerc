@@ -16,7 +16,22 @@
 extends Control
 
 const World = preload("res://core/world.gd")
+const WorldAI = preload("res://core/world_ai.gd")
+const Scaler = preload("res://core/scaler.gd")
+const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
+
+const COMBAT_SCENE := "res://scenes/main.tscn"
+# O4 trigger distance, in world units. A party token draws at 9-11px before the
+# projection's ISO_GAIN, i.e. ~6 world units of radius, so 24 is "the two tokens
+# are visibly on top of each other" (~2 token diameters) — and it is comfortably
+# wider than one tick's closing distance: two parties at World.SPEED=40 close at
+# 80 u/s, 8 units per 0.1s step, so nobody tunnels through the trigger.
+const ENCOUNTER_RADIUS := 24.0
+const ENCOUNTER_DIFFICULTY := "normal"
+# The board an ambush happens on when the encountered faction has no theme of
+# its own in Scaler.THEME_FACTION — open country, which is where the map is.
+const DEFAULT_THEME := "forest-clearing"
 
 const ISO_YAW := 35.0
 const ISO_SQUASH := 0.38
@@ -29,6 +44,9 @@ const CELL := 90.0          # ground patch size, in world units
 const MAX_CELLS := 900      # cap the ground loop when zoomed far out
 
 var world: World
+var party: Party            # injected by whoever opens the map, or a demo roster
+var _combat = null          # the live scenes/main.tscn instance, while fighting
+var _combat_overlay: Control = null
 var _pan := Vector2.ZERO
 var _zoom := 1.0
 var _origin := Vector2.ZERO
@@ -38,6 +56,10 @@ var _clock_lbl: Label
 func _ready() -> void:
 	if world == null:
 		world = _demo_world()
+	if party == null:               # same demo roster scenes/campaign/campaign.gd falls back to
+		party = Party.new()
+		for ch in Party.demo_roster():
+			party.add_member(ch)
 	set_process(true)
 	_build_hud()
 
@@ -50,15 +72,18 @@ func _demo_world() -> World:
 	w.add_settlement(World.Settlement.new("dun-arrow", Vector2(-360, 260), "soldier", "town"))
 	w.add_settlement(World.Settlement.new("ashfell", Vector2(160, 470), "cultist", "city"))
 	w.add_party(World.RoamingParty.new("player", Vector2(80, 120), "soldier", true))
-	w.add_party(World.RoamingParty.new("bandits", Vector2(-250, -120), "bandit"))
-	w.add_party(World.RoamingParty.new("goblins", Vector2(380, 300), "goblinoid"))
-	w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "soldier"))
+	WorldAI.hunt(w.add_party(World.RoamingParty.new("bandits", Vector2(-250, -120), "bandit")))
+	WorldAI.hunt(w.add_party(World.RoamingParty.new("goblins", Vector2(380, 300), "goblinoid")))
+	WorldAI.patrol(w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "soldier")),
+		[Vector2(-120, 380), Vector2(-360, 260), Vector2(0, 0)])
 	return w
 
 # World.tick() advances the clock itself and gates movement on it, so one call
 # per frame is the whole update.
 func _process(delta: float) -> void:
 	world.tick(delta)
+	WorldAI.update(world, delta)
+	_check_encounter()
 	if _clock_lbl != null:
 		_clock_lbl.text = "Day %d  %02d:%02d" % [
 			int(world.clock.elapsed / 1440.0) + 1,
@@ -89,6 +114,85 @@ func _toggle_pause() -> void:
 	else:
 		world.clock.pause()
 	_pause_btn.text = "Resume" if world.clock.is_paused() else "Pause"
+
+# --- O4: encounter trigger + combat hand-off ---------------------------
+# ponytail: linear scan over 3-8 parties once a frame, same as world_ai.gd's hunt.
+func _check_encounter() -> void:
+	if _combat != null or world.clock.is_paused():
+		return
+	var p := world.player()
+	if p == null:
+		return
+	for q in world.parties:
+		if q == p or not WorldAI.is_hostile(q, p):
+			continue
+		if q.position.distance_to(p.position) <= ENCOUNTER_RADIUS:
+			_launch_combat(q)
+			return
+
+# The roster the encountered party fights with. Scaler takes a *theme*, not a
+# faction, so: THEME_FACTION reversed gives a matching board for the factions
+# that have one; for the rest (soldier/orc/cultist/...) there is no theme, and
+# _faction_order's other documented route — FACTIONS[seed % size] — is snapped
+# onto this faction instead. Seeded off the party id, so meeting the same band
+# twice is the same band.
+func encounter_spec(foe) -> Dictionary:
+	var theme := ""
+	for t in Scaler.THEME_FACTION:
+		if String(Scaler.THEME_FACTION[t]) == foe.faction:
+			theme = String(t)
+			break
+	var seed_v: int = absi(hash(foe.id))
+	if theme == "":
+		var idx: int = Scaler.FACTIONS.find(foe.faction)
+		if idx >= 0:
+			seed_v = seed_v - seed_v % Scaler.FACTIONS.size() + idx
+	var spec: Dictionary = Scaler.roster_for(
+		party.party_characters(), ENCOUNTER_DIFFICULTY, {}, theme, seed_v)
+	spec["theme"] = theme if theme != "" else DEFAULT_THEME
+	return spec
+
+# The same hand-off scenes/campaign/campaign.gd's _launch_combat() does: the map
+# freezes, scenes/main.tscn runs the fight unchanged, `result` comes back.
+func _launch_combat(foe) -> void:
+	world.clock.pause()
+	_combat_overlay = Control.new()
+	_combat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_combat_overlay)
+	_combat = load(COMBAT_SCENE).instantiate()
+	_combat.party = party
+	_combat.spec = encounter_spec(foe)
+	_combat.difficulty = ENCOUNTER_DIFFICULTY
+	_combat_overlay.add_child(_combat)
+
+	while _combat != null and _combat.result.is_empty():
+		await get_tree().process_frame
+	if _combat == null:
+		return
+	var result: Dictionary = _combat.result
+	_combat = null
+	_combat_overlay.queue_free()
+	_combat_overlay = null
+	if String(result.get("outcome", "")) == "Victory":
+		world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
+	else:
+		_retreat()
+	world.clock.resume()
+
+# Defeat/retreat, deliberately the cheapest thing that keeps the map playable:
+# the party falls back to the nearest settlement and stops there. No losses, no
+# gold, no wound state — a real defeat-consequences system is O7's business once
+# faction opinion exists to hang it on.
+func _retreat() -> void:
+	var p := world.player()
+	if p == null or world.settlements.is_empty():
+		return
+	var safe: Vector2 = world.settlements[0].position
+	for s in world.settlements:
+		if p.position.distance_squared_to(s.position) < p.position.distance_squared_to(safe):
+			safe = s.position
+	p.position = safe
+	world.set_goal(p, safe)
 
 # --- projection (see header) -------------------------------------------
 func _iso(v: Vector2) -> Vector2:

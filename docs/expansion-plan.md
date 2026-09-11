@@ -1745,4 +1745,29 @@ test_world_ai.gd`: 35 passed.
 Full suite: 26 test files, 0 failures; all 5 `drive_*` smoke tests
 (including the new `drive_world`) OK.
 
+**O4 completion (2026-09-11):** all in `scenes/world/world.gd` — `scenes/main.gd`
+and `core/*` untouched. `ENCOUNTER_RADIUS := 24.0` world units: a party token is
+~6 world units of radius after ISO_GAIN, so 24 is "the tokens visibly overlap",
+and it is wider than one tick's closing distance (two parties at `World.SPEED`
+close 8 units per 0.1s step), so nothing tunnels through the trigger. `_process`
+now also calls `WorldAI.update()` (O3 shipped it unwired) and `_check_encounter()`.
+The hand-off copies `scenes/campaign/campaign.gd`'s `_launch_combat()` exactly:
+full-rect overlay, instantiate `main.tscn`, set `.party`/`.spec`/`.difficulty`,
+await `.result`, tear down. Roster: `encounter_spec()` maps the encountered
+party's faction to a `Scaler.roster_for()` call — `THEME_FACTION` reversed gives
+a matching board for the five factions that have one, and for the rest
+(soldier/orc/cultist/kobold/gnoll/...) the seed is snapped so
+`FACTIONS[seed % size]` lands on that faction, with `DEFAULT_THEME =
+forest-clearing` as the board. Verified: cultist/orc/kobold/gnoll specs come back
+all-in-faction. Player roster is the same `Party.demo_roster()` fallback
+campaign.gd uses, overridable via an injected `party` field (O8 will inject the
+real one). Difficulty is fixed `"normal"` — no per-encounter scaling yet.
+Victory `world.parties.erase(foe)`; anything else retreats the player to the
+nearest settlement and resumes, deliberately with no losses/gold/wound state —
+defeat consequences belong to O7 once faction opinion exists. `tests/
+drive_world.gd` extended (proximity triggers a real `main.tscn` with a live
+`Combat` and 5 foes, map frozen during the fight, winning removes the party,
+clock resumes, player marches again). Full suite: 26 test files, 0 failures; all
+6 `drive_*` OK.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
