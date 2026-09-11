@@ -2389,4 +2389,16 @@ same save type at once, confirm neither fails anymore) — this is the one
 place "full suite green" isn't sufficient proof; reproduce the failure
 mode first, then prove it's gone.
 
+**O14 completion (2026-09-11):** landed as `ee95bb3`. Board Game Icons
+(the other O10 candidate) turned out to be pure UI iconography, not
+usable; Board Game Pack has real pawn/piece art (19 shapes, 7 colours,
+CC0) — used the classic pawn (`pieceWhite_border00.png`, cropped to its
+alpha bbox), tinted per faction via `modulate` rather than needing
+per-colour asset variants (faction colours are hash-derived, wouldn't
+map onto 7 fixed ones anyway). `_draw_party()` only; ground/settlement/
+building code untouched. Verified visually myself (re-rendered `tests/
+shot_world.gd`): clean, readable pawn silhouettes per faction, player's
+gold ring still visible at its feet, moved to draw before the sprite so
+its far arc reads as occluded ground. Full suite + all `drive_*` green.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
