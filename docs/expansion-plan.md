@@ -2679,4 +2679,114 @@ that's proven to look good on this game's isometric board, since a
 single billboard sprite reading badly on a warped-projection hex board
 would be a problem the paid pack's extra variety doesn't fix either.
 
+## T47 — pixel art as the whole game's visual direction (locked 2026-09-11, decided, own branch)
+
+**This is the decision** superseding T44 (scrapped), T45 (portrait
+reveal — on hold, may be revisited once real character sprites exist to
+portrait-crop from), and T46 (HEROES 99 — passed over in favor of this).
+Full character-pipeline spec below is the user's own, given essentially
+verbatim; this entry exists to lock it as the record and scope the
+dispatches.
+
+**Scope is the whole game, not just combat**, per direct follow-up
+("need to adjust all of the visual assets to this pixel art") — the
+open-world map's current painted-isometric art (O11's Screaming Brain
+Studios ground tiles, O12's rubberduck medieval buildings, O15's water,
+O14's Kenney board-game pawn token) is now also slated to move to pixel
+art, not just the hex combat board. LPC's asset library is
+character-only (no ground/building tiles), so the overworld's
+ground/building art needs a *different* pixel-art source — O10's own
+research already surfaced one CC0 candidate that was passed over at the
+time in favor of the painted look: **Kenney's "Isometric Tiles
+Landscape" + "Isometric Roads"** (both confirmed CC0, already
+license-checked, no new spike needed for those two specifically). LPC-
+composed character sheets are also the natural token art for the
+overworld's roaming parties/settlement NPCs, giving one consistent
+character-art pipeline across both screens instead of two. This
+overworld re-skin is **not dispatched yet** — it's a real, acknowledged
+follow-up phase, sequenced after the combat character pipeline (below)
+proves out, since that pipeline is the harder/riskier piece and the
+overworld's existing art is functional in the meantime (not broken,
+just due for a style pass).
+
+Move the hex **combat** board's character representation (`scenes/
+main.gd`'s currently flat vector-drawn tokens) to real pixel-art
+sprites, sourced from the **Universal LPC Spritesheet Character
+Generator** — a large, modular, CC-BY-SA 3.0/GPL 3.0 open asset library
+(share-alike, not CC0 — attribution and edited-part republishing
+obligations are real and must be honored, not skipped; see step 8).
+
+**1. Get the assets and their license data.** Clone the Universal LPC
+Spritesheet Character Generator repo. `spritesheets/` is the parts
+library (body, head, hair, torso, legs, weapons, etc.); `CREDITS.csv`
+maps every image to its authors and license. Vendor only the parts
+actually used into `assets/lpc/`, copying their `CREDITS.csv` rows
+alongside — keeps attribution tractable and the repo small.
+
+**2. Understand the grid.** LPC sheets are 64×64 frames, 4 directional
+rows per animation (up/left/down/right), fixed frame counts per
+animation: walk 9, slash 6, thrust 8, cast 7, shoot 13, hurt 6, plus
+extended sets (idle, run, jump, sit, climb). Every layer sheet shares
+this layout — stacking is pure pixel-overlay, no alignment math. Some
+weapons have oversized variants (192×192 for polearms/greatbows) —
+decide early whether to support those or restrict the roster.
+
+**3. Build the compositor (Claude's job).** A Python/Pillow script
+taking a loadout JSON, emitting one composed sheet:
+```json
+{ "id": "merc_01", "layers": [
+  "body/male/light", "hair/short/brown", "torso/chain/steel",
+  "legs/pants/brown", "feet/boots/leather", "weapon/sword/steel" ] }
+```
+Stack in LPC's documented z-order (body → feet/legs → torso →
+head/hair → hands → weapon; some layers have "behind" variants).
+Output `merc_01.png` plus a `credits.txt` generated from the vendored
+`CREDITS.csv` rows of those layers. Generated sheets go in
+`assets/generated/`, not the source parts.
+
+**4. Generate Godot SpriteFrames.** Same script (or a second one)
+writes a `.tres` `SpriteFrames` resource per unit: one animation per
+row (`slash_down`, `hurt_left`, etc.) using `AtlasTexture` regions into
+the composed sheet. Frame counts come from a small table defined once;
+validate by loading the resource in `godot --headless` and asserting
+animation names exist.
+
+**5. Hex-grid facing.** LPC has 4 facings; a hex grid has 6 neighbors.
+Map: NE/E → right, NW/W → left, N → up, S → down (or left/right plus
+the two verticals for attacks along vertical-ish axes). Store `facing`
+on the unit, pick the row at animation time.
+
+**6. Play animations from the combat system.** Unit scene:
+`AnimatedSprite2D` + `AnimationPlayer`/`Tween` for lunge/shake/flash
+juice. Combat resolver emits signals (`attack_started`, `damage_taken`,
+`unit_died`) → unit picks `slash_<facing>`, `hurt_<facing>`, returns to
+`idle_<facing>` via `AnimatedSprite2D.animation_finished` chaining.
+Keep animation names data-driven so weapon type selects
+slash/thrust/shoot/cast. (Note for whoever builds this against current
+`core/combat.gd`: that layer is presently signal-free, pure return-dict
+— `scenes/main.gd` reads results and calls `_attack_fx()` itself. Either
+add real signals to `combat.gd`, or keep driving this from `main.gd`'s
+existing result-handling call sites; a design call for the implementer,
+not pre-decided here.)
+
+**7. Runtime customization (optional, later).** For Battle-Brothers-
+style equipment shown live: skip pre-composing, stack multiple
+`AnimatedSprite2D` nodes (one per layer) sharing the same frame index —
+LPC's uniform grid makes this trivial. Pre-composing is simpler for the
+prototype; layered nodes are better once gear matters.
+
+**8. Licensing hygiene.** A Credits screen listing every LPC author
+(generated from `credits.txt` per unit, deduplicated), and a
+`LICENSES/` folder with CC-BY-SA 3.0 and GPL 3.0 texts. Recolored/edited
+parts are share-alike — keep them in a clearly marked, publishable
+folder. Code and everything non-LPC stays proprietary. No Steam AI
+disclosure needed (this is licensed human-made art, not AI-generated).
+
+**First spike (dispatched now):** steps 1–4 only — one loadout, one
+animation (`slash_right`), rendered on a single hex in Godot. Own
+branch, not master (`feature/lpc-pipeline` or similar), same review-
+before-merge pattern as every other art branch this session. Report
+back with an actual screenshot of the composed sheet/rendered frame,
+not just "it built" — same visual-proof discipline as O11/O12/T46.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
