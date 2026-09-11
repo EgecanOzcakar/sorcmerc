@@ -32,6 +32,8 @@ func _init() -> void:
 	test_reveal_head()
 	test_tooltips_name_their_dice()
 	test_attack_swap()
+	test_actor_economy_badges()
+	test_actor_hp_readout_is_colored()
 	print("test_ui_log: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -124,3 +126,20 @@ func test_attack_swap() -> void:
 	check(c.ranged and c.atk_range > 1 and c.atk_bonus == 7 and c.damage == "1d6+4", "ranged stats applied")
 	check(Main._attack_swap(c).get("id") == "sword", "and the swap offers the sword back")
 	check(not Adapter.set_main_attack(c, "trebuchet"), "an unequipped weapon is refused")
+
+# The actor line's action-economy badges: present while the resource is
+# unspent, gone (not dimmed) once it's not -- compact over exhaustive.
+func test_actor_economy_badges() -> void:
+	var c = _fight().combatants[0]
+	c.econ["action"] = 1; c.econ["bonus"] = 1; c.econ["move_left"] = 5
+	var full := Main._econ_bb(c)
+	check("Ⓐ" in full and "Ⓑ" in full and "➤ 5" in full, "both badges show while unspent")
+	c.econ["action"] = 0
+	var spent := Main._econ_bb(c)
+	check(not "Ⓐ" in spent and "Ⓑ" in spent, "a spent resource's badge disappears, not just dims")
+
+func test_actor_hp_readout_is_colored() -> void:
+	var c = _fight().combatants[0]
+	c.hp = c.max_hp
+	check("[color=" in Main._hp_bb(c) and "%d/%d" % [c.hp, c.max_hp] in Main._hp_bb(c),
+		"HP is colorized and shows current/max")

@@ -48,7 +48,7 @@ var _fx_on := false           # attack animations: off under SORCMERC_FAST / hea
 @onready var _order := HBoxContainer.new()   # turn-order icon strip along the top
 @onready var _hint := Label.new()
 @onready var _board := Board.new()
-@onready var _actor := Label.new()
+@onready var _actor := RichTextLabel.new()
 @onready var _buttons := HFlowContainer.new()
 @onready var _bscroll := ScrollContainer.new()
 @onready var _logbox := RichTextLabel.new()
@@ -171,9 +171,12 @@ func _ready() -> void:
 	_board.custom_minimum_size = Vector2(0, 240)
 	col.add_child(_board)
 
-	_actor.add_theme_font_size_override("font_size", Icons.FS_HEAD)
-	_actor.add_theme_color_override("font_color", Icons.COL_BODY)
-	_actor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_actor.bbcode_enabled = true
+	_actor.fit_content = true
+	_actor.scroll_active = false
+	_actor.add_theme_font_size_override("normal_font_size", Icons.FS_HEAD)
+	_actor.add_theme_font_size_override("bold_font_size", Icons.FS_HEAD)
+	_actor.add_theme_color_override("default_color", Icons.COL_BODY)
 	col.add_child(_actor)
 
 	_buttons.add_theme_constant_override("h_separation", 6)
@@ -196,7 +199,8 @@ func _ready() -> void:
 func _apply_ui_scale() -> void:
 	var u := clampf(_zoom, 0.9, 1.4)
 	_header.add_theme_font_size_override("font_size", int(Icons.FS_TITLE * u))
-	_actor.add_theme_font_size_override("font_size", int(Icons.FS_HEAD * u))
+	_actor.add_theme_font_size_override("normal_font_size", int(Icons.FS_HEAD * u))
+	_actor.add_theme_font_size_override("bold_font_size", int(Icons.FS_HEAD * u))
 	_cap.add_theme_font_size_override("font_size", int(Icons.FS_CAPTION * u))
 	# the log is a narrow sidebar now — body size wraps far less than head size
 	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
@@ -660,12 +664,10 @@ func _refresh() -> void:
 		var before = cb.order[(ci - 1 + n) % n]
 		var again := "  ·  you act again after %s" % before.cname.split(" ")[0] if before != cur else ""
 		var res := _resources(cur)
-		_actor.text = "%s  ·  AC %d  ·  HP %d/%d  ·  %s%s%smove %d%s%s" % [
-			cur.cname, cb.effective_ac(cur), cur.hp, cur.max_hp,
-			res + "  ·  " if res != "" else "",
-			"[action] " if cur.econ["action"] > 0 else "",
-			"[bonus] " if cur.econ["bonus"] > 0 else "",
-			cur.econ["move_left"], hint, again,
+		_actor.text = "%s  ·  AC %d  ·  %s%s  ·  %s%s%s" % [
+			"[b]%s[/b]" % cur.cname, cb.effective_ac(cur), _hp_bb(cur),
+			("  ·  " + res) if res != "" else "",
+			_econ_bb(cur), hint, again,
 		]
 	elif _mode == "idle":
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
@@ -744,6 +746,24 @@ static func _hp_color(c) -> Color:
 	if frac < 0.33: return Color("d15750")
 	if frac < 0.66: return Color("d9a441")
 	return Color("5fbf6a")
+
+# The actor line's HP readout, colored by the same three bands as the token's
+# own bar — one glance tells you if the acting hero is in trouble.
+static func _hp_bb(c) -> String:
+	return "[color=#%s]♥ %d/%d[/color]" % [_hp_color(c).to_html(false), c.hp, c.max_hp]
+
+# Action-economy badges: a filled glyph per resource still available this
+# turn, gone (not just dimmed) once spent — the request was "more compact",
+# so a spent resource takes zero space rather than a struck-through slot.
+static func _econ_bb(c) -> String:
+	var gold := Icons.COL_GOLD.to_html(false)
+	var bits: Array = []
+	if int(c.econ.get("action", 0)) > 0:
+		bits.append("[color=#%s]Ⓐ[/color]" % gold)
+	if int(c.econ.get("bonus", 0)) > 0:
+		bits.append("[color=#%s]Ⓑ[/color]" % gold)
+	bits.append("➤ %d" % int(c.econ.get("move_left", 0)))
+	return " ".join(bits)
 
 var _logged = 0
 var _last_round = 1
