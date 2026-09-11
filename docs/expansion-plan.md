@@ -1122,4 +1122,19 @@ File ownership: `scenes/game/game.gd` (title screen entry), `scenes/main.gd`
 default combat behavior), and a small new data/const block for the fixed
 tutorial encounter (in campaign.gd or a new small file, agent's call).
 
+- 2026-09-11: **T32 complete.** A "❖ Tutorial" button on the title screen
+  launches straight into a fixed, pre-made fight — Vera (fighter) + Ilsa
+  (cleric) vs. one 7-HP goblin, on forest-clearing (the one theme with no
+  objects/hazards to also explain) — no party setup, skipped entirely. A
+  6-step walkthrough overlay dims everything but the region it is
+  explaining (action log → turn order → hex board/targeting → reading a
+  combatant's HP/status → the action button row/tooltips/hotkeys → the
+  actor's action economy line), gold-outlined, blocking input and holding
+  the goblin's AI turn until dismissed; Skip drops straight into ordinary
+  play at any point, and once finished the fight resolves through the
+  exact same combat.gd everything else uses — nothing about resolution is
+  tutorial-specific. `core/tutorial.gd` (new) holds the fixed spec/party/
+  steps as pure data. **Full suite: 24 test files, 0 failures;
+  drive_ui/drive_game both pass.** Pushed.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
