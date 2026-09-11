@@ -38,6 +38,11 @@ var log: Array[String] = []
 # messy one; "down" itself is erased the moment someone gets back up.
 var downed: Dictionary = {}
 
+# T39: the party opened the fight unseen (Stealth beat the foes' passive
+# Perception, or they scouted the node). One surprise round — the foe team
+# loses its round-1 turns entirely; round 2 on is a normal fight.
+var unseen := false
+
 # T26 barks: a cosmetic side channel. Entries are {"id": combatant id, "text": line};
 # the board scene drains it each frame. Nothing in this file reads it back.
 var barks: Array = []
@@ -241,9 +246,20 @@ func end_turn() -> void:
 			turn_idx = 0
 			round_num += 1
 		var c = current()
-		if c.is_dead() or c.is_stable():
+		if c.is_dead() or c.is_stable() or skips_turn(c):
 			continue
 		return
+
+func skips_turn(c) -> bool:
+	return unseen and round_num == 1 and c.team == "foe"
+
+# Called once, before the turn loop starts. Skipping rides on end_turn()'s
+# existing skip path, so every driver (UI, autoplay, tests) honours it.
+func begin_surprise_round() -> void:
+	unseen = true
+	log.append("The party has the drop on them — the enemy loses the first round.")
+	if skips_turn(current()):
+		end_turn()
 
 func is_over() -> bool:
 	return round_num > MAX_ROUNDS or _team_out("party") or _team_out("foe")

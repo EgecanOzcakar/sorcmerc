@@ -298,6 +298,44 @@ static func _foe_spots(b: Dictionary, party_c: Array) -> Array:
 	out.append_array(far)   # overflow: the least-bad remaining hexes
 	return out.map(func(e): return e[1])
 
+# --- T39: surprise ----------------------------------------------------
+# One group Stealth check at the top of the fight: the party's best Stealth
+# (d20 + bonus, same shape as campaign.gd's opportunity_check) against the
+# average foe passive Perception. Beat it and the party is unseen — a surprise
+# round, see combat.gd. A node the party already scouted (T30) succeeds
+# outright: scouting must never be worse than not scouting. A miss costs
+# nothing. Rolls on its own stream derived from the combat seed (same trick as
+# barks) so the fight itself rolls identically whether or not this is called.
+static func surprise_check(cb: Combat, scouted_ahead := false) -> bool:
+	var foes: Array = cb.team_of("foe")
+	var heroes: Array = cb.team_of("party")
+	if foes.is_empty() or heroes.is_empty():
+		return false
+	if scouted_ahead:
+		cb.log.append("The ground was read ahead of time — the party comes in unseen.")
+		cb.begin_surprise_round()
+		return true
+	var bonus := -99
+	var who = heroes[0]
+	for c in heroes:
+		if int(c.stealth) > bonus:
+			bonus = int(c.stealth)
+			who = c
+	var pp := 0
+	for c in foes:
+		pp += int(c.passive_perception)
+	var dc: int = roundi(float(pp) / foes.size())
+	var Dice = load("res://core/dice.gd")
+	var RNG = load("res://core/rng.gd")
+	var nat: int = int(Dice.d20(RNG.new((cb.rng.seed_value ^ 0x5117EA17) & 0xFFFFFFFF))["nat"])
+	if nat + bonus < dc:
+		cb.log.append("%s leads them in badly (Stealth %d+%d vs %d) — they are seen coming."
+			% [who.cname, nat, bonus, dc])
+		return false
+	cb.log.append("%s leads them in quietly (Stealth %d+%d vs %d)." % [who.cname, nat, bonus, dc])
+	cb.begin_surprise_round()
+	return true
+
 # After is_over(): persist the fight to the Characters and report the spoils.
 # `party` is a core/party.gd or a plain Array of Character. HP/pools/slots are
 # written back here; xp/gold/loot are reported, not banked — T5 does that.

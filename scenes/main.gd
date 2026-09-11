@@ -22,6 +22,7 @@ const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 var party                       # core/party.gd; a Presets demo party when null
 var spec: Dictionary = {}
 var difficulty := "normal"
+var scouted_ahead := false      # T39: campaign scouted this node — surprise is automatic
 var tutorial := false           # T32: run the guided walkthrough over this fight
 var result: Dictionary = {}
 var _own_party := false
@@ -243,7 +244,7 @@ func _press_hotkey(idx: int) -> void:
 		return
 	# T29: while aiming, the number keys still address the verb menu — drop out
 	# of targeting first instead of indexing into the lone [Esc] Cancel button.
-	if idx >= 0 and _mode != "idle" and cb and not cb.is_over() \
+	if idx >= 0 and _mode != "idle" and _mode != "deploy" and cb and not cb.is_over() \
 			and cb.current().team == "party" and cb.current().conscious():
 		_build_hero_menu(cb.current())
 	var kids := _buttons.get_children()
@@ -283,7 +284,39 @@ func _new_game(forced := 0) -> void:
 	_board.reset(cb)
 	_flush_log()
 	_refresh()
+	# T39: surprise is settled before anyone acts. Unseen buys a deployment
+	# phase — the player permutes who stands on which party start hex.
+	if Encounter.surprise_check(cb, scouted_ahead):
+		_flush_log()
+		_deploy_menu()
+		return
 	_advance()
+
+# --- T39: deployment phase (unseen only) --------------------------------
+
+func _deploy_menu() -> void:
+	_mode = "deploy"
+	var heroes: Array = cb.team_of("party").filter(func(c): return c.conscious())
+	var opts: Array = []
+	for i in heroes.size():
+		for j in range(i + 1, heroes.size()):
+			opts.append(["Swap %s ↔ %s" % [heroes[i].cname, heroes[j].cname],
+				_swap_deploy.bind(heroes[i], heroes[j])])
+	_actor.text = "[b]Unseen.[/b]  Trade starting places, then begin — the enemy loses its first round."
+	opts.append(["Begin the ambush", func():
+		_mode = "idle"
+		_advance()])
+	_set_buttons(opts)
+
+func _swap_deploy(a, b) -> void:
+	var p: Vector2i = a.pos
+	a.pos = b.pos
+	b.pos = p
+	cb.log.append("%s and %s trade places before the fight." % [a.cname, b.cname])
+	_board.reset(cb)
+	_flush_log()
+	_refresh()
+	_deploy_menu()
 
 # --- turn driver --------------------------------------------------------
 
@@ -539,7 +572,7 @@ func target_readout(h, c) -> String:
 # board callbacks -------------------------------------------------------
 
 func board_hex_clicked(hx: Vector2i) -> void:
-	if _busy or cb.is_over():
+	if _busy or cb.is_over() or _mode == "deploy":
 		return
 	var h = cb.current()
 	if h.team != "party" or not h.conscious():
@@ -600,7 +633,7 @@ func board_hex_hovered(hx: Vector2i) -> void:
 	_board.queue_redraw()
 
 func board_cancel() -> void:
-	if _mode != "idle" and cb and not cb.is_over() and cb.current().team == "party":
+	if _mode != "idle" and _mode != "deploy" and cb and not cb.is_over() and cb.current().team == "party":
 		_build_hero_menu(cb.current())
 
 # hero actions ---------------------------------------------------------

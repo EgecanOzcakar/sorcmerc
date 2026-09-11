@@ -27,6 +27,8 @@ func _init() -> void:
 	test_outcome_victory()
 	test_outcome_defeat_and_deaths()
 	test_humanoid_foe_names()
+	test_surprise_check()
+	test_surprise_round_skips_only_the_foes_first_turn()
 	print("test_encounter: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -52,6 +54,49 @@ func test_humanoid_foe_names() -> void:
 
 	var beast = Encounter.spawn("grull", 1.0, "foe", Vector2i.ZERO)
 	check(not beast.cname.contains(" the "), "a non-humanoid foe keeps its plain species name")
+
+# --- T39: surprise + scouting ----------------------------------------
+func _fight(seed_v: int):
+	# scouts: passive Perception 15, so the party's Stealth can genuinely miss.
+	return Encounter.build({"monsters": [{"id": "scout", "count": 2}], "seed": seed_v}, _combatants(_chars()))
+
+func test_surprise_check() -> void:
+	var got := []
+	for s in [3, 4, 5, 6, 7, 8, 9, 10]:
+		var cb = _fight(s)
+		var r: bool = Encounter.surprise_check(cb)
+		check(r == cb.unseen, "the check's answer is what the fight records (seed %d)" % s)
+		check(r == Encounter.surprise_check(_fight(s)), "same seed, same surprise (seed %d)" % s)
+		got.append(r)
+	check(got.has(true) and got.has(false), "the roll can go either way across seeds: %s" % str(got))
+
+	for s in [3, 4, 5, 6]:
+		var cb = _fight(s)
+		check(Encounter.surprise_check(cb, true) and cb.unseen,
+			"a scouted node is unseen no matter the roll (seed %d)" % s)
+
+	var no_foes = Encounter.build({"monsters": []}, _combatants(_chars()))
+	check(not Encounter.surprise_check(no_foes, true), "nobody to surprise, no surprise round")
+
+	# The fight itself must roll identically whether or not the check happened.
+	var checked = _fight(11)
+	Encounter.surprise_check(checked)
+	checked.unseen = false                       # mechanics off; only the RNG stream matters here
+	var plain = _fight(11)
+	check(_play(checked)["rounds"] == _play(plain)["rounds"], "the surprise roll doesn't disturb the fight's RNG")
+
+func test_surprise_round_skips_only_the_foes_first_turn() -> void:
+	var cb = _fight(5)
+	check(Encounter.surprise_check(cb, true), "scouted: the party comes in unseen")
+	var acted := {1: [], 2: []}
+	while cb.round_num <= 2:
+		acted[cb.round_num].append(cb.current())
+		cb.end_turn()
+	check(acted[1].all(func(c): return c.team == "party"), "no foe acts in the surprise round")
+	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.team_of("party").size(),
+		"every party member still gets its round-1 turn")
+	check(_uniq(acted[2].map(func(c): return c.id)).size() == cb.combatants.size(),
+		"round 2 is a normal round again — everyone acts")
 
 func test_build_spec() -> void:
 	var chars := _chars()
