@@ -2833,4 +2833,83 @@ honesty bar as every prior spike: say plainly if coverage is partial or
 if the best candidates are a style mismatch, don't oversell. Research/
 reporting only — no integration, no branch, no code changes.
 
+**T47 first-spike completion (2026-09-11):** landed on `feature/lpc-pipeline`
+(pushed, not merged). Cloned `sanderfrenken/Universal-LPC-Spritesheet-
+Character-Generator`; real z-order comes from upstream's own numeric
+`zPos` per layer (`sheet_definitions/*.json`), not a fixed prose list —
+that's what correctly puts a weapon's "behind" sheet under the body
+while the weapon itself sits on top. Grid confirmed empirically (832px
+= 13×64 cols; slash = 6 frames at row 14, per-pixel alpha checked, not
+assumed). `tools/lpc_compose.py` composites a loadout + writes credits +
+a Godot `.tres`; `assets/generated/merc_01.png` renders as a real
+chainmail/dagger character. Verified two ways: `test_lpc_spike.gd`
+(headless, 9/9 passed: loads, has `slash_right`, 6×64×64 frames) and a
+real screenshot on the actual Sunken Shrine combat board (non-headless)
+— confirmed by me directly: a crisp 64px pixel character stands on hex
+(2,0), feet anchored to the hex ellipse, mid-slash pose, next to the
+still-present (unreplaced, as scoped) vector token. Known ceiling for
+later: the dagger was chosen specifically because it's the one weapon
+using the universal 64px frame — other swords need 128/192px oversize
+sheets with offset math, not yet handled.
+
+**T48 completion (2026-09-11):** researched, nothing integrated. Real
+target set corrected from the locked entry's assumption:
+`data/monsters.json` is a 4-entry test fixture with no `type` field;
+`data/bestiary.json` (316 entries) is the real bestiary — beast 87,
+humanoid 67, monstrosity 35, dragon 22, undead 17, fiend 16, elemental
+14, giant 14, swarm-of-Tiny-beasts 10, fey 8, construct 7, plant 6,
+aberration 5, ooze 4, celestial 4. Honest finding: nothing free gives
+real coverage at LPC's style weight. The one genuine style match —
+**[LPC] Monsters** (CC-BY-SA 3.0/GPL 3.0/OGA-BY 3.0, literally drawn as
+an LPC companion set) — only covers a thin slice: small beasts (bat,
+bee, worms, snake), one ooze (slime), one undead (ghost). Everything
+with real breadth (Tiny Dungeon+Creatures, Kenney Monster Builder,
+Hexany's Menagerie) fails the style bar — wrong pixel density (16x16 or
+32x16 vs. LPC's 64x64), wrong outline weight, or 1-bit monochrome — and
+would read as a different game's art bolted onto LPC humanoids. One
+CC0-tagged pack (Pixel Monsters Megapack) was explicitly excluded: its
+own page admits "AI generated/modified," contradicting this project's
+"licensed human-made art" framing for the LPC pipeline. Recommendation,
+now folded into T49 below: use [LPC] Monsters for its narrow real fit,
+lean on the vector-glyph fallback (already tier 3) for the rest — giant/
+dragon/fey/elemental/construct have no free, style-matched source at
+all right now.
+
+## T49 — procedural creature tokens, tier-3 fallback for monster art (locked 2026-09-11, dispatched now, own branch)
+
+Direct user follow-up to the monster-coverage question ("try 1 and 2" —
+this is "2"): since real pixel-art creation isn't something Claude can
+do (no image-generation tool connected, no hand-drawing capability),
+this is a **code-only, deliberately simple** third tier below LPC
+(humanoid factions) and T48's sourced pack (non-humanoid factions, once
+found) — for whatever's left uncovered by both, or as an immediate
+placeholder while T48's pack is evaluated/integrated. Explicitly labeled
+placeholder-quality "programmer art," not a peer to hand-drawn LPC
+sprites — the point is a real move/attack/death animation beat for
+every creature, not visual fidelity.
+
+Build a small procedural creature-shape system: simple geometric/blob
+silhouettes (not photorealistic, not trying to look painted — closer to
+the existing flat vector combat tokens' own honesty about being simple
+shapes) with three real animation beats:
+- **Move**: a squash-stretch/bob cycle while sliding toward a position
+  (reuse the timing patterns `scenes/main.gd`'s `Board.tick()` already
+  established for token interpolation, if useful as a reference — this
+  spike doesn't need to touch that file, see below).
+- **Attack**: a lunge/snap toward the target, distinct per rough
+  creature silhouette if easy (a "bite" snap for beasts vs. a "slam"
+  for giants, say) but a single reasonable default animation is fine
+  for the spike — don't over-scope shape-specific variety yet.
+- **Death**: a collapse/fade-out, not just vanishing.
+
+Scope for this spike: a **standalone module + demo scene**, not wired
+into real combat yet (that integration is a later phase, same as T47's
+"steps 1-4 only" boundary) — e.g. `core/procedural_creature.gd` (the
+shape/animation logic, testable headless) + a small demo scene showing
+a handful of creature silhouettes idling/moving/attacking/dying, so the
+look can actually be judged. Own branch (`feature/procedural-creatures`
+or similar), same review-before-merge pattern as every other art
+branch. Render and describe real screenshots, same discipline as every
+other visual entry in this doc — "it runs" is not sufficient proof.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
