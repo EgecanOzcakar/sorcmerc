@@ -28,8 +28,6 @@ var _zoom := 1.0
 var _pan := Vector2.ZERO
 var hex_px: float:
 	get: return HEX_BASE * _zoom
-const FAST := false  # set by _ready from SORCMERC_FAST
-
 var cb
 var _seed: int = 0
 var _busy = false
@@ -39,9 +37,11 @@ var _tgt_verb: Dictionary = {}   # the verb being aimed, straight from cb.availa
 var _armed := ""             # a confirm-guarded verb waiting for its second press
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
+var _fx_on := false           # attack animations: off under SORCMERC_FAST / headless
 
 @onready var _header := Label.new()
-@onready var _order := RichTextLabel.new()
+@onready var _order := HBoxContainer.new()   # turn-order icon strip along the top
+@onready var _hint := Label.new()
 @onready var _board := Board.new()
 @onready var _actor := Label.new()
 @onready var _buttons := HFlowContainer.new()
@@ -72,17 +72,23 @@ const COL_FOE := Icons.COL_FOE
 
 func _ready() -> void:
 	_anim = Settings.anim()   # the in-game setting, or SORCMERC_FAST when set
+	_fx_on = OS.get_environment("SORCMERC_FAST") == "" and DisplayServer.get_name() != "headless"
 	if spec.is_empty():       # standalone: no campaign node dictating difficulty
 		difficulty = Settings.current().default_difficulty
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_theme()
 
-	var root := VBoxContainer.new()
+	# Root is log sidebar | right column (order strip, board, actor, buttons).
+	var root := HBoxContainer.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 6)
+	root.add_theme_constant_override("separation", 10)
 	root.offset_left = 12; root.offset_top = 10
 	root.offset_right = -12; root.offset_bottom = -10
 	add_child(root)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 	var bg := ColorRect.new()
 	bg.color = COL_BG
@@ -99,12 +105,12 @@ func _ready() -> void:
 
 	_header.add_theme_font_size_override("font_size", Icons.FS_TITLE)
 	_header.add_theme_color_override("font_color", Icons.COL_HEAD)
-	root.add_child(_header)
+	col.add_child(_header)
 
-	# --- the action log: big, centred, shiny --------------------------
-	_logwrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	# --- the action log: a full-height sidebar down the left edge -----
+	_logwrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var logwrap := _logwrap
-	logwrap.custom_minimum_size = Vector2(min(820.0, size.x * 0.72), 210)
+	logwrap.custom_minimum_size = Vector2(_log_width(), 0)
 	var glow := StyleBoxFlat.new()
 	glow.bg_color = Icons.COL_INK
 	glow.set_corner_radius_all(14)
@@ -129,27 +135,44 @@ func _ready() -> void:
 	_logbox.add_theme_color_override("default_color", Icons.COL_TEXT)
 	logcol.add_child(_logbox)
 	root.add_child(logwrap)
+	root.add_child(col)
 
-	_order.bbcode_enabled = true
-	_order.fit_content = true
-	_order.scroll_active = false
-	_order.custom_minimum_size = Vector2(0, 26)
-	root.add_child(_order)
+	# --- turn order: one icon tile per combatant, along the top -------
+	var orderwrap := PanelContainer.new()
+	var obox := StyleBoxFlat.new()
+	obox.bg_color = Icons.COL_PANEL
+	obox.set_corner_radius_all(10)
+	obox.set_border_width_all(1)
+	obox.border_color = Icons.COL_EDGE
+	obox.set_content_margin_all(6)
+	orderwrap.add_theme_stylebox_override("panel", obox)
+	_order.add_theme_constant_override("separation", 10)
+	_order.alignment = BoxContainer.ALIGNMENT_CENTER
+	_order.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	orderwrap.add_child(_order)
+	col.add_child(orderwrap)
+
+	_hint.text = "1-9 actions · scroll/± zoom · drag/arrows pan · Home reset"
+	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint.add_theme_color_override("font_color", Icons.COL_MUTED)
+	_hint.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+	col.add_child(_hint)
 
 	_board.main = self
 	_board.clip_contents = true
 	_board.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_board.custom_minimum_size = Vector2(0, 240)
-	root.add_child(_board)
+	col.add_child(_board)
 
 	_actor.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	_actor.add_theme_color_override("font_color", Icons.COL_BODY)
-	root.add_child(_actor)
+	_actor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(_actor)
 
 	_buttons.add_theme_constant_override("h_separation", 6)
 	_buttons.add_theme_constant_override("v_separation", 6)
-	root.add_child(_buttons)
+	col.add_child(_buttons)
 
 	set_process(true)
 	_apply_ui_scale()
@@ -161,10 +184,9 @@ func _apply_ui_scale() -> void:
 	_header.add_theme_font_size_override("font_size", int(Icons.FS_TITLE * u))
 	_actor.add_theme_font_size_override("font_size", int(Icons.FS_HEAD * u))
 	_cap.add_theme_font_size_override("font_size", int(Icons.FS_CAPTION * u))
-	_order.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
-	_order.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
-	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_HEAD * u))
-	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_HEAD * u))
+	# the log is a narrow sidebar now — body size wraps far less than head size
+	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
+	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
 	for b in _buttons.get_children():
 		b.add_theme_font_size_override("font_size", int(Icons.FS_BODY * u))
 
@@ -256,7 +278,17 @@ func _advance() -> void:
 			_set_buttons([])
 			await get_tree().create_timer(0.5 / _anim).timeout
 			if not c.is_down():
+				# ponytail: the AI layer reports no per-attack events, so the FX are
+				# inferred from who lost HP over its turn. Good enough to follow a
+				# turn; give AI.take_turn a callback if it ever needs to be exact.
+				var before := {}
+				if _fx_on:
+					for x in cb.combatants:
+						before[x.id] = x.hp
 				AI.take_turn(cb, c)
+				for x in cb.combatants:
+					if before.get(x.id, x.hp) > x.hp:
+						_attack_fx(c, x, {"kind": "attack"})
 			_flush_log()
 			_refresh()
 			_busy = false
@@ -427,6 +459,9 @@ func board_hex_clicked(hx: Vector2i) -> void:
 			var v := _tgt_verb
 			_tgt_verb = {}
 			cb.perform(h, v, dir)
+			if _fx_on:
+				var swept := Hex.cone(h.pos, dir, int(v.get("radius", 2)))
+				_board.play_fx("spell", h.id, h.pos, swept[swept.size() - 1] if not swept.is_empty() else h.pos, swept)
 			_after_hero_action(h)
 	elif _mode == "target":
 		for c in cb.combatants:
@@ -444,6 +479,7 @@ func _apply_target(h, c) -> void:
 	var v := _tgt_verb
 	_tgt_verb = {}
 	var res = cb.perform(h, v, c)
+	_attack_fx(h, c, v)
 	if v["kind"] == "attack" and typeof(res) == TYPE_DICTIONARY and not res.has("error"):
 		_busy = true
 		_board.show_reveal(c.id, res)
@@ -460,6 +496,18 @@ func board_cancel() -> void:
 		_build_hero_menu(cb.current())
 
 # hero actions ---------------------------------------------------------
+
+# Cosmetic attack animation. Kind comes from the verb: a spell flashes, a ranged
+# weapon throws a projectile, anything else lunges.
+func _attack_fx(a, t, v: Dictionary) -> void:
+	if not _fx_on or a == null or t == null or a == t:
+		return
+	var kind := "melee"
+	if v.has("spell") or v.get("kind", "") in ["heal_ally", "heal_self"]:
+		kind = "spell"
+	elif a.ranged or int(v.get("range", a.atk_range)) > 1:
+		kind = "ranged"
+	_board.play_fx(kind, a.id, a.pos, t.pos)
 
 func _after_hero_action(h) -> void:
 	_armed = ""
@@ -500,24 +548,7 @@ func _refresh() -> void:
 
 	var n: int = cb.order.size()
 	var ci: int = cb.order.find(cb.current())
-	var parts: Array = []
-	for i in n:
-		var c = cb.order[i]
-		var nm = c.cname.split(" ")[0]
-		var col = "#8fdc97" if c.team == "party" else "#e58a84"
-		if c == cb.current():
-			nm = "▶ " + nm
-			col = "#ffe27a"
-		if c.is_dead():
-			nm = "[s]%s[/s]" % nm
-		var slot: int = i - ci
-		if slot < 0:
-			slot += n
-		var chunk := "[color=%s]%s(%d)[/color]" % [col, nm, c.init_roll]
-		if slot >= 1 and slot <= 3:
-			chunk = "[b]%s[/b]" % chunk
-		parts.append(chunk)
-	_order.text = "[b]ORDER[/b]  " + "   ".join(parts) + "     [color=#5a6070]· 1-9 actions · scroll/± zoom · drag/arrows pan · Home reset ·[/color]"
+	_build_order_strip()
 
 	var cur = cb.current()
 	if cur and cur.team == "party" and cur.conscious() and _mode == "idle":
@@ -534,13 +565,113 @@ func _refresh() -> void:
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
 	_board.queue_redraw()
 
+# One tile per combatant in initiative order: glyph over short name, team-tinted,
+# the current turn boxed in gold and the dead greyed out.
+func _build_order_strip() -> void:
+	for c in _order.get_children():
+		c.queue_free()
+	var u := clampf(_zoom, 0.9, 1.4)
+	for c in cb.order:
+		var tile := PanelContainer.new()
+		if c == cb.current():
+			var box := StyleBoxFlat.new()
+			box.bg_color = Color(0.78, 0.65, 0.30, 0.20)
+			box.set_corner_radius_all(8)
+			box.set_border_width_all(2)
+			box.border_color = Icons.COL_GOLD
+			box.set_content_margin_all(4)
+			tile.add_theme_stylebox_override("panel", box)
+		var tv := VBoxContainer.new()
+		tv.add_theme_constant_override("separation", 0)
+		tile.add_child(tv)
+		var tint: Color = COL_PARTY if c.team == "party" else COL_FOE
+		if c == cb.current():
+			tint = Icons.COL_GOLD
+		var g := Label.new()
+		g.text = Icons.combatant_glyph(c)
+		g.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		g.add_theme_font_size_override("font_size", int(28 * u))
+		g.add_theme_color_override("font_color", tint)
+		tv.add_child(g)
+		var nm := Label.new()
+		nm.text = "%s (%d)" % [c.cname.split(" ")[0], c.init_roll]
+		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		nm.add_theme_font_size_override("font_size", int(Icons.FS_SMALL * u))
+		nm.add_theme_color_override("font_color", tint if c == cb.current() else Icons.COL_BODY)
+		tv.add_child(nm)
+		if c.is_dead():
+			tile.modulate = Color(1, 1, 1, 0.35)
+		elif c.is_down():
+			tile.modulate = Color(1, 1, 1, 0.6)
+		_order.add_child(tile)
+
 var _logged = 0
 var _last_round = 1
+
+# --- log colorization (presentation only; core/combat.gd stays plain text) ---
+# Spans are found on the ORIGINAL line and only then spliced, so inserted bbcode
+# is never re-scanned. First match of an overlapping pair wins, names first.
+const VERB_COLORS := {
+	"CRIT": "#ff6a4a", "CRITS": "#ff6a4a", "crits": "#ff6a4a",
+	"hits": "#ffe0a0", "hit": "#ffe0a0",
+	"misses": "#7f7f79", "miss": "#7f7f79",
+	"moves": "#8fb7d8", "casts": "#9fd0ff", "uses": "#9fd0ff",
+	"heals": "#8dffb0", "healed": "#8dffb0", "revives": "#8dffb0",
+}
+const COL_DICE := "#8fb7d8"
+const COL_NUM := "#ffd24a"
+
+static var _re_dice := RegEx.create_from_string(r"d20\[[^\]]*\]|\b\d+d\d+\b")
+static var _re_num := RegEx.create_from_string(r"\b(\d+)\s+(?:damage|HP|hp|gold|XP)\b")
+static var _re_verb := RegEx.create_from_string(r"\b(CRITS?|crits?|hits?|misses|miss|moves|casts|uses|heals|healed|revives)\b")
+
+# `name_colors`: combatant name -> html colour. Returns bbcode for one log line.
+static func colorize(line: String, name_colors: Dictionary) -> String:
+	var spans: Array = []   # [start, end, color]
+	var claim := func(a: int, b: int, col: String) -> void:
+		for s in spans:
+			if a < s[1] and s[0] < b:
+				return
+		spans.append([a, b, col])
+	for nm in name_colors:
+		var from := 0
+		while true:
+			var at := line.find(nm, from)
+			if at < 0:
+				break
+			claim.call(at, at + nm.length(), String(name_colors[nm]))
+			from = at + nm.length()
+	for m in _re_dice.search_all(line):
+		claim.call(m.get_start(), m.get_end(), COL_DICE)
+	for m in _re_num.search_all(line):
+		claim.call(m.get_start(1), m.get_end(1), COL_NUM)
+	for m in _re_verb.search_all(line):
+		claim.call(m.get_start(1), m.get_end(1), VERB_COLORS.get(m.get_string(1), COL_DICE))
+	spans.sort_custom(func(a, b): return a[0] < b[0])
+	var out := ""
+	var cut := 0
+	for s in spans:
+		out += line.substr(cut, s[0] - cut)
+		out += "[color=%s]%s[/color]" % [s[2], line.substr(s[0], s[1] - s[0])]
+		cut = s[1]
+	return out + line.substr(cut)
+
+# Names as the colorizer wants them: longest first so "Vess the Quick" beats "Vess".
+func _name_colors() -> Dictionary:
+	var names: Array = []
+	for c in cb.combatants:
+		names.append(c)
+	names.sort_custom(func(a, b): return a.cname.length() > b.cname.length())
+	var d := {}
+	for c in names:
+		d[c.cname] = "#8fdc97" if c.team == "party" else "#e58a84"
+	return d
 
 func _flush_log() -> void:
 	if cb.round_num != _last_round:
 		_last_round = cb.round_num
 		_logbox.append_text("\n[color=#6a6f80]─────────   ROUND %d   ─────────[/color]\n" % _last_round)
+	var ncols := _name_colors()
 	while _logged < cb.log.size():
 		var line: String = cb.log[_logged]
 		var col := "#e9e9df"
@@ -561,7 +692,9 @@ func _flush_log() -> void:
 			col = "#9fd0ff"
 		elif "Initiative:" in line:
 			col = "#c8a75a"
-		var body := "[b]%s[/b]" % line if bold else line
+		var body := colorize(line, ncols)
+		if bold:
+			body = "[b]%s[/b]" % body
 		_logbox.append_text("[color=%s]%s[/color]\n" % [col, body])
 		_logged += 1
 
@@ -596,9 +729,12 @@ func _process(dt: float) -> void:
 	if _board:
 		_board.tick(dt * _anim)
 
+func _log_width() -> float:
+	return clampf(size.x * 0.26, 260.0, 380.0)
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and _logwrap:
-		_logwrap.custom_minimum_size.x = min(820.0, size.x * 0.72)
+		_logwrap.custom_minimum_size.x = _log_width()
 
 # =====================================================================
 #  Board — the hex map. Draws tiles, tokens, HP bars, highlights, juice.
@@ -615,6 +751,43 @@ class Board extends Control:
 	var _reveal = null   # {tid, dice, nat, bonus, total, ac, hit, crit, age}
 	var _barks := {}     # id -> {text, age}; drained from cb.barks (T26)
 	const BARK_TTL := 2.2
+	# T28 attack FX, cosmetic only: {kind, id, from, to, hexes, age, ttl}
+	var _fx: Array = []
+	const FX_TTL := {"melee": 0.30, "ranged": 0.34, "spell": 0.45}
+
+	# Queued by main only when FX are on (never under SORCMERC_FAST/headless).
+	func play_fx(kind: String, id: String, from_hx: Vector2i, to_hx: Vector2i, hexes: Array = []) -> void:
+		_fx.append({"kind": kind, "id": id, "from": from_hx, "to": to_hx, "hexes": hexes,
+			"age": 0.0, "ttl": float(FX_TTL.get(kind, 0.35))})
+		queue_redraw()
+
+	# How far the lunging attacker's token is pushed off its hex right now.
+	func _lunge(id: String) -> Vector2:
+		for f in _fx:
+			if f.kind == "melee" and f.id == id:
+				var t: float = clampf(f.age / f.ttl, 0.0, 1.0)
+				var d: Vector2 = _pix(f.to) - _pix(f.from)
+				if d.length() < 0.01:
+					return Vector2.ZERO
+				return d.normalized() * (sin(t * PI) * main.hex_px * 0.55)
+		return Vector2.ZERO
+
+	func _draw_fx(s: float) -> void:
+		for f in _fx:
+			var t: float = clampf(f.age / f.ttl, 0.0, 1.0)
+			match String(f.kind):
+				"ranged":
+					var a: Vector2 = _pix(f.from)
+					var b: Vector2 = _pix(f.to)
+					draw_line(a, a.lerp(b, t), Color(1.0, 0.92, 0.66, 0.35 * (1.0 - t)), 2.0)
+					draw_circle(a.lerp(b, t), s * 0.13, Color(1.0, 0.92, 0.66, 1.0 - t * 0.4))
+				"spell":
+					var col := Color(0.72, 0.86, 1.0, 1.0 - t)
+					for hx in f.hexes:              # AoE: light up the swept hexes
+						draw_colored_polygon(_hex_poly(_pix(hx), s - 3.0), Color(col.r, col.g, col.b, 0.35 * (1.0 - t)))
+					var c: Vector2 = _pix(f.to)
+					draw_arc(c, s * (0.25 + 1.0 * t), 0, TAU, 28, col, 3.0)
+					draw_circle(c, s * 0.3 * (1.0 - t), Color(col.r, col.g, col.b, 0.5 * (1.0 - t)))
 
 	func reset(_cb) -> void:
 		cb = _cb
@@ -705,6 +878,9 @@ class Board extends Control:
 			if _barks[id].age > BARK_TTL:
 				_barks.erase(id)
 			dirty = true
+		for f in _fx:
+			f.age += dt; dirty = true
+		_fx = _fx.filter(func(f): return f.age < f.ttl)
 		if _reveal != null:
 			_reveal.age += dt; dirty = true
 			if _reveal.age > 1.4:
@@ -839,7 +1015,7 @@ class Board extends Control:
 		for c in cb.combatants:
 			if c.is_dead():
 				continue
-			var p: Vector2 = _tok.get(c.id, _pix(c.pos))
+			var p: Vector2 = _tok.get(c.id, _pix(c.pos)) + _lunge(c.id)
 			var base: Color = main.COL_PARTY if c.team == "party" else main.COL_FOE
 			if c.is_down():
 				base = Color("6a6a6a")
@@ -847,21 +1023,18 @@ class Board extends Control:
 				base = base.lerp(Color.WHITE, clampf(_flash[c.id] / 0.35, 0, 1))
 			var rad := s * 0.62
 			if c == cur:
-				draw_arc(p, rad + 4.0, 0, TAU, 32, Color("ffe27a"), 2.0 + pulse * 1.5)
+				# A real blink: the ring breathes in alpha, width AND radius, with a
+				# faint outer halo — the old width-only wobble read as noise.
+				var bl := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 170.0)
+				base = base.lerp(Color("ffe27a"), 0.18 * bl)
+				draw_arc(p, rad + 4.0 + bl * 3.0, 0, TAU, 32,
+					Color(1.0, 0.886, 0.478, 0.25 + 0.75 * bl), 2.5 + bl * 3.0)
+				draw_arc(p, rad + 12.0 + bl * 6.0, 0, TAU, 32,
+					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0)
 			draw_circle(p, rad, base)
 			draw_arc(p, rad, 0, TAU, 24, base.darkened(0.4), 2.0)
-			var initials: String = _initials(c.cname)
-			draw_string(ThemeDB.fallback_font, p - Vector2(rad * 0.55, -5 * fz), initials,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * fz), Color("101216"))
-			# class mark as a small badge pinned to the token's shoulder — legible
-			# against the token fill, and it never collides with the initials.
-			var glyph := _glyph(c)
-			if glyph != "":
-				var bc := p + Vector2(-rad * 0.72, -rad * 0.72)
-				var brad := rad * 0.46
-				draw_circle(bc, brad, base.darkened(0.62))
-				draw_arc(bc, brad, 0, TAU, 16, base.lightened(0.15), 1.5)
-				_centered(glyph, bc, int(14 * fz), Color("f0e6cf"))
+			# The token's mark: class glyph for heroes, creature-type glyph for foes.
+			_centered(_glyph(c), p, int(26 * fz), Color("101216"))
 
 			# hp bar
 			var hv: float = _hp.get(c.id, float(c.hp))
@@ -881,6 +1054,8 @@ class Board extends Control:
 			if c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
 			if tags != "":
 				_centered(tags, p + Vector2(0, -rad - 10), int(13 * fz), Color("e6c15a"))
+
+		_draw_fx(s)   # projectiles / spell flashes sit over the tokens
 
 		# the odds chip itself draws last of the per-target overlay — after every
 		# token's own circle/badge/HP bar/condition tags, which used to be drawn
@@ -996,12 +1171,6 @@ class Board extends Control:
 		var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		draw_string(f, at - Vector2(w * 0.5, -fs * 0.36), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
-	func _initials(nm: String) -> String:
-		var w := nm.split(" ", false)
-		if w.size() >= 2:
-			return (w[0][0] + w[1][0]).to_upper()
-		return nm.substr(0, 2).to_upper()
-
-	# A hero's class mark, whatever class the creator made them — monsters get none.
+	# A hero's class mark, a monster's creature-type mark.
 	func _glyph(c) -> String:
 		return Icons.combatant_glyph(c)

@@ -90,9 +90,19 @@ static func primary_class(sheet) -> String:
 			best = cid
 	return best
 
-# Heroes carry a resolved sheet; monsters do not and get no class mark.
+# Monsters carry no sheet and so no class mark — they read by creature type instead.
+# ponytail: nine types mapped, the rest fall back to melee/ranged marks.
+const FOE_GLYPHS := {
+	"undead": "☠", "dragon": "➳", "beast": "❦", "fiend": "✖", "plant": "☘",
+	"ooze": "◕", "construct": "⚙", "celestial": "✧", "aberration": "◍",
+}
+
+# Heroes get their class mark, monsters their creature-type mark.
 static func combatant_glyph(c) -> String:
-	return class_glyph(primary_class(c.sheet)) if c.sheet != null else ""
+	if c.sheet != null:
+		return class_glyph(primary_class(c.sheet))
+	var mtype := String(Catalog.monster(c.src_id).get("type", ""))
+	return String(FOE_GLYPHS.get(mtype, "➶" if c.ranged else "⚔"))
 
 # --- campaign map nodes ----------------------------------------------------
 const NODE_GLYPHS := {"combat": "⚔", "treasure": "◆", "merchant": "⚖", "rest": "♨",
