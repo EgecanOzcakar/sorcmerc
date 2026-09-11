@@ -1,16 +1,21 @@
 name: Build and publish to itch.io
 
-# Two channels, one workflow: a `test*` tag ships the Playtest export (every
-# species/class/subclass unlocked, core/progression.gd's "playtest" custom
-# feature check) to the web-playtest channel; any other tag ships the normal
-# Release export (real lifetime-XP gating) to the web channel. Push a tag to
-# trigger it — nothing runs on ordinary commits.
+# Three channels, one workflow:
+#   - a `v*` tag        -> the Release export (real lifetime-XP gating)  -> "web"
+#   - a `test*` tag     -> the Playtest export (everything unlocked)     -> "web-playtest"
+#   - any push to master (no tag needed) -> the Release export           -> "web-dev"
+# Tags are the deliberate, versioned releases; master pushes are a fully
+# automatic "latest build" channel so there's always a live link to what's
+# on master, without it ever overwriting the real release/playtest channels.
 #
-#   git tag v0.1.0 && git push origin v0.1.0        # -> web (locked progression)
-#   git tag test-2026-09-11 && git push origin test-2026-09-11   # -> web-playtest (all unlocked)
+#   git tag v0.1.0 && git push origin v0.1.0                     # -> web
+#   git tag test-2026-09-11 && git push origin test-2026-09-11   # -> web-playtest
+#   git push origin master                                       # -> web-dev, automatic
 
 on:
   push:
+    branches:
+      - master
     tags:
       - "v*"
       - "test*"
@@ -23,17 +28,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Pick the channel + export preset for this tag
+      - name: Pick the channel + export preset for this push
         id: pick
         run: |
-          if [[ "${GITHUB_REF_NAME}" == test* ]]; then
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == test* ]]; then
             echo "preset=Web (Playtest)" >> "$GITHUB_OUTPUT"
             echo "channel=web-playtest" >> "$GITHUB_OUTPUT"
             echo "outdir=build/web-playtest" >> "$GITHUB_OUTPUT"
-          else
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             echo "preset=Web (Release)" >> "$GITHUB_OUTPUT"
             echo "channel=web" >> "$GITHUB_OUTPUT"
             echo "outdir=build/web-release" >> "$GITHUB_OUTPUT"
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "preset=Web (Release)" >> "$GITHUB_OUTPUT"
+            echo "channel=web-dev" >> "$GITHUB_OUTPUT"
+            echo "outdir=build/web-dev" >> "$GITHUB_OUTPUT"
+            echo "version=dev-${GITHUB_RUN_NUMBER}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           fi
 
       # godot-ci's image ships Godot + every export template pre-installed at
@@ -55,4 +67,4 @@ jobs:
           ITCH_GAME: sorcmerc
           ITCH_USER: nacege
           PACKAGE: ${{ steps.pick.outputs.outdir }}
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ steps.pick.outputs.version }}
