@@ -2206,4 +2206,121 @@ against real renders — a full correction overshot the house below the
 ring, 0.3 of it reads centered — not derived by formula, since "looks
 centered" is a visual call. Full suite + all `drive_*` green.
 
+## O13 — world persistence (locked 2026-09-11, dispatched now)
+
+Leaving the open world (`scenes/world/world.gd`'s `_leave_world()`) today
+saves only the roster (`CharacterSave.save()` per member) and resets
+`FactionOpinion`. Party position, roaming parties, settlement visit
+state (`last_visited`/`battle_at`), and faction opinion all vanish —
+resuming means starting the world over. Give it a real save, same
+overall shape as `core/campaign_save.gd` (JSON to disk, a `has_save()`/
+`load_latest()`/`clear()` surface, autosave on meaningful events rather
+than only on exit so a crash doesn't lose everything).
+
+New `core/world_save.gd`: serialize `World` (settlements incl.
+`last_visited`/`battle_at`/`pending_opinion_delta`, parties incl.
+position/faction/`ai` state, `clock.elapsed`) and `FactionOpinion.all()`
+into one save file. `scenes/game/game.gd` gets a "Resume the open world"
+option on the title screen (parallel to the existing linear-campaign
+Resume, which stays gated on `SORCMERC_LINEAR_CAMPAIGN` — this one is
+for normal play) that reconstructs the `World` and re-applies opinion
+before showing `world.tscn`. `_leave_world()` still saves the roster the
+same way; add the world save alongside it, and autosave periodically
+(e.g. on every settlement visit close and every combat resolution —
+reuse existing event hooks, don't add a timer/poll).
+
+File ownership: new `core/world_save.gd`, `scenes/game/game.gd`,
+`scenes/world/world.gd`'s `_ready()`/`_leave_world()` only (do not touch
+its drawing code). Add `tests/test_world_save.gd` (seeded, headless —
+round-trip a `World` + opinion through save/load, verify every field
+survives). Extend `tests/drive_game.gd`/`tests/drive_world.gd` for the
+live Resume path. Full suite + all `drive_*` green.
+
+## O14 — real party/caravan token art (locked 2026-09-11, dispatched now)
+
+O10 flagged Kenney's Board Game Icons / Board Game Pack (both CC0,
+confirmed) as an open item: unverified whether either sheet actually
+contains simple colorable pawn shapes vs. just dice/card iconography.
+Resolve that first — download both, look at the actual sheets. If
+neither has usable pawn/token art, search further (same CC0/CC-BY bar as
+every prior asset spike) rather than forcing a bad fit; report back and
+stop if nothing suitable turns up, don't fabricate placeholder art.
+
+If a usable set exists: replace `scenes/world/world.gd`'s `_draw_party()`
+(currently a procedural flat-base + shaded-ball circle, faction-tinted)
+with real sprite art, keeping faction color variation (tint the sprite,
+or pick a sheet variant per faction if the pack has color options) and
+the existing gold ring that marks the player specifically. Party tokens
+are small/distant by design (read as a silhouette, not a detailed
+figure) — don't pick art that only reads at combat-token scale.
+
+File ownership: `scenes/world/world.gd`'s `_draw_party()` only, plus new
+`assets/world/tokens/` art + license file. Re-render `tests/
+shot_world.gd` and actually look at it before calling this done, same
+discipline as O11/O12. Full suite + `drive_world` green.
+
+## O15 — minimal terrain/coastline so water tiles have somewhere to go (locked 2026-09-11, dispatched now)
+
+O11 deliberately left the Overworld Pack's water tiles unused: ground
+cells are picked by hash with no terrain data behind them, so scattering
+water would be nonsense — there was nothing for a coastline to be a
+coastline *of*. Scope the smallest fix, not a full biome/terrain-
+generation system: add a handful of fixed water *regions* (e.g. 1-2 lake
+or river shapes, as a list of world-space points/polylines or simple
+circles in `core/world.gd`'s `World`, hand-placed in `_demo_world()`
+the same way settlements are), and have `scenes/world/world.gd`'s
+`_draw_ground()` pick water tiles for cells within some distance of a
+region, forest/grass as it already does elsewhere (blend at the edge
+via the existing wooded-threshold pattern rather than a hard cutoff).
+
+File ownership: `core/world.gd` (additive: a `WaterRegion` shape or
+reuse a plain `Vector2`+radius list, whatever's least new surface),
+`scenes/world/world.gd`'s `_draw_ground()` and `_demo_world()` only.
+Extend `tests/test_world.gd` if `core/world.gd` gains a real new shape;
+re-render `tests/shot_world.gd` and look at it. Full suite +
+`drive_world` green. This lands after O13/O14 land (or is at least
+rebased on top) since all three touch `scenes/world/world.gd` — check
+current master before starting, don't fork stale.
+
+## O16 — per-building footprint sizing (locked 2026-09-11, dispatched now)
+
+O12 flagged this as a known simplification: `_draw_settlement()` scales
+every building in a cluster by the same `r * (3.2 if big else 2.8)`
+multiplier off the settlement's ring radius, not the building sprite's
+own real footprint. Give each of the 5 medieval buildings (see
+`tools/pack_buildings.py`'s sheet layout, already built by O12) its own
+footprint size read from the source art (or a small hand-tuned per-
+building scale table, whichever is less code) so a market shed and a
+manor house read as different sizes, not just different skins at the
+same scale.
+
+File ownership: `scenes/world/world.gd`'s `_draw_settlement()`/
+`_draw_building()` only. Re-render `tests/shot_world.gd`, look at it.
+Full suite + `drive_world` green. Land after O13/O14/O15 (same file,
+check master before starting).
+
+## T43 — root-cause drive_campaign's unseeded flakiness (locked 2026-09-11, dispatched now)
+
+Confirmed pre-existing across T34/T38/T40/T41's own investigations —
+`tests/drive_campaign.gd` occasionally loses when run without
+`SORCMERC_SEED` pinned, and it's never actually been root-caused, only
+repeatedly waved through as "pre-existing, seeded runs are fine." Chase
+it properly this time: run the driver across a range of unseeded/random
+seeds, find one that reproduces the loss, and determine whether it's the
+driver itself (T41 already found and fixed one real driver bug — a
+hand-rolled fighter with no spells/heals — there may be a second one) or
+a genuine campaign-balance issue (the stage-0 combat being unwinnable at
+some seed/roll combination). Fix the actual cause; if it turns out to be
+inherent variance (a bad-luck seed genuinely can lose a difficulty-tuned
+fight, which is by design — see T23/T38/T40's calibrated win rates),
+say so plainly and adjust the driver/test to tolerate it (e.g. retry
+once, or assert on a distribution across N seeds rather than a single
+run) rather than pretending it's 100% deterministic when the underlying
+combat isn't.
+
+File ownership: `tests/drive_campaign.gd`, and `core/campaign.gd`/
+`core/ai.gd` only if the root cause is a genuine engine bug (unlikely,
+per T41's finding that the campaign flow itself was fine — verify before
+touching either). Full suite + all `drive_*` green.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
