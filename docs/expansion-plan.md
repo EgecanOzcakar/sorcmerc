@@ -3026,4 +3026,64 @@ name against the pack's actual contents, nothing recolors into a fit.
 That gap is a sourcing/commissioning problem now, not a pipeline
 limitation — the pipeline itself is no longer what's blocking it.
 
+## T51 — wire the LPC pipeline into real combat and merge to master (locked 2026-09-12, dispatched now)
+
+Direct user decision: take what T47/T50 already built and proved
+(`merc_01` humanoid, bat/ghost/slime monsters) and make it real —
+replace the flat vector tokens in `scenes/main.gd`'s combat board with
+the composited sprites, for real gameplay, merged to master. Honest
+scope limit stated up front: only ONE humanoid loadout exists right
+now, so every party member and humanoid-faction combatant renders with
+`merc_01`'s appearance for this pass — per-class/per-character variety
+is a real, acknowledged follow-up, not delivered here. Ship what
+exists; don't block merging on art variety that doesn't exist yet.
+
+**Coverage for this pass**: `merc_01` for every humanoid-team
+combatant (party + humanoid-faction foes); `bat`/`ghost`/`slime` for
+their real bestiary matches (Bat/Giant Bat → bat; Ghost/Specter/Shadow/
+Will-o'-Wisp → ghost, recolored if that's easy, single color if not;
+Gray Ooze/Ochre Jelly/Black Pudding → slime). Everything else keeps the
+existing vector token — this is the tiered-fallback design already
+locked, not a regression.
+
+**Build, in order**:
+1. **Facing** (T47's plan step 5): map relative attacker/defender hex
+   position to LPC's 4 rows (up/left/down/right) — left/right for the
+   dominant horizontal axis, up/down for the dominant vertical, matching
+   the plan doc's own NE/E→right, NW/W→left, N→up, S→down scheme (or a
+   simplified 2-facing left/right-only version if the full 4-way mapping
+   fights the hex geometry awkwardly — implementer's call, document
+   which).
+2. **Combat-event wiring** (step 6): idle by default; attack animation
+   triggered from the existing `_attack_fx()`/`play_fx()` melee window
+   (reuse its `ttl`/timing, don't invent a second clock); a hurt/flinch
+   beat on the existing HP-decrease detection hook; death fades/holds on
+   the last frame rather than vanishing. Reuse existing token-position
+   interpolation (`_tok`) for placement — sprites replace the drawn
+   shape, not the positioning system.
+3. **Fallback correctness**: any combatant without a matching loadout
+   must render exactly as it does today (the vector token path) —
+   verify this explicitly with a mixed-roster fight (some LPC, some
+   vector) actually rendered and looked at, not just unit-tested.
+4. **Licensing hygiene** (step 8, minimum viable): a `LICENSES/` folder
+   with the CC-BY-SA 3.0 and GPL 3.0 full texts, and a real, reachable
+   in-game credits list (piggyback on the existing Settings screen
+   rather than building a new screen) aggregating every vendored LPC
+   part's `credits.txt` contents, deduplicated by author. This is a
+   real obligation of the license, not optional polish, and must land
+   in the same merge — don't ship LPC assets to master without it.
+
+**Non-negotiable constraint**: combat outcomes, RNG consumption, and
+timing under `SORCMERC_FAST`/headless must be bit-identical to before
+this change — this is a rendering swap, not a rules change. Verify the
+same way T44 did: seeded `drive_ui.gd` runs before/after, diffed.
+
+**Process**: continue on `feature/lpc-pipeline` (same branch/worktree).
+Full suite + all `drive_*` green, real rendered screenshots of a mixed
+LPC/vector-token fight actually looked at and described. Once verified
+clean, **merge to master** (the user has explicitly asked for this one
+to land, unlike the reviewed-and-parked art spikes) — full outcome-
+parity and suite-green verification happens before the merge, same
+discipline as every master-bound change all session.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
