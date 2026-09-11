@@ -271,7 +271,7 @@ const POOL := [
 const BOSS := {"id": "sunken-shrine", "kind": "combat", "stage_position": ["boss"],
 	"title": "THE SUNKEN SHRINE", "desc": "Whatever has been calling them lives down here.",
 	"difficulty": "hard", "boss": true, "archetype": "classic", "gold": 250,
-	"theme": "sunken-shrine", "win_rate": 0.49}
+	"theme": "sunken-shrine", "win_rate": 0.06}
 
 # win_rate is each boss's measured sweep result (scaler.gd's TUNING header, T18)
 # — how much harder it plays than a plain "hard" node. finish_combat() turns the
@@ -282,25 +282,25 @@ const BOSS_POOL := [
 	{"id": "the-oni", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE ONI OF THE DEEP ICE", "desc": "It has worn a friendlier face all week.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "frozen-cave", "lead": "oni", "win_rate": 0.35},
+		"theme": "frozen-cave", "lead": "oni", "win_rate": 0.375},
 	{"id": "the-assassin", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE KNIFE IN THE SQUARE", "desc": "Whoever paid the warband is here to collect.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "city-square", "lead": "assassin", "win_rate": 0.30},
+		"theme": "city-square", "lead": "assassin", "win_rate": 0.55},
 	{"id": "the-mammoth", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE THING IN THE TREELINE", "desc": "The forest has been getting out of its way.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "forest-clearing", "lead": "mammoth", "win_rate": 0.60},
+		"theme": "forest-clearing", "lead": "mammoth", "win_rate": 0.15},
 	{"id": "the-arrow-chief", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE ARROW-CHIEF", "desc": "The little archer from the road. He has been eating well.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
 		"theme": "goblin-camp", "lead": "goblin-archer", "lead_features": ["monster-multiattack-2"],
-		"win_rate": 0.375},
+		"win_rate": 0.10},
 	{"id": "the-shop-captain", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE CAPTAIN COMES BACK", "desc": "He took the shop once. This time he brought the company.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
 		"theme": "merchant-shop", "lead": "bandit", "lead_features": ["monster-multiattack-2"],
-		"win_rate": 0.15},
+		"win_rate": 0.025},
 ]
 
 # Reference win rate a boss's XP bonus is measured against: the average of the

@@ -7,20 +7,23 @@
 # more honest kind of harder; the multiplier only closes what the bodies cannot.
 #
 # TUNING — 200-seed autoplay sweeps (tests/test_scaler.gd), level-3 preset party
-# (Vera/Pike/Ilsa, team score 46.6), re-measured 2026-09-10 after T23 taught
-# power.gd to price control (DENIAL/CTRL_WEIGHT) and advantage. One roster per
-# seed, each its own faction, so this is the shipped distribution and not one
-# warband repeated:
-#   easy   TIER 0.85 -> avg 4.1 foes x0.88 : 181W/19L  (90.5%)  avg 8.6 rounds
-#   normal TIER 1.06 -> avg 4.4 foes x0.94 : 151W/49L  (75.5%)  avg 9.7 rounds
-#   hard   TIER 1.50 -> avg 5.6 foes x0.99 :  98W/102L (49.0%)  avg 10.0 rounds
-# Level-8 party (the presets levelled to 8, score 107.8), 60 seeds: 88 / 73 / 52%
-# (was 93 / 75 / 43 before T23).
-# TIER rose across the board (0.73/1.00/1.47 -> 0.85/1.06/1.50) because pricing
-# control raised what a bestiary roster costs, so the same budget now buys fewer
-# bodies; the tiers had to buy more to stay on target. CURVE stays 0.90 — level 8
-# still tracks level 3 within ~3 points. TIER is steep here: hard 1.47/1.48/1.50/
-# 1.51/1.55 measured 53.5/54.0/49.0/47.5/48.0%, the mult knob being lumpy, so do
+# (Vera/Pike/Ilsa, team score 47.2), re-measured 2026-09-11 after T36's SPAWN_GAP
+# 3 -> 6 landed: foes now start six hexes out, so the party gets a free round of
+# ranged fire and the melee arrives piecemeal. One roster per seed, each its own
+# faction, so this is the shipped distribution and not one warband repeated:
+#   easy   TIER 1.00 -> avg 4.3 foes x0.93 : 182W/18L  (91.0%)  avg 8.7 rounds
+#   normal TIER 1.35 -> avg 5.4 foes x0.96 : 148W/52L  (74.0%)  avg 10.3 rounds
+#   hard   TIER 1.80 -> avg 5.9 foes x1.08 : 103W/97L  (51.5%)  avg 10.6 rounds
+# Level-8 party (the presets levelled to 8, score 108.8), 60 seeds: 92 / 73 / 58%
+# (was 88 / 73 / 52 before the gap change).
+# TIER rose across the board (0.85/1.06/1.50 -> 1.00/1.35/1.80) purely to pay for
+# the wider gap: at the old tiers the same rosters measured 95.5/86.5/68.5%, i.e.
+# the distance alone was worth +5 easy / +11 normal / +19.5 hard, the harder tier
+# gaining most because it fields the most bodies to walk in. CURVE stays 0.90 —
+# level 8 still tracks level 3 within ~7 points. REF_SCORE stays 46.6: it is the
+# anchor TIER is expressed against, not a measurement of today's preset party.
+# TIER is steep here: hard 1.50/1.80/2.00/2.20 measured 68.5/51.5/40.5/30.0%, and
+# easy 0.98/1.00/1.02 measured 94.5/91.0/89.5%, the mult knob being lumpy, so do
 # not read a 2-point miss as a knob that wants turning.
 #
 # Known ceiling: what power.gd still misprices is chaff vs chunk, not control —
@@ -37,7 +40,7 @@ const Encounter = preload("res://core/encounter.gd")
 const Power = preload("res://core/rules/power.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
-const TIER := {"easy": 0.85, "normal": 1.06, "hard": 1.50}
+const TIER := {"easy": 1.00, "normal": 1.35, "hard": 1.80}
 const REF_SCORE := 46.6   # the level-3 preset party — where TIER was calibrated
 const CURVE := 0.90       # budget grows sublinearly with party power (see the header)
 const MAX_FOES := 8
@@ -93,17 +96,27 @@ static func _budget(party_characters: Array, difficulty: String) -> float:
 # difficulty, theme}.
 #
 # TUNING — 40-seed sweeps per boss (tests/test_scaler.gd), level-3 preset party,
-# re-measured 2026-09-10 with T23's control pricing: oni 35%, assassin 30%,
-# mammoth 60%, arrow-chief 37.5%, shop-captain 15% — pooled 35.5% against a 49%
-# hard node (was 50/35/22/68/8, pooled 36.5%). Pricing control shrank the spread
-# from 60 points to 45: the control-heavy escorts (grappling toads, web-shooting
-# spiders, paralytic touches) now cost what they play like, so the fights that
-# fielded them (mammoth, assassin) stopped being losses on arrival.
-# BOSS_LEAD_SHARE went 0.45 -> 0.40 for the last of it — a smaller lead slice
-# spends the budget on escort bodies instead of one more pumped stat block, and
-# the pumped stat block is what power.gd overprices. What is left (mammoth 60 vs
-# shop-captain 15) is the chaff-vs-chunk ceiling in the header above, not the
-# lead share; fix that in estimate(), don't chase it with this constant.
+# re-measured 2026-09-11 after SPAWN_GAP 3 -> 6 and the TIER retune above: oni
+# 37.5%, assassin 55%, mammoth 15%, arrow-chief 10%, shop-captain 2.5% — pooled
+# 24.0% against a 51.5% hard node (was 35/30/60/37.5/15, pooled 35.5%). These
+# numbers are copied verbatim into campaign.gd's BOSS_POOL win_rate fields, which
+# is what BOSS_REF_WIN_RATE's XP bonus reads. The lead-less shrine boss is swept
+# as a plain hard node on its own theme (200 seeds, printed by the same test):
+# 6.0%, down from 24.5% at the old hard 1.50 — "sunken-shrine" maps to no faction
+# (THEME_FACTION) so it always fields MAX_FOES of the hand-tuned MIX and dumps the
+# entire tier rise into mult (x1.15 -> x1.40). It has been an outlier since T16,
+# the wider tier only sharpened it; it wants THEME_FACTION or MAX_FOES, not TIER.
+# A boss spends the *hard* budget, so raising hard 1.50 -> 1.80 bought every boss
+# a fatter escort, and an escort walking in from six hexes still beats a party
+# that has to split fire between it and a pumped lead: the pool fell 11 points
+# while the hard node it is measured against rose 2.5. The spread also flipped
+# ends (mammoth 60 -> 15, assassin 30 -> 55) because distance rewards the bosses
+# whose lead is slow and punishes a party that must chase one, which is the same
+# chaff-vs-chunk ceiling in the header above seen from the other side.
+# BOSS_LEAD_SHARE stays 0.40 (T23 took it 0.45 -> 0.40) — the pool is still inside
+# test_scaler's 15-85% climax band, and a lead-share change would have to be
+# re-measured against a hard node that just moved. Fix the spread in estimate(),
+# don't chase it with this constant.
 const BOSS_LEAD_SHARE := 0.40   # how much of the fight the boss itself is
 const BOSS_MULT_MAX := 3.0      # +6 AC / +8 to-hit / +8 dmg / 3x HP at the ceiling
 static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0) -> Dictionary:

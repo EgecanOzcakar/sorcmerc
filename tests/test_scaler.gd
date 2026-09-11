@@ -125,6 +125,11 @@ func test_boss_pool() -> void:
 	var fights := 0
 	for boss in Campaign.BOSS_POOL:
 		if not boss.has("lead"):
+			# The shrine is a plain hard node on a theme that maps to no faction, so it
+			# fights the hand-tuned MIX: always MAX_FOES bodies with the whole budget
+			# poured into mult. Printed, not banded — it measures far below the faction
+			# rosters the TIER sweep above covers (see scaler.gd's boss TUNING note).
+			_sweep(chars, boss["difficulty"], SEEDS, boss["theme"])
 			continue
 		var spec := Scaler.boss_for(chars, boss, 1)
 		var lead: Dictionary = spec["monsters"][0]
@@ -180,13 +185,13 @@ func _sweep_boss(chars: Array, boss: Dictionary, seeds: int) -> Dictionary:
 
 # T16: one roster per seed, each its own faction — the shipped distribution, not
 # one lucky warband repeated 200 times.
-func _sweep(chars: Array, difficulty: String, seeds: int) -> Dictionary:
+func _sweep(chars: Array, difficulty: String, seeds: int, theme: String = "") -> Dictionary:
 	var wins := 0
 	var rounds := 0
 	var foes := 0
 	var mult := 0.0
 	for s in range(1, seeds + 1):
-		var spec: Dictionary = Scaler.roster_for(chars, difficulty, {}, "", s)
+		var spec: Dictionary = Scaler.roster_for(chars, difficulty, {}, theme, s)
 		foes += _total(spec)
 		mult += float(spec["monsters"][0]["mult"])
 		var sp: Dictionary = spec.duplicate(true)
@@ -204,7 +209,7 @@ func _sweep(chars: Array, difficulty: String, seeds: int) -> Dictionary:
 			wins += 1
 	var rate := 100.0 * wins / seeds
 	print("    %-7s avg %.1f foes x%.2f -> %dW/%dL (%.1f%%) avg %.1f rounds" % [
-		difficulty, float(foes) / seeds, mult / seeds, wins, seeds - wins,
+		difficulty if theme == "" else theme, float(foes) / seeds, mult / seeds, wins, seeds - wins,
 		rate, float(rounds) / seeds])
 	return {"rate": rate, "wins": wins}
 
