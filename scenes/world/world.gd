@@ -58,11 +58,19 @@ const LIGHT := Vector2(-0.30, -0.34)
 
 const ZOOM_MIN := 0.25
 const ZOOM_MAX := 2.5
-const CELL := 90.0          # ground patch size, in world units
-const MAX_CELLS := 900      # cap the ground loop when zoomed far out
+# O12: was 90, which read as a handful of huge diamonds at the default camera
+# distance; 50 was picked by rendering tests/shot_world.gd at both (and at 60,
+# still coarse) and looking. MAX_CELLS is the far-zoom fallback threshold and is
+# not a free number: this viewport needs 783 cells at zoom 1.0 (it needed 255 at
+# CELL 90), and the old 900 was exactly "still paint at zoom 0.5, give up below
+# it" — 2850 is that same rule at the new density (2805 cells at zoom 0.5).
+const CELL := 50.0          # ground patch size, in world units
+const MAX_CELLS := 2850     # cap the ground loop when zoomed far out
 
-# O11 art. Screaming Brain Studios' Isometric Tiles Overworld/Town packs, CC0 —
-# see assets/world/README.md for provenance and the one edit made to the files.
+# Ground: O11's Screaming Brain Studios Isometric Tiles Overworld pack, CC0.
+# Buildings: O12's rubberduck isometric medieval buildings 1+2, CC0 — the Town
+# pack they replace read as a modern city. See assets/world/README.md for
+# provenance and the edits made to the files.
 const TerrainTex := preload("res://assets/world/overworld/terrain.png")
 const ForestTex := preload("res://assets/world/overworld/forest.png")
 const BuildingTex := preload("res://assets/world/town/buildings.png")
@@ -78,14 +86,14 @@ const GRASS := [0, 1, 2, 9, 10]
 const FOREST := [0, 1, 2, 3, 4, 5]
 const WOODED := 0.78              # above this, a cell draws from FOREST
 
-const BUILDING := Vector2(64, 96) # one wall tile in the Town sheet
-# The sheet is 8 rows (4 styles, each doubled for the left/right tile offset) by
-# 18 columns (9 left+right corner pairs). Only the first two styles are drawn:
-# the pack is a modern-city set, and rows 4-8 are plate glass and painted
-# render, which no amount of distance reads as a fantasy town. Rows 0-4 are
-# brick and stone and do.
-const BUILDING_STYLES := 2
-const BUILDING_PAIRS := 6         # the brick/stone corners; 6-8 are siding and shop glass
+# O12: one cell of the sheet tools/pack_buildings.py lays out — 5 columns (the
+# pack's 5 medieval buildings, at their true relative sizes) by 4 rows (the
+# camera rotations each ships). Each cell is pasted so the building's near
+# ground corner sits on BUILDING_ANCHOR, which is what `base` means below.
+const BUILDING := Vector2(128, 120)
+const BUILDING_ANCHOR := Vector2(64, 112)
+const BUILDING_STYLES := 5        # sheet columns: which building
+const BUILDING_PAIRS := 4         # sheet rows: which way it faces
 
 var world: World
 var party: Party            # injected by whoever opens the map, or a demo roster
@@ -657,7 +665,7 @@ func _draw_ground() -> void:
 				Rect2(Vector2(idx % TILE_COLS, idx / TILE_COLS) * TILE, TILE))
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 
-# O11: Town Pack buildings on the same footprint the blocks stood on — a city
+# O11/O12: a medieval building on each footprint the blocks stood on — a city
 # gets three, a town two, painter-sorted among themselves. The footprint ring
 # stays: every faction's walls are the same stone, and faction is the one thing
 # the map still has to read at a glance.
@@ -679,20 +687,19 @@ func _draw_settlement(s, at: Vector2) -> void:
 		bases.append(at + _iso(b * r))
 	bases.sort_custom(func(a, b): return a.y < b.y)
 	for k in bases.size():
-		_draw_building(bases[k], r * (1.5 if big else 1.3), style + k, pair + k)
+		_draw_building(bases[k], r * (3.2 if big else 2.8), style + k, pair + k)
 	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), s.sname,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
 
-# One building: the Town Pack's walls are modular left/right halves that meet at
-# the near corner, so a pair drawn shoulder to shoulder is a whole corner of a
-# house. `base` is that near corner, i.e. the point standing on the ground.
+# One building: a whole house in one cell now (the old Town Pack's modular
+# left/right wall halves are gone with it). `base` is the house's near ground
+# corner, i.e. the point it stands on; `h` scales the cell, whose own 128x120
+# proportions are kept so the five buildings stay at their relative sizes.
 func _draw_building(base: Vector2, h: float, style: int, pair: int) -> void:
-	var w := h * BUILDING.x / BUILDING.y
-	var src := Vector2((pair % BUILDING_PAIRS) * 2, (style % BUILDING_STYLES) * 2) * BUILDING
-	draw_texture_rect_region(BuildingTex, Rect2(base - Vector2(w, h), Vector2(w, h)),
-		Rect2(src, BUILDING))
-	draw_texture_rect_region(BuildingTex, Rect2(base - Vector2(0, h), Vector2(w, h)),
-		Rect2(src + Vector2(BUILDING.x, 0), BUILDING))
+	var cell := BUILDING * (h / BUILDING.y)
+	var src := Vector2(style % BUILDING_STYLES, pair % BUILDING_PAIRS) * BUILDING
+	draw_texture_rect_region(BuildingTex,
+		Rect2(base - BUILDING_ANCHOR * (h / BUILDING.y), cell), Rect2(src, BUILDING))
 
 # A circular token, the same ball shading the combat board's char tokens use.
 func _draw_party(p, at: Vector2) -> void:
