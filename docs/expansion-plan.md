@@ -2175,4 +2175,26 @@ at default zoom and at least one zoomed-in level, actually look at the
 PNG before calling this done. Full suite + drive_world green. Push the
 branch again; still not merged to master without explicit sign-off.
 
+**O12 completion (2026-09-11):** landed as `ec33343` on
+`feature/overworld-art-packs` (pushed, still not merged to master —
+awaiting sign-off). Rubberduck's two CC0 packs (5 buildings, sun-shadow
+variant picked to match the existing fixed `LIGHT` constant; snowy
+variant skipped — no season state exists to switch it on) replace the
+Town Pack entirely; `_draw_building()` rewritten for standalone sprites
+instead of a 216-type grid, `_draw_settlement()`'s faction-ring/city-vs-
+town logic kept, only its sprite-scale multiplier changed (a whole house
+needs a bigger multiplier than a wall segment did). `CELL` 90→50,
+`MAX_CELLS` 900→2850 (computed from the same viewport-cell-count model
+O11 used, not guessed). Verified visually, not just by test count: I
+personally re-rendered `tests/shot_world.gd` (non-headless — headless
+hangs on this specific viewport-texture capture here) at default and 2.5x
+zoom and inspected the PNGs myself — the earlier O11 result read as a
+modern brick rowhouse; this one reads as an actual half-timbered,
+shingle-roofed medieval house cluster, and the ground is visibly denser/
+higher-resolution at default zoom. Full suite (30 files) + all 6
+`drive_*` green. One cosmetic nit left alone: the house cluster sits
+toward the back half of the faction ring rather than centered (the
+sprites rise up-and-left from their ground-corner anchor) — not worth
+its own pass yet.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
