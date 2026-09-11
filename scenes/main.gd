@@ -712,12 +712,14 @@ func _build_order_strip() -> void:
 		g.add_theme_color_override("font_color", tint)
 		tv.add_child(g)
 		var nm := Label.new()
-		nm.text = c.cname.split(" ")[0]
+		nm.text = "%s (%d)" % [c.cname.split(" ")[0], c.init_roll]
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		nm.add_theme_font_size_override("font_size", int(Icons.FS_SMALL * u))
 		nm.add_theme_color_override("font_color", tint if c == cb.current() else Icons.COL_BODY)
 		tv.add_child(nm)
-		# T29: current HP, not the initiative roll — the order is already the order.
+		# The strip is still initiative order (cb.order, untouched) -- the name
+		# label keeps the roll so you can read the actual initiative, and HP
+		# shows alongside it rather than replacing it.
 		var hp := Label.new()
 		hp.text = "%d/%d" % [c.hp, c.max_hp]
 		hp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
