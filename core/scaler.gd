@@ -7,24 +7,28 @@
 # more honest kind of harder; the multiplier only closes what the bodies cannot.
 #
 # TUNING — 200-seed autoplay sweeps (tests/test_scaler.gd), level-3 preset party
-# (Vera/Pike/Ilsa, team score 47.2), re-measured 2026-09-11 after T36's SPAWN_GAP
-# 3 -> 6 landed: foes now start six hexes out, so the party gets a free round of
-# ranged fire and the melee arrives piecemeal. One roster per seed, each its own
-# faction, so this is the shipped distribution and not one warband repeated:
-#   easy   TIER 1.00 -> avg 4.3 foes x0.93 : 182W/18L  (91.0%)  avg 8.7 rounds
-#   normal TIER 1.35 -> avg 5.4 foes x0.96 : 148W/52L  (74.0%)  avg 10.3 rounds
-#   hard   TIER 1.80 -> avg 5.9 foes x1.08 : 103W/97L  (51.5%)  avg 10.6 rounds
-# Level-8 party (the presets levelled to 8, score 108.8), 60 seeds: 92 / 73 / 58%
-# (was 88 / 73 / 52 before the gap change).
-# TIER rose across the board (0.85/1.06/1.50 -> 1.00/1.35/1.80) purely to pay for
-# the wider gap: at the old tiers the same rosters measured 95.5/86.5/68.5%, i.e.
-# the distance alone was worth +5 easy / +11 normal / +19.5 hard, the harder tier
-# gaining most because it fields the most bodies to walk in. CURVE stays 0.90 —
-# level 8 still tracks level 3 within ~7 points. REF_SCORE stays 46.6: it is the
-# anchor TIER is expressed against, not a measurement of today's preset party.
-# TIER is steep here: hard 1.50/1.80/2.00/2.20 measured 68.5/51.5/40.5/30.0%, and
-# easy 0.98/1.00/1.02 measured 94.5/91.0/89.5%, the mult knob being lumpy, so do
-# not read a 2-point miss as a knob that wants turning.
+# (Vera/Pike/Ilsa, team score 47.2), re-measured 2026-09-11 for T40, which raised
+# test_scaler's TARGET to easy 95 / normal 85 / hard 75 (was 90/75/50). Same
+# shape, the whole curve shifted easier; nothing about the fight itself changed,
+# only what we are aiming at. One roster per seed, each its own faction, so this
+# is the shipped distribution and not one warband repeated:
+#   easy   TIER 0.96 -> avg 4.4 foes x0.91 : 189W/11L  (94.5%)  avg 8.6 rounds
+#   normal TIER 1.10 -> avg 4.6 foes x0.94 : 167W/33L  (83.5%)  avg 9.0 rounds
+#   hard   TIER 1.32 -> avg 5.3 foes x0.95 : 150W/50L  (75.0%)  avg 10.5 rounds
+# Level-8 party (the presets levelled to 8, score 108.8), 60 seeds: 95 / 88 / 78%
+# (was 92 / 73 / 58 at T38's tiers).
+# TIER fell across the board (1.00/1.35/1.80 -> 0.96/1.10/1.32) and the three
+# tiers now sit much closer together: hard is where nearly all of the target rise
+# landed (+23.5 points), so the budget spread that used to separate the tiers
+# has largely collapsed. CURVE stays 0.90 — level 8 still tracks level 3 within
+# ~4 points. REF_SCORE stays 46.6: it is the anchor TIER is expressed against,
+# not a measurement of today's preset party.
+# TIER is steep and lumpy here: hard 1.30/1.32/1.33 measured 77.5/75.0/73.5% and
+# normal 1.08/1.10/1.12/1.14 measured 87.5/83.5/83.5/84.0%, so do not read a
+# 2-point miss as a knob that wants turning. Easy has a floor near 95: at TIER
+# 0.90 the level-8 easy sweep goes 60W/0L and trips test_scaler's "neither end is
+# a foregone conclusion" check, which is what pins easy at 0.96 rather than the
+# 94.5 -> 95.0 point a lower tier would otherwise buy.
 #
 # Known ceiling: what power.gd still misprices is chaff vs chunk, not control —
 # an 11-hp hobgoblin's damage is priced for a whole fight it does not survive,
@@ -40,7 +44,7 @@ const Encounter = preload("res://core/encounter.gd")
 const Power = preload("res://core/rules/power.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
-const TIER := {"easy": 1.00, "normal": 1.35, "hard": 1.80}
+const TIER := {"easy": 0.96, "normal": 1.10, "hard": 1.32}
 const REF_SCORE := 46.6   # the level-3 preset party — where TIER was calibrated
 const CURVE := 0.90       # budget grows sublinearly with party power (see the header)
 const MAX_FOES := 8
@@ -96,23 +100,24 @@ static func _budget(party_characters: Array, difficulty: String) -> float:
 # difficulty, theme}.
 #
 # TUNING — 40-seed sweeps per boss (tests/test_scaler.gd), level-3 preset party,
-# re-measured 2026-09-11 after SPAWN_GAP 3 -> 6 and the TIER retune above: oni
-# 37.5%, assassin 55%, mammoth 15%, arrow-chief 10%, shop-captain 2.5% — pooled
-# 24.0% against a 51.5% hard node (was 35/30/60/37.5/15, pooled 35.5%). These
-# numbers are copied verbatim into campaign.gd's BOSS_POOL win_rate fields, which
-# is what BOSS_REF_WIN_RATE's XP bonus reads. The lead-less shrine boss is swept
-# as a plain hard node on its own theme (200 seeds, printed by the same test):
-# 6.0%, down from 24.5% at the old hard 1.50 — "sunken-shrine" maps to no faction
-# (THEME_FACTION) so it always fields MAX_FOES of the hand-tuned MIX and dumps the
-# entire tier rise into mult (x1.15 -> x1.40). It has been an outlier since T16,
-# the wider tier only sharpened it; it wants THEME_FACTION or MAX_FOES, not TIER.
-# A boss spends the *hard* budget, so raising hard 1.50 -> 1.80 bought every boss
-# a fatter escort, and an escort walking in from six hexes still beats a party
-# that has to split fire between it and a pumped lead: the pool fell 11 points
-# while the hard node it is measured against rose 2.5. The spread also flipped
-# ends (mammoth 60 -> 15, assassin 30 -> 55) because distance rewards the bosses
-# whose lead is slow and punishes a party that must chase one, which is the same
-# chaff-vs-chunk ceiling in the header above seen from the other side.
+# re-measured 2026-09-11 for T40's target retune: oni 32.5%, assassin 75%,
+# mammoth 67.5%, arrow-chief 32.5%, shop-captain 17.5% — pooled 45.0% against a
+# 75.0% hard node (was 37.5/55/15/10/2.5, pooled 24.0%). These numbers are copied
+# verbatim into campaign.gd's BOSS_POOL win_rate fields, which is what
+# BOSS_REF_WIN_RATE's XP bonus reads. The lead-less shrine boss is swept as a
+# plain hard node on its own theme (200 seeds, printed by the same test): 47.0%,
+# up from 6.0% — "sunken-shrine" maps to no faction (THEME_FACTION) so it always
+# fields MAX_FOES of the hand-tuned MIX and dumps the whole tier into mult, which
+# makes it the entry that moves most when hard moves at all (x1.40 -> x0.95). It
+# has been an outlier since T16 in both directions; it wants THEME_FACTION or
+# MAX_FOES, not TIER.
+# A boss spends the *hard* budget, so cutting hard 1.80 -> 1.32 thinned every
+# boss's escort, and the pool gained 21 points while the hard node it is measured
+# against gained 23.5 — the pool tracks hard almost one-for-one because the lead
+# itself is capped by BOSS_LEAD_SHARE and it is the escort that absorbs the
+# budget change. The spread stays wide (17.5% to 75%) and the ends stayed put
+# this time, which is the chaff-vs-chunk ceiling in the header above: power.gd
+# misprices a lone big bruiser no matter what the budget is.
 # BOSS_LEAD_SHARE stays 0.40 (T23 took it 0.45 -> 0.40) — the pool is still inside
 # test_scaler's 15-85% climax band, and a lead-share change would have to be
 # re-measured against a hard node that just moved. Fix the spread in estimate(),

@@ -13,7 +13,7 @@ const Campaign = preload("res://core/campaign.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
 const SEEDS := 200
-const TARGET := {"easy": 90.0, "normal": 75.0, "hard": 50.0}
+const TARGET := {"easy": 95.0, "normal": 85.0, "hard": 75.0}
 const BAND := 10.0
 
 var _pass = 0
