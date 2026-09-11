@@ -68,6 +68,22 @@ func _run() -> void:
 	if p.position.is_equal_approx(held):
 		fail("resuming did not start the party moving again")
 
+	# --- speed button cycles 1x/2x/4x/8x and actually speeds movement up ----
+	var slow_step: Vector2 = p.position
+	await step(1)
+	slow_step = p.position - slow_step
+	screen._cycle_speed()
+	if screen.world.clock.speed != 2.0:
+		fail("the speed button did not move the clock to 2x")
+	var fast_step: Vector2 = p.position
+	await step(1)
+	fast_step = p.position - fast_step
+	if fast_step.length() <= slow_step.length() * 1.5:
+		fail("2x did not noticeably speed up movement (%s vs %s)" % [fast_step, slow_step])
+	screen._cycle_speed(); screen._cycle_speed(); screen._cycle_speed()
+	if screen.world.clock.speed != 1.0:
+		fail("cycling four times did not wrap back to 1x")
+
 	# --- camera: drag-pan and scroll-zoom ----------------------------------
 	var pan0: Vector2 = screen._pan
 	var m := InputEventMouseMotion.new()

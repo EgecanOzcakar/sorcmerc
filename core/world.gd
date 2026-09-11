@@ -19,15 +19,19 @@ const SPEED := 40.0   # map units per world-second, every party for now
 # one line in _process (`world.tick(delta)`), which is also how headless tests
 # drive it with fixed deltas.
 class WorldClock extends RefCounted:
+	const SPEEDS := [1.0, 2.0, 4.0, 8.0]   # cycled by set_speed_index / the UI's speed button
+
 	var elapsed := 0.0     # world-seconds since start, paused time excluded
+	var speed := 1.0       # multiplies every tick's delta — movement/AI/economy all speed up with it
 	var _paused := false
 
 	# Returns the world-time actually advanced: 0.0 while paused.
 	func tick(delta: float) -> float:
 		if _paused or delta <= 0.0:
 			return 0.0
-		elapsed += delta
-		return delta
+		var advanced := delta * speed
+		elapsed += advanced
+		return advanced
 
 	func pause() -> void:
 		_paused = true
@@ -37,6 +41,16 @@ class WorldClock extends RefCounted:
 
 	func is_paused() -> bool:
 		return _paused
+
+	# Snaps to the nearest entry in SPEEDS rather than accepting anything, so the
+	# UI only ever cycles through the four sanctioned rates.
+	func set_speed(mult: float) -> void:
+		speed = mult if mult in SPEEDS else SPEEDS[0]
+
+	# 1x -> 2x -> 4x -> 8x -> 1x, whatever the current speed's nearest slot is.
+	func cycle_speed() -> void:
+		var i: int = maxi(0, SPEEDS.find(speed))
+		speed = SPEEDS[(i + 1) % SPEEDS.size()]
 
 class Settlement extends RefCounted:
 	var id: String

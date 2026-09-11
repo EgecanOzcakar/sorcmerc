@@ -17,6 +17,7 @@ func check(cond: bool, label: String) -> void:
 
 func _init() -> void:
 	test_clock_advances_only_unpaused()
+	test_clock_speed()
 	test_party_moves_toward_goal_without_overshooting()
 	test_nothing_moves_while_paused()
 	test_data_shapes_and_container()
@@ -39,6 +40,27 @@ func test_clock_advances_only_unpaused() -> void:
 	check(not c.is_paused(), "resume() resumes")
 	check(is_equal_approx(c.tick(0.25), 0.25), "tick reports the time it gave")
 	check(is_equal_approx(c.elapsed, 1.25), "the clock picks up where it left off")
+
+func test_clock_speed() -> void:
+	var c = World.WorldClock.new()
+	check(c.speed == 1.0, "a fresh clock runs at 1x")
+	check(is_equal_approx(c.tick(1.0), 1.0), "1x advances a full second per second")
+
+	c.set_speed(4.0)
+	check(is_equal_approx(c.tick(1.0), 4.0), "4x advances four world-seconds per real second")
+	c.set_speed(99.0)   # not one of the sanctioned rates
+	check(c.speed == 1.0, "an unrecognized speed snaps back to 1x rather than accepting anything")
+
+	c.cycle_speed()
+	check(c.speed == 2.0, "cycling from 1x goes to 2x")
+	c.cycle_speed(); c.cycle_speed()
+	check(c.speed == 8.0, "...then 4x, then 8x")
+	c.cycle_speed()
+	check(c.speed == 1.0, "8x wraps back to 1x")
+
+	c.pause()
+	c.set_speed(8.0)
+	check(c.tick(1.0) == 0.0, "speed doesn't defeat pause")
 
 func test_party_moves_toward_goal_without_overshooting() -> void:
 	var w = World.new()

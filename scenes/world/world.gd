@@ -60,6 +60,7 @@ var _pan := Vector2.ZERO
 var _zoom := 1.0
 var _origin := Vector2.ZERO
 var _pause_btn: Button
+var _speed_btn: Button
 var _clock_lbl: Label
 var _visit: Dictionary = {}      # the open market, or {}
 var _visit_panel: Control = null
@@ -121,6 +122,10 @@ func _build_hud() -> void:
 	_pause_btn.text = "Pause"
 	_pause_btn.pressed.connect(_toggle_pause)
 	bar.add_child(_pause_btn)
+	_speed_btn = Button.new()
+	_speed_btn.text = "1x"
+	_speed_btn.pressed.connect(_cycle_speed)
+	bar.add_child(_speed_btn)
 	_clock_lbl = Label.new()
 	_clock_lbl.add_theme_color_override("font_color", Icons.COL_GOLD)
 	bar.add_child(_clock_lbl)
@@ -135,6 +140,10 @@ func _toggle_pause() -> void:
 	else:
 		world.clock.pause()
 	_pause_btn.text = "Resume" if world.clock.is_paused() else "Pause"
+
+func _cycle_speed() -> void:
+	world.clock.cycle_speed()
+	_speed_btn.text = "%dx" % int(world.clock.speed)   # every WorldClock.SPEEDS entry is a whole number
 
 # --- O4: encounter trigger + combat hand-off ---------------------------
 # ponytail: linear scan over 3-8 parties once a frame, same as world_ai.gd's hunt.
