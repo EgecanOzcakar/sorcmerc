@@ -3148,4 +3148,29 @@ Redirected mid-task: produce just this one monster through the full
 pipeline (source, license-record, background removal, pixelize) and
 report back for approval before continuing to the other ~10-14.
 
+**T51 completion (2026-09-12): merged to master as `92d1d16`.** Combat
+now renders LPC sprites for real, not just on a demo screenshot.
+`core/lpc_art.gd` maps combatant → loadout (party/humanoid foes →
+`merc_01`; Bat/Ghost/Gray Ooze-family → bat/ghost/slime; everything
+else → unchanged vector token — verified in the same frame, side by
+side, in the mixed-roster screenshot). Facing resolves off the
+*projected* (post-yaw/squash) delta, not the raw hex delta — nearly
+always left/right given the board's squash, which is exactly where the
+art exists. Combat-event wiring reuses the existing `_fx`/`_lunge()`
+melee timing with no second clock; hurt is the existing white-flash tint
+applied as sprite modulate (honest gap: the vendored art has no hurt/
+death rows, so this is a tint/dim, not a new animation — named with a
+`ponytail:` comment). One real bug caught by looking, not by a test: a
+negative-width mirror rect doesn't flip in Godot, it normalizes — foes
+were rendering a full sprite-width off their own hex. Licensing
+hygiene landed in the same merge: `LICENSES/` (full CC-BY-SA 3.0 + GPL
+3.0 texts), and a real in-game **Art Credits** panel in Settings listing
+all 16 deduplicated LPC artists (two upstream CSV data defects — a
+mojibake name and a duplicate-under-two-spellings — fixed so the dedup
+actually names each person once). Outcome-parity proven, not asserted:
+identical press counts/round counts/outcomes/verb lists across 5 seeds,
+`diff` empty, md5s matching, before vs. after the change — verified
+independently by me a second time post-merge. Full suite (31 files,
+5291 checks) + all 6 `drive_*` green, both pre-merge and again after.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
