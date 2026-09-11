@@ -1003,6 +1003,13 @@ func _apply_damage(target, dmg: int, dtype := "") -> void:
 		if not _saving_throw(target, maxi(10, dmg / 2), "con"):
 			log.append("%s loses concentration." % target.cname)
 			target.statuses.erase("concentrating")
+			# ponytail: doesn't clean up whatever the spell was maintaining on
+			# another combatant — a real gap for a multi-round concentration
+			# effect, currently a non-issue because every condition-inflicting
+			# concentration spell (T33) caps its condition at duration "round"
+			# regardless of concentration, so nothing outlives this by design.
+			# Revisit (track caster -> {target: condition} per cast) the day a
+			# real repeated-save/full-duration concentration effect lands.
 	if target.is_down():
 		target.death_f += 1 if dmg > 0 else 0
 		if target.death_f >= 3:
