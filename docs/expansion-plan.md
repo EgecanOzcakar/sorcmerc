@@ -2028,4 +2028,43 @@ Full suite: 30 files, 0 failures. All 6 `drive_*` OK (verified with
 `SORCMERC_SEED=7` — `drive_campaign` is separately known to be flaky
 *unseeded*, pre-existing, unrelated to this pass).
 
+## O10 — asset spike: real art for the overworld map (locked 2026-09-11, dispatched now)
+
+Research-only, same shape as the earlier isometric-view art spikes (the
+`feature/isometric-sprite-assets` branch, still live and unmerged, found
+CC0 "Tiny Tactics — Battle Kit I" on OpenGameArt for combat). The
+overworld map currently reuses `scenes/world/world.gd`'s vector-drawn
+projection — functional, not visually rich. Find real, license-clear
+assets that would make settlements, roaming-party tokens, and open
+terrain read better at the overworld's zoomed-out scale specifically
+(distinct from combat-board asset needs — a settlement needs to read as
+a landmark from far away, a roaming party as a small silhouette, not a
+detailed close-up token).
+
+Scope: search itch.io asset packs, OpenGameArt, Kenney.nl, and similar
+CC0/CC-BY marketplaces for isometric or top-down city/town/settlement
+sprites (several distinct looks — city vs. town vs. faction-flavored
+outposts), small party/caravan tokens (readable at a distance, distinct
+per faction), and open-terrain/ground tile sets matching a temperate
+fantasy setting. For each candidate: confirm the actual license
+(CC0/public-domain preferred; CC-BY is fine if attribution is trivial to
+carry; reject anything requiring a paid license or with an ambiguous
+grant), note asset count/resolution/style, and a direct link.
+
+Direct user note: the world's ground tiles specifically need more polish
+than settlements/parties do — `scenes/world/world.gd`'s ground is
+currently a tessellating grid of flat projected quads with hashed
+tint/mottle noise (O2's own description), which reads as plain at the
+overworld's zoomed-out scale. Weight the search accordingly: prioritize
+finding real ground/terrain tile sets (grass, dirt roads, forest edges,
+water) over settlement/party assets if trade-offs are needed, and call
+out in the report which candidates specifically solve the flat-ground
+problem vs. which are "nice to have" on top of it.
+
+This is research and reporting only — no assets downloaded into the repo,
+no code changes, no branch. Report a shortlist (3-5 real candidates) with
+license confirmation for each, plus a recommendation, back to the user;
+the user decides what (if anything) gets integrated next, same as how the
+combat-board sprite spike was handled.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
