@@ -3086,4 +3086,60 @@ to land, unlike the reviewed-and-parked art spikes) — full outcome-
 parity and suite-green verification happens before the merge, same
 discipline as every master-bound change all session.
 
+## T52 — source + pixelize reference art for LPC-uncovered monsters (locked 2026-09-12, dispatched now)
+
+T50 confirmed by name, not assumed: giant/dragon/fey/elemental/
+construct/monstrosity/fiend/celestial (108 of 316 bestiary entries)
+have zero coverage from LPC or its Monsters pack and no recolor gets
+there. User-specified pipeline to close part of that gap with real,
+individually-licensed reference art converted to pixel style, rather
+than another asset-pack search:
+
+**Step 1 — determine the exact uncovered list.** Read `data/bestiary.json`
+and cross-reference against T50's confirmed-zero factions to produce
+the real, named monster list (not just faction names) that has no LPC
+coverage. Report this list before sourcing anything.
+
+**Step 2 — source one reference image per monster** (scope: a
+representative first batch, not all 108 at once — pick a sensible
+subset, e.g. 1-2 iconic entries per uncovered faction, ~10-15 images
+total, to prove the pipeline before scaling it), using, in this order:
+1. Google Images with the usage-rights filter set to Creative Commons,
+   then verify the ACTUAL license on the source page itself (CC-BY
+   needs credit; CC-BY-SA needs share-alike; any "NC" variant is
+   off-limits for a commercial game — reject, don't rationalize).
+2. Wikimedia Commons, filtered to CC0/public domain.
+3. Open-access museum collections (the Met, Rijksmuseum, Smithsonian,
+   Art Institute of Chicago — CC0 high-res scans; strong for medieval
+   art, heraldry, armor/texture references, dragons/knights/bestiary
+   illustrations).
+4. Public-domain works (published pre-1929 in the US) — genuine old
+   illustrations.
+5. CC0 photo sites (Pexels/Pixabay — check each site's own terms;
+   Unsplash's license is permissive but explicitly NOT CC0, treat it
+   as CC-BY-equivalent, not CC0).
+Track and report source URL + exact license for every single image
+while working, not after — this is the one place in this pipeline
+where sloppy record-keeping becomes a real legal problem later.
+
+**Step 3 — process.** Make the background transparent before
+pixelizing if the source has one. Convert to pixel art at a density/
+palette weight compatible with the existing LPC sprites (64px-scale
+character art) using a permissively-licensed tool or technique —
+`github.com/giventofly/pixelit` (confirm its actual license before
+using/citing it) is the suggested reference for the algorithm
+(palette-quantized nearest-neighbor downscale); reimplementing the same
+straightforward technique in Python/Pillow (matching this project's
+existing `tools/pack_buildings.py` convention) is equally acceptable if
+that's more practical than running pixelit's JS directly — implementer's
+call, document which.
+
+**Output**: real converted images + a source/license manifest (one row
+per image: monster name, source URL, exact license, attribution text
+if required), reported back with actual rendered results for review —
+same visual-proof discipline as every art entry in this doc. Research
+and image-production only for this dispatch — no integration into
+`tools/lpc_compose.py`'s loadout system or `scenes/main.gd` yet, that's
+a follow-up once the images are approved.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
