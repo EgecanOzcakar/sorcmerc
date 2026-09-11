@@ -1198,4 +1198,40 @@ bigger belongs in the tier-2 follow-up list, not this pass.
   capped at one round). **Full suite: 24 test files, 0 failures; drive_ui
   passes.** Pushed.
 
+## T34 — let an already-made choice be revisited (locked 2026-09-11, dispatched now)
+
+The request was "enable back stepping during character creation phases."
+Checked first, empirically (not just by reading the code): `scenes/creator/
+creator.gd`'s top-level step wizard (basics → class → abilities → skills/
+background → equipment) ALREADY has a working Back button — verified with a
+headless probe that species/state survive going back and forward. That is
+not the gap.
+
+The real gap: every generic pending choice (skill-choice, feat-choice,
+subclass, ASI, spell-choice, weapon-mastery-choice, ...) is rendered by
+iterating `sheet.pending` — the resolver's list of choices NOT YET made.
+The moment `ch.decide(key, ...)` records a complete decision, that key drops
+out of `pending` and its picker widget vanishes from the screen entirely, in
+BOTH `creator.gd`'s step panels and `levelup.gd`'s flat choice form (which
+shows every pending choice as a toggle-group already — so within a still-
+pending choice you CAN already freely change your pick; the gap is only
+choices that have already resolved and disappeared). There is currently no
+way to reopen and change an already-made generic choice short of restarting
+the whole character.
+
+**The fix has to start below the UI.** `core/rules/resolve.gd`/`grants.gd`
+would need to expose the full set of choice points a build has ever
+encountered — decided or not — not just the unresolved ones, so creator.gd/
+levelup.gd can render an already-decided choice as an editable widget
+(pre-populated with the current picks, clicking toggles it the same way an
+unresolved one does) instead of it just vanishing. Read `core/rules/
+resolve.gd`, `grants.gd`, and `Resolved`'s `pending` field construction
+before touching anything — understand exactly how "pending" is computed
+today before adding a sibling "all choice points" list next to it.
+
+File ownership: `core/rules/resolve.gd`, `core/rules/grants.gd` (if the
+choice-point enumeration genuinely needs to move there), `scenes/creator/
+creator.gd`, `scenes/creator/levelup.gd`. Keep the change additive — pending
+computation itself must not change, only what ELSE gets exposed alongside it.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
