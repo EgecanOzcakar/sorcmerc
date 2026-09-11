@@ -6,6 +6,7 @@ extends SceneTree
 
 const World = preload("res://core/world.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Party = preload("res://core/party.gd")
 const RNG = preload("res://core/rng.gd")
 
@@ -27,6 +28,7 @@ func _init() -> void:
 	test_battle_marking_is_local()
 	test_trade()
 	test_steal_deterministic_and_hooks()
+	test_opinion_moves_prices_and_can_refuse_trade()
 	print("test_settlement_visit: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -149,3 +151,35 @@ func _rng_rolling(want: int):
 			return RNG.new(s)
 	check(false, "no seed rolls a %d" % want)
 	return RNG.new(1)
+
+# O7: what the faction thinks of you rides on top of the scarcity markup, and
+# past REFUSE_TRADE the stall is closed to you.
+func test_opinion_moves_prices_and_can_refuse_trade() -> void:
+	FactionOpinion.reset()
+	var w := _world()
+	var s = w.settlements[0]
+	var neutral := Visit.market(s, 120.0, false)
+	var hated := Visit.market(s, 120.0, false, -40.0)
+	var loved := Visit.market(s, 120.0, false, 40.0)
+	check(hated["markup"] > neutral["markup"], "a faction that dislikes you charges more")
+	check(loved["markup"] < neutral["markup"], "...and one that likes you charges less")
+	var id: String = neutral["stock"][0]["item_id"]
+	check(Visit.price_of(hated, id) > Visit.price_of(neutral, id), "the shelf price follows")
+	check(Visit.sell_price(loved, id) < Visit.sell_price(neutral, id), "so does the sell price")
+
+	var refused := Visit.market(s, 120.0, false, FactionOpinion.REFUSE_TRADE - 1.0)
+	check(refused["refused"] and refused["stock"].is_empty(), "below the floor they will not deal")
+	var party := _party()
+	party.gold = 100000
+	check(not Visit.buy(refused, party, id), "and nothing can be bought off a refused market")
+
+	# visit() reads the live score, so the same town is dearer after you rob it.
+	Visit.visit(s, w)
+	s.pending_opinion_delta = -40.0
+	FactionOpinion.drain(w)
+	w.clock.tick(Visit.RESTOCK * 3.0)
+	var after := Visit.visit(s, w)
+	check(after["opinion"] == -40.0, "visit() reads the live faction score")
+	check(after["markup"] > Visit.market(s, after["gap"], false)["markup"],
+		"robbing them shows up on the next visit's prices")
+	FactionOpinion.reset()

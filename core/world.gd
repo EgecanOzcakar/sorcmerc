@@ -113,13 +113,15 @@ func set_goal(p: RoamingParty, goal: Vector2) -> void:
 	p.goal = goal
 
 # One frame: advance the clock, then move everyone by the time it actually gave
-# us — so pause gates movement in exactly one place.
-func tick(delta: float) -> void:
+# us — so pause gates movement in exactly one place. Returns the world-time
+# advanced (0.0 while paused), which is what O7's per-day decay runs on.
+func tick(delta: float) -> float:
 	var dt := clock.tick(delta)
 	if dt <= 0.0:
-		return
+		return 0.0
 	for p in parties:
 		move_toward_goal(p, dt)
+	return dt
 
 # move_toward never overshoots, so arriving is just position == goal.
 func move_toward_goal(p: RoamingParty, delta: float) -> void:

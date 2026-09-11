@@ -4,6 +4,7 @@ extends SceneTree
 
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
 
 var _pass = 0
 var _fail = 0
@@ -20,6 +21,7 @@ func _init() -> void:
 	test_wander_stays_near_home_and_moves_on()
 	test_hunt_tracks_the_nearest_hostile()
 	test_civilized_parties_never_target_each_other()
+	test_low_opinion_turns_a_civilized_faction_hostile()
 	print("test_world_ai: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -102,6 +104,7 @@ func test_hunt_tracks_the_nearest_hostile() -> void:
 	check(hunter.position.distance_to(far.position) < before, "hunting actually closes in")
 
 func test_civilized_parties_never_target_each_other() -> void:
+	FactionOpinion.reset()
 	var w = World.new()
 	w.add_settlement(World.Settlement.new("riverhold", Vector2(50, 50), "soldier"))
 	var guard = w.add_party(World.RoamingParty.new("guard", Vector2.ZERO, "soldier"))
@@ -117,3 +120,29 @@ func test_civilized_parties_never_target_each_other() -> void:
 	check(WorldAI.is_hostile(w.add_party(World.RoamingParty.new("gob", Vector2.ZERO, "goblinoid")), other),
 		"but a goblinoid party is hostile to a soldier one")
 	check(WorldAI.is_monster("bandit") and not WorldAI.is_monster("soldier"), "the monster/civilized split")
+
+# O7: below FactionOpinion.HOSTILE a civilized faction's own parties hunt the
+# player like monsters do — and only the player.
+func test_low_opinion_turns_a_civilized_faction_hostile() -> void:
+	FactionOpinion.reset()
+	var w = World.new()
+	var guard = w.add_party(World.RoamingParty.new("guard", Vector2.ZERO, "soldier"))
+	var caravan = w.add_party(World.RoamingParty.new("caravan", Vector2(20, 0), "soldier"))
+	var player = w.add_party(World.RoamingParty.new("player", Vector2(120, 0), "soldier", true))
+	var orcs = w.add_party(World.RoamingParty.new("orcs", Vector2(300, 0), "orc"))
+	WorldAI.hunt(guard)
+	check(not WorldAI.is_hostile(guard, player), "at neutral opinion the guards leave you be")
+
+	FactionOpinion.set_opinion("soldier", FactionOpinion.HOSTILE - 1.0)
+	check(WorldAI.is_hostile(guard, player), "past the threshold they want the player dead")
+	check(not WorldAI.is_hostile(guard, caravan), "...but still never their own kind")
+	check(not WorldAI.is_hostile(guard, orcs), "...and they are not suddenly hunting monsters")
+	check(WorldAI.is_hostile(orcs, player), "monsters hunt the player regardless")
+	check(not WorldAI.is_hostile(player, guard), "the player party is never the hostile one")
+	WorldAI.update(w)
+	check(guard.goal == player.position, "an angry garrison hunts the player on the map")
+
+	# ...and it goes away again when the opinion recovers.
+	FactionOpinion.raise("soldier", 100.0)
+	check(not WorldAI.is_hostile(guard, player), "making it up to them ends the hunt")
+	FactionOpinion.reset()

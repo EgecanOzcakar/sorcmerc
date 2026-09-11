@@ -9,6 +9,8 @@
 #   reward: {gold, item_id (optional)}
 extends RefCounted
 
+const FactionOpinion = preload("res://core/faction_opinion.gd")
+
 const BIAS_WEIGHT := 2.0   # what an unfulfilled quest is worth to Scaler.roster_for
 
 # Hand-authored, four of them. Monster ids are data/monsters.json's — the bestiary
@@ -71,10 +73,20 @@ static func get_quest(party, id: String) -> Dictionary:
 	return {}
 
 # The one quest a merchant node offers: its own, not already in the log.
-static func offer_for(party, node_id: String) -> Dictionary:
+# O7: `opinion` is the giver's faction's opinion of the player (0 = neutral, which
+# is every T9 caller and so T9's behavior unchanged). Below QUEST_MIN they have no
+# work for you; above QUEST_GENEROUS they will pass you a neighbour's job once
+# their own is taken.
+static func offer_for(party, node_id: String, opinion := 0.0) -> Dictionary:
+	if opinion <= FactionOpinion.QUEST_MIN:
+		return {}
 	for q in CURATED:
 		if q["giver_node_id"] == node_id and get_quest(party, q["id"]).is_empty():
 			return fresh(q["id"])
+	if opinion >= FactionOpinion.QUEST_GENEROUS:
+		for q in CURATED:
+			if get_quest(party, q["id"]).is_empty():
+				return fresh(q["id"])
 	return {}
 
 static func accept(party, quest: Dictionary) -> bool:
@@ -126,9 +138,13 @@ static func can_turn_in(quest: Dictionary) -> bool:
 		and int(quest["progress"]) >= int(quest["required"])
 
 # Any merchant takes a finished quest, not just the giver (kept deliberately simple).
-static func turn_in(party, quest: Dictionary) -> bool:
+# O7: pass the taker's faction and finishing the job raises their opinion of you;
+# the linear campaign has no factions and passes nothing.
+static func turn_in(party, quest: Dictionary, faction := "") -> bool:
 	if not can_turn_in(quest):
 		return false
+	if faction != "":
+		FactionOpinion.raise(faction, FactionOpinion.QUEST_DONE)
 	var reward: Dictionary = quest.get("reward", {})
 	party.add_gold(int(reward.get("gold", 0)))
 	if reward.has("item_id"):

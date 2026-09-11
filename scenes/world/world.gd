@@ -22,6 +22,7 @@ const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices only
 const Sound = preload("res://core/audio.gd")
 
@@ -95,7 +96,9 @@ func _demo_world() -> World:
 # World.tick() advances the clock itself and gates movement on it, so one call
 # per frame is the whole update.
 func _process(delta: float) -> void:
-	world.tick(delta)
+	# O7: the clock's own advance (0 while paused) both drains O6's queued opinion
+	# deltas off the settlements and runs the slow drift back toward neutral.
+	FactionOpinion.tick(world, world.tick(delta))
 	WorldAI.update(world, delta)
 	_check_encounter()
 	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not
@@ -205,6 +208,12 @@ func _launch_combat(foe) -> void:
 	_combat_overlay = null
 	if String(result.get("outcome", "")) == "Victory":
 		world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
+		# O7 raise/lower event: putting down a monster band is a favour to whoever
+		# lives near the bodies; putting down a faction's own band is not.
+		if WorldAI.is_monster(foe.faction):
+			FactionOpinion.credit_fight(world, foe.position, FactionOpinion.FOUGHT_FOR, foe.faction)
+		else:
+			FactionOpinion.lower(foe.faction, FactionOpinion.KILLED_THEIRS)
 	else:
 		_retreat()
 	world.clock.resume()
@@ -239,9 +248,17 @@ func _check_visit() -> void:
 			if s == _left:
 				_left = null
 			continue
-		if s != _left:
-			_open_visit(s)
+		if s == _left:
+			continue
+		# O7 effect 3: past FactionOpinion.HOSTILE the gate guards come out instead
+		# of the market opening — O4's encounter path, with the garrison standing in
+		# as the party (it is not on the map, so beating it just ends the fight).
+		if FactionOpinion.is_hostile_to_player(s.faction):
+			_left = s
+			_launch_combat(World.RoamingParty.new("%s-guard" % s.id, s.position, s.faction))
 			return
+		_open_visit(s)
+		return
 
 func _open_visit(s) -> void:
 	world.clock.pause()
@@ -297,9 +314,11 @@ func _build_visit_panel() -> void:
 	title.add_theme_color_override("font_color", Icons.COL_GOLD)
 	box.add_child(title)
 	var mood := Label.new()
-	mood.text = "Shelves %d/%d · prices x%.2f%s · your purse: %d gp" % [
+	mood.text = "Shelves %d/%d · prices x%.2f%s%s · your purse: %d gp" % [
 		_visit["steps"], Visit.MAX_STEPS, _visit["markup"],
-		"  (fighting nearby)" if _visit["battle"] else "", party.gold]
+		"  (fighting nearby)" if _visit["battle"] else "",
+		"  (they will not trade with you)" if _visit.get("refused", false) else "",
+		party.gold]
 	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
 	box.add_child(mood)
 

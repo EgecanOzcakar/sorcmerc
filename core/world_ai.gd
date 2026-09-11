@@ -15,6 +15,7 @@ extends RefCounted
 
 const Scaler = preload("res://core/scaler.gd")
 const RNG = preload("res://core/rng.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
 
 # The split: `soldier` is the one faction in Scaler.FACTIONS that reads as a
 # settled, civilized power (it's what O1's settlements are garrisoned by);
@@ -27,14 +28,16 @@ static func is_monster(faction: String) -> bool:
 	return not CIVILIZED.has(faction)
 
 # Monsters are hostile to everything civilized (the player included, whatever
-# faction they fly); civilized parties are hostile to nobody yet — O7's faction
-# opinion is what will eventually make them hostile back.
+# faction they fly) — that rule never changes. O7: a civilized faction's own
+# parties turn on the player once its opinion has fallen past FactionOpinion
+# .HOSTILE, and on nobody else (conflict is still never civilized-vs-civilized).
 static func is_hostile(party, other) -> bool:
-	if party.is_player or not is_monster(party.faction):
+	if party.is_player:
 		return false
-	if "is_player" in other and other.is_player:
-		return true
-	return not is_monster(other.faction)
+	var other_is_player: bool = "is_player" in other and other.is_player
+	if not is_monster(party.faction):
+		return other_is_player and FactionOpinion.is_hostile_to_player(party.faction)
+	return other_is_player or not is_monster(other.faction)
 
 # --- behavior assignment ---------------------------------------------
 

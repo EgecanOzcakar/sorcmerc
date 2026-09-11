@@ -20,6 +20,7 @@ extends RefCounted
 const Campaign = preload("res://core/campaign.gd")
 const RNG = preload("res://core/rng.gd")
 const Dice = preload("res://core/dice.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
 
 # World-time is in minutes (scenes/world/world.gd's HUD reads elapsed/60 as hours).
 # Calibration knobs — a party crosses the demo map in ~20 world-minutes, so a
@@ -82,12 +83,18 @@ static func mark_battle(world, at: Vector2, now: float) -> void:
 # The whole market, pure: same (settlement, gap, battle) -> same shelf and prices.
 # Shelf grows with the gap since the last visit; a thin shelf is a dear one, and
 # a fight nearby halves it again and marks everything up.
-static func market(s, gap: float, battle: bool) -> Dictionary:
+static func market(s, gap: float, battle: bool, opinion := 0.0) -> Dictionary:
 	var steps := clampi(int(gap / RESTOCK), 0, MAX_STEPS) if gap >= 0.0 else MAX_STEPS
 	var full: float = float(steps) / float(MAX_STEPS)
 	var markup := 1.0 + SCARCITY_MARKUP * (1.0 - full)
 	if battle:
 		markup *= BATTLE_MARKUP
+	# O7: what they think of you rides on top of the scarcity markup, and past
+	# REFUSE_TRADE they clear the stall rather than deal with you at all.
+	markup *= 1.0 - FactionOpinion.PRICE_SWING * opinion / FactionOpinion.RANGE
+	if opinion <= FactionOpinion.REFUSE_TRADE:
+		return {"steps": steps, "markup": markup, "battle": battle, "gap": gap,
+			"opinion": opinion, "refused": true, "stock": []}
 	var ids := catalog(s)
 	var share := 0.25 + 0.75 * full
 	if battle:
@@ -101,14 +108,15 @@ static func market(s, gap: float, battle: bool) -> Dictionary:
 		out.append({"item_id": id, "name": Campaign.item_name(id),
 			"price": maxi(1, int(round(Campaign.item_price(id) * markup)))})
 	out.sort_custom(func(a, b): return String(a["item_id"]) < String(b["item_id"]))
-	return {"steps": steps, "markup": markup, "battle": battle, "gap": gap, "stock": out}
+	return {"steps": steps, "markup": markup, "battle": battle, "gap": gap,
+		"opinion": opinion, "refused": false, "stock": out}
 
 # A visit: reads the gap off the world clock, then stamps it, so visiting twice in
 # a row is a bare shelf and coming back tomorrow is a full one.
 static func visit(s, world) -> Dictionary:
 	var now: float = world.clock.elapsed
 	var gap: float = now - s.last_visited if s.last_visited >= 0.0 else -1.0
-	var m := market(s, gap, battle_recent(s, now))
+	var m := market(s, gap, battle_recent(s, now), FactionOpinion.get_opinion(s.faction))
 	m["settlement"] = s
 	m["services"] = services(s)
 	s.last_visited = now

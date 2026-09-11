@@ -1842,4 +1842,49 @@ and does not reopen on the spot, coming back reopens). Its O4 case moved out to
 open country — standing on `(0,0)` is standing in Riverhold now. Full suite: 29
 test files, 0 failures; all 6 `drive_*` OK.
 
+**O7 completion (2026-09-11):** new `core/faction_opinion.gd` (~115 lines) plus
+small hooks in `core/world_ai.gd`, `core/settlement_visit.gd`, `core/quest.gd`,
+`core/world.gd` (`tick()` now returns the world-time it advanced) and
+`scenes/world/world.gd`; `core/campaign.gd`, `scenes/campaign/*`,
+`scenes/main.gd` and `core/world_battle.gd` untouched.
+- **Scale**: one float per faction, -100..100, 0 = neutral/unknown, held in a
+  `static var` dictionary — the two hot readers (`WorldAI.is_hostile`,
+  `SettlementVisit.market`) are static functions reached from places with no
+  handle on the `World`, and there is one live world at a time (`ponytail:`
+  noted, hang it on `World` the day two coexist). `reset()` for tests/new game.
+- **Thresholds**: `QUEST_MIN -25` (no work for you) < `HOSTILE -50` (guards and
+  roaming parties attack) < `REFUSE_TRADE -75` (nobody sells to you), and
+  `QUEST_GENEROUS +40`. Spaced so one theft (O6's -5/-10) is noise and a run of
+  them — or a fight with the faction's own bands (-8 each) — is what walks the
+  score past them. Decay is `2.0`/world-day via `move_toward(0)`, so the worst
+  standing heals in ~50 days of leaving them alone; factions already at 0 are
+  skipped entirely.
+- **Effects**: prices are `markup *= 1 - 0.4 * opinion/100` (x1.4 at -100, x0.6
+  at +100) on top of O6's scarcity markup, sell price follows, and at/below
+  `REFUSE_TRADE` `market()` returns an empty shelf with `refused: true`;
+  `Quest.offer_for(party, node_id, opinion := 0.0)` offers nothing below
+  `QUEST_MIN` and hands over another giver's job above `QUEST_GENEROUS` (the
+  default keeps T9/the linear campaign byte-identical); `WorldAI.is_hostile()`
+  makes a *civilized* party hostile to the player (and only the player) below
+  `HOSTILE` — the monster rule is untouched; `_check_visit()` below `HOSTILE`
+  launches O4's `_launch_combat()` with a synthetic `"<id>-guard"` garrison
+  party instead of opening the market (not on the map, so beating it just ends
+  the fight — no second combat path).
+- **Raise/lower sites**: `Quest.turn_in(party, quest, faction := "")` raises
+  +10; `scenes/world/world.gd`'s O4 victory calls `credit_fight()` (+5 to every
+  civilized faction with a settlement inside 140 units of the bodies, never the
+  dead band's own faction) for a monster kill, and `lower(+8)` on the faction
+  whose own band the player just wiped out. `FactionOpinion.tick(world,
+  world.tick(delta))` in `_process` drains O6's `pending_opinion_delta` per
+  settlement into its faction and then decays — a paused clock does neither.
+- **Persistence**: skipped. Nothing persists world state yet (`campaign_save.gd`
+  is the linear campaign's); `all()`/`set_opinion()` are the whole surface a
+  future world save needs.
+`tests/test_faction_opinion.gd`: 23 passed (raise/lower/clamp, decay drifting
+and stopping dead at 0, neutral factions untouched, the drain being per-faction
+and one-shot, `credit_fight` locality). Effect tests live with the systems they
+change: `test_settlement_visit` 38, `test_quest` 463, `test_world_ai` 43.
+`tests/drive_world.gd` extended with the live hostile-settlement case. Full
+suite: 30 test files, 0 failures; all 6 `drive_*` OK.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.

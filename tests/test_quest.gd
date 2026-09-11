@@ -5,6 +5,7 @@ extends SceneTree
 
 const Party = preload("res://core/party.gd")
 const Quest = preload("res://core/quest.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Presets = preload("res://core/presets.gd")
 const RNG = preload("res://core/rng.gd")
@@ -28,6 +29,8 @@ func _party() -> Party:
 func _init() -> void:
 	test_catalog()
 	test_offer_accept()
+	test_opinion_gates_offers()
+	test_turn_in_raises_the_faction()
 	test_kill_count()
 	test_collect_item()
 	test_bias()
@@ -134,3 +137,39 @@ func _count(spec: Dictionary, id: String) -> int:
 		if e["id"] == id:
 			return int(e["count"])
 	return 0
+
+# O7: the giver's faction opinion gates what (if anything) is on offer, and a
+# turn-in credited to a faction raises it.
+func test_opinion_gates_offers() -> void:
+	FactionOpinion.reset()
+	var p := _party()
+	check(Quest.offer_for(p, "wayside-camp").is_empty() == false, "neutral offers as before")
+	check(Quest.offer_for(p, "wayside-camp", FactionOpinion.QUEST_MIN - 1.0).is_empty(),
+		"a faction that dislikes you has no work for you")
+	check(not Quest.offer_for(p, "wayside-camp", FactionOpinion.QUEST_MIN + 1.0).is_empty(),
+		"just above the floor they still hire you")
+	# Take both of this giver's quests: at neutral it is out of work, while a
+	# faction that likes you passes you somebody else's.
+	Quest.accept(p, Quest.offer_for(p, "wayside-camp"))
+	Quest.accept(p, Quest.offer_for(p, "wayside-camp"))
+	check(Quest.offer_for(p, "wayside-camp").is_empty(), "a tapped-out giver offers nothing")
+	var extra := Quest.offer_for(p, "wayside-camp", FactionOpinion.QUEST_GENEROUS)
+	check(not extra.is_empty() and extra["giver_node_id"] != "wayside-camp",
+		"a faction that likes you hands over a neighbour's job")
+
+func test_turn_in_raises_the_faction() -> void:
+	FactionOpinion.reset()
+	var p := _party()
+	var q := Quest.fresh("road-clearing")
+	Quest.accept(p, q)
+	Quest.record_kills(p, ["vess", "vess", "vess"], RNG.new(1))
+	check(Quest.turn_in(p, q, "soldier"), "turn in at a faction's town")
+	check(FactionOpinion.get_opinion("soldier") == FactionOpinion.QUEST_DONE,
+		"finishing their job raises their opinion")
+	var q2 := Quest.fresh("kritch-bounty")
+	Quest.accept(p, q2)
+	Quest.record_kills(p, ["kritch", "kritch", "kritch", "kritch"], RNG.new(1))
+	check(Quest.turn_in(p, q2), "the factionless (linear campaign) turn-in still works")
+	check(FactionOpinion.get_opinion("soldier") == FactionOpinion.QUEST_DONE,
+		"...and moves nobody's opinion")
+	FactionOpinion.reset()

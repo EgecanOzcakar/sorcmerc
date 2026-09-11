@@ -112,6 +112,7 @@ func _run() -> void:
 	await _encounter_handoff(p)
 	await _offscreen_battle(p)
 	await _settlement_visit(p)
+	await _hostile_settlement(p)
 	_done()
 
 # --- O6: walking into a settlement opens the market, Leave closes it --------
@@ -173,6 +174,44 @@ func _settlement_visit(p) -> void:
 		fail("coming back to the settlement did not open the market again")
 	else:
 		screen._close_visit()
+
+# --- O7: at a low enough opinion the gate guards come out instead of the market --
+func _hostile_settlement(p) -> void:
+	var FactionOpinion = load("res://core/faction_opinion.gd")
+	var s = screen.world.settlements[0]
+	FactionOpinion.set_opinion(s.faction, FactionOpinion.HOSTILE - 1.0)
+	screen._left = null
+	p.position = s.position
+	screen.world.set_goal(p, s.position)
+	screen._check_visit()
+	if not screen._visit.is_empty():
+		fail("a hostile settlement still opened its market")
+	if screen._combat == null:
+		fail("walking into a hostile settlement did not trigger a fight")
+		FactionOpinion.reset()
+		return
+	if not screen.world.clock.is_paused():
+		fail("the guard fight did not pause the world clock")
+	# Win it: the garrison is not a map party, so the map just carries on.
+	var n: int = screen.world.parties.size()
+	screen._combat.result = {"outcome": "Victory", "xp": 10, "gold": 5}
+	await step(4)
+	if screen._combat != null:
+		fail("the guard fight scene was never torn down")
+	if screen.world.parties.size() != n:
+		fail("beating the garrison removed a party from the map")
+	if FactionOpinion.get_opinion(s.faction) >= FactionOpinion.HOSTILE - 1.0:
+		fail("killing their garrison did not lower the faction further")
+	# Back to friendly terms: the same walk-in opens the market again.
+	FactionOpinion.set_opinion(s.faction, 0.0)
+	screen._left = null
+	screen.world.clock.resume()
+	screen._check_visit()
+	if screen._visit.is_empty():
+		fail("a settlement at neutral opinion did not open its market")
+	else:
+		screen._close_visit()
+	FactionOpinion.reset()
 
 # --- O5: two NPC parties meeting resolve off-screen, no scene, no pause -----
 func _offscreen_battle(p) -> void:
