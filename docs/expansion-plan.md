@@ -1309,4 +1309,29 @@ size tuning only.
   pass.** Pushed (T34 + T35's throwaway sweep script only — the candidate
   branches are not merged, by design).
 
+## T36 — measure starting distance alone (locked 2026-09-11, dispatched now)
+
+A follow-up to T35, same rules: measurement only, nothing adopted
+automatically. T35's one SPAWN_GAP data point (`t35-diagnostic-spawn-gap`,
+3→6) was confounded — it ran ON TOP OF the wider-boards candidate, not in
+isolation, and was explicitly flagged as outside that task's own scope. This
+task isolates the one variable: increasing `SPAWN_GAP` (`core/encounter.gd`
+— how close a foe may spawn to the nearest party member at combat start)
+alone, boards and `FT_PER_HEX` left at their current values.
+
+Reuse `tests/sweep_range.gd` (already on master from T35 — do not rebuild
+the measurement tooling) exactly as T35 ran it, varying only `SPAWN_GAP`.
+Try at least 2-3 values spanning a real range (e.g. 4, 6, 8 — use judgment,
+but don't test only one value and call it decided). Report the same metrics
+T35 did (rounds to universal adjacency, overall ranged-attack share, ranged
+share among attackers who have a ranged option, party win rate, fight
+length, and the never-fully-closed fight count) side by side against T35's
+already-published baseline row.
+
+File ownership: `core/encounter.gd` (`SPAWN_GAP` only), reusing
+`tests/sweep_range.gd` unmodified unless it genuinely needs a small
+extension to report the same breakdown cleanly. Leave the tree back at
+baseline when done, one commit per value tested on its own branch, matching
+how T35 organized its candidates — do not land a chosen value on master.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
