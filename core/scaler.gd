@@ -57,10 +57,13 @@ const MULT_STEP := 0.05
 const MIX := ["snik", "vess", "kritch", "grull"]
 
 # T16: one board, one faction — a roster never mixes a dragon with a goblin.
-# "sunken-shrine" deliberately maps to nothing: the shrine fights stay the four
-# hand-tuned archetypes every difficulty target was calibrated against.
+# T41: "sunken-shrine" used to map to "" (the hand-tuned MIX), which made it the
+# one theme with no body budget of its own — always MAX_FOES with the whole tier
+# in mult, so it swung wildly with every TIER retune (6% at T38, 47% at T40).
+# "undead" (17 entries, all habitat "dungeon", so no THEME_HABITAT split needed)
+# is the drowned-shrine roster: 3.4 foes x0.89, 64.5% against hard's 75%.
 const THEME_FACTION := {
-	"sunken-shrine": "", "goblin-camp": "goblinoid", "frozen-cave": "giant",
+	"sunken-shrine": "undead", "goblin-camp": "goblinoid", "frozen-cave": "giant",
 	"city-square": "bandit", "forest-clearing": "beast", "merchant-shop": "bandit",
 }
 # Most factions are already habitat-uniform (every "goblinoid" is "cave", every
@@ -105,12 +108,12 @@ static func _budget(party_characters: Array, difficulty: String) -> float:
 # 75.0% hard node (was 37.5/55/15/10/2.5, pooled 24.0%). These numbers are copied
 # verbatim into campaign.gd's BOSS_POOL win_rate fields, which is what
 # BOSS_REF_WIN_RATE's XP bonus reads. The lead-less shrine boss is swept as a
-# plain hard node on its own theme (200 seeds, printed by the same test): 47.0%,
-# up from 6.0% — "sunken-shrine" maps to no faction (THEME_FACTION) so it always
-# fields MAX_FOES of the hand-tuned MIX and dumps the whole tier into mult, which
-# makes it the entry that moves most when hard moves at all (x1.40 -> x0.95). It
-# has been an outlier since T16 in both directions; it wants THEME_FACTION or
-# MAX_FOES, not TIER.
+# plain hard node on its own theme (200 seeds, printed by the same test): 64.5%
+# (was 47.0% at T40, 6.0% at T38). T41 closed that outlier the way T40's note
+# asked — THEME_FACTION, not TIER: the shrine now draws an undead roster and
+# scales on bodies like every other theme (3.4 foes x0.89, both knobs mid-range),
+# so a TIER change moves it as much as it moves anything else. The ~10-point gap
+# left under hard is the chaff-vs-chunk ceiling, not the mapping.
 # A boss spends the *hard* budget, so cutting hard 1.80 -> 1.32 thinned every
 # boss's escort, and the pool gained 21 points while the hard node it is measured
 # against gained 23.5 — the pool tracks hard almost one-for-one because the lead

@@ -4,8 +4,7 @@
 #   godot --headless --path . -s tests/drive_campaign.gd
 extends SceneTree
 
-const Hex = preload("res://core/hex.gd")
-const Quest = preload("res://core/quest.gd")
+const AI = preload("res://core/ai.gd")
 
 const MAX_STEPS := 4000
 
@@ -133,9 +132,12 @@ func _visit_step() -> void:
 		fail("no Continue on the %s node" % kind)
 		main.run.leave()
 
-# One press of the real combat screen, drive_ui style: close to melee, swing,
-# end the turn. Deliberately dumb — this smoke test is about the wiring, and
-# tests/drive_ui.gd already exercises the verb menu properly.
+# One hero turn on the real combat screen: the party plays itself with the same
+# AI the foes use, then the real End-turn button hands back to the turn loop.
+# T41: the old version closed to melee and swung by hand, which lost the opening
+# fight — and since T12 made stage 0 combat-only there is no road around it, so
+# the run ended at stage 0 and every later assertion failed. This smoke test is
+# about the campaign wiring; tests/drive_ui.gd exercises the verb menu properly.
 func _fight_step() -> void:
 	var fight = main._combat
 	var cb = fight.cb
@@ -143,45 +145,14 @@ func _fight_step() -> void:
 		return
 	_presses += 1
 	_did["fight"] = true
-	if fight._mode in ["cone", "target"]:
-		var h = cb.current()
-		for c in cb.combatants:
-			if fight._valid_target(h, c):
-				fight.board_hex_clicked(c.pos)
-				return
-		fight.board_cancel()
+	if fight._mode == "deploy":            # T39: a scouted node deploys first
+		if not press(fight, "Begin"):
+			fail("no way out of the deployment phase")
 		return
+	AI.take_turn(cb, cb.current())
 	var btns: Array = []
 	for b in fight._buttons.get_children():
 		if b is Button and not b.is_queued_for_deletion():
 			btns.append(b)
-	if btns.is_empty():
-		return
-	# "Attack…", never "Reckless Attack" — the free toggle does not spend the action.
-	for b in btns:
-		if "] Attack" in b.text:
-			b.pressed.emit()
-			return
-	if _step_toward_a_foe(cb):
-		return
-	btns[btns.size() - 1].pressed.emit()   # End turn
-
-func _step_toward_a_foe(cb) -> bool:
-	var h = cb.current()
-	if h.econ["move_left"] <= 0:
-		return false
-	var foes = cb.enemies_of(h)
-	if foes.is_empty():
-		return false
-	var goal = h.pos
-	var best := 1 << 30
-	for hx in cb.move_field(h):
-		var d: int = Hex.distance(hx, foes[0].pos)
-		if d < best:
-			best = d
-			goal = hx
-	if goal == h.pos:
-		return false
-	_did["move"] = true
-	main._combat.board_hex_clicked(goal)
-	return true
+	if not btns.is_empty():
+		btns[btns.size() - 1].pressed.emit()   # End turn

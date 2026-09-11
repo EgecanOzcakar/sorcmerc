@@ -16,6 +16,7 @@
 #   "long_rests_used": 0,              // capped at Campaign.MAX_LONG_RESTS per run
 #   "opportunity_taken": false,        // this node's one Perception/Survival attempt, spent or not
 #   "scouted": [],                     // next stage's fights, once a Survival check has read them
+#   "node_scouted": false,             // THIS node was scouted: its surprise round is guaranteed
 #   "seed": 1234,                      // the run RNG's seed, so loot/quest rolls reproduce
 #   "log": ["→ The Hollow Market"],
 #   "party": {
@@ -54,6 +55,7 @@ static func to_dict(campaign) -> Dictionary:
 		"long_rests_used": campaign.long_rests_used,
 		"opportunity_taken": campaign.opportunity_taken,
 		"scouted": campaign.scouted.duplicate(true),
+		"node_scouted": campaign.node_scouted,
 		"seed": int(campaign.rng.seed_value),
 		"log": campaign.log.duplicate(),
 		"party": {
@@ -90,6 +92,7 @@ static func from_dict(d: Dictionary):
 	campaign.long_rests_used = int(d.get("long_rests_used", 0))
 	campaign.opportunity_taken = bool(d.get("opportunity_taken", false))
 	campaign.scouted = d.get("scouted", [])
+	campaign.node_scouted = bool(d.get("node_scouted", false))
 	campaign.log.assign(d.get("log", []))
 	campaign.node = _node(campaign, String(d.get("node_id", "")))
 	return campaign

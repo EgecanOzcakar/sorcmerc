@@ -627,9 +627,19 @@ func test_opportunity() -> void:
 			for n in e.scouted:
 				check(n in e.route[e.stage + 1] and n["kind"] == "combat",
 					"and they are really the next stage's fights")
+			var ahead: Array = e.scouted.duplicate()
 			e.leave()
-			e.enter(0)
+			# T41: walk into one of the fights that was named, mid-combat-save it,
+			# and the guaranteed ambush has to come back with it.
+			var into := 0
+			for j in e.options().size():
+				if e.options()[j] in ahead:
+					into = j
+			e.enter(into)
 			check(e.scouted.is_empty(), "the forewarning is spent once the party walks on")
+			check(e.node_scouted, "but entering a scouted fight remembers it was scouted")
+			check(CampaignSave.from_dict(CampaignSave.to_dict(e)).node_scouted,
+				"and that guarantee survives a mid-combat save/load")
 			break
 	check(found, "a Survival success is reachable")
 

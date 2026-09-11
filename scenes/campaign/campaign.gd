@@ -492,18 +492,16 @@ const COMBAT_SCENE := "res://scenes/main.tscn"
 
 func _enter(index: int) -> void:
 	_retire_armed = false
-	# T39: enter() clears run.scouted, so read "did we scout this one" first.
-	var opts := run.options()
-	var scouted_ahead: bool = index >= 0 and index < opts.size() and run.scouted.any(
-		func(n): return n.get("id", "") == opts[index].get("id", ""))
 	var node := run.enter(index)
 	if not node.is_empty() and run.state == "combat":
-		_launch_combat(scouted_ahead)
+		_launch_combat()
 	_refresh()
 
 # The whole handoff: inject party/spec/difficulty, let the combat screen run, and
 # read `result` back off it when the fight is over.
-func _launch_combat(scouted_ahead := false) -> void:
+# T41: whether this fight was scouted comes off the run (enter() works it out and
+# campaign_save.gd persists it), so resuming a mid-combat save keeps the ambush.
+func _launch_combat() -> void:
 	_combat_overlay = Control.new()
 	_combat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_combat_overlay)
@@ -511,7 +509,7 @@ func _launch_combat(scouted_ahead := false) -> void:
 	_combat.party = party
 	_combat.spec = run.combat_spec()
 	_combat.difficulty = run.node_difficulty()
-	_combat.scouted_ahead = scouted_ahead
+	_combat.scouted_ahead = run.node_scouted
 	_combat_overlay.add_child(_combat)
 
 	# Wait out the fight — main.gd fills `result` in its _finish().

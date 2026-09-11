@@ -271,7 +271,7 @@ const POOL := [
 const BOSS := {"id": "sunken-shrine", "kind": "combat", "stage_position": ["boss"],
 	"title": "THE SUNKEN SHRINE", "desc": "Whatever has been calling them lives down here.",
 	"difficulty": "hard", "boss": true, "archetype": "classic", "gold": 250,
-	"theme": "sunken-shrine", "win_rate": 0.47}
+	"theme": "sunken-shrine", "win_rate": 0.645}
 
 # win_rate is each boss's measured sweep result (scaler.gd's TUNING header, T18)
 # — how much harder it plays than a plain "hard" node. finish_combat() turns the
@@ -452,6 +452,10 @@ func enter(i: int) -> Dictionary:
 		return {}
 	node = opts[i]
 	identify_failed.clear()          # a new camp is a new chance to examine
+	# T41: was this node one the last Survival check named? Answer before the clear
+	# below and keep it on the run — the autosave at the end of enter() is what a
+	# mid-combat reload reads back, and by then `scouted` is empty.
+	node_scouted = scouted.any(func(n): return n.get("id", "") == node.get("id", ""))
 	# A fresh node earns a fresh attempt (campaign_save.gd persists these two
 	# across a reload of the SAME node — this reset is only for entering a new one).
 	opportunity_taken = false
@@ -795,6 +799,7 @@ const OPPORTUNITY_GOLD_MIN := 25
 
 var opportunity_taken := false    # one attempt per node, win or lose
 var scouted: Array = []           # next stage's fights, once Survival has read them
+var node_scouted := false         # T39/T41: this node was scouted — surprise is automatic
 
 # The check on offer here, or {} — the panel's button. Carries who would roll it.
 func opportunity() -> Dictionary:
