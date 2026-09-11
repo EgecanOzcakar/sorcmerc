@@ -2401,4 +2401,19 @@ shot_world.gd`): clean, readable pawn silhouettes per faction, player's
 gold ring still visible at its feet, moved to draw before the sprite so
 its far arc reads as occluded ground. Full suite + all `drive_*` green.
 
+**O17 completion (2026-09-11):** landed as `2ceb592`. `SORCMERC_SAVE_DIR`
+(resolved once, cached, defaults to `user://autosave` unchanged for real
+play) added to `core/campaign_save.gd`/`core/world_save.gd`; every save-
+touching test driver sets its own unique dir as the first line of
+`_init()`. One real finding along the way: `OS.get_process_id()` alone
+doesn't isolate anything on this box's flatpak Godot build — every
+process reports pid 3 inside its own namespace — so the dir is keyed on
+pid+`randi()` instead (auto-randomized per process, verified unique
+across 6 concurrent probes). Reproduced the actual failure before
+fixing it (a looped `drive_campaign` racing repeated `drive_game` runs:
+1/12 failed) and confirmed it's gone after (0/24, plus 6 more
+drive_world/drive_game pairs, 0 collisions) — proof, not just "tests
+pass." Full suite green sequentially, verified independently by me as
+well as by the agent.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
