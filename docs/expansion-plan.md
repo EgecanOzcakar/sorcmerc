@@ -3142,4 +3142,10 @@ and image-production only for this dispatch — no integration into
 `tools/lpc_compose.py`'s loadout system or `scenes/main.gd` yet, that's
 a follow-up once the images are approved.
 
+**Checkpoint (2026-09-12):** user asked for a single example — Baboon
+(a `beast`-faction bestiary entry) — before the rest of the batch.
+Redirected mid-task: produce just this one monster through the full
+pipeline (source, license-record, background removal, pixelize) and
+report back for approval before continuing to the other ~10-14.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
