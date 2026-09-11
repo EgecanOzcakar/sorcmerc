@@ -39,6 +39,7 @@ func _init() -> void:
 	test_settlements()
 	test_quest_flow()
 	test_identification()
+	test_opportunity()
 	test_full_run()
 	print("test_campaign: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -360,7 +361,7 @@ func test_merchant() -> void:
 	for n in Campaign.POOL:
 		if n["kind"] != "merchant":
 			continue
-		var m := Campaign.new(c.party)
+		var m := _campaign()   # a fresh party per merchant: stashes must not pile up
 		m.node = n
 		if Campaign.SCROLL in m.stock_ids():
 			scrolls += 1
@@ -579,6 +580,70 @@ func test_identification() -> void:
 		h._take_treasure()
 		drops += h.party.stash_count(Campaign.IDENTIFY_SCROLL)
 	check(drops > 0 and drops < 20, "the scroll drops from hoards sometimes, not always (%d/20)" % drops)
+
+# T30 — one skill check per node: Perception in a treasure room (bonus purse),
+# Survival after a victory (the next stage's fights, named in advance).
+func test_opportunity() -> void:
+	var c := _campaign()
+	check(c.opportunity().is_empty(), "no check on offer while picking")
+	c.enter(_find(c, "treasure"))
+	var opp := c.opportunity()
+	check(opp.get("skill", "") == "perception" and opp.get("char_id", "") != "",
+		"a treasure room offers a Perception check to somebody")
+	check(c.opportunity_check(), "the check resolves")
+	check(c.opportunity_taken and c.opportunity().is_empty(), "and there is no second attempt here")
+
+	# both outcomes are reachable, and a success pays
+	var hits := 0
+	var misses := 0
+	for s in range(1, 41):
+		var e := _campaign()
+		e.enter(_find(e, "treasure"))
+		e.rng = load("res://core/rng.gd").new(s)
+		var gold: int = e.party.gold
+		if e.opportunity_check():
+			hits += 1
+			check(e.party.gold > gold, "a found purse is banked")
+		else:
+			misses += 1
+			check(e.party.gold == gold, "a failed search pays nothing")
+	check(hits > 0 and misses > 0, "both outcomes are reachable (%d/%d)" % [hits, misses])
+
+	# after a victory: Survival names what is on the next stage
+	var d := _campaign()
+	d.enter(_find(d, "combat"))
+	check(d.opportunity().is_empty(), "no check mid-fight")
+	d.finish_combat({"outcome": "Victory", "xp": 10, "gold": 0, "loot": [], "deaths": [], "kills": []})
+	check(d.opportunity().get("skill", "") == "survival", "a won fight offers a Survival check")
+	var found := false
+	for s in range(1, 41):
+		var e := _campaign()
+		e.enter(_find(e, "combat"))
+		e.finish_combat({"outcome": "Victory", "xp": 0, "gold": 0, "loot": [], "deaths": [], "kills": []})
+		e.rng = load("res://core/rng.gd").new(s)
+		if e.opportunity_check():
+			found = true
+			check(e.scouted.size() > 0, "a success names the next stage's fights")
+			for n in e.scouted:
+				check(n in e.route[e.stage + 1] and n["kind"] == "combat",
+					"and they are really the next stage's fights")
+			e.leave()
+			e.enter(0)
+			check(e.scouted.is_empty(), "the forewarning is spent once the party walks on")
+			break
+	check(found, "a Survival success is reachable")
+
+	# the boss stage has no road after it to scout
+	var f := _campaign()
+	f.stage = f.route.size() - 1
+	f.enter(0)
+	f.finish_combat({"outcome": "Victory", "xp": 0, "gold": 0, "loot": [], "deaths": [], "kills": []})
+	check(f.opportunity().is_empty(), "nothing to scout past the boss")
+
+	# a rest or merchant node offers none
+	var g := _campaign()
+	g.enter(_find(g, "rest"))
+	check(g.opportunity().is_empty(), "no check at a camp")
 
 func test_full_run() -> void:
 	var c := _campaign()

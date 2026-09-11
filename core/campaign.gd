@@ -50,6 +50,18 @@ const POOL := [
 	{"id": "market-brawl", "kind": "combat", "stage_position": ["early"],
 		"title": "Brawl in the square", "desc": "It started over a mule. It will not end there.",
 		"difficulty": "normal", "gold": 50, "theme": "city-square"},
+	{"id": "drover-road", "kind": "combat", "stage_position": ["early", "mid"],
+		"title": "The drovers' road", "desc": "The herd stopped two hours ago. Nobody is driving it now.",
+		"difficulty": "normal", "gold": 45, "theme": "forest-clearing"},
+	{"id": "dog-hollow", "kind": "combat", "stage_position": ["early"],
+		"title": "The hollow the dogs came from", "desc": "Something down there bit first and ran second.",
+		"difficulty": "easy", "theme": "goblin-camp"},
+	{"id": "cellar-door", "kind": "combat", "stage_position": ["early", "mid"],
+		"title": "The cellar door", "desc": "Barred from the inside. That is the problem.",
+		"difficulty": "normal", "gold": 35, "theme": "merchant-shop"},
+	{"id": "wet-ford", "kind": "combat", "stage_position": ["early"],
+		"title": "The wet ford", "desc": "Knee-deep, slow, and watched from the far bank.",
+		"difficulty": "easy", "theme": "forest-clearing"},
 	# --- combat: mid ------------------------------------------------------
 	{"id": "warband-camp", "kind": "combat", "stage_position": ["mid"],
 		"title": "The warband camp (hard)",
@@ -70,6 +82,18 @@ const POOL := [
 	{"id": "market-gate", "kind": "combat", "stage_position": ["mid"],
 		"title": "The market gate", "desc": "A toll-taker with too few friends.",
 		"difficulty": "easy", "theme": "city-square"},
+	{"id": "quarry-floor", "kind": "combat", "stage_position": ["mid"],
+		"title": "The quarry floor", "desc": "Sheer walls, one ramp, and they know which.",
+		"difficulty": "hard", "gold": 85, "theme": "goblin-camp"},
+	{"id": "sleet-crossing", "kind": "combat", "stage_position": ["mid", "late"],
+		"title": "The sleet crossing", "desc": "The wind takes your shouting. Theirs too.",
+		"difficulty": "normal", "gold": 55, "theme": "frozen-cave"},
+	{"id": "counting-house", "kind": "combat", "stage_position": ["mid"],
+		"title": "The counting house", "desc": "They are still filling sacks. Interrupt them.",
+		"difficulty": "normal", "gold": 75, "theme": "merchant-shop"},
+	{"id": "hanged-oak", "kind": "combat", "stage_position": ["mid"],
+		"title": "Under the hanged oak", "desc": "Four ropes, three of them empty. Somebody is cutting them down.",
+		"difficulty": "normal", "theme": "forest-clearing"},
 	# --- combat: late -----------------------------------------------------
 	{"id": "shrine-steps", "kind": "combat", "stage_position": ["late"],
 		"title": "The shrine steps", "desc": "The last of them, camped on holy ground.",
@@ -83,6 +107,18 @@ const POOL := [
 	{"id": "rearguard", "kind": "combat", "stage_position": ["late"],
 		"title": "The pack's rearguard", "desc": "Left behind to buy their chief an hour.",
 		"difficulty": "hard", "gold": 85, "theme": "goblin-camp"},
+	{"id": "shrine-causeway", "kind": "combat", "stage_position": ["late"],
+		"title": "The causeway", "desc": "One road in, black water either side, and they hold the middle.",
+		"difficulty": "hard", "gold": 90, "theme": "sunken-shrine"},
+	{"id": "last-toll", "kind": "combat", "stage_position": ["late"],
+		"title": "The last toll", "desc": "The same racket as the bridge. Bigger knives.",
+		"difficulty": "normal", "gold": 80, "theme": "city-square"},
+	{"id": "chief-tent", "kind": "combat", "stage_position": ["late"],
+		"title": "The chief's tent", "desc": "Empty. His guard is not.",
+		"difficulty": "hard", "gold": 95, "theme": "goblin-camp"},
+	{"id": "black-ice", "kind": "combat", "stage_position": ["mid", "late"],
+		"title": "Black ice", "desc": "You can see them through the floor. They can see you.",
+		"difficulty": "hard", "gold": 90, "theme": "frozen-cave"},
 	# --- settlements (T25: every one has a Generalist; size adds specialists) --
 	{"id": "wayside-camp", "kind": "merchant", "stage_position": ["early", "mid"],
 		"title": "The wayside camp", "desc": "A pedlar, a fire, and work for anyone with a sword.",
@@ -127,6 +163,37 @@ const POOL := [
 			"librarian": "\"Hand it here. I've read worse handwriting than a wizard's.\"",
 			"healer": "\"Lie down, bite this, and don't watch.\"",
 		}},
+	{"id": "ford-stall", "kind": "merchant", "stage_position": ["early"],
+		"title": "The stall at the ford", "desc": "A plank on two barrels. Older than the bridge.",
+		"size": "camp", "services": [],
+		"npcs": {"generalist": "\"Cross first, haggle after. Water's rising.\""}},
+	{"id": "spice-road-inn", "kind": "merchant", "stage_position": ["early", "mid"],
+		"title": "The Spice Road inn", "desc": "Bad beer, good fire, and a board full of grievances.",
+		"size": "village", "services": ["innkeeper"],
+		"npcs": {
+			"generalist": "\"Road stock only. Anything heavier, wait for the market.\"",
+			"innkeeper": "\"Half this board is lies. The other half pays.\"",
+		}},
+	{"id": "salt-quay", "kind": "merchant", "stage_position": ["mid", "late"],
+		"title": "The salt quay", "desc": "Everything here is damp, and everything here is for sale.",
+		"size": "town", "services": ["weaponsmith", "alchemist", "innkeeper"],
+		"npcs": {
+			"generalist": "\"Salt gets in everything. Buy it anyway.\"",
+			"weaponsmith": "\"Oil it nightly or the sea eats it by the shrine.\"",
+			"alchemist": "\"Corked, waxed, and twice what it's worth. Yes.\"",
+			"innkeeper": "\"Dock work or killing work. You look like the second.\"",
+		}},
+	{"id": "sledge-camp", "kind": "merchant", "stage_position": ["mid"],
+		"title": "The sledge camp", "desc": "Two sledges, one fire, and whatever they hauled out.",
+		"size": "camp", "services": [],
+		"npcs": {"generalist": "\"We carried it down the ice. You'll pay for the ice.\""}},
+	{"id": "grey-chapel", "kind": "merchant", "stage_position": ["late"],
+		"title": "The grey chapel", "desc": "They mend what walks in and ask for a donation after.",
+		"size": "village", "services": ["healer"],
+		"npcs": {
+			"generalist": "\"Candles, rope, salt. The offerings box takes the rest.\"",
+			"healer": "\"Kneel. This will hurt in the ordinary way.\"",
+		}},
 	# --- treasure ---------------------------------------------------------
 	{"id": "broken-cart", "kind": "treasure", "stage_position": ["early", "mid"],
 		"title": "The broken cart", "desc": "Someone else's bad day.",
@@ -149,6 +216,24 @@ const POOL := [
 	{"id": "tax-strongbox", "kind": "treasure", "stage_position": ["late"],
 		"title": "The tax strongbox", "desc": "Nobody left alive to collect it.",
 		"gold": 140, "item_id": "shortbow"},
+	{"id": "votive-niche", "kind": "treasure", "stage_position": ["early"],
+		"title": "The votive niche", "desc": "Coins pressed into wax by people who wanted something.",
+		"gold": 45, "item_id": "mace"},
+	{"id": "mill-strongroom", "kind": "treasure", "stage_position": ["early", "mid"],
+		"title": "The mill strongroom", "desc": "The miller left in a hurry and the lock stayed honest.",
+		"gold": 55, "item_id": "spear"},
+	{"id": "kiln-cache", "kind": "treasure", "stage_position": ["mid"],
+		"title": "The cache under the kiln", "desc": "Still warm. Still nobody's.",
+		"gold": 85, "item_id": "scale-mail"},
+	{"id": "smugglers-floor", "kind": "treasure", "stage_position": ["mid", "late"],
+		"title": "The smugglers' floor", "desc": "Third board from the wall sounds wrong. It should.",
+		"gold": 95, "item_id": "studded-leather"},
+	{"id": "toppled-palanquin", "kind": "treasure", "stage_position": ["mid", "late"],
+		"title": "The toppled palanquin", "desc": "Curtains drawn. Bearers long gone. Boxes still strapped in.",
+		"gold": 100, "item_id": "rapier"},
+	{"id": "ice-crevasse", "kind": "treasure", "stage_position": ["late"],
+		"title": "The crevasse", "desc": "Somebody fell in here with everything they owned.",
+		"gold": 130, "item_id": "battleaxe"},
 	# --- rest -------------------------------------------------------------
 	{"id": "milestone-camp", "kind": "rest", "stage_position": ["early", "mid"],
 		"title": "Camp by the milestone", "desc": "Cold, dry, and safe enough to sleep."},
@@ -162,6 +247,16 @@ const POOL := [
 		"title": "Camp behind the falls", "desc": "Loud, but nothing can hear you either."},
 	{"id": "chapel-floor", "kind": "rest", "stage_position": ["late"],
 		"title": "The chapel floor", "desc": "Cold flagstones, thick doors, no windows."},
+	{"id": "drovers-shelter", "kind": "rest", "stage_position": ["early", "mid"],
+		"title": "The drovers' shelter", "desc": "Three walls and a roof. The fourth wall is the fire."},
+	{"id": "kiln-shed", "kind": "rest", "stage_position": ["early"],
+		"title": "The kiln shed", "desc": "The bricks hold last night's heat all the way to dawn."},
+	{"id": "boathouse", "kind": "rest", "stage_position": ["mid"],
+		"title": "The empty boathouse", "desc": "Dry planks, one door, and water at your back."},
+	{"id": "tollhouse-attic", "kind": "rest", "stage_position": ["mid", "late"],
+		"title": "The tollhouse attic", "desc": "Nobody has come up the stairs in a week. You'd hear it."},
+	{"id": "cairn-lee", "kind": "rest", "stage_position": ["late"],
+		"title": "In the lee of the cairn", "desc": "Out of the wind, out of sight, and the stones are warm."},
 ]
 
 # The last stage is never a choice — but T18 made it not always the same fight.
@@ -356,6 +451,11 @@ func enter(i: int) -> Dictionary:
 		return {}
 	node = opts[i]
 	identify_failed.clear()          # a new camp is a new chance to examine
+	# ponytail: opportunity_taken/scouted are per-node and live only in memory —
+	# campaign_save.gd doesn't carry them, so reloading mid-node hands back the
+	# one skill check. Persist them there if that ever matters.
+	opportunity_taken = false
+	scouted.clear()
 	state = "combat" if node["kind"] == "combat" else "visiting"
 	say("→ %s" % node["title"])
 	# T27: the bed follows the place, the tension layer follows the fight.
@@ -614,20 +714,27 @@ const SCROLL_DROP_ONE_IN := 4        # a hoard sometimes also holds an identify 
 var identify_failed: Array = []      # item ids already flubbed at this node
 var spent: int = 0                   # gp handed to merchants this run (T19: big_spender)
 
-# Whose Arcana the examination uses: the best of the active party. "" if nobody.
-func arcana_examiner() -> String:
+# Who in the active party is best at a skill, and by how much. "" if nobody.
+func best_at(skill: String) -> String:
 	var best := ""
 	var best_bonus := -99
 	for ch in party.party_characters():
-		var b := int(ch.sheet().skills.get("arcana", 0))
+		var b := int(ch.sheet().skills.get(skill, 0))
 		if b > best_bonus:
 			best_bonus = b
 			best = ch.id
 	return best
 
-func arcana_bonus(char_id: String) -> int:
+func skill_bonus(char_id: String, skill: String) -> int:
 	var ch = party.get_member(char_id)
-	return int(ch.sheet().skills.get("arcana", 0)) if ch != null else 0
+	return int(ch.sheet().skills.get(skill, 0)) if ch != null else 0
+
+# Whose Arcana the examination uses: the best of the active party.
+func arcana_examiner() -> String:
+	return best_at("arcana")
+
+func arcana_bonus(char_id: String) -> int:
+	return skill_bonus(char_id, "arcana")
 
 # The item's fixed identification DC (rarity-based, calibrated at the +2
 # reference examiner — see IDENTIFY_DC above).
@@ -667,6 +774,79 @@ func identify_with_scroll(item_id: String) -> bool:
 	say("The Scroll of Identification crumbles: %s." % item_name(item_id))
 	_autosave()
 	return true
+
+# --- T30: the one-per-node skill-check opportunity -------------------------
+#
+# Same shape as identify_check above: d20 + the party's best skill vs a fixed DC,
+# one attempt, pass or fail, no retry at this node. Two places offer one —
+#   treasure room  — Perception: turn the place over properly for a second purse
+#   after a victory — Survival: read the ground for what the next stage holds
+# — and the boss stage offers no Survival check because there is no road after it.
+const OPPORTUNITY := {
+	"treasure": {"skill": "perception", "dc": 13,
+		"label": "Turn the place over properly",
+		"flavour": "and finds a second purse under the first"},
+	"combat": {"skill": "survival", "dc": 13,
+		"label": "Read the ground before moving on",
+		"flavour": "reads the tracks off the field"},
+}
+const OPPORTUNITY_GOLD_SHARE := 0.4   # of the room's own purse
+const OPPORTUNITY_GOLD_MIN := 25
+
+var opportunity_taken := false    # one attempt per node, win or lose
+var scouted: Array = []           # next stage's fights, once Survival has read them
+
+# The check on offer here, or {} — the panel's button. Carries who would roll it.
+func opportunity() -> Dictionary:
+	var kind := String(node.get("kind", ""))
+	if state != "visiting" or opportunity_taken or not OPPORTUNITY.has(kind):
+		return {}
+	if kind == "combat" and stage + 1 >= route.size():
+		return {}                  # nothing left to scout past the boss
+	var out: Dictionary = OPPORTUNITY[kind].duplicate()
+	out["char_id"] = best_at(String(out["skill"]))
+	return out
+
+func opportunity_check(char_id := "") -> bool:
+	var opp := opportunity()
+	if opp.is_empty():
+		return false
+	if char_id == "":
+		char_id = String(opp["char_id"])
+	var ch = party.get_member(char_id)
+	if ch == null:
+		return false
+	var skill := String(opp["skill"])
+	var dc := int(opp["dc"])
+	var bonus := skill_bonus(char_id, skill)
+	var nat: int = int(Dice.d20(rng)["nat"])
+	opportunity_taken = true
+	if nat + bonus < dc:
+		say("%s finds nothing worth the time (%s %d+%d vs DC %d)."
+			% [ch.cname, skill.capitalize(), nat, bonus, dc])
+		_autosave()
+		return false
+	say("%s %s (%s %d+%d vs DC %d)."
+		% [ch.cname, String(opp["flavour"]), skill.capitalize(), nat, bonus, dc])
+	if node.get("kind", "") == "treasure":
+		var extra: int = maxi(OPPORTUNITY_GOLD_MIN,
+			int(round(int(node.get("gold", 0)) * OPPORTUNITY_GOLD_SHARE)))
+		party.add_gold(extra)
+		say("+%d gold." % extra)
+		Sound.play_sfx("pickup")
+	else:
+		_scout_next_stage()
+	_autosave()
+	return true
+
+# What the Survival success buys: the next stage's fights, named and graded,
+# before the party has to choose between them.
+func _scout_next_stage() -> void:
+	scouted = route[stage + 1].filter(func(n): return n["kind"] == "combat")
+	for n in scouted:
+		say("Ahead: %s — %s." % [n["title"], String(n.get("difficulty", "?"))])
+	if scouted.is_empty():
+		say("The road ahead is quiet.")
 
 # --- merchant -------------------------------------------------------------
 

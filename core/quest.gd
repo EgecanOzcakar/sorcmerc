@@ -40,6 +40,19 @@ const CURATED := [
 		"target_item_id": "ogre-tusk", "drop_chance": 0.6,
 		"required": 2, "reward": {"gold": 200, "item_id": "chain-shirt"},
 	},
+	{
+		"id": "board-grievance", "giver_node_id": "spice-road-inn",
+		"title": "Settle the board: 3 of Snik's lot",
+		"kind": "kill_count", "target_monster_id": "snik",
+		"required": 3, "reward": {"gold": 85, "item_id": "handaxe"},
+	},
+	{
+		"id": "quay-tusks", "giver_node_id": "salt-quay",
+		"title": "The quay wants an ogre's tusk",
+		"kind": "collect_item", "target_monster_id": "grull",
+		"target_item_id": "ogre-tusk", "drop_chance": 0.6,
+		"required": 1, "reward": {"gold": 140},
+	},
 ]
 
 static func fresh(id: String) -> Dictionary:
