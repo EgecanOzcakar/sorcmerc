@@ -1072,7 +1072,7 @@ class Board extends Control:
 					for hx in f.hexes:              # AoE: light up the swept hexes
 						draw_colored_polygon(_hex_poly(_pix(hx), s - 3.0), Color(col.r, col.g, col.b, 0.35 * (1.0 - t)))
 					var c: Vector2 = _pix(f.to)
-					draw_arc(c, s * (0.25 + 1.0 * t), 0, TAU, 28, col, 3.0)
+					draw_polyline(_disc(c, s * (0.25 + 1.0 * t), true), col, 3.0)
 					draw_circle(c, s * 0.3 * (1.0 - t), Color(col.r, col.g, col.b, 0.5 * (1.0 - t)))
 
 	func reset(_cb) -> void:
@@ -1104,16 +1104,16 @@ class Board extends Control:
 
 	# zoom keeping the hex under `sp` (screen point) roughly fixed
 	func _zoom_at(sp: Vector2, factor: float) -> void:
-		var anchor := Hex.from_pixel(sp - _origin, main.hex_px)
+		var anchor := _unpix(sp)
 		main.set_zoom(main._zoom * factor)
 		_layout()
-		main.pan_by(sp - (_origin + Hex.to_pixel(anchor, main.hex_px)))
+		main.pan_by(sp - _pix(anchor))
 
 	func _layout() -> void:
 		var mn := Vector2(1e9, 1e9)
 		var mx := Vector2(-1e9, -1e9)
 		for hx in cb.board["hexes"]:
-			var p := Hex.to_pixel(hx, main.hex_px)
+			var p := _iso(Hex.to_pixel(hx, main.hex_px))
 			mn = mn.min(p); mx = mx.max(p)
 		var span := mx - mn
 		# keep the board from being panned entirely off-screen
@@ -1122,15 +1122,76 @@ class Board extends Control:
 		main._pan = main._pan.clamp(-lim, lim)
 		_origin = (size - span) * 0.5 - mn + main._pan
 
+	# --- isometric projection ------------------------------------------
+	# Purely a _draw()-time view transform: hex.gd still speaks flat-top axial
+	# pixels, we just tilt the plane those pixels live on. Linear, so projecting
+	# an offset and adding it to a projected centre == projecting the world point.
+	# The camera: yaw the ground plane by ISO_YAW, then squash it vertically —
+	# ISO_SQUASH is the sine of the pitch, so 0.45 ≈ looking down from ~27°,
+	# the flat wide RTS angle rather than a steep 45° overhead.
+	# ponytail: fixed camera. Make these vars if it ever needs to orbit/tilt.
+	const ISO_YAW := 35.0
+	const ISO_SQUASH := 0.38
+	const ISO_GAIN := 1.85    # the whole plane, scaled to fill the viewport
+
+	func _iso(v: Vector2) -> Vector2:
+		var r := v.rotated(deg_to_rad(ISO_YAW)) * ISO_GAIN
+		return Vector2(r.x, r.y * ISO_SQUASH)
+
+	func _iso_inv(v: Vector2) -> Vector2:
+		return Vector2(v.x, v.y / ISO_SQUASH).rotated(-deg_to_rad(ISO_YAW)) / ISO_GAIN
+
 	func _pix(hx: Vector2i) -> Vector2:
-		return _origin + Hex.to_pixel(hx, main.hex_px)
+		return _origin + _iso(Hex.to_pixel(hx, main.hex_px))
+
+	# screen point -> hex, the inverse of _pix
+	func _unpix(sp: Vector2) -> Vector2i:
+		return Hex.from_pixel(_iso_inv(sp - _origin), main.hex_px)
 
 	func _hex_poly(center: Vector2, s: float) -> PackedVector2Array:
 		var pts := PackedVector2Array()
 		for i in 6:
 			var a := deg_to_rad(60.0 * i)
-			pts.append(center + Vector2(cos(a), sin(a)) * s)
+			pts.append(center + _iso(Vector2(cos(a), sin(a)) * s))
 		return pts
+
+	# A ring of points. `flat` lays it on the board plane (an ellipse on screen);
+	# without it you get a true screen circle, for things that face the camera.
+	func _ring(center: Vector2, r: float, flat := true, closed := false, segs := 32) -> PackedVector2Array:
+		var pts := PackedVector2Array()
+		for i in segs:
+			var v := Vector2(cos(TAU * i / segs), sin(TAU * i / segs)) * r
+			pts.append(center + (_iso(v) if flat else v))
+		if closed:
+			pts.append(pts[0])
+		return pts
+
+	# A circle lying flat on the board plane, i.e. an ellipse on screen.
+	func _disc(center: Vector2, r: float, closed := false) -> PackedVector2Array:
+		return _ring(center, r, true, closed)
+
+	# --- shading helpers -------------------------------------------------
+	# The light: up and to the left, so every highlight in the scene agrees.
+	const LIGHT := Vector2(-0.30, -0.34)
+
+	# A radial gradient, as a triangle fan from `apex` out to `rim` with the
+	# vertex colours interpolated across each triangle. Offsetting the apex
+	# toward the light gives an off-centre hotspot, which is what makes a disc
+	# read as a sphere rather than a coin. No shader, no texture, no per-frame
+	# allocation beyond the fan itself.
+	func _fan(apex: Vector2, rim: PackedVector2Array, inner: Color, outer: Color) -> void:
+		var n := rim.size()
+		var cols := PackedColorArray([inner, outer, outer])
+		var uv := PackedVector2Array()
+		for i in n:
+			draw_primitive(PackedVector2Array([apex, rim[i], rim[(i + 1) % n]]), cols, uv)
+
+	# A soft drop shadow: three ellipses, each wider and fainter than the last.
+	# Cheaper than a blur pass and, at these sizes, indistinguishable from one.
+	func _soft_shadow(at: Vector2, r: float, strength := 1.0) -> void:
+		for i in 3:
+			draw_colored_polygon(_disc(at, r * (1.0 + 0.26 * i)),
+				Color(0.02, 0.01, 0.04, strength * (0.20 - 0.05 * i)))
 
 	func tick(dt: float) -> void:
 		if cb == null:
@@ -1195,7 +1256,7 @@ class Board extends Control:
 			if e.button_mask & (MOUSE_BUTTON_MASK_MIDDLE | MOUSE_BUTTON_MASK_RIGHT):
 				main.pan_by(e.relative)
 				return
-			var hx := Hex.from_pixel(e.position - _origin, main.hex_px)
+			var hx := _unpix(e.position)
 			if hx != _hover:
 				_hover = hx
 				main.board_hex_hovered(hx)
@@ -1207,7 +1268,62 @@ class Board extends Control:
 			elif e.button_index == MOUSE_BUTTON_RIGHT:
 				main.board_cancel()
 			elif e.button_index == MOUSE_BUTTON_LEFT:
-				main.board_hex_clicked(Hex.from_pixel(e.position - _origin, main.hex_px))
+				main.board_hex_clicked(_unpix(e.position))
+
+	# Stable per-hex noise: same hex, same salt -> same value, every frame. No RNG
+	# state, so nothing here can perturb the game's seeded rolls.
+	static func _rand(hx: Vector2i, salt: int) -> float:
+		var n: int = hash(Vector3i(hx.x, hx.y, salt))
+		return float(n % 4096) / 4096.0 if n >= 0 else float(-n % 4096) / 4096.0
+
+	# What KIND of ground this is, for the seam test — "" is plain floor.
+	func _terrain(hx: Vector2i) -> String:
+		var o: Dictionary = cb.object_at(hx)
+		if o.has("hazard") and not o.get("blocks_movement", false):
+			return "hazard"
+		if o.get("blocks_movement", false):
+			return "prop"
+		return "cover" if cb.is_cover(hx) else ""
+
+	# How thickly each theme is planted. Cosmetic only — foliage is never
+	# consulted by movement, targeting or line of sight, it is picked from the
+	# hex's own hash at draw time and never stored.
+	const FLORA := {"forest": 0.55, "camp": 0.22, "shrine": 0.12, "ice": 0.14,
+		"city": 0.0, "shop": 0.0}
+	const FLORA_COL := {"forest": "3f6b3a", "camp": "5c5f33", "shrine": "3a5548",
+		"ice": "5d7a84", "city": "3f5240", "shop": "3f5240"}
+
+	# {} for bare ground, else the plant to draw. Cover hexes always get one —
+	# the thing you are hiding behind should be visible.
+	func _foliage_at(hx: Vector2i, c: Vector2, s: float) -> Dictionary:
+		var pal := String(cb.board.get("palette", "shrine"))
+		var r := _rand(hx, 5)
+		var cover: bool = cb.is_cover(hx)
+		if not cover and r > float(FLORA.get(pal, 0.1)):
+			return {}
+		var off := _iso(Vector2(_rand(hx, 6) - 0.5, _rand(hx, 7) - 0.5) * s * 0.7)
+		return {"at": c + off, "kind": "tree" if _rand(hx, 8) > 0.55 else "bush",
+			"col": Color(String(FLORA_COL.get(pal, "3f5240"))),
+			"scale": (0.85 + 0.45 * _rand(hx, 9)) * (1.15 if cover else 1.0)}
+
+	# A plant: flat shapes only, standing upright out of a projected shadow.
+	func _draw_foliage(d: Dictionary, s: float) -> void:
+		var at: Vector2 = d["at"]
+		var k: float = float(d["scale"]) * s
+		var col: Color = d["col"]
+		_soft_shadow(at, k * 0.26, 0.85)
+		if String(d["kind"]) == "tree":
+			draw_line(at, at - Vector2(0, k * 0.62), Color("3a2c1c"), maxf(1.5, k * 0.09), true)
+			for o in [Vector2(0, -0.95), Vector2(-0.24, -0.66), Vector2(0.24, -0.70)]:
+				_lobe(at + o * k, k * 0.30, col)
+		else:
+			for o in [Vector2(-0.20, -0.16), Vector2(0.20, -0.16), Vector2(0, -0.34)]:
+				_lobe(at + o * k, k * 0.24, col)
+
+	# One shaded clump of leaves: the same ball shading the tokens use.
+	func _lobe(at: Vector2, r: float, col: Color) -> void:
+		_fan(at + LIGHT * r * 0.6, _ring(at, r, false, false, 20),
+			col.lightened(0.28), col.darkened(0.26))
 
 	# T11 interactables: shapes only, no sprites. Hazards pulse (the hex fill already
 	# glows), props get a crate mark, torches a small bright flame.
@@ -1215,18 +1331,24 @@ class Board extends Control:
 	func _draw_object(o: Dictionary, c: Vector2, s: float, pulse: float) -> void:
 		match String(o["type"]):
 			"torch":
+				for i in 3:   # a soft glow around the flame, not a hard ring
+					draw_circle(c, s * (0.22 + 0.10 * i), Color(1.0, 0.78, 0.45, 0.10 - 0.02 * i))
 				draw_circle(c, s * 0.16, main.COL_TORCH.lerp(Color("ff9d3d"), pulse))
-				draw_circle(c, s * 0.30, Color(1.0, 0.78, 0.45, 0.12 + 0.10 * pulse))
-			"fountain":
-				draw_circle(c, s * 0.45, Color("3d5566"))
-				draw_arc(c, s * 0.45, 0, TAU, 20, Color("6f97ad"), 2.0)
+			"fountain":     # lies flat on the board, so it projects
+				_fan(c + _iso(LIGHT) * s * 0.28, _disc(c, s * 0.45),
+					Color("50707f"), Color("32444f"))
+				draw_polyline(_disc(c, s * 0.45, true), Color("6f97ad"), 2.0, true)
 			_:
 				if o.has("hazard") and not o.get("blocks_movement", false):
-					draw_circle(c, s * 0.22, Color("ffcf7a").lerp(Color("ff6a2a"), pulse))
+					var hot := Color("ffcf7a").lerp(Color("ff6a2a"), pulse)
+					_fan(c, _disc(c, s * 0.26), hot, Color(hot.r, hot.g, hot.b, 0.0))
 					return
 				var r := s * 0.42
-				draw_rect(Rect2(c - Vector2(r, r), Vector2(r * 2, r * 2)), Color("6b5236"))
-				draw_line(c - Vector2(r, 0), c + Vector2(r, 0),
+				var quad := PackedVector2Array()
+				for d in [Vector2(-r, -r), Vector2(r, -r), Vector2(r, r), Vector2(-r, r)]:
+					quad.append(c + _iso(d))
+				draw_colored_polygon(quad, Color("6b5236"))
+				draw_line(c + _iso(Vector2(-r, 0)), c + _iso(Vector2(r, 0)),
 					Color("ff8c42") if o.get("explosive", false) else Color("3a2c1c"), 2.0)
 
 	func _draw() -> void:
@@ -1257,8 +1379,9 @@ class Board extends Control:
 					cone_hexes[hx] = true
 
 		# tiles
+		var decor: Array = []   # foliage, drawn after every tile so it can overhang
 		for hx in cb.board["hexes"]:
-			var c := _origin + Hex.to_pixel(hx, s)
+			var c := _pix(hx)
 			var poly := _hex_poly(c, s - 2.0)
 			var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
 			var obj: Dictionary = cb.object_at(hx)
@@ -1268,20 +1391,47 @@ class Board extends Control:
 				fill = main.COL_PROP
 			elif cb.is_cover(hx):
 				fill = main.COL_COVER
-			draw_colored_polygon(poly, fill)
+			# Ground, in two layers: a per-hex tinted slab so the field isn't one
+			# flat colour, then a lighter patch drifting off-centre. Neighbouring
+			# tiles overlap in tone, which is what stops the borders reading as
+			# hard-cut diamonds without needing an actual texture.
+			var v := _rand(hx, 1)
+			var tint := fill.lightened(0.09 * v).darkened(0.07 * (1.0 - v))
+			# lit from the top-left and falling off to the rim, so a tile is a
+			# shaded surface rather than a solid lozenge
+			_fan(c + _iso(LIGHT * s * 0.55), poly, tint.lightened(0.11), tint.darkened(0.13))
+			var blob := c + _iso(Vector2(_rand(hx, 2) - 0.5, _rand(hx, 3) - 0.5) * s * 0.6)
+			var br2 := s * (0.45 + 0.30 * _rand(hx, 4))
+			for i in 3:   # the mottling, feathered out instead of a hard-edged patch
+				draw_colored_polygon(_disc(blob, br2 * (0.55 + 0.225 * i)),
+					Color(fill.lightened(0.09), 0.11))
 			if field.has(hx) and hx != cur.pos:
 				draw_colored_polygon(poly, main.COL_MOVE)
 			if cone_hexes.has(hx):
 				draw_colored_polygon(poly, main.COL_CONE)
+			# Only the outline of a terrain CHANGE is drawn at full strength; seams
+			# between two plain tiles stay a whisper, so same-terrain runs blend.
 			var edge := _hex_poly(c, s - 2.0)
 			edge.append(edge[0])
-			draw_polyline(edge, main.COL_HEX_EDGE, 1.5)
+			var seam: bool = _terrain(hx) != ""
+			for n in Hex.neighbors(hx):
+				if not n in cb.board["hexes"] or _terrain(n) != _terrain(hx):
+					seam = true
+			draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.9 if seam else 0.22), 1.5, true)
+			if obj.is_empty():
+				var d := _foliage_at(hx, c, s)
+				if not d.is_empty():
+					decor.append(d)
 			if provoke.has(hx):
 				draw_string(ThemeDB.fallback_font, c - Vector2(6, -5), "⚠", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("ffcf47"))
 			if cb.is_cover(hx):
-				draw_string(ThemeDB.fallback_font, c - Vector2(s - 6, -s + 12), "cover", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("7fa6a6"))
+				draw_string(ThemeDB.fallback_font, c + Vector2(-s * 0.5, s * ISO_SQUASH - 3), "cover", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("7fa6a6"))
 			if not obj.is_empty():
 				_draw_object(obj, c, s, pulse)
+
+		decor.sort_custom(func(a, b): return a["at"].y < b["at"].y)
+		for d in decor:
+			_draw_foliage(d, s)
 
 		# the valid-target ring stays here, under the tokens — it just traces the
 		# hex edge, which reads fine as "this hex is targetable," not a card that
@@ -1290,23 +1440,23 @@ class Board extends Control:
 			for c in cb.combatants:
 				if not main._valid_target(cur, c):
 					continue
-				var tp := _origin + Hex.to_pixel(c.pos, s)
+				var tp := _pix(c.pos)
 				var hot: bool = c.pos == _hover
 				var poly := _hex_poly(tp, s - 3.0)
 				poly.append(poly[0])
 				var oc: Color = main.COL_TARGET
-				draw_polyline(poly, oc if hot else Color(oc.r, oc.g, oc.b, 0.45), 3.0 if hot else 2.0)
+				draw_polyline(poly, oc if hot else Color(oc.r, oc.g, oc.b, 0.45), 3.0 if hot else 2.0, true)
 		elif hero_turn and main._mode == "idle" and cur.econ["action"] > 0:
 			for f in cb.enemies_of(cur):
 				if cb.in_reach(cur, f):
-					var poly := _hex_poly(_origin + Hex.to_pixel(f.pos, s), s - 3.0)
+					var poly := _hex_poly(_pix(f.pos), s - 3.0)
 					poly.append(poly[0])
-					draw_polyline(poly, Color(main.COL_TARGET.r, main.COL_TARGET.g, main.COL_TARGET.b, 0.30), 1.5)
+					draw_polyline(poly, Color(main.COL_TARGET.r, main.COL_TARGET.g, main.COL_TARGET.b, 0.30), 1.5, true)
 
-		# tokens
-		for c in cb.combatants:
-			if c.is_dead():
-				continue
+		# tokens, painted back-to-front so nearer ones overlap farther ones
+		var order: Array = cb.combatants.filter(func(c): return not c.is_dead())
+		order.sort_custom(func(a, b): return _tok.get(a.id, _pix(a.pos)).y < _tok.get(b.id, _pix(b.pos)).y)
+		for c in order:
 			var p: Vector2 = _tok.get(c.id, _pix(c.pos)) + _lunge(c.id)
 			var base: Color = main.COL_PARTY if c.team == "party" else main.COL_FOE
 			if c.is_down():
@@ -1314,24 +1464,42 @@ class Board extends Control:
 			if _flash.has(c.id):
 				base = base.lerp(Color.WHITE, clampf(_flash[c.id] / 0.35, 0, 1))
 			var rad := s * 0.62
+			# The token stands ON its hex: a flat shadow ellipse marks the footprint,
+			# the disc itself floats a little above it. Unconscious, it drops onto
+			# the ground — no lift, and flat to the board plane like everything
+			# else lying on it.
+			var tp := p if c.is_down() else p + Vector2(0, -rad * 0.55)
+			_soft_shadow(p, rad * 0.80, 1.0 if c.is_down() else 1.15)
 			if c == cur:
 				# A real blink: the ring breathes in alpha, width AND radius, with a
 				# faint outer halo — the old width-only wobble read as noise.
 				var bl := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 170.0)
 				base = base.lerp(Color("ffe27a"), 0.18 * bl)
-				draw_arc(p, rad + 4.0 + bl * 3.0, 0, TAU, 32,
-					Color(1.0, 0.886, 0.478, 0.25 + 0.75 * bl), 2.5 + bl * 3.0)
-				draw_arc(p, rad + 12.0 + bl * 6.0, 0, TAU, 32,
-					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0)
-			draw_circle(p, rad, base)
-			draw_arc(p, rad, 0, TAU, 24, base.darkened(0.4), 2.0)
+				draw_polyline(_disc(p, rad + 4.0 + bl * 3.0, true),
+					Color(1.0, 0.886, 0.478, 0.25 + 0.75 * bl), 2.5 + bl * 3.0, true)
+				draw_polyline(_disc(p, rad + 12.0 + bl * 6.0, true),
+					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0, true)
+			# The token is shaded like a ball: hotspot toward the light, falling
+			# off to a darker rim, with a bright sliver of rim light on the lit
+			# side and a dark contact line on the far one.
+			var trad := rad * 0.8
+			var flat: bool = c.is_down()
+			if not flat:
+				draw_line(p, tp, base.darkened(0.55), 3.0, true)   # the "post" it stands on
+			_fan(tp + (_iso(LIGHT) if flat else LIGHT) * trad * 0.62,
+				_ring(tp, trad, flat, false, 28), base.lightened(0.26), base.darkened(0.20))
+			draw_polyline(_ring(tp, trad, flat, true, 28), base.darkened(0.45), 1.5, true)
+			if not flat:
+				var lit := LIGHT.angle()
+				draw_arc(tp, trad * 0.93, lit - 0.85, lit + 0.85, 20,
+					Color(1, 1, 1, 0.26), 2.0, true)
 			# The token's mark: class glyph for heroes, creature-type glyph for foes.
-			_centered(_glyph(c), p, int(26 * fz), Color("101216"))
+			_centered(_glyph(c), tp, int(24 * fz), Color("101216"))
 
 			# hp bar
 			var hv: float = _hp.get(c.id, float(c.hp))
 			var bw := s * 1.2
-			var br := Rect2(p.x - bw / 2.0, p.y + rad + 3.0, bw, 6.0)
+			var br := Rect2(p.x - bw / 2.0, p.y + rad * ISO_SQUASH + 4.0, bw, 6.0)
 			draw_rect(br, Color("0c0d11"))
 			var frac := clampf(hv / float(c.max_hp), 0.0, 1.0)
 			var hpcol := Color("5fbf6a")
@@ -1345,7 +1513,7 @@ class Board extends Control:
 			var tags: String = Icons.status_glyphs(c)
 			if c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
 			if tags != "":
-				_centered(tags, p + Vector2(0, -rad - 10), int(13 * fz), Color("e6c15a"))
+				_centered(tags, tp + Vector2(0, -rad * 0.8 - 10), int(13 * fz), Color("e6c15a"))
 
 		_draw_fx(s)   # projectiles / spell flashes sit over the tokens
 
@@ -1356,12 +1524,12 @@ class Board extends Control:
 			for c in cb.combatants:
 				if not main._valid_target(cur, c):
 					continue
-				var tp := _origin + Hex.to_pixel(c.pos, s)
+				var tp := _pix(c.pos)
 				var hot: bool = c.pos == _hover
 				var txt: String = main.target_readout(cur, c)
 				var fs := int((20 if hot else 15) * fz)
 				var w := ThemeDB.fallback_font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-				var chip := tp + Vector2(-w / 2.0, -s - 4.0)
+				var chip := tp + Vector2(-w / 2.0, -s * 1.35)
 				draw_rect(Rect2(chip - Vector2(5, fs), Vector2(w + 10, fs + 8)), Color(0, 0, 0, 0.72))
 				draw_string(ThemeDB.fallback_font, chip, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
 					Color("ffe27a") if hot else Color("d7d7cf"))
