@@ -2541,6 +2541,16 @@ then ease back to whatever the player had set (save/restore or blend
 additively, don't clobber their manual view). Same `_fx_on` gate, same
 outcome-parity bar as the other five.
 
+**Scrapped (2026-09-11):** built, verified (hit-stop/shake/recoil/dodge/
+school-tint/focus-punch-in all confirmed working via real screenshots,
+full suite + outcome-parity green), but the user reviewed it and it
+wasn't what they wanted — procedural motion on the existing flat tokens
+isn't the read they're after. Branch `feature/combat-juice` deleted
+(local, remote, worktree), nothing merged to master. T45's portrait-
+reveal work is unaffected and continues separately — the two were always
+meant to be distinct pieces of "focus," and this closes out the
+procedural half without touching the portrait half.
+
 ## T45 — attacker/defender portrait reveal (locked 2026-09-11, spike dispatched now)
 
 What the user actually meant by "focus animations on the attacker and
