@@ -24,6 +24,7 @@ func _init() -> void:
 	test_decay_leaves_neutral_factions_alone()
 	test_drain_settlement_hook()
 	test_credit_fight_is_local_and_skips_the_dead()
+	test_thresholds_are_ordered()
 	print("test_faction_opinion: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -108,3 +109,22 @@ func test_credit_fight_is_local_and_skips_the_dead() -> void:
 	FactionOpinion.credit_fight(w, Vector2(30, 0), FactionOpinion.FOUGHT_FOR, "soldier")
 	check(FactionOpinion.get_opinion("soldier") == 0.0,
 		"killing their own band is not a favour to them")
+	# O9 item 8: "every *civilized* faction nearby", which is what the comment always
+	# claimed — a cultist city does not thank you for putting down a monster band.
+	FactionOpinion.reset()
+	FactionOpinion.credit_fight(w, Vector2(880, 0), FactionOpinion.FOUGHT_FOR)
+	check(FactionOpinion.get_opinion("cultist") == 0.0,
+		"a monster faction is not credited for a fight on its doorstep")
+
+# O9 item 5: the three bands are ordered and distinct, so each one is reachable.
+func test_thresholds_are_ordered() -> void:
+	FactionOpinion.reset()
+	check(FactionOpinion.GUARDS_ATTACK < FactionOpinion.REFUSE_TRADE
+		and FactionOpinion.REFUSE_TRADE < FactionOpinion.HOSTILE,
+		"guards attack below refuse-trade, which is below hostile")
+	FactionOpinion.set_opinion("soldier", FactionOpinion.REFUSE_TRADE - 1.0)
+	check(FactionOpinion.refuses_trade("soldier") and not FactionOpinion.guards_attack("soldier"),
+		"a faction can refuse to trade without fighting you at the gate")
+	FactionOpinion.set_opinion("soldier", FactionOpinion.GUARDS_ATTACK - 1.0)
+	check(FactionOpinion.guards_attack("soldier"), "...and below that the guards come out")
+	FactionOpinion.reset()

@@ -13,7 +13,9 @@ extends RefCounted
 
 const Scaler = preload("res://core/scaler.gd")
 
-const SPEED := 40.0   # map units per world-second, every party for now
+# World-time is counted in MINUTES: everything built on top of this clock (O2's
+# Day/HH:MM readout, O6's RESTOCK, O7's DAY := 1440.0) reads `elapsed` that way.
+const SPEED := 40.0   # map units per world-minute, every party for now
 
 # Real-time-with-pause. RefCounted, not a Node: O2's world scene drives it with
 # one line in _process (`world.tick(delta)`), which is also how headless tests
@@ -21,7 +23,7 @@ const SPEED := 40.0   # map units per world-second, every party for now
 class WorldClock extends RefCounted:
 	const SPEEDS := [1.0, 2.0, 4.0, 8.0]   # cycled by set_speed_index / the UI's speed button
 
-	var elapsed := 0.0     # world-seconds since start, paused time excluded
+	var elapsed := 0.0     # world-minutes since start, paused time excluded
 	var speed := 1.0       # multiplies every tick's delta — movement/AI/economy all speed up with it
 	var _paused := false
 

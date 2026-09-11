@@ -23,21 +23,29 @@ const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
-const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices only
+const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
 const Sound = preload("res://core/audio.gd")
+const Quest = preload("res://core/quest.gd")
+const RNG = preload("res://core/rng.gd")
+const CharacterSave = preload("res://core/character_save.gd")
 
 const COMBAT_SCENE := "res://scenes/main.tscn"
 # O4 trigger distance, in world units. A party token draws at 9-11px before the
 # projection's ISO_GAIN, i.e. ~6 world units of radius, so 24 is "the two tokens
-# are visibly on top of each other" (~2 token diameters) — and it is comfortably
-# wider than one tick's closing distance: two parties at World.SPEED=40 close at
-# 80 u/s, 8 units per 0.1s step, so nobody tunnels through the trigger.
+# are visibly on top of each other" (~2 token diameters) at 1x, where a tick moves
+# a party 4 units.
+# O9 item 3: that "comfortably wider than a tick" reasoning only held at 1x. At 4x
+# /8x a tick moves 16-32 units, so a pursuer matching the player's speed could sit
+# a fixed 32 units behind forever and never trip a 24-unit trigger. _trigger() is
+# the floor, widened to whatever the tick actually travelled.
 const ENCOUNTER_RADIUS := 24.0
 const ENCOUNTER_DIFFICULTY := "normal"
 # O6 visit distance. Deliberately wider than ENCOUNTER_RADIUS: a settlement is a
 # fixed landmark drawn at ~26 world units of radius (a city footprint) rather than
 # a 6-unit token, so "close enough to walk in through the gate" is its own number.
-# Nothing tunnels: the player closes 4 units per 0.1s step at World.SPEED.
+# It is NOT widened by speed the way the encounter trigger is: a settlement is
+# something you steer into on purpose, and marching past one at 8x without the
+# market opening is the player's own choice, not a missed ambush.
 const VISIT_RADIUS := 34.0
 # The board an ambush happens on when the encountered faction has no theme of
 # its own in Scaler.THEME_FACTION — open country, which is where the map is.
@@ -98,15 +106,16 @@ func _demo_world() -> World:
 func _process(delta: float) -> void:
 	# O7: the clock's own advance (0 while paused) both drains O6's queued opinion
 	# deltas off the settlements and runs the slow drift back toward neutral.
-	FactionOpinion.tick(world, world.tick(delta))
+	var dt := world.tick(delta)
+	FactionOpinion.tick(world, dt)
 	WorldAI.update(world, delta)
-	_check_encounter()
+	_check_encounter(dt)
 	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not
 	# while the player's own fight has the map frozen.
 	if _combat == null and not world.clock.is_paused():
 		# O6 feeds off the outcome: a settlement near the corpses reads differently
 		# on the next visit. O5's resolution itself is untouched.
-		for r in WorldBattle.check(world, ENCOUNTER_RADIUS, encounter_spec):
+		for r in WorldBattle.check(world, _trigger(dt), encounter_spec):
 			Visit.mark_battle(world, r["loser"].position, world.clock.elapsed)
 	_check_visit()
 	if _clock_lbl != null:
@@ -132,12 +141,35 @@ func _build_hud() -> void:
 	_clock_lbl = Label.new()
 	_clock_lbl.add_theme_color_override("font_color", Icons.COL_GOLD)
 	bar.add_child(_clock_lbl)
+	var title := Button.new()
+	title.text = "←  Title"
+	title.pressed.connect(_leave_world)
+	bar.add_child(title)
 	var hint := Label.new()
 	hint.text = "right-click: march here   ·   drag: pan   ·   wheel: zoom"
 	hint.add_theme_color_override("font_color", Icons.COL_MUTED)
 	bar.add_child(hint)
 
+# O9 item 2: the only way out of the open world, and the only thing that persists
+# it. The map itself is not saved (no world save exists yet) — the characters are,
+# which is what the barracks on the title screen counts. Opinion is per-run state
+# (a process-global in faction_opinion.gd), so it clears with the run.
+func _leave_world() -> void:
+	for ch in party.roster:
+		CharacterSave.save(ch)
+	FactionOpinion.reset()
+	# Duck-typed so world.tscn still runs standalone (godot --path . scenes/world/
+	# world.tscn), where the parent is the scene root and has no title screen.
+	var host := get_parent()
+	if host != null and host.has_method("show_title"):
+		host.show_title()
+
+# O9 item 7: both are no-ops while a market panel is open. The visit owns the
+# clock (it paused it); letting the button resume the world underneath an open
+# panel desynced the label and set the map running behind it.
 func _toggle_pause() -> void:
+	if not _visit.is_empty():
+		return
 	if world.clock.is_paused():
 		world.clock.resume()
 	else:
@@ -145,21 +177,34 @@ func _toggle_pause() -> void:
 	_pause_btn.text = "Resume" if world.clock.is_paused() else "Pause"
 
 func _cycle_speed() -> void:
+	if not _visit.is_empty():
+		return
 	world.clock.cycle_speed()
 	_speed_btn.text = "%dx" % int(world.clock.speed)   # every WorldClock.SPEEDS entry is a whole number
 
 # --- O4: encounter trigger + combat hand-off ---------------------------
+
+# O9 item 3: the trigger distance for this tick — never below ENCOUNTER_RADIUS,
+# but at least as wide as the ground two parties covered in it, so a pursuit at a
+# stable gap still closes at 4x/8x. Same number for the player's trigger and O5's
+# NPC-vs-NPC one, since both are "two tokens met between two frames".
+# ponytail: assumes every party moves at World.SPEED (RoamingParty.speed's default).
+# Take the pair's own speeds the day a party moves at its own rate.
+func _trigger(dt: float) -> float:
+	return maxf(ENCOUNTER_RADIUS, World.SPEED * 2.0 * dt)
+
 # ponytail: linear scan over 3-8 parties once a frame, same as world_ai.gd's hunt.
-func _check_encounter() -> void:
+func _check_encounter(dt := 0.0) -> void:
 	if _combat != null or world.clock.is_paused():
 		return
 	var p := world.player()
 	if p == null:
 		return
+	var reach := _trigger(dt)
 	for q in world.parties:
 		if q == p or not WorldAI.is_hostile(q, p):
 			continue
-		if q.position.distance_to(p.position) <= ENCOUNTER_RADIUS:
+		if q.position.distance_to(p.position) <= reach:
 			_launch_combat(q)
 			return
 
@@ -207,6 +252,7 @@ func _launch_combat(foe) -> void:
 	_combat_overlay.queue_free()
 	_combat_overlay = null
 	if String(result.get("outcome", "")) == "Victory":
+		_bank(result)
 		world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
 		# O7 raise/lower event: putting down a monster band is a favour to whoever
 		# lives near the bodies; putting down a faction's own band is not.
@@ -217,6 +263,25 @@ func _launch_combat(foe) -> void:
 	else:
 		_retreat()
 	world.clock.resume()
+
+# O9 item 2: a won fight has to actually pay, or the run is a dead end. The same
+# four things core/campaign.gd's finish_combat() banks, minus the linear run's own
+# bookkeeping (node gold, achievements, autosave, the journal):
+#   XP  — Campaign._split_xp(), which is the even split *plus* T22's lifetime/class
+#         progression and the level-up chime. It only touches `party`, so a bare
+#         Campaign.new(party) is enough to reach it.
+#         ponytail: it is an instance method on a file O9 may not edit. Make it
+#         static (and drop the throwaway) the day campaign.gd is in scope.
+#   gold, loot, quest progress — party-level calls, made directly.
+func _bank(result: Dictionary) -> void:
+	Campaign.new(party)._split_xp(int(result.get("xp", 0)))
+	party.add_gold(int(result.get("gold", 0)))
+	for item in result.get("loot", []):
+		party.stash_add(String(item))
+	# Without this an accepted quest can never reach "complete", so O9 item 4's
+	# turn-in row would have nothing to turn in.
+	Quest.record_kills(party, result.get("kills", []),
+		RNG.new(maxi(1, int(world.clock.elapsed) + 1)))
 
 # Defeat/retreat, deliberately the cheapest thing that keeps the map playable:
 # the party falls back to the nearest settlement and stops there. No losses, no
@@ -250,10 +315,16 @@ func _check_visit() -> void:
 			continue
 		if s == _left:
 			continue
-		# O7 effect 3: past FactionOpinion.HOSTILE the gate guards come out instead
-		# of the market opening — O4's encounter path, with the garrison standing in
-		# as the party (it is not on the map, so beating it just ends the fight).
-		if FactionOpinion.is_hostile_to_player(s.faction):
+		# O7 effect 3: past FactionOpinion.GUARDS_ATTACK the gate guards come out
+		# instead of the market opening — O4's encounter path, with the garrison
+		# standing in as the party (it is not on the map, so beating it just ends
+		# the fight).
+		# O9 item 5: that used to fire at HOSTILE, above REFUSE_TRADE, so the market's
+		# refusal branch could never be reached. It has its own lower floor now.
+		# O9 item 6: and a monster faction's town never trades at any opinion — its
+		# own bands attack the player on sight (WorldAI.is_hostile), so its gate does
+		# too. Same gate _check_encounter() uses.
+		if WorldAI.is_monster(s.faction) or FactionOpinion.guards_attack(s.faction):
 			_left = s
 			_launch_combat(World.RoamingParty.new("%s-guard" % s.id, s.position, s.faction))
 			return
@@ -286,13 +357,54 @@ func _sell(item_id: String) -> void:
 	if Visit.sell(_visit, party, item_id):
 		_build_visit_panel()
 
+# O9 item 1: one attempt per visit. The steal roll is seeded off (settlement, hour)
+# and the clock is paused for the whole visit, so every press rolled the identical
+# result — a nat 20 was an unlimited gold button. The mark lives on `_visit`, so
+# Leave and come back is a fresh attempt (at a fresh hour).
 func _steal() -> void:
+	if _visit.get("stolen", false):
+		_say("They are watching the stall now. Come back another day.")
+		return
 	var r: Dictionary = Visit.steal(_visit["settlement"], party, world, _visit)
-	_say(String(r.get("text", "Nobody here has the hands for it.")))
+	_visit["stolen"] = true
 	if bool(r.get("ok", false)):
 		Sound.play_sfx("pickup")
+	_build_visit_panel()
+	_say(String(r.get("text", "Nobody here has the hands for it.")))
 
+# O9 item 2: the inn. Time is the cost — see SettlementVisit.rest — and the extra
+# hours restock the shelf, so the market is re-read afterwards.
+func _rest() -> void:
+	var s = _visit["settlement"]
+	var stolen: bool = _visit.get("stolen", false)
+	Visit.rest(party, world)
+	Sound.play_sfx("rest")
+	_visit = Visit.visit(s, world)
+	_visit["stolen"] = stolen
+	_build_visit_panel()
+	_say("The party takes a long rest. Eight hours pass and the stalls fill up again.")
+
+# O9 item 4: T9's quest verbs, reached from a settlement at last.
+func _take_quest() -> void:
+	var q: Dictionary = Visit.quest_offer(_visit["settlement"], party)
+	if Quest.accept(party, q):
+		_build_visit_panel()
+		_say("Job taken: %s" % q["title"])
+	else:
+		_say("No work here just now.")
+
+func _turn_in(quest: Dictionary) -> void:
+	var reward: int = int(quest.get("reward", {}).get("gold", 0))
+	if Quest.turn_in(party, quest, _visit["settlement"].faction):
+		Sound.play_sfx("buy")
+		_build_visit_panel()
+		_say("%s — paid, +%d gp. They will remember it." % [quest["title"], reward])
+
+# The panel is rebuilt after every action, so the last line has to live on the
+# visit rather than on the Label that just got freed.
 func _say(text: String) -> void:
+	if not _visit.is_empty():
+		_visit["log"] = text
 	if _visit_log != null:
 		_visit_log.text = text
 
@@ -338,14 +450,30 @@ func _build_visit_panel() -> void:
 		_trade_row(rows, "%s x%d — sells for %d gp" % [
 			Campaign.item_name(id), int(entry["quantity"]), paid], "Sell", _sell.bind(id))
 
+	# O9 item 4: one offer, one row per finished job. Quest.offer_for()/turn_in() as
+	# they stand; nothing here decides anything about quests.
+	var offer: Dictionary = Visit.quest_offer(s, party)
+	if not offer.is_empty():
+		_trade_row(rows, "Job: %s — %d gp" % [
+			offer["title"], int(offer.get("reward", {}).get("gold", 0))], "Take", _take_quest)
+	for q in Visit.turn_ins(party):
+		_trade_row(rows, "✔ %s" % Quest.describe(q), "Turn in", _turn_in.bind(q))
+
 	_visit_log = Label.new()
 	_visit_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_visit_log.custom_minimum_size = Vector2(440, 34)
 	box.add_child(_visit_log)
+	_visit_log.text = String(_visit.get("log", ""))
 	var bar := HBoxContainer.new()
 	box.add_child(bar)
+	var rest_btn := Button.new()
+	rest_btn.text = "Rest the night"
+	rest_btn.pressed.connect(_rest)
+	bar.add_child(rest_btn)
 	var steal_btn := Button.new()
-	steal_btn.text = "Steal from the market"
+	var spent: bool = _visit.get("stolen", false)
+	steal_btn.text = "Stole from the market" if spent else "Steal from the market"
+	steal_btn.disabled = spent
 	steal_btn.pressed.connect(_steal)
 	bar.add_child(steal_btn)
 	var leave := Button.new()

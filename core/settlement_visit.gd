@@ -21,6 +21,8 @@ const Campaign = preload("res://core/campaign.gd")
 const RNG = preload("res://core/rng.gd")
 const Dice = preload("res://core/dice.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Adapter = preload("res://core/adapter.gd")
+const Quest = preload("res://core/quest.gd")
 
 # World-time is in minutes (scenes/world/world.gd's HUD reads elapsed/60 as hours).
 # Calibration knobs — a party crosses the demo map in ~20 world-minutes, so a
@@ -149,6 +151,38 @@ static func sell(m: Dictionary, party, item_id: String) -> bool:
 		return false
 	party.add_gold(paid)
 	return true
+
+# --- O9: the inn (a long rest) ---------------------------------------------
+#
+# core/campaign.gd's rest() is an instance method gated on a linear-run rest node
+# and a per-run rest budget, neither of which exists out here — so this calls what
+# it calls underneath (Adapter.rest) and charges the only currency the open world
+# has: time. Eight hours off the clock is eight hours the market restocks in, and
+# eight hours a hunting band keeps walking.
+const REST_MINUTES := 480.0
+
+static func rest(party, world, kind := "long-rest") -> void:
+	for ch in party.party_characters():
+		Adapter.rest(ch, kind)
+	world.clock.elapsed += REST_MINUTES   # paused during a visit, so advance it directly
+
+# --- O9: quests (T9's verbs, reached from a settlement) ---------------------
+#
+# Quest.offer_for() keys on a T25 giver node id; a settlement is not one, so each
+# settlement stands in for a curated giver, picked off its own id and stable for
+# the life of the map. No new quest content — the same six jobs, reachable.
+static func giver_node_id(s) -> String:
+	var givers: Array = []
+	for q in Quest.CURATED:
+		if not givers.has(q["giver_node_id"]):
+			givers.append(q["giver_node_id"])
+	return String(givers[absi(hash(s.id)) % givers.size()])
+
+static func quest_offer(s, party) -> Dictionary:
+	return Quest.offer_for(party, giver_node_id(s), FactionOpinion.get_opinion(s.faction))
+
+static func turn_ins(party) -> Array:
+	return party.quests.filter(func(q): return Quest.can_turn_in(q))
 
 # --- steal (T30's opportunity_check, in a market) --------------------------
 

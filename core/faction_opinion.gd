@@ -21,8 +21,12 @@ const RANGE := 100.0            # clamp, both ways
 # Thresholds, on the same -100..100 scale. Spaced so a player has to work at it:
 # one theft (-5/-10) is noise, a run of them (or a fight with the faction's own
 # parties, -8 a band) is what walks the score down past them.
-const HOSTILE := -50.0          # guards attack on sight; roaming parties hunt you
+const HOSTILE := -50.0          # their roaming parties hunt you
 const REFUSE_TRADE := -75.0     # ...and below that nobody will even sell to you
+# O9 item 5: the gate-guard fight needs its own floor *below* REFUSE_TRADE. When it
+# shared HOSTILE the guards came out first and the refusal branch was dead code, so
+# the three bands now read: hunted (-50) -> no trade (-75) -> fought at the gate (-90).
+const GUARDS_ATTACK := -90.0
 const QUEST_MIN := -25.0        # below this a settlement has no work for you
 const QUEST_GENEROUS := 40.0    # ...above it they will hand you a neighbour's job
 
@@ -65,6 +69,10 @@ static func is_hostile_to_player(faction: String) -> bool:
 static func refuses_trade(faction: String) -> bool:
 	return get_opinion(faction) <= REFUSE_TRADE
 
+# Walking up to their gate gets you a fight instead of a market.
+static func guards_attack(faction: String) -> bool:
+	return get_opinion(faction) <= GUARDS_ATTACK
+
 # What O6's markup gets multiplied by: dearer when they dislike you, cheaper when
 # they don't. One line, no branch — 0 opinion is x1.0, which is O6 unchanged.
 static func price_factor(faction: String) -> float:
@@ -100,15 +108,18 @@ static func decay(dt: float) -> void:
 
 # --- events ------------------------------------------------------------------
 
-# The player won a fight at `at`: every civilized faction with a settlement close
-# by hears about it. Used for "helped in a fight" (a monster band died) and, with a
-# negative amount, for killing a faction's own people.
-static func credit_fight(world, at: Vector2, amount: float, skip_faction := "",
-		radius := HELP_RADIUS) -> Array:
+# The player won a fight at `at`: every *civilized* faction with a settlement close
+# by hears about it — a monster faction's town does not thank you for killing
+# monsters (O9 item 8: the filter the comment always claimed was missing).
+# load() rather than preload(): world_ai.gd preloads this file, and a const cycle
+# will not resolve.
+static func credit_fight(world, at: Vector2, amount: float, skip_faction := "") -> Array:
+	var WorldAI = load("res://core/world_ai.gd")
 	var moved: Array = []
 	for s in world.settlements:
 		if s.faction == skip_faction or moved.has(s.faction) \
-				or s.position.distance_to(at) > radius:
+				or WorldAI.is_monster(s.faction) \
+				or s.position.distance_to(at) > HELP_RADIUS:
 			continue
 		moved.append(s.faction)
 		set_opinion(s.faction, get_opinion(s.faction) + amount)

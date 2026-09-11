@@ -9,6 +9,7 @@ const Visit = preload("res://core/settlement_visit.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Party = preload("res://core/party.gd")
 const RNG = preload("res://core/rng.gd")
+const Quest = preload("res://core/quest.gd")
 
 var _pass = 0
 var _fail = 0
@@ -29,6 +30,7 @@ func _init() -> void:
 	test_trade()
 	test_steal_deterministic_and_hooks()
 	test_opinion_moves_prices_and_can_refuse_trade()
+	test_rest_and_quests()
 	print("test_settlement_visit: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -141,6 +143,38 @@ func test_steal_deterministic_and_hooks() -> void:
 	var b := Visit.steal(s, _party(), w, m)
 	check(a["nat"] == b["nat"] and a["ok"] == b["ok"], "the same attempt rolls the same")
 	check(String(a["text"]) != "", "the attempt is narrated")
+
+# O9 item 2/4: the inn spends world-time to heal, and a settlement is a quest giver.
+func test_rest_and_quests() -> void:
+	FactionOpinion.reset()
+	var w := _world()
+	var s = w.settlements[0]
+	var party := _party()
+	var ch = party.party_characters()[0]
+	ch.hp_current = 1
+	w.clock.tick(10.0)
+	var t0: float = w.clock.elapsed
+	Visit.rest(party, w)
+	check(is_equal_approx(w.clock.elapsed, t0 + Visit.REST_MINUTES), "a rest spends world-time")
+	check(ch.hp_current != 1, "a long rest heals the party")
+
+	check(Visit.giver_node_id(s) == Visit.giver_node_id(s), "a settlement's giver is stable")
+	check(Visit.giver_node_id(w.settlements[1]) != "" , "every settlement has one")
+	var offer := Visit.quest_offer(s, party)
+	check(not offer.is_empty(), "a neutral settlement has work")
+	check(Quest.accept(party, offer), "the offer can be accepted")
+	check(Visit.quest_offer(s, party) != offer, "the same job is not offered twice")
+	check(Visit.turn_ins(party).is_empty(), "an unfinished job cannot be turned in")
+	offer["progress"] = int(offer["required"])
+	offer["state"] = "complete"
+	check(Visit.turn_ins(party).size() == 1, "a finished job is ready to hand in")
+	var gold0: int = party.gold
+	check(Quest.turn_in(party, offer, s.faction) and party.gold > gold0, "handing it in pays")
+	check(FactionOpinion.get_opinion(s.faction) == FactionOpinion.QUEST_DONE,
+		"...and the faction hears about it")
+	FactionOpinion.set_opinion(s.faction, FactionOpinion.QUEST_MIN - 1.0)
+	check(Visit.quest_offer(s, party).is_empty(), "a faction that dislikes you has no work")
+	FactionOpinion.reset()
 
 # The smallest seed whose first d20 is `want` — the test wants a pinned roll, not
 # a particular stream.

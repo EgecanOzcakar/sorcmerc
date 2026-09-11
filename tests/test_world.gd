@@ -29,7 +29,7 @@ func test_clock_advances_only_unpaused() -> void:
 	check(not c.is_paused(), "a fresh clock runs")
 	for i in 10:
 		c.tick(0.1)
-	check(is_equal_approx(c.elapsed, 1.0), "ten 0.1s ticks are one world-second")
+	check(is_equal_approx(c.elapsed, 1.0), "ten 0.1s ticks are one world-minute")
 
 	c.pause()
 	check(c.is_paused(), "pause() pauses")
@@ -47,7 +47,7 @@ func test_clock_speed() -> void:
 	check(is_equal_approx(c.tick(1.0), 1.0), "1x advances a full second per second")
 
 	c.set_speed(4.0)
-	check(is_equal_approx(c.tick(1.0), 4.0), "4x advances four world-seconds per real second")
+	check(is_equal_approx(c.tick(1.0), 4.0), "4x advances four world-minutes per real second")
 	c.set_speed(99.0)   # not one of the sanctioned rates
 	check(c.speed == 1.0, "an unrecognized speed snaps back to 1x rather than accepting anything")
 
@@ -65,7 +65,7 @@ func test_clock_speed() -> void:
 func test_party_moves_toward_goal_without_overshooting() -> void:
 	var w = World.new()
 	var p = w.add_party(World.RoamingParty.new("player", Vector2.ZERO, "soldier", true))
-	w.set_goal(p, Vector2(World.SPEED * 2.0, 0))   # exactly 2 world-seconds away
+	w.set_goal(p, Vector2(World.SPEED * 2.0, 0))   # exactly 2 world-minutes away
 
 	w.tick(1.0)
 	check(is_equal_approx(p.position.x, World.SPEED), "one second of travel is one speed-unit")

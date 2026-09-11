@@ -113,7 +113,46 @@ func _run() -> void:
 	await _offscreen_battle(p)
 	await _settlement_visit(p)
 	await _hostile_settlement(p)
+	await _pursuit_at_8x(p)
+	_exit_to_title()
 	_done()
+
+# --- O9 item 3: a chase at 8x still catches ---------------------------------
+# Pursuer and quarry move at the same World.SPEED, so a pursuit holds its gap
+# forever; at 8x a tick moves both 32 units, which used to step clean over the
+# fixed 24-unit trigger and the fight never happened.
+func _pursuit_at_8x(p) -> void:
+	var World = load("res://core/world.gd")
+	var WorldAI = load("res://core/world_ai.gd")
+	var open_country := Vector2(9000, 9000)
+	p.position = open_country
+	screen.world.set_goal(p, open_country + Vector2(20000, 0))     # a long flight
+	var chaser = screen.world.add_party(
+		World.RoamingParty.new("hound", open_country - Vector2(32, 0), "goblinoid"))
+	WorldAI.hunt(chaser)
+	screen.world.clock.set_speed(8.0)
+	var gap0: float = chaser.position.distance_to(p.position)
+	await step(30)
+	if screen._combat == null:
+		fail("a hunting party at 8x never caught the player (gap %.1f -> %.1f)"
+			% [gap0, chaser.position.distance_to(p.position)])
+	else:
+		screen._combat.result = {"outcome": "Victory", "xp": 40, "gold": 30}
+		await step(4)
+	screen.world.clock.set_speed(1.0)
+	screen.world.parties.erase(chaser)
+
+# --- O9 item 2: the way out, and the only thing that persists a run ----------
+func _exit_to_title() -> void:
+	var CharacterSave = load("res://core/character_save.gd")
+	var FactionOpinion = load("res://core/faction_opinion.gd")
+	FactionOpinion.set_opinion("soldier", -20.0)
+	screen._leave_world()
+	if not FactionOpinion.all().is_empty():
+		fail("leaving the world did not clear per-run faction opinion")
+	for ch in screen.party.roster:
+		if not FileAccess.file_exists(CharacterSave.path_for(ch.id)):
+			fail("%s was not saved to the barracks on the way out" % ch.id)
 
 # --- O6: walking into a settlement opens the market, Leave closes it --------
 func _settlement_visit(p) -> void:
@@ -153,6 +192,56 @@ func _settlement_visit(p) -> void:
 	if screen._visit_log == null or screen._visit_log.text == "":
 		fail("the theft was not narrated in the panel")
 
+	# O9 item 1: one attempt per visit. The clock is paused, so a second press
+	# would re-roll the identical (possibly winning) result forever.
+	var opinion1: float = s.pending_opinion_delta
+	var purse: int = screen.party.gold
+	screen._steal()
+	if screen.party.gold != purse:
+		fail("a second Steal in the same visit still paid out")
+	if s.pending_opinion_delta != opinion1:
+		fail("a second Steal in the same visit still moved opinion")
+	if not screen._visit.get("stolen", false):
+		fail("the visit was not marked as already stolen from")
+
+	# O9 item 2: the inn — a long rest, paid for in world-time.
+	var clock0: float = screen.world.clock.elapsed
+	var ch = screen.party.party_characters()[0]
+	ch.hp_current = 1
+	screen._rest()
+	if screen.world.clock.elapsed <= clock0:
+		fail("resting did not spend any world-time")
+	if ch.hp_current == 1:
+		fail("the long rest did not heal the party")
+	if not screen._visit.get("stolen", false):
+		fail("resting cleared the one-theft-per-visit mark")
+
+	# O9 item 4: a settlement offers work, and a finished job can be handed in.
+	var Quest = load("res://core/quest.gd")
+	var offer: Dictionary = screen.Visit.quest_offer(s, screen.party)
+	if offer.is_empty():
+		fail("a neutral settlement offered no work at all")
+	else:
+		screen._take_quest()
+		var taken: Dictionary = Quest.get_quest(screen.party, offer["id"])
+		if taken.is_empty() or taken["state"] != "active":
+			fail("taking the offered job did not put it in the log")
+		else:
+			taken["progress"] = int(taken["required"])
+			taken["state"] = "complete"
+			if screen.Visit.turn_ins(screen.party).is_empty():
+				fail("a finished job is not offered for turn-in")
+			var gold0b: int = screen.party.gold
+			screen._turn_in(taken)
+			if taken["state"] != "turned_in" or screen.party.gold <= gold0b:
+				fail("turning the job in did not pay")
+
+	# O9 item 7: the HUD's pause/speed buttons are inert while the panel is open.
+	screen._toggle_pause()
+	screen._cycle_speed()
+	if not screen.world.clock.is_paused() or screen.world.clock.speed != 1.0:
+		fail("the pause/speed buttons still fired during a settlement visit")
+
 	screen._close_visit()
 	if not screen._visit.is_empty() or screen._visit_panel != null:
 		fail("Leave did not close the market")
@@ -179,7 +268,54 @@ func _settlement_visit(p) -> void:
 func _hostile_settlement(p) -> void:
 	var FactionOpinion = load("res://core/faction_opinion.gd")
 	var s = screen.world.settlements[0]
+
+	# O9 item 5: the three bands are all reachable now. Past HOSTILE their parties
+	# hunt you but the gate is still open; past REFUSE_TRADE the stall is bare;
+	# only past GUARDS_ATTACK do the guards come out.
 	FactionOpinion.set_opinion(s.faction, FactionOpinion.HOSTILE - 1.0)
+	screen._left = null
+	p.position = s.position
+	screen.world.set_goal(p, s.position)
+	screen._check_visit()
+	if screen._visit.is_empty():
+		fail("a merely hostile settlement refused to open its gate")
+	elif screen._visit.get("refused", false):
+		fail("a merely hostile settlement already refused to trade")
+	else:
+		screen._close_visit()
+	FactionOpinion.set_opinion(s.faction, FactionOpinion.REFUSE_TRADE - 1.0)
+	screen._left = null
+	screen._check_visit()
+	if screen._visit.is_empty():
+		fail("a trade-refusing settlement fought instead of refusing")
+	elif not screen._visit.get("refused", false):
+		fail("REFUSE_TRADE is still unreachable: the market traded normally")
+	else:
+		screen._close_visit()
+
+	# O9 item 6: a monster faction's town never opens a market, whatever it thinks.
+	var monster_town = null
+	for st in screen.world.settlements:
+		if load("res://core/world_ai.gd").is_monster(st.faction):
+			monster_town = st
+			break
+	if monster_town == null:
+		fail("the demo map has no monster-faction settlement to test")
+	else:
+		screen._left = null
+		p.position = monster_town.position
+		screen.world.set_goal(p, monster_town.position)
+		screen._check_visit()
+		if not screen._visit.is_empty():
+			fail("a monster-faction settlement ran a friendly market")
+			screen._close_visit()
+		elif screen._combat == null:
+			fail("walking into a monster-faction settlement did nothing at all")
+		else:
+			screen._combat.result = {"outcome": "Victory", "xp": 10, "gold": 5}
+			await step(4)
+
+	FactionOpinion.set_opinion(s.faction, FactionOpinion.GUARDS_ATTACK - 1.0)
 	screen._left = null
 	p.position = s.position
 	screen.world.set_goal(p, s.position)
@@ -200,7 +336,7 @@ func _hostile_settlement(p) -> void:
 		fail("the guard fight scene was never torn down")
 	if screen.world.parties.size() != n:
 		fail("beating the garrison removed a party from the map")
-	if FactionOpinion.get_opinion(s.faction) >= FactionOpinion.HOSTILE - 1.0:
+	if FactionOpinion.get_opinion(s.faction) >= FactionOpinion.GUARDS_ATTACK - 1.0:
 		fail("killing their garrison did not lower the faction further")
 	# Back to friendly terms: the same walk-in opens the market again.
 	FactionOpinion.set_opinion(s.faction, 0.0)
@@ -279,8 +415,18 @@ func _encounter_handoff(p) -> void:
 		fail("parties kept moving on the map during the fight")
 
 	# Win it the way scenes/main.gd's _finish() does — fill `result`.
-	screen._combat.result = {"outcome": "Victory", "xp": 10, "gold": 5}
+	# O9 item 2: the haul has to actually land on the party.
+	var gold0: int = screen.party.gold
+	var xp0: int = screen.party.party_characters()[0].xp
+	screen._combat.result = {"outcome": "Victory", "xp": 400, "gold": 50,
+		"loot": ["handaxe"], "kills": []}
 	await step(4)
+	if screen.party.gold != gold0 + 50:
+		fail("winning an open-world fight paid no gold (%d -> %d)" % [gold0, screen.party.gold])
+	if screen.party.party_characters()[0].xp <= xp0:
+		fail("winning an open-world fight banked no XP")
+	if screen.party.stash_count("handaxe") < 1:
+		fail("the loot from an open-world fight never reached the stash")
 	if screen._combat != null:
 		fail("the combat scene was never torn down after the fight")
 	if screen.world.parties.has(foe):
