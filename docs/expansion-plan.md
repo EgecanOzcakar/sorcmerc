@@ -2650,4 +2650,33 @@ Research/reporting only — no purchase, no code changes, no branch;
 downloading the free demo asset itself for inspection is fine (same as
 every prior art spike's "look at the real files" step).
 
+**T46 completion (2026-09-11):** spike done, nothing integrated (research
+only, as scoped). Downloaded and inspected the free demo character —
+license confirmed clean for our use; 44 real frames across idle(6)/
+run(8)/dash(8)/attack(8+2 combo)/hurt(4)/jump(8), one fixed appearance,
+faces left only, verified visually (both by the agent's alpha-channel
+grid analysis and by me looking at the actual sheet). Integration plan:
+`scenes/main.gd`'s `Board` has no per-token nodes at all — everything is
+immediate-mode `_draw()` vector shapes over flat per-id state
+dictionaries (`_tok`/`_hp`/`_flash`/`_fx`). The natural fit is
+`draw_texture_rect_region` (the same primitive O11/O12 already used for
+the world map's tiles/buildings) swapped in for the existing `_fan`/
+`_ring` "ball" block, with one more per-id `_anim` state dict advanced
+in the existing `tick(dt)`, not `AnimatedSprite2D` nodes (would fight
+the single-canvas draw model for no benefit). Real event hooks already
+exist to drive it: idle = the existing not-sliding branch, run = the
+existing slide/lerp branch, attack = `_attack_fx()`'s melee case
+(already synced to `_lunge()`/`_fx` timing), hurt = the existing
+HP-decrease detection in `tick()`. Estimated small-to-medium, roughly a
+day for one character with idle/run/attack/hurt wired.
+
+**Recommendation: hold off on the $15/$25 full pack.** The free demo is
+one fixed-appearance character with no team/individual variety — exactly
+the opposite of what the paid pack's layering solves. Build and visually
+validate the frame-stepping pipeline against the free character first
+(cheap, already downloaded, license-clear); only buy the full pack once
+that's proven to look good on this game's isometric board, since a
+single billboard sprite reading badly on a warped-projection hex board
+would be a problem the paid pack's extra variety doesn't fix either.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
