@@ -1,0 +1,24 @@
+[
+  {
+    "monster": "Baboon",
+    "bestiary_id": "baboon",
+    "faction": "beast",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Hamadryas_baboon.jpg",
+    "image_url": "https://upload.wikimedia.org/wikipedia/commons/d/dd/Hamadryas_baboon.jpg",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "author": "Moataz1997 (Wikimedia Commons)",
+    "attribution_text": "Hamadryas baboon photo by Moataz1997, CC BY-SA 4.0, via Wikimedia Commons (https://commons.wikimedia.org/wiki/File:Hamadryas_baboon.jpg)",
+    "verified_on_source_page": true,
+    "rejected_candidates": [
+      {
+        "candidate": "File:Baboon (PSF).png (Pearson Scott Foresman line-art, public domain)",
+        "reason": "not rejected on license (genuinely public domain) - passed over because it is monochrome line art with no fill color, which would pixelize to a mostly black/white sketch rather than a colored sprite matching the LPC-style palette; kept as a fallback option, not used for this deliverable"
+      }
+    ],
+    "source_local_path": "data/monster_refs/baboon/baboon_photo_source.jpg",
+    "bg_removed_local_path": "data/monster_refs/baboon/baboon_nobg.png",
+    "pixelized_output": "assets/monster_refs_pixel/baboon.png",
+    "pixelized_size_px": [64, 43]
+  }
+]
