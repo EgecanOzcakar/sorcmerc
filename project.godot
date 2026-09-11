@@ -18,6 +18,10 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 
 Audio="*res://core/audio.gd"
 
+[gui]
+
+theme/custom_font="res://assets/fonts/DejaVuSans.ttf"
+
 [display]
 
 window/size/viewport_width=1280

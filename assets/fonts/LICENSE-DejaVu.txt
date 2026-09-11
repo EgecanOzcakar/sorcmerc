@@ -1,0 +1,8 @@
+DejaVu Sans (assets/fonts/DejaVuSans.ttf, DejaVuSans-Bold.ttf)
+Bundled for full Unicode symbol-glyph coverage (Miscellaneous Symbols,
+Dingbats, etc.) that the engine's own default/web font lacks — see
+core/ui_icons.gd's glyph tables.
+
+Fonts are (c) Bitstream, Inc. and other contributors, released under the
+Bitstream Vera / DejaVu license — free to use, modify, and redistribute,
+including embedded in software. Full text: https://dejavu-fonts.github.io/License.html
