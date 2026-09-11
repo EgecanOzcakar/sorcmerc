@@ -86,6 +86,17 @@ const TILE_COLS := 3              # both sheets are 3x6 tiles
 const GRASS := [0, 1, 2, 9, 10]
 const FOREST := [0, 1, 2, 3, 4, 5]
 const WOODED := 0.78              # above this, a cell draws from FOREST
+# O15: the Water sheet's left column — its blue-water pair. The other 15 tiles are
+# the pack's swamp, ice and shallow-sand families, which next to grass read as
+# three different lakes rather than one, the same reason GRASS/FOREST are narrow.
+const WaterTex := preload("res://assets/world/overworld/water.png")
+const WATER := [0, 3]
+# Half-width of the shoreline band, in world units (~0.7 of a CELL either side).
+# Across it a cell's chance of being water falls from 1 to 0, so the bank frays
+# into the grass over a tile or so instead of ending on a cell boundary — the
+# WOODED threshold's trick, with the noise compared against terrain rather than
+# against a constant.
+const SHORE := 35.0
 
 # O12: one cell of the sheet tools/pack_buildings.py lays out — 5 columns (the
 # pack's 5 medieval buildings, at their true relative sizes) by 4 rows (the
@@ -142,6 +153,18 @@ func _demo_world() -> World:
 	WorldAI.hunt(w.add_party(World.RoamingParty.new("goblins", Vector2(380, 300), "goblinoid")))
 	WorldAI.patrol(w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "soldier")),
 		[Vector2(-120, 380), Vector2(-360, 260), Vector2(0, 0)])
+	# O15 terrain: one lake northwest of Riverhold, and the river it drains into —
+	# which runs past Riverhold's west wall and down to Ashfell, so the town's name
+	# is finally standing next to something. World.waters only knows circles, so the
+	# river is blobs stamped along a polyline; spacing is well under the radius, so
+	# they merge into one band with a scalloped (not machined) bank.
+	w.add_water(Vector2(-190, -70), 100.0)
+	var river := PackedVector2Array([Vector2(-110, -20), Vector2(-40, 100),
+		Vector2(-10, 210), Vector2(60, 320), Vector2(140, 400)])
+	for i in river.size() - 1:
+		for t in 5:
+			w.add_water(river[i].lerp(river[i + 1], t / 5.0), 40.0)
+	w.add_water(river[-1], 40.0)
 	return w
 
 # World.tick() advances the clock itself and gates movement on it, so one call
@@ -294,7 +317,11 @@ func _build_quest_panel() -> void:
 	if _quest_panel != null:
 		_quest_panel.queue_free()
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
+	# No anchor preset: default anchors are top-left (0), so `position` is a plain
+	# pixel offset from the parent's origin — set_anchors_preset(PRESET_CENTER)
+	# used to also be called here, which re-centers the control on its OWN anchor
+	# point and resets the offsets, so this same centering math then applied a
+	# second time on top of it and shoved the panel off-screen.
 	panel.position = size * 0.5 - Vector2(200, 160)
 	panel.custom_minimum_size = Vector2(400, 320)
 	add_child(panel)
@@ -565,7 +592,11 @@ func _build_visit_panel() -> void:
 		_visit_panel.queue_free()
 	var s = _visit["settlement"]
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
+	# Default (top-left) anchors: `position` is a plain pixel offset from the
+	# parent's origin. set_anchors_preset(PRESET_CENTER) used to be called here
+	# too, which re-centers on its own and resets the offsets — this same
+	# centering math then applied again on top of that shoved the panel
+	# off-screen (see the same fix in _build_quest_panel just above).
 	panel.position = size * 0.5 - Vector2(230, 230)
 	panel.custom_minimum_size = Vector2(460, 460)
 	add_child(panel)
@@ -742,6 +773,8 @@ func _draw() -> void:
 	for s in world.settlements:
 		props.append({"at": _pix(s.position), "s": s})
 	for q in world.parties:
+		if q.is_player and not _visit.is_empty():
+			continue   # inside the gates for the duration of the visit, not standing on the map
 		props.append({"at": _pix(q.position), "p": q})
 	props.sort_custom(func(a, b): return a["at"].y < b["at"].y)
 	for d in props:
@@ -775,10 +808,18 @@ func _draw_ground() -> void:
 	for i in range(i0, i1 + 1):
 		for j in range(j0, j1 + 1):
 			var cell := Vector2i(i, j)
-			var wooded: bool = _rand(cell, 5) > WOODED
-			var pool: Array = FOREST if wooded else GRASS
+			# 1.0 deep in a lake, 0.0 well inland, a ramp across the bank between.
+			var wet := 0.5 - world.water_depth(Vector2(i + 0.5, j + 0.5) * CELL) / (SHORE * 2.0)
+			var tex := TerrainTex
+			var pool: Array = GRASS
+			if _rand(cell, 9) < wet:
+				tex = WaterTex
+				pool = WATER
+			elif _rand(cell, 5) > WOODED:
+				tex = ForestTex
+				pool = FOREST
 			var idx: int = pool[int(_rand(cell, 1) * pool.size()) % pool.size()]
-			draw_texture_rect_region(ForestTex if wooded else TerrainTex,
+			draw_texture_rect_region(tex,
 				Rect2(Vector2(i + j, j - i - 1) * TILE * 0.5, TILE),
 				Rect2(Vector2(idx % TILE_COLS, idx / TILE_COLS) * TILE, TILE))
 	draw_set_transform_matrix(Transform2D.IDENTITY)

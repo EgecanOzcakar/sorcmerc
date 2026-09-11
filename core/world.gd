@@ -96,6 +96,11 @@ class RoamingParty extends RefCounted:
 var clock := WorldClock.new()
 var settlements: Array[Settlement] = []
 var parties: Array[RoamingParty] = []
+# O15 — the only terrain the map has: hand-placed blobs of water, `{position, radius}`
+# each. A circle is the whole vocabulary; a lake is one, a river is a chain of
+# overlapping ones (see scenes/world/world.gd's _demo_world). Plain dictionaries
+# rather than a class because water_depth() below is the only thing that reads them.
+var waters: Array[Dictionary] = []
 
 func add_settlement(s: Settlement) -> Settlement:
 	settlements.append(s)
@@ -104,6 +109,22 @@ func add_settlement(s: Settlement) -> Settlement:
 func add_party(p: RoamingParty) -> RoamingParty:
 	parties.append(p)
 	return p
+
+func add_water(position: Vector2, radius: float) -> Dictionary:
+	var w := {"position": position, "radius": radius}
+	waters.append(w)
+	return w
+
+# Signed distance to the nearest shoreline: negative in the water (how far in),
+# positive on land (how far from the bank), INF with no water at all. One number
+# is all the renderer needs to pick a tile and fade the edge.
+# ponytail: linear scan over a handful of hand-placed blobs. If terrain ever grows
+# to hundreds, index them; a per-cell cache in the renderer is the cheaper fix.
+func water_depth(p: Vector2) -> float:
+	var d := INF
+	for w in waters:
+		d = minf(d, p.distance_to(w["position"]) - float(w["radius"]))
+	return d
 
 func player() -> RoamingParty:
 	for p in parties:

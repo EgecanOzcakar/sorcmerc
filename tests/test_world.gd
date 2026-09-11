@@ -21,6 +21,7 @@ func _init() -> void:
 	test_party_moves_toward_goal_without_overshooting()
 	test_nothing_moves_while_paused()
 	test_data_shapes_and_container()
+	test_water_regions()
 	print("test_world: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -117,3 +118,21 @@ func test_data_shapes_and_container() -> void:
 	check(not foe.is_player, "an NPC party is not the player")
 	check(foe.goal == foe.position and foe.at_goal(), "a new party's goal is where it stands")
 	check(Scaler.FACTIONS.has(foe.faction), "parties are faction-tagged from the same list")
+
+# O15: the only terrain the map has. water_depth() is what the renderer picks
+# tiles off, so its sign convention is the contract.
+func test_water_regions() -> void:
+	var w = World.new()
+	check(w.water_depth(Vector2(0, 0)) == INF, "a world with no water is dry everywhere")
+
+	w.add_water(Vector2(100, 0), 40.0)
+	check(w.waters.size() == 1 and w.waters[0]["radius"] == 40.0, "the world holds the water it was given")
+	check(w.water_depth(Vector2(100, 0)) == -40.0, "the middle of a lake is a radius deep")
+	check(is_equal_approx(w.water_depth(Vector2(140, 0)), 0.0), "the shoreline is depth zero")
+	check(w.water_depth(Vector2(180, 0)) > 0.0, "dry land reads positive")
+
+	# Two overlapping blobs are one body of water: the point between them, outside
+	# neither circle alone by much, is wet because the *nearest* edge is what counts.
+	w.add_water(Vector2(160, 0), 40.0)
+	check(w.water_depth(Vector2(130, 0)) < 0.0, "a chain of overlapping blobs is continuous")
+	check(w.water_depth(Vector2(-500, -500)) > 400.0, "far inland is far from any bank")
