@@ -1918,4 +1918,99 @@ check (51 passed). Full suite: 30 test files, 0 failures; all 6 `drive_*` OK,
 including `drive_campaign` (which drives `campaign.tscn` directly and so never
 needed the flag).
 
+## O9 — open-world bug/gap fix pass (locked 2026-09-11, dispatched now)
+
+A full review of O1-O8 (merge-reviewer, 2026-09-11) surfaced nine real
+issues — the seams between 8 separately-dispatched phases, none caught
+individually since each phase only reads a summary of the others. Fix all
+nine:
+
+1. **Unlimited gold via repeat-Steal** (`scenes/world/world.gd`'s
+   `_steal()`/`core/settlement_visit.gd`). The clock is paused for the
+   whole visit, so `elapsed` (the steal RNG's seed input) never changes —
+   every press of Steal rolls the identical result. Add a one-shot guard:
+   once `_visit` has been stolen from, further presses are refused (and
+   the button should read as spent/disabled), same visit until Leave.
+2. **The run is a dead end** (`scenes/world/world.gd`'s `_launch_combat()`,
+   `scenes/game/game.gd`'s `show_world()`). Victory currently discards
+   `result["xp"]`/`result["gold"]`; there is no Rest action anywhere in
+   the visit panel; there is no way back to the title screen; nothing
+   calls `CharacterSave.save()` outside the linear campaign's summary.
+   Fix: award XP/gold on victory (reuse whatever split logic
+   `core/campaign.gd`'s `finish_combat()` already uses rather than
+   reinventing it), add a Rest option to the settlement-visit panel
+   (reuse `Campaign.rest("long-rest")`'s mechanics if that's callable
+   without a full `Campaign` instance, otherwise the smallest equivalent),
+   and add a Title/exit control that saves every roster member via
+   `CharacterSave.save()` before leaving (and calls
+   `FactionOpinion.reset()` — see item 9's note on why that matters once
+   an exit exists).
+3. **Encounter trigger breaks at high time-speed**
+   (`scenes/world/world.gd`'s `ENCOUNTER_RADIUS`/`_check_encounter()`).
+   At 4x/8x a hunting party's per-tick movement can outrun the fixed
+   24-unit trigger radius, so pursuit never actually catches the player
+   (confirmed: gap locks at 32 units and stays there). Scale the
+   effective trigger distance with the tick's actual travel distance
+   (e.g. compare against `maxf(ENCOUNTER_RADIUS, p.speed * dt * 2.0)`
+   using the dt `world.tick()` returns) rather than a fixed constant, and
+   fix the same stale reasoning in `VISIT_RADIUS`'s comment.
+4. **Quests are unreachable** (`core/settlement_visit.gd`/
+   `scenes/world/world.gd`'s visit panel). O7 built `Quest.offer_for()`/
+   `turn_in()` for exactly this, but nothing in the open world calls
+   either — the plan's primary positive-opinion source (completed
+   quests) can never fire in normal play. Add an Offer/Turn-in row to
+   the settlement-visit panel using those two functions as they already
+   exist; do not redesign the quest system itself.
+5. **`REFUSE_TRADE` unreachable** (`scenes/world/world.gd`'s
+   `_check_visit()`). The hostile-guard-fight gate at `HOSTILE` (-50)
+   intercepts and returns before opinion can ever reach `REFUSE_TRADE`
+   (-75), so `market()`'s refusal branch is dead code in practice. Give
+   the settlement-hostility check its own threshold distinct from (and
+   lower than) trade refusal, so both are reachable.
+6. **A monster-faction settlement trades peacefully with the player**
+   (`scenes/world/world.gd`'s `_check_visit()`). It gates only on
+   `FactionOpinion.is_hostile_to_player()`, never on
+   `WorldAI.is_monster()`, so the demo map's cultist city (Ashfell) runs
+   a friendly market while its own roaming cultist parties attack on
+   sight. Gate visits the same way `_check_encounter()` already gates
+   combat: `WorldAI.is_monster(s.faction) or FactionOpinion.is_hostile_to_player(s.faction)`.
+7. **Pause button desyncs during a settlement visit**
+   (`scenes/world/world.gd`'s `_open_visit()`). It pauses the clock but
+   never updates `_pause_btn.text`, so the button reads "Pause" while
+   already paused; pressing it then resumes the world (parties move,
+   NPC battles resolve) underneath the still-open market panel. Set the
+   label correctly in `_open_visit()`, or simplest: gate
+   `_toggle_pause()`/`_cycle_speed()` on `_visit.is_empty()` so neither
+   does anything while a visit panel is open.
+8. **`credit_fight` isn't actually civilized-only**
+   (`core/faction_opinion.gd`). Its own comment and O7's completion note
+   both say "every civilized faction with a settlement nearby", but the
+   loop never checks `WorldAI.is_monster()` — killing a goblin band near
+   a cultist city currently raises cultist opinion. Add the filter. Also
+   cut the unused `radius` parameter (one call site, always the default)
+   and the docstring's unused negative-amount example (the real "killing
+   a faction's people" path already goes through `lower()` directly at
+   its one call site).
+9. **World-time unit confusion** (`core/world.gd`'s `elapsed`/`SPEED`
+   comments, `tests/test_world.gd`'s matching test label). O1 documents
+   `elapsed` as world-*seconds* and asserts "ten 0.1s ticks are one
+   world-second" — every phase after it (the HUD's Day/HH:MM readout,
+   O6's `RESTOCK`, O7's `DAY := 1440.0`) actually treats it as
+   world-*minutes*. Nothing computes wrong today (it's self-consistent
+   downstream), but it's a 60x trap for the next constant tuned off
+   `world.gd`'s own comments. Fix the two O1 comments and the test
+   label to say minutes, matching what's actually been built on top.
+
+Also, lower priority, note-only unless there's time: `World.set_goal()`
+is bypassed by `core/world_ai.gd` everywhere in favor of direct
+`p.goal = goal` — pick one convention and use it consistently, cheap
+cleanup, not worth its own item if it doesn't fit.
+
+File ownership: `scenes/world/world.gd`, `core/settlement_visit.gd`,
+`core/world.gd` (comments only, item 9), `core/faction_opinion.gd`, and
+their test files. Do not touch `core/campaign.gd`, `scenes/campaign/*`,
+`scenes/main.gd`, `core/world_ai.gd`'s hostility logic beyond what item 6
+needs, or `core/quest.gd` beyond calling its existing functions (item 4).
+Full suite + all `drive_*` smoke tests green before reporting done.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
