@@ -2560,10 +2560,17 @@ archetype (fighter, cleric, rogue, wizard, etc. — the party's own
 `core/rules/catalog.gd` class list is the real target set, not an
 arbitrary number). Report a shortlist with license confirmation and a
 recommendation; do not integrate anything yet — this is research only,
-matching O10's shape. Realistic expectation, state plainly in the
-report: an exact style match to the reference (that specific painted-
-gothic look) is unlikely at CC0 quality — say so if the best candidates
-are a looser stylistic fit rather than pretending otherwise.
+matching O10's shape.
+
+**Style bar loosened (2026-09-11, mid-spike):** the user does not need
+an exact Darkest Dungeon style match — "no need about the specific art
+theme." Any decent fantasy character-portrait art (any illustration
+style — pixel, flat vector, painted, whatever — as long as it reads as
+a character bust/figure, not the isometric tile-art style used for the
+overworld map) with good class-list coverage and a clear CC0/CC-BY
+license is fair game. Don't reject candidates just for stylistic
+mismatch to the reference image; the mechanic (a portrait popup on
+attack resolution) matters more than the exact look.
 
 **Phase B (after Phase A, not yet dispatched) — wire it in.** Extend
 `scenes/main.gd`'s `show_reveal()`/`REVEAL_PAUSE` popup (which already
