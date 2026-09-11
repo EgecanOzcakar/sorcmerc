@@ -1234,4 +1234,52 @@ choice-point enumeration genuinely needs to move there), `scenes/creator/
 creator.gd`, `scenes/creator/levelup.gd`. Keep the change additive — pending
 computation itself must not change, only what ELSE gets exposed alongside it.
 
+## T35 — measure the melee-closes-instantly problem, don't fix it blind (locked 2026-09-11, dispatched now)
+
+Diagnosed directly from the numbers before dispatching anything: standard
+speed is 30 ft = 5 hexes/turn (`core/adapter.gd`'s `FT_PER_HEX := 6`), boards
+are 5-9 hexes wide (`core/encounter.gd`'s `board_for`/theme boards), foes
+spawn only `SPAWN_GAP := 3` hexes from the party at minimum. A single move
+can close nearly the whole board, so ranged range (capped at
+`RANGE_CAP := 8` hexes) rarely gets a real window before everyone is
+adjacent. User's own framing: "most ranged spells and ranged attacks should
+work for under 3 hex unit distance, or the combat map can be enlarged" —
+and explicitly wants **measured results before deciding**, not a live
+balance change picked blind.
+
+This is a measurement spike. Build a small seeded sweep (follow the existing
+pattern `tests/test_scaler.gd`/`core/scaler.gd`'s TUNING sweeps already use)
+that measures, across ~100+ seeds of real fights (`AI.take_turn` on both
+sides, like `autoplay.gd`/the scaler's own win-rate sweeps already do):
+how many rounds until every combatant is adjacent to an enemy at least once,
+what fraction of a fight's total attacks happen at range 2+ vs. melee range,
+and party win rate — for:
+1. **Baseline** (current numbers, unchanged) — the control.
+2. **Candidate A — tune the hex/foot conversion.** Increasing
+   `FT_PER_HEX` shrinks movement speed in hex terms WITHOUT touching
+   `RANGE_CAP` (ranged is already cap-bound at 8, so its effective hex
+   range barely moves), which should slow how fast melee closes distance
+   relative to a board's width — try one or two concrete values and
+   measure them, don't guess one number and call it done.
+2. **Candidate B — enlarge the boards.** Widen the existing theme board
+   layouts (`core/encounter.gd`) by some amount and re-measure with
+   `FT_PER_HEX` left at its current value.
+3. Optionally, a combination of both, if the two candidates individually
+   under-shoot.
+
+Report the measured numbers for baseline vs. every candidate side by side —
+this task's job is to hand back data for a decision, not to make the
+decision. Whatever candidate code changes were made to take the
+measurements should be left in the working tree, clearly separable (or on
+their own throwaway commit) so the orchestrating session can pick one,
+adjust it, or discard all of them — do not silently land a chosen value as
+if it were final.
+
+File ownership: a new measurement script under `tests/` (not a permanent
+`test_*.gd` — name it clearly as a one-off, e.g. `tests/sweep_range.gd`),
+`core/adapter.gd` (`FT_PER_HEX` only, for candidate A), `core/encounter.gd`
+(board hex layouts only, for candidate B). Do not touch combat resolution
+logic, weapon/spell data, or anything else — this is range/movement/board-
+size tuning only.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
