@@ -7,21 +7,53 @@ extends SceneTree
 const AI = preload("res://core/ai.gd")
 
 const MAX_STEPS := 4000
+# T43: the fight is not a formality — the tuned win rates are 94.5% easy / 83.5%
+# normal (scaler.gd's TUNING header), so a walked run can genuinely lose, and a
+# stage-0 loss ends it before a merchant/rest/treasure node is ever reached. The
+# driver therefore walks up to ATTEMPTS runs on consecutive seeds and asserts on
+# the first one that wins; three tries put a false red under ~1 in 1000.
+const ATTEMPTS := 3
+const DIFFICULTY_RANK := {"easy": 1, "normal": 2, "hard": 3}
 
 var main
 var _presses := 0
 var _fail := 0
+var _quiet := false      # a retried attempt's failures are counted, not printed
 var _did := {}
 
 func _init() -> void:
 	OS.set_environment("SORCMERC_FAST", "1")   # the combat screen skips its pauses
-	main = load("res://scenes/campaign/campaign.tscn").instantiate()
-	root.add_child(main)
-	_run()
+	_attempts()
+
+# Walk runs until one satisfies _check(). A pinned SORCMERC_SEED replays exactly,
+# so a retry has to move it; unseeded, route and fight reseed off the clock alone.
+# A late loss that still walked every node kind passes on the spot — only a run
+# cut short (a lost opening fight) costs an attempt.
+func _attempts() -> void:
+	var base := int(OS.get_environment("SORCMERC_SEED"))
+	for attempt in ATTEMPTS:
+		if base > 0:
+			OS.set_environment("SORCMERC_SEED", str(base + attempt))
+		if main != null:
+			main.queue_free()
+			await process_frame
+		_did = {}
+		_fail = 0
+		_quiet = attempt < ATTEMPTS - 1
+		main = load("res://scenes/campaign/campaign.tscn").instantiate()
+		root.add_child(main)
+		await _run()
+		_check()
+		if _fail == 0:
+			break
+		print("drive_campaign: attempt %d %s at stage %d, %d assertions unmet — retrying" % [
+			attempt + 1, main.run.state, main.run.stage, _fail])
+	_summary()
 
 func fail(msg: String) -> void:
 	_fail += 1
-	printerr("  FAIL: ", msg)
+	if not _quiet:
+		printerr("  FAIL: ", msg)
 
 # Every Button under `node`, in tree order.
 func buttons(node: Node) -> Array:
@@ -68,11 +100,18 @@ func _run() -> void:
 					fail("no road to take on stage %d" % main.run.stage)
 					break
 				var opts: Array = main.run.options()
+				# T43: when every road is a fight — stage 0 always is — take the
+				# *easiest* one. The old "first option" fallback walked into a normal
+				# node (~68% on an AI-vs-AI sweep) while an easy one (~90%) sat right
+				# beside it, which is what lost the opening fight on seeds 29 and 44.
 				var pick := 0
+				var best := 99
 				for i in opts.size():
-					if opts[i]["kind"] != "combat":
+					var rank: int = 0 if opts[i]["kind"] != "combat" \
+						else DIFFICULTY_RANK.get(opts[i].get("difficulty", "normal"), 2)
+					if rank < best:
+						best = rank
 						pick = i
-						break
 				_presses += 1
 				_did["Take this road"] = true
 				_did["node:" + String(opts[pick]["kind"])] = true
@@ -82,7 +121,8 @@ func _run() -> void:
 			"combat":
 				await process_frame   # the overlay is coming up
 
-	# --- assertions on the walked run ------------------------------------
+# --- assertions on the walked run --------------------------------------------
+func _check() -> void:
 	if main.run.state not in ["won", "lost"]:
 		fail("the run never finished (state=%s, stage=%d)" % [main.run.state, main.run.stage])
 	if not _did.has("Take this road"):
@@ -104,6 +144,8 @@ func _run() -> void:
 		fail("never bought anything")
 	if not _did.has("Take a long rest"):
 		fail("never rested")
+
+func _summary() -> void:
 	print("drive_campaign: %d presses, stage %d/%d, state=%s, %d gp, %d XP, %d quests — %s" % [
 		_presses, main.run.stage, main.run.route.size(), main.run.state,
 		main.party.gold, main.run.xp, main.party.quests.size(),
