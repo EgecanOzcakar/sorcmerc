@@ -2091,4 +2091,40 @@ mismatch risk) plus #3 for roads. #5 is the open item — a five-minute
 visual check, not a licensing risk. Awaiting user decision on what (if
 anything) to integrate; no branch, no download yet.
 
+## O11 — integrate the Overworld + Town packs (locked 2026-09-11, dispatched now)
+
+User approved O10's #1+#2 recommendation ("do 1-2 if licensing is
+available"). Re-verified directly against both itch.io pages before
+dispatch: both **confirmed CC0** ("released under the Public Domain
+(CC0) license... free to use however you like in any project, commercial
+or non-commercial"), both **free to download** ("name your own price",
+$0 accepted, no purchase required).
+
+- Screaming Brain Studios — **Isometric Tiles: Overworld Pack**
+  (screamingbrainstudios.itch.io/iso-overworld-pack) — 360 tiles,
+  grass/forest/water, flat+thick renders. Replaces
+  `scenes/world/world.gd`'s procedural hashed-tint ground quads.
+- Screaming Brain Studios — **Isometric Tiles: Town Pack**
+  (screamingbrainstudios.itch.io/iso-town-pack) — 443 tiles (432
+  building + 11 roof), same author/grid/style as the Overworld Pack, no
+  style mismatch. Replaces the plain settlement-landmark blobs.
+
+Same pattern as the combat board's own art spike
+(`feature/isometric-sprite-assets`): build this on its **own branch**,
+not master directly, so the actual in-game look can be reviewed before
+merging. Downloading itch.io "name your own price" assets programmatically
+may hit an auth/session wall the agent can't clear headless — if so, stop
+and report back rather than guessing at a workaround; the user can
+download manually and hand the files over.
+
+Scope: download both packs into the branch (with their license file/
+attribution note kept, even though CC0 needs none, as a paper trail),
+wire them into `scenes/world/world.gd`'s ground/settlement rendering in
+place of the current procedural quads/blobs, keep the existing
+projection math (`ISO_YAW`/`ISO_SQUASH`/`ISO_GAIN`) so it still lines up
+with the camera/click-to-move math already tuned against it. Party tokens
+stay as they are (O10's #5 token question is unresolved, out of scope
+here). Full suite + `drive_world` must stay green — a visual change
+should not break the headless logic tests, which don't inspect pixels.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
