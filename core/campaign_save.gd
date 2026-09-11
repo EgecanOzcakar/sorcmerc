@@ -12,6 +12,10 @@
 #   "node_id": "hollow-market",        // "" when standing between nodes
 #   "state": "picking",                // picking | visiting | combat | won | lost
 #   "xp": 400,                         // the run's XP total (the bank is per-character)
+#   "short_rests_used": 1,             // capped at Campaign.MAX_SHORT_RESTS per run
+#   "long_rests_used": 0,              // capped at Campaign.MAX_LONG_RESTS per run
+#   "opportunity_taken": false,        // this node's one Perception/Survival attempt, spent or not
+#   "scouted": [],                     // next stage's fights, once a Survival check has read them
 #   "seed": 1234,                      // the run RNG's seed, so loot/quest rolls reproduce
 #   "log": ["→ The Hollow Market"],
 #   "party": {
@@ -48,6 +52,8 @@ static func to_dict(campaign) -> Dictionary:
 		"xp": campaign.xp,
 		"short_rests_used": campaign.short_rests_used,
 		"long_rests_used": campaign.long_rests_used,
+		"opportunity_taken": campaign.opportunity_taken,
+		"scouted": campaign.scouted.duplicate(true),
 		"seed": int(campaign.rng.seed_value),
 		"log": campaign.log.duplicate(),
 		"party": {
@@ -82,6 +88,8 @@ static func from_dict(d: Dictionary):
 	campaign.xp = int(d.get("xp", 0))
 	campaign.short_rests_used = int(d.get("short_rests_used", 0))
 	campaign.long_rests_used = int(d.get("long_rests_used", 0))
+	campaign.opportunity_taken = bool(d.get("opportunity_taken", false))
+	campaign.scouted = d.get("scouted", [])
 	campaign.log.assign(d.get("log", []))
 	campaign.node = _node(campaign, String(d.get("node_id", "")))
 	return campaign

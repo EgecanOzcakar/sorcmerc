@@ -645,6 +645,16 @@ func test_opportunity() -> void:
 	g.enter(_find(g, "rest"))
 	check(g.opportunity().is_empty(), "no check at a camp")
 
+	# opportunity state survives an autosave/resume round trip mid-node
+	var h := _campaign()
+	h.enter(_find(h, "combat"))
+	h.finish_combat({"outcome": "Victory", "xp": 0, "gold": 0, "loot": [], "deaths": [], "kills": []})
+	h.opportunity_check()
+	var reloaded = CampaignSave.from_dict(CampaignSave.to_dict(h))
+	check(reloaded.opportunity_taken == h.opportunity_taken,
+		"a reload of the same node doesn't hand back a spent check")
+	check(reloaded.scouted == h.scouted, "and a Survival success's forewarning survives too")
+
 func test_full_run() -> void:
 	var c := _campaign()
 	var stages := 0

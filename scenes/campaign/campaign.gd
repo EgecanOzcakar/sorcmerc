@@ -244,12 +244,16 @@ func _node_panel() -> Control:
 		"rest":
 			for kind in ["short-rest", "long-rest"]:
 				var b := Button.new()
-				b.text = "Take a %s" % kind.replace("-", " ")
+				var left := run.long_rests_left() if kind == "long-rest" else run.short_rests_left()
+				b.text = "Take a %s   (%d left this run)" % [kind.replace("-", " "), left]
+				b.disabled = left <= 0
 				b.pressed.connect(func(): run.rest(kind); _refresh())
 				col.add_child(b)
 			_identify_ui(col)
 		"merchant":
 			_merchant_ui(col)
+		"treasure", "combat":
+			_opportunity_ui(col)
 
 	var on := Button.new()
 	on.text = "Continue  →"
@@ -339,6 +343,28 @@ func _service_page(service: String, page: VBoxContainer) -> void:
 # with the item's rarity (rarer = harder — see Campaign.IDENTIFY_TARGET), one
 # attempt per item per camp. The party's best arcanist does the examining —
 # nobody sits their wizard out of this, so there is no chooser, just the button.
+# T30 — a Perception/Survival check on offer at a treasure room or a just-won
+# fight: one attempt, pass or fail, no retry at this node.
+func _opportunity_ui(col: VBoxContainer) -> void:
+	if not run.scouted.is_empty():
+		col.add_child(_caption("T H E   R O A D   A H E A D"))
+		for n in run.scouted:
+			col.add_child(_dim("%s — %s" % [n["title"], String(n.get("difficulty", "?"))]))
+		return
+	var opp := run.opportunity()
+	if opp.is_empty():
+		return
+	var who = party.get_member(String(opp["char_id"]))
+	if who == null:
+		return
+	var skill: String = String(opp["skill"])
+	var bonus := run.skill_bonus(who.id, skill)
+	var b := Button.new()
+	b.text = "%s   (%s, %s %+d vs DC %d)" % [String(opp["label"]), who.cname,
+		skill.capitalize(), bonus, int(opp["dc"])]
+	b.pressed.connect(func(): run.opportunity_check(who.id); _refresh())
+	col.add_child(b)
+
 func _identify_ui(col: VBoxContainer) -> void:
 	var mysteries: Array = party.unidentified()
 	if mysteries.is_empty():

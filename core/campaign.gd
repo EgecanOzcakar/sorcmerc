@@ -451,9 +451,8 @@ func enter(i: int) -> Dictionary:
 		return {}
 	node = opts[i]
 	identify_failed.clear()          # a new camp is a new chance to examine
-	# ponytail: opportunity_taken/scouted are per-node and live only in memory —
-	# campaign_save.gd doesn't carry them, so reloading mid-node hands back the
-	# one skill check. Persist them there if that ever matters.
+	# A fresh node earns a fresh attempt (campaign_save.gd persists these two
+	# across a reload of the SAME node — this reset is only for entering a new one).
 	opportunity_taken = false
 	scouted.clear()
 	state = "combat" if node["kind"] == "combat" else "visiting"
