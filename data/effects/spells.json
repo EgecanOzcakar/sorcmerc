@@ -33,5 +33,104 @@
     "upcast": {"per_level": {"count": 1, "sides": 6}}
   },
   "guidance": {"cost": "action", "shape": "single", "range_ft": 5, "non_combat": true},
-  "light": {"cost": "action", "shape": "single", "range_ft": 5, "non_combat": true}
+  "light": {"cost": "action", "shape": "single", "range_ft": 5, "non_combat": true},
+
+  "_note_t33": "Everything below is T33. The raw regex parse spells these override wrote dice as {\"dice\": \"8d6\"} / \"halfOnSave\" / \"area\", none of which _spell_verb reads — so every one of them was silently resolving as 1d6 before being authored here. Numbers come from each entry's `description` prose, not from `mechanics`.",
+
+  "poison-spray": {
+    "cost": "action", "shape": "single", "range_ft": 30, "save": "con",
+    "damage": [{"count": 1, "sides": 12, "type": "poison"}],
+    "cantrip_scale": [{"min": 5, "count": 2}, {"min": 11, "count": 3}, {"min": 17, "count": 4}]
+  },
+  "thorn-whip": {
+    "cost": "action", "shape": "single", "range_ft": 30, "attack": "melee",
+    "damage": [{"count": 1, "sides": 6, "type": "piercing"}],
+    "cantrip_scale": [{"min": 5, "count": 2}, {"min": 11, "count": 3}, {"min": 17, "count": 4}]
+  },
+  "ray-of-frost": {
+    "cost": "action", "shape": "single", "range_ft": 60, "attack": "ranged",
+    "damage": [{"count": 1, "sides": 8, "type": "cold"}],
+    "cantrip_scale": [{"min": 5, "count": 2}, {"min": 11, "count": 3}, {"min": 17, "count": 4}]
+  },
+  "shocking-grasp": {
+    "cost": "action", "shape": "single", "range_ft": 5, "attack": "melee",
+    "damage": [{"count": 1, "sides": 8, "type": "lightning"}],
+    "cantrip_scale": [{"min": 5, "count": 2}, {"min": 11, "count": 3}, {"min": 17, "count": 4}]
+  },
+  "chill-touch": {
+    "cost": "action", "shape": "single", "range_ft": 120, "attack": "ranged",
+    "damage": [{"count": 1, "sides": 8, "type": "necrotic"}],
+    "cantrip_scale": [{"min": 5, "count": 2}, {"min": 11, "count": 3}, {"min": 17, "count": 4}]
+  },
+  "produce-flame": {
+    "cost": "action", "shape": "single", "range_ft": 60, "attack": "ranged",
+    "damage": [{"count": 1, "sides": 8, "type": "fire"}],
+    "cantrip_scale": [{"min": 5, "count": 2}, {"min": 11, "count": 3}, {"min": 17, "count": 4}]
+  },
+  "mind-sliver": {
+    "cost": "action", "shape": "single", "range_ft": 60, "save": "int",
+    "damage": [{"count": 1, "sides": 6, "type": "psychic"}],
+    "cantrip_scale": [{"min": 5, "count": 2}, {"min": 11, "count": 3}, {"min": 17, "count": 4}]
+  },
+  "acid-splash": {
+    "cost": "action", "shape": "sphere", "size_ft": 5, "range_ft": 60, "save": "dex",
+    "damage": [{"count": 1, "sides": 6, "type": "acid"}],
+    "cantrip_scale": [{"min": 5, "count": 2}, {"min": 11, "count": 3}, {"min": 17, "count": 4}]
+  },
+
+  "guiding-bolt": {
+    "cost": "action", "shape": "single", "range_ft": 120, "attack": "ranged",
+    "damage": [{"count": 4, "sides": 6, "type": "radiant"}],
+    "upcast": {"per_level": {"count": 1, "sides": 6}}
+  },
+  "chromatic-orb": {
+    "cost": "action", "shape": "single", "range_ft": 90, "save": "dex",
+    "damage": [{"count": 3, "sides": 8, "type": "fire"}],
+    "upcast": {"per_level": {"count": 1, "sides": 8}}
+  },
+  "dissonant-whispers": {
+    "cost": "action", "shape": "single", "range_ft": 60, "save": "wis",
+    "damage": [{"count": 3, "sides": 6, "type": "psychic"}],
+    "upcast": {"per_level": {"count": 1, "sides": 6}}
+  },
+  "hellish-rebuke": {
+    "cost": "reaction", "shape": "single", "range_ft": 60, "save": "dex", "half_on_save": true,
+    "damage": [{"count": 2, "sides": 10, "type": "fire"}],
+    "upcast": {"per_level": {"count": 1, "sides": 10}}
+  },
+  "ray-of-sickness": {
+    "cost": "action", "shape": "single", "range_ft": 60, "attack": "ranged", "save": "",
+    "damage": [{"count": 2, "sides": 8, "type": "poison"}],
+    "upcast": {"per_level": {"count": 1, "sides": 8}}
+  },
+  "arms-of-hadar": {
+    "cost": "action", "shape": "emanation", "size_ft": 10, "range_ft": 5, "save": "str",
+    "damage": [{"count": 2, "sides": 6, "type": "necrotic"}],
+    "upcast": {"per_level": {"count": 1, "sides": 6}}
+  },
+  "hideous-laughter": {
+    "cost": "action", "shape": "single", "range_ft": 30, "save": "wis",
+    "conditions": ["prone", "incapacitated"], "duration": "round",
+    "upcast": {"per_level": {"count": 0}}
+  },
+  "sleep": {
+    "cost": "action", "shape": "sphere", "size_ft": 5, "range_ft": 60, "save": "wis",
+    "conditions": ["incapacitated"], "duration": "round",
+    "upcast": {"per_level": {"count": 0}}
+  },
+  "fear": {
+    "cost": "action", "shape": "cone", "size_ft": 30, "range_ft": 5, "save": "wis",
+    "conditions": ["frightened"], "duration": "round",
+    "upcast": {"per_level": {"count": 0}}
+  },
+  "blight": {
+    "cost": "action", "shape": "single", "range_ft": 30, "save": "con", "half_on_save": true,
+    "damage": [{"count": 8, "sides": 8, "type": "necrotic"}],
+    "upcast": {"per_level": {"count": 1, "sides": 8}}
+  },
+  "cone-of-cold": {
+    "cost": "action", "shape": "cone", "size_ft": 60, "range_ft": 5, "save": "con", "half_on_save": true,
+    "damage": [{"count": 8, "sides": 8, "type": "cold"}],
+    "upcast": {"per_level": {"count": 1, "sides": 8}}
+  }
 }

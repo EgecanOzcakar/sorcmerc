@@ -13,6 +13,7 @@ const Adapter = preload("res://core/adapter.gd")
 const Character = preload("res://core/character.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Presets = preload("res://core/presets.gd")
+const Effects = preload("res://core/rules/effects.gd")
 
 var _pass = 0
 var _fail = 0
@@ -31,6 +32,7 @@ func _init() -> void:
 	test_crit_doubles_dice_not_mod()
 	test_burning_hands_hits_allies_not_caster()
 	test_scorching_ray_fires_three_rays()
+	test_t33_authored_spells_resolve()
 	test_move_provokes_unless_disengage()
 	test_healing_word_clears_death()
 	test_alcove_cover()
@@ -133,6 +135,82 @@ func test_scorching_ray_fires_three_rays() -> void:
 	check(int(res.get("hits", 0)) == 3, "all 3 rays land at a guaranteed-hit bonus")
 	check(before - grull.hp == int(res["damage"]), "total damage is the sum of all landed rays")
 	check(before - grull.hp >= 6, "3 rays of at-least-2d6 each land for real damage, not one roll's worth")
+
+# T33: the authored overrides, resolved through cast() for real — one of each
+# shape. The verbs come straight out of effects.gd, so a bad number in
+# data/effects/spells.json shows up here as a bad swing in HP, not just a bad dict.
+
+func _t33_verb(id: String) -> Dictionary:
+	for v in Effects.spell_verbs_for(Presets.ilsa().sheet(), [id]):
+		if v["id"] == id:
+			v["radius"] = Adapter.area_hexes(int(v.get("size_ft", 0))) if int(v.get("size_ft", 0)) > 0 else 2
+			return v
+	return {}
+
+func test_t33_authored_spells_resolve() -> void:
+	# 1. single-target spell attack: Guiding Bolt, 4d6 radiant.
+	var cb = _sandbox()
+	var ilsa = _find(cb, "ilsa"); var grull = _find(cb, "grull")
+	ilsa.pos = Vector2i(4, 1); grull.pos = Vector2i(6, 1)
+	ilsa.slots = [4, 3, 3, 3, 3, 0, 0, 0, 0] as Array[int]
+	var gb := _t33_verb("guiding-bolt")
+	gb["attack_bonus"] = 20        # guaranteed hit, so the damage range is the assertion
+	var before: int = grull.hp
+	var res := cb.perform(ilsa, gb, grull)
+	check(res.get("hit", false), "Guiding Bolt hits at +20")
+	check(int(res["damage"]) >= 4 and int(res["damage"]) <= 24,
+		"Guiding Bolt rolls 4d6, not the 1d6 the regex parse left behind (got %d)" % int(res["damage"]))
+	check(before - grull.hp == int(res["damage"]), "and that damage lands")
+
+	# 2. single-target save-for-half: Blight, 8d8 necrotic on a forced failure.
+	var cb2 = _sandbox()
+	var i2 = _find(cb2, "ilsa"); var g2 = _find(cb2, "grull")
+	i2.pos = Vector2i(4, 1); g2.pos = Vector2i(6, 1)
+	i2.slots = [4, 3, 3, 3, 3, 0, 0, 0, 0] as Array[int]
+	var bl := _t33_verb("blight")
+	bl["save_dc"] = 99             # nothing saves against a DC 99
+	g2.hp = 200; g2.max_hp = 200
+	var res2 := cb2.perform(i2, bl, g2)
+	check(not res2["saved"] and int(res2["damage"]) >= 8, "Blight beats a DC 99 save for 8d8")
+	var half := _sandbox()
+	var i3 = _find(half, "ilsa"); var g3 = _find(half, "grull")
+	i3.pos = Vector2i(4, 1); g3.pos = Vector2i(6, 1); i3.slots = [4, 3, 3, 3, 3, 0, 0, 0, 0] as Array[int]
+	g3.hp = 200; g3.max_hp = 200
+	var bl2 := _t33_verb("blight")
+	bl2["save_dc"] = -99           # nothing fails against a DC -99
+	var res3 := half.perform(i3, bl2, g3)
+	check(res3["saved"] and int(res3["damage"]) > 0, "a made save still takes half from Blight")
+
+	# 3. AoE save: Cone of Cold, aimed like Burning Hands.
+	var cb4 = _sandbox()
+	var i4 = _find(cb4, "ilsa"); var v4 = _find(cb4, "vera"); var s4 = _find(cb4, "snik")
+	i4.pos = Vector2i(4, 1); v4.pos = Vector2i(5, 1); s4.pos = Vector2i(5, 0)
+	i4.slots = [4, 3, 3, 3, 3, 0, 0, 0, 0] as Array[int]
+	var coc := _t33_verb("cone-of-cold")
+	coc["save_dc"] = 99
+	var vb: int = v4.hp; var sb: int = s4.hp; var ib: int = i4.hp
+	cb4.perform(i4, coc, Vector2i(1, 0))
+	check(v4.hp < vb and s4.hp < sb, "Cone of Cold catches everyone in the wedge")
+	check(i4.hp == ib, "and never the caster")
+	check(i4.slots[4] == 2, "a 5th-level cast spends a 5th-level slot")
+
+	# 4. condition, no damage at all: Hideous Laughter.
+	var cb5 = _sandbox()
+	var i5 = _find(cb5, "ilsa"); var g5 = _find(cb5, "grull")
+	i5.pos = Vector2i(4, 1); g5.pos = Vector2i(6, 1); i5.slots = [4, 3, 3, 3, 3, 0, 0, 0, 0] as Array[int]
+	var hl := _t33_verb("hideous-laughter")
+	hl["save_dc"] = 99
+	var hp5: int = g5.hp
+	cb5.perform(i5, hl, g5)
+	check(g5.has("prone") and g5.has("incapacitated"), "Hideous Laughter lands both conditions")
+	check(g5.hp == hp5, "and deals no damage")
+	var cb6 = _sandbox()
+	var i6 = _find(cb6, "ilsa"); var g6 = _find(cb6, "grull")
+	i6.pos = Vector2i(4, 1); g6.pos = Vector2i(6, 1); i6.slots = [4, 3, 3, 3, 3, 0, 0, 0, 0] as Array[int]
+	var hl2 := _t33_verb("hideous-laughter")
+	hl2["save_dc"] = -99
+	cb6.perform(i6, hl2, g6)
+	check(not g6.has("incapacitated"), "a made save shrugs it off")
 
 func test_move_provokes_unless_disengage() -> void:
 	# Pike adjacent to Grull, steps away out of adjacency.

@@ -548,9 +548,9 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		heal(target, Dice.roll(rng, "%dd%d+%d" % [int(v["heal_count"]), int(v["heal_sides"]),
 			int(v.get("heal_bonus", 0))]))
 		return {}
-	if not v.has("dice_count"):
+	if not (v.has("dice_count") or v.has("conditions")):
 		return {}
-	var notation := "%dd%d" % [int(v["dice_count"]), int(v["dice_sides"])]
+	var notation := "%dd%d" % [int(v.get("dice_count", 0)), int(v.get("dice_sides", 6))]
 	var dc := int(v.get("save_dc", caster.save_dc))
 	if v.get("targeting", "") == "direction":
 		var wedge := Hex.cone(caster.pos, target, int(v.get("radius", 2)))
@@ -558,13 +558,13 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		for c in combatants:
 			if c == caster or not c.conscious() or not (c.pos in wedge):
 				continue
-			_spell_hit(c, v, notation, dc)
+			_spell_hit(c, v, notation, dc, caster)
 		_destroy_in_area(wedge)
 		return {}
 	log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
-	return _spell_hit(target, v, notation, dc)
+	return _spell_hit(target, v, notation, dc, caster)
 
-func _spell_hit(c, v: Dictionary, notation: String, dc: int) -> Dictionary:
+func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> Dictionary:
 	if v.has("attack_bonus"):
 		# Scorching Ray etc.: several independent attack rolls from one cast, all
 		# at this same target (RAW also lets you split rays across several
@@ -593,6 +593,13 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int) -> Dictionary:
 			dmg = (dmg / 2) if v.get("half_on_save", false) else 0
 	log.append("  %s %s the save — %d %s." % [c.cname, "makes" if saved else "fails", dmg,
 		v.get("damage_type", "damage")])
+	# Only a save-or-suffer effect lands a condition. The raw parse also tags
+	# buffs (Invisibility, Freedom of Movement) with `conditions` and no save —
+	# those are tier-2 ally buffs, not something to inflict on the target here.
+	if not saved and v.get("save", "") != "":
+		for cond in v.get("conditions", []):
+			apply_condition(c, cond, caster, v.get("duration", "round"))
+			log.append("  %s is %s." % [c.cname, cond])
 	if dmg > 0:
 		_apply_damage(c, dmg, v.get("damage_type", ""))
 	return {"saved": saved, "damage": dmg}

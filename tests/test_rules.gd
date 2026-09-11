@@ -50,6 +50,7 @@ func _init() -> void:
 	test_pools()
 	test_presets_match_encounter()
 	test_presets_have_no_pending_and_no_warnings()
+	test_unknown_equipped_item_warns()
 	test_sheet_is_cached_and_retroactive()
 	test_attacks()
 	test_spell_slots()
@@ -58,6 +59,7 @@ func _init() -> void:
 	test_effects_reproduce_the_hardcoded_kit()
 	test_spell_mechanics_merge()
 	test_spell_verbs()
+	test_t33_spell_overrides()
 	test_power_ranks_the_heroes()
 
 	print("test_rules: %d passed, %d failed" % [_pass, _fail])
@@ -521,6 +523,15 @@ func test_presets_have_no_pending_and_no_warnings() -> void:
 			printerr("    %s warning: %s" % [ch.id, w])
 		check(real.is_empty(), "%s resolves with no warnings beyond bundle-choice (%d)" % [ch.id, real.size()])
 
+# An equipped id matching neither weapons.json nor armor.json used to sit
+# inert with no diagnostic -- a typo'd/stale id silently lost a gear slot.
+func test_unknown_equipped_item_warns() -> void:
+	var ch = Presets.vera()
+	ch.equipped.append("not-a-real-item-id")
+	var s: Resolved = ch.sheet()
+	var hit: Array = s.warnings.filter(func(w): return "not-a-real-item-id" in w)
+	check(hit.size() == 1, "an unknown equipped item warns exactly once (got %d)" % hit.size())
+
 func test_sheet_is_cached_and_retroactive() -> void:
 	var ch: Character = Presets.vera()
 	check(ch.sheet() == ch.sheet(), "sheet() is cached")
@@ -794,6 +805,85 @@ func test_spell_verbs() -> void:
 	var vs2 := Effects.spell_verbs_for(ilsa.sheet(), ["scorching-ray"])
 	check(vs2.size() == 1 and int(vs2[0]["rays"]) == 3,
 		"scorching ray's verb carries its ray count (no upcast headroom at 2nd-level slots to test the +1/level)")
+
+# T33: hand-authored combat mechanics for the spells the regex parse got wrong or
+# missed entirely. Numbers here are read off each spell's SRD `description` prose —
+# if one drifts, this table is where it gets caught.
+func test_t33_spell_overrides() -> void:
+	# id -> [count, sides, type, save ("" = spell attack), shape, size_ft, range_ft]
+	var want := {
+		"poison-spray":       [1, 12, "poison", "con", "single", 0, 30],
+		"thorn-whip":         [1, 6, "piercing", "", "single", 0, 30],
+		"ray-of-frost":       [1, 8, "cold", "", "single", 0, 60],
+		"shocking-grasp":     [1, 8, "lightning", "", "single", 0, 5],
+		"chill-touch":        [1, 8, "necrotic", "", "single", 0, 120],
+		"produce-flame":      [1, 8, "fire", "", "single", 0, 60],
+		"mind-sliver":        [1, 6, "psychic", "int", "single", 0, 60],
+		"acid-splash":        [1, 6, "acid", "dex", "sphere", 5, 60],
+		"guiding-bolt":       [4, 6, "radiant", "", "single", 0, 120],
+		"chromatic-orb":      [3, 8, "fire", "dex", "single", 0, 90],
+		"dissonant-whispers": [3, 6, "psychic", "wis", "single", 0, 60],
+		"hellish-rebuke":     [2, 10, "fire", "dex", "single", 0, 60],
+		"ray-of-sickness":    [2, 8, "poison", "", "single", 0, 60],
+		"arms-of-hadar":      [2, 6, "necrotic", "str", "emanation", 10, 5],
+		"blight":             [8, 8, "necrotic", "con", "single", 0, 30],
+		"cone-of-cold":       [8, 8, "cold", "con", "cone", 60, 5],
+	}
+	for id in want:
+		var m := Effects.spell(id)
+		var w: Array = want[id]
+		var d: Dictionary = m.get("damage", [{}])[0]
+		check(int(d.get("count", 0)) == w[0] and int(d.get("sides", 0)) == w[1],
+			"%s is %dd%d (got %sd%s)" % [id, w[0], w[1], d.get("count"), d.get("sides")])
+		check(d.get("type", "") == w[2], "%s deals %s damage" % [id, w[2]])
+		check(m.get("save", "") == w[3], "%s: save \"%s\"" % [id, w[3]])
+		check(m.has("attack") == (w[3] == ""), "%s rolls %s" % [id, "to hit" if w[3] == "" else "a save"])
+		check(m.get("shape", "") == w[4] and int(m.get("size_ft", 0)) == w[5],
+			"%s is a %s%s" % [id, w[4], "" if w[5] == 0 else " of %d ft" % w[5]])
+		check(int(m.get("range_ft", 0)) == w[6], "%s reaches %d ft" % [id, w[6]])
+		check(int(m.get("level", -1)) == 0 or m.has("upcast"), "%s: upcast authored" % id)
+		check(int(m.get("level", -1)) > 0 or m.has("cantrip_scale"), "%s: cantrip scaling authored" % id)
+
+	# half-on-save is the difference between a dodge and a reduction — spot-check both ways.
+	check(Effects.spell("blight")["half_on_save"] and Effects.spell("cone-of-cold")["half_on_save"],
+		"Blight and Cone of Cold are save-for-half")
+	check(not Effects.spell("poison-spray").get("half_on_save", false),
+		"Poison Spray is save-or-nothing")
+	check(Effects.spell("hellish-rebuke")["cost"] == "reaction", "Hellish Rebuke is a reaction")
+
+	# save-or-condition spells: no damage at all, so `conditions` is what makes them castable.
+	for id in ["hideous-laughter", "sleep", "fear"]:
+		var m := Effects.spell(id)
+		check(not m.is_empty() and not m.has("damage"), "%s is castable on its condition alone" % id)
+		check(m.get("save", "") == "wis", "%s forces a WIS save" % id)
+		check(m.get("duration", "") == "round", "%s's condition is not a permanent lockout" % id)
+	check(Effects.spell("hideous-laughter")["conditions"] == ["prone", "incapacitated"],
+		"Hideous Laughter drops the target prone AND incapacitated")
+	check(Effects.spell("sleep")["conditions"] == ["incapacitated"], "Sleep incapacitates")
+	check(Effects.spell("fear")["conditions"] == ["frightened"] and Effects.spell("fear")["shape"] == "cone"
+		and int(Effects.spell("fear")["size_ft"]) == 30, "Fear frightens a 30 ft cone")
+
+	# and the verbs those merge into, at Ilsa's level-2 slots.
+	var sheet = Presets.ilsa().sheet()
+	var by_id := {}
+	for v in Effects.spell_verbs_for(sheet, ["guiding-bolt", "chromatic-orb", "hideous-laughter",
+			"ray-of-frost", "cone-of-cold"]):
+		by_id[v["id"]] = v
+	check(int(by_id["guiding-bolt"]["dice_count"]) == 4 and int(by_id["guiding-bolt@2"]["dice_count"]) == 5,
+		"Guiding Bolt upcasts 4d6 -> 5d6")
+	check(by_id["guiding-bolt"].has("attack_bonus") and not by_id["guiding-bolt"].has("conditions"),
+		"a spell attack carries the caster's attack bonus")
+	check(int(by_id["chromatic-orb@2"]["dice_count"]) == 4, "Chromatic Orb upcasts 3d8 -> 4d8")
+	check(by_id["ray-of-frost"]["targeting"] == "enemy" and int(by_id["ray-of-frost"]["dice_count"]) == 1,
+		"a cantrip is one die below level 5")
+	var hl: Dictionary = by_id["hideous-laughter"]
+	check(hl["conditions"] == ["prone", "incapacitated"] and hl["duration"] == "round",
+		"the conditions and their duration ride the verb")
+	check(not hl.has("dice_count") and int(hl["save_dc"]) == 13, "no damage, but the caster's DC")
+	check(by_id.has("cone-of-cold") and not by_id.has("cone-of-cold@6"),
+		"a 5th-level spell offers its base level only — Ilsa has no headroom above it")
+	check(by_id["cone-of-cold"]["targeting"] == "direction" and int(by_id["cone-of-cold"]["size_ft"]) == 60,
+		"Cone of Cold is aimed like Burning Hands, 60 ft")
 
 func test_power_ranks_the_heroes() -> void:
 	var scores := {}

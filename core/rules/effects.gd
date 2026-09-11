@@ -150,6 +150,12 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 	}
 	if m.has("attack"):   # a spell attack rolls to hit instead of forcing a save
 		v["attack_bonus"] = int(sheet.spellcasting.get("attack_bonus", 0))
+	if m.has("conditions"):
+		# A save-or-suffer spell. Default "round" (until the target's next turn):
+		# apply_condition's other duration is "forever", and nothing in the engine
+		# ends a concentration spell, so an unauthored duration would be a lockout.
+		v["conditions"] = m["conditions"]
+		v["duration"] = m.get("duration", "round")
 	if m.has("rays"):     # Scorching Ray: several independent attack rolls, one cast
 		var rays := int(m["rays"])
 		if up > 0 and m.has("upcast"):
