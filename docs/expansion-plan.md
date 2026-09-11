@@ -1797,4 +1797,49 @@ peace). `tests/drive_world.gd` extended with the live case (two NPC bands close
 on the map, one dies, no combat scene, clock never pauses). Full suite: 28 test
 files, 0 failures; all 6 `drive_*` OK.
 
+**O6 completion (2026-09-11):** new `core/settlement_visit.gd` (~170 lines, the
+economy + theft, headless) plus a visit trigger and panel in `scenes/world/
+world.gd`; `core/campaign.gd`, `scenes/campaign/*`, `core/world_ai.gd`,
+`core/world_battle.gd` and `scenes/main.gd` untouched. `core/world.gd`'s
+`Settlement` gained three additive fields: `last_visited`/`battle_at` (world-clock
+stamps, < 0 = never) and `pending_opinion_delta`.
+- **Visit radius**: its own `VISIT_RADIUS := 34.0`, not O4's `ENCOUNTER_RADIUS` —
+  a settlement is a fixed landmark drawn at ~26 world units, not a 6-unit token,
+  so "in through the gate" is a wider circle than "tokens overlap". `_check_visit()`
+  sits next to `_check_encounter()` in `_process` and is the same linear scan; a
+  `_left` guard stops the panel reopening the frame after Leave and clears once
+  the party is outside the radius again.
+- **Economy**: `market(settlement, gap, battle)` is pure and seeded on
+  `hash("id|steps|battle")`. `steps = clamp(gap / RESTOCK(60 world-min), 0, 6)`;
+  the shelf is `0.25 + 0.75 * steps/6` of T25's catalog for that settlement
+  (`node_services`/`shop_ids` via a synthetic merchant node — no new catalog),
+  and a thin shelf is a dear one: `markup = 1 + 0.6 * (1 - steps/6)`, so a full
+  restock sells at list price. `visit()` reads the gap off the clock and then
+  stamps `last_visited`, so walking straight back in finds the shelf as it was
+  left. Sell price is `item_price * SELL_RATE * markup` — the same swing.
+- **Battle flag**: `SettlementVisit.mark_battle(world, at, now)` stamps
+  `battle_at` on every settlement within `BATTLE_RADIUS := 140.0` of a fight.
+  Fed from the one place O5 already returns its results — `world.gd`'s `_process`
+  now consumes `WorldBattle.check()`'s return value instead of discarding it; O5's
+  own logic is unchanged. A visit inside `BATTLE_WINDOW := 240.0` world-minutes
+  halves the shelf again and marks it up x1.4. Not an event log: one timestamp.
+- **Stealing**: `steal()` is `opportunity_check()`'s shape — `Dice.d20` + the
+  party's best `sleightofhand` (via a throwaway `Campaign` instance for
+  `best_at`/`skill_bonus`, which is also how the catalog is reached; `ponytail:`
+  noted — make those static the day campaign.gd is in scope) vs `STEAL_DC := 15`,
+  narrated the same way. Success takes 5% of the shelf's list value as gold,
+  clamped 25-250. Seeded off `"steal|id|hour"` unless an rng is passed.
+- **O7 hook**: `Settlement.pending_opinion_delta: float`. Every attempt adds to it
+  (`OPINION_STEAL_SUCCESS = -5.0`, `OPINION_STEAL_CAUGHT = -10.0` — both, per the
+  phase's own call), keyed by `settlement.faction` when O7 drains and zeroes it.
+  O6 never reads it back, so O7 plugs in without touching this phase.
+`tests/test_settlement_visit.gd`: 30 passed (determinism, gap, second-visit-vs-
+much-later, the battle flag and its locality/ageing, buy/sell, seeded theft and
+the hook firing on both branches). `tests/drive_world.gd` extended with the live
+case (walking in opens the panel and pauses the clock, buy moves gold/stash and
+clears the shelf slot, theft narrates and queues the delta, Leave closes/resumes
+and does not reopen on the spot, coming back reopens). Its O4 case moved out to
+open country — standing on `(0,0)` is standing in Riverhold now. Full suite: 29
+test files, 0 failures; all 6 `drive_*` OK.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.

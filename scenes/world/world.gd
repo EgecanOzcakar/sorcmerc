@@ -21,6 +21,9 @@ const WorldBattle = preload("res://core/world_battle.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const Visit = preload("res://core/settlement_visit.gd")
+const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices only
+const Sound = preload("res://core/audio.gd")
 
 const COMBAT_SCENE := "res://scenes/main.tscn"
 # O4 trigger distance, in world units. A party token draws at 9-11px before the
@@ -30,6 +33,11 @@ const COMBAT_SCENE := "res://scenes/main.tscn"
 # 80 u/s, 8 units per 0.1s step, so nobody tunnels through the trigger.
 const ENCOUNTER_RADIUS := 24.0
 const ENCOUNTER_DIFFICULTY := "normal"
+# O6 visit distance. Deliberately wider than ENCOUNTER_RADIUS: a settlement is a
+# fixed landmark drawn at ~26 world units of radius (a city footprint) rather than
+# a 6-unit token, so "close enough to walk in through the gate" is its own number.
+# Nothing tunnels: the player closes 4 units per 0.1s step at World.SPEED.
+const VISIT_RADIUS := 34.0
 # The board an ambush happens on when the encountered faction has no theme of
 # its own in Scaler.THEME_FACTION — open country, which is where the map is.
 const DEFAULT_THEME := "forest-clearing"
@@ -53,6 +61,10 @@ var _zoom := 1.0
 var _origin := Vector2.ZERO
 var _pause_btn: Button
 var _clock_lbl: Label
+var _visit: Dictionary = {}      # the open market, or {}
+var _visit_panel: Control = null
+var _visit_log: Label = null
+var _left: Object = null         # the settlement just left; no re-entry until out of range
 
 func _ready() -> void:
 	if world == null:
@@ -88,7 +100,11 @@ func _process(delta: float) -> void:
 	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not
 	# while the player's own fight has the map frozen.
 	if _combat == null and not world.clock.is_paused():
-		WorldBattle.check(world, ENCOUNTER_RADIUS, encounter_spec)
+		# O6 feeds off the outcome: a settlement near the corpses reads differently
+		# on the next visit. O5's resolution itself is untouched.
+		for r in WorldBattle.check(world, ENCOUNTER_RADIUS, encounter_spec):
+			Visit.mark_battle(world, r["loser"].position, world.clock.elapsed)
+	_check_visit()
 	if _clock_lbl != null:
 		_clock_lbl.text = "Day %d  %02d:%02d" % [
 			int(world.clock.elapsed / 1440.0) + 1,
@@ -198,6 +214,128 @@ func _retreat() -> void:
 			safe = s.position
 	p.position = safe
 	world.set_goal(p, safe)
+
+# --- O6: settlement visit ----------------------------------------------
+# Same shape as _check_encounter above, against the settlement list instead of
+# the party list. `_left` stops the panel reopening on the frame after Leave —
+# it clears once the player is actually outside the radius again.
+func _check_visit() -> void:
+	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+		return
+	var p := world.player()
+	if p == null:
+		return
+	for s in world.settlements:
+		if s.position.distance_to(p.position) > VISIT_RADIUS:
+			if s == _left:
+				_left = null
+			continue
+		if s != _left:
+			_open_visit(s)
+			return
+
+func _open_visit(s) -> void:
+	world.clock.pause()
+	world.set_goal(world.player(), world.player().position)   # stop at the gate
+	_visit = Visit.visit(s, world)
+	_build_visit_panel()
+
+func _close_visit() -> void:
+	_left = _visit.get("settlement")
+	_visit = {}
+	if _visit_panel != null:
+		_visit_panel.queue_free()
+		_visit_panel = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+func _buy(item_id: String) -> void:
+	if Visit.buy(_visit, party, item_id):
+		Sound.play_sfx("buy")
+		_build_visit_panel()
+	else:
+		_say("Not enough gold.")
+
+func _sell(item_id: String) -> void:
+	if Visit.sell(_visit, party, item_id):
+		_build_visit_panel()
+
+func _steal() -> void:
+	var r: Dictionary = Visit.steal(_visit["settlement"], party, world, _visit)
+	_say(String(r.get("text", "Nobody here has the hands for it.")))
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("pickup")
+
+func _say(text: String) -> void:
+	if _visit_log != null:
+		_visit_log.text = text
+
+func _build_visit_panel() -> void:
+	if _visit_panel != null:
+		_visit_panel.queue_free()
+	var s = _visit["settlement"]
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = size * 0.5 - Vector2(230, 230)
+	panel.custom_minimum_size = Vector2(460, 460)
+	add_child(panel)
+	_visit_panel = panel
+	var box := VBoxContainer.new()
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "%s — %s" % [s.sname, ", ".join(_visit["services"])]
+	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	box.add_child(title)
+	var mood := Label.new()
+	mood.text = "Shelves %d/%d · prices x%.2f%s · your purse: %d gp" % [
+		_visit["steps"], Visit.MAX_STEPS, _visit["markup"],
+		"  (fighting nearby)" if _visit["battle"] else "", party.gold]
+	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	box.add_child(mood)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(440, 320)
+	box.add_child(scroll)
+	var rows := VBoxContainer.new()
+	scroll.add_child(rows)
+	for e in _visit["stock"]:
+		_trade_row(rows, "%s — %d gp" % [e["name"], e["price"]], "Buy",
+			_buy.bind(String(e["item_id"])))
+	for entry in party.stash:
+		var id := String(entry["item_id"])
+		var paid := Visit.sell_price(_visit, id)
+		if paid <= 0:
+			continue
+		_trade_row(rows, "%s x%d — sells for %d gp" % [
+			Campaign.item_name(id), int(entry["quantity"]), paid], "Sell", _sell.bind(id))
+
+	_visit_log = Label.new()
+	_visit_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_visit_log.custom_minimum_size = Vector2(440, 34)
+	box.add_child(_visit_log)
+	var bar := HBoxContainer.new()
+	box.add_child(bar)
+	var steal_btn := Button.new()
+	steal_btn.text = "Steal from the market"
+	steal_btn.pressed.connect(_steal)
+	bar.add_child(steal_btn)
+	var leave := Button.new()
+	leave.text = "Leave"
+	leave.pressed.connect(_close_visit)
+	bar.add_child(leave)
+
+func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable) -> void:
+	var row := HBoxContainer.new()
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.custom_minimum_size = Vector2(330, 0)
+	row.add_child(lbl)
+	var btn := Button.new()
+	btn.text = action
+	btn.pressed.connect(on_press)
+	row.add_child(btn)
+	rows.add_child(row)
 
 # --- projection (see header) -------------------------------------------
 func _iso(v: Vector2) -> Vector2:

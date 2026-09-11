@@ -95,7 +95,68 @@ func _run() -> void:
 	await step(2)     # a frame at min zoom, to exercise the far-out ground path
 	await _encounter_handoff(p)
 	await _offscreen_battle(p)
+	await _settlement_visit(p)
 	_done()
+
+# --- O6: walking into a settlement opens the market, Leave closes it --------
+func _settlement_visit(p) -> void:
+	var s = screen.world.settlements[0]
+	p.position = s.position + Vector2(screen.VISIT_RADIUS + 12.0, 0)
+	screen.world.set_goal(p, s.position)
+	screen._check_visit()
+	if not screen._visit.is_empty():
+		fail("the market opened while the party was still outside the walls")
+		return
+	await step(5)
+	if screen._visit.is_empty():
+		fail("walking into the settlement did not open the market")
+		return
+	if not screen.world.clock.is_paused():
+		fail("the visit did not pause the world clock")
+	if screen._visit_panel == null or screen._visit["stock"].is_empty():
+		fail("the market panel came up with nothing on it")
+		return
+
+	# Buy the first thing on the shelf through the panel's own path.
+	screen.party.gold = 100000
+	var id: String = String(screen._visit["stock"][0]["item_id"])
+	var price: int = screen._visit["stock"][0]["price"]
+	var gold0: int = screen.party.gold
+	screen._buy(id)
+	if screen.party.gold != gold0 - price or screen.party.stash_count(id) != 1:
+		fail("buying from the market panel did not move gold/stash")
+	if screen._visit["stock"].any(func(e): return e["item_id"] == id):
+		fail("the bought item is still on the shelf")
+
+	# Steal: narrated, and it queues the O7 opinion delta on the settlement.
+	var opinion0: float = s.pending_opinion_delta
+	screen._steal()
+	if s.pending_opinion_delta >= opinion0:
+		fail("stealing did not queue an opinion delta for O7")
+	if screen._visit_log == null or screen._visit_log.text == "":
+		fail("the theft was not narrated in the panel")
+
+	screen._close_visit()
+	if not screen._visit.is_empty() or screen._visit_panel != null:
+		fail("Leave did not close the market")
+	if screen.world.clock.is_paused():
+		fail("Leave did not resume the world clock")
+	screen._check_visit()
+	if not screen._visit.is_empty():
+		fail("the market reopened on the spot after Leave")
+	# ...and it opens again once the party has left the walls and come back.
+	var away: Vector2 = s.position + Vector2(screen.VISIT_RADIUS + 60.0, 0)
+	screen.world.set_goal(p, away)
+	await step(30)
+	if not screen._visit.is_empty():
+		fail("the market stayed open while the party walked out")
+		return
+	screen.world.set_goal(p, s.position)
+	await step(30)
+	if screen._visit.is_empty():
+		fail("coming back to the settlement did not open the market again")
+	else:
+		screen._close_visit()
 
 # --- O5: two NPC parties meeting resolve off-screen, no scene, no pause -----
 func _offscreen_battle(p) -> void:
@@ -130,11 +191,13 @@ func _encounter_handoff(p) -> void:
 		fail("no hostile party in the demo world to be ambushed by")
 		return
 
-	# Walk them together: just outside the radius, then inside it.
-	p.position = Vector2.ZERO
-	screen.world.set_goal(p, Vector2.ZERO)
-	foe.position = Vector2(screen.ENCOUNTER_RADIUS + 10.0, 0)
-	foe.goal = Vector2.ZERO
+	# Walk them together: just outside the radius, then inside it. Out in open
+	# country — standing on a settlement would open O6's market instead.
+	var open_country := Vector2(3000, -3000)
+	p.position = open_country
+	screen.world.set_goal(p, open_country)
+	foe.position = open_country + Vector2(screen.ENCOUNTER_RADIUS + 10.0, 0)
+	foe.goal = open_country
 	screen._check_encounter()
 	if screen._combat != null:
 		fail("combat launched while the parties were still apart")

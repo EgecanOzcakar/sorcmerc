@@ -44,6 +44,11 @@ class Settlement extends RefCounted:
 	var position: Vector2
 	var faction: String          # one of Scaler.FACTIONS
 	var kind: String             # "city" | "town" — enough for O2 to pick a sprite
+	# O6 economy state. last_visited/battle_at are world-clock stamps, < 0 = never;
+	# pending_opinion_delta is the O7 hook: O6 adds to it (theft), O7 drains it.
+	var last_visited := -1.0
+	var battle_at := -1.0
+	var pending_opinion_delta := 0.0
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String,
 			kind_v: String = "town", name_v: String = "") -> void:
