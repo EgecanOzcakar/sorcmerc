@@ -167,17 +167,51 @@ func _pursuit_at_8x(p) -> void:
 	screen.world.clock.set_speed(1.0)
 	screen.world.parties.erase(chaser)
 
-# --- O9 item 2: the way out, and the only thing that persists a run ----------
+# --- O9 item 2 / O13: the way out, and what persists a run -------------------
 func _exit_to_title() -> void:
 	var CharacterSave = load("res://core/character_save.gd")
 	var FactionOpinion = load("res://core/faction_opinion.gd")
+	var WorldSave = load("res://core/world_save.gd")
+	# O13: play itself autosaves — markets, fights and overlays have opened and
+	# closed above, and each teardown writes the slot. Cleared here so the checks
+	# below are about _leave_world's own save.
+	if not WorldSave.has_save():
+		fail("nothing during play wrote a world autosave")
+	WorldSave.clear()
 	FactionOpinion.set_opinion("soldier", -20.0)
+	var p = screen.world.player()
+	var where: Vector2 = p.position
+	var elapsed: float = screen.world.clock.elapsed
+	screen.party.add_gold(77)
+	var purse: int = screen.party.gold
 	screen._leave_world()
 	if not FactionOpinion.all().is_empty():
 		fail("leaving the world did not clear per-run faction opinion")
 	for ch in screen.party.roster:
 		if not FileAccess.file_exists(CharacterSave.path_for(ch.id)):
 			fail("%s was not saved to the barracks on the way out" % ch.id)
+
+	# O13: ...and the map itself, opinion included, is in the slot.
+	if not WorldSave.has_save():
+		fail("leaving the world wrote no world autosave")
+		return
+	var saved = WorldSave.load_latest()
+	if saved == null:
+		fail("the world autosave did not load back")
+		return
+	var loaded_p = saved["world"].player()
+	if loaded_p == null or not loaded_p.position.is_equal_approx(where):
+		fail("the saved world lost the player's position")
+	if not is_equal_approx(saved["world"].clock.elapsed, elapsed):
+		fail("the saved world lost the clock")
+	if saved["world"].settlements.size() != screen.world.settlements.size():
+		fail("the saved world lost settlements")
+	if saved["party"].gold != purse:
+		fail("the saved world lost the party's purse")
+	if FactionOpinion.get_opinion("soldier") != -20.0:
+		fail("loading the world did not re-apply faction opinion")
+	FactionOpinion.reset()
+	WorldSave.clear()
 
 # --- O6: walking into a settlement opens the market, Leave closes it --------
 func _settlement_visit(p) -> void:

@@ -17,6 +17,7 @@ extends Control
 
 const Campaign = preload("res://core/campaign.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
+const WorldSave = preload("res://core/world_save.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
 const Presets = preload("res://core/presets.gd")
@@ -72,10 +73,12 @@ func show_title() -> void:
 	col.add_child(title)
 	col.add_child(_dim("A short road, a hard fight, and whatever you carry home."))
 
-	# The autosave belongs to the linear run; nothing in the open world writes one
-	# yet (O7 left world persistence out), so Resume only exists behind the flag.
+	# Two slots, two doors: the linear run's autosave is debug-only (behind the flag),
+	# the open world's is normal play's.
 	if linear_campaign() and CampaignSave.has_save():
 		col.add_child(_button("▶  Resume the last run", _resume))
+	if WorldSave.has_save():
+		col.add_child(_button("▶  Resume the open world", _resume_world))
 	col.add_child(_button("✦  New run", show_party_setup))
 	col.add_child(_button("❖  Tutorial", show_tutorial))
 	col.add_child(_button("⚔  Random battle (debug)", show_random_battle))
@@ -98,6 +101,15 @@ func _resume() -> void:
 		show_summary(saved)
 		return
 	_show_campaign(saved)
+
+# O13: the open world has no terminal state to check — there is no "finished" world,
+# only the map you left. WorldSave.from_dict re-applies faction opinion itself.
+func _resume_world() -> void:
+	var saved = WorldSave.load_latest()
+	if saved == null:
+		show_title()
+		return
+	show_world(saved["party"], saved["world"])
 
 # --- tutorial -------------------------------------------------------------
 #
@@ -204,9 +216,12 @@ func show_party_setup() -> void:
 # goes in instead of world.gd's demo roster fallback. The starting map itself is
 # world.gd's own _demo_world() layout (4 settlements, 3 bands); generating a
 # richer world is not this phase's job.
-func show_world(party) -> void:
+# `world` is O13's resume path: a loaded map instead of world.gd's _demo_world().
+func show_world(party, world = null) -> void:
 	var screen = load(WORLD_SCENE).instantiate()
 	screen.party = party
+	if world != null:
+		screen.world = world
 	_swap(screen)
 
 # --- the run (linear, debug-only) -----------------------------------------

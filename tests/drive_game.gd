@@ -10,6 +10,7 @@ extends SceneTree
 const Campaign = preload("res://core/campaign.gd")
 const Party = preload("res://core/party.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
+const WorldSave = preload("res://core/world_save.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 
 const SLUG := "drive-gamesworth"
@@ -22,6 +23,7 @@ func _init() -> void:
 	OS.set_environment("SORCMERC_FAST", "1")
 	OS.set_environment("SORCMERC_LINEAR_CAMPAIGN", "")   # normal play, whatever the shell said
 	CampaignSave.clear()                 # a saved run would change the title screen
+	WorldSave.clear()                    # ...and so would a saved open world
 	CharacterSave.delete(SLUG)           # and a leftover from an earlier walk
 	main = load("res://scenes/game/game.tscn").instantiate()
 	root.add_child(main)
@@ -73,7 +75,7 @@ func _run() -> void:
 	CampaignSave.save(Campaign.new(throwaway, 3))
 	main.show_title()
 	await process_frame
-	if buttons(main).any(func(b): return "Resume" in b.text):
+	if buttons(main).any(func(b): return "Resume the last run" in b.text):
 		fail("the title offers Resume (the linear run) with SORCMERC_LINEAR_CAMPAIGN unset")
 	CampaignSave.clear()
 	main.show_title()
@@ -137,6 +139,35 @@ func _run() -> void:
 		fail("the open world got a demo roster, not the player's own characters")
 	if world_screen.world == null or world_screen.world.player() == null:
 		fail("the open world has no map/player party")
+
+	# --- O13: leave the map, and the front door offers it back -------------
+	var where := Vector2(321, -77)
+	world_screen.world.player().position = where
+	world_screen.world.set_goal(world_screen.world.player(), where)   # stand still,
+	                                                                 # the map runs live
+	world_screen.party.add_gold(55)
+	var purse: int = world_screen.party.gold
+	world_screen._leave_world()
+	await process_frame
+	await process_frame
+	if not buttons(main).any(func(b): return "Resume the open world" in b.text):
+		fail("leaving the open world did not put its Resume on the title screen")
+	press("Resume the open world")
+	await process_frame
+	await process_frame
+	var resumed_world = find_node(main, "res://scenes/world/world.gd")
+	if resumed_world == null:
+		fail("Resume the open world did not reopen the map")
+	else:
+		if not resumed_world.world.player().position.is_equal_approx(where):
+			fail("Resume the open world lost the player's position")
+		if resumed_world.party.get_member(SLUG) == null:
+			fail("Resume the open world lost the player's own characters")
+		if resumed_world.party.gold != purse:
+			fail("Resume the open world lost the purse (%d, want %d)"
+				% [resumed_world.party.gold, purse])
+		if resumed_world.world.settlements.is_empty():
+			fail("the resumed map has no settlements")
 
 	# --- the same walk with the debug flag on: the linear route ------------
 	OS.set_environment("SORCMERC_LINEAR_CAMPAIGN", "1")
@@ -214,6 +245,7 @@ func _run() -> void:
 		fail("resuming mid-fight did not put the combat screen back up")
 
 	CampaignSave.clear()
+	WorldSave.clear()
 	CharacterSave.delete(SLUG)
 	_done()
 

@@ -28,6 +28,7 @@ const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
+const WorldSave = preload("res://core/world_save.gd")
 
 const COMBAT_SCENE := "res://scenes/main.tscn"
 # O4 trigger distance, in world units. A party token draws at 9-11px before the
@@ -121,6 +122,17 @@ func _ready() -> void:
 			party.add_member(ch)
 	set_process(true)
 	_build_hud()
+	# O13 autosave. Every meaningful map event ends by tearing down a direct child
+	# of this node — the market panel on Leave (and on every rebuild), the combat
+	# overlay when a fight resolves, the party/quest overlays on close — so one
+	# signal covers them all without a timer, a poll, or an edit to any of those
+	# functions (this phase owns only _ready/_leave_world).
+	# ponytail: saves a little more often than the events strictly need (a buy
+	# rebuilds the panel); the file is ~10 KB. Hook the events directly the day
+	# scenes/world/world.gd is in scope for wider edits.
+	child_exiting_tree.connect(func(_c):
+		if not is_queued_for_deletion():     # the screen itself going: _leave_world
+			WorldSave.save(world, party))    # already saved, and opinion is reset by now
 
 # Hand-placed stand-ins so the scene has something to render and move. Real
 # spawning is a later phase's job (O3 onward).
@@ -194,13 +206,15 @@ func _build_hud() -> void:
 	hint.add_theme_color_override("font_color", Icons.COL_MUTED)
 	bar.add_child(hint)
 
-# O9 item 2: the only way out of the open world, and the only thing that persists
-# it. The map itself is not saved (no world save exists yet) — the characters are,
-# which is what the barracks on the title screen counts. Opinion is per-run state
-# (a process-global in faction_opinion.gd), so it clears with the run.
+# O9 item 2: the only way out of the open world. The characters go to the barracks
+# (what the title screen's count reads); O13: the map, the party's purse/stash/quests
+# and faction opinion go to core/world_save.gd's slot, which the title screen's
+# "Resume the open world" reads back. Opinion is process-global, so it is still
+# cleared here once saved — the next thing to run must not inherit this run's.
 func _leave_world() -> void:
 	for ch in party.roster:
 		CharacterSave.save(ch)
+	WorldSave.save(world, party)
 	FactionOpinion.reset()
 	# Duck-typed so world.tscn still runs standalone (godot --path . scenes/world/
 	# world.tscn), where the parent is the scene root and has no title screen.
