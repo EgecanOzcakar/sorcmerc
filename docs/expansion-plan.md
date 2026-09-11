@@ -2013,4 +2013,19 @@ their test files. Do not touch `core/campaign.gd`, `scenes/campaign/*`,
 needs, or `core/quest.gd` beyond calling its existing functions (item 4).
 Full suite + all `drive_*` smoke tests green before reporting done.
 
+**O9 completion (2026-09-11):** landed as `f34ddb9`. All nine items fixed,
+each confirmed at its real location before changing it (the review's line
+numbers were accurate). Notably: item 2 turned out worse than reported —
+`_launch_combat()` was discarding `kills` too, so quests could never
+progress even once reachable; fixed by a `_bank(result)` that reuses
+`Campaign._split_xp()` for XP and calls `Quest.record_kills` directly.
+Item 4 hit an undocumented snag — `Quest.offer_for()` keys on T25 giver
+*node ids*, which settlements don't have — worked around with a new
+`giver_node_id()` helper in `core/settlement_visit.gd` rather than
+reshaping the quest system. Item 1/3 fixes were verified negatively too
+(reverting either reproduces the exact failure the review described).
+Full suite: 30 files, 0 failures. All 6 `drive_*` OK (verified with
+`SORCMERC_SEED=7` — `drive_campaign` is separately known to be flaky
+*unseeded*, pre-existing, unrelated to this pass).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
