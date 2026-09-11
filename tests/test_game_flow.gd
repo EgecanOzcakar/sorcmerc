@@ -122,6 +122,15 @@ func _init() -> void:
 	game.queue_free()
 	CharacterSave.delete("vera-hp-test")
 
+	# --- O8: the mode switch reads the env var live, both ways ------------
+	# (which screen each mode opens is drive_game.gd's walk)
+	var was_flag := OS.get_environment("SORCMERC_LINEAR_CAMPAIGN")
+	OS.set_environment("SORCMERC_LINEAR_CAMPAIGN", "")
+	check(not Game.linear_campaign(), "no env var, no linear campaign")
+	OS.set_environment("SORCMERC_LINEAR_CAMPAIGN", "1")
+	check(Game.linear_campaign(), "the debug env var brings the linear campaign back")
+	OS.set_environment("SORCMERC_LINEAR_CAMPAIGN", was_flag)
+
 	_tutorial_checks()
 
 # T32. Split out and async: a node only reaches _ready once the loop turns, and

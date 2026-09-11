@@ -2,8 +2,15 @@
 # nothing but routing: every screen it shows is an existing scene, instantiated
 # as a full-screen child.
 #
-#   title  →  party setup (party.tscn + creator.tscn)  →  campaign.tscn  →  summary  →  title
-#            └ resume ──────────────────────────────────────┘
+#   title  →  party setup (party.tscn + creator.tscn)  →  world.tscn (the open world)
+#
+# O8: the open world is normal play. The old linear route is still wired up, but
+# only when SORCMERC_LINEAR_CAMPAIGN is in the environment (same debug-gate shape
+# as SORCMERC_SEED/SORCMERC_FAST) — its determinism is what the test suite leans
+# on, so it is kept, not user-facing. With the var set the flow is the old one:
+#
+#   title  →  party setup  →  campaign.tscn  →  summary  →  title
+#            └ resume ──────────┘   (the autosave is a linear-run thing too)
 #
 # Run standalone:  godot --path . scenes/game/game.tscn
 extends Control
@@ -21,6 +28,11 @@ const Tutorial = preload("res://core/tutorial.gd")
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 const CAMPAIGN_SCENE := "res://scenes/campaign/campaign.tscn"
 const COMBAT_SCENE := "res://scenes/main.tscn"
+const WORLD_SCENE := "res://scenes/world/world.tscn"
+
+# O8's one switch. Read live (not cached) so a test can set it between runs.
+static func linear_campaign() -> bool:
+	return OS.get_environment("SORCMERC_LINEAR_CAMPAIGN") != ""
 
 var _screen: Control = null      # whatever is on show right now
 
@@ -60,7 +72,9 @@ func show_title() -> void:
 	col.add_child(title)
 	col.add_child(_dim("A short road, a hard fight, and whatever you carry home."))
 
-	if CampaignSave.has_save():
+	# The autosave belongs to the linear run; nothing in the open world writes one
+	# yet (O7 left world persistence out), so Resume only exists behind the flag.
+	if linear_campaign() and CampaignSave.has_save():
 		col.add_child(_button("▶  Resume the last run", _resume))
 	col.add_child(_button("✦  New run", show_party_setup))
 	col.add_child(_button("❖  Tutorial", show_tutorial))
@@ -170,7 +184,10 @@ func show_party_setup() -> void:
 		if party.active.is_empty():
 			screen._hint.text = "Put at least one character in the active party first."
 			return
-		_show_campaign(Campaign.new(party, int(OS.get_environment("SORCMERC_SEED")))))
+		if linear_campaign():
+			_show_campaign(Campaign.new(party, int(OS.get_environment("SORCMERC_SEED"))))
+		else:
+			show_world(party))
 	wrap.add_child(begin)
 
 	var back := Button.new()
@@ -181,7 +198,18 @@ func show_party_setup() -> void:
 	wrap.add_child(back)
 	_swap(wrap)
 
-# --- the run --------------------------------------------------------------
+# --- the open world (normal play) -----------------------------------------
+#
+# O8: the whole integration is one field — the party the player just assembled
+# goes in instead of world.gd's demo roster fallback. The starting map itself is
+# world.gd's own _demo_world() layout (4 settlements, 3 bands); generating a
+# richer world is not this phase's job.
+func show_world(party) -> void:
+	var screen = load(WORLD_SCENE).instantiate()
+	screen.party = party
+	_swap(screen)
+
+# --- the run (linear, debug-only) -----------------------------------------
 
 var campaign = null      # the live campaign.tscn instance, while a run is on
 

@@ -1887,4 +1887,35 @@ change: `test_settlement_visit` 38, `test_quest` 463, `test_world_ai` 43.
 `tests/drive_world.gd` extended with the live hostile-settlement case. Full
 suite: 30 test files, 0 failures; all 6 `drive_*` OK.
 
+**O8 completion (2026-09-11):** `scenes/game/game.gd` only — `scenes/world/world.gd`,
+`core/campaign.gd`, `scenes/campaign/*` and every `core/world*` file untouched.
+- **The flow**: no new screen and no new button on the normal path. "New run →
+  party setup → Begin the run" is unchanged; only its destination moved, from
+  `_show_campaign(Campaign.new(...))` to a new `show_world(party)` that
+  instantiates `scenes/world/world.tscn`, sets `.party`, and `_swap`s it in.
+  Fewest moving parts: the player sees exactly the same two clicks they always did.
+- **The gate**: `Game.linear_campaign()` = `OS.get_environment("SORCMERC_LINEAR_CAMPAIGN") != ""`,
+  read live per press so a test can flip it mid-run. Set, Begin routes to the
+  linear campaign exactly as before (same seed plumbing). The title's "Resume the
+  last run" is gated on the same flag, because the autosave *is* a linear-run
+  artifact (`campaign_save.gd`) and nothing in the open world writes one — leaving
+  it ungated would have left a normal player one leftover save away from the
+  linear route. No debug-only extra button was added; the existing Begin does both.
+- **Real starting world**: world.gd's own `_demo_world()` layout (Riverhold/
+  Greenmarch/Dun-Arrow/Ashfell, a player token, bandits, goblins, a patrol). Per
+  this phase's scope it is the mode switch, not content generation; the one real
+  injection is the player's assembled `Party`, which replaces world.gd's
+  `Party.demo_roster()` fallback — so encounters, the market and theft all run on
+  the characters out of the barracks.
+`tests/drive_game.gd` rewalked: default press-through now asserts the open world
+(same `Party` object as the party screen assembled, the created character in it,
+a live map), that the linear campaign is *not* reached, and that a planted
+autosave shows no Resume with the flag unset; then it sets the flag, walks the
+same buttons again and gets the campaign map, retire, summary and Resume. Its
+`SORCMERC_LINEAR_CAMPAIGN` is set via `OS.set_environment`, next to the
+`SORCMERC_FAST` it already set. `tests/test_game_flow.gd` adds the two-way switch
+check (51 passed). Full suite: 30 test files, 0 failures; all 6 `drive_*` OK,
+including `drive_campaign` (which drives `campaign.tscn` directly and so never
+needed the flag).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.

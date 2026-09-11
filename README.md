@@ -90,7 +90,9 @@ SORCMERC_SEED=5 SORCMERC_FAST=1 godot --headless --path . -s tests/drive_game.gd
 
 `SORCMERC_SEED` replays an exact fight/route; `SORCMERC_FAST` zeroes UI tween
 timing and skips cosmetic-only systems (barks, audio) that have nothing
-meaningful to assert on in a headless run.
+meaningful to assert on in a headless run. `SORCMERC_LINEAR_CAMPAIGN=1` puts the
+old linear node-route campaign (and its Resume-the-last-run autosave) back on the
+title screen; without it, "New run" goes straight to the open world.
 
 ## Status
 

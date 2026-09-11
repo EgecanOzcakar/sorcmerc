@@ -1,5 +1,7 @@
-# T17 — headless player for the whole game, from the entry scene: title → new run
-# → make a character → begin → the campaign map → retire → run summary → hub.
+# T17/O8 — headless player for the whole game, from the entry scene: title → new
+# run → make a character → begin → the open world (normal play), then the same
+# walk again with SORCMERC_LINEAR_CAMPAIGN set, which is the only way to the old
+# linear route: campaign map → retire → run summary → hub → resume.
 # Presses real buttons on the real scenes; the fighting itself is drive_ui's and
 # drive_campaign's job, so this walk retires instead of playing the road out.
 #   godot --headless --path . -s tests/drive_game.gd
@@ -18,6 +20,7 @@ var _fail := 0
 
 func _init() -> void:
 	OS.set_environment("SORCMERC_FAST", "1")
+	OS.set_environment("SORCMERC_LINEAR_CAMPAIGN", "")   # normal play, whatever the shell said
 	CampaignSave.clear()                 # a saved run would change the title screen
 	CharacterSave.delete(SLUG)           # and a leftover from an earlier walk
 	main = load("res://scenes/game/game.tscn").instantiate()
@@ -62,6 +65,19 @@ func _run() -> void:
 	# --- title ------------------------------------------------------------
 	if not buttons(main).any(func(b): return "New run" in b.text):
 		fail("the title screen has no New run")
+	# O8: with the flag unset, nothing on the title screen leads to the linear run —
+	# not even a leftover autosave (Resume is a linear-run door).
+	var throwaway := Party.new()
+	for ch in Party.demo_roster():
+		throwaway.add_member(ch)
+	CampaignSave.save(Campaign.new(throwaway, 3))
+	main.show_title()
+	await process_frame
+	if buttons(main).any(func(b): return "Resume" in b.text):
+		fail("the title offers Resume (the linear run) with SORCMERC_LINEAR_CAMPAIGN unset")
+	CampaignSave.clear()
+	main.show_title()
+	await process_frame
 	press("New run")
 	await process_frame
 
@@ -76,7 +92,7 @@ func _run() -> void:
 	party_screen.party.active.clear()
 	press("Begin the run")
 	await process_frame
-	if find_node(main, "res://scenes/campaign/campaign.gd") != null:
+	if find_node(main, "res://scenes/world/world.gd") != null:
 		fail("started a run with an empty active party")
 	party_screen.party.active.assign(was)
 
@@ -102,13 +118,42 @@ func _run() -> void:
 	if CharacterSave.load_slug(SLUG) == null:
 		fail("the created character never saved")
 
-	# --- into the run -----------------------------------------------------
-	# The party screen is freed the moment the campaign replaces it, so hold on
-	# to the assembled party itself, not the screen.
+	# --- into the open world (O8: the default) ----------------------------
+	# The party screen is freed the moment the map replaces it, so hold on to the
+	# assembled party itself, not the screen.
 	var assembled = party_screen.party
 	press("Begin the run")
 	await process_frame
 	await process_frame
+	var world_screen = find_node(main, "res://scenes/world/world.gd")
+	if world_screen == null:
+		fail("Begin the run did not reach the open world")
+		return _done()
+	if find_node(main, "res://scenes/campaign/campaign.gd") != null:
+		fail("normal play reached the linear campaign")
+	if world_screen.party != assembled:
+		fail("the open world is not running the party we assembled")
+	if world_screen.party.get_member(SLUG) == null:
+		fail("the open world got a demo roster, not the player's own characters")
+	if world_screen.world == null or world_screen.world.player() == null:
+		fail("the open world has no map/player party")
+
+	# --- the same walk with the debug flag on: the linear route ------------
+	OS.set_environment("SORCMERC_LINEAR_CAMPAIGN", "1")
+	main.show_title()
+	await process_frame
+	press("New run")
+	await process_frame
+	party_screen = find_node(main, "res://scenes/party/party.gd")
+	if party_screen == null:
+		fail("New run did not open the party screen the second time")
+		return _done()
+	assembled = party_screen.party
+	press("Begin the run")
+	await process_frame
+	await process_frame
+	if find_node(main, "res://scenes/world/world.gd") != null:
+		fail("SORCMERC_LINEAR_CAMPAIGN still opened the open world")
 	var campaign = find_node(main, "res://scenes/campaign/campaign.gd")
 	if campaign == null:
 		fail("Begin the run did not reach the campaign map")
