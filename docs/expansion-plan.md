@@ -1349,4 +1349,34 @@ how T35 organized its candidates — do not land a chosen value on master.
   `t36-spawn-gap-4/6/8`, one commit each, none merged.
   **Full suite: 25 test files, 0 failures.**
 
+## T37 — measure starting distance + slower movement together (locked 2026-09-11, dispatched now)
+
+A further follow-up to T35/T36, same rules: measurement only, nothing
+adopted automatically. Individually: T35 found `FT_PER_HEX` (slower
+per-turn movement) barely touches ranged share and costs ~7 points of win
+rate; T36 found `SPAWN_GAP` (starting distance) alone also barely touches
+ranged share but is a genuine difficulty lever (+6-7 points of win rate,
+saturating around gap 6 on current board sizes). Neither alone moved the
+actual ranged-usage needle. This task measures them TOGETHER — same
+mechanism (more approach turns before melee lands) stacking from two
+directions might compound differently than either alone, particularly on
+the ranged-share metric where both individually landed flat.
+
+Reuse `tests/sweep_range.gd` (on master, unmodified unless it needs a small
+extension) exactly as T35/T36 ran it. Combine one of T36's effective
+`SPAWN_GAP` values (4 or 6 — pick based on its own findings: gap 6 already
+saturates board size on most themes, so consider whether gap 4 + slower
+movement is the more informative combination, or test both) with one of
+T35's `FT_PER_HEX` values (8 or 10). Measure at least 2 combinations, not
+just one, and include T35's and T36's already-published baseline/candidate
+rows in your final side-by-side table for direct comparison — the point is
+whether the combination is additive, sub-additive, or does something
+neither predicts alone.
+
+File ownership: `core/encounter.gd` (`SPAWN_GAP` only) and `core/adapter.gd`
+(`FT_PER_HEX` only), reusing `tests/sweep_range.gd`. Leave master at
+baseline when done (both constants untouched), one branch/commit per
+combination tested, matching how T35/T36 organized their candidates — do
+not land a chosen combination on master.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
