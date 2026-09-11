@@ -163,6 +163,7 @@ func _ready() -> void:
 	col.add_child(_hint)
 
 	_board.main = self
+	_board.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST   # pixel art, no blur
 	_board.clip_contents = true
 	_board.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1014,6 +1015,41 @@ class Board extends Control:
 	const ISO_Y := 0.525
 	const ISO_SQUASH := 2.0 * ISO_Y   # how much a world y-extent shrinks on screen
 
+	# --- sprite art (experiment) ---------------------------------------
+	# Real CC0 pixel art instead of drawn shapes — see assets/iso-experiment/SOURCE.md.
+	# Built by hand from Image, not load()ed, because this project ships no editor
+	# .import files (same reason core/audio.gd hand-rolls its WAVs).
+	const ART_DIR := "res://assets/iso-experiment/"
+	const TILE_ART := {"shrine": "stone", "camp": "dirt", "city": "stone",
+		"forest": "grass", "ice": "water", "shop": "dirt"}
+	const CLASS_ART := {"wizard": "mage", "sorcerer": "mage", "warlock": "mage",
+		"bard": "mage", "cleric": "cleric", "druid": "cleric", "paladin": "cleric"}
+	# Screen width of one tile sprite, in hex radii. The art is a 2:1 iso diamond
+	# and the board is a flat-top hex grid, so this is a fitted knob, not a derivation.
+	const TILE_W := 3.9
+	static var _art := {}
+
+	static func art(name: String) -> Texture2D:
+		if not _art.has(name):
+			var img := Image.load_from_file(ART_DIR + name + ".png")
+			_art[name] = ImageTexture.create_from_image(img) if img != null else null
+		return _art[name]
+
+	# Which sprite stands in for this combatant. Three stand-ins only: the spike
+	# proves the pipeline, not the roster.
+	func _unit_art(c) -> String:
+		if c.team != "party":
+			return "unit_fighter"
+		return "unit_" + String(CLASS_ART.get(Icons.primary_class(c.sheet), "fighter"))
+
+	# Draw a sprite with its 32x32 anchor point landing on `at`.
+	func _blit(name: String, at: Vector2, anchor: Vector2, scale: float, tint := Color.WHITE) -> bool:
+		var tex := art(name)
+		if tex == null:
+			return false
+		draw_texture_rect(tex, Rect2(at - anchor * scale, Vector2(32, 32) * scale), false, tint)
+		return true
+
 	func _iso(v: Vector2) -> Vector2:
 		return Vector2((v.x - v.y) * ISO_X, (v.x + v.y) * ISO_Y)
 
@@ -1173,11 +1209,15 @@ class Board extends Control:
 				for hx in Hex.cone(cur.pos, dir, int(main._tgt_verb.get("radius", 2))):
 					cone_hexes[hx] = true
 
-		# tiles
-		for hx in cb.board["hexes"]:
+		# tiles — sprite art, painted back-to-front so a tile's raised block body
+		# is overlapped by the tile in front of it.
+		var tile_name := "tile_" + String(TILE_ART.get(cb.board.get("palette", "shrine"), "stone"))
+		var hexes: Array = cb.board["hexes"].duplicate()
+		hexes.sort_custom(func(a, b): return _pix(a).y < _pix(b).y)
+		for hx in hexes:
 			var c := _pix(hx)
 			var poly := _hex_poly(c, s - 2.0)
-			var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
+			var fill: Color = Color.TRANSPARENT
 			var obj: Dictionary = cb.object_at(hx)
 			if obj.has("hazard") and not obj.get("blocks_movement", false):
 				fill = main.COL_BRAZIER.lerp(Color("d9622e"), pulse)
@@ -1185,14 +1225,19 @@ class Board extends Control:
 				fill = main.COL_PROP
 			elif cb.is_cover(hx):
 				fill = main.COL_COVER
-			draw_colored_polygon(poly, fill)
+			# the tile sprite's diamond top is centred at (16, 8) in its 32x32 cell
+			if not _blit(tile_name, c, Vector2(16, 8), s * TILE_W / 32.0):
+				fill = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
+			if fill.a > 0.0:
+				draw_colored_polygon(poly, Color(fill.r, fill.g, fill.b, 0.55))
 			if field.has(hx) and hx != cur.pos:
 				draw_colored_polygon(poly, main.COL_MOVE)
 			if cone_hexes.has(hx):
 				draw_colored_polygon(poly, main.COL_CONE)
 			var edge := _hex_poly(c, s - 2.0)
 			edge.append(edge[0])
-			draw_polyline(edge, main.COL_HEX_EDGE, 1.5)
+			# the tile art carries the grid now, so the outline only has to hint at it
+			draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.30), 1.0)
 			if provoke.has(hx):
 				draw_string(ThemeDB.fallback_font, c - Vector2(6, -5), "⚠", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("ffcf47"))
 			if cb.is_cover(hx):
@@ -1245,11 +1290,18 @@ class Board extends Control:
 					Color(1.0, 0.886, 0.478, 0.25 + 0.75 * bl), 2.5 + bl * 3.0)
 				draw_polyline(_disc(p, rad + 12.0 + bl * 6.0, true),
 					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0)
-			draw_line(p, tp, base.darkened(0.55), 3.0)   # the "post" it stands on
-			draw_circle(tp, rad * 0.8, base)
-			draw_arc(tp, rad * 0.8, 0, TAU, 24, base.darkened(0.4), 2.0)
-			# The token's mark: class glyph for heroes, creature-type glyph for foes.
-			_centered(_glyph(c), tp, int(24 * fz), Color("101216"))
+			# The unit sprite stands with its feet on the hex centre. Foes wear a red
+			# wash so team still reads at a glance off three shared stand-in sprites.
+			var tint := Color.WHITE if c.team == "party" else Color(1.0, 0.42, 0.40)
+			if c.is_down():
+				tint = Color(0.55, 0.55, 0.6)
+			if _flash.has(c.id):
+				tint = tint.lerp(Color.WHITE, clampf(_flash[c.id] / 0.35, 0, 1))
+			if not _blit(_unit_art(c), p, Vector2(16, 28), s * 2.2 / 32.0, tint):
+				draw_line(p, tp, base.darkened(0.55), 3.0)   # the "post" it stands on
+				draw_circle(tp, rad * 0.8, base)
+				draw_arc(tp, rad * 0.8, 0, TAU, 24, base.darkened(0.4), 2.0)
+				_centered(_glyph(c), tp, int(24 * fz), Color("101216"))
 
 			# hp bar
 			var hv: float = _hp.get(c.id, float(c.hp))
