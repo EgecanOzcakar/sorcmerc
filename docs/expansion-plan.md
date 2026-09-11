@@ -2933,4 +2933,58 @@ spread instead, documented in the file. `tests/test_procedural_creature.gd`:
 47/47. Full suite green. Not yet wired into `scenes/main.gd`'s real
 combat (out of scope, same "spike only" boundary as T47).
 
+**T49 scrapped (2026-09-12):** reviewed, not what the user wants.
+Branch `feature/procedural-creatures` deleted (local, remote, worktree).
+No procedural-shape fallback tier — see T50 below for the replacement
+direction.
+
+## T50 — extend the LPC codebase itself to cover non-humanoid monsters (locked 2026-09-12, dispatched now, continues feature/lpc-pipeline)
+
+Direct user decision, replacing T49: instead of a separate procedural
+fallback system, assess and extend the **LPC pipeline/tooling itself**
+so it isn't hard-locked to the one universal bipedal 64×64/21-row rig,
+and use that generalized pipeline to bring T48's actual find — the
+**[LPC] Monsters** pack (bat, bee, big/small worm, eyeball, man-eater
+flower, pumpkin king, slime, snake, ghost — CC-BY-SA 3.0/GPL 3.0/OGA-BY
+3.0, a genuine LPC-lineage asset, already license-confirmed) — online as
+real, working, non-humanoid coverage, not just a research citation.
+
+**Assess first, don't assume:** read `tools/lpc_compose.py` and the
+vendored `sheet_definitions`/`z_positions.csv` data model from T47's
+spike. Determine concretely whether [LPC] Monsters' sheets share the
+universal grid/z-order convention (T47's own report noted this pack is
+"attack + idle only" — confirm whether that means a different row
+count/layout, not just a subset of the same one) and whether the
+compositor's current assumptions (humanoid part categories: body/head/
+hair/torso/legs/weapon; the specific animation-row layout from
+`custom-animations.js`) would silently produce garbage output if fed a
+non-humanoid sheet, or whether the z-order/stacking model already
+generalizes cleanly. Report the real answer before writing code against
+an assumption.
+
+**Then extend**, scoped to what the assessment actually finds needed:
+- Generalize the compositor/loadout schema so a "creature" loadout
+  (fewer/different layer slots, e.g. just "base" + optional overlay,
+  not the full humanoid 8-slot stack) is a first-class case alongside
+  the humanoid loadout T47 already built — not a special-cased hack.
+- Vendor [LPC] Monsters' actual part files into `assets/lpc/` (same
+  CREDITS-row-copying discipline as T47's `merc_01`), and compose at
+  least 2-3 real creatures from it (e.g. a bat for `beast`, a slime for
+  `ooze`, a ghost for `undead`) end to end through the same `.tres`-
+  SpriteFrames output T47 built, proving the generalized pipeline
+  actually works, not just parses.
+- Honestly re-assess and report which bestiary factions remain
+  genuinely uncovered after this (giant/dragon/fey/elemental/construct
+  are very unlikely to gain coverage from this pack specifically, per
+  T48's own findings — confirm rather than assume, but don't force a
+  fit that isn't there).
+
+File/repo scope: continue on `feature/lpc-pipeline` (same worktree/
+branch T47 used, still live) — this is a direct continuation, not a
+fresh branch. Verify with real rendered screenshots of the new
+creatures (same discipline as every prior visual entry), plus the
+existing `test_lpc_spike.gd`-style headless validation extended for the
+new loadouts. Push the branch when done; still not merged to master
+without explicit sign-off.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
