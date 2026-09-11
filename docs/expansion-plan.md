@@ -1698,4 +1698,20 @@ File ownership per phase will be scoped in each phase's own dispatch
 serial with nothing else in flight against `core/world.gd` until it lands,
 same "phase 1-2 forces serial" caution the original F1/F2 phasing used.
 
+**O1 completion (2026-09-11):** landed as `0199298`. `core/world.gd` (one
+file, ~105 lines): `WorldClock` (`RefCounted`, not a `Node` — a `tick(delta)`
+method the caller drives, so it's headless-testable and leaks nothing),
+`Settlement` (`id`/`sname`/`position`/`faction`/`kind`), `RoamingParty`
+(`id`/`position`/`faction`/`is_player`/`goal`/`speed`/`at_goal()`), and a
+`World` container (`clock`/`settlements`/`parties`,
+`add_settlement`/`add_party`/`player()`/`set_goal()`/`tick()`/
+`move_toward_goal()`). Pause gates movement in exactly one place
+(`World.tick()`); `move_toward_goal()` itself is pause-agnostic, a
+primitive O3's AI will call directly. `tests/test_world.gd`: 29 passed.
+Full suite: 25 files, 0 failures. Nothing else in the game references
+`core/world.gd` yet — purely additive, `core/campaign.gd`/`scenes/*`
+untouched. No spatial query/serialization added (deliberately — O4/O5
+need proximity checks, O7 needs persistence; both are that phase's job,
+a linear scan over 3-6 parties needs no index yet).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
