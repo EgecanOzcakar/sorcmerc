@@ -1,0 +1,4 @@
+#!/bin/sh
+# Same as post-merge, for `git checkout`/`git switch` — swapping branches can
+# bring in assets the current .godot/imported/ cache has never seen.
+exec "$(dirname "$0")/_reimport.sh"

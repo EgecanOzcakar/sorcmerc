@@ -64,6 +64,15 @@ Godot 4.7 is installed as a Flatpak here. A shorthand:
 alias godot='flatpak run org.godotengine.Godot'
 ```
 
+One-time setup so new/changed assets (art, audio, fonts) always get
+imported automatically after a pull or branch switch — without this, a
+pull that touched `assets/` can throw "Cannot open file ...ctex/.fontdata"
+until someone remembers to run `godot --headless --import` by hand:
+
+```sh
+git config core.hooksPath .githooks
+```
+
 Play (needs a display):
 
 ```sh

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Runs after `git pull`/`git merge`: new or changed art/audio/font assets
+# (e.g. the open-world art packs) need Godot to (re)generate their
+# .godot/imported/ cache before the game will load them. Without this, a
+# fresh pull that touched assets/ throws "Cannot open file ...ctex/.fontdata"
+# the next time the game runs, until someone remembers to import by hand.
+exec "$(dirname "$0")/_reimport.sh"
