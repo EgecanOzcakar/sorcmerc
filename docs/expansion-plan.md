@@ -2323,4 +2323,19 @@ File ownership: `tests/drive_campaign.gd`, and `core/campaign.gd`/
 per T41's finding that the campaign flow itself was fine — verify before
 touching either). Full suite + all `drive_*` green.
 
+**T43 completion (2026-09-11):** landed as `35ab371`. Root cause was a
+second `tests/drive_campaign.gd` driver bug (T41 fixed the first), not
+the engine: the road picker fell back to `pick = 0` on stage 0 (combat-
+only since T12), always taking the *first* listed fight regardless of
+difficulty — reproduced on seeds 29/44, where it walked into the harder
+of two available rosters every time. Fixed by ranking combat roads by
+difficulty (easiest first when no non-combat option exists) and, since
+some residual loss is genuine calibrated variance (T40's own targets:
+94.5% easy, 83.5% normal — not 100%), the driver now retries up to 3
+attempts rather than asserting a single run must always fully succeed.
+Verified across seeds 1–60 plus unseeded runs (65/65), and again
+independently on 6 more unseeded runs post-verification. `core/campaign.gd`/
+`core/ai.gd` confirmed untouched — T41's "the flow itself is fine"
+conclusion still holds. Full suite green.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
