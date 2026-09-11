@@ -11,6 +11,8 @@ const Settings = preload("res://core/settings.gd")
 const Game = preload("res://scenes/game/game.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const Presets = preload("res://core/presets.gd")
+const Tutorial = preload("res://core/tutorial.gd")
+const Encounter = preload("res://core/encounter.gd")
 
 var _pass := 0
 var _fail := 0
@@ -28,6 +30,13 @@ func _campaign() -> Campaign:
 		p.add_member(ch)
 	p.add_gold(120)
 	return Campaign.new(p, 7)
+
+func _press(under: Node, label: String) -> void:
+	for b in under.find_children("*", "Button", true, false):
+		if label in b.text:
+			b.pressed.emit()
+			return
+	check(false, "no button labelled '%s'" % label)
 
 func _find(c: Campaign, kind: String) -> int:
 	for i in c.options().size():
@@ -112,6 +121,39 @@ func _init() -> void:
 	check(loaded.hp_current == -1, "a new run resets HP to full (the usual -1 sentinel)")
 	game.queue_free()
 	CharacterSave.delete("vera-hp-test")
+
+	_tutorial_checks()
+
+# T32. Split out and async: a node only reaches _ready once the loop turns, and
+# the walkthrough is started by scenes/main.gd's _ready.
+func _tutorial_checks() -> void:
+	var tp = Tutorial.party()
+	check(tp.party_characters().size() == 2, "the tutorial party is two pre-made heroes")
+	var tcb = Encounter.build(Tutorial.SPEC, tp.to_combatants(Encounter.PARTY_STARTS))
+	var foes: Array = tcb.team_of("foe")
+	check(foes.size() == 1, "the tutorial fields exactly one foe")
+	check(foes.size() == 1 and foes[0].max_hp <= 10, "...and a weak one")
+	check(tcb.board["objects"].is_empty(), "the tutorial board is plain — no hazards or props")
+	check(Tutorial.STEPS.size() >= 6, "the walkthrough covers every region of the combat screen")
+	var game2 = load("res://scenes/game/game.tscn").instantiate()
+	root.add_child(game2)
+	await process_frame
+	game2.show_tutorial()
+	await process_frame
+	var combat = game2._screen.get_child(0)
+	check(combat.tutorial, "the title screen's Tutorial launches with the walkthrough on")
+	check(combat._walk != null, "...and the first step is up, blocking play")
+	# Next walks every step and the last one hands the fight over; Skip does it at once.
+	for n in Tutorial.STEPS.size():
+		check(combat._walk != null, "step %d is up" % (n + 1))
+		await process_frame
+		_press(combat._walk, "→")
+	check(combat._walk == null, "the last Next ends the walkthrough")
+	combat._walk_show(0)
+	_press(combat._walk, "Skip")
+	check(combat._walk == null, "Skip tutorial drops straight into normal play")
+	check(combat.cb != null and not combat.cb.is_over(), "the fight underneath was never touched")
+	game2.queue_free()
 
 	print("test_game_flow: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

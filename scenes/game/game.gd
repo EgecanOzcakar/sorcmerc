@@ -14,9 +14,11 @@ const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
+const Tutorial = preload("res://core/tutorial.gd")
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 const CAMPAIGN_SCENE := "res://scenes/campaign/campaign.tscn"
+const COMBAT_SCENE := "res://scenes/main.tscn"
 
 var _screen: Control = null      # whatever is on show right now
 
@@ -59,6 +61,7 @@ func show_title() -> void:
 	if CampaignSave.has_save():
 		col.add_child(_button("▶  Resume the last run", _resume))
 	col.add_child(_button("✦  New run", show_party_setup))
+	col.add_child(_button("❖  Tutorial", show_tutorial))
 	var roster := CharacterSave.list_slugs().size()
 	col.add_child(_dim("%d character(s) in the barracks." % roster))
 	col.add_child(_button("⚙  Settings", func(): SettingsOverlay.toggle(self)))
@@ -78,6 +81,28 @@ func _resume() -> void:
 		show_summary(saved)
 		return
 	_show_campaign(saved)
+
+# --- tutorial -------------------------------------------------------------
+#
+# T32: straight into the fixed fight — no party setup, the party is pre-made and
+# thrown away afterwards. The only thing that differs from a normal fight is the
+# `tutorial` flag, which turns on main.gd's walkthrough overlay.
+
+func show_tutorial() -> void:
+	var combat = load(COMBAT_SCENE).instantiate()
+	combat.party = Tutorial.party()
+	combat.spec = Tutorial.SPEC.duplicate(true)
+	combat.difficulty = Tutorial.DIFFICULTY
+	combat.tutorial = true
+	var wrap := Control.new()
+	wrap.add_child(combat)
+	var back := Button.new()
+	back.text = "←  Title"
+	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	back.offset_left = -160; back.offset_top = 12; back.offset_right = -16
+	back.pressed.connect(show_title)
+	wrap.add_child(back)
+	_swap(wrap)
 
 # --- party setup ----------------------------------------------------------
 #

@@ -12,6 +12,7 @@ const Party = preload("res://core/party.gd")
 const Presets = preload("res://core/presets.gd")
 const Hex = preload("res://core/hex.gd")
 const Settings = preload("res://core/settings.gd")
+const Tutorial = preload("res://core/tutorial.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 
@@ -21,6 +22,7 @@ const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 var party                       # core/party.gd; a Presets demo party when null
 var spec: Dictionary = {}
 var difficulty := "normal"
+var tutorial := false           # T32: run the guided walkthrough over this fight
 var result: Dictionary = {}
 var _own_party := false
 
@@ -187,6 +189,8 @@ func _ready() -> void:
 	set_process(true)
 	_apply_ui_scale()
 	_new_game()
+	if tutorial:
+		_walk_show(0)
 
 # Font sizes across the whole combat UI track the zoom level.
 func _apply_ui_scale() -> void:
@@ -212,7 +216,7 @@ func pan_by(delta: Vector2) -> void:
 		_board.queue_redraw()
 
 func _unhandled_key_input(e: InputEvent) -> void:
-	if not (e is InputEventKey and e.pressed):
+	if not (e is InputEventKey and e.pressed) or _walk != null:
 		return
 	match e.keycode:
 		KEY_EQUAL, KEY_KP_ADD: set_zoom(_zoom * 1.1)
@@ -294,6 +298,8 @@ func _advance() -> void:
 		if c.team == "foe" or c.is_down():
 			_busy = true
 			_set_buttons([])
+			while _walk != null:      # nobody swings while the walkthrough is up
+				await get_tree().process_frame
 			await get_tree().create_timer(0.5 / _anim).timeout
 			if not c.is_down():
 				# ponytail: the AI layer reports no per-attack events, so the FX are
@@ -878,6 +884,120 @@ func _log_width() -> float:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and _logwrap:
 		_logwrap.custom_minimum_size.x = _log_width()
+
+# =====================================================================
+#  T32 walkthrough — presentation only. It spotlights a region of this
+#  same screen and blocks play until it's dismissed; the fight underneath
+#  is an ordinary fight, resolved by the ordinary code.
+# =====================================================================
+
+var _walk: Walk = null      # the live overlay, null whenever the tutorial isn't up
+
+# Which control each step in Tutorial.STEPS points at.
+func _walk_target(key: String) -> Control:
+	match key:
+		"log": return _logwrap
+		"order": return _order.get_parent()
+		"actions": return _bscroll
+		"actor": return _actor
+	return _board
+
+func _walk_show(i: int) -> void:
+	_walk_end()
+	if i >= Tutorial.STEPS.size():
+		return
+	var step: Dictionary = Tutorial.STEPS[i]
+	_walk = Walk.new()
+	_walk.target = _walk_target(String(step["target"]))
+	_walk.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_walk.mouse_filter = Control.MOUSE_FILTER_STOP   # nothing underneath is clickable
+	add_child(_walk)
+
+	var card := PanelContainer.new()
+	var box := StyleBoxFlat.new()
+	box.bg_color = Icons.COL_INK
+	box.set_corner_radius_all(10)
+	box.set_border_width_all(2)
+	box.border_color = Icons.COL_GOLD_EDGE
+	box.set_content_margin_all(14)
+	card.add_theme_stylebox_override("panel", box)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	card.add_child(col)
+
+	var head := Label.new()
+	head.text = "%s   (%d/%d)" % [step["title"], i + 1, Tutorial.STEPS.size()]
+	head.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	head.add_theme_color_override("font_color", Icons.COL_GOLD)
+	col.add_child(head)
+
+	var body := Label.new()
+	body.text = String(step["text"])
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.custom_minimum_size = Vector2(WALK_CARD_W, 0)
+	body.add_theme_color_override("font_color", Icons.COL_BODY)
+	col.add_child(body)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.alignment = BoxContainer.ALIGNMENT_END
+	var skip := Button.new()
+	skip.text = "Skip tutorial"
+	skip.pressed.connect(_walk_end)
+	row.add_child(skip)
+	var next := Button.new()
+	next.text = "Start fighting  →" if i == Tutorial.STEPS.size() - 1 else "Next  →"
+	next.pressed.connect(func(): _walk_show(i + 1))
+	row.add_child(next)
+	col.add_child(row)
+
+	_walk.card = card
+	_walk.add_child(card)
+
+func _walk_end() -> void:
+	if _walk != null:
+		_walk.queue_free()
+		_walk = null
+
+const WALK_CARD_W := 460.0
+
+# Dims everything but the step's target, outlines it, and parks the card clear of it.
+class Walk extends Control:
+	var target: Control
+	var card: Control
+	var _last := Rect2()
+	const DIM := Color(0.02, 0.03, 0.05, 0.72)
+
+	func _process(_dt: float) -> void:
+		if card == null:
+			return
+		var r := _spot()
+		if r != _last:              # the layout settles a frame or two after the step opens
+			_last = r
+			queue_redraw()
+		var cs := card.get_combined_minimum_size()
+		var p := Vector2((size.x - cs.x) * 0.5, r.end.y + 16.0)
+		if p.y + cs.y > size.y - 8.0:                       # no room below — go above
+			p.y = r.position.y - cs.y - 16.0
+		card.position = p.clamp(Vector2(8, 8), (size - cs - Vector2(8, 8)).max(Vector2(8, 8)))
+		card.size = cs
+
+	func _spot() -> Rect2:
+		if target == null or not is_instance_valid(target):
+			return Rect2(size * 0.5, Vector2.ZERO)
+		return Rect2(target.global_position - global_position, target.size)
+
+	func _draw() -> void:
+		var r := _spot().grow(4.0)
+		draw_rect(Rect2(0, 0, size.x, r.position.y), DIM)
+		draw_rect(Rect2(0, r.end.y, size.x, size.y - r.end.y), DIM)
+		draw_rect(Rect2(0, r.position.y, r.position.x, r.size.y), DIM)
+		draw_rect(Rect2(r.end.x, r.position.y, size.x - r.end.x, r.size.y), DIM)
+		draw_rect(r, Icons.COL_GOLD, false, 3.0)
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			queue_redraw()
 
 # =====================================================================
 #  Board — the hex map. Draws tiles, tokens, HP bars, highlights, juice.
