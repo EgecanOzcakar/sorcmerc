@@ -1,0 +1,12 @@
+buildings.png is built from two asset packs by rubberduck, both released under
+CC0 1.0 / Public Domain (license stated on each OpenGameArt page):
+
+  Isometric medieval buildings
+  https://opengameart.org/content/isometric-medieval-buildings
+  Isometric medieval buildings 2
+  https://opengameart.org/content/isometric-medieval-buildings-2
+
+CC0 asks for nothing: the assets may be used in any project, commercial or not,
+with or without credit. Credit is given here anyway.
+
+See ../README.md and tools/pack_buildings.py for how the sheet was assembled.

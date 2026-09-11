@@ -7,4 +7,5 @@
 # GitHub Actions secret, never in this file.
 *.translation
 combat_screen.png*
+world_screen.png*
 icon_sheet.png
