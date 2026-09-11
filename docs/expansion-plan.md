@@ -2338,4 +2338,55 @@ independently on 6 more unseeded runs post-verification. `core/campaign.gd`/
 `core/ai.gd` confirmed untouched — T41's "the flow itself is fine"
 conclusion still holds. Full suite green.
 
+**O13 completion (2026-09-11):** landed as `91f49be` + `29729f6`. The
+flakiness I caught was real but NOT the autosave hook itself — root-
+caused to concurrent `godot` processes on this box sharing one
+`user://` save directory (a second process's `drive_campaign` run
+clobbering `campaign.json` mid-assertion in a concurrently-running
+`drive_game`), confirmed by an A/B: pre- and post-O13 drivers failed at
+the same rate under a concurrent load, so this predates O13 and equally
+affects T43's own driver. Fixed anyway to the better shape regardless:
+autosave moved from a generic `child_exiting_tree` signal (a deferred-
+free timing window) to three synchronous calls at the actual events
+(`_close_visit()`, `_launch_combat()`, `_leave_world()`) — "the world is
+saved" is now true at a defined instant, not eventually. Also fixed a
+real nondeterminism the agent's own first pass introduced:
+`drive_game.gd`'s resumed map was left mounted and ticking for the rest
+of the walk, letting a roaming hunt open combat mid-assertion. Verified
+myself: 10/10 `drive_game`, 8/8 `drive_world`, full suite, all other
+`drive_*`, nothing else running concurrently. **Flagged, not fixed**:
+an env-overridable save directory in `campaign_save.gd`/`world_save.gd`
+would eliminate this whole class of cross-process test flakiness for
+good — worth doing given how many concurrent background agents this
+project runs tests under; scoped separately below as O17 rather than
+folded into O13's own diff.
+
+## O17 — per-process test save directories (locked 2026-09-11, dispatched now)
+
+Flagged by O13: `core/campaign_save.gd` and `core/world_save.gd` both
+write to a fixed `user://autosave/...` path, which every concurrently-
+running `godot` process on the same machine shares — two test runs (or a
+test run and manual play) in flight at once can clobber each other's
+save file mid-assertion. This session runs many background agents in
+parallel, each spawning its own `godot --headless` processes, so this is
+a real, recurring source of false test failures (already implicated in
+both O13's and T43's flakiness hunts), not a hypothetical.
+
+Fix: make the save directory env-overridable (e.g.
+`SORCMERC_SAVE_DIR`, read once, falling back to today's `user://
+autosave/` when unset — matching the `SORCMERC_SEED`/`SORCMERC_FAST`/
+`SORCMERC_LINEAR_CAMPAIGN` convention already used throughout) in both
+`core/campaign_save.gd` and `core/world_save.gd`. Test drivers that need
+isolation (`tests/drive_game.gd`, `tests/drive_campaign.gd`, `tests/
+drive_world.gd`, and any `test_*_save.gd` that touches disk) set a
+unique dir per run (e.g. derived from `OS.get_process_id()`) rather than
+sharing the default. CI is unaffected (one process per job already).
+
+File ownership: `core/campaign_save.gd`, `core/world_save.gd`, and the
+test files listed above only. Full suite + all `drive_*` green, verified
+under an actual concurrent-process repro (run two drivers that touch the
+same save type at once, confirm neither fails anymore) — this is the one
+place "full suite green" isn't sufficient proof; reproduce the failure
+mode first, then prove it's gone.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
