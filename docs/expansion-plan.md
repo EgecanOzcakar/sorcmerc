@@ -2442,4 +2442,30 @@ packs, the bundled font) can't silently leave a stale `.godot/imported/`
 cache the way the DejaVu font and the O11-O15 art packs did — that
 error class shouldn't recur for anyone who's run the one-time opt-in.
 
+**O16 — closed, already satisfied (2026-09-11):** investigated, no code
+change needed. `tools/pack_buildings.py` (O12) deliberately scales all 5
+buildings by one shared factor rather than normalizing each to its cell
+— its own docstring says so — so the packed sheet already carries each
+building's true relative size as differing alpha coverage inside
+identical cells; `_draw_building()`'s uniform per-cluster `h` scaling
+that over non-uniform cell contents already produces real per-building
+sizing. Measured off the sheet's alpha (min-max across 4 rotations):
+manor ~0.85h tall/102-123px wide vs. market shed ~0.39h/52-54px wide —
+2.1-2.2x apart, confirmed with a reverted probe render (no commit,
+working tree byte-identical to master afterward). A hand-tuned scale
+table on top would have double-applied the differential and shrunk the
+shed to a prop.
+
+Two real, smaller follow-ups surfaced along the way, not yet actioned:
+1. The manor (sheet column 3) is wider than its packed cell and loses
+   pixels off the right edge on some rotations — a `tools/
+   pack_buildings.py` re-pack fix (widen the cell, regenerate
+   `buildings.png`), not a `world.gd` change.
+2. `_draw_settlement()`'s `style + k` always picks consecutive sheet
+   columns for a cluster, so — since the sheet is ordered small to large
+   — many factions' clusters land on similar-size neighbours and never
+   visibly mix small/large in one settlement (`style + k * 2` or similar
+   would fix it, deliberately left alone since the brief said keep that
+   logic intact).
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
