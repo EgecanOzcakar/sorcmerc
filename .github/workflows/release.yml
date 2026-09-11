@@ -48,8 +48,16 @@ jobs:
             echo "version=dev-${GITHUB_RUN_NUMBER}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           fi
 
-      # godot-ci's image ships Godot + every export template pre-installed at
-      # /root/.local/share/godot/export_templates/ -- nothing to download here.
+      # godot-ci's image bakes every export template into /root/.local/share/
+      # godot/export_templates/, but GitHub Actions' container mode remaps
+      # $HOME to /github/home (an empty, runner-managed dir) -- Godot then
+      # looks in the wrong place and reports "no export template found".
+      # Known gotcha with this image: copy them into the remapped $HOME first.
+      - name: Move export templates to the remapped $HOME
+        run: |
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          cp -r /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/"
+
       - name: Import resources once
         run: godot --headless --path . --import || true
 
