@@ -1334,4 +1334,19 @@ extension to report the same breakdown cleanly. Leave the tree back at
 baseline when done, one commit per value tested on its own branch, matching
 how T35 organized its candidates — do not land a chosen value on master.
 
+- 2026-09-11: **T36 complete** (measurement only, nothing adopted). Isolated
+  the one variable T35's own SPAWN_GAP diagnostic confounded (that run had
+  wider boards active at the same time). Baseline confirmed exact match to
+  T35's published numbers on all six metrics — tooling verified sound.
+  Tested SPAWN_GAP 4/6/8 alone, boards/FT_PER_HEX untouched: ranged share is
+  flat-to-slightly-down as the gap triples (32.5% → 31.4%), confirming T35's
+  read cleanly with the confound removed — the low ranged-attack share really
+  is roster composition, not geometry. The real, unambiguous effect is a
+  **difficulty** one: party win rate jumps 74.7% → 80.7% at gap 4 (more free
+  ranged rounds before melee lands), then plateaus by gap 6 (81.3%, no
+  further change at gap 8) — current board sizes (5-9 hexes wide) saturate
+  past that point; going further needs bigger boards first. Branches
+  `t36-spawn-gap-4/6/8`, one commit each, none merged.
+  **Full suite: 25 test files, 0 failures.**
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
