@@ -1578,4 +1578,124 @@ real, root-caused, not just papered over:
 Full suite green (25 test files, 0 failures) and all 5 `drive_*` smoke
 tests OK, `drive_campaign` included (previously always lost at stage 0).
 
+## Open-world campaign map (locked 2026-09-11) — replaces the linear route as the default
+
+Direct user request: replace the linear node-route campaign (`core/campaign.gd`,
+`scenes/campaign/*`, T5/T6/T7/T9/T12 etc.) with a Mount & Blade-style open
+world — several settlements across a free 2D map, NPC/monster parties that
+roam and fight each other or the player, settlements belonging to factions
+whose opinion of the player rises or falls with what the player does near
+them. The linear campaign is **not deleted** — it stays wired up behind a
+debug flag (same pattern as `SORCMERC_SEED`/`SORCMERC_FAST`) because its
+determinism is exactly what the rest of this project's testing discipline
+depends on; normal play only ever sees the open world once O8 lands.
+
+Design decisions locked with the user (2026-09-11 Q&A), each with the
+alternative considered and rejected:
+- **Movement**: real-time with pause, not turn/day ticks — closer to the
+  M&B reference; a `WorldClock` node drives it, pausable at any time.
+- **Map shape**: a free continuous 2D map (`Vector2` positions, no hex
+  grid), not the existing Hex utilities — settlements/parties sit at
+  arbitrary points, movement is steering-toward-goal, not hex pathing.
+  The hex grid stays exactly where it already is: inside a single combat.
+- **Sim depth**: a real economy computed on-visit (not a background tick
+  for every settlement every frame) plus roaming monster-faction parties
+  that can fight NPCs or the player — explicitly **not** full faction
+  diplomacy/war between "civilized" factions; conflict is monsters/bandits
+  vs. settlements and the player, not settlements vs. each other.
+- **Off-screen battles**: resolved instantly with the existing seeded
+  `AI.take_turn` autoplay loop (the same one every `test_scaler.gd` sweep
+  already uses) — no visible fight, no new AI to write.
+- **Scale**: small first pass — 5-8 settlements, 3-6 roaming parties live
+  at once. Grow the roster once the systems work, not before.
+- **Visuals**: reuse the isometric projection/tile-painting code the
+  combat board already has (`_iso()`/`_pix()`/foliage/tinting in
+  `scenes/main.gd`), at a larger scale with a panning/zooming camera —
+  not a new abstract schematic map style.
+- **Economy**: computed at the moment of a settlement visit from a seeded
+  formula (time-since-last-visit + nearby-battle flags), not a live
+  background simulation — matches "computed on visit" over "fully live".
+- **Faction opinion**: tracked **per faction**, not per individual
+  settlement — helping/wronging one settlement moves how every settlement
+  and roaming party of that faction treats the player. Effects (all four,
+  user picked all): worse prices/refused services, fewer/no quests,
+  hostile guards below a threshold, hostile roaming parties of that
+  faction. Raised by completed quests and helping in a fight; lowered by
+  theft and killing. Decays slowly toward neutral over time rather than
+  staying wherever the player last left it.
+- **Stealing**: a new settlement-visit action, a skill check in the same
+  shape as T30's Survival scouting check (roll vs. a DC, success/failure
+  narrated the same way) — not a stealth minigame or a combat-time action.
+
+### Build order (each phase disjoint enough to dispatch separately)
+
+**O1 — world data model + clock + player movement.** `core/world.gd`:
+`WorldClock` (real-time `_process(delta)` accumulator, `pause()`/`resume()`),
+`Settlement` (position, faction, kind), `RoamingParty` (position, faction,
+goal, `is_player`). Player movement: click/hold a direction, moves at a
+fixed speed toward the cursor/goal while unpaused. No rendering yet —
+built and tested headless, the same way `core/campaign.gd` was. No other
+phase can start until this lands (everything else reads its shapes).
+
+**O2 — isometric world rendering + camera.** New `scenes/world/*` scene.
+Reuses `scenes/main.gd`'s `_iso()`/`_pix()`/ground-tinting/foliage helpers
+(factor them out to a shared autoload/RefCounted if duplicating them
+becomes awkward — call this out in the PR rather than deciding it now)
+at a larger scale; settlements as landmarks, parties as tokens; camera
+pans by drag, zooms by scroll. Depends on O1's shapes.
+
+**O3 — NPC/monster/faction roaming-party AI.** Movement goals: patrol a
+fixed route, wander near a settlement, or hunt the nearest hostile party
+(monster factions hunting settlements/player; a settlement's own parties
+defending or fleeing). Faction-tagged, reuses `core/scaler.gd`'s
+`FACTIONS`/`THEME_FACTION` vocabulary rather than inventing a new faction
+list. Depends on O1.
+
+**O4 — encounter trigger.** When the player party's position and a
+hostile party's position close within a radius, pause the `WorldClock`
+and hand off to the existing, **completely unchanged** `scenes/main.tscn`
+hex-combat scene — same pattern `scenes/campaign/campaign.gd`'s
+`_launch_combat()` already uses (instantiate, set `.party`/`.spec`, await
+`.result`). The battle itself does not change; only what puts the player
+into it. Depends on O1, O3.
+
+**O5 — off-screen instant battle resolution.** When two non-player
+parties' positions close within the same radius, resolve immediately:
+build an `Encounter` from each side's roster and run the existing seeded
+`AI.take_turn` loop headless (reuse, don't reimplement — this is the exact
+loop `tests/test_scaler.gd`'s `_sweep`/`_sweep_boss` already run). Winner
+survives (possibly hurt/reduced), loser's party is removed or routed.
+Depends on O1, O3.
+
+**O6 — settlement visit: services + economy-on-visit + stealing.**
+Visiting a settlement reuses T25's `node_services`/stock pattern, with
+prices/stock computed from a seeded formula keyed on time-since-last-visit
+(plus a flag if a nearby battle happened recently — feed off O5's
+outcomes). Add the new "steal from the market" action: a skill check in
+`opportunity_check()`'s shape, success takes gold/goods free, any attempt
+(success or failure — lock this down in the phase's own PR, not guessed
+here) costs opinion with that settlement's faction. Depends on O1, O5 (for
+the battle-aftermath price flag).
+
+**O7 — faction opinion.** `core/faction_opinion.gd` (or similar): one
+score per faction, persisted, read by O6 (prices/services/steal-cost),
+`core/quest.gd` (quest availability/offers), O3/O4 (guard and roaming-
+party hostility thresholds). Quest completion and helping a settlement's
+party in a fight (O4/O5) raise it; theft (O6) and killing a faction's
+combatants lower it; a slow per-in-game-day drift moves it back toward 0
+when nothing happens. Depends on O3, O4, O5, O6 all existing to hook into.
+
+**O8 — New Game mode switch.** The title/party-setup flow
+(`scenes/game/game.gd`) offers the open world as the only normal-play
+option; the existing linear `Campaign`/`scenes/campaign/*` stays reachable
+only via a debug env var (e.g. `SORCMERC_LINEAR_CAMPAIGN=1`), matching how
+`SORCMERC_SEED`/`SORCMERC_FAST` already gate test/debug paths — not
+deleted, not user-facing, kept exactly because its determinism is what
+the test suite leans on. Depends on O1-O7 all being playable end to end.
+
+File ownership per phase will be scoped in each phase's own dispatch
+(this entry is the locked design, not a file-ownership grant) — O1 first,
+serial with nothing else in flight against `core/world.gd` until it lands,
+same "phase 1-2 forces serial" caution the original F1/F2 phasing used.
+
 This is a multi-week build; phases 0–1 are the critical path and land first.
