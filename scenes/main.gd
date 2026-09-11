@@ -1035,15 +1035,43 @@ class Board extends Control:
 			pts.append(center + _iso(Vector2(cos(a), sin(a)) * s))
 		return pts
 
-	# A circle lying flat on the board plane, i.e. an ellipse on screen.
-	func _disc(center: Vector2, r: float, closed := false) -> PackedVector2Array:
+	# A ring of points. `flat` lays it on the board plane (an ellipse on screen);
+	# without it you get a true screen circle, for things that face the camera.
+	func _ring(center: Vector2, r: float, flat := true, closed := false, segs := 32) -> PackedVector2Array:
 		var pts := PackedVector2Array()
-		for i in 24:
-			var a := TAU * i / 24.0
-			pts.append(center + _iso(Vector2(cos(a), sin(a)) * r))
+		for i in segs:
+			var v := Vector2(cos(TAU * i / segs), sin(TAU * i / segs)) * r
+			pts.append(center + (_iso(v) if flat else v))
 		if closed:
 			pts.append(pts[0])
 		return pts
+
+	# A circle lying flat on the board plane, i.e. an ellipse on screen.
+	func _disc(center: Vector2, r: float, closed := false) -> PackedVector2Array:
+		return _ring(center, r, true, closed)
+
+	# --- shading helpers -------------------------------------------------
+	# The light: up and to the left, so every highlight in the scene agrees.
+	const LIGHT := Vector2(-0.30, -0.34)
+
+	# A radial gradient, as a triangle fan from `apex` out to `rim` with the
+	# vertex colours interpolated across each triangle. Offsetting the apex
+	# toward the light gives an off-centre hotspot, which is what makes a disc
+	# read as a sphere rather than a coin. No shader, no texture, no per-frame
+	# allocation beyond the fan itself.
+	func _fan(apex: Vector2, rim: PackedVector2Array, inner: Color, outer: Color) -> void:
+		var n := rim.size()
+		var cols := PackedColorArray([inner, outer, outer])
+		var uv := PackedVector2Array()
+		for i in n:
+			draw_primitive(PackedVector2Array([apex, rim[i], rim[(i + 1) % n]]), cols, uv)
+
+	# A soft drop shadow: three ellipses, each wider and fainter than the last.
+	# Cheaper than a blur pass and, at these sizes, indistinguishable from one.
+	func _soft_shadow(at: Vector2, r: float, strength := 1.0) -> void:
+		for i in 3:
+			draw_colored_polygon(_disc(at, r * (1.0 + 0.26 * i)),
+				Color(0.02, 0.01, 0.04, strength * (0.20 - 0.05 * i)))
 
 	func tick(dt: float) -> void:
 		if cb == null:
@@ -1163,16 +1191,19 @@ class Board extends Control:
 		var at: Vector2 = d["at"]
 		var k: float = float(d["scale"]) * s
 		var col: Color = d["col"]
-		draw_colored_polygon(_disc(at, k * 0.30), Color(0, 0, 0, 0.25))
+		_soft_shadow(at, k * 0.26, 0.85)
 		if String(d["kind"]) == "tree":
-			draw_line(at, at - Vector2(0, k * 0.62), Color("3a2c1c"), maxf(1.5, k * 0.09))
+			draw_line(at, at - Vector2(0, k * 0.62), Color("3a2c1c"), maxf(1.5, k * 0.09), true)
 			for o in [Vector2(0, -0.95), Vector2(-0.24, -0.66), Vector2(0.24, -0.70)]:
-				draw_circle(at + o * k, k * 0.30, col)
-			draw_circle(at + Vector2(-0.10, -1.02) * k, k * 0.20, col.lightened(0.16))
+				_lobe(at + o * k, k * 0.30, col)
 		else:
 			for o in [Vector2(-0.20, -0.16), Vector2(0.20, -0.16), Vector2(0, -0.34)]:
-				draw_circle(at + o * k, k * 0.24, col)
-			draw_circle(at + Vector2(-0.06, -0.38) * k, k * 0.15, col.lightened(0.14))
+				_lobe(at + o * k, k * 0.24, col)
+
+	# One shaded clump of leaves: the same ball shading the tokens use.
+	func _lobe(at: Vector2, r: float, col: Color) -> void:
+		_fan(at + LIGHT * r * 0.6, _ring(at, r, false, false, 20),
+			col.lightened(0.28), col.darkened(0.26))
 
 	# T11 interactables: shapes only, no sprites. Hazards pulse (the hex fill already
 	# glows), props get a crate mark, torches a small bright flame.
@@ -1180,14 +1211,17 @@ class Board extends Control:
 	func _draw_object(o: Dictionary, c: Vector2, s: float, pulse: float) -> void:
 		match String(o["type"]):
 			"torch":
+				for i in 3:   # a soft glow around the flame, not a hard ring
+					draw_circle(c, s * (0.22 + 0.10 * i), Color(1.0, 0.78, 0.45, 0.10 - 0.02 * i))
 				draw_circle(c, s * 0.16, main.COL_TORCH.lerp(Color("ff9d3d"), pulse))
-				draw_circle(c, s * 0.30, Color(1.0, 0.78, 0.45, 0.12 + 0.10 * pulse))
 			"fountain":     # lies flat on the board, so it projects
-				draw_colored_polygon(_disc(c, s * 0.45), Color("3d5566"))
-				draw_polyline(_disc(c, s * 0.45, true), Color("6f97ad"), 2.0)
+				_fan(c + _iso(LIGHT) * s * 0.28, _disc(c, s * 0.45),
+					Color("50707f"), Color("32444f"))
+				draw_polyline(_disc(c, s * 0.45, true), Color("6f97ad"), 2.0, true)
 			_:
 				if o.has("hazard") and not o.get("blocks_movement", false):
-					draw_colored_polygon(_disc(c, s * 0.22), Color("ffcf7a").lerp(Color("ff6a2a"), pulse))
+					var hot := Color("ffcf7a").lerp(Color("ff6a2a"), pulse)
+					_fan(c, _disc(c, s * 0.26), hot, Color(hot.r, hot.g, hot.b, 0.0))
 					return
 				var r := s * 0.42
 				var quad := PackedVector2Array()
@@ -1242,9 +1276,15 @@ class Board extends Control:
 			# tiles overlap in tone, which is what stops the borders reading as
 			# hard-cut diamonds without needing an actual texture.
 			var v := _rand(hx, 1)
-			draw_colored_polygon(poly, fill.lightened(0.09 * v).darkened(0.07 * (1.0 - v)))
-			draw_colored_polygon(_disc(c + _iso(Vector2(_rand(hx, 2) - 0.5, _rand(hx, 3) - 0.5) * s * 0.6),
-				s * (0.45 + 0.30 * _rand(hx, 4))), Color(fill.lightened(0.09), 0.28))
+			var tint := fill.lightened(0.09 * v).darkened(0.07 * (1.0 - v))
+			# lit from the top-left and falling off to the rim, so a tile is a
+			# shaded surface rather than a solid lozenge
+			_fan(c + _iso(LIGHT * s * 0.55), poly, tint.lightened(0.11), tint.darkened(0.13))
+			var blob := c + _iso(Vector2(_rand(hx, 2) - 0.5, _rand(hx, 3) - 0.5) * s * 0.6)
+			var br2 := s * (0.45 + 0.30 * _rand(hx, 4))
+			for i in 3:   # the mottling, feathered out instead of a hard-edged patch
+				draw_colored_polygon(_disc(blob, br2 * (0.55 + 0.225 * i)),
+					Color(fill.lightened(0.09), 0.11))
 			if field.has(hx) and hx != cur.pos:
 				draw_colored_polygon(poly, main.COL_MOVE)
 			if cone_hexes.has(hx):
@@ -1257,7 +1297,7 @@ class Board extends Control:
 			for n in Hex.neighbors(hx):
 				if not n in cb.board["hexes"] or _terrain(n) != _terrain(hx):
 					seam = true
-			draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.9 if seam else 0.22), 1.5)
+			draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.9 if seam else 0.22), 1.5, true)
 			if obj.is_empty():
 				var d := _foliage_at(hx, c, s)
 				if not d.is_empty():
@@ -1285,13 +1325,13 @@ class Board extends Control:
 				var poly := _hex_poly(tp, s - 3.0)
 				poly.append(poly[0])
 				var oc: Color = main.COL_TARGET
-				draw_polyline(poly, oc if hot else Color(oc.r, oc.g, oc.b, 0.45), 3.0 if hot else 2.0)
+				draw_polyline(poly, oc if hot else Color(oc.r, oc.g, oc.b, 0.45), 3.0 if hot else 2.0, true)
 		elif hero_turn and main._mode == "idle" and cur.econ["action"] > 0:
 			for f in cb.enemies_of(cur):
 				if cb.in_reach(cur, f):
 					var poly := _hex_poly(_pix(f.pos), s - 3.0)
 					poly.append(poly[0])
-					draw_polyline(poly, Color(main.COL_TARGET.r, main.COL_TARGET.g, main.COL_TARGET.b, 0.30), 1.5)
+					draw_polyline(poly, Color(main.COL_TARGET.r, main.COL_TARGET.g, main.COL_TARGET.b, 0.30), 1.5, true)
 
 		# tokens, painted back-to-front so nearer ones overlap farther ones
 		var order: Array = cb.combatants.filter(func(c): return not c.is_dead())
@@ -1309,23 +1349,30 @@ class Board extends Control:
 			# the ground — no lift, and flat to the board plane like everything
 			# else lying on it.
 			var tp := p if c.is_down() else p + Vector2(0, -rad * 0.55)
-			draw_colored_polygon(_disc(p, rad * 0.92), Color(0, 0, 0, 0.28))
+			_soft_shadow(p, rad * 0.80, 1.0 if c.is_down() else 1.15)
 			if c == cur:
 				# A real blink: the ring breathes in alpha, width AND radius, with a
 				# faint outer halo — the old width-only wobble read as noise.
 				var bl := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 170.0)
 				base = base.lerp(Color("ffe27a"), 0.18 * bl)
 				draw_polyline(_disc(p, rad + 4.0 + bl * 3.0, true),
-					Color(1.0, 0.886, 0.478, 0.25 + 0.75 * bl), 2.5 + bl * 3.0)
+					Color(1.0, 0.886, 0.478, 0.25 + 0.75 * bl), 2.5 + bl * 3.0, true)
 				draw_polyline(_disc(p, rad + 12.0 + bl * 6.0, true),
-					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0)
-			if c.is_down():
-				draw_colored_polygon(_disc(p, rad * 0.8), base)
-				draw_polyline(_disc(p, rad * 0.8, true), base.darkened(0.4), 2.0)
-			else:
-				draw_line(p, tp, base.darkened(0.55), 3.0)   # the "post" it stands on
-				draw_circle(tp, rad * 0.8, base)
-				draw_arc(tp, rad * 0.8, 0, TAU, 24, base.darkened(0.4), 2.0)
+					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0, true)
+			# The token is shaded like a ball: hotspot toward the light, falling
+			# off to a darker rim, with a bright sliver of rim light on the lit
+			# side and a dark contact line on the far one.
+			var trad := rad * 0.8
+			var flat: bool = c.is_down()
+			if not flat:
+				draw_line(p, tp, base.darkened(0.55), 3.0, true)   # the "post" it stands on
+			_fan(tp + (_iso(LIGHT) if flat else LIGHT) * trad * 0.62,
+				_ring(tp, trad, flat, false, 28), base.lightened(0.26), base.darkened(0.20))
+			draw_polyline(_ring(tp, trad, flat, true, 28), base.darkened(0.45), 1.5, true)
+			if not flat:
+				var lit := LIGHT.angle()
+				draw_arc(tp, trad * 0.93, lit - 0.85, lit + 0.85, 20,
+					Color(1, 1, 1, 0.26), 2.0, true)
 			# The token's mark: class glyph for heroes, creature-type glyph for foes.
 			_centered(_glyph(c), tp, int(24 * fz), Color("101216"))
 
