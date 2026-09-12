@@ -71,7 +71,16 @@ static func to_dict(world, party = null) -> Dictionary:
 		parties.append({
 			"id": p.id, "position": _v(p.position), "faction": p.faction,
 			"is_player": p.is_player, "goal": _v(p.goal), "speed": p.speed,
-			"ai": _enc(p.ai),
+			"ai": _enc(p.ai), "troops": p.troops,
+		})
+	# T91: lairs weren't a thing when this format was designed -- an old save
+	# without a "lairs" key just loads with none (from_dict below), not a
+	# missing-key crash.
+	var lairs: Array = []
+	for l in world.lairs:
+		lairs.append({
+			"id": l.id, "sname": l.sname, "position": _v(l.position),
+			"faction": l.faction, "discovered": l.discovered, "looted": l.looted,
 		})
 	return {
 		"format": FORMAT, "version": VERSION,
@@ -79,6 +88,7 @@ static func to_dict(world, party = null) -> Dictionary:
 		"opinion": FactionOpinion.all(),
 		"settlements": settlements,
 		"parties": parties,
+		"lairs": lairs,
 		"party": _party_dict(party),
 	}
 
@@ -104,7 +114,17 @@ static func from_dict(d: Dictionary):
 		p.goal = _vec(pd.get("goal", pd.get("position")))
 		p.speed = float(pd.get("speed", World.SPEED))
 		p.ai = _dec(pd.get("ai", {}))
+		var troops: Array[Dictionary] = []
+		for t in pd.get("troops", []):
+			troops.append(t)
+		p.troops = troops
 		world.add_party(p)
+	for ld in d.get("lairs", []):
+		var l := World.Lair.new(String(ld["id"]), _vec(ld.get("position")),
+			String(ld.get("faction", "goblinoid")), String(ld.get("sname", "")))
+		l.discovered = bool(ld.get("discovered", false))
+		l.looted = bool(ld.get("looted", false))
+		world.add_lair(l)
 
 	FactionOpinion.reset()
 	var opinion: Dictionary = d.get("opinion", {})
