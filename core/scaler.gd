@@ -73,7 +73,10 @@ const THEME_FACTION := {
 # board. Only themes whose faction actually needs the extra split are listed.
 const THEME_HABITAT := {"forest-clearing": "forest"}
 const FACTIONS := ["goblinoid", "beast", "undead", "bandit", "giant", "kobold",
-	"orc", "gnoll", "cultist", "soldier", "monstrosity", "fey", "elemental", "construct"]
+	"orc", "gnoll", "cultist", "soldier", "monstrosity", "fey", "elemental", "construct",
+	# T91: added for lair encounters (dragon cave) — bestiary.json already carries
+	# 22 dragon-faction entries, just never plugged into a roster before this.
+	"dragon"]
 const ROSTER_KINDS := 3   # distinct ids in one faction roster
 const BIGGEST_SHARE := 0.6  # no single foe may be worth more than this of the budget
 

@@ -74,6 +74,26 @@ class Settlement extends RefCounted:
 		kind = kind_v
 		sname = name_v if name_v != "" else id_v.capitalize()
 
+# T91 — a hostile monster lair: hidden until a Survival check finds it (see
+# core/world_lairs.gd), then attackable like a hostile settlement's guard for
+# its own stash of loot. Not a Settlement: it has no economy, no visit/market,
+# and can't be traded with or turned civilized — winning just loots it once.
+# "camp" is deliberately not this class's name — Settlement.kind already uses
+# "camp" for its smallest size tier, and the two are unrelated concepts.
+class Lair extends RefCounted:
+	var id: String
+	var sname: String
+	var position: Vector2
+	var faction: String          # one of Scaler.FACTIONS — same field driving encounter_spec
+	var discovered := false      # found by a Survival check yet? undiscovered lairs don't draw
+	var looted := false          # cleared once — stays on the map, spent, not removed
+
+	func _init(id_v: String, position_v: Vector2, faction_v: String, name_v: String = "") -> void:
+		id = id_v
+		position = position_v
+		faction = faction_v
+		sname = name_v if name_v != "" else id_v.capitalize()
+
 class RoamingParty extends RefCounted:
 	var id: String
 	var position: Vector2
@@ -96,6 +116,7 @@ class RoamingParty extends RefCounted:
 var clock := WorldClock.new()
 var settlements: Array[Settlement] = []
 var parties: Array[RoamingParty] = []
+var lairs: Array[Lair] = []
 # O15 — the only terrain the map has: hand-placed blobs of water, `{position, radius}`
 # each. A circle is the whole vocabulary; a lake is one, a river is a chain of
 # overlapping ones (see scenes/world/world.gd's _demo_world). Plain dictionaries
@@ -105,6 +126,10 @@ var waters: Array[Dictionary] = []
 func add_settlement(s: Settlement) -> Settlement:
 	settlements.append(s)
 	return s
+
+func add_lair(l: Lair) -> Lair:
+	lairs.append(l)
+	return l
 
 func add_party(p: RoamingParty) -> RoamingParty:
 	parties.append(p)

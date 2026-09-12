@@ -178,7 +178,17 @@ static func giver_node_id(s) -> String:
 			givers.append(q["giver_node_id"])
 	return String(givers[absi(hash(s.id)) % givers.size()])
 
-static func quest_offer(s, party) -> Dictionary:
+# T91: a settlement first tries a world-target quest (hunt a hostile band, raid
+# a hostile settlement, clear a lair) seeded off its own id — stable across the
+# repeated calls one open visit panel makes, and re-checked against the party's
+# log the same way CURATED already is, so an accepted/turned-in one doesn't
+# reappear. Falls back to the curated giver-node quest when `world` is unset
+# (any caller that predates T91) or nothing world-side qualifies right now.
+static func quest_offer(s, party, world = null) -> Dictionary:
+	if world != null:
+		var wq: Dictionary = Quest.world_quest_for(world, s, RNG.new(maxi(1, absi(hash(s.id)))))
+		if not wq.is_empty() and Quest.get_quest(party, wq["id"]).is_empty():
+			return wq
 	return Quest.offer_for(party, giver_node_id(s), FactionOpinion.get_opinion(s.faction))
 
 static func turn_ins(party) -> Array:
