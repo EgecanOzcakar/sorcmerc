@@ -66,23 +66,26 @@ const ZOOM_MAX := 2.5
 # O12: was 90, which read as a handful of huge diamonds at the default camera
 # distance; 50 was picked by rendering tests/shot_world.gd at both (and at 60,
 # still coarse) and looking.
-# T-tiles: dropped again to 30 (more, smaller tiles — the SBS photo-textures
-# read better at higher density than the old flat-color pack did) — that's
-# (50/30)^2 ~= 2.8x as many cells at any given zoom, so MAX_CELLS is scaled by
-# the same factor to keep the same "give up and flat-fill" zoom threshold
-# rather than tripping it sooner. MAX_CELLS is still not a free number: this
-# viewport needs 783 cells at zoom 1.0 at CELL 50 (it needed 255 at CELL 90),
-# and the old 900 was exactly "still paint at zoom 0.5, give up below it".
-const CELL := 30.0          # ground patch size, in world units
-const MAX_CELLS := 7900     # cap the ground loop when zoomed far out
+# T-tiles: dropped hard, to 15 — much smaller tiles read as a smoother, less
+# obviously-diamond-tiled field on the current (Screaming Brain Studios
+# Overworld) pack this stayed on; the SBS Floor Pack spike (SORCMERC_ALT_TILES
+# =sbs) was tried and set aside, not adopted. That's (50/15)^2 ~= 11.1x as many
+# cells at any given zoom, so MAX_CELLS is scaled by the same factor to keep
+# the same "give up and flat-fill" zoom threshold rather than tripping it
+# sooner. MAX_CELLS is still not a free number: this viewport needs 783 cells
+# at zoom 1.0 at CELL 50 (it needed 255 at CELL 90), and the old 900 was
+# exactly "still paint at zoom 0.5, give up below it".
+const CELL := 15.0          # ground patch size, in world units
+const MAX_CELLS := 32000    # cap the ground loop when zoomed far out
 # T-tiles: same terrain-variant pick clusters over a TILE_CLUSTER x TILE_CLUSTER
 # block of cells instead of re-rolling every single one — large patches of one
-# texture instead of a different tile every neighbour (the SBS pack's 18 wildly
-# different textures per pool made that read as noise, not a field). The
-# shoreline's own per-cell dither (_rand(cell, 9) below) is deliberately left
-# alone — that's what frays the bank into an organic edge instead of a hard
-# tile-aligned line, clustering it would make the water's edge blocky instead.
-const TILE_CLUSTER := 4
+# texture instead of a different tile every neighbour. Doubled from 4 to 8
+# alongside CELL's halving so a patch still covers the same ~120x120 world
+# units, not a smaller, choppier-looking one. The shoreline's own per-cell
+# dither (_rand(cell, 9) below) is deliberately left alone — that's what frays
+# the bank into an organic edge instead of a hard tile-aligned line,
+# clustering it would make the water's edge blocky instead.
+const TILE_CLUSTER := 8
 
 # Ground: O11's Screaming Brain Studios Isometric Tiles Overworld pack, CC0.
 # Buildings: O12's rubberduck isometric medieval buildings 1+2, CC0 — the Town
