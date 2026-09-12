@@ -188,19 +188,32 @@ func show_party_setup() -> void:
 	screen.party = party
 	wrap.add_child(screen)
 
-	var begin := Button.new()
-	begin.text = "Begin the run  →"
-	begin.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	begin.offset_left = -220; begin.offset_top = 12; begin.offset_right = -16
-	begin.pressed.connect(func():
+	# T-worlds: two world sizes, small (4 settlements, the original map) or
+	# large (8 settlements, more of everything — scenes/world/large_world.gd).
+	# Meaningless for the linear campaign, which never touches world.gd at
+	# all, so only the open-world path reads it.
+	var begin := func(size: String) -> void:
 		if party.active.is_empty():
 			screen._hint.text = "Put at least one character in the active party first."
 			return
 		if linear_campaign():
 			_show_campaign(Campaign.new(party, int(OS.get_environment("SORCMERC_SEED"))))
 		else:
-			show_world(party))
-	wrap.add_child(begin)
+			show_world(party, null, size)
+
+	var begin_small := Button.new()
+	begin_small.text = "Begin — Small World  →"
+	begin_small.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	begin_small.offset_left = -320; begin_small.offset_top = 12; begin_small.offset_right = -168
+	begin_small.pressed.connect(begin.bind("small"))
+	wrap.add_child(begin_small)
+
+	var begin_large := Button.new()
+	begin_large.text = "Begin — Large World  →"
+	begin_large.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	begin_large.offset_left = -160; begin_large.offset_top = 12; begin_large.offset_right = -16
+	begin_large.pressed.connect(begin.bind("large"))
+	wrap.add_child(begin_large)
 
 	var back := Button.new()
 	back.text = "←  Title"
@@ -213,13 +226,17 @@ func show_party_setup() -> void:
 # --- the open world (normal play) -----------------------------------------
 #
 # O8: the whole integration is one field — the party the player just assembled
-# goes in instead of world.gd's demo roster fallback. The starting map itself is
-# world.gd's own _demo_world() layout (4 settlements, 3 bands); generating a
-# richer world is not this phase's job.
-# `world` is O13's resume path: a loaded map instead of world.gd's _demo_world().
-func show_world(party, world = null) -> void:
+# goes in instead of world.gd's demo roster fallback. The starting map itself
+# is one of world.gd's two built-in ones (_small_world / _large_world via
+# large_world.gd), picked by the button below; procedurally generating a map
+# is not this phase's job.
+# `world` is O13's resume path: a loaded map instead of one of world.gd's own
+# built-in ones. `size` ("small" | "large") only matters when `world` is
+# null — a resumed save already has its map, the size that built it is moot.
+func show_world(party, world = null, size := "small") -> void:
 	var screen = load(WORLD_SCENE).instantiate()
 	screen.party = party
+	screen.world_size = size
 	if world != null:
 		screen.world = world
 	_swap(screen)

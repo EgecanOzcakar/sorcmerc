@@ -140,10 +140,12 @@ var _lair_msg: Label                 # the last search/loot outcome — persists
 var _settlements3d
 var _lairs3d
 var _party3d
+var world_size := "small"   # "small" | "large" — which built-in map _ready() falls back to
+                             # when nobody injected a `world` (a fresh start, not O13's resume)
 
 func _ready() -> void:
 	if world == null:
-		world = _demo_world()
+		world = _large_world() if world_size == "large" else _small_world()
 	if party == null:               # same demo roster scenes/campaign/campaign.gd falls back to
 		party = Party.new()
 		for ch in Party.demo_roster():
@@ -165,11 +167,18 @@ func _ready() -> void:
 
 # Hand-placed stand-ins so the scene has something to render and move. Real
 # spawning is a later phase's job (O3 onward).
-func _demo_world() -> World:
+const LargeWorld = preload("res://scenes/world/large_world.gd")
+
+func _large_world() -> World:
+	return LargeWorld.build()
+
+# T90: one settlement per playable race — dwarf/elf/human/orc, "for now" per
+# the brief. Orc is the hostile one (world_ai.gd CIVILIZED), same role
+# "cultist" had; the other three are the friendly, tradeable factions.
+# T-worlds: kept as the small map once _large_world() existed to contrast it
+# with — same content it always had, just renamed and no longer the only one.
+func _small_world() -> World:
 	var w := World.new()
-	# T90: one settlement per playable race — dwarf/elf/human/orc, "for now" per
-	# the brief. Orc is the hostile one (world_ai.gd CIVILIZED), same role
-	# "cultist" had; the other three are the friendly, tradeable factions.
 	w.add_settlement(World.Settlement.new("riverhold", Vector2(0, 0), "human", "city"))
 	w.add_settlement(World.Settlement.new("greenmarch", Vector2(420, -180), "elf", "town"))
 	w.add_settlement(World.Settlement.new("dun-arrow", Vector2(-360, 260), "dwarf", "camp"))
