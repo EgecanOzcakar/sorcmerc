@@ -56,6 +56,35 @@ tools/gen_audio.py procedurally synthesizes every SFX/music/bark asset under
                    after editing it to regenerate
 ```
 
+## Assets and provenance
+
+AI generation **may** be used for visual assets and for music/audio. This replaces the
+project's earlier all-deterministic stance (policy changed 2026-09-12). The constraint
+was dropped; the obligation it existed to avoid was not.
+
+**Steam disclosure.** Shipping AI-generated art or audio requires declaring it in the
+store page's AI content disclosure at publish time. Steam's form changed on 2026-01-16:
+AI *coding* assistants are exempt, shipped AI-generated *art and audio* are not.
+Whoever completes that form months from now needs to know what actually went into the
+build — which is the point of the table below.
+
+**Provenance stays decidable per asset.** Generated and hand-made/licensed assets live
+in separate directories, so any file's origin is answerable from its path alone:
+
+| Path | Origin | Recorded in |
+|---|---|---|
+| `assets/audio/` | procedurally synthesized, stdlib only — **not AI** | `tools/gen_audio.py` |
+| `assets/lpc/` | Liberated Pixel Cup art, CC-BY-SA 3.0 / GPL-3.0 / OGA-BY 3.0 | `assets/lpc/CREDITS.csv`, `LICENSES/` |
+| `assets/generated/` | sheets composited from `assets/lpc/` | `*_credits.txt` per sheet |
+| `assets/world/` | sourced packs | `License.txt` per subdirectory |
+| `assets/fonts/` | DejaVu | `LICENSE-DejaVu.txt` |
+
+**As of 2026-09-12 nothing in this repo is AI-generated.** Anything added under the new
+policy goes in its own directory with the tool and date recorded alongside it, the same
+way every directory above already carries its origin. Don't mix generated and licensed
+assets in one folder — that is what makes the disclosure question answerable later
+without archaeology.
+
 ## Run
 
 Godot 4.7 is installed as a Flatpak here. A shorthand:
