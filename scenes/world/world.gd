@@ -18,10 +18,12 @@ extends Control
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const WorldBattle = preload("res://core/world_battle.gd")
+const Settlements3D := preload("res://scenes/world/settlements3d.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const WorldLairs = preload("res://core/world_lairs.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
 const Sound = preload("res://core/audio.gd")
@@ -129,6 +131,11 @@ var _visit_log: Label = null
 var _left: Object = null         # the settlement just left; no re-entry until out of range
 var _party_overlay: Control = null   # T3's party/profile/inventory screen, full-screen
 var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.active/describe
+var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
+var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
+var _lair_msg: Label                 # the last search/loot outcome — persists past the
+                                      # button's own text, which _check_lairs() overwrites every frame
+var _settlements3d
 
 func _ready() -> void:
 	if world == null:
@@ -137,6 +144,10 @@ func _ready() -> void:
 		party = Party.new()
 		for ch in Party.demo_roster():
 			party.add_member(ch)
+	_settlements3d = Settlements3D.new()
+	_settlements3d.world_map = self
+	add_child(_settlements3d)
+	_settlements3d.reset(world)
 	set_process(true)
 	_build_hud()
 
@@ -144,14 +155,17 @@ func _ready() -> void:
 # spawning is a later phase's job (O3 onward).
 func _demo_world() -> World:
 	var w := World.new()
-	w.add_settlement(World.Settlement.new("riverhold", Vector2(0, 0), "soldier", "city"))
-	w.add_settlement(World.Settlement.new("greenmarch", Vector2(420, -180), "soldier", "town"))
-	w.add_settlement(World.Settlement.new("dun-arrow", Vector2(-360, 260), "soldier", "town"))
-	w.add_settlement(World.Settlement.new("ashfell", Vector2(160, 470), "cultist", "city"))
-	w.add_party(World.RoamingParty.new("player", Vector2(80, 120), "soldier", true))
+	# T90: one settlement per playable race — dwarf/elf/human/orc, "for now" per
+	# the brief. Orc is the hostile one (world_ai.gd CIVILIZED), same role
+	# "cultist" had; the other three are the friendly, tradeable factions.
+	w.add_settlement(World.Settlement.new("riverhold", Vector2(0, 0), "human", "city"))
+	w.add_settlement(World.Settlement.new("greenmarch", Vector2(420, -180), "elf", "town"))
+	w.add_settlement(World.Settlement.new("dun-arrow", Vector2(-360, 260), "dwarf", "camp"))
+	w.add_settlement(World.Settlement.new("ashfell", Vector2(160, 470), "orc", "city"))
+	w.add_party(World.RoamingParty.new("player", Vector2(80, 120), "human", true))
 	WorldAI.hunt(w.add_party(World.RoamingParty.new("bandits", Vector2(-250, -120), "bandit")))
 	WorldAI.hunt(w.add_party(World.RoamingParty.new("goblins", Vector2(380, 300), "goblinoid")))
-	WorldAI.patrol(w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "soldier")),
+	WorldAI.patrol(w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "human")),
 		[Vector2(-120, 380), Vector2(-360, 260), Vector2(0, 0)])
 	# O15 terrain: one lake northwest of Riverhold, and the river it drains into —
 	# which runs past Riverhold's west wall and down to Ashfell, so the town's name
@@ -165,6 +179,15 @@ func _demo_world() -> World:
 		for t in 5:
 			w.add_water(river[i].lerp(river[i + 1], t / 5.0), 40.0)
 	w.add_water(river[-1], 40.0)
+
+	# T91: five hidden monster lairs — the initial roster the brief named. Hidden
+	# until a Survival check finds them (WorldLairs.DISCOVER_RADIUS), then
+	# attackable like a hostile settlement's guard for their own stash.
+	w.add_lair(World.Lair.new("goblin-warren", Vector2(560, 60), "goblinoid"))
+	w.add_lair(World.Lair.new("giant-hold", Vector2(-520, -260), "giant"))
+	w.add_lair(World.Lair.new("sunken-ruins", Vector2(-280, -340), "undead", "Sunken Ruins"))
+	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(300, 620), "undead", "Zombie Graveyard"))
+	w.add_lair(World.Lair.new("dragon-cave", Vector2(680, -400), "dragon", "Dragon's Cave"))
 	return w
 
 # World.tick() advances the clock itself and gates movement on it, so one call
@@ -184,6 +207,7 @@ func _process(delta: float) -> void:
 		for r in WorldBattle.check(world, _trigger(dt), encounter_spec):
 			Visit.mark_battle(world, r["loser"].position, world.clock.elapsed)
 	_check_visit()
+	_check_lairs()
 	if _clock_lbl != null:
 		_clock_lbl.text = "Day %d  %02d:%02d" % [
 			int(world.clock.elapsed / 1440.0) + 1,
@@ -219,10 +243,17 @@ func _build_hud() -> void:
 	title.text = "←  Title"
 	title.pressed.connect(_leave_world)
 	bar.add_child(title)
+	_lair_btn = Button.new()
+	_lair_btn.visible = false
+	_lair_btn.pressed.connect(_lair_action)
+	bar.add_child(_lair_btn)
 	var hint := Label.new()
 	hint.text = "right-click: march here   ·   drag: pan   ·   wheel: zoom"
 	hint.add_theme_color_override("font_color", Icons.COL_MUTED)
 	bar.add_child(hint)
+	_lair_msg = Label.new()
+	_lair_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
+	bar.add_child(_lair_msg)
 
 # O9 item 2: the only way out of the open world. The characters go to the barracks
 # (what the title screen's count reads); O13: the map, the party's purse/stash/quests
@@ -408,7 +439,7 @@ func encounter_spec(foe) -> Dictionary:
 
 # The same hand-off scenes/campaign/campaign.gd's _launch_combat() does: the map
 # freezes, scenes/main.tscn runs the fight unchanged, `result` comes back.
-func _launch_combat(foe) -> void:
+func _launch_combat(foe) -> Dictionary:
 	world.clock.pause()
 	_combat_overlay = Control.new()
 	_combat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -422,7 +453,7 @@ func _launch_combat(foe) -> void:
 	while _combat != null and _combat.result.is_empty():
 		await get_tree().process_frame
 	if _combat == null:
-		return
+		return {}
 	var result: Dictionary = _combat.result
 	_combat = null
 	_combat_overlay.queue_free()
@@ -430,6 +461,10 @@ func _launch_combat(foe) -> void:
 	if String(result.get("outcome", "")) == "Victory":
 		_bank(result)
 		world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
+		# T91: a no-op for the settlement-guard/lair-raid stand-ins below (their
+		# synthetic ids never match a live hunt_party quest's target), correct
+		# for an actual hostile roaming party from _check_encounter.
+		Quest.record_party_defeated(party, foe.id)
 		# O7 raise/lower event: putting down a monster band is a favour to whoever
 		# lives near the bodies; putting down a faction's own band is not.
 		if WorldAI.is_monster(foe.faction):
@@ -441,6 +476,7 @@ func _launch_combat(foe) -> void:
 	world.clock.resume()
 	WorldSave.save(world, party)   # O13 autosave: a fight is the biggest thing that
 	                               # happens to a run — never re-fight it after a crash
+	return result
 
 # O9 item 2: a won fight has to actually pay, or the run is a dead end. The same
 # four things core/campaign.gd's finish_combat() banks, minus the linear run's own
@@ -504,10 +540,68 @@ func _check_visit() -> void:
 		# too. Same gate _check_encounter() uses.
 		if WorldAI.is_monster(s.faction) or FactionOpinion.guards_attack(s.faction):
 			_left = s
-			_launch_combat(World.RoamingParty.new("%s-guard" % s.id, s.position, s.faction))
+			_settlement_guard_fight(s)
 			return
 		_open_visit(s)
 		return
+
+# --- T91: monster lairs -------------------------------------------------
+# Same "one button, updated every frame the player is in range" shape as the
+# visit gate above, but two states instead of one: undiscovered offers a
+# Survival check, discovered-and-unlooted offers the fight. A looted lair (or
+# nothing in range) hides the button — there is nothing left to do there.
+func _check_lairs() -> void:
+	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+		_lair_btn.visible = false
+		return
+	var p := world.player()
+	if p == null:
+		_lair_btn.visible = false
+		return
+	var undiscovered = WorldLairs.nearby_undiscovered(world, p.position)
+	var target = undiscovered
+	if target == null:
+		for l in world.lairs:
+			if l.discovered and not l.looted and l.position.distance_to(p.position) <= WorldLairs.DISCOVER_RADIUS:
+				target = l
+				break
+	_lair_target = target
+	if target == null:
+		_lair_btn.visible = false
+		return
+	_lair_btn.visible = true
+	_lair_btn.text = ("Search for a hidden lair (Survival)" if not target.discovered
+		else "Attack %s" % target.sname)
+
+func _lair_action() -> void:
+	var l: World.Lair = _lair_target
+	if l == null or _combat != null:
+		return
+	if not l.discovered:
+		var roll := WorldLairs.search(l, party)
+		if roll.is_empty():
+			return
+		if roll["ok"]:
+			_lair_msg.text = "%s finds the tracks — %s is here (Survival %d+%d vs DC %d)." % [
+				roll["cname"], l.sname, roll["nat"], roll["bonus"], roll["dc"]]
+		else:
+			_lair_msg.text = "Nothing this time (Survival %d+%d vs DC %d)." % [
+				roll["nat"], roll["bonus"], roll["dc"]]
+		return
+	var result: Dictionary = await _launch_combat(World.RoamingParty.new("%s-raid" % l.id, l.position, l.faction))
+	if String(result.get("outcome", "")) == "Victory":
+		var loot: Dictionary = WorldLairs.loot(l)
+		party.add_gold(int(loot.get("gold", 0)))
+		Quest.record_lair_cleared(party, l.id)
+		_lair_msg.text = "%s is cleared out — +%d gold from its stash." % [l.sname, int(loot.get("gold", 0))]
+
+# T91: split out of _check_visit so it can await the fight — the stand-in id
+# ("%s-guard") never matches a hunt_party quest's target, so raid_settlement
+# is recorded here with the settlement's own id rather than in _launch_combat.
+func _settlement_guard_fight(s) -> void:
+	var result: Dictionary = await _launch_combat(World.RoamingParty.new("%s-guard" % s.id, s.position, s.faction))
+	if String(result.get("outcome", "")) == "Victory":
+		Quest.record_settlement_raided(party, s.id)
 
 func _open_visit(s) -> void:
 	world.clock.pause()
@@ -565,7 +659,7 @@ func _rest() -> void:
 
 # O9 item 4: T9's quest verbs, reached from a settlement at last.
 func _take_quest() -> void:
-	var q: Dictionary = Visit.quest_offer(_visit["settlement"], party)
+	var q: Dictionary = Visit.quest_offer(_visit["settlement"], party, world)
 	if Quest.accept(party, q):
 		_build_visit_panel()
 		_say("Job taken: %s" % q["title"])
@@ -635,7 +729,7 @@ func _build_visit_panel() -> void:
 
 	# O9 item 4: one offer, one row per finished job. Quest.offer_for()/turn_in() as
 	# they stand; nothing here decides anything about quests.
-	var offer: Dictionary = Visit.quest_offer(s, party)
+	var offer: Dictionary = Visit.quest_offer(s, party, world)
 	if not offer.is_empty():
 		_trade_row(rows, "Job: %s — %d gp" % [
 			offer["title"], int(offer.get("reward", {}).get("gold", 0))], "Take", _take_quest)
@@ -772,6 +866,9 @@ func _draw() -> void:
 	var props: Array = []
 	for s in world.settlements:
 		props.append({"at": _pix(s.position), "s": s})
+	for l in world.lairs:
+		if l.discovered:   # T91: undiscovered lairs draw nothing — that's the point
+			props.append({"at": _pix(l.position), "l": l})
 	for q in world.parties:
 		if q.is_player and not _visit.is_empty():
 			continue   # inside the gates for the duration of the visit, not standing on the map
@@ -780,6 +877,8 @@ func _draw() -> void:
 	for d in props:
 		if d.has("s"):
 			_draw_settlement(d["s"], d["at"])
+		elif d.has("l"):
+			_draw_lair(d["l"], d["at"])
 		else:
 			_draw_party(d["p"], d["at"])
 
@@ -828,10 +927,29 @@ func _draw_ground() -> void:
 # gets three, a town two, painter-sorted among themselves. The footprint ring
 # stays: every faction's walls are the same stone, and faction is the one thing
 # the map still has to read at a glance.
+# T91: a discovered lair — a plain skull-marked circle, no building sprite (no
+# model exists yet; see kitbashforge/NEXT_BATCH.md). Grey once looted, faction-
+# tinted red while there's still a fight in it, so a glance says which lairs
+# are done.
+func _draw_lair(l, at: Vector2) -> void:
+	var col := Icons.COL_MUTED if l.looted else Icons.COL_FOE
+	var r := 14.0 * _zoom
+	_soft_shadow(at, r * 0.85)
+	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
+	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
+	var fs := int(18 * _zoom)
+	draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Icons.COL_HEAD)
+	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), l.sname,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
+
 func _draw_settlement(s, at: Vector2) -> void:
 	var col := faction_color(s.faction)
 	var big: bool = s.kind == "city"
-	var r := (26.0 if big else 17.0) * _zoom
+	# T90: "camp" is the smallest tier (one lean-to, no ring flourish scale-up) —
+	# everything below city was "town" before there were three sizes.
+	var small: bool = s.kind == "camp"
+	var r := (26.0 if big else (12.0 if small else 17.0)) * _zoom
 	_soft_shadow(at, r * 0.9)
 	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
 	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
@@ -840,20 +958,24 @@ func _draw_settlement(s, at: Vector2) -> void:
 	var style: int = absi(hash(s.faction))
 	var pair: int = absi(hash(s.id))
 	var blocks := [Vector2(0, 0), Vector2(-0.5, 0.35), Vector2(0.5, 0.3)] if big \
-		else [Vector2(0, 0), Vector2(0.45, 0.3)]
-	var h := r * (3.2 if big else 2.8)
+		else ([Vector2(0, 0)] if small else [Vector2(0, 0), Vector2(0.45, 0.3)])
+	var h := r * (3.2 if big else (2.4 if small else 2.8))
 	# BUILDING_ANCHOR sits near the sprite's bottom (112 of 120px tall), so a house
 	# drawn at `base` reads as mostly-above it — a cluster whose bases sit on the
 	# ring reads as pushed toward the ring's back half. Nudge every base down by
 	# the gap between the anchor and the sprite's true vertical centre so the
 	# cluster's visual mass, not its ground corner, is what centres on the ring.
 	var vcenter := Vector2(0.0, (BUILDING_ANCHOR.y - BUILDING.y * 0.5) * 0.3 * h / BUILDING.y)
-	var bases: Array = []
-	for b in blocks:
-		bases.append(at + _iso(b * r) + vcenter)
-	bases.sort_custom(func(a, b): return a.y < b.y)
-	for k in bases.size():
-		_draw_building(bases[k], h, style + k, pair + k)
+	# Tier 0: a 3D diorama in the Settlements3D layer above this map. Same
+	# contract as Figures3D on the combat board — it replaces the building
+	# blocks only; shadow, ring and name label above/below stay shared.
+	if not (_settlements3d and _settlements3d.has_model(s)):
+		var bases: Array = []
+		for b in blocks:
+			bases.append(at + _iso(b * r) + vcenter)
+		bases.sort_custom(func(a, b): return a.y < b.y)
+		for k in bases.size():
+			_draw_building(bases[k], h, style + k, pair + k)
 	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), s.sname,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
 

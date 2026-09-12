@@ -3,13 +3,21 @@
 # The party owns the log (`party.quests`); nothing here holds state.
 #
 # Quest shape:
-#   id, giver_node_id, title, kind: "kill_count" | "collect_item",
+#   id, giver_node_id, title, kind: "kill_count" | "collect_item" | "hunt_party" |
+#     "raid_settlement" | "clear_lair",
 #   target_monster_id, target_item_id + drop_chance (collect_item only),
+#   target_party_id (hunt_party) / target_settlement_id (raid_settlement) /
+#     target_lair_id (clear_lair) — T91, live open-world objects rather than the
+#     campaign's own hand-authored monster ids, so these three complete via
+#     record_party_defeated/record_settlement_raided/record_lair_cleared instead
+#     of record_kills. required is always 1 for them: the target either still
+#     exists or it doesn't.
 #   required, progress, state: "offered" | "active" | "complete" | "turned_in",
 #   reward: {gold, item_id (optional)}
 extends RefCounted
 
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const WorldAI = preload("res://core/world_ai.gd")
 
 const BIAS_WEIGHT := 2.0   # what an unfulfilled quest is worth to Scaler.roster_for
 
@@ -89,6 +97,42 @@ static func offer_for(party, node_id: String, opinion := 0.0) -> Dictionary:
 				return fresh(q["id"])
 	return {}
 
+# T91: a quest targeting a live open-world object instead of a curated monster
+# id — offered wherever a settlement can give a quest (core/settlement_visit.gd),
+# alongside CURATED. Picks one eligible target at random from whatever the
+# world actually has right now (a hostile roaming party, another hostile
+# settlement, or an unlooted lair) and returns {} if nothing qualifies.
+static func world_quest_for(world, giver_settlement, rng) -> Dictionary:
+	var pool: Array = []
+	for p in world.parties:
+		if not p.is_player and WorldAI.is_monster(p.faction):
+			pool.append({"kind": "hunt_party", "id": p.id, "name": p.id.capitalize()})
+	for s in world.settlements:
+		if s.id != giver_settlement.id and WorldAI.is_monster(s.faction):
+			pool.append({"kind": "raid_settlement", "id": s.id, "name": s.sname})
+	for l in world.lairs:
+		if not l.looted:
+			pool.append({"kind": "clear_lair", "id": l.id, "name": l.sname})
+	if pool.is_empty():
+		return {}
+	var pick: Dictionary = pool[rng.roll_die(pool.size()) - 1]
+	var out := {
+		"id": "world:%s:%s" % [pick["kind"], pick["id"]],
+		"giver_node_id": giver_settlement.id, "state": "offered", "progress": 0, "required": 1,
+		"kind": pick["kind"], "reward": {"gold": 80 + rng.roll_die(120)},
+	}
+	match String(pick["kind"]):
+		"hunt_party":
+			out["title"] = "Hunt down the %s band" % pick["name"]
+			out["target_party_id"] = pick["id"]
+		"raid_settlement":
+			out["title"] = "Raid %s" % pick["name"]
+			out["target_settlement_id"] = pick["id"]
+		"clear_lair":
+			out["title"] = "Clear out %s" % pick["name"]
+			out["target_lair_id"] = pick["id"]
+	return out
+
 static func accept(party, quest: Dictionary) -> bool:
 	if quest.is_empty() or not get_quest(party, quest["id"]).is_empty():
 		return false
@@ -132,6 +176,23 @@ static func record_kills(party, kills: Array, rng) -> Array:
 			q["state"] = "complete"
 			lines.append("%s: ready to turn in." % q["title"])
 	return lines
+
+# T91: the three world-target kinds complete in one shot (required is always
+# 1) the moment their target stops existing / is looted — no per-kill tally.
+static func _complete_world_target(party, kind: String, field: String, id: String) -> void:
+	for q in party.quests:
+		if q["state"] == "active" and q["kind"] == kind and String(q.get(field, "")) == id:
+			q["progress"] = 1
+			q["state"] = "complete"
+
+static func record_party_defeated(party, party_id: String) -> void:
+	_complete_world_target(party, "hunt_party", "target_party_id", party_id)
+
+static func record_settlement_raided(party, settlement_id: String) -> void:
+	_complete_world_target(party, "raid_settlement", "target_settlement_id", settlement_id)
+
+static func record_lair_cleared(party, lair_id: String) -> void:
+	_complete_world_target(party, "clear_lair", "target_lair_id", lair_id)
 
 static func can_turn_in(quest: Dictionary) -> bool:
 	return not quest.is_empty() and quest["state"] in ["active", "complete"] \

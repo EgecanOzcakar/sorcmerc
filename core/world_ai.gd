@@ -22,7 +22,7 @@ const FactionOpinion = preload("res://core/faction_opinion.gd")
 # every other entry is a monster/bandit faction. Per the plan doc, conflict is
 # monsters vs. settlements/player — never civilized vs. civilized — so one
 # civilized bucket is all the hostility rule needs.
-const CIVILIZED := ["soldier"]
+const CIVILIZED := ["dwarf", "elf", "human"]   # orc settlements are hostile, same role "cultist" had
 
 static func is_monster(faction: String) -> bool:
 	return not CIVILIZED.has(faction)

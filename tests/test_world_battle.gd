@@ -44,7 +44,7 @@ func _world(pairs: Array) -> World:
 
 func test_hostile_pair_fights_and_one_dies() -> void:
 	var w := _world([["raiders", Vector2.ZERO, "bandit"],
-		["patrol", Vector2(RADIUS - 4.0, 0), "soldier"]])
+		["patrol", Vector2(RADIUS - 4.0, 0), "human"]])
 	var before: Array = w.parties.duplicate()
 	var out: Array = WorldBattle.check(w, RADIUS, _spec)
 	check(out.size() == 1, "one meeting, one battle (got %d)" % out.size())
@@ -62,7 +62,7 @@ func test_same_seed_same_survivor() -> void:
 	var first := ""
 	for i in 2:
 		var w := _world([["raiders", Vector2.ZERO, "bandit"],
-			["patrol", Vector2(10, 0), "soldier"]])
+			["patrol", Vector2(10, 0), "human"]])
 		WorldBattle.check(w, RADIUS, _spec)
 		if i == 0:
 			first = w.parties[0].id
@@ -71,8 +71,8 @@ func test_same_seed_same_survivor() -> void:
 				"the same meeting resolves the same way twice (%s vs %s)" % [first, w.parties[0].id])
 
 func test_civilized_pair_does_not_fight() -> void:
-	var w := _world([["patrol-a", Vector2.ZERO, "soldier"],
-		["patrol-b", Vector2(2, 2), "soldier"]])
+	var w := _world([["patrol-a", Vector2.ZERO, "human"],
+		["patrol-b", Vector2(2, 2), "human"]])
 	check(WorldBattle.check(w, RADIUS, _spec).is_empty(), "two garrisons touching do not fight")
 	check(w.parties.size() == 2, "and both are still on the map")
 
@@ -80,10 +80,10 @@ func test_player_pairs_are_left_to_o4() -> void:
 	# Mixed scene: the player is stacked on a hostile band (O4's trigger fires on
 	# this, not O5's), and two NPCs meet elsewhere.
 	var w := _world([
-		["player", Vector2.ZERO, "soldier", true],
+		["player", Vector2.ZERO, "human", true],
 		["ambushers", Vector2(3, 0), "bandit"],
 		["raiders", Vector2(500, 0), "goblinoid"],
-		["patrol", Vector2(505, 0), "soldier"]])
+		["patrol", Vector2(505, 0), "human"]])
 	var out: Array = WorldBattle.check(w, RADIUS, _spec)
 	check(out.size() == 1, "only the NPC-vs-NPC meeting resolved (got %d)" % out.size())
 	check(w.player() != null, "the player is never resolved away")
@@ -93,6 +93,6 @@ func test_player_pairs_are_left_to_o4() -> void:
 
 func test_out_of_radius_is_peace() -> void:
 	var w := _world([["raiders", Vector2.ZERO, "bandit"],
-		["patrol", Vector2(RADIUS + 1.0, 0), "soldier"]])
+		["patrol", Vector2(RADIUS + 1.0, 0), "human"]])
 	check(WorldBattle.check(w, RADIUS, _spec).is_empty(), "just outside the radius, nothing happens")
 	check(w.parties.size() == 2, "and nobody is removed")

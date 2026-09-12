@@ -1,0 +1,210 @@
+# Tier 0 of the token pipeline: a real 3D figure standing on its hex.
+#
+# One transparent SubViewport, its own 3D world, laid exactly over the Board it is a
+# child of. The camera is DERIVED from Board.ISO_* rather than tuned by hand, so a
+# figure placed at hex H lands on the same pixels Board._pix(H) produces — and because
+# positions are re-read from Board._tok (+ _lunge) every frame, figures slide, lunge,
+# pan and zoom identically to the vector tokens they replace. Change ISO_SQUASH and the
+# camera tilts with it; there is no second source of truth for the projection.
+#
+# What this layer does NOT own: shadow, active-turn ring, hit flash, HP bar, condition
+# tags. Those stay in Board._draw, shared with every tier — same contract as the LPC
+# sprite tier. Layering caveat: this draws above Board._draw, so a figure can cover the
+# HP bar of the hex behind it. Moving the HUD to a CanvasLayer above this is the fix;
+# ~30 lines, deliberately not in the spike.
+extends SubViewportContainer
+
+const Catalog = preload("res://core/rules/catalog.gd")
+
+# Same contract as LpcArt.BY_MONSTER (core/lpc_art.gd): a lookup, not a hardcoded
+# model, because coverage will always trail the 316-entry bestiary. A key with no
+# file on disk yet (roster generation is a slow background batch, see kitbashforge)
+# just falls through has_figure() to the vector disc/glyph tier — that's the
+# design, same as an uncovered LPC loadout, not a bug to chase per-monster.
+#
+# Heroes key by class id (core/character.gd, ids from data/classes.json — all 12);
+# foes by Catalog.monster(id)["faction"] (data/bestiary.json) — one look per
+# faction, not per bestiary id, since Board only ever fields one faction per
+# encounter (core/scaler.gd) and melee/archer variants already read as
+# different by pose.
+const HERO_MODELS := {
+	"barbarian": "res://assets/figures/barbarian_idle.glb",
+	"bard": "res://assets/figures/bard_idle.glb",
+	"cleric": "res://assets/figures/cleric_idle.glb",
+	"druid": "res://assets/figures/druid_idle.glb",
+	"fighter": "res://assets/figures/fighter_idle.glb",
+	"monk": "res://assets/figures/monk_idle.glb",
+	"paladin": "res://assets/figures/paladin_idle.glb",
+	"ranger": "res://assets/figures/ranger_idle.glb",
+	"rogue": "res://assets/figures/rogue_idle.glb",
+	"sorcerer": "res://assets/figures/sorcerer_idle.glb",
+	"warlock": "res://assets/figures/warlock_idle.glb",
+	"wizard": "res://assets/figures/wizard_idle.glb",
+}
+const FOE_MODELS := {
+	"goblinoid": "res://assets/figures/goblin_idle.glb",
+	"bandit": "res://assets/figures/bandit_idle.glb",
+	"soldier": "res://assets/figures/soldier_idle.glb",
+	"cultist": "res://assets/figures/cultist_idle.glb",
+	"kobold": "res://assets/figures/kobold_idle.glb",
+	"undead": "res://assets/figures/undead_idle.glb",
+}
+const FIGURE_SCALE := 1.25     # rig is 1.2 m tall, feet at y=0; ~1.5 hex radii so neighbours do not stack
+const CAM_DIST := 40.0
+
+var board: Control
+var main
+var cb
+var _sub: SubViewport
+var _cam: Camera3D
+var _figs := {}                # combatant id -> Node3D
+var _prev := {}                # combatant id -> last world position, for facing
+var _model_cache := {}         # path -> PackedScene, or null once if missing
+
+
+func _ready() -> void:
+	set_anchors_preset(Control.PRESET_FULL_RECT)
+	stretch = true
+	mouse_filter = Control.MOUSE_FILTER_IGNORE     # clicks fall through to the Board
+	_sub = SubViewport.new()
+	_sub.transparent_bg = true
+	_sub.own_world_3d = true
+	_sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_sub.gui_disable_input = true
+	# A manually-created SubViewport gets no AA by default (the root viewport's
+	# project-settings MSAA doesn't apply here) — silhouette edges and the 4k
+	# texture detail both alias hard without this. Screen-space AA (FXAA) needs
+	# Forward+/Mobile; this project runs GL Compatibility, so MSAA alone.
+	_sub.msaa_3d = Viewport.MSAA_4X
+	add_child(_sub)
+
+	var env := WorldEnvironment.new()
+	var e := Environment.new()
+	e.background_mode = Environment.BG_COLOR
+	e.background_color = Color(0, 0, 0, 0)
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	e.ambient_light_color = Color(0.50, 0.53, 0.60)
+	e.ambient_light_energy = 1.0
+	env.environment = e
+	_sub.add_child(env)
+
+	# Key light from the upper-left, the side Board.LIGHT shades the discs from.
+	var sun := DirectionalLight3D.new()
+	_sub.add_child(sun)
+	sun.rotation_degrees = Vector3(-55, -35, 0)
+	sun.light_energy = 1.0
+	sun.shadow_enabled = true
+
+	_cam = Camera3D.new()
+	_sub.add_child(_cam)
+	_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_cam.keep_aspect = Camera3D.KEEP_HEIGHT
+	_cam.near = 0.1
+	_cam.far = CAM_DIST * 4.0
+	_cam.current = true
+
+
+func _model_path(c) -> String:
+	if c.sheet != null:
+		# ResolvedCharacter.class_levels: {"rogue": 5, ...} — no single-class
+		# accessor (core/resolved.gd), so take the class carrying the most levels.
+		var cid := ""
+		var best := -1
+		for k in c.sheet.class_levels:
+			if c.sheet.class_levels[k] > best:
+				best = c.sheet.class_levels[k]; cid = k
+		return String(HERO_MODELS.get(cid, ""))
+	if c.src_id == "":
+		return ""
+	return String(FOE_MODELS.get(String(Catalog.monster(c.src_id).get("faction", "")), ""))
+
+
+func _model(path: String) -> PackedScene:
+	if not _model_cache.has(path):
+		_model_cache[path] = load(path) if ResourceLoader.exists(path) else null
+	return _model_cache[path]
+
+
+func has_figure(c) -> bool:
+	return _figs.has(c.id)
+
+
+func reset(_cb) -> void:
+	cb = _cb
+	for n in _figs.values():
+		n.queue_free()
+	_figs.clear()
+	_prev.clear()
+	for c in cb.combatants:
+		var scene := _model(_model_path(c))
+		if scene == null:
+			continue          # no model for this class/faction yet — vector disc/glyph tier draws it
+		var holder := Node3D.new()
+		_sub.add_child(holder)
+		var m := scene.instantiate()
+		holder.add_child(m)
+		var ap: AnimationPlayer = m.find_child("AnimationPlayer", true, false)
+		if ap:
+			var clip: String = ap.get_animation_list()[0]
+			ap.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
+			ap.play(clip)
+			ap.seek(randf() * ap.get_animation(clip).length)   # desync the roster
+		_figs[c.id] = holder
+
+
+# --- projection: the exact inverse of Board._iso -------------------------------
+#
+# Board:  screen = _origin + (K*x, K*z*SQUASH)   for a ground point (x, 0, z),
+#         where K = ISO_GAIN * hex_px is pixels per world unit and one world unit
+#         is one hex radius. An orthographic camera tilted DOWN by theta = asin(SQUASH)
+#         reproduces that squash on the ground and shows height foreshortened by
+#         cos(theta), which is the right thing for a standing figure.
+
+func px_per_unit() -> float:
+	return board.ISO_GAIN * main.hex_px
+
+func theta() -> float:
+	return asin(board.ISO_SQUASH)
+
+func world_for_screen(p: Vector2) -> Vector3:
+	var d: Vector2 = p - board._origin
+	var K := px_per_unit()
+	return Vector3(d.x / K, 0.0, d.y / (K * board.ISO_SQUASH))
+
+func screen_for_world(w: Vector3) -> Vector2:
+	var K := px_per_unit()
+	var th := theta()
+	return board._origin + Vector2(K * w.x, K * (w.z * sin(th) - w.y * cos(th)))
+
+
+func _process(_dt: float) -> void:
+	if cb == null or board == null or main == null:
+		return
+	# Anchors alone don't track the Board (it isn't a Container): pin the rect by hand.
+	position = Vector2.ZERO
+	size = board.size
+	var th := theta()
+	var target := world_for_screen(board.size * 0.5)          # ground under the centre
+	var back := Vector3(0.0, sin(th), cos(th))
+	_cam.look_at_from_position(target + back * CAM_DIST, target, Vector3.UP)
+	_cam.size = board.size.y / px_per_unit()                    # KEEP_HEIGHT => px/unit == K
+
+	for c in cb.combatants:
+		var n: Node3D = _figs.get(c.id)
+		if n == null:
+			continue
+		n.visible = not c.is_dead()
+		var p: Vector2 = board._tok.get(c.id, board._pix(c.pos)) + board._lunge(c.id)
+		n.position = world_for_screen(p)
+		n.scale = Vector3.ONE * FIGURE_SCALE
+		# Face the direction of travel and keep facing it on arrival. The model's
+		# forward is +Z (glTF), so yaw = atan2(dx, dz). _lunge feeds in here too, so a
+		# melee jab turns the figure toward its target for free. Shipped facing is
+		# toward the camera, which is what an un-moved figure keeps.
+		if _prev.has(c.id):
+			var d: Vector3 = n.position - _prev[c.id]
+			d.y = 0.0
+			if d.length() > 0.004:
+				n.rotation.y = lerp_angle(n.rotation.y, atan2(d.x, d.z), 0.35)
+		_prev[c.id] = n.position
+		n.rotation.x = deg_to_rad(-80.0) if c.is_down() else 0.0   # unconscious: lying flat

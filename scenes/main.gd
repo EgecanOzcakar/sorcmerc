@@ -30,7 +30,8 @@ var _own_party := false
 
 const HEX_BASE := 34.0
 const REVEAL_PAUSE := 0.75  # beat to read the attack roll (0 under SORCMERC_FAST)
-var _zoom := 1.0
+const ZOOM_DEFAULT := 1.5     # ceiling: the board fits the whole map first (Board._layout)
+var _zoom := ZOOM_DEFAULT
 var _pan := Vector2.ZERO
 var hex_px: float:
 	get: return HEX_BASE * _zoom
@@ -61,6 +62,8 @@ var _verb_freq: Dictionary = {}
 @onready var _order := HBoxContainer.new()   # turn-order icon strip along the top
 @onready var _hint := Label.new()
 @onready var _board := Board.new()
+const Figures3D := preload("res://scenes/figures3d.gd")
+var _figures
 @onready var _actor := RichTextLabel.new()
 @onready var _buttons := GridContainer.new()
 @onready var _bscroll := ScrollContainer.new()
@@ -186,6 +189,10 @@ func _ready() -> void:
 	_board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_board.custom_minimum_size = Vector2(0, 240)
 	col.add_child(_board)
+	_figures = Figures3D.new()
+	_figures.board = _board
+	_figures.main = self
+	_board.add_child(_figures)
 
 	_actor.bbcode_enabled = true
 	_actor.fit_content = true
@@ -228,6 +235,8 @@ func _apply_ui_scale() -> void:
 
 func set_zoom(z: float) -> void:
 	_zoom = clampf(z, 0.45, 3.0)
+	if _board:
+		_board._auto_fit = false
 	_apply_ui_scale()
 	if _board:
 		_board.queue_redraw()
@@ -243,7 +252,7 @@ func _unhandled_key_input(e: InputEvent) -> void:
 	match e.keycode:
 		KEY_EQUAL, KEY_KP_ADD: set_zoom(_zoom * 1.1)
 		KEY_MINUS, KEY_KP_SUBTRACT: set_zoom(_zoom / 1.1)
-		KEY_HOME: _zoom = 1.0; _pan = Vector2.ZERO; _apply_ui_scale(); _board.queue_redraw()
+		KEY_HOME: _zoom = ZOOM_DEFAULT; _pan = Vector2.ZERO; _board._auto_fit = true; _apply_ui_scale(); _board.queue_redraw()
 		KEY_LEFT: pan_by(Vector2(40, 0))
 		KEY_RIGHT: pan_by(Vector2(-40, 0))
 		KEY_UP: pan_by(Vector2(0, 40))
@@ -299,6 +308,7 @@ func _new_game(forced := 0) -> void:
 	_logged = 0
 	_last_round = 1
 	_board.reset(cb)
+	_figures.reset(cb)
 	_flush_log()
 	_refresh()
 	# T39: surprise is settled before anyone acts. Unseen buys a deployment
@@ -331,6 +341,7 @@ func _swap_deploy(a, b) -> void:
 	b.pos = p
 	cb.log.append("%s and %s trade places before the fight." % [a.cname, b.cname])
 	_board.reset(cb)
+	_figures.reset(cb)
 	_flush_log()
 	_refresh()
 	_deploy_menu()
@@ -1162,9 +1173,11 @@ class Walk extends Control:
 #  Board — the hex map. Draws tiles, tokens, HP bars, highlights, juice.
 # =====================================================================
 class Board extends Control:
+	const USE_LPC_SPRITES := false   # off: heroes render as the vector disc/glyph, not 64px pixel art
 	var main
 	var cb
 	var _origin := Vector2.ZERO
+	var _auto_fit := false    # zoom-to-fit each layout until the user zooms (new fight, Home)
 	var _tok := {}        # id -> displayed pixel pos (for slide)
 	var _hp := {}         # id -> displayed hp value
 	var _floats: Array = []   # {pos: Vector2, text, color, age}
@@ -1237,6 +1250,7 @@ class Board extends Control:
 	func reset(_cb) -> void:
 		cb = _cb
 		_defeat = -1.0
+		_auto_fit = true
 		_tok.clear(); _hp.clear(); _floats.clear(); _flash.clear()
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
@@ -1275,6 +1289,18 @@ class Board extends Control:
 			var p := _iso(Hex.to_pixel(hx, main.hex_px))
 			mn = mn.min(p); mx = mx.max(p)
 		var span := mx - mn
+		# TFT-style: the whole map is on screen at once. Zoom down from ZOOM_DEFAULT
+		# until it fits (once per fight / Home), never up — small maps stay readable.
+		# Re-evaluated every layout (the rect settles over the first frames and
+		# font scale feeds back into it); the user's own zoom switches it off.
+		if _auto_fit and size.y > 0.0:
+			var fit: float = main._zoom * minf((size.x - 60.0) / span.x, (size.y - 40.0) / span.y)
+			var z := clampf(minf(main.ZOOM_DEFAULT, fit), 0.45, 3.0)
+			if not is_equal_approx(z, main._zoom):
+				main._zoom = z
+				main._apply_ui_scale()
+				_layout()
+				return
 		# keep the board from being panned entirely off-screen
 		var lim := (size + span) * 0.5 - Vector2(90, 60)
 		lim = lim.max(Vector2.ZERO)
@@ -1289,8 +1315,8 @@ class Board extends Control:
 	# ISO_SQUASH is the sine of the pitch, so 0.45 ≈ looking down from ~27°,
 	# the flat wide RTS angle rather than a steep 45° overhead.
 	# ponytail: fixed camera. Make these vars if it ever needs to orbit/tilt.
-	const ISO_YAW := 35.0
-	const ISO_SQUASH := 0.38
+	const ISO_YAW := -30.0    # long axis of the strip runs left-right, TFT-style; was 35
+	const ISO_SQUASH := 0.71    # sin(45°): a TFT-style three-quarter view; was 0.38 (22°)
 	const ISO_GAIN := 1.85    # the whole plane, scaled to fill the viewport
 
 	func _iso(v: Vector2) -> Vector2:
@@ -1713,7 +1739,14 @@ class Board extends Control:
 			# flash, HP bar, condition tags and the _tok/_lunge positioning above
 			# are shared with the vector token below, which still draws everyone
 			# the art doesn't cover.
-			if _draw_sprite(c, p, s, base):
+			# Tier 0: a 3D figure in the Figures3D layer above this Board. Same contract
+			# as the sprite tier below: it replaces the disc and glyph only.
+			if main._figures and main._figures.has_figure(c):
+				_draw_token_hud(c, p, tp, s, rad, fz)
+				continue
+			# ponytail: LPC pixel-art tier disabled — clashed against the 3D foes
+			# (T85). USE_LPC_SPRITES flips it back on; _draw_sprite is untouched.
+			if USE_LPC_SPRITES and _draw_sprite(c, p, s, base):
 				_draw_token_hud(c, p, tp, s, rad, fz)
 				continue
 			# The token is shaded like a ball: hotspot toward the light, falling
