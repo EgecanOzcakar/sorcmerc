@@ -22,14 +22,24 @@ const Catalog = preload("res://core/rules/catalog.gd")
 # just falls through has_figure() to the vector disc/glyph tier — that's the
 # design, same as an uncovered LPC loadout, not a bug to chase per-monster.
 #
-# Heroes key by ResolvedCharacter.class_id() (core/character.gd); foes by
-# Catalog.monster(id)["faction"] (data/bestiary.json) — one look per faction,
-# not per bestiary id, since Board only ever fields one faction per encounter
-# (core/scaler.gd) and melee/archer variants already read as different by pose.
+# Heroes key by class id (core/character.gd, ids from data/classes.json — all 12);
+# foes by Catalog.monster(id)["faction"] (data/bestiary.json) — one look per
+# faction, not per bestiary id, since Board only ever fields one faction per
+# encounter (core/scaler.gd) and melee/archer variants already read as
+# different by pose.
 const HERO_MODELS := {
-	"fighter": "res://assets/figures/fighter_idle.glb",
-	"rogue": "res://assets/figures/rogue_idle.glb",
+	"barbarian": "res://assets/figures/barbarian_idle.glb",
+	"bard": "res://assets/figures/bard_idle.glb",
 	"cleric": "res://assets/figures/cleric_idle.glb",
+	"druid": "res://assets/figures/druid_idle.glb",
+	"fighter": "res://assets/figures/fighter_idle.glb",
+	"monk": "res://assets/figures/monk_idle.glb",
+	"paladin": "res://assets/figures/paladin_idle.glb",
+	"ranger": "res://assets/figures/ranger_idle.glb",
+	"rogue": "res://assets/figures/rogue_idle.glb",
+	"sorcerer": "res://assets/figures/sorcerer_idle.glb",
+	"warlock": "res://assets/figures/warlock_idle.glb",
+	"wizard": "res://assets/figures/wizard_idle.glb",
 }
 const FOE_MODELS := {
 	"goblinoid": "res://assets/figures/goblin_idle.glb",
