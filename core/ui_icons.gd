@@ -132,6 +132,23 @@ static func school_color(school: String) -> Color:
 static func spell_school(spell_id: String) -> String:
 	return String(Catalog.spell(spell_id).get("school", ""))
 
+# --- action-bar verb glyphs -------------------------------------------------
+# One mark per verb `kind` (scenes/main.gd's BASIC + combat.gd's OFFERABLE) —
+# the action bar's icon-forward T-actionbar redesign. "spell" isn't listed:
+# a spell button uses school_glyph(spell_school(...)) instead, since a school
+# mark is more informative than one generic wand icon for every spell.
+const VERB_GLYPHS := {
+	"attack": "⚔", "offhand_attack": "⚔",
+	"shove": "⇉", "smash": "⚒", "help": "✚",
+	"dodge": "◈", "dash": "➤", "disengage": "↩", "hide": "☁",
+	"heal_self": "☤", "heal_ally": "☤",
+	"self_buff": "⬆", "ally_buff": "⬆",
+	"grant_action": "⏩", "attack_modifier": "◎", "save_effect": "⚡",
+}
+
+static func verb_glyph(kind: String) -> String:
+	return String(VERB_GLYPHS.get(kind, "·"))
+
 # "⟳ Fire Bolt" as bbcode, school-tinted mark, plain name.
 static func spell_bb(spell_id: String, text: String) -> String:
 	var sc := spell_school(spell_id)
