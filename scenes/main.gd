@@ -1071,6 +1071,7 @@ class Walk extends Control:
 #  Board — the hex map. Draws tiles, tokens, HP bars, highlights, juice.
 # =====================================================================
 class Board extends Control:
+	const USE_LPC_SPRITES := false   # off: heroes render as the vector disc/glyph, not 64px pixel art
 	var main
 	var cb
 	var _origin := Vector2.ZERO
@@ -1641,7 +1642,9 @@ class Board extends Control:
 			if main._figures and main._figures.has_figure(c):
 				_draw_token_hud(c, p, tp, s, rad, fz)
 				continue
-			if _draw_sprite(c, p, s, base):
+			# ponytail: LPC pixel-art tier disabled — clashed against the 3D foes
+			# (T85). USE_LPC_SPRITES flips it back on; _draw_sprite is untouched.
+			if USE_LPC_SPRITES and _draw_sprite(c, p, s, base):
 				_draw_token_hud(c, p, tp, s, rad, fz)
 				continue
 			# The token is shaded like a ball: hotspot toward the light, falling
