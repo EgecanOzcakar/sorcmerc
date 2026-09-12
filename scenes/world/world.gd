@@ -65,12 +65,24 @@ const ZOOM_MIN := 0.25
 const ZOOM_MAX := 2.5
 # O12: was 90, which read as a handful of huge diamonds at the default camera
 # distance; 50 was picked by rendering tests/shot_world.gd at both (and at 60,
-# still coarse) and looking. MAX_CELLS is the far-zoom fallback threshold and is
-# not a free number: this viewport needs 783 cells at zoom 1.0 (it needed 255 at
-# CELL 90), and the old 900 was exactly "still paint at zoom 0.5, give up below
-# it" — 2850 is that same rule at the new density (2805 cells at zoom 0.5).
-const CELL := 50.0          # ground patch size, in world units
-const MAX_CELLS := 2850     # cap the ground loop when zoomed far out
+# still coarse) and looking.
+# T-tiles: dropped again to 30 (more, smaller tiles — the SBS photo-textures
+# read better at higher density than the old flat-color pack did) — that's
+# (50/30)^2 ~= 2.8x as many cells at any given zoom, so MAX_CELLS is scaled by
+# the same factor to keep the same "give up and flat-fill" zoom threshold
+# rather than tripping it sooner. MAX_CELLS is still not a free number: this
+# viewport needs 783 cells at zoom 1.0 at CELL 50 (it needed 255 at CELL 90),
+# and the old 900 was exactly "still paint at zoom 0.5, give up below it".
+const CELL := 30.0          # ground patch size, in world units
+const MAX_CELLS := 7900     # cap the ground loop when zoomed far out
+# T-tiles: same terrain-variant pick clusters over a TILE_CLUSTER x TILE_CLUSTER
+# block of cells instead of re-rolling every single one — large patches of one
+# texture instead of a different tile every neighbour (the SBS pack's 18 wildly
+# different textures per pool made that read as noise, not a field). The
+# shoreline's own per-cell dither (_rand(cell, 9) below) is deliberately left
+# alone — that's what frays the bank into an organic edge instead of a hard
+# tile-aligned line, clustering it would make the water's edge blocky instead.
+const TILE_CLUSTER := 4
 
 # Ground: O11's Screaming Brain Studios Isometric Tiles Overworld pack, CC0.
 # Buildings: O12's rubberduck isometric medieval buildings 1+2, CC0 — the Town
@@ -877,6 +889,14 @@ static func _rand(c: Vector2i, salt: int) -> float:
 	var n: int = hash(Vector3i(c.x, c.y, salt))
 	return float(n % 4096) / 4096.0 if n >= 0 else float(-n % 4096) / 4096.0
 
+# Quantizes a cell to its TILE_CLUSTER x TILE_CLUSTER block so every cell in
+# that block feeds _rand() the same coordinate — one texture roll per patch of
+# ground instead of one per tile. floor(), not int(), because cell indices run
+# negative in every direction from the origin and int()'s truncation-toward-
+# zero would put -1 and -4 in the same "cluster" as 0..3.
+static func _cluster(c: Vector2i, n: int) -> Vector2i:
+	return Vector2i(int(floor(float(c.x) / n)), int(floor(float(c.y) / n)))
+
 # A faction's colour, straight off its name's hash so no table needs maintaining
 # as core/scaler.gd's FACTIONS list grows.
 static func faction_color(faction: String, is_player := false) -> Color:
@@ -972,17 +992,20 @@ func _draw_ground() -> void:
 	for i in range(i0, i1 + 1):
 		for j in range(j0, j1 + 1):
 			var cell := Vector2i(i, j)
+			var cl := _cluster(cell, TILE_CLUSTER)
 			# 1.0 deep in a lake, 0.0 well inland, a ramp across the bank between.
 			var wet := 0.5 - world.water_depth(Vector2(i + 0.5, j + 0.5) * CELL) / (SHORE * 2.0)
 			var tex := _terrain_tex
 			var pool: Array = GRASS
+			# Left un-clustered on purpose: this per-cell dither is what frays the
+			# bank into an organic edge (see TILE_CLUSTER's own comment above).
 			if _rand(cell, 9) < wet:
 				tex = _water_tex
 				pool = WATER
-			elif _rand(cell, 5) > WOODED:
+			elif _rand(cl, 5) > WOODED:
 				tex = _forest_tex
 				pool = FOREST
-			var idx: int = pool[int(_rand(cell, 1) * pool.size()) % pool.size()]
+			var idx: int = pool[int(_rand(cl, 1) * pool.size()) % pool.size()]
 			draw_texture_rect_region(tex,
 				Rect2(Vector2(i + j, j - i - 1) * TILE * 0.5, TILE),
 				Rect2(Vector2(idx % TILE_COLS, idx / TILE_COLS) * TILE, TILE))
