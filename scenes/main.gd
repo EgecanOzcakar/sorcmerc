@@ -30,7 +30,8 @@ var _own_party := false
 
 const HEX_BASE := 34.0
 const REVEAL_PAUSE := 0.75  # beat to read the attack roll (0 under SORCMERC_FAST)
-var _zoom := 1.0
+const ZOOM_DEFAULT := 1.5     # figures ~130px tall at this zoom
+var _zoom := ZOOM_DEFAULT
 var _pan := Vector2.ZERO
 var hex_px: float:
 	get: return HEX_BASE * _zoom
@@ -50,6 +51,8 @@ var _fx_on := false           # attack animations: off under SORCMERC_FAST / hea
 @onready var _order := HBoxContainer.new()   # turn-order icon strip along the top
 @onready var _hint := Label.new()
 @onready var _board := Board.new()
+const Figures3D := preload("res://scenes/figures3d.gd")
+var _figures
 @onready var _actor := RichTextLabel.new()
 @onready var _buttons := HFlowContainer.new()
 @onready var _bscroll := ScrollContainer.new()
@@ -175,6 +178,10 @@ func _ready() -> void:
 	_board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_board.custom_minimum_size = Vector2(0, 240)
 	col.add_child(_board)
+	_figures = Figures3D.new()
+	_figures.board = _board
+	_figures.main = self
+	_board.add_child(_figures)
 
 	_actor.bbcode_enabled = true
 	_actor.fit_content = true
@@ -230,7 +237,7 @@ func _unhandled_key_input(e: InputEvent) -> void:
 	match e.keycode:
 		KEY_EQUAL, KEY_KP_ADD: set_zoom(_zoom * 1.1)
 		KEY_MINUS, KEY_KP_SUBTRACT: set_zoom(_zoom / 1.1)
-		KEY_HOME: _zoom = 1.0; _pan = Vector2.ZERO; _apply_ui_scale(); _board.queue_redraw()
+		KEY_HOME: _zoom = ZOOM_DEFAULT; _pan = Vector2.ZERO; _apply_ui_scale(); _board.queue_redraw()
 		KEY_LEFT: pan_by(Vector2(40, 0))
 		KEY_RIGHT: pan_by(Vector2(-40, 0))
 		KEY_UP: pan_by(Vector2(0, 40))
@@ -286,6 +293,7 @@ func _new_game(forced := 0) -> void:
 	_logged = 0
 	_last_round = 1
 	_board.reset(cb)
+	_figures.reset(cb)
 	_flush_log()
 	_refresh()
 	# T39: surprise is settled before anyone acts. Unseen buys a deployment
@@ -318,6 +326,7 @@ func _swap_deploy(a, b) -> void:
 	b.pos = p
 	cb.log.append("%s and %s trade places before the fight." % [a.cname, b.cname])
 	_board.reset(cb)
+	_figures.reset(cb)
 	_flush_log()
 	_refresh()
 	_deploy_menu()
@@ -1188,7 +1197,7 @@ class Board extends Control:
 	# the flat wide RTS angle rather than a steep 45° overhead.
 	# ponytail: fixed camera. Make these vars if it ever needs to orbit/tilt.
 	const ISO_YAW := 35.0
-	const ISO_SQUASH := 0.38
+	const ISO_SQUASH := 0.71    # sin(45°): a TFT-style three-quarter view; was 0.38 (22°)
 	const ISO_GAIN := 1.85    # the whole plane, scaled to fill the viewport
 
 	func _iso(v: Vector2) -> Vector2:
@@ -1611,6 +1620,11 @@ class Board extends Control:
 			# flash, HP bar, condition tags and the _tok/_lunge positioning above
 			# are shared with the vector token below, which still draws everyone
 			# the art doesn't cover.
+			# Tier 0: a 3D figure in the Figures3D layer above this Board. Same contract
+			# as the sprite tier below: it replaces the disc and glyph only.
+			if main._figures and main._figures.has_figure(c):
+				_draw_token_hud(c, p, tp, s, rad, fz)
+				continue
 			if _draw_sprite(c, p, s, base):
 				_draw_token_hud(c, p, tp, s, rad, fz)
 				continue
