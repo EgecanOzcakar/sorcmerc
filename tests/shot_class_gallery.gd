@@ -42,7 +42,7 @@ func _init() -> void:
 			continue
 		var m: Node3D = load(path).instantiate()
 		sub.add_child(m)
-		m.position = Vector3(slot * 1.7 - (CLASSES.size() - 1) * 0.85, 0, 0)
+		m.position = Vector3(slot * 1.5 - (CLASSES.size() - 1) * 0.75, 0, 0)
 		var ap: AnimationPlayer = m.find_child("AnimationPlayer", true, false)
 		if ap:
 			var clip: String = ap.get_animation_list()[0]
@@ -54,7 +54,7 @@ func _init() -> void:
 	var cam := Camera3D.new()
 	sub.add_child(cam)
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-	cam.size = 2.6
+	cam.size = 6.0
 	cam.position = Vector3(0, 1.0, 6)
 	cam.look_at(Vector3(0, 0.6, 0), Vector3.UP)
 	cam.current = true
