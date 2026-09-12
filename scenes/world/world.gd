@@ -79,16 +79,27 @@ const MAX_CELLS := 2850     # cap the ground loop when zoomed far out
 const TerrainTex := preload("res://assets/world/overworld/terrain.png")
 const ForestTex := preload("res://assets/world/overworld/forest.png")
 const BuildingTex := preload("res://assets/world/town/buildings.png")
-# T-tiles spike: SORCMERC_ALT_TILES swaps in a Kenney "Isometric Tiles
-# Landscape" (CC0) ground sheet instead of the Screaming Brain Studios one
-# above — see assets/world/overworld_alt/PROVENANCE.md for what that costs
-# stylistically (Kenney's isometric line is all raised-block art; the top
-# face is cropped out and reused flat, which leaves a thin dirt sliver at
-# each tile's front corner that the original flat pack never had). Not the
-# new default — a comparison render is the point of a spike, not a swap.
+# T-tiles spike: SORCMERC_ALT_TILES ("kenney" | "sbs") swaps in an
+# alternate ground sheet instead of the Screaming Brain Studios Overworld one
+# above. Neither is the new default — a comparison render is the point of a
+# spike, not a swap.
+#   "kenney" — Kenney's "Isometric Tiles Landscape" (CC0). See
+#     assets/world/overworld_alt/PROVENANCE.md: Kenney's isometric line is
+#     all raised-block art, so the top face is cropped out and reused flat,
+#     which leaves a thin dirt sliver at each tile's front corner the
+#     original flat pack never had.
+#   "sbs" — Screaming Brain Studios' *other* free pack, "Isometric Floor
+#     Pack" (also CC0, same author as the current terrain — see
+#     assets/world/overworld_sbs/PROVENANCE.md). Genuine flat photo-textured
+#     diamonds already at the exact 256x128/3-column layout this file
+#     expects, no cropping workaround needed — the realistic-with-colour-pop
+#     option (grass detail, floral accents, vivid water).
 const TerrainTexAlt := preload("res://assets/world/overworld_alt/terrain_alt.png")
 const ForestTexAlt := preload("res://assets/world/overworld_alt/forest_alt.png")
 const WaterTexAlt := preload("res://assets/world/overworld_alt/water_alt.png")
+const TerrainTexSbs := preload("res://assets/world/overworld_sbs/terrain_sbs.png")
+const ForestTexSbs := preload("res://assets/world/overworld_sbs/forest_sbs.png")
+const WaterTexSbs := preload("res://assets/world/overworld_sbs/water_sbs.png")
 
 const TILE := Vector2(256, 128)   # one ground diamond in the Overworld sheets
 const TILE_COLS := 3              # both sheets are 3x6 tiles
@@ -160,10 +171,13 @@ var world_size := "small"   # "small" | "large" — which built-in map _ready() 
                              # when nobody injected a `world` (a fresh start, not O13's resume)
 
 func _ready() -> void:
-	if OS.get_environment("SORCMERC_ALT_TILES") != "":
-		_terrain_tex = TerrainTexAlt; _forest_tex = ForestTexAlt; _water_tex = WaterTexAlt
-	else:
-		_terrain_tex = TerrainTex; _forest_tex = ForestTex; _water_tex = WaterTex
+	match OS.get_environment("SORCMERC_ALT_TILES"):
+		"kenney":
+			_terrain_tex = TerrainTexAlt; _forest_tex = ForestTexAlt; _water_tex = WaterTexAlt
+		"sbs":
+			_terrain_tex = TerrainTexSbs; _forest_tex = ForestTexSbs; _water_tex = WaterTexSbs
+		_:
+			_terrain_tex = TerrainTex; _forest_tex = ForestTex; _water_tex = WaterTex
 	if world == null:
 		world = _large_world() if world_size == "large" else _small_world()
 	if party == null:               # same demo roster scenes/campaign/campaign.gd falls back to
