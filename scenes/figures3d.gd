@@ -61,6 +61,11 @@ func _ready() -> void:
 	_sub.own_world_3d = true
 	_sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	_sub.gui_disable_input = true
+	# A manually-created SubViewport gets no AA by default (the root viewport's
+	# project-settings MSAA doesn't apply here) — silhouette edges and the 4k
+	# texture detail both alias hard without this. Screen-space AA (FXAA) needs
+	# Forward+/Mobile; this project runs GL Compatibility, so MSAA alone.
+	_sub.msaa_3d = Viewport.MSAA_4X
 	add_child(_sub)
 
 	var env := WorldEnvironment.new()
