@@ -24,12 +24,14 @@ const MODELS := {
 	"human": {"camp": "res://assets/settlements/human_camp.glb", "town": "res://assets/settlements/human_town.glb", "city": "res://assets/settlements/human_city.glb"},
 	"orc": {"camp": "res://assets/settlements/orc_camp.glb", "town": "res://assets/settlements/orc_town.glb", "city": "res://assets/settlements/orc_city.glb"},
 }
-# Target ground footprint height (world units), auto-fit from each model's own
-# AABB so raw Meshy output scale (which varies wildly for a multi-building
-# diorama) never needs hand calibration — see figures3d.gd's FIGURE_SCALE
-# comment for why that was a trial-and-error constant there; this avoids it.
-const TARGET_HEIGHT := {"camp": 0.55, "town": 0.85, "city": 1.3}
-const CAM_DIST := 60.0
+# Target screen height in px at zoom 1 (matching the 2D sprite tier's own
+# h = r * factor in World._draw_settlement — 26/17/12 * 3.2/2.8/2.4), divided
+# by World.ISO_GAIN to convert to world units. World's map coordinates are a
+# totally different scale from Board's hex units (K ~= 1.85 px/unit here vs
+# Board's ~46-94), so this can't reuse figures3d.gd's FIGURE_SCALE intuition —
+# first render came out at 2px tall because of exactly that assumption.
+const TARGET_HEIGHT := {"camp": 15.6, "town": 25.7, "city": 45.0}
+const CAM_DIST := 400.0
 
 var world_map: Control
 var _sub: SubViewport
