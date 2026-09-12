@@ -26,12 +26,19 @@ func _init() -> void:
 	check(is_equal_approx(fig.theta(), asin(board.ISO_SQUASH)), "camera elevation is exactly asin(ISO_SQUASH) — one source of truth")
 	check(el_deg > 44.0 and el_deg < 46.0, "elevation sits in the TFT-style 44-46 deg band (got %.2f)" % el_deg)
 
-	var foes := 0
+	# has_figure follows the model lookup (class for heroes, faction for foes),
+	# not team — coverage is whatever GLBs exist under assets/figures, same
+	# design as LpcArt.BY_MONSTER falling through to the vector tier.
+	var expect_figs := 0
 	for c in main.cb.combatants:
-		if c.team != "party": foes += 1
-	check(fig._figs.size() == foes and foes > 0, "one figure per foe (%d), heroes keep badges" % foes)
+		var path: String = fig._model_path(c)
+		if path != "" and ResourceLoader.exists(path):
+			expect_figs += 1
+	check(fig._figs.size() == expect_figs, "one figure per modeled combatant (%d)" % expect_figs)
 	for c in main.cb.combatants:
-		check(fig.has_figure(c) == (c.team != "party"), "has_figure matches team for %s" % c.cname)
+		var path: String = fig._model_path(c)
+		check(fig.has_figure(c) == (path != "" and ResourceLoader.exists(path)),
+			"has_figure matches model lookup for %s" % c.cname)
 
 	# Projection round-trip: Board._pix(H) -> world -> back must be the same pixel.
 	board._origin = Vector2(311.0, 187.0)     # any non-zero origin, incl. pan
