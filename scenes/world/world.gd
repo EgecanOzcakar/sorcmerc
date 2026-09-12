@@ -18,6 +18,7 @@ extends Control
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const WorldBattle = preload("res://core/world_battle.gd")
+const Settlements3D := preload("res://scenes/world/settlements3d.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
@@ -129,6 +130,7 @@ var _visit_log: Label = null
 var _left: Object = null         # the settlement just left; no re-entry until out of range
 var _party_overlay: Control = null   # T3's party/profile/inventory screen, full-screen
 var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.active/describe
+var _settlements3d
 
 func _ready() -> void:
 	if world == null:
@@ -137,6 +139,10 @@ func _ready() -> void:
 		party = Party.new()
 		for ch in Party.demo_roster():
 			party.add_member(ch)
+	_settlements3d = Settlements3D.new()
+	_settlements3d.world_map = self
+	add_child(_settlements3d)
+	_settlements3d.reset(world)
 	set_process(true)
 	_build_hud()
 
@@ -854,12 +860,16 @@ func _draw_settlement(s, at: Vector2) -> void:
 	# the gap between the anchor and the sprite's true vertical centre so the
 	# cluster's visual mass, not its ground corner, is what centres on the ring.
 	var vcenter := Vector2(0.0, (BUILDING_ANCHOR.y - BUILDING.y * 0.5) * 0.3 * h / BUILDING.y)
-	var bases: Array = []
-	for b in blocks:
-		bases.append(at + _iso(b * r) + vcenter)
-	bases.sort_custom(func(a, b): return a.y < b.y)
-	for k in bases.size():
-		_draw_building(bases[k], h, style + k, pair + k)
+	# Tier 0: a 3D diorama in the Settlements3D layer above this map. Same
+	# contract as Figures3D on the combat board — it replaces the building
+	# blocks only; shadow, ring and name label above/below stay shared.
+	if not (_settlements3d and _settlements3d.has_model(s)):
+		var bases: Array = []
+		for b in blocks:
+			bases.append(at + _iso(b * r) + vcenter)
+		bases.sort_custom(func(a, b): return a.y < b.y)
+		for k in bases.size():
+			_draw_building(bases[k], h, style + k, pair + k)
 	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), s.sname,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
 
