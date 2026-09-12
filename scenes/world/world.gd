@@ -19,6 +19,7 @@ const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const WorldBattle = preload("res://core/world_battle.gd")
 const Settlements3D := preload("res://scenes/world/settlements3d.gd")
+const Lairs3D := preload("res://scenes/world/lairs3d.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
@@ -136,6 +137,7 @@ var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found 
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _settlements3d
+var _lairs3d
 
 func _ready() -> void:
 	if world == null:
@@ -148,6 +150,10 @@ func _ready() -> void:
 	_settlements3d.world_map = self
 	add_child(_settlements3d)
 	_settlements3d.reset(world)
+	_lairs3d = Lairs3D.new()
+	_lairs3d.world_map = self
+	add_child(_lairs3d)
+	_lairs3d.reset(world)
 	set_process(true)
 	_build_hud()
 
@@ -927,19 +933,20 @@ func _draw_ground() -> void:
 # gets three, a town two, painter-sorted among themselves. The footprint ring
 # stays: every faction's walls are the same stone, and faction is the one thing
 # the map still has to read at a glance.
-# T91: a discovered lair — a plain skull-marked circle, no building sprite (no
-# model exists yet; see kitbashforge/NEXT_BATCH.md). Grey once looted, faction-
-# tinted red while there's still a fight in it, so a glance says which lairs
-# are done.
+# T91: a discovered lair. Grey once looted, faction-tinted red while there's
+# still a fight in it, so a glance says which lairs are done. Tier 0: a 3D
+# diorama in the Lairs3D layer above this map, same contract as Settlements3D
+# — it replaces the "☠" glyph only; shadow, ring and name label stay shared.
 func _draw_lair(l, at: Vector2) -> void:
 	var col := Icons.COL_MUTED if l.looted else Icons.COL_FOE
 	var r := 14.0 * _zoom
 	_soft_shadow(at, r * 0.85)
 	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
 	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
-	var fs := int(18 * _zoom)
-	draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Icons.COL_HEAD)
+	if not (_lairs3d and _lairs3d.has_model(l)):
+		var fs := int(18 * _zoom)
+		draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Icons.COL_HEAD)
 	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), l.sname,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
 
