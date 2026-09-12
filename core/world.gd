@@ -59,7 +59,7 @@ class Settlement extends RefCounted:
 	var sname: String            # `name` is taken on Node; match combatant.gd's `cname`
 	var position: Vector2
 	var faction: String          # one of Scaler.FACTIONS
-	var kind: String             # "city" | "town" — enough for O2 to pick a sprite
+	var kind: String             # "city" | "town" | "camp" — enough for O2 to pick a sprite
 	# O6 economy state. last_visited/battle_at are world-clock stamps, < 0 = never;
 	# pending_opinion_delta is the O7 hook: O6 adds to it (theft), O7 drains it.
 	var last_visited := -1.0

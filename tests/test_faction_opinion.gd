@@ -30,7 +30,7 @@ func _init() -> void:
 
 func _world() -> World:
 	var w = World.new()
-	w.add_settlement(World.Settlement.new("riverhold", Vector2.ZERO, "soldier", "city"))
+	w.add_settlement(World.Settlement.new("riverhold", Vector2.ZERO, "human", "city"))
 	w.add_settlement(World.Settlement.new("ashfell", Vector2(900, 0), "cultist", "city"))
 	return w
 
@@ -80,34 +80,34 @@ func test_drain_settlement_hook() -> void:
 	w.settlements[0].pending_opinion_delta = -10.0    # O6's theft hook
 	w.settlements[1].pending_opinion_delta = -5.0
 	FactionOpinion.drain(w)
-	check(FactionOpinion.get_opinion("soldier") == -10.0, "the delta lands on the owning faction")
+	check(FactionOpinion.get_opinion("human") == -10.0, "the delta lands on the owning faction")
 	check(FactionOpinion.get_opinion("cultist") == -5.0, "...each on its own")
 	check(w.settlements[0].pending_opinion_delta == 0.0, "the hook is zeroed once applied")
 	FactionOpinion.drain(w)
-	check(FactionOpinion.get_opinion("soldier") == -10.0, "draining twice does not double-count")
+	check(FactionOpinion.get_opinion("human") == -10.0, "draining twice does not double-count")
 	# Two settlements of one faction both feed the same score.
-	w.add_settlement(World.Settlement.new("greenmarch", Vector2(60, 0), "soldier", "town"))
+	w.add_settlement(World.Settlement.new("greenmarch", Vector2(60, 0), "human", "town"))
 	w.settlements[0].pending_opinion_delta = -5.0
 	w.settlements[2].pending_opinion_delta = -5.0
 	FactionOpinion.drain(w)
-	check(FactionOpinion.get_opinion("soldier") == -20.0, "opinion is per faction, not per town")
+	check(FactionOpinion.get_opinion("human") == -20.0, "opinion is per faction, not per town")
 	# tick() = drain + decay, on the world-time the clock actually advanced.
 	FactionOpinion.reset()
 	w.settlements[0].pending_opinion_delta = -50.0
 	FactionOpinion.tick(w, FactionOpinion.DAY)
-	check(is_equal_approx(FactionOpinion.get_opinion("soldier"),
+	check(is_equal_approx(FactionOpinion.get_opinion("human"),
 		-50.0 + FactionOpinion.DECAY_PER_DAY), "tick drains then decays")
 
 func test_credit_fight_is_local_and_skips_the_dead() -> void:
 	FactionOpinion.reset()
 	var w := _world()
 	FactionOpinion.credit_fight(w, Vector2(30, 0), FactionOpinion.FOUGHT_FOR)
-	check(FactionOpinion.get_opinion("soldier") == FactionOpinion.FOUGHT_FOR,
+	check(FactionOpinion.get_opinion("human") == FactionOpinion.FOUGHT_FOR,
 		"a fight on their doorstep is credited")
 	check(FactionOpinion.get_opinion("cultist") == 0.0, "a faction across the map hears nothing")
 	FactionOpinion.reset()
-	FactionOpinion.credit_fight(w, Vector2(30, 0), FactionOpinion.FOUGHT_FOR, "soldier")
-	check(FactionOpinion.get_opinion("soldier") == 0.0,
+	FactionOpinion.credit_fight(w, Vector2(30, 0), FactionOpinion.FOUGHT_FOR, "human")
+	check(FactionOpinion.get_opinion("human") == 0.0,
 		"killing their own band is not a favour to them")
 	# O9 item 8: "every *civilized* faction nearby", which is what the comment always
 	# claimed — a cultist city does not thank you for putting down a monster band.

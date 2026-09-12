@@ -37,7 +37,7 @@ func _run_until_arrival(w, p, ticks := 200) -> int:
 func test_patrol_cycles_waypoints_in_order() -> void:
 	var w = World.new()
 	var wps := [Vector2(0, 0), Vector2(60, 0), Vector2(60, 60)]
-	var p = w.add_party(World.RoamingParty.new("patrol", Vector2(-30, 0), "soldier"))
+	var p = w.add_party(World.RoamingParty.new("patrol", Vector2(-30, 0), "human"))
 	WorldAI.patrol(p, wps)
 	check(p.goal == wps[0], "patrol starts on its first waypoint")
 
@@ -53,7 +53,7 @@ func test_patrol_cycles_waypoints_in_order() -> void:
 
 func test_wander_stays_near_home_and_moves_on() -> void:
 	var w = World.new()
-	var home = w.add_settlement(World.Settlement.new("riverhold", Vector2(100, 100), "soldier", "city"))
+	var home = w.add_settlement(World.Settlement.new("riverhold", Vector2(100, 100), "human", "city"))
 	var p = w.add_party(World.RoamingParty.new("wanderer", home.position, "beast"))
 	WorldAI.wander(p, home, 80.0, 1337)
 
@@ -67,7 +67,7 @@ func test_wander_stays_near_home_and_moves_on() -> void:
 
 	# Same seed, same walk: the wander is reproducible.
 	var w2 = World.new()
-	var h2 = w2.add_settlement(World.Settlement.new("riverhold", Vector2(100, 100), "soldier", "city"))
+	var h2 = w2.add_settlement(World.Settlement.new("riverhold", Vector2(100, 100), "human", "city"))
 	var p2 = w2.add_party(World.RoamingParty.new("wanderer", h2.position, "beast"))
 	WorldAI.wander(p2, h2, 80.0, 1337)
 	WorldAI.update(w2)
@@ -75,9 +75,9 @@ func test_wander_stays_near_home_and_moves_on() -> void:
 
 func test_hunt_tracks_the_nearest_hostile() -> void:
 	var w = World.new()
-	var far = w.add_settlement(World.Settlement.new("faraway", Vector2(900, 900), "soldier"))
+	var far = w.add_settlement(World.Settlement.new("faraway", Vector2(900, 900), "human"))
 	var hunter = w.add_party(World.RoamingParty.new("orcs", Vector2.ZERO, "orc"))
-	var prey = w.add_party(World.RoamingParty.new("player", Vector2(200, 0), "soldier", true))
+	var prey = w.add_party(World.RoamingParty.new("player", Vector2(200, 0), "human", true))
 	var wolves = w.add_party(World.RoamingParty.new("wolves", Vector2(10, 0), "beast"))
 	WorldAI.hunt(hunter)
 
@@ -106,10 +106,10 @@ func test_hunt_tracks_the_nearest_hostile() -> void:
 func test_civilized_parties_never_target_each_other() -> void:
 	FactionOpinion.reset()
 	var w = World.new()
-	w.add_settlement(World.Settlement.new("riverhold", Vector2(50, 50), "soldier"))
-	var guard = w.add_party(World.RoamingParty.new("guard", Vector2.ZERO, "soldier"))
-	var other = w.add_party(World.RoamingParty.new("caravan", Vector2(20, 0), "soldier"))
-	var player = w.add_party(World.RoamingParty.new("player", Vector2(30, 0), "soldier", true))
+	w.add_settlement(World.Settlement.new("riverhold", Vector2(50, 50), "human"))
+	var guard = w.add_party(World.RoamingParty.new("guard", Vector2.ZERO, "human"))
+	var other = w.add_party(World.RoamingParty.new("caravan", Vector2(20, 0), "human"))
+	var player = w.add_party(World.RoamingParty.new("player", Vector2(30, 0), "human", true))
 	WorldAI.hunt(guard)
 	var kept: Vector2 = guard.goal
 
@@ -119,21 +119,21 @@ func test_civilized_parties_never_target_each_other() -> void:
 	check(not WorldAI.is_hostile(guard, player), "nor to the player")
 	check(WorldAI.is_hostile(w.add_party(World.RoamingParty.new("gob", Vector2.ZERO, "goblinoid")), other),
 		"but a goblinoid party is hostile to a soldier one")
-	check(WorldAI.is_monster("bandit") and not WorldAI.is_monster("soldier"), "the monster/civilized split")
+	check(WorldAI.is_monster("bandit") and not WorldAI.is_monster("human"), "the monster/civilized split")
 
 # O7: below FactionOpinion.HOSTILE a civilized faction's own parties hunt the
 # player like monsters do — and only the player.
 func test_low_opinion_turns_a_civilized_faction_hostile() -> void:
 	FactionOpinion.reset()
 	var w = World.new()
-	var guard = w.add_party(World.RoamingParty.new("guard", Vector2.ZERO, "soldier"))
-	var caravan = w.add_party(World.RoamingParty.new("caravan", Vector2(20, 0), "soldier"))
-	var player = w.add_party(World.RoamingParty.new("player", Vector2(120, 0), "soldier", true))
+	var guard = w.add_party(World.RoamingParty.new("guard", Vector2.ZERO, "human"))
+	var caravan = w.add_party(World.RoamingParty.new("caravan", Vector2(20, 0), "human"))
+	var player = w.add_party(World.RoamingParty.new("player", Vector2(120, 0), "human", true))
 	var orcs = w.add_party(World.RoamingParty.new("orcs", Vector2(300, 0), "orc"))
 	WorldAI.hunt(guard)
 	check(not WorldAI.is_hostile(guard, player), "at neutral opinion the guards leave you be")
 
-	FactionOpinion.set_opinion("soldier", FactionOpinion.HOSTILE - 1.0)
+	FactionOpinion.set_opinion("human", FactionOpinion.HOSTILE - 1.0)
 	check(WorldAI.is_hostile(guard, player), "past the threshold they want the player dead")
 	check(not WorldAI.is_hostile(guard, caravan), "...but still never their own kind")
 	check(not WorldAI.is_hostile(guard, orcs), "...and they are not suddenly hunting monsters")
@@ -143,6 +143,6 @@ func test_low_opinion_turns_a_civilized_faction_hostile() -> void:
 	check(guard.goal == player.position, "an angry garrison hunts the player on the map")
 
 	# ...and it goes away again when the opinion recovers.
-	FactionOpinion.raise("soldier", 100.0)
+	FactionOpinion.raise("human", 100.0)
 	check(not WorldAI.is_hostile(guard, player), "making it up to them ends the hunt")
 	FactionOpinion.reset()

@@ -144,14 +144,17 @@ func _ready() -> void:
 # spawning is a later phase's job (O3 onward).
 func _demo_world() -> World:
 	var w := World.new()
-	w.add_settlement(World.Settlement.new("riverhold", Vector2(0, 0), "soldier", "city"))
-	w.add_settlement(World.Settlement.new("greenmarch", Vector2(420, -180), "soldier", "town"))
-	w.add_settlement(World.Settlement.new("dun-arrow", Vector2(-360, 260), "soldier", "town"))
-	w.add_settlement(World.Settlement.new("ashfell", Vector2(160, 470), "cultist", "city"))
-	w.add_party(World.RoamingParty.new("player", Vector2(80, 120), "soldier", true))
+	# T90: one settlement per playable race — dwarf/elf/human/orc, "for now" per
+	# the brief. Orc is the hostile one (world_ai.gd CIVILIZED), same role
+	# "cultist" had; the other three are the friendly, tradeable factions.
+	w.add_settlement(World.Settlement.new("riverhold", Vector2(0, 0), "human", "city"))
+	w.add_settlement(World.Settlement.new("greenmarch", Vector2(420, -180), "elf", "town"))
+	w.add_settlement(World.Settlement.new("dun-arrow", Vector2(-360, 260), "dwarf", "camp"))
+	w.add_settlement(World.Settlement.new("ashfell", Vector2(160, 470), "orc", "city"))
+	w.add_party(World.RoamingParty.new("player", Vector2(80, 120), "human", true))
 	WorldAI.hunt(w.add_party(World.RoamingParty.new("bandits", Vector2(-250, -120), "bandit")))
 	WorldAI.hunt(w.add_party(World.RoamingParty.new("goblins", Vector2(380, 300), "goblinoid")))
-	WorldAI.patrol(w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "soldier")),
+	WorldAI.patrol(w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "human")),
 		[Vector2(-120, 380), Vector2(-360, 260), Vector2(0, 0)])
 	# O15 terrain: one lake northwest of Riverhold, and the river it drains into —
 	# which runs past Riverhold's west wall and down to Ashfell, so the town's name
@@ -831,7 +834,10 @@ func _draw_ground() -> void:
 func _draw_settlement(s, at: Vector2) -> void:
 	var col := faction_color(s.faction)
 	var big: bool = s.kind == "city"
-	var r := (26.0 if big else 17.0) * _zoom
+	# T90: "camp" is the smallest tier (one lean-to, no ring flourish scale-up) —
+	# everything below city was "town" before there were three sizes.
+	var small: bool = s.kind == "camp"
+	var r := (26.0 if big else (12.0 if small else 17.0)) * _zoom
 	_soft_shadow(at, r * 0.9)
 	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
 	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
@@ -840,8 +846,8 @@ func _draw_settlement(s, at: Vector2) -> void:
 	var style: int = absi(hash(s.faction))
 	var pair: int = absi(hash(s.id))
 	var blocks := [Vector2(0, 0), Vector2(-0.5, 0.35), Vector2(0.5, 0.3)] if big \
-		else [Vector2(0, 0), Vector2(0.45, 0.3)]
-	var h := r * (3.2 if big else 2.8)
+		else ([Vector2(0, 0)] if small else [Vector2(0, 0), Vector2(0.45, 0.3)])
+	var h := r * (3.2 if big else (2.4 if small else 2.8))
 	# BUILDING_ANCHOR sits near the sprite's bottom (112 of 120px tall), so a house
 	# drawn at `base` reads as mostly-above it — a cluster whose bases sit on the
 	# ring reads as pushed toward the ring's back half. Nudge every base down by
