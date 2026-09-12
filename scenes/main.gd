@@ -45,13 +45,24 @@ var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 var _slot_max := {}          # id -> slots at the start of the fight (for the pips)
 var _fx_on := false           # attack animations: off under SORCMERC_FAST / headless
+# T-actionbar: a compact icon grid, up to BTN_COLUMNS*BUTTON_ROWS visible before
+# it scrolls (see _process's _bscroll sizing) — plain text rows read fine up to
+# ~9 verbs but sprawled once a caster's spell list pushed past 20.
+const BTN_COLUMNS := 6
+const BTN_SIZE := Vector2(126, 40)
+# Session-only "which verbs does this player actually reach for" — no save file,
+# resets with the app. Keyed by a verb's id ("attack", "dash", ...) or "spell:"
+# + the base spell id (so a caster's upcast tiers count as the one spell they
+# picked, not N separate counters). Read by _prioritize(), written by
+# _set_buttons() on every button press.
+var _verb_freq: Dictionary = {}
 
 @onready var _header := Label.new()
 @onready var _order := HBoxContainer.new()   # turn-order icon strip along the top
 @onready var _hint := Label.new()
 @onready var _board := Board.new()
 @onready var _actor := RichTextLabel.new()
-@onready var _buttons := HFlowContainer.new()
+@onready var _buttons := GridContainer.new()
 @onready var _bscroll := ScrollContainer.new()
 @onready var _logbox := RichTextLabel.new()
 @onready var _cap := Label.new()
@@ -186,6 +197,7 @@ func _ready() -> void:
 
 	_buttons.add_theme_constant_override("h_separation", 6)
 	_buttons.add_theme_constant_override("v_separation", 6)
+	_buttons.columns = BTN_COLUMNS
 	_buttons.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# T29: the row wraps, and once it's wrapped past BUTTON_ROWS it scrolls —
 	# a caster with 20 verbs used to push the rest off the bottom of the screen.
@@ -212,6 +224,7 @@ func _apply_ui_scale() -> void:
 	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
 	for b in _buttons.get_children():
 		b.add_theme_font_size_override("font_size", int(Icons.FS_BODY * u))
+		b.custom_minimum_size = BTN_SIZE * u
 
 func set_zoom(z: float) -> void:
 	_zoom = clampf(z, 0.45, 3.0)
@@ -375,31 +388,69 @@ func _end_turn() -> void:
 
 # --- hero menu ---------------------------------------------------------
 
-# Verb-level menu. Buttons are numbered [1]..[9]; End turn is [0].
-# Everything on it comes from cb.available(h) — no hero, class or spell is named here.
+# Verb-level menu. Buttons are numbered [1]..[9]; End turn is [0]; most-used
+# verbs (_prioritize) claim those low slots over time instead of whatever
+# order cb.available() happened to build them in. Everything on it comes from
+# cb.available(h) — no hero, class or spell is named here.
 # Verbs that need a target enter "target" mode — hover a token for its %, click to apply.
+#
+# A spell castable at several slot levels used to get one full-width row per
+# level ("Cure Wounds", "Cure Wounds ★2", "Cure Wounds ★3", ...) — fine at 2
+# tiers, unreadable at 5. Now every tier after the loop is collapsed into the
+# one spell's tiers[] and only its base entry reaches `opts`; picking it opens
+# _spell_tier_menu instead of casting directly, unless there's only one tier,
+# which behaves exactly as before.
 func _build_hero_menu(h, keep_armed := false) -> void:
 	if not keep_armed:
 		_armed = ""
 	_mode = "idle"
 	_tgt_verb = {}
 	var opts: Array = []
+	var spell_tiers: Dictionary = {}   # spell id -> Array of this verb's entries, one per castable level
+	var spell_order: Array = []        # first-seen order, so a spell keeps its natural position in opts
 	for v in cb.available(h):
 		var label: String = _verb_label(h, v)
 		var tip: String = _verb_tooltip(h, v)
+		var sid: String = String(v.get("spell", ""))
+		var glyph: String = Icons.school_glyph(Icons.spell_school(sid)) if sid != "" \
+			else Icons.verb_glyph(String(v["kind"]))
+		var freq_key: String = ("spell:" + sid) if sid != "" else String(v.get("id", v["kind"]))
+		var meta := {"glyph": glyph, "freq_key": freq_key}
+		var entry: Array
 		match v.get("targeting", "self"):
 			"enemy", "ally":
-				opts.append([label + "…", func(): _enter_target(h, v), tip])
+				entry = [label + "…", func(): _enter_target(h, v), tip, meta]
 			"direction":
-				opts.append([label + " (aim…)", func(): _enter_cone(h, v), tip])
+				entry = [label + " (aim…)", func(): _enter_cone(h, v), tip, meta]
 			_:
 				if _costly(v):
 					var opt := _confirm_opt(h, v["id"], label, func(): cb.perform(h, v); _after_hero_action(h))
 					opt.append(tip)
-					opts.append(opt)
+					opt.append(meta)
+					entry = opt
 				else:
 					var fn := func(): cb.perform(h, v); _after_hero_action(h)
-					opts.append([label, fn, tip])
+					entry = [label, fn, tip, meta]
+		if sid != "":
+			if not spell_tiers.has(sid):
+				spell_tiers[sid] = []
+				spell_order.append(sid)
+				opts.append(sid)   # placeholder — replaced once every tier of this spell is seen
+			spell_tiers[sid].append(entry)
+		else:
+			opts.append(entry)
+
+	for sid in spell_order:
+		var tiers: Array = spell_tiers[sid]
+		var i: int = opts.find(sid)
+		if tiers.size() == 1:
+			opts[i] = tiers[0]
+		else:
+			var base: Array = tiers[0]
+			opts[i] = [base[0], func(): _spell_tier_menu(h, tiers),
+				"%d levels available — pick one." % tiers.size(), base[3]]
+
+	opts = _prioritize(opts)
 
 	# T29: melee/ranged toggle — only offered to someone carrying both.
 	var swap := _attack_swap(h)
@@ -414,6 +465,15 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 		opts.append(_confirm_opt(h, "end", "End turn (action unspent!)", _end_turn))
 	else:
 		opts.append(["End turn", _end_turn])
+	_set_buttons(opts)
+	_board.queue_redraw()
+
+# One spell, several slot levels: a small picker instead of a button per tier.
+# Each tier's own entry (built above, already wired to _enter_target/_enter_cone/
+# cb.perform exactly as it would have been standalone) is reused verbatim.
+func _spell_tier_menu(h, tiers: Array) -> void:
+	var opts: Array = tiers.duplicate()
+	opts.append(["‹ Back", func(): _build_hero_menu(h, true)])
 	_set_buttons(opts)
 	_board.queue_redraw()
 
@@ -668,25 +728,67 @@ func _after_hero_action(h) -> void:
 
 # --- rendering --------------------------------------------------------
 
+# opts entries: [label, fn] or [label, fn, tooltip] or [label, fn, tooltip, meta]
+# where meta is {"glyph": String, "freq_key": String}, both optional. Buttons are
+# a fixed-size grid (BTN_COLUMNS wide, up to BUTTON_ROWS tall before scrolling —
+# see _process), clipped rather than wrapped, so 30 verbs stays tidy instead of
+# reflowing the panel. Hotkeys: [1]..[9] on the first nine, [0] on the last
+# entry (End turn / Cancel), everything past 9 is click-only.
 func _set_buttons(opts: Array) -> void:
 	for c in _buttons.get_children():
 		c.queue_free()
 	var count := opts.size()
 	for i in count:
 		var b := Button.new()
+		var meta: Dictionary = opts[i][3] if opts[i].size() > 3 else {}
+		var hotkey := ""
 		if count == 1:
-			b.text = "[Esc] %s" % opts[i][0]
+			hotkey = "Esc"
 		elif i == count - 1:
-			b.text = "[0] %s" % opts[i][0]
+			hotkey = "0"
 		elif i < 9:
-			b.text = "[%d] %s" % [i + 1, opts[i][0]]
-		else:
-			b.text = opts[i][0]
+			hotkey = str(i + 1)
+		var glyph: String = String(meta.get("glyph", ""))
+		var prefix := ("[%s] " % hotkey if hotkey != "" else "") + (glyph + " " if glyph != "" else "")
+		b.text = prefix + String(opts[i][0])
+		b.clip_text = true
+		b.custom_minimum_size = BTN_SIZE * clampf(_zoom, 0.9, 1.4)
 		b.pressed.connect(opts[i][1])
+		var freq_key := String(meta.get("freq_key", ""))
+		if freq_key != "":
+			b.pressed.connect(func(): _bump_freq(freq_key))
 		if opts[i].size() > 2 and String(opts[i][2]) != "":
 			b.tooltip_text = opts[i][2]   # native hover popup — what the verb actually does
 		_buttons.add_child(b)
 	_apply_ui_scale()
+
+func _bump_freq(key: String) -> void:
+	_verb_freq[key] = int(_verb_freq.get(key, 0)) + 1
+
+# Stable sort, most-used first — ties (including every verb tried 0 times, the
+# common case at the start of a fight) keep their original relative order, so
+# an unused kit doesn't shuffle itself every turn. Entries without a freq_key
+# in meta (the weapon-swap toggle, End turn, "‹ Back", ...) sort as count 0
+# but that's fine, callers only run this over the verb list before appending
+# those pinned entries.
+func _prioritize(opts: Array) -> Array:
+	var idx := range(opts.size())
+	idx.sort_custom(func(a, b):
+		var ka := _freq_of(opts[a])
+		var kb := _freq_of(opts[b])
+		if ka != kb:
+			return ka > kb
+		return a < b)
+	var out: Array = []
+	for i in idx:
+		out.append(opts[i])
+	return out
+
+func _freq_of(opt: Array) -> int:
+	if opt.size() <= 3:
+		return 0
+	var key := String(opt[3].get("freq_key", ""))
+	return int(_verb_freq.get(key, 0)) if key != "" else 0
 
 func _refresh() -> void:
 	_header.text = "THE SUNKEN SHRINE   ·   Round %d   ·   seed %d" % [cb.round_num, _seed]
@@ -931,7 +1033,7 @@ func _process(dt: float) -> void:
 	if _board:
 		_board.tick(dt * _anim)
 	if _bscroll:   # grow with the wrapped rows, up to BUTTON_ROWS, then scroll
-		var row := _buttons.get_theme_default_font_size() * 2.6 + 6.0
+		var row := BTN_SIZE.y * clampf(_zoom, 0.9, 1.4) + 6.0
 		_bscroll.custom_minimum_size.y = minf(_buttons.get_combined_minimum_size().y,
 			row * BUTTON_ROWS)
 
