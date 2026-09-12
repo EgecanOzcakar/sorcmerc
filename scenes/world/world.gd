@@ -79,6 +79,16 @@ const MAX_CELLS := 2850     # cap the ground loop when zoomed far out
 const TerrainTex := preload("res://assets/world/overworld/terrain.png")
 const ForestTex := preload("res://assets/world/overworld/forest.png")
 const BuildingTex := preload("res://assets/world/town/buildings.png")
+# T-tiles spike: SORCMERC_ALT_TILES swaps in a Kenney "Isometric Tiles
+# Landscape" (CC0) ground sheet instead of the Screaming Brain Studios one
+# above — see assets/world/overworld_alt/PROVENANCE.md for what that costs
+# stylistically (Kenney's isometric line is all raised-block art; the top
+# face is cropped out and reused flat, which leaves a thin dirt sliver at
+# each tile's front corner that the original flat pack never had). Not the
+# new default — a comparison render is the point of a spike, not a swap.
+const TerrainTexAlt := preload("res://assets/world/overworld_alt/terrain_alt.png")
+const ForestTexAlt := preload("res://assets/world/overworld_alt/forest_alt.png")
+const WaterTexAlt := preload("res://assets/world/overworld_alt/water_alt.png")
 
 const TILE := Vector2(256, 128)   # one ground diamond in the Overworld sheets
 const TILE_COLS := 3              # both sheets are 3x6 tiles
@@ -140,10 +150,20 @@ var _lair_msg: Label                 # the last search/loot outcome — persists
 var _settlements3d
 var _lairs3d
 var _party3d
+# T-tiles spike: which ground sheets _draw_ground() actually samples — set once
+# in _ready() from SORCMERC_ALT_TILES, since preload() can't be conditional on
+# an env var the way a plain assignment can.
+var _terrain_tex: Texture2D
+var _forest_tex: Texture2D
+var _water_tex: Texture2D
 var world_size := "small"   # "small" | "large" — which built-in map _ready() falls back to
                              # when nobody injected a `world` (a fresh start, not O13's resume)
 
 func _ready() -> void:
+	if OS.get_environment("SORCMERC_ALT_TILES") != "":
+		_terrain_tex = TerrainTexAlt; _forest_tex = ForestTexAlt; _water_tex = WaterTexAlt
+	else:
+		_terrain_tex = TerrainTex; _forest_tex = ForestTex; _water_tex = WaterTex
 	if world == null:
 		world = _large_world() if world_size == "large" else _small_world()
 	if party == null:               # same demo roster scenes/campaign/campaign.gd falls back to
@@ -940,13 +960,13 @@ func _draw_ground() -> void:
 			var cell := Vector2i(i, j)
 			# 1.0 deep in a lake, 0.0 well inland, a ramp across the bank between.
 			var wet := 0.5 - world.water_depth(Vector2(i + 0.5, j + 0.5) * CELL) / (SHORE * 2.0)
-			var tex := TerrainTex
+			var tex := _terrain_tex
 			var pool: Array = GRASS
 			if _rand(cell, 9) < wet:
-				tex = WaterTex
+				tex = _water_tex
 				pool = WATER
 			elif _rand(cell, 5) > WOODED:
-				tex = ForestTex
+				tex = _forest_tex
 				pool = FOREST
 			var idx: int = pool[int(_rand(cell, 1) * pool.size()) % pool.size()]
 			draw_texture_rect_region(tex,
