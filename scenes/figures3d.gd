@@ -14,9 +14,9 @@
 # ~30 lines, deliberately not in the spike.
 extends SubViewportContainer
 
-# Swap to goblin_lite.glb (3.9 MB vs 26 MB) if roster size or load time bites.
-const MODEL := preload("res://assets/figures/goblin_std.glb")
-const FIGURE_SCALE := 1.0      # calibration: model is ~1.9 hex-radii tall as shipped
+# Rigged + Meshy "Idle" clip baked in (10 MB). goblin_std.glb is the unrigged 26 MB source.
+const MODEL := preload("res://assets/figures/goblin_idle.glb")
+const FIGURE_SCALE := 1.25     # rig is 1.2 m tall, feet at y=0; ~1.5 hex radii so neighbours do not stack
 const CAM_DIST := 40.0
 
 var board: Control
@@ -25,6 +25,7 @@ var cb
 var _sub: SubViewport
 var _cam: Camera3D
 var _figs := {}                # combatant id -> Node3D
+var _prev := {}                # combatant id -> last world position, for facing
 
 
 func _ready() -> void:
@@ -52,7 +53,7 @@ func _ready() -> void:
 	var sun := DirectionalLight3D.new()
 	_sub.add_child(sun)
 	sun.rotation_degrees = Vector3(-55, -35, 0)
-	sun.light_energy = 1.4
+	sun.light_energy = 1.0
 	sun.shadow_enabled = true
 
 	_cam = Camera3D.new()
@@ -73,12 +74,20 @@ func reset(_cb) -> void:
 	for n in _figs.values():
 		n.queue_free()
 	_figs.clear()
+	_prev.clear()
 	for c in cb.combatants:
 		if c.team == "party":
 			continue          # one model exists; foes get it, heroes keep their badges
 		var holder := Node3D.new()
 		_sub.add_child(holder)
-		holder.add_child(MODEL.instantiate())
+		var m := MODEL.instantiate()
+		holder.add_child(m)
+		var ap: AnimationPlayer = m.find_child("AnimationPlayer", true, false)
+		if ap:
+			var clip: String = ap.get_animation_list()[0]
+			ap.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
+			ap.play(clip)
+			ap.seek(randf() * ap.get_animation(clip).length)   # desync the roster
 		_figs[c.id] = holder
 
 
@@ -110,6 +119,9 @@ func screen_for_world(w: Vector3) -> Vector2:
 func _process(_dt: float) -> void:
 	if cb == null or board == null or main == null:
 		return
+	# Anchors alone don't track the Board (it isn't a Container): pin the rect by hand.
+	position = Vector2.ZERO
+	size = board.size
 	var th := theta()
 	var target := world_for_screen(board.size * 0.5)          # ground under the centre
 	var back := Vector3(0.0, sin(th), cos(th))
@@ -124,4 +136,14 @@ func _process(_dt: float) -> void:
 		var p: Vector2 = board._tok.get(c.id, board._pix(c.pos)) + board._lunge(c.id)
 		n.position = world_for_screen(p)
 		n.scale = Vector3.ONE * FIGURE_SCALE
+		# Face the direction of travel and keep facing it on arrival. The model's
+		# forward is +Z (glTF), so yaw = atan2(dx, dz). _lunge feeds in here too, so a
+		# melee jab turns the figure toward its target for free. Shipped facing is
+		# toward the camera, which is what an un-moved figure keeps.
+		if _prev.has(c.id):
+			var d: Vector3 = n.position - _prev[c.id]
+			d.y = 0.0
+			if d.length() > 0.004:
+				n.rotation.y = lerp_angle(n.rotation.y, atan2(d.x, d.z), 0.35)
+		_prev[c.id] = n.position
 		n.rotation.x = deg_to_rad(-80.0) if c.is_down() else 0.0   # unconscious: lying flat

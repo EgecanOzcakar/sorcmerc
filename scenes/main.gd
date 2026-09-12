@@ -30,7 +30,7 @@ var _own_party := false
 
 const HEX_BASE := 34.0
 const REVEAL_PAUSE := 0.75  # beat to read the attack roll (0 under SORCMERC_FAST)
-const ZOOM_DEFAULT := 1.5     # figures ~130px tall at this zoom
+const ZOOM_DEFAULT := 1.5     # ceiling: the board fits the whole map first (Board._layout)
 var _zoom := ZOOM_DEFAULT
 var _pan := Vector2.ZERO
 var hex_px: float:
@@ -222,6 +222,8 @@ func _apply_ui_scale() -> void:
 
 func set_zoom(z: float) -> void:
 	_zoom = clampf(z, 0.45, 3.0)
+	if _board:
+		_board._auto_fit = false
 	_apply_ui_scale()
 	if _board:
 		_board.queue_redraw()
@@ -237,7 +239,7 @@ func _unhandled_key_input(e: InputEvent) -> void:
 	match e.keycode:
 		KEY_EQUAL, KEY_KP_ADD: set_zoom(_zoom * 1.1)
 		KEY_MINUS, KEY_KP_SUBTRACT: set_zoom(_zoom / 1.1)
-		KEY_HOME: _zoom = ZOOM_DEFAULT; _pan = Vector2.ZERO; _apply_ui_scale(); _board.queue_redraw()
+		KEY_HOME: _zoom = ZOOM_DEFAULT; _pan = Vector2.ZERO; _board._auto_fit = true; _apply_ui_scale(); _board.queue_redraw()
 		KEY_LEFT: pan_by(Vector2(40, 0))
 		KEY_RIGHT: pan_by(Vector2(-40, 0))
 		KEY_UP: pan_by(Vector2(0, 40))
@@ -1072,6 +1074,7 @@ class Board extends Control:
 	var main
 	var cb
 	var _origin := Vector2.ZERO
+	var _auto_fit := false    # zoom-to-fit each layout until the user zooms (new fight, Home)
 	var _tok := {}        # id -> displayed pixel pos (for slide)
 	var _hp := {}         # id -> displayed hp value
 	var _floats: Array = []   # {pos: Vector2, text, color, age}
@@ -1144,6 +1147,7 @@ class Board extends Control:
 	func reset(_cb) -> void:
 		cb = _cb
 		_defeat = -1.0
+		_auto_fit = true
 		_tok.clear(); _hp.clear(); _floats.clear(); _flash.clear()
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
@@ -1182,6 +1186,18 @@ class Board extends Control:
 			var p := _iso(Hex.to_pixel(hx, main.hex_px))
 			mn = mn.min(p); mx = mx.max(p)
 		var span := mx - mn
+		# TFT-style: the whole map is on screen at once. Zoom down from ZOOM_DEFAULT
+		# until it fits (once per fight / Home), never up — small maps stay readable.
+		# Re-evaluated every layout (the rect settles over the first frames and
+		# font scale feeds back into it); the user's own zoom switches it off.
+		if _auto_fit and size.y > 0.0:
+			var fit: float = main._zoom * minf((size.x - 60.0) / span.x, (size.y - 40.0) / span.y)
+			var z := clampf(minf(main.ZOOM_DEFAULT, fit), 0.45, 3.0)
+			if not is_equal_approx(z, main._zoom):
+				main._zoom = z
+				main._apply_ui_scale()
+				_layout()
+				return
 		# keep the board from being panned entirely off-screen
 		var lim := (size + span) * 0.5 - Vector2(90, 60)
 		lim = lim.max(Vector2.ZERO)
@@ -1196,7 +1212,7 @@ class Board extends Control:
 	# ISO_SQUASH is the sine of the pitch, so 0.45 ≈ looking down from ~27°,
 	# the flat wide RTS angle rather than a steep 45° overhead.
 	# ponytail: fixed camera. Make these vars if it ever needs to orbit/tilt.
-	const ISO_YAW := 35.0
+	const ISO_YAW := -30.0    # long axis of the strip runs left-right, TFT-style; was 35
 	const ISO_SQUASH := 0.71    # sin(45°): a TFT-style three-quarter view; was 0.38 (22°)
 	const ISO_GAIN := 1.85    # the whole plane, scaled to fill the viewport
 

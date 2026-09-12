@@ -20,3 +20,10 @@ Licence: Meshy output. Commercial rights require a paid Meshy plan; free-tier ou
 CC BY 4.0 with Meshy retaining ownership. See Meshy ToS §3.2 before shipping.
 
 Meshy deletes API assets after 3 days; these local copies are the only durable ones.
+
+## goblin_idle.glb
+Meshy chain on goblin_std (task 01a0964e-9a49-767d-ace1-98551c2f81ba): remesh v1 50k tris
+(01a0965e-6438-7561-932d-45b707248d25) → rig 1.2 m (01a0965f-ea5b-74d8-87f0-1468cc99136b, 0 credits)
+→ animation "Idle" action 0 (01a09663-a7e2-73b1-9dfe-e9a8c629a8cc, 3 credits). Clip
+`Armature|Idle|baselayer`, 4.03 s. Rigged base + walking/running GLBs kept in ~/kitbashforge/meshy_out.
+goblin_std_0.jpg / goblin_lite_0.jpg: textures Godot extracted from the GLBs on import.
