@@ -19,6 +19,8 @@ const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const WorldBattle = preload("res://core/world_battle.gd")
 const Settlements3D := preload("res://scenes/world/settlements3d.gd")
+const Lairs3D := preload("res://scenes/world/lairs3d.gd")
+const Party3D := preload("res://scenes/world/party3d.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
@@ -136,6 +138,8 @@ var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found 
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _settlements3d
+var _lairs3d
+var _party3d
 
 func _ready() -> void:
 	if world == null:
@@ -148,6 +152,14 @@ func _ready() -> void:
 	_settlements3d.world_map = self
 	add_child(_settlements3d)
 	_settlements3d.reset(world)
+	_lairs3d = Lairs3D.new()
+	_lairs3d.world_map = self
+	add_child(_lairs3d)
+	_lairs3d.reset(world)
+	_party3d = Party3D.new()
+	_party3d.world_map = self
+	add_child(_party3d)
+	_party3d.reset(world)
 	set_process(true)
 	_build_hud()
 
@@ -163,10 +175,20 @@ func _demo_world() -> World:
 	w.add_settlement(World.Settlement.new("dun-arrow", Vector2(-360, 260), "dwarf", "camp"))
 	w.add_settlement(World.Settlement.new("ashfell", Vector2(160, 470), "orc", "city"))
 	w.add_party(World.RoamingParty.new("player", Vector2(80, 120), "human", true))
-	WorldAI.hunt(w.add_party(World.RoamingParty.new("bandits", Vector2(-250, -120), "bandit")))
-	WorldAI.hunt(w.add_party(World.RoamingParty.new("goblins", Vector2(380, 300), "goblinoid")))
-	WorldAI.patrol(w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "human")),
-		[Vector2(-120, 380), Vector2(-360, 260), Vector2(0, 0)])
+	var bandits := w.add_party(World.RoamingParty.new("bandits", Vector2(-250, -120), "bandit"))
+	# T-party3d: flavour rosters, for the overworld headcount label and Party3D's
+	# model pick (highest-leveled troop) -- not combat stats, those still come
+	# from Scaler.roster_for(faction). "goblins" has no dwarf/elf/human/orc
+	# counterpart to model, so it keeps a roster (for the headcount) but reads
+	# as no-model to Party3D and stays the plain PawnTex icon.
+	bandits.troops = [{"role": "heavy", "level": 3}, {"role": "light", "level": 5}]
+	WorldAI.hunt(bandits)
+	var goblins := w.add_party(World.RoamingParty.new("goblins", Vector2(380, 300), "goblinoid"))
+	goblins.troops = [{"role": "heavy", "level": 1}, {"role": "heavy", "level": 1}, {"role": "light", "level": 2}]
+	WorldAI.hunt(goblins)
+	var patrol := w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "human"))
+	patrol.troops = [{"role": "heavy", "level": 2}, {"role": "heavy", "level": 2}]
+	WorldAI.patrol(patrol, [Vector2(-120, 380), Vector2(-360, 260), Vector2(0, 0)])
 	# O15 terrain: one lake northwest of Riverhold, and the river it drains into —
 	# which runs past Riverhold's west wall and down to Ashfell, so the town's name
 	# is finally standing next to something. World.waters only knows circles, so the
@@ -927,19 +949,20 @@ func _draw_ground() -> void:
 # gets three, a town two, painter-sorted among themselves. The footprint ring
 # stays: every faction's walls are the same stone, and faction is the one thing
 # the map still has to read at a glance.
-# T91: a discovered lair — a plain skull-marked circle, no building sprite (no
-# model exists yet; see kitbashforge/NEXT_BATCH.md). Grey once looted, faction-
-# tinted red while there's still a fight in it, so a glance says which lairs
-# are done.
+# T91: a discovered lair. Grey once looted, faction-tinted red while there's
+# still a fight in it, so a glance says which lairs are done. Tier 0: a 3D
+# diorama in the Lairs3D layer above this map, same contract as Settlements3D
+# — it replaces the "☠" glyph only; shadow, ring and name label stay shared.
 func _draw_lair(l, at: Vector2) -> void:
 	var col := Icons.COL_MUTED if l.looted else Icons.COL_FOE
 	var r := 14.0 * _zoom
 	_soft_shadow(at, r * 0.85)
 	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
 	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
-	var fs := int(18 * _zoom)
-	draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Icons.COL_HEAD)
+	if not (_lairs3d and _lairs3d.has_model(l)):
+		var fs := int(18 * _zoom)
+		draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Icons.COL_HEAD)
 	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), l.sname,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
 
@@ -1000,5 +1023,17 @@ func _draw_party(p, at: Vector2) -> void:
 	_soft_shadow(at, rad * 0.8)
 	if p.is_player:   # under the sprite, so the ring's far arc reads as behind the pawn
 		draw_polyline(_ring(at, rad * 1.7), Icons.COL_GOLD, 1.5, true)
-	draw_texture_rect(PawnTex, Rect2(at - Vector2(rad, h - rad * 0.22),
-		Vector2(rad * 2.0, h)), false, col)
+	# Tier 0: a 3D troop figure in the Party3D layer above this map, picked from
+	# the band's highest-leveled troop — same contract as Settlements3D/Lairs3D,
+	# replaces the PawnTex icon (and its faction tint) only.
+	if not (_party3d and _party3d.has_model(p)):
+		draw_texture_rect(PawnTex, Rect2(at - Vector2(rad, h - rad * 0.22),
+			Vector2(rad * 2.0, h)), false, col)
+	# T-party3d: name + headcount, floating below the token — same label
+	# treatment World._draw_settlement()/_draw_lair() already use. The player's
+	# own headcount comes off the real Party (active roster), everyone else's
+	# off their troops[] flavour roster (RoamingParty.highest_troop's source).
+	var count: int = party.active.size() if p.is_player else p.troops.size()
+	var label: String = "You" if p.is_player else p.id.capitalize()
+	draw_string(ThemeDB.fallback_font, at + Vector2(-rad * 1.3, rad * 1.3 + 12.0),
+		"%s (%d)" % [label, count], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)

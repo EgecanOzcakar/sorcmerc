@@ -34,6 +34,10 @@ func _world() -> World:
 	# wander() reads `home.position`, so it wants a settlement, not a point.
 	WorldAI.wander(w.add_party(World.RoamingParty.new("elk", Vector2(40, 40), "goblinoid")),
 		w.settlements[0], 90.0, 4242)
+	w.parties[1].troops = [{"role": "heavy", "level": 3}, {"role": "light", "level": 5}]
+	var l := w.add_lair(World.Lair.new("goblin-warren", Vector2(560, 60), "goblinoid"))
+	l.discovered = true
+	w.add_lair(World.Lair.new("dragon-cave", Vector2(680, -400), "dragon", "Dragon's Cave"))
 	w.clock.elapsed = 742.5
 	return w
 
@@ -106,6 +110,17 @@ func _init() -> void:
 	check(elk2.ai["rng"].roll_die(100) == elk.ai["rng"].roll_die(100),
 		"the wander RNG resumes mid-sequence, not from its seed")
 	check(elk2.ai["rng"].seed_value == 4242, "…and the seed itself is kept too")
+	check(_find(w2, "bandits").troops.size() == 2
+		and int(_find(w2, "bandits").highest_troop().get("level", -1)) == 5,
+		"a party's flavour troop roster survives, highest-level troop intact")
+
+	# --- lairs (T91 -- didn't exist when this format was designed) -----------
+	check(w2.lairs.size() == 2, "both lairs came back")
+	var gw = w2.lairs[0]
+	check(gw.id == "goblin-warren" and gw.sname == "Goblin Warren" and gw.faction == "goblinoid"
+		and gw.position == Vector2(560, 60) and gw.discovered and not gw.looted,
+		"a lair's identity and discovery state")
+	check(w2.lairs[1].sname == "Dragon's Cave", "a lair's custom display name survives, not just its id")
 
 	# --- the player's own party ----------------------------------------------
 	check(p2.roster.size() == party.roster.size(), "the roster came back")

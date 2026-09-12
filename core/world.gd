@@ -102,6 +102,14 @@ class RoamingParty extends RefCounted:
 	var goal: Vector2            # O3 drives this; O1 just steers toward it
 	var speed := SPEED
 	var ai := {}                 # O3's behavior + its state; see core/world_ai.gd
+	# T-party3d: who's actually in this band, for the overworld figure (Party3D
+	# picks the highest-leveled one's model) -- flavour only, no stat effect;
+	# combat rosters still come from Scaler.roster_for(faction), unrelated.
+	# {"role": "heavy" | "light" | "spellcaster", "level": int} per troop.
+	# Empty for the player (their own class figure already exists) and for any
+	# NPC faction nobody's bothered seeding a roster for yet -- both read as
+	# "no model," same fallback contract as everything else this session.
+	var troops: Array[Dictionary] = []
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String, is_player_v := false) -> void:
 		id = id_v
@@ -109,6 +117,14 @@ class RoamingParty extends RefCounted:
 		faction = faction_v
 		is_player = is_player_v
 		goal = position_v
+
+	# {} if this party has no troop roster at all.
+	func highest_troop() -> Dictionary:
+		var best := {}
+		for t in troops:
+			if best.is_empty() or int(t.get("level", 0)) > int(best.get("level", 0)):
+				best = t
+		return best
 
 	func at_goal() -> bool:
 		return position.is_equal_approx(goal)

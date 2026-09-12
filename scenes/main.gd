@@ -57,6 +57,12 @@ const BTN_SIZE := Vector2(126, 40)
 # picked, not N separate counters). Read by _prioritize(), written by
 # _set_buttons() on every button press.
 var _verb_freq: Dictionary = {}
+# T-hud: HP bar + condition tags, painted above every tier (see
+# Board._paint_token_hud / _draw_hud_overlay below) instead of inline in
+# Board._draw() — a figure in front used to be able to cover the HP bar of
+# the hex behind it, since Figures3D (a Board child) draws after Board itself.
+var _hud_layer: CanvasLayer
+var _hud_overlay: Control
 
 @onready var _header := Label.new()
 @onready var _order := HBoxContainer.new()   # turn-order icon strip along the top
@@ -193,6 +199,15 @@ func _ready() -> void:
 	_figures.board = _board
 	_figures.main = self
 	_board.add_child(_figures)
+
+	_hud_layer = CanvasLayer.new()
+	_hud_layer.layer = 5   # above Board and Figures3D, both layer 0 — see _draw_hud_overlay
+	add_child(_hud_layer)
+	_hud_overlay = Control.new()
+	_hud_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hud_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_overlay.draw.connect(_draw_hud_overlay)
+	_hud_layer.add_child(_hud_overlay)
 
 	_actor.bbcode_enabled = true
 	_actor.fit_content = true
@@ -1043,10 +1058,32 @@ const BUTTON_ROWS := 3
 func _process(dt: float) -> void:
 	if _board:
 		_board.tick(dt * _anim)
+	if _hud_overlay:
+		_hud_overlay.queue_redraw()
 	if _bscroll:   # grow with the wrapped rows, up to BUTTON_ROWS, then scroll
 		var row := BTN_SIZE.y * clampf(_zoom, 0.9, 1.4) + 6.0
 		_bscroll.custom_minimum_size.y = minf(_buttons.get_combined_minimum_size().y,
 			row * BUTTON_ROWS)
+
+# T-hud: HP bar + condition tags for every living combatant, painted on a
+# CanvasLayer above Board and everything Board parents (Figures3D included) —
+# see Board._paint_token_hud's header comment for why this can't just call
+# back into Board's own drawing code. Coordinates are Board-local; draw_set_
+# transform(origin) once up front instead of adding board.global_position to
+# every point below.
+func _draw_hud_overlay() -> void:
+	if cb == null or _board == null:
+		return
+	_hud_overlay.draw_set_transform(_board.global_position)
+	var s: float = hex_px
+	var fz := clampf(_zoom, 0.75, 1.7)
+	for c in cb.combatants:
+		if c.is_dead():
+			continue
+		var p: Vector2 = _board._tok.get(c.id, _board._pix(c.pos)) + _board._lunge(c.id)
+		var rad := s * 0.62
+		var tp := p if c.is_down() else p + Vector2(0, -rad * 0.55)
+		Board._paint_token_hud(_hud_overlay, c, _board._hp.get(c.id, float(c.hp)), p, tp, s, rad, fz)
 
 func _log_width() -> float:
 	return clampf(size.x * 0.26, 260.0, 380.0)
@@ -1430,24 +1467,36 @@ class Board extends Control:
 
 	# HP bar + condition strip: identical for a sprite and for a vector token, so
 	# both paths call this rather than keeping two copies in step by hand.
-	func _draw_token_hud(c, p: Vector2, tp: Vector2, s: float, rad: float, fz: float) -> void:
-		var hv: float = _hp.get(c.id, float(c.hp))
+	# T-hud: static and canvas-agnostic on purpose. A figure standing in front of
+	# a hex behind it (Figures3D, a Board child, so it draws after Board's own
+	# _draw()) could cover that hex's HP bar — the fix main.gd uses is a
+	# CanvasLayer overlay sitting above everything, which means this has to
+	# paint onto a DIFFERENT CanvasItem than Board itself. draw_rect/draw_string
+	# always target whatever `self` is bound to, so `canvas` is threaded through
+	# explicitly instead of implied. See main.gd's _draw_hud_overlay.
+	static func _paint_token_hud(canvas: CanvasItem, c, hp_shown: float,
+			p: Vector2, tp: Vector2, s: float, rad: float, fz: float) -> void:
 		var bw := s * 1.2
 		var br := Rect2(p.x - bw / 2.0, p.y + rad * ISO_SQUASH + 4.0, bw, 6.0)
-		draw_rect(br, Color("0c0d11"))
-		var frac := clampf(hv / float(c.max_hp), 0.0, 1.0)
+		canvas.draw_rect(br, Color("0c0d11"))
+		var frac := clampf(hp_shown / float(c.max_hp), 0.0, 1.0)
 		var hpcol := Color("5fbf6a")
 		if frac < 0.33: hpcol = Color("d15750")
 		elif frac < 0.66: hpcol = Color("d9a441")
-		draw_rect(Rect2(br.position, Vector2(br.size.x * frac, br.size.y)), hpcol)
-		draw_string(ThemeDB.fallback_font, br.position + Vector2(0, 12 + 8 * fz),
+		canvas.draw_rect(Rect2(br.position, Vector2(br.size.x * frac, br.size.y)), hpcol)
+		canvas.draw_string(ThemeDB.fallback_font, br.position + Vector2(0, 12 + 8 * fz),
 			"%d/%d" % [c.hp, c.max_hp], HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * fz), Color("c9ccd6"))
 
 		# condition strip, centred over the token (the shoulder is the class badge's)
 		var tags: String = Icons.status_glyphs(c)
 		if c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
 		if tags != "":
-			_centered(tags, tp + Vector2(0, -rad * 0.8 - 10), int(13 * fz), Color("e6c15a"))
+			var fs := int(13 * fz)
+			var f := ThemeDB.fallback_font
+			var w := f.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var at := tp + Vector2(0, -rad * 0.8 - 10)
+			canvas.draw_string(f, at - Vector2(w * 0.5, -fs * 0.36), tags,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("e6c15a"))
 
 	# The LPC sprite for `c`, if there is one. Returns false when there isn't, and
 	# the caller draws its vector token instead.
@@ -1735,19 +1784,19 @@ class Board extends Control:
 				draw_polyline(_disc(p, rad + 12.0 + bl * 6.0, true),
 					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0, true)
 			# Tier 1: a composited LPC sprite, if this combatant has one. It
-			# replaces the drawn disc and its glyph only — shadow, active ring,
-			# flash, HP bar, condition tags and the _tok/_lunge positioning above
+			# replaces the drawn disc and its glyph only — shadow and active ring
 			# are shared with the vector token below, which still draws everyone
-			# the art doesn't cover.
+			# the art doesn't cover. HP bar and condition tags are T-hud's job now
+			# (main.gd's _draw_hud_overlay, a CanvasLayer above every tier including
+			# Figures3D — a figure standing in front used to be able to cover the
+			# HP bar of the hex behind it when this drew inline here).
 			# Tier 0: a 3D figure in the Figures3D layer above this Board. Same contract
 			# as the sprite tier below: it replaces the disc and glyph only.
 			if main._figures and main._figures.has_figure(c):
-				_draw_token_hud(c, p, tp, s, rad, fz)
 				continue
 			# ponytail: LPC pixel-art tier disabled — clashed against the 3D foes
 			# (T85). USE_LPC_SPRITES flips it back on; _draw_sprite is untouched.
 			if USE_LPC_SPRITES and _draw_sprite(c, p, s, base):
-				_draw_token_hud(c, p, tp, s, rad, fz)
 				continue
 			# The token is shaded like a ball: hotspot toward the light, falling
 			# off to a darker rim, with a bright sliver of rim light on the lit
@@ -1765,7 +1814,6 @@ class Board extends Control:
 					Color(1, 1, 1, 0.26), 2.0, true)
 			# The token's mark: class glyph for heroes, creature-type glyph for foes.
 			_centered(_glyph(c), tp, int(24 * fz), Color("101216"))
-			_draw_token_hud(c, p, tp, s, rad, fz)
 
 		_draw_fx(s)   # projectiles / spell flashes sit over the tokens
 
