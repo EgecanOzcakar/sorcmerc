@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/human_town_texture_0.png-d8f49a4a2701115034f8
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/orc_town_texture_0.png-7216116a8a6f74ca4957e0
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

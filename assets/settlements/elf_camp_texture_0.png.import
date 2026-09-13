@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/elf_camp_texture_0.png-7f058495905e85b4cd9271
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

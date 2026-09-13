@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/human_camp_texture_0.png-7e81d0ac69c14e49d8b2
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
