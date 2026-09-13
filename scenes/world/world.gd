@@ -32,6 +32,8 @@ const SiteScreen = preload("res://scenes/world/site_screen.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
 const Travel = preload("res://core/travel.gd")
 const EventCard = preload("res://scenes/world/event_card.gd")
+const Approach = preload("res://core/approach.gd")
+const ApproachCard = preload("res://scenes/world/approach_card.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
@@ -211,6 +213,12 @@ var _site = null                     # D1: the delve in progress (core/site.gd),
 # save-format field for something that fires every six world-hours anyway.
 var _last_travel_at: float = 0.0
 var _event_card: Control = null
+# D4: the band the player is deciding how to meet, and the card asking. Bands
+# slipped past go on `_slipped` so walking away does not immediately re-trigger
+# the same meeting — the settlement gate's `_left` does the same job.
+var _approach_foe = null
+var _approach_card: Control = null
+var _slipped := {}
 var _pace_btn: Button
 var _site_screen: Control = null     # ...and the descent screen drawing it
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
@@ -608,12 +616,22 @@ func _check_encounter(dt := 0.0) -> void:
 	var p := world.player()
 	if p == null:
 		return
+	if _approach_card != null:
+		return
 	var reach := _trigger(dt)
 	for q in world.parties:
 		if q == p or not WorldAI.is_hostile(q, p):
 			continue
-		if q.position.distance_to(p.position) <= reach:
-			_launch_combat(q)
+		var near: bool = q.position.distance_to(p.position) <= reach
+		# A band already slipped past stays slipped until it is genuinely out of
+		# range again, or the player would be asked the same question every frame
+		# for as long as they stand next to it.
+		if _slipped.has(q.id):
+			if not near:
+				_slipped.erase(q.id)
+			continue
+		if near:
+			_open_approach(q)
 			return
 
 # The roster the encountered party fights with. Scaler takes a *theme*, not a
@@ -995,6 +1013,69 @@ func _check_forage() -> void:
 		_camp_msg.text = "%s forages along the way (%s %d+%d vs DC %d) — +%d gold." % [
 			roll["cname"], String(roll["skill"]).capitalize(), roll["nat"], roll["bonus"], roll["dc"], int(roll["gold"])]
 
+# --- D4: how the party meets a band ---------------------------------------
+#
+# A hostile band closing in used to drop the player straight into a fight — the
+# encounter happened TO them, which is the blob-bumps-blob shape the scope
+# revision set out to remove. Now the clock stops and they choose: slip away,
+# parley, set an ambush, or go straight at it (core/approach.gd owns the rules
+# and the rolls; this only runs the flow).
+func _open_approach(foe) -> void:
+	if _approach_card != null:
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_approach_foe = foe
+	_approach_card = ApproachCard.new()
+	add_child(_approach_card)
+	_approach_card.chosen.connect(_on_approach_chosen)
+	_approach_card.show_approach(Approach.options(party, foe),
+		"%s (%d)" % [foe.id.capitalize(), foe.troops.size()])
+
+func _on_approach_chosen(way: String) -> void:
+	var foe = _approach_foe
+	if foe == null:
+		return
+	var r: Dictionary = Approach.resolve(party, foe, way,
+		RNG.new(maxi(1, absi(hash("%s|%s|%d" % [foe.id, way, int(world.clock.elapsed)])))))
+	_close_approach()
+	# The outcome is reported on the same card the road events use — it is the
+	# same kind of thing, and a second card style would be a second thing to
+	# learn for no reason.
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(_on_approach_reported.bind(foe, r))
+	_event_card.show_event(_approach_event(r))
+
+# core/approach.gd's result, in the shape event_card.gd already draws.
+func _approach_event(r: Dictionary) -> Dictionary:
+	var e: Dictionary = r.duplicate(true)
+	e["id"] = "approach-%s" % String(r.get("way", ""))
+	e["title"] = String(Approach.WAYS.get(String(r.get("way", "")), {}).get("label", "The meeting"))
+	# "good" is not the same as "the roll passed": walking into a fight you
+	# meant to walk into is not a setback, and a blown ambush is.
+	e["kind"] = "bad" if bool(r.get("forced_ambush", false)) else "good"
+	if r.has("toll"):
+		e["gold"] = -int(r["toll"])
+	return e
+
+func _on_approach_reported(foe, r: Dictionary) -> void:
+	_on_event_ack()
+	if not bool(r.get("fight", true)):
+		# No fight: the band is still out there, just not met. Mark it slipped so
+		# standing next to it does not re-open the question every frame.
+		_slipped[foe.id] = true
+		world.clock.resume()
+		return
+	await _launch_combat(foe, bool(r.get("scouted_ahead", false)),
+		bool(r.get("forced_ambush", false)))
+
+func _close_approach() -> void:
+	if _approach_card != null:
+		_approach_card.queue_free()
+		_approach_card = null
+	_approach_foe = null
+
 # D3 — the other half of keeping a 1x-8x fast-forward honest. Travel used to be
 # empty, so 8x was a way to skip the game; now the road rolls an event every
 # Travel.EVENT_INTERVAL of actual travel and the clock STOPS for it. That is the
@@ -1025,6 +1106,11 @@ func _check_travel() -> void:
 	_event_card.show_event(e)
 	WorldSave.save(world, party)   # an event can move gold, HP, the clock and the map
 
+# The plain handler for a road event's card. Note it FREES the card without
+# emitting `acknowledged`, so anything that needs a bound follow-up to run
+# (D4's _on_approach_reported, which launches the fight) must emit the signal
+# instead of calling this. A driver that called this directly is exactly how
+# that was found.
 func _on_event_ack() -> void:
 	if _event_card != null:
 		_event_card.queue_free()

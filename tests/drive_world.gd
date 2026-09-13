@@ -38,7 +38,18 @@ func step(n: int, dt := 0.1) -> void:
 		# never dismisses it would sit behind a paused world for the rest of the
 		# run, so the driver does what a player does and waves it away.
 		if screen._event_card != null:
-			screen._on_event_ack()
+			# Emit the signal rather than calling world.gd's plain ack handler:
+			# an outcome card can carry a bound follow-up (D4 launches the fight
+			# off it), and calling the handler frees the card without ever
+			# running what was waiting on it.
+			screen._event_card.acknowledged.emit()
+		# D4: a hostile band now asks how the party wants to meet it before any
+		# fight happens. The robot charges — that is what this driver's existing
+		# assertions were written against, back when charging was the only
+		# option. The other three ways have their own coverage in
+		# tests/test_approach.gd.
+		if screen._approach_card != null:
+			screen._on_approach_chosen("engage")
 
 func _run() -> void:
 	await process_frame
