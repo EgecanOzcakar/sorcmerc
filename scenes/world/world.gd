@@ -342,7 +342,13 @@ func _small_world() -> World:
 	# T91: five hidden monster lairs — the initial roster the brief named. Hidden
 	# until a Survival check finds them (WorldLairs.DISCOVER_RADIUS), then
 	# attackable like a hostile settlement's guard for their own stash.
-	w.add_lair(World.Lair.new("goblin-warren", Vector2(560, 60), "goblinoid"))
+	# D6.1: was (560, 60) — frac 0.71, out in the Frontier, which is two countries
+	# from a goblinoid's own (Regions.HOMES). That left the Heartland holding
+	# Riverhold and nothing else: the band built for levels 1-3 had no destination
+	# in it at all, and the first thing a new party could walk to was Marches
+	# content built for level 3-6. Pulled in to frac 0.45, clear of every
+	# settlement, both banks of the river, and the lake.
+	w.add_lair(World.Lair.new("goblin-warren", Vector2(330, 130), "goblinoid"))
 	w.add_lair(World.Lair.new("giant-hold", Vector2(-520, -260), "giant"))
 	w.add_lair(World.Lair.new("sunken-ruins", Vector2(-280, -340), "undead", "Sunken Ruins"))
 	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(300, 620), "undead", "Zombie Graveyard"))
