@@ -25,6 +25,9 @@ func _init() -> void:
 	check(races.size() == 4, "all four races present, no dupes/gaps (got %s)" % str(races.keys()))
 	check(w1.lairs.size() == 5, "all five named lairs (got %d)" % w1.lairs.size())
 	check(w1.player() != null, "has a player party")
+	# T-water: provenance — the seed is the map, so a save has to carry it.
+	check(String(w1.origin.get("kind", "")) == "procedural"
+		and int(w1.origin.get("seed", -1)) == 42, "a generated world records its builder and seed")
 
 	for i in w1.settlements.size():
 		check(w1.settlements[i].position.is_equal_approx(w2.settlements[i].position),

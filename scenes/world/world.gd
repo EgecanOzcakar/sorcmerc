@@ -21,6 +21,7 @@ const WorldBattle = preload("res://core/world_battle.gd")
 const Settlements3D := preload("res://scenes/world/settlements3d.gd")
 const Lairs3D := preload("res://scenes/world/lairs3d.gd")
 const Party3D := preload("res://scenes/world/party3d.gd")
+const Minimap := preload("res://scenes/world/minimap.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
@@ -180,6 +181,11 @@ var _visit: Dictionary = {}      # the open market, or {}
 # action handler's _build_visit_panel() call just re-renders whichever page
 # is current, same as before the split.
 var _visit_page := "hub"
+# T9y: which counter the Market page is showing — MARKET_TAB_ALL, or one of
+# the settlement's own Campaign.SERVICE_ORDER services. Scene-local like
+# _visit_page, and reset with it: which stall you were last standing at is
+# not worth a save-format field.
+var _market_tab := MARKET_TAB_ALL
 var _visit_panel: Control = null
 var _visit_log: Label = null
 var _left: Object = null         # the settlement just left; no re-entry until out of range
@@ -199,6 +205,7 @@ var _last_forage_at: float = 0.0
 var _settlements3d
 var _lairs3d
 var _party3d
+var _minimap: Control = null   # T9y: the corner map inset, see _layout_minimap()
 # T-tiles spike: which ground sheets _draw_ground() actually samples — set once
 # in _ready() from SORCMERC_ALT_TILES, since preload() can't be conditional on
 # an env var the way a plain assignment can.
@@ -256,12 +263,16 @@ func _large_world() -> World:
 # with — same content it always had, just renamed and no longer the only one.
 func _small_world() -> World:
 	var w := World.new()
+	w.origin = {"kind": "small", "seed": 0}   # which builder made this map; survives a save (core/world_save.gd)
 	w.add_settlement(World.Settlement.new("riverhold", Vector2(0, 0), "human", "city"))
 	w.add_settlement(World.Settlement.new("greenmarch", Vector2(420, -180), "elf", "town"))
 	w.add_settlement(World.Settlement.new("dun-arrow", Vector2(-360, 260), "dwarf", "camp"))
 	w.add_settlement(World.Settlement.new("ashfell", Vector2(160, 470), "orc", "city"))
 	w.add_party(World.RoamingParty.new("player", Vector2(80, 120), "human", true))
-	var bandits := w.add_party(World.RoamingParty.new("bandits", Vector2(-250, -120), "bandit"))
+	# T9y: was (-250, -120), which is 22 units deep in the lake stamped below —
+	# invisible while water was cosmetic, a band standing in a lake the moment
+	# water became terrain. Moved to the same corner, 70 units clear of the bank.
+	var bandits := w.add_party(World.RoamingParty.new("bandits", Vector2(-320, -180), "bandit"))
 	# T-party3d: flavour rosters, for the overworld headcount label and Party3D's
 	# model pick (highest-leveled troop) -- not combat stats, those still come
 	# from Scaler.roster_for(faction). "goblins" has no dwarf/elf/human/orc
@@ -322,6 +333,7 @@ func _process(delta: float) -> void:
 	_check_forage()
 	if _camp_btn != null:
 		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0
+	_layout_minimap()   # this Control resizes with the window; the inset follows the corner
 	if _clock_lbl != null:
 		_clock_lbl.text = "Day %d  %02d:%02d" % [
 			int(world.clock.elapsed / 1440.0) + 1,
@@ -387,6 +399,32 @@ func _build_hud() -> void:
 	_camp_msg = Label.new()
 	_camp_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	bar.add_child(_camp_msg)
+	# T9y: the map inset. Added last so it sits above the 2D map but below the
+	# visit/party/quest overlays, which are added later still; it places itself
+	# nowhere, so _layout_minimap() below owns the corner it lives in.
+	_minimap = Minimap.new()
+	_minimap.world_map = self
+	add_child(_minimap)
+	_layout_minimap()
+
+# Bottom-right, inside the same 12px gutter the top-left button bar uses, and
+# re-run every frame because this Control resizes with the window.
+const MINIMAP_GUTTER := 12.0
+func _layout_minimap() -> void:
+	if _minimap == null:
+		return
+	var want: Vector2 = Minimap.DEFAULT_SIZE
+	# Never let the inset eat the map on a small window: a third of the shorter
+	# side is the ceiling, and below MINIMAP_MIN it is not worth drawing at all.
+	var cap: float = minf(size.x, size.y) / 3.0
+	if cap < MINIMAP_MIN:
+		_minimap.visible = false
+		return
+	_minimap.visible = true
+	var side: float = minf(want.x, cap)
+	_minimap.size = Vector2(side, side * want.y / want.x)
+	_minimap.position = size - _minimap.size - Vector2(MINIMAP_GUTTER, MINIMAP_GUTTER)
+const MINIMAP_MIN := 96.0
 
 # O9 item 2: the only way out of the open world. The characters go to the barracks
 # (what the title screen's count reads); O13: the map, the party's purse/stash/quests
@@ -809,11 +847,42 @@ func _open_visit(s) -> void:
 	world.set_goal(world.player(), world.player().position)   # stop at the gate
 	_visit = Visit.visit(s, world)
 	_visit_page = "hub"
+	_market_tab = MARKET_TAB_ALL
 	_build_visit_panel()
 
 func _goto_page(page: String) -> void:
 	_visit_page = page
+	if page == "market":
+		_market_tab = MARKET_TAB_ALL   # every visit to the stalls starts at the whole shelf
 	_build_visit_panel()
+
+const MARKET_TAB_ALL := "all"
+
+func _goto_market_tab(service: String) -> void:
+	_market_tab = service
+	_build_visit_panel()
+
+# T9y: a settlement is four screens now, and the only way between them was the
+# mouse. Esc backs out one level (counter -> page -> town square -> the map),
+# which is the one binding a player will try without being told; the initials
+# jump straight to a building from anywhere inside the gates.
+func _unhandled_key_input(event: InputEvent) -> void:
+	if _visit.is_empty() or _combat != null or not (event is InputEventKey) or not event.pressed:
+		return
+	match event.keycode:
+		KEY_ESCAPE:
+			if _visit_page == "market" and _market_tab != MARKET_TAB_ALL:
+				_goto_market_tab(MARKET_TAB_ALL)
+			elif _visit_page != "hub":
+				_goto_page("hub")
+			else:
+				_close_visit()
+		KEY_M: _goto_page("market")
+		KEY_I: _goto_page("inn")
+		KEY_B: _goto_page("board")
+		KEY_T: _goto_page("hub")
+		_: return
+	accept_event()
 
 func _close_visit() -> void:
 	_left = _visit.get("settlement")
@@ -835,6 +904,27 @@ func _buy(item_id: String) -> void:
 func _sell(item_id: String) -> void:
 	if Visit.sell(_visit, party, item_id):
 		_build_visit_panel()
+
+# T9y: the Healer and the Librarian — T25 services that a settlement has
+# always been able to advertise but never actually staff (see
+# core/settlement_visit.gd's heal()/identify()). Neither takes clock time,
+# so neither re-reads the market; both autosave, same as every other purse
+# movement in this file.
+func _heal() -> void:
+	var r: Dictionary = Visit.heal(party)
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("heal")
+		WorldSave.save(world, party)
+	_build_visit_panel()
+	_say(String(r.get("text", "")))
+
+func _identify(item_id: String) -> void:
+	var r: Dictionary = Visit.identify(party, item_id)
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("identify")
+		WorldSave.save(world, party)
+	_build_visit_panel()
+	_say(String(r.get("text", "")))
 
 # T9x: flat price, unlimited stock — see the row comment in _build_visit_panel.
 func _buy_camp_kit() -> void:
@@ -1074,6 +1164,11 @@ const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "b
 
 # The town square: where to go, plus the one thing that belongs to no single
 # building — picking over a battlefield nearby.
+# T9y: every door now says what is behind it before you open it. The split
+# into separate screens (34300bb) left the hub with three unlabelled buttons,
+# so the only way to find out whether the board had work — or whether the
+# shelves were bare — was to walk in and look. All three counts are read off
+# state the page already had to compute anyway.
 func _build_hub_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()
 	mood.text = "%s%s · your purse: %d gp" % [
@@ -1085,16 +1180,30 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 
 	var places := VBoxContainer.new()
 	box.add_child(places)
+	var stock: Array = _visit.get("stock", [])
 	var market_btn := Button.new()
-	market_btn.text = "Market — %s" % ", ".join(_visit["services"])
+	market_btn.text = ("Market — they will not trade with you" if _visit.get("refused", false)
+		else "Market — %d on the shelves" % stock.size())
 	market_btn.pressed.connect(_goto_page.bind("market"))
 	places.add_child(market_btn)
+	var counters := Label.new()
+	counters.text = "      %s" % ", ".join(_visit["services"].map(
+		func(x): return String(Campaign.SERVICE_NAMES.get(x, x))))
+	counters.add_theme_color_override("font_color", Icons.COL_MUTED)
+	places.add_child(counters)
+
 	var inn_btn := Button.new()
-	inn_btn.text = "Inn — rest the night (%d gp)" % Visit.inn_cost(s)
+	var wait: float = Visit.long_rest_in(party, world)
+	inn_btn.text = ("Inn — rest the night (%d gp)" % Visit.inn_cost(s) if wait <= 0.0
+		else "Inn — rested recently, a room does nothing for %s yet" % _hours(wait))
 	inn_btn.pressed.connect(_goto_page.bind("inn"))
 	places.add_child(inn_btn)
+
 	var board_btn := Button.new()
-	board_btn.text = "Notice Board — work and turn-ins"
+	var offers: int = Visit.quest_offers(s, party, world).size()
+	var ready: int = Visit.turn_ins(party).size()
+	board_btn.text = ("Notice Board — nothing posted" if offers == 0 and ready == 0
+		else "Notice Board — %d posted, %d ready to turn in" % [offers, ready])
 	board_btn.pressed.connect(_goto_page.bind("board"))
 	places.add_child(board_btn)
 
@@ -1106,6 +1215,13 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 		investigate_btn.pressed.connect(_investigate)
 		places.add_child(investigate_btn)
 
+# T9y: one counter at a time. T25 sizes a settlement's specialists and the
+# hub line names them, but the shelf itself was one alphabetical list with no
+# hint of who was selling what — and the two services that stock no goods
+# (Healer, Librarian) had nowhere to exist at all, so a city's own services
+# line was advertising people the player could never talk to. A tab strip
+# across the top picks the counter; "All" keeps the old single list, grouped
+# under headers rather than shuffled together.
 func _build_market_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()
 	mood.text = "Shelves %d/%d · prices x%.2f%s · your purse: %d gp" % [
@@ -1115,27 +1231,72 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
 	box.add_child(mood)
 
+	var groups: Dictionary = Visit.stock_by_service(s, _visit)
+	var tabs := HBoxContainer.new()
+	box.add_child(tabs)
+	for t in [MARKET_TAB_ALL] + Array(_visit["services"]):
+		var name_of: String = ("All" if t == MARKET_TAB_ALL
+			else String(Campaign.SERVICE_NAMES.get(t, t)))
+		# Innkeeper is the quest-giver role (see campaign.gd's SERVICE_ORDER
+		# comment); its counter is the Notice Board, not a stall here.
+		if t == "innkeeper":
+			continue
+		var btn := Button.new()
+		btn.text = name_of
+		btn.disabled = (_market_tab == t)   # the open tab, shown as pressed rather than as a live button
+		btn.pressed.connect(_goto_market_tab.bind(String(t)))
+		tabs.add_child(btn)
+
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(440, 280)
+	scroll.custom_minimum_size = Vector2(440, 250)
 	box.add_child(scroll)
 	var rows := VBoxContainer.new()
 	scroll.add_child(rows)
-	for e in _visit["stock"]:
-		_trade_row(rows, "%s — %d gp" % [e["name"], e["price"]], "Buy",
-			_buy.bind(String(e["item_id"])))
+	var showing_all: bool = _market_tab == MARKET_TAB_ALL
+	for service in _visit["services"]:
+		if service == "innkeeper":
+			continue
+		if not showing_all and _market_tab != service:
+			continue
+		var shelf: Array = groups.get(service, [])
+		var actions: bool = service in ["healer", "librarian"]
+		if shelf.is_empty() and not actions:
+			continue
+		if showing_all:
+			_section(rows, String(Campaign.SERVICE_NAMES.get(service, service)))
+		for e in shelf:
+			_trade_row(rows, "%s — %d gp" % [e["name"], e["price"]], "Buy",
+				_buy.bind(String(e["item_id"])))
+		if service == "healer":
+			_trade_row(rows, "Patch up the whole party — %d gp (no rest, no waiting)" % Visit.HEAL_COST,
+				"Heal", _heal)
+		elif service == "librarian":
+			var mystery: Array = party.unidentified()
+			if mystery.is_empty():
+				_note(rows, "Nothing in the pack needs identifying.")
+			for entry in mystery:
+				var mid := String(entry["item_id"])
+				_trade_row(rows, "Identify the unknown %s — %d gp" % [
+					Campaign.item_name(mid), Visit.IDENTIFY_COST], "Identify", _identify.bind(mid))
+	# The generalist's own counter also outfits you: the camp kit is a flat
+	# price and never runs out, so it is not part of the T25 shelf/restock
+	# catalog (T9x) and gets its own row rather than a fake catalog entry.
+	if showing_all or _market_tab == "generalist":
+		_trade_row(rows, "%s — %d gp (lets you long-rest away from a settlement)" % [
+			WorldCamp.CAMP_KIT_NAME, WorldCamp.CAMP_KIT_PRICE], "Buy", _buy_camp_kit)
+	# Selling is not a counter — whoever is behind it takes the whole pack —
+	# so it stays out of the tabs and sits under everything, on every tab.
+	var sellable := 0
 	for entry in party.stash:
 		var id := String(entry["item_id"])
 		var paid := Visit.sell_price(_visit, id)
 		if paid <= 0:
 			continue
+		if sellable == 0:
+			_section(rows, "Your pack")
+		sellable += 1
 		_trade_row(rows, "%s x%d — sells for %d gp" % [
 			Campaign.item_name(id), int(entry["quantity"]), paid], "Sell", _sell.bind(id))
-	# T9x: the outfitter's one flat-priced, always-in-stock good — not part of
-	# the T25 shelf/restock catalog (it's not a weapon/armor/magic item, and
-	# it never runs out), so it gets its own row rather than a fake catalog
-	# entry.
-	_trade_row(rows, "%s — %d gp (lets you long-rest away from a settlement)" % [
-		WorldCamp.CAMP_KIT_NAME, WorldCamp.CAMP_KIT_PRICE], "Buy", _buy_camp_kit)
 
 	var bar := HBoxContainer.new()
 	box.add_child(bar)
@@ -1153,19 +1314,59 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		persuade_btn.pressed.connect(_persuade)
 		bar.add_child(persuade_btn)
 
+# T9y: the inn was one button and a purse. Resting is the one action here
+# whose whole value is the state it changes, so the page now shows that state:
+# who is hurt, what a night costs, and — when the once-a-day cooldown says no
+# — how long until it says yes. A disabled button with a number beside it is
+# an answer; a button that shrugs is the silent-no-op bug again (e3cc910).
 func _build_inn_page(box: VBoxContainer, s) -> void:
+	var cost := Visit.inn_cost(s)
 	var mood := Label.new()
-	mood.text = "Your purse: %d gp" % party.gold
+	mood.text = "A %s bed is %d gp a night · your purse: %d gp" % [s.kind, cost, party.gold]
 	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
 	box.add_child(mood)
+
+	var rows := VBoxContainer.new()
+	box.add_child(rows)
+	_section(rows, "Around the table")
+	for id in party.active:
+		var m: Dictionary = party.summary(id)
+		if m.is_empty():
+			continue
+		var line := Label.new()
+		var hurt: bool = int(m["hp"]) < int(m["max_hp"])
+		line.text = "%s — %s %d · %d/%d hp%s" % [m["name"], m["class_name"], m["level"],
+			m["hp"], m["max_hp"], "" if not hurt else "   (hurt)"]
+		line.add_theme_color_override("font_color", Icons.COL_FOE if hurt else Icons.COL_BODY)
+		rows.add_child(line)
+
+	var wait: float = Visit.long_rest_in(party, world)
 	var rest_btn := Button.new()
-	rest_btn.text = "Rest the night (%d gp)" % Visit.inn_cost(s)
+	rest_btn.text = "Rest the night (%d gp)" % cost
+	rest_btn.disabled = wait > 0.0 or party.gold < cost
 	rest_btn.pressed.connect(_rest)
 	box.add_child(rest_btn)
+	if wait > 0.0:
+		_note(box, "They rested less than a day ago — another night does nothing for %s." % _hours(wait))
+		# The healer is the paid way past this wall, and only a settlement that
+		# has one can offer it: say so where the player hits the wall, not only
+		# on the counter they would have to guess to open.
+		if Visit.has_service(s, "healer"):
+			_note(box, "The healer will patch everyone up regardless, for %d gp." % Visit.HEAL_COST)
+	elif party.gold < cost:
+		_note(box, "Not enough gold for a room.")
+	else:
+		_note(box, "Eight hours: everyone back to full, spells and abilities back, and the stalls restock while you sleep.")
 
 func _build_board_page(box: VBoxContainer, s) -> void:
+	var mood := Label.new()
+	mood.text = "%s posts the work here · your purse: %d gp" % [
+		Campaign.SERVICE_NAMES.get("innkeeper", "The innkeeper") if Visit.has_service(s, "innkeeper")
+		else "A town elder", party.gold]
+	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	box.add_child(mood)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(440, 320)
+	scroll.custom_minimum_size = Vector2(440, 300)
 	box.add_child(scroll)
 	var rows := VBoxContainer.new()
 	scroll.add_child(rows)
@@ -1185,6 +1386,39 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 		none.text = "Nothing posted right now."
 		none.add_theme_color_override("font_color", Icons.COL_MUTED)
 		rows.add_child(none)
+
+# A counter's heading inside a page's scroll list, and a muted aside. Both
+# exist so a page can explain itself without every builder re-deriving the
+# same Label boilerplate.
+func _section(rows: Control, text: String) -> void:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_color_override("font_color", Icons.COL_GOLD)
+	rows.add_child(l)
+
+func _note(rows: Control, text: String) -> void:
+	var l := Label.new()
+	l.text = text
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(430, 0)
+	l.add_theme_color_override("font_color", Icons.COL_MUTED)
+	rows.add_child(l)
+
+# World-minutes as something a person would say out loud. Under an hour is
+# still "an hour" — the long-rest cooldown is a day-scale number and false
+# precision on it ("in 3 minutes") would read as a bug, not as detail.
+static func _hours(minutes: float) -> String:
+	var h := int(ceil(minutes / 60.0))
+	return "an hour" if h <= 1 else "%d hours" % h
+
+# The same clock at the other end of its range. A march is a minutes-scale
+# number — World.SPEED is 40 units per world-minute, so crossing the whole
+# small map is about 25 of them — and rounding that to hours the way _hours()
+# does would print "an hour" for every settlement on the map.
+static func _travel_time(minutes: float) -> String:
+	if minutes < 60.0:
+		return "%d min" % maxi(1, int(round(minutes)))
+	return "%dh%02d" % [int(minutes / 60.0), int(minutes) % 60]
 
 func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable) -> void:
 	var row := HBoxContainer.new()
@@ -1303,26 +1537,39 @@ func _draw() -> void:
 	# whole point of the beacon is to give the player something to walk
 	# toward on a still-dark map. Lairs and roaming parties stay fog-gated:
 	# those are meant to be found, not signposted.
+	# T9y: "live" is the same currently-visible tier _draw_ground() dims the
+	# ground with — a prop the party can actually see right now draws in full
+	# colour, one they are only remembering draws washed out. Without it a
+	# settlement visited two days ago looked exactly like the one you are
+	# standing in, which threw away the distinction the three-tier fog had
+	# just bought.
+	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
 	var props: Array = []
 	for s in world.settlements:
-		props.append({"at": _pix(s.position), "s": s})
+		props.append({"at": _pix(s.position), "s": s, "live": world.is_visible_now(s.position, ppos)})
 	for l in world.lairs:
 		if l.discovered and world.is_explored(l.position):   # T91: undiscovered lairs draw nothing — that's the point
-			props.append({"at": _pix(l.position), "l": l})
+			props.append({"at": _pix(l.position), "l": l, "live": world.is_visible_now(l.position, ppos)})
 	for q in world.parties:
 		if q.is_player and not _visit.is_empty():
 			continue   # inside the gates for the duration of the visit, not standing on the map
 		if not q.is_player and not world.is_explored(q.position):
 			continue
-		props.append({"at": _pix(q.position), "p": q})
+		# A roaming band is the one prop whose remembered position is a lie —
+		# it has walked on since. Drawn at its live position either way (the
+		# map has no last-known-position memory to draw instead), but washed
+		# out, which is the honest reading: "they were around here".
+		props.append({"at": _pix(q.position), "p": q,
+			"live": q.is_player or world.is_visible_now(q.position, ppos)})
 	props.sort_custom(func(a, b): return a["at"].y < b["at"].y)
 	for d in props:
 		if d.has("s"):
-			_draw_settlement(d["s"], d["at"])
+			_draw_settlement(d["s"], d["at"], d["live"])
 		elif d.has("l"):
-			_draw_lair(d["l"], d["at"])
+			_draw_lair(d["l"], d["at"], d["live"])
 		else:
-			_draw_party(d["p"], d["at"])
+			_draw_party(d["p"], d["at"], d["live"])
+	_draw_offscreen_markers(ppos)
 
 # O11: one Overworld Pack tile per ground cell, on the same grid the procedural
 # patches used. ISO_YAW is 35°, not the 45° the art is drawn for, so a cell lands
@@ -1385,6 +1632,110 @@ func _draw_ground() -> void:
 				draw_rect(rect, FOG_REMEMBERED)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 
+# T9y: the one place the "you can see it now" vs "you only remember it"
+# distinction turns into a colour. Desaturate toward the fog's own blue-black
+# and drop the alpha rather than simply darkening: a darkened faction colour
+# still reads as that faction's colour at full confidence, which is exactly
+# the claim a remembered prop must not make. FOG_REMEMBERED is the ground
+# tint doing the same job one layer down; these numbers are tuned to sit
+# with it, not independently.
+const REMEMBERED_FADE := 0.55     # how far toward the fog colour a remembered prop goes
+const REMEMBERED_ALPHA := 0.72
+func _remembered(col: Color, live: bool) -> Color:
+	if live:
+		return col
+	var faded := col.lerp(Color(FOG_REMEMBERED, 1.0), REMEMBERED_FADE)
+	faded.a = col.a * REMEMBERED_ALPHA
+	return faded
+
+# T9y: the map is thousands of units across and the camera shows a few hundred
+# of them, so a settlement that is not on screen may as well not exist — the
+# fog's settlement beacons (32c4c88) gave the player something to walk toward
+# only while it happened to be in frame. These are the same beacons, pinned to
+# the edge of the frame when they fall outside it: the nearest few, each a
+# chevron pointing the way with its name and how far off it is.
+#
+# Three, not all of them: on the large and procedural maps every settlement is
+# off screen most of the time, and a rim of chevrons is no more use than none.
+# The nearest three are the ones a party could plausibly be heading for.
+const OFFSCREEN_MARKERS := 3
+const OFFSCREEN_MARGIN := 26.0    # how far in from the viewport edge a chevron sits
+const OFFSCREEN_SIZE := 9.0
+func _marker_frame() -> Rect2:
+	return Rect2(Vector2(OFFSCREEN_MARGIN, OFFSCREEN_MARGIN),
+		size - Vector2(OFFSCREEN_MARGIN, OFFSCREEN_MARGIN) * 2.0)
+
+# Which settlements earn a chevron: the ones not currently on screen, nearest
+# first, capped. Split out of the draw so the choice is testable without a
+# viewport — the drawing itself is the part a test can only look at.
+func _offscreen_settlements(frame: Rect2, ppos: Vector2) -> Array:
+	var off: Array = []
+	for s in world.settlements:
+		if frame.has_point(_pix(s.position)):
+			continue
+		off.append(s)
+	off.sort_custom(func(a, b):
+		return ppos.distance_squared_to(a.position) < ppos.distance_squared_to(b.position))
+	return off.slice(0, OFFSCREEN_MARKERS)
+
+func _draw_offscreen_markers(ppos: Vector2) -> void:
+	if world.settlements.is_empty():
+		return
+	var frame := _marker_frame()
+	if frame.size.x <= 0.0 or frame.size.y <= 0.0:
+		return      # a viewport too small to have an inside; nothing to pin to
+	for s in _offscreen_settlements(frame, ppos):
+		_draw_offscreen_marker(s, frame, ppos)
+
+func _draw_offscreen_marker(s, frame: Rect2, ppos: Vector2) -> void:
+	var center := frame.position + frame.size * 0.5
+	var to := _pix(s.position) - center
+	if to.length() < 0.001:
+		return
+	# Push out along the direction until one axis hits the frame, then take the
+	# nearer hit — the standard "clamp a ray to a box" trick, in screen space so
+	# the chevron points where the eye would travel, not where the world's own
+	# axes go.
+	var scale_x: float = (frame.size.x * 0.5) / maxf(absf(to.x), 0.001)
+	var scale_y: float = (frame.size.y * 0.5) / maxf(absf(to.y), 0.001)
+	var at := center + to * minf(scale_x, scale_y)
+	var dir := to.normalized()
+	var col := faction_color(s.faction)
+	var tip := at + dir * OFFSCREEN_SIZE
+	var side := Vector2(-dir.y, dir.x) * OFFSCREEN_SIZE * 0.62
+	draw_colored_polygon(PackedVector2Array([tip, at - dir * OFFSCREEN_SIZE * 0.5 + side,
+		at - dir * OFFSCREEN_SIZE * 0.5 - side]), col)
+	# World units read as nothing to a player; the clock is the map's real
+	# currency, so the distance is quoted as the travel time it costs at the
+	# party's own speed (World.SPEED is units per world-minute).
+	var p := world.player()
+	var speed: float = p.speed if p != null and p.speed > 0.0 else World.SPEED
+	var mins: float = ppos.distance_to(s.position) / speed
+	var label := "%s  %s" % [s.sname, _travel_time(mins)]
+	var w := ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+	# Keep the text inside the frame whichever edge the chevron landed on. On a
+	# side edge the plain clamp is not enough on its own: centring the label on
+	# a chevron 26px from the edge puts half of it off screen, and clamping
+	# that back shoves the text under the chevron it belongs to. So on those
+	# edges the label is pinned strictly inboard of its own arrow first, and
+	# only then clamped.
+	var text_at := at - dir * (OFFSCREEN_SIZE + 4.0)
+	text_at.x -= w * 0.5
+	const SIDEWAYS := 0.3       # |dir.x| past this and the chevron is on a left/right edge
+	if dir.x < -SIDEWAYS:
+		text_at.x = maxf(text_at.x, at.x + OFFSCREEN_SIZE + 4.0)
+	elif dir.x > SIDEWAYS:
+		text_at.x = minf(text_at.x, at.x - OFFSCREEN_SIZE - 4.0 - w)
+	text_at.x = clampf(text_at.x, 2.0, maxf(2.0, size.x - w - 2.0))
+	text_at.y = clampf(text_at.y, 12.0, maxf(12.0, size.y - 4.0))
+	# A one-pixel drop shadow: the label is faction-coloured (that is how you
+	# tell whose town it is) and the edge of the frame is wherever the party
+	# happens to be looking, so it has to stay readable over bright water and
+	# pale roofs as well as over the dark fog.
+	draw_string(ThemeDB.fallback_font, text_at + Vector2(1, 1), label,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.75))
+	draw_string(ThemeDB.fallback_font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, col)
+
 # O11/O12: a medieval building on each footprint the blocks stood on — a city
 # gets three, a town two, painter-sorted among themselves. The footprint ring
 # stays: every faction's walls are the same stone, and faction is the one thing
@@ -1393,8 +1744,8 @@ func _draw_ground() -> void:
 # still a fight in it, so a glance says which lairs are done. Tier 0: a 3D
 # diorama in the Lairs3D layer above this map, same contract as Settlements3D
 # — it replaces the "☠" glyph only; shadow, ring and name label stay shared.
-func _draw_lair(l, at: Vector2) -> void:
-	var col := Icons.COL_MUTED if l.looted else Icons.COL_FOE
+func _draw_lair(l, at: Vector2, live := true) -> void:
+	var col := _remembered(Icons.COL_MUTED if l.looted else Icons.COL_FOE, live)
 	var r := 14.0 * _zoom
 	_soft_shadow(at, r * 0.85)
 	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
@@ -1402,12 +1753,12 @@ func _draw_lair(l, at: Vector2) -> void:
 	if not (_lairs3d and _lairs3d.has_model(l)):
 		var fs := int(18 * _zoom)
 		draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Icons.COL_HEAD)
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, _remembered(Icons.COL_HEAD, live))
 	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), l.sname,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _remembered(Icons.COL_BODY, live))
 
-func _draw_settlement(s, at: Vector2) -> void:
-	var col := faction_color(s.faction)
+func _draw_settlement(s, at: Vector2, live := true) -> void:
+	var col := _remembered(faction_color(s.faction), live)
 	var big: bool = s.kind == "city"
 	# T90: "camp" is the smallest tier (one lean-to, no ring flourish scale-up) —
 	# everything below city was "town" before there were three sizes.
@@ -1438,26 +1789,27 @@ func _draw_settlement(s, at: Vector2) -> void:
 			bases.append(at + _iso(b * r) + vcenter)
 		bases.sort_custom(func(a, b): return a.y < b.y)
 		for k in bases.size():
-			_draw_building(bases[k], h, style + k, pair + k)
+			_draw_building(bases[k], h, style + k, pair + k, live)
 	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), s.sname,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _remembered(Icons.COL_BODY, live))
 
 # One building: a whole house in one cell now (the old Town Pack's modular
 # left/right wall halves are gone with it). `base` is the house's near ground
 # corner, i.e. the point it stands on; `h` scales the cell, whose own 128x120
 # proportions are kept so the five buildings stay at their relative sizes.
-func _draw_building(base: Vector2, h: float, style: int, pair: int) -> void:
+func _draw_building(base: Vector2, h: float, style: int, pair: int, live := true) -> void:
 	var cell := BUILDING * (h / BUILDING.y)
 	var src := Vector2(style % BUILDING_STYLES, pair % BUILDING_PAIRS) * BUILDING
 	draw_texture_rect_region(BuildingTex,
-		Rect2(base - BUILDING_ANCHOR * (h / BUILDING.y), cell), Rect2(src, BUILDING))
+		Rect2(base - BUILDING_ANCHOR * (h / BUILDING.y), cell), Rect2(src, BUILDING),
+		_remembered(Color.WHITE, live))
 
 # O14: a board-game pawn standing on the party's position, tinted to its faction.
 # `at` is the ground point, so the sprite hangs above it rather than centring on
 # it, the way a building sits on its near corner. Sizes are the old ball token's
 # radii kept as the token's half-width, so parties read at the same scale as before.
-func _draw_party(p, at: Vector2) -> void:
-	var col := faction_color(p.faction, p.is_player)
+func _draw_party(p, at: Vector2, live := true) -> void:
+	var col := _remembered(faction_color(p.faction, p.is_player), live)
 	var rad := (11.0 if p.is_player else 9.0) * _zoom
 	var h := rad * 2.0 * PAWN.y / PAWN.x
 	_soft_shadow(at, rad * 0.8)
@@ -1486,4 +1838,5 @@ func _draw_party(p, at: Vector2) -> void:
 	var count: int = party.active.size() if p.is_player else p.troops.size()
 	var label: String = "You" if p.is_player else p.id.capitalize()
 	draw_string(ThemeDB.fallback_font, at + Vector2(-rad * 1.3, rad * 1.3 + 12.0),
-		"%s (%d)" % [label, count], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
+		"%s (%d)" % [label, count], HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+		_remembered(Icons.COL_BODY, live))
