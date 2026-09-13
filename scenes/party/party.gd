@@ -112,10 +112,9 @@ func _footer() -> Control:
 	_stash.add_theme_font_size_override("normal_font_size", Icons.FS_SMALL)
 	row.add_child(_stash)
 
-	# T9x: which figure stands for the party on the open-world map — picked
-	# from who's actually in the active party, not any of the 12 possible
-	# classes. Rebuilt on every _refresh() (see below) since swapping the
-	# active roster changes who's offered.
+	# T9x: which of the active party stands for the band on the open-world
+	# map — a specific character, not a class. Rebuilt on every _refresh()
+	# (see below) since swapping the active roster changes who's offered.
 	row.add_child(_fig_row)
 
 	var create := Button.new()
@@ -124,10 +123,11 @@ func _footer() -> Control:
 	row.add_child(create)
 	return panel
 
-# T9x: options are the active party's own members, by name — not any of
-# the 12 possible classes. Picking "Vera" (a fighter) sets overworld_figure
-# to "fighter"; two active members sharing a class just both point at the
-# same figure, which is correct (they'd look identical either way). Rebuilt
+# T9x: options are the active party's own members, one row each — a person,
+# not a class. The row carries that character's id (what core/party.gd's
+# overworld_figure stores), so two members of the same class are two separate
+# rows that each stick, and benching the one you chose drops the party back to
+# the pawn instead of silently handing the figure to their colleague. Rebuilt
 # every _refresh() since swapping the active roster changes who's offered.
 func _build_figure_picker() -> void:
 	for c in _fig_row.get_children():
@@ -137,6 +137,11 @@ func _build_figure_picker() -> void:
 	label.add_theme_color_override("font_color", COL_DIM)
 	_fig_row.add_child(label)
 
+	# Asking the party who it resolves to (rather than reading the field raw)
+	# is also what migrates a pre-identity save's class id — see
+	# core/party.gd's overworld_member().
+	var chosen = party.overworld_member()
+	var chosen_id: String = chosen.id if chosen != null else ""
 	var ob := OptionButton.new()
 	ob.add_item("Default (plain pawn)")
 	ob.set_item_metadata(0, "")
@@ -148,9 +153,9 @@ func _build_figure_picker() -> void:
 		if not HeroModels.has(cid):
 			continue   # a class with no figure asset yet — not offered, same fallback contract as everywhere else
 		ob.add_item("%s  %s" % [Icons.class_glyph(cid), ch.cname])
-		ob.set_item_metadata(ob.item_count - 1, cid)
+		ob.set_item_metadata(ob.item_count - 1, ch.id)
 	for i in ob.item_count:
-		if String(ob.get_item_metadata(i)) == party.overworld_figure:
+		if String(ob.get_item_metadata(i)) == chosen_id:
 			ob.select(i)
 			break
 	ob.item_selected.connect(func(i): party.overworld_figure = String(ob.get_item_metadata(i)))

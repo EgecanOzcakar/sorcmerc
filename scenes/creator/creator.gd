@@ -604,23 +604,6 @@ func _build_abilities() -> void:
 	if ch.class_id() != "":
 		_opt(mf, "Use quick-build recommendation", false, func(): _apply_quick_build())
 
-# Used to silently no-op outside Standard Array mode (the button looked
-# broken — nothing happened, no message). It also only ever set ability
-# scores, not the "recommended build" 5e's own quick-build actually means
-# (array + suggested background) — both fixed: switch to array mode as
-# part of the action, and apply the class's suggestedBackground too.
-func _apply_quick_build() -> void:
-	if ch.class_id() == "":
-		return
-	_abil_mode = "array"
-	ch.base_abilities = recommended_array(ch.class_id())
-	var bg := String(Catalog.class_src(ch.class_id()).get("quickBuild", {}).get("suggestedBackground", ""))
-	if bg != "" and ch.background_id != bg:
-		_prune_choices(ch.background_id)
-		ch.background_id = bg
-	ch.dirty()
-	_refresh()
-
 	if _abil_mode == "array":
 		_note("Assign 15/14/13/12/10/8. Picking a value swaps it with whoever holds it.")
 	else:
@@ -665,6 +648,23 @@ func _apply_quick_build() -> void:
 		tot.add_theme_color_override("font_color", COL_DIM)
 		grid.add_child(tot)
 	_note("Species and background bonuses (the → column) are applied by the resolver; the background's points are chosen on the next step.")
+
+# Used to silently no-op outside Standard Array mode (the button looked
+# broken — nothing happened, no message). It also only ever set ability
+# scores, not the "recommended build" 5e's own quick-build actually means
+# (array + suggested background) — both fixed: switch to array mode as
+# part of the action, and apply the class's suggestedBackground too.
+func _apply_quick_build() -> void:
+	if ch.class_id() == "":
+		return
+	_abil_mode = "array"
+	ch.base_abilities = recommended_array(ch.class_id())
+	var bg := String(Catalog.class_src(ch.class_id()).get("quickBuild", {}).get("suggestedBackground", ""))
+	if bg != "" and ch.background_id != bg:
+		_prune_choices(ch.background_id)
+		ch.background_id = bg
+	ch.dirty()
+	_refresh()
 
 func _set_abil_mode(m: String) -> void:
 	_abil_mode = m

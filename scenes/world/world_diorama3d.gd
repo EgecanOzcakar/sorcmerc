@@ -87,6 +87,43 @@ func _fit_height(m: Node3D, target: float) -> void:
 func _explored(pos: Vector2) -> bool:
 	return world_map.world.is_explored(pos)
 
+# T9y: a landmark the party cannot see right now is a memory, and World's own
+# 2D layer draws it that way (ring, label and fallback art all fade through
+# World._remembered()). A diorama is a separate 3D layer over the top, so a
+# full-brightness town standing on a faded footprint is exactly the mismatch
+# the three-tier fog was meant to remove — the model has to fade with it.
+#
+# GeometryInstance3D.transparency rather than a material tint: it needs no
+# material override (the GLBs bring their own), costs nothing to set every
+# frame, and fading toward the dark map behind it reads the same way the 2D
+# layer's alpha drop does.
+# ponytail: this fades, it does not desaturate — the 2D side does both. Close
+# enough at map scale; a real match would mean a shader on every diorama.
+#
+# Both the mesh list and the last value applied are cached as metadata ON the
+# holder: _reposition() runs every frame for every landmark on the map, and
+# walking a GLB's whole subtree with find_children() that often was measurably
+# worse than the fade is worth. Metadata rather than a dictionary in this
+# object because it dies with the node — reset() frees every holder, and a
+# cache keyed on freed nodes is a leak waiting to be forgotten about.
+const REMEMBERED_TRANSPARENCY := 0.55
+func _fade(holder: Node3D, remembered: bool) -> void:
+	var want: float = REMEMBERED_TRANSPARENCY if remembered else 0.0
+	if not holder.has_meta("fade_meshes"):
+		holder.set_meta("fade_meshes", holder.find_children("*", "GeometryInstance3D", true, false))
+	elif is_equal_approx(float(holder.get_meta("fade_want", -1.0)), want):
+		return                                  # already showing this, nothing to walk
+	holder.set_meta("fade_want", want)
+	for mesh in holder.get_meta("fade_meshes"):
+		mesh.transparency = want
+
+# Where the party is standing this frame, for _fade()'s "can they see it now"
+# question — Vector2.ZERO on a world with no player, same null-tolerant
+# contract as _explored() above.
+func _player_pos() -> Vector2:
+	var p = world_map.world.player()
+	return p.position if p != null else Vector2.ZERO
+
 func px_per_unit() -> float:
 	return world_map.ISO_GAIN * world_map._zoom
 

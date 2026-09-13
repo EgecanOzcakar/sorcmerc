@@ -38,6 +38,12 @@ func _world() -> World:
 	var l := w.add_lair(World.Lair.new("goblin-warren", Vector2(560, 60), "goblinoid"))
 	l.discovered = true
 	w.add_lair(World.Lair.new("dragon-cave", Vector2(680, -400), "dragon", "Dragon's Cave"))
+	# T-water: a lake and two river blobs — terrain the resumed world has to
+	# still be wet, now that it also blocks movement.
+	w.add_water(Vector2(-190, -70), 100.0)
+	w.add_water(Vector2(-110, -20), 40.0)
+	w.add_water(Vector2(-40, 100), 40.0)
+	w.origin = {"kind": "procedural", "seed": 4242}
 	w.clock.elapsed = 742.5
 	return w
 
@@ -122,6 +128,27 @@ func _init() -> void:
 		and gw.position == Vector2(560, 60) and gw.discovered and not gw.looted,
 		"a lair's identity and discovery state")
 	check(w2.lairs[1].sname == "Dragon's Cave", "a lair's custom display name survives, not just its id")
+
+	# --- water (T-water -- likewise newer than the format) --------------------
+	check(w2.waters.size() == 3, "every water blob came back (got %d)" % w2.waters.size())
+	check(w2.waters[0]["position"] == Vector2(-190, -70)
+		and is_equal_approx(float(w2.waters[0]["radius"]), 100.0), "the lake keeps its place and size")
+	check(w2.is_water(Vector2(-190, -70)) and w2.water_depth(Vector2(-40, 100)) < 0.0,
+		"the restored map is still wet where it was wet")
+	check(not w2.is_water(Vector2(500, 500)), "...and still dry where it was dry")
+
+	# --- provenance ----------------------------------------------------------
+	check(String(w2.origin.get("kind", "")) == "procedural"
+		and int(w2.origin.get("seed", -1)) == 4242, "the world remembers which builder made it")
+
+	# --- a save from before either key existed -------------------------------
+	var old_save: Dictionary = WorldSave.to_dict(_world(), null)
+	old_save.erase("waters")
+	old_save.erase("origin")
+	var old_world = WorldSave.from_dict(old_save)["world"]
+	check(old_world.waters.is_empty(), "an old save with no \"waters\" loads dry, not broken")
+	check(String(old_world.origin.get("kind", "")) == "small"
+		and int(old_world.origin.get("seed", -1)) == 0, "...and with no \"origin\" reads as the small map")
 
 	# --- the player's own party ----------------------------------------------
 	check(p2.roster.size() == party.roster.size(), "the roster came back")

@@ -28,6 +28,8 @@ const LAIRS := [
 	["zombie-graveyard", "undead", "Zombie Graveyard"],
 	["dragon-cave", "dragon", "Dragon's Cave"],
 ]
+const LAKE_RADIUS := 100.0            # the one lake, same size the small map's has
+const MIN_WATER_GAP := 60.0           # dry margin between the lake's edge and anything placed
 const MONSTER_FACTIONS := ["bandit", "goblinoid"]
 const MONSTER_BAND_COUNT := 4
 
@@ -57,6 +59,7 @@ static func _place(rng, taken: Array, gap: float) -> Vector2:
 static func build(seed_v: int = 0) -> World:
 	var rng := RNG.new(seed_v)
 	var w := World.new()
+	w.origin = {"kind": "procedural", "seed": seed_v}   # the seed IS the map; keep it
 
 	# Faction balance: exactly one settlement per civilized race, spaced apart.
 	var settlement_pos: Array = []
@@ -85,7 +88,15 @@ static func build(seed_v: int = 0) -> World:
 		var pos := _place(rng, settlement_pos, MIN_MONSTER_GAP)
 		w.add_lair(World.Lair.new(String(entry[0]), pos, String(entry[1]), String(entry[2])))
 
-	# One lake, kept clear of every settlement — same "water is a hand-placed
-	# blob" vocabulary the other two worlds use, just at a generated spot.
-	w.add_water(_place(rng, settlement_pos, MIN_MONSTER_GAP), 100.0)
+	# One lake — same "water is a hand-placed blob" vocabulary the other two
+	# worlds use, just at a generated spot. It is placed last and against
+	# everything already on the map, not only the settlements: water blocks
+	# movement now (core/world.gd), so a lair or a band that happened to land
+	# inside the blob would spawn unreachable, in a puddle of its own.
+	var occupied: Array = settlement_pos.duplicate()
+	for p in w.parties:
+		occupied.append(p.position)
+	for l in w.lairs:
+		occupied.append(l.position)
+	w.add_water(_place(rng, occupied, LAKE_RADIUS + MIN_WATER_GAP), LAKE_RADIUS)
 	return w

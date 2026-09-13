@@ -33,6 +33,7 @@ func _init() -> void:
 	test_rest_and_quests()
 	test_quest_board_and_chains()
 	test_persuade_and_investigate()
+	test_counters_and_the_two_services_that_sell_nothing()
 	print("test_settlement_visit: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -320,3 +321,72 @@ func test_persuade_and_investigate() -> void:
 			saw_bfail = true
 			check(party.gold == gold0, "a failure pays nothing")
 	check(saw_bok and saw_bfail, "both outcomes reachable across seeds (got ok=%s fail=%s)" % [saw_bok, saw_bfail])
+
+# --- T9y: the counters behind the market -----------------------------------
+# T25 sized a settlement's services long ago and the visit panel listed their
+# names, but the shelf was one flat list and the two services that stock no
+# goods at all — Healer, Librarian — had no way to be used. These are the
+# data-level halves of both (scenes/world/world.gd draws them).
+func test_counters_and_the_two_services_that_sell_nothing() -> void:
+	var w := _world()
+	var city = w.settlements[0]
+	var town = w.settlements[1]
+	var party := _party()
+	var m: Dictionary = Visit.visit(city, w)
+
+	# Every row on the shelf lands under exactly one counter, and nothing is
+	# invented or dropped on the way.
+	var groups: Dictionary = Visit.stock_by_service(city, m)
+	var regrouped: Array = []
+	for service in groups:
+		for e in groups[service]:
+			check(not e["item_id"] in regrouped, "%s is on one counter, not two" % e["item_id"])
+			regrouped.append(e["item_id"])
+	check(regrouped.size() == m["stock"].size(), "every row on the shelf belongs to some counter")
+	check(groups.has("generalist"), "the generalist counter always exists, even if empty")
+	for service in groups:
+		check(service in Visit.services(city), "%s is a counter this settlement staffs" % service)
+
+	# A camp staffs nobody but the generalist, so its whole shelf falls there.
+	check(Visit.has_service(city, "healer"), "a city has a healer")
+	check(not Visit.has_service(town, "healer"), "a town does not")
+
+	# --- the healer ---
+	check(Visit.heal(party)["ok"] == false, "a party in the pink has nothing to pay a healer for")
+	var hurt = party.roster[0]
+	hurt.hp_current = 1
+	party.gold = Visit.HEAL_COST - 1
+	var broke: Dictionary = Visit.heal(party)
+	check(not broke["ok"] and party.gold == Visit.HEAL_COST - 1, "no gold, no healing, no charge")
+	check(hurt.hp_current == 1, "...and nobody was quietly healed for free")
+	party.gold = Visit.HEAL_COST
+	var healed: Dictionary = Visit.heal(party)
+	check(healed["ok"] and healed["healed"] == 1, "the healer patches up whoever is actually hurt")
+	check(party.gold == 0, "...for exactly the posted fee")
+	check(hurt.hp_current < 0, "...back to the sheet's own maximum")
+
+	# The healer is the way past a long-rest cooldown, so it must not care
+	# about one: that is the whole reason to pay instead of sleeping.
+	party.last_long_rest_at = w.clock.elapsed
+	check(not Visit.can_long_rest(party, w), "the party just rested")
+	party.roster[0].hp_current = 2
+	party.gold = Visit.HEAL_COST
+	check(Visit.heal(party)["ok"], "the healer works regardless of the rest cooldown")
+
+	# --- the long-rest countdown the inn page shows ---
+	check(Visit.long_rest_in(party, w) > 0.0, "a fresh rest leaves time on the clock")
+	w.clock.elapsed += Visit.LONG_REST_COOLDOWN
+	check(Visit.long_rest_in(party, w) == 0.0, "a full day later there is none left")
+	check(Visit.can_long_rest(party, w), "...which is exactly when resting is allowed again")
+
+	# --- the librarian ---
+	party.gold = Visit.IDENTIFY_COST * 2
+	party.stash_add("spell-scroll", 1, false)
+	check(party.unidentified().size() == 1, "the pack holds one mystery")
+	check(not Visit.identify(party, "longsword")["ok"], "nothing unidentified like that in the pack")
+	check(party.gold == Visit.IDENTIFY_COST * 2, "...and no fee for the question")
+	var read: Dictionary = Visit.identify(party, "spell-scroll")
+	check(read["ok"], "the librarian reads the mystery")
+	check(party.gold == Visit.IDENTIFY_COST, "...for the flat fee")
+	check(party.unidentified().is_empty(), "...leaving nothing unidentified")
+	check(party.stash_count("spell-scroll", true) == 1, "...and the item itself is still there, known")

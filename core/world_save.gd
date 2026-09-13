@@ -14,6 +14,7 @@
 #   "version": 1,
 #   "elapsed": 742.5,                 // World.clock.elapsed, world-minutes
 #   "opinion": {"soldier": -12.0},    // FactionOpinion.all()
+#   "origin": {"kind": "procedural", "seed": 42},   // which builder made this map
 #   "settlements": [
 #     {"id": "riverhold", "sname": "Riverhold", "position": [0, 0], "faction": "soldier",
 #      "kind": "city", "last_visited": 120.0, "battle_at": -1.0, "pending_opinion_delta": 0.0}
@@ -23,6 +24,7 @@
 #      "goal": [80, 120], "speed": 40.0,
 #      "ai": { <core/world_ai.gd's state dict, Vector2s and RNGs encoded, see _enc> }}
 #   ],
+#   "waters": [{"position": [-190, -70], "radius": 100.0}],  // O15 terrain blobs
 #   "explored": [[80, 120], [125, 118]],  // T9x fog of war: World.explored waypoints
 #   "party": {                        // the player's own party: the roster is also in
 #     "roster": [ <character_save.gd dicts> ],   // the barracks, but gold/stash/quests
@@ -84,6 +86,13 @@ static func to_dict(world, party = null) -> Dictionary:
 			"id": l.id, "sname": l.sname, "position": _v(l.position),
 			"faction": l.faction, "discovered": l.discovered, "looted": l.looted,
 		})
+	# T-water: same story as lairs -- terrain postdates this format, so an old
+	# save with no "waters" key loads as a world with none rather than crashing.
+	# It has to be saved at all: a lake nobody remembers is a lake the player
+	# walks through after a resume.
+	var waters: Array = []
+	for wtr in world.waters:
+		waters.append({"position": _v(wtr["position"]), "radius": float(wtr["radius"])})
 	var explored: Array = []
 	for e in world.explored:
 		explored.append(_v(e))
@@ -91,9 +100,12 @@ static func to_dict(world, party = null) -> Dictionary:
 		"format": FORMAT, "version": VERSION,
 		"elapsed": world.clock.elapsed,
 		"opinion": FactionOpinion.all(),
+		"origin": {"kind": String(world.origin.get("kind", "small")),
+			"seed": int(world.origin.get("seed", 0))},
 		"settlements": settlements,
 		"parties": parties,
 		"lairs": lairs,
+		"waters": waters,
 		"explored": explored,
 		"party": _party_dict(party),
 	}
@@ -131,10 +143,17 @@ static func from_dict(d: Dictionary):
 		l.discovered = bool(ld.get("discovered", false))
 		l.looted = bool(ld.get("looted", false))
 		world.add_lair(l)
+	for wd in d.get("waters", []):
+		world.add_water(_vec(wd.get("position")), float(wd.get("radius", 0.0)))
 	# T9x: an old save without "explored" just loads with none — everything
 	# fogged again, same missing-key-falls-back-to-default contract as lairs.
 	for e in d.get("explored", []):
 		world.explored.append(_vec(e))
+	# A save from before provenance existed is a small hand-placed map: that is
+	# the only kind that could have been saved back then.
+	var origin: Dictionary = d.get("origin", {})
+	world.origin = {"kind": String(origin.get("kind", "small")),
+		"seed": int(origin.get("seed", 0))}
 
 	FactionOpinion.reset()
 	var opinion: Dictionary = d.get("opinion", {})

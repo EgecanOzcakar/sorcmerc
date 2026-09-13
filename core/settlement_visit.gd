@@ -258,6 +258,106 @@ static func rest(party, world, kind := "long-rest") -> void:
 static func can_long_rest(party, world) -> bool:
 	return world.clock.elapsed - party.last_long_rest_at >= LONG_REST_COOLDOWN
 
+# World-minutes until the party may long-rest again, 0.0 when they already may.
+# The inn page shows this rather than an unexplained disabled button — "not
+# tired enough" with no number reads as a bug, same lesson as the quick-build
+# no-op (commit e3cc910).
+static func long_rest_in(party, world) -> float:
+	return maxf(0.0, LONG_REST_COOLDOWN - (world.clock.elapsed - party.last_long_rest_at))
+
+# --- T9y: the specialists behind the counter -------------------------------
+#
+# T25 already sizes which services a settlement has (KIND_SERVICES above), and
+# core/campaign.gd already prices the two that sell no goods at all: the
+# Healer's flat whole-party patch-up and the Librarian's no-roll identify. The
+# open world showed neither — the market was one undifferentiated stock list,
+# so a city's healer and librarian existed only as words in the services line.
+#
+# These are the open-world versions of campaign.gd's own heal_party()/
+# identify_for_fee(): same prices, same effects, but a result dict instead of
+# say() and NO autosave — campaign.gd's methods write a CampaignSave, which is
+# the wrong save slot entirely out here (world.gd autosaves a WorldSave itself
+# after the action). Same {"ok", "text", ...} shape every other check in this
+# file returns, so the caller can narrate what happened rather than guess.
+const HEAL_COST := Campaign.HEALER_GP
+const IDENTIFY_COST := Campaign.IDENTIFY_FEE_GP
+
+static func has_service(s, service: String) -> bool:
+	return service in services(s)
+
+# {service: [stock rows]} for the shelf `m` is currently showing, so the market
+# can be read one counter at a time instead of as one long alphabetical list.
+# A specialist claims an id first (weapons to the weaponsmith, potions to the
+# alchemist); whatever nobody claims falls to the generalist, which is every
+# settlement's own catalog and therefore a superset — matching against it
+# first would swallow the lot.
+static func stock_by_service(s, m: Dictionary) -> Dictionary:
+	var c = Campaign.new(null)
+	c.node = node_for(s)
+	var out := {}
+	var claimed := {}
+	for service in services(s):
+		if service == "generalist":
+			continue
+		var ids := {}
+		for id in c.service_stock_ids(service):
+			ids[String(id)] = true
+		var rows: Array = []
+		for e in m.get("stock", []):
+			var item_id := String(e["item_id"])
+			if ids.has(item_id) and not claimed.has(item_id):
+				rows.append(e)
+				claimed[item_id] = true
+		if not rows.is_empty():
+			out[service] = rows
+	var rest_rows: Array = []
+	for e in m.get("stock", []):
+		if not claimed.has(String(e["item_id"])):
+			rest_rows.append(e)
+	out["generalist"] = rest_rows
+	return out
+
+# The Healer: everyone standing back to full, flat fee, no clock time and no
+# long-rest cooldown — that's what you're paying to skip. Refuses when nobody
+# is actually hurt rather than taking the gold for nothing (the silent-no-op
+# lesson again); the dead are not the healer's department (Party.REVIVE_COST
+# is, and stays where it is).
+static func heal(party) -> Dictionary:
+	var hurt: Array = []
+	for ch in party.roster:
+		if ch.dead:
+			continue
+		var s = ch.sheet()
+		if ch.hp_current >= 0 and ch.hp_current < s.max_hp:
+			hurt.append(ch)
+	if hurt.is_empty():
+		return {"ok": false, "cost": 0, "healed": 0,
+			"text": "Nobody here needs the healer."}
+	if not party.spend_gold(HEAL_COST):
+		return {"ok": false, "cost": HEAL_COST, "healed": 0,
+			"text": "The healer wants %d gp up front." % HEAL_COST}
+	for ch in hurt:
+		ch.hp_current = -1     # the sheet's max, the same "-1 means full" convention Party.summary() reads
+		ch.dirty()
+	return {"ok": true, "cost": HEAL_COST, "healed": hurt.size(),
+		"text": "The healer works down the line — %d back on their feet (-%d gp)." % [
+			hurt.size(), HEAL_COST]}
+
+# The Librarian: what a scroll of identification does, for a fee and no roll.
+# Trance's free nightly attempt (core/trance.gd) is the same job done badly;
+# this is the version you pay to be sure of.
+static func identify(party, item_id: String) -> Dictionary:
+	if party.stash_count(item_id, true) >= party.stash_count(item_id):
+		return {"ok": false, "cost": 0,
+			"text": "There's nothing unidentified in the pack like that."}
+	if not party.spend_gold(IDENTIFY_COST):
+		return {"ok": false, "cost": IDENTIFY_COST,
+			"text": "The librarian's fee is %d gp." % IDENTIFY_COST}
+	party.stash_identify(item_id)
+	return {"ok": true, "cost": IDENTIFY_COST,
+		"text": "The librarian reads it off in a breath: %s (-%d gp)." % [
+			Campaign.item_name(item_id), IDENTIFY_COST]}
+
 # --- O9: quests (T9's verbs, reached from a settlement) ---------------------
 #
 # Quest.offer_for() keys on a T25 giver node id; a settlement is not one, so each

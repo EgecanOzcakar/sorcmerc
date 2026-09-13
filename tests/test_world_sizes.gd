@@ -23,6 +23,8 @@ func _init() -> void:
 	check(w.settlements.size() == 8, "large world has 8 settlements (got %d)" % w.settlements.size())
 	check(w.lairs.size() == 5, "large world has all 5 named lairs (got %d)" % w.lairs.size())
 	check(w.player() != null, "large world has a player party")
+	check(String(w.origin.get("kind", "")) == "large" and int(w.origin.get("seed", -1)) == 0,
+		"the large world says which builder made it (T-water provenance)")
 	var races := {}
 	for s in w.settlements:
 		races[s.faction] = int(races.get(s.faction, 0)) + 1

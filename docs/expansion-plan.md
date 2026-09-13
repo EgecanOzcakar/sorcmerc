@@ -3193,3 +3193,208 @@ just don't let it get lost. Everything else from this note's source list
 (figures-into-Party3D, procedural world gen, fog of war, real defeat
 consequences, quest board + chains) was implemented in the same round —
 see the T9x/O-series entries or git log around 2026-09-13 for each.
+
+## T9y — a review of the last five commits, and the six things it found (2026-09-13)
+
+Read the five implementation commits that closed out the previous round
+(`67afe13` map-figure picker, `ec515c3` player figure + ring, `32c4c88` fog
+of war rework, `e3cc910` quick-build no-op, `34300bb` settlement screens),
+looking for what they left half-finished rather than for new features. Six
+items came out of it; the user picked all six, and they were built in
+parallel by five workers against a disjoint file split (one owner per file,
+no shared edits), then integrated and verified together.
+
+**1. Water was never saved, and was never terrain.** `world_save.gd`'s
+`to_dict` wrote settlements/parties/lairs/explored but not `waters`, and
+`from_dict` never called `add_water` — so every lake and river on every map
+silently turned to grass the first time a player resumed a save. It had gone
+unnoticed because nothing but the renderer read `water_depth()`. Both halves
+are fixed: `waters` round-trips (with the usual missing-key-falls-back
+contract), and water is now impassable — `World.is_water()`, `set_goal()`
+snapping a wet goal back to the last dry point on the line toward the party,
+and `move_toward_goal()` walking its travel in `WATER_STEP` hops so nothing
+tunnels across a river on a fat delta at 8x, with a one-step shoreline slide
+so a party skimming a bank follows it instead of gluing to it. The safety
+valve is deliberate and commented: only land→water steps are refused, so a
+party already in water (an old save, a spawn inside a blob) swims out rather
+than wedging forever. That rule immediately caught a real placement bug —
+the small map's `bandits` band started 22 units deep in its own lake — now
+moved, and asserted for all three built-in maps plus six procedural seeds.
+No pathfinder is involved and none is wanted: clicking across a lake means
+"walk to that lake". `World.origin` (`{"kind", "seed"}`) is saved alongside,
+so a resumed world can still say which builder made it.
+
+**2. The fog scan was the frame's hot loop, and is now indexed.**
+`is_explored()` was a linear scan over every waypoint the party had ever
+banked, and `scenes/world/world.gd:_draw_ground()` calls it once per ground
+cell per frame — hundreds of cells on screen, up to `MAX_CELLS` (32000)
+zoomed out. Tripling `VISION_RADIUS` in 32c4c88 put more of the map on
+screen to be scanned, and the existing `ponytail:` note had sized the
+compromise for the old radius. `explored` stays the flat, saved list (it is
+what `world_save.gd` round-trips), with a hash grid over it keyed at
+`BUCKET := VISION_RADIUS`: both queries are "is there a waypoint within R of
+this point" and both radii are `<= BUCKET`, so only the 3x3 block of cells
+around the point can hold the answer. `reveal()`'s own dedupe scan goes
+through the same index. The list is public and `world_save.gd` appends to it
+directly on load, so the index reindexes on a size mismatch rather than
+assuming `reveal()` is the only writer — a resumed world would otherwise
+come back fogged everywhere it had walked. Measured on a 1669-waypoint
+trail: **12.6x** faster over 4000 probes (9.6ms vs 121ms), with the two
+implementations returning identical answers on every probe — which is what
+`tests/test_world_fog.gd` now asserts against the old scan kept as an
+oracle. The gap widens with the length of the walk, which was the point.
+
+**3. The map now says where you are.** Two additions on top of the new fog:
+off-screen chevrons for the three nearest settlements, pinned to the frame
+edge with the faction's colour, the town's name and the travel time to it
+(minutes — `World.SPEED` is 40 units per world-minute, so an hours-only
+formatter would have labelled every town on the small map alike); and a
+top-down minimap inset (`scenes/world/minimap.gd`, new) showing the explored
+footprint, water, known settlements, the player and the camera's own view
+region, clickable to set a march goal. Three, not all: on the large and
+procedural maps every settlement is off screen most of the time and a rim of
+chevrons is no more use than none.
+
+**4. Remembered is now drawn as remembered.** 32c4c88 bought a three-tier
+fog for the ground but left everything standing on it binary — a town
+visited two days ago drew identically to the one you were standing in. Props
+now split on the same `is_visible_now()` the ground tint uses: the 2D ring,
+label and sprite fade through `World._remembered()` (desaturated toward the
+fog colour *and* thinned, because a merely darkened faction colour still
+claims full confidence), and the 3D dioramas fade with them via
+`GeometryInstance3D.transparency` in the shared rig — a full-brightness town
+on a faded footprint was exactly the mismatch to avoid.
+
+**5. The settlement screens got the depth the split was for.** 34300bb
+separated town square / market / inn / notice board but left three
+unlabelled doors and a one-button inn. The hub's doors now carry live counts
+(what is on the shelf, what is posted, whether a room would do anything);
+the market is tabbed per counter; the inn shows who is hurt and, when the
+once-a-day cooldown blocks a rest, says how long and points at the healer;
+Esc/M/I/B navigate. And the two T25 services that stock no goods — Healer
+and Librarian — are finally staffed: both existed as priced methods on
+`campaign.gd` that the open world could never reach, so they were advertised
+in a settlement's services line and then unusable. `settlement_visit.gd` now
+has open-world versions (same prices, no campaign autosave, a result dict
+instead of `say()`).
+
+**6. Identity, not class, for the map figure — and a walk.** `67afe13`
+stored a class id, so two active fighters produced two picker rows that did
+the same thing and the staleness check passed if *anyone* shared the class.
+It stores a member id now, resolving to a class at render time, with a
+self-healing back-compat path for old saves. The troop GLBs are idle-only,
+so rather than wait for art the walk is procedural and in-engine: bob, sway
+and lean driven by the position delta the layer already tracked, cadence
+scaled to real speed (so a party at 8x steps faster rather than floating),
+easing back to exactly the idle pose on arrival. Marked in the file header
+as a stand-in and what a real walk clip would delete.
+
+**7. The silent-no-op bug class, hunted rather than waited for — and it
+immediately caught a regression in the very commit that inspired it.**
+`e3cc910` fixed a button whose handler did nothing under a reachable state:
+no error, no message. `tests/drive_buttons.gd` (new) generalises that into a
+sweep — 38 pages, 794 presses — which rebuilds each screen from scratch
+before every press (so no press is judged against the state a previous one
+left), fires the control without touching its own widget state (a checkbox
+flipping its own tick cannot pass for the screen having done something), and
+asserts the Control tree or the underlying model observably moved.
+
+What it found on its first real run: **`e3cc910` had inserted
+`func _apply_quick_build()` into the middle of `_build_abilities()`**, so
+GDScript ended `_build_abilities` at the blank line above it and the entire
+six-ability grid — every array selector, every point-buy stepper, the whole
+`→ total` column — became unreachable tail code of the new function. Step 3
+of character creation had rendered three buttons and nothing else since that
+commit: "Point buy (27)" set all six scores to 8 and then offered no way to
+spend a single point. The grid only ever appeared as a side effect of
+pressing quick-build. Fixed by moving the definition out below
+`_build_abilities` (pure code motion, no logic change).
+
+It is worth being blunt about the lesson: the review that produced this
+whole round read `e3cc910` and did not catch this, because the diff read
+correctly — the bug was in where the new function landed, not in what it
+said. The sweep caught it in one run. Verified non-vacuous by mutation:
+re-introducing the indentation bug, the original quick-build no-op, a dead
+heal button and a `pass`-wired quest toggle each fail it.
+
+Blind spots are listed in the file header — the world map and party screen
+are a deliberate follow-up (one more `sweep()` call each), and combat itself
+stays `drive_ui.gd`'s job.
+
+**Honest gaps left:** no pathfinding around water (a march into a lake stops
+at the bank, by design); the roaming-band props are drawn at their live
+position even when only remembered, because the map keeps no last-known
+position to draw instead; the diorama fade fades without desaturating, where
+the 2D layer does both; and persistent faction warfare (the note above) is
+still untouched.
+
+### How T9y was actually run — five local agents, one working tree
+
+Recorded because the split is the reason this round landed as one coherent
+change rather than five conflicting ones, and because two of its failures
+are worth not repeating.
+
+**The partition.** Five workers in a single working tree (no git worktrees,
+no branches per worker), divided by *file ownership* rather than by feature.
+Each brief named the exact files that worker could edit and forbade
+everything else, including git itself — nobody committed, nobody branched,
+nobody stashed; the parent session integrated and made the single commit.
+Ownership was:
+
+| worker | owns | built |
+|---|---|---|
+| parent | `scenes/world/world.gd`, `core/settlement_visit.gd`, the three diorama layers, docs | items 3-5, integration |
+| core | `core/world.gd`, `core/world_save.gd`, the two map builders | item 1 |
+| figures | `core/party.gd`, `scenes/party/party.gd`, `scenes/world/party3d.gd` | item 6 |
+| minimap | **new files only** — `scenes/world/minimap.gd`, its test | item 3's inset |
+| sweep | **new file** `tests/drive_buttons.gd`, plus fixes confined to the screens nobody else held | item 7 |
+
+`scenes/world/world.gd` is 1489 lines and every UI item wanted it, so it was
+not split at all — the parent kept it and did items 3-5 itself while the
+other four ran. That is the same lesson `docs/improvements.md` recorded for
+`scenes/main.gd` back in the MVP plan ("the one contention point"), applied
+instead of relearned.
+
+**Contracts agreed before the code existed**, so a worker could write
+against something another worker had not written yet: the minimap's public
+surface (`world_map`, `DEFAULT_SIZE`, its own placement left to the parent)
+was specified in the brief, and the parent wired it before the file landed;
+`World.origin`'s exact shape (`{"kind", "seed"}`) was pinned in two briefs
+at once. The figures worker was forbidden `world_save.gd` because the core
+worker held it — which is *why* `overworld_figure` kept its name and changed
+its meaning instead of being renamed, and therefore why old saves still
+load.
+
+**Cross-worker findings were reported, not fixed.** The core worker found
+the small map's bandit band standing in a lake, in a file it did not own,
+and wrote it up with the corrected coordinate instead of reaching for it;
+the parent moved the band and added the assertion. The sweep worker found a
+bug in `scenes/world/settlements3d.gd` the same way (below). Ownership held
+in both directions — no worker silently edited outside its lane, and no
+finding was dropped on the floor.
+
+**Two failures, both the parent's:**
+
+1. *A task fell out of a brief.* The core worker's brief was written with
+   three tasks; the fog-index work (item 2) was in its title and not in its
+   body, so it was never dispatched. It surfaced only when the completion
+   report came back without it, and the parent then wrote it directly. The
+   brief body is the contract — a task named anywhere else does not exist.
+2. *A scripted edit deleted a function.* The parent hoisted `_fade()` into
+   the shared diorama base with a Python slice over `settlements3d.gd` whose
+   end anchor sat below `reset()`, silently removing it. The system's own
+   file-changed excerpt was read as confirmation — it showed only the region
+   that survived. It was caught because the sweep worker, running the suite
+   against its own files, reported `world.gd` calling a `reset()` that "does
+   not currently exist". `git diff` after every scripted edit would have
+   caught it in seconds; reading an excerpt of the result would not, and did
+   not.
+
+**Two smaller frictions worth knowing:** running the full suite while
+workers were still editing produced a transient "Compilation failed" (a file
+was read mid-write) and one 4-minute test timeout from five headless Godot
+processes competing for the same CPU — neither was a real failure, and both
+cost time to rule out. Integration runs belong after the workers are done,
+not alongside them. And a finished worker re-notifies when its own
+background waiters exit: those repeats carry nothing new and should be read
+as such rather than acted on twice.

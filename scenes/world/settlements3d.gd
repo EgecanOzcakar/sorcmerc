@@ -57,6 +57,7 @@ func reset(world) -> void:
 
 
 func _reposition() -> void:
+	var ppos := _player_pos()
 	for s in world_map.world.settlements:
 		var n: Node3D = _dioramas.get(s.id)
 		if n == null:
@@ -65,3 +66,4 @@ func _reposition() -> void:
 		# matches World._draw()'s own 2D layer (both changed together).
 		n.visible = true
 		n.position = world_for_screen(world_map._pix(s.position))
+		_fade(n, not world_map.world.is_visible_now(s.position, ppos))

@@ -12,6 +12,7 @@ const WorldAI = preload("res://core/world_ai.gd")
 
 static func build() -> World:
 	var w := World.new()
+	w.origin = {"kind": "large", "seed": 0}   # hand-placed: no seed to remember
 
 	# Two settlements per race instead of one — a city/capital plus an outlying
 	# town or camp, so a faction reads as an actual territory, not one dot.
