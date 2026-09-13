@@ -27,6 +27,7 @@ const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
+const Rumors = preload("res://core/rumors.gd")
 const Site = preload("res://core/site.gd")
 const SiteScreen = preload("res://scenes/world/site_screen.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
@@ -1202,6 +1203,17 @@ func _sell(item_id: String) -> void:
 # core/settlement_visit.gd's heal()/identify()). Neither takes clock time,
 # so neither re-reads the market; both autosave, same as every other purse
 # movement in this file.
+# D5: a lead costs gold and puts a real lair on the map — the same `discovered`
+# flag a Survival check sets, so a place found by asking behaves exactly like
+# one found by walking into it. There is no second kind of found.
+func _buy_rumor(lead: Dictionary) -> void:
+	var r: Dictionary = Rumors.buy(lead, party, world)
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("quest")
+		WorldSave.save(world, party)
+	_build_visit_panel()
+	_say(String(r.get("text", "")))
+
 func _heal() -> void:
 	var r: Dictionary = Visit.heal(party)
 	if bool(r.get("ok", false)):
@@ -1391,8 +1403,14 @@ func _turn_in(quest: Dictionary) -> void:
 	var reward: int = int(quest.get("reward", {}).get("gold", 0))
 	if Quest.turn_in(party, quest, _visit["settlement"].faction):
 		Sound.play_sfx("buy")
+		# D5: a job well done is how a town decides you are worth telling things
+		# to. The board's second payout, and the one that is not gold.
+		var lead: Dictionary = Rumors.free_lead(_visit["settlement"], party, world)
 		_build_visit_panel()
-		_say("%s — paid, +%d gp. They will remember it." % [quest["title"], reward])
+		_say("%s — paid, +%d gp. They will remember it.%s" % [
+			quest["title"], reward,
+			("  " + String(lead["text"])) if not lead.is_empty() else ""])
+		WorldSave.save(world, party)
 
 # The panel is rebuilt after every action, so the last line has to live on the
 # visit rather than on the Label that just got freed.
@@ -1649,6 +1667,21 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 		_note(box, "Not enough gold for a room.")
 	else:
 		_note(box, "Eight hours: everyone back to full, spells and abilities back, and the stalls restock while you sleep.")
+
+	# D5: the other half of what an inn is for. Until now a lair was found by
+	# walking close enough to one you had no reason to think existed — discovery
+	# by collision. This is where you hear about it instead, which is what makes
+	# a town worth walking back to.
+	var leads: Array = Rumors.offers(s, world)
+	_section(box, "Word in the common room")
+	if leads.is_empty():
+		_note(box, "Nothing anybody here has not already told you.")
+		return
+	var lead_rows := VBoxContainer.new()   # `rows` is the party-status list above
+	box.add_child(lead_rows)
+	for lead in leads:
+		_trade_row(lead_rows, "%s — %d gp" % [lead["text"], int(lead["price"])],
+			"Buy", _buy_rumor.bind(lead))
 
 func _build_board_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()

@@ -162,6 +162,43 @@ func _init() -> void:
 	main._unhandled_key_input(key(KEY_ESCAPE))
 	check(main._visit.is_empty(), "Esc from the town square leaves town")
 
+	# --- D5: the inn sells information ------------------------------------
+	# The other half of what an inn is for. Until this, a lair was found by
+	# walking close enough to one you had no reason to think existed.
+	var Rumors = preload("res://core/rumors.gd")
+	var World2 = preload("res://core/world.gd")
+	var hidden = main.world.add_lair(World2.Lair.new(
+		"rumor-warren", s.position + Vector2(150, 0), "goblinoid", "Rumor Warren"))
+	main.party.gold = 2000
+	main._open_visit(s)
+	press(main._visit_panel, "Inn")
+	check(has_label(main._visit_panel, "common room"), "the inn has word going round it")
+	var lead_row := false
+	for b in buttons(main._visit_panel):
+		if b.text == "Buy" and not b.disabled:
+			lead_row = true
+	check(lead_row, "...and a lead that can be bought")
+	var gold_before: int = main.party.gold
+	check(press(main._visit_panel, "Buy"), "a lead can actually be paid for")
+	check(hidden.discovered, "...and the place it names goes on the map")
+	check(main.party.gold < gold_before, "...for gold")
+	check(main._visit_page == "inn", "...without leaving the room")
+	press(main._visit_panel, "Leave")
+
+	# Nothing left to sell says so, rather than showing an empty heading. The
+	# demo world has several lairs inside Rumors.RANGE of this town, so the room
+	# has to actually be talked dry first — one purchase is not the end of it.
+	main._open_visit(s)
+	press(main._visit_panel, "Inn")
+	for i in 20:
+		if not press(main._visit_panel, "Buy"):
+			break
+	check(Rumors.offers(s, main.world).is_empty(), "a common room can be talked dry")
+	check(has_label(main._visit_panel, "not already told you"),
+		"an inn with nothing left to tell says so")
+	check(not has_button(main._visit_panel, "Buy"), "...and offers nothing to press")
+	press(main._visit_panel, "Leave")
+
 	print("test_world_visit_pages: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
