@@ -798,13 +798,17 @@ func _rest() -> void:
 		_say("The party isn't tired enough for another long rest yet.")
 		return
 	var s = _visit["settlement"]
+	var cost := Visit.inn_cost(s)
+	if not party.spend_gold(cost):
+		_say("Can't afford a room here (%d gp)." % cost)
+		return
 	var stolen: bool = _visit.get("stolen", false)
 	Visit.rest(party, world, "long-rest")
 	Sound.play_sfx("rest")
 	_visit = Visit.visit(s, world)
 	_visit["stolen"] = stolen
 	_build_visit_panel()
-	_say("The party takes a long rest. Eight hours pass and the stalls fill up again.")
+	_say("The party takes a long rest (%d gp for the room). Eight hours pass and the stalls fill up again." % cost)
 
 # T9x: a short rest works anywhere on the map, not just a settlement — but
 # only when it's actually safe: mid-fight, paused, or a hostile band close
@@ -961,7 +965,7 @@ func _build_visit_panel() -> void:
 	var bar := HBoxContainer.new()
 	box.add_child(bar)
 	var rest_btn := Button.new()
-	rest_btn.text = "Rest the night"
+	rest_btn.text = "Rest the night (%d gp)" % Visit.inn_cost(s)
 	rest_btn.pressed.connect(_rest)
 	bar.add_child(rest_btn)
 	var steal_btn := Button.new()

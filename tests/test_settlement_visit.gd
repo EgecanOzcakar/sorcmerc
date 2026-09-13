@@ -159,6 +159,16 @@ func test_rest_and_quests() -> void:
 	check(is_equal_approx(w.clock.elapsed, t0 + Visit.LONG_REST_MINUTES), "a rest spends world-time")
 	check(ch.hp_current != 1, "a long rest heals the party")
 
+	# T9x: a room at the inn isn't free, and scales with settlement kind —
+	# checked at the data level here; world.gd's _rest() is what actually
+	# charges it (see test_world_camp_integration.gd).
+	check(Visit.inn_cost(World.Settlement.new("x", Vector2.ZERO, "human", "city")) >
+		Visit.inn_cost(World.Settlement.new("x", Vector2.ZERO, "human", "town")),
+		"a city room costs more than a town room")
+	check(Visit.inn_cost(World.Settlement.new("x", Vector2.ZERO, "human", "town")) >
+		Visit.inn_cost(World.Settlement.new("x", Vector2.ZERO, "human", "camp")),
+		"a town room costs more than a camp")
+
 	check(Visit.giver_node_id(s) == Visit.giver_node_id(s), "a settlement's giver is stable")
 	check(Visit.giver_node_id(w.settlements[1]) != "" , "every settlement has one")
 	var offer := Visit.quest_offer(s, party)

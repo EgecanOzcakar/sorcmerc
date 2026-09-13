@@ -44,6 +44,15 @@ const KIND_SERVICES := {
 	"town": ["weaponsmith", "alchemist", "innkeeper"],
 }
 
+# T9x: a room at the inn isn't free — bigger settlement, pricier bed. Only
+# charged by the settlement-visit rest path (world.gd's _rest()); the
+# camp-kit's out-of-settlement long rest (core/world_camp.gd) already has its
+# own cost (the kit price + ambush risk) and isn't staying at anyone's inn.
+const INN_COST := {"city": 40, "town": 20, "camp": 10}
+
+static func inn_cost(s) -> int:
+	return int(INN_COST.get(s.kind, INN_COST["town"]))
+
 # --- stealing (T30's opportunity_check shape) ------------------------------
 const STEAL_SKILL := "sleightofhand"
 const STEAL_DC := 15

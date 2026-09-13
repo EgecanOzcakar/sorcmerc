@@ -121,5 +121,24 @@ func _init() -> void:
 		"a short rest refuses with a hostile band right on top of the party")
 	sr.world.parties.erase(raider)
 
+	# --- settlement long rest: costs gold, gated on affording it ---
+	var inn = load("res://scenes/world/world.tscn").instantiate()
+	root.add_child(inn)
+	for i in 10:
+		await process_frame
+	var home = inn.world.settlements[0]
+	inn._open_visit(home)
+	var cost := Visit.inn_cost(home)
+	inn.party.gold = cost - 1
+	var clock0: float = inn.world.clock.elapsed
+	inn._rest()
+	check(is_equal_approx(inn.world.clock.elapsed, clock0), "can't afford the room -> no rest happens")
+	check(inn.party.gold == cost - 1, "...and nothing was charged either")
+
+	inn.party.gold = cost
+	inn._rest()
+	check(inn.party.gold == 0, "affording the room spends exactly its cost")
+	check(inn.world.clock.elapsed > clock0, "and the rest actually happens once it's paid for")
+
 	print("test_world_camp_integration: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
