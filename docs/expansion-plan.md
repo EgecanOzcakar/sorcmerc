@@ -3327,3 +3327,74 @@ position even when only remembered, because the map keeps no last-known
 position to draw instead; the diorama fade fades without desaturating, where
 the 2D layer does both; and persistent faction warfare (the note above) is
 still untouched.
+
+### How T9y was actually run — five local agents, one working tree
+
+Recorded because the split is the reason this round landed as one coherent
+change rather than five conflicting ones, and because two of its failures
+are worth not repeating.
+
+**The partition.** Five workers in a single working tree (no git worktrees,
+no branches per worker), divided by *file ownership* rather than by feature.
+Each brief named the exact files that worker could edit and forbade
+everything else, including git itself — nobody committed, nobody branched,
+nobody stashed; the parent session integrated and made the single commit.
+Ownership was:
+
+| worker | owns | built |
+|---|---|---|
+| parent | `scenes/world/world.gd`, `core/settlement_visit.gd`, the three diorama layers, docs | items 3-5, integration |
+| core | `core/world.gd`, `core/world_save.gd`, the two map builders | item 1 |
+| figures | `core/party.gd`, `scenes/party/party.gd`, `scenes/world/party3d.gd` | item 6 |
+| minimap | **new files only** — `scenes/world/minimap.gd`, its test | item 3's inset |
+| sweep | **new file** `tests/drive_buttons.gd`, plus fixes confined to the screens nobody else held | item 7 |
+
+`scenes/world/world.gd` is 1489 lines and every UI item wanted it, so it was
+not split at all — the parent kept it and did items 3-5 itself while the
+other four ran. That is the same lesson `docs/improvements.md` recorded for
+`scenes/main.gd` back in the MVP plan ("the one contention point"), applied
+instead of relearned.
+
+**Contracts agreed before the code existed**, so a worker could write
+against something another worker had not written yet: the minimap's public
+surface (`world_map`, `DEFAULT_SIZE`, its own placement left to the parent)
+was specified in the brief, and the parent wired it before the file landed;
+`World.origin`'s exact shape (`{"kind", "seed"}`) was pinned in two briefs
+at once. The figures worker was forbidden `world_save.gd` because the core
+worker held it — which is *why* `overworld_figure` kept its name and changed
+its meaning instead of being renamed, and therefore why old saves still
+load.
+
+**Cross-worker findings were reported, not fixed.** The core worker found
+the small map's bandit band standing in a lake, in a file it did not own,
+and wrote it up with the corrected coordinate instead of reaching for it;
+the parent moved the band and added the assertion. The sweep worker found a
+bug in `scenes/world/settlements3d.gd` the same way (below). Ownership held
+in both directions — no worker silently edited outside its lane, and no
+finding was dropped on the floor.
+
+**Two failures, both the parent's:**
+
+1. *A task fell out of a brief.* The core worker's brief was written with
+   three tasks; the fog-index work (item 2) was in its title and not in its
+   body, so it was never dispatched. It surfaced only when the completion
+   report came back without it, and the parent then wrote it directly. The
+   brief body is the contract — a task named anywhere else does not exist.
+2. *A scripted edit deleted a function.* The parent hoisted `_fade()` into
+   the shared diorama base with a Python slice over `settlements3d.gd` whose
+   end anchor sat below `reset()`, silently removing it. The system's own
+   file-changed excerpt was read as confirmation — it showed only the region
+   that survived. It was caught because the sweep worker, running the suite
+   against its own files, reported `world.gd` calling a `reset()` that "does
+   not currently exist". `git diff` after every scripted edit would have
+   caught it in seconds; reading an excerpt of the result would not, and did
+   not.
+
+**Two smaller frictions worth knowing:** running the full suite while
+workers were still editing produced a transient "Compilation failed" (a file
+was read mid-write) and one 4-minute test timeout from five headless Godot
+processes competing for the same CPU — neither was a real failure, and both
+cost time to rule out. Integration runs belong after the workers are done,
+not alongside them. And a finished worker re-notifies when its own
+background waiters exit: those repeats carry nothing new and should be read
+as such rather than acted on twice.
