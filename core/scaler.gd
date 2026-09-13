@@ -30,27 +30,48 @@
 # understood: hard draws the SAME roster shape as it did at T40 (5.3 foes,
 # x0.95) and still loses 6 more points, so the budget is not what changed.
 #
-# WHY, measured the same day — the aggregate was hiding a bimodal distribution.
-# Win rate at easy, level-3 party, 200 seeds, split by the faction the seed drew:
-#   cultist 54%   fey 54%   bandit 79%   dragon 92%   beast 93%   undead 93%
-#   giant / kobold / orc / gnoll / soldier / monstrosity / elemental /
-#   construct / goblinoid: 100%
-# Eleven factions are a walkover and two are a coin flip. "easy = 87.5%" is the
-# average of those, and it describes no fight anybody actually has. The two
-# outliers are the caster-heavy factions, which is T23's control-underpricing
-# ceiling still live (see the Known ceiling note below) rather than anything
-# TIER can reach.
+# WHY — measured the same day, then RE-measured because the first pass was
+# unsound. The first split omitted `spec["seed"]` (encounter.gd: "omit for a
+# random fight"), so every fight was randomly seeded and the per-faction numbers
+# moved run to run; an earlier version of this header reported a bimodal
+# "eleven factions at 100%, two at 54%" split that does not exist. Pin the seed
+# the way _sweep() does, or do not quote the number.
 #
-# Ruled out while looking, so nobody re-walks it: "dragon" joining FACTIONS in
-# T91 (2026-09-12, after the T40 sweep) re-mapped every seed through
-# `FACTIONS[seed % size]` and put dragons in the untethered draw — but dragons
-# measure 92%, above the mean, so they are not what pulled it down. REF_SCORE
-# 46.6 vs the preset party's 47.2 is likewise not drift: this header says so
-# three lines down, deliberately.
+# Easy tier, level-3 party, 450 seeds, fight seed PINNED, by the faction drawn:
+#   fey 53%  cultist 73%  dragon 73%  giant 77%  elemental 90%  undead 93%
+#   beast/bandit/orc/gnoll/goblinoid 97%  kobold/soldier/monstrosity/construct 100%
+#   overall 89.6%
+# So it is a gradient, not two clusters: one real outlier (fey), a 73-77% band
+# (cultist, dragon, giant), and a long tail that is nearly a walkover. What the
+# low end shares is not "casters" — giant and dragon are not — but *chunk*: a
+# budget met with a handful of big bodies.
 #
-# The relevant change is therefore to estimate()'s pricing of casters, or to
-# what the untethered wilderness draw is allowed to roll at low budgets — not
-# to TIER. Neither is done here; D1 needed the measurement, not the retune.
+# MEASURED, and it inverts the obvious fix. Asked whether a weaker/"younger"
+# variant of a monster would fix the low end (the same knob boss_for uses to
+# scale UP), 30 pinned seeds a cell:
+#   as shipped                    fey 53%  cultist 73%  giant 77%  dragon 73%
+#   same bodies at x0.6           fey 100% cultist  90%  giant 90%
+#   SAME SPEND, x0.6 bodies       fey  27% cultist  30%  giant 50%  dragon 30%
+# Scaling a monster down works mechanically — _scale() already handles it and
+# MULT_MIN is 0.6, so no new monster ids, data or models are needed. But spending
+# the saving on MORE bodies, which is what a budget-neutral swap means, makes
+# every one of these fights far worse. That is action economy: 5e punishes the
+# number of turns the other side gets much harder than it punishes any stat line.
+# (Scaling save_dc down with the mult — which _scale does NOT currently do —
+# added almost nothing: 90% vs 93% on cultist. It is a real gap in _scale, but
+# it is not what drives the outliers.)
+#
+# So the lever for the low end is FEWER bodies, not weaker ones, and the pricing
+# gap is that _score() is linear in count: the Nth body costs the same as the
+# first, when its real contribution is a whole extra turn every round. A
+# superlinear term in body count is the targeted fix. Note _build() currently
+# adds bodies first and only raises mult once they are placed, so the generator
+# is already biased toward the expensive direction.
+#
+# The relevant change is therefore a body-count term in _score()/estimate(), or
+# a cap on what the untethered wilderness draw may roll at low budgets — not
+# TIER, and not a tier of weaker monsters. None of it is done here; D1 needed
+# the measurement, not the retune.
 # TIER fell across the board (1.00/1.35/1.80 -> 0.96/1.10/1.32) and the three
 # tiers now sit much closer together: hard is where nearly all of the target rise
 # landed (+23.5 points), so the budget spread that used to separate the tiers

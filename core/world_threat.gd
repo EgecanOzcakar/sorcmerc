@@ -34,46 +34,57 @@ extends RefCounted
 # A tier down, not off: it is still a fight, just not a second climax.
 const BASELINE := "easy"
 
-# MEASURED (2026-09-13), not reasoned. tests/test_scaler.gd's sweep starts every
-# party at full HP by construction, so it could never see the case this file
-# exists for; a throwaway harness that damages the party before round 1 and then
-# autoplays it produced this grid — level-3 preset party, easy tier, 60 seeds a
-# cell, so roughly +/-6 points of noise per number:
+# MEASURED (2026-09-13), and re-measured the same day after the first pass was
+# found unsound. tests/test_scaler.gd's sweep starts every party at full HP by
+# construction, so it can never see the case this file exists for; a throwaway
+# harness that damages the party before round 1 and then autoplays it produced
+# the grid below.
 #
-#     hp%      x1.00  x0.90  x0.75  x0.60  x0.50      <- budget scale
-#     100%       87%    93%   100%    97%   100%
-#      70%       85%    82%    92%   100%    97%
-#      50%       68%    77%    82%    97%   100%
-#      30%       40%    60%    83%    72%    72%
+# The first run of that harness omitted `spec["seed"]`, which core/encounter.gd
+# documents as "omit for a random fight" — so every fight was randomly seeded
+# and the numbers moved run to run. The repo's own sweep pins it
+# (tests/test_scaler.gd's _sweep sets sp["seed"] = s) and so does this one now.
+# Anything measured without it is not reproducible; do not trust a grid that
+# does not say it pinned the seed.
 #
-# Three things fall straight out of it, and all three moved the numbers below:
+#   level-3 preset party, easy tier, 60 seeds a cell, fight seed pinned:
 #
-#  1. The hole is real and it is big. A party at 30% HP on an UNSCALED easy
-#     roster wins 40% of the time. Walking home from a cleared lair was, before
-#     this file, a coin flip you were losing.
-#  2. x0.75 is the flat spot — 100/92/82/83 across the whole HP range. That is
-#     the number the floor should land on.
-#  3. Scaling FURTHER DOWN stops helping and starts hurting: at 30% HP, x0.60
-#     and x0.50 both measured 72%, worse than x0.75's 83%. That is scaler.gd's
-#     own chaff-vs-chunk mispricing (see its TUNING header) — a smaller budget
-#     can buy a roster of fewer, chunkier foes that is nastier for a weakened
-#     party than more small ones. "Just scale it down more" is wrong, and the
-#     floor exists to stop exactly that.
+#     hp%      x1.00  x0.90  x0.75  x0.60  x0.50  x0.40    <- budget scale
+#     100%       95%    93%    98%      -      -      -
+#      70%       78%    80%    92%      -      -      -
+#      50%       63%    67%    82%    88%    95%    97%
+#      30%       35%    48%    62%    72%    83%    93%
+#
+# What it says:
+#  1. The hole is real. A party at 30% HP against an unscaled easy roster wins
+#     35% of the time — the walk home from a cleared lair was a coin flip it was
+#     losing badly.
+#  2. Scaling down keeps helping, monotonically, all the way to x0.40. An
+#     earlier version of this comment claimed the opposite ("below ~0.6 it stops
+#     helping and starts hurting"); that was an artifact of the unseeded run and
+#     is false. There is no measured reason to fear a low floor.
+#  3. Getting a badly hurt party home reliably therefore needs a LOW floor —
+#     around x0.5 at 30% HP, not the x0.75 the bad grid suggested.
 
 # The flat part, and the user's own ask: open-world bands are some percent
-# easier than the tier alone, always. Measured 93% at full HP against 87%
+# easier than the tier alone, always. Measured 93% at full HP against 95%
 # unscaled — the road is not the content and should not cost a reload.
 const WILDERNESS_SCALE := 0.90
 
-# Where the condition curve starts biting. 0.80, not 0.70: the grid shows an
-# unscaled party already down to 85% at 70% HP and 68% at 50%, so protection
-# that only begins at 0.70 begins too late to catch the fall.
-const HURT_AT := 0.80
+# Where the condition curve starts biting. 0.90: the grid shows an unscaled
+# party already down to 78% at 70% HP, so protection has to start almost as
+# soon as the party is meaningfully hurt, not wait for a crisis.
+const HURT_AT := 0.90
 
 # The most the party's condition can thin a fight, on top of WILDERNESS_SCALE.
-# 0.83 because 0.90 * 0.83 ~= 0.75, which is the grid's flat spot — and because
-# finding 3 above says going below it buys a worse fight, not a safer one.
-const CONDITION_FLOOR := 0.83
+# 0.39, so the combined floor is 0.90 * 0.39 ~= 0.35 — below the x0.40 column,
+# which measured 93% at 30% HP. Chosen to hold the whole curve near 85%: at
+# 70/50/30% HP this lands on roughly x0.78/0.66/0.53, which the grid puts at
+# about 89/85/85%. Getting home is meant to be likely, not certain.
+# It must never reach 0.0 — Scaler._build() appends a body before it checks the
+# budget, so a zero budget still fields one monster; the floor is about the
+# fight staying a fight, not about avoiding an empty roster.
+const CONDITION_FLOOR := 0.39
 
 # Derived, and the two numbers anything outside this file should reason about:
 # the kindest and the harshest multiplier the wilderness can ever ask for.
