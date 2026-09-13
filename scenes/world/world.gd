@@ -26,6 +26,7 @@ const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
+const WorldCamp = preload("res://core/world_camp.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
 const Sound = preload("res://core/audio.gd")
@@ -174,6 +175,8 @@ var _lair_btn: Button                # T91: "Search for a lair" / "Attack the la
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
+var _camp_msg: Label                 # T9x: last short-rest/camp outcome, same "persists" contract as _lair_msg
+var _camp_btn: Button                # T9x: "Make camp" — visible only while the party owns a camp kit
 var _settlements3d
 var _lairs3d
 var _party3d
@@ -296,6 +299,8 @@ func _process(delta: float) -> void:
 			Visit.mark_battle(world, r["loser"].position, world.clock.elapsed)
 	_check_visit()
 	_check_lairs()
+	if _camp_btn != null:
+		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0
 	if _clock_lbl != null:
 		_clock_lbl.text = "Day %d  %02d:%02d" % [
 			int(world.clock.elapsed / 1440.0) + 1,
@@ -335,6 +340,17 @@ func _build_hud() -> void:
 	_lair_btn.visible = false
 	_lair_btn.pressed.connect(_lair_action)
 	bar.add_child(_lair_btn)
+	# T9x: short rest works anywhere (when safe) — always visible, _short_rest()
+	# itself says why not rather than the button toggling in and out.
+	var shortrest_btn := Button.new()
+	shortrest_btn.text = "Short Rest"
+	shortrest_btn.pressed.connect(_short_rest)
+	bar.add_child(shortrest_btn)
+	_camp_btn = Button.new()
+	_camp_btn.text = "Make Camp"
+	_camp_btn.visible = false   # only while the party owns a camp kit — see _process()
+	_camp_btn.pressed.connect(_make_camp)
+	bar.add_child(_camp_btn)
 	var hint := Label.new()
 	hint.text = "right-click: march here   ·   drag: pan   ·   wheel: zoom"
 	hint.add_theme_color_override("font_color", Icons.COL_MUTED)
@@ -342,6 +358,9 @@ func _build_hud() -> void:
 	_lair_msg = Label.new()
 	_lair_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	bar.add_child(_lair_msg)
+	_camp_msg = Label.new()
+	_camp_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
+	bar.add_child(_camp_msg)
 
 # O9 item 2: the only way out of the open world. The characters go to the barracks
 # (what the title screen's count reads); O13: the map, the party's purse/stash/quests
@@ -527,7 +546,10 @@ func encounter_spec(foe) -> Dictionary:
 
 # The same hand-off scenes/campaign/campaign.gd's _launch_combat() does: the map
 # freezes, scenes/main.tscn runs the fight unchanged, `result` comes back.
-func _launch_combat(foe) -> Dictionary:
+# `scouted_ahead`/`forced_ambush` are T9x's camp-ambush outcomes (see
+# _make_camp() below) — both default false for every other caller, same
+# no-op they'd get from a plain Combat scene.
+func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dictionary:
 	world.clock.pause()
 	_combat_overlay = Control.new()
 	_combat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -536,6 +558,8 @@ func _launch_combat(foe) -> Dictionary:
 	_combat.party = party
 	_combat.spec = encounter_spec(foe)
 	_combat.difficulty = ENCOUNTER_DIFFICULTY
+	_combat.scouted_ahead = scouted_ahead
+	_combat.forced_ambush = forced_ambush
 	_combat_overlay.add_child(_combat)
 
 	while _combat != null and _combat.result.is_empty():
@@ -740,6 +764,16 @@ func _sell(item_id: String) -> void:
 	if Visit.sell(_visit, party, item_id):
 		_build_visit_panel()
 
+# T9x: flat price, unlimited stock — see the row comment in _build_visit_panel.
+func _buy_camp_kit() -> void:
+	if party.spend_gold(WorldCamp.CAMP_KIT_PRICE):
+		party.stash_add(WorldCamp.CAMP_KIT_ITEM)
+		Sound.play_sfx("buy")
+		_build_visit_panel()
+		_say("%s bought." % WorldCamp.CAMP_KIT_NAME)
+	else:
+		_say("Not enough gold.")
+
 # O9 item 1: one attempt per visit. The steal roll is seeded off (settlement, hour)
 # and the clock is paused for the whole visit, so every press rolled the identical
 # result — a nat 20 was an unlimited gold button. The mark lives on `_visit`, so
@@ -757,15 +791,78 @@ func _steal() -> void:
 
 # O9 item 2: the inn. Time is the cost — see SettlementVisit.rest — and the extra
 # hours restock the shelf, so the market is re-read afterwards.
+# T9x: gated to once per in-game day (Visit.can_long_rest) — RAW's own rule,
+# never enforced before, so a settlement visit could spam free full heals.
 func _rest() -> void:
+	if not Visit.can_long_rest(party, world):
+		_say("The party isn't tired enough for another long rest yet.")
+		return
 	var s = _visit["settlement"]
 	var stolen: bool = _visit.get("stolen", false)
-	Visit.rest(party, world)
+	Visit.rest(party, world, "long-rest")
 	Sound.play_sfx("rest")
 	_visit = Visit.visit(s, world)
 	_visit["stolen"] = stolen
 	_build_visit_panel()
 	_say("The party takes a long rest. Eight hours pass and the stalls fill up again.")
+
+# T9x: a short rest works anywhere on the map, not just a settlement — but
+# only when it's actually safe: mid-fight, paused, or a hostile band close
+# enough to notice all say no, same radius _check_encounter() uses to decide
+# whether a band has closed in enough to trigger a fight.
+func _hostile_nearby() -> bool:
+	var p := world.player()
+	if p == null:
+		return false
+	for q in world.parties:
+		if q != p and WorldAI.is_hostile(q, p) and q.position.distance_to(p.position) <= ENCOUNTER_RADIUS:
+			return true
+	return false
+
+func _short_rest() -> void:
+	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+		return
+	if _hostile_nearby():
+		_camp_msg.text = "Too dangerous to rest here — something hostile is close."
+		return
+	Visit.rest(party, world, "short-rest")
+	Sound.play_sfx("rest")
+	_camp_msg.text = "The party takes a short rest. An hour passes."
+
+# T9x: the camp-kit item (bought at any settlement, see _build_visit_panel)
+# lets the party long-rest away from town — for a price already paid at
+# purchase, and a small risk paid here: AMBUSH_CHANCE_PCT odds of being
+# jumped in the night. A failed watch (whoever's best at Survival or
+# Perception) costs the party the enemy's surprise round; a passed one
+# means they heard it coming and get the same swap-places deployment edge
+# a stealthy approach into a fight would earn them (core/world_camp.gd).
+# Either way an interrupted night grants no rest — same as RAW, and the
+# reason to gate this on can_long_rest() first: no point risking an ambush
+# for a rest that wouldn't grant its benefit yet regardless.
+func _make_camp() -> void:
+	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+		return
+	if not Visit.can_long_rest(party, world):
+		_camp_msg.text = "The party isn't tired enough for another long rest yet."
+		return
+	if party.stash_count(WorldCamp.CAMP_KIT_ITEM) < 1:
+		return
+	party.stash_remove(WorldCamp.CAMP_KIT_ITEM, 1)
+	var p := world.player()
+	var rng := RNG.new(WorldCamp.camp_seed(world.clock.elapsed, p.position))
+	if not WorldCamp.ambush_roll(rng):
+		Visit.rest(party, world, "long-rest")
+		Sound.play_sfx("rest")
+		_camp_msg.text = "The camp holds through the night. Eight hours pass."
+		return
+	var watch: Dictionary = WorldCamp.watch_check(party, rng)
+	var foe := World.RoamingParty.new("camp-ambush-%d" % int(world.clock.elapsed), p.position, WorldCamp.AMBUSH_FACTION)
+	if watch["ok"]:
+		_camp_msg.text = "Someone hears them coming — the party gets the drop first."
+		await _launch_combat(foe, true, false)
+	else:
+		_camp_msg.text = "The camp is jumped in the night!"
+		await _launch_combat(foe, false, true)
 
 # O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
 # (the board can show several at once now), not re-rolled here.
@@ -836,6 +933,13 @@ func _build_visit_panel() -> void:
 			continue
 		_trade_row(rows, "%s x%d — sells for %d gp" % [
 			Campaign.item_name(id), int(entry["quantity"]), paid], "Sell", _sell.bind(id))
+
+	# T9x: the outfitter's one flat-priced, always-in-stock good — not part of
+	# the T25 shelf/restock catalog (it's not a weapon/armor/magic item, and
+	# it never runs out), so it gets its own row rather than a fake catalog
+	# entry.
+	_trade_row(rows, "%s — %d gp (lets you long-rest away from a settlement)" % [
+		WorldCamp.CAMP_KIT_NAME, WorldCamp.CAMP_KIT_PRICE], "Buy", _buy_camp_kit)
 
 	# T9x quest board: every job this settlement can offer right now, one row
 	# each — not the old single ad-hoc offer. A world-target row also shows

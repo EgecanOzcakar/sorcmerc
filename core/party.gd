@@ -18,6 +18,11 @@ var gold: int = 0
 # carries an unidentified stack, so the flag is uniform but only ever false for magic.
 var stash: Array[Dictionary] = []
 var quests: Array = []            # T9's quest log — dicts owned by core/quest.gd
+# T9x: RAW's "one long rest per 24h" gate, read against World.clock.elapsed by
+# core/settlement_visit.gd's can_long_rest(). A huge negative default (not
+# -INF — keeps the value a normal float through a JSON save round-trip) so a
+# fresh party can always rest immediately.
+var last_long_rest_at: float = -1e12
 
 # --- roster ---------------------------------------------------------------
 

@@ -43,6 +43,10 @@ var downed: Dictionary = {}
 # loses its round-1 turns entirely; round 2 on is a normal fight.
 var unseen := false
 
+# T9x: the reverse — a camp ambush the party's watch failed to spot. Same
+# one-round skip, just the other team eats it.
+var ambushed := false
+
 # T26 barks: a cosmetic side channel. Entries are {"id": combatant id, "text": line};
 # the board scene drains it each frame. Nothing in this file reads it back.
 var barks: Array = []
@@ -251,13 +255,24 @@ func end_turn() -> void:
 		return
 
 func skips_turn(c) -> bool:
-	return unseen and round_num == 1 and c.team == "foe"
+	if round_num != 1:
+		return false
+	return (unseen and c.team == "foe") or (ambushed and c.team == "party")
 
 # Called once, before the turn loop starts. Skipping rides on end_turn()'s
 # existing skip path, so every driver (UI, autoplay, tests) honours it.
 func begin_surprise_round() -> void:
 	unseen = true
 	log.append("The party has the drop on them — the enemy loses the first round.")
+	if skips_turn(current()):
+		end_turn()
+
+# T9x: camp-ambush counterpart — called unconditionally (no roll here; the
+# watch/DC check already happened in core/world_camp.gd) when the party's
+# watch failed to spot it coming.
+func begin_ambush_round() -> void:
+	ambushed = true
+	log.append("The camp is jumped in the night — the party loses the first round.")
 	if skips_turn(current()):
 		end_turn()
 

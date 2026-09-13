@@ -29,6 +29,7 @@ func _init() -> void:
 	test_humanoid_foe_names()
 	test_surprise_check()
 	test_surprise_round_skips_only_the_foes_first_turn()
+	test_ambush_round_skips_only_the_partys_first_turn()
 	print("test_encounter: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -95,6 +96,24 @@ func test_surprise_round_skips_only_the_foes_first_turn() -> void:
 	check(acted[1].all(func(c): return c.team == "party"), "no foe acts in the surprise round")
 	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.team_of("party").size(),
 		"every party member still gets its round-1 turn")
+	check(_uniq(acted[2].map(func(c): return c.id)).size() == cb.combatants.size(),
+		"round 2 is a normal round again — everyone acts")
+
+# T9x: the camp-ambush counterpart — same one-round skip, the other team eats
+# it. Unlike surprise_check, begin_ambush_round() is called unconditionally
+# (the watch-check roll already happened in core/world_camp.gd), so this
+# tests the combat-engine half only.
+func test_ambush_round_skips_only_the_partys_first_turn() -> void:
+	var cb = _fight(5)
+	cb.begin_ambush_round()
+	check(cb.ambushed and not cb.unseen, "ambushed is set, unseen (the other case) is not")
+	var acted := {1: [], 2: []}
+	while cb.round_num <= 2:
+		acted[cb.round_num].append(cb.current())
+		cb.end_turn()
+	check(acted[1].all(func(c): return c.team == "foe"), "no party member acts in the ambush round")
+	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.team_of("foe").size(),
+		"every foe still gets its round-1 turn")
 	check(_uniq(acted[2].map(func(c): return c.id)).size() == cb.combatants.size(),
 		"round 2 is a normal round again — everyone acts")
 

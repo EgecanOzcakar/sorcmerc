@@ -27,7 +27,7 @@
 #   "party": {                        // the player's own party: the roster is also in
 #     "roster": [ <character_save.gd dicts> ],   // the barracks, but gold/stash/quests
 #     "active": ["vera"], "gold": 120,           // and marching order live nowhere else
-#     "stash": [...], "quests": [...]
+#     "stash": [...], "quests": [...], "last_long_rest_at": 742.5  // T9x rest cooldown
 #   }
 # }
 #
@@ -154,6 +154,7 @@ static func _party_dict(party) -> Dictionary:
 	return {
 		"roster": roster, "active": Array(party.active), "gold": party.gold,
 		"stash": party.stash.duplicate(true), "quests": party.quests.duplicate(true),
+		"last_long_rest_at": party.last_long_rest_at,
 	}
 
 static func _party_from(pd: Dictionary):
@@ -168,6 +169,7 @@ static func _party_from(pd: Dictionary):
 		party.stash_add(String(e["item_id"]), int(e.get("quantity", 1)),
 			bool(e.get("identified", true)))
 	party.quests = _ints(pd.get("quests", []))
+	party.last_long_rest_at = float(pd.get("last_long_rest_at", -1e12))
 	return party
 
 # JSON gives every number back as a float; quest counters are compared as ints.

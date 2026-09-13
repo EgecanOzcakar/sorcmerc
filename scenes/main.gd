@@ -24,6 +24,7 @@ var party                       # core/party.gd; a Presets demo party when null
 var spec: Dictionary = {}
 var difficulty := "normal"
 var scouted_ahead := false      # T39: campaign scouted this node — surprise is automatic
+var forced_ambush := false      # T9x: camp-ambush item, watch check failed — the foe gets the surprise round, no roll
 var tutorial := false           # T32: run the guided walkthrough over this fight
 var result: Dictionary = {}
 var _own_party := false
@@ -326,6 +327,15 @@ func _new_game(forced := 0) -> void:
 	_figures.reset(cb)
 	_flush_log()
 	_refresh()
+	# T9x: a failed camp-ambush watch check — the foe gets the surprise round
+	# unconditionally, no Stealth roll (the roll already happened, and failed,
+	# in core/world_camp.gd). Checked first: an ambushed party was never given
+	# a chance to be the ones sneaking up.
+	if forced_ambush:
+		cb.begin_ambush_round()
+		_flush_log()
+		_advance()
+		return
 	# T39: surprise is settled before anyone acts. Unseen buys a deployment
 	# phase — the player permutes who stands on which party start hex.
 	if Encounter.surprise_check(cb, scouted_ahead):

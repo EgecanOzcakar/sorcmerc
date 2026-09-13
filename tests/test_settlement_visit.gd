@@ -156,7 +156,7 @@ func test_rest_and_quests() -> void:
 	w.clock.tick(10.0)
 	var t0: float = w.clock.elapsed
 	Visit.rest(party, w)
-	check(is_equal_approx(w.clock.elapsed, t0 + Visit.REST_MINUTES), "a rest spends world-time")
+	check(is_equal_approx(w.clock.elapsed, t0 + Visit.LONG_REST_MINUTES), "a rest spends world-time")
 	check(ch.hp_current != 1, "a long rest heals the party")
 
 	check(Visit.giver_node_id(s) == Visit.giver_node_id(s), "a settlement's giver is stable")

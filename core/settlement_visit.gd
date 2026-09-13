@@ -152,19 +152,31 @@ static func sell(m: Dictionary, party, item_id: String) -> bool:
 	party.add_gold(paid)
 	return true
 
-# --- O9: the inn (a long rest) ---------------------------------------------
+# --- O9 / T9x: rest (short and long) ----------------------------------------
 #
 # core/campaign.gd's rest() is an instance method gated on a linear-run rest node
 # and a per-run rest budget, neither of which exists out here — so this calls what
 # it calls underneath (Adapter.rest) and charges the only currency the open world
 # has: time. Eight hours off the clock is eight hours the market restocks in, and
-# eight hours a hunting band keeps walking.
-const REST_MINUTES := 480.0
+# eight hours a hunting band keeps walking. A short rest is the same idea at RAW's
+# smaller scale — an hour, not a full night.
+const LONG_REST_MINUTES := 480.0
+const SHORT_REST_MINUTES := 60.0
+# RAW: a long rest only grants its benefit once per 24h. Nothing enforced that
+# before — a settlement visit could spam free full heals with no cost but clock
+# time. can_long_rest() below is the gate; T9x's camp-kit rest goes through the
+# same rest()/stamp, so it's covered too, not a second rule to keep in sync.
+const LONG_REST_COOLDOWN := 1440.0
 
 static func rest(party, world, kind := "long-rest") -> void:
 	for ch in party.party_characters():
 		Adapter.rest(ch, kind)
-	world.clock.elapsed += REST_MINUTES   # paused during a visit, so advance it directly
+	world.clock.elapsed += (LONG_REST_MINUTES if kind == "long-rest" else SHORT_REST_MINUTES)
+	if kind == "long-rest":
+		party.last_long_rest_at = world.clock.elapsed
+
+static func can_long_rest(party, world) -> bool:
+	return world.clock.elapsed - party.last_long_rest_at >= LONG_REST_COOLDOWN
 
 # --- O9: quests (T9's verbs, reached from a settlement) ---------------------
 #
