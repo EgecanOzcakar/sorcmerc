@@ -597,18 +597,24 @@ func _apply_deaths(result: Dictionary) -> void:
 			fallen.dead = true
 		party.bench(id)
 
-# Real stakes for a lost fight, reusing what's already here rather than a new
-# wound/injury system: the fallen are handled above (dead + benched, same as
-# a won fight — they need the existing paid Party.resurrect() flow to return,
-# no free revive the way the linear run gives on a run-ending loss). On top
-# of that, retreating loses gold — the bandits loot whoever's still standing
-# while the party falls back to the nearest settlement.
+# Real stakes for a lost fight, but a soft landing — not a death spiral. A
+# world-map encounter is scaled to whatever band you stumbled into, not the
+# curated early-game jobs Party.REVIVE_COST (300gp) was priced against, so
+# charging that per fallen character on top of the retreat tax could leave a
+# beaten party unable to ever afford getting back to full strength. The dead
+# are still handled above (dead + benched, so they can't act, and a party
+# that wins with someone down still pays the normal paid-resurrection price —
+# only a run-ending loss is this forgiving, same "the dead come back for
+# free" rule campaign.gd's own run-ending loss already uses). What actually
+# costs here: no XP/loot/quest progress from the fight, lost time, and the
+# gold the bandits loot off whoever's still standing.
 const DEFEAT_GOLD_LOSS_PCT := 0.15
 func _retreat() -> void:
 	var p := world.player()
 	if p == null or world.settlements.is_empty():
 		return
 	party.spend_gold(roundi(party.gold * DEFEAT_GOLD_LOSS_PCT))
+	Party.auto_revive_all(party)
 	var safe: Vector2 = world.settlements[0].position
 	for s in world.settlements:
 		if p.position.distance_squared_to(s.position) < p.position.distance_squared_to(safe):
