@@ -111,15 +111,25 @@ func _run() -> void:
 		fail("no quick-build button")
 	if main.ch.base_abilities["int"] != 15:
 		fail("quick-build did not put the 15 in INT")
+	if main.ch.background_id != "sage":
+		fail("quick-build did not apply the class's suggested background")
+	# Used to be a silent no-op here — the button did nothing at all with no
+	# message once you'd switched to Point Buy, which read as "the
+	# recommended build doesn't work". Confirmed fixed: it should still
+	# apply the standard array (switching modes back) instead of no-op'ing.
 	if not press("Point buy"):
 		fail("no point-buy toggle")
-	if not press("Standard array"):
-		fail("cannot switch back to the standard array")
+	main.ch.base_abilities["int"] = 8
+	if not press("Use quick-build"):
+		fail("no quick-build button while in point-buy mode")
+	if main.ch.base_abilities["int"] != 15 or main._abil_mode != "array":
+		fail("quick-build silently did nothing from point-buy mode")
 	next_step()
 
-	# 4. background + every remaining choice
-	if not press("Sage"):
-		fail("no background button")
+	# 4. background + every remaining choice — quick-build already applied
+	# Sage above, so there's no unselected "Sage" button left to press here.
+	if main.ch.background_id != "sage":
+		fail("the background quick-build picked earlier didn't stick")
 	settle_choices()
 	reopen_a_decided_choice()
 	next_step()
