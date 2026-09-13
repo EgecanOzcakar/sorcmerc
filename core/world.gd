@@ -90,6 +90,10 @@ class Lair extends RefCounted:
 	var faction: String          # one of Scaler.FACTIONS — same field driving encounter_spec
 	var discovered := false      # found by a Survival check yet? undiscovered lairs don't draw
 	var looted := false          # cleared once — stays on the map, spent, not removed
+	# D1: how many rooms of the interior the party has already fought through
+	# (core/site.gd). A lair is no longer one fight, so backing out part-way has
+	# to be remembered — otherwise "withdraw" silently means "start over".
+	var depth_cleared := 0
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String, name_v: String = "") -> void:
 		id = id_v

@@ -85,17 +85,28 @@ static var _fac_cache := {}   # faction -> [{id, score}], strongest first
 # `theme` is the board this fight is on (Encounter.THEMES); with none, `seed`
 # picks a faction. A quest bias keeps the hand-tuned MIX — the quest target has
 # to be in the roster, and a snik among sahuagin is not a coherent warband.
+#
+# T92 — `power_scale` multiplies the finished budget, for callers who know
+# something about the party that TIER cannot: core/world_threat.gd reads the
+# active party's wounds and asks for a thinner wilderness fight, because every
+# win rate in the header above was measured on a party at FULL resources and a
+# party limping home from a cleared site is not that party. It is deliberately
+# the LAST parameter with a 1.0 default, so it is a knob bolted onto the side of
+# the calibration rather than a change to it — at 1.0 the arithmetic below is
+# bit-for-bit what it was, and every existing call site keeps its measured
+# numbers. It multiplies the budget only; nothing about TIER, CURVE, REF_SCORE
+# or the two knobs in _build() moves.
 static func roster_for(party_characters: Array, difficulty: String, quest_bias: Dictionary = {},
-		theme: String = "", seed: int = 0) -> Dictionary:
-	var budget := _budget(party_characters, difficulty)
+		theme: String = "", seed: int = 0, power_scale: float = 1.0) -> Dictionary:
+	var budget := _budget(party_characters, difficulty, power_scale)
 	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() else _faction_order(theme, seed, budget))
 
-static func _budget(party_characters: Array, difficulty: String) -> float:
+static func _budget(party_characters: Array, difficulty: String, power_scale: float = 1.0) -> float:
 	var party: Array = []
 	for ch in party_characters:
 		party.append(Adapter.to_combatant(ch, "party", Vector2i.ZERO))
 	var team: float = maxf(1.0, Power.team_score(party))
-	return REF_SCORE * pow(team / REF_SCORE, CURVE) * float(TIER.get(difficulty, TIER["normal"]))
+	return REF_SCORE * pow(team / REF_SCORE, CURVE) * float(TIER.get(difficulty, TIER["normal"])) * power_scale
 
 # T18 — a boss fight: the same budget and the same MULT knob, aimed differently.
 # One named lead (campaign.gd's BOSS_POOL entry) is pumped until it alone is worth

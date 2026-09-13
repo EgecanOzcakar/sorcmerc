@@ -85,6 +85,7 @@ static func to_dict(world, party = null) -> Dictionary:
 		lairs.append({
 			"id": l.id, "sname": l.sname, "position": _v(l.position),
 			"faction": l.faction, "discovered": l.discovered, "looted": l.looted,
+			"depth_cleared": l.depth_cleared,
 		})
 	# T-water: same story as lairs -- terrain postdates this format, so an old
 	# save with no "waters" key loads as a world with none rather than crashing.
@@ -142,6 +143,7 @@ static func from_dict(d: Dictionary):
 			String(ld.get("faction", "goblinoid")), String(ld.get("sname", "")))
 		l.discovered = bool(ld.get("discovered", false))
 		l.looted = bool(ld.get("looted", false))
+		l.depth_cleared = int(ld.get("depth_cleared", 0))   # D1; an old save just starts at the mouth
 		world.add_lair(l)
 	for wd in d.get("waters", []):
 		world.add_water(_vec(wd.get("position")), float(wd.get("radius", 0.0)))
