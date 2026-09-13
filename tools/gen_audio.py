@@ -239,6 +239,20 @@ SFX = {
 LOOP = 4.0
 
 # theme -> (chord midi notes, tremolo cycles per loop, sparkle notes, wave)
+#
+# The first block is one bed per Encounter.THEMES (the fight backdrops), plus
+# settlement and title. The second is D6's four countries: the overworld map
+# plays the bed for the ring the party is standing in (scenes/world/world.gd),
+# so riding out is audible before anything on screen says so.
+#
+# The region beds are deliberately a gradient rather than four unrelated moods.
+# Root pitch walks down as the country gets older and emptier (43 -> 41 -> 38 ->
+# 31), the waveform roughens from a plain sine through triangle to saw as it
+# stops being anybody's country, and the tremolo — the thing that reads as
+# "something is moving out there" — climbs 2/3/5 through the settled bands and
+# then drops to 1 in the deeps, where the stillness is the threat. Sparkle
+# (the soft plucks) thins from three notes to two to one: fewer birds, fewer
+# bells, fewer people.
 BEDS = {
     "sunken-shrine":   ([36, 43, 48, 55], 2, [72, 79], "sine"),
     "goblin-camp":     ([38, 45, 50, 57], 4, [62, 65], "saw"),
@@ -248,6 +262,12 @@ BEDS = {
     "merchant-shop":   ([43, 50, 55, 62], 3, [74, 77, 81], "tri"),
     "settlement":      ([41, 48, 55, 60], 2, [67, 72, 76], "sine"),
     "title":           ([36, 48, 55, 64], 1, [76, 79, 84], "tri"),
+    # D6 regions — ids are core/regions.gd's BANDS ids, and must stay that way:
+    # world.gd feeds the band id straight to Sound.set_environment().
+    "heartland":       ([43, 50, 55, 62], 2, [74, 79, 83], "sine"),
+    "marches":         ([41, 48, 53, 60], 3, [69, 74], "tri"),
+    "frontier":        ([38, 45, 50, 57], 5, [65, 70], "saw"),
+    "deeps":           ([31, 38, 43, 50], 1, [79], "saw"),
 }
 
 

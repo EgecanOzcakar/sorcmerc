@@ -30,7 +30,14 @@ func _init() -> void:
 		check(s != null and s.data.size() > 1000, "sfx %s parses" % id)
 		if s != null:
 			check(s.loop_mode == AudioStreamWAV.LOOP_DISABLED, "sfx %s is one-shot" % id)
-	for theme in Encounter.THEMES + ["settlement", "title", "tension"]:
+	# D6: the overworld feeds a band id straight to set_environment(), so every
+	# band core/regions.gd declares needs a bed of that exact name. Derived from
+	# BANDS rather than listed, or a fifth country would ship silent.
+	var Regions = load("res://core/regions.gd")
+	var region_beds: Array = []
+	for b in Regions.BANDS:
+		region_beds.append(String(b["id"]))
+	for theme in Encounter.THEMES + ["settlement", "title", "tension"] + region_beds:
 		var s = a._stream(Audio.MUSIC_DIR + theme + ".wav", true)
 		check(s != null and s.loop_mode == AudioStreamWAV.LOOP_FORWARD, "bed %s loops" % theme)
 		if s != null:

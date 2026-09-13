@@ -24,6 +24,7 @@ const Presets = preload("res://core/presets.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
+const Sound = preload("res://core/audio.gd")
 const Tutorial = preload("res://core/tutorial.gd")
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
@@ -61,6 +62,12 @@ func _swap(to: Control) -> void:
 # copy for running that scene standalone — a dev convenience, not the game.)
 
 func show_title() -> void:
+	# T27: title.wav has shipped since the audio pass and nothing ever played it —
+	# the front door was the one screen with a bed of its own and no way to hear
+	# it. set_combat(false) because the title is also where you land after a run:
+	# the tension layer must not follow you out of the fight you just left.
+	Sound.set_environment("title")
+	Sound.set_combat(false)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -334,11 +341,20 @@ static func _end_color(state: String) -> Color:
 
 # --- small builders -------------------------------------------------------
 
+# Every button on the title and summary screens comes through here, which is why
+# the click lives here rather than at fourteen call sites. click.wav was the
+# second orphan of the T27 pass: generated, shipped, never played by anything.
 func _button(text: String, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.pressed.connect(cb)
+	b.pressed.connect(_clicked.bind(cb))
 	return b
+
+# Named rather than an inline lambda so the click cannot be silently dropped by a
+# lambda-indent slip in a file nothing type-checks until it is loaded.
+func _clicked(cb: Callable) -> void:
+	Sound.play_sfx("click")
+	cb.call()
 
 func _dim(text: String) -> Label:
 	var l := Label.new()
