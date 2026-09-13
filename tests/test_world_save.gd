@@ -3,6 +3,8 @@
 #   godot --headless --path . -s tests/test_world_save.gd
 extends SceneTree
 
+const Travel = preload("res://core/travel.gd")
+
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const WorldSave = preload("res://core/world_save.gd")
@@ -177,5 +179,26 @@ func _find(w, id: String):
 	return null
 
 func _done() -> void:
+	# D3: standing orders are a marching decision, so they have to survive a
+	# reload — a party that comes back from a save marching at a pace it was
+	# never set to is the same bug class as the figure picker's stale class id.
+	var wo := World.new()
+	wo.add_party(World.RoamingParty.new("player", Vector2.ZERO, "human", true))
+	var po := _party()
+	Travel.set_orders(po, "careful", String(po.active[0]), String(po.active[1]))
+	var back_o = WorldSave.from_dict(WorldSave.to_dict(wo, po))
+	var ro: Dictionary = Travel.orders(back_o["party"])
+	check(String(ro["pace"]) == "careful", "the marching pace survives a save")
+	check(String(ro["scout"]) == String(po.active[0]), "...and who was scouting")
+	check(String(ro["watch"]) == String(po.active[1]), "...and who had the watch")
+	check(Travel.speed_mult(back_o["party"]) < 1.0, "...and it still moves the party's speed")
+
+	# An old save has no orders at all and must simply march at the default.
+	var d_old: Dictionary = WorldSave.to_dict(wo, _party())
+	d_old["party"].erase("travel_orders")
+	var back_old = WorldSave.from_dict(d_old)
+	check(String(Travel.orders(back_old["party"])["pace"]) == "normal",
+		"a save from before standing orders marches at the default")
+
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

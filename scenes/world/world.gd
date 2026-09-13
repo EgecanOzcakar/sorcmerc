@@ -30,6 +30,8 @@ const WorldLairs = preload("res://core/world_lairs.gd")
 const Site = preload("res://core/site.gd")
 const SiteScreen = preload("res://scenes/world/site_screen.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
+const Travel = preload("res://core/travel.gd")
+const EventCard = preload("res://scenes/world/event_card.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
@@ -204,6 +206,12 @@ var _lair_btn: Button                # T91: "Search for a lair" / "Attack the la
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
 var _site = null                     # D1: the delve in progress (core/site.gd), or null
+# D3: last road-event roll, and the card showing one. Scene-local like the
+# forage stamp — a reload just restarts the cadence, which is not worth a
+# save-format field for something that fires every six world-hours anyway.
+var _last_travel_at: float = 0.0
+var _event_card: Control = null
+var _pace_btn: Button
 var _site_screen: Control = null     # ...and the descent screen drawing it
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
@@ -256,8 +264,10 @@ func _ready() -> void:
 	add_child(_party3d)
 	_party3d.reset(world)
 	_last_forage_at = world.clock.elapsed   # T9x: start the cadence from load time, not zero
+	_last_travel_at = world.clock.elapsed   # D3: same, for road events
 	set_process(true)
 	_build_hud()
+	_refresh_pace_btn()
 
 # Hand-placed stand-ins so the scene has something to render and move. Real
 # spawning is a later phase's job (O3 onward).
@@ -329,6 +339,9 @@ func _process(delta: float) -> void:
 	var p0 := world.player()
 	if p0 != null:
 		world.reveal(p0.position)   # T9x fog of war: permanent once seen
+		# D3: the marching order IS the speed, re-read every frame so changing
+		# it on the party screen takes effect the moment you back out.
+		p0.speed = World.SPEED * Travel.speed_mult(party)
 	FactionOpinion.tick(world, dt)
 	WorldAI.update(world, delta)
 	_check_encounter(dt)
@@ -343,6 +356,7 @@ func _process(delta: float) -> void:
 	_check_lairs()
 	_check_expired_lairs()
 	_check_forage()
+	_check_travel()
 	if _camp_btn != null:
 		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0
 	_layout_minimap()   # this Control resizes with the window; the inset follows the corner
@@ -392,6 +406,9 @@ func _build_hud() -> void:
 	bar.add_child(_lair_sneak_btn)
 	# T9x: short rest works anywhere (when safe) — always visible, _short_rest()
 	# itself says why not rather than the button toggling in and out.
+	_pace_btn = Button.new()
+	_pace_btn.pressed.connect(_cycle_pace)
+	bar.add_child(_pace_btn)
 	var shortrest_btn := Button.new()
 	shortrest_btn.text = "Short Rest"
 	shortrest_btn.pressed.connect(_short_rest)
@@ -977,6 +994,59 @@ func _check_forage() -> void:
 		party.add_gold(int(roll["gold"]))
 		_camp_msg.text = "%s forages along the way (%s %d+%d vs DC %d) — +%d gold." % [
 			roll["cname"], String(roll["skill"]).capitalize(), roll["nat"], roll["bonus"], roll["dc"], int(roll["gold"])]
+
+# D3 — the other half of keeping a 1x-8x fast-forward honest. Travel used to be
+# empty, so 8x was a way to skip the game; now the road rolls an event every
+# Travel.EVENT_INTERVAL of actual travel and the clock STOPS for it. That is the
+# whole bargain: nothing is asked of the player while nothing is happening, and
+# nothing is missed when something is.
+#
+# The event arrives already resolved — standing orders set on the party screen
+# decided who rolled and at what bonus (core/travel.gd), hours before this
+# fired. The card reports; it does not ask. Same gates as every other _check_*:
+# not mid-fight, not in a settlement, not underground, not already paused.
+func _check_travel() -> void:
+	if _combat != null or not _visit.is_empty() or _site != null or world.clock.is_paused():
+		return
+	if _event_card != null:
+		return          # one card at a time; the clock is stopped behind it anyway
+	if world.clock.elapsed - _last_travel_at < Travel.EVENT_INTERVAL:
+		return
+	_last_travel_at = world.clock.elapsed
+	var e: Dictionary = Travel.check(party, world,
+		RNG.new(maxi(1, absi(hash("road|%d" % int(world.clock.elapsed))))))
+	if e.is_empty():
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(_on_event_ack)
+	_event_card.show_event(e)
+	WorldSave.save(world, party)   # an event can move gold, HP, the clock and the map
+
+func _on_event_ack() -> void:
+	if _event_card != null:
+		_event_card.queue_free()
+		_event_card = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+# D3: the quick version of the party screen's standing orders — the one order
+# worth changing mid-march, on the HUD where the clock speed already is.
+func _cycle_pace() -> void:
+	var o: Dictionary = Travel.orders(party)
+	var i: int = Travel.PACES.find(String(o["pace"]))
+	var next: String = Travel.PACES[(i + 1) % Travel.PACES.size()]
+	Travel.set_orders(party, next, String(o["scout"]), String(o["watch"]))
+	_refresh_pace_btn()
+
+func _refresh_pace_btn() -> void:
+	if _pace_btn == null:
+		return
+	var pace: String = String(Travel.orders(party)["pace"])
+	_pace_btn.text = Travel.pace_label(pace)
+	_pace_btn.tooltip_text = Travel.pace_note(pace)
 
 func _open_visit(s) -> void:
 	world.clock.pause()

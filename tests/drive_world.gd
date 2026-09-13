@@ -34,6 +34,11 @@ func step(n: int, dt := 0.1) -> void:
 	for i in n:
 		screen._process(dt)
 		await process_frame
+		# D3: a road event stops the clock until it is acknowledged. A robot that
+		# never dismisses it would sit behind a paused world for the rest of the
+		# run, so the driver does what a player does and waves it away.
+		if screen._event_card != null:
+			screen._on_event_ack()
 
 func _run() -> void:
 	await process_frame
