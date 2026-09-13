@@ -94,9 +94,14 @@ func _run() -> void:
 		return _done()
 
 	# An empty active party must not be able to start a run.
+	# T-worlds replaced the single "Begin the run" button with three
+	# ("Begin — Small/Large/Procedural World"); which one is pressed doesn't
+	# matter for anything checked in this file (linear-vs-open-world routing
+	# is decided by SORCMERC_LINEAR_CAMPAIGN, not by which map size button),
+	# so "Small World" stands in for all three everywhere below.
 	var was: Array = Array(party_screen.party.active)
 	party_screen.party.active.clear()
-	press("Begin the run")
+	press("Begin — Small World")
 	await process_frame
 	if find_node(main, "res://scenes/world/world.gd") != null:
 		fail("started a run with an empty active party")
@@ -128,7 +133,7 @@ func _run() -> void:
 	# The party screen is freed the moment the map replaces it, so hold on to the
 	# assembled party itself, not the screen.
 	var assembled = party_screen.party
-	press("Begin the run")
+	press("Begin — Small World")
 	await process_frame
 	await process_frame
 	var world_screen = find_node(main, "res://scenes/world/world.gd")
@@ -190,7 +195,7 @@ func _run() -> void:
 		fail("New run did not open the party screen the second time")
 		return _done()
 	assembled = party_screen.party
-	press("Begin the run")
+	press("Begin — Small World")
 	await process_frame
 	await process_frame
 	if find_node(main, "res://scenes/world/world.gd") != null:

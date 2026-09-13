@@ -417,7 +417,7 @@ func _offscreen_battle(p) -> void:
 	var World = load("res://core/world.gd")
 	var away: Vector2 = p.position + Vector2(4000, 4000)     # nowhere near the player
 	var a = screen.world.add_party(World.RoamingParty.new("raid-band", away, "bandit"))
-	var b = screen.world.add_party(World.RoamingParty.new("garrison", away + Vector2(40, 0), "soldier"))
+	var b = screen.world.add_party(World.RoamingParty.new("garrison", away + Vector2(40, 0), "human"))
 	a.goal = b.position
 	b.goal = b.position
 	var n: int = screen.world.parties.size()
@@ -436,9 +436,15 @@ func _offscreen_battle(p) -> void:
 
 # --- O4: proximity triggers a real fight, winning clears the party ------
 func _encounter_handoff(p) -> void:
+	# "soldier" was the pre-T90 civilized faction name — a stale check here
+	# (T90 moved the civilized/monster split to the four playable races and
+	# missed this file) happened to still work by accident, since nothing in
+	# the demo world uses "soldier" any more. WorldAI.is_monster() is the
+	# actual, current rule.
+	var WorldAI = load("res://core/world_ai.gd")
 	var foe = null
 	for q in screen.world.parties:
-		if not q.is_player and q.faction != "soldier":
+		if not q.is_player and WorldAI.is_monster(q.faction):
 			foe = q
 			break
 	if foe == null:
