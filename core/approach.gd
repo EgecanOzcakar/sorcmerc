@@ -48,15 +48,31 @@ const PARLEY_DC := 14
 # Which standing order does the job, and which skill it rolls. Scout for the
 # two that are about reading ground; parley is nobody's standing order, so it
 # falls to whoever in the party can actually talk.
+# `win` and `lose` are what the card puts on the row, and they are not flavour:
+# a row that shows only what a way BUYS makes every way that rolls look better
+# than the one that does not, and engage — the only way that cannot go wrong —
+# reads as the option with nothing on it. The gamble is the point of this card,
+# so both halves of every gamble are stated, in the same words the resolution
+# will use. Engage has no `lose` because there is nothing to fail.
 const WAYS := {
 	"engage": {"label": "Engage", "role": "", "skills": [], "dc": 0,
-		"note": "Straight at them. No edge, no surprises."},
+		"note": "Straight at them. No edge, no surprises.",
+		"win": "An even fight, full XP and loot. Nothing can go wrong first."},
 	"ambush": {"label": "Set an ambush", "role": "scout", "skills": ["stealth", "survival"],
-		"dc": AMBUSH_DC, "note": "Take the first round — or hand it to them."},
+		"dc": AMBUSH_DC, "note": "Take the first round — or hand it to them.",
+		"win": "The party takes the first round.",
+		"lose": "THEY take the first round, and the fight happens anyway."},
 	"avoid": {"label": "Slip away", "role": "scout", "skills": ["stealth"], "dc": AVOID_DC,
-		"note": "No fight, and nothing to show for it."},
+		"note": "No fight, and nothing to show for it.",
+		"win": "No fight — and no XP, no loot, nothing.",
+		"lose": "Seen mid-slip: they take the first round, and you fight strung out."},
 	"parley": {"label": "Parley", "role": "", "skills": ["persuasion", "deception"],
-		"dc": PARLEY_DC, "note": "Buy your way past. They will want something."},
+		"dc": PARLEY_DC, "note": "Buy your way past. They will want something.",
+		"win": "No fight. The toll is %d gold, and there is no loot.",
+		# A purse with nothing in it: _toll() caps at what the party actually has,
+		# so the line has to stop saying "0 gold" and say what that means.
+		"win_broke": "No fight. They take what you are carrying, which is nothing.",
+		"lose": "They were never going to be talked to. A plain, even fight."},
 }
 # Order they are offered in: the safe one first, the gamble last, so the list
 # reads as an escalation rather than a menu.
@@ -98,11 +114,35 @@ static func options(party, foe) -> Array:
 			var who := _roller(party, w)
 			if who.is_empty():
 				continue          # nobody can roll it: do not offer it
+			var bonus: int = int(who["bonus"]) + Travel.pace_bonus(party)
 			o.merge({"char_id": who["id"], "cname": who["cname"], "skill": who["skill"],
-				"bonus": int(who["bonus"]) + Travel.pace_bonus(party),
-				"named": bool(who["named"])}, true)
+				"bonus": bonus, "named": bool(who["named"]),
+				"needs": needs(int(w["dc"]), bonus)}, true)
+		# What it buys and what it costs, both, before the press. The toll is the
+		# real number the party would actually pay — "they will want something" is
+		# not a price anybody can weigh against a fight.
+		if id == "parley":
+			var toll: int = _toll(party)
+			o["win"] = String(w["win"]) % toll if toll > 0 else String(w["win_broke"])
+		else:
+			o["win"] = String(w.get("win", ""))
+		if w.has("lose"):
+			o["lose"] = String(w["lose"])
+		if id == "parley":
+			o["toll"] = _toll(party)
 		out.append(o)
 	return out
+
+
+# The face the d20 has to come up, which is the only honest way to show odds in
+# a game whose whole vocabulary is d20s. Ability checks have no natural 1/20
+# rule in 5.5e, so a bonus big enough really is a certainty and a DC far enough
+# out of reach really is impossible — and a card that showed "needs 23" as if it
+# could happen would be lying about the only number on it that matters.
+#
+# 0 means it cannot fail; 21 means it cannot pass.
+static func needs(dc: int, bonus: int) -> int:
+	return clampi(dc - bonus, 0, 21)
 
 
 # Take a way. Returns what happened and, crucially, what the fight should be if

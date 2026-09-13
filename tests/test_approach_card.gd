@@ -247,6 +247,16 @@ func _init() -> void:
 			and b.position.x + b.size.x <= narrow._panel.end.x and b.size.y > 0.0
 	check(inside, "...and so does every one of its rows")
 	check("vs DC 13" in row_text(narrow, 0), "...and a narrow row still shows its DC")
+	# With the stakes lines a row is four lines, not two, so the tallest real card
+	# (four ways, all of them priced) has to be re-checked against a small window
+	# rather than assumed from the two-line version.
+	var tall = card(400.0, 720.0)
+	var tp = _party()
+	tp.gold = 400
+	tall.show_approach(Approach.options(tp, World.RoamingParty.new("men", Vector2(40.0, 0.0), "orc")),
+		"Orc raiders (8)")
+	check(tall._panel.end.y <= 720.0, "a fully priced four-way card still fits a 400x720 window (%.0f)" % tall._panel.end.y)
+	check(tall._panel.position.y >= 0.0, "...from the top edge down")
 	var wide = card(1280.0, 720.0)
 	wide.show_approach(four(), "Goblins (3)")
 	check(wide._panel.size.x <= ApproachCard.PANEL_MAX_W,
@@ -279,10 +289,62 @@ func _init() -> void:
 				and ("%+d" % int(o["bonus"])) in rt
 	check(priced, "every real option draws its own label, roller, bonus and DC")
 
+	# Both halves of every gamble, on the row. This is the fix for the thing that
+	# was actually wrong with this card: it showed what each way BOUGHT and never
+	# what it cost, so the three ways that roll all read as free upside and
+	# engage — the one that cannot fail — read as the row with nothing on it.
+	var staked := true
+	var risked := true
+	for i in mopts.size():
+		var o: Dictionary = mopts[i]
+		var rt := row_text(m, i)
+		staked = staked and String(o.get("win", "")) != "" and String(o["win"]) in rt
+		if String(o["id"]) == "engage":
+			check(not o.has("lose"), "engage has no downside to state")
+			check(not ApproachCard.LOSE_GLYPH in rt, "...and draws no loss line")
+		else:
+			risked = risked and String(o.get("lose", "")) != "" and String(o["lose"]) in rt
+			# The subtraction a player would otherwise do under time pressure.
+			staked = staked and ("needs %d+" % int(o["needs"])) in rt
+	check(staked, "every way says what it buys, and what the die has to show")
+	check(risked, "every way that rolls says what happens when it does not land")
+
+	# The two ends of the odds display. 5.5e has no natural 1 or 20 on an ability
+	# check, so both of these are real states a party can actually be in, and a
+	# card that printed "needs 0+" or "needs 24+" would be lying about the only
+	# number on it that decides anything.
+	var sure = card()
+	sure.show_approach([{"id": "avoid", "label": "Slip away", "dc": 10, "cname": "Pike",
+		"skill": "stealth", "bonus": 12, "needs": Approach.needs(10, 12),
+		"win": "Gone.", "lose": "Seen."}], "Bandits (2)")
+	check("cannot fail" in drawn(sure), "a bonus past the DC says so (%s)" % drawn(sure))
+	var hopeless = card()
+	hopeless.show_approach([{"id": "ambush", "label": "Set an ambush", "dc": 30, "cname": "Pike",
+		"skill": "stealth", "bonus": 2, "needs": Approach.needs(30, 2),
+		"win": "First round.", "lose": "Their first round."}], "Bandits (2)")
+	check("out of reach" in drawn(hopeless), "and a DC past the die says that (%s)" % drawn(hopeless))
+
 	var copts := Approach.options(party, men)
 	var cc = card()
 	cc.show_approach(copts, "Orc raiders (8)")
 	check(copts.size() == 4, "a band that can be talked to offers four")
+	# A price you cannot see is not a price. "They will want something" was the
+	# old line, and it is not a number anybody can weigh against a fight.
+	var rich = _party()
+	rich.gold = 400
+	var rich_opts := Approach.options(rich, men)
+	var rc = card()
+	rc.show_approach(rich_opts, "Orc raiders (8)")
+	for o in rich_opts:
+		if String(o["id"]) == "parley":
+			check(int(o["toll"]) > 0 and String(o["win"]).find(str(int(o["toll"]))) >= 0,
+				"the parley names the actual toll (%s)" % o["win"])
+			check(String(o["win"]) in drawn(rc), "...on the card, before it is chosen")
+	# And an empty purse does not print "0 gold" at somebody.
+	for o in copts:
+		if String(o["id"]) == "parley":
+			check(int(o["toll"]) == 0 and String(o["win"]).find("0 gold") < 0,
+				"a party with nothing is told what that means (%s)" % o["win"])
 	check("Parley" in drawn(cc), "...and the fourth is the parley")
 	# thrun is the scout the orders below name, so approach.gd's `named` is true
 	# for the two scout-role ways and the card has to carry that through.

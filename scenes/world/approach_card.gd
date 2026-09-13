@@ -108,6 +108,18 @@ const UNKNOWN_GLYPH := "·"
 const NAMED_MARK := "★"
 const NAMED_HINT := "  ★ is the character your standing orders put on the job."
 
+# What a way buys and what it costs, one line each. Both glyphs are already on
+# the icon sheet (CONDITION_GLYPHS' "helped" and "down"), so neither can come out
+# as tofu — which a ✓/✗ pair, the obvious choice, could.
+#
+# This pair is the whole answer to the thing that was wrong with this card: a row
+# that showed only what a way BUYS made every way that rolls read as better than
+# the one that cannot fail, and engage — the safe option — looked like the option
+# with nothing on it. The cost of a gamble belongs next to its prize.
+const WIN_GLYPH := "✚"
+const LOSE_GLYPH := "✗"
+const STAKE_LINES := 2        # each half of a gamble, wrapped
+
 const NO_ROLL_TEXT := "no roll"   # engage is the certain one; say so, do not just omit
 const NO_FOE := "A band on the road"
 const NO_LABEL := "Meet them"
@@ -251,6 +263,14 @@ func _roll_line(o: Dictionary) -> String:
 	var dc := _on(o, "dc")
 	if dc > 0:
 		parts.append("vs DC %d" % dc)
+	# The face the die has to show. A bonus and a DC are two numbers a player has
+	# to subtract under time pressure to know whether this is a good bet; the
+	# subtraction is the whole decision, so the card does it.
+	var needs := _on(o, "needs")
+	if needs > 0 and dc > 0:
+		parts.append("· needs %s" % ("%d+" % needs if needs <= 20 else "out of reach"))
+	elif o.has("needs") and dc > 0:
+		parts.append("· cannot fail")
 	var check := " ".join(parts)
 	var who := _os(o, "cname")
 	if who == "":
@@ -317,6 +337,10 @@ func _tooltip(i: int) -> String:
 	var note := _os(o, "note")
 	if note != "":
 		out += "\n" + note
+	for pair in [[WIN_GLYPH, "win"], [LOSE_GLYPH, "lose"]]:
+		var text := _os(o, String(pair[1]))
+		if text != "":
+			out += "\n%s %s" % [String(pair[0]), text]
 	return out
 
 
@@ -442,12 +466,22 @@ func _row(rel: Array, rel_rows: Array, i: int, tx: float, avail: float, top: flo
 		sub.append(_op(Vector2(right - _w(NO_ROLL_TEXT, Icons.FS_SMALL), y),
 			NO_ROLL_TEXT, Icons.FS_SMALL, Icons.COL_MUTED, avail))
 
-	# The sell, under everything, muted: approach.gd wrote it and it is the only
-	# part of the row that is prose rather than a number.
-	for nline in _wrap(note, Icons.FS_SMALL, right - ROW_TEXT_X, NOTE_LINES):
-		y += LINE_GAP + Icons.FS_SMALL
-		sub.append(_op(Vector2(ROW_TEXT_X, y), nline, Icons.FS_SMALL, Icons.COL_MUTED,
-			right - ROW_TEXT_X))
+	# The sell, under everything, muted — but only for a way that did not say what
+	# it wins and loses. Those two lines say the same thing in harder words, and
+	# printing both made every row carry its own paraphrase. The note is still on
+	# the tooltip, where a player who wants the prose can hover for it.
+	if _os(o, "win") == "" and _os(o, "lose") == "":
+		for nline in _wrap(note, Icons.FS_SMALL, right - ROW_TEXT_X, NOTE_LINES):
+			y += LINE_GAP + Icons.FS_SMALL
+			sub.append(_op(Vector2(ROW_TEXT_X, y), nline, Icons.FS_SMALL, Icons.COL_MUTED,
+				right - ROW_TEXT_X))
+
+	# Both halves of the gamble, in the order a gambler weighs them: what it pays
+	# and then what it costs. A way with no `lose` (engage) draws one line, and
+	# that absence IS its argument — it is the only row on the card with nothing
+	# under the red mark.
+	y = _stake(sub, y, WIN_GLYPH, _os(o, "win"), Icons.COL_PARTY, right)
+	y = _stake(sub, y, LOSE_GLYPH, _os(o, "lose"), Icons.COL_FOE, right)
 
 	var h := (y - top) + ROW_PAD
 	rel_rows.append({"rect": Rect2(tx, top, avail, h), "col": col})
@@ -460,6 +494,24 @@ func _row(rel: Array, rel_rows: Array, i: int, tx: float, avail: float, top: flo
 			moved["pos"] = Vector2(moved["pos"]) + Vector2(tx, 0.0)
 		rel.append(moved)
 	return h
+
+
+# One stake line: a mark and the outcome it stands for, hanging under the note.
+# Returns the new y whether or not it drew anything, so a way with no downside
+# simply takes up no room saying so.
+func _stake(sub: Array, y: float, glyph: String, text: String, col: Color, right: float) -> float:
+	if text == "":
+		return y
+	var gx := ROW_TEXT_X
+	var tx2 := gx + _w(glyph, Icons.FS_SMALL) + GLYPH_GAP
+	var first := true
+	for line in _wrap(text, Icons.FS_SMALL, right - tx2, STAKE_LINES):
+		y += LINE_GAP + Icons.FS_SMALL
+		if first:
+			sub.append(_op(Vector2(gx, y), glyph, Icons.FS_SMALL, col, right - gx))
+			first = false
+		sub.append(_op(Vector2(tx2, y), line, Icons.FS_SMALL, col, right - tx2))
+	return y
 
 
 # The roll line and, when the player's own standing order put this character on

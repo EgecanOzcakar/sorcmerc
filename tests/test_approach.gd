@@ -69,6 +69,42 @@ func _init() -> void:
 			"%s is priced before it is chosen" % o["id"])
 		check(String(o["note"]) != "", "%s says what it is for" % o["id"])
 
+	# --- both halves of every gamble, before it is taken --------------------
+	# A card that shows only what a way BUYS makes every way that rolls look
+	# better than the one that cannot fail. So each option states its downside in
+	# the same words the resolution will use, and prints the face the die has to
+	# show — the subtraction that IS the decision.
+	for o in opts:
+		check(String(o.get("win", "")) != "", "%s says what it buys" % o["id"])
+		if String(o["id"]) == "engage":
+			check(not o.has("lose"), "engage has nothing to fail, and claims none")
+			check(not o.has("needs"), "...and no die face to hit")
+		else:
+			check(String(o.get("lose", "")) != "", "%s says what it costs when it misses" % o["id"])
+			check(int(o["needs"]) == int(o["dc"]) - int(o["bonus"]),
+				"%s prints the face the die has to show (%d)" % [o["id"], int(o["needs"])])
+
+	# The toll is a number, not "they will want something": a price nobody can
+	# see is a price nobody can weigh against a fight.
+	var flush2 := _party()
+	flush2.gold = 400
+	for o in Approach.options(flush2, _foe("bandit")):
+		if String(o["id"]) == "parley":
+			check(int(o["toll"]) > 0, "the parley prices itself (%d)" % int(o["toll"]))
+			check(String(o["win"]).find(str(int(o["toll"]))) >= 0,
+				"...in the line the player reads (%s)" % o["win"])
+			var paid := _until(flush2, _foe("bandit"), "parley", true)
+			check(int(paid["toll"]) == int(o["toll"]),
+				"...and it is the toll actually taken (%d vs %d)" % [
+					int(o["toll"]), int(paid["toll"])])
+
+	# needs() is the whole odds display, so its ends have to be honest: 5.5e has
+	# no natural 1 or 20 on an ability check, so a big enough bonus really is a
+	# certainty and a far enough DC really is out of reach.
+	check(Approach.needs(13, 6) == 7, "a DC 13 against +6 needs a 7")
+	check(Approach.needs(10, 15) == 0, "a bonus past the DC cannot fail")
+	check(Approach.needs(30, 2) == 21, "and a DC past the die cannot be hit")
+
 	# --- the spread: no way strictly dominates another ---------------------
 	# Engage is the baseline: no roll, no edge, and no way to end up worse.
 	var eng: Dictionary = Approach.resolve(party, _foe(), "engage", RNG.new(1))
