@@ -43,9 +43,16 @@ var downed: Dictionary = {}
 # loses its round-1 turns entirely; round 2 on is a normal fight.
 var unseen := false
 
-# T9x: the reverse — a camp ambush the party's watch failed to spot. Same
-# one-round skip, just the other team eats it.
+# T9x: the reverse — a camp ambush the party's watch failed to spot. Unlike
+# `unseen`, this does NOT skip every party turn for the whole round — with a
+# multi-foe roster that was every enemy getting a free, unanswered action
+# before the party could do anything at all, which read as a near-guaranteed
+# rout rather than a bad break. Capped instead: at most AMBUSH_EXPOSURE foe
+# turns land before the party starts acting normally, still within round 1.
 var ambushed := false
+const AMBUSH_EXPOSURE := 2
+var _ambush_foe_turns: int = 0
+var _ambush_cap: int = 0   # min(AMBUSH_EXPOSURE, foes actually on the field) — set in begin_ambush_round()
 
 # T26 barks: a cosmetic side channel. Entries are {"id": combatant id, "text": line};
 # the board scene drains it each frame. Nothing in this file reads it back.
@@ -243,7 +250,10 @@ func _auto_stand(c) -> void:
 	log.append("%s scrambles up off the ground (-%d move)." % [c.cname, cost])
 
 func end_turn() -> void:
-	current().has_acted = true
+	var c0 = current()
+	c0.has_acted = true
+	if ambushed and round_num == 1 and c0.team == "foe":
+		_ambush_foe_turns += 1
 	for _i in order.size() + 1:
 		turn_idx += 1
 		if turn_idx >= order.size():
@@ -257,7 +267,9 @@ func end_turn() -> void:
 func skips_turn(c) -> bool:
 	if round_num != 1:
 		return false
-	return (unseen and c.team == "foe") or (ambushed and c.team == "party")
+	if unseen and c.team == "foe":
+		return true
+	return ambushed and c.team == "party" and _ambush_foe_turns < _ambush_cap
 
 # Called once, before the turn loop starts. Skipping rides on end_turn()'s
 # existing skip path, so every driver (UI, autoplay, tests) honours it.
@@ -272,7 +284,9 @@ func begin_surprise_round() -> void:
 # watch failed to spot it coming.
 func begin_ambush_round() -> void:
 	ambushed = true
-	log.append("The camp is jumped in the night — the party loses the first round.")
+	var foe_count: int = combatants.filter(func(c): return c.team == "foe" and c.conscious()).size()
+	_ambush_cap = mini(AMBUSH_EXPOSURE, foe_count)
+	log.append("The camp is jumped in the night — the party is caught flat-footed.")
 	if skips_turn(current()):
 		end_turn()
 
