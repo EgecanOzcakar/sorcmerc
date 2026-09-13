@@ -70,8 +70,37 @@
 #
 # The relevant change is therefore a body-count term in _score()/estimate(), or
 # a cap on what the untethered wilderness draw may roll at low budgets — not
-# TIER, and not a tier of weaker monsters. None of it is done here; D1 needed
-# the measurement, not the retune.
+# TIER, and not a tier of weaker monsters.
+#
+# SPIKE, 2026-09-13: the body-count term was built and measured, and then
+# REVERTED. Recorded here so the next attempt starts from the results rather
+# than from the idea. What was tried: _score() multiplied by a crowd factor —
+# first the 2014 DMG's own table (x1.5 at two monsters, x2 at three to six,
+# x2.5 at seven to ten), then pow(n, k) for k in {0.15, 0.25, 0.40}, then
+# pow(min(n, 5), 0.40) to stop the brake growing once rosters are already large.
+# TIER was re-calibrated by measurement for each, not guessed.
+#
+# It WORKS for the thing it was for. With the multiplier in and TIER
+# recalibrated, the level-3 faction spread tightened from 47 points to 30:
+# fey 53% -> 73%, cultist 73% -> 90%, and the "coin flip or walkover depending
+# on which family the seed drew" problem above is materially reduced.
+#
+# It breaks the level-8 curve, and that is why it is not here. Crowd pricing
+# forces every TIER up by roughly half, and at a level-8 budget the generator
+# answers a bigger budget with bigger monsters rather than more of them — which
+# is exactly where the chunk overpricing in the Known ceiling note below lives.
+# Measured outcomes at level 8: the DMG table flattened the tiers to 96.7/93.3/
+# 95.0; pow(n, 0.40) INVERTED them (hard easier than easy); pow(n, 0.25) ordered
+# them but flat (94/91/...); the capped version ordered them with real spread
+# but only above an effective TIER of ~2.4, while the level-3 targets want
+# ~1.05-2.03. No single TIER triple satisfies both ends.
+#
+# So the missing knob is CURVE, not TIER: what reconciles a level-3 and a
+# level-8 party is how fast the budget grows with party power, and that was left
+# at 0.90 throughout. The next attempt should calibrate CURVE and TIER together
+# against both parties, and should probably fix estimate()'s chunk pricing
+# first, since the crowd term and the chunk bias pull in opposite directions and
+# compound. This is a three-knob measured exercise, not a one-line addition.
 # TIER fell across the board (1.00/1.35/1.80 -> 0.96/1.10/1.32) and the three
 # tiers now sit much closer together: hard is where nearly all of the target rise
 # landed (+23.5 points), so the budget spread that used to separate the tiers

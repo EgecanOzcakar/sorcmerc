@@ -3539,3 +3539,51 @@ for an army or a lord, it is out by construction.
   `_retreat()` soft landing was written for a campaign map and should be
   revisited once sites exist, because a site is where a party can actually
   be lost.
+
+### Spike — the DMG body-count multiplier (2026-09-13, built, measured, reverted)
+
+Asked for directly after the D1 measurements showed the wilderness draw
+producing wildly inconsistent fights under one "easy" label. The diagnosis
+was that `Scaler._score()` is linear in monster count — the eighth body is
+priced like the first — while 5e's own encounter rules multiply by monster
+count precisely because what beats a party is the number of turns the other
+side gets. Confirmed empirically first: holding the budget fixed and spending
+it on twice as many half-strength monsters took the fey warband from 53% to
+27%.
+
+**It works for its purpose.** With the term in and TIER re-calibrated by
+measurement, the level-3 faction spread tightened from a 47-point range to
+30: fey 53% → 73%, cultist 73% → 90%.
+
+**It was reverted anyway**, because it destabilises the level/tier
+calibration. Crowd pricing forces every TIER up by roughly half, and at a
+level-8 budget the generator answers a bigger budget with bigger monsters
+rather than more of them — which lands squarely on the chunk overpricing
+`scaler.gd`'s own "Known ceiling" note already describes. Five
+configurations, each with TIER re-calibrated by sweep rather than guessed:
+
+| crowd term | level-3 | level-8 |
+|---|---|---|
+| DMG table (x1.5 / x2 / x2.5) | 97.0 / 85.0 / 71.5 ✓ | 96.7 / 93.3 / 95.0 — flat, unordered |
+| `pow(n, 0.40)` | 86.5 / 82.0 / 72.5 ✓ | 93.3 / 95.0 / 96.7 — **inverted** |
+| `pow(n, 0.25)` | — | ordered but flat (94 / 91 …) |
+| `pow(min(n,5), 0.40)` | wants TIER ~1.05–2.03 | needs TIER ≥ 2.4 for spread |
+| `pow(n, 0.15)` | 88.5 / 82.0 / 63.5 ✗ | 90.0 / 98.3 / 76.7 — unordered |
+
+No single TIER triple satisfies both parties. The knob that reconciles them
+is **CURVE** — how fast the budget grows with party power — which was left at
+0.90 throughout and is the thing that actually differs between a level-3 and
+a level-8 fight.
+
+**For whoever picks this up:** calibrate CURVE and TIER together against both
+parties, and fix `estimate()`'s chunk pricing first — the crowd term and the
+chunk bias pull in opposite directions and compound, so tuning either alone
+chases its own tail. Three knobs, measured, not a one-line addition. The
+measurements above are in `core/scaler.gd`'s TUNING header so the next
+attempt starts from results rather than from the idea.
+
+Method note, and it cost a full round to learn: `core/encounter.gd` documents
+`spec["seed"]` as "omit for a random fight", and `tests/test_scaler.gd`'s own
+sweep pins it. A harness that does not pin it produces numbers that move run
+to run — an earlier pass in this round reported a faction split that did not
+survive re-measurement. Pin the seed, or do not quote the number.
