@@ -23,6 +23,7 @@
 #      "goal": [80, 120], "speed": 40.0,
 #      "ai": { <core/world_ai.gd's state dict, Vector2s and RNGs encoded, see _enc> }}
 #   ],
+#   "explored": [[80, 120], [125, 118]],  // T9x fog of war: World.explored waypoints
 #   "party": {                        // the player's own party: the roster is also in
 #     "roster": [ <character_save.gd dicts> ],   // the barracks, but gold/stash/quests
 #     "active": ["vera"], "gold": 120,           // and marching order live nowhere else
@@ -82,6 +83,9 @@ static func to_dict(world, party = null) -> Dictionary:
 			"id": l.id, "sname": l.sname, "position": _v(l.position),
 			"faction": l.faction, "discovered": l.discovered, "looted": l.looted,
 		})
+	var explored: Array = []
+	for e in world.explored:
+		explored.append(_v(e))
 	return {
 		"format": FORMAT, "version": VERSION,
 		"elapsed": world.clock.elapsed,
@@ -89,6 +93,7 @@ static func to_dict(world, party = null) -> Dictionary:
 		"settlements": settlements,
 		"parties": parties,
 		"lairs": lairs,
+		"explored": explored,
 		"party": _party_dict(party),
 	}
 
@@ -125,6 +130,10 @@ static func from_dict(d: Dictionary):
 		l.discovered = bool(ld.get("discovered", false))
 		l.looted = bool(ld.get("looted", false))
 		world.add_lair(l)
+	# T9x: an old save without "explored" just loads with none — everything
+	# fogged again, same missing-key-falls-back-to-default contract as lairs.
+	for e in d.get("explored", []):
+		world.explored.append(_vec(e))
 
 	FactionOpinion.reset()
 	var opinion: Dictionary = d.get("opinion", {})

@@ -188,10 +188,11 @@ func show_party_setup() -> void:
 	screen.party = party
 	wrap.add_child(screen)
 
-	# T-worlds: two world sizes, small (4 settlements, the original map) or
-	# large (8 settlements, more of everything — scenes/world/large_world.gd).
-	# Meaningless for the linear campaign, which never touches world.gd at
-	# all, so only the open-world path reads it.
+	# T-worlds / T9x: three starting maps — small (4 settlements, hand-placed),
+	# large (8 settlements, hand-placed, scenes/world/large_world.gd), or
+	# procedural (seeded, scenes/world/procedural_world.gd). Meaningless for
+	# the linear campaign, which never touches world.gd at all, so only the
+	# open-world path reads it.
 	var begin := func(size: String) -> void:
 		if party.active.is_empty():
 			screen._hint.text = "Put at least one character in the active party first."
@@ -215,6 +216,16 @@ func show_party_setup() -> void:
 	begin_large.pressed.connect(begin.bind("large"))
 	wrap.add_child(begin_large)
 
+	# T9x: a seeded procedural map — scenes/world/procedural_world.gd, same
+	# content types as the two hand-placed maps, a fresh layout every run
+	# (SORCMERC_SEED pins it, same env var the linear campaign already honours).
+	var begin_proc := Button.new()
+	begin_proc.text = "Begin — Procedural World  →"
+	begin_proc.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	begin_proc.offset_left = -496; begin_proc.offset_top = 12; begin_proc.offset_right = -328
+	begin_proc.pressed.connect(begin.bind("procedural"))
+	wrap.add_child(begin_proc)
+
 	var back := Button.new()
 	back.text = "←  Title"
 	back.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -227,12 +238,12 @@ func show_party_setup() -> void:
 #
 # O8: the whole integration is one field — the party the player just assembled
 # goes in instead of world.gd's demo roster fallback. The starting map itself
-# is one of world.gd's two built-in ones (_small_world / _large_world via
-# large_world.gd), picked by the button below; procedurally generating a map
-# is not this phase's job.
+# is one of world.gd's three built-in ones (_small_world / _large_world via
+# large_world.gd / ProceduralWorld.build()), picked by the button below.
 # `world` is O13's resume path: a loaded map instead of one of world.gd's own
-# built-in ones. `size` ("small" | "large") only matters when `world` is
-# null — a resumed save already has its map, the size that built it is moot.
+# built-in ones. `size` ("small" | "large" | "procedural") only matters when
+# `world` is null — a resumed save already has its map, the size that built
+# it is moot.
 func show_world(party, world = null, size := "small") -> void:
 	var screen = load(WORLD_SCENE).instantiate()
 	screen.party = party

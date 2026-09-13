@@ -80,6 +80,13 @@ func _fit_height(m: Node3D, target: float) -> void:
 	m.position.y -= aabb.position.y * k   # rest the lowest point on y=0
 
 
+# T9x fog of war: a diorama is a real 3D layer, drawn independently of the 2D
+# map below it — hiding an entity's 2D icon (World._draw()'s props filter)
+# does nothing to the diorama standing on top of it, so every subclass's
+# _reposition() also needs this check before showing its own model.
+func _explored(pos: Vector2) -> bool:
+	return world_map.world.is_explored(pos)
+
 func px_per_unit() -> float:
 	return world_map.ISO_GAIN * world_map._zoom
 

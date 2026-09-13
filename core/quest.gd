@@ -97,40 +97,80 @@ static func offer_for(party, node_id: String, opinion := 0.0) -> Dictionary:
 				return fresh(q["id"])
 	return {}
 
-# T91: a quest targeting a live open-world object instead of a curated monster
-# id — offered wherever a settlement can give a quest (core/settlement_visit.gd),
-# alongside CURATED. Picks one eligible target at random from whatever the
-# world actually has right now (a hostile roaming party, another hostile
-# settlement, or an unlooted lair) and returns {} if nothing qualifies.
-static func world_quest_for(world, giver_settlement, rng) -> Dictionary:
+# T91: eligible live open-world targets for a giver settlement's quests — a
+# hostile roaming party, another hostile settlement, or an unlooted lair.
+# Shared by world_quest_for (one random pick) and the T9x quest board
+# (multiple at once) so there's one place that decides what counts as a
+# target, not two.
+static func _world_quest_pool(world, giver_settlement) -> Array:
 	var pool: Array = []
 	for p in world.parties:
 		if not p.is_player and WorldAI.is_monster(p.faction):
-			pool.append({"kind": "hunt_party", "id": p.id, "name": p.id.capitalize()})
+			pool.append({"kind": "hunt_party", "id": p.id, "name": p.id.capitalize(), "faction": p.faction})
 	for s in world.settlements:
 		if s.id != giver_settlement.id and WorldAI.is_monster(s.faction):
-			pool.append({"kind": "raid_settlement", "id": s.id, "name": s.sname})
+			pool.append({"kind": "raid_settlement", "id": s.id, "name": s.sname, "faction": s.faction})
 	for l in world.lairs:
 		if not l.looted:
-			pool.append({"kind": "clear_lair", "id": l.id, "name": l.sname})
+			pool.append({"kind": "clear_lair", "id": l.id, "name": l.sname, "faction": l.faction})
+	return pool
+
+# T9x quest chains: escalating, faction-specific. `tier` is how many
+# world-target quests against this faction the party has already turned in
+# (see faction_chain_tier below, derived from the log itself — no separate
+# save field) — 0 is the first job, each one after reads tougher and pays
+# more, same target kinds, just relabeled and better rewarded.
+const CHAIN_LABELS := {
+	"hunt_party": ["Hunt down the %s band", "Break the %s warband", "End the %s threat"],
+	"raid_settlement": ["Raid %s", "Sack %s", "Raze %s for good"],
+	"clear_lair": ["Clear out %s", "Purge %s", "Finish %s, once and for all"],
+}
+
+static func faction_chain_tier(party, faction: String) -> int:
+	if party == null:
+		return 0
+	var n := 0
+	for q in party.quests:
+		if q["state"] == "turned_in" and String(q.get("chain_faction", "")) == faction:
+			n += 1
+	return n
+
+static func _world_quest_from_pick(pick: Dictionary, giver_settlement, party, rng) -> Dictionary:
+	var kind := String(pick["kind"])
+	var tier: int = mini(2, faction_chain_tier(party, String(pick["faction"])))
+	var out := {
+		"id": "world:%s:%s:%d" % [kind, pick["id"], tier],
+		"giver_node_id": giver_settlement.id, "state": "offered", "progress": 0, "required": 1,
+		"kind": kind, "chain_faction": pick["faction"], "chain_tier": tier,
+		"reward": {"gold": 80 + tier * 60 + rng.roll_die(120)},
+		"title": String(CHAIN_LABELS[kind][tier]) % pick["name"],
+	}
+	match kind:
+		"hunt_party": out["target_party_id"] = pick["id"]
+		"raid_settlement": out["target_settlement_id"] = pick["id"]
+		"clear_lair": out["target_lair_id"] = pick["id"]
+	return out
+
+# A quest targeting a live open-world object instead of a curated monster id —
+# offered wherever a settlement can give a quest (core/settlement_visit.gd),
+# alongside CURATED. Picks one eligible target at random and returns {} if
+# nothing qualifies.
+static func world_quest_for(world, giver_settlement, rng) -> Dictionary:
+	var pool := _world_quest_pool(world, giver_settlement)
 	if pool.is_empty():
 		return {}
-	var pick: Dictionary = pool[rng.roll_die(pool.size()) - 1]
-	var out := {
-		"id": "world:%s:%s" % [pick["kind"], pick["id"]],
-		"giver_node_id": giver_settlement.id, "state": "offered", "progress": 0, "required": 1,
-		"kind": pick["kind"], "reward": {"gold": 80 + rng.roll_die(120)},
-	}
-	match String(pick["kind"]):
-		"hunt_party":
-			out["title"] = "Hunt down the %s band" % pick["name"]
-			out["target_party_id"] = pick["id"]
-		"raid_settlement":
-			out["title"] = "Raid %s" % pick["name"]
-			out["target_settlement_id"] = pick["id"]
-		"clear_lair":
-			out["title"] = "Clear out %s" % pick["name"]
-			out["target_lair_id"] = pick["id"]
+	return _world_quest_from_pick(pool[rng.roll_die(pool.size()) - 1], giver_settlement, null, rng)
+
+# T9x quest board: every eligible world target at once (not just one random
+# pick), for a settlement that shows multiple concurrent job offers instead
+# of a single ad-hoc one. `party` is needed here (not in world_quest_for)
+# to read each target's chain tier.
+static func world_quest_offers(world, giver_settlement, party, rng) -> Array:
+	var out: Array = []
+	for pick in _world_quest_pool(world, giver_settlement):
+		var q := _world_quest_from_pick(pick, giver_settlement, party, rng)
+		if get_quest(party, q["id"]).is_empty():
+			out.append(q)
 	return out
 
 static func accept(party, quest: Dictionary) -> bool:

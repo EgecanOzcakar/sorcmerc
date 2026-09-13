@@ -86,6 +86,7 @@ const MAX_CELLS := 32000    # cap the ground loop when zoomed far out
 # the bank into an organic edge instead of a hard tile-aligned line,
 # clustering it would make the water's edge blocky instead.
 const TILE_CLUSTER := 8
+const FOG_COLOR := Color(0.05, 0.05, 0.08)   # T9x: unexplored ground
 
 # Ground: O11's Screaming Brain Studios Isometric Tiles Overworld pack, CC0.
 # Buildings: O12's rubberduck isometric medieval buildings 1+2, CC0 — the Town
@@ -194,7 +195,10 @@ func _ready() -> void:
 		_:
 			_terrain_tex = TerrainTex; _forest_tex = ForestTex; _water_tex = WaterTex
 	if world == null:
-		world = _large_world() if world_size == "large" else _small_world()
+		match world_size:
+			"large": world = _large_world()
+			"procedural": world = ProceduralWorld.build(int(OS.get_environment("SORCMERC_SEED")))
+			_: world = _small_world()
 	if party == null:               # same demo roster scenes/campaign/campaign.gd falls back to
 		party = Party.new()
 		for ch in Party.demo_roster():
@@ -217,6 +221,7 @@ func _ready() -> void:
 # Hand-placed stand-ins so the scene has something to render and move. Real
 # spawning is a later phase's job (O3 onward).
 const LargeWorld = preload("res://scenes/world/large_world.gd")
+const ProceduralWorld = preload("res://scenes/world/procedural_world.gd")
 
 func _large_world() -> World:
 	return LargeWorld.build()
@@ -276,6 +281,9 @@ func _process(delta: float) -> void:
 	# O7: the clock's own advance (0 while paused) both drains O6's queued opinion
 	# deltas off the settlements and runs the slow drift back toward neutral.
 	var dt := world.tick(delta)
+	var p0 := world.player()
+	if p0 != null:
+		world.reveal(p0.position)   # T9x fog of war: permanent once seen
 	FactionOpinion.tick(world, dt)
 	WorldAI.update(world, delta)
 	_check_encounter(dt)
@@ -553,6 +561,7 @@ func _launch_combat(foe) -> Dictionary:
 			FactionOpinion.lower(foe.faction, FactionOpinion.KILLED_THEIRS)
 	else:
 		_retreat()
+	_apply_deaths(result)
 	world.clock.resume()
 	WorldSave.save(world, party)   # O13 autosave: a fight is the biggest thing that
 	                               # happens to a run — never re-fight it after a crash
@@ -577,14 +586,29 @@ func _bank(result: Dictionary) -> void:
 	Quest.record_kills(party, result.get("kills", []),
 		RNG.new(maxi(1, int(world.clock.elapsed) + 1)))
 
-# Defeat/retreat, deliberately the cheapest thing that keeps the map playable:
-# the party falls back to the nearest settlement and stops there. No losses, no
-# gold, no wound state — a real defeat-consequences system is O7's business once
-# faction opinion exists to hang it on.
+# A death is a death regardless of who won — encounter.gd always fills
+# `deaths`, campaign.gd's linear run already benches+marks them the same way;
+# the open world just never read the field. Applied once here for both
+# outcomes rather than duplicated per-branch.
+func _apply_deaths(result: Dictionary) -> void:
+	for id in result.get("deaths", []):
+		var fallen = party.get_member(id)
+		if fallen != null:
+			fallen.dead = true
+		party.bench(id)
+
+# Real stakes for a lost fight, reusing what's already here rather than a new
+# wound/injury system: the fallen are handled above (dead + benched, same as
+# a won fight — they need the existing paid Party.resurrect() flow to return,
+# no free revive the way the linear run gives on a run-ending loss). On top
+# of that, retreating loses gold — the bandits loot whoever's still standing
+# while the party falls back to the nearest settlement.
+const DEFEAT_GOLD_LOSS_PCT := 0.15
 func _retreat() -> void:
 	var p := world.player()
 	if p == null or world.settlements.is_empty():
 		return
+	party.spend_gold(roundi(party.gold * DEFEAT_GOLD_LOSS_PCT))
 	var safe: Vector2 = world.settlements[0].position
 	for s in world.settlements:
 		if p.position.distance_squared_to(s.position) < p.position.distance_squared_to(safe):
@@ -737,9 +761,9 @@ func _rest() -> void:
 	_build_visit_panel()
 	_say("The party takes a long rest. Eight hours pass and the stalls fill up again.")
 
-# O9 item 4: T9's quest verbs, reached from a settlement at last.
-func _take_quest() -> void:
-	var q: Dictionary = Visit.quest_offer(_visit["settlement"], party, world)
+# O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
+# (the board can show several at once now), not re-rolled here.
+func _take_quest(q: Dictionary) -> void:
 	if Quest.accept(party, q):
 		_build_visit_panel()
 		_say("Job taken: %s" % q["title"])
@@ -807,12 +831,15 @@ func _build_visit_panel() -> void:
 		_trade_row(rows, "%s x%d — sells for %d gp" % [
 			Campaign.item_name(id), int(entry["quantity"]), paid], "Sell", _sell.bind(id))
 
-	# O9 item 4: one offer, one row per finished job. Quest.offer_for()/turn_in() as
-	# they stand; nothing here decides anything about quests.
-	var offer: Dictionary = Visit.quest_offer(s, party, world)
-	if not offer.is_empty():
-		_trade_row(rows, "Job: %s — %d gp" % [
-			offer["title"], int(offer.get("reward", {}).get("gold", 0))], "Take", _take_quest)
+	# T9x quest board: every job this settlement can offer right now, one row
+	# each — not the old single ad-hoc offer. A world-target row also shows
+	# its chain tier once it's escalated past the first job.
+	for offer in Visit.quest_offers(s, party, world):
+		var tier: int = int(offer.get("chain_tier", 0))
+		var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
+		_trade_row(rows, "Job: %s%s — %d gp" % [
+			offer["title"], tag, int(offer.get("reward", {}).get("gold", 0))],
+			"Take", _take_quest.bind(offer))
 	for q in Visit.turn_ins(party):
 		_trade_row(rows, "✔ %s" % Quest.describe(q), "Turn in", _turn_in.bind(q))
 
@@ -950,16 +977,23 @@ func _draw() -> void:
 	if p != null and not p.at_goal():
 		draw_polyline(_ring(_pix(p.goal), 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
 
-	# One painter's-order pass over everything standing on the ground.
+	# One painter's-order pass over everything standing on the ground. T9x fog
+	# of war: nothing standing on unexplored ground draws, same fallback-tier
+	# discipline as the undiscovered-lair check right below, just gated on
+	# world.is_explored() instead of a per-entity flag. The player's own party
+	# is exempt — you can always see yourself.
 	var props: Array = []
 	for s in world.settlements:
-		props.append({"at": _pix(s.position), "s": s})
+		if world.is_explored(s.position):
+			props.append({"at": _pix(s.position), "s": s})
 	for l in world.lairs:
-		if l.discovered:   # T91: undiscovered lairs draw nothing — that's the point
+		if l.discovered and world.is_explored(l.position):   # T91: undiscovered lairs draw nothing — that's the point
 			props.append({"at": _pix(l.position), "l": l})
 	for q in world.parties:
 		if q.is_player and not _visit.is_empty():
 			continue   # inside the gates for the duration of the visit, not standing on the map
+		if not q.is_player and not world.is_explored(q.position):
+			continue
 		props.append({"at": _pix(q.position), "p": q})
 	props.sort_custom(func(a, b): return a["at"].y < b["at"].y)
 	for d in props:
@@ -995,6 +1029,13 @@ func _draw_ground() -> void:
 	for i in range(i0, i1 + 1):
 		for j in range(j0, j1 + 1):
 			var cell := Vector2i(i, j)
+			# T9x fog of war: an unexplored cell draws as flat fog, not terrain —
+			# ponytail: an O(cells x waypoints) distance scan every frame, fine at
+			# this map's scale (screen-visible cells, a few hundred waypoints);
+			# a spatial grid is the upgrade if a very long walk makes it drag.
+			if not world.is_explored(Vector2(i + 0.5, j + 0.5) * CELL):
+				draw_rect(Rect2(Vector2(i + j, j - i - 1) * TILE * 0.5, TILE), FOG_COLOR)
+				continue
 			var cl := _cluster(cell, TILE_CLUSTER)
 			# 1.0 deep in a lake, 0.0 well inland, a ramp across the bank between.
 			var wet := 0.5 - world.water_depth(Vector2(i + 0.5, j + 0.5) * CELL) / (SHORE * 2.0)

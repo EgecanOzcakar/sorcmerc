@@ -194,6 +194,19 @@ static func quest_offer(s, party, world = null) -> Dictionary:
 static func turn_ins(party) -> Array:
 	return party.quests.filter(func(q): return Quest.can_turn_in(q))
 
+# T9x quest board: every job this settlement can offer right now, not just
+# one — every eligible world target (Quest.world_quest_offers) plus the
+# curated giver-node job, whichever of those the party doesn't already have
+# logged. Same opinion gate as the single-offer path.
+static func quest_offers(s, party, world = null) -> Array:
+	var out: Array = []
+	if world != null:
+		out.append_array(Quest.world_quest_offers(world, s, party, RNG.new(maxi(1, absi(hash(s.id))))))
+	var curated := Quest.offer_for(party, giver_node_id(s), FactionOpinion.get_opinion(s.faction))
+	if not curated.is_empty():
+		out.append(curated)
+	return out
+
 # --- steal (T30's opportunity_check, in a market) --------------------------
 
 # d20 + the party's best Sleight of Hand vs STEAL_DC, one roll, narrated the same
