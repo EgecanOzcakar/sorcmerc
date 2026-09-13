@@ -27,6 +27,9 @@ const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
+const Site = preload("res://core/site.gd")
+const SiteScreen = preload("res://scenes/world/site_screen.gd")
+const WorldThreat = preload("res://core/world_threat.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
@@ -48,7 +51,13 @@ const COMBAT_SCENE := "res://scenes/main.tscn"
 # a fixed 32 units behind forever and never trip a 24-unit trigger. _trigger() is
 # the floor, widened to whatever the tick actually travelled.
 const ENCOUNTER_RADIUS := 24.0
-const ENCOUNTER_DIFFICULTY := "normal"
+# D1: what the open country throws at you is no longer a fixed tier. Sites are
+# the hard content now (core/site.gd), and a party walking out of a cleared lair
+# at a third of its HP has to be able to reach a town — so the wilderness reads
+# the party's condition and scales down toward a floor (core/world_threat.gd).
+# It can only ever scale DOWN, and a weaker roster pays proportionally less XP
+# (encounter.gd's xp = power * XP_PER_POWER), so nothing is gained by staying
+# hurt. The old flat "normal" is what world_threat.gd's BASELINE replaces.
 # O6 visit distance. Deliberately wider than ENCOUNTER_RADIUS: a settlement is a
 # fixed landmark drawn at ~26 world units of radius (a city footprint) rather than
 # a 6-unit token, so "close enough to walk in through the gate" is its own number.
@@ -194,6 +203,8 @@ var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.acti
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
+var _site = null                     # D1: the delve in progress (core/site.gd), or null
+var _site_screen: Control = null     # ...and the descent screen drawing it
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _camp_msg: Label                 # T9x: last short-rest/camp outcome, same "persists" contract as _lair_msg
@@ -604,8 +615,10 @@ func encounter_spec(foe) -> Dictionary:
 		var idx: int = Scaler.FACTIONS.find(foe.faction)
 		if idx >= 0:
 			seed_v = seed_v - seed_v % Scaler.FACTIONS.size() + idx
+	var threat: Dictionary = WorldThreat.assess(party)
 	var spec: Dictionary = Scaler.roster_for(
-		party.party_characters(), ENCOUNTER_DIFFICULTY, {}, theme, seed_v)
+		party.party_characters(), String(threat["difficulty"]), {}, theme, seed_v,
+		float(threat["power_scale"]))
 	spec["theme"] = theme if theme != "" else DEFAULT_THEME
 	return spec
 
@@ -614,15 +627,21 @@ func encounter_spec(foe) -> Dictionary:
 # `scouted_ahead`/`forced_ambush` are T9x's camp-ambush outcomes (see
 # _make_camp() below) — both default false for every other caller, same
 # no-op they'd get from a plain Combat scene.
-func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dictionary:
+# One fight, start to finish: put scenes/main.tscn up over the map, wait for it,
+# tear it down, hand back the result. Split out of _launch_combat() so a site
+# room (core/site.gd) can run a fight with its own pre-built spec without also
+# inheriting the roaming-band aftermath below — erasing a party that was never
+# on the map, crediting faction opinion for a room in a cave.
+func _run_combat(spec: Dictionary, difficulty: String,
+		scouted_ahead := false, forced_ambush := false) -> Dictionary:
 	world.clock.pause()
 	_combat_overlay = Control.new()
 	_combat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_combat_overlay)
 	_combat = load(COMBAT_SCENE).instantiate()
 	_combat.party = party
-	_combat.spec = encounter_spec(foe)
-	_combat.difficulty = ENCOUNTER_DIFFICULTY
+	_combat.spec = spec
+	_combat.difficulty = difficulty
 	_combat.scouted_ahead = scouted_ahead
 	_combat.forced_ambush = forced_ambush
 	_combat_overlay.add_child(_combat)
@@ -633,8 +652,18 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dict
 		return {}
 	var result: Dictionary = _combat.result
 	_combat = null
-	_combat_overlay.queue_free()
-	_combat_overlay = null
+	if _combat_overlay != null:
+		_combat_overlay.queue_free()
+		_combat_overlay = null
+	return result
+
+
+func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dictionary:
+	var threat: Dictionary = WorldThreat.assess(party)
+	var result: Dictionary = await _run_combat(encounter_spec(foe),
+		String(threat["difficulty"]), scouted_ahead, forced_ambush)
+	if result.is_empty():
+		return {}
 	if String(result.get("outcome", "")) == "Victory":
 		_bank(result)
 		world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
@@ -791,12 +820,7 @@ func _lair_action() -> void:
 			_lair_msg.text = "Nothing this time (Survival %d+%d vs DC %d)." % [
 				roll["nat"], roll["bonus"], roll["dc"]]
 		return
-	var result: Dictionary = await _launch_combat(World.RoamingParty.new("%s-raid" % l.id, l.position, l.faction))
-	if String(result.get("outcome", "")) == "Victory":
-		var loot: Dictionary = WorldLairs.loot(l)
-		party.add_gold(int(loot.get("gold", 0)))
-		Quest.record_lair_cleared(party, l.id)
-		_lair_msg.text = "%s is cleared out — +%d gold from its stash." % [l.sname, int(loot.get("gold", 0))]
+	await _delve(l)
 
 # T9x: the quiet alternative to _lair_action()'s attack — a pass loots the
 # lair with no fight; a fail falls straight through to the normal attack
@@ -816,6 +840,106 @@ func _lair_sneak_action() -> void:
 	else:
 		_lair_msg.text = String(roll["text"])
 		await _lair_action()
+
+# --- D1: the delve --------------------------------------------------------
+#
+# A lair is a place you go INTO now, not a single fight with a gold number
+# attached (core/site.gd). This drives the model: the descent screen offers the
+# rooms, the player picks one, a combat room runs through the same unchanged
+# scenes/main.tscn hand-off every other fight uses, and the loop repeats until
+# the party clears it, walks out, or goes down in there.
+#
+# The clock stays paused for the whole delve — the world does not move while
+# you are underground, same rule a settlement visit already follows.
+func _delve(l) -> void:
+	if _site != null:
+		return
+	world.clock.pause()
+	_site = Site.for_lair(l, party, world)
+	_site_screen = SiteScreen.new()
+	_site_screen.site = _site
+	_site_screen.party = party
+	add_child(_site_screen)
+	_site_screen.room_chosen.connect(_on_site_room_chosen)
+	_site_screen.withdrew.connect(_on_site_withdrew)
+	_site_screen.advanced.connect(_on_site_advanced)
+	_site_screen.done.connect(_on_site_done)
+	_site_screen.refresh()
+
+func _on_site_room_chosen(i: int) -> void:
+	if _site == null or _site.state != "picking":
+		return
+	var room: Dictionary = _site.enter(i)
+	if room.is_empty():
+		return
+	_site_screen.refresh()
+	if String(room.get("kind", "")) != "combat":
+		return
+	# The fight itself is the unchanged combat scene; the site only says what is
+	# in the room. Its difficulty is the room's own — a site never scales down
+	# with the party's condition the way open country does (core/world_threat.gd),
+	# because a lair that got easier the worse you were doing would be no gamble.
+	var result: Dictionary = await _run_combat(_site.combat_spec(),
+		String(_site.room.get("difficulty", "normal")))
+	if _site == null:
+		return
+	if not result.is_empty():
+		if String(result.get("outcome", "")) == "Victory":
+			_bank(result)
+		_apply_deaths(result)
+		_site.finish_combat(result)
+	if _site.state == "wiped":
+		_site_wiped()
+	elif not _site.is_over():
+		_site.leave()
+	_site_screen.refresh()
+	WorldSave.save(world, party)
+
+func _on_site_advanced() -> void:
+	if _site == null or _site.is_over():
+		return
+	_site.leave()
+	_site_screen.refresh()
+	WorldSave.save(world, party)
+
+func _on_site_withdrew() -> void:
+	if _site == null:
+		return
+	_site.withdraw()
+	_site_screen.refresh()
+
+# Locked with the user: harder than a lost fight on the road, softer than losing
+# people. The map's own soft landing still applies (gold tax, free revival, wake
+# at the nearest settlement) and on top of it the bag is lightened and the lair
+# closes up again — see core/site.gd's wipe_penalty() for why it is the stash
+# and never the equipped gear.
+func _site_wiped() -> void:
+	var toll: Dictionary = Site.wipe_penalty(party, _site.lair)
+	_retreat()
+	var names: Array = []
+	for item_id in toll.get("items", {}):
+		names.append("%s x%d" % [Campaign.item_name(String(item_id)), int(toll["items"][item_id])])
+	var lost: String = ("They lost %s from the packs. " % ", ".join(names)) if not names.is_empty() else ""
+	_lair_msg.text = "The party is dragged out of %s. %sThe way in has closed up behind them." % [
+		_site.lair.sname, lost]
+
+func _on_site_done() -> void:
+	if _site == null:
+		return
+	var l = _site.lair
+	if _site.state == "cleared":
+		Quest.record_lair_cleared(party, l.id)
+		_lair_msg.text = "%s is cleared out, all the way to the bottom." % l.sname
+	elif _site.state == "withdrawn":
+		_lair_msg.text = "%s is still down there — %d of %d rooms behind you." % [
+			l.sname, int(l.depth_cleared), Site.depth_for(l)]
+	_site = null
+	if _site_screen != null:
+		_site_screen.queue_free()
+		_site_screen = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+	WorldSave.save(world, party)
 
 # T91: split out of _check_visit so it can await the fight — the stand-in id
 # ("%s-guard") never matches a hunt_party quest's target, so raid_settlement
