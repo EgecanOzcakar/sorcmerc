@@ -38,7 +38,14 @@ jobs:
 
       - name: Pick the channel + export preset for this push
         id: pick
+        shell: bash
         run: |
+          # Container jobs' default `run:` shell is `sh` (no `[[ ]]`) even
+          # though the runner has bash — hence `shell: bash` above. And a
+          # script-level `git` call in a container job doesn't inherit
+          # actions/checkout's own safe.directory trust (that's set up for
+          # its own git invocations, in a different context) — hence this.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == test* ]]; then
             echo "preset=Web (Playtest)" >> "$GITHUB_OUTPUT"
             echo "channel=web-playtest" >> "$GITHUB_OUTPUT"
