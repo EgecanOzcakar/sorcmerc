@@ -133,6 +133,7 @@ func _footer() -> Control:
 	row.add_child(_fig_row)
 
 	var create := Button.new()
+	Icons.clicks(create)
 	create.text = "+  Create new"
 	create.pressed.connect(_on_create_new)
 	row.add_child(create)
@@ -346,6 +347,7 @@ func _card(sm: Dictionary) -> Control:
 	panel.add_child(row)
 
 	var pick := Button.new()
+	Icons.clicks(pick)
 	pick.text = "▣" if picked else "▢"
 	pick.tooltip_text = "Select for a party slot"
 	pick.pressed.connect(func(): _select(sm["id"]))
@@ -354,6 +356,7 @@ func _card(sm: Dictionary) -> Control:
 	row.add_child(_summary_label(sm))
 
 	var bench := Button.new()
+	Icons.clicks(bench)
 	bench.text = "Bench" if sm["active"] else "To party"
 	bench.disabled = not sm["active"] and party.active.size() >= Party.MAX_ACTIVE
 	bench.pressed.connect(func():
@@ -364,6 +367,7 @@ func _card(sm: Dictionary) -> Control:
 	row.add_child(bench)
 
 	var prof := Button.new()
+	Icons.clicks(prof)
 	prof.text = "View"
 	prof.tooltip_text = "Open the character profile"
 	prof.pressed.connect(func(): _on_view_profile(sm["id"]))
@@ -373,6 +377,7 @@ func _card(sm: Dictionary) -> Control:
 # One of the four marching-order slots. Clicking it places/swaps the selection.
 func _slot(index: int, sm: Dictionary) -> Control:
 	var b := Button.new()
+	Icons.clicks(b)
 	b.custom_minimum_size = Vector2(0, 54)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.add_theme_stylebox_override("normal",
@@ -443,6 +448,7 @@ func _on_create_new() -> void:
 		overlay.queue_free()
 		_refresh())
 	var back := Button.new()
+	Icons.clicks(back)
 	back.text = "←  Cancel"
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -180; back.offset_top = 12; back.offset_right = -16
@@ -470,6 +476,7 @@ func _on_view_profile(id: String) -> void:
 	prof.set_party(party)          # equip pulls from the shared stash, not the character
 	prof.set_character(ch)
 	var back := Button.new()
+	Icons.clicks(back)
 	back.text = "←  Back to party"
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -180; back.offset_top = 12; back.offset_right = -16

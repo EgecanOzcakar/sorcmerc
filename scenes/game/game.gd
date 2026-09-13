@@ -341,20 +341,15 @@ static func _end_color(state: String) -> Color:
 
 # --- small builders -------------------------------------------------------
 
-# Every button on the title and summary screens comes through here, which is why
-# the click lives here rather than at fourteen call sites. click.wav was the
-# second orphan of the T27 pass: generated, shipped, never played by anything.
+# Every button on the title and summary screens comes through here. The click
+# itself is Icons.clicks() — the same helper the five menu screens use — so the
+# sound has one definition for the whole game rather than one per screen.
 func _button(text: String, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.pressed.connect(_clicked.bind(cb))
+	b.pressed.connect(cb)
+	Icons.clicks(b)
 	return b
-
-# Named rather than an inline lambda so the click cannot be silently dropped by a
-# lambda-indent slip in a file nothing type-checks until it is loaded.
-func _clicked(cb: Callable) -> void:
-	Sound.play_sfx("click")
-	cb.call()
 
 func _dim(text: String) -> Label:
 	var l := Label.new()
