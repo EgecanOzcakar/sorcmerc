@@ -168,6 +168,12 @@ var _pause_btn: Button
 var _speed_btn: Button
 var _clock_lbl: Label
 var _visit: Dictionary = {}      # the open market, or {}
+# T9x: which settlement screen is showing — "hub" (the town square, where
+# you pick a place to go), "market", "inn", or "board" (the notice board,
+# T9x's quest board). Reset to "hub" every time a new visit opens; each
+# action handler's _build_visit_panel() call just re-renders whichever page
+# is current, same as before the split.
+var _visit_page := "hub"
 var _visit_panel: Control = null
 var _visit_log: Label = null
 var _left: Object = null         # the settlement just left; no re-entry until out of range
@@ -795,6 +801,11 @@ func _open_visit(s) -> void:
 	world.clock.pause()
 	world.set_goal(world.player(), world.player().position)   # stop at the gate
 	_visit = Visit.visit(s, world)
+	_visit_page = "hub"
+	_build_visit_panel()
+
+func _goto_page(page: String) -> void:
+	_visit_page = page
 	_build_visit_panel()
 
 func _close_visit() -> void:
@@ -1002,6 +1013,10 @@ func _say(text: String) -> void:
 	if _visit_log != null:
 		_visit_log.text = text
 
+# T9x: a settlement is a set of separate screens now (town square / market /
+# inn / notice board), not one panel with everything stacked in it — this is
+# just the shell (frame, title, footer) and the page dispatch; each _build_*
+# below only owns its own content between the title and the footer.
 func _build_visit_panel() -> void:
 	if _visit_panel != null:
 		_visit_panel.queue_free()
@@ -1020,20 +1035,81 @@ func _build_visit_panel() -> void:
 	panel.add_child(box)
 
 	var title := Label.new()
-	title.text = "%s — %s" % [s.sname, ", ".join(_visit["services"])]
+	title.text = "%s — %s" % [s.sname, PAGE_TITLES.get(_visit_page, "")]
 	title.add_theme_color_override("font_color", Icons.COL_GOLD)
 	box.add_child(title)
+
+	match _visit_page:
+		"market": _build_market_page(box, s)
+		"inn": _build_inn_page(box, s)
+		"board": _build_board_page(box, s)
+		_: _build_hub_page(box, s)
+
+	_visit_log = Label.new()
+	_visit_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_visit_log.custom_minimum_size = Vector2(440, 34)
+	box.add_child(_visit_log)
+	_visit_log.text = String(_visit.get("log", ""))
+
+	var bar := HBoxContainer.new()
+	box.add_child(bar)
+	if _visit_page != "hub":
+		var back := Button.new()
+		back.text = "← Town Square"
+		back.pressed.connect(_goto_page.bind("hub"))
+		bar.add_child(back)
+	var leave := Button.new()
+	leave.text = "Leave"
+	leave.pressed.connect(_close_visit)
+	bar.add_child(leave)
+
+const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board"}
+
+# The town square: where to go, plus the one thing that belongs to no single
+# building — picking over a battlefield nearby.
+func _build_hub_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()
-	mood.text = "Shelves %d/%d · prices x%.2f%s%s · your purse: %d gp" % [
+	mood.text = "%s%s · your purse: %d gp" % [
+		"Fighting nearby. " if _visit.get("battle", false) else "",
+		"They will not trade with you." if _visit.get("refused", false) else "",
+		party.gold]
+	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	box.add_child(mood)
+
+	var places := VBoxContainer.new()
+	box.add_child(places)
+	var market_btn := Button.new()
+	market_btn.text = "Market — %s" % ", ".join(_visit["services"])
+	market_btn.pressed.connect(_goto_page.bind("market"))
+	places.add_child(market_btn)
+	var inn_btn := Button.new()
+	inn_btn.text = "Inn — rest the night (%d gp)" % Visit.inn_cost(s)
+	inn_btn.pressed.connect(_goto_page.bind("inn"))
+	places.add_child(inn_btn)
+	var board_btn := Button.new()
+	board_btn.text = "Notice Board — work and turn-ins"
+	board_btn.pressed.connect(_goto_page.bind("board"))
+	places.add_child(board_btn)
+
+	if _visit.get("battle", false):
+		var investigate_btn := Button.new()
+		var investigated: bool = _visit.get("investigated", false)
+		investigate_btn.text = "Investigated the battlefield" if investigated else "Investigate the battlefield"
+		investigate_btn.disabled = investigated
+		investigate_btn.pressed.connect(_investigate)
+		places.add_child(investigate_btn)
+
+func _build_market_page(box: VBoxContainer, s) -> void:
+	var mood := Label.new()
+	mood.text = "Shelves %d/%d · prices x%.2f%s · your purse: %d gp" % [
 		_visit["steps"], Visit.MAX_STEPS, _visit["markup"],
-		"  (fighting nearby)" if _visit["battle"] else "",
 		"  (they will not trade with you)" if _visit.get("refused", false) else "",
 		party.gold]
 	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
 	box.add_child(mood)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(440, 320)
+	scroll.custom_minimum_size = Vector2(440, 280)
 	box.add_child(scroll)
 	var rows := VBoxContainer.new()
 	scroll.add_child(rows)
@@ -1047,7 +1123,6 @@ func _build_visit_panel() -> void:
 			continue
 		_trade_row(rows, "%s x%d — sells for %d gp" % [
 			Campaign.item_name(id), int(entry["quantity"]), paid], "Sell", _sell.bind(id))
-
 	# T9x: the outfitter's one flat-priced, always-in-stock good — not part of
 	# the T25 shelf/restock catalog (it's not a weapon/armor/magic item, and
 	# it never runs out), so it gets its own row rather than a fake catalog
@@ -1055,6 +1130,38 @@ func _build_visit_panel() -> void:
 	_trade_row(rows, "%s — %d gp (lets you long-rest away from a settlement)" % [
 		WorldCamp.CAMP_KIT_NAME, WorldCamp.CAMP_KIT_PRICE], "Buy", _buy_camp_kit)
 
+	var bar := HBoxContainer.new()
+	box.add_child(bar)
+	var steal_btn := Button.new()
+	var spent: bool = _visit.get("stolen", false)
+	steal_btn.text = "Stole from the market" if spent else "Steal from the market"
+	steal_btn.disabled = spent
+	steal_btn.pressed.connect(_steal)
+	bar.add_child(steal_btn)
+	if _visit.get("refused", false):
+		var persuade_btn := Button.new()
+		var persuaded: bool = _visit.get("persuaded", false)
+		persuade_btn.text = "Tried persuasion" if persuaded else "Persuade them to trade"
+		persuade_btn.disabled = persuaded
+		persuade_btn.pressed.connect(_persuade)
+		bar.add_child(persuade_btn)
+
+func _build_inn_page(box: VBoxContainer, s) -> void:
+	var mood := Label.new()
+	mood.text = "Your purse: %d gp" % party.gold
+	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	box.add_child(mood)
+	var rest_btn := Button.new()
+	rest_btn.text = "Rest the night (%d gp)" % Visit.inn_cost(s)
+	rest_btn.pressed.connect(_rest)
+	box.add_child(rest_btn)
+
+func _build_board_page(box: VBoxContainer, s) -> void:
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(440, 320)
+	box.add_child(scroll)
+	var rows := VBoxContainer.new()
+	scroll.add_child(rows)
 	# T9x quest board: every job this settlement can offer right now, one row
 	# each — not the old single ad-hoc offer. A world-target row also shows
 	# its chain tier once it's escalated past the first job.
@@ -1066,44 +1173,11 @@ func _build_visit_panel() -> void:
 			"Take", _take_quest.bind(offer))
 	for q in Visit.turn_ins(party):
 		_trade_row(rows, "✔ %s" % Quest.describe(q), "Turn in", _turn_in.bind(q))
-
-	_visit_log = Label.new()
-	_visit_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_visit_log.custom_minimum_size = Vector2(440, 34)
-	box.add_child(_visit_log)
-	_visit_log.text = String(_visit.get("log", ""))
-	var bar := HBoxContainer.new()
-	box.add_child(bar)
-	var rest_btn := Button.new()
-	rest_btn.text = "Rest the night (%d gp)" % Visit.inn_cost(s)
-	rest_btn.pressed.connect(_rest)
-	bar.add_child(rest_btn)
-	var steal_btn := Button.new()
-	var spent: bool = _visit.get("stolen", false)
-	steal_btn.text = "Stole from the market" if spent else "Steal from the market"
-	steal_btn.disabled = spent
-	steal_btn.pressed.connect(_steal)
-	bar.add_child(steal_btn)
-	# T9x: only shown when there's something to persuade/investigate — a
-	# refused market, or a fight resolved nearby recently.
-	if _visit.get("refused", false):
-		var persuade_btn := Button.new()
-		var persuaded: bool = _visit.get("persuaded", false)
-		persuade_btn.text = "Tried persuasion" if persuaded else "Persuade them to trade"
-		persuade_btn.disabled = persuaded
-		persuade_btn.pressed.connect(_persuade)
-		bar.add_child(persuade_btn)
-	if _visit.get("battle", false):
-		var investigate_btn := Button.new()
-		var investigated: bool = _visit.get("investigated", false)
-		investigate_btn.text = "Investigated the battlefield" if investigated else "Investigate the battlefield"
-		investigate_btn.disabled = investigated
-		investigate_btn.pressed.connect(_investigate)
-		bar.add_child(investigate_btn)
-	var leave := Button.new()
-	leave.text = "Leave"
-	leave.pressed.connect(_close_visit)
-	bar.add_child(leave)
+	if rows.get_child_count() == 0:
+		var none := Label.new()
+		none.text = "Nothing posted right now."
+		none.add_theme_color_override("font_color", Icons.COL_MUTED)
+		rows.add_child(none)
 
 func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable) -> void:
 	var row := HBoxContainer.new()
