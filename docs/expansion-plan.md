@@ -3587,3 +3587,75 @@ Method note, and it cost a full round to learn: `core/encounter.gd` documents
 sweep pins it. A harness that does not pin it produces numbers that move run
 to run — an earlier pass in this round reported a faction split that did not
 survive re-measurement. Pin the seed, or do not quote the number.
+
+---
+
+## D1–D6, built (2026-09-13)
+
+The build order set out in the scope revision above, as it actually shipped.
+Each item names the commit's own claim and the number that backs it; the
+per-file headers carry the measured grids in full.
+
+**D1 — sites.** `core/site.gd`: a lair is 3–6 rooms run on ONE set of
+resources. No long rests inside, short rests as a room kind, merchant nodes
+excluded (nobody is selling potions in a goblin warren). The adventuring day,
+from `campaign.gd`'s existing 5-stage route engine rather than from a new
+dungeon system. Site defeat takes a third of the loose stash and leaves
+equipped gear alone, and the lair resets — the user's own call between the
+two options offered.
+
+**D2 — lairs become sites.** `_lair_action()` enters a site; withdrawing
+part-cleared is a real choice because `depth_cleared` persists. A lair left
+alone resolves without the party after `WorldLairs.WINDOW` (2880 minutes) —
+cleared by somebody else or abandoned — and says which, out loud.
+
+**D3 — travel.** `core/travel.gd`: standing orders (pace / scout / watch),
+six road events on a seeded table, and the auto-pause contract. Every event
+names the check and names the roll, and credits the standing order that put
+that character on the job — which is the only place the player ever sees an
+order they set hours ago pay off.
+
+**D4 — encounters you choose.** `core/approach.gd`: avoid / parley / ambush /
+engage, each priced on the card before it is pressed. Ambush hands the first
+round over on a failure, which is what stops it dominating engage. Parley's
+deny-list is its own (`MINDLESS`) rather than `WorldAI.CIVILIZED` — by that
+list a bandit is a monster, and a bandit wanting paid is the most obviously
+bribable thing on the map.
+
+**D5 — rumors.** `core/rumors.gd`: a town sells what its people know, a
+turned-in job earns a lead for nothing. The thing pinned hardest is that a
+lair heard about in a common room sets the SAME `discovered` flag a Survival
+check sets — one flag, one meaning, so nothing downstream learns there is a
+second kind of found.
+
+**D6 — regions and tiers.** `core/regions.gd`: four rings anchored on the
+human settlement and sized to the map's own extent. The rule is a clamp, not
+a replacement — inside its band a fight is still built for the party standing
+there, so every win rate in `scaler.gd` still means what it says; outside it,
+content stops following. Measured, 80 seeds a cell, fight seed pinned:
+
+| party | content | scale | win |
+|---|---|---|---|
+| lvl 3 | lvl 3 | x1.00 | 92.5% — in band, untouched |
+| lvl 10 | lvl 3 | x0.41 | 100% — the heartland is a memory |
+| lvl 3 | lvl 6 | x1.86 | 37.5% — one band out: "not yet" |
+| lvl 3 | lvl 10 | x2.45 | 27.5% — the deeps, at level 3 |
+
+That is the destination the delve cycle was missing: the frontier is visible
+from the start, genuinely lethal, and the thing that opens it is levels — not
+a key, a quest flag, or a wall. It is signposted four ways before anybody
+walks into it (HUD band label, the inn's leads, the lair button, and a
+one-time card when riding out above your level), because a level-banded map's
+one failure mode is a wall you only learn about by hitting it.
+
+### Still open
+
+- **The three-knob scaler retune** (CURVE + TIER + `estimate()`'s chunk
+  pricing), described in the body-count spike record above. D6 deliberately
+  did not touch it: the band clamp reads scaler's existing curve at a
+  different point rather than changing its shape, which is why no measured
+  number moved.
+- **Whether a site's interior is drawn** rather than being a node graph. D1
+  works either way and assumes the node graph, which is what exists.
+- **Whether withdrawing from a part-cleared site restocks it over time.**
+  Currently it does not; the D1 window expires the whole lair instead.
