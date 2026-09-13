@@ -23,6 +23,7 @@
 extends RefCounted
 
 const Scaler = preload("res://core/scaler.gd")
+const Regions = preload("res://core/regions.gd")
 
 # How far the locals' knowledge reaches. A town knows its own country — the
 # charcoal-burners and drovers who come in have been somewhere — but nobody in
@@ -73,10 +74,17 @@ static func offers(settlement, world) -> Array:
 		var d: float = settlement.position.distance_to(l.position)
 		if d > RANGE:
 			continue
+		# D6: a lead says which country the place is in. Buying directions to
+		# something in the Far Deeps at level 3 is a decision the player is
+		# allowed to make and is not allowed to make blind.
+		var band: Dictionary = Regions.at(world, l.position)
+		var lv: Array = band["levels"]
 		out.append({
 			"lair_id": l.id, "faction": l.faction, "distance": d,
 			"price": price_of(settlement, l),
+			"region": String(band["label"]), "levels": lv,
 			"text": String(TALK.get(l.faction, TALK_DEFAULT)),
+			"where": "%s, levels %d-%d" % [String(band["label"]), int(lv[0]), int(lv[1])],
 		})
 	out.sort_custom(func(a, b): return float(a["distance"]) < float(b["distance"]))
 	return out

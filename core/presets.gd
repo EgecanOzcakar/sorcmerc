@@ -20,11 +20,11 @@ static func _base(id: String, name: String, species: String, background: String,
 	ch.decide("feat-choice:species:human:0", {"type": "feat-choice", "featId": "savage-attacker"})
 	return ch
 
-static func vera() -> Character:
+static func vera(levels := 3) -> Character:
 	# Fighter 3 (Champion) — chain mail + shield, longsword. Improved Critical = crit 19.
 	# Interception, not Defense: Defense's +1 AC would push AC to 19 vs the authored 18.
 	var ch := _base("vera", "Vera Kord", "human", "soldier",
-		{"str": 14, "dex": 12, "con": 13, "int": 10, "wis": 12, "cha": 10}, "fighter", 3)
+		{"str": 14, "dex": 12, "con": 13, "int": 10, "wis": 12, "cha": 10}, "fighter", levels)
 	ch.decide("asi:background:soldier:0", {"type": "asi", "allocation": {"str": 2, "con": 1}})
 	ch.decide("tool-choice:background:soldier:0", {"type": "tool-choice", "tools": ["gaming-set-dice"]})
 	ch.decide("language-choice:background:soldier:0", {"type": "language-choice", "languages": ["orc"]})
@@ -37,10 +37,10 @@ static func vera() -> Character:
 	ch.equipped = ["longsword", "chain-mail", "shield"]
 	return ch
 
-static func pike() -> Character:
+static func pike(levels := 3) -> Character:
 	# Rogue 3 (Thief) — studded leather, shortbow. Sneak Attack 2d6 at rogue 3.
 	var ch := _base("pike", "Pike Sallow", "human", "criminal",
-		{"str": 10, "dex": 14, "con": 11, "int": 12, "wis": 10, "cha": 12}, "rogue", 3)
+		{"str": 10, "dex": 14, "con": 11, "int": 12, "wis": 10, "cha": 12}, "rogue", levels)
 	ch.decide("asi:background:criminal:0", {"type": "asi", "allocation": {"dex": 2, "con": 1}})
 	ch.decide("tool-choice:background:criminal:0", {"type": "tool-choice", "tools": ["thieves-tools"]})
 	ch.decide("language-choice:background:criminal:0", {"type": "language-choice", "languages": ["thieves-cant"]})
@@ -55,12 +55,12 @@ static func pike() -> Character:
 	ch.equipped = ["shortbow", "studded-leather"]
 	return ch
 
-static func ilsa() -> Character:
+static func ilsa(levels := 3) -> Character:
 	# Cleric 3 (Light Domain) — chain shirt + shield, mace. Save DC 13, slots 4/2.
 	# Light Domain because it grants Burning Hands always-prepared, which is the kit
 	# encounter.gd hand-authored for Ilsa.
 	var ch := _base("ilsa", "Ilsa Vane", "human", "acolyte",
-		{"str": 12, "dex": 12, "con": 12, "int": 10, "wis": 14, "cha": 12}, "cleric", 3)
+		{"str": 12, "dex": 12, "con": 12, "int": 10, "wis": 14, "cha": 12}, "cleric", levels)
 	ch.decide("asi:background:acolyte:0", {"type": "asi", "allocation": {"wis": 2, "cha": 1}})
 	ch.decide("language-choice:background:acolyte:0", {"type": "language-choice", "languages": ["celestial"]})
 	ch.decide("skill-choice:species:human:0", {"type": "skill-choice", "skills": ["perception"]})
@@ -76,3 +76,17 @@ static func ilsa() -> Character:
 
 static func party() -> Array:
 	return [vera(), pike(), ilsa()]
+
+# D6 — the same three at any level, as a RULER rather than as content: core/regions.gd
+# measures "what is a level-N party worth" off this trio so a region can be banded in
+# levels instead of in budget multipliers. Level 3 is what every other caller wants and
+# is what party() still returns; only the ruler asks for anything else.
+#
+# ponytail: a trio levelled this way leaves the higher-level choices pending (a
+# fighter 4's ASI is never decided here), so these sheets are slightly under a
+# played character of the same level. That is fine for a ruler — it is the same
+# understatement at every level — but do not read party_at(12) as "what a level-12
+# party looks like".
+static func party_at(levels: int) -> Array:
+	var n: int = clampi(levels, 1, 20)
+	return [vera(n), pike(n), ilsa(n)]

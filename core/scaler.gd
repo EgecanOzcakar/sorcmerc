@@ -225,8 +225,16 @@ static func _budget(party_characters: Array, difficulty: String, power_scale: fl
 # don't chase it with this constant.
 const BOSS_LEAD_SHARE := 0.40   # how much of the fight the boss itself is
 const BOSS_MULT_MAX := 3.0      # +6 AC / +8 to-hit / +8 dmg / 3x HP at the ceiling
-static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0) -> Dictionary:
-	var budget := _budget(party_characters, String(boss.get("difficulty", "hard")))
+# D6 — `power_scale` here is the SAME knob roster_for has, and it exists for one
+# caller: core/regions.gd's band clamp, which has to be able to say "this lair is
+# in the deeps, build its climax for the deeps" when an underlevelled party walks
+# in. T92's rule still stands and is enforced at the call site rather than here —
+# core/world_threat.gd never reaches a boss, and core/site.gd passes maxf(1.0, x),
+# so a climax can be raised by the country it stands in and never lowered by
+# anything.
+static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
+		power_scale: float = 1.0) -> Dictionary:
+	var budget := _budget(party_characters, String(boss.get("difficulty", "hard")), power_scale)
 	var lead := String(boss.get("lead", ""))
 	var count: int = maxi(1, int(boss.get("lead_count", 1)))
 	var extras: Array = boss.get("lead_features", [])

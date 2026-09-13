@@ -52,6 +52,11 @@ func _init() -> void:
 	for o in offers:
 		check(String(o["text"]) != "", "%s comes with something a person would actually say" % o["lair_id"])
 		check(int(o["price"]) > 0, "%s costs something" % o["lair_id"])
+		# D6: and it says which country it is in. A lead you cannot price against
+		# your own level is a lead sold blind.
+		check(String(o["where"]).find("levels") >= 0,
+			"%s says what it is going to take (%s)" % [o["lair_id"], o["where"]])
+		check(String(o["region"]) != "", "...and names the country")
 
 	# Danger is what a rumour is worth: a whisper about a dragon is not priced
 	# like one about goblins.

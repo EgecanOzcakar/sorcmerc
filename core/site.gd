@@ -38,6 +38,7 @@ extends RefCounted
 
 const Campaign = preload("res://core/campaign.gd")
 const Scaler = preload("res://core/scaler.gd")
+const Regions = preload("res://core/regions.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const RNG = preload("res://core/rng.gd")
 
@@ -283,9 +284,16 @@ func combat_spec() -> Dictionary:
 		return {}
 	var theme: String = String(room.get("theme", ""))
 	var seed_v: int = rng.seed_value + hash(String(room.get("id", "")))
-	var spec: Dictionary = Scaler.boss_for(party.party_characters(), room, seed_v) if room.has("lead") \
+	# D6: a lair is built for the country it stands in. Inside the band this is
+	# 1.0 and changes nothing; outside it, a warren three days past the last
+	# waystone is a frontier warren whoever walks in. The boss takes maxf(1.0, x)
+	# — T92's rule that a climax is never scaled DOWN still holds, and it is this
+	# call site that holds it (core/scaler.gd's boss_for takes the knob neutrally).
+	var band: float = Regions.power_scale(world, lair.position, party)
+	var spec: Dictionary = Scaler.boss_for(party.party_characters(), room, seed_v,
+			maxf(1.0, band)) if room.has("lead") \
 		else Scaler.roster_for(party.party_characters(), String(room.get("difficulty", "normal")),
-			{}, theme, seed_v)
+			{}, theme, seed_v, band)
 	spec["theme"] = theme if theme != "" else Campaign.BOSS["theme"]
 	return spec
 

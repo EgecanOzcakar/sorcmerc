@@ -76,8 +76,12 @@ const DISMISS_TEXT := "Back to the road   (Enter)"
 # caught in time is still a bad thing that happened, and the stripe says so while
 # the verdict on the roll line says it went well. Both glyphs are already on the
 # icon sheet (ui_icons.gd), so neither can come out as tofu.
-const KIND_GLYPH := {"good": "✦", "bad": "↯"}
-const KIND_CAPTION := {"good": "T H E   R O A D   G I V E S", "bad": "T H E   R O A D   T A K E S"}
+# D6 adds "border": not something the road gave or took, but the country under
+# it changing. Its own caption because "the road takes" would be a lie — nothing
+# has happened yet, which is the entire point of showing it before it does.
+const KIND_GLYPH := {"good": "✦", "bad": "↯", "border": "⚑"}
+const KIND_CAPTION := {"good": "T H E   R O A D   G I V E S", "bad": "T H E   R O A D   T A K E S",
+	"border": "T H E   C O U N T R Y   C H A N G E S"}
 const UNKNOWN_CAPTION := "O N   T H E   R O A D"
 const UNKNOWN_GLYPH := "·"
 
@@ -166,6 +170,7 @@ func _kind_color() -> Color:
 	match _kind():
 		"good": return Icons.COL_GOLD
 		"bad": return Icons.COL_FOE
+		"border": return Icons.COL_ACCENT
 	return Icons.COL_MUTED
 
 

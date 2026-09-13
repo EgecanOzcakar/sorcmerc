@@ -31,6 +31,7 @@ const Rumors = preload("res://core/rumors.gd")
 const Site = preload("res://core/site.gd")
 const SiteScreen = preload("res://scenes/world/site_screen.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
+const Regions = preload("res://core/regions.gd")
 const Travel = preload("res://core/travel.gd")
 const EventCard = preload("res://scenes/world/event_card.gd")
 const Approach = preload("res://core/approach.gd")
@@ -222,6 +223,15 @@ var _approach_card: Control = null
 var _slipped := {}
 var _pace_btn: Button
 var _site_screen: Control = null     # ...and the descent screen drawing it
+# D6: the country the party is standing in, and the label that says so. `_region`
+# is last frame's band — a crossing is the only thing anybody wants to be told
+# about, and you cannot notice one without remembering where you were.
+var _region: Dictionary = {}
+var _warned_bands := {}              # bands already warned about; a seam you step over
+                                     # twice is not news twice
+var _region_lbl: Label
+var _region_msg: Label               # the last crossing, same "persists" contract as _lair_msg
+
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _camp_msg: Label                 # T9x: last short-rest/camp outcome, same "persists" contract as _lair_msg
@@ -366,6 +376,7 @@ func _process(delta: float) -> void:
 	_check_expired_lairs()
 	_check_forage()
 	_check_travel()
+	_check_region()
 	if _camp_btn != null:
 		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0
 	_layout_minimap()   # this Control resizes with the window; the inset follows the corner
@@ -392,6 +403,12 @@ func _build_hud() -> void:
 	_clock_lbl = Label.new()
 	_clock_lbl.add_theme_color_override("font_color", Icons.COL_GOLD)
 	bar.add_child(_clock_lbl)
+	# D6: which country this is and who it is for, always on. A band that only
+	# announced itself at the seam would be invisible to a player who saved in
+	# the frontier and came back a week later.
+	_region_lbl = Label.new()
+	_region_lbl.add_theme_color_override("font_color", Icons.COL_MUTED)
+	bar.add_child(_region_lbl)
 	var party_btn := Button.new()
 	party_btn.text = "Party"
 	party_btn.pressed.connect(_open_party)
@@ -431,6 +448,9 @@ func _build_hud() -> void:
 	hint.text = "right-click: march here   ·   drag: pan   ·   wheel: zoom"
 	hint.add_theme_color_override("font_color", Icons.COL_MUTED)
 	bar.add_child(hint)
+	_region_msg = Label.new()
+	_region_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
+	bar.add_child(_region_msg)
 	_lair_msg = Label.new()
 	_lair_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	bar.add_child(_lair_msg)
@@ -653,9 +673,13 @@ func encounter_spec(foe) -> Dictionary:
 		if idx >= 0:
 			seed_v = seed_v - seed_v % Scaler.FACTIONS.size() + idx
 	var threat: Dictionary = WorldThreat.assess(party)
+	# D6: the two knobs compose, and they answer different questions. The band
+	# says how dangerous this country is (1.0 while the party is inside its level
+	# range, which is the common case); the party's condition still thins whatever
+	# the country sends, in the same proportion it always did.
 	var spec: Dictionary = Scaler.roster_for(
 		party.party_characters(), String(threat["difficulty"]), {}, theme, seed_v,
-		float(threat["power_scale"]))
+		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party))
 	spec["theme"] = theme if theme != "" else DEFAULT_THEME
 	return spec
 
@@ -838,8 +862,14 @@ func _check_lairs() -> void:
 		_lair_sneak_btn.visible = false
 		return
 	_lair_btn.visible = true
+	# D6: what country it is in, on the button that walks into it. A lair is the
+	# one thing on this map a party can commit to before finding out what is in
+	# it, so the level band belongs here rather than one screen further in.
+	var band: Dictionary = Regions.at(world, target.position)
+	var lv: Array = band["levels"]
 	_lair_btn.text = ("Search for a hidden lair (Survival)" if not target.discovered
-		else "Attack %s" % target.sname)
+		else "Attack %s — %s, levels %d-%d" % [target.sname, String(band["label"]),
+			int(lv[0]), int(lv[1])])
 	_lair_sneak_btn.visible = target.discovered
 
 # D1: a lair the party walked away from resolves without them after
@@ -1118,6 +1148,61 @@ func _on_event_ack() -> void:
 		_event_card = null
 	world.clock.resume()
 	_pause_btn.text = "Pause"
+
+# D6: which country the party is in, and the one moment it is worth saying so
+# out loud. Runs every frame because the label has to be right every frame; the
+# rest of it only happens on a seam.
+#
+# The clock stops for exactly one case: riding OUT into a band whose floor is
+# above the party's level. That is the case where the map is about to build
+# fights the party cannot win (core/regions.gd's measured grid: one band out is
+# 37.5%, two is 27.5%), and it is the only warning the game can give that is not
+# a wall. Riding back in is good news and never interrupts anything.
+func _check_region() -> void:
+	var p0 = world.player()
+	if p0 == null:
+		return
+	var band: Dictionary = Regions.at(world, p0.position)
+	var lv: Array = band["levels"]
+	if _region_lbl != null:
+		# Short form: this bar already carries nine controls and a hint, and the
+		# long form lives on the lair button, the inn's leads and the crossing card.
+		_region_lbl.text = "%s · lv %d-%d" % [String(band["label"]), int(lv[0]), int(lv[1])]
+	if _region.is_empty():
+		_region = band          # first frame: the party is simply somewhere
+		return
+	if String(band["id"]) == String(_region["id"]):
+		return
+	var was: Dictionary = _region
+	_region = band
+	if _region_msg != null:
+		_region_msg.text = Regions.crossing_text(was, band)
+	var deeper: bool = int(band["index"]) > int(was["index"])
+	var over_head: bool = Regions.party_level(party) < int(lv[0])
+	if not (deeper and over_head):
+		return
+	# Once per band. A party working a seam — a lair just over it, a town just
+	# back — would otherwise be stopped every few minutes to be told something it
+	# already decided to ignore. The HUD label never stops saying it.
+	if _warned_bands.has(String(band["id"])):
+		return
+	_warned_bands[String(band["id"])] = true
+	# Same gates every other _check_* uses: not mid-fight, not in a settlement,
+	# not underground, not already stopped, and never a second card over the first.
+	if _combat != null or not _visit.is_empty() or _site != null or world.clock.is_paused():
+		return
+	if _event_card != null:
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(_on_event_ack)
+	_event_card.show_event({
+		"id": "crossing", "kind": "border",
+		"title": "Into %s" % String(band["label"]),
+		"text": "%s  This is country for levels %d-%d, and the party is level %d." % [
+			String(band["blurb"]), int(lv[0]), int(lv[1]), Regions.party_level(party)]})
 
 # D3: the quick version of the party screen's standing orders — the one order
 # worth changing mid-march, on the HUD where the clock speed already is.
@@ -1680,7 +1765,8 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	var lead_rows := VBoxContainer.new()   # `rows` is the party-status list above
 	box.add_child(lead_rows)
 	for lead in leads:
-		_trade_row(lead_rows, "%s — %d gp" % [lead["text"], int(lead["price"])],
+		_trade_row(lead_rows, "%s  (%s) — %d gp" % [
+			lead["text"], String(lead.get("where", "")), int(lead["price"])],
 			"Buy", _buy_rumor.bind(lead))
 
 func _build_board_page(box: VBoxContainer, s) -> void:
