@@ -85,6 +85,8 @@ static func to_dict(world, party = null) -> Dictionary:
 		lairs.append({
 			"id": l.id, "sname": l.sname, "position": _v(l.position),
 			"faction": l.faction, "discovered": l.discovered, "looted": l.looted,
+			"depth_cleared": l.depth_cleared,
+			"entered_at": l.entered_at, "resolved_as": l.resolved_as,
 		})
 	# T-water: same story as lairs -- terrain postdates this format, so an old
 	# save with no "waters" key loads as a world with none rather than crashing.
@@ -142,6 +144,9 @@ static func from_dict(d: Dictionary):
 			String(ld.get("faction", "goblinoid")), String(ld.get("sname", "")))
 		l.discovered = bool(ld.get("discovered", false))
 		l.looted = bool(ld.get("looted", false))
+		l.depth_cleared = int(ld.get("depth_cleared", 0))   # D1; an old save just starts at the mouth
+		l.entered_at = float(ld.get("entered_at", -1.0))    # ...and has never been disturbed
+		l.resolved_as = String(ld.get("resolved_as", ""))
 		world.add_lair(l)
 	for wd in d.get("waters", []):
 		world.add_water(_vec(wd.get("position")), float(wd.get("radius", 0.0)))
@@ -176,6 +181,7 @@ static func _party_dict(party) -> Dictionary:
 		"stash": party.stash.duplicate(true), "quests": party.quests.duplicate(true),
 		"last_long_rest_at": party.last_long_rest_at,
 		"overworld_figure": party.overworld_figure,
+		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 	}
 
 static func _party_from(pd: Dictionary):
@@ -192,6 +198,7 @@ static func _party_from(pd: Dictionary):
 	party.quests = _ints(pd.get("quests", []))
 	party.last_long_rest_at = float(pd.get("last_long_rest_at", -1e12))
 	party.overworld_figure = String(pd.get("overworld_figure", ""))
+	party.travel_orders = pd.get("travel_orders", {}).duplicate(true)   # D3; an old save marches at the default
 	return party
 
 # JSON gives every number back as a float; quest counters are compared as ints.

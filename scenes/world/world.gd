@@ -27,6 +27,15 @@ const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
+const Rumors = preload("res://core/rumors.gd")
+const Site = preload("res://core/site.gd")
+const SiteScreen = preload("res://scenes/world/site_screen.gd")
+const WorldThreat = preload("res://core/world_threat.gd")
+const Regions = preload("res://core/regions.gd")
+const Travel = preload("res://core/travel.gd")
+const EventCard = preload("res://scenes/world/event_card.gd")
+const Approach = preload("res://core/approach.gd")
+const ApproachCard = preload("res://scenes/world/approach_card.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
@@ -48,7 +57,13 @@ const COMBAT_SCENE := "res://scenes/main.tscn"
 # a fixed 32 units behind forever and never trip a 24-unit trigger. _trigger() is
 # the floor, widened to whatever the tick actually travelled.
 const ENCOUNTER_RADIUS := 24.0
-const ENCOUNTER_DIFFICULTY := "normal"
+# D1: what the open country throws at you is no longer a fixed tier. Sites are
+# the hard content now (core/site.gd), and a party walking out of a cleared lair
+# at a third of its HP has to be able to reach a town — so the wilderness reads
+# the party's condition and scales down toward a floor (core/world_threat.gd).
+# It can only ever scale DOWN, and a weaker roster pays proportionally less XP
+# (encounter.gd's xp = power * XP_PER_POWER), so nothing is gained by staying
+# hurt. The old flat "normal" is what world_threat.gd's BASELINE replaces.
 # O6 visit distance. Deliberately wider than ENCOUNTER_RADIUS: a settlement is a
 # fixed landmark drawn at ~26 world units of radius (a city footprint) rather than
 # a 6-unit token, so "close enough to walk in through the gate" is its own number.
@@ -194,6 +209,29 @@ var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.acti
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
+var _site = null                     # D1: the delve in progress (core/site.gd), or null
+# D3: last road-event roll, and the card showing one. Scene-local like the
+# forage stamp — a reload just restarts the cadence, which is not worth a
+# save-format field for something that fires every six world-hours anyway.
+var _last_travel_at: float = 0.0
+var _event_card: Control = null
+# D4: the band the player is deciding how to meet, and the card asking. Bands
+# slipped past go on `_slipped` so walking away does not immediately re-trigger
+# the same meeting — the settlement gate's `_left` does the same job.
+var _approach_foe = null
+var _approach_card: Control = null
+var _slipped := {}
+var _pace_btn: Button
+var _site_screen: Control = null     # ...and the descent screen drawing it
+# D6: the country the party is standing in, and the label that says so. `_region`
+# is last frame's band — a crossing is the only thing anybody wants to be told
+# about, and you cannot notice one without remembering where you were.
+var _region: Dictionary = {}
+var _warned_bands := {}              # bands already warned about; a seam you step over
+                                     # twice is not news twice
+var _region_lbl: Label
+var _region_msg: Label               # the last crossing, same "persists" contract as _lair_msg
+
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _camp_msg: Label                 # T9x: last short-rest/camp outcome, same "persists" contract as _lair_msg
@@ -245,8 +283,10 @@ func _ready() -> void:
 	add_child(_party3d)
 	_party3d.reset(world)
 	_last_forage_at = world.clock.elapsed   # T9x: start the cadence from load time, not zero
+	_last_travel_at = world.clock.elapsed   # D3: same, for road events
 	set_process(true)
 	_build_hud()
+	_refresh_pace_btn()
 
 # Hand-placed stand-ins so the scene has something to render and move. Real
 # spawning is a later phase's job (O3 onward).
@@ -318,6 +358,9 @@ func _process(delta: float) -> void:
 	var p0 := world.player()
 	if p0 != null:
 		world.reveal(p0.position)   # T9x fog of war: permanent once seen
+		# D3: the marching order IS the speed, re-read every frame so changing
+		# it on the party screen takes effect the moment you back out.
+		p0.speed = World.SPEED * Travel.speed_mult(party)
 	FactionOpinion.tick(world, dt)
 	WorldAI.update(world, delta)
 	_check_encounter(dt)
@@ -330,7 +373,10 @@ func _process(delta: float) -> void:
 			Visit.mark_battle(world, r["loser"].position, world.clock.elapsed)
 	_check_visit()
 	_check_lairs()
+	_check_expired_lairs()
 	_check_forage()
+	_check_travel()
+	_check_region()
 	if _camp_btn != null:
 		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0
 	_layout_minimap()   # this Control resizes with the window; the inset follows the corner
@@ -357,6 +403,12 @@ func _build_hud() -> void:
 	_clock_lbl = Label.new()
 	_clock_lbl.add_theme_color_override("font_color", Icons.COL_GOLD)
 	bar.add_child(_clock_lbl)
+	# D6: which country this is and who it is for, always on. A band that only
+	# announced itself at the seam would be invisible to a player who saved in
+	# the frontier and came back a week later.
+	_region_lbl = Label.new()
+	_region_lbl.add_theme_color_override("font_color", Icons.COL_MUTED)
+	bar.add_child(_region_lbl)
 	var party_btn := Button.new()
 	party_btn.text = "Party"
 	party_btn.pressed.connect(_open_party)
@@ -380,6 +432,9 @@ func _build_hud() -> void:
 	bar.add_child(_lair_sneak_btn)
 	# T9x: short rest works anywhere (when safe) — always visible, _short_rest()
 	# itself says why not rather than the button toggling in and out.
+	_pace_btn = Button.new()
+	_pace_btn.pressed.connect(_cycle_pace)
+	bar.add_child(_pace_btn)
 	var shortrest_btn := Button.new()
 	shortrest_btn.text = "Short Rest"
 	shortrest_btn.pressed.connect(_short_rest)
@@ -393,6 +448,9 @@ func _build_hud() -> void:
 	hint.text = "right-click: march here   ·   drag: pan   ·   wheel: zoom"
 	hint.add_theme_color_override("font_color", Icons.COL_MUTED)
 	bar.add_child(hint)
+	_region_msg = Label.new()
+	_region_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
+	bar.add_child(_region_msg)
 	_lair_msg = Label.new()
 	_lair_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	bar.add_child(_lair_msg)
@@ -579,12 +637,22 @@ func _check_encounter(dt := 0.0) -> void:
 	var p := world.player()
 	if p == null:
 		return
+	if _approach_card != null:
+		return
 	var reach := _trigger(dt)
 	for q in world.parties:
 		if q == p or not WorldAI.is_hostile(q, p):
 			continue
-		if q.position.distance_to(p.position) <= reach:
-			_launch_combat(q)
+		var near: bool = q.position.distance_to(p.position) <= reach
+		# A band already slipped past stays slipped until it is genuinely out of
+		# range again, or the player would be asked the same question every frame
+		# for as long as they stand next to it.
+		if _slipped.has(q.id):
+			if not near:
+				_slipped.erase(q.id)
+			continue
+		if near:
+			_open_approach(q)
 			return
 
 # The roster the encountered party fights with. Scaler takes a *theme*, not a
@@ -604,8 +672,14 @@ func encounter_spec(foe) -> Dictionary:
 		var idx: int = Scaler.FACTIONS.find(foe.faction)
 		if idx >= 0:
 			seed_v = seed_v - seed_v % Scaler.FACTIONS.size() + idx
+	var threat: Dictionary = WorldThreat.assess(party)
+	# D6: the two knobs compose, and they answer different questions. The band
+	# says how dangerous this country is (1.0 while the party is inside its level
+	# range, which is the common case); the party's condition still thins whatever
+	# the country sends, in the same proportion it always did.
 	var spec: Dictionary = Scaler.roster_for(
-		party.party_characters(), ENCOUNTER_DIFFICULTY, {}, theme, seed_v)
+		party.party_characters(), String(threat["difficulty"]), {}, theme, seed_v,
+		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party))
 	spec["theme"] = theme if theme != "" else DEFAULT_THEME
 	return spec
 
@@ -614,15 +688,21 @@ func encounter_spec(foe) -> Dictionary:
 # `scouted_ahead`/`forced_ambush` are T9x's camp-ambush outcomes (see
 # _make_camp() below) — both default false for every other caller, same
 # no-op they'd get from a plain Combat scene.
-func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dictionary:
+# One fight, start to finish: put scenes/main.tscn up over the map, wait for it,
+# tear it down, hand back the result. Split out of _launch_combat() so a site
+# room (core/site.gd) can run a fight with its own pre-built spec without also
+# inheriting the roaming-band aftermath below — erasing a party that was never
+# on the map, crediting faction opinion for a room in a cave.
+func _run_combat(spec: Dictionary, difficulty: String,
+		scouted_ahead := false, forced_ambush := false) -> Dictionary:
 	world.clock.pause()
 	_combat_overlay = Control.new()
 	_combat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_combat_overlay)
 	_combat = load(COMBAT_SCENE).instantiate()
 	_combat.party = party
-	_combat.spec = encounter_spec(foe)
-	_combat.difficulty = ENCOUNTER_DIFFICULTY
+	_combat.spec = spec
+	_combat.difficulty = difficulty
 	_combat.scouted_ahead = scouted_ahead
 	_combat.forced_ambush = forced_ambush
 	_combat_overlay.add_child(_combat)
@@ -633,8 +713,18 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dict
 		return {}
 	var result: Dictionary = _combat.result
 	_combat = null
-	_combat_overlay.queue_free()
-	_combat_overlay = null
+	if _combat_overlay != null:
+		_combat_overlay.queue_free()
+		_combat_overlay = null
+	return result
+
+
+func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dictionary:
+	var threat: Dictionary = WorldThreat.assess(party)
+	var result: Dictionary = await _run_combat(encounter_spec(foe),
+		String(threat["difficulty"]), scouted_ahead, forced_ambush)
+	if result.is_empty():
+		return {}
 	if String(result.get("outcome", "")) == "Victory":
 		_bank(result)
 		world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
@@ -772,9 +862,25 @@ func _check_lairs() -> void:
 		_lair_sneak_btn.visible = false
 		return
 	_lair_btn.visible = true
+	# D6: what country it is in, on the button that walks into it. A lair is the
+	# one thing on this map a party can commit to before finding out what is in
+	# it, so the level band belongs here rather than one screen further in.
+	var band: Dictionary = Regions.at(world, target.position)
+	var lv: Array = band["levels"]
 	_lair_btn.text = ("Search for a hidden lair (Survival)" if not target.discovered
-		else "Attack %s" % target.sname)
+		else "Attack %s — %s, levels %d-%d" % [target.sname, String(band["label"]),
+			int(lv[0]), int(lv[1])])
 	_lair_sneak_btn.visible = target.discovered
+
+# D1: a lair the party walked away from resolves without them after
+# WorldLairs.WINDOW — somebody else clears it, or its tenants move on. Said out
+# loud when it happens: a landmark going grey with no explanation reads as a bug.
+func _check_expired_lairs() -> void:
+	if _combat != null or _site != null:
+		return
+	for l in WorldLairs.expire(world, world.clock.elapsed):
+		_lair_msg.text = WorldLairs.resolution_text(l)
+		WorldSave.save(world, party)
 
 func _lair_action() -> void:
 	var l: World.Lair = _lair_target
@@ -791,12 +897,7 @@ func _lair_action() -> void:
 			_lair_msg.text = "Nothing this time (Survival %d+%d vs DC %d)." % [
 				roll["nat"], roll["bonus"], roll["dc"]]
 		return
-	var result: Dictionary = await _launch_combat(World.RoamingParty.new("%s-raid" % l.id, l.position, l.faction))
-	if String(result.get("outcome", "")) == "Victory":
-		var loot: Dictionary = WorldLairs.loot(l)
-		party.add_gold(int(loot.get("gold", 0)))
-		Quest.record_lair_cleared(party, l.id)
-		_lair_msg.text = "%s is cleared out — +%d gold from its stash." % [l.sname, int(loot.get("gold", 0))]
+	await _delve(l)
 
 # T9x: the quiet alternative to _lair_action()'s attack — a pass loots the
 # lair with no fight; a fail falls straight through to the normal attack
@@ -816,6 +917,107 @@ func _lair_sneak_action() -> void:
 	else:
 		_lair_msg.text = String(roll["text"])
 		await _lair_action()
+
+# --- D1: the delve --------------------------------------------------------
+#
+# A lair is a place you go INTO now, not a single fight with a gold number
+# attached (core/site.gd). This drives the model: the descent screen offers the
+# rooms, the player picks one, a combat room runs through the same unchanged
+# scenes/main.tscn hand-off every other fight uses, and the loop repeats until
+# the party clears it, walks out, or goes down in there.
+#
+# The clock stays paused for the whole delve — the world does not move while
+# you are underground, same rule a settlement visit already follows.
+func _delve(l) -> void:
+	if _site != null:
+		return
+	world.clock.pause()
+	WorldLairs.mark_entered(l, world.clock.elapsed)   # D1: kicking the door starts the window
+	_site = Site.for_lair(l, party, world)
+	_site_screen = SiteScreen.new()
+	_site_screen.site = _site
+	_site_screen.party = party
+	add_child(_site_screen)
+	_site_screen.room_chosen.connect(_on_site_room_chosen)
+	_site_screen.withdrew.connect(_on_site_withdrew)
+	_site_screen.advanced.connect(_on_site_advanced)
+	_site_screen.done.connect(_on_site_done)
+	_site_screen.refresh()
+
+func _on_site_room_chosen(i: int) -> void:
+	if _site == null or _site.state != "picking":
+		return
+	var room: Dictionary = _site.enter(i)
+	if room.is_empty():
+		return
+	_site_screen.refresh()
+	if String(room.get("kind", "")) != "combat":
+		return
+	# The fight itself is the unchanged combat scene; the site only says what is
+	# in the room. Its difficulty is the room's own — a site never scales down
+	# with the party's condition the way open country does (core/world_threat.gd),
+	# because a lair that got easier the worse you were doing would be no gamble.
+	var result: Dictionary = await _run_combat(_site.combat_spec(),
+		String(_site.room.get("difficulty", "normal")))
+	if _site == null:
+		return
+	if not result.is_empty():
+		if String(result.get("outcome", "")) == "Victory":
+			_bank(result)
+		_apply_deaths(result)
+		_site.finish_combat(result)
+	if _site.state == "wiped":
+		_site_wiped()
+	elif not _site.is_over():
+		_site.leave()
+	_site_screen.refresh()
+	WorldSave.save(world, party)
+
+func _on_site_advanced() -> void:
+	if _site == null or _site.is_over():
+		return
+	_site.leave()
+	_site_screen.refresh()
+	WorldSave.save(world, party)
+
+func _on_site_withdrew() -> void:
+	if _site == null:
+		return
+	_site.withdraw()
+	_site_screen.refresh()
+
+# Locked with the user: harder than a lost fight on the road, softer than losing
+# people. The map's own soft landing still applies (gold tax, free revival, wake
+# at the nearest settlement) and on top of it the bag is lightened and the lair
+# closes up again — see core/site.gd's wipe_penalty() for why it is the stash
+# and never the equipped gear.
+func _site_wiped() -> void:
+	var toll: Dictionary = Site.wipe_penalty(party, _site.lair)
+	_retreat()
+	var names: Array = []
+	for item_id in toll.get("items", {}):
+		names.append("%s x%d" % [Campaign.item_name(String(item_id)), int(toll["items"][item_id])])
+	var lost: String = ("They lost %s from the packs. " % ", ".join(names)) if not names.is_empty() else ""
+	_lair_msg.text = "The party is dragged out of %s. %sThe way in has closed up behind them." % [
+		_site.lair.sname, lost]
+
+func _on_site_done() -> void:
+	if _site == null:
+		return
+	var l = _site.lair
+	if _site.state == "cleared":
+		Quest.record_lair_cleared(party, l.id)
+		_lair_msg.text = "%s is cleared out, all the way to the bottom." % l.sname
+	elif _site.state == "withdrawn":
+		_lair_msg.text = "%s is still down there — %d of %d rooms behind you." % [
+			l.sname, int(l.depth_cleared), Site.depth_for(l)]
+	_site = null
+	if _site_screen != null:
+		_site_screen.queue_free()
+		_site_screen = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+	WorldSave.save(world, party)
 
 # T91: split out of _check_visit so it can await the fight — the stand-in id
 # ("%s-guard") never matches a hunt_party quest's target, so raid_settlement
@@ -841,6 +1043,182 @@ func _check_forage() -> void:
 		party.add_gold(int(roll["gold"]))
 		_camp_msg.text = "%s forages along the way (%s %d+%d vs DC %d) — +%d gold." % [
 			roll["cname"], String(roll["skill"]).capitalize(), roll["nat"], roll["bonus"], roll["dc"], int(roll["gold"])]
+
+# --- D4: how the party meets a band ---------------------------------------
+#
+# A hostile band closing in used to drop the player straight into a fight — the
+# encounter happened TO them, which is the blob-bumps-blob shape the scope
+# revision set out to remove. Now the clock stops and they choose: slip away,
+# parley, set an ambush, or go straight at it (core/approach.gd owns the rules
+# and the rolls; this only runs the flow).
+func _open_approach(foe) -> void:
+	if _approach_card != null:
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_approach_foe = foe
+	_approach_card = ApproachCard.new()
+	add_child(_approach_card)
+	_approach_card.chosen.connect(_on_approach_chosen)
+	_approach_card.show_approach(Approach.options(party, foe),
+		"%s (%d)" % [foe.id.capitalize(), foe.troops.size()])
+
+func _on_approach_chosen(way: String) -> void:
+	var foe = _approach_foe
+	if foe == null:
+		return
+	var r: Dictionary = Approach.resolve(party, foe, way,
+		RNG.new(maxi(1, absi(hash("%s|%s|%d" % [foe.id, way, int(world.clock.elapsed)])))))
+	_close_approach()
+	# The outcome is reported on the same card the road events use — it is the
+	# same kind of thing, and a second card style would be a second thing to
+	# learn for no reason.
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(_on_approach_reported.bind(foe, r))
+	_event_card.show_event(_approach_event(r))
+
+# core/approach.gd's result, in the shape event_card.gd already draws.
+func _approach_event(r: Dictionary) -> Dictionary:
+	var e: Dictionary = r.duplicate(true)
+	e["id"] = "approach-%s" % String(r.get("way", ""))
+	e["title"] = String(Approach.WAYS.get(String(r.get("way", "")), {}).get("label", "The meeting"))
+	# "good" is not the same as "the roll passed": walking into a fight you
+	# meant to walk into is not a setback, and a blown ambush is.
+	e["kind"] = "bad" if bool(r.get("forced_ambush", false)) else "good"
+	if r.has("toll"):
+		e["gold"] = -int(r["toll"])
+	return e
+
+func _on_approach_reported(foe, r: Dictionary) -> void:
+	_on_event_ack()
+	if not bool(r.get("fight", true)):
+		# No fight: the band is still out there, just not met. Mark it slipped so
+		# standing next to it does not re-open the question every frame.
+		_slipped[foe.id] = true
+		world.clock.resume()
+		return
+	await _launch_combat(foe, bool(r.get("scouted_ahead", false)),
+		bool(r.get("forced_ambush", false)))
+
+func _close_approach() -> void:
+	if _approach_card != null:
+		_approach_card.queue_free()
+		_approach_card = null
+	_approach_foe = null
+
+# D3 — the other half of keeping a 1x-8x fast-forward honest. Travel used to be
+# empty, so 8x was a way to skip the game; now the road rolls an event every
+# Travel.EVENT_INTERVAL of actual travel and the clock STOPS for it. That is the
+# whole bargain: nothing is asked of the player while nothing is happening, and
+# nothing is missed when something is.
+#
+# The event arrives already resolved — standing orders set on the party screen
+# decided who rolled and at what bonus (core/travel.gd), hours before this
+# fired. The card reports; it does not ask. Same gates as every other _check_*:
+# not mid-fight, not in a settlement, not underground, not already paused.
+func _check_travel() -> void:
+	if _combat != null or not _visit.is_empty() or _site != null or world.clock.is_paused():
+		return
+	if _event_card != null:
+		return          # one card at a time; the clock is stopped behind it anyway
+	if world.clock.elapsed - _last_travel_at < Travel.EVENT_INTERVAL:
+		return
+	_last_travel_at = world.clock.elapsed
+	var e: Dictionary = Travel.check(party, world,
+		RNG.new(maxi(1, absi(hash("road|%d" % int(world.clock.elapsed))))))
+	if e.is_empty():
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(_on_event_ack)
+	_event_card.show_event(e)
+	WorldSave.save(world, party)   # an event can move gold, HP, the clock and the map
+
+# The plain handler for a road event's card. Note it FREES the card without
+# emitting `acknowledged`, so anything that needs a bound follow-up to run
+# (D4's _on_approach_reported, which launches the fight) must emit the signal
+# instead of calling this. A driver that called this directly is exactly how
+# that was found.
+func _on_event_ack() -> void:
+	if _event_card != null:
+		_event_card.queue_free()
+		_event_card = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+# D6: which country the party is in, and the one moment it is worth saying so
+# out loud. Runs every frame because the label has to be right every frame; the
+# rest of it only happens on a seam.
+#
+# The clock stops for exactly one case: riding OUT into a band whose floor is
+# above the party's level. That is the case where the map is about to build
+# fights the party cannot win (core/regions.gd's measured grid: one band out is
+# 37.5%, two is 27.5%), and it is the only warning the game can give that is not
+# a wall. Riding back in is good news and never interrupts anything.
+func _check_region() -> void:
+	var p0 = world.player()
+	if p0 == null:
+		return
+	var band: Dictionary = Regions.at(world, p0.position)
+	var lv: Array = band["levels"]
+	if _region_lbl != null:
+		# Short form: this bar already carries nine controls and a hint, and the
+		# long form lives on the lair button, the inn's leads and the crossing card.
+		_region_lbl.text = "%s · lv %d-%d" % [String(band["label"]), int(lv[0]), int(lv[1])]
+	if _region.is_empty():
+		_region = band          # first frame: the party is simply somewhere
+		return
+	if String(band["id"]) == String(_region["id"]):
+		return
+	var was: Dictionary = _region
+	_region = band
+	if _region_msg != null:
+		_region_msg.text = Regions.crossing_text(was, band)
+	var deeper: bool = int(band["index"]) > int(was["index"])
+	var over_head: bool = Regions.party_level(party) < int(lv[0])
+	if not (deeper and over_head):
+		return
+	# Once per band. A party working a seam — a lair just over it, a town just
+	# back — would otherwise be stopped every few minutes to be told something it
+	# already decided to ignore. The HUD label never stops saying it.
+	if _warned_bands.has(String(band["id"])):
+		return
+	_warned_bands[String(band["id"])] = true
+	# Same gates every other _check_* uses: not mid-fight, not in a settlement,
+	# not underground, not already stopped, and never a second card over the first.
+	if _combat != null or not _visit.is_empty() or _site != null or world.clock.is_paused():
+		return
+	if _event_card != null:
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(_on_event_ack)
+	_event_card.show_event({
+		"id": "crossing", "kind": "border",
+		"title": "Into %s" % String(band["label"]),
+		"text": "%s  This is country for levels %d-%d, and the party is level %d." % [
+			String(band["blurb"]), int(lv[0]), int(lv[1]), Regions.party_level(party)]})
+
+# D3: the quick version of the party screen's standing orders — the one order
+# worth changing mid-march, on the HUD where the clock speed already is.
+func _cycle_pace() -> void:
+	var o: Dictionary = Travel.orders(party)
+	var i: int = Travel.PACES.find(String(o["pace"]))
+	var next: String = Travel.PACES[(i + 1) % Travel.PACES.size()]
+	Travel.set_orders(party, next, String(o["scout"]), String(o["watch"]))
+	_refresh_pace_btn()
+
+func _refresh_pace_btn() -> void:
+	if _pace_btn == null:
+		return
+	var pace: String = String(Travel.orders(party)["pace"])
+	_pace_btn.text = Travel.pace_label(pace)
+	_pace_btn.tooltip_text = Travel.pace_note(pace)
 
 func _open_visit(s) -> void:
 	world.clock.pause()
@@ -910,6 +1288,17 @@ func _sell(item_id: String) -> void:
 # core/settlement_visit.gd's heal()/identify()). Neither takes clock time,
 # so neither re-reads the market; both autosave, same as every other purse
 # movement in this file.
+# D5: a lead costs gold and puts a real lair on the map — the same `discovered`
+# flag a Survival check sets, so a place found by asking behaves exactly like
+# one found by walking into it. There is no second kind of found.
+func _buy_rumor(lead: Dictionary) -> void:
+	var r: Dictionary = Rumors.buy(lead, party, world)
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("quest")
+		WorldSave.save(world, party)
+	_build_visit_panel()
+	_say(String(r.get("text", "")))
+
 func _heal() -> void:
 	var r: Dictionary = Visit.heal(party)
 	if bool(r.get("ok", false)):
@@ -1099,8 +1488,14 @@ func _turn_in(quest: Dictionary) -> void:
 	var reward: int = int(quest.get("reward", {}).get("gold", 0))
 	if Quest.turn_in(party, quest, _visit["settlement"].faction):
 		Sound.play_sfx("buy")
+		# D5: a job well done is how a town decides you are worth telling things
+		# to. The board's second payout, and the one that is not gold.
+		var lead: Dictionary = Rumors.free_lead(_visit["settlement"], party, world)
 		_build_visit_panel()
-		_say("%s — paid, +%d gp. They will remember it." % [quest["title"], reward])
+		_say("%s — paid, +%d gp. They will remember it.%s" % [
+			quest["title"], reward,
+			("  " + String(lead["text"])) if not lead.is_empty() else ""])
+		WorldSave.save(world, party)
 
 # The panel is rebuilt after every action, so the last line has to live on the
 # visit rather than on the Label that just got freed.
@@ -1357,6 +1752,22 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 		_note(box, "Not enough gold for a room.")
 	else:
 		_note(box, "Eight hours: everyone back to full, spells and abilities back, and the stalls restock while you sleep.")
+
+	# D5: the other half of what an inn is for. Until now a lair was found by
+	# walking close enough to one you had no reason to think existed — discovery
+	# by collision. This is where you hear about it instead, which is what makes
+	# a town worth walking back to.
+	var leads: Array = Rumors.offers(s, world)
+	_section(box, "Word in the common room")
+	if leads.is_empty():
+		_note(box, "Nothing anybody here has not already told you.")
+		return
+	var lead_rows := VBoxContainer.new()   # `rows` is the party-status list above
+	box.add_child(lead_rows)
+	for lead in leads:
+		_trade_row(lead_rows, "%s  (%s) — %d gp" % [
+			lead["text"], String(lead.get("where", "")), int(lead["price"])],
+			"Buy", _buy_rumor.bind(lead))
 
 func _build_board_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()

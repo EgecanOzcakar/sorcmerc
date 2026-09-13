@@ -32,6 +32,7 @@ func _init() -> void:
 	test_forest_beasts_stay_on_land()
 	test_quest_bias()
 	test_monotone_difficulty()
+	test_power_scale_knob()
 	test_win_rates()
 	test_higher_level_party()
 	test_boss_pool()
@@ -91,6 +92,51 @@ func test_monotone_difficulty() -> void:
 		var s := _spec_power(Scaler.roster_for(chars, d))
 		check(s > prev, "%s is worth more than the tier below it (%.1f > %.1f)" % [d, s, prev])
 		prev = s
+
+# T92 — the budget scale core/world_threat.gd drives. The whole point of the
+# default is that it changes nothing: every win rate in scaler.gd's TUNING header
+# was measured through the four-argument call, so the five-argument one had
+# better still produce the identical roster, byte for byte, everywhere.
+func test_power_scale_knob() -> void:
+	var chars := Presets.party()
+	for d in ["easy", "normal", "hard"]:
+		for seed_value in range(1, 9):
+			var plain: Dictionary = Scaler.roster_for(chars, d, {}, "", seed_value)
+			var explicit: Dictionary = Scaler.roster_for(chars, d, {}, "", seed_value, 1.0)
+			# str(), not ==: separately built Dictionaries are different objects, and
+			# what is on trial is their contents.
+			check(str(plain) == str(explicit),
+				"%s seed %d: power_scale defaults to 1.0 and 1.0 is a no-op" % [d, seed_value])
+	# the quest-bias and theme paths go through the same budget, so check one of each
+	check(str(Scaler.roster_for(chars, "normal", {"grull": 3.0})) ==
+		str(Scaler.roster_for(chars, "normal", {"grull": 3.0}, "", 0, 1.0)),
+		"a quest-biased roster is unchanged at scale 1.0")
+	check(str(Scaler.roster_for(chars, "hard", {}, "forest-clearing", 4)) ==
+		str(Scaler.roster_for(chars, "hard", {}, "forest-clearing", 4, 1.0)),
+		"a themed roster is unchanged at scale 1.0")
+	# The formula itself, recomputed here from the constants: this is what pins
+	# "a knob was added, nothing was retuned" — if TIER/REF_SCORE/CURVE or the
+	# shape of _budget() moves, this fails before any sweep has to run.
+	var team: float = maxf(1.0, Power.team_score(_party_at(chars)))
+	for d in ["easy", "normal", "hard"]:
+		var want: float = Scaler.REF_SCORE * pow(team / Scaler.REF_SCORE, Scaler.CURVE) * float(Scaler.TIER[d])
+		check(is_equal_approx(Scaler._budget(chars, d), want),
+			"%s: the default budget is still REF_SCORE*(team/REF_SCORE)^CURVE*TIER (%.4f vs %.4f)" % [
+				d, Scaler._budget(chars, d), want])
+		check(Scaler._budget(chars, d) == Scaler._budget(chars, d, 1.0),
+			"%s: scale 1.0 is an exact identity on the budget" % d)
+		check(is_equal_approx(Scaler._budget(chars, d, 0.5), want * 0.5),
+			"%s: the scale multiplies the finished budget and nothing else" % d)
+	# and the knob does something when it is actually turned
+	var full := _spec_power(Scaler.roster_for(chars, "normal", {}, "", 3, 1.0))
+	var half := _spec_power(Scaler.roster_for(chars, "normal", {}, "", 3, 0.5))
+	check(half < full, "halving the scale buys a weaker roster (%.1f < %.1f)" % [half, full])
+	check(_total(Scaler.roster_for(chars, "normal", {}, "", 3, 0.5)) >= 1,
+		"and it is still a roster, not an empty spec")
+	# bosses never come through the knob at all — boss_for has no such parameter
+	var boss := {"lead": "goblin-archer", "difficulty": "hard", "theme": "goblin-camp"}
+	check(str(Scaler.boss_for(chars, boss, 1)) == str(Scaler.boss_for(chars, boss, 1)),
+		"boss_for is untouched by the new parameter")
 
 func test_win_rates() -> void:
 	var chars := Presets.party()

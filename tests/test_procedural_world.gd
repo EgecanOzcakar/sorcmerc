@@ -7,6 +7,7 @@ extends SceneTree
 
 const ProceduralWorld = preload("res://scenes/world/procedural_world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
+const Regions = preload("res://core/regions.gd")
 
 var _pass := 0
 var _fail := 0
@@ -58,6 +59,14 @@ func _init() -> void:
 			for s in w.settlements:
 				check(l.position.distance_to(s.position) >= ProceduralWorld.MIN_MONSTER_GAP,
 					"seed %d: lair %s clear of %s" % [seed_v, l.id, s.id])
+		# D6: a generated map is banded, not a bag of difficulty spikes. Every
+		# lair lands in the country its faction belongs to, so the dragon is
+		# always the long ride and the goblins are always the near thing.
+		for l in w.lairs:
+			var want: String = Regions.home_band(l.faction)
+			var got: String = Regions.band_of(w, l.position)
+			check(got == want, "seed %d: %s (%s) sits in the %s, not the %s" % [
+				seed_v, l.id, l.faction, want, got])
 
 	print("test_procedural_world: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

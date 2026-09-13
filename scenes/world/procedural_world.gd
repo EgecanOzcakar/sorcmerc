@@ -13,6 +13,7 @@ extends RefCounted
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const RNG = preload("res://core/rng.gd")
+const Regions = preload("res://core/regions.gd")
 
 const SPAN := 1400.0                  # settlements/lairs scatter within +/- this, world units
 const MIN_SETTLEMENT_GAP := 500.0     # no two settlements closer than this
@@ -56,6 +57,28 @@ static func _place(rng, taken: Array, gap: float) -> Vector2:
 			return p
 	return _point(rng)
 
+# The same rejection sampling as _place(), but drawing from one ring around the
+# anchor instead of from the whole square — how a lair ends up in the country
+# its faction belongs to (D6). Falls back to the last try for the same reason
+# _place() does; a ring is a smaller target, so it gets more of them.
+static func _place_in_ring(rng, taken: Array, gap: float, anchor: Vector2,
+		fracs: Array, ext: float) -> Vector2:
+	var lo: float = float(fracs[0]) * ext
+	var hi: float = maxf(lo + 1.0, float(fracs[1]) * ext)
+	var p := anchor
+	for i in 80:
+		var ang: float = _randf(rng) * TAU
+		var r: float = lo + _randf(rng) * (hi - lo)
+		p = anchor + Vector2(cos(ang), sin(ang)) * r
+		var ok := true
+		for t in taken:
+			if p.distance_to(t) < gap:
+				ok = false
+				break
+		if ok:
+			return p
+	return p
+
 static func build(seed_v: int = 0) -> World:
 	var rng := RNG.new(seed_v)
 	var w := World.new()
@@ -84,8 +107,21 @@ static func build(seed_v: int = 0) -> World:
 		]
 		WorldAI.hunt(band)
 
+	# D6: a lair goes in its faction's own country. Scattering them uniformly is
+	# what made a generated map a bag of difficulty spikes — a dragon three
+	# minutes from the starting town, a goblin warren out past everything. The
+	# rings are anchored on the human settlement (core/regions.gd) and measured
+	# against the settlements alone, which is what keeps the extent stable: every
+	# lair is placed INSIDE that extent, so placing them cannot move the seams
+	# they were placed against.
+	var anchor: Vector2 = settlement_pos[RACES.find("human")]
+	var ext := Regions.MIN_EXTENT
+	for p in settlement_pos:
+		ext = maxf(ext, anchor.distance_to(p))
 	for entry in LAIRS:
-		var pos := _place(rng, settlement_pos, MIN_MONSTER_GAP)
+		var band := Regions.home_band(String(entry[1]))
+		var pos := _place_in_ring(rng, settlement_pos, MIN_MONSTER_GAP, anchor,
+			Regions.ring_fracs(band), ext)
 		w.add_lair(World.Lair.new(String(entry[0]), pos, String(entry[1]), String(entry[2])))
 
 	# One lake — same "water is a hand-placed blob" vocabulary the other two

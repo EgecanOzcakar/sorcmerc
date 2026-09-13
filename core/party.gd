@@ -30,6 +30,10 @@ var last_long_rest_at: float = -1e12
 # graceful-degrade contract every other model lookup this session uses.
 # overworld_member() below is the one resolver both screens go through.
 var overworld_figure := ""
+# D3 standing orders: {"pace", "scout", "watch"} — see core/travel.gd, which
+# owns every rule about them. A dict rather than three fields so the save format
+# grows a key, not a column, when travel gains another order.
+var travel_orders: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 

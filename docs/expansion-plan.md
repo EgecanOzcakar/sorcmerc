@@ -3398,3 +3398,264 @@ cost time to rule out. Integration runs belong after the workers are done,
 not alongside them. And a finished worker re-notifies when its own
 background waiters exit: those repeats carry nothing new and should be read
 as such rather than acted on twice.
+
+## Scope revision — open-world sandbox RPG, not a campaign map (locked 2026-09-13)
+
+Supersedes the "Mount & Blade-style open world" lock of 2026-09-11 (above).
+The open world itself stays; what it is *for* changes. Direct user direction:
+an open-world sandbox RPG with D&D combat, explicitly not M&B's overworld
+gameplay.
+
+### Why, in one paragraph — this is mechanical, not a matter of taste
+
+The world layer as built undermines the combat engine it exists to serve.
+5e only sings across an **adventuring day**: slots, HP, short-rest pools and
+once-per-day abilities draining over several fights before a long rest.
+That attrition is where class balance lives, and T38/T40 tuned it
+carefully. But open-world fights are sparse and isolated — meet a band,
+fight it, walk away, rest. `LONG_REST_COOLDOWN` is the only brake, so
+optimal play is one fight per day at full resources. Every fight is a fresh
+nova: the Fighter's short-rest economy is inert, the Wizard never rations,
+and `scaler.gd`'s difficulty tiers measure a situation the player is never
+forced into. Fixing that removes most of the "this feels like M&B" feeling
+as a side effect, because the map stops being a corridor between menus and
+starts costing something to cross.
+
+### Locked with the user (2026-09-13 Q&A)
+
+- **Core loop: the delve cycle.** Town → wilderness → site → back. Rumors
+  and the board point at sites; sites hold treasure and XP; deeper regions
+  need higher levels. Rejected: survival-crawl (no safe base), a pure
+  reputation sandbox, and a no-central-pull sandbox.
+- **Sites have interiors.** A lair becomes 3-6 linked encounters on ONE set
+  of resources. This is the adventuring day, and it is the whole point.
+  Rejected: the lightweight 2-3 fight version, and keeping one-fight lairs.
+- **Travel: keep the 1x-8x fast-forward AND add the decisions and events.**
+  The user picked both halves deliberately, and they are only in tension if
+  the clock is dumb. The synthesis, and the design this locks:
+  - **Standing orders, not per-watch prompts.** Pace (careful / normal /
+    forced), who scouts, who keeps watch — set once as a travel policy, not
+    asked every few hours. Fast-forward stays fast because there is nothing
+    to answer while nothing is happening.
+  - **The clock auto-pauses on anything that matters.** An event, a
+    sighting, a site coming into view: `world.clock.pause()` (already the
+    mechanism `_check_visit`/`_check_encounter`/`_check_lairs` gate on) and
+    surface the decision. 8x is then safe rather than a way to skip content
+    — it is "nothing is happening, wake me when it does."
+  - Standing orders are what *decide* how an event resolves (who rolls,
+    with what advantage, what options exist), so the decisions have teeth
+    without costing a prompt per watch.
+- **Party scale: four heroes, permanently.** Growth is levels, gear and
+  reputation — never headcount. `RoamingParty.troops[]` stays cosmetic
+  flavour for NPC bands and never becomes a player-facing system.
+  Rejected: hirelings, and growing into a warband.
+
+### Keep / reframe / cut
+
+**Keep, unchanged** — all of it serves a delve cycle as well as it served a
+campaign map, which is why this pivot is cheap: the free 2D map, three-tier
+fog of war, settlement beacons, the minimap and off-screen chevrons (T9y),
+water as terrain, settlements with market/inn/board/healer/librarian,
+camping with ambush risk, foraging, Trance, the short/long rest economy,
+lairs as things found by a Survival check, faction opinion as plumbing.
+
+**Reframe**
+
+| thing | from | to |
+|---|---|---|
+| lairs | one fight, a flat gold number, spent forever | a site with an interior: several encounters, per-room loot, a boss cache |
+| roaming bands | a proximity radius that fires a fight *at* you | an approach you choose: avoid / ambush / parley / engage |
+| the clock | a strategy-layer speed control | fast-forward that auto-pauses on anything real |
+| faction opinion | a price multiplier | access and people: who hires you, who shuts the gate |
+| quest board | kill-count and fetch against monster ids | work that points at sites |
+
+**Cut, and say so out loud**
+
+- **Persistent faction warfare** — the standing deferred note above is now a
+  decision, not a gap. It serves a strategy game, not four adventurers, and
+  it is the most M&B thing left on the board. Not building it is the
+  clearest signal of which game this is.
+- **Trade-route economics** (arbitrage, caravans, price spreads) and any
+  form of troop recruitment.
+- **Off-screen NPC-vs-NPC battles as a feature to grow.** `world_battle.gd`
+  stays as world texture; it does not get deeper. Nobody watches them.
+
+### Build order
+
+**D1 — sites: the adventuring day, from a system already written.**
+`core/campaign.gd` is a 5-stage route (`STAGE_POSITIONS`, `PICK_MIN/MAX`
+branching picks, `SUPPORT_KINDS` treasure/rest nodes, `BOSS_POOL`, and
+`short_rests_used`/`long_rests_used` already tracked) with 1140 assertions
+and a `drive_campaign.gd` robot, dormant behind `SORCMERC_LINEAR_CAMPAIGN=1`
+since the open world landed. **That is a dungeon.** Re-point it as a site
+interior rather than writing one: stage count from the site's tier, no
+merchant nodes inside a goblin warren, rest nodes offer a short rest only,
+long rests forbidden outright (cap `long_rests_used` at 0 — the attrition
+is the feature), roster themed from the site's faction through the gating
+`scaler.gd` already does. The linear-campaign flag stays working; this is a
+second profile over the same engine, not a rewrite of it.
+
+**D2 — lairs become sites.** `world.gd`'s `_lair_action()` enters a D1 site
+instead of launching one fight; `world_lairs.gd`'s flat `loot()` gives way
+to the site's own caches. A site can be left part-cleared and re-entered,
+which is what makes "withdraw" a real choice rather than a loss. Depends D1.
+
+**D3 — travel: standing orders + an event table + auto-pause.** New
+`core/travel.gd`: the policy (pace / scout / watch), a seeded event table
+rolled on the world clock, and the auto-pause contract above. Events resolve
+through the skill-check idiom every overworld check already uses
+(`WorldLairs.search`, `WorldCamp.watch_check`, `WorldForage.check`) — name
+the check, name the roll, never just "something happened".
+
+**D4 — encounters you choose.** A roaming band in range opens an approach
+step instead of a fight: avoid (Stealth), ambush (Survival), parley
+(Persuasion), engage. Every one of those idioms exists already
+(`sneak_past`, `persuade`, `watch_check`, and T39's surprise/scouting
+deployment) — this is wiring, not new mechanics. Depends D3.
+
+**D5 — rumors.** How a site gets onto the map: the inn sells information, a
+turned-in job points at the next place, a survivor tells you what is down
+there. Replaces "wander until a Survival check pings" as the primary
+discovery path (that stays as the secondary one). Depends D2.
+
+**D6 — regions and tiers.** Level-banded areas so "further out" means
+something and the delve cycle has somewhere to go. `scaler.gd` already has
+tiers; this is placing them on the map. Depends D2, D5.
+
+### Non-goals for this arc
+
+No narrative/dialogue layer yet (still deliberate — see README); no crafting;
+no settlement building; no mounts; no romance; no simulation of anything the
+player cannot see. The party is four people. If a feature only makes sense
+for an army or a lord, it is out by construction.
+
+### Not yet decided
+
+- Whether a site's interior is *drawn* (a mapped dungeon the party moves
+  through) or stays a node graph like `campaign.gd`'s route screen. D1 works
+  either way; the node graph is what already exists and is what D1 assumes.
+- Whether withdrawing from a part-cleared site restocks it over time.
+- What death means in a sandbox with no run boundary — `world.gd`'s
+  `_retreat()` soft landing was written for a campaign map and should be
+  revisited once sites exist, because a site is where a party can actually
+  be lost.
+
+### Spike — the DMG body-count multiplier (2026-09-13, built, measured, reverted)
+
+Asked for directly after the D1 measurements showed the wilderness draw
+producing wildly inconsistent fights under one "easy" label. The diagnosis
+was that `Scaler._score()` is linear in monster count — the eighth body is
+priced like the first — while 5e's own encounter rules multiply by monster
+count precisely because what beats a party is the number of turns the other
+side gets. Confirmed empirically first: holding the budget fixed and spending
+it on twice as many half-strength monsters took the fey warband from 53% to
+27%.
+
+**It works for its purpose.** With the term in and TIER re-calibrated by
+measurement, the level-3 faction spread tightened from a 47-point range to
+30: fey 53% → 73%, cultist 73% → 90%.
+
+**It was reverted anyway**, because it destabilises the level/tier
+calibration. Crowd pricing forces every TIER up by roughly half, and at a
+level-8 budget the generator answers a bigger budget with bigger monsters
+rather than more of them — which lands squarely on the chunk overpricing
+`scaler.gd`'s own "Known ceiling" note already describes. Five
+configurations, each with TIER re-calibrated by sweep rather than guessed:
+
+| crowd term | level-3 | level-8 |
+|---|---|---|
+| DMG table (x1.5 / x2 / x2.5) | 97.0 / 85.0 / 71.5 ✓ | 96.7 / 93.3 / 95.0 — flat, unordered |
+| `pow(n, 0.40)` | 86.5 / 82.0 / 72.5 ✓ | 93.3 / 95.0 / 96.7 — **inverted** |
+| `pow(n, 0.25)` | — | ordered but flat (94 / 91 …) |
+| `pow(min(n,5), 0.40)` | wants TIER ~1.05–2.03 | needs TIER ≥ 2.4 for spread |
+| `pow(n, 0.15)` | 88.5 / 82.0 / 63.5 ✗ | 90.0 / 98.3 / 76.7 — unordered |
+
+No single TIER triple satisfies both parties. The knob that reconciles them
+is **CURVE** — how fast the budget grows with party power — which was left at
+0.90 throughout and is the thing that actually differs between a level-3 and
+a level-8 fight.
+
+**For whoever picks this up:** calibrate CURVE and TIER together against both
+parties, and fix `estimate()`'s chunk pricing first — the crowd term and the
+chunk bias pull in opposite directions and compound, so tuning either alone
+chases its own tail. Three knobs, measured, not a one-line addition. The
+measurements above are in `core/scaler.gd`'s TUNING header so the next
+attempt starts from results rather than from the idea.
+
+Method note, and it cost a full round to learn: `core/encounter.gd` documents
+`spec["seed"]` as "omit for a random fight", and `tests/test_scaler.gd`'s own
+sweep pins it. A harness that does not pin it produces numbers that move run
+to run — an earlier pass in this round reported a faction split that did not
+survive re-measurement. Pin the seed, or do not quote the number.
+
+---
+
+## D1–D6, built (2026-09-13)
+
+The build order set out in the scope revision above, as it actually shipped.
+Each item names the commit's own claim and the number that backs it; the
+per-file headers carry the measured grids in full.
+
+**D1 — sites.** `core/site.gd`: a lair is 3–6 rooms run on ONE set of
+resources. No long rests inside, short rests as a room kind, merchant nodes
+excluded (nobody is selling potions in a goblin warren). The adventuring day,
+from `campaign.gd`'s existing 5-stage route engine rather than from a new
+dungeon system. Site defeat takes a third of the loose stash and leaves
+equipped gear alone, and the lair resets — the user's own call between the
+two options offered.
+
+**D2 — lairs become sites.** `_lair_action()` enters a site; withdrawing
+part-cleared is a real choice because `depth_cleared` persists. A lair left
+alone resolves without the party after `WorldLairs.WINDOW` (2880 minutes) —
+cleared by somebody else or abandoned — and says which, out loud.
+
+**D3 — travel.** `core/travel.gd`: standing orders (pace / scout / watch),
+six road events on a seeded table, and the auto-pause contract. Every event
+names the check and names the roll, and credits the standing order that put
+that character on the job — which is the only place the player ever sees an
+order they set hours ago pay off.
+
+**D4 — encounters you choose.** `core/approach.gd`: avoid / parley / ambush /
+engage, each priced on the card before it is pressed. Ambush hands the first
+round over on a failure, which is what stops it dominating engage. Parley's
+deny-list is its own (`MINDLESS`) rather than `WorldAI.CIVILIZED` — by that
+list a bandit is a monster, and a bandit wanting paid is the most obviously
+bribable thing on the map.
+
+**D5 — rumors.** `core/rumors.gd`: a town sells what its people know, a
+turned-in job earns a lead for nothing. The thing pinned hardest is that a
+lair heard about in a common room sets the SAME `discovered` flag a Survival
+check sets — one flag, one meaning, so nothing downstream learns there is a
+second kind of found.
+
+**D6 — regions and tiers.** `core/regions.gd`: four rings anchored on the
+human settlement and sized to the map's own extent. The rule is a clamp, not
+a replacement — inside its band a fight is still built for the party standing
+there, so every win rate in `scaler.gd` still means what it says; outside it,
+content stops following. Measured, 80 seeds a cell, fight seed pinned:
+
+| party | content | scale | win |
+|---|---|---|---|
+| lvl 3 | lvl 3 | x1.00 | 92.5% — in band, untouched |
+| lvl 10 | lvl 3 | x0.41 | 100% — the heartland is a memory |
+| lvl 3 | lvl 6 | x1.86 | 37.5% — one band out: "not yet" |
+| lvl 3 | lvl 10 | x2.45 | 27.5% — the deeps, at level 3 |
+
+That is the destination the delve cycle was missing: the frontier is visible
+from the start, genuinely lethal, and the thing that opens it is levels — not
+a key, a quest flag, or a wall. It is signposted four ways before anybody
+walks into it (HUD band label, the inn's leads, the lair button, and a
+one-time card when riding out above your level), because a level-banded map's
+one failure mode is a wall you only learn about by hitting it.
+
+### Still open
+
+- **The three-knob scaler retune** (CURVE + TIER + `estimate()`'s chunk
+  pricing), described in the body-count spike record above. D6 deliberately
+  did not touch it: the band clamp reads scaler's existing curve at a
+  different point rather than changing its shape, which is why no measured
+  number moved.
+- **Whether a site's interior is drawn** rather than being a node graph. D1
+  works either way and assumes the node graph, which is what exists.
+- **Whether withdrawing from a part-cleared site restocks it over time.**
+  Currently it does not; the D1 window expires the whole lair instead.

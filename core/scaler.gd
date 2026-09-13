@@ -17,6 +17,90 @@
 #   hard   TIER 1.32 -> avg 5.3 foes x0.95 : 150W/50L  (75.0%)  avg 10.5 rounds
 # Level-8 party (the presets levelled to 8, score 108.8), 60 seeds: 95 / 88 / 78%
 # (was 92 / 73 / 58 at T38's tiers).
+#
+# RE-MEASURED 2026-09-13 (D1), same harness, no knob touched since:
+#   easy   avg 4.4 foes x0.93 : 175W/25L (87.5%)  avg 9.3 rounds
+#   normal avg 4.7 foes x0.96 : 166W/34L (83.0%)  avg 9.5 rounds
+#   hard   avg 5.3 foes x0.95 : 138W/62L (69.0%)  avg 10.4 rounds
+#   level-8, 60 seeds: 98.3 / 93.3 / 81.7%   (bosses and the shrine are unmoved,
+#   matching this header's numbers exactly, so the boss path is not involved)
+# Still inside test_scaler's +/-10 BAND, so nothing fails — but easy is 7 points
+# down and hard 6, which is 2-3 standard errors at 200 seeds, and level-8 moved
+# the other way. Do not "fix" this by turning TIER until the cause below is
+# understood: hard draws the SAME roster shape as it did at T40 (5.3 foes,
+# x0.95) and still loses 6 more points, so the budget is not what changed.
+#
+# WHY — measured the same day, then RE-measured because the first pass was
+# unsound. The first split omitted `spec["seed"]` (encounter.gd: "omit for a
+# random fight"), so every fight was randomly seeded and the per-faction numbers
+# moved run to run; an earlier version of this header reported a bimodal
+# "eleven factions at 100%, two at 54%" split that does not exist. Pin the seed
+# the way _sweep() does, or do not quote the number.
+#
+# Easy tier, level-3 party, 450 seeds, fight seed PINNED, by the faction drawn:
+#   fey 53%  cultist 73%  dragon 73%  giant 77%  elemental 90%  undead 93%
+#   beast/bandit/orc/gnoll/goblinoid 97%  kobold/soldier/monstrosity/construct 100%
+#   overall 89.6%
+# So it is a gradient, not two clusters: one real outlier (fey), a 73-77% band
+# (cultist, dragon, giant), and a long tail that is nearly a walkover. What the
+# low end shares is not "casters" — giant and dragon are not — but *chunk*: a
+# budget met with a handful of big bodies.
+#
+# MEASURED, and it inverts the obvious fix. Asked whether a weaker/"younger"
+# variant of a monster would fix the low end (the same knob boss_for uses to
+# scale UP), 30 pinned seeds a cell:
+#   as shipped                    fey 53%  cultist 73%  giant 77%  dragon 73%
+#   same bodies at x0.6           fey 100% cultist  90%  giant 90%
+#   SAME SPEND, x0.6 bodies       fey  27% cultist  30%  giant 50%  dragon 30%
+# Scaling a monster down works mechanically — _scale() already handles it and
+# MULT_MIN is 0.6, so no new monster ids, data or models are needed. But spending
+# the saving on MORE bodies, which is what a budget-neutral swap means, makes
+# every one of these fights far worse. That is action economy: 5e punishes the
+# number of turns the other side gets much harder than it punishes any stat line.
+# (Scaling save_dc down with the mult — which _scale does NOT currently do —
+# added almost nothing: 90% vs 93% on cultist. It is a real gap in _scale, but
+# it is not what drives the outliers.)
+#
+# So the lever for the low end is FEWER bodies, not weaker ones, and the pricing
+# gap is that _score() is linear in count: the Nth body costs the same as the
+# first, when its real contribution is a whole extra turn every round. A
+# superlinear term in body count is the targeted fix. Note _build() currently
+# adds bodies first and only raises mult once they are placed, so the generator
+# is already biased toward the expensive direction.
+#
+# The relevant change is therefore a body-count term in _score()/estimate(), or
+# a cap on what the untethered wilderness draw may roll at low budgets — not
+# TIER, and not a tier of weaker monsters.
+#
+# SPIKE, 2026-09-13: the body-count term was built and measured, and then
+# REVERTED. Recorded here so the next attempt starts from the results rather
+# than from the idea. What was tried: _score() multiplied by a crowd factor —
+# first the 2014 DMG's own table (x1.5 at two monsters, x2 at three to six,
+# x2.5 at seven to ten), then pow(n, k) for k in {0.15, 0.25, 0.40}, then
+# pow(min(n, 5), 0.40) to stop the brake growing once rosters are already large.
+# TIER was re-calibrated by measurement for each, not guessed.
+#
+# It WORKS for the thing it was for. With the multiplier in and TIER
+# recalibrated, the level-3 faction spread tightened from 47 points to 30:
+# fey 53% -> 73%, cultist 73% -> 90%, and the "coin flip or walkover depending
+# on which family the seed drew" problem above is materially reduced.
+#
+# It breaks the level-8 curve, and that is why it is not here. Crowd pricing
+# forces every TIER up by roughly half, and at a level-8 budget the generator
+# answers a bigger budget with bigger monsters rather than more of them — which
+# is exactly where the chunk overpricing in the Known ceiling note below lives.
+# Measured outcomes at level 8: the DMG table flattened the tiers to 96.7/93.3/
+# 95.0; pow(n, 0.40) INVERTED them (hard easier than easy); pow(n, 0.25) ordered
+# them but flat (94/91/...); the capped version ordered them with real spread
+# but only above an effective TIER of ~2.4, while the level-3 targets want
+# ~1.05-2.03. No single TIER triple satisfies both ends.
+#
+# So the missing knob is CURVE, not TIER: what reconciles a level-3 and a
+# level-8 party is how fast the budget grows with party power, and that was left
+# at 0.90 throughout. The next attempt should calibrate CURVE and TIER together
+# against both parties, and should probably fix estimate()'s chunk pricing
+# first, since the crowd term and the chunk bias pull in opposite directions and
+# compound. This is a three-knob measured exercise, not a one-line addition.
 # TIER fell across the board (1.00/1.35/1.80 -> 0.96/1.10/1.32) and the three
 # tiers now sit much closer together: hard is where nearly all of the target rise
 # landed (+23.5 points), so the budget spread that used to separate the tiers
@@ -85,17 +169,28 @@ static var _fac_cache := {}   # faction -> [{id, score}], strongest first
 # `theme` is the board this fight is on (Encounter.THEMES); with none, `seed`
 # picks a faction. A quest bias keeps the hand-tuned MIX — the quest target has
 # to be in the roster, and a snik among sahuagin is not a coherent warband.
+#
+# T92 — `power_scale` multiplies the finished budget, for callers who know
+# something about the party that TIER cannot: core/world_threat.gd reads the
+# active party's wounds and asks for a thinner wilderness fight, because every
+# win rate in the header above was measured on a party at FULL resources and a
+# party limping home from a cleared site is not that party. It is deliberately
+# the LAST parameter with a 1.0 default, so it is a knob bolted onto the side of
+# the calibration rather than a change to it — at 1.0 the arithmetic below is
+# bit-for-bit what it was, and every existing call site keeps its measured
+# numbers. It multiplies the budget only; nothing about TIER, CURVE, REF_SCORE
+# or the two knobs in _build() moves.
 static func roster_for(party_characters: Array, difficulty: String, quest_bias: Dictionary = {},
-		theme: String = "", seed: int = 0) -> Dictionary:
-	var budget := _budget(party_characters, difficulty)
+		theme: String = "", seed: int = 0, power_scale: float = 1.0) -> Dictionary:
+	var budget := _budget(party_characters, difficulty, power_scale)
 	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() else _faction_order(theme, seed, budget))
 
-static func _budget(party_characters: Array, difficulty: String) -> float:
+static func _budget(party_characters: Array, difficulty: String, power_scale: float = 1.0) -> float:
 	var party: Array = []
 	for ch in party_characters:
 		party.append(Adapter.to_combatant(ch, "party", Vector2i.ZERO))
 	var team: float = maxf(1.0, Power.team_score(party))
-	return REF_SCORE * pow(team / REF_SCORE, CURVE) * float(TIER.get(difficulty, TIER["normal"]))
+	return REF_SCORE * pow(team / REF_SCORE, CURVE) * float(TIER.get(difficulty, TIER["normal"])) * power_scale
 
 # T18 — a boss fight: the same budget and the same MULT knob, aimed differently.
 # One named lead (campaign.gd's BOSS_POOL entry) is pumped until it alone is worth
@@ -130,8 +225,16 @@ static func _budget(party_characters: Array, difficulty: String) -> float:
 # don't chase it with this constant.
 const BOSS_LEAD_SHARE := 0.40   # how much of the fight the boss itself is
 const BOSS_MULT_MAX := 3.0      # +6 AC / +8 to-hit / +8 dmg / 3x HP at the ceiling
-static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0) -> Dictionary:
-	var budget := _budget(party_characters, String(boss.get("difficulty", "hard")))
+# D6 — `power_scale` here is the SAME knob roster_for has, and it exists for one
+# caller: core/regions.gd's band clamp, which has to be able to say "this lair is
+# in the deeps, build its climax for the deeps" when an underlevelled party walks
+# in. T92's rule still stands and is enforced at the call site rather than here —
+# core/world_threat.gd never reaches a boss, and core/site.gd passes maxf(1.0, x),
+# so a climax can be raised by the country it stands in and never lowered by
+# anything.
+static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
+		power_scale: float = 1.0) -> Dictionary:
+	var budget := _budget(party_characters, String(boss.get("difficulty", "hard")), power_scale)
 	var lead := String(boss.get("lead", ""))
 	var count: int = maxi(1, int(boss.get("lead_count", 1)))
 	var extras: Array = boss.get("lead_features", [])
