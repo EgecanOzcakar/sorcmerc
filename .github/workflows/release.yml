@@ -3,14 +3,17 @@ name: Build and publish to itch.io
 # Three channels, one workflow:
 #   - a `v*` tag        -> the Release export (real lifetime-XP gating)  -> "web"
 #   - a `test*` tag     -> the Playtest export (everything unlocked)     -> "web-playtest"
-#   - any push to master (no tag needed) -> the Release export           -> "web-dev"
-# Tags are the deliberate, versioned releases; master pushes are a fully
-# automatic "latest build" channel so there's always a live link to what's
-# on master, without it ever overwriting the real release/playtest channels.
+#   - master's "latest build" channel                                   -> "web-dev"
+# Tags are the deliberate, versioned releases and always publish. The
+# web-dev channel used to publish on every single push to master; that's
+# throttled to every 10th commit on master, or a manual run from the
+# Actions tab (Run workflow) — everything still gets built and tested on
+# every push, this only throttles the itch.io publish step itself.
 #
 #   git tag v0.1.0 && git push origin v0.1.0                     # -> web
 #   git tag test-2026-09-11 && git push origin test-2026-09-11   # -> web-playtest
-#   git push origin master                                       # -> web-dev, automatic
+#   git push origin master                                       # -> web-dev, every 10th commit
+#   gh workflow run release.yml                                  # -> web-dev, right now
 
 on:
   push:
@@ -19,6 +22,7 @@ on:
     tags:
       - "v*"
       - "test*"
+  workflow_dispatch: {}
 
 jobs:
   export-and-publish:
@@ -26,7 +30,11 @@ jobs:
     container:
       image: barichello/godot-ci:4.7.2
     steps:
+      # Full history, not the default shallow clone — the master-push
+      # throttle below counts commits off `git rev-list --count HEAD`.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Pick the channel + export preset for this push
         id: pick
@@ -36,16 +44,26 @@ jobs:
             echo "channel=web-playtest" >> "$GITHUB_OUTPUT"
             echo "outdir=build/web-playtest" >> "$GITHUB_OUTPUT"
             echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
           elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             echo "preset=Web (Release)" >> "$GITHUB_OUTPUT"
             echo "channel=web" >> "$GITHUB_OUTPUT"
             echo "outdir=build/web-release" >> "$GITHUB_OUTPUT"
             echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
           else
             echo "preset=Web (Release)" >> "$GITHUB_OUTPUT"
             echo "channel=web-dev" >> "$GITHUB_OUTPUT"
             echo "outdir=build/web-dev" >> "$GITHUB_OUTPUT"
             echo "version=dev-${GITHUB_RUN_NUMBER}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            # T-itch: publish on a manual run, or every 10th commit on master
+            # — not on every push, which is what this branch used to do.
+            commit_count=$(git rev-list --count HEAD)
+            if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" || $(( commit_count % 10 )) -eq 0 ]]; then
+              echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       # godot-ci's image bakes every export template into /root/.local/share/
@@ -54,20 +72,24 @@ jobs:
       # looks in the wrong place and reports "no export template found".
       # Known gotcha with this image: copy them into the remapped $HOME first.
       - name: Move export templates to the remapped $HOME
+        if: steps.pick.outputs.should_publish == 'true'
         run: |
           mkdir -p "$HOME/.local/share/godot/export_templates"
           cp -r /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/"
 
       - name: Import resources once
+        if: steps.pick.outputs.should_publish == 'true'
         run: godot --headless --path . --import || true
 
       - name: Export
+        if: steps.pick.outputs.should_publish == 'true'
         run: |
           mkdir -p "${{ steps.pick.outputs.outdir }}"
           godot --headless --path . --export-release "${{ steps.pick.outputs.preset }}" \
             "${{ steps.pick.outputs.outdir }}/index.html"
 
       - name: Push to itch.io
+        if: steps.pick.outputs.should_publish == 'true'
         uses: yeslayla/butler-publish-itchio-action@v1.2.0
         env:
           BUTLER_CREDENTIALS: ${{ secrets.BUTLER_API_KEY }}
