@@ -6,6 +6,7 @@
 #   WorldLairs.nearby_undiscovered(world, party.position, radius)  # -> Lair or null
 #   WorldLairs.search(lair, party)          # one Survival roll, may set discovered
 #   WorldLairs.loot(lair)                   # marks looted, returns the stash
+#   WorldLairs.sneak_past(lair, party)      # T9x: Animal Handling — loot without a fight
 #
 # The attack itself isn't here: it's the same _launch_combat(World.RoamingParty)
 # path a hostile settlement's guard fight already uses (scenes/world/world.gd),
@@ -70,3 +71,34 @@ static func loot(lair) -> Dictionary:
 	var Scaler = load("res://core/scaler.gd")
 	var idx: int = maxi(0, Scaler.FACTIONS.find(lair.faction))
 	return {"gold": LOOT_BASE + idx * LOOT_PER_FACTION_INDEX}
+
+# --- T9x: a quieter approach ------------------------------------------------
+const SNEAK_SKILL := "animalhandling"
+const SNEAK_DC := 14
+
+# An alternative to the straight fight, offered alongside "Attack" once a
+# lair is discovered: calm whatever's guarding it instead of fighting
+# through. A pass loots the lair clean, same payout as winning the fight,
+# with no combat at all; a fail just means the guardians didn't buy it —
+# the caller falls through to the normal attack. One attempt per lair — like
+# search(), no cooldown, but here failing has a real cost (a fight anyway)
+# so there's no spam to guard against.
+static func sneak_past(lair, party, rng = null) -> Dictionary:
+	if not lair.discovered or lair.looted:
+		return {}
+	var c = Campaign.new(party)
+	var char_id := c.best_at(SNEAK_SKILL)
+	var ch = party.get_member(char_id) if char_id != "" else null
+	if ch == null:
+		return {}
+	if rng == null:
+		rng = RNG.new(maxi(1, absi(hash("sneak|%s" % lair.id))))
+	var bonus: int = c.skill_bonus(char_id, SNEAK_SKILL)
+	var nat: int = int(Dice.d20(rng)["nat"])
+	var ok: bool = nat + bonus >= SNEAK_DC
+	var line := ("%s calms them down (Animal Handling %d+%d vs DC %d) — %s is looted clean, no fight needed."
+		% [ch.cname, nat, bonus, SNEAK_DC, lair.sname]) if ok else (
+		"%s can't settle them (Animal Handling %d+%d vs DC %d) — they attack."
+		% [ch.cname, nat, bonus, SNEAK_DC])
+	return {"ok": ok, "char_id": char_id, "cname": ch.cname, "nat": nat, "bonus": bonus,
+		"dc": SNEAK_DC, "text": line}

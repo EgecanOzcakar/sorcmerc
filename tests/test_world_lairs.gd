@@ -112,5 +112,27 @@ func _init() -> void:
 	Quest.record_settlement_raided(party, "ashfell")
 	check(rs["state"] == "complete", "raiding the named settlement completes raid_settlement")
 
+	# --- T9x: sneak_past — a quiet alternative, both outcomes reachable ---
+	var l4 := World.Lair.new("test-warren-4", Vector2.ZERO, "giant")
+	check(WorldLairs.sneak_past(l4, party).is_empty(), "can't sneak into an undiscovered lair")
+	l4.discovered = true
+	var saw_sneak_ok := false
+	var saw_sneak_fail := false
+	for seed_v in range(40):
+		l4.looted = false
+		var roll: Dictionary = WorldLairs.sneak_past(l4, party, RNG.new(seed_v + 1))
+		check(not roll.is_empty(), "sneak_past() rolls for a party that has members")
+		check(String(roll["text"]) != "", "the attempt is narrated")
+		if roll.get("ok", false):
+			saw_sneak_ok = true
+		else:
+			saw_sneak_fail = true
+			check(not l4.looted, "a failed sneak doesn't loot the lair itself")
+	check(saw_sneak_ok and saw_sneak_fail, "both outcomes reachable (got ok=%s fail=%s)" % [saw_sneak_ok, saw_sneak_fail])
+	var l5 := World.Lair.new("test-warren-5", Vector2.ZERO, "giant")
+	l5.discovered = true
+	l5.looted = true
+	check(WorldLairs.sneak_past(l5, party).is_empty(), "an already-looted lair has nothing left to sneak into")
+
 	print("test_world_lairs: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

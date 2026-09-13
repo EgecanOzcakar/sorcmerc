@@ -32,6 +32,7 @@ func _init() -> void:
 	test_opinion_moves_prices_and_can_refuse_trade()
 	test_rest_and_quests()
 	test_quest_board_and_chains()
+	test_persuade_and_investigate()
 	print("test_settlement_visit: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -266,3 +267,56 @@ func test_opinion_moves_prices_and_can_refuse_trade() -> void:
 	check(after["markup"] > Visit.market(s, after["gap"], false)["markup"],
 		"robbing them shows up on the next visit's prices")
 	FactionOpinion.reset()
+
+# T9x: talking a refused market into trading anyway, and picking over a
+# recent battlefield — both one-roll, both-outcomes-reachable checks, same
+# shape as steal().
+func test_persuade_and_investigate() -> void:
+	var w := _world()
+	var s = w.settlements[0]
+	var party := _party()
+
+	var open_market := Visit.market(s, 120.0, false)
+	check(Visit.persuade(s, open_market, party).is_empty(), "nothing to persuade when the market isn't refusing")
+
+	var refused := Visit.market(s, 120.0, false, FactionOpinion.REFUSE_TRADE - 1.0)
+	var saw_ok := false
+	var saw_fail := false
+	for seed_v in range(40):
+		var roll: Dictionary = Visit.persuade(s, refused, party, RNG.new(seed_v + 1))
+		check(not roll.is_empty(), "persuade() rolls for a party that has members")
+		check(String(roll["text"]) != "", "the attempt is narrated")
+		if roll["ok"]:
+			saw_ok = true
+		else:
+			saw_fail = true
+	check(saw_ok and saw_fail, "both outcomes reachable across seeds (got ok=%s fail=%s)" % [saw_ok, saw_fail])
+
+	var opened := Visit.persuade_into_trading(s, refused)
+	check(not opened["refused"] and not opened["stock"].is_empty(), "a persuaded market actually opens back up")
+	check(opened["opinion"] == refused["opinion"], "the faction's real opinion is untouched by talking your way in")
+
+	# A much worse opinion is a harder sell.
+	var very_refused := Visit.market(s, 120.0, false, FactionOpinion.REFUSE_TRADE - 50.0)
+	var r1 := Visit.persuade(s, refused, party, RNG.new(1))
+	var r2 := Visit.persuade(s, very_refused, party, RNG.new(1))
+	check(r2["dc"] > r1["dc"], "a settlement that loathes you is a harder sell than one that merely refuses")
+
+	# --- investigate_battle ---
+	var no_battle := Visit.market(s, 120.0, false)
+	check(Visit.investigate_battle(s, no_battle, party).is_empty(), "nothing to investigate without a recent battle")
+
+	var battle := Visit.market(s, 120.0, true)
+	var saw_bok := false
+	var saw_bfail := false
+	for seed_v in range(40):
+		var gold0: int = party.gold
+		var roll: Dictionary = Visit.investigate_battle(s, battle, party, RNG.new(seed_v + 1))
+		check(not roll.is_empty(), "investigate_battle() rolls for a party that has members")
+		if roll["ok"]:
+			saw_bok = true
+			check(party.gold == gold0 + roll["gold"], "a success actually pays the gold it reports")
+		else:
+			saw_bfail = true
+			check(party.gold == gold0, "a failure pays nothing")
+	check(saw_bok and saw_bfail, "both outcomes reachable across seeds (got ok=%s fail=%s)" % [saw_bok, saw_bfail])

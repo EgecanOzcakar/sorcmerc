@@ -27,6 +27,8 @@ const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
+const Trance = preload("res://core/trance.gd")
+const WorldForage = preload("res://core/world_forage.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
 const Sound = preload("res://core/audio.gd")
@@ -172,11 +174,16 @@ var _left: Object = null         # the settlement just left; no re-entry until o
 var _party_overlay: Control = null   # T3's party/profile/inventory screen, full-screen
 var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.active/describe
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
+var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _camp_msg: Label                 # T9x: last short-rest/camp outcome, same "persists" contract as _lair_msg
 var _camp_btn: Button                # T9x: "Make camp" — visible only while the party owns a camp kit
+# T9x: last WorldForage.check() cadence stamp — scene-local, not saved. A
+# reload just resets the four-hour clock; harmless, not worth a save-format
+# field for an ambient bonus this small.
+var _last_forage_at: float = 0.0
 var _settlements3d
 var _lairs3d
 var _party3d
@@ -218,6 +225,7 @@ func _ready() -> void:
 	_party3d.world_map = self
 	add_child(_party3d)
 	_party3d.reset(world)
+	_last_forage_at = world.clock.elapsed   # T9x: start the cadence from load time, not zero
 	set_process(true)
 	_build_hud()
 
@@ -299,6 +307,7 @@ func _process(delta: float) -> void:
 			Visit.mark_battle(world, r["loser"].position, world.clock.elapsed)
 	_check_visit()
 	_check_lairs()
+	_check_forage()
 	if _camp_btn != null:
 		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0
 	if _clock_lbl != null:
@@ -340,6 +349,11 @@ func _build_hud() -> void:
 	_lair_btn.visible = false
 	_lair_btn.pressed.connect(_lair_action)
 	bar.add_child(_lair_btn)
+	_lair_sneak_btn = Button.new()
+	_lair_sneak_btn.text = "Slip past the guardians (Animal Handling)"
+	_lair_sneak_btn.visible = false
+	_lair_sneak_btn.pressed.connect(_lair_sneak_action)
+	bar.add_child(_lair_sneak_btn)
 	# T9x: short rest works anywhere (when safe) — always visible, _short_rest()
 	# itself says why not rather than the button toggling in and out.
 	var shortrest_btn := Button.new()
@@ -687,10 +701,12 @@ func _check_visit() -> void:
 func _check_lairs() -> void:
 	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
 		_lair_btn.visible = false
+		_lair_sneak_btn.visible = false
 		return
 	var p := world.player()
 	if p == null:
 		_lair_btn.visible = false
+		_lair_sneak_btn.visible = false
 		return
 	var undiscovered = WorldLairs.nearby_undiscovered(world, p.position)
 	var target = undiscovered
@@ -702,10 +718,12 @@ func _check_lairs() -> void:
 	_lair_target = target
 	if target == null:
 		_lair_btn.visible = false
+		_lair_sneak_btn.visible = false
 		return
 	_lair_btn.visible = true
 	_lair_btn.text = ("Search for a hidden lair (Survival)" if not target.discovered
 		else "Attack %s" % target.sname)
+	_lair_sneak_btn.visible = target.discovered
 
 func _lair_action() -> void:
 	var l: World.Lair = _lair_target
@@ -729,6 +747,25 @@ func _lair_action() -> void:
 		Quest.record_lair_cleared(party, l.id)
 		_lair_msg.text = "%s is cleared out — +%d gold from its stash." % [l.sname, int(loot.get("gold", 0))]
 
+# T9x: the quiet alternative to _lair_action()'s attack — a pass loots the
+# lair with no fight; a fail falls straight through to the normal attack
+# (the guardians are alerted either way now, so there's no third attempt).
+func _lair_sneak_action() -> void:
+	var l: World.Lair = _lair_target
+	if l == null or _combat != null or not l.discovered or l.looted:
+		return
+	var roll := WorldLairs.sneak_past(l, party)
+	if roll.is_empty():
+		return
+	if roll["ok"]:
+		var loot: Dictionary = WorldLairs.loot(l)
+		party.add_gold(int(loot.get("gold", 0)))
+		Quest.record_lair_cleared(party, l.id)
+		_lair_msg.text = "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))]
+	else:
+		_lair_msg.text = String(roll["text"])
+		await _lair_action()
+
 # T91: split out of _check_visit so it can await the fight — the stand-in id
 # ("%s-guard") never matches a hunt_party quest's target, so raid_settlement
 # is recorded here with the settlement's own id rather than in _launch_combat.
@@ -736,6 +773,23 @@ func _settlement_guard_fight(s) -> void:
 	var result: Dictionary = await _launch_combat(World.RoamingParty.new("%s-guard" % s.id, s.position, s.faction))
 	if String(result.get("outcome", "")) == "Victory":
 		Quest.record_settlement_raided(party, s.id)
+
+# T9x: foraging — an ambient reward for time spent traveling, not a button.
+# Rolls once every WorldForage.INTERVAL world-minutes actually spent out on
+# the map; a hit narrates the skill and roll like every other overworld
+# check, a miss says nothing (no point spamming "found nothing" every four
+# hours of a long march).
+func _check_forage() -> void:
+	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+		return
+	if world.clock.elapsed - _last_forage_at < WorldForage.INTERVAL:
+		return
+	_last_forage_at = world.clock.elapsed
+	var roll := WorldForage.check(party, RNG.new(maxi(1, absi(hash("forage|%d" % int(world.clock.elapsed))))))
+	if roll.get("ok", false):
+		party.add_gold(int(roll["gold"]))
+		_camp_msg.text = "%s forages along the way (%s %d+%d vs DC %d) — +%d gold." % [
+			roll["cname"], String(roll["skill"]).capitalize(), roll["nat"], roll["bonus"], roll["dc"], int(roll["gold"])]
 
 func _open_visit(s) -> void:
 	world.clock.pause()
@@ -789,6 +843,36 @@ func _steal() -> void:
 	_build_visit_panel()
 	_say(String(r.get("text", "Nobody here has the hands for it.")))
 
+# T9x: one attempt per visit, same shape as _steal(). Only shown when the
+# market actually refused to trade (see _build_visit_panel).
+func _persuade() -> void:
+	if _visit.get("persuaded", false):
+		_say("They've made up their mind for today.")
+		return
+	var r: Dictionary = Visit.persuade(_visit["settlement"], _visit, party)
+	_visit["persuaded"] = true
+	if bool(r.get("ok", false)):
+		var stolen: bool = _visit.get("stolen", false)
+		var persuaded: bool = true
+		_visit = Visit.persuade_into_trading(_visit["settlement"], _visit)
+		_visit["stolen"] = stolen
+		_visit["persuaded"] = persuaded
+	_build_visit_panel()
+	_say(String(r.get("text", "Nobody here will hear you out.")))
+
+# T9x: one attempt per visit. Only shown when a fight resolved near this
+# settlement recently (market()'s own `battle` flag).
+func _investigate() -> void:
+	if _visit.get("investigated", false):
+		_say("The battlefield's already been picked over.")
+		return
+	var r: Dictionary = Visit.investigate_battle(_visit["settlement"], _visit, party)
+	_visit["investigated"] = true
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("pickup")
+	_build_visit_panel()
+	_say(String(r.get("text", "There's nobody here who'd know where to look.")))
+
 # O9 item 2: the inn. Time is the cost — see SettlementVisit.rest — and the extra
 # hours restock the shelf, so the market is re-read afterwards.
 # T9x: gated to once per in-game day (Visit.can_long_rest) — RAW's own rule,
@@ -805,10 +889,28 @@ func _rest() -> void:
 	var stolen: bool = _visit.get("stolen", false)
 	Visit.rest(party, world, "long-rest")
 	Sound.play_sfx("rest")
+	var trance: Dictionary = Trance.apply_rest_bonus(party, world, s.position)
 	_visit = Visit.visit(s, world)
 	_visit["stolen"] = stolen
 	_build_visit_panel()
-	_say("The party takes a long rest (%d gp for the room). Eight hours pass and the stalls fill up again." % cost)
+	_say("The party takes a long rest (%d gp for the room). Eight hours pass and the stalls fill up again.%s" % [
+		cost, _trance_note(trance)])
+
+# T9x: names the check and its result explicitly, same convention every
+# other overworld roll in this file uses — never just "something happened".
+func _trance_note(trance: Dictionary) -> String:
+	if trance.is_empty():
+		return ""
+	var note := "  Someone didn't need the sleep: the party gets a short rest on top, and the ground nearby is scouted."
+	var id: Dictionary = trance.get("identify", {})
+	if not id.is_empty():
+		if id["ok"]:
+			note += "  They also puzzle out the %s while they're at it (Arcana %d+%d vs DC %d)." % [
+				Campaign.item_name(id["item_id"]), id["nat"], id["bonus"], id["dc"]]
+		else:
+			note += "  They also take a crack at identifying an item, no luck (Arcana %d+%d vs DC %d)." % [
+				id["nat"], id["bonus"], id["dc"]]
+	return note
 
 # T9x: a short rest works anywhere on the map, not just a settlement — but
 # only when it's actually safe: mid-fight, paused, or a hostile band close
@@ -857,15 +959,23 @@ func _make_camp() -> void:
 	if not WorldCamp.ambush_roll(rng):
 		Visit.rest(party, world, "long-rest")
 		Sound.play_sfx("rest")
-		_camp_msg.text = "The camp holds through the night. Eight hours pass."
+		var trance: Dictionary = Trance.apply_rest_bonus(party, world, p.position)
+		_camp_msg.text = "The camp holds through the night. Eight hours pass.%s" % _trance_note(trance)
 		return
 	var watch: Dictionary = WorldCamp.watch_check(party, rng)
 	var foe := World.RoamingParty.new("camp-ambush-%d" % int(world.clock.elapsed), p.position, WorldCamp.AMBUSH_FACTION)
+	# T9x: name the check and the roll, not just the outcome — same
+	# "Skill nat+bonus vs DC" shape every other overworld check in this file uses.
+	var skill_name: String = String(watch.get("skill", "")).capitalize()
 	if watch["ok"]:
-		_camp_msg.text = "Someone hears them coming — the party gets the drop first."
+		_camp_msg.text = "%s hears them coming (%s %d+%d vs DC %d) — the party gets the drop first." % [
+			watch.get("cname", "Someone"), skill_name, watch["nat"], watch["bonus"], watch["dc"]]
 		await _launch_combat(foe, true, false)
 	else:
-		_camp_msg.text = "The camp is jumped in the night!"
+		var who: String = watch.get("char_id", "")
+		_camp_msg.text = ("%s doesn't catch it in time (%s %d+%d vs DC %d) — the camp is jumped in the night!" % [
+			watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"]]) if who != "" \
+			else "Nobody's keeping watch — the camp is jumped in the night!"
 		await _launch_combat(foe, false, true)
 
 # O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
@@ -974,6 +1084,22 @@ func _build_visit_panel() -> void:
 	steal_btn.disabled = spent
 	steal_btn.pressed.connect(_steal)
 	bar.add_child(steal_btn)
+	# T9x: only shown when there's something to persuade/investigate — a
+	# refused market, or a fight resolved nearby recently.
+	if _visit.get("refused", false):
+		var persuade_btn := Button.new()
+		var persuaded: bool = _visit.get("persuaded", false)
+		persuade_btn.text = "Tried persuasion" if persuaded else "Persuade them to trade"
+		persuade_btn.disabled = persuaded
+		persuade_btn.pressed.connect(_persuade)
+		bar.add_child(persuade_btn)
+	if _visit.get("battle", false):
+		var investigate_btn := Button.new()
+		var investigated: bool = _visit.get("investigated", false)
+		investigate_btn.text = "Investigated the battlefield" if investigated else "Investigate the battlefield"
+		investigate_btn.disabled = investigated
+		investigate_btn.pressed.connect(_investigate)
+		bar.add_child(investigate_btn)
 	var leave := Button.new()
 	leave.text = "Leave"
 	leave.pressed.connect(_close_visit)

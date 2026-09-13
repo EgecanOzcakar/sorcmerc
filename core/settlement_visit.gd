@@ -53,6 +53,77 @@ const INN_COST := {"city": 40, "town": 20, "camp": 10}
 static func inn_cost(s) -> int:
 	return int(INN_COST.get(s.kind, INN_COST["town"]))
 
+# --- T9x: persuading a hostile market into trading anyway -------------------
+const PERSUADE_SKILL := "persuasion"
+const PERSUADE_DC := 15
+
+# Only meaningful once market() has already refused (opinion <= REFUSE_TRADE)
+# — one attempt per visit, same shape as steal(). The DC climbs with how far
+# below the refusal line the faction actually sits: a settlement that merely
+# refuses is one thing, one that loathes you is a harder sell.
+static func persuade(s, m: Dictionary, party, rng = null) -> Dictionary:
+	if not m.get("refused", false):
+		return {}
+	var c = Campaign.new(party)
+	var char_id: String = c.best_at(PERSUADE_SKILL)
+	var ch = party.get_member(char_id) if char_id != "" else null
+	if ch == null:
+		return {}
+	var dc: int = PERSUADE_DC + maxi(0, int((FactionOpinion.REFUSE_TRADE - float(m.get("opinion", 0.0))) / 10.0))
+	if rng == null:
+		rng = RNG.new(maxi(1, absi(hash("persuade|%s|%d" % [s.id, int(s.last_visited)]))))
+	var bonus: int = c.skill_bonus(char_id, PERSUADE_SKILL)
+	var nat: int = int(Dice.d20(rng)["nat"])
+	var ok: bool = nat + bonus >= dc
+	var line := ("%s talks them into it, grudgingly (Persuasion %d+%d vs DC %d)."
+		% [ch.cname, nat, bonus, dc]) if ok else (
+		"%s can't budge them (Persuasion %d+%d vs DC %d)." % [ch.cname, nat, bonus, dc])
+	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": dc, "char_id": char_id, "text": line}
+
+# A refused market opened up for this visit only — same markup math as any
+# other trade at this opinion, just with the outright refusal lifted (still
+# priced like the worst possible customer, not a free pass).
+static func persuade_into_trading(s, m: Dictionary) -> Dictionary:
+	var opened := market(s, float(m.get("gap", -1.0)), bool(m.get("battle", false)),
+		FactionOpinion.REFUSE_TRADE + 1.0)
+	opened["opinion"] = m.get("opinion", 0.0)   # the faction's real opinion hasn't moved
+	opened["settlement"] = s
+	opened["services"] = services(s)
+	return opened
+
+# --- T9x: investigating a recent battle site --------------------------------
+const INVESTIGATE_SKILL := "investigation"
+const INVESTIGATE_DC := 13
+const INVESTIGATE_GOLD_MIN := 20
+const INVESTIGATE_GOLD_MAX := 80
+
+# Only meaningful when market()'s own `battle` flag is set (O5's off-screen
+# fights mark every nearby settlement — battle_recent()). One attempt per
+# visit, same shape as steal()/persuade().
+static func investigate_battle(s, m: Dictionary, party, rng = null) -> Dictionary:
+	if not m.get("battle", false):
+		return {}
+	var c = Campaign.new(party)
+	var char_id: String = c.best_at(INVESTIGATE_SKILL)
+	var ch = party.get_member(char_id) if char_id != "" else null
+	if ch == null:
+		return {}
+	if rng == null:
+		rng = RNG.new(maxi(1, absi(hash("investigate|%s|%d" % [s.id, int(s.battle_at)]))))
+	var bonus: int = c.skill_bonus(char_id, INVESTIGATE_SKILL)
+	var nat: int = int(Dice.d20(rng)["nat"])
+	var ok: bool = nat + bonus >= INVESTIGATE_DC
+	var gold := 0
+	if ok:
+		gold = INVESTIGATE_GOLD_MIN + rng.roll_die(INVESTIGATE_GOLD_MAX - INVESTIGATE_GOLD_MIN + 1) - 1
+		party.add_gold(gold)
+	var line := ("%s picks the battlefield clean (Investigation %d+%d vs DC %d) — +%d gold."
+		% [ch.cname, nat, bonus, INVESTIGATE_DC, gold]) if ok else (
+		"%s finds nothing worth taking (Investigation %d+%d vs DC %d)."
+		% [ch.cname, nat, bonus, INVESTIGATE_DC])
+	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": INVESTIGATE_DC, "gold": gold,
+		"char_id": char_id, "text": line}
+
 # --- stealing (T30's opportunity_check shape) ------------------------------
 const STEAL_SKILL := "sleightofhand"
 const STEAL_DC := 15

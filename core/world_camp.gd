@@ -13,6 +13,7 @@ extends RefCounted
 const Campaign = preload("res://core/campaign.gd")
 const Dice = preload("res://core/dice.gd")
 const RNG = preload("res://core/rng.gd")
+const Trance = preload("res://core/trance.gd")
 
 const CAMP_KIT_ITEM := "camp-kit"
 const CAMP_KIT_NAME := "Camp Kit"
@@ -54,11 +55,15 @@ static func watch_check(party, rng = null) -> Dictionary:
 			best_bonus = b
 			best_id = id
 			best_skill = skill
+	# T9x: a Trance character doesn't need to sleep — sharper eyes on watch.
+	if best_id != "" and Trance.has_trance(party):
+		best_bonus += Trance.WATCH_BONUS
 	if rng == null:
 		rng = RNG.new()
 	var nat: int = int(Dice.d20(rng)["nat"])
+	var ch = party.get_member(best_id)
 	return {
 		"ok": best_id != "" and nat + best_bonus >= AMBUSH_DC,
-		"char_id": best_id, "skill": best_skill,
+		"char_id": best_id, "cname": ch.cname if ch != null else "Someone", "skill": best_skill,
 		"nat": nat, "bonus": best_bonus, "dc": AMBUSH_DC,
 	}
