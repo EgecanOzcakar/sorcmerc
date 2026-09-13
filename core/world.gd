@@ -94,6 +94,13 @@ class Lair extends RefCounted:
 	# (core/site.gd). A lair is no longer one fight, so backing out part-way has
 	# to be remembered — otherwise "withdraw" silently means "start over".
 	var depth_cleared := 0
+	# D1: world-clock stamp of the first time the party went in, < 0 = never.
+	# Kicking the door starts a clock: see core/world_lairs.gd's WINDOW — a
+	# disturbed lair does not sit there waiting forever for you to come back.
+	var entered_at := -1.0
+	# How it ended if it ended without the party: "cleared" (somebody else got
+	# there) or "abandoned" (they packed up and left). "" while it is still live.
+	var resolved_as := ""
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String, name_v: String = "") -> void:
 		id = id_v

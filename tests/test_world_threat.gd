@@ -48,6 +48,7 @@ func _init() -> void:
 	test_fresh_party_is_untouched()
 	test_baseline_is_easy()
 	test_hurt_party_gets_a_thinner_roster()
+	test_flat_wilderness_discount()
 	test_floor_holds()
 	test_monotone_in_health()
 	test_never_scales_up()
@@ -60,15 +61,22 @@ func _init() -> void:
 func test_fresh_party_is_untouched() -> void:
 	var t := WorldThreat.assess(_party())
 	check(t["hp_frac"] == 1.0, "an unwounded party reads as full HP (got %.3f)" % float(t["hp_frac"]))
-	check(t["power_scale"] == 1.0, "and gets scale exactly 1.0 (got %.6f)" % float(t["power_scale"]))
+	check(t["power_scale"] == WorldThreat.SCALE_MAX,
+		"and gets the kindest scale there is, no condition discount (got %.6f)" % float(t["power_scale"]))
 	check(int(t["counted"]) == 3, "the preset party is pooled from its 3 active members")
-	# and the scale being 1.0 really is a no-op through the scaler
+	# A fresh party is no longer a no-op through the scaler, and that is
+	# deliberate: WILDERNESS_SCALE is a flat discount the road gets whatever
+	# shape the party is in. What must still hold is that the knob itself is an
+	# identity at 1.0, so nothing that does not opt in is affected.
 	var chars := Presets.party()
 	# str(), not ==: two Dictionaries built separately are not the same object,
-	# and what matters here is that the contents came out identical.
-	check(str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5, t["power_scale"]))
+	# and what matters is that the contents came out identical.
+	check(str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5, 1.0))
 		== str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5)),
-		"scale 1.0 produces the identical spec to not passing one at all")
+		"the scale knob is still an exact identity at 1.0")
+	check(str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5, t["power_scale"]))
+		!= str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5)),
+		"...and the flat wilderness discount really does change the roster")
 
 func test_baseline_is_easy() -> void:
 	check(WorldThreat.BASELINE == "easy", "the wilderness baseline is easy, not normal — sites are the hard content")
@@ -82,11 +90,37 @@ func test_hurt_party_gets_a_thinner_roster() -> void:
 	var fresh := WorldThreat.assess(_party())
 	var beaten := WorldThreat.assess(_hurt(_party(), 0.3))
 	check(float(beaten["hp_frac"]) < 0.4, "a party at 30%% HP reads as hurt (%.3f)" % float(beaten["hp_frac"]))
-	check(float(beaten["power_scale"]) < 1.0, "and asks for a smaller budget (%.3f)" % float(beaten["power_scale"]))
-	var a := _spec_power(Scaler.roster_for(chars, fresh["difficulty"], {}, "", 3, fresh["power_scale"]))
-	var b := _spec_power(Scaler.roster_for(chars, beaten["difficulty"], {}, "", 3, beaten["power_scale"]))
-	check(b < a * 0.9, "the beaten party's roster is materially weaker (%.1f vs %.1f)" % [b, a])
+	check(float(beaten["power_scale"]) < WorldThreat.SCALE_MAX,
+		"and asks for a smaller budget than an unhurt party (%.3f)" % float(beaten["power_scale"]))
+	# Pooled over seeds, not one: scaler.gd's own TUNING header calls the mult
+	# knob lumpy, and a single seed really can land on the same roster either
+	# side of a budget cut this size. What has to be true is that the beaten
+	# party faces less across the distribution it will actually meet.
+	var a := 0.0
+	var b := 0.0
+	var thinner := 0
+	for seed_v in range(1, 41):
+		var pa := _spec_power(Scaler.roster_for(chars, fresh["difficulty"], {}, "", seed_v, fresh["power_scale"]))
+		var pb := _spec_power(Scaler.roster_for(chars, beaten["difficulty"], {}, "", seed_v, beaten["power_scale"]))
+		a += pa
+		b += pb
+		if pb < pa:
+			thinner += 1
+		check(pb <= pa, "seed %d: a beaten party never faces MORE than a fresh one" % seed_v)
+	check(b < a, "pooled over 40 seeds the beaten party's rosters are weaker (%.1f vs %.1f)" % [b, a])
+	check(thinner >= 20, "and it bites on most of them, not a lucky few (%d/40)" % thinner)
 	check(b > 0.0, "but it is still a fight")
+
+# The user's own ask, and the half of the scale that is not about condition:
+# open-world bands are flatly some percent easier than the tier alone. Pinned
+# here because it is a design decision, not an implementation detail.
+func test_flat_wilderness_discount() -> void:
+	check(WorldThreat.SCALE_MAX < 1.0, "a fresh party still gets a kinder road than the bare tier")
+	check(WorldThreat.SCALE_MAX == WorldThreat.WILDERNESS_SCALE, "...by exactly the flat discount")
+	var chars := Presets.party()
+	var bare := _spec_power(Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", 7))
+	var road := _spec_power(Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", 7, WorldThreat.SCALE_MAX))
+	check(road < bare, "and it really reaches the roster (%.1f vs %.1f)" % [road, bare])
 
 func test_floor_holds() -> void:
 	check(WorldThreat.power_scale(0.0) == WorldThreat.SCALE_FLOOR, "zero HP bottoms out at the floor exactly")
@@ -112,8 +146,10 @@ func test_monotone_in_health() -> void:
 		check(s >= prev, "scale never falls as the party gets healthier (%.3f -> %.3f)" % [prev, s])
 		prev = s
 	check(WorldThreat.power_scale(1.0) > WorldThreat.power_scale(0.0), "and it really does move across the range")
-	check(WorldThreat.power_scale(WorldThreat.HURT_AT) == 1.0, "at the hurt threshold it is already back to 1.0")
-	check(WorldThreat.power_scale(WorldThreat.HURT_AT - 0.01) < 1.0, "just under it, the discount has started")
+	check(WorldThreat.power_scale(WorldThreat.HURT_AT) == WorldThreat.SCALE_MAX,
+		"at the hurt threshold the condition discount is already gone")
+	check(WorldThreat.power_scale(WorldThreat.HURT_AT - 0.01) < WorldThreat.SCALE_MAX,
+		"just under it, the condition discount has started")
 	# monotone through real parties too, not just the bare curve
 	var prev_p := -1.0
 	for i in range(0, 11):
@@ -139,7 +175,7 @@ func test_short_handed_is_not_hurt() -> void:
 	fallen.hp_current = 0
 	var t := WorldThreat.assess(p)
 	check(float(t["hp_frac"]) == 1.0, "a dead member does not drag the pooled fraction (%.3f)" % float(t["hp_frac"]))
-	check(float(t["power_scale"]) == 1.0, "so two healthy survivors still get the full baseline")
+	check(float(t["power_scale"]) == WorldThreat.SCALE_MAX, "so two healthy survivors still read as unhurt")
 	check(int(t["counted"]) == 2, "and the count says who was actually read")
 
 	var p2 := _party()
@@ -152,5 +188,6 @@ func test_short_handed_is_not_hurt() -> void:
 
 	# The degenerate end: nobody readable at all is not a discount.
 	var empty := Party.new()
-	check(float(WorldThreat.assess(empty)["power_scale"]) == 1.0, "an empty party gets the untouched baseline")
+	check(float(WorldThreat.assess(empty)["power_scale"]) == WorldThreat.SCALE_MAX,
+		"an empty party reads as unhurt rather than as dying")
 	check(int(WorldThreat.assess(empty)["counted"]) == 0, "and reports that it read nobody")

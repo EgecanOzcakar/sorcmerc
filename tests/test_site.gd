@@ -241,5 +241,57 @@ func _init() -> void:
 		sf.enter(0)
 		check(not sf.combat_spec().get("monsters", []).is_empty(), "%s lairs have a boss with a roster" % f)
 
+	# --- D1: a disturbed lair does not wait forever ------------------------
+	# Locked with the user: enter a lair and you have a day or two to finish it.
+	# Walk away longer and it resolves without you — somebody else clears it, or
+	# whatever lived there moves on. This is what stops "back out, heal up, come
+	# back at full strength" from being free and strictly correct.
+	const Lairs = preload("res://core/world_lairs.gd")
+	var w7 := _world()
+	var lair8 = _lair()
+	w7.add_lair(lair8)
+	check(Lairs.expire(w7, w7.clock.elapsed).is_empty(), "an undisturbed lair never expires")
+	w7.clock.elapsed += Lairs.WINDOW * 3.0
+	check(Lairs.expire(w7, w7.clock.elapsed).is_empty(),
+		"...however long you leave it, if you never went in")
+
+	Lairs.mark_entered(lair8, w7.clock.elapsed)
+	var stamped: float = lair8.entered_at
+	check(stamped >= 0.0, "going in starts the clock")
+	w7.clock.elapsed += 10.0
+	Lairs.mark_entered(lair8, w7.clock.elapsed)
+	check(is_equal_approx(lair8.entered_at, stamped), "...and going back in does not restart it")
+	check(Lairs.window_left(lair8, w7.clock.elapsed) > 0.0, "there is time left on it")
+	check(Lairs.expire(w7, w7.clock.elapsed).is_empty(), "a lair inside its window is still there")
+
+	w7.clock.elapsed += Lairs.WINDOW
+	var gone: Array = Lairs.expire(w7, w7.clock.elapsed)
+	check(gone.size() == 1 and gone[0] == lair8, "past the window it resolves without the party")
+	check(lair8.looted, "...and is spent")
+	check(lair8.resolved_as in Lairs.OUTCOMES, "...one way or the other (%s)" % lair8.resolved_as)
+	check(Lairs.resolution_text(lair8) != "", "...and it can say which, out loud")
+	check(is_zero_approx(Lairs.window_left(lair8, w7.clock.elapsed)), "no window left on a spent lair")
+	check(Lairs.expire(w7, w7.clock.elapsed).is_empty(), "and it only resolves once")
+
+	# Seeded off the lair, so reloading cannot reroll it into the nicer outcome.
+	var w8 := _world(); var w9 := _world()
+	var la2 = _lair(); var lb2 = _lair()
+	w8.add_lair(la2); w9.add_lair(lb2)
+	for pair in [[w8, la2], [w9, lb2]]:
+		Lairs.mark_entered(pair[1], 0.0)
+		pair[0].clock.elapsed = Lairs.WINDOW + 1.0
+		Lairs.expire(pair[0], pair[0].clock.elapsed)
+	check(la2.resolved_as == lb2.resolved_as, "the same lair always resolves the same way")
+
+	# A wipe must NOT expire the lair — losing already resets it and leaves it
+	# standing (wipe_penalty above); the window is for walking away intact.
+	var w10 := _world()
+	var lair9 = _lair()
+	w10.add_lair(lair9)
+	Lairs.mark_entered(lair9, 0.0)
+	lair9.depth_cleared = 2
+	Site.wipe_penalty(_party(), lair9)
+	check(not lair9.looted, "a wipe leaves the lair standing to try again")
+
 	print("test_site: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

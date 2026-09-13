@@ -341,6 +341,7 @@ func _process(delta: float) -> void:
 			Visit.mark_battle(world, r["loser"].position, world.clock.elapsed)
 	_check_visit()
 	_check_lairs()
+	_check_expired_lairs()
 	_check_forage()
 	if _camp_btn != null:
 		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0
@@ -805,6 +806,16 @@ func _check_lairs() -> void:
 		else "Attack %s" % target.sname)
 	_lair_sneak_btn.visible = target.discovered
 
+# D1: a lair the party walked away from resolves without them after
+# WorldLairs.WINDOW — somebody else clears it, or its tenants move on. Said out
+# loud when it happens: a landmark going grey with no explanation reads as a bug.
+func _check_expired_lairs() -> void:
+	if _combat != null or _site != null:
+		return
+	for l in WorldLairs.expire(world, world.clock.elapsed):
+		_lair_msg.text = WorldLairs.resolution_text(l)
+		WorldSave.save(world, party)
+
 func _lair_action() -> void:
 	var l: World.Lair = _lair_target
 	if l == null or _combat != null:
@@ -855,6 +866,7 @@ func _delve(l) -> void:
 	if _site != null:
 		return
 	world.clock.pause()
+	WorldLairs.mark_entered(l, world.clock.elapsed)   # D1: kicking the door starts the window
 	_site = Site.for_lair(l, party, world)
 	_site_screen = SiteScreen.new()
 	_site_screen.site = _site

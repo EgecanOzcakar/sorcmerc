@@ -17,6 +17,40 @@
 #   hard   TIER 1.32 -> avg 5.3 foes x0.95 : 150W/50L  (75.0%)  avg 10.5 rounds
 # Level-8 party (the presets levelled to 8, score 108.8), 60 seeds: 95 / 88 / 78%
 # (was 92 / 73 / 58 at T38's tiers).
+#
+# RE-MEASURED 2026-09-13 (D1), same harness, no knob touched since:
+#   easy   avg 4.4 foes x0.93 : 175W/25L (87.5%)  avg 9.3 rounds
+#   normal avg 4.7 foes x0.96 : 166W/34L (83.0%)  avg 9.5 rounds
+#   hard   avg 5.3 foes x0.95 : 138W/62L (69.0%)  avg 10.4 rounds
+#   level-8, 60 seeds: 98.3 / 93.3 / 81.7%   (bosses and the shrine are unmoved,
+#   matching this header's numbers exactly, so the boss path is not involved)
+# Still inside test_scaler's +/-10 BAND, so nothing fails — but easy is 7 points
+# down and hard 6, which is 2-3 standard errors at 200 seeds, and level-8 moved
+# the other way. Do not "fix" this by turning TIER until the cause below is
+# understood: hard draws the SAME roster shape as it did at T40 (5.3 foes,
+# x0.95) and still loses 6 more points, so the budget is not what changed.
+#
+# WHY, measured the same day — the aggregate was hiding a bimodal distribution.
+# Win rate at easy, level-3 party, 200 seeds, split by the faction the seed drew:
+#   cultist 54%   fey 54%   bandit 79%   dragon 92%   beast 93%   undead 93%
+#   giant / kobold / orc / gnoll / soldier / monstrosity / elemental /
+#   construct / goblinoid: 100%
+# Eleven factions are a walkover and two are a coin flip. "easy = 87.5%" is the
+# average of those, and it describes no fight anybody actually has. The two
+# outliers are the caster-heavy factions, which is T23's control-underpricing
+# ceiling still live (see the Known ceiling note below) rather than anything
+# TIER can reach.
+#
+# Ruled out while looking, so nobody re-walks it: "dragon" joining FACTIONS in
+# T91 (2026-09-12, after the T40 sweep) re-mapped every seed through
+# `FACTIONS[seed % size]` and put dragons in the untethered draw — but dragons
+# measure 92%, above the mean, so they are not what pulled it down. REF_SCORE
+# 46.6 vs the preset party's 47.2 is likewise not drift: this header says so
+# three lines down, deliberately.
+#
+# The relevant change is therefore to estimate()'s pricing of casters, or to
+# what the untethered wilderness draw is allowed to roll at low budgets — not
+# to TIER. Neither is done here; D1 needed the measurement, not the retune.
 # TIER fell across the board (1.00/1.35/1.80 -> 0.96/1.10/1.32) and the three
 # tiers now sit much closer together: hard is where nearly all of the target rise
 # landed (+23.5 points), so the budget spread that used to separate the tiers
