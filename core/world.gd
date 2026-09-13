@@ -139,6 +139,27 @@ var lairs: Array[Lair] = []
 # rather than a class because water_depth() below is the only thing that reads them.
 var waters: Array[Dictionary] = []
 
+# Fog of war: a list of waypoints the player has actually stood near, not a
+# per-cell grid — a permanent-once-seen reveal (no separate "remembered but
+# not currently visible" dimming), which is the whole feature the open-world
+# map needs. reveal() only remembers a new waypoint every EXPLORE_STEP units
+# so this list stays small over a long walk instead of growing every frame.
+const EXPLORE_RADIUS := 90.0
+const EXPLORE_STEP := 45.0
+var explored: Array[Vector2] = []
+
+func reveal(pos: Vector2) -> void:
+	for e in explored:
+		if e.distance_to(pos) < EXPLORE_STEP:
+			return
+	explored.append(pos)
+
+func is_explored(pos: Vector2) -> bool:
+	for e in explored:
+		if e.distance_to(pos) <= EXPLORE_RADIUS:
+			return true
+	return false
+
 func add_settlement(s: Settlement) -> Settlement:
 	settlements.append(s)
 	return s

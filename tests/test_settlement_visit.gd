@@ -31,6 +31,7 @@ func _init() -> void:
 	test_steal_deterministic_and_hooks()
 	test_opinion_moves_prices_and_can_refuse_trade()
 	test_rest_and_quests()
+	test_quest_board_and_chains()
 	print("test_settlement_visit: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -175,6 +176,44 @@ func test_rest_and_quests() -> void:
 	FactionOpinion.set_opinion(s.faction, FactionOpinion.QUEST_MIN - 1.0)
 	check(Visit.quest_offer(s, party).is_empty(), "a faction that dislikes you has no work")
 	FactionOpinion.reset()
+
+# T9x: the quest board (multiple concurrent offers) and chains (escalating,
+# faction-specific — reward and title ramp up the more jobs against that
+# faction the party has turned in).
+func test_quest_board_and_chains() -> void:
+	var w := _world()
+	var home = w.settlements[0]
+	w.add_settlement(World.Settlement.new("ashfell", Vector2(400, 0), "orc", "city"))
+	var band := w.add_party(World.RoamingParty.new("raiders", Vector2(1, 1), "bandit"))
+	w.add_lair(World.Lair.new("warren", Vector2(2, 2), "goblinoid"))
+	var party := _party()
+
+	var board: Array = Visit.quest_offers(home, party, w)
+	check(board.size() >= 2, "a settlement with several eligible targets offers several jobs at once (got %d)" % board.size())
+	var hunt: Dictionary = {}
+	for q in board:
+		if q["kind"] == "hunt_party":
+			hunt = q
+	check(not hunt.is_empty(), "the raiders band shows up as a hunt-party job on the board")
+	check(int(hunt.get("chain_tier", -1)) == 0, "a first job against this faction is tier 0")
+
+	check(Quest.accept(party, hunt), "the board's own offer can be accepted")
+	hunt["progress"] = 1
+	hunt["state"] = "complete"
+	check(Quest.turn_in(party, hunt, "bandit"), "turning in a chain job pays out")
+	check(Quest.faction_chain_tier(party, "bandit") == 1, "one turned-in job against bandit is chain tier 1")
+
+	# The next job against the same faction (another bandit band) reads as the
+	# escalated tier — different title, bigger base reward.
+	var band2 := w.add_party(World.RoamingParty.new("raiders-2", Vector2(3, 3), "bandit"))
+	var board2: Array = Visit.quest_offers(home, party, w)
+	var hunt2: Dictionary = {}
+	for q in board2:
+		if q["kind"] == "hunt_party":
+			hunt2 = q
+	check(not hunt2.is_empty(), "a fresh band still offers a hunt-party job")
+	check(int(hunt2["chain_tier"]) == 1, "the next job against the same faction is tier 1")
+	check(hunt2["title"] != hunt["title"], "an escalated job reads differently, not a copy of tier 0")
 
 # The smallest seed whose first d20 is `want` — the test wants a pinned roll, not
 # a particular stream.

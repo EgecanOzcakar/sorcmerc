@@ -1,9 +1,10 @@
-# T-worlds: small (World._small_world, the original 4-settlement map) vs
+# T-worlds: small (World._small_world, the original 4-settlement map),
 # large (LargeWorld.build(), 8 settlements/2 per race + more of everything
-# else), picked via World.world_size before _ready() builds one. Both use
-# every mechanic added this session (Settlements3D/Lairs3D/Party3D, lairs,
-# faction-scoped quests) unmodified — this only checks the content differs
-# and the picker actually routes to the right builder.
+# else), or procedural (ProceduralWorld.build(), seeded, one settlement per
+# race) — picked via World.world_size before _ready() builds one. All three
+# use every mechanic added this session (Settlements3D/Lairs3D/Party3D,
+# lairs, faction-scoped quests) unmodified — this only checks the content
+# differs and the picker actually routes to the right builder.
 #   godot --headless --path . -s tests/test_world_sizes.gd
 extends SceneTree
 
@@ -46,6 +47,15 @@ func _init() -> void:
 	check(large.world.settlements.size() == 8, "world_size='large' routes to LargeWorld, not the small map")
 	check(large._settlements3d != null and large._lairs3d != null and large._party3d != null,
 		"the large world gets the same 3D layers as the small one")
+
+	var proc = load("res://scenes/world/world.tscn").instantiate()
+	proc.world_size = "procedural"
+	root.add_child(proc)
+	for i in 10:
+		await process_frame
+	check(proc.world.settlements.size() == 4, "world_size='procedural' routes to ProceduralWorld, not the small map")
+	check(proc._settlements3d != null and proc._lairs3d != null and proc._party3d != null,
+		"the procedural world gets the same 3D layers as the other two")
 
 	print("test_world_sizes: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

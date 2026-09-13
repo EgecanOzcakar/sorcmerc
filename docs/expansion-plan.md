@@ -3174,3 +3174,22 @@ independently by me a second time post-merge. Full suite (31 files,
 5291 checks) + all 6 `drive_*` green, both pre-merge and again after.
 
 This is a multi-week build; phases 0–1 are the critical path and land first.
+
+## Post-T91 gap note — persistent faction warfare (deferred, 2026-09-13)
+
+Recorded per user instruction while scoping the 3D-diorama/world-size/tile
+work (Settlements3D/Lairs3D/Party3D, `_small_world()`/`_large_world()`,
+lair persistence): **persistent faction warfare** — settlements and
+roaming parties of different "civilized" factions actually fighting each
+other over time, territory changing hands, not just monsters/bandits vs.
+the player — is explicitly a TODO, not implemented yet. This is a bigger
+scope change than it sounds: the locked open-world design (see "Design
+decisions locked with the user (2026-09-11 Q&A)" above) deliberately
+chose "conflict is monsters/bandits vs. settlements and the player, not
+settlements vs. each other" over full diplomacy/war. Revisiting that
+would need its own design pass (win/loss conditions for a settlement,
+territory-control state, AI faction goals) — no design committed here,
+just don't let it get lost. Everything else from this note's source list
+(figures-into-Party3D, procedural world gen, fog of war, real defeat
+consequences, quest board + chains) was implemented in the same round —
+see the T9x/O-series entries or git log around 2026-09-13 for each.

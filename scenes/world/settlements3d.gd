@@ -61,4 +61,5 @@ func _reposition() -> void:
 		var n: Node3D = _dioramas.get(s.id)
 		if n == null:
 			continue
+		n.visible = _explored(s.position)   # T9x fog of war
 		n.position = world_for_screen(world_map._pix(s.position))

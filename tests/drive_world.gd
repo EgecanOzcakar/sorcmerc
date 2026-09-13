@@ -285,7 +285,7 @@ func _settlement_visit(p) -> void:
 	if offer.is_empty():
 		fail("a neutral settlement offered no work at all")
 	else:
-		screen._take_quest()
+		screen._take_quest(offer)   # T9x: _take_quest now takes the exact board row
 		var taken: Dictionary = Quest.get_quest(screen.party, offer["id"])
 		if taken.is_empty() or taken["state"] != "active":
 			fail("taking the offered job did not put it in the log")

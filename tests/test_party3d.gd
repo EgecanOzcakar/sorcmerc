@@ -1,8 +1,10 @@
 # T-party3d: RoamingParty.troops/highest_troop(), and Party3D's model pick
-# off them — the player keeps their gold-ringed pawn, an NPC band with no
-# troop roster or no race counterpart (goblinoid has none) falls through to
-# the flat PawnTex icon, same fallback contract as every other tier this
-# session.
+# off them — the player keeps their gold-ringed pawn, a race-troop band
+# (human/dwarf/elf/orc) with a roster gets the role figure, a monster-faction
+# band with no race counterpart (goblinoid, undead, ...) falls back to
+# figures3d.gd's single FOE_MODELS figure for that faction, and only a band
+# with neither (no troops, no faction coverage) falls through to the flat
+# PawnTex icon.
 #   godot --headless --path . -s tests/test_party3d.gd
 extends SceneTree
 
@@ -39,8 +41,8 @@ func _init() -> void:
 		"patrol (human, heavy troop we generated) gets a figure")
 	check(player != null and not main._party3d.has_model(player),
 		"the player never gets a Party3D figure — they keep the pawn")
-	check(goblins != null and not main._party3d.has_model(goblins),
-		"goblinoid has no race counterpart — falls through to the pawn")
+	check(goblins != null and main._party3d.has_model(goblins),
+		"goblinoid has no race counterpart, but gets the FOE_MODELS figure combat uses")
 
 	print("test_party3d: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

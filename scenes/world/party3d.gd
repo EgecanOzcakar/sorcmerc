@@ -17,6 +17,12 @@
 # replaces the PawnTex sprite (and the faction-tint that comes with it).
 extends "res://scenes/world/world_diorama3d.gd"
 
+# Monster-faction parties (goblinoid, bandit, undead, ...) have no race and no
+# troops-with-roles — they get the same single figure-per-faction combat
+# already uses (figures3d.gd's FOE_MODELS), reused as-is rather than
+# duplicated: one lookup, not two art pipelines for the same monster.
+const FoeModels := preload("res://scenes/figures3d.gd").FOE_MODELS
+
 # core/world.gd's RoamingParty.faction is a Scaler.FACTIONS combat faction
 # (bandit, goblinoid, human, orc, ...), not one of the four races the troop
 # figures were generated for — most factions (goblinoid, undead, ...) have no
@@ -42,11 +48,15 @@ var _prev := {}                # party id -> last world position, for facing
 func _model_path(p) -> String:
 	if p.is_player:
 		return ""              # the player keeps the gold-ringed pawn, deliberately
-	var role := String(p.highest_troop().get("role", ""))
-	if role == "":
-		return ""
 	var race := String(RACE_FOR_FACTION.get(p.faction, ""))
-	return String(MODELS.get(race, {}).get(role, ""))
+	var role := String(p.highest_troop().get("role", ""))
+	if race != "" and role != "":
+		var by_role := String(MODELS.get(race, {}).get(role, ""))
+		if by_role != "":
+			return by_role
+	# Monster factions (goblinoid, bandit, undead, ...): no race/role, one
+	# figure per faction, same source as combat.
+	return String(FoeModels.get(p.faction, ""))
 
 
 func has_model(p) -> bool:
@@ -81,6 +91,7 @@ func _reposition() -> void:
 		var n: Node3D = _figs.get(p.id)
 		if n == null:
 			continue
+		n.visible = _explored(p.position)   # T9x fog of war — the player never has a figure here anyway
 		n.position = world_for_screen(world_map._pix(p.position))
 		# Same trick as Figures3D: face the direction of travel, hold it on
 		# arrival. The model's forward is +Z (glTF), so yaw = atan2(dx, dz).
