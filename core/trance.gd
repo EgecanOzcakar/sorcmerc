@@ -20,7 +20,7 @@ const RNG = preload("res://core/rng.gd")
 const TRANCE_FEATURES := ["elf-trance"]
 const WATCH_BONUS := 5             # core/world_camp.gd's watch_check: sharper eyes on the ambush roll
 const IDENTIFY_SKILL := "arcana"
-const SCOUT_MULT := 1.8            # how far past World.EXPLORE_RADIUS the extra reveal points sit
+const SCOUT_MULT := 1.8            # how far past World.VISION_RADIUS the extra reveal points sit
 
 static func has_trance(party) -> bool:
 	for ch in party.party_characters():
@@ -43,7 +43,7 @@ static func apply_rest_bonus(party, world, pos: Vector2, rng = null) -> Dictiona
 	for ch in party.party_characters():
 		Adapter.rest(ch, "short-rest")
 	for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
-		world.reveal(pos + d * world.EXPLORE_RADIUS * SCOUT_MULT)
+		world.reveal(pos + d * world.VISION_RADIUS * SCOUT_MULT)
 	return {"topped_up": true, "scouted": true, "identify": _try_identify(party, rng)}
 
 # {} when there's nothing unidentified to try. Otherwise the full roll

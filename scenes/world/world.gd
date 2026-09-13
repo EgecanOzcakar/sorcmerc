@@ -89,7 +89,13 @@ const MAX_CELLS := 32000    # cap the ground loop when zoomed far out
 # the bank into an organic edge instead of a hard tile-aligned line,
 # clustering it would make the water's edge blocky instead.
 const TILE_CLUSTER := 8
-const FOG_COLOR := Color(0.05, 0.05, 0.08)   # T9x: unexplored ground
+# T9x: two fog tiers. Never explored is flat and near-black (opaque — there's
+# no tile underneath to show). Explored-but-not-currently-visible is a
+# translucent dark tint OVER the real tile (drawn on top of it, not instead
+# of it), so the shape and color of ground you've already seen still reads,
+# just dimmed — distinct from both full fog and full daylight.
+const FOG_UNKNOWN := Color(0.03, 0.03, 0.045)
+const FOG_REMEMBERED := Color(0.05, 0.05, 0.09, 0.55)
 
 # Ground: O11's Screaming Brain Studios Isometric Tiles Overworld pack, CC0.
 # Buildings: O12's rubberduck isometric medieval buildings 1+2, CC0 — the Town
@@ -1291,15 +1297,14 @@ func _draw() -> void:
 	if p != null and not p.at_goal():
 		draw_polyline(_ring(_pix(p.goal), 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
 
-	# One painter's-order pass over everything standing on the ground. T9x fog
-	# of war: nothing standing on unexplored ground draws, same fallback-tier
-	# discipline as the undiscovered-lair check right below, just gated on
-	# world.is_explored() instead of a per-entity flag. The player's own party
-	# is exempt — you can always see yourself.
+	# One painter's-order pass over everything standing on the ground.
+	# T9x: settlements are landmarks, always drawn regardless of fog — the
+	# whole point of the beacon is to give the player something to walk
+	# toward on a still-dark map. Lairs and roaming parties stay fog-gated:
+	# those are meant to be found, not signposted.
 	var props: Array = []
 	for s in world.settlements:
-		if world.is_explored(s.position):
-			props.append({"at": _pix(s.position), "s": s})
+		props.append({"at": _pix(s.position), "s": s})
 	for l in world.lairs:
 		if l.discovered and world.is_explored(l.position):   # T91: undiscovered lairs draw nothing — that's the point
 			props.append({"at": _pix(l.position), "l": l})
@@ -1340,19 +1345,28 @@ func _draw_ground() -> void:
 	var ex := _iso(Vector2(CELL, 0)) * _zoom
 	var ey := _iso(Vector2(0, CELL)) * _zoom
 	draw_set_transform_matrix(Transform2D((ex + ey) / TILE.x, (ey - ex) / TILE.y, _origin))
+	# T9x: three fog tiers, not two. Currently-visible (near the player right
+	# now) draws clean; explored-but-not-visible ("remembered") draws the
+	# real tile with a translucent dark tint over it so the shape still
+	# reads; never-explored draws as flat, opaque, darker fog. Only one
+	# live-position check needed — is_explored() already folds in the
+	# settlement-beacon radius (world.gd's near_settlement()).
+	var p := world.player()
+	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
 	for i in range(i0, i1 + 1):
 		for j in range(j0, j1 + 1):
 			var cell := Vector2i(i, j)
-			# T9x fog of war: an unexplored cell draws as flat fog, not terrain —
+			var center := Vector2(i + 0.5, j + 0.5) * CELL
+			var rect := Rect2(Vector2(i + j, j - i - 1) * TILE * 0.5, TILE)
 			# ponytail: an O(cells x waypoints) distance scan every frame, fine at
 			# this map's scale (screen-visible cells, a few hundred waypoints);
 			# a spatial grid is the upgrade if a very long walk makes it drag.
-			if not world.is_explored(Vector2(i + 0.5, j + 0.5) * CELL):
-				draw_rect(Rect2(Vector2(i + j, j - i - 1) * TILE * 0.5, TILE), FOG_COLOR)
+			if not world.is_explored(center):
+				draw_rect(rect, FOG_UNKNOWN)
 				continue
 			var cl := _cluster(cell, TILE_CLUSTER)
 			# 1.0 deep in a lake, 0.0 well inland, a ramp across the bank between.
-			var wet := 0.5 - world.water_depth(Vector2(i + 0.5, j + 0.5) * CELL) / (SHORE * 2.0)
+			var wet := 0.5 - world.water_depth(center) / (SHORE * 2.0)
 			var tex := _terrain_tex
 			var pool: Array = GRASS
 			# Left un-clustered on purpose: this per-cell dither is what frays the
@@ -1364,9 +1378,10 @@ func _draw_ground() -> void:
 				tex = _forest_tex
 				pool = FOREST
 			var idx: int = pool[int(_rand(cl, 1) * pool.size()) % pool.size()]
-			draw_texture_rect_region(tex,
-				Rect2(Vector2(i + j, j - i - 1) * TILE * 0.5, TILE),
+			draw_texture_rect_region(tex, rect,
 				Rect2(Vector2(idx % TILE_COLS, idx / TILE_COLS) * TILE, TILE))
+			if not world.is_visible_now(center, ppos):
+				draw_rect(rect, FOG_REMEMBERED)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 
 # O11/O12: a medieval building on each footprint the blocks stood on — a city

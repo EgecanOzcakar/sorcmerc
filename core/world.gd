@@ -139,13 +139,24 @@ var lairs: Array[Lair] = []
 # rather than a class because water_depth() below is the only thing that reads them.
 var waters: Array[Dictionary] = []
 
-# Fog of war: a list of waypoints the player has actually stood near, not a
-# per-cell grid — a permanent-once-seen reveal (no separate "remembered but
-# not currently visible" dimming), which is the whole feature the open-world
-# map needs. reveal() only remembers a new waypoint every EXPLORE_STEP units
-# so this list stays small over a long walk instead of growing every frame.
-const EXPLORE_RADIUS := 90.0
-const EXPLORE_STEP := 45.0
+# Fog of war, three tiers: currently visible (near the player right now),
+# explored (a waypoint list of everywhere that was ever true, remembered
+# forever — not a per-cell grid), and never explored. reveal() only
+# remembers a new waypoint every EXPLORE_STEP units so this list stays
+# small over a long walk instead of growing every frame.
+# T9x: VISION_RADIUS tripled (90 -> 260) — the original size read as "the
+# map failed to load" on the large world, where the nearest settlement can
+# be several hundred units from the start: a tiny lit circle in an
+# otherwise solid-black multi-thousand-unit map has nothing to walk
+# toward. EXPLORE_STEP grows with it so waypoints still overlap along a
+# path with no gaps (must stay under 2x the radius).
+const VISION_RADIUS := 260.0
+const EXPLORE_STEP := 150.0
+# T9x: settlements are landmarks, not surprises — a small always-on patch
+# around each one (regardless of exploration) so there's something to
+# aim for on a map that's otherwise still fogged. Lairs and roaming
+# parties stay fog-gated; those are meant to be found, not signposted.
+const SETTLEMENT_BEACON_RADIUS := 55.0
 var explored: Array[Vector2] = []
 
 func reveal(pos: Vector2) -> void:
@@ -154,9 +165,24 @@ func reveal(pos: Vector2) -> void:
 			return
 	explored.append(pos)
 
+# The "remembered" tier: was ever within VISION_RADIUS of some point on the
+# explored trail, or close enough to a settlement to see its beacon.
 func is_explored(pos: Vector2) -> bool:
+	if near_settlement(pos):
+		return true
 	for e in explored:
-		if e.distance_to(pos) <= EXPLORE_RADIUS:
+		if e.distance_to(pos) <= VISION_RADIUS:
+			return true
+	return false
+
+# The "currently visible" tier: within sight of the player's position RIGHT
+# NOW, not just remembered from having passed through once.
+func is_visible_now(pos: Vector2, from: Vector2) -> bool:
+	return pos.distance_to(from) <= VISION_RADIUS
+
+func near_settlement(pos: Vector2) -> bool:
+	for s in settlements:
+		if pos.distance_to(s.position) <= SETTLEMENT_BEACON_RADIUS:
 			return true
 	return false
 

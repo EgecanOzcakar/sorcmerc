@@ -61,5 +61,7 @@ func _reposition() -> void:
 		var n: Node3D = _dioramas.get(s.id)
 		if n == null:
 			continue
-		n.visible = _explored(s.position)   # T9x fog of war
+		# T9x: settlements are landmarks, always shown regardless of fog —
+		# matches World._draw()'s own 2D layer (both changed together).
+		n.visible = true
 		n.position = world_for_screen(world_map._pix(s.position))

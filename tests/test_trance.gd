@@ -48,8 +48,8 @@ func _init() -> void:
 	var bonus: Dictionary = Trance.apply_rest_bonus(elf, w2, Vector2.ZERO, RNG.new(1))
 	check(not bonus.is_empty(), "Trance -> a real bonus dict comes back")
 	check(ch.hp_current > 1, "the short-rest top-up actually heals")
-	check(w2.is_explored(Vector2(w2.EXPLORE_RADIUS * Trance.SCOUT_MULT, 0)),
-		"scouting reaches past the normal EXPLORE_RADIUS in at least one direction")
+	check(w2.is_explored(Vector2(w2.VISION_RADIUS * Trance.SCOUT_MULT, 0)),
+		"scouting reaches past the normal VISION_RADIUS in at least one direction")
 	check(bonus["identify"].has("ok"), "an unidentified item in the stash gets a real identify attempt")
 
 	var no_mystery := _party(true)
