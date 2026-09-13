@@ -182,6 +182,23 @@ func _gait_pose(id: String, speed: float, dt: float) -> Vector3:
 
 
 func _reposition() -> void:
+	# A defeated party is erased from world.parties (core/world.gd, core/
+	# world_battle.gd) — reset() only rebuilds _figs at travel start, so
+	# without this the figure it left behind just stops being repositioned:
+	# still in the tree, still visible, frozen where it died forever.
+	if not _figs.is_empty():
+		var live := {}
+		for p in world_map.world.parties:
+			live[p.id] = true
+		for id in _figs.keys().duplicate():
+			if not live.has(id):
+				_figs[id].queue_free()
+				_figs.erase(id)
+				_prev.erase(id)
+				_aps.erase(id)
+				_gait.erase(id)
+				_step.erase(id)
+
 	for p in world_map.world.parties:
 		var n: Node3D = _figs.get(p.id)
 		if n == null:

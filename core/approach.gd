@@ -58,6 +58,18 @@ const WAYS := {
 	"engage": {"label": "Engage", "role": "", "skills": [], "dc": 0,
 		"note": "Straight at them. No edge, no surprises.",
 		"win": "An even fight, full XP and loot. Nothing can go wrong first."},
+	# A civilized band WorldAI.is_hostile() says is not hostile — a faction
+	# patrol, most often — never had a card at all: _check_encounter() only
+	# ever opened one for a hostile foe, so a friendly band on the road could
+	# be stood next to and nothing happened. These two ways are the
+	# friendly-band card: no roll, no risk, because there is no fight sitting
+	# behind either outcome the way there is for every way above.
+	"greet": {"label": "Greet them", "role": "", "skills": [], "dc": 0,
+		"note": "A friendly hail. No roll, no cost.",
+		"win": "A friendly word exchanged, and the road goes on."},
+	"pass": {"label": "Move on", "role": "", "skills": [], "dc": 0,
+		"note": "Keep going without stopping to talk.",
+		"win": "The party keeps its own road; no words exchanged."},
 	"ambush": {"label": "Set an ambush", "role": "scout", "skills": ["stealth", "survival"],
 		"dc": AMBUSH_DC, "note": "Take the first round — or hand it to them.",
 		"win": "The party takes the first round.",
@@ -77,6 +89,8 @@ const WAYS := {
 # Order they are offered in: the safe one first, the gamble last, so the list
 # reads as an escalation rather than a menu.
 const ORDER := ["avoid", "parley", "ambush", "engage"]
+# What a non-hostile band offers instead: no gamble, nothing to roll.
+const FRIENDLY_ORDER := ["greet", "pass"]
 
 # What talking past a band costs. A share of the purse rather than a flat fee —
 # a toll that is trivial at 500 gold and impossible at 30 is not a decision.
@@ -102,8 +116,14 @@ static func can_parley(foe) -> bool:
 # What this party can try against this band, each with the check it would roll
 # and by whom — so the card can show "Vera Kord, Stealth vs DC 13" on the button
 # BEFORE it is pressed. A choice you cannot price is not a choice.
-static func options(party, foe) -> Array:
+static func options(party, foe, hostile := true) -> Array:
 	var out: Array = []
+	if not hostile:
+		for id in FRIENDLY_ORDER:
+			var w: Dictionary = WAYS[id]
+			out.append({"id": id, "label": String(w["label"]), "note": String(w["note"]),
+				"dc": 0, "win": String(w["win"])})
+		return out
 	for id in ORDER:
 		if id == "parley" and not can_parley(foe):
 			continue
@@ -159,6 +179,11 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 	if way == "engage":
 		out["ok"] = true
 		out["text"] = "The party goes straight at them."
+		return out
+	if way == "greet" or way == "pass":
+		out["ok"] = true
+		out["fight"] = false
+		out["text"] = String(w["win"])
 		return out
 
 	var who := _roller(party, w)

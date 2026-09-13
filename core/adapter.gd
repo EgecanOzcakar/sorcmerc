@@ -145,6 +145,16 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 		castable.append(sid)
 	for sid in s.spellcasting.get("always_prepared", []):
 		castable.append(sid)
+	# Every slot-costing spell the character knows — the spellbook for a
+	# prepared caster (wizard/cleric/...), the known list for a sorcerer/
+	# bard/warlock. Nothing in this project ever offers a daily-prep screen
+	# to whittle this down to ch.prepared, so without this line a player-made
+	# prepared caster's ch.prepared stayed empty forever and every leveled
+	# spell they knew was simply invisible in combat.
+	for k in s.spellcasting.get("known", []):
+		var sid: String = String(k["id"])
+		if not sid in castable:
+			castable.append(sid)
 	for sid in ch.prepared:
 		if not sid in castable:
 			castable.append(sid)

@@ -641,8 +641,15 @@ func _check_encounter(dt := 0.0) -> void:
 		return
 	var reach := _trigger(dt)
 	for q in world.parties:
-		if q == p or not WorldAI.is_hostile(q, p):
+		if q == p:
 			continue
+		# A hostile band (raiders, monsters — WorldAI.is_hostile() makes every
+		# monster faction hostile to the player unconditionally) gets the
+		# fight/parley/ambush card; a civilized one that ISN'T hostile — a
+		# faction patrol, most often — used to be skipped here entirely and
+		# could never be met at all. It now gets the same card with the
+		# friendly-only ways (T9z).
+		var hostile: bool = WorldAI.is_hostile(q, p)
 		var near: bool = q.position.distance_to(p.position) <= reach
 		# A band already slipped past stays slipped until it is genuinely out of
 		# range again, or the player would be asked the same question every frame
@@ -652,7 +659,7 @@ func _check_encounter(dt := 0.0) -> void:
 				_slipped.erase(q.id)
 			continue
 		if near:
-			_open_approach(q)
+			_open_approach(q, hostile)
 			return
 
 # The roster the encountered party fights with. Scaler takes a *theme*, not a
@@ -1051,7 +1058,7 @@ func _check_forage() -> void:
 # revision set out to remove. Now the clock stops and they choose: slip away,
 # parley, set an ambush, or go straight at it (core/approach.gd owns the rules
 # and the rolls; this only runs the flow).
-func _open_approach(foe) -> void:
+func _open_approach(foe, hostile := true) -> void:
 	if _approach_card != null:
 		return
 	world.clock.pause()
@@ -1060,7 +1067,7 @@ func _open_approach(foe) -> void:
 	_approach_card = ApproachCard.new()
 	add_child(_approach_card)
 	_approach_card.chosen.connect(_on_approach_chosen)
-	_approach_card.show_approach(Approach.options(party, foe),
+	_approach_card.show_approach(Approach.options(party, foe, hostile),
 		"%s (%d)" % [foe.id.capitalize(), foe.troops.size()])
 
 func _on_approach_chosen(way: String) -> void:
