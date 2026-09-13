@@ -49,8 +49,7 @@ var _prev := {}                # party id -> last world position, for facing
 
 func _model_path(p) -> String:
 	if p.is_player:
-		var fig := String(world_map.party.overworld_figure) if world_map.party != null else ""
-		return String(HeroModels.get(fig, ""))
+		return String(HeroModels.get(_player_figure(), ""))
 	var race := String(RACE_FOR_FACTION.get(p.faction, ""))
 	var role := String(p.highest_troop().get("role", ""))
 	if race != "" and role != "":
@@ -60,6 +59,24 @@ func _model_path(p) -> String:
 	# Monster factions (goblinoid, bandit, undead, ...): no race/role, one
 	# figure per faction, same source as combat.
 	return String(FoeModels.get(p.faction, ""))
+
+
+# The chosen figure only counts while someone in the active party actually
+# is that class — enforced here, not just in the Party screen's picker, so
+# a stale choice (the character it pointed to got benched, or an old save)
+# can't leave a figure on the map that no longer matches who's in the party.
+func _player_figure() -> String:
+	var party = world_map.party
+	if party == null:
+		return ""
+	var fig := String(party.overworld_figure)
+	if fig == "":
+		return ""
+	for id in party.active:
+		var ch = party.get_member(id)
+		if ch != null and ch.class_id() == fig:
+			return fig
+	return ""
 
 
 func has_model(p) -> bool:

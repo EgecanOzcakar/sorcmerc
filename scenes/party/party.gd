@@ -28,6 +28,7 @@ var _slot_col := VBoxContainer.new()
 var _hint := Label.new()
 var _purse := Label.new()
 var _stash := RichTextLabel.new()
+var _fig_row := HBoxContainer.new()   # T9x: rebuilt on every _refresh() — its options are the active roster
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -111,33 +112,49 @@ func _footer() -> Control:
 	_stash.add_theme_font_size_override("normal_font_size", Icons.FS_SMALL)
 	row.add_child(_stash)
 
-	# T9x: which figure stands for the party on the open-world map — a free
-	# choice (core/party.gd's overworld_figure), not derived from the active
-	# roster. "" keeps the original flat pawn icon.
-	var fig_label := Label.new()
-	fig_label.text = "Map figure:"
-	fig_label.add_theme_color_override("font_color", COL_DIM)
-	row.add_child(fig_label)
-	var fig_ob := OptionButton.new()
-	fig_ob.add_item("Default (plain pawn)")
-	fig_ob.set_item_metadata(0, "")
-	var keys: Array = HeroModels.keys()
-	keys.sort()
-	for k in keys:
-		fig_ob.add_item("%s  %s" % [Icons.class_glyph(k), k.capitalize()])
-		fig_ob.set_item_metadata(fig_ob.item_count - 1, k)
-	for i in fig_ob.item_count:
-		if String(fig_ob.get_item_metadata(i)) == party.overworld_figure:
-			fig_ob.select(i)
-			break
-	fig_ob.item_selected.connect(func(i): party.overworld_figure = String(fig_ob.get_item_metadata(i)))
-	row.add_child(fig_ob)
+	# T9x: which figure stands for the party on the open-world map — picked
+	# from who's actually in the active party, not any of the 12 possible
+	# classes. Rebuilt on every _refresh() (see below) since swapping the
+	# active roster changes who's offered.
+	row.add_child(_fig_row)
 
 	var create := Button.new()
 	create.text = "+  Create new"
 	create.pressed.connect(_on_create_new)
 	row.add_child(create)
 	return panel
+
+# T9x: options are the active party's own members, by name — not any of
+# the 12 possible classes. Picking "Vera" (a fighter) sets overworld_figure
+# to "fighter"; two active members sharing a class just both point at the
+# same figure, which is correct (they'd look identical either way). Rebuilt
+# every _refresh() since swapping the active roster changes who's offered.
+func _build_figure_picker() -> void:
+	for c in _fig_row.get_children():
+		c.queue_free()
+	var label := Label.new()
+	label.text = "Map figure:"
+	label.add_theme_color_override("font_color", COL_DIM)
+	_fig_row.add_child(label)
+
+	var ob := OptionButton.new()
+	ob.add_item("Default (plain pawn)")
+	ob.set_item_metadata(0, "")
+	for id in party.active:
+		var ch = party.get_member(id)
+		if ch == null:
+			continue
+		var cid: String = ch.class_id()
+		if not HeroModels.has(cid):
+			continue   # a class with no figure asset yet — not offered, same fallback contract as everywhere else
+		ob.add_item("%s  %s" % [Icons.class_glyph(cid), ch.cname])
+		ob.set_item_metadata(ob.item_count - 1, cid)
+	for i in ob.item_count:
+		if String(ob.get_item_metadata(i)) == party.overworld_figure:
+			ob.select(i)
+			break
+	ob.item_selected.connect(func(i): party.overworld_figure = String(ob.get_item_metadata(i)))
+	_fig_row.add_child(ob)
 
 # --- rendering ------------------------------------------------------------
 
@@ -155,6 +172,8 @@ func _refresh() -> void:
 			_slot_col.add_child(_slot(i, party.summary(party.active[i])))
 		else:
 			_slot_col.add_child(_slot(i, {}))
+
+	_build_figure_picker()
 
 	_purse.text = "%d gp" % party.gold
 	if party.stash.is_empty():

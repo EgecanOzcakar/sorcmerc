@@ -46,11 +46,17 @@ func _init() -> void:
 		"goblinoid has no race counterpart, but gets the FOE_MODELS figure combat uses")
 
 	# T9x: picking a figure on the Party screen (core/party.gd's
-	# overworld_figure) gets the player a real Party3D model too — takes
-	# effect on the next reset(), same as world.gd's _close_party() does.
-	main.party.overworld_figure = "wizard"
+	# overworld_figure) gets the player a real Party3D model too — but only
+	# while someone in the ACTIVE party actually is that class. The demo
+	# roster's active four are fighter/rogue/cleric/barbarian (Party.
+	# demo_roster()'s first four via add_member's auto-activate) — no wizard.
+	main.party.overworld_figure = "fighter"   # Vera, active by default
 	main._party3d.reset(main.world)
-	check(main._party3d.has_model(player), "picking a hero figure gives the player a model")
+	check(main._party3d.has_model(player), "picking an active member's class gives the player a model")
+	main.party.overworld_figure = "wizard"    # nobody active is a wizard
+	main._party3d.reset(main.world)
+	check(not main._party3d.has_model(player),
+		"a class nobody in the active party has falls back to the pawn, not a stale figure")
 	main.party.overworld_figure = "not-a-real-class"
 	main._party3d.reset(main.world)
 	check(not main._party3d.has_model(player), "an unknown figure id falls back to the pawn, not a crash")
