@@ -1,5 +1,5 @@
-# Tier 0 for non-player roaming parties: a real 3D troop figure standing
-# where World draws the flat PawnTex icon. Shared SubViewport/camera/
+# Tier 0 for every roaming party, player included: a real 3D figure
+# standing where World draws the flat PawnTex icon. Shared SubViewport/camera/
 # projection rig lives in world_diorama3d.gd (also used by Settlements3D and
 # Lairs3D) — this file only owns what's party-specific: picking a model from
 # the party's highest-leveled troop (RoamingParty.highest_troop(), core/
@@ -7,10 +7,11 @@
 # and lairs don't, so this is the one diorama layer that needs it — same
 # lerp_angle trick Figures3D uses on the combat board).
 #
-# The player's own party is deliberately never given a figure here — they
-# already have a class-based hero figure story (figures3d.gd's HERO_MODELS)
-# and the gold-ringed pawn is how the player currently reads their own icon;
-# this layer is for the *other* bands on the map.
+# T9x: the player picks their own figure from HERO_MODELS on the Party
+# screen (core/party.gd's overworld_figure) — a free choice, not derived
+# from the active roster's classes. "" (never picked, or explicitly reset)
+# falls through has_model() to the flat, gold-ringed pawn, same contract as
+# every other uncovered lookup here.
 #
 # What this layer does NOT own: the shadow ellipse World._draw_party() draws
 # — that stays shared, same contract as Settlements3D/Lairs3D. This only
@@ -22,6 +23,7 @@ extends "res://scenes/world/world_diorama3d.gd"
 # already uses (figures3d.gd's FOE_MODELS), reused as-is rather than
 # duplicated: one lookup, not two art pipelines for the same monster.
 const FoeModels := preload("res://scenes/figures3d.gd").FOE_MODELS
+const HeroModels := preload("res://scenes/figures3d.gd").HERO_MODELS
 
 # core/world.gd's RoamingParty.faction is a Scaler.FACTIONS combat faction
 # (bandit, goblinoid, human, orc, ...), not one of the four races the troop
@@ -47,7 +49,8 @@ var _prev := {}                # party id -> last world position, for facing
 
 func _model_path(p) -> String:
 	if p.is_player:
-		return ""              # the player keeps the gold-ringed pawn, deliberately
+		var fig := String(world_map.party.overworld_figure) if world_map.party != null else ""
+		return String(HeroModels.get(fig, ""))
 	var race := String(RACE_FOR_FACTION.get(p.faction, ""))
 	var role := String(p.highest_troop().get("role", ""))
 	if race != "" and role != "":
@@ -91,7 +94,10 @@ func _reposition() -> void:
 		var n: Node3D = _figs.get(p.id)
 		if n == null:
 			continue
-		n.visible = _explored(p.position)   # T9x fog of war — the player never has a figure here anyway
+		# T9x fog of war: everyone else is fog-gated; the player is exempt —
+		# same "you can always see yourself" rule World._draw()'s 2D props
+		# loop already applies.
+		n.visible = p.is_player or _explored(p.position)
 		n.position = world_for_screen(world_map._pix(p.position))
 		# Same trick as Figures3D: face the direction of travel, hold it on
 		# arrival. The model's forward is +Z (glTF), so yaw = atan2(dx, dz).

@@ -7,6 +7,10 @@ extends Control
 
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
+# T9x: the open-world map's own figure lookup (scenes/world/party3d.gd reads
+# the same dict for the player) — reused here rather than duplicated so the
+# picker can never drift out of sync with what actually has a model.
+const HeroModels = preload("res://scenes/figures3d.gd").HERO_MODELS
 
 const COL_BG := Icons.COL_BG
 const COL_CARD := Icons.COL_PANEL
@@ -106,6 +110,28 @@ func _footer() -> Control:
 	_stash.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stash.add_theme_font_size_override("normal_font_size", Icons.FS_SMALL)
 	row.add_child(_stash)
+
+	# T9x: which figure stands for the party on the open-world map — a free
+	# choice (core/party.gd's overworld_figure), not derived from the active
+	# roster. "" keeps the original flat pawn icon.
+	var fig_label := Label.new()
+	fig_label.text = "Map figure:"
+	fig_label.add_theme_color_override("font_color", COL_DIM)
+	row.add_child(fig_label)
+	var fig_ob := OptionButton.new()
+	fig_ob.add_item("Default (plain pawn)")
+	fig_ob.set_item_metadata(0, "")
+	var keys: Array = HeroModels.keys()
+	keys.sort()
+	for k in keys:
+		fig_ob.add_item("%s  %s" % [Icons.class_glyph(k), k.capitalize()])
+		fig_ob.set_item_metadata(fig_ob.item_count - 1, k)
+	for i in fig_ob.item_count:
+		if String(fig_ob.get_item_metadata(i)) == party.overworld_figure:
+			fig_ob.select(i)
+			break
+	fig_ob.item_selected.connect(func(i): party.overworld_figure = String(fig_ob.get_item_metadata(i)))
+	row.add_child(fig_ob)
 
 	var create := Button.new()
 	create.text = "+  Create new"

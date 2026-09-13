@@ -47,6 +47,7 @@ func _party() -> Party:
 		p.add_member(ch)
 	p.add_gold(137)
 	p.stash_add("potion-of-healing", 2)
+	p.overworld_figure = "wizard"
 	return p
 
 func _init() -> void:
@@ -127,6 +128,7 @@ func _init() -> void:
 	check(Array(p2.active) == Array(party.active), "marching order")
 	check(p2.gold == 137, "the purse")
 	check(p2.stash_count("potion-of-healing") == 2, "the stash")
+	check(p2.overworld_figure == "wizard", "the chosen map figure")
 
 	# --- the world still runs ------------------------------------------------
 	w2.tick(0.1)

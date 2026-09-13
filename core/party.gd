@@ -23,6 +23,12 @@ var quests: Array = []            # T9's quest log — dicts owned by core/quest
 # -INF — keeps the value a normal float through a JSON save round-trip) so a
 # fresh party can always rest immediately.
 var last_long_rest_at: float = -1e12
+# T9x: which of figures3d.gd's HERO_MODELS the player picked to stand for
+# the party on the open-world map — chosen freely on the Party screen, not
+# derived from the active roster's classes. "" keeps the original flat
+# PawnTex icon (scenes/world/party3d.gd's fallback), same graceful-degrade
+# contract every other model lookup this session uses.
+var overworld_figure := ""
 
 # --- roster ---------------------------------------------------------------
 

@@ -455,6 +455,7 @@ func _close_party() -> void:
 		_party_overlay = null
 	world.clock.resume()
 	_pause_btn.text = "Pause"
+	_party3d.reset(world)   # T9x: picking a new overworld figure only takes effect on rebuild
 
 # --- quest log ------------------------------------------------------------
 #
@@ -1460,8 +1461,18 @@ func _draw_party(p, at: Vector2) -> void:
 	var rad := (11.0 if p.is_player else 9.0) * _zoom
 	var h := rad * 2.0 * PAWN.y / PAWN.x
 	_soft_shadow(at, rad * 0.8)
-	if p.is_player:   # under the sprite, so the ring's far arc reads as behind the pawn
-		draw_polyline(_ring(at, rad * 1.7), Icons.COL_GOLD, 1.5, true)
+	if p.is_player:
+		# T9x: a layered glow, not just a thin outline — needs to read as
+		# "this one is you" regardless of which hero figure is showing, now
+		# that the player can pick any of them from the Party screen. Drawn
+		# under the sprite so the ring's far arc reads as behind the pawn.
+		# (the old single ring was also never actually closed — draw_polyline's
+		# 3rd arg is antialiasing, not _ring()'s own `closed`, so it was
+		# missing one segment; fixed here too.)
+		for i in 3:
+			draw_colored_polygon(_ring(at, rad * (1.5 + 0.35 * i)),
+				Color(Icons.COL_GOLD, 0.18 - 0.05 * i))
+		draw_polyline(_ring(at, rad * 1.7, true, true), Icons.COL_GOLD, 2.5, true)
 	# Tier 0: a 3D troop figure in the Party3D layer above this map, picked from
 	# the band's highest-leveled troop — same contract as Settlements3D/Lairs3D,
 	# replaces the PawnTex icon (and its faction tint) only.
