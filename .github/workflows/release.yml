@@ -32,9 +32,16 @@ jobs:
     steps:
       # Full history, not the default shallow clone — the master-push
       # throttle below counts commits off `git rev-list --count HEAD`.
+      #
+      # ...but full history of a repository with 47 models in it used to mean
+      # downloading every version of every texture ever committed, on every
+      # run. `filter: blob:none` keeps the commits (which is all rev-list
+      # needs) and fetches file contents only for the tree actually checked
+      # out. The export below sees exactly the same working directory.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Pick the channel + export preset for this push
         id: pick
