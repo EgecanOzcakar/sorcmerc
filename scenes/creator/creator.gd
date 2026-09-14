@@ -417,11 +417,20 @@ func _confirm() -> void:
 	if not sheet.pending.is_empty():
 		_status.text = "%d choice(s) still unmade." % sheet.pending.size()
 		return
-	if ch.id == "":
-		ch.id = Save.slugify(ch.cname)
+	# A new hero is a new file, always. The name is not the identity — two Aria
+	# Vales are two characters — so the slug is minted against what is already in
+	# the barracks rather than straight off the name, which used to write the new
+	# build over the hero who happened to slugify the same way (and then lose the
+	# new one too, to Party.add_member's duplicate-id guard). Minted once: press
+	# Confirm twice and the second press re-saves this file, it does not fork it.
+	var wanted: String = ch.id if ch.id != "" else Save.slugify(ch.cname)
+	if _confirmed == null:
+		ch.id = Save.unique_slug(ch.cname, ch.id)
 	var path := Save.save(ch)
 	_confirmed = ch
 	_status.text = "Saved to %s" % path
+	if ch.id != wanted:
+		_status.text += "   —   the barracks already has someone called %s; this one is filed beside them, not over them." % ch.cname
 	character_created.emit(ch)
 
 # --- render ---------------------------------------------------------------

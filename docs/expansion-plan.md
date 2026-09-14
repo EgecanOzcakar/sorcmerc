@@ -4021,3 +4021,245 @@ Measured on this machine: the whole suite — import, script check, 64 subsystem
 tests, 8 UI robots — is **177 seconds**. That is why the workflow is one job
 and not a shard matrix; an earlier 30-minute figure turned out to be three
 copies of the runner fighting each other for the CPU, not the suite.
+
+## Five things play found (2026-09-14)
+
+Five reports from actually playing the game, and what each one turned out to
+be. Four were bugs; one was a design decision that had drifted into a bug.
+
+### A created ranger vanished off the party page
+
+The one that started as "where did my character go". The barracks is one JSON
+file per character at `user://characters/<slug>.json`, and the slug was minted
+by slugifying the name at the moment of saving. So a name is an identity, which
+is wrong twice over: two heroes called Aria Vale are two heroes, and
+`slugify()` is lossy besides — any two names built from the same letters and
+punctuation collapse together, and a name with no ASCII letters in it at all
+collapses to `character`.
+
+Naming a second hero after one already in the barracks therefore did two silent
+things at once. The new build was written **over** the existing one, so the
+ranger already on disk was destroyed with no warning; and then `Party.add_member`
+refused the new hero for carrying an id the roster already had — silently,
+because the refusal was an ignored return value — so the hero you had just
+built was not on the page either. One character deleted, one never created,
+nothing on screen about either. Reproduced end to end through the real screens:
+a ranger in the barracks, a hero built on the pack's party-setup page with the
+same name, and afterwards the page still showed a ranger who was now a
+barbarian on disk.
+
+The fix is that a new character gets a slug nothing is using —
+`CharacterSave.unique_slug()`, called once in the creator's `_confirm()`, so
+Aria Vale and Aria Vale are `aria-vale` and `aria-vale-2` — and that the file
+name is the identity: `load_slug()` now stamps the slug it loaded from onto the
+character, so a hand-copied or renamed save cannot come back wearing somebody
+else's id and get dropped. The creator says so when it has to number one. The
+refused `add_member` is reported on the party screen rather than swallowed;
+it should not be reachable any more, but a hero disappearing without a word is
+what this whole entry is about.
+
+### Shove → brazier worked with nothing to shove anyone into
+
+"You can only put somebody in the fire if they are standing next to it" was a
+rule of the *button*, not of the verb: `legal_target()` asked it, so the UI
+never offered or accepted an illegal target, but `Combat.perform()` would take
+the action, roll the contested Athletics, win it, and then quietly do nothing —
+`act_shove` returned `{"success": true}` on an empty hazard lookup, without so
+much as a line in the log. A turn gone and no explanation. The rule is now
+`can_shove_into_hazard()`, asked in both places, and asked in `perform()`
+*before* anything is spent.
+
+### Slipping past lair guardians the party had already been fighting
+
+`WorldLairs.sneak_past()` — the Animal Handling alternative to attacking a lair
+— checked that the lair was discovered and unlooted, and nothing else. Its own
+comment said "one attempt per lair" and world.gd's said "the guardians are
+alerted either way now, so there's no third attempt", but neither was true: the
+party could kick the door in, fight half-way down, withdraw, come back and then
+*talk their way past the guardians they had been killing*, collecting the
+sneak-past stash on top of the rooms they had already looted.
+
+`alerted()` is the missing rule, and it needs no new state: `entered_at` is
+already stamped the first time the party goes in (it is what starts the D1
+window) and already round-trips through `core/world_save.gd`, so a lair that
+has been disturbed reads as roused, including in saves written before this
+existed. A failed attempt now rouses the lair itself rather than relying on the
+fight it falls into, which is what makes it one attempt rather than one per
+visit. The button hides once they are up, and says why if it is pressed anyway.
+
+### Barks hidden behind the models
+
+Same bug the HP bar and the odds chip were each fixed for, one tier further
+down: a Figures3D model is a **Board child**, so it draws after everything
+`Board._draw()` paints, whatever the order within that function. Barks sat
+lower over their hex than either of the other two — right at a tall rig's chest
+— so what a character said was routinely covered by whoever was standing in
+front of them. They paint in `_draw_hud_overlay` now, on the CanvasLayer above
+Board and every tier including the figures, with a dropped shadow since they
+now land on top of the art rather than behind it. `tests/test_hud_layer.gd`
+pins both halves: that `Board._draw` no longer paints them and the overlay
+does, and that the two names the overlay reaches across for still exist.
+
+### The ambush deployment, and the action bar that would not hold still
+
+Two UI changes, both of them about the same thing: a control that moves under
+the hand reaching for it.
+
+**Deployment** offered one button per *pair* of heroes — six lines of
+"Swap Vera ↔ Pike" at four heroes, fifteen at six, none of which say anything
+about where on the board anybody is standing. It is a spatial choice, so it is
+made on the board now: click a hero to pick them up, click another to trade
+places. The swappable hexes are ringed, the held one brighter, and clicking the
+held hero again puts them back. The bar still lists them, so the phase is
+playable without the map and the robot can still drive it.
+
+**The action bar** re-sorted itself live. `_prioritize()` ordered the badges
+most-used-first and ran on every single rebuild, while `_bump_freq` counted
+every press — so using a verb could promote it past another and slide every
+badge to its right, mid-turn, under a player who was reaching for slot 3. On
+top of that the bar was built from `available()`, which only returns what is
+usable *this instant*, so spending a bonus action made a badge vanish and
+everything after it shift left. The hotkeys are positional, so [3] genuinely
+meant something different from one press to the next.
+
+Both halves are fixed. `Combat.all_verbs()` is `available()` without the
+can-they-afford-it-right-now filter (the structural half is now `is_button()`),
+so the bar is laid out along a character's whole kit and a verb that is merely
+spent holds its slot greyed out instead of collapsing the row. And the order is
+settled once per character per fight: `_prioritize()` still decides that first
+layout — the verbs this player reaches for still claim the low hotkeys — but it
+decides it once, and `_bar_order` replays it for the rest of the fight. What
+the frequency counter buys is the *next* fight's opening layout, which is all
+it was ever really worth.
+
+## Four more from play: loot, the save slot, the dead art, the sound (2026-09-14)
+
+### Winning a fight left nothing on the field
+
+`resolve_outcome()` has always returned a `loot` array, and both banking paths
+— `core/campaign.gd`'s `finish_combat` and `scenes/world/world.gd`'s `_bank` —
+have always stashed whatever is in it. It was always empty. The array was built
+from one source: a monster's own hand-authored `loot` key, and **not one of the
+316 entries in `data/bestiary.json` has one**. You could clear a bandit camp and
+come away with gold, XP, and nothing you could hold.
+
+`core/loot.gd` fills it, on two axes that are both "appropriate to what you just
+killed" rather than a flat table:
+
+- **Who it was decides what it was carrying.** `CARRIED` is keyed on the
+  bestiary's `faction` (the axis `core/scaler.gd` builds rosters along) and
+  falls back to `type`. A bandit is holding a shortsword and a leather jerkin; a
+  goblin a scimitar and a shortbow; a wolf is holding nothing, because a wolf is
+  holding nothing. Anything not in the table is a creature you loot rather than a
+  person you rob, and its odds are halved — what turns up is what the last person
+  it ate was carrying.
+- **How dangerous it was decides how often, and how good.** A flat CR ramp
+  (12% + 9%/CR, capped at 70%) on the odds, and a cumulative CR band on the
+  quality: common under CR 3, uncommon to 6, rare to 9, very-rare above. A CR 10
+  kill can still turn up a climbing potion; a CR 1/8 one cannot turn up a potion
+  of speed. Past CR 8 a kill is searched twice.
+
+Capped at three drops for the whole fight, because eight goblins should not come
+to eight swords. Rolled on the fight's own RNG, so `SORCMERC_SEED` replays the
+drops with the fight.
+
+Every id it can hand back is a **real catalog id**. That is load-bearing rather
+than tidy: the stash names an item with `Campaign.item_name()`, the shop pays
+`Campaign.item_price()` and the rarity colour comes off `Icons.rarity_of()`, and
+all three degrade silently — an invented `wolf-pelt` would show as "Wolf-pelt",
+worth 0 gp, in common grey, and look like loot while behaving like litter.
+`tests/test_loot.gd` checks every id in every hand-written table resolves.
+
+One judgement call worth writing down: `potions-of-healing` sits in the
+**uncommon** band rather than the obvious common one. The SRD files
+healing/greater/superior under one heading, so its rarity is `varies`, and
+`item_price` deliberately prices `varies` as rare — 2025 gp. Handing that over
+for a CR 1/8 bandit is not a healing potion, it is a purse.
+
+And it is said out loud in all three places a fight can end: the combat log
+names what came off the bodies in its rarity colour, the linear run's journal
+says it, and the open world puts it on the same label the lair outcomes use —
+the fight log is gone by the time the map comes back, and loot that lands
+silently in the stash is loot nobody knows they picked up.
+
+### The autosave slot was invisible
+
+There is exactly one open-world slot and it rolls. Fine, until you look at what
+the title screen said about it: `▶ Resume the open world`. Nothing about what
+you would be resuming, nothing about `✦ New run` being the thing that writes
+over it, and no way to clear it short of deleting a file by hand.
+
+`WorldSave.summary()` reads the slot's JSON without rebuilding a World — the
+clock, the map it was built from, who was standing, the purse, the story pack if
+there is one, and the file's own mtime. The title prints that under Resume,
+says in as many words that there is one slot and a new run takes it, and offers
+a Delete that goes through its own confirm screen naming what is about to be
+lost (and what is not — the characters are in the barracks, which is a different
+file).
+
+### The art credits, and the art
+
+Settings → Art credits listed every Liberated Pixel Cup author whose work went
+into the composited sprite sheets. Except the sprite tier had been switched off
+when the 3D figures landed (`USE_LPC_SPRITES := false`, "clashed against the 3D
+foes") and had been dead ever since — so the screen credited art that is not in
+the game.
+
+Removing just the screen was the wrong half: the art was still in the repo and
+still in every export, and CC-BY-SA 3.0 / OGA-BY require attribution for
+distributing it, not for displaying it. So both halves went — `assets/lpc/`,
+`assets/generated/`, `core/lpc_art.gd`, `Board._draw_sprite`, the
+`tools/lpc_compose.py` pipeline, `LICENSES/`, the credits screen, and the tests
+and shot scripts for all of it. Nothing changes visually, because nothing was
+drawing it. The README's provenance table and `assets/figures/PROVENANCE.md`
+lose the two rows that no longer describe anything.
+
+### Sound effects
+
+`tools/gen_audio.py` synthesizes all 39 assets offline out of the stdlib, and
+that is what makes `assets/audio/` reproducible from source with no network, no
+account and no bill. What it cannot do is sound like a recording — it is
+oscillators and filters, and several of the stings read as exactly that.
+
+`tools/gen_audio_elevenlabs.py` writes the same file names into the same
+directories from the ElevenLabs sound-effects API instead, one sound at a time
+(`--only hit,crit`), so the choice is per-sound rather than all-or-nothing: the
+synthesized `click` is fine, the synthesized `hit` is not. Output is 16-bit mono
+PCM at 44.1 kHz wrapped in a RIFF header, which `core/audio.gd` already handles
+— it reads rate and channel count out of each file's `fmt ` chunk rather than
+assuming them, so a mono generated file sits beside the synthesized stereo ones.
+
+Two things it deliberately is not. It is not the default: `gen_audio.py` stays
+the supported path and can rewrite any of these back. And it is not
+deterministic — the same prompt is a different take every run — so the WAVs stay
+committed and this is a tool you reach for when a sound needs replacing, never
+part of a build.
+
+The prompts describe the *sound*, not the game event: "a single heavy sword
+strike landing on chain mail armor, dry, no reverb tail" is something a model has
+heard; "hit.wav" is not. Lengths match what the game gives each sting room for,
+since `core/audio.gd` fires them as one-shots over live combat.
+
+**All 14 stings are now generated ones** — `assets/audio/sfx/` is the model's,
+`assets/audio/music/` and `assets/audio/barks/` are still the synthesized set.
+Three things had to be true before a take was drop-in, and none of them were:
+
+1. **The API has a half-second floor** (`duration_seconds` under 0.5 is a 400)
+   and overruns whatever it is given by about 2×. A UI click is a tick, not a
+   second, so the request is floored and the result trimmed.
+2. **Level.** `gen_audio.py` peak-normalizes every sting to 28480 (-1.2 dBFS),
+   uniformly, all fourteen. The takes came back anywhere from 2944 to clipping
+   at full scale — a tenfold spread, which dropped in unchanged would make some
+   sounds inaudible next to their neighbours and others the loudest thing in the
+   game. Matched to `gen_audio.py`'s own number rather than a new one, so the
+   two sets mix.
+3. **Silence.** Trimming is judged on RMS over a 10 ms window rather than per
+   sample. The first usable click was over by 200 ms and carried one stray
+   sample at 0.8% FS near the end — enough to defeat a per-sample scan and keep
+   three quarters of a second of nothing. Window RMS ignores the stray and still
+   catches a real decay tail. It took `click` from 0.96s to 0.18s.
+
+And one take came back **silent** (peak 14 of 32767). That is why the tool
+measures the peak and says `** silent take, re-run this one **` rather than
+writing a dead file and reporting success: a generative API can hand you nothing
+with a 200, and the only thing that catches it is looking at the samples.

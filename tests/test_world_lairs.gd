@@ -134,5 +134,23 @@ func _init() -> void:
 	l5.looted = true
 	check(WorldLairs.sneak_past(l5, party).is_empty(), "an already-looted lair has nothing left to sneak into")
 
+	# --- the quiet way closes once the guardians are up ------------------
+	# Fighting half-way into a warren, walking out and then talking your way
+	# past the guardians you had been killing used to work, and paid a second
+	# time on top of the rooms already looted.
+	var l6 := World.Lair.new("test-warren-6", Vector2.ZERO, "giant")
+	l6.discovered = true
+	check(not WorldLairs.alerted(l6), "an untouched lair is not roused")
+	check(WorldLairs.can_sneak(l6), "and the quiet way is open")
+
+	WorldLairs.mark_entered(l6, 100.0)              # the party kicks the door in
+	check(WorldLairs.alerted(l6), "going in rouses them")
+	check(not WorldLairs.can_sneak(l6), "the quiet way is shut")
+	check(WorldLairs.sneak_past(l6, party, RNG.new(1)).is_empty(),
+		"and sneak_past refuses whatever the roll would have been")
+
+	l6.depth_cleared = 0                             # withdrawn, then wiped: still roused
+	check(not WorldLairs.can_sneak(l6), "withdrawing and coming back does not settle them")
+
 	print("test_world_lairs: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

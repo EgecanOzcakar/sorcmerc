@@ -82,6 +82,39 @@ func test_hazards_where_expected() -> void:
 	check(cb.adjacent_hazard(hero)["type"] == "brazier", "and reports which one")
 	hero.pos = Vector2i(0, 0)
 	check(not cb.adjacent_to_hazard(hero), "and nothing across the room")
+	shove_into_the_brazier_needs_a_brazier()
+
+# You can only put somebody in the fire if they are standing next to it — and
+# that is the verb's rule, not just the button's. The resolver used to take the
+# action, roll the contest and quietly do nothing when the target was across the
+# room, so a shove aimed anywhere but beside the brazier burned the turn.
+func shove_into_the_brazier_needs_a_brazier() -> void:
+	var cb := _combat("sunken-shrine")
+	var hero = cb.combatants[0]
+	hero.athletics = 20          # the contest is never what refuses this
+	var foe = Adapter.to_combatant(Presets.party()[1], "foe", Vector2i(1, 0))
+	foe.athletics = -5
+	foe.acro = -5
+	cb.combatants.append(foe)
+	var shove: Dictionary = cb._basic("shove_brazier")
+
+	hero.pos = Vector2i(0, 0)    # both of them a room away from the brazier at (5,1)
+	cb.begin_turn_for(hero)
+	check(not cb.legal_target(hero, shove, foe), "an enemy across the room is not a legal target")
+	check(cb.available(hero).filter(func(v): return v.get("choice", "") == "brazier").is_empty(),
+		"and the verb is not offered at all")
+	var hp: int = foe.hp
+	var res: Dictionary = cb.perform(hero, shove, foe)
+	check(res.has("error"), "performing it anyway is refused (got %s)" % str(res))
+	check(foe.hp == hp, "the enemy takes no fire damage")
+	check(int(hero.econ["action"]) == 1, "and the action is still there to spend on something else")
+
+	hero.pos = Vector2i(4, 0)    # beside the brazier, and so is the foe
+	foe.pos = Vector2i(5, 0)
+	cb.begin_turn_for(hero)
+	check(cb.legal_target(hero, shove, foe), "beside the brazier it is a legal target")
+	res = cb.perform(hero, shove, foe)
+	check(res.get("success", false) and foe.hp < hp, "and the shove burns them")
 
 func test_barrel_blocks_until_smashed() -> void:
 	var cb := _combat("merchant-shop")

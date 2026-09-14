@@ -10,6 +10,7 @@ const WorldAI = preload("res://core/world_ai.gd")
 const WorldSave = preload("res://core/world_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Party = preload("res://core/party.gd")
+const Presets = preload("res://core/presets.gd")
 
 var _pass := 0
 var _fail := 0
@@ -199,6 +200,39 @@ func _done() -> void:
 	var back_old = WorldSave.from_dict(d_old)
 	check(String(Travel.orders(back_old["party"])["pace"]) == "normal",
 		"a save from before standing orders marches at the default")
+
+		# O13+: the title screen has to be able to say what is in the slot without
+	# rebuilding a World, say that there is only one of them, and clear it.
+	# "Resume the open world" on its own told the player none of that.
+	var Game = load("res://scenes/game/game.gd")
+	WorldSave.clear()
+	check(WorldSave.summary().is_empty(), "no slot, no summary")
+
+	var w2 := World.new()
+	w2.origin = {"kind": "procedural", "seed": 42}
+	w2.clock.elapsed = 1440.0 + 14 * 60.0 + 5.0        # Day 2, 14:05
+	var p2 := Party.new()
+	for ch in Presets.party():
+		p2.add_member(ch)
+	p2.add_gold(275)
+	WorldSave.save(w2, p2)
+
+	var slot: Dictionary = WorldSave.summary()
+	check(not slot.is_empty(), "a written slot summarises")
+	check(WorldSave.day_clock(float(slot["elapsed"])) == "Day 2  14:05",
+		"the summary reads the same clock the map does (got %s)"
+			% WorldSave.day_clock(float(slot["elapsed"])))
+	check(String(slot["map"]) == "procedural", "and names the map it was built from")
+	check(int(slot["gold"]) == 275, "and the purse")
+	check(not slot["party"].is_empty(), "and who was standing")
+	check(int(slot["written_at"]) > 0, "and when it was written")
+
+	var line: String = Game.slot_line(slot)
+	for bit in ["Day 2  14:05", "procedural", "275 gp"]:
+		check(line.contains(bit), "the title line says %s (got %s)" % [bit, line])
+
+	WorldSave.clear()
+	check(WorldSave.summary().is_empty(), "and the slot can be cleared from the title")
 
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

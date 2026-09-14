@@ -93,11 +93,21 @@ func show_title() -> void:
 
 	# Two slots, two doors: the linear run's autosave is debug-only (behind the flag),
 	# the open world's is normal play's.
+	#
+	# Both of them ROLL — one slot each, written over as you play — and the title
+	# used to say nothing about that at all. "Resume the open world" was the whole
+	# of it: no saying what you would be resuming, no saying that New run is going
+	# to write over it, and no way to clear it. All three are here now.
 	if linear_campaign() and CampaignSave.has_save():
 		col.add_child(_button("▶  Resume the last run", _resume))
-	if WorldSave.has_save():
+	var slot: Dictionary = WorldSave.summary()
+	if not slot.is_empty():
 		col.add_child(_button("▶  Resume the open world", _resume_world))
+		col.add_child(_dim("     " + slot_line(slot)))
+		col.add_child(_button("✖  Delete the autosave", _confirm_delete_world_save))
 	col.add_child(_button("✦  New run", show_party_setup))
+	if not slot.is_empty():
+		col.add_child(_dim("     one autosave slot — beginning a new run writes over the one above"))
 	col.add_child(_button("❖  Campaigns & mods", show_content))
 	col.add_child(_button("✧  Tutorial", show_tutorial))
 	col.add_child(_button("⚔  Random battle (debug)", show_random_battle))
@@ -106,6 +116,47 @@ func show_title() -> void:
 	col.add_child(_button("⚙  Settings", func(): SettingsOverlay.toggle(self)))
 	col.add_child(_button("Quit", func(): get_tree().quit()))
 
+	var centre := CenterContainer.new()
+	centre.add_child(col)
+	_swap(centre)
+
+# What is in the open-world slot, on one line: when the party stopped, where
+# they were, who was standing, and what they were carrying.
+static func slot_line(slot: Dictionary) -> String:
+	var bits: Array = [WorldSave.day_clock(float(slot.get("elapsed", 0.0)))]
+	var map := String(slot.get("map", ""))
+	if map != "":
+		bits.append("%s map" % map)
+	var who: Array = slot.get("party", [])
+	bits.append(", ".join(who) if not who.is_empty() else "nobody standing")
+	bits.append("%d gp" % int(slot.get("gold", 0)))
+	var story := String(slot.get("story", ""))
+	if story != "":
+		bits.append(story)
+	var when: int = int(slot.get("written_at", 0))
+	if when > 0:
+		bits.append("saved %s" % Time.get_datetime_string_from_unix_time(when, true).replace("T", " "))
+	return "  ·  ".join(bits)
+
+# Deleting the only copy of a run is not a one-click thing: this is its own
+# screen, and the way back is a button rather than a guess.
+func _confirm_delete_world_save() -> void:
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 10)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	var head := Label.new()
+	head.text = "Delete the open-world autosave?"
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	head.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	head.add_theme_color_override("font_color", Icons.COL_FOE)
+	col.add_child(head)
+	col.add_child(_dim(slot_line(WorldSave.summary())))
+	col.add_child(_dim("The characters stay in the barracks. The map, the purse, the"))
+	col.add_child(_dim("stash and the quests do not. This cannot be undone."))
+	col.add_child(_button("✖  Delete it", func():
+		WorldSave.clear()
+		show_title()))
+	col.add_child(_button("←  Keep it", show_title))
 	var centre := CenterContainer.new()
 	centre.add_child(col)
 	_swap(centre)
