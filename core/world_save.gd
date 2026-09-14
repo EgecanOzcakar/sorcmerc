@@ -1,13 +1,23 @@
-# O13 — open-world autosave. One rolling slot, same shape as core/campaign_save.gd
-# (that file is the linear run's slot; this one is normal play's).
+# O13 — open-world autosave, one rolling slot per playthrough (a sibling of
+# core/campaign_save.gd, the linear run's single dev-only slot).
 #
-#   WorldSave.save(world, party)            # on every overlay teardown, and on exit
+#   WorldSave.new_slot()                    # once, starting a fresh run
+#   WorldSave.set_active_slot(id)           # once, resuming a chosen one
+#   WorldSave.save(world, party)            # on every overlay teardown, and on exit —
+#                                            # always into whichever slot is active
 #   var s = WorldSave.load_latest()         # {"world": World, "party": Party}, or null
+#   WorldSave.list_slots()                  # every slot, newest first, for a picker
+#
+# The player only ever autosaves (automatic) or loads (picks a slot) — there is no
+# manual save, and no rename/delete. Never calling new_slot()/set_active_slot() is
+# the original single-slot behaviour, still what every test/driver gets by default.
 #
 # Loading also re-applies the saved faction opinion (it is process-global state in
 # core/faction_opinion.gd, so there is nowhere else to put it).
 #
-# user://autosave/world.json (or $SORCMERC_SAVE_DIR/world.json):
+# user://autosave/worlds/<slot id>.json (or $SORCMERC_SAVE_DIR/worlds/<slot id>.json;
+# the pre-slots user://autosave/world.json is migrated into a "legacy" slot the first
+# time list_slots() runs — see _migrate_legacy()):
 #
 # {
 #   "format": "sorcmerc-world",       // literal, checked on load
@@ -58,8 +68,73 @@ static func dir() -> String:
 		_dir = env if env != "" else DEFAULT_DIR
 	return _dir
 
+# Multiple slots, one per open-world playthrough — a "New run" must never land on
+# the same file an earlier run is still using (that was the actual bug: two runs
+# sharing one slot means the second overwrites the first the moment anything
+# autosaves). "" is the original single-slot behaviour and is what every test/
+# driver that never calls new_slot()/set_active_slot() still gets, unchanged.
+static var _active_slot := ""
+
+static func new_slot() -> String:
+	_active_slot = "%d-%d" % [Time.get_ticks_usec(), randi() % 1000000]
+	return _active_slot
+
+static func set_active_slot(id: String) -> void:
+	_active_slot = id
+
+static func active_slot() -> String:
+	return _active_slot
+
 static func path() -> String:
-	return dir() + "/world.json"
+	if _active_slot == "":
+		return dir() + "/world.json"
+	return dir() + "/worlds/%s.json" % _active_slot
+
+# A save from before slots existed is still just user://autosave/world.json — copied
+# (not moved, so an old test/driver that only knows the legacy path still finds it)
+# into the slot list the first time anything asks for it, so it shows up as
+# "Resume" instead of quietly vanishing the first time this ships.
+static func _migrate_legacy() -> void:
+	var legacy := dir() + "/world.json"
+	if not FileAccess.file_exists(legacy):
+		return
+	var slots_dir := dir() + "/worlds"
+	var migrated := slots_dir + "/legacy.json"
+	if FileAccess.file_exists(migrated):
+		return
+	DirAccess.make_dir_recursive_absolute(slots_dir)
+	var f := FileAccess.open(migrated, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_string(FileAccess.get_file_as_string(legacy))
+	f.close()
+
+# One row per slot, newest first — enough to label a "Resume" button without the
+# caller having to load (and re-decode RNGs/Vector2s for) the whole world.
+static func list_slots() -> Array:
+	_migrate_legacy()
+	var out: Array = []
+	var slots_dir := dir() + "/worlds"
+	var da := DirAccess.open(slots_dir)
+	if da == null:
+		return out
+	da.list_dir_begin()
+	var fname := da.get_next()
+	while fname != "":
+		if not da.current_is_dir() and fname.ends_with(".json"):
+			var full := slots_dir + "/" + fname
+			var d = JSON.parse_string(FileAccess.get_file_as_string(full))
+			if d is Dictionary and d.get("format") == FORMAT:
+				out.append({
+					"id": fname.get_basename(),
+					"elapsed": float(d.get("elapsed", 0.0)),
+					"gold": int(d.get("party", {}).get("gold", 0)),
+					"mtime": FileAccess.get_modified_time(full),
+				})
+		fname = da.get_next()
+	da.list_dir_end()
+	out.sort_custom(func(a, b): return a["mtime"] > b["mtime"])
+	return out
 
 static func to_dict(world, party = null) -> Dictionary:
 	var settlements: Array = []
@@ -269,7 +344,7 @@ static func _dec(v):
 static func save(world, party = null) -> void:
 	if world == null:
 		return
-	DirAccess.make_dir_recursive_absolute(dir())
+	DirAccess.make_dir_recursive_absolute(path().get_base_dir())
 	var f := FileAccess.open(path(), FileAccess.WRITE)
 	if f == null:
 		push_warning("cannot write %s" % path())

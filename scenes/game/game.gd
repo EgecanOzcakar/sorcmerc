@@ -84,8 +84,11 @@ func show_title() -> void:
 	# the open world's is normal play's.
 	if linear_campaign() and CampaignSave.has_save():
 		col.add_child(_button("▶  Resume the last run", _resume))
-	if WorldSave.has_save():
-		col.add_child(_button("▶  Resume the open world", _resume_world))
+	# O13x: one button per open-world slot, newest first — multiple playthroughs
+	# can coexist now, so "Resume" is a list, not a single fixed door.
+	for slot in WorldSave.list_slots():
+		col.add_child(_button("▶  Resume the open world — %s" % _slot_label(slot),
+			_resume_world.bind(slot["id"])))
 	col.add_child(_button("✦  New run", show_party_setup))
 	col.add_child(_button("❖  Tutorial", show_tutorial))
 	col.add_child(_button("⚔  Random battle (debug)", show_random_battle))
@@ -111,12 +114,22 @@ func _resume() -> void:
 
 # O13: the open world has no terminal state to check — there is no "finished" world,
 # only the map you left. WorldSave.from_dict re-applies faction opinion itself.
-func _resume_world() -> void:
+func _resume_world(slot_id: String) -> void:
+	WorldSave.set_active_slot(slot_id)
 	var saved = WorldSave.load_latest()
 	if saved == null:
 		show_title()
 		return
 	show_world(saved["party"], saved["world"])
+
+# "Day 3  08:40  ·  #91A2C4" — the same day/hour/minute arithmetic world.gd's HUD
+# clock uses, plus a slice of the slot id so two saves are never indistinguishable
+# even when their in-game clocks happen to tie.
+func _slot_label(slot: Dictionary) -> String:
+	var elapsed: float = slot["elapsed"]
+	return "Day %d  %02d:%02d  ·  #%s" % [
+		int(elapsed / 1440.0) + 1, int(elapsed / 60.0) % 24, int(elapsed) % 60,
+		String(slot["id"]).replace("-", "").right(6).to_upper()]
 
 # --- tutorial -------------------------------------------------------------
 #
@@ -207,7 +220,8 @@ func show_party_setup() -> void:
 		if linear_campaign():
 			_show_campaign(Campaign.new(party, int(OS.get_environment("SORCMERC_SEED"))))
 		else:
-			show_world(party, null, size)
+			WorldSave.new_slot()          # O13x: a fresh run gets its own slot, never
+			show_world(party, null, size) # one an earlier run's autosave still owns
 
 	var begin_small := Button.new()
 	begin_small.text = "Begin — Small World  →"
