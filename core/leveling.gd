@@ -37,6 +37,24 @@ static func add_level(ch, class_id := "", hp_roll := AVERAGE) -> void:
 	ch.add_level(class_id if class_id != "" else ch.class_id(), hp_roll)
 	milestones(ch)
 
+# Catch-up levels for a character joining a party that is already several levels
+# in (scenes/creator/creator.gd's start_level): append levels in `class_id` until
+# the build sits at `target_level`, and bank exactly the XP that level costs so
+# the new arrival is not instantly owed another one.
+#
+# These levels are a gift, not a haul, so nothing here touches core/progression.gd:
+# lifetime XP — and the species/class unlocks it buys — only ever counts XP earned
+# in a fight, which core/campaign.gd banks on its own. Milestone achievements stay
+# out for the same reason: being handed level 5 is not reaching level 5.
+static func grant_levels(ch, target_level: int, class_id := "") -> void:
+	var cid: String = class_id if class_id != "" else ch.class_id()
+	if cid == "":
+		return
+	var target: int = clampi(target_level, 1, MAX_LEVEL)
+	while ch.level() < target:
+		ch.add_level(cid, AVERAGE)
+	ch.xp = maxi(int(ch.xp), xp_for_level(ch.level()))
+
 static func pending(ch) -> Array:
 	return ch.sheet().pending
 

@@ -67,6 +67,18 @@ func bench_list() -> Array:
 func is_active(id: String) -> bool:
 	return id in active
 
+# The level the party is actually playing at: the highest among the <= 4 who
+# fight. 1 while nobody is active, so the very first hero still starts where a
+# first hero starts. A character created later joins here rather than at 1 —
+# see scenes/creator/creator.gd's start_level.
+func active_max_level() -> int:
+	var best := 1
+	for id in active:
+		var ch = get_member(id)
+		if ch != null:
+			best = maxi(best, ch.level())
+	return best
+
 func activate(id: String) -> bool:
 	var ch = get_member(id)
 	if is_active(id) or ch == null or ch.dead or active.size() >= MAX_ACTIVE:
