@@ -1,0 +1,24 @@
+[
+  {
+    "id": "ember-crown",
+    "name": "The Ember Crown",
+    "category": "wondrous",
+    "rarity": "legendary",
+    "attunement": true,
+    "attunementNote": "by a creature that has closed the Ashen Road",
+    "variantOf": null,
+    "description": "Wondrous Item\n A circlet of banked coal that has never gone out. While attuned and wearing it you have resistance to cold damage, and once per long rest you may end one effect on yourself that a Constitution saving throw would have prevented.",
+    "structuredBonuses": null
+  },
+  {
+    "id": "coldmarch-lantern",
+    "name": "Coldmarch Lantern",
+    "category": "wondrous",
+    "rarity": "uncommon",
+    "attunement": false,
+    "attunementNote": null,
+    "variantOf": null,
+    "description": "Wondrous Item\n It burns without fuel and casts no heat. Undead within its light are visible even when they should not be.",
+    "structuredBonuses": null
+  }
+]

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "ember-brand",
+    "name": "Ember Brand",
+    "category": "weapon",
+    "rarity": "rare",
+    "attunement": true,
+    "attunementNote": null,
+    "variantOf": null,
+    "description": "Weapon (Any Sword)\n A blade quenched in the Wyrmscar's own heat. You gain a +1 bonus to attack and damage rolls made with this weapon, and it sheds dim light out to 10 feet while anything undead stands within 60 feet of you.",
+    "structuredBonuses": null
+  },
+  {
+    "id": "reeves-seal",
+    "name": "The Reeve's Seal",
+    "category": "wondrous",
+    "rarity": "uncommon",
+    "attunement": false,
+    "attunementNote": null,
+    "variantOf": null,
+    "description": "Wondrous Item\n A soot-blackened writ of authority from Emberwatch. Its bearer speaks for the holding, which is worth rather more on the road than it is at home.",
+    "structuredBonuses": null
+  }
+]

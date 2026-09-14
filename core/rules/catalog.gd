@@ -10,6 +10,33 @@ static var _files := {}      # filename -> parsed Variant (null when absent/bad)
 static var _indexes := {}    # filename -> {id: record}
 static var _spell_lists := {}  # class_id -> {level: [spell_id]}
 
+# M6 — content packs layering their own records over data/*.json. Each entry is
+# {"id": pack id, "files": {data filename: parsed records}}, in the order they
+# should apply: a later pack's record with an id an earlier one already used
+# replaces it, so `priority` in a pack.json is what decides who wins a fight
+# over "goblin". core/mod/registry.gd owns this list and is the only thing that
+# should write it.
+#
+# Overlays are deliberately NOT a separate lookup path: they are folded into
+# the same parsed arrays everything already reads, so a pack's monster is a
+# monster to every system in the game — the scaler's faction pools, the
+# bestiary screen, the encounter builder — with no per-caller awareness.
+static var _overlays: Array = []
+
+static func set_overlays(list: Array) -> void:
+	_overlays = list
+	reset()
+
+static func overlays() -> Array:
+	return _overlays
+
+# Drop every cache. Needed when the overlay set changes (enabling a pack
+# mid-session) and useful to a test that wants the base game back.
+static func reset() -> void:
+	_files.clear()
+	_indexes.clear()
+	_spell_lists.clear()
+
 static func all(file: String) -> Variant:
 	if not _files.has(file):
 		var txt := FileAccess.get_file_as_string(DIR + file)
@@ -20,7 +47,50 @@ static func all(file: String) -> Variant:
 			_files[file] = JSON.parse_string(txt)
 			if _files[file] == null:
 				warnings.append("unparsable data file: " + file)
+		_files[file] = _layered(file, _files[file])
 	return _files[file]
+
+# The base file with every pack's records for it folded in. An Array file
+# (monsters, spells, items — anything with `id` records) merges by id and
+# appends what is new, keeping the base order so nothing that walks the list
+# in file order shifts under a pack. A Dictionary file (skills.json) merges by
+# key. A pack may therefore both ADD content and RETUNE the game's own, which
+# is the difference between a mod loader and a second data directory.
+static func _layered(file: String, base):
+	if _overlays.is_empty():
+		return base
+	var merged = base
+	for pack in _overlays:
+		var records = pack.get("files", {}).get(file)
+		if records == null:
+			continue
+		if merged == null:
+			merged = [] if records is Array else {}
+		if merged is Dictionary and records is Dictionary:
+			merged = merged.duplicate()
+			merged.merge(records, true)
+		elif merged is Array and records is Array:
+			merged = _merge_records(merged, records)
+		else:
+			warnings.append("pack \"%s\" overlays %s with the wrong shape"
+				% [pack.get("id", "?"), file])
+	return merged
+
+static func _merge_records(base: Array, extra: Array) -> Array:
+	var at := {}
+	for i in base.size():
+		if base[i] is Dictionary and base[i].has("id"):
+			at[base[i]["id"]] = i
+	var out := base.duplicate()
+	for r in extra:
+		if not (r is Dictionary) or not r.has("id"):
+			continue
+		if at.has(r["id"]):
+			out[at[r["id"]]] = r
+		else:
+			at[r["id"]] = out.size()
+			out.append(r)
+	return out
 
 static func index(file: String) -> Dictionary:
 	if not _indexes.has(file):

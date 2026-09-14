@@ -50,7 +50,11 @@ static func patrol(party, waypoints: Array) -> void:
 static func wander(party, home, radius := 80.0, seed_value := 0) -> void:
 	party.ai = {
 		"behavior": "wander",
-		"home": home.position if "position" in home else home,
+		# Either a settlement (anything with a position) or a bare point. The
+		# Vector2 half is what the header has always documented and what M3's
+		# data-driven placement passes; `"position" in <Vector2>` is an error,
+		# not a false, so the type test has to come first.
+		"home": home if home is Vector2 else home.position,
 		"radius": radius,
 		"rng": RNG.new(seed_value),
 	}
