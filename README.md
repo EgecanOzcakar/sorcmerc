@@ -83,11 +83,15 @@ tools/check_audio.py
                    tests, since tests/test_audio.gd can only prove the engine
                    parses them
 tools/gen_action_icons.py
-                   draws assets/icons/ — one gilt-framed 64x64 SVG badge per
-                   action-bar verb kind, per spell school, and for the bar's
-                   own controls, plus the .import each one is read through.
-                   `--check` fails if a committed icon has drifted from its
-                   recipe
+                   draws assets/icons/ — a gilt-framed 64x64 SVG badge for
+                   every skill the action bar can offer (each combat-castable
+                   spell, each feature that becomes a button, each Shove
+                   variant) plus the verb-kind and spell-school fallbacks and
+                   the bar's own controls, and the .import each one is read
+                   through. Motifs are composed from a shared library and
+                   coloured by what the skill does, so the disc says school and
+                   the mark says fire/frost/poison. `--check` fails if a
+                   committed icon has drifted from its recipe
 ```
 
 ## Assets and provenance

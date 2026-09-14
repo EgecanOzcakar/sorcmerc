@@ -182,11 +182,21 @@ static func verb_glyph(kind: String) -> String:
 # The glyphs above are the fallback now, not the mark. A codepoint is whatever
 # the shipped font decided it looks like: DejaVu draws ⚔, ⚒ and ⇉ at three
 # different weights and on two different baselines, so a row of them never sat
-# straight however the buttons were laid out. assets/icons/ holds a drawn 64x64
-# SVG badge per verb kind and per spell school instead — gilt frame, dark
-# medallion, a lit silhouette on it. tools/gen_action_icons.py emits them, keyed
-# by exactly the names in VERB_GLYPHS and SCHOOL_GLYPHS, so a new verb needs a
-# recipe there and nothing here.
+# straight however the buttons were laid out. assets/icons/ holds drawn 64x64
+# SVG badges instead — gilt frame, dark medallion, a lit silhouette on it —
+# emitted by tools/gen_action_icons.py in three layers:
+#
+#   skills/    one per skill the bar can name: every combat-castable spell,
+#              every feature that becomes a button, each Shove variant. This is
+#              the layer the bar actually wants, because since T-skillicons the
+#              badge IS the button — the name and the numbers live in the
+#              tooltip — and two spells that share a mark are two buttons a
+#              player cannot tell apart.
+#   schools/   the eight spell schools, for a spell with no badge of its own.
+#   actions/   one per verb kind (VERB_GLYPHS), plus the bar's own controls.
+#
+# Keyed by exactly the ids the game uses, so a new spell needs a recipe there
+# and nothing here.
 #
 # The colour is in the file, not on the button. A school badge already stands on
 # its own SCHOOL_COLORS disc (the same colour spell_bb tints the spell's name
@@ -198,10 +208,9 @@ static func verb_glyph(kind: String) -> String:
 # left them out, a content pack's verb kind with no art of its own: _icon()
 # returns null and the caller keeps the glyph. Every call site pairs the two.
 const ICON_ROOT := "res://assets/icons"
-# 22, not the badge's own 64: the bar's buttons are 126 px wide and clip their
-# text, so every pixel the mark takes is a character of the label lost. 22 is
-# what the font glyph it replaced occupied, and the badge still reads at it.
-const ICON_PX := 22          # drawn size on the bar at zoom 1 (_apply_ui_scale scales it)
+# The badge IS the button now — the name, the prose and the numbers moved into
+# the hover popup — so it gets the room a 126 px label used to take.
+const ICON_PX := 40          # drawn size on the bar at zoom 1 (_apply_ui_scale scales it)
 # The bar's own controls live alongside the verbs — same row, same weight.
 const BAR_ICONS := ["end_turn", "back", "swap", "generic"]
 
@@ -216,6 +225,32 @@ static func _icon(path: String) -> Texture2D:
 	if ResourceLoader.exists(path):
 		tex = ResourceLoader.load(path) as Texture2D
 	_icon_cache[path] = tex
+	return tex
+
+# The badge for one thing the bar is offering, most specific first: the skill's
+# own art if it has any (assets/icons/skills — every combat-castable spell, every
+# feature that becomes a button, each Shove variant), then the spell's school,
+# then the verb kind, then the generic spark. `v` is a verb straight out of
+# cb.available().
+#
+# Ids arrive with two decorations that are not part of the identity: a granted
+# verb is "<feature>:<basic>" (combat.gd's grant_verb, e.g. Flurry of Blows
+# granting an attack) and an upcast spell is "<spell>@<level>". Both are cut
+# back to the thing that has art.
+static func skill_icon(v: Dictionary) -> Texture2D:
+	var sid := String(v.get("spell", ""))
+	var id := String(v.get("id", "")).get_slice(":", 1) if String(v.get("id", "")).contains(":") \
+		else String(v.get("id", ""))
+	id = id.get_slice("@", 0)
+	var tex: Texture2D = null
+	if sid != "":
+		tex = _icon("%s/skills/%s.svg" % [ICON_ROOT, sid])
+		if tex == null:
+			tex = _icon("%s/schools/%s.svg" % [ICON_ROOT, spell_school(sid)])
+	else:
+		tex = _icon("%s/skills/%s.svg" % [ICON_ROOT, id])
+	if tex == null:
+		tex = verb_icon(String(v.get("kind", "")))
 	return tex
 
 # One per verb `kind`, plus BAR_ICONS. A kind with no art of its own — a
@@ -245,6 +280,16 @@ static func icon_button(b: Button, tex: Texture2D, px := ICON_PX) -> Button:
 	b.add_theme_constant_override("icon_max_width", px)
 	b.add_theme_constant_override("h_separation", 4)
 	b.add_theme_color_override("icon_disabled_color", Color(1, 1, 1, 0.35))
+	# dark_theme() pads a button by 10 for text; a badge button has no text and
+	# that padding is the difference between a 40 px mark and a 32 px one, so
+	# these get their own boxes — same colours, four pixels of inset.
+	for state in [["normal", "2b3040"], ["hover", "3a4152"], ["pressed", "4a5570"],
+			["disabled", "22252e"]]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(state[1])
+		box.set_corner_radius_all(6)
+		box.set_content_margin_all(4)
+		b.add_theme_stylebox_override(state[0], box)
 	return b
 
 # "⟳ Fire Bolt" as bbcode, school-tinted mark, plain name.

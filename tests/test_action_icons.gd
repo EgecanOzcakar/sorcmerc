@@ -12,9 +12,12 @@ extends SceneTree
 
 const Icons = preload("res://core/ui_icons.gd")
 const Combat = preload("res://core/combat.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
+const Effects = preload("res://core/rules/effects.gd")
 
 const ACTION_DIR := "res://assets/icons/actions"
 const SCHOOL_DIR := "res://assets/icons/schools"
+const SKILL_DIR := "res://assets/icons/skills"
 
 var _pass := 0
 var _fail := 0
@@ -77,6 +80,56 @@ func _init() -> void:
 			check(Icons.SCHOOL_GLYPHS.has(f.get_basename()),
 				"schools/%s is still a school" % f)
 
+	# --- one badge per skill, not one per kind -----------------------------
+	# The bar names nothing any more: the badge is the whole button and the
+	# name lives in the tooltip. So every skill that can BE a button needs art
+	# of its own, or two different spells become the same square.
+	var spells := 0
+	for sid in Catalog.index("spells.json"):
+		if Effects.spell(sid).is_empty():
+			continue          # not combat-castable: it never reaches the bar
+		spells += 1
+		_icon_ok("%s/%s.svg" % [SKILL_DIR, sid], "spell " + String(sid))
+	check(spells >= 50, "found the castable spells to check (%d)" % spells)
+
+	var feats := 0
+	var fdata = Catalog.all("effects/features.json")
+	for fid in fdata:
+		if String(fid).begins_with("_") or not fdata[fid] is Dictionary:
+			continue
+		if not fdata[fid].get("kind", "") in Combat.OFFERABLE:
+			continue          # passive: folded into a roll, never a button
+		feats += 1
+		_icon_ok("%s/%s.svg" % [SKILL_DIR, fid], "feature " + String(fid))
+	check(feats >= 20, "found the button features to check (%d)" % feats)
+
+	# Shove is one kind with three choices, and the choice is the verb.
+	for b in Combat.BASIC:
+		if String(b["kind"]) == "shove":
+			_icon_ok("%s/%s.svg" % [SKILL_DIR, b["id"]], "shove " + String(b["id"]))
+
+	# Nothing in skills/ that nothing offers.
+	for f in DirAccess.get_files_at(SKILL_DIR):
+		if not f.ends_with(".svg"):
+			continue
+		var id := f.get_basename()
+		var known: bool = Catalog.index("spells.json").has(id) or (fdata is Dictionary and fdata.has(id))
+		if not known:
+			for b in Combat.BASIC:
+				if b["id"] == id:
+					known = true
+		check(known, "skills/%s is still something the bar can offer" % f)
+
+	# Two skills sharing a badge is the failure this whole layer exists to
+	# prevent, and it is invisible on screen — the buttons just look alike.
+	var seen := {}
+	for f in DirAccess.get_files_at(SKILL_DIR):
+		if not f.ends_with(".svg"):
+			continue
+		var body := FileAccess.get_file_as_string("%s/%s" % [SKILL_DIR, f])
+		check(not seen.has(body), "skills/%s has art of its own (matches %s)" % [f, seen.get(body, "")])
+		seen[body] = f
+
 	# The lookups themselves. Only meaningful once the project has been
 	# imported — on a clean clone there is no .ctex yet and the bar is supposed
 	# to fall back to glyphs rather than break, so that case is a skip, not a
@@ -86,6 +139,22 @@ func _init() -> void:
 		check(Icons.school_icon("evocation") != null, "school_icon('evocation') loads")
 		check(Icons.verb_icon("no_such_verb") != null,
 			"an unknown verb kind falls back to the generic mark, not to nothing")
+		# skill_icon walks id -> spell -> school -> kind -> generic, and has to
+		# see through the two decorations an id can arrive with.
+		check(Icons.skill_icon({"id": "fire-bolt", "spell": "fire-bolt", "kind": "spell"}) != null,
+			"skill_icon finds a spell's own badge")
+		check(Icons.skill_icon({"id": "fighter-second-wind", "kind": "heal_self"})
+			== Icons.skill_icon({"id": "fighter-second-wind", "kind": "heal_self"}),
+			"and caches it rather than re-loading per frame")
+		check(Icons.skill_icon({"id": "burning-hands@2", "spell": "burning-hands", "kind": "spell"})
+			== Icons.skill_icon({"id": "burning-hands", "spell": "burning-hands", "kind": "spell"}),
+			"an upcast tier wears the same badge as the spell it upcasts")
+		check(Icons.skill_icon({"id": "monk-flurry-of-blows:attack", "kind": "attack"})
+			== Icons.verb_icon("attack"),
+			"a granted verb resolves to the basic verb it grants")
+		check(Icons.skill_icon({"id": "nothing-like-this", "kind": "dodge"})
+			== Icons.verb_icon("dodge"),
+			"a skill with no art of its own falls back to its kind")
 		var btn := Button.new()
 		Icons.icon_button(btn, Icons.verb_icon("dash"))
 		check(btn.icon != null, "icon_button hangs the badge on the button")

@@ -612,7 +612,633 @@ SCHOOLS = {
     ),
 }
 
-GROUPS = {"actions": ACTIONS, "schools": SCHOOLS}
+
+
+# --- the elements ----------------------------------------------------------
+# A skill's motif is coloured by what it DOES, not by its school: the school is
+# already the disc under it. Two Evocation cantrips that throw fire and frost
+# should not be the same badge in two shades of the same red.
+
+ELEM = {
+    "fire": "#e0643c", "cold": "#7fc4dd", "lightning": "#f0cf55", "acid": "#a8c740",
+    "poison": "#79a86b", "necrotic": "#9d7fd8", "radiant": "#f2dfa6", "psychic": "#d47fc0",
+    "force": "#b9c6e6", "thunder": "#c8a75a", "life": "#5fbf6a", "steel": "#c3cbdb",
+    "gold": "#d0a95c", "shadow": "#7a6f96", "nature": "#8fbf5a", "stone": "#a39c8e",
+}
+
+
+def E(name: str) -> tuple:
+    return tones(ELEM[name])
+
+
+# --- motifs ----------------------------------------------------------------
+# One builder per shape family, each drawing into a ~30-unit box centred on
+# (32, 32) so any of them can stand on any disc. They are parametrised rather
+# than one-per-skill because that is what makes 90 badges a registry instead of
+# 90 drawings: Fire Bolt and Ray of Frost are the same dart in two elements,
+# Scorching Ray is three of it.
+
+def flame(t: tuple, cx: float = 32, cy: float = 33, s: float = 1.0) -> str:
+    """A tongue of fire. The inner flame is the light tone, so it reads lit."""
+    def P(x, y):
+        return cx + x * s, cy + y * s
+    return (path("M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f "
+                 "C%.1f %.1f %.1f %.1f %.1f %.1fz" % (
+                     *P(0, -16), *P(7, -6), *P(11, -1), *P(11, 5),
+                     *P(11, 13), *P(5, 17), *P(0, 17),
+                     *P(-11, 17), *P(-11, 5), *P(-11, 1)), t[1], sw=1.3)
+            + path("M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1fz" % (
+                *P(0, -5), *P(5, 1), *P(5.5, 5), *P(5.5, 9),
+                *P(4, 13), *P(-5.5, 13), *P(-5.5, 6)), t[0], stroke="none"))
+
+
+def dart(t: tuple, rot: float = -45, n: int = 1, s: float = 1.0) -> str:
+    """A bolt of something thrown: a tapered dart with a trailing tail. `n` of
+    them fan out — one is Fire Bolt, three is Scorching Ray."""
+    out = []
+    spread = 13.0
+    for i in range(n):
+        off = (i - (n - 1) / 2.0) * spread
+        out.append(group([
+            poly([(0, -15 * s), (4.2 * s, -4 * s), (0, 9 * s), (-4.2 * s, -4 * s)], t[1], sw=1.2),
+            poly([(0, -13 * s), (2.2 * s, -4 * s), (0, 5 * s)], t[0], stroke="none"),
+            poly([(0, 9 * s), (2.4 * s, 15 * s), (-2.4 * s, 15 * s)], t[2], sw=1.0),
+        ], 32 + off * 0.62, 32 + off * 0.28, rot))
+    return "".join(out)
+
+
+def beam(t: tuple, rot: float = -35, s: float = 1.0) -> str:
+    """A held beam rather than a thrown bolt: a widening shaft from one corner."""
+    return group([
+        poly([(-3.5 * s, -18 * s), (3.5 * s, -18 * s), (7 * s, 18 * s), (-7 * s, 18 * s)], t[1], sw=1.2),
+        poly([(-1.4 * s, -17 * s), (1.4 * s, -17 * s), (3 * s, 16 * s), (-3 * s, 16 * s)], t[0], stroke="none"),
+    ], 32, 32, rot)
+
+
+def cone_burst(t: tuple, rot: float = 0.0, s: float = 1.0) -> str:
+    """A cone leaving the caster: Burning Hands, a breath weapon, Cone of Cold."""
+    return group([
+        poly([(0, -17 * s), (14 * s, 12 * s), (0, 17 * s), (-14 * s, 12 * s)], t[2], sw=1.1),
+        poly([(0, -14 * s), (9 * s, 10 * s), (0, 14 * s), (-9 * s, 10 * s)], t[1], stroke="none"),
+        poly([(0, -9 * s), (4.5 * s, 8 * s), (0, 10 * s), (-4.5 * s, 8 * s)], t[0], stroke="none"),
+    ], 32, 32, rot)
+
+
+def orb(t: tuple, s: float = 1.0, ring: bool = False) -> str:
+    out = [circle(32, 32, 13 * s, t[1], sw=1.3),
+           band(32, 32, 10 * s, 6.5 * s, 185, 260, t[0], stroke="none")]
+    if ring:
+        out.append(circle(32, 32, 16.5 * s, "none", stroke=t[2], sw=1.6))
+    return "".join(out)
+
+
+def droplets(t: tuple, n: int = 3, s: float = 1.0) -> str:
+    """Acid, poison, venom — a fan of drops."""
+    out = []
+    for i in range(n):
+        a = -60 + i * (120.0 / max(1, n - 1)) if n > 1 else 0
+        x, y = pt(32, 30, 12 * s, a + 90)
+        r = 5.2 * s if i == n // 2 else 4.2 * s
+        out.append(path("M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1fz" % (
+            x, y - r * 1.9, x + r, y - r * 0.2, x + r, y + r * 0.1, x, y + r * 1.2,
+            x - r, y + r * 0.1, x - r, y - r * 0.2, x, y - r * 1.9), t[1], sw=1.1))
+        out.append(circle(x - r * 0.3, y - r * 0.1, r * 0.32, t[0], stroke="none"))
+    return "".join(out)
+
+
+def snowflake(t: tuple, s: float = 1.0) -> str:
+    out = []
+    for a in (90, 150, 210, 270, 330, 30):
+        x0, y0 = pt(32, 32, 3 * s, a)
+        x1, y1 = pt(32, 32, 16 * s, a)
+        out.append(stroke_path("M%.1f %.1f L%.1f %.1f" % (x0, y0, x1, y1), t[1], 3.0 * s))
+        bx, by = pt(32, 32, 11 * s, a)
+        for da in (-38, 38):
+            tx, ty = pt(bx, by, 5.5 * s, a + da)
+            out.append(stroke_path("M%.1f %.1f L%.1f %.1f" % (bx, by, tx, ty), t[1], 2.2 * s))
+    out.append(circle(32, 32, 3.4 * s, t[0], stroke="none"))
+    return "".join(out)
+
+
+def bolt(t: tuple, s: float = 1.0) -> str:
+    """The lightning zigzag."""
+    def P(x, y):
+        return 32 + x * s, 32 + y * s
+    return (poly([P(4, -18), P(-9, 2), P(-1, 2), P(-5, 18), P(9, -3), P(1, -3)], t[1], sw=1.3)
+            + poly([P(2.5, -14), P(-5, 1), P(-1.5, 1)], t[0], stroke="none"))
+
+
+def skull(t: tuple, s: float = 1.0, cy: float = 31) -> str:
+    """A cranium and a jaw, from computed points — the first version of this was
+    one format string with a %.1f count nobody could check by eye."""
+    dark = mix(t[2], INK, 0.55)
+    def P(x, y):
+        return "%.1f %.1f" % (32 + x * s, cy + y * s)
+    d = ("M" + P(0, -15)
+         + " C" + P(8.5, -15) + " " + P(14, -8.5) + " " + P(14, 0)
+         + " C" + P(14, 4.5) + " " + P(11.5, 7) + " " + P(9.5, 9)
+         + " L" + P(9.5, 13)
+         + " C" + P(9.5, 15) + " " + P(8, 15.5) + " " + P(6.5, 15.5)
+         + " L" + P(-6.5, 15.5)
+         + " C" + P(-8, 15.5) + " " + P(-9.5, 15) + " " + P(-9.5, 13)
+         + " L" + P(-9.5, 9)
+         + " C" + P(-11.5, 7) + " " + P(-14, 4.5) + " " + P(-14, 0)
+         + " C" + P(-14, -8.5) + " " + P(-8.5, -15) + " " + P(0, -15) + "z")
+    return (path(d, t[1], sw=1.3)
+            + circle(32 - 5.4 * s, cy - 2 * s, 4.0 * s, dark, sw=1.0)
+            + circle(32 + 5.4 * s, cy - 2 * s, 4.0 * s, dark, sw=1.0)
+            + poly([(32, cy + 2.5 * s), (32 + 2.6 * s, cy + 7 * s), (32 - 2.6 * s, cy + 7 * s)],
+                   dark, sw=1.0))
+
+
+def hand(t: tuple, rot: float = 0.0, s: float = 1.0, claw: bool = False) -> str:
+    """A palm with three fingers — a touch spell, a grasp, a rebuke."""
+    tip = t[0] if not claw else mix(t[0], "#ffffff", 0.4)
+    parts = [
+        path("M%.1f %.1f L%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f L%.1f %.1f z" % (
+            32 - 9 * s, 32 + 2 * s, 32 - 9 * s, 32 + 8 * s,
+            32 - 9 * s, 32 + 15 * s, 32 + 9 * s, 32 + 15 * s,
+            32 + 9 * s, 32 + 8 * s, 32 + 9 * s, 32 + 2 * s), t[1], sw=1.3),
+    ]
+    for i, dx in enumerate((-6.2, 0, 6.2)):
+        h = 13 if i == 1 else 10
+        parts.append(rect(32 + dx * s - 2.6 * s, 32 - h * s, 5.2 * s, (h + 4) * s,
+                          2.6 * s, t[1] if not claw else t[2], sw=1.2))
+
+        if claw:
+            parts.append(poly([(32 + dx * s - 2.4 * s, 32 - h * s),
+                               (32 + dx * s + (6.5 if dx < 0 else -6.5 if dx > 0 else 0),
+                                32 - (h + 8) * s),
+                               (32 + dx * s + 2.4 * s, 32 - h * s)], tip, sw=1.0))
+    return group(parts, 0, 0, 0) if rot == 0 else group(parts, 0, 0, 0)
+
+
+def eye(t: tuple, s: float = 1.0, pupil: str = None) -> str:
+    return (path("M%.1f 32 Q32 %.1f %.1f 32 Q32 %.1f %.1f 32z" % (
+        32 - 17 * s, 32 - 12 * s, 32 + 17 * s, 32 + 12 * s, 32 - 17 * s), t[0], sw=1.3)
+        + circle(32, 32, 6.6 * s, pupil or t[2], sw=1.2)
+        + circle(32 - 2.2 * s, 32 - 2.2 * s, 2.1 * s, "#ffffff", stroke="none"))
+
+
+def person(t: tuple, pose: str = "stand", s: float = 1.0) -> str:
+    """A person, in the pose the skill leaves them in. Every pose keeps the
+    head/torso/legs silhouette so it still reads as a body at 22 px."""
+    if pose == "prone":
+        return (rect(13, 45, 38, 5, 2.5, mix(t[2], INK, 0.35), sw=1.1)
+                + circle(20, 37, 6.4 * s, t[1], sw=1.2)
+                + poly([(26, 32), (43, 36), (42, 44), (25, 43)], t[1], sw=1.2)
+                + poly([(41, 37), (52, 33), (54, 39), (43, 44)], t[2], sw=1.1))
+    if pose == "held":
+        bind = mix(t[2], INK, 0.25)
+        return (circle(32, 17, 6.6 * s, t[1], sw=1.2)
+                + poly([(25, 24), (39, 24), (37, 48), (27, 48)], t[1], sw=1.2)
+                + rect(21, 28.6, 22, 3.0, 1.5, bind, sw=1.0)
+                + rect(21, 36.6, 22, 3.0, 1.5, bind, sw=1.0)
+                + circle(21, 30, 3.4, "none", stroke=bind, sw=2.2)
+                + circle(43, 38, 3.4, "none", stroke=bind, sw=2.2))
+    if pose == "sleep":
+        return (circle(24, 34, 6.0 * s, t[1], sw=1.2)
+                + rect(28, 38, 18, 6, 3, t[1], sw=1.2))
+    return (circle(32, 18, 6.2 * s, t[1], sw=1.2)
+            + poly([(25.5, 25), (38.5, 25), (36.5, 47), (27.5, 47)], t[1], sw=1.2))
+
+
+def mask(t: tuple, mood: str = "laugh", s: float = 1.0) -> str:
+    """A face — the enchantment/illusion family's shorthand for a mind touched.
+    Big dark eyes and a mouth with a shape, because a line and two dots turn
+    into a blob the moment the bar scales this down."""
+    dark = mix(t[2], INK, 0.62)
+    def P(x, y):
+        return 32 + x * s, 32 + y * s
+    out = [path("M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f "
+                "C%.1f %.1f %.1f %.1f %.1f %.1fz" % (
+                    *P(0, -17), *P(11, -17), *P(15, -11), *P(15, -2),
+                    *P(15, 8), *P(8, 17), *P(0, 17),
+                    *P(-8, 17), *P(-15, 8), *P(-15, -2)), t[1], sw=1.3),
+           path("M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1fz" % (
+               *P(-13, -6), *P(-9, -13), *P(-1, -13), *P(-2, -6)), t[0], stroke="none")]
+    for dx in (-6.4, 6.4):
+        out.append(path("M%.1f %.1f a%.1f %.1f 0 1 0 0.1 0z" % (
+            32 + dx * s, 32 - 6 * s, 3.4 * s, 4.2 * s), dark, stroke="none"))
+    if mood == "laugh":
+        out.append(path("M%.1f %.1f Q%.1f %.1f %.1f %.1f L%.1f %.1f Q%.1f %.1f %.1f %.1fz" % (
+            *P(-8, 3), *P(0, 13), *P(8, 3), *P(6, 3), *P(0, 8), *P(-6, 3)), dark, sw=1.0))
+    elif mood == "scream":
+        out.append(path("M%.1f %.1f a%.1f %.1f 0 1 0 0.1 0z" % (
+            32, 32 + 4 * s, 4.6 * s, 6.2 * s), dark, sw=1.0))
+    else:
+        out.append(rect(32 - 7 * s, 32 + 4 * s, 14 * s, 2.8 * s, 1.4 * s, dark, stroke="none"))
+    return "".join(out)
+
+
+def note(t: tuple, s: float = 1.0) -> str:
+    return (rect(32 + 2 * s, 32 - 16 * s, 3.4 * s, 24 * s, 1.6 * s, t[1], sw=1.2)
+            + poly([(32 + 5.4 * s, 32 - 16 * s), (32 + 14 * s, 32 - 12 * s),
+                    (32 + 14 * s, 32 - 5 * s), (32 + 5.4 * s, 32 - 9 * s)], t[1], sw=1.2)
+            + circle(32 - 2.5 * s, 32 + 8 * s, 6.2 * s, t[0], sw=1.3))
+
+
+def fist(t: tuple, s: float = 1.0) -> str:
+    """A closed fist, knuckles up. The knuckles are drawn in the body tone and
+    the block over them — they are the silhouette, not stripes on it, which is
+    the whole difference between a fist and a stack of bars at 22 px."""
+    out = []
+    for dx in (-8.4, -2.8, 2.8, 8.4):
+        out.append(circle(32 + dx * s, 32 - 7 * s, 3.6 * s, t[1], stroke="none"))
+    out.append(rect(32 - 12 * s, 32 - 7 * s, 24 * s, 15 * s, 3 * s, t[1], sw=1.3))
+    out.append(poly([(32 - 12 * s, 32 - 4 * s), (32 - 5 * s, 32 - 4 * s),
+                     (32 - 5 * s, 32 + 7 * s), (32 - 12 * s, 32 + 7 * s)], t[0], stroke="none"))
+    out.append(path("M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f L%.1f %.1f "
+                    "C%.1f %.1f %.1f %.1f %.1f %.1fz" % (
+                        32 - 12 * s, 32 + 1 * s,
+                        32 - 17 * s, 32 + 1 * s, 32 - 17 * s, 32 + 8 * s, 32 - 11 * s, 32 + 8 * s,
+                        32 - 4 * s, 32 + 8 * s,
+                        32 - 4 * s, 32 + 4 * s, 32 - 8 * s, 32 + 1 * s, 32 - 12 * s, 32 + 1 * s),
+                    t[2], sw=1.2))
+    out.append(rect(32 - 9 * s, 32 + 8 * s, 18 * s, 7 * s, 3 * s, t[2], sw=1.2))
+    return "".join(out)
+
+
+def fangs(t: tuple, s: float = 1.0) -> str:
+    return (band(32, 30, 15 * s, 9 * s, 200, 340, t[1])
+            + poly([(32 - 8 * s, 32 - 2 * s), (32 - 4 * s, 32 + 12 * s), (32 - 1 * s, 32 - 2 * s)],
+                   t[0], sw=1.0)
+            + poly([(32 + 1 * s, 32 - 2 * s), (32 + 4 * s, 32 + 12 * s), (32 + 8 * s, 32 - 2 * s)],
+                   t[0], sw=1.0))
+
+
+def web(t: tuple, s: float = 1.0) -> str:
+    out = []
+    for a in range(0, 360, 45):
+        x, y = pt(32, 32, 17 * s, a)
+        out.append(stroke_path("M32 32 L%.1f %.1f" % (x, y), t[1], 1.8))
+    for r in (7 * s, 12 * s, 17 * s):
+        pts = [pt(32, 32, r, a) for a in range(0, 405, 45)]
+        d = "M%.1f %.1f " % pts[0] + " ".join("L%.1f %.1f" % p for p in pts[1:])
+        out.append(stroke_path(d, t[0] if r == 12 * s else t[1], 1.6))
+    return "".join(out)
+
+
+def tentacles(t: tuple, s: float = 1.0) -> str:
+    out = []
+    for i, (x, h) in enumerate(((20, 12), (27, 18), (37, 18), (44, 12))):
+        out.append(stroke_path("M%.1f 48 C%.1f %.1f %.1f %.1f %.1f %.1f" % (
+            x, x, 48 - h, x + (4 if i % 2 else -4), 40 - h, x + (9 if i % 2 else -9), 34 - h),
+            t[1] if i % 2 else t[2], 4.6 - 0.4 * i))
+    out.append(rect(16, 46, 32, 6, 3, t[2], sw=1.1))
+    return "".join(out)
+
+
+def cloud(t: tuple, s: float = 1.0) -> str:
+    return (path("M%.1f %.1f a9 9 0 0 1 17 -6 a8 8 0 0 1 14 6 a7 7 0 0 1 -2 13 h-27 "
+                 "a7 7 0 0 1 -2 -13z" % (32 - 15 * s, 32 + 2 * s), t[1], sw=1.3)
+            + circle(26, 30, 4.2, t[0], stroke="none")
+            + circle(37, 32, 3.2, t[0], stroke="none"))
+
+
+def swarm(t: tuple, s: float = 1.0) -> str:
+    out = []
+    spots = [(24, 22, 3.2), (33, 18, 2.6), (41, 25, 3.0), (20, 32, 2.6), (30, 30, 3.6),
+             (42, 36, 2.8), (25, 42, 3.0), (35, 44, 2.4), (44, 44, 2.0), (16, 42, 2.0)]
+    for i, (x, y, r) in enumerate(spots):
+        out.append(circle(x, y, r * s, t[1] if i % 2 else t[0], sw=1.0))
+    return "".join(out)
+
+
+def chain(t: tuple, broken: bool = False, s: float = 1.0) -> str:
+    out = []
+    links = [(20, 20), (28, 27), (44, 45), (36, 38)] if broken else [(20, 20), (27, 27), (37, 37), (44, 44)]
+    for i, (x, y) in enumerate(links):
+        out.append(circle(x, y, 6.2 * s, "none", stroke=t[1], sw=3.4))
+    if broken:
+        out.append(stroke_path("M30 30 L34 26", t[0], 2.0))
+        out.append(stroke_path("M34 38 L38 34", t[0], 2.0))
+    return "".join(out)
+
+
+def spiral(t: tuple, s: float = 1.0) -> str:
+    d = "M32 15 A17 17 0 1 1 15 32 A12 12 0 1 0 39 32 A6 6 0 1 1 26 32"
+    return (stroke_path(d, mix(t[1], INK, 0.55), 7.6) + stroke_path(d, t[1], 4.6))
+
+
+def crescent(t: tuple, s: float = 1.0) -> str:
+    return path("M%.1f %.1f A16 16 0 1 0 %.1f %.1f A12.5 12.5 0 1 1 %.1f %.1fz" % (
+        38, 17, 38, 47, 38, 17), t[1], sw=1.3)
+
+
+def banner(t: tuple, s: float = 1.0) -> str:
+    return (rect(30, 14, 4, 34, 2, t[2], sw=1.2)
+            + poly([(34, 16), (50, 20), (50, 34), (34, 30)], t[1], sw=1.3)
+            + poly([(34, 19), (46, 22), (46, 27), (34, 24)], t[0], stroke="none")
+            + circle(32, 13, 3.2, t[0], sw=1.1))
+
+
+def reticle(t: tuple, s: float = 1.0) -> str:
+    return (circle(32, 32, 13 * s, "none", stroke=t[1], sw=3.6)
+            + circle(32, 32, 4 * s, t[0], sw=1.1)
+            + stroke_path("M32 13 V19", t[1], 2.6) + stroke_path("M32 45 V51", t[1], 2.6)
+            + stroke_path("M13 32 H19", t[1], 2.6) + stroke_path("M45 32 H51", t[1], 2.6))
+
+
+def brain(t: tuple, s: float = 1.0) -> str:
+    """Two lobes, a seam down the middle, a fold in each — the seam is what
+    makes it a brain rather than a cloud."""
+    out = [path("M32 %.1f C%.1f %.1f %.1f %.1f %.1f %.1f C%.1f %.1f %.1f %.1f 32 %.1f "
+                "C%.1f %.1f %.1f %.1f %.1f %.1f C%.1f %.1f %.1f %.1f 32 %.1fz" % (
+                    32 - 15 * s,
+                    32 - 8 * s, 32 - 16 * s, 32 - 16 * s, 32 - 9 * s, 32 - 15 * s, 32 - 1 * s,
+                    32 - 15 * s, 32 + 9 * s, 32 - 7 * s, 32 + 15 * s, 32 + 14 * s,
+                    32 + 7 * s, 32 + 15 * s, 32 + 15 * s, 32 + 9 * s, 32 + 15 * s, 32 - 1 * s,
+                    32 + 16 * s, 32 - 9 * s, 32 + 8 * s, 32 - 16 * s, 32 - 15 * s), t[1], sw=1.3),
+           stroke_path("M32 %.1f V%.1f" % (32 - 14 * s, 32 + 13 * s), mix(t[2], INK, 0.3), 2.2),
+           stroke_path("M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f" % (
+               32 - 10 * s, 32 - 8 * s, 32 - 4 * s, 32 - 4 * s, 32 - 10 * s, 32 + 1 * s,
+               32 - 5 * s, 32 + 7 * s), t[0], 2.0),
+           stroke_path("M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f" % (
+               32 + 10 * s, 32 - 8 * s, 32 + 4 * s, 32 - 4 * s, 32 + 10 * s, 32 + 1 * s,
+               32 + 5 * s, 32 + 7 * s), t[0], 2.0)]
+    return "".join(out)
+
+
+def puppet(t: tuple, s: float = 1.0) -> str:
+    return (stroke_path("M22 12 L26 26", t[2], 1.6) + stroke_path("M42 12 L38 26", t[2], 1.6)
+            + circle(32, 30, 7.5 * s, t[1], sw=1.3)
+            + poly([(26, 37), (38, 37), (36, 50), (28, 50)], t[1], sw=1.2)
+            + circle(29.5, 28, 1.8, mix(t[2], INK, 0.5), stroke="none")
+            + circle(34.5, 28, 1.8, mix(t[2], INK, 0.5), stroke="none"))
+
+
+def scroll(t: tuple, s: float = 1.0) -> str:
+    return (rect(18, 16, 28, 32, 3, t[1], sw=1.3)
+            + rect(15, 13, 34, 6, 3, t[2], sw=1.2)
+            + rect(15, 45, 34, 6, 3, t[2], sw=1.2)
+            + rect(23, 24, 18, 2.6, 1.3, t[0], stroke="none")
+            + rect(23, 30, 18, 2.6, 1.3, t[0], stroke="none")
+            + rect(23, 36, 11, 2.6, 1.3, t[0], stroke="none"))
+
+
+def vines(t: tuple, s: float = 1.0) -> str:
+    out = [stroke_path("M16 50 C20 36 30 32 32 20 C34 12 40 12 44 16", t[1], 4.0)]
+    for i, (x, y, a) in enumerate(((22, 40, -40), (29, 30, 40), (34, 20, -30), (41, 15, 30))):
+        out.append(poly([(x, y), (x + 7 * (1 if a > 0 else -1), y - 4), (x, y - 7)], t[0], sw=1.0))
+    return "".join(out)
+
+
+def slashes(t: tuple, n: int = 3, s: float = 1.0) -> str:
+    out = []
+    for i in range(n):
+        off = (i - (n - 1) / 2.0) * 9
+        out.append(poly([(20 + off, 46), (28 + off, 16), (32 + off, 18), (24 + off, 47)],
+                        t[0] if i == n // 2 else t[1], sw=1.1))
+    return "".join(out)
+
+
+def waves(t: tuple, s: float = 1.0) -> str:
+    out = []
+    for i, r in enumerate((8, 13, 18)):
+        out.append(band(20, 32, r + 2.2, r - 0.6, -52, 52, t[0] if i == 1 else t[1], sw=1.0))
+    out.append(circle(19, 32, 4.6, t[1], sw=1.2))
+    return "".join(out)
+
+
+def zzz(t: tuple, s: float = 1.0) -> str:
+    out = []
+    for i, (x, y, sz) in enumerate(((22, 44, 9), (31, 32, 11), (42, 20, 13))):
+        out.append(poly([(x - sz / 2, y - sz / 2), (x + sz / 2, y - sz / 2),
+                         (x - sz / 2 + 2.6, y + sz / 2 - 2.6), (x + sz / 2, y + sz / 2 - 2.6),
+                         (x + sz / 2, y + sz / 2), (x - sz / 2, y + sz / 2),
+                         (x + sz / 2 - 2.6, y - sz / 2 + 2.6), (x - sz / 2, y - sz / 2 + 2.6)],
+                        t[1] if i < 2 else t[0], sw=1.0))
+    return "".join(out)
+
+
+def portal(t: tuple, s: float = 1.0) -> str:
+    return (circle(32, 32, 17 * s, "none", stroke=t[2], sw=3.4)
+            + circle(32, 32, 11.5 * s, "none", stroke=t[1], sw=3.0)
+            + circle(32, 32, 5.5 * s, mix(t[2], INK, 0.5), sw=1.2))
+
+
+def wind(t: tuple, s: float = 1.0) -> str:
+    """Three streaming lines with a curl on the end — breath, haste, freedom."""
+    out = []
+    for i, (y, x1, curl) in enumerate(((22, 42, 1), (32, 47, 1), (42, 38, -1))):
+        out.append(stroke_path(
+            "M14 %d H%d a5 5 0 1 %d %d %d" % (y, x1, 1 if curl > 0 else 0, -1, 7 * curl),
+            t[1] if i != 1 else t[0], 3.6 - 0.4 * i))
+    return "".join(out)
+
+
+def halo(t: tuple, s: float = 1.0) -> str:
+    """A radiant ring with rays — the divine family."""
+    out = [circle(32, 32, 11 * s, "none", stroke=t[1], sw=3.4)]
+    for a in range(0, 360, 45):
+        x0, y0 = pt(32, 32, 14.5 * s, a)
+        x1, y1 = pt(32, 32, 19 * s, a)
+        out.append(stroke_path("M%.1f %.1f L%.1f %.1f" % (x0, y0, x1, y1), t[0], 2.4))
+    return "".join(out)
+
+
+def pillar(t: tuple, s: float = 1.0) -> str:
+    """A column falling from above: Flame Strike, Moonbeam, Ice Storm."""
+    return (poly([(24, 12), (40, 12), (44, 50), (20, 50)], t[1], sw=1.3)
+            + poly([(28.5, 14), (35.5, 14), (37.5, 46), (26.5, 46)], t[0], stroke="none")
+            + rect(16, 8, 32, 6, 3, t[2], sw=1.2))
+
+
+def wall(t: tuple, s: float = 1.0) -> str:
+    """A standing line of the element."""
+    out = [rect(13, 42, 38, 6, 3, t[2], sw=1.2)]
+    for i, x in enumerate((20, 32, 44)):
+        out.append(flame(t, x, 34, 0.62 if i != 1 else 0.78))
+    return "".join(out)
+
+
+# --- the skills ------------------------------------------------------------
+# One badge per thing the action bar can offer BY NAME: every combat-castable
+# spell, every feature that becomes a button, and the three Shove variants that
+# share one verb kind. The bar looks these up by id before it falls back to the
+# kind or the school (core/ui_icons.gd skill_icon), so this table is what makes
+# a row of a caster's spells read as ten different spells rather than ten
+# evocation discs.
+#
+# A spell's disc comes from data/spells.json, so the two can't drift: change a
+# spell's school there and the badge follows. The motif is coloured by what the
+# skill DOES — the element, not the school.
+
+SPELL_SCHOOLS = {
+    s["id"]: s["school"]
+    for s in __import__("json").loads((ROOT / "data" / "spells.json").read_text())
+}
+
+FEATURE_DISC = mix("#c8a75a", "#0b0a11", 0.86)      # a class feature: gilt, banked right down
+FEATURE_RING = mix("#c8a75a", PANEL, 0.55)
+FOE_DISC = mix("#d15750", "#0b0a11", 0.86)          # a monster's own: COL_FOE, same treatment
+FOE_RING = mix("#d15750", PANEL, 0.55)
+
+
+def spell_art(sid: str, *art: str) -> str:
+    return school_badge(SPELL_SCHOOLS[sid], *art)
+
+
+def feature_art(*art: str, foe: bool = False) -> str:
+    return badge(*art, disc=FOE_DISC if foe else FEATURE_DISC,
+                 ring=FOE_RING if foe else FEATURE_RING, art_scale=0.84)
+
+
+# --- spells ----------------------------------------------------------------
+# Grouped by school the way data/spells.json has them, so a gap is visible.
+
+SPELLS = {
+    # abjuration
+    "cure-wounds": (heart(32, 31, 16, E("life")), plus(32, 28, 7.5, 2.7, LIGHT)),
+    "freedom-of-movement": (chain(E("force"), broken=True),),
+    "banishment": (portal(E("shadow")),),
+
+    # conjuration
+    "produce-flame": (hand(E("gold")), flame(E("fire"), 32, 20, 0.55)),
+    "acid-splash": (droplets(E("acid"), 3),),
+    "ensnaring-strike": (vines(E("nature")),),
+    "arms-of-hadar": (tentacles(E("shadow")),),
+    "web": (web(E("steel")),),
+    "stinking-cloud": (cloud(E("poison")),),
+    "evards-black-tentacles": (tentacles(E("necrotic")), circle(32, 52, 3, ELEM["necrotic"], stroke="none")),
+    "steel-wind-strike": (slashes(E("steel"), 3),),
+    "insect-plague": (swarm(E("nature")),),
+
+    # divination
+    "hunters-mark": (reticle(E("gold")), dart(E("nature"), -45, 1, 0.5)),
+
+    # enchantment
+    "mind-sliver": (brain(E("psychic")), dart(E("psychic"), 25, 1, 0.55)),
+    "charm-person": (mask(E("psychic"), "flat"), heart(44, 20, 6, E("life"))),
+    "sleep": (zzz(E("psychic")),),
+    "heroism": (fist(E("gold")), star(46, 16, 6, 2, 4, LIGHT, sw=1.0)),
+    "dissonant-whispers": (waves(E("psychic")),),
+    "hideous-laughter": (mask(E("psychic"), "laugh"),),
+    "hold-person": (person(E("steel"), "held"),),
+    "calm-emotions": (waves(E("cold")), circle(19, 32, 4.6, ELEM["life"], stroke="none")),
+    "charm-monster": (mask(E("psychic"), "flat"), fangs(E("poison"), 0.42)),
+    "dominate-beast": (puppet(E("nature")),),
+    "dominate-person": (puppet(E("psychic")),),
+    "modify-memory": (brain(E("psychic")),
+                      band(32, 32, 21, 16, 205, 335, ELEM["shadow"]),
+                      band_head(32, 32, 21, 16, 335, 24, ELEM["shadow"])),
+    "hold-monster": (person(E("necrotic"), "held"), fangs(E("shadow"), 0.4)),
+    "geas": (scroll(E("gold")),),
+
+    # evocation
+    "fire-bolt": (dart(E("fire"), -45, 1),),
+    "ray-of-frost": (beam(E("cold")),),
+    "shocking-grasp": (hand(E("steel")), bolt(E("lightning"), 0.55)),
+    "sacred-flame": (halo(E("radiant")), flame(E("radiant"), 32, 34, 0.5)),
+    "burning-hands": (cone_burst(E("fire"), -20),),
+    "guiding-bolt": (dart(E("radiant"), -45, 1), star(46, 17, 6.5, 2.2, 4, LIGHT, sw=1.0)),
+    "chromatic-orb": (orb(E("force"), ring=True), circle(27, 27, 3.2, ELEM["fire"], stroke="none"),
+                      circle(37, 29, 3.2, ELEM["cold"], stroke="none"),
+                      circle(32, 38, 3.2, ELEM["acid"], stroke="none")),
+    "hellish-rebuke": (path("M32 12 L48 17 C48 32 41 42 32 47 C23 42 16 32 16 17z",
+                            E("shadow")[1], sw=1.3), flame(E("fire"), 32, 32, 0.62)),
+    "scorching-ray": (dart(E("fire"), -45, 3),),
+    "moonbeam": (pillar(E("cold")), crescent(E("radiant"))),
+    "fireball": (orb(E("fire")), flame(E("fire"), 32, 24, 0.5)),
+    "crusaders-mantle": (banner(E("radiant")),),
+    "lightning-bolt": (bolt(E("lightning")),),
+    "wall-of-fire": (wall(E("fire")),),
+    "ice-storm": (pillar(E("cold")), snowflake(E("cold"), 0.5)),
+    "flame-strike": (pillar(E("fire")),),
+    "cone-of-cold": (cone_burst(E("cold"), -20), snowflake(E("cold"), 0.36)),
+
+    # illusion
+    "invisibility": (person(E("force"), "stand"), circle(32, 32, 19, "none",
+                                                         stroke=ELEM["force"], sw=1.6)),
+    "phantasmal-force": (mask(E("shadow"), "flat"), cloud(E("shadow"), 0.5)),
+    "hypnotic-pattern": (spiral(E("psychic")),),
+    "fear": (mask(E("shadow"), "scream"),),
+    "greater-invisibility": (person(E("force"), "stand"),
+                             circle(32, 32, 19, "none", stroke=ELEM["force"], sw=1.6),
+                             star(48, 16, 6, 2, 4, LIGHT, sw=1.0)),
+
+    # necromancy
+    "poison-spray": (droplets(E("poison"), 3),),
+    "chill-touch": (hand(E("necrotic")), skull(E("shadow"), 0.42, cy=22)),
+    "ray-of-sickness": (beam(E("poison")),),
+    "blight": (skull(E("necrotic")), vines(E("shadow"), 0.5)),
+
+    # transmutation
+    "thorn-whip": (vines(E("nature")), circle(44, 16, 3.2, ELEM["nature"], stroke="none")),
+}
+
+
+# --- features --------------------------------------------------------------
+# The class features and monster abilities that become their own button
+# (data/effects/features.json, the kinds in combat.gd's OFFERABLE).
+
+FEATURES = {
+    "fighter-second-wind": (wind(E("life")), heart(46, 44, 8, E("life"))),
+    "fighter-action-surge": (chevron(24, 32, 0, 13, 6, E("gold")),
+                             chevron(38, 32, 0, 13, 6, E("gold")),
+                             star(50, 16, 6, 2, 4, LIGHT, sw=1.0)),
+    "barbarian-rage": (mask(E("fire"), "scream"), waves(E("fire"), 0.5)),
+    "barbarian-reckless-attack": (slashes(E("steel"), 2), star(46, 18, 6, 2, 4, E("fire"), sw=1.0)),
+    "monk-flurry-of-blows": (fist(E("steel")), chevron(52, 22, 0, 8, 4, E("gold"))),
+    "monk-stunning-strike": (fist(E("gold")), star(48, 18, 7, 2.4, 4, LIGHT, sw=1.0),
+                             star(16, 22, 5, 1.8, 4, LIGHT, sw=1.0)),
+    "cleric-channel-divinity": (halo(E("radiant")),),
+    "bard-bardic-inspiration": (note(E("gold")),),
+
+    "monster-poison-bite": (fangs(E("poison")), droplets(E("poison"), 1, 0.5)),
+    "monster-venom-sting": (dart(E("poison"), 200, 1), droplets(E("poison"), 1, 0.42)),
+    "monster-paralytic-touch": (hand(E("lightning")), bolt(E("lightning"), 0.5)),
+    "monster-stunning-blow": (fist(E("thunder")), star(48, 18, 7, 2.4, 4, LIGHT, sw=1.0)),
+    "monster-grappling-attack": (hand(E("steel"), claw=True),),
+    "monster-constrict": (band(32, 34, 18, 12.5, 20, 300, E("nature")[1]),
+                          band(32, 34, 11, 6, 40, 320, E("nature")[2]),
+                          circle(45, 20, 6.2, ELEM["nature"], sw=1.2),
+                          circle(47, 18.5, 1.6, INK, stroke="none"),
+                          poly([(50, 22), (57, 24), (50, 26)], E("nature")[0], sw=1.0)),
+    "monster-knockdown": (person(E("steel"), "prone"),),
+    "monster-blinding-attack": (eye(E("steel")), stroke_path("M16 48 L48 16", ELEM["shadow"], 4.4)),
+    "monster-life-drain": (skull(E("necrotic")), waves(E("necrotic"), 0.45)),
+    "monster-frightful-presence": (mask(E("shadow"), "scream"), waves(E("shadow"), 0.42)),
+    "monster-charm-gaze": (eye(E("psychic")), heart(46, 18, 7, E("psychic"))),
+    "monster-petrifying-gaze": (eye(E("stone")), hexagon(46, 18, 7, ELEM["stone"], sw=1.1)),
+    "monster-web-shot": (web(E("steel")), dart(E("steel"), -45, 1, 0.42)),
+    "monster-breath-weapon": (cone_burst(E("fire"), -20),),
+    "monster-breath-weapon-greater": (cone_burst(E("fire"), -20), fangs(E("fire"), 0.42)),
+    "monster-innate-bolt": (orb(E("force")), bolt(E("lightning"), 0.55)),
+    "monster-pack-tactics": (dart(E("steel"), -45, 1, 0.6), dart(E("steel"), 0, 1, 0.6),
+                             dart(E("steel"), 45, 1, 0.6)),
+    "monster-regeneration": (heart(32, 32, 15, E("life")),
+                             band(32, 32, 19, 15.5, 200, 330, E("life")[1]),
+                             band_head(32, 32, 19, 15.5, 330, 24, E("life")[1])),
+}
+
+
+# --- the three Shoves ------------------------------------------------------
+# One verb kind, three choices, and the choice is the whole point of the verb:
+# they are the one place where an id-level badge says something the kind-level
+# one cannot.
+
+SHOVES = {
+    "shove_prone": (arrow(14, 24, 135, 20, 9, GOLD), person(STEEL, "prone")),
+    "shove_push": (arrow(16, 32, 90, 22, 10, GOLD),
+                   group([person(STEEL, "stand")], 12, 2, 16, scale=0.8)),
+    "shove_brazier": (arrow(13, 32, 90, 18, 8, GOLD),
+                      group([person(STEEL, "stand")], 8, 0, 20, scale=0.66),
+                      flame(E("fire"), 50, 38, 0.62)),
+}
+
+
+SKILLS = {}
+for _sid, _art in SPELLS.items():
+    SKILLS[_sid] = spell_art(_sid, *_art)
+for _fid, _art in FEATURES.items():
+    SKILLS[_fid] = feature_art(*_art, foe=_fid.startswith("monster-"))
+for _bid, _art in SHOVES.items():
+    SKILLS[_bid] = badge(*_art)
+
+GROUPS = {"actions": ACTIONS, "schools": SCHOOLS, "skills": SKILLS}
+
 
 
 # --- the Godot side --------------------------------------------------------
