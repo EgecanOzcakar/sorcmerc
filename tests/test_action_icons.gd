@@ -33,7 +33,7 @@ func _icon_ok(path: String, label: String) -> void:
 		return
 	var body := FileAccess.get_file_as_string(path)
 	check(body.begins_with("<svg"), "%s: %s is an svg" % [label, path])
-	check(body.contains('viewBox="0 0 32 32"'), "%s: %s is on the 32x32 grid" % [label, path])
+	check(body.contains('viewBox="0 0 64 64"'), "%s: %s is on the 64x64 grid" % [label, path])
 	check(not body.contains("<style") and not body.contains("Gradient"),
 		"%s: %s sticks to what ThorVG renders" % [label, path])
 
@@ -87,10 +87,12 @@ func _init() -> void:
 		check(Icons.verb_icon("no_such_verb") != null,
 			"an unknown verb kind falls back to the generic mark, not to nothing")
 		var btn := Button.new()
-		Icons.icon_button(btn, Icons.verb_icon("dash"), Icons.COL_GOLD)
-		check(btn.icon != null, "icon_button hangs the texture on the button")
-		check(btn.get_theme_color("icon_normal_color", "Button") == Icons.COL_GOLD,
-			"icon_button tints it")
+		Icons.icon_button(btn, Icons.verb_icon("dash"))
+		check(btn.icon != null, "icon_button hangs the badge on the button")
+		check(btn.get_theme_constant("icon_max_width", "Button") == Icons.ICON_PX,
+			"icon_button sizes it for the bar")
+		check(not btn.has_theme_color_override("icon_normal_color"),
+			"and leaves the colour alone — the badge carries its own")
 		btn.free()
 	else:
 		print("  (icons not imported in this checkout — load path skipped)")

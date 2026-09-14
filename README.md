@@ -76,10 +76,11 @@ tools/check_audio.py
                    tests, since tests/test_audio.gd can only prove the engine
                    parses them
 tools/gen_action_icons.py
-                   draws assets/icons/ — one 32x32 SVG per action-bar verb
-                   kind, per spell school, and for the bar's own controls,
-                   plus the .import each one is read through. `--check` fails
-                   if a committed icon has drifted from its recipe
+                   draws assets/icons/ — one gilt-framed 64x64 SVG badge per
+                   action-bar verb kind, per spell school, and for the bar's
+                   own controls, plus the .import each one is read through.
+                   `--check` fails if a committed icon has drifted from its
+                   recipe
 ```
 
 ## Assets and provenance

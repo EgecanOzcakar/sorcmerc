@@ -29,14 +29,14 @@ class Sheet extends Control:
 			x += 90
 		y += 84
 
-		# Each school twice: the drawn mark the bar uses, and the glyph behind it.
+		# Each school twice: the drawn badge the bar uses, and the glyph behind it.
 		head.call("S P E L L   S C H O O L S", y)
 		y += 26
 		x = 24.0
 		for s in Icons.SCHOOL_GLYPHS:
 			var stex: Texture2D = Icons.school_icon(s)
 			if stex != null:
-				draw_texture_rect(stex, Rect2(x, y - 2, 26, 26), false, Icons.school_color(s))
+				draw_texture_rect(stex, Rect2(x, y - 4, 30, 30), false)
 			draw_string(f, Vector2(x + 34, y + 18), Icons.school_glyph(s),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Icons.school_color(s))
 			draw_string(f, Vector2(x, y + 40), s, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
@@ -50,15 +50,15 @@ class Sheet extends Control:
 		for i in marks.size():
 			var id: String = String(marks[i])
 			var mx := 24.0 + (i % 10) * 116.0
-			var my := y + int(i / 10.0) * 58.0
+			var my := y + int(i / 10.0) * 62.0
 			var tex: Texture2D = Icons.verb_icon(id)
 			if tex != null:
-				draw_texture_rect(tex, Rect2(mx, my, 26, 26), false, Icons.COL_GOLD)
+				draw_texture_rect(tex, Rect2(mx, my, 30, 30), false)
 			else:
 				draw_string(f, Vector2(mx + 3, my + 20), Icons.verb_glyph(id),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Icons.COL_GOLD)
-			draw_string(f, Vector2(mx, my + 42), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Icons.COL_BODY)
-		y += 58 * ceil(marks.size() / 10.0) + 18
+			draw_string(f, Vector2(mx, my + 44), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Icons.COL_BODY)
+		y += 62 * ceil(marks.size() / 10.0) + 18
 
 		head.call("C O N D I T I O N S", y)
 		y += 26

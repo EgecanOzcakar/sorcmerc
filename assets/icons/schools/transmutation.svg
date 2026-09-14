@@ -1,9 +1,3 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <g fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M26 12.5 A11 11 0 0 0 5.5 12"/>
-    <path d="M20.5 12.5 H26.5 V6.5"/>
-    <path d="M6 19.5 A11 11 0 0 0 26.5 20"/>
-    <path d="M11.5 19.5 H5.5 V25.5"/>
-    <circle cx="16" cy="16" r="2.6" fill="#ffffff" stroke="none"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect x="1.5" y="1.5" width="61.0" height="61.0" rx="11.5" fill="#7a6130"/><rect x="2.5" y="2.5" width="59.0" height="58.0" rx="10.5" fill="#c8a75a"/><rect x="3.5" y="3.5" width="57.0" height="55.0" rx="9.5" fill="#e8cf8a"/><rect x="4.5" y="5.5" width="55.0" height="54.0" rx="9.0" fill="#c8a75a"/><rect x="5.0" y="5.0" width="54.0" height="54.0" rx="8.0" fill="#15161e"/><rect x="7.5" y="7.5" width="49.0" height="49.0" rx="6.0" fill="none" stroke="#7a6130" stroke-width="1.1" stroke-linejoin="round"/><circle cx="32.0" cy="32.0" r="19.5" fill="#332d24"/><circle cx="32.0" cy="32.0" r="18.0" fill="none" stroke="#927c48" stroke-width="1.1" stroke-linejoin="round"/><circle cx="17.3" cy="21.7" r="1.3" fill="#927c48"/><circle cx="46.7" cy="21.7" r="1.3" fill="#927c48"/><circle cx="46.7" cy="42.3" r="1.3" fill="#927c48"/><circle cx="17.3" cy="42.3" r="1.3" fill="#927c48"/><path d="M15.1 25.8 A18.0 18.0 0 0 1 47.6 23.0 L42.8 25.7 A12.5 12.5 0 0 0 20.3 27.7z" fill="#c8a75a" stroke="#0d0f16" stroke-width="1.2" stroke-linejoin="round"/><polygon points="47.2,30.9 50.7,21.2 39.7,27.5" fill="#c8a75a" stroke="#0d0f16" stroke-width="1.3" stroke-linejoin="round"/><path d="M48.9 38.2 A18.0 18.0 0 0 1 16.4 41.0 L21.2 38.2 A12.5 12.5 0 0 0 43.7 36.3z" fill="#c8a75a" stroke="#0d0f16" stroke-width="1.2" stroke-linejoin="round"/><polygon points="16.8,33.1 13.3,42.8 24.3,36.5" fill="#c8a75a" stroke="#0d0f16" stroke-width="1.3" stroke-linejoin="round"/><polygon points="32.0,25.5 37.6,28.8 37.6,35.2 32.0,38.5 26.4,35.2 26.4,28.8" fill="#e1cfa4" stroke="#0d0f16" stroke-width="1.1" stroke-linejoin="round"/>
 </svg>

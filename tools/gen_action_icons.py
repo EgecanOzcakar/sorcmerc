@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""The action bar's icon set: one SVG per verb kind, spell school and bar control.
+"""The action bar's icon set: one framed SVG badge per verb kind, spell school
+and bar control.
 
     python3 tools/gen_action_icons.py           # write everything
     python3 tools/gen_action_icons.py --list    # what would be written
     python3 tools/gen_action_icons.py --check   # fail if any file is stale
 
-Writes flat, monochrome line icons under
+Writes gilt-framed, full-colour skill badges under
 
     assets/icons/actions/*.svg   one per scenes/main.gd action-bar button kind
                                  (combat.gd's BASIC + OFFERABLE verb kinds) plus
@@ -19,21 +20,30 @@ The keys here ARE the lookup: core/ui_icons.gd builds the path from the verb
 `kind` / school id, so adding a verb means adding a recipe below under the same
 name and nothing else. tests/test_action_icons.gd fails if the two drift apart.
 
-Every icon is drawn in pure white on transparent and tinted at runtime
-(`icon_normal_color` on the button) — gold for a verb, the school's own colour
-for a spell. Authoring them monochrome is what makes that one-line tint
-possible; it also keeps them legible on the dark panel at the ~22 px the bar
-actually renders them at.
+THE LOOK
+Each icon is a badge, not a glyph: a gilt rounded frame, a dark inset panel, a
+medallion disc, and a lit silhouette standing on it. Everything is built from
+three flat tones per material — a light face, a body, and a shadow — with a
+near-black outline holding the shape together. That is a deliberate substitute
+for gradients: Godot rasterises SVG through ThorVG, a subset renderer, and flat
+fills are the part of the format there is no doubt about. Three tones and an
+outline read as modelled anyway at the size this ships at.
 
-Drawing constraints, all of them learned from that size:
-  * 32x32 viewBox, artwork inside 3..29 — the outer 3 px is the button's own
-    breathing room and Godot's SVG rasteriser softens anything that touches
-    the edge.
-  * 2 px strokes, round caps and joins, no fill unless a shape needs weight.
-    A 1 px stroke disappears at 22 px; a 3 px one closes up the small counters.
-  * geometry only: no <style>, no gradients, no filters, no text. Godot imports
-    SVG through ThorVG, which is a subset renderer — a filter that looks right
-    in a browser silently drops out in-game.
+Colour is baked in, which is the one thing that changed about how these are
+used. The bar draws them as they are (Button's icon_*_color defaults are white,
+a no-op multiply) rather than tinting a monochrome master: a spell's school
+still colours its badge, but the colour lives in the file. See MATERIALS for
+the palette, which is core/ui_icons.gd's own — the same gold, the same steel,
+the same eight school colours.
+
+Drawing constraints, all of them learned from the size this renders at:
+  * 64x64 viewBox. The frame owns the outer 5 px, the art lives inside a ~40 px
+    circle centred on (32, 32), and anything that leaves the disc (a sword tip,
+    a shield's shoulders) still stops short of the frame.
+  * outlines at 1.2-1.6, never below 1.0 — a hairline vanishes when the bar
+    scales the badge down to ~28 px.
+  * geometry only: no <style>, no gradients, no filters, no text, no masks.
+    A filter that looks right in a browser silently drops out in-game.
 
 No image model was involved in any of this: every path below is coordinates in
 source, the same "shapes, not sprites" line the rest of the project's assets are
@@ -43,285 +53,521 @@ exempt half of the disclosure — see the provenance table in README.md.
 
 import argparse
 import hashlib
+import math
 import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-HEADER = (
-    '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" '
-    'viewBox="0 0 32 32">\n'
-    '  <g fill="none" stroke="#ffffff" stroke-width="2" '
-    'stroke-linecap="round" stroke-linejoin="round">\n'
-)
-FOOTER = "  </g>\n</svg>\n"
+
+# --- palette ---------------------------------------------------------------
+# core/ui_icons.gd's colours, plus the light/shadow tone of each material. The
+# schools are SCHOOL_COLORS verbatim; their two other tones are derived, so
+# changing a school colour there is a one-line change here.
+
+INK = "#0d0f16"          # every outline
+PANEL = "#15161e"        # the badge's inset panel
+DISC = "#23242f"         # the medallion a martial verb stands on
+FRAME = "#c8a75a"        # COL_GOLD — the gilt edge
+FRAME_HI = "#e8cf8a"
+FRAME_LO = "#7a6130"
 
 
-def svg(*parts: str) -> str:
-    """Wrap element lines in the shared frame. Keeps every icon's stroke identical."""
-    body = "".join("    %s\n" % p for p in parts)
-    return HEADER + body + FOOTER
+def _rgb(c: str) -> tuple:
+    return tuple(int(c[i:i + 2], 16) for i in (1, 3, 5))
 
 
-# --- shared shapes ---------------------------------------------------------
-# A sword is the one shape three icons need (attack, offhand attack, the wield
-# swap), and hand-placing a crossguard perpendicular to a blade three times is
-# how they end up not matching. Parametrised once instead.
+def mix(a: str, b: str, t: float) -> str:
+    """`t` of the way from a to b. Every derived tone in this file comes from here."""
+    ca, cb = _rgb(a), _rgb(b)
+    return "#%02x%02x%02x" % tuple(round(x + (y - x) * t) for x, y in zip(ca, cb))
 
 
-def blade(x1: float, y1: float, x2: float, y2: float, guard: float = 4.4,
-          grip: float = 7.0, width: float = 2.8, pommel: float = 1.5) -> str:
-    """A sword from hilt (x1,y1) toward tip (x2,y2): blade, crossguard, grip, pommel.
+def tones(base: str) -> tuple:
+    """(light face, body, shadow) for a material, the three fills every shape uses."""
+    return (mix(base, "#ffffff", 0.45), base, mix(base, INK, 0.45))
 
-    The crossguard is what makes the shape read as a sword rather than a stick,
-    and it has to be square to the blade — hence the maths instead of three
-    hand-placed lines that nearly match."""
-    dx, dy = x2 - x1, y2 - y1
-    length = (dx * dx + dy * dy) ** 0.5
-    ux, uy = dx / length, dy / length          # along the blade
-    px, py = -uy, ux                           # across it
-    gx, gy = x1 + ux * grip, y1 + uy * grip    # where the guard sits
+
+STEEL = tones("#c3cbdb")
+GOLD = tones("#d0a95c")
+LIFE = tones("#5fbf6a")          # COL_PARTY — healing
+WOOD = tones("#7a5a3a")
+
+SCHOOL_COLORS = {                # verbatim from core/ui_icons.gd
+    "abjuration": "#6f9bd8", "conjuration": "#d98f4a",
+    "divination": "#8fd0d8", "enchantment": "#d47fc0",
+    "evocation": "#e0643c", "illusion": "#9d8fd8",
+    "necromancy": "#79a86b", "transmutation": "#c8a75a",
+}
+
+
+# --- primitives ------------------------------------------------------------
+# Everything below draws with these five. `fill` is a flat colour, `stroke` is
+# always the same near-black, and nothing anywhere sets an opacity except the
+# illusion school's ghost copy — which is the point of it.
+
+def poly(points, fill: str, stroke: str = INK, sw: float = 1.3, extra: str = "") -> str:
+    pts = " ".join("%.1f,%.1f" % (x, y) for x, y in points)
+    return '<polygon points="%s" fill="%s"%s%s/>' % (pts, fill, _stroke(stroke, sw), extra)
+
+
+def path(d: str, fill: str, stroke: str = INK, sw: float = 1.3, extra: str = "") -> str:
+    return '<path d="%s" fill="%s"%s%s/>' % (d, fill, _stroke(stroke, sw), extra)
+
+
+def circle(cx: float, cy: float, r: float, fill: str, stroke: str = INK,
+           sw: float = 1.3, extra: str = "") -> str:
+    return '<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"%s%s/>' % (
+        cx, cy, r, fill, _stroke(stroke, sw), extra)
+
+
+def rect(x: float, y: float, w: float, h: float, r: float, fill: str,
+         stroke: str = INK, sw: float = 1.3, extra: str = "") -> str:
+    return '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="%.1f" fill="%s"%s%s/>' % (
+        x, y, w, h, r, fill, _stroke(stroke, sw), extra)
+
+
+def stroke_path(d: str, color: str, w: float, cap: str = "round") -> str:
+    """A drawn line rather than a filled shape — the spiral and the cracks."""
+    return ('<path d="%s" fill="none" stroke="%s" stroke-width="%.1f" '
+            'stroke-linecap="%s" stroke-linejoin="round"/>' % (d, color, w, cap))
+
+
+def _stroke(color: str, w: float) -> str:
+    if color is None or color == "none" or w <= 0:
+        return ''
+    return ' stroke="%s" stroke-width="%.1f" stroke-linejoin="round"' % (color, w)
+
+
+def group(parts, tx: float = 0.0, ty: float = 0.0, rot: float = 0.0,
+          scale: float = 1.0) -> str:
+    t = "translate(%.1f %.1f)" % (tx, ty)
+    if rot:
+        t += " rotate(%.1f)" % rot
+    if scale != 1.0:
+        t += " scale(%.3f)" % scale
+    return '<g transform="%s">%s</g>' % (t, "".join(parts))
+
+
+def pt(cx: float, cy: float, r: float, deg: float) -> tuple:
+    rad = math.radians(deg)
+    return cx + r * math.cos(rad), cy + r * math.sin(rad)
+
+
+def band(cx: float, cy: float, r_out: float, r_in: float, a0: float, a1: float,
+         fill: str, stroke: str = INK, sw: float = 1.2) -> str:
+    """An annular sector — cupped hands, curved arrows, the portal's rim.
+
+    Angles are SVG's: 0 is +x and they run clockwise, because y is down."""
+    large = 1 if abs(a1 - a0) > 180 else 0
+    x0, y0 = pt(cx, cy, r_out, a0)
+    x1, y1 = pt(cx, cy, r_out, a1)
+    x2, y2 = pt(cx, cy, r_in, a1)
+    x3, y3 = pt(cx, cy, r_in, a0)
+    d = ("M%.1f %.1f A%.1f %.1f 0 %d 1 %.1f %.1f L%.1f %.1f A%.1f %.1f 0 %d 0 %.1f %.1fz"
+         % (x0, y0, r_out, r_out, large, x1, y1, x2, y2, r_in, r_in, large, x3, y3))
+    return path(d, fill, stroke, sw)
+
+
+# --- the badge itself ------------------------------------------------------
+# Frame, panel, medallion. Every icon is these three and then its art, which is
+# what makes a bar of them read as one set however different the silhouettes.
+
+def frame() -> str:
     return (
-        '<path d="M%.1f %.1f L%.1f %.1f" stroke-width="%.1f"/>'
-        '<path d="M%.1f %.1f L%.1f %.1f"/>'
-        '<path d="M%.1f %.1f L%.1f %.1f" stroke-width="%.1f"/>'
-        '<circle cx="%.1f" cy="%.1f" r="%.1f" fill="#ffffff" stroke="none"/>'
-        % (
-            gx, gy, x2, y2, width,
-            gx - px * guard, gy - py * guard, gx + px * guard, gy + py * guard,
-            x1 + ux * 1.6, y1 + uy * 1.6, gx - ux * 1.2, gy - uy * 1.2, width * 0.75,
-            x1, y1, pommel,
-        )
+        rect(1.5, 1.5, 61, 61, 11.5, FRAME_LO, stroke="none")
+        + rect(2.5, 2.5, 59, 58, 10.5, FRAME, stroke="none")
+        + rect(3.5, 3.5, 57, 55, 9.5, FRAME_HI, stroke="none")
+        + rect(4.5, 5.5, 55, 54, 9, FRAME, stroke="none")
+        + rect(5, 5, 54, 54, 8, PANEL, stroke="none")
+        + rect(7.5, 7.5, 49, 49, 6, "none", stroke=FRAME_LO, sw=1.1)
     )
 
 
-def spark(cx: float, cy: float, r: float = 3.2) -> str:
-    """A four-point twinkle — the mark for 'and something extra happens'."""
-    return ('<path d="M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f '
-            'C%.1f %.1f %.1f %.1f %.1f %.1f '
-            'C%.1f %.1f %.1f %.1f %.1f %.1f '
-            'C%.1f %.1f %.1f %.1f %.1f %.1fz" stroke-width="1.6"/>'
-            % (cx, cy - r,
-               cx + r * 0.22, cy - r * 0.22, cx + r * 0.22, cy - r * 0.22, cx + r, cy,
-               cx + r * 0.22, cy + r * 0.22, cx + r * 0.22, cy + r * 0.22, cx, cy + r,
-               cx - r * 0.22, cy + r * 0.22, cx - r * 0.22, cy + r * 0.22, cx - r, cy,
-               cx - r * 0.22, cy - r * 0.22, cx - r * 0.22, cy - r * 0.22, cx, cy - r))
+def medallion(base: str = None, ring: str = None) -> str:
+    """The disc the art stands on. A school tints its own; the martial verbs
+    share the neutral one, which is what separates the two halves of the bar
+    at a glance."""
+    out = [circle(32, 32, 19.5, base or DISC, stroke="none")]
+    if ring:
+        out.append(circle(32, 32, 18, "none", stroke=ring, sw=1.1))
+        for a in (215, 325, 35, 145):
+            x, y = pt(32, 32, 18, a)
+            out.append(circle(x, y, 1.3, ring, stroke="none"))
+    return "".join(out)
 
 
-HEART = ("M16 26 C7 19.5 4 15.6 4 11.8 A5.8 5.8 0 0 1 16 9.2 "
-         "A5.8 5.8 0 0 1 28 11.8 C28 15.6 25 19.5 16 26z")
-SHIELD = "M16 4 L27 8 C27 18 22.5 25 16 28.5 C9.5 25 5 18 5 8z"
+def badge(*art: str, disc: str = None, ring: str = None) -> str:
+    body = frame() + medallion(disc, ring) + "".join(art)
+    return ('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" '
+            'viewBox="0 0 64 64">\n  %s\n</svg>\n' % body)
+
+
+# --- the things the art is made of -----------------------------------------
+
+def sword(x: float, y: float, rot: float = 0.0, length: float = 52.0,
+          w: float = 10.0, steel: tuple = STEEL, hilt: tuple = GOLD) -> str:
+    """A sword, point up, centred on (x, y) and rotated `rot` degrees clockwise.
+
+    Parametrised because three icons carry one and hand-placing a crossguard
+    square to a blade three times is how they end up not matching. Everything
+    below the guard is sized off `length` too — a short sword with a longsword's
+    hilt reads as a dagger someone dropped."""
+    h = length / 2.0
+    grip_len = length * 0.29          # guard, grip and pommel share this
+    guard_y = h - grip_len
+    guard_t = w * 0.52
+    pommel = max(2.4, w * 0.31)
+    return group([
+        poly([(-w / 2, guard_y), (-w / 2, -h + w * 0.9), (0, -h), (w / 2, -h + w * 0.9),
+              (w / 2, guard_y)], steel[1], sw=1.5),
+        poly([(-w / 2 + w * 0.18, guard_y - 1.8), (-w / 2 + w * 0.18, -h + w * 1.05),
+              (-w * 0.09, -h + w * 0.55), (-w * 0.09, guard_y - 1.8)], steel[0], stroke="none"),
+        rect(-w * 1.3, guard_y, w * 2.6, guard_t, guard_t / 2.0, hilt[1], sw=1.3),
+        rect(-w * 0.19, guard_y + guard_t, w * 0.38, grip_len - guard_t - pommel * 0.9,
+             1.6, hilt[2], sw=1.2),
+        circle(0, h - pommel * 0.9, pommel, hilt[1], sw=1.3),
+    ], x, y, rot)
+
+
+def arrow(x: float, y: float, rot: float, length: float, w: float, tone: tuple,
+          head: float = 1.9) -> str:
+    """A block arrow pointing up in local space: shaft, head, and a lit face."""
+    h = length / 2.0
+    hw = w * head / 2.0
+    hy = -h + w * 1.5
+    return group([
+        poly([(-hw, hy), (0, -h), (hw, hy), (w / 2, hy), (w / 2, h), (-w / 2, h), (-w / 2, hy)],
+             tone[1]),
+        poly([(-hw + 1.6, hy - 0.4), (-0.8, -h + 2.4), (-0.8, h - 1.4), (-w / 2 + 1.3, h - 1.4),
+              (-w / 2 + 1.3, hy - 0.4)], tone[0], stroke="none"),
+    ], x, y, rot)
+
+
+def chevron(x: float, y: float, rot: float, size: float, thick: float, tone: tuple) -> str:
+    """A filled > — the speed marks and the fast-forward."""
+    s, t = size, thick
+    return group([
+        poly([(-s * 0.55, -s), (s * 0.55, 0), (-s * 0.55, s), (-s * 0.55 + t, s),
+              (s * 0.55 + t, 0), (-s * 0.55 + t, -s)], tone[1]),
+    ], x, y, rot)
+
+
+def heart(cx: float, cy: float, s: float, tone: tuple) -> str:
+    """s is the half-width. Four curves: two lobes over, two flanks down to the
+    point. Drawn from the centre out so both halves are the same curve."""
+    def P(x, y):
+        return cx + x * s, cy + y * s
+    d = ("M%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f "
+         "L%.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1f C%.1f %.1f %.1f %.1f %.1f %.1fz") % (
+        *P(0, -0.3),
+        *P(0, -0.62), *P(-0.38, -0.98), *P(-0.68, -0.76),
+        *P(-1.02, -0.5), *P(-1.0, 0.0), *P(-0.62, 0.36),
+        *P(0, 0.98),
+        *P(0.62, 0.36), *P(1.0, 0.0), *P(1.02, -0.5),
+        *P(0.68, -0.76), *P(0.38, -0.98), *P(0, -0.3))
+    return path(d, tone[1], sw=1.4)
+
+
+def band_head(cx: float, cy: float, r_out: float, r_in: float, a: float, span: float,
+              fill: str) -> str:
+    """The arrowhead on the end of a band(), tangent to it."""
+    return poly([pt(cx, cy, (r_out + r_in) / 2.0, a + span),
+                 pt(cx, cy, r_out + 3.6, a), pt(cx, cy, r_in - 3.6, a)], fill, sw=1.3)
+
+
+def plus(cx: float, cy: float, s: float, t: float, tone: tuple) -> str:
+    return poly([(cx - t, cy - s), (cx + t, cy - s), (cx + t, cy - t), (cx + s, cy - t),
+                 (cx + s, cy + t), (cx + t, cy + t), (cx + t, cy + s), (cx - t, cy + s),
+                 (cx - t, cy + t), (cx - s, cy + t), (cx - s, cy - t), (cx - t, cy - t)],
+                tone[1], sw=1.3)
+
+
+def star(cx: float, cy: float, r_out: float, r_in: float, points: int, tone: tuple,
+         phase: float = -90.0, sw: float = 1.3) -> str:
+    pts = []
+    for i in range(points * 2):
+        r = r_out if i % 2 == 0 else r_in
+        pts.append(pt(cx, cy, r, phase + i * 180.0 / points))
+    return poly(pts, tone[1], sw=sw)
+
+
+def diamond(cx: float, cy: float, w: float, h: float, tone: tuple, sw: float = 1.3,
+            extra: str = "") -> str:
+    return poly([(cx, cy - h), (cx + w, cy), (cx, cy + h), (cx - w, cy)], tone[1],
+                sw=sw, extra=extra)
+
+
+def figure(x: float, y: float, rot: float, tone: tuple) -> str:
+    """A person: head, torso, two legs. Used by shove, and nothing else needs
+    to be more than that at this size."""
+    return group([
+        poly([(-4.4, 2), (4.4, 2), (3.2, 13), (-3.2, 13)], tone[1]),
+        poly([(-3.2, 12), (0.6, 12), (3.2, 22), (-1.2, 22)], tone[2]),
+        poly([(0.2, 12), (3.8, 12), (7.8, 20), (4.2, 22)], tone[2]),
+        circle(0, -3.6, 5.8, tone[1]),
+        circle(-1.8, -5.2, 2.2, tone[0], stroke="none"),
+    ], x, y, rot)
+
+
+LIGHT = tones("#eef2fb")
+BONE = tones("#e2dcc6")
+
+
+def hexagon(cx: float, cy: float, r: float, tone_i: str, sw: float = 1.3) -> str:
+    return poly([pt(cx, cy, r, -90 + i * 60) for i in range(6)], tone_i, sw=sw)
+
+
+def school_badge(sid: str, *art: str) -> str:
+    base = SCHOOL_COLORS[sid]
+    return badge(*art, disc=mix(base, "#0e0f16", 0.80), ring=mix(base, PANEL, 0.30))
 
 
 # --- the verbs -------------------------------------------------------------
 # Keyed by scenes/main.gd's verb `kind` (Icons.VERB_GLYPHS), plus the four
 # controls the bar builds itself. One recipe per key, nothing keyed by verb id:
-# Shove → prone and Shove → back are one shape, their labels say which.
+# Shove → prone and Shove → back are one badge, their labels say which.
 
 ACTIONS = {
-    # A single sword, tip high — the plain Attack action.
-    "attack": svg(blade(6.5, 26, 26.5, 6)),
+    # The Attack action: one sword, lit down its near edge.
+    "attack": badge(sword(32, 32, 45, length=52, w=10)),
 
-    # Two blades crossed: the bonus-action second swing with the off hand.
-    "offhand_attack": svg(
-        blade(6, 26, 21.5, 10.5, guard=3.4, grip=5.5, width=2.4, pommel=1.3),
-        blade(26, 26, 10.5, 10.5, guard=3.4, grip=5.5, width=2.4, pommel=1.3),
+    # The bonus-action second swing — the same sword twice, smaller, crossed.
+    "offhand_attack": badge(
+        sword(37, 33, 42, length=44, w=8),
+        sword(27, 33, -42, length=44, w=8),
     ),
 
-    # Force, and the figure already going over backwards from it.
-    "shove": svg(
-        '<path d="M3 16 H14"/><path d="M10 11.5 L14.5 16 L10 20.5"/>',
-        '<circle cx="22.5" cy="7.5" r="3" fill="#ffffff" stroke-width="1.4"/>',
-        '<path d="M23 11 L19.5 20"/>',
-        '<path d="M19.5 20 L16.5 25.5"/><path d="M19.5 20 L23.5 24.5"/>',
-        '<path d="M28.5 10 A7 7 0 0 1 28.5 22"/>',
+    # Force applied, and the figure already going over backwards from it.
+    "shove": badge(
+        group([figure(0, 0, 0, STEEL)], 44, 28, 20, scale=1.35),
+        arrow(16, 32, 90, 24, 11, GOLD),
     ),
 
     # A maul mid-swing, and the object coming apart under it.
-    "smash": svg(
-        '<path d="M16.5 9.5 L21.5 4.5 L27.5 10.5 L22.5 15.5z"/>',
-        '<path d="M19 13 L11 21" stroke-width="2.6"/>',
-        '<path d="M4.5 27.5 L9 23"/><path d="M13.5 27.5 L11.5 24.5"/>',
-        '<path d="M3.5 19 L6.5 21"/>',
+    "smash": badge(
+        group([
+            rect(-3.4, 6, 6.8, 26, 2.8, WOOD[1], sw=1.4),
+            rect(-13, -9, 26, 18, 3.5, GOLD[1], sw=1.5),
+            rect(-10, -6.4, 20, 5.4, 2.2, GOLD[0], stroke="none"),
+        ], 38, 22, 45),
+        poly([(10, 48), (16.5, 43), (18.5, 51)], GOLD[2], sw=1.2),
+        poly([(21, 54), (26, 49), (28.5, 55)], GOLD[1], sw=1.2),
+        poly([(9, 36), (15.5, 37.5), (11.5, 42)], GOLD[2], sw=1.2),
     ),
 
-    # Aid offered: the boon, held up in two cupped hands. The seam down the
-    # middle is what keeps it from reading as a smile at 22 px.
-    "help": svg(
-        '<path d="M16 4 V14.5"/><path d="M10.5 9.5 H21.5"/>',
-        '<path d="M4 17 A12 12 0 0 0 15 25.5"/>',
-        '<path d="M28 17 A12 12 0 0 1 17 25.5"/>',
-        '<path d="M4 17 V21"/><path d="M28 17 V21"/>',
+    # Aid offered: the boon, held up in two cupped hands.
+    "help": badge(
+        plus(32, 21, 10, 3.4, LIFE),
+        band(32, 25, 21, 15.5, 97, 158, GOLD[1]),
+        band(32, 25, 21, 15.5, 22, 83, GOLD[1]),
+        band(32, 25, 19.5, 17.5, 103, 152, GOLD[0], stroke="none"),
+        band(32, 25, 19.5, 17.5, 28, 77, GOLD[0], stroke="none"),
     ),
 
-    # A guard held: the doubled ward of the ◈ this replaces.
-    "dodge": svg(
-        '<path d="M16 3.5 L28.5 16 L16 28.5 L3.5 16z"/>',
-        '<path d="M16 10 L22 16 L16 22 L10 16z"/>',
+    # A guard held: the doubled ward, with the old ◈ still legible in it.
+    "dodge": badge(
+        path("M32 11 L50 32 L32 53 L14 32z M32 19 L43.5 32 L32 45 L20.5 32z",
+             STEEL[1], sw=1.4, extra=' fill-rule="evenodd"'),
+        diamond(32, 32, 8, 10, GOLD),
+        poly([(32, 25), (37, 32), (32, 32)], GOLD[0], stroke="none"),
     ),
 
-    # Speed: one arrow, three trails behind it.
-    "dash": svg(
-        '<path d="M11 16 H27"/>',
-        '<path d="M22 11 L27 16 L22 21"/>',
-        '<path d="M4 9.5 H13"/><path d="M3 16 H7"/><path d="M4 22.5 H13"/>',
+    # Speed: two chevrons and the trails behind them.
+    "dash": badge(
+        chevron(38, 32, 0, 12, 5.5, GOLD),
+        chevron(27, 32, 0, 12, 5.5, GOLD),
+        rect(10, 20.5, 11, 3.4, 1.7, STEEL[2], stroke="none"),
+        rect(7, 30.3, 12, 3.4, 1.7, STEEL[1], stroke="none"),
+        rect(10, 40.1, 11, 3.4, 1.7, STEEL[2], stroke="none"),
     ),
 
-    # Backing out of a threatened square — the reach you leave, dashed.
-    "disengage": svg(
-        '<path d="M21 4 A14 14 0 0 1 21 28" stroke-dasharray="3 3.5"/>',
-        '<path d="M27 16 H7"/><path d="M12.5 10 L6.5 16 L12.5 22"/>',
+    # Backing out of a threatened square, and the blades you back out of.
+    "disengage": badge(
+        band(32, 32, 20, 16, -58, -26, GOLD[2], sw=1.1),
+        band(32, 32, 20, 16, -13, 13, GOLD[2], sw=1.1),
+        band(32, 32, 20, 16, 26, 58, GOLD[2], sw=1.1),
+        arrow(27, 32, -90, 28, 11, STEEL),
     ),
 
     # Unseen: the eye, struck out.
-    "hide": svg(
-        '<path d="M3.5 16 C7 10.5 11.3 7.8 16 7.8 C20.7 7.8 25 10.5 28.5 16 '
-        'C25 21.5 20.7 24.2 16 24.2 C11.3 24.2 7 21.5 3.5 16z"/>',
-        '<circle cx="16" cy="16" r="3.4"/>',
-        '<path d="M6 26 L26 6" stroke-width="2.4"/>',
+    "hide": badge(
+        path("M12 32 Q32 13 52 32 Q32 51 12 32z", STEEL[0], sw=1.4),
+        circle(32, 32, 7.6, "#2b3040", sw=1.3),
+        circle(29.6, 29.6, 2.4, STEEL[0], stroke="none"),
+        group([rect(-2.8, -19, 5.6, 38, 2.8, GOLD[1], sw=1.3)], 32, 32, -45),
     ),
 
     # Your own wounds closed.
-    "heal_self": svg(
-        '<path d="%s"/>' % HEART,
-        '<path d="M16 11.5 V19.5"/><path d="M12 15.5 H20"/>',
+    "heal_self": badge(
+        heart(32, 31, 18, LIFE),
+        plus(32, 28, 8.5, 3, LIGHT),
     ),
 
     # The same heart, handed to someone else.
-    "heal_ally": svg(
-        '<path d="M16 21.5 C9.5 16.6 7.5 13.8 7.5 11 A4.2 4.2 0 0 1 16 8.9 '
-        'A4.2 4.2 0 0 1 24.5 11 C24.5 13.8 22.5 16.6 16 21.5z"/>',
-        '<path d="M16 12 V17"/><path d="M13.5 14.5 H18.5"/>',
-        '<path d="M4.5 22 A11.5 11.5 0 0 0 27.5 22"/>',
+    "heal_ally": badge(
+        heart(32, 24, 13.5, LIFE),
+        plus(32, 21.5, 6.2, 2.2, LIGHT),
+        band(32, 23, 23, 17, 94, 156, GOLD[1]),
+        band(32, 23, 23, 17, 24, 86, GOLD[1]),
     ),
 
-    # A step up, on yourself: one rising arrow off a baseline.
-    "self_buff": svg(
-        '<path d="M16 27 V8"/>',
-        '<path d="M10 14 L16 8 L22 14"/>',
-        '<path d="M9 29 H23"/>',
-        spark(26, 7, 2.8),
+    # A step up, on yourself.
+    "self_buff": badge(
+        arrow(32, 28, 0, 32, 13, GOLD),
+        rect(17, 47, 30, 5.5, 2.2, GOLD[2]),
+        star(48, 15, 6, 2, 4, LIGHT, sw=1.1),
     ),
 
     # The same step up, granted to the party: two of them.
-    "ally_buff": svg(
-        '<path d="M10 27 V10"/><path d="M5.5 14.5 L10 10 L14.5 14.5"/>',
-        '<path d="M22 27 V10"/><path d="M17.5 14.5 L22 10 L26.5 14.5"/>',
-        '<path d="M4 29 H28"/>',
-        spark(16, 6.5, 2.8),
+    "ally_buff": badge(
+        arrow(22, 29, 0, 26, 10, GOLD),
+        arrow(42, 29, 0, 26, 10, GOLD),
+        rect(12, 46, 40, 5.5, 2.2, GOLD[2]),
+        star(32, 14, 6, 2, 4, LIGHT, sw=1.1),
     ),
 
     # Another action, right now: the fast-forward, plus one.
-    "grant_action": svg(
-        '<path d="M5 8.5 L14 16 L5 23.5z" fill="#ffffff" stroke-width="1.6"/>',
-        '<path d="M15 8.5 L24 16 L15 23.5z" fill="#ffffff" stroke-width="1.6"/>',
-        '<path d="M26.5 6.5 V13.5"/><path d="M23 10 H30"/>',
+    "grant_action": badge(
+        poly([(13, 17), (30, 32), (13, 47)], GOLD[1]),
+        poly([(27, 17), (44, 32), (27, 47)], GOLD[1]),
+        poly([(16, 22), (25, 30), (16, 38)], GOLD[0], stroke="none"),
+        plus(48, 18, 6.5, 2.2, LIGHT),
     ),
 
     # Something changed about the roll: the reticle, marked.
-    "attack_modifier": svg(
-        '<circle cx="16" cy="16" r="9"/>',
-        '<circle cx="16" cy="16" r="2.4" fill="#ffffff" stroke="none"/>',
-        '<path d="M16 3.5 V7.5"/><path d="M16 24.5 V28.5"/>',
-        '<path d="M3.5 16 H7.5"/><path d="M24.5 16 H28.5"/>',
+    "attack_modifier": badge(
+        circle(32, 32, 13.5, "none", stroke=INK, sw=6.6),
+        circle(32, 32, 13.5, "none", stroke=STEEL[1], sw=4.2),
+        rect(30.4, 9, 3.2, 8, 1.6, STEEL[2]),
+        rect(30.4, 47, 3.2, 8, 1.6, STEEL[2]),
+        rect(9, 30.4, 8, 3.2, 1.6, STEEL[2]),
+        rect(47, 30.4, 8, 3.2, 1.6, STEEL[2]),
+        circle(32, 32, 4.2, GOLD[1]),
     ),
 
     # Roll a save or wear it: the bolt against the shield.
-    "save_effect": svg(
-        '<path d="%s"/>' % SHIELD,
-        '<path d="M17.5 9 L12 17 H16 L14.5 24 L20.5 15.5 H16.5z"/>',
+    "save_effect": badge(
+        path("M32 9 L51 15.5 C51 34 43 47 32 54.5 C21 47 13 34 13 15.5z", GOLD[1], sw=1.5),
+        path("M32 14 L46.5 19 C46.5 33 40 43.5 32 49.5 C24 43.5 17.5 33 17.5 19z",
+             GOLD[2], stroke="none"),
+        poly([(35, 17), (23.5, 34), (30.5, 34), (27.5, 49), (40.5, 28.5), (32.5, 28.5)],
+             LIGHT[1], sw=1.3),
     ),
 
     # --- bar controls ---
     # The turn is spent.
-    "end_turn": svg(
-        '<path d="M8 4.5 H24"/><path d="M8 27.5 H24"/>',
-        '<path d="M10.5 4.5 V9 L16 16 L21.5 9 V4.5"/>',
-        '<path d="M10.5 27.5 V23 L16 16 L21.5 23 V27.5"/>',
-        '<path d="M13 24.5 H19"/>',
+    "end_turn": badge(
+        poly([(19, 14), (45, 14), (34.5, 32), (45, 50), (19, 50), (29.5, 32)], STEEL[0], sw=1.4),
+        poly([(23.5, 18), (40.5, 18), (32, 28)], GOLD[1], stroke="none"),
+        poly([(32, 36), (41.5, 46.5), (22.5, 46.5)], GOLD[1], stroke="none"),
+        rect(15, 8.5, 34, 6, 2.4, GOLD[1]),
+        rect(15, 49.5, 34, 6, 2.4, GOLD[1]),
     ),
 
     # Out of a submenu.
-    "back": svg(
-        '<path d="M13 9 L6 16 L13 23"/>',
-        '<path d="M6 16 H20 A6 6 0 0 1 20 28"/>',
+    "back": badge(
+        arrow(33, 32, -90, 30, 12, STEEL),
     ),
 
     # Melee ⇄ ranged: the other weapon comes up.
-    "swap": svg(
-        '<path d="M5 12 H27"/><path d="M23 8 L27 12 L23 16"/>',
-        '<path d="M27 21 H5"/><path d="M9 17 L5 21 L9 25"/>',
+    "swap": badge(
+        arrow(32, 23, 90, 28, 9, STEEL),
+        arrow(32, 41, -90, 28, 9, GOLD),
     ),
 
     # Anything the bar offers that has no mark of its own.
-    "generic": svg(spark(16, 16, 9.5), '<circle cx="16" cy="16" r="1.6" '
-                   'fill="#ffffff" stroke="none"/>'),
+    "generic": badge(
+        star(32, 32, 19.5, 6.5, 4, GOLD, sw=1.4),
+        circle(32, 32, 4.4, GOLD[0], stroke="none"),
+        star(49, 16, 5.5, 1.8, 4, LIGHT, sw=1.0),
+    ),
 }
 
 
 # --- the eight schools -----------------------------------------------------
-# Keyed by Icons.SCHOOL_GLYPHS / SCHOOL_COLORS. Each is tinted with its own
-# school colour on the bar, so these read as a set of eight even though they
-# share the verbs' stroke weight.
+# Keyed by Icons.SCHOOL_GLYPHS / SCHOOL_COLORS. Each stands on a disc of its own
+# colour, which is what makes a caster's row of spells sort itself by eye.
+
+def _s(sid: str) -> tuple:
+    return tones(SCHOOL_COLORS[sid])
+
 
 SCHOOLS = {
-    # A ward that holds: the hex sigil, doubled.
-    "abjuration": svg(
-        '<path d="M16 3.5 L27 9.8 V22.2 L16 28.5 L5 22.2 V9.8z"/>',
-        '<path d="M16 10 L22 13.4 V20.6 L16 24 L10 20.6 V13.4z"/>',
+    # A ward that holds: the hex sigil, plated.
+    "abjuration": school_badge(
+        "abjuration",
+        hexagon(32, 32, 19.5, _s("abjuration")[1], sw=1.4),
+        hexagon(32, 32, 13.5, _s("abjuration")[2], sw=1.2),
+        hexagon(32, 32, 7.5, _s("abjuration")[0], sw=1.1),
     ),
 
-    # Something arrives: a spark rising out of the circle that called it.
-    "conjuration": svg(
-        '<ellipse cx="16" cy="23" rx="11" ry="4.5"/>',
-        '<path d="M16 18.5 V5"/><path d="M11 10 L16 5 L21 10"/>',
-        '<path d="M7 15.5 L9 13.5"/><path d="M25 15.5 L23 13.5"/>',
+    # Something arrives: a star rising out of the circle that called it.
+    "conjuration": school_badge(
+        "conjuration",
+        '<ellipse cx="32" cy="45" rx="17.5" ry="7.5" fill="none" stroke="%s" stroke-width="7.4"/>' % INK,
+        '<ellipse cx="32" cy="45" rx="17.5" ry="7.5" fill="none" stroke="%s" stroke-width="4.6"/>'
+        % _s("conjuration")[1],
+        star(32, 25, 14, 4.8, 4, _s("conjuration"), sw=1.4),
+        star(14, 35, 4.5, 1.6, 4, _s("conjuration"), sw=1.0),
+        star(50, 35, 4.5, 1.6, 4, _s("conjuration"), sw=1.0),
     ),
 
     # Knowing: the scrying orb on its stand.
-    "divination": svg(
-        '<circle cx="16" cy="14" r="9"/>',
-        '<path d="M11 17.5 A6 6 0 0 1 15 10.5"/>',
-        '<path d="M9 27 H23"/><path d="M12 23.5 L10.5 27"/><path d="M20 23.5 L21.5 27"/>',
+    "divination": school_badge(
+        "divination",
+        circle(32, 28, 15.5, _s("divination")[1], sw=1.4),
+        band(32, 28, 12, 8, 190, 265, _s("divination")[0], stroke="none"),
+        poly([(23, 44), (41, 44), (37.5, 51), (26.5, 51)], GOLD[2], sw=1.2),
+        rect(20, 49.5, 24, 5.5, 2.2, GOLD[1]),
     ),
 
-    # A will bent: the spiral, and the heart it takes.
-    "enchantment": svg(
-        '<path d="M16 24 A8 8 0 1 0 8 16 A6 6 0 0 0 20 16 A4 4 0 0 1 12 16"/>',
-        spark(26, 7, 2.8),
+    # A will bent: the spiral.
+    "enchantment": school_badge(
+        "enchantment",
+        stroke_path("M32 13 A19 19 0 1 1 13 32 A13 13 0 1 0 39 32 A7 7 0 1 1 25 32", INK, 8.4),
+        stroke_path("M32 13 A19 19 0 1 1 13 32 A13 13 0 1 0 39 32 A7 7 0 1 1 25 32",
+                    _s("enchantment")[1], 5.2),
+        star(49, 15, 6, 2, 4, LIGHT, sw=1.0),
     ),
 
-    # Raw energy, thrown: the burst.
-    "evocation": svg(
-        '<path d="M16 3.5 V9.5"/><path d="M16 22.5 V28.5"/>',
-        '<path d="M3.5 16 H9.5"/><path d="M22.5 16 H28.5"/>',
-        '<path d="M7.2 7.2 L11.4 11.4"/><path d="M20.6 20.6 L24.8 24.8"/>',
-        '<path d="M24.8 7.2 L20.6 11.4"/><path d="M11.4 20.6 L7.2 24.8"/>',
-        '<circle cx="16" cy="16" r="4" fill="#ffffff" stroke-width="1.6"/>',
+    # Raw energy, thrown.
+    "evocation": school_badge(
+        "evocation",
+        star(32, 32, 21, 8, 8, _s("evocation"), sw=1.4),
+        circle(32, 32, 7, _s("evocation")[0], sw=1.2),
     ),
 
-    # Which one is real: the shape and the copy that isn't.
-    "illusion": svg(
-        '<path d="M12 4.5 L21.5 14 L12 23.5 L2.5 14z"/>',
-        '<path d="M20 8.5 L29.5 18 L20 27.5 L10.5 18z" stroke-dasharray="3 3"/>',
+    # Which one is real: the shape, and the copy that isn't.
+    "illusion": school_badge(
+        "illusion",
+        diamond(39, 32, 12, 15.5, _s("illusion"), sw=1.2, extra=' opacity="0.42"'),
+        diamond(26, 32, 12, 15.5, _s("illusion"), sw=1.4),
+        poly([(26, 20.5), (33, 32), (26, 32)], _s("illusion")[0], stroke="none"),
     ),
 
     # The dead put to work.
-    "necromancy": svg(
-        '<path d="M8 21 A9.5 9.5 0 1 1 24 21 V24 A2.5 2.5 0 0 1 21.5 26.5 '
-        'H10.5 A2.5 2.5 0 0 1 8 24z"/>',
-        '<circle cx="12" cy="15.5" r="2.6" fill="#ffffff" stroke-width="1.4"/>',
-        '<circle cx="20" cy="15.5" r="2.6" fill="#ffffff" stroke-width="1.4"/>',
-        '<path d="M16 21.5 V26.5"/><path d="M12 22.5 V26.5"/><path d="M20 22.5 V26.5"/>',
+    "necromancy": school_badge(
+        "necromancy",
+        path("M32 11 C43 11 51 19.5 51 30 C51 36 48 40.5 45 43.5 L45 48.5 "
+             "C45 50.5 43.5 52 41.5 52 L22.5 52 C20.5 52 19 50.5 19 48.5 L19 43.5 "
+             "C16 40.5 13 36 13 30 C13 19.5 21 11 32 11z", _s("necromancy")[1], sw=1.4),
+        circle(24, 30, 5.8, mix(_s("necromancy")[2], INK, 0.55), sw=1.1),
+        circle(40, 30, 5.8, mix(_s("necromancy")[2], INK, 0.55), sw=1.1),
+        poly([(32, 36), (35.5, 43), (28.5, 43)], mix(_s("necromancy")[2], INK, 0.55), sw=1.1),
+        rect(25.5, 45, 4, 7, 1.2, _s("necromancy")[2], sw=1.0),
+        rect(30.5, 45, 4, 7, 1.2, _s("necromancy")[2], sw=1.0),
+        rect(35.5, 45, 4, 7, 1.2, _s("necromancy")[2], sw=1.0),
     ),
 
     # One thing made another: the turning ring.
-    "transmutation": svg(
-        '<path d="M26 12.5 A11 11 0 0 0 5.5 12"/>',
-        '<path d="M20.5 12.5 H26.5 V6.5"/>',
-        '<path d="M6 19.5 A11 11 0 0 0 26.5 20"/>',
-        '<path d="M11.5 19.5 H5.5 V25.5"/>',
-        '<circle cx="16" cy="16" r="2.6" fill="#ffffff" stroke="none"/>',
+    "transmutation": school_badge(
+        "transmutation",
+        band(32, 32, 18, 12.5, 200, 330, _s("transmutation")[1]),
+        band_head(32, 32, 18, 12.5, 330, 26, _s("transmutation")[1]),
+        band(32, 32, 18, 12.5, 20, 150, _s("transmutation")[1]),
+        band_head(32, 32, 18, 12.5, 150, 26, _s("transmutation")[1]),
+        hexagon(32, 32, 6.5, _s("transmutation")[0], sw=1.1),
     ),
 }
 
@@ -334,11 +580,11 @@ GROUPS = {"actions": ACTIONS, "schools": SCHOOLS}
 # incidental diff. Written here rather than by hand because two settings are
 # deliberate and would quietly revert if someone re-imported at the defaults:
 #
-#   svg/scale=2.0        rasterise at 64 px and let the bar draw it at ~22.
+#   svg/scale=1.0        rasterise at 64 px and let the bar draw it at ~22.
 #                        At 1.0 the master is the display size and every
 #                        rounding of the button's layout softens a 2 px stroke.
 #   mipmaps/generate     the bar redraws these at whatever the zoom slider
-#                        says; a mip chain is what keeps 22 px off 64 px from
+#                        says; a mip chain is what keeps 28 px off 64 px from
 #                        crawling.
 #
 # The rest are Godot's texture defaults, spelled out because that is what the
@@ -386,7 +632,7 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=2.0
+svg/scale=1.0
 editor/scale_with_editor_scale=false
 editor/convert_colors_with_editor_theme=false
 """

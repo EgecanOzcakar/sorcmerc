@@ -182,20 +182,23 @@ static func verb_glyph(kind: String) -> String:
 # The glyphs above are the fallback now, not the mark. A codepoint is whatever
 # the shipped font decided it looks like: DejaVu draws ⚔, ⚒ and ⇉ at three
 # different weights and on two different baselines, so a row of them never sat
-# straight however the buttons were laid out. assets/icons/ holds a drawn 32x32
-# SVG per verb kind and per spell school instead — tools/gen_action_icons.py
-# emits them, keyed by exactly the names in VERB_GLYPHS and SCHOOL_GLYPHS, so a
-# new verb needs a recipe there and nothing here.
+# straight however the buttons were laid out. assets/icons/ holds a drawn 64x64
+# SVG badge per verb kind and per spell school instead — gilt frame, dark
+# medallion, a lit silhouette on it. tools/gen_action_icons.py emits them, keyed
+# by exactly the names in VERB_GLYPHS and SCHOOL_GLYPHS, so a new verb needs a
+# recipe there and nothing here.
 #
-# The art is white on transparent and gets its colour on the button, which is
-# what lets one file serve both the gold verb marks and the eight school
-# colours (see spell_bb — a spell has always been tinted by school).
+# The colour is in the file, not on the button. A school badge already stands on
+# its own SCHOOL_COLORS disc (the same colour spell_bb tints the spell's name
+# with), the martial verbs share steel and gold, and healing is COL_PARTY green
+# — so the bar draws them untouched. Button's icon_*_color defaults are white,
+# which multiplies to a no-op; nothing here overrides them.
 #
 # A miss is not an error. Icons that haven't been imported yet, an export that
 # left them out, a content pack's verb kind with no art of its own: _icon()
 # returns null and the caller keeps the glyph. Every call site pairs the two.
 const ICON_ROOT := "res://assets/icons"
-const ICON_PX := 22          # drawn size on the bar at zoom 1 (_apply_ui_scale scales it)
+const ICON_PX := 28          # drawn size on the bar at zoom 1 (_apply_ui_scale scales it)
 # The bar's own controls live alongside the verbs — same row, same weight.
 const BAR_ICONS := ["end_turn", "back", "swap", "generic"]
 
@@ -226,20 +229,18 @@ static func school_icon(school: String) -> Texture2D:
 	var tex := _icon("%s/schools/%s.svg" % [ICON_ROOT, school])
 	return tex if tex != null else _icon("%s/actions/generic.svg" % ICON_ROOT)
 
-# Hang `tex` on `b` in `col`, sized for the bar. Button reads its icon colour
-# from one theme entry per state rather than a single property, so setting only
-# icon_normal_color leaves the mark stark white the moment the pointer touches
-# it — hence the loop. Returns the button so it chains, like clicks().
-static func icon_button(b: Button, tex: Texture2D, col: Color, px := ICON_PX) -> Button:
+# Hang `tex` on `b`, sized for the bar. No tint: these are finished art, and a
+# theme colour would multiply the whole badge — frame, disc and all — down to
+# one hue. The one override is the disabled state, where the default theme
+# leaves a badge as bright as a live one. Returns the button so it chains,
+# like clicks().
+static func icon_button(b: Button, tex: Texture2D, px := ICON_PX) -> Button:
 	if tex == null:
 		return b
 	b.icon = tex
 	b.expand_icon = false
 	b.add_theme_constant_override("icon_max_width", px)
-	for state in ["icon_normal_color", "icon_hover_color", "icon_pressed_color",
-			"icon_focus_color"]:
-		b.add_theme_color_override(state, col)
-	b.add_theme_color_override("icon_disabled_color", Color(col, 0.4))
+	b.add_theme_color_override("icon_disabled_color", Color(1, 1, 1, 0.35))
 	return b
 
 # "⟳ Fire Bolt" as bbcode, school-tinted mark, plain name.
