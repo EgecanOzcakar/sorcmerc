@@ -50,8 +50,15 @@ var _fx_on := false           # attack animations: off under SORCMERC_FAST / hea
 # T-actionbar: a compact icon grid, up to BTN_COLUMNS*BUTTON_ROWS visible before
 # it scrolls (see _process's _bscroll sizing) — plain text rows read fine up to
 # ~9 verbs but sprawled once a caster's spell list pushed past 20.
-const BTN_COLUMNS := 6
-const BTN_SIZE := Vector2(126, 40)
+#
+# T-skillicons: and now the button IS the badge. Every skill the bar can offer
+# has its own art (assets/icons/skills, one per castable spell and per feature),
+# so the name, the prose and the numbers moved into the hover popup and the
+# label came off the button entirely. A 126x40 row that clipped "Burning Ha…"
+# is a 52x52 square that shows the whole spell. What stays on the face is the
+# hotkey, in the corner, and an upcast tier when there is one.
+const BTN_COLUMNS := 10
+const BTN_SIZE := Vector2(52, 52)
 # Session-only "which verbs does this player actually reach for" — no save file,
 # resets with the app. Keyed by a verb's id ("attack", "dash", ...) or "spell:"
 # + the base spell id (so a caster's upcast tiers count as the one spell they
@@ -246,8 +253,15 @@ func _apply_ui_scale() -> void:
 	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
 	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
 	for b in _buttons.get_children():
-		b.add_theme_font_size_override("font_size", int(Icons.FS_BODY * u))
-		b.custom_minimum_size = BTN_SIZE * u
+		if b.icon != null:
+			b.custom_minimum_size = BTN_SIZE * u
+			b.add_theme_constant_override("icon_max_width", int(Icons.ICON_PX * u))
+			for chip in b.get_children():
+				if chip is Label:
+					chip.add_theme_font_size_override("font_size", int(12 * u))
+		else:
+			b.add_theme_font_size_override("font_size", int(Icons.FS_BODY * u))
+			b.custom_minimum_size = Vector2(126, 40) * u
 
 func set_zoom(z: float) -> void:
 	_zoom = clampf(z, 0.45, 3.0)
@@ -424,6 +438,14 @@ func _end_turn() -> void:
 
 # --- hero menu ---------------------------------------------------------
 
+# What a bar button's mark is made of: the drawn badge (assets/icons, via
+# Icons.verb_icon / school_icon), the glyph to fall back to if that build has no
+# icons, and the frequency key the press counts against (empty for the bar's own
+# controls — End turn and Back don't reorder anything). No colour: the badges
+# are finished art and carry their own.
+static func _mark(tex: Texture2D, glyph := "", freq_key := "") -> Dictionary:
+	return {"icon": tex, "glyph": glyph, "freq_key": freq_key}
+
 # Verb-level menu. Buttons are numbered [1]..[9]; End turn is [0]; most-used
 # verbs (_prioritize) claim those low slots over time instead of whatever
 # order cb.available() happened to build them in. Everything on it comes from
@@ -446,12 +468,21 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	var spell_order: Array = []        # first-seen order, so a spell keeps its natural position in opts
 	for v in cb.available(h):
 		var label: String = _verb_label(h, v)
-		var tip: String = _verb_tooltip(h, v)
+		# The name leads the popup now that it has left the button face.
+		var tip: String = label + "\n" + _verb_tooltip(h, v)
 		var sid: String = String(v.get("spell", ""))
 		var glyph: String = Icons.school_glyph(Icons.spell_school(sid)) if sid != "" \
 			else Icons.verb_glyph(String(v["kind"]))
 		var freq_key: String = ("spell:" + sid) if sid != "" else String(v.get("id", v["kind"]))
-		var meta := {"glyph": glyph, "freq_key": freq_key}
+		# The drawn badge: a spell wears its school (the disc under the art is
+		# school_color, the same one spell_bb tints its name with), everything
+		# else the martial set. `glyph` stays as the fallback for a build where
+		# the icons aren't there — see Icons.verb_icon.
+		var meta := _mark(Icons.skill_icon(v), glyph, freq_key)
+		if label.contains("★"):
+			meta["tier"] = label.substr(label.find("★"))   # the upcast slot, on the badge's corner
+		if _armed == String(v.get("id", "")):
+			meta["armed"] = true
 		var entry: Array
 		match v.get("targeting", "self"):
 			"enemy", "ally":
@@ -483,24 +514,33 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 			opts[i] = tiers[0]
 		else:
 			var base: Array = tiers[0]
+			# The name has to lead here too: this entry replaces the per-tier
+			# ones wholesale, and its tooltip is the only place left that says
+			# which spell the badge belongs to.
 			opts[i] = [base[0], func(): _spell_tier_menu(h, tiers),
-				"%d levels available — pick one." % tiers.size(), base[3]]
+				"%s\n%d levels available — pick one." % [base[0], tiers.size()], base[3]]
 
 	opts = _prioritize(opts)
 
 	# T29: melee/ranged toggle — only offered to someone carrying both.
 	var swap := _attack_swap(h)
 	if not swap.is_empty():
-		opts.append(["⇄ Wield %s" % swap["name"],
+		opts.append(["Wield %s" % swap["name"],
 			func(): Adapter.set_main_attack(h, String(swap["id"])); _build_hero_menu(h),
-			"Your Attack action switches to %s (%s): %+d to hit, %s %s damage. Free." % [
-				swap["name"], swap["range"], int(swap["to_hit"]), swap["notation"],
-				swap.get("damage_type", "")]])
+			"Wield %s\nYour Attack action switches to %s (%s): %+d to hit, %s %s damage. Free." % [
+				swap["name"], swap["name"], swap["range"], int(swap["to_hit"]),
+				swap["notation"], swap.get("damage_type", "")],
+			_mark(Icons.verb_icon("swap"), "⇄")])
 
+	var end_mark := _mark(Icons.verb_icon("end_turn"))
 	if h.econ["action"] > 0 and not cb.is_over():
-		opts.append(_confirm_opt(h, "end", "End turn (action unspent!)", _end_turn))
+		end_mark["armed"] = _armed == "end"
+		var end_opt := _confirm_opt(h, "end", "End turn (action unspent!)", _end_turn)
+		end_opt.append("End turn\nYour action is still unspent.")
+		end_opt.append(end_mark)
+		opts.append(end_opt)
 	else:
-		opts.append(["End turn", _end_turn])
+		opts.append(["End turn", _end_turn, "End turn", end_mark])
 	_set_buttons(opts)
 	_board.queue_redraw()
 
@@ -509,7 +549,8 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 # cb.perform exactly as it would have been standalone) is reused verbatim.
 func _spell_tier_menu(h, tiers: Array) -> void:
 	var opts: Array = tiers.duplicate()
-	opts.append(["‹ Back", func(): _build_hero_menu(h, true)])
+	opts.append(["Back", func(): _build_hero_menu(h, true), "Back",
+		_mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
 	_board.queue_redraw()
 
@@ -636,7 +677,8 @@ func _enter_cone(h, v: Dictionary) -> void:
 	_tgt_verb = v
 	_actor.text = "%s — aim %s: hover a direction, click to cast.  (Esc / right-click cancels)" % [
 		h.cname, v["label"]]
-	_set_buttons([["Cancel", func(): board_cancel()]])
+	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
+		_mark(Icons.verb_icon("back"), "‹")]])
 	_board.queue_redraw()
 
 func _enter_target(h, v: Dictionary) -> void:
@@ -644,7 +686,8 @@ func _enter_target(h, v: Dictionary) -> void:
 	_tgt_verb = v
 	_actor.text = "%s — %s: hover a target for the odds, click to apply.  (Esc / right-click cancels)" % [
 		h.cname, v["label"]]
-	_set_buttons([["Cancel", func(): board_cancel()]])
+	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
+		_mark(Icons.verb_icon("back"), "‹")]])
 	_board.queue_redraw()
 
 # Is `c` a legal target for the pending verb?
@@ -765,15 +808,24 @@ func _after_hero_action(h) -> void:
 # --- rendering --------------------------------------------------------
 
 # opts entries: [label, fn] or [label, fn, tooltip] or [label, fn, tooltip, meta]
-# where meta is {"glyph": String, "freq_key": String}, both optional. Buttons are
-# a fixed-size grid (BTN_COLUMNS wide, up to BUTTON_ROWS tall before scrolling —
-# see _process), clipped rather than wrapped, so 30 verbs stays tidy instead of
-# reflowing the panel. Hotkeys: [1]..[9] on the first nine, [0] on the last
-# entry (End turn / Cancel), everything past 9 is click-only.
+# where meta is {"icon": Texture2D, "glyph": String, "freq_key": String,
+# "tier": String, "armed": bool}, all optional. Buttons are a fixed-size grid
+# (BTN_COLUMNS wide, up to BUTTON_ROWS tall before scrolling — see _process).
+#
+# T-skillicons: a button is its skill's badge and nothing else. `label` is not
+# drawn any more — it leads the tooltip instead (see _build_hero_menu), which is
+# what lets the grid be squares. Two things still ride on the face, both as
+# corner chips rather than as button text, so neither can push the badge around:
+# the hotkey, and an upcast tier. A build with no icons falls back to the old
+# labelled row, glyph and all, so the bar is never a grid of blank squares.
+#
+# Hotkeys: [1]..[9] on the first nine, [0] on the last entry (End turn /
+# Cancel), everything past 9 is click-only.
 func _set_buttons(opts: Array) -> void:
 	for c in _buttons.get_children():
 		c.queue_free()
 	var count := opts.size()
+	var u := clampf(_zoom, 0.9, 1.4)
 	for i in count:
 		var b := Button.new()
 		var meta: Dictionary = opts[i][3] if opts[i].size() > 3 else {}
@@ -784,19 +836,50 @@ func _set_buttons(opts: Array) -> void:
 			hotkey = "0"
 		elif i < 9:
 			hotkey = str(i + 1)
-		var glyph: String = String(meta.get("glyph", ""))
-		var prefix := ("[%s] " % hotkey if hotkey != "" else "") + (glyph + " " if glyph != "" else "")
-		b.text = prefix + String(opts[i][0])
-		b.clip_text = true
-		b.custom_minimum_size = BTN_SIZE * clampf(_zoom, 0.9, 1.4)
+		var tex: Texture2D = meta.get("icon")
+		Icons.icon_button(b, tex, int(Icons.ICON_PX * u))
+		var tip := String(opts[i][2]) if opts[i].size() > 2 else ""
+		if tex != null:
+			b.custom_minimum_size = BTN_SIZE * u
+			_chip(b, hotkey, Control.PRESET_BOTTOM_RIGHT, Icons.COL_HEAD, u)
+			_chip(b, String(meta.get("tier", "")), Control.PRESET_TOP_LEFT, Icons.COL_GOLD, u)
+		else:
+			# no art in this build: the pre-badge bar, verbatim
+			var glyph: String = String(meta.get("glyph", ""))
+			b.text = ("[%s] " % hotkey if hotkey != "" else "") \
+				+ (glyph + " " if glyph != "" else "") + String(opts[i][0])
+			b.clip_text = true
+			b.custom_minimum_size = Vector2(126, 40) * u
+		if meta.get("armed", false):
+			# A two-press verb is armed: with no label to relabel, the badge says
+			# so by going warm, and the popup says it in words.
+			b.modulate = Color("ffb3a8")
+			tip = "Press again to confirm.\n" + tip
 		b.pressed.connect(opts[i][1])
 		var freq_key := String(meta.get("freq_key", ""))
 		if freq_key != "":
 			b.pressed.connect(func(): _bump_freq(freq_key))
-		if opts[i].size() > 2 and String(opts[i][2]) != "":
-			b.tooltip_text = opts[i][2]   # native hover popup — what the verb actually does
+		if tip != "":
+			b.tooltip_text = tip   # native hover popup — the name, then what it does
 		_buttons.add_child(b)
 	_apply_ui_scale()
+
+# A corner chip on a badge button: the hotkey, or an upcast tier. A Label child
+# rather than the Button's own text, because Button lays its text out next to
+# the icon and would squeeze the badge to fit it.
+func _chip(b: Button, text: String, preset: int, col: Color, u: float) -> void:
+	if text == "":
+		return
+	var l := Label.new()
+	l.text = text
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_font_size_override("font_size", int(12 * u))
+	l.add_theme_color_override("font_color", col)
+	l.add_theme_color_override("font_shadow_color", Icons.COL_INK)
+	l.add_theme_constant_override("shadow_offset_x", 1)
+	l.add_theme_constant_override("shadow_offset_y", 1)
+	b.add_child(l)
+	l.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, int(3 * u))
 
 func _bump_freq(key: String) -> void:
 	_verb_freq[key] = int(_verb_freq.get(key, 0)) + 1

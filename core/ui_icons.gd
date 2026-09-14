@@ -178,6 +178,120 @@ const VERB_GLYPHS := {
 static func verb_glyph(kind: String) -> String:
 	return String(VERB_GLYPHS.get(kind, "·"))
 
+# --- action-bar icons ------------------------------------------------------
+# The glyphs above are the fallback now, not the mark. A codepoint is whatever
+# the shipped font decided it looks like: DejaVu draws ⚔, ⚒ and ⇉ at three
+# different weights and on two different baselines, so a row of them never sat
+# straight however the buttons were laid out. assets/icons/ holds drawn 64x64
+# SVG badges instead — gilt frame, dark medallion, a lit silhouette on it —
+# emitted by tools/gen_action_icons.py in three layers:
+#
+#   skills/    one per skill the bar can name: every combat-castable spell,
+#              every feature that becomes a button, each Shove variant. This is
+#              the layer the bar actually wants, because since T-skillicons the
+#              badge IS the button — the name and the numbers live in the
+#              tooltip — and two spells that share a mark are two buttons a
+#              player cannot tell apart.
+#   schools/   the eight spell schools, for a spell with no badge of its own.
+#   actions/   one per verb kind (VERB_GLYPHS), plus the bar's own controls.
+#
+# Keyed by exactly the ids the game uses, so a new spell needs a recipe there
+# and nothing here.
+#
+# The colour is in the file, not on the button. A school badge already stands on
+# its own SCHOOL_COLORS disc (the same colour spell_bb tints the spell's name
+# with), the martial verbs share steel and gold, and healing is COL_PARTY green
+# — so the bar draws them untouched. Button's icon_*_color defaults are white,
+# which multiplies to a no-op; nothing here overrides them.
+#
+# A miss is not an error. Icons that haven't been imported yet, an export that
+# left them out, a content pack's verb kind with no art of its own: _icon()
+# returns null and the caller keeps the glyph. Every call site pairs the two.
+const ICON_ROOT := "res://assets/icons"
+# The badge IS the button now — the name, the prose and the numbers moved into
+# the hover popup — so it gets the room a 126 px label used to take.
+const ICON_PX := 40          # drawn size on the bar at zoom 1 (_apply_ui_scale scales it)
+# The bar's own controls live alongside the verbs — same row, same weight.
+const BAR_ICONS := ["end_turn", "back", "swap", "generic"]
+
+static var _icon_cache := {}
+
+static func _icon(path: String) -> Texture2D:
+	if _icon_cache.has(path):
+		return _icon_cache[path]
+	var tex: Texture2D = null
+	# exists() first: load()ing a path that isn't there is an engine error, and
+	# a headless test run that never imported the assets would print 28 of them.
+	if ResourceLoader.exists(path):
+		tex = ResourceLoader.load(path) as Texture2D
+	_icon_cache[path] = tex
+	return tex
+
+# The badge for one thing the bar is offering, most specific first: the skill's
+# own art if it has any (assets/icons/skills — every combat-castable spell, every
+# feature that becomes a button, each Shove variant), then the spell's school,
+# then the verb kind, then the generic spark. `v` is a verb straight out of
+# cb.available().
+#
+# Ids arrive with two decorations that are not part of the identity: a granted
+# verb is "<feature>:<basic>" (combat.gd's grant_verb, e.g. Flurry of Blows
+# granting an attack) and an upcast spell is "<spell>@<level>". Both are cut
+# back to the thing that has art.
+static func skill_icon(v: Dictionary) -> Texture2D:
+	var sid := String(v.get("spell", ""))
+	var id := String(v.get("id", "")).get_slice(":", 1) if String(v.get("id", "")).contains(":") \
+		else String(v.get("id", ""))
+	id = id.get_slice("@", 0)
+	var tex: Texture2D = null
+	if sid != "":
+		tex = _icon("%s/skills/%s.svg" % [ICON_ROOT, sid])
+		if tex == null:
+			tex = _icon("%s/schools/%s.svg" % [ICON_ROOT, spell_school(sid)])
+	else:
+		tex = _icon("%s/skills/%s.svg" % [ICON_ROOT, id])
+	if tex == null:
+		tex = verb_icon(String(v.get("kind", "")))
+	return tex
+
+# One per verb `kind`, plus BAR_ICONS. A kind with no art of its own — a
+# content pack's, or one added before its icon was drawn — gets the generic
+# spark; null means the build has no icons at all, and the glyph takes over.
+static func verb_icon(kind: String) -> Texture2D:
+	var tex := _icon("%s/actions/%s.svg" % [ICON_ROOT, kind])
+	return tex if tex != null else _icon("%s/actions/generic.svg" % ICON_ROOT)
+
+# One per SCHOOL_GLYPHS key — a spell button is marked by its school, which
+# says more about it than one generic wand for all 300 of them would. Same
+# generic fallback for a spell whose entry names no school.
+static func school_icon(school: String) -> Texture2D:
+	var tex := _icon("%s/schools/%s.svg" % [ICON_ROOT, school])
+	return tex if tex != null else _icon("%s/actions/generic.svg" % ICON_ROOT)
+
+# Hang `tex` on `b`, sized for the bar. No tint: these are finished art, and a
+# theme colour would multiply the whole badge — frame, disc and all — down to
+# one hue. The one override is the disabled state, where the default theme
+# leaves a badge as bright as a live one. Returns the button so it chains,
+# like clicks().
+static func icon_button(b: Button, tex: Texture2D, px := ICON_PX) -> Button:
+	if tex == null:
+		return b
+	b.icon = tex
+	b.expand_icon = false
+	b.add_theme_constant_override("icon_max_width", px)
+	b.add_theme_constant_override("h_separation", 4)
+	b.add_theme_color_override("icon_disabled_color", Color(1, 1, 1, 0.35))
+	# dark_theme() pads a button by 10 for text; a badge button has no text and
+	# that padding is the difference between a 40 px mark and a 32 px one, so
+	# these get their own boxes — same colours, four pixels of inset.
+	for state in [["normal", "2b3040"], ["hover", "3a4152"], ["pressed", "4a5570"],
+			["disabled", "22252e"]]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(state[1])
+		box.set_corner_radius_all(6)
+		box.set_content_margin_all(4)
+		b.add_theme_stylebox_override(state[0], box)
+	return b
+
 # "⟳ Fire Bolt" as bbcode, school-tinted mark, plain name.
 static func spell_bb(spell_id: String, text: String) -> String:
 	var sc := spell_school(spell_id)

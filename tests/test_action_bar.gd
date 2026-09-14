@@ -13,6 +13,12 @@ func check(cond: bool, label: String) -> void:
 	if cond: _pass += 1
 	else: _fail += 1; printerr("  FAIL: ", label)
 
+# What a button says it is. Since T-skillicons the face carries the skill's
+# badge and two corner chips, and the NAME leads the tooltip instead
+# (scenes/main.gd _build_hero_menu builds "name\nprose\nnumbers"), so that
+# first line is what identifies a button now. `b.text` is only populated in a
+# build with no icons, and is read here as the fallback for exactly that case.
+#
 # _set_buttons() queue_free()s the old row instead of removing it outright, so
 # get_children() still returns stale buttons until a frame turns over — every
 # read below waits one frame first.
@@ -20,7 +26,8 @@ func _labels(main) -> Array:
 	await process_frame
 	var out: Array = []
 	for b in main._buttons.get_children():
-		out.append(String(b.text))
+		var tip := String(b.tooltip_text)
+		out.append(tip.get_slice("\n", 0) if tip != "" else String(b.text))
 	return out
 
 func _init() -> void:
