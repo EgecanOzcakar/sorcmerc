@@ -248,6 +248,8 @@ func _apply_ui_scale() -> void:
 	for b in _buttons.get_children():
 		b.add_theme_font_size_override("font_size", int(Icons.FS_BODY * u))
 		b.custom_minimum_size = BTN_SIZE * u
+		if b.icon != null:
+			b.add_theme_constant_override("icon_max_width", int(Icons.ICON_PX * u))
 
 func set_zoom(z: float) -> void:
 	_zoom = clampf(z, 0.45, 3.0)
@@ -424,6 +426,13 @@ func _end_turn() -> void:
 
 # --- hero menu ---------------------------------------------------------
 
+# What a bar button's mark is made of: the drawn icon (assets/icons, via
+# Icons.verb_icon / school_icon), the colour it wears, the glyph to fall back to
+# if that build has no icons, and the frequency key the press counts against
+# (empty for the bar's own controls — End turn and Back don't reorder anything).
+static func _mark(tex: Texture2D, tint: Color, glyph := "", freq_key := "") -> Dictionary:
+	return {"icon": tex, "tint": tint, "glyph": glyph, "freq_key": freq_key}
+
 # Verb-level menu. Buttons are numbered [1]..[9]; End turn is [0]; most-used
 # verbs (_prioritize) claim those low slots over time instead of whatever
 # order cb.available() happened to build them in. Everything on it comes from
@@ -448,10 +457,17 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 		var label: String = _verb_label(h, v)
 		var tip: String = _verb_tooltip(h, v)
 		var sid: String = String(v.get("spell", ""))
-		var glyph: String = Icons.school_glyph(Icons.spell_school(sid)) if sid != "" \
+		var school: String = Icons.spell_school(sid) if sid != "" else ""
+		var glyph: String = Icons.school_glyph(school) if sid != "" \
 			else Icons.verb_glyph(String(v["kind"]))
 		var freq_key: String = ("spell:" + sid) if sid != "" else String(v.get("id", v["kind"]))
-		var meta := {"glyph": glyph, "freq_key": freq_key}
+		# The drawn mark, and the colour it wears: a spell in its school's
+		# colour (the same one spell_bb has always tinted its name with), every
+		# other verb in the panel gold. `glyph` stays as the fallback for a
+		# build where the icons aren't there — see Icons.verb_icon.
+		var meta := _mark(
+			Icons.school_icon(school) if sid != "" else Icons.verb_icon(String(v["kind"])),
+			Icons.school_color(school) if sid != "" else Icons.COL_GOLD, glyph, freq_key)
 		var entry: Array
 		match v.get("targeting", "self"):
 			"enemy", "ally":
@@ -491,16 +507,21 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	# T29: melee/ranged toggle — only offered to someone carrying both.
 	var swap := _attack_swap(h)
 	if not swap.is_empty():
-		opts.append(["⇄ Wield %s" % swap["name"],
+		opts.append(["Wield %s" % swap["name"],
 			func(): Adapter.set_main_attack(h, String(swap["id"])); _build_hero_menu(h),
 			"Your Attack action switches to %s (%s): %+d to hit, %s %s damage. Free." % [
 				swap["name"], swap["range"], int(swap["to_hit"]), swap["notation"],
-				swap.get("damage_type", "")]])
+				swap.get("damage_type", "")],
+			_mark(Icons.verb_icon("swap"), Icons.COL_ACCENT, "⇄")])
 
+	var end_mark := _mark(Icons.verb_icon("end_turn"), Icons.COL_MUTED)
 	if h.econ["action"] > 0 and not cb.is_over():
-		opts.append(_confirm_opt(h, "end", "End turn (action unspent!)", _end_turn))
+		var end_opt := _confirm_opt(h, "end", "End turn (action unspent!)", _end_turn)
+		end_opt.append("")
+		end_opt.append(end_mark)
+		opts.append(end_opt)
 	else:
-		opts.append(["End turn", _end_turn])
+		opts.append(["End turn", _end_turn, "", end_mark])
 	_set_buttons(opts)
 	_board.queue_redraw()
 
@@ -509,7 +530,8 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 # cb.perform exactly as it would have been standalone) is reused verbatim.
 func _spell_tier_menu(h, tiers: Array) -> void:
 	var opts: Array = tiers.duplicate()
-	opts.append(["‹ Back", func(): _build_hero_menu(h, true)])
+	opts.append(["Back", func(): _build_hero_menu(h, true), "",
+		_mark(Icons.verb_icon("back"), Icons.COL_MUTED, "‹")])
 	_set_buttons(opts)
 	_board.queue_redraw()
 
@@ -636,7 +658,8 @@ func _enter_cone(h, v: Dictionary) -> void:
 	_tgt_verb = v
 	_actor.text = "%s — aim %s: hover a direction, click to cast.  (Esc / right-click cancels)" % [
 		h.cname, v["label"]]
-	_set_buttons([["Cancel", func(): board_cancel()]])
+	_set_buttons([["Cancel", func(): board_cancel(), "",
+		_mark(Icons.verb_icon("back"), Icons.COL_MUTED, "‹")]])
 	_board.queue_redraw()
 
 func _enter_target(h, v: Dictionary) -> void:
@@ -644,7 +667,8 @@ func _enter_target(h, v: Dictionary) -> void:
 	_tgt_verb = v
 	_actor.text = "%s — %s: hover a target for the odds, click to apply.  (Esc / right-click cancels)" % [
 		h.cname, v["label"]]
-	_set_buttons([["Cancel", func(): board_cancel()]])
+	_set_buttons([["Cancel", func(): board_cancel(), "",
+		_mark(Icons.verb_icon("back"), Icons.COL_MUTED, "‹")]])
 	_board.queue_redraw()
 
 # Is `c` a legal target for the pending verb?
@@ -784,7 +808,12 @@ func _set_buttons(opts: Array) -> void:
 			hotkey = "0"
 		elif i < 9:
 			hotkey = str(i + 1)
-		var glyph: String = String(meta.get("glyph", ""))
+		var tex: Texture2D = meta.get("icon")
+		var tint: Color = meta.get("tint", Icons.COL_GOLD)
+		Icons.icon_button(b, tex, tint, int(Icons.ICON_PX * clampf(_zoom, 0.9, 1.4)))
+		# The glyph is the fallback, and only that: with the drawn mark up it
+		# would be the same idea twice, in two different weights.
+		var glyph: String = "" if tex != null else String(meta.get("glyph", ""))
 		var prefix := ("[%s] " % hotkey if hotkey != "" else "") + (glyph + " " if glyph != "" else "")
 		b.text = prefix + String(opts[i][0])
 		b.clip_text = true

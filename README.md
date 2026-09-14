@@ -55,7 +55,7 @@ data/              the 5e SRD export (classes/spells/species/...), a 316-
 content/           content packs that ship with the game: an example map, a
                    free campaign, and a paid DLC — all three written against
                    the same public API a player's mod uses
-tests/             83 files, headless: one per subsystem (64 test_*.gd) plus
+tests/             84 files, headless: one per subsystem (65 test_*.gd) plus
                    8 drive_*.gd (robots pressing real UI buttons end-to-end)
                    and a few dev tools (shot.gd renders a frame to PNG)
 docs/              docs/expansion-plan.md is the current source of truth;
@@ -75,6 +75,11 @@ tools/check_audio.py
                    loop seams continuous) — the waveform half of the audio
                    tests, since tests/test_audio.gd can only prove the engine
                    parses them
+tools/gen_action_icons.py
+                   draws assets/icons/ — one 32x32 SVG per action-bar verb
+                   kind, per spell school, and for the bar's own controls,
+                   plus the .import each one is read through. `--check` fails
+                   if a committed icon has drifted from its recipe
 ```
 
 ## Assets and provenance
@@ -95,6 +100,7 @@ in separate directories, so any file's origin is answerable from its path alone:
 | Path | Origin | Recorded in |
 |---|---|---|
 | `assets/audio/` | procedurally synthesized, stdlib only — **not AI** | `tools/gen_audio.py`, `tools/synth.py` |
+| `assets/icons/` | SVG path data written as source, stdlib only — **no image model**; the coordinates were authored with a coding assistant, which the disclosure exempts | `tools/gen_action_icons.py` |
 | `assets/lpc/` | Liberated Pixel Cup art, CC-BY-SA 3.0 / GPL-3.0 / OGA-BY 3.0 | `assets/lpc/CREDITS.csv`, `LICENSES/` |
 | `assets/generated/` | sheets composited from `assets/lpc/` | `*_credits.txt` per sheet |
 | `assets/world/` | sourced packs | `License.txt` per subdirectory |
