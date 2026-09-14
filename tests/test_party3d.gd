@@ -102,11 +102,45 @@ func _init() -> void:
 	var lean := fig.rotation.x
 	check(lean > 0.0, "and leans into the direction of travel")
 
-	# Stop: it must ease out, not snap — still leaning on the very next frame,
-	# at rest a fraction of a second later.
-	await process_frame
-	check(fig.rotation.x > 0.0 and fig.rotation.x < lean,
-		"a party that stops eases out of the walk instead of snapping")
+	# Stop: it must ease out, not snap.
+	#
+	# Driven through _gait_pose() with fixed deltas rather than off a real frame.
+	# The gait decays by GAIT_RAMP * dt, so the whole ease-out takes 0.25s — and
+	# "still leaning on the very next frame" is therefore only true when that
+	# frame was SHORTER than 0.25s. It always is on a developer machine; on a
+	# loaded CI runner one headless frame can be longer, move_toward lands on
+	# exactly the idle pose, and this reported a snap that had not happened.
+	# Measured: at dt 0.2 the lean is 0.007, at dt 0.25 it is exactly 0.
+	#
+	# _gait_pose is split out of _reposition() precisely so a headless test can
+	# hand it a delta ("driven with fixed deltas by a headless test", scenes/
+	# world/party3d.gd) — so the assertion uses that seam and stops depending on
+	# how busy the machine was.
+	# Spun up and eased down on fixed deltas, so nothing here reads a wall clock:
+	# not how long a frame took, and not whatever weight the loop above happened
+	# to leave behind. GAIT_RAMP is per second, so a full ramp is 1.0/GAIT_RAMP
+	# and a step of a fifth of that has to come down over five frames.
+	const STOP_DT := 1.0 / (Party3D.GAIT_RAMP * 5.0)     # a fifth of the ramp
+	for i in 10:
+		main._party3d._gait_pose(player.id, Party3D.REF_SPEED, STOP_DT)   # walking, at full weight
+	var walking: float = main._party3d._gait_pose(player.id, Party3D.REF_SPEED, STOP_DT).z
+	check(is_equal_approx(walking, Party3D.LEAN_RAD),
+		"the walk reaches full lean before it is asked to stop (%.5f)" % walking)
+
+	var eased: Array = []
+	for i in 5:
+		eased.append(main._party3d._gait_pose(player.id, 0.0, STOP_DT).z)
+	check(eased[0] > 0.0 and eased[0] < walking,
+		"a party that stops eases out of the walk instead of snapping (%.5f, was %.5f)"
+			% [eased[0], walking])
+	var still_easing := true
+	for i in range(1, eased.size() - 1):
+		still_easing = still_easing and eased[i] > 0.0 and eased[i] < eased[i - 1]
+	check(still_easing, "and keeps easing, a fifth of the ramp at a time (%s)"
+		% str(eased.map(func(v): return "%.5f" % v)))
+	check(is_zero_approx(eased[eased.size() - 1]),
+		"reaching exactly the idle pose at the end of the ramp, not near it (%.5f)"
+			% eased[eased.size() - 1])
 	var settled := false
 	for i in 120:
 		await process_frame
