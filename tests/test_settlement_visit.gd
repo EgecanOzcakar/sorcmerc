@@ -302,6 +302,31 @@ func test_persuade_and_investigate() -> void:
 	var r2 := Visit.persuade(s, very_refused, party, RNG.new(1))
 	check(r2["dc"] > r1["dc"], "a settlement that loathes you is a harder sell than one that merely refuses")
 
+	# --- haggle: the mirror of persuade, for a market that's already open ---
+	check(Visit.haggle(refused, party).is_empty(), "nothing to haggle over on a market that's refusing")
+	var saw_hok := false
+	var saw_hfail := false
+	for seed_v in range(40):
+		var roll: Dictionary = Visit.haggle(open_market, party, RNG.new(seed_v + 1))
+		check(not roll.is_empty(), "haggle() rolls for a party that has members")
+		check(String(roll["text"]) != "", "the attempt is narrated")
+		if roll["ok"]:
+			saw_hok = true
+			check(roll["mult"] < 1.0, "a win discounts this visit's prices")
+		else:
+			saw_hfail = true
+			check(roll["mult"] > 1.0, "a loss makes this visit's prices worse")
+	check(saw_hok and saw_hfail, "both outcomes reachable across seeds (got ok=%s fail=%s)" % [saw_hok, saw_hfail])
+
+	var priced := Visit.market(s, 120.0, false)
+	var id2: String = priced["stock"][0]["item_id"]
+	var before_price: int = Visit.price_of(priced, id2)
+	var before_markup: float = priced["markup"]
+	Visit.apply_haggle(priced, 0.85)
+	check(Visit.price_of(priced, id2) == maxi(1, int(round(before_price * 0.85))),
+		"apply_haggle rescales every shelf price")
+	check(is_equal_approx(priced["markup"], before_markup * 0.85), "...and the markup itself, so sell prices follow too")
+
 	# --- investigate_battle ---
 	var no_battle := Visit.market(s, 120.0, false)
 	check(Visit.investigate_battle(s, no_battle, party).is_empty(), "nothing to investigate without a recent battle")

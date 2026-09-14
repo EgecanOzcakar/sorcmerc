@@ -91,6 +91,47 @@ static func persuade_into_trading(s, m: Dictionary) -> Dictionary:
 	opened["services"] = services(s)
 	return opened
 
+# --- T9x: haggling over an already-open market's prices ---------------------
+const HAGGLE_SKILL := "persuasion"
+const HAGGLE_DC := 13
+const HAGGLE_DISCOUNT := 0.15   # success: 15% off every price for this visit
+const HAGGLE_PENALTY := 0.10    # failure: 10% worse — a bad ask sours the room
+
+# The mirror of persuade(): that one talks a REFUSED market into opening at
+# all; this one only makes sense once it's already open, moving the price
+# up or down instead of the door. One attempt per visit, same shape as
+# persuade()/steal() — apply_haggle() below does the actual repricing so
+# this stays a pure roll, same "the caller decides what a result means"
+# split search()/loot() already use.
+static func haggle(m: Dictionary, party, rng = null) -> Dictionary:
+	if m.get("refused", false):
+		return {}
+	var c = Campaign.new(party)
+	var char_id: String = c.best_at(HAGGLE_SKILL)
+	var ch = party.get_member(char_id) if char_id != "" else null
+	if ch == null:
+		return {}
+	var s = m.get("settlement")
+	if rng == null:
+		rng = RNG.new(maxi(1, absi(hash("haggle|%s|%d" % [String(s.id) if s != null else "", int(m.get("steps", 0))]))))
+	var bonus: int = c.skill_bonus(char_id, HAGGLE_SKILL)
+	var nat: int = int(Dice.d20(rng)["nat"])
+	var ok: bool = nat + bonus >= HAGGLE_DC
+	var mult := (1.0 - HAGGLE_DISCOUNT) if ok else (1.0 + HAGGLE_PENALTY)
+	var line := ("%s talks the price down (Persuasion %d+%d vs DC %d) — %d%% off for the rest of this visit."
+		% [ch.cname, nat, bonus, HAGGLE_DC, int(HAGGLE_DISCOUNT * 100)]) if ok else (
+		"%s oversells it and gets a cold shoulder (Persuasion %d+%d vs DC %d) — prices just got worse."
+		% [ch.cname, nat, bonus, HAGGLE_DC])
+	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": HAGGLE_DC, "mult": mult, "char_id": char_id, "text": line}
+
+# Rescales the market's own markup and every already-priced shelf item by
+# `mult` — in place, on the live visit dict, not a fresh market() roll (a
+# haggle changes what THIS conversation agreed to, not the shelf itself).
+static func apply_haggle(m: Dictionary, mult: float) -> void:
+	m["markup"] = float(m.get("markup", 1.0)) * mult
+	for e in m.get("stock", []):
+		e["price"] = maxi(1, int(round(int(e["price"]) * mult)))
+
 # --- T9x: investigating a recent battle site --------------------------------
 const INVESTIGATE_SKILL := "investigation"
 const INVESTIGATE_DC := 13
