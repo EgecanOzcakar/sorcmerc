@@ -101,7 +101,7 @@ func _run() -> void:
 	# so "Small World" stands in for all three everywhere below.
 	var was: Array = Array(party_screen.party.active)
 	party_screen.party.active.clear()
-	press("Begin — Small World")
+	press("Begin, small world")
 	await process_frame
 	if find_node(main, "res://scenes/world/world.gd") != null:
 		fail("started a run with an empty active party")
@@ -133,7 +133,7 @@ func _run() -> void:
 	# The party screen is freed the moment the map replaces it, so hold on to the
 	# assembled party itself, not the screen.
 	var assembled = party_screen.party
-	press("Begin — Small World")
+	press("Begin, small world")
 	await process_frame
 	await process_frame
 	var world_screen = find_node(main, "res://scenes/world/world.gd")
@@ -195,7 +195,7 @@ func _run() -> void:
 		fail("New run did not open the party screen the second time")
 		return _done()
 	assembled = party_screen.party
-	press("Begin — Small World")
+	press("Begin, small world")
 	await process_frame
 	await process_frame
 	if find_node(main, "res://scenes/world/world.gd") != null:
@@ -224,7 +224,7 @@ func _run() -> void:
 		fail("the campaign screen is still up after the run ended")
 	if CampaignSave.has_save():
 		fail("a finished run left its autosave behind")
-	if not _text_on_screen("R E T I R E D"):
+	if not _text_on_screen("Retired"):
 		fail("the summary does not name the end state")
 	if not _text_on_screen("Carried home"):
 		fail("the summary has no loot line")
@@ -234,7 +234,7 @@ func _run() -> void:
 	await process_frame
 	if not buttons(main).any(func(b): return "New run" in b.text):
 		fail("the summary did not return to the title screen")
-	if not _text_on_screen("S O R C M E R C"):
+	if not _text_on_screen("Sorcmerc"):
 		fail("the title is not back up")
 
 	# --- resume: a half-walked run is offered at the front door ------------

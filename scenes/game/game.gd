@@ -79,17 +79,25 @@ func show_title() -> void:
 	# the tension layer must not follow you out of the fight you just left.
 	Sound.set_environment("title")
 	Sound.set_combat(false)
+	# The front page of the company book: the name set large in the serif, the
+	# one thing you are most likely to do next in gilt, everything else as a
+	# plain list under it. Left-aligned like every ledger page after it.
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 10)
+	col.custom_minimum_size.x = 520
+	col.add_theme_constant_override("separation", 8)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 
 	var title := Label.new()
-	title.text = "S O R C M E R C"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", Icons.FS_TITLE)
-	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	title.text = "Sorcmerc"
+	title.theme_type_variation = "Title"
+	title.add_theme_font_size_override("font_size", 64)
 	col.add_child(title)
-	col.add_child(_dim("A short road, a hard fight, and whatever you carry home."))
+	var tag := Label.new()
+	tag.text = "A short road, a hard fight, and whatever you carry home."
+	tag.theme_type_variation = "Serif"
+	tag.add_theme_color_override("font_color", Icons.COL_BODY)
+	col.add_child(tag)
+	col.add_child(_gap(18))
 
 	# Two slots, two doors: the linear run's autosave is debug-only (behind the flag),
 	# the open world's is normal play's.
@@ -99,22 +107,30 @@ func show_title() -> void:
 	# of it: no saying what you would be resuming, no saying that New run is going
 	# to write over it, and no way to clear it. All three are here now.
 	if linear_campaign() and CampaignSave.has_save():
-		col.add_child(_button("▶  Resume the last run", _resume))
+		col.add_child(_button("Resume the last run", _resume))
 	var slot: Dictionary = WorldSave.summary()
 	if not slot.is_empty():
-		col.add_child(_button("▶  Resume the open world", _resume_world))
-		col.add_child(_dim("     " + slot_line(slot)))
-		col.add_child(_button("✖  Delete the autosave", _confirm_delete_world_save))
-	col.add_child(_button("✦  New run", show_party_setup))
+		col.add_child(_button("Resume the open world", _resume_world, true))
+		col.add_child(_dim(slot_lines(slot)))
+		col.add_child(_gap(6))
+	col.add_child(_button("New run", show_party_setup, slot.is_empty()))
 	if not slot.is_empty():
-		col.add_child(_dim("     one autosave slot — beginning a new run writes over the one above"))
-	col.add_child(_button("❖  Campaigns & mods", show_content))
-	col.add_child(_button("✧  Tutorial", show_tutorial))
-	col.add_child(_button("⚔  Random battle (debug)", show_random_battle))
+		col.add_child(_dim("One autosave slot. A new run writes over the one above."))
+		col.add_child(_gap(6))
+	col.add_child(_button("Campaigns & mods", show_content))
+	col.add_child(_button("Tutorial", show_tutorial))
 	var roster := CharacterSave.list_slugs().size()
-	col.add_child(_dim("%d character(s) in the barracks." % roster))
-	col.add_child(_button("⚙  Settings", func(): SettingsOverlay.toggle(self)))
-	col.add_child(_button("Quit", func(): get_tree().quit()))
+	col.add_child(_dim("%d in the barracks." % roster if roster != 1 else "1 in the barracks."))
+	col.add_child(_gap(12))
+	var foot := HBoxContainer.new()
+	foot.add_theme_constant_override("separation", 12)
+	foot.add_child(_quiet("Settings", func(): SettingsOverlay.toggle(self)))
+	foot.add_child(_quiet("Random battle (debug)", show_random_battle))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	foot.add_child(spacer)
+	foot.add_child(_quiet("Quit", func(): get_tree().quit()))
+	col.add_child(foot)
 
 	var centre := CenterContainer.new()
 	centre.add_child(col)
@@ -138,6 +154,18 @@ static func slot_line(slot: Dictionary) -> String:
 		bits.append("saved %s" % Time.get_datetime_string_from_unix_time(when, true).replace("T", " "))
 	return "  ·  ".join(bits)
 
+# The same facts as two short lines: when and where, then who and what.
+static func slot_lines(slot: Dictionary) -> String:
+	var when := WorldSave.day_clock(float(slot.get("elapsed", 0.0)))
+	var map := String(slot.get("map", ""))
+	var who: Array = slot.get("party", [])
+	var first := when + (", %s map" % map if map != "" else "")
+	var story := String(slot.get("story", ""))
+	if story != "":
+		first += ", " + story
+	var second := (", ".join(who) if not who.is_empty() else "nobody standing") + ", %d gp" % int(slot.get("gold", 0))
+	return first + "\n" + second
+
 # Deleting the only copy of a run is not a one-click thing: this is its own
 # screen, and the way back is a button rather than a guess.
 func _confirm_delete_world_save() -> void:
@@ -146,17 +174,20 @@ func _confirm_delete_world_save() -> void:
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	var head := Label.new()
 	head.text = "Delete the open-world autosave?"
-	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	head.add_theme_font_size_override("font_size", Icons.FS_HEAD)
-	head.add_theme_color_override("font_color", Icons.COL_FOE)
+	head.theme_type_variation = "Title"
 	col.add_child(head)
-	col.add_child(_dim(slot_line(WorldSave.summary())))
-	col.add_child(_dim("The characters stay in the barracks. The map, the purse, the"))
-	col.add_child(_dim("stash and the quests do not. This cannot be undone."))
-	col.add_child(_button("✖  Delete it", func():
+	col.add_child(_dim(slot_lines(WorldSave.summary())))
+	var body := Label.new()
+	body.text = "The characters stay in the barracks. The map, the purse, the stash and the quests do not. This cannot be undone."
+	body.theme_type_variation = "Serif"
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD
+	body.custom_minimum_size.x = 520
+	col.add_child(body)
+	col.add_child(_gap(8))
+	col.add_child(_button("Delete it", func():
 		WorldSave.clear()
 		show_title()))
-	col.add_child(_button("←  Keep it", show_title))
+	col.add_child(_quiet("Keep it", show_title))
 	var centre := CenterContainer.new()
 	centre.add_child(col)
 	_swap(centre)
@@ -227,7 +258,7 @@ func show_tutorial() -> void:
 	var wrap := Control.new()
 	wrap.add_child(combat)
 	var back := Button.new()
-	back.text = "←  Title"
+	back.text = "Title"
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -160; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(show_title)
@@ -266,7 +297,7 @@ func show_random_battle() -> void:
 	var wrap := Control.new()
 	wrap.add_child(combat)
 	var back := Button.new()
-	back.text = "←  Title"
+	back.text = "Title"
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -160; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(show_title)
@@ -307,7 +338,8 @@ func show_party_setup() -> void:
 	# one thing to begin, and it is the campaign the player just picked.
 	if _pack != null:
 		var begin_pack := Button.new()
-		begin_pack.text = "Begin — %s  →" % _pack.title()
+		begin_pack.text = "Begin %s" % _pack.title()
+		begin_pack.theme_type_variation = "Primary"
 		begin_pack.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 		begin_pack.offset_left = -360; begin_pack.offset_top = 12; begin_pack.offset_right = -16
 		begin_pack.pressed.connect(func():
@@ -317,7 +349,7 @@ func show_party_setup() -> void:
 			_start_pack(party))
 		wrap.add_child(begin_pack)
 		var cancel := Button.new()
-		cancel.text = "←  Campaigns"
+		cancel.text = "Campaigns"
 		cancel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		cancel.offset_left = 16; cancel.offset_top = 12; cancel.offset_right = 160
 		cancel.pressed.connect(func():
@@ -328,14 +360,15 @@ func show_party_setup() -> void:
 		return
 
 	var begin_small := Button.new()
-	begin_small.text = "Begin — Small World  →"
+	begin_small.text = "Begin, small world"
 	begin_small.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	begin_small.offset_left = -320; begin_small.offset_top = 12; begin_small.offset_right = -168
 	begin_small.pressed.connect(begin.bind("small"))
 	wrap.add_child(begin_small)
 
 	var begin_large := Button.new()
-	begin_large.text = "Begin — Large World  →"
+	begin_large.text = "Begin, large world"
+	begin_large.theme_type_variation = "Primary"
 	begin_large.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	begin_large.offset_left = -160; begin_large.offset_top = 12; begin_large.offset_right = -16
 	begin_large.pressed.connect(begin.bind("large"))
@@ -345,14 +378,14 @@ func show_party_setup() -> void:
 	# content types as the two hand-placed maps, a fresh layout every run
 	# (SORCMERC_SEED pins it, same env var the linear campaign already honours).
 	var begin_proc := Button.new()
-	begin_proc.text = "Begin — Procedural World  →"
+	begin_proc.text = "Begin, procedural world"
 	begin_proc.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	begin_proc.offset_left = -496; begin_proc.offset_top = 12; begin_proc.offset_right = -328
 	begin_proc.pressed.connect(begin.bind("procedural"))
 	wrap.add_child(begin_proc)
 
 	var back := Button.new()
-	back.text = "←  Title"
+	back.text = "Title"
 	back.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	back.offset_left = 16; back.offset_top = 12; back.offset_right = 130
 	back.pressed.connect(show_title)
@@ -423,16 +456,15 @@ func show_summary(run) -> void:
 	CampaignSave.clear()
 
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _box(Icons.COL_PANEL, _end_color(run.state)))
+	panel.add_theme_stylebox_override("panel", Icons.box(Icons.COL_PANEL, _end_color(run.state), 0, 24, 20))
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
 
 	var head := Label.new()
-	head.text = {"won": "V I C T O R Y", "retired": "R E T I R E D",
-		"lost": "D E F E A T"}.get(run.state, "T H E   R U N   E N D S")
-	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	head.add_theme_font_size_override("font_size", Icons.FS_TITLE)
+	head.text = {"won": "Victory", "retired": "Retired",
+		"lost": "Defeat"}.get(run.state, "The run ends")
+	head.theme_type_variation = "Title"
 	head.add_theme_color_override("font_color", _end_color(run.state))
 	col.add_child(head)
 
@@ -447,7 +479,8 @@ func show_summary(run) -> void:
 	journal.text = "[color=%s]%s[/color]" % [Icons.COL_BODY.to_html(false),
 		"\n".join(PackedStringArray(run.log))]
 	col.add_child(journal)
-	col.add_child(_button("←  Back to the hub", show_title))
+	col.add_child(_gap(6))
+	col.add_child(_button("Back to the hub", show_title, true))
 
 	var centre := CenterContainer.new()
 	centre.add_child(panel)
@@ -478,25 +511,28 @@ static func _end_color(state: String) -> Color:
 # Every button on the title and summary screens comes through here. The click
 # itself is Icons.clicks() — the same helper the five menu screens use — so the
 # sound has one definition for the whole game rather than one per screen.
-func _button(text: String, cb: Callable) -> Button:
+func _button(text: String, cb: Callable, primary := false) -> Button:
 	var b := Button.new()
 	b.text = text
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if primary:
+		b.theme_type_variation = "Primary"
 	b.pressed.connect(cb)
 	Icons.clicks(b)
 	return b
 
+func _quiet(text: String, cb: Callable) -> Button:
+	var b := _button(text, cb)
+	b.theme_type_variation = "Quiet"
+	return b
+
+func _gap(px: int) -> Control:
+	var c := Control.new()
+	c.custom_minimum_size.y = px
+	return c
+
 func _dim(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	l.add_theme_color_override("font_color", Icons.COL_MUTED)
+	l.theme_type_variation = "Dim"
 	return l
-
-func _box(bg: Color, edge: Color) -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = bg
-	s.set_corner_radius_all(8)
-	s.set_border_width_all(1)
-	s.border_color = edge
-	s.set_content_margin_all(14)
-	return s

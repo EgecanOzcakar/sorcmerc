@@ -31,13 +31,7 @@ func _ready() -> void:
 	add_child(bg)
 
 	var panel := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = Icons.COL_PANEL
-	box.set_corner_radius_all(10)
-	box.set_border_width_all(1)
-	box.border_color = Icons.COL_GOLD_EDGE
-	box.set_content_margin_all(18)
-	panel.add_theme_stylebox_override("panel", box)
+	panel.add_theme_stylebox_override("panel", Icons.box(Icons.COL_PANEL, Icons.COL_GOLD_EDGE, 0, 24, 20))
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.offset_left = 40; panel.offset_right = -40
 	panel.offset_top = 30; panel.offset_bottom = -30
@@ -48,17 +42,13 @@ func _ready() -> void:
 	panel.add_child(col)
 
 	var cap := Label.new()
-	cap.text = "»   P R O G R E S S I O N   «"
-	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cap.add_theme_color_override("font_color", Icons.COL_GOLD)
-	cap.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+	cap.text = "Progression"
+	cap.theme_type_variation = "Title"
 	col.add_child(cap)
 
 	var tally := Label.new()
 	tally.text = "%d lifetime XP" % Prog.lifetime_xp_total()
-	tally.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tally.add_theme_color_override("font_color", Icons.COL_MUTED)
-	tally.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	tally.theme_type_variation = "Dim"
 	col.add_child(tally)
 
 	var scroll := ScrollContainer.new()
@@ -100,19 +90,17 @@ func _ready() -> void:
 func _heading(text: String) -> Control:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", Icons.FS_TITLE)
-	l.add_theme_color_override("font_color", Icons.COL_GOLD)
+	l.theme_type_variation = "Caption"
 	return l
 
 func _card(glyph: String, title: String, unlocked: bool, note: String, sub: String,
 		subclasses: Array) -> Control:
 	var card := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = Icons.COL_INK
-	box.set_corner_radius_all(6)
-	box.set_border_width_all(1)
-	box.border_color = Icons.COL_GOLD_EDGE if unlocked else Icons.COL_EDGE
-	box.set_content_margin_all(10)
+	# A ledger row: the earned ones carry a gilt bar down the left edge, the
+	# rest sit plain. No box per entry.
+	var box := Icons.box(Icons.COL_INK, Color(0, 0, 0, 0), 0, 12, 8)
+	box.border_color = Icons.COL_GOLD if unlocked else Icons.COL_EDGE
+	box.border_width_left = 3
 	card.add_theme_stylebox_override("panel", box)
 
 	var col := VBoxContainer.new()
@@ -131,8 +119,9 @@ func _card(glyph: String, title: String, unlocked: bool, note: String, sub: Stri
 	var name_l := Label.new()
 	name_l.text = title
 	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_l.add_theme_font_size_override("font_size", Icons.FS_HEAD)
-	name_l.add_theme_color_override("font_color", Icons.COL_HEAD if unlocked else Icons.COL_MUTED)
+	name_l.theme_type_variation = "Head"
+	if not unlocked:
+		name_l.add_theme_color_override("font_color", Icons.COL_MUTED)
 	head.add_child(name_l)
 
 	var state := Label.new()

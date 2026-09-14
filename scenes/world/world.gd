@@ -264,6 +264,7 @@ var world_size := "small"   # "small" | "large" — which built-in map _ready() 
                              # when nobody injected a `world` (a fresh start, not O13's resume)
 
 func _ready() -> void:
+	theme = Icons.dark_theme()   # standalone runs; under game.gd it is the same theme inherited
 	match OS.get_environment("SORCMERC_ALT_TILES"):
 		"kenney":
 			_terrain_tex = TerrainTexAlt; _forest_tex = ForestTexAlt; _water_tex = WaterTexAlt
@@ -418,13 +419,14 @@ func _build_hud() -> void:
 	_speed_btn.pressed.connect(_cycle_speed)
 	bar.add_child(_speed_btn)
 	_clock_lbl = Label.new()
+	_clock_lbl.theme_type_variation = "Stat"
 	_clock_lbl.add_theme_color_override("font_color", Icons.COL_GOLD)
 	bar.add_child(_clock_lbl)
 	# D6: which country this is and who it is for, always on. A band that only
 	# announced itself at the seam would be invisible to a player who saved in
 	# the frontier and came back a week later.
 	_region_lbl = Label.new()
-	_region_lbl.add_theme_color_override("font_color", Icons.COL_MUTED)
+	_region_lbl.theme_type_variation = "Dim"
 	bar.add_child(_region_lbl)
 	var party_btn := Button.new()
 	party_btn.text = "Party"
@@ -441,7 +443,8 @@ func _build_hud() -> void:
 	_story_btn.pressed.connect(_toggle_story)
 	bar.add_child(_story_btn)
 	var title := Button.new()
-	title.text = "←  Title"
+	title.text = "Title"
+	title.theme_type_variation = "Quiet"
 	title.pressed.connect(_leave_world)
 	bar.add_child(title)
 	_lair_btn = Button.new()
@@ -468,16 +471,19 @@ func _build_hud() -> void:
 	_camp_btn.pressed.connect(_make_camp)
 	bar.add_child(_camp_btn)
 	var hint := Label.new()
-	hint.text = "right-click: march here   ·   drag: pan   ·   wheel: zoom"
-	hint.add_theme_color_override("font_color", Icons.COL_MUTED)
+	hint.text = "Right-click marches there.  Drag pans, wheel zooms."
+	hint.theme_type_variation = "Dim"
 	bar.add_child(hint)
 	_region_msg = Label.new()
+	_region_msg.theme_type_variation = "Serif"
 	_region_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	bar.add_child(_region_msg)
 	_lair_msg = Label.new()
+	_lair_msg.theme_type_variation = "Serif"
 	_lair_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	bar.add_child(_lair_msg)
 	_camp_msg = Label.new()
+	_camp_msg.theme_type_variation = "Serif"
 	_camp_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	bar.add_child(_camp_msg)
 	# T9y: the map inset. Added last so it sits above the 2D map but below the
@@ -611,6 +617,7 @@ func _build_quest_panel() -> void:
 	if _quest_panel != null:
 		_quest_panel.queue_free()
 	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
 	# No anchor preset: default anchors are top-left (0), so `position` is a plain
 	# pixel offset from the parent's origin — set_anchors_preset(PRESET_CENTER)
 	# used to also be called here, which re-centers the control on its OWN anchor
@@ -625,7 +632,7 @@ func _build_quest_panel() -> void:
 
 	var title := Label.new()
 	title.text = "Quest log"
-	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	title.theme_type_variation = "Head"
 	box.add_child(title)
 
 	var scroll := ScrollContainer.new()
@@ -637,7 +644,7 @@ func _build_quest_panel() -> void:
 	if live.is_empty():
 		var none := Label.new()
 		none.text = "No quests. Settlements have work."
-		none.add_theme_color_override("font_color", Icons.COL_MUTED)
+		none.theme_type_variation = "Dim"
 		rows.add_child(none)
 	for q in live:
 		var l := Label.new()
@@ -725,6 +732,7 @@ func _close_story() -> void:
 
 func _build_story_panel() -> void:
 	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
 	panel.position = size * 0.5 - Vector2(230, 190)
 	panel.custom_minimum_size = Vector2(460, 380)
 	add_child(panel)
@@ -734,13 +742,13 @@ func _build_story_panel() -> void:
 
 	var title := Label.new()
 	title.text = story.story.title
-	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	title.theme_type_variation = "Head"
 	box.add_child(title)
 
 	var chapter := Label.new()
 	var c: Dictionary = story.story.chapter(story.chapter)
 	chapter.text = "Finished." if story.done else String(c.get("title", "—"))
-	chapter.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	chapter.theme_type_variation = "Dim"
 	chapter.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	box.add_child(chapter)
 
@@ -758,8 +766,7 @@ func _build_story_panel() -> void:
 		l.text = String(line)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.custom_minimum_size = Vector2(420, 0)
-		l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-		l.add_theme_color_override("font_color", Icons.COL_BODY)
+		l.theme_type_variation = "Serif"
 		rows.add_child(l)
 
 	var close := Button.new()
@@ -1358,7 +1365,7 @@ func _check_region() -> void:
 	if _region_lbl != null:
 		# Short form: this bar already carries nine controls and a hint, and the
 		# long form lives on the lair button, the inn's leads and the crossing card.
-		_region_lbl.text = "%s · lv %d-%d" % [String(band["label"]), int(lv[0]), int(lv[1])]
+		_region_lbl.text = "%s, levels %d to %d" % [String(band["label"]), int(lv[0]), int(lv[1])]
 	if _region.is_empty():
 		_region = band          # first frame: the party is simply somewhere
 		return
@@ -1730,6 +1737,7 @@ func _build_visit_panel() -> void:
 		_visit_panel.queue_free()
 	var s = _visit["settlement"]
 	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
 	# Default (top-left) anchors: `position` is a plain pixel offset from the
 	# parent's origin. set_anchors_preset(PRESET_CENTER) used to be called here
 	# too, which re-centers on its own and resets the offsets — this same
@@ -1743,8 +1751,8 @@ func _build_visit_panel() -> void:
 	panel.add_child(box)
 
 	var title := Label.new()
-	title.text = "%s — %s" % [s.sname, PAGE_TITLES.get(_visit_page, "")]
-	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	title.text = "%s, %s" % [s.sname, String(PAGE_TITLES.get(_visit_page, "")).to_lower()]
+	title.theme_type_variation = "Head"
 	box.add_child(title)
 
 	match _visit_page:
@@ -1782,39 +1790,42 @@ const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "b
 # state the page already had to compute anyway.
 func _build_hub_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()
-	mood.text = "%s%s · your purse: %d gp" % [
+	mood.text = "%s%s%d gp in the purse." % [
 		"Fighting nearby. " if _visit.get("battle", false) else "",
-		"They will not trade with you." if _visit.get("refused", false) else "",
+		"They will not trade with you. " if _visit.get("refused", false) else "",
 		party.gold]
-	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
 	var places := VBoxContainer.new()
 	box.add_child(places)
 	var stock: Array = _visit.get("stock", [])
 	var market_btn := Button.new()
-	market_btn.text = ("Market — they will not trade with you" if _visit.get("refused", false)
-		else "Market — %d on the shelves" % stock.size())
+	market_btn.text = ("Market.  They will not trade with you" if _visit.get("refused", false)
+		else "Market.  %d on the shelves" % stock.size())
+	market_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	market_btn.pressed.connect(_goto_page.bind("market"))
 	places.add_child(market_btn)
 	var counters := Label.new()
 	counters.text = "      %s" % ", ".join(_visit["services"].map(
 		func(x): return String(Campaign.SERVICE_NAMES.get(x, x))))
-	counters.add_theme_color_override("font_color", Icons.COL_MUTED)
+	counters.theme_type_variation = "Dim"
 	places.add_child(counters)
 
 	var inn_btn := Button.new()
 	var wait: float = Visit.long_rest_in(party, world)
-	inn_btn.text = ("Inn — rest the night (%d gp)" % Visit.inn_cost(s) if wait <= 0.0
-		else "Inn — rested recently, a room does nothing for %s yet" % _hours(wait))
+	inn_btn.text = ("Inn.  A night is %d gp" % Visit.inn_cost(s) if wait <= 0.0
+		else "Inn.  Rested recently, a room does nothing for %s yet" % _hours(wait))
+	inn_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	inn_btn.pressed.connect(_goto_page.bind("inn"))
 	places.add_child(inn_btn)
 
 	var board_btn := Button.new()
 	var offers: int = Visit.quest_offers(s, party, world).size()
 	var ready: int = Visit.turn_ins(party).size()
-	board_btn.text = ("Notice Board — nothing posted" if offers == 0 and ready == 0
-		else "Notice Board — %d posted, %d ready to turn in" % [offers, ready])
+	board_btn.text = ("Notice Board.  Nothing posted" if offers == 0 and ready == 0
+		else "Notice Board.  %d posted, %d ready to turn in" % [offers, ready])
+	board_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	board_btn.pressed.connect(_goto_page.bind("board"))
 	places.add_child(board_btn)
 
@@ -1835,11 +1846,11 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 # under headers rather than shuffled together.
 func _build_market_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()
-	mood.text = "Shelves %d/%d · prices x%.2f%s · your purse: %d gp" % [
+	mood.text = "Shelves %d of %d, prices x%.2f%s.  %d gp in the purse." % [
 		_visit["steps"], Visit.MAX_STEPS, _visit["markup"],
 		"  (they will not trade with you)" if _visit.get("refused", false) else "",
 		party.gold]
-	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
 	var groups: Dictionary = Visit.stock_by_service(s, _visit)
@@ -1942,8 +1953,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 func _build_inn_page(box: VBoxContainer, s) -> void:
 	var cost := Visit.inn_cost(s)
 	var mood := Label.new()
-	mood.text = "A %s bed is %d gp a night · your purse: %d gp" % [s.kind, cost, party.gold]
-	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	mood.text = "A %s bed is %d gp a night.  %d gp in the purse." % [s.kind, cost, party.gold]
+	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
 	var rows := VBoxContainer.new()
@@ -1955,7 +1966,7 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 			continue
 		var line := Label.new()
 		var hurt: bool = int(m["hp"]) < int(m["max_hp"])
-		line.text = "%s — %s %d · %d/%d hp%s" % [m["name"], m["class_name"], m["level"],
+		line.text = "%s, %s %d, %d/%d hp%s" % [m["name"], m["class_name"], m["level"],
 			m["hp"], m["max_hp"], "" if not hurt else "   (hurt)"]
 		line.add_theme_color_override("font_color", Icons.COL_FOE if hurt else Icons.COL_BODY)
 		rows.add_child(line)
@@ -1996,10 +2007,10 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 
 func _build_board_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()
-	mood.text = "%s posts the work here · your purse: %d gp" % [
+	mood.text = "%s posts the work here.  %d gp in the purse." % [
 		Campaign.SERVICE_NAMES.get("innkeeper", "The innkeeper") if Visit.has_service(s, "innkeeper")
 		else "A town elder", party.gold]
-	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(440, 300)
@@ -2029,7 +2040,7 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 func _section(rows: Control, text: String) -> void:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_color_override("font_color", Icons.COL_GOLD)
+	l.theme_type_variation = "Caption"
 	rows.add_child(l)
 
 func _note(rows: Control, text: String) -> void:
@@ -2037,7 +2048,7 @@ func _note(rows: Control, text: String) -> void:
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.custom_minimum_size = Vector2(430, 0)
-	l.add_theme_color_override("font_color", Icons.COL_MUTED)
+	l.theme_type_variation = "Dim"
 	rows.add_child(l)
 
 # World-minutes as something a person would say out loud. Under an hour is

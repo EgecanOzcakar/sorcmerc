@@ -48,13 +48,7 @@ func show_beat(run, beat: Dictionary, lines: Array, world, party) -> void:
 	add_child(scrim)
 
 	var panel := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = Icons.COL_PANEL
-	box.set_corner_radius_all(10)
-	box.set_border_width_all(1)
-	box.border_color = Icons.COL_GOLD_EDGE
-	box.set_content_margin_all(18)
-	panel.add_theme_stylebox_override("panel", box)
+	panel.theme_type_variation = "Gilt"
 	panel.custom_minimum_size = Vector2(PANEL_W, 0)
 	add_child(panel)
 
@@ -66,8 +60,7 @@ func show_beat(run, beat: Dictionary, lines: Array, world, party) -> void:
 	var head := Label.new()
 	head.text = run.story.speaker_label(speaker) if speaker != "" \
 		else String(beat.get("title", run.story.title))
-	head.add_theme_font_size_override("font_size", Icons.FS_HEAD)
-	head.add_theme_color_override("font_color", Icons.COL_GOLD)
+	head.theme_type_variation = "Head"
 	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(head)
 
@@ -82,7 +75,7 @@ func show_beat(run, beat: Dictionary, lines: Array, world, party) -> void:
 		l.text = String(line)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.custom_minimum_size = Vector2(PANEL_W - 36.0, 0)
-		l.add_theme_color_override("font_color", Icons.COL_TEXT)
+		l.theme_type_variation = "Serif"   # the story is read, not scanned
 		col.add_child(l)
 
 	# What firing the beat actually did: the quest it handed over, the gold, the
@@ -121,8 +114,9 @@ func _dim(text: String, color: Color) -> Label:
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.custom_minimum_size = Vector2(PANEL_W - 36.0, 0)
-	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	l.add_theme_color_override("font_color", color)
+	l.theme_type_variation = "Dim"
+	if color != Icons.COL_MUTED:
+		l.add_theme_color_override("font_color", color)
 	return l
 
 func _emit(choice_id: String) -> void:

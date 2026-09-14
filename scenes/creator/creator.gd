@@ -320,11 +320,9 @@ func _ready() -> void:
 	root.add_theme_constant_override("separation", 8)
 	add_child(root)
 
-	_title.add_theme_font_size_override("font_size", Icons.FS_TITLE)
-	_title.add_theme_color_override("font_color", COL_GOLD)
+	_title.theme_type_variation = "Title"
 	root.add_child(_title)
-	_crumbs.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	_crumbs.add_theme_color_override("font_color", COL_DIM)
+	_crumbs.theme_type_variation = "Dim"
 	root.add_child(_crumbs)
 
 	var split := HBoxContainer.new()
@@ -342,7 +340,7 @@ func _ready() -> void:
 
 	var side := PanelContainer.new()
 	side.custom_minimum_size = Vector2(330, 0)
-	side.add_theme_stylebox_override("panel", _panel_style())
+	side.theme_type_variation = "Card"
 	split.add_child(side)
 	_summary.bbcode_enabled = true
 	_summary.scroll_following = false
@@ -355,7 +353,8 @@ func _ready() -> void:
 	var nav := HBoxContainer.new()
 	nav.add_theme_constant_override("separation", 8)
 	root.add_child(nav)
-	_back.text = "‹ Back"
+	_back.text = "Back"
+	_next.theme_type_variation = "Primary"
 	_back.pressed.connect(func(): _goto(_step - 1))
 	nav.add_child(_back)
 	var spacer := Control.new()
@@ -372,15 +371,6 @@ static func new_character():
 	for i in ABILS.size():
 		c.base_abilities[ABILS[i]] = STANDARD_ARRAY[i]
 	return c
-
-func _panel_style() -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = COL_PANEL
-	s.set_corner_radius_all(10)
-	s.set_border_width_all(1)
-	s.border_color = Icons.COL_EDGE
-	s.set_content_margin_all(12)
-	return s
 
 func _build_theme() -> void:
 	theme = dark_theme()
@@ -445,7 +435,7 @@ func _refresh() -> void:
 		crumbs.append(("[%s]" % STEPS[i]) if i == _step else STEPS[i])
 	_crumbs.text = "  ›  ".join(crumbs)
 	_back.disabled = _step == 0
-	_next.text = "Confirm & Save" if _step == STEPS.size() - 1 else "Next ›"
+	_next.text = "Confirm and save" if _step == STEPS.size() - 1 else "Next"
 	_status.text = ""
 
 	match _step:
@@ -463,16 +453,16 @@ func _refresh_summary() -> void:
 func _head(text: String) -> void:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", Icons.FS_HEAD)
-	l.add_theme_color_override("font_color", COL_GOLD)
+	l.theme_type_variation = "Head"
 	_body.add_child(l)
 
 func _note(text: String, col: Color = COL_DIM) -> void:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	l.add_theme_color_override("font_color", col)
+	l.theme_type_variation = "Dim"
+	if col != COL_DIM:
+		l.add_theme_color_override("font_color", col)
 	_body.add_child(l)
 
 func _flow() -> HFlowContainer:
@@ -487,7 +477,7 @@ func _opt(parent: Control, label: String, on: bool, cb: Callable, extra := "") -
 	Icons.clicks(b)
 	b.text = ("● " if on else "") + label + extra
 	if on:
-		b.add_theme_color_override("font_color", COL_GOLD)
+		b.theme_type_variation = "Picked"
 	b.pressed.connect(cb)
 	parent.add_child(b)
 	return b
@@ -498,9 +488,7 @@ func _gate(b: Button, note: String) -> void:
 	if note == "":
 		return
 	b.disabled = true
-	b.text += "  · " + note
-	b.add_theme_color_override("font_color", COL_DIM)
-	b.add_theme_color_override("font_disabled_color", COL_DIM)
+	b.text += "   " + note
 
 # 1. basics ---------------------------------------------------------------
 
@@ -913,7 +901,7 @@ func _sheet_bbcode(full: bool) -> String:
 	var sub := ""
 	if sheet.subclasses.has(ch.class_id()):
 		sub = " (%s)" % humanize(sheet.subclasses[ch.class_id()])
-	var s := "[b][color=#c8a75a]%s[/color][/b]\n%s %s %s%s %d\n\n" % [ch.cname,
+	var s := "[b][color=#c9a45a]%s[/color][/b]\n%s %s %s%s %d\n\n" % [ch.cname,
 		humanize(ch.species_id) if ch.species_id != "" else "—",
 		Icons.class_glyph(ch.class_id()), cls, sub, max(1, sheet.level)]
 	s += "[b]AC[/b] %d   [b]HP[/b] %d   [b]Speed[/b] %d ft   [b]PB[/b] +%d   [b]Init[/b] %+d\n\n" % [
@@ -974,7 +962,7 @@ func _sheet_bbcode(full: bool) -> String:
 		for p in sheet.pending:
 			s += "[color=#d15750]  · %s[/color]\n" % humanize(p["type"])
 	if not sheet.warnings.is_empty() and full:
-		s += "\n[color=#c8a75a]warnings:[/color]\n"
+		s += "\n[color=#c9a45a]warnings:[/color]\n"
 		for w in sheet.warnings:
 			s += "  %s\n" % w
 	return s

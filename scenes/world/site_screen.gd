@@ -70,7 +70,7 @@ const FORK_EXTRA := FORK_LABEL_H + 14.0
 # At or under this share of max hp a name in the party line goes gold — the
 # "one more room?" threshold, not a death's door warning (that is 0 hp, and red).
 const HURT_SHARE := 0.4
-const SEPARATOR := "  ·  "
+const SEPARATOR := "     "
 
 const COL_GAP := 12.0
 const COL_MAX_W := 230.0      # a fork column never needs to be wider than its longest title
@@ -579,12 +579,12 @@ func _text(at: Vector2, s: String, fs: int, col: Color, center := false) -> void
 	if s == "":
 		return
 	var x := at.x - (_w(s, fs) * 0.5 if center else 0.0)
-	draw_string(ThemeDB.fallback_font, Vector2(x, at.y), s,
+	draw_string(Icons.sans(), Vector2(x, at.y), s,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 
 func _w(s: String, fs: int) -> float:
-	return ThemeDB.fallback_font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	return Icons.sans().get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 
 
 func _wrap(text: String, fs: int, max_w: float, max_lines: int) -> PackedStringArray:

@@ -148,29 +148,24 @@ func _ready() -> void:
 	add_child(bg)
 	move_child(bg, 0)
 
-	_header.add_theme_font_size_override("font_size", Icons.FS_TITLE)
-	_header.add_theme_color_override("font_color", Icons.COL_HEAD)
+	_header.theme_type_variation = "Title"
 	col.add_child(_header)
 
 	# --- the action log: a full-height sidebar down the left edge -----
 	_logwrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var logwrap := _logwrap
 	logwrap.custom_minimum_size = Vector2(_log_width(), 0)
-	var glow := StyleBoxFlat.new()
-	glow.bg_color = Icons.COL_INK
-	glow.set_corner_radius_all(14)
-	glow.set_border_width_all(2)
+	# The ledger's margin column: ink, with the gilt rule down its right edge
+	# where it meets the board. No glow — the fight is the bright thing.
+	var glow := Icons.box(Icons.COL_INK, Color(0, 0, 0, 0), 0, 16, 14)
 	glow.border_color = Icons.COL_GOLD_EDGE
-	glow.shadow_color = Color(0.95, 0.78, 0.42, 0.22)
-	glow.shadow_size = 16
-	glow.set_content_margin_all(16)
+	glow.border_width_right = 2
 	logwrap.add_theme_stylebox_override("panel", glow)
 	var logcol := VBoxContainer.new()
 	logcol.add_theme_constant_override("separation", 4)
 	logwrap.add_child(logcol)
-	_cap.text = "»   A C T I O N   L O G   «"
-	_cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_cap.add_theme_color_override("font_color", Icons.COL_GOLD)
+	_cap.text = "Action log"
+	_cap.theme_type_variation = "Caption"
 	logcol.add_child(_cap)
 	_logbox.bbcode_enabled = true
 	_logbox.scroll_following = true
@@ -184,23 +179,15 @@ func _ready() -> void:
 
 	# --- turn order: one icon tile per combatant, along the top -------
 	var orderwrap := PanelContainer.new()
-	var obox := StyleBoxFlat.new()
-	obox.bg_color = Icons.COL_PANEL
-	obox.set_corner_radius_all(10)
-	obox.set_border_width_all(1)
-	obox.border_color = Icons.COL_EDGE
-	obox.set_content_margin_all(6)
-	orderwrap.add_theme_stylebox_override("panel", obox)
+	orderwrap.add_theme_stylebox_override("panel", Icons.box(Icons.COL_PANEL, Color(0, 0, 0, 0), 0, 8, 6))
 	_order.add_theme_constant_override("separation", 10)
 	_order.alignment = BoxContainer.ALIGNMENT_CENTER
 	_order.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	orderwrap.add_child(_order)
 	col.add_child(orderwrap)
 
-	_hint.text = "1-9 actions · scroll/± zoom · drag/arrows pan · Home reset"
-	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint.add_theme_color_override("font_color", Icons.COL_MUTED)
-	_hint.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+	_hint.text = "Keys 1 to 9 act.  Scroll zooms, drag pans, Home resets the view."
+	_hint.theme_type_variation = "Dim"
 	col.add_child(_hint)
 
 	_board.main = self
@@ -257,7 +244,6 @@ func _apply_ui_scale() -> void:
 	_header.add_theme_font_size_override("font_size", int(Icons.FS_TITLE * u))
 	_actor.add_theme_font_size_override("normal_font_size", int(Icons.FS_HEAD * u))
 	_actor.add_theme_font_size_override("bold_font_size", int(Icons.FS_HEAD * u))
-	_cap.add_theme_font_size_override("font_size", int(Icons.FS_CAPTION * u))
 	# the log is a narrow sidebar now — body size wraps far less than head size
 	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
 	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
@@ -937,7 +923,6 @@ func _set_buttons(opts: Array) -> void:
 			var glyph: String = String(meta.get("glyph", ""))
 			b.text = ("[%s] " % hotkey if hotkey != "" else "") \
 				+ (glyph + " " if glyph != "" else "") + String(opts[i][0])
-			b.clip_text = true
 			b.custom_minimum_size = Vector2(126, 40) * u
 		if meta.get("disabled", false):
 			# Still in its slot, still the same badge — just not right now. The
@@ -1045,7 +1030,8 @@ func _freq_of(opt: Array) -> int:
 	return int(_verb_freq.get(key, 0)) if key != "" else 0
 
 func _refresh() -> void:
-	_header.text = "THE SUNKEN SHRINE   ·   Round %d   ·   seed %d" % [cb.round_num, _seed]
+	_header.text = "The Sunken Shrine, round %d" % cb.round_num
+	_header.tooltip_text = "seed %d" % _seed
 
 	var n: int = cb.order.size()
 	var ci: int = cb.order.find(cb.current())
@@ -1053,13 +1039,13 @@ func _refresh() -> void:
 
 	var cur = cb.current()
 	if cur and cur.team == "party" and cur.conscious() and _mode == "idle":
-		var hint := "  ·  click a blue tile to move" if cur.econ["move_left"] > 0 else ""
+		var hint := "    click a blue tile to move" if cur.econ["move_left"] > 0 else ""
 		var before = cb.order[(ci - 1 + n) % n]
-		var again := "  ·  you act again after %s" % before.cname.split(" ")[0] if before != cur else ""
+		var again := "    you act again after %s" % before.cname.split(" ")[0] if before != cur else ""
 		var res := _resources(cur)
-		_actor.text = "%s  ·  AC %d  ·  %s%s  ·  %s%s%s" % [
+		_actor.text = "%s    AC %d    %s%s    %s%s%s" % [
 			"[b]%s[/b]" % cur.cname, cb.effective_ac(cur), _hp_bb(cur),
-			("  ·  " + res) if res != "" else "",
+			("    " + res) if res != "" else "",
 			_econ_bb(cur), hint, again,
 		]
 	elif _mode == "idle":
@@ -1093,13 +1079,13 @@ func _build_order_strip() -> void:
 	for c in cb.order:
 		var tile := PanelContainer.new()
 		if c == cb.current():
-			var box := StyleBoxFlat.new()
-			box.bg_color = Color(0.78, 0.65, 0.30, 0.20)
-			box.set_corner_radius_all(8)
-			box.set_border_width_all(2)
+			# whose turn it is: a gilt rule under the tile, nothing boxed
+			var box := Icons.box(Color(0.79, 0.64, 0.35, 0.12), Color(0, 0, 0, 0), 0, 6, 4)
 			box.border_color = Icons.COL_GOLD
-			box.set_content_margin_all(4)
+			box.border_width_bottom = 3
 			tile.add_theme_stylebox_override("panel", box)
+		else:
+			tile.add_theme_stylebox_override("panel", Icons.box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6, 4))
 		var tv := VBoxContainer.new()
 		tv.add_theme_constant_override("separation", 0)
 		tile.add_child(tv)
@@ -1244,7 +1230,7 @@ func _flush_log() -> void:
 		elif "casts" in line or "calls" in line or "Second Wind" in line or "healed" in line:
 			col = "#9fd0ff"
 		elif "Initiative:" in line:
-			col = "#c8a75a"
+			col = "#c9a45a"
 		var body := colorize(line, ncols)
 		if bold:
 			body = "[b]%s[/b]" % body
@@ -1279,7 +1265,7 @@ func _finish() -> void:
 		"#7dff9d" if res == "Victory" else "#ff5a4a", res, cb.round_num,
 	])
 	if res == "Victory":
-		_logbox.append_text("[color=#c8a75a]+%d XP, +%d gold.[/color]\n" % [result["xp"], result["gold"]])
+		_logbox.append_text("[color=#c9a45a]+%d XP, +%d gold.[/color]\n" % [result["xp"], result["gold"]])
 		# What came off the bodies, by name and in its rarity colour. It goes
 		# into the shared stash either way (campaign.gd's finish_combat /
 		# world.gd's _bank) — but loot that lands silently is loot nobody knows
@@ -1289,7 +1275,7 @@ func _finish() -> void:
 			var names: Array = []
 			for id in taken:
 				names.append(Icons.item_bb(String(id), Campaign.item_name(String(id))))
-			_logbox.append_text("[color=#c8a75a]Taken from the dead:[/color] %s\n" % ", ".join(names))
+			_logbox.append_text("[color=#c9a45a]Taken from the dead:[/color] %s\n" % ", ".join(names))
 
 const BUTTON_ROWS := 3
 
@@ -1403,21 +1389,14 @@ func _walk_show(i: int) -> void:
 	add_child(_walk)
 
 	var card := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = Icons.COL_INK
-	box.set_corner_radius_all(10)
-	box.set_border_width_all(2)
-	box.border_color = Icons.COL_GOLD_EDGE
-	box.set_content_margin_all(14)
-	card.add_theme_stylebox_override("panel", box)
+	card.add_theme_stylebox_override("panel", Icons.box(Icons.COL_INK, Icons.COL_GOLD_EDGE, 0, 18, 14))
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	card.add_child(col)
 
 	var head := Label.new()
 	head.text = "%s   (%d/%d)" % [step["title"], i + 1, Tutorial.STEPS.size()]
-	head.add_theme_font_size_override("font_size", Icons.FS_HEAD)
-	head.add_theme_color_override("font_color", Icons.COL_GOLD)
+	head.theme_type_variation = "Head"
 	col.add_child(head)
 
 	var body := Label.new()

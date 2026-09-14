@@ -40,52 +40,224 @@ static func clicks(b: BaseButton) -> BaseButton:
 	return b
 
 # --- palette ---------------------------------------------------------------
-# The established dark, warm-gold fantasy set. Screens alias these into their own
-# COL_* constants so their local names keep working.
-const COL_BG := Color("14161c")          # screen background
-const COL_PANEL := Color("1b1f29")       # card / panel fill
-const COL_INK := Color("0c0e15")         # deep inset fill (log box, profile panels)
-const COL_EDGE := Color("39404f")        # quiet border
-const COL_GOLD := Color("c8a75a")        # captions, accents
-const COL_GOLD_EDGE := Color("6f5a30")   # gilt panel border
-const COL_HEAD := Color("f0e6cf")        # headline text
-const COL_TEXT := Color("e9e9df")        # body text
-const COL_BODY := Color("c2c5cf")        # secondary body text
-const COL_MUTED := Color("8f95a3")       # captions/hints, disabled prose
-const COL_ACCENT := Color("8fb7d8")      # informational highlight
-const COL_PARTY := Color("5fbf6a")
-const COL_FOE := Color("d15750")
+# The company ledger by lamplight: a warm near-black ground (oiled leather, not
+# blue-grey), gilt for the one thing on a screen that matters, verdigris where
+# the old build used a cool blue for "information". Screens alias these into
+# their own COL_* constants so their local names keep working.
+const COL_BG := Color("17130f")          # screen background
+const COL_PANEL := Color("221c16")       # card / panel fill
+const COL_ROW := Color("1d1813")         # the alternate ledger row
+const COL_INK := Color("0f0c09")         # deep inset fill (log box, profile panels)
+const COL_EDGE := Color("4a3d2c")        # quiet border — tarnished brass
+const COL_GOLD := Color("c9a45a")        # captions, accents, the primary button
+const COL_GOLD_EDGE := Color("7a6234")   # gilt panel border
+const COL_HEAD := Color("f1e6cf")        # headline text
+const COL_TEXT := Color("dcd3c2")        # body text
+const COL_BODY := Color("b9ae9b")        # secondary body text
+const COL_MUTED := Color("8a7f6e")       # captions/hints, disabled prose
+const COL_ACCENT := Color("6fa89a")      # informational highlight — verdigris
+const COL_PARTY := Color("7fbf6a")
+const COL_FOE := Color("d35a4a")
 
-# --- type scale ------------------------------------------------------------
-# One size per UI role, shared by all five screens.
-const FS_TITLE := 22      # the screen's one headline
-const FS_HEAD := 17       # section / card title
-const FS_BODY := 15       # default running text and button labels
-const FS_SMALL := 13      # secondary rows, hints, journal
-const FS_CAPTION := 12    # the »  S P A C E D  « panel captions
+# --- type ------------------------------------------------------------------
+# Two faces from one hand (Huerta Tipográfica, OFL): Alegreya carries every
+# title, name and sentence; Alegreya Sans carries controls, stats and the log.
+# DejaVu stays as the glyph fallback — the class / school marks are symbol
+# codepoints neither Alegreya face draws.
+const FS_TITLE := 32      # the screen's one headline
+const FS_HEAD := 21       # section / card title
+const FS_BODY := 16       # default running text and button labels
+const FS_SMALL := 14      # secondary rows, hints, journal
+const FS_CAPTION := 14    # panel captions — sentence case, gilt, no tracking
 
-# The one button/label theme every screen wears. `compact` is the inline-control
-# variant (the profile's ± / equip buttons sit inside text rows).
+static var _fonts := {}
+
+static func _font(kind: String) -> Font:
+	if _fonts.is_empty():
+		var fallback: Font = load("res://assets/fonts/DejaVuSans.ttf")
+		var serif_file: FontFile = load("res://assets/fonts/Alegreya-Variable.ttf")
+		serif_file.fallbacks = [fallback]
+		for w in [400, 500, 700]:
+			var v := FontVariation.new()
+			v.base_font = serif_file
+			v.variation_opentype = {"wght": w}
+			_fonts["serif%d" % w] = v
+		for w in [["", 400], ["-Medium", 500], ["-Bold", 700]]:
+			var f: FontFile = load("res://assets/fonts/AlegreyaSans%s.ttf" % ("-Regular" if w[0] == "" else w[0]))
+			f.fallbacks = [fallback]
+			_fonts["sans%d" % w[1]] = f
+	return _fonts[kind]
+
+static func serif(weight := 400) -> Font:
+	return _font("serif%d" % weight)
+
+static func sans(weight := 400) -> Font:
+	return _font("sans%d" % weight)
+
+# A flat leather block with a darker bottom edge — the button, the field, the
+# row. Radius 3 on anything you press, 0 on anything you read.
+static func box(bg: Color, edge := Color(0, 0, 0, 0), radius := 3, pad_x := 12, pad_y := 6) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.set_corner_radius_all(radius)
+	s.content_margin_left = pad_x; s.content_margin_right = pad_x
+	s.content_margin_top = pad_y; s.content_margin_bottom = pad_y
+	if edge.a > 0.0:
+		s.border_color = edge
+		s.set_border_width_all(1)
+	return s
+
+static func _pressable(bg: Color, pad_y: int) -> StyleBoxFlat:
+	var s := box(bg, Color(0, 0, 0, 0), 3, 12, pad_y)
+	s.border_color = bg.darkened(0.45)
+	s.border_width_bottom = 2
+	return s
+
+# The one theme every screen wears, applied once at the front door
+# (scenes/game/game.gd) and inherited by everything under it. Type variations
+# are the vocabulary a screen speaks — `l.theme_type_variation = "Title"` —
+# instead of a font-size and a colour override on every label:
+#
+#   Label:   Title  Head  Caption  Dim  Stat  Gilt  Serif
+#   Button:  Primary  Quiet  Key
+#   Panel:   Card  Inset  Row  RowAlt  Gilt
+#
+# `compact` is the inline-control variant (the profile's ± / equip buttons sit
+# inside text rows).
 static func dark_theme(compact := false) -> Theme:
 	var th := Theme.new()
 	var pad := 3 if compact else 6
-	var mk := func(bg: Color) -> StyleBoxFlat:
-		var s := StyleBoxFlat.new()
-		s.bg_color = bg
-		s.set_corner_radius_all(6)
-		s.content_margin_left = 10; s.content_margin_right = 10
-		s.content_margin_top = pad; s.content_margin_bottom = pad
-		return s
-	th.set_stylebox("normal", "Button", mk.call(Color("2b3040")))
-	th.set_stylebox("hover", "Button", mk.call(Color("3a4152")))
-	th.set_stylebox("pressed", "Button", mk.call(Color("4a5570")))
-	th.set_stylebox("disabled", "Button", mk.call(Color("22252e")))
-	th.set_color("font_color", "Button", Color("e6e8ee"))
-	th.set_color("font_hover_color", "Button", Color("ffffff"))
-	th.set_color("font_color", "Label", COL_TEXT)
+	th.default_font = sans()
+	th.default_font_size = FS_BODY
+
+	# buttons
+	th.set_stylebox("normal", "Button", _pressable(Color("2e261d"), pad))
+	th.set_stylebox("hover", "Button", _pressable(Color("3b3125"), pad))
+	th.set_stylebox("pressed", "Button", _pressable(Color("4a3d2c"), pad))
+	th.set_stylebox("disabled", "Button", _pressable(Color("1e1913"), pad))
+	th.set_stylebox("focus", "Button", box(Color(0, 0, 0, 0), COL_GOLD, 3, 12, pad))
+	th.set_color("font_color", "Button", COL_TEXT)
+	th.set_color("font_hover_color", "Button", COL_HEAD)
+	th.set_color("font_pressed_color", "Button", COL_HEAD)
+	th.set_color("font_disabled_color", "Button", COL_MUTED)
+	th.set_font("font", "Button", sans(500))
 	th.set_font_size("font_size", "Button", FS_BODY)
+	# the one gilt button a screen gets
+	th.set_type_variation("Primary", "Button")
+	th.set_stylebox("normal", "Primary", _pressable(COL_GOLD, pad))
+	th.set_stylebox("hover", "Primary", _pressable(Color("dbb86a"), pad))
+	th.set_stylebox("pressed", "Primary", _pressable(Color("b08d47"), pad))
+	th.set_stylebox("disabled", "Primary", _pressable(Color("5a4a2c"), pad))
+	th.set_color("font_color", "Primary", COL_INK)
+	th.set_color("font_hover_color", "Primary", COL_INK)
+	th.set_color("font_pressed_color", "Primary", COL_INK)
+	th.set_font("font", "Primary", sans(700))
+	# the chosen one of a set of options: the block with a gilt rim
+	th.set_type_variation("Picked", "Button")
+	for st in ["normal", "hover", "pressed"]:
+		var pk := _pressable(Color("3b3125"), pad)
+		pk.border_color = COL_GOLD
+		pk.set_border_width_all(1)
+		pk.border_width_bottom = 2
+		th.set_stylebox(st, "Picked", pk)
+	th.set_stylebox("disabled", "Picked", _pressable(Color("1e1913"), pad))
+	th.set_color("font_color", "Picked", COL_GOLD)
+	th.set_color("font_hover_color", "Picked", COL_HEAD)
+	th.set_font("font", "Picked", sans(700))
+	# a button that reads as a link: no block, gilt text
+	th.set_type_variation("Quiet", "Button")
+	for st in ["normal", "hover", "pressed", "disabled"]:
+		th.set_stylebox(st, "Quiet", box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 4, pad))
+	th.set_color("font_color", "Quiet", COL_GOLD)
+	th.set_color("font_hover_color", "Quiet", COL_HEAD)
+	# a key cap: the combat bar's [1]…[9]
+	th.set_type_variation("Key", "Button")
+	th.set_stylebox("normal", "Key", _pressable(Color("2e261d"), pad))
+	th.set_stylebox("hover", "Key", _pressable(Color("3b3125"), pad))
+	th.set_stylebox("pressed", "Key", _pressable(COL_GOLD_EDGE, pad))
+	th.set_font("font", "Key", sans(500))
+
+	for t in ["OptionButton", "CheckBox", "CheckButton", "MenuButton"]:
+		th.set_stylebox("normal", t, _pressable(Color("2e261d"), pad))
+		th.set_stylebox("hover", t, _pressable(Color("3b3125"), pad))
+		th.set_stylebox("pressed", t, _pressable(Color("4a3d2c"), pad))
+		th.set_stylebox("disabled", t, _pressable(Color("1e1913"), pad))
+		th.set_stylebox("focus", t, box(Color(0, 0, 0, 0), COL_GOLD, 3, 12, pad))
+		th.set_color("font_color", t, COL_TEXT)
+		th.set_color("font_hover_color", t, COL_HEAD)
+	th.set_stylebox("normal", "LineEdit", box(COL_INK, COL_EDGE, 3, 10, pad))
+	th.set_stylebox("focus", "LineEdit", box(COL_INK, COL_GOLD, 3, 10, pad))
+	th.set_color("font_color", "LineEdit", COL_HEAD)
+	th.set_color("caret_color", "LineEdit", COL_GOLD)
+	th.set_stylebox("panel", "PopupMenu", box(COL_PANEL, COL_EDGE, 3, 6, 6))
+	th.set_stylebox("hover", "PopupMenu", box(Color("3b3125"), Color(0, 0, 0, 0), 2, 8, 4))
+	th.set_color("font_color", "PopupMenu", COL_TEXT)
+	th.set_color("font_hover_color", "PopupMenu", COL_HEAD)
+	th.set_stylebox("panel", "TooltipPanel", box(COL_INK, COL_GOLD_EDGE, 3, 10, 8))
+	th.set_color("font_color", "TooltipLabel", COL_TEXT)
+
+	# labels
+	th.set_color("font_color", "Label", COL_TEXT)
 	th.set_font_size("font_size", "Label", FS_BODY)
-	th.set_stylebox("normal", "LineEdit", mk.call(Color("22252e")))
+	th.set_type_variation("Title", "Label")
+	th.set_font("font", "Title", serif(500))
+	th.set_font_size("font_size", "Title", FS_TITLE)
+	th.set_color("font_color", "Title", COL_HEAD)
+	th.set_type_variation("Head", "Label")
+	th.set_font("font", "Head", serif(500))
+	th.set_font_size("font_size", "Head", FS_HEAD)
+	th.set_color("font_color", "Head", COL_HEAD)
+	th.set_type_variation("Serif", "Label")   # a name or a sentence at body size
+	th.set_font("font", "Serif", serif())
+	th.set_font_size("font_size", "Serif", FS_BODY + 1)
+	th.set_type_variation("Caption", "Label")
+	th.set_font("font", "Caption", sans(700))
+	th.set_font_size("font_size", "Caption", FS_CAPTION)
+	th.set_color("font_color", "Caption", COL_GOLD)
+	th.set_type_variation("Gilt", "Label")
+	th.set_color("font_color", "Gilt", COL_GOLD)
+	th.set_type_variation("Dim", "Label")
+	th.set_font_size("font_size", "Dim", FS_SMALL)
+	th.set_color("font_color", "Dim", COL_MUTED)
+	th.set_type_variation("Stat", "Label")
+	th.set_font("font", "Stat", sans(500))
+	th.set_color("font_color", "Stat", COL_HEAD)
+	th.set_color("default_color", "RichTextLabel", COL_TEXT)
+	th.set_font("normal_font", "RichTextLabel", sans())
+	th.set_font("bold_font", "RichTextLabel", sans(700))
+	th.set_font_size("normal_font_size", "RichTextLabel", FS_BODY)
+
+	# panels
+	th.set_stylebox("panel", "PanelContainer", box(COL_PANEL, Color(0, 0, 0, 0), 0, 14, 10))
+	th.set_type_variation("Card", "PanelContainer")
+	th.set_stylebox("panel", "Card", box(COL_PANEL, COL_EDGE, 0, 14, 10))
+	th.set_type_variation("Inset", "PanelContainer")
+	th.set_stylebox("panel", "Inset", box(COL_INK, COL_EDGE, 0, 12, 10))
+	th.set_type_variation("Gilt", "PanelContainer")
+	th.set_stylebox("panel", "Gilt", box(COL_PANEL, COL_GOLD_EDGE, 0, 14, 10))
+	th.set_type_variation("Row", "PanelContainer")
+	th.set_stylebox("panel", "Row", box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 10, 6))
+	th.set_type_variation("RowAlt", "PanelContainer")
+	th.set_stylebox("panel", "RowAlt", box(COL_ROW, Color(0, 0, 0, 0), 0, 10, 6))
+	# the picked row: a gilt bar down its left edge, nothing else
+	th.set_type_variation("RowPicked", "PanelContainer")
+	var picked := box(COL_ROW, Color(0, 0, 0, 0), 0, 10, 6)
+	picked.border_color = COL_GOLD
+	picked.border_width_left = 3
+	th.set_stylebox("panel", "RowPicked", picked)
+
+	th.set_stylebox("panel", "ScrollContainer", box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 0, 0))
+	th.set_stylebox("scroll", "VScrollBar", box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 0, 0))
+	th.set_stylebox("grabber", "VScrollBar", box(COL_EDGE, Color(0, 0, 0, 0), 2, 0, 0))
+	th.set_stylebox("grabber_highlight", "VScrollBar", box(COL_GOLD_EDGE, Color(0, 0, 0, 0), 2, 0, 0))
+	th.set_stylebox("grabber_pressed", "VScrollBar", box(COL_GOLD, Color(0, 0, 0, 0), 2, 0, 0))
+	th.set_stylebox("panel", "Tree", box(COL_INK, COL_EDGE, 0, 6, 6))
+	th.set_stylebox("normal", "TextEdit", box(COL_INK, COL_EDGE, 0, 10, 8))
+	th.set_color("font_color", "TextEdit", COL_TEXT)
+	th.set_stylebox("background", "ProgressBar", box(COL_INK, Color(0, 0, 0, 0), 0, 0, 0))
+	th.set_stylebox("fill", "ProgressBar", box(COL_GOLD, Color(0, 0, 0, 0), 0, 0, 0))
+	th.set_stylebox("separator", "HSeparator", box(COL_EDGE, Color(0, 0, 0, 0), 0, 0, 0))
+	th.set_constant("separation", "HSeparator", 1)
 	return th
 
 # --- class glyphs ----------------------------------------------------------
@@ -149,7 +321,7 @@ const SCHOOL_COLORS := {
 	"abjuration": Color("6f9bd8"), "conjuration": Color("d98f4a"),
 	"divination": Color("8fd0d8"), "enchantment": Color("d47fc0"),
 	"evocation": Color("e0643c"), "illusion": Color("9d8fd8"),
-	"necromancy": Color("79a86b"), "transmutation": Color("c8a75a"),
+	"necromancy": Color("79a86b"), "transmutation": Color("c9a45a"),
 }
 
 static func school_glyph(school: String) -> String:

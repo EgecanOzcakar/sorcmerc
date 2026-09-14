@@ -118,13 +118,11 @@ func _header() -> Control:
 	var name_col := VBoxContainer.new()
 	var nm := Label.new()
 	nm.text = _ch.cname
-	nm.add_theme_font_size_override("font_size", Icons.FS_TITLE)
-	nm.add_theme_color_override("font_color", COL_TEXT)
+	nm.theme_type_variation = "Title"
 	name_col.add_child(nm)
 	var sub := Label.new()
-	sub.text = "%s · %s" % [_title(_ch.species_id), _title(_ch.background_id)]
-	sub.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	sub.add_theme_color_override("font_color", Icons.COL_MUTED)
+	sub.text = "%s, %s" % [_title(_ch.species_id), _title(_ch.background_id)]
+	sub.theme_type_variation = "Dim"
 	name_col.add_child(sub)
 	box.add_child(name_col)
 
@@ -134,22 +132,23 @@ func _header() -> Control:
 
 	var lv := Label.new()
 	lv.text = _class_line(s)
-	lv.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	lv.theme_type_variation = "Head"
 	lv.add_theme_color_override("font_color", COL_GOLD)
 	box.add_child(lv)
 	_fields["classes"] = lv
 
 	var need := Leveling.xp_to_next(_ch)
 	var xp := Label.new()
-	xp.text = "%d XP" % int(_ch.xp) if need == 0 else "%d XP  ·  need %d more" % [int(_ch.xp), need]
-	xp.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	xp.add_theme_color_override("font_color", Icons.COL_MUTED)
+	xp.text = "%d XP" % int(_ch.xp) if need == 0 else "%d XP, need %d more" % [int(_ch.xp), need]
+	xp.theme_type_variation = "Dim"
 	box.add_child(xp)
 	_fields["xp"] = xp
 
 	var b := Button.new()
 	Icons.clicks(b)
 	b.text = "Level up"
+	b.theme_type_variation = "Primary"
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.disabled = need > 0
 	b.pressed.connect(_level_up)
 	box.add_child(b)
@@ -191,21 +190,14 @@ func _column() -> VBoxContainer:
 
 func _panel(col: VBoxContainer, title: String) -> VBoxContainer:
 	var p := PanelContainer.new()
-	var st := StyleBoxFlat.new()
-	st.bg_color = COL_PANEL
-	st.set_corner_radius_all(10)
-	st.set_border_width_all(1)
-	st.border_color = COL_EDGE
-	st.set_content_margin_all(12)
-	p.add_theme_stylebox_override("panel", st)
+	p.theme_type_variation = "Card"
 	col.add_child(p)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
 	p.add_child(v)
 	var cap := Label.new()
-	cap.text = "»  " + title.to_upper() + "  «"
-	cap.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
-	cap.add_theme_color_override("font_color", COL_GOLD)
+	cap.text = title
+	cap.theme_type_variation = "Caption"
 	v.add_child(cap)
 	return v
 

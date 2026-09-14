@@ -7,6 +7,7 @@ extends Control
 
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const Sound = preload("res://core/audio.gd")
 # D3: travel.gd owns every rule about the standing orders — the paces, their
 # labels and notes, and the shape of party.travel_orders. This screen only sets
 # them, and always through set_orders(), never by writing the dict.
@@ -17,8 +18,6 @@ const Travel = preload("res://core/travel.gd")
 const HeroModels = preload("res://scenes/figures3d.gd").HERO_MODELS
 
 const COL_BG := Icons.COL_BG
-const COL_CARD := Icons.COL_PANEL
-const COL_CARD_SEL := Color("2b3040")
 const COL_EDGE := Icons.COL_EDGE
 const COL_GOLD := Icons.COL_GOLD
 const COL_DIM := Icons.COL_MUTED
@@ -62,23 +61,19 @@ func _ready() -> void:
 	add_child(root)
 
 	var header := Label.new()
-	header.text = "»   T H E   P A R T Y   «"
-	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	header.add_theme_font_size_override("font_size", Icons.FS_TITLE)
-	header.add_theme_color_override("font_color", COL_GOLD)
+	header.text = "The party"
+	header.theme_type_variation = "Title"
 	root.add_child(header)
 
-	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	_hint.add_theme_color_override("font_color", COL_DIM)
+	_hint.theme_type_variation = "Dim"
 	root.add_child(_hint)
 
 	var cols := HBoxContainer.new()
 	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cols.add_theme_constant_override("separation", 16)
 	root.add_child(cols)
-	cols.add_child(_column("R O S T E R", _roster_col, 1.4))
-	cols.add_child(_column("A C T I V E   P A R T Y   (max %d)" % Party.MAX_ACTIVE, _slot_col, 1.0))
+	cols.add_child(_column("Roster", _roster_col, 1.4))
+	cols.add_child(_column("Marching, up to %d" % Party.MAX_ACTIVE, _slot_col, 1.0))
 
 	root.add_child(_footer())
 	_refresh()
@@ -90,21 +85,20 @@ func _column(title: String, body: VBoxContainer, stretch: float) -> Control:
 	wrap.size_flags_stretch_ratio = stretch
 	var cap := Label.new()
 	cap.text = title
-	cap.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
-	cap.add_theme_color_override("font_color", COL_GOLD)
+	cap.theme_type_variation = "Caption"
 	wrap.add_child(cap)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 6)
+	body.add_theme_constant_override("separation", 2)
 	scroll.add_child(body)
 	wrap.add_child(scroll)
 	return wrap
 
 func _footer() -> Control:
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _box(COL_CARD, COL_GOLD))
+	panel.theme_type_variation = "Card"
 	# Two lines: the purse/stash/figure line the screen already had, and D3's
 	# standing orders under it. The orders get their own line because the pace
 	# note is a sentence, not a widget, and it has to stay readable.
@@ -115,8 +109,8 @@ func _footer() -> Control:
 	row.add_theme_constant_override("separation", 14)
 	col.add_child(row)
 
+	_purse.theme_type_variation = "Head"
 	_purse.add_theme_color_override("font_color", COL_GOLD)
-	_purse.add_theme_font_size_override("font_size", Icons.FS_HEAD)
 	row.add_child(_purse)
 
 	_stash.bbcode_enabled = true
@@ -134,7 +128,8 @@ func _footer() -> Control:
 
 	var create := Button.new()
 	Icons.clicks(create)
-	create.text = "+  Create new"
+	create.text = "Create new"
+	create.theme_type_variation = "Primary"
 	create.pressed.connect(_on_create_new)
 	row.add_child(create)
 
@@ -160,8 +155,8 @@ func _clear(row: Container) -> void:
 func _build_figure_picker() -> void:
 	_clear(_fig_row)
 	var label := Label.new()
-	label.text = "Map figure:"
-	label.add_theme_color_override("font_color", COL_DIM)
+	label.text = "Map figure"
+	label.theme_type_variation = "Dim"
 	_fig_row.add_child(label)
 
 	# Asking the party who it resolves to (rather than reading the field raw)
@@ -217,8 +212,8 @@ func _build_orders() -> void:
 	_orders_row.add_child(row)
 
 	var cap := Label.new()
-	cap.text = "Standing orders:"
-	cap.add_theme_color_override("font_color", COL_GOLD)
+	cap.text = "Standing orders"
+	cap.theme_type_variation = "Caption"
 	row.add_child(cap)
 
 	var pace_ob := OptionButton.new()
@@ -241,10 +236,9 @@ func _build_orders() -> void:
 	# that Careful is 0.70x and +2 without opening core/travel.gd.
 	var note := Label.new()
 	note.name = "PaceNote"
-	note.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	note.add_theme_color_override("font_color", COL_DIM)
+	note.theme_type_variation = "Dim"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "%s   ·   %.2f× travel speed, %s." % [
+	note.text = "%s  %.2f× travel speed, %s." % [
 		Travel.pace_note(pace), Travel.speed_mult(party), _effect(Travel.pace_bonus(party))]
 	_orders_row.add_child(note)
 
@@ -338,21 +332,21 @@ func _refresh() -> void:
 
 # One roster row: summary + select/bench/profile.
 func _card(sm: Dictionary) -> Control:
+	# A ledger row, not a card: alternate rows take a faint tint, the picked
+	# one a gilt bar down its left edge. The whole row is the pick button.
 	var panel := PanelContainer.new()
 	var picked: bool = sm["id"] == _selected
-	panel.add_theme_stylebox_override("panel",
-		_box(COL_CARD_SEL if picked else COL_CARD, COL_GOLD if picked else COL_EDGE))
+	panel.theme_type_variation = "RowPicked" if picked else ("RowAlt" if _roster_col.get_child_count() % 2 == 1 else "Row")
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
 
-	var pick := Button.new()
-	Icons.clicks(pick)
-	pick.text = "▣" if picked else "▢"
-	pick.tooltip_text = "Select for a party slot"
-	pick.pressed.connect(func(): _select(sm["id"]))
-	row.add_child(pick)
-
+	panel.tooltip_text = "Pick up, then click a marching slot"
+	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	panel.gui_input.connect(func(ev):
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			Sound.play_sfx("click")
+			_select(sm["id"]))
 	row.add_child(_summary_label(sm))
 
 	var bench := Button.new()
@@ -378,35 +372,65 @@ func _card(sm: Dictionary) -> Control:
 func _slot(index: int, sm: Dictionary) -> Control:
 	var b := Button.new()
 	Icons.clicks(b)
-	b.custom_minimum_size = Vector2(0, 54)
+	b.custom_minimum_size = Vector2(0, 56)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	b.add_theme_stylebox_override("normal",
-		_box(COL_CARD, COL_PARTY if not sm.is_empty() else COL_EDGE))
 	if sm.is_empty():
-		b.text = "%d.  — empty —" % (index + 1)
+		b.text = "%d.  Empty" % (index + 1)
 		b.add_theme_color_override("font_color", COL_DIM)
 	else:
-		b.text = "%d.  %s  %s   —   %s %d   ·   AC %d   ·   HP %d/%d" % [index + 1,
-			Icons.class_glyph(sm["class_id"]), sm["name"],
-			sm["class_name"], sm["level"], sm["ac"], sm["hp"], sm["max_hp"]]
+		# The marching slots are numbered because the order IS the order — who
+		# walks first is who the road meets first.
+		b.add_theme_stylebox_override("normal", _slot_box())
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		row.set_anchors_preset(Control.PRESET_FULL_RECT)
+		row.offset_left = 14; row.offset_top = 4; row.offset_bottom = -4
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var num := Label.new()
+		num.text = "%d." % (index + 1)
+		num.theme_type_variation = "Gilt"
+		num.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(num)
+		var sum := _summary_label(sm)
+		sum.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(sum)
+		b.add_child(row)
 	b.pressed.connect(func(): _on_slot(index))
 	return b
 
+# The marching row: the normal button block with the party green down its
+# left edge, the same bar the picked roster row wears in gilt.
+func _slot_box() -> StyleBoxFlat:
+	var s := Icons.box(Icons.COL_ROW, Color(0, 0, 0, 0), 0, 12, 6)
+	s.border_color = COL_PARTY
+	s.border_width_left = 3
+	return s
+
 func _summary_label(sm: Dictionary) -> Control:
+	# Name in the serif, then the three numbers in fixed columns so a whole
+	# roster's ACs line up under each other — a ledger, not a sentence.
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 0)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var name_l := Label.new()
 	name_l.text = "%s  %s" % [Icons.class_glyph(sm["class_id"]), sm["name"]]
-	name_l.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	name_l.theme_type_variation = "Head"
+	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if sm["active"]:
 		name_l.add_theme_color_override("font_color", COL_PARTY)
 	col.add_child(name_l)
-	var stats := Label.new()
-	stats.text = "%s %d   ·   AC %d   ·   HP %d/%d" % [sm["class_name"], sm["level"],
-		sm["ac"], sm["hp"], sm["max_hp"]]
-	stats.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	stats.add_theme_color_override("font_color", COL_DIM)
+	var stats := HBoxContainer.new()
+	stats.add_theme_constant_override("separation", 0)
+	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for cell in [["%s %d" % [sm["class_name"], sm["level"]], 120], ["AC %d" % sm["ac"], 60],
+			["HP %d/%d" % [sm["hp"], sm["max_hp"]], 0]]:
+		var l := Label.new()
+		l.text = cell[0]
+		l.theme_type_variation = "Dim"
+		l.custom_minimum_size.x = cell[1]
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		stats.add_child(l)
 	col.add_child(stats)
 	return col
 
@@ -497,15 +521,6 @@ func _on_view_profile(id: String) -> void:
 	overlay.add_child(back)
 
 # --- theme (mirrors scenes/main.gd's) -------------------------------------
-
-func _box(bg: Color, edge: Color) -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = bg
-	s.set_corner_radius_all(8)
-	s.set_border_width_all(1)
-	s.border_color = edge
-	s.set_content_margin_all(10)
-	return s
 
 func _build_theme() -> void:
 	theme = Icons.dark_theme()

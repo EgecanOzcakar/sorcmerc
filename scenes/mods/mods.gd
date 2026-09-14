@@ -38,13 +38,7 @@ func _ready() -> void:
 	add_child(bg)
 
 	var panel := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = Icons.COL_PANEL
-	box.set_corner_radius_all(10)
-	box.set_border_width_all(1)
-	box.border_color = Icons.COL_GOLD_EDGE
-	box.set_content_margin_all(18)
-	panel.add_theme_stylebox_override("panel", box)
+	panel.add_theme_stylebox_override("panel", Icons.box(Icons.COL_PANEL, Icons.COL_GOLD_EDGE, 0, 24, 20))
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.offset_left = 40; panel.offset_right = -40
 	panel.offset_top = 30; panel.offset_bottom = -30
@@ -55,16 +49,12 @@ func _ready() -> void:
 	panel.add_child(col)
 
 	var cap := Label.new()
-	cap.text = "»   C A M P A I G N S   &   M O D S   «"
-	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cap.add_theme_color_override("font_color", Icons.COL_GOLD)
-	cap.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+	cap.text = "Campaigns and mods"
+	cap.theme_type_variation = "Title"
 	col.add_child(cap)
 
 	_note = Label.new()
-	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_note.add_theme_color_override("font_color", Icons.COL_MUTED)
-	_note.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	_note.theme_type_variation = "Dim"
 	col.add_child(_note)
 
 	var scroll := ScrollContainer.new()
@@ -116,12 +106,9 @@ func refresh() -> void:
 func _row(pack) -> Control:
 	var m = pack.manifest
 	var card := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = Icons.COL_INK
-	box.set_corner_radius_all(6)
-	box.set_border_width_all(1)
+	var box := Icons.box(Icons.COL_INK, Color(0, 0, 0, 0), 0, 12, 8)
 	box.border_color = _edge(pack)
-	box.set_content_margin_all(10)
+	box.border_width_left = 3
 	card.add_theme_stylebox_override("panel", box)
 
 	var col := VBoxContainer.new()
@@ -140,7 +127,7 @@ func _row(pack) -> Control:
 	var title := Label.new()
 	title.text = pack.title()
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	title.theme_type_variation = "Head"
 	title.add_theme_color_override("font_color",
 		Icons.COL_HEAD if pack.live() else Icons.COL_MUTED)
 	head.add_child(title)
@@ -151,8 +138,8 @@ func _row(pack) -> Control:
 	chip.add_theme_color_override("font_color", _edge(pack))
 	head.add_child(chip)
 
-	col.add_child(_dim("%s  ·  %s%s" % [m.kind, m.describe(),
-		"  ·  official" if m.official else ""], Icons.COL_MUTED))
+	col.add_child(_dim("%s, %s%s" % [m.kind, m.describe(),
+		", official" if m.official else ""], Icons.COL_MUTED))
 	if m.summary != "":
 		col.add_child(_dim(m.summary, Icons.COL_BODY))
 
@@ -169,7 +156,8 @@ func _row(pack) -> Control:
 
 	if pack.playable() and on_play.is_valid():
 		var play := Button.new()
-		play.text = "▶  Play" if m.has_world() else "▶  Start the story"
+		play.text = "Play" if m.has_world() else "Start the story"
+		play.theme_type_variation = "Primary"
 		Icons.clicks(play)
 		play.pressed.connect(func(): on_play.call(pack))
 		row.add_child(play)
@@ -177,7 +165,9 @@ func _row(pack) -> Control:
 	if pack.status == "locked":
 		# No purchase button: the game is not the storefront. It reads what the
 		# player owns (core/mod/entitlement.gd) and says so.
-		row.add_child(_dim("Sold separately — %s" % m.product_id, Icons.COL_GOLD))
+		var sold := _dim("Sold separately, as %s" % m.product_id, Icons.COL_GOLD)
+		sold.size_flags_horizontal = Control.SIZE_EXPAND_FILL   # an HBox gives a wrapping label no width otherwise
+		row.add_child(sold)
 	elif pack.status != "broken":
 		var toggle := Button.new()
 		toggle.text = "Turn off" if Registry.is_enabled(m.id) else "Turn on"
@@ -206,8 +196,9 @@ func _dim(text: String, color: Color) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	l.add_theme_color_override("font_color", color)
+	l.theme_type_variation = "Dim"
+	if color != Icons.COL_MUTED:
+		l.add_theme_color_override("font_color", color)
 	return l
 
 func _back() -> void:

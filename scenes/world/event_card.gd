@@ -427,12 +427,12 @@ func _draw() -> void:
 func _text(at: Vector2, s: String, fs: int, col: Color, max_w := -1.0) -> void:
 	if s == "":
 		return
-	draw_string(ThemeDB.fallback_font, at, s, HORIZONTAL_ALIGNMENT_LEFT,
+	draw_string(Icons.sans(), at, s, HORIZONTAL_ALIGNMENT_LEFT,
 		max_w if max_w > 0.0 else -1.0, fs, col)
 
 
 func _w(s: String, fs: int) -> float:
-	return ThemeDB.fallback_font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	return Icons.sans().get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 
 
 func _wrap(text: String, fs: int, max_w: float, max_lines: int) -> PackedStringArray:

@@ -59,8 +59,7 @@ func _build_chrome() -> void:
 	root.add_theme_constant_override("separation", 8)
 	add_child(root)
 
-	_title.add_theme_font_size_override("font_size", 24)
-	_title.add_theme_color_override("font_color", COL_GOLD)
+	_title.theme_type_variation = "Title"
 	root.add_child(_title)
 
 	var scroll := ScrollContainer.new()
@@ -85,6 +84,7 @@ func _build_chrome() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	nav.add_child(spacer)
+	_confirm.theme_type_variation = "Primary"
 	_confirm.pressed.connect(_on_confirm)
 	Icons.clicks(_confirm)
 	nav.add_child(_confirm)
@@ -197,15 +197,14 @@ func _choices() -> void:
 			if Creator.allows_repeat(p) and count > 0:
 				b.text += "  +%d" % count
 			if count > 0:
-				b.add_theme_color_override("font_color", COL_GOLD)
+				b.theme_type_variation = "Picked"
 			b.pressed.connect(_pick.bind(p, o["id"]))
 			f.add_child(b)
 
 func _head(text: String) -> void:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 17)
-	l.add_theme_color_override("font_color", COL_GOLD)
+	l.theme_type_variation = "Head"
 	_body.add_child(l)
 
 func _note(text: String, col: Color = COL_DIM) -> void:

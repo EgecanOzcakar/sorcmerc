@@ -52,7 +52,7 @@ func _init() -> void:
 	await _stand(main, Regions.anchor(w) + Vector2(200, 0))
 	check(main._region_lbl != null and main._region_lbl.text != "", "the HUD says which country this is")
 	check(main._region_lbl.text.find("Heartland") >= 0, "home reads as the heartland (%s)" % main._region_lbl.text)
-	check(main._region_lbl.text.find("lv 1-3") >= 0, "...and who it is for (%s)" % main._region_lbl.text)
+	check(main._region_lbl.text.find("levels 1 to 3") >= 0, "...and who it is for (%s)" % main._region_lbl.text)
 
 	# --- crossing out -------------------------------------------------------
 	var deeps: Array = Regions.ring(w, "deeps")
