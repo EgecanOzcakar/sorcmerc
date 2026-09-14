@@ -143,6 +143,14 @@ func adjacent_hazard(c) -> Dictionary:
 func adjacent_to_hazard(c) -> bool:
 	return not adjacent_hazard(c).is_empty()
 
+# The whole rule of "Shove → brazier": you can only put somebody in the fire if
+# they are already standing next to it. One function because it is asked twice —
+# legal_target() asks it so the button is never offered or clickable, and
+# perform() asks it again so a shove that reaches the resolver some other way
+# cannot spend the action on something that could never do anything.
+func can_shove_into_hazard(target) -> bool:
+	return target != null and not adjacent_hazard(target).is_empty()
+
 # A destructible neighbour (barrel, crate). {} if none.
 func smashable_near(c) -> Dictionary:
 	for o in objects():
@@ -404,12 +412,16 @@ func _basic(id: String) -> Dictionary:
 			return b
 	return {}
 
-# Every verb `actor` can use right now (spec §6). scenes/main.gd renders this list;
-# ai.gd scores it.
-func available(actor) -> Array:
+# Every verb that is a BUTTON for `actor` at all — this instant or later in the
+# fight. Split from available() so scenes/main.gd can lay its action bar out
+# along the whole kit and grey out what is merely spent: a badge that vanishes
+# the moment its pool empties takes every badge to its right along with it, and
+# the slot under the player's finger stops meaning what it meant last turn.
+# ai.gd and everything else still want available(), below.
+func all_verbs(actor) -> Array:
 	var out: Array = []
 	for b in BASIC:
-		if _offerable(actor, b):
+		if is_button(actor, b):
 			out.append(b.duplicate())
 	for v in actor.verbs:
 		if v["kind"] == "grant_verb":
@@ -421,11 +433,18 @@ func available(actor) -> Array:
 				g["cost"] = v["cost"]
 				if v.has("pool"):
 					g["pool"] = v["pool"]
-				if _offerable(actor, g):
+				if is_button(actor, g):
 					out.append(g)
-		elif v["kind"] in OFFERABLE and _offerable(actor, v):
+		elif v["kind"] in OFFERABLE and is_button(actor, v):
 			out.append(v.duplicate())
 	return out
+
+# Every verb `actor` can use right now (spec §6). scenes/main.gd renders this list;
+# ai.gd scores it.
+func available(actor) -> Array:
+	if not actor.conscious():
+		return []
+	return all_verbs(actor).filter(func(v): return _offerable(actor, v))
 
 func can_spend(actor, cost: String) -> bool:
 	if cost in ["free", "none", ""]:
@@ -439,12 +458,23 @@ func _spend(actor, cost: String) -> bool:
 		actor.econ[cost] = int(actor.econ[cost]) - 1
 	return true
 
-func _offerable(actor, v: Dictionary) -> bool:
-	if not actor.conscious():
-		return false
+# The half of offerability that does not change while the fight runs: whether
+# this verb is ever a button, and whether this actor could ever press it. Asked
+# on its own by all_verbs(), so the action bar's slots are settled by what a
+# character IS rather than by what they have left this turn.
+func is_button(actor, v: Dictionary) -> bool:
 	if v.get("trigger", "") in ["passive", "start_of_turn"] \
 			or (v.get("trigger", "") == "on_weapon_hit" and v["kind"] == "save_effect" and not v.has("pool")):
 		return false   # fires from resolve_attack / begin_turn, never a button
+	if v["kind"] == "shove" and actor.athletics <= 0:
+		return false   # not something this character is ever going to manage
+	return true
+
+func _offerable(actor, v: Dictionary) -> bool:
+	if not actor.conscious():
+		return false
+	if not is_button(actor, v):
+		return false
 	if not can_spend(actor, v.get("cost", "action")):
 		return false
 	if v.get("once_per", "") == "turn" and actor.econ.get("used", {}).has(v["id"]):
@@ -465,7 +495,6 @@ func _offerable(actor, v: Dictionary) -> bool:
 		"dash": return true
 		"self_buff": return not actor.has(v.get("status", v["id"]))
 		"attack_modifier", "grant_action": return true
-		"shove": if actor.athletics <= 0: return false
 	match v.get("targeting", "self"):
 		"enemy": return enemies_of(actor).any(func(e): return legal_target(actor, v, e))
 		"ally": return combatants.any(func(a): return a != actor and legal_target(actor, v, a))
@@ -483,7 +512,7 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 				return false  # charmed
 			if v["kind"] == "attack" or (v["kind"] == "offhand_attack" and int(v.get("range", 1)) <= 1):
 				return in_reach(actor, c)
-			if v.get("choice", "") == "brazier" and not adjacent_to_hazard(c):
+			if v.get("choice", "") == "brazier" and not can_shove_into_hazard(c):
 				return false
 			return Hex.distance(actor.pos, c.pos) <= int(v.get("range", 1))
 		"ally":
@@ -499,6 +528,12 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 # Run a verb. `target` is a Combatant, a direction (Vector2i) or null.
 func perform(actor, v: Dictionary, target = null) -> Dictionary:
 	var kind: String = v["kind"]
+	# Asked before anything is spent. The rule used to live only in
+	# legal_target(), so the resolver would take the action, roll the contest,
+	# win it, and then quietly do nothing because there was no brazier beside
+	# the target — a turn gone with not a line in the log to say why.
+	if kind == "shove" and v.get("choice", "") == "brazier" and not can_shove_into_hazard(target):
+		return {"error": "nothing to shove them into"}
 	if kind != "attack" and not _spend(actor, v.get("cost", "action")):
 		return {"error": "no %s left" % v.get("cost", "action")}
 	if v.get("once_per", "") == "turn":
@@ -1236,9 +1271,12 @@ func act_shove(attacker, target, choice: String) -> Dictionary:
 				target.statuses["prone"] = true
 				log.append("%s shoves %s — no room to push, %s falls prone." % [attacker.cname, target.cname, target.cname])
 		"brazier":
+			# perform() refuses this verb without a hazard beside the target, so
+			# the only way here is a direct act_shove() call.
 			var haz := adjacent_hazard(target)
 			if haz.is_empty():
-				return {"success": true}
+				log.append("%s has nothing to shove %s into." % [attacker.cname, target.cname])
+				return {"success": false}
 			var notation: String = String(haz["hazard"].get("dice", "2d6"))
 			var burn = Dice.roll(rng, notation)
 			log.append("%s shoves %s into the %s — %s = %d fire." % [attacker.cname, target.cname,

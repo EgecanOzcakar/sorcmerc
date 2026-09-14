@@ -75,22 +75,46 @@ func _init() -> void:
 		check(after_back.filter(func(t): return t.contains("Burning Hands")).size() == 1,
 			"Back returns to the main menu, still one Burning Hands button")
 
-	# Frequency: bump Dodge's key hard, rebuild, confirm it moved to the front.
+	# Frequency decides the layout ONCE per fight, and then the slots hold still.
+	# The bar used to re-sort itself on every press, so reaching for the verb in
+	# slot 3 could get you whatever had just been promoted into it.
 	main._build_hero_menu(ilsa)
 	var before: Array = await _labels(main)
 	for i in 20:
 		main._bump_freq("dodge")   # BASIC's dodge verb id — see scenes/main.gd _build_hero_menu
 	main._build_hero_menu(ilsa)
 	var after: Array = await _labels(main)
+	check(after == before, "using a verb 20 times does not move a single badge mid-fight")
+
+	# ...and the next fight opens with the well-worn verb in the low slot.
+	main._bar_order.clear()
+	main._build_hero_menu(ilsa)
+	var relaid: Array = await _labels(main)
 	var dodge_before: int = -1
 	var dodge_after: int = -1
 	for i in before.size():
 		if before[i].contains("Dodge"): dodge_before = i
-	for i in after.size():
-		if after[i].contains("Dodge"): dodge_after = i
+	for i in relaid.size():
+		if relaid[i].contains("Dodge"): dodge_after = i
 	check(dodge_before >= 0 and dodge_after >= 0, "Dodge is offered before and after")
-	check(dodge_after < dodge_before, "a heavily-used verb (Dodge) moves toward the front, not backward")
-	check(after[0].contains("Dodge"), "20 uses is enough to put Dodge in the [1] slot")
+	check(dodge_after < dodge_before, "a heavily-used verb (Dodge) leads the next fight's bar")
+	check(relaid[0].contains("Dodge"), "20 uses is enough to put Dodge in the [1] slot")
+
+	# A verb that has gone unavailable holds its slot, greyed, instead of
+	# collapsing the row and shifting every badge after it.
+	main._build_hero_menu(ilsa)
+	var full: Array = await _labels(main)
+	var lit: int = main._buttons.get_children().filter(func(b): return not b.disabled).size()
+	ilsa.econ["action"] = 0
+	main._build_hero_menu(ilsa)
+	var spent: Array = await _labels(main)
+	check(spent.size() == full.size(), "spending the action does not shorten the bar (%d vs %d)"
+		% [spent.size(), full.size()])
+	for i in mini(spent.size(), full.size()) - 1:      # the last slot is End turn, which relabels
+		check(spent[i] == full[i], "slot %d still holds the same skill" % (i + 1))
+	var still_lit: int = main._buttons.get_children().filter(func(b): return not b.disabled).size()
+	check(still_lit < lit, "and the ones that need the action are greyed out (%d lit, was %d)"
+		% [still_lit, lit])
 
 	print("test_action_bar: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

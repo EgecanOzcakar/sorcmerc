@@ -7,6 +7,7 @@ const Creator = preload("res://scenes/creator/creator.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Save = preload("res://core/character_save.gd")
 const Presets = preload("res://core/presets.gd")
+const Party = preload("res://core/party.gd")
 
 var _pass := 0
 var _fail := 0
@@ -190,5 +191,56 @@ func _init() -> void:
 	Save.delete("vera")
 	check(not "valdis-hark" in Save.list_slugs(), "delete removes the file")
 
+	same_name_is_not_the_same_hero()
+
 	print("test_creator: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# Two heroes with one name. Naming a second character after one already in the
+# barracks used to destroy the first (same slug, same file, no warning) and lose
+# the second as well, since Party.add_member refuses a duplicate id — you built a
+# ranger, and both the ranger and the hero you built next were simply gone.
+func same_name_is_not_the_same_hero() -> void:
+	for slug in ["aria-vale", "aria-vale-2", "aria-vale-3"]:
+		Save.delete(slug)
+
+	var ranger = build("Aria Vale", "human", "ranger", "guide", "array")
+	ranger.id = Save.unique_slug(ranger.cname)
+	check(ranger.id == "aria-vale", "the first of a name gets the plain slug")
+	Save.save(ranger)
+
+	var barbarian = build("Aria Vale", "human", "barbarian", "guide", "array")
+	barbarian.id = Save.unique_slug(barbarian.cname)
+	check(barbarian.id == "aria-vale-2", "the second of a name gets a slug of its own")
+	Save.save(barbarian)
+
+	var reloaded_ranger = Save.load_slug("aria-vale")
+	check(reloaded_ranger != null and reloaded_ranger.class_id() == "ranger",
+		"the hero already in the barracks is still a ranger")
+
+	# The point of the unique id: a Party takes both, because add_member refuses
+	# a second character wearing an id it already has.
+	var party := Party.new()
+	var loaded := Save.load_all()
+	var names: Array = []
+	for ch in loaded:
+		if ch.cname == "Aria Vale":
+			check(party.add_member(ch), "%s (%s) joins the roster" % [ch.cname, ch.id])
+			names.append(ch.class_id())
+	names.sort()
+	check(names == ["barbarian", "ranger"], "both Aria Vales are on the party page (got %s)" % str(names))
+
+	# The file name is the identity, whatever a hand-edited `id` field claims.
+	var f := FileAccess.open(Save.path_for("aria-vale-2"), FileAccess.READ_WRITE)
+	if f != null:
+		var d: Dictionary = JSON.parse_string(f.get_as_text())
+		d["id"] = "aria-vale"
+		f.seek(0)
+		f.store_string(JSON.stringify(d, "  "))
+		f.close()
+		check(Save.load_slug("aria-vale-2").id == "aria-vale-2",
+			"a save wearing somebody else's id comes back under its own file name")
+
+	for slug in ["aria-vale", "aria-vale-2"]:
+		Save.delete(slug)
+

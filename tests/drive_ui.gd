@@ -109,10 +109,15 @@ func _name(b: Button) -> String:
 	var tip := String(b.tooltip_text)
 	return tip.get_slice("\n", 0) if tip != "" else String(b.text)
 
+# Only what a player could actually press. A greyed badge holds its slot on the
+# bar now instead of vanishing (scenes/main.gd's _bar_order), and `pressed.emit()`
+# does NOT honour Button.disabled the way a real click does — so without this
+# the robot "clicks" a spent verb, gets put into targeting for something it
+# cannot afford, and mills there until the press budget runs out.
 func _buttons() -> Array:
 	var out: Array = []
 	for b in main._buttons.get_children():
-		if b is Button and not b.is_queued_for_deletion():
+		if b is Button and not b.is_queued_for_deletion() and not b.disabled:
 			out.append(b)
 	return out
 

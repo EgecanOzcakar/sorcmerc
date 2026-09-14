@@ -4021,3 +4021,113 @@ Measured on this machine: the whole suite — import, script check, 64 subsystem
 tests, 8 UI robots — is **177 seconds**. That is why the workflow is one job
 and not a shard matrix; an earlier 30-minute figure turned out to be three
 copies of the runner fighting each other for the CPU, not the suite.
+
+## Five things play found (2026-09-14)
+
+Five reports from actually playing the game, and what each one turned out to
+be. Four were bugs; one was a design decision that had drifted into a bug.
+
+### A created ranger vanished off the party page
+
+The one that started as "where did my character go". The barracks is one JSON
+file per character at `user://characters/<slug>.json`, and the slug was minted
+by slugifying the name at the moment of saving. So a name is an identity, which
+is wrong twice over: two heroes called Aria Vale are two heroes, and
+`slugify()` is lossy besides — any two names built from the same letters and
+punctuation collapse together, and a name with no ASCII letters in it at all
+collapses to `character`.
+
+Naming a second hero after one already in the barracks therefore did two silent
+things at once. The new build was written **over** the existing one, so the
+ranger already on disk was destroyed with no warning; and then `Party.add_member`
+refused the new hero for carrying an id the roster already had — silently,
+because the refusal was an ignored return value — so the hero you had just
+built was not on the page either. One character deleted, one never created,
+nothing on screen about either. Reproduced end to end through the real screens:
+a ranger in the barracks, a hero built on the pack's party-setup page with the
+same name, and afterwards the page still showed a ranger who was now a
+barbarian on disk.
+
+The fix is that a new character gets a slug nothing is using —
+`CharacterSave.unique_slug()`, called once in the creator's `_confirm()`, so
+Aria Vale and Aria Vale are `aria-vale` and `aria-vale-2` — and that the file
+name is the identity: `load_slug()` now stamps the slug it loaded from onto the
+character, so a hand-copied or renamed save cannot come back wearing somebody
+else's id and get dropped. The creator says so when it has to number one. The
+refused `add_member` is reported on the party screen rather than swallowed;
+it should not be reachable any more, but a hero disappearing without a word is
+what this whole entry is about.
+
+### Shove → brazier worked with nothing to shove anyone into
+
+"You can only put somebody in the fire if they are standing next to it" was a
+rule of the *button*, not of the verb: `legal_target()` asked it, so the UI
+never offered or accepted an illegal target, but `Combat.perform()` would take
+the action, roll the contested Athletics, win it, and then quietly do nothing —
+`act_shove` returned `{"success": true}` on an empty hazard lookup, without so
+much as a line in the log. A turn gone and no explanation. The rule is now
+`can_shove_into_hazard()`, asked in both places, and asked in `perform()`
+*before* anything is spent.
+
+### Slipping past lair guardians the party had already been fighting
+
+`WorldLairs.sneak_past()` — the Animal Handling alternative to attacking a lair
+— checked that the lair was discovered and unlooted, and nothing else. Its own
+comment said "one attempt per lair" and world.gd's said "the guardians are
+alerted either way now, so there's no third attempt", but neither was true: the
+party could kick the door in, fight half-way down, withdraw, come back and then
+*talk their way past the guardians they had been killing*, collecting the
+sneak-past stash on top of the rooms they had already looted.
+
+`alerted()` is the missing rule, and it needs no new state: `entered_at` is
+already stamped the first time the party goes in (it is what starts the D1
+window) and already round-trips through `core/world_save.gd`, so a lair that
+has been disturbed reads as roused, including in saves written before this
+existed. A failed attempt now rouses the lair itself rather than relying on the
+fight it falls into, which is what makes it one attempt rather than one per
+visit. The button hides once they are up, and says why if it is pressed anyway.
+
+### Barks hidden behind the models
+
+Same bug the HP bar and the odds chip were each fixed for, one tier further
+down: a Figures3D model is a **Board child**, so it draws after everything
+`Board._draw()` paints, whatever the order within that function. Barks sat
+lower over their hex than either of the other two — right at a tall rig's chest
+— so what a character said was routinely covered by whoever was standing in
+front of them. They paint in `_draw_hud_overlay` now, on the CanvasLayer above
+Board and every tier including the figures, with a dropped shadow since they
+now land on top of the art rather than behind it. `tests/test_hud_layer.gd`
+pins both halves: that `Board._draw` no longer paints them and the overlay
+does, and that the two names the overlay reaches across for still exist.
+
+### The ambush deployment, and the action bar that would not hold still
+
+Two UI changes, both of them about the same thing: a control that moves under
+the hand reaching for it.
+
+**Deployment** offered one button per *pair* of heroes — six lines of
+"Swap Vera ↔ Pike" at four heroes, fifteen at six, none of which say anything
+about where on the board anybody is standing. It is a spatial choice, so it is
+made on the board now: click a hero to pick them up, click another to trade
+places. The swappable hexes are ringed, the held one brighter, and clicking the
+held hero again puts them back. The bar still lists them, so the phase is
+playable without the map and the robot can still drive it.
+
+**The action bar** re-sorted itself live. `_prioritize()` ordered the badges
+most-used-first and ran on every single rebuild, while `_bump_freq` counted
+every press — so using a verb could promote it past another and slide every
+badge to its right, mid-turn, under a player who was reaching for slot 3. On
+top of that the bar was built from `available()`, which only returns what is
+usable *this instant*, so spending a bonus action made a badge vanish and
+everything after it shift left. The hotkeys are positional, so [3] genuinely
+meant something different from one press to the next.
+
+Both halves are fixed. `Combat.all_verbs()` is `available()` without the
+can-they-afford-it-right-now filter (the structural half is now `is_button()`),
+so the bar is laid out along a character's whole kit and a verb that is merely
+spent holds its slot greyed out instead of collapsing the row. And the order is
+settled once per character per fight: `_prioritize()` still decides that first
+layout — the verbs this player reaches for still claim the low hotkeys — but it
+decides it once, and `_bar_order` replays it for the rest of the fight. What
+the frequency counter buys is the *next* fight's opening layout, which is all
+it was ever really worth.

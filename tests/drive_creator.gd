@@ -149,7 +149,11 @@ func _run() -> void:
 	if main._confirmed == null:
 		fail("confirm did not produce a character: " + main._status.text)
 	else:
-		var slug := Save.slugify(main.ch.cname)
+		# ch.id, not slugify(cname): a new hero's slug is minted against what is
+		# already in the barracks, so a leftover smoke-testerson.json from an
+		# earlier run makes this one smoke-testerson-2 — and deleting the name's
+		# slug would then tidy up the wrong file and leave this one behind.
+		var slug: String = main.ch.id
 		if Save.load_slug(slug) == null:
 			fail("the confirmed character did not save")
 		Save.delete(slug)

@@ -1028,7 +1028,11 @@ func _check_lairs() -> void:
 	_lair_btn.text = ("Search for a hidden lair (Survival)" if not target.discovered
 		else "Attack %s — %s, levels %d-%d" % [target.sname, String(band["label"]),
 			int(lv[0]), int(lv[1])])
-	_lair_sneak_btn.visible = target.discovered
+	# The quiet way is only on the table while the warren is still quiet: once
+	# the party has been through that door (or tried the quiet way and failed
+	# into the fight below), the guardians are up and stay up — see
+	# core/world_lairs.gd's alerted().
+	_lair_sneak_btn.visible = WorldLairs.can_sneak(target)
 
 # D1: a lair the party walked away from resolves without them after
 # WorldLairs.WINDOW — somebody else clears it, or its tenants move on. Said out
@@ -1062,10 +1066,16 @@ func _lair_action() -> void:
 # (the guardians are alerted either way now, so there's no third attempt).
 func _lair_sneak_action() -> void:
 	var l: World.Lair = _lair_target
-	if l == null or _combat != null or not l.discovered or l.looted:
+	if l == null or _combat != null:
 		return
 	var roll := WorldLairs.sneak_past(l, party)
 	if roll.is_empty():
+		# The one refusal worth saying out loud: they have already been in there,
+		# so there is nobody left to talk past. (An empty roll otherwise means a
+		# party with no one to make the check, which the button being up already
+		# implies is not the case.)
+		if WorldLairs.alerted(l):
+			_lair_msg.text = "%s is already roused — the quiet way is gone." % l.sname
 		return
 	if roll["ok"]:
 		var loot: Dictionary = WorldLairs.loot(l)
@@ -1074,6 +1084,10 @@ func _lair_sneak_action() -> void:
 		_lair_msg.text = "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))]
 	else:
 		_lair_msg.text = String(roll["text"])
+		# Roused by the attempt itself, not as a side effect of the fight it
+		# falls into: that is what makes this one attempt rather than one per
+		# visit, and it is the moment the D1 window should start counting from.
+		WorldLairs.mark_entered(l, world.clock.elapsed)
 		await _lair_action()
 
 # --- D1: the delve --------------------------------------------------------

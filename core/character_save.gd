@@ -1,9 +1,13 @@
 # Character persistence. THE format T3 (profile) and T4 (party) load characters with.
 #
 # One JSON file per character at  user://characters/<slug>.json  — the slug is
-# Character.id, or a slugified name when id is empty. It is the *build*, not the
-# sheet: reload it and call ch.sheet() to re-resolve. Nothing derived is stored,
-# so a rules/data fix retroactively fixes every saved character.
+# Character.id, and the file name is the identity: load_slug() hands back a
+# character wearing the slug it was filed under, whatever the `id` inside says.
+# A new character's slug is minted once by unique_slug() (the creator's
+# _confirm), so saving a hero never lands on a hero the barracks already has —
+# two people called Aria Vale are aria-vale and aria-vale-2. It is the *build*,
+# not the sheet: reload it and call ch.sheet() to re-resolve. Nothing derived is
+# stored, so a rules/data fix retroactively fixes every saved character.
 #
 # {
 #   "format": "sorcmerc-character",   // literal, checked on load
@@ -46,6 +50,31 @@ static func slugify(s: String) -> String:
 
 static func path_for(slug: String) -> String:
 	return "%s/%s.json" % [DIR, slug]
+
+static func exists(slug: String) -> bool:
+	return FileAccess.file_exists(path_for(slug))
+
+# A slug no file is using yet — what a NEW character must be saved under.
+#
+# The name is not the identity. Two heroes called Aria Vale are two heroes, and
+# slugify() is lossy besides (any two names made of the same letters and
+# punctuation collapse to the same slug), so minting an id straight off the name
+# meant the second Aria's file landed on top of the first's: the hero already in
+# the barracks was overwritten with no warning, and the new one was then dropped
+# by Party.add_member's duplicate-id guard without a word either. One character
+# destroyed, one never created, nothing on screen about either.
+#
+# `preferred` is an id the character already carries (a preset's "vera", a
+# character being re-saved); it is kept when it is still free, so re-saving is
+# still an overwrite of the same file — only a genuinely new name gets a number.
+static func unique_slug(name: String, preferred := "") -> String:
+	var base: String = preferred if preferred != "" else slugify(name)
+	if not exists(base):
+		return base
+	var n := 2
+	while exists("%s-%d" % [base, n]):
+		n += 1
+	return "%s-%d" % [base, n]
 
 static func to_dict(ch) -> Dictionary:
 	var slug: String = ch.id if ch.id != "" else slugify(ch.cname)
@@ -121,7 +150,14 @@ static func load_path(path: String):
 	return from_dict(d) if d is Dictionary else null
 
 static func load_slug(slug: String):
-	return load_path(path_for(slug))
+	var ch = load_path(path_for(slug))
+	# The file name IS the identity (see the header). A save whose `id` field
+	# disagrees with it — hand-copied, renamed, written by an older build — would
+	# otherwise come back wearing somebody else's id, and the second of the two
+	# would be dropped silently the moment a Party loaded them both.
+	if ch != null:
+		ch.id = slug
+	return ch
 
 # Every saved character, newest-first by modification time. T4's roster reads this.
 static func list_slugs() -> Array[String]:

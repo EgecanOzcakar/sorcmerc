@@ -447,9 +447,17 @@ func _on_create_new() -> void:
 	creator.set_start_level(party.active_max_level())
 	overlay.add_child(creator)
 	creator.character_created.connect(func(ch):
-		party.add_member(ch)          # auto-activates while there is a free slot
+		# add_member refuses a duplicate id, and used to refuse it silently: the
+		# hero you just built was saved to disk and then simply was not on the
+		# page, with nothing on screen to say why. The creator mints a free slug
+		# now (core/character_save.gd's unique_slug), so this should not fire —
+		# but a refusal must never again be invisible.
+		var joined: bool = party.add_member(ch)   # auto-activates while there is a free slot
 		overlay.queue_free()
-		_refresh())
+		_refresh()
+		if not joined:
+			_hint.text = "%s is saved to the barracks but could not join the roster — id \"%s\" is already taken." \
+				% [ch.cname, ch.id])
 	var back := Button.new()
 	Icons.clicks(back)
 	back.text = "←  Cancel"

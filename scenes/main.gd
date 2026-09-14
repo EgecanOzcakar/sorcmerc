@@ -43,6 +43,7 @@ var _advancing = false
 var _mode := "idle"          # idle | cone | target
 var _tgt_verb: Dictionary = {}   # the verb being aimed, straight from cb.available()
 var _armed := ""             # a confirm-guarded verb waiting for its second press
+var _deploy_pick := ""       # T39: the hero picked up for a trade, waiting for who to trade with
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 var _slot_max := {}          # id -> slots at the start of the fight (for the pips)
@@ -65,6 +66,14 @@ const BTN_SIZE := Vector2(52, 52)
 # picked, not N separate counters). Read by _prioritize(), written by
 # _set_buttons() on every button press.
 var _verb_freq: Dictionary = {}
+# The slot order a character's badges sit in, settled the first time their bar
+# is built in this fight and not touched again. _prioritize() still decides that
+# first layout — the verbs this player reaches for get the low hotkeys — but it
+# decides it once: re-sorting it live meant pressing a verb could promote it
+# past another and slide every badge to its right out from under the hand that
+# was reaching for it, in the middle of a turn. Keyed by combatant id, cleared
+# with the fight.
+var _bar_order: Dictionary = {}
 # T-hud: HP bar + condition tags, painted above every tier (see
 # Board._paint_token_hud / _draw_hud_overlay below) instead of inline in
 # Board._draw() — a figure in front used to be able to cover the HP bar of
@@ -334,6 +343,8 @@ func _new_game(forced := 0) -> void:
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()
+	_bar_order.clear()  # a new fight lays the bars out again (see _in_slot_order)
+	_deploy_pick = ""
 	_logbox.text = ""
 	_logged = 0
 	_last_round = 1
@@ -360,19 +371,65 @@ func _new_game(forced := 0) -> void:
 
 # --- T39: deployment phase (unseen only) --------------------------------
 
+# Pick somebody up, then click who they change places with — on the map, or off
+# the bar, the same two-step the party screen's roster/slot click already is.
+#
+# It used to be one button per PAIR: with four heroes that is six lines of
+# "Swap Vera ↔ Pike" to read before you can move anybody, and the list grows
+# quadratically (fifteen at six heroes) while saying nothing about where on the
+# board anyone is standing. The choice is a spatial one, so it is made on the
+# board: the swappable hexes are ringed, the one you have picked up is ringed
+# brighter, and clicking a second hero trades them.
 func _deploy_menu() -> void:
 	_mode = "deploy"
 	var heroes: Array = cb.team_of("party").filter(func(c): return c.conscious())
+	if _deploy_pick != "" and not heroes.any(func(c): return c.id == _deploy_pick):
+		_deploy_pick = ""          # they went down between menus; nobody is held
 	var opts: Array = []
-	for i in heroes.size():
-		for j in range(i + 1, heroes.size()):
-			opts.append(["Swap %s ↔ %s" % [heroes[i].cname, heroes[j].cname],
-				_swap_deploy.bind(heroes[i], heroes[j])])
-	_actor.text = "[b]Unseen.[/b]  Trade starting places, then begin — the enemy loses its first round."
+	for h in heroes:
+		var held: bool = h.id == _deploy_pick
+		opts.append([("▣  %s" % h.cname) if held else "Swap %s" % h.cname,
+			_pick_deploy.bind(h.id)])
+	if _deploy_pick == "":
+		_actor.text = "[b]Unseen.[/b]  Click a hero on the map (or here) to pick them up, then click who they trade places with. Begin when they stand where you want them — the enemy loses its first round."
+	else:
+		_actor.text = "[b]Unseen.[/b]  %s is picked up — click another hero to trade places, or click them again to put them back." \
+			% _deploy_name(_deploy_pick)
 	opts.append(["Begin the ambush", func():
+		_deploy_pick = ""
 		_mode = "idle"
 		_advance()])
 	_set_buttons(opts)
+
+# combat.gd holds combatants in a flat array with no lookup of its own, and one
+# deployment phase is not a reason to add an index to the resolver.
+func _combatant(id: String):
+	for c in cb.combatants:
+		if c.id == id:
+			return c
+	return null
+
+func _deploy_name(id: String) -> String:
+	var c = _combatant(id)
+	return c.cname if c != null else "?"
+
+# One click of the two. The first picks a hero up, a second click on the same
+# hero puts them back, and a click on anybody else is the trade.
+func _pick_deploy(id: String) -> void:
+	if _mode != "deploy":
+		return
+	if _deploy_pick == "" or _deploy_pick == id:
+		_deploy_pick = "" if _deploy_pick == id else id
+		_board.queue_redraw()
+		_deploy_menu()
+		return
+	var a = _combatant(_deploy_pick)
+	var b = _combatant(id)
+	_deploy_pick = ""
+	if a == null or b == null:
+		_deploy_menu()
+		return
+	_swap_deploy(a, b)
 
 func _swap_deploy(a, b) -> void:
 	var p: Vector2i = a.pos
@@ -384,6 +441,11 @@ func _swap_deploy(a, b) -> void:
 	_flush_log()
 	_refresh()
 	_deploy_menu()
+
+# Who on the board can be picked up right now: the conscious party, since the
+# whole phase is permuting where they stand.
+func deploy_swappable(c) -> bool:
+	return _mode == "deploy" and c != null and c.team == "party" and c.conscious()
 
 # --- turn driver --------------------------------------------------------
 
@@ -466,7 +528,13 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	var opts: Array = []
 	var spell_tiers: Dictionary = {}   # spell id -> Array of this verb's entries, one per castable level
 	var spell_order: Array = []        # first-seen order, so a spell keeps its natural position in opts
+	var usable := {}
 	for v in cb.available(h):
+		usable[String(v.get("id", v["kind"]))] = true
+	# The whole kit, not just what is affordable this instant: an unavailable
+	# verb keeps its slot, greyed. See _bar_order above for why.
+	for v in cb.all_verbs(h):
+		var on: bool = usable.has(String(v.get("id", v["kind"])))
 		var label: String = _verb_label(h, v)
 		# The name leads the popup now that it has left the button face.
 		var tip: String = label + "\n" + _verb_tooltip(h, v)
@@ -483,6 +551,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 			meta["tier"] = label.substr(label.find("★"))   # the upcast slot, on the badge's corner
 		if _armed == String(v.get("id", "")):
 			meta["armed"] = true
+		meta["disabled"] = not on
 		var entry: Array
 		match v.get("targeting", "self"):
 			"enemy", "ally":
@@ -516,11 +585,16 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 			var base: Array = tiers[0]
 			# The name has to lead here too: this entry replaces the per-tier
 			# ones wholesale, and its tooltip is the only place left that says
-			# which spell the badge belongs to.
+			# which spell the badge belongs to. One badge for the spell, live
+			# while ANY of its tiers is — the picker greys the tiers there are
+			# no slots for, the same way the bar greys anything else spent.
+			var head: Dictionary = base[3].duplicate()
+			var castable: int = tiers.filter(func(t): return not bool(t[3].get("disabled", false))).size()
+			head["disabled"] = castable == 0
 			opts[i] = [base[0], func(): _spell_tier_menu(h, tiers),
-				"%s\n%d levels available — pick one." % [base[0], tiers.size()], base[3]]
+				"%s\n%d of %d levels castable — pick one." % [base[0], castable, tiers.size()], head]
 
-	opts = _prioritize(opts)
+	opts = _in_slot_order(h, opts)
 
 	# T29: melee/ranged toggle — only offered to someone carrying both.
 	var swap := _attack_swap(h)
@@ -715,7 +789,16 @@ func target_readout(h, c) -> String:
 # board callbacks -------------------------------------------------------
 
 func board_hex_clicked(hx: Vector2i) -> void:
-	if _busy or cb.is_over() or _mode == "deploy":
+	if _busy or cb.is_over():
+		return
+	# T39: during deployment the board is the control — click a hero to pick
+	# them up, click another to trade places. Nobody has a turn yet, so none of
+	# the acting-hero checks below apply.
+	if _mode == "deploy":
+		for c in cb.combatants:
+			if c.pos == hx and deploy_swappable(c):
+				_pick_deploy(c.id)
+				return
 		return
 	var h = cb.current()
 	if h.team != "party" or not h.conscious():
@@ -776,7 +859,13 @@ func board_hex_hovered(hx: Vector2i) -> void:
 	_board.queue_redraw()
 
 func board_cancel() -> void:
-	if _mode != "idle" and _mode != "deploy" and cb and not cb.is_over() and cb.current().team == "party":
+	if _mode == "deploy":
+		if _deploy_pick != "":      # put down whoever is held; the phase itself stays open
+			_deploy_pick = ""
+			_board.queue_redraw()
+			_deploy_menu()
+		return
+	if _mode != "idle" and cb and not cb.is_over() and cb.current().team == "party":
 		_build_hero_menu(cb.current())
 
 # hero actions ---------------------------------------------------------
@@ -850,7 +939,15 @@ func _set_buttons(opts: Array) -> void:
 				+ (glyph + " " if glyph != "" else "") + String(opts[i][0])
 			b.clip_text = true
 			b.custom_minimum_size = Vector2(126, 40) * u
-		if meta.get("armed", false):
+		if meta.get("disabled", false):
+			# Still in its slot, still the same badge — just not right now. The
+			# alternative is dropping it, which moves every badge after it.
+			b.disabled = true
+			b.modulate = Color(1, 1, 1, 0.35)
+			# Appended, not prefixed: the skill's NAME leads every tooltip on
+			# this bar, and it is the line that says which badge you are over.
+			tip = tip + "\n\nNot available right now."
+		elif meta.get("armed", false):
 			# A two-press verb is armed: with no label to relabel, the badge says
 			# so by going warm, and the popup says it in words.
 			b.modulate = Color("ffb3a8")
@@ -880,6 +977,44 @@ func _chip(b: Button, text: String, preset: int, col: Color, u: float) -> void:
 	l.add_theme_constant_override("shadow_offset_y", 1)
 	b.add_child(l)
 	l.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, int(3 * u))
+
+# This character's verb badges in their frozen slot order. The first call settles
+# it — most-reached-for first, the same _prioritize() ordering the bar has always
+# opened with — and every call after it lays the same keys out in the same
+# places. A verb that has since become unavailable is still here, holding its
+# slot greyed, so nothing to its right ever moves.
+func _in_slot_order(h, opts: Array) -> Array:
+	var spine: Array = _bar_order.get(h.id, [])
+	if spine.is_empty():
+		for o in _prioritize(opts):
+			var k0 := _slot_key(o)
+			if k0 != "" and not k0 in spine:
+				spine.append(k0)
+		_bar_order[h.id] = spine
+	var by_key := {}
+	var loose: Array = []      # no key of its own, or a second entry claiming one
+	for o in opts:
+		var k := _slot_key(o)
+		if k == "" or by_key.has(k):
+			loose.append(o)
+		else:
+			by_key[k] = o
+	var out: Array = []
+	for k in spine:
+		if by_key.has(k):
+			out.append(by_key[k])
+			by_key.erase(k)
+	for o in opts:             # anything granted since the spine was settled
+		var k := _slot_key(o)
+		if by_key.has(k):
+			out.append(o)
+			by_key.erase(k)
+			spine.append(k)    # ...and it holds that slot from now on
+	out.append_array(loose)
+	return out
+
+func _slot_key(opt: Array) -> String:
+	return String(opt[3].get("freq_key", "")) if opt.size() > 3 else ""
 
 func _bump_freq(key: String) -> void:
 	_verb_freq[key] = int(_verb_freq.get(key, 0)) + 1
@@ -1198,6 +1333,29 @@ func _draw_hud_overlay() -> void:
 			_hud_overlay.draw_rect(Rect2(chip - Vector2(5, fs), Vector2(w + 10, fs + 8)), Color(0, 0, 0, 0.72))
 			_hud_overlay.draw_string(ThemeDB.fallback_font, chip, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
 				Color("ffe27a") if hot else Color("d7d7cf"))
+
+	# T26 barks, up here for the same reason the two above are: what somebody
+	# says over their own hex was being covered by whoever was standing in
+	# front of them. Still plain text over the speaker's hex at the offset it
+	# always had — only the layer changed — with a dropped shadow now that it
+	# lands on top of the figure art rather than behind it.
+	for id in _board._barks:
+		var bk: Dictionary = _board._barks[id]
+		var col := Color("ffe9b0")
+		col.a = clampf((Board.BARK_TTL - bk.age) / 0.5, 0.0, 1.0)
+		var at: Vector2 = _board._tok.get(id, Vector2.ZERO) + Vector2(0, -s * 1.15)
+		var fs2 := int(14 * fz)
+		var shade := Color(0, 0, 0, col.a * 0.8)
+		_centered_on(_hud_overlay, String(bk.text), at + Vector2(1, 1), fs2, shade)
+		_centered_on(_hud_overlay, String(bk.text), at, fs2, col)
+
+# draw_string with the string's own width taken out, so `at` is its centre.
+# Board._centered is the same thing bound to Board's own canvas; this one takes
+# the canvas, which is what lets the HUD overlay paint Board-authored text.
+static func _centered_on(ci: CanvasItem, text: String, at: Vector2, fs: int, col: Color) -> void:
+	var f := ThemeDB.fallback_font
+	var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	ci.draw_string(f, at - Vector2(w * 0.5, -fs * 0.36), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 func _log_width() -> float:
 	return clampf(size.x * 0.26, 260.0, 380.0)
@@ -1864,6 +2022,20 @@ class Board extends Control:
 				poly.append(poly[0])
 				var oc: Color = main.COL_TARGET
 				draw_polyline(poly, oc if hot else Color(oc.r, oc.g, oc.b, 0.45), 3.0 if hot else 2.0, true)
+		elif main._mode == "deploy":
+			# Who can be picked up, and who is held — the same hex-edge ring the
+			# targeting mode above uses, since it means the same thing: this hex
+			# is the one to click.
+			for c in cb.combatants:
+				if not main.deploy_swappable(c):
+					continue
+				var held: bool = c.id == main._deploy_pick
+				var hot: bool = c.pos == _hover
+				var poly := _hex_poly(_pix(c.pos), s - 3.0)
+				poly.append(poly[0])
+				var oc: Color = main.COL_PARTY
+				draw_polyline(poly, oc if (held or hot) else Color(oc.r, oc.g, oc.b, 0.40),
+					3.5 if held else (3.0 if hot else 2.0), true)
 		elif hero_turn and main._mode == "idle" and cur.econ["action"] > 0:
 			for f in cb.enemies_of(cur):
 				if cb.in_reach(cur, f):
@@ -1939,13 +2111,12 @@ class Board extends Control:
 		# _draw_hud_overlay, the CanvasLayer above Board and every tier including
 		# Figures3D — same fix as the HP bar above.
 
-		# T26 barks — plain text over the speaker's hex, fading out at the end
-		for id in _barks:
-			var bk: Dictionary = _barks[id]
-			var col := Color("ffe9b0")
-			col.a = clampf((BARK_TTL - bk.age) / 0.5, 0.0, 1.0)
-			_centered(String(bk.text), _tok.get(id, Vector2.ZERO) + Vector2(0, -s * 1.15),
-				int(14 * fz), col)
+		# T26 barks used to draw here, and went the same way as the odds chip
+		# above and the HP bar before it: a Figures3D model is a Board child, so
+		# it draws after this whole block whatever the order within it, and the
+		# bark sits lower over its hex than either of those — right where a tall
+		# rig's chest is. What a character says was being read by the model
+		# standing in front of it. They paint in main.gd's _draw_hud_overlay now.
 
 		# floating damage
 		for f in _floats:

@@ -136,11 +136,32 @@ const SNEAK_DC := 14
 # lair is discovered: calm whatever's guarding it instead of fighting
 # through. A pass loots the lair clean, same payout as winning the fight,
 # with no combat at all; a fail just means the guardians didn't buy it —
-# the caller falls through to the normal attack. One attempt per lair — like
-# search(), no cooldown, but here failing has a real cost (a fight anyway)
-# so there's no spam to guard against.
+# the caller falls through to the normal attack. Exactly one attempt per lair,
+# and alerted() below is what enforces it.
+#
+# Only on a lair nobody has been into yet. The guardians are awake the moment
+# somebody comes through the door — the party kicked it in, or the quiet way was
+# tried and failed and fell straight through to the attack (world.gd's
+# _lair_sneak_action) — and they do not settle back down because the party
+# withdrew and came back a day later. Without this you could fight half-way into
+# a warren, walk out, and then talk your way past the very guardians you had
+# been killing, for a second payout on top of the rooms you already looted.
+#
+# `entered_at` is the stamp already: mark_entered() sets it the first time the
+# party goes in, it is what starts WINDOW, and core/world_save.gd round-trips it
+# — so there is no second piece of state to keep in step, and an old save that
+# was disturbed before this rule existed reads correctly too.
+static func alerted(lair) -> bool:
+	return lair.entered_at >= 0.0
+
+# The quiet way is open at all only on a discovered, unspent, undisturbed lair.
+# world.gd asks this to decide whether to show the button; sneak_past() asks it
+# again so the rule holds whoever calls it.
+static func can_sneak(lair) -> bool:
+	return lair.discovered and not lair.looted and not alerted(lair)
+
 static func sneak_past(lair, party, rng = null) -> Dictionary:
-	if not lair.discovered or lair.looted:
+	if not can_sneak(lair):
 		return {}
 	var c = Campaign.new(party)
 	var char_id := c.best_at(SNEAK_SKILL)
