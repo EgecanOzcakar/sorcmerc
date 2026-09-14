@@ -55,14 +55,21 @@ data/              the 5e SRD export (classes/spells/species/...), a 316-
 content/           content packs that ship with the game: an example map, a
                    free campaign, and a paid DLC — all three written against
                    the same public API a player's mod uses
-tests/             83 files, headless: one per subsystem (64 test_*.gd) plus
-                   8 drive_*.gd (robots pressing real UI buttons end-to-end)
-                   and a few dev tools (shot.gd renders a frame to PNG)
+tests/             84 files, headless: one per subsystem (64 test_*.gd) plus
+                   8 drive_*.gd (robots pressing real UI buttons end-to-end),
+                   check_scripts.gd (every .gd in the project still parses)
+                   and a few dev tools (shot.gd renders a frame to PNG).
+                   Run them all with tools/run_tests.sh
 docs/              docs/expansion-plan.md is the current source of truth;
                    modding.md is the content-pack authoring guide (worlds,
                    campaigns, data overlays, free/paid DLC); combat-design.md
                    and the docs/superpowers/specs/ hex design doc are the
                    original pre-expansion design record
+tools/run_tests.sh the whole headless suite in one command — the asset import,
+                   a project-wide script parse check (tests/check_scripts.gd),
+                   then every test_*.gd and drive_*.gd. What CI runs on every
+                   pull request, and what a contributor runs locally, so the
+                   two are the same claim
 tools/gen_audio.py procedurally synthesizes every SFX/music/bark asset under
                    assets/audio/ — no external audio assets, run it again
                    after editing it to regenerate. `--rate`/`--loop` trade
@@ -138,7 +145,18 @@ applies it (`Esc` or right-click cancels, number keys still switch actions
 while aiming). Mouse wheel or `+`/`-` zooms, drag or arrow keys pan, `Home`
 resets the view, `F1` opens settings.
 
-Headless checks (no display):
+Headless checks (no display). The whole suite, which is also exactly what CI
+runs on every pull request (`.github/workflows/tests.yml`):
+
+```sh
+tools/run_tests.sh            # asset import, script parse check, every test
+tools/run_tests.sh --unit     # just tests/test_*.gd
+tools/run_tests.sh --drive    # just the robots
+tools/run_tests.sh tests/test_story.gd        # just these
+GODOT=/path/to/godot tools/run_tests.sh       # if `godot` is not on PATH
+```
+
+Or one at a time:
 
 ```sh
 godot --headless --path . -s tests/test_combat.gd     # any single subsystem test
