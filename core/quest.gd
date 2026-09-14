@@ -184,10 +184,15 @@ static func active(party) -> Array:
 	return party.quests.filter(func(q): return q["state"] in ["active", "complete"])
 
 # What Scaler.roster_for wants: {monster_id: weight} for every unfulfilled quest.
+# Only the two monster-target kinds have anything to bias toward: T91's
+# world-target kinds (and M4's story quests, which are the same shape) name a
+# party, a settlement or a lair, and asking those for a monster id they have
+# never had used to throw rather than return nothing.
 static func bias(party) -> Dictionary:
 	var out := {}
 	for q in party.quests:
-		if q["state"] == "active" and int(q["progress"]) < int(q["required"]):
+		if q["state"] == "active" and int(q["progress"]) < int(q["required"]) \
+				and q.has("target_monster_id"):
 			out[q["target_monster_id"]] = BIAS_WEIGHT
 	return out
 

@@ -92,6 +92,7 @@ func _ready() -> void:
 			note, "", c["subclasses"]))
 
 	var close := Button.new()
+	Icons.clicks(close)
 	close.text = "Close"
 	close.pressed.connect(_close)
 	col.add_child(close)

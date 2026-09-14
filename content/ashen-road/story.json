@@ -1,0 +1,195 @@
+{
+  "format": "sorcmerc-story",
+  "version": 1,
+  "title": "The Ashen Road",
+  "synopsis": "Three holdings have burned in a month and the burning is walking inland. Emberwatch has one reeve, no soldiers, and a purse. You have the rest.",
+  "cast": [
+    {"id": "maera", "name": "Maera Vulk", "role": "Reeve of Emberwatch",
+     "home": "emberwatch",
+     "about": "Third year in the office, second year without a garrison. Counts everything twice, including you."},
+    {"id": "oss", "name": "Oss Tallow", "role": "Warren-born, and nobody's goblin",
+     "home": "ash-warren",
+     "about": "Ran out of the Ash Warren ahead of the thing that took it. Would rather be paid than pitied."},
+    {"id": "sigrun", "name": "Sigrun Barrowkeep", "role": "Keeper of the Barrow of Kings",
+     "home": "barrow-of-kings",
+     "about": "Has held the door of a dead king's house for longer than Emberwatch has existed."}
+  ],
+  "chapters": [
+    {
+      "id": "smoke",
+      "title": "Smoke on the Marches",
+      "intro": "Riding in, you can smell the marches before you can see them.",
+      "beats": [
+        {
+          "id": "arrival",
+          "kind": "note",
+          "when": {},
+          "title": "The road in",
+          "then": {"journal": ["Three holdings gone in a month. The last one was close enough to Emberwatch to light its wall."]}
+        },
+        {
+          "id": "the-reeve",
+          "kind": "scene",
+          "speaker": "maera",
+          "when": {"near": "emberwatch"},
+          "title": "The Reeve of Emberwatch",
+          "lines": [
+            "\"You're the ones who take work. Good. I have work and no soldiers, which is the whole of my situation.\"",
+            "\"Goblins out of the Ash Warren have been burning holdings — except they haven't. They've been running through them. Something moved into that warren and put them on the road.\"",
+            "\"Clear it out. I'll pay what the holdings would have paid in tax, which is insulting, and it's what I have.\""
+          ],
+          "choices": [
+            {"id": "take", "text": "Name the price and we'll ride.",
+             "then": {"flags": ["hired"], "journal": ["Hired by Maera Vulk, on Emberwatch's coin."],
+                      "opinion": [{"faction": "human", "delta": 6}]}},
+            {"id": "haggle", "text": "Insulting, you said. Say a number that isn't.",
+             "then": {"flags": ["hired", "haggled"], "gold": 60,
+                      "journal": ["The reeve paid sixty up front rather than argue. She will remember it."],
+                      "opinion": [{"faction": "human", "delta": -4}]}},
+            {"id": "refuse", "text": "Not our war.",
+             "then": {"flags": ["refused"], "journal": ["You told the reeve no. The marches keep burning; the offer stays open."]}}
+          ]
+        },
+        {
+          "id": "oss-at-the-gate",
+          "kind": "scene",
+          "speaker": "oss",
+          "optional": true,
+          "when": {"all": [{"flag": "hired"}, {"near": "emberwatch", "within": 120}]},
+          "title": "Oss Tallow, at the gate",
+          "lines": [
+            "\"You're the warren job. Listen — my lot didn't burn anything. We left. There's a thing in the deep gallery that came up out of the barrow road, and it walks in cinders.\"",
+            "\"Kill it and I'll say so in front of the reeve. That's worth more to me than your coin, and about the same to you.\""
+          ],
+          "choices": [
+            {"id": "listen", "text": "Tell us what's down there.",
+             "then": {"flags": ["oss-told"], "journal": ["Oss Tallow: a cinder-thing in the deep gallery, come up from the barrow road."]}},
+            {"id": "dismiss", "text": "We'll find out ourselves.", "then": {}}
+          ]
+        },
+        {
+          "id": "warren-work",
+          "kind": "quest",
+          "when": {"flag": "hired"},
+          "quest": {
+            "id": "ashen-warren",
+            "kind": "clear_lair",
+            "target_lair_id": "ash-warren",
+            "title": "Burn out the Ash Warren",
+            "required": 1,
+            "reward": {"gold": 220}
+          },
+          "then": {"reveal_lair": "ash-warren"}
+        }
+      ],
+      "ends_when": {"quest": "ashen-warren", "state": "turned_in"}
+    },
+    {
+      "id": "barrow",
+      "title": "What the Goblins Were Running From",
+      "intro": "Whatever it was in the warren came up from somewhere, and it left a road behind it.",
+      "beats": [
+        {
+          "id": "the-keeper",
+          "kind": "scene",
+          "speaker": "sigrun",
+          "when": {"near": "emberwatch", "within": 140},
+          "title": "Sigrun Barrowkeep sends word",
+          "lines": [
+            "A rider from the west, carrying a seal older than the holding she rode to.",
+            "\"The Barrow of Kings is open. It was not opened from outside. Whatever walks out of it walks east, and east of it is you.\"",
+            "\"I have held that door for ninety years. I would rather not hold it alone for the ninety-first.\""
+          ],
+          "then": {"reveal_lair": "barrow-of-kings", "flags": ["barrow-known"],
+                   "journal": ["The Barrow of Kings stands open — from the inside."]}
+        },
+        {
+          "id": "barrow-work",
+          "kind": "quest",
+          "when": {"flag": "barrow-known"},
+          "quest": {
+            "id": "ashen-barrow",
+            "kind": "clear_lair",
+            "target_lair_id": "barrow-of-kings",
+            "title": "Shut the Barrow of Kings",
+            "required": 1,
+            "reward": {"gold": 400, "item_id": "reeves-seal"}
+          }
+        },
+        {
+          "id": "raiders-smell-blood",
+          "kind": "note",
+          "optional": true,
+          "when": {"all": [{"beat": "barrow-work"}, {"party_level": 4}]},
+          "title": "The road is worse now",
+          "then": {
+            "spawn_party": {"id": "barrow-road-raiders", "name": "The barrow-road raiders",
+                            "near": "barrow-of-kings", "offset": [80, 80], "faction": "bandit",
+                            "troops": [{"role": "heavy", "level": 4}, {"role": "light", "level": 3}]},
+            "journal": ["Somebody else is working the barrow road, and they are not there to shut it."]
+          }
+        }
+      ],
+      "ends_when": {"quest": "ashen-barrow", "state": "turned_in"}
+    },
+    {
+      "id": "wyrmscar",
+      "title": "The Thing Under the Scar",
+      "intro": "Sigrun's barrow was a door. Doors have somebody on the other side of them.",
+      "beats": [
+        {
+          "id": "what-it-was",
+          "kind": "scene",
+          "speaker": "sigrun",
+          "when": {},
+          "title": "What the keeper knew",
+          "lines": [
+            "\"The dead in my barrow were not walking. They were being called, and the call came from the Wyrmscar.\"",
+            "\"There is a thing asleep under that burn, and it has started dreaming about the vale.\"",
+            "\"I can give you the road in. I cannot give you the way out; nobody has needed one.\""
+          ],
+          "choices": [
+            {"id": "go", "text": "Give us the road.",
+             "then": {"flags": ["scar-road"], "reveal_lair": "wyrmscar",
+                      "journal": ["Sigrun gave you the road into the Wyrmscar."]}},
+            {"id": "prepare", "text": "We'll come back armed for it.",
+             "when": {"gold": 300},
+             "then": {"flags": ["scar-road"], "reveal_lair": "wyrmscar", "gold": -300,
+                      "items": [{"id": "potions-of-healing", "quantity": 3}],
+                      "journal": ["Three hundred gold went on supply for the Wyrmscar road."]}}
+          ]
+        },
+        {
+          "id": "scar-work",
+          "kind": "quest",
+          "when": {"flag": "scar-road"},
+          "quest": {
+            "id": "ashen-scar",
+            "kind": "clear_lair",
+            "target_lair_id": "wyrmscar",
+            "title": "End what sleeps in the Wyrmscar",
+            "required": 1,
+            "reward": {"gold": 900, "item_id": "ember-brand"}
+          }
+        },
+        {
+          "id": "the-vale-holds",
+          "kind": "scene",
+          "speaker": "maera",
+          "when": {"quest": "ashen-scar", "state": "turned_in"},
+          "title": "The vale holds",
+          "lines": [
+            "\"Nothing has burned in three weeks. People have started arguing about taxes again, which is how I know it's over.\"",
+            "\"Emberwatch owes you a road, a wall and a season. Take the road; we're keeping the wall.\""
+          ],
+          "then": {
+            "xp": 1200,
+            "opinion": [{"faction": "human", "delta": 25}],
+            "journal": ["The Ashen Road is closed. Emberwatch still stands, which was the whole of the job."],
+            "end_story": true
+          }
+        }
+      ]
+    }
+  ]
+}

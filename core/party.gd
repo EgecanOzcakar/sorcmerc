@@ -23,12 +23,17 @@ var quests: Array = []            # T9's quest log — dicts owned by core/quest
 # -INF — keeps the value a normal float through a JSON save round-trip) so a
 # fresh party can always rest immediately.
 var last_long_rest_at: float = -1e12
-# T9x: which of figures3d.gd's HERO_MODELS the player picked to stand for
-# the party on the open-world map — chosen freely on the Party screen, not
-# derived from the active roster's classes. "" keeps the original flat
-# PawnTex icon (scenes/world/party3d.gd's fallback), same graceful-degrade
-# contract every other model lookup this session uses.
+# T9x: who stands for the party on the open-world map — the MEMBER ID of one
+# of the active party (picked on the Party screen), resolved to that
+# character's class figure (figures3d.gd's HERO_MODELS) only at render time,
+# by scenes/world/party3d.gd. "" keeps the original flat PawnTex icon, same
+# graceful-degrade contract every other model lookup this session uses.
+# overworld_member() below is the one resolver both screens go through.
 var overworld_figure := ""
+# D3 standing orders: {"pace", "scout", "watch"} — see core/travel.gd, which
+# owns every rule about them. A dict rather than three fields so the save format
+# grows a key, not a column, when travel gains another order.
+var travel_orders: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 
@@ -62,6 +67,18 @@ func bench_list() -> Array:
 func is_active(id: String) -> bool:
 	return id in active
 
+# The level the party is actually playing at: the highest among the <= 4 who
+# fight. 1 while nobody is active, so the very first hero still starts where a
+# first hero starts. A character created later joins here rather than at 1 —
+# see scenes/creator/creator.gd's start_level.
+func active_max_level() -> int:
+	var best := 1
+	for id in active:
+		var ch = get_member(id)
+		if ch != null:
+			best = maxi(best, ch.level())
+	return best
+
 func activate(id: String) -> bool:
 	var ch = get_member(id)
 	if is_active(id) or ch == null or ch.dead or active.size() >= MAX_ACTIVE:
@@ -83,6 +100,39 @@ func swap(active_id: String, bench_id: String) -> bool:
 		return false
 	active[i] = bench_id
 	return true
+
+# --- overworld figure ------------------------------------------------------
+
+# The member whose figure stands for the party on the open-world map, or null
+# for the plain gold-ringed pawn. The single place overworld_figure is
+# resolved — the Party screen's picker and scenes/world/party3d.gd both come
+# through here, so "is this pick still good?" has exactly one answer. It is an
+# identity, not a class: benching or removing that character falls back to the
+# pawn even when somebody else in the party shares their class. (A removed
+# member keeps their id in the field rather than clearing it — re-recruit them
+# and the pick comes back; until then it just reads as the pawn.)
+#
+# ponytail: two shapes in one field. It holds a member id now, but saves
+# written before that hold a CLASS id ("wizard") — and core/world_save.gd
+# persists the field by name, so renaming it would strand every one of those
+# saves. So an id matching nobody in the roster is retried as a class id
+# against the active party, exactly the way the old code read it, and then
+# rewritten to that member's id here: each save migrates the first time
+# anything looks at it. The one ambiguity left is a character whose id happens
+# to be a class id ("wizard"), which resolves as the member — the new shape
+# wins, and that is the right way round.
+func overworld_member():
+	if overworld_figure == "":
+		return null
+	var ch = get_member(overworld_figure)
+	if ch != null:
+		return ch if is_active(ch.id) else null
+	for id in active:
+		var legacy = get_member(id)
+		if legacy != null and legacy.class_id() == overworld_figure:
+			overworld_figure = legacy.id   # migrate at the first opportunity
+			return legacy
+	return null
 
 # THE SEAM: the Characters combat gets, in marching order.
 func party_characters() -> Array:

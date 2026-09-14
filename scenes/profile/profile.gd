@@ -148,6 +148,7 @@ func _header() -> Control:
 	_fields["xp"] = xp
 
 	var b := Button.new()
+	Icons.clicks(b)
 	b.text = "Level up"
 	b.disabled = need > 0
 	b.pressed.connect(_level_up)
@@ -226,6 +227,7 @@ func _row(box: VBoxContainer, left: String, right: String, key := "", tint := CO
 
 func _btn(h: HBoxContainer, text: String, fn: Callable) -> void:
 	var b := Button.new()
+	Icons.clicks(b)
 	b.text = text
 	b.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 	b.pressed.connect(fn)
@@ -421,12 +423,14 @@ func _item_row(v: VBoxContainer, iid: String, def: Dictionary, kind: String, qty
 	# T24: a Light weapon already in hand can be moved to the off-hand slot.
 	if equipped and kind == "weapon" and _ch.is_light(iid):
 		var o := Button.new()
+		Icons.clicks(o)
 		o.text = "Main hand" if _ch.offhand == iid else "Off-hand"
 		o.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 		o.pressed.connect(toggle_offhand.bind(iid))
 		h.add_child(o)
 		_fields["offhand_btn_" + iid] = o
 	var b := Button.new()
+	Icons.clicks(b)
 	b.text = "Unequip" if equipped else "Equip"
 	b.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 	b.pressed.connect(toggle_equip.bind(iid))

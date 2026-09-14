@@ -14,6 +14,7 @@
 #   "version": 1,
 #   "elapsed": 742.5,                 // World.clock.elapsed, world-minutes
 #   "opinion": {"soldier": -12.0},    // FactionOpinion.all()
+#   "origin": {"kind": "procedural", "seed": 42},   // which builder made this map
 #   "settlements": [
 #     {"id": "riverhold", "sname": "Riverhold", "position": [0, 0], "faction": "soldier",
 #      "kind": "city", "last_visited": 120.0, "battle_at": -1.0, "pending_opinion_delta": 0.0}
@@ -23,12 +24,18 @@
 #      "goal": [80, 120], "speed": 40.0,
 #      "ai": { <core/world_ai.gd's state dict, Vector2s and RNGs encoded, see _enc> }}
 #   ],
+#   "waters": [{"position": [-190, -70], "radius": 100.0}],  // O15 terrain blobs
 #   "explored": [[80, 120], [125, 118]],  // T9x fog of war: World.explored waypoints
 #   "party": {                        // the player's own party: the roster is also in
 #     "roster": [ <character_save.gd dicts> ],   // the barracks, but gold/stash/quests
 #     "active": ["vera"], "gold": 120,           // and marching order live nowhere else
 #     "stash": [...], "quests": [...], "last_long_rest_at": 742.5,  // T9x rest cooldown
 #     "overworld_figure": "wizard"  // T9x: chosen map token, "" = the flat pawn
+#   },
+#   "story": {                        // M7: the content pack's story, mid-telling.
+#     "pack": "ashen-road",           //   {} on every run with no story on it.
+#     "chapter": "smoke", "done": false,
+#     "flags": {"hired": true}, "fired": ["meet-maera"], "journal": ["..."]
 #   }
 # }
 #
@@ -59,7 +66,12 @@ static func dir() -> String:
 static func path() -> String:
 	return dir() + "/world.json"
 
-static func to_dict(world, party = null) -> Dictionary:
+# M7: `story` is a core/mod/story_runtime.gd, or null for a run with no story
+# on it (every built-in map). A save that carries one also carries the pack id
+# it came from, so a resumed run knows which content pack to ask the registry
+# for — without it a half-told story would resume as a map with orphan quests
+# in the log.
+static func to_dict(world, party = null, story = null) -> Dictionary:
 	var settlements: Array = []
 	for s in world.settlements:
 		settlements.append({
@@ -83,7 +95,16 @@ static func to_dict(world, party = null) -> Dictionary:
 		lairs.append({
 			"id": l.id, "sname": l.sname, "position": _v(l.position),
 			"faction": l.faction, "discovered": l.discovered, "looted": l.looted,
+			"depth_cleared": l.depth_cleared,
+			"entered_at": l.entered_at, "resolved_as": l.resolved_as,
 		})
+	# T-water: same story as lairs -- terrain postdates this format, so an old
+	# save with no "waters" key loads as a world with none rather than crashing.
+	# It has to be saved at all: a lake nobody remembers is a lake the player
+	# walks through after a resume.
+	var waters: Array = []
+	for wtr in world.waters:
+		waters.append({"position": _v(wtr["position"]), "radius": float(wtr["radius"])})
 	var explored: Array = []
 	for e in world.explored:
 		explored.append(_v(e))
@@ -91,11 +112,15 @@ static func to_dict(world, party = null) -> Dictionary:
 		"format": FORMAT, "version": VERSION,
 		"elapsed": world.clock.elapsed,
 		"opinion": FactionOpinion.all(),
+		"origin": {"kind": String(world.origin.get("kind", "small")),
+			"seed": int(world.origin.get("seed", 0))},
 		"settlements": settlements,
 		"parties": parties,
 		"lairs": lairs,
+		"waters": waters,
 		"explored": explored,
 		"party": _party_dict(party),
+		"story": story.to_dict() if story != null else {},
 	}
 
 # null when the dictionary is not a world save. Applies the saved opinion as a
@@ -130,17 +155,32 @@ static func from_dict(d: Dictionary):
 			String(ld.get("faction", "goblinoid")), String(ld.get("sname", "")))
 		l.discovered = bool(ld.get("discovered", false))
 		l.looted = bool(ld.get("looted", false))
+		l.depth_cleared = int(ld.get("depth_cleared", 0))   # D1; an old save just starts at the mouth
+		l.entered_at = float(ld.get("entered_at", -1.0))    # ...and has never been disturbed
+		l.resolved_as = String(ld.get("resolved_as", ""))
 		world.add_lair(l)
+	for wd in d.get("waters", []):
+		world.add_water(_vec(wd.get("position")), float(wd.get("radius", 0.0)))
 	# T9x: an old save without "explored" just loads with none — everything
 	# fogged again, same missing-key-falls-back-to-default contract as lairs.
 	for e in d.get("explored", []):
 		world.explored.append(_vec(e))
+	# A save from before provenance existed is a small hand-placed map: that is
+	# the only kind that could have been saved back then.
+	var origin: Dictionary = d.get("origin", {})
+	world.origin = {"kind": String(origin.get("kind", "small")),
+		"seed": int(origin.get("seed", 0))}
 
 	FactionOpinion.reset()
 	var opinion: Dictionary = d.get("opinion", {})
 	for faction in opinion:
 		FactionOpinion.set_opinion(String(faction), float(opinion[faction]))
-	return {"world": world, "party": _party_from(d.get("party", {}))}
+	# M7: the story's progress rides home as a plain dictionary — rebuilding a
+	# runtime from it needs the pack, which is scenes/game/game.gd's job, not
+	# this file's. An old save (or one with no story) simply has {}.
+	var story = d.get("story", {})
+	return {"world": world, "party": _party_from(d.get("party", {})),
+		"story": story if story is Dictionary else {}}
 
 # --- the player's party ------------------------------------------------------
 # Same six fields campaign_save.gd stores; the roster round-trips through the same
@@ -157,6 +197,7 @@ static func _party_dict(party) -> Dictionary:
 		"stash": party.stash.duplicate(true), "quests": party.quests.duplicate(true),
 		"last_long_rest_at": party.last_long_rest_at,
 		"overworld_figure": party.overworld_figure,
+		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 	}
 
 static func _party_from(pd: Dictionary):
@@ -173,6 +214,7 @@ static func _party_from(pd: Dictionary):
 	party.quests = _ints(pd.get("quests", []))
 	party.last_long_rest_at = float(pd.get("last_long_rest_at", -1e12))
 	party.overworld_figure = String(pd.get("overworld_figure", ""))
+	party.travel_orders = pd.get("travel_orders", {}).duplicate(true)   # D3; an old save marches at the default
 	return party
 
 # JSON gives every number back as a float; quest counters are compared as ints.
@@ -240,7 +282,7 @@ static func _dec(v):
 
 # --- the slot ----------------------------------------------------------------
 
-static func save(world, party = null) -> void:
+static func save(world, party = null, story = null) -> void:
 	if world == null:
 		return
 	DirAccess.make_dir_recursive_absolute(dir())
@@ -248,7 +290,7 @@ static func save(world, party = null) -> void:
 	if f == null:
 		push_warning("cannot write %s" % path())
 		return
-	f.store_string(JSON.stringify(to_dict(world, party), "  "))
+	f.store_string(JSON.stringify(to_dict(world, party, story), "  "))
 	f.close()
 
 # Never crashes on a missing or corrupt file — a bad autosave is just "no autosave".

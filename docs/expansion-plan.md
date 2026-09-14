@@ -3193,3 +3193,656 @@ just don't let it get lost. Everything else from this note's source list
 (figures-into-Party3D, procedural world gen, fog of war, real defeat
 consequences, quest board + chains) was implemented in the same round —
 see the T9x/O-series entries or git log around 2026-09-13 for each.
+
+## T9y — a review of the last five commits, and the six things it found (2026-09-13)
+
+Read the five implementation commits that closed out the previous round
+(`67afe13` map-figure picker, `ec515c3` player figure + ring, `32c4c88` fog
+of war rework, `e3cc910` quick-build no-op, `34300bb` settlement screens),
+looking for what they left half-finished rather than for new features. Six
+items came out of it; the user picked all six, and they were built in
+parallel by five workers against a disjoint file split (one owner per file,
+no shared edits), then integrated and verified together.
+
+**1. Water was never saved, and was never terrain.** `world_save.gd`'s
+`to_dict` wrote settlements/parties/lairs/explored but not `waters`, and
+`from_dict` never called `add_water` — so every lake and river on every map
+silently turned to grass the first time a player resumed a save. It had gone
+unnoticed because nothing but the renderer read `water_depth()`. Both halves
+are fixed: `waters` round-trips (with the usual missing-key-falls-back
+contract), and water is now impassable — `World.is_water()`, `set_goal()`
+snapping a wet goal back to the last dry point on the line toward the party,
+and `move_toward_goal()` walking its travel in `WATER_STEP` hops so nothing
+tunnels across a river on a fat delta at 8x, with a one-step shoreline slide
+so a party skimming a bank follows it instead of gluing to it. The safety
+valve is deliberate and commented: only land→water steps are refused, so a
+party already in water (an old save, a spawn inside a blob) swims out rather
+than wedging forever. That rule immediately caught a real placement bug —
+the small map's `bandits` band started 22 units deep in its own lake — now
+moved, and asserted for all three built-in maps plus six procedural seeds.
+No pathfinder is involved and none is wanted: clicking across a lake means
+"walk to that lake". `World.origin` (`{"kind", "seed"}`) is saved alongside,
+so a resumed world can still say which builder made it.
+
+**2. The fog scan was the frame's hot loop, and is now indexed.**
+`is_explored()` was a linear scan over every waypoint the party had ever
+banked, and `scenes/world/world.gd:_draw_ground()` calls it once per ground
+cell per frame — hundreds of cells on screen, up to `MAX_CELLS` (32000)
+zoomed out. Tripling `VISION_RADIUS` in 32c4c88 put more of the map on
+screen to be scanned, and the existing `ponytail:` note had sized the
+compromise for the old radius. `explored` stays the flat, saved list (it is
+what `world_save.gd` round-trips), with a hash grid over it keyed at
+`BUCKET := VISION_RADIUS`: both queries are "is there a waypoint within R of
+this point" and both radii are `<= BUCKET`, so only the 3x3 block of cells
+around the point can hold the answer. `reveal()`'s own dedupe scan goes
+through the same index. The list is public and `world_save.gd` appends to it
+directly on load, so the index reindexes on a size mismatch rather than
+assuming `reveal()` is the only writer — a resumed world would otherwise
+come back fogged everywhere it had walked. Measured on a 1669-waypoint
+trail: **12.6x** faster over 4000 probes (9.6ms vs 121ms), with the two
+implementations returning identical answers on every probe — which is what
+`tests/test_world_fog.gd` now asserts against the old scan kept as an
+oracle. The gap widens with the length of the walk, which was the point.
+
+**3. The map now says where you are.** Two additions on top of the new fog:
+off-screen chevrons for the three nearest settlements, pinned to the frame
+edge with the faction's colour, the town's name and the travel time to it
+(minutes — `World.SPEED` is 40 units per world-minute, so an hours-only
+formatter would have labelled every town on the small map alike); and a
+top-down minimap inset (`scenes/world/minimap.gd`, new) showing the explored
+footprint, water, known settlements, the player and the camera's own view
+region, clickable to set a march goal. Three, not all: on the large and
+procedural maps every settlement is off screen most of the time and a rim of
+chevrons is no more use than none.
+
+**4. Remembered is now drawn as remembered.** 32c4c88 bought a three-tier
+fog for the ground but left everything standing on it binary — a town
+visited two days ago drew identically to the one you were standing in. Props
+now split on the same `is_visible_now()` the ground tint uses: the 2D ring,
+label and sprite fade through `World._remembered()` (desaturated toward the
+fog colour *and* thinned, because a merely darkened faction colour still
+claims full confidence), and the 3D dioramas fade with them via
+`GeometryInstance3D.transparency` in the shared rig — a full-brightness town
+on a faded footprint was exactly the mismatch to avoid.
+
+**5. The settlement screens got the depth the split was for.** 34300bb
+separated town square / market / inn / notice board but left three
+unlabelled doors and a one-button inn. The hub's doors now carry live counts
+(what is on the shelf, what is posted, whether a room would do anything);
+the market is tabbed per counter; the inn shows who is hurt and, when the
+once-a-day cooldown blocks a rest, says how long and points at the healer;
+Esc/M/I/B navigate. And the two T25 services that stock no goods — Healer
+and Librarian — are finally staffed: both existed as priced methods on
+`campaign.gd` that the open world could never reach, so they were advertised
+in a settlement's services line and then unusable. `settlement_visit.gd` now
+has open-world versions (same prices, no campaign autosave, a result dict
+instead of `say()`).
+
+**6. Identity, not class, for the map figure — and a walk.** `67afe13`
+stored a class id, so two active fighters produced two picker rows that did
+the same thing and the staleness check passed if *anyone* shared the class.
+It stores a member id now, resolving to a class at render time, with a
+self-healing back-compat path for old saves. The troop GLBs are idle-only,
+so rather than wait for art the walk is procedural and in-engine: bob, sway
+and lean driven by the position delta the layer already tracked, cadence
+scaled to real speed (so a party at 8x steps faster rather than floating),
+easing back to exactly the idle pose on arrival. Marked in the file header
+as a stand-in and what a real walk clip would delete.
+
+**7. The silent-no-op bug class, hunted rather than waited for — and it
+immediately caught a regression in the very commit that inspired it.**
+`e3cc910` fixed a button whose handler did nothing under a reachable state:
+no error, no message. `tests/drive_buttons.gd` (new) generalises that into a
+sweep — 38 pages, 794 presses — which rebuilds each screen from scratch
+before every press (so no press is judged against the state a previous one
+left), fires the control without touching its own widget state (a checkbox
+flipping its own tick cannot pass for the screen having done something), and
+asserts the Control tree or the underlying model observably moved.
+
+What it found on its first real run: **`e3cc910` had inserted
+`func _apply_quick_build()` into the middle of `_build_abilities()`**, so
+GDScript ended `_build_abilities` at the blank line above it and the entire
+six-ability grid — every array selector, every point-buy stepper, the whole
+`→ total` column — became unreachable tail code of the new function. Step 3
+of character creation had rendered three buttons and nothing else since that
+commit: "Point buy (27)" set all six scores to 8 and then offered no way to
+spend a single point. The grid only ever appeared as a side effect of
+pressing quick-build. Fixed by moving the definition out below
+`_build_abilities` (pure code motion, no logic change).
+
+It is worth being blunt about the lesson: the review that produced this
+whole round read `e3cc910` and did not catch this, because the diff read
+correctly — the bug was in where the new function landed, not in what it
+said. The sweep caught it in one run. Verified non-vacuous by mutation:
+re-introducing the indentation bug, the original quick-build no-op, a dead
+heal button and a `pass`-wired quest toggle each fail it.
+
+Blind spots are listed in the file header — the world map and party screen
+are a deliberate follow-up (one more `sweep()` call each), and combat itself
+stays `drive_ui.gd`'s job.
+
+**Honest gaps left:** no pathfinding around water (a march into a lake stops
+at the bank, by design); the roaming-band props are drawn at their live
+position even when only remembered, because the map keeps no last-known
+position to draw instead; the diorama fade fades without desaturating, where
+the 2D layer does both; and persistent faction warfare (the note above) is
+still untouched.
+
+### How T9y was actually run — five local agents, one working tree
+
+Recorded because the split is the reason this round landed as one coherent
+change rather than five conflicting ones, and because two of its failures
+are worth not repeating.
+
+**The partition.** Five workers in a single working tree (no git worktrees,
+no branches per worker), divided by *file ownership* rather than by feature.
+Each brief named the exact files that worker could edit and forbade
+everything else, including git itself — nobody committed, nobody branched,
+nobody stashed; the parent session integrated and made the single commit.
+Ownership was:
+
+| worker | owns | built |
+|---|---|---|
+| parent | `scenes/world/world.gd`, `core/settlement_visit.gd`, the three diorama layers, docs | items 3-5, integration |
+| core | `core/world.gd`, `core/world_save.gd`, the two map builders | item 1 |
+| figures | `core/party.gd`, `scenes/party/party.gd`, `scenes/world/party3d.gd` | item 6 |
+| minimap | **new files only** — `scenes/world/minimap.gd`, its test | item 3's inset |
+| sweep | **new file** `tests/drive_buttons.gd`, plus fixes confined to the screens nobody else held | item 7 |
+
+`scenes/world/world.gd` is 1489 lines and every UI item wanted it, so it was
+not split at all — the parent kept it and did items 3-5 itself while the
+other four ran. That is the same lesson `docs/improvements.md` recorded for
+`scenes/main.gd` back in the MVP plan ("the one contention point"), applied
+instead of relearned.
+
+**Contracts agreed before the code existed**, so a worker could write
+against something another worker had not written yet: the minimap's public
+surface (`world_map`, `DEFAULT_SIZE`, its own placement left to the parent)
+was specified in the brief, and the parent wired it before the file landed;
+`World.origin`'s exact shape (`{"kind", "seed"}`) was pinned in two briefs
+at once. The figures worker was forbidden `world_save.gd` because the core
+worker held it — which is *why* `overworld_figure` kept its name and changed
+its meaning instead of being renamed, and therefore why old saves still
+load.
+
+**Cross-worker findings were reported, not fixed.** The core worker found
+the small map's bandit band standing in a lake, in a file it did not own,
+and wrote it up with the corrected coordinate instead of reaching for it;
+the parent moved the band and added the assertion. The sweep worker found a
+bug in `scenes/world/settlements3d.gd` the same way (below). Ownership held
+in both directions — no worker silently edited outside its lane, and no
+finding was dropped on the floor.
+
+**Two failures, both the parent's:**
+
+1. *A task fell out of a brief.* The core worker's brief was written with
+   three tasks; the fog-index work (item 2) was in its title and not in its
+   body, so it was never dispatched. It surfaced only when the completion
+   report came back without it, and the parent then wrote it directly. The
+   brief body is the contract — a task named anywhere else does not exist.
+2. *A scripted edit deleted a function.* The parent hoisted `_fade()` into
+   the shared diorama base with a Python slice over `settlements3d.gd` whose
+   end anchor sat below `reset()`, silently removing it. The system's own
+   file-changed excerpt was read as confirmation — it showed only the region
+   that survived. It was caught because the sweep worker, running the suite
+   against its own files, reported `world.gd` calling a `reset()` that "does
+   not currently exist". `git diff` after every scripted edit would have
+   caught it in seconds; reading an excerpt of the result would not, and did
+   not.
+
+**Two smaller frictions worth knowing:** running the full suite while
+workers were still editing produced a transient "Compilation failed" (a file
+was read mid-write) and one 4-minute test timeout from five headless Godot
+processes competing for the same CPU — neither was a real failure, and both
+cost time to rule out. Integration runs belong after the workers are done,
+not alongside them. And a finished worker re-notifies when its own
+background waiters exit: those repeats carry nothing new and should be read
+as such rather than acted on twice.
+
+## Scope revision — open-world sandbox RPG, not a campaign map (locked 2026-09-13)
+
+Supersedes the "Mount & Blade-style open world" lock of 2026-09-11 (above).
+The open world itself stays; what it is *for* changes. Direct user direction:
+an open-world sandbox RPG with D&D combat, explicitly not M&B's overworld
+gameplay.
+
+### Why, in one paragraph — this is mechanical, not a matter of taste
+
+The world layer as built undermines the combat engine it exists to serve.
+5e only sings across an **adventuring day**: slots, HP, short-rest pools and
+once-per-day abilities draining over several fights before a long rest.
+That attrition is where class balance lives, and T38/T40 tuned it
+carefully. But open-world fights are sparse and isolated — meet a band,
+fight it, walk away, rest. `LONG_REST_COOLDOWN` is the only brake, so
+optimal play is one fight per day at full resources. Every fight is a fresh
+nova: the Fighter's short-rest economy is inert, the Wizard never rations,
+and `scaler.gd`'s difficulty tiers measure a situation the player is never
+forced into. Fixing that removes most of the "this feels like M&B" feeling
+as a side effect, because the map stops being a corridor between menus and
+starts costing something to cross.
+
+### Locked with the user (2026-09-13 Q&A)
+
+- **Core loop: the delve cycle.** Town → wilderness → site → back. Rumors
+  and the board point at sites; sites hold treasure and XP; deeper regions
+  need higher levels. Rejected: survival-crawl (no safe base), a pure
+  reputation sandbox, and a no-central-pull sandbox.
+- **Sites have interiors.** A lair becomes 3-6 linked encounters on ONE set
+  of resources. This is the adventuring day, and it is the whole point.
+  Rejected: the lightweight 2-3 fight version, and keeping one-fight lairs.
+- **Travel: keep the 1x-8x fast-forward AND add the decisions and events.**
+  The user picked both halves deliberately, and they are only in tension if
+  the clock is dumb. The synthesis, and the design this locks:
+  - **Standing orders, not per-watch prompts.** Pace (careful / normal /
+    forced), who scouts, who keeps watch — set once as a travel policy, not
+    asked every few hours. Fast-forward stays fast because there is nothing
+    to answer while nothing is happening.
+  - **The clock auto-pauses on anything that matters.** An event, a
+    sighting, a site coming into view: `world.clock.pause()` (already the
+    mechanism `_check_visit`/`_check_encounter`/`_check_lairs` gate on) and
+    surface the decision. 8x is then safe rather than a way to skip content
+    — it is "nothing is happening, wake me when it does."
+  - Standing orders are what *decide* how an event resolves (who rolls,
+    with what advantage, what options exist), so the decisions have teeth
+    without costing a prompt per watch.
+- **Party scale: four heroes, permanently.** Growth is levels, gear and
+  reputation — never headcount. `RoamingParty.troops[]` stays cosmetic
+  flavour for NPC bands and never becomes a player-facing system.
+  Rejected: hirelings, and growing into a warband.
+
+### Keep / reframe / cut
+
+**Keep, unchanged** — all of it serves a delve cycle as well as it served a
+campaign map, which is why this pivot is cheap: the free 2D map, three-tier
+fog of war, settlement beacons, the minimap and off-screen chevrons (T9y),
+water as terrain, settlements with market/inn/board/healer/librarian,
+camping with ambush risk, foraging, Trance, the short/long rest economy,
+lairs as things found by a Survival check, faction opinion as plumbing.
+
+**Reframe**
+
+| thing | from | to |
+|---|---|---|
+| lairs | one fight, a flat gold number, spent forever | a site with an interior: several encounters, per-room loot, a boss cache |
+| roaming bands | a proximity radius that fires a fight *at* you | an approach you choose: avoid / ambush / parley / engage |
+| the clock | a strategy-layer speed control | fast-forward that auto-pauses on anything real |
+| faction opinion | a price multiplier | access and people: who hires you, who shuts the gate |
+| quest board | kill-count and fetch against monster ids | work that points at sites |
+
+**Cut, and say so out loud**
+
+- **Persistent faction warfare** — the standing deferred note above is now a
+  decision, not a gap. It serves a strategy game, not four adventurers, and
+  it is the most M&B thing left on the board. Not building it is the
+  clearest signal of which game this is.
+- **Trade-route economics** (arbitrage, caravans, price spreads) and any
+  form of troop recruitment.
+- **Off-screen NPC-vs-NPC battles as a feature to grow.** `world_battle.gd`
+  stays as world texture; it does not get deeper. Nobody watches them.
+
+### Build order
+
+**D1 — sites: the adventuring day, from a system already written.**
+`core/campaign.gd` is a 5-stage route (`STAGE_POSITIONS`, `PICK_MIN/MAX`
+branching picks, `SUPPORT_KINDS` treasure/rest nodes, `BOSS_POOL`, and
+`short_rests_used`/`long_rests_used` already tracked) with 1140 assertions
+and a `drive_campaign.gd` robot, dormant behind `SORCMERC_LINEAR_CAMPAIGN=1`
+since the open world landed. **That is a dungeon.** Re-point it as a site
+interior rather than writing one: stage count from the site's tier, no
+merchant nodes inside a goblin warren, rest nodes offer a short rest only,
+long rests forbidden outright (cap `long_rests_used` at 0 — the attrition
+is the feature), roster themed from the site's faction through the gating
+`scaler.gd` already does. The linear-campaign flag stays working; this is a
+second profile over the same engine, not a rewrite of it.
+
+**D2 — lairs become sites.** `world.gd`'s `_lair_action()` enters a D1 site
+instead of launching one fight; `world_lairs.gd`'s flat `loot()` gives way
+to the site's own caches. A site can be left part-cleared and re-entered,
+which is what makes "withdraw" a real choice rather than a loss. Depends D1.
+
+**D3 — travel: standing orders + an event table + auto-pause.** New
+`core/travel.gd`: the policy (pace / scout / watch), a seeded event table
+rolled on the world clock, and the auto-pause contract above. Events resolve
+through the skill-check idiom every overworld check already uses
+(`WorldLairs.search`, `WorldCamp.watch_check`, `WorldForage.check`) — name
+the check, name the roll, never just "something happened".
+
+**D4 — encounters you choose.** A roaming band in range opens an approach
+step instead of a fight: avoid (Stealth), ambush (Survival), parley
+(Persuasion), engage. Every one of those idioms exists already
+(`sneak_past`, `persuade`, `watch_check`, and T39's surprise/scouting
+deployment) — this is wiring, not new mechanics. Depends D3.
+
+**D5 — rumors.** How a site gets onto the map: the inn sells information, a
+turned-in job points at the next place, a survivor tells you what is down
+there. Replaces "wander until a Survival check pings" as the primary
+discovery path (that stays as the secondary one). Depends D2.
+
+**D6 — regions and tiers.** Level-banded areas so "further out" means
+something and the delve cycle has somewhere to go. `scaler.gd` already has
+tiers; this is placing them on the map. Depends D2, D5.
+
+### Non-goals for this arc
+
+No narrative/dialogue layer yet (still deliberate — see README) — *superseded
+by M1–M8 below, which added one as a content-pack API rather than as a
+hardcoded campaign*; no crafting;
+no settlement building; no mounts; no romance; no simulation of anything the
+player cannot see. The party is four people. If a feature only makes sense
+for an army or a lord, it is out by construction.
+
+### Not yet decided
+
+- Whether a site's interior is *drawn* (a mapped dungeon the party moves
+  through) or stays a node graph like `campaign.gd`'s route screen. D1 works
+  either way; the node graph is what already exists and is what D1 assumes.
+- Whether withdrawing from a part-cleared site restocks it over time.
+- What death means in a sandbox with no run boundary — `world.gd`'s
+  `_retreat()` soft landing was written for a campaign map and should be
+  revisited once sites exist, because a site is where a party can actually
+  be lost.
+
+### Spike — the DMG body-count multiplier (2026-09-13, built, measured, reverted)
+
+Asked for directly after the D1 measurements showed the wilderness draw
+producing wildly inconsistent fights under one "easy" label. The diagnosis
+was that `Scaler._score()` is linear in monster count — the eighth body is
+priced like the first — while 5e's own encounter rules multiply by monster
+count precisely because what beats a party is the number of turns the other
+side gets. Confirmed empirically first: holding the budget fixed and spending
+it on twice as many half-strength monsters took the fey warband from 53% to
+27%.
+
+**It works for its purpose.** With the term in and TIER re-calibrated by
+measurement, the level-3 faction spread tightened from a 47-point range to
+30: fey 53% → 73%, cultist 73% → 90%.
+
+**It was reverted anyway**, because it destabilises the level/tier
+calibration. Crowd pricing forces every TIER up by roughly half, and at a
+level-8 budget the generator answers a bigger budget with bigger monsters
+rather than more of them — which lands squarely on the chunk overpricing
+`scaler.gd`'s own "Known ceiling" note already describes. Five
+configurations, each with TIER re-calibrated by sweep rather than guessed:
+
+| crowd term | level-3 | level-8 |
+|---|---|---|
+| DMG table (x1.5 / x2 / x2.5) | 97.0 / 85.0 / 71.5 ✓ | 96.7 / 93.3 / 95.0 — flat, unordered |
+| `pow(n, 0.40)` | 86.5 / 82.0 / 72.5 ✓ | 93.3 / 95.0 / 96.7 — **inverted** |
+| `pow(n, 0.25)` | — | ordered but flat (94 / 91 …) |
+| `pow(min(n,5), 0.40)` | wants TIER ~1.05–2.03 | needs TIER ≥ 2.4 for spread |
+| `pow(n, 0.15)` | 88.5 / 82.0 / 63.5 ✗ | 90.0 / 98.3 / 76.7 — unordered |
+
+No single TIER triple satisfies both parties. The knob that reconciles them
+is **CURVE** — how fast the budget grows with party power — which was left at
+0.90 throughout and is the thing that actually differs between a level-3 and
+a level-8 fight.
+
+**For whoever picks this up:** calibrate CURVE and TIER together against both
+parties, and fix `estimate()`'s chunk pricing first — the crowd term and the
+chunk bias pull in opposite directions and compound, so tuning either alone
+chases its own tail. Three knobs, measured, not a one-line addition. The
+measurements above are in `core/scaler.gd`'s TUNING header so the next
+attempt starts from results rather than from the idea.
+
+Method note, and it cost a full round to learn: `core/encounter.gd` documents
+`spec["seed"]` as "omit for a random fight", and `tests/test_scaler.gd`'s own
+sweep pins it. A harness that does not pin it produces numbers that move run
+to run — an earlier pass in this round reported a faction split that did not
+survive re-measurement. Pin the seed, or do not quote the number.
+
+---
+
+## D1–D6, built (2026-09-13)
+
+The build order set out in the scope revision above, as it actually shipped.
+Each item names the commit's own claim and the number that backs it; the
+per-file headers carry the measured grids in full.
+
+**D1 — sites.** `core/site.gd`: a lair is 3–6 rooms run on ONE set of
+resources. No long rests inside, short rests as a room kind, merchant nodes
+excluded (nobody is selling potions in a goblin warren). The adventuring day,
+from `campaign.gd`'s existing 5-stage route engine rather than from a new
+dungeon system. Site defeat takes a third of the loose stash and leaves
+equipped gear alone, and the lair resets — the user's own call between the
+two options offered.
+
+**D2 — lairs become sites.** `_lair_action()` enters a site; withdrawing
+part-cleared is a real choice because `depth_cleared` persists. A lair left
+alone resolves without the party after `WorldLairs.WINDOW` (2880 minutes) —
+cleared by somebody else or abandoned — and says which, out loud.
+
+**D3 — travel.** `core/travel.gd`: standing orders (pace / scout / watch),
+six road events on a seeded table, and the auto-pause contract. Every event
+names the check and names the roll, and credits the standing order that put
+that character on the job — which is the only place the player ever sees an
+order they set hours ago pay off.
+
+**D4 — encounters you choose.** `core/approach.gd`: avoid / parley / ambush /
+engage, each priced on the card before it is pressed. Ambush hands the first
+round over on a failure, which is what stops it dominating engage. Parley's
+deny-list is its own (`MINDLESS`) rather than `WorldAI.CIVILIZED` — by that
+list a bandit is a monster, and a bandit wanting paid is the most obviously
+bribable thing on the map.
+
+**D5 — rumors.** `core/rumors.gd`: a town sells what its people know, a
+turned-in job earns a lead for nothing. The thing pinned hardest is that a
+lair heard about in a common room sets the SAME `discovered` flag a Survival
+check sets — one flag, one meaning, so nothing downstream learns there is a
+second kind of found.
+
+**D6 — regions and tiers.** `core/regions.gd`: four rings anchored on the
+human settlement and sized to the map's own extent. The rule is a clamp, not
+a replacement — inside its band a fight is still built for the party standing
+there, so every win rate in `scaler.gd` still means what it says; outside it,
+content stops following. Measured, 80 seeds a cell, fight seed pinned:
+
+| party | content | scale | win |
+|---|---|---|---|
+| lvl 3 | lvl 3 | x1.00 | 92.5% — in band, untouched |
+| lvl 10 | lvl 3 | x0.41 | 100% — the heartland is a memory |
+| lvl 3 | lvl 6 | x1.86 | 37.5% — one band out: "not yet" |
+| lvl 3 | lvl 10 | x2.45 | 27.5% — the deeps, at level 3 |
+
+That is the destination the delve cycle was missing: the frontier is visible
+from the start, genuinely lethal, and the thing that opens it is levels — not
+a key, a quest flag, or a wall. It is signposted four ways before anybody
+walks into it (HUD band label, the inn's leads, the lair button, and a
+one-time card when riding out above your level), because a level-banded map's
+one failure mode is a wall you only learn about by hitting it.
+
+**D6.1 — the heartland was a bubble.** The seams shipped at 0.30 / 0.60 / 0.85
+of the map's extent, which *sounds* like four comparable countries and is not:
+a ring's share of a map goes as the square of its radius, so those seams gave
+the four bands 9% / 27% / 36% / 28% of the map. The heartland — the band built
+for levels 1-3, which is the whole early game — was a third the size of any of
+its neighbours. On the shipped maps it came out 237 units across (small) and
+592 (large), and held the starting town and nothing else: the first landmark a
+new party could walk to was already Marches content built for level 3-6.
+
+The seams are now equal-area — sqrt(1/4), sqrt(2/4), sqrt(3/4) = 0.50 / 0.71 /
+0.87 — so each country really is a quarter of the map. Nothing else in D6
+moved: the clamp, the ruler, and every measured win rate above are untouched,
+because widening a ring changes *where* a seam is, not what happens either side
+of it.
+
+| | old | new |
+|---|---|---|
+| heartland / marches / frontier / deeps, by area | 9 / 27 / 36 / 28% | 25 / 25 / 25 / 24% |
+| heartland radius, small map | 237 | 394 |
+| heartland radius, large map | 592 | 986 |
+| generated maps placing a lair inside a settlement's 300-unit gap (400 seeds) | 4 | 0 |
+
+Two things fell out of it. Oakford — the second human town, and the obvious
+first ride out of Riverhold — is now in the country built for the party that
+can reach it. And the goblin warren, whose faction's home band is the heartland
+(`Regions.HOMES`), was hand-placed at frac 0.71 on *both* hand-placed maps: two
+countries from home, a rule the procedural builder has always enforced and the
+hand-placed ones silently broke. Pulled in to 0.45 (small) and 0.39 (large),
+clear of every settlement, lair and both banks of the river. That last one is
+what actually puts something in the near ring; a wider empty bubble would still
+have been an empty bubble.
+
+### Still open
+
+- **The three-knob scaler retune** (CURVE + TIER + `estimate()`'s chunk
+  pricing), described in the body-count spike record above. D6 deliberately
+  did not touch it: the band clamp reads scaler's existing curve at a
+  different point rather than changing its shape, which is why no measured
+  number moved.
+- **Whether a site's interior is drawn** rather than being a node graph. D1
+  works either way and assumes the node graph, which is what exists.
+- **Whether withdrawing from a part-cleared site restocks it over time.**
+  Currently it does not; the D1 window expires the whole lair instead.
+
+## M1–M8 — the content pack API: worlds, campaigns, and DLC (built 2026-09-14)
+
+The narrative layer landed, and it landed as a public API rather than as a
+hardcoded campaign. The ask was three things that turned out to be one thing:
+let the community build worlds out of the features the game already has; grow
+that into campaigns with stories, quest chains and characters; and ship the
+team's own stories through the same route, some free and some paid.
+
+They are one thing because the alternative — a DLC pipeline for us and a mod
+pipeline for everyone else — has a known ending: the mod half rots, because
+nothing anybody cares about is running through it. So there is one format, one
+loader, one validator, and the three packs the game ships (`content/`) are
+written against the same API a stranger's zip file uses. `docs/modding.md` is
+the authoring guide; this is the record of what was built and why it is shaped
+this way.
+
+**M1 manifest / M6 registry.** A pack is a directory with a `pack.json`. Two
+roots — `res://content/` (ours) and `user://mods/` (theirs) — one pipeline. A
+pack's `official` flag comes from the root it was found in, never from
+anything it can write about itself, and the first root wins a duplicate id, so
+a mod cannot shadow a DLC by claiming its name. Everything a pack declares is
+parsed and checked at **scan** time, not play time: an author learns their
+story is broken from the browser, and a player never gets three chapters into
+one that cannot finish.
+
+**Data only, and that is the security model.** A pack ships no GDScript, and
+there is no hook or script field anywhere in the formats. Community content is
+downloaded from strangers and run on a player's machine; a pack that could
+carry code would be a way to run that code. Everything is JSON interpreted by
+`core/mod/`, which is also what lets official and community content share one
+trust level instead of needing two.
+
+**M3 worlds.** `world.json` places everything the three built-in builders
+place: settlements, hidden lairs, roaming bands with a behavior and a roster,
+water (a `river` polyline is the one piece of sugar, because every hand-placed
+river in this project is a for-loop stamping blobs and making an author write
+that in JSON means making them write it wrong), and the start. Nothing in it is
+a new concept, which is the point.
+
+The thing that makes a pack map read like a designed map is that **it declares
+no difficulty at all**. D6's bands are measured off the map's own extent and
+anchored on its human settlement, so an author gets the level curve by placing
+things — goblins near home, the dragon at the edge. `tests/test_world_pack.gd`
+asserts exactly that on the shipped campaign: three lairs, three different
+bands, no region data in the pack.
+
+**M4/M5 stories, and the decision the whole layer rests on.** A story is
+chapters of beats; a beat fires the first time its condition holds. Conditions
+are **predicates over state the game already keeps** — a flag the story set, a
+quest's state in the party's own log, where the player is standing, which lairs
+are cleared, party level, the day, faction opinion — and the runtime is
+*polled*, once a frame, next to the lair and forage and travel checks it sits
+beside in `world.gd`.
+
+Events would have been the obvious design and would have been worse: an event
+bus means every system in the game has to publish into it before a story can
+react to it, which means a modder can only write stories about the systems
+somebody remembered to wire. Predicates need nothing. A content pack can tell a
+story about systems that have never heard of it, and the integration into a
+2278-line world screen is one `_check_story()` call.
+
+The second decision: **a story quest is an ordinary quest**. A quest beat
+appends to `party.quests`, and from there the existing machinery — kill
+tracking, the turn-in at any merchant, the log panel, the encounter spawn bias
+— picks it up with no idea a story is involved. A quest chain is quests that
+unlock each other, not a second quest system.
+
+**M2 free and paid.** `"access": "paid"` plus a `product_id`. A paid pack the
+player does not own is listed but **not loaded** — not loaded-and-hidden, so a
+locked DLC cannot leak a monster, an item name or a line of its story through
+some other system that reads the catalog. What is owned lives in
+`user://entitlements.json`; a storefront integration calls `Entitlement.sync()`
+once at boot and everything downstream keeps working, offline. Playtest builds
+own everything, through the same switch `progression.gd` already uses. The game
+is not the storefront and has no purchase button.
+
+**M5 data overlays.** A pack's records are folded into `catalog.gd`'s own
+parsed arrays, merged by id — so a pack can add a monster *and* retune one of
+ours, and the result is a monster to the faction rosters, the encounter builder
+and the bestiary screen with nothing anywhere made pack-aware. The one trap
+found on the way: `scaler.gd` caches its faction pools off the bestiary, so
+changing what the bestiary is has to drop that cache (`Scaler.forget_pools()`),
+or a pack's monsters exist everywhere except in a fight.
+
+**M7/M8 the screens.** A browser on the title screen (every pack, its state,
+and every problem with the broken ones spelled out in full — an author's only
+feedback loop is that list, so a truncated error is a bug report nobody can
+act on), a beat card, and a journal. The autosave carries the story's progress
+and the id of the pack it belongs to; a resume whose pack has since been
+uninstalled, disabled or locked comes back as the map it already is, with the
+story simply not being told, rather than as a broken save.
+
+### Shipped content
+
+| Pack | |
+|---|---|
+| `content/example-world/` | a map and nothing else — the shortest thing that is a working pack, and the one to copy |
+| `content/ashen-road/` | free, three chapters, its own map, three cast members, a quest chain, two monsters and two items |
+| `content/vault-of-the-ember-crown/` | paid, `requires` the above, and the reason the DLC path is exercised by our own content rather than only by a test |
+
+### Fixed on the way
+
+- `WorldAI.wander()` documented taking a bare point and crashed on one
+  (`"position" in <Vector2>` is an error, not a false). The Vector2 half of its
+  own contract now works, which is what data-driven placement needs.
+- `world.gd` had twelve copies of `WorldSave.save(world, party)`; they are one
+  `_autosave()`, which is also where the story now rides along.
+
+### Still open
+
+- **A story cannot yet author a fight.** Beats can hand over quests, move the
+  purse, reveal lairs and spawn bands, but a scripted set-piece encounter (this
+  roster, on this board, at this moment) goes through the same generated
+  pipeline as everything else. `Encounter`'s spec dictionary is the obvious
+  seam and is deliberately not exposed yet.
+- **Story-only packs have nowhere to be told.** The format allows a pack with a
+  story and no world; starting one drops it on the default map, where its
+  `near`/`lair_cleared` conditions name places that do not exist. Either they
+  should declare a world they attach to, or the browser should ask which map to
+  tell them on.
+- **No localisation seam.** Every string in a pack is the string the player
+  reads.
+- **`user://mods/` on the web build.** The browser export has no real user
+  directory to drop a zip into, so community packs are a desktop feature for
+  now; `res://content/` ships everywhere.
+
+## A new hero joins at the party's level (2026-09-14)
+
+Creating a character mid-game handed you a level-1 hero to walk into content
+the rest of the party is levels past — a replacement for a dead veteran was a
+liability, and the fifth build you wanted to try was unplayable. The creator
+now builds at `Party.active_max_level()`: the highest level among the <= 4 who
+fight (1 while nobody does, so the first hero is still a first hero).
+
+`scenes/party/party.gd` injects it with `creator.set_start_level(...)` before
+the overlay opens; `Leveling.grant_levels()` appends the levels and banks
+exactly `xp_for_level(target)`, so the new arrival is not instantly owed
+another one. Nothing else in the creator changed: every grant those levels
+bring arrives as a pending choice the way level 1's do, so the Skills &
+Background and Review steps ask for the subclass, the ASI-or-feat and the
+spells, and Confirm stays blocked until they are all made. The three presets
+go the same way — they are level-3 builds with their choices already made, so
+they are topped up to the party's level rather than rebuilt.
+
+The catch-up is a gift, not a haul, and the meta-progression must not be able
+to tell the difference — so it touches neither side of `core/progression.gd`:
+lifetime XP (which buys species and classes) and class XP (which buys
+subclasses) are still only ever written by `core/campaign.gd` out of XP earned
+in a fight. Milestone achievements stay out for the same reason: being handed
+level 5 is not reaching level 5. Covered by `tests/test_leveling.gd`'s
+`_catch_up` / `_catch_up_in_creator` (the model, then the real creator scene)
+and `tests/test_party.gd`'s `test_active_max_level`.

@@ -72,6 +72,62 @@ static func loot(lair) -> Dictionary:
 	var idx: int = maxi(0, Scaler.FACTIONS.find(lair.faction))
 	return {"gold": LOOT_BASE + idx * LOOT_PER_FACTION_INDEX}
 
+# --- D1: a disturbed lair does not wait for you -----------------------------
+#
+# Kicking the door starts a clock. Withdraw from a half-cleared warren and you
+# have a day or two to come back and finish it; leave it longer and it resolves
+# without you — either somebody else got there, or whatever lived in it packed
+# up and moved on now that it is known.
+#
+# The point is that withdrawing costs something other than time. Without this,
+# "back out and come back at full strength" is free and strictly correct, which
+# makes the press-on-or-get-out decision D1 is built around a fake one. With it,
+# retreating is a real trade: your party's hit points against the lair itself.
+#
+# It is deliberately NOT a punishment for losing. A wipe resets the lair and
+# leaves it standing (core/site.gd's wipe_penalty) — you can always go back and
+# try again. This only fires on a lair the party walked away from intact.
+const WINDOW := 2880.0            # two in-game days; long enough to cross the map and heal, short enough to be a deadline
+const OUTCOMES := ["cleared", "abandoned"]
+
+static func window_left(lair, now: float) -> float:
+	if lair.entered_at < 0.0 or lair.looted:
+		return 0.0
+	return maxf(0.0, WINDOW - (now - lair.entered_at))
+
+# Stamps the clock the first time the party goes in. Idempotent: re-entering a
+# lair you already disturbed does not buy you another two days.
+static func mark_entered(lair, now: float) -> void:
+	if lair.entered_at < 0.0:
+		lair.entered_at = now
+
+# Resolves every lair whose window has run out, and returns them so the caller
+# can say so out loud — a landmark quietly going grey with no explanation reads
+# as a bug. Called once a frame from the world screen; cheap, there are five.
+static func expire(world, now: float) -> Array:
+	var gone: Array = []
+	for l in world.lairs:
+		if l.looted or l.entered_at < 0.0:
+			continue
+		if now - l.entered_at < WINDOW:
+			continue
+		# Seeded off the lair, so the same warren always ends the same way —
+		# reloading cannot reroll it into the outcome you preferred.
+		l.resolved_as = OUTCOMES[absi(hash("resolve|%s" % l.id)) % OUTCOMES.size()]
+		l.looted = true
+		gone.append(l)
+	return gone
+
+# What happened, in words. Separate from expire() so the world screen is not
+# the only thing that can explain it.
+static func resolution_text(lair) -> String:
+	match lair.resolved_as:
+		"cleared":
+			return "%s has been cleared out — somebody else got there first." % lair.sname
+		"abandoned":
+			return "%s stands empty. Whatever was in it moved on once it was found." % lair.sname
+	return ""
+
 # --- T9x: a quieter approach ------------------------------------------------
 const SNEAK_SKILL := "animalhandling"
 const SNEAK_DC := 14

@@ -1095,6 +1095,27 @@ func _draw_hud_overlay() -> void:
 		var tp := p if c.is_down() else p + Vector2(0, -rad * 0.55)
 		Board._paint_token_hud(_hud_overlay, c, _board._hp.get(c.id, float(c.hp)), p, tp, s, rad, fz)
 
+	# The attack/save/shove odds chip: same layer as the HP bar above, and for
+	# the same reason — a Figures3D model is a Board child, so it draws on top
+	# of anything Board paints regardless of ordering, and a tall figure (the
+	# ranger rig, notably) could stand over the chip's fixed screen offset and
+	# block the readout the player is hovering to see.
+	var cur = cb.current()
+	var hero_turn: bool = cur and cur.team == "party" and cur.conscious()
+	if hero_turn and _mode == "target":
+		for c in cb.combatants:
+			if not _valid_target(cur, c):
+				continue
+			var tp2 := _board._pix(c.pos)
+			var hot: bool = c.pos == _board._hover
+			var txt: String = target_readout(cur, c)
+			var fs := int((20 if hot else 15) * fz)
+			var w := ThemeDB.fallback_font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var chip := tp2 + Vector2(-w / 2.0, -s * 1.35)
+			_hud_overlay.draw_rect(Rect2(chip - Vector2(5, fs), Vector2(w + 10, fs + 8)), Color(0, 0, 0, 0.72))
+			_hud_overlay.draw_string(ThemeDB.fallback_font, chip, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
+				Color("ffe27a") if hot else Color("d7d7cf"))
+
 func _log_width() -> float:
 	return clampf(size.x * 0.26, 260.0, 380.0)
 
@@ -1827,22 +1848,13 @@ class Board extends Control:
 
 		_draw_fx(s)   # projectiles / spell flashes sit over the tokens
 
-		# the odds chip itself draws last of the per-target overlay — after every
-		# token's own circle/badge/HP bar/condition tags, which used to be drawn
-		# on top of it and could cover the readout depending on hex spacing.
-		if hero_turn and main._mode == "target":
-			for c in cb.combatants:
-				if not main._valid_target(cur, c):
-					continue
-				var tp := _pix(c.pos)
-				var hot: bool = c.pos == _hover
-				var txt: String = main.target_readout(cur, c)
-				var fs := int((20 if hot else 15) * fz)
-				var w := ThemeDB.fallback_font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-				var chip := tp + Vector2(-w / 2.0, -s * 1.35)
-				draw_rect(Rect2(chip - Vector2(5, fs), Vector2(w + 10, fs + 8)), Color(0, 0, 0, 0.72))
-				draw_string(ThemeDB.fallback_font, chip, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
-					Color("ffe27a") if hot else Color("d7d7cf"))
+		# The odds chip used to draw here, last, on the theory that nothing after it
+		# would cover it — but a Figures3D model is a Board *child*, so it draws
+		# after this whole block regardless of order within it, and a tall figure
+		# (the ranger rig runs taller than most) could stand right over the chip's
+		# fixed -s*1.35 offset and block it. It now lives in main.gd's
+		# _draw_hud_overlay, the CanvasLayer above Board and every tier including
+		# Figures3D — same fix as the HP bar above.
 
 		# T26 barks — plain text over the speaker's hex, fading out at the end
 		for id in _barks:

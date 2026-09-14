@@ -52,9 +52,13 @@ func reset(world) -> void:
 
 
 func _reposition() -> void:
+	var ppos := _player_pos()
 	for l in world_map.world.lairs:
 		var n: Node3D = _dioramas.get(l.id)
 		if n == null:
 			continue
 		n.visible = l.discovered and _explored(l.position)   # T9x: also fog of war
 		n.position = world_for_screen(world_map._pix(l.position))
+		# T9y: and a found lair you have walked away from is a memory, drawn
+		# the same washed-out way its 2D marker is.
+		_fade(n, not world_map.world.is_visible_now(l.position, ppos))

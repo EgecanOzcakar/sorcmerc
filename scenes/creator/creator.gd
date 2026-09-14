@@ -14,6 +14,7 @@ const Save = preload("res://core/character_save.gd")
 const Presets = preload("res://core/presets.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Prog = preload("res://core/progression.gd")
+const Leveling = preload("res://core/leveling.gd")
 
 signal character_created(ch)
 
@@ -280,6 +281,10 @@ const MAX_WEAPONS := 2
 # =========================================================================
 
 var ch
+# The level the finished character joins at — the active party's highest, handed
+# in by scenes/party/party.gd before the creator is shown. 1 (a fresh level-1
+# hero) standalone, or while the party is still empty.
+var start_level := 1
 var _step := 0
 var _abil_mode := "array"     # array | pointbuy
 var _confirmed = null         # the Character handed back
@@ -294,6 +299,10 @@ var _next := Button.new()
 var _status := Label.new()
 
 func _ready() -> void:
+	# Class-scope Buttons, so they cannot be armed at their declaration the way
+	# the ones built inside a function are.
+	Icons.clicks(_back)
+	Icons.clicks(_next)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_theme()
 	if ch == null:
@@ -466,6 +475,7 @@ func _flow() -> HFlowContainer:
 
 func _opt(parent: Control, label: String, on: bool, cb: Callable, extra := "") -> Button:
 	var b := Button.new()
+	Icons.clicks(b)
 	b.text = ("● " if on else "") + label + extra
 	if on:
 		b.add_theme_color_override("font_color", COL_GOLD)
@@ -531,12 +541,19 @@ func _load_preset(which: String) -> void:
 		"vera": ch = Presets.vera()
 		"pike": ch = Presets.pike()
 		"ilsa": ch = Presets.ilsa()
+	# The presets are level-3 builds; a preset joins a higher-level party at its
+	# level too. Topped up rather than rebuilt — what they already are is a real
+	# build with its choices made, and only the levels above it are missing.
+	Leveling.grant_levels(ch, start_level)
 	_goto(STEPS.size() - 1)
 
 # 2. class ----------------------------------------------------------------
 
 func _build_class() -> void:
 	_head("Class")
+	if start_level > 1:
+		_note("Joins at level %d to match the party, with %d XP banked. Catch-up levels are granted, not earned: none of that XP counts toward the lifetime XP that unlocks species and classes."
+			% [start_level, Leveling.xp_for_level(start_level)], COL_GOLD)
 	var f := _flow()
 	for c in Catalog.all("classes.json"):
 		var cid: String = c["id"]
@@ -589,10 +606,33 @@ func _set_class(cid: String) -> void:
 	if ch.class_id() == cid:
 		return
 	_prune_choices(ch.class_id())
-	ch.levels.clear()
-	ch.add_level(cid, -1)
 	ch.equipped.clear()
+	_relevel(cid)
 	_refresh()
+
+# Builds the class out to start_level. Every level's grants arrive as pending
+# choices (subclass at 3, ASI/feat at 4, more spells...), so the Skills &
+# Background and Review steps ask for them exactly the way level 1's are asked
+# for, and Confirm stays blocked until they are all made. The banked XP is the
+# level's own cost and no more — a gift, never lifetime XP (see leveling.gd's
+# grant_levels).
+func _relevel(cid := "") -> void:
+	var class_id: String = cid if cid != "" else ch.class_id()
+	if class_id == "":
+		return
+	ch.levels.clear()
+	ch.xp = 0
+	Leveling.grant_levels(ch, start_level, class_id)
+
+# Injected before the creator is shown (scenes/party/party.gd). Also safe later:
+# the build is re-leveled in place and the screen redrawn.
+func set_start_level(n: int) -> void:
+	start_level = clampi(n, 1, Leveling.MAX_LEVEL)
+	if ch == null or ch.class_id() == "":
+		return
+	_relevel()
+	if is_inside_tree():
+		_refresh()
 
 # 3. abilities ------------------------------------------------------------
 
@@ -603,23 +643,6 @@ func _build_abilities() -> void:
 	_opt(mf, "Point buy (27)", _abil_mode == "pointbuy", func(): _set_abil_mode("pointbuy"))
 	if ch.class_id() != "":
 		_opt(mf, "Use quick-build recommendation", false, func(): _apply_quick_build())
-
-# Used to silently no-op outside Standard Array mode (the button looked
-# broken — nothing happened, no message). It also only ever set ability
-# scores, not the "recommended build" 5e's own quick-build actually means
-# (array + suggested background) — both fixed: switch to array mode as
-# part of the action, and apply the class's suggestedBackground too.
-func _apply_quick_build() -> void:
-	if ch.class_id() == "":
-		return
-	_abil_mode = "array"
-	ch.base_abilities = recommended_array(ch.class_id())
-	var bg := String(Catalog.class_src(ch.class_id()).get("quickBuild", {}).get("suggestedBackground", ""))
-	if bg != "" and ch.background_id != bg:
-		_prune_choices(ch.background_id)
-		ch.background_id = bg
-	ch.dirty()
-	_refresh()
 
 	if _abil_mode == "array":
 		_note("Assign 15/14/13/12/10/8. Picking a value swaps it with whoever holds it.")
@@ -665,6 +688,23 @@ func _apply_quick_build() -> void:
 		tot.add_theme_color_override("font_color", COL_DIM)
 		grid.add_child(tot)
 	_note("Species and background bonuses (the → column) are applied by the resolver; the background's points are chosen on the next step.")
+
+# Used to silently no-op outside Standard Array mode (the button looked
+# broken — nothing happened, no message). It also only ever set ability
+# scores, not the "recommended build" 5e's own quick-build actually means
+# (array + suggested background) — both fixed: switch to array mode as
+# part of the action, and apply the class's suggestedBackground too.
+func _apply_quick_build() -> void:
+	if ch.class_id() == "":
+		return
+	_abil_mode = "array"
+	ch.base_abilities = recommended_array(ch.class_id())
+	var bg := String(Catalog.class_src(ch.class_id()).get("quickBuild", {}).get("suggestedBackground", ""))
+	if bg != "" and ch.background_id != bg:
+		_prune_choices(ch.background_id)
+		ch.background_id = bg
+	ch.dirty()
+	_refresh()
 
 func _set_abil_mode(m: String) -> void:
 	_abil_mode = m

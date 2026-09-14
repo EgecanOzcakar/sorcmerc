@@ -131,6 +131,12 @@ func test_bias() -> void:
 	q["progress"] = int(q["required"])
 	q["state"] = "complete"
 	check(Quest.bias(p).is_empty(), "a fulfilled quest stops biasing")
+	# T91/M4: a quest whose target is a place or a band, not a monster. There is
+	# nothing to bias a roster toward, and asking it for a monster id threw.
+	Quest.accept(p, {"id": "lair-job", "kind": "clear_lair", "target_lair_id": "warren",
+		"title": "Clear the warren", "required": 1, "progress": 0, "state": "offered",
+		"reward": {"gold": 10}})
+	check(Quest.bias(p).is_empty(), "a world-target quest biases nothing, and does not throw")
 
 func _count(spec: Dictionary, id: String) -> int:
 	for e in spec["monsters"]:

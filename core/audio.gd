@@ -19,13 +19,18 @@
 # Assets are the WAVs tools/gen_audio.py writes. They are read with FileAccess and
 # turned into AudioStreamWAV by hand rather than load()ed, so no editor import
 # round-trip (.import files) is needed to run from source.
+#
+# Sample rate and channel count come out of each file's `fmt ` chunk rather than
+# being assumed, so a stereo bed and a mono one-shot at a different rate can sit
+# in the same directory and both play at the right speed. gen_audio.py's --rate
+# therefore needs no change here.
 # ponytail: swap to plain load() if these ever become real, editor-imported audio.
 extends Node
 
 const SFX_DIR := "res://assets/audio/sfx/"
 const BARK_DIR := "res://assets/audio/barks/"
 const MUSIC_DIR := "res://assets/audio/music/"
-const MIX_RATE := 22050
+const FALLBACK_MIX_RATE := 22050   # only if a file's fmt chunk is unreadable
 const FADE := 1.0            # seconds, bed crossfade and tension fade
 const BED_DB := -12.0        # the bed sits under everything
 const TENSION_DB := -9.0
@@ -152,7 +157,8 @@ static func _set_bus(bus: String, v: float) -> void:
 	AudioServer.set_bus_mute(i, v <= 0.0)
 	AudioServer.set_bus_volume_db(i, linear_to_db(clampf(v, 1.0, 100.0) / 100.0))
 
-# Read one of our own WAVs (mono 16-bit PCM) into an AudioStreamWAV, cached.
+# Read one of our own WAVs (16-bit PCM, mono or stereo) into an AudioStreamWAV,
+# cached. Rate and channel count come from the file's `fmt ` chunk.
 # Returns null if the file is missing or unreadable.
 func _stream(path: String, looped: bool):
 	if _streams.has(path):
@@ -164,21 +170,27 @@ func _stream(path: String, looped: bool):
 		return null
 	var at := 12   # past "RIFF" + size + "WAVE"
 	var data := PackedByteArray()
+	var channels := 1
+	var rate := FALLBACK_MIX_RATE
 	while at + 8 <= bytes.size():
 		var id := bytes.slice(at, at + 4).get_string_from_ascii()
 		var size := bytes.decode_u32(at + 4)
-		if id == "data":
+		if id == "fmt " and at + 16 <= bytes.size():
+			channels = maxi(1, bytes.decode_u16(at + 10))
+			rate = maxi(1, bytes.decode_u32(at + 12))
+		elif id == "data":
 			data = bytes.slice(at + 8, mini(at + 8 + size, bytes.size()))
 			break
 		at += 8 + size + (size & 1)
 	var s := AudioStreamWAV.new()
 	s.format = AudioStreamWAV.FORMAT_16_BITS
-	s.mix_rate = MIX_RATE
-	s.stereo = false
+	s.mix_rate = rate
+	s.stereo = channels >= 2
 	s.data = data
 	if looped:
+		# loop_end is in FRAMES, so a stereo file is data.size() / 4, not / 2.
 		s.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		s.loop_begin = 0
-		s.loop_end = data.size() / 2
+		s.loop_end = data.size() / (2 * channels)
 	_streams[path] = s
 	return s

@@ -7,6 +7,10 @@ extends Control
 
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
+# D3: travel.gd owns every rule about the standing orders — the paces, their
+# labels and notes, and the shape of party.travel_orders. This screen only sets
+# them, and always through set_orders(), never by writing the dict.
+const Travel = preload("res://core/travel.gd")
 # T9x: the open-world map's own figure lookup (scenes/world/party3d.gd reads
 # the same dict for the player) — reused here rather than duplicated so the
 # picker can never drift out of sync with what actually has a model.
@@ -29,6 +33,10 @@ var _hint := Label.new()
 var _purse := Label.new()
 var _stash := RichTextLabel.new()
 var _fig_row := HBoxContainer.new()   # T9x: rebuilt on every _refresh() — its options are the active roster
+# D3: pace / scout / watch, plus the line that says what the pace costs and
+# buys. Rebuilt on every _refresh() for the same reason the figure picker is —
+# who can be named for a job is the active roster, and that moves under it.
+var _orders_row := VBoxContainer.new()
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -97,9 +105,15 @@ func _column(title: String, body: VBoxContainer, stretch: float) -> Control:
 func _footer() -> Control:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _box(COL_CARD, COL_GOLD))
+	# Two lines: the purse/stash/figure line the screen already had, and D3's
+	# standing orders under it. The orders get their own line because the pace
+	# note is a sentence, not a widget, and it has to stay readable.
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	panel.add_child(col)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
-	panel.add_child(row)
+	col.add_child(row)
 
 	_purse.add_theme_color_override("font_color", COL_GOLD)
 	_purse.add_theme_font_size_override("font_size", Icons.FS_HEAD)
@@ -112,32 +126,51 @@ func _footer() -> Control:
 	_stash.add_theme_font_size_override("normal_font_size", Icons.FS_SMALL)
 	row.add_child(_stash)
 
-	# T9x: which figure stands for the party on the open-world map — picked
-	# from who's actually in the active party, not any of the 12 possible
-	# classes. Rebuilt on every _refresh() (see below) since swapping the
-	# active roster changes who's offered.
+	# T9x: which of the active party stands for the band on the open-world
+	# map — a specific character, not a class. Rebuilt on every _refresh()
+	# (see below) since swapping the active roster changes who's offered.
+	_fig_row.name = "FigureRow"
 	row.add_child(_fig_row)
 
 	var create := Button.new()
+	Icons.clicks(create)
 	create.text = "+  Create new"
 	create.pressed.connect(_on_create_new)
 	row.add_child(create)
+
+	_orders_row.name = "OrdersRow"
+	_orders_row.add_theme_constant_override("separation", 4)
+	col.add_child(_orders_row)
 	return panel
 
-# T9x: options are the active party's own members, by name — not any of
-# the 12 possible classes. Picking "Vera" (a fighter) sets overworld_figure
-# to "fighter"; two active members sharing a class just both point at the
-# same figure, which is correct (they'd look identical either way). Rebuilt
+# Out of the tree now, not at the end of the frame: these rows hold NAMED
+# controls, and a queue_free()d child still sitting there would make Godot
+# rename its own replacement ("PacePicker2").
+func _clear(row: Container) -> void:
+	for c in row.get_children():
+		row.remove_child(c)
+		c.queue_free()
+
+# T9x: options are the active party's own members, one row each — a person,
+# not a class. The row carries that character's id (what core/party.gd's
+# overworld_figure stores), so two members of the same class are two separate
+# rows that each stick, and benching the one you chose drops the party back to
+# the pawn instead of silently handing the figure to their colleague. Rebuilt
 # every _refresh() since swapping the active roster changes who's offered.
 func _build_figure_picker() -> void:
-	for c in _fig_row.get_children():
-		c.queue_free()
+	_clear(_fig_row)
 	var label := Label.new()
 	label.text = "Map figure:"
 	label.add_theme_color_override("font_color", COL_DIM)
 	_fig_row.add_child(label)
 
+	# Asking the party who it resolves to (rather than reading the field raw)
+	# is also what migrates a pre-identity save's class id — see
+	# core/party.gd's overworld_member().
+	var chosen = party.overworld_member()
+	var chosen_id: String = chosen.id if chosen != null else ""
 	var ob := OptionButton.new()
+	ob.name = "FigurePicker"      # the footer holds four pickers now; named so each is addressable
 	ob.add_item("Default (plain pawn)")
 	ob.set_item_metadata(0, "")
 	for id in party.active:
@@ -148,13 +181,122 @@ func _build_figure_picker() -> void:
 		if not HeroModels.has(cid):
 			continue   # a class with no figure asset yet — not offered, same fallback contract as everywhere else
 		ob.add_item("%s  %s" % [Icons.class_glyph(cid), ch.cname])
-		ob.set_item_metadata(ob.item_count - 1, cid)
+		ob.set_item_metadata(ob.item_count - 1, ch.id)
 	for i in ob.item_count:
-		if String(ob.get_item_metadata(i)) == party.overworld_figure:
+		if String(ob.get_item_metadata(i)) == chosen_id:
 			ob.select(i)
 			break
 	ob.item_selected.connect(func(i): party.overworld_figure = String(ob.get_item_metadata(i)))
 	_fig_row.add_child(ob)
+
+# --- D3 standing orders ----------------------------------------------------
+#
+# Set once here and then left alone: the open world's 1x-8x fast-forward only
+# stays honest if the road never stops to ask a question, so these orders are
+# what resolve whatever happens out there (core/travel.gd's two rules).
+#
+# Scout and watch are the two jobs travel.gd hands out by role. Naming somebody
+# means their skill is rolled instead of the party's best at it — which is the
+# entire point of naming them, so say so rather than leaving it to be guessed.
+const SCOUT_HINT := "Reads the ground ahead — rough going, and tracks across the road.\n" \
+	+ "Leave it to \"whoever is best\" and the party's best at it rolls."
+const WATCH_HINT := "Notices what the road is about to do — foul water, and the like.\n" \
+	+ "Leave it to \"whoever is best\" and the party's best at it rolls."
+const BEST_LABEL := "Whoever is best"
+
+func _build_orders() -> void:
+	_clear(_orders_row)
+	# Asking travel.gd (rather than reading party.travel_orders) is also what
+	# drops an order naming somebody who has since been benched, so the control
+	# never shows a name that is no longer marching.
+	var o: Dictionary = Travel.orders(party)
+	var pace: String = String(o["pace"])
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	_orders_row.add_child(row)
+
+	var cap := Label.new()
+	cap.text = "Standing orders:"
+	cap.add_theme_color_override("font_color", COL_GOLD)
+	row.add_child(cap)
+
+	var pace_ob := OptionButton.new()
+	pace_ob.name = "PacePicker"
+	for p in Travel.PACES:
+		var pid: String = String(p)
+		pace_ob.add_item(Travel.pace_label(pid))
+		pace_ob.set_item_metadata(pace_ob.item_count - 1, pid)
+		pace_ob.set_item_tooltip(pace_ob.item_count - 1, Travel.pace_note(pid))
+	_select_meta(pace_ob, pace)
+	pace_ob.item_selected.connect(func(i): _set_order("pace", String(pace_ob.get_item_metadata(i))))
+	row.add_child(_order_field("Pace:", pace_ob))
+
+	for job in ["scout", "watch"]:
+		var job_ob := _job_picker(String(job), String(o[job]))
+		row.add_child(_order_field("%s:" % String(job).capitalize(), job_ob))
+
+	# Both halves earn their place: the note is the sentence that sells the
+	# trade, the numbers are the trade itself. A player should be able to see
+	# that Careful is 0.70x and +2 without opening core/travel.gd.
+	var note := Label.new()
+	note.name = "PaceNote"
+	note.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	note.add_theme_color_override("font_color", COL_DIM)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.text = "%s   ·   %.2f× travel speed, %s." % [
+		Travel.pace_note(pace), Travel.speed_mult(party), _effect(Travel.pace_bonus(party))]
+	_orders_row.add_child(note)
+
+# One job's picker: the active party by name, over a first row meaning "nobody
+# named, use the party's best". Everybody active is offered — unlike the figure
+# picker there is no asset to be missing, and travel.gd will roll whoever is
+# named whether or not they are any good at it.
+func _job_picker(job: String, chosen_id: String) -> OptionButton:
+	var ob := OptionButton.new()
+	ob.name = "%sPicker" % job.capitalize()
+	ob.tooltip_text = SCOUT_HINT if job == "scout" else WATCH_HINT
+	ob.add_item(BEST_LABEL)
+	ob.set_item_metadata(0, "")
+	for id in party.active:
+		var ch = party.get_member(id)
+		if ch == null:
+			continue
+		ob.add_item("%s  %s" % [Icons.class_glyph(ch.class_id()), ch.cname])
+		ob.set_item_metadata(ob.item_count - 1, ch.id)
+	_select_meta(ob, chosen_id)
+	ob.item_selected.connect(func(i): _set_order(job, String(ob.get_item_metadata(i))))
+	return ob
+
+# One order written back. All three go through set_orders() together because the
+# shape of party.travel_orders belongs to travel.gd, not to this screen.
+func _set_order(key: String, value: String) -> void:
+	var o: Dictionary = Travel.orders(party)
+	o[key] = value
+	Travel.set_orders(party, String(o["pace"]), String(o["scout"]), String(o["watch"]))
+	_build_orders()          # the pace note is the only thing on screen that moves
+
+func _select_meta(ob: OptionButton, value: String) -> void:
+	for i in ob.item_count:
+		if String(ob.get_item_metadata(i)) == value:
+			ob.select(i)
+			return
+
+func _order_field(caption: String, ob: OptionButton) -> Control:
+	var box := HBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var label := Label.new()
+	label.text = caption
+	label.add_theme_color_override("font_color", COL_DIM)
+	box.add_child(label)
+	box.add_child(ob)
+	return box
+
+# The pace's bonus as a clause. Zero gets words rather than "+0", which reads as
+# a modifier that is there rather than one that is not.
+func _effect(bonus: int) -> String:
+	return "no modifier on the road" if bonus == 0 \
+		else "%+d on every check the road makes" % bonus
 
 # --- rendering ------------------------------------------------------------
 
@@ -174,6 +316,7 @@ func _refresh() -> void:
 			_slot_col.add_child(_slot(i, {}))
 
 	_build_figure_picker()
+	_build_orders()
 
 	_purse.text = "%d gp" % party.gold
 	if party.stash.is_empty():
@@ -204,6 +347,7 @@ func _card(sm: Dictionary) -> Control:
 	panel.add_child(row)
 
 	var pick := Button.new()
+	Icons.clicks(pick)
 	pick.text = "▣" if picked else "▢"
 	pick.tooltip_text = "Select for a party slot"
 	pick.pressed.connect(func(): _select(sm["id"]))
@@ -212,6 +356,7 @@ func _card(sm: Dictionary) -> Control:
 	row.add_child(_summary_label(sm))
 
 	var bench := Button.new()
+	Icons.clicks(bench)
 	bench.text = "Bench" if sm["active"] else "To party"
 	bench.disabled = not sm["active"] and party.active.size() >= Party.MAX_ACTIVE
 	bench.pressed.connect(func():
@@ -222,6 +367,7 @@ func _card(sm: Dictionary) -> Control:
 	row.add_child(bench)
 
 	var prof := Button.new()
+	Icons.clicks(prof)
 	prof.text = "View"
 	prof.tooltip_text = "Open the character profile"
 	prof.pressed.connect(func(): _on_view_profile(sm["id"]))
@@ -231,6 +377,7 @@ func _card(sm: Dictionary) -> Control:
 # One of the four marching-order slots. Clicking it places/swaps the selection.
 func _slot(index: int, sm: Dictionary) -> Control:
 	var b := Button.new()
+	Icons.clicks(b)
 	b.custom_minimum_size = Vector2(0, 54)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.add_theme_stylebox_override("normal",
@@ -295,12 +442,16 @@ func _on_create_new() -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(overlay)
 	var creator = load(CREATOR_SCENE).instantiate()
+	# A hero created once the party is under way joins at the level the party is
+	# playing at, not at 1 — the creator asks for every choice those levels bring.
+	creator.set_start_level(party.active_max_level())
 	overlay.add_child(creator)
 	creator.character_created.connect(func(ch):
 		party.add_member(ch)          # auto-activates while there is a free slot
 		overlay.queue_free()
 		_refresh())
 	var back := Button.new()
+	Icons.clicks(back)
 	back.text = "←  Cancel"
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -180; back.offset_top = 12; back.offset_right = -16
@@ -328,6 +479,7 @@ func _on_view_profile(id: String) -> void:
 	prof.set_party(party)          # equip pulls from the shared stash, not the character
 	prof.set_character(ch)
 	var back := Button.new()
+	Icons.clicks(back)
 	back.text = "←  Back to party"
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -180; back.offset_top = 12; back.offset_right = -16

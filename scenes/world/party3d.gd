@@ -3,15 +3,27 @@
 # projection rig lives in world_diorama3d.gd (also used by Settlements3D and
 # Lairs3D) — this file only owns what's party-specific: picking a model from
 # the party's highest-leveled troop (RoamingParty.highest_troop(), core/
-# world.gd), and facing the direction of travel (parties move; settlements
-# and lairs don't, so this is the one diorama layer that needs it — same
-# lerp_angle trick Figures3D uses on the combat board).
+# world.gd), facing the direction of travel, and walking. Parties move;
+# settlements and lairs don't, so this is the one diorama layer that needs
+# either — same lerp_angle trick Figures3D uses on the combat board.
 #
-# T9x: the player picks their own figure from HERO_MODELS on the Party
-# screen (core/party.gd's overworld_figure) — a free choice, not derived
-# from the active roster's classes. "" (never picked, or explicitly reset)
-# falls through has_model() to the flat, gold-ringed pawn, same contract as
-# every other uncovered lookup here.
+# T9x: the player picks one of their own active party on the Party screen
+# (core/party.gd's overworld_figure — a member id) and that character's class
+# figure from HERO_MODELS stands for the band. Bench them, or pick nobody,
+# and it falls through has_model() to the flat, gold-ringed pawn, same
+# contract as every other uncovered lookup here.
+#
+# ponytail — the walk is procedural, not animated. Every model this project
+# generates (assets/troops/*_idle.glb, assets/figures/*_idle.glb) ships
+# exactly one clip, an idle, so a marching party would otherwise glide across
+# the map standing perfectly still. The GAIT_* block below fakes it: a
+# vertical bob and a counter-rotating sway on a sine whose cadence comes from
+# how far the figure actually moved this frame. At map zoom that reads as
+# walking; up close it is obviously not one, because the legs never move.
+# The real fix is a `walk` clip out of the same generator that made the
+# idles — then delete the GAIT_* constants, _gait_pose() and its two state
+# dicts, keep _reposition()'s position/facing lines, and cross-fade
+# ap.play("walk") on the same moving/stopped signal this already computes.
 #
 # What this layer does NOT own: the shadow ellipse World._draw_party() draws
 # — that stays shared, same contract as Settlements3D/Lairs3D. This only
@@ -24,6 +36,9 @@ extends "res://scenes/world/world_diorama3d.gd"
 # duplicated: one lookup, not two art pipelines for the same monster.
 const FoeModels := preload("res://scenes/figures3d.gd").FOE_MODELS
 const HeroModels := preload("res://scenes/figures3d.gd").HERO_MODELS
+# For World.SPEED only — the gait quotes its cadence against the real marching
+# speed rather than re-declaring a number that would drift away from it.
+const WorldModel := preload("res://core/world.gd")
 
 # core/world.gd's RoamingParty.faction is a Scaler.FACTIONS combat faction
 # (bandit, goblinoid, human, orc, ...), not one of the four races the troop
@@ -43,8 +58,26 @@ const MODELS := {
 }
 const TARGET_HEIGHT := 15.0   # a person, not a building — smaller than any settlement/lair tier
 
+# --- procedural walk (see the ponytail note in the header) -----------------
+# Tuned for a 15-unit figure read at map zoom: enough to say "walking", small
+# enough that nothing reads as a bouncing spring. Speed here is map units per
+# real second, which is exactly what World.SPEED is — so the clock's 2x/4x/8x
+# arrive as genuinely faster figures with no second multiplier to keep in sync.
+const REF_SPEED := WorldModel.SPEED   # 1x marching speed: the yardstick for both cadence and amplitude
+const GAIT_HZ := 1.4          # full strides per second at REF_SPEED (two footfalls each) — a brisk human cadence
+const GAIT_HZ_EXP := 0.5      # cadence grows as sqrt(speed), the Froude relation real gaits follow: 8x clock hurries ~2.8x, it doesn't strobe
+const BOB_HEIGHT := 0.42      # world units at full stride, ~3% of TARGET_HEIGHT — the hip rise of a real walk, and all this zoom can carry
+const SWAY_RAD := 0.045       # ~2.6° of trunk roll, alternating with the stride so the weight reads as shifting from leg to leg
+const LEAN_RAD := 0.035       # ~2° of steady pitch into the direction of travel — a body pushing forward, not a statue sliding
+const GAIT_RAMP := 4.0        # gait weight per second: ~0.25s to spin up and the same to settle, so stopping eases into the idle pose
+const IDLE_SPEED_GAIN := 0.35 # the idle clip runs up to 35% faster while moving — nudged along with the motion rather than fought
+
 var _figs := {}                # party id -> Node3D
-var _prev := {}                # party id -> last world position, for facing
+var _prev := {}                # party id -> last world position: drives facing, and the gait's speed
+var _aps := {}                 # party id -> the model's idle AnimationPlayer, nudged with the walk
+var _gait := {}                # party id -> how much walk is showing, 0 (idle pose) .. 1 (full stride)
+var _step := {}                # party id -> gait phase, radians — seeded per party, never shared
+var _frame_dt := 0.0           # real seconds since the last frame; see _process()
 
 
 func _model_path(p) -> String:
@@ -61,22 +94,22 @@ func _model_path(p) -> String:
 	return String(FoeModels.get(p.faction, ""))
 
 
-# The chosen figure only counts while someone in the active party actually
-# is that class — enforced here, not just in the Party screen's picker, so
-# a stale choice (the character it pointed to got benched, or an old save)
-# can't leave a figure on the map that no longer matches who's in the party.
+# Which HERO_MODELS class the player's chosen character wears, "" for the
+# pawn. The choice is an identity, not a class: core/party.gd's
+# overworld_member() resolves it to one specific member (and migrates a
+# pre-identity save's class id on the way), so benching the character you
+# picked drops you back to the pawn even when a second member of the same
+# class is still marching. Enforced here and not only in the Party screen's
+# picker, so a choice that goes stale between visits can't leave a figure on
+# the map that nobody in the party answers for.
 func _player_figure() -> String:
-	var party = world_map.party
-	if party == null:
+	if world_map.party == null:
 		return ""
-	var fig := String(party.overworld_figure)
-	if fig == "":
+	var ch = world_map.party.overworld_member()
+	if ch == null:
 		return ""
-	for id in party.active:
-		var ch = party.get_member(id)
-		if ch != null and ch.class_id() == fig:
-			return fig
-	return ""
+	var cid: String = ch.class_id()
+	return cid
 
 
 func has_model(p) -> bool:
@@ -88,6 +121,9 @@ func reset(world) -> void:
 		n.queue_free()
 	_figs.clear()
 	_prev.clear()
+	_aps.clear()
+	_gait.clear()
+	_step.clear()
 	for p in world.parties:
 		var scene := _model(_model_path(p))
 		if scene == null:
@@ -103,10 +139,66 @@ func reset(world) -> void:
 			ap.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
 			ap.play(clip)
 			ap.seek(randf() * ap.get_animation(clip).length)   # desync the roster
+			_aps[p.id] = ap
+		# Desynced for the same reason the seek above is, and the same way:
+		# two bands crossing the map together must never bob in lockstep.
+		_step[p.id] = randf() * TAU
 		_figs[p.id] = holder
 
 
+# The base's _process() drives _reposition() but hands it nothing: that
+# signature is shared with Settlements3D and Lairs3D, neither of which has any
+# use for a delta. The gait does, so it's caught here on the way through.
+func _process(dt: float) -> void:
+	_frame_dt = dt
+	super._process(dt)
+
+
+# One party's walk for this frame, advanced by `dt` seconds at `speed` map
+# units/second: returns the pose to hold as (bob height, sway roll, forward
+# lean). Split out of _reposition() because it is the entire stand-in in one
+# place — the thing a real walk clip deletes — and because it can then be
+# driven with fixed deltas by a headless test.
+func _gait_pose(id: String, speed: float, dt: float) -> Vector3:
+	var w: float = _gait.get(id, 0.0)
+	var ph: float = _step.get(id, 0.0)
+	# Amplitude saturates at REF_SPEED: a party at 8x steps faster, it does
+	# not bob higher. move_toward rather than lerp so rest is actually
+	# reached instead of approached forever — "settled" has to mean exactly
+	# the idle pose, not almost.
+	w = move_toward(w, clampf(speed / REF_SPEED, 0.0, 1.0), GAIT_RAMP * dt)
+	if speed > 0.0:
+		ph = fposmod(ph + TAU * GAIT_HZ * pow(speed / REF_SPEED, GAIT_HZ_EXP) * dt, TAU)
+	_gait[id] = w
+	_step[id] = ph
+	# The bob runs at twice the sway — one rise per footfall, one weight shift
+	# per full stride, which is the real relationship between the two and why
+	# they don't read as a single wobble. sin^2 (not |sin|) so the bottom of
+	# each step is smooth, and never dips below where the feet rest.
+	return Vector3(
+		BOB_HEIGHT * w * (0.5 - 0.5 * cos(2.0 * ph)),
+		SWAY_RAD * w * sin(ph),
+		LEAN_RAD * w)
+
+
 func _reposition() -> void:
+	# A defeated party is erased from world.parties (core/world.gd, core/
+	# world_battle.gd) — reset() only rebuilds _figs at travel start, so
+	# without this the figure it left behind just stops being repositioned:
+	# still in the tree, still visible, frozen where it died forever.
+	if not _figs.is_empty():
+		var live := {}
+		for p in world_map.world.parties:
+			live[p.id] = true
+		for id in _figs.keys().duplicate():
+			if not live.has(id):
+				_figs[id].queue_free()
+				_figs.erase(id)
+				_prev.erase(id)
+				_aps.erase(id)
+				_gait.erase(id)
+				_step.erase(id)
+
 	for p in world_map.world.parties:
 		var n: Node3D = _figs.get(p.id)
 		if n == null:
@@ -115,12 +207,26 @@ func _reposition() -> void:
 		# same "you can always see yourself" rule World._draw()'s 2D props
 		# loop already applies.
 		n.visible = p.is_player or _explored(p.position)
-		n.position = world_for_screen(world_map._pix(p.position))
+		# Pan and zoom cancel out of world_for_screen(_pix(...)) — each is the
+		# other's inverse — so the delta below is the party's own travel in map
+		# units, and dragging the map doesn't set anybody walking.
+		var at := world_for_screen(world_map._pix(p.position))
+		var moved := 0.0
 		# Same trick as Figures3D: face the direction of travel, hold it on
 		# arrival. The model's forward is +Z (glTF), so yaw = atan2(dx, dz).
 		if _prev.has(p.id):
-			var d: Vector3 = n.position - _prev[p.id]
+			var d: Vector3 = at - _prev[p.id]
 			d.y = 0.0
-			if d.length() > 0.01:
+			moved = d.length()
+			if moved > 0.01:
 				n.rotation.y = lerp_angle(n.rotation.y, atan2(d.x, d.z), 0.15)
-		_prev[p.id] = n.position
+		_prev[p.id] = at   # the rest pose, never the bobbed one: the gait must not feed itself
+		var pose := _gait_pose(p.id, moved / maxf(_frame_dt, 0.0001), _frame_dt)
+		n.position = at + Vector3(0.0, pose.x, 0.0)   # pose.x: the bob
+		n.rotation.z = pose.y                         # pose.y: the sway, a roll about the figure's own forward axis
+		n.rotation.x = pose.z                         # pose.z: the lean, a pitch into the direction of travel
+		# Let the idle clip hurry along with the body instead of fighting it —
+		# it keeps its own desynced phase, only the rate moves.
+		var ap: AnimationPlayer = _aps.get(p.id)
+		if ap != null:
+			ap.speed_scale = 1.0 + IDLE_SPEED_GAIN * float(_gait.get(p.id, 0.0))

@@ -33,9 +33,16 @@ core/            pure rules + game state, mostly no engine deps
                     features step by step, resolve.gd assembles the final
                     sheet, effects.gd + data/effects/*.json layer sorcmerc-
                     authored combat mechanics over the (prose-only) export
+  mod/             the content-pack API (M1-M8): manifest/registry/entitlement
+                    find and gate packs, world_pack.gd builds a map from JSON,
+                    story.gd + story_runtime.gd are a campaign's schema and its
+                    playthrough. Data only — a pack ships no code. See
+                    docs/modding.md
 scenes/
   game/            the one entry point (title -> party setup -> campaign ->
                     summary), routes every other screen
+  mods/            the campaign/mod browser: everything installed, what state
+                    it is in, and the button that starts one
   main.gd/.tscn    the combat screen: hex board, tokens, action log, buttons
   campaign/        the run screen: route choices, shop/rest/treasure, journal
   creator/, party/, profile/, progression/, achievements/, settings/
@@ -45,15 +52,29 @@ scenes/
 data/              the 5e SRD export (classes/spells/species/...), a 316-
                    entry hand-tagged bestiary, and data/effects/*.json (the
                    sorcmerc-authored mechanics layer over the raw export)
-tests/             32 files, headless, one per subsystem (test_*.gd) plus
-                   drive_*.gd (robots pressing real UI buttons end-to-end)
-                   and a couple of dev tools (shot.gd renders a frame to PNG)
+content/           content packs that ship with the game: an example map, a
+                   free campaign, and a paid DLC — all three written against
+                   the same public API a player's mod uses
+tests/             83 files, headless: one per subsystem (64 test_*.gd) plus
+                   8 drive_*.gd (robots pressing real UI buttons end-to-end)
+                   and a few dev tools (shot.gd renders a frame to PNG)
 docs/              docs/expansion-plan.md is the current source of truth;
-                   combat-design.md and the docs/superpowers/specs/ hex
-                   design doc are the original pre-expansion design record
+                   modding.md is the content-pack authoring guide (worlds,
+                   campaigns, data overlays, free/paid DLC); combat-design.md
+                   and the docs/superpowers/specs/ hex design doc are the
+                   original pre-expansion design record
 tools/gen_audio.py procedurally synthesizes every SFX/music/bark asset under
                    assets/audio/ — no external audio assets, run it again
-                   after editing it to regenerate
+                   after editing it to regenerate. `--rate`/`--loop` trade
+                   file size against fidelity; the default 32 kHz stereo is
+                   13 MB for all 35 assets
+tools/synth.py     the DSP it is built on: band-limited oscillators, biquads,
+                   Freeverb, Karplus-Strong, and a formant voice for the barks
+tools/check_audio.py
+                   validates the generated WAVs (no clipping, no DC offset,
+                   loop seams continuous) — the waveform half of the audio
+                   tests, since tests/test_audio.gd can only prove the engine
+                   parses them
 ```
 
 ## Assets and provenance
@@ -73,7 +94,7 @@ in separate directories, so any file's origin is answerable from its path alone:
 
 | Path | Origin | Recorded in |
 |---|---|---|
-| `assets/audio/` | procedurally synthesized, stdlib only — **not AI** | `tools/gen_audio.py` |
+| `assets/audio/` | procedurally synthesized, stdlib only — **not AI** | `tools/gen_audio.py`, `tools/synth.py` |
 | `assets/lpc/` | Liberated Pixel Cup art, CC-BY-SA 3.0 / GPL-3.0 / OGA-BY 3.0 | `assets/lpc/CREDITS.csv`, `LICENSES/` |
 | `assets/generated/` | sheets composited from `assets/lpc/` | `*_credits.txt` per sheet |
 | `assets/world/` | sourced packs | `License.txt` per subdirectory |
@@ -124,6 +145,16 @@ godot --headless --path . -s tests/test_combat.gd     # any single subsystem tes
 SORCMERC_SEED=5 SORCMERC_FAST=1 godot --headless --path . -s tests/drive_ui.gd      # a robot plays a real fight
 SORCMERC_SEED=5 SORCMERC_FAST=1 godot --headless --path . -s tests/drive_campaign.gd # a robot plays a whole run
 SORCMERC_SEED=5 SORCMERC_FAST=1 godot --headless --path . -s tests/drive_game.gd     # title -> run -> summary, end to end
+godot --headless --path . -s tests/test_mod_packs.gd   # every shipped content pack loads clean
+godot --headless --path . -s tests/drive_story.gd      # a robot plays a pack campaign's first chapter
+```
+
+Writing a content pack? `docs/modding.md` is the guide, and the browser behind
+the title screen's **Campaigns & mods** lists every pack with every problem it
+has. To poke at one without the game:
+
+```sh
+SORCMERC_MODS_DIR=/path/to/mods godot --path . scenes/mods/mods.tscn
 ```
 
 `SORCMERC_SEED` replays an exact fight/route; `SORCMERC_FAST` zeroes UI tween
@@ -131,6 +162,9 @@ timing and skips cosmetic-only systems (barks, audio) that have nothing
 meaningful to assert on in a headless run. `SORCMERC_LINEAR_CAMPAIGN=1` puts the
 old linear node-route campaign (and its Resume-the-last-run autosave) back on the
 title screen; without it, "New run" goes straight to the open world.
+`SORCMERC_MODS_DIR` moves where community packs are read from, and
+`SORCMERC_UNLOCK_DLC=1` (like `SORCMERC_PLAYTEST=1`) owns every paid pack — see
+`docs/modding.md`.
 
 ## Status
 
@@ -145,7 +179,10 @@ building, a generated campaign route (sized settlements, quests, rest/
 treasure nodes, a seed-picked boss pool), shared party inventory with
 rarity-gated pricing and magic item identification, meta-progression
 unlocks, local achievements, procedural audio, and a guided tutorial fight.
-Explicit, deliberate TODOs: no narrative/dialogue layer (held back on
-purpose), and an isometric board presentation exists as an unmerged
-experiment (`git branch -a` for the current list of `feature/isometric-*`
+There is now a narrative layer, and it arrived as a modding API rather than as
+a hardcoded campaign: content packs (`core/mod/`, `docs/modding.md`) carry
+worlds, chapters, a cast, dialogue with choices and quest chains, plus data
+overlays over `data/*.json`, and the same pipeline carries the team's own free
+and paid story packs. Still an unmerged experiment: an isometric board
+presentation (`git branch -a` for the current list of `feature/isometric-*`
 branches).

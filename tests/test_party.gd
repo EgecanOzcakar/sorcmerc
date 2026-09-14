@@ -4,6 +4,7 @@ extends SceneTree
 
 const Party = preload("res://core/party.gd")
 const Adapter = preload("res://core/adapter.gd")
+const Leveling = preload("res://core/leveling.gd")
 
 var _pass = 0
 var _fail = 0
@@ -105,6 +106,8 @@ func _init() -> void:
 
 	test_death()
 	test_identification()
+	test_overworld_figure()
+	test_active_max_level()
 	print("test_party: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -199,3 +202,64 @@ func test_identification() -> void:
 	check(p.stash_count(Party.IDENTIFY_SCROLL, true) == 0, "the scroll is consumed")
 	check(p.stash_count(Party.IDENTIFY_SCROLL) == 1, "the unidentified one is untouched")
 	check(not p.use_identification_scroll("cloak-of-elvenkind"), "nothing left to identify")
+
+# T9x: overworld_figure names ONE character (scenes/world/party3d.gd renders
+# their class figure on the map), and only counts while they are marching.
+# The pre-identity shape — a class id, from a save written before the switch —
+# resolves the old way and migrates on the first read; see overworld_member().
+func test_overworld_figure() -> void:
+	var p := Party.new()
+	for ch in Party.demo_roster():
+		p.add_member(ch)
+	check(p.overworld_figure == "", "a fresh party has picked nobody")
+	check(p.overworld_member() == null, "which resolves to nobody at all — the plain pawn")
+
+	p.overworld_figure = "vera"
+	var pick = p.overworld_member()
+	check(pick != null and pick.id == "vera", "a member id resolves to that exact member")
+
+	# Identity, not class: Thrun and the benched Gera are both barbarians.
+	check(p.swap("ilsa", "gera"), "swap Gera in for Ilsa")   # active: vera, pike, gera, thrun
+	p.overworld_figure = "thrun"
+	var thrun = p.overworld_member()
+	check(thrun != null and thrun.id == "thrun", "one of two barbarians is still his own pick")
+	check(p.bench("thrun"), "bench him")
+	check(p.overworld_member() == null,
+		"benching the pick falls back to the pawn, even with another barbarian still marching")
+	check(p.overworld_figure == "thrun", "the pick is remembered, not cleared, while he sits out")
+	check(p.activate("thrun"), "bring him back")
+	var back = p.overworld_member()
+	check(back != null and back.id == "thrun", "and the pick comes back with him")
+	check(p.remove_member("thrun"), "let him go for good")
+	check(p.overworld_member() == null, "a stranger's id reads as the pawn")
+
+	# The pre-identity shape: a class id, resolved against the active party.
+	p.overworld_figure = "rogue"
+	var legacy = p.overworld_member()
+	check(legacy != null and legacy.id == "pike", "an old save's class id still resolves to a member")
+	check(p.overworld_figure == "pike", "and is migrated to that member's id on the first read")
+	p.overworld_figure = "wizard"
+	check(p.overworld_member() == null, "a class nobody active has is the pawn")
+	check(p.overworld_figure == "wizard", "and with nothing to migrate it to, it is left alone")
+	p.overworld_figure = "not-an-id-and-not-a-class"
+	check(p.overworld_member() == null, "so is pure nonsense — no crash, no figure")
+
+# The level a hero created now would join at (scenes/creator/creator.gd's
+# start_level): the highest among the <= 4 who fight, and 1 while nobody does.
+func test_active_max_level() -> void:
+	var p := Party.new()
+	check(p.active_max_level() == 1, "an empty party still starts a hero at level 1")
+	var roster := Party.demo_roster()
+	for ch in roster:
+		p.add_member(ch)
+	var best := 1
+	var benched: String = p.bench_list()[0].id
+	for id in p.active:
+		best = maxi(best, p.get_member(id).level())
+	check(p.active_max_level() == best, "reads the highest active member (%d)" % best)
+	Leveling.grant_levels(p.get_member(p.active[0]), best + 2)
+	check(p.active_max_level() == best + 2, "follows an active member levelling up")
+	Leveling.grant_levels(p.get_member(benched), Leveling.MAX_LEVEL)
+	check(p.active_max_level() == best + 2, "a benched veteran does not set it")
+	p.swap(p.active[0], benched)
+	check(p.active_max_level() == Leveling.MAX_LEVEL, "until they are put in the party")
