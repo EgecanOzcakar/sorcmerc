@@ -3524,7 +3524,9 @@ tiers; this is placing them on the map. Depends D2, D5.
 
 ### Non-goals for this arc
 
-No narrative/dialogue layer yet (still deliberate — see README); no crafting;
+No narrative/dialogue layer yet (still deliberate — see README) — *superseded
+by M1–M8 below, which added one as a content-pack API rather than as a
+hardcoded campaign*; no crafting;
 no settlement building; no mounts; no romance; no simulation of anything the
 player cannot see. The party is four people. If a feature only makes sense
 for an army or a lord, it is out by construction.
@@ -3691,3 +3693,129 @@ have been an empty bubble.
   works either way and assumes the node graph, which is what exists.
 - **Whether withdrawing from a part-cleared site restocks it over time.**
   Currently it does not; the D1 window expires the whole lair instead.
+
+## M1–M8 — the content pack API: worlds, campaigns, and DLC (built 2026-09-14)
+
+The narrative layer landed, and it landed as a public API rather than as a
+hardcoded campaign. The ask was three things that turned out to be one thing:
+let the community build worlds out of the features the game already has; grow
+that into campaigns with stories, quest chains and characters; and ship the
+team's own stories through the same route, some free and some paid.
+
+They are one thing because the alternative — a DLC pipeline for us and a mod
+pipeline for everyone else — has a known ending: the mod half rots, because
+nothing anybody cares about is running through it. So there is one format, one
+loader, one validator, and the three packs the game ships (`content/`) are
+written against the same API a stranger's zip file uses. `docs/modding.md` is
+the authoring guide; this is the record of what was built and why it is shaped
+this way.
+
+**M1 manifest / M6 registry.** A pack is a directory with a `pack.json`. Two
+roots — `res://content/` (ours) and `user://mods/` (theirs) — one pipeline. A
+pack's `official` flag comes from the root it was found in, never from
+anything it can write about itself, and the first root wins a duplicate id, so
+a mod cannot shadow a DLC by claiming its name. Everything a pack declares is
+parsed and checked at **scan** time, not play time: an author learns their
+story is broken from the browser, and a player never gets three chapters into
+one that cannot finish.
+
+**Data only, and that is the security model.** A pack ships no GDScript, and
+there is no hook or script field anywhere in the formats. Community content is
+downloaded from strangers and run on a player's machine; a pack that could
+carry code would be a way to run that code. Everything is JSON interpreted by
+`core/mod/`, which is also what lets official and community content share one
+trust level instead of needing two.
+
+**M3 worlds.** `world.json` places everything the three built-in builders
+place: settlements, hidden lairs, roaming bands with a behavior and a roster,
+water (a `river` polyline is the one piece of sugar, because every hand-placed
+river in this project is a for-loop stamping blobs and making an author write
+that in JSON means making them write it wrong), and the start. Nothing in it is
+a new concept, which is the point.
+
+The thing that makes a pack map read like a designed map is that **it declares
+no difficulty at all**. D6's bands are measured off the map's own extent and
+anchored on its human settlement, so an author gets the level curve by placing
+things — goblins near home, the dragon at the edge. `tests/test_world_pack.gd`
+asserts exactly that on the shipped campaign: three lairs, three different
+bands, no region data in the pack.
+
+**M4/M5 stories, and the decision the whole layer rests on.** A story is
+chapters of beats; a beat fires the first time its condition holds. Conditions
+are **predicates over state the game already keeps** — a flag the story set, a
+quest's state in the party's own log, where the player is standing, which lairs
+are cleared, party level, the day, faction opinion — and the runtime is
+*polled*, once a frame, next to the lair and forage and travel checks it sits
+beside in `world.gd`.
+
+Events would have been the obvious design and would have been worse: an event
+bus means every system in the game has to publish into it before a story can
+react to it, which means a modder can only write stories about the systems
+somebody remembered to wire. Predicates need nothing. A content pack can tell a
+story about systems that have never heard of it, and the integration into a
+2278-line world screen is one `_check_story()` call.
+
+The second decision: **a story quest is an ordinary quest**. A quest beat
+appends to `party.quests`, and from there the existing machinery — kill
+tracking, the turn-in at any merchant, the log panel, the encounter spawn bias
+— picks it up with no idea a story is involved. A quest chain is quests that
+unlock each other, not a second quest system.
+
+**M2 free and paid.** `"access": "paid"` plus a `product_id`. A paid pack the
+player does not own is listed but **not loaded** — not loaded-and-hidden, so a
+locked DLC cannot leak a monster, an item name or a line of its story through
+some other system that reads the catalog. What is owned lives in
+`user://entitlements.json`; a storefront integration calls `Entitlement.sync()`
+once at boot and everything downstream keeps working, offline. Playtest builds
+own everything, through the same switch `progression.gd` already uses. The game
+is not the storefront and has no purchase button.
+
+**M5 data overlays.** A pack's records are folded into `catalog.gd`'s own
+parsed arrays, merged by id — so a pack can add a monster *and* retune one of
+ours, and the result is a monster to the faction rosters, the encounter builder
+and the bestiary screen with nothing anywhere made pack-aware. The one trap
+found on the way: `scaler.gd` caches its faction pools off the bestiary, so
+changing what the bestiary is has to drop that cache (`Scaler.forget_pools()`),
+or a pack's monsters exist everywhere except in a fight.
+
+**M7/M8 the screens.** A browser on the title screen (every pack, its state,
+and every problem with the broken ones spelled out in full — an author's only
+feedback loop is that list, so a truncated error is a bug report nobody can
+act on), a beat card, and a journal. The autosave carries the story's progress
+and the id of the pack it belongs to; a resume whose pack has since been
+uninstalled, disabled or locked comes back as the map it already is, with the
+story simply not being told, rather than as a broken save.
+
+### Shipped content
+
+| Pack | |
+|---|---|
+| `content/example-world/` | a map and nothing else — the shortest thing that is a working pack, and the one to copy |
+| `content/ashen-road/` | free, three chapters, its own map, three cast members, a quest chain, two monsters and two items |
+| `content/vault-of-the-ember-crown/` | paid, `requires` the above, and the reason the DLC path is exercised by our own content rather than only by a test |
+
+### Fixed on the way
+
+- `WorldAI.wander()` documented taking a bare point and crashed on one
+  (`"position" in <Vector2>` is an error, not a false). The Vector2 half of its
+  own contract now works, which is what data-driven placement needs.
+- `world.gd` had twelve copies of `WorldSave.save(world, party)`; they are one
+  `_autosave()`, which is also where the story now rides along.
+
+### Still open
+
+- **A story cannot yet author a fight.** Beats can hand over quests, move the
+  purse, reveal lairs and spawn bands, but a scripted set-piece encounter (this
+  roster, on this board, at this moment) goes through the same generated
+  pipeline as everything else. `Encounter`'s spec dictionary is the obvious
+  seam and is deliberately not exposed yet.
+- **Story-only packs have nowhere to be told.** The format allows a pack with a
+  story and no world; starting one drops it on the default map, where its
+  `near`/`lair_cleared` conditions name places that do not exist. Either they
+  should declare a world they attach to, or the browser should ask which map to
+  tell them on.
+- **No localisation seam.** Every string in a pack is the string the player
+  reads.
+- **`user://mods/` on the web build.** The browser export has no real user
+  directory to drop a zip into, so community packs are a desktop feature for
+  now; `res://content/` ships everywhere.

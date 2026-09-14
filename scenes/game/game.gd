@@ -26,21 +26,32 @@ const Icons = preload("res://core/ui_icons.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const Sound = preload("res://core/audio.gd")
 const Tutorial = preload("res://core/tutorial.gd")
+const Registry = preload("res://core/mod/registry.gd")
+const StoryRuntime = preload("res://core/mod/story_runtime.gd")
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 const CAMPAIGN_SCENE := "res://scenes/campaign/campaign.tscn"
 const COMBAT_SCENE := "res://scenes/main.tscn"
 const WORLD_SCENE := "res://scenes/world/world.tscn"
+const MODS_SCENE := "res://scenes/mods/mods.tscn"
 
 # O8's one switch. Read live (not cached) so a test can set it between runs.
 static func linear_campaign() -> bool:
 	return OS.get_environment("SORCMERC_LINEAR_CAMPAIGN") != ""
 
 var _screen: Control = null      # whatever is on show right now
+# M8: the content pack the player picked out of the browser, waiting for a
+# party to be assembled for it. Null is normal play on a built-in map.
+var _pack = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	theme = Icons.dark_theme()
+	# M6: every enabled pack's data lands in the catalog before anything reads
+	# it — the front door is the one place that happens, so no screen has to
+	# know packs exist to get a pack's monsters and items.
+	Registry.scan()
+	Registry.apply_data()
 	var bg := ColorRect.new()
 	bg.color = Icons.COL_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -87,7 +98,8 @@ func show_title() -> void:
 	if WorldSave.has_save():
 		col.add_child(_button("▶  Resume the open world", _resume_world))
 	col.add_child(_button("✦  New run", show_party_setup))
-	col.add_child(_button("❖  Tutorial", show_tutorial))
+	col.add_child(_button("❖  Campaigns & mods", show_content))
+	col.add_child(_button("✧  Tutorial", show_tutorial))
 	col.add_child(_button("⚔  Random battle (debug)", show_random_battle))
 	var roster := CharacterSave.list_slugs().size()
 	col.add_child(_dim("%d character(s) in the barracks." % roster))
@@ -116,7 +128,38 @@ func _resume_world() -> void:
 	if saved == null:
 		show_title()
 		return
-	show_world(saved["party"], saved["world"])
+	show_world(saved["party"], saved["world"], "small", _story_from(saved))
+
+# M7: a save that was telling a story names the pack it came from. The story
+# itself is not in the save — only the progress through it — so resuming means
+# finding the pack again. A pack that has since been uninstalled, disabled or
+# (a bought DLC on a machine that no longer owns it) locked simply resumes as
+# the map it already is: the run is not lost, the story is just not being told.
+func _story_from(saved: Dictionary):
+	var state: Dictionary = saved.get("story", {})
+	var pack_id := String(state.get("pack", ""))
+	if pack_id.is_empty():
+		return null
+	var pack = Registry.find(pack_id)
+	if pack == null or not pack.live():
+		return null
+	var story_def = Registry.story_of(pack)
+	return StoryRuntime.new(story_def, state, pack_id) if story_def != null else null
+
+# --- M8: campaigns and mods -----------------------------------------------
+#
+# The browser lists what is installed; picking one only remembers it, because a
+# campaign still needs a party and the party screen is where parties are made.
+
+func show_content() -> void:
+	var screen = load(MODS_SCENE).instantiate()
+	screen.on_back = show_title
+	screen.on_play = _choose_pack
+	_swap(screen)
+
+func _choose_pack(pack) -> void:
+	_pack = pack
+	show_party_setup()
 
 # --- tutorial -------------------------------------------------------------
 #
@@ -209,6 +252,30 @@ func show_party_setup() -> void:
 		else:
 			show_world(party, null, size)
 
+	# M8: a chosen pack replaces the three built-in maps with its own — there is
+	# one thing to begin, and it is the campaign the player just picked.
+	if _pack != null:
+		var begin_pack := Button.new()
+		begin_pack.text = "Begin — %s  →" % _pack.title()
+		begin_pack.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		begin_pack.offset_left = -360; begin_pack.offset_top = 12; begin_pack.offset_right = -16
+		begin_pack.pressed.connect(func():
+			if party.active.is_empty():
+				screen._hint.text = "Put at least one character in the active party first."
+				return
+			_start_pack(party))
+		wrap.add_child(begin_pack)
+		var cancel := Button.new()
+		cancel.text = "←  Campaigns"
+		cancel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		cancel.offset_left = 16; cancel.offset_top = 12; cancel.offset_right = 160
+		cancel.pressed.connect(func():
+			_pack = null
+			show_content())
+		wrap.add_child(cancel)
+		_swap(wrap)
+		return
+
 	var begin_small := Button.new()
 	begin_small.text = "Begin — Small World  →"
 	begin_small.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -241,6 +308,21 @@ func show_party_setup() -> void:
 	wrap.add_child(back)
 	_swap(wrap)
 
+# M8: a pack run is an ordinary open-world run — the same scene, the same
+# party, the same autosave. The pack supplies the map, and (when it has one) a
+# core/mod/story_runtime.gd that the world screen polls.
+func _start_pack(party) -> void:
+	var world = Registry.world_of(_pack, int(OS.get_environment("SORCMERC_SEED")))
+	var story_def = Registry.story_of(_pack)
+	var run = StoryRuntime.new(story_def, {}, _pack.id()) if story_def != null else null
+	_pack = null
+	if world == null:
+		# A story-only pack rides on whichever map is already the default: it
+		# declared no world, so it did not ask for one.
+		show_world(party, null, "small", run)
+		return
+	show_world(party, world, "small", run)
+
 # --- the open world (normal play) -----------------------------------------
 #
 # O8: the whole integration is one field — the party the player just assembled
@@ -251,12 +333,13 @@ func show_party_setup() -> void:
 # built-in ones. `size` ("small" | "large" | "procedural") only matters when
 # `world` is null — a resumed save already has its map, the size that built
 # it is moot.
-func show_world(party, world = null, size := "small") -> void:
+func show_world(party, world = null, size := "small", story = null) -> void:
 	var screen = load(WORLD_SCENE).instantiate()
 	screen.party = party
 	screen.world_size = size
 	if world != null:
 		screen.world = world
+	screen.story = story
 	_swap(screen)
 
 # --- the run (linear, debug-only) -----------------------------------------

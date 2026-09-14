@@ -31,6 +31,11 @@
 #     "active": ["vera"], "gold": 120,           // and marching order live nowhere else
 #     "stash": [...], "quests": [...], "last_long_rest_at": 742.5,  // T9x rest cooldown
 #     "overworld_figure": "wizard"  // T9x: chosen map token, "" = the flat pawn
+#   },
+#   "story": {                        // M7: the content pack's story, mid-telling.
+#     "pack": "ashen-road",           //   {} on every run with no story on it.
+#     "chapter": "smoke", "done": false,
+#     "flags": {"hired": true}, "fired": ["meet-maera"], "journal": ["..."]
 #   }
 # }
 #
@@ -61,7 +66,12 @@ static func dir() -> String:
 static func path() -> String:
 	return dir() + "/world.json"
 
-static func to_dict(world, party = null) -> Dictionary:
+# M7: `story` is a core/mod/story_runtime.gd, or null for a run with no story
+# on it (every built-in map). A save that carries one also carries the pack id
+# it came from, so a resumed run knows which content pack to ask the registry
+# for — without it a half-told story would resume as a map with orphan quests
+# in the log.
+static func to_dict(world, party = null, story = null) -> Dictionary:
 	var settlements: Array = []
 	for s in world.settlements:
 		settlements.append({
@@ -110,6 +120,7 @@ static func to_dict(world, party = null) -> Dictionary:
 		"waters": waters,
 		"explored": explored,
 		"party": _party_dict(party),
+		"story": story.to_dict() if story != null else {},
 	}
 
 # null when the dictionary is not a world save. Applies the saved opinion as a
@@ -164,7 +175,12 @@ static func from_dict(d: Dictionary):
 	var opinion: Dictionary = d.get("opinion", {})
 	for faction in opinion:
 		FactionOpinion.set_opinion(String(faction), float(opinion[faction]))
-	return {"world": world, "party": _party_from(d.get("party", {}))}
+	# M7: the story's progress rides home as a plain dictionary — rebuilding a
+	# runtime from it needs the pack, which is scenes/game/game.gd's job, not
+	# this file's. An old save (or one with no story) simply has {}.
+	var story = d.get("story", {})
+	return {"world": world, "party": _party_from(d.get("party", {})),
+		"story": story if story is Dictionary else {}}
 
 # --- the player's party ------------------------------------------------------
 # Same six fields campaign_save.gd stores; the roster round-trips through the same
@@ -266,7 +282,7 @@ static func _dec(v):
 
 # --- the slot ----------------------------------------------------------------
 
-static func save(world, party = null) -> void:
+static func save(world, party = null, story = null) -> void:
 	if world == null:
 		return
 	DirAccess.make_dir_recursive_absolute(dir())
@@ -274,7 +290,7 @@ static func save(world, party = null) -> void:
 	if f == null:
 		push_warning("cannot write %s" % path())
 		return
-	f.store_string(JSON.stringify(to_dict(world, party), "  "))
+	f.store_string(JSON.stringify(to_dict(world, party, story), "  "))
 	f.close()
 
 # Never crashes on a missing or corrupt file — a bad autosave is just "no autosave".

@@ -1,0 +1,132 @@
+{
+  "format": "sorcmerc-story",
+  "version": 1,
+  "title": "Vault of the Ember Crown",
+  "synopsis": "The thing under the Wyrmscar was dreaming of a crown. Crowns have owners. This one has been under the Coldmarch for eight hundred years and has not stopped being one.",
+  "cast": [
+    {"id": "hale", "name": "Warden Hale", "role": "Warden of Hearthgate", "home": "hearthgate",
+     "about": "Took the post because nobody else would sign for the Coldmarch. Signs for everything."},
+    {"id": "vessa", "name": "Vessa of the Nine Coals", "role": "Speaker for the crown-seekers",
+     "home": "the-crown-vault",
+     "about": "Wants the crown worn, not owned, and does not much mind by whom."},
+    {"id": "durn", "name": "Durn Stonewake", "role": "Column-captain out of Stonewake", "home": "stonewake",
+     "about": "Has lost two columns on the vault road and intends to lose no more."}
+  ],
+  "chapters": [
+    {
+      "id": "cold-road",
+      "title": "The Cold Road",
+      "intro": "Hearthgate is the last holding with a bell, and it has been ringing for a week.",
+      "beats": [
+        {
+          "id": "hale-at-the-gate",
+          "kind": "scene",
+          "speaker": "hale",
+          "when": {"near": "hearthgate"},
+          "title": "Warden Hale",
+          "lines": [
+            "\"You came up the Ashen Road. Then you already know what we're arguing about.\"",
+            "\"There's a vault out past the Wyrmscar line and it opened the same week your business down south ended. Something in it woke up when you closed that scar.\"",
+            "\"Stonewake sent two columns. Stonewake is not sending a third.\""
+          ],
+          "choices": [
+            {"id": "sign", "text": "Put us on the ledger.",
+             "then": {"flags": ["warded"], "items": [{"id": "coldmarch-lantern", "quantity": 1}],
+                      "journal": ["Warden Hale signed you onto the Coldmarch ledger, and handed over a lantern that casts no heat."]}},
+            {"id": "ask", "text": "What happened to the columns?",
+             "then": {"flags": ["warded", "asked-about-columns"],
+                      "journal": ["Two Stonewake columns went up the vault road. Neither came back, and neither is listed as dead."]}}
+          ]
+        },
+        {
+          "id": "cairn-work",
+          "kind": "quest",
+          "when": {"flag": "warded"},
+          "quest": {
+            "id": "crown-cairns",
+            "kind": "clear_lair",
+            "target_lair_id": "coldmarch-cairns",
+            "title": "Put the Coldmarch Cairns back down",
+            "required": 1,
+            "reward": {"gold": 500}
+          },
+          "then": {"reveal_lair": "coldmarch-cairns"}
+        },
+        {
+          "id": "durn-counts",
+          "kind": "scene",
+          "speaker": "durn",
+          "optional": true,
+          "when": {"all": [{"quest": "crown-cairns", "state": "turned_in"}, {"near": "stonewake", "within": 160}]},
+          "title": "Durn Stonewake, counting",
+          "lines": [
+            "\"Forty-one went up that road under my seal. I know where thirty-nine are. That is not a war record, it is an accounts problem, and I hate accounts problems.\"",
+            "\"Take the column road. If you find the other two, they answer to me before they answer to any crown.\""
+          ],
+          "then": {"flags": ["column-road"], "opinion": [{"faction": "dwarf", "delta": 12}],
+                   "journal": ["Durn Stonewake opened the column road, on the condition that his missing two answer to him first."]}
+        }
+      ],
+      "ends_when": {"quest": "crown-cairns", "state": "turned_in"}
+    },
+    {
+      "id": "the-vault",
+      "title": "Vault of the Ember Crown",
+      "intro": "Past the last cairn the snow stops, in a perfect circle, and has for eight hundred years.",
+      "beats": [
+        {
+          "id": "vessa-offers",
+          "kind": "scene",
+          "speaker": "vessa",
+          "when": {"near": "the-crown-vault", "within": 200},
+          "title": "Vessa of the Nine Coals",
+          "lines": [
+            "\"You closed the scar. You have no idea what you woke, and I do, and I am still glad you did it.\"",
+            "\"The crown wants a head. It does not especially care whose. Walk in with me and it will be worn by somebody who understands it.\"",
+            "\"Or walk in without me, and it will be worn by whoever is left standing.\""
+          ],
+          "choices": [
+            {"id": "with", "text": "We go in together.",
+             "then": {"flags": ["with-vessa"],
+                      "journal": ["You took the Nine Coals into the vault at your back."],
+                      "opinion": [{"faction": "cultist", "delta": 20}]}},
+            {"id": "without", "text": "We go in alone.",
+             "then": {"flags": ["alone"],
+                      "spawn_party": {"id": "nine-coals-rearguard", "name": "The Nine Coals' rearguard",
+                                      "near": "the-crown-vault", "offset": [110, 60], "faction": "cultist",
+                                      "troops": [{"role": "spellcaster", "level": 7}, {"role": "heavy", "level": 6}]},
+                      "journal": ["You refused the Nine Coals. They are behind you on the vault road now."],
+                      "opinion": [{"faction": "cultist", "delta": -30}]}}
+          ]
+        },
+        {
+          "id": "vault-work",
+          "kind": "quest",
+          "when": {"any": [{"flag": "with-vessa"}, {"flag": "alone"}]},
+          "quest": {
+            "id": "crown-vault",
+            "kind": "clear_lair",
+            "target_lair_id": "the-crown-vault",
+            "title": "Take the Vault of the Ember Crown",
+            "required": 1,
+            "reward": {"gold": 1500, "item_id": "ember-crown"}
+          }
+        },
+        {
+          "id": "crowned",
+          "kind": "scene",
+          "speaker": "hale",
+          "when": {"quest": "crown-vault", "state": "turned_in"},
+          "title": "The ledger closes",
+          "lines": [
+            "\"The bell's stopped. First time since I took the post.\"",
+            "\"I'm told there's a crown involved and I'm told not to ask. Fine. You're off the Coldmarch ledger, and the Coldmarch is off mine.\""
+          ],
+          "then": {"xp": 2400, "opinion": [{"faction": "human", "delta": 20}],
+                   "journal": ["The Ember Crown came out of the Coldmarch. What it does next is somebody's next problem."],
+                   "end_story": true}
+        }
+      ]
+    }
+  ]
+}

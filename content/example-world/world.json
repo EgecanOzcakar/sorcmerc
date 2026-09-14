@@ -1,0 +1,37 @@
+{
+  "format": "sorcmerc-world",
+  "version": 1,
+  "name": "The Long Vale",
+
+  "settlements": [
+    {"id": "longvale", "name": "Long Vale", "position": [0, 0], "faction": "human", "kind": "town"},
+    {"id": "highcopse", "name": "High Copse", "position": [380, -220], "faction": "elf", "kind": "camp"},
+    {"id": "under-stair", "name": "Under-Stair", "position": [-420, 180], "faction": "dwarf", "kind": "town"}
+  ],
+
+  "lairs": [
+    {"id": "vale-warren", "name": "The Vale Warren", "position": [220, 210], "faction": "goblinoid"},
+    {"id": "old-quarry", "name": "The Old Quarry", "position": [-560, -380], "faction": "undead"}
+  ],
+
+  "parties": [
+    {"id": "vale-bandits", "position": [-240, -160], "faction": "bandit",
+     "troops": [{"role": "heavy", "level": 2}, {"role": "light", "level": 2}],
+     "ai": {"behavior": "hunt"}},
+
+    {"id": "copse-wardens", "position": [340, -160], "faction": "elf",
+     "troops": [{"role": "light", "level": 3}],
+     "ai": {"behavior": "patrol", "waypoints": ["highcopse", "longvale", [340, -160]]}},
+
+    {"id": "warren-foragers", "position": [260, 260], "faction": "goblinoid",
+     "troops": [{"role": "light", "level": 1}],
+     "ai": {"behavior": "wander", "home": "vale-warren", "radius": 140, "seed": 7}}
+  ],
+
+  "waters": [
+    {"position": [-140, -60], "radius": 90},
+    {"river": [[-70, -10], [-20, 120], [30, 260]], "radius": 35}
+  ],
+
+  "start": {"at": "longvale", "offset": [40, 40], "faction": "human"}
+}

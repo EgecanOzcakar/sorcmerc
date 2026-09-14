@@ -36,6 +36,7 @@ const Travel = preload("res://core/travel.gd")
 const EventCard = preload("res://scenes/world/event_card.gd")
 const Approach = preload("res://core/approach.gd")
 const ApproachCard = preload("res://scenes/world/approach_card.gd")
+const StoryCard = preload("res://scenes/world/story_card.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
@@ -250,6 +251,15 @@ var _minimap: Control = null   # T9y: the corner map inset, see _layout_minimap(
 var _terrain_tex: Texture2D
 var _forest_tex: Texture2D
 var _water_tex: Texture2D
+# M7: the content pack's story, mid-telling — a core/mod/story_runtime.gd
+# injected by scenes/game/game.gd alongside the map it belongs to, or null for
+# every run on a built-in map. Everything below treats null as "no story", so a
+# normal run costs one `if` per frame and nothing else.
+var story = null
+var story_card: Control = null       # the beat being shown, or null
+var _story_panel: Control = null     # the journal overlay, toggled off the HUD
+var _story_btn: Button
+
 var world_size := "small"   # "small" | "large" — which built-in map _ready() falls back to
                              # when nobody injected a `world` (a fresh start, not O13's resume)
 
@@ -378,6 +388,7 @@ func _process(delta: float) -> void:
 		for r in WorldBattle.check(world, _trigger(dt), encounter_spec):
 			Visit.mark_battle(world, r["loser"].position, world.clock.elapsed)
 	_check_visit()
+	_check_story()
 	_check_lairs()
 	_check_expired_lairs()
 	_check_forage()
@@ -423,6 +434,12 @@ func _build_hud() -> void:
 	quests_btn.text = "Quests"
 	quests_btn.pressed.connect(_toggle_quests)
 	bar.add_child(quests_btn)
+	# M7: only a run that is telling a story has a story to read.
+	_story_btn = Button.new()
+	_story_btn.text = "Story"
+	_story_btn.visible = story != null
+	_story_btn.pressed.connect(_toggle_story)
+	bar.add_child(_story_btn)
 	var title := Button.new()
 	title.text = "←  Title"
 	title.pressed.connect(_leave_world)
@@ -495,10 +512,16 @@ const MINIMAP_MIN := 96.0
 # and faction opinion go to core/world_save.gd's slot, which the title screen's
 # "Resume the open world" reads back. Opinion is process-global, so it is still
 # cleared here once saved — the next thing to run must not inherit this run's.
+# M7: one place that knows what an autosave carries, now that it also carries
+# how far into its story a run is. Every call site used to spell out
+# `WorldSave.save(world, party)`; there were twelve of them.
+func _autosave() -> void:
+	WorldSave.save(world, party, story)
+
 func _leave_world() -> void:
 	for ch in party.roster:
 		CharacterSave.save(ch)
-	WorldSave.save(world, party)
+	_autosave()
 	FactionOpinion.reset()
 	# Duck-typed so world.tscn still runs standalone (godot --path . scenes/world/
 	# world.tscn), where the parent is the scene root and has no title screen.
@@ -508,9 +531,11 @@ func _leave_world() -> void:
 
 # O9 item 7: both are no-ops while a market panel is open. The visit owns the
 # clock (it paused it); letting the button resume the world underneath an open
-# panel desynced the label and set the map running behind it.
+# panel desynced the label and set the map running behind it. M7's beat card
+# and journal own it the same way, for the same reason.
 func _toggle_pause() -> void:
-	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null:
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
+			or _story_panel != null or story_card != null:
 		return
 	if world.clock.is_paused():
 		world.clock.resume()
@@ -519,7 +544,8 @@ func _toggle_pause() -> void:
 	_pause_btn.text = "Resume" if world.clock.is_paused() else "Pause"
 
 func _cycle_speed() -> void:
-	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null:
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
+			or _story_panel != null or story_card != null:
 		return
 	world.clock.cycle_speed()
 	_speed_btn.text = "%dx" % int(world.clock.speed)   # every WorldClock.SPEEDS entry is a whole number
@@ -568,7 +594,8 @@ func _toggle_quests() -> void:
 	if _quest_panel != null:
 		_close_quests()
 		return
-	if _combat != null or not _visit.is_empty() or _party_overlay != null:
+	if _combat != null or not _visit.is_empty() or _party_overlay != null \
+			or _story_panel != null or story_card != null:
 		return
 	world.clock.pause()
 	_build_quest_panel()
@@ -623,6 +650,121 @@ func _build_quest_panel() -> void:
 	var close := Button.new()
 	close.text = "Close"
 	close.pressed.connect(_close_quests)
+	box.add_child(close)
+
+# --- M7: the story ---------------------------------------------------------
+#
+# Polled, once a frame, exactly like the lair/forage/travel checks above it —
+# core/mod/story_runtime.gd asks the live world and party what is true and
+# hands back whatever just became eligible. Nothing publishes an event and
+# nothing subscribes, which is why a content pack can tell a story about
+# systems that have never heard of it.
+
+func _check_story() -> void:
+	if story == null or story_card != null:
+		return
+	# A beat interrupts the map, so it waits its turn behind anything else that
+	# already has: a fight, a market, the party screen, the quest log, a road
+	# event, a band asking to be dealt with.
+	if _combat != null or not _visit.is_empty() or _party_overlay != null \
+			or _quest_panel != null or _story_panel != null \
+			or _event_card != null or _approach_card != null or _site_screen != null:
+		return
+	var pending: Array = story.pending(world, party)
+	if pending.is_empty():
+		if not story.advance(world, party).is_empty():
+			_autosave()
+		return
+	var beat: Dictionary = pending[0]
+	var lines: Array = story.fire(beat, world, party)
+	# A beat with nothing to show (a `note` that only set a flag) must not
+	# stop a map at 8x for a blank card.
+	if beat.get("lines", []).is_empty() and lines.is_empty() \
+			and beat.get("choices", []).is_empty():
+		story.advance(world, party)
+		_autosave()
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	story_card = StoryCard.new()
+	add_child(story_card)
+	story_card.chosen.connect(_on_story_choice.bind(beat))
+	story_card.show_beat(story, beat, lines, world, party)
+
+func _on_story_choice(choice_id: String, beat: Dictionary) -> void:
+	if choice_id != "":
+		story.choose(beat, choice_id, world, party)
+	story.advance(world, party)
+	if story_card != null:
+		story_card.queue_free()
+		story_card = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+	# A beat can hand over a quest, move the purse and put a lair on the map:
+	# everything an autosave exists to remember.
+	_autosave()
+
+# The journal: the synopsis, where the story has got to, and every line it has
+# written down. Same inline-overlay shape as the quest log next to it.
+func _toggle_story() -> void:
+	if _story_panel != null:
+		_close_story()
+		return
+	if story == null or _combat != null or not _visit.is_empty() \
+			or _party_overlay != null or _quest_panel != null or story_card != null:
+		return
+	world.clock.pause()
+	_build_story_panel()
+
+func _close_story() -> void:
+	if _story_panel != null:
+		_story_panel.queue_free()
+		_story_panel = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+func _build_story_panel() -> void:
+	var panel := PanelContainer.new()
+	panel.position = size * 0.5 - Vector2(230, 190)
+	panel.custom_minimum_size = Vector2(460, 380)
+	add_child(panel)
+	_story_panel = panel
+	var box := VBoxContainer.new()
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = story.story.title
+	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	box.add_child(title)
+
+	var chapter := Label.new()
+	var c: Dictionary = story.story.chapter(story.chapter)
+	chapter.text = "Finished." if story.done else String(c.get("title", "—"))
+	chapter.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	chapter.add_theme_color_override("font_color", Icons.COL_ACCENT)
+	box.add_child(chapter)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(440, 290)
+	box.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(rows)
+	var lines: Array = story.journal
+	if lines.is_empty():
+		lines = [story.story.synopsis]
+	for line in lines:
+		var l := Label.new()
+		l.text = String(line)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size = Vector2(420, 0)
+		l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+		l.add_theme_color_override("font_color", Icons.COL_BODY)
+		rows.add_child(l)
+
+	var close := Button.new()
+	close.text = "Close"
+	close.pressed.connect(_close_story)
 	box.add_child(close)
 
 # --- O4: encounter trigger + combat hand-off ---------------------------
@@ -758,7 +900,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dict
 		_retreat()
 	_apply_deaths(result)
 	world.clock.resume()
-	WorldSave.save(world, party)   # O13 autosave: a fight is the biggest thing that
+	_autosave()   # O13 autosave: a fight is the biggest thing that
 	                               # happens to a run — never re-fight it after a crash
 	return result
 
@@ -896,7 +1038,7 @@ func _check_expired_lairs() -> void:
 		return
 	for l in WorldLairs.expire(world, world.clock.elapsed):
 		_lair_msg.text = WorldLairs.resolution_text(l)
-		WorldSave.save(world, party)
+		_autosave()
 
 func _lair_action() -> void:
 	var l: World.Lair = _lair_target
@@ -987,14 +1129,14 @@ func _on_site_room_chosen(i: int) -> void:
 	elif not _site.is_over():
 		_site.leave()
 	_site_screen.refresh()
-	WorldSave.save(world, party)
+	_autosave()
 
 func _on_site_advanced() -> void:
 	if _site == null or _site.is_over():
 		return
 	_site.leave()
 	_site_screen.refresh()
-	WorldSave.save(world, party)
+	_autosave()
 
 func _on_site_withdrew() -> void:
 	if _site == null:
@@ -1033,7 +1175,7 @@ func _on_site_done() -> void:
 		_site_screen = null
 	world.clock.resume()
 	_pause_btn.text = "Pause"
-	WorldSave.save(world, party)
+	_autosave()
 
 # T91: split out of _check_visit so it can await the fight — the stand-in id
 # ("%s-guard") never matches a hunt_party quest's target, so raid_settlement
@@ -1151,7 +1293,7 @@ func _check_travel() -> void:
 	add_child(_event_card)
 	_event_card.acknowledged.connect(_on_event_ack)
 	_event_card.show_event(e)
-	WorldSave.save(world, party)   # an event can move gold, HP, the clock and the map
+	_autosave()   # an event can move gold, HP, the clock and the map
 
 # The plain handler for a road event's card. Note it FREES the card without
 # emitting `acknowledged`, so anything that needs a bound follow-up to run
@@ -1295,7 +1437,7 @@ func _close_visit() -> void:
 		_visit_panel = null
 	world.clock.resume()
 	_pause_btn.text = "Pause"
-	WorldSave.save(world, party)   # O13 autosave: the purse and the shelf both moved
+	_autosave()   # O13 autosave: the purse and the shelf both moved
 
 func _buy(item_id: String) -> void:
 	if Visit.buy(_visit, party, item_id):
@@ -1320,7 +1462,7 @@ func _buy_rumor(lead: Dictionary) -> void:
 	var r: Dictionary = Rumors.buy(lead, party, world)
 	if bool(r.get("ok", false)):
 		Sound.play_sfx("quest")
-		WorldSave.save(world, party)
+		_autosave()
 	_build_visit_panel()
 	_say(String(r.get("text", "")))
 
@@ -1328,7 +1470,7 @@ func _heal() -> void:
 	var r: Dictionary = Visit.heal(party)
 	if bool(r.get("ok", false)):
 		Sound.play_sfx("heal")
-		WorldSave.save(world, party)
+		_autosave()
 	_build_visit_panel()
 	_say(String(r.get("text", "")))
 
@@ -1336,7 +1478,7 @@ func _identify(item_id: String) -> void:
 	var r: Dictionary = Visit.identify(party, item_id)
 	if bool(r.get("ok", false)):
 		Sound.play_sfx("identify")
-		WorldSave.save(world, party)
+		_autosave()
 	_build_visit_panel()
 	_say(String(r.get("text", "")))
 
@@ -1520,7 +1662,7 @@ func _turn_in(quest: Dictionary) -> void:
 		_say("%s — paid, +%d gp. They will remember it.%s" % [
 			quest["title"], reward,
 			("  " + String(lead["text"])) if not lead.is_empty() else ""])
-		WorldSave.save(world, party)
+		_autosave()
 
 # The panel is rebuilt after every action, so the last line has to live on the
 # visit rather than on the Label that just got freed.

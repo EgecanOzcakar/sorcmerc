@@ -1,0 +1,13 @@
+{
+  "format": "sorcmerc-pack",
+  "api": 1,
+  "id": "example-world",
+  "title": "Example — The Long Vale",
+  "summary": "A small, complete map and nothing else: the shortest thing that is a working content pack. Copy this directory to start your own. See docs/modding.md.",
+  "authors": ["The sorcmerc team"],
+  "pack_version": "1.0.0",
+  "kind": "world",
+  "access": "free",
+  "priority": 0,
+  "world": "world.json"
+}
