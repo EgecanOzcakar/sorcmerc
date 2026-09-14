@@ -416,7 +416,23 @@ which means a mod cannot shadow a DLC by claiming its id.
 
 ---
 
-## 8. What is where, in the code
+## 8. Not yet: scripted fights
+
+A beat cannot yet say "this fight, these foes, this board, now". Every fight in
+the game — including the ones a story's quests send you into — is built for the
+party standing there by `core/scaler.gd`, so a pack shapes encounters by
+*placing* things (a lair's faction, where it sits on the map) rather than by
+writing a roster.
+
+It is designed and not built: `docs/expansion-plan.md` §M9 has the intended
+shape — a `fights` block in the pack, a `"kind": "fight"` beat that runs one,
+and `on_win`/`on_loss` effect blocks so a story can branch on the outcome. If
+you are writing a pack now, the thing worth knowing is that the trigger already
+works (`when` on a beat); only the fight itself is missing, so a set-piece can
+be written today as a scene plus a `clear_lair` quest and upgraded later
+without rewriting the chapter around it.
+
+## 9. What is where, in the code
 
 | File | Owns |
 |---|---|
