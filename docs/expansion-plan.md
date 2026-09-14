@@ -3808,7 +3808,8 @@ story simply not being told, rather than as a broken save.
   purse, reveal lairs and spawn bands, but a scripted set-piece encounter (this
   roster, on this board, at this moment) goes through the same generated
   pipeline as everything else. `Encounter`'s spec dictionary is the obvious
-  seam and is deliberately not exposed yet.
+  seam and is deliberately not exposed yet — designed, not built, in **M9**
+  below.
 - **Story-only packs have nowhere to be told.** The format allows a pack with a
   story and no world; starting one drops it on the default map, where its
   `near`/`lair_cleared` conditions name places that do not exist. Either they
@@ -3819,3 +3820,204 @@ story simply not being told, rather than as a broken save.
 - **`user://mods/` on the web build.** The browser export has no real user
   directory to drop a zip into, so community packs are a desktop feature for
   now; `res://content/` ships everywhere.
+
+## A new hero joins at the party's level (2026-09-14)
+
+Creating a character mid-game handed you a level-1 hero to walk into content
+the rest of the party is levels past — a replacement for a dead veteran was a
+liability, and the fifth build you wanted to try was unplayable. The creator
+now builds at `Party.active_max_level()`: the highest level among the <= 4 who
+fight (1 while nobody does, so the first hero is still a first hero).
+
+`scenes/party/party.gd` injects it with `creator.set_start_level(...)` before
+the overlay opens; `Leveling.grant_levels()` appends the levels and banks
+exactly `xp_for_level(target)`, so the new arrival is not instantly owed
+another one. Nothing else in the creator changed: every grant those levels
+bring arrives as a pending choice the way level 1's do, so the Skills &
+Background and Review steps ask for the subclass, the ASI-or-feat and the
+spells, and Confirm stays blocked until they are all made. The three presets
+go the same way — they are level-3 builds with their choices already made, so
+they are topped up to the party's level rather than rebuilt.
+
+The catch-up is a gift, not a haul, and the meta-progression must not be able
+to tell the difference — so it touches neither side of `core/progression.gd`:
+lifetime XP (which buys species and classes) and class XP (which buys
+subclasses) are still only ever written by `core/campaign.gd` out of XP earned
+in a fight. Milestone achievements stay out for the same reason: being handed
+level 5 is not reaching level 5. Covered by `tests/test_leveling.gd`'s
+`_catch_up` / `_catch_up_in_creator` (the model, then the real creator scene)
+and `tests/test_party.gd`'s `test_active_max_level`.
+
+## M9 (design note, not built) — scripted fights for content packs
+
+The one thing a pack cannot do that a pack author will want on day one: say
+*this* fight, with *these* foes, on *this* board, at *this* moment in the
+story. Written down now, while the shape of M1–M8 is fresh, so whoever picks
+it up is not re-deriving the seam.
+
+### Why it is not already possible
+
+Every fight in the game is generated. `Scaler.roster_for(chars, difficulty,
+bias, theme, seed, power_scale)` builds a roster for the party that is standing
+there, and hands back a spec:
+
+```gdscript
+{"monsters": [{"id": "snik", "count": 3, "mult": 1.2, "features": [...]}],
+ "theme": "goblin-camp", "mult": 1.0, "seed": 1234}
+```
+
+`Encounter.build(spec, party_combatants, board := {})` turns that into a
+`Combat`. Note what that means: **the spec is already exactly the thing an
+author would want to write**, and `Encounter.build()` already accepts a
+hand-written one — `Tutorial.SPEC` is a hand-authored spec that ships today,
+and `core/site.gd` already runs a room off a pre-built spec without going
+through the scaler at all. The machinery is there. What is missing is a way for
+a *pack* to supply one, and a way for a *story* to trigger it.
+
+### The shape
+
+A `fights` block in the pack, referenced by id — beside `cast`, not inside a
+beat, because the same set-piece may be reachable from more than one place:
+
+```json
+"fights": [
+  {
+    "id": "warren-mouth",
+    "title": "At the mouth of the Ash Warren",
+    "theme": "goblin-camp",
+    "monsters": [
+      {"id": "warren-firecaller", "count": 1, "mult": 1.4,
+       "features": ["monster-surprise-attack"]},
+      {"id": "snik", "count": 4}
+    ],
+    "scale_to_party": false,
+    "seed": 91
+  }
+]
+```
+
+and a beat kind that runs one:
+
+```json
+{"id": "the-ambush", "kind": "fight", "fight": "warren-mouth",
+ "when": {"near": "ash-warren", "within": 90},
+ "lines": ["Something has been waiting at the mouth of it."],
+ "on_win":  {"flags": ["mouth-cleared"], "gold": 120},
+ "on_loss": {"flags": ["driven-off"], "journal": ["You were thrown back down the slope."]}}
+```
+
+`on_win` / `on_loss` are the point. A generated encounter is a thing that
+happens to you; a beat that branches on its outcome is a thing the story is
+about. Both take the ordinary M4 effects block, so nothing new has to be
+learned to write one.
+
+### The actual work, and why it is its own pass
+
+The M5 runtime is polled and **never blocks** — rule 2 of
+`core/mod/story_runtime.gd` is that it never asks the player anything, which is
+what lets a beat fire, apply, and be done inside one `_check_story()` call. A
+fight is the first beat that must *suspend*: the world screen has to put
+`scenes/main.tscn` up, wait for it, and bring a result back.
+
+That means:
+
+- a new runtime state — "waiting on fight X, from beat Y" — which has to be in
+  `to_dict()`, because a reload mid-fight must neither lose the beat nor re-fire
+  it;
+- `resolve_fight(beat, result)` on the runtime, applying `on_win`/`on_loss`;
+- one more branch in `_check_story()`, next to the card, using the
+  `_run_combat()` hand-off `world.gd` already has for lairs and bands;
+- and a decision about what a *defeat* means, which the open world has never
+  settled either (`world.gd`'s `_retreat()` soft landing was written for the
+  linear campaign map — see "Not yet decided", above).
+
+None of it is large. It is a new contract for the story layer rather than more
+of the existing one, which is exactly why it was not bolted onto M5.
+
+### Two rules it must keep
+
+1. **One combat path.** A scripted fight still goes through
+   `Encounter.build()` and the normal combat screen. A pack that could open its
+   own fight screen is a pack that can ship a broken one.
+2. **`scale_to_party` is the whole difficulty question.** Default `false`: the
+   author's numbers are absolute, which is what makes a set-piece a set-piece.
+   But an absolute fight is also how a pack hands a level-2 party an
+   unwinnable wall — so the validator should price the roster with
+   `Power.score()` against the band the trigger sits in (`Regions.at()`) and
+   warn when they are a country apart. `true` keeps the numbers as a base and
+   lets the scaler adjust, for an author who wants a named encounter that is
+   still fair at any level.
+
+### What the validator owes an author
+
+All of it at scan time, like everything else in M1–M8:
+
+- every monster id known — including the pack's own `bestiary.json` overlay,
+  which the catalog has not loaded yet at validation time (`_own_item_ids()` in
+  `registry.gd` already does this dance for item rewards; it wants a sibling);
+- `theme` in `Encounter.THEMES`;
+- every id in `features` present in `data/effects/features.json`;
+- `count >= 1`, and `mult` inside the range `Scaler` itself uses
+  (`MULT_MIN` 0.6 to `MULT_MAX` 2.5) — outside it the numbers stop meaning what
+  the bestiary says they mean;
+- **total foes within the board's capacity.** `Encounter.build()` falls back to
+  `PARTY_STARTS[0]` when it runs out of spawn spots, which stacks every extra
+  foe on top of the party's own start hex. Measured capacity, with a four-hero
+  party: merchant-shop 15, frozen-cave 18, sunken-shrine 20, goblin-camp 22,
+  city-square 22, forest-clearing 23. (Generated fights never hit this —
+  `Scaler.MAX_FOES` is 8.)
+- a `fight` id a beat references actually existing, and — worth a warning —
+  every declared fight being referenced by something.
+
+### Where else it plugs in
+
+A story beat is the first customer, but the same `fights` block would serve two
+others already in the code: `core/site.gd`, which builds a spec per lair room
+(a pack naming its boss room's fight is the obvious second step), and the
+`raid_settlement` quest kind. Neither should be in the first pass.
+
+## CI — the suite runs on pull requests now (2026-09-14)
+
+Nothing checked a branch before this. `release.yml` builds and publishes on a
+push to master or a tag; a pull request ran nothing at all, so every "the suite
+is green" in a PR description was a claim about somebody's laptop, unverifiable
+by the person reading it.
+
+**`tools/run_tests.sh`** is the whole suite in one command, and
+`.github/workflows/tests.yml` runs exactly that on every pull request and every
+push to master. The script rather than steps in the YAML is the point: a
+contributor runs the identical thing locally, so local green and CI green are
+the same claim rather than two similar ones.
+
+Three things the script knows that a bare `for f in tests/*.gd` loop does not,
+all three learned the hard way today:
+
+1. **Assets must be imported first.** A script that preloads a texture cannot
+   *compile* without `.godot/imported/`, so on a fresh checkout half the suite
+   fails with parse errors that have nothing to do with any test. Godot's own
+   `--import` is incremental, so running it every time costs nothing after the
+   first.
+2. **The verdict is the exit code, never the output.** Most tests print
+   "N passed, M failed"; `test_bestiary.gd` prints `OK`; the drive robots each
+   print a line of their own. All of them `quit(1)` on failure.
+3. **A failed `assert()` hangs.** The SceneTree never reaches its `quit()`, so
+   the process sits in the main loop forever — measured, not guessed. Every
+   test therefore runs under `timeout`, and a timeout is reported as a failure
+   rather than waited on.
+
+**`tests/check_scripts.gd`** runs first: every `.gd` under `core/`, `scenes/`
+and `tests/` is loaded and must compile (170 of them, ~3s). No test can do
+this job — a test only compiles the scripts it happens to preload, so a parse
+error in a file nothing imports, or in a screen no robot drives, survives a
+green suite and is found by running the game. This session shipped exactly that
+bug and caught it by accident; now it is a check.
+
+The signal is `can_instantiate()`, **not** a null return: a script that fails to
+parse still comes back from `load()` as a GDScript object, so the obvious
+`if load(path) == null` check quietly passes everything. Verified by breaking a
+file on purpose and watching the null check miss it.
+
+Measured on this machine: the whole suite — import, script check, 64 subsystem
+tests, 8 UI robots — is **177 seconds**. That is why the workflow is one job
+and not a shard matrix; an earlier 30-minute figure turned out to be three
+copies of the runner fighting each other for the CPU, not the suite.

@@ -442,6 +442,9 @@ func _on_create_new() -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(overlay)
 	var creator = load(CREATOR_SCENE).instantiate()
+	# A hero created once the party is under way joins at the level the party is
+	# playing at, not at 1 — the creator asks for every choice those levels bring.
+	creator.set_start_level(party.active_max_level())
 	overlay.add_child(creator)
 	creator.character_created.connect(func(ch):
 		party.add_member(ch)          # auto-activates while there is a free slot

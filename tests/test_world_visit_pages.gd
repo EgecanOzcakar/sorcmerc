@@ -6,6 +6,9 @@
 #   godot --headless --path . -s tests/test_world_visit_pages.gd
 extends SceneTree
 
+const Visit = preload("res://core/settlement_visit.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
+
 var _pass := 0
 var _fail := 0
 
@@ -88,6 +91,48 @@ func _init() -> void:
 	check(press(main._visit_panel, "Leave"), "Leave actually closes the visit")
 	check(main._visit.is_empty(), "...and the visit is really over")
 
+	# --- regression: a rest (fresh shelf roll) must not reset the other
+	# one-per-visit flags (steal/persuade/investigate) — they used to
+	# silently reset because Visit.visit()'s fresh dict only ever had
+	# "stolen" carried forward by hand, not persuaded/investigated too.
+	var s2 = load("res://scenes/world/world.tscn").instantiate()
+	root.add_child(s2)
+	for i in 10:
+		await process_frame
+	var home = s2.world.settlements[0]
+	FactionOpinion.set_opinion(home.faction, FactionOpinion.REFUSE_TRADE - 1.0)
+	Visit.mark_battle(s2.world, home.position, s2.world.clock.elapsed)
+	s2.party.gold = 10000
+	s2._open_visit(home)
+	s2._goto_page("hub")
+	s2._investigate()
+	check(s2._visit.get("investigated", false), "investigate sets its one-shot flag")
+	s2._goto_page("market")
+	s2._persuade()
+	check(s2._visit.get("persuaded", false), "persuade sets its one-shot flag")
+	s2._steal()
+	check(s2._visit.get("stolen", false), "steal sets its one-shot flag")
+
+	s2._goto_page("inn")
+	s2._rest()
+	check(s2._visit.get("investigated", false), "a rest does not reset the investigate flag")
+	check(s2._visit.get("persuaded", false), "a rest does not reset the persuade flag")
+	check(s2._visit.get("stolen", false), "a rest does not reset the steal flag")
+	FactionOpinion.reset()
+
+	# --- haggle: shown on an open market, hidden on a refused one, and vice
+	# versa for persuade — they're mutually exclusive by construction.
+	var s3 = load("res://scenes/world/world.tscn").instantiate()
+	root.add_child(s3)
+	for i in 10:
+		await process_frame
+	s3._open_visit(s3.world.settlements[0])
+	s3._goto_page("market")
+	check(has_button(s3._visit_panel, "Haggle over prices"), "an open market offers haggling")
+	check(not has_button(s3._visit_panel, "Persuade them to trade"), "...but not persuasion")
+	check(press(s3._visit_panel, "Haggle"), "the Haggle button works")
+	check(s3._visit.get("haggled", false), "...and spends the one-per-visit attempt")
+
 	# --- T9y: the hub says what is behind each door -----------------------
 	main._open_visit(s)
 	check(has_button(main._visit_panel, "on the shelves")
@@ -120,7 +165,7 @@ func _init() -> void:
 		var hurt = main.party.get_member(main.party.active[0])
 		hurt.hp_current = 1
 		var gold_before: int = main.party.gold
-		main.party.add_gold(Visit().HEAL_COST)
+		main.party.add_gold(Visit.HEAL_COST)
 		main._goto_market_tab("healer")
 		check(has_button(main._visit_panel, "Heal"), "a settlement with a healer offers the healer")
 		check(press(main._visit_panel, "Heal"), "...and the healer can be paid")
@@ -129,7 +174,7 @@ func _init() -> void:
 		check(main.party.gold == gold_before, "...for exactly the posted fee")
 	if "librarian" in services:
 		main.party.stash_add("spell-scroll", 1, false)
-		main.party.add_gold(Visit().IDENTIFY_COST)
+		main.party.add_gold(Visit.IDENTIFY_COST)
 		main._goto_market_tab("librarian")
 		check(has_button(main._visit_panel, "Identify"), "the librarian lists what needs identifying")
 		check(press(main._visit_panel, "Identify"), "...and reads it for the fee")
@@ -207,9 +252,6 @@ func key(code: int) -> InputEventKey:
 	e.keycode = code
 	e.pressed = true
 	return e
-
-func Visit():
-	return preload("res://core/settlement_visit.gd")
 
 func WorldCampName() -> String:
 	return preload("res://core/world_camp.gd").CAMP_KIT_NAME

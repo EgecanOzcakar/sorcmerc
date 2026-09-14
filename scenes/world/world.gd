@@ -1509,6 +1509,17 @@ func _steal() -> void:
 
 # T9x: one attempt per visit, same shape as _steal(). Only shown when the
 # market actually refused to trade (see _build_visit_panel).
+# T9x: steal/persuade/investigate/haggle are one-attempt-per-visit flags
+# that live only on this UI's own _visit dict — Visit.visit()/market()/
+# persuade_into_trading() know nothing about them, so any spot that
+# replaces _visit wholesale (a rest's fresh shelf roll, a successful
+# persuade reopening the market) has to carry them forward explicitly or
+# they silently reset, re-enabling an action that was supposed to be spent
+# for the price of pressing a different button.
+func _carry_visit_flags(from: Dictionary, to: Dictionary) -> void:
+	for k in ["stolen", "persuaded", "investigated", "haggled"]:
+		to[k] = from.get(k, false)
+
 func _persuade() -> void:
 	if _visit.get("persuaded", false):
 		_say("They've made up their mind for today.")
@@ -1516,13 +1527,27 @@ func _persuade() -> void:
 	var r: Dictionary = Visit.persuade(_visit["settlement"], _visit, party)
 	_visit["persuaded"] = true
 	if bool(r.get("ok", false)):
-		var stolen: bool = _visit.get("stolen", false)
-		var persuaded: bool = true
+		var before := _visit
 		_visit = Visit.persuade_into_trading(_visit["settlement"], _visit)
-		_visit["stolen"] = stolen
-		_visit["persuaded"] = persuaded
+		_carry_visit_flags(before, _visit)
 	_build_visit_panel()
 	_say(String(r.get("text", "Nobody here will hear you out.")))
+
+# T9x: haggling — the mirror of persuade(), for a market that's already
+# open. One attempt per visit; moves this visit's prices for better or
+# worse depending on the roll, doesn't touch the underlying faction opinion.
+func _haggle() -> void:
+	if _visit.get("haggled", false):
+		_say("They won't budge on price again today.")
+		return
+	var r: Dictionary = Visit.haggle(_visit, party)
+	_visit["haggled"] = true
+	if not r.is_empty():
+		Visit.apply_haggle(_visit, float(r["mult"]))
+		if bool(r["ok"]):
+			Sound.play_sfx("buy")
+	_build_visit_panel()
+	_say(String(r.get("text", "Nobody here is in the mood to talk price.")))
 
 # T9x: one attempt per visit. Only shown when a fight resolved near this
 # settlement recently (market()'s own `battle` flag).
@@ -1550,12 +1575,12 @@ func _rest() -> void:
 	if not party.spend_gold(cost):
 		_say("Can't afford a room here (%d gp)." % cost)
 		return
-	var stolen: bool = _visit.get("stolen", false)
+	var before := _visit
 	Visit.rest(party, world, "long-rest")
 	Sound.play_sfx("rest")
 	var trance: Dictionary = Trance.apply_rest_bonus(party, world, s.position)
 	_visit = Visit.visit(s, world)
-	_visit["stolen"] = stolen
+	_carry_visit_flags(before, _visit)
 	_build_visit_panel()
 	_say("The party takes a long rest (%d gp for the room). Eight hours pass and the stalls fill up again.%s" % [
 		cost, _trance_note(trance)])
@@ -1875,6 +1900,15 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		persuade_btn.disabled = persuaded
 		persuade_btn.pressed.connect(_persuade)
 		bar.add_child(persuade_btn)
+	else:
+		# T9x: haggle only makes sense on a market that's actually open —
+		# persuade (above) is what opens a refused one in the first place.
+		var haggle_btn := Button.new()
+		var haggled: bool = _visit.get("haggled", false)
+		haggle_btn.text = "Haggled already" if haggled else "Haggle over prices (Persuasion)"
+		haggle_btn.disabled = haggled
+		haggle_btn.pressed.connect(_haggle)
+		bar.add_child(haggle_btn)
 
 # T9y: the inn was one button and a purse. Resting is the one action here
 # whose whole value is the state it changes, so the page now shows that state:

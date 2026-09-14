@@ -1,0 +1,47 @@
+name: Tests
+
+# Every pull request, and master itself. release.yml publishes; this is the
+# gate in front of it — before this existed nothing checked a branch at all, so
+# "the suite is green" was a claim about somebody's laptop.
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch: {}
+
+# A second push to the same PR makes the first run's answer worthless.
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  headless:
+    name: headless suite
+    runs-on: ubuntu-latest
+    container:
+      # The same image release.yml exports with, so the engine that judges a
+      # branch is the engine that ships it.
+      image: barichello/godot-ci:4.7.2
+    steps:
+      - uses: actions/checkout@v4
+
+      # Assets have to be imported before a single test can run — a script that
+      # preloads a texture cannot even compile without .godot/imported/. Godot's
+      # import is incremental and re-checks every source's md5, so a stale cache
+      # is slow, never wrong; the key moves whenever an asset is added, removed
+      # or re-imported, since every one carries a tracked .import file.
+      - name: Cache the asset import
+        uses: actions/cache@v4
+        with:
+          path: .godot
+          key: godot-import-4.7.2-${{ hashFiles('**/*.import', 'project.godot') }}
+          restore-keys: |
+            godot-import-4.7.2-
+
+      # One job, not a matrix: the whole suite — the import, the script parse
+      # check, 64 subsystem tests and 8 UI robots — is about three minutes.
+      # tools/run_tests.sh is deliberately a script in the repo rather than
+      # steps in this file, so a contributor runs the identical thing locally.
+      - name: Run the headless suite
+        run: tools/run_tests.sh
