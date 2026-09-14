@@ -3821,6 +3821,33 @@ story simply not being told, rather than as a broken save.
   directory to drop a zip into, so community packs are a desktop feature for
   now; `res://content/` ships everywhere.
 
+## A new hero joins at the party's level (2026-09-14)
+
+Creating a character mid-game handed you a level-1 hero to walk into content
+the rest of the party is levels past — a replacement for a dead veteran was a
+liability, and the fifth build you wanted to try was unplayable. The creator
+now builds at `Party.active_max_level()`: the highest level among the <= 4 who
+fight (1 while nobody does, so the first hero is still a first hero).
+
+`scenes/party/party.gd` injects it with `creator.set_start_level(...)` before
+the overlay opens; `Leveling.grant_levels()` appends the levels and banks
+exactly `xp_for_level(target)`, so the new arrival is not instantly owed
+another one. Nothing else in the creator changed: every grant those levels
+bring arrives as a pending choice the way level 1's do, so the Skills &
+Background and Review steps ask for the subclass, the ASI-or-feat and the
+spells, and Confirm stays blocked until they are all made. The three presets
+go the same way — they are level-3 builds with their choices already made, so
+they are topped up to the party's level rather than rebuilt.
+
+The catch-up is a gift, not a haul, and the meta-progression must not be able
+to tell the difference — so it touches neither side of `core/progression.gd`:
+lifetime XP (which buys species and classes) and class XP (which buys
+subclasses) are still only ever written by `core/campaign.gd` out of XP earned
+in a fight. Milestone achievements stay out for the same reason: being handed
+level 5 is not reaching level 5. Covered by `tests/test_leveling.gd`'s
+`_catch_up` / `_catch_up_in_creator` (the model, then the real creator scene)
+and `tests/test_party.gd`'s `test_active_max_level`.
+
 ## M9 (design note, not built) — scripted fights for content packs
 
 The one thing a pack cannot do that a pack author will want on day one: say
