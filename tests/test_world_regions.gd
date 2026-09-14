@@ -37,6 +37,17 @@ func _init() -> void:
 		await process_frame
 	var w = main.world
 
+	# The small map is the one the world screen builds, and the one nobody thinks
+	# to check because it is hand-placed. Its near ring has to hold a landmark: a
+	# heartland with only the starting town in it means a level 1-3 party has to
+	# ride into the marches to find its first fight, which is exactly the wall D6
+	# exists to remove.
+	var home_lairs := 0
+	for l in w.lairs:
+		if Regions.band_of(w, l.position) == "heartland":
+			home_lairs += 1
+	check(home_lairs > 0, "the small map's heartland has a lair of its own")
+
 	# --- the always-on label ------------------------------------------------
 	await _stand(main, Regions.anchor(w) + Vector2(200, 0))
 	check(main._region_lbl != null and main._region_lbl.text != "", "the HUD says which country this is")

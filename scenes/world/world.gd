@@ -342,7 +342,13 @@ func _small_world() -> World:
 	# T91: five hidden monster lairs — the initial roster the brief named. Hidden
 	# until a Survival check finds them (WorldLairs.DISCOVER_RADIUS), then
 	# attackable like a hostile settlement's guard for their own stash.
-	w.add_lair(World.Lair.new("goblin-warren", Vector2(560, 60), "goblinoid"))
+	# D6.1: was (560, 60) — frac 0.71, out in the Frontier, which is two countries
+	# from a goblinoid's own (Regions.HOMES). That left the Heartland holding
+	# Riverhold and nothing else: the band built for levels 1-3 had no destination
+	# in it at all, and the first thing a new party could walk to was Marches
+	# content built for level 3-6. Pulled in to frac 0.45, clear of every
+	# settlement, both banks of the river, and the lake.
+	w.add_lair(World.Lair.new("goblin-warren", Vector2(330, 130), "goblinoid"))
 	w.add_lair(World.Lair.new("giant-hold", Vector2(-520, -260), "giant"))
 	w.add_lair(World.Lair.new("sunken-ruins", Vector2(-280, -340), "undead", "Sunken Ruins"))
 	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(300, 620), "undead", "Zombie Graveyard"))
@@ -703,6 +709,7 @@ func encounter_spec(foe) -> Dictionary:
 func _run_combat(spec: Dictionary, difficulty: String,
 		scouted_ahead := false, forced_ambush := false) -> Dictionary:
 	world.clock.pause()
+	Sound.set_combat(true)    # T27: campaign.gd did this for run fights; map fights were silent
 	_combat_overlay = Control.new()
 	_combat_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_combat_overlay)
@@ -717,9 +724,11 @@ func _run_combat(spec: Dictionary, difficulty: String,
 	while _combat != null and _combat.result.is_empty():
 		await get_tree().process_frame
 	if _combat == null:
+		Sound.set_combat(false)   # torn down mid-fight; the layer must not outlive it
 		return {}
 	var result: Dictionary = _combat.result
 	_combat = null
+	Sound.set_combat(false)
 	if _combat_overlay != null:
 		_combat_overlay.queue_free()
 		_combat_overlay = null
@@ -1171,6 +1180,15 @@ func _check_region() -> void:
 		return
 	var band: Dictionary = Regions.at(world, p0.position)
 	var lv: Array = band["levels"]
+	# T27+D6: the map's own ambient bed. The overworld used to be the one screen
+	# with SFX but no music at all — campaign.gd set a bed for every node of a
+	# linear run, and the open world, which is where most of a session is spent,
+	# played nothing. The band id IS the theme id (tools/gen_audio.py BEDS), so
+	# riding out of the heartland is audible a beat before the label says so.
+	# Called every frame: Audio._set_environment() early-returns on an unchanged
+	# theme, so this is a string compare, and coming out of a town restores the
+	# right country's bed without _close_visit() having to know which one it was.
+	Sound.set_environment("settlement" if not _visit.is_empty() else String(band["id"]))
 	if _region_lbl != null:
 		# Short form: this bar already carries nine controls and a hint, and the
 		# long form lives on the lair button, the inn's leads and the crossing card.

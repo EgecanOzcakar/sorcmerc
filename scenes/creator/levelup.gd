@@ -11,6 +11,7 @@ const Creator = preload("res://scenes/creator/creator.gd")
 const Leveling = preload("res://core/leveling.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Save = preload("res://core/character_save.gd")
+const Icons = preload("res://core/ui_icons.gd")
 
 # leveled = the build actually gained a level (a cancel before Confirm leaves it false).
 signal finished(leveled: bool)
@@ -79,11 +80,13 @@ func _build_chrome() -> void:
 	root.add_child(nav)
 	_cancel.text = "Cancel"
 	_cancel.pressed.connect(_on_cancel)
+	Icons.clicks(_cancel)
 	nav.add_child(_cancel)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	nav.add_child(spacer)
 	_confirm.pressed.connect(_on_confirm)
+	Icons.clicks(_confirm)
 	nav.add_child(_confirm)
 
 # --- actions ---------------------------------------------------------------
@@ -189,6 +192,7 @@ func _choices() -> void:
 		for o in opts:
 			var count := picks.count(o["id"])
 			var b := Button.new()
+			Icons.clicks(b)
 			b.text = ("● " if count > 0 else "") + o["label"]
 			if Creator.allows_repeat(p) and count > 0:
 				b.text += "  +%d" % count

@@ -3648,6 +3648,38 @@ walks into it (HUD band label, the inn's leads, the lair button, and a
 one-time card when riding out above your level), because a level-banded map's
 one failure mode is a wall you only learn about by hitting it.
 
+**D6.1 — the heartland was a bubble.** The seams shipped at 0.30 / 0.60 / 0.85
+of the map's extent, which *sounds* like four comparable countries and is not:
+a ring's share of a map goes as the square of its radius, so those seams gave
+the four bands 9% / 27% / 36% / 28% of the map. The heartland — the band built
+for levels 1-3, which is the whole early game — was a third the size of any of
+its neighbours. On the shipped maps it came out 237 units across (small) and
+592 (large), and held the starting town and nothing else: the first landmark a
+new party could walk to was already Marches content built for level 3-6.
+
+The seams are now equal-area — sqrt(1/4), sqrt(2/4), sqrt(3/4) = 0.50 / 0.71 /
+0.87 — so each country really is a quarter of the map. Nothing else in D6
+moved: the clamp, the ruler, and every measured win rate above are untouched,
+because widening a ring changes *where* a seam is, not what happens either side
+of it.
+
+| | old | new |
+|---|---|---|
+| heartland / marches / frontier / deeps, by area | 9 / 27 / 36 / 28% | 25 / 25 / 25 / 24% |
+| heartland radius, small map | 237 | 394 |
+| heartland radius, large map | 592 | 986 |
+| generated maps placing a lair inside a settlement's 300-unit gap (400 seeds) | 4 | 0 |
+
+Two things fell out of it. Oakford — the second human town, and the obvious
+first ride out of Riverhold — is now in the country built for the party that
+can reach it. And the goblin warren, whose faction's home band is the heartland
+(`Regions.HOMES`), was hand-placed at frac 0.71 on *both* hand-placed maps: two
+countries from home, a rule the procedural builder has always enforced and the
+hand-placed ones silently broke. Pulled in to 0.45 (small) and 0.39 (large),
+clear of every settlement, lair and both banks of the river. That last one is
+what actually puts something in the near ring; a wider empty bubble would still
+have been an empty bubble.
+
 ### Still open
 
 - **The three-knob scaler retune** (CURVE + TIER + `estimate()`'s chunk
