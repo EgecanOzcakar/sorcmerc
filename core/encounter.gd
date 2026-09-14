@@ -9,6 +9,7 @@ const Combat = preload("res://core/combat.gd")
 const Hex = preload("res://core/hex.gd")
 const Power = preload("res://core/rules/power.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")
+const Loot = preload("res://core/loot.gd")
 
 # --- ranges (hexes) — tune here ---------------------------------------
 const REACH_MELEE := 1
@@ -355,12 +356,19 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 			continue
 		kills.append(c.src_id)
 		power += float(Power.estimate(c)["score"])
-		loot.append_array(Catalog.monster(c.src_id).get("loot", []))
+		loot.append_array(Catalog.monster(c.src_id).get("loot", []))   # a pack author's explicit drops, always
 	var deaths: Array[String] = []
 	for c in cb.team_of("party"):
 		if c.is_dead():
 			deaths.append(c.id)
 	var res: String = cb.outcome()
+	# On top of anything hand-authored: what the dead were actually carrying.
+	# Not one of the 316 bestiary entries declares a `loot` key, so before
+	# core/loot.gd this array was always empty and a won fight paid in gold and
+	# XP and nothing you could hold. Rolled on the fight's own RNG, so the drops
+	# replay with the seed; only on a win, because a wipe does not loot the room.
+	if res == "Victory":
+		loot.append_array(Loot.for_kills(kills, cb.rng))
 	return {
 		"outcome": "Victory" if res == "Victory" else "Defeat",   # a round-cap timeout is not a win
 		"xp": roundi(power * XP_PER_POWER),

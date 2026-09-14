@@ -916,8 +916,18 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dict
 func _bank(result: Dictionary) -> void:
 	Campaign.new(party)._split_xp(int(result.get("xp", 0)))
 	party.add_gold(int(result.get("gold", 0)))
-	for item in result.get("loot", []):
+	var taken: Array = result.get("loot", [])
+	for item in taken:
 		party.stash_add(String(item))
+	# Said out loud, on the same label the lair outcomes use. The combat screen
+	# lists it in the fight log, but that log is gone by the time the map comes
+	# back, and loot that lands silently in the stash is loot nobody knows they
+	# picked up.
+	if not taken.is_empty():
+		var names: Array = []
+		for item in taken:
+			names.append(Campaign.item_name(String(item)))
+		_lair_msg.text = "Taken from the dead: %s." % ", ".join(names)
 	# Without this an accepted quest can never reach "complete", so O9 item 4's
 	# turn-in row would have nothing to turn in.
 	Quest.record_kills(party, result.get("kills", []),

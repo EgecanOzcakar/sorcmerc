@@ -1,8 +1,0 @@
-LPC art used by bat
-
-monsters/bat
-  authors:  bagzie, bluecarrot16
-  licenses: OGA-BY 3.0
-  notes:    the entire bat sprite is OGA-BY 3.0; animated by bluecarrot16 for the [LPC] Monsters pack
-  https://opengameart.org/content/lpc-monsters
-  https://opengameart.org/content/bat-sprite

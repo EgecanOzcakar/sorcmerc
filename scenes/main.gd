@@ -14,7 +14,7 @@ const Hex = preload("res://core/hex.gd")
 const Settings = preload("res://core/settings.gd")
 const Tutorial = preload("res://core/tutorial.gd")
 const Icons = preload("res://core/ui_icons.gd")
-const LpcArt = preload("res://core/lpc_art.gd")
+const Campaign = preload("res://core/campaign.gd")   # item_name, for the loot line at the end of a fight
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 
 # What T5 injects before the scene runs: the live party, the node's spec (empty ->
@@ -1280,6 +1280,16 @@ func _finish() -> void:
 	])
 	if res == "Victory":
 		_logbox.append_text("[color=#c8a75a]+%d XP, +%d gold.[/color]\n" % [result["xp"], result["gold"]])
+		# What came off the bodies, by name and in its rarity colour. It goes
+		# into the shared stash either way (campaign.gd's finish_combat /
+		# world.gd's _bank) — but loot that lands silently is loot nobody knows
+		# they have.
+		var taken: Array = result.get("loot", [])
+		if not taken.is_empty():
+			var names: Array = []
+			for id in taken:
+				names.append(Icons.item_bb(String(id), Campaign.item_name(String(id))))
+			_logbox.append_text("[color=#c8a75a]Taken from the dead:[/color] %s\n" % ", ".join(names))
 
 const BUTTON_ROWS := 3
 
@@ -1482,7 +1492,6 @@ class Walk extends Control:
 #  Board — the hex map. Draws tiles, tokens, HP bars, highlights, juice.
 # =====================================================================
 class Board extends Control:
-	const USE_LPC_SPRITES := false   # off: heroes render as the vector disc/glyph, not 64px pixel art
 	var main
 	var cb
 	var _origin := Vector2.ZERO
@@ -1770,55 +1779,6 @@ class Board extends Control:
 			canvas.draw_string(f, at - Vector2(w * 0.5, -fs * 0.36), tags,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("e6c15a"))
 
-	# The LPC sprite for `c`, if there is one. Returns false when there isn't, and
-	# the caller draws its vector token instead.
-	#
-	# There is no separate animation clock here on purpose: the frame comes out of
-	# the same `_fx` melee entry that `_lunge()` already reads, so the swing, the
-	# lunge and the damage number stay locked together and nothing new has to be
-	# ticked. Idle is frame 0 — in both rigs that is the rest pose the attack
-	# leaves from.
-	func _draw_sprite(c, p: Vector2, s: float, tint: Color) -> bool:
-		var sf: SpriteFrames = LpcArt.frames(LpcArt.loadout_for(c))
-		if sf == null:
-			return false
-		var facing := "right" if c.team == "party" else "left"
-		var phase := -1.0
-		for f in _fx:
-			if f.kind == "melee" and f.id == c.id:
-				phase = clampf(f.age / f.ttl, 0.0, 1.0)
-				facing = LpcArt.facing_between(_pix(f.from), _pix(f.to))
-		var pick: Array = LpcArt.row_for(sf, facing)
-		var anim: String = pick[0]
-		var count := sf.get_frame_count(anim)
-		var idx := 0 if phase < 0.0 else clampi(int(phase * count), 0, count - 1)
-		var tex := sf.get_frame_texture(anim, idx)
-		# 64px art on a 34px hex: the same fit the T47 preview was judged at, with
-		# the frame's ground row (54) landing on the token's own hex point.
-		var sc := s / 26.0
-		var w := 64.0 * sc
-		var at := p - Vector2(32.0 * sc, 54.0 * sc)
-		# Down: no lift, greyed and half-faded, same read as the flattened vector
-		# token. ponytail: no death/hurt rows exist in the vendored art, so a KO is
-		# a tint, not an animation — revisit if a death row is ever vendored.
-		var col := tint if c.is_down() else Color.WHITE
-		if _flash.has(c.id):
-			col = col.lerp(Color.WHITE, clampf(_flash[c.id] / 0.35, 0, 1) * 0.85)
-		if c.is_down():
-			col.a = 0.55
-			at.y += 12.0 * sc
-		if pick[1]:
-			# Mirror (merc_01 only ships the right-facing row). It has to be a draw
-			# transform about the token's own x: a negative-width Rect2 does NOT
-			# flip, it gets normalised and lands one full sprite-width to the right.
-			draw_set_transform(p, 0.0, Vector2(-1.0, 1.0))
-			draw_texture_rect(tex, Rect2(Vector2(-w * 0.5, at.y - p.y), Vector2(w, 64.0 * sc)),
-				false, col)
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		else:
-			draw_texture_rect(tex, Rect2(at, Vector2(w, 64.0 * sc)), false, col)
-		return true
-
 	func _spawn_float(c, amount: float) -> void:
 		var band := Color("ffd24a")
 		if amount >= 12: band = Color("ff5a4a")
@@ -2069,20 +2029,21 @@ class Board extends Control:
 					Color(1.0, 0.886, 0.478, 0.25 + 0.75 * bl), 2.5 + bl * 3.0, true)
 				draw_polyline(_disc(p, rad + 12.0 + bl * 6.0, true),
 					Color(1.0, 0.886, 0.478, 0.30 * bl), 2.0, true)
-			# Tier 1: a composited LPC sprite, if this combatant has one. It
+			# Tier 0: a 3D figure in the Figures3D layer above this Board. It
 			# replaces the drawn disc and its glyph only — shadow and active ring
 			# are shared with the vector token below, which still draws everyone
-			# the art doesn't cover. HP bar and condition tags are T-hud's job now
-			# (main.gd's _draw_hud_overlay, a CanvasLayer above every tier including
-			# Figures3D — a figure standing in front used to be able to cover the
-			# HP bar of the hex behind it when this drew inline here).
-			# Tier 0: a 3D figure in the Figures3D layer above this Board. Same contract
-			# as the sprite tier below: it replaces the disc and glyph only.
+			# the models don't cover. HP bar, condition tags and barks are all
+			# T-hud's job (main.gd's _draw_hud_overlay, a CanvasLayer above every
+			# tier including Figures3D — a figure standing in front used to be
+			# able to cover the HP bar of the hex behind it when those drew
+			# inline here).
+			#
+			# There used to be a tier between the two: 64px composited LPC pixel
+			# art. It was switched off when the 3D foes landed (it clashed) and
+			# then sat there dead, along with the CC-BY-SA source art it was
+			# composited from and the credits screen that art obliged us to ship.
+			# All three are gone now rather than half-gone.
 			if main._figures and main._figures.has_figure(c):
-				continue
-			# ponytail: LPC pixel-art tier disabled — clashed against the 3D foes
-			# (T85). USE_LPC_SPRITES flips it back on; _draw_sprite is untouched.
-			if USE_LPC_SPRITES and _draw_sprite(c, p, s, base):
 				continue
 			# The token is shaded like a ball: hotspot toward the light, falling
 			# off to a darker rim, with a bright sliver of rim light on the lit

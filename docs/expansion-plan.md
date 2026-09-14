@@ -4131,3 +4131,111 @@ layout — the verbs this player reaches for still claim the low hotkeys — but
 decides it once, and `_bar_order` replays it for the rest of the fight. What
 the frequency counter buys is the *next* fight's opening layout, which is all
 it was ever really worth.
+
+## Four more from play: loot, the save slot, the dead art, the sound (2026-09-14)
+
+### Winning a fight left nothing on the field
+
+`resolve_outcome()` has always returned a `loot` array, and both banking paths
+— `core/campaign.gd`'s `finish_combat` and `scenes/world/world.gd`'s `_bank` —
+have always stashed whatever is in it. It was always empty. The array was built
+from one source: a monster's own hand-authored `loot` key, and **not one of the
+316 entries in `data/bestiary.json` has one**. You could clear a bandit camp and
+come away with gold, XP, and nothing you could hold.
+
+`core/loot.gd` fills it, on two axes that are both "appropriate to what you just
+killed" rather than a flat table:
+
+- **Who it was decides what it was carrying.** `CARRIED` is keyed on the
+  bestiary's `faction` (the axis `core/scaler.gd` builds rosters along) and
+  falls back to `type`. A bandit is holding a shortsword and a leather jerkin; a
+  goblin a scimitar and a shortbow; a wolf is holding nothing, because a wolf is
+  holding nothing. Anything not in the table is a creature you loot rather than a
+  person you rob, and its odds are halved — what turns up is what the last person
+  it ate was carrying.
+- **How dangerous it was decides how often, and how good.** A flat CR ramp
+  (12% + 9%/CR, capped at 70%) on the odds, and a cumulative CR band on the
+  quality: common under CR 3, uncommon to 6, rare to 9, very-rare above. A CR 10
+  kill can still turn up a climbing potion; a CR 1/8 one cannot turn up a potion
+  of speed. Past CR 8 a kill is searched twice.
+
+Capped at three drops for the whole fight, because eight goblins should not come
+to eight swords. Rolled on the fight's own RNG, so `SORCMERC_SEED` replays the
+drops with the fight.
+
+Every id it can hand back is a **real catalog id**. That is load-bearing rather
+than tidy: the stash names an item with `Campaign.item_name()`, the shop pays
+`Campaign.item_price()` and the rarity colour comes off `Icons.rarity_of()`, and
+all three degrade silently — an invented `wolf-pelt` would show as "Wolf-pelt",
+worth 0 gp, in common grey, and look like loot while behaving like litter.
+`tests/test_loot.gd` checks every id in every hand-written table resolves.
+
+One judgement call worth writing down: `potions-of-healing` sits in the
+**uncommon** band rather than the obvious common one. The SRD files
+healing/greater/superior under one heading, so its rarity is `varies`, and
+`item_price` deliberately prices `varies` as rare — 2025 gp. Handing that over
+for a CR 1/8 bandit is not a healing potion, it is a purse.
+
+And it is said out loud in all three places a fight can end: the combat log
+names what came off the bodies in its rarity colour, the linear run's journal
+says it, and the open world puts it on the same label the lair outcomes use —
+the fight log is gone by the time the map comes back, and loot that lands
+silently in the stash is loot nobody knows they picked up.
+
+### The autosave slot was invisible
+
+There is exactly one open-world slot and it rolls. Fine, until you look at what
+the title screen said about it: `▶ Resume the open world`. Nothing about what
+you would be resuming, nothing about `✦ New run` being the thing that writes
+over it, and no way to clear it short of deleting a file by hand.
+
+`WorldSave.summary()` reads the slot's JSON without rebuilding a World — the
+clock, the map it was built from, who was standing, the purse, the story pack if
+there is one, and the file's own mtime. The title prints that under Resume,
+says in as many words that there is one slot and a new run takes it, and offers
+a Delete that goes through its own confirm screen naming what is about to be
+lost (and what is not — the characters are in the barracks, which is a different
+file).
+
+### The art credits, and the art
+
+Settings → Art credits listed every Liberated Pixel Cup author whose work went
+into the composited sprite sheets. Except the sprite tier had been switched off
+when the 3D figures landed (`USE_LPC_SPRITES := false`, "clashed against the 3D
+foes") and had been dead ever since — so the screen credited art that is not in
+the game.
+
+Removing just the screen was the wrong half: the art was still in the repo and
+still in every export, and CC-BY-SA 3.0 / OGA-BY require attribution for
+distributing it, not for displaying it. So both halves went — `assets/lpc/`,
+`assets/generated/`, `core/lpc_art.gd`, `Board._draw_sprite`, the
+`tools/lpc_compose.py` pipeline, `LICENSES/`, the credits screen, and the tests
+and shot scripts for all of it. Nothing changes visually, because nothing was
+drawing it. The README's provenance table and `assets/figures/PROVENANCE.md`
+lose the two rows that no longer describe anything.
+
+### Sound effects
+
+`tools/gen_audio.py` synthesizes all 39 assets offline out of the stdlib, and
+that is what makes `assets/audio/` reproducible from source with no network, no
+account and no bill. What it cannot do is sound like a recording — it is
+oscillators and filters, and several of the stings read as exactly that.
+
+`tools/gen_audio_elevenlabs.py` writes the same file names into the same
+directories from the ElevenLabs sound-effects API instead, one sound at a time
+(`--only hit,crit`), so the choice is per-sound rather than all-or-nothing: the
+synthesized `click` is fine, the synthesized `hit` is not. Output is 16-bit mono
+PCM at 44.1 kHz wrapped in a RIFF header, which `core/audio.gd` already handles
+— it reads rate and channel count out of each file's `fmt ` chunk rather than
+assuming them, so a mono generated file sits beside the synthesized stereo ones.
+
+Two things it deliberately is not. It is not the default: `gen_audio.py` stays
+the supported path and can rewrite any of these back. And it is not
+deterministic — the same prompt is a different take every run — so the WAVs stay
+committed and this is a tool you reach for when a sound needs replacing, never
+part of a build.
+
+The prompts describe the *sound*, not the game event: "a single heavy sword
+strike landing on chain mail armor, dry, no reverb tail" is something a model has
+heard; "hit.wav" is not. Lengths match what the game gives each sting room for,
+since `core/audio.gd` fires them as one-shots over live combat.

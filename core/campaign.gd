@@ -572,6 +572,12 @@ func finish_combat(result: Dictionary) -> void:
 		_note_rarity(String(item))
 	say("Victory. +%d XP, +%d gold." % [earned_xp,
 		int(result.get("gold", 0)) + int(node.get("gold", 0))])
+	var taken: Array = result.get("loot", [])
+	if not taken.is_empty():
+		var names: Array = []
+		for id in taken:
+			names.append(item_name(String(id)))
+		say("Taken from the dead: %s." % ", ".join(names))
 	for id in result.get("deaths", []):
 		var fallen = party.get_member(id)
 		if fallen != null:

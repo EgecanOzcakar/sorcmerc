@@ -8,7 +8,7 @@
 # camera tilts with it; there is no second source of truth for the projection.
 #
 # What this layer does NOT own: shadow, active-turn ring, hit flash, HP bar, condition
-# tags. Those stay in Board._draw, shared with every tier — same contract as the LPC
+# tags. Those stay in Board._draw, shared with every tier — same contract as the
 # sprite tier. Layering caveat: this draws above Board._draw, so a figure can cover the
 # HP bar of the hex behind it. Moving the HUD to a CanvasLayer above this is the fix;
 # ~30 lines, deliberately not in the spike.
@@ -16,11 +16,12 @@ extends SubViewportContainer
 
 const Catalog = preload("res://core/rules/catalog.gd")
 
-# Same contract as LpcArt.BY_MONSTER (core/lpc_art.gd): a lookup, not a hardcoded
+# A lookup, not a hardcoded
 # model, because coverage will always trail the 316-entry bestiary. A key with no
 # file on disk yet (roster generation is a slow background batch, see kitbashforge)
 # just falls through has_figure() to the vector disc/glyph tier — that's the
-# design, same as an uncovered LPC loadout, not a bug to chase per-monster.
+# design — the vector disc/glyph draws whoever the models do not cover — not a
+# bug to chase per-monster.
 #
 # Heroes key by class id (core/character.gd, ids from data/classes.json — all 12);
 # foes by Catalog.monster(id)["faction"] (data/bestiary.json) — one look per

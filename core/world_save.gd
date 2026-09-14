@@ -303,6 +303,42 @@ static func load_latest():
 static func has_save() -> bool:
 	return FileAccess.file_exists(path())
 
+# What is in the slot, in words, without rebuilding a World to find out.
+#
+# There is exactly ONE slot and it rolls (see the header), which is a fine model
+# right up until the title screen says nothing but "Resume the open world" — at
+# which point the player cannot tell what they would be resuming, cannot tell
+# that starting a new run is going to write over it, and has no way to clear it.
+# scenes/game/game.gd's title reads this to say all three.
+#
+# {} when there is no slot or the file is unreadable — same "a bad autosave is
+# just no autosave" contract as load_latest().
+static func summary() -> Dictionary:
+	if not FileAccess.file_exists(path()):
+		return {}
+	var d = JSON.parse_string(FileAccess.get_file_as_string(path()))
+	if not (d is Dictionary) or d.get("format") != FORMAT:
+		return {}
+	var pd: Dictionary = d.get("party", {})
+	var names: Array = []
+	for ch in pd.get("roster", []):
+		if ch is Dictionary and String(ch.get("id", "")) in pd.get("active", []):
+			names.append(String(ch.get("name", ch.get("id", "?"))))
+	return {
+		"elapsed": float(d.get("elapsed", 0.0)),
+		"map": String(d.get("origin", {}).get("kind", "")),
+		"party": names,
+		"gold": int(pd.get("gold", 0)),
+		"story": String(d.get("story", {}).get("pack", "")),
+		"written_at": FileAccess.get_modified_time(path()),
+	}
+
+# "Day 3  14:05" off world-minutes — the same reading scenes/world/world.gd's
+# clock label shows, so the title and the map agree about when you left.
+static func day_clock(elapsed: float) -> String:
+	return "Day %d  %02d:%02d" % [int(elapsed / 1440.0) + 1,
+		int(elapsed / 60.0) % 24, int(elapsed) % 60]
+
 static func clear() -> void:
 	if FileAccess.file_exists(path()):
 		DirAccess.remove_absolute(path())

@@ -17,6 +17,9 @@ core/            pure rules + game state, mostly no engine deps
   ai.gd                          monster turn logic (prioritizes special attacks)
   character.gd, adapter.gd       a build (Character) <-> a fight (Combatant), the seam
   encounter.gd, scaler.gd        board assembly + the difficulty/roster estimator
+  loot.gd                        what a won fight leaves: who died decides what
+                                  was on them, how dangerous they were decides
+                                  how often and how good
   campaign.gd, campaign_save.gd  the run: generated route, shop/rest/treasure,
                                   autosave
   party.gd                       shared inventory, resurrection, marching order
@@ -55,7 +58,7 @@ data/              the 5e SRD export (classes/spells/species/...), a 316-
 content/           content packs that ship with the game: an example map, a
                    free campaign, and a paid DLC — all three written against
                    the same public API a player's mod uses
-tests/             85 files, headless: one per subsystem (65 test_*.gd) plus
+tests/             84 files, headless: one per subsystem (65 test_*.gd) plus
                    8 drive_*.gd (robots pressing real UI buttons end-to-end),
                    check_scripts.gd (every .gd in the project still parses)
                    and a few dev tools (shot.gd renders a frame to PNG).
@@ -70,6 +73,11 @@ tools/run_tests.sh the whole headless suite in one command — the asset import,
                    then every test_*.gd and drive_*.gd. What CI runs on every
                    pull request, and what a contributor runs locally, so the
                    two are the same claim
+tools/gen_audio_elevenlabs.py
+                   the same SFX and bark file names from the ElevenLabs sound-
+                   effects API instead, per sound, for anything the synthesis
+                   cannot make sound like a recording. Needs a key; the
+                   synthesized set stays the default and the fallback
 tools/gen_audio.py procedurally synthesizes every SFX/music/bark asset under
                    assets/audio/ — no external audio assets, run it again
                    after editing it to regenerate. `--rate`/`--loop` trade
@@ -113,8 +121,6 @@ in separate directories, so any file's origin is answerable from its path alone:
 |---|---|---|
 | `assets/audio/` | procedurally synthesized, stdlib only — **not AI** | `tools/gen_audio.py`, `tools/synth.py` |
 | `assets/icons/` | SVG path data written as source, stdlib only — **no image model**; the coordinates were authored with a coding assistant, which the disclosure exempts | `tools/gen_action_icons.py` |
-| `assets/lpc/` | Liberated Pixel Cup art, CC-BY-SA 3.0 / GPL-3.0 / OGA-BY 3.0 | `assets/lpc/CREDITS.csv`, `LICENSES/` |
-| `assets/generated/` | sheets composited from `assets/lpc/` | `*_credits.txt` per sheet |
 | `assets/world/` | sourced packs | `License.txt` per subdirectory |
 | `assets/fonts/` | DejaVu | `LICENSE-DejaVu.txt` |
 

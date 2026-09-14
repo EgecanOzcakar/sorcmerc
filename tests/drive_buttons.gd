@@ -519,19 +519,16 @@ func _profile() -> void:
 
 var _set: Control = null
 
-func _settings_at(credits: bool) -> Control:
+# There used to be a second page here: Settings -> Art credits, the attribution
+# screen the CC-BY-SA pixel art obliged us to ship. The art tier had been off
+# since the 3D figures landed, so the art, the screen and this page all went
+# together rather than leaving a credits list for art that is no longer in the
+# build.
+func _settings_plain() -> Control:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Settings.PATH))
 	Settings._current = null
 	_set = fresh("res://scenes/settings/settings.tscn")
-	if credits:
-		_set._show_credits()
 	return _set
-
-func _settings_plain() -> Control:
-	return _settings_at(false)
-
-func _settings_credits() -> Control:
-	return _settings_at(true)
 
 func _settings_model() -> String:
 	var s = _set._s
@@ -539,21 +536,10 @@ func _settings_model() -> String:
 		s.sfx_volume, s.music_volume, _set._note.text]
 
 func _settings_expect(c: BaseButton) -> String:
-	if c.text != "Close":
-		return ""
-	# _show_credits() hangs its panel off a CenterContainer; that Close only frees
-	# the panel, which the UI half of the fingerprint sees. The overlay's own Close
-	# frees the whole screen.
-	var n: Node = c
-	while n != null and n != _set:
-		if n is CenterContainer:
-			return ""
-		n = n.get_parent()
-	return "gone: closes the overlay"
+	return "gone: closes the overlay" if c.text == "Close" else ""
 
 func _settings() -> void:
 	await sweep("settings", _settings_plain, _settings_model, _settings_expect)
-	await sweep("settings/credits", _settings_credits, _settings_model, _settings_expect)
 
 # =========================================================================
 # 5. the read-only viewers (achievements, progression)
