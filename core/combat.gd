@@ -111,8 +111,16 @@ func region_at(p: Vector2i) -> String:
 	var f = board.get("region_at")
 	return f.call(p) if f is Callable else ""
 
+# Only hostiles wall a hex off. An ally's space can be walked THROUGH (5.5e
+# "Moving Around Other Creatures") — it just cannot be stopped in, which
+# move_field() enforces by erasing those hexes after the flood. Before this, a
+# melee foe queued behind its own archer in a choke stood there all fight.
+# Not enemies_of(): a hidden foe is unseen, not incorporeal.
 func _blockers(mover) -> Array:
-	return combatants.filter(func(c): return c != mover and c.conscious()).map(func(c): return c.pos)
+	return combatants.filter(func(c): return c.team != mover.team and c.conscious()).map(func(c): return c.pos)
+
+func _ally_hexes(mover) -> Array:
+	return allies_of(mover).map(func(c): return c.pos)
 
 func _hex_free(p: Vector2i, ignore = null) -> bool:
 	for c in combatants:
@@ -1177,6 +1185,8 @@ func _survived_down(c) -> void:
 # Hexes reachable by `mover` with the move points left this turn.
 func move_field(mover) -> Dictionary:
 	var field := Hex.reachable(passable, mover.pos, move_left(mover), _blockers(mover), _rough())
+	for h in _ally_hexes(mover):
+		field.erase(h)
 	# frightened: you can never end a step closer to what scares you
 	var fear = _source_of(mover, "cannot_approach_source")
 	if fear != null:

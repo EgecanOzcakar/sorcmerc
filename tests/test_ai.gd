@@ -29,6 +29,7 @@ func _init() -> void:
 	test_never_specials_a_downed_pc()
 	test_falls_back_to_the_swing()
 	test_no_second_helping_of_the_same_condition()
+	test_melee_walks_through_its_own_archer()
 	print("test_ai: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -117,3 +118,24 @@ func test_no_second_helping_of_the_same_condition() -> void:
 	AI.take_turn(cb, f[1])
 	check(f[1].pool_left("monster-web-shot") == 1, "the second web is held, not re-applied")
 	check(f[2].hp < 200, "it bit instead")
+
+# A one-hex corridor: victim at the far end, a goblin archer in range of it,
+# and a bugbear queued behind the archer. Found in play: the bugbear stood
+# there all fight because its own ally counted as a wall. An ally's space is
+# passable, not a place to stop (combat.gd's _blockers / _ally_hexes).
+func test_melee_walks_through_its_own_archer() -> void:
+	var corridor: Array = []
+	for x in 8:
+		corridor.append(Vector2i(x, 1))
+	var board := {"hexes": corridor, "cover": [], "rough": [], "objects": []}
+	var archer = Adapter.from_monster(Catalog.index("bestiary.json")["goblin-archer"], "foe", Vector2i(2, 1))
+	var bugbear = Adapter.from_monster(Catalog.index("bestiary.json")["bugbear"], "foe", Vector2i(0, 1))
+	var v = _victim(Vector2i(5, 1))
+	var cb = Combat.new(RNG.new(3), [archer, bugbear, v], board)
+	for c in cb.combatants:
+		cb.begin_turn_for(c)
+	check(not cb.move_field(bugbear).has(archer.pos), "it cannot stop on the archer's hex")
+	check(cb.move_field(bugbear).has(Vector2i(4, 1)), "but the hexes past the archer are reachable")
+	AI.take_turn(cb, bugbear)
+	check(Hex.distance(bugbear.pos, v.pos) <= 1, "the bugbear walks past its archer and closes")
+	check(bugbear.pos != archer.pos, "without ending up on top of it")
