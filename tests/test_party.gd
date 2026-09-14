@@ -4,6 +4,7 @@ extends SceneTree
 
 const Party = preload("res://core/party.gd")
 const Adapter = preload("res://core/adapter.gd")
+const Leveling = preload("res://core/leveling.gd")
 
 var _pass = 0
 var _fail = 0
@@ -106,6 +107,7 @@ func _init() -> void:
 	test_death()
 	test_identification()
 	test_overworld_figure()
+	test_active_max_level()
 	print("test_party: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -241,3 +243,23 @@ func test_overworld_figure() -> void:
 	check(p.overworld_figure == "wizard", "and with nothing to migrate it to, it is left alone")
 	p.overworld_figure = "not-an-id-and-not-a-class"
 	check(p.overworld_member() == null, "so is pure nonsense — no crash, no figure")
+
+# The level a hero created now would join at (scenes/creator/creator.gd's
+# start_level): the highest among the <= 4 who fight, and 1 while nobody does.
+func test_active_max_level() -> void:
+	var p := Party.new()
+	check(p.active_max_level() == 1, "an empty party still starts a hero at level 1")
+	var roster := Party.demo_roster()
+	for ch in roster:
+		p.add_member(ch)
+	var best := 1
+	var benched: String = p.bench_list()[0].id
+	for id in p.active:
+		best = maxi(best, p.get_member(id).level())
+	check(p.active_max_level() == best, "reads the highest active member (%d)" % best)
+	Leveling.grant_levels(p.get_member(p.active[0]), best + 2)
+	check(p.active_max_level() == best + 2, "follows an active member levelling up")
+	Leveling.grant_levels(p.get_member(benched), Leveling.MAX_LEVEL)
+	check(p.active_max_level() == best + 2, "a benched veteran does not set it")
+	p.swap(p.active[0], benched)
+	check(p.active_max_level() == Leveling.MAX_LEVEL, "until they are put in the party")

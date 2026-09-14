@@ -7,6 +7,7 @@ const Leveling = preload("res://core/leveling.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
 const Presets = preload("res://core/presets.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Progression = preload("res://core/progression.gd")
 
 var _pass := 0
 var _fail := 0
@@ -60,6 +61,12 @@ func _init() -> void:
 	_screen()
 	_from_profile()
 	_xp_gate()
+	_catch_up()
+	_finish()   # the creator screen needs a frame before its _ready has run
+
+func _finish() -> void:
+	await process_frame
+	await _catch_up_in_creator()
 	print("test_leveling: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -221,3 +228,74 @@ func _xp_gate() -> void:
 	p.set_character(ch)
 	check(not p._fields["level_up_btn"].disabled, "enough XP enables the button")
 	p.queue_free()
+
+# A hero created once the party is already several levels in starts at the party's
+# level. Those catch-up levels are granted, not earned: they bank exactly the XP
+# the level costs and leave the account-wide lifetime XP — the currency that
+# unlocks species and classes — where it was.
+func _catch_up() -> void:
+	var lifetime_before: int = Progression.lifetime_xp_total()
+	var wizard_xp_before: int = Progression.class_xp_of("wizard")
+	var ch = fresh("wizard", "sage")
+	Leveling.grant_levels(ch, 5)
+	check(ch.level() == 5, "grant_levels climbs to the target (got %d)" % ch.level())
+	check(ch.class_level("wizard") == 5, "every catch-up level is in the same class")
+	check(int(ch.xp) == Leveling.xp_for_level(5), "banks exactly level 5's XP (got %d)" % ch.xp)
+	check(not Leveling.can_level_up(ch), "and not one XP more")
+	check(not Leveling.pending(ch).is_empty(), "the granted levels still ask for their choices")
+	resolve_all(ch, "wizard catch-up")
+	var sheet = ch.sheet()
+	check(sheet.level == 5 and sheet.proficiency_bonus == 3, "the sheet resolves at level 5")
+	check(sheet.subclasses.has("wizard"), "the level-3 subclass was among the choices")
+	check(Progression.lifetime_xp_total() == lifetime_before,
+		"catch-up levels never touch lifetime XP")
+	check(Progression.class_xp_of("wizard") == wizard_xp_before,
+		"nor the class XP that buys subclasses")
+
+	Leveling.grant_levels(ch, 2)
+	check(ch.level() == 5, "a lower target never takes levels away")
+	Leveling.grant_levels(ch, 999)
+	check(ch.level() == Leveling.MAX_LEVEL, "the target is clamped at level 20")
+	var nobody = Creator.new_character()
+	Leveling.grant_levels(nobody, 5)
+	check(nobody.level() == 0, "no class picked yet: nothing to grant")
+
+# The same thing through the creator screen: start_level is injected, the class
+# button builds the whole climb, and Confirm stays blocked until every choice
+# those levels raised has been made.
+func _catch_up_in_creator() -> void:
+	var scr = load("res://scenes/creator/creator.tscn").instantiate()
+	scr.set_start_level(5)           # what scenes/party/party.gd hands in
+	root.add_child(scr)
+	await process_frame
+	scr.ch.cname = "Catchup Cleric"
+	scr.ch.species_id = "human"
+	scr.ch.background_id = "acolyte"
+	scr.ch.base_abilities = Creator.recommended_array("cleric")
+	scr._set_class("cleric")
+	check(scr.ch.level() == 5, "the creator builds the class out to level 5 (got %d)"
+		% scr.ch.level())
+	check(int(scr.ch.xp) == Leveling.xp_for_level(5), "with level 5's XP banked")
+	check(not Leveling.can_finalize(scr.ch), "level 5's choices are pending")
+	for _step in 60:
+		var pend: Array = Leveling.pending(scr.ch)
+		if pend.is_empty():
+			break
+		for id in autopick(pend[0], scr.ch.sheet()):
+			scr._pick(pend[0], id)   # what an option button does
+	check(Leveling.can_finalize(scr.ch), "the creator's own buttons answer them")
+	check(scr.ch.sheet().level == 5, "and the finished hero is level 5")
+	scr.set_start_level(1)
+	check(scr.ch.level() == 1 and int(scr.ch.xp) == 0,
+		"re-injecting a level-1 party rebuilds the climb")
+
+	# The presets are level-3 builds handed straight to Review — they are topped
+	# up to the party's level rather than rebuilt.
+	scr.set_start_level(7)
+	scr._load_preset("vera")
+	check(scr.ch.level() == 7, "a preset joins at the party's level too (got %d)"
+		% scr.ch.level())
+	check(scr.ch.class_level("fighter") == 7, "topped up in its own class")
+	check(int(scr.ch.xp) == Leveling.xp_for_level(7), "with level 7's XP banked")
+	check(not Leveling.can_finalize(scr.ch), "and the levels above 3 still to choose")
+	scr.queue_free()
