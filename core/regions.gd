@@ -48,12 +48,30 @@ const Scaler = preload("res://core/scaler.gd")
 # The bands overlap at their seams on purpose — a level 6 party is at the top of
 # the marches and the bottom of the frontier, and is meant to be able to work
 # either. A gap would make some level nobody's level.
+#
+# The seams are EQUAL-AREA, which is not the same as equally spaced, and getting
+# that wrong is what made the heartland read as a bubble. A ring's share of the
+# map goes as the square of its radius, so the first seams shipped at
+# 0.30/0.60/0.85 gave the four countries 9% / 27% / 36% / 28% of the map — the
+# heartland was a third the size of any of its neighbours. A player explores
+# area, not radius, so the seams now sit at sqrt(1/4), sqrt(2/4), sqrt(3/4):
+# four countries, a quarter of the map each.
+#
+# What that bought, on the maps the game ships (measured 2026-09-13): the small
+# map's heartland goes 237 -> 394 units and the large map's 592 -> 986, which is
+# what finally puts Oakford — the second human town, and the obvious first ride
+# out of Riverhold — in the country built for the party that can reach it. On a
+# generated map it also gives the near ring room to hold a lair at all: the
+# heartland ring has to clear ProceduralWorld.MIN_MONSTER_GAP (300) from the
+# settlement sitting at its own centre, and at 0.30 that annulus was empty below
+# a 1000-unit extent, so the rejection sampler ran out of tries and dropped the
+# goblin warren in somebody's front yard on 4 of 400 seeds. At 0.50: none.
 const BANDS := [
-	{"id": "heartland", "label": "the Heartland", "upto": 0.30, "levels": [1, 3],
+	{"id": "heartland", "label": "the Heartland", "upto": 0.50, "levels": [1, 3],
 		"blurb": "Patrolled, farmed, and about as dangerous as a bad harvest."},
-	{"id": "marches", "label": "the Marches", "upto": 0.60, "levels": [3, 6],
+	{"id": "marches", "label": "the Marches", "upto": 0.71, "levels": [3, 6],
 		"blurb": "Still somebody's country, but nobody rides it alone after dark."},
-	{"id": "frontier", "label": "the Frontier", "upto": 0.85, "levels": [6, 10],
+	{"id": "frontier", "label": "the Frontier", "upto": 0.87, "levels": [6, 10],
 		"blurb": "Past the last waystone. What lives here has never been taxed."},
 	{"id": "deeps", "label": "the Far Deeps", "upto": 999.0, "levels": [10, 20],
 		"blurb": "Old ground, and old things on it. Nothing out here is anybody's problem but yours."},

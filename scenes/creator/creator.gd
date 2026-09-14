@@ -294,6 +294,10 @@ var _next := Button.new()
 var _status := Label.new()
 
 func _ready() -> void:
+	# Class-scope Buttons, so they cannot be armed at their declaration the way
+	# the ones built inside a function are.
+	Icons.clicks(_back)
+	Icons.clicks(_next)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_theme()
 	if ch == null:
@@ -466,6 +470,7 @@ func _flow() -> HFlowContainer:
 
 func _opt(parent: Control, label: String, on: bool, cb: Callable, extra := "") -> Button:
 	var b := Button.new()
+	Icons.clicks(b)
 	b.text = ("● " if on else "") + label + extra
 	if on:
 		b.add_theme_color_override("font_color", COL_GOLD)

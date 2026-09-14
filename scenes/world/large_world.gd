@@ -60,7 +60,9 @@ static func build() -> World:
 
 	# All five named lairs (T91) — the two with no diorama yet still work,
 	# just draw the flat skull marker (Lairs3D falls through cleanly).
-	w.add_lair(World.Lair.new("goblin-warren", Vector2(1400, 150), "goblinoid"))
+	# D6.1: was (1400, 150) — frac 0.71, the Frontier, same misfiling the small map
+	# had. Pulled in to frac 0.39 so the Heartland has a lair of its own.
+	w.add_lair(World.Lair.new("goblin-warren", Vector2(700, 300), "goblinoid"))
 	w.add_lair(World.Lair.new("giant-hold", Vector2(-1300, -650), "giant"))
 	w.add_lair(World.Lair.new("sunken-ruins", Vector2(-700, -850), "undead", "Sunken Ruins"))
 	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(750, 1550), "undead", "Zombie Graveyard"))

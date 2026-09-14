@@ -9,6 +9,35 @@
 extends RefCounted
 
 const Catalog = preload("res://core/rules/catalog.gd")
+const Sound = preload("res://core/audio.gd")
+
+
+# --- the click -------------------------------------------------------------
+#
+# assets/audio/sfx/click.wav shipped with the T27 audio pass and, until this,
+# nothing in the game played it: every screen builds its own buttons and none of
+# them made a sound. This is the one place that changes.
+#
+# It ATTACHES to a button you already built rather than building one for you.
+# A constructor-style factory was the obvious shape and the wrong one — the 23
+# button sites across the menu screens set tooltip_text, disabled, toggle_mode,
+# custom text and half a dozen different callback signatures between them, so a
+# factory would have had to grow a parameter for each and every call site would
+# have been rewritten around it. This way a site gains one wrapper and keeps its
+# own setup verbatim:
+#
+#   row.add_child(Icons.clicks(b))      # or Icons.clicks(b) on its own line
+#
+# Returns the button so it chains into an add_child(). Safe headless and safe
+# before the Audio autoload exists: play_sfx is a no-op static until then.
+#
+# Deliberately NOT applied to OptionButton — `pressed` on a dropdown fires when
+# the list opens, not when a choice is made, so it would click on the wrong half
+# of the interaction. Those want an item_selected sound, which is a different
+# cue and not one this project has.
+static func clicks(b: BaseButton) -> BaseButton:
+	b.pressed.connect(func(): Sound.play_sfx("click"))
+	return b
 
 # --- palette ---------------------------------------------------------------
 # The established dark, warm-gold fantasy set. Screens alias these into their own
