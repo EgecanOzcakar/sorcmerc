@@ -41,7 +41,7 @@ Drawing constraints, all of them learned from the size this renders at:
     circle centred on (32, 32), and anything that leaves the disc (a sword tip,
     a shield's shoulders) still stops short of the frame.
   * outlines at 1.2-1.6, never below 1.0 — a hairline vanishes when the bar
-    scales the badge down to ~28 px.
+    scales the badge down to ~22 px (core/ui_icons.gd's ICON_PX).
   * geometry only: no <style>, no gradients, no filters, no text, no masks.
     A filter that looks right in a browser silently drops out in-game.
 
@@ -55,6 +55,7 @@ import argparse
 import hashlib
 import math
 import pathlib
+import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -65,12 +66,12 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # schools are SCHOOL_COLORS verbatim; their two other tones are derived, so
 # changing a school colour there is a one-line change here.
 
-INK = "#0d0f16"          # every outline
-PANEL = "#15161e"        # the badge's inset panel
-DISC = "#23242f"         # the medallion a martial verb stands on
-FRAME = "#c8a75a"        # COL_GOLD — the gilt edge
-FRAME_HI = "#e8cf8a"
-FRAME_LO = "#7a6130"
+INK = "#0d0f16"          # the few genuinely dark details: sockets, a crack
+PANEL = "#141118"        # the badge's inset panel — near black, faintly warm
+DISC = "#272120"         # the medallion a martial verb stands on
+FRAME = "#c9a24a"        # the gilt edge (COL_GOLD, warmed)
+FRAME_HI = "#d6b76e"
+FRAME_LO = "#4b3a16"
 
 
 def _rgb(c: str) -> tuple:
@@ -106,25 +107,25 @@ SCHOOL_COLORS = {                # verbatim from core/ui_icons.gd
 # always the same near-black, and nothing anywhere sets an opacity except the
 # illusion school's ghost copy — which is the point of it.
 
-def poly(points, fill: str, stroke: str = INK, sw: float = 1.3, extra: str = "") -> str:
+def poly(points, fill: str, stroke: str = "auto", sw: float = 1.3, extra: str = "") -> str:
     pts = " ".join("%.1f,%.1f" % (x, y) for x, y in points)
-    return '<polygon points="%s" fill="%s"%s%s/>' % (pts, fill, _stroke(stroke, sw), extra)
+    return '<polygon points="%s" fill="%s"%s%s/>' % (pts, fill, _rim(fill, stroke, sw), extra)
 
 
-def path(d: str, fill: str, stroke: str = INK, sw: float = 1.3, extra: str = "") -> str:
-    return '<path d="%s" fill="%s"%s%s/>' % (d, fill, _stroke(stroke, sw), extra)
+def path(d: str, fill: str, stroke: str = "auto", sw: float = 1.3, extra: str = "") -> str:
+    return '<path d="%s" fill="%s"%s%s/>' % (d, fill, _rim(fill, stroke, sw), extra)
 
 
-def circle(cx: float, cy: float, r: float, fill: str, stroke: str = INK,
+def circle(cx: float, cy: float, r: float, fill: str, stroke: str = "auto",
            sw: float = 1.3, extra: str = "") -> str:
     return '<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"%s%s/>' % (
-        cx, cy, r, fill, _stroke(stroke, sw), extra)
+        cx, cy, r, fill, _rim(fill, stroke, sw), extra)
 
 
 def rect(x: float, y: float, w: float, h: float, r: float, fill: str,
-         stroke: str = INK, sw: float = 1.3, extra: str = "") -> str:
+         stroke: str = "auto", sw: float = 1.3, extra: str = "") -> str:
     return '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="%.1f" fill="%s"%s%s/>' % (
-        x, y, w, h, r, fill, _stroke(stroke, sw), extra)
+        x, y, w, h, r, fill, _rim(fill, stroke, sw), extra)
 
 
 def stroke_path(d: str, color: str, w: float, cap: str = "round") -> str:
@@ -133,10 +134,35 @@ def stroke_path(d: str, color: str, w: float, cap: str = "round") -> str:
             'stroke-linecap="%s" stroke-linejoin="round"/>' % (d, color, w, cap))
 
 
+def _lum(c: str) -> float:
+    r, g, b = _rgb(c)
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
+
+
 def _stroke(color: str, w: float) -> str:
-    if color is None or color == "none" or w <= 0:
+    """No keyline unless one is asked for.
+
+    A near-black outline round everything is what makes an icon set read as
+    stickers; the reference these are drawn against separates shapes by tone and
+    lifts the dark ones with a rim of their own colour. So: a fill dark enough to
+    sink into the medallion gets that rim, a light one gets nothing, and the two
+    or three places that genuinely want ink (a skull's sockets, a crack) pass it
+    explicitly."""
+    if color is None:
+        return ''
+    if color == "auto":
+        return ''
+    if color == "none" or w <= 0:
         return ''
     return ' stroke="%s" stroke-width="%.1f" stroke-linejoin="round"' % (color, w)
+
+
+def _rim(fill: str, given: str, w: float) -> str:
+    if given != "auto":
+        return _stroke(given, w)
+    if _lum(fill) >= 0.62:
+        return ''
+    return _stroke(mix(fill, "#ffffff", 0.22), 1.0)
 
 
 def group(parts, tx: float = 0.0, ty: float = 0.0, rot: float = 0.0,
@@ -174,13 +200,16 @@ def band(cx: float, cy: float, r_out: float, r_in: float, a0: float, a1: float,
 # what makes a bar of them read as one set however different the silhouettes.
 
 def frame() -> str:
+    """Outer line, gilt band, black panel, and a hairline set well inside it.
+
+    Four rounded rects and no more: the band reads as bevelled because the light
+    tone sits a pixel high in it, not because it is three bands stacked."""
     return (
-        rect(1.5, 1.5, 61, 61, 11.5, FRAME_LO, stroke="none")
-        + rect(2.5, 2.5, 59, 58, 10.5, FRAME, stroke="none")
-        + rect(3.5, 3.5, 57, 55, 9.5, FRAME_HI, stroke="none")
-        + rect(4.5, 5.5, 55, 54, 9, FRAME, stroke="none")
-        + rect(5, 5, 54, 54, 8, PANEL, stroke="none")
-        + rect(7.5, 7.5, 49, 49, 6, "none", stroke=FRAME_LO, sw=1.1)
+        rect(1.6, 1.6, 60.8, 60.8, 12, FRAME_LO, stroke="none")
+        + rect(2.4, 2.4, 59.2, 59.2, 11.4, FRAME_HI, stroke="none")
+        + rect(2.4, 3.5, 59.2, 58.1, 11.4, FRAME, stroke="none")
+        + rect(5.2, 5.2, 53.6, 53.6, 8.8, PANEL, stroke="none")
+        + rect(8.4, 8.4, 47.2, 47.2, 6.4, "none", stroke=mix(FRAME, PANEL, 0.52), sw=1.2)
     )
 
 
@@ -193,12 +222,22 @@ def medallion(base: str = None, ring: str = None) -> str:
         out.append(circle(32, 32, 18, "none", stroke=ring, sw=1.1))
         for a in (215, 325, 35, 145):
             x, y = pt(32, 32, 18, a)
-            out.append(circle(x, y, 1.3, ring, stroke="none"))
+            out.append(circle(x, y, 1.4, ring, stroke="none"))
+        for a in (250, 290, 70, 110):      # the short radial ticks on the rim
+            x0, y0 = pt(32, 32, 15.5, a)
+            x1, y1 = pt(32, 32, 18.5, a)
+            out.append(stroke_path("M%.1f %.1f L%.1f %.1f" % (x0, y0, x1, y1), ring, 1.0))
     return "".join(out)
 
 
-def badge(*art: str, disc: str = None, ring: str = None) -> str:
-    body = frame() + medallion(disc, ring) + "".join(art)
+def badge(*art: str, disc: str = None, ring: str = None, art_scale: float = 0.92) -> str:
+    # The art is drawn on the full 64 grid and then pulled in a little: the
+    # reference keeps a clear margin between the silhouette and the gilt, and
+    # scaling once here beats trimming 28 sets of coordinates. A school badge
+    # comes in further still — its disc carries a ring the art has to clear.
+    body = (frame() + medallion(disc, ring)
+            + '<g transform="translate(32 32) scale(%.2f) translate(-32 -32)">%s</g>'
+            % (art_scale, "".join(art)))
     return ('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" '
             'viewBox="0 0 64 64">\n  %s\n</svg>\n' % body)
 
@@ -206,7 +245,7 @@ def badge(*art: str, disc: str = None, ring: str = None) -> str:
 # --- the things the art is made of -----------------------------------------
 
 def sword(x: float, y: float, rot: float = 0.0, length: float = 52.0,
-          w: float = 10.0, steel: tuple = STEEL, hilt: tuple = GOLD) -> str:
+          w: float = 8.4, steel: tuple = STEEL, hilt: tuple = GOLD) -> str:
     """A sword, point up, centred on (x, y) and rotated `rot` degrees clockwise.
 
     Parametrised because three icons carry one and hand-placing a crossguard
@@ -216,14 +255,14 @@ def sword(x: float, y: float, rot: float = 0.0, length: float = 52.0,
     h = length / 2.0
     grip_len = length * 0.29          # guard, grip and pommel share this
     guard_y = h - grip_len
-    guard_t = w * 0.52
+    guard_t = w * 0.44
     pommel = max(2.4, w * 0.31)
     return group([
         poly([(-w / 2, guard_y), (-w / 2, -h + w * 0.9), (0, -h), (w / 2, -h + w * 0.9),
               (w / 2, guard_y)], steel[1], sw=1.5),
         poly([(-w / 2 + w * 0.18, guard_y - 1.8), (-w / 2 + w * 0.18, -h + w * 1.05),
               (-w * 0.09, -h + w * 0.55), (-w * 0.09, guard_y - 1.8)], steel[0], stroke="none"),
-        rect(-w * 1.3, guard_y, w * 2.6, guard_t, guard_t / 2.0, hilt[1], sw=1.3),
+        rect(-w * 1.55, guard_y, w * 3.1, guard_t, guard_t / 2.0, hilt[1], sw=1.3),
         rect(-w * 0.19, guard_y + guard_t, w * 0.38, grip_len - guard_t - pommel * 0.9,
              1.6, hilt[2], sw=1.2),
         circle(0, h - pommel * 0.9, pommel, hilt[1], sw=1.3),
@@ -302,9 +341,9 @@ def figure(x: float, y: float, rot: float, tone: tuple) -> str:
     """A person: head, torso, two legs. Used by shove, and nothing else needs
     to be more than that at this size."""
     return group([
-        poly([(-4.4, 2), (4.4, 2), (3.2, 13), (-3.2, 13)], tone[1]),
-        poly([(-3.2, 12), (0.6, 12), (3.2, 22), (-1.2, 22)], tone[2]),
-        poly([(0.2, 12), (3.8, 12), (7.8, 20), (4.2, 22)], tone[2]),
+        poly([(-4.4, 2), (4.4, 2), (3.2, 13), (-3.2, 13)], tone[0]),
+        poly([(-3.4, 12), (-0.2, 12), (2.2, 22), (-1.8, 22)], tone[2]),
+        poly([(1.2, 12), (4.2, 12), (8.2, 20), (5.0, 22)], tone[2]),
         circle(0, -3.6, 5.8, tone[1]),
         circle(-1.8, -5.2, 2.2, tone[0], stroke="none"),
     ], x, y, rot)
@@ -320,7 +359,8 @@ def hexagon(cx: float, cy: float, r: float, tone_i: str, sw: float = 1.3) -> str
 
 def school_badge(sid: str, *art: str) -> str:
     base = SCHOOL_COLORS[sid]
-    return badge(*art, disc=mix(base, "#0e0f16", 0.80), ring=mix(base, PANEL, 0.30))
+    return badge(*art, disc=mix(base, "#0b0a11", 0.74), ring=mix(base, PANEL, 0.52),
+                 art_scale=0.80)
 
 
 # --- the verbs -------------------------------------------------------------
@@ -330,12 +370,12 @@ def school_badge(sid: str, *art: str) -> str:
 
 ACTIONS = {
     # The Attack action: one sword, lit down its near edge.
-    "attack": badge(sword(32, 32, 45, length=52, w=10)),
+    "attack": badge(sword(32, 32, 45, length=54, w=8.6)),
 
     # The bonus-action second swing — the same sword twice, smaller, crossed.
     "offhand_attack": badge(
-        sword(37, 33, 42, length=44, w=8),
-        sword(27, 33, -42, length=44, w=8),
+        sword(37, 33, 42, length=48, w=7),
+        sword(27, 33, -42, length=48, w=7),
     ),
 
     # Force applied, and the figure already going over backwards from it.
@@ -351,9 +391,9 @@ ACTIONS = {
             rect(-13, -9, 26, 18, 3.5, GOLD[1], sw=1.5),
             rect(-10, -6.4, 20, 5.4, 2.2, GOLD[0], stroke="none"),
         ], 38, 22, 45),
-        poly([(10, 48), (16.5, 43), (18.5, 51)], GOLD[2], sw=1.2),
-        poly([(21, 54), (26, 49), (28.5, 55)], GOLD[1], sw=1.2),
-        poly([(9, 36), (15.5, 37.5), (11.5, 42)], GOLD[2], sw=1.2),
+        poly([(10, 48), (16.5, 43), (18.5, 51)], GOLD[1], sw=1.2),
+        poly([(21, 54), (26, 49), (28.5, 55)], GOLD[0], sw=1.2),
+        poly([(9, 36), (15.5, 37.5), (11.5, 42)], GOLD[1], sw=1.2),
     ),
 
     # Aid offered: the boon, held up in two cupped hands.
@@ -377,9 +417,9 @@ ACTIONS = {
     "dash": badge(
         chevron(38, 32, 0, 12, 5.5, GOLD),
         chevron(27, 32, 0, 12, 5.5, GOLD),
-        rect(10, 20.5, 11, 3.4, 1.7, STEEL[2], stroke="none"),
-        rect(7, 30.3, 12, 3.4, 1.7, STEEL[1], stroke="none"),
-        rect(10, 40.1, 11, 3.4, 1.7, STEEL[2], stroke="none"),
+        rect(10, 20.5, 11, 3.4, 1.7, STEEL[1], stroke="none"),
+        rect(7, 30.3, 12, 3.4, 1.7, STEEL[0], stroke="none"),
+        rect(10, 40.1, 11, 3.4, 1.7, STEEL[1], stroke="none"),
     ),
 
     # Backing out of a threatened square, and the blades you back out of.
@@ -415,7 +455,7 @@ ACTIONS = {
     # A step up, on yourself.
     "self_buff": badge(
         arrow(32, 28, 0, 32, 13, GOLD),
-        rect(17, 47, 30, 5.5, 2.2, GOLD[2]),
+        rect(17, 47, 30, 5.5, 2.2, GOLD[1]),
         star(48, 15, 6, 2, 4, LIGHT, sw=1.1),
     ),
 
@@ -423,7 +463,7 @@ ACTIONS = {
     "ally_buff": badge(
         arrow(22, 29, 0, 26, 10, GOLD),
         arrow(42, 29, 0, 26, 10, GOLD),
-        rect(12, 46, 40, 5.5, 2.2, GOLD[2]),
+        rect(12, 46, 40, 5.5, 2.2, GOLD[1]),
         star(32, 14, 6, 2, 4, LIGHT, sw=1.1),
     ),
 
@@ -439,10 +479,10 @@ ACTIONS = {
     "attack_modifier": badge(
         circle(32, 32, 13.5, "none", stroke=INK, sw=6.6),
         circle(32, 32, 13.5, "none", stroke=STEEL[1], sw=4.2),
-        rect(30.4, 9, 3.2, 8, 1.6, STEEL[2]),
-        rect(30.4, 47, 3.2, 8, 1.6, STEEL[2]),
-        rect(9, 30.4, 8, 3.2, 1.6, STEEL[2]),
-        rect(47, 30.4, 8, 3.2, 1.6, STEEL[2]),
+        rect(30.4, 9, 3.2, 8, 1.6, STEEL[1]),
+        rect(30.4, 47, 3.2, 8, 1.6, STEEL[1]),
+        rect(9, 30.4, 8, 3.2, 1.6, STEEL[1]),
+        rect(47, 30.4, 8, 3.2, 1.6, STEEL[1]),
         circle(32, 32, 4.2, GOLD[1]),
     ),
 
@@ -518,14 +558,15 @@ SCHOOLS = {
         "divination",
         circle(32, 28, 15.5, _s("divination")[1], sw=1.4),
         band(32, 28, 12, 8, 190, 265, _s("divination")[0], stroke="none"),
-        poly([(23, 44), (41, 44), (37.5, 51), (26.5, 51)], GOLD[2], sw=1.2),
+        poly([(23, 44), (41, 44), (37.5, 51), (26.5, 51)], GOLD[1], sw=1.2),
         rect(20, 49.5, 24, 5.5, 2.2, GOLD[1]),
     ),
 
     # A will bent: the spiral.
     "enchantment": school_badge(
         "enchantment",
-        stroke_path("M32 13 A19 19 0 1 1 13 32 A13 13 0 1 0 39 32 A7 7 0 1 1 25 32", INK, 8.4),
+        stroke_path("M32 13 A19 19 0 1 1 13 32 A13 13 0 1 0 39 32 A7 7 0 1 1 25 32",
+                    mix(SCHOOL_COLORS["enchantment"], INK, 0.62), 8.4),
         stroke_path("M32 13 A19 19 0 1 1 13 32 A13 13 0 1 0 39 32 A7 7 0 1 1 25 32",
                     _s("enchantment")[1], 5.2),
         star(49, 15, 6, 2, 4, LIGHT, sw=1.0),
@@ -541,7 +582,7 @@ SCHOOLS = {
     # Which one is real: the shape, and the copy that isn't.
     "illusion": school_badge(
         "illusion",
-        diamond(39, 32, 12, 15.5, _s("illusion"), sw=1.2, extra=' opacity="0.42"'),
+        diamond(39, 32, 12, 15.5, _s("illusion"), sw=1.2, extra=' opacity="0.55"'),
         diamond(26, 32, 12, 15.5, _s("illusion"), sw=1.4),
         poly([(26, 20.5), (33, 32), (26, 32)], _s("illusion")[0], stroke="none"),
     ),
@@ -563,11 +604,11 @@ SCHOOLS = {
     # One thing made another: the turning ring.
     "transmutation": school_badge(
         "transmutation",
-        band(32, 32, 18, 12.5, 200, 330, _s("transmutation")[1]),
-        band_head(32, 32, 18, 12.5, 330, 26, _s("transmutation")[1]),
-        band(32, 32, 18, 12.5, 20, 150, _s("transmutation")[1]),
-        band_head(32, 32, 18, 12.5, 150, 26, _s("transmutation")[1]),
-        hexagon(32, 32, 6.5, _s("transmutation")[0], sw=1.1),
+        band(32, 32, 18, 12.5, 200, 330, _s("transmutation")[0]),
+        band_head(32, 32, 18, 12.5, 330, 26, _s("transmutation")[0]),
+        band(32, 32, 18, 12.5, 20, 150, _s("transmutation")[0]),
+        band_head(32, 32, 18, 12.5, 150, 26, _s("transmutation")[0]),
+        hexagon(32, 32, 6.5, mix(SCHOOL_COLORS["transmutation"], "#ffffff", 0.7), sw=1.1),
     ),
 }
 
@@ -584,7 +625,7 @@ GROUPS = {"actions": ACTIONS, "schools": SCHOOLS}
 #                        At 1.0 the master is the display size and every
 #                        rounding of the button's layout softens a 2 px stroke.
 #   mipmaps/generate     the bar redraws these at whatever the zoom slider
-#                        says; a mip chain is what keeps 28 px off 64 px from
+#                        says; a mip chain is what keeps 22 px off 64 px from
 #                        crawling.
 #
 # The rest are Godot's texture defaults, spelled out because that is what the
@@ -641,11 +682,14 @@ UID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 
 def uid_for(res_path: str) -> str:
-    """A stable uid://, base-36 the way ResourceUID::id_to_text spells one.
+    """A first uid:// for a brand-new icon, base-36 the way
+    ResourceUID::id_to_text spells one.
 
-    The editor rolls a random one per file; deriving it from the path instead
-    keeps this tool idempotent — regenerating an icon must not churn its uid,
-    which is what every .tscn referencing it is holding on to."""
+    Only ever used once per file. Godot mints and normalises uids itself — it
+    rewrote half of these the first time it imported them — so import_file()
+    keeps whatever is already on disk and this is just a plausible value to
+    start from. Deriving it from the path rather than rolling a random one
+    keeps the tool deterministic for a fresh checkout."""
     n = int.from_bytes(hashlib.md5(res_path.encode()).digest()[:8], "big") >> 1
     out = ""
     while n:
@@ -654,10 +698,22 @@ def uid_for(res_path: str) -> str:
     return "uid://" + out
 
 
-def import_file(res_path: str) -> str:
+def import_file(res_path: str, current: str = None) -> str:
+    """The .import sidecar, keeping the uid Godot has already assigned.
+
+    The uid is the one line in here this tool does not own: it is what every
+    scene referencing the icon holds on to, and the editor rewrites it on its
+    own terms. Everything else — the params, and the imported path, which is
+    md5 of the source res:// path (EditorFileSystem::_get_import_base_path) —
+    is ours and is regenerated."""
     digest = hashlib.md5(res_path.encode()).hexdigest()
     dest = "res://.godot/imported/%s-%s.ctex" % (res_path.rsplit("/", 1)[1], digest)
-    return IMPORT_TEMPLATE.format(uid=uid_for(res_path), dest=dest, src=res_path)
+    uid = uid_for(res_path)
+    if current:
+        found = re.search(r'^uid="(uid://[^"]+)"$', current, re.M)
+        if found:
+            uid = found.group(1)
+    return IMPORT_TEMPLATE.format(uid=uid, dest=dest, src=res_path)
 
 
 def targets() -> list:
@@ -667,7 +723,9 @@ def targets() -> list:
         for name in sorted(icons):
             rel = "assets/icons/%s/%s.svg" % (group, name)
             out.append((ROOT / rel, icons[name]))
-            out.append((ROOT / (rel + ".import"), import_file("res://" + rel)))
+            sidecar = ROOT / (rel + ".import")
+            out.append((sidecar, import_file(
+                "res://" + rel, sidecar.read_text() if sidecar.exists() else None)))
     return out
 
 

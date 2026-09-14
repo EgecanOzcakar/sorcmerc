@@ -70,7 +70,7 @@ class Sheet extends Control:
 			draw_string(f, Vector2(cx + 8, cy + 18), Icons.condition_glyph(id),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color("e6c15a"))
 			draw_string(f, Vector2(cx, cy + 38), id, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Icons.COL_BODY)
-		y += 130
+		y += 56 * ceil(Icons.CONDITION_ORDER.size() / 10.0) + 20
 
 		head.call("R A R I T Y", y)
 		y += 26

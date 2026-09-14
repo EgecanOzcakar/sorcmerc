@@ -198,7 +198,10 @@ static func verb_glyph(kind: String) -> String:
 # left them out, a content pack's verb kind with no art of its own: _icon()
 # returns null and the caller keeps the glyph. Every call site pairs the two.
 const ICON_ROOT := "res://assets/icons"
-const ICON_PX := 28          # drawn size on the bar at zoom 1 (_apply_ui_scale scales it)
+# 22, not the badge's own 64: the bar's buttons are 126 px wide and clip their
+# text, so every pixel the mark takes is a character of the label lost. 22 is
+# what the font glyph it replaced occupied, and the badge still reads at it.
+const ICON_PX := 22          # drawn size on the bar at zoom 1 (_apply_ui_scale scales it)
 # The bar's own controls live alongside the verbs — same row, same weight.
 const BAR_ICONS := ["end_turn", "back", "swap", "generic"]
 
@@ -240,6 +243,7 @@ static func icon_button(b: Button, tex: Texture2D, px := ICON_PX) -> Button:
 	b.icon = tex
 	b.expand_icon = false
 	b.add_theme_constant_override("icon_max_width", px)
+	b.add_theme_constant_override("h_separation", 4)
 	b.add_theme_color_override("icon_disabled_color", Color(1, 1, 1, 0.35))
 	return b
 
