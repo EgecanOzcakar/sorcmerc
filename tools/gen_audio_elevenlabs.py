@@ -42,9 +42,39 @@ import urllib.request
 
 API_URL = "https://api.elevenlabs.io/v1/sound-generation"
 OUTPUT_FORMAT = "pcm_44100"
+# The API's own floor, enforced server-side: anything under half a second is a
+# 400. Shorter is still what several of these want -- a UI click is a tick, not
+# half a second of anything -- so the prompt asks for a short sound and the rest
+# of the window comes back as the silence after it, which costs a few KB of WAV
+# and nothing at playback: core/audio.gd fires these as one-shots.
+MIN_SECONDS = 0.5
+MAX_SECONDS = 30.0
 SR = 44100
 CHANNELS = 1
 KEY_ENV = "ELEVENLABS_API_KEY"
+
+# What comes back is NOT drop-in on its own, and both reasons are measurable
+# against the synthesized set it has to sit beside:
+#
+#  * LEVEL. tools/gen_audio.py peak-normalizes every sting to 28480 (-1.2 dBFS),
+#    uniformly, all 14 of them. A generated take lands wherever it lands -- the
+#    first click back was 7691, a quarter of that -- so dropping it in unchanged
+#    makes one sound in the game four times quieter than its neighbours. Matched
+#    to the same number rather than a number of my own, so the two sets mix.
+#  * LENGTH. The API has a half-second floor and overruns it anyway; the first
+#    click was 0.96s, against 0.06s for the synthesized one. Almost all of that
+#    is silence after the sound, and a UI click that holds an audio voice for a
+#    second is a click you can hear queueing. Trimmed to the actual sound.
+PEAK = 28480                # tools/gen_audio.py's own normalization target
+# Silence is judged over a WINDOW, not per sample. A take's noise floor is not
+# flat -- the first usable click came back with the sound over by 200 ms and a
+# single stray sample at 0.8% FS near the very end, which is enough to defeat a
+# per-sample scan and keep three quarters of a second of nothing. RMS over a
+# short window ignores one sample and still catches a real tail.
+WINDOW_MS = 10
+SILENCE_RMS = 0.004         # 0.4% FS averaged over a window: room tone, not sound
+LEAD_MS = 5                 # kept before the first live window, so nothing clicks in
+TAIL_MS = 60                # kept after the last, so a decay is not chopped
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
 
@@ -123,6 +153,43 @@ def jobs(groups, only):
     return out
 
 
+def trim_and_normalize(pcm):
+    """Raw take -> the same sound at the synthesized set's level and length.
+
+    Returns (pcm, before_secs, after_secs, peak_before). A take that is silent
+    all the way through comes back untouched rather than divided by zero -- that
+    is a miss to listen to and re-run, not something to amplify into noise.
+    """
+    n = len(pcm) // 2
+    before = n / float(SR)
+    if n == 0:
+        return pcm, before, before, 0
+    vals = list(struct.unpack("<%dh" % n, pcm))
+    peak = max(abs(v) for v in vals)
+    floor = SILENCE_RMS * 32767.0
+    if peak < floor:
+        return pcm, before, before, peak
+
+    win = max(1, int(SR * WINDOW_MS / 1000.0))
+    live = []
+    for i in range(0, n, win):
+        chunk = vals[i:i + win]
+        rms = (sum(v * v for v in chunk) / float(len(chunk))) ** 0.5
+        if rms >= floor:
+            live.append(i)
+    if not live:
+        return pcm, before, before, peak
+
+    first = max(0, live[0] - int(SR * LEAD_MS / 1000.0))
+    last = min(n - 1, live[-1] + win + int(SR * TAIL_MS / 1000.0))
+    vals = vals[first:last + 1]
+
+    gain = PEAK / float(peak)
+    vals = [max(-32768, min(32767, int(round(v * gain)))) for v in vals]
+    return (struct.pack("<%dh" % len(vals), *vals),
+            before, len(vals) / float(SR), peak)
+
+
 def wav(pcm):
     """16-bit mono PCM bytes -> a complete RIFF/WAVE file."""
     block_align = CHANNELS * 2
@@ -137,7 +204,7 @@ def generate(key, prompt, seconds, influence, timeout=180):
     """One call. Returns raw 16-bit PCM at SR, or raises."""
     body = json.dumps({
         "text": prompt,
-        "duration_seconds": round(seconds, 2),
+        "duration_seconds": round(max(MIN_SECONDS, min(MAX_SECONDS, seconds)), 2),
         "prompt_influence": influence,
     }).encode()
     req = urllib.request.Request(
@@ -177,7 +244,9 @@ def main():
 
     if args.list:
         for group, name, path, prompt, secs, infl in todo:
-            print("%-10s %-10s %4.1fs  infl %.2f  %s" % (group, name, secs, infl, prompt))
+            asked = max(MIN_SECONDS, min(MAX_SECONDS, secs))
+            note = "" if asked == secs else "  (floored from %.1fs)" % secs
+            print("%-10s %-10s %4.1fs  infl %.2f  %s%s" % (group, name, asked, infl, prompt, note))
         print("\n%d generation(s)." % len(todo))
         return
 
@@ -192,10 +261,14 @@ def main():
             print("(dry run)")
             continue
         pcm = generate(key, prompt, secs, infl)
+        pcm, was, now, peak = trim_and_normalize(pcm)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(wav(pcm))
-        print("%s (%d KiB)" % (os.path.relpath(path, ROOT), len(pcm) // 1024))
+        note = ("  ** silent take, re-run this one **"
+                if peak < SILENCE_RMS * 32767.0 else "")
+        print("%s  %.2fs (from %.2fs, peak %d -> %d)%s"
+              % (os.path.relpath(path, ROOT), now, was, peak, PEAK, note))
 
     if not args.dry_run:
         print("\nListen to them before committing — a take can miss, and this is not\n"

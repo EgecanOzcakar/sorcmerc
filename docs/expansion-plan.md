@@ -4239,3 +4239,27 @@ The prompts describe the *sound*, not the game event: "a single heavy sword
 strike landing on chain mail armor, dry, no reverb tail" is something a model has
 heard; "hit.wav" is not. Lengths match what the game gives each sting room for,
 since `core/audio.gd` fires them as one-shots over live combat.
+
+**All 14 stings are now generated ones** — `assets/audio/sfx/` is the model's,
+`assets/audio/music/` and `assets/audio/barks/` are still the synthesized set.
+Three things had to be true before a take was drop-in, and none of them were:
+
+1. **The API has a half-second floor** (`duration_seconds` under 0.5 is a 400)
+   and overruns whatever it is given by about 2×. A UI click is a tick, not a
+   second, so the request is floored and the result trimmed.
+2. **Level.** `gen_audio.py` peak-normalizes every sting to 28480 (-1.2 dBFS),
+   uniformly, all fourteen. The takes came back anywhere from 2944 to clipping
+   at full scale — a tenfold spread, which dropped in unchanged would make some
+   sounds inaudible next to their neighbours and others the loudest thing in the
+   game. Matched to `gen_audio.py`'s own number rather than a new one, so the
+   two sets mix.
+3. **Silence.** Trimming is judged on RMS over a 10 ms window rather than per
+   sample. The first usable click was over by 200 ms and carried one stray
+   sample at 0.8% FS near the end — enough to defeat a per-sample scan and keep
+   three quarters of a second of nothing. Window RMS ignores the stray and still
+   catches a real decay tail. It took `click` from 0.96s to 0.18s.
+
+And one take came back **silent** (peak 14 of 32767). That is why the tool
+measures the peak and says `** silent take, re-run this one **` rather than
+writing a dead file and reporting success: a generative API can hand you nothing
+with a 200, and the only thing that catches it is looking at the samples.
