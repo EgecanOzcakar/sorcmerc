@@ -1,0 +1,17 @@
+{
+  "format": "sorcmerc-pack",
+  "api": 1,
+  "id": "vault-of-the-ember-crown",
+  "title": "Vault of the Ember Crown",
+  "summary": "A paid chapter for parties who closed the Ashen Road. The crown the Wyrmscar was dreaming about has an owner, and she has been waiting under the Coldmarch for a very long time.",
+  "authors": ["The sorcmerc team"],
+  "pack_version": "1.0.0",
+  "kind": "campaign",
+  "access": "paid",
+  "product_id": "sorcmerc.dlc.ember-crown",
+  "priority": 20,
+  "requires": ["ashen-road"],
+  "world": "world.json",
+  "story": "story.json",
+  "data": {"magic-items.json": "items.json"}
+}

@@ -166,6 +166,12 @@ const BIGGEST_SHARE := 0.6  # no single foe may be worth more than this of the b
 
 static var _fac_cache := {}   # faction -> [{id, score}], strongest first
 
+# M6: the pools are built from the bestiary once and kept. A content pack that
+# adds or retunes monsters changes what the bestiary IS, so the cache has to go
+# with it — core/mod/registry.gd calls this whenever the overlay set changes.
+static func forget_pools() -> void:
+	_fac_cache.clear()
+
 # `theme` is the board this fight is on (Encounter.THEMES); with none, `seed`
 # picks a faction. A quest bias keeps the hand-tuned MIX — the quest target has
 # to be in the roster, and a snik among sahuagin is not a coherent warband.
