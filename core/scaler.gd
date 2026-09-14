@@ -186,10 +186,13 @@ static func forget_pools() -> void:
 # bit-for-bit what it was, and every existing call site keeps its measured
 # numbers. It multiplies the budget only; nothing about TIER, CURVE, REF_SCORE
 # or the two knobs in _build() moves.
+# `exclude` keeps named ids out of the faction draw — core/site.gd uses it so
+# a warren's own boss creature never turns up as escort three rooms before the
+# room it is built around.
 static func roster_for(party_characters: Array, difficulty: String, quest_bias: Dictionary = {},
-		theme: String = "", seed: int = 0, power_scale: float = 1.0) -> Dictionary:
+		theme: String = "", seed: int = 0, power_scale: float = 1.0, exclude: Array = []) -> Dictionary:
 	var budget := _budget(party_characters, difficulty, power_scale)
-	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() else _faction_order(theme, seed, budget))
+	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() else _faction_order(theme, seed, budget, exclude))
 
 static func _budget(party_characters: Array, difficulty: String, power_scale: float = 1.0) -> float:
 	var party: Array = []
@@ -288,14 +291,14 @@ static func _build(budget: float, order: Array, max_foes: int = MAX_FOES) -> Dic
 # One faction's ids, strongest first, capped so the bodies knob still has room to
 # work. Falls back to the hand-tuned MIX when nothing in the faction is small
 # enough for the party (a level-1 party meets no CR 8 giant).
-static func _faction_order(theme: String, seed: int, budget: float) -> Array:
+static func _faction_order(theme: String, seed: int, budget: float, exclude: Array = []) -> Array:
 	var fac: String = String(THEME_FACTION.get(theme, "")) if THEME_FACTION.has(theme) \
 		else FACTIONS[absi(seed) % FACTIONS.size()]
 	if fac == "":
 		return MIX.duplicate()
 	var need_habitat: String = String(THEME_HABITAT.get(theme, ""))
 	var pool: Array = _faction_pool(fac).filter(
-		func(e): return _in_budget_and_habitat(e, budget, need_habitat))
+		func(e): return _in_budget_and_habitat(e, budget, need_habitat) and not e["id"] in exclude)
 	if pool.is_empty():
 		return MIX.duplicate()
 	var start: int = absi(seed) % maxi(1, pool.size() / 2)

@@ -239,6 +239,19 @@ static func _boss_room(lair, theme: String, total: int) -> Dictionary:
 		"depth": total - 1, "gold": BOSS_CACHE + BOSS_CACHE_PER_DEPTH * total}
 
 
+# The creature the last room is built around must not be a regular pick on the
+# way down. Once a party is strong enough (~level 6 for the oni), the faction
+# pool would hand it out as plain escort, and "THE ONI OF THE DEEP ICE" is not a
+# reveal after you have already killed two. Only for "bestiary" bosses — an
+# "elite" lead (the arrow-chief's goblin archer) IS the common creature with a
+# title, and pulling it from the warren would gut every goblin roster.
+func _boss_lead_exclusion() -> Array:
+	var boss: Dictionary = rooms[-1][0] if not rooms.is_empty() else {}
+	if String(boss.get("archetype", "")) == "bestiary" and boss.has("lead"):
+		return [String(boss["lead"])]
+	return []
+
+
 func say(line: String) -> void:
 	log.append(line)
 
@@ -293,7 +306,7 @@ func combat_spec() -> Dictionary:
 	var spec: Dictionary = Scaler.boss_for(party.party_characters(), room, seed_v,
 			maxf(1.0, band)) if room.has("lead") \
 		else Scaler.roster_for(party.party_characters(), String(room.get("difficulty", "normal")),
-			{}, theme, seed_v, band)
+			{}, theme, seed_v, band, _boss_lead_exclusion())
 	spec["theme"] = theme if theme != "" else Campaign.BOSS["theme"]
 	return spec
 

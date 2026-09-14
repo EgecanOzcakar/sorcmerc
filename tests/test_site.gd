@@ -9,6 +9,7 @@ const World = preload("res://core/world.gd")
 const Site = preload("res://core/site.gd")
 const Party = preload("res://core/party.gd")
 const Scaler = preload("res://core/scaler.gd")
+const Regions = preload("res://core/regions.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 
 var _pass := 0
@@ -240,6 +241,27 @@ func _init() -> void:
 		sf.depth = sf.depth_total() - 1
 		sf.enter(0)
 		check(not sf.combat_spec().get("monsters", []).is_empty(), "%s lairs have a boss with a roster" % f)
+
+	# A "bestiary" boss is the creature itself, and it must not show up as plain
+	# escort on the floors above it. The giant hold sits in the frontier, so
+	# core/regions.gd builds its rooms for a level-6 party whoever walks in — and
+	# at that budget the giant pool hands the oni out as a normal pick (found in
+	# play: first fight of the giant hold was an oni). Every room, every pick.
+	var far = World.Lair.new("giant-hold", Vector2(-520, -260), "giant")
+	var s8 = Site.for_lair(far, _party(), _world())
+	check(Regions.band_of(_world(), far.position) == "frontier", "the giant hold is frontier country")
+	var leaked := false
+	for d in s8.depth_total() - 1:
+		for i in s8.rooms[d].size():
+			s8.depth = d; s8.state = "picking"
+			if String(s8.enter(i).get("kind", "")) != "combat":
+				continue
+			for m in s8.combat_spec()["monsters"]:
+				leaked = leaked or String(m["id"]) == "oni"
+	check(not leaked, "the oni never turns up before the boss room")
+	s8.depth = s8.depth_total() - 1; s8.state = "picking"; s8.enter(0)
+	check(s8.combat_spec()["monsters"].any(func(m): return String(m["id"]) == "oni"),
+		"...but it is still the boss")
 
 	# --- D1: a disturbed lair does not wait forever ------------------------
 	# Locked with the user: enter a lair and you have a day or two to finish it.
