@@ -41,7 +41,10 @@ func _init() -> void:
 		var s = a._stream(Audio.MUSIC_DIR + theme + ".wav", true)
 		check(s != null and s.loop_mode == AudioStreamWAV.LOOP_FORWARD, "bed %s loops" % theme)
 		if s != null:
-			check(s.loop_end == s.data.size() / 2, "bed %s loops over its whole length" % theme)
+			# loop_end is in frames, so the divisor tracks the channel count.
+			var frames: int = s.data.size() / (4 if s.stereo else 2)
+			check(s.loop_end == frames, "bed %s loops over its whole length" % theme)
+			check(s.mix_rate >= 22050, "bed %s kept its sample rate" % theme)
 	check(a._stream("res://assets/audio/sfx/nope.wav", false) == null, "missing file -> null")
 	# T31: every voice barks.gd can name has all its variants on disk.
 	var Barks = load("res://core/barks.gd")

@@ -53,7 +53,16 @@ docs/              docs/expansion-plan.md is the current source of truth;
                    design doc are the original pre-expansion design record
 tools/gen_audio.py procedurally synthesizes every SFX/music/bark asset under
                    assets/audio/ — no external audio assets, run it again
-                   after editing it to regenerate
+                   after editing it to regenerate. `--rate`/`--loop` trade
+                   file size against fidelity; the default 32 kHz stereo is
+                   13 MB for all 35 assets
+tools/synth.py     the DSP it is built on: band-limited oscillators, biquads,
+                   Freeverb, Karplus-Strong, and a formant voice for the barks
+tools/check_audio.py
+                   validates the generated WAVs (no clipping, no DC offset,
+                   loop seams continuous) — the waveform half of the audio
+                   tests, since tests/test_audio.gd can only prove the engine
+                   parses them
 ```
 
 ## Assets and provenance
@@ -73,7 +82,7 @@ in separate directories, so any file's origin is answerable from its path alone:
 
 | Path | Origin | Recorded in |
 |---|---|---|
-| `assets/audio/` | procedurally synthesized, stdlib only — **not AI** | `tools/gen_audio.py` |
+| `assets/audio/` | procedurally synthesized, stdlib only — **not AI** | `tools/gen_audio.py`, `tools/synth.py` |
 | `assets/lpc/` | Liberated Pixel Cup art, CC-BY-SA 3.0 / GPL-3.0 / OGA-BY 3.0 | `assets/lpc/CREDITS.csv`, `LICENSES/` |
 | `assets/generated/` | sheets composited from `assets/lpc/` | `*_credits.txt` per sheet |
 | `assets/world/` | sourced packs | `License.txt` per subdirectory |
