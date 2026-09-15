@@ -270,10 +270,16 @@ static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
 	var lead := String(boss.get("lead", ""))
 	var count: int = maxi(1, int(boss.get("lead_count", 1)))
 	var extras: Array = boss.get("lead_features", [])
+	# Per-boss knobs off the BOSS_POOL entry, for the chaff-vs-chunk ceiling the
+	# header describes: `mult_max` caps how far the lead is pumped, `lead_share`
+	# how much of the fight it is (less lead = more escort bodies = harder, by the
+	# action-economy measurement above). Defaults are the globals.
+	var mult_max: float = minf(BOSS_MULT_MAX, float(boss.get("mult_max", BOSS_MULT_MAX)))
+	var share: float = float(boss.get("lead_share", BOSS_LEAD_SHARE))
 	var mult := MULT_MIN
-	while mult < BOSS_MULT_MAX and _lead_score(lead, count, mult, extras) < budget * BOSS_LEAD_SHARE:
+	while mult < mult_max and _lead_score(lead, count, mult, extras) < budget * share:
 		mult += MULT_STEP
-	mult = snappedf(minf(mult, BOSS_MULT_MAX), 0.01)
+	mult = snappedf(minf(mult, mult_max), 0.01)
 	var entry := {"id": lead, "count": count, "mult": mult}
 	if not extras.is_empty():
 		entry["features"] = extras
