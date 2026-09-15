@@ -1,5 +1,5 @@
-# T-actionbar: spell-tier stacking, glyphs, and frequency-based prioritization
-# on the redesigned action bar (scenes/main.gd _build_hero_menu/_set_buttons).
+# T-actionbar: the fixed nine-slot bar, spell-tier stacking, and submenus
+# (scenes/main.gd _build_hero_menu/_slotted/_set_buttons).
 # Ilsa Vane, the demo party's cleric (core/presets.gd), has Burning Hands
 # castable at level 1 and 2 (Light Domain always-prepared + her own 2nd-level
 # slots) — a real 2-tier spell to stack, not a synthetic fixture.
@@ -47,58 +47,75 @@ func _init() -> void:
 
 	main._build_hero_menu(ilsa)
 	var labels: Array = await _labels(main)
-	var bh_buttons := labels.filter(func(t): return t.contains("Burning Hands"))
-	check(bh_buttons.size() == 1, "Burning Hands collapses to one button, not one per tier (got %s)" % str(bh_buttons))
-	check(not labels.any(func(t): return t.contains("★")), "no upcast tier leaks onto the main bar as its own button")
+	# The fixed layout: nine slots, Swap, End turn — for every character.
+	check(labels.size() == 11, "eleven buttons: nine slots, Swap, End turn (got %d)" % labels.size())
+	check(labels[0].contains("Attack") and labels[1].contains("Spells") and labels[2].contains("Bonus")
+		and labels[3].contains("Features") and labels[4].contains("Dash") and labels[5].contains("Disengage")
+		and labels[6].contains("Dodge") and labels[7].contains("Hide") and labels[8].contains("Help"),
+		"slots 1-9 are Attack, Spells, Bonus, Features, Dash, Disengage, Dodge, Hide, Help & Shove (%s)" % str(labels))
+	check(labels[10].contains("End turn"), "the last button is End turn")
+	var keys: Array = main._buttons.get_children().map(func(b): return String(b.get_meta("hotkey", "")))
+	check(keys.slice(0, 9) == ["1", "2", "3", "4", "5", "6", "7", "8", "9"] and keys[9] == "Tab" and keys[10] == "Spc",
+		"the key chips read 1-9, Tab, Spc (%s)" % str(keys))
+	check(not labels.any(func(t): return t.contains("Burning Hands")), "no spell sits on the main bar — they live under [2]")
 	check(main._buttons.columns == main.BTN_COLUMNS, "buttons lay out in the fixed-width grid")
+	# Vera's bar is the same shape, with the slots she lacks greyed rather than gone.
+	var vera = null
+	for c in main.cb.combatants:
+		if c.cname == "Vera Kord":
+			vera = c
+	main._build_hero_menu(vera)
+	var vlabels: Array = await _labels(main)
+	check(vlabels.size() == 11 and vlabels[1].contains("Spells") and vlabels[4].contains("Dash"),
+		"the fighter's bar has the same eleven slots in the same places")
+	var vkids: Array = main._buttons.get_children()
+	check(vkids[1].disabled, "a fighter's Spells slot is there, greyed")
+	check(not vkids[4].disabled, "...and her Dash is live")   # Attack may be greyed: nobody in reach yet
+	# [3] Bonus: Vera's Second Wind is a bonus action, so it sits there (and not under Features)
+	main._press_hotkey(2)
+	var vbonus: Array = await _labels(main)
+	check(vbonus.any(func(l): return l.contains("Second Wind")), "Second Wind is under [3] Bonus (%s)" % str(vbonus))
+	main.board_cancel()
+	await process_frame
+	main._press_hotkey(3)
+	var vfeat: Array = await _labels(main)
+	check(not vfeat.any(func(l): return l.contains("Second Wind")), "...and not under [4] Features (%s)" % str(vfeat))
+	main.board_cancel()
+	await process_frame
+
+	# [2] opens the level groups, always; Level 1 holds Burning Hands once (its tiers collapse), Esc back.
+	main._build_hero_menu(ilsa)
+	await process_frame
+	main._press_hotkey(1)
+	var lvl_labels: Array = await _labels(main)
+	check(lvl_labels[0].contains("Cantrips") and lvl_labels[1].contains("Level 1"), "three spells still get level groups (%s)" % str(lvl_labels))
+	main._press_hotkey(1)
+	var sub_labels: Array = await _labels(main)
+	var bh_buttons := sub_labels.filter(func(t): return t.contains("Burning Hands"))
+	check(bh_buttons.size() == 1, "Burning Hands collapses to one button, not one per tier (got %s)" % str(bh_buttons))
+	check(not sub_labels.any(func(t): return t.contains("★")), "no upcast tier leaks into the spell list as its own button")
+	check(sub_labels[-1].contains("Back") and String(main._buttons.get_children()[-1].get_meta("hotkey", "")) == "Esc",
+		"the spell list ends in Back, on Esc")
+	check(not sub_labels.any(func(l): return l.contains("Sacred Flame")), "Level 1 does not list the cantrip")
+	var lv: Array = main._buttons.get_children().map(func(b): return int(b.tooltip_text.length()))   # touch the buttons
+	check(lv.size() > 0, "spell buttons exist")
 
 	# Press it: since Burning Hands has 2 tiers, this should open the tier
 	# submenu (Back present, both tiers present) rather than casting directly.
 	var kids: Array = main._buttons.get_children()
-	var bh_idx: int = labels.find(bh_buttons[0]) if not bh_buttons.is_empty() else -1
+	var bh_idx: int = sub_labels.find(bh_buttons[0]) if not bh_buttons.is_empty() else -1
 	check(bh_idx >= 0, "found the Burning Hands button to press")
 	if bh_idx >= 0:
 		kids[bh_idx].pressed.emit()
-		var sub_labels: Array = await _labels(main)
-		check(sub_labels.any(func(t): return t.contains("Burning Hands") and not t.contains("★")),
-			"tier 1 (base, unstarred) is offered in the submenu")
-		check(sub_labels.any(func(t): return t.contains("★2")), "tier 2 (★2) is offered in the submenu")
-		check(sub_labels.any(func(t): return t.contains("Back")), "the submenu has a way back")
-		# Back returns to the main menu with Burning Hands collapsed again.
-		var sub_kids: Array = main._buttons.get_children()
-		var back_idx: int = -1
-		for i in sub_labels.size():
-			if sub_labels[i].contains("Back"):
-				back_idx = i
-		sub_kids[back_idx].pressed.emit()
+		var tier_labels: Array = await _labels(main)
+		check(tier_labels.any(func(t): return t.contains("Burning Hands") and not t.contains("★")),
+			"tier 1 (base, unstarred) is offered in the tier picker")
+		check(tier_labels.any(func(t): return t.contains("★2")), "tier 2 (★2) is offered in the tier picker")
+		check(tier_labels.any(func(t): return t.contains("Back")), "the tier picker has a way back")
+		# Esc returns to the main bar, spells folded under [2] again.
+		main.board_cancel()
 		var after_back: Array = await _labels(main)
-		check(after_back.filter(func(t): return t.contains("Burning Hands")).size() == 1,
-			"Back returns to the main menu, still one Burning Hands button")
-
-	# Frequency decides the layout ONCE per fight, and then the slots hold still.
-	# The bar used to re-sort itself on every press, so reaching for the verb in
-	# slot 3 could get you whatever had just been promoted into it.
-	main._build_hero_menu(ilsa)
-	var before: Array = await _labels(main)
-	for i in 20:
-		main._bump_freq("dodge")   # BASIC's dodge verb id — see scenes/main.gd _build_hero_menu
-	main._build_hero_menu(ilsa)
-	var after: Array = await _labels(main)
-	check(after == before, "using a verb 20 times does not move a single badge mid-fight")
-
-	# ...and the next fight opens with the well-worn verb in the low slot.
-	main._bar_order.clear()
-	main._build_hero_menu(ilsa)
-	var relaid: Array = await _labels(main)
-	var dodge_before: int = -1
-	var dodge_after: int = -1
-	for i in before.size():
-		if before[i].contains("Dodge"): dodge_before = i
-	for i in relaid.size():
-		if relaid[i].contains("Dodge"): dodge_after = i
-	check(dodge_before >= 0 and dodge_after >= 0, "Dodge is offered before and after")
-	check(dodge_after < dodge_before, "a heavily-used verb (Dodge) leads the next fight's bar")
-	check(relaid[0].contains("Dodge"), "20 uses is enough to put Dodge in the [1] slot")
+		check(after_back.size() == 11 and after_back[1].contains("Spells"), "Esc returns to the main bar")
 
 	# A verb that has gone unavailable holds its slot, greyed, instead of
 	# collapsing the row and shifting every badge after it.
@@ -115,6 +132,48 @@ func _init() -> void:
 	var still_lit: int = main._buttons.get_children().filter(func(b): return not b.disabled).size()
 	check(still_lit < lit, "and the ones that need the action are greyed out (%d lit, was %d)"
 		% [still_lit, lit])
+
+	# A caster with every spell in the book: [2] groups by level, each group
+	# numbered from 1, and a group past nine entries pages on [9] More.
+	var ch = load("res://core/presets.gd").ilsa()
+	var Adapter = load("res://core/adapter.gd")
+	var Catalog = load("res://core/rules/catalog.gd")
+	var Effects = load("res://core/rules/effects.gd")
+	for i in 5:
+		ch.add_level("cleric", -1)
+	var ids: Array = []
+	for sid in Catalog.index("spells.json").keys():
+		if not Effects.spell(sid).is_empty():
+			ids.append(sid)
+	ch.prepared.assign(ids)
+	var archmage = Adapter.to_combatant(ch, "party", ilsa.pos)
+	archmage.id = "archmage"
+	archmage.team = "party"
+	main.cb.combatants.append(archmage)
+	main.cb.begin_turn_for(archmage)
+	main._build_hero_menu(archmage)
+	await process_frame
+	main._press_hotkey(1)
+	var groups: Array = await _labels(main)
+	check(groups[0].contains("Cantrips") and groups[1].contains("Level 1") and groups.size() <= 10,
+		"20+ spells: [2] opens level groups, Cantrips first (%s)" % str(groups))
+	check(groups[-1].contains("Back"), "the group list ends in Back")
+	main._press_hotkey(0)   # Cantrips
+	var cantrips: Array = await _labels(main)
+	var cn: int = cantrips.filter(func(l): return not l.contains("Back") and not l.contains("More")).size()
+	check(cn >= 5 and cn <= 9, "the cantrip page holds at most nine spells (%d)" % cn)
+	if cantrips.any(func(l): return l.contains("More")):
+		var more_idx: int = -1
+		for i in cantrips.size():
+			if cantrips[i].contains("More"):
+				more_idx = i
+		check(more_idx == 8, "More sits on [9]")
+		main._press_hotkey(more_idx)
+		var page2: Array = await _labels(main)
+		check(page2 != cantrips and page2.any(func(l): return l.contains("Back")), "More turns the page")
+	main.board_cancel()
+	var home: Array = await _labels(main)
+	check(home.size() == 11 and home[1].contains("Spells"), "Esc from a group returns to the main bar")
 
 	print("test_action_bar: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

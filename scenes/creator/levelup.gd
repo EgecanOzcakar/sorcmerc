@@ -167,14 +167,10 @@ func _choices() -> void:
 	var sheet = _ch.sheet()
 	if Leveling.pending(_ch).is_empty():
 		_head("Nothing left to choose")
-	# Open choices first, then the ones already made — those stay on screen and
-	# editable instead of vanishing the moment they resolve (T34).
-	var pts: Array = []
-	for want_decided in [false, true]:
-		for p in sheet.choice_points:
-			if bool(p.get("decided", false)) == want_decided:
-				pts.append(p)
-	for p in pts:
+	# In the resolver's order, made or not: a choice keeps its place on the page
+	# (made ones stay on screen and editable, T34) rather than dropping to the
+	# bottom the moment it resolves.
+	for p in sheet.choice_points:
 		var picks := Creator.picks_from_decision(p, _ch.choices.get(p["key"]))
 		var n := Creator.pick_count(p)
 		var src: Dictionary = p["source"]
