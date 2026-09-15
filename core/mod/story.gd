@@ -60,9 +60,10 @@ const Quest = preload("res://core/quest.gd")
 const FORMAT := "sorcmerc-story"
 const BEAT_KINDS := ["scene", "quest", "note"]
 # The quest kinds core/quest.gd can actually track. A story may not invent one:
-# an unknown kind is a quest that can be taken and never completed.
-const QUEST_KINDS := ["kill_count", "collect_item", "hunt_party",
-	"raid_settlement", "clear_lair"]
+# an unknown kind is a quest that can be taken and never completed. Read off
+# quest.gd rather than copied — this list was a copy until D7 added three kinds
+# to quest.gd and left the validator rejecting all three.
+const QUEST_KINDS := Quest.KINDS
 
 # Condition vocabulary. Listed here (rather than being whatever the runtime
 # happens to read) so a typo is an error an author is shown, not a beat that
@@ -289,12 +290,10 @@ func _check_quest(q: Dictionary, where: String, quest_ids: Dictionary,
 		return
 	# Each kind names its target in its own field; a quest missing that field
 	# can never make progress, which looks exactly like a bug in the game.
-	var need: String = {"kill_count": "target_monster_id", "collect_item": "target_monster_id",
-		"hunt_party": "target_party_id", "raid_settlement": "target_settlement_id",
-		"clear_lair": "target_lair_id"}[kind]
+	var need: String = String(Quest.TARGET_FIELD[kind])
 	if String(q.get(need, "")).is_empty():
 		errors.append("%s: a %s quest needs %s" % [where, kind, need])
-	elif not world_ids.is_empty() and need != "target_monster_id" \
+	elif not world_ids.is_empty() and Quest.WORLD_TARGET_FIELDS.has(need) \
 			and not world_ids.has(String(q[need])):
 		errors.append("%s: %s \"%s\" is not on this pack's map" % [where, need, q[need]])
 	if kind == "collect_item" and String(q.get("target_item_id", "")).is_empty():
