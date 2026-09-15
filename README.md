@@ -23,7 +23,8 @@ core/            pure rules + game state, mostly no engine deps
   campaign.gd, campaign_save.gd  the run: generated route, shop/rest/treasure,
                                   autosave
   party.gd                       shared inventory, resurrection, marching order
-  quest.gd                       kill/collect quests offered by settlement NPCs
+  quest.gd                       what a quest is, and how each kind makes progress
+  quest_posting.gd               which counter in which settlement posts which kind
   leveling.gd, progression.gd    per-character XP/level, and the meta-progression
                                   (lifetime XP unlocks species/classes/subclasses)
   achievements.gd, character_save.gd, settings.gd   local user:// persistence

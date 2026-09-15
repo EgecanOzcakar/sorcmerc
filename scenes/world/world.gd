@@ -1359,6 +1359,12 @@ func _check_region() -> void:
 		return
 	var band: Dictionary = Regions.at(world, p0.position)
 	var lv: Array = band["levels"]
+	# D7: a scouting job is done the moment the party is standing in the band it
+	# was sent to look at — the riding back is the turn-in, not the job. Read off
+	# where they ARE rather than off a crossing: a job taken in a town that sits
+	# just inside the seam would otherwise need the party to leave the band and
+	# come back before it would tick.
+	Quest.record_region_reached(party, String(band["id"]))
 	# T27+D6: the map's own ambient bed. The overworld used to be the one screen
 	# with SFX but no music at all — campaign.gd set a bed for every node of a
 	# linear run, and the open world, which is where most of a session is spent,
@@ -1427,6 +1433,9 @@ func _refresh_pace_btn() -> void:
 func _open_visit(s) -> void:
 	world.clock.pause()
 	world.set_goal(world.player(), world.player().position)   # stop at the gate
+	# D7: walking in this gate IS a courier job's delivery. Before the panel is
+	# built, so the crate is already handed over on the screen that opens.
+	Quest.record_settlement_visited(party, s.id)
 	_visit = Visit.visit(s, world)
 	_visit_page = "hub"
 	_market_tab = MARKET_TAB_ALL
@@ -1709,11 +1718,21 @@ func _make_camp() -> void:
 # O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
 # (the board can show several at once now), not re-rolled here.
 func _take_quest(q: Dictionary) -> void:
-	if Quest.accept(party, q):
-		_build_visit_panel()
-		_say("Job taken: %s" % q["title"])
-	else:
+	if not Quest.accept(party, q):
 		_say("No work here just now.")
+		return
+	# D7: being told where it is IS the job. A lair the party has not found yet
+	# (core/world_lairs.gd's Survival check, D5's bought leads) does not draw on
+	# the map, so a clear_lair job about one used to be a contract with no way to
+	# reach the thing it named.
+	var note := ""
+	if String(q["kind"]) == "clear_lair":
+		for l in world.lairs:
+			if l.id == String(q.get("target_lair_id", "")) and not l.discovered:
+				l.discovered = true
+				note = "  They mark %s on your map." % l.sname
+	_build_visit_panel()
+	_say("Job taken: %s%s" % [q["title"], note])
 
 func _turn_in(quest: Dictionary) -> void:
 	var reward: int = int(quest.get("reward", {}).get("gold", 0))
@@ -1743,6 +1762,10 @@ func _say(text: String) -> void:
 func _build_visit_panel() -> void:
 	if _visit_panel != null:
 		_visit_panel.queue_free()
+	# D7: a supply_item job's progress is a reading of the pack, not an event,
+	# so it is re-read here — every buy, sell and turn-in rebuilds this panel,
+	# which makes this the one place that cannot show a stale count.
+	Quest.record_stash(party)
 	var s = _visit["settlement"]
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Gilt"
@@ -1807,10 +1830,23 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 
 	var places := VBoxContainer.new()
 	box.add_child(places)
+	# D7: jobs are split across the counters now, so each door has to carry its
+	# own count — otherwise the smith's standing order is a thing you find only
+	# by opening every tab.
+	var jobs: Dictionary = _counter_offers(s)
+	var counter_jobs := 0
+	for key in jobs:
+		if key != "board":
+			counter_jobs += jobs[key].size()
+	var wanted := ""
+	if counter_jobs == 1:
+		wanted = ",  one counter wants something fetched"
+	elif counter_jobs > 1:
+		wanted = ",  %d counters want something fetched" % counter_jobs
 	var stock: Array = _visit.get("stock", [])
 	var market_btn := Button.new()
 	market_btn.text = ("Market.  They will not trade with you" if _visit.get("refused", false)
-		else "Market.  %d on the shelves" % stock.size())
+		else "Market.  %d on the shelves%s" % [stock.size(), wanted])
 	market_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	market_btn.pressed.connect(_goto_page.bind("market"))
 	places.add_child(market_btn)
@@ -1829,7 +1865,7 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 	places.add_child(inn_btn)
 
 	var board_btn := Button.new()
-	var offers: int = Visit.quest_offers(s, party, world).size()
+	var offers: int = jobs.get("board", []).size()
 	var ready: int = Visit.turn_ins(party).size()
 	board_btn.text = ("Notice Board.  Nothing posted" if offers == 0 and ready == 0
 		else "Notice Board.  %d posted, %d ready to turn in" % [offers, ready])
@@ -1862,6 +1898,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	box.add_child(mood)
 
 	var groups: Dictionary = Visit.stock_by_service(s, _visit)
+	# D7: each specialist posts its own order, and it hangs at its own counter.
+	var jobs: Dictionary = _counter_offers(s)
 	var tabs := HBoxContainer.new()
 	box.add_child(tabs)
 	for t in [MARKET_TAB_ALL] + Array(_visit["services"]):
@@ -1891,8 +1929,9 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		if not showing_all and _market_tab != service:
 			continue
 		var shelf: Array = groups.get(service, [])
+		var posted: Array = jobs.get(service, [])
 		var actions: bool = service in ["healer", "librarian"]
-		if shelf.is_empty() and not actions:
+		if shelf.is_empty() and posted.is_empty() and not actions:
 			continue
 		if showing_all:
 			_section(rows, String(Campaign.SERVICE_NAMES.get(service, service)))
@@ -1906,6 +1945,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 				+ "\n\nClick: buy for %d gp" % int(e["price"]), "%d gp" % int(e["price"]))
 			tile.pressed.connect(_buy.bind(iid))
 			shelf_grid.add_child(tile)
+		for offer in posted:
+			_job_row(rows, offer)
 		if service == "healer":
 			_trade_row(rows, "Patch up the whole party — %d gp (no rest, no waiting)" % Visit.HEAL_COST,
 				"Heal", _heal)
@@ -2029,33 +2070,32 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 			"Buy", _buy_rumor.bind(lead))
 
 func _build_board_page(box: VBoxContainer, s) -> void:
+	var has_inn: bool = Visit.has_service(s, "innkeeper")
 	var mood := Label.new()
 	mood.text = "%s posts the work here.  %d gp in the purse." % [
-		Campaign.SERVICE_NAMES.get("innkeeper", "The innkeeper") if Visit.has_service(s, "innkeeper")
+		Campaign.SERVICE_NAMES.get("innkeeper", "The innkeeper") if has_inn
 		else "A town elder", party.gold]
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
-	if Visit.has_service(s, "innkeeper"):
+	if has_inn:
 		_portrait(box, s.faction, "innkeeper")
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(440, 300)
 	box.add_child(scroll)
 	var rows := VBoxContainer.new()
 	scroll.add_child(rows)
-	# T9x quest board: every job this settlement can offer right now, one row
-	# each — not the old single ad-hoc offer. A world-target row also shows
-	# its chain tier once it's escalated past the first job.
-	for offer in Visit.quest_offers(s, party, world):
-		var tier: int = int(offer.get("chain_tier", 0))
-		var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
-		_trade_row(rows, "Job: %s%s — %d gp" % [
-			offer["title"], tag, int(offer.get("reward", {}).get("gold", 0))],
-			"Take", _take_quest.bind(offer))
+	# T9x quest board, D7 placement: the board carries what the settlement posts
+	# in public — bounty and war work where there is an innkeeper to take it,
+	# carting and scouting everywhere. The specialists' own orders are at their
+	# own counters (see _build_market_page), not here.
+	for offer in _counter_offers(s).get("board", []):
+		_job_row(rows, offer)
 	for q in Visit.turn_ins(party):
 		_trade_row(rows, "✔ %s" % Quest.describe(q), "Turn in", _turn_in.bind(q))
 	if rows.get_child_count() == 0:
 		var none := Label.new()
-		none.text = "Nothing posted right now."
+		none.text = ("Nothing posted right now." if has_inn
+			else "Nothing posted right now — and no innkeeper here to hear of more.")
 		none.add_theme_color_override("font_color", Icons.COL_MUTED)
 		rows.add_child(none)
 
@@ -2102,6 +2142,32 @@ func _item_grid(rows: Control) -> GridContainer:
 	g.columns = 5
 	rows.add_child(g)
 	return g
+
+# D7: where each job this settlement is posting belongs on screen. The counter
+# core/quest_posting.gd stamped on the offer IS the answer, with one fold: the
+# innkeeper and the generalist both post in public, so both land on the notice
+# board (a camp has no innkeeper, and its board is the generalist's). Every
+# specialist keeps its own orders at its own counter in the market.
+const BOARD_COUNTERS := ["innkeeper", "generalist"]
+
+func _counter_offers(s) -> Dictionary:
+	var by_counter: Dictionary = Visit.quest_offers_by_counter(s, party, world)
+	var out := {}
+	for counter in by_counter:
+		var key: String = "board" if BOARD_COUNTERS.has(counter) else String(counter)
+		if not out.has(key):
+			out[key] = []
+		out[key].append_array(by_counter[counter])
+	return out
+
+# One posted job, ready to take. A world-target row also shows its chain tier
+# once it has escalated past the first job.
+func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
+	var tier: int = int(offer.get("chain_tier", 0))
+	var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
+	_trade_row(rows, "Job: %s%s — %d gp" % [
+		offer["title"], tag, int(offer.get("reward", {}).get("gold", 0))],
+		"Take", _take_quest.bind(offer))
 
 func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable) -> void:
 	var row := HBoxContainer.new()

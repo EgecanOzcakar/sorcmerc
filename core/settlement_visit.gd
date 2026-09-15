@@ -23,6 +23,7 @@ const Dice = preload("res://core/dice.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Adapter = preload("res://core/adapter.gd")
 const Quest = preload("res://core/quest.gd")
+const Posting = preload("res://core/quest_posting.gd")
 
 # World-time is in minutes (scenes/world/world.gd's HUD reads elapsed/60 as hours).
 # Calibration knobs — a party crosses the demo map in ~20 world-minutes, so a
@@ -39,9 +40,14 @@ const SELL_RATE := Campaign.SELL_RATE
 
 # Specialists by settlement kind — the T25 vocabulary, sized off Settlement.kind.
 # node_services() always prepends the generalist.
+# D7: "camp" was missing and fell through to the town list, so a camp of six
+# charcoal-burners had a weaponsmith, an alchemist and an inn. Campaign.
+# SIZE_SPECIALISTS has always said a camp has none ([0, 0]); this is that, said
+# where the open world reads it. The town fallback stays for an unknown kind.
 const KIND_SERVICES := {
 	"city": ["weaponsmith", "armorsmith", "alchemist", "librarian", "healer", "innkeeper"],
 	"town": ["weaponsmith", "alchemist", "innkeeper"],
+	"camp": [],
 }
 
 # T9x: a room at the inn isn't free — bigger settlement, pricier bed. Only
@@ -399,46 +405,36 @@ static func identify(party, item_id: String) -> Dictionary:
 		"text": "The librarian reads it off in a breath: %s (-%d gp)." % [
 			Campaign.item_name(item_id), IDENTIFY_COST]}
 
-# --- O9: quests (T9's verbs, reached from a settlement) ---------------------
+# --- O9 / D7: quests (T9's verbs, reached from a settlement) ----------------
 #
-# Quest.offer_for() keys on a T25 giver node id; a settlement is not one, so each
-# settlement stands in for a curated giver, picked off its own id and stable for
-# the life of the map. No new quest content — the same six jobs, reachable.
+# WHICH jobs a settlement posts, and at which of its counters, is
+# core/quest_posting.gd's question — these are the two lines the visit panel
+# calls, kept here because a visit is how the player reaches any of it.
+# `services(s)` is passed in rather than looked up over there so the two modules
+# stay one-directional: this one knows about postings, that one knows nothing
+# about visits.
 static func giver_node_id(s) -> String:
-	var givers: Array = []
-	for q in Quest.CURATED:
-		if not givers.has(q["giver_node_id"]):
-			givers.append(q["giver_node_id"])
-	return String(givers[absi(hash(s.id)) % givers.size()])
+	return Posting.giver_node_id(s)
 
-# T91: a settlement first tries a world-target quest (hunt a hostile band, raid
-# a hostile settlement, clear a lair) seeded off its own id — stable across the
-# repeated calls one open visit panel makes, and re-checked against the party's
-# log the same way CURATED already is, so an accepted/turned-in one doesn't
-# reappear. Falls back to the curated giver-node quest when `world` is unset
-# (any caller that predates T91) or nothing world-side qualifies right now.
+# T9x quest board, D7 placement: every job this settlement can post right now,
+# flat and in kind order, each stamped with the counter posting it. The single
+# ad-hoc offer quest_offer() used to return is simply the first of them.
+static func quest_offers(s, party, world = null) -> Array:
+	return Posting.offers(s, services(s), party, world)
+
+# {counter: [job, ...]} — what each counter has up, for the pages that show a
+# job where its business is instead of everything on one board.
+static func quest_offers_by_counter(s, party, world = null) -> Dictionary:
+	return Posting.by_counter(quest_offers(s, party, world))
+
+# The one job a caller that only wants one should show. Kept for the callers
+# that predate the board (and for "does this settlement have any work at all").
 static func quest_offer(s, party, world = null) -> Dictionary:
-	if world != null:
-		var wq: Dictionary = Quest.world_quest_for(world, s, RNG.new(maxi(1, absi(hash(s.id)))))
-		if not wq.is_empty() and Quest.get_quest(party, wq["id"]).is_empty():
-			return wq
-	return Quest.offer_for(party, giver_node_id(s), FactionOpinion.get_opinion(s.faction))
+	var out := quest_offers(s, party, world)
+	return out[0] if not out.is_empty() else {}
 
 static func turn_ins(party) -> Array:
 	return party.quests.filter(func(q): return Quest.can_turn_in(q))
-
-# T9x quest board: every job this settlement can offer right now, not just
-# one — every eligible world target (Quest.world_quest_offers) plus the
-# curated giver-node job, whichever of those the party doesn't already have
-# logged. Same opinion gate as the single-offer path.
-static func quest_offers(s, party, world = null) -> Array:
-	var out: Array = []
-	if world != null:
-		out.append_array(Quest.world_quest_offers(world, s, party, RNG.new(maxi(1, absi(hash(s.id))))))
-	var curated := Quest.offer_for(party, giver_node_id(s), FactionOpinion.get_opinion(s.faction))
-	if not curated.is_empty():
-		out.append(curated)
-	return out
 
 # --- steal (T30's opportunity_check, in a market) --------------------------
 

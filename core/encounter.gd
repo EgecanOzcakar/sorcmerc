@@ -390,6 +390,11 @@ static func _scale(c, mult: float) -> void:
 	c.hp = c.max_hp
 	c.ac = maxi(5, c.ac + roundi(d * AC_PER_MULT))
 	c.atk_bonus += roundi(d * ATK_PER_MULT)
+	# A scaled caster's spells get harder to shrug off at the same rate its
+	# swings get harder to dodge (BG3 does the same: +2 to hit and +2 DC on
+	# Tactician). A monster with no save DC has nothing to scale.
+	if c.save_dc > 0:
+		c.save_dc += roundi(d * ATK_PER_MULT)
 	var bump := roundi(d * DMG_PER_MULT)
 	c.damage = _bump(c.damage, bump)
 	for a in c.attacks:

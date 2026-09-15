@@ -282,7 +282,7 @@ const BOSS_POOL := [
 	{"id": "the-oni", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE ONI OF THE DEEP ICE", "desc": "It has worn a friendlier face all week.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "frozen-cave", "lead": "oni", "win_rate": 0.75},
+		"theme": "frozen-cave", "lead": "oni", "win_rate": 0.825},
 	{"id": "the-assassin", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE KNIFE IN THE SQUARE", "desc": "Whoever paid the warband is here to collect.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
@@ -290,17 +290,19 @@ const BOSS_POOL := [
 	{"id": "the-mammoth", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE THING IN THE TREELINE", "desc": "The forest has been getting out of its way.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "forest-clearing", "lead": "mammoth", "win_rate": 0.70},
+		"theme": "forest-clearing", "lead": "mammoth", "win_rate": 0.65},
 	{"id": "the-arrow-chief", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE ARROW-CHIEF", "desc": "The little archer from the road. He has been eating well.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
 		"theme": "goblin-camp", "lead": "goblin-archer", "lead_features": ["monster-multiattack-2"],
-		"win_rate": 0.475},
+		# mult_max: a x3 multiattack archer was a 47-65% node against hard's 75;
+		# capped at x1.75 the budget goes to escort instead (60 seeds: 76.7%).
+		"mult_max": 1.75, "win_rate": 0.75},
 	{"id": "the-shop-captain", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE CAPTAIN COMES BACK", "desc": "He took the shop once. This time he brought the company.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
 		"theme": "merchant-shop", "lead": "bandit", "lead_features": ["monster-multiattack-2"],
-		"win_rate": 0.825},
+		"win_rate": 0.95},
 ]
 
 # Reference win rate a boss's XP bonus is measured against: the average of the

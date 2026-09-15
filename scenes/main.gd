@@ -59,22 +59,8 @@ var _fx_on := false           # attack animations: off under SORCMERC_FAST / hea
 # label came off the button entirely. A 126x40 row that clipped "Burning Ha…"
 # is a 52x52 square that shows the whole spell. What stays on the face is the
 # hotkey, in the corner, and an upcast tier when there is one.
-const BTN_COLUMNS := 10
+const BTN_COLUMNS := 11   # the nine slots, Swap, End turn: one row
 const BTN_SIZE := Vector2(52, 52)
-# Session-only "which verbs does this player actually reach for" — no save file,
-# resets with the app. Keyed by a verb's id ("attack", "dash", ...) or "spell:"
-# + the base spell id (so a caster's upcast tiers count as the one spell they
-# picked, not N separate counters). Read by _prioritize(), written by
-# _set_buttons() on every button press.
-var _verb_freq: Dictionary = {}
-# The slot order a character's badges sit in, settled the first time their bar
-# is built in this fight and not touched again. _prioritize() still decides that
-# first layout — the verbs this player reaches for get the low hotkeys — but it
-# decides it once: re-sorting it live meant pressing a verb could promote it
-# past another and slide every badge to its right out from under the hand that
-# was reaching for it, in the middle of a turn. Keyed by combatant id, cleared
-# with the fight.
-var _bar_order: Dictionary = {}
 # T-hud: HP bar + condition tags, painted above every tier (see
 # Board._paint_token_hud / _draw_hud_overlay below) instead of inline in
 # Board._draw() — a figure in front used to be able to cover the HP bar of
@@ -106,6 +92,20 @@ const COL_TORCH := Color("ffd98a")
 # T11: per-theme floor tint, palette only — no mechanical difference.
 const PALETTES := {"shrine": COL_HEX, "camp": Color("2a2a26"), "city": Color("2c2c33"),
 	"forest": Color("1f2a22"), "ice": Color("222c36"), "shop": Color("2b2620")}
+# T9b: a seamless ground texture per palette (tools/localgen/gen_floor_textures.py),
+# laid on the hex plane in ground space so it foreshortens with the board and
+# runs unbroken across tiles; the tinted slab underneath still carries the
+# theme colour, the texture only gives the ground a surface.
+const FLOORS := {
+	"shrine": preload("res://assets/board/floor_shrine.png"),
+	"camp": preload("res://assets/board/floor_camp.png"),
+	"city": preload("res://assets/board/floor_city.png"),
+	"forest": preload("res://assets/board/floor_forest.png"),
+	"ice": preload("res://assets/board/floor_ice.png"),
+	"shop": preload("res://assets/board/floor_shop.png"),
+}
+const FLOOR_SPAN := 3.0    # hexes per texture repeat
+const FLOOR_ALPHA := 0.55
 const COL_MOVE := Color(0.30, 0.55, 0.95, 0.35)
 const COL_TARGET := Color(0.95, 0.35, 0.30, 0.9)
 const COL_CONE := Color(0.98, 0.55, 0.15, 0.30)
@@ -196,7 +196,7 @@ func _ready() -> void:
 	orderwrap.add_child(_order)
 	col.add_child(orderwrap)
 
-	_hint.text = "Keys 1 to 9 act.  Scroll zooms, drag pans, Home resets the view."
+	_hint.text = "1-9 act, Tab swaps weapon, Space ends the turn, Esc backs out.  Scroll zooms, drag pans, Home resets the view."
 	_hint.theme_type_variation = "Dim"
 	col.add_child(_hint)
 
@@ -258,7 +258,7 @@ func _apply_ui_scale() -> void:
 	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
 	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
 	for b in _buttons.get_children():
-		if b.icon != null:
+		if b is Button and b.icon != null:   # the Field Manual search box shares this grid
 			b.custom_minimum_size = BTN_SIZE * u
 			b.add_theme_constant_override("icon_max_width", int(Icons.ICON_PX * u))
 			for chip in b.get_children():
@@ -293,15 +293,16 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		KEY_UP: pan_by(Vector2(0, 40))
 		KEY_DOWN: pan_by(Vector2(0, -40))
 		KEY_ESCAPE, KEY_B: board_cancel()
+		KEY_TAB: _press_key("Tab")
 		KEY_R: if cb and cb.is_over(): _new_game()
 		KEY_F1: SettingsOverlay.toggle(self, func(): _anim = Settings.anim())
 		KEY_F2: ManualOverlay.toggle(self)
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
-			_press_hotkey(e.keycode - KEY_1)
+			_press_hotkey(e.keycode - KEY_1, e.shift_pressed)
 		KEY_0, KEY_SPACE:
 			_press_hotkey(-1)  # last button (End turn / Cancel)
 
-func _press_hotkey(idx: int) -> void:
+func _press_hotkey(idx: int, shift := false) -> void:
 	if _busy:
 		return
 	# T29: while aiming, the number keys still address the verb menu — drop out
@@ -314,7 +315,19 @@ func _press_hotkey(idx: int) -> void:
 		return
 	var b = kids[kids.size() - 1] if idx < 0 else (kids[idx] if idx < kids.size() else null)
 	if b is Button and not b.disabled:
-		b.pressed.emit()
+		if shift and b.has_meta("shift_fn"):
+			b.get_meta("shift_fn").call()
+		else:
+			b.pressed.emit()
+
+# The button wearing a named key chip (Tab for Swap weapon).
+func _press_key(key: String) -> void:
+	if _busy:
+		return
+	for b in _buttons.get_children():
+		if b is Button and String(b.get_meta("hotkey", "")) == key and not b.disabled:
+			b.pressed.emit()
+			return
 
 func _build_theme() -> void:
 	theme = Icons.dark_theme()
@@ -340,7 +353,6 @@ func _new_game(forced := 0) -> void:
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()
-	_bar_order.clear()  # a new fight lays the bars out again (see _in_slot_order)
 	_deploy_pick = ""
 	_logbox.text = ""
 	_logged = 0
@@ -505,9 +517,8 @@ func _end_turn() -> void:
 static func _mark(tex: Texture2D, glyph := "", freq_key := "") -> Dictionary:
 	return {"icon": tex, "glyph": glyph, "freq_key": freq_key}
 
-# Verb-level menu. Buttons are numbered [1]..[9]; End turn is [0]; most-used
-# verbs (_prioritize) claim those low slots over time instead of whatever
-# order cb.available() happened to build them in. Everything on it comes from
+# Verb-level menu. Every verb becomes an entry here, then _slotted() lays the
+# entries into the fixed bar (see SLOTS). Everything on it comes from
 # cb.available(h) — no hero, class or spell is named here.
 # Verbs that need a target enter "target" mode — hover a token for its %, click to apply.
 #
@@ -529,7 +540,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	for v in cb.available(h):
 		usable[String(v.get("id", v["kind"]))] = true
 	# The whole kit, not just what is affordable this instant: an unavailable
-	# verb keeps its slot, greyed. See _bar_order above for why.
+	# verb keeps its slot, greyed, so nothing to its right ever moves.
 	for v in cb.all_verbs(h):
 		var on: bool = usable.has(String(v.get("id", v["kind"])))
 		var label: String = _verb_label(h, v)
@@ -544,6 +555,8 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 		# else the martial set. `glyph` stays as the fallback for a build where
 		# the icons aren't there — see Icons.verb_icon.
 		var meta := _mark(Icons.skill_icon(v), glyph, freq_key)
+		meta["slot_level"] = int(v.get("slot_level", 0))
+		meta["cost"] = String(v.get("cost", "action"))
 		if label.contains("★"):
 			meta["tier"] = label.substr(label.find("★"))   # the upcast slot, on the badge's corner
 		if _armed == String(v.get("id", "")):
@@ -590,30 +603,165 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 			var head: Dictionary = base[3].duplicate()
 			var castable: int = tiers.filter(func(t): return not bool(t[3].get("disabled", false))).size()
 			head["disabled"] = castable == 0
+			head["shift_fn"] = func(): _spell_tier_menu(h, tiers)   # Shift+number: pick the slot level
 			opts[i] = [base[0], func(): _spell_tier_menu(h, tiers),
-				"%s\n%d of %d levels castable — pick one." % [base[0], castable, tiers.size()], head]
+				"%s\n%d of %d levels castable — pick one (Shift+key for the levels)." % [base[0], castable, tiers.size()], head]
 
-	opts = _in_slot_order(h, opts)
+	_submenu = ""
+	_set_buttons(_slotted(h, opts))
+	_board.queue_redraw()
 
-	# T29: melee/ranged toggle — only offered to someone carrying both.
+# --- the fixed bar --------------------------------------------------------
+#
+# Nine slots, the same for every character, the same every fight:
+#   [1] Attack  [2] Spells ▸  [3] Bonus ▸  [4] Features ▸  [5] Dash
+#   [6] Disengage  [7] Dodge  [8] Hide  [9] Other ▸ (Help, Shove, Smash)
+#   then [Tab] Swap weapon   [Space] End turn.
+# A slot the character has nothing for stays put, greyed. Spells are always
+# grouped by level under [2]; [3] is everything that costs a bonus action (or
+# nothing) — Second Wind, Rage, Cunning Action's
+# Dash/Disengage/Hide, a Nick off-hand, Healing Word — so the second thing
+# you do each turn is one key away; [4] is the action-cost kit (Channel
+# Divinity today). No more most-used-first reshuffling: the
+# point of a fixed bar is that 5 is Dash on Vera, on Ilsa, and next week.
+const SLOTS := ["attack", "spells", "bonus", "features", "dash", "disengage", "dodge", "hide", "other"]
+const SLOT_NAMES := {"attack": "Attack", "spells": "Spells", "features": "Features", "bonus": "Bonus actions",
+	"dash": "Dash", "disengage": "Disengage", "dodge": "Dodge", "hide": "Hide", "other": "Help & Shove"}
+const LIST_SLOTS := ["spells", "features", "bonus", "other"]
+var _submenu := ""   # "" on the main bar, else the open slot's id (Esc goes back)
+
+# Which slots an entry belongs in, from the meta _build_hero_menu attached. A
+# bonus-action spell sits under [2] with its level AND under [4].
+static func _slots_of(opt: Array) -> Array:
+	var meta: Dictionary = opt[3] if opt.size() > 3 else {}
+	var key := String(meta.get("freq_key", ""))
+	var cost := String(meta.get("cost", "action"))
+	var out: Array = []
+	if key.begins_with("spell:"):
+		out.append("spells")
+	elif key.begins_with("shove") or key in ["smash", "help"]:
+		out.append("other")
+	elif key in ["attack", "dash", "disengage", "dodge", "hide"] and cost == "action":
+		out.append(key)
+	elif cost != "bonus" and cost != "free":
+		out.append("features")
+	if cost == "bonus" or cost == "free":
+		out.append("bonus")
+	return out
+
+func _slotted(h, opts: Array) -> Array:
+	var by_slot := {}
+	for s in SLOTS:
+		by_slot[s] = []
+	for o in opts:
+		for s in _slots_of(o):
+			by_slot[s].append(o)
+	var out: Array = []
+	for s in SLOTS:
+		var mine: Array = by_slot[s]
+		var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
+		if s in LIST_SLOTS:
+			if s == "spells":
+				mine.sort_custom(func(a, b): return _tier_of(a) < _tier_of(b) or (_tier_of(a) == _tier_of(b) and a[0] < b[0]))
+			var meta := _mark(_slot_icon(s), "▸")
+			meta["disabled"] = mine.is_empty() or live == 0
+			meta["key"] = str(SLOTS.find(s) + 1)
+			var tip := "%s\n%s" % [SLOT_NAMES[s], ("Nothing to pick from." if mine.is_empty()
+				else "%d of %d ready — press to pick one." % [live, mine.size()])]
+			out.append([SLOT_NAMES[s] + " ▸", _open_submenu.bind(h, s, mine), tip, meta])
+		elif mine.is_empty():
+			var meta := _mark(_slot_icon(s))
+			meta["disabled"] = true
+			meta["key"] = str(SLOTS.find(s) + 1)
+			out.append([SLOT_NAMES[s], func(): pass, "%s\nNot something this character can do." % SLOT_NAMES[s], meta])
+		else:
+			var o: Array = mine[0].duplicate()
+			var meta: Dictionary = o[3].duplicate()
+			meta["key"] = str(SLOTS.find(s) + 1)
+			o[3] = meta
+			out.append(o)
+	# T29: melee/ranged toggle — the slot is always there, live only for someone carrying both.
 	var swap := _attack_swap(h)
-	if not swap.is_empty():
-		opts.append(["Wield %s" % swap["name"],
+	var swap_meta := _mark(Icons.verb_icon("swap"), "⇄")
+	swap_meta["key"] = "Tab"
+	if swap.is_empty():
+		swap_meta["disabled"] = true
+		out.append(["Swap weapon", func(): pass, "Swap weapon\nOnly one weapon to hand.", swap_meta])
+	else:
+		out.append(["Wield %s" % swap["name"],
 			func(): Adapter.set_main_attack(h, String(swap["id"])); _build_hero_menu(h),
 			"Wield %s\nYour Attack action switches to %s (%s): %+d to hit, %s %s damage. Free." % [
 				swap["name"], swap["name"], swap["range"], int(swap["to_hit"]),
-				swap["notation"], swap.get("damage_type", "")],
-			_mark(Icons.verb_icon("swap"), "⇄")])
-
+				swap["notation"], swap.get("damage_type", "")], swap_meta])
 	var end_mark := _mark(Icons.verb_icon("end_turn"))
+	end_mark["key"] = "Spc"
 	if h.econ["action"] > 0 and not cb.is_over():
 		end_mark["armed"] = _armed == "end"
 		var end_opt := _confirm_opt(h, "end", "End turn (action unspent!)", _end_turn)
 		end_opt.append("End turn\nYour action is still unspent.")
 		end_opt.append(end_mark)
-		opts.append(end_opt)
+		out.append(end_opt)
 	else:
-		opts.append(["End turn", _end_turn, "End turn", end_mark])
+		out.append(["End turn", _end_turn, "End turn", end_mark])
+	return out
+
+static func _tier_of(opt: Array) -> int:
+	var meta: Dictionary = opt[3] if opt.size() > 3 else {}
+	return int(meta.get("slot_level", 0))
+
+func _slot_icon(s: String) -> Texture2D:
+	match s:
+		"spells": return Icons.school_icon("evocation")
+		"features": return Icons.verb_icon("self_buff")
+		"bonus": return Icons.verb_icon("grant_action")
+		"other": return Icons.verb_icon("shove")
+	return Icons.verb_icon(s)
+
+# A slot's own list: numbered from 1, Esc (the last button) goes back. Spells
+# are always grouped by level first (the key is the level: 2-3-1 is "my first
+# 2nd-level spell", every fight, whether you know three spells or thirty);
+# any list longer than nine pages on slot 9 (More ▸), in a stable order.
+const LIST_KEYS := 9
+
+func _open_submenu(h, slot: String, entries: Array, page := 0) -> void:
+	_submenu = slot
+	var back := ["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")]
+	if slot == "spells":
+		var groups := {}
+		for e in entries:
+			var lvl := _tier_of(e)
+			groups[lvl] = groups.get(lvl, []) + [e]
+		var lvls: Array = groups.keys()
+		lvls.sort()
+		var opts: Array = []
+		for lvl in lvls:
+			var mine: Array = groups[lvl]
+			var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
+			var name: String = "Cantrips" if lvl == 0 else "Level %d" % lvl
+			var meta := _mark(Icons.school_icon("evocation"), "▸")
+			meta["disabled"] = live == 0
+			meta["tier"] = "" if lvl == 0 else "★%d" % lvl
+			opts.append([name + " ▸", _open_list.bind(h, slot, mine, name),
+				"%s\n%d of %d ready — press to pick one." % [name, live, mine.size()], meta])
+		opts.append(back)
+		_set_buttons(opts)
+	else:
+		_open_list(h, slot, entries, SLOT_NAMES.get(slot, slot), page)
+	_board.queue_redraw()
+
+# One flat list, nine to a page.
+func _open_list(h, slot: String, entries: Array, name: String, page := 0) -> void:
+	_submenu = slot
+	var opts: Array = []
+	var per := LIST_KEYS if entries.size() <= LIST_KEYS else LIST_KEYS - 1
+	var start := page * per
+	opts.append_array(entries.slice(start, mini(entries.size(), start + per)))
+	if entries.size() > LIST_KEYS:
+		var next_page := page + 1 if start + per < entries.size() else 0
+		var meta := _mark(Icons.verb_icon("generic"), "…")
+		opts.append(["More ▸", _open_list.bind(h, slot, entries, name, next_page),
+			"%s — page %d of %d\nPress for the next page." % [name, page + 1, ceili(float(entries.size()) / per)], meta])
+	opts.append(["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
 	_board.queue_redraw()
 
@@ -621,6 +769,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 # Each tier's own entry (built above, already wired to _enter_target/_enter_cone/
 # cb.perform exactly as it would have been standalone) is reused verbatim.
 func _spell_tier_menu(h, tiers: Array) -> void:
+	_submenu = "tiers"
 	var opts: Array = tiers.duplicate()
 	opts.append(["Back", func(): _build_hero_menu(h, true), "Back",
 		_mark(Icons.verb_icon("back"), "‹")])
@@ -895,7 +1044,7 @@ func board_cancel() -> void:
 			_board.queue_redraw()
 			_deploy_menu()
 		return
-	if _mode != "idle" and cb and not cb.is_over() and cb.current().team == "party":
+	if (_mode != "idle" or _submenu != "") and cb and not cb.is_over() and cb.current().team == "party":
 		_build_hero_menu(cb.current())
 
 # hero actions ---------------------------------------------------------
@@ -948,13 +1097,14 @@ func _set_buttons(opts: Array) -> void:
 	for i in count:
 		var b := Button.new()
 		var meta: Dictionary = opts[i][3] if opts[i].size() > 3 else {}
-		var hotkey := ""
-		if count == 1:
-			hotkey = "Esc"
-		elif i == count - 1:
-			hotkey = "0"
-		elif i < 9:
-			hotkey = str(i + 1)
+		var hotkey := String(meta.get("key", ""))
+		if hotkey == "":
+			if count == 1 or (_submenu != "" and i == count - 1):
+				hotkey = "Esc"
+			elif i == count - 1:
+				hotkey = "0"
+			elif i < 9:
+				hotkey = str(i + 1)
 		var tex: Texture2D = meta.get("icon")
 		Icons.icon_button(b, tex, int(Icons.ICON_PX * u))
 		var tip := String(opts[i][2]) if opts[i].size() > 2 else ""
@@ -982,9 +1132,9 @@ func _set_buttons(opts: Array) -> void:
 			b.modulate = Color("ffb3a8")
 			tip = "Press again to confirm.\n" + tip
 		b.pressed.connect(opts[i][1])
-		var freq_key := String(meta.get("freq_key", ""))
-		if freq_key != "":
-			b.pressed.connect(func(): _bump_freq(freq_key))
+		b.set_meta("hotkey", hotkey)
+		if meta.has("shift_fn"):
+			b.set_meta("shift_fn", meta["shift_fn"])
 		if tip != "":
 			b.tooltip_text = tip   # native hover popup — the name, then what it does
 		_buttons.add_child(b)
@@ -1006,72 +1156,6 @@ func _chip(b: Button, text: String, preset: int, col: Color, u: float) -> void:
 	l.add_theme_constant_override("shadow_offset_y", 1)
 	b.add_child(l)
 	l.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, int(3 * u))
-
-# This character's verb badges in their frozen slot order. The first call settles
-# it — most-reached-for first, the same _prioritize() ordering the bar has always
-# opened with — and every call after it lays the same keys out in the same
-# places. A verb that has since become unavailable is still here, holding its
-# slot greyed, so nothing to its right ever moves.
-func _in_slot_order(h, opts: Array) -> Array:
-	var spine: Array = _bar_order.get(h.id, [])
-	if spine.is_empty():
-		for o in _prioritize(opts):
-			var k0 := _slot_key(o)
-			if k0 != "" and not k0 in spine:
-				spine.append(k0)
-		_bar_order[h.id] = spine
-	var by_key := {}
-	var loose: Array = []      # no key of its own, or a second entry claiming one
-	for o in opts:
-		var k := _slot_key(o)
-		if k == "" or by_key.has(k):
-			loose.append(o)
-		else:
-			by_key[k] = o
-	var out: Array = []
-	for k in spine:
-		if by_key.has(k):
-			out.append(by_key[k])
-			by_key.erase(k)
-	for o in opts:             # anything granted since the spine was settled
-		var k := _slot_key(o)
-		if by_key.has(k):
-			out.append(o)
-			by_key.erase(k)
-			spine.append(k)    # ...and it holds that slot from now on
-	out.append_array(loose)
-	return out
-
-func _slot_key(opt: Array) -> String:
-	return String(opt[3].get("freq_key", "")) if opt.size() > 3 else ""
-
-func _bump_freq(key: String) -> void:
-	_verb_freq[key] = int(_verb_freq.get(key, 0)) + 1
-
-# Stable sort, most-used first — ties (including every verb tried 0 times, the
-# common case at the start of a fight) keep their original relative order, so
-# an unused kit doesn't shuffle itself every turn. Entries without a freq_key
-# in meta (the weapon-swap toggle, End turn, "‹ Back", ...) sort as count 0
-# but that's fine, callers only run this over the verb list before appending
-# those pinned entries.
-func _prioritize(opts: Array) -> Array:
-	var idx := range(opts.size())
-	idx.sort_custom(func(a, b):
-		var ka := _freq_of(opts[a])
-		var kb := _freq_of(opts[b])
-		if ka != kb:
-			return ka > kb
-		return a < b)
-	var out: Array = []
-	for i in idx:
-		out.append(opts[i])
-	return out
-
-func _freq_of(opt: Array) -> int:
-	if opt.size() <= 3:
-		return 0
-	var key := String(opt[3].get("freq_key", ""))
-	return int(_verb_freq.get(key, 0)) if key != "" else 0
 
 func _refresh() -> void:
 	_header.text = "The Sunken Shrine, round %d" % cb.round_num
@@ -1318,7 +1402,7 @@ func _finish() -> void:
 		if not taken.is_empty():
 			var names: Array = []
 			for id in taken:
-				names.append(Icons.item_bb(String(id), Campaign.item_name(String(id))))
+				names.append(Icons.item_img_bb(String(id)) + Icons.item_bb(String(id), Campaign.item_name(String(id))))
 			_logbox.append_text("[color=#c9a45a]Taken from the dead:[/color] %s\n" % ", ".join(names))
 
 const BUTTON_ROWS := 3
@@ -1602,6 +1686,7 @@ class Board extends Control:
 		cb = _cb
 		_defeat = -1.0
 		_auto_fit = true
+		texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED   # the floor texture wraps across hexes
 		_tok.clear(); _hp.clear(); _floats.clear(); _flash.clear()
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
@@ -1978,6 +2063,12 @@ class Board extends Control:
 			# lit from the top-left and falling off to the rim, so a tile is a
 			# shaded surface rather than a solid lozenge
 			_fan(c + _iso(LIGHT * s * 0.55), poly, tint.lightened(0.11), tint.darkened(0.13))
+			var floor_tex: Texture2D = main.FLOORS.get(cb.board.get("palette", "shrine"))
+			if floor_tex != null and obj.is_empty():
+				var uvs := PackedVector2Array()
+				for pt in poly:   # ground-space position, so the texture lies flat on the board
+					uvs.append(_iso_inv(pt - _origin) / (s * main.FLOOR_SPAN))
+				draw_polygon(poly, PackedColorArray([Color(1, 1, 1, main.FLOOR_ALPHA)]), uvs, floor_tex)
 			var blob := c + _iso(Vector2(_rand(hx, 2) - 0.5, _rand(hx, 3) - 0.5) * s * 0.6)
 			var br2 := s * (0.45 + 0.30 * _rand(hx, 4))
 			for i in 3:   # the mottling, feathered out instead of a hard-edged patch
