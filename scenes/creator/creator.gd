@@ -776,8 +776,7 @@ func _build_equipment() -> void:
 	var wf := _flow()
 	for wid in proficient_weapons(sheet):
 		var w := Catalog.weapon(wid)
-		var extra := "  %s %s" % [w["damageDice"], String(w["damageType"]).substr(0, 4)]
-		_opt(wf, w["name"], wid in ch.equipped, func(): _toggle_weapon(wid), extra)
+		_item_opt(wf, wid, w, "weapon", wid in ch.equipped, func(): _toggle_weapon(wid))
 
 	_head("Armor")
 	var af := _flow()
@@ -786,10 +785,21 @@ func _build_equipment() -> void:
 		if aid == "shield":
 			continue
 		var a := Catalog.armor(aid)
-		_opt(af, a["name"], aid in ch.equipped, func(): _set_armor(aid), "  AC %d" % int(a["baseAc"]))
+		_item_opt(af, aid, a, "armor", aid in ch.equipped, func(): _set_armor(aid))
 	if "shield" in proficient_armor(sheet):
-		_opt(_flow(), "Shield (+2 AC)", "shield" in ch.equipped, func(): _toggle_equip("shield"))
+		_item_opt(_flow(), "shield", Catalog.armor("shield"), "armor", "shield" in ch.equipped,
+			func(): _toggle_equip("shield"))
 	_note("Equipped: %s" % (", ".join(ch.equipped) if ch.equipped else "nothing"))
+
+# T9a: gear is picked off its picture, like the inventory — the numbers are
+# the hover text, the name the caption, "Picked" the same highlight _opt uses.
+func _item_opt(parent: Control, iid: String, def: Dictionary, kind: String, on: bool, cb: Callable) -> Button:
+	var b := Icons.item_tile(iid, Icons.item_tooltip(iid, def, kind), String(def.get("name", iid)))
+	if on:
+		b.theme_type_variation = "Picked"
+	b.pressed.connect(cb)
+	parent.add_child(b)
+	return b
 
 func _has_body_armor() -> bool:
 	for e in ch.equipped:

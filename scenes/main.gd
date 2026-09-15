@@ -1332,7 +1332,7 @@ func _finish() -> void:
 		if not taken.is_empty():
 			var names: Array = []
 			for id in taken:
-				names.append(Icons.item_bb(String(id), Campaign.item_name(String(id))))
+				names.append(Icons.item_img_bb(String(id)) + Icons.item_bb(String(id), Campaign.item_name(String(id))))
 			_logbox.append_text("[color=#c9a45a]Taken from the dead:[/color] %s\n" % ", ".join(names))
 
 const BUTTON_ROWS := 3

@@ -638,3 +638,9 @@ static func item_def(item_id: String) -> Array:
 	if not def.is_empty():
 		return ["armor", def]
 	return ["magic", Catalog.magic_item(item_id)]
+
+# The item's picture as bbcode for a RichTextLabel (the combat log's loot
+# line); "" when it has no art, so the name stands alone as before.
+static func item_img_bb(item_id: String, px := 28) -> String:
+	var path := "res://assets/art/items/%s.png" % item_id
+	return "[img=%dx%d]%s[/img] " % [px, px, path] if item_art(item_id) != null else ""
