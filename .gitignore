@@ -22,3 +22,6 @@ shots_tmp/
 kit_gallery_*.png*
 kit_variety.png*
 kit_vs_glb.png*
+# tests/shot_lair_kit.gd output
+lair_kit_gallery.png*
+lair_kit_vs_glb.png*

@@ -28,8 +28,10 @@
 # WHAT THIS DOES NOT OWN, same contract as settlements3d.gd's own header: the
 # shadow ellipse, the footprint ring and the name label that
 # World._draw_settlement() draws underneath. The one exception is the ground
-# apron in _ground(), which has its reasons written where it is built.
+# apron from KitParts.apron(), which has its reasons written where it is built.
 extends RefCounted
+
+const KitParts = preload("res://scenes/world/kit_parts.gd")
 
 # Per-kind geometry, in World units (World._pix multiplies by ISO_GAIN * zoom).
 #
@@ -67,7 +69,7 @@ const PLANS := {
 #   post        palisade stakes and wall timbers. Its own entry because using
 #               the accent colour here turned the orc palisade into a ring of
 #               red toothpicks.
-#   ground      the dirt apron the settlement stands on — see _ground().
+#   ground      the dirt apron the settlement stands on — KitParts.apron().
 #   roof        prism = gabled, cone = spire, lean = single-pitch (asymmetric
 #               PrismMesh, the crooked orc shed)
 #   pitch       roof height as a fraction of the body's, so dwarf reads squat
@@ -101,11 +103,6 @@ const PROFILES := {
 	},
 }
 
-# Three brightness steps per role, picked per building off the seed, so a row of
-# houses is not one flat colour. Kept this coarse on purpose: at 48px a
-# continuous jitter is noise, three steps still read as "separate buildings".
-const SHADES := [-0.10, 0.0, 0.12]
-
 # Rejection sampling for building placement: give up after this many tries and
 # take the last position. Bounded so plan() can never hang.
 const PLACE_TRIES := 24
@@ -121,10 +118,6 @@ const RING_BANDS := [[0.44, 0.52], [0.72, 0.88]]
 # placement test. Under 1.0 on purpose — village houses share walls, and a gap
 # wide enough to drive a cart through at every house reads as a car park.
 const CLEARANCE := 0.62
-
-static var _meshes := {}         # part name -> Mesh, shared by every instance
-static var _materials := {}      # "faction:role:shade" -> StandardMaterial3D
-
 
 static func has(faction: String, kind: String) -> bool:
 	return PROFILES.has(faction) and PLANS.has(kind)
@@ -179,46 +172,17 @@ static func plan(faction: String, kind: String, id: String) -> Array:
 				+ TAU * (float(slot) + rng.randf_range(-0.18, 0.18)) / float(slots[ring])
 			var dist: float = radius * rng.randf_range(band[0], band[1])
 			at = Vector2(cos(ang) * dist, sin(ang) * dist)
-			if _clear(at, clearance, taken):
+			if KitParts.clear_of(at, clearance, taken):
 				break
 		taken.append([at, clearance])
 		_house(parts, faction, at, w, h, d, float(p["height"]) * float(p["house_cap"]),
-			rng.randf_range(-PI, PI), rng.randi() % SHADES.size(), rng)
+			rng.randf_range(-PI, PI), rng.randi() % KitParts.SHADES.size(), rng)
 
 	match String(p["wall"]):
 		"palisade": _palisade(parts, faction, radius * 1.02, float(p["house_h"]) * 0.66, rng)
 		"stone": _stone_wall(parts, faction, radius * 1.02, float(p["house_h"]) * 0.62, rng)
-	_ground(parts, faction, radius)
+	KitParts.apron(parts, "ground", radius * 1.03)
 	return parts
-
-
-# A shallow dirt apron under the whole settlement. The first render without one
-# was the clearest single problem: flat-shaded buildings with nothing beneath
-# them read as blocks floating over the terrain, because there is no contact
-# edge anywhere. A disc gives every building a line to sit on.
-#
-# This does cover World._draw_settlement()'s footprint ring, which the header
-# above says this layer does not own — but that ring is already covered today:
-# a GLB fitted to 45 units tall is 88 units across against a ring of 28, and it
-# brings its own baked base plate. So this is the existing behaviour, not a new
-# regression, and the ring is still doing its job at the zoom levels where the
-# diorama is too small to hide it.
-static func _ground(parts: Array, faction: String, radius: float) -> void:
-	parts.append({
-		"part": "disc", "role": "ground", "shade": 1,
-		"pos": Vector3(0, 0.35, 0), "size": Vector3(radius * 2.06, 0.7, radius * 2.06),
-		"yaw": 0.0, "tilt": 0.0,
-	})
-
-
-# Is `at` far enough from everything already placed? Circle-vs-circle on the
-# ground plane — buildings are boxes, but their yaw is random, so a bounding
-# circle is both the honest test and the cheap one.
-static func _clear(at: Vector2, clearance: float, taken: Array) -> bool:
-	for t in taken:
-		if at.distance_to(t[0]) < clearance + float(t[1]):
-			return false
-	return true
 
 
 # A body plus its roof, and for the factions that have one, a chimney. The roof
@@ -318,7 +282,7 @@ static func _palisade(parts: Array, faction: String, radius: float, h: float,
 		# and then varying the length buried every taller stake in the ground.
 		var post_h: float = h * rng.randf_range(0.88, 1.12)
 		parts.append({
-			"part": "post", "role": "post", "shade": i % SHADES.size(),
+			"part": "post", "role": "post", "shade": i % KitParts.SHADES.size(),
 			"pos": Vector3(at.x, post_h * 0.5, at.y),
 			"size": Vector3(h * 0.22, post_h, h * 0.22),
 			"yaw": ang, "tilt": 0.0,
@@ -368,104 +332,14 @@ static func _stone_wall(parts: Array, faction: String, radius: float, h: float,
 
 # --- turning the plan into nodes -------------------------------------------
 
-# One Node3D holding one MeshInstance3D per part, resting on y=0, ready to be
-# positioned by Settlements3D._reposition() exactly like an instantiated GLB.
-# Meshes and materials are shared statics, so the Nth settlement allocates
-# nothing but nodes.
+# The primitives, materials and caches all live in kit_parts.gd; what stays
+# here is the palette this kit hands it. A faction's PROFILES entry is already
+# role -> Color plus the shape numbers, and KitParts.material_for() only reads
+# the roles it is asked for, so it doubles as the palette unchanged.
 static func build(faction: String, kind: String, id: String) -> Node3D:
-	var root := Node3D.new()
-	root.name = "kit_%s_%s" % [faction, kind]
-	for part in plan(faction, kind, id):
-		var mi := MeshInstance3D.new()
-		mi.mesh = _mesh(String(part["part"]), part["size"])
-		mi.material_override = _material(faction, String(part["role"]), int(part["shade"]))
-		var b := Basis.from_euler(Vector3(0.0, float(part["yaw"]), float(part["tilt"])))
-		mi.transform = Transform3D(b, part["pos"])
-		root.add_child(mi)
-	return root
+	return KitParts.assemble(plan(faction, kind, id), PROFILES[faction],
+		"%s_%s" % [faction, kind])
 
 
-# Primitive meshes are sized per part rather than scaled from a unit mesh: a
-# non-uniform Node3D scale would skew the normals on the tilted orc buildings,
-# and PrimitiveMesh instances with identical parameters are cheap to hold.
-# Keyed on the part name and its rounded size so the ~40 distinct sizes in a map
-# full of settlements share a handful of resources instead of one each.
-static func _mesh(part: String, size: Vector3) -> Mesh:
-	var key := "%s:%.1f,%.1f,%.1f" % [part, size.x, size.y, size.z]
-	if _meshes.has(key):
-		return _meshes[key]
-	var m: Mesh
-	match part:
-		"prism":
-			var pr := PrismMesh.new()
-			pr.size = size
-			m = pr
-		"lean":
-			# Same prism with its ridge pushed to one side: a single-pitch roof,
-			# which is the orc shed's whole character.
-			var pl := PrismMesh.new()
-			pl.size = size
-			pl.left_to_right = 0.3
-			m = pl
-		"cone":
-			var c := CylinderMesh.new()
-			c.top_radius = 0.0
-			c.bottom_radius = size.x * 0.5
-			c.height = size.y
-			c.radial_segments = 8
-			c.rings = 1
-			m = c
-		"disc":
-			var g := CylinderMesh.new()
-			g.top_radius = size.x * 0.5
-			g.bottom_radius = size.x * 0.5
-			g.height = size.y
-			g.radial_segments = 16
-			g.rings = 1
-			m = g
-		"post":
-			var p := CylinderMesh.new()
-			p.top_radius = size.x * 0.30
-			p.bottom_radius = size.x * 0.5
-			p.height = size.y
-			p.radial_segments = 5
-			p.rings = 1
-			m = p
-		_:
-			var b := BoxMesh.new()
-			b.size = size
-			m = b
-	_meshes[key] = m
-	return m
-
-
-# Flat, unlit-looking, untextured: no albedo map at all, which is the point —
-# there is no atlas to mip away. Roughness is high and specular off so the only
-# shading is the diorama rig's own sun, and a roof edge stays an edge at 10px.
-static func _material(faction: String, role: String, shade: int) -> StandardMaterial3D:
-	var key := "%s:%s:%d" % [faction, role, shade]
-	if _materials.has(key):
-		return _materials[key]
-	var base: Color = PROFILES[faction].get(role, Color.MAGENTA)
-	var step: float = SHADES[clampi(shade, 0, SHADES.size() - 1)]
-	var m := StandardMaterial3D.new()
-	m.albedo_color = base.lightened(step) if step > 0.0 else base.darkened(-step)
-	m.roughness = 0.92
-	m.metallic = 0.0
-	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	_materials[key] = m
-	return m
-
-
-# Tests and the gallery both want this and neither should re-derive it: the
-# triangle budget the whole point of this file rests on.
 static func triangles(faction: String, kind: String, id: String) -> int:
-	var total := 0
-	for part in plan(faction, kind, id):
-		match String(part["part"]):
-			"prism", "lean": total += 8
-			"cone": total += 12       # 6 side triangles + a 6-gon base fan
-			"disc": total += 60       # 16 segments quadded, two 16-gon caps
-			"post": total += 20       # 5 sides quadded + two caps
-			_: total += 12
-	return total
+	return KitParts.triangles(plan(faction, kind, id))
