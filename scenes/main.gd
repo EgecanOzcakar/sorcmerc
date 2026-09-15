@@ -14,7 +14,8 @@ const Hex = preload("res://core/hex.gd")
 const Settings = preload("res://core/settings.gd")
 const Tutorial = preload("res://core/tutorial.gd")
 const Icons = preload("res://core/ui_icons.gd")
-const Campaign = preload("res://core/campaign.gd")   # item_name, for the loot line at the end of a fight
+const Campaign = preload("res://core/campaign.gd")
+const Difficulty = preload("res://core/difficulty.gd")   # item_name, for the loot line at the end of a fight
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
 
@@ -272,7 +273,7 @@ func _apply_ui_scale() -> void:
 	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
 	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
 	for b in _buttons.get_children():
-		if b.icon != null:
+		if b is Button and b.icon != null:   # the Field Manual search box shares this grid
 			b.custom_minimum_size = BTN_SIZE * u
 			b.add_theme_constant_override("icon_max_width", int(Icons.ICON_PX * u))
 			for chip in b.get_children():
@@ -351,6 +352,7 @@ func _new_game(forced := 0) -> void:
 	sp["seed"] = _seed
 	result = {}
 	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS))   # sp["theme"] picks the board
+	Difficulty.apply(cb, Settings.current().difficulty)   # T9c: the player's overlay, foes only
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()
