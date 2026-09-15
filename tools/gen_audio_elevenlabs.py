@@ -113,6 +113,49 @@ SFX = {
                "tick, very short", 0.5, 0.8),
     "rest": ("A campfire settling with a soft exhale and a gentle low drone, the sound of "
              "making camp, warm and calm", 2.0, 0.45),
+
+    # T9z: per-weapon-class hits. core/weapon_sfx.gd picks one off the attacker's
+    # main-hand weapon (or a monster's damage type), so a bow and a mace stop
+    # sounding the same. Each is the SWING through the air and then the landing.
+    "hit_sword": ("A sword swung through the air then striking chain mail, quick whoosh "
+                  "into a sharp bright metallic clang with a ring, dry, close", 0.7, 0.7),
+    "hit_axe": ("A heavy battle axe swung and chopping into armor and shield, a whoosh into "
+                "a deep heavy thunk with a short dull metallic bite, dry", 0.7, 0.7),
+    "hit_blunt": ("A heavy mace or war hammer swung and slamming into armor, a deep dull "
+                  "crushing thud with a low metallic clank, no ring, dry", 0.7, 0.7),
+    "hit_pierce": ("A dagger or spear thrust quickly stabbing through leather and mail, a "
+                   "short sharp metallic shink and a quick puncture, very brief, dry", 0.5, 0.75),
+    "hit_bow": ("A bowstring released with a taut twang, an arrow whistling through the air, "
+                "then thudding into a wooden shield, dry", 0.9, 0.7),
+    "hit_thrown": ("A javelin or throwing axe whooshing through the air then striking a "
+                   "target with a solid thunk, dry", 0.8, 0.7),
+    "hit_claw": ("A large beast's claws raking and tearing through leather armor, a quick "
+                 "triple scratch and rip, no metal, dry", 0.6, 0.7),
+    "hit_bite": ("A large creature's jaws snapping shut and crunching down on armor and "
+                 "flesh, a sharp snap into a wet crunch, brief, dry", 0.6, 0.7),
+    "hit_slam": ("A huge creature's fist slamming down onto a warrior, a heavy deep body "
+                 "blow with a low thump and armor rattle, dry", 0.8, 0.7),
+
+    # T9z: per-school casts. Picked off data/spells.json's `school`. Same wide,
+    # magical space as the generic cast; what differs is the character of it.
+    "cast_evocation": ("A destructive evocation spell being cast, a rising surge of raw "
+                       "energy erupting into a fiery crackling boom, fantasy game magic", 1.2, 0.55),
+    "cast_abjuration": ("A protective ward spell being cast, a bright clear chime blooming "
+                        "into a steady shimmering barrier hum, fantasy game magic", 1.2, 0.5),
+    "cast_conjuration": ("A summoning spell being cast, a swirling portal opening with a "
+                         "whooshing rush of air and a deep arrival thump, fantasy game magic", 1.2, 0.5),
+    "cast_enchantment": ("A charm spell being cast, a soft dreamy descending twinkle of "
+                         "bells with a hypnotic sparkle, fantasy game magic", 1.2, 0.5),
+    "cast_transmutation": ("A transmutation spell reshaping matter, a warbling wobbling "
+                           "tone with bubbling shifting textures settling into a chime, "
+                           "fantasy game magic", 1.2, 0.5),
+    "cast_divination": ("A divination spell revealing a vision, an ascending crystalline "
+                        "cluster of bells with an airy ethereal shimmer, fantasy game magic", 1.3, 0.5),
+    "cast_illusion": ("An illusion spell being cast, a phasing wavering unreal shimmer with "
+                      "a ghostly whisper and an off-key glint, fantasy game magic", 1.2, 0.5),
+    "cast_necromancy": ("A necromancy death spell being cast, a low ominous droning bend "
+                        "downward with a rasping breath and a hollow wrong note, dark "
+                        "fantasy game magic", 1.3, 0.5),
 }
 
 # Wordless voice stingers, three takes per archetype (core/barks.gd picks one at

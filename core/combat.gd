@@ -8,6 +8,7 @@ const Effects = preload("res://core/rules/effects.gd")
 const Ach = preload("res://core/achievements.gd")
 const Barks = preload("res://core/barks.gd")
 const Sound = preload("res://core/audio.gd")
+const WeaponSfx = preload("res://core/weapon_sfx.gd")
 const Rng = preload("res://core/rng.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
@@ -78,8 +79,10 @@ const BARK_SFX := {"hit": "hit", "crit": "crit", "kill": "kill", "down": "kill",
 
 # Fire a bark for `c` on `trigger` ("hit" | "crit" | "kill" | "low_hp" | "down" |
 # "victory"). Cosmetic: never gates, never touches the combat RNG, never fails loudly.
-func bark(c, trigger: String) -> void:
-	var sound: String = BARK_SFX.get(trigger, "")
+# T9z: `sfx` overrides the trigger's default sting — resolve_attack passes the
+# attacker's weapon-specific hit so a bow and a mace stop sounding identical.
+func bark(c, trigger: String, sfx := "") -> void:
+	var sound: String = sfx if sfx != "" else BARK_SFX.get(trigger, "")
 	if sound != "":
 		Sound.play_sfx(sound)   # before the returns below: sound plays even in a fast run
 	if _bark_rng == null or c == null:
@@ -626,7 +629,9 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		caster.slots[lvl - 1] -= 1
 		if v["cost"] == "bonus":
 			caster.econ["cast_bonus_spell"] = true
-	Sound.play_sfx("cast")   # T27: past the slot check, so a refused cast is silent
+	# T27: past the slot check, so a refused cast is silent. T9z: the school
+	# picks the sting — evocation booms, necromancy drones, abjuration chimes.
+	Sound.play_sfx(WeaponSfx.for_spell(String(v.get("spell", ""))))
 	if v.get("concentration", false):
 		if caster.has("concentrating"):
 			log.append("%s drops concentration on their earlier spell." % caster.cname)
@@ -935,7 +940,15 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		_apply_damage(target, out.damage, _damage_type(attacker))
 		if target.conscious():
 			_hit_riders(attacker, target)
-		bark(attacker, "kill" if target.is_dead() else ("crit" if crit else "hit"))
+		# T9z: a plain hit sounds like the weapon that landed it. A crit and a kill
+		# keep their own stingers — those are the dramatic beats, and a flourish
+		# on top of every weapon variant would be a second matrix to maintain.
+		if target.is_dead():
+			bark(attacker, "kill")
+		elif crit:
+			bark(attacker, "crit")
+		else:
+			bark(attacker, "hit", WeaponSfx.for_attack(attacker))
 	if not opts.get("no_mastery", false):
 		_mastery_rider(attacker, target, hit)
 	return out

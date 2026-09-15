@@ -18,6 +18,13 @@ var size: String = "Medium"  # bestiary.json's; Push spares Huge and bigger
 var atk_bonus: int = 0
 var damage: String = "1d4"
 var ranged: bool = false
+# T9z: bestiary.json carries these on the monster itself (no attacks[] entry,
+# just "bite"/"claw" + a damage type). Declared here so Adapter.from_monster's
+# generic `c.set(k, v)` copy actually keeps them — Object.set() on a property a
+# script doesn't declare is a silent no-op, which is why they were dropped
+# before. core/weapon_sfx.gd reads them to pick a natural-attack sound.
+var damage_type: String = ""
+var attack_name: String = ""
 var atk_range: int = 1     # hexes; melee = 1, shortbow set in encounter.gd
 var crit_range: int = 20  # Vera crits on 19
 

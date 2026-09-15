@@ -445,12 +445,244 @@ def spread_room(mono, wet, size, damp, tail):
     return [l, r]
 
 
+# --- T9z: one hit sound per weapon class -----------------------------------
+#
+# core/weapon_sfx.gd picks one of these off the attacker's main-hand weapon
+# (or, for a monster, off what kind of wound it deals). The shared vocabulary:
+# a `swing` is the air the weapon moves before it lands (a rising-then-falling
+# filtered noise), the impact is a noise burst + a body thud, and only edged
+# metal gets a `metal()` ring after it. Blunt and natural attacks get none — a
+# club against mail thumps, it doesn't sing.
+
+def swing(dur, amp=0.22, f0=900.0, f1=2600.0, rng=None):
+    """Whoosh: bandpassed noise whose centre sweeps up as the swing accelerates."""
+    rng = rng or random
+    n = max(1, int(dur * SR))
+    out = [rng.uniform(-1.0, 1.0) for _ in range(n)]
+    S.sweep_lp(out, f0, f1, q=2.2)
+    env = adsr(n, a=dur * 0.55, d=dur * 0.15, s=0.35, r=dur * 0.3)
+    for i in range(n):
+        out[i] *= amp * env[i]
+    return out
+
+
+def sfx_hit_sword(rng):
+    b = buf(0.36)
+    mix(b, swing(0.09, 0.20, 700.0, 3200.0, rng=rng))
+    mix(b, noise(0.035, 0.5, 40.0, 3800.0, 0.9, rng=rng), offset=int(0.085 * SR))
+    mix(b, metal(0.26, 1700.0, 0.36, rng=rng), offset=int(0.085 * SR))   # bright blade ring
+    mix(b, tone(0.08, 240.0, 90.0, 0.35, "tri", 24.0, 0.001), offset=int(0.085 * SR))
+    S.softclip(b, 1.5)
+    return room(b, wet=0.14, size=0.62, damp=0.55, tail=0.3)
+
+
+def sfx_hit_axe(rng):
+    b = buf(0.36)
+    mix(b, swing(0.11, 0.24, 400.0, 1800.0, rng=rng))                     # heavier, slower swing
+    mix(b, noise(0.05, 0.6, 30.0, 1900.0, 0.8, rng=rng), offset=int(0.10 * SR))
+    mix(b, metal(0.14, 900.0, 0.22, rng=rng), offset=int(0.10 * SR))     # a short, dull ring
+    mix(b, tone(0.12, 160.0, 55.0, 0.5, "tri", 18.0, 0.001), offset=int(0.10 * SR))
+    mix(b, sub(0.18, 55.0, 0.30, 7.0), offset=int(0.10 * SR))           # the chop lands
+    S.softclip(b, 1.7)
+    return room(b, wet=0.12, size=0.60, damp=0.6, tail=0.3)
+
+
+def sfx_hit_blunt(rng):
+    b = buf(0.34)
+    mix(b, swing(0.10, 0.18, 300.0, 1200.0, rng=rng))
+    mix(b, noise(0.06, 0.5, 24.0, 1100.0, 0.8, rng=rng), offset=int(0.095 * SR))
+    mix(b, tone(0.14, 130.0, 45.0, 0.55, "tri", 14.0, 0.001), offset=int(0.095 * SR))
+    mix(b, tom(110.0, 0.4, rng=rng), offset=int(0.095 * SR))              # no ring: a thump
+    mix(b, sub(0.2, 48.0, 0.32, 6.0), offset=int(0.095 * SR))
+    S.softclip(b, 1.8)
+    return room(b, wet=0.12, size=0.60, damp=0.65, tail=0.3)
+
+
+def sfx_hit_pierce(rng):
+    b = buf(0.26)
+    mix(b, swing(0.06, 0.16, 1200.0, 4200.0, rng=rng))                    # quick, thin
+    mix(b, noise(0.025, 0.45, 55.0, 5200.0, 1.0, "hp", rng=rng), offset=int(0.055 * SR))
+    mix(b, metal(0.16, 2600.0, 0.26, rng=rng), offset=int(0.055 * SR))   # high, brief "shink"
+    mix(b, tone(0.06, 300.0, 120.0, 0.25, "tri", 30.0, 0.001), offset=int(0.055 * SR))
+    S.softclip(b, 1.4)
+    return room(b, wet=0.12, size=0.58, damp=0.55, tail=0.22)
+
+
+def sfx_hit_bow(rng):
+    b = buf(0.55)
+    # the string: a tight pluck at the release, then the arrow's flight, then it lands
+    mix(b, pluck(0.14, 220.0, 0.28, damp=0.35, bright=0.9, rng=rng))
+    mix(b, noise(0.02, 0.25, 70.0, 3000.0, 1.0, "bp", rng=rng))            # snap of the release
+    flight = noise(0.22, 0.14, 4.0, 5000.0, 0.6, "hp", rng=rng)
+    S.sweep_lp(flight, 8000.0, 2500.0, q=1.4)                             # doppler-ish fall
+    mix(b, flight, offset=int(0.06 * SR))
+    mix(b, noise(0.03, 0.45, 40.0, 2200.0, 0.9, rng=rng), offset=int(0.30 * SR))
+    mix(b, tone(0.10, 200.0, 70.0, 0.4, "tri", 20.0, 0.001), offset=int(0.30 * SR))   # thunk
+    S.softclip(b, 1.4)
+    return room(b, wet=0.16, size=0.68, damp=0.5, tail=0.35)
+
+
+def sfx_hit_thrown(rng):
+    b = buf(0.5)
+    flight = noise(0.26, 0.20, 3.0, 4000.0, 0.7, "bp", rng=rng)
+    S.sweep_lp(flight, 1200.0, 3600.0, q=1.6)                             # rising whoosh
+    mix(b, flight)
+    mix(b, noise(0.035, 0.45, 38.0, 2400.0, 0.9, rng=rng), offset=int(0.27 * SR))
+    mix(b, tone(0.10, 220.0, 80.0, 0.4, "tri", 20.0, 0.001), offset=int(0.27 * SR))
+    S.softclip(b, 1.4)
+    return room(b, wet=0.14, size=0.64, damp=0.55, tail=0.3)
+
+
+def sfx_hit_claw(rng):
+    b = buf(0.34)
+    # a tearing rake: three fast staggered scratches, no metal anywhere
+    for i in range(3):
+        mix(b, noise(0.05, 0.42, 34.0, 2600.0 + i * 500.0, 1.3, "bp", rng=rng),
+            offset=int(i * 0.035 * SR))
+    mix(b, tone(0.10, 180.0, 70.0, 0.3, "tri", 20.0, 0.001), offset=int(0.04 * SR))
+    S.softclip(b, 1.5)
+    return room(b, wet=0.12, size=0.6, damp=0.6, tail=0.25)
+
+
+def sfx_hit_bite(rng):
+    b = buf(0.3)
+    mix(b, noise(0.02, 0.5, 60.0, 4200.0, 1.0, "bp", rng=rng))              # snap
+    mix(b, noise(0.07, 0.4, 22.0, 900.0, 0.8, rng=rng), offset=int(0.02 * SR))   # crunch
+    mix(b, tone(0.12, 150.0, 60.0, 0.45, "tri", 16.0, 0.001), offset=int(0.02 * SR))
+    mix(b, sub(0.15, 60.0, 0.25, 8.0), offset=int(0.02 * SR))
+    S.softclip(b, 1.7)
+    return room(b, wet=0.12, size=0.6, damp=0.6, tail=0.25)
+
+
+def sfx_hit_slam(rng):
+    b = buf(0.4)
+    mix(b, swing(0.12, 0.16, 200.0, 900.0, rng=rng))
+    mix(b, noise(0.08, 0.45, 18.0, 800.0, 0.8, rng=rng), offset=int(0.11 * SR))
+    mix(b, tone(0.18, 110.0, 40.0, 0.5, "tri", 12.0, 0.001), offset=int(0.11 * SR))
+    mix(b, kick(0.5, rng=rng), offset=int(0.11 * SR))
+    mix(b, sub(0.26, 42.0, 0.38, 5.0), offset=int(0.11 * SR))
+    S.softclip(b, 1.8)
+    return room(b, wet=0.14, size=0.66, damp=0.65, tail=0.35)
+
+
+# --- T9z: one cast sound per school of magic -------------------------------
+#
+# core/weapon_sfx.gd picks one off data/spells.json's `school`. Each keeps the
+# generic cast's wide, wet room but changes what happens inside it: evocation
+# is force and heat, abjuration a held ward, necromancy a drone, and so on.
+
+def sfx_cast_evocation(rng):
+    b = buf(0.9)
+    sweep = tone(0.4, 200.0, 1400.0, 0.30, "saw", 2.0, 0.03, detune=18.0)
+    S.sweep_lp(sweep, 500.0, 7000.0, q=1.8)
+    mix(b, sweep)
+    mix(b, noise(0.30, 0.34, 9.0, 3000.0, 0.7, rng=rng), offset=int(0.28 * SR))  # the burst
+    mix(b, sub(0.5, 50.0, 0.42, 3.5), offset=int(0.28 * SR))                    # the boom
+    mix(b, noise(0.5, 0.10, 3.0, 6500.0, 0.7, "hp", rng=rng), offset=int(0.32 * SR))  # crackle tail
+    S.softclip(b, 1.5)
+    return room(b, wet=0.40, size=0.88, damp=0.3, tail=1.0)
+
+
+def sfx_cast_abjuration(rng):
+    b = buf(1.1)
+    # a ward going up: a bright chime, then a held, slowly-swelling hum under it
+    mix(b, bell(0.7, midi(84), 0.22, inharm=1.2))
+    mix(b, bell(0.7, midi(91), 0.14, inharm=1.2), offset=int(0.05 * SR))
+    hum = tone(0.9, midi(60), amp=0.16, kind="tri", decay=0.9, attack=0.30, detune=8.0)
+    mix(b, hum, offset=int(0.10 * SR))
+    mix(b, tone(0.9, midi(67), amp=0.10, kind="sine", decay=0.9, attack=0.35), offset=int(0.10 * SR))
+    mix(b, noise(0.4, 0.08, 4.0, 7500.0, 0.7, "hp", rng=rng), offset=int(0.15 * SR))
+    return room(b, wet=0.44, size=0.90, damp=0.28, tail=1.1)
+
+
+def sfx_cast_conjuration(rng):
+    b = buf(1.1)
+    # something arriving: a downward filtered swell like a portal opening, wind around it
+    swell = tone(0.7, 900.0, 220.0, 0.28, "saw", 1.4, 0.18, detune=22.0)
+    S.sweep_lp(swell, 5000.0, 600.0, q=1.5)
+    mix(b, swell)
+    mix(b, wind(0.9, 0.16, 600.0, 1.1, rate=2.0, rng=rng))
+    mix(b, noise(0.06, 0.32, 24.0, 2400.0, 0.9, rng=rng), offset=int(0.62 * SR))  # it lands
+    mix(b, sub(0.4, 55.0, 0.30, 4.0), offset=int(0.62 * SR))
+    S.softclip(b, 1.3)
+    return room(b, wet=0.44, size=0.92, damp=0.32, tail=1.1)
+
+
+def sfx_cast_enchantment(rng):
+    b = buf(1.1)
+    # a charm: a soft, dreamy descending bell run, widened
+    for i, n in enumerate((91, 88, 84, 79, 76)):
+        mix(b, bell(0.6, midi(n), 0.16, inharm=1.05), offset=int(i * 0.09 * SR))
+        mix(b, pluck(0.45, midi(n - 12), 0.12, damp=0.9, bright=0.5, rng=rng),
+            offset=int(i * 0.09 * SR))
+    mix(b, noise(0.5, 0.06, 3.0, 8000.0, 0.7, "hp", rng=rng), offset=int(0.2 * SR))
+    S.chorus(b, rate=0.4, depth_ms=8.0, mix_amt=0.5)
+    return room(b, wet=0.48, size=0.92, damp=0.26, tail=1.2)
+
+
+def sfx_cast_transmutation(rng):
+    b = buf(1.0)
+    # matter reshaping: a wobbling pitch that climbs, then settles, bubbling under it
+    wob = tone(0.55, 320.0, 640.0, 0.24, "tri", 1.8, 0.05, detune=30.0)
+    S.chorus(wob, rate=6.5, depth_ms=14.0, mix_amt=0.7)                   # the wobble
+    mix(b, wob)
+    for i in range(6):                                                     # bubbles
+        f = 900.0 + rng.uniform(-300.0, 500.0)
+        mix(b, tone(0.06, f, f * 1.6, 0.14, "sine", 26.0, 0.001), offset=int((0.1 + i * 0.08) * SR))
+    mix(b, bell(0.5, midi(79), 0.16), offset=int(0.55 * SR))              # it settles
+    return room(b, wet=0.40, size=0.88, damp=0.3, tail=1.0)
+
+
+def sfx_cast_divination(rng):
+    b = buf(1.2)
+    # a glimpse of what's coming: a rising crystalline cluster with airy shimmer on top
+    for i, n in enumerate((79, 84, 88, 91, 96)):
+        mix(b, bell(0.8, midi(n), 0.16, inharm=1.4), offset=int(i * 0.07 * SR))
+    shim = noise(0.8, 0.12, 2.5, 9000.0, 0.6, "hp", rng=rng)
+    mix(b, shim, offset=int(0.1 * SR))
+    mix(b, tone(0.9, midi(72), amp=0.08, kind="sine", decay=1.0, attack=0.3), offset=int(0.2 * SR))
+    return room(b, wet=0.50, size=0.94, damp=0.22, tail=1.3)
+
+
+def sfx_cast_illusion(rng):
+    b = buf(1.1)
+    # not quite there: a detuned, phasing pad that never fully lands, a whisper over it
+    pad_ = tone(0.8, midi(64), amp=0.20, kind="saw", decay=1.2, attack=0.12, detune=40.0)
+    S.sweep_lp(pad_, 3000.0, 900.0, q=1.2)
+    S.chorus(pad_, rate=1.2, depth_ms=12.0, mix_amt=0.8)
+    mix(b, pad_)
+    mix(b, noise(0.7, 0.10, 2.0, 5500.0, 0.6, "hp", rng=rng), offset=int(0.1 * SR))
+    mix(b, bell(0.5, midi(88), 0.10, inharm=2.2), offset=int(0.4 * SR))   # an off-key glint
+    return room(b, wet=0.52, size=0.94, damp=0.3, tail=1.2)
+
+
+def sfx_cast_necromancy(rng):
+    b = buf(1.2)
+    # death magic: a low drone bending down, a rasp of breath over it
+    drone = tone(0.9, midi(40), midi(36), 0.30, "saw", 1.0, 0.08, detune=24.0)
+    S.sweep_lp(drone, 900.0, 300.0, q=1.3)
+    mix(b, drone)
+    mix(b, sub(1.0, 36.0, 0.36, 1.6))
+    mix(b, noise(0.8, 0.14, 2.0, 1400.0, 0.9, "bp", rng=rng), offset=int(0.1 * SR))  # the rasp
+    mix(b, bell(0.6, midi(63), 0.12, inharm=2.6), offset=int(0.3 * SR))    # a wrong note
+    S.softclip(b, 1.3)
+    return room(b, wet=0.46, size=0.94, damp=0.5, tail=1.3)
+
+
 SFX = {
     "hit": sfx_hit, "crit": sfx_crit, "kill": sfx_kill, "cast": sfx_cast,
     "heal": sfx_heal, "level_up": sfx_level_up, "victory": sfx_victory,
     "defeat": sfx_defeat, "click": sfx_click, "buy": sfx_buy,
     "identify": sfx_identify, "quest": sfx_quest, "pickup": sfx_pickup,
     "rest": sfx_rest,
+    # T9z: per-weapon-class hits, per-school casts (core/weapon_sfx.gd)
+    "hit_sword": sfx_hit_sword, "hit_axe": sfx_hit_axe, "hit_blunt": sfx_hit_blunt,
+    "hit_pierce": sfx_hit_pierce, "hit_bow": sfx_hit_bow, "hit_thrown": sfx_hit_thrown,
+    "hit_claw": sfx_hit_claw, "hit_bite": sfx_hit_bite, "hit_slam": sfx_hit_slam,
+    "cast_evocation": sfx_cast_evocation, "cast_abjuration": sfx_cast_abjuration,
+    "cast_conjuration": sfx_cast_conjuration, "cast_enchantment": sfx_cast_enchantment,
+    "cast_transmutation": sfx_cast_transmutation, "cast_divination": sfx_cast_divination,
+    "cast_illusion": sfx_cast_illusion, "cast_necromancy": sfx_cast_necromancy,
 }
 
 # --- ambient beds ----------------------------------------------------------
