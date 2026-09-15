@@ -31,7 +31,7 @@ const STEPS := [
 	{"target": "board", "title": "Reading a combatant",
 	"text": "Each token carries its class or creature glyph, a bar under it for HP (green, amber, red as it drops) with the exact numbers beneath, and a row of glyphs above it for conditions — prone, poisoned, blinded, dying. Hover any token for the full stat card: AC, HP, speed and its whole kit."},
 	{"target": "actions", "title": "Your actions",
-	"text": "Everything this character can do right now, straight off the rules engine. The number in front is its hotkey (0 ends the turn), the tag in brackets is what it costs — [bonus], [free] — and hovering a button explains what it does with its real numbers. Anything that spends a limited resource asks for a second click to confirm."},
+	"text": "The same nine slots for every character: 1 Attack, 2 Spells, 3 Features, 4 Dash, 5 Disengage, 6 Dodge, 7 Help, 8 Hide, 9 Shove — then Tab to swap weapon and Space to end the turn. A slot this character can't use stays put, greyed. Spells and features open a list (numbered again, Esc backs out); hovering any badge explains it with its real numbers. Anything that spends a limited resource asks for a second press to confirm."},
 	{"target": "actor", "title": "Your turn's economy",
 	"text": "This line is what you have left: AC, HP, spell slots and feature uses as pips, then [action] and [bonus] while they're unspent, and how many hexes of movement remain. When all three run out the turn ends itself. That's everything — go win the fight."},
 ]

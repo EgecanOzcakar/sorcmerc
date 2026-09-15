@@ -58,22 +58,8 @@ var _fx_on := false           # attack animations: off under SORCMERC_FAST / hea
 # label came off the button entirely. A 126x40 row that clipped "Burning Ha…"
 # is a 52x52 square that shows the whole spell. What stays on the face is the
 # hotkey, in the corner, and an upcast tier when there is one.
-const BTN_COLUMNS := 10
+const BTN_COLUMNS := 11   # the nine slots, Swap, End turn: one row
 const BTN_SIZE := Vector2(52, 52)
-# Session-only "which verbs does this player actually reach for" — no save file,
-# resets with the app. Keyed by a verb's id ("attack", "dash", ...) or "spell:"
-# + the base spell id (so a caster's upcast tiers count as the one spell they
-# picked, not N separate counters). Read by _prioritize(), written by
-# _set_buttons() on every button press.
-var _verb_freq: Dictionary = {}
-# The slot order a character's badges sit in, settled the first time their bar
-# is built in this fight and not touched again. _prioritize() still decides that
-# first layout — the verbs this player reaches for get the low hotkeys — but it
-# decides it once: re-sorting it live meant pressing a verb could promote it
-# past another and slide every badge to its right out from under the hand that
-# was reaching for it, in the middle of a turn. Keyed by combatant id, cleared
-# with the fight.
-var _bar_order: Dictionary = {}
 # T-hud: HP bar + condition tags, painted above every tier (see
 # Board._paint_token_hud / _draw_hud_overlay below) instead of inline in
 # Board._draw() — a figure in front used to be able to cover the HP bar of
@@ -186,7 +172,7 @@ func _ready() -> void:
 	orderwrap.add_child(_order)
 	col.add_child(orderwrap)
 
-	_hint.text = "Keys 1 to 9 act.  Scroll zooms, drag pans, Home resets the view."
+	_hint.text = "1-9 act, Tab swaps weapon, Space ends the turn, Esc backs out.  Scroll zooms, drag pans, Home resets the view."
 	_hint.theme_type_variation = "Dim"
 	col.add_child(_hint)
 
@@ -283,14 +269,15 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		KEY_UP: pan_by(Vector2(0, 40))
 		KEY_DOWN: pan_by(Vector2(0, -40))
 		KEY_ESCAPE, KEY_B: board_cancel()
+		KEY_TAB: _press_key("Tab")
 		KEY_R: if cb and cb.is_over(): _new_game()
 		KEY_F1: SettingsOverlay.toggle(self, func(): _anim = Settings.anim())
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
-			_press_hotkey(e.keycode - KEY_1)
+			_press_hotkey(e.keycode - KEY_1, e.shift_pressed)
 		KEY_0, KEY_SPACE:
 			_press_hotkey(-1)  # last button (End turn / Cancel)
 
-func _press_hotkey(idx: int) -> void:
+func _press_hotkey(idx: int, shift := false) -> void:
 	if _busy:
 		return
 	# T29: while aiming, the number keys still address the verb menu — drop out
@@ -303,7 +290,19 @@ func _press_hotkey(idx: int) -> void:
 		return
 	var b = kids[kids.size() - 1] if idx < 0 else (kids[idx] if idx < kids.size() else null)
 	if b is Button and not b.disabled:
-		b.pressed.emit()
+		if shift and b.has_meta("shift_fn"):
+			b.get_meta("shift_fn").call()
+		else:
+			b.pressed.emit()
+
+# The button wearing a named key chip (Tab for Swap weapon).
+func _press_key(key: String) -> void:
+	if _busy:
+		return
+	for b in _buttons.get_children():
+		if b is Button and String(b.get_meta("hotkey", "")) == key and not b.disabled:
+			b.pressed.emit()
+			return
 
 func _build_theme() -> void:
 	theme = Icons.dark_theme()
@@ -329,7 +328,6 @@ func _new_game(forced := 0) -> void:
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()
-	_bar_order.clear()  # a new fight lays the bars out again (see _in_slot_order)
 	_deploy_pick = ""
 	_logbox.text = ""
 	_logged = 0
@@ -494,9 +492,8 @@ func _end_turn() -> void:
 static func _mark(tex: Texture2D, glyph := "", freq_key := "") -> Dictionary:
 	return {"icon": tex, "glyph": glyph, "freq_key": freq_key}
 
-# Verb-level menu. Buttons are numbered [1]..[9]; End turn is [0]; most-used
-# verbs (_prioritize) claim those low slots over time instead of whatever
-# order cb.available() happened to build them in. Everything on it comes from
+# Verb-level menu. Every verb becomes an entry here, then _slotted() lays the
+# entries into the fixed bar (see SLOTS). Everything on it comes from
 # cb.available(h) — no hero, class or spell is named here.
 # Verbs that need a target enter "target" mode — hover a token for its %, click to apply.
 #
@@ -518,7 +515,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	for v in cb.available(h):
 		usable[String(v.get("id", v["kind"]))] = true
 	# The whole kit, not just what is affordable this instant: an unavailable
-	# verb keeps its slot, greyed. See _bar_order above for why.
+	# verb keeps its slot, greyed, so nothing to its right ever moves.
 	for v in cb.all_verbs(h):
 		var on: bool = usable.has(String(v.get("id", v["kind"])))
 		var label: String = _verb_label(h, v)
@@ -533,6 +530,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 		# else the martial set. `glyph` stays as the fallback for a build where
 		# the icons aren't there — see Icons.verb_icon.
 		var meta := _mark(Icons.skill_icon(v), glyph, freq_key)
+		meta["slot_level"] = int(v.get("slot_level", 0))
 		if label.contains("★"):
 			meta["tier"] = label.substr(label.find("★"))   # the upcast slot, on the badge's corner
 		if _armed == String(v.get("id", "")):
@@ -579,30 +577,113 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 			var head: Dictionary = base[3].duplicate()
 			var castable: int = tiers.filter(func(t): return not bool(t[3].get("disabled", false))).size()
 			head["disabled"] = castable == 0
+			head["shift_fn"] = func(): _spell_tier_menu(h, tiers)   # Shift+number: pick the slot level
 			opts[i] = [base[0], func(): _spell_tier_menu(h, tiers),
-				"%s\n%d of %d levels castable — pick one." % [base[0], castable, tiers.size()], head]
+				"%s\n%d of %d levels castable — pick one (Shift+key for the levels)." % [base[0], castable, tiers.size()], head]
 
-	opts = _in_slot_order(h, opts)
+	_submenu = ""
+	_set_buttons(_slotted(h, opts))
+	_board.queue_redraw()
 
-	# T29: melee/ranged toggle — only offered to someone carrying both.
+# --- the fixed bar --------------------------------------------------------
+#
+# Nine slots, the same for every character, the same every fight:
+#   [1] Attack  [2] Spells ▸  [3] Features ▸  [4] Dash  [5] Disengage
+#   [6] Dodge   [7] Help      [8] Hide        [9] Shove ▸     then
+#   [Tab] Swap weapon   [Space] End turn.
+# A slot the character has nothing for stays put, greyed. Spells, features
+# and the Shove choices open a submenu (numbered 1.., Esc back). No more
+# most-used-first reshuffling: the point of a fixed bar is that 4 is Dash on
+# Vera, on Ilsa, and next week.
+const SLOTS := ["attack", "spells", "features", "dash", "disengage", "dodge", "help", "hide", "shove"]
+const SLOT_NAMES := {"attack": "Attack", "spells": "Spells", "features": "Features", "dash": "Dash",
+	"disengage": "Disengage", "dodge": "Dodge", "help": "Help", "hide": "Hide", "shove": "Shove"}
+var _submenu := ""   # "" on the main bar, else the open slot's id (Esc goes back)
+
+# Which slot an entry belongs in, from the meta _build_hero_menu attached.
+static func _slot_of(opt: Array) -> String:
+	var meta: Dictionary = opt[3] if opt.size() > 3 else {}
+	var key := String(meta.get("freq_key", ""))
+	if key.begins_with("spell:"):
+		return "spells"
+	if key.begins_with("shove") or key == "smash":
+		return "shove"
+	if key in ["attack", "dash", "disengage", "dodge", "help", "hide"]:
+		return key
+	return "features"
+
+func _slotted(h, opts: Array) -> Array:
+	var by_slot := {}
+	for s in SLOTS:
+		by_slot[s] = []
+	for o in opts:
+		by_slot[_slot_of(o)].append(o)
+	var out: Array = []
+	for s in SLOTS:
+		var mine: Array = by_slot[s]
+		var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
+		if s in ["spells", "features", "shove"]:
+			if s == "spells":
+				mine.sort_custom(func(a, b): return _tier_of(a) < _tier_of(b) or (_tier_of(a) == _tier_of(b) and a[0] < b[0]))
+			var meta := _mark(_slot_icon(s), "▸")
+			meta["disabled"] = mine.is_empty() or live == 0
+			meta["key"] = str(SLOTS.find(s) + 1)
+			var tip := "%s\n%s" % [SLOT_NAMES[s], ("Nothing to pick from." if mine.is_empty()
+				else "%d of %d ready — press to pick one." % [live, mine.size()])]
+			out.append([SLOT_NAMES[s] + " ▸", _open_submenu.bind(h, s, mine), tip, meta])
+		elif mine.is_empty():
+			var meta := _mark(_slot_icon(s))
+			meta["disabled"] = true
+			meta["key"] = str(SLOTS.find(s) + 1)
+			out.append([SLOT_NAMES[s], func(): pass, "%s\nNot something this character can do." % SLOT_NAMES[s], meta])
+		else:
+			var o: Array = mine[0].duplicate()
+			var meta: Dictionary = o[3].duplicate()
+			meta["key"] = str(SLOTS.find(s) + 1)
+			o[3] = meta
+			out.append(o)
+	# T29: melee/ranged toggle — the slot is always there, live only for someone carrying both.
 	var swap := _attack_swap(h)
-	if not swap.is_empty():
-		opts.append(["Wield %s" % swap["name"],
+	var swap_meta := _mark(Icons.verb_icon("swap"), "⇄")
+	swap_meta["key"] = "Tab"
+	if swap.is_empty():
+		swap_meta["disabled"] = true
+		out.append(["Swap weapon", func(): pass, "Swap weapon\nOnly one weapon to hand.", swap_meta])
+	else:
+		out.append(["Wield %s" % swap["name"],
 			func(): Adapter.set_main_attack(h, String(swap["id"])); _build_hero_menu(h),
 			"Wield %s\nYour Attack action switches to %s (%s): %+d to hit, %s %s damage. Free." % [
 				swap["name"], swap["name"], swap["range"], int(swap["to_hit"]),
-				swap["notation"], swap.get("damage_type", "")],
-			_mark(Icons.verb_icon("swap"), "⇄")])
-
+				swap["notation"], swap.get("damage_type", "")], swap_meta])
 	var end_mark := _mark(Icons.verb_icon("end_turn"))
+	end_mark["key"] = "Spc"
 	if h.econ["action"] > 0 and not cb.is_over():
 		end_mark["armed"] = _armed == "end"
 		var end_opt := _confirm_opt(h, "end", "End turn (action unspent!)", _end_turn)
 		end_opt.append("End turn\nYour action is still unspent.")
 		end_opt.append(end_mark)
-		opts.append(end_opt)
+		out.append(end_opt)
 	else:
-		opts.append(["End turn", _end_turn, "End turn", end_mark])
+		out.append(["End turn", _end_turn, "End turn", end_mark])
+	return out
+
+static func _tier_of(opt: Array) -> int:
+	var meta: Dictionary = opt[3] if opt.size() > 3 else {}
+	return int(meta.get("slot_level", 0))
+
+func _slot_icon(s: String) -> Texture2D:
+	match s:
+		"spells": return Icons.school_icon("evocation")
+		"features": return Icons.verb_icon("self_buff")
+		"shove": return Icons.verb_icon("shove")
+	return Icons.verb_icon(s)
+
+# A slot's own list: numbered from 1, Esc (the last button) goes back.
+func _open_submenu(h, slot: String, entries: Array) -> void:
+	_submenu = slot
+	var opts: Array = entries.duplicate()
+	opts.append(["Back", func(): _build_hero_menu(h, true), "Back",
+		_mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
 	_board.queue_redraw()
 
@@ -610,6 +691,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 # Each tier's own entry (built above, already wired to _enter_target/_enter_cone/
 # cb.perform exactly as it would have been standalone) is reused verbatim.
 func _spell_tier_menu(h, tiers: Array) -> void:
+	_submenu = "tiers"
 	var opts: Array = tiers.duplicate()
 	opts.append(["Back", func(): _build_hero_menu(h, true), "Back",
 		_mark(Icons.verb_icon("back"), "‹")])
@@ -884,7 +966,7 @@ func board_cancel() -> void:
 			_board.queue_redraw()
 			_deploy_menu()
 		return
-	if _mode != "idle" and cb and not cb.is_over() and cb.current().team == "party":
+	if (_mode != "idle" or _submenu != "") and cb and not cb.is_over() and cb.current().team == "party":
 		_build_hero_menu(cb.current())
 
 # hero actions ---------------------------------------------------------
@@ -937,13 +1019,14 @@ func _set_buttons(opts: Array) -> void:
 	for i in count:
 		var b := Button.new()
 		var meta: Dictionary = opts[i][3] if opts[i].size() > 3 else {}
-		var hotkey := ""
-		if count == 1:
-			hotkey = "Esc"
-		elif i == count - 1:
-			hotkey = "0"
-		elif i < 9:
-			hotkey = str(i + 1)
+		var hotkey := String(meta.get("key", ""))
+		if hotkey == "":
+			if count == 1 or (_submenu != "" and i == count - 1):
+				hotkey = "Esc"
+			elif i == count - 1:
+				hotkey = "0"
+			elif i < 9:
+				hotkey = str(i + 1)
 		var tex: Texture2D = meta.get("icon")
 		Icons.icon_button(b, tex, int(Icons.ICON_PX * u))
 		var tip := String(opts[i][2]) if opts[i].size() > 2 else ""
@@ -971,9 +1054,9 @@ func _set_buttons(opts: Array) -> void:
 			b.modulate = Color("ffb3a8")
 			tip = "Press again to confirm.\n" + tip
 		b.pressed.connect(opts[i][1])
-		var freq_key := String(meta.get("freq_key", ""))
-		if freq_key != "":
-			b.pressed.connect(func(): _bump_freq(freq_key))
+		b.set_meta("hotkey", hotkey)
+		if meta.has("shift_fn"):
+			b.set_meta("shift_fn", meta["shift_fn"])
 		if tip != "":
 			b.tooltip_text = tip   # native hover popup — the name, then what it does
 		_buttons.add_child(b)
@@ -995,72 +1078,6 @@ func _chip(b: Button, text: String, preset: int, col: Color, u: float) -> void:
 	l.add_theme_constant_override("shadow_offset_y", 1)
 	b.add_child(l)
 	l.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, int(3 * u))
-
-# This character's verb badges in their frozen slot order. The first call settles
-# it — most-reached-for first, the same _prioritize() ordering the bar has always
-# opened with — and every call after it lays the same keys out in the same
-# places. A verb that has since become unavailable is still here, holding its
-# slot greyed, so nothing to its right ever moves.
-func _in_slot_order(h, opts: Array) -> Array:
-	var spine: Array = _bar_order.get(h.id, [])
-	if spine.is_empty():
-		for o in _prioritize(opts):
-			var k0 := _slot_key(o)
-			if k0 != "" and not k0 in spine:
-				spine.append(k0)
-		_bar_order[h.id] = spine
-	var by_key := {}
-	var loose: Array = []      # no key of its own, or a second entry claiming one
-	for o in opts:
-		var k := _slot_key(o)
-		if k == "" or by_key.has(k):
-			loose.append(o)
-		else:
-			by_key[k] = o
-	var out: Array = []
-	for k in spine:
-		if by_key.has(k):
-			out.append(by_key[k])
-			by_key.erase(k)
-	for o in opts:             # anything granted since the spine was settled
-		var k := _slot_key(o)
-		if by_key.has(k):
-			out.append(o)
-			by_key.erase(k)
-			spine.append(k)    # ...and it holds that slot from now on
-	out.append_array(loose)
-	return out
-
-func _slot_key(opt: Array) -> String:
-	return String(opt[3].get("freq_key", "")) if opt.size() > 3 else ""
-
-func _bump_freq(key: String) -> void:
-	_verb_freq[key] = int(_verb_freq.get(key, 0)) + 1
-
-# Stable sort, most-used first — ties (including every verb tried 0 times, the
-# common case at the start of a fight) keep their original relative order, so
-# an unused kit doesn't shuffle itself every turn. Entries without a freq_key
-# in meta (the weapon-swap toggle, End turn, "‹ Back", ...) sort as count 0
-# but that's fine, callers only run this over the verb list before appending
-# those pinned entries.
-func _prioritize(opts: Array) -> Array:
-	var idx := range(opts.size())
-	idx.sort_custom(func(a, b):
-		var ka := _freq_of(opts[a])
-		var kb := _freq_of(opts[b])
-		if ka != kb:
-			return ka > kb
-		return a < b)
-	var out: Array = []
-	for i in idx:
-		out.append(opts[i])
-	return out
-
-func _freq_of(opt: Array) -> int:
-	if opt.size() <= 3:
-		return 0
-	var key := String(opt[3].get("freq_key", ""))
-	return int(_verb_freq.get(key, 0)) if key != "" else 0
 
 func _refresh() -> void:
 	_header.text = "The Sunken Shrine, round %d" % cb.round_num
