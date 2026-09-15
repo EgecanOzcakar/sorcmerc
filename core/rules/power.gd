@@ -156,8 +156,9 @@ static func _spell_power(sid: String, c) -> Dictionary:
 	var per_cast := 0.0
 	for d in m.get("damage", []):
 		var amount := avg(int(d.get("count", 1)), int(d.get("sides", 6)), int(d.get("plus", 0)))
-		# A shaped spell rarely catches more than a pair on a 9-wide board.
-		var targets: float = 1.5 if m.get("shape", "single") != "single" else 1.0
+		# A shaped spell: the autopilot only throws one where it nets two, and a
+		# corner circle or a line through a cluster catches about that.
+		var targets: float = 2.0 if m.get("shape", "single") != "single" else 1.0
 		var landed: float = 1.0
 		if m.has("save"):
 			landed = 1.0 - p_save(c.save_dc, REF_SAVE)

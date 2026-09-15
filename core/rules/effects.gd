@@ -168,7 +168,12 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 		# apply_condition's other duration is "forever", and nothing in the engine
 		# ends a concentration spell, so an unauthored duration would be a lockout.
 		v["conditions"] = m["conditions"]
-		v["duration"] = m.get("duration", "round")
+		# A concentration spell's conditions last while the caster holds it (up
+		# to combat.gd's CONCENTRATION_ROUNDS); the target repeats its save as
+		# `repeat_save` says — end of its turn by default, "on_damage", or
+		# "damage_ends" (any damage breaks it), "none" for the full duration.
+		v["duration"] = m.get("duration", "concentration" if m.get("concentration", false) else "round")
+		v["repeat_save"] = m.get("repeat_save", "end_turn")
 	if m.has("rays"):     # Scorching Ray: several independent attack rolls, one cast
 		var rays := int(m["rays"])
 		if up > 0 and m.has("upcast"):
@@ -192,10 +197,14 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 		v["heal_count"] = n
 		v["heal_sides"] = int(h.get("sides", 8))
 		v["heal_bonus"] = abil_mod if h.get("plus", "") == "ability_mod" else int(h.get("plus", 0))
-	if shape in ["cone", "line"]:
+	if shape == "cone":
 		v["targeting"] = "direction"
-	elif shape in ["sphere", "cube", "cylinder", "radius", "emanation"]:
-		v["targeting"] = "hex"
+	elif shape == "line":
+		v["targeting"] = "line"          # aimed at a hex, runs its full length through it
+	elif shape == "emanation":
+		v["targeting"] = "self_area"     # everything within size_ft of the caster
+	elif shape in ["sphere", "cube", "cylinder", "radius"]:
+		v["targeting"] = "area"          # adapter.gd sizes it: one hex, or a corner-anchored circle
 	else:
 		v["targeting"] = "ally" if v.has("heal_count") else "enemy"
 	return v

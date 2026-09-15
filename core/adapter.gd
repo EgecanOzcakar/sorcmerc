@@ -11,6 +11,7 @@ const PassGear = preload("res://core/rules/pass_gear.gd")
 # tests/test_combat.gd when you do.
 const FT_PER_HEX := 6      # 30 ft -> 5 hexes
 const RANGE_CAP := 8       # ranged attacks clamped to this many hexes
+const AREA_ONE_HEX_FT := 16   # a radius up to ~5 m is one hex; bigger is a corner circle
 
 static func hexes(ft: int) -> int:
 	return maxi(1, roundi(float(ft) / FT_PER_HEX))
@@ -242,14 +243,23 @@ static func _finish_verbs(c, saved_pools: Dictionary) -> void:
 			v["range"] = mini(RANGE_CAP, hexes(int(v["range_ft"])))
 		if int(v.get("size_ft", 0)) > 0:
 			v["radius"] = area_hexes(int(v["size_ft"]))
+		if v.get("targeting", "") == "area":
+			# Areas on this board: up to a 5 m radius is one hex; anything bigger
+			# is anchored on a hex corner and covers the hexes around it.
+			# ponytail: one corner ring for every 6-9 m area — the ring count is
+			# the knob if a 9 m circle should read bigger than a 6 m one.
+			if int(v["size_ft"]) <= AREA_ONE_HEX_FT:
+				v["targeting"] = "hex"
+			else:
+				v["targeting"] = "corner"
+				v["ring"] = 0
+		if v.get("targeting", "") == "line":
+			v["length"] = mini(RANGE_CAP, area_hexes(int(v.get("size_ft", 0))))
 		if v.has("pool") and not c.pools.has(v["pool"]):
 			var n := int(v.get("uses", 1))
 			var regen := _synthetic_regen(v["pool"], c.sheet)
 			c.pools[v["pool"]] = {"cur": int(saved_pools.get(v["pool"], n)), "max": n, "regen": regen}
-		# ponytail: hex-targeted areas (fireball) need an aiming mode no shipping
-		# build uses yet — drop them rather than offer a verb the UI can't point.
-		if v.get("targeting", "") != "hex":
-			keep.append(v)
+		keep.append(v)
 	c.verbs = keep
 
 # Areas floor rather than round: a 15 ft cone stays the 2-hex wedge the room was
