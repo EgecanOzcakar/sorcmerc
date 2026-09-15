@@ -910,6 +910,13 @@ func test_t33_spell_overrides() -> void:
 		check(int(m.get("level", -1)) == 0 or m.has("upcast"), "%s: upcast authored" % id)
 		check(int(m.get("level", -1)) > 0 or m.has("cantrip_scale"), "%s: cantrip scaling authored" % id)
 
+	# Unauthored spells take their range from the export's prose, not touch.
+	for pair in [["hold-person", 60], ["web", 60], ["fireball", 150], ["burning-hands", 5],
+			["hypnotic-pattern", 120], ["cure-wounds", 5]]:
+		check(int(Effects.spell(pair[0]).get("range_ft", 0)) == pair[1],
+			"%s reaches %d ft off its prose" % pair)
+	check(Effects.range_ft("1 mile") == 5280 and Effects.range_ft("Unlimited") == 5, "range prose edges")
+
 	# half-on-save is the difference between a dodge and a reduction — spot-check both ways.
 	check(Effects.spell("blight")["half_on_save"] and Effects.spell("cone-of-cold")["half_on_save"],
 		"Blight and Cone of Cold are save-for-half")

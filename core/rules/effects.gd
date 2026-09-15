@@ -44,7 +44,20 @@ static func spell(id: String) -> Dictionary:
 		return {}
 	merged["level"] = int(def.get("level", 0))
 	merged["concentration"] = def.get("concentration", false)
+	# The export's "range" is prose ("60 feet", "Touch", "Self (15-foot cone)");
+	# an authored range_ft wins, otherwise read it off the prose so Hold Person
+	# is not a touch spell. Self-origin shapes stay 5: the size is the cone.
+	if not merged.has("range_ft"):
+		merged["range_ft"] = range_ft(String(def.get("range", "")))
 	return merged
+
+static func range_ft(prose: String) -> int:
+	var t := prose.split(" ")
+	if t.size() >= 2 and t[1] == "feet":
+		return int(t[0])
+	if t.size() >= 2 and t[1] == "mile":
+		return 5280
+	return 5   # Touch, Self, Self (...), Unlimited
 
 # {by: "class_level"|"pb"|"ability_mod", class?, ability?, steps?, formula?} -> int.
 # A plain number passes through.
