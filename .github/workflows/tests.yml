@@ -45,3 +45,18 @@ jobs:
       # steps in this file, so a contributor runs the identical thing locally.
       - name: Run the headless suite
         run: tools/run_tests.sh
+
+  # The bug reporter's relay is a Cloudflare Worker, so it is JavaScript and the
+  # Godot image cannot run its tests. Its own job, on plain node: no network, no
+  # Cloudflare account, and it is seconds.
+  relay:
+    name: bug relay
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test the bug relay
+        working-directory: tools/bug-relay
+        run: node --test

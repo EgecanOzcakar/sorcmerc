@@ -28,6 +28,9 @@ core/            pure rules + game state, mostly no engine deps
   leveling.gd, progression.gd    per-character XP/level, and the meta-progression
                                   (lifetime XP unlocks species/classes/subclasses)
   achievements.gd, character_save.gd, settings.gd   local user:// persistence
+  bug_report.gd                  the in-game bug reporter's model: a breadcrumb
+                                  ring of the last things that happened, the
+                                  markdown body, and the prefilled GitHub link
   audio.gd, barks.gd, enemy_names.gd, ui_icons.gd, tutorial.gd   presentation
                                   data/helpers (procedural SFX, combat flavor
                                   lines, fantasy enemy names, the shared icon/
@@ -53,6 +56,11 @@ scenes/
                    character creation + leveling, roster management, the
                    character sheet, the meta-progression viewer, the
                    achievements viewer, the settings overlay
+  bugreport/       the "Report a bug" overlay: a title, what happened, and a
+                   look at the diagnostics before any of it leaves the machine
+tools/bug-relay/   the reporter's optional fallback: a Cloudflare Worker that
+                   holds a repo-scoped token and files a report as an issue when
+                   the player's browser will not open. Opt-in; see its README
 data/              the 5e SRD export (classes/spells/species/...), a 316-
                    entry hand-tagged bestiary, and data/effects/*.json (the
                    sorcmerc-authored mechanics layer over the raw export)
@@ -201,6 +209,44 @@ title screen; without it, "New run" goes straight to the open world.
 `SORCMERC_MODS_DIR` moves where community packs are read from, and
 `SORCMERC_UNLOCK_DLC=1` (like `SORCMERC_PLAYTEST=1`) owns every paid pack — see
 `docs/modding.md`.
+
+## Reporting a bug
+
+Every screen has a way in: **Report a bug** on the title screen's footer, in the
+open world's HUD bar (or `F3`), and in the combat screen's header (or `F3`). It
+opens GitHub's own new-issue form with the title, the description and a block of
+diagnostics already written, and the player presses Submit there.
+
+That last part is deliberate. A GitHub token in a shipped game is a token every
+player owns — the web export is a zip anyone can read — so the game holds no
+credentials at all and files nothing on anyone's behalf. The reporter's own
+account opens the issue, which also means we can reply to them. `core/bug_report.gd`
+has the long version of the argument.
+
+When that path is shut — a popup blocker on the web export, a machine with no
+handler for `https` — there is an optional second door: **Send it anonymously**
+posts the report to a small Cloudflare Worker (`tools/bug-relay/`) that holds a
+repo-scoped token and files the issue. It is the fallback and it stays the
+fallback, because the issue arrives with nobody to reply to; the filed issue
+says so on its own face. It is also entirely opt-in — the button only appears in
+a build with a relay compiled in, and the repo ships with none. See
+`tools/bug-relay/README.md` to deploy one, or don't, and the browser path is the
+only path.
+
+What rides along with the description: the build and engine version, the
+platform, the screen it was filed from and that screen's live state (the board
+mid-fight; the day, region, party and purse on the map), and a ring buffer of
+the last two dozen things the game narrated (repeats collapse to a count) — combat log lines, settlement
+messages, screen changes. The overlay shows all of it, verbatim, behind a fold
+before anything is sent. Every report is also written to `user://bug_reports/`
+first, so a blocked popup or a machine with no browser costs nothing.
+
+The version on a report comes from `application/config/version` in
+`project.godot`; `.github/workflows/release.yml` stamps the real tag into it at
+export time, so a run from source says `0.1.0-dev` and a release says `v0.2.1`.
+That workflow also stamps the relay URL, from a `BUG_RELAY_URL` repository
+variable, the same way. `SORCMERC_BUG_RELAY` overrides it for a local run
+against `wrangler dev`.
 
 ## Status
 
