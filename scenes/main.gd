@@ -531,6 +531,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 		# the icons aren't there — see Icons.verb_icon.
 		var meta := _mark(Icons.skill_icon(v), glyph, freq_key)
 		meta["slot_level"] = int(v.get("slot_level", 0))
+		meta["cost"] = String(v.get("cost", "action"))
 		if label.contains("★"):
 			meta["tier"] = label.substr(label.find("★"))   # the upcast slot, on the badge's corner
 		if _armed == String(v.get("id", "")):
@@ -588,41 +589,52 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 # --- the fixed bar --------------------------------------------------------
 #
 # Nine slots, the same for every character, the same every fight:
-#   [1] Attack  [2] Spells ▸  [3] Features ▸  [4] Dash  [5] Disengage
-#   [6] Dodge   [7] Help      [8] Hide        [9] Shove ▸     then
-#   [Tab] Swap weapon   [Space] End turn.
-# A slot the character has nothing for stays put, greyed. Spells, features
-# and the Shove choices open a submenu (numbered 1.., Esc back). No more
-# most-used-first reshuffling: the point of a fixed bar is that 4 is Dash on
-# Vera, on Ilsa, and next week.
-const SLOTS := ["attack", "spells", "features", "dash", "disengage", "dodge", "help", "hide", "shove"]
-const SLOT_NAMES := {"attack": "Attack", "spells": "Spells", "features": "Features", "dash": "Dash",
-	"disengage": "Disengage", "dodge": "Dodge", "help": "Help", "hide": "Hide", "shove": "Shove"}
+#   [1] Attack  [2] Spells ▸  [3] Features ▸  [4] Bonus ▸  [5] Dash
+#   [6] Disengage  [7] Dodge  [8] Hide  [9] Other ▸ (Help, Shove, Smash)
+#   then [Tab] Swap weapon   [Space] End turn.
+# A slot the character has nothing for stays put, greyed. Spells are always
+# grouped by level under [2]; [3] is the action-cost kit; [4] is everything
+# that costs a bonus action (or nothing) — Second Wind, Rage, Cunning Action's
+# Dash/Disengage/Hide, a Nick off-hand, Healing Word — so the second thing
+# you do each turn is one key away. No more most-used-first reshuffling: the
+# point of a fixed bar is that 5 is Dash on Vera, on Ilsa, and next week.
+const SLOTS := ["attack", "spells", "features", "bonus", "dash", "disengage", "dodge", "hide", "other"]
+const SLOT_NAMES := {"attack": "Attack", "spells": "Spells", "features": "Features", "bonus": "Bonus actions",
+	"dash": "Dash", "disengage": "Disengage", "dodge": "Dodge", "hide": "Hide", "other": "Help & Shove"}
+const LIST_SLOTS := ["spells", "features", "bonus", "other"]
 var _submenu := ""   # "" on the main bar, else the open slot's id (Esc goes back)
 
-# Which slot an entry belongs in, from the meta _build_hero_menu attached.
-static func _slot_of(opt: Array) -> String:
+# Which slots an entry belongs in, from the meta _build_hero_menu attached. A
+# bonus-action spell sits under [2] with its level AND under [4].
+static func _slots_of(opt: Array) -> Array:
 	var meta: Dictionary = opt[3] if opt.size() > 3 else {}
 	var key := String(meta.get("freq_key", ""))
+	var cost := String(meta.get("cost", "action"))
+	var out: Array = []
 	if key.begins_with("spell:"):
-		return "spells"
-	if key.begins_with("shove") or key == "smash":
-		return "shove"
-	if key in ["attack", "dash", "disengage", "dodge", "help", "hide"]:
-		return key
-	return "features"
+		out.append("spells")
+	elif key.begins_with("shove") or key in ["smash", "help"]:
+		out.append("other")
+	elif key in ["attack", "dash", "disengage", "dodge", "hide"] and cost == "action":
+		out.append(key)
+	elif cost != "bonus" and cost != "free":
+		out.append("features")
+	if cost == "bonus" or cost == "free":
+		out.append("bonus")
+	return out
 
 func _slotted(h, opts: Array) -> Array:
 	var by_slot := {}
 	for s in SLOTS:
 		by_slot[s] = []
 	for o in opts:
-		by_slot[_slot_of(o)].append(o)
+		for s in _slots_of(o):
+			by_slot[s].append(o)
 	var out: Array = []
 	for s in SLOTS:
 		var mine: Array = by_slot[s]
 		var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
-		if s in ["spells", "features", "shove"]:
+		if s in LIST_SLOTS:
 			if s == "spells":
 				mine.sort_custom(func(a, b): return _tier_of(a) < _tier_of(b) or (_tier_of(a) == _tier_of(b) and a[0] < b[0]))
 			var meta := _mark(_slot_icon(s), "▸")
@@ -675,19 +687,20 @@ func _slot_icon(s: String) -> Texture2D:
 	match s:
 		"spells": return Icons.school_icon("evocation")
 		"features": return Icons.verb_icon("self_buff")
-		"shove": return Icons.verb_icon("shove")
+		"bonus": return Icons.verb_icon("grant_action")
+		"other": return Icons.verb_icon("shove")
 	return Icons.verb_icon(s)
 
-# A slot's own list: numbered from 1, Esc (the last button) goes back. More
-# than nine spells are grouped by level first (the key is the level: 2-3-1
-# is "my first 2nd-level spell", every fight); any list still longer than
-# nine pages on slot 9 (More ▸), in a stable order.
+# A slot's own list: numbered from 1, Esc (the last button) goes back. Spells
+# are always grouped by level first (the key is the level: 2-3-1 is "my first
+# 2nd-level spell", every fight, whether you know three spells or thirty);
+# any list longer than nine pages on slot 9 (More ▸), in a stable order.
 const LIST_KEYS := 9
 
 func _open_submenu(h, slot: String, entries: Array, page := 0) -> void:
 	_submenu = slot
 	var back := ["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")]
-	if slot == "spells" and entries.size() > LIST_KEYS:
+	if slot == "spells":
 		var groups := {}
 		for e in entries:
 			var lvl := _tier_of(e)

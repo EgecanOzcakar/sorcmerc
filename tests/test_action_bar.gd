@@ -50,9 +50,9 @@ func _init() -> void:
 	# The fixed layout: nine slots, Swap, End turn — for every character.
 	check(labels.size() == 11, "eleven buttons: nine slots, Swap, End turn (got %d)" % labels.size())
 	check(labels[0].contains("Attack") and labels[1].contains("Spells") and labels[2].contains("Features")
-		and labels[3].contains("Dash") and labels[4].contains("Disengage") and labels[5].contains("Dodge")
-		and labels[6].contains("Help") and labels[7].contains("Hide") and labels[8].contains("Shove"),
-		"slots 1-9 are Attack, Spells, Features, Dash, Disengage, Dodge, Help, Hide, Shove (%s)" % str(labels))
+		and labels[3].contains("Bonus") and labels[4].contains("Dash") and labels[5].contains("Disengage")
+		and labels[6].contains("Dodge") and labels[7].contains("Hide") and labels[8].contains("Help"),
+		"slots 1-9 are Attack, Spells, Features, Bonus, Dash, Disengage, Dodge, Hide, Help & Shove (%s)" % str(labels))
 	check(labels[10].contains("End turn"), "the last button is End turn")
 	var keys: Array = main._buttons.get_children().map(func(b): return String(b.get_meta("hotkey", "")))
 	check(keys.slice(0, 9) == ["1", "2", "3", "4", "5", "6", "7", "8", "9"] and keys[9] == "Tab" and keys[10] == "Spc",
@@ -66,15 +66,29 @@ func _init() -> void:
 			vera = c
 	main._build_hero_menu(vera)
 	var vlabels: Array = await _labels(main)
-	check(vlabels.size() == 11 and vlabels[1].contains("Spells") and vlabels[3].contains("Dash"),
+	check(vlabels.size() == 11 and vlabels[1].contains("Spells") and vlabels[4].contains("Dash"),
 		"the fighter's bar has the same eleven slots in the same places")
 	var vkids: Array = main._buttons.get_children()
 	check(vkids[1].disabled, "a fighter's Spells slot is there, greyed")
-	check(not vkids[3].disabled, "...and her Dash is live")   # Attack may be greyed: nobody in reach yet
+	check(not vkids[4].disabled, "...and her Dash is live")   # Attack may be greyed: nobody in reach yet
+	# [4] Bonus: Vera's Second Wind is a bonus action, so it sits there (and not under Features)
+	main._press_hotkey(3)
+	var vbonus: Array = await _labels(main)
+	check(vbonus.any(func(l): return l.contains("Second Wind")), "Second Wind is under [4] Bonus (%s)" % str(vbonus))
+	main.board_cancel()
+	await process_frame
+	main._press_hotkey(2)
+	var vfeat: Array = await _labels(main)
+	check(not vfeat.any(func(l): return l.contains("Second Wind")), "...and not under [3] Features (%s)" % str(vfeat))
+	main.board_cancel()
+	await process_frame
 
-	# [2] opens the spell list: Burning Hands once (its tiers collapse), Esc back.
+	# [2] opens the level groups, always; Level 1 holds Burning Hands once (its tiers collapse), Esc back.
 	main._build_hero_menu(ilsa)
 	await process_frame
+	main._press_hotkey(1)
+	var lvl_labels: Array = await _labels(main)
+	check(lvl_labels[0].contains("Cantrips") and lvl_labels[1].contains("Level 1"), "three spells still get level groups (%s)" % str(lvl_labels))
 	main._press_hotkey(1)
 	var sub_labels: Array = await _labels(main)
 	var bh_buttons := sub_labels.filter(func(t): return t.contains("Burning Hands"))
@@ -82,6 +96,7 @@ func _init() -> void:
 	check(not sub_labels.any(func(t): return t.contains("★")), "no upcast tier leaks into the spell list as its own button")
 	check(sub_labels[-1].contains("Back") and String(main._buttons.get_children()[-1].get_meta("hotkey", "")) == "Esc",
 		"the spell list ends in Back, on Esc")
+	check(not sub_labels.any(func(l): return l.contains("Sacred Flame")), "Level 1 does not list the cantrip")
 	var lv: Array = main._buttons.get_children().map(func(b): return int(b.tooltip_text.length()))   # touch the buttons
 	check(lv.size() > 0, "spell buttons exist")
 
