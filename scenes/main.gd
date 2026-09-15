@@ -589,16 +589,17 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 # --- the fixed bar --------------------------------------------------------
 #
 # Nine slots, the same for every character, the same every fight:
-#   [1] Attack  [2] Spells ▸  [3] Features ▸  [4] Bonus ▸  [5] Dash
+#   [1] Attack  [2] Spells ▸  [3] Bonus ▸  [4] Features ▸  [5] Dash
 #   [6] Disengage  [7] Dodge  [8] Hide  [9] Other ▸ (Help, Shove, Smash)
 #   then [Tab] Swap weapon   [Space] End turn.
 # A slot the character has nothing for stays put, greyed. Spells are always
-# grouped by level under [2]; [3] is the action-cost kit; [4] is everything
-# that costs a bonus action (or nothing) — Second Wind, Rage, Cunning Action's
+# grouped by level under [2]; [3] is everything that costs a bonus action (or
+# nothing) — Second Wind, Rage, Cunning Action's
 # Dash/Disengage/Hide, a Nick off-hand, Healing Word — so the second thing
-# you do each turn is one key away. No more most-used-first reshuffling: the
+# you do each turn is one key away; [4] is the action-cost kit (Channel
+# Divinity today). No more most-used-first reshuffling: the
 # point of a fixed bar is that 5 is Dash on Vera, on Ilsa, and next week.
-const SLOTS := ["attack", "spells", "features", "bonus", "dash", "disengage", "dodge", "hide", "other"]
+const SLOTS := ["attack", "spells", "bonus", "features", "dash", "disengage", "dodge", "hide", "other"]
 const SLOT_NAMES := {"attack": "Attack", "spells": "Spells", "features": "Features", "bonus": "Bonus actions",
 	"dash": "Dash", "disengage": "Disengage", "dodge": "Dodge", "hide": "Hide", "other": "Help & Shove"}
 const LIST_SLOTS := ["spells", "features", "bonus", "other"]

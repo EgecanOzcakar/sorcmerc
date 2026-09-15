@@ -49,10 +49,10 @@ func _init() -> void:
 	var labels: Array = await _labels(main)
 	# The fixed layout: nine slots, Swap, End turn — for every character.
 	check(labels.size() == 11, "eleven buttons: nine slots, Swap, End turn (got %d)" % labels.size())
-	check(labels[0].contains("Attack") and labels[1].contains("Spells") and labels[2].contains("Features")
-		and labels[3].contains("Bonus") and labels[4].contains("Dash") and labels[5].contains("Disengage")
+	check(labels[0].contains("Attack") and labels[1].contains("Spells") and labels[2].contains("Bonus")
+		and labels[3].contains("Features") and labels[4].contains("Dash") and labels[5].contains("Disengage")
 		and labels[6].contains("Dodge") and labels[7].contains("Hide") and labels[8].contains("Help"),
-		"slots 1-9 are Attack, Spells, Features, Bonus, Dash, Disengage, Dodge, Hide, Help & Shove (%s)" % str(labels))
+		"slots 1-9 are Attack, Spells, Bonus, Features, Dash, Disengage, Dodge, Hide, Help & Shove (%s)" % str(labels))
 	check(labels[10].contains("End turn"), "the last button is End turn")
 	var keys: Array = main._buttons.get_children().map(func(b): return String(b.get_meta("hotkey", "")))
 	check(keys.slice(0, 9) == ["1", "2", "3", "4", "5", "6", "7", "8", "9"] and keys[9] == "Tab" and keys[10] == "Spc",
@@ -71,15 +71,15 @@ func _init() -> void:
 	var vkids: Array = main._buttons.get_children()
 	check(vkids[1].disabled, "a fighter's Spells slot is there, greyed")
 	check(not vkids[4].disabled, "...and her Dash is live")   # Attack may be greyed: nobody in reach yet
-	# [4] Bonus: Vera's Second Wind is a bonus action, so it sits there (and not under Features)
-	main._press_hotkey(3)
+	# [3] Bonus: Vera's Second Wind is a bonus action, so it sits there (and not under Features)
+	main._press_hotkey(2)
 	var vbonus: Array = await _labels(main)
-	check(vbonus.any(func(l): return l.contains("Second Wind")), "Second Wind is under [4] Bonus (%s)" % str(vbonus))
+	check(vbonus.any(func(l): return l.contains("Second Wind")), "Second Wind is under [3] Bonus (%s)" % str(vbonus))
 	main.board_cancel()
 	await process_frame
-	main._press_hotkey(2)
+	main._press_hotkey(3)
 	var vfeat: Array = await _labels(main)
-	check(not vfeat.any(func(l): return l.contains("Second Wind")), "...and not under [3] Features (%s)" % str(vfeat))
+	check(not vfeat.any(func(l): return l.contains("Second Wind")), "...and not under [4] Features (%s)" % str(vfeat))
 	main.board_cancel()
 	await process_frame
 
