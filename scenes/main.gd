@@ -544,6 +544,8 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 				entry = [label + "…", func(): _enter_target(h, v), tip, meta]
 			"direction":
 				entry = [label + " (aim…)", func(): _enter_cone(h, v), tip, meta]
+			"hex", "corner", "line":
+				entry = [label + " (aim…)", func(): _enter_area(h, v), tip, meta]
 			_:
 				if _costly(v):
 					var opt := _confirm_opt(h, v["id"], label, func(): cb.perform(h, v); _after_hero_action(h))
@@ -741,6 +743,26 @@ func _enter_cone(h, v: Dictionary) -> void:
 		_mark(Icons.verb_icon("back"), "‹")]])
 	_board.queue_redraw()
 
+# A hex, a corner or a line: the board's hover is the aim; click commits.
+func _enter_area(h, v: Dictionary) -> void:
+	_mode = "area"
+	_tgt_verb = v
+	var how: String = {"hex": "hover a hex", "corner": "hover a hex corner", "line": "hover a hex to aim the line"}.get(v["targeting"], "aim")
+	_actor.text = "%s — %s: %s, click to cast.  (Esc / right-click cancels)" % [h.cname, v["label"], how]
+	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
+		_mark(Icons.verb_icon("back"), "‹")]])
+	_board.queue_redraw()
+
+# What the pending area verb would cover at the board's current hover, [] if
+# it can't be aimed there. Shared by the preview and the click.
+func _area_aim(h) -> Array:
+	if _tgt_verb.is_empty():
+		return []
+	var target = _board.aim_target(_tgt_verb["targeting"])
+	if target == null or not cb.legal_area(h, _tgt_verb, target):
+		return []
+	return cb.area_hexes(h, _tgt_verb, target)
+
 func _enter_target(h, v: Dictionary) -> void:
 	_mode = "target"
 	_tgt_verb = v
@@ -799,6 +821,17 @@ func board_hex_clicked(hx: Vector2i) -> void:
 			if _fx_on:
 				var swept := Hex.cone(h.pos, dir, int(v.get("radius", 2)))
 				_board.play_fx("spell", h.id, h.pos, swept[swept.size() - 1] if not swept.is_empty() else h.pos, swept)
+			_after_hero_action(h)
+	elif _mode == "area":
+		var target = _board.aim_target(_tgt_verb["targeting"])
+		if target != null and cb.legal_area(h, _tgt_verb, target):
+			_mode = "idle"
+			var v := _tgt_verb
+			_tgt_verb = {}
+			var swept: Array = cb.area_hexes(h, v, target)
+			cb.perform(h, v, target)
+			if _fx_on and not swept.is_empty():
+				_board.play_fx("spell", h.id, h.pos, swept[-1], swept)
 			_after_hero_action(h)
 	elif _mode == "target":
 		for c in cb.combatants:
@@ -1480,6 +1513,16 @@ class Board extends Control:
 	var _floats: Array = []   # {pos: Vector2, text, color, age}
 	var _flash := {}     # id -> ttl
 	var _hover := Vector2i(999, 999)
+	var _hover_pt := Vector2(1e9, 1e9)   # un-iso'd pixel point under the mouse, for corner aiming
+
+	# The aim for an area verb at the current hover: a hex, a corner (three
+	# hexes) or the aimed hex of a line; null when the mouse is off the board.
+	func aim_target(kind: String):
+		if not (_hover in cb.board["hexes"]):
+			return null
+		if kind == "corner":
+			return Hex.corner_at(_hover_pt, main.hex_px)
+		return _hover
 	var _reveal = null   # {tid, dice, nat, bonus, total, ac, hit, crit, age}
 	var _barks := {}     # id -> {text, age}; drained from cb.barks (T26)
 	const BARK_TTL := 2.2
@@ -1772,9 +1815,12 @@ class Board extends Control:
 				main.pan_by(e.relative)
 				return
 			var hx := _unpix(e.position)
+			_hover_pt = _iso_inv(e.position - _origin)
 			if hx != _hover:
 				_hover = hx
 				main.board_hex_hovered(hx)
+			elif main._mode == "area":
+				queue_redraw()   # a corner can change without the hex changing
 		elif e is InputEventMouseButton and e.pressed:
 			if e.button_index == MOUSE_BUTTON_WHEEL_UP:
 				_zoom_at(e.position, 1.1)
@@ -1892,6 +1938,9 @@ class Board extends Control:
 			if dir != Vector2i.ZERO:
 				for hx in Hex.cone(cur.pos, dir, int(main._tgt_verb.get("radius", 2))):
 					cone_hexes[hx] = true
+		if hero_turn and main._mode == "area":
+			for hx in main._area_aim(cur):
+				cone_hexes[hx] = true
 
 		# tiles
 		var decor: Array = []   # foliage, drawn after every tile so it can overhang

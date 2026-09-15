@@ -110,7 +110,7 @@
   },
   "hideous-laughter": {
     "cost": "action", "shape": "single", "range_ft": 30, "save": "wis",
-    "conditions": ["prone", "incapacitated"], "duration": "round",
+    "conditions": ["prone", "incapacitated"], "repeat_save": "on_damage",
     "upcast": {"per_level": {"count": 0}}
   },
   "sleep": {
@@ -120,7 +120,7 @@
   },
   "fear": {
     "cost": "action", "shape": "cone", "size_ft": 30, "range_ft": 5, "save": "wis",
-    "conditions": ["frightened"], "duration": "round",
+    "conditions": ["frightened"],
     "upcast": {"per_level": {"count": 0}}
   },
   "blight": {
@@ -134,26 +134,26 @@
     "upcast": {"per_level": {"count": 1, "sides": 8}}
   },
 
-  "_note_ranges": "2026-09-15: range_ft for every combat-castable spell the regex draft left rangeless (it never carries a range, so effects.gd defaulted them all to 5 ft = touch). The ten marked _area are really areas; the adapter drops hex-targeted verbs (no aiming mode yet), so they stay single-target at the right range until that lands. lightning-bolt (100 ft line) is left unauthored on purpose: cast() draws every direction verb as a cone wedge, and a 16-hex wedge is worse than a touch bolt.",
-  "charm-person": {"shape": "single", "range_ft": 30},
+  "_note_ranges": "2026-09-15: range_ft for every combat-castable spell the regex draft left rangeless (it never carries a range, so effects.gd defaulted them all to 5 ft = touch). Areas carry shape + size_ft: up to a 5 m radius is one hex, bigger is a corner-anchored circle, a line runs from the caster through the aimed hex (adapter.gd _finish_verbs). Concentration spells hold their conditions until concentration ends; repeat_save says how the target shakes one off (end_turn default, on_damage, damage_ends, none).",
+  "charm-person": {"shape": "single", "range_ft": 30, "repeat_save": "none"},
   "hunters-mark": {"shape": "single", "range_ft": 90},
-  "calm-emotions": {"shape": "single", "range_ft": 60, "_area": true},
-  "hold-person": {"shape": "single", "range_ft": 60},
-  "moonbeam": {"shape": "single", "range_ft": 120, "_area": true},
-  "phantasmal-force": {"shape": "single", "range_ft": 60},
-  "web": {"shape": "single", "range_ft": 60, "_area": true},
-  "hypnotic-pattern": {"shape": "single", "range_ft": 120, "_area": true},
-  "stinking-cloud": {"shape": "single", "range_ft": 90, "_area": true},
-  "banishment": {"shape": "single", "range_ft": 30},
-  "charm-monster": {"shape": "single", "range_ft": 30},
-  "dominate-beast": {"shape": "single", "range_ft": 60},
-  "evards-black-tentacles": {"shape": "single", "range_ft": 90, "_area": true},
-  "ice-storm": {"shape": "single", "range_ft": 300, "_area": true},
-  "wall-of-fire": {"shape": "single", "range_ft": 120, "_area": true},
-  "dominate-person": {"shape": "single", "range_ft": 60},
-  "flame-strike": {"shape": "single", "range_ft": 60, "_area": true},
-  "hold-monster": {"shape": "single", "range_ft": 90},
-  "insect-plague": {"shape": "single", "range_ft": 300, "_area": true},
+  "calm-emotions": {"shape": "sphere", "size_ft": 20, "range_ft": 60, "repeat_save": "none"},
+  "hold-person": {"shape": "single", "range_ft": 60, "repeat_save": "end_turn"},
+  "moonbeam": {"shape": "cylinder", "size_ft": 5, "range_ft": 120},
+  "phantasmal-force": {"shape": "single", "range_ft": 60, "repeat_save": "end_turn"},
+  "web": {"shape": "cube", "size_ft": 20, "range_ft": 60, "repeat_save": "end_turn"},
+  "hypnotic-pattern": {"shape": "cube", "size_ft": 30, "range_ft": 120, "repeat_save": "damage_ends"},
+  "stinking-cloud": {"shape": "sphere", "size_ft": 20, "range_ft": 90, "repeat_save": "end_turn"},
+  "banishment": {"shape": "single", "range_ft": 30, "repeat_save": "none"},
+  "charm-monster": {"shape": "single", "range_ft": 30, "repeat_save": "none"},
+  "dominate-beast": {"shape": "single", "range_ft": 60, "repeat_save": "on_damage"},
+  "evards-black-tentacles": {"shape": "sphere", "size_ft": 20, "range_ft": 90, "repeat_save": "end_turn"},
+  "ice-storm": {"shape": "cylinder", "size_ft": 20, "range_ft": 300},
+  "wall-of-fire": {"shape": "line", "size_ft": 60, "range_ft": 120},
+  "dominate-person": {"shape": "single", "range_ft": 60, "repeat_save": "on_damage"},
+  "flame-strike": {"shape": "cylinder", "size_ft": 10, "range_ft": 60},
+  "hold-monster": {"shape": "single", "range_ft": 90, "repeat_save": "end_turn"},
+  "insect-plague": {"shape": "sphere", "size_ft": 20, "range_ft": 300},
   "modify-memory": {"shape": "single", "range_ft": 30},
   "steel-wind-strike": {"shape": "single", "range_ft": 30},
   "heroism": {"shape": "single", "range_ft": 5},
@@ -161,5 +161,6 @@
   "greater-invisibility": {"shape": "single", "range_ft": 5},
   "freedom-of-movement": {"shape": "single", "range_ft": 5},
   "crusaders-mantle": {"shape": "single", "range_ft": 5},
-  "ensnaring-strike": {"shape": "single", "range_ft": 5}
+  "ensnaring-strike": {"shape": "single", "range_ft": 5},
+  "lightning-bolt": {"shape": "line", "size_ft": 100, "range_ft": 5}
 }

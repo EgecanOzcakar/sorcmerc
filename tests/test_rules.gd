@@ -929,7 +929,9 @@ func test_t33_spell_overrides() -> void:
 		var m := Effects.spell(id)
 		check(not m.is_empty() and not m.has("damage"), "%s is castable on its condition alone" % id)
 		check(m.get("save", "") == "wis", "%s forces a WIS save" % id)
-		check(m.get("duration", "") == "round", "%s's condition is not a permanent lockout" % id)
+		# one round, or held by concentration (which combat.gd ends) — never forever
+		check(m.get("duration", "round") == "round" or m.get("concentration", false),
+			"%s's condition is not a permanent lockout" % id)
 	check(Effects.spell("hideous-laughter")["conditions"] == ["prone", "incapacitated"],
 		"Hideous Laughter drops the target prone AND incapacitated")
 	check(Effects.spell("sleep")["conditions"] == ["incapacitated"], "Sleep incapacitates")
@@ -950,8 +952,8 @@ func test_t33_spell_overrides() -> void:
 	check(by_id["ray-of-frost"]["targeting"] == "enemy" and int(by_id["ray-of-frost"]["dice_count"]) == 1,
 		"a cantrip is one die below level 5")
 	var hl: Dictionary = by_id["hideous-laughter"]
-	check(hl["conditions"] == ["prone", "incapacitated"] and hl["duration"] == "round",
-		"the conditions and their duration ride the verb")
+	check(hl["conditions"] == ["prone", "incapacitated"] and hl["duration"] == "concentration"
+		and hl["repeat_save"] == "on_damage", "the conditions, their duration and the repeat save ride the verb")
 	check(not hl.has("dice_count") and int(hl["save_dc"]) == 13, "no damage, but the caster's DC")
 	check(by_id.has("cone-of-cold") and not by_id.has("cone-of-cold@6"),
 		"a 5th-level spell offers its base level only — Ilsa has no headroom above it")
@@ -974,7 +976,10 @@ func test_power_ranks_the_heroes() -> void:
 	# a Light cleric with real access to Burning Hands AND Scorching Ray outdamages
 	# a sword-and-board fighter over 4 rounds, which is the estimator being honest,
 	# not a bug. Pike last: single-target, 21 HP, AC 15.
-	check(scores["vera"] > scores["pike"] and absf(scores["vera"] - scores["ilsa"]) < 1.0,
+	# Areas now price at two targets (the corner circle / the line land on a
+	# cluster, and the autopilot only throws one where it nets two): ilsa 19.6,
+	# a clear step over vera rather than a dead heat, still the same tier.
+	check(scores["vera"] > scores["pike"] and absf(scores["vera"] - scores["ilsa"]) < 3.0,
 		"vera clears the weaker martial, and stays close to the front-loaded caster")
 	check(scores["pike"] > float(goblin["score"]), "even the squishiest hero beats a mook")
 	check(float(boss["score"]) > float(goblin["score"]) * 2.0, "the brute outscores a mook several times over")

@@ -121,6 +121,32 @@ static func _away(threats: Array) -> Callable:
 			m = mini(m, Hex.distance(h, t.pos))
 		return float(m)
 
+# The aim for an area verb that catches the most foes net of allies — every
+# enemy's hex (and, for a corner circle, each corner of it) is a candidate.
+# null unless some aim nets at least two.
+static func _best_area(cb, h, v: Dictionary):
+	var best = null
+	var best_net := 1
+	var cands: Array = []
+	for f in cb.enemies_of(h):
+		if not f.conscious():
+			continue
+		if v["targeting"] == "corner":
+			for k in 6:
+				cands.append(Hex.corner(f.pos, k))
+		else:
+			cands.append(f.pos)
+	for aim in cands:
+		if not cb.legal_area(h, v, aim):
+			continue
+		var hexes: Array = cb.area_hexes(h, v, aim)
+		var net: int = cb.enemies_of(h).filter(func(c): return c.conscious() and c.pos in hexes).size() \
+			- cb.allies_of(h).filter(func(c): return c.conscious() and c.pos in hexes).size()
+		if net > best_net:
+			best_net = net
+			best = aim
+	return best
+
 # --- foes ------------------------------------------------------------
 
 # A shooter with an enemy adjacent fires at disadvantage. If one move can reach a
@@ -223,6 +249,14 @@ static func _party_auto(cb, h) -> void:
 		var t = _nearest(h.pos, foes)
 		_move_by(cb, h, _toward(t.pos))
 		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
+
+	# caster: an area spell (a hex, a corner circle, a line) where it nets 2+ foes
+	var area := _pick(cb, h, func(v): return v.get("targeting", "") in ["hex", "corner", "line"])
+	if not area.is_empty():
+		var aim = _best_area(cb, h, area)
+		if aim != null:
+			cb.perform(h, area, aim)
+			return
 
 	# caster: a cone spell if the wedge catches 2+ foes and no ally
 	var cone := _pick(cb, h, func(v): return v.get("targeting", "") == "direction")
