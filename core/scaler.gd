@@ -22,10 +22,10 @@
 # perimeter) with areas castable and concentration held — the party got
 # Fireball, the foes got room, and both ends of the curve moved. TIER down,
 # CURVE up to 1.15 so a level-8 party (score 116) buys a roster it can lose to:
-#   easy   TIER 0.64 -> avg 4.1 foes x0.89 : 188W/12L  (94.0%)  avg 6.7 rounds
-#   normal TIER 0.78 -> avg 4.2 foes x0.88 : 166W/34L  (83.0%)  avg 7.5 rounds
-#   hard   TIER 0.92 -> avg 4.4 foes x0.93 : 147W/53L  (73.5%)  avg 8.4 rounds
-# Level 8, 150 seeds: 98 / 85 / 71% (was 99 / 96 / 90 before CURVE moved).
+#   easy   TIER 0.64 -> avg 4.1 foes x0.89 : 189W/11L  (94.5%)  avg 6.3 rounds
+#   normal TIER 0.78 -> avg 4.2 foes x0.88 : 168W/32L  (84.0%)  avg 7.7 rounds
+#   hard   TIER 0.92 -> avg 4.4 foes x0.93 : 151W/49L  (75.5%)  avg 8.2 rounds
+# Level 8, 150 seeds: 98 / 83 / 70% (was 99 / 96 / 90 before CURVE moved).
 #
 # RETUNED 2026-09-15. 6b098e8 let a mover pass through allies (correct 5e; the
 # same rule BG3 uses), and the numbers below fell to easy 80 / normal 68 / hard

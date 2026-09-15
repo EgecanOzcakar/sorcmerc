@@ -101,7 +101,8 @@ static func _grow(b: Dictionary, seed: int) -> Dictionary:
 		if floor.has(out):
 			continue
 		for h in [out] + Hex.within(out, rng.randi_range(1, 2)):
-			floor[h] = true
+			if h.x >= q0 - 1 and h.x <= q1 + 1:   # lumps grow up and down, not along the road
+				floor[h] = true
 	for _i in BOARD_BITES:
 		var edge := _perimeter(floor)
 		var at: Vector2i = edge[rng.randi_range(0, edge.size() - 1)]
@@ -161,17 +162,24 @@ static func _all_connected(floor: Dictionary) -> bool:
 # region_at answers for the mirrored hex's twin, so narration keeps its names.
 # ponytail: a mirror, not a second authored half per theme — author one when
 # a board needs an asymmetric far end.
+const BOARD_OVERLAP := 3     # columns the mirror shares with the room: 0 is a full-length road
+
 static func _widen(b: Dictionary) -> Dictionary:
 	var qmax := 0
 	for h in b["hexes"]:
 		qmax = maxi(qmax, h.x)
-	var flip := func(p: Vector2i) -> Vector2i: return Vector2i(2 * qmax + 1 - p.x, p.y)
+	# a narrow room (the shop, 5 wide) overlaps less so the far side still sits a SPAWN_GAP away
+	var overlap: int = clampi(2 * (qmax + 1) - 10, 0, BOARD_OVERLAP)
+	var flip := func(p: Vector2i) -> Vector2i: return Vector2i(2 * qmax + 1 - overlap - p.x, p.y)
+	# the shared columns keep the room's own furniture; the mirror only adds what lands on fresh ground
 	for k in ["hexes", "cover", "rough"]:
-		b[k] = b[k] + b[k].map(flip)
+		var have: Array = b[k]
+		b[k] = have + have.map(flip).filter(func(h): return not (h in have))
+	var taken: Array = b["objects"].map(func(o): return o["pos"])
 	var twins: Array = b["objects"].duplicate(true)
 	for o in twins:
 		o["pos"] = flip.call(o["pos"])
-	b["objects"] = b["objects"] + twins
+	b["objects"] = b["objects"] + twins.filter(func(o): return not (o["pos"] in taken))
 	var src: Callable = b["region_at"]
 	b["region_at"] = func(p: Vector2i) -> String: return src.call(p if p.x <= qmax else flip.call(p))
 	return b
@@ -401,7 +409,13 @@ static func _foe_spots(b: Dictionary, party_c: Array) -> Array:
 	var taken: Array = party_c.map(func(c): return c.pos)
 	var blocked: Array = b.get("objects", []).filter(
 		func(o): return o.get("blocks_movement", false)).map(func(o): return o["pos"])
+	# The party enters from the low-q end, so "ahead" is past its front rank:
+	# a foe a gap away but behind the party is the ground's shape, not an ambush.
+	var front := -(1 << 30)
+	for p in taken:
+		front = maxi(front, p.x)
 	var out: Array = []
+	var behind: Array = []
 	var far: Array = []
 	for h in b["hexes"]:
 		if h in taken or h in blocked:
@@ -410,12 +424,14 @@ static func _foe_spots(b: Dictionary, party_c: Array) -> Array:
 		for p in taken:
 			d = mini(d, Hex.distance(h, p))
 		if d >= SPAWN_GAP:
-			out.append([d, h])
+			(out if h.x > front else behind).append([d, h])
 		else:
 			far.append([d, h])
 	out.sort_custom(func(a, c): return a[0] < c[0])
+	behind.sort_custom(func(a, c): return a[0] < c[0])
 	far.sort_custom(func(a, c): return a[0] > c[0])
-	out.append_array(far)   # overflow: the least-bad remaining hexes
+	out.append_array(behind)   # only once the ground ahead is full
+	out.append_array(far)      # overflow: the least-bad remaining hexes
 	return out.map(func(e): return e[1])
 
 # --- T39: surprise ----------------------------------------------------
