@@ -4269,7 +4269,19 @@ with a 200, and the only thing that catches it is looking at the samples.
 Everything the game had a sound for fired when something *landed*. Twelve
 moments that fired with no audio at all now have one, generated the same way:
 a prompt in `tools/gen_audio_elevenlabs.py`, a synthesized recipe of the same
-name in `tools/gen_audio.py`, so either tool can still write any id.
+name in `tools/gen_audio.py`, so either tool can still write any id. **All
+twelve committed WAVs are the generated takes**, like the 31 stings before
+them; the synthesized recipes are the fallback, not what shipped.
+
+All twelve came back usable on the first pass, which is worth recording
+because the earlier batch did not: peaks landed between 23464 and 63957 — a
+spread of nearly 9 dB, one of them clipping at full scale — and every one was
+normalized to `gen_audio.py`'s 28480 so the set mixes with its neighbours.
+Lengths came back at roughly 2× what was asked, as before, and trimming took
+`quest_complete` from 4.00s to 2.44s and `shop` from 2.40s to 1.11s. `miss`
+matters most here and landed at 0.66s — short enough to fire on every other
+attack roll without queueing, which is what the half-second API floor and the
+window-RMS trim exist to get.
 
 `miss` / `miss_ranged` are the ones that change how a fight reads. A missed
 attack was silent, which meant roughly half of all attack rolls resolved into
