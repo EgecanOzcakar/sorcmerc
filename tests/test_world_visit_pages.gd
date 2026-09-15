@@ -180,6 +180,31 @@ func _init() -> void:
 		check(press(main._visit_panel, "Identify"), "...and reads it for the fee")
 		check(main.party.stash_count("spell-scroll", true) >= 1, "...leaving it identified")
 
+	# --- D7: a job hangs at the counter whose job it is -------------------
+	# The notice board used to be the only place work appeared. A specialist's
+	# standing order now sits at that specialist's own tab, and must NOT also be
+	# on the board — a job in two places is a job you take twice by accident.
+	press(main._visit_panel, "Town Square")
+	var counter_jobs: Dictionary = main._counter_offers(main._visit["settlement"])
+	for counter in counter_jobs:
+		if counter == "board":
+			continue
+		var job: Dictionary = counter_jobs[counter][0]
+		var headline: String = String(job["title"]).split(":")[0]
+		press(main._visit_panel, "Town Square")
+		press(main._visit_panel, "Notice Board")
+		check(not has_label(main._visit_panel, headline),
+			"the %s's own order is not also on the notice board" % counter)
+		press(main._visit_panel, "Town Square")
+		press(main._visit_panel, "Market")
+		main._goto_market_tab(counter)
+		check(has_label(main._visit_panel, headline),
+			"...it is at the %s's counter" % counter)
+		var logged: int = main.party.quests.size()
+		check(press(main._visit_panel, "Take"), "...where it can be taken")
+		check(main.party.quests.size() == logged + 1, "...and lands in the log")
+		break
+
 	# --- T9y: the inn explains itself -------------------------------------
 	press(main._visit_panel, "Town Square")
 	press(main._visit_panel, "Inn")

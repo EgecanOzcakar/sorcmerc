@@ -182,6 +182,12 @@ func test_mult_scales_the_instance_not_the_data() -> void:
 	check(small.max_hp < base.max_hp and small.atk_bonus < base.atk_bonus, "a mult below 1 weakens")
 	check(Encounter.spawn("grull", 1.0, "foe", Vector2i.ZERO).max_hp == base.max_hp,
 		"monsters.json is untouched by scaling")
+	# a caster's DC moves with its to-hit; a brute with no DC stays at 0
+	var hyena = Encounter.spawn("hyena", 1.5, "foe", Vector2i.ZERO)
+	var hyena1 = Encounter.spawn("hyena", 1.0, "foe", Vector2i.ZERO)
+	check(hyena.save_dc == hyena1.save_dc + (hyena.atk_bonus - hyena1.atk_bonus),
+		"mult raises save DC in step with to-hit (%d -> %d)" % [hyena1.save_dc, hyena.save_dc])
+	check(big.save_dc == 0 if base.save_dc == 0 else true, "no DC stays no DC")
 
 func test_outcome_victory() -> void:
 	var party := Party.new()

@@ -3,7 +3,7 @@
 
     export ELEVENLABS_API_KEY=...
     python3 tools/gen_audio_elevenlabs.py --list          # the prompts, writes nothing
-    python3 tools/gen_audio_elevenlabs.py sfx             # regenerate all 31 stings
+    python3 tools/gen_audio_elevenlabs.py sfx             # regenerate all 43 stings
     python3 tools/gen_audio_elevenlabs.py --only hit,crit # just those two
     python3 tools/gen_audio_elevenlabs.py sfx barks       # stings and the voice stingers
 
@@ -30,11 +30,10 @@ API: POST https://api.elevenlabs.io/v1/sound-generation, `xi-api-key` header.
 `prompt_influence` trades faithfulness to the prompt against the model's own
 judgement -- high for a sound with a precise brief (a click), lower where the
 model has more room (a victory sting). Cost is per generation and this writes
-31 of them for `sfx`, so --only is the normal way to use it.
+43 of them for `sfx`, so --only is the normal way to use it.
 """
 import argparse
 import json
-import math
 import os
 import struct
 import sys
@@ -54,11 +53,11 @@ SR = 44100
 CHANNELS = 1
 KEY_ENV = "ELEVENLABS_API_KEY"
 
-# What comes back is NOT drop-in on its own, and every reason is measurable
+# What comes back is NOT drop-in on its own, and both reasons are measurable
 # against the synthesized set it has to sit beside:
 #
 #  * LEVEL. tools/gen_audio.py peak-normalizes every sting to 28480 (-1.2 dBFS),
-#    uniformly, every one of them. A generated take lands where it lands -- the
+#    uniformly, all 14 of them. A generated take lands wherever it lands -- the
 #    first click back was 7691, a quarter of that -- so dropping it in unchanged
 #    makes one sound in the game four times quieter than its neighbours. Matched
 #    to the same number rather than a number of my own, so the two sets mix.
@@ -66,21 +65,7 @@ KEY_ENV = "ELEVENLABS_API_KEY"
 #    click was 0.96s, against 0.06s for the synthesized one. Almost all of that
 #    is silence after the sound, and a UI click that holds an audio voice for a
 #    second is a click you can hear queueing. Trimmed to the actual sound.
-#  * RUMBLE. Takes come back with content under the audible band, and enough of
-#    it to fail tools/check_audio.py's DC-offset check: the first evocation cast
-#    read a mean of 0.0738 against a 0.02 limit, the first thrown hit 0.0226.
-#    Neither is a fixed bias -- the cast's mean decays from 0.152 to zero with
-#    its own envelope and the hit's swings +0.140 then -0.197 -- so subtracting
-#    the mean would flatten the hit's sub-bass thump, which is the sound, not a
-#    fault in it. What both have is energy near 1 Hz that no speaker reproduces
-#    and every meter counts. High-passed instead, so the thump survives.
 PEAK = 28480                # tools/gen_audio.py's own normalization target
-# One pole is 6 dB/oct, which still leaves a quarter of a 1 Hz component behind;
-# two gets the evocation cast's 0.0738 to 0.0002 while costing a 60 Hz impact
-# 0.25 dB. Cutting at 20 rather than 30 Hz for the same reason: the lowest thing
-# in these files worth keeping is a body-blow thump around 50 Hz.
-HP_HZ = 20.0
-HP_POLES = 2
 # Silence is judged over a WINDOW, not per sample. A take's noise floor is not
 # flat -- the first usable click came back with the sound over by 200 ms and a
 # single stray sample at 0.8% FS near the very end, which is enough to defeat a
@@ -171,6 +156,57 @@ SFX = {
     "cast_necromancy": ("A necromancy death spell being cast, a low ominous droning bend "
                         "downward with a rasping breath and a hollow wrong note, dark "
                         "fantasy game magic", 1.3, 0.5),
+
+    # The silent moments. Everything above fires when something LANDS; a fight is
+    # at least as much the swings that don't, the saves that hold, and the hero
+    # who drops. Those fired with no audio at all until now.
+    #
+    # A miss is the hardest of these to get right and the most often heard: it
+    # must read as "nothing happened" while still being a sound, so it is air
+    # and no impact. Kept quieter and shorter than `hit` on purpose — it lands
+    # on roughly half of all attack rolls, and a miss as loud as a hit is a
+    # fight that sounds like it is going twice as well as it is.
+    "miss": ("A sword swung hard through empty air and missing, a fast clean whoosh "
+             "with no impact at all, dry, close, no reverb tail", 0.5, 0.8),
+    "miss_ranged": ("An arrow whistling past close by and clattering off stone somewhere "
+                    "behind, a quick whistle then a small sharp skitter, dry", 0.7, 0.75),
+
+    # Saves. A pair, so they read against each other: the same event resolving
+    # two ways. Made is bright and upward and over quickly; failed is dull and
+    # downward. Neither is a full sting — they ride under the spell that caused
+    # them, which is already making noise.
+    "save_made": ("A magical ward deflecting a spell, a short bright metallic shimmer "
+                  "glancing away, resonant but brief", 0.6, 0.65),
+    "save_failed": ("A spell striking home through failing defenses, a dull heavy "
+                    "downward thud with a brief dark shudder, no brightness", 0.7, 0.65),
+
+    # `down` was `kill`'s asset until now — the same crash for a hero dropping as
+    # for a foe dying, which made a party wipe sound like a victory. A body going
+    # down but not out: heavier on the armor, no finality.
+    "down": ("An armored warrior dropping to their knees and slumping onto stone, a "
+             "heavy weary collapse with armor rattling, no final crash", 1.0, 0.6),
+    "burst": ("A wooden barrel exploding, splintering wood and a sharp percussive blast "
+              "with a deep thump underneath, brief and violent, dry", 1.0, 0.7),
+
+    # Conditions and exhaustion. `condition` fires whenever a status lands, which
+    # is often, so it is deliberately small — a marker, not an event.
+    "condition": ("A dark magical affliction taking hold, a short low sickly warble "
+                  "sinking downward with a faint unpleasant buzz", 0.7, 0.6),
+    "collapse": ("An exhausted armored figure collapsing face-first onto stone, a heavy "
+                 "limp fall with a long weary exhale and settling metal", 1.4, 0.55),
+
+    # The world outside a fight. These are the places rather than the moments, so
+    # they are looser prompts and lower influence — the model has more room, and
+    # a settlement that sounds slightly different each generation is fine.
+    "travel": ("Booted footsteps walking steadily on a dirt road with light gear and "
+               "leather creaking, a few paces, outdoors, open air", 1.6, 0.6),
+    "settlement": ("Arriving at a medieval town gate, a heavy wooden gate creaking open "
+                   "with a distant murmuring crowd and a faint bell beyond", 2.0, 0.45),
+    "shop": ("Entering a small medieval shop, a door with a little bell swinging open "
+             "onto a quiet room with a soft wooden creak", 1.2, 0.55),
+    "quest_complete": ("A short warm triumphant flourish for completing a task, a bright "
+                       "horn phrase resolving over a purse of coins landing on wood, "
+                       "medieval fantasy, ending cleanly", 2.0, 0.45),
 }
 
 # Wordless voice stingers, three takes per archetype (core/barks.gd picks one at
@@ -211,27 +247,6 @@ def jobs(groups, only):
     return out
 
 
-def high_pass(vals):
-    """Samples -> the same sound with everything under HP_HZ rolled off.
-
-    One RC pole per iteration, y[n] = a*(y[n-1] + x[n] - x[n-1]). Run before the
-    peak is measured, so what gets normalized to PEAK is the audible signal
-    rather than a rumble riding on top of it.
-    """
-    dt = 1.0 / SR
-    rc = 1.0 / (2.0 * math.pi * HP_HZ)
-    a = rc / (rc + dt)
-    for _ in range(HP_POLES):
-        out = [0.0] * len(vals)
-        prev_x, prev_y = vals[0], 0.0
-        for i, x in enumerate(vals):
-            prev_y = a * (prev_y + x - prev_x)
-            prev_x = x
-            out[i] = prev_y
-        vals = out
-    return vals
-
-
 def trim_and_normalize(pcm):
     """Raw take -> the same sound at the synthesized set's level and length.
 
@@ -243,8 +258,8 @@ def trim_and_normalize(pcm):
     before = n / float(SR)
     if n == 0:
         return pcm, before, before, 0
-    vals = high_pass(list(struct.unpack("<%dh" % n, pcm)))
-    peak = int(max(abs(v) for v in vals))
+    vals = list(struct.unpack("<%dh" % n, pcm))
+    peak = max(abs(v) for v in vals)
     floor = SILENCE_RMS * 32767.0
     if peak < floor:
         return pcm, before, before, peak
@@ -262,6 +277,12 @@ def trim_and_normalize(pcm):
     first = max(0, live[0] - int(SR * LEAD_MS / 1000.0))
     last = min(n - 1, live[-1] + win + int(SR * TAIL_MS / 1000.0))
     vals = vals[first:last + 1]
+
+    # Some takes come back riding a DC offset (tools/check_audio.py rejects
+    # anything past 0.02 FS); centre them before the peak is measured for gain.
+    dc = sum(vals) / float(len(vals))
+    vals = [v - dc for v in vals]
+    peak = max(abs(v) for v in vals)
 
     gain = PEAK / float(peak)
     vals = [max(-32768, min(32767, int(round(v * gain)))) for v in vals]

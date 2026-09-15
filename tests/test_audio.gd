@@ -14,7 +14,14 @@ const WeaponSfx = preload("res://core/weapon_sfx.gd")
 # core/weapon_sfx.gd can hand out — those lists are the contract, so a class
 # added there without a WAV behind it fails here, not silently in a fight.
 const BASE_SFX_IDS := ["hit", "crit", "kill", "cast", "heal", "level_up", "victory",
-	"defeat", "click", "buy", "identify", "quest", "pickup", "rest"]
+	"defeat", "click", "buy", "identify", "quest", "pickup", "rest",
+	# The moments that used to fire silently: a save either way, a barrel going
+	# up, a status landing, exhaustion, and the world between fights. `down` is
+	# here rather than aliased to `kill` now that a hero dropping and a foe dying
+	# are two different sounds. The two miss ids come in off WeaponSfx.MISS_IDS
+	# below, the same way the weapon and school ids do.
+	"save_made", "save_failed", "down", "burst", "condition", "collapse",
+	"travel", "settlement", "shop", "quest_complete"]
 
 var _pass := 0
 var _fail := 0
@@ -28,7 +35,7 @@ func check(cond: bool, label: String) -> void:
 
 func _init() -> void:
 	var a = Audio.new()
-	var sfx_ids: Array = BASE_SFX_IDS + WeaponSfx.ATTACK_IDS + WeaponSfx.SPELL_IDS
+	var sfx_ids: Array = BASE_SFX_IDS + WeaponSfx.ATTACK_IDS + WeaponSfx.SPELL_IDS + WeaponSfx.MISS_IDS
 	for id in sfx_ids:
 		var s = a._stream(Audio.SFX_DIR + id + ".wav", false)
 		check(s != null and s.data.size() > 1000, "sfx %s parses" % id)
@@ -50,6 +57,19 @@ func _init() -> void:
 			check(s.loop_end == frames, "bed %s loops over its whole length" % theme)
 			check(s.mix_rate >= 22050, "bed %s kept its sample rate" % theme)
 	check(a._stream("res://assets/audio/sfx/nope.wav", false) == null, "missing file -> null")
+	# The same sting twice in one frame is one event heard twice. An area spell
+	# resolves a save and a condition PER TARGET, so this is what stops a fireball
+	# catching five bodies from stacking five copies of one sample.
+	var hit_path: String = Audio.SFX_DIR + "hit.wav"
+	var miss_path: String = Audio.SFX_DIR + "miss.wav"
+	check(a._should_play(hit_path, 1000), "the first start plays")
+	check(not a._should_play(hit_path, 1000), "the same sting on the same frame is dropped")
+	check(not a._should_play(hit_path, 1000 + Audio.RETRIGGER_MS - 1), "still inside the window")
+	check(a._should_play(hit_path, 1000 + Audio.RETRIGGER_MS), "past the window it plays again")
+	# Per sound, not global: a miss and a hit landing together are two events.
+	check(a._should_play(miss_path, 1000 + Audio.RETRIGGER_MS), "a different sting is unaffected")
+	# The very first play of a sound must not be swallowed by the zero-clock case.
+	check(a._should_play(Audio.SFX_DIR + "burst.wav", 0), "a start at tick 0 still plays")
 	# T31: every voice barks.gd can name has all its variants on disk.
 	var Barks = load("res://core/barks.gd")
 	var voices := ["hero", "gruff"]
@@ -102,6 +122,11 @@ func _init() -> void:
 		"ranged": false}, "foe", Vector2i.ZERO)
 	check(WeaponSfx.for_attack(bite) == "hit_bite", "a piercing natural attack is hit_bite")
 	check(WeaponSfx.for_attack(null) == "hit", "no attacker at all -> the generic hit")
+	# Misses split melee/ranged only, off the same attacks[0] the hits read.
+	check(WeaponSfx.for_miss(vera) == "miss", "a melee miss is the whoosh")
+	check(WeaponSfx.for_miss(pike) == "miss_ranged", "a shortbow miss whistles past")
+	check(WeaponSfx.for_miss(goblin) in WeaponSfx.MISS_IDS, "a monster miss resolves to a real id")
+	check(WeaponSfx.for_miss(null) == "miss", "no attacker at all -> the generic miss")
 	# Schools, off real spells.
 	check(WeaponSfx.for_spell("fireball") == "cast_evocation", "fireball is evocation")
 	check(WeaponSfx.for_spell("cure-wounds") == "cast_abjuration", "cure-wounds is abjuration")

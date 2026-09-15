@@ -267,6 +267,9 @@ kills, the turn-in at any merchant, the log panel, the encounter spawn bias. A
 | `hunt_party` | `target_party_id` | that band is destroyed |
 | `raid_settlement` | `target_settlement_id` | that settlement is raided |
 | `clear_lair` | `target_lair_id` | that lair is cleared |
+| `supply_item` | `target_item_id` | that many are in the shared stash |
+| `deliver_goods` | `target_settlement_id` | the party walks into that settlement |
+| `scout_region` | `target_region_id` | the party is standing in that band (`heartland` / `marches` / `frontier` / `deeps`) |
 
 ### Conditions (`when`)
 

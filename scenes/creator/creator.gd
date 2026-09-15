@@ -776,8 +776,7 @@ func _build_equipment() -> void:
 	var wf := _flow()
 	for wid in proficient_weapons(sheet):
 		var w := Catalog.weapon(wid)
-		var extra := "  %s %s" % [w["damageDice"], String(w["damageType"]).substr(0, 4)]
-		_opt(wf, w["name"], wid in ch.equipped, func(): _toggle_weapon(wid), extra)
+		_item_opt(wf, wid, w, "weapon", wid in ch.equipped, func(): _toggle_weapon(wid))
 
 	_head("Armor")
 	var af := _flow()
@@ -786,10 +785,21 @@ func _build_equipment() -> void:
 		if aid == "shield":
 			continue
 		var a := Catalog.armor(aid)
-		_opt(af, a["name"], aid in ch.equipped, func(): _set_armor(aid), "  AC %d" % int(a["baseAc"]))
+		_item_opt(af, aid, a, "armor", aid in ch.equipped, func(): _set_armor(aid))
 	if "shield" in proficient_armor(sheet):
-		_opt(_flow(), "Shield (+2 AC)", "shield" in ch.equipped, func(): _toggle_equip("shield"))
+		_item_opt(_flow(), "shield", Catalog.armor("shield"), "armor", "shield" in ch.equipped,
+			func(): _toggle_equip("shield"))
 	_note("Equipped: %s" % (", ".join(ch.equipped) if ch.equipped else "nothing"))
+
+# T9a: gear is picked off its picture, like the inventory — the numbers are
+# the hover text, the name the caption, "Picked" the same highlight _opt uses.
+func _item_opt(parent: Control, iid: String, def: Dictionary, kind: String, on: bool, cb: Callable) -> Button:
+	var b := Icons.item_tile(iid, Icons.item_tooltip(iid, def, kind), String(def.get("name", iid)))
+	if on:
+		b.theme_type_variation = "Picked"
+	b.pressed.connect(cb)
+	parent.add_child(b)
+	return b
 
 func _has_body_armor() -> bool:
 	for e in ch.equipped:
@@ -846,16 +856,11 @@ func _build_review() -> void:
 
 # --- choice widgets -------------------------------------------------------
 
-# Every choice point the build has reached, optionally filtered to a set of types.
-# Still-open ones first so the screen reads top-down as "what's left, then what you
-# already picked" (and so a driver pressing the first matching option hits an open one).
+# Every choice point the build has reached, optionally filtered to a set of types,
+# in the resolver's own order — a choice keeps its place on the page whether or
+# not it is made yet, so picking one never shuffles the rest under the cursor.
 func _choice_points_of(types: Array) -> Array:
-	var out: Array = []
-	for want_decided in [false, true]:
-		for p in ch.sheet().choice_points:
-			if bool(p.get("decided", false)) == want_decided and (types.is_empty() or p["type"] in types):
-				out.append(p)
-	return out
+	return ch.sheet().choice_points.filter(func(p): return types.is_empty() or p["type"] in types)
 
 func _choice_widget(p: Dictionary) -> void:
 	var sheet = ch.sheet()

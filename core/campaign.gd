@@ -282,7 +282,7 @@ const BOSS_POOL := [
 	{"id": "the-oni", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE ONI OF THE DEEP ICE", "desc": "It has worn a friendlier face all week.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "frozen-cave", "lead": "oni", "win_rate": 0.75},
+		"theme": "frozen-cave", "lead": "oni", "win_rate": 0.825},
 	{"id": "the-assassin", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE KNIFE IN THE SQUARE", "desc": "Whoever paid the warband is here to collect.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
@@ -290,17 +290,19 @@ const BOSS_POOL := [
 	{"id": "the-mammoth", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE THING IN THE TREELINE", "desc": "The forest has been getting out of its way.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "forest-clearing", "lead": "mammoth", "win_rate": 0.70},
+		"theme": "forest-clearing", "lead": "mammoth", "win_rate": 0.65},
 	{"id": "the-arrow-chief", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE ARROW-CHIEF", "desc": "The little archer from the road. He has been eating well.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
 		"theme": "goblin-camp", "lead": "goblin-archer", "lead_features": ["monster-multiattack-2"],
-		"win_rate": 0.475},
+		# mult_max: a x3 multiattack archer was a 47-65% node against hard's 75;
+		# capped at x1.75 the budget goes to escort instead (60 seeds: 76.7%).
+		"mult_max": 1.75, "win_rate": 0.75},
 	{"id": "the-shop-captain", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE CAPTAIN COMES BACK", "desc": "He took the shop once. This time he brought the company.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
 		"theme": "merchant-shop", "lead": "bandit", "lead_features": ["monster-multiattack-2"],
-		"win_rate": 0.825},
+		"win_rate": 0.95},
 ]
 
 # Reference win rate a boss's XP bonus is measured against: the average of the
@@ -465,11 +467,20 @@ func enter(i: int) -> Dictionary:
 	# T27: the bed follows the place, the tension layer follows the fight.
 	Sound.set_environment(String(node.get("theme", "")) if node["kind"] == "combat" else "settlement")
 	Sound.set_combat(node["kind"] == "combat")
-	if node["kind"] == "rest":
-		Sound.play_sfx("rest")
-	if node["kind"] == "treasure":
-		Sound.play_sfx("pickup")
-		_take_treasure()
+	# One sting per arrival, chosen by what you arrived AT — not stacked, because
+	# two one-shots fired on the same frame read as one muddy noise rather than
+	# two events. `travel` is the default: getting anywhere took walking, and a
+	# combat node wants footsteps-into-ambush under its tension layer, not silence.
+	match String(node["kind"]):
+		"rest":
+			Sound.play_sfx("rest")
+		"treasure":
+			Sound.play_sfx("pickup")
+			_take_treasure()
+		"merchant":
+			Sound.play_sfx("settlement")
+		_:
+			Sound.play_sfx("travel")
 	_autosave()
 	return node
 
@@ -994,7 +1005,10 @@ func accept(quest: Dictionary) -> bool:
 func turn_in(quest: Dictionary) -> bool:
 	if node.get("kind", "") != "merchant" or not Quest.turn_in(party, quest):
 		return false
-	Sound.play_sfx("quest")   # T27
+	# Accepting and completing a quest used to be the same sting. They are the two
+	# ends of the same arc and the payoff is the one worth hearing, so completing
+	# now resolves where accepting only reaches.
+	Sound.play_sfx("quest_complete")
 	say("Quest complete: %s (+%d gp)" % [quest["title"], int(quest["reward"].get("gold", 0))])
 	_autosave()
 	return true
