@@ -617,8 +617,9 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 #   [1] Attack  [2] Spells ▸  [3] Bonus ▸  [4] Features ▸  [5] Dash
 #   [6] Disengage  [7] Dodge  [8] Hide  [9] Other ▸ (Help, Shove, Smash)
 #   then [Tab] Swap weapon   [Space] End turn.
-# A slot the character has nothing for stays put, greyed. Spells are always
-# grouped by level under [2]; [3] is everything that costs a bonus action (or
+# A slot the character has nothing for stays put, greyed; a list slot with a
+# single entry (a barbarian's Rage) fires it directly, no submenu. Spells are
+# one list under [2]; [3] is everything that costs a bonus action (or
 # nothing) — Second Wind, Rage, Cunning Action's
 # Dash/Disengage/Hide, a Nick off-hand, Healing Word — so the second thing
 # you do each turn is one key away; [4] is the action-cost kit (Channel
@@ -660,7 +661,7 @@ func _slotted(h, opts: Array) -> Array:
 	for s in SLOTS:
 		var mine: Array = by_slot[s]
 		var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
-		if s in LIST_SLOTS:
+		if s in LIST_SLOTS and mine.size() > 1:   # one thing to pick from is no pick: the key fires it
 			if s == "spells":
 				mine.sort_custom(func(a, b): return _tier_of(a) < _tier_of(b) or (_tier_of(a) == _tier_of(b) and a[0] < b[0]))
 			var meta := _mark(_slot_icon(s), "▸")
@@ -668,7 +669,7 @@ func _slotted(h, opts: Array) -> Array:
 			meta["key"] = str(SLOTS.find(s) + 1)
 			var tip := "%s\n%s" % [SLOT_NAMES[s], ("Nothing to pick from." if mine.is_empty()
 				else "%d of %d ready — press to pick one." % [live, mine.size()])]
-			out.append([SLOT_NAMES[s] + " ▸", _open_submenu.bind(h, s, mine), tip, meta])
+			out.append([SLOT_NAMES[s] + " ▸", _open_list.bind(h, s, mine, SLOT_NAMES[s]), tip, meta])
 		elif mine.is_empty():
 			var meta := _mark(_slot_icon(s))
 			meta["disabled"] = true
@@ -718,36 +719,10 @@ func _slot_icon(s: String) -> Texture2D:
 	return Icons.verb_icon(s)
 
 # A slot's own list: numbered from 1, Esc (the last button) goes back. Spells
-# are always grouped by level first (the key is the level: 2-3-1 is "my first
-# 2nd-level spell", every fight, whether you know three spells or thirty);
-# any list longer than nine pages on slot 9 (More ▸), in a stable order.
+# are one flat list, lowest level first, one button per spell — a spell with
+# several castable levels opens its own tier picker (_spell_tier_menu) when
+# pressed; any list longer than nine pages on slot 9 (More ▸), in a stable order.
 const LIST_KEYS := 9
-
-func _open_submenu(h, slot: String, entries: Array, page := 0) -> void:
-	_submenu = slot
-	var back := ["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")]
-	if slot == "spells":
-		var groups := {}
-		for e in entries:
-			var lvl := _tier_of(e)
-			groups[lvl] = groups.get(lvl, []) + [e]
-		var lvls: Array = groups.keys()
-		lvls.sort()
-		var opts: Array = []
-		for lvl in lvls:
-			var mine: Array = groups[lvl]
-			var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
-			var name: String = "Cantrips" if lvl == 0 else "Level %d" % lvl
-			var meta := _mark(Icons.school_icon("evocation"), "▸")
-			meta["disabled"] = live == 0
-			meta["tier"] = "" if lvl == 0 else "★%d" % lvl
-			opts.append([name + " ▸", _open_list.bind(h, slot, mine, name),
-				"%s\n%d of %d ready — press to pick one." % [name, live, mine.size()], meta])
-		opts.append(back)
-		_set_buttons(opts)
-	else:
-		_open_list(h, slot, entries, SLOT_NAMES.get(slot, slot), page)
-	_board.queue_redraw()
 
 # One flat list, nine to a page.
 func _open_list(h, slot: String, entries: Array, name: String, page := 0) -> void:
@@ -1602,6 +1577,28 @@ class Board extends Control:
 	var main
 	var cb
 	var _origin := Vector2.ZERO
+	# The ground (slab, floor texture, mottling, seams, foliage) is the same
+	# picture every frame until the layout or the board changes, and it was
+	# ~9 ms of the ~11 ms a Board redraw cost (124 hexes × a dozen draw calls,
+	# in GDScript) — every frame of every slide, float and flash. It lives on
+	# this child, drawn behind the Board, and tick() redraws it only when
+	# what it depends on moves. Board._draw keeps what changes per frame.
+	class Ground extends Control:
+		var board
+		func _draw() -> void:
+			if board.cb != null:
+				board._paint_ground(self)
+	var _ground := Ground.new()
+	var _ground_key := 0
+	var _field := {}      # move_field of the hero whose turn it is, memoised
+	var _provoke := {}    # ...and the hexes a walk there would draw an OA on
+	var _field_key := 0
+
+	func _init() -> void:
+		_ground.board = self
+		_ground.show_behind_parent = true
+		_ground.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_ground)
 	var _auto_fit := false    # zoom-to-fit each layout until the user zooms (new fight, Home)
 	var _tok := {}        # id -> displayed pixel pos (for slide)
 	var _hp := {}         # id -> displayed hp value
@@ -1803,18 +1800,18 @@ class Board extends Control:
 	# toward the light gives an off-centre hotspot, which is what makes a disc
 	# read as a sphere rather than a coin. No shader, no texture, no per-frame
 	# allocation beyond the fan itself.
-	func _fan(apex: Vector2, rim: PackedVector2Array, inner: Color, outer: Color) -> void:
+	func _fan(canvas: CanvasItem, apex: Vector2, rim: PackedVector2Array, inner: Color, outer: Color) -> void:
 		var n := rim.size()
 		var cols := PackedColorArray([inner, outer, outer])
 		var uv := PackedVector2Array()
 		for i in n:
-			draw_primitive(PackedVector2Array([apex, rim[i], rim[(i + 1) % n]]), cols, uv)
+			canvas.draw_primitive(PackedVector2Array([apex, rim[i], rim[(i + 1) % n]]), cols, uv)
 
 	# A soft drop shadow: three ellipses, each wider and fainter than the last.
 	# Cheaper than a blur pass and, at these sizes, indistinguishable from one.
-	func _soft_shadow(at: Vector2, r: float, strength := 1.0) -> void:
+	func _soft_shadow(canvas: CanvasItem, at: Vector2, r: float, strength := 1.0) -> void:
 		for i in 3:
-			draw_colored_polygon(_disc(at, r * (1.0 + 0.26 * i)),
+			canvas.draw_colored_polygon(_disc(at, r * (1.0 + 0.26 * i)),
 				Color(0.02, 0.01, 0.04, strength * (0.20 - 0.05 * i)))
 
 	func tick(dt: float) -> void:
@@ -1866,6 +1863,11 @@ class Board extends Control:
 			dirty = true
 		if dirty:
 			queue_redraw()
+		_layout()
+		var key := hash([_origin, main.hex_px, cb.board])
+		if key != _ground_key:
+			_ground_key = key
+			_ground.queue_redraw()
 
 	# HP bar + condition strip: identical for a sprite and for a vector token, so
 	# both paths call this rather than keeping two copies in step by hand.
@@ -1932,6 +1934,70 @@ class Board extends Control:
 
 	# Stable per-hex noise: same hex, same salt -> same value, every frame. No RNG
 	# state, so nothing here can perturb the game's seeded rolls.
+	static func _is_hazard(obj: Dictionary) -> bool:
+		return obj.has("hazard") and not obj.get("blocks_movement", false)
+
+	# Everything about the ground that is the same picture every frame: the
+	# slab, floor texture, mottling, seams, the cover label and the foliage.
+	# Hazards are skipped — their glow pulses, so Board._draw paints them live.
+	func _paint_ground(canvas: CanvasItem) -> void:
+		var s: float = main.hex_px
+		var decor: Array = []   # foliage, drawn after every tile so it can overhang
+		for hx in cb.board["hexes"]:
+			var c := _pix(hx)
+			var obj: Dictionary = cb.object_at(hx)
+			if not _is_hazard(obj):
+				_paint_tile(canvas, hx, c, s, 0.0)
+			if obj.is_empty():
+				var d := _foliage_at(hx, c, s)
+				if not d.is_empty():
+					decor.append(d)
+		decor.sort_custom(func(a, b): return a["at"].y < b["at"].y)
+		for d in decor:
+			_draw_foliage(canvas, d, s)
+
+	func _paint_tile(canvas: CanvasItem, hx: Vector2i, c: Vector2, s: float, pulse: float) -> void:
+		var poly := _hex_poly(c, s - 2.0)
+		var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
+		var obj: Dictionary = cb.object_at(hx)
+		if _is_hazard(obj):
+			fill = main.COL_BRAZIER.lerp(Color("d9622e"), pulse)
+		elif obj.get("blocks_movement", false):
+			fill = main.COL_PROP
+		elif cb.is_cover(hx):
+			fill = main.COL_COVER
+		# Ground, in two layers: a per-hex tinted slab so the field isn't one
+		# flat colour, then a lighter patch drifting off-centre. Neighbouring
+		# tiles overlap in tone, which is what stops the borders reading as
+		# hard-cut diamonds without needing an actual texture.
+		var v := _rand(hx, 1)
+		var tint := fill.lightened(0.09 * v).darkened(0.07 * (1.0 - v))
+		# lit from the top-left and falling off to the rim, so a tile is a
+		# shaded surface rather than a solid lozenge
+		_fan(canvas, c + _iso(LIGHT * s * 0.55), poly, tint.lightened(0.11), tint.darkened(0.13))
+		var floor_tex: Texture2D = main.FLOORS.get(cb.board.get("palette", "shrine"))
+		if floor_tex != null and obj.is_empty():
+			var uvs := PackedVector2Array()
+			for pt in poly:   # ground-space position, so the texture lies flat on the board
+				uvs.append(_iso_inv(pt - _origin) / (s * main.FLOOR_SPAN))
+			canvas.draw_polygon(poly, PackedColorArray([Color(1, 1, 1, main.FLOOR_ALPHA)]), uvs, floor_tex)
+		var blob := c + _iso(Vector2(_rand(hx, 2) - 0.5, _rand(hx, 3) - 0.5) * s * 0.6)
+		var br2 := s * (0.45 + 0.30 * _rand(hx, 4))
+		for i in 3:   # the mottling, feathered out instead of a hard-edged patch
+			canvas.draw_colored_polygon(_disc(blob, br2 * (0.55 + 0.225 * i)),
+				Color(fill.lightened(0.09), 0.11))
+		# Only the outline of a terrain CHANGE is drawn at full strength; seams
+		# between two plain tiles stay a whisper, so same-terrain runs blend.
+		var edge := _hex_poly(c, s - 2.0)
+		edge.append(edge[0])
+		var seam: bool = _terrain(hx) != ""
+		for n in Hex.neighbors(hx):
+			if not n in cb.board["hexes"] or _terrain(n) != _terrain(hx):
+				seam = true
+		canvas.draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.9 if seam else 0.22), 1.5, true)
+		if cb.is_cover(hx):
+			canvas.draw_string(ThemeDB.fallback_font, c + Vector2(-s * 0.5, s * ISO_SQUASH - 3), "cover", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("7fa6a6"))
+
 	static func _rand(hx: Vector2i, salt: int) -> float:
 		var n: int = hash(Vector3i(hx.x, hx.y, salt))
 		return float(n % 4096) / 4096.0 if n >= 0 else float(-n % 4096) / 4096.0
@@ -1967,22 +2033,22 @@ class Board extends Control:
 			"scale": (0.85 + 0.45 * _rand(hx, 9)) * (1.15 if cover else 1.0)}
 
 	# A plant: flat shapes only, standing upright out of a projected shadow.
-	func _draw_foliage(d: Dictionary, s: float) -> void:
+	func _draw_foliage(canvas: CanvasItem, d: Dictionary, s: float) -> void:
 		var at: Vector2 = d["at"]
 		var k: float = float(d["scale"]) * s
 		var col: Color = d["col"]
-		_soft_shadow(at, k * 0.26, 0.85)
+		_soft_shadow(canvas, at, k * 0.26, 0.85)
 		if String(d["kind"]) == "tree":
-			draw_line(at, at - Vector2(0, k * 0.62), Color("3a2c1c"), maxf(1.5, k * 0.09), true)
+			canvas.draw_line(at, at - Vector2(0, k * 0.62), Color("3a2c1c"), maxf(1.5, k * 0.09), true)
 			for o in [Vector2(0, -0.95), Vector2(-0.24, -0.66), Vector2(0.24, -0.70)]:
-				_lobe(at + o * k, k * 0.30, col)
+				_lobe(canvas, at + o * k, k * 0.30, col)
 		else:
 			for o in [Vector2(-0.20, -0.16), Vector2(0.20, -0.16), Vector2(0, -0.34)]:
-				_lobe(at + o * k, k * 0.24, col)
+				_lobe(canvas, at + o * k, k * 0.24, col)
 
 	# One shaded clump of leaves: the same ball shading the tokens use.
-	func _lobe(at: Vector2, r: float, col: Color) -> void:
-		_fan(at + LIGHT * r * 0.6, _ring(at, r, false, false, 20),
+	func _lobe(canvas: CanvasItem, at: Vector2, r: float, col: Color) -> void:
+		_fan(canvas, at + LIGHT * r * 0.6, _ring(at, r, false, false, 20),
 			col.lightened(0.28), col.darkened(0.26))
 
 	# T11 interactables: shapes only, no sprites. Hazards pulse (the hex fill already
@@ -1995,13 +2061,13 @@ class Board extends Control:
 					draw_circle(c, s * (0.22 + 0.10 * i), Color(1.0, 0.78, 0.45, 0.10 - 0.02 * i))
 				draw_circle(c, s * 0.16, main.COL_TORCH.lerp(Color("ff9d3d"), pulse))
 			"fountain":     # lies flat on the board, so it projects
-				_fan(c + _iso(LIGHT) * s * 0.28, _disc(c, s * 0.45),
+				_fan(self, c + _iso(LIGHT) * s * 0.28, _disc(c, s * 0.45),
 					Color("50707f"), Color("32444f"))
 				draw_polyline(_disc(c, s * 0.45, true), Color("6f97ad"), 2.0, true)
 			_:
 				if o.has("hazard") and not o.get("blocks_movement", false):
 					var hot := Color("ffcf7a").lerp(Color("ff6a2a"), pulse)
-					_fan(c, _disc(c, s * 0.26), hot, Color(hot.r, hot.g, hot.b, 0.0))
+					_fan(self, c, _disc(c, s * 0.26), hot, Color(hot.r, hot.g, hot.b, 0.0))
 					return
 				var r := s * 0.42
 				var quad := PackedVector2Array()
@@ -2015,9 +2081,11 @@ class Board extends Control:
 		if cb == null:
 			return
 		_layout()
+		_ground.position = Vector2.ZERO
 		if _defeat >= 0.0 and _defeat < 0.6:     # screen shake on the wipe
 			var m := (1.0 - _defeat / 0.6) * 10.0
-			_origin += Vector2(randf_range(-m, m), randf_range(-m, m))
+			_ground.position = Vector2(randf_range(-m, m), randf_range(-m, m))
+			_origin += _ground.position
 		var s: float = main.hex_px
 		var fz := clampf(main._zoom, 0.75, 1.7)   # font scale, gentler than the hex scale
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 350.0)
@@ -2028,10 +2096,19 @@ class Board extends Control:
 		var cur = cb.current()
 		var hero_turn: bool = cur and cur.team == "party" and cur.conscious()
 		if hero_turn and main._mode == "idle" and cur.econ["move_left"] > 0:
-			field = cb.move_field(cur)
-			for hx in field:
-				if not cb.provokers_for(cur, hx).is_empty():
-					provoke[hx] = true
+			# One A* per reachable hex — 15-20 ms a frame in GDScript, so it is
+			# memoised on everything it reads until something on the field moves.
+			var key := hash([cur.id, cb.log.size(), cb.board,
+				cb.combatants.map(func(c): return [c.pos, c.hp, c.econ, c.statuses])])
+			if key != _field_key:
+				_field_key = key
+				_field = cb.move_field(cur)
+				_provoke = {}
+				for hx in _field:
+					if not cb.provokers_for(cur, hx).is_empty():
+						_provoke[hx] = true
+			field = _field
+			provoke = _provoke
 		if hero_turn and main._mode == "cone":
 			var dir := Hex.direction_to(cur.pos, _hover)
 			if dir != Vector2i.ZERO:
@@ -2041,66 +2118,22 @@ class Board extends Control:
 			for hx in main._area_aim(cur):
 				cone_hexes[hx] = true
 
-		# tiles
-		var decor: Array = []   # foliage, drawn after every tile so it can overhang
+		# tiles: the ground itself is on _ground (see Ground); only what moves
+		# frame to frame is painted here, on top of it.
 		for hx in cb.board["hexes"]:
 			var c := _pix(hx)
 			var poly := _hex_poly(c, s - 2.0)
-			var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
 			var obj: Dictionary = cb.object_at(hx)
-			if obj.has("hazard") and not obj.get("blocks_movement", false):
-				fill = main.COL_BRAZIER.lerp(Color("d9622e"), pulse)
-			elif obj.get("blocks_movement", false):
-				fill = main.COL_PROP
-			elif cb.is_cover(hx):
-				fill = main.COL_COVER
-			# Ground, in two layers: a per-hex tinted slab so the field isn't one
-			# flat colour, then a lighter patch drifting off-centre. Neighbouring
-			# tiles overlap in tone, which is what stops the borders reading as
-			# hard-cut diamonds without needing an actual texture.
-			var v := _rand(hx, 1)
-			var tint := fill.lightened(0.09 * v).darkened(0.07 * (1.0 - v))
-			# lit from the top-left and falling off to the rim, so a tile is a
-			# shaded surface rather than a solid lozenge
-			_fan(c + _iso(LIGHT * s * 0.55), poly, tint.lightened(0.11), tint.darkened(0.13))
-			var floor_tex: Texture2D = main.FLOORS.get(cb.board.get("palette", "shrine"))
-			if floor_tex != null and obj.is_empty():
-				var uvs := PackedVector2Array()
-				for pt in poly:   # ground-space position, so the texture lies flat on the board
-					uvs.append(_iso_inv(pt - _origin) / (s * main.FLOOR_SPAN))
-				draw_polygon(poly, PackedColorArray([Color(1, 1, 1, main.FLOOR_ALPHA)]), uvs, floor_tex)
-			var blob := c + _iso(Vector2(_rand(hx, 2) - 0.5, _rand(hx, 3) - 0.5) * s * 0.6)
-			var br2 := s * (0.45 + 0.30 * _rand(hx, 4))
-			for i in 3:   # the mottling, feathered out instead of a hard-edged patch
-				draw_colored_polygon(_disc(blob, br2 * (0.55 + 0.225 * i)),
-					Color(fill.lightened(0.09), 0.11))
+			if _is_hazard(obj):
+				_paint_tile(self, hx, c, s, pulse)   # its glow pulses, so it can't be cached
 			if field.has(hx) and hx != cur.pos:
 				draw_colored_polygon(poly, main.COL_MOVE)
 			if cone_hexes.has(hx):
 				draw_colored_polygon(poly, main.COL_CONE)
-			# Only the outline of a terrain CHANGE is drawn at full strength; seams
-			# between two plain tiles stay a whisper, so same-terrain runs blend.
-			var edge := _hex_poly(c, s - 2.0)
-			edge.append(edge[0])
-			var seam: bool = _terrain(hx) != ""
-			for n in Hex.neighbors(hx):
-				if not n in cb.board["hexes"] or _terrain(n) != _terrain(hx):
-					seam = true
-			draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.9 if seam else 0.22), 1.5, true)
-			if obj.is_empty():
-				var d := _foliage_at(hx, c, s)
-				if not d.is_empty():
-					decor.append(d)
 			if provoke.has(hx):
 				draw_string(ThemeDB.fallback_font, c - Vector2(6, -5), "⚠", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("ffcf47"))
-			if cb.is_cover(hx):
-				draw_string(ThemeDB.fallback_font, c + Vector2(-s * 0.5, s * ISO_SQUASH - 3), "cover", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("7fa6a6"))
 			if not obj.is_empty():
 				_draw_object(obj, c, s, pulse)
-
-		decor.sort_custom(func(a, b): return a["at"].y < b["at"].y)
-		for d in decor:
-			_draw_foliage(d, s)
 
 		# the valid-target ring stays here, under the tokens — it just traces the
 		# hex edge, which reads fine as "this hex is targetable," not a card that
@@ -2152,7 +2185,7 @@ class Board extends Control:
 			# the ground — no lift, and flat to the board plane like everything
 			# else lying on it.
 			var tp := p if c.is_down() else p + Vector2(0, -rad * 0.55)
-			_soft_shadow(p, rad * 0.80, 1.0 if c.is_down() else 1.15)
+			_soft_shadow(self, p, rad * 0.80, 1.0 if c.is_down() else 1.15)
 			if c == cur:
 				# A real blink: the ring breathes in alpha, width AND radius, with a
 				# faint outer halo — the old width-only wobble read as noise.
@@ -2185,7 +2218,7 @@ class Board extends Control:
 			var flat: bool = c.is_down()
 			if not flat:
 				draw_line(p, tp, base.darkened(0.55), 3.0, true)   # the "post" it stands on
-			_fan(tp + (_iso(LIGHT) if flat else LIGHT) * trad * 0.62,
+			_fan(self, tp + (_iso(LIGHT) if flat else LIGHT) * trad * 0.62,
 				_ring(tp, trad, flat, false, 28), base.lightened(0.26), base.darkened(0.20))
 			draw_polyline(_ring(tp, trad, flat, true, 28), base.darkened(0.45), 1.5, true)
 			if not flat:

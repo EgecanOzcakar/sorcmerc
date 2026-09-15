@@ -1,6 +1,6 @@
 # O2 — the open-world map screen: draws core/world.gd's free 2D map in the same
 # dimetric projection the combat board uses, with a drag-pan / scroll-zoom camera,
-# a pause button on the WorldClock, and right-click-to-move for the player party.
+# a pause button on the WorldClock, and click-to-move for the player party.
 # All state lives in core/world.gd; this only draws it and feeds it goals.
 #
 # Run standalone:  godot --path . scenes/world/world.tscn
@@ -477,7 +477,7 @@ func _build_hud() -> void:
 	_camp_btn.pressed.connect(_make_camp)
 	bar.add_child(_camp_btn)
 	var hint := Label.new()
-	hint.text = "Right-click marches there.  Drag pans, wheel zooms."
+	hint.text = "Click marches there.  Right-drag pans, wheel zooms."
 	hint.theme_type_variation = "Dim"
 	bar.add_child(hint)
 	_region_msg = Label.new()
@@ -911,6 +911,11 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dict
 			FactionOpinion.lower(foe.faction, FactionOpinion.KILLED_THEIRS)
 	else:
 		_retreat()
+		# The band that beat them is still where the fight was. Left un-slipped
+		# it would ask "fight/parley/ambush?" again the frame the map came back
+		# whenever the nearest settlement was inside its trigger radius — the
+		# same card the beaten party had just answered.
+		_slipped[foe.id] = true
 	_apply_deaths(result)
 	world.clock.resume()
 	_autosave()   # O13 autosave: a fight is the biggest thing that
@@ -973,14 +978,16 @@ func _retreat() -> void:
 	var p := world.player()
 	if p == null or world.settlements.is_empty():
 		return
-	party.spend_gold(roundi(party.gold * DEFEAT_GOLD_LOSS_PCT))
+	var lost: int = roundi(party.gold * DEFEAT_GOLD_LOSS_PCT)
+	party.spend_gold(lost)
 	Party.auto_revive_all(party)
-	var safe: Vector2 = world.settlements[0].position
+	var safe = world.settlements[0]
 	for s in world.settlements:
-		if p.position.distance_squared_to(s.position) < p.position.distance_squared_to(safe):
-			safe = s.position
-	p.position = safe
-	world.set_goal(p, safe)
+		if p.position.distance_squared_to(s.position) < p.position.distance_squared_to(safe.position):
+			safe = s
+	p.position = safe.position
+	world.set_goal(p, safe.position)
+	_lair_msg.text = "The party is beaten and left for dead. They come to at %s, %d gold lighter." % [safe.sname, lost]
 
 # --- O6: settlement visit ----------------------------------------------
 # Same shape as _check_encounter above, against the settlement list instead of
@@ -2258,7 +2265,7 @@ func _layout() -> void:
 
 func _gui_input(e: InputEvent) -> void:
 	if e is InputEventMouseMotion:
-		if e.button_mask & (MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_MIDDLE):
+		if e.button_mask & (MOUSE_BUTTON_MASK_RIGHT | MOUSE_BUTTON_MASK_MIDDLE):
 			pan_by(e.relative)
 			queue_redraw()
 	elif e is InputEventMouseButton and e.pressed:
@@ -2266,7 +2273,7 @@ func _gui_input(e: InputEvent) -> void:
 			zoom_at(e.position, 1.1)
 		elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom_at(e.position, 1.0 / 1.1)
-		elif e.button_index == MOUSE_BUTTON_RIGHT:
+		elif e.button_index == MOUSE_BUTTON_LEFT:
 			var p := world.player()
 			if p != null:
 				world.set_goal(p, _unpix(e.position))

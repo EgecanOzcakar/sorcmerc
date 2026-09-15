@@ -1,5 +1,5 @@
 # O2/O4 — scene-driver smoke test for the open-world map screen: it renders, the
-# clock runs, a right-click moves the player party, pause stops it, the camera
+# clock runs, a left-click moves the player party, pause stops it, the camera
 # pans/zooms without crashing, and closing on a hostile party hands off to a real
 # scenes/main.tscn fight that freezes the map until it is won.
 #   godot --headless --path . -s tests/drive_world.gd
@@ -64,11 +64,11 @@ func _run() -> void:
 		fail("the scene has nothing to render: %d settlements, %d parties"
 			% [screen.world.settlements.size(), screen.world.parties.size()])
 
-	# --- right-click sets a goal and the party actually walks there ---------
+	# --- left-click sets a goal and the party actually walks there ----------
 	var start: Vector2 = p.position
-	click(MOUSE_BUTTON_RIGHT, Vector2(1000, 600))
+	click(MOUSE_BUTTON_LEFT, Vector2(1000, 600))
 	if p.goal.is_equal_approx(start):
-		fail("right-click did not set a goal away from the party")
+		fail("left-click did not set a goal away from the party")
 	await step(5)
 	if p.position.is_equal_approx(start):
 		fail("the player party never moved toward the clicked point")
@@ -107,7 +107,7 @@ func _run() -> void:
 	# --- camera: drag-pan and scroll-zoom ----------------------------------
 	var pan0: Vector2 = screen._pan
 	var m := InputEventMouseMotion.new()
-	m.button_mask = MOUSE_BUTTON_MASK_LEFT
+	m.button_mask = MOUSE_BUTTON_MASK_RIGHT
 	m.position = Vector2(600, 400)
 	m.relative = Vector2(-40, 25)
 	screen._gui_input(m)

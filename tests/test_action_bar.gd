@@ -50,9 +50,9 @@ func _init() -> void:
 	# The fixed layout: nine slots, Swap, End turn — for every character.
 	check(labels.size() == 11, "eleven buttons: nine slots, Swap, End turn (got %d)" % labels.size())
 	check(labels[0].contains("Attack") and labels[1].contains("Spells") and labels[2].contains("Bonus")
-		and labels[3].contains("Features") and labels[4].contains("Dash") and labels[5].contains("Disengage")
+		and labels[3].contains("Channel Divinity") and labels[4].contains("Dash") and labels[5].contains("Disengage")
 		and labels[6].contains("Dodge") and labels[7].contains("Hide") and labels[8].contains("Help"),
-		"slots 1-9 are Attack, Spells, Bonus, Features, Dash, Disengage, Dodge, Hide, Help & Shove (%s)" % str(labels))
+		"slots 1-9 are Attack, Spells, Bonus, Features (her one: Channel Divinity), Dash, Disengage, Dodge, Hide, Help & Shove (%s)" % str(labels))
 	check(labels[10].contains("End turn"), "the last button is End turn")
 	var keys: Array = main._buttons.get_children().map(func(b): return String(b.get_meta("hotkey", "")))
 	check(keys.slice(0, 9) == ["1", "2", "3", "4", "5", "6", "7", "8", "9"] and keys[9] == "Tab" and keys[10] == "Spc",
@@ -75,28 +75,24 @@ func _init() -> void:
 	main._press_hotkey(2)
 	var vbonus: Array = await _labels(main)
 	check(vbonus.any(func(l): return l.contains("Second Wind")), "Second Wind is under [3] Bonus (%s)" % str(vbonus))
-	main.board_cancel()
-	await process_frame
-	main._press_hotkey(3)
-	var vfeat: Array = await _labels(main)
-	check(not vfeat.any(func(l): return l.contains("Second Wind")), "...and not under [4] Features (%s)" % str(vfeat))
+	check(not vlabels[3].contains("Second Wind"), "...and not under [4] Features (%s)" % vlabels[3])
 	main.board_cancel()
 	await process_frame
 
-	# [2] opens the level groups, always; Level 1 holds Burning Hands once (its tiers collapse), Esc back.
+	# [2] opens one flat list of every spell, lowest level first; Burning Hands
+	# is there once (its tiers collapse into a picker), Esc back.
 	main._build_hero_menu(ilsa)
 	await process_frame
 	main._press_hotkey(1)
-	var lvl_labels: Array = await _labels(main)
-	check(lvl_labels[0].contains("Cantrips") and lvl_labels[1].contains("Level 1"), "three spells still get level groups (%s)" % str(lvl_labels))
-	main._press_hotkey(1)
 	var sub_labels: Array = await _labels(main)
+	check(not sub_labels.any(func(t): return t.contains("Level 1") or t.contains("Cantrips")),
+		"[2] lists spells, not level groups (%s)" % str(sub_labels))
 	var bh_buttons := sub_labels.filter(func(t): return t.contains("Burning Hands"))
 	check(bh_buttons.size() == 1, "Burning Hands collapses to one button, not one per tier (got %s)" % str(bh_buttons))
 	check(not sub_labels.any(func(t): return t.contains("★")), "no upcast tier leaks into the spell list as its own button")
 	check(sub_labels[-1].contains("Back") and String(main._buttons.get_children()[-1].get_meta("hotkey", "")) == "Esc",
 		"the spell list ends in Back, on Esc")
-	check(not sub_labels.any(func(l): return l.contains("Sacred Flame")), "Level 1 does not list the cantrip")
+	check(sub_labels[0].contains("Sacred Flame"), "the cantrip leads the list (%s)" % str(sub_labels))
 	var lv: Array = main._buttons.get_children().map(func(b): return int(b.tooltip_text.length()))   # touch the buttons
 	check(lv.size() > 0, "spell buttons exist")
 
@@ -133,8 +129,8 @@ func _init() -> void:
 	check(still_lit < lit, "and the ones that need the action are greyed out (%d lit, was %d)"
 		% [still_lit, lit])
 
-	# A caster with every spell in the book: [2] groups by level, each group
-	# numbered from 1, and a group past nine entries pages on [9] More.
+	# A caster with every spell in the book: [2] is still one list, nine to a
+	# page, paging on [9] More.
 	var ch = load("res://core/presets.gd").ilsa()
 	var Adapter = load("res://core/adapter.gd")
 	var Catalog = load("res://core/rules/catalog.gd")
@@ -154,26 +150,32 @@ func _init() -> void:
 	main._build_hero_menu(archmage)
 	await process_frame
 	main._press_hotkey(1)
-	var groups: Array = await _labels(main)
-	check(groups[0].contains("Cantrips") and groups[1].contains("Level 1") and groups.size() <= 10,
-		"20+ spells: [2] opens level groups, Cantrips first (%s)" % str(groups))
-	check(groups[-1].contains("Back"), "the group list ends in Back")
-	main._press_hotkey(0)   # Cantrips
-	var cantrips: Array = await _labels(main)
-	var cn: int = cantrips.filter(func(l): return not l.contains("Back") and not l.contains("More")).size()
-	check(cn >= 5 and cn <= 9, "the cantrip page holds at most nine spells (%d)" % cn)
-	if cantrips.any(func(l): return l.contains("More")):
-		var more_idx: int = -1
-		for i in cantrips.size():
-			if cantrips[i].contains("More"):
-				more_idx = i
-		check(more_idx == 8, "More sits on [9]")
-		main._press_hotkey(more_idx)
-		var page2: Array = await _labels(main)
-		check(page2 != cantrips and page2.any(func(l): return l.contains("Back")), "More turns the page")
+	var page1: Array = await _labels(main)
+	var pn: int = page1.filter(func(l): return not l.contains("Back") and not l.contains("page")).size()
+	check(pn == 8 and page1[8].contains("page 1 of") and page1[-1].contains("Back"),
+		"20+ spells: eight a page, More on [9], Back last (%s)" % str(page1))
+	main._press_hotkey(8)
+	var page2: Array = await _labels(main)
+	check(page2 != page1 and page2.any(func(l): return l.contains("Back")), "More turns the page")
 	main.board_cancel()
 	var home: Array = await _labels(main)
-	check(home.size() == 11 and home[1].contains("Spells"), "Esc from a group returns to the main bar")
+	check(home.size() == 11 and home[1].contains("Spells"), "Esc from the list returns to the main bar")
+
+	# A list slot with ONE entry is no pick: a barbarian's only bonus action is
+	# Rage, so [3] is Rage itself and the key fires it — no submenu in between.
+	var conan = load("res://core/presets.gd").vera()
+	conan.levels.clear()
+	conan.add_level("barbarian", -1)
+	var barb = Adapter.to_combatant(conan, "party", ilsa.pos)
+	barb.id = "barb"
+	main.cb.combatants.append(barb)
+	main.cb.begin_turn_for(barb)
+	main._build_hero_menu(barb)
+	var blabels: Array = await _labels(main)
+	check(blabels[2].contains("Rage") and not blabels[2].contains("▸"),
+		"a lone bonus action (Rage) sits on [3] itself, no submenu (%s)" % blabels[2])
+	var bkeys: Array = main._buttons.get_children().map(func(b): return String(b.get_meta("hotkey", "")))
+	check(bkeys[2] == "3", "...on key 3 (%s)" % bkeys[2])
 
 	print("test_action_bar: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

@@ -1721,8 +1721,8 @@ O2 (`e641747`) — `scenes/world/world.tscn`+`.gd`, runnable standalone
 (`godot --path . scenes/world/world.tscn`). Isometric ground as tessellating
 projected quads (discs like combat's hexes overlapped into domes at this
 scale — quads fixed it), tokens matching the combat board's flat-base +
-camera-facing-ball look. Camera: drag pans, wheel zooms about the cursor
-(0.25-2.5x clamped), right-click sets the player's goal (goal ringed gold),
+camera-facing-ball look. Camera: right-drag pans, wheel zooms about the cursor
+(0.25-2.5x clamped), left-click sets the player's goal (goal ringed gold),
 a Pause/Resume button + Day/HH:MM readout. Deliberately duplicated (not
 extracted) `scenes/main.gd`'s ~25 lines of iso-projection math rather than
 touching that file, which this phase couldn't edit — flagged as the
