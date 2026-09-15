@@ -105,6 +105,28 @@ jobs:
           sed -i "s|^config/version=.*|config/version=\"$VERSION\"|" project.godot
           grep '^config/version=' project.godot
 
+      # The bug reporter's optional second door (tools/bug-relay/). Set the
+      # BUG_RELAY_URL repository VARIABLE — not a secret; the URL ends up inside
+      # the shipped client either way, and its Worker is what enforces anything.
+      # Leave it unset and the export simply has no relay, which is a perfectly
+      # good place to stop: the browser path is the primary one regardless.
+      - name: Stamp the bug relay into the build
+        if: steps.pick.outputs.should_publish == 'true' && vars.BUG_RELAY_URL != ''
+        env:
+          RELAY_URL: ${{ vars.BUG_RELAY_URL }}
+          RELAY_KEY: ${{ vars.BUG_RELAY_KEY }}
+          F: core/bug_report.gd
+        run: |
+          case "$RELAY_URL" in
+            https://*) ;;
+            *) echo "BUG_RELAY_URL must be an https URL"; exit 1 ;;
+          esac
+          grep -q '^const RELAY_URL := ""' "$F" \
+            || { echo "$F no longer has an empty RELAY_URL to stamp"; exit 1; }
+          sed -i "s|^const RELAY_URL := \"\"|const RELAY_URL := \"$RELAY_URL\"|" "$F"
+          sed -i "s|^const RELAY_KEY := \"\"|const RELAY_KEY := \"$RELAY_KEY\"|" "$F"
+          grep '^const RELAY_URL' "$F"
+
       - name: Import resources once
         if: steps.pick.outputs.should_publish == 'true'
         run: godot --headless --path . --import || true

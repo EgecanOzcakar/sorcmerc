@@ -26,7 +26,11 @@ func _init() -> void:
 	test_long_report_still_makes_a_link()
 	test_save_copy()
 	test_submit_never_opens_a_browser_headless()
+	test_relay_config()
+	test_relay_payload()
+	test_relay_answers()
 	await test_overlay()
+	await test_overlay_without_a_relay()
 	print("test_bug_report: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -154,9 +158,68 @@ func test_submit_never_opens_a_browser_headless() -> void:
 	check(not quiet["opened"], "open_browser=false does not open anything")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(String(quiet["path"])))
 
+# --- the optional relay (tools/bug-relay/) --------------------------------
+
+func test_relay_config() -> void:
+	OS.set_environment("SORCMERC_BUG_RELAY", "")
+	# The repo ships with no relay: the second door is opt-in, and a build that
+	# has not deployed one must not offer a button that cannot work.
+	check(Report.RELAY_URL == "", "no relay url is committed")
+	check(Report.RELAY_KEY == "", "no relay key is committed")
+	check(not Report.has_relay(), "...so has_relay() is false out of the box")
+	# The env var is the local override — a dev Worker without editing the const.
+	OS.set_environment("SORCMERC_BUG_RELAY", "https://relay.test/report")
+	check(Report.relay_url() == "https://relay.test/report", "the env var supplies the url")
+	check(Report.has_relay(), "...and turns the second door on")
+	# Something that is not a URL is not a relay, however it got there.
+	OS.set_environment("SORCMERC_BUG_RELAY", "not-a-url")
+	check(not Report.has_relay(), "a non-url is not a relay")
+	OS.set_environment("SORCMERC_BUG_RELAY", "")
+	check(not Report.has_relay(), "clearing it turns the door off again")
+
+func test_relay_payload() -> void:
+	var p = JSON.parse_string(Report.relay_payload("A title", "A body"))
+	check(p is Dictionary, "the payload is a json object")
+	# Exactly the two fields the Worker validates. Anything else here is another
+	# thing a stranger can make the Worker parse.
+	check(p.keys().size() == 2, "the payload carries only title and body")
+	check(p["title"] == "A title" and p["body"] == "A body", "...and carries them intact")
+	check(String(JSON.parse_string(Report.relay_payload("t".repeat(400), "b"))["title"]).length()
+		<= Report.TITLE_MAX, "an over-long title is clipped before it is sent")
+
+# request_completed's [result, code, headers, body], every shape of it.
+func test_relay_answers() -> void:
+	var ok := Report._read_relay_answer([HTTPRequest.RESULT_SUCCESS, 201, [],
+		'{"ok":true,"url":"https://github.com/o/r/issues/7","number":7}'.to_utf8_buffer()])
+	check(ok["ok"], "a 201 with ok:true is a filed report")
+	check(ok["url"] == "https://github.com/o/r/issues/7", "...and hands back where it landed")
+
+	# The Worker writes its refusals to be read by a player, so they pass through.
+	var limited := Report._read_relay_answer([HTTPRequest.RESULT_SUCCESS, 429, [],
+		'{"ok":false,"error":"too many reports from here — try again in a few minutes"}'.to_utf8_buffer()])
+	check(not limited["ok"], "a 429 is not a filed report")
+	check("too many reports" in String(limited["error"]), "the relay's own message reaches the player")
+
+	# No reply at all: offline, DNS, TLS, or the timeout.
+	var dead := Report._read_relay_answer([HTTPRequest.RESULT_CANT_CONNECT, 0, [], PackedByteArray()])
+	check(not dead["ok"], "a failed connection is not a filed report")
+	check("Copy instead" in String(dead["error"]), "...and points at the fallback that still works")
+
+	# A reply that is not JSON, or is JSON without the fields, must not crash or
+	# be mistaken for success.
+	for junk in ["<html>502 Bad Gateway</html>", "", "[]", '{"ok":true}']:
+		var r := Report._read_relay_answer([HTTPRequest.RESULT_SUCCESS, 502, [], junk.to_utf8_buffer()])
+		check(not r["ok"], "a 502 body of %s is not success" % JSON.stringify(junk))
+		check(not String(r["error"]).is_empty(), "...and still says something")
+	# A 200 that does not say ok:true is not a filed report either.
+	var liar := Report._read_relay_answer([HTTPRequest.RESULT_SUCCESS, 200, [],
+		'{"ok":false,"error":"nope"}'.to_utf8_buffer()])
+	check(not liar["ok"], "a 200 without ok:true is not a filed report")
+
 # The overlay builds, fills in, and hands back a report — the same path a
 # player takes, minus the browser.
 func test_overlay() -> void:
+	OS.set_environment("SORCMERC_BUG_RELAY", "https://relay.test/report")
 	Report.clear_trail()
 	Report.note("stepped on the loose flagstone")
 	var host := Control.new()
@@ -188,6 +251,28 @@ func test_overlay() -> void:
 	check("stepped on the loose flagstone" in preview, "the preview shows the trail")
 	check(Report.version() in preview, "the preview shows the build")
 
+	check(o._relay != null, "a build with a relay offers the second door")
+	check(not o._relay.disabled, "...enabled, since there is a summary")
+
 	check(Overlay.toggle(host) == null, "toggling again closes it")
 	await process_frame
 	host.queue_free()
+	OS.set_environment("SORCMERC_BUG_RELAY", "")
+
+# The shipped default: no relay deployed, so no button for one.
+func test_overlay_without_a_relay() -> void:
+	OS.set_environment("SORCMERC_BUG_RELAY", "")
+	var host := Control.new()
+	root.add_child(host)
+	var o = Overlay.toggle(host, {"Screen": "title"})
+	await process_frame
+	check(o._relay == null, "no relay, no second-door button")
+	# ...and the browser path is untouched by its absence.
+	o._title_edit.text = "Still works"
+	o._refresh_send()
+	check(not o._send.disabled, "the browser path still works without a relay")
+	o._copy()
+	check("Still works" in String(o._last["title"]), "...and so does copying")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(String(o._last["path"])))
+	host.queue_free()
+	await process_frame

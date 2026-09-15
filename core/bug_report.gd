@@ -19,6 +19,19 @@
 # popup blocker can eat the tab, or on a machine with no handler for https,
 # the player still has the text and the overlay offers it on the clipboard.
 #
+# The second door
+# ---------------
+# "Copy this text and paste it somewhere yourself" is a fallback most people
+# will not take, so there is an optional one in front of it: post_to_relay()
+# sends the report to a small Cloudflare Worker (tools/bug-relay/) that holds a
+# repo-scoped token and files the issue. It is strictly the fallback — the issue
+# arrives anonymous, with nobody to reply to, which is exactly what the first
+# door buys and why it stays first.
+#
+# relay_url() is empty unless a relay has been deployed and wired up, and the
+# overlay simply does not offer the button when it is. See the README in
+# tools/bug-relay/ for the whole of it.
+#
 # The breadcrumb trail
 # --------------------
 # note() is a ring buffer of the last TRAIL_MAX things that happened, pushed
@@ -41,6 +54,34 @@ const DIR := "user://bug_reports"
 # the tail is the diagnostics, which are also in the file on disk.
 const URL_MAX := 6000
 const TRUNCATED := "\n\n_(truncated to fit the link — the full report is saved on disk)_"
+
+# --- the optional relay (tools/bug-relay/) --------------------------------
+#
+# Empty in the repo. .github/workflows/release.yml stamps these from the
+# BUG_RELAY_URL / BUG_RELAY_KEY Actions variables at export time, the same way
+# it stamps the version — so a build with no relay deployed simply has none,
+# and the overlay offers only the browser.
+const RELAY_URL := ""
+const RELAY_KEY := ""
+const RELAY_TIMEOUT := 20.0    # seconds before we stop waiting and say so
+
+# The env var wins, so a local run or a test can point at a dev Worker
+# (`wrangler dev`) without editing the constant.
+static func relay_url() -> String:
+	var env := OS.get_environment("SORCMERC_BUG_RELAY")
+	return env if not env.is_empty() else RELAY_URL
+
+static func relay_key() -> String:
+	var env := OS.get_environment("SORCMERC_BUG_RELAY_KEY")
+	return env if not env.is_empty() else RELAY_KEY
+
+static func has_relay() -> bool:
+	return relay_url().begins_with("http")
+
+# What goes on the wire. Kept to the two fields the Worker validates, because
+# anything else here is something a stranger can make the Worker parse.
+static func relay_payload(title: String, report: String) -> String:
+	return JSON.stringify({"title": _clip(title.strip_edges(), TITLE_MAX), "body": report})
 
 static var _trail: Array[String] = []
 
@@ -200,6 +241,53 @@ static func save_copy(title: String, report: String) -> String:
 #
 # Returns  {title, body, url, path, opened}  — the overlay reports the path when
 # the browser did not open, and offers the body on the clipboard either way.
+# Post a report to the relay and wait for the answer. `host` is any node in the
+# tree — HTTPRequest is a Node, and this module is not one.
+#
+# Returns  {ok, url, error}  — `url` is the filed issue when ok, and `error` is
+# something the player can read when not. Never throws, never leaves the
+# HTTPRequest behind.
+static func post_to_relay(host: Node, title: String, report: String) -> Dictionary:
+	if not has_relay():
+		return {"ok": false, "url": "", "error": "No relay is configured in this build."}
+	var http := HTTPRequest.new()
+	http.timeout = RELAY_TIMEOUT
+	host.add_child(http)
+	var headers: PackedStringArray = ["Content-Type: application/json"]
+	var key := relay_key()
+	if not key.is_empty():
+		headers.append("X-Relay-Key: " + key)
+	var started := http.request(relay_url(), headers, HTTPClient.METHOD_POST,
+		relay_payload(title, report))
+	if started != OK:
+		http.queue_free()
+		return {"ok": false, "url": "", "error": "Could not start the request (error %d)." % started}
+	var answer: Array = await http.request_completed
+	http.queue_free()
+	return _read_relay_answer(answer)
+
+# request_completed gives [result, code, headers, body]. Split out so a test can
+# feed it every shape of failure without a network.
+static func _read_relay_answer(answer: Array) -> Dictionary:
+	var result: int = int(answer[0])
+	var code: int = int(answer[1])
+	var body: PackedByteArray = answer[3]
+	if result != HTTPRequest.RESULT_SUCCESS:
+		# No reply at all: offline, DNS, TLS, or the timeout above.
+		return {"ok": false, "url": "",
+			"error": "Could not reach the bug relay. Check your connection, or press “Copy instead”."}
+	var parsed = JSON.parse_string(body.get_string_from_utf8())
+	var d: Dictionary = parsed if parsed is Dictionary else {}
+	if code >= 200 and code < 300 and bool(d.get("ok", false)):
+		return {"ok": true, "url": String(d.get("url", "")), "error": ""}
+	# The Worker's own message when it sent one — it is written to be read by a
+	# player ("too many reports from here"), and it is the only part of the
+	# answer worth showing.
+	var why := String(d.get("error", ""))
+	if why.is_empty():
+		why = "The bug relay refused the report (%d)." % code
+	return {"ok": false, "url": "", "error": why}
+
 static func submit(title: String, description: String, context := {},
 		open_browser := true) -> Dictionary:
 	var t := _clip(title.strip_edges(), TITLE_MAX)

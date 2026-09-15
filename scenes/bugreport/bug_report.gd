@@ -10,6 +10,11 @@
 # already in it, and the player submits there under their own account — the
 # game never holds a token. core/bug_report.gd says why at length.
 #
+# "Send it anonymously" is the second door, and only appears when a build has a
+# relay compiled in (tools/bug-relay/). It is the quieter button on purpose:
+# what it costs is the reply, since nobody can answer an issue with no account
+# behind it, and the button says so rather than making that a surprise.
+#
 # Run standalone:  godot --path . scenes/bugreport/bug_report.tscn
 extends Control
 
@@ -31,7 +36,9 @@ var _title_edit: LineEdit
 var _desc_edit: TextEdit
 var _note: Label
 var _send: Button
+var _relay: Button              # null in a build with no relay configured
 var _last: Dictionary = {}     # the most recent submit(), for "copy" afterwards
+var _in_flight := false         # a relay post is out; every button waits for it
 
 # Open the overlay under `host`, or close it if it is already open. Returns the
 # overlay when it opened one, null when it closed it — same contract as
@@ -127,6 +134,16 @@ func _ready() -> void:
 	_send.pressed.connect(_submit)
 	Icons.clicks(_send)
 	row.add_child(_send)
+	# Only in a build that has a relay. Nothing about the overlay changes when
+	# there is none — there is simply no second button, which is the honest
+	# thing for a build where the second door does not exist.
+	if Report.has_relay():
+		_relay = Button.new()
+		_relay.text = "Send it anonymously"
+		_relay.tooltip_text = "Files it without opening a browser. It arrives with no account attached, so we cannot reply to you."
+		_relay.pressed.connect(_send_via_relay)
+		Icons.clicks(_relay)
+		row.add_child(_relay)
 	var copy := Button.new()
 	copy.text = "Copy instead"
 	copy.pressed.connect(_copy)
@@ -209,8 +226,13 @@ func _can_send() -> bool:
 	return not _title_edit.text.strip_edges().is_empty()
 
 func _refresh_send() -> void:
-	_send.disabled = not _can_send()
-	if _send.disabled:
+	var ready := _can_send() and not _in_flight
+	_send.disabled = not ready
+	if _relay != null:
+		_relay.disabled = not ready
+	if _in_flight:
+		return          # the note belongs to the post while one is out
+	if not _can_send():
 		_note.text = HINT_NEED_TITLE
 	elif _note.text == HINT_NEED_TITLE:
 		_note.text = ""
@@ -223,13 +245,49 @@ func _submit() -> void:
 		_note.text = "GitHub is open in your browser — press Submit there to file it."
 	else:
 		# The browser refused (a blocked popup on the web export, or no handler
-		# for https). The report exists regardless; say where, and offer it.
-		_note.text = "Could not open a browser. Press “Copy instead” and paste it at github.com/%s/issues/new." % Report.REPO
+		# for https). The report exists regardless; say so, and point at
+		# whichever fallback this build actually has.
+		_note.text = "Could not open a browser. " + ("Press “Send it anonymously” and we will file it for you."
+			if _relay != null
+			else "Press “Copy instead” and paste it at github.com/%s/issues/new." % Report.REPO)
+	_note_saved_copy()
+
+# The second door. The report is built and written to disk exactly as the
+# browser path builds it, then posted; tools/bug-relay/ files it.
+func _send_via_relay() -> void:
+	if not _can_send() or _in_flight:
+		return
+	_in_flight = true
+	_refresh_send()
+	_note.text = "Sending…"
+	_last = Report.submit(_title_edit.text, _desc_edit.text, context, false)
+	var answer: Dictionary = await Report.post_to_relay(self, _last["title"], _last["body"])
+	# The player may have closed the overlay while it was in the air.
+	if not is_inside_tree():
+		return
+	_in_flight = false
+	if answer.get("ok", false):
+		var where := String(answer.get("url", ""))
+		_note.text = "Filed. Thank you." + ("\n" + where if not where.is_empty() else "")
+		# Nothing more to send: leave the report on screen, but stop offering
+		# to file the same thing twice.
+		_send.disabled = true
+		if _relay != null:
+			_relay.disabled = true
+		return
+	_note.text = String(answer.get("error", "Could not send it."))
+	_refresh_send()
+	_note_saved_copy()
+
+# The one thing that is true whatever else happened: it is written down.
+func _note_saved_copy() -> void:
 	var path := String(_last.get("path", ""))
 	if not path.is_empty():
 		_note.text += "\nA copy is saved at %s" % ProjectSettings.globalize_path(path)
 
 func _copy() -> void:
+	if _in_flight:
+		return
 	if not _can_send():
 		_note.text = "Write a one-line summary first — it becomes the issue title."
 		return
@@ -239,9 +297,7 @@ func _copy() -> void:
 	_last = Report.submit(_title_edit.text, _desc_edit.text, context, false)
 	DisplayServer.clipboard_set("%s\n\n%s" % [_last["title"], _last["body"]])
 	_note.text = "Copied. Paste it at github.com/%s/issues/new" % Report.REPO
-	var path := String(_last.get("path", ""))
-	if not path.is_empty():
-		_note.text += "\nA copy is saved at %s" % ProjectSettings.globalize_path(path)
+	_note_saved_copy()
 
 # --- small builders -------------------------------------------------------
 

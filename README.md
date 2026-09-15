@@ -58,6 +58,9 @@ scenes/
                    achievements viewer, the settings overlay
   bugreport/       the "Report a bug" overlay: a title, what happened, and a
                    look at the diagnostics before any of it leaves the machine
+tools/bug-relay/   the reporter's optional fallback: a Cloudflare Worker that
+                   holds a repo-scoped token and files a report as an issue when
+                   the player's browser will not open. Opt-in; see its README
 data/              the 5e SRD export (classes/spells/species/...), a 316-
                    entry hand-tagged bestiary, and data/effects/*.json (the
                    sorcmerc-authored mechanics layer over the raw export)
@@ -220,6 +223,16 @@ credentials at all and files nothing on anyone's behalf. The reporter's own
 account opens the issue, which also means we can reply to them. `core/bug_report.gd`
 has the long version of the argument.
 
+When that path is shut — a popup blocker on the web export, a machine with no
+handler for `https` — there is an optional second door: **Send it anonymously**
+posts the report to a small Cloudflare Worker (`tools/bug-relay/`) that holds a
+repo-scoped token and files the issue. It is the fallback and it stays the
+fallback, because the issue arrives with nobody to reply to; the filed issue
+says so on its own face. It is also entirely opt-in — the button only appears in
+a build with a relay compiled in, and the repo ships with none. See
+`tools/bug-relay/README.md` to deploy one, or don't, and the browser path is the
+only path.
+
 What rides along with the description: the build and engine version, the
 platform, the screen it was filed from and that screen's live state (the board
 mid-fight; the day, region, party and purse on the map), and a ring buffer of
@@ -231,6 +244,9 @@ first, so a blocked popup or a machine with no browser costs nothing.
 The version on a report comes from `application/config/version` in
 `project.godot`; `.github/workflows/release.yml` stamps the real tag into it at
 export time, so a run from source says `0.1.0-dev` and a release says `v0.2.1`.
+That workflow also stamps the relay URL, from a `BUG_RELAY_URL` repository
+variable, the same way. `SORCMERC_BUG_RELAY` overrides it for a local run
+against `wrangler dev`.
 
 ## Status
 
