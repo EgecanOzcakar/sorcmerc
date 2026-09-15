@@ -1868,6 +1868,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		btn.disabled = (_market_tab == t)   # the open tab, shown as pressed rather than as a live button
 		btn.pressed.connect(_goto_market_tab.bind(String(t)))
 		tabs.add_child(btn)
+	if _market_tab != MARKET_TAB_ALL:
+		_portrait(box, s.faction, _market_tab)
 
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(440, 250)
@@ -2012,6 +2014,8 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 		else "A town elder", party.gold]
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
+	if Visit.has_service(s, "innkeeper"):
+		_portrait(box, s.faction, "innkeeper")
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(440, 300)
 	box.add_child(scroll)
@@ -2037,6 +2041,11 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 # A counter's heading inside a page's scroll list, and a muted aside. Both
 # exist so a page can explain itself without every builder re-deriving the
 # same Label boilerplate.
+func _portrait(box: Control, faction: String, service: String) -> void:
+	var pic := Icons.portrait_rect(faction, service)
+	if pic != null:
+		box.add_child(pic)
+
 func _section(rows: Control, text: String) -> void:
 	var l := Label.new()
 	l.text = text
