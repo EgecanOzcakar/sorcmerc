@@ -28,6 +28,6 @@ jobs:
             Find the cause, implement a fix, run the tests if there are any,
             and open a pull request that references the issue.
             If the issue is unclear, comment on it asking for details instead of guessing.
-        claude_args: |
-          --max-turns 30
-          --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(npx:*)"
+          claude_args: |
+            --max-turns 30
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git:*),Bash(gh:*),Bash(npm:*),Bash(npx:*)"
