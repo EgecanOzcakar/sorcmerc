@@ -4263,3 +4263,15 @@ And one take came back **silent** (peak 14 of 32767). That is why the tool
 measures the peak and says `** silent take, re-run this one **` rather than
 writing a dead file and reporting success: a generative API can hand you nothing
 with a 200, and the only thing that catches it is looking at the samples.
+
+## Spike — hex distances, spell ranges, ranged↔melee (2026-09-15, measurement only)
+
+Full write-up in `docs/spike-hex-ranges.md`; tooling `tests/sweep_range_detail.gd`
+(throwaway). Headlines: `RANGE_CAP` 6/8/10/12 and "spells uncapped" are
+byte-identical on current boards (nobody ever shoots past 7 hexes);
+`FT_PER_HEX` only rescales the party because the bestiary is hex-native
+(FT 5 = +10.7 win-rate points, all from a 3-hex Burning Hands and speed 6);
+29 of 53 castable spells have no authored `range_ft` and default to touch
+(Hold Person, Web, Hypnotic Pattern…). Recommendation: author the 29 ranges
+first, then decide whether range is a 3-tier grammar (cap 5) or needs bigger
+boards + a `_foe_spots` fix — no more constant sweeps until that's chosen.
