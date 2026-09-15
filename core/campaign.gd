@@ -467,11 +467,20 @@ func enter(i: int) -> Dictionary:
 	# T27: the bed follows the place, the tension layer follows the fight.
 	Sound.set_environment(String(node.get("theme", "")) if node["kind"] == "combat" else "settlement")
 	Sound.set_combat(node["kind"] == "combat")
-	if node["kind"] == "rest":
-		Sound.play_sfx("rest")
-	if node["kind"] == "treasure":
-		Sound.play_sfx("pickup")
-		_take_treasure()
+	# One sting per arrival, chosen by what you arrived AT — not stacked, because
+	# two one-shots fired on the same frame read as one muddy noise rather than
+	# two events. `travel` is the default: getting anywhere took walking, and a
+	# combat node wants footsteps-into-ambush under its tension layer, not silence.
+	match String(node["kind"]):
+		"rest":
+			Sound.play_sfx("rest")
+		"treasure":
+			Sound.play_sfx("pickup")
+			_take_treasure()
+		"merchant":
+			Sound.play_sfx("settlement")
+		_:
+			Sound.play_sfx("travel")
 	_autosave()
 	return node
 
@@ -996,7 +1005,10 @@ func accept(quest: Dictionary) -> bool:
 func turn_in(quest: Dictionary) -> bool:
 	if node.get("kind", "") != "merchant" or not Quest.turn_in(party, quest):
 		return false
-	Sound.play_sfx("quest")   # T27
+	# Accepting and completing a quest used to be the same sting. They are the two
+	# ends of the same arc and the payoff is the one worth hearing, so completing
+	# now resolves where accepting only reaches.
+	Sound.play_sfx("quest_complete")
 	say("Quest complete: %s (+%d gp)" % [quest["title"], int(quest["reward"].get("gold", 0))])
 	_autosave()
 	return true

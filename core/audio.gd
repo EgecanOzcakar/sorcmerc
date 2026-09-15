@@ -36,12 +36,22 @@ const BED_DB := -12.0        # the bed sits under everything
 const TENSION_DB := -9.0
 const QUIET_DB := -60.0      # "off" without stopping the loop
 const VOICES := 8            # concurrent one-shots; oldest gets reused
+# The same sting starting twice within this window is one event heard twice, not
+# two events, so the second is dropped. An area spell resolves a save PER TARGET
+# and a condition PER TARGET in a single frame, so a fireball catching five
+# bodies would otherwise stack five copies of one sample: phasey, five times as
+# loud, and it drowns the cast it is supposed to be answering. Generous enough to
+# catch a whole frame's worth of that (~3 frames at 60 fps) and far shorter than
+# the gap between two things a player would ever read as separate — a second
+# attack is turns or animation away, never 50 ms.
+const RETRIGGER_MS := 50
 
 static var _i = null         # the autoload, once it exists
 
 var _streams := {}           # path -> AudioStreamWAV (or null when missing)
 var _voices: Array = []
 var _next_voice := 0
+var _last_start := {}        # path -> Time.get_ticks_msec() of its last start
 var _beds: Array = []        # two players, ping-ponged for the crossfade
 var _bed := 0
 var _tension: AudioStreamPlayer = null
@@ -94,10 +104,22 @@ func _play_one_shot(path: String) -> void:
 	var stream = _stream(path, false)
 	if stream == null:
 		return
+	if not _should_play(path, Time.get_ticks_msec()):
+		return
 	var p: AudioStreamPlayer = _voices[_next_voice]
 	_next_voice = (_next_voice + 1) % _voices.size()
 	p.stream = stream
 	p.play()
+
+# The RETRIGGER_MS rule, and the only place that records a start. Split out of
+# _play_one_shot so tests/test_audio.gd can exercise it with synthetic timestamps:
+# headless never builds a voice pool (_ready returns before it does), so the
+# caller above cannot run at all under the test suite.
+func _should_play(path: String, now: int) -> bool:
+	if now - int(_last_start.get(path, -RETRIGGER_MS - 1)) < RETRIGGER_MS:
+		return false
+	_last_start[path] = now
+	return true
 
 # Crossfade to `theme`'s ambient bed. An unknown theme is ignored (the current bed
 # keeps playing) rather than cutting to silence.

@@ -22,6 +22,12 @@ const ATTACK_IDS := ["hit_sword", "hit_axe", "hit_blunt", "hit_pierce", "hit_bow
 const SPELL_IDS := ["cast_evocation", "cast_abjuration", "cast_conjuration",
 	"cast_enchantment", "cast_transmutation", "cast_divination", "cast_illusion",
 	"cast_necromancy"]
+# A miss splits only two ways, not nine. What you hear when a blow lands is the
+# weapon meeting armour, which is what makes an axe and a mace different sounds;
+# what you hear when it misses is air, and air moved by an axe and a mace is the
+# same air. The one split worth keeping is melee against ranged: a whiffed swing
+# is a whoosh that stays with you, a missed shot whistles past and lands somewhere.
+const MISS_IDS := ["miss", "miss_ranged"]
 
 
 static func for_attack(c) -> String:
@@ -54,6 +60,17 @@ static func for_attack(c) -> String:
 		"piercing": return "hit_bite"
 		"bludgeoning": return "hit_slam"
 	return "hit"
+
+
+# Which miss a swing makes. Same contract as for_attack(): heroes carry the
+# weapon on attacks[0], monsters carry only `ranged`, and anything unreadable
+# falls through to the melee whoosh rather than going silent.
+static func for_miss(c) -> String:
+	if c == null:
+		return "miss"
+	if not c.attacks.is_empty():
+		return "miss_ranged" if String(c.attacks[0].get("range", "melee")) == "ranged" else "miss"
+	return "miss_ranged" if c.ranged else "miss"
 
 
 static func for_spell(spell_id: String) -> String:

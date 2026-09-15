@@ -4264,6 +4264,75 @@ measures the peak and says `** silent take, re-run this one **` rather than
 writing a dead file and reporting success: a generative API can hand you nothing
 with a 200, and the only thing that catches it is looking at the samples.
 
+### The moments that fired silently (2026-09-15)
+
+Everything the game had a sound for fired when something *landed*. Twelve
+moments that fired with no audio at all now have one, generated the same way:
+a prompt in `tools/gen_audio_elevenlabs.py`, a synthesized recipe of the same
+name in `tools/gen_audio.py`, so either tool can still write any id. **All
+twelve committed WAVs are the generated takes**, like the 31 stings before
+them; the synthesized recipes are the fallback, not what shipped.
+
+All twelve came back usable on the first pass, which is worth recording
+because the earlier batch did not: peaks landed between 23464 and 63957 — a
+spread of nearly 9 dB, one of them clipping at full scale — and every one was
+normalized to `gen_audio.py`'s 28480 so the set mixes with its neighbours.
+Lengths came back at roughly 2× what was asked, as before, and trimming took
+`quest_complete` from 4.00s to 2.44s and `shop` from 2.40s to 1.11s. `miss`
+matters most here and landed at 0.66s — short enough to fire on every other
+attack roll without queueing, which is what the half-second API floor and the
+window-RMS trim exist to get.
+
+`miss` / `miss_ranged` are the ones that change how a fight reads. A missed
+attack was silent, which meant roughly half of all attack rolls resolved into
+nothing and the only thing a player ever heard was their own successes — a
+fight sounded like it was going better than it was. Misses split melee/ranged
+and stop there, not nine ways like hits: what you hear when a blow lands is the
+weapon meeting armour, which is what makes an axe and a mace different sounds;
+what you hear when it misses is air, and air moved by an axe and a mace is the
+same air. `WeaponSfx.for_miss()` is the classifier, same contract as
+`for_attack()`. Both takes are deliberately quieter and shorter than `hit`.
+
+`save_made` / `save_failed` are a pair, written to read against each other —
+the same moment resolving two ways, bright and glancing off versus dull and
+sinking. They fire only when there *was* a save to make; a no-save spell logs
+"fails" through the same line and would otherwise get a second sting under
+every magic missile.
+
+`down` was `kill`'s asset until now, so a hero dropping sounded exactly like a
+foe dying and a party wipe sounded like a victory. Same armour and body, softer
+attack, no sub-bass crash: it settles rather than stops.
+
+`condition` fires only on a status that is actually new. Concentration spells
+re-apply their status every round to refresh the duration, and a sting on each
+refresh would put a buzz under every round of a running Hold Person.
+
+The rest: `burst` (an explosive barrel), `collapse` (exhaustion's last level),
+and four for the world between fights — `travel`, `settlement`, `shop`, and
+`quest_complete`, which resolves where accepting a quest only reaches. Arrival
+at a node picks exactly one sting rather than stacking them, because two
+one-shots on the same frame read as one muddy noise rather than two events.
+
+One thing this forced in `core/audio.gd`, and it is the reason the new stings
+are safe to fire where they fire: **a sound will not restart within 50 ms of
+itself**. An area spell resolves a save per target and a condition per target in
+one frame, so a fireball catching five bodies fired five copies of the same
+sample on the same frame — phasey, five times as loud, and loud enough to drown
+the cast it was answering. The floor is per sound rather than global (a miss and
+a hit landing together are still two events) and far shorter than the gap
+between two things a player reads as separate, since a second attack is turns or
+animation away. `_should_play()` is split out of `_play_one_shot()` so the rule
+is testable: headless never builds a voice pool, so the caller cannot run under
+the suite at all.
+
+`tools/gen_audio.py` grew `--only`, the same spelling its sibling already had,
+and it is load-bearing now rather than a convenience: `assets/audio/` is a
+**mixed** set — the stings are the ElevenLabs tool's, the beds and barks are
+the synthesized ones — so a bare `gen_audio.py sfx` would quietly overwrite 31
+generated takes with their synthesized versions. A bare name is matched across
+every group and must be unambiguous, because `settlement` is now both a sting
+and a bed; `sfx/settlement` says which.
+
 ## Spike — hex distances, spell ranges, ranged↔melee (2026-09-15, measurement only)
 
 Full write-up in `docs/spike-hex-ranges.md`; tooling `tests/sweep_range_detail.gd`
