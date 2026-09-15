@@ -10,11 +10,27 @@
 # only replaces the building-cluster sprite blocks.
 extends "res://scenes/world/world_diorama3d.gd"
 
-# One diorama per (faction, kind) — not per settlement instance, so two towns
-# of the same race are the same building (that's already true of the 2D
-# tier's style/pair hash, just coarser: one look per size now, not a random
-# pick per id). Missing entries fall through has_model() to the existing
-# BuildingTex sprite tier, same fallback contract as Figures3D/LpcArt.
+const SettlementKit := preload("res://scenes/world/settlement_kit.gd")
+
+# Which tier-0 source builds a diorama, with the same graceful fallback either
+# way — whatever neither source covers drops through has_model() to the 2D
+# BuildingTex sprite tier, exactly as before.
+#
+#   "kit"  settlement_kit.gd assembles one from primitives, seeded per
+#          settlement id. ~1.2k triangles for a city, no texture, and a
+#          different village per id.
+#   "glb"  the Meshy dioramas in assets/settlements/: 82k triangles and a
+#          2048 atlas per (faction, kind), twelve fixed looks in total.
+#
+# A static var rather than a const because it is a comparison switch, not a
+# setting: tests/shot_settlement_kit.gd flips it to shoot both sources through
+# the same rig, which is the only honest way to look at the two side by side.
+static var source := "kit"
+
+# The GLB lookup, one model per (faction, kind) — not per settlement instance,
+# so under "glb" two towns of the same race are the same building (that's
+# already true of the 2D tier's style/pair hash, just coarser: one look per
+# size now, not a random pick per id).
 const MODELS := {
 	"dwarf": {"camp": "res://assets/settlements/dwarf_camp.glb", "town": "res://assets/settlements/dwarf_town.glb", "city": "res://assets/settlements/dwarf_city.glb"},
 	"elf": {"camp": "res://assets/settlements/elf_camp.glb", "town": "res://assets/settlements/elf_town.glb", "city": "res://assets/settlements/elf_city.glb"},
@@ -27,6 +43,10 @@ const MODELS := {
 # totally different scale from Board's hex units (K ~= 1.85 px/unit here vs
 # Board's ~46-94), so this can't reuse figures3d.gd's FIGURE_SCALE intuition —
 # first render came out at 2px tall because of exactly that assumption.
+#
+# Used by the "glb" source only — the kit builds at these heights itself
+# (SettlementKit.PLANS mirrors them, deliberately, so swapping source doesn't
+# change how big a settlement is on the map).
 const TARGET_HEIGHT := {"camp": 15.6, "town": 25.7, "city": 45.0}
 
 var _dioramas := {}            # settlement id -> Node3D
@@ -45,15 +65,29 @@ func reset(world) -> void:
 		n.queue_free()
 	_dioramas.clear()
 	for s in world.settlements:
-		var scene := _model(_model_path(s))
-		if scene == null:
+		var m := _build(s)
+		if m == null:
 			continue
 		var holder := Node3D.new()
 		_sub.add_child(holder)
-		var m := scene.instantiate()
 		holder.add_child(m)
-		_fit_height(m, float(TARGET_HEIGHT.get(s.kind, 1.0)))
 		_dioramas[s.id] = holder
+
+
+# The one place the two sources differ. A kit diorama is built in World units at
+# its final size, so it must NOT go through _fit_height() — that exists to
+# normalise a GLB, whose raw scale is whatever Meshy happened to generate it at.
+# Running it on the kit would undo the deliberate height/footprint ratio in
+# SettlementKit.PLANS.
+func _build(s) -> Node3D:
+	if source == "kit" and SettlementKit.has(s.faction, s.kind):
+		return SettlementKit.build(s.faction, s.kind, s.id)
+	var scene := _model(_model_path(s))
+	if scene == null:
+		return null
+	var m := scene.instantiate()
+	_fit_height(m, float(TARGET_HEIGHT.get(s.kind, 1.0)))
+	return m
 
 
 func _reposition() -> void:
