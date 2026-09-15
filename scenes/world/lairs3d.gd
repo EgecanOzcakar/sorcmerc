@@ -9,11 +9,23 @@
 # as Settlements3D. This only replaces the "☠" glyph.
 extends "res://scenes/world/world_diorama3d.gd"
 
+const LairKit := preload("res://scenes/world/lair_kit.gd")
+
+# Which source is PREFERRED for a lair diorama; the other one is the fallback,
+# and World._draw_lair()'s skull marker is still the last resort when neither
+# covers a lair. Ordering rather than an either/or, because the two sources do
+# not cover the same set: sunken-ruins and zombie-graveyard have no GLB at all
+# (see assets/lairs/PROVENANCE.md), so under "glb" they still come back as kit
+# dioramas instead of dropping to the glyph they render as today.
+#
+# Unlike Settlements3D.source this is genuinely undecided. A cave and a rock
+# hold are the fused organic volumes text-to-3D is good at, which is the
+# opposite of a village — see the header of lair_kit.gd.
+static var source := "kit"
+
 # One diorama per lair id, not per faction — unlike a settlement, a lair
 # isn't a repeatable size tier, it's a unique named location (data/bestiary's
 # thin "dragon"/"giant" pools would make faction-keying degenerate anyway).
-# Missing entries fall through has_model() to World._draw_lair()'s skull
-# marker, same fallback contract as Settlements3D/Figures3D.
 const MODELS := {
 	"goblin-warren": "res://assets/lairs/goblin-warren.glb",
 	"giant-hold": "res://assets/lairs/giant-hold.glb",
@@ -39,16 +51,30 @@ func reset(world) -> void:
 		n.queue_free()
 	_dioramas.clear()
 	for l in world.lairs:
-		var scene := _model(_model_path(l))
-		if scene == null:
+		var m := _build(l)
+		if m == null:
 			continue
 		var holder := Node3D.new()
 		_sub.add_child(holder)
-		var m := scene.instantiate()
 		holder.add_child(m)
-		_fit_height(m, TARGET_HEIGHT)
 		holder.visible = l.discovered   # stays hidden — that's the whole mechanic — until found
 		_dioramas[l.id] = holder
+
+
+# Preferred source first, the other as fallback, null (so reset() skips it and
+# has_model() stays false) when neither has anything. A kit lair is built in
+# World units at its final size and must NOT go through _fit_height(), which
+# exists to normalise a GLB whose raw scale is whatever Meshy generated it at.
+func _build(l) -> Node3D:
+	var kit: bool = LairKit.has(l.id)
+	var scene := _model(_model_path(l))
+	if source == "kit" and kit:
+		return LairKit.build(l.id)
+	if scene != null:
+		var m := scene.instantiate()
+		_fit_height(m, TARGET_HEIGHT)
+		return m
+	return LairKit.build(l.id) if kit else null
 
 
 func _reposition() -> void:

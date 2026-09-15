@@ -18,3 +18,10 @@ figures_idle_*.png
 move_sequence.png
 idle_sequence.png
 shots_tmp/
+# tests/shot_settlement_kit.gd output — dev-only renders, same as the rest here
+kit_gallery_*.png*
+kit_variety.png*
+kit_vs_glb.png*
+# tests/shot_lair_kit.gd output
+lair_kit_gallery.png*
+lair_kit_vs_glb.png*
