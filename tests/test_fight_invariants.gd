@@ -42,6 +42,7 @@ func _init() -> void:
 	test_every_castable_spell_has_its_range()
 	test_thrown_weapons()
 	test_hit_chance_matrix()
+	test_downed_body_rules()
 	test_spawn_geometry()
 	test_real_fights_hold_the_rules()
 	print("test_fight_invariants: %d passed, %d failed" % [_pass, _fail])
@@ -151,6 +152,38 @@ func test_hit_chance_matrix() -> void:
 	var pc := base_r - 0.10
 	check(is_equal_approx(cb.hit_chance(pike, gob), 1.0 - (1.0 - pc) * (1.0 - pc)), "hidden archer: advantage on a covered target")
 	pike.statuses.erase("hidden")
+
+# The mercy rule keeps the AI off downed bodies, so a random sweep can go 60
+# fights without ever exercising these — hand-built instead.
+func test_downed_body_rules() -> void:
+	var chars := Presets.party()
+	var vera = Adapter.to_combatant(chars[0], "party", Vector2i(2, 0))
+	var pike = Adapter.to_combatant(chars[1], "party", Vector2i(2, 2))
+	var gob = Encounter.spawn("goblin", 1.0, "party", Vector2i(3, 0))   # a downed ally, so mercy is not in play
+	var cb := Combat.new(RNG.new(3), [vera, pike, gob], Encounter.board_for("sunken-shrine"))
+	for c in cb.combatants:
+		cb.begin_turn_for(c)
+	gob.team = "foe"
+	cb._apply_damage(gob, gob.hp)
+	gob.statuses["down"] = true   # a foe would be killed outright; make it a body on the floor
+	gob.statuses.erase("dead")
+	gob.hp = 0
+	gob.death_f = 0
+	check(is_equal_approx(cb.hit_chance(vera, gob), 1.0 - 0.45 * 0.45), "melee on an unconscious body: advantage on a 55%% swing (%.2f)" % cb.hit_chance(vera, gob))
+	var r := cb.resolve_attack(vera, gob)
+	check(r.get("hit", false) and r.get("crit", false), "a melee hit from reach on a downed body is an automatic crit")
+	check(gob.is_dead() or gob.death_f == 2, "...and counts as two failed death saves (%d)" % gob.death_f)
+	# a ranged hit is one failure, no auto-crit
+	var gob2 = Encounter.spawn("goblin", 1.0, "foe", Vector2i(6, 2))
+	cb.combatants.append(gob2)
+	cb.begin_turn_for(gob2)
+	gob2.hp = 0
+	gob2.statuses["down"] = true
+	pike.atk_bonus = 30
+	pike.crit_range = 21
+	var r2 := cb.resolve_attack(pike, gob2)
+	check(r2.get("hit", false) and not r2.get("crit", false), "an arrow into a downed body is a plain hit")
+	check(gob2.death_f == 1, "...worth one failed save (%d)" % gob2.death_f)
 
 # --- 2. where everybody starts, on every board ----------------------------------
 func test_spawn_geometry() -> void:
@@ -316,7 +349,7 @@ func test_real_fights_hold_the_rules() -> void:
 	print("  %d fights, %d party wins" % [SEEDS, wins])
 	# every invariant must have actually been exercised, or the harness is hooking nothing
 	for label in ["no swing beyond reach/range", "point-blank shot never rolls with advantage",
-			"an OA is swung from reach, where the mover left it", "damage on a downed body is one failure, a crit two",
+			"an OA is swung from reach, where the mover left it",
 			"a levelled cast spends exactly one slot",
 			"spell within its range", "a step never exceeds the movement left",
 			"movement per turn is speed (x2 with Dash)", "HP never exceeds max"]:

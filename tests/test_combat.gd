@@ -669,7 +669,7 @@ func test_reaction_and_concentration() -> void:
 	var v: Dictionary = ilsa.verb("burning-hands").duplicate()
 	v["concentration"] = true
 	cb.perform(ilsa, v, Vector2i(1, 0))
-	check(ilsa.statuses.get("concentrating") == "burning-hands", "casting sets concentration")
+	check(ilsa.statuses.get("concentrating", {}).get("spell") == "burning-hands", "casting sets concentration")
 	ilsa.max_hp = 500; ilsa.hp = 500
 	cb._apply_damage(ilsa, 60)                 # DC 30 — nobody makes that
 	check(not ilsa.has("concentrating"), "damage breaks concentration on a failed CON save")

@@ -225,6 +225,9 @@ func begin_turn() -> void:
 
 func begin_turn_for(c) -> void:
 	c.new_turn()   # action/bonus/reaction/move + turn-long statuses (spec §7)
+	var held = c.statuses.get("concentrating")
+	if held is Dictionary and round_num >= int(held.get("until_round", 0)):
+		_end_concentration(c, "lets %s lapse" % Effects.humanize(String(held["spell"])))
 	_expire_conditions(c)
 	_regenerate(c)
 	_auto_stand(c)
@@ -258,6 +261,10 @@ func _regenerate(c) -> void:
 func _auto_stand(c) -> void:
 	if not c.has("prone"):
 		return
+	# Hideous Laughter's prone is the spell holding you down: no getting up
+	# until it ends, and no half-move charged for trying.
+	if c.statuses["prone"] is Dictionary and c.statuses["prone"].has("held_by"):
+		return
 	c.statuses.erase("prone")
 	var mult := 1.0
 	for fid in c.features:
@@ -271,6 +278,7 @@ func _auto_stand(c) -> void:
 func end_turn() -> void:
 	var c0 = current()
 	c0.has_acted = true
+	_repeat_saves(c0, "end_turn")
 	if ambushed and round_num == 1 and c0.team == "foe":
 		_ambush_foe_turns += 1
 	for _i in order.size() + 1:
@@ -509,7 +517,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 	match v.get("targeting", "self"):
 		"enemy": return enemies_of(actor).any(func(e): return legal_target(actor, v, e))
 		"ally": return combatants.any(func(a): return a != actor and legal_target(actor, v, a))
-		"direction": return not enemies_of(actor).is_empty()
+		"direction", "hex", "corner", "line", "self_area": return not enemies_of(actor).is_empty()
 		"object": return not smashable_near(actor).is_empty()
 	return true
 
@@ -606,7 +614,7 @@ func _save_effect(actor, v: Dictionary, target) -> Dictionary:
 			dmg = dmg / 2 if v.get("halve_damage", false) else 0
 	if not saved:
 		for cond in v.get("conditions", []):
-			apply_condition(target, cond, actor, v.get("duration", ""))
+			apply_condition(target, cond, actor, v.get("duration", ""), v)
 	if dmg > 0:
 		_apply_damage(target, dmg, v.get("damage_type", ""))
 	return {"saved": saved, "damage": dmg}
@@ -634,8 +642,8 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	Sound.play_sfx(WeaponSfx.for_spell(String(v.get("spell", ""))))
 	if v.get("concentration", false):
 		if caster.has("concentrating"):
-			log.append("%s drops concentration on their earlier spell." % caster.cname)
-		caster.statuses["concentrating"] = v["spell"]
+			_end_concentration(caster, "drops concentration on %s" % Effects.humanize(String(caster.statuses["concentrating"]["spell"])))
+		caster.statuses["concentrating"] = {"spell": v["spell"], "until_round": round_num + CONCENTRATION_ROUNDS}
 	if v.has("heal_count"):
 		log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
 		heal(target, Dice.roll(rng, "%dd%d+%d" % [int(v["heal_count"]), int(v["heal_sides"]),
@@ -645,17 +653,56 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		return {}
 	var notation := "%dd%d" % [int(v.get("dice_count", 0)), int(v.get("dice_sides", 6))]
 	var dc := int(v.get("save_dc", caster.save_dc))
-	if v.get("targeting", "") == "direction":
-		var wedge := Hex.cone(caster.pos, target, int(v.get("radius", 2)))
+	var area := area_hexes(caster, v, target)
+	if not area.is_empty() or v.get("targeting", "") in AREA_KINDS:
 		log.append("%s casts %s — DC %d save." % [caster.cname, v["label"], dc])
+		var hit_any := false
 		for c in combatants:
-			if c == caster or not c.conscious() or not (c.pos in wedge):
+			if c == caster or not c.conscious() or not (c.pos in area):
 				continue
 			_spell_hit(c, v, notation, dc, caster)
-		_destroy_in_area(wedge)
-		return {}
+			hit_any = true
+		_destroy_in_area(area)
+		return {"area": area, "caught": hit_any}
 	log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
 	return _spell_hit(target, v, notation, dc, caster)
+
+const AREA_KINDS := ["direction", "hex", "corner", "line", "self_area"]
+
+# The hexes an area verb covers for `target` — a direction (cone), a hex, a
+# corner (Array of 3 hexes), an aimed hex (line), or nothing (self_area). []
+# for a single-target verb. The board preview and the AI ask this too.
+func area_hexes(caster, v: Dictionary, target) -> Array:
+	match v.get("targeting", ""):
+		"direction":
+			return Hex.cone(caster.pos, target, int(v.get("radius", 2))) if target is Vector2i else []
+		"hex":
+			return [target] if target is Vector2i else []
+		"corner":
+			return Hex.corner_area(target, int(v.get("ring", 0))) if target is Array and target.size() == 3 else []
+		"line":
+			return Hex.ray(caster.pos, target, int(v.get("length", 1))) if target is Vector2i else []
+		"self_area":
+			return Hex.within(caster.pos, int(v.get("radius", 1)))
+	return []
+
+# Can `caster` aim `v` at `target` (hex / corner / aimed hex) from where it stands?
+func legal_area(caster, v: Dictionary, target) -> bool:
+	var r := int(v.get("range", 1))
+	match v.get("targeting", ""):
+		"hex", "line":
+			return target is Vector2i and (target in board["hexes"]) and Hex.distance(caster.pos, target) <= r \
+				and (v.get("targeting", "") == "hex" or target != caster.pos)
+		"corner":
+			if not (target is Array) or target.size() != 3:
+				return false
+			var on_board := false
+			var near := 99
+			for h in target:
+				on_board = on_board or (h in board["hexes"])
+				near = mini(near, Hex.distance(caster.pos, h))
+			return on_board and near <= r
+	return true
 
 func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> Dictionary:
 	if v.has("attack_bonus"):
@@ -691,7 +738,7 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 	# those are tier-2 ally buffs, not something to inflict on the target here.
 	if not saved and v.get("save", "") != "":
 		for cond in v.get("conditions", []):
-			apply_condition(c, cond, caster, v.get("duration", "round"))
+			apply_condition(c, cond, caster, v.get("duration", "round"), v)
 			log.append("  %s is %s." % [c.cname, cond])
 	if dmg > 0:
 		_apply_damage(c, dmg, v.get("damage_type", ""))
@@ -749,7 +796,7 @@ func gain_exhaustion(c, levels := 1) -> int:
 	return lvl
 
 # Apply a named condition. charmed/frightened remember who caused them.
-func apply_condition(target, cond: String, source = null, duration := "") -> void:
+func apply_condition(target, cond: String, source = null, duration := "", v: Dictionary = {}) -> void:
 	if cond == "exhaustion":
 		gain_exhaustion(target)
 		return
@@ -759,7 +806,52 @@ func apply_condition(target, cond: String, source = null, duration := "") -> voi
 		s["source"] = source
 	if duration == "round":
 		s["until_tick"] = _tick()
+	elif duration == "concentration" and source != null:
+		# Held by the caster: ends with their concentration, or when the target
+		# shakes it off the way the spell allows (see _repeat_saves).
+		s["held_by"] = source
+		s["spell"] = String(v.get("spell", ""))
+		s["repeat"] = String(v.get("repeat_save", "end_turn"))
+		s["save"] = String(v.get("save", ""))
+		s["dc"] = int(v.get("save_dc", source.save_dc))
 	target.statuses[cond] = s if not s.is_empty() else true
+
+# --- concentration ---------------------------------------------------
+#
+# caster.statuses["concentrating"] = {spell, until_round}. Every condition the
+# spell landed carries held_by = caster, so ending concentration — a failed CON
+# save, a new concentration spell, going down, dying, or the duration running
+# out at the caster's turn — strips them all in one pass.
+const CONCENTRATION_ROUNDS := 10   # a minute, the RAW duration of the lot
+
+func _end_concentration(caster, why: String) -> void:
+	var held = caster.statuses.get("concentrating")
+	caster.statuses.erase("concentrating")
+	if not (held is Dictionary):
+		return
+	log.append("%s %s." % [caster.cname, why])
+	for c in combatants:
+		for id in c.statuses.keys():
+			var s = c.statuses[id]
+			if s is Dictionary and s.get("held_by") == caster and s.get("spell", "") == held["spell"]:
+				c.statuses.erase(id)
+				log.append("  %s is no longer %s." % [c.cname, id])
+
+# A held condition the target can shake off: `when` is "end_turn" (its own
+# turn ends), "on_damage" (it was just hurt). "damage_ends" needs no roll.
+func _repeat_saves(c, when: String) -> void:
+	for id in c.statuses.keys():
+		var s = c.statuses[id]
+		if not (s is Dictionary and s.has("held_by")):
+			continue
+		var mode := String(s.get("repeat", "end_turn"))
+		if when == "on_damage" and mode == "damage_ends":
+			c.statuses.erase(id)
+			log.append("%s is shaken out of %s." % [c.cname, id])
+		elif mode == when and String(s.get("save", "")) != "":
+			if _saving_throw(c, int(s["dc"]), s["save"]):
+				c.statuses.erase(id)
+				log.append("%s shakes off %s (%s save)." % [c.cname, id, String(s["save"]).to_upper()])
 
 func _source_of(c, key: String):
 	for id in c.statuses:
@@ -1110,15 +1202,9 @@ func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 		dmg = dmg / 2
 	if dmg > 0 and target.has("concentrating"):
 		if not _saving_throw(target, maxi(10, dmg / 2), "con"):
-			log.append("%s loses concentration." % target.cname)
-			target.statuses.erase("concentrating")
-			# ponytail: doesn't clean up whatever the spell was maintaining on
-			# another combatant — a real gap for a multi-round concentration
-			# effect, currently a non-issue because every condition-inflicting
-			# concentration spell (T33) caps its condition at duration "round"
-			# regardless of concentration, so nothing outlives this by design.
-			# Revisit (track caster -> {target: condition} per cast) the day a
-			# real repeated-save/full-duration concentration effect lands.
+			_end_concentration(target, "loses concentration")
+	if dmg > 0:
+		_repeat_saves(target, "on_damage")
 	if target.is_down():
 		# Damage to a downed body is a failed death save; a crit (which any melee
 		# hit from reach is, via _auto_crit) is two.
@@ -1141,12 +1227,16 @@ func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 		else:
 			target.statuses["down"] = true
 			target.statuses.erase("prone")
+			if target.has("concentrating"):
+				_end_concentration(target, "loses concentration")
 			target.death_s = 0
 			target.death_f = 0
 			log.append("%s falls unconscious." % target.cname)
 			bark(target, "down")
 
 func _kill(c) -> void:
+	if c.has("concentrating"):
+		_end_concentration(c, "loses concentration")
 	c.statuses["dead"] = true
 	c.statuses.erase("down")
 	c.hp = 0

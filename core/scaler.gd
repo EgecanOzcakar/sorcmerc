@@ -18,6 +18,15 @@
 # Level-8 party (the presets levelled to 8, score 108.8), 60 seeds: 95 / 88 / 78%
 # (was 92 / 73 / 58 at T38's tiers).
 #
+# Re-measured 2026-09-15 on the grown boards (encounter._grow: 9 rows, lumpy
+# perimeter) with areas castable and concentration held — the party got
+# Fireball, the foes got room, and both ends of the curve moved. TIER down,
+# CURVE up to 1.15 so a level-8 party (score 116) buys a roster it can lose to:
+#   easy   TIER 0.64 -> avg 4.1 foes x0.89 : 189W/11L  (94.5%)  avg 6.3 rounds
+#   normal TIER 0.78 -> avg 4.2 foes x0.88 : 168W/32L  (84.0%)  avg 7.7 rounds
+#   hard   TIER 0.92 -> avg 4.4 foes x0.93 : 151W/49L  (75.5%)  avg 8.2 rounds
+# Level 8, 150 seeds: 98 / 83 / 70% (was 99 / 96 / 90 before CURVE moved).
+#
 # RETUNED 2026-09-15. 6b098e8 let a mover pass through allies (correct 5e; the
 # same rule BG3 uses), and the numbers below fell to easy 80 / normal 68 / hard
 # 51.5 — bisected, it is that commit alone. The side with more bodies gains more
@@ -142,9 +151,9 @@ const Encounter = preload("res://core/encounter.gd")
 const Power = preload("res://core/rules/power.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
-const TIER := {"easy": 0.77, "normal": 0.90, "hard": 1.04}
+const TIER := {"easy": 0.64, "normal": 0.78, "hard": 0.92}
 const REF_SCORE := 46.6   # the level-3 preset party — where TIER was calibrated
-const CURVE := 0.90       # budget grows sublinearly with party power (see the header)
+const CURVE := 1.15       # budget grows sublinearly with party power (see the header)
 const MAX_FOES := 8
 const MULT_MIN := 0.6
 const MULT_MAX := 2.5

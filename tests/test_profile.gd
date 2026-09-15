@@ -168,7 +168,7 @@ func _unidentified() -> void:
 	p.set_party(pty)
 	check(pty.use_identification_scroll("cloak-of-elvenkind"), "the scroll reveals it")
 	p.set_party(pty)
-	var known: String = p._fields["item_cloak-of-elvenkind"].get_parent().get_child(0).text
+	var known: String = p._fields["item_cloak-of-elvenkind"].tooltip_text.get_slice("\n", 0)
 	check(known.begins_with("Cloak"), "the identified item shows its real name (got %s)" % known)
 	p.toggle_equip("cloak-of-elvenkind")
 	check(pty.stash_count("cloak-of-elvenkind") == 0, "an identified magic item can be taken")
