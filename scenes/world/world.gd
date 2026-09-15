@@ -1888,9 +1888,16 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 			continue
 		if showing_all:
 			_section(rows, String(Campaign.SERVICE_NAMES.get(service, service)))
+		# T9a: a shelf is a row of pictures; the name, numbers and prose are
+		# the hover text, the price the caption, the click the purchase.
+		var shelf_grid := _item_grid(rows)
 		for e in shelf:
-			_trade_row(rows, "%s — %d gp" % [e["name"], e["price"]], "Buy",
-				_buy.bind(String(e["item_id"])))
+			var iid := String(e["item_id"])
+			var kd: Array = Icons.item_def(iid)
+			var tile := Icons.item_tile(iid, Icons.item_tooltip(iid, kd[1], kd[0])
+				+ "\n\nClick: buy for %d gp" % int(e["price"]), "%d gp" % int(e["price"]))
+			tile.pressed.connect(_buy.bind(iid))
+			shelf_grid.add_child(tile)
 		if service == "healer":
 			_trade_row(rows, "Patch up the whole party — %d gp (no rest, no waiting)" % Visit.HEAL_COST,
 				"Heal", _heal)
@@ -1910,17 +1917,23 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 			WorldCamp.CAMP_KIT_NAME, WorldCamp.CAMP_KIT_PRICE], "Buy", _buy_camp_kit)
 	# Selling is not a counter — whoever is behind it takes the whole pack —
 	# so it stays out of the tabs and sits under everything, on every tab.
-	var sellable := 0
+	var pack: GridContainer = null
 	for entry in party.stash:
 		var id := String(entry["item_id"])
 		var paid := Visit.sell_price(_visit, id)
 		if paid <= 0:
 			continue
-		if sellable == 0:
+		if pack == null:
 			_section(rows, "Your pack")
-		sellable += 1
-		_trade_row(rows, "%s x%d — sells for %d gp" % [
-			Campaign.item_name(id), int(entry["quantity"]), paid], "Sell", _sell.bind(id))
+			pack = _item_grid(rows)
+		var kd: Array = Icons.item_def(id)
+		var tip: String = ("Unidentified item (%s)" % Icons.rarity_of(id) if not Party.is_identified(entry)
+			else Icons.item_tooltip(id, kd[1], kd[0]))
+		var qty := int(entry["quantity"])
+		var tile := Icons.item_tile(id, tip + "\n\nClick: sell one for %d gp" % paid,
+			"%d gp" % paid + (" ×%d" % qty if qty > 1 else ""))
+		tile.pressed.connect(_sell.bind(id))
+		pack.add_child(tile)
 
 	var bar := HBoxContainer.new()
 	box.add_child(bar)
@@ -2075,6 +2088,12 @@ static func _travel_time(minutes: float) -> String:
 	if minutes < 60.0:
 		return "%d min" % maxi(1, int(round(minutes)))
 	return "%dh%02d" % [int(minutes / 60.0), int(minutes) % 60]
+
+func _item_grid(rows: Control) -> GridContainer:
+	var g := GridContainer.new()
+	g.columns = 5
+	rows.add_child(g)
+	return g
 
 func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable) -> void:
 	var row := HBoxContainer.new()

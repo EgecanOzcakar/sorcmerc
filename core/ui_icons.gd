@@ -556,3 +556,85 @@ static func item_color(item_id: String) -> Color:
 # line) — the ramp only colours it, so an unidentified item still reads as one.
 static func item_bb(item_id: String, text: String) -> String:
 	return "[color=%s]%s[/color]" % [item_color(item_id).to_html(false), text]
+
+# --- item art (T9a) ---------------------------------------------------------
+# One render per item id under assets/art/items (tools/import_item_art.py off
+# the ComfyUI batch). null when nobody has drawn it: the tile then shows the
+# name, so a content pack's item is still a tile, just a plain one.
+const ITEM_ART_PX := 64
+
+static func item_art(item_id: String) -> Texture2D:
+	return _icon("res://assets/art/items/%s.png" % item_id)
+
+# Everything the old row said, as the hover text of a tile: name, the numbers
+# that matter for its kind, then the prose. `def` is the catalog entry (weapon,
+# armor or magic-item), `kind` which of the three it came from.
+static func item_tooltip(item_id: String, def: Dictionary, kind: String) -> String:
+	var lines: Array = [str(def.get("name", item_id.capitalize()))]
+	match kind:
+		"weapon":
+			var dice := str(def.get("damageDice", ""))
+			if str(def.get("versatileDice", "None")) != "None":
+				dice += " (%s two-handed)" % def["versatileDice"]
+			lines.append("%s %s, %s" % [dice, def.get("damageType", ""), def.get("category", "")])
+			var props := str(def.get("properties", "[]")).replace("[", "").replace("]", "").replace("'", "")
+			if str(def.get("range", "melee")) == "ranged" or props.contains("thrown"):
+				lines.append("Range %s/%s ft" % [def.get("normalRange", "?"), def.get("longRange", "?")])
+			if props != "":
+				lines.append(props.capitalize())
+		"armor":
+			var ac := "AC %s" % def.get("baseAc", "?")
+			var dex := str(def.get("maxDexBonus", "None"))
+			if str(def.get("category", "")) == "light":
+				ac += " + Dex"
+			elif dex != "None":
+				ac += " + Dex (max %s)" % dex
+			lines.append("%s, %s" % [ac, def.get("category", "")])
+			if str(def.get("stealthDisadvantage", "False")) == "True":
+				lines.append("Disadvantage on Stealth")
+			if int(def.get("strengthRequirement", 0)) > 0:
+				lines.append("Needs Str %s" % def["strengthRequirement"])
+		_:
+			lines.append(str(def.get("rarity", "")).capitalize()
+				+ (", attunement" if str(def.get("attunement", "False")) == "True" else ""))
+			var desc := str(def.get("description", "")).strip_edges()
+			if desc != "":
+				lines.append("")
+				lines.append(desc.left(600) + ("…" if desc.length() > 600 else ""))
+	var cost := str(def.get("costGp", ""))
+	if cost != "" and cost != "None":
+		lines.append("%s gp" % cost)
+	return "\n".join(lines)
+
+# A square art tile with the hover text; the caller wires `pressed`. `caption`
+# is the button's own text under the art (a price, "×3", "Equipped"); without
+# art the name stands in for it. The rarity ramp colours the caption.
+static func item_tile(item_id: String, tooltip: String, caption := "", px := ITEM_ART_PX) -> Button:
+	var b := Button.new()
+	clicks(b)
+	b.tooltip_text = tooltip
+	b.add_theme_color_override("font_color", item_color(item_id))
+	b.add_theme_font_size_override("font_size", FS_CAPTION)
+	var tex := item_art(item_id)
+	if tex == null:
+		b.text = tooltip.get_slice("\n", 0) + ("" if caption == "" else "\n" + caption)
+		b.custom_minimum_size = Vector2(px + 12, px + 12)
+		return b
+	b.icon = tex
+	b.expand_icon = true
+	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	b.text = caption
+	b.custom_minimum_size = Vector2(px + 12, px + (30 if caption != "" else 12))
+	return b
+
+# Kind + catalog entry for any item id, in the order the rest of the UI
+# resolves them (an armor "shield" beats the magic-item "shield").
+static func item_def(item_id: String) -> Array:
+	var def := Catalog.weapon(item_id)
+	if not def.is_empty():
+		return ["weapon", def]
+	def = Catalog.armor(item_id)
+	if not def.is_empty():
+		return ["armor", def]
+	return ["magic", Catalog.magic_item(item_id)]

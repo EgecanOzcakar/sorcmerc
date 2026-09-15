@@ -371,63 +371,72 @@ func _inventory(col: VBoxContainer, s) -> void:
 	var v := _panel(col, "Equipped")
 	if s.equipment.is_empty():
 		_row(v, "—", "nothing worn")
+	var worn := _grid(v)
 	for it in s.equipment:
-		_item_row(v, String(it["item_id"]), it["def"], String(it["kind"]), int(it["quantity"]), true)
+		_item_tile(worn, String(it["item_id"]), it["def"], String(it["kind"]), int(it["quantity"]), true)
 
 	var stash := _panel(col, "Party stash")
 	if party().stash.is_empty():
 		_row(stash, "—", "empty")
+	var bag := _grid(stash)
 	for e in party().stash:
 		var iid := String(e["item_id"])
-		var def: Dictionary = Catalog.index("weapons.json").get(iid, {})
-		var kind := "weapon"
-		if def.is_empty():
-			def = Catalog.index("armor.json").get(iid, {})
-			kind = "armor"
-		if def.is_empty():
-			def = Catalog.index("magic-items.json").get(iid, {})
-			kind = "unknown"
-		_item_row(stash, iid, def, kind, int(e["quantity"]), false, Party.is_identified(e))
+		var kd: Array = Icons.item_def(iid)
+		var kind: String = kd[0] if not kd[1].is_empty() else "unknown"
+		_item_tile(bag, iid, kd[1], kind, int(e["quantity"]), false, Party.is_identified(e))
 
+func _grid(v: VBoxContainer) -> GridContainer:
+	var g := GridContainer.new()
+	g.columns = 5
+	v.add_child(g)
+	return g
+
+# T9a: the item IS its picture. Everything the row used to say is the hover
+# text; the click is the one action the row offered (Equip/Unequip, or Read
+# identify scroll), and a Light weapon in hand takes the off-hand on right-click.
 # T13: an unidentified item shows as a mystery — rarity only, no name, no Equip.
 # Reading a Scroll of Identification here works any time; the DC 15 Arcana check
 # is the rest node's business (it is made "during a short rest").
-func _item_row(v: VBoxContainer, iid: String, def: Dictionary, kind: String, qty: int,
+func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qty: int,
 		equipped: bool, identified := true) -> void:
-	var nm: String = def.get("name", _title(iid))
+	var tip: String
+	var caption := "×%d" % qty if qty > 1 else ""
 	if not identified:
-		nm = "Unidentified item (%s)" % str(def.get("rarity", "unknown"))
-	if qty > 1:
-		nm += " ×%d" % qty
-	var tag := kind
-	if kind == "armor":
-		tag = str(def.get("category", "armor"))
-	var h := _row(v, nm, tag, "item_" + iid, COL_TEXT if equipped else COL_DIM)
-	h.get_child(0).add_theme_color_override("font_color", Icons.item_color(iid))
-	if not identified:
-		if party().stash_count(Party.IDENTIFY_SCROLL, true) > 0:
-			_btn(h, "Read identify scroll", func():
+		tip = "Unidentified item (%s)" % str(def.get("rarity", "unknown"))
+		var can_read: bool = party().stash_count(Party.IDENTIFY_SCROLL, true) > 0
+		tip += "\n\nClick: read an identify scroll" if can_read else "\n\nNeeds a Scroll of Identification"
+		var m := Icons.item_tile(iid, tip, caption)
+		m.text = "?" if m.icon != null else m.text
+		m.disabled = not can_read
+		_fields["item_" + iid] = m
+		if can_read:
+			m.pressed.connect(func():
 				party().use_identification_scroll(iid)
 				_render())
+		g.add_child(m)
 		return
+	tip = Icons.item_tooltip(iid, def, kind)
 	if kind == "unknown":
+		_fields["item_" + iid] = Icons.item_tile(iid, tip, caption)
+		g.add_child(_fields["item_" + iid])
 		return
-	# T24: a Light weapon already in hand can be moved to the off-hand slot.
-	if equipped and kind == "weapon" and _ch.is_light(iid):
-		var o := Button.new()
-		Icons.clicks(o)
-		o.text = "Main hand" if _ch.offhand == iid else "Off-hand"
-		o.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
-		o.pressed.connect(toggle_offhand.bind(iid))
-		h.add_child(o)
-		_fields["offhand_btn_" + iid] = o
-	var b := Button.new()
-	Icons.clicks(b)
-	b.text = "Unequip" if equipped else "Equip"
-	b.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+	var offhand: bool = equipped and kind == "weapon" and _ch.is_light(iid)
+	if equipped:
+		caption = "Off-hand" if _ch.offhand == iid else "Equipped"
+	tip += "\n\nClick: %s" % ("unequip" if equipped else "equip")
+	if offhand:
+		tip += "\nRight-click: %s" % ("main hand" if _ch.offhand == iid else "off-hand")
+	var b := Icons.item_tile(iid, tip, caption)
 	b.pressed.connect(toggle_equip.bind(iid))
-	h.add_child(b)
+	if offhand:
+		b.gui_input.connect(func(ev: InputEvent):
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT:
+				toggle_offhand(iid))
+	g.add_child(b)
+	_fields["item_" + iid] = b
 	_fields["equip_btn_" + iid] = b
+	if offhand:
+		_fields["offhand_btn_" + iid] = b
 
 # Public for the same reason toggle_equip is: tests drive it without a button.
 func toggle_offhand(item_id: String) -> void:

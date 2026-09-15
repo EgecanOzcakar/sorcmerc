@@ -96,7 +96,7 @@ func _equip() -> void:
 	var no_shield: int = vera.sheet().ac
 	check(no_shield == armored - 2, "dropping the shield costs 2 AC (%d -> %d)" % [armored, no_shield])
 	check(p.field("ac") == str(no_shield), "screen re-renders AC after unequip")
-	check(p._fields["equip_btn_shield"].text == "Equip", "button flips to Equip")
+	check(p._fields["equip_btn_shield"].tooltip_text.ends_with("Click: equip"), "tile flips to Equip")
 
 	p.toggle_equip("chain-mail")
 	var naked: int = vera.sheet().ac
@@ -154,9 +154,8 @@ func _unidentified() -> void:
 	p.set_party(pty)
 	p.set_character(pike)
 
-	var row: String = p.field("item_cloak-of-elvenkind")
-	var label: String = p._fields["item_cloak-of-elvenkind"].get_parent().get_child(0).text
-	check(row != "", "the mystery still renders a row")
+	check(p._fields.has("item_cloak-of-elvenkind"), "the mystery still renders a tile")
+	var label: String = p._fields["item_cloak-of-elvenkind"].tooltip_text.get_slice("\n", 0)
 	check(label == "Unidentified item (uncommon)",
 		"it shows rarity only, no name (got %s)" % label)
 	check(not p._fields.has("equip_btn_cloak-of-elvenkind"), "no Equip button on a mystery")
