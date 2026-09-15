@@ -3,8 +3,10 @@
 # The party owns the log (`party.quests`); nothing here holds state.
 #
 # Quest shape:
-#   id, giver_node_id, title, kind: "kill_count" | "collect_item" | "hunt_party" |
-#     "raid_settlement" | "clear_lair",
+#   id, giver_node_id, title, kind (one of KINDS below),
+#   counter — D7: which counter posts it, so a job appears where its business
+#     is rather than on one board that has everything (core/quest_posting.gd
+#     decides; nothing in this file reads it back).
 #   target_monster_id, target_item_id + drop_chance (collect_item only),
 #   target_party_id (hunt_party) / target_settlement_id (raid_settlement) /
 #     target_lair_id (clear_lair) — T91, live open-world objects rather than the
@@ -12,6 +14,9 @@
 #     record_party_defeated/record_settlement_raided/record_lair_cleared instead
 #     of record_kills. required is always 1 for them: the target either still
 #     exists or it doesn't.
+#   target_item_id (supply_item) / target_settlement_id (deliver_goods) /
+#     target_region_id (scout_region) — D7's three, completing via
+#     record_stash/record_settlement_visited/record_region_reached.
 #   required, progress, state: "offered" | "active" | "complete" | "turned_in",
 #   reward: {gold, item_id (optional)}
 extends RefCounted
@@ -20,6 +25,23 @@ const FactionOpinion = preload("res://core/faction_opinion.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 
 const BIAS_WEIGHT := 2.0   # what an unfulfilled quest is worth to Scaler.roster_for
+
+# Every kind the log can actually track, and the field each one names its target
+# in. Kept here as data rather than as prose in three files: core/mod/story.gd
+# validates an authored quest against these (its own copy drifted the moment a
+# kind was added) and core/quest_posting.gd reads KINDS to know what it may post.
+const KINDS := ["kill_count", "collect_item", "hunt_party", "raid_settlement",
+	"clear_lair", "supply_item", "deliver_goods", "scout_region"]
+const TARGET_FIELD := {
+	"kill_count": "target_monster_id", "collect_item": "target_monster_id",
+	"hunt_party": "target_party_id", "raid_settlement": "target_settlement_id",
+	"clear_lair": "target_lair_id", "supply_item": "target_item_id",
+	"deliver_goods": "target_settlement_id", "scout_region": "target_region_id",
+}
+# The subset of those fields that names something standing on the map, so a
+# caller holding a world can check the id against it. An item id and a region id
+# are not map objects and must not be looked up as if they were.
+const WORLD_TARGET_FIELDS := ["target_party_id", "target_settlement_id", "target_lair_id"]
 
 # Hand-authored, four of them. Monster ids are data/monsters.json's — the bestiary
 # is four archetypes deep, so a quest names a foe, not a species.
@@ -205,8 +227,11 @@ static func record_kills(party, kills: Array, rng) -> Array:
 		if q["state"] != "active":
 			continue
 		var n := 0
+		var want := String(q.get("target_monster_id", ""))
+		if want == "":
+			continue      # the kinds that name a place, a band or an item: no bodies to count
 		for k in kills:
-			if k != q["target_monster_id"]:
+			if k != want:
 				continue
 			if q["kind"] == "kill_count":
 				n += 1
@@ -239,6 +264,36 @@ static func record_settlement_raided(party, settlement_id: String) -> void:
 static func record_lair_cleared(party, lair_id: String) -> void:
 	_complete_world_target(party, "clear_lair", "target_lair_id", lair_id)
 
+# --- D7: the three kinds that finish on something other than a body ---------
+
+# deliver_goods — a courier run between two civilized settlements. Walking in
+# the destination's gate IS the job, so scenes/world/world.gd calls this from
+# _open_visit(). Nothing is carried in the pack: the parcel would need a catalog
+# entry, a price and a weight to exist as an item, and all three would be lies.
+static func record_settlement_visited(party, settlement_id: String) -> void:
+	_complete_world_target(party, "deliver_goods", "target_settlement_id", settlement_id)
+
+# scout_region — ride out into a band (core/regions.gd's rings) and come back
+# able to say what is there. Completes on crossing in, turns in back at the
+# giver; scenes/world/world.gd calls this from _check_region().
+static func record_region_reached(party, region_id: String) -> void:
+	_complete_world_target(party, "scout_region", "target_region_id", region_id)
+
+# supply_item — a counter wants goods in hand, and does not care how you came by
+# them: bought at the next town, looted, or already in the pack when they asked.
+# That makes progress a READING of the pack rather than an event, so this
+# re-derives it both ways instead of incrementing: buy two and it climbs, sell
+# them again and it falls back and the job un-completes, which is the honest
+# answer to "do you have them on you". Call it anywhere the number is about to
+# be shown (world.gd re-reads it on every redraw of a town screen).
+static func record_stash(party) -> void:
+	for q in party.quests:
+		if q["kind"] != "supply_item" or not q["state"] in ["active", "complete"]:
+			continue
+		var have: int = party.stash_count(String(q["target_item_id"]))
+		q["progress"] = mini(int(q["required"]), have)
+		q["state"] = "complete" if have >= int(q["required"]) else "active"
+
 static func can_turn_in(quest: Dictionary) -> bool:
 	return not quest.is_empty() and quest["state"] in ["active", "complete"] \
 		and int(quest["progress"]) >= int(quest["required"])
@@ -255,7 +310,8 @@ static func turn_in(party, quest: Dictionary, faction := "") -> bool:
 	party.add_gold(int(reward.get("gold", 0)))
 	if reward.has("item_id"):
 		party.stash_add(String(reward["item_id"]))
-	if quest["kind"] == "collect_item":
+	# The two kinds that are paid for goods hand the goods over.
+	if quest["kind"] in ["collect_item", "supply_item"]:
 		party.stash_remove(String(quest["target_item_id"]), int(quest["required"]))
 	quest["state"] = "turned_in"
 	return true

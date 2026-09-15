@@ -34,11 +34,52 @@ func _init() -> void:
 	test_kill_count()
 	test_collect_item()
 	test_bias()
+	test_the_kinds_that_count_no_bodies()
 	print("test_quest: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
+# D7: three kinds whose progress has nothing to do with a fight. What is checked
+# here is that they coexist with the ones that do — a log holding a supply order
+# used to be a log where every kill asked it for a monster id it has never had.
+# (Placement — who posts them and where — is tests/test_quest_posting.gd.)
+func test_the_kinds_that_count_no_bodies() -> void:
+	var p := _party()
+	Quest.accept(p, {"id": "smith-order", "kind": "supply_item", "target_item_id": "handaxe",
+		"title": "Smith's order: 2 Handaxes", "required": 2, "progress": 0,
+		"state": "offered", "reward": {"gold": 40}})
+	Quest.accept(p, {"id": "crate", "kind": "deliver_goods", "target_settlement_id": "oakford",
+		"title": "Run a crate to Oakford", "required": 1, "progress": 0,
+		"state": "offered", "reward": {"gold": 60}})
+	Quest.accept(p, {"id": "look-out", "kind": "scout_region", "target_region_id": "marches",
+		"title": "Ride out into the Marches", "required": 1, "progress": 0,
+		"state": "offered", "reward": {"gold": 90}})
+	var kills := Quest.record_kills(p, ["snik", "vess", "grull"], RNG.new(3))
+	check(kills.is_empty(), "a fight moves none of them, and does not throw asking")
+	check(Quest.bias(p).is_empty(), "...and none of them biases a roster")
+
+	Quest.record_settlement_visited(p, "greenmarch")
+	check(Quest.get_quest(p, "crate")["state"] == "active", "the wrong town is not the delivery")
+	Quest.record_settlement_visited(p, "oakford")
+	check(Quest.get_quest(p, "crate")["state"] == "complete", "the right one is")
+
+	Quest.record_region_reached(p, "heartland")
+	check(Quest.get_quest(p, "look-out")["state"] == "active", "home is not the frontier")
+	Quest.record_region_reached(p, "marches")
+	check(Quest.get_quest(p, "look-out")["state"] == "complete", "the band they were sent to is")
+
+	var order := Quest.get_quest(p, "smith-order")
+	p.stash_add("handaxe", 2)
+	Quest.record_stash(p)
+	check(order["state"] == "complete", "goods in the pack complete a supply order")
+	var gold := p.gold
+	check(Quest.turn_in(p, order), "it turns in")
+	check(p.gold == gold + 40 and p.stash_count("handaxe") == 0,
+		"...paying for the goods and taking them")
+
 func test_catalog() -> void:
 	check(Quest.CURATED.size() >= 3, "3+ curated quests")
+	for kind in Quest.KINDS:
+		check(Quest.TARGET_FIELD.has(kind), "%s names the field it targets through" % kind)
 	for q in Quest.CURATED:
 		check(q["kind"] in ["kill_count", "collect_item"], "%s has a known kind" % q["id"])
 		check(int(q["required"]) > 0, "%s requires something" % q["id"])
