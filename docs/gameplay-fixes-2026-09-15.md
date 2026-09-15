@@ -105,3 +105,15 @@ No recommendation without a sweep; it is cheap to run once you pick.
 Noted in the scaler header as a real gap that "is not what drives the
 outliers". BG3 scales DCs with difficulty (+2 on Tactician). Mechanical once
 decided; ~3 lines. Skipped only because it shifts the same calibration as (1).
+
+## Deferred — item art is placeholder, outsource it
+
+The 315 icons under `assets/art/items` are local SDXL renders (Stability AI
+Community License, see `~/localgen/README.md`), picked by hand after three
+passes because the model kept drawing sets and sprite sheets. Good enough for
+now, and accepted as such on 2026-09-15. When budget allows, commission a real
+icon set instead of polishing these: one artist, one style sheet, the 39 weapons
+and 13 armors first (they are on screen every fight), then the magic items by
+rarity. `tools/item_art_picks.txt` is the manifest of what ships today and
+`tools/import_item_art.py` the drop-in path — replacing a PNG under
+`assets/art/items/<id>.png` is the whole integration.
