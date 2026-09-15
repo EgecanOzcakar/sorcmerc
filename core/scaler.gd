@@ -18,6 +18,20 @@
 # Level-8 party (the presets levelled to 8, score 108.8), 60 seeds: 95 / 88 / 78%
 # (was 92 / 73 / 58 at T38's tiers).
 #
+# RETUNED 2026-09-15. 6b098e8 let a mover pass through allies (correct 5e; the
+# same rule BG3 uses), and the numbers below fell to easy 80 / normal 68 / hard
+# 51.5 — bisected, it is that commit alone. The side with more bodies gains more
+# turns-in-contact when nobody queues behind its own archer, which is the
+# action-economy effect measured further down. So TIER moved, not the rule:
+# 0.96/1.10/1.32 -> 0.77/0.90/1.04, picked off tests/sweep_tier.gd (200 seeds a
+# point, scale 0.75..0.90 per tier), then confirmed by test_scaler:
+#   easy   avg 3.9 foes x0.90 : 188W/12L (94.0%)  avg 7.2 rounds
+#   normal avg 4.3 foes x0.91 : 173W/27L (86.5%)  avg 8.1 rounds
+#   hard   avg 4.5 foes x0.94 : 144W/56L (72.0%)  avg 8.4 rounds
+#   level-8, 60 seeds: 98.3 / 91.7 / 68.3%
+# Fights are shorter (7-8 rounds, was 9-10) with fewer bodies: the thing the
+# movement fix bought is a faster fight at the same win rate.
+#
 # RE-MEASURED 2026-09-13 (D1), same harness, no knob touched since:
 #   easy   avg 4.4 foes x0.93 : 175W/25L (87.5%)  avg 9.3 rounds
 #   normal avg 4.7 foes x0.96 : 166W/34L (83.0%)  avg 9.5 rounds
@@ -128,7 +142,7 @@ const Encounter = preload("res://core/encounter.gd")
 const Power = preload("res://core/rules/power.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
-const TIER := {"easy": 0.96, "normal": 1.10, "hard": 1.32}
+const TIER := {"easy": 0.77, "normal": 0.90, "hard": 1.04}
 const REF_SCORE := 46.6   # the level-3 preset party — where TIER was calibrated
 const CURVE := 0.90       # budget grows sublinearly with party power (see the header)
 const MAX_FOES := 8
@@ -260,8 +274,11 @@ static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
 	# would spawn two combatants sharing an id.
 	var order: Array = _faction_order(String(boss.get("theme", "")), seed, rest).filter(
 		func(id): return id != lead)
-	if rest > 0.0 and not order.is_empty():
-		monsters.append_array(_build(rest, order, MAX_FOES - count)["monsters"])
+	# A boss always brings an escort: when the lead at MULT_MIN already overruns
+	# the budget (the mammoth against a level-3 hard budget after the 2026-09-15
+	# retune), _build() with nothing left still seats one body at MULT_MIN.
+	if not order.is_empty():
+		monsters.append_array(_build(maxf(rest, 0.0), order, MAX_FOES - count)["monsters"])
 	return {"monsters": monsters}
 
 static func _lead_score(id: String, count: int, mult: float, extras: Array) -> float:
