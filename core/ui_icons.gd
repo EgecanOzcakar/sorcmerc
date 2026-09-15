@@ -609,8 +609,54 @@ static func item_tooltip(item_id: String, def: Dictionary, kind: String) -> Stri
 # A square art tile with the hover text; the caller wires `pressed`. `caption`
 # is the button's own text under the art (a price, "×3", "Equipped"); without
 # art the name stands in for it. The rarity ramp colours the caption.
+# The hover card an ItemTile shows in place of the engine's plain tooltip: the
+# name in its rarity colour, the numbers, the prose wrapped, the click hint
+# dim at the foot. Built from the same tooltip string (first line the name,
+# "Click:"/"Right-click:" lines the hint, everything else the body), so a
+# test can still read tooltip_text and nothing has two sources of truth.
+class ItemTile extends Button:
+	const Icons = preload("res://core/ui_icons.gd")
+	var rarity_color := Icons.COL_TEXT
+	func _make_custom_tooltip(for_text: String) -> Object:
+		var card := PanelContainer.new()
+		card.add_theme_stylebox_override("panel", Icons.box(Icons.COL_PANEL, Icons.COL_GOLD_EDGE, 4, 12, 8))
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 4)
+		card.add_child(v)
+		var lines: PackedStringArray = for_text.split("\n")
+		var head := Label.new()
+		head.text = lines[0]
+		head.add_theme_font_size_override("font_size", Icons.FS_BODY + 4)
+		head.add_theme_color_override("font_color", rarity_color)
+		v.add_child(head)
+		var body: Array = []
+		var hint: Array = []
+		for i in range(1, lines.size()):
+			var l := String(lines[i])
+			if l.begins_with("Click:") or l.begins_with("Right-click:"):
+				hint.append(l)
+			else:
+				body.append(l)
+		while not body.is_empty() and String(body[-1]).strip_edges() == "":
+			body.pop_back()
+		if not body.is_empty():
+			var txt := Label.new()
+			txt.text = "\n".join(body)
+			txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			txt.custom_minimum_size = Vector2(320, 0)
+			txt.add_theme_color_override("font_color", Icons.COL_TEXT)
+			v.add_child(txt)
+		if not hint.is_empty():
+			var h := Label.new()
+			h.text = "\n".join(hint)
+			h.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+			h.add_theme_color_override("font_color", Icons.COL_MUTED)
+			v.add_child(h)
+		return card
+
 static func item_tile(item_id: String, tooltip: String, caption := "", px := ITEM_ART_PX) -> Button:
-	var b := Button.new()
+	var b := ItemTile.new()
+	b.rarity_color = item_color(item_id)
 	clicks(b)
 	b.tooltip_text = tooltip
 	b.add_theme_color_override("font_color", item_color(item_id))
