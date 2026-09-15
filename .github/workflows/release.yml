@@ -91,6 +91,20 @@ jobs:
           mkdir -p "$HOME/.local/share/godot/export_templates"
           cp -r /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/"
 
+      # The build stamps its own version into project.godot before the export
+      # reads it, so core/bug_report.gd can put it on every bug report — "it
+      # happens on v0.2.1" and "it happens on some build" are different reports.
+      # Before the import, because that is what bakes project.godot into the pack.
+      - name: Stamp the version into project.godot
+        if: steps.pick.outputs.should_publish == 'true'
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+        run: |
+          grep -q '^config/version=' project.godot \
+            || { echo "project.godot lost config/version"; exit 1; }
+          sed -i "s|^config/version=.*|config/version=\"$VERSION\"|" project.godot
+          grep '^config/version=' project.godot
+
       - name: Import resources once
         if: steps.pick.outputs.should_publish == 'true'
         run: godot --headless --path . --import || true

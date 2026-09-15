@@ -43,6 +43,8 @@ const WorldForage = preload("res://core/world_forage.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
+const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
+const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
 const RNG = preload("res://core/rng.gd")
@@ -448,6 +450,11 @@ func _build_hud() -> void:
 	manual.theme_type_variation = "Quiet"
 	manual.pressed.connect(func(): ManualOverlay.toggle(self))
 	bar.add_child(manual)
+	var bug := Button.new()
+	bug.text = "Report a bug  [F3]"
+	bug.theme_type_variation = "Quiet"
+	bug.pressed.connect(report_bug)
+	bar.add_child(bug)
 	var title := Button.new()
 	title.text = "Title"
 	title.theme_type_variation = "Quiet"
@@ -1460,7 +1467,15 @@ func _goto_market_tab(service: String) -> void:
 # which is the one binding a player will try without being told; the initials
 # jump straight to a building from anywhere inside the gates.
 func _unhandled_key_input(event: InputEvent) -> void:
-	if _visit.is_empty() or _combat != null or not (event is InputEventKey) or not event.pressed:
+	if not (event is InputEventKey) or not event.pressed:
+		return
+	# The one binding that works everywhere on the map, in a town or out of it:
+	# a bug you can only report from the town square is a bug you lose.
+	if event.keycode == KEY_F3 and _combat == null:
+		accept_event()
+		report_bug()
+		return
+	if _visit.is_empty() or _combat != null:
 		return
 	match event.keycode:
 		KEY_ESCAPE:
@@ -1476,6 +1491,39 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_T: _goto_page("hub")
 		_: return
 	accept_event()
+
+# Everything a report wants to know about a run in progress, read live. Ordered:
+# the overlay and the issue body both render it in this order.
+func report_bug() -> void:
+	BugReportOverlay.toggle(self, bug_context())
+
+func bug_context() -> Dictionary:
+	var ctx := {"Screen": "the open world (%s map)" % String(world.origin.get("kind", world_size))}
+	if not _visit.is_empty():
+		var s = _visit.get("settlement")
+		ctx["In a settlement"] = "%s, %s page" % [
+			s.sname if s != null else "?", _visit_page]
+	ctx["When"] = "Day %d, %02d:%02d" % [int(world.clock.elapsed / 1440.0) + 1,
+		int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60]
+	if not _region.is_empty():
+		ctx["Region"] = String(_region.get("label", _region.get("id", "?")))
+	var p0 = world.player()
+	if p0 != null:
+		ctx["Position"] = "%d, %d" % [int(p0.position.x), int(p0.position.y)]
+	var who: Array = []
+	for ch in (party.party_characters() if party != null else []):
+		# hp_current is -1 for "never been hurt" (core/character.gd), not zero.
+		var state := "down" if ch.dead else (
+			"full hp" if ch.hp_current < 0 else "%d hp" % ch.hp_current)
+		who.append("%s (%s)" % [ch.cname, state])
+	ctx["Party"] = ", ".join(who) if not who.is_empty() else "nobody standing"
+	if party != null:
+		ctx["Gold"] = "%d gp" % party.gold
+	if story != null:
+		ctx["Story"] = "%s, chapter %s" % [story.pack_id,
+			story.chapter if story.chapter != "" else "(finished)"]
+	ctx["Paused"] = "yes" if world.clock.is_paused() else "no"
+	return ctx
 
 func _close_visit() -> void:
 	_left = _visit.get("settlement")
@@ -1750,6 +1798,7 @@ func _turn_in(quest: Dictionary) -> void:
 # The panel is rebuilt after every action, so the last line has to live on the
 # visit rather than on the Label that just got freed.
 func _say(text: String) -> void:
+	BugReport.note(text)
 	if not _visit.is_empty():
 		_visit["log"] = text
 	if _visit_log != null:

@@ -12,6 +12,7 @@ const Quest = preload("res://core/quest.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
+const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 
 const Icons = preload("res://core/ui_icons.gd")
 
@@ -96,6 +97,15 @@ func _ready() -> void:
 	mbtn.text = "Manual"
 	mbtn.pressed.connect(func(): ManualOverlay.toggle(self))
 	footer.add_child(mbtn)
+	var bbtn := Button.new()
+	bbtn.text = "Report a bug"
+	bbtn.pressed.connect(func(): BugReportOverlay.toggle(self, {
+		"Screen": "the linear campaign map",
+		"Stage": "%d of %d" % [run.stage, Campaign.STAGE_COUNT],
+		"State": run.state,
+		"Gold": "%d gp" % run.party.gold,
+	}))
+	footer.add_child(bbtn)
 
 	_refresh()
 	# A run saved mid-fight comes back to the fight — otherwise the map sits on

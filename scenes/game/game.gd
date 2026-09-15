@@ -25,6 +25,8 @@ const Scaler = preload("res://core/scaler.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
+const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
+const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
 const Tutorial = preload("res://core/tutorial.gd")
 const Registry = preload("res://core/mod/registry.gd")
@@ -41,6 +43,10 @@ static func linear_campaign() -> bool:
 	return OS.get_environment("SORCMERC_LINEAR_CAMPAIGN") != ""
 
 var _screen: Control = null      # whatever is on show right now
+# Which screen that is, in words, for the bug reporter: the routing table above
+# is the only thing that knows, and a report filed three screens later still
+# wants to say where it came from.
+var _screen_label := "title"
 # M8: the content pack the player picked out of the browser, waiting for a
 # party to be assembled for it. Null is normal play on a built-in map.
 var _pack = null
@@ -59,13 +65,22 @@ func _ready() -> void:
 	add_child(bg)
 	show_title()
 
-# One screen at a time; the old one goes.
-func _swap(to: Control) -> void:
+# One screen at a time; the old one goes. `label` is the screen in words —
+# every route through the game passes here, which makes it the one honest place
+# to record where the player has been (core/bug_report.gd's breadcrumb trail).
+func _swap(to: Control, label: String) -> void:
+	_screen_label = label
+	BugReport.note("opened the %s screen" % label)
 	if _screen != null:
 		_screen.queue_free()
 	_screen = to
 	to.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(to)
+
+# The bug reporter, from the title. Nothing is in play here, so the context is
+# just "which screen" — the overlay adds the build and the trail itself.
+func report_bug() -> void:
+	BugReportOverlay.toggle(self, {"Screen": _screen_label})
 
 # --- title / continue -----------------------------------------------------
 #
@@ -127,6 +142,7 @@ func show_title() -> void:
 	foot.add_theme_constant_override("separation", 12)
 	foot.add_child(_quiet("Settings", func(): SettingsOverlay.toggle(self)))
 	foot.add_child(_quiet("Field manual", func(): ManualOverlay.toggle(self)))
+	foot.add_child(_quiet("Report a bug", report_bug))
 	foot.add_child(_quiet("Random battle (debug)", show_random_battle))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -136,7 +152,7 @@ func show_title() -> void:
 
 	var centre := CenterContainer.new()
 	centre.add_child(col)
-	_swap(centre)
+	_swap(centre, "title")
 
 # What is in the open-world slot, on one line: when the party stopped, where
 # they were, who was standing, and what they were carrying.
@@ -192,7 +208,7 @@ func _confirm_delete_world_save() -> void:
 	col.add_child(_quiet("Keep it", show_title))
 	var centre := CenterContainer.new()
 	centre.add_child(col)
-	_swap(centre)
+	_swap(centre, "delete-the-autosave confirmation")
 
 func _resume() -> void:
 	var saved = CampaignSave.load_latest()
@@ -239,7 +255,7 @@ func show_content() -> void:
 	var screen = load(MODS_SCENE).instantiate()
 	screen.on_back = show_title
 	screen.on_play = _choose_pack
-	_swap(screen)
+	_swap(screen, "campaigns & mods")
 
 func _choose_pack(pack) -> void:
 	_pack = pack
@@ -265,7 +281,7 @@ func show_tutorial() -> void:
 	back.offset_left = -160; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(show_title)
 	wrap.add_child(back)
-	_swap(wrap)
+	_swap(wrap, "tutorial fight")
 
 # --- random battle (debug) -------------------------------------------------
 #
@@ -304,7 +320,7 @@ func show_random_battle() -> void:
 	back.offset_left = -160; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(show_title)
 	wrap.add_child(back)
-	_swap(wrap)
+	_swap(wrap, "random battle (debug)")
 
 # --- party setup ----------------------------------------------------------
 #
@@ -358,7 +374,7 @@ func show_party_setup() -> void:
 			_pack = null
 			show_content())
 		wrap.add_child(cancel)
-		_swap(wrap)
+		_swap(wrap, "party setup")
 		return
 
 	var begin_small := Button.new()
@@ -392,7 +408,7 @@ func show_party_setup() -> void:
 	back.offset_left = 16; back.offset_top = 12; back.offset_right = 130
 	back.pressed.connect(show_title)
 	wrap.add_child(back)
-	_swap(wrap)
+	_swap(wrap, "party setup")
 
 # M8: a pack run is an ordinary open-world run — the same scene, the same
 # party, the same autosave. The pack supplies the map, and (when it has one) a
@@ -426,7 +442,7 @@ func show_world(party, world = null, size := "small", story = null) -> void:
 	if world != null:
 		screen.world = world
 	screen.story = story
-	_swap(screen)
+	_swap(screen, "open world")
 
 # --- the run (linear, debug-only) -----------------------------------------
 
@@ -435,7 +451,7 @@ var campaign = null      # the live campaign.tscn instance, while a run is on
 func _show_campaign(run) -> void:
 	campaign = load(CAMPAIGN_SCENE).instantiate()
 	campaign.run = run                    # party comes off the run
-	_swap(campaign)
+	_swap(campaign, "linear campaign")
 	await _await_end(run)
 
 # Victory, defeat and retirement all land in the same place: the summary.
@@ -486,7 +502,7 @@ func show_summary(run) -> void:
 
 	var centre := CenterContainer.new()
 	centre.add_child(panel)
-	_swap(centre)
+	_swap(centre, "run summary")
 
 # Everything off what the run already tracked — no summary-only bookkeeping.
 static func summary_lines(run) -> Array:

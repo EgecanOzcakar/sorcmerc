@@ -17,6 +17,8 @@ const Icons = preload("res://core/ui_icons.gd")
 const Campaign = preload("res://core/campaign.gd")   # item_name, for the loot line at the end of a fight
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
+const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
+const BugReport = preload("res://core/bug_report.gd")
 
 # What T5 injects before the scene runs: the live party, the node's spec (empty ->
 # the scaler sizes one) and its difficulty. `result` is resolve_outcome() once the
@@ -160,6 +162,14 @@ func _ready() -> void:
 	manual.focus_mode = Control.FOCUS_NONE   # hotkeys 1-9 must keep going to the board
 	manual.pressed.connect(func(): ManualOverlay.toggle(self))
 	head.add_child(manual)
+	# A fight is where the rules go wrong, so this is the one screen where the
+	# reporter is most worth a click of its own rather than a trip to the title.
+	var bug := Button.new()
+	bug.text = "Report a bug  [F3]"
+	bug.theme_type_variation = "Quiet"
+	bug.focus_mode = Control.FOCUS_NONE
+	bug.pressed.connect(report_bug)
+	head.add_child(bug)
 
 	# --- the action log: a full-height sidebar down the left edge -----
 	_logwrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -297,10 +307,40 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		KEY_R: if cb and cb.is_over(): _new_game()
 		KEY_F1: SettingsOverlay.toggle(self, func(): _anim = Settings.anim())
 		KEY_F2: ManualOverlay.toggle(self)
+		KEY_F3: report_bug()
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 			_press_hotkey(e.keycode - KEY_1, e.shift_pressed)
 		KEY_0, KEY_SPACE:
 			_press_hotkey(-1)  # last button (End turn / Cancel)
+
+# The bug reporter, from the fight. The context is the board as it stands —
+# which is exactly the thing a rules bug is about and the thing a screenshot of
+# the log would not say.
+func report_bug() -> void:
+	BugReportOverlay.toggle(self, bug_context())
+
+func bug_context() -> Dictionary:
+	var ctx := {"Screen": "combat%s" % ("  (tutorial)" if tutorial else "")}
+	ctx["Map"] = String(spec.get("theme", "sunken-shrine"))
+	ctx["Difficulty"] = difficulty
+	if cb != null:
+		ctx["Round"] = str(cb.round_num)
+		if cb.is_over():
+			ctx["Over"] = "yes — %s" % cb.outcome()
+		elif cb.turn_idx >= 0 and cb.turn_idx < cb.order.size():
+			# Indexed by hand rather than through current(): this runs while the
+			# game is in whatever state the player is reporting, which is exactly
+			# when the turn cursor might be somewhere current() would fault on.
+			var up = cb.order[cb.turn_idx]
+			ctx["Whose turn"] = "%s (%s)" % [up.cname, up.team]
+		var standing: Array = []
+		for c in cb.combatants:
+			standing.append("%s [%s] %d/%d hp at %d,%d" % [
+				c.cname, c.team, c.hp, c.max_hp, c.pos.x, c.pos.y])
+		ctx["Board"] = "; ".join(standing)
+	ctx["Seed"] = str(_seed)
+	ctx["Aiming"] = _mode
+	return ctx
 
 func _press_hotkey(idx: int, shift := false) -> void:
 	if _busy:
@@ -1363,6 +1403,7 @@ func _flush_log() -> void:
 		if bold:
 			body = "[b]%s[/b]" % body
 		_logbox.append_text("[color=%s]%s[/color]\n" % [col, body])
+		BugReport.note(line)
 		_logged += 1
 
 func _finish() -> void:
