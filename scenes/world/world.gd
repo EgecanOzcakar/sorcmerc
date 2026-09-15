@@ -42,6 +42,7 @@ const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
+const ManualOverlay = preload("res://scenes/manual/manual.gd")
 const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
 const RNG = preload("res://core/rng.gd")
@@ -442,6 +443,11 @@ func _build_hud() -> void:
 	_story_btn.visible = story != null
 	_story_btn.pressed.connect(_toggle_story)
 	bar.add_child(_story_btn)
+	var manual := Button.new()
+	manual.text = "Manual"
+	manual.theme_type_variation = "Quiet"
+	manual.pressed.connect(func(): ManualOverlay.toggle(self))
+	bar.add_child(manual)
 	var title := Button.new()
 	title.text = "Title"
 	title.theme_type_variation = "Quiet"
