@@ -705,7 +705,9 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 func _cond_effects(c) -> Array:
 	var out: Array = []
 	for id in c.statuses:
-		var e: Dictionary = Effects.condition(id)
+		# 0 HP is the Unconscious condition: advantage against, auto-fail STR/DEX,
+		# any melee hit from reach a crit — the same entry, under the engine's name.
+		var e: Dictionary = Effects.condition("unconscious" if id == "down" else id)
 		if e.is_empty():
 			e = ENGINE_CONDS.get(id, {})
 		if e.is_empty():
@@ -788,12 +790,12 @@ func _no_economy(actor, cost: String) -> bool:
 func _attack_mode(attacker, target, opts := {}) -> int:
 	var adv = false
 	var dis = false
-	if attacker.ranged and adjacent_enemy(attacker):
+	if attacker.ranged and not opts.get("melee", false) and adjacent_enemy(attacker):
 		dis = true
 	for e in _cond_effects(target):
 		var a = e.get("attacks_against", "")
 		if a is Dictionary:
-			a = a.get("ranged" if attacker.ranged else "melee", "")
+			a = a.get("ranged" if attacker.ranged and not opts.get("melee", false) else "melee", "")
 		adv = adv or a == "adv"
 		dis = dis or a == "dis"
 	for e in _cond_effects(attacker):
@@ -813,8 +815,8 @@ func _attack_mode(attacker, target, opts := {}) -> int:
 	return Dice.combine(adv, dis)
 
 # Paralyzed/unconscious: any melee hit from within reach is a crit.
-func _auto_crit(attacker, target) -> bool:
-	if attacker.ranged:
+func _auto_crit(attacker, target, opts := {}) -> bool:
+	if attacker.ranged and not opts.get("melee", false):
 		return false
 	for e in _cond_effects(target):
 		var ft := int(e.get("auto_crit_within_ft", 0))
@@ -884,8 +886,14 @@ func _buff_damage_extras(attacker) -> Array:
 
 func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var oa: bool = opts.get("opportunity", false)
+	if oa and attacker.ranged:
+		# An opportunity attack is a melee attack. ponytail: an archer swings unarmed
+		# (flat 1) at its own to-hit rather than modelling a sidearm per statblock.
+		opts = opts.duplicate()
+		opts["melee"] = true
+		opts["damage"] = opts.get("damage", "1")
 	var free: bool = oa or opts.get("free", false)   # Cleave's second swing costs nothing
-	if _no_economy(attacker, "action" if not free else "reaction"):
+	if not attacker.conscious() or _no_economy(attacker, "action" if not free else "reaction"):
 		return {"error": "cannot act"}   # ai.gd swings without asking available()
 	if _source_of(attacker, "cannot_target_source") == target:
 		return {"error": "charmed"}
@@ -909,7 +917,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var ac = effective_ac(target)
 	var crit: bool = nat >= attacker.crit_range
 	var hit: bool = crit or (nat != 1 and total >= ac)
-	if hit and not crit and _auto_crit(attacker, target):
+	if hit and not crit and _auto_crit(attacker, target, opts):
 		crit = true
 	var out = {
 		"attacker": attacker.cname, "target": target.cname,
@@ -937,7 +945,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		attacker.statuses.erase("helped")  # the granted advantage is spent
 	_log_attack(out, oa)
 	if hit:
-		_apply_damage(target, out.damage, _damage_type(attacker))
+		_apply_damage(target, out.damage, _damage_type(attacker), crit)
 		if target.conscious():
 			_hit_riders(attacker, target)
 		# T9z: a plain hit sounds like the weapon that landed it. A crit and a kill
@@ -1097,7 +1105,7 @@ func _resists(c, dtype: String) -> bool:
 			return true
 	return false
 
-func _apply_damage(target, dmg: int, dtype := "") -> void:
+func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 	if _resists(target, dtype):
 		dmg = dmg / 2
 	if dmg > 0 and target.has("concentrating"):
@@ -1112,7 +1120,9 @@ func _apply_damage(target, dmg: int, dtype := "") -> void:
 			# Revisit (track caster -> {target: condition} per cast) the day a
 			# real repeated-save/full-duration concentration effect lands.
 	if target.is_down():
-		target.death_f += 1 if dmg > 0 else 0
+		# Damage to a downed body is a failed death save; a crit (which any melee
+		# hit from reach is, via _auto_crit) is two.
+		target.death_f += (2 if crit else 1) if dmg > 0 else 0
 		if target.death_f >= 3:
 			_kill(target)
 		return
@@ -1215,16 +1225,24 @@ func move_path(mover, dest: Vector2i) -> Array:
 
 # Hostiles that get an opportunity attack somewhere along `mover`'s walk to `dest`.
 func provokers_for(mover, dest: Vector2i) -> Array:
+	return _provocations(mover, dest).map(func(p): return p[0])
+
+# [[hostile, hex]]: each foe that gets a swing, and the hex the mover is on when
+# it steps out of that foe's reach — the OA is rolled from there, not from where
+# the walk began, so cover and prone are judged where the swing actually lands.
+func _provocations(mover, dest: Vector2i) -> Array:
 	if mover.has("hidden"):
 		return []   # unseen means unreacted-to: nobody can ready an OA on what they can't see
 	var path := move_path(mover, dest)
 	var out: Array = []
+	var taken: Array = []
 	for f in enemies_of(mover):
-		if not can_spend(f, "reaction") or f in out:
+		if not can_spend(f, "reaction") or f in taken:
 			continue
 		for i in range(path.size() - 1):
 			if Hex.distance(f.pos, path[i]) <= 1 and Hex.distance(f.pos, path[i + 1]) > 1:
-				out.append(f)
+				out.append([f, path[i]])
+				taken.append(f)
 				break
 	return out
 
@@ -1236,11 +1254,15 @@ func move_to(mover, dest: Vector2i, disengage := false) -> void:
 		return  # out of range / blocked — UI never offers this; guard for AI + tests
 	var from: Vector2i = mover.pos
 	if not disengage and not mover.has("disengaged"):
-		for f in provokers_for(mover, dest):
-			_spend(f, "reaction")
-			resolve_attack(f, mover, {"opportunity": true})
+		for p in _provocations(mover, dest):
+			mover.pos = p[1]
+			_spend(p[0], "reaction")
+			resolve_attack(p[0], mover, {"opportunity": true})
 			if mover.is_down() or mover.is_dead():
+				# dropped mid-walk: the body lies where it was hit, the steps to it spent
+				mover.econ["move_left"] = int(mover.econ.get("move_left", 0)) - int(field.get(p[1], 0))
 				return
+		mover.pos = from
 	var before_region := region_at(from)
 	mover.pos = dest
 	mover.econ["move_left"] = int(mover.econ.get("move_left", 0)) - field[dest]

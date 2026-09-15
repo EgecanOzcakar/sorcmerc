@@ -117,6 +117,15 @@ static func attacks(items: Array, abilities: Dictionary, pb: int, weapon_profs: 
 			"versatile_notation": _versatile(w, dmg),
 			"mastery": masteries.get(w["id"], ""),
 		})
+		# Thrown: the same weapon as a ranged attack (same ability, no Archery bonus),
+		# so a javelin or dagger shows up in the wield toggle as a real ranged option.
+		if "thrown" in w["properties"] and w["range"] == "melee" and w["normalRange"] != null:
+			var thrown: Dictionary = out[-1].duplicate(true)
+			thrown["id"] = w["id"] + "-thrown"
+			thrown["name"] = w["name"] + " (thrown)"
+			thrown["range"] = "ranged"
+			thrown["versatile_notation"] = ""
+			out.append(thrown)
 
 	var unarmed_fighting: bool = "unarmed-fighting" in styles
 	if equipped.is_empty() or monk_level > 0 or unarmed_fighting:

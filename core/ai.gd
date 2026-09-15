@@ -123,6 +123,27 @@ static func _away(threats: Array) -> Callable:
 
 # --- foes ------------------------------------------------------------
 
+# A shooter with an enemy adjacent fires at disadvantage. If one move can reach a
+# hex that is clear of every PC and still within range of one, take it (eating
+# the opportunity attack — a bow at full effect is worth more than a free swing
+# avoided) and report true so the caller shoots instead of swinging point-blank.
+static func _step_clear(cb, m, pcs: Array) -> bool:
+	var best := Vector2i.ZERO
+	var best_d := -1
+	for h in cb.move_field(m):
+		var near := 1 << 30
+		for c in pcs:
+			near = mini(near, Hex.distance(h, c.pos))
+		if near <= 1 or near > m.atk_range:
+			continue
+		if near > best_d:   # the farthest still-in-range hex: the most room before they close again
+			best_d = near
+			best = h
+	if best_d < 0:
+		return false
+	cb.move_to(m, best)
+	return m.conscious()
+
 static func _foe_turn(cb, m) -> void:
 	var pcs: Array = cb.combatants.filter(func(c): return c.team == "party" and c.conscious())
 	if pcs.is_empty():
@@ -130,6 +151,10 @@ static func _foe_turn(cb, m) -> void:
 	_use_kit(cb, m)
 
 	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1)
+	if not adj.is_empty() and m.ranged and _step_clear(cb, m, pcs):
+		adj = []   # an archer with someone in its face backs off first, then shoots (falls through)
+	if not m.conscious():
+		return     # the opportunity attack on the way out dropped it
 	if not adj.is_empty():
 		adj.sort_custom(func(a, b): return a.hp < b.hp if a.hp != b.hp else a.ac < b.ac)
 		_strike(cb, m, adj)
