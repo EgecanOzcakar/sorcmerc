@@ -74,7 +74,7 @@ func _init(_rng, _combatants: Array, _board: Dictionary) -> void:
 # T27: the same moments the barks fire on are the moments the SFX fire on, so the
 # sound hangs off this one function rather than a second set of hookpoints.
 # Empty = that trigger has no sting. Audio is a no-op headlessly.
-const BARK_SFX := {"hit": "hit", "crit": "crit", "kill": "kill", "down": "kill",
+const BARK_SFX := {"hit": "hit", "crit": "crit", "kill": "kill", "down": "down",
 	"low_hp": "", "victory": "victory"}
 
 # Fire a bark for `c` on `trigger` ("hit" | "crit" | "kill" | "low_hp" | "down" |
@@ -181,6 +181,7 @@ func destroy_object(o: Dictionary) -> void:
 	var dmg := Dice.roll(rng, String(h.get("dice", "2d6")))
 	log.append("The %s bursts — %d %s to everything beside it." % [o["type"], dmg,
 		h.get("damage_type", "fire")])
+	Sound.play_sfx("burst")
 	for c in combatants:
 		if c.conscious() and Hex.distance(c.pos, o["pos"]) <= 1:
 			_apply_damage(c, dmg, String(h.get("damage_type", "")))
@@ -733,6 +734,11 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 			dmg = (dmg / 2) if v.get("half_on_save", false) else 0
 	log.append("  %s %s the save — %d %s." % [c.cname, "makes" if saved else "fails", dmg,
 		v.get("damage_type", "damage")])
+	# Only when there WAS a save to make: a no-save spell always reports "fails"
+	# through the line above, and firing save_failed on it would put a second
+	# sting under every magic missile.
+	if v.get("save", "") != "":
+		Sound.play_sfx("save_made" if saved else "save_failed")
 	# Only a save-or-suffer effect lands a condition. The raw parse also tags
 	# buffs (Invisibility, Freedom of Movement) with `conditions` and no save —
 	# those are tier-2 ally buffs, not something to inflict on the target here.
@@ -792,6 +798,7 @@ func gain_exhaustion(c, levels := 1) -> int:
 	log.append("%s gains exhaustion (level %d)." % [c.cname, lvl])
 	if lvl >= int(Effects.condition("exhaustion").get("max_level", 6)):
 		log.append("%s collapses, spent." % c.cname)
+		Sound.play_sfx("collapse")   # before _kill, so it is not buried under the kill sting
 		_kill(c)
 	return lvl
 
@@ -814,7 +821,13 @@ func apply_condition(target, cond: String, source = null, duration := "", v: Dic
 		s["repeat"] = String(v.get("repeat_save", "end_turn"))
 		s["save"] = String(v.get("save", ""))
 		s["dc"] = int(v.get("save_dc", source.save_dc))
+	# Only sting a condition that is actually NEW. A concentration spell re-applies
+	# its status to refresh the duration, and a sting on every refresh would put a
+	# buzz under every round of a running Hold Person.
+	var already: bool = target.statuses.has(cond)
 	target.statuses[cond] = s if not s.is_empty() else true
+	if not already:
+		Sound.play_sfx("condition")
 
 # --- concentration ---------------------------------------------------
 #
@@ -1049,6 +1062,13 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 			bark(attacker, "crit")
 		else:
 			bark(attacker, "hit", WeaponSfx.for_attack(attacker))
+	else:
+		# A miss had no sound at all until now, which made a fight sound like it
+		# was going better than it was: roughly half of all attack rolls resolved
+		# in silence, so the only thing you ever heard was your own successes.
+		# Straight to play_sfx rather than through bark(): there is no "miss"
+		# bark trigger and adding one would put a line of dialogue on every whiff.
+		Sound.play_sfx(WeaponSfx.for_miss(attacker))
 	if not opts.get("no_mastery", false):
 		_mastery_rider(attacker, target, hit)
 	return out

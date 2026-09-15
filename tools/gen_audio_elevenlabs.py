@@ -3,7 +3,7 @@
 
     export ELEVENLABS_API_KEY=...
     python3 tools/gen_audio_elevenlabs.py --list          # the prompts, writes nothing
-    python3 tools/gen_audio_elevenlabs.py sfx             # regenerate all 31 stings
+    python3 tools/gen_audio_elevenlabs.py sfx             # regenerate all 43 stings
     python3 tools/gen_audio_elevenlabs.py --only hit,crit # just those two
     python3 tools/gen_audio_elevenlabs.py sfx barks       # stings and the voice stingers
 
@@ -30,7 +30,7 @@ API: POST https://api.elevenlabs.io/v1/sound-generation, `xi-api-key` header.
 `prompt_influence` trades faithfulness to the prompt against the model's own
 judgement -- high for a sound with a precise brief (a click), lower where the
 model has more room (a victory sting). Cost is per generation and this writes
-31 of them for `sfx`, so --only is the normal way to use it.
+43 of them for `sfx`, so --only is the normal way to use it.
 """
 import argparse
 import json
@@ -171,6 +171,57 @@ SFX = {
     "cast_necromancy": ("A necromancy death spell being cast, a low ominous droning bend "
                         "downward with a rasping breath and a hollow wrong note, dark "
                         "fantasy game magic", 1.3, 0.5),
+
+    # The silent moments. Everything above fires when something LANDS; a fight is
+    # at least as much the swings that don't, the saves that hold, and the hero
+    # who drops. Those fired with no audio at all until now.
+    #
+    # A miss is the hardest of these to get right and the most often heard: it
+    # must read as "nothing happened" while still being a sound, so it is air
+    # and no impact. Kept quieter and shorter than `hit` on purpose — it lands
+    # on roughly half of all attack rolls, and a miss as loud as a hit is a
+    # fight that sounds like it is going twice as well as it is.
+    "miss": ("A sword swung hard through empty air and missing, a fast clean whoosh "
+             "with no impact at all, dry, close, no reverb tail", 0.5, 0.8),
+    "miss_ranged": ("An arrow whistling past close by and clattering off stone somewhere "
+                    "behind, a quick whistle then a small sharp skitter, dry", 0.7, 0.75),
+
+    # Saves. A pair, so they read against each other: the same event resolving
+    # two ways. Made is bright and upward and over quickly; failed is dull and
+    # downward. Neither is a full sting — they ride under the spell that caused
+    # them, which is already making noise.
+    "save_made": ("A magical ward deflecting a spell, a short bright metallic shimmer "
+                  "glancing away, resonant but brief", 0.6, 0.65),
+    "save_failed": ("A spell striking home through failing defenses, a dull heavy "
+                    "downward thud with a brief dark shudder, no brightness", 0.7, 0.65),
+
+    # `down` was `kill`'s asset until now — the same crash for a hero dropping as
+    # for a foe dying, which made a party wipe sound like a victory. A body going
+    # down but not out: heavier on the armor, no finality.
+    "down": ("An armored warrior dropping to their knees and slumping onto stone, a "
+             "heavy weary collapse with armor rattling, no final crash", 1.0, 0.6),
+    "burst": ("A wooden barrel exploding, splintering wood and a sharp percussive blast "
+              "with a deep thump underneath, brief and violent, dry", 1.0, 0.7),
+
+    # Conditions and exhaustion. `condition` fires whenever a status lands, which
+    # is often, so it is deliberately small — a marker, not an event.
+    "condition": ("A dark magical affliction taking hold, a short low sickly warble "
+                  "sinking downward with a faint unpleasant buzz", 0.7, 0.6),
+    "collapse": ("An exhausted armored figure collapsing face-first onto stone, a heavy "
+                 "limp fall with a long weary exhale and settling metal", 1.4, 0.55),
+
+    # The world outside a fight. These are the places rather than the moments, so
+    # they are looser prompts and lower influence — the model has more room, and
+    # a settlement that sounds slightly different each generation is fine.
+    "travel": ("Booted footsteps walking steadily on a dirt road with light gear and "
+               "leather creaking, a few paces, outdoors, open air", 1.6, 0.6),
+    "settlement": ("Arriving at a medieval town gate, a heavy wooden gate creaking open "
+                   "with a distant murmuring crowd and a faint bell beyond", 2.0, 0.45),
+    "shop": ("Entering a small medieval shop, a door with a little bell swinging open "
+             "onto a quiet room with a soft wooden creak", 1.2, 0.55),
+    "quest_complete": ("A short warm triumphant flourish for completing a task, a bright "
+                       "horn phrase resolving over a purse of coins landing on wood, "
+                       "medieval fantasy, ending cleanly", 2.0, 0.45),
 }
 
 # Wordless voice stingers, three takes per archetype (core/barks.gd picks one at

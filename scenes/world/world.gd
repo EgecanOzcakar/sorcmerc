@@ -1430,12 +1430,14 @@ func _open_visit(s) -> void:
 	_visit = Visit.visit(s, world)
 	_visit_page = "hub"
 	_market_tab = MARKET_TAB_ALL
+	Sound.play_sfx("settlement")   # the gate, once, on arriving — not on every page
 	_build_visit_panel()
 
 func _goto_page(page: String) -> void:
 	_visit_page = page
 	if page == "market":
 		_market_tab = MARKET_TAB_ALL   # every visit to the stalls starts at the whole shelf
+		Sound.play_sfx("shop")         # the shop door, over the button's own click
 	_build_visit_panel()
 
 const MARKET_TAB_ALL := "all"
