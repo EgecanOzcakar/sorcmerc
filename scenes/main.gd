@@ -1628,7 +1628,10 @@ class Board extends Control:
 		for hx in cb.board["hexes"]:
 			var p := _iso(Hex.to_pixel(hx, main.hex_px))
 			mn = mn.min(p); mx = mx.max(p)
-		var span := mx - mn
+		# centres only — pad by a hex so the outermost tiles (and their labels) sit inside the frame
+		var pad: Vector2 = Vector2(1.0, ISO_SQUASH) * float(main.hex_px)
+		var span: Vector2 = mx - mn + pad * 2.0
+		mn -= pad
 		# TFT-style: the whole map is on screen at once. Zoom down from ZOOM_DEFAULT
 		# until it fits (once per fight / Home), never up — small maps stay readable.
 		# Re-evaluated every layout (the rect settles over the first frames and
@@ -1642,7 +1645,7 @@ class Board extends Control:
 				_layout()
 				return
 		# keep the board from being panned entirely off-screen
-		var lim := (size + span) * 0.5 - Vector2(90, 60)
+		var lim: Vector2 = (size + span) * 0.5 - Vector2(90, 60)
 		lim = lim.max(Vector2.ZERO)
 		main._pan = main._pan.clamp(-lim, lim)
 		_origin = (size - span) * 0.5 - mn + main._pan

@@ -48,14 +48,109 @@ static func board() -> Dictionary:
 const THEMES := ["sunken-shrine", "goblin-camp", "city-square", "forest-clearing",
 	"frozen-cave", "merchant-shop"]
 
-static func board_for(theme: String) -> Dictionary:
+# `seed` shapes the ground around the authored room (see _grow); 0 means "the
+# theme's own fixed shape", so a caller without a fight seed still gets the
+# same board every time.
+static func board_for(theme: String, seed: int = 0) -> Dictionary:
+	var b: Dictionary
 	match theme:
-		"goblin-camp": return _widen(goblin_camp_board())
-		"city-square": return _widen(city_square_board())
-		"forest-clearing": return _widen(forest_clearing_board())
-		"frozen-cave": return _widen(frozen_cave_board())
-		"merchant-shop": return _widen(merchant_shop_board())
-	return _widen(shrine_board())
+		"goblin-camp": b = goblin_camp_board()
+		"city-square": b = city_square_board()
+		"forest-clearing": b = forest_clearing_board()
+		"frozen-cave": b = frozen_cave_board()
+		"merchant-shop": b = merchant_shop_board()
+		_: b = shrine_board()
+	return _grow(_widen(b), seed if seed != 0 else theme.hash())
+
+# --- the ground around the room ----------------------------------------
+#
+# The room and its mirror are a 14x4 strip: a road, not a place. _grow pads it
+# to BOARD_ROWS rows, then takes seeded bites out of the perimeter and adds
+# seeded bulges beyond it, so every fight's footprint is its own lumpy shape —
+# inlets, lobes, a pinch here and there. The core (the authored hexes, the
+# party starts) is never touched and the result is always one connected
+# floor. Fresh ground gets a few rough patches; props and cover stay authored.
+const BOARD_ROWS := 9        # rows of floor, room rows included (the room is 4)
+const BOARD_BITES := 8       # perimeter discs removed — how badly shaped it gets
+const BOARD_BULGES := 5      # perimeter discs added outside the rectangle
+const BOARD_ROUGH := 6       # rough patches sprinkled on the new ground
+
+static func _grow(b: Dictionary, seed: int) -> Dictionary:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var core := {}
+	for h in b["hexes"]:
+		core[h] = true
+	for p in PARTY_STARTS:
+		core[p] = true
+	var q0 := 1 << 30; var q1 := -(1 << 30); var r0 := 1 << 30; var r1 := -(1 << 30)
+	for h in core:
+		q0 = mini(q0, h.x); q1 = maxi(q1, h.x); r0 = mini(r0, h.y); r1 = maxi(r1, h.y)
+	# pad: rows above and below the room, alternating so it stays centred
+	var extra := maxi(0, BOARD_ROWS - (r1 - r0 + 1))
+	r0 -= extra / 2
+	r1 += extra - extra / 2
+	var floor := {}
+	for h in _rect(q0, q1, r0, r1):
+		floor[h] = true
+	# bulges first (they only add), then bites (checked against the core and connectivity)
+	for _i in BOARD_BULGES:
+		var edge := _perimeter(floor)
+		var at: Vector2i = edge[rng.randi_range(0, edge.size() - 1)]
+		var out: Vector2i = at + Hex.DIRS[rng.randi_range(0, 5)]
+		if floor.has(out):
+			continue
+		for h in [out] + Hex.within(out, rng.randi_range(1, 2)):
+			floor[h] = true
+	for _i in BOARD_BITES:
+		var edge := _perimeter(floor)
+		var at: Vector2i = edge[rng.randi_range(0, edge.size() - 1)]
+		var bite: Array = [at] + Hex.within(at, rng.randi_range(1, 2))
+		if bite.any(func(h): return core.has(h)):
+			continue
+		var trial := floor.duplicate()
+		for h in bite:
+			trial.erase(h)
+		if _all_connected(trial):
+			floor = trial
+	b["hexes"] = floor.keys()
+	# a little texture on the new ground, never on a hex that already means something
+	var taken := {}
+	for h in b["cover"]: taken[h] = true
+	for h in b["rough"]: taken[h] = true
+	for o in b["objects"]: taken[o["pos"]] = true
+	var fresh: Array = b["hexes"].filter(func(h): return not core.has(h) and not taken.has(h))
+	var rough: Array = b["rough"].duplicate()
+	for _i in mini(BOARD_ROUGH, fresh.size()):
+		var h: Vector2i = fresh[rng.randi_range(0, fresh.size() - 1)]
+		if not (h in rough):
+			rough.append(h)
+	b["rough"] = rough
+	return b
+
+# Floor hexes with at least one non-floor neighbour.
+static func _perimeter(floor: Dictionary) -> Array:
+	var out: Array = []
+	for h in floor:
+		for n in Hex.neighbors(h):
+			if not floor.has(n):
+				out.append(h)
+				break
+	return out
+
+static func _all_connected(floor: Dictionary) -> bool:
+	if floor.is_empty():
+		return false
+	var start: Vector2i = floor.keys()[0]
+	var seen := {start: true}
+	var q: Array = [start]
+	while not q.is_empty():
+		var h: Vector2i = q.pop_front()
+		for n in Hex.neighbors(h):
+			if floor.has(n) and not seen.has(n):
+				seen[n] = true
+				q.append(n)
+	return seen.size() == floor.size()
 
 # The authored rooms are 5-9 hexes wide: docs/spike-hex-ranges.md measured
 # that on them SPAWN_GAP is unreachable on four of six, first contact is round
@@ -238,7 +333,7 @@ const GOLD_PER_POWER := 0.6
 # `mult` is T8's difficulty knob; it scales the spawned instance, never
 # data/monsters.json.
 static func build(spec: Dictionary, party_combatants: Array, board: Dictionary = {}) -> Combat:
-	var b: Dictionary = board if not board.is_empty() else board_for(String(spec.get("theme", "")))
+	var b: Dictionary = board if not board.is_empty() else board_for(String(spec.get("theme", "")), int(spec.get("seed", 0)))
 	var all_c: Array = party_combatants.duplicate()
 	var spots := _foe_spots(b, party_combatants)
 	var i := 0

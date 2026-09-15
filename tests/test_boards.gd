@@ -21,6 +21,7 @@ func check(cond: bool, label: String) -> void:
 
 func _init() -> void:
 	test_every_theme_is_well_formed()
+	test_grown_boards()
 	test_shrine_is_unchanged()
 	test_hazards_where_expected()
 	test_barrel_blocks_until_smashed()
@@ -37,7 +38,7 @@ func test_every_theme_is_well_formed() -> void:
 		var seen := {}
 		for h in hexes:
 			seen[h] = true
-		check(hexes.size() >= 36 and hexes.size() <= 64, "%s is 36-64 hexes, the room and its mirror (%d)" % [theme, hexes.size()])
+		check(hexes.size() >= 60 and hexes.size() <= 170, "%s is 60-170 hexes, the room, its mirror and the ground around (%d)" % [theme, hexes.size()])
 		check(seen.size() == hexes.size(), "%s has no duplicate hexes" % theme)
 		check(b.get("cover", []).all(func(h): return seen.has(h)), "%s cover is on the board" % theme)
 		check(b.get("rough", []).all(func(h): return seen.has(h)), "%s rough is on the board" % theme)
@@ -49,6 +50,39 @@ func test_every_theme_is_well_formed() -> void:
 			"%s has room for every party start" % theme)
 		check(_connected(b), "%s is walkable end to end" % theme)
 		check(b.has("reach_melee") and b.has("region_at"), "%s carries the resolver's keys" % theme)
+
+# The seeded ground around the room: every seed is a different lumpy shape,
+# every shape keeps the room, the props and the starts, and is one floor.
+func test_grown_boards() -> void:
+	for theme in Encounter.THEMES:
+		var shapes := {}
+		for s in range(1, 13):
+			var b: Dictionary = Encounter.board_for(theme, s)
+			var seen := {}
+			for h in b["hexes"]:
+				seen[h] = true
+			check(seen.size() == b["hexes"].size(), "%s/%d no duplicates" % [theme, s])
+			check(_connected(b), "%s/%d is one connected floor" % [theme, s])
+			check(Encounter.PARTY_STARTS.all(func(p): return seen.has(p)), "%s/%d keeps the party starts" % [theme, s])
+			check(b["objects"].all(func(o): return seen.has(o["pos"])) and b["cover"].all(func(h): return seen.has(h))
+				and b["rough"].all(func(h): return seen.has(h)), "%s/%d keeps props, cover and rough on the floor" % [theme, s])
+			var rows := {}
+			for h in b["hexes"]:
+				rows[h.y] = true
+			check(rows.size() >= Encounter.BOARD_ROWS - 2, "%s/%d is at least %d rows tall (%d)" % [theme, s, Encounter.BOARD_ROWS - 2, rows.size()])
+			var key := ""
+			var sorted: Array = b["hexes"].duplicate()
+			sorted.sort()
+			for h in sorted:
+				key += str(h)
+			shapes[key] = true
+		check(shapes.size() >= 10, "%s: twelve seeds give at least ten different shapes (%d)" % [theme, shapes.size()])
+		check(Encounter.board_for(theme, 0)["hexes"] == Encounter.board_for(theme)["hexes"], "%s: no seed is the fixed shape" % theme)
+	# the room's own hexes survive growth on every seed
+	var shrine_room: Array = Encounter._widen(Encounter.shrine_board())["hexes"]
+	for s in range(1, 13):
+		var hs: Array = Encounter.board_for("sunken-shrine", s)["hexes"]
+		check(shrine_room.all(func(h): return h in hs), "shrine/%d: the room and its mirror are never bitten" % s)
 
 # The whole game's tuning assumes this room. If this test fails, someone drifted it.
 func test_shrine_is_unchanged() -> void:
