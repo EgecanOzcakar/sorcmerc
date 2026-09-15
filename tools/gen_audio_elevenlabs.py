@@ -3,7 +3,7 @@
 
     export ELEVENLABS_API_KEY=...
     python3 tools/gen_audio_elevenlabs.py --list          # the prompts, writes nothing
-    python3 tools/gen_audio_elevenlabs.py sfx             # regenerate all 14 stings
+    python3 tools/gen_audio_elevenlabs.py sfx             # regenerate all 31 stings
     python3 tools/gen_audio_elevenlabs.py --only hit,crit # just those two
     python3 tools/gen_audio_elevenlabs.py sfx barks       # stings and the voice stingers
 
@@ -30,10 +30,11 @@ API: POST https://api.elevenlabs.io/v1/sound-generation, `xi-api-key` header.
 `prompt_influence` trades faithfulness to the prompt against the model's own
 judgement -- high for a sound with a precise brief (a click), lower where the
 model has more room (a victory sting). Cost is per generation and this writes
-14 of them for `sfx`, so --only is the normal way to use it.
+31 of them for `sfx`, so --only is the normal way to use it.
 """
 import argparse
 import json
+import math
 import os
 import struct
 import sys
@@ -53,11 +54,11 @@ SR = 44100
 CHANNELS = 1
 KEY_ENV = "ELEVENLABS_API_KEY"
 
-# What comes back is NOT drop-in on its own, and both reasons are measurable
+# What comes back is NOT drop-in on its own, and every reason is measurable
 # against the synthesized set it has to sit beside:
 #
 #  * LEVEL. tools/gen_audio.py peak-normalizes every sting to 28480 (-1.2 dBFS),
-#    uniformly, all 14 of them. A generated take lands wherever it lands -- the
+#    uniformly, every one of them. A generated take lands where it lands -- the
 #    first click back was 7691, a quarter of that -- so dropping it in unchanged
 #    makes one sound in the game four times quieter than its neighbours. Matched
 #    to the same number rather than a number of my own, so the two sets mix.
@@ -65,7 +66,21 @@ KEY_ENV = "ELEVENLABS_API_KEY"
 #    click was 0.96s, against 0.06s for the synthesized one. Almost all of that
 #    is silence after the sound, and a UI click that holds an audio voice for a
 #    second is a click you can hear queueing. Trimmed to the actual sound.
+#  * RUMBLE. Takes come back with content under the audible band, and enough of
+#    it to fail tools/check_audio.py's DC-offset check: the first evocation cast
+#    read a mean of 0.0738 against a 0.02 limit, the first thrown hit 0.0226.
+#    Neither is a fixed bias -- the cast's mean decays from 0.152 to zero with
+#    its own envelope and the hit's swings +0.140 then -0.197 -- so subtracting
+#    the mean would flatten the hit's sub-bass thump, which is the sound, not a
+#    fault in it. What both have is energy near 1 Hz that no speaker reproduces
+#    and every meter counts. High-passed instead, so the thump survives.
 PEAK = 28480                # tools/gen_audio.py's own normalization target
+# One pole is 6 dB/oct, which still leaves a quarter of a 1 Hz component behind;
+# two gets the evocation cast's 0.0738 to 0.0002 while costing a 60 Hz impact
+# 0.25 dB. Cutting at 20 rather than 30 Hz for the same reason: the lowest thing
+# in these files worth keeping is a body-blow thump around 50 Hz.
+HP_HZ = 20.0
+HP_POLES = 2
 # Silence is judged over a WINDOW, not per sample. A take's noise floor is not
 # flat -- the first usable click came back with the sound over by 200 ms and a
 # single stray sample at 0.8% FS near the very end, which is enough to defeat a
@@ -196,6 +211,27 @@ def jobs(groups, only):
     return out
 
 
+def high_pass(vals):
+    """Samples -> the same sound with everything under HP_HZ rolled off.
+
+    One RC pole per iteration, y[n] = a*(y[n-1] + x[n] - x[n-1]). Run before the
+    peak is measured, so what gets normalized to PEAK is the audible signal
+    rather than a rumble riding on top of it.
+    """
+    dt = 1.0 / SR
+    rc = 1.0 / (2.0 * math.pi * HP_HZ)
+    a = rc / (rc + dt)
+    for _ in range(HP_POLES):
+        out = [0.0] * len(vals)
+        prev_x, prev_y = vals[0], 0.0
+        for i, x in enumerate(vals):
+            prev_y = a * (prev_y + x - prev_x)
+            prev_x = x
+            out[i] = prev_y
+        vals = out
+    return vals
+
+
 def trim_and_normalize(pcm):
     """Raw take -> the same sound at the synthesized set's level and length.
 
@@ -207,8 +243,8 @@ def trim_and_normalize(pcm):
     before = n / float(SR)
     if n == 0:
         return pcm, before, before, 0
-    vals = list(struct.unpack("<%dh" % n, pcm))
-    peak = max(abs(v) for v in vals)
+    vals = high_pass(list(struct.unpack("<%dh" % n, pcm)))
+    peak = int(max(abs(v) for v in vals))
     floor = SILENCE_RMS * 32767.0
     if peak < floor:
         return pcm, before, before, peak
