@@ -14,8 +14,7 @@ const Hex = preload("res://core/hex.gd")
 const Settings = preload("res://core/settings.gd")
 const Tutorial = preload("res://core/tutorial.gd")
 const Icons = preload("res://core/ui_icons.gd")
-const Campaign = preload("res://core/campaign.gd")
-const Difficulty = preload("res://core/difficulty.gd")   # item_name, for the loot line at the end of a fight
+const Campaign = preload("res://core/campaign.gd")   # item_name, for the loot line at the end of a fight
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
 
@@ -352,7 +351,6 @@ func _new_game(forced := 0) -> void:
 	sp["seed"] = _seed
 	result = {}
 	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS))   # sp["theme"] picks the board
-	Difficulty.apply(cb, Settings.current().difficulty)   # T9c: the player's overlay, foes only
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()

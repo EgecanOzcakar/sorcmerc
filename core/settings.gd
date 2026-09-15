@@ -8,8 +8,7 @@
 #   "anim_speed_multiplier": 1.0,   // 1.0 normal, higher = faster tweens/pauses
 #   "default_difficulty": "normal", // "easy" | "normal" | "hard"
 #   "sfx_volume": 80,               // 0-100, the "SFX" audio bus (T27)
-#   "music_volume": 80,             // 0-100, the "Music" audio bus (T27)
-#   "difficulty": {...}             // T9c core/difficulty.gd overlay; missing keys = balanced
+#   "music_volume": 80              // 0-100, the "Music" audio bus (T27)
 # }
 #
 # Read it with Settings.current() — loaded once, cached; save() writes the cache
@@ -28,9 +27,6 @@ var anim_speed_multiplier := 1.0
 var default_difficulty := "normal"
 var sfx_volume := DEFAULT_VOLUME
 var music_volume := DEFAULT_VOLUME
-var difficulty: Dictionary = Difficulty.PRESETS["balanced"].duplicate()
-
-const Difficulty = preload("res://core/difficulty.gd")
 
 static var _current = null
 
@@ -50,8 +46,6 @@ static func load_settings():
 		s.default_difficulty = diff if diff in DIFFICULTIES else "normal"
 		s.sfx_volume = clampf(float(d.get("sfx_volume", DEFAULT_VOLUME)), 0.0, 100.0)
 		s.music_volume = clampf(float(d.get("music_volume", DEFAULT_VOLUME)), 0.0, 100.0)
-		var o = d.get("difficulty", {})
-		s.difficulty = Difficulty.clamped(o if o is Dictionary else {})
 	return s
 
 static func to_dict(s) -> Dictionary:
@@ -59,8 +53,7 @@ static func to_dict(s) -> Dictionary:
 		"anim_speed_multiplier": s.anim_speed_multiplier,
 		"default_difficulty": s.default_difficulty,
 		"sfx_volume": s.sfx_volume,
-		"music_volume": s.music_volume,
-		"difficulty": s.difficulty}
+		"music_volume": s.music_volume}
 
 # Returns the path written, or "" on failure.
 static func save_settings(s = null) -> String:

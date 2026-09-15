@@ -33,7 +33,6 @@ var board: Dictionary = {}
 var order: Array = []
 var turn_idx: int = 0
 var round_num: int = 1
-var foe_crits := true   # T9c core/difficulty.gd; false = a foe's natural 20 is a plain hit
 var log: Array[String] = []
 # T19: party combatant ids that hit 0 HP at any point this fight. Read back out by
 # encounter.resolve_outcome() so campaign.gd can tell a flawless hard win from a
@@ -1010,8 +1009,6 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var ac = effective_ac(target)
 	var crit: bool = nat >= attacker.crit_range
 	var hit: bool = crit or (nat != 1 and total >= ac)
-	if crit and attacker.team == "foe" and not foe_crits:   # T9c Explorer: a foe's 20 still hits, never doubles
-		crit = false
 	if hit and not crit and _auto_crit(attacker, target, opts):
 		crit = true
 	var out = {

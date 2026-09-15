@@ -9,7 +9,6 @@
 extends Control
 
 const Settings = preload("res://core/settings.gd")
-const Difficulty = preload("res://core/difficulty.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
 const Sound = preload("res://core/audio.gd")
@@ -55,13 +54,11 @@ func _ready() -> void:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", Icons.box(COL_CARD, Icons.COL_GOLD_EDGE, 0, 24, 20))
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH   # grow around the centre, not down-right
-	panel.grow_vertical = Control.GROW_DIRECTION_BOTH     # from it (T9c made the list tall)
 	panel.custom_minimum_size = Vector2(380, 0)
 	add_child(panel)
 
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
+	col.add_theme_constant_override("separation", 10)
 	panel.add_child(col)
 
 	var cap := Label.new()
@@ -102,43 +99,6 @@ func _ready() -> void:
 	row.add_child(pick)
 	col.add_child(row)
 
-	# T9c: the BG3-shaped overlay — a preset picker and the knobs behind it.
-	# Touching a knob flips the picker to Custom; picking a preset sets them all.
-	var dcap := Label.new()
-	dcap.text = "Encounter rules"
-	dcap.theme_type_variation = "Caption"
-	col.add_child(dcap)
-	var prow := HBoxContainer.new()
-	prow.add_theme_constant_override("separation", 8)
-	var plbl := Label.new()
-	plbl.text = "Preset"
-	plbl.theme_type_variation = "Dim"
-	prow.add_child(plbl)
-	_preset = OptionButton.new()
-	for name in Difficulty.PRESETS.keys() + ["custom"]:
-		_preset.add_item(String(name).capitalize())
-	_preset.item_selected.connect(func(i: int):
-		var names: Array = Difficulty.PRESETS.keys() + ["custom"]
-		if names[i] != "custom":
-			_s.difficulty = Difficulty.PRESETS[names[i]].duplicate()
-			_apply()
-			_rebuild())
-	prow.add_child(_preset)
-	col.add_child(prow)
-	col.add_child(_knob("Enemy hit points", "foe_hp", 0.05, "×%.2f"))
-	col.add_child(_knob("Enemy to-hit and spell DC", "foe_hit", 1, "%+d"))
-	col.add_child(_knob("Enemy damage per hit", "foe_dmg", 1, "%+d"))
-	var crits := CheckButton.new()
-	crits.text = "Enemies can score critical hits"
-	crits.button_pressed = bool(_s.difficulty.get("foe_crits", true))
-	crits.toggled.connect(func(on: bool):
-		_s.difficulty["foe_crits"] = on
-		_touched())
-	col.add_child(crits)
-	col.add_child(_knob("Inn and camp-kit cost", "camp_cost", 0.25, "×%.2f"))
-	col.add_child(_knob("Market prices", "trade_price", 0.25, "×%.2f"))
-	_sync_preset()
-
 	var wipe := Button.new()
 	wipe.text = "Clear autosave"
 	wipe.pressed.connect(_clear_autosave)
@@ -152,51 +112,6 @@ func _ready() -> void:
 	close.theme_type_variation = "Primary"
 	close.pressed.connect(queue_free)
 	col.add_child(close)
-
-# T9c helpers ----------------------------------------------------------------
-var _preset: OptionButton = null
-
-func _sync_preset() -> void:
-	var names: Array = Difficulty.PRESETS.keys() + ["custom"]
-	_preset.selected = names.find(Difficulty.preset_of(_s.difficulty))
-
-func _touched() -> void:
-	_s.difficulty = Difficulty.clamped(_s.difficulty)
-	_sync_preset()
-	_apply()
-
-func _rebuild() -> void:
-	# the knobs read _s.difficulty when built, so a preset change redraws the screen
-	var parent := get_parent()
-	var fresh = load("res://scenes/settings/settings.tscn").instantiate()
-	parent.add_child(fresh)
-	queue_free()
-
-func _knob(label: String, key: String, step: float, fmt: String) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	var lbl := Label.new()
-	lbl.text = label
-	lbl.theme_type_variation = "Dim"
-	lbl.custom_minimum_size = Vector2(220, 0)
-	row.add_child(lbl)
-	var slider := HSlider.new()
-	slider.min_value = float(Difficulty.RANGE[key][0])
-	slider.max_value = float(Difficulty.RANGE[key][1])
-	slider.step = step
-	slider.value = float(_s.difficulty.get(key, Difficulty.PRESETS["balanced"][key]))
-	slider.custom_minimum_size = Vector2(150, 0)
-	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(slider)
-	var val := Label.new()
-	val.custom_minimum_size = Vector2(56, 0)
-	val.text = fmt % (int(slider.value) if step >= 1 else slider.value)
-	row.add_child(val)
-	slider.value_changed.connect(func(v: float):
-		_s.difficulty[key] = int(v) if step >= 1 else v
-		val.text = fmt % (int(v) if step >= 1 else v)
-		_touched())
-	return row
 
 # T27: one 0-100 audio slider. `on_value` gets the new value (already stepped),
 # and is responsible for writing it through to settings + the bus.

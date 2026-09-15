@@ -25,8 +25,6 @@ const Minimap := preload("res://scenes/world/minimap.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
-const Difficulty = preload("res://core/difficulty.gd")
-const Settings = preload("res://core/settings.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
 const Rumors = preload("res://core/rumors.gd")
@@ -1430,7 +1428,6 @@ func _open_visit(s) -> void:
 	world.clock.pause()
 	world.set_goal(world.player(), world.player().position)   # stop at the gate
 	_visit = Visit.visit(s, world)
-	Visit.apply_haggle(_visit, Difficulty.trade_scale(Settings.current().difficulty))   # T9c
 	_visit_page = "hub"
 	_market_tab = MARKET_TAB_ALL
 	_build_visit_panel()
@@ -1522,13 +1519,9 @@ func _identify(item_id: String) -> void:
 	_build_visit_panel()
 	_say(String(r.get("text", "")))
 
-# T9c: what a night or a kit costs after the difficulty overlay's camp-cost knob.
-func _road_cost(gp: int) -> int:
-	return Difficulty.camp_cost(gp, Settings.current().difficulty)
-
 # T9x: flat price, unlimited stock — see the row comment in _build_visit_panel.
 func _buy_camp_kit() -> void:
-	if party.spend_gold(_road_cost(WorldCamp.CAMP_KIT_PRICE)):
+	if party.spend_gold(WorldCamp.CAMP_KIT_PRICE):
 		party.stash_add(WorldCamp.CAMP_KIT_ITEM)
 		Sound.play_sfx("buy")
 		_build_visit_panel()
@@ -1615,7 +1608,7 @@ func _rest() -> void:
 		_say("The party isn't tired enough for another long rest yet.")
 		return
 	var s = _visit["settlement"]
-	var cost := _road_cost(Visit.inn_cost(s))
+	var cost := Visit.inn_cost(s)
 	if not party.spend_gold(cost):
 		_say("Can't afford a room here (%d gp)." % cost)
 		return
@@ -1624,7 +1617,6 @@ func _rest() -> void:
 	Sound.play_sfx("rest")
 	var trance: Dictionary = Trance.apply_rest_bonus(party, world, s.position)
 	_visit = Visit.visit(s, world)
-	Visit.apply_haggle(_visit, Difficulty.trade_scale(Settings.current().difficulty))   # T9c
 	_carry_visit_flags(before, _visit)
 	_build_visit_panel()
 	_say("The party takes a long rest (%d gp for the room). Eight hours pass and the stalls fill up again.%s" % [
@@ -1828,7 +1820,7 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 
 	var inn_btn := Button.new()
 	var wait: float = Visit.long_rest_in(party, world)
-	inn_btn.text = ("Inn.  A night is %d gp" % _road_cost(Visit.inn_cost(s)) if wait <= 0.0
+	inn_btn.text = ("Inn.  A night is %d gp" % Visit.inn_cost(s) if wait <= 0.0
 		else "Inn.  Rested recently, a room does nothing for %s yet" % _hours(wait))
 	inn_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	inn_btn.pressed.connect(_goto_page.bind("inn"))
@@ -1928,7 +1920,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	# catalog (T9x) and gets its own row rather than a fake catalog entry.
 	if showing_all or _market_tab == "generalist":
 		_trade_row(rows, "%s — %d gp (lets you long-rest away from a settlement)" % [
-			WorldCamp.CAMP_KIT_NAME, _road_cost(WorldCamp.CAMP_KIT_PRICE)], "Buy", _buy_camp_kit)
+			WorldCamp.CAMP_KIT_NAME, WorldCamp.CAMP_KIT_PRICE], "Buy", _buy_camp_kit)
 	# Selling is not a counter — whoever is behind it takes the whole pack —
 	# so it stays out of the tabs and sits under everything, on every tab.
 	var pack: GridContainer = null
@@ -1980,7 +1972,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 # — how long until it says yes. A disabled button with a number beside it is
 # an answer; a button that shrugs is the silent-no-op bug again (e3cc910).
 func _build_inn_page(box: VBoxContainer, s) -> void:
-	var cost := _road_cost(Visit.inn_cost(s))
+	var cost := Visit.inn_cost(s)
 	var mood := Label.new()
 	mood.text = "A %s bed is %d gp a night.  %d gp in the purse." % [s.kind, cost, party.gold]
 	mood.theme_type_variation = "Dim"
