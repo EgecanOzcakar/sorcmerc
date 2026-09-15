@@ -678,12 +678,51 @@ func _slot_icon(s: String) -> Texture2D:
 		"shove": return Icons.verb_icon("shove")
 	return Icons.verb_icon(s)
 
-# A slot's own list: numbered from 1, Esc (the last button) goes back.
-func _open_submenu(h, slot: String, entries: Array) -> void:
+# A slot's own list: numbered from 1, Esc (the last button) goes back. More
+# than nine spells are grouped by level first (the key is the level: 2-3-1
+# is "my first 2nd-level spell", every fight); any list still longer than
+# nine pages on slot 9 (More ▸), in a stable order.
+const LIST_KEYS := 9
+
+func _open_submenu(h, slot: String, entries: Array, page := 0) -> void:
 	_submenu = slot
-	var opts: Array = entries.duplicate()
-	opts.append(["Back", func(): _build_hero_menu(h, true), "Back",
-		_mark(Icons.verb_icon("back"), "‹")])
+	var back := ["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")]
+	if slot == "spells" and entries.size() > LIST_KEYS:
+		var groups := {}
+		for e in entries:
+			var lvl := _tier_of(e)
+			groups[lvl] = groups.get(lvl, []) + [e]
+		var lvls: Array = groups.keys()
+		lvls.sort()
+		var opts: Array = []
+		for lvl in lvls:
+			var mine: Array = groups[lvl]
+			var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
+			var name: String = "Cantrips" if lvl == 0 else "Level %d" % lvl
+			var meta := _mark(Icons.school_icon("evocation"), "▸")
+			meta["disabled"] = live == 0
+			meta["tier"] = "" if lvl == 0 else "★%d" % lvl
+			opts.append([name + " ▸", _open_list.bind(h, slot, mine, name),
+				"%s\n%d of %d ready — press to pick one." % [name, live, mine.size()], meta])
+		opts.append(back)
+		_set_buttons(opts)
+	else:
+		_open_list(h, slot, entries, SLOT_NAMES.get(slot, slot), page)
+	_board.queue_redraw()
+
+# One flat list, nine to a page.
+func _open_list(h, slot: String, entries: Array, name: String, page := 0) -> void:
+	_submenu = slot
+	var opts: Array = []
+	var per := LIST_KEYS if entries.size() <= LIST_KEYS else LIST_KEYS - 1
+	var start := page * per
+	opts.append_array(entries.slice(start, mini(entries.size(), start + per)))
+	if entries.size() > LIST_KEYS:
+		var next_page := page + 1 if start + per < entries.size() else 0
+		var meta := _mark(Icons.verb_icon("generic"), "…")
+		opts.append(["More ▸", _open_list.bind(h, slot, entries, name, next_page),
+			"%s — page %d of %d\nPress for the next page." % [name, page + 1, ceili(float(entries.size()) / per)], meta])
+	opts.append(["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
 	_board.queue_redraw()
 

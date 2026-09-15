@@ -118,5 +118,47 @@ func _init() -> void:
 	check(still_lit < lit, "and the ones that need the action are greyed out (%d lit, was %d)"
 		% [still_lit, lit])
 
+	# A caster with every spell in the book: [2] groups by level, each group
+	# numbered from 1, and a group past nine entries pages on [9] More.
+	var ch = load("res://core/presets.gd").ilsa()
+	var Adapter = load("res://core/adapter.gd")
+	var Catalog = load("res://core/rules/catalog.gd")
+	var Effects = load("res://core/rules/effects.gd")
+	for i in 5:
+		ch.add_level("cleric", -1)
+	var ids: Array = []
+	for sid in Catalog.index("spells.json").keys():
+		if not Effects.spell(sid).is_empty():
+			ids.append(sid)
+	ch.prepared.assign(ids)
+	var archmage = Adapter.to_combatant(ch, "party", ilsa.pos)
+	archmage.id = "archmage"
+	archmage.team = "party"
+	main.cb.combatants.append(archmage)
+	main.cb.begin_turn_for(archmage)
+	main._build_hero_menu(archmage)
+	await process_frame
+	main._press_hotkey(1)
+	var groups: Array = await _labels(main)
+	check(groups[0].contains("Cantrips") and groups[1].contains("Level 1") and groups.size() <= 10,
+		"20+ spells: [2] opens level groups, Cantrips first (%s)" % str(groups))
+	check(groups[-1].contains("Back"), "the group list ends in Back")
+	main._press_hotkey(0)   # Cantrips
+	var cantrips: Array = await _labels(main)
+	var cn: int = cantrips.filter(func(l): return not l.contains("Back") and not l.contains("More")).size()
+	check(cn >= 5 and cn <= 9, "the cantrip page holds at most nine spells (%d)" % cn)
+	if cantrips.any(func(l): return l.contains("More")):
+		var more_idx: int = -1
+		for i in cantrips.size():
+			if cantrips[i].contains("More"):
+				more_idx = i
+		check(more_idx == 8, "More sits on [9]")
+		main._press_hotkey(more_idx)
+		var page2: Array = await _labels(main)
+		check(page2 != cantrips and page2.any(func(l): return l.contains("Back")), "More turns the page")
+	main.board_cancel()
+	var home: Array = await _labels(main)
+	check(home.size() == 11 and home[1].contains("Spells"), "Esc from a group returns to the main bar")
+
 	print("test_action_bar: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
