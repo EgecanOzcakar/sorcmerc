@@ -846,16 +846,11 @@ func _build_review() -> void:
 
 # --- choice widgets -------------------------------------------------------
 
-# Every choice point the build has reached, optionally filtered to a set of types.
-# Still-open ones first so the screen reads top-down as "what's left, then what you
-# already picked" (and so a driver pressing the first matching option hits an open one).
+# Every choice point the build has reached, optionally filtered to a set of types,
+# in the resolver's own order — a choice keeps its place on the page whether or
+# not it is made yet, so picking one never shuffles the rest under the cursor.
 func _choice_points_of(types: Array) -> Array:
-	var out: Array = []
-	for want_decided in [false, true]:
-		for p in ch.sheet().choice_points:
-			if bool(p.get("decided", false)) == want_decided and (types.is_empty() or p["type"] in types):
-				out.append(p)
-	return out
+	return ch.sheet().choice_points.filter(func(p): return types.is_empty() or p["type"] in types)
 
 func _choice_widget(p: Dictionary) -> void:
 	var sheet = ch.sheet()
