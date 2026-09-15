@@ -10,7 +10,12 @@ const PassGear = preload("res://core/rules/pass_gear.gd")
 # Changing either re-tunes every encounter — re-run the seed sweep in
 # tests/test_combat.gd when you do.
 const FT_PER_HEX := 6      # 30 ft -> 5 hexes
-const RANGE_CAP := 8       # ranged attacks clamped to this many hexes
+# 12 hexes is BG3's 18 m / 60 ft grammar. Measured 2026-09-15 on the grown
+# boards (tests/sweep_range_detail.gd, 150 seeds): 8 -> 12 frees 17 of Pike's
+# ~740 shots past 8 hexes, moves no win rate, and the bestiary's archers never
+# reach it (atk_range is authored in hexes, not capped here) — so the cap now
+# only separates a longbow from a shortbow, which is the point of having one.
+const RANGE_CAP := 12      # ranged attacks clamped to this many hexes
 const AREA_ONE_HEX_FT := 16   # a radius up to ~5 m is one hex; bigger is a corner circle
 
 static func hexes(ft: int) -> int:
