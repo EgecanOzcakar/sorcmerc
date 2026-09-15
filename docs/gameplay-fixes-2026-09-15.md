@@ -16,6 +16,24 @@ default; authored values still win; Self/Touch/Self-(cone) stay 5 ft.
 Still capped by `adapter.gd` `RANGE_CAP := 8` hexes (40 ft at 5 ft/hex), so
 Fireball's 150 ft becomes 8 hexes in play. See decision 2.
 
+### Encounter difficulty retuned — `fd54b54`
+Decision taken: keep the movement rule, recalibrate. `TIER` 0.96/1.10/1.32 →
+0.77/0.90/1.04 (swept with `tests/sweep_tier.gd`), confirmed 94.0 / 86.5 /
+72.0. The smaller hard budget sat below the mammoth's score at `MULT_MIN`, so
+`boss_for` now always seats one escort body. `BOSS_POOL` win rates and
+`BOSS_REF_WIN_RATE` re-derived.
+
+### Boards widened — every board is the room plus its mirror
+Decision taken: grow boards, not the cap. `Encounter.board_for()` now returns
+the authored room mirrored along q (`_widen`): cover, rough and objects come
+along, `region_at` answers for a hex's twin. Diameters 12–19 (was 7–10);
+`SPAWN_GAP` 6 is honoured on every board (spawn distance 6..15, was 3..5).
+Measured with `tests/sweep_range_detail.gd`, 150 seeds: Pike's shots at 6–7
+hexes 61 → 268, foe archers' 178 → 426 — range does work now. Win rates on
+the retuned `TIER` did not move (93.5 / 85.5 / 74.5), so no second retune.
+The board view auto-fits, so no scene work. Two fixtures updated: board size
+band 36–64, and the wipe fixture hits at ×12 (foes no longer start adjacent).
+
 ## Found, not fixed (decisions)
 
 ### 1. Encounter difficulty dropped 15–25 points — `6b098e8`

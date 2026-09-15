@@ -117,10 +117,19 @@ func test_hurt_party_gets_a_thinner_roster() -> void:
 func test_flat_wilderness_discount() -> void:
 	check(WorldThreat.SCALE_MAX < 1.0, "a fresh party still gets a kinder road than the bare tier")
 	check(WorldThreat.SCALE_MAX == WorldThreat.WILDERNESS_SCALE, "...by exactly the flat discount")
+	# Over a spread of seeds, not one: the mult knob is 0.05-lumpy, so a single
+	# seed can land on the same roster either side of the discount.
 	var chars := Presets.party()
-	var bare := _spec_power(Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", 7))
-	var road := _spec_power(Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", 7, WorldThreat.SCALE_MAX))
-	check(road < bare, "and it really reaches the roster (%.1f vs %.1f)" % [road, bare])
+	var thinner := 0
+	var fatter := 0
+	for s in range(1, 11):
+		var bare := _spec_power(Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", s))
+		var road := _spec_power(Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", s, WorldThreat.SCALE_MAX))
+		if road < bare:
+			thinner += 1
+		elif road > bare:
+			fatter += 1
+	check(thinner > 0 and fatter == 0, "and it really reaches the roster (%d/10 thinner, %d fatter)" % [thinner, fatter])
 
 func test_floor_holds() -> void:
 	check(WorldThreat.power_scale(0.0) == WorldThreat.SCALE_FLOOR, "zero HP bottoms out at the floor exactly")

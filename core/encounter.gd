@@ -50,12 +50,36 @@ const THEMES := ["sunken-shrine", "goblin-camp", "city-square", "forest-clearing
 
 static func board_for(theme: String) -> Dictionary:
 	match theme:
-		"goblin-camp": return goblin_camp_board()
-		"city-square": return city_square_board()
-		"forest-clearing": return forest_clearing_board()
-		"frozen-cave": return frozen_cave_board()
-		"merchant-shop": return merchant_shop_board()
-	return shrine_board()
+		"goblin-camp": return _widen(goblin_camp_board())
+		"city-square": return _widen(city_square_board())
+		"forest-clearing": return _widen(forest_clearing_board())
+		"frozen-cave": return _widen(frozen_cave_board())
+		"merchant-shop": return _widen(merchant_shop_board())
+	return _widen(shrine_board())
+
+# The authored rooms are 5-9 hexes wide: docs/spike-hex-ranges.md measured
+# that on them SPAWN_GAP is unreachable on four of six, first contact is round
+# 1 in 150/150 fights, and every range from 30 ft up is the same range. So a
+# fight is played on the room plus its mirror image along q: the party starts
+# in the authored half, foes spawn a real SPAWN_GAP away in the other, and
+# cover/rough/objects come along so the far half is the same kind of place.
+# region_at answers for the mirrored hex's twin, so narration keeps its names.
+# ponytail: a mirror, not a second authored half per theme — author one when
+# a board needs an asymmetric far end.
+static func _widen(b: Dictionary) -> Dictionary:
+	var qmax := 0
+	for h in b["hexes"]:
+		qmax = maxi(qmax, h.x)
+	var flip := func(p: Vector2i) -> Vector2i: return Vector2i(2 * qmax + 1 - p.x, p.y)
+	for k in ["hexes", "cover", "rough"]:
+		b[k] = b[k] + b[k].map(flip)
+	var twins: Array = b["objects"].duplicate(true)
+	for o in twins:
+		o["pos"] = flip.call(o["pos"])
+	b["objects"] = b["objects"] + twins
+	var src: Callable = b["region_at"]
+	b["region_at"] = func(p: Vector2i) -> String: return src.call(p if p.x <= qmax else flip.call(p))
+	return b
 
 # Same dict; named so build()'s `board` parameter can still reach the default.
 static func shrine_board() -> Dictionary:

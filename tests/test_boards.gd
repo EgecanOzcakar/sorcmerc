@@ -37,7 +37,7 @@ func test_every_theme_is_well_formed() -> void:
 		var seen := {}
 		for h in hexes:
 			seen[h] = true
-		check(hexes.size() >= 18 and hexes.size() <= 32, "%s is 18-32 hexes (%d)" % [theme, hexes.size()])
+		check(hexes.size() >= 36 and hexes.size() <= 64, "%s is 36-64 hexes, the room and its mirror (%d)" % [theme, hexes.size()])
 		check(seen.size() == hexes.size(), "%s has no duplicate hexes" % theme)
 		check(b.get("cover", []).all(func(h): return seen.has(h)), "%s cover is on the board" % theme)
 		check(b.get("rough", []).all(func(h): return seen.has(h)), "%s rough is on the board" % theme)

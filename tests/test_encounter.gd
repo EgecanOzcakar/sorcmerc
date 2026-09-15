@@ -215,10 +215,11 @@ func test_outcome_defeat_and_deaths() -> void:
 	var party := Party.new()
 	for ch in Presets.party():
 		party.add_member(ch)
-	# a wipe is certain; an actual death takes three failed death saves, so sweep seeds
+	# a wipe is certain; a death takes three failed saves or massive damage, so sweep seeds
+	# (x12 since the boards were widened: foes start SPAWN_GAP out, so fewer round-1 swings)
 	var any_death := false
-	for s in range(1, 12):
-		var cb = Encounter.build({"monsters": [{"id": "grull", "count": 8, "mult": 6.0}], "seed": s},
+	for s in range(1, 31):
+		var cb = Encounter.build({"monsters": [{"id": "grull", "count": 8, "mult": 12.0}], "seed": s},
 			party.to_combatants(Encounter.PARTY_STARTS))
 		_play(cb)
 		var r = Encounter.resolve_outcome(cb, party)
