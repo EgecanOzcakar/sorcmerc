@@ -399,6 +399,22 @@ static func _icon(path: String) -> Texture2D:
 	_icon_cache[path] = tex
 	return tex
 
+# The face behind a settlement counter: assets/generated/<faction>-<service>.png,
+# null if nobody has drawn that one yet (callers add nothing rather than a blank).
+static func portrait(faction: String, service: String) -> Texture2D:
+	return _icon("res://assets/generated/%s-%s.png" % [faction, service])
+
+static func portrait_rect(faction: String, service: String, px := 160) -> TextureRect:
+	var tex := portrait(faction, service)
+	if tex == null:
+		return null
+	var pic := TextureRect.new()
+	pic.texture = tex
+	pic.custom_minimum_size = Vector2(px, px)
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	return pic
+
 # The badge for one thing the bar is offering, most specific first: the skill's
 # own art if it has any (assets/icons/skills — every combat-castable spell, every
 # feature that becomes a button, each Shove variant), then the spell's school,

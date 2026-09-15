@@ -270,9 +270,19 @@ func _merchant_ui(col: VBoxContainer) -> void:
 		var page := VBoxContainer.new()
 		page.name = String(Campaign.SERVICE_NAMES.get(service, service))
 		tabs.add_child(page)
+		# Campaign merchant nodes have no faction; the road is human country.
+		var pic := Icons.portrait_rect(String(run.node.get("faction", "human")), service, 120)
 		var line := run.npc_line(service)
+		var head := HBoxContainer.new()
+		page.add_child(head)
+		if pic != null:
+			pic.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+			head.add_child(pic)
 		if line != "":
-			page.add_child(_dim(line))
+			var l := _dim(line)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			head.add_child(l)
 		_service_page(service, page)
 
 func _service_page(service: String, page: VBoxContainer) -> void:
