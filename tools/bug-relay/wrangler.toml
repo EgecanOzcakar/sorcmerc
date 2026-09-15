@@ -27,6 +27,6 @@ ALLOWED_ORIGINS = "*"
 #   wrangler kv namespace create RATE_LIMIT
 # then paste the id it prints here. Without it the Worker still runs — it just
 # fails open on the rate limit, with the size caps still in force.
-# [[kv_namespaces]]
-# binding = "RATE_LIMIT"
-# id = "paste-the-id-wrangler-printed"
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "843f4e99c2204ec9b56861e66988616e"

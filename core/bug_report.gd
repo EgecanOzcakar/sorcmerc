@@ -61,7 +61,7 @@ const TRUNCATED := "\n\n_(truncated to fit the link — the full report is saved
 # BUG_RELAY_URL / BUG_RELAY_KEY Actions variables at export time, the same way
 # it stamps the version — so a build with no relay deployed simply has none,
 # and the overlay offers only the browser.
-const RELAY_URL := ""
+const RELAY_URL := "https://sorcmerc-bug-relay.egecanozcakar.workers.dev"
 const RELAY_KEY := ""
 const RELAY_TIMEOUT := 20.0    # seconds before we stop waiting and say so
 
