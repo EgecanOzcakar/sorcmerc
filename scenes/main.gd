@@ -16,6 +16,7 @@ const Tutorial = preload("res://core/tutorial.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Campaign = preload("res://core/campaign.gd")   # item_name, for the loot line at the end of a fight
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
+const ManualOverlay = preload("res://scenes/manual/manual.gd")
 
 # What T5 injects before the scene runs: the live party, the node's spec (empty ->
 # the scaler sizes one) and its difficulty. `result` is resolve_outcome() once the
@@ -149,7 +150,16 @@ func _ready() -> void:
 	move_child(bg, 0)
 
 	_header.theme_type_variation = "Title"
-	col.add_child(_header)
+	var head := HBoxContainer.new()
+	col.add_child(head)
+	_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(_header)
+	var manual := Button.new()
+	manual.text = "Manual  [F2]"
+	manual.theme_type_variation = "Quiet"
+	manual.focus_mode = Control.FOCUS_NONE   # hotkeys 1-9 must keep going to the board
+	manual.pressed.connect(func(): ManualOverlay.toggle(self))
+	head.add_child(manual)
 
 	# --- the action log: a full-height sidebar down the left edge -----
 	_logwrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -285,6 +295,7 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		KEY_ESCAPE, KEY_B: board_cancel()
 		KEY_R: if cb and cb.is_over(): _new_game()
 		KEY_F1: SettingsOverlay.toggle(self, func(): _anim = Settings.anim())
+		KEY_F2: ManualOverlay.toggle(self)
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 			_press_hotkey(e.keycode - KEY_1)
 		KEY_0, KEY_SPACE:

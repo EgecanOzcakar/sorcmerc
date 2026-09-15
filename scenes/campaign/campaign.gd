@@ -11,6 +11,7 @@ const Party = preload("res://core/party.gd")
 const Quest = preload("res://core/quest.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
+const ManualOverlay = preload("res://scenes/manual/manual.gd")
 
 const Icons = preload("res://core/ui_icons.gd")
 
@@ -91,6 +92,10 @@ func _ready() -> void:
 	sbtn.text = "⚙  Settings"
 	sbtn.pressed.connect(func(): SettingsOverlay.toggle(self))
 	footer.add_child(sbtn)
+	var mbtn := Button.new()
+	mbtn.text = "Manual"
+	mbtn.pressed.connect(func(): ManualOverlay.toggle(self))
+	footer.add_child(mbtn)
 
 	_refresh()
 	# A run saved mid-fight comes back to the fight — otherwise the map sits on
