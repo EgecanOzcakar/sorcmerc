@@ -2139,18 +2139,24 @@ func _build_visit_panel() -> void:
 	# which makes this the one place that cannot show a stale count.
 	Quest.record_stash(party)
 	var s = _visit["settlement"]
+	# Issue #33: this used to place itself by arithmetic — half the screen minus
+	# half the 460x460 it was told to expect — and then measure whatever its
+	# content actually came to. A board with jobs on it comes to more than that
+	# in both directions, so the panel sat off-centre and, on a short window,
+	# hung off the bottom. A CenterContainer centres what it measures; the max
+	# width keeps a long line wrapping inside the panel rather than widening it.
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centre)
+	_visit_panel = centre
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Gilt"
-	# Default (top-left) anchors: `position` is a plain pixel offset from the
-	# parent's origin. set_anchors_preset(PRESET_CENTER) used to be called here
-	# too, which re-centers on its own and resets the offsets — this same
-	# centering math then applied again on top of that shoved the panel
-	# off-screen (see the same fix in _build_quest_panel just above).
-	panel.position = size * 0.5 - Vector2(230, 230)
 	panel.custom_minimum_size = Vector2(460, 460)
-	add_child(panel)
-	_visit_panel = panel
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	centre.add_child(panel)
 	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = VISIT_PANEL_W
 	panel.add_child(box)
 
 	var title := Label.new()
@@ -2181,6 +2187,18 @@ func _build_visit_panel() -> void:
 	leave.text = "Leave"
 	leave.pressed.connect(_close_visit)
 	bar.add_child(leave)
+
+# The settlement panel's column width. Every list inside it is sized against
+# this, so one long job title wraps instead of widening the whole counter.
+const VISIT_PANEL_W := 440.0
+# How much of the panel is not the list: title, mood line, portrait, the log
+# line and the buttons under it. A page's list gets what the window has left
+# after that, so a short window trims the list instead of running the whole
+# counter off the bottom of the screen (issue #33).
+const VISIT_CHROME_H := 320.0
+
+func _page_scroll_h(want: float) -> float:
+	return clampf(size.y - VISIT_CHROME_H, 120.0, want)
 
 const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board"}
 
@@ -2289,7 +2307,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	if _market_tab != MARKET_TAB_ALL:
 		_portrait(box, s.faction, _market_tab)
 
-	var scroll := _scroll_column(Vector2(440, 250))
+	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(250.0)))
 	box.add_child(scroll)
 	var rows: VBoxContainer = scroll.get_child(0)
 	var showing_all: bool = _market_tab == MARKET_TAB_ALL
@@ -2459,7 +2477,7 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 	box.add_child(mood)
 	if has_inn:
 		_portrait(box, s.faction, "innkeeper")
-	var scroll := _scroll_column(Vector2(440, 300))
+	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(300.0)))
 	box.add_child(scroll)
 	var rows: VBoxContainer = scroll.get_child(0)
 	# T9x quest board, D7 placement: the board carries what the settlement posts
@@ -2547,14 +2565,24 @@ func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 		offer["title"], tag, int(offer.get("reward", {}).get("gold", 0))],
 		"Take", _take_quest.bind(offer))
 
+# Issue #33: the label wraps. Without that its minimum width is the whole
+# string, and a job with a long title pushed the row — and with it the counter,
+# and with it the whole settlement panel — out past the edge of the screen. 330
+# stays as the column width short rows line up on; it is a floor now rather
+# than the only width the row can have.
 func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable) -> void:
 	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var lbl := Label.new()
 	lbl.text = text
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl.custom_minimum_size = Vector2(330, 0)
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(lbl)
 	var btn := Button.new()
 	btn.text = action
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.pressed.connect(on_press)
 	row.add_child(btn)
 	rows.add_child(row)

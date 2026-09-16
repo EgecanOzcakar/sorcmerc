@@ -131,6 +131,43 @@ func _init() -> void:
 				"...and its column fills the width instead of collapsing (%.0f of %.0f)" % [
 					sc.get_child(0).size.x, sc.size.x])
 
+	# --- issue #33: a long job title must not widen the counter ----------
+	#
+	# "quest complete screen stretches and overflows". A trade row's label had
+	# no wrapping, so its minimum width was the whole string: one long title
+	# pushed the row out, the row pushed the list out, and the list pushed the
+	# settlement panel past the edge of the screen — while the panel was still
+	# placing itself by arithmetic against the 460x460 it was told to expect.
+	for q in main.party.quests:
+		q["progress"] = int(q["required"])
+		q["state"] = "complete"
+		q["title"] = "Clear out the Zombie Graveyard on the Oakford road before the frost sets in"
+	main._goto_page("board")
+	for i in 3:
+		await process_frame
+	var board: PanelContainer = panels(main._visit_panel)[0]
+	check(has_button(main._visit_panel, "Turn in"), "the board has completed jobs on it to turn in")
+	check(board.size.x <= 480.0, "a long title does not widen the counter (%.0f)" % board.size.x)
+	check(board.global_position.x >= 0.0 and board.global_position.x + board.size.x <= main.size.x,
+		"...and it stays on the screen sideways")
+	var mid2: Vector2 = board.global_position + board.size * 0.5
+	check(absf(mid2.x - main.size.x * 0.5) < 2.0 and absf(mid2.y - main.size.y * 0.5) < 2.0,
+		"the counter is centred on what it measures, not on what it guessed")
+
+	# ...and a short window trims the list rather than running off the bottom.
+	main.size = Vector2(1024, 600)
+	main._build_visit_panel()
+	for i in 3:
+		await process_frame
+	board = panels(main._visit_panel)[0]
+	check(board.global_position.y >= 0.0 and board.global_position.y + board.size.y <= main.size.y,
+		"the counter fits a short window (%.0f..%.0f of %.0f)" % [
+			board.global_position.y, board.global_position.y + board.size.y, main.size.y])
+	main.size = Vector2(1280, 1280)
+	main._build_visit_panel()
+	for i in 3:
+		await process_frame
+
 	# --- issue #27: the roster reshuffles at an inn, not in a field -------
 	main._goto_page("inn")
 	for i in 3:
