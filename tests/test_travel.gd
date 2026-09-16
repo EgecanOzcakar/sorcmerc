@@ -4,6 +4,9 @@
 #   godot --headless --path . -s tests/test_travel.gd
 extends SceneTree
 
+const Campaign = preload("res://core/campaign.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Regions = preload("res://core/regions.gd")
 const World = preload("res://core/world.gd")
 const Travel = preload("res://core/travel.gd")
 const Party = preload("res://core/party.gd")
@@ -28,14 +31,51 @@ func _party() -> Party:
 		p.add_member(ch)
 	return p
 
+# The same world with the party standing `frac` of the map's extent out from
+# the anchor, which is what decides the D6 band under their feet — and therefore
+# which half of D3.1's table the road is allowed to roll (EVENTS' `bands`).
+func _world_out(frac: float) -> World:
+	var w := _world()
+	w.player().position = Vector2(Regions.extent(w) * frac, 0.0)
+	return w
+
 # Rolls until the named event comes up, so a test can drive one event rather
 # than whatever the clock happened to land on.
 func _force(party, w, want: String) -> Dictionary:
-	for seed_v in range(1, 400):
+	return _force_where(party, w, want, func(_e): return true)
+
+# ...and the same with a condition on the outcome, for the tests that only care
+# about a pass or only about a fail. `tries` is generous because D3.1's table is
+# fourteen events deep and some of these want one specific side of one specific
+# event's roll.
+func _force_where(party, w, want: String, ok_when: Callable, tries := 1200) -> Dictionary:
+	for seed_v in range(1, tries):
 		var e: Dictionary = Travel.check(party, w, RNG.new(seed_v))
-		if String(e.get("id", "")) == want:
+		if String(e.get("id", "")) == want and ok_when.call(e):
 			return e
 	return {}
+
+# The SEED that produces the wanted event, rather than the event itself — for
+# the tests that need to watch one event land on a party in a known state. A
+# search cannot be that party: every roll it walks past is already applied, so
+# by the time it finds a failed toll the purse it was told to empty has been
+# paid twice over by wayfarers. The probe is kept topped up as it goes, because
+# the table itself depends on the party (EVENTS' `needs`) and a probe quietly
+# bleeding would stop looking at the same table the replay will roll on.
+func _seed_of(w, want: String, ok_when: Callable, tries := 1200) -> int:
+	var probe := _party()
+	for seed_v in range(1, tries):
+		var e: Dictionary = Travel.check(probe, w, RNG.new(seed_v))
+		_top_up(probe)
+		if String(e.get("id", "")) == want and ok_when.call(e):
+			return seed_v
+	return 0
+
+# Everybody back to full. -1 is full (core/character.gd), which is also the
+# state a freshly built roster is in.
+func _top_up(party) -> void:
+	for ch in party.party_characters():
+		ch.hp_current = -1
 
 func _init() -> void:
 	# --- standing orders --------------------------------------------------
@@ -180,6 +220,155 @@ func _init() -> void:
 	check(not found.is_empty(), "a successful tracks read is reachable")
 	check(w10.lairs[0].discovered, "...and the lair really is on the map now")
 	check(found.has("lair"), "...and the card is told which one")
+
+	# --- D3.1: the country decides which table the road rolls ---------------
+	# A self-resolving card cannot be argued with, so it must not describe a
+	# world the player can see is not there: no toll posts past the last
+	# waystone, no dead companies in the farmed heartland.
+	var p11 := _party()
+	var deeps := _world_out(0.95)
+	check(Regions.band_of(deeps, deeps.player().position) == "deeps", "the test party really is in the deeps")
+	var settled_out_there := 0
+	var wilds_out_there := 0
+	for seed_v in range(1, 300):
+		var e: Dictionary = Travel.check(p11, deeps, RNG.new(seed_v))
+		if String(e.get("id", "")) in ["toll", "carter"]:
+			settled_out_there += 1
+		if String(e.get("id", "")) == "wreck":
+			wilds_out_there += 1
+	check(settled_out_there == 0, "nobody is manning a toll post in the Far Deeps (%d)" % settled_out_there)
+	check(wilds_out_there > 0, "...and the wrecks out there are (%d)" % wilds_out_there)
+
+	var p12 := _party()
+	var home := _world()
+	check(Regions.band_of(home, home.player().position) == "heartland", "the starting town is in the heartland")
+	var wrecks_at_home := 0
+	for seed_v in range(1, 300):
+		if String(Travel.check(p12, home, RNG.new(seed_v)).get("id", "")) == "wreck":
+			wrecks_at_home += 1
+	check(wrecks_at_home == 0, "no company lies dead on the farm road (%d)" % wrecks_at_home)
+
+	# An event needing a state of the party waits for that state. A shrine is
+	# worth stopping at when somebody is hurt and is scenery when nobody is.
+	var p13 := _party()
+	var w13 := _world()
+	var shrines_at_full := 0
+	for seed_v in range(1, 300):
+		if String(Travel.check(p13, w13, RNG.new(seed_v)).get("id", "")) == "shrine":
+			shrines_at_full += 1
+		_top_up(p13)   # the road bites: a party left to bleed stops being the case under test
+	check(shrines_at_full == 0, "a party at full HP never stops at the shrine (%d)" % shrines_at_full)
+
+	for ch in p13.party_characters():
+		ch.hp_current = 1
+	var shrine := _force_where(p13, w13, "shrine", func(e): return bool(e["ok"]))
+	check(not shrine.is_empty(), "a hurt party can find one")
+	check(int(shrine.get("healed", 0)) > 0, "...and a passed check actually heals (%d)" % int(shrine.get("healed", 0)))
+	var over_healed := false
+	for ch in p13.party_characters():
+		if ch.hp_current > int(ch.sheet().max_hp):
+			over_healed = true
+	check(not over_healed, "...never past full")
+
+	# The dead are not what a roadside shrine is for.
+	var p14 := _party()
+	var w14 := _world()
+	var corpse = p14.party_characters()[0]
+	corpse.dead = true
+	corpse.hp_current = 0
+	for ch in p14.party_characters():
+		if not ch.dead:
+			ch.hp_current = 1
+	var shrine2 := _force_where(p14, w14, "shrine", func(e): return bool(e["ok"]))
+	if not shrine2.is_empty():
+		check(corpse.hp_current == 0, "the shrine leaves the dead where they are")
+
+	# --- what the new events cost and pay -----------------------------------
+	# Time, both ways: weather sat out, and an old straight road found.
+	var p15 := _party()
+	var w15 := _world()
+	w15.clock.elapsed = 5000.0
+	var storm := _force_where(p15, w15, "storm", func(e): return not bool(e["ok"]))
+	check(not storm.is_empty() and float(storm["minutes"]) > 0.0, "a storm sat out costs time")
+	var waystone := _force_where(p15, w15, "waystone", func(e): return bool(e["ok"]))
+	check(not waystone.is_empty() and float(waystone["minutes"]) < 0.0, "a read waystone hands time back")
+
+	# Blood, and the floor under it: nothing on the road may drop anybody.
+	var p16 := _party()
+	var w16 := _world()
+	for ch in p16.party_characters():
+		ch.hp_current = 2
+	var snare := _force_where(p16, w16, "snare", func(e): return not bool(e["ok"]))
+	if not snare.is_empty():
+		check(int(snare["hurt"]) > 0, "a snare walked into hurts")
+		for ch in p16.party_characters():
+			check(ch.hp_current >= 1, "%s is cut up, never dropped" % ch.id)
+
+	# Coin, taken rather than given — and never more than there is. Both of
+	# these replay one known seed onto a purse of a known size, because a search
+	# spends and earns as it goes.
+	var w17 := _world()
+	var seed_ford := _seed_of(w17, "ford", func(e): return not bool(e["ok"]))
+	var p17 := _party()
+	p17.gold = 2000
+	var ford: Dictionary = Travel.check(p17, w17, RNG.new(seed_ford)) if seed_ford > 0 else {}
+	check(String(ford.get("id", "")) == "ford" and not bool(ford.get("ok", true)),
+		"a bad crossing is reachable")
+	check(int(ford["gold"]) < 0, "...and it is a cost, not a payout (%d)" % int(ford["gold"]))
+	check(p17.gold == 2000 + int(ford["gold"]), "...and exactly that much left the purse (%d)" % p17.gold)
+
+	var w18 := _world()
+	var seed_toll := _seed_of(w18, "toll", func(e): return not bool(e["ok"]))
+	var p18 := _party()
+	p18.gold = 0
+	var toll: Dictionary = Travel.check(p18, w18, RNG.new(seed_toll)) if seed_toll > 0 else {}
+	check(String(toll.get("id", "")) == "toll", "a toll post is reachable in settled country")
+	check(p18.gold == 0 and int(toll["gold"]) == 0, "a purse with nothing in it pays nothing")
+	check(String(toll["text"]) != "", "...and the card still says what happened")
+
+	var p18b := _party()
+	p18b.gold = 10000
+	var toll_paid: Dictionary = Travel.check(p18b, w18, RNG.new(seed_toll))
+	check(int(toll_paid["gold"]) < 0 and p18b.gold == 10000 + int(toll_paid["gold"]),
+		"a purse with something in it pays the toll (%d)" % int(toll_paid["gold"]))
+
+	# Salvage: plain gear, in the stash, that the catalog has actually heard of.
+	var p19 := _party()
+	var w19 := _world_out(0.6)
+	var wreck := _force_where(p19, w19, "wreck", func(e): return bool(e["ok"]))
+	check(not wreck.is_empty(), "a wreck worth searching is reachable in the marches")
+	var salvaged := String(wreck.get("item", ""))
+	check(p19.stash_count(salvaged) > 0, "...and the salvage is in the stash (%s)" % salvaged)
+	check(not Campaign.item_data(salvaged).is_empty(), "...and it is a real item, not an id nobody knows")
+	check(not Campaign.is_magic(salvaged), "...and the road does not hand out magic items")
+
+	# Goodwill: the one road event whose payoff is not on the party sheet at all.
+	FactionOpinion.reset()
+	var p20 := _party()
+	var w20 := _world()
+	var carter := _force_where(p20, w20, "carter", func(e): return bool(e["ok"]))
+	check(not carter.is_empty(), "a carter in the ditch is reachable near a town")
+	check(FactionOpinion.get_opinion("human") > 0.0,
+		"...and helping him is remembered by the locals (%.1f)" % FactionOpinion.get_opinion("human"))
+	check(String(carter.get("thanks", "")) == "Riverhold", "...by name, so the card can say who heard")
+	FactionOpinion.reset()
+
+	# Every event on the grown table still keeps D3's own house rule.
+	var p21 := _party()
+	for ch in p21.party_characters():
+		ch.hp_current = 1
+	var seen_ids := {}
+	for frac in [0.1, 0.6, 0.95]:
+		var w21 := _world_out(float(frac))
+		for seed_v in range(1, 400):
+			var e: Dictionary = Travel.check(p21, w21, RNG.new(seed_v))
+			if e.is_empty():
+				continue
+			seen_ids[String(e["id"])] = true
+			check(String(e["text"]) != "" and String(e["title"]) != "",
+				"%s says what happened, wherever it fired" % e["id"])
+	check(seen_ids.size() >= 12, "the whole table is reachable across the map (%d of %d)" % [
+		seen_ids.size(), Travel.EVENTS.size()])
 
 	# --- degenerate input --------------------------------------------------
 	check(Travel.check(null, _world()).is_empty(), "no party, no event")

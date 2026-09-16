@@ -4541,3 +4541,80 @@ them, so the old interaction is untouched; the bench click is the
 no-selection case. It respects issue #27's inn lock like every other way of
 benching, the tooltip says which of the two things the click will do, and the
 hint line leads with it.
+
+## D3.1 — eight more road events, and the gates that keep them honest (2026-09-16)
+
+D3 shipped the road with six events on it. Six was enough to settle the
+question it was built to answer — a map with something on it beats a corridor
+between menus, and a clock that stops for it beats a fast-forward that skips
+the game. It was not enough to ride for an evening. At one roll per six
+world-hours the table came round inside a single crossing, and the second time
+a stream ran wrong in the same afternoon the card stopped being news.
+
+`core/travel.gd` now carries fourteen. Both of D3's rules are untouched:
+standing orders are still set once on the party screen, and an event still
+resolves itself against the orders already standing rather than stopping to ask
+anything. What changed is how much road there is between repeats, what the road
+asks for, and what it deals.
+
+**What it asks for.** The six originals rolled Survival, Perception,
+Persuasion, Insight, Investigation and Medicine. Everything else on a sheet —
+Athletics, History, Religion, Nature, Animal Handling, and the two lying
+skills — was dead weight the moment a fight ended. Each of the eight new events
+is anchored on one of those: a ford that wants Athletics, a waystone that wants
+History, a crossroads shrine that wants Religion, a storm that wants Nature, a
+carter's spooked team that wants Animal Handling, and a toll post that will
+take Intimidation, Deception or Persuasion, whichever the party is best at.
+
+**What it deals.** D3's events could cost time, cost HP, pay gold, or reveal a
+lair. These add four more payoffs, one event each so that none of them is a
+reskin of another: a wound taken off at the shrine (a share of max HP, to
+everyone still standing — never the dead, because a shrine by the road must not
+look like a cheaper resurrection), gear lost to a river, coin lost at a toll
+post, plain sellable salvage out of a dead company's wreck, and goodwill with
+the locals' faction for pulling a cart out of a ditch — the one road event whose
+payoff is not on the party sheet at all, and the only place `FactionOpinion`
+moves outside a town.
+
+**The gates.** A card nobody can argue with had better not describe a world the
+player can see is not there. Two optional keys on an event decline the roll
+instead:
+
+| key | what it gates on | why |
+|---|---|---|
+| `bands` | the D6 country underfoot (`core/regions.gd`) | nobody is manning a toll post in the Far Deeps; nobody's company lies dead on a farm road |
+| `needs` | a state of the party or the map | the shrine only comes up when somebody is actually hurt; the carter only when there are locals whose goodwill is worth something |
+
+An unknown `needs` fails closed — a requirement this version does not
+understand is a card it must not show. A world too small to band, or one with
+no player on it (a test harness, a save mid-load), drops the band gate rather
+than the event.
+
+**Sizes.** Everything on this table stays small on purpose: a road event is
+something that happened between two places, not a fight and not a reward node.
+A storm sat out costs less than the worst ground (180 world-minutes against
+240); the old straight road hands back more than a clear day does (120 against 90,
+because clear running asks for no check at all); the snare's toll is under the
+bad water's;
+and the `maxi(1, ...)` floor that has always kept foul water from dropping
+anybody is now shared by every HP cost on the table, because there is no fight
+out there to drop somebody in and nobody to pick them back up. A toll takes
+what is in the purse and never more, and says so on the card when the purse
+would not cover it.
+
+**The card.** `scenes/world/event_card.gd` grew chips for the new payoffs
+(healing, salvage, and who heard about a favour) and — the one fix that was not
+new work — gold now renders signed. D4's parley toll has always passed a
+negative gold through this card, and the card has always drawn it as
+`+-40 gold`. The skill on the roll line is read off the catalog rather than
+`capitalize()`d, which is the difference between "Animal Handling" and
+"Animalhandling".
+
+`tests/test_travel.gd` pins the gates in both directions (no toll posts in the
+deeps, no wrecks in the heartland, no shrines for a party at full HP), the four
+new payoffs, and the invariants: the purse never goes negative, the healing
+never goes past full, the dead stay dead, and nothing on the road drops
+anybody. Two of those tests replay a known seed onto a party in a known state
+rather than searching with the party under test — a search spends and earns as
+it goes, so by the time it finds a failed toll the purse it was told to empty
+has been paid twice over by wayfarers.
