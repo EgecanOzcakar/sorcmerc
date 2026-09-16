@@ -39,6 +39,10 @@ var scouted_next := false   # Potion of Clairvoyance / Clairvoyance cast: the ne
 var swift_until := 0.0      # Fly / Longstrider: forced-march speed, no road penalty, until this world-minute
 var safe_camp := false      # Rope Trick: the next camp needs no kit and can't be jumped
 var alarm_set := false      # Alarm: the next camp's ambush is heard coming
+# SPIKE (docs/spike-party-opinions.md): what members think of each other —
+# "a|b" pair key -> {score, status}. Owned entirely by core/party_opinion.gd;
+# nothing in the shipped game reads or saves it yet.
+var relations: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 

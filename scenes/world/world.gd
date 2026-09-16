@@ -1886,12 +1886,14 @@ func _close_visit() -> void:
 func _buy(item_id: String) -> void:
 	if Visit.buy(_visit, party, item_id):
 		Sound.play_sfx("buy")
+		_cheer()
 		_build_visit_panel()
 	else:
 		_say("Not enough gold.")
 
 func _sell(item_id: String) -> void:
 	if Visit.sell(_visit, party, item_id):
+		_cheer()
 		_build_visit_panel()
 
 # T9y: the Healer and the Librarian — T25 services that a settlement has
@@ -1961,7 +1963,11 @@ func _steal() -> void:
 # they silently reset, re-enabling an action that was supposed to be spent
 # for the price of pressing a different button.
 func _carry_visit_flags(from: Dictionary, to: Dictionary) -> void:
-	for k in ["stolen", "persuaded", "investigated", "haggled", "worked"]:
+	# Both sides added a flag here, and the comment above is exactly why both have
+	# to stay: "worked" is this branch's healer shift, "sour" is the moods work's
+	# soured face. Either one dropped from this list resets itself the next time
+	# anything replaces _visit.
+	for k in ["stolen", "persuaded", "investigated", "haggled", "worked", "sour"]:
 		to[k] = from.get(k, false)
 
 func _persuade() -> void:
@@ -2001,6 +2007,9 @@ func _haggle() -> void:
 		Visit.apply_haggle(_visit, float(r["mult"]))
 		if bool(r["ok"]):
 			Sound.play_sfx("buy")
+			_cheer()
+		else:
+			_visit["sour"] = true   # a bad ask sours the room, and the face, for the visit
 	_build_visit_panel()
 	_say(String(r.get("text", "Nobody here is in the mood to talk price.")))
 
@@ -2036,6 +2045,7 @@ func _rest() -> void:
 	var trance: Dictionary = Trance.apply_rest_bonus(party, world, s.position)
 	_visit = Visit.visit(s, world)
 	_carry_visit_flags(before, _visit)
+	_cheer()
 	_build_visit_panel()
 	_say("The party takes a long rest (%d gp for the room). Eight hours pass and the stalls fill up again.%s" % [
 		cost, _trance_note(trance)])
@@ -2547,10 +2557,34 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 # A counter's heading inside a page's scroll list, and a muted aside. Both
 # exist so a page can explain itself without every builder re-deriving the
 # same Label boilerplate.
+# The face behind the counter reads the visit: a moment's smile after a sale,
+# a purchase or a haggle that went your way (CHEER_S seconds, then back), and
+# a frown for the rest of the visit once a haggle went badly.
+const CHEER_S := 2.5
+var _cheer_until := 0.0     # Time.get_ticks_msec()/1000 the smile lasts to
+var _portrait_pic: TextureRect = null
+var _portrait_of := ["", ""]
+
+func _mood() -> String:
+	if Time.get_ticks_msec() / 1000.0 < _cheer_until:
+		return "happy"
+	return "frown" if _visit.get("sour", false) else ""
+
 func _portrait(box: Control, faction: String, service: String) -> void:
-	var pic := Icons.portrait_rect(faction, service)
+	var pic := Icons.portrait_rect(faction, service, 160, _mood())
 	if pic != null:
 		box.add_child(pic)
+	_portrait_pic = pic
+	_portrait_of = [faction, service]
+
+func _cheer() -> void:
+	_cheer_until = Time.get_ticks_msec() / 1000.0 + CHEER_S
+	_refresh_portrait()
+	get_tree().create_timer(CHEER_S + 0.05).timeout.connect(_refresh_portrait)
+
+func _refresh_portrait() -> void:
+	if _portrait_pic != null and is_instance_valid(_portrait_pic):
+		_portrait_pic.texture = Icons.portrait(_portrait_of[0], _portrait_of[1], _mood())
 
 func _section(rows: Control, text: String) -> void:
 	var l := Label.new()
