@@ -176,6 +176,8 @@ func _rebuild() -> void:
 				var r: Dictionary = opts[i]
 				var b := _button("%s  %s" % [_glyph(r), String(r.get("title", "A way on"))])
 				b.pressed.connect(_pick.bind(i))
+				b.mouse_entered.connect(queue_redraw)   # the picture follows the hovered fork
+				b.mouse_exited.connect(queue_redraw)
 				# Only the fork clips: its width is the diagram's, not the
 				# label's. A footer button that clips reports no width of its
 				# own to _place() and comes out reading "Withdra".
@@ -348,6 +350,7 @@ func _draw() -> void:
 		return
 	_draw_header()
 	_draw_shaft()
+	_draw_room_art()
 	_draw_party()
 
 
@@ -506,6 +509,37 @@ func _draw_live_row(d: int, y: float, xs: PackedFloat32Array) -> void:
 		_text(Vector2(cx, y + NODE_R + LABEL_GAP + Icons.FS_HEAD + float(i + 1) * (Icons.FS_SMALL + 3.0)),
 			lines[i], Icons.FS_SMALL, Icons.COL_BODY, true)
 
+
+# The room, pictured, on the shaft's empty right flank: while picking, the
+# fork under the mouse (the first, until one is); while visiting, the room
+# itself, with its found/empty frame once a cache is taken. Nothing when the
+# window is too narrow to hold the shaft and a picture side by side.
+const ART_PX := 240.0
+func _room_art():
+	var st := _state()
+	var room: Dictionary = {}
+	if st == "picking":
+		var opts: Array = site.options()
+		room = opts[0] if not opts.is_empty() else {}
+		for i in mini(_forks.size(), opts.size()):
+			if is_instance_valid(_forks[i]) and _forks[i].is_hovered():
+				room = opts[i]
+	elif st == "visiting":
+		room = site.room
+	if room.is_empty():
+		return null
+	var ok = null
+	if String(room.get("kind", "")) == "treasure" and bool(room.get("taken", false)):
+		ok = int(room.get("gold", 1)) > 0 or not room.get("loot", []).is_empty()
+	return Icons.scene_art("room-" + String(room.get("id", "")), ok) if String(room.get("id", "")) != "" else null
+
+func _draw_room_art() -> void:
+	var art = _room_art()
+	if art == null or size.x < COL_MAX_W * 2.0 + ART_PX + MARGIN * 4.0:
+		return
+	var r := Rect2(Vector2(size.x - MARGIN - ART_PX, (size.y - ART_PX) * 0.45), Vector2(ART_PX, ART_PX))
+	draw_texture_rect(art, r, false)
+	draw_rect(r, Color(Icons.COL_GOLD, 0.5), false, 1.0)
 
 func _kind_word(room: Dictionary) -> String:
 	if _is_boss(room):

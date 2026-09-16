@@ -18,6 +18,7 @@
 extends Control
 
 const Icons = preload("res://core/ui_icons.gd")
+const Registry = preload("res://core/mod/registry.gd")
 
 # Emitted exactly once per show_beat(): the id of the choice taken, or "" when
 # the player closed the card without taking one (a scene with no choices always
@@ -57,6 +58,18 @@ func show_beat(run, beat: Dictionary, lines: Array, world, party) -> void:
 	panel.add_child(col)
 
 	var speaker := String(beat.get("speaker", ""))
+	# The cast member's face, when the pack ships one (content/<pack>/portraits/<id>.png)
+	if speaker != "" and run.pack_id != "":
+		var pk = Registry.find(run.pack_id)
+		if pk != null:
+			var face := Icons.image_at(pk.manifest.path_of("portraits/%s.png" % speaker))
+			if face != null:
+				var pic := TextureRect.new()
+				pic.texture = face
+				pic.custom_minimum_size = Vector2(160, 160)
+				pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				col.add_child(pic)
 	var head := Label.new()
 	head.text = run.story.speaker_label(speaker) if speaker != "" \
 		else String(beat.get("title", run.story.title))

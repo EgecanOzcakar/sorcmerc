@@ -2119,6 +2119,7 @@ func _make_camp() -> void:
 		Sound.play_sfx("rest")
 		var trance: Dictionary = Trance.apply_rest_bonus(party, world, p.position)
 		_camp_msg.text = "The camp holds through the night. Eight hours pass.%s" % _trance_note(trance)
+		_camp_card("night", "The camp holds", "good", _camp_msg.text, _on_event_ack)
 		return
 	var watch: Dictionary = WorldCamp.watch_check(party, rng)
 	if party.alarm_set:   # Alarm: the ward wakes them whatever the watch rolled
@@ -2131,13 +2132,26 @@ func _make_camp() -> void:
 	if watch["ok"]:
 		_camp_msg.text = "%s hears them coming (%s %d+%d vs DC %d) — the party gets the drop first." % [
 			watch.get("cname", "Someone"), skill_name, watch["nat"], watch["bonus"], watch["dc"]]
-		await _launch_combat(foe, true, false)
+		_camp_card("watch", "Something in the dark", "good", _camp_msg.text,
+			func(): _on_event_ack(); await _launch_combat(foe, true, false))
 	else:
 		var who: String = watch.get("char_id", "")
 		_camp_msg.text = ("%s doesn't catch it in time (%s %d+%d vs DC %d) — the camp is jumped in the night!" % [
 			watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"]]) if who != "" \
 			else "Nobody's keeping watch — the camp is jumped in the night!"
-		await _launch_combat(foe, false, true)
+		_camp_card("jumped", "The camp is jumped", "bad", _camp_msg.text,
+			func(): _on_event_ack(); await _launch_combat(foe, false, true))
+
+# The night, on the same card the road uses: what the camp did, pictured
+# (assets/generated/camp-<night|watch|jumped>.png), and — for an ambush —
+# the fight waits behind the button rather than under the label.
+func _camp_card(id: String, title: String, kind: String, text: String, then: Callable) -> void:
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(then)
+	_event_card.show_event({"id": "camp-" + id, "title": title, "kind": kind, "text": text})
 
 # O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
 # (the board can show several at once now), not re-rolled here.
@@ -2468,6 +2482,15 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
+	var room := Icons.scene_art("inn-" + String(s.faction), null)
+	if room != null:
+		var pic := TextureRect.new()
+		pic.texture = room
+		pic.custom_minimum_size = Vector2(440, 160)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.clip_contents = true
+		box.add_child(pic)
 	var rows := VBoxContainer.new()
 	box.add_child(rows)
 	_section(rows, "Around the table")
@@ -2646,16 +2669,25 @@ func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 	var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
 	_trade_row(rows, "Job: %s%s — %d gp" % [
 		offer["title"], tag, int(offer.get("reward", {}).get("gold", 0))],
-		"Take", _take_quest.bind(offer))
+		"Take", _take_quest.bind(offer), false, Icons.scene_art("quest-" + String(offer.get("kind", "")), null))
 
 # Issue #33: the label wraps. Without that its minimum width is the whole
 # string, and a job with a long title pushed the row — and with it the counter,
 # and with it the whole settlement panel — out past the edge of the screen. 330
 # stays as the column width short rows line up on; it is a floor now rather
 # than the only width the row can have.
-func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable, disabled := false) -> void:
+func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable, disabled := false,
+		tile: Texture2D = null) -> void:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if tile != null:   # the job's kind, as a tile (assets/generated/quest-<kind>.png)
+		var pic := TextureRect.new()
+		pic.texture = tile
+		pic.custom_minimum_size = Vector2(48, 48)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(pic)
 	var lbl := Label.new()
 	lbl.text = text
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

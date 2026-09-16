@@ -416,11 +416,33 @@ static func portrait(faction: String, service: String, mood := "") -> Texture2D:
 # tools: ~/localgen/gen_sorcmerc_events.py): the outcome's own frame when it
 # has one, the plain scene otherwise, null for an event with no art.
 static func event_art(event_id: String, ok) -> Texture2D:
+	return scene_art("event-" + event_id, ok)
+
+# Any generated scene by its file stem (assets/generated/<stem>[-pass|-fail].png,
+# tools: ~/localgen/gen_sorcmerc_scenes.py): the outcome's frame when there
+# is one, the plain scene otherwise, null for none.
+# A pack's own image (a story portrait), by the path its manifest resolves:
+# a shipped pack's is imported like any res:// asset; a community pack's
+# under user:// is read off disk, since nothing imported it.
+static func image_at(path: String) -> Texture2D:
+	if path.begins_with("res://"):
+		return _icon(path)
+	if _icon_cache.has(path):
+		return _icon_cache[path]
+	var tex: Texture2D = null
+	if FileAccess.file_exists(path):
+		var img := Image.load_from_file(path)
+		if img != null:
+			tex = ImageTexture.create_from_image(img)
+	_icon_cache[path] = tex
+	return tex
+
+static func scene_art(stem: String, ok) -> Texture2D:
 	if ok != null:
-		var tex := _icon("res://assets/generated/event-%s-%s.png" % [event_id, "pass" if ok else "fail"])
+		var tex := _icon("res://assets/generated/%s-%s.png" % [stem, "pass" if ok else "fail"])
 		if tex != null:
 			return tex
-	return _icon("res://assets/generated/event-%s.png" % event_id)
+	return _icon("res://assets/generated/%s.png" % stem)
 
 static func portrait_rect(faction: String, service: String, px := 160, mood := "") -> TextureRect:
 	var tex := portrait(faction, service, mood)
