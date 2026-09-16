@@ -77,7 +77,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		settlements.append({
 			"id": s.id, "sname": s.sname, "position": _v(s.position),
 			"faction": s.faction, "kind": s.kind,
-			"last_visited": s.last_visited, "battle_at": s.battle_at,
+			"last_visited": s.last_visited, "battle_at": s.battle_at, "stolen_at": s.stolen_at,
 			"pending_opinion_delta": s.pending_opinion_delta,
 		})
 	var parties: Array = []
@@ -138,6 +138,7 @@ static func from_dict(d: Dictionary):
 			String(sd.get("sname", "")))
 		s.last_visited = float(sd.get("last_visited", -1.0))
 		s.battle_at = float(sd.get("battle_at", -1.0))
+		s.stolen_at = float(sd.get("stolen_at", -1.0))
 		s.pending_opinion_delta = float(sd.get("pending_opinion_delta", 0.0))
 		world.add_settlement(s)
 	for pd in d.get("parties", []):

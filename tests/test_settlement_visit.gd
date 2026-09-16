@@ -137,13 +137,23 @@ func test_steal_deterministic_and_hooks() -> void:
 	check(party.gold == gold0 + int(hit["gold"]), "the gold landed in the purse")
 	check(s.pending_opinion_delta == Visit.OPINION_STEAL_SUCCESS,
 		"a clean theft queued the O7 opinion hit")
+	check(String(hit["text"]).contains("opinion %d" % int(Visit.OPINION_STEAL_SUCCESS)),
+		"...and says so on the spot")
+	# The stall is watched now: a second try today does not even roll.
+	var again := Visit.steal(s, party, w, m, _rng_rolling(20))
+	check(again.get("watched", false) and int(again["gold"]) == 0, "no second theft while the stall is watched")
+	check(Visit.steal_wait(s, w) > 0.0, "...and the wait is visible")
+	w.clock.elapsed += Visit.STEAL_COOLDOWN_MINUTES
+	check(Visit.steal_wait(s, w) == 0.0, "a day later the watch is off")
 	var miss := Visit.steal(s, party, w, m, _rng_rolling(1))
 	check(not miss["ok"] and int(miss["gold"]) == 0, "a nat 1 gets caught with nothing")
 	check(s.pending_opinion_delta
 			== Visit.OPINION_STEAL_SUCCESS + Visit.OPINION_STEAL_CAUGHT,
 		"getting caught queued the bigger O7 opinion hit, on top of the first")
 	# Unseeded: same settlement, same hour, same outcome.
+	s.stolen_at = -1.0
 	var a := Visit.steal(s, _party(), w, m)
+	s.stolen_at = -1.0
 	var b := Visit.steal(s, _party(), w, m)
 	check(a["nat"] == b["nat"] and a["ok"] == b["ok"], "the same attempt rolls the same")
 	check(String(a["text"]) != "", "the attempt is narrated")

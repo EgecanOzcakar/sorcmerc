@@ -501,12 +501,26 @@ static func turn_ins(party) -> Array:
 # way. Seeded off the settlement and the hour, so the same attempt is the same
 # result; pass an rng to pin it in a test. Either way it costs opinion (success is
 # quieter than getting caught) via the O7 hook on the settlement.
+# After any attempt the stall is watched: no second try here for a day, so
+# Leave-and-come-back is not an unlimited gold button either.
+const STEAL_COOLDOWN_MINUTES := 24.0 * 60.0
+
+# World-minutes until the stall stops watching, 0 when it isn't.
+static func steal_wait(s, world) -> float:
+	if s.stolen_at < 0.0:
+		return 0.0
+	return maxf(0.0, s.stolen_at + STEAL_COOLDOWN_MINUTES - world.clock.elapsed)
+
 static func steal(s, party, world, m: Dictionary = {}, rng = null) -> Dictionary:
 	var c = Campaign.new(party)
 	var char_id: String = c.best_at(STEAL_SKILL)
 	var ch = party.get_member(char_id) if char_id != "" else null
 	if ch == null:
 		return {}
+	if steal_wait(s, world) > 0.0:
+		return {"ok": false, "watched": true, "gold": 0,
+			"text": "They are watching the stall now. Come back another day."}
+	s.stolen_at = world.clock.elapsed
 	if rng == null:
 		rng = RNG.new(maxi(1, absi(hash("steal|%s|%d" % [s.id, int(world.clock.elapsed)]))))
 	var bonus: int = c.skill_bonus(char_id, STEAL_SKILL)
@@ -521,10 +535,13 @@ static func steal(s, party, world, m: Dictionary = {}, rng = null) -> Dictionary
 		party.add_gold(gold)
 	Ach.unlock("steal_first" if ok else "steal_caught")
 	# O7 hook — see OPINION_STEAL_* above.
-	s.pending_opinion_delta += OPINION_STEAL_SUCCESS if ok else OPINION_STEAL_CAUGHT
+	var delta: float = OPINION_STEAL_SUCCESS if ok else OPINION_STEAL_CAUGHT
+	s.pending_opinion_delta += delta
 	var line := ("%s lifts %d gp off the stall (Sleight of Hand %d+%d vs DC %d)."
 		% [ch.cname, gold, nat, bonus, STEAL_DC]) if ok else (
 		"%s is spotted reaching for it (Sleight of Hand %d+%d vs DC %d)."
 		% [ch.cname, nat, bonus, STEAL_DC])
+	# The cost is said where it is incurred, not discovered on the next visit.
+	line += "  The %s will hear of it: opinion %d." % [String(s.faction).capitalize(), int(delta)]
 	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": STEAL_DC, "gold": gold,
 		"char_id": char_id, "text": line}

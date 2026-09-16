@@ -1910,14 +1910,12 @@ func _buy_camp_kit() -> void:
 	else:
 		_say("Not enough gold.")
 
-# O9 item 1: one attempt per visit. The steal roll is seeded off (settlement, hour)
+# O9 item 1: one attempt per visit, and the stall is watched for a day after
+# (Visit.steal_wait). The steal roll is seeded off (settlement, hour)
 # and the clock is paused for the whole visit, so every press rolled the identical
 # result — a nat 20 was an unlimited gold button. The mark lives on `_visit`, so
 # Leave and come back is a fresh attempt (at a fresh hour).
 func _steal() -> void:
-	if _visit.get("stolen", false):
-		_say("They are watching the stall now. Come back another day.")
-		return
 	var r: Dictionary = Visit.steal(_visit["settlement"], party, world, _visit)
 	_visit["stolen"] = true
 	if bool(r.get("ok", false)):
@@ -2423,8 +2421,9 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	var bar := HBoxContainer.new()
 	box.add_child(bar)
 	var steal_btn := Button.new()
-	var spent: bool = _visit.get("stolen", false)
-	steal_btn.text = "Stole from the market" if spent else "Steal from the market"
+	var wait: float = Visit.steal_wait(_visit["settlement"], world)
+	var spent: bool = _visit.get("stolen", false) or wait > 0.0
+	steal_btn.text = ("Stall watched — %dh" % maxi(1, ceili(wait / 60.0))) if wait > 0.0 else "Steal from the market"
 	steal_btn.disabled = spent
 	steal_btn.pressed.connect(_steal)
 	bar.add_child(steal_btn)
