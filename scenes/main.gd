@@ -379,11 +379,15 @@ func bug_context() -> Dictionary:
 	return ctx
 
 func _press_hotkey(idx: int, shift := false) -> void:
-	if _busy:
+	# A reaction question is the one thing asked while the board is busy, and
+	# [1] Yes / [2] or Space Hold it must reach it — it is the buttons, not the
+	# animation, that the keys address.
+	var asking: bool = _reaction_answer < 0
+	if _busy and not asking:
 		return
 	# T29: while aiming, the number keys still address the verb menu — drop out
 	# of targeting first instead of indexing into the lone [Esc] Cancel button.
-	if idx >= 0 and _mode != "idle" and _mode != "deploy" and cb and not cb.is_over() \
+	if idx >= 0 and not asking and _mode != "idle" and _mode != "deploy" and cb and not cb.is_over() \
 			and cb.current().team == "party" and cb.current().conscious():
 		_build_hero_menu(cb.current())
 	var kids := _buttons.get_children()
@@ -608,7 +612,7 @@ func _advance() -> void:
 # Only reactions that spend a slot get here. An opportunity attack and Uncanny
 # Dodge cost nothing and still fire by themselves — there is one sensible answer
 # to those and it is not worth a key press.
-var _reaction_answer := -1   # -1 while the question is up, then 0 no / 1 yes
+var _reaction_answer := 0    # -1 only while the question is up, then 0 no / 1 yes
 
 func _ask_reaction(reactor, v: Dictionary, trigger: String, ctx: Dictionary) -> bool:
 	var was_busy: bool = _busy
@@ -616,9 +620,9 @@ func _ask_reaction(reactor, v: Dictionary, trigger: String, ctx: Dictionary) -> 
 	_actor.text = _reaction_question(reactor, v, trigger, ctx)
 	_reaction_answer = -1
 	_set_buttons([
-		["Yes — " + String(v["label"]), func(): _reaction_answer = 1,
+		["Yes — " + String(v["label"]) + "  [1]", func(): _reaction_answer = 1,
 			"Spend %s's reaction and the slot." % reactor.cname],
-		["Hold it", func(): _reaction_answer = 0,
+		["Hold it  [2 / Space]", func(): _reaction_answer = 0,
 			"Keep the reaction and the slot for later."],
 	])
 	while _reaction_answer < 0:
@@ -1217,6 +1221,9 @@ func board_hex_hovered(hx: Vector2i) -> void:
 	_board.queue_redraw()
 
 func board_cancel() -> void:
+	if _reaction_answer < 0:   # Esc on a reaction question is "hold it"
+		_reaction_answer = 0
+		return
 	if _mode == "deploy":
 		if _deploy_pick != "":      # put down whoever is held; the phase itself stays open
 			_deploy_pick = ""
