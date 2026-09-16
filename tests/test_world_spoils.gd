@@ -123,16 +123,40 @@ func _init() -> void:
 	check(int(main._delve_haul["fights"]) == 1, "...and its fight is counted")
 	check((main._delve_haul["loot"] as Array).has("shortsword"), "...and its loot listed")
 
+	# Reaching the bottom pays on top of the rooms — every fight on the way down
+	# already paid its own, and a delve used to be worth strictly less than the
+	# same fights out on the road.
+	var bonus: int = Site.clear_xp(lair)
+	check(bonus > 0, "clearing a lair is worth something (%d)" % bonus)
+	var xp0: int = main.party.party_characters()[0].xp
 	main._site.state = "cleared"
 	main._on_site_done()
 	for i in 4:
 		await process_frame
+	check(main.party.party_characters()[0].xp > xp0, "...and it lands on the party")
 	check(main._spoils_panel != null, "finishing the lair opens the delve's page")
 	check(said(main._spoils_panel, "cleared out"), "headed with what happened to it")
-	check(said(main._spoils_panel, "+120 XP"), "totalling the XP of the whole descent")
+	check(said(main._spoils_panel, "+%d XP" % (120 + bonus)), "totalling the XP of the whole descent")
+	check(said(main._spoils_panel, "for reaching the bottom"), "...and saying which part was the clear")
 	check(said(main._spoils_panel, "+%d gold" % (main.party.gold - gold0)),
 		"and every place it paid from, read off the purse")
 	check(main._delve_haul.is_empty(), "the running total is closed out")
+	main._close_spoils()
+	await process_frame
+
+	# Withdrawing keeps what the rooms paid and nothing else — that is the whole
+	# tension of deciding to turn back.
+	main._delve(main.world.lairs[0])
+	for i in 4:
+		await process_frame
+	var xp1: int = main.party.party_characters()[0].xp
+	main._site.state = "withdrawn"
+	main._on_site_done()
+	for i in 4:
+		await process_frame
+	check(main.party.party_characters()[0].xp == xp1, "walking back out pays no clear bonus")
+	check(main._spoils_panel != null, "it still gets a page")
+	check(not said(main._spoils_panel, "for reaching the bottom"), "...that does not claim one")
 	main._close_spoils()
 	await process_frame
 

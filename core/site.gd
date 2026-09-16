@@ -69,6 +69,22 @@ const TREASURE_PER_DEPTH := 15
 const BOSS_CACHE := 180
 const BOSS_CACHE_PER_DEPTH := 30
 
+# What clearing the place out is worth on top of the rooms themselves. Every
+# fight on the way down already pays its own XP (encounter.gd resolves it per
+# room), but reaching the bottom paid nothing extra — so a delve was worth
+# strictly less than the same number of fights out on the road, which is the
+# wrong way round for the one piece of content you commit to blind.
+#
+# Flat, and scaled by depth the way the hoard above is: a 3-room warren pays
+# about what one more fight would at the levels a party clears one, a 6-room
+# hold rather more. Only on a clear — withdrawing keeps what the rooms paid
+# and nothing else, which is the whole tension of deciding to turn back.
+const CLEAR_XP := 60
+const CLEAR_XP_PER_DEPTH := 30
+
+static func clear_xp(lair) -> int:
+	return CLEAR_XP + CLEAR_XP_PER_DEPTH * depth_for(lair)
+
 # Interior flavour. Deliberately faction-agnostic: a collapsed gallery reads the
 # same whether goblins or the dead are holding it, and one pool that works
 # everywhere beats five thin ones. Faction colours the *roster*, which is the

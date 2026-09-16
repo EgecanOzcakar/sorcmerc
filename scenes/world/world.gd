@@ -1148,8 +1148,10 @@ func _show_delve_spoils(l, cleared: bool) -> void:
 	var rows: Array = []
 	rows.append(["%d of %d rooms behind them" % [int(l.depth_cleared), Site.depth_for(l)],
 		Icons.COL_TEXT])
-	rows.append(["+%d XP over %d fight%s" % [int(haul.get("xp", 0)), int(haul.get("fights", 0)),
-		"" if int(haul.get("fights", 0)) == 1 else "s"], Icons.COL_GOLD])
+	rows.append(["+%d XP over %d fight%s%s" % [int(haul.get("xp", 0)), int(haul.get("fights", 0)),
+		"" if int(haul.get("fights", 0)) == 1 else "s",
+		"" if not haul.has("cleared_xp") else ", %d of it for reaching the bottom" % int(haul["cleared_xp"])],
+		Icons.COL_GOLD])
 	rows.append(["+%d gold" % maxi(0, party.gold - int(haul.get("gold0", party.gold))), Icons.COL_GOLD])
 	var loot: Array = haul.get("loot", [])
 	if loot.is_empty():
@@ -1490,7 +1492,17 @@ func _on_site_done() -> void:
 	var cleared: bool = ending == "cleared"
 	if cleared:
 		Quest.record_lair_cleared(party, l.id)
-		_lair_msg.text = "%s is cleared out, all the way to the bottom." % l.sname
+		# Reaching the bottom is worth something of its own. Every room on the
+		# way down already paid its own XP; this is the part that was missing,
+		# and it is why a delve is now worth more than the same fights strung
+		# out on the road rather than less. Banked through the same split every
+		# other XP award uses, and counted into the delve's own page below.
+		var bonus: int = Site.clear_xp(l)
+		Campaign.new(party)._split_xp(bonus)
+		if not _delve_haul.is_empty():
+			_delve_haul["xp"] = int(_delve_haul.get("xp", 0)) + bonus
+			_delve_haul["cleared_xp"] = bonus
+		_lair_msg.text = "%s is cleared out, all the way to the bottom. +%d XP." % [l.sname, bonus]
 	elif _site.state == "withdrawn":
 		_lair_msg.text = "%s is still down there — %d of %d rooms behind you." % [
 			l.sname, int(l.depth_cleared), Site.depth_for(l)]
