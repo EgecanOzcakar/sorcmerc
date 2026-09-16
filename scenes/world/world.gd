@@ -212,6 +212,9 @@ var _left: Object = null         # the settlement just left; no re-entry until o
 var _party_overlay: Control = null   # T3's party/profile/inventory screen, full-screen
 var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.active/describe
 var _menu_panel: Control = null      # the Esc pause menu, or null — see _toggle_menu()
+var _spoils_panel: Control = null    # issue #30's after-action page, or null
+var _delve_haul: Dictionary = {}     # what the delve in progress has paid so far; {} outside one
+var _quest_news: Array = []          # quest progress the last _bank() made, for that page
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
@@ -556,7 +559,8 @@ func _leave_world() -> void:
 # and journal own it the same way, for the same reason.
 func _toggle_pause() -> void:
 	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
-			or _story_panel != null or story_card != null or _menu_panel != null:
+			or _story_panel != null or story_card != null or _menu_panel != null \
+			or _spoils_panel != null:
 		return
 	if world.clock.is_paused():
 		world.clock.resume()
@@ -566,7 +570,8 @@ func _toggle_pause() -> void:
 
 func _cycle_speed() -> void:
 	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
-			or _story_panel != null or story_card != null or _menu_panel != null:
+			or _story_panel != null or story_card != null or _menu_panel != null \
+			or _spoils_panel != null:
 		return
 	world.clock.cycle_speed()
 	_speed_btn.text = "%dx" % int(world.clock.speed)   # every WorldClock.SPEEDS entry is a whole number
@@ -589,7 +594,8 @@ func _toggle_menu() -> void:
 	# so reaching here means nothing else is up.)
 	if _combat != null or not _visit.is_empty() or _site != null \
 			or _event_card != null or _approach_card != null or story_card != null \
-			or _party_overlay != null or _quest_panel != null or _story_panel != null:
+			or _party_overlay != null or _quest_panel != null or _story_panel != null \
+			or _spoils_panel != null:
 		return
 	world.clock.pause()
 	_pause_btn.text = "Resume"
@@ -804,6 +810,7 @@ func _check_story() -> void:
 	# event, a band asking to be dealt with.
 	if _combat != null or not _visit.is_empty() or _party_overlay != null \
 			or _quest_panel != null or _story_panel != null or _menu_panel != null \
+			or _spoils_panel != null \
 			or _event_card != null or _approach_card != null or _site_screen != null:
 		return
 	var pending: Array = story.pending(world, party)
@@ -1042,6 +1049,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dict
 	world.clock.resume()
 	_autosave()   # O13 autosave: a fight is the biggest thing that
 	                               # happens to a run — never re-fight it after a crash
+	_show_spoils(result)
 	return result
 
 # O9 item 2: a won fight has to actually pay, or the run is a dead end. The same
@@ -1059,6 +1067,12 @@ func _bank(result: Dictionary) -> void:
 	var taken: Array = result.get("loot", [])
 	for item in taken:
 		party.stash_add(String(item))
+	# Issue #30: a delve is several fights on one set of resources, so what it
+	# paid is a running total, not the last room's.
+	if not _delve_haul.is_empty():
+		_delve_haul["xp"] = int(_delve_haul.get("xp", 0)) + int(result.get("xp", 0))
+		(_delve_haul["loot"] as Array).append_array(taken)
+		_delve_haul["fights"] = int(_delve_haul.get("fights", 0)) + 1
 	# Said out loud, on the same label the lair outcomes use. The combat screen
 	# lists it in the fight log, but that log is gone by the time the map comes
 	# back, and loot that lands silently in the stash is loot nobody knows they
@@ -1070,8 +1084,135 @@ func _bank(result: Dictionary) -> void:
 		_lair_msg.text = "Taken from the dead: %s." % ", ".join(names)
 	# Without this an accepted quest can never reach "complete", so O9 item 4's
 	# turn-in row would have nothing to turn in.
-	Quest.record_kills(party, result.get("kills", []),
+	_quest_news = Quest.record_kills(party, result.get("kills", []),
 		RNG.new(maxi(1, int(world.clock.elapsed) + 1)))
+	if not _delve_haul.is_empty():
+		(_delve_haul["quests"] as Array).append_array(_quest_news)
+
+# --- issue #30: the spoils page -------------------------------------------
+#
+# A won fight on the map used to pay in silence. The combat screen writes its
+# own after-action lines — "+400 XP, +50 gold", "Taken from the dead: a
+# handaxe" — but out here the screen is torn down the frame `result` is filled,
+# so nobody ever read them; all that survived was one line on the HUD's lair
+# label, which the next frame's button text could overwrite. The linear
+# campaign never had this problem: it holds the fight screen up behind a "Back
+# to the road" button and the player reads the log. This is the map's version
+# of that button, as a page of its own rather than a lingering board, since the
+# map has a lair delve to summarise as well as a single fight.
+#
+# A delve is several fights on one set of resources (core/site.gd), so its
+# page totals the whole descent instead of firing per room.
+
+func _show_spoils(result: Dictionary) -> void:
+	if result.is_empty() or _spoils_panel != null:
+		return
+	var won: bool = String(result.get("outcome", "")) == "Victory"
+	var rows: Array = []
+	if won:
+		rows.append(["+%d XP" % int(result.get("xp", 0)), Icons.COL_GOLD])
+		rows.append(["+%d gold" % int(result.get("gold", 0)), Icons.COL_GOLD])
+		for item in result.get("loot", []):
+			rows.append(["Taken from the dead: %s" % Campaign.item_name(String(item)), Icons.COL_TEXT])
+		if result.get("loot", []).is_empty():
+			rows.append(["Nothing worth carrying off the bodies.", Icons.COL_MUTED])
+	for line in _quest_news:
+		rows.append([String(line), Icons.COL_ACCENT])
+	_quest_news = []
+	for id in result.get("deaths", []):
+		var fallen = party.get_member(id)
+		rows.append(["%s did not get up." % (fallen.cname if fallen != null else id), Icons.COL_FOE])
+	# The retreat's own accounting (gold tax, where they woke up) is already
+	# written; a lost fight's page is that line, not an empty spoils list.
+	if not won and _lair_msg != null and _lair_msg.text != "":
+		rows.append([_lair_msg.text, Icons.COL_FOE])
+	_build_spoils_panel("Victory" if won else "Defeat", rows)
+
+# What the whole descent paid, once the party is back out on the map.
+func _show_delve_spoils(l, cleared: bool) -> void:
+	if _delve_haul.is_empty():
+		return
+	var haul: Dictionary = _delve_haul
+	_delve_haul = {}
+	var rows: Array = []
+	rows.append(["%d of %d rooms behind them" % [int(l.depth_cleared), Site.depth_for(l)],
+		Icons.COL_TEXT])
+	rows.append(["+%d XP over %d fight%s" % [int(haul.get("xp", 0)), int(haul.get("fights", 0)),
+		"" if int(haul.get("fights", 0)) == 1 else "s"], Icons.COL_GOLD])
+	rows.append(["+%d gold" % maxi(0, party.gold - int(haul.get("gold0", party.gold))), Icons.COL_GOLD])
+	var loot: Array = haul.get("loot", [])
+	if loot.is_empty():
+		rows.append(["Nothing came out of there but coin.", Icons.COL_MUTED])
+	else:
+		var names: Array = []
+		for item in loot:
+			names.append(Campaign.item_name(String(item)))
+		rows.append(["Carried out: %s" % ", ".join(names), Icons.COL_TEXT])
+	for line in haul.get("quests", []):
+		rows.append([String(line), Icons.COL_ACCENT])
+	_build_spoils_panel(
+		"%s is cleared out" % l.sname if cleared else "Out of %s" % l.sname, rows)
+
+func _build_spoils_panel(heading: String, rows: Array) -> void:
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+	_spoils_panel = overlay
+
+	var dim := ColorRect.new()
+	dim.color = Color(Icons.COL_BG.r, Icons.COL_BG.g, Icons.COL_BG.b, 0.72)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(dim)
+
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(centre)
+
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.custom_minimum_size = Vector2(440, 0)
+	centre.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = heading
+	title.theme_type_variation = "Head"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+
+	var scroll := _scroll_column(Vector2(420, 0))
+	# Only as tall as it needs to be, up to a ceiling: a two-line haul should not
+	# open a half-screen box, and a twelve-line one should not run off the bottom.
+	scroll.custom_minimum_size.y = clampf(rows.size() * 26.0, 52.0, 320.0)
+	box.add_child(scroll)
+	var list: VBoxContainer = scroll.get_child(0)
+	for row in rows:
+		var l := Label.new()
+		l.text = String(row[0])
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.add_theme_color_override("font_color", row[1])
+		list.add_child(l)
+
+	var go := Button.new()
+	go.text = "Back to the map  [Esc]"
+	go.pressed.connect(_close_spoils)
+	box.add_child(go)
+	go.grab_focus()
+
+func _close_spoils() -> void:
+	if _spoils_panel != null:
+		_spoils_panel.queue_free()
+		_spoils_panel = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
 
 # A death is a death regardless of who won — encounter.gd always fills
 # `deaths`, campaign.gd's linear run already benches+marks them the same way;
@@ -1257,6 +1398,11 @@ func _delve(l) -> void:
 		return
 	world.clock.pause()
 	WorldLairs.mark_entered(l, world.clock.elapsed)   # D1: kicking the door starts the window
+	# Issue #30: the running total the delve's own spoils page is built from.
+	# gold0 rather than a counter, because a site pays from three places (room
+	# caches, the boss hoard, the fights themselves) and only the purse sees all
+	# of them.
+	_delve_haul = {"gold0": party.gold, "xp": 0, "fights": 0, "loot": [], "quests": []}
 	_site = Site.for_lair(l, party, world)
 	_site_screen = SiteScreen.new()
 	_site_screen.site = _site
@@ -1329,7 +1475,9 @@ func _on_site_done() -> void:
 	if _site == null:
 		return
 	var l = _site.lair
-	if _site.state == "cleared":
+	var ending: String = _site.state
+	var cleared: bool = ending == "cleared"
+	if cleared:
 		Quest.record_lair_cleared(party, l.id)
 		_lair_msg.text = "%s is cleared out, all the way to the bottom." % l.sname
 	elif _site.state == "withdrawn":
@@ -1342,6 +1490,13 @@ func _on_site_done() -> void:
 	world.clock.resume()
 	_pause_btn.text = "Pause"
 	_autosave()
+	# Issue #30: what the whole descent paid, once they are back out in the air.
+	# Not on a wipe — _site_wiped() has already said what that cost, and a page
+	# headed with a haul is the wrong thing to show a party that was dragged out.
+	if ending in ["cleared", "withdrawn"]:
+		_show_delve_spoils(l, cleared)
+	else:
+		_delve_haul = {}
 
 # T91: split out of _check_visit so it can await the fight — the stand-in id
 # ("%s-guard") never matches a hunt_party quest's target, so raid_settlement
@@ -1604,6 +1759,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	# opens the pause menu; space is the Pause button without the trip to the
 	# corner. Neither existed here, though both do in the fight (scenes/main.gd).
 	if _visit.is_empty():
+		# The spoils page is modal and has one way on: any of the three keys a
+		# player reaches for takes it.
+		if _spoils_panel != null:
+			if event.keycode in [KEY_ESCAPE, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]:
+				accept_event()
+				_close_spoils()
+			return
 		match event.keycode:
 			KEY_ESCAPE:
 				# A delve, a road event, a band closing in and a story beat each
