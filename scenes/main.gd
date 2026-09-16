@@ -1077,10 +1077,16 @@ func _apply_target(h, c) -> void:
 	_tgt_verb = {}
 	var res = cb.perform(h, v, c)
 	_attack_fx(h, c, v)
-	# T29: any resolved roll pops the reveal, not just weapon attacks.
-	if typeof(res) == TYPE_DICTIONARY and (res.has("hit") or res.has("saved")):
+	# T29: any resolved roll pops the reveal, not just weapon attacks. A
+	# countered spell pops one too: the action is gone and nothing happened,
+	# which without a word on the board reads as a button that did nothing.
+	if typeof(res) == TYPE_DICTIONARY and (res.has("hit") or res.has("saved")
+			or res.get("countered", false)):
 		_busy = true
-		_board.show_reveal(c.id, res, _reveal_head(res))
+		# The news belongs over whoever answered, not over the target the spell
+		# never reached.
+		var on = res.get("by") if res.get("countered", false) else c
+		_board.show_reveal((on if on != null else c).id, res, _reveal_head(res))
 		await get_tree().create_timer(REVEAL_PAUSE / _anim).timeout
 		_busy = false
 	_after_hero_action(h)
@@ -1090,6 +1096,8 @@ func _apply_target(h, c) -> void:
 static func _reveal_head(res: Dictionary) -> Array:
 	var dmg := int(res.get("damage", 0))
 	var tail := "  %d" % dmg if dmg > 0 else ""
+	if res.get("countered", false):
+		return ["COUNTERED", Color("b98fe0")]
 	if res.has("hit"):
 		if not res["hit"]:
 			return ["MISS", Color("8a8a84")]

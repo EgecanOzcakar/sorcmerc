@@ -60,7 +60,7 @@ on every turn, the design failed and the tuning numbers in §7 are wrong, not th
 | **Action** | Keep, obviously | The decision. |
 | **Move** | Keep | 0 or 1 zone. Cheap, and it's what makes the board a board. |
 | **Bonus action** | Keep — **but only because all three PCs have a real one** | A bonus action prompt that's empty for two of three characters is a dead key press. Every PC here has a genuinely tempting bonus: Ilsa's Healing Word, Vera's Second Wind, Pike's Cunning Action. It earns its keep *only* under that condition — see §11. |
-| **Reaction** | **Keep exactly one, auto-resolved: Opportunity Attack.** Zero reaction *prompts* in the MVP. | This is the most important architectural line in the doc. Prompted reactions mean pausing a monster's turn mid-resolution, asking the player, and resuming — it's the most expensive thing you could build here for the least loop value. OA fires automatically with a log line. Warding Flare, Shield, Uncanny Dodge: all stretch goals. |
+| **Reaction** | **Keep, auto-resolved. Zero reaction *prompts*, ever.** | This is the most important architectural line in the doc. Prompted reactions mean pausing a monster's turn mid-resolution, asking the player, and resuming — it's the most expensive thing you could build here for the least loop value. What fires instead is a log line. *(2026-09-16: the stretch goal landed. `combat.gd`'s `fire_reactions()` is a general trigger dispatcher — `hit_by_attack`, `damaged_by_attack`, `spell_cast` — and Uncanny Dodge, Hellish Rebuke and Counterspell all ride it. The prompt is still the thing that stays cut: a reaction is data with a `trigger`, never a button, and the resolver is still straight-line.)* |
 | **Free object interaction** | **Cut.** | Nothing to interact with. |
 
 **Turn structure, final:**
@@ -448,6 +448,9 @@ A terminal game's juice budget is timing, color, and word choice. Spend it in th
 1. **Reaction prompts.** Interrupting a monster's turn to ask the player a question means the turn
    resolver can no longer be a straight-line function. **The MVP has zero of these.** If Warding
    Flare or Shield is ever added, that's the day it becomes an async/generator-based resolver.
+   *(2026-09-16: reactions themselves shipped without that day arriving. `fire_reactions()`
+   resolves them inline, mid-moment, off the creature's own data — the engine makes the choice the
+   prompt would have asked for, so the resolver stayed straight-line.)*
 2. **Monster AI creep.** The temptation to make goblins "smart" is where a two-day build becomes a
    week. Cap it at the five rules. Tune with numbers, not with cleverness.
 3. **The action-order-agnostic turn.** Letting the player move before *or* after their action means
