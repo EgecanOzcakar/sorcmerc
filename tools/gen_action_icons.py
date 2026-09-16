@@ -1091,6 +1091,10 @@ def feature_art(*art: str, foe: bool = False) -> str:
 SPELLS = {
     # abjuration
     "cure-wounds": (heart(32, 31, 16, E("life")), plus(32, 28, 7.5, 2.7, LIGHT)),
+    # A ward plate with somebody else's spell breaking on it — the one badge
+    # that is about a spell that never arrives.
+    "counterspell": (hexagon(32, 32, 20, mix(ELEM["force"], PANEL, 0.5), sw=1.6),
+                     bolt(E("psychic"), 0.52), star(45, 18, 6, 2, 4, LIGHT, sw=1.0)),
     "freedom-of-movement": (chain(E("force"), broken=True),),
     "banishment": (portal(E("shadow")),),
 

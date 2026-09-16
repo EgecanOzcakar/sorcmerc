@@ -32,11 +32,23 @@ func test_round_trip() -> void:
 	var s = Settings.load_settings()
 	s.anim_speed_multiplier = Settings.FAST
 	s.default_difficulty = "hard"
+	s.reaction_prompts = false
 	check(Settings.save_settings(s) != "", "saved")
 	var back = Settings.load_settings()
 	check(back.anim_speed_multiplier == Settings.FAST, "anim speed survives the round trip")
 	check(back.default_difficulty == "hard", "difficulty survives the round trip")
+	check(back.reaction_prompts == false, "the reaction-prompt choice survives the round trip")
 	check(Settings.current().default_difficulty == "hard", "save updates the cached instance")
+	# On by default: a slot spent without being asked is the thing the setting exists to stop.
+	var fresh_default = Settings.new()
+	check(fresh_default.reaction_prompts, "asking is the default")
+	# SORCMERC_FAST wins outright — a headless run has nobody to answer, and an
+	# unanswered prompt is a hang rather than a pause.
+	if OS.get_environment("SORCMERC_FAST") != "":
+		var asked = Settings.new()
+		asked.reaction_prompts = true
+		Settings.save_settings(asked)
+		check(not Settings.reaction_prompts_on(), "no prompts under SORCMERC_FAST, whatever is stored")
 
 	# Garbage in the file falls back to sane defaults instead of exploding.
 	var f := FileAccess.open(Settings.PATH, FileAccess.WRITE)

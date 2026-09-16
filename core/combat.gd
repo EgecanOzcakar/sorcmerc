@@ -1,5 +1,7 @@
 # The turn resolver. Pure logic, no nodes. Mutates combatant state, appends to `log`.
-# Straight-line functions only — no reaction prompts (combat-design.md §2).
+# Straight-line functions only — no reaction PROMPTS (combat-design.md §2). The
+# reactions themselves are real and general: see fire_reactions() below, which
+# resolves them mid-moment without ever stopping to ask.
 extends RefCounted
 
 const Dice = preload("res://core/dice.gd")
@@ -226,6 +228,10 @@ func begin_turn() -> void:
 
 func begin_turn_for(c) -> void:
 	c.new_turn()   # action/bonus/reaction/move + turn-long statuses (spec §7)
+	# An answer is given for one trigger. Anything still sitting here was asked
+	# about something that never happened — the caster died first, the swing
+	# went elsewhere — and must not be spent on whatever comes next.
+	reaction_intent.clear()
 	var held = c.statuses.get("concentrating")
 	if held is Dictionary and round_num >= int(held.get("until_round", 0)):
 		_end_concentration(c, "lets %s lapse" % Effects.humanize(String(held["spell"])))
@@ -434,8 +440,14 @@ func _basic(id: String) -> Dictionary:
 
 # Triggers that fire from the resolver rather than from a press: T94's on_death
 # (Death Burst) is in here because save_effect IS in OFFERABLE and its `uses`
-# would otherwise put a button on a living mephit's action bar.
-const NON_BUTTON_TRIGGERS := ["passive", "start_of_turn", "on_death", "would_be_hit"]
+# would otherwise put a button on a living mephit's action bar. Reactions need no
+# entry — is_button() refuses those by cost, whatever they trigger on.
+const NON_BUTTON_TRIGGERS := ["passive", "start_of_turn", "on_death"]
+
+# The plain Attack, for a caller that has to name the swing resolve_attack()
+# makes without going through perform() — ai.gd, offering reactions before it.
+func attack_verb() -> Dictionary:
+	return _basic("attack")
 
 # Every verb that is a BUTTON for `actor` at all — this instant or later in the
 # fight. Split from available() so scenes/main.gd can lay its action bar out
@@ -488,6 +500,8 @@ func _spend(actor, cost: String) -> bool:
 # on its own by all_verbs(), so the action bar's slots are settled by what a
 # character IS rather than by what they have left this turn.
 func is_button(actor, v: Dictionary) -> bool:
+	if v.get("cost", "") == "reaction":
+		return false   # a reaction is never a button — fire_reactions() casts it
 	if v.get("trigger", "") in NON_BUTTON_TRIGGERS \
 			or (v.get("trigger", "") == "on_weapon_hit" and v["kind"] == "save_effect" and not v.has("pool")):
 		return false   # fires from resolve_attack / begin_turn, never a button
@@ -638,9 +652,16 @@ func _hit_riders(attacker, target) -> void:
 # `target` is a Combatant (single / ally) or a direction (cone).
 func cast(caster, v: Dictionary, target) -> Dictionary:
 	var lvl := int(v.get("slot_level", 0))
+	if lvl > 0 and (lvl > caster.slots.size() or caster.slots[lvl - 1] <= 0):
+		return {"error": "no slot"}
+	# The one moment a reaction reaches into somebody else's turn: the spell is
+	# announced, and anything holding an answer gets it in before the slot is
+	# spent. A countered spell costs the action already paid for it and nothing
+	# more — the slot survives.
+	var answer := fire_reactions("spell_cast", {"caster": caster, "verb": v, "level": lvl})
+	if answer["countered"]:
+		return {"countered": true, "by": answer["by"]}
 	if lvl > 0:
-		if lvl > caster.slots.size() or caster.slots[lvl - 1] <= 0:
-			return {"error": "no slot"}
 		caster.slots[lvl - 1] -= 1
 		if v["cost"] == "bonus":
 			caster.econ["cast_bonus_spell"] = true
@@ -1001,34 +1022,262 @@ func _passive_damage(attacker, target, mode: int, crit: bool) -> Array:
 			"%dd%d" % [int(v["dice_count"]), int(v["dice_sides"])], crit)})
 	return out
 
-# The AC a spent Parry reaction adds, or 0 for "nobody parried".
-func _parry(target, total: int, ac: int) -> int:
-	for v in target.verbs:
-		if v["kind"] != "reaction" or v.get("trigger", "") != "would_be_hit":
-			continue
-		var bonus := int(v.get("ac_bonus", 0))
-		if bonus <= 0 or ac + bonus <= total:
-			continue          # still lands — keep the reaction for a closer one
-		if not _spend(target, "reaction"):
-			continue          # already spent it, or stunned out of reactions
-		log.append("%s %ss — AC %d, and the blow goes wide." % [
-			target.cname, String(v["label"]).to_lower(), ac + bonus])
-		return bonus
-	return 0
+# --- reactions (spec §7) ------------------------------------------------
+#
+# One dispatcher for every reaction in the game, and still zero prompts
+# (combat-design.md §2): the engine fires a trigger the moment it happens, finds
+# everyone holding an answer to it, and resolves theirs before the moment
+# finishes. So a reaction is never a button — is_button() refuses anything that
+# costs one — and nothing here ever pauses a monster's turn to ask a question.
+#
+# A trigger is a name plus a context Dictionary:
+#
+#   hit_by_attack      {attacker, target, damage} -> {damage}       before it lands
+#   damaged_by_attack  {attacker, target, damage} -> {}             after it landed
+#   spell_cast         {caster, verb, level}      -> {countered, by} before the slot
+#
+# Adding one is a `trigger` in data/effects/*.json (Effects.REACTION_TRIGGERS
+# validates the name) plus the one call site that fires it. Nothing below names
+# a spell, a feature or a class.
 
-# Reactions stay auto-resolved with zero prompts (spec §7). Returns the damage
-# after any reaction that modifies it. One trigger is authored today; another is
-# a features.json entry plus a call site.
-func _react(c, trigger: String, dmg: int) -> int:
+# Reactions nest — a Counterspell can itself be counterspelled — and terminate
+# on their own, since every level down spends a different creature's one
+# reaction. The cap is for the trigger somebody adds later that doesn't.
+const REACTION_DEPTH_MAX := 4
+var _reaction_depth: int = 0
+
+# Counterspell's DC, off its own catalog description: "a Constitution saving
+# throw (DC 10 + the spell's level)". A bigger spell is a bigger target.
+const COUNTER_DC_BASE := 10
+
+# --- being asked first --------------------------------------------------
+#
+# A reaction that spends a spell slot is a real decision — the fight can turn on
+# whether that 3rd-level slot went on stopping this spell or on casting your own
+# next round — so the player gets to make it. A reaction that costs nothing
+# (an opportunity attack, Uncanny Dodge) never asks: there is only one sensible
+# answer and a question with one answer is a key press, not a choice.
+#
+# The question cannot be asked from in here. GDScript cannot block, so a
+# straight-line resolver can never stop mid-call and wait for a click
+# (combat-design.md §2 — the reason prompts were cut in the first place). So the
+# asking happens one step EARLIER, from whoever is about to call the resolver:
+# they call offer_reactions() — the one function in this file that can suspend —
+# and it records the answers here. fire_reactions() then reads them back
+# synchronously at the moment the trigger fires, and everything below it stays
+# exactly as straight-line as it was.
+#
+# With no decider installed (the whole test suite, every headless run, and the
+# game with prompts turned off) offer_reactions() returns without suspending and
+# nothing else changes shape at all.
+var reaction_decider: Callable = Callable()
+var reaction_decider_team := "party"
+
+# "<reactor id>|<verb id>" -> bool. Written by offer_reactions(), read once by
+# fire_reactions() and erased on the way — a yes is good for the trigger it was
+# given for and no other, and begin_turn_for() drops whatever went unused.
+var reaction_intent := {}
+
+# Does spending this reaction cost `c` something it could want later?
+func reaction_costs_resource(v: Dictionary) -> bool:
+	return int(v.get("slot_level", 0)) > 0 or v.has("pool")
+
+# Is this one the decider gets a say in?
+func asks_first(c, v: Dictionary) -> bool:
+	return reaction_decider.is_valid() and c.team == reaction_decider_team \
+		and reaction_costs_resource(v)
+
+# The triggers `actor` doing `v` at `target` is about to fire, as
+# [trigger, ctx] — a pure prediction, no rolls, no state touched. It is the
+# same shape fire_reactions() will be called with when the action resolves,
+# which is what makes an answer given here good for the trigger that follows.
+func reaction_triggers_for(actor, v: Dictionary, target) -> Array:
+	var kind := String(v.get("kind", "attack"))
+	if kind == "spell":
+		return [["spell_cast",
+			{"caster": actor, "verb": v, "level": int(v.get("slot_level", 0))}]]
+	if kind in ["attack", "offhand_attack"] and target != null and not (target is Vector2i):
+		# A swing fires three — the AC answer, then one before the damage lands
+		# and one after — so all three are offered. The blow has not been rolled
+		# yet, so this is a commitment made against the hit chance rather than
+		# against the damage: answer for the case where it lands, and nothing is
+		# spent if it misses. (Parry costs no slot and no pool, so asks_first()
+		# never puts it to the decider; it is listed for the one somebody adds
+		# later that does.)
+		var ctx := {"attacker": actor, "target": target}
+		return [["would_be_hit", ctx], ["hit_by_attack", ctx], ["damaged_by_attack", ctx]]
+	return []
+
+# Everyone the decider should be asked about before `actor` does `v` at
+# `target`, as [reactor, verb, trigger, ctx]. Pure query — the UI renders it,
+# the tests assert it, and nothing here spends anything.
+func pending_reactions(actor, v: Dictionary, target) -> Array:
+	var out: Array = []
+	if not reaction_decider.is_valid():
+		return out
+	for pair in reaction_triggers_for(actor, v, target):
+		var trigger: String = pair[0]
+		var ctx: Dictionary = pair[1]
+		for r in reactors_for(trigger, ctx):
+			if asks_first(r[0], r[1]):
+				out.append([r[0], r[1], trigger, ctx])
+	return out
+
+# Put the question, record the answer. THE ONE SUSPENDING FUNCTION IN THIS FILE:
+# with no decider it returns without ever reaching an await, which is why every
+# synchronous caller of perform()/resolve_attack() in the suite is untouched by
+# any of this. Callers that DO install a decider must await it.
+func offer_reactions(actor, v: Dictionary, target) -> void:
+	for ask in pending_reactions(actor, v, target):
+		var yes = await reaction_decider.call(ask[0], ask[1], ask[2], ask[3])
+		reaction_intent["%s|%s" % [ask[0].id, ask[1]["id"]]] = bool(yes)
+
+# What the decider said, if it was asked. A reaction nobody was asked about
+# fires the way it always did — the answer to "should this spend a slot without
+# asking" is only ever no when somebody was there to ask.
+func _intends(c, v: Dictionary) -> bool:
+	var key := "%s|%s" % [c.id, v["id"]]
+	if not reaction_intent.has(key):
+		return true
+	var yes: bool = bool(reaction_intent[key])
+	reaction_intent.erase(key)   # good for this trigger, not the next one
+	return yes
+
+# The cheapest answer `c` holds to `trigger`, or {} for none it can pay for
+# right now. Cheapest because upcasting a reaction buys nothing this engine
+# reads — a 5th-level slot counters exactly what a 3rd-level one does.
+func reaction_verb(c, trigger: String) -> Dictionary:
+	var best := {}
 	for v in c.verbs:
-		if v["kind"] != "reaction" or v.get("trigger", "") != trigger:
+		if v.get("cost", "") != "reaction" or v.get("trigger", "") != trigger:
+			continue
+		if not _reaction_affordable(c, v):
+			continue
+		if best.is_empty() or int(v.get("slot_level", 0)) < int(best.get("slot_level", 0)):
+			best = v
+	return best
+
+# The reaction itself is checked by can_spend(); this is everything else the
+# verb costs. _offerable() asks the same questions of a button.
+func _reaction_affordable(c, v: Dictionary) -> bool:
+	var lvl := int(v.get("slot_level", 0))
+	if lvl > 0 and (lvl > c.slots.size() or c.slots[lvl - 1] <= 0):
+		return false
+	if v.has("pool") and c.pool_left(v["pool"]) <= 0:
+		return false
+	if v.get("once_per", "") == "turn" and c.econ.get("used", {}).has(v["id"]):
+		return false
+	return true
+
+# Everyone who could answer `trigger`, as [combatant, verb] pairs in initiative
+# order — so the same seed resolves the same fight twice. Anyone down, or whose
+# reaction is spent or denied (conditions.json's no_reaction: stunned,
+# paralyzed, incapacitated), is already out via can_spend().
+func reactors_for(trigger: String, ctx: Dictionary) -> Array:
+	var out: Array = []
+	for c in order:
+		if not c.conscious() or not can_spend(c, "reaction"):
+			continue
+		var v := reaction_verb(c, trigger)
+		if v.is_empty() or not _reaction_applies(c, v, ctx, trigger):
+			continue
+		out.append([c, v])
+	return out
+
+# Whether this trigger is `c`'s business at all.
+func _reaction_applies(c, v: Dictionary, ctx: Dictionary, trigger: String) -> bool:
+	match trigger:
+		"hit_by_attack", "damaged_by_attack", "would_be_hit":
+			if c != ctx.get("target"):
+				return false   # a blow is only the business of whoever took it
+			# Parry is spent only when its AC actually turns the blow into a
+			# miss. The SRD lets it be wasted on one that lands anyway; this
+			# engine resolves reactions with no prompt (combat-design.md §2), so
+			# throwing it away on a swing it could not have stopped would model
+			# the choice a player makes worse than holding it does. A prediction
+			# (pending_reactions) carries no roll, and answers "could apply".
+			if trigger == "would_be_hit" and ctx.has("total") \
+					and int(ctx["ac"]) + int(v.get("ac_bonus", 0)) <= int(ctx["total"]):
+				return false
+			var atk = ctx.get("attacker")
+			return atk == null or _reaction_reaches(c, v, atk)
+		"spell_cast":
+			var caster = ctx.get("caster")
+			if caster == null or caster == c or caster.team == c.team:
+				return false
+			if int(ctx.get("level", 0)) < int(v.get("min_level", 0)):
+				return false   # the data says how low this stoops
+			return _reaction_reaches(c, v, caster)
+	return false
+
+# A reaction answers something it can see, inside the range of whatever it is
+# spending. A feature reaction carries no range: it is about its own bearer.
+func _reaction_reaches(c, v: Dictionary, other) -> bool:
+	if other.has("hidden"):
+		return false
+	if not v.has("range"):
+		return true
+	return Hex.distance(c.pos, other.pos) <= int(v["range"])
+
+# Fire `trigger`. Returns the context back with whatever the answers changed:
+# "damage" for the ones that alter a blow, "countered"/"by" for the ones that
+# stop a spell. Callers that care about neither can ignore the return.
+func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
+	var out := {"damage": int(ctx.get("damage", 0)), "countered": false, "by": null,
+		"ac_bonus": 0}
+	if _reaction_depth >= REACTION_DEPTH_MAX:
+		return out
+	_reaction_depth += 1
+	for pair in reactors_for(trigger, ctx):
+		var c = pair[0]
+		var v: Dictionary = pair[1]
+		# The list was taken before any of it resolved: an earlier answer may
+		# have dropped this one, or spent the slot it was going to pay with.
+		if not c.conscious() or not _reaction_affordable(c, v):
+			continue
+		if not _intends(c, v):
+			log.append("%s holds their reaction." % c.cname)
 			continue
 		if not _spend(c, "reaction"):
 			continue
-		if v.get("halve_damage", false):
-			dmg = dmg / 2
+		if v.get("once_per", "") == "turn":
+			c.econ["used"][v["id"]] = true
+		# What happens next is the verb's business, not the trigger's.
+		if v.get("counter", false):
+			if _counter(c, v, ctx):
+				out["countered"] = true
+				out["by"] = c
+				break   # the spell is already gone; a second answer has nothing to stop
+		elif int(v.get("ac_bonus", 0)) > 0:
+			out["ac_bonus"] = int(v["ac_bonus"])
+			log.append("%s %ss — AC %d, and the blow goes wide." % [
+				c.cname, String(v["label"]).to_lower(),
+				int(ctx.get("ac", 0)) + int(v["ac_bonus"])])
+			break   # the swing is already a miss; a second answer has nothing to stop
+		elif v.get("halve_damage", false):
+			out["damage"] = int(out["damage"]) / 2
 			log.append("%s — %s, halving the blow." % [c.cname, v["label"]])
-	return dmg
+		elif v["kind"] == "spell":
+			cast(c, v, ctx.get("attacker", ctx.get("caster")))
+	_reaction_depth -= 1
+	return out
+
+# Counterspell, and anything else the data gives a `counter`. The reactor pays
+# the slot first (its own cast can be countered in turn), then the caster rolls
+# to hold the spell together. A countered caster keeps the slot — the action it
+# already spent is the whole cost, per the spell's catalog text.
+func _counter(reactor, v: Dictionary, ctx: Dictionary) -> bool:
+	var caster = ctx["caster"]
+	var spell_label: String = String(ctx["verb"]["label"])
+	log.append("%s answers %s with %s." % [reactor.cname, spell_label, v["label"]])
+	if cast(reactor, v, caster).get("countered", false):
+		return false   # the counter was itself counterspelled
+	var dc: int = COUNTER_DC_BASE + int(ctx.get("level", 0))
+	if _saving_throw(caster, dc, String(v.get("save", "con"))):
+		log.append("  %s holds %s together (DC %d)." % [caster.cname, spell_label, dc])
+		return false
+	log.append("  %s unravels in %s's hands." % [spell_label, caster.cname])
+	return true
 
 # Damage a held buff adds to a melee swing (Rage), extras-shaped so the log
 # labels it the same way a passive-damage rider is — not silently folded into
@@ -1075,13 +1324,12 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var crit: bool = nat >= attacker.crit_range
 	var hit: bool = crit or (nat != 1 and total >= ac)
 	# T94 — Parry: "adds N to its AC against one melee attack that would hit it".
-	# Asked only once the roll is known to land, which is what the SRD wording
-	# says, and spent only when the bonus actually turns it into a miss: this
-	# engine auto-resolves reactions with no prompt (combat-design.md §2), and a
-	# reaction thrown away on a swing it could not have stopped models the choice
-	# a player would make worse than holding it does. A crit cannot be parried.
+	# Fired only once the roll is known to land, which is what the SRD wording
+	# says. A crit cannot be parried, and a shot cannot: it is a melee reaction.
 	if hit and not crit and not (attacker.ranged and not opts.get("melee", false)):
-		var parry := _parry(target, total, ac)
+		var parry := int(fire_reactions("would_be_hit", {
+			"attacker": attacker, "target": target, "total": total, "ac": ac,
+		}).get("ac_bonus", 0))
 		if parry > 0:
 			ac += parry
 			hit = false
@@ -1103,7 +1351,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 			dmg += int(e["amount"])
 		out.damage = dmg
 	if hit:
-		out.damage = _react(target, "hit_by_attack", out.damage)
+		out.damage = int(fire_reactions("hit_by_attack",
+			{"attacker": attacker, "target": target, "damage": out.damage})["damage"])
 	attacker.statuses.erase("hidden")
 	attacker.statuses.erase("sapped")   # Sap is spent on the next roll, hit or miss
 	var vx = attacker.statuses.get("vex")
@@ -1116,6 +1365,13 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		_apply_damage(target, out.damage, _damage_type(attacker), crit)
 		if target.conscious():
 			_hit_riders(attacker, target)
+			# The other half of hit_by_attack: one trigger changes the number
+			# before it lands, this one answers it after. Hellish Rebuke is the
+			# difference — it is retaliation, not damage reduction, and a
+			# creature dropped by the blow doesn't get to make it.
+			if out.damage > 0:
+				fire_reactions("damaged_by_attack",
+					{"attacker": attacker, "target": target, "damage": out.damage})
 		# T9z: a plain hit sounds like the weapon that landed it. A crit and a kill
 		# keep their own stingers — those are the dramatic beats, and a flourish
 		# on top of every weapon variant would be a second matrix to maintain.
