@@ -1000,7 +1000,6 @@ func _apply_buff(caster, who, v: Dictionary) -> void:
 # as they come and go; a save/damage zone (Web, Spirit Guardians) rolls against
 # a creature the turn it starts inside or steps in, once per turn. Emanations
 # walk with their caster; concentration zones die with the concentration.
-# ponytail: the AI does not know zones exist and will walk through a Wall of Fire.
 var zones: Array = []   # {spell, label, hexes, caster, v, until_tick, hit: {id: tick}}
 
 func _add_zone(caster, v: Dictionary, hexes: Array) -> void:
@@ -1022,6 +1021,14 @@ func live_zones() -> Array:
 		if z["v"].get("targeting", "") == "self_area":
 			z["hexes"] = Hex.within(z["caster"].pos, int(z["v"].get("radius", 1)))
 	return zones
+
+# Would standing on `hex` put `c` in a zone that works against it? Everything
+# lingering is hostile except a caster's own side inside Spirit Guardians.
+func zone_hurts(c, hex: Vector2i) -> bool:
+	for z in live_zones():
+		if hex in z["hexes"] and not (z["v"].get("spare_allies", false) and c.team == z["caster"].team):
+			return true
+	return false
 
 # `c` started a turn or stepped: settle every zone against where it now stands.
 # Returns true when a zone rolled against it.
