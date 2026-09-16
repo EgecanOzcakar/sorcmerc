@@ -1137,6 +1137,25 @@ tutorial encounter (in campaign.gd or a new small file, agent's call).
   steps as pure data. **Full suite: 24 test files, 0 failures;
   drive_ui/drive_game both pass.** Pushed.
 
+- 2026-09-16: **The walkthrough re-cut against the action bar as it is now.**
+  The one card that explained the buttons was written against the bar T32
+  shipped over, and the bar has moved under it twice since. Spells no longer
+  open by level: `[2]` is one flat list, cantrips first, and a spell castable
+  from more than one slot opens its own tier picker (`★2`, `★3`) with
+  Shift+key jumping straight there. A list slot holding a single thing now
+  fires that thing instead of opening a list of one — which is what Ilsa's
+  `[4]` Channel Divinity is on the tutorial's own party. A list longer than
+  nine pages on `[9]`. And the economy line has read `Ⓐ Ⓑ ➤ n` since T29,
+  not `[action] [bonus]`. The action step is therefore two cards now — the
+  fixed nine slots, the badges, the greying and Tab/Space on one; lists,
+  spell levels and the two-press confirm on the other — so the walkthrough is
+  seven steps rather than six, and the greying explanation names the two
+  slots that are genuinely grey on turn one (Attack and Help & Shove, with
+  nobody in reach yet) instead of leaving the player to wonder.
+  `tests/test_action_bar.gd` now reads `Tutorial.STEPS` and fails if the card
+  stops naming all nine slots, by key, in the order `_slotted()` lays them
+  out, so the prose and the layout cannot drift apart again in silence.
+
 ## T33 — author combat mechanics for the missing spells (locked 2026-09-11, dispatched now)
 
 Of the 146 catalogued spells, only 8 have a hand-authored combat mechanics
