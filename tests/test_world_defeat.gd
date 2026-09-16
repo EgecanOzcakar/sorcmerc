@@ -58,11 +58,14 @@ func _init() -> void:
 	for i in 2:
 		main._process(0.1); await process_frame
 	check(main._combat != null, "sanity: engaging launches the fight")
+	var clock_before: float = main.world.clock.elapsed
 	if main._combat != null:
-		main._combat.result = {"outcome": "Defeat", "xp": 0, "gold": 0}
+		main._combat.result = {"outcome": "Defeat", "xp": 0, "gold": 0, "rounds": 5}
 	for i in 3:
 		main._process(0.1); await process_frame
 	check(main._combat == null, "the lost fight is torn down")
+	check(main.world.clock.elapsed - clock_before == 5 * main.MINUTES_PER_ROUND,
+		"five rounds cost the party five hours of daylight")
 	check(main._approach_card == null, "...and the band that won does not re-open its approach card")
 	check(main._slipped.has(foe.id), "it is marked slipped instead")
 

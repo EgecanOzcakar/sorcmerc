@@ -982,6 +982,8 @@ func encounter_spec(foe) -> Dictionary:
 # room (core/site.gd) can run a fight with its own pre-built spec without also
 # inheriting the roaming-band aftermath below — erasing a party that was never
 # on the map, crediting faction opinion for a room in a cave.
+const MINUTES_PER_ROUND := 60.0
+
 func _run_combat(spec: Dictionary, difficulty: String,
 		scouted_ahead := false, forced_ambush := false) -> Dictionary:
 	world.clock.pause()
@@ -1005,6 +1007,10 @@ func _run_combat(spec: Dictionary, difficulty: String,
 	var result: Dictionary = _combat.result
 	_combat = null
 	Sound.set_combat(false)
+	# A fight costs daylight: an hour a round, so a long brawl eats the afternoon
+	# and a two-round ambush barely dents it. The clock is paused through the
+	# fight itself, so this is the whole bill.
+	world.clock.elapsed += int(result.get("rounds", 0)) * MINUTES_PER_ROUND
 	if _combat_overlay != null:
 		_combat_overlay.queue_free()
 		_combat_overlay = null
