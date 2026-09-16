@@ -10,6 +10,7 @@ const Presets = preload("res://core/presets.gd")
 const Leveling = preload("res://core/leveling.gd")
 const Ach = preload("res://core/achievements.gd")
 const Potions = preload("res://core/potions.gd")
+const RoadSpells = preload("res://core/road_spells.gd")
 const RNG = preload("res://core/rng.gd")
 
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
@@ -108,6 +109,7 @@ func _render() -> void:
 	_skills(c2, s)
 	var c3 := _column()
 	_resources(c3, s)
+	_road(c3)
 	_features(c3, s)
 	var c4 := _column()
 	_attacks(c4, s)
@@ -345,6 +347,37 @@ func _apply_hp(delta: int) -> void:
 	_render()
 
 # --- features ----------------------------------------------------------------
+
+# Utility spells with a road door (core/road_spells.gd): cast here, for a slot.
+var last_cast := ""   # the line the last road cast produced; the panel shows it
+
+func _road(col: VBoxContainer) -> void:
+	var known: Array = RoadSpells.known(party(), _ch)
+	if known.is_empty():
+		return
+	var v := _panel(col, "On the road")
+	if last_cast != "":
+		var note := Label.new()
+		note.text = last_cast
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.add_theme_color_override("font_color", COL_DIM)
+		v.add_child(note)
+		_fields["road_note"] = note
+	for r in known:
+		var sid := String(r["id"])
+		var h := _row(v, Catalog.spell(sid).get("name", sid), "L%d" % int(r["level"]), "road_" + sid, COL_DIM)
+		h.tooltip_text = RoadSpells.text(sid)
+		var b := Button.new()
+		b.text = "Cast"
+		b.disabled = not bool(r["castable"])
+		b.tooltip_text = RoadSpells.text(sid) if r["castable"] else "No slot of level %d left" % int(r["level"])
+		b.pressed.connect(cast_road.bind(sid))
+		h.add_child(b)
+		_fields["road_btn_" + sid] = b
+
+func cast_road(sid: String) -> void:
+	last_cast = RoadSpells.cast(party(), _ch, sid, party().world_now)
+	_render()
 
 func _features(col: VBoxContainer, s) -> void:
 	var v := _panel(col, "Features")

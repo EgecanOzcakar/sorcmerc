@@ -46,7 +46,8 @@ static func spell(id: String) -> Dictionary:
 	if merged.has("damage") and not _authored_damage(merged["damage"]):
 		merged.erase("damage")
 	if not (merged.has("damage") or merged.has("heal") or merged.has("healing")
-			or merged.has("conditions") or merged.has("buff")):
+			or merged.has("conditions") or merged.has("buff") or merged.has("teleport")
+			or merged.has("summon")):
 		return {}
 	merged["level"] = int(def.get("level", 0))
 	merged["concentration"] = def.get("concentration", false)
@@ -178,6 +179,11 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 	}
 	if m.get("spare_allies", false):
 		v["spare_allies"] = true
+	if m.get("teleport", false):   # Misty Step: aim a free hex, arrive there, provoke nothing
+		v["teleport"] = true
+	if m.has("summon"):            # Summon Beast: a bestiary creature on the caster's side
+		v["summon"] = m["summon"]
+		v["text"] = String(m.get("text", ""))
 	if m.has("buff"):     # Bless, Haste, Bane: a status the target wears (combat.gd _apply_buff)
 		v["buff"] = m["buff"]
 		v["rounds"] = int(m.get("rounds", 10))
@@ -218,7 +224,11 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 		v["heal_count"] = n
 		v["heal_sides"] = int(h.get("sides", 8))
 		v["heal_bonus"] = abil_mod if str(h.get("plus", "")) == "ability_mod" else int(h.get("plus", 0))
-	if shape == "cone":
+	if m.get("teleport", false):
+		v["targeting"] = "hex"
+	elif m.has("summon"):
+		v["targeting"] = "self"
+	elif shape == "cone":
 		v["targeting"] = "direction"
 	elif shape == "line":
 		v["targeting"] = "line"          # aimed at a hex, runs its full length through it

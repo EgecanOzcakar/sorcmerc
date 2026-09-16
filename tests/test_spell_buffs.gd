@@ -11,6 +11,7 @@ const Presets = preload("res://core/presets.gd")
 const Adapter = preload("res://core/adapter.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Hex = preload("res://core/hex.gd")
 
 var _pass := 0
 var _fail := 0
@@ -29,6 +30,7 @@ func _init() -> void:
 	test_save_or_debuff_and_rider()
 	test_invisibility()
 	test_pick_pool()
+	test_teleport_obscure_summon()
 	print("test_spell_buffs: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -110,7 +112,7 @@ func test_single_buffs() -> void:
 	check(seen, "attacks against a blurred Ilsa are at disadvantage")
 
 func test_save_or_debuff_and_rider() -> void:
-	var f := _fight(["bane", "ray-of-sickness", "faerie-fire"])
+	var f := _fight(["bane", "ray-of-sickness", "faerie-fire", "ray-of-enfeeblement"])
 	var cb = f[0]; var ilsa = f[1]
 	var gob = cb.combatants[2]
 	var bane := _verb(ilsa, "bane")
@@ -160,3 +162,36 @@ func test_pick_pool() -> void:
 	check(Effects.pick_pool("bard", 6).is_empty(), "there are no 6th-level spells to pick")
 	var ilsa := Presets.ilsa()
 	check(ilsa.sheet().pending.is_empty(), "Ilsa's Light and Guidance stay chosen")
+
+func test_teleport_obscure_summon() -> void:
+	var f := _fight(["misty-step", "darkness", "summon-beast"], [Vector2i(3, 0)])   # goblin adjacent to Ilsa
+	var cb = f[0]; var ilsa = f[1]
+	var gob = cb.combatants[2]
+	var step := _verb(ilsa, "misty-step")
+	check(step["targeting"] == "hex" and step["cost"] == "bonus" and step.get("teleport", false), "Misty Step aims a hex, as a bonus action")
+	var dest := Vector2i(5, 1)
+	var hp0: int = ilsa.hp
+	var r: Dictionary = cb.perform(ilsa, step, dest)
+	check(not r.has("error") and ilsa.pos == dest and ilsa.hp == hp0, "...and she is there, with no opportunity attack taken (%s)" % str(r))
+	check(cb.perform(ilsa, _verb(ilsa, "misty-step"), gob.pos).has("error"), "an occupied hex is refused")
+	ilsa.econ["action"] = 1
+	var dark := _verb(ilsa, "darkness")
+	dark["save_dc"] = 0
+	cb.perform(ilsa, dark, gob.pos if dark["targeting"] == "hex" else [gob.pos, gob.pos + Vector2i(1, 0), gob.pos + Vector2i(0, 1)])
+	var dis := false
+	for e in cb._cond_effects(gob):
+		dis = dis or (e.get("own_attacks", "") == "dis" and e.get("attacks_against", "") == "dis")
+	check(dis, "in the Darkness the goblin attacks and is attacked at disadvantage")
+	ilsa.econ["action"] = 1
+	var n0: int = cb.combatants.size()
+	var sb := _verb(ilsa, "summon-beast")
+	check(sb["targeting"] == "self", "Summon Beast needs no aim")
+	var res: Dictionary = cb.perform(ilsa, sb)
+	check(cb.combatants.size() == n0 + 1 and res.has("summoned"), "a creature joins the fight")
+	var wolf = res["summoned"]
+	check(wolf.team == "party" and wolf.src_id == "dire-wolf" and wolf.cname.begins_with("Ilsa's"), "...on Ilsa's side, hers by name (%s)" % wolf.cname)
+	check(cb.order.find(wolf) == cb.order.find(ilsa) + 1, "...acting right after her")
+	check(Hex.distance(wolf.pos, ilsa.pos) <= 3 and cb._hex_free(wolf.pos, wolf), "...in a free hex beside her")
+	check(not cb.all_verbs(wolf).filter(func(v): return v["kind"] == "attack").is_empty(), "...and it has an attack")
+	cb._end_concentration(ilsa, "drops it")
+	check(wolf.is_dead() and not (wolf in cb.order), "the summon fades with her concentration")

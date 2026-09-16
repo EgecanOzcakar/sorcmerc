@@ -297,6 +297,13 @@ static func from_monster(m: Dictionary, team: String, pos: Vector2i):
 	_finish_verbs(c, {})
 	return c
 
+# Unspent slots per level, the sheet's full set less slots_used.
+static func slots_left(ch) -> Array[int]:
+	var left := _full_slots(ch.sheet())
+	for i in mini(9, ch.slots_used.size()):
+		left[i] = maxi(0, left[i] - int(ch.slots_used[i]))
+	return left
+
 # Short/long rest: refill the pools that regain on it, all spell slots on a long
 # rest, and HP on a long rest. T6's rest node is the caller.
 static func rest(ch, kind: String) -> void:

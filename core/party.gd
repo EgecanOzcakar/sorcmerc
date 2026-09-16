@@ -35,7 +35,10 @@ var overworld_figure := ""
 # grows a key, not a column, when travel gains another order.
 var travel_orders: Dictionary = {}
 var world_now := 0.0        # world-minutes, stamped by world.gd each frame; potion buffs expire against it
-var scouted_next := false   # Potion of Clairvoyance: the next fight starts scouted
+var scouted_next := false   # Potion of Clairvoyance / Clairvoyance cast: the next fight starts scouted
+var swift_until := 0.0      # Fly / Longstrider: forced-march speed, no road penalty, until this world-minute
+var safe_camp := false      # Rope Trick: the next camp needs no kit and can't be jumped
+var alarm_set := false      # Alarm: the next camp's ambush is heard coming
 
 # --- roster ---------------------------------------------------------------
 
@@ -237,6 +240,21 @@ const REVIVE_SPELL := "revivify"
 const REVIVE_SCROLL := "scroll-of-resurrection"
 const REVIVE_COST := 300
 const REVIVE_SLOT := 3        # Revivify is 3rd level: any free slot of 3+ pays for it
+
+# The first active member who knows any of `spell_ids`, or null. The road's
+# "a spell you know changes the roll" hook (Revivify's pattern): Pass Without
+# Trace on the approach, Detect Thoughts at the stall, a restoration spell
+# behind the healer's counter.
+func caster_of(spell_ids: Array):
+	return caster_and_spell(spell_ids).get("ch")
+
+# {ch, spell} for the first active member who knows any of `spell_ids`; {} if none.
+func caster_and_spell(spell_ids: Array) -> Dictionary:
+	for ch in party_characters():
+		for sid in spell_ids:
+			if _knows(ch, String(sid)):
+				return {"ch": ch, "spell": String(sid)}
+	return {}
 
 static func _knows(ch, spell_id: String) -> bool:
 	if spell_id in ch.prepared:

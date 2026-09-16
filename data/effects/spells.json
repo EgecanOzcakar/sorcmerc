@@ -94,9 +94,15 @@
   "yolandes-regal-presence": {"non_combat": true},
   "counterspell": {"non_combat": true},
   "dispel-magic": {"non_combat": true},
-  "misty-step": {"non_combat": true},
-  "dimension-door": {"non_combat": true},
-  "fog-cloud": {"non_combat": true},
-  "darkness": {"non_combat": true},
-  "silence": {"non_combat": true}
+  "silence": {"non_combat": true},
+  "misty-step": {"shape": "single", "range_ft": 30, "teleport": true, "text": "Step through mist to a free hex within 30 ft. Nothing gets a swing at you."},
+  "dimension-door": {"shape": "single", "range_ft": 500, "teleport": true, "text": "Vanish and reappear at any free hex you can see. Nothing gets a swing at you."},
+  "fog-cloud": {"shape": "sphere", "size_ft": 20, "range_ft": 120, "save": "", "buff": {"effects": {"attacks_against": "dis", "own_attacks": "dis"}}, "text": "Everyone in the fog, friend or foe, attacks and is attacked at disadvantage"},
+  "darkness": {"shape": "sphere", "size_ft": 15, "range_ft": 60, "save": "", "buff": {"effects": {"attacks_against": "dis", "own_attacks": "dis"}}, "text": "Everyone in the dark, friend or foe, attacks and is attacked at disadvantage"},
+  "summon-beast": {"shape": "self", "summon": {"id": "dire-wolf"}, "text": "A dire wolf fights at your side while you concentrate"},
+  "summon-fey": {"shape": "self", "summon": {"id": "dryad"}, "text": "A dryad fights at your side while you concentrate"},
+  "summon-aberration": {"shape": "self", "summon": {"id": "gibbering-mouther"}, "text": "A gibbering thing fights at your side while you concentrate"},
+  "summon-construct": {"shape": "self", "summon": {"id": "animated-armor"}, "text": "Animated armor fights at your side while you concentrate"},
+  "summon-dragon": {"shape": "self", "summon": {"id": "red-dragon-wyrmling"}, "text": "A red wyrmling fights at your side while you concentrate"},
+  "summon-celestial": {"shape": "self", "summon": {"id": "couatl"}, "text": "A couatl fights at your side while you concentrate"}
 }

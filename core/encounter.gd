@@ -447,6 +447,8 @@ static func _foe_spots(b: Dictionary, party_c: Array) -> Array:
 # outright: scouting must never be worse than not scouting. A miss costs
 # nothing. Rolls on its own stream derived from the combat seed (same trick as
 # barks) so the fight itself rolls identically whether or not this is called.
+const PASS_WITHOUT_TRACE := "pass-without-trace"
+const PASS_WITHOUT_TRACE_BONUS := 10
 static func surprise_check(cb: Combat, scouted_ahead := false) -> bool:
 	var foes: Array = cb.team_of("foe")
 	var heroes: Array = cb.team_of("party")
@@ -462,6 +464,11 @@ static func surprise_check(cb: Combat, scouted_ahead := false) -> bool:
 		if int(c.stealth) > bonus:
 			bonus = int(c.stealth)
 			who = c
+	# Pass Without Trace in the party's repertoire: the spell's +10, the same
+	# "a known spell changes the roll" hook the road uses (core/party.gd caster_of).
+	var veiled: bool = heroes.any(func(c): return PASS_WITHOUT_TRACE in c.spell_ids)
+	if veiled:
+		bonus += PASS_WITHOUT_TRACE_BONUS
 	var pp := 0
 	for c in foes:
 		pp += int(c.passive_perception)
@@ -469,6 +476,8 @@ static func surprise_check(cb: Combat, scouted_ahead := false) -> bool:
 	var Dice = load("res://core/dice.gd")
 	var RNG = load("res://core/rng.gd")
 	var nat: int = int(Dice.d20(RNG.new((cb.rng.seed_value ^ 0x5117EA17) & 0xFFFFFFFF))["nat"])
+	if veiled:
+		cb.log.append("A veil of shadow goes with them (Pass Without Trace, +%d)." % PASS_WITHOUT_TRACE_BONUS)
 	if nat + bonus < dc:
 		cb.log.append("%s leads them in badly (Stealth %d+%d vs %d) — they are seen coming."
 			% [who.cname, nat, bonus, dc])

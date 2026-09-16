@@ -690,6 +690,19 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		if caster.has("concentrating"):
 			_end_concentration(caster, "drops concentration on %s" % Effects.humanize(String(caster.statuses["concentrating"]["spell"])))
 		caster.statuses["concentrating"] = {"spell": v["spell"], "until_round": round_num + CONCENTRATION_ROUNDS}
+	if v.get("teleport", false):
+		if not (target is Vector2i and target in board["hexes"] and passable(target) and _hex_free(target)
+				and Hex.distance(caster.pos, target) <= int(v.get("range", 1))):
+			return {"error": "not a free hex in range"}
+		log.append("%s casts %s and is simply elsewhere." % [caster.cname, v["label"]])
+		caster.pos = target   # no provocation: the whole point of the spell
+		return {}
+	if v.has("summon"):
+		var spawned = summon(caster, v)
+		if spawned == null:
+			return {"error": "nowhere to appear"}
+		log.append("%s casts %s — %s answers." % [caster.cname, v["label"], spawned.cname])
+		return {"summoned": spawned}
 	var who: Array = []   # Bless, Mass Healing Word: everyone on the caster's side in range
 	match v.get("targeting", ""):
 		"self": who = [caster]
@@ -708,7 +721,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 			if v.has("buff"):
 				_apply_buff(caster, c, v)
 		return {}
-	if not (v.has("dice_count") or v.has("conditions")):
+	if not (v.has("dice_count") or v.has("conditions") or v.has("buff")):
 		return {}
 	var notation := "%dd%d" % [int(v.get("dice_count", 0)), int(v.get("dice_sides", 6))]
 	var dc := int(v.get("save_dc", caster.save_dc))
@@ -814,11 +827,41 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 		for cond in v.get("conditions", []):
 			apply_condition(c, cond, caster, v.get("duration", "round"), v)
 			log.append("  %s is %s." % [c.cname, cond])
-		if v.has("buff"):
-			_apply_buff(caster, c, v)
+	if not saved and v.has("buff"):   # a `buff` is always authored: with no save it simply lands (Darkness)
+		_apply_buff(caster, c, v)
 	if dmg > 0:
 		_apply_damage(c, dmg, v.get("damage_type", ""))
 	return {"saved": saved, "damage": dmg}
+
+# Summon Beast and kin: a bestiary creature on the caster's side, in the free
+# hex nearest the caster, acting right after them for the rest of the fight
+# (or until concentration drops — it is held like a condition). Its `summon`
+# is {id, count?}: `id` a monsters.json id, scaled by nothing — the spell
+# picks a creature the slot pays for. The player drives it like a hero.
+# ponytail: one stat block per spell, no upcast scaling; add a per-level id
+# table if a 5th-level Summon Beast needs to be more than a wolf.
+func summon(caster, v: Dictionary):
+	var m: Dictionary = v["summon"]
+	var spot := _free_near(caster.pos)
+	if spot == Vector2i(-999, -999):
+		return null
+	var n := combatants.filter(func(c): return c.src_id == String(m["id"])).size() + 1
+	var c = load("res://core/encounter.gd").spawn(String(m["id"]), 1.0, caster.team, spot, n)   # load: encounter.gd preloads this file
+	if c == null:
+		return null
+	c.cname = "%s's %s" % [caster.cname.get_slice(" ", 0), c.cname]
+	combatants.append(c)
+	var at := order.find(caster)
+	order.insert(at + 1 if at >= 0 else order.size(), c)
+	begin_turn_for(c)
+	if v.get("concentration", false):
+		c.statuses["summoned"] = {"held_by": caster, "spell": String(v.get("spell", ""))}
+	return c
+
+func _free_near(origin: Vector2i) -> Vector2i:
+	var ring: Array = Hex.within(origin, 3).filter(func(p): return p != origin and p in board["hexes"] and passable(p) and _hex_free(p))
+	ring.sort_custom(func(a, b): return Hex.distance(origin, a) < Hex.distance(origin, b))
+	return ring[0] if not ring.is_empty() else Vector2i(-999, -999)
 
 # A spell's `buff` (data/effects/spells.json) on `who`: a statuses entry under
 # "spell:<id>" carrying the keys the resolver reads (ac, bonus_to_hit,
@@ -952,6 +995,12 @@ func _end_concentration(caster, why: String) -> void:
 			var s = c.statuses[id]
 			if s is Dictionary and s.get("held_by") == caster and s.get("spell", "") == held["spell"]:
 				c.statuses.erase(id)
+				if id == "summoned":
+					c.hp = 0
+					c.statuses["dead"] = true
+					order.erase(c)
+					log.append("  %s fades." % c.cname)
+					continue
 				log.append("  %s is no longer %s." % [c.cname, id])
 
 # A held condition the target can shake off: `when` is "end_turn" (its own

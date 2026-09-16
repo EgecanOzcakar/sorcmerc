@@ -37,6 +37,7 @@ const Campaign = preload("res://core/campaign.gd")
 const Dice = preload("res://core/dice.gd")
 const RNG = preload("res://core/rng.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
+const RoadSpells = preload("res://core/road_spells.gd")
 
 # One roll per six world-hours on the road. Foraging (world_forage.gd) is on
 # four, so the two interleave rather than always landing together; at 8x that
@@ -93,7 +94,10 @@ static func pace_note(pace: String) -> String:
 	return String(PACE.get(pace, PACE["normal"])["note"])
 
 static func speed_mult(party) -> float:
-	return float(PACE[orders(party)["pace"]]["speed"])
+	var m := float(PACE[orders(party)["pace"]]["speed"])
+	if RoadSpells.is_swift(party):   # Fly / Longstrider: the forced march's ground, none of its penalty
+		m = maxf(m, RoadSpells.SWIFT_MULT)
+	return m
 
 static func pace_bonus(party) -> int:
 	return int(PACE[orders(party)["pace"]]["bonus"])
@@ -154,6 +158,15 @@ const COIN_MAX := 45
 # {} on most ticks — the caller only calls this once per EVENT_INTERVAL of road.
 # Otherwise the resolved event: what happened, the roll behind it, and what it
 # cost or paid. Already applied; nothing is left for the caller to decide.
+# A spell in the party's repertoire answers some events without a roll: the
+# animals say whose tracks, the water is purified before anyone drinks.
+const SPELL_PASS := {
+	"tracks": {"spells": ["speak-with-animals"],
+		"text": "%s asks the birds. They know exactly whose tracks, and where they went."},
+	"foul-water": {"spells": ["purify-food-and-drink"],
+		"text": "%s purifies it before anyone drinks. The stream runs clean behind them."},
+}
+
 static func check(party, world, rng = null) -> Dictionary:
 	if party == null or world == null:
 		return {}
@@ -170,6 +183,13 @@ static func check(party, world, rng = null) -> Dictionary:
 		out["minutes"] = -TIME_SAVED
 		return out
 
+	var sp: Dictionary = SPELL_PASS.get(String(e["id"]), {})
+	var caster = party.caster_of(sp.get("spells", [])) if not sp.is_empty() else null
+	if caster != null:
+		out.merge({"ok": true, "char_id": caster.id, "cname": caster.cname, "skill": "",
+			"spell": String(sp["spells"][0]), "text": String(sp["text"]) % caster.cname, "named": false}, true)
+		_apply(e, true, party, world, rng, out)
+		return out
 	var who := _assign(party, e, orders(party))
 	if who.is_empty():
 		return {}                      # nobody left to roll: no event rather than a fake one

@@ -1103,6 +1103,15 @@ SPELLS = {
     "banishment": (portal(E("shadow")),),
 
     # conjuration
+    "misty-step": (person(E("force"), "stand", 0.7), cloud(E("force"), 0.45)),
+    "dimension-door": (portal(E("force")),),
+    "fog-cloud": (cloud(E("steel")),),
+    "summon-beast": (fangs(E("nature"), 0.9), star(46, 16, 6, 2, 4, LIGHT, sw=1.0)),
+    "summon-fey": (crescent(E("nature")), star(46, 16, 6, 2, 4, LIGHT, sw=1.0)),
+    "summon-aberration": (eye(E("psychic"), 0.9), tentacles(E("psychic"), 0.45)),
+    "summon-construct": (hexagon(32, 32, 15, E("stone")[1]), fist(E("stone"), 0.5)),
+    "summon-dragon": (flame(E("fire"), 32, 30, 0.7), fangs(E("fire"), 0.45)),
+    "summon-celestial": (halo(E("radiant")), star(32, 32, 9, 3.5, 5, E("radiant"))),
     "spirit-guardians": (halo(E("radiant")), person(E("radiant"), "stand", 0.55)),
     "sleet-storm": (cloud(E("cold")), snowflake(E("cold"), 0.45)),
     "hunger-of-hadar": (orb(E("shadow"), 1.0, ring=True), tentacles(E("shadow"), 0.5)),
@@ -1144,6 +1153,7 @@ SPELLS = {
     "geas": (scroll(E("gold")),),
 
     # evocation
+    "darkness": (orb(E("shadow"), 1.0, ring=True), crescent(E("shadow"), 0.4)),
     "faerie-fire": (person(E("force"), "stand", 0.8), star(46, 16, 6, 2, 4, E("lightning"), sw=1.0)),
     "spiritual-weapon": (sword(32, 32, -30, 44), halo(E("radiant"), 0.5)),
     "fire-bolt": (dart(E("fire"), -45, 1),),
