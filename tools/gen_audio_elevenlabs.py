@@ -90,19 +90,16 @@ SFX = {
             "impact with a short dull thud underneath, dry, no reverb tail", 0.7, 0.7),
     "crit": ("A devastating critical sword strike, metal shearing through armor and bone, "
              "sharp crack with a deep impact underneath, brief and brutal", 0.9, 0.65),
-    "kill": ("A body collapsing to a stone floor in armor, heavy final thud with "
-             "scattered metal rattle", 1.0, 0.6),
-    "cast": ("A magic spell being cast, rising shimmering energy with a soft bright "
-             "release at the end, fantasy game spell sound", 1.1, 0.5),
-    "heal": ("A gentle healing magic chime, warm soft bells rising, brief and comforting, "
-             "fantasy game heal sound", 1.2, 0.5),
+    "kill": ("An armored body dropping dead onto flagstones: a heavy final thud, a sword clattering loose, then chain mail settling, dry, no reverb", 1.0, 0.6),
+    "cast": ("A spell being cast: a quick indrawn breath, a rush of air gathering, then a bright snap of release like a struck flint, close, dry", 1.1, 0.5),
+    "heal": ("Healing magic: a warm exhale of light, a soft glassy rising tone with a gentle harp pluck at the top, close and intimate, no reverb tail", 1.2, 0.5),
     "level_up": ("A triumphant short fanfare for leveling up, bright ascending chime with "
                  "a warm resonant finish, fantasy RPG", 1.6, 0.45),
     "victory": ("A short triumphant brass and drum victory fanfare, heroic, medieval "
                 "fantasy, ending cleanly", 2.5, 0.4),
     "defeat": ("A grim descending tone marking defeat, low strings and a distant drum, "
                "hollow and final", 2.5, 0.4),
-    "click": ("A single crisp UI button click, small wooden tick, very short, dry", 0.3, 0.9),
+    "click": ("A single soft click of a wooden game piece set down on a wooden table, tiny, dry, with a natural short decay, no ring", 0.5, 0.9),
     "buy": ("Coins being counted onto a wooden merchant counter, a few gold pieces, "
             "short and bright", 0.8, 0.75),
     "identify": ("A soft magical reveal, shimmering chime resolving into a clear tone, "
@@ -190,8 +187,7 @@ SFX = {
 
     # Conditions and exhaustion. `condition` fires whenever a status lands, which
     # is often, so it is deliberately small — a marker, not an event.
-    "condition": ("A dark magical affliction taking hold, a short low sickly warble "
-                  "sinking downward with a faint unpleasant buzz", 0.7, 0.6),
+    "condition": ("A poison or curse taking hold: a wet sickly gurgle, a brief low groan of pain, and a faint dry rattle, close, unpleasant", 0.7, 0.6),
     "collapse": ("An exhausted armored figure collapsing face-first onto stone, a heavy "
                  "limp fall with a long weary exhale and settling metal", 1.4, 0.55),
 
