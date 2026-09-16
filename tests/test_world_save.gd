@@ -55,7 +55,7 @@ func _party() -> Party:
 	for ch in Party.demo_roster():
 		p.add_member(ch)
 	p.add_gold(137)
-	p.stash_add("potion-of-healing", 2)
+	p.stash_add("potions-of-healing", 2)
 	p.overworld_figure = "wizard"
 	return p
 
@@ -157,7 +157,7 @@ func _init() -> void:
 	check(p2.roster.size() == party.roster.size(), "the roster came back")
 	check(Array(p2.active) == Array(party.active), "marching order")
 	check(p2.gold == 137, "the purse")
-	check(p2.stash_count("potion-of-healing") == 2, "the stash")
+	check(p2.stash_count("potions-of-healing") == 2, "the stash")
 	check(p2.overworld_figure == "wizard", "the chosen map figure")
 
 	# --- the world still runs ------------------------------------------------

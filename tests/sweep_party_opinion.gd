@@ -46,7 +46,9 @@ const VARIANTS := [
 
 # combat.gd with the three hooks the doc proposes, plus counters for the sources.
 class Measured extends Combat:
-	var party = null
+	# `party` is Combat's own now — feature/spells-fix gave it one for the potion
+	# shelf, with the same meaning and the same null default this spike declared
+	# for itself when Combat had none. Redeclaring it here is a parse error.
 	var use_shoulder := true
 	var use_bicker := true
 	var use_rally := true

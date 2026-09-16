@@ -13,6 +13,7 @@ const Sound = preload("res://core/audio.gd")
 const WeaponSfx = preload("res://core/weapon_sfx.gd")
 const Rng = preload("res://core/rng.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Potions = preload("res://core/potions.gd")
 
 const FT_PER_HEX := 6  # adapter.gd's convention
 
@@ -31,6 +32,7 @@ const MAX_ROUNDS := 60  # safety guard; a real fight ends in ~4-6
 
 var rng
 var combatants: Array = []
+var party = null   # core/party.gd when a real party fights: its stash is the potion shelf
 var board: Dictionary = {}
 var order: Array = []
 var turn_idx: int = 0
@@ -236,8 +238,27 @@ func begin_turn_for(c) -> void:
 	if held is Dictionary and round_num >= int(held.get("until_round", 0)):
 		_end_concentration(c, "lets %s lapse" % Effects.humanize(String(held["spell"])))
 	_expire_conditions(c)
+	c.econ["action"] = int(c.econ["action"]) + _buff_sum(c, "extra_action")
+	if _buff_sum(c, "speed_mult") > 0:
+		c.econ["move_left"] = int(c.econ["move_left"]) * _buff_sum(c, "speed_mult")
 	_regenerate(c)
 	_auto_stand(c)
+
+# What the drinker's potion buffs add up to for one key (core/potions.gd).
+func _buff_sum(c, key: String) -> int:
+	var n := 0
+	for id in c.statuses:
+		var s = c.statuses[id]
+		if s is Dictionary:
+			n += int(s.get(key, 0))
+	return n
+
+func _buff_flag(c, key: String) -> bool:
+	for id in c.statuses:
+		var s = c.statuses[id]
+		if s is Dictionary and s.get(key, false):
+			return true
+	return false
 
 # A condition applied with duration "round" lasts until the bearer's next turn:
 # one lost turn, never a permanent lockout (nothing else in the engine ends them).
@@ -369,7 +390,7 @@ func in_reach(attacker, target) -> bool:
 	return d <= int(board.get("reach_melee", 1))
 
 func effective_ac(c) -> int:
-	var ac: int = c.ac
+	var ac: int = c.ac + _buff_sum(c, "ac")
 	if is_cover(c.pos):
 		ac += 2  # half cover
 	return ac
@@ -468,6 +489,18 @@ func all_verbs(actor) -> Array:
 					out.append(g)
 		elif v["kind"] in OFFERABLE and is_button(actor, v):
 			out.append(v.duplicate())
+	if party != null and actor.team == "party":
+		var seen := {}
+		for e in party.stash:
+			var pid := String(e["item_id"])
+			if seen.has(pid) or not party.is_identified(e) or not Potions.is_potion(pid):
+				continue
+			seen[pid] = true
+			var m := Potions.mechanics(pid)
+			out.append({"id": "drink:" + pid, "kind": "drink", "potion": pid, "cost": "action",
+				"label": "Drink " + Catalog.magic_item(pid).get("name", pid), "text": Potions.text(pid),
+				"targeting": "enemy" if m.has("target") else "self",
+				"target_type": m.get("target", ""), "range": maxi(1, int(m.get("range_ft", 5)) / 6)})
 	return out
 
 # Every verb `actor` can use right now (spec §6). scenes/main.gd renders this list;
@@ -521,6 +554,8 @@ func _offerable(actor, v: Dictionary) -> bool:
 		# a bonus-action leveled spell forbids a leveled spell with your action (§7)
 		if v["cost"] == "action" and actor.econ.get("cast_bonus_spell", false):
 			return false
+	if _buff_flag(actor, "no_attack") and v["kind"] in ["attack", "offhand_attack", "spell"]:
+		return false
 	match v["kind"]:
 		"hide": return not actor.has("hidden")
 		"dodge": return not actor.has("dodging")
@@ -543,6 +578,9 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 				return false
 			if _source_of(actor, "cannot_target_source") == c:
 				return false  # charmed
+			if String(v.get("target_type", "")) != "" \
+					and String(Catalog.monster(c.src_id).get("type", "")) != String(v["target_type"]):
+				return false  # Animal Friendship only ever works on a beast
 			if v["kind"] == "attack" or (v["kind"] == "offhand_attack" and int(v.get("range", 1)) <= 1):
 				return in_reach(actor, c)
 			if v.get("choice", "") == "brazier" and not can_shove_into_hazard(c):
@@ -615,6 +653,11 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"save_effect": return _save_effect(actor, v, target)
 		"spell": return cast(actor, v, target)
+		"drink":
+			var r := Potions.drink_in_combat(self, actor, String(v["potion"]), target)
+			if not r.has("error"):
+				party.stash_remove(String(v["potion"]))
+			return r
 	return {}
 
 func _save_effect(actor, v: Dictionary, target) -> Dictionary:
@@ -661,16 +704,44 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	# T27: past the slot check, so a refused cast is silent. T9z: the school
 	# picks the sting — evocation booms, necromancy drones, abjuration chimes.
 	Sound.play_sfx(WeaponSfx.for_spell(String(v.get("spell", ""))))
+	if not (caster.statuses.get("invisible") is Dictionary and caster.statuses["invisible"].get("sticky", false)):
+		caster.statuses.erase("invisible")
 	if v.get("concentration", false):
 		if caster.has("concentrating"):
 			_end_concentration(caster, "drops concentration on %s" % Effects.humanize(String(caster.statuses["concentrating"]["spell"])))
 		caster.statuses["concentrating"] = {"spell": v["spell"], "until_round": round_num + CONCENTRATION_ROUNDS}
-	if v.has("heal_count"):
-		log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
-		heal(target, Dice.roll(rng, "%dd%d+%d" % [int(v["heal_count"]), int(v["heal_sides"]),
-			int(v.get("heal_bonus", 0))]))
+	if v.get("teleport", false):
+		if not (target is Vector2i and target in board["hexes"] and passable(target) and _hex_free(target)
+				and Hex.distance(caster.pos, target) <= int(v.get("range", 1))):
+			return {"error": "not a free hex in range"}
+		log.append("%s casts %s and is simply elsewhere." % [caster.cname, v["label"]])
+		caster.pos = target   # no provocation: the whole point of the spell
 		return {}
-	if not (v.has("dice_count") or v.has("conditions")):
+	if v.has("summon"):
+		var spawned = summon(caster, v)
+		if spawned == null:
+			return {"error": "nowhere to appear"}
+		log.append("%s casts %s — %s answers." % [caster.cname, v["label"], spawned.cname])
+		return {"summoned": spawned}
+	var who: Array = []   # Bless, Mass Healing Word: everyone on the caster's side in range
+	match v.get("targeting", ""):
+		"self": who = [caster]
+		"allies":
+			for c in combatants:
+				if c.team == caster.team and not c.is_dead() and Hex.distance(caster.pos, c.pos) <= int(v.get("range", 1)):
+					who.append(c)
+		"ally": who = [target]
+	if not who.is_empty() and (v.has("heal_count") or v.has("buff")):
+		log.append("%s casts %s%s." % [caster.cname, v["label"],
+			"" if who.size() == 1 and who[0] == caster else " on " + ", ".join(who.map(func(c): return c.cname))])
+		for c in who:
+			if v.has("heal_count"):
+				heal(c, Dice.roll(rng, "%dd%d+%d" % [int(v["heal_count"]), int(v["heal_sides"]),
+					int(v.get("heal_bonus", 0))]))
+			if v.has("buff"):
+				_apply_buff(caster, c, v)
+		return {}
+	if not (v.has("dice_count") or v.has("conditions") or v.has("buff")):
 		return {}
 	var notation := "%dd%d" % [int(v.get("dice_count", 0)), int(v.get("dice_sides", 6))]
 	var dc := int(v.get("save_dc", caster.save_dc))
@@ -681,6 +752,8 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		for c in combatants:
 			if c == caster or not c.conscious() or not (c.pos in area):
 				continue
+			if v.get("spare_allies", false) and c.team == caster.team:
+				continue   # Spirit Guardians picks who it spares; here that is your side
 			_spell_hit(c, v, notation, dc, caster)
 			hit_any = true
 		_destroy_in_area(area)
@@ -767,6 +840,14 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 				hits += 1
 				total += d
 				_apply_damage(c, d, v.get("damage_type", ""))
+		if hits > 0 and (v.has("conditions") or v.has("buff")):
+			# Ray of Sickness: the rider needs its own save when the spell names one
+			if v.get("save", "") == "" or not _saving_throw(c, dc, v["save"], v.get("ignores_cover", false)):
+				for cond in v.get("conditions", []):
+					apply_condition(c, cond, caster, v.get("duration", "round"), v)
+					log.append("  %s is %s." % [c.cname, cond])
+				if v.has("buff"):
+					_apply_buff(caster, c, v)
 		return {"hit": hits > 0, "damage": total, "hits": hits}
 	var dmg := Dice.roll(rng, notation)
 	var saved := false
@@ -788,9 +869,74 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 		for cond in v.get("conditions", []):
 			apply_condition(c, cond, caster, v.get("duration", "round"), v)
 			log.append("  %s is %s." % [c.cname, cond])
+	if not saved and v.has("buff"):   # a `buff` is always authored: with no save it simply lands (Darkness)
+		_apply_buff(caster, c, v)
 	if dmg > 0:
 		_apply_damage(c, dmg, v.get("damage_type", ""))
 	return {"saved": saved, "damage": dmg}
+
+# Summon Beast and kin: a bestiary creature on the caster's side, in the free
+# hex nearest the caster, acting right after them for the rest of the fight
+# (or until concentration drops — it is held like a condition). Its `summon`
+# is {id, count?}: `id` a monsters.json id, scaled by nothing — the spell
+# picks a creature the slot pays for. The player drives it like a hero.
+# ponytail: one stat block per spell, no upcast scaling; add a per-level id
+# table if a 5th-level Summon Beast needs to be more than a wolf.
+func summon(caster, v: Dictionary):
+	var m: Dictionary = v["summon"]
+	var spot := _free_near(caster.pos)
+	if spot == Vector2i(-999, -999):
+		return null
+	var n := combatants.filter(func(c): return c.src_id == String(m["id"])).size() + 1
+	var c = load("res://core/encounter.gd").spawn(String(m["id"]), 1.0, caster.team, spot, n)   # load: encounter.gd preloads this file
+	if c == null:
+		return null
+	c.short = c.cname.replace(" %d" % n, "")   # the bar says "Dire Wolf", the log "Ilsa's Dire Wolf 1"
+	c.cname = "%s's %s" % [caster.cname.get_slice(" ", 0), c.cname]
+	combatants.append(c)
+	var at := order.find(caster)
+	order.insert(at + 1 if at >= 0 else order.size(), c)
+	begin_turn_for(c)
+	if v.get("concentration", false):
+		c.statuses["summoned"] = {"held_by": caster, "spell": String(v.get("spell", ""))}
+	return c
+
+func _free_near(origin: Vector2i) -> Vector2i:
+	var ring: Array = Hex.within(origin, 3).filter(func(p): return p != origin and p in board["hexes"] and passable(p) and _hex_free(p))
+	ring.sort_custom(func(a, b): return Hex.distance(origin, a) < Hex.distance(origin, b))
+	return ring[0] if not ring.is_empty() else Vector2i(-999, -999)
+
+# A spell's `buff` (data/effects/spells.json) on `who`: a statuses entry under
+# "spell:<id>" carrying the keys the resolver reads (ac, bonus_to_hit,
+# bonus_save, bonus_damage, resist, extra_action, speed_mult, no_attack, and
+# an `effects` dict of conditions.json-style adv/dis). Lives `rounds` rounds,
+# or while the caster concentrates. `condition` hangs a conditions.json id
+# beside it (Invisibility); `sticky` keeps that one through attacks (Greater).
+func _apply_buff(caster, who, v: Dictionary) -> void:
+	var b: Dictionary = v["buff"].duplicate(true)
+	var until: int = _tick() + int(v.get("rounds", 10)) * maxi(1, order.size())
+	if b.has("resist_random"):
+		var types: Array = b["resist_random"]
+		b["resist"] = [types[rng.roll_die(types.size()) - 1]]
+		b.erase("resist_random")
+		log.append("  %s: resistance to %s." % [who.cname, b["resist"][0]])
+	var held := {}
+	if v.get("concentration", false):
+		held = {"held_by": caster, "spell": String(v.get("spell", ""))}
+	if b.has("condition"):
+		var cond := String(b["condition"])
+		b.erase("condition")
+		var s := {"until_tick": until}
+		if b.get("sticky", false):
+			s["sticky"] = true
+		s.merge(held)
+		who.statuses[cond] = s
+		log.append("  %s is %s." % [who.cname, cond])
+	b.erase("sticky")
+	if not b.is_empty():
+		b["until_tick"] = until
+		b.merge(held)
+		who.statuses["spell:" + String(v.get("spell", v["id"]))] = b
 
 # --- conditions (data/effects/conditions.json) --------------------------
 #
@@ -805,6 +951,8 @@ func _cond_effects(c) -> Array:
 		var e: Dictionary = Effects.condition("unconscious" if id == "down" else id)
 		if e.is_empty():
 			e = ENGINE_CONDS.get(id, {})
+		if e.is_empty() and c.statuses[id] is Dictionary:
+			e = c.statuses[id].get("effects", {})   # Blur, Faerie Fire: a buff's own adv/dis
 		if e.is_empty():
 			continue
 		if e.has("per_level"):
@@ -890,6 +1038,12 @@ func _end_concentration(caster, why: String) -> void:
 			var s = c.statuses[id]
 			if s is Dictionary and s.get("held_by") == caster and s.get("spell", "") == held["spell"]:
 				c.statuses.erase(id)
+				if id == "summoned":
+					c.hp = 0
+					c.statuses["dead"] = true
+					order.erase(c)
+					log.append("  %s fades." % c.cname)
+					continue
 				log.append("  %s is no longer %s." % [c.cname, id])
 
 # A held condition the target can shake off: `when` is "end_turn" (its own
@@ -1283,7 +1437,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var r = Dice.d20(rng, mode)
 	var nat: int = r.nat
 	var insp: int = _consume_inspired(attacker)
-	var atk_bonus: int = int(opts.get("atk_bonus", attacker.atk_bonus)) + insp - _d20_penalty(attacker)
+	var atk_bonus: int = int(opts.get("atk_bonus", attacker.atk_bonus)) + insp - _d20_penalty(attacker) \
+		+ _buff_sum(attacker, "bonus_to_hit")
 	var total: int = nat + atk_bonus
 	var ac = effective_ac(target)
 	var crit: bool = nat >= attacker.crit_range
@@ -1309,6 +1464,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		out.damage = int(fire_reactions("hit_by_attack",
 			{"attacker": attacker, "target": target, "damage": out.damage})["damage"])
 	attacker.statuses.erase("hidden")
+	if not (attacker.statuses.get("invisible") is Dictionary and attacker.statuses["invisible"].get("sticky", false)):
+		attacker.statuses.erase("invisible")   # gone the moment you swing — unless it's Greater
 	attacker.statuses.erase("sapped")   # Sap is spent on the next roll, hit or miss
 	var vx = attacker.statuses.get("vex")
 	if vx is Dictionary and vx.get("target") == target:
@@ -1730,7 +1887,7 @@ func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false) -> bool:
 			log.append("%s can't resist — the %s save fails automatically." % [c.cname, ability.to_upper()])
 			return false
 		dis = dis or e.get("saves", {}).get(ability, "") == "dis"
-	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c) - _d20_penalty(c)
+	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c) - _d20_penalty(c) + _buff_sum(c, "bonus_save")
 	if is_cover(c.pos) and not ignore_cover:
 		bonus += 2
 	return Dice.d20(rng, Dice.combine(adv, dis)).nat + bonus >= dc

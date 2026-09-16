@@ -400,6 +400,7 @@ func _new_game(forced := 0) -> void:
 	sp["seed"] = _seed
 	result = {}
 	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS))   # sp["theme"] picks the board
+	cb.party = party   # the stash is the potion shelf (core/potions.gd)
 	# The one thing that makes a reaction stop the fight and ask. Installed only
 	# here, only for a player who is actually watching: with it unset the
 	# resolver auto-resolves reactions exactly as it always has, which is what
@@ -978,6 +979,8 @@ static func _verb_tooltip(h, v: Dictionary) -> String:
 			bits.append("%s %s" % [notation, v.get("damage_type", "damage")])
 	if int(v.get("rays", 1)) > 1:
 		bits.append("%d rays, each rolled to hit" % int(v["rays"]))
+	if v["kind"] == "drink":
+		bits.append(String(v.get("text", "")))
 	if int(v.get("targets", 1)) > 1:
 		bits.append("up to %d targets within 30 ft of each other" % int(v["targets"]))
 	if v.has("heal_count"):
@@ -1318,7 +1321,7 @@ func _refresh() -> void:
 	if cur and cur.team == "party" and cur.conscious() and _mode == "idle":
 		var hint := "    click a blue tile to move" if cur.econ["move_left"] > 0 else ""
 		var before = cb.order[(ci - 1 + n) % n]
-		var again := "    you act again after %s" % before.cname.split(" ")[0] if before != cur else ""
+		var again := "    you act again after %s" % before.short_name() if before != cur else ""
 		var res := _resources(cur)
 		_actor.text = "%s    AC %d    %s%s    %s%s%s" % [
 			"[b]%s[/b]" % cur.cname, cb.effective_ac(cur), _hp_bb(cur),
@@ -1382,7 +1385,7 @@ func _build_order_strip() -> void:
 		g.add_theme_color_override("font_color", tint)
 		tv.add_child(g)
 		var nm := Label.new()
-		nm.text = "%s (%d)" % [c.cname.split(" ")[0], c.init_roll]
+		nm.text = "%s (%d)" % [c.short_name(), c.init_roll]
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		nm.add_theme_font_size_override("font_size", int(Icons.FS_SMALL * u))
 		nm.add_theme_color_override("font_color", tint if c == cb.current() else Icons.COL_BODY)

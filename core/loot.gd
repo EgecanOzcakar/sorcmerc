@@ -110,12 +110,12 @@ const UNDROPPABLE_RARITIES := ["artifact"]
 # killing a CR 1/8 bandit is not a healing potion, it is a purse. One band up it
 # is worth roughly what the thing that was carrying it was worth.
 const CONSUMABLE_BANDS := {
-	"common":    ["potion-of-climbing"],
+	"common":    ["scroll-of-identification"],
 	"uncommon":  ["potions-of-healing", "potion-of-animal-friendship", "potion-of-growth",
-		"potion-of-resistance", "potion-of-water-breathing", "scroll-of-identification"],
+		"potion-of-resistance"],
 	"rare":      ["potion-of-heroism", "potion-of-invisibility", "potion-of-mind-reading",
 		"potion-of-gaseous-form", "potion-of-clairvoyance"],
-	"very-rare": ["potion-of-flying", "potion-of-speed"],
+	"very-rare": ["potion-of-speed"],
 }
 
 # Of the rolls that hit: how they split between the three kinds of thing.

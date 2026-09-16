@@ -26,6 +26,7 @@ const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const Potions = preload("res://core/potions.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
 const Rumors = preload("res://core/rumors.gd")
 const Site = preload("res://core/site.gd")
@@ -380,6 +381,9 @@ func _process(delta: float) -> void:
 	# O7: the clock's own advance (0 while paused) both drains O6's queued opinion
 	# deltas off the settlements and runs the slow drift back toward neutral.
 	var dt := world.tick(delta)
+	party.world_now = world.clock.elapsed
+	for ch in party.roster:
+		Potions.expire(ch, party.world_now)
 	var p0 := world.player()
 	if p0 != null:
 		world.reveal(p0.position)   # T9x fog of war: permanent once seen
@@ -404,7 +408,7 @@ func _process(delta: float) -> void:
 	_check_travel()
 	_check_region()
 	if _camp_btn != null:
-		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0
+		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0 or party.safe_camp
 	_layout_minimap()   # this Control resizes with the window; the inset follows the corner
 	if _clock_lbl != null:
 		_clock_lbl.text = "Day %d  %02d:%02d" % [
@@ -1031,6 +1035,9 @@ func _run_combat(spec: Dictionary, difficulty: String,
 
 
 func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dictionary:
+	if party.scouted_next:   # Potion of Clairvoyance, spent on this fight
+		scouted_ahead = true
+		party.scouted_next = false
 	var threat: Dictionary = WorldThreat.assess(party)
 	var result: Dictionary = await _run_combat(encounter_spec(foe),
 		String(threat["difficulty"]), scouted_ahead, forced_ambush)
@@ -1956,7 +1963,11 @@ func _steal() -> void:
 # they silently reset, re-enabling an action that was supposed to be spent
 # for the price of pressing a different button.
 func _carry_visit_flags(from: Dictionary, to: Dictionary) -> void:
-	for k in ["stolen", "persuaded", "investigated", "haggled", "sour"]:
+	# Both sides added a flag here, and the comment above is exactly why both have
+	# to stay: "worked" is this branch's healer shift, "sour" is the moods work's
+	# soured face. Either one dropped from this list resets itself the next time
+	# anything replaces _visit.
+	for k in ["stolen", "persuaded", "investigated", "haggled", "worked", "sour"]:
 		to[k] = from.get(k, false)
 
 func _persuade() -> void:
@@ -1975,6 +1986,17 @@ func _persuade() -> void:
 # T9x: haggling — the mirror of persuade(), for a market that's already
 # open. One attempt per visit; moves this visit's prices for better or
 # worse depending on the roll, doesn't touch the underlying faction opinion.
+func _work_healer() -> void:
+	if _visit.get("worked", false):
+		return
+	var r: Dictionary = Visit.work_healer(_visit["settlement"], party)
+	_visit["worked"] = true
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("buy")
+	_autosave()
+	_build_visit_panel()
+	_say(String(r.get("text", "The healer has no work for you.")))
+
 func _haggle() -> void:
 	if _visit.get("haggled", false):
 		_say("They won't budge on price again today.")
@@ -2083,18 +2105,25 @@ func _make_camp() -> void:
 	if not Visit.can_long_rest(party, world):
 		_camp_msg.text = "The party isn't tired enough for another long rest yet."
 		return
-	if party.stash_count(WorldCamp.CAMP_KIT_ITEM) < 1:
+	var roped: bool = party.safe_camp   # Rope Trick (core/road_spells.gd): the kit is the spell
+	if not roped and party.stash_count(WorldCamp.CAMP_KIT_ITEM) < 1:
 		return
-	party.stash_remove(WorldCamp.CAMP_KIT_ITEM, 1)
+	if roped:
+		party.safe_camp = false
+	else:
+		party.stash_remove(WorldCamp.CAMP_KIT_ITEM, 1)
 	var p := world.player()
 	var rng := RNG.new(WorldCamp.camp_seed(world.clock.elapsed, p.position))
-	if not WorldCamp.ambush_roll(rng):
+	if roped or not WorldCamp.ambush_roll(rng):
 		Visit.rest(party, world, "long-rest")
 		Sound.play_sfx("rest")
 		var trance: Dictionary = Trance.apply_rest_bonus(party, world, p.position)
 		_camp_msg.text = "The camp holds through the night. Eight hours pass.%s" % _trance_note(trance)
 		return
 	var watch: Dictionary = WorldCamp.watch_check(party, rng)
+	if party.alarm_set:   # Alarm: the ward wakes them whatever the watch rolled
+		party.alarm_set = false
+		watch = {"ok": true, "cname": "The alarm", "skill": "ward", "nat": 20, "bonus": 0, "dc": 0, "char_id": "alarm"}
 	var foe := World.RoamingParty.new("camp-ambush-%d" % int(world.clock.elapsed), p.position, WorldCamp.AMBUSH_FACTION)
 	# T9x: name the check and the roll, not just the outcome — same
 	# "Skill nat+bonus vs DC" shape every other overworld check in this file uses.
@@ -2363,6 +2392,10 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		if service == "healer":
 			_trade_row(rows, "Patch up the whole party — %d gp (no rest, no waiting)" % Visit.HEAL_COST,
 				"Heal", _heal)
+			if Visit.can_work_healer(party):
+				var worked: bool = _visit.get("worked", false)
+				_trade_row(rows, "Work a shift in the ward — your restoration spell opens the door, Medicine sets the wage",
+					"Done" if worked else "Work", _work_healer, worked)
 		elif service == "librarian":
 			var mystery: Array = party.unidentified()
 			if mystery.is_empty():
@@ -2620,7 +2653,7 @@ func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 # and with it the whole settlement panel — out past the edge of the screen. 330
 # stays as the column width short rows line up on; it is a floor now rather
 # than the only width the row can have.
-func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable) -> void:
+func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable, disabled := false) -> void:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var lbl := Label.new()
@@ -2632,6 +2665,7 @@ func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Cal
 	row.add_child(lbl)
 	var btn := Button.new()
 	btn.text = action
+	btn.disabled = disabled
 	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.pressed.connect(on_press)
 	row.add_child(btn)

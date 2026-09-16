@@ -10,6 +10,7 @@ extends Control
 
 const Character = preload("res://core/character.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Effects = preload("res://core/rules/effects.gd")
 const Save = preload("res://core/character_save.gd")
 const Presets = preload("res://core/presets.gd")
 const Icons = preload("res://core/ui_icons.gd")
@@ -86,7 +87,7 @@ static func options_for(p: Dictionary, sheet = null) -> Array:
 				if not i in p.get("already_chosen", []):
 					ids.append(i)
 		"spell-choice":
-			ids = Catalog.spell_list(p["spellList"], int(p["spellLevel"]))
+			ids = Effects.pick_pool(p["spellList"], int(p["spellLevel"]))
 		"feature-choice":
 			for o in p["options"]:
 				ids.append(o["optionId"])
@@ -867,6 +868,8 @@ func _choice_widget(p: Dictionary) -> void:
 	var picks := picks_from_decision(p, ch.choices.get(p["key"]))
 	var n := pick_count(p)
 	var src: Dictionary = p["source"]
+	if p["type"] == "spell-choice":   # a pool shorter than the grant asks for all of it
+		n = mini(n, Effects.pick_pool(p["spellList"], int(p["spellLevel"])).size())
 	_head("%s%s — pick %d  (%d chosen)" % ["✓ " if p.get("decided", false) else "",
 		humanize(p["type"]).replace(" choice", ""), n, picks.size()])
 	_note("from %s %s%s" % [src["origin"], humanize(src["id"]),

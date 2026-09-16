@@ -202,6 +202,8 @@ static func _party_dict(party) -> Dictionary:
 		"last_long_rest_at": party.last_long_rest_at,
 		"overworld_figure": party.overworld_figure,
 		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
+		"road": {"scouted_next": party.scouted_next, "swift_until": party.swift_until,
+			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set},   # potions / road spells
 	}
 
 static func _party_from(pd: Dictionary):
@@ -219,6 +221,11 @@ static func _party_from(pd: Dictionary):
 	party.last_long_rest_at = float(pd.get("last_long_rest_at", -1e12))
 	party.overworld_figure = String(pd.get("overworld_figure", ""))
 	party.travel_orders = pd.get("travel_orders", {}).duplicate(true)   # D3; an old save marches at the default
+	var road: Dictionary = pd.get("road", {})
+	party.scouted_next = bool(road.get("scouted_next", false))
+	party.swift_until = float(road.get("swift_until", 0.0))
+	party.safe_camp = bool(road.get("safe_camp", false))
+	party.alarm_set = bool(road.get("alarm_set", false))
 	return party
 
 # JSON gives every number back as a float; quest counters are compared as ints.

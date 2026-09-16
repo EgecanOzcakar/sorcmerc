@@ -439,7 +439,9 @@ static func skill_icon(v: Dictionary) -> Texture2D:
 		else String(v.get("id", ""))
 	id = id.get_slice("@", 0)
 	var tex: Texture2D = null
-	if sid != "":
+	if v.has("potion"):   # a Drink button wears its bottle
+		tex = item_art(String(v["potion"]))
+	elif sid != "":
 		tex = _icon("%s/skills/%s.svg" % [ICON_ROOT, sid])
 		if tex == null:
 			tex = _icon("%s/schools/%s.svg" % [ICON_ROOT, spell_school(sid)])

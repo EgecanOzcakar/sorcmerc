@@ -48,6 +48,7 @@ func _init() -> void:
 	_resources()
 	_pact()
 	_equip_legendary()
+	_drink()
 	_shift_compare()
 	print("test_profile: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -215,6 +216,21 @@ func _pact() -> void:
 	check(not p._fields.has("pool_slot:1"), "warlock has no ordinary slot rows")
 	p.queue_free()
 
+# A potion in the stash is a Drink tile, not an Equip one; drinking heals.
+func _drink() -> void:
+	var pike = Presets.pike()
+	var pty = Party.new()
+	pty.add_member(pike)
+	pty.stash_add("potions-of-healing")
+	pike.hp_current = 1
+	var p = _screen(pike)
+	p.set_party(pty)
+	check(p._fields.has("drink_btn_potions-of-healing") and not p._fields.has("equip_btn_potions-of-healing"),
+		"a potion tile drinks, never equips")
+	check(p._fields["item_potions-of-healing"].tooltip_text.ends_with("Click: drink"), "...and says so")
+	p.drink("potions-of-healing")
+	check(pike.hp_current >= 5 and pty.stash_count("potions-of-healing") == 0, "drinking from the stash heals and spends it")
+	check(not p._fields.has("item_potions-of-healing"), "the empty bottle is gone from the screen")
 # Shift on a stash tile reads the item against what every active member wears.
 func _shift_compare() -> void:
 	var pike = Presets.pike()
