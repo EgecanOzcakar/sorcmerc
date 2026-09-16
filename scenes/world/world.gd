@@ -157,6 +157,7 @@ var _visit_log: Label = null
 var _left: Object = null         # the settlement just left; no re-entry until out of range
 var _party_overlay: Control = null   # T3's party/profile/inventory screen, full-screen
 var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.active/describe
+var _inventory_panel: Control = null # the shared pack, as tiles — see _toggle_inventory
 var _menu_panel: Control = null      # the Esc pause menu, or null — see _toggle_menu()
 var _spoils_panel: Control = null    # issue #30's after-action page, or null
 var _delve_haul: Dictionary = {}     # what the delve in progress has paid so far; {} outside one
@@ -410,6 +411,10 @@ func _build_hud() -> void:
 	party_btn.text = "Party"
 	party_btn.pressed.connect(_open_party)
 	bar.add_child(party_btn)
+	var pack_btn := Button.new()
+	pack_btn.text = "Pack"
+	pack_btn.pressed.connect(_toggle_inventory)
+	bar.add_child(pack_btn)
 	var quests_btn := Button.new()
 	quests_btn.text = "Quests"
 	quests_btn.pressed.connect(_toggle_quests)
@@ -466,7 +471,7 @@ func _build_hud() -> void:
 	_camp_btn.pressed.connect(_make_camp)
 	bar.add_child(_camp_btn)
 	var hint := Label.new()
-	hint.text = "Click marches there.  Right-drag pans, wheel zooms.  Space pauses, 1/2/4/8 set the speed, P the party, Esc the menu."
+	hint.text = "Click marches there.  Right-drag pans, wheel zooms.  Space pauses, 1/2/4/8 set the speed, P the party, I the pack, Esc the menu."
 	hint.theme_type_variation = "Dim"
 	bar.add_child(hint)
 	_region_msg = Label.new()
@@ -545,7 +550,7 @@ func _leave_world() -> void:
 # panel desynced the label and set the map running behind it. M7's beat card
 # and journal own it the same way, for the same reason.
 func _toggle_pause() -> void:
-	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
 			or _story_panel != null or story_card != null or _menu_panel != null \
 			or _spoils_panel != null:
 		return
@@ -556,7 +561,7 @@ func _toggle_pause() -> void:
 	_pause_btn.text = "Resume" if world.clock.is_paused() else "Pause"
 
 func _cycle_speed() -> void:
-	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
 			or _story_panel != null or story_card != null or _menu_panel != null \
 			or _spoils_panel != null:
 		return
@@ -564,7 +569,7 @@ func _cycle_speed() -> void:
 	_speed_btn.text = "%dx" % int(world.clock.speed)   # every WorldClock.SPEEDS entry is a whole number
 
 func _set_speed(mult: float) -> void:
-	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
 			or _story_panel != null or story_card != null or _menu_panel != null \
 			or _spoils_panel != null:
 		return
@@ -589,7 +594,7 @@ func _toggle_menu() -> void:
 	# so reaching here means nothing else is up.)
 	if _combat != null or not _visit.is_empty() or _site != null \
 			or _event_card != null or _approach_card != null or story_card != null \
-			or _party_overlay != null or _quest_panel != null or _story_panel != null \
+			or _party_overlay != null or _quest_panel != null or _inventory_panel != null or _story_panel != null \
 			or _spoils_panel != null:
 		return
 	world.clock.pause()
@@ -776,6 +781,73 @@ func _build_quest_panel() -> void:
 	close.pressed.connect(_close_quests)
 	box.add_child(close)
 
+# --- the pack -------------------------------------------------------------
+#
+# The shared stash as the same tiles the market shows — art, rarity colour,
+# the hover card, Shift to compare with what the party wears. View only: gear
+# is equipped and potions drunk from a character's profile, which is where the
+# body that wears or drinks it is.
+func _toggle_inventory() -> void:
+	if _inventory_panel != null:
+		_close_inventory()
+		return
+	if _combat != null or not _visit.is_empty() or _party_overlay != null \
+			or _quest_panel != null or _story_panel != null or story_card != null:
+		return
+	world.clock.pause()
+	_build_inventory_panel()
+
+func _close_inventory() -> void:
+	if _inventory_panel != null:
+		_inventory_panel.queue_free()
+		_inventory_panel = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+func _build_inventory_panel() -> void:
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centre)
+	_inventory_panel = centre
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.custom_minimum_size = Vector2(520, 320)
+	centre.add_child(panel)
+	var box := VBoxContainer.new()
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "The pack"
+	title.theme_type_variation = "Head"
+	box.add_child(title)
+	var purse := Label.new()
+	purse.text = "%d gp.  Equip and drink from a character's profile (P, then View)." % party.gold
+	purse.theme_type_variation = "Dim"
+	box.add_child(purse)
+
+	var scroll := _scroll_column(Vector2(500, 240))
+	box.add_child(scroll)
+	var rows: VBoxContainer = scroll.get_child(0)
+	if party.stash.is_empty():
+		_note(rows, "Nothing in the pack.")
+	else:
+		var grid := _item_grid(rows)
+		for entry in party.stash:
+			var id := String(entry["item_id"])
+			var kd: Array = Icons.item_def(id)
+			var known: bool = Party.is_identified(entry)
+			var tip: String = ("Unidentified item (%s)" % Icons.rarity_of(id)) if not known \
+				else Icons.item_tooltip(id, kd[1], kd[0])
+			var qty := int(entry["quantity"])
+			grid.add_child(Icons.item_tile(id, tip, ("×%d" % qty) if qty > 1 else "",
+				Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if known else ""))
+
+	var close := Button.new()
+	close.text = "Close"
+	close.pressed.connect(_close_inventory)
+	box.add_child(close)
+
 # A scrolling column that wraps instead of growing sideways. Issue #28: a
 # ScrollContainer that allows horizontal scrolling hands its child the child's
 # own MINIMUM width, and an autowrapping Label's minimum width is one pixel —
@@ -811,7 +883,7 @@ func _check_story() -> void:
 	# already has: a fight, a market, the party screen, the quest log, a road
 	# event, a band asking to be dealt with.
 	if _combat != null or not _visit.is_empty() or _party_overlay != null \
-			or _quest_panel != null or _story_panel != null or _menu_panel != null \
+			or _quest_panel != null or _inventory_panel != null or _story_panel != null or _menu_panel != null \
 			or _spoils_panel != null \
 			or _event_card != null or _approach_card != null or _site_screen != null:
 		return
@@ -856,7 +928,7 @@ func _toggle_story() -> void:
 		_close_story()
 		return
 	if story == null or _combat != null or not _visit.is_empty() \
-			or _party_overlay != null or _quest_panel != null or story_card != null:
+			or _party_overlay != null or _quest_panel != null or _inventory_panel != null or story_card != null:
 		return
 	world.clock.pause()
 	_build_story_panel()
@@ -1821,6 +1893,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 					_close_party()
 				elif _quest_panel != null:
 					_close_quests()
+				elif _inventory_panel != null:
+					_close_inventory()
 				elif _story_panel != null:
 					_close_story()
 				else:
@@ -1841,6 +1915,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 					_close_party()
 				else:
 					_open_party()
+			KEY_I: _toggle_inventory()
 			_: return
 		accept_event()
 		return
