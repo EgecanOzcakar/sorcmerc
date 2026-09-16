@@ -324,3 +324,288 @@ godot --headless --path . -s tests/sweep_party_opinion.gd    # §3 and §6, ~1 m
 
 Variants are the `VARIANTS` table at the top of the sweep; the constants
 are the top of `core/party_opinion.gd`.
+
+---
+
+# Appendix A — what Darkest Dungeon and its neighbours do, and how much of it transfers
+
+Added 2026-09-16, after the spike above, in answer to two questions: how do
+the games that are known for opinionated party members actually model them,
+and what do they do about **uncontrollable actions** — the part §6 above does
+not touch at all, because every effect it measured is a modifier the player
+still steers around.
+
+This appendix is research plus a recommendation. It changes no code.
+
+## A1. Darkest Dungeon 1 — stress, not relationships
+
+DD1 has **no relationships between heroes at all.** The thing people remember
+as "my heroes hate each other" is one hero's *Stress* meter plus the barks it
+produces, which land on whoever is nearby. Worth saying plainly, because it is
+the most-cited reference for a feature it does not have.
+
+The loop: stress 0–100 per hero. Crossing 100 forces a **Resolve Test** —
+**25% Virtue, 75% Affliction** by default, shiftable with trinkets. At 200 a
+hero has a heart attack: HP to 0 and onto Death's Door, and a second one while
+already there kills them.
+
+An Affliction is where the control loss lives. Each of the nine has a chance,
+**rolled at the start of the afflicted hero's turn**, to "act out" instead of
+doing what the player asked, and a flat 33% to **refuse** specific commands:
+
+| Affliction | act-out chance | what the act-out can be | refuses |
+|---|---|---|---|
+| Fearful | 31.5% | stress bark, move back, pass the turn | move (33%), camping skill (33%) |
+| Paranoid | 31.25% | stress bark, move back, random skill, **attack an ally (3.1%)** | retreat, move, healing, buffs, items (33%); eating (33%) |
+| Selfish | 33.3% | stress bark, move back, pass, random skill | camping skill (33%); steals from treasure curios (50%) |
+| Masochistic | 33.3% | stress bark, move forward, **self-attack**, self-mark | retreat, move, healing, items, camping (33%) |
+| Abusive | 29.4% | stress bark (23.5%), **attack an ally (5.8%)** | move, camping skill (33%) |
+| Hopeless | 35% | bark, move, pass, random skill, self-attack, self-mark | retreat, buffs, healing, items, camping (33%) |
+| Irrational | 33.3% | all of the above, plus **7.5% to touch any curio** | retreat, move, buffs, healing, items, camping (33%) |
+| Rapturous | 41.67% | bark, move forward, random skill, **attack an ally**, self-attack | retreat, move, camping (33%); buffs/items (10%) |
+| Refracted | 39% | bark, move, pass, attack ally (2.4%), self-mark, **random item use** | healing, buffs, camping (33%); eating (33%) |
+
+Three things about that table matter more than the numbers:
+
+1. **Refusal is the common case; hitting your own people is the rare one.**
+   Every affliction refuses something at 33%, and the highest chance of
+   attacking an ally on any given turn is 8.3% (Rapturous). The felt
+   experience is "my healer will not accept a heal", not "my fighter murdered
+   the cleric".
+2. **The act-out is rolled per turn and stated in the log.** The player is
+   told which hero acted out and what they did. It is a visible dice roll
+   with a published table behind it, which is why it reads as the game being
+   hard rather than the game cheating.
+3. **The barks are the real damage.** An afflicted hero's comments deal **6
+   stress** to the whole party (when they are hit, or on an act-out) or to a
+   single ally (when that ally attacks or is attacked). That is the spiral:
+   one afflicted hero manufactures the stress that afflicts the next one.
+   DD1's system is a *contagion* model, not an opinion model.
+
+Virtue is the mirror, and it is worth copying the symmetry: it drops the hero
+to 45 stress, reduces the whole party's stress, and act-outs become *good*
+unprompted actions — Courageous can spend a turn cutting 25 stress off
+everyone, Stalwart can take a hit meant for an adjacent ally and heals 5
+stress off an ally on every miss, Vigorous heals itself 5 HP a turn. So the
+same machinery that steals a turn also *gives* turns away, and the player
+meets both.
+
+The other half of DD1 is **Quirks**, and the cheapest good idea in either game
+is here: a hero with a locked quirk **cannot use the town building the player
+wants**. An alcoholic refuses the Abbey and must be sent to the Tavern. That
+is control loss with a completely different feel — it happens in a menu, with
+the clock stopped, where the player can plan around it, and it costs money
+rather than a life.
+
+## A2. Darkest Dungeon 2 — the actual relationship system
+
+DD2 is the one with pair relationships, and it is the closest published thing
+to what §2 above proposes. **Affinity is 0–20 per pair, starting at 9**, and
+it is *symmetric* — one number for the pair, which is the same call this spike
+made. Bands and the chance that a band resolves into a named relationship:
+
+| affinity | band | resolves to |
+|---|---|---|
+| 0 | zero | — |
+| 1–4 | very unfriendly | 90% negative |
+| 5–8 | unfriendly | 65% negative |
+| 9–13 | neutral | 5% negative / 5% positive |
+| 14–16 | friendly | 33% positive |
+| 17–19 | very friendly | 65% positive |
+| 20 | max | 90% positive |
+
+Note the shape: the meter does not *become* a relationship at a threshold, it
+becomes a **chance** of one. A pair sitting at 18 is probably going to bond
+and might not. That is a deliberately softer contract than this spike's
+`band()`, which is a pure function of the score.
+
+The named relationships and what each actually does:
+
+| relationship | standing effect on the partner | act-outs |
+|---|---|---|
+| **Respectful** (+) | +Strength, +Dodge | follow-up attack, counterattack when the partner is hit, stress-healing bark |
+| **Hopeful** (+) | −1 stress per turn | big stat buff to the partner, −5 stress and removes Horror, stress-healing bark |
+| **Amorous** (+) | heals 10% HP, clears Bleed/Blight/Burn | **intercepts an attack aimed at the partner**, heals the partner 50% max HP and clears DoTs, stress-healing bark |
+| **Suspicious** (−) | +Taunt, +Vulnerable | stress-dealing bark |
+| **Envious** (−) | +1 stress | stress-dealing bark |
+| **Hateful** (−) | +Vulnerable | **chance to hit the partner for damage**, stress-dealing bark |
+| **Resentful** (−) | +Blind, +Weak | stress-dealing bark |
+
+And the mechanism that is more interesting than any of those: a negative
+relationship **curses a skill**. A cursed skill is force-equipped to the
+hero's bar, cannot be removed by the player, carries a debuff, and has
+**triple priority over mastered skills**. It does not seize a turn. It
+narrows the menu the player chooses from, permanently, until the
+relationship changes.
+
+What moves affinity, which is the part this spike's §3 should be compared
+against — note how much of it is *combat behaviour* rather than events:
+
+**+1 each** (doubled on a 10% crit chance): buffing an ally, healing a
+low-HP or Death's Door ally, cutting an ally's stress, guarding a low-HP
+ally, moving while calm, attacking the same enemy as an ally on consecutive
+turns, attacking an enemy an ally debuffed or comboed, attacking an enemy
+that just hit an ally, agreeing with an ally at a narrative node, and Inn
+items (Candles and Chocolate up to +3).
+
+**−1 to −2**: disagreeing at a node, healing or guarding *yourself* while
+low, cutting *your own* stress while high, moving while stressed, random
+combat and road events, and a failed Inn item (25–33% of them fail).
+
+That negative list is the sharpest idea in DD2: **selfishness is the thing
+that costs you affinity.** Heal yourself instead of the man bleeding out and
+the party notices. It is measured off actions the player was going to take
+anyway, so the system reads the player's play rather than asking them
+questions.
+
+Stress in DD2 is 0–10. At 10 in combat there is an **80% chance of a
+Meltdown**: HP down to 10%, −15% Deathblow resistance until the next Inn,
++40% stress resistance for 3 turns, a 40% chance of a new negative quirk,
+and **three negative affinity hits with every party member at once**. So
+DD2 wires stress into relationships explicitly: the hero who breaks takes
+the whole party's opinion of them down with it.
+
+## A3. Comparison set
+
+Left for the second pass — a parallel survey of Wildermyth, RimWorld, Battle
+Brothers, XCOM 2's soldier bonds, Fire Emblem supports and Jagged Alliance 2
+was in flight when this section was written. The DD material above is what
+decides A4 either way.
+
+## A4. What transfers to sorcmerc, and what must not
+
+sorcmerc is not Darkest Dungeon, and the difference is the one that decides
+this entire question: **a DD hero is a resource and a sorcmerc character is
+an investment.** DD1 hands you a fresh stagecoach of heroes every week and
+the game is *about* spending them; a hero lost to an affliction spiral is
+the content working. A sorcmerc character was built by the player in
+`scenes/creator/creator.gd` across a dozen 5e choices, banks its own XP,
+levels, carries gear, and survives runs — and `core/progression.gd` spends
+its lifetime XP on unlocking species and classes. Taking the turn away from
+*that* character is a far bigger insult than taking one away from Reynauld.
+
+The second difference is the brief. `docs/brief.md`: *"Reading the log alone,
+a 5e-literate person can reconstruct why they won or lost — every hit/miss
+traces to a visible number."* A 5.8% unannounced roll at the top of a turn
+that makes a character swing at their own cleric does not trace to a visible
+number. **But 5e already has the canonical mechanism for control loss, and
+it is a saving throw** — which is a visible number, published DC, rolled in
+the open. That is the translation this game can take: *not* "8.3% chance to
+act out", but *"Vera, WIS save 12+2 vs DC 13 — fails. She will not take an
+order from Pike this round."*
+
+### The engine already has every primitive
+
+This is the finding that makes the rest cheap. `data/effects/conditions.json`
+and `core/combat.gd`'s `apply_condition()` already express all four DD
+act-out categories as 5e conditions, tested and shipping:
+
+| DD behaviour | sorcmerc equivalent, already implemented |
+|---|---|
+| passes the turn / refuses to act | `incapacitated` — `no_action`, `no_bonus`, `no_reaction` |
+| refuses to attack the target you picked | `charmed` — `cannot_target_source`, and `resolve_attack` already returns `{"error": "charmed"}` |
+| moves back / will not close | `frightened` — `cannot_approach_source`, already honoured in `move_field()` |
+| will not move at all | `grappled` / `restrained` — `speed: 0` |
+| affliction stat penalty | `exhaustion` — `d20_penalty`, `speed_penalty_ft` |
+| DD2's Vulnerable / Weak / Blind | the `attacks_against` / `own_attacks` adv-dis vocabulary, and `blinded` |
+
+And the signature is already the right shape for a *pair*:
+`apply_condition(target, cond, source, duration, v)` stores `source` for
+exactly the two conditions that need to know *who* — which is what
+"frightened **of Pike**" and "charmed **by Vera**" require, and a
+relationship always has an other end. `duration: "round"` gives a one-turn
+effect; `held_by` + `repeat_save` + `dc` gives "save at the end of your turn
+to shake it off". A relationship act-out needs **no new engine machinery at
+all** — it is one `apply_condition` call with the other member as the source.
+
+One more existing path worth naming: `core/ai.gd`'s `take_turn()` already
+routes a party member to `_party_auto()`, and `combat.gd`'s `skips_turn()`
+already exists for surprise and ambush rounds. So "this member acts on their
+own this round" and "this member loses their turn" are both one call to
+tested code. If control loss is ever wanted, it is hours, not days. That is
+an argument for deciding it on design grounds rather than cost.
+
+### Recommended, in order
+
+1. **Copy DD2's affinity inputs, not its act-outs.** The single best idea in
+   either game is that **affinity is measured off combat behaviour the player
+   was going to choose anyway** — buffing, healing the man who is actually
+   dying, focusing the same enemy, and losing points for treating yourself
+   first. §3 above has only four sources and two of them are events; DD2 has
+   nine, all of them free reads on actions `combat.gd` already resolves.
+   Concretely: `act_help` on an ally, a heal aimed at the *lowest* HP ally
+   rather than yourself, two members attacking the same foe in consecutive
+   turns, and a heal or buff a member spends on themselves while an ally is
+   down. That is five hooks in functions this spike already touches, and it
+   makes the score a reading of how the player plays rather than a tally of
+   things that happened to them.
+2. **Take the cursed-skill idea, not the stolen turn.** Narrowing the menu is
+   legible and survivable; seizing a turn is neither. The sorcmerc version is
+   a rival pair losing access to the *cooperative* verbs with each other:
+   `act_help` on a rival fails (or is not offered), a heal aimed at a rival
+   comes at a cost, and `OFFERABLE`'s `ally_buff` skips them. The button is
+   visibly greyed with a reason on the tooltip, which is the whole difference
+   between a restriction and a betrayal.
+3. **Put the real control loss in town and at camp, where DD1's quirks put
+   it.** This is the recommendation I would actually ship, and it is almost
+   free. `core/settlement_visit.gd` already prices an inn per settlement
+   (`INN_COST`) and rolls Persuasion, Investigation and Sleight of Hand
+   checks with a party-picked roller; `core/travel.gd` already asks the
+   player to name a scout and a watch. So: rivals will not share a room, so
+   the inn costs more for them; lovers insist on the same watch, so naming
+   one of them scout and the other watch is refused; a feuding pair cannot
+   both be named to the same job. Nothing is lost mid-fight, the clock is
+   stopped, the player can plan around it, and it costs coin and convenience
+   rather than a character. It is the DD1 alcoholic-at-the-Abbey mechanic,
+   which nobody else copies and which fits this game's existing menus exactly.
+4. **If a combat act-out is ever wanted, gate it behind a saving throw and
+   nothing else.** One shape, at the extreme band only (rivals at or past
+   -75, say, not the -40 band): at the top of their turn, a member adjacent
+   to someone they hate makes a Wisdom save against a published DC; on a
+   failure they take `frightened` or `charmed` sourced at that rival for one
+   round, which the engine already enforces and the log already narrates.
+   Never an unannounced roll, never friendly-fire damage, and never at a band
+   the player was not warned about. DD's 8.3% ally attack is the one thing in
+   this research I would not port at any size.
+5. **Copy the symmetry, which DD1 gets right and most imitators drop.** The
+   same machinery that costs a turn should sometimes give one. §6's rally is
+   already this shape; DD2's Amorous interception (taking a hit aimed at your
+   partner) is the other half, and the precedent for a reaction that eats
+   damage is `rogue-uncanny-dodge` in `data/effects/features.json` — a
+   `kind: reaction` on the `hit_by_attack` trigger with `halve_damage`, which
+   `combat.gd`'s `_react()` already resolves with no prompt. (The Fighter's
+   Interception style is *not* the precedent: `data/fighting-styles.json`
+   grants `fighting-style-interception` but no effects entry authors it, so it
+   currently does nothing — which is why `Presets.vera` can pick it to keep
+   her AC at the authored 18.)
+
+### Not recommended
+
+- **A stress meter.** DD's afflictions hang off stress, and adding a second
+  resource with its own threshold, its own UI and its own spiral to a game
+  that already tracks HP, slots, pools, exhaustion and 15 conditions buys a
+  worse version of exhaustion, which is already in the engine and already
+  5e-legal.
+- **Contagion.** DD1's 6-stress barks are how one bad hero ruins four. In a
+  four-member party of the player's own hand-built characters this reads as
+  the game punishing you twice for one bad roll.
+- **Making a relationship a chance of a relationship.** DD2's band-to-named
+  roll (90/65/33/5) is there to keep a roguelike run surprising. sorcmerc's
+  relationships persist across runs and have to be *plannable*, so `band()`
+  staying a pure function of the score is the right call.
+- **Anything that can kill a character.** DD1's affliction path ends in a
+  heart attack. The road-event invariant this project already holds — nothing
+  rolled between towns may drop anybody (`core/travel.gd`'s `_hp_toll`) — is
+  the right precedent, and a relationship should respect it too.
+
+## A5. Sources
+
+Darkest Dungeon 1: [Affliction](https://darkestdungeon.wiki.gg/wiki/Affliction),
+[Stress](https://darkestdungeon.wiki.gg/wiki/Stress_(Darkest_Dungeon)),
+[Virtue](https://darkestdungeon.wiki.gg/wiki/Virtue).
+Darkest Dungeon 2: [Relationships](https://darkestdungeon.wiki.gg/wiki/Relationships),
+[Stress](https://darkestdungeon.wiki.gg/wiki/Stress_(Darkest_Dungeon_II)),
+[Affinity System](https://darkestdungeon2.wiki.fextralife.com/Affinity_System).
+
+Percentages are as those pages state them and were not verified against the
+games' own data files.
