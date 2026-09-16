@@ -87,10 +87,13 @@ func _ready() -> void:
 	lang_row.add_child(lang_lbl)
 	var lang := OptionButton.new()
 	lang.name = "LanguagePicker"
+	# Selected on the language actually in force, not on what the file says:
+	# SORCMERC_LANG overrides the setting, and a picker that disagreed with the
+	# screen around it would be lying about which one won.
 	for l in Loc.LANGS:
 		lang.add_item(String(l["label"]))
 		lang.set_item_metadata(lang.item_count - 1, String(l["id"]))
-		if l["id"] == _s.language:
+		if l["id"] == Loc.lang():
 			lang.select(lang.item_count - 1)
 	lang.item_selected.connect(func(i: int):
 		_s.language = String(lang.get_item_metadata(i))

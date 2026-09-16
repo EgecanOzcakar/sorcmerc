@@ -335,5 +335,21 @@
   "subclass": "alt sınıf",
   "feat": "erdem",
   "lineage": "soy"
+ },
+ "movement": {
+  "walk": "Yürüyüş",
+  "fly": "Uçuş",
+  "swim": "Yüzme",
+  "climb": "Tırmanma",
+  "burrow": "Kazma"
+ },
+ "map_size": {
+  "small": "küçük",
+  "large": "büyük",
+  "procedural": "yordamsal"
+ },
+ "xp_pool": {
+  "lifetime": "ömürlük TP",
+  "class": "sınıf TP"
  }
 }

@@ -239,7 +239,19 @@ func _btn(h: HBoxContainer, text: String, fn: Callable) -> void:
 static func _sign(n: int) -> String:
 	return "%+d" % n
 
+# A bare id as a heading: a species, a background, a subclass, a fighting
+# style, a movement mode. Each of the first four IS a catalog record with a
+# name field, so ask the catalog before falling back to humanize() — that is
+# what makes "Champion" read as "Şampiyon" on a Turkish sheet rather than
+# staying the one English word in the class line.
 static func _title(id: String) -> String:
+	if id == "":
+		return ""
+	for rec in [Catalog.index("species.json"), Catalog.index("backgrounds.json"),
+			Catalog.index("subclasses.json"), Catalog.index("fighting-styles.json"),
+			Catalog.index("classes.json")]:
+		if rec.has(id):
+			return String(rec[id].get("name", Effects.humanize(id)))
 	return Effects.humanize(id)
 
 # --- stat sections -----------------------------------------------------------
@@ -257,9 +269,10 @@ func _defense(col: VBoxContainer, s) -> void:
 		"%d/%d" % [_hp_current(s), s.max_hp], "hp")
 	for delta in [-5, -1, 1, 5]:
 		_btn(hp, _sign(delta), _apply_hp.bind(delta))
-	_btn(hp, "full", _apply_hp.bind(9999))
+	_btn(hp, Loc.t("profile.hp_full", "full"), _apply_hp.bind(9999))
 	for k in s.speeds:
-		_row(v, _title(k) + " speed", "%d ft" % int(s.speeds[k]), "speed_" + k)
+		_row(v, Loc.tf("profile.speed", "%s speed",
+			[Loc.term("movement", k, _title(k))]), "%d ft" % int(s.speeds[k]), "speed_" + k)
 	_row(v, Loc.term("stat", "initiative", "Initiative"), _sign(s.initiative), "initiative")
 	_row(v, Loc.t("profile.proficiency", "Proficiency"), _sign(s.proficiency_bonus), "pb")
 	_row(v, Loc.term("stat", "passive_perception", "Passive Perception"),

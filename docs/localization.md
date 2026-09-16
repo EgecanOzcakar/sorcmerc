@@ -24,7 +24,7 @@ loads nothing until something asks. A language is a directory of JSON under
 
 | File | What is in it | Read by |
 |---|---|---|
-| `ui.json` | UI chrome, keyed by a dotted key (`"title.new_run"`) | `Loc.t()` / `Loc.tf()` |
+| `ui.json` | UI chrome, keyed by a dotted key (`"title.new_run"`) | `Loc.t()` / `tf()` / `tmpl()` |
 | `terms.json` | the keyword glossary, grouped (`"condition"` → `"prone"`) | `Loc.term()` |
 | `features.json` | feature id → name (`"fighter-second-wind"`) | `Loc.name_of()` |
 | `names.json` | every other bare id that becomes a label: resource pools, choice types, class ids | `Loc.name_of()` |
@@ -90,11 +90,22 @@ b.text = Loc.t("party.create_new", "Create new")
 head.text = Loc.tf("title.barracks", "%d in the barracks.", [roster])
 ```
 
-`Loc.tf()` is `Loc.t()` with the format arguments applied after the lookup, so a
-translation keeps the placeholders and may reorder them. Then add the key to
-`data/loc/tr/ui.json` — `tests/test_loc.gd` scrapes the scripts for every key a
-screen actually asks for and fails on any that has no Turkish, so a key added
-and forgotten is a red test rather than an English sentence in a Turkish menu.
+`Loc.tf()` is `Loc.t()` with the format arguments applied after the lookup.
+GDScript's `%` operator is positional and has no `%2$s`, so a `tf()` translation
+must keep the same placeholders **in the same order**. For the handful of
+strings whose word order genuinely differs between languages, use `Loc.tmpl()`
+and named slots instead — `"{name} the {species}"` is `"{species} {name}"` in
+Turkish:
+
+```gdscript
+c.cname = Loc.tmpl("enemy.named", "{name} the {species}",
+	{"name": who, "species": c.cname})
+```
+
+Then add the key to `data/loc/tr/ui.json` — `tests/test_loc.gd` scrapes the
+scripts for every key a screen actually asks for and fails on any that has no
+Turkish, so a key added and forgotten is a red test rather than an English
+sentence in a Turkish menu.
 It also compares the `printf` specs on both sides: a `%d` that became `%s` in
 translation is a crash at the call site, not a typo.
 
@@ -111,7 +122,7 @@ in Turkish they do.
 - every **keyword**: abilities, skills, the 15 conditions (names *and* prose),
   damage types, spell schools, sizes, creature types, factions, rarities,
   weapon properties and masteries, action costs, rest types, spell casting
-  times / ranges / durations — 282 glossary entries
+  times / ranges / durations — 292 glossary entries
 - all **493 feature ids** — every class, subclass, species, feat and monster
   feature the resolver can grant
 - **names** for everything the catalog holds: 12 classes, 48 subclasses (with
@@ -121,7 +132,7 @@ in Turkish they do.
 - the **UI**: title and summary, settings, the party screen and standing
   orders, the character sheet, the creator and level-up, progression,
   achievements, the mod browser, the combat HUD and its tutorial, and the open
-  world's HUD and menus — 392 keys
+  world's HUD and menus — 409 keys
 
 **Not yet** — large bodies of authored English prose, and the next pass:
 

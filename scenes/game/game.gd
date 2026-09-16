@@ -164,7 +164,7 @@ static func slot_line(slot: Dictionary) -> String:
 	var bits: Array = [WorldSave.day_clock(float(slot.get("elapsed", 0.0)))]
 	var map := String(slot.get("map", ""))
 	if map != "":
-		bits.append(Loc.tf("save.map", "%s map", [map]))
+		bits.append(Loc.tf("save.map", "%s map", [Loc.term("map_size", map, map)]))
 	var who: Array = slot.get("party", [])
 	bits.append(", ".join(who) if not who.is_empty() else Loc.t("save.nobody", "nobody standing"))
 	bits.append("%d gp" % int(slot.get("gold", 0)))
@@ -182,7 +182,8 @@ static func slot_lines(slot: Dictionary) -> String:
 	var when := WorldSave.day_clock(float(slot.get("elapsed", 0.0)))
 	var map := String(slot.get("map", ""))
 	var who: Array = slot.get("party", [])
-	var first := when + (", " + Loc.tf("save.map", "%s map", [map]) if map != "" else "")
+	var first := when + (", " + Loc.tf("save.map", "%s map",
+		[Loc.term("map_size", map, map)]) if map != "" else "")
 	var story := String(slot.get("story", ""))
 	if story != "":
 		first += ", " + story

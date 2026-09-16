@@ -401,5 +401,11 @@
  "verb.dash": "Koş",
  "verb.disengage": "Çekil",
  "verb.hide": "Gizlen",
- "verb.drink": "%s iç"
+ "verb.drink": "%s iç",
+ "profile.speed": "%s hızı",
+ "profile.hp_full": "tam",
+ "creator.locked": "kilitli",
+ "creator.locked_price": "kilitli — %d %s daha lazım",
+ "attack.unarmed_strike": "Silahsız Vuruş",
+ "enemy.named": "{species} {name}"
 }

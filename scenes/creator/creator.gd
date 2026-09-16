@@ -250,17 +250,21 @@ static func lock_note(kind: String, id: String) -> String:
 	match kind:
 		"species":
 			if not Prog.is_species_unlocked(id):
-				return _price("lifetime XP", Prog.species_cost(id) - Prog.lifetime_xp_total())
+				return _price("lifetime", Prog.species_cost(id) - Prog.lifetime_xp_total())
 		"class":
 			if not Prog.is_class_unlocked(id):
-				return _price("lifetime XP", Prog.class_cost(id) - Prog.lifetime_xp_total())
+				return _price("lifetime", Prog.class_cost(id) - Prog.lifetime_xp_total())
 		"subclass":
 			if not Prog.is_subclass_unlocked(id):
-				return _price("class XP", Prog.subclass_remaining(id))
+				return _price("class", Prog.subclass_remaining(id))
 	return ""
 
+# `currency` is "lifetime" or "class" — the two XP pools progression.gd tracks.
 static func _price(currency: String, remaining: int) -> String:
-	return "locked — %d more %s" % [remaining, currency] if remaining > 0 else "locked"
+	if remaining <= 0:
+		return Loc.t("creator.locked", "locked")
+	return Loc.t("creator.locked_price", "locked — %d more %s") % [remaining,
+		Loc.term("xp_pool", currency, "%s XP" % currency)]
 
 # The wizard's own fallback name for a bare id, now with the language's own
 # table in front of it (core/loc.gd's names.json / features.json). English, and

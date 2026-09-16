@@ -102,9 +102,16 @@ static func t(key: String, fallback := "") -> String:
 	return String(s) if s is String and s != "" else (fallback if fallback != "" else key)
 
 # The same, with a format string's arguments applied after the lookup. The
-# translation must keep the placeholders and may reorder them.
+# translation must keep the same %-placeholders, in the same order — GDScript's
+# % operator is positional and has no "%2$s".
 static func tf(key: String, fallback: String, args: Array) -> String:
 	return t(key, fallback) % args
+
+# For the handful of strings whose WORD ORDER differs between languages, where
+# "keep the placeholders in order" is exactly what a translation cannot do.
+# Named slots instead: "{name} the {species}" is "{species} {name}" in Turkish.
+static func tmpl(key: String, fallback: String, slots: Dictionary) -> String:
+	return t(key, fallback).format(slots)
 
 # A glossary word: a condition, a damage type, an ability, a school. Grouped so
 # "light" the armour category and "light" the weapon property can differ, which

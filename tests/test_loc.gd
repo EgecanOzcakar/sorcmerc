@@ -129,7 +129,7 @@ func test_every_ui_key_a_screen_asks_for_is_translated() -> void:
 const SCRIPT_DIRS := ["res://scenes", "res://core"]
 
 func _keys_in_scripts() -> Array:
-	var re := RegEx.create_from_string('Loc\\.tf?\\(\\s*"([a-z0-9_.]+)"\\s*,')
+	var re := RegEx.create_from_string('Loc\\.t(?:f|mpl)?\\(\\s*"([a-z0-9_.]+)"\\s*,')
 	var out := {}
 	for dir in SCRIPT_DIRS:
 		for path in _gd_files(dir):
@@ -177,7 +177,7 @@ func test_tables_are_well_formed() -> void:
 # The English text each call site passes, so the check above has something to
 # compare the translation's placeholders against.
 func _english_fallbacks() -> Dictionary:
-	var re := RegEx.create_from_string('Loc\\.tf?\\(\\s*"([a-z0-9_.]+)"\\s*,\\s*\\n?\\s*"((?:[^"\\\\]|\\\\.)*)"')
+	var re := RegEx.create_from_string('Loc\\.t(?:f|mpl)?\\(\\s*"([a-z0-9_.]+)"\\s*,\\s*\\n?\\s*"((?:[^"\\\\]|\\\\.)*)"')
 	var out := {}
 	for dir in SCRIPT_DIRS:
 		for path in _gd_files(dir):

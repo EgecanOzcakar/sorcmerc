@@ -336,7 +336,7 @@ func _refresh() -> void:
 	_build_figure_picker()
 	_build_orders()
 
-	_purse.text = "%d gp" % party.gold
+	_purse.text = Loc.tf("common.gp", "%d gp", [party.gold])
 	if party.stash.is_empty():
 		_stash.text = "[color=#8f95a3]%s[/color]" % Loc.t("party.stash_empty", "stash empty")
 	else:
