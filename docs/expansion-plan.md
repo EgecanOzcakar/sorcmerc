@@ -1137,6 +1137,44 @@ tutorial encounter (in campaign.gd or a new small file, agent's call).
   steps as pure data. **Full suite: 24 test files, 0 failures;
   drive_ui/drive_game both pass.** Pushed.
 
+- 2026-09-16: **The walkthrough re-cut against the action bar as it is now.**
+  The one card that explained the buttons was written against the bar T32
+  shipped over, and the bar has moved under it twice since. Spells no longer
+  open by level: `[2]` is one flat list, cantrips first, and a spell castable
+  from more than one slot opens its own tier picker (`★2`, `★3`) with
+  Shift+key jumping straight there. A list slot holding a single thing now
+  fires that thing instead of opening a list of one — which is what Ilsa's
+  `[4]` Channel Divinity is on the tutorial's own party. A list longer than
+  nine pages on `[9]`. And the economy line has read `Ⓐ Ⓑ ➤ n` since T29,
+  not `[action] [bonus]`. The action step is therefore two cards now — the
+  fixed nine slots, the badges, the greying and Tab/Space on one; lists,
+  spell levels and the two-press confirm on the other — so the walkthrough is
+  seven steps rather than six, and the greying explanation names the two
+  slots that are genuinely grey on turn one (Attack and Help & Shove, with
+  nobody in reach yet) instead of leaving the player to wonder.
+  `tests/test_action_bar.gd` now reads `Tutorial.STEPS` and fails if the card
+  stops naming all nine slots, by key, in the order `_slotted()` lays them
+  out, so the prose and the layout cannot drift apart again in silence.
+
+  Rendering the cards to check them (`tests/shot_tutorial.gd`, new — one PNG
+  per step, the proof a PR touching this file owes) turned up the reason the
+  drift was invisible: **the walkthrough was not opening over the bar it
+  describes at all.** `_ready` showed step 1 the instant the screen existed,
+  which is before the fight has settled — so the card about the nine slots
+  was landing over an empty bar while the goblin took the first turn, or,
+  when the party won its Stealth roll, over T39's deployment bar reading
+  "Swap Vera Kord", "Swap Ilsa Vane", "Begin the ambush". Three fixes:
+  the overlay is armed in `_ready` and opened by `_advance()` on the first
+  hero turn, when there is a bar to explain; the guided fight keeps the free
+  round surprise buys it but skips the deployment phase, which is a mechanic
+  no card explains; and the overlay moved onto `_hud_layer` (above
+  `_hud_overlay`, carrying the screen's theme, since a CanvasLayer breaks
+  both the draw order and the theme chain) because T-hud's HP bars and
+  condition glyphs are on a CanvasLayer and were painting straight through
+  any card parked over a token. `tests/test_game_flow.gd` now waits for the
+  overlay rather than assuming frame one, and asserts the bar underneath it
+  is the eleven-button one and not a deployment phase.
+
 ## T33 — author combat mechanics for the missing spells (locked 2026-09-11, dispatched now)
 
 Of the 146 catalogued spells, only 8 have a hand-authored combat mechanics
