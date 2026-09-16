@@ -31,6 +31,14 @@ func has_button(node: Node, label: String) -> bool:
 			return true
 	return false
 
+func pictures(node: Node) -> Array:
+	var out: Array = []
+	for c in node.get_children():
+		if c is TextureRect:
+			out.append(c)
+		out.append_array(pictures(c))
+	return out
+
 func labels(node: Node) -> Array:
 	var out: Array = []
 	for c in node.get_children():
@@ -167,6 +175,28 @@ func _init() -> void:
 	s4._goto_market_tab("healer")
 	check(s4._portrait_pic != null and s4._portrait_pic.texture == Icons.portrait(
 		s4._visit["settlement"].faction, "healer", "frown"), "the healer's counter shows the frowning face")
+
+	# --- the town square's establishing shot -------------------------------
+	# The set is being filled in a faction at a time (gen_settlement_art.py), so
+	# what is under test is the contract, not twelve files: a painted settlement
+	# shows its painting on the hub page, an unpainted one shows nothing at all
+	# rather than an empty box, and either way the doors below it still work.
+	check(Icons.settlement_art("human", "nowhere") == null
+		and Icons.settlement_art("gnome", "town") == null,
+		"a settlement nobody has painted has no art")
+	check(Icons.settlement_art_rect("gnome", "town", Vector2(440, 150)) == null,
+		"...and no picture to add to the page either")
+	main._open_visit(s)
+	var painted: Texture2D = Icons.settlement_art(s.faction, s.kind)
+	var shown: Array = pictures(main._visit_panel).filter(
+		func(p): return p.texture == painted and painted != null)
+	check(shown.size() == (1 if painted != null and main._hub_art_h() > 0.0 else 0),
+		"the town square shows the settlement's own painting, once, when there is one")
+	for p in shown:
+		check(p.custom_minimum_size.y == main._hub_art_h()
+			and p.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_COVERED,
+			"...as a cropped strip the page has room for")
+	check(has_button(main._visit_panel, "Market"), "...above doors that still work")
 
 	# --- T9y: the hub says what is behind each door -----------------------
 	main._open_visit(s)

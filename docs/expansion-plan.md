@@ -4821,3 +4821,51 @@ new hook is gated on it, and so is the old one.
 they are earned, which is the ones that would otherwise read as a to-do list
 ("go and lose a fight", "get caught stealing") or spoil their own joke. The
 rest show their progress bar while they are locked.
+
+## T19c — the town you are standing in, painted, and a map palette to match
+
+The counters got faces in T9x (28 SDXL portraits) and the road got pictures a
+phase later. The settlement itself never did: the town square page opened on a
+title and three buttons, and the only picture of a town anywhere was the map
+diorama, which is 48px of coloured primitives. Meanwhile
+`assets/settlements/*.glb` — twelve Meshy text-to-3D dioramas — still sits in
+the tree behind `Settlements3D.source`, and `settlement_kit.gd`'s header
+already says why nobody looks at it: 82k fused triangles under a 2048 atlas of
+3.3k tiny UV islands, sampled at mip 5, averaging to one brown.
+
+**So the settlements were repainted rather than re-modelled.** Same pipeline as
+the portraits and the road-event art: a painted establishing shot per
+(faction, kind) in `assets/generated/settlement-<faction>-<kind>.png`, loaded
+by `Icons.settlement_art()` and laid across the top of the town square page as
+a cropped strip. The loader returns null for a pair nobody has painted, exactly
+like `portrait()`, which is what lets the set arrive a faction at a time — and
+it is arriving a faction at a time: **human camp/town/city are in, the other
+nine are not**. A town of a faction still waiting simply has no strip, and its
+doors sit where they always did.
+
+The picture is also the first thing to go on a short window. The hub does not
+scroll — its doors *are* the page — so `_hub_art_h()` trims the strip against
+the window height and drops it entirely below 60px rather than letterbox it,
+the same trade `_page_scroll_h()` makes for a counter's list.
+
+**The map diorama's palette now comes out of the paintings.**
+`tools/palette_from_art.py` median-cuts a pooled set of frames and prints what
+they are made of, `--ring` dropping the middle so a portrait reports the room
+behind the shopkeeper instead of the shopkeeper. `settlement_kit.gd`'s
+`PROFILES` took its hues from that: human out of its three paintings, the other
+three out of their seven counter backgrounds, which is the only painted
+architecture they have until their own art exists. Hues only — the paintings
+are one golden hour end to end and quantise to six browns, so transplanting
+their averages would have rebuilt the brown blob this kit was written to
+replace. The value spread stays deliberate: wall well above roof in every
+faction, far enough apart to survive a 48px silhouette.
+
+**Two things worth knowing about the renders.** The three human frames were
+made with flux-2-pro through the ElevenLabs flow API rather than the local
+SDXL box, because that is what this machine could reach; `TAIL`, `NEG` and the
+twelve scene lines in `tools/localgen/gen_settlement_art.py` are the same
+prompts either route uses, at 1024x576 and 30 steps for the local one. And
+these models sign their work — two of the three came back with a painted
+signature in the bottom-right corner, so the repo copies are cropped to 90%
+width and 96% height to cut it off. Look at the corner before committing a
+render.

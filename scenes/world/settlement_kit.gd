@@ -76,28 +76,43 @@ const PLANS := {
 #               and elf reads steep from the silhouette alone
 #   slender     body width multiplier: elf tall and narrow, dwarf broad and low
 #   lean_deg    per-building random tilt, orc only — nothing else is crooked
+#
+# WHERE THE COLOURS COME FROM. Off the painted art, read with
+# tools/palette_from_art.py rather than picked by eye: human out of the three
+# settlement paintings themselves (assets/generated/settlement-human-*.png),
+# the other three out of their seven counter portraits' BACKGROUNDS — the room
+# behind the shopkeeper is the only painted architecture those factions have
+# until their own paintings exist, and it is already the right stone, timber
+# and forge-light.
+#
+# What is taken from the sample is the HUE, not the average. The paintings are
+# one golden hour end to end, so the palette they quantise to is six browns
+# between #443627 and #ecd2a6 — transplanting that wholesale would rebuild the
+# brown blob at the top of this file. Value and saturation stay the deliberate
+# thing they were: wall well above roof, and both far enough apart to survive a
+# 48px silhouette.
 const PROFILES := {
 	"human": {
-		"wall": Color("e0d2b2"), "roof": Color("9c4d33"), "trim": Color("6b5236"),
-		"stone": Color("9a9284"), "post": Color("6d5636"), "ground": Color("6f6446"),
+		"wall": Color("e6cfa8"), "roof": Color("a5563a"), "trim": Color("6a5239"),
+		"stone": Color("9c917c"), "post": Color("6d553d"), "ground": Color("6c563a"),
 		"roof_kind": "prism", "pitch": 0.62,
 		"slender": 1.0, "squat": 1.0, "lean_deg": 0.0,
 	},
 	"elf": {
-		"wall": Color("e6dfc9"), "roof": Color("3f7a64"), "trim": Color("c8a94e"),
-		"stone": Color("9fa79a"), "post": Color("8d8a6a"), "ground": Color("5f6a4c"),
+		"wall": Color("e8e1c4"), "roof": Color("35705c"), "trim": Color("ccae5c"),
+		"stone": Color("97a293"), "post": Color("85805e"), "ground": Color("566447"),
 		"roof_kind": "cone", "pitch": 0.72,
 		"slender": 0.82, "squat": 1.12, "lean_deg": 0.0,
 	},
 	"dwarf": {
-		"wall": Color("bda88c"), "roof": Color("3a352f"), "trim": Color("c47a22"),
-		"stone": Color("8d8175"), "post": Color("6b6359"), "ground": Color("6e6252"),
+		"wall": Color("c2a98b"), "roof": Color("332d28"), "trim": Color("cf8024"),
+		"stone": Color("8b7f71"), "post": Color("6a6055"), "ground": Color("6a583f"),
 		"roof_kind": "prism", "pitch": 0.34,
 		"slender": 1.32, "squat": 0.74, "lean_deg": 0.0,
 	},
 	"orc": {
-		"wall": Color("a89068"), "roof": Color("57432f"), "trim": Color("a83c26"),
-		"stone": Color("6a5f4c"), "post": Color("4a3f30"), "ground": Color("5c5340"),
+		"wall": Color("a68f62"), "roof": Color("4d3b29"), "trim": Color("b03e28"),
+		"stone": Color("665a46"), "post": Color("493e2f"), "ground": Color("575039"),
 		"roof_kind": "lean", "pitch": 0.5,
 		"slender": 1.1, "squat": 0.86, "lean_deg": 5.5,
 	},
