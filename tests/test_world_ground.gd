@@ -111,5 +111,34 @@ func _init() -> void:
 	check(moved.size() != beacon.size() or beacon.is_empty(),
 		"...but panning somewhere else does not hand back the old answer")
 
+	# --- the ground shader's mask: R forest, G water, B explored, per cell ----
+	main.world.add_water(Vector2(3000, 3000), 120.0)
+	var lake_cell := Vector2i(int(3000.0 / main.CELL), int(3000.0 / main.CELL))
+	var a0 := lake_cell.x - 20; var a1 := lake_cell.x + 20
+	var b0 := lake_cell.y - 20; var b1 := lake_cell.y + 20
+	main.world.explored.append(Vector2(3000, 3000))
+	var cells: Dictionary = main._visible_ground(a0, a1, b0, b1)
+	var tex: ImageTexture = main._build_mask(a0, a1, b0, b1, 1, cells)
+	var img := tex.get_image()
+	check(img.get_width() == 41 and img.get_height() == 41, "one texel per cell (%dx%d)" % [img.get_width(), img.get_height()])
+	var mid := img.get_pixel(20, 20)
+	check(mid.g > 0.99 and mid.r == 0.0 and mid.b > 0.99, "the lake's middle is water, not forest, and explored (%s)" % str(mid))
+	var far := img.get_pixel(0, 0)
+	check(far.g == 0.0, "the corner, 20 cells out, is dry")
+	check(main._build_mask(a0, a1, b0, b1, 2, cells).get_image().get_width() == 21, "step 2 halves the mask")
+	# a pan inside the padded box rebuilds nothing; leaving it does
+	main._pan = Vector2.ZERO
+	main.queue_redraw()
+	await process_frame
+	var key0: Array = main._mask_key.duplicate()
+	main._pan += Vector2(15, 5)
+	main.queue_redraw()
+	await process_frame
+	check(main._mask_key == key0, "a small pan keeps the mask (%s)" % str(key0))
+	main._pan += Vector2(4000, 1500)
+	main.queue_redraw()
+	await process_frame
+	check(main._mask_key != key0, "a long pan rebuilds it")
+
 	print("test_world_ground: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
