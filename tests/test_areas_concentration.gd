@@ -30,12 +30,13 @@ func _init() -> void:
 	test_repeat_saves()
 	test_concentration_lapses()
 	test_autopilot_aims_areas()
+	test_upcast_targets()
 	print("test_areas_concentration: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
 # A cleric with the named spells prepared, on the shrine at (2,0), plus goblins where asked.
-func _setup(spells: Array, goblins: Array) -> Combat:
-	var ch := Presets.ilsa()
+func _setup(spells: Array, goblins: Array, levels := 3) -> Combat:
+	var ch := Presets.ilsa(levels)
 	ch.prepared.assign(spells)
 	var ilsa = Adapter.to_combatant(ch, "party", Vector2i(2, 0))
 	# the test hands the cleric level-3 slots for anything up to 3rd level
@@ -208,3 +209,27 @@ func test_autopilot_aims_areas() -> void:
 	# spread out, no corner nets two: it holds the slot
 	var cb2 := _setup(["fireball"], [Vector2i(5, 1), Vector2i(1, 3)])
 	check(AI._best_area(cb2, cb2.combatants[0], _verb(cb2.combatants[0], "fireball")) == null, "no aim worth a slot -> none")
+
+# Hold Person from a 3rd-level slot also holds the nearest other humanoid
+# within 30 ft of the aimed one; the base cast holds one; nobody far away.
+func test_upcast_targets() -> void:
+	var cb := _setup(["hold-person"], [Vector2i(4, 0), Vector2i(5, 0), Vector2i(6, 0), Vector2i(13, 1)], 5)
+	var ilsa = cb.combatants[0]
+	var gobs := cb.combatants.slice(1)
+	ilsa.save_dc = 30
+	var base := _verb(ilsa, "hold-person")
+	var up3: Dictionary = {}
+	for v in ilsa.verbs:
+		if String(v["id"]) == "hold-person@3":
+			up3 = v
+	check(not base.has("targets") and int(up3.get("targets", 1)) == 2,
+		"a 3rd-level Hold Person is authored as two targets, the 2nd-level one as one")
+	check(cb.extra_targets(ilsa, up3, gobs[0]).size() == 1, "one extra target is picked")
+	check(cb.extra_targets(ilsa, up3, gobs[0])[0] == gobs[1], "...the nearest to the aimed one")
+	check(cb.extra_targets(ilsa, up3, gobs[3]).is_empty(), "nobody within 30 ft: no extras")
+	check(cb.extra_targets(ilsa, base, gobs[0]).is_empty(), "the base cast has no extras")
+	up3["save_dc"] = 30
+	cb.perform(ilsa, up3, gobs[0])
+	check(gobs[0].has("paralyzed") and gobs[1].has("paralyzed"), "both are held")
+	check(not gobs[2].has("paralyzed") and not gobs[3].has("paralyzed"), "the third and the far one are not")
+	check(ilsa.slots[2] == 1, "one 3rd-level slot spent")

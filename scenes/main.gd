@@ -916,6 +916,8 @@ static func _verb_tooltip(h, v: Dictionary) -> String:
 			bits.append("%s %s" % [notation, v.get("damage_type", "damage")])
 	if int(v.get("rays", 1)) > 1:
 		bits.append("%d rays, each rolled to hit" % int(v["rays"]))
+	if int(v.get("targets", 1)) > 1:
+		bits.append("up to %d targets within 30 ft of each other" % int(v["targets"]))
 	if v.has("heal_count"):
 		var hb: int = int(v.get("heal_bonus", 0))
 		bits.append("Heals %dd%d%s HP" % [int(v["heal_count"]), int(v.get("heal_sides", 8)),

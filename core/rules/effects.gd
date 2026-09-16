@@ -191,6 +191,9 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 		# "damage_ends" (any damage breaks it), "none" for the full duration.
 		v["duration"] = m.get("duration", "concentration" if m.get("concentration", false) else "round")
 		v["repeat_save"] = m.get("repeat_save", "end_turn")
+		# Charm/Hold Person and kin: one more creature per slot level above base.
+		if up > 0 and m.has("upcast") and int(m["upcast"]["per_level"].get("targets", 0)) > 0:
+			v["targets"] = 1 + up * int(m["upcast"]["per_level"]["targets"])
 	if m.has("rays"):     # Scorching Ray: several independent attack rolls, one cast
 		var rays := int(m["rays"])
 		if up > 0 and m.has("upcast"):

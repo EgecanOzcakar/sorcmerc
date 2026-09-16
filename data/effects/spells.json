@@ -112,7 +112,7 @@
   "hideous-laughter": {
     "cost": "action", "shape": "single", "range_ft": 30, "save": "wis",
     "conditions": ["prone", "incapacitated"], "repeat_save": "on_damage",
-    "upcast": {"per_level": {"count": 0}}
+    "upcast": {"per_level": {"targets": 1}}
   },
   "sleep": {
     "cost": "action", "shape": "sphere", "size_ft": 5, "range_ft": 60, "save": "wis",
@@ -136,17 +136,17 @@
   },
 
   "_note_ranges": "2026-09-15: range_ft for every combat-castable spell the regex draft left rangeless (it never carries a range, so effects.gd defaulted them all to 5 ft = touch). Areas carry shape + size_ft: up to a 5 m radius is one hex, bigger is a corner-anchored circle, a line runs from the caster through the aimed hex (adapter.gd _finish_verbs). Concentration spells hold their conditions until concentration ends; repeat_save says how the target shakes one off (end_turn default, on_damage, damage_ends, none).",
-  "charm-person": {"shape": "single", "range_ft": 30, "repeat_save": "none"},
+  "charm-person": {"upcast": {"per_level": {"targets": 1}}, "shape": "single", "range_ft": 30, "repeat_save": "none"},
   "hunters-mark": {"shape": "single", "range_ft": 90},
   "calm-emotions": {"shape": "sphere", "size_ft": 20, "range_ft": 60, "repeat_save": "none"},
-  "hold-person": {"shape": "single", "range_ft": 60, "repeat_save": "end_turn"},
+  "hold-person": {"upcast": {"per_level": {"targets": 1}}, "shape": "single", "range_ft": 60, "repeat_save": "end_turn"},
   "moonbeam": {"shape": "cylinder", "size_ft": 5, "range_ft": 120},
   "phantasmal-force": {"shape": "single", "range_ft": 60, "repeat_save": "end_turn"},
   "web": {"shape": "cube", "size_ft": 20, "range_ft": 60, "repeat_save": "end_turn"},
   "hypnotic-pattern": {"shape": "cube", "size_ft": 30, "range_ft": 120, "repeat_save": "damage_ends"},
   "stinking-cloud": {"shape": "sphere", "size_ft": 20, "range_ft": 90, "repeat_save": "end_turn"},
-  "banishment": {"shape": "single", "range_ft": 30, "repeat_save": "none"},
-  "charm-monster": {"shape": "single", "range_ft": 30, "repeat_save": "none"},
+  "banishment": {"upcast": {"per_level": {"targets": 1}}, "shape": "single", "range_ft": 30, "repeat_save": "none"},
+  "charm-monster": {"upcast": {"per_level": {"targets": 1}}, "shape": "single", "range_ft": 30, "repeat_save": "none"},
   "dominate-beast": {"shape": "single", "range_ft": 60, "repeat_save": "on_damage"},
   "evards-black-tentacles": {"shape": "sphere", "size_ft": 20, "range_ft": 90, "repeat_save": "end_turn"},
   "ice-storm": {"shape": "cylinder", "size_ft": 20, "range_ft": 300},
