@@ -94,6 +94,27 @@ func _init() -> void:
 		"the skills line names skills (%s)" % str(skills.map(func(l): return l.text)))
 	check(skills.any(func(l): return "+" in l.text or "-" in l.text), "...with their modifiers")
 
+	# The marching slots on the right have to grow for the lines too. A Button
+	# does not size itself to a child laid out by anchors, so the 56px height
+	# that used to be hard-coded there was a bet that a summary would never be
+	# taller than two lines — and these rows made it four, which stacked all
+	# four slots on top of each other. (Caught by the screenshot, not the suite,
+	# which is why it is in the suite now.)
+	var slots: Array = screen._slot_col.get_children()
+	check(slots.size() == Party.MAX_ACTIVE, "there is a slot per marching place")
+	for i in slots.size():
+		var b = slots[i]
+		if b.get_child_count() == 0:
+			continue          # an empty slot is one line of text
+		var inner: Control = b.get_child(0)
+		check(b.size.y >= inner.get_combined_minimum_size().y,
+			"slot %d is tall enough for what is in it (%.0f vs %.0f)" % [
+				i, b.size.y, inner.get_combined_minimum_size().y])
+		if i > 0:
+			var prev = slots[i - 1]
+			check(b.position.y >= prev.position.y + prev.size.y - 1.0,
+				"slot %d starts below slot %d instead of overlapping it" % [i, i - 1])
+
 	# --- the lock ---------------------------------------------------------
 	check(not screen.roster_locked, "a screen opened with nothing said is unlocked")
 	var bench := find_button(screen._roster_col, "Bench")

@@ -397,10 +397,18 @@ func _card(sm: Dictionary) -> Control:
 	return panel
 
 # One of the four marching-order slots. Clicking it places/swaps the selection.
+# The slot's height is measured, not assumed. A Button does not grow for a
+# child laid out by anchors, so the 56 that used to be hard-coded here was a
+# standing bet that the summary would never be taller than two lines — and
+# issue #27's gear and skills lines took it to four, which stacked the four
+# marching slots on top of each other.
+const SLOT_MIN_H := 56.0
+const SLOT_PAD_H := 10.0
+
 func _slot(index: int, sm: Dictionary) -> Control:
 	var b := Button.new()
 	Icons.clicks(b)
-	b.custom_minimum_size = Vector2(0, 56)
+	b.custom_minimum_size = Vector2(0, SLOT_MIN_H)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if sm.is_empty():
 		b.text = "%d.  Empty" % (index + 1)
@@ -423,6 +431,8 @@ func _slot(index: int, sm: Dictionary) -> Control:
 		sum.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(sum)
 		b.add_child(row)
+		b.custom_minimum_size.y = maxf(SLOT_MIN_H,
+			sum.get_combined_minimum_size().y + SLOT_PAD_H)
 	b.pressed.connect(func(): _on_slot(index))
 	return b
 

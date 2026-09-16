@@ -51,11 +51,19 @@ func _ready() -> void:
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 
+	# A CenterContainer rather than PRESET_CENTER: that preset moves the anchors
+	# to the middle and leaves the offsets alone, so the panel hangs DOWN AND
+	# RIGHT from the centre by its own size rather than sitting on it — which
+	# the pace picker's extra row made plain. Same fix the quest log and the
+	# settlement counter got.
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centre)
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", Icons.box(COL_CARD, Icons.COL_GOLD_EDGE, 0, 24, 20))
-	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.custom_minimum_size = Vector2(380, 0)
-	add_child(panel)
+	centre.add_child(panel)
 
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
