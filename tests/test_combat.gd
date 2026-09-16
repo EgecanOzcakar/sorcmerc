@@ -50,6 +50,7 @@ func _init() -> void:
 	test_rage_full_turn()
 	test_buff_rider_ranged()
 	test_zones()
+	test_heal_self()
 	test_action_surge_full_turn()
 	test_spell_slot_spend()
 	test_reaction_and_concentration()
@@ -813,3 +814,17 @@ func test_zones() -> void:
 	var z: Dictionary = cb.live_zones()[0]
 	cb.begin_turn_for(grull)
 	check(int(z["hit"].get(grull.id, -1)) == cb._tick(), "Web rolled against the one standing in it")
+
+# Cure Wounds is a touch spell and the caster is in reach of their own hand.
+func test_heal_self() -> void:
+	var cb = _sandbox()
+	var ilsa = _find(cb, "ilsa")
+	ilsa.slots = [4, 3, 3, 3, 3, 0, 0, 0, 0] as Array[int]
+	var cw := _t33_verb("cure-wounds")
+	check(cb.legal_target(ilsa, cw, ilsa), "a heal may target its own caster")
+	check(not cb.legal_target(ilsa, {"targeting": "ally", "kind": "help", "range": 1}, ilsa),
+		"Help still cannot target yourself")
+	ilsa.hp = 1
+	cb.begin_turn_for(ilsa)
+	cb.perform(ilsa, cw, ilsa)
+	check(ilsa.hp > 1, "...and it heals them")

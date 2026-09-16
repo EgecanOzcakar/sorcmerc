@@ -599,7 +599,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 		"attack_modifier", "grant_action": return true
 	match v.get("targeting", "self"):
 		"enemy": return enemies_of(actor).any(func(e): return legal_target(actor, v, e))
-		"ally": return combatants.any(func(a): return a != actor and legal_target(actor, v, a))
+		"ally": return combatants.any(func(a): return legal_target(actor, v, a))
 		"direction", "hex", "corner", "line", "self_area": return not enemies_of(actor).is_empty()
 		"object": return not smashable_near(actor).is_empty()
 	return true
@@ -621,7 +621,8 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 				return false
 			return Hex.distance(actor.pos, c.pos) <= int(v.get("range", 1))
 		"ally":
-			if c.team != actor.team or c == actor or c.is_dead():
+			# A touch heal reaches its own caster; Help, Bless-on-one and the rest do not.
+			if c.team != actor.team or c.is_dead() or (c == actor and not v.has("heal_count")):
 				return false
 			if not (v.has("heal_count") or v["kind"] in ["heal_ally", "ally_buff", "help"]) and not c.conscious():
 				return false
