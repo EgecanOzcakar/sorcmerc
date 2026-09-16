@@ -72,6 +72,8 @@ var _hud_overlay: Control
 
 @onready var _header := Label.new()
 @onready var _order := HBoxContainer.new()   # turn-order icon strip along the top
+var _order_tiles := {}    # combatant id -> its tile in that strip
+var _order_aimed := {}    # ids currently wearing the aim highlight — see _paint_order_aim
 @onready var _hint := Label.new()
 @onready var _board := Board.new()
 const Figures3D := preload("res://scenes/figures3d.gd")
@@ -88,7 +90,15 @@ const COL_BG := Icons.COL_BG
 const COL_HEX := Color("232733")
 const COL_HEX_EDGE := Color("39404f")
 const COL_BRAZIER := Color("6b2f1c")
-const COL_COVER := Color("2a3a3a")
+const COL_COVER := Color("2f4744")       # the slab under a cover hex
+# T-cover: half cover is +2 AC and +2 on Dex saves (core/combat.gd's
+# effective_ac / _saving_throw) — the difference between a 55% swing and a 45%
+# one. It was announced by a slab two shades off the ordinary floor and the
+# word "cover" in 10px grey-teal at the bottom-left corner, under the foliage
+# that always grows on a cover hex, over a textured floor, at any zoom. These
+# are what say so instead: a rim around the tile in a colour nothing else on
+# the board uses, and a chip that states the number rather than the noun.
+const COL_COVER_EDGE := Color("74c2b4")
 const COL_PROP := Color("4a3826")       # barrels, crates, fountains
 const COL_TORCH := Color("ffd98a")
 # T11: per-theme floor tint, palette only — no mechanical difference.
@@ -515,7 +525,7 @@ func _advance() -> void:
 			_set_buttons([])
 			while _walk != null:      # nobody swings while the walkthrough is up
 				await get_tree().process_frame
-			await get_tree().create_timer(0.5 / _anim).timeout
+			await get_tree().create_timer(TURN_BEAT / _anim).timeout
 			if not c.is_down():
 				# ponytail: the AI layer reports no per-attack events, so the FX are
 				# inferred from who lost HP over its turn. Good enough to follow a
@@ -573,6 +583,22 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 		_armed = ""
 	_mode = "idle"
 	_tgt_verb = {}
+	_submenu = ""
+	_submenu_page = 0
+	_tier_spell = ""
+	_set_buttons(_slotted(h, _menu_entries(h)["opts"]))
+	_paint_order_aim()   # aim dropped: clear any highlight it left on the strip
+	_board.queue_redraw()
+
+# Every verb the character has, as a bar entry, before _slotted() lays them into
+# the fixed nine. Split out of _build_hero_menu so a page can be re-derived
+# rather than re-shown: arming a two-press confirm changes one entry's label and
+# its armed flag, and whatever page you armed it FROM has to be rebuilt from the
+# new entries. Issue #24 is what re-showing the stale ones looked like — arming
+# Rage inside the [3] Bonus submenu dropped you back on the main bar with the
+# confirm nowhere on it, so the second press of the same key swung the greataxe
+# instead and Rage took four presses (3, 1, 3, 1) to come out.
+func _menu_entries(h) -> Dictionary:
 	var opts: Array = []
 	var spell_tiers: Dictionary = {}   # spell id -> Array of this verb's entries, one per castable level
 	var spell_order: Array = []        # first-seen order, so a spell keeps its natural position in opts
@@ -643,13 +669,11 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 			var head: Dictionary = base[3].duplicate()
 			var castable: int = tiers.filter(func(t): return not bool(t[3].get("disabled", false))).size()
 			head["disabled"] = castable == 0
-			head["shift_fn"] = func(): _spell_tier_menu(h, tiers)   # Shift+number: pick the slot level
-			opts[i] = [base[0], func(): _spell_tier_menu(h, tiers),
+			head["shift_fn"] = func(): _spell_tier_menu(h, sid)   # Shift+number: pick the slot level
+			opts[i] = [base[0], func(): _spell_tier_menu(h, sid),
 				"%s\n%d of %d levels castable — pick one (Shift+key for the levels)." % [base[0], castable, tiers.size()], head]
 
-	_submenu = ""
-	_set_buttons(_slotted(h, opts))
-	_board.queue_redraw()
+	return {"opts": opts, "tiers": spell_tiers}
 
 # --- the fixed bar --------------------------------------------------------
 #
@@ -669,7 +693,9 @@ const SLOTS := ["attack", "spells", "bonus", "features", "dash", "disengage", "d
 const SLOT_NAMES := {"attack": "Attack", "spells": "Spells", "features": "Features", "bonus": "Bonus actions",
 	"dash": "Dash", "disengage": "Disengage", "dodge": "Dodge", "hide": "Hide", "other": "Help & Shove"}
 const LIST_SLOTS := ["spells", "features", "bonus", "other"]
-var _submenu := ""   # "" on the main bar, else the open slot's id (Esc goes back)
+var _submenu := ""      # "" on the main bar, else the open slot's id (Esc goes back)
+var _submenu_page := 0  # which page of a long slot list is showing
+var _tier_spell := ""   # which spell's tier picker is open, while _submenu == "tiers"
 
 # Which slots an entry belongs in, from the meta _build_hero_menu attached. A
 # bonus-action spell sits under [2] with its level AND under [4].
@@ -690,26 +716,26 @@ static func _slots_of(opt: Array) -> Array:
 		out.append("bonus")
 	return out
 
+# One slot's entries, in the order the submenu shows them. A function rather
+# than a local so _open_list can re-derive the page it is re-rendering.
+func _slot_list(opts: Array, s: String) -> Array:
+	var mine: Array = opts.filter(func(o): return s in _slots_of(o))
+	if s == "spells":
+		mine.sort_custom(func(a, b): return _tier_of(a) < _tier_of(b) or (_tier_of(a) == _tier_of(b) and a[0] < b[0]))
+	return mine
+
 func _slotted(h, opts: Array) -> Array:
-	var by_slot := {}
-	for s in SLOTS:
-		by_slot[s] = []
-	for o in opts:
-		for s in _slots_of(o):
-			by_slot[s].append(o)
 	var out: Array = []
 	for s in SLOTS:
-		var mine: Array = by_slot[s]
+		var mine: Array = _slot_list(opts, s)
 		var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
 		if s in LIST_SLOTS and mine.size() > 1:   # one thing to pick from is no pick: the key fires it
-			if s == "spells":
-				mine.sort_custom(func(a, b): return _tier_of(a) < _tier_of(b) or (_tier_of(a) == _tier_of(b) and a[0] < b[0]))
 			var meta := _mark(_slot_icon(s), "▸")
 			meta["disabled"] = mine.is_empty() or live == 0
 			meta["key"] = str(SLOTS.find(s) + 1)
 			var tip := "%s\n%s" % [SLOT_NAMES[s], ("Nothing to pick from." if mine.is_empty()
 				else "%d of %d ready — press to pick one." % [live, mine.size()])]
-			out.append([SLOT_NAMES[s] + " ▸", _open_list.bind(h, s, mine, SLOT_NAMES[s]), tip, meta])
+			out.append([SLOT_NAMES[s] + " ▸", _open_list.bind(h, s), tip, meta])
 		elif mine.is_empty():
 			var meta := _mark(_slot_icon(s))
 			meta["disabled"] = true
@@ -764,9 +790,16 @@ func _slot_icon(s: String) -> Texture2D:
 # pressed; any list longer than nine pages on slot 9 (More ▸), in a stable order.
 const LIST_KEYS := 9
 
-# One flat list, nine to a page.
-func _open_list(h, slot: String, entries: Array, name: String, page := 0) -> void:
+# One flat list, nine to a page. The entries are re-derived on every call rather
+# than carried in the binding, so re-opening the page after something on it
+# changed (a confirm armed, a use spent) shows what is true now — see
+# _menu_entries.
+func _open_list(h, slot: String, page := 0) -> void:
 	_submenu = slot
+	_submenu_page = page
+	_tier_spell = ""
+	var name: String = SLOT_NAMES.get(slot, slot)
+	var entries: Array = _slot_list(_menu_entries(h)["opts"], slot)
 	var opts: Array = []
 	var per := LIST_KEYS if entries.size() <= LIST_KEYS else LIST_KEYS - 1
 	var start := page * per
@@ -774,7 +807,7 @@ func _open_list(h, slot: String, entries: Array, name: String, page := 0) -> voi
 	if entries.size() > LIST_KEYS:
 		var next_page := page + 1 if start + per < entries.size() else 0
 		var meta := _mark(Icons.verb_icon("generic"), "…")
-		opts.append(["More ▸", _open_list.bind(h, slot, entries, name, next_page),
+		opts.append(["More ▸", _open_list.bind(h, slot, next_page),
 			"%s — page %d of %d\nPress for the next page." % [name, page + 1, ceili(float(entries.size()) / per)], meta])
 	opts.append(["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
@@ -782,13 +815,26 @@ func _open_list(h, slot: String, entries: Array, name: String, page := 0) -> voi
 
 # One spell, several slot levels: a small picker instead of a button per tier.
 # Each tier's own entry (built above, already wired to _enter_target/_enter_cone/
-# cb.perform exactly as it would have been standalone) is reused verbatim.
-func _spell_tier_menu(h, tiers: Array) -> void:
+# cb.perform exactly as it would have been standalone) is reused verbatim, and
+# re-derived on every call for the same reason _open_list re-derives its page.
+func _spell_tier_menu(h, sid: String) -> void:
 	_submenu = "tiers"
-	var opts: Array = tiers.duplicate()
+	_submenu_page = 0
+	_tier_spell = sid
+	var opts: Array = (_menu_entries(h)["tiers"].get(sid, []) as Array).duplicate()
 	opts.append(["Back", func(): _build_hero_menu(h, true), "Back",
 		_mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
+	_board.queue_redraw()
+
+# Re-render whatever page is showing from freshly built entries — the main bar,
+# an open slot list, or a spell's tier picker. What a two-press confirm calls
+# when it arms: the confirm has to appear where the player's finger already is.
+func _refresh_menu(h) -> void:
+	match _submenu:
+		"": _set_buttons(_slotted(h, _menu_entries(h)["opts"]))
+		"tiers": _spell_tier_menu(h, _tier_spell)
+		_: _open_list(h, _submenu, _submenu_page)
 	_board.queue_redraw()
 
 # The other weapon this character could be swinging: the first equipped attack
@@ -903,11 +949,14 @@ static func _verb_tooltip(h, v: Dictionary) -> String:
 func _costly(v: Dictionary) -> bool:
 	return v.has("pool") or int(v.get("slot_level", 0)) > 0 or v["kind"] in ["dodge", "dash"]
 
-# A two-press guard: first press arms and relabels, second press fires.
+# A two-press guard: first press arms and relabels, second press fires. The
+# relabel lands on whatever page the first press came from — issue #24: arming
+# from a submenu used to rebuild the main bar under the player, so the same key
+# pressed twice ran the main bar's slot instead of confirming.
 func _confirm_opt(h, key: String, label: String, fn: Callable) -> Array:
 	if _armed == key:
 		return ["✓ Confirm: %s" % label, func(): _armed = ""; fn.call()]
-	return [label, func(): _armed = key; _build_hero_menu(h, true)]
+	return [label, func(): _armed = key; _refresh_menu(h)]
 
 func _enter_cone(h, v: Dictionary) -> void:
 	_mode = "cone"
@@ -916,6 +965,7 @@ func _enter_cone(h, v: Dictionary) -> void:
 		h.cname, v["label"]]
 	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
 		_mark(Icons.verb_icon("back"), "‹")]])
+	_paint_order_aim()
 	_board.queue_redraw()
 
 # A hex, a corner or a line: the board's hover is the aim; click commits.
@@ -926,6 +976,7 @@ func _enter_area(h, v: Dictionary) -> void:
 	_actor.text = "%s — %s: %s, click to cast.  (Esc / right-click cancels)" % [h.cname, v["label"], how]
 	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
 		_mark(Icons.verb_icon("back"), "‹")]])
+	_paint_order_aim()
 	_board.queue_redraw()
 
 # What the pending area verb would cover at the board's current hover, [] if
@@ -945,6 +996,7 @@ func _enter_target(h, v: Dictionary) -> void:
 		h.cname, v["label"]]
 	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
 		_mark(Icons.verb_icon("back"), "‹")]])
+	_paint_order_aim()
 	_board.queue_redraw()
 
 # Is `c` a legal target for the pending verb?
@@ -1050,6 +1102,7 @@ static func _reveal_head(res: Dictionary) -> Array:
 
 func board_hex_hovered(hx: Vector2i) -> void:
 	_hover_hex = hx
+	_paint_order_aim()
 	_board.queue_redraw()
 
 func board_cancel() -> void:
@@ -1105,7 +1158,16 @@ func _after_hero_action(h) -> void:
 # Hotkeys: [1]..[9] on the first nine, [0] on the last entry (End turn /
 # Cancel), everything past 9 is click-only.
 func _set_buttons(opts: Array) -> void:
+	# Out of the tree now, not at the end of the frame. A queue_free()d child is
+	# still a child until the frame turns over, and _press_hotkey indexes
+	# get_children() by position — so a key pressed in the same frame a new bar
+	# was built addressed the OLD bar's slots. Rare in play (it needs the press
+	# and the rebuild in one frame) and reliable in a harness, which is how it
+	# turned up: pressing [3] right after a turn began hit the deploy bar's
+	# third button instead of Bonus actions. scenes/party/party.gd's _clear()
+	# already does it this way, for its own version of the same reason.
 	for c in _buttons.get_children():
+		_buttons.remove_child(c)
 		c.queue_free()
 	var count := opts.size()
 	var u := clampf(_zoom, 0.9, 1.4)
@@ -1218,17 +1280,23 @@ func _resources(c) -> String:
 func _build_order_strip() -> void:
 	for c in _order.get_children():
 		c.queue_free()
+	_order_tiles.clear()
+	_order_aimed.clear()
 	var u := clampf(_zoom, 0.9, 1.4)
 	for c in cb.order:
 		var tile := PanelContainer.new()
+		var base: StyleBox
 		if c == cb.current():
 			# whose turn it is: a gilt rule under the tile, nothing boxed
 			var box := Icons.box(Color(0.79, 0.64, 0.35, 0.12), Color(0, 0, 0, 0), 0, 6, 4)
 			box.border_color = Icons.COL_GOLD
 			box.border_width_bottom = 3
-			tile.add_theme_stylebox_override("panel", box)
+			base = box
 		else:
-			tile.add_theme_stylebox_override("panel", Icons.box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6, 4))
+			base = Icons.box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6, 4)
+		tile.add_theme_stylebox_override("panel", base)
+		tile.set_meta("base_box", base)
+		_order_tiles[c.id] = tile
 		var tv := VBoxContainer.new()
 		tv.add_theme_constant_override("separation", 0)
 		tile.add_child(tv)
@@ -1261,6 +1329,58 @@ func _build_order_strip() -> void:
 		elif c.is_down():
 			tile.modulate = Color(1, 1, 1, 0.6)
 		_order.add_child(tile)
+	_paint_order_aim(true)
+
+# --- issue #29: what the aim is on, said on the turn strip ------------------
+#
+# Hovering a token mid-aim already shows its odds over its own head, but a fight
+# is read off the strip at the top — whose turn, who is hurt, who is next — and
+# nothing up there said which of those tiles the spell in hand was pointed at.
+# A cone or a burst makes that worse: the hexes light up on the board, but which
+# NAMES are standing in them is exactly the thing the strip knows and the board
+# does not spell out.
+#
+# Who the aim currently lands on: {} when not aiming, or when the cursor is
+# somewhere the verb cannot go.
+func aimed_ids() -> Dictionary:
+	var out := {}
+	if cb == null or cb.is_over() or _tgt_verb.is_empty():
+		return out
+	var cur = cb.current()
+	if cur == null or cur.team != "party" or not cur.conscious():
+		return out
+	match _mode:
+		"target":
+			for c in cb.combatants:
+				if c.pos == _board._hover and _valid_target(cur, c):
+					out[c.id] = true
+		"area", "cone":
+			var hexes: Array = _area_aim(cur)
+			if hexes.is_empty():
+				return out
+			for c in cb.combatants:
+				if not c.is_dead() and c.pos in hexes:
+					out[c.id] = true
+	return out
+
+# Repaint only when the set actually changed — this is called off mouse motion.
+func _paint_order_aim(force := false) -> void:
+	var want := aimed_ids()
+	if not force and want == _order_aimed:
+		return
+	_order_aimed = want
+	for id in _order_tiles:
+		var tile = _order_tiles[id]
+		if not is_instance_valid(tile):
+			continue
+		if want.has(id):
+			var box: StyleBoxFlat = (tile.get_meta("base_box") as StyleBoxFlat).duplicate()
+			box.bg_color = Color(COL_FOE.r, COL_FOE.g, COL_FOE.b, 0.22)
+			box.border_color = COL_FOE
+			box.set_border_width_all(2)
+			tile.add_theme_stylebox_override("panel", box)
+		else:
+			tile.add_theme_stylebox_override("panel", tile.get_meta("base_box"))
 
 # Same three bands the token HP bar uses.
 static func _hp_color(c) -> Color:
@@ -1420,6 +1540,12 @@ func _finish() -> void:
 			for id in taken:
 				names.append(Icons.item_img_bb(String(id)) + Icons.item_bb(String(id), Campaign.item_name(String(id))))
 			_logbox.append_text("[color=#c9a45a]Taken from the dead:[/color] %s\n" % ", ".join(names))
+
+# The pause before a monster acts, so its turn is a beat and not a jump cut.
+# Raised with the strike timings below it: at 0.5 the next turn started while
+# the last swing was still on screen, which is what stacked several turns into
+# one unreadable blur. Divided by the pace setting like every other wait.
+const TURN_BEAT := 0.75
 
 const BUTTON_ROWS := 3
 
@@ -1642,6 +1768,7 @@ class Board extends Control:
 		add_child(_ground)
 	var _auto_fit := false    # zoom-to-fit each layout until the user zooms (new fight, Home)
 	var _tok := {}        # id -> displayed pixel pos (for slide)
+	var _slide := {}      # id -> {from, to, t, dur}: the traversal in progress, see tick()
 	var _hp := {}         # id -> displayed hp value
 	var _floats: Array = []   # {pos: Vector2, text, color, age}
 	var _flash := {}     # id -> ttl
@@ -1661,7 +1788,11 @@ class Board extends Control:
 	const BARK_TTL := 2.2
 	# T28 attack FX, cosmetic only: {kind, id, from, to, hexes, age, ttl}
 	var _fx: Array = []
-	const FX_TTL := {"melee": 0.30, "ranged": 0.34, "spell": 0.45}
+	# How long a strike is on screen. Raised across the board: at 0.30 a melee
+	# swing was over before the eye found it, which is most of why a fight read
+	# as "fast mode" even at 1x. Every one of these is divided by the pace
+	# setting through Board.tick's own dt, so Instant still skips them.
+	const FX_TTL := {"melee": 0.46, "ranged": 0.52, "spell": 0.70}
 	var _defeat := -1.0   # T29: seconds since the party wipe, -1 = not wiped
 
 	func play_defeat() -> void:
@@ -1693,6 +1824,11 @@ class Board extends Control:
 		queue_redraw()
 
 	# How far the lunging attacker's token is pushed off its hex right now.
+	# The melee step-in. sin(t * PI) is a symmetric there-and-back, which reads
+	# as a nudge; a swing wants to go out fast and come back slow, so the curve
+	# is skewed to peak at about a third of the way through and recover over the
+	# rest. Reaches further too — 0.55 of a hex barely left the tile.
+	const LUNGE_REACH := 0.66
 	func _lunge(id: String) -> Vector2:
 		for f in _fx:
 			if f.kind == "melee" and f.id == id:
@@ -1700,7 +1836,7 @@ class Board extends Control:
 				var d: Vector2 = _pix(f.to) - _pix(f.from)
 				if d.length() < 0.01:
 					return Vector2.ZERO
-				return d.normalized() * (sin(t * PI) * main.hex_px * 0.55)
+				return d.normalized() * (sin(pow(t, 0.62) * PI) * main.hex_px * LUNGE_REACH)
 		return Vector2.ZERO
 
 	func _draw_fx(s: float) -> void:
@@ -1725,7 +1861,7 @@ class Board extends Control:
 		_defeat = -1.0
 		_auto_fit = true
 		texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED   # the floor texture wraps across hexes
-		_tok.clear(); _hp.clear(); _floats.clear(); _flash.clear()
+		_tok.clear(); _slide.clear(); _hp.clear(); _floats.clear(); _flash.clear()
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
 			_hp[c.id] = float(c.hp)
@@ -1855,6 +1991,23 @@ class Board extends Control:
 			canvas.draw_colored_polygon(_disc(at, r * (1.0 + 0.26 * i)),
 				Color(0.02, 0.01, 0.04, strength * (0.20 - 0.05 * i)))
 
+	# How a token covers ground. This used to be exponential smoothing at a fixed
+	# rate — `cur.lerp(target, dt * 12)` — which has two problems and they are
+	# both "no weight". It has no idea how far the token is going, so a six-hex
+	# dash and a one-hex sidestep take the same quarter of a second; and it
+	# starts at full speed and creeps into the destination, which is the exact
+	# opposite of how something with mass moves.
+	#
+	# A token now crosses the board at a speed measured in HEXES, eased in and
+	# out: a dash reads as ground covered, a step reads as a step, and both
+	# start heavy and settle rather than snapping and drifting.
+	const TOKEN_HEXES_PER_SEC := 6.0
+	const STEP_MIN := 0.20    # even a one-hex shuffle gets this long
+	const STEP_MAX := 1.10    # ...and the longest dash is not a journey
+
+	static func _ease_move(u: float) -> float:
+		return u * u * (3.0 - 2.0 * u)    # smoothstep: lean in, cruise, settle
+
 	func tick(dt: float) -> void:
 		if cb == null:
 			return
@@ -1863,8 +2016,17 @@ class Board extends Control:
 		for c in cb.combatants:
 			var target := _pix(c.pos)
 			var cur: Vector2 = _tok.get(c.id, target)
-			if cur.distance_to(target) > 0.5:
-				_tok[c.id] = cur.lerp(target, k); dirty = true
+			var slide: Dictionary = _slide.get(c.id, {})
+			if slide.is_empty() or not (slide["to"] as Vector2).is_equal_approx(target):
+				var hexes: float = cur.distance_to(target) / maxf(1.0, main.hex_px)
+				slide = {"from": cur, "to": target, "t": 0.0,
+					"dur": clampf(hexes / TOKEN_HEXES_PER_SEC, STEP_MIN, STEP_MAX)}
+				_slide[c.id] = slide
+			if cur.distance_to(target) > 0.5 and float(slide["t"]) < float(slide["dur"]):
+				slide["t"] = minf(float(slide["dur"]), float(slide["t"]) + dt)
+				_tok[c.id] = (slide["from"] as Vector2).lerp(target,
+					_ease_move(float(slide["t"]) / float(slide["dur"])))
+				dirty = true
 			else:
 				_tok[c.id] = target
 			var hv: float = _hp.get(c.id, float(c.hp))
@@ -2037,7 +2199,37 @@ class Board extends Control:
 				seam = true
 		canvas.draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.9 if seam else 0.22), 1.5, true)
 		if cb.is_cover(hx):
-			canvas.draw_string(ThemeDB.fallback_font, c + Vector2(-s * 0.5, s * ISO_SQUASH - 3), "cover", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("7fa6a6"))
+			_paint_cover(canvas, c, s)
+
+	# A cover hex, said twice: a rim in a colour nothing else on the board
+	# wears, and a chip carrying the number it is worth. Both scale with the
+	# hex, so zooming out loses the chip's text before it loses the rim — the
+	# rim is the part that has to survive, because it is what lets you read the
+	# shape of the cover on a board at a glance.
+	const COVER_RIM_W := 2.4
+	const COVER_CHIP := "+2"
+	func _paint_cover(canvas: CanvasItem, c: Vector2, s: float) -> void:
+		var rim := _hex_poly(c, s - 2.5)
+		rim.append(rim[0])
+		canvas.draw_polyline(rim, Color(main.COL_COVER_EDGE, 0.9), COVER_RIM_W, true)
+		# ...and an inner line, so the rim reads as a lip of something rather
+		# than as a selection outline (which is what the move/aim overlays are).
+		var inner := _hex_poly(c, s - 2.5 - COVER_RIM_W * 1.6)
+		inner.append(inner[0])
+		canvas.draw_polyline(inner, Color(main.COL_COVER_EDGE, 0.22), 1.0, true)
+		var fs := int(clampf(s * 0.30, 9.0, 18.0))
+		if fs < 10:
+			return            # too small to read; the rim carries it alone
+		var f := ThemeDB.fallback_font
+		var w := f.get_string_size(COVER_CHIP, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var at := c + Vector2(0.0, s * ISO_SQUASH * 0.92)
+		var pad := Vector2(fs * 0.42, fs * 0.30)
+		# A backing plate, because this lands on a textured floor with a plant
+		# on it: without one the chip is legible on some tiles and not others.
+		canvas.draw_colored_polygon(_disc(at, (w * 0.5 + pad.x) * 1.05),
+			Color(0.02, 0.05, 0.05, 0.72))
+		canvas.draw_string(f, at - Vector2(w * 0.5, -fs * 0.34), COVER_CHIP,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, main.COL_COVER_EDGE)
 
 	static func _rand(hx: Vector2i, salt: int) -> float:
 		var n: int = hash(Vector3i(hx.x, hx.y, salt))

@@ -16,6 +16,8 @@ const Travel = preload("res://core/travel.gd")
 # the same dict for the player) — reused here rather than duplicated so the
 # picker can never drift out of sync with what actually has a model.
 const HeroModels = preload("res://scenes/figures3d.gd").HERO_MODELS
+# Skill ids -> names/abilities, the same table the profile screen reads.
+const Catalog = preload("res://core/rules/catalog.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_EDGE := Icons.COL_EDGE
@@ -25,6 +27,18 @@ const COL_PARTY := Icons.COL_PARTY
 
 var party: Party                          # injected by T5, or a demo roster
 var _selected := ""                       # roster id armed for a slot click
+
+# Issue #27: who is in the party and who is on the bench is settled where
+# people are — an inn, a roster screen before a run starts — not standing in
+# open country with the map paused. Whoever opens this screen says which it is:
+# world.gd's HUD button opens it locked, the inn's own "Sort out the party"
+# opens it unlocked, and the pre-run screens have never been anywhere else.
+#
+# What the lock covers is recruiting and benching. Marching ORDER, the standing
+# orders and the map figure stay live everywhere: deciding who walks first is a
+# travel decision, and travel is what you are doing out there.
+var roster_locked := false
+var locked_note := "Benching and recruiting happen at an inn."
 
 var _roster_col := VBoxContainer.new()
 var _slot_col := VBoxContainer.new()
@@ -36,6 +50,7 @@ var _fig_row := HBoxContainer.new()   # T9x: rebuilt on every _refresh() — its
 # buys. Rebuilt on every _refresh() for the same reason the figure picker is —
 # who can be named for a job is the active roster, and that moves under it.
 var _orders_row := VBoxContainer.new()
+var _create_btn: Button        # greyed while roster_locked — see roster_locked above
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -126,12 +141,15 @@ func _footer() -> Control:
 	_fig_row.name = "FigureRow"
 	row.add_child(_fig_row)
 
-	var create := Button.new()
-	Icons.clicks(create)
-	create.text = "Create new"
-	create.theme_type_variation = "Primary"
-	create.pressed.connect(_on_create_new)
-	row.add_child(create)
+	_create_btn = Button.new()
+	Icons.clicks(_create_btn)
+	_create_btn.text = "Create new"
+	_create_btn.theme_type_variation = "Primary"
+	_create_btn.pressed.connect(func():
+		if roster_locked:
+			return
+		_on_create_new())
+	row.add_child(_create_btn)
 
 	_orders_row.name = "OrdersRow"
 	_orders_row.add_theme_constant_override("separation", 4)
@@ -324,8 +342,13 @@ func _refresh() -> void:
 			parts.append(Icons.item_bb(id, "%s ×%d" % [nm, int(e["quantity"])]))
 		_stash.text = "[color=%s]Stash:[/color] %s" % [Icons.COL_BODY.to_html(false), ", ".join(parts)]
 
-	if _selected == "":
-		_hint.text = "Click a roster member to pick them up, then click a party slot to place or swap them."
+	if _create_btn != null:
+		_create_btn.disabled = roster_locked
+		_create_btn.tooltip_text = locked_note if roster_locked else ""
+	if roster_locked:
+		_hint.text = "%s  Marching order, standing orders and the map figure still change here." % locked_note
+	elif _selected == "":
+		_hint.text = "Click anyone marching to bench them.  Or pick up a roster member, then click a slot to place or swap them."
 	else:
 		_hint.text = "%s selected — click a party slot to place them, or click them again to cancel." \
 			% party.summary(_selected).get("name", "?")
@@ -352,8 +375,13 @@ func _card(sm: Dictionary) -> Control:
 	var bench := Button.new()
 	Icons.clicks(bench)
 	bench.text = "Bench" if sm["active"] else "To party"
-	bench.disabled = not sm["active"] and party.active.size() >= Party.MAX_ACTIVE
+	bench.disabled = roster_locked \
+		or (not sm["active"] and party.active.size() >= Party.MAX_ACTIVE)
+	if roster_locked:
+		bench.tooltip_text = locked_note
 	bench.pressed.connect(func():
+		if roster_locked:
+			return
 		if sm["active"]: party.bench(sm["id"])
 		else: party.activate(sm["id"])
 		_selected = ""
@@ -369,10 +397,18 @@ func _card(sm: Dictionary) -> Control:
 	return panel
 
 # One of the four marching-order slots. Clicking it places/swaps the selection.
+# The slot's height is measured, not assumed. A Button does not grow for a
+# child laid out by anchors, so the 56 that used to be hard-coded here was a
+# standing bet that the summary would never be taller than two lines — and
+# issue #27's gear and skills lines took it to four, which stacked the four
+# marching slots on top of each other.
+const SLOT_MIN_H := 56.0
+const SLOT_PAD_H := 10.0
+
 func _slot(index: int, sm: Dictionary) -> Control:
 	var b := Button.new()
 	Icons.clicks(b)
-	b.custom_minimum_size = Vector2(0, 56)
+	b.custom_minimum_size = Vector2(0, SLOT_MIN_H)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if sm.is_empty():
 		b.text = "%d.  Empty" % (index + 1)
@@ -395,6 +431,11 @@ func _slot(index: int, sm: Dictionary) -> Control:
 		sum.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(sum)
 		b.add_child(row)
+		b.custom_minimum_size.y = maxf(SLOT_MIN_H,
+			sum.get_combined_minimum_size().y + SLOT_PAD_H)
+		# What this click does depends on whether you are carrying somebody.
+		b.tooltip_text = ("Click to bench %s" % sm["name"]) if not roster_locked \
+			else locked_note
 	b.pressed.connect(func(): _on_slot(index))
 	return b
 
@@ -432,7 +473,50 @@ func _summary_label(sm: Dictionary) -> Control:
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		stats.add_child(l)
 	col.add_child(stats)
+	# Issue #27: what they are carrying and what they are good at, on the page
+	# that is about the party rather than one click into each sheet. Trained
+	# skills only and equipped gear only — the full eighteen-skill table and the
+	# tiles you can click stay the profile screen's job.
+	col.add_child(_detail_line("⚔", _gear_text(sm), COL_GOLD, "gear"))
+	col.add_child(_detail_line("◆", _skills_text(sm), COL_PARTY, "skills"))
 	return col
+
+# One of the two lines under a roster row's numbers. Named so a test can find
+# it without counting children.
+func _detail_line(mark: String, text: String, tint: Color, id: String) -> Label:
+	var l := Label.new()
+	l.name = "Row%s" % id.capitalize()
+	l.text = "%s %s" % [mark, text]
+	l.theme_type_variation = "Dim"
+	l.add_theme_color_override("font_color", tint)
+	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	l.clip_text = true                    # a ledger row keeps its height
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
+
+func _gear_text(sm: Dictionary) -> String:
+	var worn: Array = sm.get("equipped", [])
+	if worn.is_empty():
+		return "nothing worn or wielded"
+	var names: Array = []
+	for it in worn:
+		var nm: String = String(it["id"]).capitalize()
+		names.append(nm if int(it["quantity"]) <= 1 else "%s x%d" % [nm, int(it["quantity"])])
+	return ", ".join(names)
+
+# Best first, which is the order core/party.gd sorted them in; expertise wears
+# the filled mark the profile screen uses for it.
+func _skills_text(sm: Dictionary) -> String:
+	var trained: Array = sm.get("skills", [])
+	if trained.is_empty():
+		return "no trained skills"
+	var defs: Dictionary = Catalog.skills()
+	var bits: Array = []
+	for sk in trained:
+		var id := String(sk["id"])
+		var nm: String = String(defs.get(id, {}).get("name", id.capitalize()))
+		bits.append("%s%s %+d" % ["◆" if String(sk["prof"]) == "expert" else "", nm, int(sk["mod"])])
+	return "  ".join(bits)
 
 # --- interaction ----------------------------------------------------------
 
@@ -441,7 +525,16 @@ func _select(id: String) -> void:
 	_refresh()
 
 func _on_slot(index: int) -> void:
+	# Nothing picked up: a marching slot is the person standing in it, and
+	# clicking them takes them out of the line. The roster column has always
+	# had a Bench button; the side of the screen you are actually looking at
+	# when you decide somebody should sit this one out did not, so the only
+	# way to do it was to go and find their row again on the left.
 	if _selected == "":
+		if roster_locked or index >= party.active.size():
+			return
+		party.bench(party.active[index])
+		_refresh()
 		return
 	if index < party.active.size():
 		if party.is_active(_selected):
@@ -450,8 +543,12 @@ func _on_slot(index: int) -> void:
 			var other: String = party.active[index]
 			party.active[index] = _selected
 			party.active[i] = other
+		elif roster_locked:
+			return   # swapping somebody off the bench in is recruiting, not marching order
 		else:
 			party.swap(party.active[index], _selected)
+	elif roster_locked:
+		return
 	else:
 		party.activate(_selected)
 	_selected = ""
