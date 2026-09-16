@@ -466,7 +466,7 @@ func _build_hud() -> void:
 	_camp_btn.pressed.connect(_make_camp)
 	bar.add_child(_camp_btn)
 	var hint := Label.new()
-	hint.text = "Click marches there.  Right-drag pans, wheel zooms.  Space pauses, Esc opens the menu."
+	hint.text = "Click marches there.  Right-drag pans, wheel zooms.  Space pauses, 1/2/4/8 set the speed, P the party, Esc the menu."
 	hint.theme_type_variation = "Dim"
 	bar.add_child(hint)
 	_region_msg = Label.new()
@@ -554,6 +554,14 @@ func _cycle_speed() -> void:
 		return
 	world.clock.cycle_speed()
 	_speed_btn.text = "%dx" % int(world.clock.speed)   # every WorldClock.SPEEDS entry is a whole number
+
+func _set_speed(mult: float) -> void:
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
+			or _story_panel != null or story_card != null or _menu_panel != null \
+			or _spoils_panel != null:
+		return
+	world.clock.set_speed(mult)
+	_speed_btn.text = "%dx" % int(world.clock.speed)
 
 # --- the pause menu -------------------------------------------------------
 #
@@ -1814,6 +1822,17 @@ func _unhandled_key_input(event: InputEvent) -> void:
 					_close_menu()
 				else:
 					_toggle_pause()
+			# The clock's four speeds by their own numbers, the party screen by
+			# its letter — the HUD buttons without the trip to the bar.
+			KEY_1, KEY_KP_1: _set_speed(1.0)
+			KEY_2, KEY_KP_2: _set_speed(2.0)
+			KEY_4, KEY_KP_4: _set_speed(4.0)
+			KEY_8, KEY_KP_8: _set_speed(8.0)
+			KEY_P:
+				if _party_overlay != null:
+					_close_party()
+				else:
+					_open_party()
 			_: return
 		accept_event()
 		return
