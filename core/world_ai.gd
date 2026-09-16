@@ -62,6 +62,23 @@ static func wander(party, home, radius := 80.0, seed_value := 0) -> void:
 static func hunt(party) -> void:
 	party.ai = {"behavior": "hunt"}
 
+# A band met and left without blood — slipped, paid off, talked round — loses
+# interest in the player for a while: it breaks off, walks away from them, and
+# the hunt skips the player until the truce runs out. Free-form `ai` state, so
+# world_save.gd carries it.
+const TRUCE_MINUTES := 120.0
+const BREAK_OFF_DIST := 400.0
+
+static func truce(party, player, now_minutes: float) -> void:
+	party.ai["truce_until"] = now_minutes + TRUCE_MINUTES
+	var away: Vector2 = party.position - player.position
+	if away.length_squared() < 1.0:
+		away = Vector2.RIGHT
+	party.goal = party.position + away.normalized() * BREAK_OFF_DIST
+
+static func in_truce(party, now_minutes: float) -> bool:
+	return float(_state(party).get("truce_until", -1.0)) > now_minutes
+
 # --- driver ----------------------------------------------------------
 
 # One pass over the world: refresh every non-player party's goal. `_delta` is
@@ -105,6 +122,8 @@ static func _hunt_step(world, party) -> void:
 	for other in world.parties:
 		if other == party or not is_hostile(party, other):
 			continue
+		if other.is_player and in_truce(party, world.clock.elapsed):
+			continue
 		var d: float = party.position.distance_squared_to(other.position)
 		if d < best_d:
 			best_d = d
@@ -117,4 +136,4 @@ static func _hunt_step(world, party) -> void:
 			best_d = d
 			best = s.position
 	if best != null:
-		party.goal = best
+		party.goal = best   # a truced hunter with nothing else to chase keeps its break-off goal

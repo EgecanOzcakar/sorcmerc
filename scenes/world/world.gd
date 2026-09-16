@@ -924,6 +924,8 @@ func _check_encounter(dt := 0.0) -> void:
 			if not near:
 				_slipped.erase(q.id)
 			continue
+		if WorldAI.in_truce(q, world.clock.elapsed):
+			continue   # met and parted without blood: they want nothing from you for a while
 		if near:
 			_open_approach(q, hostile)
 			return
@@ -1570,8 +1572,11 @@ func _on_approach_reported(foe, r: Dictionary) -> void:
 	_on_event_ack()
 	if not bool(r.get("fight", true)):
 		# No fight: the band is still out there, just not met. Mark it slipped so
-		# standing next to it does not re-open the question every frame.
+		# standing next to it does not re-open the question every frame, and
+		# call a truce so a hunting band breaks off instead of closing again
+		# the moment you step out of reach.
 		_slipped[foe.id] = true
+		WorldAI.truce(foe, world.player(), world.clock.elapsed)
 		world.clock.resume()
 		return
 	await _launch_combat(foe, bool(r.get("scouted_ahead", false)),
