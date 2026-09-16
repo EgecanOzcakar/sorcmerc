@@ -106,6 +106,9 @@ var _dismissed := true        # nothing to dismiss until show_event() says so
 # cannot drift apart — the same contract site_screen.gd's _rows()/_xs() keeps.
 var _ops: Array = []
 var _panel := Rect2()
+var _art: Texture2D = null   # the event's picture, its outcome's frame when it has one
+var _art_rect := Rect2()
+const ART_H := 200.0         # the picture's height on the card; width follows the panel
 
 
 func _ready() -> void:
@@ -130,6 +133,7 @@ func _notification(what: int) -> void:
 # concerned, including all of them.
 func show_event(e: Dictionary) -> void:
 	_e = e.duplicate() if e != null else {}
+	_art = Icons.event_art(_s("id"), _e.get("ok") if _e.has("ok") else null) if _e.has("id") else null
 	_dismissed = false
 	visible = true
 	_ensure_button()
@@ -250,6 +254,11 @@ func _layout() -> void:
 	rel.append(_op(Vector2(tx + gw, y + Icons.FS_CAPTION), cap, Icons.FS_CAPTION, kind_col, avail - gw))
 	y += Icons.FS_CAPTION + 10.0
 
+	_art_rect = Rect2()
+	if _art != null:
+		_art_rect = Rect2(tx, y, avail, ART_H)   # panel-relative; moved with the ops below
+		y += ART_H + BLOCK_GAP
+
 	var title := _s("title", NO_TITLE)
 	for tline in _wrap(title, Icons.FS_TITLE, avail, TITLE_LINES):
 		y += Icons.FS_TITLE
@@ -334,6 +343,7 @@ func _layout() -> void:
 	var px := (size.x - pw) * 0.5
 	var py := maxf(MARGIN, (size.y - ph) * 0.5)
 	_panel = Rect2(px, py, pw, ph)
+	_art_rect.position += _panel.position
 	for op in rel:
 		var moved: Dictionary = op.duplicate()
 		if moved.has("pos"):
@@ -444,6 +454,20 @@ func _draw() -> void:
 	# border is COL_GOLD at half strength, and a kind-tinted one is the same idea
 	# one step further, so a bad card is not a red stripe inside a gold box.
 	draw_rect(_panel, Color(_kind_color(), BORDER_ALPHA), false, 1.0)
+	if _art != null and _art_rect.size.x > 0.0:
+		# a 1:1 picture in a wide slot: the slot is filled and the picture's
+		# centre band shows — a banner, not a postage stamp in a letterbox
+		var ts := _art.get_size()
+		var src := Rect2(Vector2.ZERO, ts)
+		var slot_aspect := _art_rect.size.x / _art_rect.size.y
+		if ts.x / ts.y < slot_aspect:
+			src.size.y = ts.x / slot_aspect
+			src.position.y = (ts.y - src.size.y) * 0.4   # a touch above centre: faces and skies live there
+		else:
+			src.size.x = ts.y * slot_aspect
+			src.position.x = (ts.x - src.size.x) / 2.0
+		draw_texture_rect_region(_art, _art_rect, src)
+		draw_rect(_art_rect, Color(_kind_color(), 0.55), false, 1.0)
 	for op in _ops:
 		var o: Dictionary = op
 		if o.has("rect"):
