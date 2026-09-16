@@ -177,6 +177,7 @@ var _approach_foe = null
 var _approach_card: Control = null
 var _slipped := {}
 var _pace_btn: Button
+var _bottom_bar: HBoxContainer       # the road actions and their messages; _layout_minimap seats it
 var _site_screen: Control = null     # ...and the descent screen drawing it
 # D6: the country the party is standing in, and the label that says so. `_region`
 # is last frame's band — a crossing is the only thing anybody wants to be told
@@ -434,6 +435,13 @@ func _build_hud() -> void:
 	title.theme_type_variation = "Quiet"
 	title.pressed.connect(_leave_world)
 	bar.add_child(title)
+	# Two bars: the state of the run along the top — clock, screens, the way
+	# out — and what the party can do where it stands along the bottom, with
+	# the messages those actions leave. One row was outrunning the window.
+	_bottom_bar = HBoxContainer.new()
+	_bottom_bar.add_theme_constant_override("separation", 12)
+	add_child(_bottom_bar)
+	bar = _bottom_bar
 	_lair_btn = Button.new()
 	_lair_btn.visible = false
 	_lair_btn.pressed.connect(_lair_action)
@@ -485,6 +493,8 @@ func _build_hud() -> void:
 # re-run every frame because this Control resizes with the window.
 const MINIMAP_GUTTER := 12.0
 func _layout_minimap() -> void:
+	if _bottom_bar != null:
+		_bottom_bar.position = Vector2(MINIMAP_GUTTER, size.y - _bottom_bar.size.y - MINIMAP_GUTTER)
 	if _minimap == null:
 		return
 	var want: Vector2 = Minimap.DEFAULT_SIZE
