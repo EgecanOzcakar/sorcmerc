@@ -5,6 +5,7 @@ extends Control
 const AI = preload("res://core/ai.gd")
 const Adapter = preload("res://core/adapter.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Loc = preload("res://core/loc.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Scaler = preload("res://core/scaler.gd")
@@ -167,7 +168,7 @@ func _ready() -> void:
 	_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(_header)
 	var manual := Button.new()
-	manual.text = "Manual  [F2]"
+	manual.text = Loc.t("combat.manual", "Manual") + "  [F2]"
 	manual.theme_type_variation = "Quiet"
 	manual.focus_mode = Control.FOCUS_NONE   # hotkeys 1-9 must keep going to the board
 	manual.pressed.connect(func(): ManualOverlay.toggle(self))
@@ -175,7 +176,7 @@ func _ready() -> void:
 	# A fight is where the rules go wrong, so this is the one screen where the
 	# reporter is most worth a click of its own rather than a trip to the title.
 	var bug := Button.new()
-	bug.text = "Report a bug  [F3]"
+	bug.text = Loc.t("common.report_bug", "Report a bug") + "  [F3]"
 	bug.theme_type_variation = "Quiet"
 	bug.focus_mode = Control.FOCUS_NONE
 	bug.pressed.connect(report_bug)
@@ -194,7 +195,7 @@ func _ready() -> void:
 	var logcol := VBoxContainer.new()
 	logcol.add_theme_constant_override("separation", 4)
 	logwrap.add_child(logcol)
-	_cap.text = "Action log"
+	_cap.text = Loc.t("combat.action_log", "Action log")
 	_cap.theme_type_variation = "Caption"
 	logcol.add_child(_cap)
 	_logbox.bbcode_enabled = true
@@ -216,7 +217,8 @@ func _ready() -> void:
 	orderwrap.add_child(_order)
 	col.add_child(orderwrap)
 
-	_hint.text = "1-9 act, Tab swaps weapon, Space ends the turn, Esc backs out.  Scroll zooms, drag pans, Home resets the view."
+	_hint.text = Loc.t("combat.keys", "1-9 act, Tab swaps weapon, Space ends the turn,"
+		+ " Esc backs out.  Scroll zooms, drag pans, Home resets the view.")
 	_hint.theme_type_variation = "Dim"
 	col.add_child(_hint)
 
@@ -455,14 +457,18 @@ func _deploy_menu() -> void:
 	var opts: Array = []
 	for h in heroes:
 		var held: bool = h.id == _deploy_pick
-		opts.append([("▣  %s" % h.cname) if held else "Swap %s" % h.cname,
+		opts.append([("▣  %s" % h.cname) if held else Loc.tf("combat.swap_hero", "Swap %s", [h.cname]),
 			_pick_deploy.bind(h.id)])
 	if _deploy_pick == "":
-		_actor.text = "[b]Unseen.[/b]  Click a hero on the map (or here) to pick them up, then click who they trade places with. Begin when they stand where you want them — the enemy loses its first round."
+		_actor.text = "[b]%s[/b]  %s" % [Loc.t("combat.unseen", "Unseen."),
+			Loc.t("combat.deploy_idle", "Click a hero on the map (or here) to pick them up,"
+			+ " then click who they trade places with. Begin when they stand where you want" \
+			+ " them — the enemy loses its first round.")]
 	else:
-		_actor.text = "[b]Unseen.[/b]  %s is picked up — click another hero to trade places, or click them again to put them back." \
-			% _deploy_name(_deploy_pick)
-	opts.append(["Begin the ambush", func():
+		_actor.text = "[b]%s[/b]  %s" % [Loc.t("combat.unseen", "Unseen."),
+			Loc.tf("combat.deploy_held", "%s is picked up — click another hero to trade places,"
+			+ " or click them again to put them back.", [_deploy_name(_deploy_pick)])]
+	opts.append([Loc.t("combat.begin_ambush", "Begin the ambush"), func():
 		_deploy_pick = ""
 		_mode = "idle"
 		_advance()])
@@ -753,9 +759,16 @@ func _menu_entries(h) -> Dictionary:
 # Divinity today). No more most-used-first reshuffling: the
 # point of a fixed bar is that 5 is Dash on Vera, on Ilsa, and next week.
 const SLOTS := ["attack", "spells", "bonus", "features", "dash", "disengage", "dodge", "hide", "other"]
-const SLOT_NAMES := {"attack": "Attack", "spells": "Spells", "features": "Features", "bonus": "Bonus actions",
-	"dash": "Dash", "disengage": "Disengage", "dodge": "Dodge", "hide": "Hide", "other": "Help & Shove"}
+const SLOT_NAMES_EN := {"attack": "Attack", "spells": "Spells", "features": "Features",
+	"bonus": "Bonus actions", "dash": "Dash", "disengage": "Disengage", "dodge": "Dodge",
+	"hide": "Hide", "other": "Help & Shove"}
+
 const LIST_SLOTS := ["spells", "features", "bonus", "other"]
+
+# The nine slot names on the action bar, in the language being played in.
+static func slot_name(s: String) -> String:
+	return Loc.t("combat.slot.%s" % s, String(SLOT_NAMES_EN.get(s, s)))
+
 var _submenu := ""      # "" on the main bar, else the open slot's id (Esc goes back)
 var _submenu_page := 0  # which page of a long slot list is showing
 var _tier_spell := ""   # which spell's tier picker is open, while _submenu == "tiers"
@@ -796,14 +809,16 @@ func _slotted(h, opts: Array) -> Array:
 			var meta := _mark(_slot_icon(s), "▸")
 			meta["disabled"] = mine.is_empty() or live == 0
 			meta["key"] = str(SLOTS.find(s) + 1)
-			var tip := "%s\n%s" % [SLOT_NAMES[s], ("Nothing to pick from." if mine.is_empty()
-				else "%d of %d ready — press to pick one." % [live, mine.size()])]
-			out.append([SLOT_NAMES[s] + " ▸", _open_list.bind(h, s), tip, meta])
+			var tip := "%s\n%s" % [slot_name(s), (Loc.t("combat.slot_empty", "Nothing to pick from.")
+				if mine.is_empty() else Loc.t("combat.slot_ready", "%d of %d ready — press to pick one.") \
+					% [live, mine.size()])]
+			out.append([slot_name(s) + " ▸", _open_list.bind(h, s), tip, meta])
 		elif mine.is_empty():
 			var meta := _mark(_slot_icon(s))
 			meta["disabled"] = true
 			meta["key"] = str(SLOTS.find(s) + 1)
-			out.append([SLOT_NAMES[s], func(): pass, "%s\nNot something this character can do." % SLOT_NAMES[s], meta])
+			out.append([slot_name(s), func(): pass, "%s\n%s" % [slot_name(s),
+				Loc.t("combat.slot_cannot", "Not something this character can do.")], meta])
 		else:
 			var o: Array = mine[0].duplicate()
 			var meta: Dictionary = o[3].duplicate()
@@ -816,23 +831,32 @@ func _slotted(h, opts: Array) -> Array:
 	swap_meta["key"] = "Tab"
 	if swap.is_empty():
 		swap_meta["disabled"] = true
-		out.append(["Swap weapon", func(): pass, "Swap weapon\nOnly one weapon to hand.", swap_meta])
+		var swap_name := Loc.t("combat.swap_weapon", "Swap weapon")
+		out.append([swap_name, func(): pass,
+			"%s\n%s" % [swap_name, Loc.t("combat.one_weapon", "Only one weapon to hand.")], swap_meta])
 	else:
-		out.append(["Wield %s" % swap["name"],
+		var wield := Loc.tf("combat.wield", "Wield %s", [swap["name"]])
+		out.append([wield,
 			func(): Adapter.set_main_attack(h, String(swap["id"])); _build_hero_menu(h),
-			"Wield %s\nYour Attack action switches to %s (%s): %+d to hit, %s %s damage. Free." % [
-				swap["name"], swap["name"], swap["range"], int(swap["to_hit"]),
-				swap["notation"], swap.get("damage_type", "")], swap_meta])
+			"%s\n%s" % [wield, Loc.t("combat.wield_note",
+				"Your Attack action switches to %s (%s): %+d to hit, %s %s damage. Free.") \
+				% [swap["name"], Loc.t("combat.range.%s" % swap["range"], String(swap["range"])),
+				int(swap["to_hit"]), swap["notation"],
+				Loc.term("damage", String(swap.get("damage_type", "")), String(swap.get("damage_type", "")))]],
+			swap_meta])
 	var end_mark := _mark(Icons.verb_icon("end_turn"))
 	end_mark["key"] = "Spc"
 	if h.econ["action"] > 0 and not cb.is_over():
 		end_mark["armed"] = _armed == "end"
-		var end_opt := _confirm_opt(h, "end", "End turn (action unspent!)", _end_turn)
-		end_opt.append("End turn\nYour action is still unspent.")
+		var end_opt := _confirm_opt(h, "end",
+			Loc.t("combat.end_turn_unspent", "End turn (action unspent!)"), _end_turn)
+		end_opt.append("%s\n%s" % [Loc.t("combat.end_turn", "End turn"),
+			Loc.t("combat.action_unspent", "Your action is still unspent.")])
 		end_opt.append(end_mark)
 		out.append(end_opt)
 	else:
-		out.append(["End turn", _end_turn, "End turn", end_mark])
+		var end_label := Loc.t("combat.end_turn", "End turn")
+		out.append([end_label, _end_turn, end_label, end_mark])
 	return out
 
 static func _tier_of(opt: Array) -> int:
@@ -861,7 +885,7 @@ func _open_list(h, slot: String, page := 0) -> void:
 	_submenu = slot
 	_submenu_page = page
 	_tier_spell = ""
-	var name: String = SLOT_NAMES.get(slot, slot)
+	var name: String = slot_name(slot)
 	var entries: Array = _slot_list(_menu_entries(h)["opts"], slot)
 	var opts: Array = []
 	var per := LIST_KEYS if entries.size() <= LIST_KEYS else LIST_KEYS - 1
@@ -870,9 +894,11 @@ func _open_list(h, slot: String, page := 0) -> void:
 	if entries.size() > LIST_KEYS:
 		var next_page := page + 1 if start + per < entries.size() else 0
 		var meta := _mark(Icons.verb_icon("generic"), "…")
-		opts.append(["More ▸", _open_list.bind(h, slot, next_page),
-			"%s — page %d of %d\nPress for the next page." % [name, page + 1, ceili(float(entries.size()) / per)], meta])
-	opts.append(["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")])
+		opts.append([Loc.t("combat.more", "More") + " ▸", _open_list.bind(h, slot, next_page),
+			Loc.t("combat.page", "%s — page %d of %d\nPress for the next page.") \
+				% [name, page + 1, ceili(float(entries.size()) / per)], meta])
+	var back := Loc.t("common.back", "Back")
+	opts.append([back, func(): _build_hero_menu(h, true), back, _mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
 	_board.queue_redraw()
 
@@ -930,7 +956,7 @@ func _verb_label(h, v: Dictionary) -> String:
 # synthesized from the verb's own resolved numbers — cheap, and honest about
 # only describing what's actually there instead of needing hand-authored
 # blurbs for ~30 features before this could ship at all.
-const KIND_BLURB := {
+const KIND_BLURB_EN := {
 	"dodge": "Until your next turn, attacks against you have disadvantage and you have advantage on DEX saves.",
 	"dash": "Gain extra movement equal to your speed.",
 	"disengage": "Your movement doesn't provoke opportunity attacks this turn.",
@@ -957,55 +983,74 @@ static func _verb_tooltip(h, v: Dictionary) -> String:
 	if v.has("spell"):
 		head = String(Catalog.spell(v["spell"]).get("description", ""))
 	if head == "":
-		head = String(KIND_BLURB.get(v["kind"], ""))
+		head = Loc.t("blurb.%s" % v["kind"], String(KIND_BLURB_EN.get(v["kind"], "")))
+		if head == "blurb.%s" % v["kind"]:
+			head = ""          # no English blurb for this kind, and none translated
 	var bits: Array = []
 	match String(v["kind"]):
 		"attack":
 			var a: Dictionary = h.attacks[0] if not h.attacks.is_empty() else {}
-			bits.append("%s: %+d to hit, %s %s" % [a.get("name", "Unarmed strike"),
-				int(h.atk_bonus), h.damage, a.get("damage_type", "damage")])
-			bits.append("reach %d hex%s" % [h.atk_range, "" if h.atk_range == 1 else "es"])
+			bits.append("%s: %+d %s, %s %s" % [
+				a.get("name", Loc.t("combat.unarmed", "Unarmed strike")),
+				int(h.atk_bonus), Loc.t("combat.to_hit", "to hit"), h.damage,
+				Loc.term("damage", String(a.get("damage_type", "")),
+					String(a.get("damage_type", Loc.t("combat.damage", "damage"))))])
+			bits.append(Loc.tf("combat.reach", "reach %d hex(es)", [h.atk_range]))
 		"offhand_attack":
-			bits.append("%+d to hit, %s damage" % [int(v.get("to_hit", 0)), v.get("damage", "")])
+			bits.append(Loc.t("combat.offhand_line", "%+d to hit, %s damage")
+				% [int(v.get("to_hit", 0)), v.get("damage", "")])
 		"grant_action":
-			bits.append("+%d action" % int(v.get("amount", 1)))
+			bits.append(Loc.tf("combat.extra_action", "+%d action", [int(v.get("amount", 1))]))
 	if v.has("dice_count") and v.has("dice_sides"):
 		var bonus: int = int(v.get("dice_bonus", v.get("bonus_damage", 0)))
 		var notation := "%dd%d%s" % [int(v["dice_count"]), int(v["dice_sides"]),
 			("+%d" % bonus) if bonus > 0 else ""]
 		if v["kind"] in ["heal_self", "heal_ally"]:
-			bits.append("Heals %s HP" % notation)
+			bits.append(Loc.tf("combat.heals", "Heals %s HP", [notation]))
 		else:
-			bits.append("%s %s" % [notation, v.get("damage_type", "damage")])
+			bits.append("%s %s" % [notation, Loc.term("damage", String(v.get("damage_type", "")),
+				String(v.get("damage_type", Loc.t("combat.damage", "damage"))))])
 	if int(v.get("rays", 1)) > 1:
-		bits.append("%d rays, each rolled to hit" % int(v["rays"]))
+		bits.append(Loc.tf("combat.rays", "%d rays, each rolled to hit", [int(v["rays"])]))
 	if v["kind"] == "drink":
 		bits.append(String(v.get("text", "")))
 	if int(v.get("targets", 1)) > 1:
-		bits.append("up to %d targets within 30 ft of each other" % int(v["targets"]))
+		bits.append(Loc.tf("combat.targets", "up to %d targets within 30 ft of each other",
+			[int(v["targets"])]))
 	if v.has("heal_count"):
 		var hb: int = int(v.get("heal_bonus", 0))
-		bits.append("Heals %dd%d%s HP" % [int(v["heal_count"]), int(v.get("heal_sides", 8)),
-			("+%d" % hb) if hb > 0 else ""])
+		bits.append(Loc.tf("combat.heals", "Heals %s HP",
+			["%dd%d%s" % [int(v["heal_count"]), int(v.get("heal_sides", 8)),
+				("+%d" % hb) if hb > 0 else ""]]))
 	if String(v.get("save", "")) != "":
-		bits.append("DC %d %s save%s" % [int(v.get("save_dc", 0)), String(v["save"]).to_upper(),
-			" for half" if v.get("half_on_save", false) else ""])
+		bits.append("%s%s" % [Loc.t("combat.save", "DC %d %s save")
+			% [int(v.get("save_dc", 0)), Loc.term("ability_abbr", String(v["save"]),
+				String(v["save"]).to_upper())],
+			Loc.t("combat.for_half", " for half") if v.get("half_on_save", false) else ""])
 	if not v.get("conditions", []).is_empty():
-		bits.append("Inflicts: %s" % ", ".join(v["conditions"]))
+		var conds: Array = []
+		for c in v["conditions"]:
+			conds.append(Loc.term("condition", String(c), String(c)))
+		bits.append(Loc.tf("combat.inflicts", "Inflicts: %s", [", ".join(conds)]))
 	if int(v.get("bonus_damage", 0)) > 0 and not v.has("dice_count"):
-		bits.append("+%d damage on your hits" % int(v["bonus_damage"]))
+		bits.append(Loc.tf("combat.bonus_damage", "+%d damage on your hits",
+			[int(v["bonus_damage"])]))
 	if int(v.get("extra_attacks", 0)) > 0:
-		bits.append("+%d attack%s" % [int(v["extra_attacks"]), "" if int(v["extra_attacks"]) == 1 else "s"])
+		bits.append(Loc.tf("combat.extra_attacks", "+%d attack(s)", [int(v["extra_attacks"])]))
 	if v.has("amount") and not v.has("dice_count") and v["kind"] != "grant_action":
 		bits.append("%d" % int(v["amount"]))
 	if not v.get("resist", []).is_empty():
-		bits.append("Resist: %s" % ", ".join(v["resist"]))
+		var res: Array = []
+		for r in v["resist"]:
+			res.append(Loc.term("damage", String(r), String(r)))
+		bits.append(Loc.tf("combat.resist", "Resist: %s", [", ".join(res)]))
 	if int(v.get("slot_level", 0)) > 0:
-		bits.append("level %d slot" % int(v["slot_level"]))
+		bits.append(Loc.tf("combat.slot_level", "level %d slot", [int(v["slot_level"])]))
 	if v.has("pool"):
-		bits.append("%d of %d uses left" % [h.pool_left(v["pool"]), int(h.pools[v["pool"]]["max"])])
+		bits.append(Loc.t("combat.uses_left", "%d of %d uses left")
+			% [h.pool_left(v["pool"]), int(h.pools[v["pool"]]["max"])])
 	if String(v.get("cost", "action")) != "action":
-		bits.append("%s action" % String(v["cost"]).capitalize() if v["cost"] != "free" else "free")
+		bits.append(Loc.term("cost", String(v["cost"]), String(v["cost"]).capitalize()))
 	var tail := " · ".join(bits)
 	if head == "" or tail == "":
 		return head + tail
@@ -1022,15 +1067,17 @@ func _costly(v: Dictionary) -> bool:
 # pressed twice ran the main bar's slot instead of confirming.
 func _confirm_opt(h, key: String, label: String, fn: Callable) -> Array:
 	if _armed == key:
-		return ["✓ Confirm: %s" % label, func(): _armed = ""; fn.call()]
+		return ["✓ " + Loc.tf("combat.confirm", "Confirm: %s", [label]), func(): _armed = ""; fn.call()]
 	return [label, func(): _armed = key; _refresh_menu(h)]
 
 func _enter_cone(h, v: Dictionary) -> void:
 	_mode = "cone"
 	_tgt_verb = v
-	_actor.text = "%s — aim %s: hover a direction, click to cast.  (Esc / right-click cancels)" % [
-		h.cname, v["label"]]
-	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
+	_actor.text = Loc.t("combat.aim_cone",
+		"%s — aim %s: hover a direction, click to cast.  (Esc / right-click cancels)") \
+		% [h.cname, v["label"]]
+	_set_buttons([[Loc.t("common.cancel", "Cancel"), func(): board_cancel(),
+		Loc.t("common.cancel", "Cancel"),
 		_mark(Icons.verb_icon("back"), "‹")]])
 	_paint_order_aim()
 	_board.queue_redraw()
@@ -1039,9 +1086,13 @@ func _enter_cone(h, v: Dictionary) -> void:
 func _enter_area(h, v: Dictionary) -> void:
 	_mode = "area"
 	_tgt_verb = v
-	var how: String = {"hex": "hover a hex", "corner": "hover a hex corner", "line": "hover a hex to aim the line"}.get(v["targeting"], "aim")
-	_actor.text = "%s — %s: %s, click to cast.  (Esc / right-click cancels)" % [h.cname, v["label"], how]
-	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
+	var how := Loc.t("combat.aim.%s" % v["targeting"], String({"hex": "hover a hex",
+		"corner": "hover a hex corner",
+		"line": "hover a hex to aim the line"}.get(v["targeting"], "aim")))
+	_actor.text = Loc.t("combat.aim_area",
+		"%s — %s: %s, click to cast.  (Esc / right-click cancels)") % [h.cname, v["label"], how]
+	_set_buttons([[Loc.t("common.cancel", "Cancel"), func(): board_cancel(),
+		Loc.t("common.cancel", "Cancel"),
 		_mark(Icons.verb_icon("back"), "‹")]])
 	_paint_order_aim()
 	_board.queue_redraw()
@@ -1059,9 +1110,11 @@ func _area_aim(h) -> Array:
 func _enter_target(h, v: Dictionary) -> void:
 	_mode = "target"
 	_tgt_verb = v
-	_actor.text = "%s — %s: hover a target for the odds, click to apply.  (Esc / right-click cancels)" % [
-		h.cname, v["label"]]
-	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
+	_actor.text = Loc.t("combat.aim_target",
+		"%s — %s: hover a target for the odds, click to apply.  (Esc / right-click cancels)") \
+		% [h.cname, v["label"]]
+	_set_buttons([[Loc.t("common.cancel", "Cancel"), func(): board_cancel(),
+		Loc.t("common.cancel", "Cancel"),
 		_mark(Icons.verb_icon("back"), "‹")]])
 	_paint_order_aim()
 	_board.queue_redraw()
@@ -1277,12 +1330,12 @@ func _set_buttons(opts: Array) -> void:
 			b.modulate = Color(1, 1, 1, 0.35)
 			# Appended, not prefixed: the skill's NAME leads every tooltip on
 			# this bar, and it is the line that says which badge you are over.
-			tip = tip + "\n\nNot available right now."
+			tip = tip + "\n\n" + Loc.t("combat.unavailable", "Not available right now.")
 		elif meta.get("armed", false):
 			# A two-press verb is armed: with no label to relabel, the badge says
 			# so by going warm, and the popup says it in words.
 			b.modulate = Color("ffb3a8")
-			tip = "Press again to confirm.\n" + tip
+			tip = Loc.t("combat.press_again", "Press again to confirm.") + "\n" + tip
 		b.pressed.connect(opts[i][1])
 		b.set_meta("hotkey", hotkey)
 		if meta.has("shift_fn"):
@@ -1310,8 +1363,8 @@ func _chip(b: Button, text: String, preset: int, col: Color, u: float) -> void:
 	l.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, int(3 * u))
 
 func _refresh() -> void:
-	_header.text = "The Sunken Shrine, round %d" % cb.round_num
-	_header.tooltip_text = "seed %d" % _seed
+	_header.text = Loc.tf("combat.header", "The Sunken Shrine, round %d", [cb.round_num])
+	_header.tooltip_text = Loc.tf("combat.seed", "seed %d", [_seed])
 
 	var n: int = cb.order.size()
 	var ci: int = cb.order.find(cb.current())
@@ -1319,17 +1372,20 @@ func _refresh() -> void:
 
 	var cur = cb.current()
 	if cur and cur.team == "party" and cur.conscious() and _mode == "idle":
-		var hint := "    click a blue tile to move" if cur.econ["move_left"] > 0 else ""
+		var hint := "    " + Loc.t("combat.click_to_move", "click a blue tile to move") \
+			if cur.econ["move_left"] > 0 else ""
 		var before = cb.order[(ci - 1 + n) % n]
-		var again := "    you act again after %s" % before.short_name() if before != cur else ""
+		var again := "    " + Loc.tf("combat.act_again", "you act again after %s",
+			[before.short_name()]) if before != cur else ""
 		var res := _resources(cur)
-		_actor.text = "%s    AC %d    %s%s    %s%s%s" % [
-			"[b]%s[/b]" % cur.cname, cb.effective_ac(cur), _hp_bb(cur),
+		_actor.text = "%s    %s %d    %s%s    %s%s%s" % [
+			"[b]%s[/b]" % cur.cname, Loc.term("stat", "ac_short", "AC"),
+			cb.effective_ac(cur), _hp_bb(cur),
 			("    " + res) if res != "" else "",
 			_econ_bb(cur), hint, again,
 		]
 	elif _mode == "idle":
-		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
+		_actor.text = Loc.tf("combat.acting", "%s is acting…", [cur.cname if cur else "?"])
 	_board.queue_redraw()
 
 # T29 spellcaster resources: one pip row per slot level the caster actually has
@@ -1591,11 +1647,11 @@ func _finish() -> void:
 		seed_edit.custom_minimum_size.x = 130
 		_buttons.add_child(seed_edit)
 		var replay := Button.new()
-		replay.text = "Replay seed"
+		replay.text = Loc.t("combat.replay_seed", "Replay seed")
 		replay.pressed.connect(func(): _new_game(maxi(1, int(seed_edit.text))))
 		_buttons.add_child(replay)
 		var fresh := Button.new()
-		fresh.text = "New encounter  (R)"
+		fresh.text = Loc.t("combat.new_encounter", "New encounter") + "  (R)"
 		fresh.pressed.connect(func(): _new_game())
 		_buttons.add_child(fresh)
 	_apply_ui_scale()
@@ -1740,12 +1796,13 @@ func _walk_show(i: int) -> void:
 	card.add_child(col)
 
 	var head := Label.new()
-	head.text = "%s   (%d/%d)" % [step["title"], i + 1, Tutorial.STEPS.size()]
+	head.text = "%s   (%d/%d)" % [Loc.t("tutorial.%s.title" % step.get("id", i),
+		String(step["title"])), i + 1, Tutorial.STEPS.size()]
 	head.theme_type_variation = "Head"
 	col.add_child(head)
 
 	var body := Label.new()
-	body.text = String(step["text"])
+	body.text = Loc.t("tutorial.%s.text" % step.get("id", i), String(step["text"]))
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.custom_minimum_size = Vector2(WALK_CARD_W, 0)
 	body.add_theme_color_override("font_color", Icons.COL_BODY)
@@ -1755,11 +1812,12 @@ func _walk_show(i: int) -> void:
 	row.add_theme_constant_override("separation", 8)
 	row.alignment = BoxContainer.ALIGNMENT_END
 	var skip := Button.new()
-	skip.text = "Skip tutorial"
+	skip.text = Loc.t("tutorial.skip", "Skip tutorial")
 	skip.pressed.connect(_walk_end)
 	row.add_child(skip)
 	var next := Button.new()
-	next.text = "Start fighting  →" if i == Tutorial.STEPS.size() - 1 else "Next  →"
+	next.text = (Loc.t("tutorial.start_fighting", "Start fighting") if i == Tutorial.STEPS.size() - 1
+		else Loc.t("common.next", "Next")) + "  →"
 	next.pressed.connect(func(): _walk_show(i + 1))
 	row.add_child(next)
 	col.add_child(row)

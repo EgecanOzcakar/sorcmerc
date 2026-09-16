@@ -5,6 +5,7 @@
 extends RefCounted
 
 const Catalog = preload("res://core/rules/catalog.gd")
+const Loc = preload("res://core/loc.gd")
 
 const KINDS := ["passive_damage", "self_buff", "ally_buff", "heal_self", "heal_ally",
 	"grant_action", "grant_verb", "attacks_per_action", "attack_modifier", "damage_bonus",
@@ -282,12 +283,22 @@ static func _cantrip_count(m: Dictionary, n: int, char_level: int) -> int:
 			n = int(s["count"])
 	return n
 
-# Fallback until F1 re-exports feature/pool prose (SCHEMA gap #4).
+# Fallback until F1 re-exports feature/pool prose (SCHEMA gap #4) — and, since
+# the localization pass, the one door every feature name goes through. A
+# translated language names features outright (data/loc/<lang>/features.json);
+# English, and anything the translation has not reached, still gets the id with
+# its hyphens knocked out.
 static func humanize(id: String) -> String:
-	return id.replace("-", " ").capitalize()
+	var named := Loc.name_of(id)
+	return named if named != "" else id.replace("-", " ").capitalize()
 
 # Feature ids are "<class>-<name>"; a button says "Second Wind", not "Fighter Second Wind".
+# A translated name is already the short one — Turkish does not carry the class
+# prefix — so the split only applies to the humanized fallback.
 static func verb_label(id: String) -> String:
+	var named := Loc.name_of(id)
+	if named != "":
+		return named
 	var p := id.split("-")
 	return humanize("-".join(p.slice(1)) if p.size() > 1 else id)
 

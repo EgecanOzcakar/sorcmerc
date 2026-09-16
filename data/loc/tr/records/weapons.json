@@ -1,0 +1,119 @@
+{
+ "club": {
+  "name": "Sopa"
+ },
+ "dagger": {
+  "name": "Hançer"
+ },
+ "greatclub": {
+  "name": "Büyük Sopa"
+ },
+ "handaxe": {
+  "name": "El Baltası"
+ },
+ "javelin": {
+  "name": "Cirit"
+ },
+ "light-hammer": {
+  "name": "Hafif Çekiç"
+ },
+ "mace": {
+  "name": "Topuz"
+ },
+ "quarterstaff": {
+  "name": "Uzun Değnek"
+ },
+ "sickle": {
+  "name": "Orak"
+ },
+ "spear": {
+  "name": "Mızrak"
+ },
+ "light-crossbow": {
+  "name": "Hafif Arbalet"
+ },
+ "dart": {
+  "name": "Dart"
+ },
+ "shortbow": {
+  "name": "Kısa Yay"
+ },
+ "sling": {
+  "name": "Sapan"
+ },
+ "battleaxe": {
+  "name": "Savaş Baltası"
+ },
+ "flail": {
+  "name": "Gürz"
+ },
+ "glaive": {
+  "name": "Tırpanlı Mızrak"
+ },
+ "greataxe": {
+  "name": "Büyük Balta"
+ },
+ "greatsword": {
+  "name": "Büyük Kılıç"
+ },
+ "halberd": {
+  "name": "Teber"
+ },
+ "lance": {
+  "name": "Süvari Mızrağı"
+ },
+ "longsword": {
+  "name": "Uzun Kılıç"
+ },
+ "maul": {
+  "name": "Balyoz"
+ },
+ "morningstar": {
+  "name": "Dikenli Topuz"
+ },
+ "pike": {
+  "name": "Kargı"
+ },
+ "rapier": {
+  "name": "Meç"
+ },
+ "scimitar": {
+  "name": "Pala"
+ },
+ "shortsword": {
+  "name": "Kısa Kılıç"
+ },
+ "trident": {
+  "name": "Üç Çatal"
+ },
+ "war-pick": {
+  "name": "Savaş Kazması"
+ },
+ "warhammer": {
+  "name": "Savaş Çekici"
+ },
+ "whip": {
+  "name": "Kırbaç"
+ },
+ "blowgun": {
+  "name": "Üfleme Borusu"
+ },
+ "hand-crossbow": {
+  "name": "El Arbaleti"
+ },
+ "heavy-crossbow": {
+  "name": "Ağır Arbalet"
+ },
+ "longbow": {
+  "name": "Uzun Yay"
+ },
+ "net": {
+  "name": "Ağ"
+ },
+ "musket": {
+  "name": "Tüfek"
+ },
+ "pistol": {
+  "name": "Tabanca"
+ }
+}

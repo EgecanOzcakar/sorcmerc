@@ -1,4 +1,5 @@
-# The settings overlay: animation speed, default difficulty, clear autosave.
+# The settings overlay: language, animation speed, default difficulty, clear
+# autosave.
 # Programmatic UI on the shared dark theme. Every control writes straight through
 # to core/settings.gd and saves; `changed` fires so a live screen can re-read.
 #
@@ -12,6 +13,7 @@ const Settings = preload("res://core/settings.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
 const Sound = preload("res://core/audio.gd")
+const Loc = preload("res://core/loc.gd")
 const CAMPAIGN_SAVE := "res://core/campaign_save.gd"
 
 const COL_BG := Icons.COL_BG
@@ -70,9 +72,37 @@ func _ready() -> void:
 	panel.add_child(col)
 
 	var cap := Label.new()
-	cap.text = "Settings"
+	cap.text = Loc.t("settings.title", "Settings")
 	cap.theme_type_variation = "Title"
 	col.add_child(cap)
+
+	# Language, first — it is the one control that rewrites every other label on
+	# this panel, and the list itself is deliberately NOT translated: a player
+	# who has landed in the wrong language has to be able to read their way out.
+	var lang_row := HBoxContainer.new()
+	lang_row.add_theme_constant_override("separation", 8)
+	var lang_lbl := Label.new()
+	lang_lbl.text = Loc.t("settings.language", "Language")
+	lang_lbl.theme_type_variation = "Dim"
+	lang_row.add_child(lang_lbl)
+	var lang := OptionButton.new()
+	lang.name = "LanguagePicker"
+	for l in Loc.LANGS:
+		lang.add_item(String(l["label"]))
+		lang.set_item_metadata(lang.item_count - 1, String(l["id"]))
+		if l["id"] == _s.language:
+			lang.select(lang.item_count - 1)
+	lang.item_selected.connect(func(i: int):
+		_s.language = String(lang.get_item_metadata(i))
+		Loc.set_lang(_s.language)
+		_apply()
+		# Every label already on screen was built in the old language, this one
+		# included. Rebuilding the overlay is cheaper and more honest than
+		# chasing each Label — and `changed` has already told the screen
+		# underneath to re-read itself.
+		_reopen())
+	lang_row.add_child(lang)
+	col.add_child(lang_row)
 
 	# Combat pace. This was a "Reduced animations (fast)" checkbox, which is to
 	# say the dial only turned one way: the fight could be made quicker and
@@ -81,15 +111,15 @@ func _ready() -> void:
 	var pace_row := HBoxContainer.new()
 	pace_row.add_theme_constant_override("separation", 8)
 	var pace_lbl := Label.new()
-	pace_lbl.text = "Combat pace"
+	pace_lbl.text = Loc.t("settings.combat_pace", "Combat pace")
 	pace_lbl.theme_type_variation = "Dim"
 	pace_row.add_child(pace_lbl)
 	var pace := OptionButton.new()
 	pace.name = "PacePicker"
 	for p in Settings.ANIM_PACES:
-		pace.add_item(String(p["label"]))
+		pace.add_item(Loc.t("pace.%s" % p["id"], String(p["label"])))
 		pace.set_item_metadata(pace.item_count - 1, float(p["speed"]))
-		pace.set_item_tooltip(pace.item_count - 1, String(p["note"]))
+		pace.set_item_tooltip(pace.item_count - 1, Loc.t("pace.%s.note" % p["id"], String(p["note"])))
 	var pace_note := Label.new()
 	pace_note.name = "PaceNote"
 	pace_note.theme_type_variation = "Dim"
@@ -100,7 +130,7 @@ func _ready() -> void:
 			if is_equal_approx(float(pace.get_item_metadata(i)), float(chosen["speed"])):
 				pace.select(i)
 				break
-		pace_note.text = String(chosen["note"])
+		pace_note.text = Loc.t("pace.%s.note" % chosen["id"], String(chosen["note"]))
 	select_pace.call(_s.anim_speed_multiplier)
 	pace.item_selected.connect(func(i: int):
 		_s.anim_speed_multiplier = float(pace.get_item_metadata(i))
@@ -110,11 +140,11 @@ func _ready() -> void:
 	col.add_child(pace_row)
 	col.add_child(pace_note)
 
-	col.add_child(_volume_row("Sound effects", _s.sfx_volume, func(v: float):
+	col.add_child(_volume_row(Loc.t("settings.sfx", "Sound effects"), _s.sfx_volume, func(v: float):
 		_s.sfx_volume = v
 		Sound.set_sfx_volume(v)
 		_apply()))
-	col.add_child(_volume_row("Music", _s.music_volume, func(v: float):
+	col.add_child(_volume_row(Loc.t("settings.music", "Music"), _s.music_volume, func(v: float):
 		_s.music_volume = v
 		Sound.set_music_volume(v)
 		_apply()))
@@ -123,9 +153,10 @@ func _ready() -> void:
 	# let you make it. The free ones never ask either way — see core/settings.gd.
 	var react := CheckButton.new()
 	react.name = "ReactionPrompts"
-	react.text = "Ask before a reaction spends a slot"
-	react.tooltip_text = "Counterspell and Hellish Rebuke stop the fight and ask.\n" \
-		+ "Opportunity attacks and Uncanny Dodge always fire by themselves."
+	react.text = Loc.t("settings.reaction_prompts", "Ask before a reaction spends a slot")
+	react.tooltip_text = Loc.t("settings.reaction_prompts.note",
+		"Counterspell and Hellish Rebuke stop the fight and ask.\n" \
+		+ "Opportunity attacks and Uncanny Dodge always fire by themselves.")
 	react.button_pressed = _s.reaction_prompts
 	react.toggled.connect(func(on: bool):
 		_s.reaction_prompts = on
@@ -135,12 +166,12 @@ func _ready() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	var lbl := Label.new()
-	lbl.text = "New campaign difficulty"
+	lbl.text = Loc.t("settings.difficulty", "New campaign difficulty")
 	lbl.theme_type_variation = "Dim"
 	row.add_child(lbl)
 	var pick := OptionButton.new()
 	for d in Settings.DIFFICULTIES:
-		pick.add_item(d.capitalize())
+		pick.add_item(Loc.term("difficulty", d, d.capitalize()))
 	pick.selected = Settings.DIFFICULTIES.find(_s.default_difficulty)
 	pick.item_selected.connect(func(i: int):
 		_s.default_difficulty = Settings.DIFFICULTIES[i]
@@ -149,7 +180,7 @@ func _ready() -> void:
 	col.add_child(row)
 
 	var wipe := Button.new()
-	wipe.text = "Clear autosave"
+	wipe.text = Loc.t("settings.clear_autosave", "Clear autosave")
 	wipe.pressed.connect(_clear_autosave)
 	col.add_child(wipe)
 
@@ -157,7 +188,7 @@ func _ready() -> void:
 	col.add_child(_note)
 
 	var close := Button.new()
-	close.text = "Close"
+	close.text = Loc.t("common.close", "Close")
 	close.theme_type_variation = "Primary"
 	close.pressed.connect(queue_free)
 	col.add_child(close)
@@ -194,6 +225,24 @@ func _apply() -> void:
 	Settings.save_settings(_s)
 	changed.emit()
 
+# Close and reopen this overlay in place, keeping whoever was listening to
+# `changed` attached. Only the language picker needs it.
+func _reopen() -> void:
+	var host := get_parent()
+	var listeners := changed.get_connections()
+	# Out of the tree NOW, not at the end of the frame: a queue_free()d child
+	# still sitting there keeps its name, and Godot would rename the
+	# replacement ("SettingsOverlay2") — which is what toggle() and every test
+	# look the overlay up by. Same reason scenes/party/party.gd's _clear()
+	# removes before it frees.
+	host.remove_child(self)
+	queue_free()
+	var o = load("res://scenes/settings/settings.tscn").instantiate()
+	o.name = "SettingsOverlay"
+	host.add_child(o)
+	for c in listeners:
+		o.changed.connect(c["callable"])
+
 # T10 owns core/campaign_save.gd and may not have landed it yet, so this stays a
 # no-op with a note rather than a crash when the script (or its delete) is absent.
 func _clear_autosave() -> void:
@@ -204,9 +253,10 @@ func _clear_autosave() -> void:
 			names.append(m["name"])
 	var fn: String = "delete" if "delete" in names else ("clear" if "clear" in names else "")
 	if fn == "":
-		_note.text = "No autosave system yet — nothing to clear."
+		_note.text = Loc.t("settings.autosave_absent", "No autosave system yet — nothing to clear.")
 		return
-	_note.text = "Autosave cleared." if script.call(fn) else "No autosave to clear."
+	_note.text = Loc.t("settings.autosave_cleared", "Autosave cleared.") if script.call(fn) \
+		else Loc.t("settings.autosave_none", "No autosave to clear.")
 
 func _unhandled_key_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and e.keycode == KEY_ESCAPE:

@@ -4761,3 +4761,72 @@ back-to-back on master and on the branch with `tests/test_scaler.gd`'s own
 per-boss numbers `campaign.gd`'s BOSS_POOL copies verbatim were re-copied. The
 cost that does not show up in a win rate is length: a level-8 fight went from
 ~9.8 rounds to ~12. Resistance is duration, not difficulty.
+
+## T95 — Turkish, and the seam a second language needed
+
+The ask was "Turkish localization, and check Baldur's Gate 3's translation for
+the keywords and the class features". The second half is the interesting half:
+it names the two bodies of text that a D&D game cannot be played without, and
+neither of them is UI chrome. A keyword is what the rules are written in
+("avantaj", "Kurtarma Zarı", "Kıskaçta"); a class feature is what a character
+*is* ("İkinci Nefes", "Öfke", "Sinsi Saldırı"). Get those two right and a
+half-translated menu is a nuisance; get them wrong and the game is unreadable
+in any language.
+
+**The seam.** `core/loc.gd` is static, loads nothing until something asks, and
+treats English as the source language: every call site passes the English it
+would have shown anyway as the fallback, so `"en"` costs a dictionary miss and
+a missing Turkish line degrades to English rather than to a key name. That is
+the property `tests/test_loc.gd` spends its first test on — a localization
+layer that changes the English game is a regression, not a feature.
+
+**Records are an overlay, not a lookup.** The one design decision worth the
+name. `core/rules/catalog.gd` already folds every content pack's records into
+the same parsed arrays the whole game reads (M6); the language now folds in
+right behind the packs:
+
+```gdscript
+_files[file] = Loc.localize_records(file, _layered(file, _files[file]))
+```
+
+So `Catalog.spell("fireball")["name"]` is "Ateş Topu" at dozens of call sites
+that were never told a second language exists, and a pack's own monster is
+translated on exactly the same terms as the base game's. The merge is
+field-by-field, so a table that gives a name and no description leaves the
+English description standing — which is how the spell *names* could ship
+without the 112 KB of SRD prose behind them.
+
+**Feature names had nowhere to come from.** `data/*.json` carries no prose for
+the 479 feature ids the resolver grants (SCHEMA gap #4), so the engine has
+always fallen back to `Effects.humanize("fighter-second-wind")` →
+"Fighter Second Wind". That function became the one door: it asks
+`Loc.name_of()` first, and `data/loc/tr/features.json` answers for all 493 ids
+(the 479 plus the feat aliases). `verb_label()` — the action bar's "Second
+Wind" rather than "Fighter Second Wind" — returns a translated name unchanged,
+because Turkish never carried the class prefix to strip.
+
+**What is in the box.** 282 glossary entries (the six abilities, eighteen
+skills, fifteen conditions with their prose, thirteen damage types, eight
+schools, sizes, creature types, factions, rarities, weapon properties and
+masteries); 493 feature names; names for every record the catalog holds — 12
+classes, 48 subclasses with prose, 10 species, 16 backgrounds, 74 feats with
+prose, 10 fighting styles with prose, 146 spells, 39 weapons, 13 armours, 264
+magic items, all 316 bestiary entries; and 392 UI keys covering the title,
+settings, party, sheet, creator, level-up, progression, achievements, the mod
+browser, the combat HUD and its tutorial, and the open world's HUD.
+
+**What is not, and why it is a separate pass.** The generated prose: the combat
+action log, the road events and settlement pages, the field manual's long-form
+pages, and the SRD descriptions behind the spell and item names. Those are
+bodies of authored English that want a translator's pass rather than a
+programmer's, and none of them blocks playing in Turkish — every one of them
+still reads, in English, inside an otherwise Turkish game. `docs/localization.md`
+names them as the next pass rather than leaving them to be discovered.
+
+**The test is the contract.** `tests/test_loc.gd` scrapes every `Loc.t()` key
+out of `scenes/` and `core/` and fails on any with no Turkish, so a string
+added to a screen and forgotten in the table is a red test rather than an
+English sentence in a Turkish menu. It walks the data files for every feature
+id the resolver can grant and fails on any without a name. And it compares the
+`printf` specs on both sides of each translation, because a `%d` that became a
+`%s` is a crash at the call site, not a typo.

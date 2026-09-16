@@ -5,6 +5,7 @@
 # Run standalone:  godot --path . scenes/campaign/campaign.tscn
 extends Control
 
+const Loc = preload("res://core/loc.gd")
 const Campaign = preload("res://core/campaign.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
 const Party = preload("res://core/party.gd")
@@ -86,19 +87,19 @@ func _ready() -> void:
 	footer.add_theme_constant_override("separation", 10)
 	root.add_child(footer)
 	var pbtn := Button.new()
-	pbtn.text = "Party"
+	pbtn.text = Loc.t("world.party", "Party")
 	pbtn.pressed.connect(_open_party)
 	footer.add_child(pbtn)
 	var sbtn := Button.new()
-	sbtn.text = "⚙  Settings"
+	sbtn.text = "⚙  " + Loc.t("common.settings", "Settings")
 	sbtn.pressed.connect(func(): SettingsOverlay.toggle(self))
 	footer.add_child(sbtn)
 	var mbtn := Button.new()
-	mbtn.text = "Manual"
+	mbtn.text = Loc.t("combat.manual", "Manual")
 	mbtn.pressed.connect(func(): ManualOverlay.toggle(self))
 	footer.add_child(mbtn)
 	var bbtn := Button.new()
-	bbtn.text = "Report a bug"
+	bbtn.text = Loc.t("common.report_bug", "Report a bug")
 	bbtn.pressed.connect(func(): BugReportOverlay.toggle(self, {
 		"Screen": "the linear campaign map",
 		"Stage": "%d of %d" % [run.stage, Campaign.STAGE_COUNT],
@@ -127,7 +128,7 @@ func _offer_continue() -> void:
 	overlay.add_child(col)
 	col.add_child(_caption("A run is saved"))
 	var cont := Button.new()
-	cont.text = "Resume the last run"
+	cont.text = Loc.t("title.resume_run", "Resume the last run")
 	cont.pressed.connect(func():
 		var saved = CampaignSave.load_latest()
 		overlay.queue_free()
@@ -138,7 +139,7 @@ func _offer_continue() -> void:
 		_refresh())
 	col.add_child(cont)
 	var fresh := Button.new()
-	fresh.text = "Begin a new run"
+	fresh.text = Loc.t("run.begin_new", "Begin a new run")
 	fresh.pressed.connect(func(): overlay.queue_free())
 	col.add_child(fresh)
 
@@ -165,7 +166,7 @@ func _refresh() -> void:
 	for c in _body.get_children():
 		c.queue_free()
 		_body.remove_child(c)
-	_header.text = "Stage %d of %d.  %d gp, %d XP" % [
+	_header.text = Loc.t("run.header", "Stage %d of %d.  %d gp, %d XP") % [
 		mini(run.stage + 1, Campaign.STAGE_COUNT), Campaign.STAGE_COUNT, party.gold, run.xp]
 
 	var fallen: Array = party.roster.filter(func(ch): return ch.dead)
@@ -181,7 +182,7 @@ func _refresh() -> void:
 			_body.add_child(_node_panel())
 		"combat":
 			var l := Label.new()
-			l.text = "Fighting…"
+			l.text = Loc.t("run.fighting", "Fighting…")
 			_body.add_child(l)
 		_:
 			_body.add_child(_end_panel())
@@ -203,11 +204,12 @@ func _node_card(index: int, node: Dictionary) -> Control:
 	title.add_theme_color_override("font_color", KIND_COL.get(node["kind"], COL_DIM))
 	col.add_child(title)
 	var desc := Label.new()
-	desc.text = "%s.  %s" % [String(node["kind"]).capitalize(), node.get("desc", "")]
+	desc.text = "%s.  %s" % [Loc.term("node", String(node["kind"]),
+		String(node["kind"]).capitalize()), node.get("desc", "")]
 	desc.theme_type_variation = "Dim"
 	col.add_child(desc)
 	var go := Button.new()
-	go.text = "Take this road"
+	go.text = Loc.t("run.take_road", "Take this road")
 	go.pressed.connect(func(): _enter(index))
 	col.add_child(go)
 	return panel
@@ -223,13 +225,14 @@ func _retire_card() -> Control:
 	var col := VBoxContainer.new()
 	panel.add_child(col)
 	var title := Label.new()
-	title.text = "⌂  Retire from the road"
+	title.text = "⌂  " + Loc.t("run.retire_title", "Retire from the road")
 	title.theme_type_variation = "Head"
 	title.add_theme_color_override("font_color", COL_GOLD)
 	col.add_child(title)
 	col.add_child(_dim("Walk home with the gold, XP and loot you have. The run ends here."))
 	var b := Button.new()
-	b.text = "Yes — end the run now" if _retire_armed else "Retire…"
+	b.text = Loc.t("run.retire_yes", "Yes — end the run now") if _retire_armed \
+		else Loc.t("run.retire", "Retire…")
 	b.pressed.connect(func():
 		if _retire_armed:
 			run.retire()
@@ -256,7 +259,8 @@ func _node_panel() -> Control:
 			for kind in ["short-rest", "long-rest"]:
 				var b := Button.new()
 				var left := run.long_rests_left() if kind == "long-rest" else run.short_rests_left()
-				b.text = "Take a %s   (%d left this run)" % [kind.replace("-", " "), left]
+				b.text = Loc.t("run.take_rest", "Take a %s   (%d left this run)") \
+					% [Loc.term("rest", kind, kind.replace("-", " ")), left]
 				b.disabled = left <= 0
 				b.pressed.connect(func(): run.rest(kind); _refresh())
 				col.add_child(b)
@@ -267,7 +271,7 @@ func _node_panel() -> Control:
 			_opportunity_ui(col)
 
 	var on := Button.new()
-	on.text = "Continue  →"
+	on.text = Loc.t("run.continue", "Continue") + "  →"
 	on.pressed.connect(func(): run.leave(); _refresh())
 	col.add_child(on)
 	return panel
@@ -303,7 +307,7 @@ func _merchant_ui(col: VBoxContainer) -> void:
 func _service_page(service: String, page: VBoxContainer) -> void:
 	for e in run.service_stock(service):
 		var b := Button.new()
-		b.text = "Buy  %s   —   %d gp" % [e["name"], e["price"]]
+		b.text = Loc.t("run.buy", "Buy  %s   —   %d gp") % [e["name"], e["price"]]
 		b.add_theme_color_override("font_color", Icons.item_color(String(e["item_id"])))
 		b.disabled = party.gold < int(e["price"]) or int(e["price"]) <= 0
 		b.pressed.connect(func(): run.buy(String(e["item_id"])); _refresh())
@@ -318,7 +322,7 @@ func _service_page(service: String, page: VBoxContainer) -> void:
 					var b := Button.new()
 					var nm: String = Campaign.item_name(id) if Party.is_identified(e) \
 						else Campaign.mystery_name(id)
-					b.text = "Sell  %s ×%d   —   %d gp" % [nm, int(e["quantity"]),
+					b.text = Loc.t("run.sell", "Sell  %s ×%d   —   %d gp") % [nm, int(e["quantity"]),
 						maxi(1, int(Campaign.item_price(id) * Campaign.SELL_RATE))]
 					b.add_theme_color_override("font_color", Icons.item_color(id))
 					b.pressed.connect(func(): run.sell(id); _refresh())
@@ -331,14 +335,14 @@ func _service_page(service: String, page: VBoxContainer) -> void:
 			for e in mysteries:
 				var id := String(e["item_id"])
 				var b := Button.new()
-				b.text = "Identify  %s   —   %d gp" % [Campaign.mystery_name(id),
+				b.text = Loc.t("run.identify", "Identify  %s   —   %d gp") % [Campaign.mystery_name(id),
 					Campaign.IDENTIFY_FEE_GP]
 				b.disabled = party.gold < Campaign.IDENTIFY_FEE_GP
 				b.pressed.connect(func(): run.identify_for_fee(id); _refresh())
 				page.add_child(b)
 		"healer":
 			var b := Button.new()
-			b.text = "Tend the whole party   —   %d gp" % Campaign.HEALER_GP
+			b.text = Loc.tf("run.tend", "Tend the whole party   —   %d gp", [Campaign.HEALER_GP])
 			b.disabled = party.gold < Campaign.HEALER_GP
 			b.pressed.connect(func(): run.heal_party(); _refresh())
 			page.add_child(b)
@@ -349,14 +353,16 @@ func _service_page(service: String, page: VBoxContainer) -> void:
 				page.add_child(_dim("Nothing else needs doing here."))
 			else:
 				var b := Button.new()
-				b.text = "Accept:  %s   (%d gp)" % [offer["title"], int(offer["reward"].get("gold", 0))]
+				b.text = Loc.t("run.accept_quest", "Accept:  %s   (%d gp)") \
+					% [offer["title"], int(offer["reward"].get("gold", 0))]
 				b.pressed.connect(func(): run.accept(offer); _refresh())
 				page.add_child(b)
 			for q in Quest.active(party):
 				if not Quest.can_turn_in(q):
 					continue
 				var b := Button.new()
-				b.text = "Turn in:  %s   (+%d gp)" % [q["title"], int(q["reward"].get("gold", 0))]
+				b.text = Loc.t("run.turn_in_quest", "Turn in:  %s   (+%d gp)") \
+					% [q["title"], int(q["reward"].get("gold", 0))]
 				b.pressed.connect(func(): run.turn_in(q); _refresh())
 				page.add_child(b)
 
@@ -399,11 +405,12 @@ func _identify_ui(col: VBoxContainer) -> void:
 			continue
 		var bonus := run.arcana_bonus(who)
 		var b := Button.new()
-		b.text = "Examine  %s   (%s, Arcana %+d vs DC %d)" % [Campaign.mystery_name(id),
+		b.text = Loc.t("run.examine", "Examine  %s   (%s, Arcana %+d vs DC %d)") \
+			% [Campaign.mystery_name(id),
 			party.get_member(who).cname, bonus, Campaign.identify_dc(id)]
 		b.disabled = id in run.identify_failed
 		if b.disabled:
-			b.text += "   — nothing learned here"
+			b.text += Loc.t("run.nothing_learned", "   — nothing learned here")
 		b.pressed.connect(func(): run.identify_check(id, who); _refresh())
 		col.add_child(b)
 
@@ -422,13 +429,15 @@ func _fallen_panel(fallen: Array) -> Control:
 		col.add_child(_dim("%s lies dead." % ch.cname))
 		if caster != "":
 			var b := Button.new()
-			b.text = "Revivify  %s   (%s casts, −%d gp)" % [ch.cname, caster, Party.REVIVE_COST]
+			b.text = Loc.t("run.revivify", "Revivify  %s   (%s casts, −%d gp)") \
+				% [ch.cname, caster, Party.REVIVE_COST]
 			b.disabled = not Party.can_resurrect(party)
 			b.pressed.connect(func(): run.resurrect(ch.id, "spell", caster); _refresh())
 			col.add_child(b)
 		if scroll:
 			var b2 := Button.new()
-			b2.text = "Read the Scroll of Resurrection over %s   (−%d gp)" % [ch.cname, Party.REVIVE_COST]
+			b2.text = Loc.t("run.resurrect", "Read the Scroll of Resurrection over %s   (−%d gp)") \
+				% [ch.cname, Party.REVIVE_COST]
 			b2.disabled = not Party.can_resurrect(party)
 			b2.pressed.connect(func(): run.resurrect(ch.id, "scroll"); _refresh())
 			col.add_child(b2)
@@ -443,14 +452,15 @@ func _end_panel() -> Control:
 	var col := VBoxContainer.new()
 	panel.add_child(col)
 	var l := Label.new()
-	l.text = "The road is walked. %d XP, %d gp." % [run.xp, party.gold] if run.state == "won" \
+	l.text = Loc.t("run.road_walked", "The road is walked. %d XP, %d gp.") \
+		% [run.xp, party.gold] if run.state == "won" \
 		else "Retired. %d XP, %d gp brought home." % [run.xp, party.gold] if run.state == "retired" \
 		else "The party falls. The run ends here."
 	l.theme_type_variation = "Head"
 	l.add_theme_color_override("font_color", COL_PARTY if won else COL_FOE)
 	col.add_child(l)
 	var again := Button.new()
-	again.text = "New run"
+	again.text = Loc.t("title.new_run", "New run")
 	again.pressed.connect(func(): run = Campaign.new(party); _refresh())
 	col.add_child(again)
 	return panel
@@ -476,7 +486,8 @@ func _refresh_quests() -> void:
 	if done.is_empty():
 		return
 	var toggle := Button.new()
-	toggle.text = "%s  History (%d)" % ["▾" if _show_history else "▸", done.size()]
+	toggle.text = "%s  %s" % ["▾" if _show_history else "▸",
+		Loc.tf("run.history", "History (%d)", [done.size()])]
 	toggle.pressed.connect(func(): _show_history = not _show_history; _refresh_quests())
 	_quests.add_child(toggle)
 	if _show_history:
@@ -538,7 +549,7 @@ func _launch_combat() -> void:
 	var result: Dictionary = _combat.result
 	_combat = null
 	var back := Button.new()
-	back.text = "←  Back to the road"
+	back.text = "←  " + Loc.t("run.back_road", "Back to the road")
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -220; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(func():
@@ -558,7 +569,7 @@ func _open_party() -> void:
 	screen.party = party
 	overlay.add_child(screen)
 	var back := Button.new()
-	back.text = "←  Back to the road"
+	back.text = "←  " + Loc.t("run.back_road", "Back to the road")
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -220; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(func():

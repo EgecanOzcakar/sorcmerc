@@ -2,6 +2,8 @@
 # Unknown ids return {} and append to `warnings`, which resolve.gd drains.
 extends RefCounted
 
+const Loc = preload("res://core/loc.gd")
+
 const DIR := "res://data/"
 
 static var warnings: Array[String] = []
@@ -47,7 +49,12 @@ static func all(file: String) -> Variant:
 			_files[file] = JSON.parse_string(txt)
 			if _files[file] == null:
 				warnings.append("unparsable data file: " + file)
-		_files[file] = _layered(file, _files[file])
+		# Packs first, then the language: a pack that adds a monster gets its
+		# name translated on the same terms as the base game's, and a pack that
+		# retunes one keeps whichever name the translation gives that id. Both
+		# happen once, at parse time, so every reader of record["name"] is
+		# localized without a single call site knowing about it.
+		_files[file] = Loc.localize_records(file, _layered(file, _files[file]))
 	return _files[file]
 
 # The base file with every pack's records for it folded in. An Array file

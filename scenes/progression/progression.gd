@@ -6,6 +6,7 @@
 #   godot --path . scenes/progression/progression.tscn
 extends Control
 
+const Loc = preload("res://core/loc.gd")
 const Prog = preload("res://core/progression.gd")
 const Icons = preload("res://core/ui_icons.gd")
 
@@ -42,12 +43,12 @@ func _ready() -> void:
 	panel.add_child(col)
 
 	var cap := Label.new()
-	cap.text = "Progression"
+	cap.text = Loc.t("progression.title", "Progression")
 	cap.theme_type_variation = "Title"
 	col.add_child(cap)
 
 	var tally := Label.new()
-	tally.text = "%d lifetime XP" % Prog.lifetime_xp_total()
+	tally.text = Loc.tf("progression.lifetime", "%d lifetime XP", [Prog.lifetime_xp_total()])
 	tally.theme_type_variation = "Dim"
 	col.add_child(tally)
 
@@ -83,7 +84,7 @@ func _ready() -> void:
 
 	var close := Button.new()
 	Icons.clicks(close)
-	close.text = "Close"
+	close.text = Loc.t("common.close", "Close")
 	close.pressed.connect(_close)
 	col.add_child(close)
 
@@ -125,7 +126,7 @@ func _card(glyph: String, title: String, unlocked: bool, note: String, sub: Stri
 	head.add_child(name_l)
 
 	var state := Label.new()
-	state.text = note if not note.is_empty() else "Unlocked"
+	state.text = note if not note.is_empty() else Loc.t("progression.unlocked", "Unlocked")
 	state.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	state.add_theme_color_override("font_color", Icons.COL_ACCENT if unlocked else Icons.COL_EDGE)
 	head.add_child(state)
@@ -140,7 +141,8 @@ func _card(glyph: String, title: String, unlocked: bool, note: String, sub: Stri
 
 	for s in subclasses:
 		var row := Label.new()
-		var tail := "free" if s["free"] else "%d class XP to go" % s["remaining"]
+		var tail := Loc.t("progression.free", "free") if s["free"] \
+			else Loc.tf("progression.to_go", "%d class XP to go", [s["remaining"]])
 		row.text = "    %s %s — %s" % ["★" if s["unlocked"] else "☆", s["name"], tail]
 		row.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 		row.add_theme_color_override("font_color",

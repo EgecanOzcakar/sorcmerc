@@ -5,6 +5,7 @@
 extends RefCounted
 
 const Dice = preload("res://core/dice.gd")
+const Loc = preload("res://core/loc.gd")
 const Hex = preload("res://core/hex.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Ach = preload("res://core/achievements.gd")
@@ -453,10 +454,15 @@ const BASIC := [
 const OFFERABLE := ["heal_self", "heal_ally", "self_buff", "ally_buff", "grant_action",
 	"attack_modifier", "save_effect", "spell", "offhand_attack"]
 
+# A BASIC verb by id, with its label in the language being played in. The table
+# above stays English — it is the source text every other language falls back
+# to, and the one place a translation is wired in is here, on the way out.
 func _basic(id: String) -> Dictionary:
 	for b in BASIC:
 		if b["id"] == id:
-			return b
+			var out: Dictionary = b.duplicate()
+			out["label"] = Loc.t("verb.%s" % id, String(b["label"]))
+			return out
 	return {}
 
 # Triggers that fire from the resolver rather than from a press: T94's on_death
@@ -480,7 +486,7 @@ func all_verbs(actor) -> Array:
 	var out: Array = []
 	for b in BASIC:
 		if is_button(actor, b):
-			out.append(b.duplicate())
+			out.append(_basic(String(b["id"])))
 	for v in actor.verbs:
 		if v["kind"] == "grant_verb":
 			for name in v.get("verbs", []):
@@ -504,7 +510,8 @@ func all_verbs(actor) -> Array:
 			seen[pid] = true
 			var m := Potions.mechanics(pid)
 			out.append({"id": "drink:" + pid, "kind": "drink", "potion": pid, "cost": "action",
-				"label": "Drink " + Catalog.magic_item(pid).get("name", pid), "text": Potions.text(pid),
+				"label": Loc.tf("verb.drink", "Drink %s",
+					[Catalog.magic_item(pid).get("name", pid)]), "text": Potions.text(pid),
 				"targeting": "enemy" if m.has("target") else "self",
 				"target_type": m.get("target", ""), "range": maxi(1, int(m.get("range_ft", 5)) / 6)})
 	return out

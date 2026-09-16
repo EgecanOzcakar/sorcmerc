@@ -1,0 +1,56 @@
+{
+ "acrobatics": {
+  "name": "Akrobasi"
+ },
+ "animalhandling": {
+  "name": "Hayvan Terbiyesi"
+ },
+ "arcana": {
+  "name": "Gizemli İlimler"
+ },
+ "athletics": {
+  "name": "Atletizm"
+ },
+ "deception": {
+  "name": "Aldatma"
+ },
+ "history": {
+  "name": "Tarih"
+ },
+ "insight": {
+  "name": "Sezgi"
+ },
+ "intimidation": {
+  "name": "Gözdağı"
+ },
+ "investigation": {
+  "name": "Araştırma"
+ },
+ "medicine": {
+  "name": "Tıp"
+ },
+ "nature": {
+  "name": "Doğa"
+ },
+ "perception": {
+  "name": "Algı"
+ },
+ "performance": {
+  "name": "Gösteri"
+ },
+ "persuasion": {
+  "name": "İkna"
+ },
+ "religion": {
+  "name": "Din"
+ },
+ "sleightofhand": {
+  "name": "El Çabukluğu"
+ },
+ "stealth": {
+  "name": "Gizlilik"
+ },
+ "survival": {
+  "name": "Hayatta Kalma"
+ }
+}

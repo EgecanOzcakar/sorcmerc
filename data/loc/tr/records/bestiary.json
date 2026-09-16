@@ -1,0 +1,950 @@
+{
+ "awakened-shrub": {
+  "cname": "Uyanmış Çalı"
+ },
+ "baboon": {
+  "cname": "Babun"
+ },
+ "badger": {
+  "cname": "Porsuk"
+ },
+ "bat": {
+  "cname": "Yarasa"
+ },
+ "cat": {
+  "cname": "Kedi"
+ },
+ "commoner": {
+  "cname": "Sıradan Halk"
+ },
+ "crab": {
+  "cname": "Yengeç"
+ },
+ "deer": {
+  "cname": "Geyik"
+ },
+ "eagle": {
+  "cname": "Kartal"
+ },
+ "giant-fire-beetle": {
+  "cname": "Dev Ateş Böceği"
+ },
+ "goat": {
+  "cname": "Keçi"
+ },
+ "hawk": {
+  "cname": "Şahin"
+ },
+ "homunculus": {
+  "cname": "Homunkulus"
+ },
+ "hyena": {
+  "cname": "Sırtlan"
+ },
+ "jackal": {
+  "cname": "Çakal"
+ },
+ "lemure": {
+  "cname": "Lemür"
+ },
+ "lizard": {
+  "cname": "Kertenkele"
+ },
+ "octopus": {
+  "cname": "Ahtapot"
+ },
+ "owl": {
+  "cname": "Baykuş"
+ },
+ "quipper": {
+  "cname": "Quipper"
+ },
+ "rat": {
+  "cname": "Sıçan"
+ },
+ "raven": {
+  "cname": "Kuzgun"
+ },
+ "scorpion": {
+  "cname": "Akrep"
+ },
+ "spider": {
+  "cname": "Örümcek"
+ },
+ "vulture": {
+  "cname": "Akbaba"
+ },
+ "weasel": {
+  "cname": "Gelincik"
+ },
+ "bandit": {
+  "cname": "Haydut"
+ },
+ "bandit-archer": {
+  "cname": "Haydut Okçusu"
+ },
+ "blood-hawk": {
+  "cname": "Kan Şahini"
+ },
+ "camel": {
+  "cname": "Deve"
+ },
+ "cultist": {
+  "cname": "Tarikatçı"
+ },
+ "flying-snake": {
+  "cname": "Uçan Yılan"
+ },
+ "giant-crab": {
+  "cname": "Dev Yengeç"
+ },
+ "giant-rat": {
+  "cname": "Dev Sıçan"
+ },
+ "giant-rat-diseased": {
+  "cname": "Dev Sıçan (Hastalıklı)"
+ },
+ "giant-weasel": {
+  "cname": "Dev Gelincik"
+ },
+ "guard": {
+  "cname": "Muhafız"
+ },
+ "kobold": {
+  "cname": "Kobold"
+ },
+ "kobold-archer": {
+  "cname": "Kobold Okçusu"
+ },
+ "mastiff": {
+  "cname": "Mastif"
+ },
+ "merfolk": {
+  "cname": "Denizkızı"
+ },
+ "mule": {
+  "cname": "Katır"
+ },
+ "noble": {
+  "cname": "Soylu"
+ },
+ "poisonous-snake": {
+  "cname": "Zehirli Yılan"
+ },
+ "pony": {
+  "cname": "Midilli"
+ },
+ "stirge": {
+  "cname": "Stirge"
+ },
+ "tribal-warrior": {
+  "cname": "Kabile Savaşçısı"
+ },
+ "acolyte": {
+  "cname": "Din Adamı"
+ },
+ "axe-beak": {
+  "cname": "Balta Gaga"
+ },
+ "blink-dog": {
+  "cname": "Sekme Köpeği"
+ },
+ "boar": {
+  "cname": "Yabandomuzu"
+ },
+ "constrictor-snake": {
+  "cname": "Boğan Yılan"
+ },
+ "draft-horse": {
+  "cname": "Yük Atı"
+ },
+ "dretch": {
+  "cname": "Dretch"
+ },
+ "drow": {
+  "cname": "Drow"
+ },
+ "drow-archer": {
+  "cname": "Drow Okçusu"
+ },
+ "elk": {
+  "cname": "Alageyik"
+ },
+ "flying-sword": {
+  "cname": "Uçan Kılıç"
+ },
+ "giant-badger": {
+  "cname": "Dev Porsuk"
+ },
+ "giant-bat": {
+  "cname": "Dev Yarasa"
+ },
+ "giant-centipede": {
+  "cname": "Dev Kırkayak"
+ },
+ "giant-frog": {
+  "cname": "Dev Kurbağa"
+ },
+ "giant-lizard": {
+  "cname": "Dev Kertenkele"
+ },
+ "giant-owl": {
+  "cname": "Dev Baykuş"
+ },
+ "giant-poisonous-snake": {
+  "cname": "Dev Zehirli Yılan"
+ },
+ "giant-wolf-spider": {
+  "cname": "Dev Kurt Örümceği"
+ },
+ "goblin": {
+  "cname": "Goblin"
+ },
+ "goblin-archer": {
+  "cname": "Goblin Okçusu"
+ },
+ "grimlock": {
+  "cname": "Grimlock"
+ },
+ "panther": {
+  "cname": "Panter"
+ },
+ "pseudodragon": {
+  "cname": "Yalancı Ejderha"
+ },
+ "riding-horse": {
+  "cname": "Binek Atı"
+ },
+ "skeleton": {
+  "cname": "İskelet"
+ },
+ "skeleton-archer": {
+  "cname": "İskelet Okçusu"
+ },
+ "sprite": {
+  "cname": "Peri Cini"
+ },
+ "sprite-archer": {
+  "cname": "Peri Cini Okçusu"
+ },
+ "steam-mephit": {
+  "cname": "Buhar Mefiti"
+ },
+ "swarm-of-bats": {
+  "cname": "Yarasa Sürüsü"
+ },
+ "swarm-of-rats": {
+  "cname": "Sıçan Sürüsü"
+ },
+ "swarm-of-ravens": {
+  "cname": "Kuzgun Sürüsü"
+ },
+ "violet-fungus": {
+  "cname": "Mor Mantar"
+ },
+ "wolf": {
+  "cname": "Kurt"
+ },
+ "zombie": {
+  "cname": "Zombi"
+ },
+ "ape": {
+  "cname": "Maymun"
+ },
+ "ape-archer": {
+  "cname": "Maymun Okçusu"
+ },
+ "black-bear": {
+  "cname": "Kara Ayı"
+ },
+ "cockatrice": {
+  "cname": "Kokatris"
+ },
+ "crocodile": {
+  "cname": "Timsah"
+ },
+ "darkmantle": {
+  "cname": "Karanlık Pelerin"
+ },
+ "deep-gnome-svirfneblin": {
+  "cname": "Derin Gnom (Svirfneblin)"
+ },
+ "deep-gnome-svirfneblin-archer": {
+  "cname": "Derin Gnom (Svirfneblin) Okçusu"
+ },
+ "dust-mephit": {
+  "cname": "Toz Mefiti"
+ },
+ "giant-goat": {
+  "cname": "Dev Keçi"
+ },
+ "giant-sea-horse": {
+  "cname": "Dev Denizatı"
+ },
+ "giant-wasp": {
+  "cname": "Dev Eşekarısı"
+ },
+ "gnoll": {
+  "cname": "Gnoll"
+ },
+ "gnoll-archer": {
+  "cname": "Gnoll Okçusu"
+ },
+ "gray-ooze": {
+  "cname": "Gri Balçık"
+ },
+ "hobgoblin": {
+  "cname": "Hobgoblin"
+ },
+ "hobgoblin-archer": {
+  "cname": "Hobgoblin Okçusu"
+ },
+ "ice-mephit": {
+  "cname": "Buz Mefiti"
+ },
+ "lizardfolk": {
+  "cname": "Kertenkele Halkı"
+ },
+ "magma-mephit": {
+  "cname": "Magma Mefiti"
+ },
+ "magmin": {
+  "cname": "Magmin"
+ },
+ "orc": {
+  "cname": "Ork"
+ },
+ "reef-shark": {
+  "cname": "Resif Köpekbalığı"
+ },
+ "rust-monster": {
+  "cname": "Pas Canavarı"
+ },
+ "sahuagin": {
+  "cname": "Sahuagin"
+ },
+ "satyr": {
+  "cname": "Satir"
+ },
+ "satyr-archer": {
+  "cname": "Satir Okçusu"
+ },
+ "scout": {
+  "cname": "Öncü"
+ },
+ "scout-archer": {
+  "cname": "Öncü Okçusu"
+ },
+ "shadow": {
+  "cname": "Gölge"
+ },
+ "swarm-of-beetles": {
+  "cname": "Böcek Sürüsü"
+ },
+ "swarm-of-centipedes": {
+  "cname": "Kırkayak Sürüsü"
+ },
+ "swarm-of-insects": {
+  "cname": "Haşere Sürüsü"
+ },
+ "swarm-of-spiders": {
+  "cname": "Örümcek Sürüsü"
+ },
+ "swarm-of-wasps": {
+  "cname": "Eşekarısı Sürüsü"
+ },
+ "thug": {
+  "cname": "Kabadayı"
+ },
+ "thug-archer": {
+  "cname": "Kabadayı Okçusu"
+ },
+ "warhorse": {
+  "cname": "Savaş Atı"
+ },
+ "warhorse-skeleton": {
+  "cname": "Savaş Atı İskeleti"
+ },
+ "worg": {
+  "cname": "Worg"
+ },
+ "animated-armor": {
+  "cname": "Canlı Zırh"
+ },
+ "brass-dragon-wyrmling": {
+  "cname": "Pirinç Ejderha Yavrusu"
+ },
+ "brown-bear": {
+  "cname": "Boz Ayı"
+ },
+ "bugbear": {
+  "cname": "Bugbear"
+ },
+ "copper-dragon-wyrmling": {
+  "cname": "Bakır Ejderha Yavrusu"
+ },
+ "death-dog": {
+  "cname": "Ölüm Köpeği"
+ },
+ "dire-wolf": {
+  "cname": "Ulu Kurt"
+ },
+ "dryad": {
+  "cname": "Dryad"
+ },
+ "duergar": {
+  "cname": "Duergar"
+ },
+ "ghoul": {
+  "cname": "Gulyabani"
+ },
+ "giant-eagle": {
+  "cname": "Dev Kartal"
+ },
+ "giant-hyena": {
+  "cname": "Dev Sırtlan"
+ },
+ "giant-octopus": {
+  "cname": "Dev Ahtapot"
+ },
+ "giant-spider": {
+  "cname": "Dev Örümcek"
+ },
+ "giant-toad": {
+  "cname": "Dev Karakurbağası"
+ },
+ "giant-vulture": {
+  "cname": "Dev Akbaba"
+ },
+ "harpy": {
+  "cname": "Harpi"
+ },
+ "hippogriff": {
+  "cname": "Hipogrif"
+ },
+ "imp": {
+  "cname": "İfrit"
+ },
+ "lion": {
+  "cname": "Aslan"
+ },
+ "quasit": {
+  "cname": "Kuasit"
+ },
+ "specter": {
+  "cname": "Hayalet"
+ },
+ "spy": {
+  "cname": "Casus"
+ },
+ "spy-archer": {
+  "cname": "Casus Okçusu"
+ },
+ "swarm-of-quippers": {
+  "cname": "Quipper Sürüsü"
+ },
+ "tiger": {
+  "cname": "Kaplan"
+ },
+ "ankheg": {
+  "cname": "Ankheg"
+ },
+ "awakened-tree": {
+  "cname": "Uyanmış Ağaç"
+ },
+ "azer": {
+  "cname": "Azer"
+ },
+ "bandit-captain": {
+  "cname": "Haydut Kaptanı"
+ },
+ "berserker": {
+  "cname": "Berserker"
+ },
+ "black-dragon-wyrmling": {
+  "cname": "Kara Ejderha Yavrusu"
+ },
+ "bronze-dragon-wyrmling": {
+  "cname": "Tunç Ejderha Yavrusu"
+ },
+ "centaur": {
+  "cname": "Sentor"
+ },
+ "centaur-archer": {
+  "cname": "Sentor Okçusu"
+ },
+ "cult-fanatic": {
+  "cname": "Tarikat Fanatiği"
+ },
+ "druid": {
+  "cname": "Druid"
+ },
+ "ettercap": {
+  "cname": "Ettercap"
+ },
+ "gargoyle": {
+  "cname": "Gargoyl"
+ },
+ "gelatinous-cube": {
+  "cname": "Jelatinli Küp"
+ },
+ "ghast": {
+  "cname": "Azgın Gulyabani"
+ },
+ "giant-boar": {
+  "cname": "Dev Yabandomuzu"
+ },
+ "giant-constrictor-snake": {
+  "cname": "Dev Boğan Yılan"
+ },
+ "giant-elk": {
+  "cname": "Dev Alageyik"
+ },
+ "gibbering-mouther": {
+  "cname": "Sayıklayan Ağız"
+ },
+ "green-dragon-wyrmling": {
+  "cname": "Yeşil Ejderha Yavrusu"
+ },
+ "grick": {
+  "cname": "Grick"
+ },
+ "griffon": {
+  "cname": "Grifon"
+ },
+ "hunter-shark": {
+  "cname": "Avcı Köpekbalığı"
+ },
+ "merrow": {
+  "cname": "Merrow"
+ },
+ "mimic": {
+  "cname": "Mimik"
+ },
+ "minotaur-skeleton": {
+  "cname": "Minotor İskeleti"
+ },
+ "ochre-jelly": {
+  "cname": "Kavuniçi Jöle"
+ },
+ "ogre": {
+  "cname": "Ogre"
+ },
+ "ogre-zombie": {
+  "cname": "Ogre Zombisi"
+ },
+ "pegasus": {
+  "cname": "Pegasus"
+ },
+ "plesiosaurus": {
+  "cname": "Plesiozor"
+ },
+ "polar-bear": {
+  "cname": "Kutup Ayısı"
+ },
+ "priest": {
+  "cname": "Rahip"
+ },
+ "rhinoceros": {
+  "cname": "Gergedan"
+ },
+ "saber-toothed-tiger": {
+  "cname": "Kılıç Dişli Kaplan"
+ },
+ "sea-hag": {
+  "cname": "Deniz Cadısı"
+ },
+ "silver-dragon-wyrmling": {
+  "cname": "Gümüş Ejderha Yavrusu"
+ },
+ "swarm-of-poisonous-snakes": {
+  "cname": "Zehirli Yılan Sürüsü"
+ },
+ "wererat-human": {
+  "cname": "Sıçanadam, İnsan Biçimi"
+ },
+ "wererat-human-archer": {
+  "cname": "Sıçanadam, İnsan Biçimi Okçusu"
+ },
+ "wererat-hybrid": {
+  "cname": "Sıçanadam, Melez Biçim"
+ },
+ "wererat-hybrid-archer": {
+  "cname": "Sıçanadam, Melez Biçim Okçusu"
+ },
+ "wererat-rat": {
+  "cname": "Sıçanadam, Sıçan Biçimi"
+ },
+ "white-dragon-wyrmling": {
+  "cname": "Beyaz Ejderha Yavrusu"
+ },
+ "will-o-wisp": {
+  "cname": "Bataklık Işığı"
+ },
+ "basilisk": {
+  "cname": "Basilisk"
+ },
+ "bearded-devil": {
+  "cname": "Sakallı Şeytan"
+ },
+ "blue-dragon-wyrmling": {
+  "cname": "Mavi Ejderha Yavrusu"
+ },
+ "doppelganger": {
+  "cname": "Doppelgänger"
+ },
+ "giant-scorpion": {
+  "cname": "Dev Akrep"
+ },
+ "gold-dragon-wyrmling": {
+  "cname": "Altın Ejderha Yavrusu"
+ },
+ "green-hag": {
+  "cname": "Yeşil Cadı"
+ },
+ "hell-hound": {
+  "cname": "Cehennem Tazısı"
+ },
+ "killer-whale": {
+  "cname": "Katil Balina"
+ },
+ "knight": {
+  "cname": "Şövalye"
+ },
+ "knight-archer": {
+  "cname": "Şövalye Okçusu"
+ },
+ "manticore": {
+  "cname": "Mantikor"
+ },
+ "manticore-archer": {
+  "cname": "Mantikor Okçusu"
+ },
+ "minotaur": {
+  "cname": "Minotor"
+ },
+ "mummy": {
+  "cname": "Mumya"
+ },
+ "nightmare": {
+  "cname": "Kâbus Atı"
+ },
+ "owlbear": {
+  "cname": "Baykuşayı"
+ },
+ "phase-spider": {
+  "cname": "Faz Örümceği"
+ },
+ "veteran": {
+  "cname": "Kıdemli Asker"
+ },
+ "veteran-archer": {
+  "cname": "Kıdemli Asker Okçusu"
+ },
+ "werewolf-human": {
+  "cname": "Kurtadam, İnsan Biçimi"
+ },
+ "werewolf-hybrid": {
+  "cname": "Kurtadam, Melez Biçim"
+ },
+ "werewolf-wolf": {
+  "cname": "Kurtadam, Kurt Biçimi"
+ },
+ "wight": {
+  "cname": "Hortlak"
+ },
+ "wight-archer": {
+  "cname": "Hortlak Okçusu"
+ },
+ "winter-wolf": {
+  "cname": "Kış Kurdu"
+ },
+ "black-pudding": {
+  "cname": "Kara Muhallebi"
+ },
+ "chuul": {
+  "cname": "Chuul"
+ },
+ "couatl": {
+  "cname": "Couatl"
+ },
+ "elephant": {
+  "cname": "Fil"
+ },
+ "ettin": {
+  "cname": "Ettin"
+ },
+ "ghost": {
+  "cname": "Ruh"
+ },
+ "lamia": {
+  "cname": "Lamia"
+ },
+ "red-dragon-wyrmling": {
+  "cname": "Kızıl Ejderha Yavrusu"
+ },
+ "succubus-incubus": {
+  "cname": "Sukubüs/İnkübüs"
+ },
+ "wereboar-boar": {
+  "cname": "Yabandomuzuadam, Yabandomuzu Biçimi"
+ },
+ "wereboar-human": {
+  "cname": "Yabandomuzuadam, İnsan Biçimi"
+ },
+ "wereboar-hybrid": {
+  "cname": "Yabandomuzuadam, Melez Biçim"
+ },
+ "weretiger-human": {
+  "cname": "Kaplanadam, İnsan Biçimi"
+ },
+ "weretiger-human-archer": {
+  "cname": "Kaplanadam, İnsan Biçimi Okçusu"
+ },
+ "weretiger-hybrid": {
+  "cname": "Kaplanadam, Melez Biçim"
+ },
+ "weretiger-hybrid-archer": {
+  "cname": "Kaplanadam, Melez Biçim Okçusu"
+ },
+ "weretiger-tiger": {
+  "cname": "Kaplanadam, Kaplan Biçimi"
+ },
+ "air-elemental": {
+  "cname": "Hava Elementeli"
+ },
+ "barbed-devil": {
+  "cname": "Dikenli Şeytan"
+ },
+ "barbed-devil-archer": {
+  "cname": "Dikenli Şeytan Okçusu"
+ },
+ "bulette": {
+  "cname": "Bulette"
+ },
+ "earth-elemental": {
+  "cname": "Toprak Elementeli"
+ },
+ "fire-elemental": {
+  "cname": "Ateş Elementeli"
+ },
+ "flesh-golem": {
+  "cname": "Et Golemi"
+ },
+ "giant-crocodile": {
+  "cname": "Dev Timsah"
+ },
+ "giant-shark": {
+  "cname": "Dev Köpekbalığı"
+ },
+ "gladiator": {
+  "cname": "Gladyatör"
+ },
+ "gorgon": {
+  "cname": "Gorgon"
+ },
+ "half-red-dragon-veteran": {
+  "cname": "Yarı Kızıl Ejderha Kıdemlisi"
+ },
+ "half-red-dragon-veteran-archer": {
+  "cname": "Yarı Kızıl Ejderha Kıdemlisi Okçusu"
+ },
+ "hill-giant": {
+  "cname": "Tepe Devi"
+ },
+ "hill-giant-archer": {
+  "cname": "Tepe Devi Okçusu"
+ },
+ "night-hag": {
+  "cname": "Gece Cadısı"
+ },
+ "otyugh": {
+  "cname": "Otyugh"
+ },
+ "roper": {
+  "cname": "Roper"
+ },
+ "salamander": {
+  "cname": "Semender"
+ },
+ "shambling-mound": {
+  "cname": "Sürünen Yığın"
+ },
+ "triceratops": {
+  "cname": "Triseratops"
+ },
+ "troll": {
+  "cname": "Trol"
+ },
+ "unicorn": {
+  "cname": "Tekboynuz"
+ },
+ "vampire-spawn": {
+  "cname": "Vampir Yavrusu"
+ },
+ "water-elemental": {
+  "cname": "Su Elementeli"
+ },
+ "werebear-bear": {
+  "cname": "Ayıadam, Ayı Biçimi"
+ },
+ "werebear-human": {
+  "cname": "Ayıadam, İnsan Biçimi"
+ },
+ "werebear-hybrid": {
+  "cname": "Ayıadam, Melez Biçim"
+ },
+ "wraith": {
+  "cname": "Ölüm Ruhu"
+ },
+ "xorn": {
+  "cname": "Xorn"
+ },
+ "chimera": {
+  "cname": "Kimera"
+ },
+ "drider": {
+  "cname": "Drider"
+ },
+ "drider-archer": {
+  "cname": "Drider Okçusu"
+ },
+ "invisible-stalker": {
+  "cname": "Görünmez Takipçi"
+ },
+ "mage": {
+  "cname": "Büyücü"
+ },
+ "mammoth": {
+  "cname": "Mamut"
+ },
+ "medusa": {
+  "cname": "Medusa"
+ },
+ "medusa-archer": {
+  "cname": "Medusa Okçusu"
+ },
+ "vrock": {
+  "cname": "Vrock"
+ },
+ "wyvern": {
+  "cname": "Vivern"
+ },
+ "young-brass-dragon": {
+  "cname": "Genç Pirinç Ejderha"
+ },
+ "young-white-dragon": {
+  "cname": "Genç Beyaz Ejderha"
+ },
+ "giant-ape": {
+  "cname": "Dev Maymun"
+ },
+ "giant-ape-archer": {
+  "cname": "Dev Maymun Okçusu"
+ },
+ "oni": {
+  "cname": "Oni"
+ },
+ "shield-guardian": {
+  "cname": "Kalkan Muhafızı"
+ },
+ "stone-giant": {
+  "cname": "Taş Devi"
+ },
+ "stone-giant-archer": {
+  "cname": "Taş Devi Okçusu"
+ },
+ "young-black-dragon": {
+  "cname": "Genç Kara Ejderha"
+ },
+ "young-copper-dragon": {
+  "cname": "Genç Bakır Ejderha"
+ },
+ "assassin": {
+  "cname": "Suikastçı"
+ },
+ "assassin-archer": {
+  "cname": "Suikastçı Okçusu"
+ },
+ "chain-devil": {
+  "cname": "Zincir Şeytanı"
+ },
+ "cloaker": {
+  "cname": "Pelerin Canavarı"
+ },
+ "frost-giant": {
+  "cname": "Ayaz Devi"
+ },
+ "frost-giant-archer": {
+  "cname": "Ayaz Devi Okçusu"
+ },
+ "hezrou": {
+  "cname": "Hezrou"
+ },
+ "hydra": {
+  "cname": "Hidra"
+ },
+ "spirit-naga": {
+  "cname": "Ruh Nagası"
+ },
+ "tyrannosaurus-rex": {
+  "cname": "Tiranozor Reks"
+ },
+ "young-bronze-dragon": {
+  "cname": "Genç Tunç Ejderha"
+ },
+ "young-green-dragon": {
+  "cname": "Genç Yeşil Ejderha"
+ },
+ "bone-devil": {
+  "cname": "Kemik Şeytanı"
+ },
+ "clay-golem": {
+  "cname": "Kil Golemi"
+ },
+ "cloud-giant": {
+  "cname": "Bulut Devi"
+ },
+ "cloud-giant-archer": {
+  "cname": "Bulut Devi Okçusu"
+ },
+ "fire-giant": {
+  "cname": "Ateş Devi"
+ },
+ "fire-giant-archer": {
+  "cname": "Ateş Devi Okçusu"
+ },
+ "glabrezu": {
+  "cname": "Glabrezu"
+ },
+ "treant": {
+  "cname": "Ağaçadam"
+ },
+ "treant-archer": {
+  "cname": "Ağaçadam Okçusu"
+ },
+ "young-blue-dragon": {
+  "cname": "Genç Mavi Ejderha"
+ },
+ "young-silver-dragon": {
+  "cname": "Genç Gümüş Ejderha"
+ },
+ "aboleth": {
+  "cname": "Aboleth"
+ },
+ "deva": {
+  "cname": "Deva"
+ },
+ "guardian-naga": {
+  "cname": "Muhafız Naga"
+ },
+ "stone-golem": {
+  "cname": "Taş Golemi"
+ },
+ "young-gold-dragon": {
+  "cname": "Genç Altın Ejderha"
+ },
+ "young-red-dragon": {
+  "cname": "Genç Kızıl Ejderha"
+ }
+}

@@ -1,0 +1,440 @@
+{
+ "acid-splash": {
+  "name": "Asit Sıçraması"
+ },
+ "aid": {
+  "name": "Yardım"
+ },
+ "alarm": {
+  "name": "Alarm"
+ },
+ "alter-self": {
+  "name": "Kendini Değiştirme"
+ },
+ "animate-objects": {
+  "name": "Nesneleri Canlandırma"
+ },
+ "arcane-eye": {
+  "name": "Gizemli Göz"
+ },
+ "arms-of-hadar": {
+  "name": "Hadar'ın Kolları"
+ },
+ "aura-of-life": {
+  "name": "Yaşam Aurası"
+ },
+ "bane": {
+  "name": "Lanet"
+ },
+ "banishment": {
+  "name": "Sürgün"
+ },
+ "beacon-of-hope": {
+  "name": "Umut Işığı"
+ },
+ "bless": {
+  "name": "Kutsama"
+ },
+ "blight": {
+  "name": "Kavurma"
+ },
+ "blink": {
+  "name": "Göz Kırpma"
+ },
+ "blur": {
+  "name": "Bulanıklık"
+ },
+ "burning-hands": {
+  "name": "Yanan Eller"
+ },
+ "calm-emotions": {
+  "name": "Duyguları Yatıştırma"
+ },
+ "charm-monster": {
+  "name": "Canavarı Büyüleme"
+ },
+ "charm-person": {
+  "name": "Kişiyi Büyüleme"
+ },
+ "chill-touch": {
+  "name": "Soğuk Dokunuş"
+ },
+ "chromatic-orb": {
+  "name": "Renkli Küre"
+ },
+ "clairvoyance": {
+  "name": "Uzağı Görüş"
+ },
+ "command": {
+  "name": "Emir"
+ },
+ "commune": {
+  "name": "Tanrıyla Görüşme"
+ },
+ "commune-with-nature": {
+  "name": "Doğayla Görüşme"
+ },
+ "compulsion": {
+  "name": "Zorlama"
+ },
+ "cone-of-cold": {
+  "name": "Soğuk Konisi"
+ },
+ "confusion": {
+  "name": "Şaşkınlık"
+ },
+ "counterspell": {
+  "name": "Karşı Büyü"
+ },
+ "crusaders-mantle": {
+  "name": "Haçlının Pelerini"
+ },
+ "cure-wounds": {
+  "name": "Yaraları İyileştirme"
+ },
+ "dancing-lights": {
+  "name": "Dans Eden Işıklar"
+ },
+ "darkness": {
+  "name": "Karanlık"
+ },
+ "darkvision": {
+  "name": "Karanlık Görüş"
+ },
+ "daylight": {
+  "name": "Gün Işığı"
+ },
+ "death-ward": {
+  "name": "Ölüm Kalkanı"
+ },
+ "detect-magic": {
+  "name": "Büyü Sezme"
+ },
+ "detect-thoughts": {
+  "name": "Düşünce Sezme"
+ },
+ "dimension-door": {
+  "name": "Boyut Kapısı"
+ },
+ "disguise-self": {
+  "name": "Kılık Değiştirme"
+ },
+ "dispel-magic": {
+  "name": "Büyüyü Dağıtma"
+ },
+ "dissonant-whispers": {
+  "name": "Kulak Tırmalayan Fısıltılar"
+ },
+ "dominate-beast": {
+  "name": "Canavara Hükmetme"
+ },
+ "dominate-person": {
+  "name": "Kişiye Hükmetme"
+ },
+ "dragons-breath": {
+  "name": "Ejderha Nefesi"
+ },
+ "druidcraft": {
+  "name": "Druid Hüneri"
+ },
+ "ensnaring-strike": {
+  "name": "Tuzaklayan Darbe"
+ },
+ "enhance-ability": {
+  "name": "Yeteneği Güçlendirme"
+ },
+ "evards-black-tentacles": {
+  "name": "Evard'ın Kara Dokunaçları"
+ },
+ "faerie-fire": {
+  "name": "Peri Ateşi"
+ },
+ "false-life": {
+  "name": "Sahte Can"
+ },
+ "fear": {
+  "name": "Korku"
+ },
+ "fire-bolt": {
+  "name": "Ateş Oku"
+ },
+ "fire-shield": {
+  "name": "Ateş Kalkanı"
+ },
+ "fireball": {
+  "name": "Ateş Topu"
+ },
+ "flame-strike": {
+  "name": "Alev Darbesi"
+ },
+ "fly": {
+  "name": "Uçuş"
+ },
+ "fog-cloud": {
+  "name": "Sis Bulutu"
+ },
+ "freedom-of-movement": {
+  "name": "Hareket Serbestliği"
+ },
+ "geas": {
+  "name": "Buyruk"
+ },
+ "greater-invisibility": {
+  "name": "Yüce Görünmezlik"
+ },
+ "greater-restoration": {
+  "name": "Yüce Onarım"
+ },
+ "guardian-of-faith": {
+  "name": "İmanın Bekçisi"
+ },
+ "guidance": {
+  "name": "Yol Gösterme"
+ },
+ "guiding-bolt": {
+  "name": "Yol Gösteren Işın"
+ },
+ "haste": {
+  "name": "Hız"
+ },
+ "hellish-rebuke": {
+  "name": "Cehennemî Azar"
+ },
+ "heroism": {
+  "name": "Kahramanlık"
+ },
+ "hideous-laughter": {
+  "name": "Çirkin Kahkaha"
+ },
+ "hold-monster": {
+  "name": "Canavarı Durdurma"
+ },
+ "hold-person": {
+  "name": "Kişiyi Durdurma"
+ },
+ "hunger-of-hadar": {
+  "name": "Hadar'ın Açlığı"
+ },
+ "hunters-mark": {
+  "name": "Avcının İşareti"
+ },
+ "hypnotic-pattern": {
+  "name": "Hipnotik Desen"
+ },
+ "ice-storm": {
+  "name": "Buz Fırtınası"
+ },
+ "insect-plague": {
+  "name": "Böcek İstilası"
+ },
+ "invisibility": {
+  "name": "Görünmezlik"
+ },
+ "legend-lore": {
+  "name": "Efsane Bilgisi"
+ },
+ "lesser-restoration": {
+  "name": "Küçük Onarım"
+ },
+ "light": {
+  "name": "Işık"
+ },
+ "lightning-bolt": {
+  "name": "Yıldırım Oku"
+ },
+ "longstrider": {
+  "name": "Uzun Adım"
+ },
+ "mage-hand": {
+  "name": "Büyücü Eli"
+ },
+ "magic-weapon": {
+  "name": "Büyülü Silah"
+ },
+ "mass-cure-wounds": {
+  "name": "Toplu Yara İyileştirme"
+ },
+ "mass-healing-word": {
+  "name": "Toplu Şifa Sözü"
+ },
+ "mending": {
+  "name": "Onarma"
+ },
+ "message": {
+  "name": "Mesaj"
+ },
+ "mind-sliver": {
+  "name": "Zihin Kıymığı"
+ },
+ "minor-illusion": {
+  "name": "Küçük Yanılsama"
+ },
+ "mislead": {
+  "name": "Yanıltma"
+ },
+ "misty-step": {
+  "name": "Sisli Adım"
+ },
+ "modify-memory": {
+  "name": "Hafızayı Değiştirme"
+ },
+ "moonbeam": {
+  "name": "Ay Işını"
+ },
+ "nondetection": {
+  "name": "Sezilmezlik"
+ },
+ "pass-without-trace": {
+  "name": "İz Bırakmadan Geçiş"
+ },
+ "phantasmal-force": {
+  "name": "Hayali Kuvvet"
+ },
+ "plant-growth": {
+  "name": "Bitki Büyümesi"
+ },
+ "poison-spray": {
+  "name": "Zehir Püskürtme"
+ },
+ "polymorph": {
+  "name": "Biçim Değiştirme"
+ },
+ "prestidigitation": {
+  "name": "El Çabukluğu Büyüsü"
+ },
+ "produce-flame": {
+  "name": "Alev Yaratma"
+ },
+ "protection-from-energy": {
+  "name": "Enerjiden Korunma"
+ },
+ "protection-from-evil-and-good": {
+  "name": "Kötüden ve İyiden Korunma"
+ },
+ "rarys-telepathic-bond": {
+  "name": "Rary'nin Telepatik Bağı"
+ },
+ "ray-of-enfeeblement": {
+  "name": "Zayıflatma Işını"
+ },
+ "ray-of-frost": {
+  "name": "Ayaz Işını"
+ },
+ "ray-of-sickness": {
+  "name": "Hastalık Işını"
+ },
+ "resistance": {
+  "name": "Direnç"
+ },
+ "revivify": {
+  "name": "Yeniden Canlandırma"
+ },
+ "rope-trick": {
+  "name": "İp Oyunu"
+ },
+ "sacred-flame": {
+  "name": "Kutsal Alev"
+ },
+ "scorching-ray": {
+  "name": "Kavurucu Işın"
+ },
+ "scrying": {
+  "name": "Uzaktan Gözetleme"
+ },
+ "see-invisibility": {
+  "name": "Görünmezi Görme"
+ },
+ "seeming": {
+  "name": "Görünüş"
+ },
+ "sending": {
+  "name": "Haber Yollama"
+ },
+ "shield-of-faith": {
+  "name": "İman Kalkanı"
+ },
+ "shillelagh": {
+  "name": "Sopa Efsunu"
+ },
+ "shocking-grasp": {
+  "name": "Çarpan Kavrayış"
+ },
+ "silence": {
+  "name": "Sessizlik"
+ },
+ "sleep": {
+  "name": "Uyku"
+ },
+ "sleet-storm": {
+  "name": "Sulusepken Fırtınası"
+ },
+ "spare-the-dying": {
+  "name": "Ölmekte Olanı Kurtarma"
+ },
+ "speak-with-animals": {
+  "name": "Hayvanlarla Konuşma"
+ },
+ "spirit-guardians": {
+  "name": "Ruh Bekçileri"
+ },
+ "spiritual-weapon": {
+  "name": "Ruhani Silah"
+ },
+ "steel-wind-strike": {
+  "name": "Çelik Rüzgâr Darbesi"
+ },
+ "stinking-cloud": {
+  "name": "Kokuşmuş Bulut"
+ },
+ "stoneskin": {
+  "name": "Taş Deri"
+ },
+ "suggestion": {
+  "name": "Telkin"
+ },
+ "summon-aberration": {
+  "name": "Sapkın Çağırma"
+ },
+ "summon-beast": {
+  "name": "Canavar Çağırma"
+ },
+ "summon-celestial": {
+  "name": "Semavi Çağırma"
+ },
+ "summon-construct": {
+  "name": "Yapıt Çağırma"
+ },
+ "summon-dragon": {
+  "name": "Ejderha Çağırma"
+ },
+ "summon-fey": {
+  "name": "Peri Çağırma"
+ },
+ "telekinesis": {
+  "name": "Telekinezi"
+ },
+ "thorn-whip": {
+  "name": "Dikenli Kırbaç"
+ },
+ "tree-stride": {
+  "name": "Ağaç Adımı"
+ },
+ "wall-of-fire": {
+  "name": "Ateş Duvarı"
+ },
+ "wall-of-force": {
+  "name": "Kuvvet Duvarı"
+ },
+ "wall-of-stone": {
+  "name": "Taş Duvar"
+ },
+ "web": {
+  "name": "Ağ"
+ },
+ "yolandes-regal-presence": {
+  "name": "Yolande'nin Görkemli Varlığı"
+ },
+ "zone-of-truth": {
+  "name": "Hakikat Alanı"
+ }
+}

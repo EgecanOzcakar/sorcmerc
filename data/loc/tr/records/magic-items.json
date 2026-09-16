@@ -1,0 +1,794 @@
+{
+ "adamantine-armor": {
+  "name": "Adamantin Zırh"
+ },
+ "ammunition": {
+  "name": "Cephane"
+ },
+ "ammunition-1": {
+  "name": "Cephane, +1"
+ },
+ "ammunition-2": {
+  "name": "Cephane, +2"
+ },
+ "ammunition-3": {
+  "name": "Cephane, +3"
+ },
+ "ammunition-of-slaying": {
+  "name": "Katletme Cephanesi"
+ },
+ "amulet-of-health": {
+  "name": "Sağlık Muskası"
+ },
+ "amulet-of-proof-against-detection-and-location": {
+  "name": "Sezilme ve Yer Bulmaya Karşı Muska"
+ },
+ "amulet-of-the-planes": {
+  "name": "Düzlemler Muskası"
+ },
+ "animated-shield": {
+  "name": "Canlı Kalkan"
+ },
+ "apparatus-of-the-crab": {
+  "name": "Yengeç Düzeneği"
+ },
+ "armor": {
+  "name": "Zırh"
+ },
+ "armor-1": {
+  "name": "Zırh +1"
+ },
+ "armor-2": {
+  "name": "Zırh +2"
+ },
+ "armor-3": {
+  "name": "Zırh +3"
+ },
+ "armor-of-invulnerability": {
+  "name": "Yaralanmazlık Zırhı"
+ },
+ "armor-of-resistance": {
+  "name": "Direnç Zırhı"
+ },
+ "armor-of-vulnerability": {
+  "name": "Zaaf Zırhı"
+ },
+ "arrow-catching-shield": {
+  "name": "Ok Yakalayan Kalkan"
+ },
+ "bag-of-beans": {
+  "name": "Fasulye Torbası"
+ },
+ "bag-of-devouring": {
+  "name": "Yutan Torba"
+ },
+ "bag-of-holding": {
+  "name": "Taşıma Torbası"
+ },
+ "bag-of-tricks": {
+  "name": "Hile Torbası"
+ },
+ "bead-of-force": {
+  "name": "Kuvvet Boncuğu"
+ },
+ "belt-of-dwarvenkind": {
+  "name": "Cüce Soyu Kemeri"
+ },
+ "belt-of-giant-strength": {
+  "name": "Dev Gücü Kemeri"
+ },
+ "berserker-axe": {
+  "name": "Berserker Baltası"
+ },
+ "boots-of-elvenkind": {
+  "name": "Elf Çizmeleri"
+ },
+ "boots-of-levitation": {
+  "name": "Havalanma Çizmeleri"
+ },
+ "boots-of-speed": {
+  "name": "Sürat Çizmeleri"
+ },
+ "boots-of-striding-and-springing": {
+  "name": "Adım ve Sıçrama Çizmeleri"
+ },
+ "boots-of-the-winterlands": {
+  "name": "Kış Diyarı Çizmeleri"
+ },
+ "bowl-of-commanding-water-elementals": {
+  "name": "Su Elementellerine Hükmetme Tası"
+ },
+ "bracers-of-archery": {
+  "name": "Okçuluk Bileklikleri"
+ },
+ "bracers-of-defense": {
+  "name": "Savunma Bileklikleri"
+ },
+ "brazier-of-commanding-fire-elementals": {
+  "name": "Ateş Elementellerine Hükmetme Mangalı"
+ },
+ "brooch-of-shielding": {
+  "name": "Kalkan Broşu"
+ },
+ "broom-of-flying": {
+  "name": "Uçan Süpürge"
+ },
+ "candle-of-invocation": {
+  "name": "Yakarış Mumu"
+ },
+ "cape-of-the-mountebank": {
+  "name": "Şarlatan Pelerini"
+ },
+ "carpet-of-flying": {
+  "name": "Uçan Halı"
+ },
+ "censer-of-controlling-air-elementals": {
+  "name": "Hava Elementellerini Denetleme Buhurdanı"
+ },
+ "chime-of-opening": {
+  "name": "Açılış Çanı"
+ },
+ "circlet-of-blasting": {
+  "name": "Patlama Tacı"
+ },
+ "cloak-of-arachnida": {
+  "name": "Arachnida Pelerini"
+ },
+ "cloak-of-displacement": {
+  "name": "Yer Değiştirme Pelerini"
+ },
+ "cloak-of-elvenkind": {
+  "name": "Elf Pelerini"
+ },
+ "cloak-of-protection": {
+  "name": "Koruma Pelerini"
+ },
+ "cloak-of-the-bat": {
+  "name": "Yarasa Pelerini"
+ },
+ "cloak-of-the-manta-ray": {
+  "name": "Vatoz Pelerini"
+ },
+ "crystal-ball": {
+  "name": "Kristal Küre"
+ },
+ "crystal-ball-of-mind-reading": {
+  "name": "Zihin Okuyan Kristal Küre"
+ },
+ "crystal-ball-of-telepathy": {
+  "name": "Telepati Kristal Küresi"
+ },
+ "crystal-ball-of-true-seeing": {
+  "name": "Hakiki Görüş Kristal Küresi"
+ },
+ "cube-of-force": {
+  "name": "Kuvvet Küpü"
+ },
+ "cubic-gate": {
+  "name": "Küp Geçit"
+ },
+ "dagger-of-venom": {
+  "name": "Zehir Hançeri"
+ },
+ "dancing-sword": {
+  "name": "Dans Eden Kılıç"
+ },
+ "decanter-of-endless-water": {
+  "name": "Bitmeyen Su Sürahisi"
+ },
+ "deck-of-illusions": {
+  "name": "Yanılsama Destesi"
+ },
+ "defender": {
+  "name": "Savunucu"
+ },
+ "demon-armor": {
+  "name": "İblis Zırhı"
+ },
+ "dimensional-shackles": {
+  "name": "Boyut Prangaları"
+ },
+ "dragon-orb": {
+  "name": "Ejderha Küresi"
+ },
+ "dragon-scale-mail": {
+  "name": "Ejderha Pullu Zırh"
+ },
+ "dragon-slayer": {
+  "name": "Ejderha Katili"
+ },
+ "dust-of-disappearance": {
+  "name": "Kayboluş Tozu"
+ },
+ "dust-of-dryness": {
+  "name": "Kuruluk Tozu"
+ },
+ "dust-of-sneezing-and-choking": {
+  "name": "Hapşırma ve Boğulma Tozu"
+ },
+ "dwarven-plate": {
+  "name": "Cüce Plaka Zırhı"
+ },
+ "dwarven-thrower": {
+  "name": "Cüce Fırlatıcısı"
+ },
+ "efficient-quiver": {
+  "name": "Verimli Sadak"
+ },
+ "efreeti-bottle": {
+  "name": "İfrit Şişesi"
+ },
+ "elemental-gem": {
+  "name": "Element Taşı"
+ },
+ "elven-chain": {
+  "name": "Elf Zincir Zırhı"
+ },
+ "eversmoking-bottle": {
+  "name": "Hiç Sönmeyen Duman Şişesi"
+ },
+ "eyes-of-charming": {
+  "name": "Büyüleme Gözlükleri"
+ },
+ "eyes-of-minute-seeing": {
+  "name": "İnce Görüş Gözlükleri"
+ },
+ "eyes-of-the-eagle": {
+  "name": "Kartal Gözleri"
+ },
+ "feather-token": {
+  "name": "Tüy Nişanı"
+ },
+ "figurine-of-wondrous-power": {
+  "name": "Harikulade Güç Heykelciği"
+ },
+ "flame-tongue": {
+  "name": "Alev Dilli"
+ },
+ "folding-boat": {
+  "name": "Katlanır Kayık"
+ },
+ "frost-brand": {
+  "name": "Ayaz Kılıcı"
+ },
+ "gauntlets-of-ogre-power": {
+  "name": "Ogre Gücü Eldivenleri"
+ },
+ "gem-of-brightness": {
+  "name": "Parlaklık Taşı"
+ },
+ "gem-of-seeing": {
+  "name": "Görüş Taşı"
+ },
+ "giant-slayer": {
+  "name": "Dev Katili"
+ },
+ "glamoured-studded-leather": {
+  "name": "Cazibeli Perçinli Deri Zırh"
+ },
+ "gloves-of-missile-snaring": {
+  "name": "Mermi Kapma Eldivenleri"
+ },
+ "gloves-of-swimming-and-climbing": {
+  "name": "Yüzme ve Tırmanma Eldivenleri"
+ },
+ "goggles-of-night": {
+  "name": "Gece Gözlükleri"
+ },
+ "hammer-of-thunderbolts": {
+  "name": "Yıldırım Çekici"
+ },
+ "handy-haversack": {
+  "name": "Becerikli Sırt Çantası"
+ },
+ "hat-of-disguise": {
+  "name": "Kılık Değiştirme Şapkası"
+ },
+ "headband-of-intellect": {
+  "name": "Zekâ Bandı"
+ },
+ "helm-of-brilliance": {
+  "name": "Parıltı Miğferi"
+ },
+ "helm-of-comprehending-languages": {
+  "name": "Dilleri Anlama Miğferi"
+ },
+ "helm-of-telepathy": {
+  "name": "Telepati Miğferi"
+ },
+ "helm-of-teleportation": {
+  "name": "Işınlanma Miğferi"
+ },
+ "holy-avenger": {
+  "name": "Kutsal İntikamcı"
+ },
+ "horn-of-blasting": {
+  "name": "Patlama Borusu"
+ },
+ "horn-of-valhalla": {
+  "name": "Valhalla Borusu"
+ },
+ "horn-of-valhalla-1": {
+  "name": "Gümüş Valhalla Borusu"
+ },
+ "horn-of-valhalla-2": {
+  "name": "Pirinç Valhalla Borusu"
+ },
+ "horn-of-valhalla-3": {
+  "name": "Tunç Valhalla Borusu"
+ },
+ "horn-of-valhalla-4": {
+  "name": "Demir Valhalla Borusu"
+ },
+ "horseshoes-of-a-zephyr": {
+  "name": "Meltem Nalları"
+ },
+ "horseshoes-of-speed": {
+  "name": "Sürat Nalları"
+ },
+ "immovable-rod": {
+  "name": "Kımıldamaz Çubuk"
+ },
+ "instant-fortress": {
+  "name": "Anlık Kale"
+ },
+ "ioun-stone": {
+  "name": "Ioun Taşı"
+ },
+ "iron-bands": {
+  "name": "Demir Kuşaklar"
+ },
+ "iron-flask": {
+  "name": "Demir Matara"
+ },
+ "javelin-of-lightning": {
+  "name": "Yıldırım Ciridi"
+ },
+ "lantern-of-revealing": {
+  "name": "Açığa Çıkaran Fener"
+ },
+ "luck-blade": {
+  "name": "Şans Kılıcı"
+ },
+ "mace-of-disruption": {
+  "name": "Parçalayıcı Topuz"
+ },
+ "mace-of-smiting": {
+  "name": "Kahredici Topuz"
+ },
+ "mace-of-terror": {
+  "name": "Dehşet Topuzu"
+ },
+ "mantle-of-spell-resistance": {
+  "name": "Büyü Direnci Pelerini"
+ },
+ "manual-of-bodily-health": {
+  "name": "Beden Sağlığı Kitabı"
+ },
+ "manual-of-gainful-exercise": {
+  "name": "Verimli Egzersiz Kitabı"
+ },
+ "manual-of-golems": {
+  "name": "Golemler Kitabı"
+ },
+ "manual-of-quickness-of-action": {
+  "name": "Aksiyon Çabukluğu Kitabı"
+ },
+ "marvelous-pigments": {
+  "name": "Harikulade Boyalar"
+ },
+ "medallion-of-thoughts": {
+  "name": "Düşünceler Madalyonu"
+ },
+ "mirror-of-life-trapping": {
+  "name": "Yaşam Hapseden Ayna"
+ },
+ "mithral-armor": {
+  "name": "Mithril Zırh"
+ },
+ "mysterious-deck": {
+  "name": "Gizemli Deste"
+ },
+ "necklace-of-adaptation": {
+  "name": "Uyum Kolyesi"
+ },
+ "necklace-of-fireballs": {
+  "name": "Ateş Topu Kolyesi"
+ },
+ "necklace-of-prayer-beads": {
+  "name": "Dua Boncukları Kolyesi"
+ },
+ "nine-lives-stealer": {
+  "name": "Dokuz Can Çalan"
+ },
+ "oathbow": {
+  "name": "Yemin Yayı"
+ },
+ "oil-of-etherealness": {
+  "name": "Eterîlik Yağı"
+ },
+ "oil-of-sharpness": {
+  "name": "Keskinlik Yağı"
+ },
+ "oil-of-slipperiness": {
+  "name": "Kayganlık Yağı"
+ },
+ "pearl-of-power": {
+  "name": "Güç İncisi"
+ },
+ "periapt-of-health": {
+  "name": "Sağlık Tılsımı"
+ },
+ "periapt-of-proof-against-poison": {
+  "name": "Zehre Karşı Tılsım"
+ },
+ "periapt-of-wound-closure": {
+  "name": "Yara Kapatma Tılsımı"
+ },
+ "philter-of-love": {
+  "name": "Aşk İksiri"
+ },
+ "pipes-of-haunting": {
+  "name": "Musallat Kavalı"
+ },
+ "pipes-of-the-sewers": {
+  "name": "Lağım Kavalı"
+ },
+ "plate-armor-of-etherealness": {
+  "name": "Eterîlik Plaka Zırhı"
+ },
+ "portable-hole": {
+  "name": "Taşınabilir Delik"
+ },
+ "potion-of-animal-friendship": {
+  "name": "Hayvan Dostluğu İksiri"
+ },
+ "potion-of-clairvoyance": {
+  "name": "Uzağı Görüş İksiri"
+ },
+ "potion-of-climbing": {
+  "name": "Tırmanma İksiri"
+ },
+ "potion-of-diminution": {
+  "name": "Küçülme İksiri"
+ },
+ "potion-of-flying": {
+  "name": "Uçuş İksiri"
+ },
+ "potion-of-gaseous-form": {
+  "name": "Gaz Biçimi İksiri"
+ },
+ "potion-of-giant-strength": {
+  "name": "Dev Gücü İksiri"
+ },
+ "potion-of-growth": {
+  "name": "Büyüme İksiri"
+ },
+ "potion-of-heroism": {
+  "name": "Kahramanlık İksiri"
+ },
+ "potion-of-invisibility": {
+  "name": "Görünmezlik İksiri"
+ },
+ "potion-of-mind-reading": {
+  "name": "Zihin Okuma İksiri"
+ },
+ "potion-of-poison": {
+  "name": "Zehir İksiri"
+ },
+ "potion-of-resistance": {
+  "name": "Direnç İksiri"
+ },
+ "potion-of-speed": {
+  "name": "Sürat İksiri"
+ },
+ "potion-of-water-breathing": {
+  "name": "Su Altında Solunum İksiri"
+ },
+ "potions-of-healing": {
+  "name": "Şifa İksiri"
+ },
+ "ring-of-animal-influence": {
+  "name": "Hayvan Etkisi Yüzüğü"
+ },
+ "ring-of-djinni-summoning": {
+  "name": "Cin Çağırma Yüzüğü"
+ },
+ "ring-of-elemental-command": {
+  "name": "Element Hükmü Yüzüğü"
+ },
+ "ring-of-evasion": {
+  "name": "Sıyrılma Yüzüğü"
+ },
+ "ring-of-feather-falling": {
+  "name": "Tüy Düşüşü Yüzüğü"
+ },
+ "ring-of-free-action": {
+  "name": "Serbest Hareket Yüzüğü"
+ },
+ "ring-of-invisibility": {
+  "name": "Görünmezlik Yüzüğü"
+ },
+ "ring-of-jumping": {
+  "name": "Sıçrama Yüzüğü"
+ },
+ "ring-of-mind-shielding": {
+  "name": "Zihin Kalkanı Yüzüğü"
+ },
+ "ring-of-protection": {
+  "name": "Koruma Yüzüğü"
+ },
+ "ring-of-regeneration": {
+  "name": "Yenilenme Yüzüğü"
+ },
+ "ring-of-resistance": {
+  "name": "Direnç Yüzüğü"
+ },
+ "ring-of-shooting-stars": {
+  "name": "Kayan Yıldızlar Yüzüğü"
+ },
+ "ring-of-spell-storing": {
+  "name": "Büyü Saklama Yüzüğü"
+ },
+ "ring-of-spell-turning": {
+  "name": "Büyü Çevirme Yüzüğü"
+ },
+ "ring-of-swimming": {
+  "name": "Yüzme Yüzüğü"
+ },
+ "ring-of-telekinesis": {
+  "name": "Telekinezi Yüzüğü"
+ },
+ "ring-of-the-ram": {
+  "name": "Koç Yüzüğü"
+ },
+ "ring-of-three-wishes": {
+  "name": "Üç Dilek Yüzüğü"
+ },
+ "ring-of-warmth": {
+  "name": "Sıcaklık Yüzüğü"
+ },
+ "ring-of-water-walking": {
+  "name": "Su Üstünde Yürüme Yüzüğü"
+ },
+ "ring-of-x-ray-vision": {
+  "name": "Röntgen Görüşü Yüzüğü"
+ },
+ "robe-of-eyes": {
+  "name": "Gözler Cüppesi"
+ },
+ "robe-of-scintillating-colors": {
+  "name": "Parıldayan Renkler Cüppesi"
+ },
+ "robe-of-stars": {
+  "name": "Yıldızlar Cüppesi"
+ },
+ "robe-of-the-archmagi": {
+  "name": "Baş Büyücü Cüppesi"
+ },
+ "robe-of-useful-items": {
+  "name": "Yararlı Eşyalar Cüppesi"
+ },
+ "rod-of-absorption": {
+  "name": "Emme Çubuğu"
+ },
+ "rod-of-alertness": {
+  "name": "Tetikte Olma Çubuğu"
+ },
+ "rod-of-lordly-might": {
+  "name": "Lord Kudreti Çubuğu"
+ },
+ "rod-of-rulership": {
+  "name": "Hükümdarlık Çubuğu"
+ },
+ "rod-of-security": {
+  "name": "Güvenlik Çubuğu"
+ },
+ "rope-of-climbing": {
+  "name": "Tırmanma Halatı"
+ },
+ "rope-of-entanglement": {
+  "name": "Dolaştırma Halatı"
+ },
+ "scarab-of-protection": {
+  "name": "Koruma Böceği"
+ },
+ "scimitar-of-speed": {
+  "name": "Sürat Palası"
+ },
+ "shield": {
+  "name": "Kalkan"
+ },
+ "shield-1": {
+  "name": "Kalkan +1"
+ },
+ "shield-2": {
+  "name": "Kalkan +2"
+ },
+ "shield-3": {
+  "name": "Kalkan +3"
+ },
+ "shield-of-missile-attraction": {
+  "name": "Mermi Çeken Kalkan"
+ },
+ "slippers-of-spider-climbing": {
+  "name": "Örümcek Tırmanışı Patikleri"
+ },
+ "sovereign-glue": {
+  "name": "Mutlak Tutkal"
+ },
+ "spell-scroll": {
+  "name": "Büyü Parşömeni"
+ },
+ "spellguard-shield": {
+  "name": "Büyü Koruyan Kalkan"
+ },
+ "sphere-of-annihilation": {
+  "name": "Yok Ediş Küresi"
+ },
+ "staff-of-charming": {
+  "name": "Büyüleme Asası"
+ },
+ "staff-of-fire": {
+  "name": "Ateş Asası"
+ },
+ "staff-of-frost": {
+  "name": "Ayaz Asası"
+ },
+ "staff-of-healing": {
+  "name": "Şifa Asası"
+ },
+ "staff-of-power": {
+  "name": "Güç Asası"
+ },
+ "staff-of-striking": {
+  "name": "Vuruş Asası"
+ },
+ "staff-of-swarming-insects": {
+  "name": "Haşere Sürüsü Asası"
+ },
+ "staff-of-the-magi": {
+  "name": "Büyücüler Asası"
+ },
+ "staff-of-the-python": {
+  "name": "Piton Asası"
+ },
+ "staff-of-the-woodlands": {
+  "name": "Ormanlar Asası"
+ },
+ "staff-of-thunder-and-lightning": {
+  "name": "Gök Gürültüsü ve Yıldırım Asası"
+ },
+ "staff-of-withering": {
+  "name": "Kavurma Asası"
+ },
+ "stone-of-controlling-earth-elementals": {
+  "name": "Toprak Elementellerini Denetleme Taşı"
+ },
+ "stone-of-good-luck-(luckstone)": {
+  "name": "İyi Şans Taşı (Şans Taşı)"
+ },
+ "sun-blade": {
+  "name": "Güneş Kılıcı"
+ },
+ "sword-of-life-stealing": {
+  "name": "Yaşam Çalan Kılıç"
+ },
+ "sword-of-sharpness": {
+  "name": "Keskinlik Kılıcı"
+ },
+ "sword-of-wounding": {
+  "name": "Yaralayan Kılıç"
+ },
+ "talisman-of-pure-good": {
+  "name": "Saf İyilik Tılsımı"
+ },
+ "talisman-of-the-sphere": {
+  "name": "Küre Tılsımı"
+ },
+ "talisman-of-ultimate-evil": {
+  "name": "Mutlak Kötülük Tılsımı"
+ },
+ "tome-of-clear-thought": {
+  "name": "Berrak Düşünce Cildi"
+ },
+ "tome-of-leadership-and-influence": {
+  "name": "Liderlik ve Etki Cildi"
+ },
+ "tome-of-understanding": {
+  "name": "Kavrayış Cildi"
+ },
+ "trident-of-fish-command": {
+  "name": "Balıklara Hükmetme Üç Çatalı"
+ },
+ "universal-solvent": {
+  "name": "Evrensel Çözücü"
+ },
+ "vicious-weapon": {
+  "name": "Gaddar Silah"
+ },
+ "vorpal-sword": {
+  "name": "Vorpal Kılıç"
+ },
+ "wand-of-binding": {
+  "name": "Bağlama Değneği"
+ },
+ "wand-of-enemy-detection": {
+  "name": "Düşman Sezme Değneği"
+ },
+ "wand-of-fear": {
+  "name": "Korku Değneği"
+ },
+ "wand-of-fireballs": {
+  "name": "Ateş Topu Değneği"
+ },
+ "wand-of-lightning-bolts": {
+  "name": "Yıldırım Oku Değneği"
+ },
+ "wand-of-magic-detection": {
+  "name": "Büyü Sezme Değneği"
+ },
+ "wand-of-magic-missiles": {
+  "name": "Büyü Mermisi Değneği"
+ },
+ "wand-of-paralysis": {
+  "name": "Felç Değneği"
+ },
+ "wand-of-polymorph": {
+  "name": "Biçim Değiştirme Değneği"
+ },
+ "wand-of-secrets": {
+  "name": "Sırlar Değneği"
+ },
+ "wand-of-the-war-mage": {
+  "name": "Savaş Büyücüsü Değneği"
+ },
+ "wand-of-the-war-mage-1": {
+  "name": "Savaş Büyücüsü Değneği +1"
+ },
+ "wand-of-the-war-mage-2": {
+  "name": "Savaş Büyücüsü Değneği +2"
+ },
+ "wand-of-the-war-mage-3": {
+  "name": "Savaş Büyücüsü Değneği +3"
+ },
+ "wand-of-web": {
+  "name": "Ağ Değneği"
+ },
+ "wand-of-wonder": {
+  "name": "Harika Değnek"
+ },
+ "weapon": {
+  "name": "Silah"
+ },
+ "weapon-1": {
+  "name": "Silah +1"
+ },
+ "weapon-2": {
+  "name": "Silah +2"
+ },
+ "weapon-3": {
+  "name": "Silah +3"
+ },
+ "weapon-of-warning": {
+  "name": "Uyarı Silahı"
+ },
+ "well-of-many-worlds": {
+  "name": "Çok Dünyalı Kuyu"
+ },
+ "wind-fan": {
+  "name": "Rüzgâr Yelpazesi"
+ },
+ "winged-boots": {
+  "name": "Kanatlı Çizmeler"
+ },
+ "wings-of-flying": {
+  "name": "Uçuş Kanatları"
+ },
+ "scroll-of-resurrection": {
+  "name": "Diriliş Parşömeni"
+ },
+ "scroll-of-identification": {
+  "name": "Tanımlama Parşömeni"
+ }
+}

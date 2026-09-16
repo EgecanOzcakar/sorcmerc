@@ -1,0 +1,41 @@
+{
+ "padded": {
+  "name": "Pamuklu Zırh"
+ },
+ "leather": {
+  "name": "Deri Zırh"
+ },
+ "studded-leather": {
+  "name": "Perçinli Deri Zırh"
+ },
+ "hide": {
+  "name": "Post Zırh"
+ },
+ "chain-shirt": {
+  "name": "Zincir Gömlek"
+ },
+ "scale-mail": {
+  "name": "Pullu Zırh"
+ },
+ "breastplate": {
+  "name": "Göğüslük"
+ },
+ "half-plate": {
+  "name": "Yarım Plaka Zırh"
+ },
+ "ring-mail": {
+  "name": "Halkalı Zırh"
+ },
+ "chain-mail": {
+  "name": "Zincir Zırh"
+ },
+ "splint": {
+  "name": "Şeritli Zırh"
+ },
+ "plate": {
+  "name": "Plaka Zırh"
+ },
+ "shield": {
+  "name": "Kalkan"
+ }
+}

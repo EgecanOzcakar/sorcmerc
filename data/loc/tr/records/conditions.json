@@ -1,0 +1,62 @@
+{
+ "blinded": {
+  "name": "Kör",
+  "description": "Göremezsin, görüş gerektiren her kontrolü otomatik olarak kaybedersin; sana yapılan saldırı zarları avantajlı, senin saldırı zarların dezavantajlıdır."
+ },
+ "charmed": {
+  "name": "Büyülenmiş",
+  "description": "Seni büyüleyene saldıramaz ya da onu zararlı yetenek ve büyülerle hedef alamazsın; büyüleyen, sana karşı sosyal yetenek kontrollerinde avantajlıdır."
+ },
+ "deafened": {
+  "name": "Sağır",
+  "description": "Duyamazsın ve işitme gerektiren her yetenek kontrolünü otomatik olarak kaybedersin."
+ },
+ "exhaustion": {
+  "name": "Bitkinlik",
+  "description": "Her bitkinlik seviyesi tüm d20 zarlarına -2 ceza getirir ve tüm hareket hızlarını 5 fit düşürür; altı seviye bitkinlik seni öldürür."
+ },
+ "frightened": {
+  "name": "Korkmuş",
+  "description": "Korkunun kaynağı görüş hattındayken yetenek kontrollerinde ve saldırı zarlarında dezavantajlısın ve o kaynağa isteyerek yaklaşamazsın."
+ },
+ "grappled": {
+  "name": "Kıskaçta",
+  "description": "Hızın 0 olur ve seni kıskaca alan dışındaki hedeflere saldırı zarlarında dezavantajlısın; kıskaca alan etkisiz hâle gelirse ya da kıskacın erişiminin dışına çıkarılırsan durum sona erer."
+ },
+ "incapacitated": {
+  "name": "Etkisiz",
+  "description": "Aksiyon, bonus aksiyon ya da tepki kullanamaz, konuşamazsın; sürmekte olan konsantrasyonun bozulur."
+ },
+ "invisible": {
+  "name": "Görünmez",
+  "description": "Görülemezsin, inisiyatif zarlarında avantajlısın ve görülmeni gerektiren etkiler sana işlemez; sana yapılan saldırı zarları dezavantajlı, senin saldırı zarların avantajlıdır."
+ },
+ "paralyzed": {
+  "name": "Felçli",
+  "description": "Etkisizsin, hareket edemez ve konuşamazsın; Güç ve Çeviklik kurtarma zarlarını otomatik olarak kaybedersin, sana yapılan saldırılar avantajlıdır ve 5 fit içinden gelen her yakın dövüş isabeti kritik vuruş sayılır."
+ },
+ "petrified": {
+  "name": "Taşlaşmış",
+  "description": "Katı ve cansız bir maddeye dönüşürsün; etkisizsin ve çevrenin farkında değilsin. Güç ve Çeviklik kurtarma zarlarını otomatik olarak kaybedersin, sana yapılan saldırılar avantajlıdır; bu hâldeyken tüm hasara dirençli ve Zehirlenmiş durumuna bağışıksın."
+ },
+ "poisoned": {
+  "name": "Zehirlenmiş",
+  "description": "Saldırı zarlarında ve yetenek kontrollerinde dezavantajlısın."
+ },
+ "prone": {
+  "name": "Yerde",
+  "description": "Ayağa kalkmadıkça tek hareket seçeneğin emeklemektir; saldırı zarlarında dezavantajlısın ve sana yapılan saldırılar saldıran 5 fit içindeyse avantajlı, değilse dezavantajlıdır."
+ },
+ "restrained": {
+  "name": "Kısıtlanmış",
+  "description": "Hızın 0 olur, saldırı zarlarında ve Çeviklik kurtarma zarlarında dezavantajlısın ve sana yapılan saldırılar avantajlıdır."
+ },
+ "stunned": {
+  "name": "Sersemlemiş",
+  "description": "Etkisizsin ve hareket edemezsin; Güç ve Çeviklik kurtarma zarlarını otomatik olarak kaybedersin ve sana yapılan saldırılar avantajlıdır."
+ },
+ "unconscious": {
+  "name": "Baygın",
+  "description": "Etkisizsin, hareket edemez ve konuşamazsın, çevrenin farkında değilsin, elindekileri düşürürsün ve yere serilirsin; Güç ve Çeviklik kurtarma zarlarını otomatik olarak kaybedersin, sana yapılan saldırılar avantajlıdır ve 5 fit içinden gelen her yakın dövüş isabeti kritik vuruş sayılır."
+ }
+}

@@ -1,0 +1,42 @@
+{
+ "archery": {
+  "name": "Okçuluk",
+  "description": "Menzilli silahlarla yaptığın saldırı zarlarına +2 bonus kazanırsın."
+ },
+ "defense": {
+  "name": "Savunma",
+  "description": "Zırh giyerken Zırh Sınıfına +1 bonus kazanırsın."
+ },
+ "dueling": {
+  "name": "Düello",
+  "description": "Tek elinde bir yakın dövüş silahı tutarken ve başka silah taşımazken, o silahla yaptığın hasar zarlarına +2 bonus kazanırsın."
+ },
+ "great-weapon-fighting": {
+  "name": "Büyük Silah Dövüşü",
+  "description": "İki elinle tuttuğun bir yakın dövüş silahıyla yaptığın saldırının hasar zarında 1 ya da 2 atarsan zarı yeniden atabilirsin ve yeni sonucu kullanmak zorundasın. Silahın çift elli ya da çok yönlü özelliği olmalıdır."
+ },
+ "protection": {
+  "name": "Koruma",
+  "description": "Gördüğün bir yaratık, 5 fit içindeki senden başka bir hedefe saldırdığında, tepkini kullanarak saldırı zarını dezavantajlı yapabilirsin. Kalkan taşıyor olmalısın."
+ },
+ "two-weapon-fighting": {
+  "name": "Çift Silah Dövüşü",
+  "description": "Çift silahla dövüşürken ikinci saldırının hasarına yetenek modifiyeni ekleyebilirsin."
+ },
+ "blind-fighting": {
+  "name": "Kör Dövüş",
+  "description": "10 fit menzilli Kör Görüş kazanırsın. Bu menzil içinde, Kör durumunda olsan ya da Karanlıkta bulunsan bile tam siperin arkasında olmayan her şeyi görebilirsin. Ayrıca sana Görünmez olan bir yaratığı yine de görebilirsin."
+ },
+ "interception": {
+  "name": "Araya Girme",
+  "description": "Gördüğün bir yaratık, 5 fit içindeki senden başka bir hedefe bir saldırıyla isabet ettirdiğinde, Tepkini kullanarak hedefin aldığı hasarı 1d10 artı Uzmanlık Bonusun kadar azaltabilirsin (en az 0 hasara kadar). Bu Tepkiyi kullanmak için bir Kalkan ya da Basit veya Savaş silahı taşımalısın."
+ },
+ "thrown-weapon-fighting": {
+  "name": "Fırlatma Silahı Dövüşü",
+  "description": "Fırlatmalı özelliği olan bir silahı, onunla yaptığın saldırının parçası olarak çekebilirsin. Ayrıca fırlatma silahıyla yaptığın menzilli bir saldırı isabet ettiğinde hasar zarına +2 bonus kazanırsın."
+ },
+ "unarmed-fighting": {
+  "name": "Silahsız Dövüş",
+  "description": "Silahsız vuruşların isabet ettiğinde 1d6 artı Güç modifiyen kadar ezici hasar verebilir. Saldırı zarını attığında hiçbir silah ya da Kalkan taşımıyorsan d6 yerine d8 atarsın. Her turunun başında, kıskacında tuttuğun bir yaratığa 1d4 ezici hasar verebilirsin."
+ }
+}
