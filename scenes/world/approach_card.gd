@@ -168,6 +168,34 @@ func _notification(what: int) -> void:
 # this card is concerned, including all of them. `foe_label` is the caller's
 # one-line name for who is closing ("Goblins (3)"); this card does not know how
 # to build one and never guesses.
+const ART_H := 200.0
+const ART_MIN_H := 110.0
+var _art_rect := Rect2()
+var _art: Texture2D = null    # the band on the road: one picture, fixed for the card's life
+
+# Which picture that is. The card used to show the HOVERED way's art, so the
+# banner flipped between four paintings while the player read four rows, and
+# then the outcome card behind it made a fifth — a pop-up that showed a handful
+# of pictures for one decision (#55). One picture while the question is open and
+# one once it is answered is the whole shape: this is the question's, and the
+# way's own art (its pass/fail frame) belongs to the answer, on the event card
+# world.gd opens next. Both of these are a band coming up the road, which is
+# what the player is actually looking at, and neither presumes a choice.
+const SCENE_ART := "approach-engage"          # a hostile band, closing
+const FRIENDLY_SCENE_ART := "approach-greet"  # a civil one, hailing
+# The friendly card is the two no-roll ways (core/approach.gd's FRIENDLY_ORDER);
+# nothing else on the dict says which kind of meeting this is.
+const FRIENDLY_WAYS := ["greet", "pass"]
+
+func _s_of(i: int, key: String) -> String:
+	return str(_opt(i).get(key, ""))
+
+func _friendly() -> bool:
+	for n in _opts.size():
+		if not _s_of(n, "id") in FRIENDLY_WAYS:
+			return false
+	return not _opts.is_empty()
+
 func show_approach(options: Array, foe_label: String) -> void:
 	_opts = []
 	if options != null:
@@ -177,6 +205,7 @@ func show_approach(options: Array, foe_label: String) -> void:
 		_opts.append(FALLBACK_OPTION)
 	_foe = foe_label if foe_label != "" else NO_FOE
 	_chosen = false
+	_art = Icons.event_art(FRIENDLY_SCENE_ART if _friendly() else SCENE_ART, null)
 	visible = true
 	_build_buttons()
 	_layout()
@@ -344,7 +373,9 @@ func _tooltip(i: int) -> String:
 	return out
 
 
-func _layout() -> void:
+# `art_h` < 0 asks for the full banner; the pass below hands back a smaller
+# one (or 0) when the card would run off the window with it.
+func _layout(art_h := -1.0) -> void:
 	_ops.clear()
 	_rows.clear()
 	var pw := minf(PANEL_MAX_W, maxf(PANEL_MIN_W, size.x - MARGIN * 2.0))
@@ -361,6 +392,17 @@ func _layout() -> void:
 	rel.append(_op(Vector2(tx + gw, y + Icons.FS_CAPTION), CAPTION, Icons.FS_CAPTION,
 		Icons.COL_FOE, avail - gw))
 	y += Icons.FS_CAPTION + 10.0
+
+	# The meeting itself, pictured: the same banner slot the event card uses for
+	# the outcome that follows, and the same size — one picture here, one there.
+	# Sized to the window: a quarter of its height up to ART_H, and none at all
+	# when a short window needs every pixel for the four ways themselves.
+	_art_rect = Rect2()
+	if art_h < 0.0:
+		art_h = ART_H
+	if _art != null and art_h >= ART_MIN_H:
+		_art_rect = Rect2(tx, y, avail, art_h)
+		y += art_h + BLOCK_GAP
 
 	# Who it is. The caller owns this string; the card only puts it in the one
 	# place a title goes.
@@ -390,9 +432,17 @@ func _layout() -> void:
 	# bottom rows rather than its title — the rows it loses are still reachable by
 	# their number keys, which is why the header says what they are.
 	var ph := y
+	# The banner yields to the words: over the window with it, lay out again
+	# with exactly the overflow taken off the picture, or none if that leaves a strip.
+	var over := ph - (size.y - MARGIN * 2.0)
+	if over > 0.0 and _art_rect.size.y > 0.0:
+		var less := _art_rect.size.y - over
+		_layout(less if less >= ART_MIN_H else 0.0)
+		return
 	var px := (size.x - pw) * 0.5
 	var py := maxf(MARGIN, (size.y - ph) * 0.5)
 	_panel = Rect2(px, py, pw, ph)
+	_art_rect.position += _panel.position
 	for op in rel:
 		var moved: Dictionary = op.duplicate()
 		if moved.has("pos"):
@@ -574,6 +624,18 @@ func _draw() -> void:
 	draw_rect(_panel, Icons.COL_PANEL)
 	draw_rect(Rect2(_panel.position, Vector2(BAR_W, _panel.size.y)), Icons.COL_FOE)
 	draw_rect(_panel, Color(Icons.COL_GOLD, BORDER_ALPHA), false, 1.0)
+	if _art != null and _art_rect.size.x > 0.0:
+		var ts := _art.get_size()
+		var src := Rect2(Vector2.ZERO, ts)
+		var slot_aspect := _art_rect.size.x / _art_rect.size.y
+		if ts.x / ts.y < slot_aspect:
+			src.size.y = ts.x / slot_aspect
+			src.position.y = (ts.y - src.size.y) * 0.4
+		else:
+			src.size.x = ts.y * slot_aspect
+			src.position.x = (ts.x - src.size.x) / 2.0
+		draw_texture_rect_region(_art, _art_rect, src)
+		draw_rect(_art_rect, Color(Icons.COL_FOE, 0.55), false, 1.0)
 
 	for n in _rows.size():
 		var row: Dictionary = _rows[n]

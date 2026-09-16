@@ -90,6 +90,7 @@ var _figures
 const COL_BG := Icons.COL_BG
 const COL_HEX := Color("232733")
 const COL_HEX_EDGE := Color("39404f")
+const COL_HEX_GRID := Color("6b7386")   # the grid line over the floor: lighter than the old gutter, since it sits on stone
 const COL_BRAZIER := Color("6b2f1c")
 const COL_COVER := Color("2f4744")       # the slab under a cover hex
 # T-cover: half cover is +2 AC and +2 on Dex saves (core/combat.gd's
@@ -118,7 +119,8 @@ const FLOORS := {
 	"shop": preload("res://assets/board/floor_shop.png"),
 }
 const FLOOR_SPAN := 3.0    # hexes per texture repeat
-const FLOOR_ALPHA := 0.55
+const FLOOR_ALPHA := 0.9    # the texture is the ground now, not a wash over a slab
+const FLOOR_TONE := 0.72    # ...held down to the board's dark palette, the board light on top
 const COL_MOVE := Color(0.30, 0.55, 0.95, 0.35)
 const COL_TARGET := Color(0.95, 0.35, 0.30, 0.9)
 const COL_CONE := Color(0.98, 0.55, 0.15, 0.30)
@@ -266,9 +268,15 @@ func _ready() -> void:
 
 	set_process(true)
 	_apply_ui_scale()
+	# T32: armed, not opened. The walkthrough used to come up the instant the
+	# screen did, which put its cards over whatever the bar happened to be at
+	# that moment — an empty one while the goblin takes the first turn, or
+	# T39's deployment bar ("Swap Vera Kord", "Begin the ambush") when the
+	# party rolled its Stealth well. Neither is the fixed nine-slot bar the
+	# card describes. _advance() opens it on the first hero turn instead, when
+	# the bar it explains is the bar on screen.
+	_walk_pending = tutorial
 	_new_game()
-	if tutorial:
-		_walk_show(0)
 
 # Font sizes across the whole combat UI track the zoom level.
 func _apply_ui_scale() -> void:
@@ -434,7 +442,14 @@ func _new_game(forced := 0) -> void:
 	# phase — the player permutes who stands on which party start hex.
 	if Encounter.surprise_check(cb, scouted_ahead):
 		_flush_log()
-		_deploy_menu()
+		# T32: the guided fight takes the free round and skips the phase. Its
+		# bar is the phase's own, which contradicts the walkthrough's card, and
+		# the phase itself is a mechanic no card explains — T32's brief is that
+		# nothing is on screen the walkthrough has not named.
+		if tutorial:
+			_advance()
+		else:
+			_deploy_menu()
 		return
 	_advance()
 
@@ -563,6 +578,9 @@ func _advance() -> void:
 		_mode = "idle"
 		_build_hero_menu(c)
 		_advancing = false
+		if _walk_pending:        # T32: the bar the cards describe is now up
+			_walk_pending = false
+			_walk_show(0)
 		return
 	_advancing = false
 	_finish()
@@ -1768,6 +1786,7 @@ func _notification(what: int) -> void:
 # =====================================================================
 
 var _walk: Walk = null      # the live overlay, null whenever the tutorial isn't up
+var _walk_pending := false  # tutorial armed in _ready, waiting on the first hero turn
 
 # Which control each step in Tutorial.STEPS points at.
 func _walk_target(key: String) -> Control:
@@ -1785,9 +1804,17 @@ func _walk_show(i: int) -> void:
 	var step: Dictionary = Tutorial.STEPS[i]
 	_walk = Walk.new()
 	_walk.target = _walk_target(String(step["target"]))
-	_walk.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_walk.mouse_filter = Control.MOUSE_FILTER_STOP   # nothing underneath is clickable
-	add_child(_walk)
+	# On _hud_layer rather than on this Control, and added after _hud_overlay so
+	# it draws after it. T-hud put the HP bars and condition glyphs on a
+	# CanvasLayer above every ordinary child, which included this overlay: a
+	# card parked over a token had that token's HP bar painted across its own
+	# title. The dim belongs over the HUD too — a bright HP bar in the darkened
+	# half of the screen is exactly what the spotlight is meant to remove.
+	# A CanvasLayer breaks the Control chain a theme is inherited down, so the
+	# combat screen's own theme is handed over rather than left to the default.
+	_walk.theme = theme
+	_hud_layer.add_child(_walk)
 
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", Icons.box(Icons.COL_INK, Icons.COL_GOLD_EDGE, 0, 18, 14))
@@ -1840,6 +1867,10 @@ class Walk extends Control:
 	const DIM := Color(0.02, 0.03, 0.05, 0.72)
 
 	func _process(_dt: float) -> void:
+		var vp := get_viewport_rect().size
+		if size != vp:              # no Control parent to anchor to — see _walk_show
+			size = vp
+			queue_redraw()
 		if card == null:
 			return
 		var r := _spot()
@@ -2279,6 +2310,21 @@ class Board extends Control:
 	func _paint_ground(canvas: CanvasItem) -> void:
 		var s: float = main.hex_px
 		var decor: Array = []   # foliage, drawn after every tile so it can overhang
+		# The ground goes on past the board's edge and fades into the dark, two
+		# rings deep, the way the map's fog does — a board is a lit patch of a
+		# place, not a lozenge cut out of nothing.
+		var halo: Dictionary = {}
+		for hx in cb.board["hexes"]:
+			for n in Hex.neighbors(hx):
+				if not n in cb.board["hexes"] and not halo.has(n):
+					halo[n] = 1
+		for hx in halo.keys():
+			for n in Hex.neighbors(hx):
+				if not n in cb.board["hexes"] and not halo.has(n):
+					halo[n] = 2
+		_light_board()
+		for hx in halo:
+			_paint_floor(canvas, _hex_poly(_pix(hx), s), s, HALO_ALPHA[halo[hx]], _light_at(_pix(hx)))
 		for hx in cb.board["hexes"]:
 			var c := _pix(hx)
 			var obj: Dictionary = cb.object_at(hx)
@@ -2292,45 +2338,66 @@ class Board extends Control:
 		for d in decor:
 			_draw_foliage(canvas, d, s)
 
-	func _paint_tile(canvas: CanvasItem, hx: Vector2i, c: Vector2, s: float, pulse: float) -> void:
-		var poly := _hex_poly(c, s - 2.0)
-		var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
-		var obj: Dictionary = cb.object_at(hx)
-		if _is_hazard(obj):
-			fill = main.COL_BRAZIER.lerp(Color("d9622e"), pulse)
-		elif obj.get("blocks_movement", false):
-			fill = main.COL_PROP
-		elif cb.is_cover(hx):
-			fill = main.COL_COVER
-		# Ground, in two layers: a per-hex tinted slab so the field isn't one
-		# flat colour, then a lighter patch drifting off-centre. Neighbouring
-		# tiles overlap in tone, which is what stops the borders reading as
-		# hard-cut diamonds without needing an actual texture.
-		var v := _rand(hx, 1)
-		var tint := fill.lightened(0.09 * v).darkened(0.07 * (1.0 - v))
-		# lit from the top-left and falling off to the rim, so a tile is a
-		# shaded surface rather than a solid lozenge
-		_fan(canvas, c + _iso(LIGHT * s * 0.55), poly, tint.lightened(0.11), tint.darkened(0.13))
+	# Beyond the board's edge the ground fades out over two rings.
+	const HALO_ALPHA := {1: 0.32, 2: 0.10}
+	const GRID_ALPHA := 0.34   # the hex line on a plain tile
+
+	# One light over the whole board rather than one per tile: brightest a
+	# little up and left of the board's middle, falling off toward its rim.
+	# A tile's floor is multiplied by _light_at(), so the whole surface is lit
+	# as one thing and nothing draws past the edge.
+	var _light_mid := Vector2.ZERO
+	var _light_reach := 1.0
+	const LIGHT_FALL := 0.38
+	func _light_board() -> void:
+		var lo := Vector2(1e9, 1e9)
+		var hi := Vector2(-1e9, -1e9)
+		for hx in cb.board["hexes"]:
+			var c := _pix(hx)
+			lo = lo.min(c); hi = hi.max(c)
+		_light_mid = (lo + hi) * 0.5 + _iso(LIGHT) * main.hex_px * 3.0
+		_light_reach = maxf(1.0, (hi - lo).length() * 0.6)
+	func _light_at(c: Vector2) -> float:
+		return 1.0 - LIGHT_FALL * clampf(c.distance_to(_light_mid) / _light_reach, 0.0, 1.0)
+
+	# The floor, laid flat on the board in ground space so it runs continuous
+	# from hex to hex — the same seamless painted texture the map's ground is,
+	# and the whole of what a plain tile is now.
+	func _paint_floor(canvas: CanvasItem, poly: PackedVector2Array, s: float, alpha: float, light := 1.0) -> void:
 		var floor_tex: Texture2D = main.FLOORS.get(cb.board.get("palette", "shrine"))
-		if floor_tex != null and obj.is_empty():
-			var uvs := PackedVector2Array()
-			for pt in poly:   # ground-space position, so the texture lies flat on the board
-				uvs.append(_iso_inv(pt - _origin) / (s * main.FLOOR_SPAN))
-			canvas.draw_polygon(poly, PackedColorArray([Color(1, 1, 1, main.FLOOR_ALPHA)]), uvs, floor_tex)
-		var blob := c + _iso(Vector2(_rand(hx, 2) - 0.5, _rand(hx, 3) - 0.5) * s * 0.6)
-		var br2 := s * (0.45 + 0.30 * _rand(hx, 4))
-		for i in 3:   # the mottling, feathered out instead of a hard-edged patch
-			canvas.draw_colored_polygon(_disc(blob, br2 * (0.55 + 0.225 * i)),
-				Color(fill.lightened(0.09), 0.11))
-		# Only the outline of a terrain CHANGE is drawn at full strength; seams
-		# between two plain tiles stay a whisper, so same-terrain runs blend.
-		var edge := _hex_poly(c, s - 2.0)
-		edge.append(edge[0])
+		var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
+		canvas.draw_colored_polygon(poly, Color(fill, alpha))
+		if floor_tex == null:
+			return
+		var uvs := PackedVector2Array()
+		for pt in poly:
+			uvs.append(_iso_inv(pt - _origin) / (s * main.FLOOR_SPAN))
+		var tone: float = main.FLOOR_TONE * light
+		canvas.draw_polygon(poly, PackedColorArray([Color(tone, tone, tone * 1.04, main.FLOOR_ALPHA * alpha)]), uvs, floor_tex)
+
+	func _paint_tile(canvas: CanvasItem, hx: Vector2i, c: Vector2, s: float, pulse: float) -> void:
+		var poly := _hex_poly(c, s)   # full size: no gutter between hexes, the texture runs through
+		var obj: Dictionary = cb.object_at(hx)
+		if obj.is_empty():
+			_paint_floor(canvas, poly, s, 1.0, _light_at(c))
+		else:
+			var fill: Color = main.COL_PROP
+			if _is_hazard(obj):
+				fill = main.COL_BRAZIER.lerp(Color("d9622e"), pulse)
+			_fan(canvas, c + _iso(LIGHT * s * 0.55), poly, fill.lightened(0.11), fill.darkened(0.13))
+		if cb.is_cover(hx) and obj.is_empty():
+			canvas.draw_colored_polygon(poly, Color(main.COL_COVER, 0.35))   # a wash, the rim says the rest
+		# Only a terrain change gets a seam; between two plain tiles there is none,
+		# so a run of the same ground is one surface.
 		var seam: bool = _terrain(hx) != ""
 		for n in Hex.neighbors(hx):
-			if not n in cb.board["hexes"] or _terrain(n) != _terrain(hx):
+			if n in cb.board["hexes"] and _terrain(n) != _terrain(hx):
 				seam = true
-		canvas.draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.9 if seam else 0.22), 1.5, true)
+		# The grid is a line on the surface, not a gap in it: every hex gets a
+		# thin one so the board still reads as hexes, a terrain change a firmer one.
+		var edge := _hex_poly(c, s - 0.5)
+		edge.append(edge[0])
+		canvas.draw_polyline(edge, Color(main.COL_HEX_GRID, 0.7 if seam else GRID_ALPHA), 1.5 if seam else 1.0, true)
 		if cb.is_cover(hx):
 			_paint_cover(canvas, c, s)
 

@@ -155,7 +155,20 @@ func _tutorial_checks() -> void:
 	await process_frame
 	var combat = game2._screen.get_child(0)
 	check(combat.tutorial, "the title screen's Tutorial launches with the walkthrough on")
-	check(combat._walk != null, "...and the first step is up, blocking play")
+	# The walkthrough waits for the first HERO turn before it opens, so that the
+	# bar its cards describe is the bar underneath them. Depending on the
+	# surprise roll and initiative that is either this frame or a couple after
+	# the goblin has swung, so this waits rather than asserting on frame one.
+	for _i in 30:
+		if combat._walk != null:
+			break
+		await process_frame
+	check(combat._walk != null, "...and the first step comes up, blocking play")
+	check(combat._mode != "deploy", "the guided fight never opens T39's deployment phase")
+	# ...over the ordinary nine slots + Swap + End turn, not the deployment bar.
+	check(combat._buttons.get_children().size() == combat.SLOTS.size() + 2,
+		"the bar under the walkthrough is the fixed one the cards describe (%d buttons)"
+		% combat._buttons.get_children().size())
 	# Next walks every step and the last one hands the fight over; Skip does it at once.
 	for n in Tutorial.STEPS.size():
 		check(combat._walk != null, "step %d is up" % (n + 1))

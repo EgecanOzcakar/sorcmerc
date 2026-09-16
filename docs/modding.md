@@ -10,7 +10,7 @@ working, because the team's own content breaks the moment it stops.
 A pack can do three things, in increasing order of ambition:
 
 1. **Add or retune data** — monsters, items, spells, species, anything under
-   `data/`.
+   `data/` — and say what the new things *do* in a fight.
 2. **Ship a world** — a map: settlements, lairs, roaming bands, water, where
    the party starts.
 3. **Tell a story** — chapters, a cast, dialogue with choices, and quest chains
@@ -88,6 +88,11 @@ and a mod from a forum can go through one pipeline with one trust level.
 | `data` | `{game data file: your file}` (§5) |
 
 Everything but `format`, `id` and `title` is optional.
+
+The API level is still **1**. The `data/effects/` files in §5.1 are new in this
+build, and no pack written before it mentioned them; a capability a pack can
+decline to use is not a break. `api` moves only when something a pack already
+wrote stops meaning what it meant.
 
 ---
 
@@ -338,15 +343,138 @@ made aware that packs exist.
 Overlayable files: `classes.json`, `subclasses.json`, `species.json`,
 `backgrounds.json`, `feats.json`, `fighting-styles.json`, `weapons.json`,
 `armor.json`, `magic-items.json`, `spells.json`, `conditions.json`,
-`monsters.json`, `bestiary.json`, `skills.json`. A key that is not one of them
-is a typo and is reported as one.
+`monsters.json`, `bestiary.json`, `skills.json`, and the four mechanics files
+of §5.1: `effects/spells.json`, `effects/potions.json`, `effects/features.json`,
+`effects/conditions.json`. A key that is not one of them is a typo and is
+reported as one.
 
 Copy the shape of an existing record — `data/SCHEMA.md` documents the export,
 and `content/ashen-road/monsters.json` is a two-entry worked example. A
 bestiary entry needs at least `id`, `cname`, `ac`, `max_hp`, `atk_bonus`,
 `damage`, `cr`, `xp`, `faction` and `habitat` to take part in a real fight.
 
+Four more fields on a bestiary entry are read, and are what makes a monster
+more than its numbers. `resist`, `immune` and `vulnerable` are lists of damage
+types; `cond_immune` is a list of `conditions.json` ids. RAW's order applies,
+once each: immunity wins outright, vulnerability doubles, resistance halves.
+`senses` (`{"darkvision": "60 ft.", "passive_perception": 12}`) feeds the one
+perception check this engine has — a watcher with a keen sense is harder to
+hide from, and blinding it takes away only the senses it was relying on.
+`features` is a list of `effects/features.json` ids (§5.1).
+
+You cannot break the difficulty curve by writing a big number:
+`core/rules/power.gd` prices every one of those fields, and the fight builder
+spends a budget, so a monster you make tougher is a monster it buys fewer of.
+
 Turning a pack off takes its records back out, including its retunes.
+
+### 5.1 `data/effects/` — what a thing *does*
+
+`spells.json` says a spell exists. `effects/spells.json` says what casting it
+puts on the board. The split is not tidiness: the game's own catalog is an SRD
+export and the export carries prose, so everything mechanical is hand-authored
+over the top of it — by us, and through these same four files, by you. Without
+them a pack could add a spell nobody could cast and a potion nobody could
+drink, which is exactly the silent dead-end the rest of this pipeline exists to
+refuse.
+
+| file | keyed by | gives |
+|---|---|---|
+| `effects/spells.json` | a `spells.json` id | the cast: cost, shape, range, save, damage, upcast |
+| `effects/potions.json` | a `magic-items.json` id | the drink: a combat action, or a swallow on the road |
+| `effects/features.json` | a feature id — one named by a monster's `features`, or a class feature | the mechanic, under a closed `kind` |
+| `effects/conditions.json` | a `conditions.json` id | what wearing that condition costs |
+
+All four are **objects keyed by id**, not lists, and they merge by key rather
+than by a record's `id` field. A key beginning with `_` is an authoring comment
+and is skipped. Every id an entry names must be in the catalog or be one your
+own pack adds: a mechanic for a spell nobody wrote is an error, not a silence.
+
+A key you write **replaces the whole entry**, it does not patch it. Retuning
+one number in the game's Fireball means writing out the rest of Fireball too —
+otherwise you have written a spell that does only the thing you mentioned.
+
+**A spell.** `cost` is `action`, `bonus` or `reaction`. `shape` is `single`,
+`cone`, `line`, `sphere`, `cube`, `cylinder`, `radius`, `emanation`, `self` or
+`allies`; `size_ft` sizes the shape, `range_ft` says how far it reaches.
+
+```json
+"ember-lance": {
+  "cost": "action", "shape": "single", "range_ft": 60,
+  "save": "dex", "half_on_save": true,
+  "damage": [{"count": 2, "sides": 8, "type": "fire"}],
+  "upcast": {"per_level": {"count": 1, "sides": 8}}
+}
+```
+
+Beside `damage`, or instead of it, a spell may carry `heal`, `conditions`,
+`buff`, `teleport`, `summon` or a `reaction` block. With none of them it is not
+combat-castable, and it is never offered as a pick — a utility spell with no
+hook would be a slot spent on nothing.
+
+`upcast.per_level` is what a bigger slot buys: more dice (`count`), more `rays`,
+or one more `targets` for a single-target status spell. `cantrip_scale` does the
+same job for a cantrip, against character level instead of slot. A `reaction`
+block names its `trigger` and, for a counter, `counter` and `min_level`.
+
+`damage` must be written as `[{count, sides, type}]`. The export's
+`{"dice": "8d6"}` is a draft the verb builder cannot read, and a pack that
+leaves it that way is refused rather than shipping a fifth-level spell that
+hits like a dagger.
+
+**A potion** hangs a mechanic on a `magic-items.json` id, and being listed here
+is what makes the bottle real: an alchemist's shelf is exactly the ids in this
+file, and nothing anywhere will let a player drink one that is not on it. Loot
+is the exception — `core/loot.gd`'s drop bands are a hand-picked list rather
+than everything drinkable, and a pack cannot extend them, so a pack's potion is
+bought and not found.
+
+```json
+"potion-of-embers": {"status": {"bonus_damage": 2}, "rounds": 10,
+                     "minutes": 30, "text": "+2 damage while it burns"}
+```
+
+`heal` and `damage` are dice strings. `condition` names a `conditions.json` id.
+`status` is a buff the drinker wears, built from keys combat already honours —
+`resist`, `bonus_damage`, `bonus_to_hit`, `bonus_save`, `extra_action`,
+`speed_mult`, `ac`, `no_attack`, `str_score`. `rounds` is its life in a fight
+and `minutes` its life on the world clock when it is drunk on the road, where an
+unexpired buff is carried into the next fight; `road` names something it does
+out of combat. A potion with none of `heal`, `damage`, `condition`, `status` or
+`road` does nothing at all, and is refused.
+
+**A feature** is a mechanic under a closed `kind`:
+
+`passive_damage`, `self_buff`, `ally_buff`, `heal_self`, `heal_ally`,
+`grant_action`, `grant_verb`, `attacks_per_action`, `attack_modifier`,
+`damage_bonus`, `save_effect`, `reaction`, `save_modifier`, `survive_damage`,
+`keen_senses`.
+
+```json
+"monster-parry-2": {"label": "Parry", "kind": "reaction",
+                    "cost": "reaction", "trigger": "would_be_hit", "ac_bonus": 2}
+```
+
+A feature with **no** entry here is a flavour feature: it shows on the sheet and
+does nothing in a fight. That default is what makes a bestiary of hundreds of
+ids tractable, so author only the ones that matter — and note that it is also
+why the `kind` vocabulary is closed rather than open. A typo'd kind would be
+indistinguishable from a feature you meant to leave as flavour.
+
+`cost` is `action`, `bonus`, `reaction`, or `none` for a passive. A reaction
+must name a `trigger` the engine actually fires — `hit_by_attack`,
+`damaged_by_attack`, `spell_cast`, `would_be_hit` — because a reaction hung off
+anything else will never wake. `dice`, `uses`, `amount` and `bonus_damage` take
+either a plain number or a scaling spec (`{"by": "class_level" | "pb" |
+"ability_mod", ...}`); a monster has no character sheet, so a monster's feature
+must use plain numbers.
+
+**A condition** says what wearing it costs: `attacks_against`, `own_attacks`
+and `own_checks` (`"adv"` or `"dis"`), `speed`, `saves`, and `auto_fail` — the
+senses it takes away, which is how blinding something interacts with what it
+was using to see.
+
+Turning the pack off takes all of this back out, the same as any other overlay.
 
 ---
 
@@ -382,7 +510,12 @@ user://mods/my-pack/
     world.json
     story.json
     monsters.json
+    spells.json          # what your spells are
+    spell-mechanics.json # what casting them does — "effects/spells.json" in pack.json
 ```
+
+Your own filenames are yours; `data` in `pack.json` is what maps them onto the
+game's. Nothing has to sit at a path that mirrors `data/effects/`.
 
 1. Copy `content/example-world/` — the shortest thing that is a working pack
    (a map, and nothing else).
@@ -402,6 +535,9 @@ rather than one per run:
 - duplicate ids, of anything, anywhere
 - a reward naming an item that does not exist (a warning: it may be another
   pack's)
+- an effect `kind` or a reaction `trigger` the engine does not have, a
+  mechanic written for a spell or an item nobody wrote, spell damage the verb
+  builder cannot read, a potion that does nothing
 - a paid pack with no `product_id`, an `api` from the future, a declared file
   that is not there
 - placement mistakes the schema cannot express — a settlement standing in a
@@ -446,6 +582,9 @@ without rewriting the chapter around it.
 | `core/mod/story.gd` | `story.json`: the schema, and the validator |
 | `core/mod/story_runtime.gd` | the playthrough: conditions, effects, chapters, save state |
 | `core/rules/catalog.gd` | where data overlays land |
+| `core/rules/effects.gd` | the `data/effects/*.json` vocabulary, and what reads it |
+| `core/potions.gd` | `effects/potions.json`: the two doors a bottle opens |
+| `core/rules/power.gd` | what a monster's defences and features cost the fight builder |
 | `scenes/mods/mods.gd` | the browser |
 | `scenes/world/story_card.gd` | the card a beat is shown on |
 

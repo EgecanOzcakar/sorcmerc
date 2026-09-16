@@ -52,6 +52,7 @@ const Regions = preload("res://core/regions.gd")
 const RNG = preload("res://core/rng.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
 const RoadSpells = preload("res://core/road_spells.gd")
+const Ach = preload("res://core/achievements.gd")
 
 # One roll per six world-hours on the road. Foraging (world_forage.gd) is on
 # four, so the two interleave rather than always landing together; at 8x that
@@ -267,8 +268,8 @@ const SALVAGE := ["dagger", "handaxe", "spear", "shortsword", "light-crossbow",
 const SPELL_PASS := {
 	"tracks": {"spells": ["speak-with-animals"],
 		"text": "%s asks the birds. They know exactly whose tracks, and where they went."},
-	"foul-water": {"spells": ["purify-food-and-drink"],
-		"text": "%s purifies it before anyone drinks. The stream runs clean behind them."},
+	"foul-water": {"spells": ["lesser-restoration"],
+		"text": "%s has the cure for whatever is in it, and says so; nobody has to find out."},
 }
 
 static func check(party, world, rng = null) -> Dictionary:
@@ -288,6 +289,7 @@ static func check(party, world, rng = null) -> Dictionary:
 		out["ok"] = true
 		out["text"] = String(e["pass"])
 		out["minutes"] = -TIME_SAVED
+		_note_event(String(e["id"]))
 		return out
 
 	var sp: Dictionary = SPELL_PASS.get(String(e["id"]), {})
@@ -296,6 +298,7 @@ static func check(party, world, rng = null) -> Dictionary:
 		out.merge({"ok": true, "char_id": caster.id, "cname": caster.cname, "skill": "",
 			"spell": String(sp["spells"][0]), "text": String(sp["text"]) % caster.cname, "named": false}, true)
 		_apply(e, true, party, world, rng, out)
+		_note_event(String(e["id"]))
 		return out
 	var who := _assign(party, e, orders(party))
 	if who.is_empty():
@@ -308,7 +311,21 @@ static func check(party, world, rng = null) -> Dictionary:
 		"named": bool(who["named"])}, true)
 	out["text"] = (String(e["pass"]) % who["cname"]) if ok else String(e["fail"])
 	_apply(e, ok, party, world, rng, out)
+	_note_event(String(e["id"]))
 	return out
+
+
+# T19: one tally of road events weathered, and a set of the ones this machine
+# has actually seen — "every kind of thing the road has to offer" is EVENTS.size(),
+# so adding a fifteenth event moves that goal in core/achievements.gd too.
+#
+# Called at each of check()'s three real exits rather than once at the top: a
+# table that picks an event and then finds nobody left to roll for it returns {}
+# and nothing happened, and counting that would tick the tally on a card the
+# player never saw.
+static func _note_event(id: String) -> void:
+	Ach.bump("road_events")
+	Ach.collect("road_event_kinds", id)
 
 
 # Which of the EVENTS could actually happen here, to this party, right now.

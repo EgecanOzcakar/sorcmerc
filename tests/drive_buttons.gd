@@ -532,8 +532,9 @@ func _settings_plain() -> Control:
 
 func _settings_model() -> String:
 	var s = _set._s
-	return "%.1f|%s|%.1f|%.1f|%s|%s" % [s.anim_speed_multiplier, s.default_difficulty,
-		s.sfx_volume, s.music_volume, s.reaction_prompts, _set._note.text]
+	return "%.1f|%s|%.1f|%.1f|%s|%s|%s" % [s.anim_speed_multiplier, s.default_difficulty,
+		s.sfx_volume, s.music_volume, s.reaction_prompts, s.achievement_popups,
+		_set._note.text]
 
 func _settings_expect(c: BaseButton) -> String:
 	return "gone: closes the overlay" if c.text == "Close" else ""

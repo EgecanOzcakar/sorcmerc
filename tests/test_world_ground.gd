@@ -81,28 +81,6 @@ func _init() -> void:
 	check(beacon.size() == beacon_slow.size(),
 		"settlement beacons agree too (%d vs %d)" % [beacon.size(), beacon_slow.size()])
 
-	# --- the tile a cell draws is stable, and cached ----------------------
-	var probe := Vector2i(3, 7)
-	var first: Vector2i = main._ground_tile(probe)
-	check(main._tile_cache.has(probe), "the tile pick is remembered")
-	check(main._ground_tile(probe) == first, "...and comes back the same")
-	check(first.x in [0, 1, 2], "...naming one of the three sheets (%d)" % first.x)
-	# It has to be the same answer the old per-frame arithmetic gave.
-	var center := Vector2(probe.x + 0.5, probe.y + 0.5) * CELL
-	var cl: Vector2i = main._cluster(probe, main.TILE_CLUSTER)
-	var wet: float = 0.5 - main.world.water_depth(center) / (main.SHORE * 2.0)
-	var want_kind := 0
-	var want_pool: Array = main.GRASS
-	if main._rand(probe, 9) < wet:
-		want_kind = 2; want_pool = main.WATER
-	elif main._rand(cl, 5) > main.WOODED:
-		want_kind = 1; want_pool = main.FOREST
-	check(first.x == want_kind, "the cached sheet is the one the arithmetic picks")
-	check(first.y == want_pool[int(main._rand(cl, 1) * want_pool.size()) % want_pool.size()],
-		"...and so is the tile in it")
-	check(main._tile_sheet(0) == main._terrain_tex and main._tile_sheet(1) == main._forest_tex
-		and main._tile_sheet(2) == main._water_tex, "the sheet ids map to the right textures")
-
 	# --- the memo answers the same thing twice ---------------------------
 	main.world.explored.append(p.position + Vector2(4000, 4000))   # far off screen
 	var again: Dictionary = main._visible_ground(i0, i1, j0, j1)
@@ -111,5 +89,78 @@ func _init() -> void:
 	check(moved.size() != beacon.size() or beacon.is_empty(),
 		"...but panning somewhere else does not hand back the old answer")
 
+	# --- the ground shader's mask: R forest, G water, B explored, per cell ----
+	main.world.add_water(Vector2(3000, 3000), 120.0)
+	var lake_cell := Vector2i(int(3000.0 / main.CELL), int(3000.0 / main.CELL))
+	var a0 := lake_cell.x - 20; var a1 := lake_cell.x + 20
+	var b0 := lake_cell.y - 20; var b1 := lake_cell.y + 20
+	main.world.explored.append(Vector2(3000, 3000))
+	var cells: Dictionary = main._visible_ground(a0, a1, b0, b1)
+	var tex: ImageTexture = main._build_mask(a0, a1, b0, b1, 1, cells)
+	var img := tex.get_image()
+	check(img.get_width() == 41 and img.get_height() == 41, "one texel per cell (%dx%d)" % [img.get_width(), img.get_height()])
+	var mid := img.get_pixel(20, 20)
+	check(mid.g > 0.99 and mid.r == 0.0 and mid.b > 0.99, "the lake's middle is water, not forest, and explored (%s)" % str(mid))
+	var far := img.get_pixel(0, 0)
+	check(far.g == 0.0, "the corner, 20 cells out, is dry")
+	check(main._build_mask(a0, a1, b0, b1, 2, cells).get_image().get_width() == 21, "step 2 halves the mask")
+	# a pan inside the padded box rebuilds nothing; leaving it does
+	main._pan = Vector2.ZERO
+	main.queue_redraw()
+	await process_frame
+	var key0: Array = main._mask_key.duplicate()
+	main._pan += Vector2(15, 5)
+	main.queue_redraw()
+	await process_frame
+	check(main._mask_key == key0, "a small pan keeps the mask (%s)" % str(key0))
+	main._pan += Vector2(4000, 1500)
+	main.queue_redraw()
+	await process_frame
+	check(main._mask_key != key0, "a long pan rebuilds it")
+
+	# --- #58: the shader's projection is the same map _unpix() draws on ------
+	# The ground shader projects a point on the map control back to a world
+	# position and looks the ground and the fog up there; _unpix() projects a
+	# mouse click the same way. They have to be the same function, or the ground
+	# is painted somewhere the party is not — which is what every window that is
+	# not 1280x800 used to get, because the shader started from FRAGCOORD (real
+	# framebuffer pixels) while _origin and _zoom are in the stretched canvas's
+	# units (window/stretch/mode is "canvas_items"). The size below is chosen to
+	# be nothing like the default for exactly that reason.
+	main.size = Vector2(1900, 1100)
+	main._pan = Vector2(120, -75)
+	main.set_zoom(0.8)
+	main.queue_redraw()
+	await process_frame
+	var mat: ShaderMaterial = main._ground_mat
+	check(mat.get_shader_parameter("rect_size") == main.size,
+		"the shader is handed the control's own rect (%s vs %s)"
+			% [str(mat.get_shader_parameter("rect_size")), str(main.size)])
+	var worst := 0.0
+	for uv in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1),
+			Vector2(0.5, 0.5), Vector2(0.23, 0.77)]:
+		var sp: Vector2 = uv * main.size
+		worst = maxf(worst, _shader_world(sp, mat).distance_to(main._unpix(sp)))
+	check(worst < 0.5, "shader and _unpix agree across the control (worst %.3f units)" % worst)
+	# The input coordinate is the half of this the check above cannot see: it
+	# replays the shader's arithmetic, not the thing the arithmetic is fed.
+	var src := FileAccess.get_file_as_string("res://assets/world/ground/ground.gdshader")
+	check(src.contains("to_world(UV * rect_size)") and not src.contains("to_world(FRAGCOORD"),
+		"...and it is fed the control's own coordinate, not a framebuffer pixel")
+
 	print("test_world_ground: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+
+# ground.gdshader's to_world(), in GDScript, read off the live material. Written
+# out rather than calling main's own helper on purpose: the point of the check
+# above is that two independently written projections land on the same world
+# point, and reusing _iso_inv() here would make it a tautology.
+func _shader_world(sp: Vector2, mat: ShaderMaterial) -> Vector2:
+	var v: Vector2 = (sp - Vector2(mat.get_shader_parameter("origin"))) \
+		/ float(mat.get_shader_parameter("zoom"))
+	v.y /= float(mat.get_shader_parameter("squash"))
+	var yaw := -float(mat.get_shader_parameter("yaw"))
+	var c := cos(yaw)
+	var s := sin(yaw)
+	return Vector2(v.x * c - v.y * s, v.x * s + v.y * c) / float(mat.get_shader_parameter("gain"))

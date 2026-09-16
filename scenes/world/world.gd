@@ -50,6 +50,7 @@ const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
+const Ach = preload("res://core/achievements.gd")
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const WorldSave = preload("res://core/world_save.gd")
@@ -89,81 +90,25 @@ const LIGHT := Vector2(-0.30, -0.34)
 
 const ZOOM_MIN := 0.25
 const ZOOM_MAX := 2.5
-# O12: was 90, which read as a handful of huge diamonds at the default camera
-# distance; 50 was picked by rendering tests/shot_world.gd at both (and at 60,
-# still coarse) and looking.
-# T-tiles: dropped hard, to 15 — much smaller tiles read as a smoother, less
-# obviously-diamond-tiled field on the current (Screaming Brain Studios
-# Overworld) pack this stayed on; the SBS Floor Pack spike (SORCMERC_ALT_TILES
-# =sbs) was tried and set aside, not adopted. That's (50/15)^2 ~= 11.1x as many
-# cells at any given zoom, so MAX_CELLS is scaled by the same factor to keep
-# the same "give up and flat-fill" zoom threshold rather than tripping it
-# sooner. MAX_CELLS is still not a free number: this viewport needs 783 cells
-# at zoom 1.0 at CELL 50 (it needed 255 at CELL 90), and the old 900 was
-# exactly "still paint at zoom 0.5, give up below it".
-const CELL := 15.0          # ground patch size, in world units
-const MAX_CELLS := 32000    # cap the ground loop when zoomed far out
-# T-tiles: same terrain-variant pick clusters over a TILE_CLUSTER x TILE_CLUSTER
-# block of cells instead of re-rolling every single one — large patches of one
-# texture instead of a different tile every neighbour. Doubled from 4 to 8
-# alongside CELL's halving so a patch still covers the same ~120x120 world
-# units, not a smaller, choppier-looking one. The shoreline's own per-cell
-# dither (_rand(cell, 9) below) is deliberately left alone — that's what frays
-# the bank into an organic edge instead of a hard tile-aligned line,
-# clustering it would make the water's edge blocky instead.
+# The ground is a shader over a cell-resolution mask (see _draw_ground): CELL
+# is the mask's grain in world units, and the memory (world.explored) is
+# rasterised at the same grain.
+const CELL := 15.0          # ground cell, in world units
+# A forest stands or falls over a TILE_CLUSTER x TILE_CLUSTER block of cells
+# (~120x120 world units) rather than per cell, so the woods come as woods.
 const TILE_CLUSTER := 8
-# T9x: two fog tiers. Never explored is flat and near-black (opaque — there's
-# no tile underneath to show). Explored-but-not-currently-visible is a
-# translucent dark tint OVER the real tile (drawn on top of it, not instead
-# of it), so the shape and color of ground you've already seen still reads,
-# just dimmed — distinct from both full fog and full daylight.
+# T9x: two fog tiers, both the shader's. Never explored is flat and near-black;
+# explored-but-not-currently-visible is a translucent dark tint over the real
+# ground, so the shape of ground you've already seen still reads, just dimmed.
 const FOG_UNKNOWN := Color(0.03, 0.03, 0.045)
 const FOG_REMEMBERED := Color(0.05, 0.05, 0.09, 0.55)
 
-# Ground: O11's Screaming Brain Studios Isometric Tiles Overworld pack, CC0.
 # Buildings: O12's rubberduck isometric medieval buildings 1+2, CC0 — the Town
 # pack they replace read as a modern city. See assets/world/README.md for
 # provenance and the edits made to the files.
-const TerrainTex := preload("res://assets/world/overworld/terrain.png")
-const ForestTex := preload("res://assets/world/overworld/forest.png")
 const BuildingTex := preload("res://assets/world/town/buildings.png")
-# T-tiles spike: SORCMERC_ALT_TILES ("kenney" | "sbs") swaps in an
-# alternate ground sheet instead of the Screaming Brain Studios Overworld one
-# above. Neither is the new default — a comparison render is the point of a
-# spike, not a swap.
-#   "kenney" — Kenney's "Isometric Tiles Landscape" (CC0). See
-#     assets/world/overworld_alt/PROVENANCE.md: Kenney's isometric line is
-#     all raised-block art, so the top face is cropped out and reused flat,
-#     which leaves a thin dirt sliver at each tile's front corner the
-#     original flat pack never had.
-#   "sbs" — Screaming Brain Studios' *other* free pack, "Isometric Floor
-#     Pack" (also CC0, same author as the current terrain — see
-#     assets/world/overworld_sbs/PROVENANCE.md). Genuine flat photo-textured
-#     diamonds already at the exact 256x128/3-column layout this file
-#     expects, no cropping workaround needed — the realistic-with-colour-pop
-#     option (grass detail, floral accents, vivid water).
-const TerrainTexAlt := preload("res://assets/world/overworld_alt/terrain_alt.png")
-const ForestTexAlt := preload("res://assets/world/overworld_alt/forest_alt.png")
-const WaterTexAlt := preload("res://assets/world/overworld_alt/water_alt.png")
-const TerrainTexSbs := preload("res://assets/world/overworld_sbs/terrain_sbs.png")
-const ForestTexSbs := preload("res://assets/world/overworld_sbs/forest_sbs.png")
-const WaterTexSbs := preload("res://assets/world/overworld_sbs/water_sbs.png")
 
-const TILE := Vector2(256, 128)   # one ground diamond in the Overworld sheets
-const TILE_COLS := 3              # both sheets are 3x6 tiles
-# The subsets of each 18-tile sheet the ground draws from. Both are deliberately
-# narrow: the cell a tile lands in is picked by hash, with no terrain data behind
-# it, so anything outside one colour family (the sheets' sand, bare rock and clay
-# rows) tiles as a loud checkerboard instead of as one meadow. Forest is the one
-# break in family, and is supposed to read as one.
-const GRASS := [0, 1, 2, 9, 10]
-const FOREST := [0, 1, 2, 3, 4, 5]
-const WOODED := 0.78              # above this, a cell draws from FOREST
-# O15: the Water sheet's left column — its blue-water pair. The other 15 tiles are
-# the pack's swamp, ice and shallow-sand families, which next to grass read as
-# three different lakes rather than one, the same reason GRASS/FOREST are narrow.
-const WaterTex := preload("res://assets/world/overworld/water.png")
-const WATER := [0, 3]
+const WOODED := 0.78              # a cell block whose hash lands above this is forest
 # Half-width of the shoreline band, in world units (~0.7 of a CELL either side).
 # Across it a cell's chance of being water falls from 1 to 0, so the bank frays
 # into the grass over a tile or so instead of ending on a cell boundary — the
@@ -255,12 +200,6 @@ var _settlements3d
 var _lairs3d
 var _party3d
 var _minimap: Control = null   # T9y: the corner map inset, see _layout_minimap()
-# T-tiles spike: which ground sheets _draw_ground() actually samples — set once
-# in _ready() from SORCMERC_ALT_TILES, since preload() can't be conditional on
-# an env var the way a plain assignment can.
-var _terrain_tex: Texture2D
-var _forest_tex: Texture2D
-var _water_tex: Texture2D
 # M7: the content pack's story, mid-telling — a core/mod/story_runtime.gd
 # injected by scenes/game/game.gd alongside the map it belongs to, or null for
 # every run on a built-in map. Everything below treats null as "no story", so a
@@ -273,15 +212,37 @@ var _story_btn: Button
 var world_size := "small"   # "small" | "large" — which built-in map _ready() falls back to
                              # when nobody injected a `world` (a fresh start, not O13's resume)
 
+# The ground is a shader (assets/world/ground/ground.gdshader) on a rect that
+# draws behind this control: three painted seamless textures blended by a soft
+# cell mask, with the fog folded in. _draw_ground() feeds it its uniforms.
+const GroundShader := preload("res://assets/world/ground/ground.gdshader")
+const GrassTex := preload("res://assets/world/ground/grass.png")
+const ForestGroundTex := preload("res://assets/world/ground/forest.png")
+const WaterGroundTex := preload("res://assets/world/ground/water.png")
+var _ground_rect: ColorRect
+var _ground_mat: ShaderMaterial
+var _mask_tex: ImageTexture
+var _mask_key: Array = []
+
 func _ready() -> void:
 	theme = Icons.dark_theme()   # standalone runs; under game.gd it is the same theme inherited
-	match OS.get_environment("SORCMERC_ALT_TILES"):
-		"kenney":
-			_terrain_tex = TerrainTexAlt; _forest_tex = ForestTexAlt; _water_tex = WaterTexAlt
-		"sbs":
-			_terrain_tex = TerrainTexSbs; _forest_tex = ForestTexSbs; _water_tex = WaterTexSbs
-		_:
-			_terrain_tex = TerrainTex; _forest_tex = ForestTex; _water_tex = WaterTex
+	_ground_rect = ColorRect.new()
+	_ground_rect.show_behind_parent = true
+	_ground_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ground_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_ground_mat = ShaderMaterial.new()
+	_ground_mat.shader = GroundShader
+	_ground_mat.set_shader_parameter("grass_tex", GrassTex)
+	_ground_mat.set_shader_parameter("forest_tex", ForestGroundTex)
+	_ground_mat.set_shader_parameter("water_tex", WaterGroundTex)
+	_ground_mat.set_shader_parameter("yaw", deg_to_rad(ISO_YAW))
+	_ground_mat.set_shader_parameter("gain", ISO_GAIN)
+	_ground_mat.set_shader_parameter("squash", ISO_SQUASH)
+	_ground_mat.set_shader_parameter("sight", World.VISION_RADIUS)
+	_ground_mat.set_shader_parameter("fog_unknown", Vector3(FOG_UNKNOWN.r, FOG_UNKNOWN.g, FOG_UNKNOWN.b))
+	_ground_mat.set_shader_parameter("fog_remembered", Vector4(FOG_REMEMBERED.r, FOG_REMEMBERED.g, FOG_REMEMBERED.b, FOG_REMEMBERED.a))
+	_ground_rect.material = _ground_mat
+	add_child(_ground_rect)
 	if world == null:
 		match world_size:
 			"large": world = _large_world()
@@ -2122,31 +2083,49 @@ func _make_camp() -> void:
 	else:
 		party.stash_remove(WorldCamp.CAMP_KIT_ITEM, 1)
 	var p := world.player()
+	Ach.bump("camps")
 	var rng := RNG.new(WorldCamp.camp_seed(world.clock.elapsed, p.position))
 	if roped or not WorldCamp.ambush_roll(rng):
 		Visit.rest(party, world, "long-rest")
 		Sound.play_sfx("rest")
 		var trance: Dictionary = Trance.apply_rest_bonus(party, world, p.position)
 		_camp_msg.text = "The camp holds through the night. Eight hours pass.%s" % _trance_note(trance)
+		_camp_card("night", "The camp holds", "good", _camp_msg.text, _on_event_ack)
 		return
 	var watch: Dictionary = WorldCamp.watch_check(party, rng)
 	if party.alarm_set:   # Alarm: the ward wakes them whatever the watch rolled
 		party.alarm_set = false
 		watch = {"ok": true, "cname": "The alarm", "skill": "ward", "nat": 20, "bonus": 0, "dc": 0, "char_id": "alarm"}
 	var foe := World.RoamingParty.new("camp-ambush-%d" % int(world.clock.elapsed), p.position, WorldCamp.AMBUSH_FACTION)
+	# T19: earned for the night itself, not for the fight — losing it ends the
+	# save's road anyway, and being woken by bandits is the achievement.
+	Ach.unlock("camp_ambush")
 	# T9x: name the check and the roll, not just the outcome — same
 	# "Skill nat+bonus vs DC" shape every other overworld check in this file uses.
 	var skill_name: String = String(watch.get("skill", "")).capitalize()
 	if watch["ok"]:
 		_camp_msg.text = "%s hears them coming (%s %d+%d vs DC %d) — the party gets the drop first." % [
 			watch.get("cname", "Someone"), skill_name, watch["nat"], watch["bonus"], watch["dc"]]
-		await _launch_combat(foe, true, false)
+		_camp_card("watch", "Something in the dark", "good", _camp_msg.text,
+			func(): _on_event_ack(); await _launch_combat(foe, true, false))
 	else:
 		var who: String = watch.get("char_id", "")
 		_camp_msg.text = ("%s doesn't catch it in time (%s %d+%d vs DC %d) — the camp is jumped in the night!" % [
 			watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"]]) if who != "" \
 			else "Nobody's keeping watch — the camp is jumped in the night!"
-		await _launch_combat(foe, false, true)
+		_camp_card("jumped", "The camp is jumped", "bad", _camp_msg.text,
+			func(): _on_event_ack(); await _launch_combat(foe, false, true))
+
+# The night, on the same card the road uses: what the camp did, pictured
+# (assets/generated/camp-<night|watch|jumped>.png), and — for an ambush —
+# the fight waits behind the button rather than under the label.
+func _camp_card(id: String, title: String, kind: String, text: String, then: Callable) -> void:
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(then)
+	_event_card.show_event({"id": "camp-" + id, "title": title, "kind": kind, "text": text})
 
 # O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
 # (the board can show several at once now), not re-rolled here.
@@ -2477,6 +2456,15 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
+	var room := Icons.scene_art("inn-" + String(s.faction), null)
+	if room != null:
+		var pic := TextureRect.new()
+		pic.texture = room
+		pic.custom_minimum_size = Vector2(440, 160)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.clip_contents = true
+		box.add_child(pic)
 	var rows := VBoxContainer.new()
 	box.add_child(rows)
 	_section(rows, "Around the table")
@@ -2655,16 +2643,25 @@ func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 	var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
 	_trade_row(rows, "Job: %s%s — %d gp" % [
 		offer["title"], tag, int(offer.get("reward", {}).get("gold", 0))],
-		"Take", _take_quest.bind(offer))
+		"Take", _take_quest.bind(offer), false, Icons.scene_art("quest-" + String(offer.get("kind", "")), null))
 
 # Issue #33: the label wraps. Without that its minimum width is the whole
 # string, and a job with a long title pushed the row — and with it the counter,
 # and with it the whole settlement panel — out past the edge of the screen. 330
 # stays as the column width short rows line up on; it is a floor now rather
 # than the only width the row can have.
-func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable, disabled := false) -> void:
+func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable, disabled := false,
+		tile: Texture2D = null) -> void:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if tile != null:   # the job's kind, as a tile (assets/generated/quest-<kind>.png)
+		var pic := TextureRect.new()
+		pic.texture = tile
+		pic.custom_minimum_size = Vector2(48, 48)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(pic)
 	var lbl := Label.new()
 	lbl.text = text
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2774,7 +2771,6 @@ func _gui_input(e: InputEvent) -> void:
 # --- drawing -----------------------------------------------------------
 func _draw() -> void:
 	_layout()
-	draw_rect(Rect2(Vector2.ZERO, size), Icons.COL_BG)
 	_draw_ground()
 	var p := world.player()
 	if p != null and not p.at_goal():
@@ -2857,34 +2853,63 @@ func _draw_ground() -> void:
 	# Which cells are both on screen and explored. Counted before anything is
 	# painted, so the "too much ground for one frame" guard can still bail out
 	# to a flat fill without leaving half a map drawn.
-	var cells: Dictionary = _visible_ground(i0, i1, j0, j1)
-	if cells.size() > MAX_CELLS:   # far-out zoom: don't paint the world
-		draw_rect(Rect2(Vector2.ZERO, size), Color("4a5333"))   # the tiles' own average
-		return
-	# T9x: three fog tiers, not two. Currently-visible (near the player right
-	# now) draws clean; explored-but-not-visible ("remembered") draws the
-	# real tile with a translucent dark tint over it so the shape still
-	# reads; never-explored draws as flat, opaque, darker fog — which is the
-	# whole viewport, once, with the explored tiles laid over it.
-	draw_rect(Rect2(Vector2.ZERO, size), FOG_UNKNOWN)
-	# The cell's two projected edges. _iso is linear, so these are the same for
-	# every cell and the whole grid is one transform plus a translation per tile.
-	var ex := _iso(Vector2(CELL, 0)) * _zoom
-	var ey := _iso(Vector2(0, CELL)) * _zoom
-	draw_set_transform_matrix(Transform2D((ex + ey) / TILE.x, (ey - ex) / TILE.y, _origin))
+	# The mask covers the screen's cell box plus a quarter of it each side, and
+	# is rebuilt only when the screen leaves that box (or the map's memory
+	# grows) — a pan of a few cells costs nothing.
+	var step := 1
+	while (i1 - i0 + 1) / step > MASK_MAX or (j1 - j0 + 1) / step > MASK_MAX:
+		step += 1
+	var pad_x := maxi(2, (i1 - i0) / 4)
+	var pad_y := maxi(2, (j1 - j0) / 4)
+	var inside: bool = _mask_key.size() == 7 and i0 >= _mask_key[0] and i1 <= _mask_key[1] \
+		and j0 >= _mask_key[2] and j1 <= _mask_key[3] and step == _mask_key[4] \
+		and world.explored.size() == _mask_key[5] and world.settlements.size() == _mask_key[6]
+	if not inside:
+		var a0 := i0 - pad_x; var a1 := i1 + pad_x
+		var b0 := j0 - pad_y; var b1 := j1 + pad_y
+		_mask_tex = _build_mask(a0, a1, b0, b1, step, _visible_ground(a0, a1, b0, b1))
+		_mask_key = [a0, a1, b0, b1, step, world.explored.size(), world.settlements.size()]
 	var p := world.player()
-	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
-	var sight_sq: float = World.VISION_RADIUS * World.VISION_RADIUS
-	for cell in cells:
-		var rect := Rect2(Vector2(cell.x + cell.y, cell.y - cell.x - 1) * TILE * 0.5, TILE)
-		var pick: Vector2i = _ground_tile(cell)
-		draw_texture_rect_region(_tile_sheet(pick.x), rect,
-			Rect2(Vector2(pick.y % TILE_COLS, pick.y / TILE_COLS) * TILE, TILE))
-		# is_visible_now inlined: it is a distance test, and this is the one
-		# thing left in here that has to be asked per cell per frame.
-		if (Vector2(cell.x + 0.5, cell.y + 0.5) * CELL).distance_squared_to(ppos) > sight_sq:
-			draw_rect(rect, FOG_REMEMBERED)
-	draw_set_transform_matrix(Transform2D.IDENTITY)
+	var m := _ground_mat
+	var mw: int = (_mask_key[1] - _mask_key[0]) / step + 1
+	var mh: int = (_mask_key[3] - _mask_key[2]) / step + 1
+	m.set_shader_parameter("mask_tex", _mask_tex)
+	m.set_shader_parameter("mask_min", Vector2(_mask_key[0], _mask_key[2]) * CELL)
+	m.set_shader_parameter("mask_size", Vector2(mw, mh) * float(step) * CELL)
+	m.set_shader_parameter("mask_texel", Vector2(1.0 / mw, 1.0 / mh))
+	m.set_shader_parameter("origin", _origin)
+	m.set_shader_parameter("zoom", _zoom)
+	# The shader reads its own rect in control units, not framebuffer pixels —
+	# the only coordinate space _origin and _zoom mean anything in. See the note
+	# on `rect_size` in the shader; without it the map is right at 1280x800 and
+	# wrong at every other window size (#58).
+	m.set_shader_parameter("rect_size", size)
+	m.set_shader_parameter("player", p.position if p != null else Vector2(1e9, 1e9))
+	m.set_shader_parameter("time_s", Time.get_ticks_msec() / 1000.0)
+
+const MASK_MAX := 96      # texels a side; far out a texel spans several cells, and nobody can tell
+
+# R forest, G water, B explored — the ground's kinds and the fog's memory,
+# one texel per cell (per `step` cells far out). The shader softens it; this
+# only has to be right. Water is the bank ramp itself rather than
+# a per-cell dithered pick, which is what makes a shore a shore.
+func _build_mask(i0: int, i1: int, j0: int, j1: int, step: int, cells: Dictionary) -> ImageTexture:
+	var w := (i1 - i0) / step + 1
+	var h := (j1 - j0) / step + 1
+	var bytes := PackedByteArray()
+	bytes.resize(w * h * 3)
+	var o := 0
+	for y in h:
+		var cy: int = j0 + y * step
+		for x in w:
+			var cell := Vector2i(i0 + x * step, cy)
+			var wet := 0.5 - world.water_depth(Vector2(cell.x + 0.5, cell.y + 0.5) * CELL) / (SHORE * 2.0)
+			var water := smoothstep(0.3, 0.7, wet)
+			bytes[o] = 255 if (water < 0.5 and _rand(_cluster(cell, TILE_CLUSTER), 5) > WOODED) else 0
+			bytes[o + 1] = int(water * 255.0)
+			bytes[o + 2] = 255 if cells.has(cell) else 0
+			o += 3
+	return ImageTexture.create_from_image(Image.create_from_data(w, h, false, Image.FORMAT_RGB8, bytes))
 
 # The explored cells inside the viewport's cell box, as a set. Walks out from
 # each remembered waypoint and each settlement beacon rather than testing every
@@ -2930,43 +2955,6 @@ func _visible_ground(i0: int, i1: int, j0: int, j1: int) -> Dictionary:
 
 var _ground_key: Array = []       # what _ground_set was computed for
 var _ground_set: Dictionary = {}  # the explored-and-on-screen cells, memoised
-
-# Which sheet and which tile in it a cell draws, cached: the answer is a pure
-# function of the cell and where the world's water is, and neither moves.
-# Packed as a Vector2i to keep the cache one small value per cell — x is the
-# sheet (0 terrain, 1 forest, 2 water), y is the index into it.
-var _tile_cache := {}
-const TILE_CACHE_MAX := 300000    # a few MB; a very long march past it starts over
-
-func _tile_sheet(kind: int) -> Texture2D:
-	match kind:
-		1: return _forest_tex
-		2: return _water_tex
-	return _terrain_tex
-
-func _ground_tile(cell: Vector2i) -> Vector2i:
-	var hit = _tile_cache.get(cell)
-	if hit != null:
-		return hit
-	if _tile_cache.size() >= TILE_CACHE_MAX:
-		_tile_cache.clear()
-	var center := Vector2(cell.x + 0.5, cell.y + 0.5) * CELL
-	var cl := _cluster(cell, TILE_CLUSTER)
-	# 1.0 deep in a lake, 0.0 well inland, a ramp across the bank between.
-	var wet := 0.5 - world.water_depth(center) / (SHORE * 2.0)
-	var kind := 0
-	var pool: Array = GRASS
-	# Left un-clustered on purpose: this per-cell dither is what frays the
-	# bank into an organic edge (see TILE_CLUSTER's own comment above).
-	if _rand(cell, 9) < wet:
-		kind = 2
-		pool = WATER
-	elif _rand(cl, 5) > WOODED:
-		kind = 1
-		pool = FOREST
-	var pick := Vector2i(kind, pool[int(_rand(cl, 1) * pool.size()) % pool.size()])
-	_tile_cache[cell] = pick
-	return pick
 
 # T9y: the one place the "you can see it now" vs "you only remember it"
 # distinction turns into a colour. Desaturate toward the fog's own blue-black

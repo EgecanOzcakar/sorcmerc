@@ -23,6 +23,7 @@ extends RefCounted
 
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const WorldAI = preload("res://core/world_ai.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const BIAS_WEIGHT := 2.0   # what an unfulfilled quest is worth to Scaler.roster_for
 
@@ -271,12 +272,14 @@ static func record_lair_cleared(party, lair_id: String) -> void:
 # _open_visit(). Nothing is carried in the pack: the parcel would need a catalog
 # entry, a price and a weight to exist as an item, and all three would be lies.
 static func record_settlement_visited(party, settlement_id: String) -> void:
+	Ach.collect("settlements", settlement_id)
 	_complete_world_target(party, "deliver_goods", "target_settlement_id", settlement_id)
 
 # scout_region — ride out into a band (core/regions.gd's rings) and come back
 # able to say what is there. Completes on crossing in, turns in back at the
 # giver; scenes/world/world.gd calls this from _check_region().
 static func record_region_reached(party, region_id: String) -> void:
+	Ach.collect("regions", region_id)
 	_complete_world_target(party, "scout_region", "target_region_id", region_id)
 
 # supply_item — a counter wants goods in hand, and does not care how you came by
@@ -314,6 +317,9 @@ static func turn_in(party, quest: Dictionary, faction := "") -> bool:
 	if quest["kind"] in ["collect_item", "supply_item"]:
 		party.stash_remove(String(quest["target_item_id"]), int(quest["required"]))
 	quest["state"] = "turned_in"
+	Ach.bump("quests")
+	if faction != "" and faction_chain_tier(party, faction) >= 2:
+		Ach.unlock("quest_chain")
 	return true
 
 # One line for the quest log panel.

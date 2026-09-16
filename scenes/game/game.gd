@@ -25,6 +25,7 @@ const Scaler = preload("res://core/scaler.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
+const AchievementsOverlay = preload("res://scenes/achievements/achievements.gd")
 const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
@@ -146,6 +147,11 @@ func show_title() -> void:
 	foot.add_theme_constant_override("separation", 12)
 	foot.add_child(_quiet(Loc.t("common.settings", "Settings"), func(): SettingsOverlay.toggle(self)))
 	foot.add_child(_quiet(Loc.t("common.manual", "Field manual"), func(): ManualOverlay.toggle(self)))
+	# The achievements viewer had no door in the whole game until now: the model
+	# and the panel both shipped with T19 and nothing ever opened it. The label is
+	# the screen's own title rather than a key of its own — same word, one entry.
+	foot.add_child(_quiet(Loc.t("achievements.title", "Achievements"),
+		func(): AchievementsOverlay.open(self)))
 	foot.add_child(_quiet(Loc.t("common.report_bug", "Report a bug"), report_bug))
 	foot.add_child(_quiet(Loc.t("title.random_battle", "Random battle (debug)"), show_random_battle))
 	var spacer := Control.new()
@@ -489,6 +495,15 @@ func show_summary(run) -> void:
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
 
+	var end_art := Icons.scene_art({"won": "summary-victory", "lost": "summary-defeat"}.get(run.state, ""), null)
+	if end_art != null:
+		var pic := TextureRect.new()
+		pic.texture = end_art
+		pic.custom_minimum_size = Vector2(480, 180)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.clip_contents = true
+		col.add_child(pic)
 	var head := Label.new()
 	head.text = {"won": Loc.t("summary.won", "Victory"),
 		"retired": Loc.t("summary.retired", "Retired"),

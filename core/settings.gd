@@ -10,6 +10,7 @@
 #   "sfx_volume": 80,               // 0-100, the "SFX" audio bus (T27)
 #   "music_volume": 80,             // 0-100, the "Music" audio bus (T27)
 #   "reaction_prompts": true,       // stop and ask before a reaction spends a slot
+#   "achievement_popups": true      // slide a card in when something is earned
 #   "language": "en"                // "en" | "tr" — core/loc.gd's LANGS
 # }
 #
@@ -59,6 +60,10 @@ var music_volume := DEFAULT_VOLUME
 # Uncanny Dodge — never ask: taking them is the right answer every time, and a
 # question with one sensible answer is a key press, not a decision.
 var reaction_prompts := true
+# The top-right card an earned achievement slides in on
+# (scenes/achievements/toast.gd). Off still earns and still records it — the
+# viewer is the record — it just stops the game talking over itself mid-fight.
+var achievement_popups := true
 
 # Which language the game is in. "en" is the source language; anything else
 # names a directory under data/loc/. Validated against core/loc.gd on load, so
@@ -106,6 +111,7 @@ static func load_settings():
 		s.sfx_volume = clampf(float(d.get("sfx_volume", DEFAULT_VOLUME)), 0.0, 100.0)
 		s.music_volume = clampf(float(d.get("music_volume", DEFAULT_VOLUME)), 0.0, 100.0)
 		s.reaction_prompts = bool(d.get("reaction_prompts", true))
+		s.achievement_popups = bool(d.get("achievement_popups", true))
 		var lang := String(d.get("language", DEFAULT_LANGUAGE))
 		s.language = lang if load("res://core/loc.gd").supported(lang) else DEFAULT_LANGUAGE
 	return s
@@ -117,6 +123,7 @@ static func to_dict(s) -> Dictionary:
 		"sfx_volume": s.sfx_volume,
 		"music_volume": s.music_volume,
 		"reaction_prompts": s.reaction_prompts,
+		"achievement_popups": s.achievement_popups,
 		"language": s.language}
 
 # Returns the path written, or "" on failure.

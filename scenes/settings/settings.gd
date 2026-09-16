@@ -166,6 +166,19 @@ func _ready() -> void:
 		_apply())
 	col.add_child(react)
 
+	# The toast itself, not the achievement: unticking this stops the card, and
+	# the achievements screen still fills up either way.
+	var toasts := CheckButton.new()
+	toasts.name = "AchievementPopups"
+	toasts.text = "Show achievement popups"
+	toasts.tooltip_text = "A card slides in from the top-right corner when something is earned.\n" \
+		+ "Achievements are still recorded with this off."
+	toasts.button_pressed = _s.achievement_popups
+	toasts.toggled.connect(func(on: bool):
+		_s.achievement_popups = on
+		_apply())
+	col.add_child(toasts)
+
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	var lbl := Label.new()

@@ -59,7 +59,21 @@ const KINDS := ["world", "campaign", "data"]
 const DATA_FILES := ["classes.json", "subclasses.json", "species.json",
 	"backgrounds.json", "feats.json", "fighting-styles.json", "weapons.json",
 	"armor.json", "magic-items.json", "spells.json", "conditions.json",
-	"monsters.json", "bestiary.json", "skills.json"]
+	"monsters.json", "bestiary.json", "skills.json",
+	# T33/T94 — data/effects/*.json: what a spell, a potion, a feature or a
+	# condition DOES, as against the catalog entry that says it exists. The
+	# catalog has layered these the whole time (Catalog.all() takes any of its
+	# own filenames), but the allowlist did not name them, so a pack could add
+	# a spell nobody could cast and a potion nobody could drink — the silent
+	# dead-end this allowlist exists to prevent, on the one axis it missed.
+	"effects/spells.json", "effects/potions.json", "effects/features.json",
+	"effects/conditions.json"]
+
+# The subset of DATA_FILES that is an object keyed by id rather than a list of
+# records, and whose values core/rules/effects.gd interprets. Listed apart
+# because registry.gd validates them against that vocabulary at scan time.
+const EFFECT_FILES := ["effects/spells.json", "effects/potions.json",
+	"effects/features.json", "effects/conditions.json"]
 
 const SLUG := "^[a-z0-9][a-z0-9_-]*$"
 

@@ -1,8 +1,14 @@
-# The achievements viewer: every defined achievement, locked ones greyed, unlocked
-# ones stamped with the day they were earned. Read-only — it only ever reads
-# core/achievements.gd, which is this machine's local profile.
+# The achievements viewer: every defined achievement, in sections, locked ones
+# greyed, unlocked ones stamped with the day they were earned. Read-only — it
+# only ever reads core/achievements.gd, which is this machine's local profile.
 #
-# Nothing hooks it up yet; open it with  Achievements.open(host)  or run it alone:
+# Three things a row can be:
+#   earned      — gilt bar, a filled star, the day it happened
+#   in progress — a threshold achievement with a bar under it (31 / 100 kills)
+#   hidden      — a ??? title and no description until it is earned, for the
+#                 ones that would read as a to-do list ("go and lose a fight")
+#
+# Open it with  Achievements.open(host)  or run it alone:
 #   godot --path . scenes/achievements/achievements.tscn
 extends Control
 
@@ -22,6 +28,9 @@ static func open(host: Control):
 	return o
 
 func _ready() -> void:
+	# The only achievement this screen earns, and it earns it before it counts
+	# the rows — so the tally you are looking at already includes it.
+	Ach.unlock("taking_stock")
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	theme = Icons.dark_theme()
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -67,14 +76,41 @@ func _ready() -> void:
 	list.add_theme_constant_override("separation", 6)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
-	for r in rows:
-		list.add_child(_row(r))
+	# One section per group, in GROUPS order, each headed with its own tally.
+	# A group nothing is defined in draws nothing rather than an empty heading.
+	for g in Ach.GROUPS:
+		var mine: Array = rows.filter(func(r): return r["group"] == g["id"])
+		if mine.is_empty():
+			continue
+		list.add_child(_heading(String(g["label"]), mine))
+		for r in mine:
+			list.add_child(_row(r))
 
 	var close := Button.new()
 	Icons.clicks(close)
 	close.text = Loc.t("common.close", "Close")
 	close.pressed.connect(_close)
 	col.add_child(close)
+
+# "Blood and Steel   4 / 12" — the section rule.
+func _heading(label: String, rows: Array) -> Control:
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+
+	var title := Label.new()
+	title.text = label
+	title.theme_type_variation = "Caption"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	head.add_child(title)
+
+	var won := rows.filter(func(r): return r["unlocked"]).size()
+	var tally := Label.new()
+	tally.text = "%d / %d" % [won, rows.size()]
+	tally.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	tally.add_theme_color_override("font_color", Icons.COL_MUTED)
+	head.add_child(tally)
+	return head
 
 func _row(r: Dictionary) -> Control:
 	var card := PanelContainer.new()
@@ -93,13 +129,31 @@ func _row(r: Dictionary) -> Control:
 	head.add_theme_constant_override("separation", 8)
 	col.add_child(head)
 
+	# The badge (assets/generated/achievement-<id>.png), dimmed while locked;
+	# the star stands in for one that has no art.
+	var badge := Icons.scene_art("achievement-" + String(r.get("id", "")), null)
+	if badge != null:
+		var pic := TextureRect.new()
+		pic.texture = badge
+		pic.custom_minimum_size = Vector2(56, 56)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		if not r["unlocked"]:
+			pic.modulate = Color(0.45, 0.45, 0.45, 0.8)
+		head.add_child(pic)
 	var mark := Label.new()
 	mark.text = "★" if r["unlocked"] else "☆"
 	mark.add_theme_color_override("font_color", Icons.COL_GOLD if r["unlocked"] else Icons.COL_EDGE)
 	head.add_child(mark)
 
+	# A hidden one keeps its own counsel until it is earned. Locked and hidden
+	# is the only combination that draws the placeholder — an earned one always
+	# says what it was.
+	var secret: bool = r["hidden"] and not r["unlocked"]
+
 	var title := Label.new()
-	title.text = r["title"]
+	title.text = "???" if secret else r["title"]
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.theme_type_variation = "Head"
 	if not r["unlocked"]:
@@ -114,12 +168,38 @@ func _row(r: Dictionary) -> Control:
 	head.add_child(when)
 
 	var desc := Label.new()
-	desc.text = r["desc"]
+	desc.text = "Earn it and find out." if secret else r["desc"]
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	desc.add_theme_color_override("font_color", Icons.COL_BODY if r["unlocked"] else Icons.COL_MUTED)
 	col.add_child(desc)
+	# How far along a threshold one is. Only while it is locked and not a
+	# secret: "31 of 100" under something already earned is noise, and under a
+	# hidden one it is half the answer.
+	if int(r["goal"]) > 0 and not r["unlocked"] and not secret:
+		col.add_child(_progress(int(r["have"]), int(r["goal"])))
 	return card
+
+func _progress(have: int, goal: int) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+
+	var bar := ProgressBar.new()
+	bar.max_value = goal
+	bar.value = have
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(160, 6)
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.add_theme_stylebox_override("background", Icons.box(Icons.COL_BG, Color(0, 0, 0, 0), 3, 0, 0))
+	bar.add_theme_stylebox_override("fill", Icons.box(Icons.COL_GOLD_EDGE, Color(0, 0, 0, 0), 3, 0, 0))
+	row.add_child(bar)
+
+	var n := Label.new()
+	n.text = "%d / %d" % [have, goal]
+	n.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	n.add_theme_color_override("font_color", Icons.COL_MUTED)
+	row.add_child(n)
+	return row
 
 # Standalone (no host to return to) it just quits; nested, it closes itself.
 func _close() -> void:

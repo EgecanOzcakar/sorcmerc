@@ -109,6 +109,7 @@ var _panel := Rect2()
 var _art: Texture2D = null   # the event's picture, its outcome's frame when it has one
 var _art_rect := Rect2()
 const ART_H := 200.0         # the picture's height on the card; width follows the panel
+const ART_MIN_H := 110.0     # below this it is a strip, not a picture: leave it out
 
 
 func _ready() -> void:
@@ -133,7 +134,8 @@ func _notification(what: int) -> void:
 # concerned, including all of them.
 func show_event(e: Dictionary) -> void:
 	_e = e.duplicate() if e != null else {}
-	_art = Icons.event_art(_s("id"), _e.get("ok") if _e.has("ok") else null) if _e.has("id") else null
+	_art = Icons.scene_art(("" if _s("id").begins_with("camp-") else "event-") + _s("id"),
+		_e.get("ok") if _e.has("ok") else null) if _e.has("id") else null
 	_dismissed = false
 	visible = true
 	_ensure_button()
@@ -234,7 +236,9 @@ func _ensure_button() -> void:
 	add_child(_btn)
 
 
-func _layout() -> void:
+# `art_h` < 0 asks for the full banner; the pass below hands back a smaller
+# one (or 0) when the card would run off the window with it.
+func _layout(art_h := -1.0) -> void:
 	_ops.clear()
 	var pw := minf(PANEL_MAX_W, maxf(PANEL_MIN_W, size.x - MARGIN * 2.0))
 	var tx := BAR_W + PAD                                   # text inset, panel-relative
@@ -255,9 +259,11 @@ func _layout() -> void:
 	y += Icons.FS_CAPTION + 10.0
 
 	_art_rect = Rect2()
-	if _art != null:
-		_art_rect = Rect2(tx, y, avail, ART_H)   # panel-relative; moved with the ops below
-		y += ART_H + BLOCK_GAP
+	if art_h < 0.0:
+		art_h = ART_H
+	if _art != null and art_h >= ART_MIN_H:
+		_art_rect = Rect2(tx, y, avail, art_h)   # panel-relative; moved with the ops below
+		y += art_h + BLOCK_GAP
 
 	var title := _s("title", NO_TITLE)
 	for tline in _wrap(title, Icons.FS_TITLE, avail, TITLE_LINES):
@@ -340,6 +346,11 @@ func _layout() -> void:
 	# Centred, and clamped off the top so a tall card on a short window loses its
 	# bottom (which is the button, still reachable by Enter) rather than its title.
 	var ph := y
+	var over := ph - (size.y - MARGIN * 2.0)   # the banner yields to the words (see approach_card.gd)
+	if over > 0.0 and _art_rect.size.y > 0.0:
+		var less := _art_rect.size.y - over
+		_layout(less if less >= ART_MIN_H else 0.0)
+		return
 	var px := (size.x - pw) * 0.5
 	var py := maxf(MARGIN, (size.y - ph) * 0.5)
 	_panel = Rect2(px, py, pw, ph)

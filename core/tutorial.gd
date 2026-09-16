@@ -12,7 +12,14 @@ const Presets = preload("res://core/presets.gd")
 const SPEC := {"monsters": [{"id": "goblin", "count": 1}], "theme": "forest-clearing"}
 const DIFFICULTY := "easy"
 
-# A sword and a healer: every button the walkthrough names is on one of them.
+# A sword and a healer: between them the two bar shapes the walkthrough
+# describes are both on screen. Vera's [3] Bonus actions is a real list (Second
+# Wind and Action Surge); Ilsa's [4] is Channel Divinity itself rather than a
+# "Features ▸" list, because a slot holding one thing fires it instead of
+# opening a list of one. (It is greyed there — her channel-divinity pool comes
+# out of the build engine with max 0, which is a rules gap of its own and not
+# the bar's doing.) Her [2] holds five spells, three of them castable from two
+# slot levels, which is what the tier picker is for.
 static func party() -> Party:
 	var p := Party.new()
 	p.add_member(Presets.vera())
@@ -20,9 +27,13 @@ static func party() -> Party:
 	return p
 
 # One step per screen region, in reading order. `target` is resolved to a live
-# Control by scenes/main.gd's _walk_target(); `id` is the localization key
-# (data/loc/<lang>/ui.json's tutorial.<id>.title / .text), which is why it is
-# spelled out rather than derived from `target` — two steps point at the board.
+# Control by scenes/main.gd's _walk_target(). The two "actions" steps describe
+# the fixed bar scenes/main.gd builds in _slotted/_open_list/_spell_tier_menu —
+# if that layout moves, these move with it.
+#
+# `id` is the localization key (data/loc/<lang>/ui.json's tutorial.<id>.title
+# and .text), which is why it is spelled out rather than derived from `target`:
+# two steps point at the board and two at the action bar.
 const STEPS := [
 	{"id": "log", "target": "log", "title": "The action log",
 	"text": "Every roll, hit, miss and heal is written down the left edge, newest at the bottom, split by round. Dice, damage numbers and names are colour-coded — if you ever wonder what just happened, it happened here."},
@@ -32,8 +43,10 @@ const STEPS := [
 	"text": "Hexes. On your turn the blue tiles are everywhere you can still walk — click one to move there, and watch for the ⚠ tiles, which let an adjacent enemy swing at you as you leave. Pick an attack and the board switches to aiming: legal targets get a red ring and a chip showing your odds — hit chance, healing, or the enemy's chance to fail the save. Click the target to commit, right-click or Esc to back out."},
 	{"id": "token", "target": "board", "title": "Reading a combatant",
 	"text": "Each token carries its class or creature glyph, a bar under it for HP (green, amber, red as it drops) with the exact numbers beneath, and a row of glyphs above it for conditions — prone, poisoned, blinded, dying. Hover any token for the full stat card: AC, HP, speed and its whole kit."},
-	{"id": "actions", "target": "actions", "title": "Your actions",
-	"text": "The same nine slots for every character: 1 Attack, 2 Spells, 3 Bonus actions, 4 Features, 5 Dash, 6 Disengage, 7 Dodge, 8 Hide, 9 Help & Shove — then Tab to swap weapon and Space to end the turn. A slot this character can't use stays put, greyed. Spells open by level (2, then the level, then the spell); features and bonus actions open a list; every list is numbered again and Esc backs out. Hovering any badge explains it with its real numbers. Anything that spends a limited resource asks for a second press to confirm."},
+	{"id": "actions", "target": "actions", "title": "Your action bar",
+	"text": "The same nine slots for every character, in the same places every fight: 1 Attack, 2 Spells, 3 Bonus actions, 4 Features, 5 Dash, 6 Disengage, 7 Dodge, 8 Hide, 9 Help & Shove — then Tab to swap weapon and Space to end the turn. Each slot is that skill's own badge with its key in the corner; the name, what it does and its real numbers live in the popup you get by hovering it. Nothing on the bar ever moves: a slot this character can't use, or can't use this instant — Attack and Help & Shove with nobody in reach, a spent slot, a used-up feature — stays where it is, greyed, instead of closing the gap."},
+	{"id": "actions_lists", "target": "actions", "title": "Lists, spell levels, confirms",
+	"text": "Slots 2, 3, 4 and 9 usually hold several things, so pressing one opens its list: numbered from 1 again, Esc or the last badge goes back, and a list longer than nine pages on 9. A slot holding one thing is no choice at all, so its key fires that thing directly and no list opens. Slot 2 is every spell you can cast, in one list, cantrips first and then by level. Press one you can cast at more than one level — Burning Hands is — and a small picker asks which spell slot to spend it from, ★2 for the second-level one; Shift and the key jumps straight to that picker. Anything that burns a spell slot or a limited use arms on the first press (the badge goes warm) and fires on the second, on the same key, on whatever page you pressed it."},
 	{"id": "actor", "target": "actor", "title": "Your turn's economy",
-	"text": "This line is what you have left: AC, HP, spell slots and feature uses as pips, then [action] and [bonus] while they're unspent, and how many hexes of movement remain. When all three run out the turn ends itself. That's everything — go win the fight."},
+	"text": "This line is what you have left: AC, HP, then spell slots by level and feature uses as pips (● unspent, ○ spent), then Ⓐ and Ⓑ while your action and your bonus action are unspent, and ➤ with the hexes of movement still in you. When all three run out the turn ends itself. That's everything — go win the fight."},
 ]

@@ -47,12 +47,25 @@ var relations: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 
+# T19: how big a bench this machine has ever kept, and who is on it. Called
+# wherever the roster or the marching order changes.
+func _note_roster() -> void:
+	Ach.record("roster_size", roster.size())
+	var species := {}
+	for id in active:
+		var ch = get_member(String(id))
+		if ch != null:
+			species[String(ch.species_id)] = true
+	if active.size() >= MAX_ACTIVE and species.size() == 1:
+		Ach.unlock("one_species")
+
 func add_member(ch) -> bool:
 	if ch == null or get_member(ch.id) != null:
 		return false
 	roster.append(ch)
 	if active.size() < MAX_ACTIVE:
 		active.append(ch.id)
+	_note_roster()
 	return true
 
 func remove_member(id: String) -> bool:
@@ -94,6 +107,7 @@ func activate(id: String) -> bool:
 	if is_active(id) or ch == null or ch.dead or active.size() >= MAX_ACTIVE:
 		return false
 	active.append(id)
+	_note_roster()
 	return true
 
 func bench(id: String) -> bool:
@@ -109,6 +123,7 @@ func swap(active_id: String, bench_id: String) -> bool:
 	if i < 0 or is_active(bench_id) or ch == null or ch.dead:
 		return false
 	active[i] = bench_id
+	_note_roster()
 	return true
 
 # --- overworld figure ------------------------------------------------------
@@ -166,11 +181,21 @@ func to_combatants(positions: Array, team := "party") -> Array:
 
 func add_gold(n: int) -> void:
 	gold = maxi(0, gold + n)
+	# T19: lifetime earnings and the fattest the purse has ever been. Losses go
+	# through here too (the road takes gold with a negative `n`), and those are
+	# nobody's income.
+	if n > 0:
+		Ach.bump("gold_earned", n)
+	Ach.record("peak_gold", gold)
 
 func spend_gold(n: int) -> bool:
 	if n < 0 or n > gold:
 		return false
 	gold -= n
+	if n > 0:
+		Ach.bump("gold_spent", n)
+	if gold == 0 and n > 0:
+		Ach.unlock("broke")
 	return true
 
 # Identified and unidentified units of the same item stack separately.
@@ -330,6 +355,7 @@ static func resurrect(party, dead_id: String, method: String, caster_id: String 
 	target.hp_current = 1
 	target.dirty()
 	Ach.unlock("resurrect_ally")   # T19 — spell or scroll, both route through here
+	Ach.bump("resurrections")
 	return true
 
 # End of a run: death is a within-run cost, not permanent. Leaves the benching alone.

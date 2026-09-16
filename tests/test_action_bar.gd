@@ -177,5 +177,34 @@ func _init() -> void:
 	var bkeys: Array = main._buttons.get_children().map(func(b): return String(b.get_meta("hotkey", "")))
 	check(bkeys[2] == "3", "...on key 3 (%s)" % bkeys[2])
 
+	# The walkthrough card that explains this bar (core/tutorial.gd, T32) is the
+	# one place outside this file that spells the layout out in words, and it went
+	# stale behind the bar twice already. It names the nine slots by key, in bar
+	# order, and the second card describes what pressing a list slot does now.
+	var Tutorial = load("res://core/tutorial.gd")
+	var bar_step := ""
+	var list_step := ""
+	for s in Tutorial.STEPS:
+		if String(s["target"]) != "actions":
+			continue
+		if bar_step == "":
+			bar_step = String(s["text"])
+		else:
+			list_step = String(s["text"])
+	check(bar_step != "" and list_step != "", "the walkthrough has its two action-bar steps")
+	var at := -1
+	var in_order := true
+	for i in main.SLOTS.size():
+		var want := "%d %s" % [i + 1, main.SLOT_NAMES[main.SLOTS[i]]]
+		var found: int = bar_step.find(want)
+		if found <= at:
+			in_order = false
+			printerr("  (the walkthrough never says '%s', or says it out of order)" % want)
+		at = found
+	check(in_order, "the walkthrough names all nine slots, by key, in the order the bar lays them out")
+	check(bar_step.contains("Tab") and bar_step.contains("Space"), "...and Tab and Space after them")
+	for phrase in ["★", "Shift", "Esc", "one list", "fires that thing directly"]:
+		check(list_step.contains(phrase), "the walkthrough's list step mentions %s" % phrase)
+
 	print("test_action_bar: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

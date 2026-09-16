@@ -19,6 +19,7 @@ const Loc = preload("res://core/loc.gd")
 const Registry = preload("res://core/mod/registry.gd")
 const Entitlement = preload("res://core/mod/entitlement.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const Ach = preload("res://core/achievements.gd")
 
 # Both optional: with neither set the screen is a read-only browser, which is
 # exactly what running it standalone should be.
@@ -163,7 +164,9 @@ func _row(pack) -> Control:
 			else Loc.t("mods.start_story", "Start the story")
 		play.theme_type_variation = "Primary"
 		Icons.clicks(play)
-		play.pressed.connect(func(): on_play.call(pack))
+		play.pressed.connect(func():
+			Ach.unlock("modded")
+			on_play.call(pack))
 		row.add_child(play)
 
 	if pack.status == "locked":

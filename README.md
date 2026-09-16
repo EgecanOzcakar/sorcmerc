@@ -27,7 +27,10 @@ core/            pure rules + game state, mostly no engine deps
   quest_posting.gd               which counter in which settlement posts which kind
   leveling.gd, progression.gd    per-character XP/level, and the meta-progression
                                   (lifetime XP unlocks species/classes/subclasses)
-  achievements.gd, character_save.gd, settings.gd   local user:// persistence
+  achievements.gd                the local achievement profile: the list, the
+                                  running tallies behind the threshold ones, and
+                                  the queue the toast layer drains
+  character_save.gd, settings.gd  the rest of the local user:// persistence
   bug_report.gd                  the in-game bug reporter's model: a breadcrumb
                                   ring of the last things that happened, the
                                   markdown body, and the prefilled GitHub link
@@ -61,7 +64,9 @@ scenes/
   creator/, party/, profile/, progression/, achievements/, settings/
                    character creation + leveling, roster management, the
                    character sheet, the meta-progression viewer, the
-                   achievements viewer, the settings overlay
+                   achievements viewer (and toast.gd, the AchievementToasts
+                   autoload that slides an earned one in from the top-right
+                   corner of whatever screen you are on), the settings overlay
   bugreport/       the "Report a bug" overlay: a title, what happened, and a
                    look at the diagnostics before any of it leaves the machine
 tools/bug-relay/   the reporter's optional fallback: a Cloudflare Worker that
@@ -293,7 +298,12 @@ properties, a 316-monster bestiary with faction/habitat-aware encounter
 building, a generated campaign route (sized settlements, quests, rest/
 treasure nodes, a seed-picked boss pool), shared party inventory with
 rarity-gated pricing and magic item identification, meta-progression
-unlocks, local achievements, procedural audio, and a guided tutorial fight.
+unlocks, procedural audio, and a guided tutorial fight. Achievements are local
+to the machine and there are 139 of them across eight sections — the
+plain milestones, running tallies (kills, crits, spells cast, distinct monsters
+killed), high-water marks (the biggest single blow, the fattest purse) and a
+cabinet of hidden ones for the things nobody sets out to do — each announced by
+a card that slides in from the top-right corner as it is earned.
 There is now a narrative layer, and it arrived as a modding API rather than as
 a hardcoded campaign: content packs (`core/mod/`, `docs/modding.md`) carry
 worlds, chapters, a cast, dialogue with choices and quest chains, plus data

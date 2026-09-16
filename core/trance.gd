@@ -16,6 +16,7 @@ const Campaign = preload("res://core/campaign.gd")
 const Adapter = preload("res://core/adapter.gd")
 const Dice = preload("res://core/dice.gd")
 const RNG = preload("res://core/rng.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const TRANCE_FEATURES := ["elf-trance"]
 const WATCH_BONUS := 5             # core/world_camp.gd's watch_check: sharper eyes on the ambush roll
@@ -67,5 +68,7 @@ static func _try_identify(party, rng = null) -> Dictionary:
 	var ok: bool = nat + bonus >= dc
 	if ok:
 		party.stash_identify(item_id)
+		Campaign._note_identified(item_id)
+		Ach.unlock("trance_identify")
 	return {"ok": ok, "item_id": item_id, "char_id": char_id, "skill": IDENTIFY_SKILL,
 		"nat": nat, "bonus": bonus, "dc": dc}

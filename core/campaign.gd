@@ -361,6 +361,10 @@ var long_rests_used := 0
 var log: Array = []
 var rng
 var route: Array = []         # this run's stages, generated from the seed
+# T19: did anybody die on this road at all? A resurrection does not clear it —
+# "everyone came home" is a claim about the whole run, not about the roster at
+# the end of it.
+var lost_anyone := false
 
 func _init(p, seed_value := 0) -> void:
 	party = p
@@ -495,6 +499,13 @@ func leave() -> void:
 	if state == "won":
 		say("The road ends. The party lives.")
 		Ach.unlock("campaign_clear")
+		# T19: the two ways of finishing clean. `lost_anyone` is set by
+		# finish_combat the first time somebody dies, and survives a reload
+		# because campaign_save.gd carries it.
+		if not lost_anyone:
+			Ach.unlock("clean_run")
+		if short_rests_used == 0 and long_rests_used == 0:
+			Ach.unlock("no_rest_run")
 		_conclude()
 	_autosave()
 
@@ -521,6 +532,7 @@ func _autosave() -> void:
 
 # The run is over, win or lose: the dead come back for free (T10's locked rule).
 func _conclude() -> void:
+	Ach.bump("runs")
 	var Party = load("res://core/party.gd")
 	for ch in party.roster:
 		if ch.dead:
@@ -592,6 +604,8 @@ func finish_combat(result: Dictionary) -> void:
 			names.append(item_name(String(id)))
 		say("Taken from the dead: %s." % ", ".join(names))
 	for id in result.get("deaths", []):
+		lost_anyone = true
+		Ach.bump("deaths")
 		var fallen = party.get_member(id)
 		if fallen != null:
 			fallen.dead = true
@@ -667,8 +681,20 @@ func _find_item(item_id: String) -> void:
 const GREAT_RARITIES := ["very-rare", "legendary", "artifact"]
 
 static func _note_rarity(item_id: String) -> void:
-	if String(item_data(item_id).get("rarity", "")) in GREAT_RARITIES:
+	var rarity := String(item_data(item_id).get("rarity", ""))
+	if rarity in GREAT_RARITIES:
 		Ach.unlock("loot_very_rare")
+	if rarity == "legendary":
+		Ach.collect("legendaries", item_id)
+
+# T19: every route to a named item — the rest-stop Arcana check, the scroll, the
+# librarian's fee — lands here, so the tally and the artifact case are counted
+# once each rather than at four call sites.
+static func _note_identified(item_id: String) -> void:
+	Ach.unlock("identify_item")
+	Ach.bump("identified")
+	if String(item_data(item_id).get("rarity", "")) == "artifact":
+		Ach.unlock("identify_artifact")
 
 # --- rest -----------------------------------------------------------------
 
@@ -778,12 +804,13 @@ func identify_check(item_id: String, char_id: String) -> bool:
 	var total := nat + bonus
 	if total < dc:
 		identify_failed.append(item_id)
+		Ach.bump("identify_fails")
 		say("%s examines it and learns nothing (%d+%d vs DC %d)." % [ch.cname, nat, bonus, dc])
 		_autosave()
 		return false
 	party.stash_identify(item_id)
 	Sound.play_sfx("identify")   # T27
-	Ach.unlock("identify_item")
+	_note_identified(item_id)
 	say("%s identifies it: %s (%d+%d vs DC %d)." % [ch.cname, item_name(item_id), nat, bonus, dc])
 	_autosave()
 	return true
@@ -793,7 +820,7 @@ func identify_with_scroll(item_id: String) -> bool:
 	if not party.use_identification_scroll(item_id):
 		return false
 	Sound.play_sfx("identify")   # T27
-	Ach.unlock("identify_item")
+	_note_identified(item_id)
 	say("The Scroll of Identification crumbles: %s." % item_name(item_id))
 	_autosave()
 	return true
@@ -958,7 +985,7 @@ func identify_for_fee(item_id: String) -> bool:
 		return false
 	party.stash_identify(item_id)
 	Sound.play_sfx("identify")   # T27
-	Ach.unlock("identify_item")
+	_note_identified(item_id)
 	say("The librarian reads it off in a breath: %s (−%d gp)." % [item_name(item_id), IDENTIFY_FEE_GP])
 	_autosave()
 	return true
@@ -985,6 +1012,7 @@ func sell(item_id: String) -> bool:
 		return false
 	var paid := maxi(1, int(item_price(item_id) * SELL_RATE))
 	party.add_gold(paid)
+	Ach.record("best_sale", paid)
 	say("Sold %s for %d gp." % [item_name(item_id), paid])
 	_autosave()
 	return true

@@ -59,9 +59,13 @@ var _theme := ""
 
 # --- static API (safe with no autoload: every call is a no-op) --------------
 
+# A sting with extra takes beside it (hit_sword.wav, hit_sword_2.wav, _3 ...)
+# plays one of them at random, and every play drifts a few percent in pitch:
+# the same file on every swing is what makes even a good recording wear thin.
+const PITCH_DRIFT := 0.06
 static func play_sfx(id: String) -> void:
 	if _i != null:
-		_i._play_one_shot(SFX_DIR + id + ".wav")
+		_i._play_one_shot(_i._take_of(SFX_DIR, id), randf_range(1.0 - PITCH_DRIFT, 1.0 + PITCH_DRIFT))
 
 # T31: the gibberish stinger paired with a text bark. Same voices/bus as the SFX.
 static func play_bark(id: String) -> void:
@@ -100,16 +104,42 @@ func _ready() -> void:
 	_tension = _player("Music", QUIET_DB)
 	_i = self
 
-func _play_one_shot(path: String) -> void:
+func _play_one_shot(path: String, pitch := 1.0) -> void:
 	var stream = _stream(path, false)
 	if stream == null:
 		return
-	if not _should_play(path, Time.get_ticks_msec()):
+	if not _should_play(_take_key(path), Time.get_ticks_msec()):
 		return
 	var p: AudioStreamPlayer = _voices[_next_voice]
 	_next_voice = (_next_voice + 1) % _voices.size()
 	p.stream = stream
+	p.pitch_scale = pitch
 	p.play()
+
+# The takes of `id` on disk, counted once: id.wav, id_2.wav, id_3.wav ... until
+# one is missing. Picks one at random; the plain file when there is only one.
+var _takes: Dictionary = {}   # dir+id -> count
+func _take_of(dir: String, id: String) -> String:
+	var key := dir + id
+	if not _takes.has(key):
+		var n := 1
+		while FileAccess.file_exists("%s%s_%d.wav" % [dir, id, n + 1]):
+			n += 1
+		_takes[key] = n
+	var n: int = _takes[key]
+	if n <= 1:
+		return dir + id + ".wav"
+	var k := randi_range(1, n)
+	return dir + id + ".wav" if k == 1 else "%s%s_%d.wav" % [dir, id, k]
+
+# Retrigger limiting is per sting, not per take: two takes of hit_sword in
+# the same frame is still the same sound twice.
+static func _take_key(path: String) -> String:
+	var base := path.get_basename()
+	var i := base.rfind("_")
+	if i > 0 and base.substr(i + 1).is_valid_int():
+		return base.substr(0, i) + ".wav"
+	return path
 
 # The RETRIGGER_MS rule, and the only place that records a start. Split out of
 # _play_one_shot so tests/test_audio.gd can exercise it with synthetic timestamps:

@@ -12,6 +12,7 @@ const Character = preload("res://core/character.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Save = preload("res://core/character_save.gd")
+const Ach = preload("res://core/achievements.gd")
 const Presets = preload("res://core/presets.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Prog = preload("res://core/progression.gd")
@@ -474,6 +475,11 @@ func _confirm() -> void:
 	if _confirmed == null:
 		ch.id = Save.unique_slug(ch.cname, ch.id)
 	var path := Save.save(ch)
+	# Only the first Confirm mints a character; pressing it again re-saves the
+	# same file, and re-counting that would make "make 10 characters" a matter
+	# of clicking one button ten times.
+	if _confirmed == null:
+		Ach.bump("created")
 	_confirmed = ch
 	_status.text = Loc.tf("creator.saved", "Saved to %s", [path])
 	if ch.id != wanted:

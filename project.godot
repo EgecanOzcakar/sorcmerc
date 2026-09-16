@@ -21,6 +21,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 [autoload]
 
 Audio="*res://core/audio.gd"
+AchievementToasts="*res://scenes/achievements/toast.gd"
 
 [gui]
 
