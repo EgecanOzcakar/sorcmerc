@@ -8,7 +8,12 @@ const Catalog = preload("res://core/rules/catalog.gd")
 
 const KINDS := ["passive_damage", "self_buff", "ally_buff", "heal_self", "heal_ally",
 	"grant_action", "grant_verb", "attacks_per_action", "attack_modifier", "damage_bonus",
-	"save_effect", "reaction"]
+	"save_effect", "reaction",
+	# T94. None of the three is ever a button: `save_modifier` and `keen_senses`
+	# are passives combat.gd reads where it already computes a save or a hide DC,
+	# and `survive_damage` fires from _apply_damage on the blow that would drop
+	# its owner. See OFFERABLE / is_button in core/combat.gd.
+	"save_modifier", "survive_damage", "keen_senses"]
 
 # castingTime -> action-economy cost. Anything longer than a Reaction is non-combat.
 const CASTING_TIME := {"Action": "action", "Bonus Action": "bonus", "Reaction": "reaction"}
@@ -16,7 +21,10 @@ const CASTING_TIME := {"Action": "action", "Bonus Action": "bonus", "Reaction": 
 # The trigger vocabulary a reaction can hang off. combat.gd fires every one of
 # these and resolves the answer with no prompt (combat-design.md §2); this list
 # is here rather than there so validate() can refuse a trigger nothing fires.
-const REACTION_TRIGGERS := ["hit_by_attack", "damaged_by_attack", "spell_cast"]
+# T94 adds "would_be_hit": fired from resolve_attack once a swing is known to
+# land but before it does, which is the moment Parry's "against one melee attack
+# that would hit it" describes.
+const REACTION_TRIGGERS := ["hit_by_attack", "damaged_by_attack", "spell_cast", "would_be_hit"]
 
 static func feature(id: String) -> Dictionary:
 	var d = Catalog.all("effects/features.json")
@@ -115,11 +123,17 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 		if e.is_empty():
 			continue  # flavor feature
 		assert(e["kind"] in KINDS, "unknown effect kind \"%s\" on \"%s\"" % [e.get("kind"), fid])
+		# An authored `label` wins: "monster-relentless-10" is the id that keeps the
+		# three SRD thresholds apart, but the log should just say "Relentless".
 		var v := {"id": fid, "kind": e["kind"], "cost": e.get("cost", "action"),
-			"label": verb_label(fid), "targeting": e.get("targeting", TARGETING.get(e["kind"], "self"))}
+			"label": String(e.get("label", verb_label(fid))),
+			"targeting": e.get("targeting", TARGETING.get(e["kind"], "self"))}
 		for k in ["trigger", "once_per", "requires", "verbs", "status", "duration", "resist",
 				"save", "conditions", "shape", "range_ft", "halve_damage", "self",
-				"attacks_against", "extra_attacks", "value", "damage_type"]:
+				"attacks_against", "extra_attacks", "value", "damage_type",
+				# T94: save_modifier / survive_damage / keen_senses / Parry
+				"vs", "ac_bonus", "dc", "dc_plus_damage", "except", "max_damage",
+				"relies_on", "passive_bonus", "magical"]:
 			if e.has(k):
 				v[k] = e[k]
 		if e.has("dice"):

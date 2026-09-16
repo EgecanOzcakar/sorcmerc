@@ -459,6 +459,12 @@ func _basic(id: String) -> Dictionary:
 			return b
 	return {}
 
+# Triggers that fire from the resolver rather than from a press: T94's on_death
+# (Death Burst) is in here because save_effect IS in OFFERABLE and its `uses`
+# would otherwise put a button on a living mephit's action bar. Reactions need no
+# entry — is_button() refuses those by cost, whatever they trigger on.
+const NON_BUTTON_TRIGGERS := ["passive", "start_of_turn", "on_death"]
+
 # The plain Attack, for a caller that has to name the swing resolve_attack()
 # makes without going through perform() — ai.gd, offering reactions before it.
 func attack_verb() -> Dictionary:
@@ -529,7 +535,7 @@ func _spend(actor, cost: String) -> bool:
 func is_button(actor, v: Dictionary) -> bool:
 	if v.get("cost", "") == "reaction":
 		return false   # a reaction is never a button — fire_reactions() casts it
-	if v.get("trigger", "") in ["passive", "start_of_turn"] \
+	if v.get("trigger", "") in NON_BUTTON_TRIGGERS \
 			or (v.get("trigger", "") == "on_weapon_hit" and v["kind"] == "save_effect" and not v.has("pool")):
 		return false   # fires from resolve_attack / begin_turn, never a button
 	if v["kind"] == "shove" and actor.athletics <= 0:
@@ -661,7 +667,8 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 	return {}
 
 func _save_effect(actor, v: Dictionary, target) -> Dictionary:
-	var saved := _saving_throw(target, actor.save_dc, v.get("save", "dex"))
+	var saved := _saving_throw(target, actor.save_dc, v.get("save", "dex"), false,
+		v.get("magical", false))
 	log.append("%s uses %s on %s — %s the save." % [
 		actor.cname, v["label"], target.cname, "makes" if saved else "fails"])
 	var dmg := 0
@@ -852,7 +859,8 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 	var dmg := Dice.roll(rng, notation)
 	var saved := false
 	if v.get("save", "") != "":
-		saved = _saving_throw(c, dc, v["save"], v.get("ignores_cover", false))
+		# every spell is a magical effect, so Magic Resistance applies (T94)
+		saved = _saving_throw(c, dc, v["save"], v.get("ignores_cover", false), true)
 		if saved:
 			dmg = (dmg / 2) if v.get("half_on_save", false) else 0
 	log.append("  %s %s the save — %d %s." % [c.cname, "makes" if saved else "fails", dmg,
@@ -994,6 +1002,13 @@ func gain_exhaustion(c, levels := 1) -> int:
 
 # Apply a named condition. charmed/frightened remember who caused them.
 func apply_condition(target, cond: String, source = null, duration := "", v: Dictionary = {}) -> void:
+	# T94 — `cond_immune` off the statblock. Checked ahead of everything, exhaustion
+	# included: 31 bestiary entries are immune to exhaustion specifically, and
+	# gain_exhaustion() is the one path that never comes back through here.
+	if cond in target.cond_immune:
+		log.append("%s cannot be %s." % [
+			target.cname, "exhausted" if cond == "exhaustion" else cond])
+		return
 	if cond == "exhaustion":
 		gain_exhaustion(target)
 		return
@@ -1058,7 +1073,8 @@ func _repeat_saves(c, when: String) -> void:
 			c.statuses.erase(id)
 			log.append("%s is shaken out of %s." % [c.cname, id])
 		elif mode == when and String(s.get("save", "")) != "":
-			if _saving_throw(c, int(s["dc"]), s["save"]):
+			# held by a concentration spell, so the shake-off is magical too (T94)
+			if _saving_throw(c, int(s["dc"]), s["save"], false, true):
 				c.statuses.erase(id)
 				log.append("%s shakes off %s (%s save)." % [c.cname, id, String(s["save"]).to_upper()])
 
@@ -1235,12 +1251,15 @@ func reaction_triggers_for(actor, v: Dictionary, target) -> Array:
 		return [["spell_cast",
 			{"caster": actor, "verb": v, "level": int(v.get("slot_level", 0))}]]
 	if kind in ["attack", "offhand_attack"] and target != null and not (target is Vector2i):
-		# A swing fires both halves — one before the damage lands, one after —
-		# so both are offered. The blow has not been rolled yet, so this is a
-		# commitment made against the hit chance rather than against the damage:
-		# answer for the case where it lands, and nothing is spent if it misses.
+		# A swing fires three — the AC answer, then one before the damage lands
+		# and one after — so all three are offered. The blow has not been rolled
+		# yet, so this is a commitment made against the hit chance rather than
+		# against the damage: answer for the case where it lands, and nothing is
+		# spent if it misses. (Parry costs no slot and no pool, so asks_first()
+		# never puts it to the decider; it is listed for the one somebody adds
+		# later that does.)
 		var ctx := {"attacker": actor, "target": target}
-		return [["hit_by_attack", ctx], ["damaged_by_attack", ctx]]
+		return [["would_be_hit", ctx], ["hit_by_attack", ctx], ["damaged_by_attack", ctx]]
 	return []
 
 # Everyone the decider should be asked about before `actor` does `v` at
@@ -1322,9 +1341,18 @@ func reactors_for(trigger: String, ctx: Dictionary) -> Array:
 # Whether this trigger is `c`'s business at all.
 func _reaction_applies(c, v: Dictionary, ctx: Dictionary, trigger: String) -> bool:
 	match trigger:
-		"hit_by_attack", "damaged_by_attack":
+		"hit_by_attack", "damaged_by_attack", "would_be_hit":
 			if c != ctx.get("target"):
 				return false   # a blow is only the business of whoever took it
+			# Parry is spent only when its AC actually turns the blow into a
+			# miss. The SRD lets it be wasted on one that lands anyway; this
+			# engine resolves reactions with no prompt (combat-design.md §2), so
+			# throwing it away on a swing it could not have stopped would model
+			# the choice a player makes worse than holding it does. A prediction
+			# (pending_reactions) carries no roll, and answers "could apply".
+			if trigger == "would_be_hit" and ctx.has("total") \
+					and int(ctx["ac"]) + int(v.get("ac_bonus", 0)) <= int(ctx["total"]):
+				return false
 			var atk = ctx.get("attacker")
 			return atk == null or _reaction_reaches(c, v, atk)
 		"spell_cast":
@@ -1349,7 +1377,8 @@ func _reaction_reaches(c, v: Dictionary, other) -> bool:
 # "damage" for the ones that alter a blow, "countered"/"by" for the ones that
 # stop a spell. Callers that care about neither can ignore the return.
 func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
-	var out := {"damage": int(ctx.get("damage", 0)), "countered": false, "by": null}
+	var out := {"damage": int(ctx.get("damage", 0)), "countered": false, "by": null,
+		"ac_bonus": 0}
 	if _reaction_depth >= REACTION_DEPTH_MAX:
 		return out
 	_reaction_depth += 1
@@ -1373,6 +1402,12 @@ func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
 				out["countered"] = true
 				out["by"] = c
 				break   # the spell is already gone; a second answer has nothing to stop
+		elif int(v.get("ac_bonus", 0)) > 0:
+			out["ac_bonus"] = int(v["ac_bonus"])
+			log.append("%s %ss — AC %d, and the blow goes wide." % [
+				c.cname, String(v["label"]).to_lower(),
+				int(ctx.get("ac", 0)) + int(v["ac_bonus"])])
+			break   # the swing is already a miss; a second answer has nothing to stop
 		elif v.get("halve_damage", false):
 			out["damage"] = int(out["damage"]) / 2
 			log.append("%s — %s, halving the blow." % [c.cname, v["label"]])
@@ -1443,6 +1478,16 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var ac = effective_ac(target)
 	var crit: bool = nat >= attacker.crit_range
 	var hit: bool = crit or (nat != 1 and total >= ac)
+	# T94 — Parry: "adds N to its AC against one melee attack that would hit it".
+	# Fired only once the roll is known to land, which is what the SRD wording
+	# says. A crit cannot be parried, and a shot cannot: it is a melee reaction.
+	if hit and not crit and not (attacker.ranged and not opts.get("melee", false)):
+		var parry := int(fire_reactions("would_be_hit", {
+			"attacker": attacker, "target": target, "total": total, "ac": ac,
+		}).get("ac_bonus", 0))
+		if parry > 0:
+			ac += parry
+			hit = false
 	if hit and not crit and _auto_crit(attacker, target, opts):
 		crit = true
 	var out = {
@@ -1643,14 +1688,48 @@ func _resists(c, dtype: String) -> bool:
 			return true
 	if dtype == "":
 		return false
+	if dtype in c.resist:
+		return true   # T94: off the statblock (combatant.resist)
 	for s in c.statuses.values():
 		if s is Dictionary and dtype in s.get("resist", []):
 			return true
 	return false
 
-func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
-	if _resists(target, dtype):
+# The word the log uses for whichever defence just fired.
+func _defense_verb(c, dtype: String) -> String:
+	if dtype != "" and dtype in c.immune:
+		return "is immune to"
+	if dtype != "" and dtype in c.vulnerable and not _resists(c, dtype):
+		return "is vulnerable to"
+	return "resists"
+
+# T94 — the whole defence stack, in RAW's order: immunity wins outright, then
+# vulnerability doubles, then resistance halves ONCE however many sources claim
+# it (5e resistance never stacks, which is why _resists answers a bool and not a
+# count). Before this, only the two status-shaped sources existed — a held Rage's
+# `resist` and Petrified's `resist_all` — and the statblock's own three lists
+# were dropped on the floor by combatant.gd's missing properties.
+func _damage_after_defenses(c, dmg: int, dtype: String) -> int:
+	if dmg <= 0:
+		return dmg
+	if dtype != "":
+		if dtype in c.immune:
+			return 0
+		if dtype in c.vulnerable:
+			dmg *= 2
+	if _resists(c, dtype):
 		dmg = dmg / 2
+	return dmg
+
+func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
+	var raw := dmg
+	dmg = _damage_after_defenses(target, dmg, dtype)
+	if raw > 0 and dmg != raw:
+		# Say why. Halved damage with nothing in the log reads as a dice roll
+		# going badly, and the whole point of giving the bestiary its damage
+		# types back is that the player can see them and change what they throw.
+		log.append("  %s %s %s — %d damage, not %d." % [
+			target.cname, _defense_verb(target, dtype), dtype, dmg, raw])
 	if dmg > 0 and target.has("concentrating"):
 		if not _saving_throw(target, maxi(10, dmg / 2), "con"):
 			_end_concentration(target, "loses concentration")
@@ -1665,6 +1744,10 @@ func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 		return
 	var before: int = target.hp
 	target.hp -= dmg
+	# Undead Fortitude / Relentless: the blow that would drop it doesn't.
+	if target.hp <= 0 and dmg > 0 and _survives_at_one(target, dmg, dtype, crit):
+		target.hp = 1
+		return
 	# bark only on the crossing into the last quarter, not every hit below it
 	if target.hp > 0 and before * 4 >= target.max_hp and target.hp * 4 < target.max_hp:
 		bark(target, "low_hp")
@@ -1685,7 +1768,46 @@ func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 			log.append("%s falls unconscious." % target.cname)
 			bark(target, "down")
 
+# T94 — a `survive_damage` feature turns lethal damage into 1 HP left. Two
+# shapes, both straight off the SRD:
+#   Undead Fortitude — a CON save at DC 5 + the damage taken, and neither radiant
+#     damage nor a critical hit allows it at all (`except`).
+#   Relentless      — no roll: any blow at or under `max_damage` (7 / 10 / 14,
+#     by creature) simply leaves it standing. The printed MM recharges this on a
+#     rest; the SRD dump this catalog was built from drops that clause, and
+#     without it a boar chipped for 1 a turn never dies — so it is authored with
+#     `uses: 1`, one save per fight, and the deviation is deliberate.
+func _survives_at_one(c, dmg: int, dtype: String, crit: bool) -> bool:
+	for v in c.verbs:
+		if v["kind"] != "survive_damage":
+			continue
+		if v.has("pool") and c.pool_left(v["pool"]) <= 0:
+			continue
+		var forbidden: Array = v.get("except", [])
+		if crit and "critical" in forbidden:
+			continue
+		if dtype != "" and dtype in forbidden:
+			continue
+		var cap := int(v.get("max_damage", 0))
+		if cap > 0 and dmg > cap:
+			continue
+		if String(v.get("save", "")) != "":
+			var dc := int(v.get("dc", 0)) + (dmg if v.get("dc_plus_damage", false) else 0)
+			if not _saving_throw(c, dc, String(v["save"])):
+				continue
+		if v.has("pool"):
+			c.pools[v["pool"]]["cur"] = c.pool_left(v["pool"]) - 1
+		log.append("%s will not go down — %s, 1 HP left." % [c.cname, v["label"]])
+		return true
+	return false
+
 func _kill(c) -> void:
+	# T94 — never kill the same creature twice. A 0-damage hit on a corpse still
+	# walks _apply_damage's hp <= 0 branch and used to land here for a second
+	# "is dead" line, which was cosmetic; with _death_triggers below it is not,
+	# because the burst would go off again.
+	if c.is_dead():
+		return
 	if c.has("concentrating"):
 		_end_concentration(c, "loses concentration")
 	c.statuses["dead"] = true
@@ -1693,11 +1815,28 @@ func _kill(c) -> void:
 	c.hp = 0
 	log.append("%s is dead." % c.cname)
 	bark(c, "down")
+	_death_triggers(c)
 	if _team_out(c.team):   # that was the last of them — the winners get a word in
 		for w in combatants:
 			if w.team != c.team and w.conscious():
 				bark(w, "victory")
 				break
+
+# T94 — Death Burst and kin: a save_effect the statblock fires as its owner
+# dies, on everything in range of BOTH teams (a mephit's steam does not read
+# tabards). Runs after the kill is logged, so the burst reads as a consequence of
+# it. A burst that kills a second bursting creature resolves that one from its
+# own _kill; the recursion terminates because the dead are never conscious().
+func _death_triggers(c) -> void:
+	for v in c.verbs:
+		if v["kind"] != "save_effect" or v.get("trigger", "") != "on_death":
+			continue
+		var reach: int = maxi(1, int(v.get("range", 1)))
+		for other in combatants:
+			if other == c or not other.conscious():
+				continue
+			if Hex.distance(other.pos, c.pos) <= reach:
+				_save_effect(c, v, other)
 
 func _death_save(c) -> void:
 	var r = Dice.d20(rng)
@@ -1824,12 +1963,44 @@ func act_help(helper, ally) -> void:
 	ally.statuses["helped"] = true
 	log.append("%s helps %s — advantage on their next attack." % [helper.cname, ally.cname])
 
-# Hide: Stealth vs the best enemy passive Perception. On success you're hidden
+# T94 — how hard it is to slip past ONE creature. Passive Perception is the
+# floor. A keen sense (Keen Smell, Keen Hearing and Smell, Keen Sight — ~60
+# bestiary entries carry one) is RAW advantage on the Perception check, which is
+# +5 passive. Routing it through senses rather than a flat bonus is the point of
+# the exercise: conditions.json's `auto_fail` lists ("blinded" auto-fails
+# anything that needs sight, "deafened" hearing) were data nothing in the engine
+# read, so blinding a wolf now takes its eyes out of the DC and leaves its nose
+# working, while blinding a hawk takes its whole Keen Sight offline.
+const SENSES := ["sight", "hearing", "smell"]
+const BLIND_PERCEPTION_PENALTY := 5   # a watcher who cannot see is easier to pass
+
+# The senses `c` can still use, per the conditions it is carrying.
+func usable_senses(c) -> Array:
+	var lost: Array = []
+	for e in _cond_effects(c):
+		for sense in e.get("auto_fail", []):
+			if not sense in lost:
+				lost.append(sense)
+	return SENSES.filter(func(sense): return not sense in lost)
+
+func hide_dc_against(observer) -> int:
+	var senses: Array = usable_senses(observer)
+	var dc: int = observer.passive_perception
+	if not "sight" in senses:
+		dc -= BLIND_PERCEPTION_PENALTY
+	for v in observer.verbs:
+		if v["kind"] != "keen_senses":
+			continue
+		if v.get("relies_on", SENSES).any(func(sense): return sense in senses):
+			dc += int(v.get("passive_bonus", 5))
+	return maxi(1, dc)
+
+# Hide: Stealth vs the hardest enemy to slip past. On success you're hidden
 # (attacks against you have disadvantage; your next attack has advantage).
 func act_hide(c) -> bool:
 	var dc: int = 0
 	for e in enemies_of(c):
-		dc = maxi(dc, e.passive_perception)
+		dc = maxi(dc, hide_dc_against(e))
 	var roll: int = Dice.d20(rng).nat + c.stealth
 	if roll >= dc:
 		c.statuses["hidden"] = true
@@ -1879,9 +2050,19 @@ func act_smash(actor) -> Dictionary:
 	destroy_object(o)
 	return {"smashed": o["type"]}
 
-func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false) -> bool:
+# `magical` marks a save forced by a spell or an explicitly magical ability —
+# what Magic Resistance ("advantage on saving throws against spells and other
+# magical effects") keys off. Everything else is mundane: a dragon's breath and a
+# ghoul's paralysis force saves but are not magic, so they are unaffected, which
+# is RAW and also what keeps this from becoming a blanket +5 on 20 statblocks.
+func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false, magical := false) -> bool:
 	var adv: bool = c.has("dodging")
 	var dis := false
+	if magical:
+		for v in c.verbs:
+			if v["kind"] == "save_modifier" and String(v.get("vs", "")) == "magic" \
+					and String(v.get("self", "")) == "adv":
+				adv = true
 	for e in _cond_effects(c):
 		if ability in e.get("auto_fail_saves", []):
 			log.append("%s can't resist — the %s save fails automatically." % [c.cname, ability.to_upper()])

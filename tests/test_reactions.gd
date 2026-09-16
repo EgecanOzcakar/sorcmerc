@@ -445,8 +445,10 @@ func test_the_offer_predicts_what_the_action_will_fire() -> void:
 	check(cb.reaction_triggers_for(atk, atk.verb("guiding-bolt"), def)[0][0] == "spell_cast",
 		"a cast is predicted as spell_cast")
 	var swing: Array = cb.reaction_triggers_for(atk, cb.attack_verb(), def)
-	check(swing.map(func(t): return t[0]) == ["hit_by_attack", "damaged_by_attack"],
-		"a swing is predicted as both of its halves, before and after the damage")
+	# T94 put a third moment in front of the other two: "would_be_hit" fires once
+	# the roll is known to land and before it does, which is where Parry answers.
+	check(swing.map(func(t): return t[0]) == ["would_be_hit", "hit_by_attack", "damaged_by_attack"],
+		"a swing is predicted as all three of its moments, in the order they fire")
 	check(cb.reaction_triggers_for(atk, cb._basic("dodge"), null).is_empty(),
 		"and Dodge fires nothing at all")
 	# The swing: asked before the d20, so a miss costs the answerer nothing.

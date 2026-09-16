@@ -41,6 +41,51 @@
 # Fights are shorter (7-8 rounds, was 9-10) with fewer bodies: the thing the
 # movement fix bought is a faster fight at the same win rate.
 #
+# RE-MEASURED 2026-09-16 (T94), and NO KNOB HERE MOVED. T94 gave the bestiary
+# the defences its own catalog had always carried (damage resistance / immunity /
+# vulnerability and condition immunity, dropped on the floor until then — see
+# core/combatant.gd) plus Magic Resistance, Parry, Undead Fortitude / Relentless,
+# Death Burst, and a second pass of on-hit riders. power.gd prices all of it
+# (Power._defense_mult and the ehp arm of estimate()), so the generator answers
+# a tougher monster by buying FEWER of it, which is the mechanism that kept the
+# curve inside the band without touching TIER. Both columns are this same test,
+# 200 seeds a tier, run back-to-back on master (6c9a5ab) and on the branch:
+#                 master            T94
+#   L3 easy    4.1 foes 94.5%    4.0 foes 93.0%   -1.5
+#   L3 normal  4.2 foes 83.0%    3.9 foes 83.5%   +0.5
+#   L3 hard    4.4 foes 73.5%    4.2 foes 79.0%   +5.5
+#   L8 easy    5.8 foes 91.3%    5.9 foes 90.0%   -1.3   (150 seeds)
+#   L8 normal  6.0 foes 80.0%    5.9 foes 74.0%   -6.0
+#   L8 hard    6.1 foes 62.0%    6.1 foes 60.0%   -2.0
+#   shrine     3.1 foes 82.5%    2.5 foes 77.0%   -5.5
+# Re-measured twice as the base moved under it, because a tuning comparison is
+# only worth the base it was taken against. After master's reaction layer (#38,
+# Counterspell) every number came back byte-identical — the sweep installs no
+# reaction_decider and the autopilot prepares no Counterspell, so that layer is
+# inert under autoplay. After the potions/spells work (#35) the LEVEL-8 column
+# moved on BOTH sides and had to be retaken: that PR gave the preset party real
+# buff spells, so its team score went 116.2 -> 123.9, it buys a bigger budget,
+# and both master and this branch lose ground at level 8 for reasons that have
+# nothing to do with T94. The level-3 numbers did not move at all. Quoting the
+# pre-#35 level-8 column against a post-#35 branch would have credited T94 with
+# somebody else's change, in both directions.
+# Every tier stays inside test_scaler's +/-10 BAND and ordered. Read the sizes
+# of those moves against the standard error, which is ~3 points at 200 seeds and
+# ~4 at 150: only L3 hard and L8 normal are much past one, and L3 hard is the
+# direction the pricing predicts — a hard budget spent on fewer, tougher bodies is EASIER, because
+# what kills a party is the number of turns the other side gets (the action-
+# economy measurement further down this header), not any one stat line.
+# The one number to watch is the shrine at 2.5 bodies: it is the thinnest roster
+# the generator produces, because an undead roster is now the most expensive one
+# per body in the game (poison immunity, a physical-resistance line, Undead
+# Fortitude). If it drops under ~2 it stops being a warband; the fix would be a
+# floor on body count for a boss theme, not a TIER change.
+# Fights also got LONGER at level 8 (normal 10.5 -> 12.9 rounds, hard 11.4 ->
+# 12.7) — resistance and immunity are duration, not difficulty, which is the
+# cost of this pass and is not visible in a win rate. That is also the most
+# likely reading of the -6.0 at L8 normal: a fight that runs two and a half
+# rounds longer is two and a half more rounds of the foes' action economy.
+#
 # RE-MEASURED 2026-09-13 (D1), same harness, no knob touched since:
 #   easy   avg 4.4 foes x0.93 : 175W/25L (87.5%)  avg 9.3 rounds
 #   normal avg 4.7 foes x0.96 : 166W/34L (83.0%)  avg 9.5 rounds

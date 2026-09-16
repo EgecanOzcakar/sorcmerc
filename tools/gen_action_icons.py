@@ -1250,6 +1250,25 @@ FEATURES = {
     "monster-regeneration": (heart(32, 32, 15, E("life")),
                              band(32, 32, 19, 15.5, 200, 330, E("life")[1]),
                              band_head(32, 32, 19, 15.5, 330, 24, E("life")[1])),
+
+    # T94. Only the five that are a button kind: the pass's passives (martial
+    # advantage, sneak attack, keen senses, magic resistance, parry, the
+    # survive_damage pair) never reach the bar and so never reach this table.
+    "monster-assassinate": (reticle(E("shadow")), dart(E("steel"), -45, 1, 0.85)),
+    "monster-divine-eminence": (halo(E("radiant")),
+                                sword(32, 33, 0, length=40, w=6.6, steel=E("radiant"))),
+    # The three bursts are one motif in three readings — the corpse is the
+    # trigger, the accent is what comes out of it — because at the bar's ~22 px
+    # a centred star swallows whatever is drawn inside it.
+    "monster-death-burst": (skull(E("fire")),
+                            star(47, 19, 7, 2.4, 5, E("fire"), sw=1.0),
+                            star(18, 23, 5.5, 1.9, 5, E("fire"), sw=1.0)),
+    "monster-death-burst-ice": (skull(E("cold")),
+                                group([snowflake(E("cold"))], 33.8, 6.8, scale=0.38)),
+    "monster-death-burst-greater": (star(32, 32, 22, 15.0, 12, E("fire"), sw=1.0),
+                                    circle(32, 32, 14, mix(ELEM["fire"], INK, 0.8),
+                                           stroke="none"),
+                                    skull(E("fire"), 0.78)),
 }
 
 

@@ -4699,3 +4699,65 @@ The appendix carries the decisions and the reasons, not the survey behind
 them: a design doc here should not be a competitive analysis of other
 people's games assembled from fan wikis. The workings are in the pull
 request's history.
+
+## T94 — the bestiary's second pass: defences, and the abilities the engine could already express
+
+The question this started from was narrow: which monster abilities does the
+engine *already* have the mechanics for, for the monsters that actually turn up?
+"Actually turn up" is measurable — `core/scaler.gd` draws one faction, filters
+it to entries under `budget * BIGGEST_SHARE`, and cycles three ids into bodies —
+and simulating that draw across party levels, difficulties and seeds puts
+hobgoblin and hobgoblin-archer at ~9.4% of every body spawned in the game, spy
+and spy-archer at ~4.3%. Their statblock abilities (Martial Advantage, Sneak
+Attack, Cunning Action) needed no engine change at all: `passive_damage` with
+`requires: ["ally_adjacent_to_target"]` is the predicate pack tactics has used
+since T16, and `rogue-cunning-action` was already written.
+
+**The part that was data, not code.** 106 bestiary entries gained a feature.
+New templates for Martial Advantage, Sneak Attack (2d6 and the assassin's 4d6),
+Assassinate, Divine Eminence; existing templates re-tagged where T16's sweep had
+missed them (`monster-charm-gaze` *is* the dryad's Fey Charm, word for word;
+`monster-charge` was on the gnoll and not its archer variant). Numbers come from
+the SRD text at the commit `data/SCHEMA.md` pins, not from the regex-parsed
+`_notes`. Three archer variants were deliberately NOT given their melee twin's
+rider — the centaur's Charge is a pike attack, the wight's Life Drain and the
+weretiger's Pounce are melee actions, and a bow does not do any of them. Brute
+is not modelled either, on both monsters that have it: the SRD says "(included
+in the attack)" and the damage line already carries the extra die.
+
+**The part that was a bug.** `data/bestiary.json` has carried `resist`,
+`immune`, `vulnerable` and `cond_immune` on all 316 entries since F1b, and the
+engine threw every one of them away: `Adapter.from_monster` copies with a
+generic `c.set(k, v)`, and `Object.set()` on a property no script declares is a
+silent no-op — the same trap `core/combatant.gd` already documented for
+`damage_type`. 135 entries had a defence that did nothing. Four properties, a
+prose normaliser for the "from nonmagical weapons" clause (no weapon in this
+game is magical, silvered or adamantine, so the clause always holds), and the
+RAW order in `_damage_after_defenses`: immunity wins, then vulnerability
+doubles, then resistance halves once however many sources claim it.
+
+**The rest of Tier B**, each one contained: Magic Resistance (20 monsters) as a
+`save_modifier` passive plus a `magical` flag on the save path, which is what
+keeps it off a dragon's breath and a ghoul's claws; Parry (5) as a reaction that
+raises AC on a swing that would otherwise land; Undead Fortitude and Relentless
+(7) as one `survive_damage` hook in `_apply_damage`; Death Burst (4) as an
+`on_death` trigger in `_kill`. `_kill` also stopped being re-entrant, which was
+cosmetic before this pass and is not once a corpse can explode.
+
+**Senses and hiding.** `conditions.json` has carried `auto_fail: ["sight"]` on
+Blinded and `["hearing"]` on Deafened since T14 and nothing read them. Hiding is
+the engine's one perception check, so that is where they landed: `hide_dc_against`
+adds RAW advantage-as-+5 for a keen sense (~60 entries), suppresses it when the
+observer has lost every sense it relies on, and takes 5 off a watcher who cannot
+see at all. Blinding a wolf now costs it its eyes and leaves its nose working;
+blinding a hawk takes its Keen Sight entirely.
+
+**Balance.** `core/rules/power.gd` prices all of it, which is the mechanism that
+kept the curve inside its band without touching a single knob in `scaler.gd`: a
+tougher monster costs more budget, so the generator buys fewer of them. Both
+columns of the before/after are in `scaler.gd`'s TUNING header, measured
+back-to-back on master and on the branch with `tests/test_scaler.gd`'s own
+200-seed sweep. Every tier stayed ordered and inside the ±10 BAND; the
+per-boss numbers `campaign.gd`'s BOSS_POOL copies verbatim were re-copied. The
+cost that does not show up in a win rate is length: a level-8 fight went from
+~9.8 rounds to ~12. Resistance is duration, not difficulty.

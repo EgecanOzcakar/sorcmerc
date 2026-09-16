@@ -243,7 +243,16 @@ class Watched extends Combat:
 				t.invariant(int(r["dmg_detail"]["total"]) <= 2, "an archer's OA is an unarmed strike, not a shot",
 					"%s dealt %d" % [_who(attacker), int(r["damage"])])
 			t.invariant(attacker != turn_owner, "you don't OA on your own turn", _who(attacker))
-		if attacker.ranged and adjacent_enemy(attacker):
+		# Mirror _attack_mode's own condition, `melee` clause included: an archer's
+		# opportunity attack is an unarmed MELEE strike (asserted four lines up),
+		# so the point-blank rule never applied to it. Without the clause this
+		# invariant fires on a perfectly correct roll — an archer holding weapon
+		# mastery Vex takes an OA and gets the advantage Vex grants, with no
+		# disadvantage to cancel it. Latent since T20; T94's roster changes are
+		# only what walked the autoplay into it.
+		# (`oa` and not opts["melee"]: resolve_attack sets that flag on a COPY of
+		# opts, so the caller's dictionary — this one — never sees it.)
+		if attacker.ranged and not (oa or opts.get("melee", false)) and adjacent_enemy(attacker):
 			t.invariant(int(r["mode"]) != Dice.ADV, "point-blank shot never rolls with advantage", _who(attacker))
 		if bool(r.get("hit", false)):
 			t.invariant(int(r["damage"]) >= 0, "hit damage is non-negative")

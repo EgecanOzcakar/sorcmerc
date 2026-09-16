@@ -184,7 +184,8 @@
       "charmed"
     ],
     "duration": "round",
-    "uses": 1
+    "uses": 1,
+    "magical": true
   },
   "monster-petrifying-gaze": {
     "kind": "save_effect",
@@ -195,7 +196,8 @@
       "restrained"
     ],
     "duration": "round",
-    "uses": 1
+    "uses": 1,
+    "magical": true
   },
   "monster-web-shot": {
     "kind": "save_effect",
@@ -242,7 +244,8 @@
     "dice": {
       "count": 3,
       "sides": 6
-    }
+    },
+    "magical": true
   },
   "monster-pack-tactics": {
     "kind": "attack_modifier",
@@ -464,5 +467,215 @@
   "_test-nimble-stand": {
     "_note": "Test-only fixture for the stand_cost_mult hook (tests/test_conditions.gd). No real feature grants a stand-up discount yet — this proves the mechanism works once one does.",
     "stand_cost_mult": 0
+  },
+  "_note_t94": "T94: the second monster pass. Everything above is T16's library; these are the templates the engine could already express (or could after one contained addition apiece) and nothing had been authored for. Numbers come from each ability's real SRD text (5e-bits/5e-database @ the commit data/SCHEMA.md pins), not from the regex-parsed `_notes`. An authored `label` wins over the id-derived one, which is why an id may carry its threshold.",
+  "monster-martial-advantage": {
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "ally_adjacent_to_target"
+    ],
+    "dice": {
+      "count": 2,
+      "sides": 6
+    }
+  },
+  "monster-sneak-attack": {
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "advantage_or_ally_adjacent",
+      "not_disadvantage"
+    ],
+    "dice": {
+      "count": 2,
+      "sides": 6
+    }
+  },
+  "monster-sneak-attack-greater": {
+    "label": "Sneak Attack",
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "advantage_or_ally_adjacent",
+      "not_disadvantage"
+    ],
+    "dice": {
+      "count": 4,
+      "sides": 6
+    }
+  },
+  "monster-assassinate": {
+    "kind": "attack_modifier",
+    "cost": "none",
+    "trigger": "passive",
+    "requires": [
+      "target_has_not_acted"
+    ],
+    "self": "adv"
+  },
+  "monster-divine-eminence": {
+    "kind": "self_buff",
+    "cost": "bonus",
+    "status": "divine-eminence",
+    "bonus_damage": 10,
+    "damage_type": "radiant",
+    "uses": 1
+  },
+  "monster-magic-resistance": {
+    "kind": "save_modifier",
+    "cost": "none",
+    "trigger": "passive",
+    "vs": "magic",
+    "self": "adv"
+  },
+  "monster-parry-2": {
+    "label": "Parry",
+    "kind": "reaction",
+    "cost": "reaction",
+    "trigger": "would_be_hit",
+    "ac_bonus": 2
+  },
+  "monster-parry-3": {
+    "label": "Parry",
+    "kind": "reaction",
+    "cost": "reaction",
+    "trigger": "would_be_hit",
+    "ac_bonus": 3
+  },
+  "monster-undead-fortitude": {
+    "kind": "survive_damage",
+    "cost": "none",
+    "save": "con",
+    "dc": 5,
+    "dc_plus_damage": true,
+    "except": [
+      "radiant",
+      "critical"
+    ]
+  },
+  "monster-relentless-7": {
+    "label": "Relentless",
+    "kind": "survive_damage",
+    "cost": "none",
+    "max_damage": 7,
+    "uses": 1
+  },
+  "monster-relentless-10": {
+    "label": "Relentless",
+    "kind": "survive_damage",
+    "cost": "none",
+    "max_damage": 10,
+    "uses": 1
+  },
+  "monster-relentless-14": {
+    "label": "Relentless",
+    "kind": "survive_damage",
+    "cost": "none",
+    "max_damage": 14,
+    "uses": 1
+  },
+  "monster-death-burst": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_death",
+    "save": "dex",
+    "range_ft": 5,
+    "damage_type": "fire",
+    "dice": {
+      "count": 1,
+      "sides": 8
+    }
+  },
+  "monster-death-burst-ice": {
+    "label": "Death Burst",
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_death",
+    "save": "dex",
+    "range_ft": 5,
+    "halve_damage": true,
+    "damage_type": "slashing",
+    "dice": {
+      "count": 1,
+      "sides": 8
+    }
+  },
+  "monster-death-burst-greater": {
+    "label": "Death Burst",
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_death",
+    "save": "dex",
+    "range_ft": 10,
+    "halve_damage": true,
+    "damage_type": "fire",
+    "dice": {
+      "count": 2,
+      "sides": 6
+    }
+  },
+  "monster-keen-smell": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "smell"
+    ],
+    "passive_bonus": 5
+  },
+  "monster-keen-hearing": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "hearing"
+    ],
+    "passive_bonus": 5
+  },
+  "monster-keen-sight": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "sight"
+    ],
+    "passive_bonus": 5
+  },
+  "monster-keen-hearing-smell": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "hearing",
+      "smell"
+    ],
+    "passive_bonus": 5
+  },
+  "monster-keen-hearing-sight": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "hearing",
+      "sight"
+    ],
+    "passive_bonus": 5
+  },
+  "monster-keen-sight-smell": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "sight",
+      "smell"
+    ],
+    "passive_bonus": 5
   }
 }
