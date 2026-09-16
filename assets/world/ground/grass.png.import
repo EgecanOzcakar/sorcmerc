@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://devcrftco58cn"
-path="res://.godot/imported/terrain_alt.png-5b247dd07efca18c59d559b8e43e2925.ctex"
+uid="uid://c7lk0hv0em0es"
+path="res://.godot/imported/grass.png-6a908551e5be0a966ad612b7875398bf.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/world/overworld_alt/terrain_alt.png"
-dest_files=["res://.godot/imported/terrain_alt.png-5b247dd07efca18c59d559b8e43e2925.ctex"]
+source_file="res://assets/world/ground/grass.png"
+dest_files=["res://.godot/imported/grass.png-6a908551e5be0a966ad612b7875398bf.ctex"]
 
 [params]
 

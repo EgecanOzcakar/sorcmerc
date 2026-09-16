@@ -81,28 +81,6 @@ func _init() -> void:
 	check(beacon.size() == beacon_slow.size(),
 		"settlement beacons agree too (%d vs %d)" % [beacon.size(), beacon_slow.size()])
 
-	# --- the tile a cell draws is stable, and cached ----------------------
-	var probe := Vector2i(3, 7)
-	var first: Vector2i = main._ground_tile(probe)
-	check(main._tile_cache.has(probe), "the tile pick is remembered")
-	check(main._ground_tile(probe) == first, "...and comes back the same")
-	check(first.x in [0, 1, 2], "...naming one of the three sheets (%d)" % first.x)
-	# It has to be the same answer the old per-frame arithmetic gave.
-	var center := Vector2(probe.x + 0.5, probe.y + 0.5) * CELL
-	var cl: Vector2i = main._cluster(probe, main.TILE_CLUSTER)
-	var wet: float = 0.5 - main.world.water_depth(center) / (main.SHORE * 2.0)
-	var want_kind := 0
-	var want_pool: Array = main.GRASS
-	if main._rand(probe, 9) < wet:
-		want_kind = 2; want_pool = main.WATER
-	elif main._rand(cl, 5) > main.WOODED:
-		want_kind = 1; want_pool = main.FOREST
-	check(first.x == want_kind, "the cached sheet is the one the arithmetic picks")
-	check(first.y == want_pool[int(main._rand(cl, 1) * want_pool.size()) % want_pool.size()],
-		"...and so is the tile in it")
-	check(main._tile_sheet(0) == main._terrain_tex and main._tile_sheet(1) == main._forest_tex
-		and main._tile_sheet(2) == main._water_tex, "the sheet ids map to the right textures")
-
 	# --- the memo answers the same thing twice ---------------------------
 	main.world.explored.append(p.position + Vector2(4000, 4000))   # far off screen
 	var again: Dictionary = main._visible_ground(i0, i1, j0, j1)
@@ -110,6 +88,35 @@ func _init() -> void:
 	var moved: Dictionary = main._visible_ground(i0 + 400, i1 + 400, j0, j1)
 	check(moved.size() != beacon.size() or beacon.is_empty(),
 		"...but panning somewhere else does not hand back the old answer")
+
+	# --- the ground shader's mask: R forest, G water, B explored, per cell ----
+	main.world.add_water(Vector2(3000, 3000), 120.0)
+	var lake_cell := Vector2i(int(3000.0 / main.CELL), int(3000.0 / main.CELL))
+	var a0 := lake_cell.x - 20; var a1 := lake_cell.x + 20
+	var b0 := lake_cell.y - 20; var b1 := lake_cell.y + 20
+	main.world.explored.append(Vector2(3000, 3000))
+	var cells: Dictionary = main._visible_ground(a0, a1, b0, b1)
+	var tex: ImageTexture = main._build_mask(a0, a1, b0, b1, 1, cells)
+	var img := tex.get_image()
+	check(img.get_width() == 41 and img.get_height() == 41, "one texel per cell (%dx%d)" % [img.get_width(), img.get_height()])
+	var mid := img.get_pixel(20, 20)
+	check(mid.g > 0.99 and mid.r == 0.0 and mid.b > 0.99, "the lake's middle is water, not forest, and explored (%s)" % str(mid))
+	var far := img.get_pixel(0, 0)
+	check(far.g == 0.0, "the corner, 20 cells out, is dry")
+	check(main._build_mask(a0, a1, b0, b1, 2, cells).get_image().get_width() == 21, "step 2 halves the mask")
+	# a pan inside the padded box rebuilds nothing; leaving it does
+	main._pan = Vector2.ZERO
+	main.queue_redraw()
+	await process_frame
+	var key0: Array = main._mask_key.duplicate()
+	main._pan += Vector2(15, 5)
+	main.queue_redraw()
+	await process_frame
+	check(main._mask_key == key0, "a small pan keeps the mask (%s)" % str(key0))
+	main._pan += Vector2(4000, 1500)
+	main.queue_redraw()
+	await process_frame
+	check(main._mask_key != key0, "a long pan rebuilds it")
 
 	print("test_world_ground: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

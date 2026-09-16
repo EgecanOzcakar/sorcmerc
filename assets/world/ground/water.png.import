@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://sotrdghqhcwy"
-path="res://.godot/imported/terrain_sbs.png-7a2aacf71b25715b4d97b566c0be666c.ctex"
+uid="uid://bh6spekucsqar"
+path="res://.godot/imported/water.png-a6649bb0dc5be3b5b8505c471c162869.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/world/overworld_sbs/terrain_sbs.png"
-dest_files=["res://.godot/imported/terrain_sbs.png-7a2aacf71b25715b4d97b566c0be666c.ctex"]
+source_file="res://assets/world/ground/water.png"
+dest_files=["res://.godot/imported/water.png-a6649bb0dc5be3b5b8505c471c162869.ctex"]
 
 [params]
 

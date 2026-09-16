@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://lypiy2p7mwig"
-path="res://.godot/imported/forest_alt.png-4c9f8c02bc055b345de015b081d8e54c.ctex"
+uid="uid://djre0w8yrmk1s"
+path="res://.godot/imported/forest.png-3674b897bf7b2db8b0b9193b4e211bde.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/world/overworld_alt/forest_alt.png"
-dest_files=["res://.godot/imported/forest_alt.png-4c9f8c02bc055b345de015b081d8e54c.ctex"]
+source_file="res://assets/world/ground/forest.png"
+dest_files=["res://.godot/imported/forest.png-3674b897bf7b2db8b0b9193b4e211bde.ctex"]
 
 [params]
 
