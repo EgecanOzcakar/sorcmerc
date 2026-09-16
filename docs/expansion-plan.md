@@ -4280,6 +4280,8 @@ since `core/audio.gd` fires them as one-shots over live combat.
 
 **All 14 stings are now generated ones** — `assets/audio/sfx/` is the model's,
 `assets/audio/music/` and `assets/audio/barks/` are still the synthesized set.
+(`assets/audio/barks/` stopped being that on 2026-09-16 — see
+`docs/bug-fixes-2026-09-16.md`; `assets/audio/music/` is still synthesized.)
 Three things had to be true before a take was drop-in, and none of them were:
 
 1. **The API has a half-second floor** (`duration_seconds` under 0.5 is a 400)
@@ -4365,9 +4367,9 @@ the suite at all.
 
 `tools/gen_audio.py` grew `--only`, the same spelling its sibling already had,
 and it is load-bearing now rather than a convenience: `assets/audio/` is a
-**mixed** set — the stings are the ElevenLabs tool's, the beds and barks are
-the synthesized ones — so a bare `gen_audio.py sfx` would quietly overwrite 31
-generated takes with their synthesized versions. A bare name is matched across
+**mixed** set — the stings and (since 2026-09-16) the barks are the ElevenLabs
+tool's, the beds are the synthesized ones — so a bare `gen_audio.py sfx` would
+quietly overwrite 31 generated takes with their synthesized versions. A bare name is matched across
 every group and must be unambiguous, because `settlement` is now both a sting
 and a bed; `sfx/settlement` says which.
 

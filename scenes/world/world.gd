@@ -2870,6 +2870,11 @@ func _draw_ground() -> void:
 	m.set_shader_parameter("mask_texel", Vector2(1.0 / mw, 1.0 / mh))
 	m.set_shader_parameter("origin", _origin)
 	m.set_shader_parameter("zoom", _zoom)
+	# The shader reads its own rect in control units, not framebuffer pixels —
+	# the only coordinate space _origin and _zoom mean anything in. See the note
+	# on `rect_size` in the shader; without it the map is right at 1280x800 and
+	# wrong at every other window size (#58).
+	m.set_shader_parameter("rect_size", size)
 	m.set_shader_parameter("player", p.position if p != null else Vector2(1e9, 1e9))
 	m.set_shader_parameter("time_s", Time.get_ticks_msec() / 1000.0)
 

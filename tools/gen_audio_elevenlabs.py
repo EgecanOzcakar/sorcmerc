@@ -217,6 +217,20 @@ BARKS = {
 BARK_TAKES = 3
 BARK_SECONDS = 0.8
 BARK_INFLUENCE = 0.6
+# What a bark is allowed to last, whatever came back. `duration_seconds` is a
+# request, not a promise -- takes have come back at 2s and 3s for the 0.8s asked
+# -- and a bark is a stinger under one line of text, fired from an 8-voice
+# round-robin (core/audio.gd) while the fight moves on. A roar that holds a voice
+# for two and a half seconds is still going when the next character speaks. Over
+# this, the take is cut and faded out rather than thrown away: these are single
+# wordless sounds, so the end of one is a tail, never a word.
+BARK_MAX_SECONDS = 1.0
+# The fade that ends every bark, cut or not. A take that was cut obviously needs
+# one; so does one the model itself ended mid-shout, which is most of the short
+# ones -- tools/check_audio.py fails a one-shot whose last 10 ms are still loud,
+# because that is a voice stopping rather than a sound finishing. Squared, so the
+# last few milliseconds are already at nothing rather than a ramp cut short.
+BARK_FADE_MS = 120
 
 
 def jobs(groups, only, take=0):
@@ -287,6 +301,26 @@ def trim_and_normalize(pcm):
     vals = [max(-32768, min(32767, int(round(v * gain)))) for v in vals]
     return (struct.pack("<%dh" % len(vals), *vals),
             before, len(vals) / float(SR), peak)
+
+
+def cap(pcm, seconds, fade_ms=BARK_FADE_MS):
+    """Cut `pcm` to at most `seconds` and fade its last `fade_ms` out.
+
+    The cut is a no-op for anything already short enough; the fade is not, and
+    both are the point. Runs after trim_and_normalize, so the sound starts at
+    sample 0 and a cut lands on the sound rather than on the silence in front of
+    it.
+    """
+    n = len(pcm) // 2
+    keep = min(n, int(SR * seconds))
+    if keep <= 0:
+        return pcm, n / float(SR)
+    vals = list(struct.unpack("<%dh" % n, pcm))[:keep]
+    fade = min(keep, max(1, int(SR * fade_ms / 1000.0)))
+    for i in range(fade):
+        g = 1.0 - (i + 1) / float(fade)
+        vals[keep - fade + i] = int(round(vals[keep - fade + i] * g * g))
+    return struct.pack("<%dh" % len(vals), *vals), keep / float(SR)
 
 
 def wav(pcm):
@@ -363,6 +397,8 @@ def main():
             continue
         pcm = generate(key, prompt, secs, infl)
         pcm, was, now, peak = trim_and_normalize(pcm)
+        if group == "barks":
+            pcm, now = cap(pcm, BARK_MAX_SECONDS)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(wav(pcm))
