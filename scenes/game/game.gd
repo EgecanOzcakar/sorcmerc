@@ -341,6 +341,9 @@ func show_party_setup() -> void:
 	var screen = load(PARTY_SCENE).instantiate()
 	screen.party = party
 	wrap.add_child(screen)
+	# The Title/Campaigns and Begin buttons below sit in a row along the top of
+	# the wrapper; the screen starts under that row so its header stays clear.
+	screen.offset_top = 56
 
 	# T-worlds / T9x: three starting maps — small (4 settlements, hand-placed),
 	# large (8 settlements, hand-placed, scenes/world/large_world.gd), or
