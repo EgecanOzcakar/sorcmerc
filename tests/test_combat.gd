@@ -52,6 +52,7 @@ func _init() -> void:
 	test_spell_slot_spend()
 	test_reaction_and_concentration()
 	test_barks()
+	test_surrender()
 
 	print("test_combat: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -756,3 +757,9 @@ func _lucky_rng():
 	while RNG.new(s).roll_die(100) > load("res://core/barks.gd").CHANCE_PCT:
 		s += 1
 	return RNG.new(s)
+
+func test_surrender() -> void:
+	var cb = Combat.new(RNG.new(1), Encounter.all(), Encounter.board())
+	check(not cb.is_over() and cb.outcome() == "ongoing", "fresh fight is ongoing")
+	cb.surrender()
+	check(cb.is_over() and cb.outcome() == "Defeat", "surrender ends the fight as a defeat")

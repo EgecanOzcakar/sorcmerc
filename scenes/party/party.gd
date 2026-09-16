@@ -353,7 +353,7 @@ func _refresh() -> void:
 		_hint.text = "%s selected — click a party slot to place them, or click them again to cancel." \
 			% party.summary(_selected).get("name", "?")
 
-# One roster row: summary + select/bench/profile.
+# One roster row: summary + select/bench/profile/dismiss.
 func _card(sm: Dictionary) -> Control:
 	# A ledger row, not a card: alternate rows take a faint tint, the picked
 	# one a gilt bar down its left edge. The whole row is the pick button.
@@ -394,6 +394,28 @@ func _card(sm: Dictionary) -> Control:
 	prof.tooltip_text = "Open the character profile"
 	prof.pressed.connect(func(): _on_view_profile(sm["id"]))
 	row.add_child(prof)
+
+	# Dismissing is recruiting in reverse, so it shares the inn lock. The last
+	# member stays: an empty roster has nobody to walk the map.
+	var dismiss := Button.new()
+	Icons.clicks(dismiss)
+	dismiss.text = "Dismiss"
+	dismiss.disabled = roster_locked or party.roster.size() <= 1
+	dismiss.tooltip_text = locked_note if roster_locked \
+		else ("The last member cannot be dismissed" if party.roster.size() <= 1 else "Remove %s from the roster for good" % sm["name"])
+	dismiss.pressed.connect(func():
+		var dlg := ConfirmationDialog.new()
+		dlg.dialog_text = "Dismiss %s? They leave the company and cannot be recalled." % sm["name"]
+		dlg.ok_button_text = "Dismiss"
+		dlg.confirmed.connect(func():
+			party.remove_member(sm["id"])
+			_selected = ""
+			_refresh())
+		dlg.canceled.connect(dlg.queue_free)
+		dlg.confirmed.connect(dlg.queue_free)
+		add_child(dlg)
+		dlg.popup_centered())
+	row.add_child(dismiss)
 	return panel
 
 # One of the four marching-order slots. Clicking it places/swaps the selection.

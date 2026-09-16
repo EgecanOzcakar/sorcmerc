@@ -364,8 +364,16 @@ func begin_ambush_round() -> void:
 	if skips_turn(current()):
 		end_turn()
 
+# The party yielded (main.gd's Admit defeat). Resolves exactly like a wipe —
+# resolve_outcome and every caller only ever read outcome() — minus the wait.
+var surrendered := false
+
+func surrender() -> void:
+	surrendered = true
+	log.append("The party lays down its arms.")
+
 func is_over() -> bool:
-	return round_num > MAX_ROUNDS or _team_out("party") or _team_out("foe")
+	return surrendered or round_num > MAX_ROUNDS or _team_out("party") or _team_out("foe")
 
 func _team_out(team: String) -> bool:
 	for c in combatants:
@@ -376,7 +384,7 @@ func _team_out(team: String) -> bool:
 func outcome() -> String:
 	if _team_out("foe"):
 		return "Victory"
-	if _team_out("party"):
+	if surrendered or _team_out("party"):
 		return "Defeat"
 	return "ongoing"
 

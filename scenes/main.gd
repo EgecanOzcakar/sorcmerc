@@ -61,7 +61,7 @@ var _fx_on := false           # attack animations: off under SORCMERC_FAST / hea
 # label came off the button entirely. A 126x40 row that clipped "Burning Ha…"
 # is a 52x52 square that shows the whole spell. What stays on the face is the
 # hotkey, in the corner, and an upcast tier when there is one.
-const BTN_COLUMNS := 11   # the nine slots, Swap, End turn: one row
+const BTN_COLUMNS := 12   # the nine slots, Admit defeat, Swap, End turn: one row
 const BTN_SIZE := Vector2(52, 52)
 # T-hud: HP bar + condition tags, painted above every tier (see
 # Board._paint_token_hud / _draw_hud_overlay below) instead of inline in
@@ -828,6 +828,14 @@ func _slotted(h, opts: Array) -> Array:
 			meta["key"] = str(SLOTS.find(s) + 1)
 			o[3] = meta
 			out.append(o)
+	# Two clicks like an unspent End turn: yielding is a wipe without the wait.
+	# Sits before End turn, which Space/0 find by being last.
+	var yield_mark := _mark(Icons.verb_icon("back"), "⚐")
+	yield_mark["armed"] = _armed == "yield"
+	var yield_opt := _confirm_opt(h, "yield", "Admit defeat", func(): cb.surrender(); _finish())
+	yield_opt.append("Admit defeat\nThe fight ends as a loss.")
+	yield_opt.append(yield_mark)
+	out.append(yield_opt)
 	# T29: melee/ranged toggle — the slot is always there, live only for someone carrying both.
 	var swap := _attack_swap(h)
 	var swap_meta := _mark(Icons.verb_icon("swap"), "⇄")
