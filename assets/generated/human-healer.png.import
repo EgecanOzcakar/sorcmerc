@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/human-healer.png-0dc2ea5232d223a8b9b1ecc66a5c
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

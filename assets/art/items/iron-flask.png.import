@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/iron-flask.png-5b88b1cfadf5c39bb09c8015bb94ca
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

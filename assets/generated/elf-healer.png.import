@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/elf-healer.png-f6f64127398c007e96c88fa150fbd0
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

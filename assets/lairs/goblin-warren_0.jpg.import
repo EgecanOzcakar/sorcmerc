@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/goblin-warren_0.jpg-ecd050bd88ced9b7b5515064e
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

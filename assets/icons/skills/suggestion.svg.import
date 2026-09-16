@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/suggestion.svg-4e1ac3c65a9cd52c1f222a2719c0cc
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

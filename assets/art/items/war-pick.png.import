@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/war-pick.png-756daed61e3b1a0934c7c64566fbba10
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

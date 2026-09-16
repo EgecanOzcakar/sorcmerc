@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/horn-of-valhalla.png-76c535f11314a3428a0b9c20
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

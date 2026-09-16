@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/achievement-legendary_5.png-ff6a48f25e7a3e187
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

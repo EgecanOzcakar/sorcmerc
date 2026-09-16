@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/spellguard-shield.png-6b2ae0fe249bbc495c474e1
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

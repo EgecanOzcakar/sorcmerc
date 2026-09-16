@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/human-armorsmith.png-30b059cf8787cb0a4bc413cc
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

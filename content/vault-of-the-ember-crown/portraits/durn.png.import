@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/durn.png-12f581759c62d310299c3a0440d347ff.cte
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

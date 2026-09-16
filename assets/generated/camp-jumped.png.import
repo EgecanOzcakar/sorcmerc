@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/camp-jumped.png-054bd74bae4e25c0d53f5cb4b675d
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

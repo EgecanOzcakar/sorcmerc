@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/fire-bolt.svg-2d5869a0900fa528ec84cd77862c60c
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

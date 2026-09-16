@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/greataxe.png-f40e3d0bf817f8288f0c7e55c2ca1a40
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

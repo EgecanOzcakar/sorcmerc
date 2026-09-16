@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/monster-death-burst-greater.svg-641e9cf55e4bb
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

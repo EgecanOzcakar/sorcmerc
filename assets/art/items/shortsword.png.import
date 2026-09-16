@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/shortsword.png-604efacbad6fa267e9cff71bf1b279
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

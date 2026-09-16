@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/potion-of-flying.png-a08a9873d68f0f32591f44c7
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

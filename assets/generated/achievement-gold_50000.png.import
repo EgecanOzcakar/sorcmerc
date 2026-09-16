@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/achievement-gold_50000.png-94b240d8c22fa37109
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

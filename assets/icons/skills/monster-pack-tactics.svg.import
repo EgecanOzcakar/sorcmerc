@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/monster-pack-tactics.svg-4d748855a1f930c952dc
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

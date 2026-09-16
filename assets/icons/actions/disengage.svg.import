@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/disengage.svg-ada6d7bb6f3672eef914228078fed46
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

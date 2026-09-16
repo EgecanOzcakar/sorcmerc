@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/achievement-resurrect_5.png-83a8554fbf9b27759
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

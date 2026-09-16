@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/event-storm-fail.png-9c79a88567d75f32558589c1
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

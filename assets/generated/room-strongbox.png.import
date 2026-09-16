@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/room-strongbox.png-4f68f8a743f6ecc8d197b972de
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

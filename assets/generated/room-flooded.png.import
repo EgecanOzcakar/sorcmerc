@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/room-flooded.png-36d8b5c0838932ad529d908d7443
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

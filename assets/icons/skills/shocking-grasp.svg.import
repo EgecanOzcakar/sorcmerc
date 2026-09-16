@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/shocking-grasp.svg-39c687ddeb14c95bf33de34f06
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

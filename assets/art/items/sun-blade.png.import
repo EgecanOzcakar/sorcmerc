@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/sun-blade.png-3a4f0df2838f33fc43f33b0d2405738
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

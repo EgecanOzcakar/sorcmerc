@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/nine-lives-stealer.png-43dd9528983e2f8446c41d
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

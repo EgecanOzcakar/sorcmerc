@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/end_turn.svg-b0e565009f47c325ba3edcb2d23ad6af
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

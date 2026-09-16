@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/gauntlets-of-ogre-power.png-ac9fa84898de98917
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

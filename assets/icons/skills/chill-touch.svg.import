@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/chill-touch.svg-82ec5b33a41d567d1c124dc959686
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

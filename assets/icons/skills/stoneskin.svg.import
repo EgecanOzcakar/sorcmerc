@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/stoneskin.svg-c15cfe5c464adabeece5a1f043c0fc1
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

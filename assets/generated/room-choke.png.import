@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/room-choke.png-0f7444fe5990099353a1c943e4b587
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/orc-weaponsmith.png-28fc53d9bd8c07cb3bf5bf556
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

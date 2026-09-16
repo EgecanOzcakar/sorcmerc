@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/achievement-spells_500.png-86e2b08c59de4ea3d9
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/inn-elf.png-a688a2ee4a408e9cfd3bb5ee54f8abbc.
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

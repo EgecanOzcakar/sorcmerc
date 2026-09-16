@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/carpet-of-flying.png-aa6f53aeb10b58ae991c3e21
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

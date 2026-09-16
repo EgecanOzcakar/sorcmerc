@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/floor_shrine.png-db7ab5fa2af678d6a04a92e03401
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

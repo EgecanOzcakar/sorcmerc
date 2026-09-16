@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/sleep.svg-9bdba9f64fdd1af3478ba550fcadc613.ct
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

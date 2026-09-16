@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/philter-of-love.png-8a21b0ffeb13ec4ca655f1c26
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/wand-of-paralysis.png-605e78ac6327b50264b35a2
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/dragon-slayer.png-4e1c86d72d318413488fb3e16c5
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

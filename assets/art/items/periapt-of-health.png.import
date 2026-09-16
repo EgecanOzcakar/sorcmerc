@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/periapt-of-health.png-8b7db99ac5a2a2643480d96
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

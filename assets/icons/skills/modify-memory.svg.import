@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/modify-memory.svg-5ed3e0e3a162c5bb25a38296d67
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

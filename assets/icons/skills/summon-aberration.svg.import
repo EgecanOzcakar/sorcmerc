@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/summon-aberration.svg-8013fff2cb935c67f8a27ac
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

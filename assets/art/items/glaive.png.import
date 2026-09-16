@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/glaive.png-10ce29308cdca2da6e645490c353c2c1.c
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

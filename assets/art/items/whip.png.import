@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/whip.png-896ba9ea958bea4630e1ce2eb7fd1bef.cte
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

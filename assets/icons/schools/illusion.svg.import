@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/illusion.svg-49fc3d710755204348de629c361d6831
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

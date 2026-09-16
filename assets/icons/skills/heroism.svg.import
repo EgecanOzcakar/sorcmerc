@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/heroism.svg-dcf43c348bfac8f5cfa5efbb9229cbc1.
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

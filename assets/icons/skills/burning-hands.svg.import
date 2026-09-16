@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/burning-hands.svg-81d535f042dc4d8886bc17d5d45
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

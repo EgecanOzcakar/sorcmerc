@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/hammer-of-thunderbolts.png-21a04a51f78615a56b
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/dash.svg-1ab7a2c0db3d8d11d84c315eae981c0b.cte
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/banishment.svg-9f46b25583c54a334a1bc009dc41d4
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

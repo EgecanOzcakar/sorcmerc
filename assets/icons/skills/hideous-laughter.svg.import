@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/hideous-laughter.svg-759df90005818d7daba1b63a
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

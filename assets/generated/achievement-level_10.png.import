@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/achievement-level_10.png-a9ac103808d1c9e303f3
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

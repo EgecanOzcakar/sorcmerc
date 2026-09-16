@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/event-rough-going-fail.png-6d9d1e858f1ffa5a17
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

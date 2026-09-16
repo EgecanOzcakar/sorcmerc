@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/universal-solvent.png-289300bd52a6c0cac1d28cd
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

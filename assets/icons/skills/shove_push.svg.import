@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/shove_push.svg-89d6b61ad5154ece66a4fa343bea42
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/human-librarian-frown.png-4aabd9af10f18fe2329
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

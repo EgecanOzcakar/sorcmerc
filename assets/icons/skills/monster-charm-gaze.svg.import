@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/monster-charm-gaze.svg-432001613484bb31b537d6
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

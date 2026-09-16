@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/inn-human.png-348e08e6b4be5e586b28757a3c2bfa3
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

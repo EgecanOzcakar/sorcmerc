@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/event-shrine-pass.png-83004b751622645e5e2f2f4
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

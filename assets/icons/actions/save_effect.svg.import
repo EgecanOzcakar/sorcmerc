@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/save_effect.svg-de5d7d5927dee9bea3e0507f92864
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

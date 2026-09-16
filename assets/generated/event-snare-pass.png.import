@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/event-snare-pass.png-dec16868100d90df41254b0a
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

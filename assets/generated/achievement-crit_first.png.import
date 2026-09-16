@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/achievement-crit_first.png-59f8e4947b1dcbc14c
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

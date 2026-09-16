@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/event-waystone.png-9d6b90947f01a9989b79b446f9
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

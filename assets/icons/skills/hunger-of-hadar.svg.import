@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/hunger-of-hadar.svg-f00f2a7d94e023c59ea97b79e
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/ring-of-djinni-summoning.png-2c0b3c6e4e9bd855
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

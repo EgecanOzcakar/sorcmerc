@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/camp-watch.png-aeddfe128871e1a448b2b8d4abaecd
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

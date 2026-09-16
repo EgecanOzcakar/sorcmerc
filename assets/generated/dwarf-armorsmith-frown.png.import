@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/dwarf-armorsmith-frown.png-70cb176ad7123dbabc
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

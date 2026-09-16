@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/swap.svg-6a1da55376698c58865e5552b7913be1.cte
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

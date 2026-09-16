@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/quest-supply_item.png-02652773da94ea23954f5fd
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

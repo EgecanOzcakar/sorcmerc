@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/monster-stunning-blow.svg-69338f8d45818e4c2fc
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

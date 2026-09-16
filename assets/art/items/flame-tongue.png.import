@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/flame-tongue.png-a571422ff7cd2e26a29ffb9b2fcc
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/room-long-stair.png-a8b47d2f42239de5e0cf77caf
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

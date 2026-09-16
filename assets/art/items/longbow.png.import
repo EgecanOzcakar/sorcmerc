@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/longbow.png-e460c88760ad1e6691034612456d035c.
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

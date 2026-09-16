@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/summary-defeat.png-8c358522bf71499353a54a4f8d
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

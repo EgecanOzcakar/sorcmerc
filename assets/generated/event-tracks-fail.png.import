@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/event-tracks-fail.png-1386e414e68b796c760b357
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

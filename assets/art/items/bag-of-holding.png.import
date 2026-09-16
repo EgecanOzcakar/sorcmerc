@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/bag-of-holding.png-c9f911cb93e36db6d03a0970f3
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

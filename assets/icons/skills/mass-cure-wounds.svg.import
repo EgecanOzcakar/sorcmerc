@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/mass-cure-wounds.svg-8d6bfcaeca91b5bdf4a32cbc
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

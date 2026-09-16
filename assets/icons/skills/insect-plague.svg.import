@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/insect-plague.svg-4825b16bb6a126370669ef8d12d
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

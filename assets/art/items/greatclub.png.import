@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/greatclub.png-c5a713ca111cda1b0fce64017db6407
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

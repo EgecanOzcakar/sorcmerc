@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/dust-of-disappearance.png-2dc7cc4e8b7a604c496
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

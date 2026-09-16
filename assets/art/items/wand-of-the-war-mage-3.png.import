@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/wand-of-the-war-mage-3.png-b80143e194099c8734
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

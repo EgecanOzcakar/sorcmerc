@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/cloak-of-the-manta-ray.png-bcb0930f2aaf5ee9dd
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

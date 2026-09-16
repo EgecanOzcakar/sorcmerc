@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/compulsion.svg-8a00a862a07ab0f1f236c13e14d51a
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

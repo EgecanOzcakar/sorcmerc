@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/mace-of-terror.png-b266a0b58cfcb73c5ec99e7ebf
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

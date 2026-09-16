@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/goblin_std_0.jpg-280718d155927a676003af0b7c9a
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

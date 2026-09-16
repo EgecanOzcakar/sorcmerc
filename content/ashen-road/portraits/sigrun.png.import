@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/sigrun.png-9629e9776b7530523734a23f02574a83.c
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

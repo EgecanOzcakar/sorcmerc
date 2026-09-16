@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/rod-of-absorption.png-a511572bd1e14460b7c9c70
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

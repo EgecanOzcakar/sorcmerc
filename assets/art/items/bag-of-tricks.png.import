@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/bag-of-tricks.png-6805dc4a74c4247fdf5d2359102
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

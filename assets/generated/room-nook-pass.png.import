@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/room-nook-pass.png-5fdd8c35cecb3ea8706c103a8c
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

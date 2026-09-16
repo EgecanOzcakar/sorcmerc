@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/adamantine-armor.png-1a7c3b333066c165baa4600d
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

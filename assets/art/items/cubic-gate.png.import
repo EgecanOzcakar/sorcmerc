@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/cubic-gate.png-15d6abfec77f662e60bebd5e89b41e
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

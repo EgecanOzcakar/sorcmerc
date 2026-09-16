@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/medallion-of-thoughts.png-f4b1d12d74a5a3a5678
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

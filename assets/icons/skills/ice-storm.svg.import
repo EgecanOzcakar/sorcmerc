@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/ice-storm.svg-a94c73e6dab54b5342ed90d68b71c70
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

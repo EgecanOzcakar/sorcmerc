@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/boots-of-levitation.png-35f10aa31b696fb3d7ded
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

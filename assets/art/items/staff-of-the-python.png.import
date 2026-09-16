@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/staff-of-the-python.png-5556cfc663be19cb7490b
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/heal_self.svg-e01b6ac407052eae81b1a8b9086c057
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

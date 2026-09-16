@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/halberd.png-4f58393c20519c64b2db6767916fd1da.
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

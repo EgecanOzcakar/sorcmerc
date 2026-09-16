@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/light-hammer.png-b722965badff7f1fd8c52dad8cb2
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

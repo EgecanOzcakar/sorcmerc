@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/hellish-rebuke.svg-869d2ad35245229b5a4a0e8630
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

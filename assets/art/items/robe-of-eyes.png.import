@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/robe-of-eyes.png-8283dc5b8a43b096a9b2695c5ab6
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

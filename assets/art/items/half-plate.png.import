@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/half-plate.png-7dd0b6db5c3bdbec3380afa9e65566
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

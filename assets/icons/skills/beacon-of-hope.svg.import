@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/beacon-of-hope.svg-27e87f91eb355c03e2c3e7c3aa
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

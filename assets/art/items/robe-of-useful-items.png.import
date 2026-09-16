@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/robe-of-useful-items.png-63b8e238431f4dc54ac2
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

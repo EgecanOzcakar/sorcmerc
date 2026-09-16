@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/shield-1.png-19a436da0c62ee97dd853c622513c760
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

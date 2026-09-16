@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/event-toll-fail.png-b1ce49adaeb603a910df66ec9
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

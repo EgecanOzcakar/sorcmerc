@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/elf-armorsmith-frown.png-9f17b77ed7f8d6f204a9
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/armor-3.png-0252b0b6b9c3bdcffe3ce07cacb51b17.
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

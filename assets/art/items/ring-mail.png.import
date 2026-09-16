@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/ring-mail.png-e06e088c82e4b5f66ce8de9f8ee5eaa
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/elf-generalist-happy.png-0ccbe79c4d6a8ba936d9
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

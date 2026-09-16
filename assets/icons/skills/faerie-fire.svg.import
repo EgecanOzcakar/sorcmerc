@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/faerie-fire.svg-6fa92d4f3c05c636da1b7e7d2865f
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

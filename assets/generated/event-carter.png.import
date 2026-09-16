@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/event-carter.png-e103949813fcfd71624d810c3373
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/achievement-camp_first.png-6536c038f593203b07
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

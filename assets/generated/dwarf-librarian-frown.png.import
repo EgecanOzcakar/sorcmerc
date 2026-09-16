@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/dwarf-librarian-frown.png-642e2e13cb879f2c53d
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

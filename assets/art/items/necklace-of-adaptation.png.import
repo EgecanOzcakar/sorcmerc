@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/necklace-of-adaptation.png-a9c44a7ae09f315810
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

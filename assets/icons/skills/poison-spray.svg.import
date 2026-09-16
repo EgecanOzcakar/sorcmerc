@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/poison-spray.svg-edf9fa702c91b80e1588e9426a3a
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

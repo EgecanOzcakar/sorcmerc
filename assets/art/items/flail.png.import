@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/flail.png-23b0cdb3911f148a11dfc8bb72ab16b7.ct
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

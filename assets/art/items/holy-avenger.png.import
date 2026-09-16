@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/holy-avenger.png-bd16d4f7da245d8f6d7909e08c60
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

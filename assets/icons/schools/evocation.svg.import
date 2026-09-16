@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/evocation.svg-6470c20a09e1908699bc03eb0aae3ae
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

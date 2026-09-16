@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/cape-of-the-mountebank.png-08d0d9c905ff229cfb
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
