@@ -1754,7 +1754,9 @@ func _goto_market_tab(service: String) -> void:
 # which is the one binding a player will try without being told; the initials
 # jump straight to a building from anywhere inside the gates.
 func _unhandled_key_input(event: InputEvent) -> void:
-	if not (event is InputEventKey) or not event.pressed:
+	# `echo` is the key repeat: a held Space used to re-toggle the pause every
+	# repeat, so the clock ran only while the key was down. One press, one toggle.
+	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	# The one binding that works everywhere on the map, in a town or out of it:
 	# a bug you can only report from the town square is a bug you lose.
