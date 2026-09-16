@@ -16,16 +16,22 @@ const SettlementKit := preload("res://scenes/world/settlement_kit.gd")
 # way — whatever neither source covers drops through has_model() to the 2D
 # BuildingTex sprite tier, exactly as before.
 #
+#   "glb"  the twelve dioramas in assets/settlements/, REBUILT low-poly:
+#          8k flat-faceted triangles carrying their old atlas as vertex colour
+#          (tools/lowpoly_glb.py). Real building shapes, twelve fixed looks.
 #   "kit"  settlement_kit.gd assembles one from primitives, seeded per
-#          settlement id. ~1.2k triangles for a city, no texture, and a
-#          different village per id.
-#   "glb"  the Meshy dioramas in assets/settlements/: 82k triangles and a
-#          2048 atlas per (faction, kind), twelve fixed looks in total.
+#          settlement id. ~2k triangles for a city, no texture at all, and a
+#          different village per id — the thing twelve fixed models cannot do.
+#
+# "glb" is the default because at the size a settlement is drawn the rebuilt
+# models read as buildings and the kit reads as blocks; the kit stays because
+# it is the only source with per-settlement variety, and because it is what
+# covers a faction or size the twelve models do not.
 #
 # A static var rather than a const because it is a comparison switch, not a
 # setting: tests/shot_settlement_kit.gd flips it to shoot both sources through
 # the same rig, which is the only honest way to look at the two side by side.
-static var source := "kit"
+static var source := "glb"
 
 # The GLB lookup, one model per (faction, kind) — not per settlement instance,
 # so under "glb" two towns of the same race are the same building (that's
@@ -37,6 +43,31 @@ const MODELS := {
 	"human": {"camp": "res://assets/settlements/human_camp.glb", "town": "res://assets/settlements/human_town.glb", "city": "res://assets/settlements/human_city.glb"},
 	"orc": {"camp": "res://assets/settlements/orc_camp.glb", "town": "res://assets/settlements/orc_town.glb", "city": "res://assets/settlements/orc_city.glb"},
 }
+# The one material every rebuilt model wears. The low-poly pass threw the 2048
+# atlas away and baked it into COLOR_0, and glTF's own material does not say
+# "use those" — without this the whole settlement imports flat white. It is also
+# where the kit's look comes from: no albedo map, high roughness, no specular,
+# so the only shading is the diorama rig's sun and an edge stays an edge at 10px.
+static var _flat_material: StandardMaterial3D = null
+
+static func _flat() -> StandardMaterial3D:
+	if _flat_material == null:
+		_flat_material = StandardMaterial3D.new()
+		_flat_material.vertex_color_use_as_albedo = true
+		_flat_material.roughness = 0.92
+		_flat_material.metallic = 0.0
+		_flat_material.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	return _flat_material
+
+
+# Public because anything that instantiates one of these models has to do it —
+# the gallery shot (tests/shot_settlement_kit.gd) included. Forgetting it is not
+# subtle: the settlement renders flat white.
+static func dress(m: Node3D) -> void:
+	for mesh in m.find_children("*", "MeshInstance3D", true, false):
+		(mesh as MeshInstance3D).material_override = _flat()
+
+
 # Target screen height in px at zoom 1 (matching the 2D sprite tier's own
 # h = r * factor in World._draw_settlement — 26/17/12 * 3.2/2.8/2.4), divided
 # by World.ISO_GAIN to convert to world units. World's map coordinates are a
@@ -87,6 +118,15 @@ func _build(s) -> Node3D:
 		return null
 	var m := scene.instantiate()
 	_fit_height(m, float(TARGET_HEIGHT.get(s.kind, 1.0)))
+	dress(m)
+	# There are twelve models and a map has more settlements than that, so two
+	# towns of the same faction ARE the same model. A seeded yaw is the cheapest
+	# thing that stops them reading as copy-paste: enough to change which gable
+	# faces the camera, not enough to swing a diorama's lit side away from the
+	# sun the whole map shares.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("%s/%s" % [s.id, s.faction])
+	m.rotate_y(deg_to_rad(rng.randf_range(-22.0, 22.0)))
 	return m
 
 

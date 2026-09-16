@@ -95,7 +95,11 @@ func _init() -> void:
 	for i in 200:
 		var bodies: Array = []
 		for part in Kit.plan("human", "city", "city-%d" % i):
-			if String(part["role"]) == "wall":     # house bodies only
+			# Dwellings only. This used to filter on role == "wall" and got the
+			# right answer by accident; the kitbash set broke the accident (a
+			# stall's counter and a totem's skull are wall-coloured too), so the
+			# plan now tags the thing people live in.
+			if String(part.get("tag", "")) == "dwelling":
 				bodies.append(part)
 		var hits := 0
 		for a in bodies.size():
@@ -123,13 +127,29 @@ func _init() -> void:
 		"a camp costs less than a city")
 
 	# --- gates: a wall you can see through somewhere -------------------------
+	# Counted on the RING, not over the whole plan: the kitbash set puts posts
+	# inside the town as well now (a well's winch, a stall's uprights, a totem),
+	# and those are not the palisade. Anything standing out at 0.9R or further
+	# is, since the houses stop at 0.88R and the wall goes up at 1.02R.
 	for faction in factions:
+		var ring: float = float(Kit.PLANS["town"]["radius"]) * 0.9
 		var posts := 0
 		for part in Kit.plan(faction, "town", "gated"):
-			if String(part["part"]) == "post":
+			var pos: Vector3 = part["pos"]
+			if String(part["part"]) == "post" and Vector2(pos.x, pos.z).length() >= ring:
 				posts += 1
 		check(posts == 20, "%s town's palisade has a 2-post gate gap (got %d of 22)"
 			% [faction, posts])
+		# ...and the gate is a gate: two squared gateposts and a lintel standing
+		# in the gap the ring left, which is what _gatehouse() puts there.
+		var gate_parts := 0
+		for part in Kit.plan(faction, "town", "gated"):
+			var pos2: Vector3 = part["pos"]
+			if String(part["part"]) == "box" and String(part["role"]) == "post" \
+					and Vector2(pos2.x, pos2.z).length() >= ring:
+				gate_parts += 1
+		check(gate_parts == 3, "%s town's gate is two posts and a lintel (got %d)"
+			% [faction, gate_parts])
 
 	# --- build(): the nodes actually come out --------------------------------
 	var node: Node3D = Kit.build("dwarf", "city", "khazduin")
@@ -153,7 +173,13 @@ func _init() -> void:
 	node.free()
 	other.free()
 
-	check(Settlements3D.source == "kit", "the kit is the default source")
+	# The rebuilt low-poly models are what the map draws (see settlements3d.gd's
+	# header for why); the kit is the source with per-id variety and the one
+	# that covers anything those twelve files do not, so it stays tested either
+	# way. If this flips, it should flip deliberately.
+	check(Settlements3D.source == "glb", "the rebuilt models are the default source")
+	check(Settlements3D.MODELS.size() == Kit.PROFILES.size(),
+		"...and the kit still answers for every faction they do")
 
 	print("test_settlement_kit: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

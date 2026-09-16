@@ -4859,3 +4859,81 @@ new hook is gated on it, and so is the old one.
 they are earned, which is the ones that would otherwise read as a to-do list
 ("go and lose a fight", "get caught stealing") or spoil their own joke. The
 rest show their progress bar while they are locked.
+
+## T19c — the twelve settlement models, rebuilt low-poly, and a kit with a town in it
+
+Two things were wrong with the settlement dioramas, and they wanted opposite
+fixes. `assets/settlements/*.glb` were Meshy text-to-3D output: real building
+shapes, but 82k fused triangles under a 2048 atlas of 3.3k-5.3k tiny UV
+islands, which at the 29-83px a settlement is actually drawn averages to one
+brown. `settlement_kit.gd` answered that by building the opposite thing out of
+primitives — crisp, seeded per settlement id, and, once you looked at it beside
+the models it was replacing, too plain to be a town.
+
+**The models were rebuilt rather than replaced.** `tools/lowpoly_glb.py` runs
+four steps, each of which needs the one before it:
+
+1. **Weld.** Meshy splits a vertex at every UV seam (67,847 vertices for 82,219
+   faces). Decimating that collapses nothing and shreds the model into
+   confetti; welding first gets to 41,269 shared vertices. Colour is sampled
+   from the atlas *before* the weld, while the UVs still exist.
+2. **Smooth** (Taubin), to take the reconstruction fuzz off before the
+   decimator spends triangles describing it.
+3. **Decimate** 82k → 4k. Quadric error collapses flat regions first, so a roof
+   slope becomes two triangles and the ridge between slopes survives.
+4. **Facet**, and punch the colour. One normal and one colour per triangle.
+   This is the step that reads as "sharp": the same mesh with interpolated
+   normals is a lump of clay, and faceted it is planes meeting at a line.
+
+Measured, not guessed: **the face budget is the smoothing control.** Taubin
+converges — 14, 35 and 60 iterations render identically, and raising lambda to
+0.75 changes almost nothing. What visibly takes the lumps out is decimating
+harder, because the same noisy wall described with a quarter of the triangles
+*is* fewer, bigger, flatter planes. 8k still reads busy; 4k is where a roof
+becomes a roof; 3k starts rounding a tent off.
+
+`assets/settlements/` went **54 MB → 8.2 MB**: 44 MB of .glb down to 4.7 MB,
+and the 48 extracted atlas .jpg/.import files deleted outright, because the
+colour lives in the mesh now. The originals are in git history; the tool is
+re-runnable against them. Godot needs `vertex_color_use_as_albedo` to show any
+of it, so `Settlements3D.dress()` puts one shared flat material on every
+instance — forget it and the settlement renders white, which is exactly what
+the gallery shot did until it called the same helper.
+
+`Settlements3D.source` now defaults to `"glb"`. Twelve models still means two
+towns of a faction are the same model, so each instance takes a seeded yaw off
+its settlement id — enough to change which gable faces the camera, not enough
+to swing its lit side away from the sun the map shares.
+
+**The kit got its detail pass anyway**, because it is still the only source
+that draws a different town per id:
+
+* **Camps are camps.** A camp builds tents (the roof shape resting on the
+  ground with a pole through it) instead of little houses, and its landmark is
+  a standard on a mast, not a keep. Dwarves are the exception and hut it.
+* **One landmark per faction**, not one shape in four palettes: a keep with a
+  side tower, a tiered elven spire, a forge hall under a chimney that runs the
+  full height from the ground, a longhouse under a totem.
+* **A kitbash set** — `DRESSING` — of wells, market stalls, carts, ore carts,
+  mine heads, woodpiles, haystacks, trees, standing stones, totems, trophy
+  stakes and cook fires, placed at golden angles in the gaps the houses left.
+  A new `ember` palette role carries the one lit thing in a settlement.
+* **Houses grow things**: a jetty, a lean-to annex, a porch, a dormer, a dark
+  door, a ridge beam — all on the inward face, which is the side the map camera
+  sees and the one direction that cannot push a part out through the footprint.
+* **A gate that is a gate**: two squared gateposts and a lintel in the gap the
+  palisade leaves, at the wall's own scale.
+
+Three things the tests learned along the way. Dwellings are now **tagged** in
+the plan rather than identified by `role == "wall"`, because a stall's counter
+and a totem's skull are wall-coloured too and the overlap test was quietly
+counting them. Palisade posts are counted **on the ring**, since the kit puts
+posts inside the town now. And a house that cannot find room is rebuilt at
+three-fifths size instead of being placed inside its neighbour, which is what a
+crowded town does anyway.
+
+The palettes, meanwhile, come out of the game's own painted art rather than the
+eye: `tools/palette_from_art.py --ring assets/generated/<faction>-*.png` drops
+the middle of each counter portrait and quantises what is left, which is the
+room behind the shopkeeper — the only painted architecture each faction has.
+Hues only; the value spread stays deliberate, or the whole thing goes brown.
