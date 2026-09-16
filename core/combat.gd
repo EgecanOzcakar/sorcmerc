@@ -228,6 +228,10 @@ func begin_turn() -> void:
 
 func begin_turn_for(c) -> void:
 	c.new_turn()   # action/bonus/reaction/move + turn-long statuses (spec §7)
+	# An answer is given for one trigger. Anything still sitting here was asked
+	# about something that never happened — the caster died first, the swing
+	# went elsewhere — and must not be spent on whatever comes next.
+	reaction_intent.clear()
 	var held = c.statuses.get("concentrating")
 	if held is Dictionary and round_num >= int(held.get("until_round", 0)):
 		_end_concentration(c, "lets %s lapse" % Effects.humanize(String(held["spell"])))
@@ -433,6 +437,11 @@ func _basic(id: String) -> Dictionary:
 		if b["id"] == id:
 			return b
 	return {}
+
+# The plain Attack, for a caller that has to name the swing resolve_attack()
+# makes without going through perform() — ai.gd, offering reactions before it.
+func attack_verb() -> Dictionary:
+	return _basic("attack")
 
 # Every verb that is a BUTTON for `actor` at all — this instant or later in the
 # fight. Split from available() so scenes/main.gd can lay its action bar out
@@ -1025,6 +1034,96 @@ var _reaction_depth: int = 0
 # throw (DC 10 + the spell's level)". A bigger spell is a bigger target.
 const COUNTER_DC_BASE := 10
 
+# --- being asked first --------------------------------------------------
+#
+# A reaction that spends a spell slot is a real decision — the fight can turn on
+# whether that 3rd-level slot went on stopping this spell or on casting your own
+# next round — so the player gets to make it. A reaction that costs nothing
+# (an opportunity attack, Uncanny Dodge) never asks: there is only one sensible
+# answer and a question with one answer is a key press, not a choice.
+#
+# The question cannot be asked from in here. GDScript cannot block, so a
+# straight-line resolver can never stop mid-call and wait for a click
+# (combat-design.md §2 — the reason prompts were cut in the first place). So the
+# asking happens one step EARLIER, from whoever is about to call the resolver:
+# they call offer_reactions() — the one function in this file that can suspend —
+# and it records the answers here. fire_reactions() then reads them back
+# synchronously at the moment the trigger fires, and everything below it stays
+# exactly as straight-line as it was.
+#
+# With no decider installed (the whole test suite, every headless run, and the
+# game with prompts turned off) offer_reactions() returns without suspending and
+# nothing else changes shape at all.
+var reaction_decider: Callable = Callable()
+var reaction_decider_team := "party"
+
+# "<reactor id>|<verb id>" -> bool. Written by offer_reactions(), read once by
+# fire_reactions() and erased on the way — a yes is good for the trigger it was
+# given for and no other, and begin_turn_for() drops whatever went unused.
+var reaction_intent := {}
+
+# Does spending this reaction cost `c` something it could want later?
+func reaction_costs_resource(v: Dictionary) -> bool:
+	return int(v.get("slot_level", 0)) > 0 or v.has("pool")
+
+# Is this one the decider gets a say in?
+func asks_first(c, v: Dictionary) -> bool:
+	return reaction_decider.is_valid() and c.team == reaction_decider_team \
+		and reaction_costs_resource(v)
+
+# The triggers `actor` doing `v` at `target` is about to fire, as
+# [trigger, ctx] — a pure prediction, no rolls, no state touched. It is the
+# same shape fire_reactions() will be called with when the action resolves,
+# which is what makes an answer given here good for the trigger that follows.
+func reaction_triggers_for(actor, v: Dictionary, target) -> Array:
+	var kind := String(v.get("kind", "attack"))
+	if kind == "spell":
+		return [["spell_cast",
+			{"caster": actor, "verb": v, "level": int(v.get("slot_level", 0))}]]
+	if kind in ["attack", "offhand_attack"] and target != null and not (target is Vector2i):
+		# A swing fires both halves — one before the damage lands, one after —
+		# so both are offered. The blow has not been rolled yet, so this is a
+		# commitment made against the hit chance rather than against the damage:
+		# answer for the case where it lands, and nothing is spent if it misses.
+		var ctx := {"attacker": actor, "target": target}
+		return [["hit_by_attack", ctx], ["damaged_by_attack", ctx]]
+	return []
+
+# Everyone the decider should be asked about before `actor` does `v` at
+# `target`, as [reactor, verb, trigger, ctx]. Pure query — the UI renders it,
+# the tests assert it, and nothing here spends anything.
+func pending_reactions(actor, v: Dictionary, target) -> Array:
+	var out: Array = []
+	if not reaction_decider.is_valid():
+		return out
+	for pair in reaction_triggers_for(actor, v, target):
+		var trigger: String = pair[0]
+		var ctx: Dictionary = pair[1]
+		for r in reactors_for(trigger, ctx):
+			if asks_first(r[0], r[1]):
+				out.append([r[0], r[1], trigger, ctx])
+	return out
+
+# Put the question, record the answer. THE ONE SUSPENDING FUNCTION IN THIS FILE:
+# with no decider it returns without ever reaching an await, which is why every
+# synchronous caller of perform()/resolve_attack() in the suite is untouched by
+# any of this. Callers that DO install a decider must await it.
+func offer_reactions(actor, v: Dictionary, target) -> void:
+	for ask in pending_reactions(actor, v, target):
+		var yes = await reaction_decider.call(ask[0], ask[1], ask[2], ask[3])
+		reaction_intent["%s|%s" % [ask[0].id, ask[1]["id"]]] = bool(yes)
+
+# What the decider said, if it was asked. A reaction nobody was asked about
+# fires the way it always did — the answer to "should this spend a slot without
+# asking" is only ever no when somebody was there to ask.
+func _intends(c, v: Dictionary) -> bool:
+	var key := "%s|%s" % [c.id, v["id"]]
+	if not reaction_intent.has(key):
+		return true
+	var yes: bool = bool(reaction_intent[key])
+	reaction_intent.erase(key)   # good for this trigger, not the next one
+	return yes
+
 # The cheapest answer `c` holds to `trigger`, or {} for none it can pay for
 # right now. Cheapest because upcasting a reaction buys nothing this engine
 # reads — a 5th-level slot counters exactly what a 3rd-level one does.
@@ -1106,6 +1205,9 @@ func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
 		# The list was taken before any of it resolved: an earlier answer may
 		# have dropped this one, or spent the slot it was going to pay with.
 		if not c.conscious() or not _reaction_affordable(c, v):
+			continue
+		if not _intends(c, v):
+			log.append("%s holds their reaction." % c.cname)
 			continue
 		if not _spend(c, "reaction"):
 			continue

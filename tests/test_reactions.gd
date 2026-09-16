@@ -40,6 +40,13 @@ func _init() -> void:
 	test_counterspell_can_itself_be_counterspelled()
 	test_the_dispatcher_still_carries_the_feature_reactions()
 	test_a_blow_is_answered_after_it_lands()
+	test_nobody_is_asked_unless_a_decider_is_installed()
+	test_only_a_reaction_that_costs_something_asks()
+	test_holding_the_reaction_spends_nothing()
+	test_saying_yes_spends_it()
+	test_an_answer_is_good_for_one_trigger_only()
+	test_the_offer_predicts_what_the_action_will_fire()
+	test_the_foe_side_is_never_asked()
 	print("test_reactions: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -304,3 +311,164 @@ func test_a_blow_is_answered_after_it_lands() -> void:
 	check(def.econ["reaction"] == 0, "which the rebuke answers with its reaction")
 	check(def.slots[0] == 3, "spending a 1st-level slot")
 	check(atk.hp < hp_before, "and the attacker burns for it")
+
+# --- being asked first --------------------------------------------------
+#
+# A reaction that spends a slot is the player's call, so combat.gd can be given
+# a decider and will not spend one without an answer. It still cannot stop to
+# ask from inside the resolver (GDScript cannot block, combat-design.md §2), so
+# the question is put one step earlier — offer_reactions(), the only suspending
+# function in the engine — and read back synchronously when the trigger fires.
+
+# Records every question it is asked and answers them all the same way.
+class Decider:
+	extends RefCounted
+	var answer: bool
+	var asked: Array = []
+	func _init(a: bool) -> void:
+		answer = a
+	func decide(reactor, v: Dictionary, trigger: String, _ctx: Dictionary) -> bool:
+		asked.append("%s:%s:%s" % [reactor.id, v["id"], trigger])
+		return answer
+
+func test_nobody_is_asked_unless_a_decider_is_installed() -> void:
+	var d := _duel()
+	var cb: Combat = d[0]
+	var atk = d[1]
+	var def = d[2]
+	atk.saves["con"] = ALWAYS_FAILS
+	check(cb.pending_reactions(atk, atk.verb("guiding-bolt"), def).is_empty(),
+		"with no decider there is nobody to ask")
+	cb.offer_reactions(atk, atk.verb("guiding-bolt"), def)   # returns without suspending
+	check(cb.reaction_intent.is_empty(), "so no answer is recorded")
+	var res := cb.perform(atk, atk.verb("guiding-bolt"), def)
+	check(res.get("countered", false),
+		"and the reaction fires by itself, exactly as it did before any of this")
+
+func test_only_a_reaction_that_costs_something_asks() -> void:
+	# Uncanny Dodge spends no slot and no pool, so it is never a question —
+	# there is one sensible answer to "halve this for free" and it is yes. The
+	# same trigger with a slot on it IS a question, which is what makes the test
+	# about the cost rather than about the trigger.
+	var d := _duel()
+	var cb: Combat = d[0]
+	var atk = d[1]
+	var def = d[2]
+	var dec := Decider.new(false)
+	cb.reaction_decider = dec.decide
+	var free_verb := {"id": "rogue-uncanny-dodge", "kind": "reaction", "cost": "reaction",
+		"label": "Uncanny Dodge", "trigger": "hit_by_attack", "halve_damage": true}
+	check(not cb.reaction_costs_resource(free_verb), "a feature reaction costs no resource")
+	check(cb.reaction_costs_resource(def.verb("counterspell")), "Counterspell costs a slot")
+	def.verbs.append(free_verb)
+	check(cb.reactors_for("hit_by_attack", {"attacker": atk, "target": def}).size() == 1,
+		"the free reaction is eligible for this swing")
+	cb.offer_reactions(atk, cb.attack_verb(), def)
+	check(dec.asked.is_empty(), "eligible, and still never offered — it costs nothing")
+	var out := cb.fire_reactions("hit_by_attack", {"attacker": atk, "target": def, "damage": 10})
+	check(out["damage"] == 5 and def.econ["reaction"] == 0,
+		"and it fires on its own, unasked")
+
+	# Same trigger, same moment, but a slot behind it: now it is asked.
+	var d2 := _duel()
+	var cb2: Combat = d2[0]
+	var dec2 := Decider.new(false)
+	cb2.reaction_decider = dec2.decide
+	var paid := {"id": "shield", "kind": "spell", "cost": "reaction", "label": "Shield",
+		"trigger": "hit_by_attack", "slot_level": 1, "halve_damage": true}
+	d2[2].verbs.append(paid)
+	cb2.offer_reactions(d2[1], cb2.attack_verb(), d2[2])
+	check(dec2.asked == ["sel:shield:hit_by_attack"], "a slot on the same trigger is a question")
+
+func test_holding_the_reaction_spends_nothing() -> void:
+	var d := _duel()
+	var cb: Combat = d[0]
+	var atk = d[1]
+	var def = d[2]
+	atk.saves["con"] = ALWAYS_FAILS
+	var dec := Decider.new(false)
+	cb.reaction_decider = dec.decide
+	var bolt: Dictionary = atk.verb("guiding-bolt")
+	cb.offer_reactions(atk, bolt, def)
+	check(dec.asked == ["sel:counterspell:spell_cast"], "the answerer is asked, once")
+	var res := cb.perform(atk, bolt, def)
+	check(not res.get("countered", false), "a held reaction stops nothing")
+	check(def.econ["reaction"] == 1 and def.slots[2] == 2, "and costs neither reaction nor slot")
+	check(atk.slots[0] == 3, "the spell went off, so its own slot is spent")
+	check(_log_has(cb, "holds their reaction"), "the log says the choice was made")
+
+func test_saying_yes_spends_it() -> void:
+	var d := _duel()
+	var cb: Combat = d[0]
+	var atk = d[1]
+	var def = d[2]
+	atk.saves["con"] = ALWAYS_FAILS
+	var dec := Decider.new(true)
+	cb.reaction_decider = dec.decide
+	var bolt: Dictionary = atk.verb("guiding-bolt")
+	cb.offer_reactions(atk, bolt, def)
+	var res := cb.perform(atk, bolt, def)
+	check(res.get("countered", false), "a yes counters the spell")
+	check(def.econ["reaction"] == 0 and def.slots[2] == 1, "paying the reaction and the slot")
+	check(atk.slots[0] == 4, "and the countered caster keeps its own")
+
+func test_an_answer_is_good_for_one_trigger_only() -> void:
+	# A yes is given to a question about one spell. The next cast is a new
+	# question, and if nobody asked it the engine must not reuse the old answer.
+	var d := _duel(["guiding-bolt"], ["counterspell"])
+	var cb: Combat = d[0]
+	var atk = d[1]
+	var def = d[2]
+	atk.saves["con"] = ALWAYS_FAILS
+	var dec := Decider.new(true)
+	cb.reaction_decider = dec.decide
+	cb.offer_reactions(atk, atk.verb("guiding-bolt"), def)
+	check(cb.reaction_intent.size() == 1, "the answer is on the books")
+	cb.perform(atk, atk.verb("guiding-bolt"), def)
+	check(cb.reaction_intent.is_empty(), "and consumed by the trigger it was given for")
+	cb.begin_turn_for(def)
+	cb.offer_reactions(atk, atk.verb("guiding-bolt"), def)
+	cb.begin_turn_for(def)
+	check(cb.reaction_intent.is_empty(), "an answer to something that never happened is dropped")
+
+func test_the_offer_predicts_what_the_action_will_fire() -> void:
+	# The whole design rests on this: the trigger predicted before the action is
+	# the trigger the resolver actually fires, or the answer belongs to the
+	# wrong question.
+	var d := _duel(["guiding-bolt"], ["hellish-rebuke"])
+	var cb: Combat = d[0]
+	var atk = d[1]
+	var def = d[2]
+	atk.pos = Vector2i(5, 1)
+	var dec := Decider.new(false)
+	cb.reaction_decider = dec.decide
+	check(cb.reaction_triggers_for(atk, atk.verb("guiding-bolt"), def)[0][0] == "spell_cast",
+		"a cast is predicted as spell_cast")
+	var swing: Array = cb.reaction_triggers_for(atk, cb.attack_verb(), def)
+	check(swing.map(func(t): return t[0]) == ["hit_by_attack", "damaged_by_attack"],
+		"a swing is predicted as both of its halves, before and after the damage")
+	check(cb.reaction_triggers_for(atk, cb._basic("dodge"), null).is_empty(),
+		"and Dodge fires nothing at all")
+	# The swing: asked before the d20, so a miss costs the answerer nothing.
+	cb.offer_reactions(atk, cb.attack_verb(), def)
+	check(dec.asked == ["sel:hellish-rebuke:damaged_by_attack"], "the rebuke is the question")
+	atk.atk_bonus = 100
+	atk.damage = "1d4"
+	var hp_before: int = atk.hp
+	cb.resolve_attack(atk, def)
+	check(def.econ["reaction"] == 1 and def.slots[0] == 4, "held: nothing spent")
+	check(atk.hp == hp_before, "and the attacker takes nothing back")
+
+func test_the_foe_side_is_never_asked() -> void:
+	# The decider speaks for one side. A monster's reaction is the engine's to
+	# resolve, and a fight must not stop to ask the player about it.
+	var d := _duel(["guiding-bolt"], ["counterspell"])
+	var cb: Combat = d[0]
+	var dec := Decider.new(false)
+	cb.reaction_decider = dec.decide
+	cb.reaction_decider_team = "foe"          # the answerer is now on the other side
+	cb.offer_reactions(d[1], d[1].verb("guiding-bolt"), d[2])
+	check(dec.asked.is_empty(), "a party reaction is not this decider's to answer")
+	check(not cb.asks_first(d[2], d[2].verb("counterspell")), "asks_first agrees")
+	cb.reaction_decider_team = "party"
+	check(cb.asks_first(d[2], d[2].verb("counterspell")), "and the other way round")

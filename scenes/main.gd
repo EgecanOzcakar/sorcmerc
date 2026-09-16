@@ -400,6 +400,13 @@ func _new_game(forced := 0) -> void:
 	sp["seed"] = _seed
 	result = {}
 	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS))   # sp["theme"] picks the board
+	# The one thing that makes a reaction stop the fight and ask. Installed only
+	# here, only for a player who is actually watching: with it unset the
+	# resolver auto-resolves reactions exactly as it always has, which is what
+	# every headless run and every test gets (Settings.reaction_prompts_on()
+	# refuses under SORCMERC_FAST — a prompt nobody answers is a hang).
+	if Settings.reaction_prompts_on():
+		cb.reaction_decider = _ask_reaction
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()
@@ -534,7 +541,10 @@ func _advance() -> void:
 				if _fx_on:
 					for x in cb.combatants:
 						before[x.id] = x.hp
-				AI.take_turn(cb, c)
+				# Awaited because the AI now stops between its own actions to
+				# offer the party its reactions (core/ai.gd). With prompts off
+				# it never suspends and this is the same call it always was.
+				await AI.take_turn(cb, c)
 				for x in cb.combatants:
 					if before.get(x.id, x.hp) > x.hp:
 						_attack_fx(c, x, {"kind": "attack"})
@@ -549,6 +559,58 @@ func _advance() -> void:
 		return
 	_advancing = false
 	_finish()
+
+# --- reaction prompts ---------------------------------------------------
+#
+# combat.gd cannot stop to ask (GDScript has no way to block, which is why
+# combat-design.md §2 cut prompts in the first place), so the question is put
+# from here, one step before the action resolves: core/ai.gd calls
+# cb.offer_reactions() ahead of every swing and every cast, that reaches this,
+# and the answer is waiting by the time the trigger fires.
+#
+# Only reactions that spend a slot get here. An opportunity attack and Uncanny
+# Dodge cost nothing and still fire by themselves — there is one sensible answer
+# to those and it is not worth a key press.
+var _reaction_answer := -1   # -1 while the question is up, then 0 no / 1 yes
+
+func _ask_reaction(reactor, v: Dictionary, trigger: String, ctx: Dictionary) -> bool:
+	var was_busy: bool = _busy
+	_busy = true
+	_actor.text = _reaction_question(reactor, v, trigger, ctx)
+	_reaction_answer = -1
+	_set_buttons([
+		["Yes — " + String(v["label"]), func(): _reaction_answer = 1,
+			"Spend %s's reaction and the slot." % reactor.cname],
+		["Hold it", func(): _reaction_answer = 0,
+			"Keep the reaction and the slot for later."],
+	])
+	while _reaction_answer < 0:
+		await get_tree().process_frame
+	_set_buttons([])
+	_actor.text = ""
+	_busy = was_busy
+	return _reaction_answer == 1
+
+# What the question says. The cost is in it because the cost is the decision,
+# and for a swing the hit chance is too — the answer is given before the d20,
+# so the player is committing against a number rather than against a result.
+func _reaction_question(reactor, v: Dictionary, trigger: String, ctx: Dictionary) -> String:
+	var lvl := int(v.get("slot_level", 0))
+	var cost := ""
+	if lvl > 0:
+		cost = " — a level-%d slot (%d left)" % [lvl, reactor.slots[lvl - 1]]
+	elif v.has("pool"):
+		cost = " — %d use%s left" % [reactor.pool_left(v["pool"]),
+			"" if reactor.pool_left(v["pool"]) == 1 else "s"]
+	var head := ""
+	if trigger == "spell_cast":
+		head = "[b]%s[/b] is casting [b]%s[/b]." % [ctx["caster"].cname, ctx["verb"]["label"]]
+	else:
+		var atk = ctx["attacker"]
+		head = "[b]%s[/b] swings at [b]%s[/b] — %d%% to hit." % [atk.cname, ctx["target"].cname,
+			int(round(cb.hit_chance(atk, ctx["target"]) * 100.0))]
+	var tail := ", if it lands" if trigger == "damaged_by_attack" else ""
+	return "%s  %s can answer with [b]%s[/b]%s%s." % [head, reactor.cname, v["label"], cost, tail]
 
 func _end_turn() -> void:
 	if _busy:
