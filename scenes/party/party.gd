@@ -60,7 +60,7 @@ func _ready() -> void:
 		for ch in Party.demo_roster():
 			party.add_member(ch)
 		party.add_gold(275)
-		party.stash_add("potion-of-healing", 3)
+		party.stash_add("potions-of-healing", 3)
 		party.stash_add("rope-hempen")
 
 	var bg := ColorRect.new()

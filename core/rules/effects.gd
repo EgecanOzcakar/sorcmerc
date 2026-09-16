@@ -52,11 +52,15 @@ static func spell(id: String) -> Dictionary:
 		merged["cost"] = t
 	if merged.get("non_combat", false):
 		return {}
-	# A reaction block is a mechanic in its own right: Counterspell deals no
-	# damage, heals nobody and inflicts no condition, and without this line the
-	# only thing it could ever be is a name on a character sheet.
+	# The regex draft writes damage as {"dice": "8d6"}; the verb builder reads
+	# count/sides. An unauthored damage entry used to fall through as 1d6 —
+	# a 5th-level Flame Strike doing a dagger's worth. Now it is no damage at
+	# all, and the spell is not castable until someone authors it.
+	if merged.has("damage") and not _authored_damage(merged["damage"]):
+		merged.erase("damage")
 	if not (merged.has("damage") or merged.has("heal") or merged.has("healing")
-			or merged.has("conditions") or merged.has("reaction")):
+			or merged.has("conditions") or merged.has("buff") or merged.has("teleport")
+			or merged.has("summon") or merged.has("reaction")):   # a reaction block is a mechanic too (Counterspell)
 		return {}
 	merged["level"] = int(def.get("level", 0))
 	merged["concentration"] = def.get("concentration", false)
@@ -66,6 +70,15 @@ static func spell(id: String) -> Dictionary:
 	if not merged.has("range_ft"):
 		merged["range_ft"] = range_ft(String(def.get("range", "")))
 	return merged
+
+static func _authored_damage(d) -> bool:
+	return d is Array and not d.is_empty() and d[0] is Dictionary and d[0].has("count") and d[0].has("sides")
+
+# Spells a character may pick at creation / level-up: the ones that do
+# something on the board. A utility spell with no hook here would be a slot
+# spent on nothing.
+static func pick_pool(list: String, level: int) -> Array:
+	return Catalog.spell_list(list, level).filter(func(id): return not spell(id).is_empty())
 
 static func range_ft(prose: String) -> int:
 	var t := prose.split(" ")
@@ -185,6 +198,17 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 		"ignores_cover": m.get("ignores_cover", false),
 		"concentration": m.get("concentration", false),
 	}
+	if m.get("spare_allies", false):
+		v["spare_allies"] = true
+	if m.get("teleport", false):   # Misty Step: aim a free hex, arrive there, provoke nothing
+		v["teleport"] = true
+	if m.has("summon"):            # Summon Beast: a bestiary creature on the caster's side
+		v["summon"] = m["summon"]
+		v["text"] = String(m.get("text", ""))
+	if m.has("buff"):     # Bless, Haste, Bane: a status the target wears (combat.gd _apply_buff)
+		v["buff"] = m["buff"]
+		v["rounds"] = int(m.get("rounds", 10))
+		v["text"] = String(m.get("text", ""))
 	if m.has("attack"):   # a spell attack rolls to hit instead of forcing a save
 		v["attack_bonus"] = int(sheet.spellcasting.get("attack_bonus", 0))
 	if m.has("reaction"):
@@ -230,8 +254,12 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 			n += up * int(m["upcast"]["per_level"].get("count", 0))
 		v["heal_count"] = n
 		v["heal_sides"] = int(h.get("sides", 8))
-		v["heal_bonus"] = abil_mod if h.get("plus", "") == "ability_mod" else int(h.get("plus", 0))
-	if shape == "cone":
+		v["heal_bonus"] = abil_mod if str(h.get("plus", "")) == "ability_mod" else int(h.get("plus", 0))
+	if m.get("teleport", false):
+		v["targeting"] = "hex"
+	elif m.has("summon"):
+		v["targeting"] = "self"
+	elif shape == "cone":
 		v["targeting"] = "direction"
 	elif shape == "line":
 		v["targeting"] = "line"          # aimed at a hex, runs its full length through it
@@ -239,8 +267,13 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 		v["targeting"] = "self_area"     # everything within size_ft of the caster
 	elif shape in ["sphere", "cube", "cylinder", "radius"]:
 		v["targeting"] = "area"          # adapter.gd sizes it: one hex, or a corner-anchored circle
+	elif shape == "self":
+		v["targeting"] = "self"
+	elif shape == "allies":
+		v["targeting"] = "allies"        # everyone on the caster's side within range, caster included
 	else:
-		v["targeting"] = "ally" if v.has("heal_count") else "enemy"
+		v["targeting"] = "ally" if (v.has("heal_count") or (v.has("buff") and v.get("save", "") == "" \
+			and not m.has("attack"))) else "enemy"
 	return v
 
 static func _cantrip_count(m: Dictionary, n: int, char_level: int) -> int:
@@ -279,6 +312,8 @@ static func validate() -> Array[String]:
 			continue
 		if Catalog.index("spells.json").get(id) == null:
 			errs.append("spells.json: \"%s\" is not in the catalog" % id)
+		if sp[id].has("damage") and not _authored_damage(sp[id]["damage"]):
+			errs.append("spells.json: \"%s\" damage needs count/sides" % id)
 		# Same rule from the other side: a reaction-cost spell with no reaction
 		# block is never a button and never fires — it is simply unreachable.
 		if sp[id].get("cost", "") == "reaction":

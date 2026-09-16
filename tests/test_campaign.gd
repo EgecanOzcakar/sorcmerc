@@ -417,7 +417,8 @@ func test_settlements() -> void:
 	var alch := _campaign()
 	alch.node = _pool("shuttered-shop")
 	var potions := alch.service_stock_ids("alchemist")
-	check("potions-of-healing" in potions and "potion-of-flying" in potions, "the Alchemist sells potions")
+	check("potions-of-healing" in potions and "potion-of-speed" in potions and not "potion-of-flying" in potions,
+		"the Alchemist sells potions — the ones that do something")
 	check(not "plate" in alch.shop_ids(), "a village without an Armorsmith sells no plate")
 
 	# Healer, Librarian, Innkeeper: the three that are not just a catalog.

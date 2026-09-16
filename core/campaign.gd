@@ -11,6 +11,7 @@
 extends RefCounted
 
 const Quest = preload("res://core/quest.gd")
+const Potions = preload("res://core/potions.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Icons = preload("res://core/ui_icons.gd")
@@ -917,8 +918,7 @@ func service_stock_ids(service: String) -> Array:
 	return []
 
 static func potion_ids() -> Array:
-	return Catalog.index("magic-items.json").keys().filter(
-		func(id): return String(id).begins_with("potion"))
+	return Potions.ids()   # only the ones with a mechanic; the rest would be 2000 gp of nothing
 
 func service_stock(service: String) -> Array:
 	var out: Array = []

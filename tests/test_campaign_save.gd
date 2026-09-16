@@ -40,7 +40,7 @@ func _init() -> void:
 	c.party.get_member("pike").dead = true
 	c.party.bench("pike")
 	c.buy("longsword")
-	c.party.stash_add("potion-of-healing", 2)
+	c.party.stash_add("potions-of-healing", 2)
 	c.accept(c.offer())          # the last mutating call is what the slot holds
 
 	var back = CampaignSave.load_latest()
@@ -56,7 +56,7 @@ func _init() -> void:
 	check(back.party.roster.size() == c.party.roster.size(), "the whole roster survives")
 	check(back.party.active == c.party.active, "the active party and its order survive")
 	check(back.party.stash_count("longsword") == 1
-		and back.party.stash_count("potion-of-healing") == 2, "the stash survives")
+		and back.party.stash_count("potions-of-healing") == 2, "the stash survives")
 	check(back.party.quests.size() == 1
 		and back.party.quests[0]["id"] == c.party.quests[0]["id"], "the quest log survives")
 	check(int(back.party.quests[0]["required"]) == int(c.party.quests[0]["required"]),

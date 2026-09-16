@@ -1090,6 +1090,14 @@ def feature_art(*art: str, foe: bool = False) -> str:
 
 SPELLS = {
     # abjuration
+    "resistance": (hexagon(32, 32, 15, E("steel")[1]), plus(32, 32, 6, 2.2, LIGHT)),
+    "aid": (heart(32, 31, 14, E("life")), plus(46, 18, 5, 2, LIGHT)),
+    "mass-healing-word": (heart(24, 30, 10, E("life")), heart(40, 30, 10, E("life")), plus(32, 44, 5, 2, LIGHT)),
+    "mass-cure-wounds": (heart(22, 30, 9, E("life")), heart(32, 26, 9, E("life")), heart(42, 30, 9, E("life"))),
+    "shield-of-faith": (hexagon(32, 32, 16, E("radiant")[1]), star(32, 32, 6, 2.4, 4, LIGHT, sw=1.0)),
+    "beacon-of-hope": (pillar(E("radiant")), star(32, 16, 6.5, 2.2, 5, LIGHT, sw=1.0)),
+    "protection-from-energy": (hexagon(32, 32, 16, E("force")[1]), flame(E("fire"), 32, 34, 0.4)),
+    "stoneskin": (hexagon(32, 32, 16, E("stone")[1]), person(E("stone"), "stand", 0.6)),
     "cure-wounds": (heart(32, 31, 16, E("life")), plus(32, 28, 7.5, 2.7, LIGHT)),
     # A ward plate with somebody else's spell breaking on it — the one badge
     # that is about a spell that never arrives.
@@ -1099,6 +1107,18 @@ SPELLS = {
     "banishment": (portal(E("shadow")),),
 
     # conjuration
+    "misty-step": (person(E("force"), "stand", 0.7), cloud(E("force"), 0.45)),
+    "dimension-door": (portal(E("force")),),
+    "fog-cloud": (cloud(E("steel")),),
+    "summon-beast": (fangs(E("nature"), 0.9), star(46, 16, 6, 2, 4, LIGHT, sw=1.0)),
+    "summon-fey": (crescent(E("nature")), star(46, 16, 6, 2, 4, LIGHT, sw=1.0)),
+    "summon-aberration": (eye(E("psychic"), 0.9), tentacles(E("psychic"), 0.45)),
+    "summon-construct": (hexagon(32, 32, 15, E("stone")[1]), fist(E("stone"), 0.5)),
+    "summon-dragon": (flame(E("fire"), 32, 30, 0.7), fangs(E("fire"), 0.45)),
+    "summon-celestial": (halo(E("radiant")), star(32, 32, 9, 3.5, 5, E("radiant"))),
+    "spirit-guardians": (halo(E("radiant")), person(E("radiant"), "stand", 0.55)),
+    "sleet-storm": (cloud(E("cold")), snowflake(E("cold"), 0.45)),
+    "hunger-of-hadar": (orb(E("shadow"), 1.0, ring=True), tentacles(E("shadow"), 0.5)),
     "produce-flame": (hand(E("gold")), flame(E("fire"), 32, 20, 0.55)),
     "acid-splash": (droplets(E("acid"), 3),),
     "ensnaring-strike": (vines(E("nature")),),
@@ -1113,6 +1133,12 @@ SPELLS = {
     "hunters-mark": (reticle(E("gold")), dart(E("nature"), -45, 1, 0.5)),
 
     # enchantment
+    "bless": (star(32, 30, 12, 5, 5, E("radiant")), plus(46, 18, 5, 2, LIGHT)),
+    "bane": (star(32, 30, 12, 5, 5, E("shadow")), skull(E("shadow"), 0.4, 44)),
+    "command": (hand(E("gold"), 0.0, 0.9), banner(E("psychic"), 0.4)),
+    "suggestion": (brain(E("psychic")), note(E("psychic"), 0.5)),
+    "compulsion": (puppet(E("psychic")), spiral(E("psychic"), 0.4)),
+    "confusion": (spiral(E("psychic")), eye(E("psychic"), 0.45)),
     "mind-sliver": (brain(E("psychic")), dart(E("psychic"), 25, 1, 0.55)),
     "charm-person": (mask(E("psychic"), "flat"), heart(44, 20, 6, E("life"))),
     "sleep": (zzz(E("psychic")),),
@@ -1131,6 +1157,9 @@ SPELLS = {
     "geas": (scroll(E("gold")),),
 
     # evocation
+    "darkness": (orb(E("shadow"), 1.0, ring=True), crescent(E("shadow"), 0.4)),
+    "faerie-fire": (person(E("force"), "stand", 0.8), star(46, 16, 6, 2, 4, E("lightning"), sw=1.0)),
+    "spiritual-weapon": (sword(32, 32, -30, 44), halo(E("radiant"), 0.5)),
     "fire-bolt": (dart(E("fire"), -45, 1),),
     "ray-of-frost": (beam(E("cold")),),
     "shocking-grasp": (hand(E("steel")), bolt(E("lightning"), 0.55)),
@@ -1153,6 +1182,7 @@ SPELLS = {
     "cone-of-cold": (cone_burst(E("cold"), -20), snowflake(E("cold"), 0.36)),
 
     # illusion
+    "blur": (person(E("force"), "stand", 0.8), waves(E("force"), 0.6)),
     "invisibility": (person(E("force"), "stand"), circle(32, 32, 19, "none",
                                                          stroke=ELEM["force"], sw=1.6)),
     "phantasmal-force": (mask(E("shadow"), "flat"), cloud(E("shadow"), 0.5)),
@@ -1163,12 +1193,17 @@ SPELLS = {
                              star(48, 16, 6, 2, 4, LIGHT, sw=1.0)),
 
     # necromancy
+    "false-life": (heart(32, 31, 14, E("necrotic")), skull(E("necrotic"), 0.35, 44)),
+    "ray-of-enfeeblement": (beam(E("necrotic")), skull(E("necrotic"), 0.4, 46)),
     "poison-spray": (droplets(E("poison"), 3),),
     "chill-touch": (hand(E("necrotic")), skull(E("shadow"), 0.42, cy=22)),
     "ray-of-sickness": (beam(E("poison")),),
     "blight": (skull(E("necrotic")), vines(E("shadow"), 0.5)),
 
     # transmutation
+    "magic-weapon": (sword(32, 32, -30, 44), star(46, 16, 6, 2, 4, LIGHT, sw=1.0)),
+    "haste": (person(E("lightning"), "stand", 0.8), wind(E("lightning"), 0.6)),
+    "polymorph": (mask(E("nature"), "flat"), fangs(E("nature"), 0.4)),
     "thorn-whip": (vines(E("nature")), circle(44, 16, 3.2, ELEM["nature"], stroke="none")),
 }
 

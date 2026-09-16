@@ -66,13 +66,13 @@ func _init() -> void:
 	check(p.gold == 0, "gold floors at 0")
 
 	# --- stash -----------------------------------------------------------
-	p.stash_add("potion-of-healing", 3)
-	p.stash_add("potion-of-healing", 2)
+	p.stash_add("potions-of-healing", 3)
+	p.stash_add("potions-of-healing", 2)
 	p.stash_add("longsword")
-	check(p.stash_count("potion-of-healing") == 5, "stash stacks by item id")
+	check(p.stash_count("potions-of-healing") == 5, "stash stacks by item id")
 	check(p.stash.size() == 2, "two distinct stash entries")
-	check(p.stash_remove("potion-of-healing", 5), "remove the whole stack")
-	check(p.stash_count("potion-of-healing") == 0, "stack gone")
+	check(p.stash_remove("potions-of-healing", 5), "remove the whole stack")
+	check(p.stash_count("potions-of-healing") == 0, "stack gone")
 	check(p.stash.size() == 1, "emptied entry dropped")
 	check(not p.stash_remove("longsword", 2), "cannot remove more than held")
 	p.stash_add("rope", 0)

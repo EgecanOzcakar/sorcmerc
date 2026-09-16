@@ -90,6 +90,7 @@ static func to_dict(ch) -> Dictionary:
 		"offhand": ch.offhand,
 		"pools": ch.pools.duplicate(),
 		"hp_current": ch.hp_current,
+		"buffs": ch.buffs.duplicate(true),
 		"prepared": ch.prepared.duplicate(),
 		"xp": ch.xp,
 		"dead": ch.dead,
@@ -124,6 +125,7 @@ static func from_dict(d: Dictionary):
 	for k in d.get("pools", {}):
 		ch.pools[k] = int(d["pools"][k])
 	ch.hp_current = int(d.get("hp_current", -1))
+	ch.buffs = d.get("buffs", {}).duplicate(true)
 	ch.prepared.assign(d.get("prepared", []))
 	ch.xp = int(d.get("xp", 0))
 	ch.dead = bool(d.get("dead", false))

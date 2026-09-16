@@ -4,6 +4,10 @@ extends RefCounted
 var id: String
 var src_id: String   # monsters.json id this was spawned from ("" for heroes)
 var cname: String
+var short := ""   # what the initiative bar shows; "" = the first word of cname
+
+func short_name() -> String:
+	return short if short != "" else cname.split(" ")[0]
 var team: String  # "party" | "foe"
 
 var ac: int

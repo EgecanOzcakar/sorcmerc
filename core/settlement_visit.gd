@@ -24,6 +24,8 @@ const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Adapter = preload("res://core/adapter.gd")
 const Quest = preload("res://core/quest.gd")
 const Posting = preload("res://core/quest_posting.gd")
+const Potions = preload("res://core/potions.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 # World-time is in minutes (scenes/world/world.gd's HUD reads elapsed/60 as hours).
 # Calibration knobs — a party crosses the demo map in ~20 world-minutes, so a
@@ -80,7 +82,7 @@ static func persuade(s, m: Dictionary, party, rng = null) -> Dictionary:
 	if rng == null:
 		rng = RNG.new(maxi(1, absi(hash("persuade|%s|%d" % [s.id, int(s.last_visited)]))))
 	var bonus: int = c.skill_bonus(char_id, PERSUADE_SKILL)
-	var nat: int = int(Dice.d20(rng)["nat"])
+	var nat: int = int(Dice.d20(rng, _talk_mode(ch, party))["nat"])
 	var ok: bool = nat + bonus >= dc
 	var line := ("%s talks them into it, grudgingly (Persuasion %d+%d vs DC %d)."
 		% [ch.cname, nat, bonus, dc]) if ok else (
@@ -99,6 +101,14 @@ static func persuade_into_trading(s, m: Dictionary) -> Dictionary:
 	return opened
 
 # --- T9x: haggling over an already-open market's prices ---------------------
+# A Potion of Mind Reading still working, or Detect Thoughts / Suggestion in
+# the party's repertoire, is advantage on the talk (core/potions.gd, party.gd).
+const TALK_SPELLS := ["detect-thoughts", "suggestion"]
+static func _talk_mode(ch, party) -> int:
+	if Potions.road_buff(ch, "persuasion_adv", party.world_now) or party.caster_of(TALK_SPELLS) != null:
+		return Dice.ADV
+	return Dice.NORMAL
+
 const HAGGLE_SKILL := "persuasion"
 const HAGGLE_DC := 13
 const HAGGLE_DISCOUNT := 0.15   # success: 15% off every price for this visit
@@ -122,7 +132,7 @@ static func haggle(m: Dictionary, party, rng = null) -> Dictionary:
 	if rng == null:
 		rng = RNG.new(maxi(1, absi(hash("haggle|%s|%d" % [String(s.id) if s != null else "", int(m.get("steps", 0))]))))
 	var bonus: int = c.skill_bonus(char_id, HAGGLE_SKILL)
-	var nat: int = int(Dice.d20(rng)["nat"])
+	var nat: int = int(Dice.d20(rng, _talk_mode(ch, party))["nat"])
 	var ok: bool = nat + bonus >= HAGGLE_DC
 	var mult := (1.0 - HAGGLE_DISCOUNT) if ok else (1.0 + HAGGLE_PENALTY)
 	var line := ("%s talks the price down (Persuasion %d+%d vs DC %d) — %d%% off for the rest of this visit."
@@ -390,6 +400,45 @@ static func heal(party) -> Dictionary:
 	return {"ok": true, "cost": HEAL_COST, "healed": hurt.size(),
 		"text": "The healer works down the line — %d back on their feet (-%d gp)." % [
 			hurt.size(), HEAL_COST]}
+
+# Working the healer's counter: a party that carries Lesser or Greater
+# Restoration is worth a morning to any healer, paid on a Medicine check. One
+# shift per visit, same shape as haggle()/steal(). The spell is the door, the
+# skill is the wage: the healer is hiring hands, not miracles.
+const WORK_SPELLS := ["lesser-restoration", "greater-restoration"]
+const WORK_SKILL := "medicine"
+const WORK_DC := 13
+const WORK_PAY := 40          # a good morning
+const WORK_PAY_POOR := 10     # a clumsy one still gets the floor swept
+
+static func can_work_healer(party) -> bool:
+	return party.caster_of(WORK_SPELLS) != null
+
+static func work_healer(s, party, rng = null) -> Dictionary:
+	var door: Dictionary = party.caster_and_spell(WORK_SPELLS)
+	if door.is_empty():
+		return {}
+	var caster = door["ch"]
+	var spell := spell_name(String(door["spell"]))
+	var c = Campaign.new(party)
+	var char_id: String = c.best_at(WORK_SKILL)
+	var ch = party.get_member(char_id) if char_id != "" else caster
+	if rng == null:
+		rng = RNG.new(maxi(1, absi(hash("work|%s|%d" % [s.id, int(s.last_visited)]))))
+	var bonus: int = c.skill_bonus(ch.id, WORK_SKILL)
+	var nat: int = int(Dice.d20(rng)["nat"])
+	var ok: bool = nat + bonus >= WORK_DC
+	var pay: int = WORK_PAY if ok else WORK_PAY_POOR
+	party.add_gold(pay)
+	var line := ("%s's %s gets them in the door; %s runs the ward all morning (Medicine %d+%d vs DC %d) — %d gp."
+		% [caster.cname, spell, ch.cname, nat, bonus, WORK_DC, pay]) if ok else (
+		"%s's %s gets them in the door, but %s is more hindrance than help (Medicine %d+%d vs DC %d) — %d gp for the trouble."
+		% [caster.cname, spell, ch.cname, nat, bonus, WORK_DC, pay])
+	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": WORK_DC, "pay": pay, "char_id": ch.id, "text": line}
+
+static func spell_name(sid: String) -> String:
+	return String(Catalog.spell(sid).get("name", sid.capitalize()))
+
 
 # The Librarian: what a scroll of identification does, for a fee and no roll.
 # Trance's free nightly attempt (core/trance.gd) is the same job done badly;
