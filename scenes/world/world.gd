@@ -679,8 +679,13 @@ func _build_menu_panel() -> void:
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 
-func _open_party() -> void:
-	if _combat != null or not _visit.is_empty() or _party_overlay != null:
+# Issue #27: `at_inn` is what unlocks benching and recruiting. The HUD button
+# opens this out in open country, where a party does not reshuffle itself, so
+# it opens locked; the inn's own entrance (_build_inn_page) opens it unlocked.
+# Everything else on the screen — marching order, standing orders, the map
+# figure, reading a character's gear and skills — works either way.
+func _open_party(at_inn := false) -> void:
+	if _combat != null or _party_overlay != null or (not at_inn and not _visit.is_empty()):
 		return
 	world.clock.pause()
 	var overlay := Control.new()
@@ -689,9 +694,11 @@ func _open_party() -> void:
 	_party_overlay = overlay
 	var screen = load(PARTY_SCENE).instantiate()
 	screen.party = party
+	screen.roster_locked = not at_inn
+	screen.locked_note = "Benching and recruiting happen at an inn — find one and ask at the counter."
 	overlay.add_child(screen)
 	var back := Button.new()
-	back.text = "←  Back to the map"
+	back.text = "←  Back to the inn" if at_inn else "←  Back to the map"
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -220; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(_close_party)
@@ -701,8 +708,12 @@ func _close_party() -> void:
 	if _party_overlay != null:
 		_party_overlay.queue_free()
 		_party_overlay = null
-	world.clock.resume()
-	_pause_btn.text = "Pause"
+	# A visit owns the clock for its whole duration (see _close_visit) — backing
+	# out of the party screen at the inn's counter must not set the map running
+	# underneath the still-open settlement panel.
+	if _visit.is_empty():
+		world.clock.resume()
+		_pause_btn.text = "Pause"
 	_party3d.reset(world)   # T9x: picking a new overworld figure only takes effect on rebuild
 
 # --- quest log ------------------------------------------------------------
@@ -2393,6 +2404,16 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 			m["hp"], m["max_hp"], "" if not hurt else "   (hurt)"]
 		line.add_theme_color_override("font_color", Icons.COL_FOE if hurt else Icons.COL_BODY)
 		rows.add_child(line)
+
+	# Issue #27: the one place a party reshuffles itself. Out on the road the
+	# party screen opens with its roster half locked; here it opens unlocked,
+	# because this is where the people who might join you are.
+	var manage := Button.new()
+	manage.text = "Sort out the party (bench, recruit, marching order)"
+	manage.pressed.connect(func(): _open_party(true))
+	box.add_child(manage)
+	if party.roster.size() <= Party.MAX_ACTIVE:
+		_note(box, "Everyone you have is marching. New faces are made here too.")
 
 	var wait: float = Visit.long_rest_in(party, world)
 	var rest_btn := Button.new()

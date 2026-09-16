@@ -37,6 +37,27 @@ func scrolls(node: Node) -> Array:
 		out.append_array(scrolls(c))
 	return out
 
+func buttons(node: Node) -> Array:
+	var out: Array = []
+	for c in node.get_children():
+		if c is Button and not c.is_queued_for_deletion():
+			out.append(c)
+		out.append_array(buttons(c))
+	return out
+
+func has_button(node: Node, label: String) -> bool:
+	for b in buttons(node):
+		if label in b.text:
+			return true
+	return false
+
+func press(node: Node, label: String) -> bool:
+	for b in buttons(node):
+		if label in b.text and not b.disabled:
+			b.pressed.emit()
+			return true
+	return false
+
 func panels(node: Node) -> Array:
 	var out: Array = []
 	for c in node.get_children():
@@ -109,6 +130,34 @@ func _init() -> void:
 			check(sc.get_child(0).size.x >= sc.size.x - 1.0,
 				"...and its column fills the width instead of collapsing (%.0f of %.0f)" % [
 					sc.get_child(0).size.x, sc.size.x])
+
+	# --- issue #27: the roster reshuffles at an inn, not in a field -------
+	main._goto_page("inn")
+	for i in 3:
+		await process_frame
+	check(has_button(main._visit_panel, "Sort out the party"), "the inn offers to sort the party out")
+	check(press(main._visit_panel, "Sort out the party"), "...and it opens")
+	for i in 3:
+		await process_frame
+	check(main._party_overlay != null, "the party screen is up")
+	var at_inn = main._party_overlay.get_child(0)
+	check(not at_inn.roster_locked, "opened from the inn it is unlocked")
+	main._close_party()
+	await process_frame
+	check(not main._visit.is_empty(), "backing out of it leaves the settlement open")
+	check(main.world.clock.is_paused(), "...and does not set the map running behind the panel")
+
+	main._close_visit()
+	await process_frame
+	main._open_party()
+	for i in 3:
+		await process_frame
+	check(main._party_overlay != null, "the HUD button opens it out on the road")
+	var on_road = main._party_overlay.get_child(0)
+	check(on_road.roster_locked, "...locked, because a field is not an inn")
+	check("inn" in String(on_road.locked_note), "...and it says where to go instead")
+	main._close_party()
+	await process_frame
 
 	print("test_world_panels: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

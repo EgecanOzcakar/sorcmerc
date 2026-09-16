@@ -335,7 +335,39 @@ func summary(id: String) -> Dictionary:
 		"hp": ch.hp_current if ch.hp_current >= 0 else s.max_hp,
 		"max_hp": s.max_hp,
 		"active": is_active(id),
+		# Issue #27: what a party page needs to say about somebody without
+		# making the player open their sheet one at a time. Trained skills only
+		# — all eighteen of them, most at +0, is the profile screen's job — and
+		# what is actually on them, which is the thing a stash listing cannot
+		# tell you. Ids and numbers; the names are the UI's business.
+		"skills": trained_skills(s),
+		"equipped": equipped_items(s),
 	}
+
+# The skills this sheet is actually trained in, best first: [{id, mod, prof}]
+# where prof is "expert" or "prof". Untrained skills are left out — a roster
+# row that lists all eighteen says nothing.
+static func trained_skills(s) -> Array:
+	var out: Array = []
+	for id in s.skill_prof:
+		var how := String(s.skill_prof[id])
+		if how != "prof" and how != "expert":
+			continue
+		out.append({"id": String(id), "mod": int(s.skills.get(id, 0)), "prof": how})
+	out.sort_custom(func(a, b):
+		if a["mod"] != b["mod"]:
+			return a["mod"] > b["mod"]
+		return a["id"] < b["id"])
+	return out
+
+# What is worn and wielded: [{id, kind, quantity}], in the order the sheet
+# resolved it.
+static func equipped_items(s) -> Array:
+	var out: Array = []
+	for it in s.equipment:
+		out.append({"id": String(it["item_id"]), "kind": String(it.get("kind", "")),
+			"quantity": int(it.get("quantity", 1))})
+	return out
 
 # --- fixtures -------------------------------------------------------------
 
