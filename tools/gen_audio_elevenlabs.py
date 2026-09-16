@@ -223,13 +223,16 @@ BARK_SECONDS = 0.8
 BARK_INFLUENCE = 0.6
 
 
-def jobs(groups, only):
-    """(group, name, out_path, prompt, seconds, influence) for everything asked for."""
+def jobs(groups, only, take=0):
+    """(group, name, out_path, prompt, seconds, influence) for everything asked for.
+    `take` > 1 writes name_<take>.wav: another recording of the same prompt,
+    which core/audio.gd round-robins with the first (see play_sfx)."""
     out = []
+    suffix = "_%d" % take if take > 1 else ""
     if "sfx" in groups:
         for name, (prompt, secs, infl) in SFX.items():
             out.append(("sfx", name,
-                        os.path.join(ROOT, "assets", "audio", "sfx", name + ".wav"),
+                        os.path.join(ROOT, "assets", "audio", "sfx", name + suffix + ".wav"),
                         prompt, secs, infl))
     if "barks" in groups:
         for archetype, prompt in BARKS.items():
@@ -331,6 +334,8 @@ def main():
                     help="print what would be generated and exit")
     ap.add_argument("--dry-run", action="store_true",
                     help="do everything but the API call and the write")
+    ap.add_argument("--take", type=int, default=0,
+                    help="write name_<N>.wav, an extra take the game round-robins (N >= 2)")
     args = ap.parse_args()
 
     groups = args.groups or ["sfx"]
@@ -338,7 +343,7 @@ def main():
     if bad:
         sys.exit("unknown group(s): %s (want sfx and/or barks)" % ", ".join(sorted(bad)))
 
-    todo = jobs(groups, args.only)
+    todo = jobs(groups, args.only, args.take)
     if not todo:
         sys.exit("nothing to do")
 
