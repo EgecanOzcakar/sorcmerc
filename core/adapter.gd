@@ -4,6 +4,7 @@ extends RefCounted
 
 const Combatant = preload("res://core/combatant.gd")
 const Effects = preload("res://core/rules/effects.gd")
+const Potions = preload("res://core/potions.gd")
 const PassGear = preload("res://core/rules/pass_gear.gd")
 
 # The two calibration knobs. Feet are the rules' unit; hexes are the board's.
@@ -122,6 +123,12 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 		c.statuses["down"] = true
 	c.init_mod = s.initiative
 	c.speed = hexes(int(s.speeds.get("walk", 30)))
+	for pid in ch.buffs:   # Potions drunk on the road, still in effect (core/potions.gd)
+		var b: Dictionary = ch.buffs[pid]
+		if b.has("status"):
+			c.statuses[Potions.STATUS_PREFIX + String(pid)] = b["status"].duplicate()
+		if b.has("condition"):
+			c.statuses[String(b["condition"])] = {}
 
 	c.attacks = s.attacks.duplicate(true)
 	var offhand := _take_offhand(c.attacks, ch.offhand)   # main hand must stay attacks[0]

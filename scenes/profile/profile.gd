@@ -9,6 +9,8 @@ const Effects = preload("res://core/rules/effects.gd")
 const Presets = preload("res://core/presets.gd")
 const Leveling = preload("res://core/leveling.gd")
 const Ach = preload("res://core/achievements.gd")
+const Potions = preload("res://core/potions.gd")
+const RNG = preload("res://core/rng.gd")
 
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
 const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
@@ -416,6 +418,15 @@ func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qt
 		g.add_child(m)
 		return
 	tip = Icons.item_tooltip(iid, def, kind)
+	if not equipped and Potions.is_potion(iid):
+		# A potion is drunk, not worn: heal now, or a buff the next fight inherits.
+		tip += "\n%s\n\nClick: drink" % Potions.text(iid)
+		var d := Icons.item_tile(iid, tip, caption)
+		d.pressed.connect(drink.bind(iid))
+		g.add_child(d)
+		_fields["item_" + iid] = d
+		_fields["drink_btn_" + iid] = d
+		return
 	if kind == "unknown":
 		_fields["item_" + iid] = Icons.item_tile(iid, tip, caption)
 		g.add_child(_fields["item_" + iid])
@@ -437,6 +448,11 @@ func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qt
 	_fields["equip_btn_" + iid] = b
 	if offhand:
 		_fields["offhand_btn_" + iid] = b
+
+# The road door of core/potions.gd; the combat door is combat.gd's drink verb.
+func drink(item_id: String) -> void:
+	Potions.drink_on_road(party(), _ch, item_id, party().world_now, RNG.new(randi()))
+	_render()
 
 # Public for the same reason toggle_equip is: tests drive it without a button.
 func toggle_offhand(item_id: String) -> void:

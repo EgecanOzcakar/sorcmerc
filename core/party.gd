@@ -34,6 +34,8 @@ var overworld_figure := ""
 # owns every rule about them. A dict rather than three fields so the save format
 # grows a key, not a column, when travel gains another order.
 var travel_orders: Dictionary = {}
+var world_now := 0.0        # world-minutes, stamped by world.gd each frame; potion buffs expire against it
+var scouted_next := false   # Potion of Clairvoyance: the next fight starts scouted
 
 # --- roster ---------------------------------------------------------------
 

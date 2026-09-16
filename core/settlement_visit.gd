@@ -24,6 +24,7 @@ const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Adapter = preload("res://core/adapter.gd")
 const Quest = preload("res://core/quest.gd")
 const Posting = preload("res://core/quest_posting.gd")
+const Potions = preload("res://core/potions.gd")
 
 # World-time is in minutes (scenes/world/world.gd's HUD reads elapsed/60 as hours).
 # Calibration knobs — a party crosses the demo map in ~20 world-minutes, so a
@@ -79,7 +80,7 @@ static func persuade(s, m: Dictionary, party, rng = null) -> Dictionary:
 	if rng == null:
 		rng = RNG.new(maxi(1, absi(hash("persuade|%s|%d" % [s.id, int(s.last_visited)]))))
 	var bonus: int = c.skill_bonus(char_id, PERSUADE_SKILL)
-	var nat: int = int(Dice.d20(rng)["nat"])
+	var nat: int = int(Dice.d20(rng, _talk_mode(ch, party))["nat"])
 	var ok: bool = nat + bonus >= dc
 	var line := ("%s talks them into it, grudgingly (Persuasion %d+%d vs DC %d)."
 		% [ch.cname, nat, bonus, dc]) if ok else (
@@ -98,6 +99,10 @@ static func persuade_into_trading(s, m: Dictionary) -> Dictionary:
 	return opened
 
 # --- T9x: haggling over an already-open market's prices ---------------------
+# A Potion of Mind Reading still working is advantage on the talk (core/potions.gd).
+static func _talk_mode(ch, party) -> int:
+	return Dice.ADV if Potions.road_buff(ch, "persuasion_adv", party.world_now) else Dice.NORMAL
+
 const HAGGLE_SKILL := "persuasion"
 const HAGGLE_DC := 13
 const HAGGLE_DISCOUNT := 0.15   # success: 15% off every price for this visit
@@ -121,7 +126,7 @@ static func haggle(m: Dictionary, party, rng = null) -> Dictionary:
 	if rng == null:
 		rng = RNG.new(maxi(1, absi(hash("haggle|%s|%d" % [String(s.id) if s != null else "", int(m.get("steps", 0))]))))
 	var bonus: int = c.skill_bonus(char_id, HAGGLE_SKILL)
-	var nat: int = int(Dice.d20(rng)["nat"])
+	var nat: int = int(Dice.d20(rng, _talk_mode(ch, party))["nat"])
 	var ok: bool = nat + bonus >= HAGGLE_DC
 	var mult := (1.0 - HAGGLE_DISCOUNT) if ok else (1.0 + HAGGLE_PENALTY)
 	var line := ("%s talks the price down (Persuasion %d+%d vs DC %d) — %d%% off for the rest of this visit."

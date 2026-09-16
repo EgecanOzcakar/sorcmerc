@@ -17,6 +17,7 @@ var offhand: String = ""                # id of the light weapon wielded off-han
 var pools: Dictionary = {}              # pool_id -> current uses
 var slots_used: Array[int] = []         # spell slots spent, per level; cleared by a long rest
 var hp_current: int = -1                # -1 = full
+var buffs: Dictionary = {}              # potion id -> {until (world-minute), status?/condition?/road?} — core/potions.gd
 var prepared: Array[String] = []
 var xp: int = 0                         # banked per character; gates Leveling.can_level_up
 var dead: bool = false                  # died in a fight; benched until revived

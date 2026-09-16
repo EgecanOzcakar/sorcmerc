@@ -11,6 +11,7 @@ const Sound = preload("res://core/audio.gd")
 const WeaponSfx = preload("res://core/weapon_sfx.gd")
 const Rng = preload("res://core/rng.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Potions = preload("res://core/potions.gd")
 
 const FT_PER_HEX := 6  # adapter.gd's convention
 
@@ -29,6 +30,7 @@ const MAX_ROUNDS := 60  # safety guard; a real fight ends in ~4-6
 
 var rng
 var combatants: Array = []
+var party = null   # core/party.gd when a real party fights: its stash is the potion shelf
 var board: Dictionary = {}
 var order: Array = []
 var turn_idx: int = 0
@@ -230,8 +232,27 @@ func begin_turn_for(c) -> void:
 	if held is Dictionary and round_num >= int(held.get("until_round", 0)):
 		_end_concentration(c, "lets %s lapse" % Effects.humanize(String(held["spell"])))
 	_expire_conditions(c)
+	c.econ["action"] = int(c.econ["action"]) + _buff_sum(c, "extra_action")
+	if _buff_sum(c, "speed_mult") > 0:
+		c.econ["move_left"] = int(c.econ["move_left"]) * _buff_sum(c, "speed_mult")
 	_regenerate(c)
 	_auto_stand(c)
+
+# What the drinker's potion buffs add up to for one key (core/potions.gd).
+func _buff_sum(c, key: String) -> int:
+	var n := 0
+	for id in c.statuses:
+		var s = c.statuses[id]
+		if s is Dictionary:
+			n += int(s.get(key, 0))
+	return n
+
+func _buff_flag(c, key: String) -> bool:
+	for id in c.statuses:
+		var s = c.statuses[id]
+		if s is Dictionary and s.get(key, false):
+			return true
+	return false
 
 # A condition applied with duration "round" lasts until the bearer's next turn:
 # one lost turn, never a permanent lockout (nothing else in the engine ends them).
@@ -363,7 +384,7 @@ func in_reach(attacker, target) -> bool:
 	return d <= int(board.get("reach_melee", 1))
 
 func effective_ac(c) -> int:
-	var ac: int = c.ac
+	var ac: int = c.ac + _buff_sum(c, "ac")
 	if is_cover(c.pos):
 		ac += 2  # half cover
 	return ac
@@ -457,6 +478,18 @@ func all_verbs(actor) -> Array:
 					out.append(g)
 		elif v["kind"] in OFFERABLE and is_button(actor, v):
 			out.append(v.duplicate())
+	if party != null and actor.team == "party":
+		var seen := {}
+		for e in party.stash:
+			var pid := String(e["item_id"])
+			if seen.has(pid) or not party.is_identified(e) or not Potions.is_potion(pid):
+				continue
+			seen[pid] = true
+			var m := Potions.mechanics(pid)
+			out.append({"id": "drink:" + pid, "kind": "drink", "potion": pid, "cost": "action",
+				"label": "Drink " + Catalog.magic_item(pid).get("name", pid), "text": Potions.text(pid),
+				"targeting": "enemy" if m.has("target") else "self",
+				"target_type": m.get("target", ""), "range": maxi(1, int(m.get("range_ft", 5)) / 6)})
 	return out
 
 # Every verb `actor` can use right now (spec §6). scenes/main.gd renders this list;
@@ -508,6 +541,8 @@ func _offerable(actor, v: Dictionary) -> bool:
 		# a bonus-action leveled spell forbids a leveled spell with your action (§7)
 		if v["cost"] == "action" and actor.econ.get("cast_bonus_spell", false):
 			return false
+	if _buff_flag(actor, "no_attack") and v["kind"] in ["attack", "offhand_attack", "spell"]:
+		return false
 	match v["kind"]:
 		"hide": return not actor.has("hidden")
 		"dodge": return not actor.has("dodging")
@@ -530,6 +565,9 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 				return false
 			if _source_of(actor, "cannot_target_source") == c:
 				return false  # charmed
+			if String(v.get("target_type", "")) != "" \
+					and String(Catalog.monster(c.src_id).get("type", "")) != String(v["target_type"]):
+				return false  # Animal Friendship only ever works on a beast
 			if v["kind"] == "attack" or (v["kind"] == "offhand_attack" and int(v.get("range", 1)) <= 1):
 				return in_reach(actor, c)
 			if v.get("choice", "") == "brazier" and not can_shove_into_hazard(c):
@@ -602,6 +640,11 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"save_effect": return _save_effect(actor, v, target)
 		"spell": return cast(actor, v, target)
+		"drink":
+			var r := Potions.drink_in_combat(self, actor, String(v["potion"]), target)
+			if not r.has("error"):
+				party.stash_remove(String(v["potion"]))
+			return r
 	return {}
 
 func _save_effect(actor, v: Dictionary, target) -> Dictionary:
@@ -641,6 +684,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	# T27: past the slot check, so a refused cast is silent. T9z: the school
 	# picks the sting — evocation booms, necromancy drones, abjuration chimes.
 	Sound.play_sfx(WeaponSfx.for_spell(String(v.get("spell", ""))))
+	caster.statuses.erase("invisible")
 	if v.get("concentration", false):
 		if caster.has("concentrating"):
 			_end_concentration(caster, "drops concentration on %s" % Effects.humanize(String(caster.statuses["concentrating"]["spell"])))
@@ -1017,7 +1061,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var r = Dice.d20(rng, mode)
 	var nat: int = r.nat
 	var insp: int = _consume_inspired(attacker)
-	var atk_bonus: int = int(opts.get("atk_bonus", attacker.atk_bonus)) + insp - _d20_penalty(attacker)
+	var atk_bonus: int = int(opts.get("atk_bonus", attacker.atk_bonus)) + insp - _d20_penalty(attacker) \
+		+ _buff_sum(attacker, "bonus_to_hit")
 	var total: int = nat + atk_bonus
 	var ac = effective_ac(target)
 	var crit: bool = nat >= attacker.crit_range
@@ -1042,6 +1087,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	if hit:
 		out.damage = _react(target, "hit_by_attack", out.damage)
 	attacker.statuses.erase("hidden")
+	attacker.statuses.erase("invisible")   # the potion's kind: gone the moment you swing
 	attacker.statuses.erase("sapped")   # Sap is spent on the next roll, hit or miss
 	var vx = attacker.statuses.get("vex")
 	if vx is Dictionary and vx.get("target") == target:
@@ -1456,7 +1502,7 @@ func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false) -> bool:
 			log.append("%s can't resist — the %s save fails automatically." % [c.cname, ability.to_upper()])
 			return false
 		dis = dis or e.get("saves", {}).get(ability, "") == "dis"
-	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c) - _d20_penalty(c)
+	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c) - _d20_penalty(c) + _buff_sum(c, "bonus_save")
 	if is_cover(c.pos) and not ignore_cover:
 		bonus += 2
 	return Dice.d20(rng, Dice.combine(adv, dis)).nat + bonus >= dc

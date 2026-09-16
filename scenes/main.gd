@@ -390,6 +390,7 @@ func _new_game(forced := 0) -> void:
 	sp["seed"] = _seed
 	result = {}
 	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS))   # sp["theme"] picks the board
+	cb.party = party   # the stash is the potion shelf (core/potions.gd)
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()
@@ -870,6 +871,8 @@ static func _verb_tooltip(h, v: Dictionary) -> String:
 			bits.append("%s %s" % [notation, v.get("damage_type", "damage")])
 	if int(v.get("rays", 1)) > 1:
 		bits.append("%d rays, each rolled to hit" % int(v["rays"]))
+	if v["kind"] == "drink":
+		bits.append(String(v.get("text", "")))
 	if v.has("heal_count"):
 		var hb: int = int(v.get("heal_bonus", 0))
 		bits.append("Heals %dd%d%s HP" % [int(v["heal_count"]), int(v.get("heal_sides", 8)),

@@ -26,6 +26,7 @@ const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const Potions = preload("res://core/potions.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
 const Rumors = preload("res://core/rumors.gd")
 const Site = preload("res://core/site.gd")
@@ -375,6 +376,9 @@ func _process(delta: float) -> void:
 	# O7: the clock's own advance (0 while paused) both drains O6's queued opinion
 	# deltas off the settlements and runs the slow drift back toward neutral.
 	var dt := world.tick(delta)
+	party.world_now = world.clock.elapsed
+	for ch in party.roster:
+		Potions.expire(ch, party.world_now)
 	var p0 := world.player()
 	if p0 != null:
 		world.reveal(p0.position)   # T9x fog of war: permanent once seen
@@ -898,6 +902,9 @@ func _run_combat(spec: Dictionary, difficulty: String,
 
 
 func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dictionary:
+	if party.scouted_next:   # Potion of Clairvoyance, spent on this fight
+		scouted_ahead = true
+		party.scouted_next = false
 	var threat: Dictionary = WorldThreat.assess(party)
 	var result: Dictionary = await _run_combat(encounter_spec(foe),
 		String(threat["difficulty"]), scouted_ahead, forced_ambush)
