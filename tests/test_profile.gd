@@ -7,6 +7,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Character = preload("res://core/character.gd")
 const Party = preload("res://core/party.gd")
 const Ach = preload("res://core/achievements.gd")
+const Icons = preload("res://core/ui_icons.gd")
 
 var _pass := 0
 var _fail := 0
@@ -47,6 +48,7 @@ func _init() -> void:
 	_resources()
 	_pact()
 	_equip_legendary()
+	_shift_compare()
 	print("test_profile: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -212,3 +214,24 @@ func _pact() -> void:
 		"pact slots render at full")
 	check(not p._fields.has("pool_slot:1"), "warlock has no ordinary slot rows")
 	p.queue_free()
+
+# Shift on a stash tile reads the item against what every active member wears.
+func _shift_compare() -> void:
+	var pike = Presets.pike()
+	var pty = Party.new()
+	pty.add_member(pike)
+	pty.stash_add("longsword")
+	pike.equipped.assign(["greataxe"])
+	var txt := Icons.party_compare("weapon", pty)
+	check(txt.contains(pike.cname + ": Greataxe — 1d12"), "the compare names who wields what")
+	check(Icons.party_compare("armor", pty).contains(pike.cname + ": nothing"), "an empty slot says so")
+	check(Icons.party_compare("unknown", pty) == "" and Icons.party_compare("weapon", null) == "",
+		"nothing to compare gives no Shift text")
+	var p = _screen(pike)
+	p.set_party(pty)
+	var tile = p._fields["item_longsword"]
+	check(tile.compare == txt, "the stash tile carries the compare")
+	var card = tile._make_custom_tooltip(tile.tooltip_text)
+	check(str(card.get_child(0).get_child(-1).text).contains("Shift:"), "the hover card advertises Shift")
+	card.free()
+	check(not tile.tooltip_text.contains("Greataxe"), "the compare stays out of the plain hover")

@@ -1998,7 +1998,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 			var iid := String(e["item_id"])
 			var kd: Array = Icons.item_def(iid)
 			var tile := Icons.item_tile(iid, Icons.item_tooltip(iid, kd[1], kd[0])
-				+ "\n\nClick: buy for %d gp" % int(e["price"]), "%d gp" % int(e["price"]))
+				+ "\n\nClick: buy for %d gp" % int(e["price"]), "%d gp" % int(e["price"]),
+				Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party))
 			tile.pressed.connect(_buy.bind(iid))
 			shelf_grid.add_child(tile)
 		for offer in posted:
@@ -2036,7 +2037,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 			else Icons.item_tooltip(id, kd[1], kd[0]))
 		var qty := int(entry["quantity"])
 		var tile := Icons.item_tile(id, tip + "\n\nClick: sell one for %d gp" % paid,
-			"%d gp" % paid + (" ×%d" % qty if qty > 1 else ""))
+			"%d gp" % paid + (" ×%d" % qty if qty > 1 else ""),
+			Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party) if Party.is_identified(entry) else "")
 		tile.pressed.connect(_sell.bind(id))
 		pack.add_child(tile)
 

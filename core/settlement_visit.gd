@@ -36,6 +36,7 @@ const BATTLE_MARKUP := 1.4        # ...and the survivors are not discounting
 const BATTLE_STOCK_LOSS := 0.5    # ...with half the shelf gone
 const BATTLE_RADIUS := 140.0      # how near a fight has to be to count as "here"
 const MIN_STOCK := 2              # even a stripped market has something out
+const FULL_SHELF := 0.5           # a rested market shows this much of its catalog, not all of it
 const SELL_RATE := Campaign.SELL_RATE
 
 # Specialists by settlement kind — the T25 vocabulary, sized off Settlement.kind.
@@ -225,7 +226,7 @@ static func market(s, gap: float, battle: bool, opinion := 0.0) -> Dictionary:
 		return {"steps": steps, "markup": markup, "battle": battle, "gap": gap,
 			"opinion": opinion, "refused": true, "stock": []}
 	var ids := catalog(s)
-	var share := 0.25 + 0.75 * full
+	var share := FULL_SHELF * (0.25 + 0.75 * full)
 	if battle:
 		share *= BATTLE_STOCK_LOSS
 	var keep := clampi(int(ceil(ids.size() * share)), mini(MIN_STOCK, ids.size()), ids.size())
