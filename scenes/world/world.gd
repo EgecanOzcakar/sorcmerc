@@ -1731,11 +1731,19 @@ func _open_visit(s) -> void:
 func _goto_page(page: String) -> void:
 	_visit_page = page
 	if page == "market":
-		_market_tab = MARKET_TAB_ALL   # every visit to the stalls starts at the whole shelf
+		_market_tab = _first_counter()   # every visit to the stalls starts at the first counter
 		Sound.play_sfx("shop")         # the shop door, over the button's own click
 	_build_visit_panel()
 
+# Kept as the fallback for a settlement with no counters at all; the "All"
+# tab itself is gone — one counter at a time, the way the stalls are drawn.
 const MARKET_TAB_ALL := "all"
+
+func _first_counter() -> String:
+	for t in _visit.get("services", []):
+		if t != "innkeeper":
+			return String(t)
+	return MARKET_TAB_ALL
 
 func _goto_market_tab(service: String) -> void:
 	_market_tab = service
@@ -1793,9 +1801,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	match event.keycode:
 		KEY_ESCAPE:
-			if _visit_page == "market" and _market_tab != MARKET_TAB_ALL:
-				_goto_market_tab(MARKET_TAB_ALL)
-			elif _visit_page != "hub":
+			if _visit_page != "hub":
 				_goto_page("hub")
 			else:
 				_close_visit()
@@ -2313,8 +2319,8 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 # hint of who was selling what — and the two services that stock no goods
 # (Healer, Librarian) had nowhere to exist at all, so a city's own services
 # line was advertising people the player could never talk to. A tab strip
-# across the top picks the counter; "All" keeps the old single list, grouped
-# under headers rather than shuffled together.
+# across the top picks the counter, opening on the first one; the old "All"
+# list survives only as the fallback for a place with no counters.
 func _build_market_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()
 	mood.text = "Shelves %d of %d, prices x%.2f%s.  %d gp in the purse." % [
@@ -2329,9 +2335,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	var jobs: Dictionary = _counter_offers(s)
 	var tabs := HBoxContainer.new()
 	box.add_child(tabs)
-	for t in [MARKET_TAB_ALL] + Array(_visit["services"]):
-		var name_of: String = ("All" if t == MARKET_TAB_ALL
-			else String(Campaign.SERVICE_NAMES.get(t, t)))
+	for t in _visit["services"]:
+		var name_of: String = String(Campaign.SERVICE_NAMES.get(t, t))
 		# Innkeeper is the quest-giver role (see campaign.gd's SERVICE_ORDER
 		# comment); its counter is the Notice Board, not a stall here.
 		if t == "innkeeper":

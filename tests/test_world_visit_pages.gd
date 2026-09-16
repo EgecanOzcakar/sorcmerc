@@ -6,6 +6,7 @@
 #   godot --headless --path . -s tests/test_world_visit_pages.gd
 extends SceneTree
 
+const Campaign = preload("res://core/campaign.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
@@ -181,18 +182,18 @@ func _init() -> void:
 	# --- T9y: the market's counters ---------------------------------------
 	var services: Array = main._visit["services"]
 	press(main._visit_panel, "Market")
-	check(main._market_tab == "all", "the market opens on the whole shelf")
-	check(has_button(main._visit_panel, "All"), "...with a tab strip to narrow it")
+	var first: String = main._first_counter()
+	check(main._market_tab == first and first != "all", "the market opens on the first counter, not an All shelf")
+	check(not has_button(main._visit_panel, "All"), "...there is no All tab")
 	check(has_button(main._visit_panel, "Generalist"), "...one tab per counter the settlement staffs")
 	# The open tab is shown as a pressed (disabled) button, so press() — which
 	# skips disabled buttons — must find nothing to do on the tab already open.
-	check(not press(main._visit_panel, "All"), "the open tab isn't also a live button")
+	check(not press(main._visit_panel, String(Campaign.SERVICE_NAMES.get(first, first))), "the open tab isn't also a live button")
 	if "weaponsmith" in services:
 		check(press(main._visit_panel, "Weaponsmith"), "a counter tab can be opened")
 		check(main._market_tab == "weaponsmith", "...and the page follows it")
-		check(not has_label(main._visit_panel, "Your pack") or true, "")
-		press(main._visit_panel, "All")
-		check(main._market_tab == "all", "...and back to the whole shelf")
+		press(main._visit_panel, String(Campaign.SERVICE_NAMES.get(first, first)))
+		check(main._market_tab == first, "...and back to the first counter")
 
 	# The two services that stock no goods: before this they existed only as
 	# words in the hub's services line (see core/settlement_visit.gd's heal()).
