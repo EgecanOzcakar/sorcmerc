@@ -521,6 +521,14 @@ const MINIMAP_MIN := 96.0
 func _autosave() -> void:
 	WorldSave.save(world, party, story)
 
+# Closing the window mid-march is a quit too. The menu's "Save and quit" goes
+# through _leave_world and saves; the title bar's X went through nothing.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and world != null and _combat == null:
+		for ch in party.roster:
+			CharacterSave.save(ch)
+		_autosave()
+
 func _leave_world() -> void:
 	for ch in party.roster:
 		CharacterSave.save(ch)
