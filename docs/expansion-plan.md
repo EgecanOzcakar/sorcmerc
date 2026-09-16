@@ -1156,6 +1156,25 @@ tutorial encounter (in campaign.gd or a new small file, agent's call).
   stops naming all nine slots, by key, in the order `_slotted()` lays them
   out, so the prose and the layout cannot drift apart again in silence.
 
+  Rendering the cards to check them (`tests/shot_tutorial.gd`, new — one PNG
+  per step, the proof a PR touching this file owes) turned up the reason the
+  drift was invisible: **the walkthrough was not opening over the bar it
+  describes at all.** `_ready` showed step 1 the instant the screen existed,
+  which is before the fight has settled — so the card about the nine slots
+  was landing over an empty bar while the goblin took the first turn, or,
+  when the party won its Stealth roll, over T39's deployment bar reading
+  "Swap Vera Kord", "Swap Ilsa Vane", "Begin the ambush". Three fixes:
+  the overlay is armed in `_ready` and opened by `_advance()` on the first
+  hero turn, when there is a bar to explain; the guided fight keeps the free
+  round surprise buys it but skips the deployment phase, which is a mechanic
+  no card explains; and the overlay moved onto `_hud_layer` (above
+  `_hud_overlay`, carrying the screen's theme, since a CanvasLayer breaks
+  both the draw order and the theme chain) because T-hud's HP bars and
+  condition glyphs are on a CanvasLayer and were painting straight through
+  any card parked over a token. `tests/test_game_flow.gd` now waits for the
+  overlay rather than assuming frame one, and asserts the bar underneath it
+  is the eleven-button one and not a deployment phase.
+
 ## T33 — author combat mechanics for the missing spells (locked 2026-09-11, dispatched now)
 
 Of the 146 catalogued spells, only 8 have a hand-authored combat mechanics

@@ -264,9 +264,15 @@ func _ready() -> void:
 
 	set_process(true)
 	_apply_ui_scale()
+	# T32: armed, not opened. The walkthrough used to come up the instant the
+	# screen did, which put its cards over whatever the bar happened to be at
+	# that moment — an empty one while the goblin takes the first turn, or
+	# T39's deployment bar ("Swap Vera Kord", "Begin the ambush") when the
+	# party rolled its Stealth well. Neither is the fixed nine-slot bar the
+	# card describes. _advance() opens it on the first hero turn instead, when
+	# the bar it explains is the bar on screen.
+	_walk_pending = tutorial
 	_new_game()
-	if tutorial:
-		_walk_show(0)
 
 # Font sizes across the whole combat UI track the zoom level.
 func _apply_ui_scale() -> void:
@@ -432,7 +438,14 @@ func _new_game(forced := 0) -> void:
 	# phase — the player permutes who stands on which party start hex.
 	if Encounter.surprise_check(cb, scouted_ahead):
 		_flush_log()
-		_deploy_menu()
+		# T32: the guided fight takes the free round and skips the phase. Its
+		# bar is the phase's own, which contradicts the walkthrough's card, and
+		# the phase itself is a mechanic no card explains — T32's brief is that
+		# nothing is on screen the walkthrough has not named.
+		if tutorial:
+			_advance()
+		else:
+			_deploy_menu()
 		return
 	_advance()
 
@@ -557,6 +570,9 @@ func _advance() -> void:
 		_mode = "idle"
 		_build_hero_menu(c)
 		_advancing = false
+		if _walk_pending:        # T32: the bar the cards describe is now up
+			_walk_pending = false
+			_walk_show(0)
 		return
 	_advancing = false
 	_finish()
@@ -1712,6 +1728,7 @@ func _notification(what: int) -> void:
 # =====================================================================
 
 var _walk: Walk = null      # the live overlay, null whenever the tutorial isn't up
+var _walk_pending := false  # tutorial armed in _ready, waiting on the first hero turn
 
 # Which control each step in Tutorial.STEPS points at.
 func _walk_target(key: String) -> Control:
@@ -1729,9 +1746,17 @@ func _walk_show(i: int) -> void:
 	var step: Dictionary = Tutorial.STEPS[i]
 	_walk = Walk.new()
 	_walk.target = _walk_target(String(step["target"]))
-	_walk.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_walk.mouse_filter = Control.MOUSE_FILTER_STOP   # nothing underneath is clickable
-	add_child(_walk)
+	# On _hud_layer rather than on this Control, and added after _hud_overlay so
+	# it draws after it. T-hud put the HP bars and condition glyphs on a
+	# CanvasLayer above every ordinary child, which included this overlay: a
+	# card parked over a token had that token's HP bar painted across its own
+	# title. The dim belongs over the HUD too — a bright HP bar in the darkened
+	# half of the screen is exactly what the spotlight is meant to remove.
+	# A CanvasLayer breaks the Control chain a theme is inherited down, so the
+	# combat screen's own theme is handed over rather than left to the default.
+	_walk.theme = theme
+	_hud_layer.add_child(_walk)
 
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", Icons.box(Icons.COL_INK, Icons.COL_GOLD_EDGE, 0, 18, 14))
@@ -1782,6 +1807,10 @@ class Walk extends Control:
 	const DIM := Color(0.02, 0.03, 0.05, 0.72)
 
 	func _process(_dt: float) -> void:
+		var vp := get_viewport_rect().size
+		if size != vp:              # no Control parent to anchor to — see _walk_show
+			size = vp
+			queue_redraw()
 		if card == null:
 			return
 		var r := _spot()
