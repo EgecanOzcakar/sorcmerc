@@ -2084,6 +2084,10 @@ func _provocations(mover, dest: Vector2i) -> Array:
 				break
 	return out
 
+# id -> the hexes of its last walk, oldest first. Written by move_to, read and
+# dropped by the board so the token follows the route instead of cutting across.
+var walks := {}
+
 func move_to(mover, dest: Vector2i, disengage := false) -> void:
 	if dest == mover.pos:
 		return
@@ -2102,6 +2106,7 @@ func move_to(mover, dest: Vector2i, disengage := false) -> void:
 				return
 		mover.pos = from
 	var before_region := region_at(from)
+	walks[mover.id] = move_path(mover, dest)   # the board slides the token along it
 	mover.pos = dest
 	mover.econ["move_left"] = int(mover.econ.get("move_left", 0)) - field[dest]
 	if region_at(dest) != before_region:

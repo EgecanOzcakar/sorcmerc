@@ -2132,6 +2132,17 @@ class Board extends Control:
 	static func _ease_move(u: float) -> float:
 		return u * u * (3.0 - 2.0 * u)    # smoothstep: lean in, cruise, settle
 
+	# The point `d` pixels along the polyline `pts`.
+	static func _along(pts: Array, d: float) -> Vector2:
+		for i in range(1, pts.size()):
+			var a: Vector2 = pts[i - 1]
+			var b: Vector2 = pts[i]
+			var seg := a.distance_to(b)
+			if d <= seg or i == pts.size() - 1:
+				return a.lerp(b, clampf(d / maxf(seg, 0.001), 0.0, 1.0))
+			d -= seg
+		return pts[-1]
+
 	func tick(dt: float) -> void:
 		if cb == null:
 			return
@@ -2142,14 +2153,24 @@ class Board extends Control:
 			var cur: Vector2 = _tok.get(c.id, target)
 			var slide: Dictionary = _slide.get(c.id, {})
 			if slide.is_empty() or not (slide["to"] as Vector2).is_equal_approx(target):
-				var hexes: float = cur.distance_to(target) / maxf(1.0, main.hex_px)
-				slide = {"from": cur, "to": target, "t": 0.0,
-					"dur": clampf(hexes / TOKEN_HEXES_PER_SEC, STEP_MIN, STEP_MAX)}
+				# A walk follows its route hex by hex; a shove or a teleport cuts straight.
+				var pts: Array = [cur]
+				var walk: Array = cb.walks.get(c.id, [])
+				cb.walks.erase(c.id)
+				if walk.size() > 2 and walk[-1] == c.pos:
+					for hx in walk.slice(1):
+						pts.append(_pix(hx))
+				else:
+					pts.append(target)
+				var length := 0.0
+				for i in range(1, pts.size()):
+					length += (pts[i] as Vector2).distance_to(pts[i - 1])
+				slide = {"from": cur, "to": target, "pts": pts, "len": length, "t": 0.0,
+					"dur": clampf(length / maxf(1.0, main.hex_px) / TOKEN_HEXES_PER_SEC, STEP_MIN, STEP_MAX)}
 				_slide[c.id] = slide
 			if cur.distance_to(target) > 0.5 and float(slide["t"]) < float(slide["dur"]):
 				slide["t"] = minf(float(slide["dur"]), float(slide["t"]) + dt)
-				_tok[c.id] = (slide["from"] as Vector2).lerp(target,
-					_ease_move(float(slide["t"]) / float(slide["dur"])))
+				_tok[c.id] = _along(slide["pts"], float(slide["len"]) * _ease_move(float(slide["t"]) / float(slide["dur"])))
 				dirty = true
 			else:
 				_tok[c.id] = target
