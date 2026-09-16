@@ -66,6 +66,17 @@ func _init() -> void:
 	check(not a._should_play(hit_path, 1000), "the same sting on the same frame is dropped")
 	check(not a._should_play(hit_path, 1000 + Audio.RETRIGGER_MS - 1), "still inside the window")
 	check(a._should_play(hit_path, 1000 + Audio.RETRIGGER_MS), "past the window it plays again")
+
+	# Takes: hit_sword has three on disk, click one; retrigger limiting sees the sting, not the take
+	var seen := {}
+	for i in 60:
+		seen[a._take_of(Audio.SFX_DIR, "hit_sword")] = true
+	check(seen.size() == 3 and seen.has(Audio.SFX_DIR + "hit_sword.wav") and seen.has(Audio.SFX_DIR + "hit_sword_3.wav"),
+		"hit_sword round-robins its three takes (%s)" % str(seen.keys()))
+	check(a._take_of(Audio.SFX_DIR, "click") == Audio.SFX_DIR + "click.wav", "a sting with one take plays it")
+	check(Audio._take_key(Audio.SFX_DIR + "hit_sword_2.wav") == Audio.SFX_DIR + "hit_sword.wav"
+		and Audio._take_key(Audio.SFX_DIR + "level_up.wav") == Audio.SFX_DIR + "level_up.wav",
+		"the retrigger key strips the take number and nothing else")
 	# Per sound, not global: a miss and a hit landing together are two events.
 	check(a._should_play(miss_path, 1000 + Audio.RETRIGGER_MS), "a different sting is unaffected")
 	# The very first play of a sound must not be swallowed by the zero-clock case.
