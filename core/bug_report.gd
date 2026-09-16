@@ -57,18 +57,29 @@ const TRUNCATED := "\n\n_(truncated to fit the link — the full report is saved
 
 # --- the optional relay (tools/bug-relay/) --------------------------------
 #
-# Empty in the repo. .github/workflows/release.yml stamps these from the
-# BUG_RELAY_URL / BUG_RELAY_KEY Actions variables at export time, the same way
-# it stamps the version — so a build with no relay deployed simply has none,
-# and the overlay offers only the browser.
+# .github/workflows/release.yml stamps these from the BUG_RELAY_URL /
+# BUG_RELAY_KEY Actions variables at export time, the same way it stamps the
+# version, and a deployed relay can also be baked in here — a build with none
+# simply has none, and the overlay offers only the browser.
+#
+# The KEY is the part that must never be committed: the Worker holds the GitHub
+# token, and this is the shared secret in front of it. The URL is not a secret —
+# it is a public endpoint that only accepts what tools/bug-relay/ validates.
 const RELAY_URL := "https://sorcmerc-bug-relay.egecanozcakar.workers.dev"
 const RELAY_KEY := ""
 const RELAY_TIMEOUT := 20.0    # seconds before we stop waiting and say so
 
+# The value that turns a compiled-in relay off for one run. Without it there is
+# no way to see (or test) the no-relay build from a checkout that has a URL
+# baked in, since an empty env var means "fall back to the constant".
+const RELAY_OFF := "off"
+
 # The env var wins, so a local run or a test can point at a dev Worker
-# (`wrangler dev`) without editing the constant.
+# (`wrangler dev`) without editing the constant, or turn the door off entirely.
 static func relay_url() -> String:
 	var env := OS.get_environment("SORCMERC_BUG_RELAY")
+	if env == RELAY_OFF:
+		return ""
 	return env if not env.is_empty() else RELAY_URL
 
 static func relay_key() -> String:

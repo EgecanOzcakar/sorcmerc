@@ -43,6 +43,7 @@ const WorldForage = preload("res://core/world_forage.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
+const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
@@ -210,6 +211,7 @@ var _visit_log: Label = null
 var _left: Object = null         # the settlement just left; no re-entry until out of range
 var _party_overlay: Control = null   # T3's party/profile/inventory screen, full-screen
 var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.active/describe
+var _menu_panel: Control = null      # the Esc pause menu, or null — see _toggle_menu()
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
@@ -484,7 +486,7 @@ func _build_hud() -> void:
 	_camp_btn.pressed.connect(_make_camp)
 	bar.add_child(_camp_btn)
 	var hint := Label.new()
-	hint.text = "Click marches there.  Right-drag pans, wheel zooms."
+	hint.text = "Click marches there.  Right-drag pans, wheel zooms.  Space pauses, Esc opens the menu."
 	hint.theme_type_variation = "Dim"
 	bar.add_child(hint)
 	_region_msg = Label.new()
@@ -554,7 +556,7 @@ func _leave_world() -> void:
 # and journal own it the same way, for the same reason.
 func _toggle_pause() -> void:
 	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
-			or _story_panel != null or story_card != null:
+			or _story_panel != null or story_card != null or _menu_panel != null:
 		return
 	if world.clock.is_paused():
 		world.clock.resume()
@@ -564,10 +566,103 @@ func _toggle_pause() -> void:
 
 func _cycle_speed() -> void:
 	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
-			or _story_panel != null or story_card != null:
+			or _story_panel != null or story_card != null or _menu_panel != null:
 		return
 	world.clock.cycle_speed()
 	_speed_btn.text = "%dx" % int(world.clock.speed)   # every WorldClock.SPEEDS entry is a whole number
+
+# --- the pause menu -------------------------------------------------------
+#
+# Esc on the map. The combat screen has had F1 settings since T29 and the title
+# screen has its own footer, but the open world had neither: the only way to
+# reach Settings mid-run was to walk back to the title and lose the map. It
+# holds the clock the same way a market visit does — the world does not move
+# behind an open menu — and every entry on it is something that was already
+# reachable from the HUD bar, gathered behind the one key a player will try.
+
+func _toggle_menu() -> void:
+	if _menu_panel != null:
+		_close_menu()
+		return
+	# Anything that has already taken the screen owns the moment; the menu is
+	# the map's own. (_unhandled_key_input has closed the light panels first,
+	# so reaching here means nothing else is up.)
+	if _combat != null or not _visit.is_empty() or _site != null \
+			or _event_card != null or _approach_card != null or story_card != null \
+			or _party_overlay != null or _quest_panel != null or _story_panel != null:
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_build_menu_panel()
+
+func _close_menu() -> void:
+	if _menu_panel != null:
+		_menu_panel.queue_free()
+		_menu_panel = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+func _build_menu_panel() -> void:
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Eat clicks: the map must not accept a march order through the menu.
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+	_menu_panel = overlay
+
+	var dim := ColorRect.new()
+	dim.color = Color(Icons.COL_BG.r, Icons.COL_BG.g, Icons.COL_BG.b, 0.75)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(dim)
+
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(centre)
+
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.custom_minimum_size = Vector2(320, 0)
+	centre.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "Paused"
+	title.theme_type_variation = "Head"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+
+	var when := Label.new()
+	when.theme_type_variation = "Dim"
+	when.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	when.text = "Day %d, %02d:%02d — %s" % [
+		int(world.clock.elapsed / 1440.0) + 1,
+		int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60,
+		String(_region.get("label", "the road"))]
+	box.add_child(when)
+
+	var add := func(label: String, fn: Callable, quiet := false) -> void:
+		var b := Button.new()
+		b.text = label
+		if quiet:
+			b.theme_type_variation = "Quiet"
+		b.pressed.connect(fn)
+		box.add_child(b)
+
+	add.call("Resume  [Esc]", _close_menu)
+	# The settings overlay parents itself to this screen, not to the menu, so
+	# it survives the menu closing underneath it — and its own Esc closes it
+	# before this one's ever sees the key.
+	add.call("Settings", func(): SettingsOverlay.toggle(self))
+	add.call("Field manual", func(): ManualOverlay.toggle(self), true)
+	add.call("Report a bug  [F3]", func(): report_bug(), true)
+	add.call("Save and quit to the title screen", func():
+		_close_menu()
+		_leave_world(), true)
 
 # --- party / profile / inventory ----------------------------------------
 #
@@ -687,7 +782,7 @@ func _check_story() -> void:
 	# already has: a fight, a market, the party screen, the quest log, a road
 	# event, a band asking to be dealt with.
 	if _combat != null or not _visit.is_empty() or _party_overlay != null \
-			or _quest_panel != null or _story_panel != null \
+			or _quest_panel != null or _story_panel != null or _menu_panel != null \
 			or _event_card != null or _approach_card != null or _site_screen != null:
 		return
 	var pending: Array = story.pending(world, party)
@@ -1482,7 +1577,35 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		accept_event()
 		report_bug()
 		return
-	if _visit.is_empty() or _combat != null:
+	if _combat != null:
+		return
+	# Out on the map, before the settlement bindings below: the two keys every
+	# player presses first. Esc backs out of whatever panel is up and otherwise
+	# opens the pause menu; space is the Pause button without the trip to the
+	# corner. Neither existed here, though both do in the fight (scenes/main.gd).
+	if _visit.is_empty():
+		match event.keycode:
+			KEY_ESCAPE:
+				# A delve, a road event, a band closing in and a story beat each
+				# own the screen and have their own way out; Esc is not it.
+				if _site != null or _event_card != null or _approach_card != null \
+						or story_card != null:
+					return
+				if _party_overlay != null:
+					_close_party()
+				elif _quest_panel != null:
+					_close_quests()
+				elif _story_panel != null:
+					_close_story()
+				else:
+					_toggle_menu()
+			KEY_SPACE:
+				if _menu_panel != null:
+					_close_menu()
+				else:
+					_toggle_pause()
+			_: return
+		accept_event()
 		return
 	match event.keycode:
 		KEY_ESCAPE:

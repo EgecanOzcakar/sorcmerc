@@ -228,10 +228,12 @@ handler for `https` — there is an optional second door: **Send it anonymously*
 posts the report to a small Cloudflare Worker (`tools/bug-relay/`) that holds a
 repo-scoped token and files the issue. It is the fallback and it stays the
 fallback, because the issue arrives with nobody to reply to; the filed issue
-says so on its own face. It is also entirely opt-in — the button only appears in
-a build with a relay compiled in, and the repo ships with none. See
-`tools/bug-relay/README.md` to deploy one, or don't, and the browser path is the
-only path.
+says so on its own face. The button only appears in a build with a relay
+compiled in — this repo has one deployed and its URL baked into
+`core/bug_report.gd` (the URL is a public endpoint; the GitHub token lives in
+the Worker and the shared key is never committed). `SORCMERC_BUG_RELAY=off`
+runs as if there were none. See `tools/bug-relay/README.md` to deploy your own,
+or don't, and the browser path is the only path.
 
 What rides along with the description: the build and engine version, the
 platform, the screen it was filed from and that screen's live state (the board

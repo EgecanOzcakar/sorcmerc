@@ -162,11 +162,14 @@ func test_submit_never_opens_a_browser_headless() -> void:
 
 func test_relay_config() -> void:
 	OS.set_environment("SORCMERC_BUG_RELAY", "")
-	# The repo ships with no relay: the second door is opt-in, and a build that
-	# has not deployed one must not offer a button that cannot work.
-	check(Report.RELAY_URL == "", "no relay url is committed")
+	# The credential is the thing that must never be committed: the Worker holds
+	# the GitHub token and the key is the shared secret in front of it. The URL
+	# is a public endpoint, and a checkout with one deployed may bake it in — so
+	# the contract is "the door is on exactly when a url resolves", not "there is
+	# never a url here".
 	check(Report.RELAY_KEY == "", "no relay key is committed")
-	check(not Report.has_relay(), "...so has_relay() is false out of the box")
+	check(Report.has_relay() == Report.RELAY_URL.begins_with("http"),
+		"out of the box the door follows whatever url is baked in")
 	# The env var is the local override — a dev Worker without editing the const.
 	OS.set_environment("SORCMERC_BUG_RELAY", "https://relay.test/report")
 	check(Report.relay_url() == "https://relay.test/report", "the env var supplies the url")
@@ -174,8 +177,14 @@ func test_relay_config() -> void:
 	# Something that is not a URL is not a relay, however it got there.
 	OS.set_environment("SORCMERC_BUG_RELAY", "not-a-url")
 	check(not Report.has_relay(), "a non-url is not a relay")
+	# ...and the one value that means "no relay at all", so the shipped-without-one
+	# build is reachable from a checkout that has a url compiled in.
+	OS.set_environment("SORCMERC_BUG_RELAY", Report.RELAY_OFF)
+	check(Report.relay_url() == "", "the off switch clears the url")
+	check(not Report.has_relay(), "...and turns the door off")
 	OS.set_environment("SORCMERC_BUG_RELAY", "")
-	check(not Report.has_relay(), "clearing it turns the door off again")
+	check(Report.has_relay() == Report.RELAY_URL.begins_with("http"),
+		"clearing it falls back to the baked-in url")
 
 func test_relay_payload() -> void:
 	var p = JSON.parse_string(Report.relay_payload("A title", "A body"))
@@ -259,9 +268,9 @@ func test_overlay() -> void:
 	host.queue_free()
 	OS.set_environment("SORCMERC_BUG_RELAY", "")
 
-# The shipped default: no relay deployed, so no button for one.
+# A build with no relay deployed: no button for one.
 func test_overlay_without_a_relay() -> void:
-	OS.set_environment("SORCMERC_BUG_RELAY", "")
+	OS.set_environment("SORCMERC_BUG_RELAY", Report.RELAY_OFF)
 	var host := Control.new()
 	root.add_child(host)
 	var o = Overlay.toggle(host, {"Screen": "title"})
@@ -276,3 +285,4 @@ func test_overlay_without_a_relay() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(String(o._last["path"])))
 	host.queue_free()
 	await process_frame
+	OS.set_environment("SORCMERC_BUG_RELAY", "")
