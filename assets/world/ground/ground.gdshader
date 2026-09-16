@@ -10,7 +10,7 @@ uniform sampler2D grass_tex : repeat_enable, filter_linear_mipmap;
 uniform sampler2D forest_tex : repeat_enable, filter_linear_mipmap;
 uniform sampler2D water_tex : repeat_enable, filter_linear_mipmap;
 uniform sampler2D mask_tex : repeat_disable, filter_linear;   // one texel per mask cell
-uniform vec2 mask_texel = vec2(1.0 / 64.0);   // one texel, in mask uv
+uniform vec2 mask_texel = vec2(0.015625);   // one texel, in mask uv
 uniform vec2 mask_min;      // world position of the mask's top-left texel
 uniform vec2 mask_size;     // world extent the mask covers
 uniform vec2 origin;        // world.gd _origin

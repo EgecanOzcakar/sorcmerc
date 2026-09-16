@@ -81,28 +81,6 @@ func _init() -> void:
 	check(beacon.size() == beacon_slow.size(),
 		"settlement beacons agree too (%d vs %d)" % [beacon.size(), beacon_slow.size()])
 
-	# --- the tile a cell draws is stable, and cached ----------------------
-	var probe := Vector2i(3, 7)
-	var first: Vector2i = main._ground_tile(probe)
-	check(main._tile_cache.has(probe), "the tile pick is remembered")
-	check(main._ground_tile(probe) == first, "...and comes back the same")
-	check(first.x in [0, 1, 2], "...naming one of the three sheets (%d)" % first.x)
-	# It has to be the same answer the old per-frame arithmetic gave.
-	var center := Vector2(probe.x + 0.5, probe.y + 0.5) * CELL
-	var cl: Vector2i = main._cluster(probe, main.TILE_CLUSTER)
-	var wet: float = 0.5 - main.world.water_depth(center) / (main.SHORE * 2.0)
-	var want_kind := 0
-	var want_pool: Array = main.GRASS
-	if main._rand(probe, 9) < wet:
-		want_kind = 2; want_pool = main.WATER
-	elif main._rand(cl, 5) > main.WOODED:
-		want_kind = 1; want_pool = main.FOREST
-	check(first.x == want_kind, "the cached sheet is the one the arithmetic picks")
-	check(first.y == want_pool[int(main._rand(cl, 1) * want_pool.size()) % want_pool.size()],
-		"...and so is the tile in it")
-	check(main._tile_sheet(0) == main._terrain_tex and main._tile_sheet(1) == main._forest_tex
-		and main._tile_sheet(2) == main._water_tex, "the sheet ids map to the right textures")
-
 	# --- the memo answers the same thing twice ---------------------------
 	main.world.explored.append(p.position + Vector2(4000, 4000))   # far off screen
 	var again: Dictionary = main._visible_ground(i0, i1, j0, j1)

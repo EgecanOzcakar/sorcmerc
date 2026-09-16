@@ -6,19 +6,13 @@ this note is the paper trail the expansion plan asks for. Each pack's own
 
 | File | Source pack | Author | Original file |
 |------|-------------|--------|---------------|
-| `overworld/terrain.png` | [Isometric Tiles: Overworld Pack](https://screamingbrainstudios.itch.io/iso-overworld-pack) | Screaming Brain Studios | `Overworld - Large/Flat/Overworld - Terrain 1 - Flat 256x128.png` |
-| `overworld/forest.png` | same | same | `Overworld - Large/Flat/Overworld - Forest - Flat 256x128.png` |
+| `ground/{grass,forest,water}.png` | generated in-house (`~/localgen/gen_overworld_ground.py`, SDXL, made seamless) | — | the overworld's painted ground, blended by `ground/ground.gdshader` |
 | `town/buildings.png` | [Isometric medieval buildings](https://opengameart.org/content/isometric-medieval-buildings) + [part 2](https://opengameart.org/content/isometric-medieval-buildings-2) | rubberduck | the `128x64_shaded` frames `00`–`03` of all 5 buildings, out of both `*_single.zip` downloads |
 | `tokens/pawn.png` | [Board Game Pack](https://kenney.nl/assets/boardgame-pack) | Kenney | `PNG/Pieces (White)/pieceWhite_border00.png` |
 
 ## The edits made to the files
 
-**Overworld tiles (O11).** The pack ships RGB PNGs with a **colour-key**
-background rather than alpha — the keys are declared in its Tiled `.tsx`
-(`trans="000000"`). Godot draws alpha, not colour keys, so every pixel exactly
-equal to the key colour was set to alpha 0 and the files re-saved as RGBA.
-Nothing else was touched: no rescaling, no recolouring, no cropping. To redo it
-from a fresh download, key out `#000000` by exact RGB match.
+**Overworld tiles (O11, retired).** The Screaming Brain Studios Overworld pack, and the Kenney / SBS Floor Pack spikes, drew the ground as per-cell diamonds until the painted ground shader replaced them; their provenance notes went with the files.
 
 **Buildings (O12).** `tools/pack_buildings.py` builds the 640x480 sheet from the
 two packs' single-frame downloads; run it to redo the file. What it does, and
