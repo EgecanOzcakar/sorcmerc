@@ -2260,24 +2260,6 @@ func _page_scroll_h(want: float) -> float:
 
 const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board"}
 
-# The town square's establishing shot — the settlement as it was painted
-# (Icons.settlement_art), cropped to a strip across the top of the hub page.
-# The hub does not scroll: its doors ARE the page, and a door you cannot reach
-# is worse than a town you cannot look at. So the picture is what gives way on
-# a short window, the same trade _page_scroll_h() makes for a counter's list,
-# and it drops out entirely rather than shrink to a letterbox nobody can read.
-const HUB_ART_H := 150.0
-const HUB_ART_MIN_H := 60.0
-# The hub's own chrome: title, mood line, up to four doors and their service
-# line, the log and the button bar. Less than VISIT_CHROME_H's 320 because the
-# hub has no counter portrait, more than the doors alone because the log under
-# them wraps to two lines in a settlement with something going on.
-const HUB_CHROME_H := 480.0
-
-func _hub_art_h() -> float:
-	var h := clampf(size.y - HUB_CHROME_H, 0.0, HUB_ART_H)
-	return h if h >= HUB_ART_MIN_H else 0.0
-
 # The town square: where to go, plus the one thing that belongs to no single
 # building — picking over a battlefield nearby.
 # T9y: every door now says what is behind it before you open it. The split
@@ -2286,12 +2268,6 @@ func _hub_art_h() -> float:
 # shelves were bare — was to walk in and look. All three counts are read off
 # state the page already had to compute anyway.
 func _build_hub_page(box: VBoxContainer, s) -> void:
-	var art_h := _hub_art_h()
-	if art_h > 0.0:
-		var art := Icons.settlement_art_rect(s.faction, s.kind,
-			Vector2(VISIT_PANEL_W, art_h))
-		if art != null:
-			box.add_child(art)
 	var mood := Label.new()
 	mood.text = "%s%s%d gp in the purse." % [
 		"Fighting nearby. " if _visit.get("battle", false) else "",

@@ -422,32 +422,6 @@ static func event_art(event_id: String, ok) -> Texture2D:
 			return tex
 	return _icon("res://assets/generated/event-%s.png" % event_id)
 
-
-# The settlement itself, painted: assets/generated/settlement-<faction>-<kind>.png
-# (tools/localgen/gen_settlement_art.py). Same contract as portrait() — null for
-# a (faction, kind) nobody has painted yet, so a set that is still being filled
-# in shows art where there is art and nothing where there is not, rather than a
-# blank box in every town of the factions still waiting.
-static func settlement_art(faction: String, kind: String) -> Texture2D:
-	return _icon("res://assets/generated/settlement-%s-%s.png" % [faction, kind])
-
-
-# settlement_art() as the wide strip a 440px panel has room for. The paintings
-# are 768x457 and the strip is about 3:1, so KEEP_ASPECT_COVERED is doing a
-# centre crop — the same thing event_card.gd does by hand with
-# draw_texture_rect_region(), in the one form a Control can be handed to a
-# VBoxContainer.
-static func settlement_art_rect(faction: String, kind: String, px: Vector2) -> TextureRect:
-	var tex := settlement_art(faction, kind)
-	if tex == null:
-		return null
-	var pic := TextureRect.new()
-	pic.texture = tex
-	pic.custom_minimum_size = px
-	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	return pic
-
 static func portrait_rect(faction: String, service: String, px := 160, mood := "") -> TextureRect:
 	var tex := portrait(faction, service, mood)
 	if tex == null:

@@ -23,6 +23,7 @@ extends SceneTree
 
 const Kit = preload("res://scenes/world/settlement_kit.gd")
 const MapView = preload("res://scenes/world/world.gd")
+const Settlements3D = preload("res://scenes/world/settlements3d.gd")
 
 const FACTIONS := ["dwarf", "elf", "human", "orc"]
 const SIZES := ["camp", "town", "city"]
@@ -195,6 +196,10 @@ func _one(faction: String, kind: String, source: String, shadows: bool,
 		var path := "res://assets/settlements/%s_%s.glb" % [faction, kind]
 		n = load(path).instantiate()
 		_fit_height(n, float(Kit.PLANS[kind]["height"]))
+		# The models carry their colour in COLOR_0 since the low-poly rebuild,
+		# and glTF's own material ignores it — without this the comparison shoots
+		# twelve white blobs and flatters the kit enormously.
+		Settlements3D.dress(n)
 	sub.add_child(n)
 	# 1:1 with the map: the viewport is `cell.y` px tall and the camera shows
 	# cell.y / ISO_GAIN world units, so one world unit lands on ISO_GAIN pixels.
