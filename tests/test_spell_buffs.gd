@@ -191,6 +191,7 @@ func test_teleport_obscure_summon() -> void:
 	var wolf = res["summoned"]
 	check(wolf.team == "party" and wolf.src_id == "dire-wolf" and wolf.cname.begins_with("Ilsa's"), "...on Ilsa's side, hers by name (%s)" % wolf.cname)
 	check(cb.order.find(wolf) == cb.order.find(ilsa) + 1, "...acting right after her")
+	check(wolf.short_name() == "Dire Wolf", "the bar calls it by its kind, not \"Ilsa's\" (%s)" % wolf.short_name())
 	check(Hex.distance(wolf.pos, ilsa.pos) <= 3 and cb._hex_free(wolf.pos, wolf), "...in a free hex beside her")
 	check(not cb.all_verbs(wolf).filter(func(v): return v["kind"] == "attack").is_empty(), "...and it has an attack")
 	cb._end_concentration(ilsa, "drops it")

@@ -849,6 +849,7 @@ func summon(caster, v: Dictionary):
 	var c = load("res://core/encounter.gd").spawn(String(m["id"]), 1.0, caster.team, spot, n)   # load: encounter.gd preloads this file
 	if c == null:
 		return null
+	c.short = c.cname.replace(" %d" % n, "")   # the bar says "Dire Wolf", the log "Ilsa's Dire Wolf 1"
 	c.cname = "%s's %s" % [caster.cname.get_slice(" ", 0), c.cname]
 	combatants.append(c)
 	var at := order.find(caster)
