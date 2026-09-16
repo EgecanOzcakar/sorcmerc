@@ -20,6 +20,7 @@ const Approach = preload("res://core/approach.gd")
 const Travel = preload("res://core/travel.gd")
 const World = preload("res://core/world.gd")
 const Party = preload("res://core/party.gd")
+const Icons = preload("res://core/ui_icons.gd")
 
 var _pass := 0
 var _fail := 0
@@ -261,7 +262,18 @@ func _init() -> void:
 	roomy.show_approach(Approach.options(tp, World.RoamingParty.new("men", Vector2(40.0, 0.0), "orc")), "Orc raiders (8)")
 	check(roomy._art_rect.size.y == roomy.ART_H and tall._art_rect.size.y < roomy.ART_H,
 		"the banner is full-height where there is room (%.0f) and gives way where there is not (%.0f)" % [roomy._art_rect.size.y, tall._art_rect.size.y])
-	check(roomy._art_of("avoid") != null and roomy._art_of("engage") != null, "every way has a picture")
+	# #55: one picture for the whole question, not one per way under the mouse.
+	# The outcome card that follows has the other one (the way's own pass/fail
+	# frame), and between them that is two pictures for one meeting.
+	check(roomy._art != null, "the card has a picture of the meeting")
+	check(roomy._art == Icons.event_art(ApproachCard.SCENE_ART, null),
+		"...the hostile one, whichever row the mouse is over")
+	var friendly = card(1280.0, 900.0)
+	friendly.show_approach(Approach.options(tp, World.RoamingParty.new("men", Vector2(40.0, 0.0), "orc"), false),
+		"Elf patrol (4)")
+	check(friendly._art == Icons.event_art(ApproachCard.FRIENDLY_SCENE_ART, null),
+		"a band nobody is fighting gets the picture of a hail instead")
+	check(friendly._art != roomy._art, "...which is not the same picture")
 	check(tall._panel.position.y >= 0.0, "...from the top edge down")
 	var wide = card(1280.0, 720.0)
 	wide.show_approach(four(), "Goblins (3)")

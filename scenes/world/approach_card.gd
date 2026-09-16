@@ -171,19 +171,30 @@ func _notification(what: int) -> void:
 const ART_H := 200.0
 const ART_MIN_H := 110.0
 var _art_rect := Rect2()
+var _art: Texture2D = null    # the band on the road: one picture, fixed for the card's life
 
-# The way whose picture the card shows: the hovered button's, else the first.
-func _hot_way() -> String:
-	for n in _btns.size():
-		if is_instance_valid(_btns[n]) and _btns[n].is_hovered():
-			return _s_of(n, "id")
-	return _s_of(0, "id")
+# Which picture that is. The card used to show the HOVERED way's art, so the
+# banner flipped between four paintings while the player read four rows, and
+# then the outcome card behind it made a fifth — a pop-up that showed a handful
+# of pictures for one decision (#55). One picture while the question is open and
+# one once it is answered is the whole shape: this is the question's, and the
+# way's own art (its pass/fail frame) belongs to the answer, on the event card
+# world.gd opens next. Both of these are a band coming up the road, which is
+# what the player is actually looking at, and neither presumes a choice.
+const SCENE_ART := "approach-engage"          # a hostile band, closing
+const FRIENDLY_SCENE_ART := "approach-greet"  # a civil one, hailing
+# The friendly card is the two no-roll ways (core/approach.gd's FRIENDLY_ORDER);
+# nothing else on the dict says which kind of meeting this is.
+const FRIENDLY_WAYS := ["greet", "pass"]
 
 func _s_of(i: int, key: String) -> String:
 	return str(_opt(i).get(key, ""))
 
-func _art_of(way: String) -> Texture2D:
-	return Icons.event_art("approach-" + way, null) if way != "" else null
+func _friendly() -> bool:
+	for n in _opts.size():
+		if not _s_of(n, "id") in FRIENDLY_WAYS:
+			return false
+	return not _opts.is_empty()
 
 func show_approach(options: Array, foe_label: String) -> void:
 	_opts = []
@@ -194,6 +205,7 @@ func show_approach(options: Array, foe_label: String) -> void:
 		_opts.append(FALLBACK_OPTION)
 	_foe = foe_label if foe_label != "" else NO_FOE
 	_chosen = false
+	_art = Icons.event_art(FRIENDLY_SCENE_ART if _friendly() else SCENE_ART, null)
 	visible = true
 	_build_buttons()
 	_layout()
@@ -381,14 +393,14 @@ func _layout(art_h := -1.0) -> void:
 		Icons.COL_FOE, avail - gw))
 	y += Icons.FS_CAPTION + 10.0
 
-	# The way under the mouse (the first offered, until one is), pictured: the
-	# same banner slot the event card uses for the outcome that follows.
+	# The meeting itself, pictured: the same banner slot the event card uses for
+	# the outcome that follows, and the same size — one picture here, one there.
 	# Sized to the window: a quarter of its height up to ART_H, and none at all
 	# when a short window needs every pixel for the four ways themselves.
 	_art_rect = Rect2()
 	if art_h < 0.0:
 		art_h = ART_H
-	if _art_of(_hot_way()) != null and art_h >= ART_MIN_H:
+	if _art != null and art_h >= ART_MIN_H:
 		_art_rect = Rect2(tx, y, avail, art_h)
 		y += art_h + BLOCK_GAP
 
@@ -612,9 +624,8 @@ func _draw() -> void:
 	draw_rect(_panel, Icons.COL_PANEL)
 	draw_rect(Rect2(_panel.position, Vector2(BAR_W, _panel.size.y)), Icons.COL_FOE)
 	draw_rect(_panel, Color(Icons.COL_GOLD, BORDER_ALPHA), false, 1.0)
-	var art := _art_of(_hot_way())
-	if art != null and _art_rect.size.x > 0.0:
-		var ts := art.get_size()
+	if _art != null and _art_rect.size.x > 0.0:
+		var ts := _art.get_size()
 		var src := Rect2(Vector2.ZERO, ts)
 		var slot_aspect := _art_rect.size.x / _art_rect.size.y
 		if ts.x / ts.y < slot_aspect:
@@ -623,7 +634,7 @@ func _draw() -> void:
 		else:
 			src.size.x = ts.y * slot_aspect
 			src.position.x = (ts.x - src.size.x) / 2.0
-		draw_texture_rect_region(art, _art_rect, src)
+		draw_texture_rect_region(_art, _art_rect, src)
 		draw_rect(_art_rect, Color(Icons.COL_FOE, 0.55), false, 1.0)
 
 	for n in _rows.size():
