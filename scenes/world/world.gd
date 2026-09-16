@@ -251,6 +251,10 @@ func _ready() -> void:
 		party = Party.new()
 		for ch in Party.demo_roster():
 			party.add_member(ch)
+	# The map opens on the party — a resumed save left them wherever they were,
+	# and the centre of the world is not it.
+	if world.player() != null:
+		center_on(world.player().position)
 	_settlements3d = Settlements3D.new()
 	_settlements3d.world_map = self
 	add_child(_settlements3d)
@@ -2742,6 +2746,11 @@ func set_zoom(z: float) -> void:
 
 func pan_by(d: Vector2) -> void:
 	_pan += d
+
+# Put world point `w` in the middle of the view.
+func center_on(w: Vector2) -> void:
+	_pan = -_iso(w) * _zoom
+	_layout()
 
 # zoom keeping the world point under `sp` fixed
 func zoom_at(sp: Vector2, factor: float) -> void:
