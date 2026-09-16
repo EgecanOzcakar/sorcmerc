@@ -128,6 +128,19 @@ func _row(r: Dictionary) -> Control:
 	head.add_theme_constant_override("separation", 8)
 	col.add_child(head)
 
+	# The badge (assets/generated/achievement-<id>.png), dimmed while locked;
+	# the star stands in for one that has no art.
+	var badge := Icons.scene_art("achievement-" + String(r.get("id", "")), null)
+	if badge != null:
+		var pic := TextureRect.new()
+		pic.texture = badge
+		pic.custom_minimum_size = Vector2(56, 56)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		if not r["unlocked"]:
+			pic.modulate = Color(0.45, 0.45, 0.45, 0.8)
+		head.add_child(pic)
 	var mark := Label.new()
 	mark.text = "★" if r["unlocked"] else "☆"
 	mark.add_theme_color_override("font_color", Icons.COL_GOLD if r["unlocked"] else Icons.COL_EDGE)

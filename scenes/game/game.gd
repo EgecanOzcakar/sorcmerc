@@ -483,6 +483,15 @@ func show_summary(run) -> void:
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
 
+	var end_art := Icons.scene_art({"won": "summary-victory", "lost": "summary-defeat"}.get(run.state, ""), null)
+	if end_art != null:
+		var pic := TextureRect.new()
+		pic.texture = end_art
+		pic.custom_minimum_size = Vector2(480, 180)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.clip_contents = true
+		col.add_child(pic)
 	var head := Label.new()
 	head.text = {"won": "Victory", "retired": "Retired",
 		"lost": "Defeat"}.get(run.state, "The run ends")

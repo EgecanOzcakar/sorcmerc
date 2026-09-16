@@ -49,6 +49,8 @@ func _init() -> void:
 	safe.world.clock.elapsed = t_safe
 	var kits0: int = safe.party.stash_count(WorldCamp.CAMP_KIT_ITEM)
 	safe._make_camp()   # no ambush -> synchronous, no await inside it
+	check(safe._event_card != null and safe._event_card._s("id") == "camp-night", "a quiet night is reported on the card")
+	safe._event_card.acknowledged.emit()
 	var elapsed_after: float = safe.world.clock.elapsed   # read before any more _process() ticks advance it further
 	check(safe.party.stash_count(WorldCamp.CAMP_KIT_ITEM) == kits0 - 1, "a camp attempt always spends the kit")
 	check(safe._combat == null, "no ambush -> no combat launched")
@@ -67,6 +69,11 @@ func _init() -> void:
 	if t_bad >= 0.0:
 		bad.world.clock.elapsed = t_bad
 		bad._make_camp()
+		for i in 5:
+			await process_frame
+		check(bad._event_card != null and bad._event_card._s("id") == "camp-jumped", "the night is reported on the card first, as jumped")
+		check(bad._combat == null, "...and the fight waits behind its button")
+		bad._event_card.acknowledged.emit()
 		for i in 5:
 			if bad._combat != null:
 				break
@@ -91,6 +98,10 @@ func _init() -> void:
 	if t_good >= 0.0:
 		good.world.clock.elapsed = t_good
 		good._make_camp()
+		for i in 5:
+			await process_frame
+		check(good._event_card != null and good._event_card._s("id") == "camp-watch", "a caught ambush is reported as caught")
+		good._event_card.acknowledged.emit()
 		for i in 5:
 			if good._combat != null:
 				break

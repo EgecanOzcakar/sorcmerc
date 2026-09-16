@@ -256,6 +256,12 @@ func _init() -> void:
 	tall.show_approach(Approach.options(tp, World.RoamingParty.new("men", Vector2(40.0, 0.0), "orc")),
 		"Orc raiders (8)")
 	check(tall._panel.end.y <= 720.0, "a fully priced four-way card still fits a 400x720 window (%.0f)" % tall._panel.end.y)
+	# ...the picture is what gave way: a roomy window shows the full banner
+	var roomy = card(1280.0, 900.0)
+	roomy.show_approach(Approach.options(tp, World.RoamingParty.new("men", Vector2(40.0, 0.0), "orc")), "Orc raiders (8)")
+	check(roomy._art_rect.size.y == roomy.ART_H and tall._art_rect.size.y < roomy.ART_H,
+		"the banner is full-height where there is room (%.0f) and gives way where there is not (%.0f)" % [roomy._art_rect.size.y, tall._art_rect.size.y])
+	check(roomy._art_of("avoid") != null and roomy._art_of("engage") != null, "every way has a picture")
 	check(tall._panel.position.y >= 0.0, "...from the top edge down")
 	var wide = card(1280.0, 720.0)
 	wide.show_approach(four(), "Goblins (3)")
