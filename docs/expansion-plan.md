@@ -4344,3 +4344,139 @@ byte-identical on current boards (nobody ever shoots past 7 hexes);
 (Hold Person, Web, Hypnotic Pattern…). Recommendation: author the 29 ranges
 first, then decide whether range is a 3-tier grammar (cap 5) or needs bigger
 boards + a `_foe_spots` fix — no more constant sweeps until that's chosen.
+
+## The open bug reports, worked through (2026-09-16)
+
+Nine issues filed from the in-game reporter over one play session, plus two
+follow-up asks. One commit and one test each; the tests all fail against the
+code as it was. What each one actually turned out to be:
+
+**#24, "berserker rage needs twice keyboard press"** — it needed four. Rage
+burns a pool so it wears the two-press confirm guard `_costly()` puts on every
+costly verb, and the guard was right; where it put the second press was not.
+Arming rebuilt the MAIN BAR, and Rage lives one level down in the `[3]` Bonus
+submenu (a barbarian has two bonus-cost things, Rage and Reckless Attack, so
+that slot is a list rather than a straight fire). First press armed Rage and
+dropped the player onto a bar with no confirm anywhere on it — second press of
+the same key swung the greataxe. 3-1-3-1. The fix is structural: a page's
+entries are re-derived on every render (`_menu_entries()`, the old
+`_build_hero_menu`'s first half) instead of being carried in the button's
+binding, so `_refresh_menu()` can rebuild whichever page is open — main bar,
+slot list, or spell tier picker — from what is true after arming.
+
+**#25 / #26, Esc and space on the map** — every other screen answers those two
+keys and the open world answered neither, so Settings mid-run meant going back
+to the title and losing the map. Esc backs out of whatever light panel is up
+and otherwise opens a pause menu; space is the Pause button. The menu holds the
+clock the way a market visit does and refuses to open over anything that
+already owns the screen.
+
+**#28, "quests page has verticality issue"** — a `ScrollContainer` hands its
+child the child's MINIMUM size on any axis it can still scroll, and an
+autowrapping `Label`'s minimum width is one pixel. Every quest line measured
+1px wide and ~570px tall: eight quests, 4096px of scroll, for text that fits in
+eight lines. Horizontal scrolling off is what makes the column stretch to the
+container's width and the labels wrap at it. Four lists in `world.gd` were
+built this way and now share `_scroll_column()`.
+
+**#33, "quest complete screen stretches and overflows"** — the other end of the
+same rope, and a regression #28's fix would otherwise have introduced: with
+horizontal scrolling off, a row's own minimum width reaches the panel instead
+of being scrolled past, and `_trade_row`'s label had no wrapping, so one long
+job title took the settlement counter to 717px where 468 was meant to be. The
+floating panels also placed themselves by arithmetic against a size they were
+told to expect and then measured whatever they came to; they sit in
+`CenterContainer`s now, and a page's list takes the height the window can spare.
+
+**#29** — the turn strip borders every tile the current aim lands on. For a
+cone or a burst, which NAMES are standing in the shape is exactly what the
+strip knows and the board does not spell out.
+
+**#30, "no loot page"** — the combat screen writes its own after-action lines,
+but out on the map it is torn down the frame its `result` is filled, so nobody
+ever read them; the linear campaign never had the problem because it holds the
+fight screen up behind "Back to the road". The map's version is a page of its
+own, since the map has a delve to summarise as well as a single fight: a delve
+totals the whole descent and reads its gold off the purse, because a site pays
+from room caches, the boss hoard and the fights themselves and only the purse
+sees all three.
+
+**#27** — roster rows carry equipped gear and trained skills (best first,
+expertise marked) out of `Party.summary()`, so comparing two characters no
+longer means opening both sheets. And the roster reshuffled anywhere: the
+screen takes a `roster_locked` flag from whoever opens it, so the HUD button
+opens it locked and the inn's "Sort out the party" opens it unlocked. The lock
+covers benching, recruiting and Create new and nothing else — marching order is
+a travel decision, and travel is what you are doing out there.
+
+**#31, the frame-rate drop** — three things, all per cell, per frame, for
+answers that do not change per frame. `_draw_ground()` walked every cell of the
+VIEWPORT and asked `world.is_explored()` about each one (3.7µs a cell measured,
+since that folds in a scan of every settlement), then recomputed each surviving
+cell's tile through `world.water_depth()`, another linear scan, at 4.8µs. It
+walks the explored ground now — out from each remembered waypoint and each
+settlement beacon, clipped to the viewport and memoised on the cell box plus
+the trail's length — which reaches exactly the set `is_explored()` would have
+said yes to, from the other end. Unexplored cells are one rect for the whole
+viewport rather than one each, and the tile pick is cached.
+
+Measured on the reporter's own 3840×2118 at their default zoom, large map, real
+trail: **9,207 cells and 35–80ms of GDScript before a tile was drawn → 0.52ms.**
+It also un-breaks the picture at that resolution, which is likely what #23
+("overworld tiles bad", same reporter, same window) is looking at: `MAX_CELLS`
+capped VIEWPORT cells, so a 4K window tripped it at zoom 1.0 and painted the
+whole map one flat green rectangle. The cap counts painted cells now, which is
+what it was ever trying to bound. The `ponytail` note in that function
+predicted the whole thing ("a spatial grid is the upgrade if a very long walk
+makes it drag").
+
+### Two asks alongside them
+
+**A testing pace for the unlock ladder.** Every `SPECIES_COST` / `CLASS_COST` /
+`SUBCLASS_COST` threshold is cut so the ladder can be walked in one sitting —
+about one unlock per three fights. The pace is measured rather than guessed: a
+fight pays `power * XP_PER_POWER`, which resolves to 55–190 at levels 1–3 and
+500–720 by level 12, so a species step is 450 and a class step is 1500. Order
+and shape are untouched. This is TEMPORARY and says so: the header carries the
+shipping numbers verbatim and `tests/test_progression.gd` pins the claim, so
+putting the real ones back is a red test rather than a silent balance change.
+
+**Clearing a lair pays.** Every room on the way down already paid its own XP,
+but reaching the bottom paid nothing, which made a delve worth strictly less
+than the same number of fights out on the road — the wrong way round for the
+one piece of content you commit to blind. `Site.clear_xp()` is flat and scaled
+by depth the way the boss hoard beside it is. Only on a clear; withdrawing
+keeps what the rooms paid and nothing else.
+
+**A lair does not stay empty.** A spent lair used to sit grey for the rest of
+the run — five lairs, five clears, nothing left underground. One in-game day
+after it is emptied (however: fought to the bottom, talked past, or resolved
+without the party while `WINDOW` ran out) something moves back in. The party
+keeps knowing WHERE it is; the rooms they cleared, the clock that was running
+and whether the guardians are awake all start over. Every "this is spent" stamp
+goes through `WorldLairs.mark_cleared()` so the clock cannot be started in one
+place and forgotten in another, and an old save with no stamp stays spent
+rather than repopulating on load.
+
+**Weight in the combat animations.** The reported feel was "like they are in
+fast mode", and the reported question was which setting would help. The answer
+was none: `anim_speed_multiplier` was floored at 1.0 both on load and in
+`anim()`, so the only thing the dial could ever do was make the fight quicker.
+Both halves are fixed. The setting turns both ways now (`ANIM_MIN` 0.4 to
+`ANIM_MAX` 3.0, with `FAST` passing through as a real stored choice), the
+checkbox is a five-way pace picker — Weighty / Measured / Normal / Brisk /
+Instant — and `SORCMERC_FAST` still wins outright so the headless suite cannot
+be slowed by whatever `settings.json` is on the machine.
+
+The animations themselves carry weight at 1x, which is the part that does not
+need a setting. Token movement was exponential smoothing at a fixed rate,
+`cur.lerp(target, dt * 12)`, which has no idea how far the token is going — a
+six-hex dash and a one-hex sidestep both took about a quarter of a second — and
+starts at full speed and creeps into the destination, the exact opposite of how
+something with mass moves. A token crosses the board at a speed measured in
+HEXES now, smoothstepped, clamped between `STEP_MIN` and `STEP_MAX`. `FX_TTL`
+went up across the board (melee 0.30 → 0.46; at 0.30 a swing was over before
+the eye found it, which is most of the "fast mode" reading), the melee
+step-in's curve is skewed to strike out fast and recover slow instead of
+`sin(t * PI)`'s symmetric nudge, and the beat before a monster acts went 0.5 →
+0.75 so the last swing is off screen before the next turn starts.

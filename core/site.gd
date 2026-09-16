@@ -41,6 +41,7 @@ const Scaler = preload("res://core/scaler.gd")
 const Regions = preload("res://core/regions.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const RNG = preload("res://core/rng.gd")
+const WorldLairs = preload("res://core/world_lairs.gd")
 
 # How deep a site runs. Three rooms is the shallowest thing that can still be
 # called an adventuring day (two fights and a boss on one set of slots); six is
@@ -385,7 +386,10 @@ func leave() -> void:
 	lair.depth_cleared = maxi(int(lair.depth_cleared), depth)
 	if was_boss or depth >= rooms.size():
 		state = "cleared"
-		lair.looted = true          # the stash is spent; the marker greys out on the map
+		# The stash is spent and the marker greys out — and the respawn clock
+		# starts, so something can move back in a day from now
+		# (core/world_lairs.gd's RESPAWN).
+		WorldLairs.mark_cleared(lair, world.clock.elapsed if world != null else -1.0)
 		say("%s is cleared out." % lair.sname)
 		return
 	state = "picking"

@@ -1349,6 +1349,12 @@ func _check_expired_lairs() -> void:
 	for l in WorldLairs.expire(world, world.clock.elapsed):
 		_lair_msg.text = WorldLairs.resolution_text(l)
 		_autosave()
+	# ...and the other direction: a day after a lair was emptied, something has
+	# moved into it. Said out loud for the same reason the expiry is — a grey
+	# landmark going red again with no explanation reads as a bug.
+	for l in WorldLairs.respawn(world, world.clock.elapsed):
+		_lair_msg.text = WorldLairs.respawn_text(l)
+		_autosave()
 
 func _lair_action() -> void:
 	var l: World.Lair = _lair_target
@@ -1384,7 +1390,7 @@ func _lair_sneak_action() -> void:
 			_lair_msg.text = "%s is already roused — the quiet way is gone." % l.sname
 		return
 	if roll["ok"]:
-		var loot: Dictionary = WorldLairs.loot(l)
+		var loot: Dictionary = WorldLairs.loot(l, world.clock.elapsed)
 		party.add_gold(int(loot.get("gold", 0)))
 		Quest.record_lair_cleared(party, l.id)
 		_lair_msg.text = "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))]

@@ -66,13 +66,41 @@ func _ready() -> void:
 	cap.theme_type_variation = "Title"
 	col.add_child(cap)
 
-	var fast := CheckButton.new()
-	fast.text = "Reduced animations (fast)"
-	fast.button_pressed = _s.anim_speed_multiplier > 1.0
-	fast.toggled.connect(func(on: bool):
-		_s.anim_speed_multiplier = Settings.FAST if on else 1.0
+	# Combat pace. This was a "Reduced animations (fast)" checkbox, which is to
+	# say the dial only turned one way: the fight could be made quicker and
+	# never weightier. Both halves are here now, slowest first, and the note
+	# under it says what the chosen one actually does.
+	var pace_row := HBoxContainer.new()
+	pace_row.add_theme_constant_override("separation", 8)
+	var pace_lbl := Label.new()
+	pace_lbl.text = "Combat pace"
+	pace_lbl.theme_type_variation = "Dim"
+	pace_row.add_child(pace_lbl)
+	var pace := OptionButton.new()
+	pace.name = "PacePicker"
+	for p in Settings.ANIM_PACES:
+		pace.add_item(String(p["label"]))
+		pace.set_item_metadata(pace.item_count - 1, float(p["speed"]))
+		pace.set_item_tooltip(pace.item_count - 1, String(p["note"]))
+	var pace_note := Label.new()
+	pace_note.name = "PaceNote"
+	pace_note.theme_type_variation = "Dim"
+	pace_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var select_pace := func(speed: float) -> void:
+		var chosen: Dictionary = Settings.pace_for(speed)
+		for i in pace.item_count:
+			if is_equal_approx(float(pace.get_item_metadata(i)), float(chosen["speed"])):
+				pace.select(i)
+				break
+		pace_note.text = String(chosen["note"])
+	select_pace.call(_s.anim_speed_multiplier)
+	pace.item_selected.connect(func(i: int):
+		_s.anim_speed_multiplier = float(pace.get_item_metadata(i))
+		select_pace.call(_s.anim_speed_multiplier)
 		_apply())
-	col.add_child(fast)
+	pace_row.add_child(pace)
+	col.add_child(pace_row)
+	col.add_child(pace_note)
 
 	col.add_child(_volume_row("Sound effects", _s.sfx_volume, func(v: float):
 		_s.sfx_volume = v

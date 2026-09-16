@@ -517,7 +517,7 @@ func _advance() -> void:
 			_set_buttons([])
 			while _walk != null:      # nobody swings while the walkthrough is up
 				await get_tree().process_frame
-			await get_tree().create_timer(0.5 / _anim).timeout
+			await get_tree().create_timer(TURN_BEAT / _anim).timeout
 			if not c.is_down():
 				# ponytail: the AI layer reports no per-attack events, so the FX are
 				# inferred from who lost HP over its turn. Good enough to follow a
@@ -1524,6 +1524,12 @@ func _finish() -> void:
 				names.append(Icons.item_img_bb(String(id)) + Icons.item_bb(String(id), Campaign.item_name(String(id))))
 			_logbox.append_text("[color=#c9a45a]Taken from the dead:[/color] %s\n" % ", ".join(names))
 
+# The pause before a monster acts, so its turn is a beat and not a jump cut.
+# Raised with the strike timings below it: at 0.5 the next turn started while
+# the last swing was still on screen, which is what stacked several turns into
+# one unreadable blur. Divided by the pace setting like every other wait.
+const TURN_BEAT := 0.75
+
 const BUTTON_ROWS := 3
 
 func _process(dt: float) -> void:
@@ -1745,6 +1751,7 @@ class Board extends Control:
 		add_child(_ground)
 	var _auto_fit := false    # zoom-to-fit each layout until the user zooms (new fight, Home)
 	var _tok := {}        # id -> displayed pixel pos (for slide)
+	var _slide := {}      # id -> {from, to, t, dur}: the traversal in progress, see tick()
 	var _hp := {}         # id -> displayed hp value
 	var _floats: Array = []   # {pos: Vector2, text, color, age}
 	var _flash := {}     # id -> ttl
@@ -1764,7 +1771,11 @@ class Board extends Control:
 	const BARK_TTL := 2.2
 	# T28 attack FX, cosmetic only: {kind, id, from, to, hexes, age, ttl}
 	var _fx: Array = []
-	const FX_TTL := {"melee": 0.30, "ranged": 0.34, "spell": 0.45}
+	# How long a strike is on screen. Raised across the board: at 0.30 a melee
+	# swing was over before the eye found it, which is most of why a fight read
+	# as "fast mode" even at 1x. Every one of these is divided by the pace
+	# setting through Board.tick's own dt, so Instant still skips them.
+	const FX_TTL := {"melee": 0.46, "ranged": 0.52, "spell": 0.70}
 	var _defeat := -1.0   # T29: seconds since the party wipe, -1 = not wiped
 
 	func play_defeat() -> void:
@@ -1796,6 +1807,11 @@ class Board extends Control:
 		queue_redraw()
 
 	# How far the lunging attacker's token is pushed off its hex right now.
+	# The melee step-in. sin(t * PI) is a symmetric there-and-back, which reads
+	# as a nudge; a swing wants to go out fast and come back slow, so the curve
+	# is skewed to peak at about a third of the way through and recover over the
+	# rest. Reaches further too — 0.55 of a hex barely left the tile.
+	const LUNGE_REACH := 0.66
 	func _lunge(id: String) -> Vector2:
 		for f in _fx:
 			if f.kind == "melee" and f.id == id:
@@ -1803,7 +1819,7 @@ class Board extends Control:
 				var d: Vector2 = _pix(f.to) - _pix(f.from)
 				if d.length() < 0.01:
 					return Vector2.ZERO
-				return d.normalized() * (sin(t * PI) * main.hex_px * 0.55)
+				return d.normalized() * (sin(pow(t, 0.62) * PI) * main.hex_px * LUNGE_REACH)
 		return Vector2.ZERO
 
 	func _draw_fx(s: float) -> void:
@@ -1828,7 +1844,7 @@ class Board extends Control:
 		_defeat = -1.0
 		_auto_fit = true
 		texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED   # the floor texture wraps across hexes
-		_tok.clear(); _hp.clear(); _floats.clear(); _flash.clear()
+		_tok.clear(); _slide.clear(); _hp.clear(); _floats.clear(); _flash.clear()
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
 			_hp[c.id] = float(c.hp)
@@ -1958,6 +1974,23 @@ class Board extends Control:
 			canvas.draw_colored_polygon(_disc(at, r * (1.0 + 0.26 * i)),
 				Color(0.02, 0.01, 0.04, strength * (0.20 - 0.05 * i)))
 
+	# How a token covers ground. This used to be exponential smoothing at a fixed
+	# rate — `cur.lerp(target, dt * 12)` — which has two problems and they are
+	# both "no weight". It has no idea how far the token is going, so a six-hex
+	# dash and a one-hex sidestep take the same quarter of a second; and it
+	# starts at full speed and creeps into the destination, which is the exact
+	# opposite of how something with mass moves.
+	#
+	# A token now crosses the board at a speed measured in HEXES, eased in and
+	# out: a dash reads as ground covered, a step reads as a step, and both
+	# start heavy and settle rather than snapping and drifting.
+	const TOKEN_HEXES_PER_SEC := 6.0
+	const STEP_MIN := 0.20    # even a one-hex shuffle gets this long
+	const STEP_MAX := 1.10    # ...and the longest dash is not a journey
+
+	static func _ease_move(u: float) -> float:
+		return u * u * (3.0 - 2.0 * u)    # smoothstep: lean in, cruise, settle
+
 	func tick(dt: float) -> void:
 		if cb == null:
 			return
@@ -1966,8 +1999,17 @@ class Board extends Control:
 		for c in cb.combatants:
 			var target := _pix(c.pos)
 			var cur: Vector2 = _tok.get(c.id, target)
-			if cur.distance_to(target) > 0.5:
-				_tok[c.id] = cur.lerp(target, k); dirty = true
+			var slide: Dictionary = _slide.get(c.id, {})
+			if slide.is_empty() or not (slide["to"] as Vector2).is_equal_approx(target):
+				var hexes: float = cur.distance_to(target) / maxf(1.0, main.hex_px)
+				slide = {"from": cur, "to": target, "t": 0.0,
+					"dur": clampf(hexes / TOKEN_HEXES_PER_SEC, STEP_MIN, STEP_MAX)}
+				_slide[c.id] = slide
+			if cur.distance_to(target) > 0.5 and float(slide["t"]) < float(slide["dur"]):
+				slide["t"] = minf(float(slide["dur"]), float(slide["t"]) + dt)
+				_tok[c.id] = (slide["from"] as Vector2).lerp(target,
+					_ease_move(float(slide["t"]) / float(slide["dur"])))
+				dirty = true
 			else:
 				_tok[c.id] = target
 			var hv: float = _hp.get(c.id, float(c.hp))

@@ -95,6 +95,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		lairs.append({
 			"id": l.id, "sname": l.sname, "position": _v(l.position),
 			"faction": l.faction, "discovered": l.discovered, "looted": l.looted,
+			"cleared_at": l.cleared_at,
 			"depth_cleared": l.depth_cleared,
 			"entered_at": l.entered_at, "resolved_as": l.resolved_as,
 		})
@@ -158,6 +159,9 @@ static func from_dict(d: Dictionary):
 		l.depth_cleared = int(ld.get("depth_cleared", 0))   # D1; an old save just starts at the mouth
 		l.entered_at = float(ld.get("entered_at", -1.0))    # ...and has never been disturbed
 		l.resolved_as = String(ld.get("resolved_as", ""))
+		# An old save spent its lairs before the respawn rule existed; -1 leaves
+		# them spent for good rather than repopulating them all on load.
+		l.cleared_at = float(ld.get("cleared_at", -1.0))
 		world.add_lair(l)
 	for wd in d.get("waters", []):
 		world.add_water(_vec(wd.get("position")), float(wd.get("radius", 0.0)))
