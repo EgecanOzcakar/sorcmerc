@@ -61,7 +61,7 @@ var _fx_on := false           # attack animations: off under SORCMERC_FAST / hea
 # label came off the button entirely. A 126x40 row that clipped "Burning Ha…"
 # is a 52x52 square that shows the whole spell. What stays on the face is the
 # hotkey, in the corner, and an upcast tier when there is one.
-const BTN_COLUMNS := 12   # the nine slots, Admit defeat, Swap, End turn: one row
+const BTN_COLUMNS := 11   # the nine slots, Swap, End turn: one row
 const BTN_SIZE := Vector2(52, 52)
 # T-hud: HP bar + condition tags, painted above every tier (see
 # Board._paint_token_hud / _draw_hud_overlay below) instead of inline in
@@ -182,6 +182,24 @@ func _ready() -> void:
 	bug.focus_mode = Control.FOCUS_NONE
 	bug.pressed.connect(report_bug)
 	head.add_child(bug)
+	# Yielding is a wipe without the wait. Up here with the other out-of-fight
+	# controls, not in the action bar, so a misclick mid-turn cannot reach it.
+	var yield_btn := Button.new()
+	yield_btn.text = "Admit defeat"
+	yield_btn.theme_type_variation = "Quiet"
+	yield_btn.focus_mode = Control.FOCUS_NONE
+	yield_btn.pressed.connect(func():
+		if cb == null or cb.is_over() or _busy:
+			return
+		var dlg := ConfirmationDialog.new()
+		dlg.dialog_text = "Admit defeat? The fight ends as a loss."
+		dlg.ok_button_text = "Admit defeat"
+		dlg.confirmed.connect(func(): cb.surrender(); _finish())
+		dlg.confirmed.connect(dlg.queue_free)
+		dlg.canceled.connect(dlg.queue_free)
+		add_child(dlg)
+		dlg.popup_centered())
+	head.add_child(yield_btn)
 
 	# --- the action log: a full-height sidebar down the left edge -----
 	_logwrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -828,14 +846,6 @@ func _slotted(h, opts: Array) -> Array:
 			meta["key"] = str(SLOTS.find(s) + 1)
 			o[3] = meta
 			out.append(o)
-	# Two clicks like an unspent End turn: yielding is a wipe without the wait.
-	# Sits before End turn, which Space/0 find by being last.
-	var yield_mark := _mark(Icons.verb_icon("back"), "⚐")
-	yield_mark["armed"] = _armed == "yield"
-	var yield_opt := _confirm_opt(h, "yield", "Admit defeat", func(): cb.surrender(); _finish())
-	yield_opt.append("Admit defeat\nThe fight ends as a loss.")
-	yield_opt.append(yield_mark)
-	out.append(yield_opt)
 	# T29: melee/ranged toggle — the slot is always there, live only for someone carrying both.
 	var swap := _attack_swap(h)
 	var swap_meta := _mark(Icons.verb_icon("swap"), "⇄")
