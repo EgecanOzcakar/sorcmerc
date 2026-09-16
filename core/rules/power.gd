@@ -95,18 +95,68 @@ static func estimate(c) -> Dictionary:
 
 	var ehp := float(c.max_hp) * (0.55 / maxf(0.05, p_hit(REF_ATK, c.ac)))
 	for v in c.verbs:
-		if v["kind"] in ["heal_self", "heal_ally"]:
-			ehp += avg(int(v.get("dice_count", 1)), int(v.get("dice_sides", 8)),
-				int(v.get("dice_bonus", 0))) * float(v.get("uses", 1))
+		match v["kind"]:
+			"heal_self", "heal_ally":
+				ehp += avg(int(v.get("dice_count", 1)), int(v.get("dice_sides", 8)),
+					int(v.get("dice_bonus", 0))) * float(v.get("uses", 1))
+			"survive_damage":
+				# T94 — one refused death is worth about the HP it takes to finish
+				# the job again, and Undead Fortitude's save can fail.
+				ehp += float(c.max_hp) * SURVIVE_SHARE * float(v.get("uses", 1))
+			"save_modifier":
+				ehp *= MAGIC_RESIST_MULT   # advantage on every save a spell forces
+			"reaction":
+				if int(v.get("ac_bonus", 0)) > 0:
+					ehp *= PARRY_MULT
 	var resists := false
 	for v in c.verbs:
 		if "bludgeoning" in v.get("resist", []):
-			resists = true
+			resists = true   # a held buff's resistance (Rage)
 	if resists:
 		ehp *= 1.3
+	ehp *= _defense_mult(c)
 
 	return {"dpr": dpr, "ehp": ehp, "control": control,
 		"score": sqrt(maxf(0.0, dpr) * maxf(0.0, ehp)) * (1.0 + 0.08 * control)}
+
+# T94 — the statblock defences (combatant.resist/immune/vulnerable), priced
+# against what the party actually throws. Every weapon in data/weapons.json is
+# one of the three physical types, so a physical line blunts nearly all of the
+# party's damage and an elemental one only the caster's share of it — which is
+# why the two are priced an order apart rather than per-entry. Immunity is worth
+# about twice the resistance it beats. Replaces nothing: before this, a monster's
+# whole damage-type line was invisible to the scaler because it was invisible to
+# the engine (see core/combatant.gd's T94 note).
+const PHYSICAL := ["bludgeoning", "piercing", "slashing"]
+const PHYS_IMMUNE := 0.30
+const PHYS_RESIST := 0.15
+const PHYS_VULNERABLE := -0.10
+const ELEM_IMMUNE := 0.06
+const ELEM_RESIST := 0.03
+const ELEM_VULNERABLE := -0.04
+const SURVIVE_SHARE := 0.20      # of max HP, per use of a survive_damage feature
+const MAGIC_RESIST_MULT := 1.10
+const PARRY_MULT := 1.08
+
+static func _defense_mult(c) -> float:
+	var m := 1.0
+	for t in PHYSICAL:
+		if t in c.immune:
+			m += PHYS_IMMUNE
+		elif t in c.resist:
+			m += PHYS_RESIST
+		elif t in c.vulnerable:
+			m += PHYS_VULNERABLE
+	for t in c.immune:
+		if not t in PHYSICAL:
+			m += ELEM_IMMUNE
+	for t in c.resist:
+		if not t in PHYSICAL:
+			m += ELEM_RESIST
+	for t in c.vulnerable:
+		if not t in PHYSICAL:
+			m += ELEM_VULNERABLE
+	return maxf(0.5, m)
 
 # T23 — what a save-or-suffer effect is worth: how much of a turn it denies, times
 # how often it actually lands (the save, and the attack roll first if it is an

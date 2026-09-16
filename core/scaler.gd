@@ -41,6 +41,38 @@
 # Fights are shorter (7-8 rounds, was 9-10) with fewer bodies: the thing the
 # movement fix bought is a faster fight at the same win rate.
 #
+# RE-MEASURED 2026-09-16 (T94), and NO KNOB HERE MOVED. T94 gave the bestiary
+# the defences its own catalog had always carried (damage resistance / immunity /
+# vulnerability and condition immunity, dropped on the floor until then — see
+# core/combatant.gd) plus Magic Resistance, Parry, Undead Fortitude / Relentless,
+# Death Burst, and a second pass of on-hit riders. power.gd prices all of it
+# (Power._defense_mult and the ehp arm of estimate()), so the generator answers
+# a tougher monster by buying FEWER of it, which is the mechanism that kept the
+# curve inside the band without touching TIER. Both columns are this same test,
+# 200 seeds a tier, run back-to-back on master and on the branch:
+#                 master            T94
+#   L3 easy    4.1 foes 94.5%    4.0 foes 93.0%   -1.5
+#   L3 normal  4.2 foes 83.0%    3.9 foes 83.5%   +0.5
+#   L3 hard    4.4 foes 73.5%    4.2 foes 79.0%   +5.5
+#   L8 easy    5.7 foes 97.3%    5.7 foes 93.3%   -4.0   (150 seeds)
+#   L8 normal  5.7 foes 82.0%    5.9 foes 82.0%    0.0
+#   L8 hard    6.1 foes 70.7%    6.1 foes 67.3%   -3.4
+#   shrine     3.1 foes 82.5%    2.5 foes 77.0%   -5.5
+# Every tier stays inside test_scaler's +/-10 BAND and ordered. Read the sizes
+# of those moves against the standard error, which is ~3 points at 200 seeds and
+# ~4 at 150: only L3 hard is much past one, and it is the direction the pricing
+# predicts — a hard budget spent on fewer, tougher bodies is EASIER, because
+# what kills a party is the number of turns the other side gets (the action-
+# economy measurement further down this header), not any one stat line.
+# The one number to watch is the shrine at 2.5 bodies: it is the thinnest roster
+# the generator produces, because an undead roster is now the most expensive one
+# per body in the game (poison immunity, a physical-resistance line, Undead
+# Fortitude). If it drops under ~2 it stops being a warband; the fix would be a
+# floor on body count for a boss theme, not a TIER change.
+# Fights also got LONGER at level 8 (normal 9.8 -> 12.0 rounds, hard 10.8 ->
+# 13.5) — resistance and immunity are duration, not difficulty, which is the
+# cost of this pass and is not visible in a win rate.
+#
 # RE-MEASURED 2026-09-13 (D1), same harness, no knob touched since:
 #   easy   avg 4.4 foes x0.93 : 175W/25L (87.5%)  avg 9.3 rounds
 #   normal avg 4.7 foes x0.96 : 166W/34L (83.0%)  avg 9.5 rounds

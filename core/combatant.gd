@@ -25,6 +25,19 @@ var ranged: bool = false
 # before. core/weapon_sfx.gd reads them to pick a natural-attack sound.
 var damage_type: String = ""
 var attack_name: String = ""
+
+# T94 — defences data/bestiary.json has carried on all 316 entries since F1b and
+# the engine threw away: `Adapter.from_monster` copies every key with a generic
+# `c.set(k, v)`, and Object.set() on a property no script declares is a silent
+# no-op (the same trap the damage_type/attack_name comment above records). So
+# every fire immunity, every undead poison immunity and every charm immunity in
+# the catalog resolved to "takes it in full" until these four lines existed.
+# Damage type ids, lowercase, normalised by Adapter._damage_types(); `cond_immune`
+# holds conditions.json ids, which combat.apply_condition checks.
+var resist: Array = []
+var immune: Array = []
+var vulnerable: Array = []
+var cond_immune: Array = []
 var atk_range: int = 1     # hexes; melee = 1, shortbow set in encounter.gd
 var crit_range: int = 20  # Vera crits on 19
 
@@ -106,6 +119,10 @@ func clone() -> RefCounted:
 	]:
 		c.set(prop, get(prop))
 	c.saves = saves.duplicate()
+	c.resist = resist.duplicate()
+	c.immune = immune.duplicate()
+	c.vulnerable = vulnerable.duplicate()
+	c.cond_immune = cond_immune.duplicate()
 	c.slots = slots.duplicate()
 	c.attacks = attacks.duplicate(true)
 	c.features = features.duplicate()

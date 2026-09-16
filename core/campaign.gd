@@ -271,7 +271,7 @@ const POOL := [
 const BOSS := {"id": "sunken-shrine", "kind": "combat", "stage_position": ["boss"],
 	"title": "THE SUNKEN SHRINE", "desc": "Whatever has been calling them lives down here.",
 	"difficulty": "hard", "boss": true, "archetype": "classic", "gold": 250,
-	"theme": "sunken-shrine", "win_rate": 0.81}
+	"theme": "sunken-shrine", "win_rate": 0.77}
 
 # win_rate is each boss's measured sweep result (scaler.gd's TUNING header, T18)
 # — how much harder it plays than a plain "hard" node. finish_combat() turns the
@@ -297,23 +297,23 @@ const BOSS_POOL := [
 		"theme": "goblin-camp", "lead": "goblin-archer", "lead_features": ["monster-multiattack-2"],
 		# mult_max: a x3 multiattack archer was a 47-65% node against hard's 75;
 		# capped at x1.75 the budget goes to escort instead (60 seeds: 76.7%).
-		"mult_max": 1.75, "win_rate": 0.75},
+		"mult_max": 1.75, "win_rate": 0.825},
 	{"id": "the-shop-captain", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE CAPTAIN COMES BACK", "desc": "He took the shop once. This time he brought the company.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
 		"theme": "merchant-shop", "lead": "bandit", "lead_features": ["monster-multiattack-2"],
-		"win_rate": 0.95},
+		"win_rate": 0.925},
 ]
 
 # Reference win rate a boss's XP bonus is measured against: the average of the
-# scaler's own easy/hard sweep results (94.5%/75.0% as of T40's 95/85/75 target
-# retune, scaler.gd's TUNING header) rather than normal's own 83.5% — CURVE was
+# scaler's own easy/hard sweep results (93.0%/79.0% as of T94's re-measurement,
+# scaler.gd's TUNING header) rather than normal's own 83.5% — CURVE was
 # calibrated so normal sits near that average already, and it keeps this
 # constant tied to the two extremes instead of a third independently-drifting
 # number. A boss under this rate is harder than the curve's middle, and earns
 # XP in proportion. T38 found this stale at 0.698 (it still carried T23's
 # extremes); re-derive it from the header numbers on every TIER retune.
-const BOSS_REF_WIN_RATE := 0.83   # (94.0 + 72.0) / 2, 2026-09-15 retune
+const BOSS_REF_WIN_RATE := 0.86   # (93.0 + 79.0) / 2, T94's re-measurement
 # ponytail: the win_rate spread above is power.gd's known chaff-vs-chunk
 # mispricing (T23: a lone big bruiser like the mammoth prices for a fight it
 # doesn't survive) — cap the bonus so that ceiling doesn't turn into a
