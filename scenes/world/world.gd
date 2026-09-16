@@ -675,13 +675,9 @@ func _open_party(at_inn := false) -> void:
 	screen.party = party
 	screen.roster_locked = not at_inn
 	screen.locked_note = "Benching and recruiting happen at an inn — find one and ask at the counter."
+	screen.exit_label = "←  Back to the inn" if at_inn else "←  Back to the map"
+	screen.exit_requested.connect(_close_party)
 	overlay.add_child(screen)
-	var back := Button.new()
-	back.text = "←  Back to the inn" if at_inn else "←  Back to the map"
-	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	back.offset_left = -220; back.offset_top = 12; back.offset_right = -16
-	back.pressed.connect(_close_party)
-	overlay.add_child(back)
 
 func _close_party() -> void:
 	if _party_overlay != null:

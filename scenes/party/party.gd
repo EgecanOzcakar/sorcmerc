@@ -40,6 +40,13 @@ var _selected := ""                       # roster id armed for a slot click
 var roster_locked := false
 var locked_note := "Benching and recruiting happen at an inn."
 
+# Whoever opens this screen as an overlay names the way out and it is drawn
+# here, top-right — the same corner the profile's and creator's own Back
+# buttons use, so it has to sit UNDER those sub-screens rather than over them
+# (world.gd's own button in that corner used to cover their Cancel/Back).
+signal exit_requested
+var exit_label := ""
+
 var _roster_col := VBoxContainer.new()
 var _slot_col := VBoxContainer.new()
 var _hint := Label.new()
@@ -91,6 +98,14 @@ func _ready() -> void:
 	cols.add_child(_column("Marching, up to %d" % Party.MAX_ACTIVE, _slot_col, 1.0))
 
 	root.add_child(_footer())
+	if exit_label != "":
+		var out := Button.new()
+		Icons.clicks(out)
+		out.text = exit_label
+		out.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		out.offset_left = -220; out.offset_top = 12; out.offset_right = -16
+		out.pressed.connect(func(): exit_requested.emit())
+		add_child(out)
 	_refresh()
 
 # A titled, scrolling column.
