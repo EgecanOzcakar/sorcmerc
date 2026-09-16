@@ -7,6 +7,7 @@
 extends SceneTree
 
 const Visit = preload("res://core/settlement_visit.gd")
+const Icons = preload("res://core/ui_icons.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 
 var _pass := 0
@@ -132,6 +133,40 @@ func _init() -> void:
 	check(not has_button(s3._visit_panel, "Persuade them to trade"), "...but not persuasion")
 	check(press(s3._visit_panel, "Haggle"), "the Haggle button works")
 	check(s3._visit.get("haggled", false), "...and spends the one-per-visit attempt")
+
+	# --- the face behind the counter: a smile for a moment after business
+	# goes your way, a frown for the visit once a haggle goes badly.
+	check(Icons.portrait("human", "healer", "happy") != Icons.portrait("human", "healer")
+		and Icons.portrait("human", "healer", "frown") != Icons.portrait("human", "healer"),
+		"the healer has a happy and a frowning face on disk")
+	check(Icons.portrait("human", "healer", "bored") == Icons.portrait("human", "healer"),
+		"an unknown mood falls back to the plain portrait")
+	var s4 = load("res://scenes/world/world.tscn").instantiate()
+	root.add_child(s4)
+	for i in 10:
+		await process_frame
+	s4._open_visit(s4.world.settlements[0])
+	s4._goto_page("market")
+	check(s4._mood() == "", "a fresh visit: a neutral face")
+	s4.party.gold = 100000
+	s4._buy(String(s4._visit["stock"][0]["item_id"]))
+	check(s4._mood() == "happy", "a sale makes them happy")
+	s4._cheer_until = 0.0
+	check(s4._mood() == "", "...for a moment")
+	s4._visit["sour"] = true      # what a failed haggle sets
+	check(s4._mood() == "frown", "a failed haggle sours the face for the visit")
+	s4._cheer()
+	check(s4._mood() == "happy", "...a sale still gets a flicker of a smile")
+	s4._cheer_until = 0.0
+	check(s4._mood() == "frown", "...and then it's back to the frown")
+	var before = s4._visit
+	s4._visit = {}
+	s4._carry_visit_flags(before, s4._visit)
+	check(s4._visit.get("sour", false), "the sour flag survives a market re-roll, like the others")
+	s4._visit = before
+	s4._goto_market_tab("healer")
+	check(s4._portrait_pic != null and s4._portrait_pic.texture == Icons.portrait(
+		s4._visit["settlement"].faction, "healer", "frown"), "the healer's counter shows the frowning face")
 
 	# --- T9y: the hub says what is behind each door -----------------------
 	main._open_visit(s)

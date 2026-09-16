@@ -34,6 +34,10 @@ var overworld_figure := ""
 # owns every rule about them. A dict rather than three fields so the save format
 # grows a key, not a column, when travel gains another order.
 var travel_orders: Dictionary = {}
+# SPIKE (docs/spike-party-opinions.md): what members think of each other —
+# "a|b" pair key -> {score, status}. Owned entirely by core/party_opinion.gd;
+# nothing in the shipped game reads or saves it yet.
+var relations: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 

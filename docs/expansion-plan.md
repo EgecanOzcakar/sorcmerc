@@ -4619,6 +4619,87 @@ rather than searching with the party under test — a search spends and earns as
 it goes, so by the time it finds a failed toll the purse it was told to empty
 has been paid twice over by wayfarers.
 
+## Spike — opinions between party members, and romance (2026-09-16, feasibility)
+
+Full write-up in `docs/spike-party-opinions.md`; model `core/party_opinion.gd`
+(plus one `relations` field on `core/party.gd`), test
+`tests/test_party_opinion.gd`, throwaway sweep `tests/sweep_party_opinion.gd`.
+Nothing in the shipped game calls it. Headlines: every companion is
+player-made, so the shape has to be systemic rather than authored — a
+symmetric score per pair that drifts toward a baseline read off the two
+sheets, labelled by band, told in one-line camp beats, with no written NPC
+for a dialogue tree to hang on. Romance is a camp beat that ASKS through D4's
+options card, never a roll, one partner at a time, and declined is
+remembered. The road is where it pays — a morale point beside the pace bonus
+on every D3 check, and the roll feeding back into who the party likes. The
+three combat effects at 5e-honest sizes (+1 AC bonded and adjacent, -1 to hit
+rivals adjacent, advantage when a partner falls) are all inside the sweep's
+±2.7-point noise: a rally every other fight is a moment, not a balance
+change. The healer–faller pair bonds too fast at +12 a save (Ilsa+Pike +5.3
+per fight); cap saves once per fight before wiring anything. Side finding:
+Help's advantage is erased by the ally's own `new_turn()` before it can be
+spent — pre-existing, one line, its own PR.
+
+**Appendix A (same doc, added the same day)** — uncontrollable actions, which
+the spike above does not touch: a character who refuses an order or swings at
+the wrong person because of how they feel about somebody. Every effect §6
+measured is a modifier the player still steers around. The appendix argues
+this game can take less control loss than the genre does, for two reasons: a
+character here is an investment the player built across a dozen 5e choices
+rather than a recruit they hired, and the brief promises that every hit
+traces to a visible number, which an unannounced roll at the top of a turn
+does not. 5e's own answer to control loss is a **saving throw**, which is a
+visible number with a published DC.
+
+The finding that makes it cheap: `data/effects/conditions.json` plus
+`apply_condition()` already express every category of act-out as a 5e
+condition — refusing to act is `incapacitated`, refusing your chosen target
+is `charmed`, backing away is `frightened`, and the signature already stores
+a `source`, which is exactly what "frightened **of Pike**" needs. There is
+also a `held_by` + repeat-save path for shaking it off, and `take_turn()`
+already routes a party member to `_party_auto()`. So an act-out needs no new
+engine machinery at all, which is an argument for deciding it on design
+grounds rather than on cost.
+
+Two findings argue against decisions this spike already made, which is the
+point of having run it. Rivalry as a combat *penalty* is probably wrong here:
+designs built around characters the player made themselves make every
+relationship state a different bonus, rivalry included, with no punishing
+state at all — so `bicker_penalty` should be a different bonus rather than a
+malus, which is one sign flip. And symmetric storage was the easy call: it is
+right for a bond, which is mutual, but an opinion wants to be directed so
+that A can count B a friend while B counts A a rival, and so it can carry the
+rule this shape cannot express — one hated member floors the whole marching
+order's reading however many friends are in it. That is a save-format
+decision, so now or never.
+
+What transfers, in order: measuring the score off combat behaviour the player
+was going to choose anyway (and losing points for treating yourself first
+while an ally is down); a positional formula, since this is a hex game — sum
+a per-character bonus vector over nearby related allies and scale by band,
+which generalises both of §6's adjacency hooks into one line; making the
+relationship the **cure** for a condition and not only its cause, by having a
+move that ends beside a bonded ally shed `frightened`; narrowing the menu
+rather than seizing the turn, so a rival pair simply loses the cooperative
+verbs with each other; putting the real control loss in town and at camp,
+where the clock is stopped and it costs coin — our inn prices and standing
+orders are the surfaces; letting the campaign layer **cap** the combat layer
+rather than set it; and a timer that writes a permanent relationship on
+expiry, as the bridge between authored and simulated.
+
+What does not: a second stress or mood resource (a worse version of
+exhaustion, which is already in the engine), contagion, a real-time social
+tick, any break that seizes a whole turn (a fifth of the action economy in a
+party this size), marriage that produces recruitable children, and anything
+that can remove or kill a character over a feud. `core/travel.gd`'s
+`_hp_toll` invariant — nothing rolled between towns may drop anybody — is the
+right precedent, and a relationship should respect it too.
+
+The appendix carries the decisions and the reasons, not the survey behind
+them: a design doc here should not be a competitive analysis of other
+people's games assembled from fan wikis. The workings are in the pull
+request's history.
+
 ## T94 — the bestiary's second pass: defences, and the abilities the engine could already express
 
 The question this started from was narrow: which monster abilities does the
