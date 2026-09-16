@@ -9,6 +9,7 @@
 extends RefCounted
 
 const Catalog = preload("res://core/rules/catalog.gd")
+const PassGear = preload("res://core/rules/pass_gear.gd")
 const Sound = preload("res://core/audio.gd")
 
 
@@ -576,7 +577,7 @@ static func item_tooltip(item_id: String, def: Dictionary, kind: String) -> Stri
 	match kind:
 		"weapon":
 			var dice := str(def.get("damageDice", ""))
-			if str(def.get("versatileDice", "None")) != "None":
+			if def.get("versatileDice") != null and str(def["versatileDice"]) != "None":
 				dice += " (%s two-handed)" % def["versatileDice"]
 			lines.append("%s %s, %s" % [dice, def.get("damageType", ""), def.get("category", "")])
 			var props := str(def.get("properties", "[]")).replace("[", "").replace("]", "").replace("'", "")
@@ -616,9 +617,22 @@ static func item_tooltip(item_id: String, def: Dictionary, kind: String) -> Stri
 # dim at the foot. Built from the same tooltip string (first line the name,
 # "Click:"/"Right-click:" lines the hint, everything else the body), so a
 # test can still read tooltip_text and nothing has two sources of truth.
+# Shift while hovering swaps the party comparison (`compare`) into the hover
+# text: the engine rebuilds a tooltip whose text changed on the next mouse
+# motion, so the key handler nudges one through to make it immediate.
 class ItemTile extends Button:
 	const Icons = preload("res://core/ui_icons.gd")
 	var rarity_color := Icons.COL_TEXT
+	var base_tip := ""
+	var compare := ""
+	func _input(e: InputEvent) -> void:
+		if compare == "" or not (e is InputEventKey and e.keycode == KEY_SHIFT) or not is_hovered():
+			return
+		tooltip_text = base_tip + (compare if e.pressed else "")
+		var nudge := InputEventMouseMotion.new()
+		nudge.position = get_viewport().get_mouse_position()
+		nudge.global_position = nudge.position
+		get_viewport().push_input(nudge)
 	func _make_custom_tooltip(for_text: String) -> Object:
 		var card := PanelContainer.new()
 		card.add_theme_stylebox_override("panel", Icons.box(Icons.COL_PANEL, Icons.COL_GOLD_EDGE, 4, 12, 8))
@@ -639,6 +653,8 @@ class ItemTile extends Button:
 				hint.append(l)
 			else:
 				body.append(l)
+		if compare != "" and for_text == base_tip:
+			hint.append("Shift: compare with the party")
 		while not body.is_empty() and String(body[-1]).strip_edges() == "":
 			body.pop_back()
 		if not body.is_empty():
@@ -656,11 +672,14 @@ class ItemTile extends Button:
 			v.add_child(h)
 		return card
 
-static func item_tile(item_id: String, tooltip: String, caption := "", px := ITEM_ART_PX) -> Button:
+static func item_tile(item_id: String, tooltip: String, caption := "", px := ITEM_ART_PX,
+		compare := "") -> Button:
 	var b := ItemTile.new()
 	b.rarity_color = item_color(item_id)
 	clicks(b)
 	b.tooltip_text = tooltip
+	b.base_tip = tooltip
+	b.compare = compare
 	b.add_theme_color_override("font_color", item_color(item_id))
 	b.add_theme_font_size_override("font_size", FS_CAPTION)
 	var tex := item_art(item_id)
@@ -675,6 +694,28 @@ static func item_tile(item_id: String, tooltip: String, caption := "", px := ITE
 	b.text = caption
 	b.custom_minimum_size = Vector2(px + 12, px + (30 if caption != "" else 12))
 	return b
+
+# The Shift half of the hover card: what every active member has equipped of
+# the same kind, one line each, so a shelf or stash item reads against the
+# party at a glance. "" when there is nothing to compare (no party, or a
+# consumable), so the tile never offers a Shift it cannot honour.
+static func party_compare(kind: String, party, def := {}) -> String:
+	if party == null or kind == "unknown":
+		return ""
+	var lines: Array = ["", "Party's %s (Shift):" % kind]
+	for ch in party.party_characters():
+		var who: String = ch.cname
+		if kind in ["weapon", "armor"] and not def.is_empty():
+			var ok: bool = PassGear.proficient(kind, def, ch.sheet().proficiencies[kind])
+			who += " (%s)" % ("proficient" if ok else "NOT proficient")
+		var worn: Array = []
+		for iid in ch.equipped:
+			var kd := item_def(iid)
+			if kd[0] == kind:
+				var tip := item_tooltip(iid, kd[1], kind)
+				worn.append("%s — %s" % [tip.get_slice("\n", 0), tip.get_slice("\n", 1)])
+		lines.append("%s: %s" % [who, "; ".join(worn) if not worn.is_empty() else "nothing"])
+	return "\n".join(lines)
 
 # Kind + catalog entry for any item id, in the order the rest of the UI
 # resolves them (an armor "shield" beats the magic-item "shield").

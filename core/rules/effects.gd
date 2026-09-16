@@ -13,6 +13,11 @@ const KINDS := ["passive_damage", "self_buff", "ally_buff", "heal_self", "heal_a
 # castingTime -> action-economy cost. Anything longer than a Reaction is non-combat.
 const CASTING_TIME := {"Action": "action", "Bonus Action": "bonus", "Reaction": "reaction"}
 
+# The trigger vocabulary a reaction can hang off. combat.gd fires every one of
+# these and resolves the answer with no prompt (combat-design.md §2); this list
+# is here rather than there so validate() can refuse a trigger nothing fires.
+const REACTION_TRIGGERS := ["hit_by_attack", "damaged_by_attack", "spell_cast"]
+
 static func feature(id: String) -> Dictionary:
 	var d = Catalog.all("effects/features.json")
 	return d.get(id, {}) if d is Dictionary else {}
@@ -47,7 +52,7 @@ static func spell(id: String) -> Dictionary:
 		merged.erase("damage")
 	if not (merged.has("damage") or merged.has("heal") or merged.has("healing")
 			or merged.has("conditions") or merged.has("buff") or merged.has("teleport")
-			or merged.has("summon")):
+			or merged.has("summon") or merged.has("reaction")):   # a reaction block is a mechanic too (Counterspell)
 		return {}
 	merged["level"] = int(def.get("level", 0))
 	merged["concentration"] = def.get("concentration", false)
@@ -160,6 +165,8 @@ static func spell_verbs_for(sheet, spell_ids: Array, slots_override: Array = [])
 			for l in range(base, 10):
 				if l - 1 < slots.size() and int(slots[l - 1]) > 0:
 					top = l
+		if m.has("reaction") and not m.has("upcast"):
+			top = base   # a bigger slot counters exactly what the smallest one does
 		for lvl in range(base, top + 1):
 			out.append(_spell_verb(sid, m, lvl, base, sheet, abil_mod, int(sc.get("save_dc", 0))))
 	return out
@@ -190,6 +197,13 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 		v["text"] = String(m.get("text", ""))
 	if m.has("attack"):   # a spell attack rolls to hit instead of forcing a save
 		v["attack_bonus"] = int(sheet.spellcasting.get("attack_bonus", 0))
+	if m.has("reaction"):
+		# Not a button (combat.is_button refuses anything costing a reaction) —
+		# combat.gd fires `trigger` and casts this itself.
+		var rx: Dictionary = m["reaction"]
+		v["trigger"] = rx.get("trigger", "")
+		v["counter"] = rx.get("counter", false)
+		v["min_level"] = int(rx.get("min_level", 0))
 	if m.has("conditions"):
 		# A save-or-suffer spell. Default "round" (until the target's next turn):
 		# apply_condition's other duration is "forever", and nothing in the engine
@@ -201,6 +215,9 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 		# "damage_ends" (any damage breaks it), "none" for the full duration.
 		v["duration"] = m.get("duration", "concentration" if m.get("concentration", false) else "round")
 		v["repeat_save"] = m.get("repeat_save", "end_turn")
+		# Charm/Hold Person and kin: one more creature per slot level above base.
+		if up > 0 and m.has("upcast") and int(m["upcast"]["per_level"].get("targets", 0)) > 0:
+			v["targets"] = 1 + up * int(m["upcast"]["per_level"]["targets"])
 	if m.has("rays"):     # Scorching Ray: several independent attack rolls, one cast
 		var rays := int(m["rays"])
 		if up > 0 and m.has("upcast"):
@@ -271,6 +288,10 @@ static func validate() -> Array[String]:
 			continue
 		if not f[id].get("kind") in KINDS:
 			errs.append("features.json: \"%s\" has unknown kind \"%s\"" % [id, f[id].get("kind")])
+		# A reaction nothing fires is a feature that silently does nothing.
+		if f[id].get("cost", "") == "reaction" and not f[id].get("trigger", "") in REACTION_TRIGGERS:
+			errs.append("features.json: \"%s\" is a reaction with no fired trigger (\"%s\")"
+				% [id, f[id].get("trigger", "")])
 	var sp = Catalog.all("effects/spells.json")
 	for id in sp:
 		if id.begins_with("_"):
@@ -279,6 +300,13 @@ static func validate() -> Array[String]:
 			errs.append("spells.json: \"%s\" is not in the catalog" % id)
 		if sp[id].has("damage") and not _authored_damage(sp[id]["damage"]):
 			errs.append("spells.json: \"%s\" damage needs count/sides" % id)
+		# Same rule from the other side: a reaction-cost spell with no reaction
+		# block is never a button and never fires — it is simply unreachable.
+		if sp[id].get("cost", "") == "reaction":
+			var trig = sp[id].get("reaction", {}).get("trigger", "")
+			if not trig in REACTION_TRIGGERS:
+				errs.append("spells.json: \"%s\" is a reaction with no fired trigger (\"%s\")"
+					% [id, trig])
 	var cn = Catalog.all("effects/conditions.json")
 	for id in cn:
 		if not id.begins_with("_") and Catalog.index("conditions.json").get(id) == null:

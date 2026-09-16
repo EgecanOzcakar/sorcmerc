@@ -101,6 +101,10 @@ class Lair extends RefCounted:
 	# How it ended if it ended without the party: "cleared" (somebody else got
 	# there) or "abandoned" (they packed up and left). "" while it is still live.
 	var resolved_as := ""
+	# World-clock stamp of the moment it was spent, < 0 = still live. A hole in
+	# the ground does not stay empty: core/world_lairs.gd's RESPAWN lets
+	# something move back into it, and this is the clock that runs.
+	var cleared_at := -1.0
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String, name_v: String = "") -> void:
 		id = id_v

@@ -50,6 +50,11 @@ func step(n: int, dt := 0.1) -> void:
 		# tests/test_approach.gd.
 		if screen._approach_card != null:
 			screen._on_approach_chosen("engage")
+		# Issue #30: a fight now pays on a page of its own instead of in silence,
+		# and that page holds the clock until it is read. Same deal as the road
+		# event above — the robot does what a player does and walks on.
+		if screen._spoils_panel != null:
+			screen._close_spoils()
 
 func _run() -> void:
 	await process_frame

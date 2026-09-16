@@ -9,11 +9,17 @@ const Hex = preload("res://core/hex.gd")
 # feels-bad — flip to false to let monsters finish people off.
 const MERCY := true
 
+# A coroutine, but only on paper: the only thing below that can suspend is
+# cb.offer_reactions(), and that returns without ever reaching an await unless
+# somebody installed a reaction decider (scenes/main.gd does, when the player
+# asked for prompts). It returns void precisely so the callers that don't —
+# the whole headless suite, autoplay — can go on calling it as a bare statement
+# and get the same straight-through turn they always got.
 static func take_turn(cb, actor) -> void:
 	if not actor.conscious():
 		return
 	if actor.team == "foe":
-		_foe_turn(cb, actor)
+		await _foe_turn(cb, actor)
 	else:
 		_party_auto(cb, actor)
 
@@ -101,15 +107,24 @@ static func _use_special(cb, m, targets: Array) -> bool:
 		if legal.is_empty():
 			continue
 		legal.sort_custom(func(a, b): return a.hp < b.hp)
+		await cb.offer_reactions(m, v, legal[0])
 		cb.perform(m, v, legal[0])
 		return true
 	return false
 
 # Hit `targets` (already in the caller's preference order) — the special first,
 # the plain swing at the head of the list otherwise.
+#
+# The offer goes immediately before the blow, not after it: the resolver cannot
+# stop to ask (see combat.gd's "being asked first"), so the moment before the
+# action is committed is the last one at which the question can be put. The
+# answer is therefore given against the hit chance rather than against the
+# damage — and nothing is spent if the swing misses.
 static func _strike(cb, m, targets: Array) -> void:
-	if not _use_special(cb, m, targets):
-		cb.resolve_attack(m, targets[0])
+	if await _use_special(cb, m, targets):
+		return
+	await cb.offer_reactions(m, cb.attack_verb(), targets[0])
+	cb.resolve_attack(m, targets[0])
 
 static func _toward(goal: Vector2i) -> Callable:
 	return func(h: Vector2i) -> float: return -float(Hex.distance(h, goal))
@@ -183,7 +198,7 @@ static func _foe_turn(cb, m) -> void:
 		return     # the opportunity attack on the way out dropped it
 	if not adj.is_empty():
 		adj.sort_custom(func(a, b): return a.hp < b.hp if a.hp != b.hp else a.ac < b.ac)
-		_strike(cb, m, adj)
+		await _strike(cb, m, adj)
 		if m.hp * 2 <= m.max_hp:
 			# Nimble Escape and friends: a bonus-action Disengage, then back off
 			var esc := _pick(cb, m, func(v): return v["kind"] == "disengage" and v["cost"] == "bonus")
@@ -198,6 +213,7 @@ static func _foe_turn(cb, m) -> void:
 		return c.team == "party" and c.is_down() and Hex.distance(c.pos, m.pos) <= 1)
 	if not downed_adj.is_empty():
 		if not MERCY or not pcs.any(func(c): return _can_engage(cb, m, c)):
+			await cb.offer_reactions(m, cb.attack_verb(), downed_adj[0])
 			cb.resolve_attack(m, downed_adj[0])
 			return
 
@@ -212,7 +228,7 @@ static func _foe_turn(cb, m) -> void:
 		var shootable: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.atk_range and Hex.distance(c.pos, m.pos) > 1)
 		if not shootable.is_empty():
 			shootable.sort_custom(func(a, b): return a.hp < b.hp)
-			_strike(cb, m, shootable)
+			await _strike(cb, m, shootable)
 		return
 
 	# melee, nobody adjacent: close on the nearest PC, then swing if we arrived
@@ -223,9 +239,9 @@ static func _foe_turn(cb, m) -> void:
 		return
 	if not now.is_empty():
 		now.sort_custom(func(a, b): return a.hp < b.hp)
-		_strike(cb, m, now)
+		await _strike(cb, m, now)
 	else:
-		_use_special(cb, m, pcs)   # closed, but not close enough to swing — a gaze still reaches
+		await _use_special(cb, m, pcs)   # closed, but not close enough to swing — a gaze still reaches
 
 # --- party autopilot (demo / test only) ----------------------------
 
