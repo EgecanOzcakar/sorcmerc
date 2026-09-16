@@ -664,13 +664,23 @@ class ItemTile extends Button:
 	var rarity_color := Icons.COL_TEXT
 	var base_tip := ""
 	var compare := ""
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_MOUSE_ENTER and compare != "":
+			tooltip_text = base_tip + (compare if Input.is_key_pressed(KEY_SHIFT) else "")
 	func _input(e: InputEvent) -> void:
 		if compare == "" or not (e is InputEventKey and e.keycode == KEY_SHIFT) or not is_hovered():
 			return
 		tooltip_text = base_tip + (compare if e.pressed else "")
+		# The changed text cancels the open tooltip, but the viewport only re-arms
+		# its timer for a motion of more than 5 px — so the nudge steps 6 px, kept
+		# inside the tile, or the card would never come back.
+		var mouse := get_viewport().get_mouse_position()
+		var r := get_global_rect()
+		var step := Vector2(6.0, 0.0) if mouse.x + 6.0 < r.end.x else Vector2(-6.0, 0.0)
 		var nudge := InputEventMouseMotion.new()
-		nudge.position = get_viewport().get_mouse_position()
+		nudge.position = mouse + step
 		nudge.global_position = nudge.position
+		nudge.relative = step
 		get_viewport().push_input(nudge)
 	func _make_custom_tooltip(for_text: String) -> Object:
 		var card := PanelContainer.new()
