@@ -13,6 +13,7 @@
 extends SceneTree
 
 const EventCard = preload("res://scenes/world/event_card.gd")
+const Icons = preload("res://core/ui_icons.gd")
 const Travel = preload("res://core/travel.gd")
 const World = preload("res://core/world.gd")
 const Party = preload("res://core/party.gd")
@@ -250,6 +251,20 @@ func _init() -> void:
 			check(String(real["cname"]) in rt, "...and whoever travel.gd picked")
 	else:
 		check(false, "Travel.check() produced no event to render")
+
+	# --- the picture: the outcome's frame when there is one, and space made for it
+	var pic = card()
+	pic.show_event({"id": "tracks", "title": "Tracks", "kind": "good", "ok": true, "text": "x"})
+	check(pic._art == Icons.event_art("tracks", true) and pic._art != null, "a passed Tracks shows the pass frame")
+	check(pic._art_rect.size.y == pic.ART_H and pic._art_rect.position.y > pic._panel.position.y,
+		"...and the card makes room for it")
+	var pf = card()
+	pf.show_event({"id": "tracks", "title": "Tracks", "kind": "bad", "ok": false, "text": "x"})
+	check(pf._art == Icons.event_art("tracks", false) and pf._art != pic._art, "a failed one shows the fail frame")
+	var none = card()
+	none.show_event({"id": "no-such-event", "title": "?", "kind": "good", "text": "x"})
+	check(none._art == null and none._art_rect.size == Vector2.ZERO, "an event with no art reserves no space")
+	check(Icons.event_art("good-ground", false) == Icons.event_art("good-ground", null), "no fail frame: the plain scene")
 
 	print("test_event_card: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

@@ -404,6 +404,16 @@ static func _icon(path: String) -> Texture2D:
 static func portrait(faction: String, service: String) -> Texture2D:
 	return _icon("res://assets/generated/%s-%s.png" % [faction, service])
 
+# A road event's picture (assets/generated/event-<id>[-pass|-fail].png,
+# tools: ~/localgen/gen_sorcmerc_events.py): the outcome's own frame when it
+# has one, the plain scene otherwise, null for an event with no art.
+static func event_art(event_id: String, ok) -> Texture2D:
+	if ok != null:
+		var tex := _icon("res://assets/generated/event-%s-%s.png" % [event_id, "pass" if ok else "fail"])
+		if tex != null:
+			return tex
+	return _icon("res://assets/generated/event-%s.png" % event_id)
+
 static func portrait_rect(faction: String, service: String, px := 160) -> TextureRect:
 	var tex := portrait(faction, service)
 	if tex == null:
