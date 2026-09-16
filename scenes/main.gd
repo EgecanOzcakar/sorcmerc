@@ -573,6 +573,21 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 		_armed = ""
 	_mode = "idle"
 	_tgt_verb = {}
+	_submenu = ""
+	_submenu_page = 0
+	_tier_spell = ""
+	_set_buttons(_slotted(h, _menu_entries(h)["opts"]))
+	_board.queue_redraw()
+
+# Every verb the character has, as a bar entry, before _slotted() lays them into
+# the fixed nine. Split out of _build_hero_menu so a page can be re-derived
+# rather than re-shown: arming a two-press confirm changes one entry's label and
+# its armed flag, and whatever page you armed it FROM has to be rebuilt from the
+# new entries. Issue #24 is what re-showing the stale ones looked like — arming
+# Rage inside the [3] Bonus submenu dropped you back on the main bar with the
+# confirm nowhere on it, so the second press of the same key swung the greataxe
+# instead and Rage took four presses (3, 1, 3, 1) to come out.
+func _menu_entries(h) -> Dictionary:
 	var opts: Array = []
 	var spell_tiers: Dictionary = {}   # spell id -> Array of this verb's entries, one per castable level
 	var spell_order: Array = []        # first-seen order, so a spell keeps its natural position in opts
@@ -643,13 +658,11 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 			var head: Dictionary = base[3].duplicate()
 			var castable: int = tiers.filter(func(t): return not bool(t[3].get("disabled", false))).size()
 			head["disabled"] = castable == 0
-			head["shift_fn"] = func(): _spell_tier_menu(h, tiers)   # Shift+number: pick the slot level
-			opts[i] = [base[0], func(): _spell_tier_menu(h, tiers),
+			head["shift_fn"] = func(): _spell_tier_menu(h, sid)   # Shift+number: pick the slot level
+			opts[i] = [base[0], func(): _spell_tier_menu(h, sid),
 				"%s\n%d of %d levels castable — pick one (Shift+key for the levels)." % [base[0], castable, tiers.size()], head]
 
-	_submenu = ""
-	_set_buttons(_slotted(h, opts))
-	_board.queue_redraw()
+	return {"opts": opts, "tiers": spell_tiers}
 
 # --- the fixed bar --------------------------------------------------------
 #
@@ -669,7 +682,9 @@ const SLOTS := ["attack", "spells", "bonus", "features", "dash", "disengage", "d
 const SLOT_NAMES := {"attack": "Attack", "spells": "Spells", "features": "Features", "bonus": "Bonus actions",
 	"dash": "Dash", "disengage": "Disengage", "dodge": "Dodge", "hide": "Hide", "other": "Help & Shove"}
 const LIST_SLOTS := ["spells", "features", "bonus", "other"]
-var _submenu := ""   # "" on the main bar, else the open slot's id (Esc goes back)
+var _submenu := ""      # "" on the main bar, else the open slot's id (Esc goes back)
+var _submenu_page := 0  # which page of a long slot list is showing
+var _tier_spell := ""   # which spell's tier picker is open, while _submenu == "tiers"
 
 # Which slots an entry belongs in, from the meta _build_hero_menu attached. A
 # bonus-action spell sits under [2] with its level AND under [4].
@@ -690,26 +705,26 @@ static func _slots_of(opt: Array) -> Array:
 		out.append("bonus")
 	return out
 
+# One slot's entries, in the order the submenu shows them. A function rather
+# than a local so _open_list can re-derive the page it is re-rendering.
+func _slot_list(opts: Array, s: String) -> Array:
+	var mine: Array = opts.filter(func(o): return s in _slots_of(o))
+	if s == "spells":
+		mine.sort_custom(func(a, b): return _tier_of(a) < _tier_of(b) or (_tier_of(a) == _tier_of(b) and a[0] < b[0]))
+	return mine
+
 func _slotted(h, opts: Array) -> Array:
-	var by_slot := {}
-	for s in SLOTS:
-		by_slot[s] = []
-	for o in opts:
-		for s in _slots_of(o):
-			by_slot[s].append(o)
 	var out: Array = []
 	for s in SLOTS:
-		var mine: Array = by_slot[s]
+		var mine: Array = _slot_list(opts, s)
 		var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
 		if s in LIST_SLOTS and mine.size() > 1:   # one thing to pick from is no pick: the key fires it
-			if s == "spells":
-				mine.sort_custom(func(a, b): return _tier_of(a) < _tier_of(b) or (_tier_of(a) == _tier_of(b) and a[0] < b[0]))
 			var meta := _mark(_slot_icon(s), "▸")
 			meta["disabled"] = mine.is_empty() or live == 0
 			meta["key"] = str(SLOTS.find(s) + 1)
 			var tip := "%s\n%s" % [SLOT_NAMES[s], ("Nothing to pick from." if mine.is_empty()
 				else "%d of %d ready — press to pick one." % [live, mine.size()])]
-			out.append([SLOT_NAMES[s] + " ▸", _open_list.bind(h, s, mine, SLOT_NAMES[s]), tip, meta])
+			out.append([SLOT_NAMES[s] + " ▸", _open_list.bind(h, s), tip, meta])
 		elif mine.is_empty():
 			var meta := _mark(_slot_icon(s))
 			meta["disabled"] = true
@@ -764,9 +779,16 @@ func _slot_icon(s: String) -> Texture2D:
 # pressed; any list longer than nine pages on slot 9 (More ▸), in a stable order.
 const LIST_KEYS := 9
 
-# One flat list, nine to a page.
-func _open_list(h, slot: String, entries: Array, name: String, page := 0) -> void:
+# One flat list, nine to a page. The entries are re-derived on every call rather
+# than carried in the binding, so re-opening the page after something on it
+# changed (a confirm armed, a use spent) shows what is true now — see
+# _menu_entries.
+func _open_list(h, slot: String, page := 0) -> void:
 	_submenu = slot
+	_submenu_page = page
+	_tier_spell = ""
+	var name: String = SLOT_NAMES.get(slot, slot)
+	var entries: Array = _slot_list(_menu_entries(h)["opts"], slot)
 	var opts: Array = []
 	var per := LIST_KEYS if entries.size() <= LIST_KEYS else LIST_KEYS - 1
 	var start := page * per
@@ -774,7 +796,7 @@ func _open_list(h, slot: String, entries: Array, name: String, page := 0) -> voi
 	if entries.size() > LIST_KEYS:
 		var next_page := page + 1 if start + per < entries.size() else 0
 		var meta := _mark(Icons.verb_icon("generic"), "…")
-		opts.append(["More ▸", _open_list.bind(h, slot, entries, name, next_page),
+		opts.append(["More ▸", _open_list.bind(h, slot, next_page),
 			"%s — page %d of %d\nPress for the next page." % [name, page + 1, ceili(float(entries.size()) / per)], meta])
 	opts.append(["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
@@ -782,13 +804,26 @@ func _open_list(h, slot: String, entries: Array, name: String, page := 0) -> voi
 
 # One spell, several slot levels: a small picker instead of a button per tier.
 # Each tier's own entry (built above, already wired to _enter_target/_enter_cone/
-# cb.perform exactly as it would have been standalone) is reused verbatim.
-func _spell_tier_menu(h, tiers: Array) -> void:
+# cb.perform exactly as it would have been standalone) is reused verbatim, and
+# re-derived on every call for the same reason _open_list re-derives its page.
+func _spell_tier_menu(h, sid: String) -> void:
 	_submenu = "tiers"
-	var opts: Array = tiers.duplicate()
+	_submenu_page = 0
+	_tier_spell = sid
+	var opts: Array = (_menu_entries(h)["tiers"].get(sid, []) as Array).duplicate()
 	opts.append(["Back", func(): _build_hero_menu(h, true), "Back",
 		_mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
+	_board.queue_redraw()
+
+# Re-render whatever page is showing from freshly built entries — the main bar,
+# an open slot list, or a spell's tier picker. What a two-press confirm calls
+# when it arms: the confirm has to appear where the player's finger already is.
+func _refresh_menu(h) -> void:
+	match _submenu:
+		"": _set_buttons(_slotted(h, _menu_entries(h)["opts"]))
+		"tiers": _spell_tier_menu(h, _tier_spell)
+		_: _open_list(h, _submenu, _submenu_page)
 	_board.queue_redraw()
 
 # The other weapon this character could be swinging: the first equipped attack
@@ -903,11 +938,14 @@ static func _verb_tooltip(h, v: Dictionary) -> String:
 func _costly(v: Dictionary) -> bool:
 	return v.has("pool") or int(v.get("slot_level", 0)) > 0 or v["kind"] in ["dodge", "dash"]
 
-# A two-press guard: first press arms and relabels, second press fires.
+# A two-press guard: first press arms and relabels, second press fires. The
+# relabel lands on whatever page the first press came from — issue #24: arming
+# from a submenu used to rebuild the main bar under the player, so the same key
+# pressed twice ran the main bar's slot instead of confirming.
 func _confirm_opt(h, key: String, label: String, fn: Callable) -> Array:
 	if _armed == key:
 		return ["✓ Confirm: %s" % label, func(): _armed = ""; fn.call()]
-	return [label, func(): _armed = key; _build_hero_menu(h, true)]
+	return [label, func(): _armed = key; _refresh_menu(h)]
 
 func _enter_cone(h, v: Dictionary) -> void:
 	_mode = "cone"
