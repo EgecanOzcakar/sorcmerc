@@ -4625,10 +4625,11 @@ Full write-up in `docs/spike-party-opinions.md`; model `core/party_opinion.gd`
 (plus one `relations` field on `core/party.gd`), test
 `tests/test_party_opinion.gd`, throwaway sweep `tests/sweep_party_opinion.gd`.
 Nothing in the shipped game calls it. Headlines: every companion is
-player-made, so the shape is Wildermyth's (a symmetric score per pair that
-drifts toward a baseline read off the two sheets, labelled by band, told in
-one-line camp beats), not BioWare's; romance is a camp beat that ASKS through
-D4's options card, never a roll, one partner at a time, declined is
+player-made, so the shape has to be systemic rather than authored — a
+symmetric score per pair that drifts toward a baseline read off the two
+sheets, labelled by band, told in one-line camp beats, with no written NPC
+for a dialogue tree to hang on. Romance is a camp beat that ASKS through D4's
+options card, never a roll, one partner at a time, and declined is
 remembered. The road is where it pays — a morale point beside the pace bonus
 on every D3 check, and the roll feeding back into who the party likes. The
 three combat effects at 5e-honest sizes (+1 AC bonded and adjacent, -1 to hit
@@ -4639,38 +4640,62 @@ per fight); cap saves once per fight before wiring anything. Side finding:
 Help's advantage is erased by the ally's own `new_turn()` before it can be
 spent — pre-existing, one line, its own PR.
 
-**Appendix A (same doc, added the same day)** — what Darkest Dungeon and its
-neighbours do about opinionated characters, and specifically about
-uncontrollable actions, which the spike above does not touch. DD1 turns out to
-have no relationships at all (stress, a resolve test at 100, nine afflictions
-that refuse a command at 33% and act out at ~30-42%; attacking an ally peaks
-at 8.3%, and the 6-stress barks make it a contagion model). DD2 is the pair
-system: affinity 0-20 from 9, symmetric, resolving into a named relationship
-as a chance rather than at a threshold, read off combat behaviour the player
-was going to choose anyway, and its control loss force-equips a cursed skill
-rather than seizing a turn. Then Wildermyth, RimWorld, Battle Brothers, XCOM 2
-bonds, Fire Emblem and Jagged Alliance 2, with a shape table.
+**Appendix A (same doc, added the same day)** — uncontrollable actions, which
+the spike above does not touch: a character who refuses an order or swings at
+the wrong person because of how they feel about somebody. Every effect §6
+measured is a modifier the player still steers around. The appendix argues
+this game can take less control loss than the genre does, for two reasons: a
+character here is an investment the player built across a dozen 5e choices
+rather than a recruit they hired, and the brief promises that every hit
+traces to a visible number, which an unannounced roll at the top of a turn
+does not. 5e's own answer to control loss is a **saving throw**, which is a
+visible number with a published DC.
+
+The finding that makes it cheap: `data/effects/conditions.json` plus
+`apply_condition()` already express every category of act-out as a 5e
+condition — refusing to act is `incapacitated`, refusing your chosen target
+is `charmed`, backing away is `frightened`, and the signature already stores
+a `source`, which is exactly what "frightened **of Pike**" needs. There is
+also a `held_by` + repeat-save path for shaking it off, and `take_turn()`
+already routes a party member to `_party_auto()`. So an act-out needs no new
+engine machinery at all, which is an argument for deciding it on design
+grounds rather than on cost.
 
 Two findings argue against decisions this spike already made, which is the
-point of having run it. Rivalry as a combat penalty is the minority
-position — Wildermyth, whose characters are player-made like ours, makes
-rivalry a damage buff and has no negative relationship state at all — so
-`bicker_penalty` should probably be a different bonus, not a malus. And
-symmetric storage was the easy call: the two games that model opinion rather
-than a bond, RimWorld and Jagged Alliance 2, both went directed, and JA2 buys
-a rule ours cannot express (one hated teammate floors the whole squad's
-reading). That is a save-format decision, so now or never.
+point of having run it. Rivalry as a combat *penalty* is probably wrong here:
+designs built around characters the player made themselves make every
+relationship state a different bonus, rivalry included, with no punishing
+state at all — so `bicker_penalty` should be a different bonus rather than a
+malus, which is one sign flip. And symmetric storage was the easy call: it is
+right for a bond, which is mutual, but an opinion wants to be directed so
+that A can count B a friend while B counts A a rival, and so it can carry the
+rule this shape cannot express — one hated member floors the whole marching
+order's reading however many friends are in it. That is a save-format
+decision, so now or never.
 
-What transfers, in order: DD2's behavioural inputs, Fire Emblem's
-affinity-sum-times-rank at a hex radius (one line, and it makes positioning
-the expression of the relationship), XCOM's Stand By Me so the relationship
-is the CURE for a condition and not only its cause, the cursed-skill shape as
-rivals losing the cooperative verbs, DD1's and JA2's town-and-camp control
-loss on our inn costs and standing orders, Battle Brothers' mood-caps-morale
-coupling, and JA2's learn-to-hate timers as the bridge between authored and
-simulated. What does not: a second stress resource, contagion, RimWorld's
-real-time social tick, any break that seizes a whole turn, recruitable
-children, and anything that can remove or kill a character the player built.
-5e's own answer to control loss is a saving throw, and
-`data/effects/conditions.json` plus `apply_condition()` already express every
-DD act-out category as a condition with a source and a repeat save.
+What transfers, in order: measuring the score off combat behaviour the player
+was going to choose anyway (and losing points for treating yourself first
+while an ally is down); a positional formula, since this is a hex game — sum
+a per-character bonus vector over nearby related allies and scale by band,
+which generalises both of §6's adjacency hooks into one line; making the
+relationship the **cure** for a condition and not only its cause, by having a
+move that ends beside a bonded ally shed `frightened`; narrowing the menu
+rather than seizing the turn, so a rival pair simply loses the cooperative
+verbs with each other; putting the real control loss in town and at camp,
+where the clock is stopped and it costs coin — our inn prices and standing
+orders are the surfaces; letting the campaign layer **cap** the combat layer
+rather than set it; and a timer that writes a permanent relationship on
+expiry, as the bridge between authored and simulated.
+
+What does not: a second stress or mood resource (a worse version of
+exhaustion, which is already in the engine), contagion, a real-time social
+tick, any break that seizes a whole turn (a fifth of the action economy in a
+party this size), marriage that produces recruitable children, and anything
+that can remove or kill a character over a feud. `core/travel.gd`'s
+`_hp_toll` invariant — nothing rolled between towns may drop anybody — is the
+right precedent, and a relationship should respect it too.
+
+The appendix carries the decisions and the reasons, not the survey behind
+them: a design doc here should not be a competitive analysis of other
+people's games assembled from fan wikis. The workings are in the pull
+request's history.
