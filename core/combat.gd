@@ -666,7 +666,29 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		_destroy_in_area(area)
 		return {"area": area, "caught": hit_any}
 	log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
-	return _spell_hit(target, v, notation, dc, caster)
+	var out := _spell_hit(target, v, notation, dc, caster)
+	for c in extra_targets(caster, v, target):
+		log.append("  ...and on %s." % c.cname)
+		_spell_hit(c, v, notation, dc, caster)
+	return out
+
+# An upcast single-target spell (`targets` > 1) also lands on the nearest
+# other legal targets within SPREAD_HEXES of the aimed one — the rules' "within
+# 30 feet of each other". Auto-picked by distance to the primary, so the aim
+# stays one click.
+# ponytail: no multi-select aiming; add a pick-N UI if players want to choose.
+const SPREAD_HEXES := 5   # 30 ft
+func extra_targets(caster, v: Dictionary, primary) -> Array:
+	var n := int(v.get("targets", 1)) - 1
+	if n <= 0 or not (primary is Object and primary.get("pos") != null):
+		return []
+	var pool: Array = []
+	for c in combatants:
+		if c != primary and c != caster and legal_target(caster, v, c) \
+				and Hex.distance(primary.pos, c.pos) <= SPREAD_HEXES:
+			pool.append(c)
+	pool.sort_custom(func(a, b): return Hex.distance(primary.pos, a.pos) < Hex.distance(primary.pos, b.pos))
+	return pool.slice(0, n)
 
 const AREA_KINDS := ["direction", "hex", "corner", "line", "self_area"]
 
