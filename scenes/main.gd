@@ -72,6 +72,8 @@ var _hud_overlay: Control
 
 @onready var _header := Label.new()
 @onready var _order := HBoxContainer.new()   # turn-order icon strip along the top
+var _order_tiles := {}    # combatant id -> its tile in that strip
+var _order_aimed := {}    # ids currently wearing the aim highlight — see _paint_order_aim
 @onready var _hint := Label.new()
 @onready var _board := Board.new()
 const Figures3D := preload("res://scenes/figures3d.gd")
@@ -577,6 +579,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	_submenu_page = 0
 	_tier_spell = ""
 	_set_buttons(_slotted(h, _menu_entries(h)["opts"]))
+	_paint_order_aim()   # aim dropped: clear any highlight it left on the strip
 	_board.queue_redraw()
 
 # Every verb the character has, as a bar entry, before _slotted() lays them into
@@ -954,6 +957,7 @@ func _enter_cone(h, v: Dictionary) -> void:
 		h.cname, v["label"]]
 	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
 		_mark(Icons.verb_icon("back"), "‹")]])
+	_paint_order_aim()
 	_board.queue_redraw()
 
 # A hex, a corner or a line: the board's hover is the aim; click commits.
@@ -964,6 +968,7 @@ func _enter_area(h, v: Dictionary) -> void:
 	_actor.text = "%s — %s: %s, click to cast.  (Esc / right-click cancels)" % [h.cname, v["label"], how]
 	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
 		_mark(Icons.verb_icon("back"), "‹")]])
+	_paint_order_aim()
 	_board.queue_redraw()
 
 # What the pending area verb would cover at the board's current hover, [] if
@@ -983,6 +988,7 @@ func _enter_target(h, v: Dictionary) -> void:
 		h.cname, v["label"]]
 	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
 		_mark(Icons.verb_icon("back"), "‹")]])
+	_paint_order_aim()
 	_board.queue_redraw()
 
 # Is `c` a legal target for the pending verb?
@@ -1088,6 +1094,7 @@ static func _reveal_head(res: Dictionary) -> Array:
 
 func board_hex_hovered(hx: Vector2i) -> void:
 	_hover_hex = hx
+	_paint_order_aim()
 	_board.queue_redraw()
 
 func board_cancel() -> void:
@@ -1256,17 +1263,23 @@ func _resources(c) -> String:
 func _build_order_strip() -> void:
 	for c in _order.get_children():
 		c.queue_free()
+	_order_tiles.clear()
+	_order_aimed.clear()
 	var u := clampf(_zoom, 0.9, 1.4)
 	for c in cb.order:
 		var tile := PanelContainer.new()
+		var base: StyleBox
 		if c == cb.current():
 			# whose turn it is: a gilt rule under the tile, nothing boxed
 			var box := Icons.box(Color(0.79, 0.64, 0.35, 0.12), Color(0, 0, 0, 0), 0, 6, 4)
 			box.border_color = Icons.COL_GOLD
 			box.border_width_bottom = 3
-			tile.add_theme_stylebox_override("panel", box)
+			base = box
 		else:
-			tile.add_theme_stylebox_override("panel", Icons.box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6, 4))
+			base = Icons.box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6, 4)
+		tile.add_theme_stylebox_override("panel", base)
+		tile.set_meta("base_box", base)
+		_order_tiles[c.id] = tile
 		var tv := VBoxContainer.new()
 		tv.add_theme_constant_override("separation", 0)
 		tile.add_child(tv)
@@ -1299,6 +1312,58 @@ func _build_order_strip() -> void:
 		elif c.is_down():
 			tile.modulate = Color(1, 1, 1, 0.6)
 		_order.add_child(tile)
+	_paint_order_aim(true)
+
+# --- issue #29: what the aim is on, said on the turn strip ------------------
+#
+# Hovering a token mid-aim already shows its odds over its own head, but a fight
+# is read off the strip at the top — whose turn, who is hurt, who is next — and
+# nothing up there said which of those tiles the spell in hand was pointed at.
+# A cone or a burst makes that worse: the hexes light up on the board, but which
+# NAMES are standing in them is exactly the thing the strip knows and the board
+# does not spell out.
+#
+# Who the aim currently lands on: {} when not aiming, or when the cursor is
+# somewhere the verb cannot go.
+func aimed_ids() -> Dictionary:
+	var out := {}
+	if cb == null or cb.is_over() or _tgt_verb.is_empty():
+		return out
+	var cur = cb.current()
+	if cur == null or cur.team != "party" or not cur.conscious():
+		return out
+	match _mode:
+		"target":
+			for c in cb.combatants:
+				if c.pos == _board._hover and _valid_target(cur, c):
+					out[c.id] = true
+		"area", "cone":
+			var hexes: Array = _area_aim(cur)
+			if hexes.is_empty():
+				return out
+			for c in cb.combatants:
+				if not c.is_dead() and c.pos in hexes:
+					out[c.id] = true
+	return out
+
+# Repaint only when the set actually changed — this is called off mouse motion.
+func _paint_order_aim(force := false) -> void:
+	var want := aimed_ids()
+	if not force and want == _order_aimed:
+		return
+	_order_aimed = want
+	for id in _order_tiles:
+		var tile = _order_tiles[id]
+		if not is_instance_valid(tile):
+			continue
+		if want.has(id):
+			var box: StyleBoxFlat = (tile.get_meta("base_box") as StyleBoxFlat).duplicate()
+			box.bg_color = Color(COL_FOE.r, COL_FOE.g, COL_FOE.b, 0.22)
+			box.border_color = COL_FOE
+			box.set_border_width_all(2)
+			tile.add_theme_stylebox_override("panel", box)
+		else:
+			tile.add_theme_stylebox_override("panel", tile.get_meta("base_box"))
 
 # Same three bands the token HP bar uses.
 static func _hp_color(c) -> Color:
