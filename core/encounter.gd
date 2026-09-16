@@ -509,7 +509,7 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 		loot.append_array(Catalog.monster(c.src_id).get("loot", []))   # a pack author's explicit drops, always
 	var deaths: Array[String] = []
 	for c in cb.team_of("party"):
-		if c.is_dead():
+		if c.is_dead() and c.sheet != null:   # a faded summon is not a fallen member
 			deaths.append(c.id)
 	var res: String = cb.outcome()
 	# On top of anything hand-authored: what the dead were actually carrying.

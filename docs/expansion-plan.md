@@ -1137,6 +1137,44 @@ tutorial encounter (in campaign.gd or a new small file, agent's call).
   steps as pure data. **Full suite: 24 test files, 0 failures;
   drive_ui/drive_game both pass.** Pushed.
 
+- 2026-09-16: **The walkthrough re-cut against the action bar as it is now.**
+  The one card that explained the buttons was written against the bar T32
+  shipped over, and the bar has moved under it twice since. Spells no longer
+  open by level: `[2]` is one flat list, cantrips first, and a spell castable
+  from more than one slot opens its own tier picker (`★2`, `★3`) with
+  Shift+key jumping straight there. A list slot holding a single thing now
+  fires that thing instead of opening a list of one — which is what Ilsa's
+  `[4]` Channel Divinity is on the tutorial's own party. A list longer than
+  nine pages on `[9]`. And the economy line has read `Ⓐ Ⓑ ➤ n` since T29,
+  not `[action] [bonus]`. The action step is therefore two cards now — the
+  fixed nine slots, the badges, the greying and Tab/Space on one; lists,
+  spell levels and the two-press confirm on the other — so the walkthrough is
+  seven steps rather than six, and the greying explanation names the two
+  slots that are genuinely grey on turn one (Attack and Help & Shove, with
+  nobody in reach yet) instead of leaving the player to wonder.
+  `tests/test_action_bar.gd` now reads `Tutorial.STEPS` and fails if the card
+  stops naming all nine slots, by key, in the order `_slotted()` lays them
+  out, so the prose and the layout cannot drift apart again in silence.
+
+  Rendering the cards to check them (`tests/shot_tutorial.gd`, new — one PNG
+  per step, the proof a PR touching this file owes) turned up the reason the
+  drift was invisible: **the walkthrough was not opening over the bar it
+  describes at all.** `_ready` showed step 1 the instant the screen existed,
+  which is before the fight has settled — so the card about the nine slots
+  was landing over an empty bar while the goblin took the first turn, or,
+  when the party won its Stealth roll, over T39's deployment bar reading
+  "Swap Vera Kord", "Swap Ilsa Vane", "Begin the ambush". Three fixes:
+  the overlay is armed in `_ready` and opened by `_advance()` on the first
+  hero turn, when there is a bar to explain; the guided fight keeps the free
+  round surprise buys it but skips the deployment phase, which is a mechanic
+  no card explains; and the overlay moved onto `_hud_layer` (above
+  `_hud_overlay`, carrying the screen's theme, since a CanvasLayer breaks
+  both the draw order and the theme chain) because T-hud's HP bars and
+  condition glyphs are on a CanvasLayer and were painting straight through
+  any card parked over a token. `tests/test_game_flow.gd` now waits for the
+  overlay rather than assuming frame one, and asserts the bar underneath it
+  is the eleven-button one and not a deployment phase.
+
 ## T33 — author combat mechanics for the missing spells (locked 2026-09-11, dispatched now)
 
 Of the 146 catalogued spells, only 8 have a hand-authored combat mechanics
@@ -4242,6 +4280,8 @@ since `core/audio.gd` fires them as one-shots over live combat.
 
 **All 14 stings are now generated ones** — `assets/audio/sfx/` is the model's,
 `assets/audio/music/` and `assets/audio/barks/` are still the synthesized set.
+(`assets/audio/barks/` stopped being that on 2026-09-16 — see
+`docs/bug-fixes-2026-09-16.md`; `assets/audio/music/` is still synthesized.)
 Three things had to be true before a take was drop-in, and none of them were:
 
 1. **The API has a half-second floor** (`duration_seconds` under 0.5 is a 400)
@@ -4327,9 +4367,9 @@ the suite at all.
 
 `tools/gen_audio.py` grew `--only`, the same spelling its sibling already had,
 and it is load-bearing now rather than a convenience: `assets/audio/` is a
-**mixed** set — the stings are the ElevenLabs tool's, the beds and barks are
-the synthesized ones — so a bare `gen_audio.py sfx` would quietly overwrite 31
-generated takes with their synthesized versions. A bare name is matched across
+**mixed** set — the stings and (since 2026-09-16) the barks are the ElevenLabs
+tool's, the beds are the synthesized ones — so a bare `gen_audio.py sfx` would
+quietly overwrite 31 generated takes with their synthesized versions. A bare name is matched across
 every group and must be unambiguous, because `settlement` is now both a sting
 and a bed; `sfx/settlement` says which.
 
@@ -4821,3 +4861,81 @@ new hook is gated on it, and so is the old one.
 they are earned, which is the ones that would otherwise read as a to-do list
 ("go and lose a fight", "get caught stealing") or spoil their own joke. The
 rest show their progress bar while they are locked.
+
+## T19c — the twelve settlement models, rebuilt low-poly, and a kit with a town in it
+
+Two things were wrong with the settlement dioramas, and they wanted opposite
+fixes. `assets/settlements/*.glb` were Meshy text-to-3D output: real building
+shapes, but 82k fused triangles under a 2048 atlas of 3.3k-5.3k tiny UV
+islands, which at the 29-83px a settlement is actually drawn averages to one
+brown. `settlement_kit.gd` answered that by building the opposite thing out of
+primitives — crisp, seeded per settlement id, and, once you looked at it beside
+the models it was replacing, too plain to be a town.
+
+**The models were rebuilt rather than replaced.** `tools/lowpoly_glb.py` runs
+four steps, each of which needs the one before it:
+
+1. **Weld.** Meshy splits a vertex at every UV seam (67,847 vertices for 82,219
+   faces). Decimating that collapses nothing and shreds the model into
+   confetti; welding first gets to 41,269 shared vertices. Colour is sampled
+   from the atlas *before* the weld, while the UVs still exist.
+2. **Smooth** (Taubin), to take the reconstruction fuzz off before the
+   decimator spends triangles describing it.
+3. **Decimate** 82k → 4k. Quadric error collapses flat regions first, so a roof
+   slope becomes two triangles and the ridge between slopes survives.
+4. **Facet**, and punch the colour. One normal and one colour per triangle.
+   This is the step that reads as "sharp": the same mesh with interpolated
+   normals is a lump of clay, and faceted it is planes meeting at a line.
+
+Measured, not guessed: **the face budget is the smoothing control.** Taubin
+converges — 14, 35 and 60 iterations render identically, and raising lambda to
+0.75 changes almost nothing. What visibly takes the lumps out is decimating
+harder, because the same noisy wall described with a quarter of the triangles
+*is* fewer, bigger, flatter planes. 8k still reads busy; 4k is where a roof
+becomes a roof; 3k starts rounding a tent off.
+
+`assets/settlements/` went **54 MB → 8.2 MB**: 44 MB of .glb down to 4.7 MB,
+and the 48 extracted atlas .jpg/.import files deleted outright, because the
+colour lives in the mesh now. The originals are in git history; the tool is
+re-runnable against them. Godot needs `vertex_color_use_as_albedo` to show any
+of it, so `Settlements3D.dress()` puts one shared flat material on every
+instance — forget it and the settlement renders white, which is exactly what
+the gallery shot did until it called the same helper.
+
+`Settlements3D.source` now defaults to `"glb"`. Twelve models still means two
+towns of a faction are the same model, so each instance takes a seeded yaw off
+its settlement id — enough to change which gable faces the camera, not enough
+to swing its lit side away from the sun the map shares.
+
+**The kit got its detail pass anyway**, because it is still the only source
+that draws a different town per id:
+
+* **Camps are camps.** A camp builds tents (the roof shape resting on the
+  ground with a pole through it) instead of little houses, and its landmark is
+  a standard on a mast, not a keep. Dwarves are the exception and hut it.
+* **One landmark per faction**, not one shape in four palettes: a keep with a
+  side tower, a tiered elven spire, a forge hall under a chimney that runs the
+  full height from the ground, a longhouse under a totem.
+* **A kitbash set** — `DRESSING` — of wells, market stalls, carts, ore carts,
+  mine heads, woodpiles, haystacks, trees, standing stones, totems, trophy
+  stakes and cook fires, placed at golden angles in the gaps the houses left.
+  A new `ember` palette role carries the one lit thing in a settlement.
+* **Houses grow things**: a jetty, a lean-to annex, a porch, a dormer, a dark
+  door, a ridge beam — all on the inward face, which is the side the map camera
+  sees and the one direction that cannot push a part out through the footprint.
+* **A gate that is a gate**: two squared gateposts and a lintel in the gap the
+  palisade leaves, at the wall's own scale.
+
+Three things the tests learned along the way. Dwellings are now **tagged** in
+the plan rather than identified by `role == "wall"`, because a stall's counter
+and a totem's skull are wall-coloured too and the overlap test was quietly
+counting them. Palisade posts are counted **on the ring**, since the kit puts
+posts inside the town now. And a house that cannot find room is rebuilt at
+three-fifths size instead of being placed inside its neighbour, which is what a
+crowded town does anyway.
+
+The palettes, meanwhile, come out of the game's own painted art rather than the
+eye: `tools/palette_from_art.py --ring assets/generated/<faction>-*.png` drops
+the middle of each counter portrait and quantises what is left, which is the
+room behind the shopkeeper — the only painted architecture each faction has.
+Hues only; the value spread stays deliberate, or the whole thing goes brown.

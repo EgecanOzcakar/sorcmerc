@@ -90,19 +90,16 @@ SFX = {
             "impact with a short dull thud underneath, dry, no reverb tail", 0.7, 0.7),
     "crit": ("A devastating critical sword strike, metal shearing through armor and bone, "
              "sharp crack with a deep impact underneath, brief and brutal", 0.9, 0.65),
-    "kill": ("A body collapsing to a stone floor in armor, heavy final thud with "
-             "scattered metal rattle", 1.0, 0.6),
-    "cast": ("A magic spell being cast, rising shimmering energy with a soft bright "
-             "release at the end, fantasy game spell sound", 1.1, 0.5),
-    "heal": ("A gentle healing magic chime, warm soft bells rising, brief and comforting, "
-             "fantasy game heal sound", 1.2, 0.5),
+    "kill": ("An armored body dropping dead onto flagstones: a heavy final thud, a sword clattering loose, then chain mail settling, dry, no reverb", 1.0, 0.6),
+    "cast": ("A spell being cast: a quick indrawn breath, a rush of air gathering, then a bright snap of release like a struck flint, close, dry", 1.1, 0.5),
+    "heal": ("Healing magic: a warm exhale of light, a soft glassy rising tone with a gentle harp pluck at the top, close and intimate, no reverb tail", 1.2, 0.5),
     "level_up": ("A triumphant short fanfare for leveling up, bright ascending chime with "
                  "a warm resonant finish, fantasy RPG", 1.6, 0.45),
     "victory": ("A short triumphant brass and drum victory fanfare, heroic, medieval "
                 "fantasy, ending cleanly", 2.5, 0.4),
     "defeat": ("A grim descending tone marking defeat, low strings and a distant drum, "
                "hollow and final", 2.5, 0.4),
-    "click": ("A single crisp UI button click, small wooden tick, very short, dry", 0.3, 0.9),
+    "click": ("A single soft click of a wooden game piece set down on a wooden table, tiny, dry, with a natural short decay, no ring", 0.5, 0.9),
     "buy": ("Coins being counted onto a wooden merchant counter, a few gold pieces, "
             "short and bright", 0.8, 0.75),
     "identify": ("A soft magical reveal, shimmering chime resolving into a clear tone, "
@@ -190,8 +187,7 @@ SFX = {
 
     # Conditions and exhaustion. `condition` fires whenever a status lands, which
     # is often, so it is deliberately small — a marker, not an event.
-    "condition": ("A dark magical affliction taking hold, a short low sickly warble "
-                  "sinking downward with a faint unpleasant buzz", 0.7, 0.6),
+    "condition": ("A poison or curse taking hold: a wet sickly gurgle, a brief low groan of pain, and a faint dry rattle, close, unpleasant", 0.7, 0.6),
     "collapse": ("An exhausted armored figure collapsing face-first onto stone, a heavy "
                  "limp fall with a long weary exhale and settling metal", 1.4, 0.55),
 
@@ -221,15 +217,32 @@ BARKS = {
 BARK_TAKES = 3
 BARK_SECONDS = 0.8
 BARK_INFLUENCE = 0.6
+# What a bark is allowed to last, whatever came back. `duration_seconds` is a
+# request, not a promise -- takes have come back at 2s and 3s for the 0.8s asked
+# -- and a bark is a stinger under one line of text, fired from an 8-voice
+# round-robin (core/audio.gd) while the fight moves on. A roar that holds a voice
+# for two and a half seconds is still going when the next character speaks. Over
+# this, the take is cut and faded out rather than thrown away: these are single
+# wordless sounds, so the end of one is a tail, never a word.
+BARK_MAX_SECONDS = 1.0
+# The fade that ends every bark, cut or not. A take that was cut obviously needs
+# one; so does one the model itself ended mid-shout, which is most of the short
+# ones -- tools/check_audio.py fails a one-shot whose last 10 ms are still loud,
+# because that is a voice stopping rather than a sound finishing. Squared, so the
+# last few milliseconds are already at nothing rather than a ramp cut short.
+BARK_FADE_MS = 120
 
 
-def jobs(groups, only):
-    """(group, name, out_path, prompt, seconds, influence) for everything asked for."""
+def jobs(groups, only, take=0):
+    """(group, name, out_path, prompt, seconds, influence) for everything asked for.
+    `take` > 1 writes name_<take>.wav: another recording of the same prompt,
+    which core/audio.gd round-robins with the first (see play_sfx)."""
     out = []
+    suffix = "_%d" % take if take > 1 else ""
     if "sfx" in groups:
         for name, (prompt, secs, infl) in SFX.items():
             out.append(("sfx", name,
-                        os.path.join(ROOT, "assets", "audio", "sfx", name + ".wav"),
+                        os.path.join(ROOT, "assets", "audio", "sfx", name + suffix + ".wav"),
                         prompt, secs, infl))
     if "barks" in groups:
         for archetype, prompt in BARKS.items():
@@ -290,6 +303,26 @@ def trim_and_normalize(pcm):
             before, len(vals) / float(SR), peak)
 
 
+def cap(pcm, seconds, fade_ms=BARK_FADE_MS):
+    """Cut `pcm` to at most `seconds` and fade its last `fade_ms` out.
+
+    The cut is a no-op for anything already short enough; the fade is not, and
+    both are the point. Runs after trim_and_normalize, so the sound starts at
+    sample 0 and a cut lands on the sound rather than on the silence in front of
+    it.
+    """
+    n = len(pcm) // 2
+    keep = min(n, int(SR * seconds))
+    if keep <= 0:
+        return pcm, n / float(SR)
+    vals = list(struct.unpack("<%dh" % n, pcm))[:keep]
+    fade = min(keep, max(1, int(SR * fade_ms / 1000.0)))
+    for i in range(fade):
+        g = 1.0 - (i + 1) / float(fade)
+        vals[keep - fade + i] = int(round(vals[keep - fade + i] * g * g))
+    return struct.pack("<%dh" % len(vals), *vals), keep / float(SR)
+
+
 def wav(pcm):
     """16-bit mono PCM bytes -> a complete RIFF/WAVE file."""
     block_align = CHANNELS * 2
@@ -331,6 +364,8 @@ def main():
                     help="print what would be generated and exit")
     ap.add_argument("--dry-run", action="store_true",
                     help="do everything but the API call and the write")
+    ap.add_argument("--take", type=int, default=0,
+                    help="write name_<N>.wav, an extra take the game round-robins (N >= 2)")
     args = ap.parse_args()
 
     groups = args.groups or ["sfx"]
@@ -338,7 +373,7 @@ def main():
     if bad:
         sys.exit("unknown group(s): %s (want sfx and/or barks)" % ", ".join(sorted(bad)))
 
-    todo = jobs(groups, args.only)
+    todo = jobs(groups, args.only, args.take)
     if not todo:
         sys.exit("nothing to do")
 
@@ -362,6 +397,8 @@ def main():
             continue
         pcm = generate(key, prompt, secs, infl)
         pcm, was, now, peak = trim_and_normalize(pcm)
+        if group == "barks":
+            pcm, now = cap(pcm, BARK_MAX_SECONDS)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(wav(pcm))

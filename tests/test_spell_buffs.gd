@@ -195,4 +195,6 @@ func test_teleport_obscure_summon() -> void:
 	check(Hex.distance(wolf.pos, ilsa.pos) <= 3 and cb._hex_free(wolf.pos, wolf), "...in a free hex beside her")
 	check(not cb.all_verbs(wolf).filter(func(v): return v["kind"] == "attack").is_empty(), "...and it has an attack")
 	cb._end_concentration(ilsa, "drops it")
-	check(wolf.is_dead() and not (wolf in cb.order), "the summon fades with her concentration")
+	check(wolf.is_dead() and wolf in cb.order, "the summon fades with her concentration (a corpse in the order, like any)")
+	# and a faded summon is not a fallen member
+	check(not Encounter.resolve_outcome(cb, null).get("deaths", []).has(wolf.id), "...nor a death the spoils report")
