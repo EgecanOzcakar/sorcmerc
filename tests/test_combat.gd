@@ -48,6 +48,7 @@ func _init() -> void:
 	test_action_economy()
 	test_pool_spend_and_rest()
 	test_rage_full_turn()
+	test_buff_rider_ranged()
 	test_action_surge_full_turn()
 	test_spell_slot_spend()
 	test_reaction_and_concentration()
@@ -763,3 +764,16 @@ func test_surrender() -> void:
 	check(not cb.is_over() and cb.outcome() == "ongoing", "fresh fight is ongoing")
 	cb.surrender()
 	check(cb.is_over() and cb.outcome() == "Defeat", "surrender ends the fight as a defeat")
+
+# Hunter's Mark / Magic Weapon / potions ride any weapon hit; Rage is melee-only.
+func test_buff_rider_ranged() -> void:
+	var ch = _barbarian()
+	var a = Adapter.to_combatant(ch, "party", Vector2i(2, 1))
+	var g = Adapter.from_monster(Catalog.all("monsters.json")[0], "foe", Vector2i(6, 1))
+	var cb = Combat.new(RNG.new(3), [a, g], Encounter.board())
+	a.ranged = true
+	a.statuses["hunters-mark"] = {"bonus_damage": 3}
+	a.statuses["raging"] = {"bonus_damage": 2}
+	var ex := cb._buff_damage_extras(a, true)
+	check(ex.size() == 1 and ex[0]["label"] == "hunters-mark", "ranged hit: Hunter's Mark rides, Rage does not")
+	check(cb._buff_damage_extras(a, false).size() == 2, "melee hit: both ride")

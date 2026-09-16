@@ -254,6 +254,7 @@ func begin_turn_for(c) -> void:
 	if held is Dictionary and round_num >= int(held.get("until_round", 0)):
 		_end_concentration(c, "lets %s lapse" % Effects.humanize(String(held["spell"])))
 	_expire_conditions(c)
+	_zone_touch(c)
 	c.econ["action"] = int(c.econ["action"]) + _buff_sum(c, "extra_action")
 	if _buff_sum(c, "speed_mult") > 0:
 		c.econ["move_left"] = int(c.econ["move_left"]) * _buff_sum(c, "speed_mult")
@@ -783,6 +784,14 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	var notation := "%dd%d" % [int(v.get("dice_count", 0)), int(v.get("dice_sides", 6))]
 	var dc := int(v.get("save_dc", caster.save_dc))
 	var area := area_hexes(caster, v, target)
+	if v.get("zone", false) and not area.is_empty():
+		log.append("%s casts %s — it settles over %d hexes." % [caster.cname, v["label"], area.size()])
+		_add_zone(caster, v, area)
+		var caught := false
+		for c in combatants:
+			caught = _zone_touch(c) or caught
+		_destroy_in_area(area, caster)
+		return {"area": area, "caught": caught}
 	if not area.is_empty() or v.get("targeting", "") in AREA_KINDS:
 		log.append("%s casts %s — DC %d save." % [caster.cname, v["label"], dc])
 		var hit_any := false
@@ -982,6 +991,65 @@ func _apply_buff(caster, who, v: Dictionary) -> void:
 		b["until_tick"] = until
 		b.merge(held)
 		who.statuses["spell:" + String(v.get("spell", v["id"]))] = b
+
+# --- lingering areas (Darkness, Web, Spirit Guardians, Wall of Fire...) ----
+#
+# A `zone: true` spell stays on its hexes instead of resolving once against
+# whoever stood there. A buff zone (Darkness) dresses and undresses occupants
+# as they come and go; a save/damage zone (Web, Spirit Guardians) rolls against
+# a creature the turn it starts inside or steps in, once per turn. Emanations
+# walk with their caster; concentration zones die with the concentration.
+# ponytail: the AI does not know zones exist and will walk through a Wall of Fire.
+var zones: Array = []   # {spell, label, hexes, caster, v, until_tick, hit: {id: tick}}
+
+func _add_zone(caster, v: Dictionary, hexes: Array) -> void:
+	zones.append({"spell": String(v.get("spell", v["id"])), "label": v["label"], "hexes": hexes,
+		"caster": caster, "v": v, "until_tick": _tick() + int(v.get("rounds", 10)) * TICK_STRIDE, "hit": {}})
+
+func _zone_live(z: Dictionary) -> bool:
+	if _tick() > int(z["until_tick"]) or z["caster"].is_dead():
+		return false
+	if z["v"].get("concentration", false):
+		var held = z["caster"].statuses.get("concentrating")
+		return held is Dictionary and String(held.get("spell", "")) == z["spell"]
+	return true
+
+# The zones still standing, emanations re-centred on their caster. The board paints these.
+func live_zones() -> Array:
+	zones = zones.filter(_zone_live)
+	for z in zones:
+		if z["v"].get("targeting", "") == "self_area":
+			z["hexes"] = Hex.within(z["caster"].pos, int(z["v"].get("radius", 1)))
+	return zones
+
+# `c` started a turn or stepped: settle every zone against where it now stands.
+# Returns true when a zone rolled against it.
+func _zone_touch(c) -> bool:
+	var rolled := false
+	var worn := {}   # status key -> still standing in a zone that grants it
+	for z in live_zones():
+		var v: Dictionary = z["v"]
+		var inside: bool = c.conscious() and c.pos in z["hexes"]
+		if v.has("buff"):
+			var key := "spell:" + z["spell"]
+			worn[key] = worn.get(key, false) or inside
+			if inside and not c.statuses.has(key):
+				_apply_buff(z["caster"], c, v)
+				c.statuses[key]["zone"] = true
+				log.append("  %s is in the %s." % [c.cname, z["label"]])
+		elif inside and c != z["caster"] and int(z["hit"].get(c.id, -1)) != _tick() \
+				and not (v.get("spare_allies", false) and c.team == z["caster"].team):
+			z["hit"][c.id] = _tick()
+			log.append("%s, in the %s (DC %d):" % [c.cname, z["label"], int(v.get("save_dc", z["caster"].save_dc))])
+			_spell_hit(c, v, "%dd%d" % [int(v.get("dice_count", 0)), int(v.get("dice_sides", 6))],
+				int(v.get("save_dc", z["caster"].save_dc)), z["caster"])
+			rolled = true
+	for key in c.statuses.keys():
+		var st = c.statuses[key]
+		if st is Dictionary and st.get("zone", false) and not worn.get(key, false):
+			c.statuses.erase(key)
+			log.append("  %s is out of the %s." % [c.cname, Effects.humanize(String(key).trim_prefix("spell:"))])
+	return rolled
 
 # --- conditions (data/effects/conditions.json) --------------------------
 #
@@ -1475,13 +1543,18 @@ func _counter(reactor, v: Dictionary, ctx: Dictionary) -> bool:
 		Ach.bump("counterspells")
 	return true
 
-# Damage a held buff adds to a melee swing (Rage), extras-shaped so the log
-# labels it the same way a passive-damage rider is — not silently folded into
-# the total with nothing to say where it came from.
-func _buff_damage_extras(attacker) -> Array:
+# Damage a held buff adds to a weapon hit (Hunter's Mark, Magic Weapon, a
+# potion), extras-shaped so the log labels it the same way a passive-damage
+# rider is — not silently folded into the total with nothing to say where it
+# came from. Rage is the one that is melee-only; the rest ride any weapon.
+const MELEE_ONLY_BUFFS := ["raging"]
+
+func _buff_damage_extras(attacker, ranged: bool) -> Array:
 	var out: Array = []
 	for id in attacker.statuses:
 		var s = attacker.statuses[id]
+		if ranged and id in MELEE_ONLY_BUFFS:
+			continue
 		if s is Dictionary and int(s.get("bonus_damage", 0)) != 0:
 			out.append({"amount": int(s["bonus_damage"]), "label": id})
 	return out
@@ -1545,8 +1618,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		var dmg: int = dmg_detail["total"]
 		out["dmg_detail"] = dmg_detail
 		out.extras = _passive_damage(attacker, target, mode, crit)
-		if not attacker.ranged:
-			out.extras.append_array(_buff_damage_extras(attacker))
+		out.extras.append_array(_buff_damage_extras(attacker,
+			attacker.ranged and not opts.get("melee", false)))
 		for e in out.extras:
 			dmg += int(e["amount"])
 		out.damage = dmg
@@ -1701,6 +1774,7 @@ func _push_away(attacker, target, hexes: int) -> int:
 			break
 		target.pos = dest
 		moved += 1
+	_zone_touch(target)
 	return moved
 
 func _damage_type(attacker) -> String:
@@ -2031,6 +2105,7 @@ func move_to(mover, dest: Vector2i, disengage := false) -> void:
 	mover.econ["move_left"] = int(mover.econ.get("move_left", 0)) - field[dest]
 	if region_at(dest) != before_region:
 		log.append("%s moves to the %s." % [mover.cname, region_at(dest)])
+	_zone_touch(mover)
 
 # --- actions -------------------------------------------------------
 
@@ -2111,6 +2186,7 @@ func act_shove(attacker, target, choice: String) -> Dictionary:
 			if passable(dest) and _hex_free(dest, target):
 				target.pos = dest
 				log.append("%s shoves %s back into the %s." % [attacker.cname, target.cname, region_at(dest)])
+				_zone_touch(target)
 			else:
 				target.statuses["prone"] = true
 				log.append("%s shoves %s — no room to push, %s falls prone." % [attacker.cname, target.cname, target.cname])
