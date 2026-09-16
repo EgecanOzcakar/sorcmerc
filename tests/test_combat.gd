@@ -49,6 +49,7 @@ func _init() -> void:
 	test_pool_spend_and_rest()
 	test_rage_full_turn()
 	test_buff_rider_ranged()
+	test_zones()
 	test_action_surge_full_turn()
 	test_spell_slot_spend()
 	test_reaction_and_concentration()
@@ -777,3 +778,38 @@ func test_buff_rider_ranged() -> void:
 	var ex := cb._buff_damage_extras(a, true)
 	check(ex.size() == 1 and ex[0]["label"] == "hunters-mark", "ranged hit: Hunter's Mark rides, Rage does not")
 	check(cb._buff_damage_extras(a, false).size() == 2, "melee hit: both ride")
+
+# Darkness lingers on its hexes: whoever stands in it wears the buff, whoever
+# walks out sheds it, and the cloud dies with the caster's concentration.
+func test_zones() -> void:
+	var cb = _sandbox()
+	var ilsa = _find(cb, "ilsa"); var grull = _find(cb, "grull")
+	ilsa.pos = Vector2i(2, 1); grull.pos = Vector2i(8, 1)
+	ilsa.slots = [4, 3, 3, 3, 3, 0, 0, 0, 0] as Array[int]
+	var dark := _t33_verb("darkness")
+	check(dark.get("zone", false), "Darkness is flagged as a zone")
+	dark["targeting"] = "hex"   # one-hex cloud, so where it lies is unambiguous
+	cb.begin_turn_for(ilsa)
+	var hex := Vector2i(6, 1)
+	cb.cast(ilsa, dark, hex)
+	check(cb.live_zones().size() == 1 and hex in cb.live_zones()[0]["hexes"], "the cloud stays on the hex")
+	check(not grull.statuses.has("spell:darkness"), "nobody in it yet, nobody is dark")
+	grull.pos = hex
+	cb.begin_turn_for(grull)
+	check(grull.statuses.has("spell:darkness"), "starting a turn in the cloud puts you in the dark")
+	grull.pos = Vector2i(8, 1)
+	cb._zone_touch(grull)
+	check(not grull.statuses.has("spell:darkness"), "stepping out sheds it")
+	grull.pos = hex
+	cb._zone_touch(grull)
+	cb._end_concentration(ilsa, "drops it")
+	check(cb.live_zones().is_empty(), "the cloud dies with concentration")
+	check(not grull.statuses.has("spell:darkness"), "...and takes the dark with it")
+	# Web: a save zone rolls once per turn against whoever stands in it
+	var web := _t33_verb("web")
+	web["targeting"] = "hex"
+	cb.begin_turn_for(ilsa)
+	cb.cast(ilsa, web, hex)
+	var z: Dictionary = cb.live_zones()[0]
+	cb.begin_turn_for(grull)
+	check(int(z["hit"].get(grull.id, -1)) == cb._tick(), "Web rolled against the one standing in it")

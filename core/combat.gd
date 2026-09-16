@@ -1031,7 +1031,7 @@ func _zone_touch(c) -> bool:
 		var v: Dictionary = z["v"]
 		var inside: bool = c.conscious() and c.pos in z["hexes"]
 		if v.has("buff"):
-			var key := "spell:" + z["spell"]
+			var key: String = "spell:" + String(z["spell"])
 			worn[key] = worn.get(key, false) or inside
 			if inside and not c.statuses.has(key):
 				_apply_buff(z["caster"], c, v)

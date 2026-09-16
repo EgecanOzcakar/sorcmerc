@@ -2511,6 +2511,13 @@ class Board extends Control:
 			for hx in main._area_aim(cur):
 				cone_hexes[hx] = true
 
+		# lingering spell areas (combat.gd zones): a wash in the school's colour,
+		# a shade deeper at the rim so two overlapping clouds still read apart.
+		var zone_tint := {}
+		for z in cb.live_zones():
+			var col: Color = Icons.school_color(String(Catalog.spell(String(z["spell"])).get("school", "")))
+			for hx in z["hexes"]:
+				zone_tint[hx] = col
 		# tiles: the ground itself is on _ground (see Ground); only what moves
 		# frame to frame is painted here, on top of it.
 		for hx in cb.board["hexes"]:
@@ -2519,6 +2526,12 @@ class Board extends Control:
 			var obj: Dictionary = cb.object_at(hx)
 			if _is_hazard(obj):
 				_paint_tile(self, hx, c, s, pulse)   # its glow pulses, so it can't be cached
+			if zone_tint.has(hx):
+				var zc: Color = zone_tint[hx]
+				draw_colored_polygon(poly, Color(zc.r, zc.g, zc.b, 0.30 + 0.06 * pulse))
+				var rim := _hex_poly(c, s - 3.0)
+				rim.append(rim[0])
+				draw_polyline(rim, Color(zc.r, zc.g, zc.b, 0.75), 1.5, true)
 			if field.has(hx) and hx != cur.pos:
 				draw_colored_polygon(poly, main.COL_MOVE)
 			if cone_hexes.has(hx):

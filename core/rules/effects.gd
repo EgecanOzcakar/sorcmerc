@@ -210,6 +210,9 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 	}
 	if m.get("spare_allies", false):
 		v["spare_allies"] = true
+	if m.get("zone", false):       # lingers on its hexes (combat.gd zones)
+		v["zone"] = true
+		v["rounds"] = int(m.get("rounds", 10))
 	if m.get("teleport", false):   # Misty Step: aim a free hex, arrive there, provoke nothing
 		v["teleport"] = true
 	if m.has("summon"):            # Summon Beast: a bestiary creature on the caster's side
