@@ -4498,3 +4498,46 @@ the eye found it, which is most of the "fast mode" reading), the melee
 step-in's curve is skewed to strike out fast and recover slow instead of
 `sin(t * PI)`'s symmetric nudge, and the beat before a monster acts went 0.5 →
 0.75 so the last swing is off screen before the next turn starts.
+
+## Cover you can see, and benching where you are looking (2026-09-16)
+
+Two asks off the back of playing the branch.
+
+**Cover in the combat map should be more obvious.** Half cover is +2 AC and +2
+on Dex saves (`core/combat.gd`'s `effective_ac` and `_saving_throw`) — the
+difference between a 55% swing against you and a 45% one, and the reason to
+spend a move getting into it. It was announced by a slab two shades off the
+ordinary floor (`2a3a3a` against a `COL_HEX` that is barely different) and the
+word "cover" in 10px grey-teal at the bottom-LEFT corner of the hex — under the
+foliage that always grows on a cover hex, over a textured floor, at whatever
+zoom the board happened to auto-fit to. On the Sunken Shrine that is
+`hex_px = 15.3`: the label was smaller than the plant standing on top of it.
+
+Cover says it twice now. A rim around the tile in `COL_COVER_EDGE`, a teal
+nothing else on the board wears (the test asserts the distance from every other
+board colour, so it cannot quietly drift into meaning "selected"), with a faint
+inner line so it reads as the lip of something rather than as a selection
+outline. And a chip carrying **the number** rather than the noun — `+2`, on a
+dark backing plate, because it lands on a textured floor with a plant on it and
+without one it is legible on some tiles and not others. The chip scales with
+the hex and drops out below 10px; the rim does not, so zooming out loses the
+value and keeps the shape, which is the right way round — at board scale you
+want to see WHERE the cover is, and close up you want to know what it is worth.
+
+`tests/test_cover_readable.gd` cannot look at a picture, so it checks what is
+decidable: the palette really is distinct, the chip states the number the
+engine actually applies (it moves a combatant onto a cover hex and compares
+`effective_ac`), and the rim is thicker than an ordinary hex seam.
+
+**Clicking somebody who is marching benches them.** The roster column on the
+left has always had a Bench button per row. The marching order on the right —
+the side of the screen you are actually looking at when you decide somebody
+should sit this one out — had no way to do it, so the move was to look away,
+find that person's row again on the left, and press the button there.
+
+A marching slot with nothing picked up is now that person, and clicking them
+takes them out of the line. With somebody picked up it still places or swaps
+them, so the old interaction is untouched; the bench click is the
+no-selection case. It respects issue #27's inn lock like every other way of
+benching, the tooltip says which of the two things the click will do, and the
+hint line leads with it.

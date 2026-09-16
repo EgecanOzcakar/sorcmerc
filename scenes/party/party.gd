@@ -348,7 +348,7 @@ func _refresh() -> void:
 	if roster_locked:
 		_hint.text = "%s  Marching order, standing orders and the map figure still change here." % locked_note
 	elif _selected == "":
-		_hint.text = "Click a roster member to pick them up, then click a party slot to place or swap them."
+		_hint.text = "Click anyone marching to bench them.  Or pick up a roster member, then click a slot to place or swap them."
 	else:
 		_hint.text = "%s selected — click a party slot to place them, or click them again to cancel." \
 			% party.summary(_selected).get("name", "?")
@@ -433,6 +433,9 @@ func _slot(index: int, sm: Dictionary) -> Control:
 		b.add_child(row)
 		b.custom_minimum_size.y = maxf(SLOT_MIN_H,
 			sum.get_combined_minimum_size().y + SLOT_PAD_H)
+		# What this click does depends on whether you are carrying somebody.
+		b.tooltip_text = ("Click to bench %s" % sm["name"]) if not roster_locked \
+			else locked_note
 	b.pressed.connect(func(): _on_slot(index))
 	return b
 
@@ -522,7 +525,16 @@ func _select(id: String) -> void:
 	_refresh()
 
 func _on_slot(index: int) -> void:
+	# Nothing picked up: a marching slot is the person standing in it, and
+	# clicking them takes them out of the line. The roster column has always
+	# had a Bench button; the side of the screen you are actually looking at
+	# when you decide somebody should sit this one out did not, so the only
+	# way to do it was to go and find their row again on the left.
 	if _selected == "":
+		if roster_locked or index >= party.active.size():
+			return
+		party.bench(party.active[index])
+		_refresh()
 		return
 	if index < party.active.size():
 		if party.is_active(_selected):

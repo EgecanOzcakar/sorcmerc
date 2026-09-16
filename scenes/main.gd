@@ -90,7 +90,15 @@ const COL_BG := Icons.COL_BG
 const COL_HEX := Color("232733")
 const COL_HEX_EDGE := Color("39404f")
 const COL_BRAZIER := Color("6b2f1c")
-const COL_COVER := Color("2a3a3a")
+const COL_COVER := Color("2f4744")       # the slab under a cover hex
+# T-cover: half cover is +2 AC and +2 on Dex saves (core/combat.gd's
+# effective_ac / _saving_throw) — the difference between a 55% swing and a 45%
+# one. It was announced by a slab two shades off the ordinary floor and the
+# word "cover" in 10px grey-teal at the bottom-left corner, under the foliage
+# that always grows on a cover hex, over a textured floor, at any zoom. These
+# are what say so instead: a rim around the tile in a colour nothing else on
+# the board uses, and a chip that states the number rather than the noun.
+const COL_COVER_EDGE := Color("74c2b4")
 const COL_PROP := Color("4a3826")       # barrels, crates, fountains
 const COL_TORCH := Color("ffd98a")
 # T11: per-theme floor tint, palette only — no mechanical difference.
@@ -2191,7 +2199,37 @@ class Board extends Control:
 				seam = true
 		canvas.draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.9 if seam else 0.22), 1.5, true)
 		if cb.is_cover(hx):
-			canvas.draw_string(ThemeDB.fallback_font, c + Vector2(-s * 0.5, s * ISO_SQUASH - 3), "cover", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("7fa6a6"))
+			_paint_cover(canvas, c, s)
+
+	# A cover hex, said twice: a rim in a colour nothing else on the board
+	# wears, and a chip carrying the number it is worth. Both scale with the
+	# hex, so zooming out loses the chip's text before it loses the rim — the
+	# rim is the part that has to survive, because it is what lets you read the
+	# shape of the cover on a board at a glance.
+	const COVER_RIM_W := 2.4
+	const COVER_CHIP := "+2"
+	func _paint_cover(canvas: CanvasItem, c: Vector2, s: float) -> void:
+		var rim := _hex_poly(c, s - 2.5)
+		rim.append(rim[0])
+		canvas.draw_polyline(rim, Color(main.COL_COVER_EDGE, 0.9), COVER_RIM_W, true)
+		# ...and an inner line, so the rim reads as a lip of something rather
+		# than as a selection outline (which is what the move/aim overlays are).
+		var inner := _hex_poly(c, s - 2.5 - COVER_RIM_W * 1.6)
+		inner.append(inner[0])
+		canvas.draw_polyline(inner, Color(main.COL_COVER_EDGE, 0.22), 1.0, true)
+		var fs := int(clampf(s * 0.30, 9.0, 18.0))
+		if fs < 10:
+			return            # too small to read; the rim carries it alone
+		var f := ThemeDB.fallback_font
+		var w := f.get_string_size(COVER_CHIP, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var at := c + Vector2(0.0, s * ISO_SQUASH * 0.92)
+		var pad := Vector2(fs * 0.42, fs * 0.30)
+		# A backing plate, because this lands on a textured floor with a plant
+		# on it: without one the chip is legible on some tiles and not others.
+		canvas.draw_colored_polygon(_disc(at, (w * 0.5 + pad.x) * 1.05),
+			Color(0.02, 0.05, 0.05, 0.72))
+		canvas.draw_string(f, at - Vector2(w * 0.5, -fs * 0.34), COVER_CHIP,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, main.COL_COVER_EDGE)
 
 	static func _rand(hx: Vector2i, salt: int) -> float:
 		var n: int = hash(Vector3i(hx.x, hx.y, salt))

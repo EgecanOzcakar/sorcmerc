@@ -115,6 +115,46 @@ func _init() -> void:
 			check(b.position.y >= prev.position.y + prev.size.y - 1.0,
 				"slot %d starts below slot %d instead of overlapping it" % [i, i - 1])
 
+	# --- clicking somebody who is marching benches them -------------------
+	#
+	# The roster column has always had a Bench button; the side of the screen
+	# you are looking at when you decide somebody should sit this one out did
+	# not, so the only way to do it was to go and find their row on the left.
+	check(screen._selected == "", "nothing is picked up")
+	var marching0: Array = party.active.duplicate()
+	check(marching0.size() >= 2, "at least two are marching (%d)" % marching0.size())
+	var slot1 = screen._slot_col.get_child(1)
+	check("Click to bench" in slot1.tooltip_text, "the slot says what clicking it does (%s)" % slot1.tooltip_text)
+	slot1.pressed.emit()
+	await process_frame
+	check(not party.is_active(marching0[1]), "clicking a marching slot benches that member")
+	check(party.get_member(marching0[1]) != null, "...benched, not removed from the roster")
+	check(party.active.size() == marching0.size() - 1, "...and only that one")
+	check(party.is_active(marching0[0]), "...leaving the others where they were")
+
+	# An empty slot is not a person, so it does nothing.
+	var before_empty: Array = party.active.duplicate()
+	screen._on_slot(Party.MAX_ACTIVE - 1)
+	await process_frame
+	check(party.active == before_empty, "clicking an empty slot benches nobody")
+
+	# ...and with somebody picked up, a slot still places them: the bench click
+	# is the no-selection case, not a replacement for the old behaviour.
+	party.activate(marching0[1])
+	screen._refresh()
+	await process_frame
+	var benched_id := ""
+	for ch in party.roster:
+		if not party.is_active(ch.id):
+			benched_id = ch.id
+			break
+	if benched_id != "":
+		screen._selected = benched_id
+		screen._on_slot(0)
+		await process_frame
+		check(party.is_active(benched_id), "a picked-up member still swaps into a slot")
+		check(screen._selected == "", "...and is put down again")
+
 	# --- the lock ---------------------------------------------------------
 	check(not screen.roster_locked, "a screen opened with nothing said is unlocked")
 	var bench := find_button(screen._roster_col, "Bench")
@@ -131,6 +171,15 @@ func _init() -> void:
 	check(find_button(screen._roster_col, "To party").disabled, "locked: so is recruiting")
 	check(find_button(screen, "Create new").disabled, "locked: and making a new character")
 	check(screen._hint.text.contains("inn"), "...and the screen says where to do it (%s)" % screen._hint.text)
+
+	# ...and neither is clicking somebody who is marching.
+	var still_marching: Array = party.active.duplicate()
+	screen._selected = ""
+	screen._on_slot(0)
+	await process_frame
+	check(party.active == still_marching, "locked: clicking a marching slot benches nobody")
+	check("inn" in String(screen._slot_col.get_child(0).tooltip_text),
+		"...and the slot says why (%s)" % screen._slot_col.get_child(0).tooltip_text)
 
 	# A slot click must not be the way around it.
 	var benched := ""
