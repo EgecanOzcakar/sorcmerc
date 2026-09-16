@@ -2683,6 +2683,27 @@ func _draw() -> void:
 # mapped onto it by an affine transform (its diamond's corners to the cell's
 # corners) instead of being blitted upright. The projection stays the contract;
 # the art bends to it, so tiles line up with the camera and click-to-move math.
+# Issue #31 — the frame-rate drop. Three things were wrong with the old shape
+# of this loop, and all three are about doing work per cell, per frame, that
+# does not change per frame:
+#
+#  1. It walked every cell of the VIEWPORT and asked world.is_explored() about
+#     each one (3.7us a cell measured, since it folds in a scan of every
+#     settlement) even though the answer is no for most of a map nobody has
+#     walked yet. It now walks the explored ground instead — the cells around
+#     each remembered waypoint and each settlement beacon, clipped to the
+#     viewport — so the unwalked map costs a box test per waypoint, not a
+#     distance query per cell. The set it arrives at is the same set
+#     is_explored() would have said yes to; it is reached from the other end.
+#  2. Never-explored cells were a draw_rect each. They are one rect for the
+#     whole viewport now, painted before the tiles go on top of it.
+#  3. The tile a cell draws (water/forest/grass and which variant) is a pure
+#     function of the cell and the world's water, and was recomputed every
+#     frame at ~5.8us a cell — water_depth() alone is a linear scan of every
+#     lake. It is cached; a world's terrain does not move.
+#
+# The ponytail note this replaces predicted exactly this ("a spatial grid is
+# the upgrade if a very long walk makes it drag").
 func _draw_ground() -> void:
 	var mn := Vector2(1e9, 1e9)
 	var mx := Vector2(-1e9, -1e9)
@@ -2691,52 +2712,119 @@ func _draw_ground() -> void:
 		mn = mn.min(w); mx = mx.max(w)
 	var i0 := int(floor(mn.x / CELL)); var i1 := int(ceil(mx.x / CELL))
 	var j0 := int(floor(mn.y / CELL)); var j1 := int(ceil(mx.y / CELL))
-	if (i1 - i0 + 1) * (j1 - j0 + 1) > MAX_CELLS:   # far-out zoom: don't paint the world
+	# Which cells are both on screen and explored. Counted before anything is
+	# painted, so the "too much ground for one frame" guard can still bail out
+	# to a flat fill without leaving half a map drawn.
+	var cells: Dictionary = _visible_ground(i0, i1, j0, j1)
+	if cells.size() > MAX_CELLS:   # far-out zoom: don't paint the world
 		draw_rect(Rect2(Vector2.ZERO, size), Color("4a5333"))   # the tiles' own average
 		return
+	# T9x: three fog tiers, not two. Currently-visible (near the player right
+	# now) draws clean; explored-but-not-visible ("remembered") draws the
+	# real tile with a translucent dark tint over it so the shape still
+	# reads; never-explored draws as flat, opaque, darker fog — which is the
+	# whole viewport, once, with the explored tiles laid over it.
+	draw_rect(Rect2(Vector2.ZERO, size), FOG_UNKNOWN)
 	# The cell's two projected edges. _iso is linear, so these are the same for
 	# every cell and the whole grid is one transform plus a translation per tile.
 	var ex := _iso(Vector2(CELL, 0)) * _zoom
 	var ey := _iso(Vector2(0, CELL)) * _zoom
 	draw_set_transform_matrix(Transform2D((ex + ey) / TILE.x, (ey - ex) / TILE.y, _origin))
-	# T9x: three fog tiers, not two. Currently-visible (near the player right
-	# now) draws clean; explored-but-not-visible ("remembered") draws the
-	# real tile with a translucent dark tint over it so the shape still
-	# reads; never-explored draws as flat, opaque, darker fog. Only one
-	# live-position check needed — is_explored() already folds in the
-	# settlement-beacon radius (world.gd's near_settlement()).
 	var p := world.player()
 	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
-	for i in range(i0, i1 + 1):
-		for j in range(j0, j1 + 1):
-			var cell := Vector2i(i, j)
-			var center := Vector2(i + 0.5, j + 0.5) * CELL
-			var rect := Rect2(Vector2(i + j, j - i - 1) * TILE * 0.5, TILE)
-			# ponytail: an O(cells x waypoints) distance scan every frame, fine at
-			# this map's scale (screen-visible cells, a few hundred waypoints);
-			# a spatial grid is the upgrade if a very long walk makes it drag.
-			if not world.is_explored(center):
-				draw_rect(rect, FOG_UNKNOWN)
-				continue
-			var cl := _cluster(cell, TILE_CLUSTER)
-			# 1.0 deep in a lake, 0.0 well inland, a ramp across the bank between.
-			var wet := 0.5 - world.water_depth(center) / (SHORE * 2.0)
-			var tex := _terrain_tex
-			var pool: Array = GRASS
-			# Left un-clustered on purpose: this per-cell dither is what frays the
-			# bank into an organic edge (see TILE_CLUSTER's own comment above).
-			if _rand(cell, 9) < wet:
-				tex = _water_tex
-				pool = WATER
-			elif _rand(cl, 5) > WOODED:
-				tex = _forest_tex
-				pool = FOREST
-			var idx: int = pool[int(_rand(cl, 1) * pool.size()) % pool.size()]
-			draw_texture_rect_region(tex, rect,
-				Rect2(Vector2(idx % TILE_COLS, idx / TILE_COLS) * TILE, TILE))
-			if not world.is_visible_now(center, ppos):
-				draw_rect(rect, FOG_REMEMBERED)
+	var sight_sq: float = World.VISION_RADIUS * World.VISION_RADIUS
+	for cell in cells:
+		var rect := Rect2(Vector2(cell.x + cell.y, cell.y - cell.x - 1) * TILE * 0.5, TILE)
+		var pick: Vector2i = _ground_tile(cell)
+		draw_texture_rect_region(_tile_sheet(pick.x), rect,
+			Rect2(Vector2(pick.y % TILE_COLS, pick.y / TILE_COLS) * TILE, TILE))
+		# is_visible_now inlined: it is a distance test, and this is the one
+		# thing left in here that has to be asked per cell per frame.
+		if (Vector2(cell.x + 0.5, cell.y + 0.5) * CELL).distance_squared_to(ppos) > sight_sq:
+			draw_rect(rect, FOG_REMEMBERED)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
+
+# The explored cells inside the viewport's cell box, as a set. Walks out from
+# each remembered waypoint and each settlement beacon rather than testing every
+# cell on screen, so an unwalked map costs one box intersection per waypoint.
+# Every cell it yields is one world.is_explored() would have said yes to: the
+# same VISION_RADIUS around the same trail, and the same beacon radius around
+# the same settlements (core/world.gd).
+func _visible_ground(i0: int, i1: int, j0: int, j1: int) -> Dictionary:
+	# Memoised on what it depends on and nothing else: the box of cells on
+	# screen, and how much trail there is to walk out from. The box is in whole
+	# cells, so marching only invalidates it once every CELL units of ground
+	# rather than every frame, and a camera that is sitting still (a menu, a
+	# paused clock, a player reading the map) recomputes nothing at all.
+	var key := [i0, i1, j0, j1, world.explored.size(), world.settlements.size()]
+	if key == _ground_key:
+		return _ground_set
+	var out := {}
+	var seeds: Array = []
+	for w in world.explored:
+		seeds.append([w, World.VISION_RADIUS])
+	for s in world.settlements:
+		seeds.append([s.position, World.SETTLEMENT_BEACON_RADIUS])
+	for seed_at in seeds:
+		var at: Vector2 = seed_at[0]
+		var r: float = seed_at[1]
+		var a0: int = maxi(i0, int(floor((at.x - r) / CELL)))
+		var a1: int = mini(i1, int(ceil((at.x + r) / CELL)))
+		var b0: int = maxi(j0, int(floor((at.y - r) / CELL)))
+		var b1: int = mini(j1, int(ceil((at.y + r) / CELL)))
+		if a0 > a1 or b0 > b1:
+			continue      # this waypoint is nowhere near the screen
+		var rsq: float = r * r
+		for i in range(a0, a1 + 1):
+			for j in range(b0, b1 + 1):
+				var cell := Vector2i(i, j)
+				if out.has(cell):
+					continue
+				if (Vector2(i + 0.5, j + 0.5) * CELL).distance_squared_to(at) <= rsq:
+					out[cell] = true
+	_ground_key = key
+	_ground_set = out
+	return out
+
+var _ground_key: Array = []       # what _ground_set was computed for
+var _ground_set: Dictionary = {}  # the explored-and-on-screen cells, memoised
+
+# Which sheet and which tile in it a cell draws, cached: the answer is a pure
+# function of the cell and where the world's water is, and neither moves.
+# Packed as a Vector2i to keep the cache one small value per cell — x is the
+# sheet (0 terrain, 1 forest, 2 water), y is the index into it.
+var _tile_cache := {}
+const TILE_CACHE_MAX := 300000    # a few MB; a very long march past it starts over
+
+func _tile_sheet(kind: int) -> Texture2D:
+	match kind:
+		1: return _forest_tex
+		2: return _water_tex
+	return _terrain_tex
+
+func _ground_tile(cell: Vector2i) -> Vector2i:
+	var hit = _tile_cache.get(cell)
+	if hit != null:
+		return hit
+	if _tile_cache.size() >= TILE_CACHE_MAX:
+		_tile_cache.clear()
+	var center := Vector2(cell.x + 0.5, cell.y + 0.5) * CELL
+	var cl := _cluster(cell, TILE_CLUSTER)
+	# 1.0 deep in a lake, 0.0 well inland, a ramp across the bank between.
+	var wet := 0.5 - world.water_depth(center) / (SHORE * 2.0)
+	var kind := 0
+	var pool: Array = GRASS
+	# Left un-clustered on purpose: this per-cell dither is what frays the
+	# bank into an organic edge (see TILE_CLUSTER's own comment above).
+	if _rand(cell, 9) < wet:
+		kind = 2
+		pool = WATER
+	elif _rand(cl, 5) > WOODED:
+		kind = 1
+		pool = FOREST
+	var pick := Vector2i(kind, pool[int(_rand(cl, 1) * pool.size()) % pool.size()])
+	_tile_cache[cell] = pick
+	return pick
 
 # T9y: the one place the "you can see it now" vs "you only remember it"
 # distinction turns into a colour. Desaturate toward the fog's own blue-black

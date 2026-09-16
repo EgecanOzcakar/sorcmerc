@@ -9,6 +9,8 @@
 #   godot --headless --path . -s tests/test_order_aim.gd
 extends SceneTree
 
+const Hex = preload("res://core/hex.gd")
+
 var _pass := 0
 var _fail := 0
 
@@ -36,6 +38,17 @@ func _init() -> void:
 			foe = c
 			break
 	check(foe != null, "there is somebody to aim at")
+	# Whether the seed put anyone in reach of a plain melee swing is not this
+	# test's business, so put one there: an adjacent, unoccupied board hex.
+	if foe != null and cur != null:
+		var taken := {}
+		for c in main.cb.combatants:
+			if c != foe and not c.is_dead():
+				taken[c.pos] = true
+		for h in Hex.neighbors(cur.pos):
+			if h in main.cb.board["hexes"] and not taken.has(h):
+				foe.pos = h
+				break
 	if cur == null or foe == null:
 		print("test_order_aim: %d passed, %d failed" % [_pass, _fail])
 		quit(1); return
