@@ -27,9 +27,12 @@ characters with voices, agendas and a writer behind them, and the creator
 (`scenes/creator/creator.gd`) does not ask for a gender, an orientation or
 a temperament. So the BioWare model — romance as an authored dialogue tree
 with a specific NPC, gated on approval — has nothing to attach to. The
-model that fits is **Wildermyth / Battle Brothers / RimWorld**: relationships
-between *whoever the player brought*, produced by what happened to them,
-labelled by a system, told in templated lines. That decides four things:
+model that fits is **Wildermyth / RimWorld / Jagged Alliance 2**:
+relationships between *whoever the player brought*, produced by what happened
+to them, labelled by a system, told in templated lines. (Appendix A3 corrects
+an earlier draft of this line, which also named Battle Brothers — it tracks a
+per-brother mood scalar and no pair relationships at all.) That decides four
+things:
 
 1. **Personality has to come off the sheet.** The only thing the game knows
    about a character is species, background, class and what they have done.
@@ -47,7 +50,11 @@ labelled by a system, told in templated lines. That decides four things:
    adding at the creator if this ships; it is one boolean.
 4. **Pairs, not directions.** "Vera's opinion of Pike" and "Pike's opinion
    of Vera" would double the state for a difference the player almost never
-   sees; Wildermyth also stores one number per pair. Symmetric.
+   sees; Wildermyth, Darkest Dungeon 2 and XCOM 2 all store one number per
+   pair. Symmetric. **This is the decision A4 most wants revisited**: the two
+   games in the survey that model opinion rather than a bond — RimWorld and
+   Jagged Alliance 2 — both went directed, and both get something from it
+   this cannot express.
 
 ## 2. The model — `core/party_opinion.gd`
 
@@ -465,12 +472,230 @@ and **three negative affinity hits with every party member at once**. So
 DD2 wires stress into relationships explicitly: the hero who breaks takes
 the whole party's opinion of them down with it.
 
-## A3. Comparison set
+## A3. The comparison set
 
-Left for the second pass — a parallel survey of Wildermyth, RimWorld, Battle
-Brothers, XCOM 2's soldier bonds, Fire Emblem supports and Jagged Alliance 2
-was in flight when this section was written. The DD material above is what
-decides A4 either way.
+Six more games, surveyed for the same two things: the shape of the stored
+relationship, and whether it ever takes the character out of the player's
+hands. Claims flagged **unverified** below are ones the sources would not
+settle; they are left in because the gap is itself worth knowing, and they
+are not load-bearing for anything in A4.
+
+### Wildermyth — every relationship state is a buff, and none is a punishment
+
+Symmetric, one relationship per pair, three mutually exclusive types
+(Friend / Rival / Lover) plus a non-exclusive Family tag. Five levels each,
+at cumulative point breakpoints **20 / 60 / 120 / 200 / 300**. Points accrue
+passively from fighting and doing overworld jobs together *and* in lumps from
+authored event outcomes, so it is a meter fed by events rather than one or
+the other. The award is then scaled by a charisma term
+(`0.005 × (chaA + chaB) + 0.5`) and a compatibility "fascination" factor
+(`(|compatibility| + 3) / 3`), the product clamped to **0.33×–3.0×**.
+Compatibility comes off personality traits and is what pushes a pair toward
+Lover or Rival.
+
+The finding that matters is the mechanical table:
+
+| type | level 1 → level 5 |
+|---|---|
+| Friend | +10 → **+30** block chance when body-blocking for that hero |
+| Lover | +1 → **+5** damage against enemies who attacked that hero, until end of mission |
+| Rival | +25% → **+100%** stunt chance when your rival stunts |
+| Family | no combat effect; blocks Lover, permits Friend and Rival |
+
+**Rivalry is a damage buff, not a tax.** There is no negative relationship
+state anywhere in the system, and no relationship-driven disobedience at all.
+The only control loss in the game is injury-driven: after a non-fatal Mortal
+Choice the hero withdraws to the nearest town and cannot be controlled until
+healed. Relationship *consequences* are routed into authored events instead —
+losing a lover sets a Brokenheart hook that targets follow-up story
+opportunities — and even there the hero neither leaves nor becomes
+uncontrollable, and the player may decline. Children of heroes do become
+recruitable units, and a romance can be *locked* so re-recruited legacy
+heroes re-enter it across campaigns. (The "children draw from a separate
+origin pool" detail is **lightly verified**, from search snippets only.)
+
+### RimWorld — directed opinion, and three separate routes to disobedience
+
+**Directed, not symmetric**: A's opinion of B is a different number from B's
+opinion of A, and the wiki says so explicitly — a pawn can be friends with
+someone who considers them a rival. Clamped **−100..+100**, banded Rival
+(−100..−20), Acquaintance (−20..+20), Friend (+20..+100).
+
+Inputs are dense and mostly not about combat: beauty ±20 per level capped
+±40, disfigurement −15, traits (Annoying Voice −25, Joyous +20), social
+interactions (Deep Talk +15, Insult −15), player actions (recruited +20,
+rescued +15/+25, botched surgery −20), rejected romance (−10 to the
+proposer, **−15 to the target**), family relations (parent/child +30,
+sibling +20, a relative's death −15 to −80), and romance itself (Lovers +35,
+Spouse +30, ex −15 base plus **−50 to −70 on the dumped party**, cheated on
+**−70**).
+
+Control loss comes three ways, and they are worth separating:
+
+1. **Social fight.** An Insult has a **4%** base chance to start one, a
+   Slight 0.5%, multiplied by malnutrition, Bloodlust (×4) and drunkenness.
+   Fighting pawns **cannot be drafted**. Aftermath is a coin flip:
+   **cathartic +38** opinion or **angering −22**, for 20 days. This is the
+   cleanest "opinion produces a fight the player cannot stop" loop anywhere
+   in this survey.
+2. **Mental breaks on social mood damage.** Minor 35%, major 20%, extreme
+   5%. During any break the player has no direct control. Targeted Insulting
+   Spree stacks to about **−33** mood on one victim, which is an explicit
+   insult spiral; Murderous Rage picks a colonist and melees them until dead.
+3. **Autonomous romance.** Breakups and affairs fire on their own once
+   opinion toward a third pawn sufficiently exceeds opinion of the partner.
+   **The player is not consulted.** That is the precise opposite of §4's rule
+   here, and it is worth knowing that the most systemic game in the set went
+   the other way.
+
+### Battle Brothers — no pair relationships, but the best coupling idea
+
+Two systems, neither of them relational. Mood is **one scalar per brother,
+0–7**, drifting toward ~3.15 at ±0.1–0.15 per hour, fed by company-wide
+events: Pay Raise +2, Battle Won +0.35, Lost Confidence in Your Leadership
+−6 to −1, Permanent Injury −1.35, Brother Died **−0.25 for everyone
+regardless of who died**. Combat morale is a separate six-state ladder
+(Unbreakable / Confident / Steady / Wavering / Breaking / Fleeing) applying
+multipliers ×1.1 down to ×0.7 across Resolve, both attack skills and both
+defences.
+
+The idea worth stealing is the **coupling**: mood does not set combat morale,
+it **caps** it. Dissatisfied caps you at Steady, Disgruntled at Wavering,
+Angry at Breaking and risks desertion; Euphoric gives a 75% chance to *start*
+Confident. One line lets the campaign layer bound the combat layer without a
+second simulation.
+
+What not to steal is Fleeing. It is total AI takeover: Shieldwall, Spearwall,
+Riposte and Indomitable are all cancelled, the unit gets **−1000 initiative**
+each round, and it runs from enemies and **will not fight even if
+surrounded**. That works because Battle Brothers fields 12–20 expendable men
+over 10+ rounds. (A secondary claim that the developers explicitly ruled out
+inter-brother relationships is **unverified**; that the system does not exist
+is well supported by its absence from every mechanics page.)
+
+### XCOM 2: War of the Chosen — the relationship is both the cure and the trigger
+
+Per-pair **Cohesion on a 1.0–10.0 scale**, raised by deploying two soldiers
+together on combat or Covert Action missions; at 10 they may bond. (The
+levelling thresholds beyond that are **partially verified** — the wiki's
+wording is internally ambiguous. The widely repeated claim that pair
+compatibility derives from personality traits is **unverified** community
+inference.)
+
+| bond level | what it grants |
+|---|---|
+| 1 | **Teamwork** — grant your bondmate an extra action by spending one of yours; one charge per mission, shared between the two |
+| 2 | **Covert Operators** (−1 day when deployed together), **Spotter** (+10% aim against targets that attacked or were attacked by your bondmate, +10% more if adjacent), **Stand By Me** (ending a move *orthogonally* adjacent to your bondmate cleanses any negative mental effect) |
+| 3 | **Advanced Teamwork** (two charges) and **Dual Strike** (both fire at one enemy; free action for the partner) |
+
+Panic is the control-loss mechanism, and in WOTC it is **Battle Madness** in
+four forms, all of which take the soldier's actions away: Panic (random
+actions), Berserk (offensive only, and the stat bonuses are useless because
+you are not steering), Shattered (defensive only), Obsessed (attacks the
+feared enemy type). And the trigger list explicitly includes **a bondmate
+being killed or captured**.
+
+So one data structure sits on both sides of control loss: *Stand By Me* is
+the game's main non-psionic **cure** for a negative mental state, and the
+same bond is among the biggest **causes** of one. That symmetry is the single
+most transferable idea in this appendix. (A distinct "bondmate gravely
+wounded" trigger is **unverified**.)
+
+### Fire Emblem — the positional formula, and it is one line
+
+Support is a per-pair point total with an authored conversation gate, and the
+accrual differs per game: GBA awards points **each turn two units are
+adjacent**; Path of Radiance 1 per chapter deployed together (C/B/A at
+5/8/11); Radiant Dawn 5 for starting a turn adjacent and 17 for being
+deployed together (50/100/150); Three Houses 6 per Linked Attack and 20 for
+viewing a C support (101/301/601/1001); Awakening caps a unit's best pair at
+3 points per map.
+
+The GBA model is the one that fits a hex grid, and it is elegant: each unit
+has an **affinity** carrying a fixed bonus vector, you **sum both partners'
+vectors and multiply by the support rank** (C=1, B=2, A=3), and it applies
+while the two are **within 3 tiles**.
+
+| affinity | Atk | Def | Accuracy | Avoid | Crit | Crit evade |
+|---|---|---|---|---|---|---|
+| Fire | +0.5 | | +2.5 | +2.5 | +2.5 | |
+| Thunder | | +0.5 | | +2.5 | +2.5 | +2.5 |
+| Wind | +0.5 | | +2.5 | | +2.5 | +2.5 |
+| Ice | | +0.5 | +2.5 | +2.5 | | +2.5 |
+| Dark | | | +2.5 | +2.5 | +2.5 | +2.5 |
+| Light | +0.5 | +0.5 | +2.5 | | +2.5 | |
+| Anima | +0.5 | +0.5 | | +2.5 | | +2.5 |
+
+Supports never carry a penalty and never remove agency. S rank unlocks
+marriage, and in Awakening and Fates produces a recruitable child unit.
+(Per-rank bonus figures that circulate as universal are Awakening-era and
+**unverified** as a general rule; the formula is genuinely game-specific.)
+
+### Jagged Alliance 2 — the closest precedent in the set, from 1999
+
+The most directly relevant system here, and the best documented, because the
+1.13-derived source is open. Every number below is read out of the code.
+
+Storage is **directed and asymmetric**: `bMercOpinion[75]` is a merc's
+opinion of every other profile, one byte each way. On top of that sit static
+`bBuddy[3]` and `bHated[3]` slots (friend 1, friend 2, eventual friend; the
+same for enemies), with `BUDDY_OPINION = +25` and `HATED_OPINION = −25`.
+Morale is 0–100, default 50.
+
+The rule worth copying is how the two combine. `HourlyMoraleUpdate()`
+averages the opinions of everyone in the sector, adds a leadership term, and
+clamps to ±25 — **but if a hated merc is present the average is discarded
+and team opinion is forced to the minimum.** One hated teammate poisons the
+whole reading no matter how many friends are there. That is a legible roster
+decision instead of a diffuse average nobody can read.
+
+Relationship events are the largest single-person entries in the morale
+table: Buddy Died **−15**, Hated Died **+5**, Teammate Died −5, and a merc
+who hated the deceased gets the Hated Died bonus *instead of* any grief
+penalty. Morale then feeds competence directly: `GetMoraleModifier()` runs
++5 at 95 morale down to **−20** at 0, added straight into every skill check.
+
+And control loss is **relationship-caused, not stress-caused**, in two hard
+forms. `bHatedCount` decrements every hour a merc shares a sector with
+someone they hate; they complain partway through, **complaining stops time
+compression** so the player must notice, and at zero MERC-type mercs quit on
+the spot. There is one safety valve: if the count would hit zero while an
+enemy is in the sector it is bumped back to 1, so nobody walks out
+mid-firefight. Second, `FindRefusalReason()` ranks contract-renewal refusal
+with **hated mercs highest, above death rate and above morale** — and on the
+positive side a merc with a buddy on the team renews and *says it is because
+of their friend*. Finally, `bLearnToHate` and `bLearnToLike` are timers that
+on expiry **write** a permanent relationship and interpolate opinion toward
+±25, which is authored seeds growing into simulated opinion, in 1999.
+(Tactical insubordination — a low-morale merc refusing an order in combat —
+is **unverified**; JA2's relationship control loss is strategic.)
+
+### Two footnotes
+
+**Baldur's Gate II** is the purest case of a *relationship* rather than a
+stress meter causing disobedience: authored pair conflicts on a 24-hour
+in-game timer, and when Keldorn's ultimatum about Viconia expires with both
+still present, **both leave the party and fight each other to the death**,
+entirely outside player control. No morale scalar anywhere in the loop.
+
+**Crusader Kings** was not verifiable: the wiki sits behind a challenge that
+defeated every route tried. Personality traits drive opinion and opposite
+traits lower it; nothing else here should be quoted. The practical route is
+reading the game's own `common/opinion_modifiers/`.
+
+### The shape table
+
+| game | stored as | range | directed? | control loss from the relationship |
+|---|---|---|---|---|
+| DD1 | nothing (per-hero stress) | 0–200 | n/a | via affliction: refuse 33%, act out ~30–42% |
+| DD2 | per-pair affinity | 0–20, start 9 | no | cursed skill force-equipped; Hateful can hit the partner |
+| Wildermyth | per-pair, one of 3 types | 20–300 pts, 5 levels | no | **none** |
+| RimWorld | per-ordered-pair | −100..+100 | **yes** | social fight, mental breaks, autonomous affairs |
+| Battle Brothers | none (per-brother mood) | 0–7 | n/a | none relational; Fleeing is total takeover |
+| XCOM 2 WOTC | per-pair cohesion | 1.0–10.0 | no | bondmate death triggers Battle Madness |
+| Fire Emblem | per-pair support points | game-specific | no | **none** |
+| JA2 | per-ordered-pair + buddy/hate slots | −100..+100 (±25 flags) | **yes** | quits the company; refuses renewal |
+| sorcmerc (this spike) | per-pair | −100..+100 | no | none proposed |
 
 ## A4. What transfers to sorcmerc, and what must not
 
@@ -525,59 +750,127 @@ own this round" and "this member loses their turn" are both one call to
 tested code. If control loss is ever wanted, it is hours, not days. That is
 an argument for deciding it on design grounds rather than cost.
 
+### Two decisions this spike made that the survey argues against
+
+Before the recommendations, the two places the research disagrees with §2 and
+§6 above. Both are cheap to change now and expensive later.
+
+**1. Rivalry as a penalty is the minority position, and probably the wrong
+one.** §6 gives rivals −1 to hit when adjacent. In the whole survey, exactly
+one game punishes a *relationship* with a combat malus the player cannot
+avoid: Darkest Dungeon 2, whose characters are roguelike runs. Wildermyth,
+whose characters are player-made like this game's, makes **rivalry a damage
+buff** — up to a guaranteed stunt against a single target — and has no
+negative relationship state at all. Fire Emblem's supports carry no penalty
+either. The reasoning is the same one A4 opens with: a player who built both
+characters will not accept the game taxing them for a feud the game invented.
+The fix is to make `bicker_penalty` a *different* bonus rather than a malus —
+two people trying to outdo each other hit harder and guard each other less,
+which is one sign flip and a swap of which stat it touches.
+
+**2. Symmetric was the easy call, not obviously the right one.** §2 stores
+one number per pair, and every *bond* system in the survey does the same
+(Wildermyth, DD2, XCOM 2, Fire Emblem). But both games that model *opinion* —
+RimWorld and Jagged Alliance 2, the two closest to this design — store it
+per ordered pair, and both buy something real with it. RimWorld's wiki calls
+it out directly: a pawn can be friends with someone who considers them a
+rival. JA2 goes further and adds a rule symmetric storage cannot express:
+**one hated teammate forces the whole squad's opinion reading to the
+minimum**, however many friends are present. That is a legible roster
+decision — get that person out — instead of an average nobody can read. If
+directed is ever wanted, the migration is not bad (`"a|b"` stops being
+sorted, `score()` grows an argument order, and `band()` takes the lower of
+the two directions), but it is a save-format change, so it is a now-or-never
+call rather than a later one.
+
 ### Recommended, in order
 
 1. **Copy DD2's affinity inputs, not its act-outs.** The single best idea in
-   either game is that **affinity is measured off combat behaviour the player
-   was going to choose anyway** — buffing, healing the man who is actually
-   dying, focusing the same enemy, and losing points for treating yourself
-   first. §3 above has only four sources and two of them are events; DD2 has
-   nine, all of them free reads on actions `combat.gd` already resolves.
-   Concretely: `act_help` on an ally, a heal aimed at the *lowest* HP ally
-   rather than yourself, two members attacking the same foe in consecutive
-   turns, and a heal or buff a member spends on themselves while an ally is
-   down. That is five hooks in functions this spike already touches, and it
-   makes the score a reading of how the player plays rather than a tally of
-   things that happened to them.
-2. **Take the cursed-skill idea, not the stolen turn.** Narrowing the menu is
+   either Darkest Dungeon is that **affinity is measured off combat behaviour
+   the player was going to choose anyway** — buffing, healing the person who
+   is actually dying, focusing the same enemy, and losing points for treating
+   yourself first while an ally is down. §3 above has only four sources and
+   two of them are events; DD2 has nine, all free reads on actions
+   `combat.gd` already resolves. Concretely: `act_help` on an ally, a heal
+   aimed at the lowest-HP ally rather than at yourself, two members attacking
+   the same foe in consecutive turns, and a heal or buff spent on yourself
+   while somebody is down. Five hooks in functions this spike already
+   touches, and it turns the score into a reading of how the player plays
+   rather than a tally of things that happened to them.
+2. **Steal Fire Emblem's positional formula, because this is a hex game.**
+   The GBA support model is one line of arithmetic: each character has an
+   affinity carrying a small bonus vector, a supported pair **sums both
+   vectors and multiplies by the rank**, and it applies while the two are
+   within N tiles. It needs no authored dialogue, which is this game's
+   binding constraint, and it makes *positioning* the expression of the
+   relationship rather than a flat passive. It also generalises §6's two
+   adjacency hooks into one mechanism: `shoulder_bonus` and
+   `bicker_penalty` are both "sum a vector over nearby related allies, scale
+   by band", and `Hex.distance` is already the check. A character's affinity
+   can come off the same sheet `baseline()` already reads.
+3. **Make the relationship the cure for control loss, not only its cause.**
+   XCOM 2's *Stand By Me* is the most transferable single idea in the
+   appendix: ending your move adjacent to your bondmate **cleanses a negative
+   mental effect**. It is a perfect hex-grid verb, it turns the game's
+   condition system into a positioning puzzle instead of a dice tax, and it
+   is symmetrical with the same bond being one of the biggest triggers of
+   Battle Madness in the first place. In sorcmerc terms: a member who ends
+   their movement adjacent to someone they are bonded to sheds `frightened`,
+   or gets a free repeat save against a `held_by` condition. `_repeat_saves`
+   and `move_to` already exist; this is a call at the end of movement.
+4. **Take the cursed-skill idea, not the stolen turn.** Narrowing the menu is
    legible and survivable; seizing a turn is neither. The sorcmerc version is
    a rival pair losing access to the *cooperative* verbs with each other:
-   `act_help` on a rival fails (or is not offered), a heal aimed at a rival
-   comes at a cost, and `OFFERABLE`'s `ally_buff` skips them. The button is
-   visibly greyed with a reason on the tooltip, which is the whole difference
-   between a restriction and a betrayal.
-3. **Put the real control loss in town and at camp, where DD1's quirks put
-   it.** This is the recommendation I would actually ship, and it is almost
-   free. `core/settlement_visit.gd` already prices an inn per settlement
-   (`INN_COST`) and rolls Persuasion, Investigation and Sleight of Hand
-   checks with a party-picked roller; `core/travel.gd` already asks the
-   player to name a scout and a watch. So: rivals will not share a room, so
-   the inn costs more for them; lovers insist on the same watch, so naming
-   one of them scout and the other watch is refused; a feuding pair cannot
-   both be named to the same job. Nothing is lost mid-fight, the clock is
-   stopped, the player can plan around it, and it costs coin and convenience
-   rather than a character. It is the DD1 alcoholic-at-the-Abbey mechanic,
-   which nobody else copies and which fits this game's existing menus exactly.
-4. **If a combat act-out is ever wanted, gate it behind a saving throw and
-   nothing else.** One shape, at the extreme band only (rivals at or past
-   -75, say, not the -40 band): at the top of their turn, a member adjacent
-   to someone they hate makes a Wisdom save against a published DC; on a
-   failure they take `frightened` or `charmed` sourced at that rival for one
-   round, which the engine already enforces and the log already narrates.
-   Never an unannounced roll, never friendly-fire damage, and never at a band
-   the player was not warned about. DD's 8.3% ally attack is the one thing in
-   this research I would not port at any size.
-5. **Copy the symmetry, which DD1 gets right and most imitators drop.** The
-   same machinery that costs a turn should sometimes give one. §6's rally is
-   already this shape; DD2's Amorous interception (taking a hit aimed at your
-   partner) is the other half, and the precedent for a reaction that eats
-   damage is `rogue-uncanny-dodge` in `data/effects/features.json` — a
+   `act_help` on a rival is not offered, and `OFFERABLE`'s `ally_buff` skips
+   them. The button is visibly greyed with a reason in the tooltip, which is
+   the whole difference between a restriction and a betrayal.
+5. **Put whatever real control loss there is in town and at camp, where DD1's
+   quirks and JA2's hatreds put it.** DD1 makes an alcoholic refuse the Abbey;
+   JA2 makes a merc quit the company over a teammate, ranks that refusal
+   **above** death rate and morale, and stops time compression when they
+   complain so the player must notice. Both happen in menus with the clock
+   stopped. sorcmerc has the surfaces already: `settlement_visit.gd` prices an
+   inn per settlement and rolls Persuasion, Investigation and Sleight of Hand
+   with a party-picked roller, and `travel.gd` asks the player to name a scout
+   and a watch. So: rivals will not share a room, so the inn costs more;
+   lovers insist on the same watch, so naming one scout and the other watch is
+   refused; a feuding pair cannot both be named to the same job. Nothing is
+   lost mid-fight and it costs coin and convenience rather than a character.
+   Copy JA2's safety valve too — it refuses to let a merc walk out while an
+   enemy is in the sector.
+6. **Copy Battle Brothers' "the campaign layer caps the combat layer"
+   coupling.** Mood there does not *set* combat morale, it **bounds** it:
+   Dissatisfied caps you at Steady, Euphoric gives a 75% chance to start
+   Confident. §7's `travel_bonus` is a flat ±1 on road checks; a cap is the
+   same idea with better teeth and no second simulation. A party at rivals
+   could cap the *best* band any pair can reach in a fight, which is one
+   `mini()` rather than a new system.
+7. **Take JA2's learn-to-hate timers as the bridge between authored and
+   simulated.** `bLearnToHate` and `bLearnToLike` are countdowns that on
+   expiry *write* a permanent relationship and interpolate opinion toward it.
+   That is how you get Wildermyth-shaped arcs with no authored companions:
+   the authoring lives in the trigger condition and the bark, not in the
+   character. It is also the honest answer to §3's pacing problem — a bond
+   that is *becoming* something over a known number of days reads better than
+   one that crossed 50 because the cleric healed a lot.
+8. **Copy the symmetry DD1 gets right and most imitators drop.** The same
+   machinery that costs a turn should sometimes give one. §6's rally is
+   already this shape; DD2's Amorous interception and Wildermyth's
+   body-blocking are the other half, and the precedent for a reaction that
+   eats damage is `rogue-uncanny-dodge` in `data/effects/features.json` — a
    `kind: reaction` on the `hit_by_attack` trigger with `halve_damage`, which
    `combat.gd`'s `_react()` already resolves with no prompt. (The Fighter's
    Interception style is *not* the precedent: `data/fighting-styles.json`
    grants `fighting-style-interception` but no effects entry authors it, so it
    currently does nothing — which is why `Presets.vera` can pick it to keep
    her AC at the authored 18.)
+9. **If a combat act-out is ever wanted, gate it behind a saving throw and
+   nothing else.** One shape, at the extreme band only: at the top of their
+   turn, a member adjacent to someone they hate makes a Wisdom save against a
+   published DC; on a failure they take `frightened` or `charmed` sourced at
+   that rival for one round, which the engine already enforces and the log
+   already narrates. Never an unannounced roll, never friendly-fire damage,
+   and never at a band the player was not warned about.
 
 ### Not recommended
 
@@ -589,23 +882,89 @@ an argument for deciding it on design grounds rather than cost.
 - **Contagion.** DD1's 6-stress barks are how one bad hero ruins four. In a
   four-member party of the player's own hand-built characters this reads as
   the game punishing you twice for one bad roll.
+- **RimWorld's real-time social tick.** Chitchat, Deep Talk, Slight and
+  Insult with a 4% fight chance need continuous time and pathing to generate
+  proximity. In discrete 5e turns there is no equivalent clock, and rolling
+  it per round would be either invisible or maddening.
+- **Any break that seizes a whole turn** — RimWorld's Murderous Rage and
+  Tantrum, XCOM's Berserk, Battle Brothers' Fleeing. Those games field 12 to
+  20 units, or run in real time, or both. In a four-to-six character 5e
+  encounter one lost turn is a fifth of the action economy plus possible
+  friendly fire, and it is a loss the player could not have played around.
+  5e's `frightened` already does most of Fleeing's job legibly, and it is
+  already in the engine.
 - **Making a relationship a chance of a relationship.** DD2's band-to-named
-  roll (90/65/33/5) is there to keep a roguelike run surprising. sorcmerc's
-  relationships persist across runs and have to be *plannable*, so `band()`
-  staying a pure function of the score is the right call.
-- **Anything that can kill a character.** DD1's affliction path ends in a
-  heart attack. The road-event invariant this project already holds — nothing
-  rolled between towns may drop anybody (`core/travel.gd`'s `_hp_toll`) — is
-  the right precedent, and a relationship should respect it too.
+  roll (90/65/33/5 by affinity band) exists to keep a roguelike run
+  surprising. These relationships persist across runs and have to be
+  *plannable*, so `band()` staying a pure function of the score is right.
+- **Marriage that produces recruitable children.** Fire Emblem's and
+  Wildermyth's payoff is authored offspring inheriting authored personality
+  and dialogue. With player-made characters there is nothing to inherit that
+  the player could not build at the roster screen, so it would cost a
+  generator and deliver a worse character creator. Wildermyth only earns it
+  because cross-campaign legacy is the entire point of the game.
+- **BG2-style forced expulsion, and anything that can kill a character.**
+  Keldorn's ultimatum ends with two characters leaving and fighting to the
+  death; DD1's affliction path ends in a heart attack. Removing or killing a
+  character the *player designed* is a far harsher contract than losing an
+  authored companion they merely recruited — it reads as the game deleting
+  their work. The invariant this project already holds, that nothing rolled
+  between towns may drop anybody (`core/travel.gd`'s `_hp_toll`), is the
+  right precedent, and a relationship should respect it too.
+- **CK3-style opinion.** Wrong scale: it is tuned for hundreds of AI agents
+  whose purpose is to be disobedient, and a party of four has no faction
+  layer for it to feed. (It was also the one system in the survey that could
+  not be verified from a primary source.)
 
 ## A5. Sources
 
-Darkest Dungeon 1: [Affliction](https://darkestdungeon.wiki.gg/wiki/Affliction),
+**Darkest Dungeon 1** — [Affliction](https://darkestdungeon.wiki.gg/wiki/Affliction),
 [Stress](https://darkestdungeon.wiki.gg/wiki/Stress_(Darkest_Dungeon)),
 [Virtue](https://darkestdungeon.wiki.gg/wiki/Virtue).
-Darkest Dungeon 2: [Relationships](https://darkestdungeon.wiki.gg/wiki/Relationships),
+
+**Darkest Dungeon 2** — [Relationships](https://darkestdungeon.wiki.gg/wiki/Relationships),
 [Stress](https://darkestdungeon.wiki.gg/wiki/Stress_(Darkest_Dungeon_II)),
 [Affinity System](https://darkestdungeon2.wiki.fextralife.com/Affinity_System).
 
+**Wildermyth** — [Relationship](https://wildermyth.com/wiki/Relationship),
+[Modding Relationship Points](https://wildermyth.com/wiki/Modding_Relationship_Points),
+[Mortal choice](https://wildermyth.com/wiki/Mortal_choice),
+[Pyrelight](https://wildermyth.com/wiki/Pyrelight).
+
+**RimWorld** — [Social](https://rimworldwiki.com/wiki/Social),
+[Mental break](https://rimworldwiki.com/wiki/Mental_break).
+
+**Battle Brothers** — [Morale](https://battlebrothers.fandom.com/wiki/Morale),
+[Mood](https://battlebrothers.fandom.com/wiki/Mood),
+[dev blog 20 (Bravery/Morale)](https://battlebrothersgame.com/dev-blog-20-bravery-morale/),
+[dev blog 84 (Mood/Desertion)](https://battlebrothersgame.com/dev-blog-84-mood-desertion/).
+
+**XCOM 2: WOTC** — [Bonding](https://xcom.fandom.com/wiki/Bonding),
+[Panic](https://xcom.fandom.com/wiki/Panic_(XCOM_2)).
+
+**Fire Emblem** — [Support](https://fireemblemwiki.org/wiki/Support),
+[Affinity](https://fireemblemwiki.org/wiki/Affinity),
+[GBA support calculation (Serenes Forest)](https://serenesforest.net/blazing-sword/characters/supports/calculation/).
+
+**Jagged Alliance 2** — read out of the open
+[ja2-stracciatella](https://github.com/ja2-stracciatella/ja2-stracciatella)
+source: `src/game/Tactical/Morale.cc` (the `gbMoraleEvent` table,
+`GetMoraleModifier`, `HourlyMoraleUpdate`),
+`src/game/Tactical/Soldier_Profile_Type.h` (`bMercOpinion`, `bBuddy`,
+`bHated`, `BUDDY_OPINION`, `HATED_OPINION`),
+`src/game/Strategic/Strategic_Merc_Handler.cc`
+(`UpdateBuddyAndHatedCounters`), `src/game/Strategic/Merc_Contract.cc`
+(`FindRefusalReason`), `src/game/Tactical/SkillCheck.cc`. This is the
+1.13-derived source, faithful to the 1999 release but not the shipped binary.
+
+**Baldur's Gate II** — Sorcerer's Place walkthrough pages for
+[Keldorn](https://sorcerers.net/Games/BG2/Walkthrough2/npcs/keldorn.php) and
+[Viconia](https://sorcerers.net/Games/BG2/Walkthrough2/npcs/viconia.php). A
+long-standing fan resource rather than an official wiki; the exact conflict
+timer is community-documented.
+
 Percentages are as those pages state them and were not verified against the
-games' own data files.
+games' own data files, except for Jagged Alliance 2, where every number is
+read from source. Everything the sources would not settle is marked
+**unverified** at the point it is claimed; Crusader Kings could not be
+verified at all and nothing from it should be quoted.

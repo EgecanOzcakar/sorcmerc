@@ -4638,3 +4638,39 @@ change. The healer–faller pair bonds too fast at +12 a save (Ilsa+Pike +5.3
 per fight); cap saves once per fight before wiring anything. Side finding:
 Help's advantage is erased by the ally's own `new_turn()` before it can be
 spent — pre-existing, one line, its own PR.
+
+**Appendix A (same doc, added the same day)** — what Darkest Dungeon and its
+neighbours do about opinionated characters, and specifically about
+uncontrollable actions, which the spike above does not touch. DD1 turns out to
+have no relationships at all (stress, a resolve test at 100, nine afflictions
+that refuse a command at 33% and act out at ~30-42%; attacking an ally peaks
+at 8.3%, and the 6-stress barks make it a contagion model). DD2 is the pair
+system: affinity 0-20 from 9, symmetric, resolving into a named relationship
+as a chance rather than at a threshold, read off combat behaviour the player
+was going to choose anyway, and its control loss force-equips a cursed skill
+rather than seizing a turn. Then Wildermyth, RimWorld, Battle Brothers, XCOM 2
+bonds, Fire Emblem and Jagged Alliance 2, with a shape table.
+
+Two findings argue against decisions this spike already made, which is the
+point of having run it. Rivalry as a combat penalty is the minority
+position — Wildermyth, whose characters are player-made like ours, makes
+rivalry a damage buff and has no negative relationship state at all — so
+`bicker_penalty` should probably be a different bonus, not a malus. And
+symmetric storage was the easy call: the two games that model opinion rather
+than a bond, RimWorld and Jagged Alliance 2, both went directed, and JA2 buys
+a rule ours cannot express (one hated teammate floors the whole squad's
+reading). That is a save-format decision, so now or never.
+
+What transfers, in order: DD2's behavioural inputs, Fire Emblem's
+affinity-sum-times-rank at a hex radius (one line, and it makes positioning
+the expression of the relationship), XCOM's Stand By Me so the relationship
+is the CURE for a condition and not only its cause, the cursed-skill shape as
+rivals losing the cooperative verbs, DD1's and JA2's town-and-camp control
+loss on our inn costs and standing orders, Battle Brothers' mood-caps-morale
+coupling, and JA2's learn-to-hate timers as the bridge between authored and
+simulated. What does not: a second stress resource, contagion, RimWorld's
+real-time social tick, any break that seizes a whole turn, recruitable
+children, and anything that can remove or kill a character the player built.
+5e's own answer to control loss is a saving throw, and
+`data/effects/conditions.json` plus `apply_condition()` already express every
+DD act-out category as a condition with a source and a repeat save.
