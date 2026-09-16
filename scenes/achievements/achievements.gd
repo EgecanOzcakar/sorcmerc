@@ -128,9 +128,15 @@ func _row(r: Dictionary) -> Control:
 	head.add_theme_constant_override("separation", 8)
 	col.add_child(head)
 
+	# A hidden one keeps its own counsel until it is earned. Locked and hidden
+	# is the only combination that draws the placeholder — an earned one always
+	# says what it was.
+	var secret: bool = r["hidden"] and not r["unlocked"]
+
 	# The badge (assets/generated/achievement-<id>.png), dimmed while locked;
-	# the star stands in for one that has no art.
-	var badge := Icons.scene_art("achievement-" + String(r.get("id", "")), null)
+	# the star stands in for one that has no art. A secret keeps its badge
+	# too — the picture would give the joke away as surely as the title.
+	var badge := Icons.scene_art("achievement-" + String(r.get("id", "")), null) if not secret else null
 	if badge != null:
 		var pic := TextureRect.new()
 		pic.texture = badge
@@ -145,11 +151,6 @@ func _row(r: Dictionary) -> Control:
 	mark.text = "★" if r["unlocked"] else "☆"
 	mark.add_theme_color_override("font_color", Icons.COL_GOLD if r["unlocked"] else Icons.COL_EDGE)
 	head.add_child(mark)
-
-	# A hidden one keeps its own counsel until it is earned. Locked and hidden
-	# is the only combination that draws the placeholder — an earned one always
-	# says what it was.
-	var secret: bool = r["hidden"] and not r["unlocked"]
 
 	var title := Label.new()
 	title.text = "???" if secret else r["title"]
