@@ -58,6 +58,11 @@
 #   L8 normal  5.7 foes 82.0%    5.9 foes 82.0%    0.0
 #   L8 hard    6.1 foes 70.7%    6.1 foes 67.3%   -3.4
 #   shrine     3.1 foes 82.5%    2.5 foes 77.0%   -5.5
+# Re-measured after merging master's reaction layer (#38, Counterspell): every
+# number in the master column above came back byte-identical at the new base, so
+# the comparison is against the base this actually merges onto. It makes sense —
+# the sweep installs no reaction_decider and the autopilot prepares no
+# Counterspell, so the whole layer is inert under autoplay.
 # Every tier stays inside test_scaler's +/-10 BAND and ordered. Read the sizes
 # of those moves against the standard error, which is ~3 points at 200 seeds and
 # ~4 at 150: only L3 hard is much past one, and it is the direction the pricing
