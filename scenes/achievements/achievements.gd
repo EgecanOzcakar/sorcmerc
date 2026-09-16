@@ -168,7 +168,8 @@ func _row(r: Dictionary) -> Control:
 	head.add_child(when)
 
 	var desc := Label.new()
-	desc.text = "Earn it and find out." if secret else r["desc"]
+	desc.text = Loc.t("achievements.secret_desc", "Earn it and find out.") if secret \
+		else r["desc"]
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	desc.add_theme_color_override("font_color", Icons.COL_BODY if r["unlocked"] else Icons.COL_MUTED)

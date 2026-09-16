@@ -15,6 +15,7 @@ extends CanvasLayer
 
 const Ach = preload("res://core/achievements.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const Loc = preload("res://core/loc.gd")
 const Settings = preload("res://core/settings.gd")
 const Sound = preload("res://core/audio.gd")
 
@@ -148,7 +149,7 @@ func _card(def: Dictionary) -> Control:
 	head.add_child(star)
 
 	var cap := Label.new()
-	cap.text = "Achievement earned"
+	cap.text = Loc.t("achievements.earned_toast", "Achievement earned")
 	cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cap.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	cap.add_theme_color_override("font_color", Icons.COL_GOLD)

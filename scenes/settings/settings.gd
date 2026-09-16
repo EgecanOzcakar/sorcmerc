@@ -170,9 +170,10 @@ func _ready() -> void:
 	# the achievements screen still fills up either way.
 	var toasts := CheckButton.new()
 	toasts.name = "AchievementPopups"
-	toasts.text = "Show achievement popups"
-	toasts.tooltip_text = "A card slides in from the top-right corner when something is earned.\n" \
-		+ "Achievements are still recorded with this off."
+	toasts.text = Loc.t("settings.achievement_popups", "Show achievement popups")
+	toasts.tooltip_text = Loc.t("settings.achievement_popups.note",
+		"A card slides in from the top-right corner when something is earned.\n" \
+		+ "Achievements are still recorded with this off.")
 	toasts.button_pressed = _s.achievement_popups
 	toasts.toggled.connect(func(on: bool):
 		_s.achievement_popups = on
