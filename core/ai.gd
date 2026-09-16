@@ -251,7 +251,8 @@ static func _party_auto(cb, h) -> void:
 		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
 
 	# caster: an area spell (a hex, a corner circle, a line) where it nets 2+ foes
-	var area := _pick(cb, h, func(v): return v.get("targeting", "") in ["hex", "corner", "line"])
+	# ...that actually hurts: Faerie Fire and friends are the player's call, not a nuke
+	var area := _pick(cb, h, func(v): return v.get("targeting", "") in ["hex", "corner", "line"] and v.has("dice_count"))
 	if not area.is_empty():
 		var aim = _best_area(cb, h, area)
 		if aim != null:
@@ -259,7 +260,7 @@ static func _party_auto(cb, h) -> void:
 			return
 
 	# caster: a cone spell if the wedge catches 2+ foes and no ally
-	var cone := _pick(cb, h, func(v): return v.get("targeting", "") == "direction")
+	var cone := _pick(cb, h, func(v): return v.get("targeting", "") == "direction" and v.has("dice_count"))
 	if not cone.is_empty():
 		var best_dir := Vector2i.ZERO
 		var best_net := 1
@@ -282,6 +283,6 @@ static func _party_auto(cb, h) -> void:
 		cb.resolve_attack(h, targets[0])
 		return
 	# no weapon reach: a single-target attack spell (a cantrip needs no slot)
-	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy")
+	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count"))
 	if not bolt.is_empty() and cb.legal_target(h, bolt, targets[0]):
 		cb.perform(h, bolt, targets[0])

@@ -890,7 +890,7 @@ func test_t33_spell_overrides() -> void:
 		"chromatic-orb":      [3, 8, "fire", "dex", "single", 0, 90],
 		"dissonant-whispers": [3, 6, "psychic", "wis", "single", 0, 60],
 		"hellish-rebuke":     [2, 10, "fire", "dex", "single", 0, 60],
-		"ray-of-sickness":    [2, 8, "poison", "", "single", 0, 60],
+		"ray-of-sickness":    [2, 8, "poison", "con", "single", 0, 60],   # the save is for the Poisoned rider, not the damage
 		"arms-of-hadar":      [2, 6, "necrotic", "str", "emanation", 10, 5],
 		"blight":             [8, 8, "necrotic", "con", "single", 0, 30],
 		"cone-of-cold":       [8, 8, "cold", "con", "cone", 60, 5],
@@ -903,7 +903,9 @@ func test_t33_spell_overrides() -> void:
 			"%s is %dd%d (got %sd%s)" % [id, w[0], w[1], d.get("count"), d.get("sides")])
 		check(d.get("type", "") == w[2], "%s deals %s damage" % [id, w[2]])
 		check(m.get("save", "") == w[3], "%s: save \"%s\"" % [id, w[3]])
-		check(m.has("attack") == (w[3] == ""), "%s rolls %s" % [id, "to hit" if w[3] == "" else "a save"])
+		# Ray of Sickness is the one that does both: to hit for the damage, then
+		# a CON save against the Poisoned rider.
+		check(m.has("attack") == (w[3] == "" or m.has("conditions")), "%s rolls %s" % [id, "to hit" if w[3] == "" else "a save"])
 		check(m.get("shape", "") == w[4] and int(m.get("size_ft", 0)) == w[5],
 			"%s is a %s%s" % [id, w[4], "" if w[5] == 0 else " of %d ft" % w[5]])
 		check(int(m.get("range_ft", 0)) == w[6], "%s reaches %d ft" % [id, w[6]])

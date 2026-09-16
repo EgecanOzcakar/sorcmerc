@@ -5,6 +5,7 @@ extends RefCounted
 
 const Bundles = preload("res://core/rules/bundles.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Effects = preload("res://core/rules/effects.gd")
 const Choice = preload("res://core/rules/choice.gd")
 
 # {pending: Array, warnings: Array[String]}
@@ -132,13 +133,18 @@ static func resolve(bundles: Array, choices: Dictionary, skill_prof: Dictionary,
 	for tg in Bundles.of_type(bundles, "spell-choice"):
 		var g: Dictionary = tg["grant"]
 		var d = choices.get(g["key"])
+		# Anything on the list ever chosen stays chosen (a preset's Light, an old
+		# save's Guidance); a fresh pick only offers what does something here.
 		var pool := Catalog.spell_list(g["spellList"], int(g["spellLevel"]))
+		var offered := Effects.pick_pool(g["spellList"], int(g["spellLevel"]))
 		var valid: Array = []
 		if d != null and d.get("type") == "spell-choice":
 			for sid in d["spellIds"]:
 				if sid in pool and not sid in valid:
 					valid.append(sid)
-		if valid.size() < int(g["count"]):
+		# A pool smaller than the grant (a bard's 6th-level picks — the catalog
+		# stops at 5th) is satisfied by all of it, not pending forever.
+		if valid.size() < mini(int(g["count"]), offered.size()):
 			out.append(_p("spell-choice", g, tg, {"count": int(g["count"]), "spellList": g["spellList"],
 				"spellLevel": int(g["spellLevel"])}))
 

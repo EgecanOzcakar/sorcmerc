@@ -684,15 +684,29 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	# T27: past the slot check, so a refused cast is silent. T9z: the school
 	# picks the sting — evocation booms, necromancy drones, abjuration chimes.
 	Sound.play_sfx(WeaponSfx.for_spell(String(v.get("spell", ""))))
-	caster.statuses.erase("invisible")
+	if not (caster.statuses.get("invisible") is Dictionary and caster.statuses["invisible"].get("sticky", false)):
+		caster.statuses.erase("invisible")
 	if v.get("concentration", false):
 		if caster.has("concentrating"):
 			_end_concentration(caster, "drops concentration on %s" % Effects.humanize(String(caster.statuses["concentrating"]["spell"])))
 		caster.statuses["concentrating"] = {"spell": v["spell"], "until_round": round_num + CONCENTRATION_ROUNDS}
-	if v.has("heal_count"):
-		log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
-		heal(target, Dice.roll(rng, "%dd%d+%d" % [int(v["heal_count"]), int(v["heal_sides"]),
-			int(v.get("heal_bonus", 0))]))
+	var who: Array = []   # Bless, Mass Healing Word: everyone on the caster's side in range
+	match v.get("targeting", ""):
+		"self": who = [caster]
+		"allies":
+			for c in combatants:
+				if c.team == caster.team and not c.is_dead() and Hex.distance(caster.pos, c.pos) <= int(v.get("range", 1)):
+					who.append(c)
+		"ally": who = [target]
+	if not who.is_empty() and (v.has("heal_count") or v.has("buff")):
+		log.append("%s casts %s%s." % [caster.cname, v["label"],
+			"" if who.size() == 1 and who[0] == caster else " on " + ", ".join(who.map(func(c): return c.cname))])
+		for c in who:
+			if v.has("heal_count"):
+				heal(c, Dice.roll(rng, "%dd%d+%d" % [int(v["heal_count"]), int(v["heal_sides"]),
+					int(v.get("heal_bonus", 0))]))
+			if v.has("buff"):
+				_apply_buff(caster, c, v)
 		return {}
 	if not (v.has("dice_count") or v.has("conditions")):
 		return {}
@@ -705,6 +719,8 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		for c in combatants:
 			if c == caster or not c.conscious() or not (c.pos in area):
 				continue
+			if v.get("spare_allies", false) and c.team == caster.team:
+				continue   # Spirit Guardians picks who it spares; here that is your side
 			_spell_hit(c, v, notation, dc, caster)
 			hit_any = true
 		_destroy_in_area(area)
@@ -769,6 +785,14 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 				hits += 1
 				total += d
 				_apply_damage(c, d, v.get("damage_type", ""))
+		if hits > 0 and (v.has("conditions") or v.has("buff")):
+			# Ray of Sickness: the rider needs its own save when the spell names one
+			if v.get("save", "") == "" or not _saving_throw(c, dc, v["save"], v.get("ignores_cover", false)):
+				for cond in v.get("conditions", []):
+					apply_condition(c, cond, caster, v.get("duration", "round"), v)
+					log.append("  %s is %s." % [c.cname, cond])
+				if v.has("buff"):
+					_apply_buff(caster, c, v)
 		return {"hit": hits > 0, "damage": total, "hits": hits}
 	var dmg := Dice.roll(rng, notation)
 	var saved := false
@@ -790,9 +814,43 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 		for cond in v.get("conditions", []):
 			apply_condition(c, cond, caster, v.get("duration", "round"), v)
 			log.append("  %s is %s." % [c.cname, cond])
+		if v.has("buff"):
+			_apply_buff(caster, c, v)
 	if dmg > 0:
 		_apply_damage(c, dmg, v.get("damage_type", ""))
 	return {"saved": saved, "damage": dmg}
+
+# A spell's `buff` (data/effects/spells.json) on `who`: a statuses entry under
+# "spell:<id>" carrying the keys the resolver reads (ac, bonus_to_hit,
+# bonus_save, bonus_damage, resist, extra_action, speed_mult, no_attack, and
+# an `effects` dict of conditions.json-style adv/dis). Lives `rounds` rounds,
+# or while the caster concentrates. `condition` hangs a conditions.json id
+# beside it (Invisibility); `sticky` keeps that one through attacks (Greater).
+func _apply_buff(caster, who, v: Dictionary) -> void:
+	var b: Dictionary = v["buff"].duplicate(true)
+	var until: int = _tick() + int(v.get("rounds", 10)) * maxi(1, order.size())
+	if b.has("resist_random"):
+		var types: Array = b["resist_random"]
+		b["resist"] = [types[rng.roll_die(types.size()) - 1]]
+		b.erase("resist_random")
+		log.append("  %s: resistance to %s." % [who.cname, b["resist"][0]])
+	var held := {}
+	if v.get("concentration", false):
+		held = {"held_by": caster, "spell": String(v.get("spell", ""))}
+	if b.has("condition"):
+		var cond := String(b["condition"])
+		b.erase("condition")
+		var s := {"until_tick": until}
+		if b.get("sticky", false):
+			s["sticky"] = true
+		s.merge(held)
+		who.statuses[cond] = s
+		log.append("  %s is %s." % [who.cname, cond])
+	b.erase("sticky")
+	if not b.is_empty():
+		b["until_tick"] = until
+		b.merge(held)
+		who.statuses["spell:" + String(v.get("spell", v["id"]))] = b
 
 # --- conditions (data/effects/conditions.json) --------------------------
 #
@@ -807,6 +865,8 @@ func _cond_effects(c) -> Array:
 		var e: Dictionary = Effects.condition("unconscious" if id == "down" else id)
 		if e.is_empty():
 			e = ENGINE_CONDS.get(id, {})
+		if e.is_empty() and c.statuses[id] is Dictionary:
+			e = c.statuses[id].get("effects", {})   # Blur, Faerie Fire: a buff's own adv/dis
 		if e.is_empty():
 			continue
 		if e.has("per_level"):
@@ -1087,7 +1147,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	if hit:
 		out.damage = _react(target, "hit_by_attack", out.damage)
 	attacker.statuses.erase("hidden")
-	attacker.statuses.erase("invisible")   # the potion's kind: gone the moment you swing
+	if not (attacker.statuses.get("invisible") is Dictionary and attacker.statuses["invisible"].get("sticky", false)):
+		attacker.statuses.erase("invisible")   # gone the moment you swing — unless it's Greater
 	attacker.statuses.erase("sapped")   # Sap is spent on the next roll, hit or miss
 	var vx = attacker.statuses.get("vex")
 	if vx is Dictionary and vx.get("target") == target:
