@@ -9,6 +9,7 @@
 extends RefCounted
 
 const Catalog = preload("res://core/rules/catalog.gd")
+const PassGear = preload("res://core/rules/pass_gear.gd")
 const Sound = preload("res://core/audio.gd")
 
 
@@ -696,18 +697,22 @@ static func item_tile(item_id: String, tooltip: String, caption := "", px := ITE
 # the same kind, one line each, so a shelf or stash item reads against the
 # party at a glance. "" when there is nothing to compare (no party, or a
 # consumable), so the tile never offers a Shift it cannot honour.
-static func party_compare(kind: String, party) -> String:
+static func party_compare(kind: String, party, def := {}) -> String:
 	if party == null or kind == "unknown":
 		return ""
 	var lines: Array = ["", "Party's %s (Shift):" % kind]
 	for ch in party.party_characters():
+		var who: String = ch.cname
+		if kind in ["weapon", "armor"] and not def.is_empty():
+			var ok: bool = PassGear.proficient(kind, def, ch.sheet().proficiencies[kind])
+			who += " (%s)" % ("proficient" if ok else "NOT proficient")
 		var worn: Array = []
 		for iid in ch.equipped:
 			var kd := item_def(iid)
 			if kd[0] == kind:
 				var tip := item_tooltip(iid, kd[1], kind)
 				worn.append("%s — %s" % [tip.get_slice("\n", 0), tip.get_slice("\n", 1)])
-		lines.append("%s: %s" % [ch.cname, "; ".join(worn) if not worn.is_empty() else "nothing"])
+		lines.append("%s: %s" % [who, "; ".join(worn) if not worn.is_empty() else "nothing"])
 	return "\n".join(lines)
 
 # Kind + catalog entry for any item id, in the order the rest of the UI

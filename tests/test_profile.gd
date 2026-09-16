@@ -224,13 +224,21 @@ func _shift_compare() -> void:
 	pike.equipped.assign(["greataxe"])
 	var txt := Icons.party_compare("weapon", pty)
 	check(txt.contains(pike.cname + ": Greataxe — 1d12"), "the compare names who wields what")
+	var martial := Catalog.weapon("greataxe")
+	var simple := Catalog.weapon("club")
+	var m_ok: bool = "martial" in pike.sheet().proficiencies["weapon"]
+	check(Icons.party_compare("weapon", pty, martial).contains(
+		pike.cname + (" (proficient)" if m_ok else " (NOT proficient)")), "a martial weapon says whether Pike can use it")
+	check(Icons.party_compare("weapon", pty, simple).contains(pike.cname + " (proficient)"),
+		"everyone can swing a club")
 	check(Icons.party_compare("armor", pty).contains(pike.cname + ": nothing"), "an empty slot says so")
 	check(Icons.party_compare("unknown", pty) == "" and Icons.party_compare("weapon", null) == "",
 		"nothing to compare gives no Shift text")
 	var p = _screen(pike)
 	p.set_party(pty)
 	var tile = p._fields["item_longsword"]
-	check(tile.compare == txt, "the stash tile carries the compare")
+	check(tile.compare == Icons.party_compare("weapon", pty, Catalog.weapon("longsword")),
+		"the stash tile carries the compare")
 	var card = tile._make_custom_tooltip(tile.tooltip_text)
 	check(str(card.get_child(0).get_child(-1).text).contains("Shift:"), "the hover card advertises Shift")
 	card.free()

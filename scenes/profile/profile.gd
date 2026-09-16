@@ -426,7 +426,7 @@ func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qt
 	tip += "\n\nClick: %s" % ("unequip" if equipped else "equip")
 	if offhand:
 		tip += "\nRight-click: %s" % ("main hand" if _ch.offhand == iid else "off-hand")
-	var b := Icons.item_tile(iid, tip, caption, Icons.ITEM_ART_PX, Icons.party_compare(kind, party()))
+	var b := Icons.item_tile(iid, tip, caption, Icons.ITEM_ART_PX, Icons.party_compare(kind, party(), def))
 	b.pressed.connect(toggle_equip.bind(iid))
 	if offhand:
 		b.gui_input.connect(func(ev: InputEvent):

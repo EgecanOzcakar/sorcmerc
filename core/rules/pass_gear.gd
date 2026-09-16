@@ -67,6 +67,13 @@ static func armor_ac(items: Array, dex_mod: int, armor_profs: Array):
 		"non_proficient_body": not _armor_prof(body["category"], armor_profs),
 		"non_proficient_shield": np_shield}
 
+# Can this sheet use the item without the non-proficiency penalties? `profs`
+# is r.proficiencies["weapon"] or ["armor"] to match `kind`.
+static func proficient(kind: String, def: Dictionary, profs: Array) -> bool:
+	if kind == "weapon":
+		return str(def.get("weaponProficiencyId", "")) in profs or str(def.get("category", "")) in profs
+	return _armor_prof(str(def.get("category", "")), profs)
+
 static func _armor_prof(category: String, profs: Array) -> bool:
 	match category:
 		"light": return "light" in profs
