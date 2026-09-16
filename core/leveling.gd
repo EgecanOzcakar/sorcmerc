@@ -35,6 +35,9 @@ static func xp_to_next(ch) -> int:
 
 static func add_level(ch, class_id := "", hp_roll := AVERAGE) -> void:
 	ch.add_level(class_id if class_id != "" else ch.class_id(), hp_roll)
+	# Here rather than in milestones(): decide() calls that one again for a
+	# choice made after the fact, and a spell picked late is not a second level.
+	Ach.bump("levels")
 	milestones(ch)
 
 # Catch-up levels for a character joining a party that is already several levels
@@ -69,10 +72,25 @@ static func milestones(ch) -> void:
 	var lvl: int = ch.level()
 	if lvl >= 5:
 		Ach.unlock("level_5")
+	if lvl >= 10:
+		Ach.unlock("level_10")
+	if lvl >= 15:
+		Ach.unlock("level_15")
 	if lvl >= MAX_LEVEL:
 		Ach.unlock("level_20")
 	if _knows_high_spell(ch):
 		Ach.unlock("spell_5th")
+	# What this character is made of, for the profile-wide tallies: every class
+	# they hold a level in, and every species that has ever been fielded.
+	var classes := {}
+	for l in ch.levels:
+		classes[String(l["class_id"])] = true
+		Ach.collect("classes", String(l["class_id"]))
+	Ach.collect("species", String(ch.species_id))
+	if classes.size() >= 2:
+		Ach.unlock("multiclass")
+	if classes.size() >= 3:
+		Ach.unlock("multiclass_3")
 
 # Both halves of the split: a known-caster's `known` list carries its own level,
 # a prepared caster (cleric/wizard) only ever names ids, so those cost a lookup.

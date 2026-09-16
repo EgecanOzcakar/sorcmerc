@@ -20,6 +20,7 @@ extends Control
 
 const Report = preload("res://core/bug_report.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_CARD := Icons.COL_PANEL
@@ -241,6 +242,7 @@ func _submit() -> void:
 	if not _can_send():
 		return
 	_last = Report.submit(_title_edit.text, _desc_edit.text, context)
+	Ach.unlock("bug_hunter")
 	if _last.get("opened", false):
 		_note.text = "GitHub is open in your browser — press Submit there to file it."
 	else:
@@ -257,6 +259,7 @@ func _submit() -> void:
 func _send_via_relay() -> void:
 	if not _can_send() or _in_flight:
 		return
+	Ach.unlock("bug_hunter")
 	_in_flight = true
 	_refresh_send()
 	_note.text = "Sending…"

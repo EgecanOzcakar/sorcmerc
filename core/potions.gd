@@ -13,6 +13,7 @@ extends RefCounted
 const Catalog = preload("res://core/rules/catalog.gd")
 const Dice = preload("res://core/dice.gd")
 const Campaign = preload("res://core/campaign.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const STATUS_PREFIX := "potion:"   # statuses key for a potion buff: "potion:potion-of-speed"
 
@@ -60,6 +61,8 @@ static func drink_in_combat(cb, actor, item_id: String, target = null) -> Dictio
 	var m := mechanics(item_id)
 	var name := Campaign.item_name(item_id)
 	cb.log.append("%s drinks %s." % [actor.cname, name])
+	if cb.tracked and actor.team == "party":
+		Ach.bump("potions")
 	if m.has("heal"):
 		cb.heal(actor, Dice.roll(cb.rng, String(m["heal"])))
 	if m.has("damage"):
@@ -91,6 +94,7 @@ static func drink_on_road(party, ch, item_id: String, now: float, rng) -> void:
 	var m := mechanics(item_id)
 	if not party.stash_remove(item_id):
 		return
+	Ach.bump("potions")
 	if m.has("heal"):
 		var s = ch.sheet()
 		var cur: int = ch.hp_current if ch.hp_current >= 0 else s.max_hp

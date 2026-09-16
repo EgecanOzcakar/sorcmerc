@@ -41,6 +41,8 @@ const HELP_RADIUS := 140.0      # "near their settlement" — O6's BATTLE_RADIUS
 const DECAY_PER_DAY := 2.0      # points of drift back toward 0 per world-day
 const DAY := 1440.0             # world-minutes in a day (scenes/world/world.gd's HUD)
 
+const Ach = preload("res://core/achievements.gd")
+
 static var _scores: Dictionary = {}
 
 static func reset() -> void:
@@ -51,6 +53,10 @@ static func get_opinion(faction: String) -> float:
 
 static func set_opinion(faction: String, value: float) -> void:
 	_scores[faction] = clampf(value, -RANGE, RANGE)
+	# T19: the two extremes of a reputation, tracked as high-water marks so a
+	# later thaw does not take the achievement back.
+	Ach.record("best_standing", int(floor(float(_scores[faction]))))
+	Ach.record("worst_standing", int(floor(-float(_scores[faction]))))
 
 static func raise(faction: String, amount: float) -> void:
 	set_opinion(faction, get_opinion(faction) + absf(amount))

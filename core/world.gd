@@ -15,6 +15,7 @@
 extends RefCounted
 
 const Scaler = preload("res://core/scaler.gd")
+const Ach = preload("res://core/achievements.gd")
 
 # World-time is counted in MINUTES: everything built on top of this clock (O2's
 # Day/HH:MM readout, O6's RESTOCK, O7's DAY := 1440.0) reads `elapsed` that way.
@@ -245,6 +246,10 @@ func reveal(pos: Vector2) -> void:
 	if _near_waypoint(pos, EXPLORE_STEP - 0.0001):
 		return
 	explored.append(pos)
+	# T19: how much of any one map this machine has ever put behind it. A
+	# high-water mark, not a sum — a new world does not wipe the old score, and
+	# walking the same map twice does not earn it twice.
+	Ach.record("explored", explored.size())
 	_reindex()
 
 # The "remembered" tier: was ever within VISION_RADIUS of some point on the

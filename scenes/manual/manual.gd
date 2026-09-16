@@ -7,6 +7,7 @@ extends Control
 const Manual = preload("res://core/manual.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
+const Ach = preload("res://core/achievements.gd")
 
 var _search := LineEdit.new()
 var _list := VBoxContainer.new()
@@ -27,6 +28,7 @@ static func toggle(host: Control, page_id := ""):
 	return o
 
 func _ready() -> void:
+	Ach.unlock("read_manual")
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	theme = Creator.dark_theme()
 	mouse_filter = Control.MOUSE_FILTER_STOP   # the screen underneath sleeps while we're up

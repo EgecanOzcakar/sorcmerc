@@ -7,6 +7,7 @@ extends RefCounted
 const Campaign = preload("res://core/campaign.gd")
 const Dice = preload("res://core/dice.gd")
 const RNG = preload("res://core/rng.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const INTERVAL := 240.0     # one attempt per 4 world-hours of travel
 const SKILLS := ["survival", "nature"]
@@ -40,6 +41,7 @@ static func check(party, rng = null) -> Dictionary:
 	var gold := 0
 	if ok:
 		gold = GOLD_MIN + rng.roll_die(GOLD_MAX - GOLD_MIN + 1) - 1
+		Ach.bump("forages")
 	var ch = party.get_member(best_id)
 	return {
 		"ok": ok, "char_id": best_id, "cname": ch.cname if ch != null else "Someone",

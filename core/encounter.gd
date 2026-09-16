@@ -10,6 +10,7 @@ const Hex = preload("res://core/hex.gd")
 const Power = preload("res://core/rules/power.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")
 const Loot = preload("res://core/loot.gd")
+const Ach = preload("res://core/achievements.gd")
 
 # --- ranges (hexes) — tune here ---------------------------------------
 const REACH_MELEE := 1
@@ -518,6 +519,7 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 	# replay with the seed; only on a win, because a wipe does not loot the room.
 	if res == "Victory":
 		loot.append_array(Loot.for_kills(kills, cb.rng))
+	_score_fight(cb, res == "Victory")
 	return {
 		"outcome": "Victory" if res == "Victory" else "Defeat",   # a round-cap timeout is not a win
 		"xp": roundi(power * XP_PER_POWER),
@@ -527,3 +529,41 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 		"kills": kills,   # source monster ids, for T9's kill-count quests
 		"downed": cb.downed.keys(),   # T19: party ids that hit 0 HP, even if they got back up
 	}
+
+
+# T19 — the achievements that are about a whole fight rather than one blow.
+# Here rather than in combat.gd because this is the one function every real
+# fight ends in (core/world_battle.gd's NPC-vs-NPC scraps never call it, and
+# carry cb.tracked = false besides).
+static func _score_fight(cb, won: bool) -> void:
+	if not cb.tracked:
+		return
+	if not won:
+		Ach.unlock("first_wipe")
+		return
+	Ach.bump("wins")
+	if cb.round_num <= 1:
+		Ach.unlock("one_round")
+	if cb.round_num >= 15:
+		Ach.unlock("long_fight")
+	if cb.unseen:
+		Ach.unlock("surprise_win")
+	if cb.ambushed:
+		Ach.unlock("ambush_win")
+	# The heroes, not the wolf one of them called: a summon carries the
+	# monsters.json id it was spawned from, a character carries nothing.
+	var heroes: Array = cb.team_of("party").filter(func(c): return String(c.src_id) == "")
+	if heroes.is_empty():
+		return
+	var whole := true
+	var all_down := heroes.size() > 1
+	for c in heroes:
+		if c.hp < c.max_hp:
+			whole = false
+		if not cb.downed.has(c.id):
+			all_down = false
+	if whole and cb.downed.is_empty():
+		Ach.unlock("untouched")
+	# Everybody hit the floor and the party still took the room.
+	if all_down:
+		Ach.unlock("all_down_win")
