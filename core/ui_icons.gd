@@ -402,7 +402,14 @@ static func _icon(path: String) -> Texture2D:
 
 # The face behind a settlement counter: assets/generated/<faction>-<service>.png,
 # null if nobody has drawn that one yet (callers add nothing rather than a blank).
-static func portrait(faction: String, service: String) -> Texture2D:
+# `mood` picks a re-expressed variant of the same portrait ("happy", "frown"
+# — tools: ~/localgen/gen_sorcmerc_moods.py, the face re-sampled, the rest
+# untouched); the plain file when there is none.
+static func portrait(faction: String, service: String, mood := "") -> Texture2D:
+	if mood != "":
+		var tex := _icon("res://assets/generated/%s-%s-%s.png" % [faction, service, mood])
+		if tex != null:
+			return tex
 	return _icon("res://assets/generated/%s-%s.png" % [faction, service])
 
 # A road event's picture (assets/generated/event-<id>[-pass|-fail].png,
@@ -415,8 +422,8 @@ static func event_art(event_id: String, ok) -> Texture2D:
 			return tex
 	return _icon("res://assets/generated/event-%s.png" % event_id)
 
-static func portrait_rect(faction: String, service: String, px := 160) -> TextureRect:
-	var tex := portrait(faction, service)
+static func portrait_rect(faction: String, service: String, px := 160, mood := "") -> TextureRect:
+	var tex := portrait(faction, service, mood)
 	if tex == null:
 		return null
 	var pic := TextureRect.new()
