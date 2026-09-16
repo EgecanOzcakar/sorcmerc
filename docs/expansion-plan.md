@@ -4618,3 +4618,23 @@ anybody. Two of those tests replay a known seed onto a party in a known state
 rather than searching with the party under test — a search spends and earns as
 it goes, so by the time it finds a failed toll the purse it was told to empty
 has been paid twice over by wayfarers.
+
+## Spike — opinions between party members, and romance (2026-09-16, feasibility)
+
+Full write-up in `docs/spike-party-opinions.md`; model `core/party_opinion.gd`
+(plus one `relations` field on `core/party.gd`), test
+`tests/test_party_opinion.gd`, throwaway sweep `tests/sweep_party_opinion.gd`.
+Nothing in the shipped game calls it. Headlines: every companion is
+player-made, so the shape is Wildermyth's (a symmetric score per pair that
+drifts toward a baseline read off the two sheets, labelled by band, told in
+one-line camp beats), not BioWare's; romance is a camp beat that ASKS through
+D4's options card, never a roll, one partner at a time, declined is
+remembered. The road is where it pays — a morale point beside the pace bonus
+on every D3 check, and the roll feeding back into who the party likes. The
+three combat effects at 5e-honest sizes (+1 AC bonded and adjacent, -1 to hit
+rivals adjacent, advantage when a partner falls) are all inside the sweep's
+±2.7-point noise: a rally every other fight is a moment, not a balance
+change. The healer–faller pair bonds too fast at +12 a save (Ilsa+Pike +5.3
+per fight); cap saves once per fight before wiring anything. Side finding:
+Help's advantage is erased by the ally's own `new_turn()` before it can be
+spent — pre-existing, one line, its own PR.
