@@ -210,6 +210,26 @@ title screen; without it, "New run" goes straight to the open world.
 `SORCMERC_UNLOCK_DLC=1` (like `SORCMERC_PLAYTEST=1`) owns every paid pack — see
 `docs/modding.md`.
 
+## Pull requests
+
+Every feature or visible change in a PR comes with a **screenshot of it
+working** — one per feature, attached to the PR description. Green tests say
+the code runs; the screenshot says it looks right. Reviewers reject a PR that
+changes what the player sees without showing it.
+
+The `tests/shot_*.gd` scripts render one for you:
+
+```sh
+godot --path . -s tests/shot.gd                        # a combat board mid-fight -> combat_screen.png
+godot --path . -s tests/shot_world.gd                  # the open world -> world_screen.png (not headless: the capture hangs)
+godot --headless --path . -s tests/shot_screens.gd     # every menu screen -> shots_tmp/ (SHOT_ONLY=party for one)
+```
+
+or just run the game (`godot --path . scenes/main.tscn`) and capture the window.
+For a change that is not visual — a rule, a save format, a balance number —
+say so in the PR and paste the test output instead. `.github/PULL_REQUEST_TEMPLATE.md`
+has the checklist.
+
 ## Reporting a bug
 
 Every screen has a way in: **Report a bug** on the title screen's footer, in the

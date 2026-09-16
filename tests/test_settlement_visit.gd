@@ -28,6 +28,7 @@ func _init() -> void:
 	test_battle_flag_changes_it()
 	test_battle_marking_is_local()
 	test_trade()
+	test_full_shelf_is_a_fraction_of_the_catalog()
 	test_steal_deterministic_and_hooks()
 	test_opinion_moves_prices_and_can_refuse_trade()
 	test_rest_and_quests()
@@ -415,3 +416,9 @@ func test_counters_and_the_two_services_that_sell_nothing() -> void:
 	check(party.gold == Visit.IDENTIFY_COST, "...for the flat fee")
 	check(party.unidentified().is_empty(), "...leaving nothing unidentified")
 	check(party.stash_count("spell-scroll", true) == 1, "...and the item itself is still there, known")
+
+func test_full_shelf_is_a_fraction_of_the_catalog() -> void:
+	var s = _world().settlements[0]
+	var full := Visit.market(s, Visit.RESTOCK * Visit.MAX_STEPS, false)
+	check(full["stock"].size() == int(ceil(Visit.catalog(s).size() * Visit.FULL_SHELF)),
+		"a rested market shows FULL_SHELF of its catalog, not all of it")
