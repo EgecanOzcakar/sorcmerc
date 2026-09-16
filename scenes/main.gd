@@ -89,6 +89,7 @@ var _figures
 const COL_BG := Icons.COL_BG
 const COL_HEX := Color("232733")
 const COL_HEX_EDGE := Color("39404f")
+const COL_HEX_GRID := Color("6b7386")   # the grid line over the floor: lighter than the old gutter, since it sits on stone
 const COL_BRAZIER := Color("6b2f1c")
 const COL_COVER := Color("2f4744")       # the slab under a cover hex
 # T-cover: half cover is +2 AC and +2 on Dex saves (core/combat.gd's
@@ -2252,6 +2253,7 @@ class Board extends Control:
 
 	# Beyond the board's edge the ground fades out over two rings.
 	const HALO_ALPHA := {1: 0.32, 2: 0.10}
+	const GRID_ALPHA := 0.34   # the hex line on a plain tile
 
 	# One light over the whole board rather than one per tile: brightest a
 	# little up and left of the board's middle, falling off toward its rim.
@@ -2304,10 +2306,11 @@ class Board extends Control:
 		for n in Hex.neighbors(hx):
 			if n in cb.board["hexes"] and _terrain(n) != _terrain(hx):
 				seam = true
-		if seam:
-			var edge := _hex_poly(c, s - 1.0)
-			edge.append(edge[0])
-			canvas.draw_polyline(edge, Color(main.COL_HEX_EDGE, 0.7), 1.5, true)
+		# The grid is a line on the surface, not a gap in it: every hex gets a
+		# thin one so the board still reads as hexes, a terrain change a firmer one.
+		var edge := _hex_poly(c, s - 0.5)
+		edge.append(edge[0])
+		canvas.draw_polyline(edge, Color(main.COL_HEX_GRID, 0.7 if seam else GRID_ALPHA), 1.5 if seam else 1.0, true)
 		if cb.is_cover(hx):
 			_paint_cover(canvas, c, s)
 
