@@ -1150,7 +1150,16 @@ func _after_hero_action(h) -> void:
 # Hotkeys: [1]..[9] on the first nine, [0] on the last entry (End turn /
 # Cancel), everything past 9 is click-only.
 func _set_buttons(opts: Array) -> void:
+	# Out of the tree now, not at the end of the frame. A queue_free()d child is
+	# still a child until the frame turns over, and _press_hotkey indexes
+	# get_children() by position — so a key pressed in the same frame a new bar
+	# was built addressed the OLD bar's slots. Rare in play (it needs the press
+	# and the rebuild in one frame) and reliable in a harness, which is how it
+	# turned up: pressing [3] right after a turn began hit the deploy bar's
+	# third button instead of Bonus actions. scenes/party/party.gd's _clear()
+	# already does it this way, for its own version of the same reason.
 	for c in _buttons.get_children():
+		_buttons.remove_child(c)
 		c.queue_free()
 	var count := opts.size()
 	var u := clampf(_zoom, 0.9, 1.4)

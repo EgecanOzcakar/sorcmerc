@@ -4420,15 +4420,33 @@ the trail's length — which reaches exactly the set `is_explored()` would have
 said yes to, from the other end. Unexplored cells are one rect for the whole
 viewport rather than one each, and the tile pick is cached.
 
-Measured on the reporter's own 3840×2118 at their default zoom, large map, real
-trail: **9,207 cells and 35–80ms of GDScript before a tile was drawn → 0.52ms.**
-It also un-breaks the picture at that resolution, which is likely what #23
-("overworld tiles bad", same reporter, same window) is looking at: `MAX_CELLS`
-capped VIEWPORT cells, so a 4K window tripped it at zoom 1.0 and painted the
-whole map one flat green rectangle. The cap counts painted cells now, which is
-what it was ever trying to bound. The `ponytail` note in that function
-predicted the whole thing ("a spatial grid is the upgrade if a very long walk
-makes it drag").
+Measured on a large map with a party a good way into a run (900 reveals, 32
+waypoints), at the viewport the game actually uses, cold — the memo defeated
+on every iteration, so this is the worst case rather than the steady state:
+
+| zoom | viewport cells | painted | before | after |
+|---|---|---|---|---|
+| 2.00 | 3,575 | 2,617 | 31.3 ms | **4.0 ms** |
+| 1.00 | 13,843 | 6,502 | 96.6 ms | **9.4 ms** |
+| 0.50 | 54,901 | 7,450 | 4.8 ms (nothing painted) | **8.7 ms** |
+| 0.25 | 217,655 | 7,450 | 19.1 ms (nothing painted) | **8.4 ms** |
+
+The `ponytail` note in that function predicted the whole thing ("a spatial
+grid is the upgrade if a very long walk makes it drag").
+
+**A correction, recorded because it was published before it was checked.** The
+first version of this entry, and of PR #32's description, claimed the reporter's
+3840×2118 window tripped `MAX_CELLS` at zoom 1.0 and painted the map as one
+flat green rectangle, and guessed that this was what #23 ("overworld tiles
+bad") was seeing. That is **wrong**, and the mistake was measuring
+`_draw_ground()` against a hand-set `size = Vector2(3840, 2118)` rather than
+against what the screen reports. The project stretches `canvas_items`, so the
+Control's logical size stays around 1280×800 whatever the window is — 8,455
+viewport cells at zoom 1.0 on a 4K window, comfortably under the cap. Rendering
+master at 3840×2118 paints its tiles perfectly well, and no zoom reproduced a
+flat fill on screen. #23 is still unexplained, and this branch should not be
+read as fixing it. What survives is the table above: the per-frame cost, at the
+viewport the game really has, is roughly a tenth of what it was.
 
 ### Two asks alongside them
 
