@@ -36,7 +36,8 @@ extends RefCounted
 const Catalog = preload("res://core/rules/catalog.gd")
 const Ach = preload("res://core/achievements.gd")
 
-const PATH := "user://progression.json"
+const SaveDir = preload("res://core/save_dir.gd")
+static var PATH: String = SaveDir.path("progression.json")
 const FORMAT := "sorcmerc-progression"
 const VERSION := 1
 
@@ -148,6 +149,7 @@ static func save_state(p = null) -> String:
 	if p == null:
 		p = current()
 	_current = p
+	DirAccess.make_dir_recursive_absolute(PATH.get_base_dir())
 	var f := FileAccess.open(PATH, FileAccess.WRITE)
 	if f == null:
 		push_warning("cannot write %s" % PATH)

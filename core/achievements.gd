@@ -37,7 +37,8 @@
 # headless run (where the autoload does not exist) just lets the queue cap out.
 extends RefCounted
 
-const PATH := "user://achievements.json"
+const SaveDir = preload("res://core/save_dir.gd")
+static var PATH: String = SaveDir.path("achievements.json")
 const FORMAT := "sorcmerc-achievements"
 # v1 was unlocks only. v2 added the tallies, and load_state() reads both, so
 # this is a record of the shape rather than a gate on it.
@@ -443,6 +444,7 @@ static func save_state(a = null) -> String:
 	_current = a
 	_dirty = false
 	_last_save_ms = Time.get_ticks_msec()
+	DirAccess.make_dir_recursive_absolute(PATH.get_base_dir())
 	var f := FileAccess.open(PATH, FileAccess.WRITE)
 	if f == null:
 		push_warning("cannot write %s" % PATH)

@@ -35,7 +35,8 @@ extends RefCounted
 
 const Character = preload("res://core/character.gd")
 
-const DIR := "user://characters"
+const SaveDir = preload("res://core/save_dir.gd")
+static var DIR: String = SaveDir.path("characters")
 const FORMAT := "sorcmerc-character"
 const VERSION := 1
 

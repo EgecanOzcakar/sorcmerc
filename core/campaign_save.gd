@@ -37,7 +37,7 @@ const Campaign = preload("res://core/campaign.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
 
-const DEFAULT_DIR := "user://autosave"
+const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-campaign"
 const VERSION := 1
 
@@ -48,9 +48,8 @@ const VERSION := 1
 static var _dir := ""
 
 static func dir() -> String:
-	if _dir == "":
-		var env := OS.get_environment("SORCMERC_SAVE_DIR")
-		_dir = env if env != "" else DEFAULT_DIR
+	if _dir == "":   # $SORCMERC_SAVE_DIR itself, or <root>/autosave — see core/save_dir.gd
+		_dir = SaveDir.root() if OS.get_environment("SORCMERC_SAVE_DIR") != "" else SaveDir.path("autosave")
 	return _dir
 
 static func path() -> String:
