@@ -305,6 +305,8 @@ func _init() -> void:
 	none.show_event({"id": "no-such-event", "title": "?", "kind": "good", "text": "x"})
 	check(none._art == null and none._art_rect.size == Vector2.ZERO, "an event with no art reserves no space")
 	check(Icons.event_art("good-ground", false) == Icons.event_art("good-ground", null), "no fail frame: the plain scene")
+	for e in Travel.EVENTS:
+		check(Icons.event_art(String(e["id"]), true) != null, "every road event has a picture (%s)" % e["id"])
 
 	print("test_event_card: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
