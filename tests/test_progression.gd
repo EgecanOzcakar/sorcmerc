@@ -24,6 +24,7 @@ func _init() -> void:
 	_wipe()
 	test_starting_state()
 	test_costs_ordered()
+	test_testing_pace()
 	test_species_threshold()
 	test_class_threshold_and_picks()
 	test_class_xp_subclasses()
@@ -76,6 +77,51 @@ func test_costs_ordered() -> void:
 	for id in Prog.CLASS_COST:
 		cheapest_class = mini(cheapest_class, Prog.class_cost(id))
 	check(dearest_species < cheapest_class, "every species costs less than every class")
+
+# The temporary testing pace (see core/progression.gd's header): the whole
+# ladder walkable in one sitting, roughly one unlock every three fights. A fight
+# pays power * XP_PER_POWER, which resolves to ~150 for a party a few fights in
+# and 500-700 by the levels the class tier is reached — so a species step is 450
+# and a class step is 1500. Pinned here so the numbers carry a claim rather than
+# being free-floating, and so putting the shipping ones back is a red test
+# rather than a silent balance change.
+const FIGHT_EARLY := 150      # levels 1-3, measured
+const FIGHT_LATE := 500       # levels 8-12, measured
+const WANT_FIGHTS := 3
+
+func test_testing_pace() -> void:
+	var species: Array = Prog.SPECIES_COST.values()
+	species.sort()
+	var classes: Array = Prog.CLASS_COST.values()
+	classes.sort()
+	check(species.size() == 5 and classes.size() == 7, "the ladder still has twelve rungs")
+
+	# Evenly spaced, so "every three fights" holds between any two neighbours
+	# rather than only on average.
+	var sstep: int = species[0]
+	for i in species.size():
+		check(species[i] == sstep * (i + 1), "species rung %d is %d, one even step" % [i, species[i]])
+	var cstep: int = classes[1] - classes[0]
+	for i in classes.size():
+		check(classes[i] == classes[0] + cstep * i, "class rung %d is %d, one even step" % [i, classes[i]])
+
+	# The first rung, and each step after it, is about three fights' worth.
+	check(absi(sstep - FIGHT_EARLY * WANT_FIGHTS) <= FIGHT_EARLY,
+		"a species step (%d) is about %d early fights" % [sstep, WANT_FIGHTS])
+	check(absi(cstep - FIGHT_LATE * WANT_FIGHTS) <= FIGHT_LATE,
+		"a class step (%d) is about %d later fights" % [cstep, WANT_FIGHTS])
+
+	# The class tier opens one step past the last species, not miles past it.
+	check(classes[0] - species[species.size() - 1] <= cstep,
+		"the first class follows the last species by no more than one step")
+	# And the whole thing is reachable in a sitting: ~40 fights, not ~400.
+	var total: int = classes[classes.size() - 1]
+	check(total <= FIGHT_LATE * 40, "the last rung (%d) is inside a sitting" % total)
+
+	# Subclasses are bought with class XP, which campaign.gd hands out at
+	# total/4 per character — so the same three fights, quartered.
+	check(Prog.SUBCLASS_COST <= FIGHT_LATE * WANT_FIGHTS / 4 * 2,
+		"a paid subclass (%d class XP) is a few fights of playing that class" % Prog.SUBCLASS_COST)
 
 func test_species_threshold() -> void:
 	Prog.add_lifetime_xp(Prog.species_cost("gnome") - 1)

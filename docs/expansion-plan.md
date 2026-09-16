@@ -4344,3 +4344,277 @@ byte-identical on current boards (nobody ever shoots past 7 hexes);
 (Hold Person, Web, Hypnotic Pattern…). Recommendation: author the 29 ranges
 first, then decide whether range is a 3-tier grammar (cap 5) or needs bigger
 boards + a `_foe_spots` fix — no more constant sweeps until that's chosen.
+
+## The open bug reports, worked through (2026-09-16)
+
+Nine issues filed from the in-game reporter over one play session, plus two
+follow-up asks. One commit and one test each; the tests all fail against the
+code as it was. What each one actually turned out to be:
+
+**#24, "berserker rage needs twice keyboard press"** — it needed four. Rage
+burns a pool so it wears the two-press confirm guard `_costly()` puts on every
+costly verb, and the guard was right; where it put the second press was not.
+Arming rebuilt the MAIN BAR, and Rage lives one level down in the `[3]` Bonus
+submenu (a barbarian has two bonus-cost things, Rage and Reckless Attack, so
+that slot is a list rather than a straight fire). First press armed Rage and
+dropped the player onto a bar with no confirm anywhere on it — second press of
+the same key swung the greataxe. 3-1-3-1. The fix is structural: a page's
+entries are re-derived on every render (`_menu_entries()`, the old
+`_build_hero_menu`'s first half) instead of being carried in the button's
+binding, so `_refresh_menu()` can rebuild whichever page is open — main bar,
+slot list, or spell tier picker — from what is true after arming.
+
+**#25 / #26, Esc and space on the map** — every other screen answers those two
+keys and the open world answered neither, so Settings mid-run meant going back
+to the title and losing the map. Esc backs out of whatever light panel is up
+and otherwise opens a pause menu; space is the Pause button. The menu holds the
+clock the way a market visit does and refuses to open over anything that
+already owns the screen.
+
+**#28, "quests page has verticality issue"** — a `ScrollContainer` hands its
+child the child's MINIMUM size on any axis it can still scroll, and an
+autowrapping `Label`'s minimum width is one pixel. Every quest line measured
+1px wide and ~570px tall: eight quests, 4096px of scroll, for text that fits in
+eight lines. Horizontal scrolling off is what makes the column stretch to the
+container's width and the labels wrap at it. Four lists in `world.gd` were
+built this way and now share `_scroll_column()`.
+
+**#33, "quest complete screen stretches and overflows"** — the other end of the
+same rope, and a regression #28's fix would otherwise have introduced: with
+horizontal scrolling off, a row's own minimum width reaches the panel instead
+of being scrolled past, and `_trade_row`'s label had no wrapping, so one long
+job title took the settlement counter to 717px where 468 was meant to be. The
+floating panels also placed themselves by arithmetic against a size they were
+told to expect and then measured whatever they came to; they sit in
+`CenterContainer`s now, and a page's list takes the height the window can spare.
+
+**#29** — the turn strip borders every tile the current aim lands on. For a
+cone or a burst, which NAMES are standing in the shape is exactly what the
+strip knows and the board does not spell out.
+
+**#30, "no loot page"** — the combat screen writes its own after-action lines,
+but out on the map it is torn down the frame its `result` is filled, so nobody
+ever read them; the linear campaign never had the problem because it holds the
+fight screen up behind "Back to the road". The map's version is a page of its
+own, since the map has a delve to summarise as well as a single fight: a delve
+totals the whole descent and reads its gold off the purse, because a site pays
+from room caches, the boss hoard and the fights themselves and only the purse
+sees all three.
+
+**#27** — roster rows carry equipped gear and trained skills (best first,
+expertise marked) out of `Party.summary()`, so comparing two characters no
+longer means opening both sheets. And the roster reshuffled anywhere: the
+screen takes a `roster_locked` flag from whoever opens it, so the HUD button
+opens it locked and the inn's "Sort out the party" opens it unlocked. The lock
+covers benching, recruiting and Create new and nothing else — marching order is
+a travel decision, and travel is what you are doing out there.
+
+**#31, the frame-rate drop** — three things, all per cell, per frame, for
+answers that do not change per frame. `_draw_ground()` walked every cell of the
+VIEWPORT and asked `world.is_explored()` about each one (3.7µs a cell measured,
+since that folds in a scan of every settlement), then recomputed each surviving
+cell's tile through `world.water_depth()`, another linear scan, at 4.8µs. It
+walks the explored ground now — out from each remembered waypoint and each
+settlement beacon, clipped to the viewport and memoised on the cell box plus
+the trail's length — which reaches exactly the set `is_explored()` would have
+said yes to, from the other end. Unexplored cells are one rect for the whole
+viewport rather than one each, and the tile pick is cached.
+
+Measured on a large map with a party a good way into a run (900 reveals, 32
+waypoints), at the viewport the game actually uses, cold — the memo defeated
+on every iteration, so this is the worst case rather than the steady state:
+
+| zoom | viewport cells | painted | before | after |
+|---|---|---|---|---|
+| 2.00 | 3,575 | 2,617 | 31.3 ms | **4.0 ms** |
+| 1.00 | 13,843 | 6,502 | 96.6 ms | **9.4 ms** |
+| 0.50 | 54,901 | 7,450 | 4.8 ms (nothing painted) | **8.7 ms** |
+| 0.25 | 217,655 | 7,450 | 19.1 ms (nothing painted) | **8.4 ms** |
+
+The `ponytail` note in that function predicted the whole thing ("a spatial
+grid is the upgrade if a very long walk makes it drag").
+
+**A correction, recorded because it was published before it was checked.** The
+first version of this entry, and of PR #32's description, claimed the reporter's
+3840×2118 window tripped `MAX_CELLS` at zoom 1.0 and painted the map as one
+flat green rectangle, and guessed that this was what #23 ("overworld tiles
+bad") was seeing. That is **wrong**, and the mistake was measuring
+`_draw_ground()` against a hand-set `size = Vector2(3840, 2118)` rather than
+against what the screen reports. The project stretches `canvas_items`, so the
+Control's logical size stays around 1280×800 whatever the window is — 8,455
+viewport cells at zoom 1.0 on a 4K window, comfortably under the cap. Rendering
+master at 3840×2118 paints its tiles perfectly well, and no zoom reproduced a
+flat fill on screen. #23 is still unexplained, and this branch should not be
+read as fixing it. What survives is the table above: the per-frame cost, at the
+viewport the game really has, is roughly a tenth of what it was.
+
+### Two asks alongside them
+
+**A testing pace for the unlock ladder.** Every `SPECIES_COST` / `CLASS_COST` /
+`SUBCLASS_COST` threshold is cut so the ladder can be walked in one sitting —
+about one unlock per three fights. The pace is measured rather than guessed: a
+fight pays `power * XP_PER_POWER`, which resolves to 55–190 at levels 1–3 and
+500–720 by level 12, so a species step is 450 and a class step is 1500. Order
+and shape are untouched. This is TEMPORARY and says so: the header carries the
+shipping numbers verbatim and `tests/test_progression.gd` pins the claim, so
+putting the real ones back is a red test rather than a silent balance change.
+
+**Clearing a lair pays.** Every room on the way down already paid its own XP,
+but reaching the bottom paid nothing, which made a delve worth strictly less
+than the same number of fights out on the road — the wrong way round for the
+one piece of content you commit to blind. `Site.clear_xp()` is flat and scaled
+by depth the way the boss hoard beside it is. Only on a clear; withdrawing
+keeps what the rooms paid and nothing else.
+
+**A lair does not stay empty.** A spent lair used to sit grey for the rest of
+the run — five lairs, five clears, nothing left underground. One in-game day
+after it is emptied (however: fought to the bottom, talked past, or resolved
+without the party while `WINDOW` ran out) something moves back in. The party
+keeps knowing WHERE it is; the rooms they cleared, the clock that was running
+and whether the guardians are awake all start over. Every "this is spent" stamp
+goes through `WorldLairs.mark_cleared()` so the clock cannot be started in one
+place and forgotten in another, and an old save with no stamp stays spent
+rather than repopulating on load.
+
+**Weight in the combat animations.** The reported feel was "like they are in
+fast mode", and the reported question was which setting would help. The answer
+was none: `anim_speed_multiplier` was floored at 1.0 both on load and in
+`anim()`, so the only thing the dial could ever do was make the fight quicker.
+Both halves are fixed. The setting turns both ways now (`ANIM_MIN` 0.4 to
+`ANIM_MAX` 3.0, with `FAST` passing through as a real stored choice), the
+checkbox is a five-way pace picker — Weighty / Measured / Normal / Brisk /
+Instant — and `SORCMERC_FAST` still wins outright so the headless suite cannot
+be slowed by whatever `settings.json` is on the machine.
+
+The animations themselves carry weight at 1x, which is the part that does not
+need a setting. Token movement was exponential smoothing at a fixed rate,
+`cur.lerp(target, dt * 12)`, which has no idea how far the token is going — a
+six-hex dash and a one-hex sidestep both took about a quarter of a second — and
+starts at full speed and creeps into the destination, the exact opposite of how
+something with mass moves. A token crosses the board at a speed measured in
+HEXES now, smoothstepped, clamped between `STEP_MIN` and `STEP_MAX`. `FX_TTL`
+went up across the board (melee 0.30 → 0.46; at 0.30 a swing was over before
+the eye found it, which is most of the "fast mode" reading), the melee
+step-in's curve is skewed to strike out fast and recover slow instead of
+`sin(t * PI)`'s symmetric nudge, and the beat before a monster acts went 0.5 →
+0.75 so the last swing is off screen before the next turn starts.
+
+## Cover you can see, and benching where you are looking (2026-09-16)
+
+Two asks off the back of playing the branch.
+
+**Cover in the combat map should be more obvious.** Half cover is +2 AC and +2
+on Dex saves (`core/combat.gd`'s `effective_ac` and `_saving_throw`) — the
+difference between a 55% swing against you and a 45% one, and the reason to
+spend a move getting into it. It was announced by a slab two shades off the
+ordinary floor (`2a3a3a` against a `COL_HEX` that is barely different) and the
+word "cover" in 10px grey-teal at the bottom-LEFT corner of the hex — under the
+foliage that always grows on a cover hex, over a textured floor, at whatever
+zoom the board happened to auto-fit to. On the Sunken Shrine that is
+`hex_px = 15.3`: the label was smaller than the plant standing on top of it.
+
+Cover says it twice now. A rim around the tile in `COL_COVER_EDGE`, a teal
+nothing else on the board wears (the test asserts the distance from every other
+board colour, so it cannot quietly drift into meaning "selected"), with a faint
+inner line so it reads as the lip of something rather than as a selection
+outline. And a chip carrying **the number** rather than the noun — `+2`, on a
+dark backing plate, because it lands on a textured floor with a plant on it and
+without one it is legible on some tiles and not others. The chip scales with
+the hex and drops out below 10px; the rim does not, so zooming out loses the
+value and keeps the shape, which is the right way round — at board scale you
+want to see WHERE the cover is, and close up you want to know what it is worth.
+
+`tests/test_cover_readable.gd` cannot look at a picture, so it checks what is
+decidable: the palette really is distinct, the chip states the number the
+engine actually applies (it moves a combatant onto a cover hex and compares
+`effective_ac`), and the rim is thicker than an ordinary hex seam.
+
+**Clicking somebody who is marching benches them.** The roster column on the
+left has always had a Bench button per row. The marching order on the right —
+the side of the screen you are actually looking at when you decide somebody
+should sit this one out — had no way to do it, so the move was to look away,
+find that person's row again on the left, and press the button there.
+
+A marching slot with nothing picked up is now that person, and clicking them
+takes them out of the line. With somebody picked up it still places or swaps
+them, so the old interaction is untouched; the bench click is the
+no-selection case. It respects issue #27's inn lock like every other way of
+benching, the tooltip says which of the two things the click will do, and the
+hint line leads with it.
+
+## D3.1 — eight more road events, and the gates that keep them honest (2026-09-16)
+
+D3 shipped the road with six events on it. Six was enough to settle the
+question it was built to answer — a map with something on it beats a corridor
+between menus, and a clock that stops for it beats a fast-forward that skips
+the game. It was not enough to ride for an evening. At one roll per six
+world-hours the table came round inside a single crossing, and the second time
+a stream ran wrong in the same afternoon the card stopped being news.
+
+`core/travel.gd` now carries fourteen. Both of D3's rules are untouched:
+standing orders are still set once on the party screen, and an event still
+resolves itself against the orders already standing rather than stopping to ask
+anything. What changed is how much road there is between repeats, what the road
+asks for, and what it deals.
+
+**What it asks for.** The six originals rolled Survival, Perception,
+Persuasion, Insight, Investigation and Medicine. Everything else on a sheet —
+Athletics, History, Religion, Nature, Animal Handling, and the two lying
+skills — was dead weight the moment a fight ended. Each of the eight new events
+is anchored on one of those: a ford that wants Athletics, a waystone that wants
+History, a crossroads shrine that wants Religion, a storm that wants Nature, a
+carter's spooked team that wants Animal Handling, and a toll post that will
+take Intimidation, Deception or Persuasion, whichever the party is best at.
+
+**What it deals.** D3's events could cost time, cost HP, pay gold, or reveal a
+lair. These add four more payoffs, one event each so that none of them is a
+reskin of another: a wound taken off at the shrine (a share of max HP, to
+everyone still standing — never the dead, because a shrine by the road must not
+look like a cheaper resurrection), gear lost to a river, coin lost at a toll
+post, plain sellable salvage out of a dead company's wreck, and goodwill with
+the locals' faction for pulling a cart out of a ditch — the one road event whose
+payoff is not on the party sheet at all, and the only place `FactionOpinion`
+moves outside a town.
+
+**The gates.** A card nobody can argue with had better not describe a world the
+player can see is not there. Two optional keys on an event decline the roll
+instead:
+
+| key | what it gates on | why |
+|---|---|---|
+| `bands` | the D6 country underfoot (`core/regions.gd`) | nobody is manning a toll post in the Far Deeps; nobody's company lies dead on a farm road |
+| `needs` | a state of the party or the map | the shrine only comes up when somebody is actually hurt; the carter only when there are locals whose goodwill is worth something |
+
+An unknown `needs` fails closed — a requirement this version does not
+understand is a card it must not show. A world too small to band, or one with
+no player on it (a test harness, a save mid-load), drops the band gate rather
+than the event.
+
+**Sizes.** Everything on this table stays small on purpose: a road event is
+something that happened between two places, not a fight and not a reward node.
+A storm sat out costs less than the worst ground (180 world-minutes against
+240); the old straight road hands back more than a clear day does (120 against 90,
+because clear running asks for no check at all); the snare's toll is under the
+bad water's;
+and the `maxi(1, ...)` floor that has always kept foul water from dropping
+anybody is now shared by every HP cost on the table, because there is no fight
+out there to drop somebody in and nobody to pick them back up. A toll takes
+what is in the purse and never more, and says so on the card when the purse
+would not cover it.
+
+**The card.** `scenes/world/event_card.gd` grew chips for the new payoffs
+(healing, salvage, and who heard about a favour) and — the one fix that was not
+new work — gold now renders signed. D4's parley toll has always passed a
+negative gold through this card, and the card has always drawn it as
+`+-40 gold`. The skill on the roll line is read off the catalog rather than
+`capitalize()`d, which is the difference between "Animal Handling" and
+"Animalhandling".
+
+`tests/test_travel.gd` pins the gates in both directions (no toll posts in the
+deeps, no wrecks in the heartland, no shrines for a party at full HP), the four
+new payoffs, and the invariants: the purse never goes negative, the healing
+never goes past full, the dead stay dead, and nothing on the road drops
+anybody. Two of those tests replay a known seed onto a party in a known state
+rather than searching with the party under test — a search spends and earns as
+it goes, so by the time it finds a failed toll the purse it was told to empty
+has been paid twice over by wayfarers.

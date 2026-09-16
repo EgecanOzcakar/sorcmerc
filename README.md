@@ -210,6 +210,26 @@ title screen; without it, "New run" goes straight to the open world.
 `SORCMERC_UNLOCK_DLC=1` (like `SORCMERC_PLAYTEST=1`) owns every paid pack — see
 `docs/modding.md`.
 
+## Pull requests
+
+Every feature or visible change in a PR comes with a **screenshot of it
+working** — one per feature, attached to the PR description. Green tests say
+the code runs; the screenshot says it looks right. Reviewers reject a PR that
+changes what the player sees without showing it.
+
+The `tests/shot_*.gd` scripts render one for you:
+
+```sh
+godot --path . -s tests/shot.gd                        # a combat board mid-fight -> combat_screen.png
+godot --path . -s tests/shot_world.gd                  # the open world -> world_screen.png (not headless: the capture hangs)
+godot --headless --path . -s tests/shot_screens.gd     # every menu screen -> shots_tmp/ (SHOT_ONLY=party for one)
+```
+
+or just run the game (`godot --path . scenes/main.tscn`) and capture the window.
+For a change that is not visual — a rule, a save format, a balance number —
+say so in the PR and paste the test output instead. `.github/PULL_REQUEST_TEMPLATE.md`
+has the checklist.
+
 ## Reporting a bug
 
 Every screen has a way in: **Report a bug** on the title screen's footer, in the
@@ -228,10 +248,12 @@ handler for `https` — there is an optional second door: **Send it anonymously*
 posts the report to a small Cloudflare Worker (`tools/bug-relay/`) that holds a
 repo-scoped token and files the issue. It is the fallback and it stays the
 fallback, because the issue arrives with nobody to reply to; the filed issue
-says so on its own face. It is also entirely opt-in — the button only appears in
-a build with a relay compiled in, and the repo ships with none. See
-`tools/bug-relay/README.md` to deploy one, or don't, and the browser path is the
-only path.
+says so on its own face. The button only appears in a build with a relay
+compiled in — this repo has one deployed and its URL baked into
+`core/bug_report.gd` (the URL is a public endpoint; the GitHub token lives in
+the Worker and the shared key is never committed). `SORCMERC_BUG_RELAY=off`
+runs as if there were none. See `tools/bug-relay/README.md` to deploy your own,
+or don't, and the browser path is the only path.
 
 What rides along with the description: the build and engine version, the
 platform, the screen it was filed from and that screen's live state (the board

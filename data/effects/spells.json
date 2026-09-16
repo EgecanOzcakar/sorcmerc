@@ -95,6 +95,7 @@
   },
   "hellish-rebuke": {
     "cost": "reaction", "shape": "single", "range_ft": 60, "save": "dex", "half_on_save": true,
+    "reaction": {"trigger": "damaged_by_attack"},
     "damage": [{"count": 2, "sides": 10, "type": "fire"}],
     "upcast": {"per_level": {"count": 1, "sides": 10}}
   },
@@ -111,7 +112,7 @@
   "hideous-laughter": {
     "cost": "action", "shape": "single", "range_ft": 30, "save": "wis",
     "conditions": ["prone", "incapacitated"], "repeat_save": "on_damage",
-    "upcast": {"per_level": {"count": 0}}
+    "upcast": {"per_level": {"targets": 1}}
   },
   "sleep": {
     "cost": "action", "shape": "sphere", "size_ft": 5, "range_ft": 60, "save": "wis",
@@ -135,17 +136,17 @@
   },
 
   "_note_ranges": "2026-09-15: range_ft for every combat-castable spell the regex draft left rangeless (it never carries a range, so effects.gd defaulted them all to 5 ft = touch). Areas carry shape + size_ft: up to a 5 m radius is one hex, bigger is a corner-anchored circle, a line runs from the caster through the aimed hex (adapter.gd _finish_verbs). Concentration spells hold their conditions until concentration ends; repeat_save says how the target shakes one off (end_turn default, on_damage, damage_ends, none).",
-  "charm-person": {"shape": "single", "range_ft": 30, "repeat_save": "none"},
+  "charm-person": {"upcast": {"per_level": {"targets": 1}}, "shape": "single", "range_ft": 30, "repeat_save": "none"},
   "hunters-mark": {"shape": "single", "range_ft": 90},
   "calm-emotions": {"shape": "sphere", "size_ft": 20, "range_ft": 60, "repeat_save": "none"},
-  "hold-person": {"shape": "single", "range_ft": 60, "repeat_save": "end_turn"},
+  "hold-person": {"upcast": {"per_level": {"targets": 1}}, "shape": "single", "range_ft": 60, "repeat_save": "end_turn"},
   "moonbeam": {"shape": "cylinder", "size_ft": 5, "range_ft": 120},
   "phantasmal-force": {"shape": "single", "range_ft": 60, "repeat_save": "end_turn"},
   "web": {"shape": "cube", "size_ft": 20, "range_ft": 60, "repeat_save": "end_turn"},
   "hypnotic-pattern": {"shape": "cube", "size_ft": 30, "range_ft": 120, "repeat_save": "damage_ends"},
   "stinking-cloud": {"shape": "sphere", "size_ft": 20, "range_ft": 90, "repeat_save": "end_turn"},
-  "banishment": {"shape": "single", "range_ft": 30, "repeat_save": "none"},
-  "charm-monster": {"shape": "single", "range_ft": 30, "repeat_save": "none"},
+  "banishment": {"upcast": {"per_level": {"targets": 1}}, "shape": "single", "range_ft": 30, "repeat_save": "none"},
+  "charm-monster": {"upcast": {"per_level": {"targets": 1}}, "shape": "single", "range_ft": 30, "repeat_save": "none"},
   "dominate-beast": {"shape": "single", "range_ft": 60, "repeat_save": "on_damage"},
   "evards-black-tentacles": {"shape": "sphere", "size_ft": 20, "range_ft": 90, "repeat_save": "end_turn"},
   "ice-storm": {"shape": "cylinder", "size_ft": 20, "range_ft": 300},
@@ -162,5 +163,11 @@
   "freedom-of-movement": {"shape": "single", "range_ft": 5},
   "crusaders-mantle": {"shape": "single", "range_ft": 5},
   "ensnaring-strike": {"shape": "single", "range_ft": 5},
-  "lightning-bolt": {"shape": "line", "size_ft": 100, "range_ft": 5}
+  "lightning-bolt": {"shape": "line", "size_ft": 100, "range_ft": 5},
+
+  "_note_reactions": "A `reaction` block is what makes a reaction-cost spell reach the board at all: combat.gd fires the named trigger at the moment it happens and resolves the answer itself, so a reaction is never a button (combat-design.md §2 — zero prompts). `counter` means the trigger's spell unravels on a failed save; `min_level` is how low the reaction stoops, so a 3rd-level slot is not spent to swat a cantrip. Counterspell's numbers come from its catalog description: a Constitution save at DC 10 + the countered spell's level, and a countered caster keeps the slot — the action is the whole cost.",
+  "counterspell": {
+    "cost": "reaction", "shape": "single", "range_ft": 60, "save": "con",
+    "reaction": {"trigger": "spell_cast", "counter": true, "min_level": 1}
+  }
 }

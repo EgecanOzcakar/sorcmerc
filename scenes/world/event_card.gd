@@ -28,6 +28,7 @@
 #    keep it for the next event.
 extends Control
 
+const Catalog = preload("res://core/rules/catalog.gd")
 const Icons = preload("res://core/ui_icons.gd")
 
 # The only thing the world screen has to listen for. Emitted exactly once per
@@ -48,10 +49,13 @@ const BAR_W := 5.0            # the kind stripe down the panel's left edge
 # strength; this is that, in whichever colour the event's kind is.
 const BORDER_ALPHA := 0.5
 
-# travel.gd's longest text (a passed "tracks" plus the lair name it appends) is
-# three lines at PANEL_MAX_W and six at ~400px. The cap exists only so a future
-# event with a paragraph in it cannot grow the card off the screen.
-const BODY_LINES := 6
+# travel.gd's longest text (D3.1's carter, plus the settlement name it appends)
+# measures three lines at PANEL_MAX_W, four at ~400px and seven at PANEL_MIN_W.
+# The cap exists only so a future event with a paragraph in it cannot grow the
+# card off the screen — which means it has to sit ABOVE the longest thing the
+# table can actually say, because _wrap() drops what does not fit rather than
+# scrolling it. Six was under the carter at the narrow end; eight clears it.
+const BODY_LINES := 8
 const TITLE_LINES := 2
 const LINE_GAP := 5.0         # between wrapped lines of the same block
 const BLOCK_GAP := 12.0       # between blocks
@@ -193,9 +197,23 @@ func _flag(key: String) -> bool:
 # the roll. Signed bonus rather than world.gd's "%d+%d": a forced march is a -2
 # (travel.gd's PACE), and "14+-2" is not a roll anybody can read.
 func _roll_text() -> String:
-	var skill := _s("skill", "check").capitalize()
-	return "%s %d%s vs DC %d" % [skill, int(_num("nat")),
+	return "%s %d%s vs DC %d" % [_skill_label(), int(_num("nat")),
 		"%+d" % int(_num("bonus")), int(_num("dc"))]
+
+
+# The catalog's own name for the skill, falling back to the id dressed up.
+# capitalize() alone is right for every single-word skill and wrong for the one
+# that is two: "animalhandling" is an id, "Animal Handling" is what the sheet
+# calls it, and the road rolls it (travel.gd's carter). Catalog.skills() is a
+# cached parse, so this is a dictionary lookup per draw.
+func _skill_label() -> String:
+	var id := _s("skill", "check")
+	var entry: Variant = Catalog.skills().get(id, null)
+	if entry is Dictionary:
+		var named := String(entry.get("name", ""))
+		if named != "":
+			return named
+	return id.capitalize()
 
 
 func _cname() -> String:
@@ -350,20 +368,38 @@ func _op(pos: Vector2, text: String, fs: int, col: Color, max_w: float) -> Dicti
 # what happened, the chips say what it is worth.
 func _chips() -> Array:
 	var out: Array = []
+	# Signed rather than always "+": D3.1 put costs on the purse too (a ford that
+	# takes a pack, a toll post that is paid), and "+-40 gold" is not a number
+	# anybody can read. Colour carries the sign as well, so the direction is
+	# legible before the digits are.
 	var gold := int(_num("gold"))
 	if gold != 0:
-		out.append({"text": "+%d gold" % gold, "col": Icons.COL_GOLD})
+		out.append({"text": "%+d gold" % gold,
+			"col": Icons.COL_GOLD if gold > 0 else Icons.COL_FOE})
 	var hurt := int(_num("hurt"))
 	if hurt > 0:
 		out.append({"text": "-%d hp across the party" % hurt, "col": Icons.COL_FOE})
+	var healed := int(_num("healed"))
+	if healed > 0:
+		out.append({"text": "+%d hp across the party" % healed, "col": Icons.COL_PARTY})
 	var m := _num("minutes")
 	# Under a minute is not a consequence, it is rounding.
 	if absf(m) >= 1.0:
 		out.append({"text": "%s %s" % [_span(absf(m)), "lost on the road" if m > 0.0 else "saved"],
 			"col": Icons.COL_FOE if m > 0.0 else Icons.COL_PARTY})
+	var item := _s("item_name")
+	if item != "":
+		out.append({"text": "%s — in the stash" % item, "col": Icons.COL_GOLD})
 	var lair := _s("lair")
 	if lair != "":
 		out.append({"text": "%s — on the map now" % lair, "col": Icons.COL_ACCENT})
+	# Goodwill has no number on this card on purpose: the score it moves is a
+	# faction's (core/faction_opinion.gd) and it is read in their markets and
+	# their quest boards, not here. Naming who heard about it is the part the
+	# player can act on.
+	var thanks := _s("thanks")
+	if thanks != "":
+		out.append({"text": "%s hears of it" % thanks, "col": Icons.COL_ACCENT})
 	return out
 
 
