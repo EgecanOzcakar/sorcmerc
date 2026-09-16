@@ -42,6 +42,7 @@ const Regions = preload("res://core/regions.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const RNG = preload("res://core/rng.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
+const Ach = preload("res://core/achievements.gd")
 
 # How deep a site runs. Three rooms is the shallowest thing that can still be
 # called an adventuring day (two fights and a boss on one set of slots); six is
@@ -148,6 +149,7 @@ var room: Dictionary = {}
 var state := "picking"
 var log: Array = []
 var rng
+var _rested := false     # T19: did this delve stop for its short rest?
 
 
 static func for_lair(lair, party, world):
@@ -337,6 +339,7 @@ func finish_combat(result: Dictionary) -> void:
 		return
 	if String(result.get("outcome", "")) != "Victory":
 		state = "wiped"
+		Ach.unlock("lair_wipe")
 		say("The party goes down in %s." % room.get("title", "the dark"))
 		return
 	say("%s is cleared." % room.get("title", "The room"))
@@ -369,6 +372,7 @@ func short_rest() -> bool:
 	if state != "visiting" or room.get("kind", "") != "rest" or room.get("rested", false):
 		return false
 	room["rested"] = true
+	_rested = true
 	Visit.rest(party, world, "short-rest")
 	say("An hour in %s. Not a night's sleep, but it is something." % room.get("title", "the dark"))
 	return true
@@ -390,6 +394,10 @@ func leave() -> void:
 		# starts, so something can move back in a day from now
 		# (core/world_lairs.gd's RESPAWN).
 		WorldLairs.mark_cleared(lair, world.clock.elapsed if world != null else -1.0)
+		Ach.bump("lairs")
+		Ach.record("deepest_lair", rooms.size())
+		if not _rested:
+			Ach.unlock("lair_no_rest")
 		say("%s is cleared out." % lair.sname)
 		return
 	state = "picking"
@@ -452,5 +460,6 @@ func withdraw() -> bool:
 	if state != "picking":
 		return false
 	state = "withdrawn"
+	Ach.unlock("lair_withdraw")
 	say("The party backs out of %s, and it is still down there." % lair.sname)
 	return true

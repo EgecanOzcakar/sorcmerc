@@ -25,6 +25,7 @@ const Scaler = preload("res://core/scaler.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
+const AchievementsOverlay = preload("res://scenes/achievements/achievements.gd")
 const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
@@ -142,6 +143,9 @@ func show_title() -> void:
 	foot.add_theme_constant_override("separation", 12)
 	foot.add_child(_quiet("Settings", func(): SettingsOverlay.toggle(self)))
 	foot.add_child(_quiet("Field manual", func(): ManualOverlay.toggle(self)))
+	# The achievements viewer had no door in the whole game until now: the model
+	# and the panel both shipped with T19 and nothing ever opened it.
+	foot.add_child(_quiet("Achievements", func(): AchievementsOverlay.open(self)))
 	foot.add_child(_quiet("Report a bug", report_bug))
 	foot.add_child(_quiet("Random battle (debug)", show_random_battle))
 	var spacer := Control.new()

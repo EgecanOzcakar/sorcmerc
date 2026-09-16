@@ -34,6 +34,7 @@
 extends RefCounted
 
 const Catalog = preload("res://core/rules/catalog.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const PATH := "user://progression.json"
 const FORMAT := "sorcmerc-progression"
@@ -163,6 +164,8 @@ static func add_lifetime_xp(n: int) -> int:
 	if n > 0:
 		current().lifetime_xp += n
 		save_state()
+		Ach.record("lifetime_xp", current().lifetime_xp)
+		_note_unlocks()
 	return current().lifetime_xp
 
 # XP earned while playing a character of `class_id`, banked per class.
@@ -170,7 +173,29 @@ static func add_class_xp(class_id: String, n: int) -> int:
 	if n > 0 and (CLASS_COST.has(class_id) or STARTING_CLASSES.has(class_id)):
 		current().class_xp[class_id] = class_xp_of(class_id) + n
 		save_state()
+		for sub_id in paid_subclasses(class_id):
+			if is_subclass_unlocked(String(sub_id)):
+				Ach.unlock("unlock_subclass")
+				break
 	return class_xp_of(class_id)
+
+# T19 — an unlock here is a threshold crossed, not an event fired: nothing in
+# this file ever "grants" a species or a class, they simply become true. So the
+# achievements for them are read off the same predicates the viewer reads,
+# whenever the number that decides them moves. A playtest build has everything
+# open from the start and is deliberately left out — earning nothing is the
+# honest answer when nothing was earned.
+static func _note_unlocks() -> void:
+	if _playtest_build():
+		return
+	for id in SPECIES_COST:
+		if is_species_unlocked(String(id)):
+			Ach.unlock("unlock_species")
+			break
+	for id in CLASS_COST:
+		if is_class_unlocked(String(id)):
+			Ach.unlock("unlock_class")
+			break
 
 static func lifetime_xp_total() -> int:
 	return current().lifetime_xp

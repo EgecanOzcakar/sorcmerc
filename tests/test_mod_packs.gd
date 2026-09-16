@@ -10,6 +10,8 @@ const Registry = preload("res://core/mod/registry.gd")
 const Entitlement = preload("res://core/mod/entitlement.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Scaler = preload("res://core/scaler.gd")
+const Effects = preload("res://core/rules/effects.gd")
+const Potions = preload("res://core/potions.gd")
 
 var _pass := 0
 var _fail := 0
@@ -36,6 +38,8 @@ func _init() -> void:
 	test_entitlement()
 	test_registry()
 	test_overlays()
+	test_effect_overlays()
+	test_effect_overlays_reject()
 	test_shipped_content()
 	print("test_mod_packs: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -197,6 +201,81 @@ func test_overlays() -> void:
 	Registry.set_enabled("ghouls", false)
 	check(Catalog.monster("ash-ghoul").is_empty(), "switching the pack off takes it back out")
 	check(int(Catalog.monster("goblin").get("ac", 0)) == ac_before, "...retunes included")
+	Catalog.warnings.clear()
+
+# --- effects overlays: what a pack's content DOES ---------------------------
+
+# T33/T94 added data/effects/*.json, and until this the allowlist did not name
+# them: a pack could add a spell and never be able to say what casting it does.
+func test_effect_overlays() -> void:
+	_write("emberwork", {"pack.json": _manifest("emberwork", {"data": {
+			"spells.json": "spells.json",
+			"effects/spells.json": "spell-mechanics.json",
+			"magic-items.json": "items.json",
+			"effects/potions.json": "potion-mechanics.json",
+			"effects/features.json": "feature-mechanics.json"}}),
+		"spells.json": [
+			{"id": "ember-lance", "name": "Ember Lance", "level": 1,
+			 "school": "evocation", "castingTime": "Action", "range": "60 feet",
+			 "duration": "Instantaneous", "concentration": false, "ritual": false,
+			 "classes": ["wizard"], "description": "A lance of cinders.",
+			 "mechanics": null}],
+		"spell-mechanics.json": {
+			"_note": "an underscore key is an authoring comment, not a record",
+			"ember-lance": {"cost": "action", "shape": "single", "range_ft": 60,
+				"save": "dex", "half_on_save": true,
+				"damage": [{"count": 2, "sides": 8, "type": "fire"}],
+				"upcast": {"per_level": {"count": 1, "sides": 8}}}},
+		"items.json": [
+			{"id": "potion-of-embers", "name": "Potion of Embers", "rarity": "uncommon",
+			 "type": "potion", "description": "Warm all the way down."}],
+		"potion-mechanics.json": {
+			"potion-of-embers": {"status": {"bonus_damage": 2}, "rounds": 10,
+				"minutes": 30, "text": "+2 damage while it burns"}},
+		"feature-mechanics.json": {
+			"emberwork-cinderskin": {"kind": "self_buff", "cost": "bonus",
+				"uses": 1, "status": {"resist": ["fire"]}, "duration": 10}}})
+	Registry.scan(true)
+	check(Registry.find("emberwork").live(),
+		"a pack may declare effects/*.json: %s" % ", ".join(Registry.find("emberwork").errors))
+	Registry.apply_data()
+	var m := Effects.spell("ember-lance")
+	check(not m.is_empty(), "a pack's spell is castable, because the pack said what it does")
+	check(int(m.get("range_ft", 0)) == 60 and m.get("save", "") == "dex",
+		"...with the mechanics it authored, not a guess off the prose")
+	check(Potions.is_potion("potion-of-embers"), "a pack's potion is drinkable")
+	check(not Effects.feature("emberwork-cinderskin").is_empty(), "a pack's feature has a mechanic")
+	check(Effects.validate().is_empty(),
+		"the merged catalog still validates: %s" % ", ".join(Effects.validate()))
+
+	Registry.set_enabled("emberwork", false)
+	Registry.apply_data()
+	check(Effects.spell("ember-lance").is_empty(), "switching it off takes the mechanic back out")
+	check(not Potions.is_potion("potion-of-embers"), "...the potion too")
+	Catalog.warnings.clear()
+
+# Every silent dead-end the vocabulary has, turned into a line in the browser.
+func test_effect_overlays_reject() -> void:
+	_write("badeffects", {"pack.json": _manifest("badeffects", {"data": {
+			"effects/features.json": "f.json", "effects/spells.json": "s.json",
+			"effects/potions.json": "p.json"}}),
+		"f.json": {
+			"bad-kind": {"kind": "explodes", "value": 1},
+			"bad-reaction": {"kind": "reaction", "cost": "reaction", "trigger": "on_tuesday"}},
+		"s.json": {
+			"nowhere-spell": {"cost": "action", "damage": [{"count": 1, "sides": 6}]},
+			"fireball": {"cost": "action", "damage": [{"dice": "8d6"}]}},
+		"p.json": {"potions-of-healing": {"text": "nothing at all"}}})
+	Registry.scan(true)
+	var p = Registry.find("badeffects")
+	check(p.status == "broken", "a pack whose effects cannot work does not load")
+	var said := ", ".join(p.errors)
+	check("explodes" in said, "an unknown feature kind is named")
+	check("on_tuesday" in said, "a reaction hung off a trigger nothing fires is named")
+	check("nowhere-spell" in said, "a mechanic for a spell that does not exist is named")
+	check("count, sides" in said, "damage the verb builder cannot read is named")
+	check("does nothing" in said, "a potion with no effect is named")
+	Registry.set_enabled("badeffects", false)
 	Catalog.warnings.clear()
 
 # --- what ships in res://content -------------------------------------------

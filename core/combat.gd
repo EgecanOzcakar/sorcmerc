@@ -33,6 +33,16 @@ const MAX_ROUNDS := 60  # safety guard; a real fight ends in ~4-6
 var rng
 var combatants: Array = []
 var party = null   # core/party.gd when a real party fights: its stash is the potion shelf
+# T19: does what happens in here count towards this machine's achievements?
+# False for the off-screen fights core/world_battle.gd resolves between two NPC
+# bands — both sides are strangers, and one of them is only called "party"
+# because Encounter.build only ever spawns the foe side.
+var tracked := true
+# Per-fight bookkeeping for the achievements that are about a whole fight
+# rather than a single blow: the two ends of the die, and a turn's body count.
+var _saw_nat20 := false
+var _saw_nat1 := false
+var _kills_this_turn := 0
 var board: Dictionary = {}
 var order: Array = []
 var turn_idx: int = 0
@@ -173,7 +183,7 @@ func smashable_near(c) -> Dictionary:
 			return o
 	return {}
 
-func destroy_object(o: Dictionary) -> void:
+func destroy_object(o: Dictionary, by = null) -> void:
 	var arr: Array = objects()
 	for i in arr.size():
 		if arr[i]["pos"] == o["pos"]:
@@ -185,6 +195,8 @@ func destroy_object(o: Dictionary) -> void:
 	var dmg := Dice.roll(rng, String(h.get("dice", "2d6")))
 	log.append("The %s bursts — %d %s to everything beside it." % [o["type"], dmg,
 		h.get("damage_type", "fire")])
+	if tracked and by != null and by.team == "party":
+		Ach.unlock("explosive")
 	Sound.play_sfx("burst")
 	for c in combatants:
 		if c.conscious() and Hex.distance(c.pos, o["pos"]) <= 1:
@@ -194,11 +206,11 @@ func destroy_object(o: Dictionary) -> void:
 # standing there — a barrel in a fireball's blast shouldn't survive it just
 # because "smash" is normally its own separate action. duplicate() first:
 # destroy_object mutates the same array objects() hands back.
-func _destroy_in_area(hexes: Array) -> void:
+func _destroy_in_area(hexes: Array, by = null) -> void:
 	for o in objects().duplicate():
 		if int(o.get("hp", 0)) > 0 and o["pos"] in hexes:
 			log.append("The %s is caught in the blast and comes apart." % o["type"])
-			destroy_object(o)
+			destroy_object(o, by)
 
 func _roll_initiative() -> void:
 	for c in combatants:
@@ -224,6 +236,10 @@ func current():
 
 func begin_turn() -> void:
 	var c = current()
+	# Not in begin_turn_for(): summon() calls that one mid-turn to stand a new
+	# creature up, and a wolf arriving must not wipe the tally of what the
+	# druid who called it has already killed this turn.
+	_kills_this_turn = 0
 	begin_turn_for(c)
 	if c.is_down():
 		_death_save(c)
@@ -711,6 +727,9 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	# T27: past the slot check, so a refused cast is silent. T9z: the school
 	# picks the sting — evocation booms, necromancy drones, abjuration chimes.
 	Sound.play_sfx(WeaponSfx.for_spell(String(v.get("spell", ""))))
+	if tracked and caster.team == "party":
+		Ach.bump("spells")
+		Ach.collect("schools", String(Catalog.spell(String(v.get("spell", ""))).get("school", "")))
 	if not (caster.statuses.get("invisible") is Dictionary and caster.statuses["invisible"].get("sticky", false)):
 		caster.statuses.erase("invisible")
 	if v.get("concentration", false):
@@ -763,7 +782,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 				continue   # Spirit Guardians picks who it spares; here that is your side
 			_spell_hit(c, v, notation, dc, caster)
 			hit_any = true
-		_destroy_in_area(area)
+		_destroy_in_area(area, caster)
 		return {"area": area, "caught": hit_any}
 	log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
 	var out := _spell_hit(target, v, notation, dc, caster)
@@ -828,6 +847,11 @@ func legal_area(caster, v: Dictionary, target) -> bool:
 	return true
 
 func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> Dictionary:
+	# T19: the damage types a party has actually dealt. Weapons only ever cover
+	# the three physical ones (the SRD has no others), so without the spell side
+	# of it "every flavour" would top out at three and never be earnable.
+	if tracked and caster != null and caster.team == "party":
+		Ach.collect("damage_types", String(v.get("damage_type", "")))
 	if v.has("attack_bonus"):
 		# Scorching Ray etc.: several independent attack rolls from one cast, all
 		# at this same target (RAW also lets you split rays across several
@@ -899,6 +923,8 @@ func summon(caster, v: Dictionary):
 	var c = load("res://core/encounter.gd").spawn(String(m["id"]), 1.0, caster.team, spot, n)   # load: encounter.gd preloads this file
 	if c == null:
 		return null
+	if tracked and caster.team == "party":
+		Ach.bump("summons")
 	c.short = c.cname.replace(" %d" % n, "")   # the bar says "Dire Wolf", the log "Ilsa's Dire Wolf 1"
 	c.cname = "%s's %s" % [caster.cname.get_slice(" ", 0), c.cname]
 	combatants.append(c)
@@ -995,6 +1021,8 @@ func gain_exhaustion(c, levels := 1) -> int:
 	c.statuses["exhaustion"] = {"level": lvl}
 	log.append("%s gains exhaustion (level %d)." % [c.cname, lvl])
 	if lvl >= int(Effects.condition("exhaustion").get("max_level", 6)):
+		if tracked:
+			Ach.unlock("exhaust_death")
 		log.append("%s collapses, spent." % c.cname)
 		Sound.play_sfx("collapse")   # before _kill, so it is not buried under the kill sting
 		_kill(c)
@@ -1394,6 +1422,8 @@ func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
 			continue
 		if not _spend(c, "reaction"):
 			continue
+		if tracked and c.team == "party":
+			Ach.bump("reactions")
 		if v.get("once_per", "") == "turn":
 			c.econ["used"][v["id"]] = true
 		# What happens next is the verb's business, not the trigger's.
@@ -1431,6 +1461,8 @@ func _counter(reactor, v: Dictionary, ctx: Dictionary) -> bool:
 		log.append("  %s holds %s together (DC %d)." % [caster.cname, spell_label, dc])
 		return false
 	log.append("  %s unravels in %s's hands." % [spell_label, caster.cname])
+	if tracked and reactor.team == "party":
+		Ach.bump("counterspells")
 	return true
 
 # Damage a held buff adds to a melee swing (Rage), extras-shaped so the log
@@ -1488,6 +1520,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		if parry > 0:
 			ac += parry
 			hit = false
+			if tracked and attacker.team == "party":
+				Ach.unlock("parry")
 	if hit and not crit and _auto_crit(attacker, target, opts):
 		crit = true
 	var out = {
@@ -1495,6 +1529,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		"nat": nat, "dice": r.dice, "bonus": atk_bonus, "total": total, "ac": ac,
 		"hit": hit, "crit": crit, "damage": 0, "extras": [], "mode": mode,
 	}
+	_score_roll(attacker, nat, crit)
 	if hit:
 		var dmg_detail := Dice.roll_detailed(rng, notation, crit)
 		var dmg: int = dmg_detail["total"]
@@ -1518,8 +1553,16 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	if not free:
 		attacker.statuses.erase("helped")  # the granted advantage is spent
 	_log_attack(out, oa)
+	if hit and tracked and attacker.team == "party":
+		Ach.record("biggest_hit", int(out.damage))
+		Ach.collect("damage_types", _damage_type(attacker))
 	if hit:
 		_apply_damage(target, out.damage, _damage_type(attacker), crit)
+		if tracked and attacker.team == "party" and target.is_dead():
+			if crit:
+				Ach.unlock("crit_kill")
+			if oa:
+				Ach.unlock("oa_kill")
 		if target.conscious():
 			_hit_riders(attacker, target)
 			# The other half of hit_by_attack: one trigger changes the number
@@ -1548,6 +1591,21 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	if not opts.get("no_mastery", false):
 		_mastery_rider(attacker, target, hit)
 	return out
+
+# T19 — what one attack roll is worth to this machine's profile. Only the
+# party's own dice count, and only in a fight somebody is actually playing.
+func _score_roll(attacker, nat: int, crit: bool) -> void:
+	if not tracked or attacker.team != "party":
+		return
+	if nat == 20:
+		_saw_nat20 = true
+	elif nat == 1:
+		_saw_nat1 = true
+		Ach.bump("fumbles")
+	if crit:
+		Ach.bump("crits")
+	if _saw_nat20 and _saw_nat1:
+		Ach.unlock("both_ends")
 
 # --- weapon mastery (2024 PHB) ----------------------------------------
 #
@@ -1757,6 +1815,8 @@ func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 		if target.team == "party":
 			downed[target.id] = true
 		if target.team == "foe" or overkill >= target.max_hp:
+			if tracked and target.team == "foe" and overkill >= target.max_hp:
+				Ach.unlock("overkill")
 			_kill(target)
 		else:
 			target.statuses["down"] = true
@@ -1813,6 +1873,15 @@ func _kill(c) -> void:
 	c.statuses["dead"] = true
 	c.statuses.erase("down")
 	c.hp = 0
+	if tracked and c.team == "foe":
+		Ach.bump("kills")
+		# src_id is what Encounter.spawn stamps on a generated foe; the
+		# hand-authored MVP room builds its monsters straight off the catalog
+		# and leaves it empty, where the plain id IS the monsters.json id.
+		Ach.collect("bestiary", String(c.src_id) if String(c.src_id) != "" else String(c.id))
+		_kills_this_turn += 1
+		if _kills_this_turn >= 3:
+			Ach.unlock("triple_kill")
 	log.append("%s is dead." % c.cname)
 	bark(c, "down")
 	_death_triggers(c)
@@ -1875,12 +1944,16 @@ func heal(c, amount: int) -> void:
 		c.death_f = 0
 	c.hp = mini(c.max_hp, maxi(c.hp, 0) + amount)
 	log.append("%s %s — %d HP (%d/%d)." % [c.cname, "revives" if revived else "is healed", amount, c.hp, c.max_hp])
+	if tracked and c.team == "party":
+		Ach.record("biggest_heal", amount)
+		if revived:
+			Ach.bump("allies_saved")
 	if revived:
 		_survived_down(c)
 
 # T19: a hero who went to 0 HP and came back — stabilised, nat-20'd, or healed.
 func _survived_down(c) -> void:
-	if c.team == "party":
+	if tracked and c.team == "party":
 		Ach.unlock("death_save")
 
 # --- movement -------------------------------------------------------
@@ -2004,6 +2077,8 @@ func act_hide(c) -> bool:
 	var roll: int = Dice.d20(rng).nat + c.stealth
 	if roll >= dc:
 		c.statuses["hidden"] = true
+		if tracked and c.team == "party":
+			Ach.unlock("hide_first")
 		log.append("%s slips out of sight — Stealth %d vs %d." % [c.cname, roll, dc])
 		return true
 	log.append("%s fails to hide — Stealth %d vs %d." % [c.cname, roll, dc])
@@ -2015,6 +2090,8 @@ func act_shove(attacker, target, choice: String) -> Dictionary:
 	if a <= d:
 		log.append("%s tries to shove %s — %d vs %d, fails." % [attacker.cname, target.cname, a, d])
 		return {"success": false}
+	if tracked and attacker.team == "party":
+		Ach.bump("shoves")
 	match choice:
 		"prone":
 			target.statuses["prone"] = true
@@ -2038,6 +2115,8 @@ func act_shove(attacker, target, choice: String) -> Dictionary:
 			var burn = Dice.roll(rng, notation)
 			log.append("%s shoves %s into the %s — %s = %d fire." % [attacker.cname, target.cname,
 				haz["type"], notation, burn])
+			if tracked and attacker.team == "party":
+				Ach.unlock("shove_hazard")
 			_apply_damage(target, burn)
 	return {"success": true}
 
@@ -2047,7 +2126,9 @@ func act_smash(actor) -> Dictionary:
 	if o.is_empty():
 		return {"error": "nothing to smash"}
 	log.append("%s smashes the %s apart." % [actor.cname, o["type"]])
-	destroy_object(o)
+	if tracked and actor.team == "party":
+		Ach.bump("smashed")
+	destroy_object(o, actor)
 	return {"smashed": o["type"]}
 
 # `magical` marks a save forced by a spell or an explicitly magical ability —

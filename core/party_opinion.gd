@@ -34,6 +34,7 @@
 extends RefCounted
 
 const Hex = preload("res://core/hex.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const RANGE := 100.0
 
@@ -159,6 +160,15 @@ static func adjust(party, a: String, b: String, delta: float) -> Dictionary:
 		s -= BREAKUP
 		broke = true
 	_write(party, a, b, s, st)
+	# T19: the bands this pair has just landed in. adjust() is the one door
+	# every score change comes through, so this is the one place to watch it.
+	match band(party, a, b):
+		"bonded":
+			Ach.unlock("bonded")
+		"rivals":
+			Ach.unlock("rivals")
+	if broke:
+		Ach.unlock("breakup")
 	return {"score": score(party, a, b), "broke_up": broke}
 
 static func band(party, a: String, b: String) -> String:
@@ -252,6 +262,7 @@ static func saved(party, saver: String, saved_id: String) -> Dictionary:
 	return adjust(party, saver, saved_id, SAVED)
 
 static func friendly_fire(party, caster: String, victim: String) -> Dictionary:
+	Ach.unlock("friendly_fire")
 	return adjust(party, caster, victim, -FRIENDLY_FIRE)
 
 # A won fight: everyone still standing at the end of it warms to everyone else
@@ -370,6 +381,7 @@ static func answer_courtship(party, a: String, b: String, accepted: bool) -> Dic
 		return {}
 	if accepted:
 		_write(party, a, b, score(party, a, b) + COURTSHIP_ACCEPTED, "lovers")
+		Ach.unlock("lovers")
 	else:
 		_write(party, a, b, score(party, a, b) - COURTSHIP_DECLINED, "declined")
 	return {"score": score(party, a, b), "status": status(party, a, b), "band": band(party, a, b)}

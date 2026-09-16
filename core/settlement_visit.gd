@@ -26,6 +26,7 @@ const Quest = preload("res://core/quest.gd")
 const Posting = preload("res://core/quest_posting.gd")
 const Potions = preload("res://core/potions.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Ach = preload("res://core/achievements.gd")
 
 # World-time is in minutes (scenes/world/world.gd's HUD reads elapsed/60 as hours).
 # Calibration knobs — a party crosses the demo map in ~20 world-minutes, so a
@@ -93,6 +94,7 @@ static func persuade(s, m: Dictionary, party, rng = null) -> Dictionary:
 # other trade at this opinion, just with the outright refusal lifted (still
 # priced like the worst possible customer, not a free pass).
 static func persuade_into_trading(s, m: Dictionary) -> Dictionary:
+	Ach.unlock("persuade_market")
 	var opened := market(s, float(m.get("gap", -1.0)), bool(m.get("battle", false)),
 		FactionOpinion.REFUSE_TRADE + 1.0)
 	opened["opinion"] = m.get("opinion", 0.0)   # the faction's real opinion hasn't moved
@@ -135,6 +137,8 @@ static func haggle(m: Dictionary, party, rng = null) -> Dictionary:
 	var nat: int = int(Dice.d20(rng, _talk_mode(ch, party))["nat"])
 	var ok: bool = nat + bonus >= HAGGLE_DC
 	var mult := (1.0 - HAGGLE_DISCOUNT) if ok else (1.0 + HAGGLE_PENALTY)
+	if ok:
+		Ach.bump("haggles")
 	var line := ("%s talks the price down (Persuasion %d+%d vs DC %d) — %d%% off for the rest of this visit."
 		% [ch.cname, nat, bonus, HAGGLE_DC, int(HAGGLE_DISCOUNT * 100)]) if ok else (
 		"%s oversells it and gets a cold shoulder (Persuasion %d+%d vs DC %d) — prices just got worse."
@@ -175,6 +179,7 @@ static func investigate_battle(s, m: Dictionary, party, rng = null) -> Dictionar
 	if ok:
 		gold = INVESTIGATE_GOLD_MIN + rng.roll_die(INVESTIGATE_GOLD_MAX - INVESTIGATE_GOLD_MIN + 1) - 1
 		party.add_gold(gold)
+		Ach.unlock("investigate_battle")
 	var line := ("%s picks the battlefield clean (Investigation %d+%d vs DC %d) — +%d gold."
 		% [ch.cname, nat, bonus, INVESTIGATE_DC, gold]) if ok else (
 		"%s finds nothing worth taking (Investigation %d+%d vs DC %d)."
@@ -275,6 +280,7 @@ static func buy(m: Dictionary, party, item_id: String) -> bool:
 	if price <= 0 or not party.spend_gold(price):
 		return false
 	party.stash_add(item_id)
+	Campaign._note_rarity(item_id)
 	m["stock"] = m["stock"].filter(func(e): return e["item_id"] != item_id)
 	return true
 
@@ -288,6 +294,7 @@ static func sell(m: Dictionary, party, item_id: String) -> bool:
 	if paid <= 0 or not party.stash_remove(item_id):
 		return false
 	party.add_gold(paid)
+	Ach.record("best_sale", paid)
 	return true
 
 # --- O9 / T9x: rest (short and long) ----------------------------------------
@@ -430,6 +437,7 @@ static func work_healer(s, party, rng = null) -> Dictionary:
 	var ok: bool = nat + bonus >= WORK_DC
 	var pay: int = WORK_PAY if ok else WORK_PAY_POOR
 	party.add_gold(pay)
+	Ach.unlock("healer_work")
 	var line := ("%s's %s gets them in the door; %s runs the ward all morning (Medicine %d+%d vs DC %d) — %d gp."
 		% [caster.cname, spell, ch.cname, nat, bonus, WORK_DC, pay]) if ok else (
 		"%s's %s gets them in the door, but %s is more hindrance than help (Medicine %d+%d vs DC %d) — %d gp for the trouble."
@@ -451,6 +459,7 @@ static func identify(party, item_id: String) -> Dictionary:
 		return {"ok": false, "cost": IDENTIFY_COST,
 			"text": "The librarian's fee is %d gp." % IDENTIFY_COST}
 	party.stash_identify(item_id)
+	Campaign._note_identified(item_id)
 	return {"ok": true, "cost": IDENTIFY_COST,
 		"text": "The librarian reads it off in a breath: %s (-%d gp)." % [
 			Campaign.item_name(item_id), IDENTIFY_COST]}
@@ -510,6 +519,7 @@ static func steal(s, party, world, m: Dictionary = {}, rng = null) -> Dictionary
 			value += int(e["price"])
 		gold = clampi(int(value * STEAL_SHARE), STEAL_GOLD_MIN, STEAL_GOLD_MAX)
 		party.add_gold(gold)
+	Ach.unlock("steal_first" if ok else "steal_caught")
 	# O7 hook — see OPINION_STEAL_* above.
 	s.pending_opinion_delta += OPINION_STEAL_SUCCESS if ok else OPINION_STEAL_CAUGHT
 	var line := ("%s lifts %d gp off the stall (Sleight of Hand %d+%d vs DC %d)."

@@ -4761,3 +4761,63 @@ back-to-back on master and on the branch with `tests/test_scaler.gd`'s own
 per-boss numbers `campaign.gd`'s BOSS_POOL copies verbatim were re-copied. The
 cost that does not show up in a win rate is length: a level-8 fight went from
 ~9.8 rounds to ~12. Resistance is duration, not difficulty.
+
+## T19b — the achievement list, filled out, and a toast to go with it
+
+T19 shipped 13 achievements, a model and a viewer nothing opened. This pass is
+the other three quarters of it: **139 achievements across eight sections**, the
+unlock calls for every one of them, a card that slides in from the top-right
+corner the moment something is earned, and a door onto the viewer from the
+title screen.
+
+**The model grew two things.** `unlock()` was the whole API and it can only
+express "did this ever happen". Anything counted — a hundred kills, 25 crits,
+a 60-damage blow, every school of magic — needed a tally underneath it, so
+`core/achievements.gd` now carries `counters` and `sets` beside `unlocked` and
+three ways to move them:
+
+```
+Ach.bump("kills")                 # a running total
+Ach.record("biggest_hit", 47)     # a high-water mark; only ever moves up
+Ach.collect("bestiary", "goblin") # distinct things; count() is its size
+```
+
+All three read back through one `count(key)` and check the same threshold
+definitions afterwards, so a call site is one line and never names an
+achievement id — moving a goal, or adding a fourth achievement to an existing
+counter, touches the list and nothing else. The file is the same
+`user://achievements.json` at `version: 2`, and a v1 file loads with its
+unlocks intact and the tallies at zero. Unlocks write through as before;
+tallies coalesce into one write every few seconds, because a busy fight bumps
+half a dozen of them a round.
+
+**The toast is an autoload**, `scenes/achievements/toast.gd`, for the same
+reason `core/audio.gd` is one: `core/*.gd` is pure logic the headless suite
+exercises and cannot own scene-tree nodes. The model appends whatever it just
+unlocked to a small capped queue; the layer drains it every frame, at most
+three cards at once, and nothing in the game — a fight, a shop, a level-up, the
+world map — knows it exists. A script run as the main loop instantiates no
+autoloads, so the whole suite earns achievements with nobody drawing them,
+which is exactly right. The player can turn the cards off in Settings; the
+achievement is still earned and still shows in the viewer.
+
+**What is actually hooked up.** Roughly fifty call sites across `combat.gd`,
+`encounter.gd`, `campaign.gd`, `party.gd`, `leveling.gd`, `progression.gd`,
+`site.gd`, `settlement_visit.gd`, `travel.gd`, `quest.gd`, `party_opinion.gd`,
+`faction_opinion.gd`, `potions.gd`, `trance.gd`, `road_spells.gd`,
+`world.gd` and five screens. The fight-shaped ones (won in one round, ran
+fifteen, nobody took a scratch, every knee on the ground and still a win) live
+in `Encounter.resolve_outcome`, which is the one function every real fight ends
+in.
+
+**One correctness fix fell out of it.** `Combat` gained a `tracked` flag, false
+for the NPC-vs-NPC battles `core/world_battle.gd` resolves off-screen. Those
+build a `Combat` whose two sides are called "party" and "foe" only because
+`Encounter.build` spawns the foe side — so before this, two bandit bands
+meeting on the far side of the map could earn the player `death_save`. Every
+new hook is gated on it, and so is the old one.
+
+**Hidden ones stay hidden.** 26 of the 139 draw as `???` in the viewer until
+they are earned, which is the ones that would otherwise read as a to-do list
+("go and lose a fight", "get caught stealing") or spoil their own joke. The
+rest show their progress bar while they are locked.

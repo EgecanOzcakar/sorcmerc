@@ -38,6 +38,7 @@ const Entitlement = preload("res://core/mod/entitlement.gd")
 const WorldPack = preload("res://core/mod/world_pack.gd")
 const Story = preload("res://core/mod/story.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Effects = preload("res://core/rules/effects.gd")
 
 const OFFICIAL_ROOT := "res://content"
 const USER_ROOT := "user://mods"
@@ -236,14 +237,104 @@ static func _validate_content(pack) -> void:
 		pack.warnings.append_array(story.warnings)
 		if story.ok():
 			pack._story = story
+	var overlays := {}
 	for target in m.data_files:
 		var src = _json(m.path_of(String(m.data_files[target])), pack.errors)
 		if src == null:
 			pass                     # _json already said what was wrong with it
 		elif not (src is Array or src is Dictionary):
 			pack.errors.append("%s must be a list or an object" % m.data_files[target])
+		else:
+			overlays[String(target)] = src
+	_check_effects(pack, overlays)
 	if not pack.errors.is_empty():
 		pack.status = "broken"
+
+# T33/T94 — a pack's data/effects/*.json overlays, checked against the same
+# vocabulary core/rules/effects.gd interprets at runtime. Without this a
+# mistyped `kind` is a feature that does nothing and a reaction hung off a
+# trigger nothing fires is a spell that never goes off: the silent failures
+# every other validator in this pipeline exists to turn into a line in the
+# browser.
+#
+# Ids are resolved against the catalog OR the pack's own overlays, because
+# apply_data() runs after the scan — a pack that adds a spell and then says
+# what that spell does is the ordinary case, not an error.
+static func _check_effects(pack, overlays: Dictionary) -> void:
+	var m = pack.manifest
+	for target in Manifest.EFFECT_FILES:
+		if not overlays.has(target):
+			continue
+		var src = overlays[target]
+		var where := String(m.data_files[target])
+		if not (src is Dictionary):
+			pack.errors.append("%s must be an object of {id: mechanics}" % where)
+			continue
+		for key in src:
+			var id := String(key)
+			if id.begins_with("_"):
+				continue          # _note and friends: authoring comments, by convention
+			var e = src[key]
+			if not (e is Dictionary):
+				pack.errors.append("%s: \"%s\" must be an object" % [where, id])
+				continue
+			match target:
+				"effects/features.json": _check_feature(pack, where, id, e)
+				"effects/spells.json": _check_spell_effect(pack, where, id, e, overlays)
+				"effects/conditions.json":
+					_check_effect_id(pack, where, id, "conditions.json", overlays, "condition")
+				"effects/potions.json":
+					_check_potion(pack, where, id, e, overlays)
+
+static func _check_feature(pack, where: String, id: String, e: Dictionary) -> void:
+	if not e.get("kind") in Effects.KINDS:
+		pack.errors.append("%s: \"%s\" has unknown kind \"%s\" (one of %s)"
+			% [where, id, e.get("kind"), ", ".join(Effects.KINDS)])
+	if String(e.get("cost", "")) == "reaction" and not e.get("trigger", "") in Effects.REACTION_TRIGGERS:
+		pack.errors.append("%s: \"%s\" is a reaction with no fired trigger \"%s\" (one of %s)"
+			% [where, id, e.get("trigger", ""), ", ".join(Effects.REACTION_TRIGGERS)])
+
+static func _check_spell_effect(pack, where: String, id: String, e: Dictionary,
+		overlays: Dictionary) -> void:
+	_check_effect_id(pack, where, id, "spells.json", overlays, "spell")
+	# The regex draft in the export writes damage as {"dice": "8d6"}; the verb
+	# builder reads count/sides and silently drops anything else, which is a
+	# 5th-level spell doing nothing rather than a 5th-level spell.
+	var d = e.get("damage")
+	if e.has("damage") and not (d is Array and not d.is_empty() and d[0] is Dictionary
+			and d[0].has("count") and d[0].has("sides")):
+		pack.errors.append("%s: \"%s\" damage needs [{count, sides, type}]" % [where, id])
+	if String(e.get("cost", "")) == "reaction":
+		var trig = e.get("reaction", {}).get("trigger", "") if e.get("reaction") is Dictionary else ""
+		if not trig in Effects.REACTION_TRIGGERS:
+			pack.errors.append("%s: \"%s\" is a reaction with no fired trigger \"%s\" (one of %s)"
+				% [where, id, trig, ", ".join(Effects.REACTION_TRIGGERS)])
+
+# A potion is a mechanic bolted onto a magic-items.json id: an alchemist's shelf
+# is exactly the ids listed here (campaign.gd's potion_ids), so one naming
+# nothing is an entry no bottle in the game will ever reach.
+static func _check_potion(pack, where: String, id: String, e: Dictionary,
+		overlays: Dictionary) -> void:
+	_check_effect_id(pack, where, id, "magic-items.json", overlays, "item")
+	if not (e.has("heal") or e.has("damage") or e.has("condition") or e.has("status")
+			or e.has("road")):
+		pack.errors.append("%s: \"%s\" does nothing — it needs heal, damage, condition, status or road"
+			% [where, id])
+
+# In the catalog already, or added by this pack's own overlay of `file`.
+static func _check_effect_id(pack, where: String, id: String, file: String,
+		overlays: Dictionary, noun: String) -> void:
+	if Catalog.index(file).has(id):
+		return
+	var own = overlays.get(file)
+	if own is Array:
+		for r in own:
+			if r is Dictionary and String(r.get("id", "")) == id:
+				return
+	elif own is Dictionary and own.has(id):
+		return
+	pack.errors.append("%s: \"%s\" is not a %s in the catalog or in this pack"
+		% [where, id, noun])
 
 # The item ids this pack adds through its own data overlays. They are not in
 # the catalog yet at scan time (apply_data runs after), so the story validator

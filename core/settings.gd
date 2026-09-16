@@ -9,7 +9,8 @@
 #   "default_difficulty": "normal", // "easy" | "normal" | "hard"
 #   "sfx_volume": 80,               // 0-100, the "SFX" audio bus (T27)
 #   "music_volume": 80,             // 0-100, the "Music" audio bus (T27)
-#   "reaction_prompts": true        // stop and ask before a reaction spends a slot
+#   "reaction_prompts": true,       // stop and ask before a reaction spends a slot
+#   "achievement_popups": true      // slide a card in when something is earned
 # }
 #
 # Read it with Settings.current() — loaded once, cached; save() writes the cache
@@ -54,6 +55,10 @@ var music_volume := DEFAULT_VOLUME
 # Uncanny Dodge — never ask: taking them is the right answer every time, and a
 # question with one sensible answer is a key press, not a decision.
 var reaction_prompts := true
+# The top-right card an earned achievement slides in on
+# (scenes/achievements/toast.gd). Off still earns and still records it — the
+# viewer is the record — it just stops the game talking over itself mid-fight.
+var achievement_popups := true
 
 # Which pace a stored multiplier reads as: the nearest one, so a hand-edited
 # settings.json still selects something rather than nothing.
@@ -88,6 +93,7 @@ static func load_settings():
 		s.sfx_volume = clampf(float(d.get("sfx_volume", DEFAULT_VOLUME)), 0.0, 100.0)
 		s.music_volume = clampf(float(d.get("music_volume", DEFAULT_VOLUME)), 0.0, 100.0)
 		s.reaction_prompts = bool(d.get("reaction_prompts", true))
+		s.achievement_popups = bool(d.get("achievement_popups", true))
 	return s
 
 static func to_dict(s) -> Dictionary:
@@ -96,7 +102,8 @@ static func to_dict(s) -> Dictionary:
 		"default_difficulty": s.default_difficulty,
 		"sfx_volume": s.sfx_volume,
 		"music_volume": s.music_volume,
-		"reaction_prompts": s.reaction_prompts}
+		"reaction_prompts": s.reaction_prompts,
+		"achievement_popups": s.achievement_popups}
 
 # Returns the path written, or "" on failure.
 static func save_settings(s = null) -> String:
