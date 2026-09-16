@@ -74,10 +74,15 @@ static func drink_in_combat(cb, actor, item_id: String, target = null) -> Dictio
 		if m.has("save") and cb._saving_throw(who, int(m.get("save_dc", 13)), String(m["save"])):
 			cb.log.append("  %s shrugs it off." % who.cname)
 			return {"saved": true}
-	var until: int = cb._tick() + int(m.get("rounds", 1)) * maxi(1, cb.order.size())
+	var until: int = cb._tick() + int(m.get("rounds", 1)) * cb.TICK_STRIDE
 	if m.has("condition"):
-		cb.apply_condition(who, String(m["condition"]), actor if who != actor else null)
-		who.statuses[String(m["condition"])] = {"until_tick": until}   # timed, not forever
+		var cond := String(m["condition"])
+		cb.apply_condition(who, cond, actor if who != actor else null)
+		# apply_condition may have refused it (immune) or built it with a source
+		# (charmed: who it cannot turn on) — keep that, only add the clock.
+		if who.has(cond):
+			var s = who.statuses[cond]
+			who.statuses[cond] = (s if s is Dictionary else {}).merged({"until_tick": until})
 		cb.log.append("  %s is %s." % [who.cname, m["condition"]])
 	if m.has("status"):
 		var s := buff(item_id, cb.rng, actor.sheet)

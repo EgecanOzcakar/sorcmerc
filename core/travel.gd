@@ -264,8 +264,8 @@ const SALVAGE := ["dagger", "handaxe", "spear", "shortsword", "light-crossbow",
 const SPELL_PASS := {
 	"tracks": {"spells": ["speak-with-animals"],
 		"text": "%s asks the birds. They know exactly whose tracks, and where they went."},
-	"foul-water": {"spells": ["purify-food-and-drink"],
-		"text": "%s purifies it before anyone drinks. The stream runs clean behind them."},
+	"foul-water": {"spells": ["lesser-restoration"],
+		"text": "%s has the cure for whatever is in it, and says so; nobody has to find out."},
 }
 
 static func check(party, world, rng = null) -> Dictionary:

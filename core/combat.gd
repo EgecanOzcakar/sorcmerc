@@ -269,8 +269,11 @@ func _expire_conditions(c) -> void:
 			c.statuses.erase(id)
 			log.append("%s shakes off %s." % [c.cname, id])
 
+# Ticks count turns with a fixed stride, not order.size(): a summon joining
+# (or a corpse leaving) the order mid-fight must not re-time every until_tick.
+const TICK_STRIDE := 1000
 func _tick() -> int:
-	return round_num * maxi(1, order.size()) + turn_idx
+	return round_num * TICK_STRIDE + turn_idx
 
 # Trolls and friends: a heal_self verb with trigger start_of_turn, no button.
 func _regenerate(c) -> void:
@@ -849,7 +852,7 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 				_apply_damage(c, d, v.get("damage_type", ""))
 		if hits > 0 and (v.has("conditions") or v.has("buff")):
 			# Ray of Sickness: the rider needs its own save when the spell names one
-			if v.get("save", "") == "" or not _saving_throw(c, dc, v["save"], v.get("ignores_cover", false)):
+			if v.get("save", "") == "" or not _saving_throw(c, dc, v["save"], v.get("ignores_cover", false), true):
 				for cond in v.get("conditions", []):
 					apply_condition(c, cond, caster, v.get("duration", "round"), v)
 					log.append("  %s is %s." % [c.cname, cond])
@@ -922,7 +925,7 @@ func _free_near(origin: Vector2i) -> Vector2i:
 # beside it (Invisibility); `sticky` keeps that one through attacks (Greater).
 func _apply_buff(caster, who, v: Dictionary) -> void:
 	var b: Dictionary = v["buff"].duplicate(true)
-	var until: int = _tick() + int(v.get("rounds", 10)) * maxi(1, order.size())
+	var until: int = _tick() + int(v.get("rounds", 10)) * TICK_STRIDE
 	if b.has("resist_random"):
 		var types: Array = b["resist_random"]
 		b["resist"] = [types[rng.roll_die(types.size()) - 1]]
@@ -1055,9 +1058,8 @@ func _end_concentration(caster, why: String) -> void:
 				c.statuses.erase(id)
 				if id == "summoned":
 					c.hp = 0
-					c.statuses["dead"] = true
-					order.erase(c)
-					log.append("  %s fades." % c.cname)
+					c.statuses["dead"] = true   # stays in `order` as any corpse does: end_turn() skips it,
+					log.append("  %s fades." % c.cname)   # and erasing would slide turn_idx under the live turn
 					continue
 				log.append("  %s is no longer %s." % [c.cname, id])
 
@@ -1580,7 +1582,7 @@ func _weapon_dc(c) -> int:
 # _expire_conditions only runs at the bearer's own begin_turn, so "round" (this
 # tick) would clear them before they ever bite.
 func _next_round_tick() -> int:
-	return _tick() + maxi(1, order.size())
+	return _tick() + TICK_STRIDE
 
 func _mastery_rider(attacker, target, hit: bool) -> void:
 	var m := _mastery(attacker)

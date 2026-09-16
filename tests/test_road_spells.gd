@@ -27,6 +27,7 @@ func check(cond: bool, label: String) -> void:
 		printerr("  FAIL: ", label)
 
 func _init() -> void:
+	test_off_board_pickable()
 	test_caster_of()
 	test_travel_spell_pass()
 	test_pass_without_trace()
@@ -57,6 +58,21 @@ func _force(party, w, want: String) -> Dictionary:
 			return e
 	return {}
 
+# Every spell with a door off the board is one a made character can pick.
+func test_off_board_pickable() -> void:
+	var Effects = load("res://core/rules/effects.gd")
+	var doors: Array = RoadSpells.ROAD.keys() + Visit.TALK_SPELLS + Visit.WORK_SPELLS + [Encounter.PASS_WITHOUT_TRACE]
+	for e in Travel.SPELL_PASS.values():
+		doors.append_array(e["spells"])
+	for sid in doors:
+		check(sid in Effects.OFF_BOARD, "%s has a door, so it is on Effects.OFF_BOARD" % sid)
+	var picks: Array = []
+	for lst in ["druid", "ranger", "wizard", "cleric", "bard", "sorcerer", "warlock"]:
+		for lvl in range(1, 6):
+			picks.append_array(Effects.pick_pool(lst, lvl))
+	for sid in Effects.OFF_BOARD:
+		check(sid in picks, "%s can actually be picked by somebody" % sid)
+
 func test_caster_of() -> void:
 	var p := _party(["speak-with-animals"])
 	check(p.caster_of(["speak-with-animals"]) == p.get_member("ilsa"), "the party finds who knows a spell")
@@ -70,8 +86,8 @@ func test_travel_spell_pass() -> void:
 		"Speak with Animals reads the tracks without a roll")
 	var plain := _force(_party(), _world(), "tracks")
 	check(not plain.has("spell"), "without it the scout rolls as before")
-	var water := _force(_party(["purify-food-and-drink"]), _world(), "foul-water")
-	check(water.get("ok", false) and not water.has("hurt"), "Purify Food and Drink keeps the party well")
+	var water := _force(_party(["lesser-restoration"]), _world(), "foul-water")
+	check(water.get("ok", false) and not water.has("hurt"), "Lesser Restoration keeps the party well")
 
 func test_pass_without_trace() -> void:
 	var chars: Array = Presets.party()

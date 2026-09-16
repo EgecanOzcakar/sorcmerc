@@ -74,11 +74,21 @@ static func spell(id: String) -> Dictionary:
 static func _authored_damage(d) -> bool:
 	return d is Array and not d.is_empty() and d[0] is Dictionary and d[0].has("count") and d[0].has("sides")
 
+# Spells with a door off the board — cast on the road (core/road_spells.gd)
+# or changing a roll the party already makes (travel.gd SPELL_PASS,
+# settlement_visit.gd TALK_SPELLS / WORK_SPELLS, encounter.gd Pass Without
+# Trace). Listed here rather than read from those files so this one has no
+# preload of the modules that preload it; tests/test_road_spells.gd checks
+# the list against them.
+const OFF_BOARD := ["clairvoyance", "arcane-eye", "fly", "longstrider", "rope-trick", "alarm",
+	"speak-with-animals", "pass-without-trace", "detect-thoughts",
+	"suggestion", "lesser-restoration", "greater-restoration"]
+
 # Spells a character may pick at creation / level-up: the ones that do
-# something on the board. A utility spell with no hook here would be a slot
-# spent on nothing.
+# something on the board or have a door off it. A utility spell with neither
+# would be a slot spent on nothing.
 static func pick_pool(list: String, level: int) -> Array:
-	return Catalog.spell_list(list, level).filter(func(id): return not spell(id).is_empty())
+	return Catalog.spell_list(list, level).filter(func(id): return id in OFF_BOARD or not spell(id).is_empty())
 
 static func range_ft(prose: String) -> int:
 	var t := prose.split(" ")
