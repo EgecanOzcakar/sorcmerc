@@ -1,0 +1,38 @@
+{
+ "barbarian": {
+  "name": "Barbar"
+ },
+ "bard": {
+  "name": "Ozan"
+ },
+ "cleric": {
+  "name": "Rahip"
+ },
+ "druid": {
+  "name": "Druid"
+ },
+ "fighter": {
+  "name": "Savaşçı"
+ },
+ "monk": {
+  "name": "Keşiş"
+ },
+ "paladin": {
+  "name": "Paladin"
+ },
+ "ranger": {
+  "name": "Korucu"
+ },
+ "rogue": {
+  "name": "Hırsız"
+ },
+ "sorcerer": {
+  "name": "Efsunbaz"
+ },
+ "warlock": {
+  "name": "Kara Büyücü"
+ },
+ "wizard": {
+  "name": "Büyücü"
+ }
+}

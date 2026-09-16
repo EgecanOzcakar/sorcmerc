@@ -1,0 +1,194 @@
+{
+ "berserker": {
+  "name": "Berserker Yolu",
+  "description": "Bazı Barbarlar için öfke bir amaca giden araçtır — o amaç da şiddettir. Berserker Yolu, kana bulanmış, dizginlenmemiş bir hiddet yoludur."
+ },
+ "wildheart": {
+  "name": "Yaban Yürek Yolu",
+  "description": "Yaban Yürek Yolu'nu izleyen Barbarlar kendilerini hayvanların akrabası sayar. Hayvanlarla konuşmanın büyülü yollarını öğrenirler; bazıları geçici olarak hayvan özellikleri edinebilir."
+ },
+ "worldtree": {
+  "name": "Dünya Ağacı Yolu",
+  "description": "Dünya Ağacı Yolu'nu izleyen Barbarlar, Öfkeleri aracılığıyla kozmik ağaç Yggdrasil'e bağlanır. Bu bağ onlara olağanüstü bir dirilik ve ağacın gücünü açığa çıkarma yeteneği verir."
+ },
+ "zealot": {
+  "name": "Fanatik Yolu",
+  "description": "Fanatik Yolu'nda yürüyen Barbarlar bir tanrıdan ya da tanrı topluluğundan lütuf alır. Bu savaşçılar Öfkelerinde kutsal gücü yönlendirir; bazıları bu kutsal güçle öylesine dolar ki öldürülmeleri neredeyse imkânsızdır."
+ },
+ "collegedance": {
+  "name": "Dans Koleji",
+  "description": "Dans Koleji'nin Ozanları bilir ki Yaratılış Sözleri yalnızca konuşmaya ya da şarkıya sığmaz; onlar gök cisimlerinin hareketleriyle ve büyüklü küçüklü yaratıkların dansıyla söylenir."
+ },
+ "collegeglamour": {
+  "name": "Cazibe Koleji",
+  "description": "Cazibe Koleji kökenini Peri Diyarı'nın baştan çıkarıcı büyüsünden alır. Bu kolejde okuyan Ozanlar efsunlama ve yanılsama yollarında eğitilir; büyüleyici sanatlarıyla zihinleri etkilemeyi ve duyuları kamaştırmayı öğrenirler."
+ },
+ "collegelore": {
+  "name": "İlim Koleji",
+  "description": "İlim Koleji'nin Ozanları çoğu şey hakkında bir şeyler bilir; bilgi kırıntılarını bilimsel ciltlerden köylü masallarına kadar her kaynaktan toplarlar. İster meyhanelerde halk türküleri söylesinler ister saraylarda görkemli besteler, bu Ozanlar yeteneklerini dinleyiciyi büyülemek için kullanır."
+ },
+ "collegevalor": {
+  "name": "Yiğitlik Koleji",
+  "description": "Yiğitlik Koleji'nin Ozanları, geçmişin büyük kahramanlarının anısını yaşatan ve böylece yeni bir kahraman kuşağına ilham veren gözü pek ozanlardır. Bu Ozanlar bal şarabı salonlarında ya da büyük ateşlerin çevresinde toplanıp güçlülerin yaptıklarını söylerler."
+ },
+ "lifedomain": {
+  "name": "Yaşam Alanı",
+  "description": "Yaşam Alanı, tüm yaşamı ayakta tutan o canlı pozitif enerjiye — evrenin temel güçlerinden birine — odaklanır. Bu alandan güç alan Rahipler, tanrıların hizmetkârları arasında olağanüstü şifacılardır."
+ },
+ "lightdomain": {
+  "name": "Işık Alanı",
+  "description": "Işık tanrıları yeniden doğuş ve yenilenme, hakikat, teyakkuz ve güzellik ilkelerini yüceltir; simgeleri çoğunlukla güneştir. Işık Alanı ışıkla, şifayla, hakikatle ve ateşle ilişkilidir."
+ },
+ "trickerydomain": {
+  "name": "Hile Alanı",
+  "description": "Hile tanrıları, hem tanrılar hem ölümlüler arasındaki yerleşik düzene sürekli meydan okuyan yaramazlık ve kışkırtma ustalarıdır. Bu tanrıların Rahipleri dünyada bozguncu bir güçtür: kibri deler, zorbalarla alay eder, zenginden çalar ve kötülüğün altını oyarlar."
+ },
+ "wardomain": {
+  "name": "Savaş Alanı",
+  "description": "Savaşın pek çok yüzü vardır. Sıradan insanları kahraman yapabilir. Zulüm ve korkaklık edimlerinin yiğitliği gölgede bıraktığı, umutsuz ve korkunç bir şey de olabilir. Her iki hâlde de savaş tanrıları savaşçıları gözetir ve büyük işlerinin karşılığını verir."
+ },
+ "circleland": {
+  "name": "Kara Çemberi",
+  "description": "Kara Çemberi, kadim bilgiyi ve ayinleri geniş bir sözlü gelenekle koruyan mistiklerden ve bilgelerden oluşur. Bu Druidler kutsal ağaç ya da dikili taş çemberlerinde buluşup ilkel sırları Druidce fısıldarlar."
+ },
+ "circlemoon": {
+  "name": "Ay Çemberi",
+  "description": "Ay Çemberi'nin Druidleri yabanın gözü pek bekçileridir. Tarikatları dolunayda toplanıp haber ve uyarı paylaşır. Vahşi doğanın en ıssız köşelerinde dolaşırlar; başka bir insansıyla karşılaşmadan haftalar geçirebilirler."
+ },
+ "circlesea": {
+  "name": "Deniz Çemberi",
+  "description": "Deniz Çemberi'nin Druidleri okyanusların ve fırtınaların azgın güçlerinden beslenir. Bazıları kıyı bekçisi, balıkçı topluluklarının savunucusu ve açık denizde iş gören denizcilerdir."
+ },
+ "circlestars": {
+  "name": "Yıldızlar Çemberi",
+  "description": "Yıldızlar Çemberi, Druidlerin takımyıldızlardan güç almasını sağlar. Bu Druidler çok eski çağlardan beri göksel örüntüleri izler, gözlemlerini kaydeder ve yardım için takımyıldızlara seslenmeyi öğrenirler."
+ },
+ "champion": {
+  "name": "Şampiyon",
+  "description": "Şampiyon arketipi, ölümcül bir kusursuzluğa kadar bilenmiş ham bedensel gücün geliştirilmesine odaklanır. Kendini bu arketipe göre biçimlendirenler sıkı antrenmanı bedensel üstünlükle birleştirerek yıkıcı darbeler indirir."
+ },
+ "battlemaster": {
+  "name": "Savaş Ustası",
+  "description": "Savaş Ustası arketipini izleyenler kuşaklar boyunca aktarılmış dövüş tekniklerini kullanır. Savaş Ustası, dövüşte taktik üstünlük sağlayan özel manevraları beslemek için üstünlük zarları harcar."
+ },
+ "eldritchknight": {
+  "name": "Esrarengiz Şövalye",
+  "description": "Esrarengiz Şövalye, dövüş hünerini büyünün titiz incelemesiyle birleştirir. Bu savaşçılar büyücü büyü listesinden büyü yapmayı öğrenir ve büyüyü silah darbelerine ve savunmalarına dokurlar."
+ },
+ "psiwarrior": {
+  "name": "Psişik Savaşçı",
+  "description": "Psişik Savaşçılar bedensel güçlerini beslemek için zihnin gücünü uyandırır. Psiyonik yetenekleri onları çetin dövüşçüler yapar; Psiyonik Enerji Zarları harcayarak saldırılarını ve savunmalarını daha da güçlendirebilirler."
+ },
+ "warriorofmercy": {
+  "name": "Merhamet Savaşçısı",
+  "description": "Merhamet Savaşçıları başkalarının yaşam gücünü yönlendirir. Bu Keşişler gezgin hekimlerdir; hastaları iyileştirir, muhtaçlara yardım eder ya da durum gerektirdiğinde aynı güçle öldürürler."
+ },
+ "warriorofshadow": {
+  "name": "Gölge Savaşçısı",
+  "description": "Gölge Savaşçıları gizlilik ve aldatma üzerine çalışır. Bu Keşişler karanlıkta hareket etmek ve haber vermeden vurmak için Gölge Sanatları ile Gölge Adımı'nı kullanır."
+ },
+ "warriorofelements": {
+  "name": "Element Savaşçısı",
+  "description": "Element Savaşçıları dört elementin — hava, toprak, ateş ve suyun — gücünü zırhsız bedenlerinden geçirir."
+ },
+ "warrioropenhand": {
+  "name": "Açık El Savaşçısı",
+  "description": "Açık El Savaşçıları, silahlı ya da silahsız, dövüş sanatlarının en büyük ustalarıdır. Rakiplerini itip devirecek teknikler öğrenir, bedenlerindeki hasarı iyileştirmek için ki'yi yönlendirir ve ileri meditasyon çalışırlar."
+ },
+ "oathofdevotion": {
+  "name": "Adanmışlık Yemini",
+  "description": "Adanmışlık Yemini, bir Paladini adaletin, erdemin ve düzenin en yüce ilkelerine bağlar. Kimi zaman süvari, ak şövalye ya da kutsal savaşçı diye anılan bu Paladinler, parlak zırhlı şövalye idealinin ta kendisidir."
+ },
+ "oathofglory": {
+  "name": "Şan Yemini",
+  "description": "Şan Yemini'ni eden Paladinler, kendilerinin ve yoldaşlarının kahramanlık işleriyle şana ulaşmaya yazgılı olduğuna inanır. Sıkı çalışır ve yoldaşlarını ellerinden gelenin en iyisini yapmaya teşvik ederler."
+ },
+ "oathofancients": {
+  "name": "Kadimler Yemini",
+  "description": "Kadimler Yemini, yıldızlara hayranlıkla bakan ilk elfler ve orman açıklıklarında dolaşan kadim periler kadar eskidir. Bu yemini eden Paladinler, karanlığa karşı kozmik mücadelede saflarını ışıktan yana belirler."
+ },
+ "oathofvengeance": {
+  "name": "İntikam Yemini",
+  "description": "İntikam Yemini, ağır bir günah işleyenleri cezalandırmaya verilmiş ciddi bir sözdür. Kötü güçler savunmasız köylüleri kılıçtan geçirdiğinde, koca bir halk tanrıların iradesine sırt çevirdiğinde, bir hırsızlar loncası fazla zalim ve güçlü olduğunda, bir ejderha kırsalı yakıp yıktığında — işte böyle zamanlarda adaleti geri getirmek için bir Paladin ayağa kalkar."
+ },
+ "beastmaster": {
+  "name": "Canavar Ustası",
+  "description": "Canavar Ustası alt sınıfı bir hayvanla ilkel bir bağ kurar; korucu ile canavarın tek vücut gibi davranmasını sağlayan bu bağ, korucuya olağanüstü şeyler yaptırır. Alt sınıfın özellikleri dövüşte, keşifte ve sosyal durumlarda güçlü seçenekler sunar."
+ },
+ "feywanderer": {
+  "name": "Peri Gezgini",
+  "description": "Kimi Korucuları yalnızca Peri dokunuşunun çok ötesinde bir büyü sarar; onlara doğaüstü bir cazibe verir ve Peri Diyarı'nın büyüsüyle esinler. Peri Gezgini yolunu izleyen Korucular, Korucu yeteneklerini Peri Diyarı büyüsüyle birlikte kullanır."
+ },
+ "gloomstalker": {
+  "name": "Alacakaranlık Avcısı",
+  "description": "Alacakaranlık Avcıları en karanlık yerlerin sakinleridir: yerin derinlikleri, loş ara sokaklar, el değmemiş ormanlar ve ışığın söndüğü her yer. Çoğu kişi böyle yerlere çekinerek girer; Alacakaranlık Avcısı ise karanlığa bir amaçla dalar."
+ },
+ "hunter": {
+  "name": "Avcı",
+  "description": "Yabanda ve başka yerlerde av izlersin; Avcı olarak yeteneklerini doğayı ve her yerdeki insanları korumak için kullanırsın. Hünerini bilediğin ölçüde yabanı tehdit eden canavarlarla dövüşmenin özel tekniklerini öğrenirsin."
+ },
+ "thief": {
+  "name": "Hırsız",
+  "description": "Hırsızlık sanatlarında hünerini bilersin. Bu arketipi genellikle ev soyguncuları, haydutlar, yankesiciler ve başka suçlular izler; ama kendini profesyonel hazine avcısı, kâşif, derinlik dalgıcı ya da müfettiş saymayı yeğleyen Hırsızlar da vardır."
+ },
+ "assassin": {
+  "name": "Suikastçı",
+  "description": "Ölümün acımasız sanatında hünerini bilersin. Suikastçılar düşmanı çabucak ortadan kaldırmayı ve tehlikeli yerlere sızmayı öğrenir; bunu yaparken sık sık kılık değiştirmeden ve zehirden yararlanırlar."
+ },
+ "arcanetrickster": {
+  "name": "Gizemli Düzenbaz",
+  "description": "Bazı Hırsızlar iyice bilenmiş gizlilik ve çeviklik hünerlerini büyüyle zenginleştirir; efsunlama ve yanılsama oyunlarını öğrenirler. Bu Hırsızların arasında yankesiciler ve soyguncular kadar dolandırıcılar, düzenbazlar ve biraz sevecenlikle 'sevimli serseri' denilen birkaç kişi de vardır."
+ },
+ "soulknife": {
+  "name": "Ruh Bıçağı",
+  "description": "Bir Ruh Bıçağı zihniyle vurur; hem bedensel hem psişik engelleri keser. Bu Hırsızlar içlerinde psiyonik gücü keşfeder ve hünerlerini onunla beslemeyi öğrenirler."
+ },
+ "aberrantsorcery": {
+  "name": "Sapkın Efsun",
+  "description": "Yabancı bir etki ruhuna sarmaşık gibi dolanmış ve efsununu çarpıtmıştır. Belki bir Uzak Diyar olgusuna maruz kaldın, belki de Uzak Diyar'ın dokunduğu bir yerde doğdun."
+ },
+ "clockworksorcery": {
+  "name": "Çarklı Efsun",
+  "description": "Düzenin kozmik gücü seni büyüyle doldurmuştur. Bu güç Mechanus düzleminden ya da ona benzer bir diyardan gelir — kusursuz yasa ve düzenden oluşan çarklı bir kozmostan."
+ },
+ "draconicsorcery": {
+  "name": "Ejderha Efsunu",
+  "description": "Doğuştan gelen büyün bir ejderhanın armağanıdır. Belki bir atan bir ejderha tarafından efsunlanmıştı, belki ejderha kanı içtin, belki de doğumun kehanet edilmişti. Kökeni ne olursa olsun, soyun kullandığın ejderha büyüsünde kendini gösterir."
+ },
+ "wildmagicsorcery": {
+  "name": "Yaban Büyü Efsunu",
+  "description": "Doğuştan gelen büyün, yaratılışın düzeninin altında yatan kaos güçlerinden gelir. Ham büyüye maruz kalmış ya da yalnızca büyüsel bir çalkantının ortasında doğmuş olabilirsin."
+ },
+ "archfeypatron": {
+  "name": "Peri Efendisi Hamisi",
+  "description": "Hamin bir peri lordu ya da leydisi; ölümlü ırklar doğmadan önce unutulmuş sırları taşıyan efsanevi bir varlıktır. Bu varlığın güdüleri çoğu zaman anlaşılmaz, kimi zaman da kaprislidir; senin yıkımın da kurtuluşun da olabilir."
+ },
+ "celestialpatron": {
+  "name": "Semavi Hami",
+  "description": "Antlaşman, sonsuz mutluluğun diyarları olan Üst Düzlemlerin gücünden beslenir. Bir semavinin hayatını kurtarmış, kutsal bir sınavda kendini kanıtlamış olabilirsin; ya da kanında bir semavi gücün izi vardır."
+ },
+ "fiendpatron": {
+  "name": "Şeytani Hami",
+  "description": "Varoluşun alt düzlemlerinden bir şeytaniyle antlaşma yaptın; amaçları kötü olan bir varlıkla, sen o amaçlara karşı çabalasan bile. Böyle varlıklar her şeyin yozlaşmasını ya da yıkılmasını ister."
+ },
+ "greatoldonepatron": {
+  "name": "Kadim Varlık Hamisi",
+  "description": "Hamin, doğası gerçekliğin dokusuna büsbütün yabancı olan gizemli bir varlıktır. Uzak Diyar'dan, gerçekliğin ötesindeki boşluktan gelebilir ya da yalnızca efsanelerde bilinen eski tanrılardan biri olabilir."
+ },
+ "abjurer": {
+  "name": "Koruma Okulu",
+  "description": "Koruma Okulu engelleyen, sürgün eden ya da koruyan büyüye ağırlık verir. Okulun karşıtları, bağlılarının korkak olduğunu — korumanın duvarların ve engellerin ardına saklanma büyüsü olduğunu — söyler. Uygulayıcılar ise duvarın ardında olmayı en çok düşmanın istediğini belirtir."
+ },
+ "diviner": {
+  "name": "Kehanet Okulu",
+  "description": "Bir Kâhin'in öğüdü hem kral soyundan gelenlerce hem sıradan halkça aranır; çünkü herkes geleceğe daha berrak bir pencere ve geçmişe daha iyi bir kavrayış ister. Kâhinler tehditleri sezmek ve bilgi toplamak için zamanın ve uzamın perdesinin ardını görmeyi öğrenir."
+ },
+ "evoker": {
+  "name": "Uyandırma Okulu",
+  "description": "Çalışmanı, acı soğuk, kavurucu alev, gürleyen gök, çatırdayan yıldırım ve yakıcı asit gibi güçlü element etkileri yaratan büyüye adarsın. Bazı uyandırmacılar ordularda iş bulur; düşman ordularını uzaktan yerle bir eden birer topçu olarak hizmet ederler."
+ },
+ "illusionist": {
+  "name": "Yanılsama Okulu",
+  "description": "Çalışmanı, duyuları kamaştıran, aklı şaşırtan ve en bilge kişileri bile kandıran büyüye adarsın. Büyün incedir, ama keskin zihninin dokuduğu yanılsamalar imkânsızı gerçek gösterir."
+ }
+}

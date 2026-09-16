@@ -1,0 +1,50 @@
+{
+ "acolyte": {
+  "name": "Din Adamı"
+ },
+ "artisan": {
+  "name": "Zanaatkâr"
+ },
+ "charlatan": {
+  "name": "Şarlatan"
+ },
+ "criminal": {
+  "name": "Suçlu"
+ },
+ "entertainer": {
+  "name": "Sanatçı"
+ },
+ "farmer": {
+  "name": "Çiftçi"
+ },
+ "guard": {
+  "name": "Muhafız"
+ },
+ "guide": {
+  "name": "Rehber"
+ },
+ "hermit": {
+  "name": "Münzevi"
+ },
+ "merchant": {
+  "name": "Tüccar"
+ },
+ "noble": {
+  "name": "Soylu"
+ },
+ "sage": {
+  "name": "Bilge"
+ },
+ "sailor": {
+  "name": "Denizci"
+ },
+ "scribe": {
+  "name": "Kâtip"
+ },
+ "soldier": {
+  "name": "Asker"
+ },
+ "wayfarer": {
+  "name": "Yolcu"
+ }
+}

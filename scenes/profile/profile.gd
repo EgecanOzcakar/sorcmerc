@@ -12,9 +12,15 @@ const Ach = preload("res://core/achievements.gd")
 const Potions = preload("res://core/potions.gd")
 const RoadSpells = preload("res://core/road_spells.gd")
 const RNG = preload("res://core/rng.gd")
+const Loc = preload("res://core/loc.gd")
 
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
-const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
+const ABIL_NAME_EN := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT",
+	"wis": "WIS", "cha": "CHA"}
+
+# The six short forms, in whatever language the sheet is being read in.
+static func abil_name(a: String) -> String:
+	return Loc.term("ability_abbr", a, String(ABIL_NAME_EN.get(a, a.to_upper())))
 
 const COL_BG := Icons.COL_BG
 const COL_PANEL := Icons.COL_INK
@@ -143,14 +149,15 @@ func _header() -> Control:
 
 	var need := Leveling.xp_to_next(_ch)
 	var xp := Label.new()
-	xp.text = "%d XP" % int(_ch.xp) if need == 0 else "%d XP, need %d more" % [int(_ch.xp), need]
+	xp.text = Loc.tf("profile.xp", "%d XP", [int(_ch.xp)]) if need == 0 \
+		else Loc.tf("profile.xp_need", "%d XP, need %d more", [int(_ch.xp), need])
 	xp.theme_type_variation = "Dim"
 	box.add_child(xp)
 	_fields["xp"] = xp
 
 	var b := Button.new()
 	Icons.clicks(b)
-	b.text = "Level up"
+	b.text = Loc.t("profile.level_up", "Level up")
 	b.theme_type_variation = "Primary"
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.disabled = need > 0
@@ -165,7 +172,7 @@ func _class_line(s) -> String:
 		var sub: String = s.subclasses.get(cid, "")
 		var label: String = _title(cid) if sub == "" else "%s (%s)" % [_title(cid), _title(sub)]
 		parts.append("%s %s %d" % [Icons.class_glyph(cid), label, s.class_levels[cid]])
-	return " / ".join(parts) if not parts.is_empty() else "Level 0"
+	return " / ".join(parts) if not parts.is_empty() else Loc.t("profile.level_zero", "Level 0")
 
 const LEVELUP_SCENE := "res://scenes/creator/levelup.tscn"
 
@@ -232,42 +239,61 @@ func _btn(h: HBoxContainer, text: String, fn: Callable) -> void:
 static func _sign(n: int) -> String:
 	return "%+d" % n
 
+# A bare id as a heading: a species, a background, a subclass, a fighting
+# style, a movement mode. Each of the first four IS a catalog record with a
+# name field, so ask the catalog before falling back to humanize() — that is
+# what makes "Champion" read as "Şampiyon" on a Turkish sheet rather than
+# staying the one English word in the class line.
 static func _title(id: String) -> String:
+	if id == "":
+		return ""
+	for rec in [Catalog.index("species.json"), Catalog.index("backgrounds.json"),
+			Catalog.index("subclasses.json"), Catalog.index("fighting-styles.json"),
+			Catalog.index("classes.json")]:
+		if rec.has(id):
+			return String(rec[id].get("name", Effects.humanize(id)))
 	return Effects.humanize(id)
 
 # --- stat sections -----------------------------------------------------------
 
 func _abilities(col: VBoxContainer, s) -> void:
-	var v := _panel(col, "Abilities")
+	var v := _panel(col, Loc.t("profile.abilities", "Abilities"))
 	for a in ABIL:
 		var d: Dictionary = s.abilities.get(a, {"total": 10, "mod": 0})
-		_row(v, ABIL_NAME[a], "%d (%s)" % [int(d["total"]), _sign(int(d["mod"]))], "abil_" + a)
+		_row(v, abil_name(a), "%d (%s)" % [int(d["total"]), _sign(int(d["mod"]))], "abil_" + a)
 
 func _defense(col: VBoxContainer, s) -> void:
-	var v := _panel(col, "Defense")
-	_row(v, "Armor Class", str(s.ac), "ac")
-	var hp := _row(v, "Hit Points", "%d/%d" % [_hp_current(s), s.max_hp], "hp")
+	var v := _panel(col, Loc.t("profile.defense", "Defense"))
+	_row(v, Loc.term("stat", "ac", "Armor Class"), str(s.ac), "ac")
+	var hp := _row(v, Loc.term("stat", "hp", "Hit Points"),
+		"%d/%d" % [_hp_current(s), s.max_hp], "hp")
 	for delta in [-5, -1, 1, 5]:
 		_btn(hp, _sign(delta), _apply_hp.bind(delta))
-	_btn(hp, "full", _apply_hp.bind(9999))
+	_btn(hp, Loc.t("profile.hp_full", "full"), _apply_hp.bind(9999))
 	for k in s.speeds:
-		_row(v, _title(k) + " speed", "%d ft" % int(s.speeds[k]), "speed_" + k)
-	_row(v, "Initiative", _sign(s.initiative), "initiative")
-	_row(v, "Proficiency", _sign(s.proficiency_bonus), "pb")
-	_row(v, "Passive Perception", str(s.passive_perception), "passive_perception")
+		_row(v, Loc.tf("profile.speed", "%s speed",
+			[Loc.term("movement", k, _title(k))]), "%d ft" % int(s.speeds[k]), "speed_" + k)
+	_row(v, Loc.term("stat", "initiative", "Initiative"), _sign(s.initiative), "initiative")
+	_row(v, Loc.t("profile.proficiency", "Proficiency"), _sign(s.proficiency_bonus), "pb")
+	_row(v, Loc.term("stat", "passive_perception", "Passive Perception"),
+		str(s.passive_perception), "passive_perception")
 	if s.disadvantage_from_armor:
-		_row(v, "Armor", "non-proficient: disadvantage", "", Icons.COL_FOE)
+		_row(v, Loc.t("profile.armor", "Armor"),
+			Loc.t("profile.non_proficient", "non-proficient: disadvantage"), "", Icons.COL_FOE)
 	if not s.resistances.is_empty():
-		_row(v, "Resistances", ", ".join(s.resistances), "resistances", COL_ACCENT)
+		var res: Array = []
+		for r in s.resistances:
+			res.append(Loc.term("damage", String(r), String(r)))
+		_row(v, Loc.t("profile.resistances", "Resistances"), ", ".join(res), "resistances", COL_ACCENT)
 
 func _saves(col: VBoxContainer, s) -> void:
-	var v := _panel(col, "Saving Throws")
+	var v := _panel(col, Loc.t("profile.saves", "Saving Throws"))
 	for a in ABIL:
 		var mark := "●" if s.save_prof.get(a, false) else "○"
-		_row(v, "%s %s" % [mark, ABIL_NAME[a]], _sign(int(s.saves.get(a, 0))), "save_" + a)
+		_row(v, "%s %s" % [mark, abil_name(a)], _sign(int(s.saves.get(a, 0))), "save_" + a)
 
 func _skills(col: VBoxContainer, s) -> void:
-	var v := _panel(col, "Skills")
+	var v := _panel(col, Loc.t("profile.skills", "Skills"))
 	var defs := Catalog.skills()
 	var ids: Array = defs.keys()
 	ids.sort()
@@ -275,39 +301,43 @@ func _skills(col: VBoxContainer, s) -> void:
 		var prof: String = s.skill_prof.get(id, "none")
 		var mark := "◆" if prof == "expert" else ("●" if prof == "prof" else "○")
 		var ab: String = defs[id]["ability"]
-		_row(v, "%s %s (%s)" % [mark, defs[id]["name"], ABIL_NAME[ab]],
+		_row(v, "%s %s (%s)" % [mark, defs[id]["name"], abil_name(ab)],
 			_sign(int(s.skills.get(id, 0))), "skill_" + id)
 
 func _attacks(col: VBoxContainer, s) -> void:
-	var v := _panel(col, "Attacks")
+	var v := _panel(col, Loc.t("profile.attacks", "Attacks"))
 	if s.attacks.is_empty():
-		_row(v, "—", "nothing wielded")
+		_row(v, "—", Loc.t("profile.nothing_wielded", "nothing wielded"))
 	for a in s.attacks:
-		var reach := "%d/%d ft" % [int(a["normal_ft"]), int(a["long_ft"])] if a["range"] == "ranged" else "melee"
+		var reach := Loc.tf("profile.reach_ranged", "%d/%d ft",
+			[int(a["normal_ft"]), int(a["long_ft"])]) if a["range"] == "ranged" \
+			else Loc.t("profile.reach_melee", "melee")
 		_row(v, "%s  (%s)" % [a["name"], reach],
-			"%s  %s %s" % [_sign(int(a["to_hit"])), a["notation"], a["damage_type"]],
+			"%s  %s %s" % [_sign(int(a["to_hit"])), a["notation"],
+				Loc.term("damage", String(a["damage_type"]), String(a["damage_type"]))],
 			"attack_" + str(a["id"]))
 	if not s.spellcasting.is_empty():
 		var sc: Dictionary = s.spellcasting
-		_row(v, "Spell save DC", str(int(sc["save_dc"])), "spell_dc", COL_ACCENT)
-		_row(v, "Spell attack", _sign(int(sc["attack_bonus"])), "spell_attack", COL_ACCENT)
+		_row(v, Loc.t("profile.spell_dc", "Spell save DC"), str(int(sc["save_dc"])), "spell_dc", COL_ACCENT)
+		_row(v, Loc.t("profile.spell_attack", "Spell attack"), _sign(int(sc["attack_bonus"])), "spell_attack", COL_ACCENT)
 
 # --- resources ---------------------------------------------------------------
 
 func _resources(col: VBoxContainer, s) -> void:
-	var v := _panel(col, "Resources")
+	var v := _panel(col, Loc.t("profile.resources", "Resources"))
 	var any := false
 	var sc: Dictionary = s.spellcasting
 	if not sc.is_empty():
 		var pact: Dictionary = sc.get("pact", {})
 		if not pact.is_empty():
 			any = true
-			_pool_row(v, "pact", "Pact slots (lv %d)" % int(pact["slotLevel"]), int(pact["count"]))
+			_pool_row(v, "pact", Loc.tf("profile.pact_slots", "Pact slots (lv %d)",
+				[int(pact["slotLevel"])]), int(pact["count"]))
 		for i in int(sc.get("slots", []).size()):
 			var mx := int(sc["slots"][i])
 			if mx > 0:
 				any = true
-				_pool_row(v, "slot:%d" % (i + 1), "Level %d slots" % (i + 1), mx)
+				_pool_row(v, "slot:%d" % (i + 1), Loc.tf("profile.slots", "Level %d slots", [i + 1]), mx)
 	for p in s.pools:
 		any = true
 		var label: String = _title(p["id"])
@@ -315,11 +345,11 @@ func _resources(col: VBoxContainer, s) -> void:
 			label += " (d%d)" % int(p["die_size"])
 		_pool_row(v, p["id"], label, int(p["max"]))
 	if not any:
-		_row(v, "—", "no tracked resources")
+		_row(v, "—", Loc.t("profile.no_resources", "no tracked resources"))
 	else:
 		var h := HBoxContainer.new()
 		v.add_child(h)
-		_btn(h, "Long rest (restore all)", _restore_all)
+		_btn(h, Loc.t("profile.long_rest", "Long rest (restore all)"), _restore_all)
 
 func _pool_row(v: VBoxContainer, id: String, label: String, mx: int) -> void:
 	var h := _row(v, label, "%d/%d" % [_pool_current(id, mx), mx], "pool_" + id)
@@ -355,7 +385,7 @@ func _road(col: VBoxContainer) -> void:
 	var known: Array = RoadSpells.known(party(), _ch)
 	if known.is_empty():
 		return
-	var v := _panel(col, "On the road")
+	var v := _panel(col, Loc.t("profile.on_the_road", "On the road"))
 	if last_cast != "":
 		var note := Label.new()
 		note.text = last_cast
@@ -368,9 +398,10 @@ func _road(col: VBoxContainer) -> void:
 		var h := _row(v, Catalog.spell(sid).get("name", sid), "L%d" % int(r["level"]), "road_" + sid, COL_DIM)
 		h.tooltip_text = RoadSpells.text(sid)
 		var b := Button.new()
-		b.text = "Cast"
+		b.text = Loc.t("profile.cast", "Cast")
 		b.disabled = not bool(r["castable"])
-		b.tooltip_text = RoadSpells.text(sid) if r["castable"] else "No slot of level %d left" % int(r["level"])
+		b.tooltip_text = RoadSpells.text(sid) if r["castable"] \
+			else Loc.tf("profile.no_slot", "No slot of level %d left", [int(r["level"])])
 		b.pressed.connect(cast_road.bind(sid))
 		h.add_child(b)
 		_fields["road_btn_" + sid] = b
@@ -380,39 +411,39 @@ func cast_road(sid: String) -> void:
 	_render()
 
 func _features(col: VBoxContainer, s) -> void:
-	var v := _panel(col, "Features")
+	var v := _panel(col, Loc.t("profile.features", "Features"))
 	var ids: Array = s.features.keys()
 	ids.sort()
 	for id in ids:
 		var entry: Dictionary = s.features[id]
 		var right := ""
 		if int(entry.get("save_dc", 0)) > 0:
-			right = "DC %d" % int(entry["save_dc"])
+			right = "%s %d" % [Loc.term("stat", "dc", "DC"), int(entry["save_dc"])]
 		elif not Effects.feature(id).is_empty():
-			right = "combat"
+			right = Loc.t("profile.combat", "combat")
 		# ponytail: humanize() is F2's stated fallback — swap for real prose when F1
 		# re-exports feature descriptions (SCHEMA gap #4).
 		_row(v, Effects.humanize(id), right, "feature_" + id, COL_DIM)
 	for st in s.fighting_styles:
-		_row(v, _title(st), "style", "style_" + st, COL_DIM)
+		_row(v, _title(st), Loc.t("profile.style", "style"), "style_" + st, COL_DIM)
 	if ids.is_empty() and s.fighting_styles.is_empty():
-		_row(v, "—", "no features")
+		_row(v, "—", Loc.t("profile.no_features", "no features"))
 
 # --- inventory ---------------------------------------------------------------
 
 # Worn/wielded (off the sheet), then the party's shared stash. Equipping moves an
 # item out of the stash onto this character; unequipping puts it back.
 func _inventory(col: VBoxContainer, s) -> void:
-	var v := _panel(col, "Equipped")
+	var v := _panel(col, Loc.t("profile.equipped", "Equipped"))
 	if s.equipment.is_empty():
-		_row(v, "—", "nothing worn")
+		_row(v, "—", Loc.t("profile.nothing_worn", "nothing worn"))
 	var worn := _grid(v)
 	for it in s.equipment:
 		_item_tile(worn, String(it["item_id"]), it["def"], String(it["kind"]), int(it["quantity"]), true)
 
-	var stash := _panel(col, "Party stash")
+	var stash := _panel(col, Loc.t("profile.stash", "Party stash"))
 	if party().stash.is_empty():
-		_row(stash, "—", "empty")
+		_row(stash, "—", Loc.t("profile.empty", "empty"))
 	var bag := _grid(stash)
 	for e in party().stash:
 		var iid := String(e["item_id"])
@@ -437,9 +468,12 @@ func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qt
 	var tip: String
 	var caption := "×%d" % qty if qty > 1 else ""
 	if not identified:
-		tip = "Unidentified item (%s)" % str(def.get("rarity", "unknown"))
+		var rar := str(def.get("rarity", "unknown"))
+		tip = Loc.tf("item.unidentified_long", "Unidentified item (%s)",
+			[Loc.term("rarity", rar, rar)])
 		var can_read: bool = party().stash_count(Party.IDENTIFY_SCROLL, true) > 0
-		tip += "\n\nClick: read an identify scroll" if can_read else "\n\nNeeds a Scroll of Identification"
+		tip += "\n\n" + (Loc.t("profile.read_scroll", "Click: read an identify scroll") if can_read
+			else Loc.t("profile.needs_scroll", "Needs a Scroll of Identification"))
 		var m := Icons.item_tile(iid, tip, caption)
 		m.text = "?" if m.icon != null else m.text
 		m.disabled = not can_read
@@ -453,7 +487,7 @@ func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qt
 	tip = Icons.item_tooltip(iid, def, kind)
 	if not equipped and Potions.is_potion(iid):
 		# A potion is drunk, not worn: heal now, or a buff the next fight inherits.
-		tip += "\n%s\n\nClick: drink" % Potions.text(iid)
+		tip += "\n%s\n\n%s" % [Potions.text(iid), Loc.t("profile.drink", "Click: drink")]
 		var d := Icons.item_tile(iid, tip, caption)
 		d.pressed.connect(drink.bind(iid))
 		g.add_child(d)
@@ -466,10 +500,13 @@ func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qt
 		return
 	var offhand: bool = equipped and kind == "weapon" and _ch.is_light(iid)
 	if equipped:
-		caption = "Off-hand" if _ch.offhand == iid else "Equipped"
-	tip += "\n\nClick: %s" % ("unequip" if equipped else "equip")
+		caption = Loc.t("profile.offhand", "Off-hand") if _ch.offhand == iid \
+			else Loc.t("profile.equipped_tag", "Equipped")
+	tip += "\n\n" + (Loc.t("profile.unequip", "Click: unequip") if equipped
+		else Loc.t("profile.equip", "Click: equip"))
 	if offhand:
-		tip += "\nRight-click: %s" % ("main hand" if _ch.offhand == iid else "off-hand")
+		tip += "\n" + (Loc.t("profile.to_main_hand", "Right-click: main hand") if _ch.offhand == iid
+			else Loc.t("profile.to_offhand", "Right-click: off-hand"))
 	var b := Icons.item_tile(iid, tip, caption, Icons.ITEM_ART_PX, Icons.party_compare(kind, party(), def))
 	b.pressed.connect(toggle_equip.bind(iid))
 	if offhand:

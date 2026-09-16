@@ -12,6 +12,7 @@
 #   godot --path . scenes/achievements/achievements.tscn
 extends Control
 
+const Loc = preload("res://core/loc.gd")
 const Ach = preload("res://core/achievements.gd")
 const Icons = preload("res://core/ui_icons.gd")
 
@@ -58,12 +59,12 @@ func _ready() -> void:
 			won += 1
 
 	var cap := Label.new()
-	cap.text = "Achievements"
+	cap.text = Loc.t("achievements.title", "Achievements")
 	cap.theme_type_variation = "Title"
 	col.add_child(cap)
 
 	var tally := Label.new()
-	tally.text = "%d of %d earned" % [won, rows.size()]
+	tally.text = Loc.t("achievements.tally", "%d of %d earned") % [won, rows.size()]
 	tally.theme_type_variation = "Dim"
 	col.add_child(tally)
 
@@ -87,7 +88,7 @@ func _ready() -> void:
 
 	var close := Button.new()
 	Icons.clicks(close)
-	close.text = "Close"
+	close.text = Loc.t("common.close", "Close")
 	close.pressed.connect(_close)
 	col.add_child(close)
 
@@ -161,13 +162,15 @@ func _row(r: Dictionary) -> Control:
 	head.add_child(title)
 
 	var when := Label.new()
-	when.text = String(r["at"]).split("T")[0] if r["unlocked"] else "Locked"
+	when.text = String(r["at"]).split("T")[0] if r["unlocked"] \
+		else Loc.t("achievements.locked", "Locked")
 	when.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	when.add_theme_color_override("font_color", Icons.COL_ACCENT if r["unlocked"] else Icons.COL_EDGE)
 	head.add_child(when)
 
 	var desc := Label.new()
-	desc.text = "Earn it and find out." if secret else r["desc"]
+	desc.text = Loc.t("achievements.secret_desc", "Earn it and find out.") if secret \
+		else r["desc"]
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	desc.add_theme_color_override("font_color", Icons.COL_BODY if r["unlocked"] else Icons.COL_MUTED)

@@ -6,6 +6,7 @@
 extends RefCounted
 
 const Bundles = preload("res://core/rules/bundles.gd")
+const Loc = preload("res://core/loc.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
 # {items: Array, warnings: Array[String]}
@@ -152,7 +153,8 @@ static func attacks(items: Array, abilities: Dictionary, pb: int, weapon_profs: 
 					has_shield = true
 			sides = 8 if equipped.is_empty() and not has_shield else 6
 		out.append({
-			"id": "unarmed-strike", "name": "Unarmed Strike", "ability": ability,
+			"id": "unarmed-strike", "name": Loc.t("attack.unarmed_strike", "Unarmed Strike"),
+			"ability": ability,
 			"to_hit": mod + pb, "dice_count": 1, "dice_sides": sides, "dmg_bonus": mod,
 			"notation": notation(1, sides, mod),
 			"damage_type": "bludgeoning", "properties": [], "range": "melee",

@@ -11,6 +11,7 @@
 #   "music_volume": 80,             // 0-100, the "Music" audio bus (T27)
 #   "reaction_prompts": true,       // stop and ask before a reaction spends a slot
 #   "achievement_popups": true      // slide a card in when something is earned
+#   "language": "en"                // "en" | "tr" — core/loc.gd's LANGS
 # }
 #
 # Read it with Settings.current() — loaded once, cached; save() writes the cache
@@ -22,6 +23,10 @@ const PATH := "user://settings.json"
 const FORMAT := "sorcmerc-settings"
 const VERSION := 1
 const DIFFICULTIES := ["easy", "normal", "hard"]
+# core/loc.gd owns the list of languages; repeating the default here keeps this
+# file free of a preload it would otherwise need for one string (loc.gd already
+# preloads this one, and the cycle would not resolve).
+const DEFAULT_LANGUAGE := "en"
 const FAST := 999.0   # what SORCMERC_FAST has always meant: no waiting
 
 # The pace the combat screen plays at: a multiplier on every tween and every
@@ -60,6 +65,12 @@ var reaction_prompts := true
 # viewer is the record — it just stops the game talking over itself mid-fight.
 var achievement_popups := true
 
+# Which language the game is in. "en" is the source language; anything else
+# names a directory under data/loc/. Validated against core/loc.gd on load, so
+# a hand-edited settings.json naming a language that was never shipped falls
+# back to English rather than a game with no words in it.
+var language := DEFAULT_LANGUAGE
+
 # Which pace a stored multiplier reads as: the nearest one, so a hand-edited
 # settings.json still selects something rather than nothing.
 static func pace_for(speed: float) -> Dictionary:
@@ -76,6 +87,13 @@ static func current():
 	if _current == null:
 		_current = load_settings()
 	return _current
+
+# Drop the cached instance so the next current() reads the file again. Named
+# around the Script.reload() this would otherwise shadow. The language picker's
+# test is the one caller: it rewrites settings.json behind the cache's back to
+# put the suite's own file the way it found it.
+static func drop_cache() -> void:
+	_current = null
 
 static func load_settings():
 	var s = new()
@@ -94,6 +112,8 @@ static func load_settings():
 		s.music_volume = clampf(float(d.get("music_volume", DEFAULT_VOLUME)), 0.0, 100.0)
 		s.reaction_prompts = bool(d.get("reaction_prompts", true))
 		s.achievement_popups = bool(d.get("achievement_popups", true))
+		var lang := String(d.get("language", DEFAULT_LANGUAGE))
+		s.language = lang if load("res://core/loc.gd").supported(lang) else DEFAULT_LANGUAGE
 	return s
 
 static func to_dict(s) -> Dictionary:
@@ -103,7 +123,8 @@ static func to_dict(s) -> Dictionary:
 		"sfx_volume": s.sfx_volume,
 		"music_volume": s.music_volume,
 		"reaction_prompts": s.reaction_prompts,
-		"achievement_popups": s.achievement_popups}
+		"achievement_popups": s.achievement_popups,
+		"language": s.language}
 
 # Returns the path written, or "" on failure.
 static func save_settings(s = null) -> String:

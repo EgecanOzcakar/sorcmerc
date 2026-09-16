@@ -1,0 +1,298 @@
+{
+ "actor": {
+  "name": "Aktör",
+  "description": "Karizma puanın 1 artar. Kendini başka biri gibi göstermeye çalışırken Aldatma ve Gösteri kontrollerinde avantajlı olursun ve başka birinin konuşmasını ya da yaratıkların çıkardığı sesleri taklit edebilirsin."
+ },
+ "alert": {
+  "name": "Tetikte",
+  "description": "İnisiyatif zarlarına Uzmanlık Bonusun kadar bonus kazanırsın. Ayrıca, ikiniz de Etkisiz durumunda değilseniz, istekli bir müttefikinle inisiyatif takası yapabilirsin."
+ },
+ "athlete": {
+  "name": "Atlet",
+  "description": "Güç ya da Çeviklik puanın 1 artar. Yerden kalkmak yalnızca 5 fit hareket harcar, tırmanmak ek hareket harcamaz ve yalnızca 5 fit hareket ettikten sonra koşarak atlayış yapabilirsin."
+ },
+ "charger": {
+  "name": "Hücumcu",
+  "description": "Güç ya da Çeviklik puanın 1 artar. Koşu aksiyonunu aldığında hızın fazladan 10 fit artar. Yakın dövüş saldırısıyla isabet etmeden önce düz bir hatta en az 10 fit hareket edersen +1d8 ek hasar verebilir ya da hedefi 10 fit itebilirsin."
+ },
+ "chef": {
+  "name": "Aşçı",
+  "description": "Dayanıklılık ya da Bilgelik puanın 1 artar. Aşçı Takımı'nda uzmanlık kazanırsın. Kısa Dinlenmede yemek pişirerek müttefiklerine harcanan her Vuruş Zarı başına +1d8 ek CP verebilirsin. Uzun Dinlenmede, Bonus Aksiyonla Geçici CP veren, Uzmanlık Bonusun kadar ikram hazırlayabilirsin."
+ },
+ "crafter": {
+  "name": "Zanaatkâr",
+  "description": "Seçtiğin üç Zanaatkâr Aleti'nde uzmanlık kazanırsın. Büyülü olmayan teçhizat alırken %20 indirim alırsın. Uzun Dinlenmelerde bu aletlerle sıradan eşyaları daha hızlı yapabilirsin."
+ },
+ "crossbow-expert": {
+  "name": "Arbalet Uzmanı",
+  "description": "Çeviklik puanın 1 artar. Arbaletlerin doldurmalı özelliğini yok sayarsın, bir düşmanın 5 fit yakınında olmak menzilli saldırı zarlarını dezavantajlı yapmaz ve tek elli bir silahla saldırdığında Bonus Aksiyonla El Arbaleti'yle saldırabilirsin."
+ },
+ "crusher": {
+  "name": "Ezici",
+  "description": "Güç ya da Dayanıklılık puanın 1 artar. Turda bir kez ezici hasar verdiğinde hedefi 5 fit boş bir alana itebilirsin. Ezici hasar veren bir kritik vuruş yaptığında, bir sonraki turunun başına kadar hedefe yapılan saldırılar avantajlı olur."
+ },
+ "defensive-duelist": {
+  "name": "Savunmacı Düellocu",
+  "description": "Çeviklik puanın 1 artar. Uzman olduğun bir Ustalık silahı taşırken başka bir yaratık sana yakın dövüş saldırısıyla isabet ettirirse, tepkini kullanarak o saldırı için Zırh Sınıfına Uzmanlık Bonusunu ekleyebilirsin."
+ },
+ "dual-wielder": {
+  "name": "Çift Silah Kullanıcısı",
+  "description": "Güç ya da Çeviklik puanın 1 artar. Her iki elinde ayrı yakın dövüş silahı taşırken Zırh Sınıfına +1 bonus kazanırsın. Tek elli yakın dövüş silahların Hafif olmasa bile çift silahla dövüşebilir ve aynı anda iki silah çekip kaldırabilirsin."
+ },
+ "durable": {
+  "name": "Dayanıklı",
+  "description": "Dayanıklılık puanın 1 artar. Bonus Aksiyon olarak bir Vuruş Zarı harcayıp atabilir ve sonucu kadar Can Puanı geri kazanabilirsin. Ayrıca Ölüm Kurtarma Zarlarında avantajlı olursun."
+ },
+ "elemental-adept": {
+  "name": "Element Ustası",
+  "description": "Zekâ, Bilgelik ya da Karizma puanın 1 artar. Yaptığın büyüler, seçtiğin hasar türüne (Asit, Soğuk, Ateş, Yıldırım ya da Gürleme) karşı direnci yok sayar. Ayrıca o türden bir büyünün hasarını atarken hasar zarındaki her 1'i 2 sayabilirsin."
+ },
+ "fey-touched": {
+  "name": "Peri Dokunuşlu",
+  "description": "Zekâ, Bilgelik ya da Karizma 1 artar. Sisli Adım'ı ve Kehanet ya da Efsunlama okulundan seçtiğin bir 1. seviye büyüyü öğrenirsin. Her birini Uzun Dinlenme başına bir kez, yuva harcamadan yapabilirsin."
+ },
+ "grappler": {
+  "name": "Kıskaççı",
+  "description": "Güç ya da Çeviklik puanın 1 artar. Kıskacında tuttuğun bir yaratığa yapılan saldırı zarlarında avantajlısın. Turunda bir yaratığa Silahsız Vuruşla isabet ettiğinde, aynı aksiyonun parçası olarak hem hasar verip hem de hedefi kıskaca alabilirsin."
+ },
+ "great-weapon-master": {
+  "name": "Büyük Silah Üstadı",
+  "description": "Güç puanın 1 artar. Turunda yakın dövüş silahıyla kritik vuruş yaptığında ya da bir yaratığı 0 CP'ye düşürdüğünde, Bonus Aksiyonla bir yakın dövüş silahı saldırısı yapabilirsin. Ağır silahlar, turunda hasar zarlarına Uzmanlık Bonusunu ekler."
+ },
+ "healer": {
+  "name": "Şifacı",
+  "description": "Şifacı Çantası'nda uzmanlık kazanırsın. Bir Kullan aksiyonu olarak, Şifacı Çantası'nın bir kullanımını harcayarak bir yaratığa 1d6 + 4 + karakter seviyesi kadar Can Puanı geri kazandırabilirsin. Bir yaratık Kısa Dinlenme başına yalnızca bir kez yararlanabilir."
+ },
+ "heavily-armored": {
+  "name": "Ağır Zırhlı",
+  "description": "Güç ya da Dayanıklılık puanın 1 artar. Ağır Zırhta uzmanlık kazanırsın."
+ },
+ "heavy-armor-master": {
+  "name": "Ağır Zırh Üstadı",
+  "description": "Güç ya da Dayanıklılık puanın 1 artar. Ağır Zırh giyerken aldığın büyülü olmayan kesici, delici ve ezici hasar, Uzmanlık Bonusun kadar azalır."
+ },
+ "inspiring-leader": {
+  "name": "İlham Veren Önder",
+  "description": "Bilgelik ya da Karizma puanın 1 artar. Kısa ya da Uzun Dinlenmenin sonunda bir konuşma yaparak altı müttefike kadar karakter seviyen artı Bilgelik veya Karizma modifiyen kadar Geçici Can Puanı verebilirsin."
+ },
+ "keen-mind": {
+  "name": "Keskin Zihin",
+  "description": "Zekâ puanın 1 artar. Gizemli İlimler, Tarih, Araştırma, Doğa ya da Din'de uzmanlık kazanırsın. İnceleme aksiyonunu Bonus Aksiyon olarak alabilirsin."
+ },
+ "lightly-armored": {
+  "name": "Hafif Zırhlı",
+  "description": "Güç ya da Çeviklik puanın 1 artar. Hafif Zırh ve Kalkanlarda uzmanlık kazanırsın."
+ },
+ "lucky": {
+  "name": "Şanslı",
+  "description": "Uzmanlık Bonusun kadar Şans Puanın olur; Uzun Dinlenmede tazelenir. Bir Şans Puanı harcayarak d20 atar ve saldırı zarının, yetenek kontrolünün ya da kurtarma zarının yerine onu koyabilirsin — ya da sana saldıran birini saldırısını yeniden atmaya zorlayabilirsin."
+ },
+ "mage-slayer": {
+  "name": "Büyücü Avcısı",
+  "description": "Güç ya da Çeviklik puanın 1 artar. 5 fit içindeki bir yaratık büyü yaptığında, tepkinle bir yakın dövüş saldırısı yapabilirsin. Senden hasar alan yaratıklar konsantrasyon kurtarmalarında dezavantajlıdır. Uzun Dinlenme başına bir kez, bir büyüye karşı kurtarma zarını otomatik olarak kazanabilirsin."
+ },
+ "magic-initiate": {
+  "name": "Büyüye Yeni Başlayan",
+  "description": "Bir sınıf seç: Ozan, Rahip, Druid, Efsunbaz, Kara Büyücü ya da Büyücü. O sınıfın büyü listesinden iki küçük büyü ve bir 1. seviye büyü öğrenirsin. 1. seviye büyüyü yuva harcamadan bir kez yapabilir, bu yeteneği Uzun Dinlenmede geri kazanırsın. Bu büyüler için büyü yetenek puanın seçtiğin sınıfınkidir."
+ },
+ "martial-weapon-training": {
+  "name": "Savaş Silahı Eğitimi",
+  "description": "Güç ya da Çeviklik 1 artar. Tüm Savaş silahlarında uzmanlık kazanırsın."
+ },
+ "medium-armor-master": {
+  "name": "Orta Zırh Üstadı",
+  "description": "Güç ya da Çeviklik puanın 1 artar. Orta Zırh giymek Gizlilik kontrollerini dezavantajlı yapmaz ve Orta Zırh giyerken Zırh Sınıfına Çeviklikten +2 yerine +3'e kadar ekleyebilirsin."
+ },
+ "moderately-armored": {
+  "name": "Orta Zırhlı",
+  "description": "Güç ya da Çeviklik puanın 1 artar. Orta Zırh ve Kalkanlarda uzmanlık kazanırsın."
+ },
+ "mounted-combatant": {
+  "name": "Atlı Dövüşçü",
+  "description": "Güç, Çeviklik ya da Bilgelik 1 artar. Bineğinden küçük, binilmemiş yaratıklara yapılan yakın dövüş saldırı zarlarında avantajlısın. Bineğine yönelen bir saldırıyı kendine yöneltebilirsin ve bineğin Sıyrılma kazanır."
+ },
+ "musician": {
+  "name": "Müzisyen",
+  "description": "Seçtiğin üç Müzik Aleti'nde uzmanlık kazanırsın. Kısa ya da Uzun Dinlenmenin parçası olarak bu aletlerden birini çalıp seni duyan müttefiklere (Uzmanlık Bonusun kadarına) Kahramanca İlham verebilirsin."
+ },
+ "observant": {
+  "name": "Dikkatli",
+  "description": "Zekâ ya da Bilgelik 1 artar. Sezgi, Araştırma ya da Algı'da uzmanlık kazanırsın. Arama aksiyonunu Bonus Aksiyon olarak alabilirsin."
+ },
+ "piercer": {
+  "name": "Delici",
+  "description": "Güç ya da Çeviklik 1 artar. Turda bir kez delici hasar verdiğinde hasar zarlarından birini yeniden atabilirsin. Delici hasar veren bir kritik vuruş yaptığında bir hasar zarı daha atarsın."
+ },
+ "poisoner": {
+  "name": "Zehirci",
+  "description": "Çeviklik ya da Zekâ 1 artar. Zehirci Takımı'nda uzmanlık kazanırsın. Silahların Zehir direncini yok sayar. Bonus Aksiyonla bir silaha zehir sürebilirsin (ZD 14 DAY kurtarma; kaybeden 2d8 Zehir hasarı alır ve Zehirlenmiş olur)."
+ },
+ "polearm-master": {
+  "name": "Kargı Üstadı",
+  "description": "Güç ya da Çeviklik 1 artar. Tırpanlı Mızrak, Teber, Uzun Değnek ya da Mızrakla saldırdığında, Bonus Aksiyonla sapın ucuyla bir yakın dövüş vuruşu yapabilirsin (1d4 hasar). Düşmanlar erişimine girdiğinde fırsat saldırısı doğurur."
+ },
+ "resilient": {
+  "name": "Dirençli",
+  "description": "Bir yetenek puanı seç: Güç, Çeviklik, Dayanıklılık, Zekâ, Bilgelik ya da Karizma. O puan 1 artar ve o yetenekle yapılan kurtarma zarlarında uzmanlık kazanırsın."
+ },
+ "ritual-caster": {
+  "name": "Ayin Büyücüsü",
+  "description": "Zekâ, Bilgelik ya da Karizma 1 artar. Sınıf büyü listendeki ya da bildiğin ayin büyülerini, yapım süresini uzatmadan ayin olarak yapabilirsin."
+ },
+ "savage-attacker": {
+  "name": "Vahşi Saldırgan",
+  "description": "Turda bir kez, bir hedefe silahla isabet ettiğinde silahın hasar zarlarını iki kez atıp istediğin sonucu hedefe uygulayabilirsin."
+ },
+ "sentinel": {
+  "name": "Nöbetçi",
+  "description": "Güç ya da Çeviklik 1 artar. Bir yaratığa fırsat saldırısıyla isabet ettiğinde hızı 0 olur. Yaratıklar Çekilse bile fırsat saldırısı doğurur ve 5 fit içindeki müttefiklerine saldıran düşmanlara vurabilirsin."
+ },
+ "shadow-touched": {
+  "name": "Gölge Dokunuşlu",
+  "description": "Zekâ, Bilgelik ya da Karizma 1 artar. Görünmezlik'i ve bir 1. seviye Yanılsama ya da Ölü Büyüsü büyüsünü öğrenirsin. Her birini Uzun Dinlenme başına bir kez, yuva harcamadan yapabilirsin."
+ },
+ "sharpshooter": {
+  "name": "Keskin Nişancı",
+  "description": "Çeviklik 1 artar. Uzun menzilden saldırmak menzilli saldırı zarlarını dezavantajlı yapmaz, menzilli silah saldırıların yarım ve dörtte üç siperi yok sayar ve bir düşmanın 5 fit yakınında olmak menzilli silah saldırılarını dezavantajlı yapmaz."
+ },
+ "shield-master": {
+  "name": "Kalkan Üstadı",
+  "description": "Güç 1 artar. Kalkan taşırken turunda bir yaratığa yakın dövüş saldırısıyla isabet edersen, saldırının parçası olarak hedefi 5 fit itebilir ya da Yere serebilirsin. Ayrıca tek hedefli etkilere karşı ÇEV kurtarmalarına Kalkanının ZS bonusunu ekleyebilirsin."
+ },
+ "skill-expert": {
+  "name": "Hüner Uzmanı",
+  "description": "Seçtiğin bir yetenek puanı 1 artar. Seçtiğin bir hünerde uzmanlık ve uzman olduğun bir hünerde ustalık (çift uzmanlık) kazanırsın."
+ },
+ "skilled": {
+  "name": "Hünerli",
+  "description": "Seçtiğin üç hüner ya da alette (istediğin bileşimde) uzmanlık kazanırsın."
+ },
+ "skulker": {
+  "name": "Sinsi",
+  "description": "Çeviklik 1 artar. 10 fit menzilli Kör Görüş kazanırsın. Hafif gölgelenmiş yerlerde gizlenebilirsin ve gizliyken ıskaladığın bir menzilli saldırı yerini ele vermez."
+ },
+ "slasher": {
+  "name": "Kesici",
+  "description": "Güç ya da Çeviklik 1 artar. Turda bir kez kesici hasar verdiğinde hedefin hızını 10 fit düşürebilirsin. Kesici hasarlı kritik vuruşlar, bir sonraki turuna kadar hedefin saldırı zarlarını dezavantajlı yapar."
+ },
+ "speedy": {
+  "name": "Hızlı",
+  "description": "Çeviklik ya da Dayanıklılık 1 artar. Hızın 10 fit artar, zorlu arazide ilerlemek ek hareket harcamaz ve sana yapılan fırsat saldırıları dezavantajlıdır."
+ },
+ "spell-sniper": {
+  "name": "Büyü Nişancısı",
+  "description": "Zekâ, Bilgelik ya da Karizma 1 artar. Menzilli büyü saldırıların yarım ve dörtte üç siperi yok sayar, 5 fit içinde menzilli büyü yapmak dezavantaj getirmez ve menzilli büyülerinin menzili ikiye katlanır (en az 10 fit ise)."
+ },
+ "tavern-brawler": {
+  "name": "Meyhane Kabadayısı",
+  "description": "Silahsız Vuruşunun hasar zarı 1d4 olur. Turda bir kez, bir Silahsız Vuruş ya da Doğaçlama Silahla isabet ettiğinde hasar zarını yeniden atıp istediğin sonucu kullanabilirsin. Ayrıca Doğaçlama Silahlarda uzmanlık kazanırsın."
+ },
+ "telekinetic": {
+  "name": "Telekinetik",
+  "description": "Zekâ, Bilgelik ya da Karizma 1 artar. Büyücü Eli'ni öğrenirsin (görünmez, 60 fit menzil). Bonus Aksiyonla, 30 fit içindeki bir yaratığı telekinezi ile 5 fit kendine doğru ya da kendinden uzağa itebilirsin (ZD = 8 + UB + yetenek modifiyesi)."
+ },
+ "telepathic": {
+  "name": "Telepatik",
+  "description": "Zekâ, Bilgelik ya da Karizma 1 artar. 60 fit içinde gördüğün herhangi bir yaratıkla telepatik olarak konuşabilirsin. Düşünce Sezme'yi Uzun Dinlenme başına bir kez, yuva harcamadan yapabilirsin."
+ },
+ "tough": {
+  "name": "Sert",
+  "description": "Bu erdemi aldığında Can Puanı azamin karakter seviyenin iki katı kadar artar ve her seviye atladığında 2 daha artar."
+ },
+ "war-caster": {
+  "name": "Savaş Büyücüsü",
+  "description": "Zekâ, Bilgelik ya da Karizma 1 artar. Konsantrasyonu sürdürmek için atılan DAY kurtarmalarında avantajlısın. Silah ya da kalkan tutarken el hareketi bileşenlerini yapabilir ve tek hedefli bir büyüyü fırsat saldırısı olarak yapabilirsin."
+ },
+ "weapon-master": {
+  "name": "Silah Üstadı",
+  "description": "Güç ya da Çeviklik 1 artar. Seçtiğin dört silahta Silah Ustalığı kazanırsın."
+ },
+ "boon-of-combat-prowess": {
+  "name": "Dövüş Hüneri Lütfu",
+  "description": "Bir saldırı zarını ıskaladığında bunun yerine isabet ettirebilirsin. Turda bir kez."
+ },
+ "boon-of-dimensional-travel": {
+  "name": "Boyutlar Arası Yolculuk Lütfu",
+  "description": "Saldırı aksiyonunu aldıktan ya da bir büyü yaptıktan hemen sonra, 30 fite kadar boş bir alana ışınlanabilirsin."
+ },
+ "boon-of-energy-resistance": {
+  "name": "Enerji Direnci Lütfu",
+  "description": "Seçtiğin iki hasar türüne direnç kazanırsın: Asit, Soğuk, Ateş, Yıldırım, Nekrotik, Zehir, Psişik, Işıyan ya da Gürleme."
+ },
+ "boon-of-fate": {
+  "name": "Kader Lütfu",
+  "description": "Sen ya da 60 fit içindeki başka bir yaratık bir d20 denemesi yaptığında, bir d10 atıp sonuca ekleyebilir ya da sonuçtan çıkarabilirsin. Dinlenme başına bir kez."
+ },
+ "boon-of-fortitude": {
+  "name": "Metanet Lütfu",
+  "description": "Can Puanı azamin 40 artar. Can Puanı geri kazandığında, turda bir kez fazladan 2d20 Can Puanı daha kazanırsın."
+ },
+ "boon-of-irresistible-offense": {
+  "name": "Karşı Konulmaz Hücum Lütfu",
+  "description": "Ezici, delici ve kesici hasarın dirençleri yok sayar. Kritik vuruşlar yetenek modifiyen kadar ek hasar verir."
+ },
+ "boon-of-night-spirit": {
+  "name": "Gece Ruhu Lütfu",
+  "description": "Loş Işıkta ya da Karanlıkta, Bonus Aksiyonla Görünmez olabilirsin ve Kuvvet ile Işıyan dışındaki tüm hasara direnç kazanırsın."
+ },
+ "boon-of-recovery": {
+  "name": "Toparlanma Lütfu",
+  "description": "0 Can Puanına düştüğünde, bunun yerine Can Puanı azaminin yarısını anında geri kazanabilirsin. Uzun Dinlenme başına bir kez."
+ },
+ "boon-of-skill": {
+  "name": "Hüner Lütfu",
+  "description": "Tüm hünerlerde uzmanlık ve seçtiğin bir hünerde ustalık kazanırsın."
+ },
+ "boon-of-speed": {
+  "name": "Sürat Lütfu",
+  "description": "Hızın 30 fit artar. Bonus Aksiyonla Çekilme aksiyonunu alabilirsin."
+ },
+ "boon-of-spell-recall": {
+  "name": "Büyü Hatırlama Lütfu",
+  "description": "1. ile 4. seviye arası bir büyü yuvası kullanarak büyü yaptığında 1d4 at. 1 gelirse büyü yuvası harcanmaz."
+ },
+ "boon-of-truesight": {
+  "name": "Hakiki Görüş Lütfu",
+  "description": "60 fit menzilli Hakiki Görüş kazanırsın."
+ },
+ "archery": {
+  "name": "Okçuluk",
+  "description": "Yok"
+ },
+ "defense": {
+  "name": "Savunma",
+  "description": "Yok"
+ },
+ "dueling": {
+  "name": "Düello",
+  "description": "Yok"
+ },
+ "great-weapon-fighting": {
+  "name": "Büyük Silah Dövüşü",
+  "description": "Yok"
+ },
+ "protection": {
+  "name": "Koruma",
+  "description": "Yok"
+ },
+ "two-weapon-fighting": {
+  "name": "Çift Silah Dövüşü",
+  "description": "Yok"
+ },
+ "blind-fighting": {
+  "name": "Kör Dövüş",
+  "description": "Yok"
+ },
+ "interception": {
+  "name": "Araya Girme",
+  "description": "Yok"
+ },
+ "thrown-weapon-fighting": {
+  "name": "Fırlatma Silahı Dövüşü",
+  "description": "Yok"
+ },
+ "unarmed-fighting": {
+  "name": "Silahsız Dövüş",
+  "description": "Yok"
+ }
+}

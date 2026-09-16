@@ -195,7 +195,9 @@ func _init() -> void:
 	var at := -1
 	var in_order := true
 	for i in main.SLOTS.size():
-		var want := "%d %s" % [i + 1, main.SLOT_NAMES[main.SLOTS[i]]]
+		# SLOT_NAMES_EN, not the localized slot_name(): the step this reads is the
+		# English source text, so the names it has to contain are the English ones.
+		var want := "%d %s" % [i + 1, main.SLOT_NAMES_EN[main.SLOTS[i]]]
 		var found: int = bar_step.find(want)
 		if found <= at:
 			in_order = false

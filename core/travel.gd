@@ -45,6 +45,7 @@
 extends RefCounted
 
 const Campaign = preload("res://core/campaign.gd")
+const Loc = preload("res://core/loc.gd")
 const Dice = preload("res://core/dice.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Regions = preload("res://core/regions.gd")
@@ -102,10 +103,12 @@ static func set_orders(party, pace: String, scout_id: String = "", watch_id: Str
 	}
 
 static func pace_label(pace: String) -> String:
-	return String(PACE.get(pace, PACE["normal"])["label"])
+	var p: String = pace if PACE.has(pace) else "normal"
+	return Loc.t("travel.pace.%s" % p, String(PACE[p]["label"]))
 
 static func pace_note(pace: String) -> String:
-	return String(PACE.get(pace, PACE["normal"])["note"])
+	var p: String = pace if PACE.has(pace) else "normal"
+	return Loc.t("travel.pace.%s.note" % p, String(PACE[p]["note"]))
 
 static func speed_mult(party) -> float:
 	var m := float(PACE[orders(party)["pace"]]["speed"])

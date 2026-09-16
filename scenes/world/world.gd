@@ -15,6 +15,7 @@
 # cheap to do the day main.gd is in scope for edits.
 extends Control
 
+const Loc = preload("res://core/loc.gd")
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const WorldBattle = preload("res://core/world_battle.gd")
@@ -372,7 +373,7 @@ func _process(delta: float) -> void:
 		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0 or party.safe_camp
 	_layout_minimap()   # this Control resizes with the window; the inset follows the corner
 	if _clock_lbl != null:
-		_clock_lbl.text = "Day %d  %02d:%02d" % [
+		_clock_lbl.text = Loc.t("world.clock", "Day %d  %02d:%02d") % [
 			int(world.clock.elapsed / 1440.0) + 1,
 			int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60]
 	queue_redraw()
@@ -384,7 +385,7 @@ func _build_hud() -> void:
 	bar.add_theme_constant_override("separation", 12)
 	add_child(bar)
 	_pause_btn = Button.new()
-	_pause_btn.text = "Pause"
+	_pause_btn.text = Loc.t("world.pause", "Pause")
 	_pause_btn.pressed.connect(_toggle_pause)
 	bar.add_child(_pause_btn)
 	_speed_btn = Button.new()
@@ -402,31 +403,31 @@ func _build_hud() -> void:
 	_region_lbl.theme_type_variation = "Dim"
 	bar.add_child(_region_lbl)
 	var party_btn := Button.new()
-	party_btn.text = "Party"
+	party_btn.text = Loc.t("world.party", "Party")
 	party_btn.pressed.connect(_open_party)
 	bar.add_child(party_btn)
 	var quests_btn := Button.new()
-	quests_btn.text = "Quests"
+	quests_btn.text = Loc.t("world.quests", "Quests")
 	quests_btn.pressed.connect(_toggle_quests)
 	bar.add_child(quests_btn)
 	# M7: only a run that is telling a story has a story to read.
 	_story_btn = Button.new()
-	_story_btn.text = "Story"
+	_story_btn.text = Loc.t("world.story", "Story")
 	_story_btn.visible = story != null
 	_story_btn.pressed.connect(_toggle_story)
 	bar.add_child(_story_btn)
 	var manual := Button.new()
-	manual.text = "Manual"
+	manual.text = Loc.t("combat.manual", "Manual")
 	manual.theme_type_variation = "Quiet"
 	manual.pressed.connect(func(): ManualOverlay.toggle(self))
 	bar.add_child(manual)
 	var bug := Button.new()
-	bug.text = "Report a bug  [F3]"
+	bug.text = Loc.t("common.report_bug", "Report a bug") + "  [F3]"
 	bug.theme_type_variation = "Quiet"
 	bug.pressed.connect(report_bug)
 	bar.add_child(bug)
 	var title := Button.new()
-	title.text = "Title"
+	title.text = Loc.t("common.title", "Title")
 	title.theme_type_variation = "Quiet"
 	title.pressed.connect(_leave_world)
 	bar.add_child(title)
@@ -435,7 +436,7 @@ func _build_hud() -> void:
 	_lair_btn.pressed.connect(_lair_action)
 	bar.add_child(_lair_btn)
 	_lair_sneak_btn = Button.new()
-	_lair_sneak_btn.text = "Slip past the guardians (Animal Handling)"
+	_lair_sneak_btn.text = Loc.t("world.slip_past", "Slip past the guardians (Animal Handling)")
 	_lair_sneak_btn.visible = false
 	_lair_sneak_btn.pressed.connect(_lair_sneak_action)
 	bar.add_child(_lair_sneak_btn)
@@ -445,16 +446,17 @@ func _build_hud() -> void:
 	_pace_btn.pressed.connect(_cycle_pace)
 	bar.add_child(_pace_btn)
 	var shortrest_btn := Button.new()
-	shortrest_btn.text = "Short Rest"
+	shortrest_btn.text = Loc.t("world.short_rest", "Short Rest")
 	shortrest_btn.pressed.connect(_short_rest)
 	bar.add_child(shortrest_btn)
 	_camp_btn = Button.new()
-	_camp_btn.text = "Make Camp"
+	_camp_btn.text = Loc.t("world.make_camp", "Make Camp")
 	_camp_btn.visible = false   # only while the party owns a camp kit — see _process()
 	_camp_btn.pressed.connect(_make_camp)
 	bar.add_child(_camp_btn)
 	var hint := Label.new()
-	hint.text = "Click marches there.  Right-drag pans, wheel zooms.  Space pauses, Esc opens the menu."
+	hint.text = Loc.t("world.hint", "Click marches there.  Right-drag pans, wheel zooms."
+		+ "  Space pauses, Esc opens the menu.")
 	hint.theme_type_variation = "Dim"
 	bar.add_child(hint)
 	_region_msg = Label.new()
@@ -531,7 +533,8 @@ func _toggle_pause() -> void:
 		world.clock.resume()
 	else:
 		world.clock.pause()
-	_pause_btn.text = "Resume" if world.clock.is_paused() else "Pause"
+	_pause_btn.text = Loc.t("world.resume", "Resume") if world.clock.is_paused() \
+		else Loc.t("world.pause", "Pause")
 
 func _cycle_speed() -> void:
 	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null \
@@ -602,7 +605,7 @@ func _build_menu_panel() -> void:
 	panel.add_child(box)
 
 	var title := Label.new()
-	title.text = "Paused"
+	title.text = Loc.t("world.paused", "Paused")
 	title.theme_type_variation = "Head"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
@@ -610,7 +613,7 @@ func _build_menu_panel() -> void:
 	var when := Label.new()
 	when.theme_type_variation = "Dim"
 	when.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	when.text = "Day %d, %02d:%02d — %s" % [
+	when.text = Loc.t("world.when", "Day %d, %02d:%02d — %s") % [
 		int(world.clock.elapsed / 1440.0) + 1,
 		int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60,
 		String(_region.get("label", "the road"))]
@@ -624,14 +627,14 @@ func _build_menu_panel() -> void:
 		b.pressed.connect(fn)
 		box.add_child(b)
 
-	add.call("Resume  [Esc]", _close_menu)
+	add.call(Loc.t("world.resume", "Resume") + "  [Esc]", _close_menu)
 	# The settings overlay parents itself to this screen, not to the menu, so
 	# it survives the menu closing underneath it — and its own Esc closes it
 	# before this one's ever sees the key.
-	add.call("Settings", func(): SettingsOverlay.toggle(self))
-	add.call("Field manual", func(): ManualOverlay.toggle(self), true)
-	add.call("Report a bug  [F3]", func(): report_bug(), true)
-	add.call("Save and quit to the title screen", func():
+	add.call(Loc.t("common.settings", "Settings"), func(): SettingsOverlay.toggle(self))
+	add.call(Loc.t("common.manual", "Field manual"), func(): ManualOverlay.toggle(self), true)
+	add.call(Loc.t("common.report_bug", "Report a bug") + "  [F3]", func(): report_bug(), true)
+	add.call(Loc.t("world.save_quit", "Save and quit to the title screen"), func():
 		_close_menu()
 		_leave_world(), true)
 
@@ -660,10 +663,12 @@ func _open_party(at_inn := false) -> void:
 	var screen = load(PARTY_SCENE).instantiate()
 	screen.party = party
 	screen.roster_locked = not at_inn
-	screen.locked_note = "Benching and recruiting happen at an inn — find one and ask at the counter."
+	screen.locked_note = Loc.t("world.party_locked",
+		"Benching and recruiting happen at an inn — find one and ask at the counter.")
 	overlay.add_child(screen)
 	var back := Button.new()
-	back.text = "←  Back to the inn" if at_inn else "←  Back to the map"
+	back.text = "←  " + (Loc.t("world.back_inn", "Back to the inn") if at_inn
+		else Loc.t("world.back_map", "Back to the map"))
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -220; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(_close_party)
@@ -724,7 +729,7 @@ func _build_quest_panel() -> void:
 	panel.add_child(box)
 
 	var title := Label.new()
-	title.text = "Quest log"
+	title.text = Loc.t("world.quest_log", "Quest log")
 	title.theme_type_variation = "Head"
 	box.add_child(title)
 
@@ -734,7 +739,7 @@ func _build_quest_panel() -> void:
 	var live: Array = Quest.active(party)
 	if live.is_empty():
 		var none := Label.new()
-		none.text = "No quests. Settlements have work."
+		none.text = Loc.t("world.no_quests", "No quests. Settlements have work.")
 		none.theme_type_variation = "Dim"
 		rows.add_child(none)
 	for q in live:
@@ -746,7 +751,7 @@ func _build_quest_panel() -> void:
 		rows.add_child(l)
 
 	var close := Button.new()
-	close.text = "Close"
+	close.text = Loc.t("common.close", "Close")
 	close.pressed.connect(_close_quests)
 	box.add_child(close)
 
@@ -862,7 +867,8 @@ func _build_story_panel() -> void:
 
 	var chapter := Label.new()
 	var c: Dictionary = story.story.chapter(story.chapter)
-	chapter.text = "Finished." if story.done else String(c.get("title", "—"))
+	chapter.text = Loc.t("world.story_done", "Finished.") if story.done \
+		else String(c.get("title", "—"))
 	chapter.theme_type_variation = "Dim"
 	chapter.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	box.add_child(chapter)
@@ -881,7 +887,7 @@ func _build_story_panel() -> void:
 		rows.add_child(l)
 
 	var close := Button.new()
-	close.text = "Close"
+	close.text = Loc.t("common.close", "Close")
 	close.pressed.connect(_close_story)
 	box.add_child(close)
 
@@ -1183,7 +1189,7 @@ func _build_spoils_panel(heading: String, rows: Array) -> void:
 		list.add_child(l)
 
 	var go := Button.new()
-	go.text = "Back to the map  [Esc]"
+	go.text = Loc.t("world.back_map", "Back to the map") + "  [Esc]"
 	go.pressed.connect(_close_spoils)
 	box.add_child(go)
 	go.grab_focus()
@@ -1299,8 +1305,10 @@ func _check_lairs() -> void:
 	# it, so the level band belongs here rather than one screen further in.
 	var band: Dictionary = Regions.at(world, target.position)
 	var lv: Array = band["levels"]
-	_lair_btn.text = ("Search for a hidden lair (Survival)" if not target.discovered
-		else "Attack %s — %s, levels %d-%d" % [target.sname, String(band["label"]),
+	_lair_btn.text = (Loc.t("world.search_lair", "Search for a hidden lair (Survival)")
+		if not target.discovered
+		else Loc.t("world.attack_lair", "Attack %s — %s, levels %d-%d") \
+			% [target.sname, String(band["label"]),
 			int(lv[0]), int(lv[1])])
 	# The quiet way is only on the table while the warren is still quiet: once
 	# the party has been through that door (or tried the quiet way and failed
@@ -1658,7 +1666,8 @@ func _check_region() -> void:
 	if _region_lbl != null:
 		# Short form: this bar already carries nine controls and a hint, and the
 		# long form lives on the lair button, the inn's leads and the crossing card.
-		_region_lbl.text = "%s, levels %d to %d" % [String(band["label"]), int(lv[0]), int(lv[1])]
+		_region_lbl.text = Loc.t("world.region", "%s, levels %d to %d") \
+			% [String(band["label"]), int(lv[0]), int(lv[1])]
 	if _region.is_empty():
 		_region = band          # first frame: the party is simply somewhere
 		return

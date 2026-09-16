@@ -15,6 +15,7 @@
 #   godot --path . scenes/mods/mods.tscn
 extends Control
 
+const Loc = preload("res://core/loc.gd")
 const Registry = preload("res://core/mod/registry.gd")
 const Entitlement = preload("res://core/mod/entitlement.gd")
 const Icons = preload("res://core/ui_icons.gd")
@@ -50,7 +51,7 @@ func _ready() -> void:
 	panel.add_child(col)
 
 	var cap := Label.new()
-	cap.text = "Campaigns and mods"
+	cap.text = Loc.t("mods.title", "Campaigns and mods")
 	cap.theme_type_variation = "Title"
 	col.add_child(cap)
 
@@ -71,12 +72,12 @@ func _ready() -> void:
 	buttons.add_theme_constant_override("separation", 10)
 	col.add_child(buttons)
 	var rescan := Button.new()
-	rescan.text = "↻  Rescan"
+	rescan.text = "↻  " + Loc.t("mods.rescan", "Rescan")
 	Icons.clicks(rescan)
 	rescan.pressed.connect(_rescan)
 	buttons.add_child(rescan)
 	var back := Button.new()
-	back.text = "←  Back"
+	back.text = "←  " + Loc.t("common.back", "Back")
 	Icons.clicks(back)
 	back.pressed.connect(_back)
 	buttons.add_child(back)
@@ -95,10 +96,12 @@ func refresh() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	var packs := Registry.scan()
-	_note.text = "%d installed  ·  mods go in  %s" % [packs.size(), Registry.user_root()]
+	_note.text = Loc.t("mods.installed", "%d installed  ·  mods go in  %s") \
+		% [packs.size(), Registry.user_root()]
 	if packs.is_empty():
 		var none := Label.new()
-		none.text = "Nothing installed. Drop a pack directory in %s." % Registry.user_root()
+		none.text = Loc.tf("mods.none", "Nothing installed. Drop a pack directory in %s.",
+			[Registry.user_root()])
 		none.add_theme_color_override("font_color", Icons.COL_MUTED)
 		_list.add_child(none)
 	for p in packs:
@@ -140,7 +143,7 @@ func _row(pack) -> Control:
 	head.add_child(chip)
 
 	col.add_child(_dim("%s, %s%s" % [m.kind, m.describe(),
-		", official" if m.official else ""], Icons.COL_MUTED))
+		Loc.t("mods.official", ", official") if m.official else ""], Icons.COL_MUTED))
 	if m.summary != "":
 		col.add_child(_dim(m.summary, Icons.COL_BODY))
 
@@ -157,7 +160,8 @@ func _row(pack) -> Control:
 
 	if pack.playable() and on_play.is_valid():
 		var play := Button.new()
-		play.text = "Play" if m.has_world() else "Start the story"
+		play.text = Loc.t("mods.play", "Play") if m.has_world() \
+			else Loc.t("mods.start_story", "Start the story")
 		play.theme_type_variation = "Primary"
 		Icons.clicks(play)
 		play.pressed.connect(func():
@@ -168,12 +172,14 @@ func _row(pack) -> Control:
 	if pack.status == "locked":
 		# No purchase button: the game is not the storefront. It reads what the
 		# player owns (core/mod/entitlement.gd) and says so.
-		var sold := _dim("Sold separately, as %s" % m.product_id, Icons.COL_GOLD)
+		var sold := _dim(Loc.tf("mods.sold_separately", "Sold separately, as %s",
+			[m.product_id]), Icons.COL_GOLD)
 		sold.size_flags_horizontal = Control.SIZE_EXPAND_FILL   # an HBox gives a wrapping label no width otherwise
 		row.add_child(sold)
 	elif pack.status != "broken":
 		var toggle := Button.new()
-		toggle.text = "Turn off" if Registry.is_enabled(m.id) else "Turn on"
+		toggle.text = Loc.t("mods.turn_off", "Turn off") if Registry.is_enabled(m.id) \
+			else Loc.t("mods.turn_on", "Turn on")
 		Icons.clicks(toggle)
 		toggle.pressed.connect(func():
 			Registry.set_enabled(m.id, not Registry.is_enabled(m.id))

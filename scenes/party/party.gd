@@ -18,6 +18,8 @@ const Travel = preload("res://core/travel.gd")
 const HeroModels = preload("res://scenes/figures3d.gd").HERO_MODELS
 # Skill ids -> names/abilities, the same table the profile screen reads.
 const Catalog = preload("res://core/rules/catalog.gd")
+const Loc = preload("res://core/loc.gd")
+const Campaign = preload("res://core/campaign.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_EDGE := Icons.COL_EDGE
@@ -38,7 +40,7 @@ var _selected := ""                       # roster id armed for a slot click
 # orders and the map figure stay live everywhere: deciding who walks first is a
 # travel decision, and travel is what you are doing out there.
 var roster_locked := false
-var locked_note := "Benching and recruiting happen at an inn."
+var locked_note := Loc.t("party.locked_note", "Benching and recruiting happen at an inn.")
 
 var _roster_col := VBoxContainer.new()
 var _slot_col := VBoxContainer.new()
@@ -76,7 +78,7 @@ func _ready() -> void:
 	add_child(root)
 
 	var header := Label.new()
-	header.text = "The party"
+	header.text = Loc.t("party.title", "The party")
 	header.theme_type_variation = "Title"
 	root.add_child(header)
 
@@ -87,8 +89,9 @@ func _ready() -> void:
 	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cols.add_theme_constant_override("separation", 16)
 	root.add_child(cols)
-	cols.add_child(_column("Roster", _roster_col, 1.4))
-	cols.add_child(_column("Marching, up to %d" % Party.MAX_ACTIVE, _slot_col, 1.0))
+	cols.add_child(_column(Loc.t("party.roster", "Roster"), _roster_col, 1.4))
+	cols.add_child(_column(Loc.tf("party.marching", "Marching, up to %d",
+		[Party.MAX_ACTIVE]), _slot_col, 1.0))
 
 	root.add_child(_footer())
 	_refresh()
@@ -143,7 +146,7 @@ func _footer() -> Control:
 
 	_create_btn = Button.new()
 	Icons.clicks(_create_btn)
-	_create_btn.text = "Create new"
+	_create_btn.text = Loc.t("party.create_new", "Create new")
 	_create_btn.theme_type_variation = "Primary"
 	_create_btn.pressed.connect(func():
 		if roster_locked:
@@ -173,7 +176,7 @@ func _clear(row: Container) -> void:
 func _build_figure_picker() -> void:
 	_clear(_fig_row)
 	var label := Label.new()
-	label.text = "Map figure"
+	label.text = Loc.t("party.map_figure", "Map figure")
 	label.theme_type_variation = "Dim"
 	_fig_row.add_child(label)
 
@@ -184,7 +187,7 @@ func _build_figure_picker() -> void:
 	var chosen_id: String = chosen.id if chosen != null else ""
 	var ob := OptionButton.new()
 	ob.name = "FigurePicker"      # the footer holds four pickers now; named so each is addressable
-	ob.add_item("Default (plain pawn)")
+	ob.add_item(Loc.t("party.figure_default", "Default (plain pawn)"))
 	ob.set_item_metadata(0, "")
 	for id in party.active:
 		var ch = party.get_member(id)
@@ -211,11 +214,14 @@ func _build_figure_picker() -> void:
 # Scout and watch are the two jobs travel.gd hands out by role. Naming somebody
 # means their skill is rolled instead of the party's best at it — which is the
 # entire point of naming them, so say so rather than leaving it to be guessed.
-const SCOUT_HINT := "Reads the ground ahead — rough going, and tracks across the road.\n" \
+const SCOUT_HINT_EN := "Reads the ground ahead — rough going, and tracks across the road.\n" \
 	+ "Leave it to \"whoever is best\" and the party's best at it rolls."
-const WATCH_HINT := "Notices what the road is about to do — foul water, and the like.\n" \
+const WATCH_HINT_EN := "Notices what the road is about to do — foul water, and the like.\n" \
 	+ "Leave it to \"whoever is best\" and the party's best at it rolls."
-const BEST_LABEL := "Whoever is best"
+
+static func scout_hint() -> String: return Loc.t("orders.scout.hint", SCOUT_HINT_EN)
+static func watch_hint() -> String: return Loc.t("orders.watch.hint", WATCH_HINT_EN)
+static func best_label() -> String: return Loc.t("orders.best", "Whoever is best")
 
 func _build_orders() -> void:
 	_clear(_orders_row)
@@ -230,7 +236,7 @@ func _build_orders() -> void:
 	_orders_row.add_child(row)
 
 	var cap := Label.new()
-	cap.text = "Standing orders"
+	cap.text = Loc.t("orders.title", "Standing orders")
 	cap.theme_type_variation = "Caption"
 	row.add_child(cap)
 
@@ -243,11 +249,11 @@ func _build_orders() -> void:
 		pace_ob.set_item_tooltip(pace_ob.item_count - 1, Travel.pace_note(pid))
 	_select_meta(pace_ob, pace)
 	pace_ob.item_selected.connect(func(i): _set_order("pace", String(pace_ob.get_item_metadata(i))))
-	row.add_child(_order_field("Pace:", pace_ob))
+	row.add_child(_order_field(Loc.t("orders.pace", "Pace:"), pace_ob))
 
 	for job in ["scout", "watch"]:
 		var job_ob := _job_picker(String(job), String(o[job]))
-		row.add_child(_order_field("%s:" % String(job).capitalize(), job_ob))
+		row.add_child(_order_field(Loc.t("orders.%s" % job, "%s:" % String(job).capitalize()), job_ob))
 
 	# Both halves earn their place: the note is the sentence that sells the
 	# trade, the numbers are the trade itself. A player should be able to see
@@ -256,7 +262,7 @@ func _build_orders() -> void:
 	note.name = "PaceNote"
 	note.theme_type_variation = "Dim"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "%s  %.2f× travel speed, %s." % [
+	note.text = Loc.t("orders.note", "%s  %.2f× travel speed, %s.") % [
 		Travel.pace_note(pace), Travel.speed_mult(party), _effect(Travel.pace_bonus(party))]
 	_orders_row.add_child(note)
 
@@ -267,8 +273,8 @@ func _build_orders() -> void:
 func _job_picker(job: String, chosen_id: String) -> OptionButton:
 	var ob := OptionButton.new()
 	ob.name = "%sPicker" % job.capitalize()
-	ob.tooltip_text = SCOUT_HINT if job == "scout" else WATCH_HINT
-	ob.add_item(BEST_LABEL)
+	ob.tooltip_text = scout_hint() if job == "scout" else watch_hint()
+	ob.add_item(best_label())
 	ob.set_item_metadata(0, "")
 	for id in party.active:
 		var ch = party.get_member(id)
@@ -307,8 +313,8 @@ func _order_field(caption: String, ob: OptionButton) -> Control:
 # The pace's bonus as a clause. Zero gets words rather than "+0", which reads as
 # a modifier that is there rather than one that is not.
 func _effect(bonus: int) -> String:
-	return "no modifier on the road" if bonus == 0 \
-		else "%+d on every check the road makes" % bonus
+	return Loc.t("orders.no_modifier", "no modifier on the road") if bonus == 0 \
+		else Loc.tf("orders.modifier", "%+d on every check the road makes", [bonus])
 
 # --- rendering ------------------------------------------------------------
 
@@ -330,28 +336,33 @@ func _refresh() -> void:
 	_build_figure_picker()
 	_build_orders()
 
-	_purse.text = "%d gp" % party.gold
+	_purse.text = Loc.tf("common.gp", "%d gp", [party.gold])
 	if party.stash.is_empty():
-		_stash.text = "[color=#8f95a3]stash empty[/color]"
+		_stash.text = "[color=#8f95a3]%s[/color]" % Loc.t("party.stash_empty", "stash empty")
 	else:
 		var parts := []
 		for e in party.stash:
 			var id := String(e["item_id"])
-			var nm: String = id.capitalize() if Party.is_identified(e) \
-				else "Unidentified (%s)" % Icons.rarity_of(id)
+			var nm: String = Campaign.item_name(id) if Party.is_identified(e) \
+				else Loc.tf("item.unidentified", "Unidentified (%s)",
+					[Loc.term("rarity", Icons.rarity_of(id), Icons.rarity_of(id))])
 			parts.append(Icons.item_bb(id, "%s ×%d" % [nm, int(e["quantity"])]))
-		_stash.text = "[color=%s]Stash:[/color] %s" % [Icons.COL_BODY.to_html(false), ", ".join(parts)]
+		_stash.text = "[color=%s]%s[/color] %s" % [Icons.COL_BODY.to_html(false),
+			Loc.t("party.stash", "Stash:"), ", ".join(parts)]
 
 	if _create_btn != null:
 		_create_btn.disabled = roster_locked
 		_create_btn.tooltip_text = locked_note if roster_locked else ""
 	if roster_locked:
-		_hint.text = "%s  Marching order, standing orders and the map figure still change here." % locked_note
+		_hint.text = "%s  %s" % [locked_note, Loc.t("party.locked_hint",
+			"Marching order, standing orders and the map figure still change here.")]
 	elif _selected == "":
-		_hint.text = "Click anyone marching to bench them.  Or pick up a roster member, then click a slot to place or swap them."
+		_hint.text = Loc.t("party.hint_idle", "Click anyone marching to bench them."
+			+ "  Or pick up a roster member, then click a slot to place or swap them.")
 	else:
-		_hint.text = "%s selected — click a party slot to place them, or click them again to cancel." \
-			% party.summary(_selected).get("name", "?")
+		_hint.text = Loc.tf("party.hint_selected",
+			"%s selected — click a party slot to place them, or click them again to cancel.",
+			[party.summary(_selected).get("name", "?")])
 
 # One roster row: summary + select/bench/profile/dismiss.
 func _card(sm: Dictionary) -> Control:
@@ -364,7 +375,7 @@ func _card(sm: Dictionary) -> Control:
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
 
-	panel.tooltip_text = "Pick up, then click a marching slot"
+	panel.tooltip_text = Loc.t("party.pick_up", "Pick up, then click a marching slot")
 	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	panel.gui_input.connect(func(ev):
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
@@ -374,7 +385,8 @@ func _card(sm: Dictionary) -> Control:
 
 	var bench := Button.new()
 	Icons.clicks(bench)
-	bench.text = "Bench" if sm["active"] else "To party"
+	bench.text = Loc.t("party.bench", "Bench") if sm["active"] \
+		else Loc.t("party.to_party", "To party")
 	bench.disabled = roster_locked \
 		or (not sm["active"] and party.active.size() >= Party.MAX_ACTIVE)
 	if roster_locked:
@@ -390,8 +402,8 @@ func _card(sm: Dictionary) -> Control:
 
 	var prof := Button.new()
 	Icons.clicks(prof)
-	prof.text = "View"
-	prof.tooltip_text = "Open the character profile"
+	prof.text = Loc.t("party.view", "View")
+	prof.tooltip_text = Loc.t("party.view.hint", "Open the character profile")
 	prof.pressed.connect(func(): _on_view_profile(sm["id"]))
 	row.add_child(prof)
 
@@ -433,7 +445,7 @@ func _slot(index: int, sm: Dictionary) -> Control:
 	b.custom_minimum_size = Vector2(0, SLOT_MIN_H)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if sm.is_empty():
-		b.text = "%d.  Empty" % (index + 1)
+		b.text = Loc.tf("party.slot_empty", "%d.  Empty", [index + 1])
 		b.add_theme_color_override("font_color", COL_DIM)
 	else:
 		# The marching slots are numbered because the order IS the order — who
@@ -456,7 +468,7 @@ func _slot(index: int, sm: Dictionary) -> Control:
 		b.custom_minimum_size.y = maxf(SLOT_MIN_H,
 			sum.get_combined_minimum_size().y + SLOT_PAD_H)
 		# What this click does depends on whether you are carrying somebody.
-		b.tooltip_text = ("Click to bench %s" % sm["name"]) if not roster_locked \
+		b.tooltip_text = Loc.tf("party.click_bench", "Click to bench %s", [sm["name"]]) if not roster_locked \
 			else locked_note
 	b.pressed.connect(func(): _on_slot(index))
 	return b
@@ -486,8 +498,9 @@ func _summary_label(sm: Dictionary) -> Control:
 	var stats := HBoxContainer.new()
 	stats.add_theme_constant_override("separation", 0)
 	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for cell in [["%s %d" % [sm["class_name"], sm["level"]], 120], ["AC %d" % sm["ac"], 60],
-			["HP %d/%d" % [sm["hp"], sm["max_hp"]], 0]]:
+	for cell in [["%s %d" % [sm["class_name"], sm["level"]], 120],
+			["%s %d" % [Loc.term("stat", "ac_short", "AC"), sm["ac"]], 60],
+			["%s %d/%d" % [Loc.term("stat", "hp_short", "HP"), sm["hp"], sm["max_hp"]], 0]]:
 		var l := Label.new()
 		l.text = cell[0]
 		l.theme_type_variation = "Dim"
@@ -519,10 +532,10 @@ func _detail_line(mark: String, text: String, tint: Color, id: String) -> Label:
 func _gear_text(sm: Dictionary) -> String:
 	var worn: Array = sm.get("equipped", [])
 	if worn.is_empty():
-		return "nothing worn or wielded"
+		return Loc.t("party.no_gear", "nothing worn or wielded")
 	var names: Array = []
 	for it in worn:
-		var nm: String = String(it["id"]).capitalize()
+		var nm: String = Campaign.item_name(String(it["id"]))
 		names.append(nm if int(it["quantity"]) <= 1 else "%s x%d" % [nm, int(it["quantity"])])
 	return ", ".join(names)
 
@@ -531,7 +544,7 @@ func _gear_text(sm: Dictionary) -> String:
 func _skills_text(sm: Dictionary) -> String:
 	var trained: Array = sm.get("skills", [])
 	if trained.is_empty():
-		return "no trained skills"
+		return Loc.t("party.no_skills", "no trained skills")
 	var defs: Dictionary = Catalog.skills()
 	var bits: Array = []
 	for sk in trained:
@@ -620,7 +633,7 @@ func _on_view_profile(id: String) -> void:
 	if ch == null:
 		return
 	if not ResourceLoader.exists(PROFILE_SCENE):
-		_hint.text = "Profile screen (T3) not available yet."
+		_hint.text = Loc.t("party.no_profile", "Profile screen (T3) not available yet.")
 		return
 	var overlay := Control.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)

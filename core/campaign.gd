@@ -14,6 +14,7 @@ const Quest = preload("res://core/quest.gd")
 const Potions = preload("res://core/potions.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Loc = preload("res://core/loc.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const RNG = preload("res://core/rng.gd")
 const Dice = preload("res://core/dice.gd")
@@ -1071,10 +1072,19 @@ static func is_magic(item_id: String) -> bool:
 
 # What an unidentified item shows as: its rarity, nothing else.
 static func mystery_name(item_id: String) -> String:
-	return "Unidentified item (%s)" % String(item_data(item_id).get("rarity", "unknown"))
+	var rarity := String(item_data(item_id).get("rarity", "unknown"))
+	return Loc.tf("item.unidentified_long", "Unidentified item (%s)",
+		[Loc.term("rarity", rarity, rarity)])
 
+# An item's name. The catalog first (so a translated record answers), then the
+# language's bare-id table, then the id with its hyphens knocked out — the
+# party stash carries a few ids that are in none of the three item files.
 static func item_name(item_id: String) -> String:
-	return String(item_data(item_id).get("name", item_id.capitalize()))
+	var d := item_data(item_id)
+	if d.has("name"):
+		return String(d["name"])
+	var named := Loc.name_of(item_id)
+	return named if named != "" else item_id.capitalize()
 
 # 0 = not tradeable (artifacts, and anything the catalog has never heard of).
 static func item_price(item_id: String) -> int:

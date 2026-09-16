@@ -12,6 +12,7 @@ const Leveling = preload("res://core/leveling.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Save = preload("res://core/character_save.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const Loc = preload("res://core/loc.gd")
 
 # leveled = the build actually gained a level (a cancel before Confirm leaves it false).
 signal finished(leveled: bool)
@@ -107,7 +108,8 @@ func _on_confirm() -> void:
 		commit()
 		return
 	if not Leveling.can_finalize(_ch):
-		_status.text = "%d choice(s) still unmade." % Leveling.pending(_ch).size()
+		_status.text = Loc.tf("creator.unmade", "%d choice(s) still unmade.",
+			[Leveling.pending(_ch).size()])
 		return
 	if _ch.id != "":
 		Save.save(_ch)
@@ -131,42 +133,48 @@ func _render() -> void:
 		_body.remove_child(c)
 	var cls: String = _ch.class_id()
 	if _committed:
-		_title.text = "%s — level %d" % [_ch.cname, _ch.level()]
-		_confirm.text = "Done"
-		_cancel.text = "Close"
+		_title.text = Loc.tf("levelup.title_done", "%s — level %d", [_ch.cname, _ch.level()])
+		_confirm.text = Loc.t("common.done", "Done")
+		_cancel.text = Loc.t("common.close", "Close")
 		_gains_panel(Leveling.gains(_before, _ch.sheet()))
 		_choices()
 	else:
-		_title.text = "%s — %s %d → %d" % [_ch.cname, Creator.humanize(cls),
+		_title.text = Loc.t("levelup.title", "%s — %s %d → %d") % [_ch.cname,
+			String(Catalog.class_src(cls).get("name", Creator.humanize(cls))),
 			_ch.level(), _ch.level() + 1]
-		_confirm.text = "Confirm level %d" % (_ch.level() + 1)
-		_cancel.text = "Cancel"
+		_confirm.text = Loc.tf("levelup.confirm", "Confirm level %d", [_ch.level() + 1])
+		_cancel.text = Loc.t("common.cancel", "Cancel")
 		_gains_panel(Leveling.preview(_ch))
 	_status.text = ""
 
 func _gains_panel(g: Dictionary) -> void:
 	var die := int(Catalog.class_src(_ch.class_id())["hitDie"]) if _ch.class_id() != "" else 0
-	_head("Level %d" % int(g["level"]))
-	_note("Hit points  +%d  (average of d%d + CON)" % [int(g["hp"]), die], COL_TEXT)
+	_head(Loc.tf("levelup.level", "Level %d", [int(g["level"])]))
+	_note(Loc.t("levelup.hp", "Hit points  +%d  (average of d%d + CON)")
+		% [int(g["hp"]), die], COL_TEXT)
 	if int(g["proficiency_bonus"]) > 0:
-		_note("Proficiency bonus  +%d" % int(g["proficiency_bonus"]), COL_TEXT)
+		_note(Loc.tf("levelup.pb", "Proficiency bonus  +%d",
+			[int(g["proficiency_bonus"])]), COL_TEXT)
 	if String(g["subclass"]) != "":
-		_note("Subclass  %s" % Creator.humanize(g["subclass"]), COL_TEXT)
+		_note(Loc.tf("levelup.subclass", "Subclass  %s",
+			[String(Catalog.subclass_src(String(g["subclass"])).get("name",
+				Creator.humanize(g["subclass"])))]), COL_TEXT)
 	for f in g["features"]:
-		_note("New feature  %s" % Creator.humanize(f), COL_TEXT)
+		_note(Loc.tf("levelup.feature", "New feature  %s", [Creator.humanize(f)]), COL_TEXT)
 	for st in g["styles"]:
-		_note("Fighting style  %s" % Creator.humanize(st), COL_TEXT)
+		_note(Loc.tf("levelup.style", "Fighting style  %s", [Creator.humanize(st)]), COL_TEXT)
 	for p in g["pools"]:
 		_note("%s  %d → %d" % [Creator.humanize(p["id"]), int(p["from"]), int(p["to"])], COL_TEXT)
 	for s in g["slots"]:
-		_note("Level %d spell slots  %d → %d" % [int(s["level"]), int(s["from"]), int(s["to"])], COL_TEXT)
+		_note(Loc.t("levelup.slots", "Level %d spell slots  %d → %d")
+			% [int(s["level"]), int(s["from"]), int(s["to"])], COL_TEXT)
 	if not _committed and int(g["choices"]) > 0:
-		_note("%d choice(s) to make." % int(g["choices"]))
+		_note(Loc.tf("levelup.choices", "%d choice(s) to make.", [int(g["choices"])]))
 
 func _choices() -> void:
 	var sheet = _ch.sheet()
 	if Leveling.pending(_ch).is_empty():
-		_head("Nothing left to choose")
+		_head(Loc.t("levelup.nothing_left", "Nothing left to choose"))
 	# In the resolver's order, made or not: a choice keeps its place on the page
 	# (made ones stay on screen and editable, T34) rather than dropping to the
 	# bottom the moment it resolves.
@@ -174,17 +182,21 @@ func _choices() -> void:
 		var picks := Creator.picks_from_decision(p, _ch.choices.get(p["key"]))
 		var n := Creator.pick_count(p)
 		var src: Dictionary = p["source"]
-		_head("%s%s — pick %d  (%d chosen)" % ["✓ " if p.get("decided", false) else "",
-			Creator.humanize(p["type"]).replace(" choice", ""), n, picks.size()])
-		_note("from %s %s%s" % [src["origin"], Creator.humanize(src["id"]),
-			"  ·  already chosen, click to change" if p.get("decided", false) else ""])
+		_head("%s%s" % ["✓ " if p.get("decided", false) else "",
+			Loc.tf("creator.pick_head", "%s — pick %d  (%d chosen)",
+				[Creator.choice_label(String(p["type"])), n, picks.size()])])
+		_note("%s%s" % [Loc.tf("creator.pick_from", "from %s %s",
+			[Loc.term("origin", String(src["origin"]), String(src["origin"])),
+			Creator.humanize(src["id"])]),
+			Loc.t("creator.already_chosen", "  ·  already chosen, click to change")
+				if p.get("decided", false) else ""])
 		var f := HFlowContainer.new()
 		f.add_theme_constant_override("h_separation", 6)
 		f.add_theme_constant_override("v_separation", 6)
 		_body.add_child(f)
 		var opts := Creator.options_for(p, sheet)
 		if opts.is_empty():
-			_note("No options available.", COL_WARN)
+			_note(Loc.t("creator.no_options", "No options available."), COL_WARN)
 		for o in opts:
 			var count := picks.count(o["id"])
 			var b := Button.new()

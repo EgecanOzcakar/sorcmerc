@@ -29,6 +29,7 @@ const AchievementsOverlay = preload("res://scenes/achievements/achievements.gd")
 const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
+const Loc = preload("res://core/loc.gd")
 const Tutorial = preload("res://core/tutorial.gd")
 const Registry = preload("res://core/mod/registry.gd")
 const StoryRuntime = preload("res://core/mod/story_runtime.gd")
@@ -110,7 +111,8 @@ func show_title() -> void:
 	title.add_theme_font_size_override("font_size", 64)
 	col.add_child(title)
 	var tag := Label.new()
-	tag.text = "A short road, a hard fight, and whatever you carry home."
+	tag.text = Loc.t("title.tagline",
+		"A short road, a hard fight, and whatever you carry home.")
 	tag.theme_type_variation = "Serif"
 	tag.add_theme_color_override("font_color", Icons.COL_BODY)
 	col.add_child(tag)
@@ -124,34 +126,38 @@ func show_title() -> void:
 	# of it: no saying what you would be resuming, no saying that New run is going
 	# to write over it, and no way to clear it. All three are here now.
 	if linear_campaign() and CampaignSave.has_save():
-		col.add_child(_button("Resume the last run", _resume))
+		col.add_child(_button(Loc.t("title.resume_run", "Resume the last run"), _resume))
 	var slot: Dictionary = WorldSave.summary()
 	if not slot.is_empty():
-		col.add_child(_button("Resume the open world", _resume_world, true))
+		col.add_child(_button(Loc.t("title.resume_world", "Resume the open world"), _resume_world, true))
 		col.add_child(_dim(slot_lines(slot)))
 		col.add_child(_gap(6))
-	col.add_child(_button("New run", show_party_setup, slot.is_empty()))
+	col.add_child(_button(Loc.t("title.new_run", "New run"), show_party_setup, slot.is_empty()))
 	if not slot.is_empty():
-		col.add_child(_dim("One autosave slot. A new run writes over the one above."))
+		col.add_child(_dim(Loc.t("title.one_slot",
+			"One autosave slot. A new run writes over the one above.")))
 		col.add_child(_gap(6))
-	col.add_child(_button("Campaigns & mods", show_content))
-	col.add_child(_button("Tutorial", show_tutorial))
+	col.add_child(_button(Loc.t("title.content", "Campaigns & mods"), show_content))
+	col.add_child(_button(Loc.t("title.tutorial", "Tutorial"), show_tutorial))
 	var roster := CharacterSave.list_slugs().size()
-	col.add_child(_dim("%d in the barracks." % roster if roster != 1 else "1 in the barracks."))
+	col.add_child(_dim(Loc.tf("title.barracks", "%d in the barracks.", [roster]) if roster != 1
+		else Loc.t("title.barracks_one", "1 in the barracks.")))
 	col.add_child(_gap(12))
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 12)
-	foot.add_child(_quiet("Settings", func(): SettingsOverlay.toggle(self)))
-	foot.add_child(_quiet("Field manual", func(): ManualOverlay.toggle(self)))
+	foot.add_child(_quiet(Loc.t("common.settings", "Settings"), func(): SettingsOverlay.toggle(self)))
+	foot.add_child(_quiet(Loc.t("common.manual", "Field manual"), func(): ManualOverlay.toggle(self)))
 	# The achievements viewer had no door in the whole game until now: the model
-	# and the panel both shipped with T19 and nothing ever opened it.
-	foot.add_child(_quiet("Achievements", func(): AchievementsOverlay.open(self)))
-	foot.add_child(_quiet("Report a bug", report_bug))
-	foot.add_child(_quiet("Random battle (debug)", show_random_battle))
+	# and the panel both shipped with T19 and nothing ever opened it. The label is
+	# the screen's own title rather than a key of its own — same word, one entry.
+	foot.add_child(_quiet(Loc.t("achievements.title", "Achievements"),
+		func(): AchievementsOverlay.open(self)))
+	foot.add_child(_quiet(Loc.t("common.report_bug", "Report a bug"), report_bug))
+	foot.add_child(_quiet(Loc.t("title.random_battle", "Random battle (debug)"), show_random_battle))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	foot.add_child(spacer)
-	foot.add_child(_quiet("Quit", func(): get_tree().quit()))
+	foot.add_child(_quiet(Loc.t("common.quit", "Quit"), func(): get_tree().quit()))
 	col.add_child(foot)
 
 	var centre := CenterContainer.new()
@@ -164,16 +170,17 @@ static func slot_line(slot: Dictionary) -> String:
 	var bits: Array = [WorldSave.day_clock(float(slot.get("elapsed", 0.0)))]
 	var map := String(slot.get("map", ""))
 	if map != "":
-		bits.append("%s map" % map)
+		bits.append(Loc.tf("save.map", "%s map", [Loc.term("map_size", map, map)]))
 	var who: Array = slot.get("party", [])
-	bits.append(", ".join(who) if not who.is_empty() else "nobody standing")
+	bits.append(", ".join(who) if not who.is_empty() else Loc.t("save.nobody", "nobody standing"))
 	bits.append("%d gp" % int(slot.get("gold", 0)))
 	var story := String(slot.get("story", ""))
 	if story != "":
 		bits.append(story)
 	var when: int = int(slot.get("written_at", 0))
 	if when > 0:
-		bits.append("saved %s" % Time.get_datetime_string_from_unix_time(when, true).replace("T", " "))
+		bits.append(Loc.tf("save.saved_at", "saved %s",
+			[Time.get_datetime_string_from_unix_time(when, true).replace("T", " ")]))
 	return "  ·  ".join(bits)
 
 # The same facts as two short lines: when and where, then who and what.
@@ -181,11 +188,13 @@ static func slot_lines(slot: Dictionary) -> String:
 	var when := WorldSave.day_clock(float(slot.get("elapsed", 0.0)))
 	var map := String(slot.get("map", ""))
 	var who: Array = slot.get("party", [])
-	var first := when + (", %s map" % map if map != "" else "")
+	var first := when + (", " + Loc.tf("save.map", "%s map",
+		[Loc.term("map_size", map, map)]) if map != "" else "")
 	var story := String(slot.get("story", ""))
 	if story != "":
 		first += ", " + story
-	var second := (", ".join(who) if not who.is_empty() else "nobody standing") + ", %d gp" % int(slot.get("gold", 0))
+	var second := (", ".join(who) if not who.is_empty() else Loc.t("save.nobody", "nobody standing")) \
+		+ ", " + Loc.tf("common.gp", "%d gp", [int(slot.get("gold", 0))])
 	return first + "\n" + second
 
 # Deleting the only copy of a run is not a one-click thing: this is its own
@@ -195,21 +204,22 @@ func _confirm_delete_world_save() -> void:
 	col.add_theme_constant_override("separation", 10)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	var head := Label.new()
-	head.text = "Delete the open-world autosave?"
+	head.text = Loc.t("save.delete_head", "Delete the open-world autosave?")
 	head.theme_type_variation = "Title"
 	col.add_child(head)
 	col.add_child(_dim(slot_lines(WorldSave.summary())))
 	var body := Label.new()
-	body.text = "The characters stay in the barracks. The map, the purse, the stash and the quests do not. This cannot be undone."
+	body.text = Loc.t("save.delete_body", "The characters stay in the barracks."
+		+ " The map, the purse, the stash and the quests do not. This cannot be undone.")
 	body.theme_type_variation = "Serif"
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD
 	body.custom_minimum_size.x = 520
 	col.add_child(body)
 	col.add_child(_gap(8))
-	col.add_child(_button("Delete it", func():
+	col.add_child(_button(Loc.t("save.delete_yes", "Delete it"), func():
 		WorldSave.clear()
 		show_title()))
-	col.add_child(_quiet("Keep it", show_title))
+	col.add_child(_quiet(Loc.t("save.delete_no", "Keep it"), show_title))
 	var centre := CenterContainer.new()
 	centre.add_child(col)
 	_swap(centre, "delete-the-autosave confirmation")
@@ -280,7 +290,7 @@ func show_tutorial() -> void:
 	var wrap := Control.new()
 	wrap.add_child(combat)
 	var back := Button.new()
-	back.text = "Title"
+	back.text = Loc.t("common.title", "Title")
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -160; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(show_title)
@@ -319,7 +329,7 @@ func show_random_battle() -> void:
 	var wrap := Control.new()
 	wrap.add_child(combat)
 	var back := Button.new()
-	back.text = "Title"
+	back.text = Loc.t("common.title", "Title")
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -160; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(show_title)
@@ -349,7 +359,8 @@ func show_party_setup() -> void:
 	# open-world path reads it.
 	var begin := func(size: String) -> void:
 		if party.active.is_empty():
-			screen._hint.text = "Put at least one character in the active party first."
+			screen._hint.text = Loc.t("party.need_one",
+				"Put at least one character in the active party first.")
 			return
 		if linear_campaign():
 			_show_campaign(Campaign.new(party, int(OS.get_environment("SORCMERC_SEED"))))
@@ -360,18 +371,19 @@ func show_party_setup() -> void:
 	# one thing to begin, and it is the campaign the player just picked.
 	if _pack != null:
 		var begin_pack := Button.new()
-		begin_pack.text = "Begin %s" % _pack.title()
+		begin_pack.text = Loc.tf("party.begin_pack", "Begin %s", [_pack.title()])
 		begin_pack.theme_type_variation = "Primary"
 		begin_pack.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 		begin_pack.offset_left = -360; begin_pack.offset_top = 12; begin_pack.offset_right = -16
 		begin_pack.pressed.connect(func():
 			if party.active.is_empty():
-				screen._hint.text = "Put at least one character in the active party first."
+				screen._hint.text = Loc.t("party.need_one",
+					"Put at least one character in the active party first.")
 				return
 			_start_pack(party))
 		wrap.add_child(begin_pack)
 		var cancel := Button.new()
-		cancel.text = "Campaigns"
+		cancel.text = Loc.t("party.campaigns", "Campaigns")
 		cancel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		cancel.offset_left = 16; cancel.offset_top = 12; cancel.offset_right = 160
 		cancel.pressed.connect(func():
@@ -382,14 +394,14 @@ func show_party_setup() -> void:
 		return
 
 	var begin_small := Button.new()
-	begin_small.text = "Begin, small world"
+	begin_small.text = Loc.t("party.begin_small", "Begin, small world")
 	begin_small.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	begin_small.offset_left = -320; begin_small.offset_top = 12; begin_small.offset_right = -168
 	begin_small.pressed.connect(begin.bind("small"))
 	wrap.add_child(begin_small)
 
 	var begin_large := Button.new()
-	begin_large.text = "Begin, large world"
+	begin_large.text = Loc.t("party.begin_large", "Begin, large world")
 	begin_large.theme_type_variation = "Primary"
 	begin_large.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	begin_large.offset_left = -160; begin_large.offset_top = 12; begin_large.offset_right = -16
@@ -400,14 +412,14 @@ func show_party_setup() -> void:
 	# content types as the two hand-placed maps, a fresh layout every run
 	# (SORCMERC_SEED pins it, same env var the linear campaign already honours).
 	var begin_proc := Button.new()
-	begin_proc.text = "Begin, procedural world"
+	begin_proc.text = Loc.t("party.begin_procedural", "Begin, procedural world")
 	begin_proc.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	begin_proc.offset_left = -496; begin_proc.offset_top = 12; begin_proc.offset_right = -328
 	begin_proc.pressed.connect(begin.bind("procedural"))
 	wrap.add_child(begin_proc)
 
 	var back := Button.new()
-	back.text = "Title"
+	back.text = Loc.t("common.title", "Title")
 	back.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	back.offset_left = 16; back.offset_top = 12; back.offset_right = 130
 	back.pressed.connect(show_title)
@@ -493,8 +505,10 @@ func show_summary(run) -> void:
 		pic.clip_contents = true
 		col.add_child(pic)
 	var head := Label.new()
-	head.text = {"won": "Victory", "retired": "Retired",
-		"lost": "Defeat"}.get(run.state, "The run ends")
+	head.text = {"won": Loc.t("summary.won", "Victory"),
+		"retired": Loc.t("summary.retired", "Retired"),
+		"lost": Loc.t("summary.lost", "Defeat")}.get(run.state,
+			Loc.t("summary.ends", "The run ends"))
 	head.theme_type_variation = "Title"
 	head.add_theme_color_override("font_color", _end_color(run.state))
 	col.add_child(head)
@@ -511,7 +525,7 @@ func show_summary(run) -> void:
 		"\n".join(PackedStringArray(run.log))]
 	col.add_child(journal)
 	col.add_child(_gap(6))
-	col.add_child(_button("Back to the hub", show_title, true))
+	col.add_child(_button(Loc.t("summary.back", "Back to the hub"), show_title, true))
 
 	var centre := CenterContainer.new()
 	centre.add_child(panel)
@@ -519,16 +533,19 @@ func show_summary(run) -> void:
 
 # Everything off what the run already tracked — no summary-only bookkeeping.
 static func summary_lines(run) -> Array:
-	var out: Array = ["Stages cleared:  %d / %d" % [run.stage, Campaign.STAGE_COUNT],
-		"Gold in the purse:  %d gp" % run.party.gold,
-		"Run XP:  %d" % run.xp]
+	var out: Array = [Loc.tf("summary.stages", "Stages cleared:  %d / %d",
+			[run.stage, Campaign.STAGE_COUNT]),
+		Loc.tf("summary.gold", "Gold in the purse:  %d gp", [run.party.gold]),
+		Loc.tf("summary.xp", "Run XP:  %d", [run.xp])]
 	for ch in run.party.roster:
-		out.append("    %s  %s  —  %d XP%s" % [Icons.class_glyph(_class_of(ch)), ch.cname, ch.xp,
-			"   (fell on the road)" if ch.dead else ""])
+		out.append("    %s  %s  —  %s%s" % [Icons.class_glyph(_class_of(ch)), ch.cname,
+			Loc.tf("summary.member_xp", "%d XP", [ch.xp]),
+			Loc.t("summary.fell", "   (fell on the road)") if ch.dead else ""])
 	var loot: Array = []
 	for e in run.party.stash:
 		loot.append("%s ×%d" % [Campaign.item_name(String(e["item_id"])), int(e["quantity"])])
-	out.append("Carried home:  %s" % (", ".join(loot) if not loot.is_empty() else "nothing"))
+	out.append(Loc.tf("summary.carried", "Carried home:  %s",
+		[", ".join(loot) if not loot.is_empty() else Loc.t("summary.nothing", "nothing")]))
 	return out
 
 static func _class_of(ch) -> String:

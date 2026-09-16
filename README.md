@@ -34,6 +34,12 @@ core/            pure rules + game state, mostly no engine deps
   bug_report.gd                  the in-game bug reporter's model: a breadcrumb
                                   ring of the last things that happened, the
                                   markdown body, and the prefilled GitHub link
+  loc.gd                         localization: the language setting, the string
+                                  tables under data/loc/, and the overlay that
+                                  translates data/*.json in place so every
+                                  existing reader of record["name"] gets it.
+                                  English is the source language and costs a
+                                  dictionary miss. See docs/localization.md
   audio.gd, barks.gd, enemy_names.gd, ui_icons.gd, tutorial.gd   presentation
                                   data/helpers (procedural SFX, combat flavor
                                   lines, fantasy enemy names, the shared icon/
@@ -69,6 +75,10 @@ tools/bug-relay/   the reporter's optional fallback: a Cloudflare Worker that
 data/              the 5e SRD export (classes/spells/species/...), a 316-
                    entry hand-tagged bestiary, and data/effects/*.json (the
                    sorcmerc-authored mechanics layer over the raw export)
+data/loc/<lang>/   one directory per translation: ui.json (UI chrome),
+                   terms.json (the keyword glossary), features.json (all 493
+                   feature ids), names.json, and records/*.json overlaying the
+                   data files above. Turkish ships; English is the source
 content/           content packs that ship with the game: an example map, a
                    free campaign, and a paid DLC — all three written against
                    the same public API a player's mod uses
@@ -79,7 +89,8 @@ tests/             115 files, headless: one per subsystem (89 test_*.gd) plus
                    Run them all with tools/run_tests.sh
 docs/              docs/expansion-plan.md is the current source of truth;
                    modding.md is the content-pack authoring guide (worlds,
-                   campaigns, data overlays, free/paid DLC); combat-design.md
+                   campaigns, data overlays, free/paid DLC); localization.md
+                   is how to add a language or a string; combat-design.md
                    and the docs/superpowers/specs/ hex design doc are the
                    original pre-expansion design record
 tools/run_tests.sh the whole headless suite in one command — the asset import,

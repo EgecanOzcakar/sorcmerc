@@ -9,6 +9,7 @@ const Combat = preload("res://core/combat.gd")
 const Hex = preload("res://core/hex.gd")
 const Power = preload("res://core/rules/power.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")
+const Loc = preload("res://core/loc.gd")
 const Loot = preload("res://core/loot.gd")
 const Ach = preload("res://core/achievements.gd")
 
@@ -378,7 +379,15 @@ static func spawn(id: String, mult: float, team: String, pos: Vector2i, n := 0, 
 	# still shows the same names.
 	if team == "foe" and String(m.get("type", "")) == "humanoid":
 		var who := EnemyNames.name_for(String(m.get("faction", "")), "%s|%d|%s" % [id, n, pos])
-		c.cname = "%s the %s" % [who, c.cname]
+		# The pattern, not the pieces: Turkish puts the species first
+		# ("Goblin Grix"), so the whole shape is one translated format string —
+		# and the given name goes in `short` rather than being recovered by
+		# splitting on the first space, which only ever worked because English
+		# happens to put it there. The turn-order strip is what reads `short`,
+		# and two hobgoblins in one fight have to be told apart on it.
+		c.short = who
+		c.cname = Loc.tmpl("enemy.named", "{name} the {species}",
+			{"name": who, "species": c.cname})
 	elif n > 0:
 		c.cname = "%s %d" % [c.cname, n]
 	if not is_equal_approx(mult, 1.0):

@@ -7,6 +7,7 @@ const Adapter = preload("res://core/adapter.gd")
 const Character = preload("res://core/character.gd")
 const Presets = preload("res://core/presets.gd")
 const Ach = preload("res://core/achievements.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 const MAX_ACTIVE := 4
 
@@ -379,7 +380,9 @@ func summary(id: String) -> Dictionary:
 		"id": ch.id,
 		"name": ch.cname,
 		"class_id": cid,
-		"class_name": cid.capitalize(),
+		# Through the catalog, not capitalize(): a class's display name is a
+		# record field, so a translated language names it like everything else.
+		"class_name": String(Catalog.class_src(cid).get("name", cid.capitalize())) if cid != "" else "",
 		"level": s.level,
 		"ac": s.ac,
 		"hp": ch.hp_current if ch.hp_current >= 0 else s.max_hp,

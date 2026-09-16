@@ -44,6 +44,7 @@
 extends RefCounted
 
 const World = preload("res://core/world.gd")
+const Loc = preload("res://core/loc.gd")
 const RNG = preload("res://core/rng.gd")
 const Party = preload("res://core/party.gd")
 const CharacterSave = preload("res://core/character_save.gd")
@@ -347,7 +348,7 @@ static func summary() -> Dictionary:
 # "Day 3  14:05" off world-minutes — the same reading scenes/world/world.gd's
 # clock label shows, so the title and the map agree about when you left.
 static func day_clock(elapsed: float) -> String:
-	return "Day %d  %02d:%02d" % [int(elapsed / 1440.0) + 1,
+	return Loc.t("world.clock", "Day %d  %02d:%02d") % [int(elapsed / 1440.0) + 1,
 		int(elapsed / 60.0) % 24, int(elapsed) % 60]
 
 static func clear() -> void:
