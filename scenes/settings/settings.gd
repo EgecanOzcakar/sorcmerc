@@ -119,6 +119,19 @@ func _ready() -> void:
 		Sound.set_music_volume(v)
 		_apply()))
 
+	# A reaction that spends a slot is a real decision, so the fight can stop and
+	# let you make it. The free ones never ask either way — see core/settings.gd.
+	var react := CheckButton.new()
+	react.name = "ReactionPrompts"
+	react.text = "Ask before a reaction spends a slot"
+	react.tooltip_text = "Counterspell and Hellish Rebuke stop the fight and ask.\n" \
+		+ "Opportunity attacks and Uncanny Dodge always fire by themselves."
+	react.button_pressed = _s.reaction_prompts
+	react.toggled.connect(func(on: bool):
+		_s.reaction_prompts = on
+		_apply())
+	col.add_child(react)
+
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	var lbl := Label.new()

@@ -8,7 +8,8 @@
 #   "anim_speed_multiplier": 1.0,   // 1.0 normal, <1 slower and weightier, >1 faster
 #   "default_difficulty": "normal", // "easy" | "normal" | "hard"
 #   "sfx_volume": 80,               // 0-100, the "SFX" audio bus (T27)
-#   "music_volume": 80              // 0-100, the "Music" audio bus (T27)
+#   "music_volume": 80,             // 0-100, the "Music" audio bus (T27)
+#   "reaction_prompts": true        // stop and ask before a reaction spends a slot
 # }
 #
 # Read it with Settings.current() — loaded once, cached; save() writes the cache
@@ -48,6 +49,11 @@ var anim_speed_multiplier := 1.0
 var default_difficulty := "normal"
 var sfx_volume := DEFAULT_VOLUME
 var music_volume := DEFAULT_VOLUME
+# Stop the fight and ask before one of your reactions spends a spell slot
+# (Counterspell, Hellish Rebuke). The free ones — an opportunity attack,
+# Uncanny Dodge — never ask: taking them is the right answer every time, and a
+# question with one sensible answer is a key press, not a decision.
+var reaction_prompts := true
 
 # Which pace a stored multiplier reads as: the nearest one, so a hand-edited
 # settings.json still selects something rather than nothing.
@@ -81,6 +87,7 @@ static func load_settings():
 		s.default_difficulty = diff if diff in DIFFICULTIES else "normal"
 		s.sfx_volume = clampf(float(d.get("sfx_volume", DEFAULT_VOLUME)), 0.0, 100.0)
 		s.music_volume = clampf(float(d.get("music_volume", DEFAULT_VOLUME)), 0.0, 100.0)
+		s.reaction_prompts = bool(d.get("reaction_prompts", true))
 	return s
 
 static func to_dict(s) -> Dictionary:
@@ -88,7 +95,8 @@ static func to_dict(s) -> Dictionary:
 		"anim_speed_multiplier": s.anim_speed_multiplier,
 		"default_difficulty": s.default_difficulty,
 		"sfx_volume": s.sfx_volume,
-		"music_volume": s.music_volume}
+		"music_volume": s.music_volume,
+		"reaction_prompts": s.reaction_prompts}
 
 # Returns the path written, or "" on failure.
 static func save_settings(s = null) -> String:
@@ -112,3 +120,11 @@ static func anim() -> float:
 	if OS.get_environment("SORCMERC_FAST") != "":
 		return FAST
 	return current().anim_speed_multiplier
+
+# Whether the combat screen installs a reaction decider at all. SORCMERC_FAST
+# wins outright, for the same reason anim() lets it: a headless run has nobody
+# to answer the question, and a prompt nobody answers is a hang, not a pause.
+static func reaction_prompts_on() -> bool:
+	if OS.get_environment("SORCMERC_FAST") != "":
+		return false
+	return current().reaction_prompts

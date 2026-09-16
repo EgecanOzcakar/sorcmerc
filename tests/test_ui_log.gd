@@ -97,6 +97,8 @@ func test_reveal_head() -> void:
 	check("CRIT" in Main._reveal_head({"hit": true, "crit": true, "damage": 12})[0], "crit reads CRIT")
 	check("SAVED" in Main._reveal_head({"saved": true, "damage": 3})[0], "made save reads SAVED")
 	check("FAILED" in Main._reveal_head({"saved": false, "damage": 9})[0], "failed save reads FAILED")
+	check(Main._reveal_head({"countered": true})[0] == "COUNTERED",
+		"a countered spell says so on the board, not only in the log")
 
 # T29: every verb gets a tooltip, and every damaging one names its dice.
 func test_tooltips_name_their_dice() -> void:

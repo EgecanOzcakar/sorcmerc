@@ -60,7 +60,7 @@ on every turn, the design failed and the tuning numbers in §7 are wrong, not th
 | **Action** | Keep, obviously | The decision. |
 | **Move** | Keep | 0 or 1 zone. Cheap, and it's what makes the board a board. |
 | **Bonus action** | Keep — **but only because all three PCs have a real one** | A bonus action prompt that's empty for two of three characters is a dead key press. Every PC here has a genuinely tempting bonus: Ilsa's Healing Word, Vera's Second Wind, Pike's Cunning Action. It earns its keep *only* under that condition — see §11. |
-| **Reaction** | **Keep exactly one, auto-resolved: Opportunity Attack.** Zero reaction *prompts* in the MVP. | This is the most important architectural line in the doc. Prompted reactions mean pausing a monster's turn mid-resolution, asking the player, and resuming — it's the most expensive thing you could build here for the least loop value. OA fires automatically with a log line. Warding Flare, Shield, Uncanny Dodge: all stretch goals. |
+| **Reaction** | **Keep. Free ones auto-resolve; one that spends a slot stops and asks.** | This was the most important architectural line in the doc, and it read "zero reaction *prompts*" for a reason: prompting means pausing a monster's turn mid-resolution, asking the player, and resuming, and that turns the turn resolver into a coroutine. *(2026-09-16, in two steps. First `fire_reactions()` landed — a general trigger dispatcher over `hit_by_attack`, `damaged_by_attack`, `spell_cast`, with Uncanny Dodge, Hellish Rebuke and Counterspell riding it, all auto-resolved. Then the prompt landed too, and **the resolver still did not become a coroutine**: the question is asked one step earlier, by whoever is about to call it. `core/ai.gd` calls `cb.offer_reactions()` before each swing and each cast, that is the one function in the engine that can suspend, and `fire_reactions()` reads the recorded answer back synchronously when the trigger fires. Cost of the compromise: the answer is given against the hit chance rather than against the damage — you decide before the d20, and nothing is spent if the swing misses. Only slot- and pool-spending reactions ask; an opportunity attack and Uncanny Dodge still fire by themselves, because a question with one sensible answer is a key press, not a decision.)* |
 | **Free object interaction** | **Cut.** | Nothing to interact with. |
 
 **Turn structure, final:**
@@ -448,6 +448,13 @@ A terminal game's juice budget is timing, color, and word choice. Spend it in th
 1. **Reaction prompts.** Interrupting a monster's turn to ask the player a question means the turn
    resolver can no longer be a straight-line function. **The MVP has zero of these.** If Warding
    Flare or Shield is ever added, that's the day it becomes an async/generator-based resolver.
+   *(2026-09-16: reactions shipped, then prompts shipped, and that day still has not arrived.
+   `fire_reactions()` resolves a reaction inline off the creature's own data; when the answer is
+   the player's to give, `offer_reactions()` collects it from the caller one step before the
+   action resolves. Only that one function suspends, so `perform()`, `cast()`, `resolve_attack()`
+   and `move_to()` are the same straight-line calls they always were and their ~100 call sites
+   never changed. What it costs is fidelity, not architecture: the choice is made before the roll
+   rather than after the hit.)*
 2. **Monster AI creep.** The temptation to make goblins "smart" is where a two-day build becomes a
    week. Cap it at the five rules. Tune with numbers, not with cleverness.
 3. **The action-order-agnostic turn.** Letting the player move before *or* after their action means
