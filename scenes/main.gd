@@ -101,6 +101,7 @@ const COL_COVER := Color("2f4744")       # the slab under a cover hex
 # the board uses, and a chip that states the number rather than the noun.
 const COL_COVER_EDGE := Color("74c2b4")
 const COL_PROP := Color("4a3826")       # barrels, crates, fountains
+const COL_BLOCKED_EDGE := Color("c98a5a")   # the rim on a hex nobody can stand on — ochre, against cover's teal
 const COL_TORCH := Color("ffd98a")
 # T11: per-theme floor tint, palette only — no mechanical difference.
 const PALETTES := {"shrine": COL_HEX, "camp": Color("2a2a26"), "city": Color("2c2c33"),
@@ -2388,6 +2389,29 @@ class Board extends Control:
 		canvas.draw_polyline(edge, Color(main.COL_HEX_GRID, 0.7 if seam else GRID_ALPHA), 1.5 if seam else 1.0, true)
 		if cb.is_cover(hx):
 			_paint_cover(canvas, c, s)
+		elif not cb.passable(hx):
+			_paint_blocked(canvas, c, s)
+
+	# An impassable hex, said the way cover is said: a rim in its own colour
+	# plus a mark — a cross where cover has a "+2" — so a crate you cannot walk
+	# through and a wall you can duck behind stop looking like the same prop.
+	func _paint_blocked(canvas: CanvasItem, c: Vector2, s: float) -> void:
+		var rim := _hex_poly(c, s - 2.5)
+		rim.append(rim[0])
+		canvas.draw_polyline(rim, Color(main.COL_BLOCKED_EDGE, 0.9), COVER_RIM_W, true)
+		var inner := _hex_poly(c, s - 2.5 - COVER_RIM_W * 1.6)
+		inner.append(inner[0])
+		canvas.draw_polyline(inner, Color(main.COL_BLOCKED_EDGE, 0.22), 1.0, true)
+		var fs := int(clampf(s * 0.30, 9.0, 18.0))
+		if fs < 10:
+			return
+		var f := ThemeDB.fallback_font
+		var w := f.get_string_size("✕", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var at := c + Vector2(0.0, s * ISO_SQUASH * 0.92)
+		var pad := Vector2(fs * 0.42, fs * 0.30)
+		canvas.draw_colored_polygon(_disc(at, (w * 0.5 + pad.x) * 1.05), Color(0.05, 0.03, 0.02, 0.72))
+		canvas.draw_string(f, at - Vector2(w * 0.5, -fs * 0.34), "✕",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, main.COL_BLOCKED_EDGE)
 
 	# A cover hex, said twice: a rim in a colour nothing else on the board
 	# wears, and a chip carrying the number it is worth. Both scale with the
