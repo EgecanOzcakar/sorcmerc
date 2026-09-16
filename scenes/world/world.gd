@@ -724,17 +724,20 @@ func _close_quests() -> void:
 func _build_quest_panel() -> void:
 	if _quest_panel != null:
 		_quest_panel.queue_free()
+	# Issue #28. The panel used to place itself by arithmetic — position at
+	# half the screen minus half its own guessed size — which is right only
+	# while the guess is. A CenterContainer centres whatever the panel actually
+	# measures, so nothing hangs off an edge when the content is taller than the
+	# 320 it was told to expect.
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centre)
+	_quest_panel = centre
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Gilt"
-	# No anchor preset: default anchors are top-left (0), so `position` is a plain
-	# pixel offset from the parent's origin — set_anchors_preset(PRESET_CENTER)
-	# used to also be called here, which re-centers the control on its OWN anchor
-	# point and resets the offsets, so this same centering math then applied a
-	# second time on top of it and shoved the panel off-screen.
-	panel.position = size * 0.5 - Vector2(200, 160)
 	panel.custom_minimum_size = Vector2(400, 320)
-	add_child(panel)
-	_quest_panel = panel
+	centre.add_child(panel)
 	var box := VBoxContainer.new()
 	panel.add_child(box)
 
@@ -743,11 +746,9 @@ func _build_quest_panel() -> void:
 	title.theme_type_variation = "Head"
 	box.add_child(title)
 
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(380, 240)
+	var scroll := _scroll_column(Vector2(380, 240))
 	box.add_child(scroll)
-	var rows := VBoxContainer.new()
-	scroll.add_child(rows)
+	var rows: VBoxContainer = scroll.get_child(0)
 	var live: Array = Quest.active(party)
 	if live.is_empty():
 		var none := Label.new()
@@ -766,6 +767,26 @@ func _build_quest_panel() -> void:
 	close.text = "Close"
 	close.pressed.connect(_close_quests)
 	box.add_child(close)
+
+# A scrolling column that wraps instead of growing sideways. Issue #28: a
+# ScrollContainer that allows horizontal scrolling hands its child the child's
+# own MINIMUM width, and an autowrapping Label's minimum width is one pixel —
+# so eight quests came out as eight 1px-wide, 570px-tall columns of stacked
+# single characters, 4096px of scroll for text that fits in eight lines.
+# Turning horizontal scrolling off is what makes the container stretch the
+# column to its own width, which is the width the labels then wrap at. Every
+# other list in the game (the campaign journal, the manual, the party screen,
+# the mod browser) was already built this way; the four in this file were not.
+func _scroll_column(min_size: Vector2) -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = min_size
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(rows)
+	return scroll
 
 # --- M7: the story ---------------------------------------------------------
 #
@@ -839,12 +860,15 @@ func _close_story() -> void:
 	_pause_btn.text = "Pause"
 
 func _build_story_panel() -> void:
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centre)
+	_story_panel = centre
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Gilt"
-	panel.position = size * 0.5 - Vector2(230, 190)
 	panel.custom_minimum_size = Vector2(460, 380)
-	add_child(panel)
-	_story_panel = panel
+	centre.add_child(panel)
 	var box := VBoxContainer.new()
 	panel.add_child(box)
 
@@ -860,12 +884,9 @@ func _build_story_panel() -> void:
 	chapter.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	box.add_child(chapter)
 
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(440, 290)
+	var scroll := _scroll_column(Vector2(440, 290))
 	box.add_child(scroll)
-	var rows := VBoxContainer.new()
-	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(rows)
+	var rows: VBoxContainer = scroll.get_child(0)
 	var lines: Array = story.journal
 	if lines.is_empty():
 		lines = [story.story.synopsis]
@@ -873,7 +894,6 @@ func _build_story_panel() -> void:
 		var l := Label.new()
 		l.text = String(line)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.custom_minimum_size = Vector2(420, 0)
 		l.theme_type_variation = "Serif"
 		rows.add_child(l)
 
@@ -2096,11 +2116,9 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	if _market_tab != MARKET_TAB_ALL:
 		_portrait(box, s.faction, _market_tab)
 
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(440, 250)
+	var scroll := _scroll_column(Vector2(440, 250))
 	box.add_child(scroll)
-	var rows := VBoxContainer.new()
-	scroll.add_child(rows)
+	var rows: VBoxContainer = scroll.get_child(0)
 	var showing_all: bool = _market_tab == MARKET_TAB_ALL
 	for service in _visit["services"]:
 		if service == "innkeeper":
@@ -2258,11 +2276,9 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 	box.add_child(mood)
 	if has_inn:
 		_portrait(box, s.faction, "innkeeper")
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(440, 300)
+	var scroll := _scroll_column(Vector2(440, 300))
 	box.add_child(scroll)
-	var rows := VBoxContainer.new()
-	scroll.add_child(rows)
+	var rows: VBoxContainer = scroll.get_child(0)
 	# T9x quest board, D7 placement: the board carries what the settlement posts
 	# in public — bounty and war work where there is an innkeeper to take it,
 	# carting and scouting everywhere. The specialists' own orders are at their
