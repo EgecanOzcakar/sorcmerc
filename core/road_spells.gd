@@ -8,6 +8,7 @@ extends RefCounted
 
 const Adapter = preload("res://core/adapter.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Ach = preload("res://core/achievements.gd")
 
 const SWIFT_MULT := 1.4   # a forced march's ground, without its -2 on the road
 
@@ -54,6 +55,7 @@ static func cast(party, ch, sid: String, now: float) -> String:
 		ch.slots_used.append(0)
 	ch.slots_used[i] += 1
 	ch.dirty()
+	Ach.unlock("road_spell")
 	match String(m["do"]):
 		"scout": party.scouted_next = true
 		"swift": party.swift_until = maxf(party.swift_until, now + float(m["minutes"]))

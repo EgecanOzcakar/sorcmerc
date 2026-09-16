@@ -49,6 +49,7 @@ const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
+const Ach = preload("res://core/achievements.gd")
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const WorldSave = preload("res://core/world_save.gd")
@@ -2113,6 +2114,7 @@ func _make_camp() -> void:
 	else:
 		party.stash_remove(WorldCamp.CAMP_KIT_ITEM, 1)
 	var p := world.player()
+	Ach.bump("camps")
 	var rng := RNG.new(WorldCamp.camp_seed(world.clock.elapsed, p.position))
 	if roped or not WorldCamp.ambush_roll(rng):
 		Visit.rest(party, world, "long-rest")
@@ -2125,6 +2127,9 @@ func _make_camp() -> void:
 		party.alarm_set = false
 		watch = {"ok": true, "cname": "The alarm", "skill": "ward", "nat": 20, "bonus": 0, "dc": 0, "char_id": "alarm"}
 	var foe := World.RoamingParty.new("camp-ambush-%d" % int(world.clock.elapsed), p.position, WorldCamp.AMBUSH_FACTION)
+	# T19: earned for the night itself, not for the fight — losing it ends the
+	# save's road anyway, and being woken by bandits is the achievement.
+	Ach.unlock("camp_ambush")
 	# T9x: name the check and the roll, not just the outcome — same
 	# "Skill nat+bonus vs DC" shape every other overworld check in this file uses.
 	var skill_name: String = String(watch.get("skill", "")).capitalize()
