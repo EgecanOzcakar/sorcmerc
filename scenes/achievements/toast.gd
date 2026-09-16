@@ -142,6 +142,15 @@ func _card(def: Dictionary) -> Control:
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(head)
 
+	var badge := Icons.scene_art("achievement-" + String(def.get("id", "")), null)
+	if badge != null:   # the earned one's picture leads the card
+		var pic := TextureRect.new()
+		pic.texture = badge
+		pic.custom_minimum_size = Vector2(44, 44)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		head.add_child(pic)
 	var star := Label.new()
 	star.text = "★"
 	star.add_theme_color_override("font_color", Icons.COL_GOLD)
