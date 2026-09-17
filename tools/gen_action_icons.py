@@ -1225,6 +1225,17 @@ FEATURES = {
     "cleric-channel-divinity": (halo(E("radiant")),),
     "bard-bardic-inspiration": (note(E("gold")),),
 
+    # T-classes-a. Five class/subclass features that became buttons. Assassinate
+    # wears exactly the mark monster-assassinate wears — it is the same ability,
+    # and a rogue's version of it should not be a different picture.
+    "assassin-assassinate": (reticle(E("shadow")), dart(E("steel"), -45, 1, 0.85)),
+    "wardomain-war-priest": (sword(32, 33, 0, length=40, w=6.6, steel=E("radiant")),
+                             chevron(52, 22, 0, 8, 4, E("gold"))),
+    "celestialpatron-healing-light": (halo(E("radiant")), heart(32, 43, 8, E("life"))),
+    "warriorofmercy-hand-of-healing": (hand(E("life")), heart(46, 18, 7, E("life"))),
+    "warrioropenhand-wholeness-of-body": (person(E("life"), "stand", 0.8),
+                                          waves(E("life"), 0.45)),
+
     "monster-poison-bite": (fangs(E("poison")), droplets(E("poison"), 1, 0.5)),
     "monster-venom-sting": (dart(E("poison"), 200, 1), droplets(E("poison"), 1, 0.42)),
     "monster-paralytic-touch": (hand(E("lightning")), bolt(E("lightning"), 0.5)),

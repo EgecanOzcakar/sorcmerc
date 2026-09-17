@@ -76,6 +76,8 @@ func _init() -> void:
 	test_unarmored_defense()
 	test_known_pool_sizes()
 	test_scaled_abilities()
+	test_extra_attack_parity()
+	test_authored_abilities()
 	report()
 	print("test_class_abilities: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -460,6 +462,85 @@ func verb(c, id: String) -> Dictionary:
 		if String(v["id"]) == id:
 			return v
 	return {}
+
+# --- Extra Attack, for everyone who is granted it ------------------------
+#
+# Six classes are granted an Extra Attack feature and three of them had a
+# data/effects/features.json entry for it, so a level-8 paladin, ranger and
+# College of Valour bard swung once where a fighter swung twice. Asserted as a
+# table rather than three one-off checks: the claim is that the six agree, and a
+# seventh class granted the feature later has to join them.
+#
+# NOTE: `attacks_per_action` is inert on the board today — nothing spends the
+# `attacks_left` it banks (see docs/expansion-plan.md). This asserts the sheet,
+# which is the half that was wrong; the engine half is its own change.
+func test_extra_attack_parity() -> void:
+	var want := {
+		"barbarian/berserker": 5, "fighter/champion": 5, "monk/warrioropenhand": 5,
+		"paladin/oathofdevotion": 5, "ranger/hunter": 5, "bard/collegevalor": 6,
+	}
+	for key in want:
+		var parts: PackedStringArray = String(key).split("/")
+		var at: int = int(want[key])
+		for lvl in [at - 1, at]:
+			var c = Adapter.to_combatant(build(parts[0], parts[1], lvl), "party", Vector2i.ZERO)
+			var got: Array = c.verbs.filter(func(v): return v["kind"] == "attacks_per_action")
+			if lvl < at:
+				check(got.is_empty(), "%s L%d: no Extra Attack before level %d" % [key, lvl, at])
+			else:
+				check(got.size() == 1 and int(got[0]["value"]) == 2,
+					"%s L%d: Extra Attack is 2 attacks per action (got %s)" % [key, lvl, str(got)])
+
+# --- the features authored against the existing vocabulary ---------------
+#
+# Each of these is a feature the engine could already express and nobody had
+# written down. Three of them name a `resource-pool` the export grants and no
+# verb spent, which is why the pool report above is the place they show up.
+func test_authored_abilities() -> void:
+	# Assassinate: advantage on anything that has not taken a turn yet. Same
+	# shape as monster-assassinate, which has been in the file since T16.
+	var ass := verb(Adapter.to_combatant(build("rogue", "assassin", 8), "party", Vector2i.ZERO),
+		"assassin-assassinate")
+	check(ass.get("self", "") == "adv" and "target_has_not_acted" in ass.get("requires", []),
+		"assassin: Assassinate is advantage on a creature that has not acted (%s)" % str(ass))
+
+	# War Priest: a bonus-action attack, out of the pool the subclass grants.
+	var war = Adapter.to_combatant(build("cleric", "wardomain", 8), "party", Vector2i.ZERO)
+	var wp := verb(war, "wardomain-war-priest")
+	check(wp.get("cost", "") == "bonus" and int(wp.get("extra_attacks", 0)) == 1,
+		"war domain: War Priest is a bonus-action swing (%s)" % str(wp))
+	check(int(war.pools.get("war-priest", {}).get("max", 0)) == 3,
+		"war domain L8: War Priest has PB uses")
+
+	# Healing Light: a pool of d6s, warlock level + 1, spent a die at a time.
+	var cel = Adapter.to_combatant(build("warlock", "celestialpatron", 8), "party", Vector2i.ZERO)
+	var hl := verb(cel, "celestialpatron-healing-light")
+	check(int(hl.get("dice_count", 0)) == 1 and int(hl.get("dice_sides", 0)) == 6,
+		"celestial: Healing Light heals 1d6 a die (%s)" % str(hl))
+	check(int(hl.get("range", 0)) == Adapter.hexes(60), "celestial: Healing Light reaches 60 ft")
+	check(int(cel.pools.get("healing-light", {}).get("max", 0)) == 9,
+		"celestial L8: the pool is warlock level + 1")
+
+	# The two monk heals: both roll the Martial Arts die + WIS, so both move with
+	# the monk's level the way the unarmed strike does.
+	for lvl in LEVELS:
+		var die: int = 6 if lvl < 5 else 8
+		var mercy = Adapter.to_combatant(build("monk", "warriorofmercy", lvl), "party", Vector2i.ZERO)
+		var hoh := verb(mercy, "warriorofmercy-hand-of-healing")
+		check(int(hoh.get("dice_sides", 0)) == die and hoh.get("pool", "") == "focus-points",
+			"mercy L%d: Hand of Healing is a Focus Point and a d%d" % [lvl, die])
+		# Wholeness of Body is an Open Hand 6 feature, so level 4 is the check
+		# that it has NOT arrived yet.
+		var open = Adapter.to_combatant(build("monk", "warrioropenhand", lvl), "party", Vector2i.ZERO)
+		var wob := verb(open, "warrioropenhand-wholeness-of-body")
+		if lvl < 6:
+			check(wob.is_empty(), "open hand L%d: no Wholeness of Body before level 6" % lvl)
+			continue
+		check(int(wob.get("dice_sides", 0)) == die,
+			"open hand L%d: Wholeness of Body is a d%d" % [lvl, die])
+		check(int(open.pools.get("warrioropenhand-wholeness-of-body", {}).get("max", 0))
+				== Bundles.proficiency_bonus(lvl),
+			"open hand L%d: Wholeness of Body is PB per long rest" % lvl)
 
 # --- the report ----------------------------------------------------------
 #
