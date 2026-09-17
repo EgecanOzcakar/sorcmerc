@@ -13,7 +13,12 @@ const KINDS := ["passive_damage", "self_buff", "ally_buff", "heal_self", "heal_a
 	# are passives combat.gd reads where it already computes a save or a hide DC,
 	# and `survive_damage` fires from _apply_damage on the blow that would drop
 	# its owner. See OFFERABLE / is_button in core/combat.gd.
-	"save_modifier", "survive_damage", "keen_senses"]
+	"save_modifier", "survive_damage", "keen_senses",
+	# T-classes-c. `aura` is a standing fact about a piece of the board rather
+	# than anything anyone presses — combat.aura_bonus() reads it at the moment a
+	# number is needed, and it is deliberately NOT in combat.gd's OFFERABLE, so
+	# it never reaches the action bar and needs no badge.
+	"aura"]
 
 # castingTime -> action-economy cost. Anything longer than a Reaction is non-combat.
 const CASTING_TIME := {"Action": "action", "Bonus Action": "bonus", "Reaction": "reaction"}
@@ -143,7 +148,10 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 				"attacks_against", "extra_attacks", "value", "damage_type",
 				# T94: save_modifier / survive_damage / keen_senses / Parry
 				"vs", "ac_bonus", "dc", "dc_plus_damage", "except", "max_damage",
-				"relies_on", "passive_bonus", "magical"]:
+				"relies_on", "passive_bonus", "magical",
+				# T-classes-c: a reaction that imposes Disadvantage rather than
+				# adding AC (Warding Flare), and the aura payloads.
+				"disadvantage"]:
 			if e.has(k):
 				v[k] = e[k]
 		if e.has("dice"):
@@ -153,6 +161,8 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 			v["dice_bonus"] = scale(d.get("plus", 0), sheet)
 		if e.has("bonus_damage"):
 			v["bonus_damage"] = scale(e["bonus_damage"], sheet)
+		if e.has("save_bonus"):          # an aura's payload; CHA mod for a paladin
+			v["save_bonus"] = maxi(1, scale(e["save_bonus"], sheet))
 		if e.has("amount"):
 			v["amount"] = scale(e["amount"], sheet)
 		if e.has("pool"):
@@ -327,6 +337,13 @@ static func validate() -> Array[String]:
 		if f[id].get("cost", "") == "reaction" and not f[id].get("trigger", "") in REACTION_TRIGGERS:
 			errs.append("features.json: \"%s\" is a reaction with no fired trigger (\"%s\")"
 				% [id, f[id].get("trigger", "")])
+		# An aura with no reach is a fact about nowhere, and one with no payload
+		# is a fact about nothing — combat.aura_bonus() would read neither.
+		if f[id].get("kind", "") == "aura":
+			if int(f[id].get("range_ft", 0)) <= 0:
+				errs.append("features.json: aura \"%s\" has no range_ft" % id)
+			if not f[id].has("save_bonus"):
+				errs.append("features.json: aura \"%s\" carries no payload" % id)
 	var sp = Catalog.all("effects/spells.json")
 	for id in sp:
 		if id.begins_with("_"):

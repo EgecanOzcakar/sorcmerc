@@ -79,6 +79,7 @@ func _init() -> void:
 	test_extra_attack_parity()
 	test_extra_attack_reaches_the_board()
 	test_authored_abilities()
+	test_new_mechanics()
 	report()
 	print("test_class_abilities: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -591,6 +592,95 @@ func test_authored_abilities() -> void:
 		check(int(open.pools.get("warrioropenhand-wholeness-of-body", {}).get("max", 0))
 				== Bundles.proficiency_bonus(lvl),
 			"open hand L%d: Wholeness of Body is PB per long rest" % lvl)
+
+# --- the features that needed the engine to learn a new word -------------
+#
+# T-classes-a stopped where the vocabulary stopped: `requires` knew four
+# predicates and none of them was "while raging"; a reaction could add AC or
+# halve damage and not impose Disadvantage; nothing at all could express a
+# standing radius. Three additions, and the five features that ride them.
+#
+# Each predicate is asserted from BOTH sides. A rider that fires when it should
+# is half the claim; the half that matters is that it stays quiet otherwise,
+# and that is the half a happy-path test never checks.
+func test_new_mechanics() -> void:
+	# `target_damaged` — Colossus Slayer, "a creature that is missing HP".
+	check(not rider_fires("ranger", "hunter", "Colossus Slayer", {"damaged": false}),
+		"Colossus Slayer holds off a creature at full HP")
+	check(rider_fires("ranger", "hunter", "Colossus Slayer", {"damaged": true}),
+		"...and lands on one that is wounded")
+
+	# `while_raging` — Frenzy.
+	check(not rider_fires("barbarian", "berserker", "Frenzy", {}),
+		"Frenzy is silent while the barbarian is calm")
+	check(rider_fires("barbarian", "berserker", "Frenzy", {"rage": true}),
+		"...and fires once the Rage is up")
+
+	# `first_round` — Dread Ambusher.
+	check(rider_fires("ranger", "gloomstalker", "Dread Ambusher", {"round": 1}),
+		"Dread Ambusher lands in the round the ambush happens")
+	check(not rider_fires("ranger", "gloomstalker", "Dread Ambusher", {"round": 2}),
+		"...and not a round later")
+
+	# The first aura. "You and allies within 10 feet", so the paladin is inside
+	# their own, a neighbour is inside it, and someone across the board is not.
+	var board: Dictionary = Encounter.board_for("sunken-shrine")
+	var pal = Adapter.to_combatant(build("paladin", "oathofdevotion", 8), "party", Vector2i(2, 0))
+	var near = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(3, 0))
+	var far = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(9, 5))
+	far.id = "far-one"
+	var cb = Combat.new(RNG.new(3), [pal, near, far], board)
+	var cha: int = pal.sheet.mod("cha")
+	check(cha > 0, "the paladin has a CHA bonus to give (%d)" % cha)
+	check(cb.aura_bonus(pal, "save_bonus") == cha, "Aura of Protection covers the paladin")
+	check(cb.aura_bonus(near, "save_bonus") == cha, "...and an ally beside them")
+	check(cb.aura_bonus(far, "save_bonus") == 0, "...and nobody across the room")
+
+	# Warding Flare imposes Disadvantage, which is a thing you can only see in
+	# aggregate: the same 60 seeded swings land less often against a cleric who
+	# has it than against one who does not.
+	check(flare_hits(true) < flare_hits(false),
+		"Warding Flare turns swings aside (%d hits with, %d without)"
+			% [flare_hits(true), flare_hits(false)])
+
+# Does `label`'s on-hit rider fire, under `when`? Swings a few times so a miss
+# is not mistaken for a rider that stayed quiet.
+func rider_fires(cid: String, sid: String, label: String, when: Dictionary) -> bool:
+	var board: Dictionary = Encounter.board_for("sunken-shrine")
+	var hero = Adapter.to_combatant(build(cid, sid, 8), "party", Vector2i(2, 0))
+	var dummy = Encounter.spawn("ogre", 1.0, "foe", Vector2i(3, 0), 1)
+	dummy.max_hp = 500
+	dummy.hp = dummy.max_hp - (50 if when.get("damaged", false) else 0)
+	var cb = Combat.new(RNG.new(3), [hero, dummy], board)
+	cb.round_num = int(when.get("round", 1))
+	cb.begin_turn_for(hero)
+	if when.get("rage", false):
+		for v in cb.all_verbs(hero):
+			if v["id"] == "barbarian-rage":
+				cb.perform(hero, v, null)
+	for _swing in 4:
+		var r: Dictionary = cb.resolve_attack(hero, dummy)
+		if r.has("error"):
+			break
+		for e in r.get("extras", []):
+			if String(e["label"]) == label:
+				return true
+	return false
+
+# How many of 60 seeded ogre swings land on a Light Domain cleric.
+func flare_hits(with_flare: bool) -> int:
+	var board: Dictionary = Encounter.board_for("sunken-shrine")
+	var hits := 0
+	for s in range(1, 61):
+		var cleric = Adapter.to_combatant(build("cleric", "lightdomain", 8), "party", Vector2i(2, 0))
+		if not with_flare:
+			cleric.verbs = cleric.verbs.filter(func(v): return v["id"] != "lightdomain-warding-flare")
+		var ogre = Encounter.spawn("ogre", 1.0, "foe", Vector2i(3, 0), 1)
+		var cb = Combat.new(RNG.new(s), [cleric, ogre], board)
+		cb.begin_turn_for(ogre)
+		if cb.resolve_attack(ogre, cleric).get("hit", false):
+			hits += 1
+	return hits
 
 # --- the report ----------------------------------------------------------
 #
