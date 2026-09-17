@@ -293,7 +293,7 @@ var _confirmed = null         # the Character handed back
 var _free_picks: Array = []   # T22: the 2 subclasses a freshly unlocked class owes
 
 var _title := Label.new()
-var _crumbs := Label.new()
+var _steps := HBoxContainer.new()   # #82: the outline bar — every step, the current one lit, all clickable
 var _body := VBoxContainer.new()
 var _summary := RichTextLabel.new()
 var _back := Button.new()
@@ -325,8 +325,6 @@ func _ready() -> void:
 
 	_title.theme_type_variation = "Title"
 	root.add_child(_title)
-	_crumbs.theme_type_variation = "Dim"
-	root.add_child(_crumbs)
 
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -360,9 +358,16 @@ func _ready() -> void:
 	_next.theme_type_variation = "Primary"
 	_back.pressed.connect(func(): _goto(_step - 1))
 	nav.add_child(_back)
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	nav.add_child(spacer)
+	_steps.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_steps.alignment = BoxContainer.ALIGNMENT_CENTER
+	_steps.add_theme_constant_override("separation", 4)
+	nav.add_child(_steps)
+	for i in STEPS.size():
+		var b := Button.new()
+		Icons.clicks(b)
+		b.text = "%d. %s" % [i + 1, STEPS[i]]
+		b.pressed.connect(_jump.bind(i))
+		_steps.add_child(b)
 	_next.pressed.connect(_on_next)
 	nav.add_child(_next)
 
@@ -390,16 +395,23 @@ func _goto(step: int) -> void:
 
 func _on_next() -> void:
 	if _step < STEPS.size() - 1:
-		var why := _blocker()
-		if why != "":
-			_status.text = why
-			return
-		_goto(_step + 1)
+		_jump(_step + 1)
 	else:
 		_confirm()
 
-func _blocker() -> String:
-	match _step:
+# #82: the outline bar. Back is always free; forward runs every gate on the
+# way there, and stops on the first one that says no.
+func _jump(step: int) -> void:
+	for i in range(_step, step):
+		var why := _blocker(i)
+		if why != "":
+			_goto(i)
+			_status.text = why
+			return
+	_goto(step)
+
+func _blocker(step := _step) -> String:
+	match step:
 		0: return "" if ch.species_id != "" else "Pick a species first."
 		1: return "" if ch.levels.size() > 0 else "Pick a class first."
 		3: return "" if ch.background_id != "" else "Pick a background first."
@@ -439,10 +451,8 @@ func _refresh() -> void:
 		c.queue_free()
 		_body.remove_child(c)
 	_title.text = "%d. %s" % [_step + 1, STEPS[_step]]
-	var crumbs: Array = []
-	for i in STEPS.size():
-		crumbs.append(("[%s]" % STEPS[i]) if i == _step else STEPS[i])
-	_crumbs.text = "  ›  ".join(crumbs)
+	for i in _steps.get_child_count():
+		_steps.get_child(i).theme_type_variation = "Picked" if i == _step else "Quiet"
 	_back.disabled = _step == 0
 	_next.text = "Confirm and save" if _step == STEPS.size() - 1 else "Next"
 	_status.text = ""

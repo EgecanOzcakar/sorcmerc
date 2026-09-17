@@ -158,6 +158,23 @@ func _run() -> void:
 			fail("the confirmed character did not save")
 		Save.delete(slug)
 
+	# #82: the outline bar at the bottom — every step a button, back is free,
+	# forward stops on the first gate that says no.
+	if main._steps.get_child_count() != main.STEPS.size():
+		fail("the step bar does not list every step")
+	main._steps.get_child(0).pressed.emit()
+	if main._step != 0:
+		fail("clicking 1. Basics on the bar did not go back to it")
+	var species: String = main.ch.species_id
+	main.ch.species_id = ""
+	main._steps.get_child(4).pressed.emit()
+	if main._step != 0 or main._status.text == "":
+		fail("jumping to Equipment with no species picked was not stopped at the gate (step %d)" % main._step)
+	main.ch.species_id = species
+	main._steps.get_child(5).pressed.emit()
+	if main._step != 5:
+		fail("jumping to Review on a finished build did not land there (step %d)" % main._step)
+
 	var s = main.ch.sheet()
 	print("drive_creator: %d presses, %s, AC %d HP %d, %d pending — %s" % [
 		_presses, main.ch.cname, s.ac, s.max_hp, s.pending.size(),
