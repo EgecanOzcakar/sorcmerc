@@ -4939,3 +4939,28 @@ eye: `tools/palette_from_art.py --ring assets/generated/<faction>-*.png` drops
 the middle of each counter portrait and quantises what is left, which is the
 room behind the shopkeeper — the only painted architecture each faction has.
 Hues only; the value spread stays deliberate, or the whole thing goes brown.
+
+## Spike — the floating damage number (2026-09-17, measurement only)
+
+Full write-up in `docs/spike-damage-numbers.md`. Play feedback asked for the
+damage number to be red, big, and to stay longer. The measurement says all
+three are downstream of something else: `Board.tick()` spawns a float **per
+frame** while the HP bar is still lerping (`scenes/main.gd:2186–2192`), each
+carrying the shrinking *gap* rather than the damage, so one 14-damage hit
+draws 21 numbers stacked inside 11 px — `-14 -11 -9 … -1 -0 -0 -0 -0 -0` —
+fading red→orange→yellow on the way. The newest is on top and opaque, so
+what the player reads is `-0` in yellow. It is worse the slower you play
+(Weighty: 39 floats) and scales with frame rate (53 at 144 fps); at Instant
+it is correctly one float, which is why the headless robots have never seen
+it. Two more: the red band (`amount >= 12`) is unreachable for the whole
+preset party on a normal hit — longsword/shortbow/mace all cap at `1d8+3 =
+11` — and the float is the last transient readout still painted on `Board`
+rather than the HUD overlay, i.e. under the `Figures3D` models, the same bug
+the HP bar, the odds chip and the barks were each moved to fix. Foe attacks
+and every AoE get no reveal headline at all, so for incoming damage the
+float is the only readout there is. Recommendation: latch the HP goal and
+spawn one float per damage event first (~8 lines, leaves the bar's easing
+alone); only then re-cut the colour on fraction-of-max-HP plus crit, scale
+the size with `fz`, give it a hold-then-fade curve, and move the paint to
+`_draw_hud_overlay`. Raising the TTL or the font size on today's code just
+makes a bigger, longer-lived pile of `-0`.
