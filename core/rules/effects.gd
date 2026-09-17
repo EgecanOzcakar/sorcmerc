@@ -152,7 +152,7 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 				# T-classes-c: a reaction that imposes Disadvantage rather than
 				# adding AC (Warding Flare), the aura payloads, and `once` —
 				# the flag that separates a Smite from a Rage.
-				"disadvantage", "cond_immune", "once"]:
+				"disadvantage", "cond_immune", "once", "aura_resist"]:
 			if e.has(k):
 				v[k] = e[k]
 		if e.has("dice"):
@@ -350,7 +350,8 @@ static func validate() -> Array[String]:
 		if f[id].get("kind", "") == "aura":
 			if int(f[id].get("range_ft", 0)) <= 0:
 				errs.append("features.json: aura \"%s\" has no range_ft" % id)
-			if not f[id].has("save_bonus") and not f[id].has("cond_immune"):
+			if not f[id].has("save_bonus") and not f[id].has("cond_immune") \
+					and not f[id].has("aura_resist"):
 				errs.append("features.json: aura \"%s\" carries no payload" % id)
 	var sp = Catalog.all("effects/spells.json")
 	for id in sp:

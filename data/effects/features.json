@@ -908,5 +908,16 @@
     "cond_immune": [
       "charmed"
     ]
+  },
+  "oathofancients-aura-of-warding": {
+    "kind": "aura",
+    "cost": "none",
+    "trigger": "passive",
+    "range_ft": 10,
+    "aura_resist": [
+      "necrotic",
+      "psychic",
+      "radiant"
+    ]
   }
 }

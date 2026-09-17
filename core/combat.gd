@@ -415,20 +415,24 @@ func allies_of(c) -> Array:
 # "You and allies within N feet" includes the paladin, hence the `+ [c]`. Auras
 # do not stack: the best one in reach wins, which is RAW for two paladins
 # standing together and conservative for anything else.
-# The condition half of the same lookup: Aura of Devotion is "you and your
-# allies in the aura can't be Charmed", which is a list rather than a number.
-func aura_immunities(c) -> Array:
+# The list half of the same lookup. Aura of Devotion is "you and your allies in
+# the aura can't be Charmed" and Aura of Warding is a set of damage types you
+# shrug off — both are a list rather than a number, so they share a reader.
+func aura_types(c, key: String) -> Array:
 	var out: Array = []
 	for a in allies_of(c) + [c]:
 		for v in a.verbs:
-			if v["kind"] != "aura" or not v.has("cond_immune"):
+			if v["kind"] != "aura" or not v.has(key):
 				continue
 			if Hex.distance(a.pos, c.pos) > int(v.get("range", 1)):
 				continue
-			for cond in v["cond_immune"]:
-				if not cond in out:
-					out.append(String(cond))
+			for entry in v[key]:
+				if not entry in out:
+					out.append(String(entry))
 	return out
+
+func aura_immunities(c) -> Array:
+	return aura_types(c, "cond_immune")
 
 func aura_bonus(c, key: String) -> int:
 	var best := 0
@@ -1956,7 +1960,9 @@ func _resists(c, dtype: String) -> bool:
 	for s in c.statuses.values():
 		if s is Dictionary and dtype in s.get("resist", []):
 			return true
-	return false
+	# ...and off a paladin standing nearby (Aura of Warding). Same lookup as the
+	# save bonus and the condition immunity, third payload.
+	return dtype in aura_types(c, "aura_resist")
 
 # The word the log uses for whichever defence just fired.
 func _defense_verb(c, dtype: String) -> String:

@@ -5434,8 +5434,33 @@ real change and not this one. And `power.gd` still prices neither `reaction`
 nor `aura`, so Warding Flare, Aura of Protection and Aura of Devotion are all
 free in the estimator's eyes — the same note T-classes-c left.
 
-**Still not done:** Wild Shape, Metamagic, Portent, Arcane Ward, Primal
-Companion and Invoke Duplicity. Oath of the Ancients' aura (resistance to
-damage from spells) and Oath of Glory's (a speed bonus) need two more aura
-payloads: resistance is a read in `_apply_damage`, speed a read in
-`begin_turn_for`. Both are now small.
+**The third aura payload, while the kind was open.** `aura_types()` is the list
+half of `aura_bonus()`, and both Aura of Devotion's condition immunity and
+`oathofancients-aura-of-warding`'s damage resistance are lists — so they share
+one reader, hung off `_resists()`, which is already the single choke point every
+resistance in the game passes through. Asserted where it is actually read:
+20 necrotic on an ally inside the aura lands as 10, the same blow on one across
+the room lands as 20, and 20 slashing on the ally inside it lands as 20,
+because the oath is set against three types and not all of them.
+
+**Still not done, and why each one is not a data entry.**
+
+* **Oath of Glory's Aura of Alacrity** is a speed bonus, which wants a read in
+  `begin_turn_for` — small, but the 2024 wording (whose speed, what radius, and
+  the aura growing at 18) is not something to guess at from memory.
+* **Portent** replaces a d20 roll with one rolled at dawn, and *which* roll is
+  the whole feature. In an engine with no prompts (combat-design.md §2) it
+  would have to auto-spend on the first roll it saw, which is strictly worse
+  than not having it.
+* **Arcane Ward** is a pool of hit points that soaks damage before its owner
+  does — a fourth read in `_apply_damage`, plus a refill rule keyed on casting
+  abjuration spells, which the engine does not track by school.
+* **Wild Shape** swaps a combatant's whole statblock mid-fight, and the open
+  questions are design ones: which forms, whether the druid keeps their own
+  verbs, what happens to concentration, and what the form's HP does on the way
+  out.
+* **Primal Companion** and **Invoke Duplicity** put a second token on the board
+  under one player's control, which is an initiative and an AI question before
+  it is a rules one.
+
+The first three are a branch each. The last two are a design note first.

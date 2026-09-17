@@ -740,6 +740,23 @@ func test_smite_and_aura_immunity() -> void:
 	cb2.apply_condition(far, "charmed", near)
 	check(far.has("charmed"), "...and outside it the condition lands")
 
+	# Aura of Warding: the third payload, and the one read where damage lands.
+	var anc = Adapter.to_combatant(build("paladin", "oathofancients", 8), "party", Vector2i(2, 0))
+	var beside = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(3, 0))
+	var away = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(9, 5))
+	away.id = "far-three"
+	var cb3 = Combat.new(RNG.new(5), [anc, beside, away], board)
+	beside.hp = beside.max_hp
+	away.hp = away.max_hp
+	cb3._apply_damage(beside, 20, "necrotic")
+	cb3._apply_damage(away, 20, "necrotic")
+	check(beside.max_hp - beside.hp == 10, "Aura of Warding halves necrotic on an ally inside it (took %d)"
+		% [beside.max_hp - beside.hp])
+	check(away.max_hp - away.hp == 20, "...and not on one outside it (took %d)" % [away.max_hp - away.hp])
+	beside.hp = beside.max_hp
+	cb3._apply_damage(beside, 20, "slashing")
+	check(beside.max_hp - beside.hp == 20, "...and halves only what the oath is set against")
+
 # --- the report ----------------------------------------------------------
 #
 # Not assertions. A feature with no data/effects/features.json entry shows on the
