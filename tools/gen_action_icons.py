@@ -495,6 +495,15 @@ ACTIONS = {
              LIGHT[1], sw=1.3),
     ),
 
+    # T-summon. A second token arriving: the portal the ELEM family already
+    # uses for "something comes through", with a figure standing in it. Kept
+    # abstract on purpose — one kind covers a wolf and an illusion both.
+    "summon": badge(
+        band(32, 34, 21, 15, 200, 340, GOLD[1], sw=1.3),
+        poly([(25.5, 27), (38.5, 27), (36.5, 48), (27.5, 48)], LIGHT[1], sw=1.3),
+        circle(32, 20, 6.2, LIGHT[1], sw=1.2),
+    ),
+
     # --- bar controls ---
     # The turn is spent.
     "end_turn": badge(
@@ -1241,6 +1250,16 @@ FEATURES = {
     "warriorofmercy-hand-of-healing": (hand(E("life")), heart(46, 18, 7, E("life"))),
     "warrioropenhand-wholeness-of-body": (person(E("life"), "stand", 0.8),
                                           waves(E("life"), 0.45)),
+
+    # T-summon. The beast is a claw rather than the fangs summon-beast wears:
+    # the two land next to each other on a Beast Master's bar and must not read
+    # as the same button. The double is two of the same silhouette, the one
+    # behind in shadow — which is the whole feature in one picture.
+    "beastmaster-primal-companion": (hand(BONE, claw=True),
+                                     star(47, 16, 6, 2, 4, E("nature"), sw=1.0)),
+    "trickerydomain-invoke-duplicity": (
+        group([person(E("shadow"), "stand", 0.95)], 24.5, 12.3, scale=0.62),
+        group([person(E("psychic"), "stand", 0.95)], 5.5, 12.3, scale=0.62)),
 
     "monster-poison-bite": (fangs(E("poison")), droplets(E("poison"), 1, 0.5)),
     "monster-venom-sting": (dart(E("poison"), 200, 1), droplets(E("poison"), 1, 0.42)),

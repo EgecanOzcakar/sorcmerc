@@ -919,5 +919,71 @@
       "psychic",
       "radiant"
     ]
+  },
+  "beastmaster-primal-companion": {
+    "kind": "summon",
+    "cost": "action",
+    "label": "Primal Companion",
+    "summon": {
+      "id": "dire-wolf"
+    },
+    "mult_pct": {
+      "by": "class_level",
+      "class": "ranger",
+      "steps": [
+        {
+          "min": 3,
+          "value": 70
+        },
+        {
+          "min": 5,
+          "value": 90
+        },
+        {
+          "min": 9,
+          "value": 110
+        },
+        {
+          "min": 13,
+          "value": 130
+        },
+        {
+          "min": 17,
+          "value": 150
+        }
+      ]
+    },
+    "uses": {
+      "by": "pb"
+    }
+  },
+  "trickerydomain-invoke-duplicity": {
+    "kind": "summon",
+    "cost": "bonus",
+    "label": "Invoke Duplicity",
+    "pool": "channel-divinity",
+    "uses": {
+      "by": "class_level",
+      "class": "cleric",
+      "steps": [
+        {
+          "min": 2,
+          "value": 2
+        },
+        {
+          "min": 6,
+          "value": 3
+        },
+        {
+          "min": 18,
+          "value": 4
+        }
+      ]
+    },
+    "summon": {
+      "id": "trickery-duplicate",
+      "illusion": true
+    },
+    "rounds": 10
   }
 }

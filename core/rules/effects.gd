@@ -18,7 +18,11 @@ const KINDS := ["passive_damage", "self_buff", "ally_buff", "heal_self", "heal_a
 	# than anything anyone presses — combat.aura_bonus() reads it at the moment a
 	# number is needed, and it is deliberately NOT in combat.gd's OFFERABLE, so
 	# it never reaches the action bar and needs no badge.
-	"aura"]
+	"aura",
+	# T-summon. A second token on the board, run by whoever runs its owner's
+	# side. `summon` is {id, illusion?}; `mult` scales the stat block off the
+	# owner's level, `rounds` puts a clock on it. combat.summon() does the work.
+	"summon"]
 
 # castingTime -> action-economy cost. Anything longer than a Reaction is non-combat.
 const CASTING_TIME := {"Action": "action", "Bonus Action": "bonus", "Reaction": "reaction"}
@@ -152,7 +156,9 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 				# T-classes-c: a reaction that imposes Disadvantage rather than
 				# adding AC (Warding Flare), the aura payloads, and `once` —
 				# the flag that separates a Smite from a Rage.
-				"disadvantage", "cond_immune", "once", "aura_resist"]:
+				"disadvantage", "cond_immune", "once", "aura_resist",
+				# T-summon
+				"summon", "rounds"]:
 			if e.has(k):
 				v[k] = e[k]
 		if e.has("dice"):
@@ -164,6 +170,12 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 			v["bonus_damage"] = scale(e["bonus_damage"], sheet)
 		if e.has("save_bonus"):          # an aura's payload; CHA mod for a paladin
 			v["save_bonus"] = maxi(1, scale(e["save_bonus"], sheet))
+		if e.has("mult_pct"):
+			# A summon's stat block scaled off its owner. Authored as whole
+			# percent because `scale` deals in ints and steps: the ranger's beast
+			# is meant to grow with the ranger, and 70/90/110 is that curve
+			# written where the rest of the curves already live.
+			v["mult"] = maxi(10, scale(e["mult_pct"], sheet)) / 100.0
 		if e.has("amount"):
 			v["amount"] = scale(e["amount"], sheet)
 		if e.has("pool"):
@@ -191,7 +203,8 @@ static func _uses(spec, sheet) -> int:
 	return maxi(1, scale(spec, sheet))
 
 # Who a verb is pointed at. combat.gd's available()/legal_target() read this.
-const TARGETING := {"heal_ally": "ally", "ally_buff": "ally", "save_effect": "enemy"}
+const TARGETING := {"heal_ally": "ally", "ally_buff": "ally", "save_effect": "enemy",
+	"summon": "self"}   # it arrives in the free hex nearest its owner; there is nothing to aim
 
 # One verb per castable spell, per slot level it can be cast at. Ranges stay in FEET
 # here — adapter.gd owns the hex conversion (spec §2.5).
@@ -353,6 +366,12 @@ static func validate() -> Array[String]:
 			if not f[id].has("save_bonus") and not f[id].has("cond_immune") \
 					and not f[id].has("aura_resist"):
 				errs.append("features.json: aura \"%s\" carries no payload" % id)
+		# A summon naming a stat block nobody exported is a button that spends a
+		# use of Channel Divinity and stands nothing up.
+		if f[id].get("kind", "") == "summon":
+			var mid := String(f[id].get("summon", {}).get("id", ""))
+			if mid == "" or Catalog.monster(mid).is_empty():
+				errs.append("features.json: summon \"%s\" names no stat block (\"%s\")" % [id, mid])
 	var sp = Catalog.all("effects/spells.json")
 	for id in sp:
 		if id.begins_with("_"):

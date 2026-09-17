@@ -14,6 +14,7 @@ world_screen.png*
 icon_sheet.png*
 figures_screen.png*
 shots_move/
+shots_summons/
 figures_idle_*.png
 move_sequence.png
 idle_sequence.png
