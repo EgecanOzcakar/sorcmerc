@@ -656,34 +656,35 @@ static func item_tooltip(item_id: String, def: Dictionary, kind: String) -> Stri
 # dim at the foot. Built from the same tooltip string (first line the name,
 # "Click:"/"Right-click:" lines the hint, everything else the body), so a
 # test can still read tooltip_text and nothing has two sources of truth.
-# Shift while hovering swaps the party comparison (`compare`) into the hover
-# text: the engine rebuilds a tooltip whose text changed on the next mouse
-# motion, so the key handler nudges one through to make it immediate.
+# The party comparison (`compare`) is built into every card, hidden, and the
+# card itself watches Shift: the engine tears a tooltip down the moment its
+# text changes and only re-arms on real mouse travel, so swapping the text
+# (and faking a mouse nudge to bring the card back) never reliably showed it.
 class ItemTile extends Button:
 	const Icons = preload("res://core/ui_icons.gd")
 	var rarity_color := Icons.COL_TEXT
 	var base_tip := ""
 	var compare := ""
-	func _notification(what: int) -> void:
-		if what == NOTIFICATION_MOUSE_ENTER and compare != "":
-			tooltip_text = base_tip + (compare if Input.is_key_pressed(KEY_SHIFT) else "")
-	func _input(e: InputEvent) -> void:
-		if compare == "" or not (e is InputEventKey and e.keycode == KEY_SHIFT) or not is_hovered():
-			return
-		tooltip_text = base_tip + (compare if e.pressed else "")
-		# The changed text cancels the open tooltip, but the viewport only re-arms
-		# its timer for a motion of more than 5 px — so the nudge steps 6 px, kept
-		# inside the tile, or the card would never come back.
-		var mouse := get_viewport().get_mouse_position()
-		var r := get_global_rect()
-		var step := Vector2(6.0, 0.0) if mouse.x + 6.0 < r.end.x else Vector2(-6.0, 0.0)
-		var nudge := InputEventMouseMotion.new()
-		nudge.position = mouse + step
-		nudge.global_position = nudge.position
-		nudge.relative = step
-		get_viewport().push_input(nudge)
+
+	# The live half of the card: shows `cmp` while Shift is down, and tells the
+	# popup window to refit, since it sized itself once at open.
+	class Card extends PanelContainer:
+		var cmp: Label
+		var hint: Label
+		var hint_text := ""
+		func _process(_dt: float) -> void:
+			var on := Input.is_key_pressed(KEY_SHIFT)
+			if cmp.visible == on:
+				return
+			cmp.visible = on
+			hint.text = hint_text if not on else hint_text.replace("Shift: compare with the party", "Shift: comparing").strip_edges()
+			hint.visible = hint.text != ""
+			var w := get_window()
+			if w != null and w != get_tree().root:
+				w.reset_size()
+
 	func _make_custom_tooltip(for_text: String) -> Object:
-		var card := PanelContainer.new()
+		var card := Card.new()
 		card.add_theme_stylebox_override("panel", Icons.box(Icons.COL_PANEL, Icons.COL_GOLD_EDGE, 4, 12, 8))
 		var v := VBoxContainer.new()
 		v.add_theme_constant_override("separation", 4)
@@ -702,7 +703,7 @@ class ItemTile extends Button:
 				hint.append(l)
 			else:
 				body.append(l)
-		if compare != "" and for_text == base_tip:
+		if compare != "":
 			hint.append("Shift: compare with the party")
 		while not body.is_empty() and String(body[-1]).strip_edges() == "":
 			body.pop_back()
@@ -713,12 +714,18 @@ class ItemTile extends Button:
 			txt.custom_minimum_size = Vector2(320, 0)
 			txt.add_theme_color_override("font_color", Icons.COL_TEXT)
 			v.add_child(txt)
-		if not hint.is_empty():
-			var h := Label.new()
-			h.text = "\n".join(hint)
-			h.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
-			h.add_theme_color_override("font_color", Icons.COL_MUTED)
-			v.add_child(h)
+		card.cmp = Label.new()
+		card.cmp.text = compare.strip_edges()
+		card.cmp.visible = false
+		card.cmp.add_theme_color_override("font_color", Icons.COL_TEXT)
+		v.add_child(card.cmp)
+		card.hint = Label.new()
+		card.hint_text = "\n".join(hint)
+		card.hint.text = card.hint_text
+		card.hint.visible = card.hint_text != ""
+		card.hint.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+		card.hint.add_theme_color_override("font_color", Icons.COL_MUTED)
+		v.add_child(card.hint)
 		return card
 
 static func item_tile(item_id: String, tooltip: String, caption := "", px := ITEM_ART_PX,
