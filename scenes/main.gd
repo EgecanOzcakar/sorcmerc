@@ -48,6 +48,7 @@ var _tgt_verb: Dictionary = {}   # the verb being aimed, straight from cb.availa
 var _armed := ""             # a confirm-guarded verb waiting for its second press
 var _deploy_pick := ""       # T39: the hero picked up for a trade, waiting for who to trade with
 var _viewing := false        # #72: the bar shows a party member whose turn it is not — read-only
+var _viewed_id := ""         # #97: who, so the strip can mark them
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 var _slot_max := {}          # id -> slots at the start of the fight (for the pips)
@@ -1219,6 +1220,17 @@ func board_hex_clicked(hx: Vector2i) -> void:
 				return
 		return
 	var h = cb.current()
+	# #97: a click on a party member's token looks at their sheet (#72); while
+	# looking, any other click just puts the acting hero's bar back — it must
+	# never move them, which is what a stray click used to do.
+	if _mode == "idle" or _viewing:
+		for c in cb.combatants:
+			if c.pos == hx and c.team == "party" and c != h and c.conscious():
+				view_hero(c)
+				return
+		if _viewing:
+			_stop_viewing()
+			return
 	if h.team != "party" or not h.conscious():
 		return
 	if _mode == "cone":
@@ -1484,13 +1496,16 @@ func view_hero(c) -> void:
 		_stop_viewing()
 		return
 	_viewing = true
+	_viewed_id = c.id
 	_build_hero_menu(c)
+	_build_order_strip()
 	var res := _resources(c)
 	_actor.text = "%s    [i]not their turn[/i]    AC %d    %s%s" % [
 		"[b]%s[/b]" % c.cname, cb.effective_ac(c), _hp_bb(c), ("    " + res) if res != "" else ""]
 
 func _stop_viewing() -> void:
 	_viewing = false
+	_viewed_id = ""
 	var cur = cb.current() if cb != null else null
 	if cur != null and cur.team == "party" and cur.conscious() and not _advancing and not _busy:
 		_build_hero_menu(cur)
@@ -1532,6 +1547,11 @@ func _build_order_strip() -> void:
 			var box := Icons.box(Color(0.79, 0.64, 0.35, 0.12), Color(0, 0, 0, 0), 0, 6, 4)
 			box.border_color = Icons.COL_GOLD
 			box.border_width_bottom = 3
+			base = box
+		elif _viewing and c.id == _viewed_id:
+			# #97: being looked at — the party's green, boxed, so the strip says
+			# whose sheet the bar is showing and that it is not their turn
+			var box := Icons.box(Color(0.50, 0.75, 0.42, 0.12), COL_PARTY, 0, 6, 4)
 			base = box
 		else:
 			base = Icons.box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6, 4)
@@ -2939,7 +2959,7 @@ class Board extends Control:
 		var cone_hexes := {}
 		var cur = cb.current()
 		var hero_turn: bool = cur and cur.team == "party" and cur.conscious()
-		if hero_turn and main._mode == "idle" and cur.econ["move_left"] > 0:
+		if hero_turn and main._mode == "idle" and not main._viewing and cur.econ["move_left"] > 0:
 			# One A* per reachable hex — 15-20 ms a frame in GDScript, so it is
 			# memoised on everything it reads until something on the field moves.
 			var key := hash([cur.id, cb.log.size(), cb.board,

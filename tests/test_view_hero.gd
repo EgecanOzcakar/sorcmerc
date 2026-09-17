@@ -69,5 +69,27 @@ func _init() -> void:
 	await process_frame
 	check(not main._viewing, "looking at the acting hero is just their own bar")
 
+	# #97: the strip marks who is being looked at, and a board click while
+	# looking never moves the acting hero.
+	main.board_hex_clicked(other.pos)
+	await process_frame
+	check(main._viewing and main._viewed_id == other.id, "clicking another hero's token looks at them")
+	var tile = main._order_tiles[other.id]
+	check(tile.get_theme_stylebox("panel").border_color == main.COL_PARTY, "...and their strip tile is boxed in the party's green")
+	var was: Vector2i = cur.pos
+	var free: Vector2i = Vector2i(999, 999)
+	for hx in main.cb.move_field(cur):
+		if hx != cur.pos:
+			free = hx
+			break
+	check(free != Vector2i(999, 999), "there is a hex the acting hero could move to")
+	main.board_hex_clicked(free)
+	await process_frame
+	check(cur.pos == was, "a click on the board while looking does not move the acting hero")
+	check(not main._viewing, "...it just puts their bar back")
+	main.board_hex_clicked(free)
+	await process_frame
+	check(cur.pos == free, "and the next click moves them, as before")
+
 	print("test_view_hero: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
