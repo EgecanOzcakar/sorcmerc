@@ -416,6 +416,14 @@ func _halt() -> void:
 	world.clock.pause()
 	_pause_btn.text = "Resume"
 
+# Pin a text control's minimum width to what `sample` needs, so live text
+# under that width cannot move its neighbours (#94).
+static func _hold_width(c: Control, sample: String) -> void:
+	var was: String = c.text
+	c.text = sample
+	c.custom_minimum_size.x = c.get_combined_minimum_size().x
+	c.text = was
+
 # --- HUD ---------------------------------------------------------------
 func _build_hud() -> void:
 	var bar := HBoxContainer.new()
@@ -444,6 +452,13 @@ func _build_hud() -> void:
 	_region_lbl = Label.new()
 	_region_lbl.theme_type_variation = "Dim"
 	bar.add_child(_region_lbl)
+	# #94: the face has proportional digits, so "08:11" is not the width of
+	# "08:10" and every button to the right of the clock crept a pixel each
+	# minute. Each live label is held at the width of its widest reading.
+	_hold_width(_pause_btn, "Resume")
+	_hold_width(_speed_btn, "8x")
+	_hold_width(_clock_lbl, "Day 999  23:59")
+	_hold_width(_gold_lbl, "99999 ◉")
 	var party_btn := Button.new()
 	party_btn.text = "Party"
 	party_btn.pressed.connect(_open_party)

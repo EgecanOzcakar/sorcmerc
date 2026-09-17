@@ -115,6 +115,18 @@ func _run() -> void:
 	if screen.world.clock.speed != 1.0:
 		fail("cycling four times did not wrap back to 1x")
 
+	# --- #94: the clock's neighbours do not creep as the digits change --------
+	var gold_x: float = screen._gold_lbl.global_position.x
+	var clock_text: String = screen._clock_lbl.text
+	screen.world.clock.elapsed += 1.0
+	await step(2)
+	if screen._clock_lbl.text == clock_text:
+		fail("a minute on the clock did not change the face")
+	if not is_equal_approx(screen._gold_lbl.global_position.x, gold_x):
+		fail("the gold label moved when the clock ticked (%.1f -> %.1f)" % [gold_x, screen._gold_lbl.global_position.x])
+	if screen._pause_btn.custom_minimum_size.x <= 0.0 or screen._clock_lbl.custom_minimum_size.x <= 0.0:
+		fail("the live HUD labels are not held at a fixed width")
+
 	# --- #70: arriving halts the clock; a new goal starts it again ----------
 	screen.world.set_goal(p, p.position + Vector2(20, 0))   # half a second's walk
 	await step(10)
