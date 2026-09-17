@@ -1850,9 +1850,22 @@ func _draw_wash(res: String) -> void:
 	var k := clampf(t / 0.8, 0.0, 1.0)
 	var fz := clampf(_zoom, 0.9, 1.4)
 	var mid: Vector2 = _wash.size * 0.5
-	# The board's own DEFEAT slam already plays underneath; the victory one is
-	# drawn here, in the same voice: a wash, one word, one line under it.
-	if won:
+	# #93: both verdicts draw HERE, on the HUD layer above the figures and the
+	# HP bars. The DEFEAT slam used to be the Board's own and the figures stood
+	# in front of it. The Board keeps only the screen shake.
+	if not won:
+		_wash.draw_rect(Rect2(Vector2.ZERO, _wash.size), Color(0.30, 0.02, 0.03, 0.62 * clampf(t / 0.9, 0.0, 1.0)))
+		_wash.draw_rect(Rect2(Vector2.ZERO, _wash.size), Color(0.0, 0.0, 0.0, 0.35 * clampf(t / 0.9, 0.0, 1.0)))
+		if t < 0.9:                       # shockwave out of the centre
+			var kk := t / 0.9
+			_wash.draw_arc(mid, _wash.size.x * 0.75 * kk, 0, TAU, 48,
+				Color(1.0, 0.42, 0.30, 0.55 * (1.0 - kk)), 6.0 * (1.0 - kk))
+		var dslam := 1.0 + 2.2 * pow(1.0 - clampf(t / 0.30, 0.0, 1.0), 2)
+		Board._centered_on(_wash, "D E F E A T", mid, int(54 * fz * dslam),
+			Color(0.92, 0.22, 0.18, clampf(t / 0.12, 0.0, 1.0)))
+		Board._centered_on(_wash, "the party falls…", mid + Vector2(0, 46 * fz), int(16 * fz),
+			Color(0.86, 0.74, 0.68, clampf((t - 0.6) / 0.7, 0.0, 1.0)))
+	else:
 		_wash.draw_rect(Rect2(Vector2.ZERO, _wash.size), Color(0.10, 0.09, 0.02, 0.55 * k))
 		var slam := 1.0 + 1.6 * pow(1.0 - clampf(t / 0.30, 0.0, 1.0), 2)
 		Board._centered_on(_wash, "V I C T O R Y", mid, int(54 * fz * slam),
@@ -2267,22 +2280,6 @@ class Board extends Control:
 
 	# The wipe: the board lurches, a blood-red wash floods in behind a shockwave
 	# ring, and DEFEAT slams down over it.
-	func _draw_defeat(fz: float) -> void:
-		var t := _defeat
-		var wash := clampf(t / 0.9, 0.0, 1.0)
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.30, 0.02, 0.03, 0.62 * wash))
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.0, 0.0, 0.0, 0.35 * wash))
-		var mid := size * 0.5
-		if t < 0.9:                       # shockwave out of the centre
-			var k := t / 0.9
-			draw_arc(mid, size.x * 0.75 * k, 0, TAU, 48,
-				Color(1.0, 0.42, 0.30, 0.55 * (1.0 - k)), 6.0 * (1.0 - k))
-		var slam := 1.0 + 2.2 * pow(1.0 - clampf(t / 0.30, 0.0, 1.0), 2)
-		_centered("D E F E A T", mid, int(54 * fz * slam),
-			Color(0.92, 0.22, 0.18, clampf(t / 0.12, 0.0, 1.0)))
-		_centered("the party falls…", mid + Vector2(0, 46 * fz), int(16 * fz),
-			Color(0.86, 0.74, 0.68, clampf((t - 0.6) / 0.7, 0.0, 1.0)))
-
 	# Queued by main only when FX are on (never under SORCMERC_FAST/headless).
 	func play_fx(kind: String, id: String, from_hx: Vector2i, to_hx: Vector2i, hexes: Array = []) -> void:
 		_fx.append({"kind": kind, "id": id, "from": from_hx, "to": to_hx, "hexes": hexes,
@@ -3144,8 +3141,7 @@ class Board extends Control:
 		# _draw_hud_overlay calls _paint_reveal now.
 
 		if _defeat >= 0.0:
-			_draw_defeat(fz)
-			return   # nothing hovers over a wipe
+			return   # nothing hovers over a wipe (#93: the slam itself is main's wash, on the HUD layer)
 
 		# --- hover stat card ------------------------------------------
 		if main._mode == "idle":
