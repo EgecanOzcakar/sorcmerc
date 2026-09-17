@@ -526,7 +526,8 @@ func _deploy_menu() -> void:
 	var opts: Array = []
 	for h in heroes:
 		var held: bool = h.id == _deploy_pick
-		opts.append([("▣  %s" % h.cname) if held else "Swap %s" % h.cname,
+		# #90: words, not a glyph — "▣" read as a broken character on the button.
+		opts.append([("Put %s back" % h.cname) if held else "Swap %s" % h.cname,
 			_pick_deploy.bind(h.id)])
 	if _deploy_pick == "":
 		_actor.text = "[b]Unseen.[/b]  Click a hero on the map (or here) to pick them up, then click who they trade places with. Begin when they stand where you want them — the enemy loses its first round."
