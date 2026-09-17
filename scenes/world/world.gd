@@ -400,10 +400,21 @@ func _check_arrival(p0) -> void:
 			_pause_btn.text = "Pause"
 	elif _was_travelling and p0.at_goal() and _combat == null and _visit.is_empty() \
 			and _site == null and _event_card == null and not world.clock.is_paused():
-		_halted_on_arrival = true
-		world.clock.pause()
-		_pause_btn.text = "Resume"
+		_halt()
 	_was_travelling = not p0.at_goal()
+
+# Stop the party where it stands and the clock with it, until the next order.
+# #98: also what a fight's end does — the map used to run on the moment the
+# spoils closed, and could walk straight into the next band before the player
+# had touched anything.
+func _halt() -> void:
+	var p := world.player()
+	if p != null:
+		world.set_goal(p, p.position)
+	_halted_on_arrival = true
+	_was_travelling = false
+	world.clock.pause()
+	_pause_btn.text = "Resume"
 
 # --- HUD ---------------------------------------------------------------
 func _build_hud() -> void:
@@ -1346,8 +1357,7 @@ func _close_spoils() -> void:
 	if _spoils_panel != null:
 		_spoils_panel.queue_free()
 		_spoils_panel = null
-	world.clock.resume()
-	_pause_btn.text = "Pause"
+	_halt()   # #98: wait for an order
 
 # A death is a death regardless of who won — encounter.gd always fills
 # `deaths`, campaign.gd's linear run already benches+marks them the same way;

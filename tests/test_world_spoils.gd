@@ -85,8 +85,12 @@ func _init() -> void:
 	key(main, KEY_ESCAPE)
 	await process_frame
 	check(main._spoils_panel == null, "Esc dismisses it")
-	check(not main.world.clock.is_paused(), "and the clock runs again")
-	check(main._pause_btn.text == "Pause", "...with the HUD button agreeing")
+	# #98: the map waits for an order rather than running on into the next band
+	check(main.world.clock.is_paused() and main._halted_on_arrival, "and the map waits, halted, for the next order")
+	check(main._pause_btn.text == "Resume", "...with the HUD button agreeing")
+	main.world.set_goal(main.world.player(), main.world.player().position + Vector2(300, 0))
+	await process_frame
+	check(not main.world.clock.is_paused(), "a new destination sets it running again")
 
 	# --- a lost one says what it cost -----------------------------------
 	var foe2 = World.RoamingParty.new("bandits-test-2", main.world.player().position + Vector2(10, 0), "bandit")

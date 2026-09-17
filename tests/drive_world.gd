@@ -17,6 +17,12 @@ func _init() -> void:
 	root.add_child(screen)
 	_run()
 
+# #98: the map halts after every fight until the next order. A step that
+# teleports the party somewhere is giving that order by hand.
+func _unhalt() -> void:
+	screen._halted_on_arrival = false
+	screen.world.clock.resume()
+
 func fail(msg: String) -> void:
 	_fail += 1
 	printerr("  FAIL: ", msg)
@@ -372,6 +378,7 @@ func _hostile_settlement(p) -> void:
 	screen._left = null
 	p.position = s.position
 	screen.world.set_goal(p, s.position)
+	_unhalt()
 	screen._check_visit()
 	if screen._visit.is_empty():
 		fail("a merely hostile settlement refused to open its gate")
@@ -415,6 +422,7 @@ func _hostile_settlement(p) -> void:
 	screen._left = null
 	p.position = s.position
 	screen.world.set_goal(p, s.position)
+	_unhalt()
 	screen._check_visit()
 	if not screen._visit.is_empty():
 		fail("a hostile settlement still opened its market")
@@ -534,8 +542,8 @@ func _encounter_handoff(p) -> void:
 		fail("the combat scene was never torn down after the fight")
 	if screen.world.parties.has(foe):
 		fail("the defeated party is still on the map")
-	if screen.world.clock.is_paused():
-		fail("the world clock did not resume after the fight")
+	if not screen.world.clock.is_paused() or not screen._halted_on_arrival:
+		fail("the map did not halt for an order after the fight (#98)")
 
 	# A faction with no board of its own still gets a roster and a board.
 	var World = load("res://core/world.gd")
