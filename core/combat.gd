@@ -1468,8 +1468,15 @@ func pending_reactions(actor, v: Dictionary, target) -> Array:
 		var trigger: String = pair[0]
 		var ctx: Dictionary = pair[1]
 		for r in reactors_for(trigger, ctx):
-			if asks_first(r[0], r[1]):
-				out.append([r[0], r[1], trigger, ctx])
+			if not asks_first(r[0], r[1]):
+				continue
+			# #77: a yes is given before the d20. When the swing then misses on
+			# its own the trigger never fires and the answer is never consumed —
+			# so it still stands for the next swing, and is not asked twice.
+			# A "hold it" is a decision about that one blow and IS asked again.
+			if bool(reaction_intent.get("%s|%s" % [r[0].id, r[1]["id"]], false)):
+				continue
+			out.append([r[0], r[1], trigger, ctx])
 	return out
 
 # Put the question, record the answer. THE ONE SUSPENDING FUNCTION IN THIS FILE:

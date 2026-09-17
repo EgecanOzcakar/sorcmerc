@@ -43,6 +43,7 @@ func _init() -> void:
 	test_nobody_is_asked_unless_a_decider_is_installed()
 	test_only_a_reaction_that_costs_something_asks()
 	test_holding_the_reaction_spends_nothing()
+	test_a_yes_the_swing_never_needed_still_stands()
 	test_saying_yes_spends_it()
 	test_an_answer_is_good_for_one_trigger_only()
 	test_the_offer_predicts_what_the_action_will_fire()
@@ -396,6 +397,27 @@ func test_holding_the_reaction_spends_nothing() -> void:
 	check(def.econ["reaction"] == 1 and def.slots[2] == 2, "and costs neither reaction nor slot")
 	check(atk.slots[0] == 3, "the spell went off, so its own slot is spent")
 	check(_log_has(cb, "holds their reaction"), "the log says the choice was made")
+
+func test_a_yes_the_swing_never_needed_still_stands() -> void:
+	# #77: the question comes before the d20. A swing that misses on its own
+	# never fires would_be_hit, so the yes is never spent — and the next swing
+	# must not ask the same question again. A hold, by contrast, is per blow.
+	var d := _duel()
+	var cb: Combat = d[0]
+	var atk = d[1]
+	var def = d[2]
+	var shield := {"id": "shield", "kind": "spell", "cost": "reaction", "label": "Shield",
+		"trigger": "would_be_hit", "slot_level": 1, "ac_bonus": 5}
+	def.verbs.append(shield)
+	var dec := Decider.new(true)
+	cb.reaction_decider = dec.decide
+	cb.offer_reactions(atk, cb.attack_verb(), def)
+	check(dec.asked == ["sel:shield:would_be_hit"], "the first swing asks")
+	cb.offer_reactions(atk, cb.attack_verb(), def)   # the swing missed by itself; nothing consumed the yes
+	check(dec.asked.size() == 1, "a standing yes is not asked again on the next swing")
+	cb.reaction_intent["sel|shield"] = false           # what a hold leaves behind
+	cb.offer_reactions(atk, cb.attack_verb(), def)
+	check(dec.asked.size() == 2, "a hold is asked again — it was about that one blow")
 
 func test_saying_yes_spends_it() -> void:
 	var d := _duel()
