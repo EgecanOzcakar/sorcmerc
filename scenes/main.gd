@@ -336,6 +336,9 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		return
 	if e.echo and e.keycode not in [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]:
 		return   # key repeat pans; it must not end turns or press hotkeys twice
+	if _wash != null:   # #74: any key is the click
+		_dismiss_wash()
+		return
 	match e.keycode:
 		KEY_EQUAL, KEY_KP_ADD: set_zoom(_zoom * 1.1)
 		KEY_MINUS, KEY_KP_SUBTRACT: set_zoom(_zoom / 1.1)
@@ -1730,10 +1733,18 @@ func _flush_log() -> void:
 		_logged += 1
 
 func _finish() -> void:
-	result = Encounter.resolve_outcome(cb, party)   # writes HP/pools/slots back to the party
+	var outcome: Dictionary = Encounter.resolve_outcome(cb, party)   # writes HP/pools/slots back to the party
 	var res: String = cb.outcome()
 	if res == "Defeat":
 		_board.play_defeat()
+	# #74: the host (world, site, campaign) tears this scene down the frame
+	# `result` is set. With a screen to look at, the verdict is held behind a
+	# tinted wash the player clicks through first; headless and FAST hand it
+	# straight back, as they always did.
+	if _fx_on:
+		_show_wash(res, outcome)
+	else:
+		result = outcome
 	_flush_log()
 	_refresh()
 	for c in _buttons.get_children():
@@ -1769,6 +1780,49 @@ func _finish() -> void:
 				names.append(Icons.item_img_bb(String(id)) + Icons.item_bb(String(id), Campaign.item_name(String(id))))
 			_logbox.append_text("[color=#c9a45a]Taken from the dead:[/color] %s\n" % ", ".join(names))
 
+# --- #74: the verdict, held for a click -------------------------------------
+var _wash: Control = null
+var _wash_age := 0.0
+var _wash_result: Dictionary = {}
+
+func _show_wash(res: String, outcome: Dictionary) -> void:
+	_wash_result = outcome
+	_wash_age = 0.0
+	_wash = Control.new()
+	_wash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_wash.mouse_filter = Control.MOUSE_FILTER_STOP
+	_wash.draw.connect(_draw_wash.bind(res))
+	_wash.gui_input.connect(func(e: InputEvent):
+		if e is InputEventMouseButton and e.pressed:
+			_dismiss_wash())
+	_hud_layer.add_child(_wash)
+
+func _dismiss_wash() -> void:
+	if _wash == null:
+		return
+	_wash.queue_free()
+	_wash = null
+	result = _wash_result
+
+func _draw_wash(res: String) -> void:
+	var won := res == "Victory"
+	var t := _wash_age
+	var k := clampf(t / 0.8, 0.0, 1.0)
+	var fz := clampf(_zoom, 0.9, 1.4)
+	var mid: Vector2 = _wash.size * 0.5
+	# The board's own DEFEAT slam already plays underneath; the victory one is
+	# drawn here, in the same voice: a wash, one word, one line under it.
+	if won:
+		_wash.draw_rect(Rect2(Vector2.ZERO, _wash.size), Color(0.10, 0.09, 0.02, 0.55 * k))
+		var slam := 1.0 + 1.6 * pow(1.0 - clampf(t / 0.30, 0.0, 1.0), 2)
+		Board._centered_on(_wash, "V I C T O R Y", mid, int(54 * fz * slam),
+			Color(Icons.COL_GOLD, clampf(t / 0.12, 0.0, 1.0)))
+		Board._centered_on(_wash, "+%d XP, +%d %s" % [int(_wash_result.get("xp", 0)),
+			int(_wash_result.get("gold", 0)), Icons.GP], mid + Vector2(0, 46 * fz), int(18 * fz),
+			Color(Icons.COL_BODY, clampf((t - 0.5) / 0.6, 0.0, 1.0)))
+	Board._centered_on(_wash, "click to continue", mid + Vector2(0, 90 * fz), int(14 * fz),
+		Color(Icons.COL_BODY, 0.7 * clampf((t - 1.2) / 0.6, 0.0, 1.0)))
+
 # The pause before a monster acts, so its turn is a beat and not a jump cut.
 # Raised with the strike timings below it: at 0.5 the next turn started while
 # the last swing was still on screen, which is what stacked several turns into
@@ -1778,6 +1832,9 @@ const TURN_BEAT := 0.75
 const BUTTON_ROWS := 3
 
 func _process(dt: float) -> void:
+	if _wash != null:
+		_wash_age += dt
+		_wash.queue_redraw()
 	if _board:
 		_board.tick(dt * _anim)
 	if _hud_overlay:
