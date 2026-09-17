@@ -49,6 +49,7 @@ var _armed := ""             # a confirm-guarded verb waiting for its second pre
 var _deploy_pick := ""       # T39: the hero picked up for a trade, waiting for who to trade with
 var _viewing := false        # #72: the bar shows a party member whose turn it is not — read-only
 var _viewed_id := ""         # #97: who, so the strip can mark them
+var _hover_verb: Dictionary = {}   # #92: the bar button under the mouse — its reach is drawn on the board
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 var _slot_max := {}          # id -> slots at the start of the fight (for the pips)
@@ -801,6 +802,7 @@ func _menu_entries(h) -> Dictionary:
 		# else the martial set. `glyph` stays as the fallback for a build where
 		# the icons aren't there — see Icons.verb_icon.
 		var meta := _mark(Icons.skill_icon(v), glyph, freq_key)
+		meta["verb"] = v   # #92: hovering the button shows the reach on the board
 		meta["slot_level"] = int(v.get("slot_level", 0))
 		meta["cost"] = String(v.get("cost", "action"))
 		if label.contains("★"):
@@ -1393,6 +1395,7 @@ func _set_buttons(opts: Array) -> void:
 	for c in _buttons.get_children():
 		_buttons.remove_child(c)
 		c.queue_free()
+	_hover_verb = {}
 	var count := opts.size()
 	var u := clampf(_zoom, 0.9, 1.4)
 	for i in count:
@@ -1441,6 +1444,13 @@ func _set_buttons(opts: Array) -> void:
 			b.mouse_entered.connect(_walk_try.bind("hover_slot"))
 		if meta.has("shift_fn"):
 			b.set_meta("shift_fn", meta["shift_fn"])
+		if meta.has("verb"):   # #92
+			var hv: Dictionary = meta["verb"]
+			b.mouse_entered.connect(func(): _hover_verb = hv; _board.queue_redraw())
+			b.mouse_exited.connect(func():
+				if _hover_verb == hv:
+					_hover_verb = {}
+					_board.queue_redraw())
 		if tip != "":
 			b.tooltip_text = tip   # native hover popup — the name, then what it does
 		_buttons.add_child(b)
@@ -2633,6 +2643,38 @@ class Board extends Control:
 			_ground_key = key
 			_ground.queue_redraw()
 
+	# #92: the reach of `v` from where `cur` stands. Range is the verb's own
+	# (a weapon's is the wielder's reach); a cone is everything it could sweep;
+	# an area spell is every hex it could be centred on. Targets ring in the
+	# side's colour — red for a foe, the party's green for an ally.
+	const COL_REACH := Color(0.95, 0.85, 0.45, 0.14)
+	func _draw_reach(cur, v: Dictionary, s: float) -> void:
+		var targeting := String(v.get("targeting", "self"))
+		var r := int(v.get("range", 1))
+		if v["kind"] in ["attack", "offhand_attack"] and (targeting == "enemy"):
+			r = cur.atk_range if cur.ranged else int(cb.board.get("reach_melee", 1))
+		elif targeting == "direction":
+			r = int(v.get("radius", 2))
+		elif targeting in ["self", "self_area"]:
+			r = int(v.get("radius", 0))
+		for hx in cb.board["hexes"]:
+			if hx == cur.pos or Hex.distance(cur.pos, hx) > r or not cb.has_line_of_sight(cur.pos, hx):
+				continue
+			if targeting in ["hex", "line"] and not cb.legal_area(cur, v, hx):
+				continue
+			draw_colored_polygon(_hex_poly(_pix(hx), s - 2.0), COL_REACH)
+		if targeting in ["enemy", "ally"]:
+			var oc: Color = main.COL_TARGET if targeting == "enemy" else main.COL_PARTY
+			for c in cb.combatants:
+				if cb.legal_target(cur, v, c):
+					var poly := _hex_poly(_pix(c.pos), s - 3.0)
+					poly.append(poly[0])
+					draw_polyline(poly, Color(oc.r, oc.g, oc.b, 0.55), 2.0, true)
+		elif targeting == "self":
+			var poly := _hex_poly(_pix(cur.pos), s - 3.0)
+			poly.append(poly[0])
+			draw_polyline(poly, Color(main.COL_PARTY, 0.55), 2.0, true)
+
 	# HP bar + condition strip: identical for a sprite and for a vector token, so
 	# both paths call this rather than keeping two copies in step by hand.
 	# T-hud: static and canvas-agnostic on purpose. A figure standing in front of
@@ -2962,7 +3004,8 @@ class Board extends Control:
 		var cone_hexes := {}
 		var cur = cb.current()
 		var hero_turn: bool = cur and cur.team == "party" and cur.conscious()
-		if hero_turn and main._mode == "idle" and not main._viewing and cur.econ["move_left"] > 0:
+		if hero_turn and main._mode == "idle" and not main._viewing and main._hover_verb.is_empty() \
+				and cur.econ["move_left"] > 0:   # #92: a hovered skill's reach replaces the move field
 			# One A* per reachable hex — 15-20 ms a frame in GDScript, so it is
 			# memoised on everything it reads until something on the field moves.
 			var key := hash([cur.id, cb.log.size(), cb.board,
@@ -3021,6 +3064,12 @@ class Board extends Control:
 		# the valid-target ring stays here, under the tokens — it just traces the
 		# hex edge, which reads fine as "this hex is targetable," not a card that
 		# needs to sit on top of anything.
+		# #92: what the skill in hand (aimed, or just hovered on the bar) can
+		# reach — a wash over the hexes in range, a ring on each legal target.
+		if hero_turn and not main._viewing:
+			var shown: Dictionary = main._tgt_verb if main._mode in ["target", "area", "cone"] else main._hover_verb
+			if not shown.is_empty():
+				_draw_reach(cur, shown, s)
 		if hero_turn and main._mode == "target":
 			for c in cb.combatants:
 				if not main._valid_target(cur, c):

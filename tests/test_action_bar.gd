@@ -58,6 +58,12 @@ func _init() -> void:
 	check(keys.slice(0, 9) == ["1", "2", "3", "4", "5", "6", "7", "8", "9"] and keys[9] == "Tab" and keys[10] == "Spc",
 		"the key chips read 1-9, Tab, Spc (%s)" % str(keys))
 	check(not labels.any(func(t): return t.contains("Burning Hands")), "no spell sits on the main bar — they live under [2]")
+	# #92: hovering a skill's button shows its reach on the board
+	var atk_btn = main._buttons.get_child(0)
+	atk_btn.mouse_entered.emit()
+	check(main._hover_verb.get("kind", "") == "attack", "hovering [1] puts the Attack verb in hand for the board to draw")
+	atk_btn.mouse_exited.emit()
+	check(main._hover_verb.is_empty(), "...and leaving it clears it")
 	check(main._buttons.columns == main.BTN_COLUMNS, "buttons lay out in the fixed-width grid")
 	# Vera's bar is the same shape, with the slots she lacks greyed rather than gone.
 	var vera = null
