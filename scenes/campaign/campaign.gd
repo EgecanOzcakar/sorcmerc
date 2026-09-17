@@ -165,7 +165,7 @@ func _refresh() -> void:
 	for c in _body.get_children():
 		c.queue_free()
 		_body.remove_child(c)
-	_header.text = "Stage %d of %d.  %d gp, %d XP" % [
+	_header.text = "Stage %d of %d.  %d ◉, %d XP" % [
 		mini(run.stage + 1, Campaign.STAGE_COUNT), Campaign.STAGE_COUNT, party.gold, run.xp]
 
 	var fallen: Array = party.roster.filter(func(ch): return ch.dead)
@@ -276,7 +276,7 @@ func _node_panel() -> Control:
 # Every tab buys/sells through the same run.buy()/run.sell(); the only difference
 # is which catalog it shows. The NPC's one flavour line heads their tab.
 func _merchant_ui(col: VBoxContainer) -> void:
-	col.add_child(_caption("%s.  %d gp in the purse" % [
+	col.add_child(_caption("%s.  %d ◉ in the purse" % [
 		String(run.node.get("size", "camp")).to_upper(), party.gold]))
 	var tabs := TabContainer.new()
 	tabs.custom_minimum_size = Vector2(0, 300)
@@ -303,7 +303,7 @@ func _merchant_ui(col: VBoxContainer) -> void:
 func _service_page(service: String, page: VBoxContainer) -> void:
 	for e in run.service_stock(service):
 		var b := Button.new()
-		b.text = "Buy  %s   —   %d gp" % [e["name"], e["price"]]
+		b.text = "Buy  %s   —   %d ◉" % [e["name"], e["price"]]
 		b.add_theme_color_override("font_color", Icons.item_color(String(e["item_id"])))
 		b.disabled = party.gold < int(e["price"]) or int(e["price"]) <= 0
 		b.pressed.connect(func(): run.buy(String(e["item_id"])); _refresh())
@@ -318,27 +318,27 @@ func _service_page(service: String, page: VBoxContainer) -> void:
 					var b := Button.new()
 					var nm: String = Campaign.item_name(id) if Party.is_identified(e) \
 						else Campaign.mystery_name(id)
-					b.text = "Sell  %s ×%d   —   %d gp" % [nm, int(e["quantity"]),
+					b.text = "Sell  %s ×%d   —   %d ◉" % [nm, int(e["quantity"]),
 						maxi(1, int(Campaign.item_price(id) * Campaign.SELL_RATE))]
 					b.add_theme_color_override("font_color", Icons.item_color(id))
 					b.pressed.connect(func(): run.sell(id); _refresh())
 					page.add_child(b)
 		"librarian":
-			page.add_child(_caption("Readings, %d gp and no roll" % Campaign.IDENTIFY_FEE_GP))
+			page.add_child(_caption("Readings, %d ◉ and no roll" % Campaign.IDENTIFY_FEE_GP))
 			var mysteries: Array = party.unidentified()
 			if mysteries.is_empty():
 				page.add_child(_dim("Nothing of yours needs reading."))
 			for e in mysteries:
 				var id := String(e["item_id"])
 				var b := Button.new()
-				b.text = "Identify  %s   —   %d gp" % [Campaign.mystery_name(id),
+				b.text = "Identify  %s   —   %d ◉" % [Campaign.mystery_name(id),
 					Campaign.IDENTIFY_FEE_GP]
 				b.disabled = party.gold < Campaign.IDENTIFY_FEE_GP
 				b.pressed.connect(func(): run.identify_for_fee(id); _refresh())
 				page.add_child(b)
 		"healer":
 			var b := Button.new()
-			b.text = "Tend the whole party   —   %d gp" % Campaign.HEALER_GP
+			b.text = "Tend the whole party   —   %d ◉" % Campaign.HEALER_GP
 			b.disabled = party.gold < Campaign.HEALER_GP
 			b.pressed.connect(func(): run.heal_party(); _refresh())
 			page.add_child(b)
@@ -349,14 +349,14 @@ func _service_page(service: String, page: VBoxContainer) -> void:
 				page.add_child(_dim("Nothing else needs doing here."))
 			else:
 				var b := Button.new()
-				b.text = "Accept:  %s   (%d gp)" % [offer["title"], int(offer["reward"].get("gold", 0))]
+				b.text = "Accept:  %s   (%d ◉)" % [offer["title"], int(offer["reward"].get("gold", 0))]
 				b.pressed.connect(func(): run.accept(offer); _refresh())
 				page.add_child(b)
 			for q in Quest.active(party):
 				if not Quest.can_turn_in(q):
 					continue
 				var b := Button.new()
-				b.text = "Turn in:  %s   (+%d gp)" % [q["title"], int(q["reward"].get("gold", 0))]
+				b.text = "Turn in:  %s   (+%d ◉)" % [q["title"], int(q["reward"].get("gold", 0))]
 				b.pressed.connect(func(): run.turn_in(q); _refresh())
 				page.add_child(b)
 
@@ -415,20 +415,20 @@ func _fallen_panel(fallen: Array) -> Control:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
-	col.add_child(_caption("The fallen, %d gp to raise one" % Party.REVIVE_COST))
+	col.add_child(_caption("The fallen, %d ◉ to raise one" % Party.REVIVE_COST))
 	var caster := Party.resurrection_caster(party)
 	var scroll := Party.has_resurrection_scroll(party)
 	for ch in fallen:
 		col.add_child(_dim("%s lies dead." % ch.cname))
 		if caster != "":
 			var b := Button.new()
-			b.text = "Revivify  %s   (%s casts, −%d gp)" % [ch.cname, caster, Party.REVIVE_COST]
+			b.text = "Revivify  %s   (%s casts, −%d ◉)" % [ch.cname, caster, Party.REVIVE_COST]
 			b.disabled = not Party.can_resurrect(party)
 			b.pressed.connect(func(): run.resurrect(ch.id, "spell", caster); _refresh())
 			col.add_child(b)
 		if scroll:
 			var b2 := Button.new()
-			b2.text = "Read the Scroll of Resurrection over %s   (−%d gp)" % [ch.cname, Party.REVIVE_COST]
+			b2.text = "Read the Scroll of Resurrection over %s   (−%d ◉)" % [ch.cname, Party.REVIVE_COST]
 			b2.disabled = not Party.can_resurrect(party)
 			b2.pressed.connect(func(): run.resurrect(ch.id, "scroll"); _refresh())
 			col.add_child(b2)
@@ -443,8 +443,8 @@ func _end_panel() -> Control:
 	var col := VBoxContainer.new()
 	panel.add_child(col)
 	var l := Label.new()
-	l.text = "The road is walked. %d XP, %d gp." % [run.xp, party.gold] if run.state == "won" \
-		else "Retired. %d XP, %d gp brought home." % [run.xp, party.gold] if run.state == "retired" \
+	l.text = "The road is walked. %d XP, %d ◉." % [run.xp, party.gold] if run.state == "won" \
+		else "Retired. %d XP, %d ◉ brought home." % [run.xp, party.gold] if run.state == "retired" \
 		else "The party falls. The run ends here."
 	l.theme_type_variation = "Head"
 	l.add_theme_color_override("font_color", COL_PARTY if won else COL_FOE)

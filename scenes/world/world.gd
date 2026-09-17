@@ -388,7 +388,7 @@ func _process(delta: float) -> void:
 		_clock_lbl.text = "Day %d  %02d:%02d" % [
 			int(world.clock.elapsed / 1440.0) + 1,
 			int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60]
-		_gold_lbl.text = "%d gp" % party.gold
+		_gold_lbl.text = "%d ◉" % party.gold
 	queue_redraw()
 
 # #70: pause on reaching the goal; a new goal (a click, or anything else that
@@ -851,7 +851,7 @@ func _build_inventory_panel() -> void:
 	title.theme_type_variation = "Head"
 	box.add_child(title)
 	var purse := Label.new()
-	purse.text = "%d gp.  Equip and drink from a character's profile (P, then View)." % party.gold
+	purse.text = "%d ◉.  Equip and drink from a character's profile (P, then View)." % party.gold
 	purse.theme_type_variation = "Dim"
 	box.add_child(purse)
 
@@ -2156,7 +2156,7 @@ func _rest() -> void:
 	var s = _visit["settlement"]
 	var cost := Visit.inn_cost(s)
 	if not party.spend_gold(cost):
-		_say("Can't afford a room here (%d gp)." % cost)
+		_say("Can't afford a room here (%d ◉)." % cost)
 		return
 	var before := _visit
 	Visit.rest(party, world, "long-rest")
@@ -2166,7 +2166,7 @@ func _rest() -> void:
 	_carry_visit_flags(before, _visit)
 	_cheer()
 	_build_visit_panel()
-	_say("The party takes a long rest (%d gp for the room). Eight hours pass and the stalls fill up again.%s" % [
+	_say("The party takes a long rest (%d ◉ for the room). Eight hours pass and the stalls fill up again.%s" % [
 		cost, _trance_note(trance)])
 
 # T9x: names the check and its result explicitly, same convention every
@@ -2306,7 +2306,7 @@ func _turn_in(quest: Dictionary) -> void:
 		# to. The board's second payout, and the one that is not gold.
 		var lead: Dictionary = Rumors.free_lead(_visit["settlement"], party, world)
 		_build_visit_panel()
-		_say("%s — paid, +%d gp, +%d XP. They will remember it.%s" % [
+		_say("%s — paid, +%d ◉, +%d XP. They will remember it.%s" % [
 			quest["title"], reward, reward * Quest.XP_PER_GOLD,
 			("  " + String(lead["text"])) if not lead.is_empty() else ""])
 		_autosave()
@@ -2404,7 +2404,7 @@ const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "b
 # state the page already had to compute anyway.
 func _build_hub_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()
-	mood.text = "%s%s%d gp in the purse." % [
+	mood.text = "%s%s%d ◉ in the purse." % [
 		"Fighting nearby. " if _visit.get("battle", false) else "",
 		"They will not trade with you. " if _visit.get("refused", false) else "",
 		party.gold]
@@ -2441,7 +2441,7 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 
 	var inn_btn := Button.new()
 	var wait: float = Visit.long_rest_in(party, world)
-	inn_btn.text = ("Inn.  A night is %d gp" % Visit.inn_cost(s) if wait <= 0.0
+	inn_btn.text = ("Inn.  A night is %d ◉" % Visit.inn_cost(s) if wait <= 0.0
 		else "Inn.  Rested recently, a room does nothing for %s yet" % _hours(wait))
 	inn_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	inn_btn.pressed.connect(_goto_page.bind("inn"))
@@ -2473,7 +2473,7 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 # list survives only as the fallback for a place with no counters.
 func _build_market_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()
-	mood.text = "Shelves %d of %d, prices x%.2f%s.  %d gp in the purse." % [
+	mood.text = "Shelves %d of %d, prices x%.2f%s.  %d ◉ in the purse." % [
 		_visit["steps"], Visit.MAX_STEPS, _visit["markup"],
 		"  (they will not trade with you)" if _visit.get("refused", false) else "",
 		party.gold]
@@ -2522,14 +2522,14 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 			var iid := String(e["item_id"])
 			var kd: Array = Icons.item_def(iid)
 			var tile := Icons.item_tile(iid, Icons.item_tooltip(iid, kd[1], kd[0])
-				+ "\n\nClick: buy for %d gp" % int(e["price"]), "%d gp" % int(e["price"]),
+				+ "\n\nClick: buy for %d ◉" % int(e["price"]), "%d ◉" % int(e["price"]),
 				Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]))
 			tile.pressed.connect(_buy.bind(iid))
 			shelf_grid.add_child(tile)
 		for offer in posted:
 			_job_row(rows, offer)
 		if service == "healer":
-			_trade_row(rows, "Patch up the whole party — %d gp (no rest, no waiting)" % Visit.HEAL_COST,
+			_trade_row(rows, "Patch up the whole party — %d ◉ (no rest, no waiting)" % Visit.HEAL_COST,
 				"Heal", _heal)
 			if Visit.can_work_healer(party):
 				var worked: bool = _visit.get("worked", false)
@@ -2541,13 +2541,13 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 				_note(rows, "Nothing in the pack needs identifying.")
 			for entry in mystery:
 				var mid := String(entry["item_id"])
-				_trade_row(rows, "Identify the unknown %s — %d gp" % [
+				_trade_row(rows, "Identify the unknown %s — %d ◉" % [
 					Campaign.item_name(mid), Visit.IDENTIFY_COST], "Identify", _identify.bind(mid))
 	# The generalist's own counter also outfits you: the camp kit is a flat
 	# price and never runs out, so it is not part of the T25 shelf/restock
 	# catalog (T9x) and gets its own row rather than a fake catalog entry.
 	if showing_all or _market_tab == "generalist":
-		_trade_row(rows, "%s — %d gp (lets you long-rest away from a settlement)" % [
+		_trade_row(rows, "%s — %d ◉ (lets you long-rest away from a settlement)" % [
 			WorldCamp.CAMP_KIT_NAME, WorldCamp.CAMP_KIT_PRICE], "Buy", _buy_camp_kit)
 	# Selling is not a counter — whoever is behind it takes the whole pack —
 	# so it stays out of the tabs and sits under everything, on every tab.
@@ -2564,8 +2564,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		var tip: String = ("Unidentified item (%s)" % Icons.rarity_of(id) if not Party.is_identified(entry)
 			else Icons.item_tooltip(id, kd[1], kd[0]))
 		var qty := int(entry["quantity"])
-		var tile := Icons.item_tile(id, tip + "\n\nClick: sell one for %d gp" % paid,
-			"%d gp" % paid + (" ×%d" % qty if qty > 1 else ""),
+		var tile := Icons.item_tile(id, tip + "\n\nClick: sell one for %d ◉" % paid,
+			"%d ◉" % paid + (" ×%d" % qty if qty > 1 else ""),
 			Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if Party.is_identified(entry) else "")
 		tile.pressed.connect(_sell.bind(id))
 		pack.add_child(tile)
@@ -2604,7 +2604,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 func _build_inn_page(box: VBoxContainer, s) -> void:
 	var cost := Visit.inn_cost(s)
 	var mood := Label.new()
-	mood.text = "A %s bed is %d gp a night.  %d gp in the purse." % [s.kind, cost, party.gold]
+	mood.text = "A %s bed is %d ◉ a night.  %d ◉ in the purse." % [s.kind, cost, party.gold]
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
@@ -2643,7 +2643,7 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 
 	var wait: float = Visit.long_rest_in(party, world)
 	var rest_btn := Button.new()
-	rest_btn.text = "Rest the night (%d gp)" % cost
+	rest_btn.text = "Rest the night (%d ◉)" % cost
 	rest_btn.disabled = wait > 0.0 or party.gold < cost
 	rest_btn.pressed.connect(_rest)
 	box.add_child(rest_btn)
@@ -2653,7 +2653,7 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 		# has one can offer it: say so where the player hits the wall, not only
 		# on the counter they would have to guess to open.
 		if Visit.has_service(s, "healer"):
-			_note(box, "The healer will patch everyone up regardless, for %d gp." % Visit.HEAL_COST)
+			_note(box, "The healer will patch everyone up regardless, for %d ◉." % Visit.HEAL_COST)
 	elif party.gold < cost:
 		_note(box, "Not enough gold for a room.")
 	else:
@@ -2671,14 +2671,14 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	var lead_rows := VBoxContainer.new()   # `rows` is the party-status list above
 	box.add_child(lead_rows)
 	for lead in leads:
-		_trade_row(lead_rows, "%s  (%s) — %d gp" % [
+		_trade_row(lead_rows, "%s  (%s) — %d ◉" % [
 			lead["text"], String(lead.get("where", "")), int(lead["price"])],
 			"Buy", _buy_rumor.bind(lead))
 
 func _build_board_page(box: VBoxContainer, s) -> void:
 	var has_inn: bool = Visit.has_service(s, "innkeeper")
 	var mood := Label.new()
-	mood.text = "%s posts the work here.  %d gp in the purse." % [
+	mood.text = "%s posts the work here.  %d ◉ in the purse." % [
 		Campaign.SERVICE_NAMES.get("innkeeper", "The innkeeper") if has_inn
 		else "A town elder", party.gold]
 	mood.theme_type_variation = "Dim"
@@ -2793,7 +2793,7 @@ func _counter_offers(s) -> Dictionary:
 func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 	var tier: int = int(offer.get("chain_tier", 0))
 	var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
-	_trade_row(rows, "Job: %s%s — %d gp" % [
+	_trade_row(rows, "Job: %s%s — %d ◉" % [
 		offer["title"], tag, int(offer.get("reward", {}).get("gold", 0))],
 		"Take", _take_quest.bind(offer), false, Icons.scene_art("quest-" + String(offer.get("kind", "")), null))
 

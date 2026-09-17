@@ -105,10 +105,10 @@ static func buy(offer: Dictionary, party, world) -> Dictionary:
 	var price := int(offer.get("price", 0))
 	if not party.spend_gold(price):
 		return {"ok": false, "price": price,
-			"text": "They will not talk for less than %d gp." % price}
+			"text": "They will not talk for less than %d ◉." % price}
 	lair.discovered = true
 	return {"ok": true, "price": price, "lair_id": lair.id, "sname": lair.sname,
-		"text": "%s  %s is on the map now (-%d gp)." % [
+		"text": "%s  %s is on the map now (-%d ◉)." % [
 			String(offer.get("text", "")), lair.sname, price]}
 
 

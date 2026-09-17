@@ -249,7 +249,7 @@ func _done() -> void:
 	check(int(slot["written_at"]) > 0, "and when it was written")
 
 	var line: String = Game.slot_line(slot)
-	for bit in ["Day 2  14:05", "procedural", "275 gp"]:
+	for bit in ["Day 2  14:05", "procedural", "275 ◉"]:
 		check(line.contains(bit), "the title line says %s (got %s)" % [bit, line])
 
 	WorldSave.clear()

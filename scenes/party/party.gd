@@ -348,7 +348,7 @@ func _refresh() -> void:
 	_build_figure_picker()
 	_build_orders()
 
-	_purse.text = "%d gp" % party.gold
+	_purse.text = "%d ◉" % party.gold
 	if party.stash.is_empty():
 		_stash.text = "[color=#8f95a3]stash empty[/color]"
 	else:

@@ -262,6 +262,11 @@ static func dark_theme(compact := false) -> Theme:
 	return th
 
 # --- class glyphs ----------------------------------------------------------
+# #84: the coin. Every price and purse says "12 ◉", never "12 gp" — one mark
+# for gold across the HUD, the shops, the receipts and the log. (Bug reports
+# still say "gp": they are markdown for GitHub, not the screen.)
+const GP := "◉"
+
 const CLASS_GLYPHS := {
 	"barbarian": "⚒",   # crossed tools — the axe mark
 	"bard": "♫",
@@ -652,7 +657,7 @@ static func item_tooltip(item_id: String, def: Dictionary, kind: String) -> Stri
 				lines.append(desc.left(600) + ("…" if desc.length() > 600 else ""))
 	var cost := str(def.get("costGp", ""))
 	if cost != "" and cost != "None":
-		lines.append("%s gp" % cost)
+		lines.append("%s ◉" % cost)
 	return "\n".join(lines)
 
 # A square art tile with the hover text; the caller wires `pressed`. `caption`

@@ -307,7 +307,7 @@ func apply(e, world, party) -> Array[String]:
 	if e.has("gold") and party != null:
 		var gold := int(e["gold"])
 		party.add_gold(gold)     # negative is a price, and add_gold takes it
-		lines.append("%+d gp" % gold)
+		lines.append("%+d ◉" % gold)
 	for item in _list(e, "items"):
 		if item is Dictionary and party != null:
 			var qty: int = maxi(1, int(item.get("quantity", 1)))
