@@ -5544,3 +5544,51 @@ because the oath is set against three types and not all of them.
   it is a rules one.
 
 The first three are a branch each. The last two are a design note first.
+
+## T-prep — the page the prepared casters never had (2026-09-17)
+
+T-classes found it and left it written down: `core/rules/pass_spells.gd` has
+computed `prepared_count` since F2 and **nothing ever read it**, because no
+screen existed to spend it. The export carries leveled `spell-choice` grants
+for the bard, sorcerer, warlock and wizard, and for the cleric and druid it
+carries cantrips only — so a level-8 Circle of the Moon druid stood on the
+board with 4/3/3/2 spell slots and nothing but cantrips to spend them on.
+`scenes/party/prepare.gd` is where that list gets filled in.
+
+Measured, on exactly the build T-classes named: **0 leveled-spell buttons → 16**
+after four picks. That is the whole point of the page, and it is the last
+assertion in `tests/test_prepare_spells.gd` for that reason — the rest is
+bookkeeping in service of it.
+
+**Who gets it.** The five in `PassSpells.PREPARED_CASTERS`. A bard, sorcerer or
+warlock *knows* their spells; the list is settled at level-up and there is
+nothing here to decide. The button is on every roster row regardless, greyed
+with the reason on it, so "where do I prepare spells" has an answer on whatever
+row the person asking happens to be looking at.
+
+**What may be prepared.** The class's own list, at the levels the character has
+slots for, filtered through `Effects.pick_pool` — the same filter the creator's
+spell picks use, because a spell that does nothing on the board and has no door
+off it is a preparation spent on nothing. Two exclusions do real work:
+
+* **Nothing already castable is offered.** Cantrips, a subclass's
+  always-prepared list, and a wizard's spellbook are all castable via
+  `adapter.gd` whatever this page says, so charging a pick for one would be
+  charging for something the character has either way. They are shown, in their
+  own panel, marked as not counting — the page reads as the whole kit rather
+  than as the part of it that happens to be editable.
+* **Nothing above the character's top slot.** A 4th-level pick a level-8
+  paladin can never cast is a pick that does nothing.
+
+**The wizard is the odd one.** A wizard prepares from their spellbook and
+nowhere else, and the spellbook here is `spellcasting.known` — which is smaller
+than `prepared_count` at every level this game reaches. So a wizard's
+preparation is settled the moment the book is, the pool is empty, and the page
+says so rather than offering the whole wizard list as if RAW allowed it.
+
+**Not gated on a rest.** RAW ties preparation to a Long Rest, and this page is
+reachable from the party screen wherever that screen is. The party screen
+already has the machinery for this (`roster_locked`, which is how benching and
+recruiting became inn-only), so gating it later is a one-line change — but
+choosing to gate it is a design decision about how much re-tooling mid-run
+should cost, and that is not one to make as a side effect of adding the screen.
