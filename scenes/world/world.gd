@@ -138,6 +138,7 @@ var _pan := Vector2.ZERO
 var _zoom := 1.0
 var _origin := Vector2.ZERO
 var _pause_btn: Button
+var _gold_lbl: Label
 var _speed_btn: Button
 var _clock_lbl: Label
 var _visit: Dictionary = {}      # the open market, or {}
@@ -381,6 +382,7 @@ func _process(delta: float) -> void:
 		_clock_lbl.text = "Day %d  %02d:%02d" % [
 			int(world.clock.elapsed / 1440.0) + 1,
 			int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60]
+		_gold_lbl.text = "%d gp" % party.gold
 	queue_redraw()
 
 # --- HUD ---------------------------------------------------------------
@@ -401,6 +403,10 @@ func _build_hud() -> void:
 	_clock_lbl.theme_type_variation = "Stat"
 	_clock_lbl.add_theme_color_override("font_color", Icons.COL_GOLD)
 	bar.add_child(_clock_lbl)
+	_gold_lbl = Label.new()
+	_gold_lbl.theme_type_variation = "Stat"
+	_gold_lbl.add_theme_color_override("font_color", Icons.COL_GOLD)
+	bar.add_child(_gold_lbl)
 	# D6: which country this is and who it is for, always on. A band that only
 	# announced itself at the seam would be invisible to a player who saved in
 	# the frontier and came back a week later.
