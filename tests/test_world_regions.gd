@@ -107,6 +107,11 @@ func _init() -> void:
 	check(main._lair_btn.text.find("Deeps") >= 0,
 		"the button that walks into a lair says what country it is in (%s)" % main._lair_btn.text)
 	check(main._lair_btn.text.find("levels") >= 0, "...and what it will take")
+	# #89: a party halted on top of it (paused) is still offered the way in
+	main.world.clock.pause()
+	main._check_lairs()
+	check(main._lair_btn.visible, "...and still does while the clock is paused")
+	main.world.clock.resume()
 
 	print("test_world_regions: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

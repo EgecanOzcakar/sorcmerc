@@ -16,6 +16,7 @@ extends RefCounted
 
 const Scaler = preload("res://core/scaler.gd")
 const Ach = preload("res://core/achievements.gd")
+const WorldPath = preload("res://core/world_path.gd")   # #95
 
 # World-time is counted in MINUTES: everything built on top of this clock (O2's
 # Day/HH:MM readout, O6's RESTOCK, O7's DAY := 1440.0) reads `elapsed` that way.
@@ -158,6 +159,10 @@ class RoamingParty extends RefCounted:
 	var faction: String          # one of Scaler.FACTIONS
 	var is_player := false
 	var goal: Vector2            # O3 drives this; O1 just steers toward it
+	# #95: the waypoints still to come after `goal`, for a party the PLAYER
+	# sent somewhere across water (set_goal routes it; move_toward_goal walks
+	# it). Empty for every band the AI steers — core/world_ai.gd keeps its own.
+	var route: Array[Vector2] = []
 	var speed := SPEED
 	var ai := {}                 # O3's behavior + its state; see core/world_ai.gd
 	# T-party3d: who's actually in this band, for the overworld figure (Party3D
@@ -185,7 +190,7 @@ class RoamingParty extends RefCounted:
 		return best
 
 	func at_goal() -> bool:
-		return position.is_equal_approx(goal)
+		return position.is_equal_approx(goal) and route.is_empty()
 
 var clock := WorldClock.new()
 var settlements: Array[Settlement] = []
@@ -368,7 +373,18 @@ func player() -> RoamingParty:
 # been stopped anyway. Clicking the middle of a lake therefore means "walk to
 # that lake", not "walk nowhere"; no pathfinder is involved and none is wanted.
 func set_goal(p: RoamingParty, goal: Vector2) -> void:
-	p.goal = _land_goal(p.position, goal)
+	# #95: around the water, not into it. WorldPath (O16, built for the bands
+	# nobody steers) already knows the way round every blob; the player's click
+	# now takes the same route, one waypoint at a time. [] when the straight
+	# march is dry, or when there is no way round — then the old rule holds:
+	# march at it, stop at the bank.
+	var way: Array[Vector2] = WorldPath.route(self, p.position, WorldPath.nearest_dry(self, goal))
+	if way.is_empty():
+		p.route = []
+		p.goal = _land_goal(p.position, goal)
+		return
+	p.goal = way[0]
+	p.route = way.slice(1)
 
 # `goal` when it is dry; otherwise the dry point closest to it on the segment
 # back toward `from`. `goal` unchanged when the whole segment is wet — which can
@@ -409,6 +425,7 @@ func move_toward_goal(p: RoamingParty, delta: float) -> void:
 		return
 	if waters.is_empty():        # no terrain to respect: the O1 behavior, undisturbed
 		p.position = p.position.move_toward(p.goal, p.speed * delta)
+		p.route = []
 		return
 	var remaining := p.speed * delta
 	while remaining > 0.0:
@@ -416,6 +433,10 @@ func move_toward_goal(p: RoamingParty, delta: float) -> void:
 		remaining -= hop
 		var before := p.position
 		_hop(p, hop)
+		if p.position.is_equal_approx(p.goal) and not p.route.is_empty():
+			p.goal = p.route[0]          # #95: the next leg of a routed walk
+			p.route.remove_at(0)
+			continue
 		if p.position.is_equal_approx(before):
 			return               # arrived, or stopped against a bank
 

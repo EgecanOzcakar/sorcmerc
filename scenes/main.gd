@@ -48,6 +48,8 @@ var _tgt_verb: Dictionary = {}   # the verb being aimed, straight from cb.availa
 var _armed := ""             # a confirm-guarded verb waiting for its second press
 var _deploy_pick := ""       # T39: the hero picked up for a trade, waiting for who to trade with
 var _viewing := false        # #72: the bar shows a party member whose turn it is not — read-only
+var _viewed_id := ""         # #97: who, so the strip can mark them
+var _hover_verb: Dictionary = {}   # #92: the bar button under the mouse — its reach is drawn on the board
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 var _slot_max := {}          # id -> slots at the start of the fight (for the pips)
@@ -280,7 +282,10 @@ func _ready() -> void:
 	_hud_layer.add_child(_hud_overlay)
 
 	_actor.bbcode_enabled = true
-	_actor.fit_content = true
+	# #91: NOT fit_content. The line under the board is held at ACTOR_LINES
+	# tall whatever it says, so a two-line readout does not shove the board
+	# up and a one-line one does not drop it back.
+	_actor.fit_content = false
 	_actor.scroll_active = false
 	_actor.add_theme_font_size_override("normal_font_size", Icons.FS_HEAD)
 	_actor.add_theme_font_size_override("bold_font_size", Icons.FS_HEAD)
@@ -316,6 +321,8 @@ func _apply_ui_scale() -> void:
 	_header.add_theme_font_size_override("font_size", int(Icons.FS_TITLE * u))
 	_actor.add_theme_font_size_override("normal_font_size", int(Icons.FS_HEAD * u))
 	_actor.add_theme_font_size_override("bold_font_size", int(Icons.FS_HEAD * u))
+	_actor.custom_minimum_size.y = _actor.get_theme_font("normal_font").get_height(int(Icons.FS_HEAD * u)) \
+		* ACTOR_LINES + _actor.get_theme_constant("line_separation") * (ACTOR_LINES - 1) + 6
 	# the log is a narrow sidebar now — body size wraps far less than head size
 	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
 	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
@@ -526,7 +533,8 @@ func _deploy_menu() -> void:
 	var opts: Array = []
 	for h in heroes:
 		var held: bool = h.id == _deploy_pick
-		opts.append([("▣  %s" % h.cname) if held else "Swap %s" % h.cname,
+		# #90: words, not a glyph — "▣" read as a broken character on the button.
+		opts.append([("Put %s back" % h.cname) if held else "Swap %s" % h.cname,
 			_pick_deploy.bind(h.id)])
 	if _deploy_pick == "":
 		_actor.text = "[b]Unseen.[/b]  Click a hero on the map (or here) to pick them up, then click who they trade places with. Begin when they stand where you want them — the enemy loses its first round."
@@ -794,6 +802,7 @@ func _menu_entries(h) -> Dictionary:
 		# else the martial set. `glyph` stays as the fallback for a build where
 		# the icons aren't there — see Icons.verb_icon.
 		var meta := _mark(Icons.skill_icon(v), glyph, freq_key)
+		meta["verb"] = v   # #92: hovering the button shows the reach on the board
 		meta["slot_level"] = int(v.get("slot_level", 0))
 		meta["cost"] = String(v.get("cost", "action"))
 		if label.contains("★"):
@@ -1218,6 +1227,17 @@ func board_hex_clicked(hx: Vector2i) -> void:
 				return
 		return
 	var h = cb.current()
+	# #97: a click on a party member's token looks at their sheet (#72); while
+	# looking, any other click just puts the acting hero's bar back — it must
+	# never move them, which is what a stray click used to do.
+	if _mode == "idle" or _viewing:
+		for c in cb.combatants:
+			if c.pos == hx and c.team == "party" and c != h and c.conscious():
+				view_hero(c)
+				return
+		if _viewing:
+			_stop_viewing()
+			return
 	if h.team != "party" or not h.conscious():
 		return
 	if _mode == "cone":
@@ -1375,6 +1395,7 @@ func _set_buttons(opts: Array) -> void:
 	for c in _buttons.get_children():
 		_buttons.remove_child(c)
 		c.queue_free()
+	_hover_verb = {}
 	var count := opts.size()
 	var u := clampf(_zoom, 0.9, 1.4)
 	for i in count:
@@ -1423,6 +1444,13 @@ func _set_buttons(opts: Array) -> void:
 			b.mouse_entered.connect(_walk_try.bind("hover_slot"))
 		if meta.has("shift_fn"):
 			b.set_meta("shift_fn", meta["shift_fn"])
+		if meta.has("verb"):   # #92
+			var hv: Dictionary = meta["verb"]
+			b.mouse_entered.connect(func(): _hover_verb = hv; _board.queue_redraw())
+			b.mouse_exited.connect(func():
+				if _hover_verb == hv:
+					_hover_verb = {}
+					_board.queue_redraw())
 		if tip != "":
 			b.tooltip_text = tip   # native hover popup — the name, then what it does
 		_buttons.add_child(b)
@@ -1483,13 +1511,16 @@ func view_hero(c) -> void:
 		_stop_viewing()
 		return
 	_viewing = true
+	_viewed_id = c.id
 	_build_hero_menu(c)
+	_build_order_strip()
 	var res := _resources(c)
 	_actor.text = "%s    [i]not their turn[/i]    AC %d    %s%s" % [
 		"[b]%s[/b]" % c.cname, cb.effective_ac(c), _hp_bb(c), ("    " + res) if res != "" else ""]
 
 func _stop_viewing() -> void:
 	_viewing = false
+	_viewed_id = ""
 	var cur = cb.current() if cb != null else null
 	if cur != null and cur.team == "party" and cur.conscious() and not _advancing and not _busy:
 		_build_hero_menu(cur)
@@ -1531,6 +1562,11 @@ func _build_order_strip() -> void:
 			var box := Icons.box(Color(0.79, 0.64, 0.35, 0.12), Color(0, 0, 0, 0), 0, 6, 4)
 			box.border_color = Icons.COL_GOLD
 			box.border_width_bottom = 3
+			base = box
+		elif _viewing and c.id == _viewed_id:
+			# #97: being looked at — the party's green, boxed, so the strip says
+			# whose sheet the bar is showing and that it is not their turn
+			var box := Icons.box(Color(0.50, 0.75, 0.42, 0.12), COL_PARTY, 0, 6, 4)
 			base = box
 		else:
 			base = Icons.box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 6, 4)
@@ -1824,9 +1860,22 @@ func _draw_wash(res: String) -> void:
 	var k := clampf(t / 0.8, 0.0, 1.0)
 	var fz := clampf(_zoom, 0.9, 1.4)
 	var mid: Vector2 = _wash.size * 0.5
-	# The board's own DEFEAT slam already plays underneath; the victory one is
-	# drawn here, in the same voice: a wash, one word, one line under it.
-	if won:
+	# #93: both verdicts draw HERE, on the HUD layer above the figures and the
+	# HP bars. The DEFEAT slam used to be the Board's own and the figures stood
+	# in front of it. The Board keeps only the screen shake.
+	if not won:
+		_wash.draw_rect(Rect2(Vector2.ZERO, _wash.size), Color(0.30, 0.02, 0.03, 0.62 * clampf(t / 0.9, 0.0, 1.0)))
+		_wash.draw_rect(Rect2(Vector2.ZERO, _wash.size), Color(0.0, 0.0, 0.0, 0.35 * clampf(t / 0.9, 0.0, 1.0)))
+		if t < 0.9:                       # shockwave out of the centre
+			var kk := t / 0.9
+			_wash.draw_arc(mid, _wash.size.x * 0.75 * kk, 0, TAU, 48,
+				Color(1.0, 0.42, 0.30, 0.55 * (1.0 - kk)), 6.0 * (1.0 - kk))
+		var dslam := 1.0 + 2.2 * pow(1.0 - clampf(t / 0.30, 0.0, 1.0), 2)
+		Board._centered_on(_wash, "D E F E A T", mid, int(54 * fz * dslam),
+			Color(0.92, 0.22, 0.18, clampf(t / 0.12, 0.0, 1.0)))
+		Board._centered_on(_wash, "the party falls…", mid + Vector2(0, 46 * fz), int(16 * fz),
+			Color(0.86, 0.74, 0.68, clampf((t - 0.6) / 0.7, 0.0, 1.0)))
+	else:
 		_wash.draw_rect(Rect2(Vector2.ZERO, _wash.size), Color(0.10, 0.09, 0.02, 0.55 * k))
 		var slam := 1.0 + 1.6 * pow(1.0 - clampf(t / 0.30, 0.0, 1.0), 2)
 		Board._centered_on(_wash, "V I C T O R Y", mid, int(54 * fz * slam),
@@ -1844,6 +1893,7 @@ func _draw_wash(res: String) -> void:
 const TURN_BEAT := 0.75
 
 const BUTTON_ROWS := 3
+const ACTOR_LINES := 2   # #91: the readout's fixed height, in lines
 
 func _process(dt: float) -> void:
 	if _wash != null:
@@ -2240,22 +2290,6 @@ class Board extends Control:
 
 	# The wipe: the board lurches, a blood-red wash floods in behind a shockwave
 	# ring, and DEFEAT slams down over it.
-	func _draw_defeat(fz: float) -> void:
-		var t := _defeat
-		var wash := clampf(t / 0.9, 0.0, 1.0)
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.30, 0.02, 0.03, 0.62 * wash))
-		draw_rect(Rect2(Vector2.ZERO, size), Color(0.0, 0.0, 0.0, 0.35 * wash))
-		var mid := size * 0.5
-		if t < 0.9:                       # shockwave out of the centre
-			var k := t / 0.9
-			draw_arc(mid, size.x * 0.75 * k, 0, TAU, 48,
-				Color(1.0, 0.42, 0.30, 0.55 * (1.0 - k)), 6.0 * (1.0 - k))
-		var slam := 1.0 + 2.2 * pow(1.0 - clampf(t / 0.30, 0.0, 1.0), 2)
-		_centered("D E F E A T", mid, int(54 * fz * slam),
-			Color(0.92, 0.22, 0.18, clampf(t / 0.12, 0.0, 1.0)))
-		_centered("the party falls…", mid + Vector2(0, 46 * fz), int(16 * fz),
-			Color(0.86, 0.74, 0.68, clampf((t - 0.6) / 0.7, 0.0, 1.0)))
-
 	# Queued by main only when FX are on (never under SORCMERC_FAST/headless).
 	func play_fx(kind: String, id: String, from_hx: Vector2i, to_hx: Vector2i, hexes: Array = []) -> void:
 		_fx.append({"kind": kind, "id": id, "from": from_hx, "to": to_hx, "hexes": hexes,
@@ -2609,6 +2643,38 @@ class Board extends Control:
 			_ground_key = key
 			_ground.queue_redraw()
 
+	# #92: the reach of `v` from where `cur` stands. Range is the verb's own
+	# (a weapon's is the wielder's reach); a cone is everything it could sweep;
+	# an area spell is every hex it could be centred on. Targets ring in the
+	# side's colour — red for a foe, the party's green for an ally.
+	const COL_REACH := Color(0.95, 0.85, 0.45, 0.14)
+	func _draw_reach(cur, v: Dictionary, s: float) -> void:
+		var targeting := String(v.get("targeting", "self"))
+		var r := int(v.get("range", 1))
+		if v["kind"] in ["attack", "offhand_attack"] and (targeting == "enemy"):
+			r = cur.atk_range if cur.ranged else int(cb.board.get("reach_melee", 1))
+		elif targeting == "direction":
+			r = int(v.get("radius", 2))
+		elif targeting in ["self", "self_area"]:
+			r = int(v.get("radius", 0))
+		for hx in cb.board["hexes"]:
+			if hx == cur.pos or Hex.distance(cur.pos, hx) > r or not cb.has_line_of_sight(cur.pos, hx):
+				continue
+			if targeting in ["hex", "line"] and not cb.legal_area(cur, v, hx):
+				continue
+			draw_colored_polygon(_hex_poly(_pix(hx), s - 2.0), COL_REACH)
+		if targeting in ["enemy", "ally"]:
+			var oc: Color = main.COL_TARGET if targeting == "enemy" else main.COL_PARTY
+			for c in cb.combatants:
+				if cb.legal_target(cur, v, c):
+					var poly := _hex_poly(_pix(c.pos), s - 3.0)
+					poly.append(poly[0])
+					draw_polyline(poly, Color(oc.r, oc.g, oc.b, 0.55), 2.0, true)
+		elif targeting == "self":
+			var poly := _hex_poly(_pix(cur.pos), s - 3.0)
+			poly.append(poly[0])
+			draw_polyline(poly, Color(main.COL_PARTY, 0.55), 2.0, true)
+
 	# HP bar + condition strip: identical for a sprite and for a vector token, so
 	# both paths call this rather than keeping two copies in step by hand.
 	# T-hud: static and canvas-agnostic on purpose. A figure standing in front of
@@ -2938,7 +3004,8 @@ class Board extends Control:
 		var cone_hexes := {}
 		var cur = cb.current()
 		var hero_turn: bool = cur and cur.team == "party" and cur.conscious()
-		if hero_turn and main._mode == "idle" and cur.econ["move_left"] > 0:
+		if hero_turn and main._mode == "idle" and not main._viewing and main._hover_verb.is_empty() \
+				and cur.econ["move_left"] > 0:   # #92: a hovered skill's reach replaces the move field
 			# One A* per reachable hex — 15-20 ms a frame in GDScript, so it is
 			# memoised on everything it reads until something on the field moves.
 			var key := hash([cur.id, cb.log.size(), cb.board,
@@ -2997,6 +3064,12 @@ class Board extends Control:
 		# the valid-target ring stays here, under the tokens — it just traces the
 		# hex edge, which reads fine as "this hex is targetable," not a card that
 		# needs to sit on top of anything.
+		# #92: what the skill in hand (aimed, or just hovered on the bar) can
+		# reach — a wash over the hexes in range, a ring on each legal target.
+		if hero_turn and not main._viewing:
+			var shown: Dictionary = main._tgt_verb if main._mode in ["target", "area", "cone"] else main._hover_verb
+			if not shown.is_empty():
+				_draw_reach(cur, shown, s)
 		if hero_turn and main._mode == "target":
 			for c in cb.combatants:
 				if not main._valid_target(cur, c):
@@ -3117,8 +3190,7 @@ class Board extends Control:
 		# _draw_hud_overlay calls _paint_reveal now.
 
 		if _defeat >= 0.0:
-			_draw_defeat(fz)
-			return   # nothing hovers over a wipe
+			return   # nothing hovers over a wipe (#93: the slam itself is main's wash, on the HUD layer)
 
 		# --- hover stat card ------------------------------------------
 		if main._mode == "idle":

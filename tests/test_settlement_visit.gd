@@ -8,6 +8,7 @@ const World = preload("res://core/world.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Party = preload("res://core/party.gd")
+const Campaign = preload("res://core/campaign.gd")
 const RNG = preload("res://core/rng.gd")
 const Quest = preload("res://core/quest.gd")
 
@@ -21,7 +22,23 @@ func check(cond: bool, label: String) -> void:
 		_fail += 1
 		printerr("  FAIL: ", label)
 
+# #87: the button says what it would roll before it is pressed.
+func test_check_preview() -> void:
+	var party := _party()
+	var line := Visit.check_preview(party, Visit.STEAL_SKILL, Visit.STEAL_DC)
+	check("vs DC %d" % Visit.STEAL_DC in line and "Sleight" in line and "%" in line, "a steal preview names the skill, the DC and the odds (%s)" % line)
+	var c = Campaign.new(party)
+	var who: String = c.best_at(Visit.STEAL_SKILL)
+	check(party.get_member(who).cname in line, "...and who rolls it")
+	var bonus: int = c.skill_bonus(who, Visit.STEAL_SKILL)
+	var need := clampi(Visit.STEAL_DC - bonus, 2, 20)
+	check(("needs %d+" % need) in line and ("%d%%" % int(round((21 - need) / 20.0 * 100.0))) in line, "the odds are the d20's (%s)" % line)
+	var adv := Visit.check_preview(party, Visit.HAGGLE_SKILL, Visit.HAGGLE_DC, true)
+	check("advantage" in adv, "advantage is said when it applies")
+	check("Nobody" in Visit.check_preview(Party.new(), Visit.STEAL_SKILL, Visit.STEAL_DC), "an empty party cannot try")
+
 func _init() -> void:
+	test_check_preview()
 	test_market_is_deterministic()
 	test_gap_changes_the_market()
 	test_visit_stamps_and_second_visit_is_thinner()

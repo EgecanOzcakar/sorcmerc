@@ -740,9 +740,24 @@ class ItemTile extends Button:
 		v.add_child(card.hint)
 		return card
 
+# `count` > 1 puts a "×N" badge in the picture's bottom-right corner (#88) —
+# the stack size belongs on the item, not tacked onto the price.
 static func item_tile(item_id: String, tooltip: String, caption := "", px := ITEM_ART_PX,
-		compare := "") -> Button:
+		compare := "", count := 0) -> Button:
 	var b := ItemTile.new()
+	if count > 1:
+		var badge := Label.new()
+		badge.text = "×%d" % count
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge.add_theme_font_size_override("font_size", FS_SMALL)
+		badge.add_theme_color_override("font_color", COL_HEAD)
+		badge.add_theme_stylebox_override("normal", box(Color(COL_INK, 0.85), COL_GOLD_EDGE, 3, 5, 1))
+		badge.anchor_left = 1.0; badge.anchor_right = 1.0
+		badge.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		badge.offset_right = -6.0
+		badge.offset_top = px - 14.0
+		badge.offset_bottom = px + 4.0
+		b.add_child(badge)
 	b.rarity_color = item_color(item_id)
 	clicks(b)
 	b.tooltip_text = tooltip

@@ -43,6 +43,7 @@ const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
+const Dice = preload("res://core/dice.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
@@ -400,10 +401,29 @@ func _check_arrival(p0) -> void:
 			_pause_btn.text = "Pause"
 	elif _was_travelling and p0.at_goal() and _combat == null and _visit.is_empty() \
 			and _site == null and _event_card == null and not world.clock.is_paused():
-		_halted_on_arrival = true
-		world.clock.pause()
-		_pause_btn.text = "Resume"
+		_halt()
 	_was_travelling = not p0.at_goal()
+
+# Stop the party where it stands and the clock with it, until the next order.
+# #98: also what a fight's end does — the map used to run on the moment the
+# spoils closed, and could walk straight into the next band before the player
+# had touched anything.
+func _halt() -> void:
+	var p := world.player()
+	if p != null:
+		world.set_goal(p, p.position)
+	_halted_on_arrival = true
+	_was_travelling = false
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+
+# Pin a text control's minimum width to what `sample` needs, so live text
+# under that width cannot move its neighbours (#94).
+static func _hold_width(c: Control, sample: String) -> void:
+	var was: String = c.text
+	c.text = sample
+	c.custom_minimum_size.x = c.get_combined_minimum_size().x
+	c.text = was
 
 # --- HUD ---------------------------------------------------------------
 func _build_hud() -> void:
@@ -433,6 +453,13 @@ func _build_hud() -> void:
 	_region_lbl = Label.new()
 	_region_lbl.theme_type_variation = "Dim"
 	bar.add_child(_region_lbl)
+	# #94: the face has proportional digits, so "08:11" is not the width of
+	# "08:10" and every button to the right of the clock crept a pixel each
+	# minute. Each live label is held at the width of its widest reading.
+	_hold_width(_pause_btn, "Resume")
+	_hold_width(_speed_btn, "8x")
+	_hold_width(_clock_lbl, "Day 999  23:59")
+	_hold_width(_gold_lbl, "99999 ◉")
 	var party_btn := Button.new()
 	party_btn.text = "Party"
 	party_btn.pressed.connect(_open_party)
@@ -865,8 +892,8 @@ func _build_inventory_panel() -> void:
 			var tip: String = ("Unidentified item (%s)" % Icons.rarity_of(id)) if not known \
 				else Icons.item_tooltip(id, kd[1], kd[0])
 			var qty := int(entry["quantity"])
-			grid.add_child(Icons.item_tile(id, tip, ("×%d" % qty) if qty > 1 else "",
-				Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if known else ""))
+			grid.add_child(Icons.item_tile(id, tip, "",
+				Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if known else "", qty))
 
 	var close := Button.new()
 	close.text = "Close"
@@ -1346,8 +1373,7 @@ func _close_spoils() -> void:
 	if _spoils_panel != null:
 		_spoils_panel.queue_free()
 		_spoils_panel = null
-	world.clock.resume()
-	_pause_btn.text = "Pause"
+	_halt()   # #98: wait for an order
 
 # A death is a death regardless of who won — encounter.gd always fills
 # `deaths`, campaign.gd's linear run already benches+marks them the same way;
@@ -1391,8 +1417,17 @@ func _retreat() -> void:
 # Same shape as _check_encounter above, against the settlement list instead of
 # the party list. `_left` stops the panel reopening on the frame after Leave —
 # it clears once the player is actually outside the radius again.
+# #89: "paused" is not the gate — the halt on arriving (#70) and after a fight
+# (#98) is a pause too, and a party stopped on top of a lair still has to see
+# "Attack" / "Slip past". What these gates are really about is a card or panel
+# owning the screen.
+func _overlay_up() -> bool:
+	return _event_card != null or _approach_card != null or _spoils_panel != null \
+		or _site != null or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
+		or _story_panel != null or story_card != null or _menu_panel != null
+
 func _check_visit() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
 	var p := world.player()
 	if p == null:
@@ -1426,7 +1461,7 @@ func _check_visit() -> void:
 # Survival check, discovered-and-unlooted offers the fight. A looted lair (or
 # nothing in range) hides the button — there is nothing left to do there.
 func _check_lairs() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		_lair_btn.visible = false
 		_lair_sneak_btn.visible = false
 		return
@@ -2217,7 +2252,7 @@ func _hostile_nearby() -> bool:
 	return false
 
 func _short_rest() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
 	if _hostile_nearby():
 		_camp_msg.text = "Too dangerous to rest here — something hostile is close."
@@ -2240,7 +2275,7 @@ func _short_rest() -> void:
 # reason to gate this on can_long_rest() first: no point risking an ambush
 # for a rest that wouldn't grant its benefit yet regardless.
 func _make_camp() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
 	if not Visit.can_long_rest(party, world):
 		_camp_msg.text = "The party isn't tired enough for another long rest yet."
@@ -2479,6 +2514,7 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 		var investigated: bool = _visit.get("investigated", false)
 		investigate_btn.text = "Investigated the battlefield" if investigated else "Investigate the battlefield"
 		investigate_btn.disabled = investigated
+		investigate_btn.tooltip_text = Visit.check_preview(party, Visit.INVESTIGATE_SKILL, Visit.INVESTIGATE_DC)   # #87
 		investigate_btn.pressed.connect(_investigate)
 		places.add_child(investigate_btn)
 
@@ -2583,8 +2619,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 			else Icons.item_tooltip(id, kd[1], kd[0]))
 		var qty := int(entry["quantity"])
 		var tile := Icons.item_tile(id, tip + "\n\nClick: sell one for %d ◉" % paid,
-			"%d ◉" % paid + (" ×%d" % qty if qty > 1 else ""),
-			Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if Party.is_identified(entry) else "")
+			"%d ◉" % paid,
+			Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if Party.is_identified(entry) else "", qty)
 		tile.pressed.connect(_sell.bind(id))
 		pack.add_child(tile)
 
@@ -2595,6 +2631,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	var spent: bool = _visit.get("stolen", false) or wait > 0.0
 	steal_btn.text = ("Stall watched — %dh" % maxi(1, ceili(wait / 60.0))) if wait > 0.0 else "Steal from the market"
 	steal_btn.disabled = spent
+	steal_btn.tooltip_text = Visit.check_preview(party, Visit.STEAL_SKILL, Visit.STEAL_DC)   # #87
 	steal_btn.pressed.connect(_steal)
 	bar.add_child(steal_btn)
 	if _visit.get("refused", false):
@@ -2602,6 +2639,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		var persuaded: bool = _visit.get("persuaded", false)
 		persuade_btn.text = "Tried persuasion" if persuaded else "Persuade them to trade"
 		persuade_btn.disabled = persuaded
+		persuade_btn.tooltip_text = Visit.check_preview(party, Visit.PERSUADE_SKILL, Visit.persuade_dc(_visit), _talk_adv())
 		persuade_btn.pressed.connect(_persuade)
 		bar.add_child(persuade_btn)
 	else:
@@ -2611,6 +2649,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		var haggled: bool = _visit.get("haggled", false)
 		haggle_btn.text = "Haggled already" if haggled else "Haggle over prices (Persuasion)"
 		haggle_btn.disabled = haggled
+		haggle_btn.tooltip_text = Visit.check_preview(party, Visit.HAGGLE_SKILL, Visit.HAGGLE_DC, _talk_adv())
 		haggle_btn.pressed.connect(_haggle)
 		bar.add_child(haggle_btn)
 
@@ -2847,6 +2886,12 @@ func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Cal
 	row.add_child(btn)
 	rows.add_child(row)
 
+# #87: whether the party's talker rolls with advantage right now (a potion or
+# a talk spell) — the same test Visit's own rolls make.
+func _talk_adv() -> bool:
+	var talker = party.get_member(Campaign.new(party).best_at(Visit.PERSUADE_SKILL))
+	return talker != null and Visit._talk_mode(talker, party) == Dice.ADV
+
 # --- projection (see header) -------------------------------------------
 func _iso(v: Vector2) -> Vector2:
 	var r := v.rotated(deg_to_rad(ISO_YAW)) * ISO_GAIN
@@ -2949,7 +2994,14 @@ func _draw() -> void:
 	_draw_ground()
 	var p := world.player()
 	if p != null and not p.at_goal():
-		draw_polyline(_ring(_pix(p.goal), 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
+		# #95: the way round, when there is one — a faint gold thread through the
+		# corners to the ring at the end, so a detour reads as a plan, not a stray
+		var pts := PackedVector2Array([_pix(p.position), _pix(p.goal)])
+		for wp in p.route:
+			pts.append(_pix(wp))
+		if pts.size() > 2:
+			draw_polyline(pts, Color(Icons.COL_GOLD, 0.45), 1.5, true)
+		draw_polyline(_ring(_pix(pts[-1]), 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
 
 	# One painter's-order pass over everything standing on the ground.
 	# T9x: settlements are landmarks, always drawn regardless of fog — the

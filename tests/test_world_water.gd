@@ -50,27 +50,35 @@ func test_march_stops_at_the_bank() -> void:
 	var w := _lake_world()
 	var p := w.add_party(World.RoamingParty.new("player", Vector2(-200, 0), "human", true))
 	w.set_goal(p, Vector2(200, 0))   # dry goal, straight through the lake
-	check(p.goal == Vector2(200, 0), "a dry goal is taken as given")
+	# #95: the click is routed round the water (core/world_path.gd), a waypoint
+	# at a time: the first goal is a bank corner, the rest queue on the party.
+	check(p.goal != Vector2(200, 0) and not p.route.is_empty() and p.route[-1] == Vector2(200, 0),
+		"a goal across a lake is routed round it, ending where the click was")
+	check(not p.at_goal(), "...and a party with legs still to walk is not 'arrived' at its first corner")
 
 	for i in 20:
 		w.tick(1.0)
 	check(not w.is_water(p.position), "the party never ends up in the water")
-	check(p.position.x < -LAKE_R, "it stopped on the near side, it did not cross")
-	check(w.water_depth(p.position) < World.WATER_STEP,
-		"...and it got within one step of the bank rather than halting early")
-
-	# One absurd tick is the tunnelling case: 8x speed and a fat frame must not
-	# teleport a party over a river between two water checks.
-	var before := p.position
+	check(p.position.x > -LAKE_R, "it is on its way round, not stuck on the near bank")
+	# One absurd tick: 8x speed and a fat frame walk the whole route, hop by
+	# hop, and still never set foot in the water.
 	w.tick(100.0)
-	check(p.position.is_equal_approx(before), "a huge tick does not jump the lake either")
+	check(p.position.is_equal_approx(Vector2(200, 0)) and p.at_goal(), "a huge tick walks the rest of the way round and arrives")
+	check(not w.is_water(p.position), "...dry-shod")
+	# The old rule still holds where there is no way round: an island goal.
+	var island := World.new()
+	island.add_water(Vector2.ZERO, 100.0)
+	var q := island.add_party(World.RoamingParty.new("q", Vector2(-200, 0), "human", true))
+	island.set_goal(q, Vector2(-150, 0))
+	check(q.route.is_empty() and q.goal == Vector2(-150, 0), "a dry goal on a dry line is taken as given, no route")
 
 func test_goal_in_a_lake_snaps_to_land() -> void:
 	var w := _lake_world()
 	var p := w.add_party(World.RoamingParty.new("player", Vector2(-200, 0), "human", true))
 	w.set_goal(p, LAKE)
 	check(not w.is_water(p.goal), "a goal in the middle of a lake resolves to land")
-	check(p.goal.x < 0.0 and p.goal.x >= -200.0, "...on the party's own side of it")
+	var last: Vector2 = p.route[-1] if not p.route.is_empty() else p.goal
+	check(not w.is_water(last) and w.water_depth(last) < World.WATER_STEP, "...at the bank nearest the click (#95)")
 	check(p.goal.distance_to(LAKE) - LAKE_R < World.WATER_STEP, "...right at the bank, not back at the party")
 
 	for i in 20:

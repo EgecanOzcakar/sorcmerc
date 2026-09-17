@@ -17,6 +17,12 @@ func _init() -> void:
 	root.add_child(screen)
 	_run()
 
+# #98: the map halts after every fight until the next order. A step that
+# teleports the party somewhere is giving that order by hand.
+func _unhalt() -> void:
+	screen._halted_on_arrival = false
+	screen.world.clock.resume()
+
 func fail(msg: String) -> void:
 	_fail += 1
 	printerr("  FAIL: ", msg)
@@ -108,6 +114,18 @@ func _run() -> void:
 	screen._cycle_speed(); screen._cycle_speed(); screen._cycle_speed()
 	if screen.world.clock.speed != 1.0:
 		fail("cycling four times did not wrap back to 1x")
+
+	# --- #94: the clock's neighbours do not creep as the digits change --------
+	var gold_x: float = screen._gold_lbl.global_position.x
+	var clock_text: String = screen._clock_lbl.text
+	screen.world.clock.elapsed += 1.0
+	await step(2)
+	if screen._clock_lbl.text == clock_text:
+		fail("a minute on the clock did not change the face")
+	if not is_equal_approx(screen._gold_lbl.global_position.x, gold_x):
+		fail("the gold label moved when the clock ticked (%.1f -> %.1f)" % [gold_x, screen._gold_lbl.global_position.x])
+	if screen._pause_btn.custom_minimum_size.x <= 0.0 or screen._clock_lbl.custom_minimum_size.x <= 0.0:
+		fail("the live HUD labels are not held at a fixed width")
 
 	# --- #70: arriving halts the clock; a new goal starts it again ----------
 	screen.world.set_goal(p, p.position + Vector2(20, 0))   # half a second's walk
@@ -372,6 +390,7 @@ func _hostile_settlement(p) -> void:
 	screen._left = null
 	p.position = s.position
 	screen.world.set_goal(p, s.position)
+	_unhalt()
 	screen._check_visit()
 	if screen._visit.is_empty():
 		fail("a merely hostile settlement refused to open its gate")
@@ -415,6 +434,7 @@ func _hostile_settlement(p) -> void:
 	screen._left = null
 	p.position = s.position
 	screen.world.set_goal(p, s.position)
+	_unhalt()
 	screen._check_visit()
 	if not screen._visit.is_empty():
 		fail("a hostile settlement still opened its market")
@@ -534,8 +554,8 @@ func _encounter_handoff(p) -> void:
 		fail("the combat scene was never torn down after the fight")
 	if screen.world.parties.has(foe):
 		fail("the defeated party is still on the map")
-	if screen.world.clock.is_paused():
-		fail("the world clock did not resume after the fight")
+	if not screen.world.clock.is_paused() or not screen._halted_on_arrival:
+		fail("the map did not halt for an order after the fight (#98)")
 
 	# A faction with no board of its own still gets a roster and a board.
 	var World = load("res://core/world.gd")
