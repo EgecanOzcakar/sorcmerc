@@ -1175,6 +1175,37 @@ tutorial encounter (in campaign.gd or a new small file, agent's call).
   overlay rather than assuming frame one, and asserts the bar underneath it
   is the eleven-button one and not a deployment phase.
 
+- 2026-09-17: **The cards that name an action now let you do it.** Every
+  step was read-only: the overlay was one full-screen `MOUSE_FILTER_STOP`
+  Control and `_unhandled_key_input` dropped every key while it was up, so
+  "click one to move there", "hover any token for the full stat card",
+  "the popup you get by hovering it" and "pressing one opens its list"
+  were all instructions you could only follow after the walkthrough was
+  over. The four steps that name an action now carry a `try` block in
+  `core/tutorial.gd` (`act`, `hint`, `done`, and `keys` for the one that is
+  about key presses), and while such a step is up **its own region is
+  live**: `Walk._has_point` cuts the spotlight out of the overlay, so the
+  click, the hover and the tooltip fall straight through to the board or
+  the bar on the canvas below, while everything outside the ring stays
+  blocked and the goblin still waits. The practice is the ordinary code
+  path — `board_hex_clicked`, `board_hex_hovered`, `_open_list`, the bar's
+  own `mouse_entered` — reporting to `_walk_try()`, so nothing is faked or
+  duplicated for the tutorial: the move is a real move off a real movement
+  budget. Doing it turns the card's `▸ Try it` line into a green `✓` line;
+  nothing is a gate, and `Next` leaves any card whether or not anybody
+  tried. The keys a card lets through are now a small allowlist
+  (`_walk_key_ok`): the view controls always, the number row / Tab / Esc
+  only on a step that asks for them, and Space or `[0]` never — a turn
+  handed over under a card would stall in `_advance()`'s hold on the AI.
+  Leaving a step puts the bar back on its nine slots, so practice cannot
+  hand the next card (or ordinary play, after Skip) a half-open list or an
+  aim with the board behind the dim. The live ring is brighter and breathes
+  while its practice is outstanding, which is the only thing on screen that
+  can say "this half is yours again". `tests/test_game_flow.gd` pushes a
+  real click at the viewport — not at the handler — over the same board hex
+  under a read-only card and under the live one, and asserts it goes
+  nowhere in the first case and moves the hero in the second.
+
 ## T33 — author combat mechanics for the missing spells (locked 2026-09-11, dispatched now)
 
 Of the 146 catalogued spells, only 8 have a hand-authored combat mechanics
@@ -3360,7 +3391,8 @@ are a deliberate follow-up (one more `sweep()` call each), and combat itself
 stays `drive_ui.gd`'s job.
 
 **Honest gaps left:** no pathfinding around water (a march into a lake stops
-at the bank, by design); the roaming-band props are drawn at their live
+at the bank, by design — for NPC bands this was a bug rather than a design,
+and T-path below fixes it); the roaming-band props are drawn at their live
 position even when only remembered, because the map keeps no last-known
 position to draw instead; the diorama fade fades without desaturating, where
 the 2D layer does both; and persistent faction warfare (the note above) is
@@ -4940,12 +4972,103 @@ the middle of each counter portrait and quantises what is left, which is the
 room behind the shopkeeper — the only painted architecture each faction has.
 Hues only; the value spread stays deliberate, or the whole thing goes brown.
 
+## T-path — the bands find their way round the water (2026-09-17)
+
+T9y made water terrain and listed what it deliberately did not do: *"no
+pathfinding around water (a march into a lake stops at the bank, by design)"*.
+That is the right call for the player, who can see the map and click again. It
+was never the right call for a band nobody is steering, and the two maps that
+ship with the game were both quietly broken by it:
+
+* **`bandits` on the small map hunt the player across the river.** Their goal
+  is re-read every frame as the player's live position, so the moment the
+  player is on the far bank the band walks to the near one and stands there —
+  not for a while, for the rest of the campaign.
+* **The `patrol` band's leg back to (0, 0) crosses the river too.** Worse: a
+  patrol advances to its next waypoint when it *arrives*, so a leg it can never
+  finish does not just stall that leg, it kills the whole circuit. The band
+  never patrols again.
+* **A wander roll lands in the lake sooner or later**, with the same ending —
+  the destination is never reached, so a new one is never rolled.
+
+`core/world_path.gd` (new) is the router; `core/world_ai.gd` is where it is
+used. O1 is untouched: it still steers toward `party.goal` and still refuses
+every step from land into a blob. The player is untouched too — clicking the
+middle of a lake still means "walk to that lake".
+
+**The model picks the algorithm.** `World.waters` is circles and nothing else,
+and the shortest path around a circle hugs it, so a route only ever bends at a
+bank. The nodes are a ring of points stamped just outside each blob, keeping
+the ones that are not swallowed by some *other* blob — a river is overlapping
+blobs, so that filter leaves exactly its two banks and throws the middle away.
+The edges are the pairs that can see each other over dry ground, the path is
+Dijkstra across them, and a string-pull afterwards drops the corners the band
+could have walked straight past.
+
+Visibility is exact circle geometry — a segment is blocked when its closest
+approach to a centre falls inside that radius — rather than walking the line in
+steps and asking `is_water()`. It is one distance test per blob instead of one
+per step, and it cannot miss a thin blob that happens to fall between two
+samples. Two details earn their keep: the test ignores the first and last half
+unit of a segment (a band stopped hard against a bank is *exactly* `radius`
+from that centre, and without the slack every step it could take reads as
+blocked by the blob it is standing next to), and a destination that is itself
+in the water is pushed out to the bank first, because a destination nobody can
+stand on is a destination nobody ever "arrives" at.
+
+**Cost.** The graph depends on `waters` alone, and no map adds water after it is
+built, so it is built once per distinct set of blobs and cached on a signature
+of the water itself rather than on the world (two worlds with the same lakes
+want the same graph; a freed world leaves no stale entry). Measured: small map
+22 blobs → 86 nodes / 927 edges, 9ms; large map 26 blobs → 134 nodes / 1911
+edges, 22ms; a query across either, ~1ms. On top of that, `update()` plans at
+most two routes per frame, and a band the router could find no way round at all
+waits five world-minutes before asking again — otherwise one band aiming at an
+island burns the whole budget every frame and the bands that *could* be helped
+never get a turn.
+
+**The shape of the change in `world_ai.gd`.** A behavior no longer writes
+`party.goal`; it names a *destination*, and one `_steer()` turns that into the
+next goal — the destination itself whenever the straight line is dry, which is
+every line on a map with no water in it. Arrival is judged against the
+destination and not against `party.goal`, which on a detour is a waypoint
+halfway round a lake; getting that backwards is exactly how a patrol would tick
+through its whole waypoint list while walking one shoreline. The route rides in
+the party's own `ai` dictionary, so `world_save.gd`'s generic encoder carries it
+through a save with no changes at all — which is the claim that file makes about
+itself, now tested.
+
+One behavior needed a nudge to survive the refactor. The truce break-off (a
+band that met you and left without blood walks away for two hours) used to work
+by accident: `truce()` wrote `party.goal`, and the behaviors happened to leave
+it alone because `at_goal()` was false. With a destination going through
+`_steer()` every frame, a patrolling band would have resumed its circuit
+immediately. The break-off is now a destination in its own right, outranking
+the behavior until it is walked or the truce lapses — and it gets routed round
+the water like anything else.
+
+**Tests.** `tests/test_world_path.gd` (new, 264 assertions) covers the geometry
+(including the clip case a sampled test would miss and the band-on-the-bank
+case the end slack exists for), that a route's every leg is dry and ends where
+it was going, that it is pulled tight (no waypoint the band could have skipped),
+that a band handed one actually reaches the far bank under O1's own stepper,
+that "no way round" comes back as an honest empty answer with the band falling
+back to the old march-to-the-bank, and that every band on every built-in map
+can find its way to every settlement on it. `tests/test_world_water.gd`'s
+NPC-band case asserted the old bug as the design (*"the band is held on its own
+bank"*) and now asserts the fix.
+
+**Still not done:** the player still gets no pathfinder, on purpose. Water is
+still the only terrain, so this routes around lakes and rivers and nothing
+else. And a band's route is drawn nowhere — the map shows the player's goal
+ring and has never shown anyone else's.
+
 ## Spike — the floating damage number (2026-09-17, measurement only)
 
 Full write-up in `docs/spike-damage-numbers.md`. Play feedback asked for the
 damage number to be red, big, and to stay longer. The measurement says all
 three are downstream of something else: `Board.tick()` spawns a float **per
-frame** while the HP bar is still lerping (`scenes/main.gd:2186–2192`), each
+frame** while the HP bar is still lerping (`scenes/main.gd:2293–2299`), each
 carrying the shrinking *gap* rather than the damage, so one 14-damage hit
 draws 21 numbers stacked inside 11 px — `-14 -11 -9 … -1 -0 -0 -0 -0 -0` —
 fading red→orange→yellow on the way. The newest is on top and opaque, so

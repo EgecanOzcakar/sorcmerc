@@ -1,7 +1,9 @@
 # Spike: the floating damage number
 
 2026-09-17. Measurement only — nothing adopted here, no code changed.
-Measured at `6be5970`.
+Measured at `6be5970`; line numbers re-anchored to this branch after merging
+`2ead459` (T-path and the tutorial pass), which moved `scenes/main.gd` down
+~107 lines without touching a byte of the float code.
 
 From play, three lines of feedback on the same thing (Onat Cesur, 08:59):
 
@@ -26,19 +28,19 @@ detail on that and on the three asks.
 
 `scenes/main.gd`, inner `Board` class. Three sites:
 
-- **spawn** — `tick()`, lines 2186–2192, off the HP-bar lerp;
-- **age/reap** — `tick()`, lines 2195–2197 (`age < 1.1`);
-- **paint** — `_draw()`, lines 2708–2713.
+- **spawn** — `tick()`, lines 2293–2299, off the HP-bar lerp;
+- **age/reap** — `tick()`, lines 2302–2304 (`age < 1.1`);
+- **paint** — `_draw()`, lines 2815–2820.
 
 ```gd
-# 2263
+# 2370
 func _spawn_float(c, amount: float) -> void:
 	var band := Color("ffd24a")
 	if amount >= 12: band = Color("ff5a4a")
 	elif amount >= 6: band = Color("ff9146")
 	_floats.append({"pos": _pix(c.pos), "text": "-%d" % int(round(amount)), "color": band, "age": 0.0})
 
-# 2708
+# 2815
 for f in _floats:
 	var col: Color = f.color
 	col.a = 1.0 - f.age / 1.1
@@ -71,9 +73,9 @@ painted on `Board` rather than on the HUD overlay (§4).
 `tick()` spawns the float as a side effect of animating the HP bar:
 
 ```gd
-var k := clampf(dt * 12.0, 0.0, 1.0)            # 2159
+var k := clampf(dt * 12.0, 0.0, 1.0)            # 2266
 ...
-var hv: float = _hp.get(c.id, float(c.hp))      # 2186
+var hv: float = _hp.get(c.id, float(c.hp))      # 2293
 if absf(hv - c.hp) > 0.15:
 	if hv > c.hp:
 		_spawn_float(c, hv - c.hp)               # 2190  ← every frame
@@ -126,7 +128,7 @@ list of numbers; it is one smear of overlapping glyphs. (And `x` is
 `-14`, `-1` and `-0` do not even share a centre line as they pile up.)
 
 **Finding F4 — it gets worse the slower you play.** `tick()` is fed
-`dt * _anim` (line 1675), so the pace setting scales `k`. The pace a player
+`dt * _anim` (line 1693), so the pace setting scales `k`. The pace a player
 picks *in order to watch blows land* is the one that shreds the number
 hardest:
 
@@ -192,11 +194,11 @@ the colour is being asked to carry.
 ## 4. Where it is painted, and what stands in front of it
 
 Three things have already been moved off `Board`'s own canvas onto
-`main.gd`'s `_hud_overlay` CanvasLayer (line 1689, `layer = 5`) for one
+`main.gd`'s `_hud_overlay` CanvasLayer (line 1707, `layer = 5`) for one
 reason, recorded three times in the source: **a `Figures3D` model is a
 `Board` child, so it draws after everything `Board` paints, whatever the
 order within `_draw()`.** The HP bar went first, then the odds chip
-(`scenes/main.gd:2694–2699`), then the T26 barks (`2700–2706`), the barks
+(`scenes/main.gd:2801–2806`), then the T26 barks (`2807–2813`), the barks
 picking up a dropped shadow on the way because they now land on top of
 figure art.
 
@@ -225,7 +227,7 @@ throughout, not the project's `assets/fonts/DejaVuSans.ttf`
 ## 5. What gets a reveal and what only gets the float
 
 `show_reveal()` is called from exactly one place: `_apply_target()`
-(`scenes/main.gd:1199`), the hero's single-target path. So the big
+(`scenes/main.gd:1203`), the hero's single-target path. So the big
 `HIT  7` / `CRIT!  14` headline — 26·fz, punch-in, 0.9s hold — appears for
 a hero's targeted attack or single-target spell, and for nothing else.
 
@@ -245,7 +247,7 @@ is served by the cascade in §2. It is also why the two readouts are not
 redundant: fixing the float is not "the headline already says it".
 
 **Finding F10 — healing shows nothing.** The spawn is gated on `hv > c.hp`
-(line 2189), so HP going *up* animates the bar silently. A cure-wounds has
+(line 2296), so HP going *up* animates the bar silently. A cure-wounds has
 no number at all.
 
 ## 6. The three asks, against the findings
@@ -276,7 +278,7 @@ nothing here changes a rule or a number the simulation sees.
        _goal[c.id] = float(c.hp)
    ```
 
-   One dict, cleared alongside `_hp` at line 1998, and `_spawn_float` now
+   One dict, cleared alongside `_hp` at line 2105, and `_spawn_float` now
    receives the true damage. This alone kills F1, F2, F3, F4 and the
    frame-rate dependence, and makes every other item below meaningful.
    ~8 lines.
@@ -336,10 +338,10 @@ No engine needed — §2 and §4's tables are the arithmetic of `tick()`:
 ```python
 import math
 def cascade(dmg, dt, anim=1.0):          # dt from the monitor, anim from Settings.ANIM_PACES
-    k = min(max(dt * anim * 12.0, 0.0), 1.0)      # scenes/main.gd:2159, fed dt*_anim at :1675
+    k = min(max(dt * anim * 12.0, 0.0), 1.0)      # scenes/main.gd:2266, fed dt*_anim at :1693
     hv, out = float(dmg), []
     while abs(hv) > 0.15:                          # :2187
-        out.append(int(math.floor(hv + 0.5)))      # "-%d" % int(round(gap)), :2267
+        out.append(int(math.floor(hv + 0.5)))      # "-%d" % int(round(gap)), :2374
         hv *= (1.0 - k)                            # lerpf(hv, hp, k), :2191
     return out
 print(cascade(14, 1/60))     # 21 floats, ending -0 -0 -0 -0 -0 -0
