@@ -167,7 +167,7 @@ static func slot_line(slot: Dictionary) -> String:
 		bits.append("%s map" % map)
 	var who: Array = slot.get("party", [])
 	bits.append(", ".join(who) if not who.is_empty() else "nobody standing")
-	bits.append("%d gp" % int(slot.get("gold", 0)))
+	bits.append("%d ◉" % int(slot.get("gold", 0)))
 	var story := String(slot.get("story", ""))
 	if story != "":
 		bits.append(story)
@@ -185,7 +185,7 @@ static func slot_lines(slot: Dictionary) -> String:
 	var story := String(slot.get("story", ""))
 	if story != "":
 		first += ", " + story
-	var second := (", ".join(who) if not who.is_empty() else "nobody standing") + ", %d gp" % int(slot.get("gold", 0))
+	var second := (", ".join(who) if not who.is_empty() else "nobody standing") + ", %d ◉" % int(slot.get("gold", 0))
 	return first + "\n" + second
 
 # Deleting the only copy of a run is not a one-click thing: this is its own
@@ -523,7 +523,7 @@ func show_summary(run) -> void:
 # Everything off what the run already tracked — no summary-only bookkeeping.
 static func summary_lines(run) -> Array:
 	var out: Array = ["Stages cleared:  %d / %d" % [run.stage, Campaign.STAGE_COUNT],
-		"Gold in the purse:  %d gp" % run.party.gold,
+		"Gold in the purse:  %d ◉" % run.party.gold,
 		"Run XP:  %d" % run.xp]
 	for ch in run.party.roster:
 		out.append("    %s  %s  —  %d XP%s" % [Icons.class_glyph(_class_of(ch)), ch.cname, ch.xp,

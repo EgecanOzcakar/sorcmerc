@@ -56,6 +56,7 @@ var passive_perception: int = 10
 # kit — everything a creature can do is a verb; nothing here names a class.
 var attacks: Array = []             # from the sheet; [0] backs atk_bonus/damage
 var features: Dictionary = {}       # feature_id -> true
+var darkvision := false             # #85: sees an unlit hex as lit (core/combat.gd lit()/can_see())
 var verbs: Array = []               # fully numeric combat verbs, built by adapter.gd
 var pools: Dictionary = {}          # pool_id -> {cur, max, regen}
 var spell_ids: Array[String] = []   # castable-now spells
@@ -119,7 +120,7 @@ func clone() -> RefCounted:
 	for prop in [
 		"id","src_id","cname","team","ac","max_hp","hp","init_mod","speed","pos","size",
 		"atk_bonus","damage","ranged","atk_range","crit_range","save_dc","athletics",
-		"acro","stealth","passive_perception","sheet",
+		"acro","stealth","passive_perception","sheet","darkvision",
 	]:
 		c.set(prop, get(prop))
 	c.saves = saves.duplicate()

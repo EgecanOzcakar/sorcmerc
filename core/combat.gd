@@ -657,7 +657,20 @@ func _offerable(actor, v: Dictionary) -> bool:
 	return true
 
 # Is `c` a legal target for `v` cast/swung by `actor` right now?
+# #79: the board's edge is a wall. A straight hex line from a to b that leaves
+# the board passes through rock, and nothing can be aimed along it. Adjacent
+# hexes always see each other; solid props are cover, not walls, and do not
+# block.
+func has_line_of_sight(a: Vector2i, b: Vector2i) -> bool:
+	var line: Array = Hex.line(a, b)
+	for i in range(1, line.size() - 1):
+		if not (line[i] in board["hexes"]):
+			return false
+	return true
+
 func legal_target(actor, v: Dictionary, c) -> bool:
+	if not has_line_of_sight(actor.pos, c.pos):
+		return false
 	match v.get("targeting", "self"):
 		"enemy":
 			if c.team == actor.team or not c.conscious() or c.has("hidden"):
@@ -915,16 +928,19 @@ func legal_area(caster, v: Dictionary, target) -> bool:
 	match v.get("targeting", ""):
 		"hex", "line":
 			return target is Vector2i and (target in board["hexes"]) and Hex.distance(caster.pos, target) <= r \
-				and (v.get("targeting", "") == "hex" or target != caster.pos)
+				and (v.get("targeting", "") == "hex" or target != caster.pos) \
+				and has_line_of_sight(caster.pos, target)
 		"corner":
 			if not (target is Array) or target.size() != 3:
 				return false
 			var on_board := false
+			var seen := false
 			var near := 99
 			for h in target:
 				on_board = on_board or (h in board["hexes"])
+				seen = seen or (h in board["hexes"] and has_line_of_sight(caster.pos, h))
 				near = mini(near, Hex.distance(caster.pos, h))
-			return on_board and near <= r
+			return on_board and seen and near <= r
 	return true
 
 func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> Dictionary:
@@ -1278,11 +1294,46 @@ func _no_economy(actor, cost: String) -> bool:
 
 # --- attack ------------------------------------------------------------
 
+# --- #85: night on the board ------------------------------------------------
+#
+# A fight begun after dark carries board["night"]. Then a hex is lit only by a
+# flame on the board (LIGHT_TYPES, LIGHT_RADIUS) or by the party's own carried
+# light (CARRIED_LIGHT around each standing hero — an adventurer walks with a
+# torch). Anyone else in an unlit hex is unseen: 5e's blinded-attacker rule,
+# disadvantage to swing at what you cannot see, advantage to swing from where
+# you cannot be seen — unless the viewer has darkvision, which most monsters
+# and several species do. Hiding in the dark is easier by DARK_HIDE_BONUS.
+const LIGHT_TYPES := ["torch", "brazier", "campfire", "lamp"]
+const LIGHT_RADIUS := 2
+const CARRIED_LIGHT := 1
+const DARK_HIDE_BONUS := 5
+
+func is_night() -> bool:
+	return bool(board.get("night", false))
+
+func lit(h: Vector2i) -> bool:
+	if not is_night():
+		return true
+	for o in board.get("objects", []):
+		if String(o.get("type", "")) in LIGHT_TYPES and Hex.distance(o["pos"], h) <= LIGHT_RADIUS:
+			return true
+	for c in combatants:
+		if c.team == "party" and c.conscious() and Hex.distance(c.pos, h) <= CARRIED_LIGHT:
+			return true
+	return false
+
+func can_see(viewer, h: Vector2i) -> bool:
+	return viewer.darkvision or lit(h)
+
 func _attack_mode(attacker, target, opts := {}) -> int:
 	var adv = false
 	var dis = false
 	if attacker.ranged and not opts.get("melee", false) and adjacent_enemy(attacker):
 		dis = true
+	if not can_see(attacker, target.pos):
+		dis = true   # #85: swinging at the dark
+	if not can_see(target, attacker.pos):
+		adv = true   # #85: struck from the dark
 	for e in _cond_effects(target):
 		var a = e.get("attacks_against", "")
 		if a is Dictionary:
@@ -1468,8 +1519,15 @@ func pending_reactions(actor, v: Dictionary, target) -> Array:
 		var trigger: String = pair[0]
 		var ctx: Dictionary = pair[1]
 		for r in reactors_for(trigger, ctx):
-			if asks_first(r[0], r[1]):
-				out.append([r[0], r[1], trigger, ctx])
+			if not asks_first(r[0], r[1]):
+				continue
+			# #77: a yes is given before the d20. When the swing then misses on
+			# its own the trigger never fires and the answer is never consumed —
+			# so it still stands for the next swing, and is not asked twice.
+			# A "hold it" is a decision about that one blow and IS asked again.
+			if bool(reaction_intent.get("%s|%s" % [r[0].id, r[1]["id"]], false)):
+				continue
+			out.append([r[0], r[1], trigger, ctx])
 	return out
 
 # Put the question, record the answer. THE ONE SUSPENDING FUNCTION IN THIS FILE:
@@ -2301,6 +2359,8 @@ func act_hide(c) -> bool:
 	for e in enemies_of(c):
 		dc = maxi(dc, hide_dc_against(e))
 	var roll: int = Dice.d20(rng).nat + c.stealth
+	if not lit(c.pos):
+		roll += DARK_HIDE_BONUS   # #85
 	if roll >= dc:
 		c.statuses["hidden"] = true
 		if tracked and c.team == "party":

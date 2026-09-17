@@ -312,6 +312,9 @@ const SHORT_REST_MINUTES := 60.0
 # time. can_long_rest() below is the gate; T9x's camp-kit rest goes through the
 # same rest()/stamp, so it's covered too, not a second rule to keep in sync.
 const LONG_REST_COOLDOWN := 1440.0
+# #86: RAW's adventuring day — two short rests between long rests. Same shape as
+# core/campaign.gd's MAX_SHORT_RESTS, but counted per long rest, not per run.
+const MAX_SHORT_RESTS := 2
 
 static func rest(party, world, kind := "long-rest") -> void:
 	for ch in party.party_characters():
@@ -319,6 +322,12 @@ static func rest(party, world, kind := "long-rest") -> void:
 	world.clock.elapsed += (LONG_REST_MINUTES if kind == "long-rest" else SHORT_REST_MINUTES)
 	if kind == "long-rest":
 		party.last_long_rest_at = world.clock.elapsed
+		party.short_rests_since_long = 0
+	else:
+		party.short_rests_since_long += 1
+
+static func can_short_rest(party) -> bool:
+	return party.short_rests_since_long < MAX_SHORT_RESTS
 
 static func can_long_rest(party, world) -> bool:
 	return world.clock.elapsed - party.last_long_rest_at >= LONG_REST_COOLDOWN
@@ -400,12 +409,12 @@ static func heal(party) -> Dictionary:
 			"text": "Nobody here needs the healer."}
 	if not party.spend_gold(HEAL_COST):
 		return {"ok": false, "cost": HEAL_COST, "healed": 0,
-			"text": "The healer wants %d gp up front." % HEAL_COST}
+			"text": "The healer wants %d ◉ up front." % HEAL_COST}
 	for ch in hurt:
 		ch.hp_current = -1     # the sheet's max, the same "-1 means full" convention Party.summary() reads
 		ch.dirty()
 	return {"ok": true, "cost": HEAL_COST, "healed": hurt.size(),
-		"text": "The healer works down the line — %d back on their feet (-%d gp)." % [
+		"text": "The healer works down the line — %d back on their feet (-%d ◉)." % [
 			hurt.size(), HEAL_COST]}
 
 # Working the healer's counter: a party that carries Lesser or Greater
@@ -438,9 +447,9 @@ static func work_healer(s, party, rng = null) -> Dictionary:
 	var pay: int = WORK_PAY if ok else WORK_PAY_POOR
 	party.add_gold(pay)
 	Ach.unlock("healer_work")
-	var line := ("%s's %s gets them in the door; %s runs the ward all morning (Medicine %d+%d vs DC %d) — %d gp."
+	var line := ("%s's %s gets them in the door; %s runs the ward all morning (Medicine %d+%d vs DC %d) — %d ◉."
 		% [caster.cname, spell, ch.cname, nat, bonus, WORK_DC, pay]) if ok else (
-		"%s's %s gets them in the door, but %s is more hindrance than help (Medicine %d+%d vs DC %d) — %d gp for the trouble."
+		"%s's %s gets them in the door, but %s is more hindrance than help (Medicine %d+%d vs DC %d) — %d ◉ for the trouble."
 		% [caster.cname, spell, ch.cname, nat, bonus, WORK_DC, pay])
 	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": WORK_DC, "pay": pay, "char_id": ch.id, "text": line}
 
@@ -457,11 +466,11 @@ static func identify(party, item_id: String) -> Dictionary:
 			"text": "There's nothing unidentified in the pack like that."}
 	if not party.spend_gold(IDENTIFY_COST):
 		return {"ok": false, "cost": IDENTIFY_COST,
-			"text": "The librarian's fee is %d gp." % IDENTIFY_COST}
+			"text": "The librarian's fee is %d ◉." % IDENTIFY_COST}
 	party.stash_identify(item_id)
 	Campaign._note_identified(item_id)
 	return {"ok": true, "cost": IDENTIFY_COST,
-		"text": "The librarian reads it off in a breath: %s (-%d gp)." % [
+		"text": "The librarian reads it off in a breath: %s (-%d ◉)." % [
 			Campaign.item_name(item_id), IDENTIFY_COST]}
 
 # --- O9 / D7: quests (T9's verbs, reached from a settlement) ----------------
@@ -537,7 +546,7 @@ static func steal(s, party, world, m: Dictionary = {}, rng = null) -> Dictionary
 	# O7 hook — see OPINION_STEAL_* above.
 	var delta: float = OPINION_STEAL_SUCCESS if ok else OPINION_STEAL_CAUGHT
 	s.pending_opinion_delta += delta
-	var line := ("%s lifts %d gp off the stall (Sleight of Hand %d+%d vs DC %d)."
+	var line := ("%s lifts %d ◉ off the stall (Sleight of Hand %d+%d vs DC %d)."
 		% [ch.cname, gold, nat, bonus, STEAL_DC]) if ok else (
 		"%s is spotted reaching for it (Sleight of Hand %d+%d vs DC %d)."
 		% [ch.cname, nat, bonus, STEAL_DC])

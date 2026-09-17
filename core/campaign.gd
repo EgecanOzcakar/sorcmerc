@@ -543,7 +543,7 @@ func resurrect(dead_id: String, method: String, caster_id: String = "") -> bool:
 	var Party = load("res://core/party.gd")
 	if not Party.resurrect(party, dead_id, method, caster_id):
 		return false
-	say("%s is brought back at 1 HP (−%d gp)." % [dead_id, Party.REVIVE_COST])
+	say("%s is brought back at 1 HP (−%d ◉)." % [dead_id, Party.REVIVE_COST])
 	_autosave()
 	return true
 
@@ -945,7 +945,7 @@ func service_stock_ids(service: String) -> Array:
 	return []
 
 static func potion_ids() -> Array:
-	return Potions.ids()   # only the ones with a mechanic; the rest would be 2000 gp of nothing
+	return Potions.ids()   # only the ones with a mechanic; the rest would be 2000 ◉ of nothing
 
 func service_stock(service: String) -> Array:
 	var out: Array = []
@@ -972,7 +972,7 @@ func heal_party() -> bool:
 		if not ch.dead:
 			ch.hp_current = -1
 			ch.dirty()
-	say("The healer works down the line. Everyone stands up whole (−%d gp)." % HEALER_GP)
+	say("The healer works down the line. Everyone stands up whole (−%d ◉)." % HEALER_GP)
 	_autosave()
 	return true
 
@@ -985,7 +985,7 @@ func identify_for_fee(item_id: String) -> bool:
 	party.stash_identify(item_id)
 	Sound.play_sfx("identify")   # T27
 	_note_identified(item_id)
-	say("The librarian reads it off in a breath: %s (−%d gp)." % [item_name(item_id), IDENTIFY_FEE_GP])
+	say("The librarian reads it off in a breath: %s (−%d ◉)." % [item_name(item_id), IDENTIFY_FEE_GP])
 	_autosave()
 	return true
 
@@ -1000,7 +1000,7 @@ func buy(item_id: String) -> bool:
 	if spent >= BIG_SPENDER_GP:
 		Ach.unlock("big_spender")
 	_note_rarity(item_id)
-	say("Bought %s for %d gp." % [item_name(item_id), item_price(item_id)])
+	say("Bought %s for %d ◉." % [item_name(item_id), item_price(item_id)])
 	_autosave()
 	return true
 
@@ -1012,7 +1012,7 @@ func sell(item_id: String) -> bool:
 	var paid := maxi(1, int(item_price(item_id) * SELL_RATE))
 	party.add_gold(paid)
 	Ach.record("best_sale", paid)
-	say("Sold %s for %d gp." % [item_name(item_id), paid])
+	say("Sold %s for %d ◉." % [item_name(item_id), paid])
 	_autosave()
 	return true
 
@@ -1038,7 +1038,7 @@ func turn_in(quest: Dictionary) -> bool:
 	# now resolves where accepting only reaches.
 	Sound.play_sfx("quest_complete")
 	var gold: int = int(quest["reward"].get("gold", 0))
-	say("Quest complete: %s (+%d gp, +%d XP)" % [quest["title"], gold, gold * Quest.XP_PER_GOLD])
+	say("Quest complete: %s (+%d ◉, +%d XP)" % [quest["title"], gold, gold * Quest.XP_PER_GOLD])
 	_autosave()
 	return true
 

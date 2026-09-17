@@ -262,6 +262,11 @@ static func dark_theme(compact := false) -> Theme:
 	return th
 
 # --- class glyphs ----------------------------------------------------------
+# #84: the coin. Every price and purse says "12 ◉", never "12 gp" — one mark
+# for gold across the HUD, the shops, the receipts and the log. (Bug reports
+# still say "gp": they are markdown for GitHub, not the screen.)
+const GP := "◉"
+
 const CLASS_GLYPHS := {
 	"barbarian": "⚒",   # crossed tools — the axe mark
 	"bard": "♫",
@@ -415,6 +420,13 @@ static func portrait(faction: String, service: String, mood := "") -> Texture2D:
 # A road event's picture (assets/generated/event-<id>[-pass|-fail].png,
 # tools: ~/localgen/gen_sorcmerc_events.py): the outcome's own frame when it
 # has one, the plain scene otherwise, null for an event with no art.
+# The largest rect of `tex_size`'s aspect that fits inside `slot`, centred in
+# it — "contain", the whole picture and no crop (#83).
+static func fit_rect(tex_size: Vector2, slot: Rect2) -> Rect2:
+	var k := minf(slot.size.x / maxf(1.0, tex_size.x), slot.size.y / maxf(1.0, tex_size.y))
+	var sz := tex_size * k
+	return Rect2(slot.position + (slot.size - sz) * 0.5, sz)
+
 static func event_art(event_id: String, ok) -> Texture2D:
 	return scene_art("event-" + event_id, ok)
 
@@ -645,7 +657,7 @@ static func item_tooltip(item_id: String, def: Dictionary, kind: String) -> Stri
 				lines.append(desc.left(600) + ("…" if desc.length() > 600 else ""))
 	var cost := str(def.get("costGp", ""))
 	if cost != "" and cost != "None":
-		lines.append("%s gp" % cost)
+		lines.append("%s ◉" % cost)
 	return "\n".join(lines)
 
 # A square art tile with the hover text; the caller wires `pressed`. `caption`

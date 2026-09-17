@@ -323,6 +323,9 @@ func _creator_model() -> String:
 # "● Point buy (27)" resets every score to 8. Every unpicked option in all of these
 # groups is pressed for real as well, so no page passes vacuously.
 func _creator_expect(c: BaseButton) -> String:
+	# #82: the outline bar's lit step is the page already showing.
+	if c.get_parent() == _cre._steps and c.theme_type_variation == &"Picked":
+		return "inert: the step bar's lit step is the page already showing"
 	if not c.text.begins_with("● "):
 		return ""
 	var group: String = _creator_group(c)

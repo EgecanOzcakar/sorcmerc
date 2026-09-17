@@ -35,19 +35,19 @@ func _ready() -> void:
 	add_child(_sub)
 
 	var env := WorldEnvironment.new()
-	var e := Environment.new()
-	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0, 0, 0, 0)
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.52, 0.55, 0.60)
-	e.ambient_light_energy = 1.0
-	env.environment = e
+	_env = Environment.new()
+	_env.background_mode = Environment.BG_COLOR
+	_env.background_color = Color(0, 0, 0, 0)
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	_env.ambient_light_color = AMBIENT
+	_env.ambient_light_energy = 1.0
+	env.environment = _env
 	_sub.add_child(env)
 
-	var sun := DirectionalLight3D.new()
-	_sub.add_child(sun)
-	sun.rotation_degrees = Vector3(-55, -35, 0)
-	sun.light_energy = 1.2
+	_sun = DirectionalLight3D.new()
+	_sub.add_child(_sun)
+	_sun.rotation_degrees = Vector3(-55, -35, 0)
+	_sun.light_energy = SUN_ENERGY
 
 	_cam = Camera3D.new()
 	_sub.add_child(_cam)
@@ -141,9 +141,24 @@ func screen_for_world(w: Vector3) -> Vector2:
 	return world_map._origin + Vector2(K * w.x, K * (w.z * sin(th) - w.y * cos(th)))
 
 
+# #85: the rig's sun and ambient follow the world clock, the same number the
+# ground shader dims by, so a town at midnight is as dark as the field it
+# stands in. The sun keeps a floor: a silhouette with no shading reads as a
+# hole in the map, not as night.
+const AMBIENT := Color(0.52, 0.55, 0.60)
+const SUN_ENERGY := 1.2
+var _env: Environment
+var _sun: DirectionalLight3D
+
 func _process(_dt: float) -> void:
 	if world_map == null:
 		return
+	if world_map.get("world") != null:
+		var tint: Color = world_map.world.clock.daylight_tint()
+		var d: float = world_map.world.clock.daylight()
+		_sun.light_energy = SUN_ENERGY * lerpf(0.45, 1.0, d)
+		_sun.light_color = tint / maxf(d, 0.01)
+		_env.ambient_light_color = AMBIENT * tint
 	position = Vector2.ZERO
 	size = world_map.size
 	var th := theta()

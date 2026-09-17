@@ -200,6 +200,7 @@ static func _party_dict(party) -> Dictionary:
 		"roster": roster, "active": Array(party.active), "gold": party.gold,
 		"stash": party.stash.duplicate(true), "quests": party.quests.duplicate(true),
 		"last_long_rest_at": party.last_long_rest_at,
+		"short_rests_since_long": party.short_rests_since_long,
 		"overworld_figure": party.overworld_figure,
 		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 		"road": {"scouted_next": party.scouted_next, "swift_until": party.swift_until,
@@ -219,6 +220,7 @@ static func _party_from(pd: Dictionary):
 			bool(e.get("identified", true)))
 	party.quests = _ints(pd.get("quests", []))
 	party.last_long_rest_at = float(pd.get("last_long_rest_at", -1e12))
+	party.short_rests_since_long = int(pd.get("short_rests_since_long", 0))
 	party.overworld_figure = String(pd.get("overworld_figure", ""))
 	party.travel_orders = pd.get("travel_orders", {}).duplicate(true)   # D3; an old save marches at the default
 	var road: Dictionary = pd.get("road", {})
@@ -346,9 +348,9 @@ static func summary() -> Dictionary:
 
 # "Day 3  14:05" off world-minutes — the same reading scenes/world/world.gd's
 # clock label shows, so the title and the map agree about when you left.
-static func day_clock(elapsed: float) -> String:
-	return "Day %d  %02d:%02d" % [int(elapsed / 1440.0) + 1,
-		int(elapsed / 60.0) % 24, int(elapsed) % 60]
+static func day_clock(elapsed: float, sep := "  ") -> String:
+	var m := elapsed + World.WorldClock.START_HOUR * 60.0   # #85: the face starts at 08:00
+	return "Day %d%s%02d:%02d" % [int(m / 1440.0) + 1, sep, int(m / 60.0) % 24, int(m) % 60]
 
 static func clear() -> void:
 	if FileAccess.file_exists(path()):

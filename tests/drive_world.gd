@@ -109,6 +109,18 @@ func _run() -> void:
 	if screen.world.clock.speed != 1.0:
 		fail("cycling four times did not wrap back to 1x")
 
+	# --- #70: arriving halts the clock; a new goal starts it again ----------
+	screen.world.set_goal(p, p.position + Vector2(20, 0))   # half a second's walk
+	await step(10)
+	if not p.at_goal():
+		fail("the party never reached a goal 20 units away")
+	if not screen.world.clock.is_paused() or screen._pause_btn.text != "Resume":
+		fail("reaching the destination did not halt the clock")
+	screen.world.set_goal(p, p.position + Vector2(400, 0))
+	await step(2)
+	if screen.world.clock.is_paused() or p.at_goal():
+		fail("a new destination did not start the clock again")
+
 	# --- camera: drag-pan and scroll-zoom ----------------------------------
 	var pan0: Vector2 = screen._pan
 	var m := InputEventMouseMotion.new()
@@ -477,6 +489,7 @@ func _encounter_handoff(p) -> void:
 	var open_country := Vector2(3000, -3000)
 	p.position = open_country
 	screen.world.set_goal(p, open_country)
+	screen._was_travelling = false   # #70: teleported here, not walked — no arrival halt
 	foe.position = open_country + Vector2(screen.ENCOUNTER_RADIUS + 10.0, 0)
 	foe.goal = open_country
 	screen._check_encounter()

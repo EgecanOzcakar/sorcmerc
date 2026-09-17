@@ -293,12 +293,13 @@ var _confirmed = null         # the Character handed back
 var _free_picks: Array = []   # T22: the 2 subclasses a freshly unlocked class owes
 
 var _title := Label.new()
-var _crumbs := Label.new()
+var _steps := HBoxContainer.new()   # #82: the outline bar — every step, the current one lit, all clickable
 var _body := VBoxContainer.new()
-var _summary := RichTextLabel.new()
+var _summary := VBoxContainer.new()   # #81: the live sheet — tiles on top, prose under
 var _back := Button.new()
 var _next := Button.new()
 var _status := Label.new()
+var _target: Container = null   # where _head/_note/_flow append: _body, or a split's right column
 
 func _ready() -> void:
 	# Class-scope Buttons, so they cannot be armed at their declaration the way
@@ -324,8 +325,6 @@ func _ready() -> void:
 
 	_title.theme_type_variation = "Title"
 	root.add_child(_title)
-	_crumbs.theme_type_variation = "Dim"
-	root.add_child(_crumbs)
 
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -344,9 +343,7 @@ func _ready() -> void:
 	side.custom_minimum_size = Vector2(330, 0)
 	side.theme_type_variation = "Card"
 	split.add_child(side)
-	_summary.bbcode_enabled = true
-	_summary.scroll_following = false
-	_summary.add_theme_color_override("default_color", COL_TEXT)
+	_summary.add_theme_constant_override("separation", 6)
 	side.add_child(_summary)
 
 	_status.add_theme_color_override("font_color", COL_WARN)
@@ -359,9 +356,16 @@ func _ready() -> void:
 	_next.theme_type_variation = "Primary"
 	_back.pressed.connect(func(): _goto(_step - 1))
 	nav.add_child(_back)
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	nav.add_child(spacer)
+	_steps.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_steps.alignment = BoxContainer.ALIGNMENT_CENTER
+	_steps.add_theme_constant_override("separation", 4)
+	nav.add_child(_steps)
+	for i in STEPS.size():
+		var b := Button.new()
+		Icons.clicks(b)
+		b.text = "%d. %s" % [i + 1, STEPS[i]]
+		b.pressed.connect(_jump.bind(i))
+		_steps.add_child(b)
 	_next.pressed.connect(_on_next)
 	nav.add_child(_next)
 
@@ -389,16 +393,23 @@ func _goto(step: int) -> void:
 
 func _on_next() -> void:
 	if _step < STEPS.size() - 1:
-		var why := _blocker()
-		if why != "":
-			_status.text = why
-			return
-		_goto(_step + 1)
+		_jump(_step + 1)
 	else:
 		_confirm()
 
-func _blocker() -> String:
-	match _step:
+# #82: the outline bar. Back is always free; forward runs every gate on the
+# way there, and stops on the first one that says no.
+func _jump(step: int) -> void:
+	for i in range(_step, step):
+		var why := _blocker(i)
+		if why != "":
+			_goto(i)
+			_status.text = why
+			return
+	_goto(step)
+
+func _blocker(step := _step) -> String:
+	match step:
 		0: return "" if ch.species_id != "" else "Pick a species first."
 		1: return "" if ch.levels.size() > 0 else "Pick a class first."
 		3: return "" if ch.background_id != "" else "Pick a background first."
@@ -433,14 +444,13 @@ func _confirm() -> void:
 # --- render ---------------------------------------------------------------
 
 func _refresh() -> void:
+	_target = null
 	for c in _body.get_children():
 		c.queue_free()
 		_body.remove_child(c)
 	_title.text = "%d. %s" % [_step + 1, STEPS[_step]]
-	var crumbs: Array = []
-	for i in STEPS.size():
-		crumbs.append(("[%s]" % STEPS[i]) if i == _step else STEPS[i])
-	_crumbs.text = "  ›  ".join(crumbs)
+	for i in _steps.get_child_count():
+		_steps.get_child(i).theme_type_variation = "Picked" if i == _step else "Quiet"
 	_back.disabled = _step == 0
 	_next.text = "Confirm and save" if _step == STEPS.size() - 1 else "Next"
 	_status.text = ""
@@ -455,13 +465,13 @@ func _refresh() -> void:
 	_refresh_summary()
 
 func _refresh_summary() -> void:
-	_summary.text = _sheet_bbcode(false)
+	_sheet_into(_summary, false)
 
 func _head(text: String) -> void:
 	var l := Label.new()
 	l.text = text
 	l.theme_type_variation = "Head"
-	_body.add_child(l)
+	_into().add_child(l)
 
 func _note(text: String, col: Color = COL_DIM) -> void:
 	var l := Label.new()
@@ -470,14 +480,51 @@ func _note(text: String, col: Color = COL_DIM) -> void:
 	l.theme_type_variation = "Dim"
 	if col != COL_DIM:
 		l.add_theme_color_override("font_color", col)
-	_body.add_child(l)
+	_into().add_child(l)
 
 func _flow() -> HFlowContainer:
 	var f := HFlowContainer.new()
 	f.add_theme_constant_override("h_separation", 6)
 	f.add_theme_constant_override("v_separation", 6)
-	_body.add_child(f)
+	_into().add_child(f)
 	return f
+
+func _into() -> Container:
+	return _target if _target != null else _body
+
+# #80: a pick with a lock on it — species, class — is a column down the left,
+# the ones this profile has opened first and each group alphabetical, with a
+# rule between them; what the pick means goes on the right (_target, until the
+# caller puts it back). `entries` are {label, extra, on, cb, note}: `note` is
+# lock_note()'s price, "" for open.
+func _pick_column(entries: Array) -> void:
+	var split := HBoxContainer.new()
+	split.add_theme_constant_override("separation", 18)
+	_body.add_child(split)
+	var col := VBoxContainer.new()
+	col.custom_minimum_size = Vector2(300, 0)
+	col.add_theme_constant_override("separation", 4)
+	split.add_child(col)
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.add_theme_constant_override("separation", 10)
+	split.add_child(right)
+	_target = right
+	var by_name := func(a, b): return String(a.get("sort", a["label"])).naturalnocasecmp_to(String(b.get("sort", b["label"]))) < 0
+	var open: Array = entries.filter(func(e): return String(e["note"]) == "")
+	var locked: Array = entries.filter(func(e): return String(e["note"]) != "")
+	open.sort_custom(by_name)
+	locked.sort_custom(by_name)
+	for e in open + locked:
+		if e == locked.front():
+			var cap := Label.new()
+			cap.text = "Locked"
+			cap.theme_type_variation = "Caption"
+			col.add_child(cap)
+		var b := _opt(col, e["label"], e["on"], e["cb"], e["extra"])
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_gate(b, e["note"])
 
 func _opt(parent: Control, label: String, on: bool, cb: Callable, extra := "") -> Button:
 	var b := Button.new()
@@ -510,13 +557,14 @@ func _build_basics() -> void:
 	_body.add_child(name_edit)
 
 	_head("Species")
-	var f := _flow()
+	var entries: Array = []
 	for s in Catalog.all("species.json"):
 		var sid: String = s["id"]
-		var b := _opt(f, s["name"], ch.species_id == sid, func(): _set_species(sid),
-			"  (%d ft)" % int(s["speed"]))
-		if ch.species_id != sid:   # never take away what this character already is
-			_gate(b, lock_note("species", sid))
+		entries.append({"label": s["name"], "extra": "  (%d ft)" % int(s["speed"]),
+			"on": ch.species_id == sid, "cb": func(): _set_species(sid),
+			# never take away what this character already is
+			"note": lock_note("species", sid) if ch.species_id != sid else ""})
+	_pick_column(entries)
 	if ch.species_id != "":
 		var src := Catalog.species_src(ch.species_id)
 		_note("Size %s · speed %d ft · languages: %s" % [src["size"], int(src["speed"]),
@@ -524,6 +572,7 @@ func _build_basics() -> void:
 	# lineage / sub-species, when the data has one
 	for p in _choice_points_of(["lineage-choice"]):
 		_choice_widget(p)
+	_target = null
 
 	_head("Load a preset")
 	_note("Vera, Pike and Ilsa as real 5.5e builds — hand one back instead of building.")
@@ -558,13 +607,13 @@ func _build_class() -> void:
 	if start_level > 1:
 		_note("Joins at level %d to match the party, with %d XP banked. Catch-up levels are granted, not earned: none of that XP counts toward the lifetime XP that unlocks species and classes."
 			% [start_level, Leveling.xp_for_level(start_level)], COL_GOLD)
-	var f := _flow()
+	var entries: Array = []
 	for c in Catalog.all("classes.json"):
 		var cid: String = c["id"]
-		var b := _opt(f, "%s  %s" % [Icons.class_glyph(cid), c["name"]], ch.class_id() == cid,
-			func(): _set_class(cid), "  d%d" % int(c["hitDie"]))
-		if ch.class_id() != cid:
-			_gate(b, lock_note("class", cid))
+		entries.append({"label": "%s  %s" % [Icons.class_glyph(cid), c["name"]], "sort": c["name"], "extra": "  d%d" % int(c["hitDie"]),
+			"on": ch.class_id() == cid, "cb": func(): _set_class(cid),
+			"note": lock_note("class", cid) if ch.class_id() != cid else ""})
+	_pick_column(entries)
 	_build_free_picks()
 	if ch.class_id() != "":
 		var src := Catalog.class_src(ch.class_id())
@@ -578,6 +627,7 @@ func _build_class() -> void:
 		_note("Armor: %s · Weapons: %s" % [
 			", ".join(src["armorProficiencies"]) if src["armorProficiencies"] else "none",
 			", ".join(src["weaponProficiencies"]) if src["weaponProficiencies"] else "none"])
+	_target = null
 
 # T22: buying a class with lifetime XP comes with 2 of its 4 subclasses, free and
 # permanent. Until they are named none of the class's subclasses read as unlocked,
@@ -849,13 +899,10 @@ func _toggle_equip(id: String) -> void:
 
 func _build_review() -> void:
 	var sheet = ch.sheet()
-	_head(ch.cname)
-	var r := RichTextLabel.new()
-	r.bbcode_enabled = true
-	r.fit_content = true
-	r.add_theme_color_override("default_color", COL_TEXT)
-	r.text = _sheet_bbcode(true)
-	_body.add_child(r)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	_body.add_child(box)
+	_sheet_into(box, true)
 	if not sheet.choice_points.is_empty():
 		_head("Unmade choices" if not sheet.pending.is_empty() else "Choices")
 		for p in _choice_points_of([]):
@@ -909,48 +956,115 @@ func _pick(p: Dictionary, id: String) -> void:
 
 # --- the live sheet -------------------------------------------------------
 
-func _sheet_bbcode(full: bool) -> String:
+# #81: the sheet, laid out like one. A name block, the five numbers a fight
+# reads first as a row of tiles, the six abilities as tiles with modifier and
+# save under each, then the captioned prose (_sheet_bbcode). Built into
+# `parent` fresh each time; the side panel and the Review page share it.
+func _sheet_into(parent: Container, full: bool) -> void:
+	for c in parent.get_children():
+		parent.remove_child(c)
+		c.queue_free()
 	var sheet = ch.sheet()
 	var cls := humanize(ch.class_id()) if ch.class_id() != "" else "—"
 	var sub := ""
 	if sheet.subclasses.has(ch.class_id()):
 		sub = " (%s)" % humanize(sheet.subclasses[ch.class_id()])
-	var s := "[b][color=#c9a45a]%s[/color][/b]\n%s %s %s%s %d\n\n" % [ch.cname,
+	var name := Label.new()
+	name.text = ch.cname
+	name.theme_type_variation = "Head"
+	name.add_theme_color_override("font_color", COL_GOLD)
+	parent.add_child(name)
+	var line := Label.new()
+	line.text = "%s  ·  %s %s%s  ·  level %d" % [
 		humanize(ch.species_id) if ch.species_id != "" else "—",
 		Icons.class_glyph(ch.class_id()), cls, sub, max(1, sheet.level)]
-	s += "[b]AC[/b] %d   [b]HP[/b] %d   [b]Speed[/b] %d ft   [b]PB[/b] +%d   [b]Init[/b] %+d\n\n" % [
-		sheet.ac, sheet.max_hp, int(sheet.speeds.get("walk", 30)), sheet.proficiency_bonus, sheet.initiative]
-	var ab: Array = []
+	line.theme_type_variation = "Dim"
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	parent.add_child(line)
+	parent.add_child(_rule())
+	var stats := GridContainer.new()
+	stats.columns = 5
+	parent.add_child(stats)
+	for st in [["AC", str(sheet.ac)], ["HP", str(sheet.max_hp)],
+			["Speed", "%d ft" % int(sheet.speeds.get("walk", 30))],
+			["Prof.", "+%d" % sheet.proficiency_bonus], ["Init.", "%+d" % sheet.initiative]]:
+		stats.add_child(_tile(st[0], [[st[1], Icons.COL_HEAD, 22]]))
+	parent.add_child(_rule())
+	var abils := GridContainer.new()
+	abils.columns = 6
+	parent.add_child(abils)
 	for a in ABILS:
 		var t := int(sheet.abilities[a]["total"]) if sheet.abilities.has(a) else 10
-		ab.append("%s %d (%+d)" % [ABIL_NAME[a], t, sheet.mod(a)])
-	s += "  ".join(ab) + "\n\n"
-	var sv: Array = []
-	for a in ABILS:
-		sv.append("%s %+d%s" % [ABIL_NAME[a], int(sheet.saves.get(a, 0)),
-			"*" if sheet.save_prof.get(a, false) else ""])
-	s += "[b]Saves[/b] " + "  ".join(sv) + "\n"
+		var prof: bool = sheet.save_prof.get(a, false)
+		abils.add_child(_tile(ABIL_NAME[a], [
+			[str(t), Icons.COL_HEAD, 20], ["%+d" % sheet.mod(a), COL_TEXT, Icons.FS_BODY],
+			[("● " if prof else "") + "%+d" % int(sheet.saves.get(a, 0)), COL_GOLD if prof else COL_DIM, Icons.FS_SMALL]]))
+	var key := Label.new()
+	key.text = "score · modifier · save (● proficient)"
+	key.theme_type_variation = "Dim"
+	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	parent.add_child(key)
+	parent.add_child(_rule())
+	var r := RichTextLabel.new()
+	r.bbcode_enabled = true
+	r.fit_content = true
+	r.add_theme_color_override("default_color", COL_TEXT)
+	r.text = _sheet_bbcode(full)
+	parent.add_child(r)
+
+# One tile of the sheet: a gilt caption over one or more values, each
+# [text, colour, font size], centred.
+static func _tile(caption: String, rows: Array) -> Control:
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 0)
+	var c := Label.new()
+	c.text = caption.to_upper()
+	c.theme_type_variation = "Caption"
+	c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(c)
+	for row in rows:
+		var l := Label.new()
+		l.text = String(row[0])
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.add_theme_color_override("font_color", row[1])
+		l.add_theme_font_size_override("font_size", int(row[2]))
+		v.add_child(l)
+	return v
+
+static func _rule() -> Control:
+	var h := ColorRect.new()
+	h.color = Icons.COL_GOLD_EDGE
+	h.custom_minimum_size = Vector2(0, 1)
+	return h
+
+# The prose half of the sheet: skills, attacks, spells, features — and on the
+# Review page, everything.
+func _sheet_bbcode(full: bool) -> String:
+	var sheet = ch.sheet()
+	var s := ""
 	var sk: Array = []
 	for k in sheet.skill_prof:
 		if sheet.skill_prof[k] != "none":
-			sk.append("%s %+d%s" % [Catalog.skills().get(k, {}).get("name", k),
-				int(sheet.skills[k]), "E" if sheet.skill_prof[k] == "expert" else ""])
-	s += "[b]Skills[/b] " + (", ".join(sk) if sk else "none") + "\n"
-	s += "[b]Passive Perception[/b] %d\n\n" % sheet.passive_perception
-	s += "[b]Attacks[/b]\n"
+			sk.append("%s [color=#f1e6cf]%+d[/color]%s" % [Catalog.skills().get(k, {}).get("name", k),
+				int(sheet.skills[k]), " [color=#c9a45a]E[/color]" if sheet.skill_prof[k] == "expert" else ""])
+	s += _cap("Skills") + "  " + (", ".join(sk) if sk else "[color=#8a7f6e]none[/color]") + "\n"
+	s += _cap("Passive Perception") + "  [color=#f1e6cf]%d[/color]\n[hr color=#7a6234]\n" % sheet.passive_perception
+	s += _cap("Attacks") + "\n"
 	if sheet.attacks.is_empty():
-		s += "  none\n"
+		s += "[color=#8a7f6e]  none[/color]\n"
 	for atk in sheet.attacks:
-		s += "  %s %+d, %s %s\n" % [atk["name"], int(atk["to_hit"]), atk["notation"], atk["damage_type"]]
+		s += "  %s  [color=#f1e6cf]%+d[/color]  [color=#b9ae9b]%s %s[/color]\n" % [
+			atk["name"], int(atk["to_hit"]), atk["notation"], atk["damage_type"]]
 	if not sheet.spellcasting.is_empty():
 		var sc: Dictionary = sheet.spellcasting
 		var slots: Array = []
 		for i in sc.get("slots", []).size():
 			if int(sc["slots"][i]) > 0:
 				slots.append("L%d×%d" % [i + 1, int(sc["slots"][i])])
-		s += "\n[b]Spellcasting[/b] %s  DC %d  atk %+d\n  slots: %s\n" % [
-			String(sc["ability"]).to_upper(), int(sc["save_dc"]), int(sc["attack_bonus"]),
-			", ".join(slots) if slots else "none"]
+		s += "[hr color=#7a6234]\n" + _cap("Spellcasting") + "  %s  ·  DC [color=#f1e6cf]%d[/color]  ·  attack [color=#f1e6cf]%+d[/color]\n" % [
+			String(sc["ability"]).to_upper(), int(sc["save_dc"]), int(sc["attack_bonus"])]
+		s += "  slots: %s\n" % (", ".join(slots) if slots else "[color=#8a7f6e]none[/color]")
 		if full:
 			var known: Array = []
 			for k in sc.get("cantrips", []):
@@ -962,24 +1076,28 @@ func _sheet_bbcode(full: bool) -> String:
 			if known:
 				s += "  spells: %s\n" % ", ".join(known)
 	if full:
-		s += "\n[b]Features[/b]\n"
+		s += "[hr color=#7a6234]\n" + _cap("Features") + "\n"
 		for fid in sheet.features:
 			s += "  · %s\n" % humanize(fid)
 		if not sheet.pools.is_empty():
-			s += "\n[b]Resources[/b]\n"
+			s += "[hr color=#7a6234]\n" + _cap("Resources") + "\n"
 			for p in sheet.pools:
 				s += "  · %s ×%d\n" % [humanize(p["id"]), int(p["max"])]
 		if not sheet.equipment.is_empty():
-			s += "\n[b]Equipment[/b] %s\n" % ", ".join(ch.equipped)
+			s += "[hr color=#7a6234]\n" + _cap("Equipment") + "  %s\n" % ", ".join(ch.equipped)
 	if not sheet.pending.is_empty():
-		s += "\n[color=#d15750][b]%d choice(s) left[/b][/color]\n" % sheet.pending.size()
+		s += "[hr color=#7a6234]\n[color=#d15750][b]%d choice(s) left[/b][/color]\n" % sheet.pending.size()
 		for p in sheet.pending:
 			s += "[color=#d15750]  · %s[/color]\n" % humanize(p["type"])
 	if not sheet.warnings.is_empty() and full:
-		s += "\n[color=#c9a45a]warnings:[/color]\n"
+		s += "[hr color=#7a6234]\n[color=#c9a45a]warnings:[/color]\n"
 		for w in sheet.warnings:
 			s += "  %s\n" % w
 	return s
+
+# A section caption on the sheet: small, gilt, the way Icons' "Caption" type reads.
+static func _cap(text: String) -> String:
+	return "[font_size=13][color=#c9a45a]%s[/color][/font_size]" % text.to_upper()
 
 # A class/species/background swap leaves that source's decisions behind; drop them
 # so the old pick can't silently satisfy a same-keyed grant on the new one.

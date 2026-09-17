@@ -15,7 +15,31 @@ func check(cond: bool, label: String) -> void:
 		_fail += 1
 		printerr("  FAIL: ", label)
 
+# #85: the clock says how bright the world is.
+func test_daylight() -> void:
+	var c := World.WorldClock.new()
+	var at := func(hour: float) -> float: return (hour - World.WorldClock.START_HOUR) * 60.0
+	check(is_equal_approx(c.hour_of_day(), World.WorldClock.START_HOUR), "a new world starts at %d:00" % World.WorldClock.START_HOUR)
+	c.elapsed = at.call(12)
+	check(is_equal_approx(c.daylight(), 1.0), "noon is full day")
+	c.elapsed = at.call(24 + 2)
+	check(is_equal_approx(c.daylight(), World.WorldClock.NIGHT_FLOOR), "2am is the night floor, not black")
+	c.elapsed = at.call(24 + 6)
+	var dawn := c.daylight()
+	check(dawn > World.WorldClock.NIGHT_FLOOR and dawn < 1.0, "6am is on its way up (%.2f)" % dawn)
+	c.elapsed = at.call(19)
+	var dusk := c.daylight()
+	check(dusk > World.WorldClock.NIGHT_FLOOR and dusk < 1.0, "7pm is on its way down (%.2f)" % dusk)
+	c.elapsed = at.call(24 + 12)
+	check(is_equal_approx(c.daylight(), 1.0), "and it wraps: noon the next day is day again")
+	c.elapsed = at.call(12)
+	check(c.daylight_tint().is_equal_approx(Color.WHITE), "noon light is white")
+	c.elapsed = at.call(24 + 2)
+	var t := c.daylight_tint()
+	check(t.b > t.r and t.b < 0.3, "night light is dim and blue (%s)" % t)
+
 func _init() -> void:
+	test_daylight()
 	test_clock_advances_only_unpaused()
 	test_clock_speed()
 	test_party_moves_toward_goal_without_overshooting()
@@ -91,10 +115,12 @@ func test_nothing_moves_while_paused() -> void:
 	w.set_goal(npc, Vector2(500, 500))
 
 	w.clock.pause()
+	var t0: float = w.clock.elapsed
 	w.tick(5.0)
 	check(p.position == Vector2.ZERO, "the player does not move while paused")
 	check(npc.position == Vector2(10, 10), "nor does an NPC party")
-	check(w.clock.elapsed == 0.0, "and no world-time passed")
+	check(w.clock.elapsed == t0, "and no world-time passed")
+	check(not w.clock.is_night(), "a new world starts by day (#85)")
 
 	w.clock.resume()
 	w.tick(1.0)

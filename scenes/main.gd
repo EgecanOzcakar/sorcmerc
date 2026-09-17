@@ -47,6 +47,7 @@ var _mode := "idle"          # idle | cone | target
 var _tgt_verb: Dictionary = {}   # the verb being aimed, straight from cb.available()
 var _armed := ""             # a confirm-guarded verb waiting for its second press
 var _deploy_pick := ""       # T39: the hero picked up for a trade, waiting for who to trade with
+var _viewing := false        # #72: the bar shows a party member whose turn it is not — read-only
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 var _slot_max := {}          # id -> slots at the start of the fight (for the pips)
@@ -119,6 +120,20 @@ const FLOORS := {
 	"shop": preload("res://assets/board/floor_shop.png"),
 }
 const FLOOR_SPAN := 3.0    # hexes per texture repeat
+# #73: a painted backdrop behind the board, one per palette, from the scene
+# art the game already ships (assets/generated). Held well down so the lit
+# hexes stay the picture; the board is a patch of a place, and this is the place.
+const BACKDROPS := {
+	"shrine": "res://assets/generated/room-cistern.png",
+	"camp": "res://assets/generated/camp-night.png",
+	"city": "res://assets/generated/room-gallery.png",
+	"forest": "res://assets/generated/event-tracks.png",
+	"ice": "res://assets/generated/event-storm.png",
+	"shop": "res://assets/generated/room-forge.png",
+}
+const BACKDROP_TONE := Color(0.42, 0.40, 0.40)
+const BACKDROP_NIGHT := Color(0.16, 0.17, 0.26)
+const COL_NIGHT := Color(0.02, 0.03, 0.09, 0.62)   # #85: an unlit hex after dark
 const FLOOR_ALPHA := 0.9    # the texture is the ground now, not a wash over a slab
 const FLOOR_TONE := 0.72    # ...held down to the board's dark palette, the board light on top
 const COL_MOVE := Color(0.30, 0.55, 0.95, 0.35)
@@ -335,6 +350,9 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		return
 	if e.echo and e.keycode not in [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]:
 		return   # key repeat pans; it must not end turns or press hotkeys twice
+	if _wash != null:   # #74: any key is the click
+		_dismiss_wash()
+		return
 	match e.keycode:
 		KEY_EQUAL, KEY_KP_ADD: set_zoom(_zoom * 1.1)
 		KEY_MINUS, KEY_KP_SUBTRACT: set_zoom(_zoom / 1.1)
@@ -385,14 +403,19 @@ func bug_context() -> Dictionary:
 
 func _press_hotkey(idx: int, shift := false) -> void:
 	# A reaction question is the one thing asked while the board is busy, and
-	# [1] Yes / [2] or Space Hold it must reach it — it is the buttons, not the
-	# animation, that the keys address.
-	var asking: bool = _reaction_answer < 0
-	if _busy and not asking:
+	# [1] Yes / [2] or Space Hold it must reach it. #76: it has its own card
+	# now (_build_reaction_card), so the keys answer it directly.
+	if _reaction_answer < 0:
+		if idx == 0:
+			_reaction_answer = 1
+		elif idx == 1 or idx < 0:
+			_reaction_answer = 0
+		return
+	if _busy:
 		return
 	# T29: while aiming, the number keys still address the verb menu — drop out
 	# of targeting first instead of indexing into the lone [Esc] Cancel button.
-	if idx >= 0 and not asking and _mode != "idle" and _mode != "deploy" and cb and not cb.is_over() \
+	if idx >= 0 and _mode != "idle" and _mode != "deploy" and cb and not cb.is_over() \
 			and cb.current().team == "party" and cb.current().conscious():
 		_build_hero_menu(cb.current())
 	var kids := _buttons.get_children()
@@ -578,6 +601,7 @@ func _advance() -> void:
 			continue
 		if c.team == "foe" or c.is_down():
 			_busy = true
+			_viewing = false
 			_set_buttons([])
 			while _walk != null:      # nobody swings while the walkthrough is up
 				await get_tree().process_frame
@@ -594,6 +618,7 @@ func _advance() -> void:
 			cb.end_turn()
 			continue
 		_mode = "idle"
+		_viewing = false
 		_build_hero_menu(c)
 		_advancing = false
 		if _walk_pending:        # T32: the bar the cards describe is now up
@@ -615,13 +640,14 @@ func _advance() -> void:
 # Dodge cost nothing and still fire by themselves — there is one sensible answer
 # to those and it is not worth a key press.
 var _reaction_answer := 0    # -1 only while the question is up, then 0 no / 1 yes
+var _reaction_card: PanelContainer = null   # #76: the question, centred over the board
 
 func _ask_reaction(reactor, v: Dictionary, trigger: String, ctx: Dictionary) -> bool:
 	var was_busy: bool = _busy
 	_busy = true
-	_actor.text = _reaction_question(reactor, v, trigger, ctx)
 	_reaction_answer = -1
-	_set_buttons([
+	_set_buttons([])
+	_reaction_card = _build_reaction_card(_reaction_question(reactor, v, trigger, ctx), [
 		["Yes — " + String(v["label"]) + "  [1]", func(): _reaction_answer = 1,
 			"Spend %s's reaction and the slot." % reactor.cname],
 		["Hold it  [2 / Space]", func(): _reaction_answer = 0,
@@ -629,10 +655,51 @@ func _ask_reaction(reactor, v: Dictionary, trigger: String, ctx: Dictionary) -> 
 	])
 	while _reaction_answer < 0:
 		await get_tree().process_frame
-	_set_buttons([])
-	_actor.text = ""
+	_reaction_card.queue_free()
+	_reaction_card = null
 	_busy = was_busy
 	return _reaction_answer == 1
+
+# #76: a reaction is a stop-everything question, so it sits in the middle of
+# the screen over the board rather than down in the action bar. On _hud_layer
+# like the tutorial's cards, and for the same reason — above the HP bars.
+func _build_reaction_card(question: String, opts: Array) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.theme = theme
+	card.add_theme_stylebox_override("panel", Icons.box(Icons.COL_INK, Icons.COL_GOLD_EDGE, 0, 22, 16))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	card.add_child(col)
+	var head := Label.new()
+	head.text = "Reaction"
+	head.theme_type_variation = "Caption"
+	col.add_child(head)
+	var body := RichTextLabel.new()
+	body.bbcode_enabled = true
+	body.fit_content = true
+	body.scroll_active = false
+	body.custom_minimum_size = Vector2(WALK_CARD_W, 0)
+	body.add_theme_font_size_override("normal_font_size", Icons.FS_HEAD)
+	body.add_theme_font_size_override("bold_font_size", Icons.FS_HEAD)
+	body.add_theme_color_override("default_color", Icons.COL_BODY)
+	body.text = question
+	col.add_child(body)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_child(row)
+	for o in opts:
+		var b := Button.new()
+		b.text = String(o[0])
+		b.tooltip_text = String(o[2])
+		b.focus_mode = Control.FOCUS_NONE
+		b.pressed.connect(o[1])
+		row.add_child(b)
+	_hud_layer.add_child(card)
+	card.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	card.grow_vertical = Control.GROW_DIRECTION_BOTH
+	return card
 
 # What the question says. The cost is in it because the cost is the decision,
 # and for a swing the hit chance is too — the answer is given before the d20,
@@ -708,8 +775,9 @@ func _menu_entries(h) -> Dictionary:
 	var spell_tiers: Dictionary = {}   # spell id -> Array of this verb's entries, one per castable level
 	var spell_order: Array = []        # first-seen order, so a spell keeps its natural position in opts
 	var usable := {}
-	for v in cb.available(h):
-		usable[String(v.get("id", v["kind"]))] = true
+	if not _viewing:   # #72: a sheet being looked at fires nothing
+		for v in cb.available(h):
+			usable[String(v.get("id", v["kind"]))] = true
 	# The whole kit, not just what is affordable this instant: an unavailable
 	# verb keeps its slot, greyed, so nothing to its right ever moves.
 	for v in cb.all_verbs(h):
@@ -836,7 +904,7 @@ func _slotted(h, opts: Array) -> Array:
 		var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
 		if s in LIST_SLOTS and mine.size() > 1:   # one thing to pick from is no pick: the key fires it
 			var meta := _mark(_slot_icon(s), "▸")
-			meta["disabled"] = mine.is_empty() or live == 0
+			meta["disabled"] = mine.is_empty() or (live == 0 and not _viewing)
 			meta["key"] = str(SLOTS.find(s) + 1)
 			var tip := "%s\n%s" % [SLOT_NAMES[s], ("Nothing to pick from." if mine.is_empty()
 				else "%d of %d ready — press to pick one." % [live, mine.size()])]
@@ -867,7 +935,11 @@ func _slotted(h, opts: Array) -> Array:
 				swap["notation"], swap.get("damage_type", "")], swap_meta])
 	var end_mark := _mark(Icons.verb_icon("end_turn"))
 	end_mark["key"] = "Spc"
-	if h.econ["action"] > 0 and not cb.is_over():
+	if _viewing:
+		var back := _mark(Icons.verb_icon("back"), "‹")
+		back["key"] = "Esc"
+		out.append(["Back", _stop_viewing, "Back\nBack to whoever is acting.", back])
+	elif h.econ["action"] > 0 and not cb.is_over():
 		end_mark["armed"] = _armed == "end"
 		var end_opt := _confirm_opt(h, "end", "End turn (action unspent!)", _end_turn)
 		end_opt.append("End turn\nYour action is still unspent.")
@@ -1243,6 +1315,9 @@ func board_cancel() -> void:
 			_board.queue_redraw()
 			_deploy_menu()
 		return
+	if _viewing:
+		_stop_viewing()
+		return
 	if (_mode != "idle" or _submenu != "") and cb and not cb.is_over() and cb.current().team == "party":
 		_build_hero_menu(cb.current())
 
@@ -1371,7 +1446,7 @@ func _chip(b: Button, text: String, preset: int, col: Color, u: float) -> void:
 	l.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, int(3 * u))
 
 func _refresh() -> void:
-	_header.text = "The Sunken Shrine, round %d" % cb.round_num
+	_header.text = "The Sunken Shrine, round %d%s" % [cb.round_num, "  ·  night" if cb.is_night() else ""]
 	_header.tooltip_text = "seed %d" % _seed
 
 	var n: int = cb.order.size()
@@ -1389,9 +1464,38 @@ func _refresh() -> void:
 			("    " + res) if res != "" else "",
 			_econ_bb(cur), hint, again,
 		]
-	elif _mode == "idle":
+	elif _mode == "idle" and not _viewing:
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
 	_board.queue_redraw()
+
+# --- #72: looking at a party member off their turn ------------------------
+#
+# The strip is where a fight is read, and a tile is the natural place to ask
+# "what has Ilsa got left?". The bar it shows is the real one (_menu_entries,
+# _slotted), with every action greyed and the lists still openable, so the
+# tooltips say what each spell and feature does. Esc, Back, or the next hero
+# turn puts the acting hero's bar back.
+func view_hero(c) -> void:
+	if cb == null or cb.is_over() or c == null or c.team != "party" or _mode == "deploy" \
+			or _reaction_answer < 0:
+		return
+	if c == cb.current() and c.conscious():
+		_stop_viewing()
+		return
+	_viewing = true
+	_build_hero_menu(c)
+	var res := _resources(c)
+	_actor.text = "%s    [i]not their turn[/i]    AC %d    %s%s" % [
+		"[b]%s[/b]" % c.cname, cb.effective_ac(c), _hp_bb(c), ("    " + res) if res != "" else ""]
+
+func _stop_viewing() -> void:
+	_viewing = false
+	var cur = cb.current() if cb != null else null
+	if cur != null and cur.team == "party" and cur.conscious() and not _advancing and not _busy:
+		_build_hero_menu(cur)
+	else:
+		_set_buttons([])
+	_refresh()
 
 # T29 spellcaster resources: one pip row per slot level the caster actually has
 # (● unspent, ○ spent) plus every feature pool by name, replacing the old
@@ -1464,6 +1568,11 @@ func _build_order_strip() -> void:
 			tile.modulate = Color(1, 1, 1, 0.35)
 		elif c.is_down():
 			tile.modulate = Color(1, 1, 1, 0.6)
+		if c.team == "party":   # #72
+			tile.tooltip_text = "Click to look at %s's sheet" % c.short_name()
+			tile.gui_input.connect(func(e: InputEvent):
+				if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+					view_hero(c))
 		_order.add_child(tile)
 	_paint_order_aim(true)
 
@@ -1638,10 +1747,18 @@ func _flush_log() -> void:
 		_logged += 1
 
 func _finish() -> void:
-	result = Encounter.resolve_outcome(cb, party)   # writes HP/pools/slots back to the party
+	var outcome: Dictionary = Encounter.resolve_outcome(cb, party)   # writes HP/pools/slots back to the party
 	var res: String = cb.outcome()
 	if res == "Defeat":
 		_board.play_defeat()
+	# #74: the host (world, site, campaign) tears this scene down the frame
+	# `result` is set. With a screen to look at, the verdict is held behind a
+	# tinted wash the player clicks through first; headless and FAST hand it
+	# straight back, as they always did.
+	if _fx_on:
+		_show_wash(res, outcome)
+	else:
+		result = outcome
 	_flush_log()
 	_refresh()
 	for c in _buttons.get_children():
@@ -1677,6 +1794,49 @@ func _finish() -> void:
 				names.append(Icons.item_img_bb(String(id)) + Icons.item_bb(String(id), Campaign.item_name(String(id))))
 			_logbox.append_text("[color=#c9a45a]Taken from the dead:[/color] %s\n" % ", ".join(names))
 
+# --- #74: the verdict, held for a click -------------------------------------
+var _wash: Control = null
+var _wash_age := 0.0
+var _wash_result: Dictionary = {}
+
+func _show_wash(res: String, outcome: Dictionary) -> void:
+	_wash_result = outcome
+	_wash_age = 0.0
+	_wash = Control.new()
+	_wash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_wash.mouse_filter = Control.MOUSE_FILTER_STOP
+	_wash.draw.connect(_draw_wash.bind(res))
+	_wash.gui_input.connect(func(e: InputEvent):
+		if e is InputEventMouseButton and e.pressed:
+			_dismiss_wash())
+	_hud_layer.add_child(_wash)
+
+func _dismiss_wash() -> void:
+	if _wash == null:
+		return
+	_wash.queue_free()
+	_wash = null
+	result = _wash_result
+
+func _draw_wash(res: String) -> void:
+	var won := res == "Victory"
+	var t := _wash_age
+	var k := clampf(t / 0.8, 0.0, 1.0)
+	var fz := clampf(_zoom, 0.9, 1.4)
+	var mid: Vector2 = _wash.size * 0.5
+	# The board's own DEFEAT slam already plays underneath; the victory one is
+	# drawn here, in the same voice: a wash, one word, one line under it.
+	if won:
+		_wash.draw_rect(Rect2(Vector2.ZERO, _wash.size), Color(0.10, 0.09, 0.02, 0.55 * k))
+		var slam := 1.0 + 1.6 * pow(1.0 - clampf(t / 0.30, 0.0, 1.0), 2)
+		Board._centered_on(_wash, "V I C T O R Y", mid, int(54 * fz * slam),
+			Color(Icons.COL_GOLD, clampf(t / 0.12, 0.0, 1.0)))
+		Board._centered_on(_wash, "+%d XP, +%d %s" % [int(_wash_result.get("xp", 0)),
+			int(_wash_result.get("gold", 0)), Icons.GP], mid + Vector2(0, 46 * fz), int(18 * fz),
+			Color(Icons.COL_BODY, clampf((t - 0.5) / 0.6, 0.0, 1.0)))
+	Board._centered_on(_wash, "click to continue", mid + Vector2(0, 90 * fz), int(14 * fz),
+		Color(Icons.COL_BODY, 0.7 * clampf((t - 1.2) / 0.6, 0.0, 1.0)))
+
 # The pause before a monster acts, so its turn is a beat and not a jump cut.
 # Raised with the strike timings below it: at 0.5 the next turn started while
 # the last swing was still on screen, which is what stacked several turns into
@@ -1686,6 +1846,9 @@ const TURN_BEAT := 0.75
 const BUTTON_ROWS := 3
 
 func _process(dt: float) -> void:
+	if _wash != null:
+		_wash_age += dt
+		_wash.queue_redraw()
 	if _board:
 		_board.tick(dt * _anim)
 	if _hud_overlay:
@@ -2028,6 +2191,8 @@ class Board extends Control:
 	var _auto_fit := false    # zoom-to-fit each layout until the user zooms (new fight, Home)
 	var _tok := {}        # id -> displayed pixel pos (for slide)
 	var _slide := {}      # id -> {from, to, t, dur}: the traversal in progress, see tick()
+	var _view_origin := Vector2(1e9, 1e9)   # the view _tok/_slide were last laid out in — see _rebase_view
+	var _view_hex := 0.0
 	var _hp := {}         # id -> displayed hp value
 	# T-dmg: the hp each body was last seen at, so a hit spawns ONE number. _hp
 	# is the bar's eased value and lags for ~20 frames; this one snaps.
@@ -2137,6 +2302,7 @@ class Board extends Control:
 		texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED   # the floor texture wraps across hexes
 		_tok.clear(); _slide.clear(); _hp.clear(); _floats.clear(); _flash.clear()
 		_dmg_goal.clear()
+		_view_origin = _origin; _view_hex = main.hex_px   # fresh _pix()es are in this view
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
 			_hp[c.id] = float(c.hp)
@@ -2144,6 +2310,7 @@ class Board extends Control:
 		queue_redraw()
 
 	func slide_from(c) -> void:
+		_rebase_view()   # a fresh _pix() must be in the same view as the rest
 		if not _tok.has(c.id):
 			_tok[c.id] = _pix(c.pos)
 
@@ -2326,9 +2493,33 @@ class Board extends Control:
 			d -= seg
 		return pts[-1]
 
+	# #71/#78: _tok and _slide are screen pixels, and a pan or a zoom moves the
+	# screen under them. Left alone, every token then "walked" to its new spot
+	# — lagging behind the drag, and turning its figure to face the drag. The
+	# projection is affine in _origin and hex_px, so the stored points are
+	# carried over exactly rather than animated.
+	func _rebase_view() -> void:
+		var hx: float = main.hex_px
+		if _view_origin == _origin and is_equal_approx(_view_hex, hx):
+			return
+		if _view_hex > 0.0:
+			var k: float = hx / _view_hex
+			var map := func(q: Vector2) -> Vector2: return _origin + (q - _view_origin) * k
+			for id in _tok:
+				_tok[id] = map.call(_tok[id])
+			for id in _slide:
+				var s: Dictionary = _slide[id]
+				s["from"] = map.call(s["from"]); s["to"] = map.call(s["to"])
+				s["pts"] = s["pts"].map(map); s["len"] = float(s["len"]) * k
+			for f in _floats:
+				f["pos"] = map.call(f["pos"])
+		_view_origin = _origin
+		_view_hex = hx
+
 	func tick(dt: float) -> void:
 		if cb == null:
 			return
+		_rebase_view()
 		var k := clampf(dt * 12.0, 0.0, 1.0)
 		var dirty := false
 		for c in cb.combatants:
@@ -2461,6 +2652,7 @@ class Board extends Control:
 		if amount >= 12: band = Color("ff5a4a")
 		elif amount >= 6: band = Color("ff9146")
 		var bite := sqrt(clampf(amount / maxf(1.0, float(c.max_hp)), 0.0, 1.0))
+		_rebase_view()
 		_floats.append({"id": c.id, "pos": _pix(c.pos), "text": "-%d" % int(round(amount)),
 			"color": band, "age": 0.0, "fs": lerpf(FLOAT_FS_MIN, FLOAT_FS_MAX, bite)})
 
@@ -2499,6 +2691,12 @@ class Board extends Control:
 	func _paint_ground(canvas: CanvasItem) -> void:
 		var s: float = main.hex_px
 		var decor: Array = []   # foliage, drawn after every tile so it can overhang
+		var back: Texture2D = Icons.image_at(String(main.BACKDROPS.get(cb.board.get("palette", "shrine"), "")))
+		if back != null:   # #73: fill the frame, crop the overflow, keep the horizon high
+			var k := maxf(size.x / back.get_width(), size.y / back.get_height())
+			var sz := back.get_size() * k
+			canvas.draw_texture_rect(back, Rect2(Vector2((size.x - sz.x) * 0.5, minf(0.0, (size.y - sz.y) * 0.3)), sz),
+				false, BACKDROP_NIGHT if cb.is_night() else BACKDROP_TONE)
 		# The ground goes on past the board's edge and fades into the dark, two
 		# rings deep, the way the map's fog does — a board is a lit patch of a
 		# place, not a lozenge cut out of nothing.
@@ -2772,12 +2970,15 @@ class Board extends Control:
 				zone_tint[hx] = col
 		# tiles: the ground itself is on _ground (see Ground); only what moves
 		# frame to frame is painted here, on top of it.
+		var night: bool = cb.is_night()
 		for hx in cb.board["hexes"]:
 			var c := _pix(hx)
 			var poly := _hex_poly(c, s - 2.0)
 			var obj: Dictionary = cb.object_at(hx)
 			if _is_hazard(obj):
 				_paint_tile(self, hx, c, s, pulse)   # its glow pulses, so it can't be cached
+			if night and not cb.lit(hx):   # #85: the dark, over everything the ground painted
+				draw_colored_polygon(_hex_poly(c, s), main.COL_NIGHT)
 			if zone_tint.has(hx):
 				var zc: Color = zone_tint[hx]
 				draw_colored_polygon(poly, Color(zc.r, zc.g, zc.b, 0.30 + 0.06 * pulse))
