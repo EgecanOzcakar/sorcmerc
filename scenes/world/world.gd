@@ -172,6 +172,11 @@ var _site = null                     # D1: the delve in progress (core/site.gd),
 # save-format field for something that fires every six world-hours anyway.
 var _last_travel_at: float = 0.0
 var _event_card: Control = null
+# #70: the map halts when the party reaches where it was sent, and runs again
+# the moment it is sent somewhere else — arriving is not a reason to keep the
+# clock burning while nobody is giving orders.
+var _was_travelling := false
+var _halted_on_arrival := false
 # D4: the band the player is deciding how to meet, and the card asking. Bands
 # slipped past go on `_slipped` so walking away does not immediately re-trigger
 # the same meeting — the settlement gate's `_left` does the same job.
@@ -355,6 +360,7 @@ func _process(delta: float) -> void:
 	var p0 := world.player()
 	if p0 != null:
 		world.reveal(p0.position)   # T9x fog of war: permanent once seen
+		_check_arrival(p0)
 		# D3: the marching order IS the speed, re-read every frame so changing
 		# it on the party screen takes effect the moment you back out.
 		p0.speed = World.SPEED * Travel.speed_mult(party)
@@ -384,6 +390,22 @@ func _process(delta: float) -> void:
 			int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60]
 		_gold_lbl.text = "%d gp" % party.gold
 	queue_redraw()
+
+# #70: pause on reaching the goal; a new goal (a click, or anything else that
+# moves it) resumes. Never over a fight, a market, a delve or a card — each of
+# those owns the clock already.
+func _check_arrival(p0) -> void:
+	if _halted_on_arrival:
+		if not p0.at_goal():
+			_halted_on_arrival = false
+			world.clock.resume()
+			_pause_btn.text = "Pause"
+	elif _was_travelling and p0.at_goal() and _combat == null and _visit.is_empty() \
+			and _site == null and _event_card == null and not world.clock.is_paused():
+		_halted_on_arrival = true
+		world.clock.pause()
+		_pause_btn.text = "Resume"
+	_was_travelling = not p0.at_goal()
 
 # --- HUD ---------------------------------------------------------------
 func _build_hud() -> void:
@@ -560,6 +582,7 @@ func _toggle_pause() -> void:
 			or _story_panel != null or story_card != null or _menu_panel != null \
 			or _spoils_panel != null:
 		return
+	_halted_on_arrival = false
 	if world.clock.is_paused():
 		world.clock.resume()
 	else:
