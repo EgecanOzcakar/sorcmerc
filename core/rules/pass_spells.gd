@@ -67,6 +67,14 @@ static func resolve(bundles: Array, abilities: Dictionary, pb: int, level: int) 
 		var def := Catalog.spell(g["spellId"])
 		if def.is_empty():
 			warns.append("spell grant references uncatalogued spell \"%s\"" % g["spellId"])
+		# Two grants may name the same spell — a class cantrip pick and Magic
+		# Initiate's, a subclass's always-prepared list and a wizard's spellbook.
+		# Un-deduplicated that reached the sheet twice and adapter.gd built a
+		# second, identical cast button for it, so a druid who took Poison Spray
+		# both ways carried three Poison Sprays on the action bar.
+		if g["spellId"] in always or g["spellId"] in cantrips or known.any(
+				func(k): return k["id"] == g["spellId"]):
+			continue
 		if g["alwaysPrepared"]:
 			always.append(g["spellId"])
 		elif def.is_empty():

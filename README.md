@@ -72,7 +72,7 @@ data/              the 5e SRD export (classes/spells/species/...), a 316-
 content/           content packs that ship with the game: an example map, a
                    free campaign, and a paid DLC — all three written against
                    the same public API a player's mod uses
-tests/             115 files, headless: one per subsystem (89 test_*.gd) plus
+tests/             120 files, headless: one per subsystem (92 test_*.gd) plus
                    8 drive_*.gd (robots pressing real UI buttons end-to-end),
                    check_scripts.gd (every .gd in the project still parses)
                    and a few dev tools (shot.gd renders a frame to PNG).

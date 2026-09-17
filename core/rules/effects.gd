@@ -158,6 +158,14 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 		if e.has("pool"):
 			v["pool"] = e["pool"]
 			v["uses"] = sheet.pool_max(e["pool"])
+			# A named pool the sheet was granted none of. The Cleric's Channel
+			# Divinity is the case: the export emits the `resource-pool` grant for
+			# the paladin's and not for the cleric's (SCHEMA gap #4), so the button
+			# was built with 0 uses, adapter.gd synthesized a 0-max pool from it,
+			# and the feature has been on the bar greyed out and unpressable ever
+			# since. An authored `uses` is the fallback when the export has none.
+			if int(v["uses"]) == 0 and e.has("uses"):
+				v["uses"] = scale(e["uses"], sheet)
 		elif e.has("uses"):
 			v["pool"] = fid          # synthetic pool: the export grants no pool for this feature
 			v["uses"] = scale(e["uses"], sheet)

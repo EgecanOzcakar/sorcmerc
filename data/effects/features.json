@@ -408,6 +408,24 @@
     "kind": "save_effect",
     "cost": "action",
     "pool": "channel-divinity",
+    "uses": {
+      "by": "class_level",
+      "class": "cleric",
+      "steps": [
+        {
+          "min": 2,
+          "value": 2
+        },
+        {
+          "min": 6,
+          "value": 3
+        },
+        {
+          "min": 18,
+          "value": 4
+        }
+      ]
+    },
     "save": "wis",
     "shape": "single",
     "range_ft": 30,
@@ -420,6 +438,7 @@
     "kind": "ally_buff",
     "cost": "bonus",
     "status": "inspired",
+    "range_ft": 60,
     "dice": {
       "count": 1,
       "sides": {
