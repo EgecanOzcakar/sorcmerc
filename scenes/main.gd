@@ -120,6 +120,18 @@ const FLOORS := {
 	"shop": preload("res://assets/board/floor_shop.png"),
 }
 const FLOOR_SPAN := 3.0    # hexes per texture repeat
+# #73: a painted backdrop behind the board, one per palette, from the scene
+# art the game already ships (assets/generated). Held well down so the lit
+# hexes stay the picture; the board is a patch of a place, and this is the place.
+const BACKDROPS := {
+	"shrine": "res://assets/generated/room-cistern.png",
+	"camp": "res://assets/generated/camp-night.png",
+	"city": "res://assets/generated/room-gallery.png",
+	"forest": "res://assets/generated/event-tracks.png",
+	"ice": "res://assets/generated/event-storm.png",
+	"shop": "res://assets/generated/room-forge.png",
+}
+const BACKDROP_TONE := Color(0.42, 0.40, 0.40)
 const FLOOR_ALPHA := 0.9    # the texture is the ground now, not a wash over a slab
 const FLOOR_TONE := 0.72    # ...held down to the board's dark palette, the board light on top
 const COL_MOVE := Color(0.30, 0.55, 0.95, 0.35)
@@ -2677,6 +2689,12 @@ class Board extends Control:
 	func _paint_ground(canvas: CanvasItem) -> void:
 		var s: float = main.hex_px
 		var decor: Array = []   # foliage, drawn after every tile so it can overhang
+		var back: Texture2D = Icons.image_at(String(main.BACKDROPS.get(cb.board.get("palette", "shrine"), "")))
+		if back != null:   # #73: fill the frame, crop the overflow, keep the horizon high
+			var k := maxf(size.x / back.get_width(), size.y / back.get_height())
+			var sz := back.get_size() * k
+			canvas.draw_texture_rect(back, Rect2(Vector2((size.x - sz.x) * 0.5, minf(0.0, (size.y - sz.y) * 0.3)), sz),
+				false, BACKDROP_TONE)
 		# The ground goes on past the board's edge and fades into the dark, two
 		# rings deep, the way the map's fog does — a board is a lit patch of a
 		# place, not a lozenge cut out of nothing.
