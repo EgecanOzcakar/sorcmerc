@@ -343,6 +343,8 @@ const GOLD_PER_POWER := 0.6
 # data/monsters.json.
 static func build(spec: Dictionary, party_combatants: Array, board: Dictionary = {}) -> Combat:
 	var b: Dictionary = board if not board.is_empty() else board_for(String(spec.get("theme", "")), int(spec.get("seed", 0)))
+	if spec.get("night", false):
+		b["night"] = true   # #85
 	var all_c: Array = party_combatants.duplicate()
 	var spots := _foe_spots(b, party_combatants)
 	var i := 0

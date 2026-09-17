@@ -1294,11 +1294,46 @@ func _no_economy(actor, cost: String) -> bool:
 
 # --- attack ------------------------------------------------------------
 
+# --- #85: night on the board ------------------------------------------------
+#
+# A fight begun after dark carries board["night"]. Then a hex is lit only by a
+# flame on the board (LIGHT_TYPES, LIGHT_RADIUS) or by the party's own carried
+# light (CARRIED_LIGHT around each standing hero — an adventurer walks with a
+# torch). Anyone else in an unlit hex is unseen: 5e's blinded-attacker rule,
+# disadvantage to swing at what you cannot see, advantage to swing from where
+# you cannot be seen — unless the viewer has darkvision, which most monsters
+# and several species do. Hiding in the dark is easier by DARK_HIDE_BONUS.
+const LIGHT_TYPES := ["torch", "brazier", "campfire", "lamp"]
+const LIGHT_RADIUS := 2
+const CARRIED_LIGHT := 1
+const DARK_HIDE_BONUS := 5
+
+func is_night() -> bool:
+	return bool(board.get("night", false))
+
+func lit(h: Vector2i) -> bool:
+	if not is_night():
+		return true
+	for o in board.get("objects", []):
+		if String(o.get("type", "")) in LIGHT_TYPES and Hex.distance(o["pos"], h) <= LIGHT_RADIUS:
+			return true
+	for c in combatants:
+		if c.team == "party" and c.conscious() and Hex.distance(c.pos, h) <= CARRIED_LIGHT:
+			return true
+	return false
+
+func can_see(viewer, h: Vector2i) -> bool:
+	return viewer.darkvision or lit(h)
+
 func _attack_mode(attacker, target, opts := {}) -> int:
 	var adv = false
 	var dis = false
 	if attacker.ranged and not opts.get("melee", false) and adjacent_enemy(attacker):
 		dis = true
+	if not can_see(attacker, target.pos):
+		dis = true   # #85: swinging at the dark
+	if not can_see(target, attacker.pos):
+		adv = true   # #85: struck from the dark
 	for e in _cond_effects(target):
 		var a = e.get("attacks_against", "")
 		if a is Dictionary:
@@ -2324,6 +2359,8 @@ func act_hide(c) -> bool:
 	for e in enemies_of(c):
 		dc = maxi(dc, hide_dc_against(e))
 	var roll: int = Dice.d20(rng).nat + c.stealth
+	if not lit(c.pos):
+		roll += DARK_HIDE_BONUS   # #85
 	if roll >= dc:
 		c.statuses["hidden"] = true
 		if tracked and c.team == "party":

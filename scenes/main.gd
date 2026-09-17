@@ -132,6 +132,8 @@ const BACKDROPS := {
 	"shop": "res://assets/generated/room-forge.png",
 }
 const BACKDROP_TONE := Color(0.42, 0.40, 0.40)
+const BACKDROP_NIGHT := Color(0.16, 0.17, 0.26)
+const COL_NIGHT := Color(0.02, 0.03, 0.09, 0.62)   # #85: an unlit hex after dark
 const FLOOR_ALPHA := 0.9    # the texture is the ground now, not a wash over a slab
 const FLOOR_TONE := 0.72    # ...held down to the board's dark palette, the board light on top
 const COL_MOVE := Color(0.30, 0.55, 0.95, 0.35)
@@ -1444,7 +1446,7 @@ func _chip(b: Button, text: String, preset: int, col: Color, u: float) -> void:
 	l.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, int(3 * u))
 
 func _refresh() -> void:
-	_header.text = "The Sunken Shrine, round %d" % cb.round_num
+	_header.text = "The Sunken Shrine, round %d%s" % [cb.round_num, "  ·  night" if cb.is_night() else ""]
 	_header.tooltip_text = "seed %d" % _seed
 
 	var n: int = cb.order.size()
@@ -2694,7 +2696,7 @@ class Board extends Control:
 			var k := maxf(size.x / back.get_width(), size.y / back.get_height())
 			var sz := back.get_size() * k
 			canvas.draw_texture_rect(back, Rect2(Vector2((size.x - sz.x) * 0.5, minf(0.0, (size.y - sz.y) * 0.3)), sz),
-				false, BACKDROP_TONE)
+				false, BACKDROP_NIGHT if cb.is_night() else BACKDROP_TONE)
 		# The ground goes on past the board's edge and fades into the dark, two
 		# rings deep, the way the map's fog does — a board is a lit patch of a
 		# place, not a lozenge cut out of nothing.
@@ -2968,12 +2970,15 @@ class Board extends Control:
 				zone_tint[hx] = col
 		# tiles: the ground itself is on _ground (see Ground); only what moves
 		# frame to frame is painted here, on top of it.
+		var night: bool = cb.is_night()
 		for hx in cb.board["hexes"]:
 			var c := _pix(hx)
 			var poly := _hex_poly(c, s - 2.0)
 			var obj: Dictionary = cb.object_at(hx)
 			if _is_hazard(obj):
 				_paint_tile(self, hx, c, s, pulse)   # its glow pulses, so it can't be cached
+			if night and not cb.lit(hx):   # #85: the dark, over everything the ground painted
+				draw_colored_polygon(_hex_poly(c, s), main.COL_NIGHT)
 			if zone_tint.has(hx):
 				var zc: Color = zone_tint[hx]
 				draw_colored_polygon(poly, Color(zc.r, zc.g, zc.b, 0.30 + 0.06 * pulse))

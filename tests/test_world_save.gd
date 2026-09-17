@@ -231,7 +231,7 @@ func _done() -> void:
 
 	var w2 := World.new()
 	w2.origin = {"kind": "procedural", "seed": 42}
-	w2.clock.elapsed = 1440.0 + 14 * 60.0 + 5.0        # Day 2, 14:05
+	w2.clock.elapsed = 1440.0 + 6 * 60.0 + 5.0        # Day 2, 14:05 — the face starts at 08:00 (#85)
 	var p2 := Party.new()
 	for ch in Presets.party():
 		p2.add_member(ch)

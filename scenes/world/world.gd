@@ -385,9 +385,7 @@ func _process(delta: float) -> void:
 		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0 or party.safe_camp
 	_layout_minimap()   # this Control resizes with the window; the inset follows the corner
 	if _clock_lbl != null:
-		_clock_lbl.text = "Day %d  %02d:%02d" % [
-			int(world.clock.elapsed / 1440.0) + 1,
-			int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60]
+		_clock_lbl.text = WorldSave.day_clock(world.clock.elapsed)
 		_gold_lbl.text = "%d ◉" % party.gold
 	queue_redraw()
 
@@ -674,9 +672,7 @@ func _build_menu_panel() -> void:
 	var when := Label.new()
 	when.theme_type_variation = "Dim"
 	when.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	when.text = "Day %d, %02d:%02d — %s" % [
-		int(world.clock.elapsed / 1440.0) + 1,
-		int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60,
+	when.text = "%s — %s" % [WorldSave.day_clock(world.clock.elapsed, ", "),
 		String(_region.get("label", "the road"))]
 	box.add_child(when)
 
@@ -1054,8 +1050,29 @@ func _check_encounter(dt := 0.0) -> void:
 		if WorldAI.in_truce(q, world.clock.elapsed):
 			continue   # met and parted without blood: they want nothing from you for a while
 		if near:
+			if hostile and world.clock.is_night() and not _night_jump(q):
+				return
 			_open_approach(q, hostile)
 			return
+
+# #85: in the dark a hostile band is on the party before anyone can choose how
+# to meet it — unless someone on watch hears them coming. The same check and the
+# same two outcomes a camp ambush has (core/world_camp.gd): heard, and the card
+# is offered as by day; missed, and they take the first round. Returns true when
+# the card should still open.
+func _night_jump(foe) -> bool:
+	var rng := RNG.new(maxi(1, absi(hash("night|%s|%d" % [foe.id, int(world.clock.elapsed)]))))
+	var watch: Dictionary = WorldCamp.watch_check(party, rng)
+	if watch["ok"]:
+		return true
+	var skill_name: String = String(watch.get("skill", "")).capitalize()
+	var who: String = watch.get("char_id", "")
+	_camp_msg.text = ("%s doesn't catch it in the dark (%s %d+%d vs DC %d) — %s are on the party before anyone can draw!" % [
+		watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"], foe.id.capitalize()]) if who != "" \
+		else "Nobody is watching the dark — %s are on the party before anyone can draw!" % foe.id.capitalize()
+	_camp_card("jumped", "Jumped in the dark", "bad", _camp_msg.text,
+		func(): _on_event_ack(); await _launch_combat(foe, false, true))
+	return false
 
 # The roster the encountered party fights with. Scaler takes a *theme*, not a
 # faction, so: THEME_FACTION reversed gives a matching board for the factions
@@ -1106,6 +1123,8 @@ func _run_combat(spec: Dictionary, difficulty: String,
 	add_child(_combat_overlay)
 	_combat = load(COMBAT_SCENE).instantiate()
 	_combat.party = party
+	spec = spec.duplicate()
+	spec["night"] = world.clock.is_night()   # #85: fought by torchlight (core/combat.gd lit())
 	_combat.spec = spec
 	_combat.difficulty = difficulty
 	_combat.scouted_ahead = scouted_ahead
@@ -1972,8 +1991,7 @@ func bug_context() -> Dictionary:
 		var s = _visit.get("settlement")
 		ctx["In a settlement"] = "%s, %s page" % [
 			s.sname if s != null else "?", _visit_page]
-	ctx["When"] = "Day %d, %02d:%02d" % [int(world.clock.elapsed / 1440.0) + 1,
-		int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60]
+	ctx["When"] = WorldSave.day_clock(world.clock.elapsed, ", ")
 	if not _region.is_empty():
 		ctx["Region"] = String(_region.get("label", _region.get("id", "?")))
 	var p0 = world.player()
@@ -3045,6 +3063,7 @@ func _draw_ground() -> void:
 	m.set_shader_parameter("time_s", Time.get_ticks_msec() / 1000.0)
 	var tint: Color = world.clock.daylight_tint()   # #85
 	m.set_shader_parameter("daylight", Vector3(tint.r, tint.g, tint.b))
+	m.set_shader_parameter("sight", world.sight_radius())
 
 const MASK_MAX := 96      # texels a side; far out a texel spans several cells, and nobody can tell
 

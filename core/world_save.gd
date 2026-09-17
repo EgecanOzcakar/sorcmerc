@@ -348,9 +348,9 @@ static func summary() -> Dictionary:
 
 # "Day 3  14:05" off world-minutes — the same reading scenes/world/world.gd's
 # clock label shows, so the title and the map agree about when you left.
-static func day_clock(elapsed: float) -> String:
-	return "Day %d  %02d:%02d" % [int(elapsed / 1440.0) + 1,
-		int(elapsed / 60.0) % 24, int(elapsed) % 60]
+static func day_clock(elapsed: float, sep := "  ") -> String:
+	var m := elapsed + World.WorldClock.START_HOUR * 60.0   # #85: the face starts at 08:00
+	return "Day %d%s%02d:%02d" % [int(m / 1440.0) + 1, sep, int(m / 60.0) % 24, int(m) % 60]
 
 static func clear() -> void:
 	if FileAccess.file_exists(path()):

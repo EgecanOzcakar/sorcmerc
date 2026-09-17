@@ -27,6 +27,7 @@ func check(cond: bool, label: String) -> void:
 
 func _init() -> void:
 	test_line_of_sight_stops_at_the_wall()
+	test_night_on_the_board()
 	test_rng_deterministic()
 	test_parse()
 	test_advantage_beats_normal()
@@ -592,6 +593,38 @@ func test_line_of_sight_stops_at_the_wall() -> void:
 	check(not cb.legal_area(archer, {"targeting": "hex", "range": 30}, Vector2i(3, 2)), "nor a fireball")
 	grull.pos = Vector2i(6, 0)
 	check(cb.legal_target(archer, bow, grull), "...and can along the open row")
+
+# #85: after dark a hex is lit by a flame or a hero's own torch, and the unseen
+# are hard to hit and easy to be hit by — unless you have darkvision.
+func test_night_on_the_board() -> void:
+	var board := Encounter.board()
+	board["objects"] = [{"type": "torch", "pos": Vector2i(0, 0)}]
+	board["cover"] = []
+	var ch = _barbarian()   # a human: no darkvision
+	ch.equipped = ["longbow"] as Array[String]
+	var hero = Adapter.to_combatant(ch, "party", Vector2i(3, 1))
+	var mons: Array = Catalog.all("monsters.json")
+	var foe = Adapter.from_monster(mons[0], "foe", Vector2i(7, 1))
+	foe.darkvision = false
+	var cb = Combat.new(RNG.new(1), [hero, foe], board)
+	check(cb.lit(Vector2i(7, 1)), "by day every hex is lit")
+	board["night"] = true
+	check(cb.is_night(), "the board carries the night")
+	check(cb.lit(Vector2i(0, 2)) and not cb.lit(Vector2i(0, 3)), "a torch lights %d hexes around it" % Combat.LIGHT_RADIUS)
+	check(cb.lit(Vector2i(3, 1)) and cb.lit(Vector2i(4, 1)), "a standing hero carries a light")
+	check(not cb.lit(Vector2i(7, 1)), "and the far side of the board is dark")
+	check(cb._attack_mode(hero, foe) == Dice.DIS, "shooting into the dark is at disadvantage")
+	check(cb._attack_mode(foe, hero) == Dice.ADV, "and a shot from the dark at a lit hero has advantage")
+	foe.darkvision = true
+	check(cb._attack_mode(foe, hero) == Dice.ADV, "darkvision does not stop the foe being unseen in the dark")
+	hero.darkvision = true
+	check(cb._attack_mode(hero, foe) == Dice.NORMAL, "...but a hero with darkvision sees them fine")
+	check(Adapter.from_monster(mons[0], "foe", Vector2i.ZERO).darkvision == mons[0].get("senses", {}).has("darkvision"),
+		"a monster's darkvision comes off its senses")
+	var elf = _barbarian()
+	elf.species_id = "elf"
+	check(Adapter.to_combatant(elf, "party", Vector2i.ZERO).darkvision, "an elf has darkvision off the species trait")
+	check(not Adapter.to_combatant(_barbarian(), "party", Vector2i.ZERO).darkvision, "a human does not")
 
 func test_rage_full_turn() -> void:
 	var ch = _barbarian()

@@ -10,6 +10,8 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Adapter = preload("res://core/adapter.gd")
 const Combat = preload("res://core/combat.gd")
+const World = preload("res://core/world.gd")
+const WorldCamp = preload("res://core/world_camp.gd")
 const Encounter = preload("res://core/encounter.gd")
 
 # Class blurbs — the one thing the export doesn't carry. Two lines each: what
@@ -157,6 +159,11 @@ static func _mechanics() -> Array:
 		"body": _h("Short rests patch you up; long rests reset everything.") +
 		"A [b]short rest[/b] restores half of your missing HP (rounded up) and every feature that recharges on one — Second Wind, Action Surge, Channel Divinity, warlock slots, a wizard's Arcane Recovery. A [b]long rest[/b] is full HP, all spell slots, all pools, and clears exhaustion by one level.\n\n" +
 		"In a campaign run, rests are limited per run and taken at rest nodes; in the world, a settlement bed or a camp kit away from one. Feature uses show as pips on your actor line; a spent pip is greyed until the rest that brings it back."})
+	out.append({"id": "night", "section": "Fighting", "title": "Night and darkness",
+		"tags": ["night", "dark", "darkness", "darkvision", "torch", "light", "lit", "unseen", "ambush", "watch", "sight"],
+		"body": _h("After dark the world closes in, and a fight is fought by torchlight.") +
+		"On the map the party sees %d%% as far at night, and a hostile band can be on you before anyone can choose how to meet it — whoever is best at Perception or Survival rolls to hear them coming (DC %d); miss it and they take the first round.\n\n" % [int(World.NIGHT_SIGHT * 100), WorldCamp.AMBUSH_DC] +
+		"A fight begun at night: a hex is [b]lit[/b] only within %d hexes of a torch, brazier or campfire, or within %d of a standing hero (you carry a torch). Anyone in an unlit hex is [b]unseen[/b] — attacks against them have disadvantage and their own attacks have advantage — unless the attacker has [b]darkvision[/b], which most monsters and several species do. Hiding in an unlit hex gets +%d on the Stealth roll." % [Combat.LIGHT_RADIUS, Combat.CARRIED_LIGHT, Combat.DARK_HIDE_BONUS]})
 	out.append({"id": "mastery", "section": "Fighting", "title": "Weapon mastery",
 		"tags": ["mastery", "weapon mastery", "cleave", "graze", "nick", "push", "sap", "slow", "topple", "vex", "fighter", "barbarian", "rogue", "ranger", "paladin"],
 		"body": _h("Martial classes pick weapons whose special rider fires on every hit (or miss).") + _mastery_body()})

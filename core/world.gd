@@ -27,6 +27,10 @@ const SPEED := 40.0   # map units per world-minute, every party for now
 class WorldClock extends RefCounted:
 	const SPEEDS := [1.0, 2.0, 4.0, 8.0]   # cycled by set_speed_index / the UI's speed button
 
+	# #85: a new world starts in the morning, not at midnight — the first thing
+	# a player sees should not be the night's shrunken sight. `elapsed` still
+	# counts from zero; the hour on the clock face is elapsed + START_HOUR.
+	const START_HOUR := 8
 	var elapsed := 0.0     # world-minutes since start, paused time excluded
 	var speed := 1.0       # multiplies every tick's delta — movement/AI/economy all speed up with it
 	var _paused := false
@@ -58,8 +62,11 @@ class WorldClock extends RefCounted:
 	# the map is still readable. Pure: the map, the dioramas and anything else
 	# that wants to look like the time of day read this one number.
 	const NIGHT_FLOOR := 0.22
+	func hour_of_day() -> float:
+		return fmod(elapsed / 60.0 + START_HOUR, 24.0)
+
 	func daylight() -> float:
-		var h := fmod(elapsed / 60.0, 24.0)
+		var h := hour_of_day()
 		var k := 0.0
 		if h >= 5.0 and h < 7.0:
 			k = (h - 5.0) / 2.0
@@ -70,12 +77,17 @@ class WorldClock extends RefCounted:
 		k = smoothstep(0.0, 1.0, k)
 		return lerpf(NIGHT_FLOOR, 1.0, k)
 
+	# Dark enough that the mechanics call it night: sight closes in, a band can
+	# jump the party unseen, and a fight begun now is fought by torchlight.
+	func is_night() -> bool:
+		return daylight() < 0.5
+
 	# The colour the light has: warm at the edges of the day, blue at night.
 	func daylight_tint() -> Color:
 		var d := daylight()
 		var night := Color(0.55, 0.62, 0.95)
 		var gold := Color(1.0, 0.82, 0.62)
-		var h := fmod(elapsed / 60.0, 24.0)
+		var h := hour_of_day()
 		var edge: float = 1.0 - minf(1.0, absf(h - 6.0) / 1.5) if h < 12.0 else 1.0 - minf(1.0, absf(h - 19.0) / 1.5)
 		return night.lerp(Color.WHITE, (d - NIGHT_FLOOR) / (1.0 - NIGHT_FLOOR)).lerp(gold, edge * 0.6) * d
 
@@ -289,7 +301,16 @@ func is_explored(pos: Vector2) -> bool:
 # The "currently visible" tier: within sight of the player's position RIGHT
 # NOW, not just remembered from having passed through once.
 func is_visible_now(pos: Vector2, from: Vector2) -> bool:
-	return pos.distance_to(from) <= VISION_RADIUS
+	return pos.distance_to(from) <= sight_radius()
+
+# #85: how far the party sees right now. Full VISION_RADIUS by day, NIGHT_SIGHT
+# of it in the dark; the ground shader's circle and every "is it in view" test
+# read this, so a band walks out of the night at the same distance the fog
+# opens. What is REMEMBERED (is_explored) stays at the day radius.
+const NIGHT_SIGHT := 0.45
+func sight_radius() -> float:
+	var k := (clock.daylight() - WorldClock.NIGHT_FLOOR) / (1.0 - WorldClock.NIGHT_FLOOR)   # 0 at deep night
+	return VISION_RADIUS * lerpf(NIGHT_SIGHT, 1.0, k)
 
 func near_settlement(pos: Vector2) -> bool:
 	for s in settlements:

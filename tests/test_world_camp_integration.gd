@@ -151,5 +151,37 @@ func _init() -> void:
 	check(inn.party.gold == 0, "affording the room spends exactly its cost")
 	check(inn.world.clock.elapsed > clock0, "and the rest actually happens once it's paid for")
 
+	# --- #85: a hostile band met in the dark, with and without a watch that hears it ---
+	var night = load("res://scenes/world/world.tscn").instantiate()
+	root.add_child(night)
+	await process_frame
+	var World = load("res://core/world.gd")
+	var np = night.world.player()
+	var band = night.world.add_party(World.RoamingParty.new("night-band", np.position + Vector2(5, 0), "goblinoid"))
+	check(night.world.sight_radius() < World.VISION_RADIUS or not night.world.clock.is_night(), "sight is the day radius by day")
+	# 2am: find a minute where the watch misses, and one where it hears
+	var miss := -1.0
+	var hear := -1.0
+	for m in range(0, 180):
+		var t: float = (24 + 2.0 - World.WorldClock.START_HOUR) * 60.0 + m   # 2am on day 2
+		var ok: bool = WorldCamp.watch_check(night.party, RNG.new(maxi(1, absi(hash("night|%s|%d" % [band.id, int(t)])))))["ok"]
+		if ok and hear < 0.0: hear = t
+		if not ok and miss < 0.0: miss = t
+	check(miss >= 0.0 and hear >= 0.0, "both outcomes of the night watch exist within a few hours")
+	night.world.clock.elapsed = miss
+	check(night.world.clock.is_night(), "2am is night")
+	check(is_equal_approx(night.world.sight_radius(), World.VISION_RADIUS * World.NIGHT_SIGHT), "...and sight closes to the night radius")
+	night._check_encounter()
+	check(night._approach_card == null and night._event_card != null and "Jumped" in String(night._event_card._s("title")),
+		"a missed watch: no approach card, the party is jumped")
+	check(night.world.clock.is_paused(), "...and the clock stops for the card")
+	night._on_event_ack()
+	night.world.clock.elapsed = hear
+	night._check_encounter()
+	check(night._approach_card != null, "a heard band: the usual approach card, as by day")
+	check(bool(night._combat == null), "nothing launched yet")
+	night._close_approach()
+	night.queue_free()
+
 	print("test_world_camp_integration: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

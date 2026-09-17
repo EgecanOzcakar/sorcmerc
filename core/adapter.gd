@@ -144,6 +144,8 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 
 	for fid in s.features:
 		c.features[fid] = true
+		if String(fid).contains("darkvision"):
+			c.darkvision = true   # #85: the species trait, by its feature id
 	for p in s.pools:
 		c.pools[p["id"]] = {"cur": int(ch.pools.get(p["id"], p["max"])), "max": int(p["max"]),
 			"regen": p["regen"]}
@@ -298,6 +300,7 @@ static func from_monster(m: Dictionary, team: String, pos: Vector2i):
 	c.attacks = m.get("attacks", []).duplicate(true)
 	for fid in m.get("features", []):
 		c.features[fid] = true
+	c.darkvision = m.get("senses", {}).has("darkvision")   # #85
 	c.verbs = Effects.verbs_for(null, c.features.keys())
 	_finish_verbs(c, {})
 	return c
