@@ -77,6 +77,7 @@ func _init() -> void:
 	test_known_pool_sizes()
 	test_scaled_abilities()
 	test_extra_attack_parity()
+	test_extra_attack_reaches_the_board()
 	test_authored_abilities()
 	report()
 	print("test_class_abilities: %d passed, %d failed" % [_pass, _fail])
@@ -490,6 +491,55 @@ func test_extra_attack_parity() -> void:
 			else:
 				check(got.size() == 1 and int(got[0]["value"]) == 2,
 					"%s L%d: Extra Attack is 2 attacks per action (got %s)" % [key, lvl, str(got)])
+
+# --- and the swings actually land ----------------------------------------
+#
+# The sheet half of Extra Attack is above; this is the board half, and it is the
+# half that was missing for everybody. `attacks_per_action` banks its swings in
+# `econ.attacks_left` and three separate things then dropped them: _offerable()
+# asked can_spend("action") and nothing else, so the Attack button greyed out
+# with a swing still banked; resolve_attack ASSIGNED attacks_left rather than
+# adding, so Flurry of Blows' two were destroyed by the monk's own first swing;
+# and ai.gd took one _strike per turn, so no monster ever used its Multiattack.
+#
+# Counted through available() — the same list the action bar renders — because
+# "the engine would allow it" was never the thing in doubt.
+func test_extra_attack_reaches_the_board() -> void:
+	var want := {
+		"fighter/champion": {4: 1, 8: 2}, "rogue/thief": {4: 1, 8: 1},
+		"paladin/oathofdevotion": {8: 2}, "ranger/hunter": {8: 2},
+		"bard/collegevalor": {8: 2}, "monk/warrioropenhand": {8: 2},
+	}
+	for key in want:
+		var parts: PackedStringArray = String(key).split("/")
+		for lvl in want[key]:
+			var n: int = swings(build(parts[0], parts[1], lvl), false)
+			check(n == int(want[key][lvl]), "%s L%d: %d swings off the bar, want %d"
+				% [key, lvl, n, int(want[key][lvl])])
+	# Flurry of Blows is a Bonus Action that banks two more. RAW they stack with
+	# Extra Attack, so a level-8 monk who spends a Focus Point swings four times.
+	check(swings(build("monk", "warrioropenhand", 8), true) == 4,
+		"monk L8: Extra Attack plus Flurry of Blows is four swings")
+
+# How many times `available()` will let this character swing in one turn.
+func swings(ch, flurry: bool) -> int:
+	var board: Dictionary = Encounter.board_for("sunken-shrine")
+	var hero = Adapter.to_combatant(ch, "party", Vector2i(2, 0))
+	var dummy = Encounter.spawn("ogre", 1.0, "foe", Vector2i(3, 0), 1)
+	dummy.max_hp = 99999                # so the count is the economy, not the corpse
+	dummy.hp = dummy.max_hp
+	var cb = Combat.new(RNG.new(7), [hero, dummy], board)
+	cb.begin_turn_for(hero)
+	if flurry:
+		for v in cb.all_verbs(hero):
+			if v["id"] == "monk-flurry-of-blows":
+				cb.perform(hero, v, null)
+	var n := 0
+	while n < 9 and cb.available(hero).any(func(v): return v["id"] == "attack"):
+		if cb.perform(hero, cb.attack_verb(), dummy).has("error"):
+			break
+		n += 1
+	return n
 
 # --- the features authored against the existing vocabulary ---------------
 #

@@ -549,6 +549,17 @@ func can_spend(actor, cost: String) -> bool:
 		return true
 	return not _no_economy(actor, cost) and int(actor.econ.get(cost, 0)) > 0
 
+# What `actor` can pay for `v` right now. Attacks are the one verb whose price is
+# not just its `cost`: the Attack action buys attacks_per_action swings and
+# resolve_attack banks the rest in `attacks_left`, so a second swing is already
+# paid for. Asking can_spend() alone greyed the Attack button out the instant the
+# action was spent — with the banked swing still sitting in the economy — so
+# Extra Attack, Flurry of Blows and War Priest were all unreachable from the bar.
+func can_afford(actor, v: Dictionary) -> bool:
+	if v["kind"] == "attack" and int(actor.econ.get("attacks_left", 0)) > 0:
+		return not _no_economy(actor, "action")
+	return can_spend(actor, v.get("cost", "action"))
+
 func _spend(actor, cost: String) -> bool:
 	if not can_spend(actor, cost):
 		return false
@@ -575,7 +586,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 		return false
 	if not is_button(actor, v):
 		return false
-	if not can_spend(actor, v.get("cost", "action")):
+	if not can_afford(actor, v):
 		return false
 	if v.get("once_per", "") == "turn" and actor.econ.get("used", {}).has(v["id"]):
 		return false
@@ -1587,7 +1598,14 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		if int(attacker.econ.get("attacks_left", 0)) > 0:
 			attacker.econ["attacks_left"] = int(attacker.econ["attacks_left"]) - 1
 		elif _spend(attacker, "action"):
-			attacker.econ["attacks_left"] = int(attacker.econ.get("attacks_per_action", 1)) - 1
+			# ADD, don't assign. Flurry of Blows banks its two swings in
+			# `attacks_left` as a Bonus Action, before the Attack action is taken;
+			# assigning here threw both of them away the moment the monk swung
+			# (measured: banked 2, one swing later attacks_left was 1). The Attack
+			# action buys attacks_per_action swings ON TOP of whatever a bonus
+			# action already bought — it is one of them, hence the -1.
+			attacker.econ["attacks_left"] = int(attacker.econ["attacks_left"]) \
+				+ int(attacker.econ.get("attacks_per_action", 1)) - 1
 		else:
 			return {"error": "no action left"}
 	var notation: String = opts.get("damage", attacker.damage)
