@@ -415,6 +415,21 @@ func allies_of(c) -> Array:
 # "You and allies within N feet" includes the paladin, hence the `+ [c]`. Auras
 # do not stack: the best one in reach wins, which is RAW for two paladins
 # standing together and conservative for anything else.
+# The condition half of the same lookup: Aura of Devotion is "you and your
+# allies in the aura can't be Charmed", which is a list rather than a number.
+func aura_immunities(c) -> Array:
+	var out: Array = []
+	for a in allies_of(c) + [c]:
+		for v in a.verbs:
+			if v["kind"] != "aura" or not v.has("cond_immune"):
+				continue
+			if Hex.distance(a.pos, c.pos) > int(v.get("range", 1)):
+				continue
+			for cond in v["cond_immune"]:
+				if not cond in out:
+					out.append(String(cond))
+	return out
+
 func aura_bonus(c, key: String) -> int:
 	var best := 0
 	for a in allies_of(c) + [c]:
@@ -706,8 +721,14 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			heal(who, Dice.roll(rng, "%dd%d+%d" % [int(v.get("dice_count", 1)),
 				int(v.get("dice_sides", 10)), int(v.get("dice_bonus", 0))]))
 		"self_buff":
+			# `once` and the dice are a Smite's shape: Rage is a standing buff that
+			# adds a flat bonus to every swing until the fight ends, a Smite is
+			# dice on exactly one of them. Both are self_buffs; the difference is
+			# whether the blow that reads the buff also spends it.
 			actor.statuses[v.get("status", v["id"])] = {
-				"bonus_damage": int(v.get("bonus_damage", 0)), "resist": v.get("resist", [])}
+				"bonus_damage": int(v.get("bonus_damage", 0)), "resist": v.get("resist", []),
+				"once": v.get("once", false),
+				"dice_count": int(v.get("dice_count", 0)), "dice_sides": int(v.get("dice_sides", 0))}
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"ally_buff":
 			target.statuses[v.get("status", v["id"])] = {"dice_sides": int(v.get("dice_sides", 6))}
@@ -1153,7 +1174,7 @@ func apply_condition(target, cond: String, source = null, duration := "", v: Dic
 	# T94 — `cond_immune` off the statblock. Checked ahead of everything, exhaustion
 	# included: 31 bestiary entries are immune to exhaustion specifically, and
 	# gain_exhaustion() is the one path that never comes back through here.
-	if cond in target.cond_immune:
+	if cond in target.cond_immune or cond in aura_immunities(target):
 		log.append("%s cannot be %s." % [
 			target.cname, "exhausted" if cond == "exhaustion" else cond])
 		return
@@ -1621,12 +1642,26 @@ const MELEE_ONLY_BUFFS := ["raging"]
 
 func _buff_damage_extras(attacker, ranged: bool) -> Array:
 	var out: Array = []
+	var spent: Array = []
 	for id in attacker.statuses:
 		var s = attacker.statuses[id]
 		if ranged and id in MELEE_ONLY_BUFFS:
 			continue
-		if s is Dictionary and int(s.get("bonus_damage", 0)) != 0:
-			out.append({"amount": int(s["bonus_damage"]), "label": id})
+		if not s is Dictionary:
+			continue
+		# `dice_count`, not `dice_sides`: an ally_buff writes dice_sides into
+		# `inspired`, which is a bonus to a d20 and emphatically not damage.
+		var dice: int = int(s.get("dice_count", 0))
+		if int(s.get("bonus_damage", 0)) == 0 and dice <= 0:
+			continue
+		var amount: int = int(s.get("bonus_damage", 0))
+		if dice > 0:
+			amount += Dice.roll(rng, "%dd%d" % [dice, int(s.get("dice_sides", 6))])
+		out.append({"amount": amount, "label": id})
+		if s.get("once", false):
+			spent.append(id)   # the blow that read it is the blow that spends it
+	for id in spent:
+		attacker.statuses.erase(id)
 	return out
 
 func resolve_attack(attacker, target, opts := {}) -> Dictionary:

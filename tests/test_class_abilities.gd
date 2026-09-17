@@ -80,6 +80,7 @@ func _init() -> void:
 	test_extra_attack_reaches_the_board()
 	test_authored_abilities()
 	test_new_mechanics()
+	test_smite_and_aura_immunity()
 	report()
 	print("test_class_abilities: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -681,6 +682,63 @@ func flare_hits(with_flare: bool) -> int:
 		if cb.resolve_attack(ogre, cleric).get("hit", false):
 			hits += 1
 	return hits
+
+# --- a Smite rides one blow, and an aura can say "no" --------------------
+#
+# Two more shapes the engine could not hold. A self_buff was a STANDING fact
+# (Rage: +2 on every swing until the fight ends) and a Smite is dice on exactly
+# one of them, so `once` decides whether the blow that reads a buff also spends
+# it. And an aura carried a number; Aura of Devotion carries a refusal.
+func test_smite_and_aura_immunity() -> void:
+	var board: Dictionary = Encounter.board_for("sunken-shrine")
+	var pal = Adapter.to_combatant(build("paladin", "oathofdevotion", 8), "party", Vector2i(2, 0))
+	var dummy = Encounter.spawn("ogre", 1.0, "foe", Vector2i(3, 0), 1)
+	dummy.max_hp = 9999
+	dummy.hp = dummy.max_hp
+	var cb = Combat.new(RNG.new(5), [pal, dummy], board)
+	var smite := verb(pal, "paladin-divine-smite")
+	check(int(smite.get("dice_count", 0)) == 2 and int(smite.get("dice_sides", 0)) == 8,
+		"paladin: Divine Smite is 2d8 (%s)" % str(smite))
+	check(int(pal.pools.get("paladin-divine-smite", {}).get("max", 0)) == pal.sheet.mod("cha"),
+		"paladin: CHA-mod smites per long rest")
+
+	# Pressed, it rides the NEXT blow and only that one.
+	cb.begin_turn_for(pal)
+	cb.perform(pal, smite, null)
+	check(pal.has("divine-smite"), "the smite is held until a blow reads it")
+	var landed := 0
+	var smited := 0
+	for _swing in 3:
+		var r: Dictionary = cb.resolve_attack(pal, dummy)
+		if r.has("error"):
+			break
+		if r.get("hit", false):
+			landed += 1
+			for e in r.get("extras", []):
+				if String(e["label"]) == "divine-smite":
+					smited += 1
+	check(landed >= 1, "the paladin landed a blow to smite with (%d)" % landed)
+	check(smited == 1, "Divine Smite rode exactly one of %d blows (%d)" % [landed, smited])
+	check(not pal.has("divine-smite"), "...and is gone once it has been spent")
+
+	# A minimum of one use, whatever the ability modifier says. RAW says so for
+	# every one of these, and a pool of 0 is a button nobody can ever press.
+	var dumped = Adapter.to_combatant(build("cleric", "lightdomain", 4), "party", Vector2i.ZERO)
+	dumped.sheet.abilities["wis"]["mod"] = -1
+	check(int(dumped.pools.get("lightdomain-warding-flare", {}).get("max", 0)) >= 1,
+		"an ability-sized pool never lands on zero")
+
+	# Aura of Devotion: a refusal rather than a number.
+	var near = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(3, 0))
+	var far = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(9, 5))
+	far.id = "far-two"
+	var cb2 = Combat.new(RNG.new(5), [pal, near, far], board)
+	check("charmed" in cb2.aura_immunities(near), "an ally in the aura cannot be Charmed")
+	check(not "charmed" in cb2.aura_immunities(far), "...and one across the room can")
+	cb2.apply_condition(near, "charmed", far)
+	check(not near.has("charmed"), "the aura actually refuses the condition")
+	cb2.apply_condition(far, "charmed", near)
+	check(far.has("charmed"), "...and outside it the condition lands")
 
 # --- the report ----------------------------------------------------------
 #

@@ -5392,3 +5392,50 @@ spell slot), Wild Shape, Metamagic, Portent, Arcane Ward, Primal Companion and
 Invoke Duplicity. The other three paladin auras (Devotion's charm immunity,
 Ancients' resistance, Glory's speed) need aura *payloads* beyond `save_bonus`,
 which is a smaller job now the kind exists.
+
+## T-classes-d — a Smite rides one blow, and an aura can say no (2026-09-17)
+
+Two more shapes the engine could not hold, and the two features that wanted
+them. Both turned out to be a single flag or a single payload on machinery
+T-classes-c had already built, which is the point of having built it.
+
+**A `self_buff` was a standing fact.** Rage is +2 on every swing until the
+fight ends, and `_buff_damage_extras` read every damage buff that way — so
+Divine Smite modelled as a self_buff would have added 2d8 to *every blow of the
+fight* off one Bonus Action. `once` is the flag that separates them: the blow
+that reads the buff is the blow that spends it. The same function also rolls
+dice now, rather than only adding a flat number, because a Smite is 2d8 and not
+9 — guarded on `dice_count` rather than `dice_sides`, since an `ally_buff`
+writes `dice_sides` into `inspired` and that is a bonus to a d20, emphatically
+not damage.
+
+`paladin-divine-smite` is 2024's: a Bonus Action, 2d8 radiant, CHA-mod free
+casts per Long Rest. It is the same shape `monster-divine-eminence` has used
+since T16, plus `once`.
+
+**An aura carried a number; Aura of Devotion carries a refusal.**
+`aura_immunities()` is the condition half of `aura_bonus()`, read at the top of
+`apply_condition` beside the statblock's own `cond_immune`.
+`oathofdevotion-aura-of-devotion` is "you and your allies in your aura can't be
+Charmed", and it is asserted from both sides: the condition bounces off an ally
+standing beside the paladin and lands on one across the room.
+
+**And a floor under every ability-sized pool.** Warding Flare is WIS-mod uses,
+Divine Smite is CHA-mod, and RAW says "a minimum of once" for both. Without the
+floor a cleric who dumped WIS carried the button and could never press it —
+which is exactly the 0-max-pool bug T-classes fixed once already, from the
+other end. `Effects._uses()` is the single place that floor lives now.
+
+**Two known simplifications, written down rather than hidden.** A buff's
+`damage_type` is authored and unread: every extra folds into the blow's own
+damage type, so a Smite's radiant reads as the weapon's slashing against
+anything that resists one and not the other. Typing the extras pipeline is a
+real change and not this one. And `power.gd` still prices neither `reaction`
+nor `aura`, so Warding Flare, Aura of Protection and Aura of Devotion are all
+free in the estimator's eyes — the same note T-classes-c left.
+
+**Still not done:** Wild Shape, Metamagic, Portent, Arcane Ward, Primal
+Companion and Invoke Duplicity. Oath of the Ancients' aura (resistance to
+damage from spells) and Oath of Glory's (a speed bonus) need two more aura
+payloads: resistance is a read in `_apply_damage`, speed a read in
+`begin_turn_for`. Both are now small.

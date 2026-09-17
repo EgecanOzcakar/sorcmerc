@@ -884,5 +884,29 @@
       "ability": "cha"
     }
   },
-  "_note_classes_c": "T-classes-c: the features that needed the engine to learn a new word. Three ride `requires` predicates combat._requires_met() did not have (a damaged target, an active Rage, the first round); Warding Flare rides a reaction payload that imposes Disadvantage instead of adding AC; Aura of Protection is the first `aura`, which is not a verb anyone presses but a standing fact combat.aura_bonus() reads where a save is rolled."
+  "_note_classes_c": "T-classes-c: the features that needed the engine to learn a new word. Three ride `requires` predicates combat._requires_met() did not have (a damaged target, an active Rage, the first round); Warding Flare rides a reaction payload that imposes Disadvantage instead of adding AC; Aura of Protection is the first `aura`, which is not a verb anyone presses but a standing fact combat.aura_bonus() reads where a save is rolled.",
+  "paladin-divine-smite": {
+    "kind": "self_buff",
+    "cost": "bonus",
+    "status": "divine-smite",
+    "once": true,
+    "dice": {
+      "count": 2,
+      "sides": 8
+    },
+    "damage_type": "radiant",
+    "uses": {
+      "by": "ability_mod",
+      "ability": "cha"
+    }
+  },
+  "oathofdevotion-aura-of-devotion": {
+    "kind": "aura",
+    "cost": "none",
+    "trigger": "passive",
+    "range_ft": 10,
+    "cond_immune": [
+      "charmed"
+    ]
+  }
 }

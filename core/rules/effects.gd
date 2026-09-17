@@ -150,8 +150,9 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 				"vs", "ac_bonus", "dc", "dc_plus_damage", "except", "max_damage",
 				"relies_on", "passive_bonus", "magical",
 				# T-classes-c: a reaction that imposes Disadvantage rather than
-				# adding AC (Warding Flare), and the aura payloads.
-				"disadvantage"]:
+				# adding AC (Warding Flare), the aura payloads, and `once` —
+				# the flag that separates a Smite from a Rage.
+				"disadvantage", "cond_immune", "once"]:
 			if e.has(k):
 				v[k] = e[k]
 		if e.has("dice"):
@@ -175,12 +176,19 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 			# and the feature has been on the bar greyed out and unpressable ever
 			# since. An authored `uses` is the fallback when the export has none.
 			if int(v["uses"]) == 0 and e.has("uses"):
-				v["uses"] = scale(e["uses"], sheet)
+				v["uses"] = _uses(e["uses"], sheet)
 		elif e.has("uses"):
 			v["pool"] = fid          # synthetic pool: the export grants no pool for this feature
-			v["uses"] = scale(e["uses"], sheet)
+			v["uses"] = _uses(e["uses"], sheet)
 		out.append(v)
 	return out
+
+# An authored `uses`, floored at one. Several are sized off an ability modifier
+# and RAW says "a minimum of once" every time (Warding Flare, Divine Smite);
+# without the floor a cleric who dumped WIS would carry the button and never be
+# able to press it — the 0-max-pool bug T-classes fixed once from the other end.
+static func _uses(spec, sheet) -> int:
+	return maxi(1, scale(spec, sheet))
 
 # Who a verb is pointed at. combat.gd's available()/legal_target() read this.
 const TARGETING := {"heal_ally": "ally", "ally_buff": "ally", "save_effect": "enemy"}
@@ -342,7 +350,7 @@ static func validate() -> Array[String]:
 		if f[id].get("kind", "") == "aura":
 			if int(f[id].get("range_ft", 0)) <= 0:
 				errs.append("features.json: aura \"%s\" has no range_ft" % id)
-			if not f[id].has("save_bonus"):
+			if not f[id].has("save_bonus") and not f[id].has("cond_immune"):
 				errs.append("features.json: aura \"%s\" carries no payload" % id)
 	var sp = Catalog.all("effects/spells.json")
 	for id in sp:
