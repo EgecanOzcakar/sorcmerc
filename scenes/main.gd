@@ -281,7 +281,10 @@ func _ready() -> void:
 	_hud_layer.add_child(_hud_overlay)
 
 	_actor.bbcode_enabled = true
-	_actor.fit_content = true
+	# #91: NOT fit_content. The line under the board is held at ACTOR_LINES
+	# tall whatever it says, so a two-line readout does not shove the board
+	# up and a one-line one does not drop it back.
+	_actor.fit_content = false
 	_actor.scroll_active = false
 	_actor.add_theme_font_size_override("normal_font_size", Icons.FS_HEAD)
 	_actor.add_theme_font_size_override("bold_font_size", Icons.FS_HEAD)
@@ -317,6 +320,8 @@ func _apply_ui_scale() -> void:
 	_header.add_theme_font_size_override("font_size", int(Icons.FS_TITLE * u))
 	_actor.add_theme_font_size_override("normal_font_size", int(Icons.FS_HEAD * u))
 	_actor.add_theme_font_size_override("bold_font_size", int(Icons.FS_HEAD * u))
+	_actor.custom_minimum_size.y = _actor.get_theme_font("normal_font").get_height(int(Icons.FS_HEAD * u)) \
+		* ACTOR_LINES + _actor.get_theme_constant("line_separation") * (ACTOR_LINES - 1) + 6
 	# the log is a narrow sidebar now — body size wraps far less than head size
 	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
 	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
@@ -1865,6 +1870,7 @@ func _draw_wash(res: String) -> void:
 const TURN_BEAT := 0.75
 
 const BUTTON_ROWS := 3
+const ACTOR_LINES := 2   # #91: the readout's fixed height, in lines
 
 func _process(dt: float) -> void:
 	if _wash != null:
