@@ -53,6 +53,32 @@ class WorldClock extends RefCounted:
 	func set_speed(mult: float) -> void:
 		speed = mult if mult in SPEEDS else SPEEDS[0]
 
+	# #85: how bright the world is right now, 0 (deep night) to 1 (full day),
+	# from the hour of the day. Dawn 5-7, dusk 18-20, a night floor of 0.22 so
+	# the map is still readable. Pure: the map, the dioramas and anything else
+	# that wants to look like the time of day read this one number.
+	const NIGHT_FLOOR := 0.22
+	func daylight() -> float:
+		var h := fmod(elapsed / 60.0, 24.0)
+		var k := 0.0
+		if h >= 5.0 and h < 7.0:
+			k = (h - 5.0) / 2.0
+		elif h >= 7.0 and h < 18.0:
+			k = 1.0
+		elif h >= 18.0 and h < 20.0:
+			k = 1.0 - (h - 18.0) / 2.0
+		k = smoothstep(0.0, 1.0, k)
+		return lerpf(NIGHT_FLOOR, 1.0, k)
+
+	# The colour the light has: warm at the edges of the day, blue at night.
+	func daylight_tint() -> Color:
+		var d := daylight()
+		var night := Color(0.55, 0.62, 0.95)
+		var gold := Color(1.0, 0.82, 0.62)
+		var h := fmod(elapsed / 60.0, 24.0)
+		var edge: float = 1.0 - minf(1.0, absf(h - 6.0) / 1.5) if h < 12.0 else 1.0 - minf(1.0, absf(h - 19.0) / 1.5)
+		return night.lerp(Color.WHITE, (d - NIGHT_FLOOR) / (1.0 - NIGHT_FLOOR)).lerp(gold, edge * 0.6) * d
+
 	# 1x -> 2x -> 4x -> 8x -> 1x, whatever the current speed's nearest slot is.
 	func cycle_speed() -> void:
 		var i: int = maxi(0, SPEEDS.find(speed))

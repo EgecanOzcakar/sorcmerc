@@ -3043,6 +3043,8 @@ func _draw_ground() -> void:
 	m.set_shader_parameter("rect_size", size)
 	m.set_shader_parameter("player", p.position if p != null else Vector2(1e9, 1e9))
 	m.set_shader_parameter("time_s", Time.get_ticks_msec() / 1000.0)
+	var tint: Color = world.clock.daylight_tint()   # #85
+	m.set_shader_parameter("daylight", Vector3(tint.r, tint.g, tint.b))
 
 const MASK_MAX := 96      # texels a side; far out a texel spans several cells, and nobody can tell
 

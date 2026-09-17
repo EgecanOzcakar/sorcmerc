@@ -15,7 +15,29 @@ func check(cond: bool, label: String) -> void:
 		_fail += 1
 		printerr("  FAIL: ", label)
 
+# #85: the clock says how bright the world is.
+func test_daylight() -> void:
+	var c := World.WorldClock.new()
+	c.elapsed = 12 * 60.0
+	check(is_equal_approx(c.daylight(), 1.0), "noon is full day")
+	c.elapsed = 2 * 60.0
+	check(is_equal_approx(c.daylight(), World.WorldClock.NIGHT_FLOOR), "2am is the night floor, not black")
+	c.elapsed = 6 * 60.0
+	var dawn := c.daylight()
+	check(dawn > World.WorldClock.NIGHT_FLOOR and dawn < 1.0, "6am is on its way up (%.2f)" % dawn)
+	c.elapsed = 19 * 60.0
+	var dusk := c.daylight()
+	check(dusk > World.WorldClock.NIGHT_FLOOR and dusk < 1.0, "7pm is on its way down (%.2f)" % dusk)
+	c.elapsed = (24 + 12) * 60.0
+	check(is_equal_approx(c.daylight(), 1.0), "and it wraps: noon the next day is day again")
+	c.elapsed = 12 * 60.0
+	check(c.daylight_tint().is_equal_approx(Color.WHITE), "noon light is white")
+	c.elapsed = 2 * 60.0
+	var t := c.daylight_tint()
+	check(t.b > t.r and t.b < 0.3, "night light is dim and blue (%s)" % t)
+
 func _init() -> void:
+	test_daylight()
 	test_clock_advances_only_unpaused()
 	test_clock_speed()
 	test_party_moves_toward_goal_without_overshooting()

@@ -39,6 +39,7 @@ uniform float sight_feather = 60.0;
 uniform vec3 fog_unknown = vec3(0.03, 0.03, 0.045);
 uniform vec4 fog_remembered = vec4(0.05, 0.05, 0.09, 0.55);
 uniform float time_s = 0.0;
+uniform vec3 daylight = vec3(1.0);   // #85: WorldClock.daylight_tint(), the time of day on the ground
 
 vec2 to_world(vec2 sp) {
 	vec2 v = (sp - origin) / zoom;
@@ -67,6 +68,7 @@ void fragment() {
 	vec3 wa = texture(water_tex, uv * 0.8 + vec2(time_s * 0.004, time_s * 0.002)).rgb * vec3(0.72, 0.86, 0.98);
 	vec3 col = mix(g, f, k.r);
 	col = mix(col, wa, k.g);
+	col *= daylight;
 	float vis = 1.0 - smoothstep(sight - sight_feather, sight + sight_feather, distance(w, player));
 	col = mix(col, fog_remembered.rgb, fog_remembered.a * (1.0 - vis));
 	col = mix(fog_unknown, col, explored);
