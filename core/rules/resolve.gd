@@ -62,8 +62,7 @@ static func resolve(ch) -> Resolved:
 	var armor_ac = PassGear.armor_ac(r.equipment, r.mod("dex"), r.proficiencies["armor"])
 
 	# 6. ac
-	var bardic := PassDefense.bardic_inspiration(b, Bundles.class_level(b, "bard"), r.mod("cha"))
-	var acr := PassDefense.ac(b, r.abilities, armor_ac, int(bardic.get("die_size", 0)))
+	var acr := PassDefense.ac(b, r.abilities, armor_ac)
 	r.ac = acr["ac"]
 	r.ac_breakdown = acr["breakdown"]
 

@@ -5062,3 +5062,125 @@ bank"*) and now asserts the fix.
 still the only terrain, so this routes around lakes and rivers and nothing
 else. And a band's route is drawn nowhere — the map shows the player's goal
 ring and has never shown anyone else's.
+
+## T-classes — every class and subclass, built and played (2026-09-17)
+
+The rules engine had 48 subclasses and three of them were ever built. Every
+rules test that needed a character reached for `core/presets.gd` — Vera the
+Champion, Pike the Thief, Ilsa of the Light Domain — or for a bare
+`_build("sorcerer", 5)` fixture. Both shapes share a blind spot that turns out
+to matter more than the missing subclasses: **nothing was decided**. A fixture
+with no ASI taken, no fighting style, no spells picked exercises maybe half of
+what the resolver does, because the other half only exists once a build has
+answered its choice points.
+
+`tests/test_class_abilities.gd` deals the 48 (class, subclass) pairs into twelve
+four-hero teams — round-robin, so a team is four different classes — builds each
+team at **level 4** and again at **level 8**, resolving every pending choice
+through the creator's own static choice model the way a player would, equips the
+best weapon and armor each build is proficient with, and then puts all four on a
+board and presses every button their kit offers. 96 builds, ~7,600 assertions.
+
+Level 4 and 8 because those are the two rungs where there is something to see:
+the subclass has landed (3), the first ASI or feat is spent (4), Extra Attack and
+the level-5/6/7 subclass features have arrived by 8, and the proficiency bonus
+has moved once.
+
+**Six bugs, all of them only visible on a decided build.**
+
+1. **`Bundles.class_level()` counted bundles, not levels.** `collect()` gives
+   each class level one bundle — and then appends *derived* bundles carrying the
+   source they came from, which for a class-origin grant is that same
+   `{origin: class, id, level}` dict: one per chosen fighting style, one per
+   chosen damage type, one per decided feature-choice, and one **per spell
+   picked in a class spell-choice**. Counting them read a decided level-4 bard
+   as level 11, a sorcerer as 12, a wizard as 13. Everything keyed on that
+   number scaled off a level the character never had: a level-4 sorcerer had
+   **12 sorcery points instead of 4**, a level-4 paladin 3 Channel Divinity uses
+   instead of 2, a level-4 Psi Warrior 6 psionic dice instead of 4, a level-8
+   warlock's proficiency-bonus pools 5 instead of 3, and an Eldritch Knight read
+   the third-caster slot table at the wrong row. The bundles carry the level;
+   the highest one seen is the answer.
+
+2. **College of Dance wore its Bardic Inspiration die as armor.** `Dazzling
+   Footwork` is 10 + DEX + CHA; `pass_defense.ac()` added the inspiration *die
+   size* instead. With bug 1 feeding it a level-11 bard, a level-4 dancer stood
+   at **AC 23**, and a level-8 one at 25.
+
+3. **Unarmored Defense ignored whether you were wearing armor.** All three of
+   them are "10 + DEX + something, *while you aren't wearing armor*", and the
+   rider was never read: the resolver took the best of the armored and unarmored
+   calculations whichever you had on. A barbarian in padded armor kept the
+   unarmored number.
+
+4. **…and armor did nothing for a barbarian or a monk.** The flip side of 3,
+   found by fixing it: the export emits the `armored` calculation only for the
+   ten classes with no Unarmored Defense, so once the unarmored one is gated off
+   a barbarian in chain mail had no calculation left at all. Wearing armor is
+   something every class can do; the calculation is now implicit whenever body
+   armor is worn.
+
+5. **The Cleric's Channel Divinity could never be pressed.** The export grants
+   the `channel-divinity` resource pool to the paladin and not to the cleric
+   (SCHEMA gap #4), so `Effects.verbs_for` built the cleric's verb with
+   `uses = pool_max() = 0`, `adapter.gd` synthesized a 0-max pool from it, and
+   the button has sat on the bar greyed out for every cleric in the game. The
+   uses are now authored in `data/effects/features.json` (2/3/4 at cleric 2/6/18)
+   and an authored `uses` is the fallback whenever the export grants no pool.
+   The test's general form of this claim is the one worth keeping: *a button
+   that names a pool must have a pool with something in it.*
+
+6. **Bardic Inspiration only reached an adjacent ally.** No `range_ft` was
+   authored on the `ally_buff`, so it fell through to adapter.gd's 5 ft default.
+   It is 60 feet, which is 10 hexes.
+
+Plus one that is not a bug so much as a sharp edge: two grants may name the same
+spell (a class cantrip pick and Magic Initiate's, a subclass's always-prepared
+list and a wizard's spellbook), and nothing deduplicated them, so a druid who
+took Poison Spray twice carried **three Poison Sprays on the action bar**.
+`pass_spells.gd` now keeps the first.
+
+**What the sweep does not assert, and prints instead.** A feature with no
+`data/effects/features.json` entry is a flavor feature by design — that default
+is what makes 430 feature ids tractable (`core/rules/effects.gd`). The test ends
+with the inventory of what the default currently costs, per class and subclass:
+
+```
+TOTAL 16 mechanical, 175 flavor (92% of the features these builds carry do
+nothing in a fight)
+```
+
+Sixteen. Barbarian's Rage / Reckless Attack / Extra Attack, the fighter's three,
+the rogue's three, the monk's five, the bard's inspiration and the cleric's
+Channel Divinity — and **not one subclass feature in the game**, at any level, in
+any class. Every Berserker's Frenzy, every Assassin's Assassinate, every
+Warding Flare and Sacred Weapon and Sneak-Attack-with-a-psychic-blade is prose on
+a sheet. Alongside it the same report lists the eleven resource pools the engine
+grants and no verb can spend (`sorcery-points`, `psionic-energy`, `war-priest`,
+`portent`, …) — a resource bar the player watches fill and can never use.
+
+That is the backlog this test exists to make visible, and it is deliberately a
+`print`, not a `check`: authoring a subclass's mechanics should make the number
+go down, never make the suite go red.
+
+**One knock-on that wants a measured re-run.** Fixing the cleric's Channel
+Divinity makes a cleric genuinely stronger, and `core/rules/power.gd` scores
+that honestly: Ilsa goes 19.6 → 23.9, and the level-3 preset trio the whole
+difficulty curve is anchored on goes 46.6 → 53.9. `core/scaler.gd`'s
+`_budget()` reads the party's live score, so the preset party now buys about
+18% more roster than it did — and that file's own header says to re-run the tier
+sweep after touching any verb. `REF_SCORE`, `TIER` and `CURVE` are deliberately
+left alone here (retuning them is the three-knob measured exercise the header
+describes, not a side effect of a bug fix); `tests/test_rules.gd` and
+`tests/test_regions.gd` had their two anchor assertions restated to claim the
+tier rather than the coincidence, each with the number written down. **The tier
+sweep is owed.**
+
+**Still not done.** The prepared casters have no way to prepare anything: the
+export carries leveled `spell-choice` grants for the bard, sorcerer, warlock and
+wizard, and for the cleric and druid it carries cantrips only — so a level-8
+Circle of the Moon druid has 4/3/3/2 spell slots and **nothing but cantrips to
+spend them on**, and a cleric casts their domain list or nothing. That wants a
+daily-prep screen (or `prepared_count`, which the resolver already computes and
+nobody reads), not a one-line fix, so it is written down here rather than
+patched over.

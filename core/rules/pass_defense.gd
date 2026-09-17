@@ -3,8 +3,6 @@ extends RefCounted
 
 const Bundles = preload("res://core/rules/bundles.gd")
 
-const BARDIC_DIE := [6, 6, 6, 6, 8, 8, 8, 8, 8, 10, 10, 10, 10, 10, 12, 12, 12, 12, 12, 12]
-
 # L1 = max die + CON; L2+ = the roll (or die/2+1) + CON; then hp-bonus x level.
 # hp_rolls is indexed by level row; index 0 (level 1) is ignored. -1 = average.
 static func hp(bundles: Array, hp_rolls: Array, con_mod: int, level: int) -> int:
@@ -41,28 +39,58 @@ static func speed(bundles: Array) -> Dictionary:
 				best[mode] = best["walk"]
 	return best
 
+# An Unarmored Defense that needs both hands free as well as a bare chest. The
+# barbarian's is the odd one out — RAW it is the only one that still works with a
+# Shield in hand.
+const NO_SHIELD_FORMULAS := ["monk", "dance"]
+
 # {ac: int, breakdown: Array}. Highest calculation base + every bonus.
-static func ac(bundles: Array, abilities: Dictionary, armor_ac, bardic_die: int = 0) -> Dictionary:
+static func ac(bundles: Array, abilities: Dictionary, armor_ac) -> Dictionary:
 	var dex: int = int(abilities["dex"]["mod"])
+	# "While you aren't wearing armor" is half of every Unarmored Defense's text
+	# and none of it was read: a barbarian in padded armor took max(11 + DEX,
+	# 10 + DEX + CON) and kept the unarmored number while wearing armor.
+	var wearing_body: bool = armor_ac != null and armor_ac["totalBase"] != null
+	var using_shield: bool = armor_ac != null and (int(armor_ac["shieldBonus"]) > 0
+		or bool(armor_ac["non_proficient_shield"]))
 	var calcs: Array = []
 	for tg in Bundles.of_type(bundles, "armor-class"):
 		var c: Dictionary = tg["grant"]["calculation"]
 		var base := 0
 		match c["mode"]:
 			"armored":
-				base = int(armor_ac["totalBase"]) if armor_ac != null and armor_ac["totalBase"] != null else 10 + dex
+				base = int(armor_ac["totalBase"]) if wearing_body else 10 + dex
 			"natural":
 				base = int(c["baseAc"])
 			"unarmored":
+				if wearing_body:
+					continue
+				if c["formula"] in NO_SHIELD_FORMULAS and using_shield:
+					continue
 				base = 10 + dex
 				match c["formula"]:
 					"barbarian": base += int(abilities["con"]["mod"])
 					"monk": base += int(abilities["wis"]["mod"])
-					"dance": base += bardic_die
+					# Dazzling Footwork is 10 + DEX + CHA. This used to add the
+					# BARDIC INSPIRATION DIE SIZE instead — a number that belongs
+					# in no AC at all — computed by a bardic_inspiration() helper
+					# here that existed for this one line and is now gone. The die
+					# itself is authored in data/effects/features.json and keyed
+					# off the sheet's class level, which is where the verb that
+					# rolls it has always read it from.
+					"dance": base += int(abilities["cha"]["mod"])
 					_: assert(false, "unhandled unarmored AC formula: " + str(c["formula"]))
 			_:
 				assert(false, "unhandled AC calculation mode: " + str(c["mode"]))
 		calcs.append({"mode": c["mode"], "base": base, "source": tg["source"]})
+	# Barbarian and monk are granted an `unarmored` calculation and NO `armored`
+	# one (the export emits it only for the ten classes with no Unarmored
+	# Defense), so with the gate above a barbarian in chain mail would have had
+	# no calculation left at all and fallen back to 10 + DEX — armor ignored.
+	# Wearing armor is a thing every class can do; the calculation is implicit.
+	if wearing_body and not calcs.any(func(c): return c["mode"] == "armored"):
+		calcs.append({"mode": "armored", "base": int(armor_ac["totalBase"]),
+			"source": {"origin": "item", "id": "armor"}})
 
 	var bonuses: Array = []
 	for tg in Bundles.of_type(bundles, "ac-bonus"):
@@ -80,12 +108,3 @@ static func ac(bundles: Array, abilities: Dictionary, armor_ac, bardic_die: int 
 	var breakdown: Array = calcs.duplicate()
 	breakdown.append_array(bonuses)
 	return {"ac": total, "breakdown": breakdown}
-
-# Bard only: {die_size, uses} or {}.
-static func bardic_inspiration(bundles: Array, bard_level: int, cha_mod: int) -> Dictionary:
-	if bard_level < 1:
-		return {}
-	for tg in Bundles.of_type(bundles, "feature"):
-		if tg["grant"]["feature"]["id"] == "bard-bardic-inspiration":
-			return {"die_size": BARDIC_DIE[mini(20, bard_level) - 1], "uses": maxi(1, cha_mod)}
-	return {}

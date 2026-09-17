@@ -216,10 +216,26 @@ static func proficiency_bonus(level: int) -> int:
 	if level < 17: return 5
 	return 6
 
-# Counts class-origin bundles — one per class level.
+# The highest class level tagged on a class-origin bundle.
+#
+# This used to COUNT class-origin bundles, on the reading that collect() appends
+# exactly one per class level. It does — at step 2. Steps 4, 5, 6, 12 and 13 then
+# append DERIVED bundles carrying the source they were derived from, which for a
+# class-origin grant is that same {origin: class, id, level} dict: one per chosen
+# fighting style, one per chosen damage type, one per decided feature-choice, and
+# — the big one — one per spell picked in a class spell-choice. So the count was
+# the class level only for a build with nothing decided yet, which is exactly the
+# shape every test fixture had. A decided level-4 bard counted 11, a level-4
+# sorcerer 12, a level-4 wizard 13, and everything keyed on this number (Bardic
+# die and College of Dance AC, sorcery points and Channel Divinity uses, Psi
+# Warrior dice, third-caster slots) scaled off a level the character never had.
+#
+# The level tag is the answer and survives being copied onto a derived bundle, so
+# the highest one seen is the class level.
 static func class_level(bundles: Array, cid: String) -> int:
-	var n := 0
+	var best := 0
 	for b in bundles:
-		if b["source"]["origin"] == "class" and b["source"]["id"] == cid:
-			n += 1
-	return n
+		var s: Dictionary = b["source"]
+		if s["origin"] == "class" and s["id"] == cid:
+			best = maxi(best, int(s.get("level", 0)))
+	return best

@@ -981,8 +981,14 @@ func test_power_ranks_the_heroes() -> void:
 	# Areas now price at two targets (the corner circle / the line land on a
 	# cluster, and the autopilot only throws one where it nets two): ilsa 19.6,
 	# a clear step over vera rather than a dead heat, still the same tier.
-	check(scores["vera"] > scores["pike"] and absf(scores["vera"] - scores["ilsa"]) < 3.0,
-		"vera clears the weaker martial, and stays close to the front-loaded caster")
+	# T-classes: ilsa 23.9. Her Channel Divinity had been built with a 0-use pool
+	# since the cleric's `resource-pool` grant is the one the export omits, so the
+	# button was on her bar and unpressable and the estimator scored its control
+	# at zero. It works now, so a Light cleric with two encounter-long fears on
+	# top of Burning Hands and Scorching Ray really is half again a sword-and-
+	# board fighter over four rounds. The claim is the tier, not the dead heat.
+	check(scores["vera"] > scores["pike"] and scores["ilsa"] < scores["vera"] * 1.6,
+		"vera clears the weaker martial, and stays within a tier of the front-loaded caster")
 	check(scores["pike"] > float(goblin["score"]), "even the squishiest hero beats a mook")
 	check(float(boss["score"]) > float(goblin["score"]) * 2.0, "the brute outscores a mook several times over")
 	# "an order of magnitude" (spec §10 step 9) is a level-10 statement; at level 3 vs a
