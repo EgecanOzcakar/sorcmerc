@@ -371,6 +371,9 @@ func take() -> int:
 func short_rest() -> bool:
 	if state != "visiting" or room.get("kind", "") != "rest" or room.get("rested", false):
 		return false
+	if not Visit.can_short_rest(party):
+		say("Nobody can rest any more today — only a night's sleep will do now.")
+		return false
 	room["rested"] = true
 	_rested = true
 	Visit.rest(party, world, "short-rest")

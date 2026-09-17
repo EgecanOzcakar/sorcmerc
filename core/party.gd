@@ -23,6 +23,9 @@ var quests: Array = []            # T9's quest log — dicts owned by core/quest
 # -INF — keeps the value a normal float through a JSON save round-trip) so a
 # fresh party can always rest immediately.
 var last_long_rest_at: float = -1e12
+# #86: RAW allows two short rests per long rest. Bumped by Visit.rest("short-rest"),
+# cleared by a long rest; Visit.can_short_rest() reads it.
+var short_rests_since_long: int = 0
 # T9x: who stands for the party on the open-world map — the MEMBER ID of one
 # of the active party (picked on the Party screen), resolved to that
 # character's class figure (figures3d.gd's HERO_MODELS) only at render time,

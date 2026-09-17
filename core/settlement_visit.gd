@@ -312,6 +312,9 @@ const SHORT_REST_MINUTES := 60.0
 # time. can_long_rest() below is the gate; T9x's camp-kit rest goes through the
 # same rest()/stamp, so it's covered too, not a second rule to keep in sync.
 const LONG_REST_COOLDOWN := 1440.0
+# #86: RAW's adventuring day — two short rests between long rests. Same shape as
+# core/campaign.gd's MAX_SHORT_RESTS, but counted per long rest, not per run.
+const MAX_SHORT_RESTS := 2
 
 static func rest(party, world, kind := "long-rest") -> void:
 	for ch in party.party_characters():
@@ -319,6 +322,12 @@ static func rest(party, world, kind := "long-rest") -> void:
 	world.clock.elapsed += (LONG_REST_MINUTES if kind == "long-rest" else SHORT_REST_MINUTES)
 	if kind == "long-rest":
 		party.last_long_rest_at = world.clock.elapsed
+		party.short_rests_since_long = 0
+	else:
+		party.short_rests_since_long += 1
+
+static func can_short_rest(party) -> bool:
+	return party.short_rests_since_long < MAX_SHORT_RESTS
 
 static func can_long_rest(party, world) -> bool:
 	return world.clock.elapsed - party.last_long_rest_at >= LONG_REST_COOLDOWN

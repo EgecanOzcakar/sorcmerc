@@ -200,6 +200,7 @@ static func _party_dict(party) -> Dictionary:
 		"roster": roster, "active": Array(party.active), "gold": party.gold,
 		"stash": party.stash.duplicate(true), "quests": party.quests.duplicate(true),
 		"last_long_rest_at": party.last_long_rest_at,
+		"short_rests_since_long": party.short_rests_since_long,
 		"overworld_figure": party.overworld_figure,
 		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 		"road": {"scouted_next": party.scouted_next, "swift_until": party.swift_until,
@@ -219,6 +220,7 @@ static func _party_from(pd: Dictionary):
 			bool(e.get("identified", true)))
 	party.quests = _ints(pd.get("quests", []))
 	party.last_long_rest_at = float(pd.get("last_long_rest_at", -1e12))
+	party.short_rests_since_long = int(pd.get("short_rests_since_long", 0))
 	party.overworld_figure = String(pd.get("overworld_figure", ""))
 	party.travel_orders = pd.get("travel_orders", {}).duplicate(true)   # D3; an old save marches at the default
 	var road: Dictionary = pd.get("road", {})

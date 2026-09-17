@@ -2181,6 +2181,9 @@ func _short_rest() -> void:
 	if _hostile_nearby():
 		_camp_msg.text = "Too dangerous to rest here — something hostile is close."
 		return
+	if not Visit.can_short_rest(party):
+		_camp_msg.text = "The party has rested enough for one day — only a long rest will do now."
+		return
 	Visit.rest(party, world, "short-rest")
 	Sound.play_sfx("rest")
 	_camp_msg.text = "The party takes a short rest. An hour passes."

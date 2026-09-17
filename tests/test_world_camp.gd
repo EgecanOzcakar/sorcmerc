@@ -61,6 +61,12 @@ func _init() -> void:
 	Visit.rest(p3, w, "short-rest")
 	check(is_equal_approx(w.clock.elapsed, before2 + Visit.SHORT_REST_MINUTES), "a short rest spends the shorter time block")
 	check(is_equal_approx(p3.last_long_rest_at, -1e12), "a short rest never stamps the long-rest cooldown")
+	# #86: two short rests per long rest, RAW
+	check(Visit.can_short_rest(p3), "one short rest taken: a second is allowed")
+	Visit.rest(p3, w, "short-rest")
+	check(not Visit.can_short_rest(p3), "two short rests taken: a third is gated")
+	Visit.rest(p3, w, "long-rest")
+	check(Visit.can_short_rest(p3), "a long rest resets the short-rest budget")
 
 	# --- camp kit purchase/consume plumbing (core/party.gd) ---
 	var p4 := _party()
