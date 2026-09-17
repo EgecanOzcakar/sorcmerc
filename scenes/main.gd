@@ -329,7 +329,9 @@ func pan_by(delta: Vector2) -> void:
 		_board.queue_redraw()
 
 func _unhandled_key_input(e: InputEvent) -> void:
-	if not (e is InputEventKey and e.pressed) or _walk != null:
+	if not (e is InputEventKey and e.pressed):
+		return
+	if _walk != null and not _walk_key_ok(e.keycode):
 		return
 	if e.echo and e.keycode not in [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]:
 		return   # key repeat pans; it must not end turns or press hotkeys twice
@@ -917,6 +919,7 @@ func _open_list(h, slot: String, page := 0) -> void:
 			"%s — page %d of %d\nPress for the next page." % [name, page + 1, ceili(float(entries.size()) / per)], meta])
 	opts.append(["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
+	_walk_try("open_list")
 	_board.queue_redraw()
 
 # One spell, several slot levels: a small picker instead of a button per tier.
@@ -1179,6 +1182,7 @@ func board_hex_clicked(hx: Vector2i) -> void:
 		if h.econ["move_left"] > 0 and hx != h.pos and cb.move_field(h).has(hx):
 			_board.slide_from(h)
 			cb.move_to(h, hx)
+			_walk_try("move")
 			_after_hero_action(h)
 
 func _apply_target(h, c) -> void:
@@ -1220,6 +1224,15 @@ static func _reveal_head(res: Dictionary) -> Array:
 
 func board_hex_hovered(hx: Vector2i) -> void:
 	_hover_hex = hx
+	if _walk != null:
+		# The stat card is drawn by Board for anybody standing here (see
+		# _stat_card), so a hover that landed on a living token is the
+		# walkthrough's "inspect". Behind the null check because every other
+		# fight there has ever been pays for every hover otherwise.
+		for c in cb.combatants:
+			if c.pos == hx and not c.is_dead():
+				_walk_try("inspect")
+				break
 	_paint_order_aim()
 	_board.queue_redraw()
 
@@ -1331,6 +1344,11 @@ func _set_buttons(opts: Array) -> void:
 			tip = "Press again to confirm.\n" + tip
 		b.pressed.connect(opts[i][1])
 		b.set_meta("hotkey", hotkey)
+		if tutorial:
+			# T32: the walkthrough's bar card asks for a slot to be hovered, and
+			# this is how it hears that one was. Wired only for the guided fight
+			# — an ordinary bar is rebuilt on every action and owes nothing.
+			b.mouse_entered.connect(_walk_try.bind("hover_slot"))
 		if meta.has("shift_fn"):
 			b.set_meta("shift_fn", meta["shift_fn"])
 		if tip != "":
@@ -1753,8 +1771,16 @@ func _notification(what: int) -> void:
 
 # =====================================================================
 #  T32 walkthrough — presentation only. It spotlights a region of this
-#  same screen and blocks play until it's dismissed; the fight underneath
-#  is an ordinary fight, resolved by the ordinary code.
+#  same screen; the fight underneath is an ordinary fight, resolved by
+#  the ordinary code.
+#
+#  A card that names something you can do (Tutorial.STEPS' `try`) hands
+#  its own region back while it is up: the spotlight becomes a hole in
+#  the dim, so the board takes the click that moves you and the bar takes
+#  the hover that pops a tooltip, through the same handlers play goes
+#  through. Everything outside that region stays blocked, the goblin
+#  still waits (see _advance), and nothing is a gate — Next leaves any
+#  card whether or not the practice was done.
 # =====================================================================
 
 var _walk: Walk = null      # the live overlay, null whenever the tutorial isn't up
@@ -1774,9 +1800,16 @@ func _walk_show(i: int) -> void:
 	if i >= Tutorial.STEPS.size():
 		return
 	var step: Dictionary = Tutorial.STEPS[i]
+	var practice: Dictionary = step.get("try", {})
 	_walk = Walk.new()
 	_walk.target = _walk_target(String(step["target"]))
-	_walk.mouse_filter = Control.MOUSE_FILTER_STOP   # nothing underneath is clickable
+	# STOP, with Walk._has_point cutting the spotlight out of it on a step with
+	# something to practise: everything else on the screen is still deaf.
+	_walk.mouse_filter = Control.MOUSE_FILTER_STOP
+	_walk.act = String(practice.get("act", ""))
+	_walk.live = _walk.act != ""
+	_walk.keys = bool(practice.get("keys", false))
+	_walk.done_text = String(practice.get("done", ""))
 	# On _hud_layer rather than on this Control, and added after _hud_overlay so
 	# it draws after it. T-hud put the HP bars and condition glyphs on a
 	# CanvasLayer above every ordinary child, which included this overlay: a
@@ -1806,6 +1839,15 @@ func _walk_show(i: int) -> void:
 	body.add_theme_color_override("font_color", Icons.COL_BODY)
 	col.add_child(body)
 
+	if _walk.live:
+		var hint := Label.new()
+		hint.text = "▸  " + String(practice.get("hint", ""))
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.custom_minimum_size = Vector2(WALK_CARD_W, 0)
+		hint.add_theme_color_override("font_color", Icons.COL_ACCENT)
+		col.add_child(hint)
+		_walk.hint = hint
+
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.alignment = BoxContainer.ALIGNMENT_END
@@ -1822,19 +1864,74 @@ func _walk_show(i: int) -> void:
 	_walk.card = card
 	_walk.add_child(card)
 
+# The player did the thing the open card invited. Called from the ordinary
+# handlers — the move, the hover, the list — rather than from anything the
+# walkthrough owns, so there is no second, tutorial-only path through any of
+# it, and a step nobody is on costs one comparison.
+func _walk_try(act: String) -> void:
+	if _walk == null or _walk.done or _walk.act != act:
+		return
+	_walk.done = true
+	if _walk.hint != null:
+		_walk.hint.text = "✓  " + _walk.done_text
+		_walk.hint.add_theme_color_override("font_color", WALK_DONE)
+
+# Which keys survive the walkthrough. The view controls always — zoom and pan
+# move nothing in the fight, and a card is easier to read over a board you have
+# framed yourself. The bar's own keys only while a step is inviting them, since
+# a number is the other half of "press [2] to open its list". Never Space or
+# [0]: the turn must not be handed over under a card, because _advance holds
+# the goblin while the overlay is up and would sit there waiting for it.
+const WALK_VIEW_KEYS := [KEY_EQUAL, KEY_KP_ADD, KEY_MINUS, KEY_KP_SUBTRACT, KEY_HOME,
+	KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]
+const WALK_BAR_KEYS := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9,
+	KEY_TAB, KEY_ESCAPE, KEY_B]
+
+func _walk_key_ok(k: int) -> bool:
+	if k in WALK_VIEW_KEYS:
+		return true
+	return _walk != null and _walk.keys and k in WALK_BAR_KEYS
+
 func _walk_end() -> void:
 	if _walk != null:
 		_walk.queue_free()
 		_walk = null
+	# Practice can leave the bar inside a list, or in aim with the board behind
+	# the dim it cannot reach. Neither is a state to hand the next card or,
+	# after Skip and after the last step, ordinary play — so the bar goes back
+	# to the nine slots the way Esc would put it.
+	if (_submenu == "" and _mode == "idle") or _mode == "deploy" or cb == null or cb.is_over():
+		return
+	if cb.turn_idx < 0 or cb.turn_idx >= cb.order.size():
+		return   # combat.gd's current() indexes straight in — see bug_context()
+	var up = cb.current()
+	if up.team == "party" and up.conscious():
+		_build_hero_menu(up)
 
 const WALK_CARD_W := 460.0
+const WALK_DONE := Color("8dffb0")   # the ✓ line, the log's own green for something that landed
 
 # Dims everything but the step's target, outlines it, and parks the card clear of it.
 class Walk extends Control:
 	var target: Control
 	var card: Control
+	var live := false        # the spotlight is a hole: its region takes mouse input
+	var keys := false        # ...and the bar's keys are unlocked too
+	var act := ""            # the practice this step waits for, "" for a card that only reads
+	var done := false
+	var done_text := ""
+	var hint: Label = null
 	var _last := Rect2()
 	const DIM := Color(0.02, 0.03, 0.05, 0.72)
+
+	# The whole overlay is one full-screen Control, so "everything but the
+	# spotlight is blocked" is simply this: inside the hole the overlay is not
+	# there, and the click or the motion falls through to the board, or to the
+	# bar, on the canvas below. The card is a child, and Godot picks children
+	# before their parent, so its own buttons keep working even on the steps
+	# where it has to sit over the lit region.
+	func _has_point(p: Vector2) -> bool:
+		return not (live and _spot().grow(4.0).has_point(p))
 
 	func _process(_dt: float) -> void:
 		var vp := get_viewport_rect().size
@@ -1847,6 +1944,8 @@ class Walk extends Control:
 		if r != _last:              # the layout settles a frame or two after the step opens
 			_last = r
 			queue_redraw()
+		elif live and not done:
+			queue_redraw()          # the ring breathes while the step's practice is outstanding
 		var cs := card.get_combined_minimum_size()
 		var p := Vector2((size.x - cs.x) * 0.5, r.end.y + 16.0)
 		if p.y + cs.y > size.y - 8.0:                       # no room below — go above
@@ -1865,7 +1964,15 @@ class Walk extends Control:
 		draw_rect(Rect2(0, r.end.y, size.x, size.y - r.end.y), DIM)
 		draw_rect(Rect2(0, r.position.y, r.position.x, r.size.y), DIM)
 		draw_rect(Rect2(r.end.x, r.position.y, size.x - r.end.x, r.size.y), DIM)
-		draw_rect(r, Icons.COL_GOLD, false, 3.0)
+		# A live region is ringed brighter and breathing, a read-only one flat:
+		# the outline is the only thing on screen that can say "this half of the
+		# screen is yours again" before the player has tried it.
+		var ring := Icons.COL_GOLD
+		if live:
+			ring = Icons.COL_GOLD.lerp(Color.WHITE, 0.35)
+			if not done:
+				ring.a = 0.65 + 0.35 * (0.5 + 0.5 * sin(Time.get_ticks_msec() / 260.0))
+		draw_rect(r, ring, false, 4.0 if live else 3.0)
 
 	func _notification(what: int) -> void:
 		if what == NOTIFICATION_RESIZED:

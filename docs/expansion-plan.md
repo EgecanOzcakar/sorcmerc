@@ -1175,6 +1175,37 @@ tutorial encounter (in campaign.gd or a new small file, agent's call).
   overlay rather than assuming frame one, and asserts the bar underneath it
   is the eleven-button one and not a deployment phase.
 
+- 2026-09-17: **The cards that name an action now let you do it.** Every
+  step was read-only: the overlay was one full-screen `MOUSE_FILTER_STOP`
+  Control and `_unhandled_key_input` dropped every key while it was up, so
+  "click one to move there", "hover any token for the full stat card",
+  "the popup you get by hovering it" and "pressing one opens its list"
+  were all instructions you could only follow after the walkthrough was
+  over. The four steps that name an action now carry a `try` block in
+  `core/tutorial.gd` (`act`, `hint`, `done`, and `keys` for the one that is
+  about key presses), and while such a step is up **its own region is
+  live**: `Walk._has_point` cuts the spotlight out of the overlay, so the
+  click, the hover and the tooltip fall straight through to the board or
+  the bar on the canvas below, while everything outside the ring stays
+  blocked and the goblin still waits. The practice is the ordinary code
+  path — `board_hex_clicked`, `board_hex_hovered`, `_open_list`, the bar's
+  own `mouse_entered` — reporting to `_walk_try()`, so nothing is faked or
+  duplicated for the tutorial: the move is a real move off a real movement
+  budget. Doing it turns the card's `▸ Try it` line into a green `✓` line;
+  nothing is a gate, and `Next` leaves any card whether or not anybody
+  tried. The keys a card lets through are now a small allowlist
+  (`_walk_key_ok`): the view controls always, the number row / Tab / Esc
+  only on a step that asks for them, and Space or `[0]` never — a turn
+  handed over under a card would stall in `_advance()`'s hold on the AI.
+  Leaving a step puts the bar back on its nine slots, so practice cannot
+  hand the next card (or ordinary play, after Skip) a half-open list or an
+  aim with the board behind the dim. The live ring is brighter and breathes
+  while its practice is outstanding, which is the only thing on screen that
+  can say "this half is yours again". `tests/test_game_flow.gd` pushes a
+  real click at the viewport — not at the handler — over the same board hex
+  under a read-only card and under the live one, and asserts it goes
+  nowhere in the first case and moves the hero in the second.
+
 ## T33 — author combat mechanics for the missing spells (locked 2026-09-11, dispatched now)
 
 Of the 146 catalogued spells, only 8 have a hand-authored combat mechanics
