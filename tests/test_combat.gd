@@ -26,6 +26,7 @@ func check(cond: bool, label: String) -> void:
 		printerr("  FAIL: ", label)
 
 func _init() -> void:
+	test_line_of_sight_stops_at_the_wall()
 	test_rng_deterministic()
 	test_parse()
 	test_advantage_beats_normal()
@@ -564,6 +565,33 @@ func _barbarian(n := 5):
 		ch.add_level("barbarian", -1)
 	ch.equipped = ["greataxe"] as Array[String]
 	return ch
+
+# #79: the board's edge is rock. A board with a bite out of it: a shot across
+# the bite is blocked, a shot along the ground is not, and adjacency always is.
+func test_line_of_sight_stops_at_the_wall() -> void:
+	var board := Encounter.board()
+	var hexes: Array = []
+	for q in 7:
+		for r in 3:
+			if not (r == 1 and q in [2, 3, 4]):   # a wall three hexes long across the middle row
+				hexes.append(Vector2i(q, r))
+	board["hexes"] = hexes
+	board["cover"] = []
+	board["objects"] = []
+	var ch = _barbarian()
+	ch.equipped = ["longbow"] as Array[String]
+	var archer = Adapter.to_combatant(ch, "party", Vector2i(3, 0))
+	var grull = Adapter.from_monster(Catalog.all("monsters.json")[0], "foe", Vector2i(3, 2))
+	var cb = Combat.new(RNG.new(1), [archer, grull], board)
+	check(not cb.has_line_of_sight(Vector2i(3, 0), Vector2i(3, 2)), "the wall between them blocks sight")
+	check(cb.has_line_of_sight(Vector2i(0, 0), Vector2i(6, 0)), "along the open row, sight is clear")
+	check(cb.has_line_of_sight(Vector2i(3, 0), Vector2i(3, 1)), "an adjacent hex is always seen, wall or not")
+	var bow := cb.attack_verb()
+	bow = bow.duplicate(); bow["range"] = 30
+	check(not cb.legal_target(archer, bow, grull), "so a bow cannot be aimed through it")
+	check(not cb.legal_area(archer, {"targeting": "hex", "range": 30}, Vector2i(3, 2)), "nor a fireball")
+	grull.pos = Vector2i(6, 0)
+	check(cb.legal_target(archer, bow, grull), "...and can along the open row")
 
 func test_rage_full_turn() -> void:
 	var ch = _barbarian()

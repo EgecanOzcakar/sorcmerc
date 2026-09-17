@@ -657,7 +657,20 @@ func _offerable(actor, v: Dictionary) -> bool:
 	return true
 
 # Is `c` a legal target for `v` cast/swung by `actor` right now?
+# #79: the board's edge is a wall. A straight hex line from a to b that leaves
+# the board passes through rock, and nothing can be aimed along it. Adjacent
+# hexes always see each other; solid props are cover, not walls, and do not
+# block.
+func has_line_of_sight(a: Vector2i, b: Vector2i) -> bool:
+	var line: Array = Hex.line(a, b)
+	for i in range(1, line.size() - 1):
+		if not (line[i] in board["hexes"]):
+			return false
+	return true
+
 func legal_target(actor, v: Dictionary, c) -> bool:
+	if not has_line_of_sight(actor.pos, c.pos):
+		return false
 	match v.get("targeting", "self"):
 		"enemy":
 			if c.team == actor.team or not c.conscious() or c.has("hidden"):
@@ -915,16 +928,19 @@ func legal_area(caster, v: Dictionary, target) -> bool:
 	match v.get("targeting", ""):
 		"hex", "line":
 			return target is Vector2i and (target in board["hexes"]) and Hex.distance(caster.pos, target) <= r \
-				and (v.get("targeting", "") == "hex" or target != caster.pos)
+				and (v.get("targeting", "") == "hex" or target != caster.pos) \
+				and has_line_of_sight(caster.pos, target)
 		"corner":
 			if not (target is Array) or target.size() != 3:
 				return false
 			var on_board := false
+			var seen := false
 			var near := 99
 			for h in target:
 				on_board = on_board or (h in board["hexes"])
+				seen = seen or (h in board["hexes"] and has_line_of_sight(caster.pos, h))
 				near = mini(near, Hex.distance(caster.pos, h))
-			return on_board and near <= r
+			return on_board and seen and near <= r
 	return true
 
 func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> Dictionary:
