@@ -18,12 +18,17 @@
 #     target_region_id (scout_region) — D7's three, completing via
 #     record_stash/record_settlement_visited/record_region_reached.
 #   required, progress, state: "offered" | "active" | "complete" | "turned_in",
-#   reward: {gold, item_id (optional)}
+#   reward: {gold, item_id (optional)}   — turn-in also pays gold * XP_PER_GOLD in XP
 extends RefCounted
 
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const Ach = preload("res://core/achievements.gd")
+
+# A fight pays XP at about 6.7x its gold (core/encounter.gd's XP_PER_POWER /
+# GOLD_PER_POWER); a quest pays less per coin because it also hands over gear
+# and reputation. 2x puts a 120-gold job at ~4 early open-country fights.
+const XP_PER_GOLD := 2
 
 const BIAS_WEIGHT := 2.0   # what an unfulfilled quest is worth to Scaler.roster_for
 
@@ -311,6 +316,9 @@ static func turn_in(party, quest: Dictionary, faction := "") -> bool:
 		FactionOpinion.raise(faction, FactionOpinion.QUEST_DONE)
 	var reward: Dictionary = quest.get("reward", {})
 	party.add_gold(int(reward.get("gold", 0)))
+	# A finished job teaches something too: XP pegged to the purse, split the
+	# way a fight's is (load(), not preload — campaign.gd preloads this file).
+	load("res://core/campaign.gd").new(party)._split_xp(int(reward.get("gold", 0)) * XP_PER_GOLD)
 	if reward.has("item_id"):
 		party.stash_add(String(reward["item_id"]))
 	# The two kinds that are paid for goods hand the goods over.
