@@ -76,6 +76,18 @@ func _init() -> void:
 	# Advance the wander RNG before saving: restoring the seed alone would rewind it.
 	var elk = _find(w, "elk")
 	elk.ai["rng"].roll_die(100)
+	# T-path: a band mid-detour is carrying a route round the water in its `ai`
+	# dict. It is Vector2s in a plain Array, so the generic encoder should take
+	# it without knowing what it is — which is the whole claim that file makes.
+	# Two passes: the patrol's first leg is the spot it is already standing on,
+	# and it is the second — back to Riverhold, over the river — that needs a
+	# way round. (`bandits` is no use here: this fixture spawns it inside the
+	# lake, and a swimming party is O1's problem, not the pathfinder's.)
+	WorldAI.update(w)
+	WorldAI.update(w)
+	var routed = _find(w, "patrol")
+	check(not WorldAI.pending_route(routed).is_empty(), "the patrolling band planned a route to save")
+	var route_before: Array = WorldAI.pending_route(routed).duplicate()
 
 	WorldSave.save(w, party)
 	check(WorldSave.has_save(), "save() writes the slot")
@@ -113,7 +125,16 @@ func _init() -> void:
 	var pat = _find(w2, "patrol")
 	check(pat.ai.get("behavior", "") == "patrol" and pat.ai["waypoints"].size() == 2
 		and pat.ai["waypoints"][1] == Vector2(0, 0), "patrol waypoints are Vector2s again")
-	check(int(pat.ai.get("index", -1)) == 0, "the patrol's place in its route")
+	check(int(pat.ai.get("index", -1)) == 1, "the patrol's place in its route")
+	var routed2 = _find(w2, "patrol")
+	check(WorldAI.pending_route(routed2).size() == route_before.size(), "the detour survives the save")
+	var same := true
+	for i in route_before.size():
+		same = same and WorldAI.pending_route(routed2)[i] is Vector2 \
+			and WorldAI.pending_route(routed2)[i].is_equal_approx(route_before[i])
+	check(same, "...as Vector2s, waypoint for waypoint")
+	check(WorldAI.destination(routed2).is_equal_approx(WorldAI.destination(routed)),
+		"...and so does what it was walking toward")
 	var elk2 = _find(w2, "elk")
 	check(elk2.ai.get("behavior", "") == "wander" and elk2.ai["home"] == Vector2(0, 0)
 		and is_equal_approx(float(elk2.ai["radius"]), 90.0), "wander home/radius")
