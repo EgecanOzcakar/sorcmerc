@@ -408,6 +408,24 @@
     "kind": "save_effect",
     "cost": "action",
     "pool": "channel-divinity",
+    "uses": {
+      "by": "class_level",
+      "class": "cleric",
+      "steps": [
+        {
+          "min": 2,
+          "value": 2
+        },
+        {
+          "min": 6,
+          "value": 3
+        },
+        {
+          "min": 18,
+          "value": 4
+        }
+      ]
+    },
     "save": "wis",
     "shape": "single",
     "range_ft": 30,
@@ -420,6 +438,7 @@
     "kind": "ally_buff",
     "cost": "bonus",
     "status": "inspired",
+    "range_ft": 60,
     "dice": {
       "count": 1,
       "sides": {
@@ -677,5 +696,228 @@
       "smell"
     ],
     "passive_bonus": 5
+  },
+  "paladin-extra-attack": {
+    "kind": "attacks_per_action",
+    "value": 2
+  },
+  "ranger-extra-attack": {
+    "kind": "attacks_per_action",
+    "value": 2
+  },
+  "collegevalor-extra-attack": {
+    "kind": "attacks_per_action",
+    "value": 2
+  },
+  "assassin-assassinate": {
+    "kind": "attack_modifier",
+    "cost": "none",
+    "trigger": "passive",
+    "requires": [
+      "target_has_not_acted"
+    ],
+    "self": "adv"
+  },
+  "wardomain-war-priest": {
+    "kind": "grant_action",
+    "cost": "bonus",
+    "pool": "war-priest",
+    "amount": 0,
+    "extra_attacks": 1
+  },
+  "celestialpatron-healing-light": {
+    "kind": "heal_ally",
+    "cost": "bonus",
+    "pool": "healing-light",
+    "range_ft": 60,
+    "dice": {
+      "count": 1,
+      "sides": 6
+    }
+  },
+  "warriorofmercy-hand-of-healing": {
+    "kind": "heal_ally",
+    "cost": "bonus",
+    "pool": "focus-points",
+    "range_ft": 5,
+    "dice": {
+      "count": 1,
+      "sides": {
+        "by": "class_level",
+        "class": "monk",
+        "steps": [
+          {
+            "min": 1,
+            "value": 6
+          },
+          {
+            "min": 5,
+            "value": 8
+          },
+          {
+            "min": 11,
+            "value": 10
+          },
+          {
+            "min": 17,
+            "value": 12
+          }
+        ]
+      },
+      "plus": {
+        "by": "ability_mod",
+        "ability": "wis"
+      }
+    }
+  },
+  "warrioropenhand-wholeness-of-body": {
+    "kind": "heal_self",
+    "cost": "bonus",
+    "uses": {
+      "by": "pb"
+    },
+    "dice": {
+      "count": 1,
+      "sides": {
+        "by": "class_level",
+        "class": "monk",
+        "steps": [
+          {
+            "min": 1,
+            "value": 6
+          },
+          {
+            "min": 5,
+            "value": 8
+          },
+          {
+            "min": 11,
+            "value": 10
+          },
+          {
+            "min": 17,
+            "value": 12
+          }
+        ]
+      },
+      "plus": {
+        "by": "ability_mod",
+        "ability": "wis"
+      }
+    }
+  },
+  "_note_classes": "T-classes-a: class and subclass features expressible with the vocabulary as it stands. The three -extra-attack entries are parity, not new content: barbarian, fighter and monk had theirs and paladin, ranger and College of Valour did not, so those three swung once at level 5+ while the others swung twice. The rest give a verb to a pool the engine already granted and nothing could spend.",
+  "hunter-hunters-prey-colossus-slayer": {
+    "label": "Colossus Slayer",
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "target_damaged"
+    ],
+    "dice": {
+      "count": 1,
+      "sides": 8
+    }
+  },
+  "berserker-frenzy": {
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "while_raging"
+    ],
+    "dice": {
+      "count": {
+        "by": "class_level",
+        "class": "barbarian",
+        "steps": [
+          {
+            "min": 1,
+            "value": 2
+          },
+          {
+            "min": 9,
+            "value": 3
+          },
+          {
+            "min": 16,
+            "value": 4
+          }
+        ]
+      },
+      "sides": 6
+    }
+  },
+  "gloomstalker-dread-ambusher": {
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "first_round"
+    ],
+    "dice": {
+      "count": 2,
+      "sides": 6
+    }
+  },
+  "lightdomain-warding-flare": {
+    "kind": "reaction",
+    "cost": "reaction",
+    "trigger": "would_be_hit",
+    "disadvantage": true,
+    "uses": {
+      "by": "ability_mod",
+      "ability": "wis"
+    }
+  },
+  "paladin-aura-of-protection": {
+    "kind": "aura",
+    "cost": "none",
+    "trigger": "passive",
+    "range_ft": 10,
+    "save_bonus": {
+      "by": "ability_mod",
+      "ability": "cha"
+    }
+  },
+  "_note_classes_c": "T-classes-c: the features that needed the engine to learn a new word. Three ride `requires` predicates combat._requires_met() did not have (a damaged target, an active Rage, the first round); Warding Flare rides a reaction payload that imposes Disadvantage instead of adding AC; Aura of Protection is the first `aura`, which is not a verb anyone presses but a standing fact combat.aura_bonus() reads where a save is rolled.",
+  "paladin-divine-smite": {
+    "kind": "self_buff",
+    "cost": "bonus",
+    "status": "divine-smite",
+    "once": true,
+    "dice": {
+      "count": 2,
+      "sides": 8
+    },
+    "damage_type": "radiant",
+    "uses": {
+      "by": "ability_mod",
+      "ability": "cha"
+    }
+  },
+  "oathofdevotion-aura-of-devotion": {
+    "kind": "aura",
+    "cost": "none",
+    "trigger": "passive",
+    "range_ft": 10,
+    "cond_immune": [
+      "charmed"
+    ]
+  },
+  "oathofancients-aura-of-warding": {
+    "kind": "aura",
+    "cost": "none",
+    "trigger": "passive",
+    "range_ft": 10,
+    "aura_resist": [
+      "necrotic",
+      "psychic",
+      "radiant"
+    ]
   }
 }

@@ -11,11 +11,43 @@
 # `_state()`), not in a module-level table: a party is the only thing that
 # owns its own behavior, and a table keyed by id would need cleanup the
 # moment O5 starts removing dead parties.
+#
+# T-path: a behavior no longer writes `party.goal` itself. It names a
+# DESTINATION and `_steer()` turns that into the next goal, routing round the
+# water (core/world_path.gd) when the straight march would wade. The two are
+# the same point whenever the line is dry, which is every point of a map with
+# no water in it — so a band on dry land behaves exactly as it did before there
+# was a pathfinder. What changes is the band whose prey is across the river:
+# it used to walk to the bank and stand there forever, and a patrol whose next
+# waypoint was over the water never arrived, so it never advanced to the one
+# after it either.
 extends RefCounted
 
 const Scaler = preload("res://core/scaler.gd")
 const RNG = preload("res://core/rng.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const WorldPath = preload("res://core/world_path.gd")
+
+# How close to a waypoint counts as having walked it: slack for a band that
+# slid along a bank on its way there, not an arrival radius. Arrival at the
+# DESTINATION stays exact (`_arrived`), because `move_toward` lands exactly on
+# a goal it can reach and a band that rounds its last waypoint a whole unit
+# early would tick its patrol on a leg it has not finished.
+const WAYPOINT_SLACK := 1.0
+# How far a destination may move from where the route to it was planned before
+# that route is replanned. A hunted player at map speed covers this in three
+# world-minutes, and the tail of a detour is the only part that goes stale.
+const REPLAN_DRIFT := 120.0
+# At most this many routes are planned per update() call, so a map full of
+# blocked bands cannot all pay for Dijkstra on the same frame. A band that is
+# over budget keeps the route it has for one more frame (or, with none, marches
+# straight at its destination, which is exactly the old behavior).
+const REPLAN_BUDGET := 2
+# ...and a band the pathfinder could find no way round for waits this long, in
+# world-minutes, before asking again. Without it a band walled in by water (or
+# aiming at an island) re-runs the search every single frame and eats the whole
+# budget, so the bands that COULD be helped never get a turn.
+const REPLAN_RETRY_MINUTES := 5.0
 
 # The split: `soldier` is the one faction in Scaler.FACTIONS that reads as a
 # settled, civilized power (it's what O1's settlements are garrisoned by);
@@ -75,6 +107,15 @@ static func truce(party, player, now_minutes: float) -> void:
 	if away.length_squared() < 1.0:
 		away = Vector2.RIGHT
 	party.goal = party.position + away.normalized() * BREAK_OFF_DIST
+	# Walking away outranks the behavior until it is done or the truce lapses —
+	# a patrolling band used to break off only because `at_goal()` was false
+	# and its own step happened to leave the goal alone, which stopped being
+	# true once a destination went through `_steer()` every frame. And the
+	# route it was walking is a route to somewhere it is no longer going.
+	party.ai["break_off"] = party.goal
+	party.ai["dest"] = party.goal
+	party.ai.erase("route")
+	party.ai.erase("route_for")
 
 static func in_truce(party, now_minutes: float) -> bool:
 	return float(_state(party).get("truce_until", -1.0)) > now_minutes
@@ -82,41 +123,130 @@ static func in_truce(party, now_minutes: float) -> bool:
 # --- driver ----------------------------------------------------------
 
 # One pass over the world: refresh every non-player party's goal. `_delta` is
-# unused (behaviors are event-driven off `at_goal()`), it's there so O2 can
-# call this straight from `_process(delta)` alongside `world.tick(delta)`.
+# unused (behaviors are event-driven off arrival), it's there so O2 can call
+# this straight from `_process(delta)` alongside `world.tick(delta)`.
+#
+# A behavior returns the destination it wants, or null to leave the goal alone
+# (a hunter with nothing to chase keeps whatever it was doing). `_steer()` is
+# the only writer of `party.goal` in this file.
 static func update(world, _delta := 0.0) -> void:
+	var budget := REPLAN_BUDGET
 	for p in world.parties:
 		if p.is_player:
 			continue
-		match String(_state(p).get("behavior", "")):
-			"patrol": _patrol_step(p)
-			"wander": _wander_step(p)
-			"hunt": _hunt_step(world, p)
+		var dest = _break_off_step(world, p)
+		if dest == null:
+			match String(_state(p).get("behavior", "")):
+				"patrol": dest = _patrol_step(p)
+				"wander": dest = _wander_step(p)
+				"hunt": dest = _hunt_step(world, p)
+		if dest == null:
+			continue
+		if _steer(world, p, dest, budget > 0):
+			budget -= 1
 
 static func _state(party) -> Dictionary:
 	return party.ai if "ai" in party else {}
 
-static func _patrol_step(party) -> void:
-	if not party.at_goal():
-		return
+# The walking-away leg a truce starts, while it is still being walked: the
+# destination every behavior yields to. null once the band has got there, or
+# once the truce has run out from under it.
+static func _break_off_step(world, party):
+	var s: Dictionary = _state(party)
+	if not s.has("break_off"):
+		return null
+	var away: Vector2 = s["break_off"]
+	if in_truce(party, world.clock.elapsed) and party.position.distance_to(away) > WAYPOINT_SLACK:
+		return away
+	s.erase("break_off")
+	return null
+
+# Where the band is actually trying to end up, as the last `_steer()` left it:
+# the behavior's destination, nudged out of the water if that is where it
+# landed. Vector2.INF while a band has never been steered.
+static func destination(party) -> Vector2:
+	return _state(party).get("dest", Vector2.INF)
+
+# Standing on that destination — not on `party.goal`, which on a detour is a
+# waypoint halfway round a lake. Confusing the two is what would make a patrol
+# tick through its whole waypoint list while walking one shoreline. Exact, the
+# same test `RoamingParty.at_goal()` makes: O1's `move_toward` lands on a
+# reachable goal to the unit, and anything looser advances a patrol one tick
+# before it gets where it was going.
+static func _arrived(party) -> bool:
+	var dest: Vector2 = destination(party)
+	if dest == Vector2.INF:
+		return false
+	return party.position.is_equal_approx(dest)
+
+# The waypoints still to walk before the destination, outermost first. Empty
+# when the march is a straight line (which is every march on a dry map).
+static func pending_route(party) -> Array:
+	return _state(party).get("route", [])
+
+# Turns a destination into the next goal. The straight march wherever the
+# straight march is dry; otherwise the first waypoint of a route around the
+# water, kept on the party (so it survives a save) until the destination has
+# wandered off it or the band has walked it out.
+static func _steer(world, party, dest: Vector2, may_plan: bool) -> bool:
+	var s: Dictionary = party.ai
+	# A destination in a lake is a destination nobody can stand on: a wander
+	# roll that landed in the water, a hand-placed patrol waypoint over it.
+	# Left alone it is never "arrived at", so the behavior sitting on top of it
+	# stalls for good — the patrol never takes its next leg, the wanderer never
+	# rolls again.
+	dest = WorldPath.nearest_dry(world, dest)
+	s["dest"] = dest
+	if WorldPath.clear_line(world, party.position, dest):
+		s.erase("route")
+		s.erase("route_for")
+		party.goal = dest
+		return false
+	var route: Array = s.get("route", [])
+	# Forget the waypoints already underfoot, and the whole route when it no
+	# longer starts where the band is standing — a fight, a load or a shove can
+	# put a party somewhere its old plan does not lead from.
+	while not route.is_empty() and party.position.distance_to(route[0]) <= WAYPOINT_SLACK:
+		route.remove_at(0)
+	if not route.is_empty() and not WorldPath.clear_line(world, party.position, route[0]):
+		route = []
+	var planned := false
+	var planned_for: Vector2 = s.get("route_for", dest)
+	var stale: bool = route.is_empty() or planned_for.distance_to(dest) > REPLAN_DRIFT
+	if stale and may_plan and world.clock.elapsed >= float(s.get("replan_at", -1.0)):
+		route = WorldPath.route(world, party.position, dest)
+		s["route_for"] = dest
+		s["replan_at"] = world.clock.elapsed + (REPLAN_RETRY_MINUTES if route.is_empty() else 0.0)
+		planned = true
+	s["route"] = route
+	# No way round at all — walled in, or a goal on an island. O1's own rule
+	# (march at it, stop at the bank) is still better than standing still, and
+	# it is what every band did before this file learned to route.
+	party.goal = dest if route.is_empty() else route[0]
+	return planned
+
+static func _patrol_step(party):
 	var s: Dictionary = party.ai
 	var wps: Array = s["waypoints"]
-	s["index"] = (int(s["index"]) + 1) % wps.size()
-	party.goal = wps[int(s["index"])]
+	if wps.is_empty():
+		return null
+	if _arrived(party):
+		s["index"] = (int(s["index"]) + 1) % wps.size()
+	return wps[int(s["index"])]
 
-static func _wander_step(party) -> void:
-	if not party.at_goal():
-		return
+static func _wander_step(party):
 	var s: Dictionary = party.ai
+	if s.has("dest") and not _arrived(party):
+		return s["dest"]
 	var rng = s["rng"]
 	var angle := deg_to_rad(float(rng.roll_die(360)))
 	var dist := float(s["radius"]) * float(rng.roll_die(100)) / 100.0
-	party.goal = Vector2(s["home"]) + Vector2(cos(angle), sin(angle)) * dist
+	return Vector2(s["home"]) + Vector2(cos(angle), sin(angle)) * dist
 
 # Chases the nearest hostile thing's *current* position, re-read every update —
 # so the goal tracks a target that is itself moving.
 # ponytail: linear scan over 3-8 parties/settlements; index it if the roster grows.
-static func _hunt_step(world, party) -> void:
+static func _hunt_step(world, party):
 	var best = null
 	var best_d := INF
 	for other in world.parties:
@@ -135,5 +265,6 @@ static func _hunt_step(world, party) -> void:
 		if d < best_d:
 			best_d = d
 			best = s.position
-	if best != null:
-		party.goal = best   # a truced hunter with nothing else to chase keeps its break-off goal
+	# null when there is nothing to chase: a civilized band at peace, or a
+	# truced hunter, which then keeps its break-off goal.
+	return best

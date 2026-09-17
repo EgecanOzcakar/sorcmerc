@@ -329,7 +329,9 @@ func pan_by(delta: Vector2) -> void:
 		_board.queue_redraw()
 
 func _unhandled_key_input(e: InputEvent) -> void:
-	if not (e is InputEventKey and e.pressed) or _walk != null:
+	if not (e is InputEventKey and e.pressed):
+		return
+	if _walk != null and not _walk_key_ok(e.keycode):
 		return
 	if e.echo and e.keycode not in [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]:
 		return   # key repeat pans; it must not end turns or press hotkeys twice
@@ -914,6 +916,7 @@ func _open_list(h, slot: String, page := 0) -> void:
 			"%s — page %d of %d\nPress for the next page." % [name, page + 1, ceili(float(entries.size()) / per)], meta])
 	opts.append(["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")])
 	_set_buttons(opts)
+	_walk_try("open_list")
 	_board.queue_redraw()
 
 # One spell, several slot levels: a small picker instead of a button per tier.
@@ -1176,6 +1179,7 @@ func board_hex_clicked(hx: Vector2i) -> void:
 		if h.econ["move_left"] > 0 and hx != h.pos and cb.move_field(h).has(hx):
 			_board.slide_from(h)
 			cb.move_to(h, hx)
+			_walk_try("move")
 			_after_hero_action(h)
 
 func _apply_target(h, c) -> void:
@@ -1217,6 +1221,15 @@ static func _reveal_head(res: Dictionary) -> Array:
 
 func board_hex_hovered(hx: Vector2i) -> void:
 	_hover_hex = hx
+	if _walk != null:
+		# The stat card is drawn by Board for anybody standing here (see
+		# _stat_card), so a hover that landed on a living token is the
+		# walkthrough's "inspect". Behind the null check because every other
+		# fight there has ever been pays for every hover otherwise.
+		for c in cb.combatants:
+			if c.pos == hx and not c.is_dead():
+				_walk_try("inspect")
+				break
 	_paint_order_aim()
 	_board.queue_redraw()
 
@@ -1328,6 +1341,11 @@ func _set_buttons(opts: Array) -> void:
 			tip = "Press again to confirm.\n" + tip
 		b.pressed.connect(opts[i][1])
 		b.set_meta("hotkey", hotkey)
+		if tutorial:
+			# T32: the walkthrough's bar card asks for a slot to be hovered, and
+			# this is how it hears that one was. Wired only for the guided fight
+			# — an ordinary bar is rebuilt on every action and owes nothing.
+			b.mouse_entered.connect(_walk_try.bind("hover_slot"))
 		if meta.has("shift_fn"):
 			b.set_meta("shift_fn", meta["shift_fn"])
 		if tip != "":
@@ -1730,16 +1748,37 @@ func _draw_hud_overlay() -> void:
 		var at: Vector2 = _board._tok.get(id, Vector2.ZERO) + Vector2(0, -s * 1.15)
 		var fs2 := int(14 * fz)
 		var shade := Color(0, 0, 0, col.a * 0.8)
-		_centered_on(_hud_overlay, String(bk.text), at + Vector2(1, 1), fs2, shade)
-		_centered_on(_hud_overlay, String(bk.text), at, fs2, col)
+		Board._centered_on(_hud_overlay, String(bk.text), at + Vector2(1, 1), fs2, shade)
+		Board._centered_on(_hud_overlay, String(bk.text), at, fs2, col)
 
-# draw_string with the string's own width taken out, so `at` is its centre.
-# Board._centered is the same thing bound to Board's own canvas; this one takes
-# the canvas, which is what lets the HUD overlay paint Board-authored text.
-static func _centered_on(ci: CanvasItem, text: String, at: Vector2, fs: int, col: Color) -> void:
-	var f := ThemeDB.fallback_font
-	var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	ci.draw_string(f, at - Vector2(w * 0.5, -fs * 0.36), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+	# T-dmg: the damage numbers, up here for the same reason as the three above
+	# — a figure standing in front used to cover the number over the body it
+	# was hitting. They are the only damage readout the player gets for a foe's
+	# attack or for any area spell (show_reveal fires on the hero's
+	# single-target path alone), so this is the half of the fight that most
+	# needs to be legible.
+	var rv = _board._reveal
+	# "" would be a live id if a combatant ever had one, so the reveal's absence
+	# is checked on rv itself rather than smuggled through an empty string.
+	var told: String = String(rv.tid) if rv != null else ""
+	for f in _board._floats:
+		# The reveal's headline already reads "HIT  7" over this same body, and
+		# at these sizes the two land on top of each other. One event, one
+		# number: the headline wins where it exists, which is the hero's
+		# single-target path and nowhere else.
+		if rv != null and String(f.id) == told:
+			continue
+		var ffs := float(f.fs) * fz
+		var fcol: Color = f.color
+		fcol.a = clampf(1.0 - f.age / Board.FLOAT_TTL, 0.0, 1.0)
+		# Clear of the head, not on it: the offset carries half the glyph now
+		# that the glyph is not a fixed 18px any more.
+		Board._shout(_hud_overlay, String(f.text),
+			f.pos + Vector2(0, -(20.0 + ffs * 0.5 + f.age * 34.0)), int(ffs), fcol)
+
+	# The roll reveal last, so the outcome of a blow sits over everything.
+	if rv != null and _board._tok.has(rv.tid):
+		Board._paint_reveal(_hud_overlay, rv, _board._tok[rv.tid], s, fz)
 
 func _log_width() -> float:
 	return clampf(size.x * 0.26, 260.0, 380.0)
@@ -1750,8 +1789,16 @@ func _notification(what: int) -> void:
 
 # =====================================================================
 #  T32 walkthrough — presentation only. It spotlights a region of this
-#  same screen and blocks play until it's dismissed; the fight underneath
-#  is an ordinary fight, resolved by the ordinary code.
+#  same screen; the fight underneath is an ordinary fight, resolved by
+#  the ordinary code.
+#
+#  A card that names something you can do (Tutorial.STEPS' `try`) hands
+#  its own region back while it is up: the spotlight becomes a hole in
+#  the dim, so the board takes the click that moves you and the bar takes
+#  the hover that pops a tooltip, through the same handlers play goes
+#  through. Everything outside that region stays blocked, the goblin
+#  still waits (see _advance), and nothing is a gate — Next leaves any
+#  card whether or not the practice was done.
 # =====================================================================
 
 var _walk: Walk = null      # the live overlay, null whenever the tutorial isn't up
@@ -1771,9 +1818,16 @@ func _walk_show(i: int) -> void:
 	if i >= Tutorial.STEPS.size():
 		return
 	var step: Dictionary = Tutorial.STEPS[i]
+	var practice: Dictionary = step.get("try", {})
 	_walk = Walk.new()
 	_walk.target = _walk_target(String(step["target"]))
-	_walk.mouse_filter = Control.MOUSE_FILTER_STOP   # nothing underneath is clickable
+	# STOP, with Walk._has_point cutting the spotlight out of it on a step with
+	# something to practise: everything else on the screen is still deaf.
+	_walk.mouse_filter = Control.MOUSE_FILTER_STOP
+	_walk.act = String(practice.get("act", ""))
+	_walk.live = _walk.act != ""
+	_walk.keys = bool(practice.get("keys", false))
+	_walk.done_text = String(practice.get("done", ""))
 	# On _hud_layer rather than on this Control, and added after _hud_overlay so
 	# it draws after it. T-hud put the HP bars and condition glyphs on a
 	# CanvasLayer above every ordinary child, which included this overlay: a
@@ -1803,6 +1857,15 @@ func _walk_show(i: int) -> void:
 	body.add_theme_color_override("font_color", Icons.COL_BODY)
 	col.add_child(body)
 
+	if _walk.live:
+		var hint := Label.new()
+		hint.text = "▸  " + String(practice.get("hint", ""))
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.custom_minimum_size = Vector2(WALK_CARD_W, 0)
+		hint.add_theme_color_override("font_color", Icons.COL_ACCENT)
+		col.add_child(hint)
+		_walk.hint = hint
+
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.alignment = BoxContainer.ALIGNMENT_END
@@ -1819,19 +1882,74 @@ func _walk_show(i: int) -> void:
 	_walk.card = card
 	_walk.add_child(card)
 
+# The player did the thing the open card invited. Called from the ordinary
+# handlers — the move, the hover, the list — rather than from anything the
+# walkthrough owns, so there is no second, tutorial-only path through any of
+# it, and a step nobody is on costs one comparison.
+func _walk_try(act: String) -> void:
+	if _walk == null or _walk.done or _walk.act != act:
+		return
+	_walk.done = true
+	if _walk.hint != null:
+		_walk.hint.text = "✓  " + _walk.done_text
+		_walk.hint.add_theme_color_override("font_color", WALK_DONE)
+
+# Which keys survive the walkthrough. The view controls always — zoom and pan
+# move nothing in the fight, and a card is easier to read over a board you have
+# framed yourself. The bar's own keys only while a step is inviting them, since
+# a number is the other half of "press [2] to open its list". Never Space or
+# [0]: the turn must not be handed over under a card, because _advance holds
+# the goblin while the overlay is up and would sit there waiting for it.
+const WALK_VIEW_KEYS := [KEY_EQUAL, KEY_KP_ADD, KEY_MINUS, KEY_KP_SUBTRACT, KEY_HOME,
+	KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]
+const WALK_BAR_KEYS := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9,
+	KEY_TAB, KEY_ESCAPE, KEY_B]
+
+func _walk_key_ok(k: int) -> bool:
+	if k in WALK_VIEW_KEYS:
+		return true
+	return _walk != null and _walk.keys and k in WALK_BAR_KEYS
+
 func _walk_end() -> void:
 	if _walk != null:
 		_walk.queue_free()
 		_walk = null
+	# Practice can leave the bar inside a list, or in aim with the board behind
+	# the dim it cannot reach. Neither is a state to hand the next card or,
+	# after Skip and after the last step, ordinary play — so the bar goes back
+	# to the nine slots the way Esc would put it.
+	if (_submenu == "" and _mode == "idle") or _mode == "deploy" or cb == null or cb.is_over():
+		return
+	if cb.turn_idx < 0 or cb.turn_idx >= cb.order.size():
+		return   # combat.gd's current() indexes straight in — see bug_context()
+	var up = cb.current()
+	if up.team == "party" and up.conscious():
+		_build_hero_menu(up)
 
 const WALK_CARD_W := 460.0
+const WALK_DONE := Color("8dffb0")   # the ✓ line, the log's own green for something that landed
 
 # Dims everything but the step's target, outlines it, and parks the card clear of it.
 class Walk extends Control:
 	var target: Control
 	var card: Control
+	var live := false        # the spotlight is a hole: its region takes mouse input
+	var keys := false        # ...and the bar's keys are unlocked too
+	var act := ""            # the practice this step waits for, "" for a card that only reads
+	var done := false
+	var done_text := ""
+	var hint: Label = null
 	var _last := Rect2()
 	const DIM := Color(0.02, 0.03, 0.05, 0.72)
+
+	# The whole overlay is one full-screen Control, so "everything but the
+	# spotlight is blocked" is simply this: inside the hole the overlay is not
+	# there, and the click or the motion falls through to the board, or to the
+	# bar, on the canvas below. The card is a child, and Godot picks children
+	# before their parent, so its own buttons keep working even on the steps
+	# where it has to sit over the lit region.
+	func _has_point(p: Vector2) -> bool:
+		return not (live and _spot().grow(4.0).has_point(p))
 
 	func _process(_dt: float) -> void:
 		var vp := get_viewport_rect().size
@@ -1844,6 +1962,8 @@ class Walk extends Control:
 		if r != _last:              # the layout settles a frame or two after the step opens
 			_last = r
 			queue_redraw()
+		elif live and not done:
+			queue_redraw()          # the ring breathes while the step's practice is outstanding
 		var cs := card.get_combined_minimum_size()
 		var p := Vector2((size.x - cs.x) * 0.5, r.end.y + 16.0)
 		if p.y + cs.y > size.y - 8.0:                       # no room below — go above
@@ -1862,7 +1982,15 @@ class Walk extends Control:
 		draw_rect(Rect2(0, r.end.y, size.x, size.y - r.end.y), DIM)
 		draw_rect(Rect2(0, r.position.y, r.position.x, r.size.y), DIM)
 		draw_rect(Rect2(r.end.x, r.position.y, size.x - r.end.x, r.size.y), DIM)
-		draw_rect(r, Icons.COL_GOLD, false, 3.0)
+		# A live region is ringed brighter and breathing, a read-only one flat:
+		# the outline is the only thing on screen that can say "this half of the
+		# screen is yours again" before the player has tried it.
+		var ring := Icons.COL_GOLD
+		if live:
+			ring = Icons.COL_GOLD.lerp(Color.WHITE, 0.35)
+			if not done:
+				ring.a = 0.65 + 0.35 * (0.5 + 0.5 * sin(Time.get_ticks_msec() / 260.0))
+		draw_rect(r, ring, false, 4.0 if live else 3.0)
 
 	func _notification(what: int) -> void:
 		if what == NOTIFICATION_RESIZED:
@@ -1901,7 +2029,12 @@ class Board extends Control:
 	var _tok := {}        # id -> displayed pixel pos (for slide)
 	var _slide := {}      # id -> {from, to, t, dur}: the traversal in progress, see tick()
 	var _hp := {}         # id -> displayed hp value
-	var _floats: Array = []   # {pos: Vector2, text, color, age}
+	# T-dmg: the hp each body was last seen at, so a hit spawns ONE number. _hp
+	# is the bar's eased value and lags for ~20 frames; this one snaps.
+	var _dmg_goal := {}   # id -> hp at the last damage event
+	# `fs`, never `size`: Dictionary.size() owns that name and f.size would
+	# reach the method, not the entry.
+	var _floats: Array = []   # {id, pos, text, color, age, fs}
 	var _flash := {}     # id -> ttl
 	var _hover := Vector2i(999, 999)
 	var _hover_pt := Vector2(1e9, 1e9)   # un-iso'd pixel point under the mouse, for corner aiming
@@ -1921,11 +2054,19 @@ class Board extends Control:
 	var _fx: Array = []
 	# How long a strike is on screen. Raised across the board: at 0.30 a melee
 	# swing was over before the eye found it, which is most of why a fight read
-	# as "fast mode" even at 1x; the melee lunge got a second raise (0.46 ->
-	# 0.60) because the step-in still snapped back before it read as a blow.
-	# Every one of these is divided by the pace setting through Board.tick's
-	# own dt, so Instant still skips them.
-	const FX_TTL := {"melee": 0.60, "ranged": 0.66, "spell": 0.72}
+	# as "fast mode" even at 1x. Every one of these is divided by the pace
+	# setting through Board.tick's own dt, so Instant still skips them.
+	const FX_TTL := {"melee": 0.46, "ranged": 0.52, "spell": 0.70}
+	# T-dmg: the damage number's size range before the zoom multiplies it. The
+	# floor is the old flat 18 plus the weight it was missing; the ceiling is
+	# what a blow that takes half a body deserves. The roll reveal's headline
+	# (HIT / MISS / CRIT!) sits between them.
+	const FLOAT_FS_MIN := 23.0
+	const FLOAT_FS_MAX := 42.0
+	const REVEAL_FS := 32.0
+	# How long a damage number lives. Unchanged at 1.1s — named here because the
+	# reaper and the fade now have to agree on it from two different scripts.
+	const FLOAT_TTL := 1.1
 	var _defeat := -1.0   # T29: seconds since the party wipe, -1 = not wiped
 
 	func play_defeat() -> void:
@@ -1995,6 +2136,7 @@ class Board extends Control:
 		_auto_fit = true
 		texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED   # the floor texture wraps across hexes
 		_tok.clear(); _slide.clear(); _hp.clear(); _floats.clear(); _flash.clear()
+		_dmg_goal.clear()
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
 			_hp[c.id] = float(c.hp)
@@ -2215,17 +2357,35 @@ class Board extends Control:
 				dirty = true
 			else:
 				_tok[c.id] = target
+			# T-dmg: one number per blow. This used to hang off the bar's lerp
+			# below, which fires every frame the bar is still travelling — so a
+			# 14-damage hit drew 21 numbers stacked inside 11 px, each carrying
+			# the *remaining* gap rather than the damage, counting down through
+			# the colour bands to a pile of "-0" in yellow. The newest drew last
+			# and opaque, so "-0" was what the player actually read. Worse the
+			# slower the pace (39 numbers at Weighty) and worse the faster the
+			# monitor (53 at 144 fps); at Instant k clamps to 1 and it was
+			# correctly one, which is why the headless robots never caught it.
+			# docs/spike-damage-numbers.md has the measurement.
+			# First sight primes the latch and reports nothing — a body walking
+			# onto the board has not just taken the hp it happens to be on. It
+			# has to be a real write: defaulting to c.hp without storing it
+			# would re-prime every frame and never see a blow at all.
+			if not _dmg_goal.has(c.id):
+				_dmg_goal[c.id] = float(c.hp)
+			elif not is_equal_approx(float(_dmg_goal[c.id]), float(c.hp)):
+				if float(c.hp) < float(_dmg_goal[c.id]):
+					_spawn_float(c, float(_dmg_goal[c.id]) - float(c.hp))
+					_flash[c.id] = 0.35
+				_dmg_goal[c.id] = float(c.hp)
 			var hv: float = _hp.get(c.id, float(c.hp))
 			if absf(hv - c.hp) > 0.15:
-				if hv > c.hp:
-					_spawn_float(c, hv - c.hp)
-					_flash[c.id] = 0.35
 				_hp[c.id] = lerpf(hv, float(c.hp), k); dirty = true
 			else:
 				_hp[c.id] = float(c.hp)
 		for f in _floats:
 			f.age += dt; dirty = true
-		_floats = _floats.filter(func(f): return f.age < 1.1)
+		_floats = _floats.filter(func(f): return f.age < FLOAT_TTL)
 		# T26 barks: drain the queue, age them out. One line per speaker at a time.
 		while not cb.barks.is_empty():
 			var b: Dictionary = cb.barks.pop_front()
@@ -2291,11 +2451,18 @@ class Board extends Control:
 			canvas.draw_string(f, at - Vector2(w * 0.5, -fs * 0.36), tags,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("e6c15a"))
 
+	# The size is the hit as a fraction of what the body had to lose: 12 damage
+	# ends a goblin and scratches a giant, and the number should not be the same
+	# size in both. sqrt so the ramp is quick at the bottom — most hits are a
+	# small slice of a healthy body, and a flat ratio would leave nearly all of
+	# them at the floor.
 	func _spawn_float(c, amount: float) -> void:
 		var band := Color("ffd24a")
 		if amount >= 12: band = Color("ff5a4a")
 		elif amount >= 6: band = Color("ff9146")
-		_floats.append({"pos": _pix(c.pos), "text": "-%d" % int(round(amount)), "color": band, "age": 0.0})
+		var bite := sqrt(clampf(amount / maxf(1.0, float(c.max_hp)), 0.0, 1.0))
+		_floats.append({"id": c.id, "pos": _pix(c.pos), "text": "-%d" % int(round(amount)),
+			"color": band, "age": 0.0, "fs": lerpf(FLOAT_FS_MIN, FLOAT_FS_MAX, bite)})
 
 	func _gui_input(e: InputEvent) -> void:
 		if cb == null:
@@ -2736,48 +2903,17 @@ class Board extends Control:
 		# rig's chest is. What a character says was being read by the model
 		# standing in front of it. They paint in main.gd's _draw_hud_overlay now.
 
-		# floating damage
-		for f in _floats:
-			var col: Color = f.color
-			col.a = 1.0 - f.age / 1.1
-			draw_string(ThemeDB.fallback_font, f.pos + Vector2(-8, -(20.0 + f.age * 34.0)), f.text,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 18, col)
+		# The damage numbers went the same way as the barks above, the odds chip
+		# and the HP bar before them, and for the fourth time for the same
+		# reason: a Figures3D model is a Board child and draws over everything
+		# painted here, so whoever was standing in front of a body covered that
+		# body's damage. They paint in main.gd's _draw_hud_overlay now.
 
-		# --- roll reveal: the OUTCOME first, dice detail underneath ------
-		if _reveal != null and _tok.has(_reveal.tid):
-			var a := clampf(1.0 - (_reveal.age - 0.9) / 0.5, 0.0, 1.0)   # hold, then fade
-			var anchor: Vector2 = _tok[_reveal.tid] + Vector2(0, -s * 1.7)
-			# the headline punches in over the first 0.12s, then settles
-			var pop := 1.0 + 0.35 * clampf(1.0 - _reveal.age / 0.12, 0.0, 1.0)
-			var hcol: Color = _reveal.hcol
-			hcol.a = a
-			_centered(String(_reveal.head), anchor + Vector2(0, -14 * fz),
-				int(26 * fz * pop), hcol)
-			var dice: Array = _reveal.dice
-			var box := 22.0 * fz
-			var total_w: float = maxf(0.0, dice.size() * (box + 5.0) - 5.0)
-			var x := anchor.x - total_w / 2.0
-			anchor.y += 10.0 * fz
-			for d in dice:
-				var counts: bool = int(d) == int(_reveal.nat)
-				var bg := Color("2a2f3d")
-				bg.a = a
-				draw_rect(Rect2(x, anchor.y, box, box), bg)
-				var edge := (Color("ffe27a") if counts else Color("6a6f80"))
-				edge.a = a
-				draw_rect(Rect2(x, anchor.y, box, box), edge, false, 2.0)
-				var dc := (Color("ffffff") if counts else Color("7f8494"))
-				dc.a = a
-				draw_string(ThemeDB.fallback_font, Vector2(x + box * 0.26, anchor.y + box * 0.72),
-					str(d), HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * fz), dc)
-				if not counts:
-					var sl := Color("d15750"); sl.a = a
-					draw_line(Vector2(x + 3, anchor.y + box - 3), Vector2(x + box - 3, anchor.y + 3), sl, 2.0)
-				x += box + 5.0
-			if not dice.is_empty():
-				var lcol := Color("9aa0ae"); lcol.a = a
-				_centered("d20 %+d = %d  vs AC %d" % [_reveal.bonus, _reveal.total, _reveal.ac],
-					anchor + Vector2(0, box + 14 * fz), int(11 * fz), lcol)
+		# The roll reveal — HIT / MISS / CRIT! and the dice under it — went the
+		# same way, and it is the one that needed it most: its dice row sits
+		# lowest of all of these, right at a tall rig's chest, and a figure
+		# standing in front sliced the headline in half. main.gd's
+		# _draw_hud_overlay calls _paint_reveal now.
 
 		if _defeat >= 0.0:
 			_draw_defeat(fz)
@@ -2825,7 +2961,73 @@ class Board extends Control:
 			draw_string(ThemeDB.fallback_font, p + Vector2(pad, pad + fs + i * lh),
 				lines[i], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
+	# The roll reveal: the OUTCOME first, the dice that produced it underneath.
+	# Static and canvas-agnostic for the same reason _paint_token_hud is — it
+	# paints on the HUD overlay, which is a different CanvasItem from Board, and
+	# draw_rect/draw_string always target whatever `self` is bound to.
+	static func _paint_reveal(ci: CanvasItem, rv: Dictionary, tok: Vector2,
+			s: float, fz: float) -> void:
+		var a := clampf(1.0 - (float(rv.age) - 0.9) / 0.5, 0.0, 1.0)   # hold, then fade
+		var anchor: Vector2 = tok + Vector2(0, -s * 1.7)
+		# the headline punches in over the first 0.12s, then settles
+		var pop := 1.0 + 0.35 * clampf(1.0 - float(rv.age) / 0.12, 0.0, 1.0)
+		var hcol: Color = rv.hcol
+		hcol.a = a
+		_shout(ci, String(rv.head), anchor + Vector2(0, -14 * fz),
+			int(REVEAL_FS * fz * pop), hcol)
+		var dice: Array = rv.dice
+		var box := 22.0 * fz
+		var total_w: float = maxf(0.0, dice.size() * (box + 5.0) - 5.0)
+		var x := anchor.x - total_w / 2.0
+		anchor.y += 10.0 * fz
+		for d in dice:
+			var counts: bool = int(d) == int(rv.nat)
+			var bg := Color("2a2f3d")
+			bg.a = a
+			ci.draw_rect(Rect2(x, anchor.y, box, box), bg)
+			var edge := (Color("ffe27a") if counts else Color("6a6f80"))
+			edge.a = a
+			ci.draw_rect(Rect2(x, anchor.y, box, box), edge, false, 2.0)
+			var dc := (Color("ffffff") if counts else Color("7f8494"))
+			dc.a = a
+			ci.draw_string(ThemeDB.fallback_font, Vector2(x + box * 0.26, anchor.y + box * 0.72),
+				str(d), HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * fz), dc)
+			if not counts:
+				var sl := Color("d15750"); sl.a = a
+				ci.draw_line(Vector2(x + 3, anchor.y + box - 3), Vector2(x + box - 3, anchor.y + 3), sl, 2.0)
+			x += box + 5.0
+		if not dice.is_empty():
+			var lcol := Color("9aa0ae"); lcol.a = a
+			_centered_on(ci, "d20 %+d = %d  vs AC %d" % [rv.bonus, rv.total, rv.ac],
+				anchor + Vector2(0, box + 14 * fz), int(11 * fz), lcol)
+
+	# T-dmg: the board's loud text — the outcome of a roll, the damage a body
+	# took. Three things separate it from _centered's quiet label: the game's own
+	# bold face (Icons.sans(700)) instead of ThemeDB.fallback_font, which is
+	# Godot's built-in and not a face this game ships; an ink outline, because
+	# this lands on painted ground, on a lit token and on a 3D figure's chest and
+	# has to hold on all three; and a size the caller scales with the zoom, which
+	# the damage number never did — it was a literal 18 while every other
+	# readout on the board multiplied by `fz`, so zooming IN to watch a fight
+	# made the damage relatively smaller.
+	static func _shout(ci: CanvasItem, text: String, at: Vector2, fs: int, col: Color) -> void:
+		var f := Icons.sans(700)
+		var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var p := at - Vector2(w * 0.5, -fs * 0.36)
+		ci.draw_string_outline(f, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
+			maxi(2, fs / 7), Color(0.04, 0.04, 0.06, col.a * 0.9))
+		ci.draw_string(f, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+
 	# draw_string with the string's own width taken out, so `at` is its centre.
+	# The static one takes its canvas, which is what lets the HUD overlay paint
+	# Board-authored text; _centered is the same thing bound to Board itself. It
+	# lives in here rather than on the outer script because an inner class does
+	# not see the outer script's statics, and _paint_reveal above needs it.
+	static func _centered_on(ci: CanvasItem, text: String, at: Vector2, fs: int, col: Color) -> void:
+		var f := ThemeDB.fallback_font
+		var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		ci.draw_string(f, at - Vector2(w * 0.5, -fs * 0.36), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+
 	func _centered(text: String, at: Vector2, fs: int, col: Color) -> void:
 		var f := ThemeDB.fallback_font
 		var w := f.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x

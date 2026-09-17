@@ -34,7 +34,10 @@ func _init() -> void:
 	# sit lower over a hex than the HP bar or the odds chip, so a tall rig (the
 	# ranger's) stood squarely in front of what its neighbour was saying.
 	check("_barks" in main._board, "Board still owns the bark dict the overlay reads")
-	check(main.has_method("_centered_on"), "and the overlay can centre text on its own canvas")
+	# _centered_on lives on Board beside _paint_token_hud rather than on the
+	# outer script: Board's own statics have to reach it (_paint_reveal does),
+	# and an inner class cannot see the outer script's.
+	check(main._board.has_method("_centered_on"), "and the overlay can centre text on its own canvas")
 	var src: String = (load("res://scenes/main.gd") as GDScript).source_code
 	if src != "":
 		var board_draw := src.find("\tfunc _draw() -> void:")
@@ -44,6 +47,24 @@ func _init() -> void:
 		var overlay := src.find("func _draw_hud_overlay")
 		check(overlay > 0 and "_barks" in src.substr(overlay, src.find("\nfunc ", overlay + 1) - overlay),
 			"_draw_hud_overlay does")
+
+	# T-dmg: the damage numbers and the roll reveal are the fourth and fifth
+	# readouts to make this move, and the reveal is the one that needed it most
+	# — its dice row sits lowest of any of them, right at a tall rig's chest.
+	check("_floats" in main._board, "Board still owns the damage-number list the overlay reads")
+	check(main._board.has_method("_paint_reveal"),
+		"and the reveal paints through a canvas-agnostic static, like the HP bar")
+	if src != "":
+		var bdraw := src.find("\tfunc _draw() -> void:")
+		var bend := src.find("\n\tfunc ", bdraw + 1)
+		var body := src.substr(bdraw, bend - bdraw)
+		var ov := src.find("func _draw_hud_overlay")
+		var ovbody := src.substr(ov, src.find("\nfunc ", ov + 1) - ov)
+		check(not "draw_string(ThemeDB.fallback_font, f.pos" in body,
+			"Board._draw no longer paints the damage numbers")
+		check("_board._floats" in ovbody, "_draw_hud_overlay does")
+		check(not "_reveal.head" in body, "Board._draw no longer paints the roll reveal")
+		check("_paint_reveal" in ovbody, "_draw_hud_overlay does")
 
 	# The two names _draw_hud_overlay now reaches across for, read here the same
 	# way it reads them: a rename on either side is a runtime error that only

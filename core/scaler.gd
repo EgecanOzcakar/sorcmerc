@@ -189,6 +189,33 @@
 # needs a survival term in estimate(), not another constant. Re-run the sweep
 # after touching power.gd, the bestiary's features, adapter.gd's FT_PER_HEX/
 # RANGE_CAP, or any verb.
+#
+# T-classes-b, 2026-09-17: the sweep the line above asks for, run for real.
+# `attacks_per_action` had never reached the board — combat._offerable() would
+# not offer a second swing, resolve_attack assigned over the banked ones, and
+# ai.gd took one _strike a turn — so every Extra Attack class and every
+# Multiattack monster fought at one swing while power.gd priced them at two or
+# three. Making the economy honest roughly doubled both sides at once, and the
+# monsters gained by far the more of it: at the old TIER the level-3 sweep fell
+# to normal 69.5% / hard 46.5% against targets of 85 / 75.
+#
+# TIER re-measured against that, 200 seeds a point, two rounds:
+#
+#   normal  0.780 -> 69.5    hard  0.920 -> 46.5    easy  0.640 -> 89.0
+#           0.624 -> 86.5          0.764 -> 74.0          0.512 -> 99.0
+#           0.663 -> 85.0          0.718 -> 78.0
+#           0.585 -> 90.5          0.690 -> 81.5
+#
+# Landed at 0.56 / 0.66 / 0.76, which measures 93.5 / 86.0 / 73.0 — closer to
+# the 95 / 85 / 75 targets than the old triple ever was (91.5 / 80.0 / 65.0).
+# The level-8 curve is unmoved (76.7/54.0/34.7 -> 72.7/55.3/35.3, still ordered)
+# and the boss pool stays in band (72.5% -> 67.5%). CURVE stays 1.15 and
+# REF_SCORE stays 46.6 — one knob was enough this time, so the other two were
+# left where they were rather than re-fitted for the sake of it.
+#
+# The other measured effect is worth having on its own: fights are SHORTER now
+# that everyone's damage is real. The level-8 sweep went from ~12.9 rounds to
+# ~9.6.
 extends RefCounted
 
 const Adapter = preload("res://core/adapter.gd")
@@ -196,7 +223,7 @@ const Encounter = preload("res://core/encounter.gd")
 const Power = preload("res://core/rules/power.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
-const TIER := {"easy": 0.64, "normal": 0.78, "hard": 0.92}
+const TIER := {"easy": 0.56, "normal": 0.66, "hard": 0.76}   # T-classes-b; see the header
 const REF_SCORE := 46.6   # the level-3 preset party — where TIER was calibrated
 const CURVE := 1.15       # budget grows sublinearly with party power (see the header)
 const MAX_FOES := 8

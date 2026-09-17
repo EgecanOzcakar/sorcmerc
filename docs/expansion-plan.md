@@ -1175,6 +1175,37 @@ tutorial encounter (in campaign.gd or a new small file, agent's call).
   overlay rather than assuming frame one, and asserts the bar underneath it
   is the eleven-button one and not a deployment phase.
 
+- 2026-09-17: **The cards that name an action now let you do it.** Every
+  step was read-only: the overlay was one full-screen `MOUSE_FILTER_STOP`
+  Control and `_unhandled_key_input` dropped every key while it was up, so
+  "click one to move there", "hover any token for the full stat card",
+  "the popup you get by hovering it" and "pressing one opens its list"
+  were all instructions you could only follow after the walkthrough was
+  over. The four steps that name an action now carry a `try` block in
+  `core/tutorial.gd` (`act`, `hint`, `done`, and `keys` for the one that is
+  about key presses), and while such a step is up **its own region is
+  live**: `Walk._has_point` cuts the spotlight out of the overlay, so the
+  click, the hover and the tooltip fall straight through to the board or
+  the bar on the canvas below, while everything outside the ring stays
+  blocked and the goblin still waits. The practice is the ordinary code
+  path — `board_hex_clicked`, `board_hex_hovered`, `_open_list`, the bar's
+  own `mouse_entered` — reporting to `_walk_try()`, so nothing is faked or
+  duplicated for the tutorial: the move is a real move off a real movement
+  budget. Doing it turns the card's `▸ Try it` line into a green `✓` line;
+  nothing is a gate, and `Next` leaves any card whether or not anybody
+  tried. The keys a card lets through are now a small allowlist
+  (`_walk_key_ok`): the view controls always, the number row / Tab / Esc
+  only on a step that asks for them, and Space or `[0]` never — a turn
+  handed over under a card would stall in `_advance()`'s hold on the AI.
+  Leaving a step puts the bar back on its nine slots, so practice cannot
+  hand the next card (or ordinary play, after Skip) a half-open list or an
+  aim with the board behind the dim. The live ring is brighter and breathes
+  while its practice is outstanding, which is the only thing on screen that
+  can say "this half is yours again". `tests/test_game_flow.gd` pushes a
+  real click at the viewport — not at the handler — over the same board hex
+  under a read-only card and under the live one, and asserts it goes
+  nowhere in the first case and moves the hero in the second.
+
 ## T33 — author combat mechanics for the missing spells (locked 2026-09-11, dispatched now)
 
 Of the 146 catalogued spells, only 8 have a hand-authored combat mechanics
@@ -3360,7 +3391,8 @@ are a deliberate follow-up (one more `sweep()` call each), and combat itself
 stays `drive_ui.gd`'s job.
 
 **Honest gaps left:** no pathfinding around water (a march into a lake stops
-at the bank, by design); the roaming-band props are drawn at their live
+at the bank, by design — for NPC bands this was a bug rather than a design,
+and T-path below fixes it); the roaming-band props are drawn at their live
 position even when only remembered, because the map keeps no last-known
 position to draw instead; the diorama fade fades without desaturating, where
 the 2D layer does both; and persistent faction warfare (the note above) is
@@ -4940,12 +4972,103 @@ the middle of each counter portrait and quantises what is left, which is the
 room behind the shopkeeper — the only painted architecture each faction has.
 Hues only; the value spread stays deliberate, or the whole thing goes brown.
 
+## T-path — the bands find their way round the water (2026-09-17)
+
+T9y made water terrain and listed what it deliberately did not do: *"no
+pathfinding around water (a march into a lake stops at the bank, by design)"*.
+That is the right call for the player, who can see the map and click again. It
+was never the right call for a band nobody is steering, and the two maps that
+ship with the game were both quietly broken by it:
+
+* **`bandits` on the small map hunt the player across the river.** Their goal
+  is re-read every frame as the player's live position, so the moment the
+  player is on the far bank the band walks to the near one and stands there —
+  not for a while, for the rest of the campaign.
+* **The `patrol` band's leg back to (0, 0) crosses the river too.** Worse: a
+  patrol advances to its next waypoint when it *arrives*, so a leg it can never
+  finish does not just stall that leg, it kills the whole circuit. The band
+  never patrols again.
+* **A wander roll lands in the lake sooner or later**, with the same ending —
+  the destination is never reached, so a new one is never rolled.
+
+`core/world_path.gd` (new) is the router; `core/world_ai.gd` is where it is
+used. O1 is untouched: it still steers toward `party.goal` and still refuses
+every step from land into a blob. The player is untouched too — clicking the
+middle of a lake still means "walk to that lake".
+
+**The model picks the algorithm.** `World.waters` is circles and nothing else,
+and the shortest path around a circle hugs it, so a route only ever bends at a
+bank. The nodes are a ring of points stamped just outside each blob, keeping
+the ones that are not swallowed by some *other* blob — a river is overlapping
+blobs, so that filter leaves exactly its two banks and throws the middle away.
+The edges are the pairs that can see each other over dry ground, the path is
+Dijkstra across them, and a string-pull afterwards drops the corners the band
+could have walked straight past.
+
+Visibility is exact circle geometry — a segment is blocked when its closest
+approach to a centre falls inside that radius — rather than walking the line in
+steps and asking `is_water()`. It is one distance test per blob instead of one
+per step, and it cannot miss a thin blob that happens to fall between two
+samples. Two details earn their keep: the test ignores the first and last half
+unit of a segment (a band stopped hard against a bank is *exactly* `radius`
+from that centre, and without the slack every step it could take reads as
+blocked by the blob it is standing next to), and a destination that is itself
+in the water is pushed out to the bank first, because a destination nobody can
+stand on is a destination nobody ever "arrives" at.
+
+**Cost.** The graph depends on `waters` alone, and no map adds water after it is
+built, so it is built once per distinct set of blobs and cached on a signature
+of the water itself rather than on the world (two worlds with the same lakes
+want the same graph; a freed world leaves no stale entry). Measured: small map
+22 blobs → 86 nodes / 927 edges, 9ms; large map 26 blobs → 134 nodes / 1911
+edges, 22ms; a query across either, ~1ms. On top of that, `update()` plans at
+most two routes per frame, and a band the router could find no way round at all
+waits five world-minutes before asking again — otherwise one band aiming at an
+island burns the whole budget every frame and the bands that *could* be helped
+never get a turn.
+
+**The shape of the change in `world_ai.gd`.** A behavior no longer writes
+`party.goal`; it names a *destination*, and one `_steer()` turns that into the
+next goal — the destination itself whenever the straight line is dry, which is
+every line on a map with no water in it. Arrival is judged against the
+destination and not against `party.goal`, which on a detour is a waypoint
+halfway round a lake; getting that backwards is exactly how a patrol would tick
+through its whole waypoint list while walking one shoreline. The route rides in
+the party's own `ai` dictionary, so `world_save.gd`'s generic encoder carries it
+through a save with no changes at all — which is the claim that file makes about
+itself, now tested.
+
+One behavior needed a nudge to survive the refactor. The truce break-off (a
+band that met you and left without blood walks away for two hours) used to work
+by accident: `truce()` wrote `party.goal`, and the behaviors happened to leave
+it alone because `at_goal()` was false. With a destination going through
+`_steer()` every frame, a patrolling band would have resumed its circuit
+immediately. The break-off is now a destination in its own right, outranking
+the behavior until it is walked or the truce lapses — and it gets routed round
+the water like anything else.
+
+**Tests.** `tests/test_world_path.gd` (new, 264 assertions) covers the geometry
+(including the clip case a sampled test would miss and the band-on-the-bank
+case the end slack exists for), that a route's every leg is dry and ends where
+it was going, that it is pulled tight (no waypoint the band could have skipped),
+that a band handed one actually reaches the far bank under O1's own stepper,
+that "no way round" comes back as an honest empty answer with the band falling
+back to the old march-to-the-bank, and that every band on every built-in map
+can find its way to every settlement on it. `tests/test_world_water.gd`'s
+NPC-band case asserted the old bug as the design (*"the band is held on its own
+bank"*) and now asserts the fix.
+
+**Still not done:** the player still gets no pathfinder, on purpose. Water is
+still the only terrain, so this routes around lakes and rivers and nothing
+else. And a band's route is drawn nowhere — the map shows the player's goal
+ring and has never shown anyone else's.
+
 ## Spike — the floating damage number (2026-09-17, measurement only)
 
 Full write-up in `docs/spike-damage-numbers.md`. Play feedback asked for the
 damage number to be red, big, and to stay longer. The measurement says all
 three are downstream of something else: `Board.tick()` spawns a float **per
-frame** while the HP bar is still lerping (`scenes/main.gd:2186–2192`), each
+frame** while the HP bar is still lerping (`scenes/main.gd:2293–2299`), each
 carrying the shrinking *gap* rather than the damage, so one 14-damage hit
 draws 21 numbers stacked inside 11 px — `-14 -11 -9 … -1 -0 -0 -0 -0 -0` —
 fading red→orange→yellow on the way. The newest is on top and opaque, so
@@ -4964,3 +5087,460 @@ alone); only then re-cut the colour on fraction-of-max-HP plus crit, scale
 the size with `fz`, give it a hold-then-fade curve, and move the paint to
 `_draw_hud_overlay`. Raising the TTL or the font size on today's code just
 makes a bigger, longer-lived pile of `-0`.
+
+## T-dmg — the hit, the miss and the damage, said loudly enough to read (2026-09-17)
+
+Follows the spike above, and the same playtester's follow-up: *improve hit /
+miss / damage font weight and size*. Both readouts — the roll reveal's
+headline and the floating damage number — now paint in the game's own bold
+face (`Icons.sans(700)`, not `ThemeDB.fallback_font`, which is Godot's
+built-in and a face this game does not ship) with an ink outline, through one
+`Board._shout`.
+
+**The size ask needed a fix under it first.** The damage number was spawned as
+a side effect of the HP bar's easing — one per frame while the bar was still
+travelling, each carrying the gap it had left rather than the damage. A
+14-damage hit drew 21 numbers stacked inside 11 px, fading red→orange→yellow
+and ending on a pile of `-0`; the newest drew last and opaque, so `-0` in
+yellow is what the player actually read. Making *that* bigger and bolder makes
+a bigger, bolder pile of `-0`, so the number is latched off the real hp now
+(`_dmg_goal`) and the bar keeps its own easing untouched. First sight primes
+the latch with a real write rather than defaulting to the current hp — the
+version that defaults re-primes every frame and never sees a blow at all.
+
+**Sizes.** The number ran at a literal 18px: the only text on the board that
+ignored `fz`, so zooming *in* to watch a fight made the damage relatively
+smaller. It now scales with the zoom like everything else, and with the share
+of the body the blow took (`sqrt` of damage over max HP, 23→42px), because 12
+damage ends a goblin and scratches a giant and those should not be the same
+size. The reveal headline goes 26→32, keeping its punch-in.
+
+**And the fourth and fifth move to the HUD layer.** The damage numbers and the
+whole roll reveal now paint in `_draw_hud_overlay`, joining the HP bar, the
+odds chip and the barks, for the reason this file has now recorded three times:
+a `Figures3D` model is a `Board` child and draws after everything `Board`
+paints. The reveal needed it most — its dice row sits lowest of any of them,
+right at a tall rig's chest, and a figure standing in front sliced the headline
+in half. `docs/shots/damage-readouts-before-after.png` is that, before and
+after, on the same seed.
+
+One readout per event: where the reveal is up over a body its headline already
+reads `HIT  7`, so the float for that same body is skipped rather than drawn on
+top of it. The reveal only ever fires on the hero's single-target path, so
+every foe attack and every area spell still gets its number.
+
+`tests/test_damage_numbers.gd` (17 assertions) drives `Board.tick()` at an
+explicit dt — the suite otherwise runs at the Instant pace, where the easing
+constant clamps to 1 and the bug does not reproduce, which is why the robots
+ran past it — and asserts one number per blow across three paces and three
+frame rates, that it says the damage, that a body's *first* hit still reports,
+and that healing stays silent. `tests/test_hud_layer.gd` grew four checks for
+the two new moves. `tests/shot_damage.gd` renders the proof.
+
+Not done, and still open in the spike: the colour bands are still cut on
+absolute damage (`>= 12` for red), which the preset party cannot reach on a
+normal hit at all — longsword, shortbow and mace all cap at `1d8+3 = 11`; the
+number still fades from the frame it is born rather than holding first; and
+healing still draws nothing.
+
+## T-classes — every class and subclass, built and played (2026-09-17)
+
+The rules engine had 48 subclasses and three of them were ever built. Every
+rules test that needed a character reached for `core/presets.gd` — Vera the
+Champion, Pike the Thief, Ilsa of the Light Domain — or for a bare
+`_build("sorcerer", 5)` fixture. Both shapes share a blind spot that turns out
+to matter more than the missing subclasses: **nothing was decided**. A fixture
+with no ASI taken, no fighting style, no spells picked exercises maybe half of
+what the resolver does, because the other half only exists once a build has
+answered its choice points.
+
+`tests/test_class_abilities.gd` deals the 48 (class, subclass) pairs into twelve
+four-hero teams — round-robin, so a team is four different classes — builds each
+team at **level 4** and again at **level 8**, resolving every pending choice
+through the creator's own static choice model the way a player would, equips the
+best weapon and armor each build is proficient with, and then puts all four on a
+board and presses every button their kit offers. 96 builds, ~7,600 assertions.
+
+Level 4 and 8 because those are the two rungs where there is something to see:
+the subclass has landed (3), the first ASI or feat is spent (4), Extra Attack and
+the level-5/6/7 subclass features have arrived by 8, and the proficiency bonus
+has moved once.
+
+**Six bugs, all of them only visible on a decided build.**
+
+1. **`Bundles.class_level()` counted bundles, not levels.** `collect()` gives
+   each class level one bundle — and then appends *derived* bundles carrying the
+   source they came from, which for a class-origin grant is that same
+   `{origin: class, id, level}` dict: one per chosen fighting style, one per
+   chosen damage type, one per decided feature-choice, and one **per spell
+   picked in a class spell-choice**. Counting them read a decided level-4 bard
+   as level 11, a sorcerer as 12, a wizard as 13. Everything keyed on that
+   number scaled off a level the character never had: a level-4 sorcerer had
+   **12 sorcery points instead of 4**, a level-4 paladin 3 Channel Divinity uses
+   instead of 2, a level-4 Psi Warrior 6 psionic dice instead of 4, a level-8
+   warlock's proficiency-bonus pools 5 instead of 3, and an Eldritch Knight read
+   the third-caster slot table at the wrong row. The bundles carry the level;
+   the highest one seen is the answer.
+
+2. **College of Dance wore its Bardic Inspiration die as armor.** `Dazzling
+   Footwork` is 10 + DEX + CHA; `pass_defense.ac()` added the inspiration *die
+   size* instead. With bug 1 feeding it a level-11 bard, a level-4 dancer stood
+   at **AC 23**, and a level-8 one at 25.
+
+3. **Unarmored Defense ignored whether you were wearing armor.** All three of
+   them are "10 + DEX + something, *while you aren't wearing armor*", and the
+   rider was never read: the resolver took the best of the armored and unarmored
+   calculations whichever you had on. A barbarian in padded armor kept the
+   unarmored number.
+
+4. **…and armor did nothing for a barbarian or a monk.** The flip side of 3,
+   found by fixing it: the export emits the `armored` calculation only for the
+   ten classes with no Unarmored Defense, so once the unarmored one is gated off
+   a barbarian in chain mail had no calculation left at all. Wearing armor is
+   something every class can do; the calculation is now implicit whenever body
+   armor is worn.
+
+5. **The Cleric's Channel Divinity could never be pressed.** The export grants
+   the `channel-divinity` resource pool to the paladin and not to the cleric
+   (SCHEMA gap #4), so `Effects.verbs_for` built the cleric's verb with
+   `uses = pool_max() = 0`, `adapter.gd` synthesized a 0-max pool from it, and
+   the button has sat on the bar greyed out for every cleric in the game. The
+   uses are now authored in `data/effects/features.json` (2/3/4 at cleric 2/6/18)
+   and an authored `uses` is the fallback whenever the export grants no pool.
+   The test's general form of this claim is the one worth keeping: *a button
+   that names a pool must have a pool with something in it.*
+
+6. **Bardic Inspiration only reached an adjacent ally.** No `range_ft` was
+   authored on the `ally_buff`, so it fell through to adapter.gd's 5 ft default.
+   It is 60 feet, which is 10 hexes.
+
+Plus one that is not a bug so much as a sharp edge: two grants may name the same
+spell (a class cantrip pick and Magic Initiate's, a subclass's always-prepared
+list and a wizard's spellbook), and nothing deduplicated them, so a druid who
+took Poison Spray twice carried **three Poison Sprays on the action bar**.
+`pass_spells.gd` now keeps the first.
+
+**What the sweep does not assert, and prints instead.** A feature with no
+`data/effects/features.json` entry is a flavor feature by design — that default
+is what makes 430 feature ids tractable (`core/rules/effects.gd`). The test ends
+with the inventory of what the default currently costs, per class and subclass:
+
+```
+TOTAL 16 mechanical, 175 flavor (92% of the features these builds carry do
+nothing in a fight)
+```
+
+Sixteen. Barbarian's Rage / Reckless Attack / Extra Attack, the fighter's three,
+the rogue's three, the monk's five, the bard's inspiration and the cleric's
+Channel Divinity — and **not one subclass feature in the game**, at any level, in
+any class. Every Berserker's Frenzy, every Assassin's Assassinate, every
+Warding Flare and Sacred Weapon and Sneak-Attack-with-a-psychic-blade is prose on
+a sheet. Alongside it the same report lists the eleven resource pools the engine
+grants and no verb can spend (`sorcery-points`, `psionic-energy`, `war-priest`,
+`portent`, …) — a resource bar the player watches fill and can never use.
+
+That is the backlog this test exists to make visible, and it is deliberately a
+`print`, not a `check`: authoring a subclass's mechanics should make the number
+go down, never make the suite go red.
+
+**One knock-on that wants a measured re-run.** Fixing the cleric's Channel
+Divinity makes a cleric genuinely stronger, and `core/rules/power.gd` scores
+that honestly: Ilsa goes 19.6 → 23.9, and the level-3 preset trio the whole
+difficulty curve is anchored on goes 46.6 → 53.9. `core/scaler.gd`'s
+`_budget()` reads the party's live score, so the preset party now buys about
+18% more roster than it did — and that file's own header says to re-run the tier
+sweep after touching any verb. `REF_SCORE`, `TIER` and `CURVE` are deliberately
+left alone here (retuning them is the three-knob measured exercise the header
+describes, not a side effect of a bug fix); `tests/test_rules.gd` and
+`tests/test_regions.gd` had their two anchor assertions restated to claim the
+tier rather than the coincidence, each with the number written down. **The tier
+sweep is owed.**
+
+**Still not done.** The prepared casters have no way to prepare anything: the
+export carries leveled `spell-choice` grants for the bard, sorcerer, warlock and
+wizard, and for the cleric and druid it carries cantrips only — so a level-8
+Circle of the Moon druid has 4/3/3/2 spell slots and **nothing but cantrips to
+spend them on**, and a cleric casts their domain list or nothing. That wants a
+daily-prep screen (or `prepared_count`, which the resolver already computes and
+nobody reads), not a one-line fix, so it is written down here rather than
+patched over.
+
+## T-classes-a — the features the vocabulary could already express (2026-09-17)
+
+T-classes left an inventory: 16 features mechanical, 175 flavor, and a per-class
+list of which was which. This is the first pass over it — deliberately only the
+entries `data/effects/features.json` could already express, with no change to
+`core/` at all.
+
+Two corrections to T-classes' own write-up first, because both were overstated:
+
+* **"Not one subclass feature does anything"** was wrong. It counted entries in
+  `data/effects/features.json`, and a feature's mechanic can live elsewhere:
+  Champion's Improved Critical is `crit_range = 19` in `adapter.gd`, College of
+  Dance's Dazzling Footwork is an `armor-class` grant, Martial Arts is computed
+  in `pass_gear.attacks()`, every pool is a `resource-pool` grant. The accurate
+  claim is narrower: **no subclass feature becomes a combat verb.**
+* **"Roughly half the list is JSON only"** was optimistic. It was judged off the
+  `kind` names, and the engine's *conditions* and *payloads* are much narrower
+  than those names suggest. `requires` knows four predicates and none of them is
+  "while raging" or "on your first turn"; a `reaction` can add AC or halve
+  damage and cannot subtract a die or impose Disadvantage; `save_effect` hits
+  one target, not a radius. So Frenzy, Dread Ambusher, Warding Flare, Cutting
+  Words, Radiance of the Dawn and Open Hand Technique all *look* expressible and
+  are not. Eight entries were, not eighty.
+
+**What landed.** Three of them are parity, not content:
+`paladin-extra-attack`, `ranger-extra-attack` and `collegevalor-extra-attack`.
+Barbarian, fighter and monk had an `attacks_per_action` entry and those three
+did not, so the sheet said a level-8 paladin swung once and a level-8 fighter
+twice. Five are features whose shape the file already had a template for:
+
+| feature | shape | what it retires |
+|---|---|---|
+| `assassin-assassinate` | `attack_modifier`, `requires: target_has_not_acted` | the same entry `monster-assassinate` has had since T16 |
+| `wardomain-war-priest` | `grant_action`, `extra_attacks: 1` | the `war-priest` pool |
+| `celestialpatron-healing-light` | `heal_ally`, 1d6 a die, 60 ft | the `healing-light` pool |
+| `warriorofmercy-hand-of-healing` | `heal_ally`, Martial Arts die + WIS | — |
+| `warrioropenhand-wholeness-of-body` | `heal_self`, PB per long rest | — |
+
+Dead pools: 11 → 9. Each of the five carries a new gilt badge from
+`tools/gen_action_icons.py` (`tests/test_action_icons.gd` refuses a button
+feature with no mark) — Assassinate wears exactly the one `monster-assassinate`
+wears, since it is the same ability and a rogue's version of it should not be a
+different picture.
+
+**And the thing found on the way, which is bigger than all of it.**
+`attacks_per_action` **does nothing on the board, for anybody, and never has.**
+The chain breaks in three places at once:
+
+1. `combat._offerable()` gates the Attack verb on `can_spend("action")` alone.
+   `resolve_attack` banks the second swing in `econ.attacks_left`, but by then
+   the action is gone, so the Attack button greys out with `attacks_left = 1`
+   sitting in the economy. The player never gets it.
+2. `resolve_attack` **assigns** `attacks_left = attacks_per_action - 1` rather
+   than adding, so anything banked earlier is destroyed. Flurry of Blows banks
+   two swings as a Bonus Action and the monk's first Attack overwrites both —
+   measured: `flurry banked 2, after one swing attacks_left=1`.
+3. `ai.gd` takes exactly one `_strike` per `take_turn`, so the AI never spends a
+   banked swing either — which means every `monster-multiattack-2` and `-3` in
+   the bestiary is a single-attack monster.
+
+Meanwhile `power.gd` reads `attacks_per_action` straight into `dpr` as a
+multiplier, so every Extra Attack class and every multiattack monster is
+**priced at two or three times the damage it actually deals**, and `scaler.gd`'s
+budgets are built on that price.
+
+Fixing it roughly doubles the output of every multiattack creature on both sides
+of the board at once. That is not a small change and it is not this one: it
+belongs with the tier sweep that T-classes already said was owed. The three new
+`-extra-attack` entries are therefore **inert today**, exactly as the three that
+preceded them are — they make the sheet right and wait.
+
+## T-classes-b — the attack economy, and the tier sweep that was owed (2026-09-17)
+
+T-classes-a found it and deliberately did not fix it: **`attacks_per_action` had
+never reached the board, for anybody.** Three separate breaks in one chain.
+
+1. `combat._offerable()` gated the Attack verb on `can_spend("action")` alone.
+   `resolve_attack` banks the swings the Attack action buys in
+   `econ.attacks_left`, but the action is spent on the first of them — so the
+   button greyed out with a swing still sitting in the economy. Now there is a
+   `can_afford()` beside `can_spend()`, and Attack is the one verb whose price
+   is not just its `cost`.
+2. `resolve_attack` **assigned** `attacks_left = attacks_per_action - 1` instead
+   of adding to it. Flurry of Blows banks two swings as a Bonus Action *before*
+   the Attack action is taken, so the monk's own first swing destroyed both
+   (measured: banked 2, one swing later `attacks_left` was 1). It adds now.
+3. `ai.gd`'s `_strike()` took one swing and returned, so no monster ever used
+   its Multiattack and the party autopilot never used Extra Attack. It loops to
+   the economy's end now, re-targeting between swings — the second swing of a
+   Multiattack should not be thrown at a corpse.
+
+Measured off `available()`, which is the list the action bar renders: fighter 1
+at level 4 and 2 at level 8, paladin / ranger / College of Valour 2 at level 8
+(the entries T-classes-a added, now live), rogue 1 at both, and a level-8 monk
+who spends a Focus Point on Flurry swings **four** times. A Multiattack-2
+monster takes two.
+
+**The re-tune.** This roughly doubles both sides of the board at once, and the
+monsters gain by far the more of it — at level 3 the party has no Extra Attack
+at all and the bestiary is full of Multiattack. At the old TIER the level-3
+sweep fell to normal 69.5% / hard 46.5% against targets of 85 / 75. So the tier
+sweep T-classes said was owed got run, 200 seeds a point, two rounds:
+
+```
+normal  0.780 -> 69.5    hard  0.920 -> 46.5    easy  0.640 -> 89.0
+        0.624 -> 86.5          0.764 -> 74.0          0.512 -> 99.0
+        0.663 -> 85.0          0.718 -> 78.0
+        0.585 -> 90.5          0.690 -> 81.5
+```
+
+`TIER` lands at **0.56 / 0.66 / 0.76**, measuring 93.5 / 86.0 / 73.0 against
+targets of 95 / 85 / 75 — *closer than the old triple ever was* (91.5 / 80.0 /
+65.0, with hard sitting exactly on the edge of the ±10 band). The level-8 curve
+is unmoved and still ordered (76.7/54.0/34.7 → 72.7/55.3/35.3) and the boss pool
+stays in band (72.5% → 67.5%). `CURVE` stays 1.15 and `REF_SCORE` stays 46.6:
+one knob was enough, so the other two were left alone rather than re-fitted for
+the sake of it.
+
+A second measured effect worth having on its own: **fights are shorter** now
+that everyone's damage is real. The level-8 sweep went from ~12.9 rounds to
+~9.6.
+
+**One test changed rather than re-pinned.** `test_world_threat.gd` asserted that
+the flat wilderness discount "really does change the roster" on seed 5. A tenth
+off the budget does not move every roster — the budget buys whole monsters, so
+on a seed where the cut lands inside a rounding step the spec is identical. The
+re-tune shifted which seeds those were and 5 became one of them. It asks across
+ten seeds now (28 of 30 differ), which is the property it always wanted.
+
+**Still not done.** The mechanics that need genuinely new engine support are
+untouched and still listed in T-classes: Wild Shape (swap a combatant's
+statblock mid-fight), Metamagic (modify a spell as it is cast), Portent (replace
+a d20 result), Arcane Ward (an absorbing damage pool), the paladin auras (a
+persistent radius buff), Primal Companion and Invoke Duplicity (a second token
+on the board), and Divine Smite, which is a near-miss — the rider shape exists
+(Stunning Strike spends a pool on a hit) but nothing outside `cast()` can spend
+a spell slot. The vocabulary gaps T-classes-a ran into are the other half of
+that list: `requires` predicates ("while raging", "on your first turn", "target
+is damaged"), reaction payloads (subtract a die, impose Disadvantage), and an
+area `save_effect`.
+
+## T-classes-c — three words the engine did not have (2026-09-17)
+
+T-classes-a stopped where the vocabulary stopped, and wrote down exactly where
+that was: `requires` knew four predicates and none of them was "while raging";
+a `reaction` could add AC or halve damage and could not impose Disadvantage;
+nothing at all could express a standing radius. Frenzy, Colossus Slayer, Dread
+Ambusher, Warding Flare and every paladin aura *looked* expressible from their
+`kind` alone and were not. This adds the three words and the five features that
+ride them.
+
+**1. Three `requires` predicates** (`combat._requires_met`). Each is one
+sentence of a subclass's text that previously had nowhere to go:
+
+| predicate | the sentence | feature |
+|---|---|---|
+| `target_damaged` | "a creature that is missing any of its Hit Points" | `hunter-hunters-prey-colossus-slayer`, 1d8 |
+| `while_raging` | "while your Rage is active" | `berserker-frenzy`, d6s on the Rage Damage track |
+| `first_round` | "on your first turn of each combat" | `gloomstalker-dread-ambusher`, 2d6 |
+
+**2. A reaction that imposes Disadvantage** rather than raising AC.
+`would_be_hit` fires once a swing is known to land, so the honest reading of
+Disadvantage at that moment is the second d20 the attacker should have rolled:
+the reactor answers with `second_d20`, and `resolve_attack` takes the lower of
+the two and re-decides. `lightdomain-warding-flare` is the first of them.
+
+That needed a second fix to be reachable at all. `_reaction_applies` carries
+T94's guard against wasting Parry on a swing its AC could not have stopped —
+and that test is about AC and only about AC. With `ac_bonus` 0 it refused
+Warding Flare **every single time**; measured before the fix, a cleric with the
+feature took exactly as many hits as one without (44 of 60 either way). After:
+31 of 60.
+
+**3. `aura`** — the first thing in the game that is neither a button nor a rider
+on a roll of its own, but a standing fact about a piece of the board, read by
+whoever happens to be rolling inside it. It is deliberately not in
+`combat.gd`'s `OFFERABLE`, so it never reaches the action bar and needs no
+badge; `combat.aura_bonus()` reads it where a number is wanted.
+`paladin-aura-of-protection` is the first: +CHA to saves for the paladin and
+every ally within 10 feet, and nobody across the room. Auras do not stack — the
+best one in reach wins, which is RAW for two paladins and conservative for
+anything else.
+
+Every predicate is asserted from **both** sides in
+`tests/test_class_abilities.gd`. A rider that fires when it should is half the
+claim; the half that matters is that it stays quiet otherwise, and that is the
+half a happy-path test never checks.
+
+**No re-tune this time.** The five features make the party stronger and the
+level-3 sweep moved to 97.0 / 87.0 / 76.5 against targets of 95 / 85 / 75 —
+every one of them inside the ±10 band and none more than 2 points out, which is
+precisely what `core/scaler.gd`'s header calls noise rather than a knob that
+wants turning ("TIER is steep and lumpy here … do not read a 2-point miss as a
+knob that wants turning"). `TIER` is left at T-classes-b's 0.56 / 0.66 / 0.76.
+
+Worth noting for whoever tunes next: the party's *score* did not move at all
+(53.9, unchanged), because `power.gd` prices neither `reaction` nor `aura`. The
+win rate moved and the price did not, so both are currently free in the
+estimator's eyes. That belongs with the "Known ceiling" note in `scaler.gd`
+rather than being patched here.
+
+**Still not done**, and now the whole of the remaining list: Divine Smite (the
+near-miss — the rider shape exists, but nothing outside `cast()` can spend a
+spell slot), Wild Shape, Metamagic, Portent, Arcane Ward, Primal Companion and
+Invoke Duplicity. The other three paladin auras (Devotion's charm immunity,
+Ancients' resistance, Glory's speed) need aura *payloads* beyond `save_bonus`,
+which is a smaller job now the kind exists.
+
+## T-classes-d — a Smite rides one blow, and an aura can say no (2026-09-17)
+
+Two more shapes the engine could not hold, and the two features that wanted
+them. Both turned out to be a single flag or a single payload on machinery
+T-classes-c had already built, which is the point of having built it.
+
+**A `self_buff` was a standing fact.** Rage is +2 on every swing until the
+fight ends, and `_buff_damage_extras` read every damage buff that way — so
+Divine Smite modelled as a self_buff would have added 2d8 to *every blow of the
+fight* off one Bonus Action. `once` is the flag that separates them: the blow
+that reads the buff is the blow that spends it. The same function also rolls
+dice now, rather than only adding a flat number, because a Smite is 2d8 and not
+9 — guarded on `dice_count` rather than `dice_sides`, since an `ally_buff`
+writes `dice_sides` into `inspired` and that is a bonus to a d20, emphatically
+not damage.
+
+`paladin-divine-smite` is 2024's: a Bonus Action, 2d8 radiant, CHA-mod free
+casts per Long Rest. It is the same shape `monster-divine-eminence` has used
+since T16, plus `once`.
+
+**An aura carried a number; Aura of Devotion carries a refusal.**
+`aura_immunities()` is the condition half of `aura_bonus()`, read at the top of
+`apply_condition` beside the statblock's own `cond_immune`.
+`oathofdevotion-aura-of-devotion` is "you and your allies in your aura can't be
+Charmed", and it is asserted from both sides: the condition bounces off an ally
+standing beside the paladin and lands on one across the room.
+
+**And a floor under every ability-sized pool.** Warding Flare is WIS-mod uses,
+Divine Smite is CHA-mod, and RAW says "a minimum of once" for both. Without the
+floor a cleric who dumped WIS carried the button and could never press it —
+which is exactly the 0-max-pool bug T-classes fixed once already, from the
+other end. `Effects._uses()` is the single place that floor lives now.
+
+**Two known simplifications, written down rather than hidden.** A buff's
+`damage_type` is authored and unread: every extra folds into the blow's own
+damage type, so a Smite's radiant reads as the weapon's slashing against
+anything that resists one and not the other. Typing the extras pipeline is a
+real change and not this one. And `power.gd` still prices neither `reaction`
+nor `aura`, so Warding Flare, Aura of Protection and Aura of Devotion are all
+free in the estimator's eyes — the same note T-classes-c left.
+
+**The third aura payload, while the kind was open.** `aura_types()` is the list
+half of `aura_bonus()`, and both Aura of Devotion's condition immunity and
+`oathofancients-aura-of-warding`'s damage resistance are lists — so they share
+one reader, hung off `_resists()`, which is already the single choke point every
+resistance in the game passes through. Asserted where it is actually read:
+20 necrotic on an ally inside the aura lands as 10, the same blow on one across
+the room lands as 20, and 20 slashing on the ally inside it lands as 20,
+because the oath is set against three types and not all of them.
+
+**Still not done, and why each one is not a data entry.**
+
+* **Oath of Glory's Aura of Alacrity** is a speed bonus, which wants a read in
+  `begin_turn_for` — small, but the 2024 wording (whose speed, what radius, and
+  the aura growing at 18) is not something to guess at from memory.
+* **Portent** replaces a d20 roll with one rolled at dawn, and *which* roll is
+  the whole feature. In an engine with no prompts (combat-design.md §2) it
+  would have to auto-spend on the first roll it saw, which is strictly worse
+  than not having it.
+* **Arcane Ward** is a pool of hit points that soaks damage before its owner
+  does — a fourth read in `_apply_damage`, plus a refill rule keyed on casting
+  abjuration spells, which the engine does not track by school.
+* **Wild Shape** swaps a combatant's whole statblock mid-fight, and the open
+  questions are design ones: which forms, whether the druid keeps their own
+  verbs, what happens to concentration, and what the form's HP does on the way
+  out.
+* **Primal Companion** and **Invoke Duplicity** put a second token on the board
+  under one player's control, which is an initiative and an AI question before
+  it is a rules one.
+
+The first three are a branch each. The last two are a design note first.
