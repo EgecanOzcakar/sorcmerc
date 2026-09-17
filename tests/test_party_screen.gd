@@ -70,9 +70,9 @@ func _init() -> void:
 	# (cleric), Thrun (barbarian) — Gera (the 5th, a barbarian) is benched
 	# and should NOT be offered.
 	check(ob.item_count == screen.party.active.size() + 1,
-		"one entry per ACTIVE member, plus the default pawn (got %d)" % ob.item_count)
+		"one entry per ACTIVE member, plus the default (got %d)" % ob.item_count)
 	check(String(ob.get_item_metadata(0)) == "", "the first entry is the default (no figure)")
-	check(ob.selected == 0, "a fresh party starts on the default pawn")
+	check(ob.selected == 0, "a fresh party starts on the default")
 	var names := labels_of(ob)
 	check("Vera Kord" in names, "an active member is offered by name")
 	check(not "Gera" in names, "a benched member is not offered")

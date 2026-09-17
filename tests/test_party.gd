@@ -206,13 +206,23 @@ func test_identification() -> void:
 # T9x: overworld_figure names ONE character (scenes/world/party3d.gd renders
 # their class figure on the map), and only counts while they are marching.
 # The pre-identity shape — a class id, from a save written before the switch —
-# resolves the old way and migrates on the first read; see overworld_member().
+# resolves the old way and migrates on the first read; see overworld_pick().
+# With no pick (or a stale one) the map shows the highest-level marcher.
 func test_overworld_figure() -> void:
 	var p := Party.new()
 	for ch in Party.demo_roster():
 		p.add_member(ch)
 	check(p.overworld_figure == "", "a fresh party has picked nobody")
-	check(p.overworld_member() == null, "which resolves to nobody at all — the plain pawn")
+	check(p.overworld_pick() == null, "which is no explicit pick")
+	var senior = p.overworld_member()
+	var top := 0
+	for id in p.active:
+		top = maxi(top, p.get_member(id).level())
+	check(senior != null and senior.level() == top and p.is_active(senior.id),
+		"so the map shows the highest-level marcher, not the pawn")
+	check(p.overworld_member().id == p.active[0] or p.get_member(p.active[0]).level() < top,
+		"marching order breaks ties")
+	check(Party.new().overworld_member() == null, "an empty party is the pawn")
 
 	p.overworld_figure = "vera"
 	var pick = p.overworld_member()
@@ -224,14 +234,16 @@ func test_overworld_figure() -> void:
 	var thrun = p.overworld_member()
 	check(thrun != null and thrun.id == "thrun", "one of two barbarians is still his own pick")
 	check(p.bench("thrun"), "bench him")
-	check(p.overworld_member() == null,
-		"benching the pick falls back to the pawn, even with another barbarian still marching")
+	check(p.overworld_pick() == null,
+		"benching the pick drops it, even with another barbarian still marching")
+	check(p.overworld_member() != null and p.overworld_member().id != "thrun",
+		"and the map falls back to the default marcher")
 	check(p.overworld_figure == "thrun", "the pick is remembered, not cleared, while he sits out")
 	check(p.activate("thrun"), "bring him back")
 	var back = p.overworld_member()
 	check(back != null and back.id == "thrun", "and the pick comes back with him")
 	check(p.remove_member("thrun"), "let him go for good")
-	check(p.overworld_member() == null, "a stranger's id reads as the pawn")
+	check(p.overworld_pick() == null, "a stranger's id is no pick")
 
 	# The pre-identity shape: a class id, resolved against the active party.
 	p.overworld_figure = "rogue"
@@ -239,10 +251,10 @@ func test_overworld_figure() -> void:
 	check(legacy != null and legacy.id == "pike", "an old save's class id still resolves to a member")
 	check(p.overworld_figure == "pike", "and is migrated to that member's id on the first read")
 	p.overworld_figure = "wizard"
-	check(p.overworld_member() == null, "a class nobody active has is the pawn")
+	check(p.overworld_pick() == null, "a class nobody active has is no pick")
 	check(p.overworld_figure == "wizard", "and with nothing to migrate it to, it is left alone")
 	p.overworld_figure = "not-an-id-and-not-a-class"
-	check(p.overworld_member() == null, "so is pure nonsense — no crash, no figure")
+	check(p.overworld_pick() == null, "so is pure nonsense — no crash")
 
 # The level a hero created now would join at (scenes/creator/creator.gd's
 # start_level): the highest among the <= 4 who fight, and 1 while nobody does.
