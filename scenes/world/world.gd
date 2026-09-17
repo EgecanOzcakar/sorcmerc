@@ -43,6 +43,7 @@ const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
+const Dice = preload("res://core/dice.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
 const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
@@ -2513,6 +2514,7 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 		var investigated: bool = _visit.get("investigated", false)
 		investigate_btn.text = "Investigated the battlefield" if investigated else "Investigate the battlefield"
 		investigate_btn.disabled = investigated
+		investigate_btn.tooltip_text = Visit.check_preview(party, Visit.INVESTIGATE_SKILL, Visit.INVESTIGATE_DC)   # #87
 		investigate_btn.pressed.connect(_investigate)
 		places.add_child(investigate_btn)
 
@@ -2629,6 +2631,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	var spent: bool = _visit.get("stolen", false) or wait > 0.0
 	steal_btn.text = ("Stall watched — %dh" % maxi(1, ceili(wait / 60.0))) if wait > 0.0 else "Steal from the market"
 	steal_btn.disabled = spent
+	steal_btn.tooltip_text = Visit.check_preview(party, Visit.STEAL_SKILL, Visit.STEAL_DC)   # #87
 	steal_btn.pressed.connect(_steal)
 	bar.add_child(steal_btn)
 	if _visit.get("refused", false):
@@ -2636,6 +2639,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		var persuaded: bool = _visit.get("persuaded", false)
 		persuade_btn.text = "Tried persuasion" if persuaded else "Persuade them to trade"
 		persuade_btn.disabled = persuaded
+		persuade_btn.tooltip_text = Visit.check_preview(party, Visit.PERSUADE_SKILL, Visit.persuade_dc(_visit), _talk_adv())
 		persuade_btn.pressed.connect(_persuade)
 		bar.add_child(persuade_btn)
 	else:
@@ -2645,6 +2649,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		var haggled: bool = _visit.get("haggled", false)
 		haggle_btn.text = "Haggled already" if haggled else "Haggle over prices (Persuasion)"
 		haggle_btn.disabled = haggled
+		haggle_btn.tooltip_text = Visit.check_preview(party, Visit.HAGGLE_SKILL, Visit.HAGGLE_DC, _talk_adv())
 		haggle_btn.pressed.connect(_haggle)
 		bar.add_child(haggle_btn)
 
@@ -2880,6 +2885,12 @@ func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Cal
 	btn.pressed.connect(on_press)
 	row.add_child(btn)
 	rows.add_child(row)
+
+# #87: whether the party's talker rolls with advantage right now (a potion or
+# a talk spell) — the same test Visit's own rolls make.
+func _talk_adv() -> bool:
+	var talker = party.get_member(Campaign.new(party).best_at(Visit.PERSUADE_SKILL))
+	return talker != null and Visit._talk_mode(talker, party) == Dice.ADV
 
 # --- projection (see header) -------------------------------------------
 func _iso(v: Vector2) -> Vector2:

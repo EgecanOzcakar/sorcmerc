@@ -71,6 +71,10 @@ const PERSUADE_DC := 15
 # — one attempt per visit, same shape as steal(). The DC climbs with how far
 # below the refusal line the faction actually sits: a settlement that merely
 # refuses is one thing, one that loathes you is a harder sell.
+# The colder the town, the harder the ask — a point of DC per 10 opinion below the refusal line.
+static func persuade_dc(m: Dictionary) -> int:
+	return PERSUADE_DC + maxi(0, int((FactionOpinion.REFUSE_TRADE - float(m.get("opinion", 0.0))) / 10.0))
+
 static func persuade(s, m: Dictionary, party, rng = null) -> Dictionary:
 	if not m.get("refused", false):
 		return {}
@@ -79,7 +83,7 @@ static func persuade(s, m: Dictionary, party, rng = null) -> Dictionary:
 	var ch = party.get_member(char_id) if char_id != "" else null
 	if ch == null:
 		return {}
-	var dc: int = PERSUADE_DC + maxi(0, int((FactionOpinion.REFUSE_TRADE - float(m.get("opinion", 0.0))) / 10.0))
+	var dc: int = persuade_dc(m)
 	if rng == null:
 		rng = RNG.new(maxi(1, absi(hash("persuade|%s|%d" % [s.id, int(s.last_visited)]))))
 	var bonus: int = c.skill_bonus(char_id, PERSUADE_SKILL)
@@ -110,6 +114,24 @@ static func _talk_mode(ch, party) -> int:
 	if Potions.road_buff(ch, "persuasion_adv", party.world_now) or party.caster_of(TALK_SPELLS) != null:
 		return Dice.ADV
 	return Dice.NORMAL
+
+# #87: what a check button would roll, before it is pressed — who, with what
+# bonus, against what DC, and the odds that gives. The same numbers the
+# result line will quote, so nothing on the button is a surprise afterwards.
+static func check_preview(party, skill: String, dc: int, adv := false) -> String:
+	var c = Campaign.new(party)
+	var char_id: String = c.best_at(skill)
+	var ch = party.get_member(char_id) if char_id != "" else null
+	if ch == null:
+		return "Nobody in the party can attempt this."
+	var bonus: int = c.skill_bonus(char_id, skill)
+	var need: int = clampi(dc - bonus, 2, 20)   # a natural 1 always misses; a 20 always lands
+	var p: float = (21 - need) / 20.0
+	if adv:
+		p = 1.0 - (1.0 - p) * (1.0 - p)
+	var name: String = String(Catalog.skills().get(skill, {}).get("name", skill.capitalize()))
+	return "%s rolls %s %+d vs DC %d — needs %d+ on the d20%s, %d%% to make it." % [
+		ch.cname, name, bonus, dc, need, " (advantage)" if adv else "", int(round(p * 100.0))]
 
 const HAGGLE_SKILL := "persuasion"
 const HAGGLE_DC := 13
