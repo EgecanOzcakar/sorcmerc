@@ -448,7 +448,7 @@ out of combat. A potion with none of `heal`, `damage`, `condition`, `status` or
 `passive_damage`, `self_buff`, `ally_buff`, `heal_self`, `heal_ally`,
 `grant_action`, `grant_verb`, `attacks_per_action`, `attack_modifier`,
 `damage_bonus`, `save_effect`, `reaction`, `save_modifier`, `survive_damage`,
-`keen_senses`.
+`keen_senses`, `aura`, `summon`.
 
 ```json
 "monster-parry-2": {"label": "Parry", "kind": "reaction",
@@ -460,6 +460,30 @@ does nothing in a fight. That default is what makes a bestiary of hundreds of
 ids tractable, so author only the ones that matter — and note that it is also
 why the `kind` vocabulary is closed rather than open. A typo'd kind would be
 indistinguishable from a feature you meant to leave as flavour.
+
+An `aura` is a standing fact about a piece of the board rather than a button:
+it needs a `range_ft` and a payload (`save_bonus`, `cond_immune` or
+`aura_resist`), and the resolver reads the best one in reach at the moment a
+number is needed.
+
+A `summon` puts a second creature on the board, on its owner's side, in the
+free hex nearest them. It names a stat block and may scale it off its owner:
+
+```json
+"beastmaster-primal-companion": {"kind": "summon", "cost": "action",
+  "summon": {"id": "dire-wolf"}, "uses": {"by": "pb"},
+  "mult_pct": {"by": "class_level", "class": "ranger",
+               "steps": [{"min": 3, "value": 70}, {"min": 9, "value": 110}]}}
+```
+
+`summon.id` is a `monsters.json` or `bestiary.json` id and must exist — a
+summon naming nothing is refused rather than standing nothing up. `mult_pct` is
+whole percent (`encounter._scale`'s multiplier ×100, since a scaling spec deals
+in ints), `rounds` puts a clock on it, and `summon.illusion` marks it as not a
+creature: nothing can target it and it cannot attack. It **rolls its own
+initiative** and takes its place in the order by that roll. The button greys
+out while one of the same stat block is still standing, so a feature summon
+cannot be stacked.
 
 `cost` is `action`, `bonus`, `reaction`, or `none` for a passive. A reaction
 must name a `trigger` the engine actually fires — `hit_by_attack`,

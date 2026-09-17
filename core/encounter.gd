@@ -304,9 +304,18 @@ static func party() -> Array:
 		out.append(Adapter.to_combatant(ch, "party", START[ch.id]))
 	return out
 
+# The demo room's fixed foes. START is the roster, not just the geometry: it has
+# always been indexed blindly by every monsters.json id, so the file quietly
+# doubled as "the four things standing in the sandbox". T-summon put a fifth
+# entry in it — Invoke Duplicity's double, a stat block that is summoned and
+# never spawned — and it walked straight into the demo fight, on top of Vera,
+# because START had nothing to say about it. The filter is that assumption
+# written down.
 static func monsters() -> Array:
 	var out: Array = []
 	for m in Catalog.all("monsters.json"):
+		if not START.has(m["id"]):
+			continue
 		out.append(Adapter.from_monster(m, "foe", START[m["id"]]))
 	return out
 

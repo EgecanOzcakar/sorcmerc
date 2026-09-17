@@ -213,7 +213,13 @@ static func _step_clear(cb, m, pcs: Array) -> bool:
 	return m.conscious()
 
 static func _foe_turn(cb, m) -> void:
-	var pcs: Array = cb.combatants.filter(func(c): return c.team == "party" and c.conscious())
+	# `illusion` (Invoke Duplicity's double) is out of the list rather than
+	# merely unhittable. A foe that only refused the swing would still pick the
+	# double first — it has 1 hp and the list sorts on hp — and lose its whole
+	# turn to it, which makes the double far stronger than RAW's "Advantage
+	# against creatures within 5 feet" and reads as the AI being broken.
+	var pcs: Array = cb.combatants.filter(func(c): return c.team == "party" \
+		and c.conscious() and not c.has("illusion"))
 	if pcs.is_empty():
 		return
 	_use_kit(cb, m)

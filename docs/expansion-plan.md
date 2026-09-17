@@ -5592,3 +5592,109 @@ already has the machinery for this (`roster_locked`, which is how benching and
 recruiting became inn-only), so gating it later is a one-line change — but
 choosing to gate it is a design decision about how much re-tooling mid-run
 should cost, and that is not one to make as a side effect of adding the screen.
+
+## T-summon — a second token, on its own initiative count (2026-09-17)
+
+T-classes-c ended with five mechanics written down and not built, and two of
+them — **Primal Companion** and **Invoke Duplicity** — were held back for a
+reason that was not a rules question: *"a second token on the board under one
+player's control, which is an initiative and an AI question before it is a
+rules one."* Both answers are now in.
+
+**The AI question was already answered and nobody had noticed.** `scenes/main.gd`
+dispatches on team, not on whether a combatant has a sheet: anything on the
+party's side gets the action bar, anything on the foe's side gets `core/ai.gd`.
+Summon Beast has shipped that way since T-spells — the player drives the wolf
+like a hero. So a companion needs no new control path at all.
+
+**The initiative question needed a call, and the call is: it rolls its own.**
+Not "acts immediately after its owner", which is what `combat.summon()` did
+(and what the SRD's elemental-summoning wondrous items say). One thing costs
+attention when a creature joins mid-fight: `order` is indexed by `turn_idx`, so
+a creature landing at or above the live index slides the current actor down a
+slot and the fight quietly continues as somebody else. `_join_order` moves
+`turn_idx` with it. Landing *below* the live index is not a bug either — that
+is a creature whose count has already gone by this round, and it waits for the
+next one, which is what RAW says. `tests/test_summons.gd` drives thirty seeds
+and asserts both sides of the index were exercised, because a one-seed test
+here proves nothing.
+
+One existing assertion changed rather than being re-pinned:
+`test_spell_buffs.gd` asserted the wolf sat at `order.find(ilsa) + 1`. That was
+the old rule stated as a fact. It now asserts what has to hold under the new
+one — the wolf is in the order once, on a roll of its own, and the live turn
+did not move.
+
+**Primal Companion** (`beastmaster-primal-companion`, ranger 3). A new effect
+kind, `summon`: an entry naming a stat block, a `mult_pct` curve that scales it
+off the owner's level, and `uses`. The beast is a dire wolf at 70% of its block
+at ranger 3, 110% at 9, 150% at 17 — one bestiary entry serving every level,
+through `encounter._scale`, rather than five hand-authored companions. Uses are
+the ranger's proficiency bonus and come back on a long rest, which is why
+`beastmaster-primal-companion` joins `adapter.LONG_REST_ONLY_FEATURES` (the
+default for a synthetic pool is short-rest). The button greys out while a beast
+is standing: RAW gives the Beast Master one, and stacking a second is the
+failure mode a `summon` button has that a `self_buff` button does not.
+
+**Invoke Duplicity** (`trickerydomain-invoke-duplicity`, cleric 3) is the same
+kind with three things turned on. It spends the cleric's `channel-divinity`
+pool, so it competes with Channel Divinity's other use rather than carrying a
+pool of its own. Its `summon` carries `illusion: true`, which buys two reads:
+`legal_target` refuses it as a target (it is not a creature, and nothing swings
+at it) and its status carries `no_attack` (it does not swing back). And
+`rounds: 10` puts RAW's minute on it — `_fade_if_expired` kills it at the start
+of its own turn rather than erasing it from `order`, for the same reason
+`_end_concentration` leaves a faded summon standing as a body.
+
+What it actually buys is one read in `_attack_mode`: a foe within 5 feet of the
+double is attacked at Advantage. **One liberty taken there, deliberately.** RAW
+says *you* have Advantage; this gives it to the double's whole side, because a
+double that helps only the one person who cannot also be standing where it
+stands is a Channel Divinity spent on almost nothing. The cleric's own swing is
+the RAW case and still the common one.
+
+RAW moves the double 30 feet as a Bonus Action on the cleric's turn. Here it
+walks on its own turn like anything else on the board, which follows from the
+initiative call rather than sitting beside it — one rule for where a summoned
+token acts, not two.
+
+**Three things "not a creature" turned out to mean**, none of which the phrase
+made obvious:
+
+* `_team_out` counted anything conscious on a side as that side still standing,
+  so a wiped party with a double up left the fight "ongoing" until MAX_ROUNDS —
+  nothing can attack the double, so nothing could ever end it.
+* `ai.gd` builds its own target list off `combatants` and swings through
+  `resolve_attack` without asking `legal_target`, so the AI simply killed it.
+  The guard belongs in `resolve_attack` — the one place every swing in the game
+  passes, opportunity attacks included — and the double is *also* out of
+  `_foe_turn`'s list rather than merely unhittable. A foe that only refused the
+  swing would still pick the double first (1 hp, and the list sorts on hp) and
+  lose its whole turn to it, which is much stronger than RAW and reads as the
+  AI being broken.
+* `_provocations` would have had it readying opportunity attacks. It swings at
+  nobody, here least of all.
+
+**A latent bug the double walked into.** `Encounter.monsters()` iterated every
+`data/monsters.json` id and looked each one up in `START` — so that file had
+quietly been doubling as "the four things standing in the demo room", and a
+fifth entry (a stat block that is summoned and never spawned) walked straight
+into the sandbox fight on top of Vera. Three assertions in `test_combat.gd`
+caught it. `monsters()` now skips ids `START` has nothing to say about, which
+is the assumption it always had, written down.
+
+![the turn strip](shots/summon-own-initiative.png)
+
+A Beast Master and a Trickery cleric, both tokens up: **Dire Wolf (19)** at the
+head of the order and **Illusory Double (3)** at the tail — neither of them
+next to its owner, which is the whole point of the change.
+
+**Still not done**, and still for the reasons T-classes-c gave: Aura of
+Alacrity (the 2024 wording, not guessed at), Portent (*which* d20 you replace
+is the feature, and a no-prompt engine would auto-spend on the first roll it
+saw), Arcane Ward (a fourth read in `_apply_damage` plus school-tracking the
+engine does not do) and Wild Shape (a statblock swap whose open questions are
+design ones). Two smaller simplifications also stand: a buff's `damage_type` is
+authored and unread, and `power.gd` prices neither `reaction` nor `aura` — and
+now not `summon` either, so a Beast Master's estimated power does not count the
+beast.

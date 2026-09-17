@@ -245,6 +245,7 @@ func begin_turn() -> void:
 		_death_save(c)
 
 func begin_turn_for(c) -> void:
+	_fade_if_expired(c)
 	c.new_turn()   # action/bonus/reaction/move + turn-long statuses (spec §7)
 	# An answer is given for one trigger. Anything still sitting here was asked
 	# about something that never happened — the caster died first, the swing
@@ -260,6 +261,20 @@ func begin_turn_for(c) -> void:
 		c.econ["move_left"] = int(c.econ["move_left"]) * _buff_sum(c, "speed_mult")
 	_regenerate(c)
 	_auto_stand(c)
+
+# A summon with a clock on it (Invoke Duplicity's minute) goes at the start of
+# its own turn. Killed, not erased: a corpse is what `order` is built to carry,
+# and removing an entry would slide turn_idx under the live turn — the same
+# reason _end_concentration leaves a faded summon standing as a body.
+func _fade_if_expired(c) -> void:
+	var s = c.statuses.get("summoned")
+	if not (s is Dictionary and s.has("fades_tick")) or c.is_dead():
+		return
+	if _tick() <= int(s["fades_tick"]):
+		return
+	c.hp = 0
+	c.statuses["dead"] = true
+	log.append("%s fades." % c.cname)
 
 # What the drinker's potion buffs add up to for one key (core/potions.gd).
 func _buff_sum(c, key: String) -> int:
@@ -376,9 +391,12 @@ func surrender() -> void:
 func is_over() -> bool:
 	return surrendered or round_num > MAX_ROUNDS or _team_out("party") or _team_out("foe")
 
+# An illusion is not a creature, so it cannot be the last one standing. Without
+# this, Invoke Duplicity's double kept a wiped party's fight "ongoing" until
+# MAX_ROUNDS — nothing can attack the double, so nothing could ever end it.
 func _team_out(team: String) -> bool:
 	for c in combatants:
-		if c.team == team and c.conscious():
+		if c.team == team and c.conscious() and not c.has("illusion"):
 			return false
 	return true
 
@@ -520,7 +538,11 @@ const BASIC := [
 # Feature kinds that are a button. The rest are passive: passive_damage folds into
 # resolve_attack, attacks_per_action into new_turn(), reaction fires on its trigger.
 const OFFERABLE := ["heal_self", "heal_ally", "self_buff", "ally_buff", "grant_action",
-	"attack_modifier", "save_effect", "spell", "offhand_attack"]
+	"attack_modifier", "save_effect", "spell", "offhand_attack",
+	# T-summon. A feature that puts a second token on the board — Primal
+	# Companion, Invoke Duplicity. It aims at nothing (targeting "self"): the
+	# arrival hex is the free one nearest its owner, as a spell's summon is.
+	"summon"]
 
 func _basic(id: String) -> Dictionary:
 	for b in BASIC:
@@ -648,6 +670,8 @@ func _offerable(actor, v: Dictionary) -> bool:
 		"disengage": return not actor.has("disengaged")
 		"dash": return true
 		"self_buff": return not actor.has(v.get("status", v["id"]))
+		"summon": return not _already_out(actor, String(v["summon"]["id"])) \
+			and _free_near(actor.pos) != NOWHERE
 		"attack_modifier", "grant_action": return true
 	match v.get("targeting", "self"):
 		"enemy": return enemies_of(actor).any(func(e): return legal_target(actor, v, e))
@@ -656,12 +680,26 @@ func _offerable(actor, v: Dictionary) -> bool:
 		"object": return not smashable_near(actor).is_empty()
 	return true
 
+# RAW gives the Beast Master one beast and the Trickery cleric one double, and
+# the button greys out while it stands rather than quietly stacking a second.
+# A summon spell is not gated this way: its cost is the slot, and Summon Beast
+# twice over is two slots for two wolves.
+func _already_out(caster, monster_id: String) -> bool:
+	for c in combatants:
+		var s = c.statuses.get("summoned")
+		if s is Dictionary and s.get("by") == caster and String(s.get("of", "")) == monster_id \
+				and not c.is_dead():
+			return true
+	return false
+
 # Is `c` a legal target for `v` cast/swung by `actor` right now?
 func legal_target(actor, v: Dictionary, c) -> bool:
 	match v.get("targeting", "self"):
 		"enemy":
 			if c.team == actor.team or not c.conscious() or c.has("hidden"):
 				return false
+			if c.has("illusion"):
+				return false  # Invoke Duplicity's double is not a creature (an area still catches it)
 			if _source_of(actor, "cannot_target_source") == c:
 				return false  # charmed
 			if String(v.get("target_type", "")) != "" \
@@ -747,6 +785,12 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			actor.econ["attacks_left"] = int(actor.econ["attacks_left"]) + int(v.get("extra_attacks", 0))
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"save_effect": return _save_effect(actor, v, target)
+		"summon":
+			var called = summon(actor, v)
+			if called == null:
+				return {"error": "nowhere for it to stand"}
+			log.append("%s — %s!" % [actor.cname, v["label"]])
+			return {"summoned": called}
 		"spell": return cast(actor, v, target)
 		"drink":
 			var r := Potions.drink_in_combat(self, actor, String(v["potion"]), target)
@@ -988,20 +1032,29 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 		_apply_damage(c, dmg, v.get("damage_type", ""))
 	return {"saved": saved, "damage": dmg}
 
-# Summon Beast and kin: a bestiary creature on the caster's side, in the free
-# hex nearest the caster, acting right after them for the rest of the fight
-# (or until concentration drops — it is held like a condition). Its `summon`
-# is {id, count?}: `id` a monsters.json id, scaled by nothing — the spell
-# picks a creature the slot pays for. The player drives it like a hero.
-# ponytail: one stat block per spell, no upcast scaling; add a per-level id
-# table if a 5th-level Summon Beast needs to be more than a wolf.
+# Summon Beast, Primal Companion and kin: a bestiary creature on the caster's
+# side, in the free hex nearest the caster, for the rest of the fight (or until
+# concentration drops — it is held like a condition, or until `rounds` run out).
+#
+# T-summon: it ROLLS ITS OWN INITIATIVE and takes its place in the order by that
+# roll, rather than acting immediately after whoever called it. That is the
+# design call, and it costs one thing to get right — a creature landing at or
+# above `turn_idx` slides the live turn down a slot, so turn_idx moves with it
+# or current() silently becomes somebody else mid-action. Landing BELOW the
+# current index is not a bug either: that is a creature whose count has already
+# gone by this round, and it waits for the next one, which is what RAW says.
+#
+# Its `summon` is {id, illusion?}: `id` a monsters.json id. `mult` on the verb
+# scales the stat block (encounter._scale) — the ranger's companion grows with
+# the ranger; a spell's summon is whatever the slot paid for and passes 1.0.
+# The player drives it like a hero (scenes/main.gd dispatches on team).
 func summon(caster, v: Dictionary):
 	var m: Dictionary = v["summon"]
 	var spot := _free_near(caster.pos)
-	if spot == Vector2i(-999, -999):
+	if spot == NOWHERE:
 		return null
 	var n := combatants.filter(func(c): return c.src_id == String(m["id"])).size() + 1
-	var c = load("res://core/encounter.gd").spawn(String(m["id"]), 1.0, caster.team, spot, n)   # load: encounter.gd preloads this file
+	var c = load("res://core/encounter.gd").spawn(String(m["id"]), float(v.get("mult", 1.0)), caster.team, spot, n)   # load: encounter.gd preloads this file
 	if c == null:
 		return null
 	if tracked and caster.team == "party":
@@ -1009,17 +1062,45 @@ func summon(caster, v: Dictionary):
 	c.short = c.cname.replace(" %d" % n, "")   # the bar says "Dire Wolf", the log "Ilsa's Dire Wolf 1"
 	c.cname = "%s's %s" % [caster.cname.get_slice(" ", 0), c.cname]
 	combatants.append(c)
-	var at := order.find(caster)
-	order.insert(at + 1 if at >= 0 else order.size(), c)
-	begin_turn_for(c)
+	# Always stamped, so "does this caster already have one of these out?" has an
+	# answer (_already_out, which is what keeps Primal Companion to one beast).
+	# Written before begin_turn_for() rather than after: that call is what expires
+	# a clock, and a double standing up in round 11 must fade on arrival, not get
+	# a free turn because its stamp had not been applied yet.
+	var held := {"by": caster, "of": String(m["id"])}
 	if v.get("concentration", false):
-		c.statuses["summoned"] = {"held_by": caster, "spell": String(v.get("spell", ""))}
+		held["held_by"] = caster
+		held["spell"] = String(v.get("spell", ""))
+	elif int(v.get("rounds", 0)) > 0:
+		held["fades_tick"] = _tick() + int(v["rounds"]) * TICK_STRIDE
+	c.statuses["summoned"] = held
+	if m.get("illusion", false):
+		# Not a creature: nothing can swing at it (legal_target) and it cannot
+		# swing back (the no_attack gate in _offerable).
+		c.statuses["illusion"] = {"no_attack": true}
+	_join_order(c)
+	begin_turn_for(c)
 	return c
+
+# A mid-fight arrival takes its own initiative count. Everything below the
+# current index has missed its turn this round and starts next round; keeping
+# turn_idx pointed at the same combatant is the whole job.
+func _join_order(c) -> void:
+	c.init_roll = Dice.d20(rng).nat + c.init_mod
+	var at := 0
+	while at < order.size() and _init_before(order[at], c):
+		at += 1
+	order.insert(at, c)
+	if at <= turn_idx:
+		turn_idx += 1
+	log.append("  %s rolls initiative: %d." % [c.cname, c.init_roll])
+
+const NOWHERE := Vector2i(-999, -999)
 
 func _free_near(origin: Vector2i) -> Vector2i:
 	var ring: Array = Hex.within(origin, 3).filter(func(p): return p != origin and p in board["hexes"] and passable(p) and _hex_free(p))
 	ring.sort_custom(func(a, b): return Hex.distance(origin, a) < Hex.distance(origin, b))
-	return ring[0] if not ring.is_empty() else Vector2i(-999, -999)
+	return ring[0] if not ring.is_empty() else NOWHERE
 
 # A spell's `buff` (data/effects/spells.json) on `who`: a statuses entry under
 # "spell:<id>" carrying the keys the resolver reads (ac, bonus_to_hit,
@@ -1298,12 +1379,27 @@ func _attack_mode(attacker, target, opts := {}) -> int:
 		adv = true   # weapon mastery Vex
 	if opts.get("advantage", false):
 		adv = true
+	if _distracted(attacker, target):
+		adv = true
 	# passive attack_modifier: Pack Tactics and friends, no button, no action
 	for v in attacker.verbs:
 		if v["kind"] == "attack_modifier" and v.get("trigger", "") == "passive" \
 				and v.get("self", "") == "adv" and _requires_met(attacker, target, Dice.combine(adv, dis), v.get("requires", [])):
 			adv = true
 	return Dice.combine(adv, dis)
+
+# Invoke Duplicity: "you have Advantage on attack rolls against creatures within
+# 5 feet of the illusion". Whose Advantage is the one liberty taken — it is the
+# double's whole side here, not the cleric alone, because a double that helps
+# only the one person who cannot also be standing where it stands is a Channel
+# Divinity spent on almost nothing. The cleric's own swing is the RAW case and
+# still the common one.
+func _distracted(attacker, target) -> bool:
+	for c in combatants:
+		if c.team == attacker.team and c.has("illusion") and not c.is_dead() \
+				and Hex.distance(c.pos, target.pos) <= 1:
+			return true
+	return false
 
 # Paralyzed/unconscious: any melee hit from within reach is a crit.
 func _auto_crit(attacker, target, opts := {}) -> bool:
@@ -1690,6 +1786,12 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		return {"error": "cannot act"}   # ai.gd swings without asking available()
 	if _source_of(attacker, "cannot_target_source") == target:
 		return {"error": "charmed"}
+	if target.has("illusion"):
+		# The choke point, not legal_target: ai.gd builds its own target list off
+		# `combatants` and swings through here without asking, and so does the
+		# opportunity attack in move_to. Invoke Duplicity's double is not a
+		# creature, and this is the one place every swing in the game passes.
+		return {"error": "there is nothing there to hit"}
 	if not free and not in_reach(attacker, target):
 		return {"error": "out of range"}
 	if not free:
@@ -2210,8 +2312,8 @@ func _provocations(mover, dest: Vector2i) -> Array:
 	var out: Array = []
 	var taken: Array = []
 	for f in enemies_of(mover):
-		if not can_spend(f, "reaction") or f in taken:
-			continue
+		if not can_spend(f, "reaction") or f in taken or _buff_flag(f, "no_attack"):
+			continue   # an illusion swings at nobody, here least of all
 		for i in range(path.size() - 1):
 			if Hex.distance(f.pos, path[i]) <= 1 and Hex.distance(f.pos, path[i + 1]) > 1:
 				out.append([f, path[i]])

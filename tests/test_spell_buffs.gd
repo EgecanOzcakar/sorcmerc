@@ -186,11 +186,18 @@ func test_teleport_obscure_summon() -> void:
 	var n0: int = cb.combatants.size()
 	var sb := _verb(ilsa, "summon-beast")
 	check(sb["targeting"] == "self", "Summon Beast needs no aim")
+	var whose_turn = cb.current()
 	var res: Dictionary = cb.perform(ilsa, sb)
 	check(cb.combatants.size() == n0 + 1 and res.has("summoned"), "a creature joins the fight")
 	var wolf = res["summoned"]
 	check(wolf.team == "party" and wolf.src_id == "dire-wolf" and wolf.cname.begins_with("Ilsa's"), "...on Ilsa's side, hers by name (%s)" % wolf.cname)
-	check(cb.order.find(wolf) == cb.order.find(ilsa) + 1, "...acting right after her")
+	# T-summon changed this one: a summon used to be pinned into the slot right
+	# after its caster and now takes an initiative count of its own, so where it
+	# lands is its roll's business. What still has to hold is that the arrival
+	# did not slide the live turn out from under whoever was taking it.
+	check(wolf in cb.order and cb.order.count(wolf) == 1, "...taking a place in the order")
+	check(wolf.init_roll != 0, "...on an initiative roll of its own (%d)" % wolf.init_roll)
+	check(cb.current() == whose_turn, "...without moving the live turn off %s" % whose_turn.cname)
 	check(wolf.short_name() == "Dire Wolf", "the bar calls it by its kind, not \"Ilsa's\" (%s)" % wolf.short_name())
 	check(Hex.distance(wolf.pos, ilsa.pos) <= 3 and cb._hex_free(wolf.pos, wolf), "...in a free hex beside her")
 	check(not cb.all_verbs(wolf).filter(func(v): return v["kind"] == "attack").is_empty(), "...and it has an attack")

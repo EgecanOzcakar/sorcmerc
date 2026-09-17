@@ -49,7 +49,8 @@ static func _is_warlock(s) -> bool:
 # always long-rest; bard-bardic-inspiration is long-rest until level 5's Font of
 # Inspiration flips it to short-rest — _synthetic_regen() below is where that
 # one feature-specific exception lives, everything else uses the flat default.
-const LONG_REST_ONLY_FEATURES := ["bard-bardic-inspiration", "wizard-arcane-recovery"]
+const LONG_REST_ONLY_FEATURES := ["bard-bardic-inspiration", "wizard-arcane-recovery",
+	"beastmaster-primal-companion"]   # RAW: the beast's uses come back on a long rest
 const FONT_OF_INSPIRATION_LEVEL := 5
 
 static func _synthetic_regen(pool_id: String, sheet) -> String:
