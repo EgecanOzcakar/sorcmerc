@@ -1401,8 +1401,17 @@ func _retreat() -> void:
 # Same shape as _check_encounter above, against the settlement list instead of
 # the party list. `_left` stops the panel reopening on the frame after Leave —
 # it clears once the player is actually outside the radius again.
+# #89: "paused" is not the gate — the halt on arriving (#70) and after a fight
+# (#98) is a pause too, and a party stopped on top of a lair still has to see
+# "Attack" / "Slip past". What these gates are really about is a card or panel
+# owning the screen.
+func _overlay_up() -> bool:
+	return _event_card != null or _approach_card != null or _spoils_panel != null \
+		or _site != null or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
+		or _story_panel != null or story_card != null or _menu_panel != null
+
 func _check_visit() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
 	var p := world.player()
 	if p == null:
@@ -1436,7 +1445,7 @@ func _check_visit() -> void:
 # Survival check, discovered-and-unlooted offers the fight. A looted lair (or
 # nothing in range) hides the button — there is nothing left to do there.
 func _check_lairs() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		_lair_btn.visible = false
 		_lair_sneak_btn.visible = false
 		return
@@ -2227,7 +2236,7 @@ func _hostile_nearby() -> bool:
 	return false
 
 func _short_rest() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
 	if _hostile_nearby():
 		_camp_msg.text = "Too dangerous to rest here — something hostile is close."
@@ -2250,7 +2259,7 @@ func _short_rest() -> void:
 # reason to gate this on can_long_rest() first: no point risking an ambush
 # for a rest that wouldn't grant its benefit yet regardless.
 func _make_camp() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
 	if not Visit.can_long_rest(party, world):
 		_camp_msg.text = "The party isn't tired enough for another long rest yet."
