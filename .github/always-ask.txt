@@ -1,0 +1,17 @@
+# Paths an automated fix may never touch. Extended regexes, one per line,
+# matched against every path in the fix's diff. A hit holds the whole run
+# and opens an issue instead of a PR. Read by post-merge-audit.yml (the
+# structural check) and by the fixer prompt (so it doesn't waste turns).
+# Portable: keep the generic rows, add repo-specific ones at the bottom.
+^\.github/
+(^|/)(auth|rls|polic|security|permission|secret|credential)[^/]*$
+(^|/)migrations?/
+\.sql$
+(^|/)(payment|billing|licens|stripe|checkout)[^/]*
+^\.env
+\.(pem|key|p12)$
+(^|/)(package(-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|Cargo\.lock|go\.sum)$
+# sorcmerc: engine config, export/release presets, the network relay
+^project\.godot$
+^export_presets\.cfg$
+^tools/bug-relay/

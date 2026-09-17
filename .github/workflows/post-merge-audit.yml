@@ -1,0 +1,165 @@
+name: Post-merge audit
+
+# Every merge to master: audit the merged diff, fix the small safe things on a
+# branch and open a PR, hold everything else in an issue assigned to the owner.
+# Thresholds and the port-to-another-repo recipe: docs/post-merge-audit.md.
+#
+# The one guardrail that makes unattended fixing safe: Claude never gets git or
+# gh. It edits the working tree; a plain shell step commits to auto/* and opens
+# the PR. There is no code path from here to master.
+
+on:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: post-merge-audit
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: worth auditing?
+    # Private repos only. Merged content on a public repo can carry prompt
+    # injection from outside contributors straight into a run with write tools.
+    if: github.event.repository.private
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+      range: ${{ steps.gate.outputs.range }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: gate
+        env:
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -eu
+          skip() { echo "skip: $1"; echo run=false >> "$GITHUB_OUTPUT"; exit 0; }
+          # Our own fix PRs carry this marker in the title; auditing them again loops.
+          grep -q '\[auto-fix\]' <<<"$MSG" && skip "own fix PR"
+          grep -Eiq '^(bump|release|chore\(release\)|v[0-9])' <<<"$MSG" && skip "version bump"
+          range="$BEFORE..$SHA"
+          if [[ "$BEFORE" =~ ^0+$ ]] || ! git merge-base --is-ancestor "$BEFORE" "$SHA"; then
+            range="$SHA~1..$SHA"
+          fi
+          # Whitespace-only, or nothing but docs / assets / import metadata.
+          [ -z "$(git diff -w --numstat $range)" ] && skip "whitespace only"
+          real=$(git diff --name-only $range | grep -Ev '^docs/|\.md$|^LICENSE|^\.gitignore|\.import$|^shots/|\.(png|jpg|svg|wav|ogg)$' || true)
+          [ -z "$real" ] && skip "docs/assets only"
+          echo run=true >> "$GITHUB_OUTPUT"
+          echo "range=$range" >> "$GITHUB_OUTPUT"
+
+  audit-and-fix:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+      id-token: write
+    env:
+      RANGE: ${{ needs.gate.outputs.range }}
+      REPORT: ${{ github.workspace }}/.post-merge-report.md
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are the post-merge improvement loop for ${{ github.repository }}.
+            Scope is ONLY the merged diff `git diff ${{ env.RANGE }}` (read it with
+            Bash). Do not audit the rest of the repo; a daily sweep covers that.
+
+            1. Dispatch the `code-auditor` subagent on that diff: latent bugs,
+               dead code, cheap obvious fixes introduced or exposed by the change.
+            2. Classify every finding by the rules in docs/post-merge-audit.md.
+               AUTO = its fix stays within the size caps (≤5 files, ≤150 changed
+               lines, ≤2 top-level directories) AND touches no path matching
+               .github/always-ask.txt AND deletes or renames no file.
+               Everything else is ASK.
+            3. Dispatch the `fixer` subagent on the AUTO items, one group at a
+               time. It edits the working tree only. You have no git write or gh
+               tools and must not look for a way around that — a later step
+               commits, branches and opens the PR.
+            4. Write ${{ env.REPORT }} with exactly two headings:
+               `## Done` — one line per fix applied (file, what, why).
+               `## Needs approval` — one line per ASK item: file:line, the
+               problem, the proposed fix, why it is ASK (size or which path).
+               Write the heading even when its list is empty.
+            Nothing else. Do not touch files outside what a fix needs.
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Agent,Task,Read,Glob,Grep,Edit,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
+
+      # Structural check on what actually changed, independent of what Claude
+      # said it did. Any breach holds the whole run: no PR, issue instead.
+      - name: Check the fix against the caps
+        id: caps
+        run: |
+          set -eu
+          git add -A --intent-to-add
+          git diff --numstat -- . ':!.post-merge-report.md' > /tmp/numstat
+          files=$(wc -l < /tmp/numstat)
+          lines=$(awk '{s+=$1+$2} END{print s+0}' /tmp/numstat)
+          dirs=$(awk '{print $3}' /tmp/numstat | awk -F/ '{print ($0 ~ /\//) ? $1 : "."}' | sort -u | wc -l)
+          risky=$(awk '{print $3}' /tmp/numstat | grep -Ef <(grep -Ev '^#|^$' .github/always-ask.txt) || true)
+          gone=$(git diff --name-only --diff-filter=DR || true)
+          hold=""
+          [ "$files" -gt 5 ]   && hold="$hold $files files;"
+          [ "$lines" -gt 150 ] && hold="$hold $lines lines;"
+          [ "$dirs"  -gt 2 ]   && hold="$hold $dirs top-level dirs;"
+          [ -n "$risky" ]      && hold="$hold always-ask path: $(tr '\n' ' ' <<<"$risky");"
+          [ -n "$gone" ]       && hold="$hold deleted/renamed: $(tr '\n' ' ' <<<"$gone");"
+          echo "files=$files lines=$lines dirs=$dirs hold=[$hold]"
+          echo "changed=$([ "$files" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "hold=$hold" >> "$GITHUB_OUTPUT"
+          git reset -q
+
+      - name: Open the fix PR
+        if: steps.caps.outputs.changed == 'true' && steps.caps.outputs.hold == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHORT: ${{ github.sha }}
+        run: |
+          set -eu
+          branch="auto/post-merge-${SHORT:0:7}"
+          git config user.name  "post-merge-audit[bot]"
+          git config user.email "post-merge-audit@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -A -- . ':!.post-merge-report.md'
+          git commit -qm "[auto-fix] post-merge fixes for ${SHORT:0:7}"
+          git push -u origin "$branch"
+          gh pr create --title "[auto-fix] post-merge fixes for ${SHORT:0:7}" \
+            --body-file "$REPORT" --base master --head "$branch"
+          # PRs opened with GITHUB_TOKEN do not trigger workflows; run the suite by hand.
+          gh workflow run tests.yml --ref "$branch"
+
+      - name: Ask the owner
+        if: always() && steps.caps.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOLD: ${{ steps.caps.outputs.hold }}
+          SHORT: ${{ github.sha }}
+        run: |
+          set -eu
+          [ -f "$REPORT" ] || exit 0
+          ask=$(sed -n '/^## Needs approval/,$p' "$REPORT" | grep -c '^[-*0-9]' || true)
+          [ "$ask" -eq 0 ] && [ -z "$HOLD" ] && exit 0
+          {
+            [ -n "$HOLD" ] && printf 'Automated fix **held**, nothing pushed: %s\n\n' "$HOLD"
+            cat "$REPORT"
+            printf '\n---\nTo have Claude do any of these: relabel this issue `bug` (claude-issues.yml picks it up and opens a PR), or do it by hand.\n'
+          } > /tmp/issue.md
+          gh label create needs-approval --color D93F0B --force
+          gh issue create --title "[needs approval] post-merge audit of ${SHORT:0:7}" \
+            --body-file /tmp/issue.md --assignee "${{ github.repository_owner }}" --label needs-approval
