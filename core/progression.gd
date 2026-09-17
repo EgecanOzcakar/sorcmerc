@@ -44,14 +44,15 @@ const VERSION := 1
 # --- TESTING PACE (temporary) ----------------------------------------------
 #
 # Every threshold below is cut so the whole ladder can be walked in one sitting:
-# roughly one unlock per three fights, measured against what a fight actually
-# pays (core/encounter.gd's power * XP_PER_POWER, resolved for a real roster):
+# roughly one unlock per five fights, measured against what an open-country
+# fight actually pays (core/encounter.gd's power * XP_PER_POWER at
+# WorldThreat's "easy" baseline, resolved for the preset party — 2026-09-17):
 #
-#   levels 1-3   55-190 xp a fight    ~150 for a party a few fights in
-#   levels 5-8   250-500
-#   levels 12+   500-720
+#   levels 1-2   55-75 xp a fight
+#   levels 3-5   120-240
+#   level 8      ~350
 #
-# So a species step is 450 (three early fights) and a class step is 1500 (three
+# So a species step is 250 (five early fights) and a class step is 1000 (five
 # fights at the level you reach them). The shipping numbers, to put back when
 # this stops being a testing build, were:
 #
@@ -80,11 +81,11 @@ const STARTING_SPECIES := ["human", "orc", "elf", "dwarf"]
 # flashy lineages (dragonborn, goliath) come next, and the celestial-blooded
 # aasimar is the rarest thing on the list, so it costs the most.
 const SPECIES_COST := {
-	"gnome": 450,
-	"tiefling": 900,
-	"dragonborn": 1350,
-	"goliath": 1800,
-	"aasimar": 2250,
+	"gnome": 250,
+	"tiefling": 500,
+	"dragonborn": 750,
+	"goliath": 1000,
+	"aasimar": 1250,
 }
 
 # Open from day one, each with exactly 2 of its 4 subclasses pre-chosen.
@@ -101,13 +102,13 @@ const STARTING_CLASSES := {
 # player re-opens familiar ground early, then the rest by how many moving parts
 # they ask a new player to juggle, ending on the sorcerer's metamagic economy.
 const CLASS_COST := {
-	"rogue": 3000,
-	"fighter": 4500,
-	"bard": 6000,
-	"monk": 7500,
-	"druid": 9000,
-	"paladin": 10500,
-	"sorcerer": 12000,
+	"rogue": 2000,
+	"fighter": 3000,
+	"bard": 4000,
+	"monk": 5000,
+	"druid": 6000,
+	"paladin": 7000,
+	"sorcerer": 8000,
 }
 
 var lifetime_xp := 0
