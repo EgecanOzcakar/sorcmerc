@@ -891,8 +891,8 @@ func _build_inventory_panel() -> void:
 			var tip: String = ("Unidentified item (%s)" % Icons.rarity_of(id)) if not known \
 				else Icons.item_tooltip(id, kd[1], kd[0])
 			var qty := int(entry["quantity"])
-			grid.add_child(Icons.item_tile(id, tip, ("×%d" % qty) if qty > 1 else "",
-				Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if known else ""))
+			grid.add_child(Icons.item_tile(id, tip, "",
+				Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if known else "", qty))
 
 	var close := Button.new()
 	close.text = "Close"
@@ -2617,8 +2617,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 			else Icons.item_tooltip(id, kd[1], kd[0]))
 		var qty := int(entry["quantity"])
 		var tile := Icons.item_tile(id, tip + "\n\nClick: sell one for %d ◉" % paid,
-			"%d ◉" % paid + (" ×%d" % qty if qty > 1 else ""),
-			Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if Party.is_identified(entry) else "")
+			"%d ◉" % paid,
+			Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if Party.is_identified(entry) else "", qty)
 		tile.pressed.connect(_sell.bind(id))
 		pack.add_child(tile)
 
