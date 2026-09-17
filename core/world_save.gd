@@ -84,6 +84,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		parties.append({
 			"id": p.id, "position": _v(p.position), "faction": p.faction,
 			"is_player": p.is_player, "goal": _v(p.goal), "speed": p.speed,
+			"route": p.route.map(_v),   # #95: the legs still to walk
 			"ai": _enc(p.ai), "troops": p.troops,
 		})
 	# T91: lairs weren't a thing when this format was designed -- an old save
@@ -144,6 +145,8 @@ static func from_dict(d: Dictionary):
 		var p := World.RoamingParty.new(String(pd["id"]), _vec(pd.get("position")),
 			String(pd.get("faction", "soldier")), bool(pd.get("is_player", false)))
 		p.goal = _vec(pd.get("goal", pd.get("position")))
+		for wp in pd.get("route", []):
+			p.route.append(_vec(wp))
 		p.speed = float(pd.get("speed", World.SPEED))
 		p.ai = _dec(pd.get("ai", {}))
 		var troops: Array[Dictionary] = []
