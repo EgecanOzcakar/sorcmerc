@@ -1,6 +1,17 @@
 # Spike: the floating damage number
 
-2026-09-17. Measurement only — nothing adopted here, no code changed.
+2026-09-17. Measurement first, and then — in the same PR, after the feedback
+came back as "improve hit/miss/damage font weight and size" — **§7.1, 7.3, 7.5
+and half of 7.6 were taken**: one number per damage event, a size that scales
+with the zoom and with the size of the blow, the game's own bold face with an
+ink outline, and the paint moved off `Board`'s canvas onto the HUD overlay (the
+roll reveal went with it). §7.2 (re-cutting the colour bands, which is what F5
+is really about), §7.4 (hold-then-fade, the "stays longer" ask) and §7.7
+(healing) are **not** done and stand as written. `tests/test_damage_numbers.gd`
+holds the measurement below as a regression test; the before/after is
+`docs/shots/damage-readouts-before-after.png`. Everything below describes the
+code as it was *before* that change.
+
 Measured at `6be5970`; line numbers re-anchored to this branch after merging
 `2ead459` (T-path and the tutorial pass), which moved `scenes/main.gd` down
 ~107 lines without touching a byte of the float code.
