@@ -108,7 +108,7 @@ var _ops: Array = []
 var _panel := Rect2()
 var _art: Texture2D = null   # the event's picture, its outcome's frame when it has one
 var _art_rect := Rect2()
-const ART_H := 200.0         # the picture's height on the card; width follows the panel
+const ART_H := 320.0         # the picture's height on the card (#83: the whole 1:1 picture, so square-ish)
 const ART_MIN_H := 110.0     # below this it is a strip, not a picture: leave it out
 
 
@@ -466,19 +466,11 @@ func _draw() -> void:
 	# one step further, so a bad card is not a red stripe inside a gold box.
 	draw_rect(_panel, Color(_kind_color(), BORDER_ALPHA), false, 1.0)
 	if _art != null and _art_rect.size.x > 0.0:
-		# a 1:1 picture in a wide slot: the slot is filled and the picture's
-		# centre band shows — a banner, not a postage stamp in a letterbox
-		var ts := _art.get_size()
-		var src := Rect2(Vector2.ZERO, ts)
-		var slot_aspect := _art_rect.size.x / _art_rect.size.y
-		if ts.x / ts.y < slot_aspect:
-			src.size.y = ts.x / slot_aspect
-			src.position.y = (ts.y - src.size.y) * 0.4   # a touch above centre: faces and skies live there
-		else:
-			src.size.x = ts.y * slot_aspect
-			src.position.x = (ts.x - src.size.x) / 2.0
-		draw_texture_rect_region(_art, _art_rect, src)
-		draw_rect(_art_rect, Color(_kind_color(), 0.55), false, 1.0)
+		# #83: the whole picture, fitted inside the slot and centred — it used
+		# to be cropped to a banner, which lost most of a 1:1 scene.
+		var dst := Icons.fit_rect(_art.get_size(), _art_rect)
+		draw_texture_rect(_art, dst, false)
+		draw_rect(dst, Color(_kind_color(), 0.55), false, 1.0)
 	for op in _ops:
 		var o: Dictionary = op
 		if o.has("rect"):

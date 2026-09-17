@@ -415,6 +415,13 @@ static func portrait(faction: String, service: String, mood := "") -> Texture2D:
 # A road event's picture (assets/generated/event-<id>[-pass|-fail].png,
 # tools: ~/localgen/gen_sorcmerc_events.py): the outcome's own frame when it
 # has one, the plain scene otherwise, null for an event with no art.
+# The largest rect of `tex_size`'s aspect that fits inside `slot`, centred in
+# it — "contain", the whole picture and no crop (#83).
+static func fit_rect(tex_size: Vector2, slot: Rect2) -> Rect2:
+	var k := minf(slot.size.x / maxf(1.0, tex_size.x), slot.size.y / maxf(1.0, tex_size.y))
+	var sz := tex_size * k
+	return Rect2(slot.position + (slot.size - sz) * 0.5, sz)
+
 static func event_art(event_id: String, ok) -> Texture2D:
 	return scene_art("event-" + event_id, ok)
 

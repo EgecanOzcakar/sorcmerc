@@ -168,7 +168,7 @@ func _notification(what: int) -> void:
 # this card is concerned, including all of them. `foe_label` is the caller's
 # one-line name for who is closing ("Goblins (3)"); this card does not know how
 # to build one and never guesses.
-const ART_H := 200.0
+const ART_H := 320.0   # #83: the whole 1:1 picture, same slot as the event card
 const ART_MIN_H := 110.0
 var _art_rect := Rect2()
 var _art: Texture2D = null    # the band on the road: one picture, fixed for the card's life
@@ -625,17 +625,9 @@ func _draw() -> void:
 	draw_rect(Rect2(_panel.position, Vector2(BAR_W, _panel.size.y)), Icons.COL_FOE)
 	draw_rect(_panel, Color(Icons.COL_GOLD, BORDER_ALPHA), false, 1.0)
 	if _art != null and _art_rect.size.x > 0.0:
-		var ts := _art.get_size()
-		var src := Rect2(Vector2.ZERO, ts)
-		var slot_aspect := _art_rect.size.x / _art_rect.size.y
-		if ts.x / ts.y < slot_aspect:
-			src.size.y = ts.x / slot_aspect
-			src.position.y = (ts.y - src.size.y) * 0.4
-		else:
-			src.size.x = ts.y * slot_aspect
-			src.position.x = (ts.x - src.size.x) / 2.0
-		draw_texture_rect_region(_art, _art_rect, src)
-		draw_rect(_art_rect, Color(Icons.COL_FOE, 0.55), false, 1.0)
+		var dst := Icons.fit_rect(_art.get_size(), _art_rect)   # #83: the whole picture
+		draw_texture_rect(_art, dst, false)
+		draw_rect(dst, Color(Icons.COL_FOE, 0.55), false, 1.0)
 
 	for n in _rows.size():
 		var row: Dictionary = _rows[n]
