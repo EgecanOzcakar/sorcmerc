@@ -2274,8 +2274,8 @@ func _turn_in(quest: Dictionary) -> void:
 		# to. The board's second payout, and the one that is not gold.
 		var lead: Dictionary = Rumors.free_lead(_visit["settlement"], party, world)
 		_build_visit_panel()
-		_say("%s — paid, +%d gp. They will remember it.%s" % [
-			quest["title"], reward,
+		_say("%s — paid, +%d gp, +%d XP. They will remember it.%s" % [
+			quest["title"], reward, reward * Quest.XP_PER_GOLD,
 			("  " + String(lead["text"])) if not lead.is_empty() else ""])
 		_autosave()
 
