@@ -79,6 +79,8 @@ func _init() -> void:
 	test_extra_attack_parity()
 	test_extra_attack_reaches_the_board()
 	test_authored_abilities()
+	test_new_mechanics()
+	test_smite_and_aura_immunity()
 	report()
 	print("test_class_abilities: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -591,6 +593,169 @@ func test_authored_abilities() -> void:
 		check(int(open.pools.get("warrioropenhand-wholeness-of-body", {}).get("max", 0))
 				== Bundles.proficiency_bonus(lvl),
 			"open hand L%d: Wholeness of Body is PB per long rest" % lvl)
+
+# --- the features that needed the engine to learn a new word -------------
+#
+# T-classes-a stopped where the vocabulary stopped: `requires` knew four
+# predicates and none of them was "while raging"; a reaction could add AC or
+# halve damage and not impose Disadvantage; nothing at all could express a
+# standing radius. Three additions, and the five features that ride them.
+#
+# Each predicate is asserted from BOTH sides. A rider that fires when it should
+# is half the claim; the half that matters is that it stays quiet otherwise,
+# and that is the half a happy-path test never checks.
+func test_new_mechanics() -> void:
+	# `target_damaged` — Colossus Slayer, "a creature that is missing HP".
+	check(not rider_fires("ranger", "hunter", "Colossus Slayer", {"damaged": false}),
+		"Colossus Slayer holds off a creature at full HP")
+	check(rider_fires("ranger", "hunter", "Colossus Slayer", {"damaged": true}),
+		"...and lands on one that is wounded")
+
+	# `while_raging` — Frenzy.
+	check(not rider_fires("barbarian", "berserker", "Frenzy", {}),
+		"Frenzy is silent while the barbarian is calm")
+	check(rider_fires("barbarian", "berserker", "Frenzy", {"rage": true}),
+		"...and fires once the Rage is up")
+
+	# `first_round` — Dread Ambusher.
+	check(rider_fires("ranger", "gloomstalker", "Dread Ambusher", {"round": 1}),
+		"Dread Ambusher lands in the round the ambush happens")
+	check(not rider_fires("ranger", "gloomstalker", "Dread Ambusher", {"round": 2}),
+		"...and not a round later")
+
+	# The first aura. "You and allies within 10 feet", so the paladin is inside
+	# their own, a neighbour is inside it, and someone across the board is not.
+	var board: Dictionary = Encounter.board_for("sunken-shrine")
+	var pal = Adapter.to_combatant(build("paladin", "oathofdevotion", 8), "party", Vector2i(2, 0))
+	var near = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(3, 0))
+	var far = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(9, 5))
+	far.id = "far-one"
+	var cb = Combat.new(RNG.new(3), [pal, near, far], board)
+	var cha: int = pal.sheet.mod("cha")
+	check(cha > 0, "the paladin has a CHA bonus to give (%d)" % cha)
+	check(cb.aura_bonus(pal, "save_bonus") == cha, "Aura of Protection covers the paladin")
+	check(cb.aura_bonus(near, "save_bonus") == cha, "...and an ally beside them")
+	check(cb.aura_bonus(far, "save_bonus") == 0, "...and nobody across the room")
+
+	# Warding Flare imposes Disadvantage, which is a thing you can only see in
+	# aggregate: the same 60 seeded swings land less often against a cleric who
+	# has it than against one who does not.
+	check(flare_hits(true) < flare_hits(false),
+		"Warding Flare turns swings aside (%d hits with, %d without)"
+			% [flare_hits(true), flare_hits(false)])
+
+# Does `label`'s on-hit rider fire, under `when`? Swings a few times so a miss
+# is not mistaken for a rider that stayed quiet.
+func rider_fires(cid: String, sid: String, label: String, when: Dictionary) -> bool:
+	var board: Dictionary = Encounter.board_for("sunken-shrine")
+	var hero = Adapter.to_combatant(build(cid, sid, 8), "party", Vector2i(2, 0))
+	var dummy = Encounter.spawn("ogre", 1.0, "foe", Vector2i(3, 0), 1)
+	dummy.max_hp = 500
+	dummy.hp = dummy.max_hp - (50 if when.get("damaged", false) else 0)
+	var cb = Combat.new(RNG.new(3), [hero, dummy], board)
+	cb.round_num = int(when.get("round", 1))
+	cb.begin_turn_for(hero)
+	if when.get("rage", false):
+		for v in cb.all_verbs(hero):
+			if v["id"] == "barbarian-rage":
+				cb.perform(hero, v, null)
+	for _swing in 4:
+		var r: Dictionary = cb.resolve_attack(hero, dummy)
+		if r.has("error"):
+			break
+		for e in r.get("extras", []):
+			if String(e["label"]) == label:
+				return true
+	return false
+
+# How many of 60 seeded ogre swings land on a Light Domain cleric.
+func flare_hits(with_flare: bool) -> int:
+	var board: Dictionary = Encounter.board_for("sunken-shrine")
+	var hits := 0
+	for s in range(1, 61):
+		var cleric = Adapter.to_combatant(build("cleric", "lightdomain", 8), "party", Vector2i(2, 0))
+		if not with_flare:
+			cleric.verbs = cleric.verbs.filter(func(v): return v["id"] != "lightdomain-warding-flare")
+		var ogre = Encounter.spawn("ogre", 1.0, "foe", Vector2i(3, 0), 1)
+		var cb = Combat.new(RNG.new(s), [cleric, ogre], board)
+		cb.begin_turn_for(ogre)
+		if cb.resolve_attack(ogre, cleric).get("hit", false):
+			hits += 1
+	return hits
+
+# --- a Smite rides one blow, and an aura can say "no" --------------------
+#
+# Two more shapes the engine could not hold. A self_buff was a STANDING fact
+# (Rage: +2 on every swing until the fight ends) and a Smite is dice on exactly
+# one of them, so `once` decides whether the blow that reads a buff also spends
+# it. And an aura carried a number; Aura of Devotion carries a refusal.
+func test_smite_and_aura_immunity() -> void:
+	var board: Dictionary = Encounter.board_for("sunken-shrine")
+	var pal = Adapter.to_combatant(build("paladin", "oathofdevotion", 8), "party", Vector2i(2, 0))
+	var dummy = Encounter.spawn("ogre", 1.0, "foe", Vector2i(3, 0), 1)
+	dummy.max_hp = 9999
+	dummy.hp = dummy.max_hp
+	var cb = Combat.new(RNG.new(5), [pal, dummy], board)
+	var smite := verb(pal, "paladin-divine-smite")
+	check(int(smite.get("dice_count", 0)) == 2 and int(smite.get("dice_sides", 0)) == 8,
+		"paladin: Divine Smite is 2d8 (%s)" % str(smite))
+	check(int(pal.pools.get("paladin-divine-smite", {}).get("max", 0)) == pal.sheet.mod("cha"),
+		"paladin: CHA-mod smites per long rest")
+
+	# Pressed, it rides the NEXT blow and only that one.
+	cb.begin_turn_for(pal)
+	cb.perform(pal, smite, null)
+	check(pal.has("divine-smite"), "the smite is held until a blow reads it")
+	var landed := 0
+	var smited := 0
+	for _swing in 3:
+		var r: Dictionary = cb.resolve_attack(pal, dummy)
+		if r.has("error"):
+			break
+		if r.get("hit", false):
+			landed += 1
+			for e in r.get("extras", []):
+				if String(e["label"]) == "divine-smite":
+					smited += 1
+	check(landed >= 1, "the paladin landed a blow to smite with (%d)" % landed)
+	check(smited == 1, "Divine Smite rode exactly one of %d blows (%d)" % [landed, smited])
+	check(not pal.has("divine-smite"), "...and is gone once it has been spent")
+
+	# A minimum of one use, whatever the ability modifier says. RAW says so for
+	# every one of these, and a pool of 0 is a button nobody can ever press.
+	var dumped = Adapter.to_combatant(build("cleric", "lightdomain", 4), "party", Vector2i.ZERO)
+	dumped.sheet.abilities["wis"]["mod"] = -1
+	check(int(dumped.pools.get("lightdomain-warding-flare", {}).get("max", 0)) >= 1,
+		"an ability-sized pool never lands on zero")
+
+	# Aura of Devotion: a refusal rather than a number.
+	var near = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(3, 0))
+	var far = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(9, 5))
+	far.id = "far-two"
+	var cb2 = Combat.new(RNG.new(5), [pal, near, far], board)
+	check("charmed" in cb2.aura_immunities(near), "an ally in the aura cannot be Charmed")
+	check(not "charmed" in cb2.aura_immunities(far), "...and one across the room can")
+	cb2.apply_condition(near, "charmed", far)
+	check(not near.has("charmed"), "the aura actually refuses the condition")
+	cb2.apply_condition(far, "charmed", near)
+	check(far.has("charmed"), "...and outside it the condition lands")
+
+	# Aura of Warding: the third payload, and the one read where damage lands.
+	var anc = Adapter.to_combatant(build("paladin", "oathofancients", 8), "party", Vector2i(2, 0))
+	var beside = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(3, 0))
+	var away = Adapter.to_combatant(build("rogue", "thief", 8), "party", Vector2i(9, 5))
+	away.id = "far-three"
+	var cb3 = Combat.new(RNG.new(5), [anc, beside, away], board)
+	beside.hp = beside.max_hp
+	away.hp = away.max_hp
+	cb3._apply_damage(beside, 20, "necrotic")
+	cb3._apply_damage(away, 20, "necrotic")
+	check(beside.max_hp - beside.hp == 10, "Aura of Warding halves necrotic on an ally inside it (took %d)"
+		% [beside.max_hp - beside.hp])
+	check(away.max_hp - away.hp == 20, "...and not on one outside it (took %d)" % [away.max_hp - away.hp])
+	beside.hp = beside.max_hp
+	cb3._apply_damage(beside, 20, "slashing")
+	check(beside.max_hp - beside.hp == 20, "...and halves only what the oath is set against")
 
 # --- the report ----------------------------------------------------------
 #

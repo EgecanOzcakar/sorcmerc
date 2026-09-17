@@ -1231,6 +1231,12 @@ FEATURES = {
     "assassin-assassinate": (reticle(E("shadow")), dart(E("steel"), -45, 1, 0.85)),
     "wardomain-war-priest": (sword(32, 33, 0, length=40, w=6.6, steel=E("radiant")),
                              chevron(52, 22, 0, 8, 4, E("gold"))),
+    # T-classes-d. A Smite is the sword coming down with the light on it, so it
+    # is monster-divine-eminence's halo-and-blade read as a hero's: the same two
+    # marks, the blade angled into the blow rather than held up.
+    "paladin-divine-smite": (halo(E("radiant")),
+                             sword(32, 34, 20, length=44, w=7.0, steel=E("radiant")),
+                             star(18, 20, 6, 2, 4, LIGHT, sw=1.0)),
     "celestialpatron-healing-light": (halo(E("radiant")), heart(32, 43, 8, E("life"))),
     "warriorofmercy-hand-of-healing": (hand(E("life")), heart(46, 18, 7, E("life"))),
     "warrioropenhand-wholeness-of-body": (person(E("life"), "stand", 0.8),

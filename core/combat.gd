@@ -404,6 +404,47 @@ func enemies_of(c) -> Array:
 func allies_of(c) -> Array:
 	return combatants.filter(func(o): return o.team == c.team and o != c and o.conscious())
 
+# --- auras --------------------------------------------------------------
+#
+# A paladin's aura is the first thing in the game that is neither a button nor a
+# rider on a roll of its own: it is a standing fact about a piece of the board,
+# read by whoever happens to be rolling inside it. So it is not a verb anyone
+# performs — `aura` is not in OFFERABLE and never reaches the bar — it is a
+# lookup the resolver does at the moment a number is needed.
+#
+# "You and allies within N feet" includes the paladin, hence the `+ [c]`. Auras
+# do not stack: the best one in reach wins, which is RAW for two paladins
+# standing together and conservative for anything else.
+# The list half of the same lookup. Aura of Devotion is "you and your allies in
+# the aura can't be Charmed" and Aura of Warding is a set of damage types you
+# shrug off — both are a list rather than a number, so they share a reader.
+func aura_types(c, key: String) -> Array:
+	var out: Array = []
+	for a in allies_of(c) + [c]:
+		for v in a.verbs:
+			if v["kind"] != "aura" or not v.has(key):
+				continue
+			if Hex.distance(a.pos, c.pos) > int(v.get("range", 1)):
+				continue
+			for entry in v[key]:
+				if not entry in out:
+					out.append(String(entry))
+	return out
+
+func aura_immunities(c) -> Array:
+	return aura_types(c, "cond_immune")
+
+func aura_bonus(c, key: String) -> int:
+	var best := 0
+	for a in allies_of(c) + [c]:
+		for v in a.verbs:
+			if v["kind"] != "aura" or not v.has(key):
+				continue
+			if Hex.distance(a.pos, c.pos) > int(v.get("range", 1)):
+				continue
+			best = maxi(best, int(v[key]))
+	return best
+
 func adjacent_enemy(c) -> bool:
 	for o in enemies_of(c):
 		if Hex.distance(o.pos, c.pos) <= 1:
@@ -684,8 +725,14 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			heal(who, Dice.roll(rng, "%dd%d+%d" % [int(v.get("dice_count", 1)),
 				int(v.get("dice_sides", 10)), int(v.get("dice_bonus", 0))]))
 		"self_buff":
+			# `once` and the dice are a Smite's shape: Rage is a standing buff that
+			# adds a flat bonus to every swing until the fight ends, a Smite is
+			# dice on exactly one of them. Both are self_buffs; the difference is
+			# whether the blow that reads the buff also spends it.
 			actor.statuses[v.get("status", v["id"])] = {
-				"bonus_damage": int(v.get("bonus_damage", 0)), "resist": v.get("resist", [])}
+				"bonus_damage": int(v.get("bonus_damage", 0)), "resist": v.get("resist", []),
+				"once": v.get("once", false),
+				"dice_count": int(v.get("dice_count", 0)), "dice_sides": int(v.get("dice_sides", 0))}
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"ally_buff":
 			target.statuses[v.get("status", v["id"])] = {"dice_sides": int(v.get("dice_sides", 6))}
@@ -1131,7 +1178,7 @@ func apply_condition(target, cond: String, source = null, duration := "", v: Dic
 	# T94 — `cond_immune` off the statblock. Checked ahead of everything, exhaustion
 	# included: 31 bestiary entries are immune to exhaustion specifically, and
 	# gain_exhaustion() is the one path that never comes back through here.
-	if cond in target.cond_immune:
+	if cond in target.cond_immune or cond in aura_immunities(target):
 		log.append("%s cannot be %s." % [
 			target.cname, "exhausted" if cond == "exhaustion" else cond])
 		return
@@ -1282,6 +1329,20 @@ func _requires_met(attacker, target, mode: int, reqs: Array) -> bool:
 					return false
 			"ally_adjacent_to_target":
 				if not allies_of(attacker).any(func(a): return Hex.distance(a.pos, target.pos) <= 1):
+					return false
+			# The three the class features wanted and the vocabulary did not have.
+			# Every one of them is a sentence in a subclass's text that had no way
+			# to be written down: Colossus Slayer's "a creature that is missing
+			# any of its Hit Points", Frenzy's "while your Rage is active",
+			# Dread Ambusher's "on your first turn of each combat".
+			"target_damaged":
+				if target.hp >= target.max_hp:
+					return false
+			"while_raging":
+				if not attacker.has("raging"):
+					return false
+			"first_round":
+				if round_num > 1:
 					return false
 	return true
 
@@ -1475,7 +1536,12 @@ func _reaction_applies(c, v: Dictionary, ctx: Dictionary, trigger: String) -> bo
 			# throwing it away on a swing it could not have stopped would model
 			# the choice a player makes worse than holding it does. A prediction
 			# (pending_reactions) carries no roll, and answers "could apply".
-			if trigger == "would_be_hit" and ctx.has("total") \
+			# ...which is a test about AC, and only about AC. A reaction that
+			# answers with Disadvantage re-rolls the d20 rather than raising the
+			# bar, so "the bonus would not have been enough" says nothing about
+			# whether it could have stopped this blow — and with ac_bonus 0 the
+			# margin test refused it every single time.
+			if trigger == "would_be_hit" and ctx.has("total") and not v.get("disadvantage", false) \
 					and int(ctx["ac"]) + int(v.get("ac_bonus", 0)) <= int(ctx["total"]):
 				return false
 			var atk = ctx.get("attacker")
@@ -1535,6 +1601,16 @@ func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
 				c.cname, String(v["label"]).to_lower(),
 				int(ctx.get("ac", 0)) + int(v["ac_bonus"])])
 			break   # the swing is already a miss; a second answer has nothing to stop
+		elif v.get("disadvantage", false):
+			# Warding Flare and kin: "impose Disadvantage on the attack roll".
+			# would_be_hit fires once a swing is known to land, so the honest
+			# reading of Disadvantage at that moment is the second d20 the
+			# attacker should have rolled — resolve_attack takes the lower of the
+			# two and re-decides. Reported rather than applied here: the roll is
+			# the resolver's to own.
+			out["second_d20"] = Dice.d20(rng, 0).nat
+			log.append("%s — %s, and the blow is thrown off." % [c.cname, v["label"]])
+			break
 		elif v.get("halve_damage", false):
 			out["damage"] = int(out["damage"]) / 2
 			log.append("%s — %s, halving the blow." % [c.cname, v["label"]])
@@ -1570,12 +1646,26 @@ const MELEE_ONLY_BUFFS := ["raging"]
 
 func _buff_damage_extras(attacker, ranged: bool) -> Array:
 	var out: Array = []
+	var spent: Array = []
 	for id in attacker.statuses:
 		var s = attacker.statuses[id]
 		if ranged and id in MELEE_ONLY_BUFFS:
 			continue
-		if s is Dictionary and int(s.get("bonus_damage", 0)) != 0:
-			out.append({"amount": int(s["bonus_damage"]), "label": id})
+		if not s is Dictionary:
+			continue
+		# `dice_count`, not `dice_sides`: an ally_buff writes dice_sides into
+		# `inspired`, which is a bonus to a d20 and emphatically not damage.
+		var dice: int = int(s.get("dice_count", 0))
+		if int(s.get("bonus_damage", 0)) == 0 and dice <= 0:
+			continue
+		var amount: int = int(s.get("bonus_damage", 0))
+		if dice > 0:
+			amount += Dice.roll(rng, "%dd%d" % [dice, int(s.get("dice_sides", 6))])
+		out.append({"amount": amount, "label": id})
+		if s.get("once", false):
+			spent.append(id)   # the blow that read it is the blow that spends it
+	for id in spent:
+		attacker.statuses.erase(id)
 	return out
 
 func resolve_attack(attacker, target, opts := {}) -> Dictionary:
@@ -1623,14 +1713,23 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	# Fired only once the roll is known to land, which is what the SRD wording
 	# says. A crit cannot be parried, and a shot cannot: it is a melee reaction.
 	if hit and not crit and not (attacker.ranged and not opts.get("melee", false)):
-		var parry := int(fire_reactions("would_be_hit", {
+		var answer := fire_reactions("would_be_hit", {
 			"attacker": attacker, "target": target, "total": total, "ac": ac,
-		}).get("ac_bonus", 0))
+		})
+		var parry := int(answer.get("ac_bonus", 0))
 		if parry > 0:
 			ac += parry
 			hit = false
 			if tracked and attacker.team == "party":
 				Ach.unlock("parry")
+		elif answer.has("second_d20"):
+			# Disadvantage, arriving late (see fire_reactions): take the lower of
+			# the two d20s and re-decide the swing on it. A 1 still misses and the
+			# crit was already ruled out by the `not crit` gate above, so the only
+			# thing that can change here is hit -> miss.
+			nat = mini(nat, int(answer["second_d20"]))
+			total = nat + atk_bonus
+			hit = nat != 1 and total >= ac
 	if hit and not crit and _auto_crit(attacker, target, opts):
 		crit = true
 	var out = {
@@ -1861,7 +1960,9 @@ func _resists(c, dtype: String) -> bool:
 	for s in c.statuses.values():
 		if s is Dictionary and dtype in s.get("resist", []):
 			return true
-	return false
+	# ...and off a paladin standing nearby (Aura of Warding). Same lookup as the
+	# save bonus and the condition immunity, third payload.
+	return dtype in aura_types(c, "aura_resist")
 
 # The word the log uses for whichever defence just fired.
 func _defense_verb(c, dtype: String) -> String:
@@ -2266,7 +2367,8 @@ func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false, magical 
 			log.append("%s can't resist — the %s save fails automatically." % [c.cname, ability.to_upper()])
 			return false
 		dis = dis or e.get("saves", {}).get(ability, "") == "dis"
-	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c) - _d20_penalty(c) + _buff_sum(c, "bonus_save")
+	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c) - _d20_penalty(c) \
+		+ _buff_sum(c, "bonus_save") + aura_bonus(c, "save_bonus")
 	if is_cover(c.pos) and not ignore_cover:
 		bonus += 2
 	return Dice.d20(rng, Dice.combine(adv, dis)).nat + bonus >= dc

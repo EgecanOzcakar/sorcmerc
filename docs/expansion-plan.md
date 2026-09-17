@@ -5405,3 +5405,142 @@ a spell slot. The vocabulary gaps T-classes-a ran into are the other half of
 that list: `requires` predicates ("while raging", "on your first turn", "target
 is damaged"), reaction payloads (subtract a die, impose Disadvantage), and an
 area `save_effect`.
+
+## T-classes-c — three words the engine did not have (2026-09-17)
+
+T-classes-a stopped where the vocabulary stopped, and wrote down exactly where
+that was: `requires` knew four predicates and none of them was "while raging";
+a `reaction` could add AC or halve damage and could not impose Disadvantage;
+nothing at all could express a standing radius. Frenzy, Colossus Slayer, Dread
+Ambusher, Warding Flare and every paladin aura *looked* expressible from their
+`kind` alone and were not. This adds the three words and the five features that
+ride them.
+
+**1. Three `requires` predicates** (`combat._requires_met`). Each is one
+sentence of a subclass's text that previously had nowhere to go:
+
+| predicate | the sentence | feature |
+|---|---|---|
+| `target_damaged` | "a creature that is missing any of its Hit Points" | `hunter-hunters-prey-colossus-slayer`, 1d8 |
+| `while_raging` | "while your Rage is active" | `berserker-frenzy`, d6s on the Rage Damage track |
+| `first_round` | "on your first turn of each combat" | `gloomstalker-dread-ambusher`, 2d6 |
+
+**2. A reaction that imposes Disadvantage** rather than raising AC.
+`would_be_hit` fires once a swing is known to land, so the honest reading of
+Disadvantage at that moment is the second d20 the attacker should have rolled:
+the reactor answers with `second_d20`, and `resolve_attack` takes the lower of
+the two and re-decides. `lightdomain-warding-flare` is the first of them.
+
+That needed a second fix to be reachable at all. `_reaction_applies` carries
+T94's guard against wasting Parry on a swing its AC could not have stopped —
+and that test is about AC and only about AC. With `ac_bonus` 0 it refused
+Warding Flare **every single time**; measured before the fix, a cleric with the
+feature took exactly as many hits as one without (44 of 60 either way). After:
+31 of 60.
+
+**3. `aura`** — the first thing in the game that is neither a button nor a rider
+on a roll of its own, but a standing fact about a piece of the board, read by
+whoever happens to be rolling inside it. It is deliberately not in
+`combat.gd`'s `OFFERABLE`, so it never reaches the action bar and needs no
+badge; `combat.aura_bonus()` reads it where a number is wanted.
+`paladin-aura-of-protection` is the first: +CHA to saves for the paladin and
+every ally within 10 feet, and nobody across the room. Auras do not stack — the
+best one in reach wins, which is RAW for two paladins and conservative for
+anything else.
+
+Every predicate is asserted from **both** sides in
+`tests/test_class_abilities.gd`. A rider that fires when it should is half the
+claim; the half that matters is that it stays quiet otherwise, and that is the
+half a happy-path test never checks.
+
+**No re-tune this time.** The five features make the party stronger and the
+level-3 sweep moved to 97.0 / 87.0 / 76.5 against targets of 95 / 85 / 75 —
+every one of them inside the ±10 band and none more than 2 points out, which is
+precisely what `core/scaler.gd`'s header calls noise rather than a knob that
+wants turning ("TIER is steep and lumpy here … do not read a 2-point miss as a
+knob that wants turning"). `TIER` is left at T-classes-b's 0.56 / 0.66 / 0.76.
+
+Worth noting for whoever tunes next: the party's *score* did not move at all
+(53.9, unchanged), because `power.gd` prices neither `reaction` nor `aura`. The
+win rate moved and the price did not, so both are currently free in the
+estimator's eyes. That belongs with the "Known ceiling" note in `scaler.gd`
+rather than being patched here.
+
+**Still not done**, and now the whole of the remaining list: Divine Smite (the
+near-miss — the rider shape exists, but nothing outside `cast()` can spend a
+spell slot), Wild Shape, Metamagic, Portent, Arcane Ward, Primal Companion and
+Invoke Duplicity. The other three paladin auras (Devotion's charm immunity,
+Ancients' resistance, Glory's speed) need aura *payloads* beyond `save_bonus`,
+which is a smaller job now the kind exists.
+
+## T-classes-d — a Smite rides one blow, and an aura can say no (2026-09-17)
+
+Two more shapes the engine could not hold, and the two features that wanted
+them. Both turned out to be a single flag or a single payload on machinery
+T-classes-c had already built, which is the point of having built it.
+
+**A `self_buff` was a standing fact.** Rage is +2 on every swing until the
+fight ends, and `_buff_damage_extras` read every damage buff that way — so
+Divine Smite modelled as a self_buff would have added 2d8 to *every blow of the
+fight* off one Bonus Action. `once` is the flag that separates them: the blow
+that reads the buff is the blow that spends it. The same function also rolls
+dice now, rather than only adding a flat number, because a Smite is 2d8 and not
+9 — guarded on `dice_count` rather than `dice_sides`, since an `ally_buff`
+writes `dice_sides` into `inspired` and that is a bonus to a d20, emphatically
+not damage.
+
+`paladin-divine-smite` is 2024's: a Bonus Action, 2d8 radiant, CHA-mod free
+casts per Long Rest. It is the same shape `monster-divine-eminence` has used
+since T16, plus `once`.
+
+**An aura carried a number; Aura of Devotion carries a refusal.**
+`aura_immunities()` is the condition half of `aura_bonus()`, read at the top of
+`apply_condition` beside the statblock's own `cond_immune`.
+`oathofdevotion-aura-of-devotion` is "you and your allies in your aura can't be
+Charmed", and it is asserted from both sides: the condition bounces off an ally
+standing beside the paladin and lands on one across the room.
+
+**And a floor under every ability-sized pool.** Warding Flare is WIS-mod uses,
+Divine Smite is CHA-mod, and RAW says "a minimum of once" for both. Without the
+floor a cleric who dumped WIS carried the button and could never press it —
+which is exactly the 0-max-pool bug T-classes fixed once already, from the
+other end. `Effects._uses()` is the single place that floor lives now.
+
+**Two known simplifications, written down rather than hidden.** A buff's
+`damage_type` is authored and unread: every extra folds into the blow's own
+damage type, so a Smite's radiant reads as the weapon's slashing against
+anything that resists one and not the other. Typing the extras pipeline is a
+real change and not this one. And `power.gd` still prices neither `reaction`
+nor `aura`, so Warding Flare, Aura of Protection and Aura of Devotion are all
+free in the estimator's eyes — the same note T-classes-c left.
+
+**The third aura payload, while the kind was open.** `aura_types()` is the list
+half of `aura_bonus()`, and both Aura of Devotion's condition immunity and
+`oathofancients-aura-of-warding`'s damage resistance are lists — so they share
+one reader, hung off `_resists()`, which is already the single choke point every
+resistance in the game passes through. Asserted where it is actually read:
+20 necrotic on an ally inside the aura lands as 10, the same blow on one across
+the room lands as 20, and 20 slashing on the ally inside it lands as 20,
+because the oath is set against three types and not all of them.
+
+**Still not done, and why each one is not a data entry.**
+
+* **Oath of Glory's Aura of Alacrity** is a speed bonus, which wants a read in
+  `begin_turn_for` — small, but the 2024 wording (whose speed, what radius, and
+  the aura growing at 18) is not something to guess at from memory.
+* **Portent** replaces a d20 roll with one rolled at dawn, and *which* roll is
+  the whole feature. In an engine with no prompts (combat-design.md §2) it
+  would have to auto-spend on the first roll it saw, which is strictly worse
+  than not having it.
+* **Arcane Ward** is a pool of hit points that soaks damage before its owner
+  does — a fourth read in `_apply_damage`, plus a refill rule keyed on casting
+  abjuration spells, which the engine does not track by school.
+* **Wild Shape** swaps a combatant's whole statblock mid-fight, and the open
+  questions are design ones: which forms, whether the druid keeps their own
+  verbs, what happens to concentration, and what the form's HP does on the way
+  out.
+* **Primal Companion** and **Invoke Duplicity** put a second token on the board
+  under one player's control, which is an initiative and an AI question before
+  it is a rules one.
+
+The first three are a branch each. The last two are a design note first.
