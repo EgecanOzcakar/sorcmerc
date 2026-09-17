@@ -5255,3 +5255,73 @@ of the board at once. That is not a small change and it is not this one: it
 belongs with the tier sweep that T-classes already said was owed. The three new
 `-extra-attack` entries are therefore **inert today**, exactly as the three that
 preceded them are — they make the sheet right and wait.
+
+## T-classes-b — the attack economy, and the tier sweep that was owed (2026-09-17)
+
+T-classes-a found it and deliberately did not fix it: **`attacks_per_action` had
+never reached the board, for anybody.** Three separate breaks in one chain.
+
+1. `combat._offerable()` gated the Attack verb on `can_spend("action")` alone.
+   `resolve_attack` banks the swings the Attack action buys in
+   `econ.attacks_left`, but the action is spent on the first of them — so the
+   button greyed out with a swing still sitting in the economy. Now there is a
+   `can_afford()` beside `can_spend()`, and Attack is the one verb whose price
+   is not just its `cost`.
+2. `resolve_attack` **assigned** `attacks_left = attacks_per_action - 1` instead
+   of adding to it. Flurry of Blows banks two swings as a Bonus Action *before*
+   the Attack action is taken, so the monk's own first swing destroyed both
+   (measured: banked 2, one swing later `attacks_left` was 1). It adds now.
+3. `ai.gd`'s `_strike()` took one swing and returned, so no monster ever used
+   its Multiattack and the party autopilot never used Extra Attack. It loops to
+   the economy's end now, re-targeting between swings — the second swing of a
+   Multiattack should not be thrown at a corpse.
+
+Measured off `available()`, which is the list the action bar renders: fighter 1
+at level 4 and 2 at level 8, paladin / ranger / College of Valour 2 at level 8
+(the entries T-classes-a added, now live), rogue 1 at both, and a level-8 monk
+who spends a Focus Point on Flurry swings **four** times. A Multiattack-2
+monster takes two.
+
+**The re-tune.** This roughly doubles both sides of the board at once, and the
+monsters gain by far the more of it — at level 3 the party has no Extra Attack
+at all and the bestiary is full of Multiattack. At the old TIER the level-3
+sweep fell to normal 69.5% / hard 46.5% against targets of 85 / 75. So the tier
+sweep T-classes said was owed got run, 200 seeds a point, two rounds:
+
+```
+normal  0.780 -> 69.5    hard  0.920 -> 46.5    easy  0.640 -> 89.0
+        0.624 -> 86.5          0.764 -> 74.0          0.512 -> 99.0
+        0.663 -> 85.0          0.718 -> 78.0
+        0.585 -> 90.5          0.690 -> 81.5
+```
+
+`TIER` lands at **0.56 / 0.66 / 0.76**, measuring 93.5 / 86.0 / 73.0 against
+targets of 95 / 85 / 75 — *closer than the old triple ever was* (91.5 / 80.0 /
+65.0, with hard sitting exactly on the edge of the ±10 band). The level-8 curve
+is unmoved and still ordered (76.7/54.0/34.7 → 72.7/55.3/35.3) and the boss pool
+stays in band (72.5% → 67.5%). `CURVE` stays 1.15 and `REF_SCORE` stays 46.6:
+one knob was enough, so the other two were left alone rather than re-fitted for
+the sake of it.
+
+A second measured effect worth having on its own: **fights are shorter** now
+that everyone's damage is real. The level-8 sweep went from ~12.9 rounds to
+~9.6.
+
+**One test changed rather than re-pinned.** `test_world_threat.gd` asserted that
+the flat wilderness discount "really does change the roster" on seed 5. A tenth
+off the budget does not move every roster — the budget buys whole monsters, so
+on a seed where the cut lands inside a rounding step the spec is identical. The
+re-tune shifted which seeds those were and 5 became one of them. It asks across
+ten seeds now (28 of 30 differ), which is the property it always wanted.
+
+**Still not done.** The mechanics that need genuinely new engine support are
+untouched and still listed in T-classes: Wild Shape (swap a combatant's
+statblock mid-fight), Metamagic (modify a spell as it is cast), Portent (replace
+a d20 result), Arcane Ward (an absorbing damage pool), the paladin auras (a
+persistent radius buff), Primal Companion and Invoke Duplicity (a second token
+on the board), and Divine Smite, which is a near-miss — the rider shape exists
+(Stunning Strike spends a pool on a hit) but nothing outside `cast()` can spend
+a spell slot. The vocabulary gaps T-classes-a ran into are the other half of
+that list: `requires` predicates ("while raging", "on your first turn", "target
+is damaged"), reaction payloads (subtract a die, impose Disadvantage), and an
+area `save_effect`.

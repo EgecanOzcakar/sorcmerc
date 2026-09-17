@@ -125,11 +125,33 @@ static func _use_special(cb, m, targets: Array) -> bool:
 # action is committed is the last one at which the question can be put. The
 # answer is therefore given against the hit chance rather than against the
 # damage — and nothing is spent if the swing misses.
+#
+# One _strike is one Attack ACTION, which is however many swings
+# attacks_per_action buys — a hobgoblin's Multiattack, a fighter's Extra Attack,
+# the two a monk's Flurry banked. Taking one swing and returning left every one
+# of those on the table: the resolver banked the rest in `attacks_left` and the
+# turn ended with them unspent, so every multiattack monster in the bestiary
+# fought as a single-attack monster.
+#
+# Re-targeted between swings rather than pounded into the same body: the second
+# swing of a Multiattack should not be thrown at a corpse. The loop stops when
+# the resolver says the economy is out, which is the same answer it gives the
+# action bar.
 static func _strike(cb, m, targets: Array) -> void:
 	if await _use_special(cb, m, targets):
 		return
-	await cb.offer_reactions(m, cb.attack_verb(), targets[0])
-	cb.resolve_attack(m, targets[0])
+	for _swing in MAX_SWINGS:
+		var live: Array = targets.filter(func(c): return c.conscious() and cb.in_reach(m, c))
+		if live.is_empty() or not m.conscious():
+			return
+		live.sort_custom(func(a, b): return a.hp < b.hp)
+		await cb.offer_reactions(m, cb.attack_verb(), live[0])
+		if cb.resolve_attack(m, live[0]).has("error"):
+			return
+
+# A guard on the loop above, not a rule: nothing in the game grants more than
+# four swings, and a runaway would be an infinite turn rather than a wrong one.
+const MAX_SWINGS := 6
 
 static func _toward(goal: Vector2i) -> Callable:
 	return func(h: Vector2i) -> float: return -float(Hex.distance(h, goal))

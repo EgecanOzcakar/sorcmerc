@@ -74,9 +74,18 @@ func test_fresh_party_is_untouched() -> void:
 	check(str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5, 1.0))
 		== str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5)),
 		"the scale knob is still an exact identity at 1.0")
-	check(str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5, t["power_scale"]))
-		!= str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5)),
-		"...and the flat wilderness discount really does change the roster")
+	# Asked across seeds, not on one. A discount of a tenth does not move every
+	# roster — the budget buys whole monsters, so on a seed where the cut lands
+	# inside a rounding step the spec comes out identical, which is arithmetic
+	# rather than the knob failing. Pinned to seed 5 alone this read as a
+	# regression the first time a TIER re-tune shifted which seeds those were
+	# (T-classes-b: 28 of 30 seeds differ, and 5 stopped being one of them).
+	var moved := 0
+	for seed_value in range(1, 11):
+		if str(Scaler.roster_for(chars, t["difficulty"], {}, "", seed_value, t["power_scale"])) \
+				!= str(Scaler.roster_for(chars, t["difficulty"], {}, "", seed_value)):
+			moved += 1
+	check(moved >= 7, "...and the flat wilderness discount really does change the roster (%d of 10 seeds)" % moved)
 
 func test_baseline_is_easy() -> void:
 	check(WorldThreat.BASELINE == "easy", "the wilderness baseline is easy, not normal — sites are the hard content")
