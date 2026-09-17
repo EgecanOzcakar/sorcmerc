@@ -2075,6 +2075,8 @@ class Board extends Control:
 	var _auto_fit := false    # zoom-to-fit each layout until the user zooms (new fight, Home)
 	var _tok := {}        # id -> displayed pixel pos (for slide)
 	var _slide := {}      # id -> {from, to, t, dur}: the traversal in progress, see tick()
+	var _view_origin := Vector2(1e9, 1e9)   # the view _tok/_slide were last laid out in — see _rebase_view
+	var _view_hex := 0.0
 	var _hp := {}         # id -> displayed hp value
 	# T-dmg: the hp each body was last seen at, so a hit spawns ONE number. _hp
 	# is the bar's eased value and lags for ~20 frames; this one snaps.
@@ -2184,6 +2186,7 @@ class Board extends Control:
 		texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED   # the floor texture wraps across hexes
 		_tok.clear(); _slide.clear(); _hp.clear(); _floats.clear(); _flash.clear()
 		_dmg_goal.clear()
+		_view_origin = _origin; _view_hex = main.hex_px   # fresh _pix()es are in this view
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
 			_hp[c.id] = float(c.hp)
@@ -2191,6 +2194,7 @@ class Board extends Control:
 		queue_redraw()
 
 	func slide_from(c) -> void:
+		_rebase_view()   # a fresh _pix() must be in the same view as the rest
 		if not _tok.has(c.id):
 			_tok[c.id] = _pix(c.pos)
 
@@ -2373,9 +2377,33 @@ class Board extends Control:
 			d -= seg
 		return pts[-1]
 
+	# #71/#78: _tok and _slide are screen pixels, and a pan or a zoom moves the
+	# screen under them. Left alone, every token then "walked" to its new spot
+	# — lagging behind the drag, and turning its figure to face the drag. The
+	# projection is affine in _origin and hex_px, so the stored points are
+	# carried over exactly rather than animated.
+	func _rebase_view() -> void:
+		var hx: float = main.hex_px
+		if _view_origin == _origin and is_equal_approx(_view_hex, hx):
+			return
+		if _view_hex > 0.0:
+			var k: float = hx / _view_hex
+			var map := func(q: Vector2) -> Vector2: return _origin + (q - _view_origin) * k
+			for id in _tok:
+				_tok[id] = map.call(_tok[id])
+			for id in _slide:
+				var s: Dictionary = _slide[id]
+				s["from"] = map.call(s["from"]); s["to"] = map.call(s["to"])
+				s["pts"] = s["pts"].map(map); s["len"] = float(s["len"]) * k
+			for f in _floats:
+				f["pos"] = map.call(f["pos"])
+		_view_origin = _origin
+		_view_hex = hx
+
 	func tick(dt: float) -> void:
 		if cb == null:
 			return
+		_rebase_view()
 		var k := clampf(dt * 12.0, 0.0, 1.0)
 		var dirty := false
 		for c in cb.combatants:
@@ -2508,6 +2536,7 @@ class Board extends Control:
 		if amount >= 12: band = Color("ff5a4a")
 		elif amount >= 6: band = Color("ff9146")
 		var bite := sqrt(clampf(amount / maxf(1.0, float(c.max_hp)), 0.0, 1.0))
+		_rebase_view()
 		_floats.append({"id": c.id, "pos": _pix(c.pos), "text": "-%d" % int(round(amount)),
 			"color": band, "age": 0.0, "fs": lerpf(FLOAT_FS_MIN, FLOAT_FS_MAX, bite)})
 
