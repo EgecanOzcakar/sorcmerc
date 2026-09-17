@@ -44,8 +44,8 @@ func _init() -> void:
 		if party.id == "goblins": goblins = party
 	check(patrol != null and main._party3d.has_model(patrol),
 		"patrol (human, heavy troop we generated) gets a figure")
-	check(player != null and not main._party3d.has_model(player),
-		"by default the player has no figure — they keep the pawn")
+	check(player != null and main._party3d.has_model(player),
+		"by default the player wears their highest-level member's figure, not the pawn")
 	check(goblins != null and main._party3d.has_model(goblins),
 		"goblinoid has no race counterpart, but gets the FOE_MODELS figure combat uses")
 
@@ -59,14 +59,20 @@ func _init() -> void:
 	check(main._party3d.has_model(player), "picking an active member gives the player their figure")
 	main.party.bench("vera")
 	main._party3d.reset(main.world)
-	check(not main._party3d.has_model(player),
-		"benching the character you picked falls back to the pawn — even though Thrun is still active")
+	check(main._party3d.has_model(player) and main.party.overworld_pick() == null,
+		"benching the character you picked drops the pick; the default marcher stands in")
 	main.party.activate("vera")
 	main._party3d.reset(main.world)
-	check(main._party3d.has_model(player), "bringing them back brings the figure back")
+	check(main.party.overworld_pick() != null, "bringing them back brings the pick back")
 	main.party.overworld_figure = "not-a-real-class"
 	main._party3d.reset(main.world)
-	check(not main._party3d.has_model(player), "an id that matches nobody falls back to the pawn, not a crash")
+	check(main._party3d.has_model(player), "an id that matches nobody falls back to the default, not a crash")
+	for id in main.party.active.duplicate():
+		main.party.bench(id)
+	main._party3d.reset(main.world)
+	check(not main._party3d.has_model(player), "nobody marching is the pawn")
+	for id in ["vera", "pike", "ilsa", "thrun"]:
+		main.party.activate(id)
 
 	# Back-compat: a save written before the switch holds a CLASS id here.
 	# It still resolves (against the active party, the way the old code read
@@ -78,7 +84,7 @@ func _init() -> void:
 		"...and is rewritten to the member it resolved to, so it only happens once")
 	main.party.overworld_figure = "wizard"    # an old save naming a class nobody active has
 	main._party3d.reset(main.world)
-	check(not main._party3d.has_model(player), "an old save's unmatched class id is the pawn")
+	check(main.party.overworld_pick() == null, "an old save's unmatched class id is no pick")
 	check(main.party.overworld_figure == "wizard", "and is left alone — there is nothing to migrate it to")
 
 	# T9x: the procedural walk. The clock is paused so nothing else on the

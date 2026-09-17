@@ -94,14 +94,12 @@ func _model_path(p) -> String:
 	return String(FoeModels.get(p.faction, ""))
 
 
-# Which HERO_MODELS class the player's chosen character wears, "" for the
-# pawn. The choice is an identity, not a class: core/party.gd's
-# overworld_member() resolves it to one specific member (and migrates a
-# pre-identity save's class id on the way), so benching the character you
-# picked drops you back to the pawn even when a second member of the same
-# class is still marching. Enforced here and not only in the Party screen's
-# picker, so a choice that goes stale between visits can't leave a figure on
-# the map that nobody in the party answers for.
+# Which HERO_MODELS class the player's figure wears, "" for the pawn.
+# core/party.gd's overworld_member() picks the person: the player's choice
+# while it is still marching (migrating a pre-identity save's class id on the
+# way), else the highest-level marcher, else nobody. Enforced here and not
+# only in the Party screen's picker, so a choice that goes stale between
+# visits can't leave a figure on the map that nobody in the party answers for.
 func _player_figure() -> String:
 	if world_map.party == null:
 		return ""

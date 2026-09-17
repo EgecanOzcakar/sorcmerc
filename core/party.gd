@@ -127,14 +127,29 @@ func swap(active_id: String, bench_id: String) -> bool:
 
 # --- overworld figure ------------------------------------------------------
 
-# The member whose figure stands for the party on the open-world map, or null
-# for the plain gold-ringed pawn. The single place overworld_figure is
-# resolved — the Party screen's picker and scenes/world/party3d.gd both come
-# through here, so "is this pick still good?" has exactly one answer. It is an
-# identity, not a class: benching or removing that character falls back to the
-# pawn even when somebody else in the party shares their class. (A removed
-# member keeps their id in the field rather than clearing it — re-recruit them
-# and the pick comes back; until then it just reads as the pawn.)
+# The member whose figure stands for the party on the open-world map: the
+# player's pick while it is still marching, otherwise the highest-level active
+# member (marching order breaks ties), and null only for an empty party — the
+# plain gold-ringed pawn used to be the default, and a band of real people
+# read as a green blob until somebody found the picker. (A removed member
+# keeps their id in the field rather than clearing it — re-recruit them and
+# the pick comes back; until then the default stands in.)
+func overworld_member():
+	var ch = overworld_pick()
+	if ch != null:
+		return ch
+	for id in active:
+		var m = get_member(id)
+		if m != null and (ch == null or m.level() > ch.level()):
+			ch = m
+	return ch
+
+# The explicit pick only, or null when there is none or it is not marching.
+# The single place overworld_figure is resolved — the Party screen's picker
+# and overworld_member() both come through here, so "is this pick still
+# good?" has exactly one answer. It is an identity, not a class: benching or
+# removing that character drops the pick even when somebody else in the party
+# shares their class.
 #
 # ponytail: two shapes in one field. It holds a member id now, but saves
 # written before that hold a CLASS id ("wizard") — and core/world_save.gd
@@ -145,7 +160,7 @@ func swap(active_id: String, bench_id: String) -> bool:
 # anything looks at it. The one ambiguity left is a character whose id happens
 # to be a class id ("wizard"), which resolves as the member — the new shape
 # wins, and that is the right way round.
-func overworld_member():
+func overworld_pick():
 	if overworld_figure == "":
 		return null
 	var ch = get_member(overworld_figure)

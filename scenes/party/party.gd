@@ -195,11 +195,11 @@ func _build_figure_picker() -> void:
 	# Asking the party who it resolves to (rather than reading the field raw)
 	# is also what migrates a pre-identity save's class id — see
 	# core/party.gd's overworld_member().
-	var chosen = party.overworld_member()
+	var chosen = party.overworld_pick()
 	var chosen_id: String = chosen.id if chosen != null else ""
 	var ob := OptionButton.new()
 	ob.name = "FigurePicker"      # the footer holds four pickers now; named so each is addressable
-	ob.add_item("Default (plain pawn)")
+	ob.add_item("Default (highest level)")
 	ob.set_item_metadata(0, "")
 	for id in party.active:
 		var ch = party.get_member(id)

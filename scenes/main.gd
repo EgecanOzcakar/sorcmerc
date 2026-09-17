@@ -443,6 +443,12 @@ func _new_game(forced := 0) -> void:
 	# refuses under SORCMERC_FAST — a prompt nobody answers is a hang).
 	if Settings.reaction_prompts_on():
 		cb.reaction_decider = _ask_reaction
+	# A foe's action draws the same lunge / shot / flash a hero's does, at the
+	# moment it happens, hit or miss. Heroes draw their own from _apply_target,
+	# which knows the verb before perform() does.
+	cb.on_perform = func(a, v: Dictionary, t) -> void:
+		if a.team == "foe" and t is Object and "pos" in t:
+			_attack_fx(a, t, v)
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()
@@ -577,20 +583,11 @@ func _advance() -> void:
 				await get_tree().process_frame
 			await get_tree().create_timer(TURN_BEAT / _anim).timeout
 			if not c.is_down():
-				# ponytail: the AI layer reports no per-attack events, so the FX are
-				# inferred from who lost HP over its turn. Good enough to follow a
-				# turn; give AI.take_turn a callback if it ever needs to be exact.
-				var before := {}
-				if _fx_on:
-					for x in cb.combatants:
-						before[x.id] = x.hp
 				# Awaited because the AI now stops between its own actions to
 				# offer the party its reactions (core/ai.gd). With prompts off
 				# it never suspends and this is the same call it always was.
+				# Its swings draw through cb.on_perform (see _start_combat).
 				await AI.take_turn(cb, c)
-				for x in cb.combatants:
-					if before.get(x.id, x.hp) > x.hp:
-						_attack_fx(c, x, {"kind": "attack"})
 			_flush_log()
 			_refresh()
 			_busy = false
@@ -2223,6 +2220,38 @@ class Board extends Control:
 	# screen point -> hex, the inverse of _pix
 	func _unpix(sp: Vector2) -> Vector2i:
 		return Hex.from_pixel(_iso_inv(sp - _origin), main.hex_px)
+
+	# The native hover popup, for the tiles that change the rules. A plain
+	# hex says nothing, so the popup only ever appears over something worth
+	# reading. Static so a test can ask about a board without a screen.
+	func _get_tooltip(at: Vector2) -> String:
+		return hex_tip(cb, _unpix(at)) if cb != null else ""
+
+	static func hex_tip(combat, hx: Vector2i) -> String:
+		if combat == null or not (hx in combat.board["hexes"]):
+			return ""
+		var lines: PackedStringArray = []
+		var o: Dictionary = combat.object_at(hx)
+		if not o.is_empty():
+			var what: String = String(o["type"]).capitalize()
+			var h: Dictionary = o.get("hazard", {})
+			if int(o.get("hp", 0)) > 0:
+				what += " — smash it from beside it (one action, %d HP)" % int(o["hp"])
+				if o.get("explosive", false):
+					what += "; it bursts for %s %s to everything around it" % [h.get("dice", "2d6"), h.get("damage_type", "fire")]
+				what += "."
+			elif not h.is_empty():
+				what += " — a hazard. Shove somebody standing beside it in for %s %s." % [h.get("dice", "2d6"), h.get("damage_type", "fire")]
+			elif o.get("blocks_movement", false):
+				what += " — in the way. Nobody can stand here."
+			else:
+				what += " — light and nothing more."
+			lines.append(what)
+		if combat.is_cover(hx):
+			lines.append("Half cover — +2 AC and +2 on Dexterity saves for whoever stands here.")
+		if hx in combat._rough():
+			lines.append("Rough ground — every step here costs two.")
+		return "\n".join(lines)
 
 	func _hex_poly(center: Vector2, s: float) -> PackedVector2Array:
 		var pts := PackedVector2Array()

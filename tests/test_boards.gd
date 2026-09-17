@@ -28,6 +28,7 @@ func _init() -> void:
 	test_explosive_barrel_burns_its_neighbours()
 	test_cone_spell_destroys_a_barrel_in_its_blast()
 	test_every_combat_node_has_a_board()
+	test_hex_tips()
 	print("test_boards: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -244,3 +245,24 @@ func _connected(b: Dictionary) -> bool:
 				seen[n] = true
 				q.append(n)
 	return seen.size() == open.size()
+
+# Special tiles explain themselves on hover: what they are and what they change.
+func test_hex_tips() -> void:
+	var Board = load("res://scenes/main.gd").Board
+	var cb = Encounter.build({"monsters": [{"id": "goblin", "count": 1}], "theme": "goblin-camp", "seed": 1}, [])
+	var b: Dictionary = cb.board
+	check(Board.hex_tip(cb, b["cover"][0]).contains("+2 AC"), "cover says what it does for AC")
+	check(Board.hex_tip(cb, b["rough"][0]).contains("costs two"), "rough ground says what it costs")
+	var plain := Vector2i(999, 999)
+	for hx in b["hexes"]:
+		if not cb.is_cover(hx) and not (hx in cb._rough()) and cb.object_at(hx).is_empty():
+			plain = hx
+			break
+	check(Board.hex_tip(cb, plain) == "", "a plain hex says nothing")
+	for o in cb.objects():
+		var tip: String = Board.hex_tip(cb, o["pos"])
+		check(tip.begins_with(String(o["type"]).capitalize()), "%s names itself" % o["type"])
+		if o.has("hazard") and not o.get("explosive", false):
+			check(tip.contains("Shove"), "%s explains the shove" % o["type"])
+		if o.get("explosive", false):
+			check(tip.contains("bursts"), "%s warns that it bursts" % o["type"])
