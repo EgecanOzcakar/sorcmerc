@@ -5184,3 +5184,74 @@ spend them on**, and a cleric casts their domain list or nothing. That wants a
 daily-prep screen (or `prepared_count`, which the resolver already computes and
 nobody reads), not a one-line fix, so it is written down here rather than
 patched over.
+
+## T-classes-a — the features the vocabulary could already express (2026-09-17)
+
+T-classes left an inventory: 16 features mechanical, 175 flavor, and a per-class
+list of which was which. This is the first pass over it — deliberately only the
+entries `data/effects/features.json` could already express, with no change to
+`core/` at all.
+
+Two corrections to T-classes' own write-up first, because both were overstated:
+
+* **"Not one subclass feature does anything"** was wrong. It counted entries in
+  `data/effects/features.json`, and a feature's mechanic can live elsewhere:
+  Champion's Improved Critical is `crit_range = 19` in `adapter.gd`, College of
+  Dance's Dazzling Footwork is an `armor-class` grant, Martial Arts is computed
+  in `pass_gear.attacks()`, every pool is a `resource-pool` grant. The accurate
+  claim is narrower: **no subclass feature becomes a combat verb.**
+* **"Roughly half the list is JSON only"** was optimistic. It was judged off the
+  `kind` names, and the engine's *conditions* and *payloads* are much narrower
+  than those names suggest. `requires` knows four predicates and none of them is
+  "while raging" or "on your first turn"; a `reaction` can add AC or halve
+  damage and cannot subtract a die or impose Disadvantage; `save_effect` hits
+  one target, not a radius. So Frenzy, Dread Ambusher, Warding Flare, Cutting
+  Words, Radiance of the Dawn and Open Hand Technique all *look* expressible and
+  are not. Eight entries were, not eighty.
+
+**What landed.** Three of them are parity, not content:
+`paladin-extra-attack`, `ranger-extra-attack` and `collegevalor-extra-attack`.
+Barbarian, fighter and monk had an `attacks_per_action` entry and those three
+did not, so the sheet said a level-8 paladin swung once and a level-8 fighter
+twice. Five are features whose shape the file already had a template for:
+
+| feature | shape | what it retires |
+|---|---|---|
+| `assassin-assassinate` | `attack_modifier`, `requires: target_has_not_acted` | the same entry `monster-assassinate` has had since T16 |
+| `wardomain-war-priest` | `grant_action`, `extra_attacks: 1` | the `war-priest` pool |
+| `celestialpatron-healing-light` | `heal_ally`, 1d6 a die, 60 ft | the `healing-light` pool |
+| `warriorofmercy-hand-of-healing` | `heal_ally`, Martial Arts die + WIS | — |
+| `warrioropenhand-wholeness-of-body` | `heal_self`, PB per long rest | — |
+
+Dead pools: 11 → 9. Each of the five carries a new gilt badge from
+`tools/gen_action_icons.py` (`tests/test_action_icons.gd` refuses a button
+feature with no mark) — Assassinate wears exactly the one `monster-assassinate`
+wears, since it is the same ability and a rogue's version of it should not be a
+different picture.
+
+**And the thing found on the way, which is bigger than all of it.**
+`attacks_per_action` **does nothing on the board, for anybody, and never has.**
+The chain breaks in three places at once:
+
+1. `combat._offerable()` gates the Attack verb on `can_spend("action")` alone.
+   `resolve_attack` banks the second swing in `econ.attacks_left`, but by then
+   the action is gone, so the Attack button greys out with `attacks_left = 1`
+   sitting in the economy. The player never gets it.
+2. `resolve_attack` **assigns** `attacks_left = attacks_per_action - 1` rather
+   than adding, so anything banked earlier is destroyed. Flurry of Blows banks
+   two swings as a Bonus Action and the monk's first Attack overwrites both —
+   measured: `flurry banked 2, after one swing attacks_left=1`.
+3. `ai.gd` takes exactly one `_strike` per `take_turn`, so the AI never spends a
+   banked swing either — which means every `monster-multiattack-2` and `-3` in
+   the bestiary is a single-attack monster.
+
+Meanwhile `power.gd` reads `attacks_per_action` straight into `dpr` as a
+multiplier, so every Extra Attack class and every multiattack monster is
+**priced at two or three times the damage it actually deals**, and `scaler.gd`'s
+budgets are built on that price.
+
+Fixing it roughly doubles the output of every multiattack creature on both sides
+of the board at once. That is not a small change and it is not this one: it
+belongs with the tier sweep that T-classes already said was owed. The three new
+`-extra-attack` entries are therefore **inert today**, exactly as the three that
+preceded them are — they make the sheet right and wait.

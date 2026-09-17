@@ -696,5 +696,115 @@
       "smell"
     ],
     "passive_bonus": 5
-  }
+  },
+  "paladin-extra-attack": {
+    "kind": "attacks_per_action",
+    "value": 2
+  },
+  "ranger-extra-attack": {
+    "kind": "attacks_per_action",
+    "value": 2
+  },
+  "collegevalor-extra-attack": {
+    "kind": "attacks_per_action",
+    "value": 2
+  },
+  "assassin-assassinate": {
+    "kind": "attack_modifier",
+    "cost": "none",
+    "trigger": "passive",
+    "requires": [
+      "target_has_not_acted"
+    ],
+    "self": "adv"
+  },
+  "wardomain-war-priest": {
+    "kind": "grant_action",
+    "cost": "bonus",
+    "pool": "war-priest",
+    "amount": 0,
+    "extra_attacks": 1
+  },
+  "celestialpatron-healing-light": {
+    "kind": "heal_ally",
+    "cost": "bonus",
+    "pool": "healing-light",
+    "range_ft": 60,
+    "dice": {
+      "count": 1,
+      "sides": 6
+    }
+  },
+  "warriorofmercy-hand-of-healing": {
+    "kind": "heal_ally",
+    "cost": "bonus",
+    "pool": "focus-points",
+    "range_ft": 5,
+    "dice": {
+      "count": 1,
+      "sides": {
+        "by": "class_level",
+        "class": "monk",
+        "steps": [
+          {
+            "min": 1,
+            "value": 6
+          },
+          {
+            "min": 5,
+            "value": 8
+          },
+          {
+            "min": 11,
+            "value": 10
+          },
+          {
+            "min": 17,
+            "value": 12
+          }
+        ]
+      },
+      "plus": {
+        "by": "ability_mod",
+        "ability": "wis"
+      }
+    }
+  },
+  "warrioropenhand-wholeness-of-body": {
+    "kind": "heal_self",
+    "cost": "bonus",
+    "uses": {
+      "by": "pb"
+    },
+    "dice": {
+      "count": 1,
+      "sides": {
+        "by": "class_level",
+        "class": "monk",
+        "steps": [
+          {
+            "min": 1,
+            "value": 6
+          },
+          {
+            "min": 5,
+            "value": 8
+          },
+          {
+            "min": 11,
+            "value": 10
+          },
+          {
+            "min": 17,
+            "value": 12
+          }
+        ]
+      },
+      "plus": {
+        "by": "ability_mod",
+        "ability": "wis"
+      }
+    }
+  },
+  "_note_classes": "T-classes-a: class and subclass features expressible with the vocabulary as it stands. The three -extra-attack entries are parity, not new content: barbarian, fighter and monk had theirs and paladin, ranger and College of Valour did not, so those three swung once at level 5+ while the others swung twice. The rest give a verb to a pool the engine already granted and nothing could spend."
 }
