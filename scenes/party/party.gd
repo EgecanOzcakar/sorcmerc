@@ -18,6 +18,9 @@ const Travel = preload("res://core/travel.gd")
 const HeroModels = preload("res://scenes/figures3d.gd").HERO_MODELS
 # Skill ids -> names/abilities, the same table the profile screen reads.
 const Catalog = preload("res://core/rules/catalog.gd")
+# The prepare page's own model: who prepares, what they may prepare, and the
+# limit. Static and UI-free, so this screen can ask before offering the button.
+const Prepare = preload("res://scenes/party/prepare.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_EDGE := Icons.COL_EDGE
@@ -410,6 +413,21 @@ func _card(sm: Dictionary) -> Control:
 	prof.pressed.connect(func(): _on_view_profile(sm["id"]))
 	row.add_child(prof)
 
+	# Preparing is a thing only five of the twelve classes do, so the button is
+	# on every row and live on the rows it means something for — greyed with the
+	# reason rather than hidden, so "where do I prepare spells" has an answer on
+	# the page whoever is asking happens to be looking at.
+	var member = party.get_member(sm["id"])
+	var preps: bool = member != null and Prepare.prepares(member)
+	var spells := Button.new()
+	Icons.clicks(spells)
+	spells.text = "Spells"
+	spells.disabled = not preps
+	spells.tooltip_text = "Choose which spells %s has prepared" % sm["name"] if preps \
+		else "%s does not prepare spells — a bard, sorcerer or warlock knows theirs outright" % sm["name"]
+	spells.pressed.connect(func(): _on_prepare_spells(sm["id"]))
+	row.add_child(spells)
+
 	# Dismissing is recruiting in reverse, so it shares the inn lock. The last
 	# member stays: an empty roster has nobody to walk the map.
 	var dismiss := Button.new()
@@ -647,6 +665,31 @@ func _on_view_profile(id: String) -> void:
 	var back := Button.new()
 	Icons.clicks(back)
 	back.text = "←  Back to party"
+	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	back.offset_left = -180; back.offset_top = 12; back.offset_right = -16
+	back.pressed.connect(func():
+		overlay.queue_free()
+		_refresh())
+	overlay.add_child(back)
+
+const PREPARE_SCENE := "res://scenes/party/prepare.tscn"
+
+# The daily-prep screen, as a full-screen overlay like the profile. Preparing
+# rewrites ch.prepared and nothing else, and core/character_save.gd has always
+# persisted that field — so there is nothing to save here, only to re-read.
+func _on_prepare_spells(id: String) -> void:
+	var ch = party.get_member(id)
+	if ch == null or not Prepare.prepares(ch):
+		return
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	var page = load(PREPARE_SCENE).instantiate()
+	overlay.add_child(page)
+	page.set_character(ch)
+	var back := Button.new()
+	Icons.clicks(back)
+	back.text = "\u2190  Back to party"
 	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	back.offset_left = -180; back.offset_top = 12; back.offset_right = -16
 	back.pressed.connect(func():

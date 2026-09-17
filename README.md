@@ -56,7 +56,9 @@ scenes/
   main.gd/.tscn    the combat screen: hex board, tokens, action log, buttons
   campaign/        the run screen: route choices, shop/rest/treasure, journal
   creator/, party/, profile/, progression/, achievements/, settings/
-                   character creation + leveling, roster management, the
+                   character creation + leveling, roster management (and
+                   party/prepare.gd, the daily-prep page a cleric, druid,
+                   paladin or ranger fills their spell list on), the
                    character sheet, the meta-progression viewer, the
                    achievements viewer (and toast.gd, the AchievementToasts
                    autoload that slides an earned one in from the top-right
@@ -72,7 +74,7 @@ data/              the 5e SRD export (classes/spells/species/...), a 316-
 content/           content packs that ship with the game: an example map, a
                    free campaign, and a paid DLC — all three written against
                    the same public API a player's mod uses
-tests/             120 files, headless: one per subsystem (92 test_*.gd) plus
+tests/             121 files, headless: one per subsystem (93 test_*.gd) plus
                    8 drive_*.gd (robots pressing real UI buttons end-to-end),
                    check_scripts.gd (every .gd in the project still parses)
                    and a few dev tools (shot.gd renders a frame to PNG).
