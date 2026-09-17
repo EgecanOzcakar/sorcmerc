@@ -203,18 +203,18 @@ func _preview() -> void:
 	check(int(p["level"]) == before_level + 1, "preview reports the target level")
 	check(int(p["hp"]) > 0, "preview reports an HP gain")
 
-# T10: the 5e XP table gates level-up, and the profile button follows it.
+# T10: the XP curve gates level-up, and the profile button follows it.
 func _xp_gate() -> void:
 	var ch = Presets.vera()          # level 3
 	ch.xp = 0
 	check(not Leveling.can_level_up(ch), "L3 with 0 XP cannot level")
-	check(Leveling.xp_to_next(ch) == 2700, "L3 needs 2700 XP for level 4")
-	ch.xp = 2699
+	check(Leveling.xp_to_next(ch) == 600, "L3 needs 600 XP for level 4")
+	ch.xp = 599
 	check(not Leveling.can_level_up(ch) and Leveling.xp_to_next(ch) == 1, "one XP short")
-	ch.xp = 2700
+	ch.xp = 600
 	check(Leveling.can_level_up(ch), "hitting the threshold unlocks level-up")
 	check(Leveling.xp_to_next(ch) == 0, "eligible characters need 0 more")
-	check(Leveling.xp_for_level(1) == 0 and Leveling.xp_for_level(20) == 355000,
+	check(Leveling.xp_for_level(1) == 0 and Leveling.xp_for_level(20) == 19000,
 		"the table spans 1..20")
 
 	var p = load("res://scenes/profile/profile.tscn").instantiate()
@@ -222,7 +222,7 @@ func _xp_gate() -> void:
 	ch.xp = 100
 	p.set_character(ch)
 	check(p._fields["level_up_btn"].disabled, "the profile disables Level up below the threshold")
-	check(p.field("xp").contains("need 2600 more"), "the profile says how much XP is missing (got %s)"
+	check(p.field("xp").contains("need 500 more"), "the profile says how much XP is missing (got %s)"
 		% p.field("xp"))
 	ch.xp = 9999
 	p.set_character(ch)

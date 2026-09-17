@@ -1037,7 +1037,8 @@ func turn_in(quest: Dictionary) -> bool:
 	# ends of the same arc and the payoff is the one worth hearing, so completing
 	# now resolves where accepting only reaches.
 	Sound.play_sfx("quest_complete")
-	say("Quest complete: %s (+%d gp)" % [quest["title"], int(quest["reward"].get("gold", 0))])
+	var gold: int = int(quest["reward"].get("gold", 0))
+	say("Quest complete: %s (+%d gp, +%d XP)" % [quest["title"], gold, gold * Quest.XP_PER_GOLD])
 	_autosave()
 	return true
 
