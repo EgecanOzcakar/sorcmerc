@@ -299,6 +299,7 @@ var _summary := RichTextLabel.new()
 var _back := Button.new()
 var _next := Button.new()
 var _status := Label.new()
+var _target: Container = null   # where _head/_note/_flow append: _body, or a split's right column
 
 func _ready() -> void:
 	# Class-scope Buttons, so they cannot be armed at their declaration the way
@@ -433,6 +434,7 @@ func _confirm() -> void:
 # --- render ---------------------------------------------------------------
 
 func _refresh() -> void:
+	_target = null
 	for c in _body.get_children():
 		c.queue_free()
 		_body.remove_child(c)
@@ -461,7 +463,7 @@ func _head(text: String) -> void:
 	var l := Label.new()
 	l.text = text
 	l.theme_type_variation = "Head"
-	_body.add_child(l)
+	_into().add_child(l)
 
 func _note(text: String, col: Color = COL_DIM) -> void:
 	var l := Label.new()
@@ -470,14 +472,51 @@ func _note(text: String, col: Color = COL_DIM) -> void:
 	l.theme_type_variation = "Dim"
 	if col != COL_DIM:
 		l.add_theme_color_override("font_color", col)
-	_body.add_child(l)
+	_into().add_child(l)
 
 func _flow() -> HFlowContainer:
 	var f := HFlowContainer.new()
 	f.add_theme_constant_override("h_separation", 6)
 	f.add_theme_constant_override("v_separation", 6)
-	_body.add_child(f)
+	_into().add_child(f)
 	return f
+
+func _into() -> Container:
+	return _target if _target != null else _body
+
+# #80: a pick with a lock on it — species, class — is a column down the left,
+# the ones this profile has opened first and each group alphabetical, with a
+# rule between them; what the pick means goes on the right (_target, until the
+# caller puts it back). `entries` are {label, extra, on, cb, note}: `note` is
+# lock_note()'s price, "" for open.
+func _pick_column(entries: Array) -> void:
+	var split := HBoxContainer.new()
+	split.add_theme_constant_override("separation", 18)
+	_body.add_child(split)
+	var col := VBoxContainer.new()
+	col.custom_minimum_size = Vector2(300, 0)
+	col.add_theme_constant_override("separation", 4)
+	split.add_child(col)
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.add_theme_constant_override("separation", 10)
+	split.add_child(right)
+	_target = right
+	var by_name := func(a, b): return String(a.get("sort", a["label"])).naturalnocasecmp_to(String(b.get("sort", b["label"]))) < 0
+	var open: Array = entries.filter(func(e): return String(e["note"]) == "")
+	var locked: Array = entries.filter(func(e): return String(e["note"]) != "")
+	open.sort_custom(by_name)
+	locked.sort_custom(by_name)
+	for e in open + locked:
+		if e == locked.front():
+			var cap := Label.new()
+			cap.text = "Locked"
+			cap.theme_type_variation = "Caption"
+			col.add_child(cap)
+		var b := _opt(col, e["label"], e["on"], e["cb"], e["extra"])
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_gate(b, e["note"])
 
 func _opt(parent: Control, label: String, on: bool, cb: Callable, extra := "") -> Button:
 	var b := Button.new()
@@ -510,13 +549,14 @@ func _build_basics() -> void:
 	_body.add_child(name_edit)
 
 	_head("Species")
-	var f := _flow()
+	var entries: Array = []
 	for s in Catalog.all("species.json"):
 		var sid: String = s["id"]
-		var b := _opt(f, s["name"], ch.species_id == sid, func(): _set_species(sid),
-			"  (%d ft)" % int(s["speed"]))
-		if ch.species_id != sid:   # never take away what this character already is
-			_gate(b, lock_note("species", sid))
+		entries.append({"label": s["name"], "extra": "  (%d ft)" % int(s["speed"]),
+			"on": ch.species_id == sid, "cb": func(): _set_species(sid),
+			# never take away what this character already is
+			"note": lock_note("species", sid) if ch.species_id != sid else ""})
+	_pick_column(entries)
 	if ch.species_id != "":
 		var src := Catalog.species_src(ch.species_id)
 		_note("Size %s · speed %d ft · languages: %s" % [src["size"], int(src["speed"]),
@@ -524,6 +564,7 @@ func _build_basics() -> void:
 	# lineage / sub-species, when the data has one
 	for p in _choice_points_of(["lineage-choice"]):
 		_choice_widget(p)
+	_target = null
 
 	_head("Load a preset")
 	_note("Vera, Pike and Ilsa as real 5.5e builds — hand one back instead of building.")
@@ -558,13 +599,13 @@ func _build_class() -> void:
 	if start_level > 1:
 		_note("Joins at level %d to match the party, with %d XP banked. Catch-up levels are granted, not earned: none of that XP counts toward the lifetime XP that unlocks species and classes."
 			% [start_level, Leveling.xp_for_level(start_level)], COL_GOLD)
-	var f := _flow()
+	var entries: Array = []
 	for c in Catalog.all("classes.json"):
 		var cid: String = c["id"]
-		var b := _opt(f, "%s  %s" % [Icons.class_glyph(cid), c["name"]], ch.class_id() == cid,
-			func(): _set_class(cid), "  d%d" % int(c["hitDie"]))
-		if ch.class_id() != cid:
-			_gate(b, lock_note("class", cid))
+		entries.append({"label": "%s  %s" % [Icons.class_glyph(cid), c["name"]], "sort": c["name"], "extra": "  d%d" % int(c["hitDie"]),
+			"on": ch.class_id() == cid, "cb": func(): _set_class(cid),
+			"note": lock_note("class", cid) if ch.class_id() != cid else ""})
+	_pick_column(entries)
 	_build_free_picks()
 	if ch.class_id() != "":
 		var src := Catalog.class_src(ch.class_id())
@@ -578,6 +619,7 @@ func _build_class() -> void:
 		_note("Armor: %s · Weapons: %s" % [
 			", ".join(src["armorProficiencies"]) if src["armorProficiencies"] else "none",
 			", ".join(src["weaponProficiencies"]) if src["weaponProficiencies"] else "none"])
+	_target = null
 
 # T22: buying a class with lifetime XP comes with 2 of its 4 subclasses, free and
 # permanent. Until they are named none of the class's subclasses read as unlocked,
