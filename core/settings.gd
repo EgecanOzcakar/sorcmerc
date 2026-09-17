@@ -5,7 +5,7 @@
 # {
 #   "format": "sorcmerc-settings",  // literal, checked on load
 #   "version": 1,                   // bump only on an incompatible change
-#   "anim_speed_multiplier": 1.0,   // 1.0 normal, <1 slower and weightier, >1 faster
+#   "anim_speed_multiplier": 0.55,  // 1.0 normal, <1 slower and weightier, >1 faster
 #   "default_difficulty": "normal", // "easy" | "normal" | "hard"
 #   "sfx_volume": 80,               // 0-100, the "SFX" audio bus (T27)
 #   "music_volume": 80,             // 0-100, the "Music" audio bus (T27)
@@ -35,10 +35,10 @@ const ANIM_MAX := 3.0     # as quick as a player can ask for without SORCMERC_FA
 # FAST is the old "Reduced animations" toggle, kept as the last entry.
 const ANIM_PACES := [
 	{"id": "weighty", "label": "Weighty", "speed": 0.55,
-		"note": "Blows land. Movement covers ground."},
+		"note": "Blows land. Movement covers ground. The default pace."},
 	{"id": "measured", "label": "Measured", "speed": 0.75,
 		"note": "A little more room around every action."},
-	{"id": "normal", "label": "Normal", "speed": 1.0, "note": "The default pace."},
+	{"id": "normal", "label": "Normal", "speed": 1.0, "note": "The old default."},
 	{"id": "brisk", "label": "Brisk", "speed": 1.6, "note": "Less waiting between turns."},
 	{"id": "instant", "label": "Instant", "speed": FAST,
 		"note": "No animation at all — the log is the fight."},
@@ -46,7 +46,11 @@ const ANIM_PACES := [
 
 const DEFAULT_VOLUME := 80.0   # both audio sliders, 0-100
 
-var anim_speed_multiplier := 1.0
+# Weighty by default: the slowest pace is the one a fight reads best at, and
+# a player who wants it brisker will find the dial sooner than one who wants
+# the swing they never saw.
+const ANIM_DEFAULT := 0.55
+var anim_speed_multiplier := ANIM_DEFAULT
 var default_difficulty := "normal"
 var sfx_volume := DEFAULT_VOLUME
 var music_volume := DEFAULT_VOLUME
@@ -86,7 +90,7 @@ static func load_settings():
 		# ANIM_MAX is what FAST is for, but anything between is the player's
 		# call. FAST itself passes through — it is a real stored value now
 		# (the "Instant" pace), not just an env-var stand-in.
-		var want := float(d.get("anim_speed_multiplier", 1.0))
+		var want := float(d.get("anim_speed_multiplier", ANIM_DEFAULT))
 		s.anim_speed_multiplier = want if want >= FAST else clampf(want, ANIM_MIN, ANIM_MAX)
 		var diff := String(d.get("default_difficulty", "normal"))
 		s.default_difficulty = diff if diff in DIFFICULTIES else "normal"

@@ -1924,9 +1924,11 @@ class Board extends Control:
 	var _fx: Array = []
 	# How long a strike is on screen. Raised across the board: at 0.30 a melee
 	# swing was over before the eye found it, which is most of why a fight read
-	# as "fast mode" even at 1x. Every one of these is divided by the pace
-	# setting through Board.tick's own dt, so Instant still skips them.
-	const FX_TTL := {"melee": 0.46, "ranged": 0.52, "spell": 0.70}
+	# as "fast mode" even at 1x; the melee lunge got a second raise (0.46 ->
+	# 0.60) because the step-in still snapped back before it read as a blow.
+	# Every one of these is divided by the pace setting through Board.tick's
+	# own dt, so Instant still skips them.
+	const FX_TTL := {"melee": 0.60, "ranged": 0.66, "spell": 0.72}
 	var _defeat := -1.0   # T29: seconds since the party wipe, -1 = not wiped
 
 	func play_defeat() -> void:
@@ -2079,6 +2081,38 @@ class Board extends Control:
 	# screen point -> hex, the inverse of _pix
 	func _unpix(sp: Vector2) -> Vector2i:
 		return Hex.from_pixel(_iso_inv(sp - _origin), main.hex_px)
+
+	# The native hover popup, for the tiles that change the rules. A plain
+	# hex says nothing, so the popup only ever appears over something worth
+	# reading. Static so a test can ask about a board without a screen.
+	func _get_tooltip(at: Vector2) -> String:
+		return hex_tip(cb, _unpix(at)) if cb != null else ""
+
+	static func hex_tip(combat, hx: Vector2i) -> String:
+		if combat == null or not (hx in combat.board["hexes"]):
+			return ""
+		var lines: PackedStringArray = []
+		var o: Dictionary = combat.object_at(hx)
+		if not o.is_empty():
+			var what: String = String(o["type"]).capitalize()
+			var h: Dictionary = o.get("hazard", {})
+			if int(o.get("hp", 0)) > 0:
+				what += " — smash it from beside it (one action, %d HP)" % int(o["hp"])
+				if o.get("explosive", false):
+					what += "; it bursts for %s %s to everything around it" % [h.get("dice", "2d6"), h.get("damage_type", "fire")]
+				what += "."
+			elif not h.is_empty():
+				what += " — a hazard. Shove somebody standing beside it in for %s %s." % [h.get("dice", "2d6"), h.get("damage_type", "fire")]
+			elif o.get("blocks_movement", false):
+				what += " — in the way. Nobody can stand here."
+			else:
+				what += " — light and nothing more."
+			lines.append(what)
+		if combat.is_cover(hx):
+			lines.append("Half cover — +2 AC and +2 on Dexterity saves for whoever stands here.")
+		if hx in combat._rough():
+			lines.append("Rough ground — every step here costs two.")
+		return "\n".join(lines)
 
 	func _hex_poly(center: Vector2, s: float) -> PackedVector2Array:
 		var pts := PackedVector2Array()

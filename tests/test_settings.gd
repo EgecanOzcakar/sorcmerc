@@ -25,7 +25,7 @@ func _init() -> void:
 func test_defaults() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Settings.PATH))
 	var s = Settings.load_settings()
-	check(s.anim_speed_multiplier == 1.0, "default anim speed is normal")
+	check(s.anim_speed_multiplier == Settings.ANIM_PACES[0]["speed"], "default anim speed is the slowest pace")
 	check(s.default_difficulty == "normal", "default difficulty is normal")
 
 func test_round_trip() -> void:
