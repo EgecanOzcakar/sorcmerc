@@ -634,6 +634,8 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 # Run a verb. `target` is a Combatant, a direction (Vector2i) or null.
 func perform(actor, v: Dictionary, target = null) -> Dictionary:
 	var kind: String = v["kind"]
+	if on_perform.is_valid():
+		on_perform.call(actor, v, target)
 	# Asked before anything is spent. The rule used to live only in
 	# legal_target(), so the resolver would take the action, roll the contest,
 	# win it, and then quietly do nothing because there was no brazier beside
@@ -1340,6 +1342,13 @@ const COUNTER_DC_BASE := 10
 # nothing else changes shape at all.
 var reaction_decider: Callable = Callable()
 var reaction_decider_team := "party"
+
+# Told (actor, verb, target) at the top of every perform(), before it resolves.
+# The combat screen hangs the attack FX off it, so a foe's swing draws the
+# moment it happens and whether or not it lands — inferring it from who lost
+# HP after the turn missed every miss, and drew the hit late. Unset, nothing
+# is called and nothing changes shape.
+var on_perform: Callable = Callable()
 
 # "<reactor id>|<verb id>" -> bool. Written by offer_reactions(), read once by
 # fire_reactions() and erased on the way — a yes is good for the trigger it was

@@ -441,6 +441,12 @@ func _new_game(forced := 0) -> void:
 	# refuses under SORCMERC_FAST — a prompt nobody answers is a hang).
 	if Settings.reaction_prompts_on():
 		cb.reaction_decider = _ask_reaction
+	# A foe's action draws the same lunge / shot / flash a hero's does, at the
+	# moment it happens, hit or miss. Heroes draw their own from _apply_target,
+	# which knows the verb before perform() does.
+	cb.on_perform = func(a, v: Dictionary, t) -> void:
+		if a.team == "foe" and t is Object and "pos" in t:
+			_attack_fx(a, t, v)
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()
@@ -575,20 +581,11 @@ func _advance() -> void:
 				await get_tree().process_frame
 			await get_tree().create_timer(TURN_BEAT / _anim).timeout
 			if not c.is_down():
-				# ponytail: the AI layer reports no per-attack events, so the FX are
-				# inferred from who lost HP over its turn. Good enough to follow a
-				# turn; give AI.take_turn a callback if it ever needs to be exact.
-				var before := {}
-				if _fx_on:
-					for x in cb.combatants:
-						before[x.id] = x.hp
 				# Awaited because the AI now stops between its own actions to
 				# offer the party its reactions (core/ai.gd). With prompts off
 				# it never suspends and this is the same call it always was.
+				# Its swings draw through cb.on_perform (see _start_combat).
 				await AI.take_turn(cb, c)
-				for x in cb.combatants:
-					if before.get(x.id, x.hp) > x.hp:
-						_attack_fx(c, x, {"kind": "attack"})
 			_flush_log()
 			_refresh()
 			_busy = false
