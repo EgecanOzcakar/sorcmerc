@@ -385,14 +385,19 @@ func bug_context() -> Dictionary:
 
 func _press_hotkey(idx: int, shift := false) -> void:
 	# A reaction question is the one thing asked while the board is busy, and
-	# [1] Yes / [2] or Space Hold it must reach it — it is the buttons, not the
-	# animation, that the keys address.
-	var asking: bool = _reaction_answer < 0
-	if _busy and not asking:
+	# [1] Yes / [2] or Space Hold it must reach it. #76: it has its own card
+	# now (_build_reaction_card), so the keys answer it directly.
+	if _reaction_answer < 0:
+		if idx == 0:
+			_reaction_answer = 1
+		elif idx == 1 or idx < 0:
+			_reaction_answer = 0
+		return
+	if _busy:
 		return
 	# T29: while aiming, the number keys still address the verb menu — drop out
 	# of targeting first instead of indexing into the lone [Esc] Cancel button.
-	if idx >= 0 and not asking and _mode != "idle" and _mode != "deploy" and cb and not cb.is_over() \
+	if idx >= 0 and _mode != "idle" and _mode != "deploy" and cb and not cb.is_over() \
 			and cb.current().team == "party" and cb.current().conscious():
 		_build_hero_menu(cb.current())
 	var kids := _buttons.get_children()
@@ -615,13 +620,14 @@ func _advance() -> void:
 # Dodge cost nothing and still fire by themselves — there is one sensible answer
 # to those and it is not worth a key press.
 var _reaction_answer := 0    # -1 only while the question is up, then 0 no / 1 yes
+var _reaction_card: PanelContainer = null   # #76: the question, centred over the board
 
 func _ask_reaction(reactor, v: Dictionary, trigger: String, ctx: Dictionary) -> bool:
 	var was_busy: bool = _busy
 	_busy = true
-	_actor.text = _reaction_question(reactor, v, trigger, ctx)
 	_reaction_answer = -1
-	_set_buttons([
+	_set_buttons([])
+	_reaction_card = _build_reaction_card(_reaction_question(reactor, v, trigger, ctx), [
 		["Yes — " + String(v["label"]) + "  [1]", func(): _reaction_answer = 1,
 			"Spend %s's reaction and the slot." % reactor.cname],
 		["Hold it  [2 / Space]", func(): _reaction_answer = 0,
@@ -629,10 +635,51 @@ func _ask_reaction(reactor, v: Dictionary, trigger: String, ctx: Dictionary) -> 
 	])
 	while _reaction_answer < 0:
 		await get_tree().process_frame
-	_set_buttons([])
-	_actor.text = ""
+	_reaction_card.queue_free()
+	_reaction_card = null
 	_busy = was_busy
 	return _reaction_answer == 1
+
+# #76: a reaction is a stop-everything question, so it sits in the middle of
+# the screen over the board rather than down in the action bar. On _hud_layer
+# like the tutorial's cards, and for the same reason — above the HP bars.
+func _build_reaction_card(question: String, opts: Array) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.theme = theme
+	card.add_theme_stylebox_override("panel", Icons.box(Icons.COL_INK, Icons.COL_GOLD_EDGE, 0, 22, 16))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	card.add_child(col)
+	var head := Label.new()
+	head.text = "Reaction"
+	head.theme_type_variation = "Caption"
+	col.add_child(head)
+	var body := RichTextLabel.new()
+	body.bbcode_enabled = true
+	body.fit_content = true
+	body.scroll_active = false
+	body.custom_minimum_size = Vector2(WALK_CARD_W, 0)
+	body.add_theme_font_size_override("normal_font_size", Icons.FS_HEAD)
+	body.add_theme_font_size_override("bold_font_size", Icons.FS_HEAD)
+	body.add_theme_color_override("default_color", Icons.COL_BODY)
+	body.text = question
+	col.add_child(body)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_child(row)
+	for o in opts:
+		var b := Button.new()
+		b.text = String(o[0])
+		b.tooltip_text = String(o[2])
+		b.focus_mode = Control.FOCUS_NONE
+		b.pressed.connect(o[1])
+		row.add_child(b)
+	_hud_layer.add_child(card)
+	card.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	card.grow_vertical = Control.GROW_DIRECTION_BOTH
+	return card
 
 # What the question says. The cost is in it because the cost is the decision,
 # and for a swing the hit chance is too — the answer is given before the d20,
