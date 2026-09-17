@@ -5063,6 +5063,86 @@ still the only terrain, so this routes around lakes and rivers and nothing
 else. And a band's route is drawn nowhere — the map shows the player's goal
 ring and has never shown anyone else's.
 
+## Spike — the floating damage number (2026-09-17, measurement only)
+
+Full write-up in `docs/spike-damage-numbers.md`. Play feedback asked for the
+damage number to be red, big, and to stay longer. The measurement says all
+three are downstream of something else: `Board.tick()` spawns a float **per
+frame** while the HP bar is still lerping (`scenes/main.gd:2293–2299`), each
+carrying the shrinking *gap* rather than the damage, so one 14-damage hit
+draws 21 numbers stacked inside 11 px — `-14 -11 -9 … -1 -0 -0 -0 -0 -0` —
+fading red→orange→yellow on the way. The newest is on top and opaque, so
+what the player reads is `-0` in yellow. It is worse the slower you play
+(Weighty: 39 floats) and scales with frame rate (53 at 144 fps); at Instant
+it is correctly one float, which is why the headless robots have never seen
+it. Two more: the red band (`amount >= 12`) is unreachable for the whole
+preset party on a normal hit — longsword/shortbow/mace all cap at `1d8+3 =
+11` — and the float is the last transient readout still painted on `Board`
+rather than the HUD overlay, i.e. under the `Figures3D` models, the same bug
+the HP bar, the odds chip and the barks were each moved to fix. Foe attacks
+and every AoE get no reveal headline at all, so for incoming damage the
+float is the only readout there is. Recommendation: latch the HP goal and
+spawn one float per damage event first (~8 lines, leaves the bar's easing
+alone); only then re-cut the colour on fraction-of-max-HP plus crit, scale
+the size with `fz`, give it a hold-then-fade curve, and move the paint to
+`_draw_hud_overlay`. Raising the TTL or the font size on today's code just
+makes a bigger, longer-lived pile of `-0`.
+
+## T-dmg — the hit, the miss and the damage, said loudly enough to read (2026-09-17)
+
+Follows the spike above, and the same playtester's follow-up: *improve hit /
+miss / damage font weight and size*. Both readouts — the roll reveal's
+headline and the floating damage number — now paint in the game's own bold
+face (`Icons.sans(700)`, not `ThemeDB.fallback_font`, which is Godot's
+built-in and a face this game does not ship) with an ink outline, through one
+`Board._shout`.
+
+**The size ask needed a fix under it first.** The damage number was spawned as
+a side effect of the HP bar's easing — one per frame while the bar was still
+travelling, each carrying the gap it had left rather than the damage. A
+14-damage hit drew 21 numbers stacked inside 11 px, fading red→orange→yellow
+and ending on a pile of `-0`; the newest drew last and opaque, so `-0` in
+yellow is what the player actually read. Making *that* bigger and bolder makes
+a bigger, bolder pile of `-0`, so the number is latched off the real hp now
+(`_dmg_goal`) and the bar keeps its own easing untouched. First sight primes
+the latch with a real write rather than defaulting to the current hp — the
+version that defaults re-primes every frame and never sees a blow at all.
+
+**Sizes.** The number ran at a literal 18px: the only text on the board that
+ignored `fz`, so zooming *in* to watch a fight made the damage relatively
+smaller. It now scales with the zoom like everything else, and with the share
+of the body the blow took (`sqrt` of damage over max HP, 23→42px), because 12
+damage ends a goblin and scratches a giant and those should not be the same
+size. The reveal headline goes 26→32, keeping its punch-in.
+
+**And the fourth and fifth move to the HUD layer.** The damage numbers and the
+whole roll reveal now paint in `_draw_hud_overlay`, joining the HP bar, the
+odds chip and the barks, for the reason this file has now recorded three times:
+a `Figures3D` model is a `Board` child and draws after everything `Board`
+paints. The reveal needed it most — its dice row sits lowest of any of them,
+right at a tall rig's chest, and a figure standing in front sliced the headline
+in half. `docs/shots/damage-readouts-before-after.png` is that, before and
+after, on the same seed.
+
+One readout per event: where the reveal is up over a body its headline already
+reads `HIT  7`, so the float for that same body is skipped rather than drawn on
+top of it. The reveal only ever fires on the hero's single-target path, so
+every foe attack and every area spell still gets its number.
+
+`tests/test_damage_numbers.gd` (17 assertions) drives `Board.tick()` at an
+explicit dt — the suite otherwise runs at the Instant pace, where the easing
+constant clamps to 1 and the bug does not reproduce, which is why the robots
+ran past it — and asserts one number per blow across three paces and three
+frame rates, that it says the damage, that a body's *first* hit still reports,
+and that healing stays silent. `tests/test_hud_layer.gd` grew four checks for
+the two new moves. `tests/shot_damage.gd` renders the proof.
+
+Not done, and still open in the spike: the colour bands are still cut on
+absolute damage (`>= 12` for red), which the preset party cannot reach on a
+normal hit at all — longsword, shortbow and mace all cap at `1d8+3 = 11`; the
+number still fades from the frame it is born rather than holding first; and
+healing still draws nothing.
+
 ## T-classes — every class and subclass, built and played (2026-09-17)
 
 The rules engine had 48 subclasses and three of them were ever built. Every
