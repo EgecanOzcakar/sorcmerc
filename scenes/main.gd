@@ -47,6 +47,7 @@ var _mode := "idle"          # idle | cone | target
 var _tgt_verb: Dictionary = {}   # the verb being aimed, straight from cb.available()
 var _armed := ""             # a confirm-guarded verb waiting for its second press
 var _deploy_pick := ""       # T39: the hero picked up for a trade, waiting for who to trade with
+var _viewing := false        # #72: the bar shows a party member whose turn it is not — read-only
 var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 var _slot_max := {}          # id -> slots at the start of the fight (for the pips)
@@ -583,6 +584,7 @@ func _advance() -> void:
 			continue
 		if c.team == "foe" or c.is_down():
 			_busy = true
+			_viewing = false
 			_set_buttons([])
 			while _walk != null:      # nobody swings while the walkthrough is up
 				await get_tree().process_frame
@@ -599,6 +601,7 @@ func _advance() -> void:
 			cb.end_turn()
 			continue
 		_mode = "idle"
+		_viewing = false
 		_build_hero_menu(c)
 		_advancing = false
 		if _walk_pending:        # T32: the bar the cards describe is now up
@@ -755,8 +758,9 @@ func _menu_entries(h) -> Dictionary:
 	var spell_tiers: Dictionary = {}   # spell id -> Array of this verb's entries, one per castable level
 	var spell_order: Array = []        # first-seen order, so a spell keeps its natural position in opts
 	var usable := {}
-	for v in cb.available(h):
-		usable[String(v.get("id", v["kind"]))] = true
+	if not _viewing:   # #72: a sheet being looked at fires nothing
+		for v in cb.available(h):
+			usable[String(v.get("id", v["kind"]))] = true
 	# The whole kit, not just what is affordable this instant: an unavailable
 	# verb keeps its slot, greyed, so nothing to its right ever moves.
 	for v in cb.all_verbs(h):
@@ -883,7 +887,7 @@ func _slotted(h, opts: Array) -> Array:
 		var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
 		if s in LIST_SLOTS and mine.size() > 1:   # one thing to pick from is no pick: the key fires it
 			var meta := _mark(_slot_icon(s), "▸")
-			meta["disabled"] = mine.is_empty() or live == 0
+			meta["disabled"] = mine.is_empty() or (live == 0 and not _viewing)
 			meta["key"] = str(SLOTS.find(s) + 1)
 			var tip := "%s\n%s" % [SLOT_NAMES[s], ("Nothing to pick from." if mine.is_empty()
 				else "%d of %d ready — press to pick one." % [live, mine.size()])]
@@ -914,7 +918,11 @@ func _slotted(h, opts: Array) -> Array:
 				swap["notation"], swap.get("damage_type", "")], swap_meta])
 	var end_mark := _mark(Icons.verb_icon("end_turn"))
 	end_mark["key"] = "Spc"
-	if h.econ["action"] > 0 and not cb.is_over():
+	if _viewing:
+		var back := _mark(Icons.verb_icon("back"), "‹")
+		back["key"] = "Esc"
+		out.append(["Back", _stop_viewing, "Back\nBack to whoever is acting.", back])
+	elif h.econ["action"] > 0 and not cb.is_over():
 		end_mark["armed"] = _armed == "end"
 		var end_opt := _confirm_opt(h, "end", "End turn (action unspent!)", _end_turn)
 		end_opt.append("End turn\nYour action is still unspent.")
@@ -1290,6 +1298,9 @@ func board_cancel() -> void:
 			_board.queue_redraw()
 			_deploy_menu()
 		return
+	if _viewing:
+		_stop_viewing()
+		return
 	if (_mode != "idle" or _submenu != "") and cb and not cb.is_over() and cb.current().team == "party":
 		_build_hero_menu(cb.current())
 
@@ -1436,9 +1447,38 @@ func _refresh() -> void:
 			("    " + res) if res != "" else "",
 			_econ_bb(cur), hint, again,
 		]
-	elif _mode == "idle":
+	elif _mode == "idle" and not _viewing:
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
 	_board.queue_redraw()
+
+# --- #72: looking at a party member off their turn ------------------------
+#
+# The strip is where a fight is read, and a tile is the natural place to ask
+# "what has Ilsa got left?". The bar it shows is the real one (_menu_entries,
+# _slotted), with every action greyed and the lists still openable, so the
+# tooltips say what each spell and feature does. Esc, Back, or the next hero
+# turn puts the acting hero's bar back.
+func view_hero(c) -> void:
+	if cb == null or cb.is_over() or c == null or c.team != "party" or _mode == "deploy" \
+			or _reaction_answer < 0:
+		return
+	if c == cb.current() and c.conscious():
+		_stop_viewing()
+		return
+	_viewing = true
+	_build_hero_menu(c)
+	var res := _resources(c)
+	_actor.text = "%s    [i]not their turn[/i]    AC %d    %s%s" % [
+		"[b]%s[/b]" % c.cname, cb.effective_ac(c), _hp_bb(c), ("    " + res) if res != "" else ""]
+
+func _stop_viewing() -> void:
+	_viewing = false
+	var cur = cb.current() if cb != null else null
+	if cur != null and cur.team == "party" and cur.conscious() and not _advancing and not _busy:
+		_build_hero_menu(cur)
+	else:
+		_set_buttons([])
+	_refresh()
 
 # T29 spellcaster resources: one pip row per slot level the caster actually has
 # (● unspent, ○ spent) plus every feature pool by name, replacing the old
@@ -1511,6 +1551,11 @@ func _build_order_strip() -> void:
 			tile.modulate = Color(1, 1, 1, 0.35)
 		elif c.is_down():
 			tile.modulate = Color(1, 1, 1, 0.6)
+		if c.team == "party":   # #72
+			tile.tooltip_text = "Click to look at %s's sheet" % c.short_name()
+			tile.gui_input.connect(func(e: InputEvent):
+				if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+					view_hero(c))
 		_order.add_child(tile)
 	_paint_order_aim(true)
 
