@@ -74,14 +74,17 @@ data/              the 5e SRD export (classes/spells/species/...), a 316-
 content/           content packs that ship with the game: an example map, a
                    free campaign, and a paid DLC — all three written against
                    the same public API a player's mod uses
-tests/             125 files, headless: one per subsystem (95 test_*.gd) plus
-                   9 drive_*.gd (robots pressing real UI buttons end-to-end —
-                   eight of them walking a written script, and drive_random.gd,
-                   which plays a seeded, human-shaped session of the open world
-                   and asserts invariants instead of outcomes),
-                   check_scripts.gd (every .gd in the project still parses)
-                   and a few dev tools (shot.gd renders a frame to PNG).
-                   Run them all with tools/run_tests.sh
+tests/             126 files, headless: one per subsystem (95 test_*.gd) plus
+                   10 drive_*.gd (robots pressing real UI buttons end-to-end).
+                   Eight walk a written script; the other two play the open
+                   world two ways that miss different bugs — drive_random.gd
+                   samples it like a person (a seeded, human-shaped session
+                   asserting invariants rather than outcomes) and
+                   drive_completionist.gd works a checklist of every door in it
+                   to the end, asserting each one's contract and failing on any
+                   it could not reach. Plus check_scripts.gd (every .gd in the
+                   project still parses) and a few dev tools (shot.gd renders a
+                   frame to PNG). Run them all with tools/run_tests.sh
 docs/              docs/expansion-plan.md is the current source of truth;
                    modding.md is the content-pack authoring guide (worlds,
                    campaigns, data overlays, free/paid DLC); combat-design.md

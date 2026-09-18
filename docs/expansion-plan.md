@@ -5776,3 +5776,85 @@ live control is End turn behind its "action unspent!" confirm. A player gets out
 in two presses — the driver now does the same — but the turn arguably ought to
 end itself. Left as it is, deliberately: whether a hero downed and then revived
 mid-turn should keep their action is a design call, not a bug fix.
+
+## drive_completionist — the other kind of player (2026-09-18)
+
+`tests/drive_completionist.gd`, the counterpart to last commit's
+`drive_random.gd`. That one plays like a person: it wanders, takes what the map
+offers, and over a session *samples* the game. Sampling is the right shape for
+finding the bugs nobody wrote a case for and the wrong shape for answering
+"does every door in this screen still open?" — a door the sampler did not
+happen to walk past is a door nobody checked, and the sampler cannot tell the
+difference between a door it skipped and a door that stopped existing.
+
+So this one works a written checklist to the end: every control on the HUD,
+every page of a settlement, every counter behind the market, both ways into a
+lair, every way of meeting a band, every settlement on the map. Six chapters,
+in the shape `drive_world.gd` already uses — a tour, not a planner — each
+walking there with real march orders and pressing the real buttons.
+
+**Two rules keep it from being a second, slower drive_random.**
+
+*Every deed asserts its own contract, not just its press.* Buying moves gold
+AND the pack; selling moves both back. A night at the inn spends the fee, eight
+hours and the party's wounds. The healer's fee is exactly `HEAL_COST` and the
+party comes out full. A job turned in pays and closes. A **second** theft in one
+visit pays nothing — the only way to check O9 item 1 is to press twice and watch
+nothing happen. The press is the setup; the assertion is the test.
+
+*The ledger is the verdict.* Forty-two REQUIRED deeds and twelve OPPORTUNISTIC
+ones are listed at the top of the file, each with the sentence it is checking. A
+required deed the tour never reached fails the run **by name** — which is the
+failure a driver that only asserts what it happens to touch can never report. A
+deed ticked that is on neither list fails too, so the checklist cannot quietly
+drift away from what the file actually does.
+
+What is arranged rather than played for is listed in the header and nowhere
+else: a working purse (this is not a test of the economy), an unidentified
+trinket for the librarian, a scratch for the healer, a job forced to `complete`,
+bands spawned for the four approach ways, mid-morning before those meetings
+(#85: at night a band jumps you instead of asking, which is that rule working),
+and the long-rest cooldown wound back before the camp kit. Everything else is
+walked and pressed.
+
+It runs in ~17s and ends on an early exit rather than a budget: the tour is
+over when the list is.
+
+### Three things building it turned up
+
+**The lair Search button re-rolls nothing.** `WorldLairs.search()` seeds its RNG
+off `hash("lair|" + lair.id)` when nobody hands it one, and `world.gd`'s
+`_lair_action()` never does — so every search of the same lair by the same party
+returns the identical d20, for ever:
+
+```
+goblin-warren  six searches: 12+3, 12+3, 12+3, 12+3, 12+3, 12+3
+dragon-cave    six searches: 2+3 miss, 2+3 miss, 2+3 miss, 2+3 miss, 2+3 miss, 2+3 miss
+```
+
+The demo party can never find the Dragon's Cave by searching, however many times
+it presses — while the button answers "Nothing **this time** (Survival 2+3 vs DC
+13)", which promises another attempt that cannot land. Every neighbouring roll in
+this codebase (the approach, road events, the camp) seeds off the clock precisely
+so a repeat is a real repeat; this is the outlier. **Not changed here**, because
+the fix is a design call with three reasonable answers: seed it off the clock
+like its neighbours, charge world-time per search so the clock moves anyway, or
+keep the fixed roll and say "these tracks are beyond you" instead of "not this
+time". The driver routes around it the way a player would — it buys the lead at
+the inn, which is the other door onto a lair and is deterministic.
+
+**A fight can sit decided but unfinished.** Letting the AI move the party (this
+file and `drive_campaign.gd` both do, because the fight is not what they are
+about) goes *round* the combat screen rather than through it, and the screen only
+notices a decided fight on its way out of a turn (`_after_hero_action` /
+`_advance`). So the turn has to be handed back through the real End turn button
+even once the last foe is down, or the board sits there with `cb.is_over()` true
+and `result` empty. A driver gotcha rather than a bug — a player's every action
+goes through the screen — but it cost an afternoon, so it is written down.
+
+**A gate you are standing in front of does not open twice.** `world.gd`'s `_left`
+stops the market reopening the frame after Leave, and clears only once the party
+is out of range. A tour that ends a chapter inside the walls and starts the next
+one walking *to* that settlement is already there, and nothing opens. Both
+drivers now walk out and come back, which is what a player does and what makes
+"walking in opens the market" a fact rather than a leftover.
