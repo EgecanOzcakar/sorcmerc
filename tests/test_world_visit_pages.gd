@@ -305,6 +305,21 @@ func _init() -> void:
 	check(not has_button(main._visit_panel, "Buy"), "...and offers nothing to press")
 	press(main._visit_panel, "Leave")
 
+	# #106: Esc on the party screen opened at the inn closes the party screen,
+	# not the inn under it. It used to fall through to the visit's bindings —
+	# hub, then Leave — and "Back to the inn" put the party outside town.
+	main._open_visit(s)
+	press(main._visit_panel, "Inn")
+	main._open_party(true)
+	check(main._party_overlay != null and main._visit_page == "inn", "the party screen is up over the inn")
+	main._unhandled_key_input(key(KEY_ESCAPE))
+	check(main._party_overlay == null, "Esc closes the party screen")
+	check(not main._visit.is_empty() and main._visit_page == "inn", "...and the inn is still there under it")
+	check(main.world.clock.is_paused(), "...with the clock still stopped for the visit")
+	main._unhandled_key_input(key(KEY_ESCAPE))
+	check(main._visit_page == "hub", "the next Esc goes to the town square, as before")
+	press(main._visit_panel, "Leave")
+
 	print("test_world_visit_pages: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

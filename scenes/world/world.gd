@@ -1953,6 +1953,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if _combat != null:
 		return
+	# #106: the party screen opened at the inn's counter sits OVER the visit.
+	# Esc there used to fall through to the visit's own bindings underneath —
+	# town square, then Leave — so "Back to the inn" put the party on the map
+	# outside town, where the night had bands waiting.
+	if _party_overlay != null and not _visit.is_empty():
+		if event.keycode in [KEY_ESCAPE, KEY_P]:
+			accept_event()
+			_close_party()
+		return
 	# Out on the map, before the settlement bindings below: the two keys every
 	# player presses first. Esc backs out of whatever panel is up and otherwise
 	# opens the pause menu; space is the Pause button without the trip to the
