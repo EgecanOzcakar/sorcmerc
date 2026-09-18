@@ -18,6 +18,8 @@
 #   "background_id": "soldier",
 #   "base_abilities": {"str":14,"dex":12,"con":13,"int":10,"wis":12,"cha":10},
 #   "levels": [{"class_id": "fighter", "hp_roll": -1}],   // ordered; -1 = average HP
+#                                                        // optional "granted": true —
+#                                                        // handed over, not earned
 #   "choices": {"skill-choice:class:fighter:0": {"type":"skill-choice","skills":["perception","insight"]}},
 #   "feats": ["alert"],               // feats taken outside a feat-choice grant
 #   "equipped": ["longsword", "chain-mail", "shield"],   // unequipped gear is the party's,
@@ -111,7 +113,10 @@ static func from_dict(d: Dictionary):
 		if d.get("base_abilities", {}).has(a):
 			ch.base_abilities[a] = int(d["base_abilities"][a])
 	for l in d.get("levels", []):
-		ch.levels.append({"class_id": String(l["class_id"]), "hp_roll": int(l.get("hp_roll", -1))})
+		var lvl := {"class_id": String(l["class_id"]), "hp_roll": int(l.get("hp_roll", -1))}
+		if bool(l.get("granted", false)):
+			lvl["granted"] = true      # absent in a file written before this key existed:
+		ch.levels.append(lvl)          # those levels read as earned, and stay earned
 	ch.choices = d.get("choices", {}).duplicate(true)
 	# JSON has no ints: an ASI allocation comes back as floats. Restore them, so a
 	# reloaded build compares equal to the one that was saved.

@@ -25,6 +25,10 @@ const AVERAGE := -1
 # top of that.
 const XP_PER_LEVEL := 100
 const MAX_LEVEL := 20
+# Where a class stops being something a character dabbled in: the subclass is
+# in, the signature feature is on the sheet, and the build reads as that class
+# rather than as a dip. Same number milestones() already calls level_5 at.
+const VETERAN_LEVEL := 5
 
 static func xp_for_level(level: int) -> int:
 	var l: int = clampi(level, 1, MAX_LEVEL)
@@ -61,7 +65,7 @@ static func grant_levels(ch, target_level: int, class_id := "") -> void:
 		return
 	var target: int = clampi(target_level, 1, MAX_LEVEL)
 	while ch.level() < target:
-		ch.add_level(cid, AVERAGE)
+		ch.add_level(cid, AVERAGE, true)
 	ch.xp = maxi(int(ch.xp), xp_for_level(ch.level()))
 
 static func pending(ch) -> Array:
@@ -87,11 +91,33 @@ static func milestones(ch) -> void:
 	if _knows_high_spell(ch):
 		Ach.unlock("spell_5th")
 	# What this character is made of, for the profile-wide tallies: every class
-	# they hold a level in, and every species that has ever been fielded.
+	# they hold a level in, every class they hold FIVE in, and every species
+	# that has ever been fielded.
+	#
+	# Two things the "every class" achievement turns on, and it needs both.
+	#
+	# FIVE IN ONE CLASS, not level five. A fighter 3 / rogue 2 is a level-5
+	# character and a veteran of neither trade.
+	#
+	# EARNED, not handed over. The creator mints a recruit at the party's own
+	# level (scenes/creator/creator.gd's start_level), so at a level-5 party a
+	# brand new character arrives with five levels in a class nobody has played
+	# a round of. grant_levels() does not come through here at all, so those
+	# five never tick anything by themselves — but the next level that IS played
+	# calls this, and without the `granted` flag it would look back at a full
+	# five and hand over the class for one level's work. Counting only what was
+	# earned is what makes the achievement mean what it says.
 	var classes := {}
+	var earned := {}
 	for l in ch.levels:
-		classes[String(l["class_id"])] = true
-		Ach.collect("classes", String(l["class_id"]))
+		var cid := String(l["class_id"])
+		classes[cid] = true
+		Ach.collect("classes", cid)
+		if not bool(l.get("granted", false)):
+			earned[cid] = int(earned.get(cid, 0)) + 1
+	for cid in earned:
+		if int(earned[cid]) >= VETERAN_LEVEL:
+			Ach.collect("classes_5", String(cid))
 	Ach.collect("species", String(ch.species_id))
 	if classes.size() >= 2:
 		Ach.unlock("multiclass")

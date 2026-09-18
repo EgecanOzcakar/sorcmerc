@@ -465,8 +465,8 @@ static func _demo_barbarian(id: String, name: String, species: String) -> Charac
 	ch.species_id = species
 	ch.background_id = "soldier"
 	ch.base_abilities = {"str": 15, "dex": 12, "con": 14, "int": 8, "wis": 10, "cha": 10}
-	ch.add_level("barbarian", -1)
-	ch.add_level("barbarian", -1)
+	ch.add_level("barbarian", -1, true)   # a demo hero, handed over the same way
+	ch.add_level("barbarian", -1, true)
 	ch.decide("asi:background:soldier:0", {"type": "asi", "allocation": {"str": 2, "con": 1}})
 	ch.decide("skill-choice:class:barbarian:0", {"type": "skill-choice", "skills": ["athletics", "survival"]})
 	ch.decide("weapon-mastery-choice:class:barbarian:0",

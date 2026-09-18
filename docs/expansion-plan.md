@@ -5776,3 +5776,137 @@ live control is End turn behind its "action unspent!" confirm. A player gets out
 in two presses — the driver now does the same — but the turn arguably ought to
 end itself. Left as it is, deliberately: whether a hero downed and then revived
 mid-turn should keep their action is a design call, not a bug fix.
+
+## drive_completionist — the other kind of player (2026-09-18)
+
+`tests/drive_completionist.gd`, the counterpart to last commit's
+`drive_random.gd`. That one plays like a person: it wanders, takes what the map
+offers, and over a session *samples* the game. Sampling is the right shape for
+finding the bugs nobody wrote a case for and the wrong shape for answering
+"does every door in this screen still open?" — a door the sampler did not
+happen to walk past is a door nobody checked, and the sampler cannot tell the
+difference between a door it skipped and a door that stopped existing.
+
+So this one works a written checklist to the end: every control on the HUD,
+every page of a settlement, every counter behind the market, both ways into a
+lair, every way of meeting a band, every settlement on the map. Six chapters,
+in the shape `drive_world.gd` already uses — a tour, not a planner — each
+walking there with real march orders and pressing the real buttons.
+
+**Two rules keep it from being a second, slower drive_random.**
+
+*Every deed asserts its own contract, not just its press.* Buying moves gold
+AND the pack; selling moves both back. A night at the inn spends the fee, eight
+hours and the party's wounds. The healer's fee is exactly `HEAL_COST` and the
+party comes out full. A job turned in pays and closes. A **second** theft in one
+visit pays nothing — the only way to check O9 item 1 is to press twice and watch
+nothing happen. The press is the setup; the assertion is the test.
+
+*The ledger is the verdict.* Forty-two REQUIRED deeds and twelve OPPORTUNISTIC
+ones are listed at the top of the file, each with the sentence it is checking. A
+required deed the tour never reached fails the run **by name** — which is the
+failure a driver that only asserts what it happens to touch can never report. A
+deed ticked that is on neither list fails too, so the checklist cannot quietly
+drift away from what the file actually does.
+
+What is arranged rather than played for is listed in the header and nowhere
+else: a working purse (this is not a test of the economy), an unidentified
+trinket for the librarian, a scratch for the healer, a job forced to `complete`,
+bands spawned for the four approach ways, mid-morning before those meetings
+(#85: at night a band jumps you instead of asking, which is that rule working),
+and the long-rest cooldown wound back before the camp kit. Everything else is
+walked and pressed.
+
+It runs in ~17s and ends on an early exit rather than a budget: the tour is
+over when the list is.
+
+### Three things building it turned up
+
+**The lair Search button re-rolls nothing.** `WorldLairs.search()` seeds its RNG
+off `hash("lair|" + lair.id)` when nobody hands it one, and `world.gd`'s
+`_lair_action()` never does — so every search of the same lair by the same party
+returns the identical d20, for ever:
+
+```
+goblin-warren  six searches: 12+3, 12+3, 12+3, 12+3, 12+3, 12+3
+dragon-cave    six searches: 2+3 miss, 2+3 miss, 2+3 miss, 2+3 miss, 2+3 miss, 2+3 miss
+```
+
+The demo party can never find the Dragon's Cave by searching, however many times
+it presses — while the button answers "Nothing **this time** (Survival 2+3 vs DC
+13)", which promises another attempt that cannot land. Every neighbouring roll in
+this codebase (the approach, road events, the camp) seeds off the clock precisely
+so a repeat is a real repeat; this is the outlier. **Not changed here**, because
+the fix is a design call with three reasonable answers: seed it off the clock
+like its neighbours, charge world-time per search so the clock moves anyway, or
+keep the fixed roll and say "these tracks are beyond you" instead of "not this
+time". The driver routes around it the way a player would — it buys the lead at
+the inn, which is the other door onto a lair and is deterministic.
+
+**A fight can sit decided but unfinished.** Letting the AI move the party (this
+file and `drive_campaign.gd` both do, because the fight is not what they are
+about) goes *round* the combat screen rather than through it, and the screen only
+notices a decided fight on its way out of a turn (`_after_hero_action` /
+`_advance`). So the turn has to be handed back through the real End turn button
+even once the last foe is down, or the board sits there with `cb.is_over()` true
+and `result` empty. A driver gotcha rather than a bug — a player's every action
+goes through the screen — but it cost an afternoon, so it is written down.
+
+**A gate you are standing in front of does not open twice.** `world.gd`'s `_left`
+stops the market reopening the frame after Leave, and clears only once the party
+is out of range. A tour that ends a chapter inside the walls and starts the next
+one walking *to* that settlement is already there, and nothing opens. Both
+drivers now walk out and come back, which is what a player does and what makes
+"walking in opens the market" a fact rather than a leftover.
+
+## The Whole Guild — one achievement, and the levels that count toward it (2026-09-18)
+
+A 140th achievement, and the smallest model change that makes it mean what it
+says.
+
+**The achievement.** `classes_all_5`, "The Whole Guild", in Legends beside
+`classes_6`: *keep a veteran of every class in the barracks — five levels earned
+in each, not handed over.* It reads a new `classes_5` set collected in
+`core/leveling.gd`'s `milestones()`, goal 12, and the viewer draws it as a
+`3 / 12` bar like every other threshold. `tests/test_achievements.gd` holds the
+goal to `Progression.all_classes().size()`, so a thirteenth class cannot quietly
+leave this one earnable a class short of what it claims.
+
+**Five in one class, not level five.** A fighter 3 / rogue 2 is a level-5
+character and a veteran of neither trade, which is the distinction the whole
+thing turns on. `milestones()` counts per class, not per character.
+
+**Earned, not handed over — the part that needed a model change.** The creator
+mints a recruit at the party's own level (`creator.gd`'s `start_level`), so at a
+level-5 party a brand new character arrives holding five levels in a class
+nobody has played a round of. `Leveling.grant_levels()` already refused to fire
+milestones for exactly this reason ("being handed level 5 is not reaching level
+5") — but that only deferred it. The *next* level the character actually played
+called `milestones()`, which looked back at a full five and handed the class
+over for one level's work.
+
+So a level now remembers which kind it is. `Character.add_level()` takes a
+`granted` flag, written into the level dict only when true (so an earned level
+looks in a save file exactly as it always did) and carried through
+`character_save.gd` both ways — a file written before the key existed loads as
+all-earned, which is the only kind answer: nothing here is ever locked back.
+Three places hand levels over and now say so: a preset hero's opening levels,
+`Party._demo_barbarian`, and `grant_levels()`'s catch-up levels. Everything that
+comes through `Leveling.add_level()` — which is to say, the level-up screen — is
+earned. Nothing else reads the flag: a granted level is a level in every rule
+that matters, including the other achievements, and this is deliberately the
+smallest blast radius that closes the hole.
+
+**Why no gate on creating characters.** The obvious alternative was to constrain
+the creator instead — a cooldown, a roster cap, a fee. None of them were needed
+once the levels themselves carried the distinction, and all of them would have
+cost a player something at a screen that is not where the problem was. A
+real-time cooldown in particular buys nothing here: it is an offline
+single-player game, so it reads as an annoyance rather than a pace, and the
+system clock defeats it anyway.
+
+Four tests cover it: four earned levels is not a veteran, the fifth is, a 3/2
+multiclass is neither, and — the leak itself — five granted levels plus one
+played does not buy the class, while five played does. Plus a round-trip: a
+granted level is still granted after a trip through the barracks, or the flag is
+worth nothing the moment a character is saved.
