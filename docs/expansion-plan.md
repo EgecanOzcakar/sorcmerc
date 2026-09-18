@@ -5858,3 +5858,55 @@ is out of range. A tour that ends a chapter inside the walls and starts the next
 one walking *to* that settlement is already there, and nothing opens. Both
 drivers now walk out and come back, which is what a player does and what makes
 "walking in opens the market" a fact rather than a leftover.
+
+## The Whole Guild — one achievement, and the levels that count toward it (2026-09-18)
+
+A 140th achievement, and the smallest model change that makes it mean what it
+says.
+
+**The achievement.** `classes_all_5`, "The Whole Guild", in Legends beside
+`classes_6`: *keep a veteran of every class in the barracks — five levels earned
+in each, not handed over.* It reads a new `classes_5` set collected in
+`core/leveling.gd`'s `milestones()`, goal 12, and the viewer draws it as a
+`3 / 12` bar like every other threshold. `tests/test_achievements.gd` holds the
+goal to `Progression.all_classes().size()`, so a thirteenth class cannot quietly
+leave this one earnable a class short of what it claims.
+
+**Five in one class, not level five.** A fighter 3 / rogue 2 is a level-5
+character and a veteran of neither trade, which is the distinction the whole
+thing turns on. `milestones()` counts per class, not per character.
+
+**Earned, not handed over — the part that needed a model change.** The creator
+mints a recruit at the party's own level (`creator.gd`'s `start_level`), so at a
+level-5 party a brand new character arrives holding five levels in a class
+nobody has played a round of. `Leveling.grant_levels()` already refused to fire
+milestones for exactly this reason ("being handed level 5 is not reaching level
+5") — but that only deferred it. The *next* level the character actually played
+called `milestones()`, which looked back at a full five and handed the class
+over for one level's work.
+
+So a level now remembers which kind it is. `Character.add_level()` takes a
+`granted` flag, written into the level dict only when true (so an earned level
+looks in a save file exactly as it always did) and carried through
+`character_save.gd` both ways — a file written before the key existed loads as
+all-earned, which is the only kind answer: nothing here is ever locked back.
+Three places hand levels over and now say so: a preset hero's opening levels,
+`Party._demo_barbarian`, and `grant_levels()`'s catch-up levels. Everything that
+comes through `Leveling.add_level()` — which is to say, the level-up screen — is
+earned. Nothing else reads the flag: a granted level is a level in every rule
+that matters, including the other achievements, and this is deliberately the
+smallest blast radius that closes the hole.
+
+**Why no gate on creating characters.** The obvious alternative was to constrain
+the creator instead — a cooldown, a roster cap, a fee. None of them were needed
+once the levels themselves carried the distinction, and all of them would have
+cost a player something at a screen that is not where the problem was. A
+real-time cooldown in particular buys nothing here: it is an offline
+single-player game, so it reads as an annoyance rather than a pace, and the
+system clock defeats it anyway.
+
+Four tests cover it: four earned levels is not a veteran, the fifth is, a 3/2
+multiclass is neither, and — the leak itself — five granted levels plus one
+played does not buy the class, while five played does. Plus a round-trip: a
+granted level is still granted after a trip through the barracks, or the flag is
+worth nothing the moment a character is saved.

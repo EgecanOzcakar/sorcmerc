@@ -7,7 +7,7 @@ var cname: String
 var species_id: String
 var background_id: String
 var base_abilities: Dictionary = {"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}
-var levels: Array[Dictionary] = []      # [{class_id, hp_roll}] ordered; hp_roll -1 = average
+var levels: Array[Dictionary] = []      # [{class_id, hp_roll, granted?}] ordered; hp_roll -1 = average
 var choices: Dictionary = {}            # choice_key -> decision
 var feats: Array[String] = []
 var equipped: Array[String] = []        # weapon/armor ids worn or wielded
@@ -54,8 +54,19 @@ func decide(key: String, decision: Dictionary) -> void:
 	choices[key] = decision
 	_dirty = true
 
-func add_level(cid: String, hp_roll: int = -1) -> void:
-	levels.append({"class_id": cid, "hp_roll": hp_roll})
+# `granted` marks a level the game handed over rather than one the player
+# earned at the level-up screen: a preset hero's opening levels, and the
+# catch-up levels core/leveling.gd's grant_levels() gives a new recruit so they
+# can stand next to the party they are joining. Nothing about the build changes
+# — a granted level is a level in every rule that matters — but achievements
+# that are about the climb rather than the sheet read it (see milestones()).
+# Written only when true, so a level that was earned looks in a save file
+# exactly as it always did.
+func add_level(cid: String, hp_roll: int = -1, granted := false) -> void:
+	var l := {"class_id": cid, "hp_roll": hp_roll}
+	if granted:
+		l["granted"] = true
+	levels.append(l)
 	_dirty = true
 
 func dirty() -> void:

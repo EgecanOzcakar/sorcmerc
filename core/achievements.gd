@@ -227,6 +227,16 @@ const DEFS := [
 		"desc": "Hold levels in three classes at once."},
 	{"id": "classes_6", "group": "legend", "title": "Jack of All Trades",
 		"desc": "Take levels in six different classes.", "counter": "classes", "goal": 6},
+	# The long one. `classes_5` is collected in core/leveling.gd's milestones()
+	# and counts five levels IN a class (a fighter 3 / rogue 2 is neither), all
+	# five of them EARNED at the level-up screen — the ones a preset hero opens
+	# with and the ones the creator hands a new recruit are marked `granted` and
+	# do not count. The goal is every playable class; tests/test_achievements.gd
+	# holds it to core/progression.gd's list, so adding a thirteenth class
+	# cannot quietly leave this one earnable a class short of what it claims.
+	{"id": "classes_all_5", "group": "legend", "title": "The Whole Guild",
+		"desc": "Keep a veteran of every class in the barracks — five levels earned in each, "
+			+ "not handed over.", "counter": "classes_5", "goal": 12},
 	{"id": "species_4", "group": "legend", "title": "All Walks of Life",
 		"desc": "Field characters of four different species.", "counter": "species", "goal": 4},
 	{"id": "created_10", "group": "legend", "title": "The Recruiter",

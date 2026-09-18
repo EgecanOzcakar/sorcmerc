@@ -19,6 +19,8 @@ const Regions = preload("res://core/regions.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Progression = preload("res://core/progression.gd")
+const CharacterSave = preload("res://core/character_save.gd")
 
 const VERY_RARE := "amulet-of-the-planes"
 const MYSTERY := "cloak-of-elvenkind"
@@ -59,6 +61,8 @@ func _init() -> void:
 	test_identify_tally()
 	test_gold_wiring()
 	test_multiclass_wiring()
+	test_veteran_wiring()
+	test_granted_survives_a_save()
 	test_relationship_wiring()
 	test_world_wiring()
 	await test_viewer()
@@ -376,6 +380,11 @@ func test_goals_match_their_sources() -> void:
 		"every_road_event's goal is the size of the road-event table")
 	check(int(Ach.find("regions_4")["goal"]) == Regions.BANDS.size(),
 		"regions_4's goal is how many bands the map actually has")
+	# "Every class" has to mean every class. Adding a thirteenth without moving
+	# this goal would quietly leave the achievement earnable one short of what
+	# it says, which is the one way a threshold can be wrong and still pass.
+	check(int(Ach.find("classes_all_5")["goal"]) == Progression.all_classes().size(),
+		"classes_all_5's goal is how many classes there are to be a veteran of")
 
 # Every threshold has to be reachable with the content that ships. The ones
 # below are bounded by a fixed table rather than by how long somebody plays.
@@ -515,6 +524,77 @@ func test_multiclass_wiring() -> void:
 	check(not Ach.is_unlocked("multiclass_3"), "two is not three")
 	Leveling.add_level(ch, "cleric")
 	check(Ach.is_unlocked("multiclass_3"), "levels in three classes")
+
+# The two things "a veteran of every class" turns on: five levels IN one class
+# (not a level-5 character), and all five EARNED rather than handed over.
+func test_veteran_wiring() -> void:
+	_wipe()
+	var ch = Presets.party()[0]
+	var cid: String = ch.class_id()
+	check(ch.level() >= 3, "the preset opens with levels already on the sheet")
+	Leveling.milestones(ch)
+	check(Ach.count("classes_5") == 0, "the levels a preset hero opens with are not earned")
+	for i in Leveling.VETERAN_LEVEL - 1:
+		Leveling.add_level(ch, cid)
+	check(Ach.count("classes_5") == 0, "four earned levels in a class is not a veteran of it")
+	Leveling.add_level(ch, cid)
+	check(Ach.members("classes_5") == [cid], "the fifth earned level in a class is")
+	check(not Ach.is_unlocked("classes_all_5"), "one class is not every class")
+
+	# The leak this closes: a recruit minted at the party's level arrives with
+	# five levels already on the sheet, and one played level must not cash them.
+	_wipe()
+	var recruit = Presets.party()[1]
+	recruit.levels.clear()
+	Leveling.grant_levels(recruit, Leveling.VETERAN_LEVEL, "wizard")
+	check(recruit.level() == Leveling.VETERAN_LEVEL, "the creator hands over a level-5 build")
+	check(Ach.count("classes_5") == 0, "handing the levels over ticks nothing by itself")
+	Leveling.add_level(recruit, "wizard")
+	check(Ach.count("classes_5") == 0,
+		"...and one played level on top of five granted ones does not buy the class")
+	for i in Leveling.VETERAN_LEVEL - 1:
+		Leveling.add_level(recruit, "wizard")
+	check(Ach.members("classes_5") == ["wizard"], "five played levels do")
+
+	# A level-5 character who is a veteran of nothing.
+	_wipe()
+	var dip = Presets.party()[2]
+	var first: String = dip.class_id()
+	for i in 4:
+		Leveling.add_level(dip, first)
+	for i in 4:
+		Leveling.add_level(dip, "rogue")
+	check(first != "rogue" and Ach.count("classes_5") == 0,
+		"four earned in each of two classes is a veteran of neither")
+
+	# ...and the whole list earns it.
+	_wipe()
+	for one in Progression.all_classes():
+		Ach.collect("classes_5", String(one["id"]))
+	check(Ach.is_unlocked("classes_all_5"), "a veteran of every class earns The Whole Guild")
+
+# A granted level has to still be granted after a trip through the barracks,
+# or the flag is worth nothing the moment a character is saved and loaded.
+func test_granted_survives_a_save() -> void:
+	_wipe()
+	var ch = Presets.party()[0]
+	ch.id = "granted-probe"
+	Leveling.add_level(ch, ch.class_id())        # one earned level on top
+	CharacterSave.save(ch)
+	var back = CharacterSave.load_slug("granted-probe")
+	CharacterSave.delete("granted-probe")
+	check(back != null, "the probe saved and loaded back")
+	if back == null:
+		return
+	var granted := 0
+	var earned := 0
+	for l in back.levels:
+		if bool(l.get("granted", false)):
+			granted += 1
+		else:
+			earned += 1
+	check(granted == ch.level() - 1, "every handed-over level came back marked")
+	check(earned == 1, "...and the played one came back unmarked")
 
 func test_relationship_wiring() -> void:
 	_wipe()
