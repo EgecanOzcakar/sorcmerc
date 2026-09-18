@@ -464,7 +464,8 @@ func _new_game(forced := 0) -> void:
 	var sp: Dictionary = (spec if not spec.is_empty() else Scaler.roster_for(chars, difficulty)).duplicate(true)
 	sp["seed"] = _seed
 	result = {}
-	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS))   # sp["theme"] picks the board
+	var board: Dictionary = Encounter.board_for(String(sp.get("theme", "")), _seed)   # sp["theme"] picks the board
+	cb = Encounter.build(sp, party.to_combatants(Encounter.party_starts(board, _seed)), board)   # #114
 	cb.party = party   # the stash is the potion shelf (core/potions.gd)
 	# The one thing that makes a reaction stop the fight and ask. Installed only
 	# here, only for a player who is actually watching: with it unset the

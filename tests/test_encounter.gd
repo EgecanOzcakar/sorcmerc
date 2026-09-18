@@ -20,6 +20,7 @@ func check(cond: bool, label: String) -> void:
 		printerr("  FAIL: ", label)
 
 func _init() -> void:
+	test_party_starts_vary()
 	test_build_spec()
 	test_placement()
 	test_placement_overflow_degrades_gracefully()
@@ -240,6 +241,27 @@ func test_outcome_defeat_and_deaths() -> void:
 			if not c.is_dead() and c.sheet != null:
 				check(party.get_member(c.id).hp_current >= 1, "%s was down, not dead: back at 1 HP" % c.cname)
 	check(any_death, "some seed kills someone outright")
+
+# #114: the deployment is not the same picture every fight.
+func test_party_starts_vary() -> void:
+	var b := Encounter.board_for("sunken-shrine", 7)
+	var seen := {}
+	for seed in range(1, 25):
+		var starts: Array = Encounter.party_starts(b, seed)
+		check(starts.size() == 4, "four start hexes (seed %d)" % seed)
+		for h in starts:
+			check(h in b["hexes"], "every start is on the board (seed %d)" % seed)
+		check(starts[0].x >= starts[2].x and starts[1].x >= starts[3].x, "the front rank is the higher-q pair (seed %d)" % seed)
+		var d := 0
+		for i in 4:
+			for j in 4:
+				d = maxi(d, Hex.distance(starts[i], starts[j]))
+		check(d <= 3, "the four stand together (spread %d, seed %d)" % [d, seed])
+		seen[str(starts)] = true
+		check(starts == Encounter.party_starts(b, seed), "the same seed is the same deployment")
+	check(seen.size() >= 3, "different seeds put the party in different places (%d layouts over 24 seeds)" % seen.size())
+	check(Encounter.party_starts({"hexes": [Vector2i.ZERO, Vector2i(1, 0)], "objects": []}, 1) == Encounter.PARTY_STARTS,
+		"a board too small to offer a cluster falls back to the fixed starts")
 
 # --- helpers ----------------------------------------------------------
 
