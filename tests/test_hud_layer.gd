@@ -80,5 +80,27 @@ func _init() -> void:
 	main._hud_overlay.queue_redraw()
 	for i in 3:
 		await process_frame
+
+	# Issue #121: the same CanvasLayer that puts the HP bars over Figures3D put
+	# them over the field manual too — it is above layer 0, and a full-screen
+	# overlay is an ordinary child on layer 0. The layer stands down while one
+	# of the shared overlays is up.
+	check(main._hud_layer.visible, "the HUD layer is visible with nothing over the board")
+	check(not main._overlay_up(), "...and nothing is over it")
+	var man = main.ManualOverlay.toggle(main)
+	check(man != null and main._overlay_up(), "the manual opens and is seen as an overlay")
+	for i in 3:
+		await process_frame
+	check(not main._hud_layer.visible, "HP bars, barks and damage numbers are off while it is open")
+	main.ManualOverlay.toggle(main)
+	for i in 3:
+		await process_frame
+	check(not main._overlay_up(), "closing it puts the screen back")
+	check(main._hud_layer.visible, "...and the HUD comes back with it")
+	# Every overlay this screen can raise, not just the one that was reported.
+	for n in main.OVERLAY_NODES:
+		check(n in ["ManualOverlay", "SettingsOverlay", "BugReportOverlay"],
+			"the overlay list holds only the shared full-screen overlays (%s)" % n)
+
 	print("test_hud_layer: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

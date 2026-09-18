@@ -13,6 +13,7 @@ extends SceneTree
 
 const Quest = preload("res://core/quest.gd")
 const RNG = preload("res://core/rng.gd")
+const Leveling = preload("res://core/leveling.gd")   # #118: the level-up announcement
 
 var _pass := 0
 var _fail := 0
@@ -196,5 +197,62 @@ func _init() -> void:
 	main._close_party()
 	await process_frame
 
+	await _level_up_announcement(main)
 	print("test_world_panels: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# Issue #118: a level used to arrive as one chime and a number two screens
+# away. It gets the after-action page's own treatment now — the map stops, a
+# gilt panel says who is ready, and its button is the trip to the party screen.
+# It cannot appear over a fight: this runs off the map's own _process, which
+# does not tick while combat owns the screen, and _overlay_up() holds it back
+# behind every card and panel the map can raise.
+func _level_up_announcement(main) -> void:
+	check(main._levelup_panel == null, "nothing is announced with no level banked")
+	var who = main.party.roster[0]
+	who.xp = Leveling.xp_for_level(who.level() + 1)
+	check(main._ready_to_level().size() == 1, "one character is owed a level")
+
+	# Held back while anything else owns the screen.
+	main._toggle_quests()
+	for i in 3:
+		await process_frame
+	check(main._levelup_panel == null, "it waits behind an open panel")
+	main._close_quests()
+	for i in 4:
+		await process_frame
+	check(main._levelup_panel != null, "and comes up once the map is clear")
+	if main._levelup_panel == null:
+		return
+	check(main.world.clock.is_paused(), "the map stops for it")
+	var said := ""
+	for l in labels(main._levelup_panel):
+		said += l.text + "|"
+	check(said.contains("Level up"), "it says what it is (%s)" % said)
+	check(said.contains(who.cname), "and whose level it is")
+	check(has_button(main._levelup_panel, "Open the party"), "its button is the way to spend it")
+
+	# Centred like the spoils page it follows, and wholly on screen.
+	var panel: PanelContainer = panels(main._levelup_panel)[0]
+	var mid: Vector2 = panel.global_position + panel.size * 0.5
+	check(absf(mid.x - main.size.x * 0.5) < 2.0 and absf(mid.y - main.size.y * 0.5) < 2.0,
+		"the panel is centred (%s vs %s)" % [mid, main.size * 0.5])
+
+	check(press(main._levelup_panel, "Open the party"), "press it")
+	for i in 3:
+		await process_frame
+	check(main._levelup_panel == null and main._party_overlay != null,
+		"it closes and the party screen is open")
+	main._close_party()
+	for i in 4:
+		await process_frame
+
+	# Once per level, per character: backing out does not put it straight back.
+	check(main._levelup_panel == null, "it does not nag — the level was already announced")
+	who.xp = Leveling.xp_for_level(who.level() + 2)
+	who.add_level(who.class_id(), -1)
+	for i in 4:
+		await process_frame
+	check(main._levelup_panel != null, "...and the NEXT level says so again")
+	main._close_levelup()
+	await process_frame

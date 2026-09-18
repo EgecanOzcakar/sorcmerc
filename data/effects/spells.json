@@ -188,7 +188,7 @@
   "compulsion": {"shape": "sphere", "size_ft": 30, "range_ft": 30, "save": "wis", "conditions": ["charmed"], "repeat_save": "end_turn"},
   "confusion": {"shape": "sphere", "size_ft": 10, "range_ft": 90, "save": "wis", "conditions": ["incapacitated"], "repeat_save": "end_turn"},
   "polymorph": {"shape": "single", "range_ft": 60, "save": "wis", "conditions": ["incapacitated"], "repeat_save": "none"},
-  "spiritual-weapon": {"shape": "single", "range_ft": 60, "attack": "melee", "damage": [{"count": 1, "sides": 8, "type": "force"}], "upcast": {"per_level": {"count": 0}}},
+  "spiritual-weapon": {"cost": "bonus", "shape": "self", "summon": {"id": "spiritual-weapon"}, "rounds": 10, "text": "A spectral weapon takes its own place in the order and swings where you send it, for a minute"},
   "spirit-guardians": {"zone": true, "shape": "emanation", "size_ft": 15, "range_ft": 5, "save": "wis", "half_on_save": true, "damage": [{"count": 3, "sides": 8, "type": "radiant"}], "upcast": {"per_level": {"count": 1}}, "spare_allies": true},
   "ray-of-enfeeblement": {"shape": "single", "range_ft": 60, "attack": "ranged", "conditions": [], "buff": {"bonus_damage": -3}, "text": "Their weapon hits deal 3 less"},
   "hunger-of-hadar": {"zone": true, "shape": "sphere", "size_ft": 20, "range_ft": 150, "save": "dex", "half_on_save": false, "damage": [{"count": 4, "sides": 6, "type": "cold"}]},

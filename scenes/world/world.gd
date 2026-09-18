@@ -76,6 +76,7 @@ const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
 const Ach = preload("res://core/achievements.gd")
+const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const WorldSave = preload("res://core/world_save.gd")
@@ -224,6 +225,8 @@ var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.acti
 var _inventory_panel: Control = null # the shared pack, as tiles — see _toggle_inventory
 var _menu_panel: Control = null      # the Esc pause menu, or null — see _toggle_menu()
 var _spoils_panel: Control = null    # issue #30's after-action page, or null
+var _levelup_panel: Control = null   # issue #118's "somebody can level up" page, or null
+var _levelup_told: Dictionary = {}   # character id -> the level it was announced at
 var _delve_haul: Dictionary = {}     # what the delve in progress has paid so far; {} outside one
 var _quest_news: Array = []          # quest progress the last _bank() made, for that page
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
@@ -440,6 +443,7 @@ func _process(delta: float) -> void:
 	_check_forage()
 	_check_travel()
 	_check_region()
+	_check_level_ready()
 	if _camp_btn != null:
 		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0 or party.safe_camp
 	_layout_minimap()   # this Control resizes with the window; the inset follows the corner
@@ -1439,6 +1443,115 @@ func _close_spoils() -> void:
 		_spoils_panel = null
 	_halt()   # #98: wait for an order
 
+# --- issue #118: somebody can level up ----------------------------------
+#
+# A level used to arrive as one chime (campaign.gd's _split_xp) and a number on
+# a screen two clicks away, so parties walked around owing themselves levels
+# for hours. It gets the after-action page's own treatment instead: the map
+# stops, a gilt panel says who is ready, and its button is the trip to the
+# party screen where the sheets are.
+#
+# WHERE IT CANNOT APPEAR: over a fight. This runs off the map's own _process,
+# which does not tick while combat owns the screen, and _overlay_up() covers
+# the spoils page, a road event, a delve and the rest — so the announcement
+# waits for open country with nothing else on it, which is exactly where
+# somebody is free to go and spend the level.
+#
+# ONCE PER LEVEL, PER CHARACTER: _levelup_told remembers who was told and at
+# what level, so backing out with "Not now" does not put the panel straight
+# back up, and the next level says so again.
+func _ready_to_level() -> Array:
+	var out: Array = []
+	for ch in party.roster:
+		if not ch.dead and Leveling.can_level_up(ch):
+			out.append(ch)
+	return out
+
+func _check_level_ready() -> void:
+	if _combat != null or _overlay_up() or not _visit.is_empty():
+		return
+	var who: Array = _ready_to_level().filter(
+		func(ch): return int(_levelup_told.get(ch.id, -1)) != ch.level())
+	if who.is_empty():
+		return
+	for ch in who:
+		_levelup_told[ch.id] = ch.level()
+	_build_levelup_panel(who)
+
+func _build_levelup_panel(who: Array) -> void:
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+	_levelup_panel = overlay
+
+	var dim := ColorRect.new()
+	dim.color = Color(Icons.COL_BG.r, Icons.COL_BG.g, Icons.COL_BG.b, 0.72)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(dim)
+
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(centre)
+
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.custom_minimum_size = Vector2(480, 0)
+	centre.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "Level up" if who.size() == 1 else "Level up  ×%d" % who.size()
+	title.theme_type_variation = "Title"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	box.add_child(title)
+
+	for ch in who:
+		var l := Label.new()
+		l.text = "%s  —  %s %d  →  %d" % [ch.cname,
+			Icons.class_glyph(ch.class_id()), ch.level(), ch.level() + 1]
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.theme_type_variation = "Head"
+		box.add_child(l)
+
+	var note := Label.new()
+	note.text = "There is a level waiting on the party screen — pick it up there, per character."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	note.add_theme_color_override("font_color", Icons.COL_MUTED)
+	box.add_child(note)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(row)
+	var go := Button.new()
+	go.text = "Open the party  [Enter]"
+	go.theme_type_variation = "Primary"
+	go.pressed.connect(func():
+		_close_levelup()
+		_open_party())
+	row.add_child(go)
+	var later := Button.new()
+	later.text = "Not now  [Esc]"
+	later.theme_type_variation = "Quiet"
+	later.pressed.connect(_close_levelup)
+	row.add_child(later)
+	go.grab_focus()
+
+func _close_levelup() -> void:
+	if _levelup_panel != null:
+		_levelup_panel.queue_free()
+		_levelup_panel = null
+
 # A death is a death regardless of who won — encounter.gd always fills
 # `deaths`, campaign.gd's linear run already benches+marks them the same way;
 # the open world just never read the field. Applied once here for both
@@ -1487,6 +1600,7 @@ func _retreat() -> void:
 # owning the screen.
 func _overlay_up() -> bool:
 	return _event_card != null or _approach_card != null or _spoils_panel != null \
+		or _levelup_panel != null \
 		or _site != null or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
 		or _story_panel != null or story_card != null or _menu_panel != null
 
@@ -2037,6 +2151,17 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			if event.keycode in [KEY_ESCAPE, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]:
 				accept_event()
 				_close_spoils()
+			return
+		# #118's level-up page is modal the same way, with two answers rather
+		# than one: Enter goes to the party screen, Esc leaves it for later.
+		if _levelup_panel != null:
+			if event.keycode in [KEY_ENTER, KEY_KP_ENTER]:
+				accept_event()
+				_close_levelup()
+				_open_party()
+			elif event.keycode in [KEY_ESCAPE, KEY_SPACE]:
+				accept_event()
+				_close_levelup()
 			return
 		match event.keycode:
 			KEY_ESCAPE:

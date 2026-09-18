@@ -59,6 +59,8 @@ func _init() -> void:
 	_presets()
 	_preview()
 	_screen()
+	_expertise_shows_its_picks()
+	_earlier_levels_are_locked()
 	_from_profile()
 	_xp_gate()
 	_catch_up()
@@ -169,13 +171,109 @@ func _screen() -> void:
 	check(done[0], "Done reports the level was taken")
 	scr.queue_free()
 
+# Issue #119: a decided expertise choice has to be able to show what it chose.
+# pass_profs grades a picked skill "expert", not "prof", and the row's pool was
+# filtered on "prof" alone — so the two skills the choice had taken were the two
+# the row could not draw. "✓ Expertise — pick 2 (2 chosen)" over nine buttons,
+# none of them marked, and pressing any of them evicted an invisible pick.
+func _expertise_shows_its_picks() -> void:
+	var ch = fresh("rogue", "criminal")
+	var pt := {}
+	for p in ch.sheet().choice_points:
+		if p["type"] == "expertise-choice":
+			pt = p
+	check(not pt.is_empty(), "a level-1 rogue has an expertise choice")
+	if pt.is_empty():
+		return
+	var picks := Creator.picks_from_decision(pt, ch.choices.get(pt["key"]))
+	check(pt.get("decided", false) and picks.size() == 2,
+		"...and it is answered (%s)" % str(picks))
+	check(ch.sheet().skill_prof.get(picks[0], "") in ["expert", "prof"],
+		"the pick landed on the sheet (%s is %s)" % [picks[0], ch.sheet().skill_prof.get(picks[0], "")])
+	var ids: Array = Creator.options_for(pt, ch.sheet(), picks).map(func(o): return o["id"])
+	for s in picks:
+		check(s in ids, "the row offers its own pick %s back to be unpicked (%s)" % [s, str(ids)])
+	# ...and only its own. A skill some OTHER expertise grant spent is not on
+	# offer here, or a second grant would buy what the first already owns.
+	var fresh_ids: Array = Creator.options_for(pt, ch.sheet(), []).map(func(o): return o["id"])
+	for s in picks:
+		if ch.sheet().skill_prof.get(s, "") == "expert":
+			check(not s in fresh_ids, "a choice that did not pick %s is not offered it" % s)
+
+# Issue #120: the level-up screen is where THIS level's choices get made. The
+# feat taken at 4 and the background's skills taken at 1 are drawn, with what
+# they took still marked, and they are not up for trade. Spell choices are the
+# exception — 5e lets one move at level-up, and this game's casters do their
+# real picking on the prepare page.
+func _earlier_levels_are_locked() -> void:
+	var ch = fresh("rogue", "criminal")
+	for _i in 4:
+		Leveling.add_level(ch)
+		resolve_all(ch, "rogue climb")
+	var settled: Array = ch.sheet().choice_points.filter(func(p): return p.get("decided", false))
+	check(not settled.is_empty(), "the rogue reaches level 5 with choices behind them")
+	var scr = load("res://scenes/creator/levelup.tscn").instantiate()
+	root.add_child(scr)
+	scr.set_character(ch)
+	var locked_pt := {}
+	for p in settled:
+		if p["type"] in scr.LIVE_TYPES:
+			check(not scr._locked.has(p["key"]), "a spell choice stays open (%s)" % p["key"])
+		else:
+			check(scr._locked.has(p["key"]), "%s from an earlier level is locked" % p["type"])
+			locked_pt = p
+	check(not locked_pt.is_empty(), "at least one of them is locked")
+	if locked_pt.is_empty():
+		scr.queue_free()
+		return
+
+	# The lock is the model's, not the button's: _pick is what a press calls.
+	var was := str(Creator.picks_from_decision(locked_pt, ch.choices.get(locked_pt["key"])))
+	var opts := Creator.options_for(locked_pt, ch.sheet(),
+		Creator.picks_from_decision(locked_pt, ch.choices.get(locked_pt["key"])))
+	check(not opts.is_empty(), "the locked choice still draws its options")
+	for o in opts:
+		scr._pick(locked_pt, o["id"])
+	check(str(Creator.picks_from_decision(locked_pt, ch.choices.get(locked_pt["key"]))) == was,
+		"pressing every option on it changes nothing (%s)" % was)
+
+	# On screen: every button belonging to a locked choice is dead, and what it
+	# took is still marked, so the page reads as a record rather than a blank.
+	# _render() removes the old rows outright rather than at end of frame, so
+	# the buttons below are this call's, not the last one's.
+	scr.commit()
+	var marked := 0
+	var live := 0
+	for b in _buttons_of(scr._body):
+		if String(b.get_meta("choice_key", "")) != locked_pt["key"]:
+			continue
+		if not b.disabled:
+			live += 1
+		if b.text.begins_with("●"):
+			marked += 1
+	check(live == 0, "not one of its buttons can be pressed (%d live)" % live)
+	check(marked > 0, "and what it chose still wears the mark (%d)" % marked)
+
+	# This level's own choices, raised by the commit above, are open as ever.
+	for p in Leveling.pending(ch):
+		check(not scr._locked.has(p["key"]), "this level's own %s is open" % p["type"])
+	scr.queue_free()
+
+func _buttons_of(node: Node) -> Array:
+	var out: Array = []
+	for c in node.get_children():
+		if c is Button:
+			out.append(c)
+		out.append_array(_buttons_of(c))
+	return out
+
 # The profile's button opens the overlay and the profile re-renders on close.
 func _from_profile() -> void:
 	var ch = Presets.pike()
 	var p = load("res://scenes/profile/profile.tscn").instantiate()
 	root.add_child(p)
 	p.set_character(ch)
-	p._level_up()
+	p.level_up()
 	var scr = null
 	for c in p.get_children():
 		if c.has_method("commit"):

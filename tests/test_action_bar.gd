@@ -135,8 +135,10 @@ func _init() -> void:
 	check(still_lit < lit, "and the ones that need the action are greyed out (%d lit, was %d)"
 		% [still_lit, lit])
 
-	# A caster with every spell in the book: [2] is still one list, nine to a
-	# page, paging on [9] More.
+	# A caster with every spell in the book: [2] is still one list, and since
+	# #124 a page is as many badges as the bar can show (BTN_COLUMNS *
+	# BUTTON_ROWS, less the Back slot) rather than as many as there are number
+	# keys. The keys still stop at nine; the badges past it are click-only.
 	var ch = load("res://core/presets.gd").ilsa()
 	var Adapter = load("res://core/adapter.gd")
 	var Catalog = load("res://core/rules/catalog.gd")
@@ -158,9 +160,16 @@ func _init() -> void:
 	main._press_hotkey(1)
 	var page1: Array = await _labels(main)
 	var pn: int = page1.filter(func(l): return not l.contains("Back") and not l.contains("page")).size()
-	check(pn == 8 and page1[8].contains("page 1 of") and page1[-1].contains("Back"),
-		"20+ spells: eight a page, More on [9], Back last (%s)" % str(page1))
-	main._press_hotkey(8)
+	check(pn == main.LIST_PAGE - 1 and page1[-2].contains("page 1 of") and page1[-1].contains("Back"),
+		"20+ spells: a bar-full a page (%d), More second from last, Back last (%s)"
+		% [main.LIST_PAGE - 1, str(page1)])
+	check(page1.size() > 9, "and the page is longer than the nine number keys (%d)" % page1.size())
+	var pkeys: Array = main._buttons.get_children().map(func(b): return String(b.get_meta("hotkey", "")))
+	check(pkeys.slice(0, 9) == ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+		"the first nine still wear the number keys (%s)" % str(pkeys.slice(0, 9)))
+	check(pkeys[9] == "" and pkeys[-2] == "Tab" and pkeys[-1] == "Esc",
+		"past the ninth a badge is click-only; More is on Tab and Back on Esc (%s)" % str(pkeys))
+	main._press_key("Tab")
 	var page2: Array = await _labels(main)
 	check(page2 != page1 and page2.any(func(l): return l.contains("Back")), "More turns the page")
 	main.board_cancel()

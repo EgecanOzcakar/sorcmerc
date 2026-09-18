@@ -26,6 +26,17 @@ const COL_WARN := Creator.COL_WARN
 var _ch
 var _committed := false
 var _before                                  # the sheet as it was before the level
+# Issue #120: the choice keys that were already answered when this screen
+# opened — the picks of every level before this one. They are drawn, with what
+# was chosen still marked, but they are not up for reconsideration here: a
+# level-up is where THIS level's choices get made, not where the feat taken at
+# 4 or the background skills taken at 1 get traded in. LIVE_TYPES is the
+# exception the reporter asked for and 5e grants anyway.
+var _locked: Dictionary = {}
+# A prepared caster's list is meant to move — RAW lets one known spell be
+# swapped on level-up, and this game's casters do their real picking on the
+# prepare page. So a spell choice stays editable however old it is.
+const LIVE_TYPES := ["spell-choice"]
 var _body: VBoxContainer
 var _title := Label.new()
 var _status := Label.new()
@@ -37,6 +48,10 @@ func set_character(ch) -> void:
 	_ch = ch
 	_before = ch.sheet()
 	_committed = false
+	_locked = {}
+	for p in _before.choice_points:
+		if p.get("decided", false) and not p["type"] in LIVE_TYPES:
+			_locked[p["key"]] = true
 	if not _chrome:
 		_chrome = true
 		set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -119,6 +134,8 @@ func _on_cancel() -> void:
 	finished.emit(_committed)
 
 func _pick(p: Dictionary, id: String) -> void:
+	if _locked.has(p["key"]):   # #120: an earlier level's pick, here to be read
+		return
 	var picks := Creator.picks_from_decision(p, _ch.choices.get(p["key"]))
 	Leveling.decide(_ch, p["key"], Creator.decision_for(p, Creator.toggle(p, picks, id)))
 	_render()
@@ -174,17 +191,26 @@ func _choices() -> void:
 		var picks := Creator.picks_from_decision(p, _ch.choices.get(p["key"]))
 		var n := Creator.pick_count(p)
 		var src: Dictionary = p["source"]
+		var locked: bool = _locked.has(p["key"])
 		_head("%s%s — pick %d  (%d chosen)" % ["✓ " if p.get("decided", false) else "",
 			Creator.humanize(p["type"]).replace(" choice", ""), n, picks.size()])
-		_note("from %s %s%s" % [src["origin"], Creator.humanize(src["id"]),
-			"  ·  already chosen, click to change" if p.get("decided", false) else ""])
+		var how := ""
+		if locked:
+			how = "  ·  spent at an earlier level"
+		elif p.get("decided", false):
+			how = "  ·  already chosen, click to change"
+		_note("from %s %s%s" % [src["origin"], Creator.humanize(src["id"]), how])
 		var f := HFlowContainer.new()
 		f.add_theme_constant_override("h_separation", 6)
 		f.add_theme_constant_override("v_separation", 6)
 		_body.add_child(f)
-		var opts := Creator.options_for(p, sheet)
+		# A locked row shows what was taken and nothing else — the rest of the
+		# pool is not on offer, so it is not on the page either.
+		var opts := Creator.options_for(p, sheet, picks)
+		if locked:
+			opts = opts.filter(func(o): return o["id"] in picks)
 		if opts.is_empty():
-			_note("No options available.", COL_WARN)
+			_note("No options available." if not locked else "Nothing was chosen here.", COL_WARN)
 		for o in opts:
 			var count := picks.count(o["id"])
 			var b := Button.new()
@@ -194,7 +220,12 @@ func _choices() -> void:
 				b.text += "  +%d" % count
 			if count > 0:
 				b.theme_type_variation = "Picked"
-			b.pressed.connect(_pick.bind(p, o["id"]))
+			if locked:
+				b.disabled = true
+				b.tooltip_text = "Chosen at an earlier level. Only this level's choices are open here."
+			else:
+				b.pressed.connect(_pick.bind(p, o["id"]))
+			b.set_meta("choice_key", p["key"])   # which choice this answers, for tests
 			f.add_child(b)
 
 func _head(text: String) -> void:

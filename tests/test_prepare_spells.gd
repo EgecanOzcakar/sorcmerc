@@ -17,6 +17,7 @@ const Leveling = preload("res://core/leveling.gd")
 const Adapter = preload("res://core/adapter.gd")
 const Save = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
+const Icons = preload("res://core/ui_icons.gd")   # #122: the spell badges on each row
 
 var _pass := 0
 var _fail := 0
@@ -209,6 +210,27 @@ func test_the_page_renders() -> void:
 	root.add_child(bard)
 	bard.set_character(build("bard", "collegelore", 8))
 	check(bard.field("count") == "", "a non-preparing class gets no counter")
+
+	# Issue #122: every row wears the spell's own badge — the same art the
+	# action bar puts on the button that casts it (assets/icons/skills, falling
+	# back to the school disc), so the thing picked here is recognisable as the
+	# thing pressed in the fight.
+	var listed: Array = Prepare.free_list(druid) + Prepare.pool(druid)
+	check(not listed.is_empty(), "the druid's page lists something to draw")
+	var without: Array = listed.filter(func(s): return Icons.skill_icon({"spell": s}) == null)
+	check(without.is_empty(), "every listed spell resolves to a badge (%s)" % str(without))
+	var pics := _texture_rects(page)
+	check(pics.size() == listed.size(),
+		"one badge on the page per listed spell (%d for %d)" % [pics.size(), listed.size()])
+	check(pics.all(func(t): return t.texture != null), "and none of them is an empty frame")
+
+func _texture_rects(node: Node) -> Array:
+	var out: Array = []
+	for c in node.get_children():
+		if c is TextureRect and not c.is_queued_for_deletion():
+			out.append(c)
+		out.append_array(_texture_rects(c))
+	return out
 
 func test_the_party_screen_offers_it() -> void:
 	var pty = Party.new()

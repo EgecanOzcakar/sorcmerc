@@ -974,12 +974,21 @@ func _slot_icon(s: String) -> Texture2D:
 # A slot's own list: numbered from 1, Esc (the last button) goes back. Spells
 # are one flat list, lowest level first, one button per spell — a spell with
 # several castable levels opens its own tier picker (_spell_tier_menu) when
-# pressed; any list longer than nine pages on slot 9 (More ▸), in a stable order.
-const LIST_KEYS := 9
+# pressed; a list too long for the bar pages on the last slot (More ▸, Tab),
+# in a stable order.
+#
+# Issue #124: a page used to be nine long because nine is how many number keys
+# there are, which left a caster reading their spells eight at a time across a
+# bar with room for thirty-two of them — three pages of paging in front of two
+# empty rows. The keys and the page are two different things now: the bar shows
+# as many badges as it can fit, and [1]..[9] land on the first nine of them.
+# Everything past the ninth is click-only, which is what the badges were for.
+const LIST_KEYS := 9                                # entries that get a number key
+const LIST_PAGE := BTN_COLUMNS * BUTTON_ROWS - 1    # entries that fit, less Back
 
-# One flat list, nine to a page. The entries are re-derived on every call rather
-# than carried in the binding, so re-opening the page after something on it
-# changed (a confirm armed, a use spent) shows what is true now — see
+# One flat list, a bar-full to a page. The entries are re-derived on every call
+# rather than carried in the binding, so re-opening the page after something on
+# it changed (a confirm armed, a use spent) shows what is true now — see
 # _menu_entries.
 func _open_list(h, slot: String, page := 0) -> void:
 	_submenu = slot
@@ -988,12 +997,16 @@ func _open_list(h, slot: String, page := 0) -> void:
 	var name: String = SLOT_NAMES.get(slot, slot)
 	var entries: Array = _slot_list(_menu_entries(h)["opts"], slot)
 	var opts: Array = []
-	var per := LIST_KEYS if entries.size() <= LIST_KEYS else LIST_KEYS - 1
+	var per := LIST_PAGE if entries.size() <= LIST_PAGE else LIST_PAGE - 1
 	var start := page * per
 	opts.append_array(entries.slice(start, mini(entries.size(), start + per)))
-	if entries.size() > LIST_KEYS:
+	if entries.size() > LIST_PAGE:
 		var next_page := page + 1 if start + per < entries.size() else 0
 		var meta := _mark(Icons.verb_icon("generic"), "…")
+		# Tab, because every number key is spoken for by the page it is turning
+		# and a keyboard has to be able to reach the next one. Nothing else on a
+		# submenu wears Tab — Swap weapon is a main-bar slot.
+		meta["key"] = "Tab"
 		opts.append(["More ▸", _open_list.bind(h, slot, next_page),
 			"%s — page %d of %d\nPress for the next page." % [name, page + 1, ceili(float(entries.size()) / per)], meta])
 	opts.append(["Back", func(): _build_hero_menu(h, true), "Back", _mark(Icons.verb_icon("back"), "‹")])
@@ -1896,12 +1909,31 @@ const TURN_BEAT := 0.75
 const BUTTON_ROWS := 3
 const ACTOR_LINES := 2   # #91: the readout's fixed height, in lines
 
+# The full-screen overlays this screen can put over itself. Each one names its
+# node when it opens (see each script's toggle()), so presence is the test.
+const OVERLAY_NODES := ["ManualOverlay", "SettingsOverlay", "BugReportOverlay"]
+
+func _overlay_up() -> bool:
+	for n in OVERLAY_NODES:
+		if has_node(NodePath(n)):
+			return true
+	return false
+
 func _process(dt: float) -> void:
 	if _wash != null:
 		_wash_age += dt
 		_wash.queue_redraw()
 	if _board:
 		_board.tick(dt * _anim)
+	if _hud_layer:
+		# Issue #121: the HUD is a CanvasLayer above everything on layer 0, and
+		# a full-screen overlay is an ordinary child — so HP bars, barks, damage
+		# numbers and the odds chip painted straight across the open manual. The
+		# tutorial card hit this first and answered it by moving ONTO this layer
+		# (see _open_walk); the manual, settings and bug-report overlays are
+		# shared screens that cannot, so the layer stands down while one is up.
+		# They are modal anyway — "the screen underneath sleeps while we're up".
+		_hud_layer.visible = not _overlay_up()
 	if _hud_overlay:
 		_hud_overlay.queue_redraw()
 	if _bscroll:   # grow with the wrapped rows, up to BUTTON_ROWS, then scroll

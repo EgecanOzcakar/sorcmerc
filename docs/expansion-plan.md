@@ -5910,3 +5910,106 @@ multiclass is neither, and — the leak itself — five granted levels plus one
 played does not buy the class, while five played does. Plus a round-trip: a
 granted level is still granted after a trip through the barracks, or the flag is
 worth nothing the moment a character is saved.
+
+## Seven open issues, worked through (2026-09-18)
+
+Every issue open on the tracker, none of them started. One test each, and each
+test fails against the code as it was. What each one turned out to be:
+
+**#119, "tried to level up to 9 and expertise choice is bugged"** — the choice
+could not show its own answer. `pass_profs` grades a skill an expertise choice
+picked `"expert"`, not `"prof"`, and `creator.gd`'s `options_for` filtered the
+expertise pool on `"prof"` alone. So a *decided* expertise row — T34 keeps
+those on the page and editable — drew every skill the character had NOT spent
+expertise on and none of the two it had. The heading read "✓ Expertise — pick 2
+(2 chosen)" over a row of buttons with not one mark on it, and pressing any of
+them fed `toggle()`, which is capped at two, so it silently evicted a pick the
+player could not see. `options_for` takes the current picks now and admits a
+skill that is expert *because of this choice*; a skill some other grant spent
+stays off the list, because expertise twice over buys nothing.
+
+**#120, "feats, and background points spent in previous levels should not be
+able to change. only the spell choices"** — the level-up screen iterated the
+whole of `sheet.choice_points`, which is every choice the build has ever
+reached. The feat taken at 4 and the background's skills taken at 1 were as
+live there as the ones the level just raised. It now snapshots which keys were
+already answered when the screen opened and locks those: they are still drawn,
+with what they took still marked, but their buttons are dead and `_pick()`
+refuses them. Spell choices are the one exception the reporter asked for, and
+5e grants it anyway — and in this game a prepared caster's real picking happens
+on the prepare page, which was never part of this screen.
+
+**#118, "there should be huge level up pop up that leads to party view, and
+level up button per character should not be overlapped"** — three things.
+
+A level used to arrive as one chime in `Campaign._split_xp()` and a number two
+screens away, so parties walked around owing themselves levels. It gets the
+after-action page's own treatment now: `world.gd` raises a gilt panel naming
+whoever is ready, with the trip to the party screen as its button. It rides the
+map's own `_process`, which does not tick while combat owns the screen, and it
+is behind `_overlay_up()` — so it cannot appear over a fight, a road event, a
+delve, a settlement or the spoils page, which is the "wait for the campaign
+map" half of the ask. `_levelup_told` stamps who was told at what level, so
+"Not now" is respected and the next level says so again.
+
+*Overlapped* was literal. The party screen opened the profile and floated a
+"← Back to party" Button anchored to the top-right corner over it — the same
+corner the profile's header ends in, which is where "Level up" sits. The
+profile carries `exit_label` / `exit_requested` now and draws the way out as
+the last control in its own header row, which is exactly what `party.gd` does
+for its own exit and for the same reason (it says so in a comment dated to the
+last time this happened).
+
+*Per character* was missing. A level is spent one character at a time, so the
+roster row is where the button belongs: it is on every row, live for whoever
+has the XP and greyed with the reason for everyone else — the same idiom the
+Spells button next to it already used — and it opens that character's sheet
+with the level-up page already on it.
+
+**#121, "fix hp bars showing on manual screen"** — T-hud put the HP bars,
+barks, damage numbers and the odds chip on a `CanvasLayer` above `Board` and
+everything `Board` parents. A full-screen overlay is an ordinary child on layer
+0, so the manual opened *underneath* the HUD and wore a row of HP bars across
+its index. The tutorial card hit this first and answered it by moving onto the
+HUD layer itself; the manual, settings and bug-report overlays are shared
+screens opened over five different hosts and cannot. So the layer stands down
+instead: `main.gd` hides it while one of the three is up, which is honest —
+they are modal, and the screen underneath is asleep anyway.
+
+**#122, "add images of spells to the prepare spell page"** — the page was a
+list of names, and the action bar it feeds is nothing but art. Each row (and
+each "always yours" line) now wears the spell's own badge, through the same
+`Icons.skill_icon` the bar uses — `assets/icons/skills/<spell>.svg`, falling
+back to the school disc, and nothing at all in a build with no icons imported,
+where the row is a row of text exactly as before. All 27 entries on a level-8
+cleric's page resolve to real art. While in there: the summon summary read
+`Catalog.monster(mid).get("name")` and both monster files spell it `cname`, so
+that line had always printed the raw id.
+
+**#123, "check spiritual weapon creating a minion in control of player"** — it
+was not. It was modelled as a one-shot melee spell attack at 60 ft costing an
+Action; the 2024 spell is a Bonus Action that leaves a weapon standing there
+for a minute, swinging where you send it. That is a summon on the caster's
+team, and a summon on the party's team is driven from the action bar like any
+hero — so it is one now, with a stat block in `data/monsters.json` beside the
+Illusory Double. Two deliberate departures, both the engine's shape rather than
+the spell's: it takes its own initiative count like every other summon instead
+of riding the caster's Bonus Action, and it can be attacked, because nothing
+here can be both untargetable and able to swing, and swinging is the spell.
+
+It is also the first summon concentration does not hold, which turned up a gap:
+`_spell_verb` never copied `rounds` onto a summon verb, because every summon
+before it was a concentration spell. A summon with neither clock stands there
+for the rest of the fight. And since a bigger slot calls the same creature, a
+summon spell with no authored upcast stops offering tiers — the same rule
+reaction spells already had, for the same reason.
+
+**#124, "use the full spellbar even if they dont have numbers from keyboard
+assigned"** — a submenu page was nine entries long because nine is how many
+number keys there are, while the bar has room for `BTN_COLUMNS * BUTTON_ROWS`
+= 33 badges. A caster read their spell list eight at a time, across three
+pages, in front of two empty rows. The keys and the page are two different
+things now: a page is as many badges as the bar can show, `[1]`..`[9]` land on
+the first nine, and everything past the ninth is click-only — which is what the
+badges were drawn for. Paging survives for a list longer than the bar, on Tab,
+because every number is spoken for by the page it would be turning.

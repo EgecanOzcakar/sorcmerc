@@ -21,6 +21,9 @@ const Catalog = preload("res://core/rules/catalog.gd")
 # The prepare page's own model: who prepares, what they may prepare, and the
 # limit. Static and UI-free, so this screen can ask before offering the button.
 const Prepare = preload("res://scenes/party/prepare.gd")
+# #118: whether a roster row's Level up button is live, and what the tooltip
+# says when it is not. Same source the profile's own button reads.
+const Leveling = preload("res://core/leveling.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_EDGE := Icons.COL_EDGE
@@ -421,6 +424,26 @@ func _card(sm: Dictionary) -> Control:
 	prof.pressed.connect(func(): _on_view_profile(sm["id"]))
 	row.add_child(prof)
 
+	# Issue #118: a level is spent per character, so the button that spends it
+	# belongs on the character's own row — the roster is the page that knows
+	# who is owed one, and it used to be the page that could not say so. Greyed
+	# with the reason rather than hidden, the same way Spells below is.
+	var who = party.get_member(sm["id"])
+	var ready: bool = who != null and not sm.get("dead", false) and Leveling.can_level_up(who)
+	var lvl := Button.new()
+	Icons.clicks(lvl)
+	lvl.text = "Level up"
+	lvl.disabled = not ready
+	if ready:
+		lvl.theme_type_variation = "Primary"
+		lvl.tooltip_text = "%s has the XP for level %d" % [sm["name"], who.level() + 1]
+	elif who == null or sm.get("dead", false):
+		lvl.tooltip_text = "The dead do not level up."
+	else:
+		lvl.tooltip_text = "%d more XP to the next level" % Leveling.xp_to_next(who)
+	lvl.pressed.connect(func(): _on_view_profile(sm["id"], true))
+	row.add_child(lvl)
+
 	# Preparing is a thing only five of the twelve classes do, so the button is
 	# on every row and live on the rows it means something for — greyed with the
 	# reason rather than hidden, so "where do I prepare spells" has an answer on
@@ -656,7 +679,10 @@ const PROFILE_SCENE := "res://scenes/profile/profile.tscn"
 
 # T3's profile, opened as a full-screen overlay so the party state stays live.
 # The profile can spend resources / damage the character, so we re-read on close.
-func _on_view_profile(id: String) -> void:
+# `and_level_up` is the row's own Level up button (#118): the same sheet, with
+# the level-up page already open on top of it, so the level is two presses from
+# the roster instead of four.
+func _on_view_profile(id: String, and_level_up := false) -> void:
 	var ch = party.get_member(id)
 	if ch == null:
 		return
@@ -667,18 +693,18 @@ func _on_view_profile(id: String) -> void:
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(overlay)
 	var prof = load(PROFILE_SCENE).instantiate()
+	# #118: the profile draws the way out in its own header now. Floating a
+	# Button in the top-right corner instead put it exactly on top of that
+	# screen's "Level up".
+	prof.exit_label = "←  Back to party"
+	prof.exit_requested.connect(func():
+		overlay.queue_free()
+		_refresh())
 	overlay.add_child(prof)
 	prof.set_party(party)          # equip pulls from the shared stash, not the character
 	prof.set_character(ch)
-	var back := Button.new()
-	Icons.clicks(back)
-	back.text = "←  Back to party"
-	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	back.offset_left = -180; back.offset_top = 12; back.offset_right = -16
-	back.pressed.connect(func():
-		overlay.queue_free()
-		_refresh())
-	overlay.add_child(back)
+	if and_level_up:
+		prof.level_up()
 
 const PREPARE_SCENE := "res://scenes/party/prepare.tscn"
 
