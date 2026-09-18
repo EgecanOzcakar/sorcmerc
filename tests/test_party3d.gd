@@ -3,7 +3,7 @@
 # role figure, a monster-faction band with no race counterpart (goblinoid,
 # undead, ...) falls back to figures3d.gd's single FOE_MODELS figure for
 # that faction, and only a band with neither (no troops, no faction
-# coverage) falls through to the flat PawnTex icon. T9x: the player is the
+# coverage) falls through to the 3D pawn Party3D builds out of primitives. T9x: the player is the
 # same — no figure by default (keeps the pawn), but naming one of the active
 # party in core/party.gd's overworld_figure gets them that character's
 # figure. Plus the layer's procedural walk (party3d.gd's GAIT_* block):

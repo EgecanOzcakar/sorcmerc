@@ -12,6 +12,11 @@
 # about the claim that makes that legal — the set it arrives at is exactly the
 # set is_explored() would have said yes to.
 #
+# Plus, since the map became 3D: that the ground MESH covers the ground the
+# screen is looking at, at an odd window size and at a turned, tilted camera —
+# which is what replaced #58's "the shader and _unpix() agree" check, there
+# being only one projection left to disagree with.
+#
 #   godot --headless --path . -s tests/test_world_ground.gd
 extends SceneTree
 
@@ -118,49 +123,58 @@ func _init() -> void:
 	await process_frame
 	check(main._mask_key != key0, "a long pan rebuilds it")
 
-	# --- #58: the shader's projection is the same map _unpix() draws on ------
-	# The ground shader projects a point on the map control back to a world
-	# position and looks the ground and the fog up there; _unpix() projects a
-	# mouse click the same way. They have to be the same function, or the ground
-	# is painted somewhere the party is not — which is what every window that is
-	# not 1280x800 used to get, because the shader started from FRAGCOORD (real
-	# framebuffer pixels) while _origin and _zoom are in the stretched canvas's
-	# units (window/stretch/mode is "canvas_items"). The size below is chosen to
-	# be nothing like the default for exactly that reason.
+	# --- #58, and why it cannot come back --------------------------------
+	# The ground shader used to project each screen pixel back to a world
+	# position by re-deriving world.gd's camera from uniforms it was handed.
+	# That is what #58 was: the two derivations drifted (the shader started from
+	# FRAGCOORD, real framebuffer pixels, while _origin and _zoom are in the
+	# stretched canvas's own units) and the ground was painted somewhere the
+	# party was not on every window that was not 1280x800.
+	#
+	# There is no second projection to drift now. The ground is a mesh lying in
+	# the same 3D world the camera is in, so a fragment's world position is a
+	# varying, and the camera the mesh is seen through is built from the same
+	# yaw/pitch/zoom/pan `_unpix()` is. What is left to check is that the mesh
+	# actually covers the ground the screen is looking at — if it did not, the
+	# map would end in mid-air at some window size, which is the same bug
+	# wearing different clothes.
 	main.size = Vector2(1900, 1100)
 	main._pan = Vector2(120, -75)
 	main.set_zoom(0.8)
-	main.queue_redraw()
+	main._process(0.016)
 	await process_frame
-	var mat: ShaderMaterial = main._ground_mat
-	check(mat.get_shader_parameter("rect_size") == main.size,
-		"the shader is handed the control's own rect (%s vs %s)"
-			% [str(mat.get_shader_parameter("rect_size")), str(main.size)])
-	var worst := 0.0
+	var ground: MeshInstance3D = main._view._ground
+	var covered := Rect2(Vector2(ground.position.x, ground.position.z)
+		- Vector2(ground.scale.x, ground.scale.z) * 0.5,
+		Vector2(ground.scale.x, ground.scale.z))
+	var uncovered := 0
 	for uv in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1),
 			Vector2(0.5, 0.5), Vector2(0.23, 0.77)]:
-		var sp: Vector2 = uv * main.size
-		worst = maxf(worst, _shader_world(sp, mat).distance_to(main._unpix(sp)))
-	check(worst < 0.5, "shader and _unpix agree across the control (worst %.3f units)" % worst)
-	# The input coordinate is the half of this the check above cannot see: it
-	# replays the shader's arithmetic, not the thing the arithmetic is fed.
-	var src := FileAccess.get_file_as_string("res://assets/world/ground/ground.gdshader")
-	check(src.contains("to_world(UV * rect_size)") and not src.contains("to_world(FRAGCOORD"),
-		"...and it is fed the control's own coordinate, not a framebuffer pixel")
+		if not covered.has_point(main._unpix(uv * main.size)):
+			uncovered += 1
+	check(uncovered == 0, "the ground mesh covers every corner of the control (%d missed)" % uncovered)
+	# ...and it is the same at a turned, tilted camera, which is the case the
+	# flat map never had to answer for.
+	main.orbit_by(70.0)
+	main.tilt_by(28.0)
+	main._process(0.016)
+	await process_frame
+	covered = Rect2(Vector2(ground.position.x, ground.position.z)
+		- Vector2(ground.scale.x, ground.scale.z) * 0.5,
+		Vector2(ground.scale.x, ground.scale.z))
+	uncovered = 0
+	for uv in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1), Vector2(0.5, 0.5)]:
+		if not covered.has_point(main._unpix(uv * main.size)):
+			uncovered += 1
+	check(uncovered == 0, "...and still does once the camera is turned and tilted (%d missed)" % uncovered)
+	# The shader is fed a world position, not a screen one. The half the check
+	# above cannot see: it looks at the geometry, not at what the geometry is
+	# asked to paint.
+	var src := FileAccess.get_file_as_string("res://assets/world/ground/ground3d.gdshader")
+	check(src.contains("map_xy = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz")
+			and not src.contains("FRAGCOORD"),
+		"...and reads its world position off the mesh, not off a screen pixel")
 
 	print("test_world_ground: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
-
-# ground.gdshader's to_world(), in GDScript, read off the live material. Written
-# out rather than calling main's own helper on purpose: the point of the check
-# above is that two independently written projections land on the same world
-# point, and reusing _iso_inv() here would make it a tautology.
-func _shader_world(sp: Vector2, mat: ShaderMaterial) -> Vector2:
-	var v: Vector2 = (sp - Vector2(mat.get_shader_parameter("origin"))) \
-		/ float(mat.get_shader_parameter("zoom"))
-	v.y /= float(mat.get_shader_parameter("squash"))
-	var yaw := -float(mat.get_shader_parameter("yaw"))
-	var c := cos(yaw)
-	var s := sin(yaw)
-	return Vector2(v.x * c - v.y * s, v.x * s + v.y * c) / float(mat.get_shader_parameter("gain"))

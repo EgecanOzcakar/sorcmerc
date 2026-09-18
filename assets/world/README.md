@@ -1,68 +1,42 @@
-# World map art (O11, buildings re-done in O12, party tokens O14)
+# World map art
 
 Everything here is **CC0 1.0 / Public Domain** — no attribution is required;
-this note is the paper trail the expansion plan asks for. Each pack's own
-`License.txt` is kept next to its files.
+this note is the paper trail the expansion plan asks for.
 
 | File | Source pack | Author | Original file |
 |------|-------------|--------|---------------|
-| `ground/{grass,forest,water}.png` | generated in-house (`~/localgen/gen_overworld_ground.py`, SDXL, made seamless) | — | the overworld's painted ground, blended by `ground/ground.gdshader` |
-| `town/buildings.png` | [Isometric medieval buildings](https://opengameart.org/content/isometric-medieval-buildings) + [part 2](https://opengameart.org/content/isometric-medieval-buildings-2) | rubberduck | the `128x64_shaded` frames `00`–`03` of all 5 buildings, out of both `*_single.zip` downloads |
-| `tokens/pawn.png` | [Board Game Pack](https://kenney.nl/assets/boardgame-pack) | Kenney | `PNG/Pieces (White)/pieceWhite_border00.png` |
+| `ground/{grass,forest,water}.png` | generated in-house (`~/localgen/gen_overworld_ground.py`, SDXL, made seamless) | — | the overworld's painted ground, blended by `ground/ground3d.gdshader` |
 
-## The edits made to the files
+The three shaders next to them are written here, not sourced:
 
-**Overworld tiles (O11, retired).** The Screaming Brain Studios Overworld pack, and the Kenney / SBS Floor Pack spikes, drew the ground as per-cell diamonds until the painted ground shader replaced them; their provenance notes went with the files.
+* `ground/ground3d.gdshader` — the ground itself, on the 3D map's ground mesh.
+  Blends the three textures above by the cell mask `scenes/world/world.gd`
+  builds (R forest, G water, B explored) and folds the fog in.
+* `ground/ground_mark.gdshader` — the footprint under a landmark: shadow, lit
+  disc, faction ring, drawn as one instanced quad per landmark lying on the
+  ground.
+* `ground/foliage.gdshader` — the woods, which `scenes/world/scatter3d.gd`
+  builds out of primitives rather than loading from anywhere.
 
-**Buildings (O12).** `tools/pack_buildings.py` builds the 640x480 sheet from the
-two packs' single-frame downloads; run it to redo the file. What it does, and
-why, in short:
+## Retired art, and why
 
-* Each of the 5 buildings ships 8 frames — 4 camera rotations plain (`00`–`03`)
-  and the same 4 **snowy** (`04`–`07`) — in **sun-shaded / cloudy / no-shadow**
-  variants, at 128x64 and 64x32 tile format. We take **128x64, sun-shaded**
-  (`*_shaded`), consistently: the map's own props are lit by a fixed sun
-  (`world.gd`'s `LIGHT`) and `_soft_shadow`, so a baked sun shadow is the one
-  variant that agrees with them. The snowy frames are skipped — the world has no
-  seasons or climate to switch on, so they would be dead art.
-* The 5 frames are laid out as one sheet, 5 columns (building) x 4 rows
-  (rotation), 128x120 per cell.
-* Everything is scaled by **one shared factor** (0.125). The packs render every
-  building at the same pixels-per-world-unit but on its own square canvas
-  (512–1024px), so normalising each canvas to the cell would make the market
-  shed as big as the manor.
-* The cells are aligned on the building's **near ground corner**, found per
-  frame as the bottom-centre of the *no-shadow* variant's alpha bounding box
-  (with the shadow in, the box is skewed towards the sun). The canvases are not
-  consistently padded, so this cannot be assumed. That corner is
-  `world.gd`'s `BUILDING_ANCHOR`, i.e. the `base` argument of `_draw_building()`.
+**Overworld tiles (O11).** The Screaming Brain Studios Overworld pack, and the
+Kenney / SBS Floor Pack spikes, drew the ground as per-cell diamonds until the
+painted ground shader replaced them; their provenance notes went with the files.
 
-Unused, and why: the packs' 64x32 renders (we downscale from the large ones
-instead, which is sharper at zoom), the cloudy/no-shadow variants, the snowy
-variants (above), the `.blend` sources, the Overworld pack's `Thick` variants
-(a visible soil edge double-draws at the seams on a tessellated grid) and its
-water tiles (`core/world.gd` has no terrain map, so the ground is a hashed
-grass/forest mix — water lands with terrain data, not before).
+**Buildings (O12) and party tokens (O14).** rubberduck's isometric medieval
+buildings (`town/buildings.png`, built by `tools/pack_buildings.py`) and
+Kenney's Board Game Pack pawn (`tokens/pawn.png`) were the map's 2D prop tier:
+a painted building cluster drawn on a settlement's footprint, and a flat pawn
+sprite standing on a party's position, each a fallback for the cases the 3D
+models did not cover.
 
-**Party tokens (O14).** O10 left open whether Kenney's board-game art has real
-pawn shapes or only dice/card iconography. Both packs were downloaded and
-looked at: **Board Game Icons** is pure UI iconography (card/dice/turn symbols,
-a flat `pawn.png` glyph among them) — not token art. **Board Game Pack** does
-have it: `PNG/Pieces (<colour>)` ships 19 flat-shaded board pieces (pawn, tall
-pawn, meeple, house, rook, wagon, boat, plane, train, flag) in 7 colours x 3
-variants (`single` plain, `border` with a rim + drop shadow, `multi`).
-
-Taken: the classic pawn, `border` variant, in **White** — its art is flat
-`#f3f3f3` with a darker rim, so one file tints to any faction colour via
-`draw_texture_rect`'s modulate and the per-colour folders are not needed (the
-faction palette in `world.gd`'s `faction_color()` is hash-derived and wouldn't
-map onto 7 fixed colours anyway). The only edit is a **crop to the sprite's
-alpha bounding box** (64x64 -> 30x53, `PAWN` in `world.gd`), so the draw rect
-is the silhouette itself and the token's feet land on the party's ground point.
-No rescaling, no recolouring.
-
-Unused, and why: the other 18 piece shapes (nothing in `core/world.gd`
-distinguishes a caravan from a warband yet — one silhouette is the whole
-vocabulary the map has), the 6 coloured folders and the `single`/`multi`
-variants (tinting one white sprite covers it), the Board Game Icons pack
-entirely, and the packs' dice/card/chip art (no board-game UI here).
+They went with that tier when the map became a real 3D world. A flat sprite
+pasted over the map only ever stood in for a model, and a camera that can be
+turned walks straight round the back of one. Every landmark is a model now —
+`scenes/world/settlements3d.gd`, `lairs3d.gd` and `party3d.gd`, with the
+settlement and lair kits building from primitives for anything the generated
+GLBs do not cover, and a band with no character figure marching as a 3D pawn —
+so there is nothing left for a sprite tier to fall back to. Both packs are CC0
+and both are one download away if a 2D map ever wants them again; the sheets
+and the packer are in git history at the commit that removed them.

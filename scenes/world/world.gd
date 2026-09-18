@@ -1,18 +1,43 @@
-# O2 — the open-world map screen: draws core/world.gd's free 2D map in the same
-# dimetric projection the combat board uses, with a drag-pan / scroll-zoom camera,
-# a pause button on the WorldClock, and click-to-move for the player party.
-# All state lives in core/world.gd; this only draws it and feeds it goals.
+# O2 — the open-world map screen: core/world.gd's map, drawn as a real 3D world
+# you can turn, tilt, pan and zoom, with a pause button on the WorldClock and
+# click-to-move for the player party. All state lives in core/world.gd; this
+# only shows it and feeds it goals.
 #
 # Run standalone:  godot --path . scenes/world/world.tscn
 #
-# The projection math below is a copy of scenes/main.gd's Board._iso/_ring/_fan/
-# _soft_shadow (~25 lines). It is duplicated rather than shared because those
-# helpers are methods of main.gd's nested `Board extends Control` — they call
-# draw_* on themselves and read Board._origin/main.hex_px — so factoring them out
-# would mean editing scenes/main.gd, which this phase may not touch. The numbers
-# (yaw/squash/gain, light direction) are the contract; keep them equal if either
-# side ever changes. ponytail: a shared `core/iso.gd` is the upgrade path, and is
-# cheap to do the day main.gd is in scope for edits.
+# THE MAP IS 3D NOW. It used to be a painting with models taped on: a
+# canvas_item shader painted the ground by projecting every screen pixel back to
+# a world position, props were sorted 2D sprites drawn over it, and three
+# separate transparent SubViewports — settlements, lairs, parties — each carried
+# a private camera and a private copy of the projection so their models would
+# land on the right pixels. Nothing in any of those four layers could occlude
+# anything in any other.
+#
+# There is one 3D world now (scenes/world/world_view3d.gd): one viewport, one
+# camera, one sun. The ground is a mesh, the woods are trees, the towns and
+# lairs and marching bands are models standing on it, footprints are decals
+# lying on it, and the depth buffer decides what is in front of what — which is
+# the only reason the camera can be turned at all.
+#
+# WHAT DID NOT CHANGE, and why. The old projection was `_iso()`: rotate by
+# ISO_YAW, scale by ISO_GAIN, squash y by ISO_SQUASH. That is not an
+# approximation of an orthographic camera at yaw ISO_YAW and pitch
+# asin(ISO_SQUASH) — it IS one. So the yaw and the pitch stopped being constants
+# and became camera state, and every mechanism built on `_pix()` / `_unpix()`
+# came through untouched: click-to-move, the ground mask's visible-cell box, the
+# off-screen chevrons, the minimap's view rectangle. See world_view3d.gd's
+# header for why the camera stays orthographic rather than becoming perspective.
+#
+# WHAT THIS CONTROL STILL DRAWS IN 2D. Three things, all of them annotation
+# rather than scenery: the marching route and its goal ring, the name label
+# under each landmark, and the chevrons pinned to the frame for settlements that
+# are off screen. Everything that stands on the ground, or lies on it, is
+# geometry in the view.
+#
+# ponytail: scenes/main.gd's combat Board still carries its own copy of the
+# dimetric helpers (_iso/_ring/_fan/_soft_shadow) — a shared `core/iso.gd` was
+# always the upgrade path and is still not taken, because the board's camera is
+# fixed and this one no longer is; they are no longer the same function.
 extends Control
 
 const World = preload("res://core/world.gd")
@@ -83,30 +108,45 @@ const VISIT_RADIUS := 34.0
 # its own in Scaler.THEME_FACTION — open country, which is where the map is.
 const DEFAULT_THEME := "forest-clearing"
 
+# The camera the map opens on, and the numbers the projection is quoted
+# against. ISO_YAW and ISO_SQUASH are no longer the projection — they are its
+# starting point, because the camera turns now — but they are still the
+# contract every asset in scenes/world/ is sized to (settlement_kit.gd,
+# lair_kit.gd and their gallery shots all measure themselves against them), so
+# they keep their names and their values.
 const ISO_YAW := 35.0
 const ISO_SQUASH := 0.38
+# The pitch ISO_SQUASH always was. A squash of s on the depth axis is exactly
+# what an orthographic camera at elevation asin(s) does; writing it down as the
+# angle is the whole of what let the camera start tilting.
+const ISO_PITCH := rad_to_deg(asin(ISO_SQUASH))
 const ISO_GAIN := 1.85
 const LIGHT := Vector2(-0.30, -0.34)
 
 const ZOOM_MIN := 0.25
 const ZOOM_MAX := 2.5
-# The ground is a shader over a cell-resolution mask (see _draw_ground): CELL
-# is the mask's grain in world units, and the memory (world.explored) is
+# How far the camera may be tilted. Not to the horizon and not to straight
+# down: at 0 the ground is edge-on and the map is a line, and past ~82 the
+# footprint rings stop reading as ground and the models stop having a side.
+const PITCH_MIN := 12.0
+const PITCH_MAX := 82.0
+const YAW_STEP := 15.0                   # one keypress of turn — a twelfth of the way round
+const PITCH_STEP := 6.0
+# Degrees per pixel of drag, for the orbit. Tuned so a drag across half the
+# window is about a quarter turn, which is as much as anyone wants to do in one
+# gesture.
+const ORBIT_SENS := Vector2(0.32, 0.22)
+# The ground is a shader over a cell-resolution mask (see _update_ground):
+# CELL is the mask's grain in world units, and the memory (world.explored) is
 # rasterised at the same grain.
 const CELL := 15.0          # ground cell, in world units
 # A forest stands or falls over a TILE_CLUSTER x TILE_CLUSTER block of cells
 # (~120x120 world units) rather than per cell, so the woods come as woods.
 const TILE_CLUSTER := 8
-# T9x: two fog tiers, both the shader's. Never explored is flat and near-black;
-# explored-but-not-currently-visible is a translucent dark tint over the real
-# ground, so the shape of ground you've already seen still reads, just dimmed.
-const FOG_UNKNOWN := Color(0.03, 0.03, 0.045)
-const FOG_REMEMBERED := Color(0.05, 0.05, 0.09, 0.55)
-
-# Buildings: O12's rubberduck isometric medieval buildings 1+2, CC0 — the Town
-# pack they replace read as a modern city. See assets/world/README.md for
-# provenance and the edits made to the files.
-const BuildingTex := preload("res://assets/world/town/buildings.png")
+# T9x: two fog tiers, both the ground shader's. Never explored is flat and
+# near-black; explored-but-not-currently-visible is a translucent dark tint over
+# the real ground, so the shape of ground you've already seen still reads, just
+# dimmed. Declared with the view, which needs them first — see _view below.
 
 const WOODED := 0.78              # a cell block whose hash lands above this is forest
 # Half-width of the shoreline band, in world units (~0.7 of a CELL either side).
@@ -116,20 +156,40 @@ const WOODED := 0.78              # a cell block whose hash lands above this is 
 # against a constant.
 const SHORE := 35.0
 
-# O12: one cell of the sheet tools/pack_buildings.py lays out — 5 columns (the
-# pack's 5 medieval buildings, at their true relative sizes) by 4 rows (the
-# camera rotations each ships). Each cell is pasted so the building's near
-# ground corner sits on BUILDING_ANCHOR, which is what `base` means below.
-const BUILDING := Vector2(128, 120)
-const BUILDING_ANCHOR := Vector2(64, 112)
-const BUILDING_STYLES := 5        # sheet columns: which building
-const BUILDING_PAIRS := 4         # sheet rows: which way it faces
-
-# O14: Kenney's Board Game Pack pawn, cropped to its own silhouette. Its art is
-# flat near-white (243,243,243) with a darker rim, so one file tints to every
-# faction — no per-colour sheet variant needed. PAWN.y/PAWN.x is its aspect.
-const PawnTex := preload("res://assets/world/tokens/pawn.png")
-const PAWN := Vector2(30, 53)
+# How big a landmark's footprint is, in world units — the ring around a town,
+# the disc under a lair, the shadow under a marching band. These are the map's
+# own long-standing radii; they only look different because they used to be
+# written as screen pixels scaled by the zoom, which is the same numbers said
+# the long way round.
+#
+# They are FLOORS now rather than the answer. The ring used to be painted over
+# the map after the buildings were, so a ring the same size as the town it
+# encircled still read. It lies on the ground now and the town stands in front
+# of it, so a ring inside the walls is a ring nobody sees — and the ring is how
+# you tell whose town it is at a glance. What a footprint ends up as is
+# whichever is larger: the floor here, or the model's own measured span grown
+# by FOOTPRINT_CLEARANCE. See _footprint().
+const SETTLEMENT_RADIUS := {"city": 26.0, "town": 17.0, "camp": 12.0}
+const LAIR_RADIUS := 14.0
+const PLAYER_RADIUS := 11.0
+const BAND_RADIUS := 9.0
+# How far the ring stands off the model inside it. Just past the square root of
+# two, and that is the whole of the reason for the number: footprint_of()
+# measures the model's half-span on its widest axis, and a settlement diorama's
+# base is a slab, so its CORNERS reach 1.41 half-spans out. A ring inside that
+# is a ring under the town — which is what the first pass shipped, with one
+# violet sliver showing past the near edge of Ashfell and nothing anywhere else.
+const FOOTPRINT_CLEARANCE := 1.45
+# The ring around a footprint, as a fraction of its radius, and how far the
+# player's own gold halo reaches past their band.
+const RING_WIDTH := 0.11
+const HALO_SCALE := 2.0
+# How strongly the ground inside the ring is tinted. The flat map painted this
+# disc solid, because the disc WAS the settlement — the buildings were sprites
+# standing on it. There is a real town on it now, so a solid disc is a coloured
+# pond around the walls; what the ground wants instead is a tint that says
+# whose country this is and then gets out of the way.
+const SETTLEMENT_FILL := 0.34
 
 var world: World
 var party: Party            # injected by whoever opens the map, or a demo roster
@@ -137,6 +197,8 @@ var _combat = null          # the live scenes/main.tscn instance, while fighting
 var _combat_overlay: Control = null
 var _pan := Vector2.ZERO
 var _zoom := 1.0
+var _yaw := ISO_YAW          # which way is north on screen; the camera turns, the world does not
+var _pitch := ISO_PITCH      # how far the camera is tilted up off the ground
 var _origin := Vector2.ZERO
 var _pause_btn: Button
 var _gold_lbl: Label
@@ -220,37 +282,23 @@ var _story_btn: Button
 var world_size := "small"   # "small" | "large" — which built-in map _ready() falls back to
                              # when nobody injected a `world` (a fresh start, not O13's resume)
 
-# The ground is a shader (assets/world/ground/ground.gdshader) on a rect that
-# draws behind this control: three painted seamless textures blended by a soft
-# cell mask, with the fog folded in. _draw_ground() feeds it its uniforms.
-const GroundShader := preload("res://assets/world/ground/ground.gdshader")
-const GrassTex := preload("res://assets/world/ground/grass.png")
-const ForestGroundTex := preload("res://assets/world/ground/forest.png")
-const WaterGroundTex := preload("res://assets/world/ground/water.png")
-var _ground_rect: ColorRect
-var _ground_mat: ShaderMaterial
+# The 3D map itself — viewport, camera, sun, ground mesh, woods, footprints,
+# and the three layers of landmarks. It draws behind this control, so what this
+# control still paints reads as annotation on the map rather than as scenery in
+# it. _update_ground() hands it the fog mask; everything else it works out from
+# the camera state above.
+const WorldView3D := preload("res://scenes/world/world_view3d.gd")
+var _view: WorldView3D
+# The fog's two colours live on the view (the ground shader and the 3D
+# background both need them before this screen has said anything) and are named
+# here so the rest of the map — remembered props, the minimap — reads one copy.
+const FOG_UNKNOWN := WorldView3D.FOG_UNKNOWN
+const FOG_REMEMBERED := WorldView3D.FOG_REMEMBERED
 var _mask_tex: ImageTexture
 var _mask_key: Array = []
 
 func _ready() -> void:
 	theme = Icons.dark_theme()   # standalone runs; under game.gd it is the same theme inherited
-	_ground_rect = ColorRect.new()
-	_ground_rect.show_behind_parent = true
-	_ground_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ground_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_ground_mat = ShaderMaterial.new()
-	_ground_mat.shader = GroundShader
-	_ground_mat.set_shader_parameter("grass_tex", GrassTex)
-	_ground_mat.set_shader_parameter("forest_tex", ForestGroundTex)
-	_ground_mat.set_shader_parameter("water_tex", WaterGroundTex)
-	_ground_mat.set_shader_parameter("yaw", deg_to_rad(ISO_YAW))
-	_ground_mat.set_shader_parameter("gain", ISO_GAIN)
-	_ground_mat.set_shader_parameter("squash", ISO_SQUASH)
-	_ground_mat.set_shader_parameter("sight", World.VISION_RADIUS)
-	_ground_mat.set_shader_parameter("fog_unknown", Vector3(FOG_UNKNOWN.r, FOG_UNKNOWN.g, FOG_UNKNOWN.b))
-	_ground_mat.set_shader_parameter("fog_remembered", Vector4(FOG_REMEMBERED.r, FOG_REMEMBERED.g, FOG_REMEMBERED.b, FOG_REMEMBERED.a))
-	_ground_rect.material = _ground_mat
-	add_child(_ground_rect)
 	if world == null:
 		match world_size:
 			"large": world = _large_world()
@@ -264,17 +312,21 @@ func _ready() -> void:
 	# and the centre of the world is not it.
 	if world.player() != null:
 		center_on(world.player().position)
+	# The 3D map, and the three layers of landmarks standing in it. They are
+	# children of the view's world now rather than of this Control: one
+	# viewport, one camera, one depth buffer, so a figure can walk behind a
+	# town wall. add_layer() is the whole of their wiring.
+	_view = WorldView3D.new()
+	_view.world_map = self
+	add_child(_view)
 	_settlements3d = Settlements3D.new()
-	_settlements3d.world_map = self
-	add_child(_settlements3d)
+	_view.add_layer(_settlements3d)
 	_settlements3d.reset(world)
 	_lairs3d = Lairs3D.new()
-	_lairs3d.world_map = self
-	add_child(_lairs3d)
+	_view.add_layer(_lairs3d)
 	_lairs3d.reset(world)
 	_party3d = Party3D.new()
-	_party3d.world_map = self
-	add_child(_party3d)
+	_view.add_layer(_party3d)
 	_party3d.reset(world)
 	_last_forage_at = world.clock.elapsed   # T9x: start the cadence from load time, not zero
 	_last_travel_at = world.clock.elapsed   # D3: same, for road events
@@ -310,8 +362,9 @@ func _small_world() -> World:
 	# T-party3d: flavour rosters, for the overworld headcount label and Party3D's
 	# model pick (highest-leveled troop) -- not combat stats, those still come
 	# from Scaler.roster_for(faction). "goblins" has no dwarf/elf/human/orc
-	# counterpart to model, so it keeps a roster (for the headcount) but reads
-	# as no-model to Party3D and stays the plain PawnTex icon.
+	# counterpart to model, so it keeps a roster (for the headcount) and takes
+	# the single figure per faction combat already uses (figures3d.gd's
+	# FOE_MODELS) rather than a role model.
 	bandits.troops = [{"role": "heavy", "level": 3}, {"role": "light", "level": 5}]
 	WorldAI.hunt(bandits)
 	var goblins := w.add_party(World.RoamingParty.new("goblins", Vector2(380, 300), "goblinoid"))
@@ -388,6 +441,12 @@ func _process(delta: float) -> void:
 	if _clock_lbl != null:
 		_clock_lbl.text = WorldSave.day_clock(world.clock.elapsed)
 		_gold_lbl.text = "%d ◉" % party.gold
+	# The fog mask first, then the 3D map, then this Control's own annotation —
+	# all from the same camera state in the same frame. A view rebuilt from last
+	# frame's numbers is a map whose labels sit beside the things they name.
+	_update_ground()
+	if _view != null:
+		_view.sync()
 	queue_redraw()
 
 # #70: pause on reaching the goal; a new goal (a click, or anything else that
@@ -524,7 +583,7 @@ func _build_hud() -> void:
 	_camp_btn.pressed.connect(_make_camp)
 	bar.add_child(_camp_btn)
 	var hint := Label.new()
-	hint.text = "Click marches there.  Right-drag pans, wheel zooms.  Space pauses, 1/2/4/8 set the speed, P the party, I the pack, Esc the menu."
+	hint.text = "Click marches.  Right-drag pans, middle-drag or Q/E turns, R/F tilts, wheel zooms, Home resets.  Space pauses, 1/2/4/8 speed, P party, I pack, Esc menu."
 	hint.theme_type_variation = "Dim"
 	bar.add_child(hint)
 	_region_msg = Label.new()
@@ -1999,6 +2058,16 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				else:
 					_open_party()
 			KEY_I: _toggle_inventory()
+			# The camera, from the keyboard. Q/E turn it, R/F tilt it, Home puts
+			# it back — the same three things middle-drag and the scroll wheel
+			# do, for players who would rather not hold a button down. Home is
+			# the one that has to exist: once a view can be turned it can be
+			# lost, and finding the angle you started at by hand is not a game.
+			KEY_Q: orbit_by(-YAW_STEP)
+			KEY_E: orbit_by(YAW_STEP)
+			KEY_R: tilt_by(PITCH_STEP)
+			KEY_F: tilt_by(-PITCH_STEP)
+			KEY_HOME: reset_view()
 			_: return
 		accept_event()
 		return
@@ -2893,12 +2962,23 @@ func _talk_adv() -> bool:
 	return talker != null and Visit._talk_mode(talker, party) == Dice.ADV
 
 # --- projection (see header) -------------------------------------------
+# The map's camera, written as the function it has always been. `_iso()` maps a
+# point on the ground to its screen offset, and it is exactly what an
+# orthographic camera at yaw `_yaw` and pitch `_pitch` does: turn the ground
+# under the camera, then foreshorten the depth axis by sin(pitch). The only
+# thing the 3D refactor changed is that the two angles are now variables —
+# which is why click-to-move, the ground mask, the chevrons and the minimap all
+# came through it untouched.
+#
+# scenes/world/world_view3d.gd builds the real Camera3D from the same two
+# angles and the same ISO_GAIN, so there is one camera and two ways of asking
+# it questions, not two cameras.
 func _iso(v: Vector2) -> Vector2:
-	var r := v.rotated(deg_to_rad(ISO_YAW)) * ISO_GAIN
-	return Vector2(r.x, r.y * ISO_SQUASH)
+	var r := v.rotated(deg_to_rad(_yaw)) * ISO_GAIN
+	return Vector2(r.x, r.y * sin(deg_to_rad(_pitch)))
 
 func _iso_inv(v: Vector2) -> Vector2:
-	return Vector2(v.x, v.y / ISO_SQUASH).rotated(-deg_to_rad(ISO_YAW)) / ISO_GAIN
+	return Vector2(v.x, v.y / sin(deg_to_rad(_pitch))).rotated(-deg_to_rad(_yaw)) / ISO_GAIN
 
 # world point -> screen point
 func _pix(w: Vector2) -> Vector2:
@@ -2908,6 +2988,11 @@ func _pix(w: Vector2) -> Vector2:
 func _unpix(sp: Vector2) -> Vector2:
 	return _iso_inv((sp - _origin) / _zoom)
 
+# A circle on the GROUND, as the polygon it projects to. Still an ellipse, but
+# one whose tilt and squash follow the camera rather than two fixed constants —
+# used now only by the goal marker at the end of the marching route, since every
+# other ring on the map became a decal lying in the 3D world
+# (scenes/world/ground_marks3d.gd).
 func _ring(center: Vector2, r: float, flat := true, closed := false, segs := 24) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	for i in segs:
@@ -2917,17 +3002,12 @@ func _ring(center: Vector2, r: float, flat := true, closed := false, segs := 24)
 		pts.append(pts[0])
 	return pts
 
-func _fan(apex: Vector2, rim: PackedVector2Array, inner: Color, outer: Color) -> void:
-	var n := rim.size()
-	var cols := PackedColorArray([inner, outer, outer])
-	var uv := PackedVector2Array()
-	for i in n:
-		draw_primitive(PackedVector2Array([apex, rim[i], rim[(i + 1) % n]]), cols, uv)
-
-func _soft_shadow(at: Vector2, r: float, strength := 1.0) -> void:
-	for i in 3:
-		draw_colored_polygon(_ring(at, r * (1.0 + 0.26 * i)),
-			Color(0.02, 0.01, 0.04, strength * (0.20 - 0.05 * i)))
+# How tall a footprint of world radius `r` stands on screen: the semi-minor
+# axis of the ellipse _ring() would draw. What a name label is pushed down by,
+# so it clears the landmark it names at any tilt. Floored, because at a shallow
+# pitch the ellipse collapses and a label with no clearance sits on the model.
+func _footprint_drop(r: float) -> float:
+	return maxf(r * ISO_GAIN * _zoom * sin(deg_to_rad(_pitch)), 3.0)
 
 # Stable per-cell noise: same cell, same salt -> same value, every frame.
 static func _rand(c: Vector2i, salt: int) -> float:
@@ -2956,6 +3036,41 @@ func set_zoom(z: float) -> void:
 func pan_by(d: Vector2) -> void:
 	_pan += d
 
+func yaw() -> float:
+	return _yaw
+
+func pitch() -> float:
+	return _pitch
+
+# Turn the camera about the point it is looking at, not about the world's
+# origin: a map that slides sideways as you turn it is a map you cannot turn on
+# purpose. The ground point under the middle of the screen is read first, and
+# put back under the middle afterwards, which is the same trick zoom_at() plays
+# with the point under the cursor.
+func orbit_by(d: float) -> void:
+	var anchor := _unpix(size * 0.5)
+	_yaw = fposmod(_yaw + d, 360.0)
+	center_on(anchor)
+
+# Tilt, between edge-on and nearly overhead. Same "hold the middle" rule as the
+# turn, and for the same reason — at a shallow pitch a degree of tilt moves the
+# ground a very long way.
+func tilt_by(d: float) -> void:
+	var anchor := _unpix(size * 0.5)
+	_pitch = clampf(_pitch + d, PITCH_MIN, PITCH_MAX)
+	center_on(anchor)
+
+# Back to the view the map opens on, keeping whatever is in the middle of the
+# screen in the middle of the screen. The one binding that has to exist once a
+# camera can be turned: having got lost, you must be able to get un-lost
+# without hunting for the angle you started at.
+func reset_view() -> void:
+	var anchor := _unpix(size * 0.5)
+	_yaw = ISO_YAW
+	_pitch = ISO_PITCH
+	set_zoom(1.0)
+	center_on(anchor)
+
 # Put world point `w` in the middle of the view.
 func center_on(w: Vector2) -> void:
 	_pan = -_iso(w) * _zoom
@@ -2972,9 +3087,18 @@ func zoom_at(sp: Vector2, factor: float) -> void:
 func _layout() -> void:
 	_origin = size * 0.5 + _pan
 
+# Right-drag pans, middle-drag orbits. They used to do the same thing, which
+# was fine while there was nothing to orbit; the split keeps the gesture every
+# player already knows on the button they already use it with, and puts the new
+# one on the button that was duplicating it. Q/E/R/F and Home do the same from
+# the keyboard — see _unhandled_key_input().
 func _gui_input(e: InputEvent) -> void:
 	if e is InputEventMouseMotion:
-		if e.button_mask & (MOUSE_BUTTON_MASK_RIGHT | MOUSE_BUTTON_MASK_MIDDLE):
+		if e.button_mask & MOUSE_BUTTON_MASK_MIDDLE:
+			orbit_by(-e.relative.x * ORBIT_SENS.x)
+			tilt_by(e.relative.y * ORBIT_SENS.y)
+			queue_redraw()
+		elif e.button_mask & MOUSE_BUTTON_MASK_RIGHT:
 			pan_by(e.relative)
 			queue_redraw()
 	elif e is InputEventMouseButton and e.pressed:
@@ -2989,9 +3113,14 @@ func _gui_input(e: InputEvent) -> void:
 		queue_redraw()
 
 # --- drawing -----------------------------------------------------------
+# Three things, and every one of them is annotation rather than scenery: the
+# route the party is marching, the name under each landmark, and the chevrons
+# pinned to the frame for the settlements that are off screen. Everything that
+# stands on the ground (towns, lairs, bands, woods) or lies on it (footprints,
+# rings, shadows) is geometry in the 3D view, where the depth buffer can sort
+# it — see ground_marks() below and scenes/world/world_view3d.gd.
 func _draw() -> void:
 	_layout()
-	_draw_ground()
 	var p := world.player()
 	if p != null and not p.at_goal():
 		# #95: the way round, when there is one — a faint gold thread through the
@@ -3001,75 +3130,157 @@ func _draw() -> void:
 			pts.append(_pix(wp))
 		if pts.size() > 2:
 			draw_polyline(pts, Color(Icons.COL_GOLD, 0.45), 1.5, true)
-		draw_polyline(_ring(_pix(pts[-1]), 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
-
-	# One painter's-order pass over everything standing on the ground.
-	# T9x: settlements are landmarks, always drawn regardless of fog — the
-	# whole point of the beacon is to give the player something to walk
-	# toward on a still-dark map. Lairs and roaming parties stay fog-gated:
-	# those are meant to be found, not signposted.
-	# T9y: "live" is the same currently-visible tier _draw_ground() dims the
-	# ground with — a prop the party can actually see right now draws in full
-	# colour, one they are only remembering draws washed out. Without it a
-	# settlement visited two days ago looked exactly like the one you are
-	# standing in, which threw away the distinction the three-tier fog had
-	# just bought.
+		# `pts` is already in screen space — p.goal is the NEXT corner and p.route
+		# the ones after it, so pts[-1] is the destination, projected. This used
+		# to read _ring(_pix(pts[-1]), ...), projecting a screen point a second
+		# time and putting the marker at the end of the march somewhere that was
+		# not the end of the march. The radius is still quoted in world units,
+		# which is what the * _zoom is for: _ring() applies _iso() but not the
+		# zoom, the way _pix() does.
+		draw_polyline(_ring(pts[-1], 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
 	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
-	var props: Array = []
+	_draw_labels()
+	_draw_offscreen_markers(ppos)
+
+
+# The name under every landmark the player can see, painter-sorted so a nearer
+# label is drawn over a further one. Which landmarks those are is the same
+# question ground_marks() answers — the fog rules live there, once, and this
+# reads the list it produced.
+func _draw_labels() -> void:
+	var labels: Array = []
+	for m in ground_marks():
+		if not m.has("label"):
+			continue
+		labels.append({"at": _pix(m["pos"]) + Vector2(0.0, _footprint_drop(m["radius"]) + 12.0),
+			"text": m["label"], "col": _remembered(Icons.COL_BODY, m["live"])})
+	labels.sort_custom(func(a, b): return a["at"].y < b["at"].y)
+	for l in labels:
+		var w := ThemeDB.fallback_font.get_string_size(l["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		# A one-pixel drop shadow, for the same reason the chevron labels have
+		# one: a name can land on bright water, a pale roof or black fog, and it
+		# has to stay readable over all three.
+		draw_string(ThemeDB.fallback_font, l["at"] - Vector2(w * 0.5, 0.0) + Vector2(1, 1),
+			l["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.6))
+		draw_string(ThemeDB.fallback_font, l["at"] - Vector2(w * 0.5, 0.0), l["text"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, l["col"])
+
+
+# Every footprint on the ground this frame, and the name that goes under it:
+# one list, rebuilt per frame, read by scenes/world/ground_marks3d.gd (which
+# draws the discs, rings, shadows and haloes as one MultiMesh) and by
+# _draw_labels() above.
+#
+# It exists as a list rather than as three draw calls because the fog rules are
+# the interesting part and they must not be written twice. T9x: settlements are
+# landmarks, always shown regardless of fog — the whole point of the beacon is
+# to give the player something to walk toward on a still-dark map. Lairs and
+# roaming bands stay fog-gated: those are meant to be found, not signposted.
+# T9y: "live" is the currently-visible tier the ground is dimmed by — a
+# landmark the party can see right now reads in full colour, one they are only
+# remembering reads washed out.
+#
+#   pos     where it stands, in world units
+#   radius  the footprint's radius, in world units
+#   color   its tint, alpha already faded for the fog
+#   ring    ring width as a fraction of the radius, 0 for no ring
+#   fill    how strongly the disc inside the ring is painted, 0 for none
+#   shadow  how dark the soft shadow under it is, 0 for none
+#   label   the name to draw under it; absent means no name
+#   live    whether the party can see it right now
+func ground_marks() -> Array:
+	var p := world.player()
+	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
+	var out: Array = []
 	for s in world.settlements:
-		props.append({"at": _pix(s.position), "s": s, "live": world.is_visible_now(s.position, ppos)})
+		var live: bool = world.is_visible_now(s.position, ppos)
+		out.append({"pos": s.position,
+			"radius": _footprint(float(SETTLEMENT_RADIUS.get(s.kind, 17.0)),
+				_settlements3d.footprint(s) if _settlements3d != null else 0.0),
+			"color": _remembered(faction_color(s.faction), live), "ring": RING_WIDTH,
+			"fill": SETTLEMENT_FILL, "shadow": 0.9, "label": s.sname, "live": live})
 	for l in world.lairs:
-		if l.discovered and world.is_explored(l.position):   # T91: undiscovered lairs draw nothing — that's the point
-			props.append({"at": _pix(l.position), "l": l, "live": world.is_visible_now(l.position, ppos)})
+		# T91: an undiscovered lair draws nothing at all — that is the mechanic.
+		if not (l.discovered and world.is_explored(l.position)):
+			continue
+		var live: bool = world.is_visible_now(l.position, ppos)
+		out.append({"pos": l.position,
+			"radius": _footprint(LAIR_RADIUS, _lairs3d.footprint(l) if _lairs3d != null else 0.0),
+			"color": _remembered(Icons.COL_MUTED if l.looted else Icons.COL_FOE, live),
+			"ring": RING_WIDTH, "fill": SETTLEMENT_FILL, "shadow": 0.85, "label": l.sname, "live": live})
 	for q in world.parties:
 		if q.is_player and not _visit.is_empty():
 			continue   # inside the gates for the duration of the visit, not standing on the map
 		if not q.is_player and not world.is_explored(q.position):
 			continue
-		# A roaming band is the one prop whose remembered position is a lie —
-		# it has walked on since. Drawn at its live position either way (the
-		# map has no last-known-position memory to draw instead), but washed
+		# A roaming band is the one landmark whose remembered position is a lie
+		# — it has walked on since. Shown at its live position either way (the
+		# map has no last-known-position memory to show instead), but washed
 		# out, which is the honest reading: "they were around here".
-		props.append({"at": _pix(q.position), "p": q,
-			"live": q.is_player or world.is_visible_now(q.position, ppos)})
-	props.sort_custom(func(a, b): return a["at"].y < b["at"].y)
-	for d in props:
-		if d.has("s"):
-			_draw_settlement(d["s"], d["at"], d["live"])
-		elif d.has("l"):
-			_draw_lair(d["l"], d["at"], d["live"])
-		else:
-			_draw_party(d["p"], d["at"], d["live"])
-	_draw_offscreen_markers(ppos)
+		var live: bool = q.is_player or world.is_visible_now(q.position, ppos)
+		var rad: float = PLAYER_RADIUS if q.is_player else BAND_RADIUS
+		if q.is_player:
+			# T9x: a halo, not just an outline — it has to read as "this one is
+			# you" whichever hero figure is standing there, now that the player
+			# can pick any of them from the Party screen. First in the list so
+			# the band's own shadow blends over it, not under it.
+			out.append({"pos": q.position, "radius": rad * HALO_SCALE,
+				"color": Color(Icons.COL_GOLD, 0.55), "ring": 0.14, "fill": 0.22,
+				"shadow": 0.0, "live": true})
+		# The player's own headcount comes off the real Party (active roster),
+		# everyone else's off their troops[] flavour roster.
+		var count: int = party.active.size() if q.is_player else q.troops.size()
+		var who: String = "You" if q.is_player else q.id.capitalize()
+		out.append({"pos": q.position, "radius": rad,
+			"color": _remembered(faction_color(q.faction, q.is_player), live),
+			"ring": 0.0, "fill": 0.0, "shadow": 1.0,
+			"label": "%s (%d)" % [who, count], "live": live})
+	return out
 
-# O11: one Overworld Pack tile per ground cell, on the same grid the procedural
-# patches used. ISO_YAW is 35°, not the 45° the art is drawn for, so a cell lands
-# on screen as a sheared parallelogram rather than a 2:1 diamond — the tile is
-# mapped onto it by an affine transform (its diamond's corners to the cell's
-# corners) instead of being blitted upright. The projection stays the contract;
-# the art bends to it, so tiles line up with the camera and click-to-move math.
-# Issue #31 — the frame-rate drop. Three things were wrong with the old shape
-# of this loop, and all three are about doing work per cell, per frame, that
+
+# The radius a landmark's footprint is drawn at: its old flat-map radius, or
+# enough to clear the model standing on it, whichever is more.
+#
+# It has to be measured rather than declared. On the flat map the ring was
+# painted over the buildings, so a ring narrower than the town it encircled
+# still read; lying on the ground it does not, and how wide a town is depends
+# on which art source built it — a GLB fitted to a target height and a kit
+# assembled from primitives come out different widths, and
+# Settlements3D.source switches between them. `model` is 0.0 when the layer has
+# nothing to measure, and then the floor is the answer, which is also what
+# keeps this honest headless.
+func _footprint(floor_r: float, model: float) -> float:
+	return maxf(floor_r, model * FOOTPRINT_CLEARANCE)
+
+
+# The fog's memory, as a texture: R forest, G water, B explored, one texel per
+# ground cell. scenes/world/world_view3d.gd puts it on the ground mesh and
+# assets/world/ground/ground3d.gdshader reads it; this side owns WHICH cells and
+# HOW OFTEN, because that is the fog's business and the expensive part.
+#
+# Issue #31 — the frame-rate drop. Three things were wrong with the loop this
+# grew out of, and all three were about doing work per cell, per frame, that
 # does not change per frame:
 #
 #  1. It walked every cell of the VIEWPORT and asked world.is_explored() about
 #     each one (3.7us a cell measured, since it folds in a scan of every
 #     settlement) even though the answer is no for most of a map nobody has
-#     walked yet. It now walks the explored ground instead — the cells around
-#     each remembered waypoint and each settlement beacon, clipped to the
-#     viewport — so the unwalked map costs a box test per waypoint, not a
-#     distance query per cell. The set it arrives at is the same set
-#     is_explored() would have said yes to; it is reached from the other end.
-#  2. Never-explored cells were a draw_rect each. They are one rect for the
-#     whole viewport now, painted before the tiles go on top of it.
-#  3. The tile a cell draws (water/forest/grass and which variant) is a pure
-#     function of the cell and the world's water, and was recomputed every
-#     frame at ~5.8us a cell — water_depth() alone is a linear scan of every
-#     lake. It is cached; a world's terrain does not move.
+#     walked yet. It walks the explored ground instead — the cells around each
+#     remembered waypoint and each settlement beacon, clipped to the viewport —
+#     so the unwalked map costs a box test per waypoint, not a distance query
+#     per cell. The set it arrives at is the same set is_explored() would have
+#     said yes to; it is reached from the other end.
+#  2. Never-explored cells were a draw call each. They are one channel of one
+#     texture now, and the shader paints them.
+#  3. The tile a cell shows is a pure function of the cell and the world's
+#     water, and was recomputed every frame at ~5.8us a cell — water_depth()
+#     alone is a linear scan of every lake. It is cached; terrain does not move.
 #
-# The ponytail note this replaces predicted exactly this ("a spatial grid is
-# the upgrade if a very long walk makes it drag").
-func _draw_ground() -> void:
+# Called from _process() rather than from _draw(): the ground is no longer
+# something this Control paints, but the mask still has to be ready before the
+# view's camera looks at it in the same frame.
+func _update_ground() -> void:
+	_layout()
 	var mn := Vector2(1e9, 1e9)
 	var mx := Vector2(-1e9, -1e9)
 	for corner in [Vector2.ZERO, Vector2(size.x, 0), Vector2(0, size.y), size]:
@@ -3077,9 +3288,6 @@ func _draw_ground() -> void:
 		mn = mn.min(w); mx = mx.max(w)
 	var i0 := int(floor(mn.x / CELL)); var i1 := int(ceil(mx.x / CELL))
 	var j0 := int(floor(mn.y / CELL)); var j1 := int(ceil(mx.y / CELL))
-	# Which cells are both on screen and explored. Counted before anything is
-	# painted, so the "too much ground for one frame" guard can still bail out
-	# to a flat fill without leaving half a map drawn.
 	# The mask covers the screen's cell box plus a quarter of it each side, and
 	# is rebuilt only when the screen leaves that box (or the map's memory
 	# grows) — a pan of a few cells costs nothing.
@@ -3096,26 +3304,12 @@ func _draw_ground() -> void:
 		var b0 := j0 - pad_y; var b1 := j1 + pad_y
 		_mask_tex = _build_mask(a0, a1, b0, b1, step, _visible_ground(a0, a1, b0, b1))
 		_mask_key = [a0, a1, b0, b1, step, world.explored.size(), world.settlements.size()]
-	var p := world.player()
-	var m := _ground_mat
+	if _view == null:
+		return
 	var mw: int = (_mask_key[1] - _mask_key[0]) / step + 1
 	var mh: int = (_mask_key[3] - _mask_key[2]) / step + 1
-	m.set_shader_parameter("mask_tex", _mask_tex)
-	m.set_shader_parameter("mask_min", Vector2(_mask_key[0], _mask_key[2]) * CELL)
-	m.set_shader_parameter("mask_size", Vector2(mw, mh) * float(step) * CELL)
-	m.set_shader_parameter("mask_texel", Vector2(1.0 / mw, 1.0 / mh))
-	m.set_shader_parameter("origin", _origin)
-	m.set_shader_parameter("zoom", _zoom)
-	# The shader reads its own rect in control units, not framebuffer pixels —
-	# the only coordinate space _origin and _zoom mean anything in. See the note
-	# on `rect_size` in the shader; without it the map is right at 1280x800 and
-	# wrong at every other window size (#58).
-	m.set_shader_parameter("rect_size", size)
-	m.set_shader_parameter("player", p.position if p != null else Vector2(1e9, 1e9))
-	m.set_shader_parameter("time_s", Time.get_ticks_msec() / 1000.0)
-	var tint: Color = world.clock.daylight_tint()   # #85
-	m.set_shader_parameter("daylight", Vector3(tint.r, tint.g, tint.b))
-	m.set_shader_parameter("sight", world.sight_radius())
+	_view.set_ground_mask(_mask_tex, Vector2(_mask_key[0], _mask_key[2]) * CELL,
+		Vector2(mw, mh) * float(step) * CELL, Vector2(1.0 / mw, 1.0 / mh))
 
 const MASK_MAX := 96      # texels a side; far out a texel spans several cells, and nobody can tell
 
@@ -3290,107 +3484,13 @@ func _draw_offscreen_marker(s, frame: Rect2, ppos: Vector2) -> void:
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.75))
 	draw_string(ThemeDB.fallback_font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, col)
 
-# O11/O12: a medieval building on each footprint the blocks stood on — a city
-# gets three, a town two, painter-sorted among themselves. The footprint ring
-# stays: every faction's walls are the same stone, and faction is the one thing
-# the map still has to read at a glance.
-# T91: a discovered lair. Grey once looted, faction-tinted red while there's
-# still a fight in it, so a glance says which lairs are done. Tier 0: a 3D
-# diorama in the Lairs3D layer above this map, same contract as Settlements3D
-# — it replaces the "☠" glyph only; shadow, ring and name label stay shared.
-func _draw_lair(l, at: Vector2, live := true) -> void:
-	var col := _remembered(Icons.COL_MUTED if l.looted else Icons.COL_FOE, live)
-	var r := 14.0 * _zoom
-	_soft_shadow(at, r * 0.85)
-	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
-	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
-	if not (_lairs3d and _lairs3d.has_model(l)):
-		var fs := int(18 * _zoom)
-		draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, _remembered(Icons.COL_HEAD, live))
-	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), l.sname,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _remembered(Icons.COL_BODY, live))
-
-func _draw_settlement(s, at: Vector2, live := true) -> void:
-	var col := _remembered(faction_color(s.faction), live)
-	var big: bool = s.kind == "city"
-	# T90: "camp" is the smallest tier (one lean-to, no ring flourish scale-up) —
-	# everything below city was "town" before there were three sizes.
-	var small: bool = s.kind == "camp"
-	var r := (26.0 if big else (12.0 if small else 17.0)) * _zoom
-	_soft_shadow(at, r * 0.9)
-	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
-	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
-	# Style off the faction so a faction's towns look like each other, pair off the
-	# id so two of its towns are not the same building twice.
-	var style: int = absi(hash(s.faction))
-	var pair: int = absi(hash(s.id))
-	var blocks := [Vector2(0, 0), Vector2(-0.5, 0.35), Vector2(0.5, 0.3)] if big \
-		else ([Vector2(0, 0)] if small else [Vector2(0, 0), Vector2(0.45, 0.3)])
-	var h := r * (3.2 if big else (2.4 if small else 2.8))
-	# BUILDING_ANCHOR sits near the sprite's bottom (112 of 120px tall), so a house
-	# drawn at `base` reads as mostly-above it — a cluster whose bases sit on the
-	# ring reads as pushed toward the ring's back half. Nudge every base down by
-	# the gap between the anchor and the sprite's true vertical centre so the
-	# cluster's visual mass, not its ground corner, is what centres on the ring.
-	var vcenter := Vector2(0.0, (BUILDING_ANCHOR.y - BUILDING.y * 0.5) * 0.3 * h / BUILDING.y)
-	# Tier 0: a 3D diorama in the Settlements3D layer above this map. Same
-	# contract as Figures3D on the combat board — it replaces the building
-	# blocks only; shadow, ring and name label above/below stay shared.
-	if not (_settlements3d and _settlements3d.has_model(s)):
-		var bases: Array = []
-		for b in blocks:
-			bases.append(at + _iso(b * r) + vcenter)
-		bases.sort_custom(func(a, b): return a.y < b.y)
-		for k in bases.size():
-			_draw_building(bases[k], h, style + k, pair + k, live)
-	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), s.sname,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _remembered(Icons.COL_BODY, live))
-
-# One building: a whole house in one cell now (the old Town Pack's modular
-# left/right wall halves are gone with it). `base` is the house's near ground
-# corner, i.e. the point it stands on; `h` scales the cell, whose own 128x120
-# proportions are kept so the five buildings stay at their relative sizes.
-func _draw_building(base: Vector2, h: float, style: int, pair: int, live := true) -> void:
-	var cell := BUILDING * (h / BUILDING.y)
-	var src := Vector2(style % BUILDING_STYLES, pair % BUILDING_PAIRS) * BUILDING
-	draw_texture_rect_region(BuildingTex,
-		Rect2(base - BUILDING_ANCHOR * (h / BUILDING.y), cell), Rect2(src, BUILDING),
-		_remembered(Color.WHITE, live))
-
-# O14: a board-game pawn standing on the party's position, tinted to its faction.
-# `at` is the ground point, so the sprite hangs above it rather than centring on
-# it, the way a building sits on its near corner. Sizes are the old ball token's
-# radii kept as the token's half-width, so parties read at the same scale as before.
-func _draw_party(p, at: Vector2, live := true) -> void:
-	var col := _remembered(faction_color(p.faction, p.is_player), live)
-	var rad := (11.0 if p.is_player else 9.0) * _zoom
-	var h := rad * 2.0 * PAWN.y / PAWN.x
-	_soft_shadow(at, rad * 0.8)
-	if p.is_player:
-		# T9x: a layered glow, not just a thin outline — needs to read as
-		# "this one is you" regardless of which hero figure is showing, now
-		# that the player can pick any of them from the Party screen. Drawn
-		# under the sprite so the ring's far arc reads as behind the pawn.
-		# (the old single ring was also never actually closed — draw_polyline's
-		# 3rd arg is antialiasing, not _ring()'s own `closed`, so it was
-		# missing one segment; fixed here too.)
-		for i in 3:
-			draw_colored_polygon(_ring(at, rad * (1.5 + 0.35 * i)),
-				Color(Icons.COL_GOLD, 0.18 - 0.05 * i))
-		draw_polyline(_ring(at, rad * 1.7, true, true), Icons.COL_GOLD, 2.5, true)
-	# Tier 0: a 3D troop figure in the Party3D layer above this map, picked from
-	# the band's highest-leveled troop — same contract as Settlements3D/Lairs3D,
-	# replaces the PawnTex icon (and its faction tint) only.
-	if not (_party3d and _party3d.has_model(p)):
-		draw_texture_rect(PawnTex, Rect2(at - Vector2(rad, h - rad * 0.22),
-			Vector2(rad * 2.0, h)), false, col)
-	# T-party3d: name + headcount, floating below the token — same label
-	# treatment World._draw_settlement()/_draw_lair() already use. The player's
-	# own headcount comes off the real Party (active roster), everyone else's
-	# off their troops[] flavour roster (RoamingParty.highest_troop's source).
-	var count: int = party.active.size() if p.is_player else p.troops.size()
-	var label: String = "You" if p.is_player else p.id.capitalize()
-	draw_string(ThemeDB.fallback_font, at + Vector2(-rad * 1.3, rad * 1.3 + 12.0),
-		"%s (%d)" % [label, count], HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-		_remembered(Icons.COL_BODY, live))
+# The 2D prop tier that used to live here — _draw_settlement()'s painted
+# building blocks, _draw_lair()'s "☠" glyph, _draw_building() and
+# _draw_party()'s pawn sprite — is gone, with the sheet textures it read from.
+# A flat sprite pasted over the map was only ever a stand-in for a model, and a
+# camera that turns walks straight round the back of one. Every landmark is a
+# model in the 3D view now: scenes/world/settlements3d.gd, lairs3d.gd and
+# party3d.gd, each of which covers everything the game can produce (the
+# settlement and lair kits build from primitives, and a band with no character
+# figure marches as a 3D pawn), so there is nothing left for a fallback tier to
+# cover.
