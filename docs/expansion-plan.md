@@ -5698,3 +5698,81 @@ design ones). Two smaller simplifications also stand: a buff's `damage_type` is
 authored and unread, and `power.gd` prices neither `reaction` nor `aura` — and
 now not `summon` either, so a Beast Master's estimated power does not count the
 beast.
+
+## drive_random — a robot that has not been told what to do (2026-09-18)
+
+`tests/drive_random.gd`. Eight `drive_*.gd` robots already press real buttons
+end-to-end, and every one of them walks a script somebody wrote down. Between
+them they cover the paths we thought of. A run of this game is not a path: it is
+a few hundred small decisions about where to walk, what to buy, whether to
+charge a band or slip round it, and which spell to burn on the third round of a
+fight that is going badly. The bugs that survive the scripted suite live in the
+joins between those decisions.
+
+So this one decides for itself. It is a monkey **with taste**: every choice is a
+weighted roll, but the weights are read off the game state the way a player
+reads them — it rests when it is hurt, shops when it is rich, parleys with a
+band it cannot take, walks its melee characters into reach before it swings, and
+aims an area spell at the hex that catches the most foes. Orders are given the
+way a player gives them: `center_on` then a real left-click on the map, a real
+`pressed` on a real Button, a real mouse motion to set the board's hover before
+an area spell commits. Nothing in it writes to the model behind the screen.
+
+**Five dials, rolled off the seed** — bold, greedy, careful, curious, fidgety —
+are what make two seeds two different *players* rather than the same player with
+different dice. They decide how the approach card is answered, how long a visit
+to town lasts before boredom wins, whether a lair gets searched or sneaked into,
+and how often the session stops to re-zoom the camera and look in the pack.
+
+**It asserts invariants, never outcomes.** "The party won" is not a fact about
+this build; the fight is a dice game and it is allowed to lose. What is checked
+on every one of the ~2,200 frames: the purse never goes negative, nobody sits
+outside 0..max HP, the active party never over-fills or empties, a market and a
+fight are never both up, the world clock never runs under a fight, and — the one
+that catches what no assertion can name in advance — a fingerprint of everything
+a frame may change, which must not sit still for 300 frames while the driver is
+still pressing things. Plus a handful the driver is uniquely placed to make: a
+click has to land where it was aimed (`_pix`/`_unpix` round-trip), a click on a
+hex in a hero's own move field has to move them *somewhere*, closing an overlay
+has to give the clock back, and backing out of aiming has to leave the board in
+`idle`.
+
+**The clock is not monotonic, and that is deliberate** — `core/travel.gd` pays
+the party for a good day's road by winding `elapsed` *back* (TIME_SAVED,
+WAYSTONE_SAVED). The first version asserted monotonicity and went red on a
+seeded good-day event; the invariant is now "never back further than travel.gd
+can refund", which still catches a reset to zero or a rewind nobody announced.
+
+Two nudges are decisions rather than randomness with a thumb on the scale: a
+session that has not seen a town by a quarter of the way through goes and finds
+the nearest one, and one that has not had a fight by halfway marches on a
+monster faction's gate — the one place on either map where a fight is a
+certainty rather than a hope. Both are things players do, and they are why the
+coverage assertions at the end (a settlement, a fight, a real order given) are
+not a lottery.
+
+`SORCMERC_SEED` pins the session, so CI (which pins it already) walks one fixed
+game and a red CI replays exactly; the seed is printed at the top of the run and
+again with the failure. `SORCMERC_RANDOM_RUNS=20` is the soak — what you point
+at a branch before you believe a systems change. One session is ~23s.
+
+### What it found on its first thirty seeds
+
+**A soft-lock after a lost open-world fight.** `core/adapter.gd`'s `write_back`
+persists the field verbatim, so a hero who went *down* rather than *died* lands
+back on the map at 0 HP — alive, unconscious. `Party.auto_revive_all`, which the
+retreat calls, only ever looked at `dead`, so it left them there. The next
+encounter then opens with nobody on their feet and is over on round 1 — and
+since `world.gd`'s `_retreat()` sets the beaten party down at the *nearest*
+settlement, losing to a town's garrison wakes you up on that town's doorstep,
+where the guards turn out again. The loop has no exit. `auto_revive_all` now
+brings up the merely flattened as well as the dead, which is what both of its
+callers already narrate ("they come to at %s").
+
+**An acting hero who goes down mid-turn leaves their own bar up.** Walk into an
+opportunity attack that drops you and `_after_hero_action` sees economy left, so
+it rebuilds the menu for an unconscious character: every slot dead, and the only
+live control is End turn behind its "action unspent!" confirm. A player gets out
+in two presses — the driver now does the same — but the turn arguably ought to
+end itself. Left as it is, deliberately: whether a hero downed and then revived
+mid-turn should keep their action is a design call, not a bug fix.
