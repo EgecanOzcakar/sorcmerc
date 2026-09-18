@@ -72,6 +72,11 @@ func _init() -> void:
 	main.set_zoom(main._zoom * 1.5)
 	await process_frame; await process_frame
 	check(board._tok[c0.id].is_equal_approx(board._pix(c0.pos)), "after a zoom the token is already on its hex — no slide")
+	# #112: and within the SAME tick, not a frame later — a drag pans every
+	# frame, so a one-frame lag is a wobble the whole way.
+	main.pan_by(Vector2(-90, 40))
+	board.tick(0.016)
+	check(board._tok[c0.id].is_equal_approx(board._pix(c0.pos)), "the tick that follows a pan already has the token on its hex")
 	if fig._figs.has(c0.id):
 		check(is_equal_approx(fig._figs[c0.id].rotation.y, yaw_before), "moving the camera does not turn the figure")
 

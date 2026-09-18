@@ -720,8 +720,9 @@ func rest(kind: String) -> bool:
 			return false
 		short_rests_used += 1
 	var Adapter = load("res://core/adapter.gd")
-	for ch in party.party_characters():
-		Adapter.rest(ch, kind)
+	for ch in party.roster:   # #108: the bench rests with the party
+		if not ch.dead:
+			Adapter.rest(ch, kind)
 	Sound.play_sfx("rest")   # T27
 	say("The party takes a %s." % kind.replace("-", " "))
 	_autosave()
