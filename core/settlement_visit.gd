@@ -339,8 +339,9 @@ const LONG_REST_COOLDOWN := 1440.0
 const MAX_SHORT_RESTS := 2
 
 static func rest(party, world, kind := "long-rest") -> void:
-	for ch in party.party_characters():
-		Adapter.rest(ch, kind)
+	for ch in party.roster:   # #108: the bench sleeps under the same roof
+		if not ch.dead:
+			Adapter.rest(ch, kind)
 	world.clock.elapsed += (LONG_REST_MINUTES if kind == "long-rest" else SHORT_REST_MINUTES)
 	if kind == "long-rest":
 		party.last_long_rest_at = world.clock.elapsed
@@ -416,8 +417,7 @@ static func stock_by_service(s, m: Dictionary) -> Dictionary:
 # The Healer: everyone standing back to full, flat fee, no clock time and no
 # long-rest cooldown — that's what you're paying to skip. Refuses when nobody
 # is actually hurt rather than taking the gold for nothing (the silent-no-op
-# lesson again); the dead are not the healer's department (Party.REVIVE_COST
-# is, and stays where it is).
+# lesson again).
 static func heal(party) -> Dictionary:
 	var hurt: Array = []
 	for ch in party.roster:
