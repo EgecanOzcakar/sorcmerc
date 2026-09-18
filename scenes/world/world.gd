@@ -370,6 +370,11 @@ func _small_world() -> World:
 	var goblins := w.add_party(World.RoamingParty.new("goblins", Vector2(380, 300), "goblinoid"))
 	goblins.troops = [{"role": "heavy", "level": 1}, {"role": "heavy", "level": 1}, {"role": "light", "level": 2}]
 	WorldAI.hunt(goblins)
+	# A beast pack, now that assets/beasts/ covers the faction: fights it as a
+	# forest-clearing roster (Scaler.THEME_FACTION), so the models get seen.
+	var wolves := w.add_party(World.RoamingParty.new("wolves", Vector2(-150, 180), "beast"))
+	wolves.troops = [{"role": "light", "level": 1}, {"role": "light", "level": 1}, {"role": "light", "level": 2}]
+	WorldAI.hunt(wolves)
 	var patrol := w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "human"))
 	patrol.troops = [{"role": "heavy", "level": 2}, {"role": "heavy", "level": 2}]
 	WorldAI.patrol(patrol, [Vector2(-120, 380), Vector2(-360, 260), Vector2(0, 0)])
