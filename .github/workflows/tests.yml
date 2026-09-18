@@ -46,6 +46,19 @@ jobs:
       - name: Run the headless suite
         run: tools/run_tests.sh
 
+  # What a build calls itself is decided by a shell script reading git history
+  # (tools/build_version.sh), and every branch of it is a question about tags
+  # and commit distance — so it carries its own self-test, which builds a
+  # throwaway repo in a temp dir and checks the version each channel prints.
+  # Its own job because it needs neither Godot nor node, and it is a second.
+  version:
+    name: build version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Self-test the version convention
+        run: tools/build_version.sh --self-test
+
   # The bug reporter's relay is a Cloudflare Worker, so it is JavaScript and the
   # Godot image cannot run its tests. Its own job, on plain node: no network, no
   # Cloudflare account, and it is seconds.

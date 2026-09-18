@@ -277,11 +277,53 @@ before anything is sent. Every report is also written to `user://bug_reports/`
 first, so a blocked popup or a machine with no browser costs nothing.
 
 The version on a report comes from `application/config/version` in
-`project.godot`; `.github/workflows/release.yml` stamps the real tag into it at
-export time, so a run from source says `0.1.0-dev` and a release says `v0.2.1`.
+`project.godot`; `.github/workflows/release.yml` stamps the real build version
+into it at export time, so a run from source says `0.1.0-dev` and a published
+build says what `tools/build_version.sh` decided (see **Versions** below).
 That workflow also stamps the relay URL, from a `BUG_RELAY_URL` repository
 variable, the same way. `SORCMERC_BUG_RELAY` overrides it for a local run
 against `wrangler dev`.
+
+## Versions
+
+Every published build carries one version string, and the same one twice: it is
+stamped into `project.godot` so it rides on every bug report, and handed to
+butler as the itch.io build's user version. `tools/build_version.sh` is the only
+thing that decides it — `tools/build_version.sh --help` has the long version.
+
+| pushed | itch.io channel | version |
+| --- | --- | --- |
+| tag `v0.2.1` | `web` | `0.2.1` |
+| tag `test-2026-09-11` | `web-playtest` | `0.2.2-playtest.7+g1a2b3c4` |
+| `master` | `web-dev` | `0.2.2-dev.7+g1a2b3c4` |
+| nothing (run from source) | — | `0.1.0-dev` |
+
+All of it is SemVer 2.0.0, which is the point: the three channels used to
+publish `v0.2.1`, `test-2026-09-11` and `dev-47-1a2b3c4` — three shapes that
+compare against each other only by accident, and two that never named the
+commit they were built from. Now `0.2.1 < 0.2.2-dev.7 < 0.2.2-playtest.7 <
+0.2.2` by the spec's own precedence rules, and every pre-release build says
+which commit it is.
+
+Two things worth knowing about the shape:
+
+- A pre-release build is named for the release it is **heading toward**, not the
+  one behind it. Seven commits past `v0.2.1` is `0.2.2-dev.7`, because anything
+  spelled `0.2.1-…` sorts *below* the `0.2.1` it is already newer than. (If the
+  nearest tag is itself a pre-release, `v0.3.0-rc.1`, the release it heads for
+  is `0.3.0` and nothing is bumped.)
+- The number after the channel is commits since the nearest `v*` tag, so it only
+  goes up; the `+g…` is the short commit sha, in build metadata, which SemVer
+  precedence is required to ignore. Until the first `v*` tag exists there is no
+  release to count from, so builds are `0.1.0-dev.N` — heading for a first
+  `0.1.0`.
+
+A `v*` tag that is not `v<semver>` fails the run instead of publishing: `v0.2.1`
+and `v0.3.0-rc.1` are releases, `v2026-09-11` is a mistake. Playtest tags are
+free-form labels for humans and are not versions — the build they produce is
+versioned by its commit, and the tag names the run in the Actions log.
+`tools/build_version.sh --self-test` checks all of this against a throwaway git
+repo, and `.github/workflows/tests.yml` runs it on every pull request.
 
 ## Status
 

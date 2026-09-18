@@ -77,10 +77,23 @@ func test_flatten() -> void:
 
 # Regression: project.godot takes `;` comments, not `#` — a `#` above the key
 # makes Godot drop it and every report goes out stamped "dev".
+#
+# The shape is checked too, because it is a convention and not just a string:
+# tools/build_version.sh stamps SemVer into every published build (0.2.1,
+# 0.2.2-dev.7+g1a2b3c4) and the placeholder a run from source carries has to be
+# the same kind of thing, or "0.1.0-dev" and "v0.1.0" are two conventions and a
+# report cannot be compared against a build page.
 func test_version_is_declared() -> void:
-	check(String(ProjectSettings.get_setting("application/config/version", "")) != "",
-		"project.godot declares application/config/version")
+	var v := String(ProjectSettings.get_setting("application/config/version", ""))
+	check(v != "", "project.godot declares application/config/version")
 	check(Report.version() != "dev", "...so no report goes out with the fallback version")
+	# SemVer 2.0.0's own grammar, the same one tools/build_version.sh enforces.
+	var semver := RegEx.create_from_string(
+		r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)" +
+		r"(-((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?" +
+		r"(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$")
+	check(semver.search(v) != null,
+		"application/config/version is SemVer, like every build the release workflow stamps (got %s)" % v)
 
 func test_body() -> void:
 	Report.clear_trail()
