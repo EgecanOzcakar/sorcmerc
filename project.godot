@@ -11,9 +11,12 @@ config_version=5
 [application]
 
 config/name="sorcmerc"
-; Stamped into a release by .github/workflows/release.yml; a run from source
-; leaves it as-is. core/bug_report.gd puts it on every bug report, which is the
-; only reason the game knows its own version at all.
+; Stamped into a published build by .github/workflows/release.yml, from
+; tools/build_version.sh (0.2.1 for a release, 0.2.2-dev.7+g1a2b3c4 off master);
+; a run from source leaves the SemVer placeholder below as-is. Keep it in step
+; with that script's BASE_WHEN_UNTAGGED, and keep it SemVer — tests/
+; test_bug_report.gd checks the shape. core/bug_report.gd puts it on every bug
+; report, which is the only reason the game knows its own version at all.
 config/version="0.1.0-dev"
 run/main_scene="res://scenes/game/game.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
