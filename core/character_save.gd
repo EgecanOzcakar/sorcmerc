@@ -191,3 +191,41 @@ static func load_all() -> Array:
 
 static func delete(slug: String) -> bool:
 	return DirAccess.remove_absolute(path_for(slug)) == OK
+
+# --- #104: presets -----------------------------------------------------------
+# A build kept to make again: the same file shape, in its own folder, keyed by
+# the name. Loading one hands back a copy with no identity (id ""), so the
+# creator mints a fresh character from it rather than resurrecting the original.
+static var PRESET_DIR: String = SaveDir.path("presets")
+
+static func save_preset(ch) -> String:
+	DirAccess.make_dir_recursive_absolute(PRESET_DIR)
+	var d := to_dict(ch)
+	d["id"] = slugify(ch.cname)
+	d["hp_current"] = -1
+	var path := "%s/%s.json" % [PRESET_DIR, d["id"]]
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		push_warning("cannot write %s" % path)
+		return ""
+	f.store_string(JSON.stringify(d, "  "))
+	f.close()
+	return path
+
+static func list_presets() -> Array[String]:
+	var out: Array[String] = []
+	var dir := DirAccess.open(PRESET_DIR)
+	if dir == null:
+		return out
+	for f in dir.get_files():
+		if f.ends_with(".json"):
+			out.append(f.trim_suffix(".json"))
+	out.sort()
+	return out
+
+static func load_preset(slug: String):
+	var ch = load_path("%s/%s.json" % [PRESET_DIR, slug])
+	if ch != null:
+		ch.id = ""
+		ch.hp_current = -1
+	return ch

@@ -327,6 +327,33 @@ static func all() -> Array:
 # --- T7: generated encounters -----------------------------------------
 # Where the live party stands when a campaign node drops them into a room.
 const PARTY_STARTS := [Vector2i(2, 0), Vector2i(2, 2), Vector2i(1, 1), Vector2i(1, 0)]
+
+# #114: where the party stands when the fight opens — a different cluster of
+# four along the low-q edge each fight, off the seed, so the deployment is not
+# the same picture every time. The marching order still fills it front-first
+# (the two highest-q hexes are the front rank, as PARTY_STARTS' are), and the
+# foes still spawn ahead of the front rank (_foe_spots). Falls back to
+# PARTY_STARTS on a board too small to offer a cluster.
+static func party_starts(b: Dictionary, seed: int) -> Array:
+	var blocked: Array = b.get("objects", []).filter(
+		func(o): return o.get("blocks_movement", false)).map(func(o): return o["pos"])
+	var open: Array = b["hexes"].filter(func(h): return not (h in blocked))
+	if open.size() < 8:
+		return PARTY_STARTS
+	var q0 := 1 << 30
+	for h in open:
+		q0 = mini(q0, h.x)
+	var edge: Array = open.filter(func(h): return h.x <= q0 + 2)
+	if edge.is_empty():
+		return PARTY_STARTS
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var anchor: Vector2i = edge[rng.randi() % edge.size()]
+	var near: Array = open.duplicate()
+	near.sort_custom(func(a, c): return Hex.distance(a, anchor) < Hex.distance(c, anchor))
+	var cluster: Array = near.slice(0, 4)
+	cluster.sort_custom(func(a, c): return a.x > c.x or (a.x == c.x and a.y < c.y))
+	return cluster
 const SPAWN_GAP := 6    # no foe spawns closer than this to any party member
 # T36/T37: measured lever, not a guess -- 150-seed sweeps found this the best
 # single difficulty knob (+6.6 win-rate points over gap 3, no fight-length

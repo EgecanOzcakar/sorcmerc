@@ -413,6 +413,7 @@ func summary(id: String) -> Dictionary:
 		"hp": ch.hp_current if ch.hp_current >= 0 else s.max_hp,
 		"max_hp": s.max_hp,
 		"active": is_active(id),
+		"dead": ch.dead,
 		# Issue #27: what a party page needs to say about somebody without
 		# making the player open their sheet one at a time. Trained skills only
 		# — all eighteen of them, most at +0, is the profile screen's job — and

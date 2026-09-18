@@ -97,7 +97,15 @@ func _ready() -> void:
 	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cols.add_theme_constant_override("separation", 16)
 	root.add_child(cols)
-	cols.add_child(_column("Roster", _roster_col, 1.4))
+	_create_btn = Button.new()
+	Icons.clicks(_create_btn)
+	_create_btn.text = "Create new"
+	_create_btn.theme_type_variation = "Primary"
+	_create_btn.pressed.connect(func():
+		if roster_locked:
+			return
+		_on_create_new())
+	cols.add_child(_column("Roster", _roster_col, 1.4, _create_btn))   # #102: the button lives with the list it adds to
 	cols.add_child(_column("Marching, up to %d" % Party.MAX_ACTIVE, _slot_col, 1.0))
 
 	root.add_child(_footer())
@@ -112,14 +120,20 @@ func _ready() -> void:
 	_refresh()
 
 # A titled, scrolling column.
-func _column(title: String, body: VBoxContainer, stretch: float) -> Control:
+func _column(title: String, body: VBoxContainer, stretch: float, corner: Control = null) -> Control:
 	var wrap := VBoxContainer.new()
 	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	wrap.size_flags_stretch_ratio = stretch
+	var head := HBoxContainer.new()
+	wrap.add_child(head)
 	var cap := Label.new()
 	cap.text = title
 	cap.theme_type_variation = "Caption"
-	wrap.add_child(cap)
+	cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(cap)
+	if corner != null:   # #102: the column's own action, top-right of its list
+		head.add_child(corner)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -158,16 +172,6 @@ func _footer() -> Control:
 	# (see below) since swapping the active roster changes who's offered.
 	_fig_row.name = "FigureRow"
 	row.add_child(_fig_row)
-
-	_create_btn = Button.new()
-	Icons.clicks(_create_btn)
-	_create_btn.text = "Create new"
-	_create_btn.theme_type_variation = "Primary"
-	_create_btn.pressed.connect(func():
-		if roster_locked:
-			return
-		_on_create_new())
-	row.add_child(_create_btn)
 
 	_orders_row.name = "OrdersRow"
 	_orders_row.add_theme_constant_override("separation", 4)
@@ -397,6 +401,10 @@ func _card(sm: Dictionary) -> Control:
 		or (not sm["active"] and party.active.size() >= Party.MAX_ACTIVE)
 	if roster_locked:
 		bench.tooltip_text = locked_note
+	if sm.get("dead", false):   # #109: say so, and say what brings them back
+		bench.text = "Dead"
+		bench.disabled = true
+		bench.tooltip_text = "Dead. A settlement healer raises them for %d ◉; so does a Revivify caster with a 3rd-level slot, or a Scroll of Resurrection." % Party.REVIVE_COST
 	bench.pressed.connect(func():
 		if roster_locked:
 			return

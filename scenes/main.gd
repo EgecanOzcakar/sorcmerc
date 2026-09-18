@@ -464,7 +464,8 @@ func _new_game(forced := 0) -> void:
 	var sp: Dictionary = (spec if not spec.is_empty() else Scaler.roster_for(chars, difficulty)).duplicate(true)
 	sp["seed"] = _seed
 	result = {}
-	cb = Encounter.build(sp, party.to_combatants(Encounter.PARTY_STARTS))   # sp["theme"] picks the board
+	var board: Dictionary = Encounter.board_for(String(sp.get("theme", "")), _seed)   # sp["theme"] picks the board
+	cb = Encounter.build(sp, party.to_combatants(Encounter.party_starts(board, _seed)), board)   # #114
 	cb.party = party   # the stash is the potion shelf (core/potions.gd)
 	# The one thing that makes a reaction stop the fight and ask. Installed only
 	# here, only for a player who is actually watching: with it unset the
@@ -2553,6 +2554,11 @@ class Board extends Control:
 	func tick(dt: float) -> void:
 		if cb == null:
 			return
+		# #112: lay out FIRST. _layout() used to run at the end of this, so the
+		# re-base and every _pix() below saw last frame's origin while _draw()
+		# saw this frame's — one frame of lag per frame of drag, which is the
+		# wobble the discs and HP bars had after #71 fixed the figures' slide.
+		_layout()
 		_rebase_view()
 		var k := clampf(dt * 12.0, 0.0, 1.0)
 		var dirty := false
@@ -2637,7 +2643,6 @@ class Board extends Control:
 			dirty = true
 		if dirty:
 			queue_redraw()
-		_layout()
 		var key := hash([_origin, main.hex_px, cb.board])
 		if key != _ground_key:
 			_ground_key = key

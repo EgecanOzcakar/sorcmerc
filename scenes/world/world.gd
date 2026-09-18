@@ -1953,6 +1953,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if _combat != null:
 		return
+	# #106: the party screen opened at the inn's counter sits OVER the visit.
+	# Esc there used to fall through to the visit's own bindings underneath —
+	# town square, then Leave — so "Back to the inn" put the party on the map
+	# outside town, where the night had bands waiting.
+	if _party_overlay != null and not _visit.is_empty():
+		if event.keycode in [KEY_ESCAPE, KEY_P]:
+			accept_event()
+			_close_party()
+		return
 	# Out on the map, before the settlement bindings below: the two keys every
 	# player presses first. Esc backs out of whatever panel is up and otherwise
 	# opens the pause menu; space is the Pause button without the trip to the
@@ -2082,6 +2091,14 @@ func _buy_rumor(lead: Dictionary) -> void:
 	var r: Dictionary = Rumors.buy(lead, party, world)
 	if bool(r.get("ok", false)):
 		Sound.play_sfx("quest")
+		_autosave()
+	_build_visit_panel()
+	_say(String(r.get("text", "")))
+
+func _raise_dead(id: String) -> void:
+	var r: Dictionary = Visit.raise_dead(party, id)
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("heal")
 		_autosave()
 	_build_visit_panel()
 	_say(String(r.get("text", "")))
@@ -2585,6 +2602,10 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		if service == "healer":
 			_trade_row(rows, "Patch up the whole party — %d ◉ (no rest, no waiting)" % Visit.HEAL_COST,
 				"Heal", _heal)
+			for ch in party.roster:   # #109
+				if ch.dead:
+					_trade_row(rows, "Raise %s from the dead — %d ◉" % [ch.cname, Party.REVIVE_COST],
+						"Raise", _raise_dead.bind(ch.id), party.gold < Party.REVIVE_COST)
 			if Visit.can_work_healer(party):
 				var worked: bool = _visit.get("worked", false)
 				_trade_row(rows, "Work a shift in the ward — your restoration spell opens the door, Medicine sets the wage",
@@ -2985,8 +3006,38 @@ func _gui_input(e: InputEvent) -> void:
 		elif e.button_index == MOUSE_BUTTON_LEFT:
 			var p := world.player()
 			if p != null:
-				world.set_goal(p, _unpix(e.position))
+				world.set_goal(p, _click_target(e.position))
 		queue_redraw()
+
+# #110/#113: a settlement or lair is drawn as a diorama standing UP from its
+# ground point, so a click on its roofs lands on the ground behind it and the
+# party walks past the town. A click anywhere on a landmark's model is a click
+# on the landmark: the goal is its position, and the ring is drawn there.
+func _click_target(sp: Vector2) -> Vector2:
+	var best := Vector2.INF
+	var best_d := INF
+	for s in world.settlements:
+		var at := _pix(s.position)
+		var h: float = float(Settlements3D.TARGET_HEIGHT.get(s.kind, 25.7)) * ISO_GAIN * _zoom
+		if _in_model_box(sp, at, h):
+			var d := sp.distance_to(at)
+			if d < best_d:
+				best = s.position; best_d = d
+	for l in world.lairs:
+		if not l.discovered:
+			continue
+		var at := _pix(l.position)
+		var h: float = Lairs3D.TARGET_HEIGHT * ISO_GAIN * _zoom
+		if _in_model_box(sp, at, h):
+			var d := sp.distance_to(at)
+			if d < best_d:
+				best = l.position; best_d = d
+	return best if best != Vector2.INF else _unpix(sp)
+
+# The screen box a diorama of height `h` (px) fills over its ground point `at`:
+# roughly as wide as it is tall, standing on a shallow ellipse.
+static func _in_model_box(sp: Vector2, at: Vector2, h: float) -> bool:
+	return absf(sp.x - at.x) <= h * 0.7 and sp.y <= at.y + h * 0.3 and sp.y >= at.y - h
 
 # --- drawing -----------------------------------------------------------
 func _draw() -> void:
@@ -2994,13 +3045,12 @@ func _draw() -> void:
 	_draw_ground()
 	var p := world.player()
 	if p != null and not p.at_goal():
-		# #95: the way round, when there is one — a faint gold thread through the
-		# corners to the ring at the end, so a detour reads as a plan, not a stray
+		# #95/#115: the way there — a faint gold thread from the party through
+		# any corners to the ring at the end. Straight or routed, same thread.
 		var pts := PackedVector2Array([_pix(p.position), _pix(p.goal)])
 		for wp in p.route:
 			pts.append(_pix(wp))
-		if pts.size() > 2:
-			draw_polyline(pts, Color(Icons.COL_GOLD, 0.45), 1.5, true)
+		draw_polyline(pts, Color(Icons.COL_GOLD, 0.45), 1.5, true)
 		draw_polyline(_ring(_pix(pts[-1]), 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
 
 	# One painter's-order pass over everything standing on the ground.
@@ -3308,8 +3358,15 @@ func _draw_lair(l, at: Vector2, live := true) -> void:
 		var fs := int(18 * _zoom)
 		draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, _remembered(Icons.COL_HEAD, live))
-	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), l.sname,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _remembered(Icons.COL_BODY, live))
+	_name_under(at, r * 0.9 + 12.0, l.sname, _remembered(Icons.COL_BODY, live))
+
+# #111: a marker's name, centred under it. It used to start at the marker's
+# left edge (-r), and r grows with the zoom while the text does not, so the
+# name slid sideways as the map zoomed.
+func _name_under(at: Vector2, dy: float, text: String, col: Color) -> void:
+	var w := ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+	draw_string(ThemeDB.fallback_font, at + Vector2(-w * 0.5, dy), text,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, col)
 
 func _draw_settlement(s, at: Vector2, live := true) -> void:
 	var col := _remembered(faction_color(s.faction), live)
@@ -3344,8 +3401,7 @@ func _draw_settlement(s, at: Vector2, live := true) -> void:
 		bases.sort_custom(func(a, b): return a.y < b.y)
 		for k in bases.size():
 			_draw_building(bases[k], h, style + k, pair + k, live)
-	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), s.sname,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _remembered(Icons.COL_BODY, live))
+	_name_under(at, r * 0.9 + 12.0, s.sname, _remembered(Icons.COL_BODY, live))
 
 # One building: a whole house in one cell now (the old Town Pack's modular
 # left/right wall halves are gone with it). `base` is the house's near ground
@@ -3391,6 +3447,4 @@ func _draw_party(p, at: Vector2, live := true) -> void:
 	# off their troops[] flavour roster (RoamingParty.highest_troop's source).
 	var count: int = party.active.size() if p.is_player else p.troops.size()
 	var label: String = "You" if p.is_player else p.id.capitalize()
-	draw_string(ThemeDB.fallback_font, at + Vector2(-rad * 1.3, rad * 1.3 + 12.0),
-		"%s (%d)" % [label, count], HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-		_remembered(Icons.COL_BODY, live))
+	_name_under(at, rad * 1.3 + 12.0, "%s (%d)" % [label, count], _remembered(Icons.COL_BODY, live))
