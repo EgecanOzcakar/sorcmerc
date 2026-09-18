@@ -3308,8 +3308,15 @@ func _draw_lair(l, at: Vector2, live := true) -> void:
 		var fs := int(18 * _zoom)
 		draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, _remembered(Icons.COL_HEAD, live))
-	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), l.sname,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _remembered(Icons.COL_BODY, live))
+	_name_under(at, r * 0.9 + 12.0, l.sname, _remembered(Icons.COL_BODY, live))
+
+# #111: a marker's name, centred under it. It used to start at the marker's
+# left edge (-r), and r grows with the zoom while the text does not, so the
+# name slid sideways as the map zoomed.
+func _name_under(at: Vector2, dy: float, text: String, col: Color) -> void:
+	var w := ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+	draw_string(ThemeDB.fallback_font, at + Vector2(-w * 0.5, dy), text,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, col)
 
 func _draw_settlement(s, at: Vector2, live := true) -> void:
 	var col := _remembered(faction_color(s.faction), live)
@@ -3344,8 +3351,7 @@ func _draw_settlement(s, at: Vector2, live := true) -> void:
 		bases.sort_custom(func(a, b): return a.y < b.y)
 		for k in bases.size():
 			_draw_building(bases[k], h, style + k, pair + k, live)
-	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), s.sname,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _remembered(Icons.COL_BODY, live))
+	_name_under(at, r * 0.9 + 12.0, s.sname, _remembered(Icons.COL_BODY, live))
 
 # One building: a whole house in one cell now (the old Town Pack's modular
 # left/right wall halves are gone with it). `base` is the house's near ground
@@ -3391,6 +3397,4 @@ func _draw_party(p, at: Vector2, live := true) -> void:
 	# off their troops[] flavour roster (RoamingParty.highest_troop's source).
 	var count: int = party.active.size() if p.is_player else p.troops.size()
 	var label: String = "You" if p.is_player else p.id.capitalize()
-	draw_string(ThemeDB.fallback_font, at + Vector2(-rad * 1.3, rad * 1.3 + 12.0),
-		"%s (%d)" % [label, count], HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-		_remembered(Icons.COL_BODY, live))
+	_name_under(at, rad * 1.3 + 12.0, "%s (%d)" % [label, count], _remembered(Icons.COL_BODY, live))
