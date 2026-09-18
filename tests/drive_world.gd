@@ -1,6 +1,6 @@
 # O2/O4 — scene-driver smoke test for the open-world map screen: it renders, the
 # clock runs, a left-click moves the player party, pause stops it, the camera
-# pans/zooms without crashing, and closing on a hostile party hands off to a real
+# pans/turns/zooms without crashing, and closing on a hostile party hands off to a real
 # scenes/main.tscn fight that freezes the map until it is won.
 #   godot --headless --path . -s tests/drive_world.gd
 extends SceneTree
@@ -149,7 +149,7 @@ func _run() -> void:
 	if screen.world.clock.is_paused() or p.at_goal():
 		fail("a new destination did not start the clock again")
 
-	# --- camera: drag-pan and scroll-zoom ----------------------------------
+	# --- camera: drag-pan, middle-drag orbit and scroll-zoom ---------------
 	var pan0: Vector2 = screen._pan
 	var m := InputEventMouseMotion.new()
 	m.button_mask = MOUSE_BUTTON_MASK_RIGHT
@@ -158,6 +158,23 @@ func _run() -> void:
 	screen._gui_input(m)
 	if screen._pan.is_equal_approx(pan0):
 		fail("drag did not pan the camera")
+
+	# The same drag on the middle button turns and tilts instead of panning.
+	# Driven through _gui_input so the button split itself is what is tested —
+	# tests/test_world_camera.gd has the projection maths.
+	var yaw0: float = screen.yaw()
+	var pitch0: float = screen.pitch()
+	var o := InputEventMouseMotion.new()
+	o.button_mask = MOUSE_BUTTON_MASK_MIDDLE
+	o.position = Vector2(600, 400)
+	o.relative = Vector2(90, -35)
+	screen._gui_input(o)
+	if is_equal_approx(screen.yaw(), yaw0) or is_equal_approx(screen.pitch(), pitch0):
+		fail("middle-drag did not turn and tilt the camera")
+	await step(2)     # a frame at a turned camera, so the ground and the props are rebuilt at one
+	screen.reset_view()
+	if not (is_equal_approx(screen.yaw(), screen.ISO_YAW) and is_equal_approx(screen.pitch(), screen.ISO_PITCH)):
+		fail("reset_view did not put the camera back")
 
 	# Zoom keeps the world point under the cursor put, and clamps at both ends.
 	var at := Vector2(700, 350)

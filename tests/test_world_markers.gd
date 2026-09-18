@@ -116,10 +116,10 @@ func _init() -> void:
 	var diorama: Node3D = s3d._dioramas.get(town.id)
 	if diorama != null:
 		p.position = town.position + Vector2(10, 10)
-		s3d._reposition()
+		s3d.reposition()
 		check(_transparency_of(diorama) == 0.0, "standing in town, the town is solid")
 		p.position = town.position + Vector2(World.VISION_RADIUS * 5.0, 0.0)
-		s3d._reposition()
+		s3d.reposition()
 		check(_transparency_of(diorama) > 0.0, "walked away, the town is a memory")
 
 	# A chevron quotes travel time, and the map's clock runs in minutes: at

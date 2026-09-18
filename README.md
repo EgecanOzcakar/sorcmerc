@@ -55,6 +55,18 @@ scenes/
                     it is in, and the button that starts one
   main.gd/.tscn    the combat screen: hex board, tokens, action log, buttons
   campaign/        the run screen: route choices, shop/rest/treasure, journal
+  world/           the overworld map, as a real 3D world you can turn, tilt,
+                    pan and zoom. world.gd owns the screen (the camera, the
+                    HUD, and every mechanism that happens on the map — travel,
+                    encounters, town visits, delves); world_view3d.gd owns the
+                    3D scene it draws into — one viewport, one camera, one sun,
+                    with the ground as a mesh (assets/world/ground/*.gdshader),
+                    the woods as instanced trees (scatter3d.gd), footprints as
+                    decals lying on the ground (ground_marks3d.gd) and every
+                    town, lair and marching band as a model standing on it
+                    (settlements3d/lairs3d/party3d, over props3d.gd). The
+                    *_kit.gd files build a settlement or a lair out of
+                    primitives for whatever the generated GLBs do not cover
   creator/, party/, profile/, progression/, achievements/, settings/
                    character creation + leveling, roster management (and
                    party/prepare.gd, the daily-prep page a cleric, druid,
@@ -143,7 +155,7 @@ in separate directories, so any file's origin is answerable from its path alone:
 |---|---|---|
 | `assets/audio/` | procedurally synthesized, stdlib only — **not AI** | `tools/gen_audio.py`, `tools/synth.py` |
 | `assets/icons/` | SVG path data written as source, stdlib only — **no image model**; the coordinates were authored with a coding assistant, which the disclosure exempts | `tools/gen_action_icons.py` |
-| `assets/world/` | sourced packs | `License.txt` per subdirectory |
+| `assets/world/` | in-house ground textures + shaders written as source | `assets/world/README.md` |
 | `assets/fonts/` | DejaVu | `LICENSE-DejaVu.txt` |
 
 **As of 2026-09-12 nothing in this repo is AI-generated.** Anything added under the new
@@ -234,7 +246,7 @@ The `tests/shot_*.gd` scripts render one for you:
 
 ```sh
 godot --path . -s tests/shot.gd                        # a combat board mid-fight -> combat_screen.png
-godot --path . -s tests/shot_world.gd                  # the open world -> world_screen.png (not headless: the capture hangs)
+godot --path . -s tests/shot_world.gd                  # the open world, from two camera angles -> world_screen.png, world_turned.png (not headless: the capture hangs)
 godot --headless --path . -s tests/shot_screens.gd     # every menu screen -> shots_tmp/ (SHOT_ONLY=party for one)
 ```
 

@@ -1,20 +1,27 @@
-# Tier 0 for settlements: a real 3D diorama standing where World draws a
-# settlement's building cluster. Shared SubViewport/camera/projection rig
-# lives in world_diorama3d.gd (also used by Lairs3D) — this file only owns
-# what's settlement-specific: the (faction, kind) model lookup and which
-# world list to walk.
+# Every settlement on the map, as a building standing in the shared 3D world.
+# The rig it lives in — viewport, camera, sun — belongs to
+# scenes/world/world_view3d.gd, and the parts shared with Lairs3D and Party3D
+# to scenes/world/props3d.gd. This file owns what is settlement-specific: the
+# (faction, kind) model lookup and which world list to walk.
 #
-# What this layer does NOT own: the shadow ellipse, footprint ring, and name
-# label World._draw_settlement() already draws — those stay shared across
-# every settlement regardless of tier, same contract as Board's HP bar. This
-# only replaces the building-cluster sprite blocks.
-extends "res://scenes/world/world_diorama3d.gd"
+# What this layer does NOT own: the footprint under the settlement (its
+# shadow, its lit disc, its faction ring — scenes/world/ground_marks3d.gd) or
+# the name label above it (World._draw()). Those are shared across every kind
+# of landmark. This is the building.
+#
+# There is no sprite tier below this one any more. There used to be: a town
+# whose (faction, kind) had no model dropped through has_model() to a flat
+# painted building drawn by World._draw_settlement(). A flat sprite in a world
+# with a camera that turns is a cardboard cut-out, so the fallback is now the
+# kit, which covers every faction and size the game can produce —
+# tests/test_settlement_kit.gd is what holds it to that.
+extends "res://scenes/world/props3d.gd"
 
 const SettlementKit := preload("res://scenes/world/settlement_kit.gd")
 
 # Which tier-0 source builds a diorama, with the same graceful fallback either
-# way — whatever neither source covers drops through has_model() to the 2D
-# BuildingTex sprite tier, exactly as before.
+# way — whichever source covers a settlement builds it, and the kit covers
+# every faction and size the game can produce, so nothing falls past the two.
 #
 #   "glb"  the twelve dioramas in assets/settlements/, REBUILT low-poly:
 #          8k flat-faceted triangles carrying their old atlas as vertex colour
@@ -81,6 +88,7 @@ static func dress(m: Node3D) -> void:
 const TARGET_HEIGHT := {"camp": 15.6, "town": 25.7, "city": 45.0}
 
 var _dioramas := {}            # settlement id -> Node3D
+var _radius := {}              # ...and how much ground it stands on, measured (props3d.footprint_of)
 
 
 func _model_path(s) -> String:
@@ -95,14 +103,16 @@ func reset(world) -> void:
 	for n in _dioramas.values():
 		n.queue_free()
 	_dioramas.clear()
+	_radius.clear()
 	for s in world.settlements:
 		var m := _build(s)
 		if m == null:
 			continue
 		var holder := Node3D.new()
-		_sub.add_child(holder)
+		add_child(holder)
 		holder.add_child(m)
 		_dioramas[s.id] = holder
+		_radius[s.id] = footprint_of(m)
 
 
 # The one place the two sources differ. A kit diorama is built in World units at
@@ -115,7 +125,10 @@ func _build(s) -> Node3D:
 		return SettlementKit.build(s.faction, s.kind, s.id)
 	var scene := _model(_model_path(s))
 	if scene == null:
-		return null
+		# No GLB for this (faction, kind). The kit is the fallback rather than
+		# nothing, because "nothing" used to mean a 2D sprite and there is no
+		# 2D tier left to fall to.
+		return SettlementKit.build(s.faction, s.kind, s.id) if SettlementKit.has(s.faction, s.kind) else null
 	var m := scene.instantiate()
 	_fit_height(m, float(TARGET_HEIGHT.get(s.kind, 1.0)))
 	dress(m)
@@ -130,14 +143,21 @@ func _build(s) -> Node3D:
 	return m
 
 
-func _reposition() -> void:
+func reposition() -> void:
 	var ppos := _player_pos()
 	for s in world_map.world.settlements:
 		var n: Node3D = _dioramas.get(s.id)
 		if n == null:
 			continue
 		# T9x: settlements are landmarks, always shown regardless of fog —
-		# matches World._draw()'s own 2D layer (both changed together).
+		# matches the footprint and the name label, which are also unconditional.
 		n.visible = true
-		n.position = world_for_screen(world_map._pix(s.position))
+		n.position = at(s.position)
 		_fade(n, not world_map.world.is_visible_now(s.position, ppos))
+
+
+# How much ground this settlement's model covers, in world units — what
+# World.ground_marks() grows the footprint ring to clear. 0.0 for a settlement
+# with no model, which means the caller's own default stands.
+func footprint(s) -> float:
+	return float(_radius.get(s.id, 0.0))

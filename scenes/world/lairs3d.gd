@@ -1,13 +1,18 @@
-# Tier 0 for lairs: a real 3D diorama standing where World draws a discovered
-# lair's skull marker. Shared SubViewport/camera/projection rig lives in
-# world_diorama3d.gd (also used by Settlements3D) — this file only owns
-# what's lair-specific: the per-id model lookup, hiding an undiscovered
-# lair's diorama, and which world list to walk.
+# Every discovered lair on the map, as a diorama standing in the shared 3D
+# world. The rig it lives in belongs to scenes/world/world_view3d.gd and the
+# shared parts to scenes/world/props3d.gd; this file owns what is lair-specific:
+# the per-id model lookup, hiding an undiscovered lair, and which world list to
+# walk.
 #
-# What this layer does NOT own: the shadow ellipse, footprint ring, and name
-# label World._draw_lair() already draws — those stay shared, same contract
-# as Settlements3D. This only replaces the "☠" glyph.
-extends "res://scenes/world/world_diorama3d.gd"
+# What this layer does NOT own: the footprint under it (scenes/world/
+# ground_marks3d.gd) or the name label above it (World._draw()).
+#
+# The "☠" glyph this used to fall back to is gone with the rest of the 2D prop
+# tier. It cannot come back: a flat glyph pasted over a map whose camera turns
+# has no place to stand. Every lair the game can produce has a kit (the five ids
+# in LairKit.LAIRS, which is also the whole of procedural_world.gd's list), so
+# there is nothing left for it to cover.
+extends "res://scenes/world/props3d.gd"
 
 const LairKit := preload("res://scenes/world/lair_kit.gd")
 
@@ -36,6 +41,7 @@ const MODELS := {
 const TARGET_HEIGHT := 22.0   # one size fits all — lairs aren't tiered like settlements
 
 var _dioramas := {}            # lair id -> Node3D
+var _radius := {}              # ...and how much ground it stands on, measured (props3d.footprint_of)
 
 
 func _model_path(l) -> String:
@@ -50,15 +56,17 @@ func reset(world) -> void:
 	for n in _dioramas.values():
 		n.queue_free()
 	_dioramas.clear()
+	_radius.clear()
 	for l in world.lairs:
 		var m := _build(l)
 		if m == null:
 			continue
 		var holder := Node3D.new()
-		_sub.add_child(holder)
+		add_child(holder)
 		holder.add_child(m)
 		holder.visible = l.discovered   # stays hidden — that's the whole mechanic — until found
 		_dioramas[l.id] = holder
+		_radius[l.id] = footprint_of(m)
 
 
 # Preferred source first, the other as fallback, null (so reset() skips it and
@@ -77,14 +85,20 @@ func _build(l) -> Node3D:
 	return LairKit.build(l.id) if kit else null
 
 
-func _reposition() -> void:
+func reposition() -> void:
 	var ppos := _player_pos()
 	for l in world_map.world.lairs:
 		var n: Node3D = _dioramas.get(l.id)
 		if n == null:
 			continue
 		n.visible = l.discovered and _explored(l.position)   # T9x: also fog of war
-		n.position = world_for_screen(world_map._pix(l.position))
-		# T9y: and a found lair you have walked away from is a memory, drawn
-		# the same washed-out way its 2D marker is.
+		n.position = at(l.position)
+		# T9y: and a found lair you have walked away from is a memory, faded
+		# the same way the ground it stands on is.
 		_fade(n, not world_map.world.is_visible_now(l.position, ppos))
+
+
+# How much ground this lair's diorama covers, in world units — see
+# Settlements3D.footprint(), same contract.
+func footprint(l) -> float:
+	return float(_radius.get(l.id, 0.0))

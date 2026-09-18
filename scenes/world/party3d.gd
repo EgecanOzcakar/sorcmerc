@@ -1,17 +1,24 @@
-# Tier 0 for every roaming party, player included: a real 3D figure
-# standing where World draws the flat PawnTex icon. Shared SubViewport/camera/
-# projection rig lives in world_diorama3d.gd (also used by Settlements3D and
-# Lairs3D) — this file only owns what's party-specific: picking a model from
-# the party's highest-leveled troop (RoamingParty.highest_troop(), core/
-# world.gd), facing the direction of travel, and walking. Parties move;
-# settlements and lairs don't, so this is the one diorama layer that needs
-# either — same lerp_angle trick Figures3D uses on the combat board.
+# Every roaming party, player included, as a figure walking the shared 3D
+# world. The rig it lives in belongs to scenes/world/world_view3d.gd and the
+# shared parts to scenes/world/props3d.gd; this file owns what is
+# party-specific: picking a model from the party's highest-leveled troop
+# (RoamingParty.highest_troop(), core/world.gd), facing the direction of
+# travel, and walking. Parties move; settlements and lairs don't, so this is
+# the one layer that needs either — same lerp_angle trick Figures3D uses on
+# the combat board.
 #
 # T9x: the player picks one of their own active party on the Party screen
 # (core/party.gd's overworld_figure — a member id) and that character's class
-# figure from HERO_MODELS stands for the band. Bench them, or pick nobody,
-# and it falls through has_model() to the flat, gold-ringed pawn, same
-# contract as every other uncovered lookup here.
+# figure from HERO_MODELS stands for the band. Bench them, or pick nobody, and
+# has_model() goes false and the band marches as a pawn instead — a turned
+# board-game piece in its faction's colour, built here out of primitives.
+#
+# That pawn used to be a flat painted sprite drawn over the map by
+# World._draw_party(). It is a real one now for the same reason everything else
+# on this map is: a camera that turns walks straight round the back of a
+# billboard. It is the only tier below a character model, and every band that
+# has no figure — a monster faction the art has never covered, a player with
+# nobody marching — gets it.
 #
 # ponytail — the walk is procedural, not animated. Every model this project
 # generates (assets/troops/*_idle.glb, assets/figures/*_idle.glb) ships
@@ -22,13 +29,14 @@
 # walking; up close it is obviously not one, because the legs never move.
 # The real fix is a `walk` clip out of the same generator that made the
 # idles — then delete the GAIT_* constants, _gait_pose() and its two state
-# dicts, keep _reposition()'s position/facing lines, and cross-fade
+# dicts, keep reposition()'s position/facing lines, and cross-fade
 # ap.play("walk") on the same moving/stopped signal this already computes.
 #
-# What this layer does NOT own: the shadow ellipse World._draw_party() draws
-# — that stays shared, same contract as Settlements3D/Lairs3D. This only
-# replaces the PawnTex sprite (and the faction-tint that comes with it).
-extends "res://scenes/world/world_diorama3d.gd"
+# What this layer does NOT own: the footprint under the band — its shadow, and
+# the gold halo that marks the player's own — which is shared with every other
+# landmark (scenes/world/ground_marks3d.gd), or the name and headcount label
+# above it (World._draw()).
+extends "res://scenes/world/props3d.gd"
 
 # Monster-faction parties (goblinoid, bandit, undead, ...) have no race and no
 # troops-with-roles — they get the same single figure-per-faction combat
@@ -43,9 +51,9 @@ const WorldModel := preload("res://core/world.gd")
 # core/world.gd's RoamingParty.faction is a Scaler.FACTIONS combat faction
 # (bandit, goblinoid, human, orc, ...), not one of the four races the troop
 # figures were generated for — most factions (goblinoid, undead, ...) have no
-# race counterpart at all, and that's fine: they fall through to the PawnTex
-# icon, same as any other uncovered lookup this session. Only the factions
-# that plausibly *are* one of the four races are mapped.
+# race counterpart at all, and that's fine: they fall through to the 3D pawn,
+# same as any other uncovered lookup here. Only the factions that plausibly
+# *are* one of the four races are mapped.
 const RACE_FOR_FACTION := {
 	"human": "human", "bandit": "human", "soldier": "human",
 	"orc": "orc", "dwarf": "dwarf", "elf": "elf",
@@ -57,6 +65,56 @@ const MODELS := {
 	"orc": {"heavy": "res://assets/troops/orc_heavy_idle.glb", "light": "res://assets/troops/orc_light_idle.glb", "spellcaster": "res://assets/troops/orc_spellcaster_idle.glb"},
 }
 const TARGET_HEIGHT := 15.0   # a person, not a building — smaller than any settlement/lair tier
+
+# --- the pawn -------------------------------------------------------------
+# A turned board-game piece: foot, waist, body, head. Built from primitives the
+# way scenes/world/kit_parts.gd builds a settlement, so it ships as a dozen
+# lines rather than a file, and tinted per band so whose army it is still reads
+# at a glance — which is the one job the flat sprite it replaces actually did.
+const PAWN_TRIS := 6          # radial segments: a low count is the look, not a budget
+# The turned body, bottom up: radius at the top, radius at the bottom, height,
+# and the centre height it sits at. One unit tall in total, so _fit_height()'s
+# TARGET_HEIGHT is the pawn's height in world units the same way it is a
+# figure's.
+const PAWN_SHAPE := [
+	[0.34, 0.42, 0.10, 0.05],   # foot
+	[0.12, 0.30, 0.16, 0.18],  # waist
+	[0.16, 0.13, 0.42, 0.47],  # body
+]
+const PAWN_HEAD_Y := 0.80
+const PAWN_HEAD_R := 0.19
+
+func _pawn(p) -> Node3D:
+	var root := Node3D.new()
+	root.name = "pawn"
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = world_map.faction_color(p.faction, p.is_player)
+	mat.roughness = 0.85
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	for part in PAWN_SHAPE:
+		var seg := CylinderMesh.new()
+		seg.top_radius = part[0]
+		seg.bottom_radius = part[1]
+		seg.height = part[2]
+		seg.radial_segments = PAWN_TRIS + 2
+		seg.rings = 0
+		root.add_child(_piece(seg, part[3], mat))
+	var head := SphereMesh.new()
+	head.radius = PAWN_HEAD_R
+	head.height = PAWN_HEAD_R * 2.0
+	head.radial_segments = PAWN_TRIS + 2
+	head.rings = 4
+	root.add_child(_piece(head, PAWN_HEAD_Y, mat))
+	return root
+
+
+static func _piece(mesh: Mesh, y: float, mat: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position.y = y
+	return mi
+
 
 # --- procedural walk (see the ponytail note in the header) -----------------
 # Tuned for a 15-unit figure read at map zoom: enough to say "walking", small
@@ -72,12 +130,13 @@ const LEAN_RAD := 0.035       # ~2° of steady pitch into the direction of trave
 const GAIT_RAMP := 4.0        # gait weight per second: ~0.25s to spin up and the same to settle, so stopping eases into the idle pose
 const IDLE_SPEED_GAIN := 0.35 # the idle clip runs up to 35% faster while moving — nudged along with the motion rather than fought
 
-var _figs := {}                # party id -> Node3D
+var _figs := {}                # party id -> Node3D (every band has one)
+var _models := {}              # ...of those, the ids wearing a real character model, not the pawn
 var _prev := {}                # party id -> last world position: drives facing, and the gait's speed
 var _aps := {}                 # party id -> the model's idle AnimationPlayer, nudged with the walk
 var _gait := {}                # party id -> how much walk is showing, 0 (idle pose) .. 1 (full stride)
 var _step := {}                # party id -> gait phase, radians — seeded per party, never shared
-var _frame_dt := 0.0           # real seconds since the last frame; see _process()
+var _frame_dt := 0.0           # real seconds since the last frame; see reposition()
 
 
 func _model_path(p) -> String:
@@ -110,25 +169,34 @@ func _player_figure() -> String:
 	return cid
 
 
+# Whether this band wears a real character model, as opposed to the pawn.
+# Every band has a figure of some kind, so this is not "is there anything
+# standing here" — it is the question the Party screen's figure picker and
+# tests/test_party3d.gd actually ask.
 func has_model(p) -> bool:
-	return _figs.has(p.id)
+	return _models.has(p.id)
 
 
 func reset(world) -> void:
 	for n in _figs.values():
 		n.queue_free()
 	_figs.clear()
+	_models.clear()
 	_prev.clear()
 	_aps.clear()
 	_gait.clear()
 	_step.clear()
+	_models.clear()
 	for p in world.parties:
-		var scene := _model(_model_path(p))
-		if scene == null:
-			continue
 		var holder := Node3D.new()
-		_sub.add_child(holder)
-		var m := scene.instantiate()
+		add_child(holder)
+		var scene := _model(_model_path(p))
+		var m: Node3D
+		if scene == null:
+			m = _pawn(p)
+		else:
+			m = scene.instantiate()
+			_models[p.id] = true
 		holder.add_child(m)
 		_fit_height(m, TARGET_HEIGHT)
 		var ap: AnimationPlayer = m.find_child("AnimationPlayer", true, false)
@@ -144,17 +212,9 @@ func reset(world) -> void:
 		_figs[p.id] = holder
 
 
-# The base's _process() drives _reposition() but hands it nothing: that
-# signature is shared with Settlements3D and Lairs3D, neither of which has any
-# use for a delta. The gait does, so it's caught here on the way through.
-func _process(dt: float) -> void:
-	_frame_dt = dt
-	super._process(dt)
-
-
 # One party's walk for this frame, advanced by `dt` seconds at `speed` map
 # units/second: returns the pose to hold as (bob height, sway roll, forward
-# lean). Split out of _reposition() because it is the entire stand-in in one
+# lean). Split out of reposition() because it is the entire stand-in in one
 # place — the thing a real walk clip deletes — and because it can then be
 # driven with fixed deltas by a headless test.
 func _gait_pose(id: String, speed: float, dt: float) -> Vector3:
@@ -179,7 +239,12 @@ func _gait_pose(id: String, speed: float, dt: float) -> Vector3:
 		LEAN_RAD * w)
 
 
-func _reposition() -> void:
+func reposition() -> void:
+	# reposition() takes no delta: the signature is shared with Settlements3D
+	# and Lairs3D, neither of which has any use for one. The gait does, and the
+	# frame's own delta is already on the node.
+	_frame_dt = get_process_delta_time()
+
 	# A defeated party is erased from world.parties (core/world.gd, core/
 	# world_battle.gd) — reset() only rebuilds _figs at travel start, so
 	# without this the figure it left behind just stops being repositioned:
@@ -205,22 +270,25 @@ func _reposition() -> void:
 		# same "you can always see yourself" rule World._draw()'s 2D props
 		# loop already applies.
 		n.visible = p.is_player or _explored(p.position)
-		# Pan and zoom cancel out of world_for_screen(_pix(...)) — each is the
-		# other's inverse — so the delta below is the party's own travel in map
-		# units, and dragging the map doesn't set anybody walking.
-		var at := world_for_screen(world_map._pix(p.position))
+		# The band's own position on the map's floor. It used to be
+		# world_for_screen(_pix(pos)) — a round trip out to a screen pixel and
+		# back, which the old per-layer camera needed and which cancelled to
+		# exactly this. One consequence worth keeping in mind either way: the
+		# delta below is travel, never camera movement, so dragging the map
+		# does not set anybody walking.
+		var here := at(p.position)
 		var moved := 0.0
 		# Same trick as Figures3D: face the direction of travel, hold it on
 		# arrival. The model's forward is +Z (glTF), so yaw = atan2(dx, dz).
 		if _prev.has(p.id):
-			var d: Vector3 = at - _prev[p.id]
+			var d: Vector3 = here - _prev[p.id]
 			d.y = 0.0
 			moved = d.length()
 			if moved > 0.01:
 				n.rotation.y = lerp_angle(n.rotation.y, atan2(d.x, d.z), 0.15)
-		_prev[p.id] = at   # the rest pose, never the bobbed one: the gait must not feed itself
+		_prev[p.id] = here   # the rest pose, never the bobbed one: the gait must not feed itself
 		var pose := _gait_pose(p.id, moved / maxf(_frame_dt, 0.0001), _frame_dt)
-		n.position = at + Vector3(0.0, pose.x, 0.0)   # pose.x: the bob
+		n.position = here + Vector3(0.0, pose.x, 0.0)   # pose.x: the bob
 		n.rotation.z = pose.y                         # pose.y: the sway, a roll about the figure's own forward axis
 		n.rotation.x = pose.z                         # pose.z: the lean, a pitch into the direction of travel
 		# Let the idle clip hurry along with the body instead of fighting it —

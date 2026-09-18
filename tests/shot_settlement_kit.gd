@@ -49,7 +49,7 @@ func _init() -> void:
 
 # --- the rig ----------------------------------------------------------------
 
-# A SubViewport lit the way world_diorama3d.gd lights the real one, plus the
+# A SubViewport lit the way world_view3d.gd lights the real map, plus the
 # shadow the real rig does not turn on — see the note in _compare(), shadows are
 # a separate question and this file shows both.
 func _rig(w: int, h: int, shadows := false) -> Array:
@@ -155,7 +155,7 @@ func _variety() -> void:
 # without the upscale itself doing any smoothing the renderer did not.
 #
 # Two rows of light as well as two sources: the top pair uses the current
-# world_diorama3d.gd rig exactly (one directional light, no shadows), the bottom
+# world_view3d.gd rig exactly (one directional light, no shadows), the bottom
 # pair turns shadows on. That is a change to the shared rig rather than to
 # either source, so it is kept visible and separate here instead of being
 # smuggled into the comparison.
