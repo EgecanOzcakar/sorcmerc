@@ -376,9 +376,19 @@ static func resurrect(party, dead_id: String, method: String, caster_id: String 
 	return true
 
 # End of a run: death is a within-run cost, not permanent. Leaves the benching alone.
+#
+# Everybody comes to, not only the dead. Losing a fight writes the field back
+# verbatim (core/adapter.gd's write_back), so a hero who went DOWN rather than
+# died lands here at 0 HP, alive and unconscious — and the old version, which
+# only looked at `dead`, left them there. On the open world that is a soft-lock,
+# not a setback: world.gd's _retreat() puts the beaten party down at the nearest
+# settlement, the next encounter opens with nobody on their feet and is over on
+# round 1, and if the settlement they woke at was the one whose garrison beat
+# them, the loop has no exit. "They come to" is what both callers narrate, so it
+# is what this does — for the dead and the merely flattened alike.
 static func auto_revive_all(party) -> void:
 	for ch in party.roster:
-		if ch.dead:
+		if ch.dead or (ch.hp_current >= 0 and ch.hp_current < 1):
 			ch.dead = false
 			ch.hp_current = maxi(1, ch.hp_current)
 			ch.dirty()
