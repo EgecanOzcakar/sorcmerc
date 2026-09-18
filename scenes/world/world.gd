@@ -2985,8 +2985,38 @@ func _gui_input(e: InputEvent) -> void:
 		elif e.button_index == MOUSE_BUTTON_LEFT:
 			var p := world.player()
 			if p != null:
-				world.set_goal(p, _unpix(e.position))
+				world.set_goal(p, _click_target(e.position))
 		queue_redraw()
+
+# #110/#113: a settlement or lair is drawn as a diorama standing UP from its
+# ground point, so a click on its roofs lands on the ground behind it and the
+# party walks past the town. A click anywhere on a landmark's model is a click
+# on the landmark: the goal is its position, and the ring is drawn there.
+func _click_target(sp: Vector2) -> Vector2:
+	var best := Vector2.INF
+	var best_d := INF
+	for s in world.settlements:
+		var at := _pix(s.position)
+		var h: float = float(Settlements3D.TARGET_HEIGHT.get(s.kind, 25.7)) * ISO_GAIN * _zoom
+		if _in_model_box(sp, at, h):
+			var d := sp.distance_to(at)
+			if d < best_d:
+				best = s.position; best_d = d
+	for l in world.lairs:
+		if not l.discovered:
+			continue
+		var at := _pix(l.position)
+		var h: float = Lairs3D.TARGET_HEIGHT * ISO_GAIN * _zoom
+		if _in_model_box(sp, at, h):
+			var d := sp.distance_to(at)
+			if d < best_d:
+				best = l.position; best_d = d
+	return best if best != Vector2.INF else _unpix(sp)
+
+# The screen box a diorama of height `h` (px) fills over its ground point `at`:
+# roughly as wide as it is tall, standing on a shallow ellipse.
+static func _in_model_box(sp: Vector2, at: Vector2, h: float) -> bool:
+	return absf(sp.x - at.x) <= h * 0.7 and sp.y <= at.y + h * 0.3 and sp.y >= at.y - h
 
 # --- drawing -----------------------------------------------------------
 func _draw() -> void:

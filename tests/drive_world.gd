@@ -115,6 +115,16 @@ func _run() -> void:
 	if screen.world.clock.speed != 1.0:
 		fail("cycling four times did not wrap back to 1x")
 
+	# --- #110/#113: a click on a town's roofs is a click on the town -----------
+	var town = screen.world.settlements[0]
+	var town_px: Vector2 = screen._pix(town.position)
+	var roof: Vector2 = town_px + Vector2(0, -30.0 * screen._zoom)   # up the model, off the ground point
+	if not screen._click_target(roof).is_equal_approx(town.position):
+		fail("a click on the diorama above %s did not resolve to it (%s)" % [town.sname, screen._click_target(roof)])
+	var far: Vector2 = town_px + Vector2(400, 300)
+	if screen._click_target(far).is_equal_approx(town.position):
+		fail("a click well away from the town snapped to it")
+
 	# --- #94: the clock's neighbours do not creep as the digits change --------
 	var gold_x: float = screen._gold_lbl.global_position.x
 	var clock_text: String = screen._clock_lbl.text
