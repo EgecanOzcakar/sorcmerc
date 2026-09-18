@@ -3179,8 +3179,7 @@ func _draw() -> void:
 		var pts := PackedVector2Array([_pix(p.position), _pix(p.goal)])
 		for wp in p.route:
 			pts.append(_pix(wp))
-		if pts.size() > 2:
-			draw_polyline(pts, Color(Icons.COL_GOLD, 0.45), 1.5, true)
+		draw_polyline(pts, Color(Icons.COL_GOLD, 0.45), 1.5, true)
 		# `pts` is already in screen space — p.goal is the NEXT corner and p.route
 		# the ones after it, so pts[-1] is the destination, projected. This used
 		# to read _ring(_pix(pts[-1]), ...), projecting a screen point a second
@@ -3241,9 +3240,6 @@ func _draw_labels() -> void:
 #   live    whether the party can see it right now
 func ground_marks() -> Array:
 	var p := world.player()
-		draw_polyline(pts, Color(Icons.COL_GOLD, 0.45), 1.5, true)
-		draw_polyline(_ring(_pix(pts[-1]), 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
-
 	# One painter's-order pass over everything standing on the ground.
 	# T9x: settlements are landmarks, always drawn regardless of fog — the
 	# whole point of the beacon is to give the player something to walk
@@ -3559,111 +3555,3 @@ func _draw_offscreen_marker(s, frame: Rect2, ppos: Vector2) -> void:
 # settlement and lair kits build from primitives, and a band with no character
 # figure marches as a 3D pawn), so there is nothing left for a fallback tier to
 # cover.
-# O11/O12: a medieval building on each footprint the blocks stood on — a city
-# gets three, a town two, painter-sorted among themselves. The footprint ring
-# stays: every faction's walls are the same stone, and faction is the one thing
-# the map still has to read at a glance.
-# T91: a discovered lair. Grey once looted, faction-tinted red while there's
-# still a fight in it, so a glance says which lairs are done. Tier 0: a 3D
-# diorama in the Lairs3D layer above this map, same contract as Settlements3D
-# — it replaces the "☠" glyph only; shadow, ring and name label stay shared.
-func _draw_lair(l, at: Vector2, live := true) -> void:
-	var col := _remembered(Icons.COL_MUTED if l.looted else Icons.COL_FOE, live)
-	var r := 14.0 * _zoom
-	_soft_shadow(at, r * 0.85)
-	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
-	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
-	if not (_lairs3d and _lairs3d.has_model(l)):
-		var fs := int(18 * _zoom)
-		draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, _remembered(Icons.COL_HEAD, live))
-	_name_under(at, r * 0.9 + 12.0, l.sname, _remembered(Icons.COL_BODY, live))
-
-# #111: a marker's name, centred under it. It used to start at the marker's
-# left edge (-r), and r grows with the zoom while the text does not, so the
-# name slid sideways as the map zoomed.
-func _name_under(at: Vector2, dy: float, text: String, col: Color) -> void:
-	var w := ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-	draw_string(ThemeDB.fallback_font, at + Vector2(-w * 0.5, dy), text,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, col)
-
-func _draw_settlement(s, at: Vector2, live := true) -> void:
-	var col := _remembered(faction_color(s.faction), live)
-	var big: bool = s.kind == "city"
-	# T90: "camp" is the smallest tier (one lean-to, no ring flourish scale-up) —
-	# everything below city was "town" before there were three sizes.
-	var small: bool = s.kind == "camp"
-	var r := (26.0 if big else (12.0 if small else 17.0)) * _zoom
-	_soft_shadow(at, r * 0.9)
-	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
-	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
-	# Style off the faction so a faction's towns look like each other, pair off the
-	# id so two of its towns are not the same building twice.
-	var style: int = absi(hash(s.faction))
-	var pair: int = absi(hash(s.id))
-	var blocks := [Vector2(0, 0), Vector2(-0.5, 0.35), Vector2(0.5, 0.3)] if big \
-		else ([Vector2(0, 0)] if small else [Vector2(0, 0), Vector2(0.45, 0.3)])
-	var h := r * (3.2 if big else (2.4 if small else 2.8))
-	# BUILDING_ANCHOR sits near the sprite's bottom (112 of 120px tall), so a house
-	# drawn at `base` reads as mostly-above it — a cluster whose bases sit on the
-	# ring reads as pushed toward the ring's back half. Nudge every base down by
-	# the gap between the anchor and the sprite's true vertical centre so the
-	# cluster's visual mass, not its ground corner, is what centres on the ring.
-	var vcenter := Vector2(0.0, (BUILDING_ANCHOR.y - BUILDING.y * 0.5) * 0.3 * h / BUILDING.y)
-	# Tier 0: a 3D diorama in the Settlements3D layer above this map. Same
-	# contract as Figures3D on the combat board — it replaces the building
-	# blocks only; shadow, ring and name label above/below stay shared.
-	if not (_settlements3d and _settlements3d.has_model(s)):
-		var bases: Array = []
-		for b in blocks:
-			bases.append(at + _iso(b * r) + vcenter)
-		bases.sort_custom(func(a, b): return a.y < b.y)
-		for k in bases.size():
-			_draw_building(bases[k], h, style + k, pair + k, live)
-	_name_under(at, r * 0.9 + 12.0, s.sname, _remembered(Icons.COL_BODY, live))
-
-# One building: a whole house in one cell now (the old Town Pack's modular
-# left/right wall halves are gone with it). `base` is the house's near ground
-# corner, i.e. the point it stands on; `h` scales the cell, whose own 128x120
-# proportions are kept so the five buildings stay at their relative sizes.
-func _draw_building(base: Vector2, h: float, style: int, pair: int, live := true) -> void:
-	var cell := BUILDING * (h / BUILDING.y)
-	var src := Vector2(style % BUILDING_STYLES, pair % BUILDING_PAIRS) * BUILDING
-	draw_texture_rect_region(BuildingTex,
-		Rect2(base - BUILDING_ANCHOR * (h / BUILDING.y), cell), Rect2(src, BUILDING),
-		_remembered(Color.WHITE, live))
-
-# O14: a board-game pawn standing on the party's position, tinted to its faction.
-# `at` is the ground point, so the sprite hangs above it rather than centring on
-# it, the way a building sits on its near corner. Sizes are the old ball token's
-# radii kept as the token's half-width, so parties read at the same scale as before.
-func _draw_party(p, at: Vector2, live := true) -> void:
-	var col := _remembered(faction_color(p.faction, p.is_player), live)
-	var rad := (11.0 if p.is_player else 9.0) * _zoom
-	var h := rad * 2.0 * PAWN.y / PAWN.x
-	_soft_shadow(at, rad * 0.8)
-	if p.is_player:
-		# T9x: a layered glow, not just a thin outline — needs to read as
-		# "this one is you" regardless of which hero figure is showing, now
-		# that the player can pick any of them from the Party screen. Drawn
-		# under the sprite so the ring's far arc reads as behind the pawn.
-		# (the old single ring was also never actually closed — draw_polyline's
-		# 3rd arg is antialiasing, not _ring()'s own `closed`, so it was
-		# missing one segment; fixed here too.)
-		for i in 3:
-			draw_colored_polygon(_ring(at, rad * (1.5 + 0.35 * i)),
-				Color(Icons.COL_GOLD, 0.18 - 0.05 * i))
-		draw_polyline(_ring(at, rad * 1.7, true, true), Icons.COL_GOLD, 2.5, true)
-	# Tier 0: a 3D troop figure in the Party3D layer above this map, picked from
-	# the band's highest-leveled troop — same contract as Settlements3D/Lairs3D,
-	# replaces the PawnTex icon (and its faction tint) only.
-	if not (_party3d and _party3d.has_model(p)):
-		draw_texture_rect(PawnTex, Rect2(at - Vector2(rad, h - rad * 0.22),
-			Vector2(rad * 2.0, h)), false, col)
-	# T-party3d: name + headcount, floating below the token — same label
-	# treatment World._draw_settlement()/_draw_lair() already use. The player's
-	# own headcount comes off the real Party (active roster), everyone else's
-	# off their troops[] flavour roster (RoamingParty.highest_troop's source).
-	var count: int = party.active.size() if p.is_player else p.troops.size()
-	var label: String = "You" if p.is_player else p.id.capitalize()
-	_name_under(at, rad * 1.3 + 12.0, "%s (%d)" % [label, count], _remembered(Icons.COL_BODY, live))
