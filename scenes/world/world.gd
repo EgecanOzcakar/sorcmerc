@@ -2086,6 +2086,14 @@ func _buy_rumor(lead: Dictionary) -> void:
 	_build_visit_panel()
 	_say(String(r.get("text", "")))
 
+func _raise_dead(id: String) -> void:
+	var r: Dictionary = Visit.raise_dead(party, id)
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("heal")
+		_autosave()
+	_build_visit_panel()
+	_say(String(r.get("text", "")))
+
 func _heal() -> void:
 	var r: Dictionary = Visit.heal(party)
 	if bool(r.get("ok", false)):
@@ -2585,6 +2593,10 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		if service == "healer":
 			_trade_row(rows, "Patch up the whole party — %d ◉ (no rest, no waiting)" % Visit.HEAL_COST,
 				"Heal", _heal)
+			for ch in party.roster:   # #109
+				if ch.dead:
+					_trade_row(rows, "Raise %s from the dead — %d ◉" % [ch.cname, Party.REVIVE_COST],
+						"Raise", _raise_dead.bind(ch.id), party.gold < Party.REVIVE_COST)
 			if Visit.can_work_healer(party):
 				var worked: bool = _visit.get("worked", false)
 				_trade_row(rows, "Work a shift in the ward — your restoration spell opens the door, Medicine sets the wage",

@@ -37,8 +37,32 @@ func test_check_preview() -> void:
 	check("advantage" in adv, "advantage is said when it applies")
 	check("Nobody" in Visit.check_preview(Party.new(), Visit.STEAL_SKILL, Visit.STEAL_DC), "an empty party cannot try")
 
+# #108/#109: the bench rests too, and the healer raises the dead.
+func test_bench_rests_and_healer_raises() -> void:
+	var w := World.new()
+	w.add_settlement(World.Settlement.new("home", Vector2.ZERO, "human", "city"))
+	var party := _party()
+	var benched = party.roster[0]
+	for ch in party.roster:
+		ch.hp_current = 1
+	party.bench(benched.id)
+	Visit.rest(party, w, "long-rest")
+	check(benched.hp_current == -1, "a long rest heals the benched member too (#108)")
+	benched.dead = true
+	benched.hp_current = 0
+	party.gold = Party.REVIVE_COST - 1
+	var r: Dictionary = Visit.raise_dead(party, benched.id)
+	check(not r["ok"] and benched.dead, "a purse short of the fee raises nobody")
+	party.gold = Party.REVIVE_COST
+	r = Visit.raise_dead(party, benched.id)
+	check(r["ok"] and not benched.dead and benched.hp_current == 1 and party.gold == 0,
+		"the healer raises the dead for REVIVE_COST, no caster asked (#109)")
+	check(not Visit.raise_dead(party, benched.id)["ok"], "...and only the dead")
+	check(party.summary(benched.id).get("dead", true) == false, "the summary carries the flag the party card reads")
+
 func _init() -> void:
 	test_check_preview()
+	test_bench_rests_and_healer_raises()
 	test_market_is_deterministic()
 	test_gap_changes_the_market()
 	test_visit_stamps_and_second_visit_is_thinner()

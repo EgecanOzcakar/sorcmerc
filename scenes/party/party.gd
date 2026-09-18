@@ -397,6 +397,10 @@ func _card(sm: Dictionary) -> Control:
 		or (not sm["active"] and party.active.size() >= Party.MAX_ACTIVE)
 	if roster_locked:
 		bench.tooltip_text = locked_note
+	if sm.get("dead", false):   # #109: say so, and say what brings them back
+		bench.text = "Dead"
+		bench.disabled = true
+		bench.tooltip_text = "Dead. A settlement healer raises them for %d ◉; so does a Revivify caster with a 3rd-level slot, or a Scroll of Resurrection." % Party.REVIVE_COST
 	bench.pressed.connect(func():
 		if roster_locked:
 			return

@@ -27,6 +27,7 @@ const Posting = preload("res://core/quest_posting.gd")
 const Potions = preload("res://core/potions.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Ach = preload("res://core/achievements.gd")
+const Party = preload("res://core/party.gd")   # #109: REVIVE_COST, for the healer's raise
 
 # World-time is in minutes (scenes/world/world.gd's HUD reads elapsed/60 as hours).
 # Calibration knobs — a party crosses the demo map in ~20 world-minutes, so a
@@ -418,6 +419,23 @@ static func stock_by_service(s, m: Dictionary) -> Dictionary:
 # long-rest cooldown — that's what you're paying to skip. Refuses when nobody
 # is actually hurt rather than taking the gold for nothing (the silent-no-op
 # lesson again).
+# #109: the open world had no way back from death at all — resurrection
+# needed a Revivify caster or a scroll, and a party without either was one
+# member down for good. The healer does it for the same fee, no caster asked.
+static func raise_dead(party, id: String) -> Dictionary:
+	var ch = party.get_member(id)
+	if ch == null or not ch.dead:
+		return {"ok": false, "text": "Nobody by that name needs raising."}
+	if not party.spend_gold(Party.REVIVE_COST):
+		return {"ok": false, "cost": Party.REVIVE_COST,
+			"text": "The healer wants %d ◉ up front to raise %s." % [Party.REVIVE_COST, ch.cname]}
+	ch.dead = false
+	ch.hp_current = 1
+	ch.dirty()
+	Ach.bump("resurrections")
+	return {"ok": true, "cost": Party.REVIVE_COST,
+		"text": "%s draws breath again (-%d ◉). Barely." % [ch.cname, Party.REVIVE_COST]}
+
 static func heal(party) -> Dictionary:
 	var hurt: Array = []
 	for ch in party.roster:
