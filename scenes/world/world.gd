@@ -3024,13 +3024,12 @@ func _draw() -> void:
 	_draw_ground()
 	var p := world.player()
 	if p != null and not p.at_goal():
-		# #95: the way round, when there is one — a faint gold thread through the
-		# corners to the ring at the end, so a detour reads as a plan, not a stray
+		# #95/#115: the way there — a faint gold thread from the party through
+		# any corners to the ring at the end. Straight or routed, same thread.
 		var pts := PackedVector2Array([_pix(p.position), _pix(p.goal)])
 		for wp in p.route:
 			pts.append(_pix(wp))
-		if pts.size() > 2:
-			draw_polyline(pts, Color(Icons.COL_GOLD, 0.45), 1.5, true)
+		draw_polyline(pts, Color(Icons.COL_GOLD, 0.45), 1.5, true)
 		draw_polyline(_ring(_pix(pts[-1]), 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
 
 	# One painter's-order pass over everything standing on the ground.
