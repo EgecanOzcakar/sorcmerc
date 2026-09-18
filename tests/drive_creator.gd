@@ -158,6 +158,23 @@ func _run() -> void:
 			fail("the confirmed character did not save")
 		Save.delete(slug)
 
+	# #104: the finished build can be kept as a preset, and a new hero started from it
+	main._goto(5)
+	if not press("Save as preset"):
+		fail("no Save as preset button on the Review step")
+	if Save.list_presets().is_empty():
+		fail("Save as preset wrote nothing (%s)" % main._status.text)
+	else:
+		var kept_name: String = main.ch.cname
+		main._goto(0)
+		if not press(kept_name):
+			fail("the kept preset is not offered on the Basics page")
+		elif main._step != 5 or main.ch.cname != kept_name or main.ch.id != "":
+			fail("loading the preset did not hand back a fresh copy at Review (step %d, id '%s')" % [main._step, main.ch.id])
+		for slug in Save.list_presets():
+			DirAccess.remove_absolute("%s/%s.json" % [Save.PRESET_DIR, slug])
+	main._goto(0)
+
 	# #103: the manual opens over the creator and closes again
 	var manual_btn: Button = null
 	for b in _buttons(main):

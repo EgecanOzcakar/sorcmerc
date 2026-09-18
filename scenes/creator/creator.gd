@@ -598,6 +598,17 @@ func _build_basics() -> void:
 	for pre in [["Vera Kord (Fighter 3)", "vera"], ["Pike Sallow (Rogue 3)", "pike"],
 			["Ilsa Vane (Cleric 3)", "ilsa"]]:
 		_opt(pf, pre[0], false, func(): _load_preset(pre[1]))
+	# #104: the player's own, saved from the Review step
+	var mine: Array = Save.list_presets()
+	if not mine.is_empty():
+		_head("Your presets")
+		var mf := _flow()
+		for slug in mine:
+			var pre = Save.load_preset(slug)
+			if pre == null:
+				continue
+			_opt(mf, "%s (%s %d)" % [pre.cname, humanize(pre.class_id()), pre.level()], false,
+				func(): _load_user_preset(slug))
 
 func _set_species(sid: String) -> void:
 	if ch.species_id == sid:
@@ -615,6 +626,15 @@ func _load_preset(which: String) -> void:
 	# The presets are level-3 builds; a preset joins a higher-level party at its
 	# level too. Topped up rather than rebuilt — what they already are is a real
 	# build with its choices made, and only the levels above it are missing.
+	Leveling.grant_levels(ch, start_level)
+	_goto(STEPS.size() - 1)
+
+func _load_user_preset(slug: String) -> void:
+	var pre = Save.load_preset(slug)
+	if pre == null:
+		_status.text = "That preset is gone."
+		return
+	ch = pre
 	Leveling.grant_levels(ch, start_level)
 	_goto(STEPS.size() - 1)
 
@@ -921,6 +941,12 @@ func _build_review() -> void:
 	box.add_theme_constant_override("separation", 6)
 	_body.add_child(box)
 	_sheet_into(box, true)
+	# #104: keep the build to make again later, whoever this one becomes
+	var keep := _opt(_flow(), "Save as preset", false, func():
+		var path := Save.save_preset(ch)
+		_status.text = ("Kept as a preset: %s — it is on the Basics page from now on." % ch.cname) if path != "" \
+			else "Could not write the preset.")
+	keep.tooltip_text = "Keeps this build under its name. Start a new character from it on the Basics page."
 	if not sheet.choice_points.is_empty():
 		_head("Unmade choices" if not sheet.pending.is_empty() else "Choices")
 		for p in _choice_points_of([]):
