@@ -17,6 +17,7 @@ const Presets = preload("res://core/presets.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Prog = preload("res://core/progression.gd")
 const Leveling = preload("res://core/leveling.gd")
+const ManualOverlay = preload("res://scenes/manual/manual.gd")   # #103
 
 signal character_created(ch)
 
@@ -324,7 +325,19 @@ func _ready() -> void:
 	add_child(root)
 
 	_title.theme_type_variation = "Title"
-	root.add_child(_title)
+	var head := HBoxContainer.new()
+	root.add_child(head)
+	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(_title)
+	# #103: the rules the build is judged by, one press away — a class's dice,
+	# a skill's use, what a background buys — same overlay the fight offers.
+	var manual := Button.new()
+	Icons.clicks(manual)
+	manual.text = "Manual  [F2]"
+	manual.theme_type_variation = "Quiet"
+	manual.focus_mode = Control.FOCUS_NONE
+	manual.pressed.connect(func(): ManualOverlay.toggle(self))
+	head.add_child(manual)
 
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -384,6 +397,11 @@ func _build_theme() -> void:
 # Static so other screens (scenes/creator/levelup.gd, campaign.gd) share one copy.
 static func dark_theme() -> Theme:
 	return Icons.dark_theme()
+
+func _unhandled_key_input(e: InputEvent) -> void:
+	if e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_F2:
+		ManualOverlay.toggle(self)   # #103
+		accept_event()
 
 # --- navigation -----------------------------------------------------------
 

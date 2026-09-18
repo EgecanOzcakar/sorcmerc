@@ -281,6 +281,10 @@ func _creator_at(step: int, species: String, cls: String, background: String,
 		mode: String, equip: Array = []) -> Control:
 	if _cre == null or not is_instance_valid(_cre) or _cre.is_queued_for_deletion():
 		_cre = fresh("res://scenes/creator/creator.tscn")
+	var manual = _cre.get_node_or_null("ManualOverlay")   # #103: a press opened it; the next page starts without it
+	if manual != null:
+		_cre.remove_child(manual)
+		manual.queue_free()
 	var ch = Creator.new_character()
 	ch.cname = "Sweep Testerson"
 	if species != "":

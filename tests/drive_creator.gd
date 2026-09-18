@@ -158,6 +158,22 @@ func _run() -> void:
 			fail("the confirmed character did not save")
 		Save.delete(slug)
 
+	# #103: the manual opens over the creator and closes again
+	var manual_btn: Button = null
+	for b in _buttons(main):
+		if b.text.begins_with("Manual"):
+			manual_btn = b
+	if manual_btn == null:
+		fail("no Manual button on the creator")
+	else:
+		manual_btn.pressed.emit()
+		if main.get_node_or_null("ManualOverlay") == null:
+			fail("the Manual button did not open the manual")
+		manual_btn.pressed.emit()
+	await process_frame
+	if main.get_node_or_null("ManualOverlay") != null:
+		fail("pressing Manual again did not close it")
+
 	# #82: the outline bar at the bottom — every step a button, back is free,
 	# forward stops on the first gate that says no.
 	if main._steps.get_child_count() != main.STEPS.size():
