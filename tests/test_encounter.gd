@@ -234,6 +234,11 @@ func test_outcome_defeat_and_deaths() -> void:
 		for id in r["deaths"]:
 			any_death = true
 			check(party.get_member(id).hp_current == 0, "a dead hero is written back at 0 HP")
+		# #107: the down-but-alive come to at 1 HP, not 0 — nobody starts the
+		# next fight on the ground.
+		for c in cb.team_of("party"):
+			if not c.is_dead() and c.sheet != null:
+				check(party.get_member(c.id).hp_current >= 1, "%s was down, not dead: back at 1 HP" % c.cname)
 	check(any_death, "some seed kills someone outright")
 
 # --- helpers ----------------------------------------------------------

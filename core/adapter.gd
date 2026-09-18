@@ -369,7 +369,10 @@ static func rest(ch, kind: String) -> void:
 # What T7 persists when a fight ends: HP, spent slots, spent pool uses.
 # Statuses and position belong to the fight and are dropped.
 static func write_back(c, ch) -> void:
-	ch.hp_current = c.hp
+	# #107: somebody down but stable when the fight ends comes to at 1 HP —
+	# RAW's "a stable creature regains 1 HP after 1d4 hours", spent on the walk
+	# out. Otherwise they started the NEXT fight unconscious on the ground.
+	ch.hp_current = c.hp if c.is_dead() else maxi(1, c.hp)
 	for pid in c.pools:
 		ch.pools[pid] = int(c.pools[pid]["cur"])
 	var full: Array = _full_slots(c.sheet) if c.sheet else []
