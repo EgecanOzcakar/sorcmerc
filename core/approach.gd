@@ -223,8 +223,8 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 				var toll: int = _toll(party)
 				party.spend_gold(toll)
 				out["toll"] = toll
-				out["text"] = "%s talks them down. They take %d gold to have seen nobody." % [
-					who["cname"], toll]
+				out["text"] = "%s talks them down. They take %s to have seen nobody." % [
+					who["cname"], ("%d gold" % toll) if toll > 0 else "nothing — the purse was empty"]
 			else:
 				out["text"] = "%s gets nowhere. They were never going to be talked to." % who["cname"]
 	return out

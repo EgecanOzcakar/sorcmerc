@@ -231,7 +231,26 @@ static func lock_note(kind: String, id: String) -> String:
 static func _price(currency: String, remaining: int) -> String:
 	return "locked — %d more %s" % [remaining, currency] if remaining > 0 else "locked"
 
+# The few ids whose words are not their meaning: an acronym, a run-together
+# subclass, a tool with its apostrophe dropped. Everything else reads fine
+# capitalized.
+const PLAIN := {
+	"asi": "Ability score increase", "asi-choice": "Ability score increase",
+	"skill-choice": "Skill", "spell-choice": "Spell", "language-choice": "Language",
+	"lineage-choice": "Lineage", "feature-choice": "Feature", "fighting-style-choice": "Fighting style",
+	"expertise-choice": "Expertise", "weapon-mastery-choice": "Weapon mastery",
+	"cantrip-choice": "Cantrip", "feat-choice": "Feat", "subclass": "Subclass",
+	"calligrapherstools": "Calligrapher's tools", "thievestools": "Thieves' tools",
+	"artisanstools": "Artisan's tools", "gamingset": "Gaming set", "musicalinstrument": "Musical instrument",
+	"handcrossbow": "Hand crossbow", "lightcrossbow": "Light crossbow", "heavycrossbow": "Heavy crossbow",
+	"simple": "Simple weapons", "martial": "Martial weapons",
+	"light": "Light armor", "medium": "Medium armor", "heavy": "Heavy armor",
+	"medium-nonmetal": "Medium armor (non-metal)", "shields-nonmetal": "Shields (non-metal)",
+}
+
 static func humanize(id: String) -> String:
+	if PLAIN.has(id):
+		return PLAIN[id]
 	return id.replace("-", " ").replace("_", " ").capitalize()
 
 static func _all_tools() -> Array:
@@ -545,7 +564,7 @@ func _pick_column(entries: Array) -> void:
 	open.sort_custom(by_name)
 	locked.sort_custom(by_name)
 	for e in open + locked:
-		if e == locked.front():
+		if not locked.is_empty() and e == locked[0]:
 			var cap := Label.new()
 			cap.text = "Locked"
 			cap.theme_type_variation = "Caption"
@@ -667,15 +686,16 @@ func _build_class() -> void:
 	if ch.class_id() != "":
 		var src := Catalog.class_src(ch.class_id())
 		var q: Dictionary = src["quickBuild"]
-		_note("Primary ability: %s · Hit die: d%d · Saves: %s" % [
+		_head(String(src["name"]))
+		_note("Leans on %s.  Hit die d%d.  Saves %s." % [
 			ABIL_NAME.get(src["primaryAbility"], "?"), int(src["hitDie"]),
-			", ".join(src["savingThrows"]).to_upper()])
-		_note("Quick build: highest %s, then %s; suggested background %s." % [
+			", ".join(src["savingThrows"]).to_upper()], COL_TEXT)
+		_note("Quick build: highest %s, then %s; %s makes a good background." % [
 			", ".join(q["highestAbility"]).to_upper(), String(q["secondaryAbility"]).to_upper(),
 			humanize(q["suggestedBackground"])])
-		_note("Armor: %s · Weapons: %s" % [
-			", ".join(src["armorProficiencies"]) if src["armorProficiencies"] else "none",
-			", ".join(src["weaponProficiencies"]) if src["weaponProficiencies"] else "none"])
+		_note("Armor: %s.  Weapons: %s." % [
+			", ".join(src["armorProficiencies"].map(humanize)) if src["armorProficiencies"] else "none",
+			", ".join(src["weaponProficiencies"].map(humanize)) if src["weaponProficiencies"] else "none"])
 	_target = null
 
 # T22: buying a class with lifetime XP comes with 2 of its 4 subclasses, free and
@@ -790,7 +810,7 @@ func _build_abilities() -> void:
 		tot.text = "→ %d (%+d)" % [t, (t - 10) / 2 if t >= 10 else int(floor((t - 10) / 2.0))]
 		tot.add_theme_color_override("font_color", COL_DIM)
 		grid.add_child(tot)
-	_note("Species and background bonuses (the → column) are applied by the resolver; the background's points are chosen on the next step.")
+	_note("The → column is the score after bonuses. The background's +2/+1 is picked on the next step and lands there too.")
 
 # Used to silently no-op outside Standard Array mode (the button looked
 # broken — nothing happened, no message). It also only ever set ability
@@ -851,9 +871,9 @@ func _build_choices() -> void:
 		_opt(f, b["name"], ch.background_id == bid, func(): _set_background(bid))
 	if ch.background_id != "":
 		var src := Catalog.background_src(ch.background_id)
-		_note("Skills: %s · Tools: %s · Origin feat: %s" % [
-			", ".join(src["skillProficiencies"]),
-			", ".join(src["toolProficiencies"]) if src["toolProficiencies"] else "none",
+		_note("Skills: %s.  Tools: %s.  Origin feat: %s." % [
+			", ".join(src["skillProficiencies"].map(humanize)),
+			", ".join(src["toolProficiencies"].map(humanize)) if src["toolProficiencies"] else "none",
 			humanize(src["originFeat"]) if src["originFeat"] != null else "none"])
 
 	_head("Choices")
@@ -878,7 +898,7 @@ func _set_background(bid: String) -> void:
 func _build_equipment() -> void:
 	var sheet = ch.sheet()
 	_head("Weapons  (pick up to %d)" % MAX_WEAPONS)
-	_note("Only weapons and armor are modeled — no PHB equipment packs in the export yet.")
+	_note("What they carry into the first fight. Packs, tools and trinkets are not on the shelf.")
 	var wf := _flow()
 	for wid in proficient_weapons(sheet):
 		var w := Catalog.weapon(wid)
@@ -1133,7 +1153,7 @@ func _sheet_bbcode(full: bool) -> String:
 	if full:
 		s += "[hr color=#7a6234]\n" + _cap("Features") + "\n"
 		for fid in sheet.features:
-			s += "  · %s\n" % humanize(fid)
+			s += "  · %s [color=#8a8478]%s[/color]\n" % [Effects.verb_label(fid), Effects.feature_source(fid)]
 		if not sheet.pools.is_empty():
 			s += "[hr color=#7a6234]\n" + _cap("Resources") + "\n"
 			for p in sheet.pools:
@@ -1141,9 +1161,16 @@ func _sheet_bbcode(full: bool) -> String:
 		if not sheet.equipment.is_empty():
 			s += "[hr color=#7a6234]\n" + _cap("Equipment") + "  %s\n" % ", ".join(ch.equipped)
 	if not sheet.pending.is_empty():
-		s += "[hr color=#7a6234]\n[color=#d15750][b]%d choice(s) left[/b][/color]\n" % sheet.pending.size()
+		s += "[hr color=#7a6234]\n[color=#d15750][b]%d choice%s left[/b][/color]\n" % [sheet.pending.size(), "" if sheet.pending.size() == 1 else "s"]
+		var kinds := {}   # the same kind twice is one line with a count, not two lines
+		var order: Array = []
 		for p in sheet.pending:
-			s += "[color=#d15750]  · %s[/color]\n" % humanize(p["type"])
+			var k := humanize(p["type"])
+			if not kinds.has(k):
+				order.append(k)
+			kinds[k] = int(kinds.get(k, 0)) + 1
+		for k in order:
+			s += "[color=#d15750]  · %s%s[/color]\n" % [k, ("  ×%d" % kinds[k]) if kinds[k] > 1 else ""]
 	if not sheet.warnings.is_empty() and full:
 		s += "[hr color=#7a6234]\n[color=#c9a45a]warnings:[/color]\n"
 		for w in sheet.warnings:

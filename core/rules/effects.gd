@@ -405,6 +405,16 @@ static func verb_label(id: String) -> String:
 	var p := id.split("-")
 	return humanize("-".join(p.slice(1)) if p.size() > 1 else id)
 
+# Where a feature came from, as a sheet would caption it: "Cleric", "Feat",
+# "Light Domain", "Elf". The id's first segment, looked up where it is a
+# subclass (whose ids run words together: "lightdomain").
+static func feature_source(id: String) -> String:
+	var head := id.get_slice("-", 0)
+	var sub: Dictionary = Catalog.subclass_src(head)
+	if not sub.is_empty():
+		return String(sub.get("name", head))
+	return humanize(head)
+
 # Validates the three hand-authored files: closed `kind` vocabulary, known ids.
 static func validate() -> Array[String]:
 	var errs: Array[String] = []

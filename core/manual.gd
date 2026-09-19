@@ -103,6 +103,15 @@ static func _plain(bb: String) -> String:
 static func _h(s: String) -> String:
 	return "[b][color=#c9a45a]%s[/color][/b]\n" % s
 
+# One item of a list: the name lit, the rest plain, one per line. The ledger's
+# "· " rather than [ul] — the same mark the creator's pending list uses.
+static func _li(name: String, rest: String) -> String:
+	return "· [b]%s[/b] — %s\n" % [name, rest]
+
+# The list as a block: [indent] carries the wrapped lines in with the bullet.
+static func _list(items: Array) -> String:
+	return "[indent]" + "".join(items) + "[/indent]"
+
 static func _mechanics() -> Array:
 	var ft := Adapter.FT_PER_HEX
 	var cap := Adapter.RANGE_CAP
@@ -111,9 +120,18 @@ static func _mechanics() -> Array:
 		"tags": ["action", "bonus action", "reaction", "movement", "economy", "dash", "disengage", "dodge", "help", "hide", "shove", "end turn"],
 		"body": _h("One action, one bonus action, one reaction, and your speed in movement.") +
 		"Spend them in any order. The action line under the board shows what's left; when the action, bonus and movement are all gone the turn ends itself.\n\n" +
-		"[b]Action[/b] — Attack (every swing the Attack action buys), cast a spell, or one of the basics: [b]Dash[/b] (another full move), [b]Disengage[/b] (leave reach without provoking), [b]Dodge[/b] (attacks against you have disadvantage until your next turn), [b]Help[/b] (an ally's next attack has advantage; on a downed ally it's First Aid — up at 1 HP), [b]Hide[/b] (Stealth vs the enemies' passive Perception; unseen means untargetable and advantage on your next attack), [b]Shove[/b] (Athletics contest to push 5 ft or knock prone — into a brazier, if one's handy).\n\n" +
+		"[b]Action[/b] — Attack (every swing the Attack action buys), cast a spell, or one of the basics:\n" +
+		_list([_li("Dash", "another full move"),
+			_li("Disengage", "leave reach without provoking"),
+			_li("Dodge", "attacks against you have disadvantage until your next turn"),
+			_li("Help", "an ally's next attack has advantage; on a downed ally it's First Aid — up at 1 HP"),
+			_li("Hide", "Stealth vs the enemies' passive Perception; unseen means untargetable, and advantage on your next attack"),
+			_li("Shove", "Athletics contest to push 5 ft or knock prone — into a brazier, if one's handy")]) + "\n" +
 		"[b]Bonus action[/b] — only what a feature or spell names as one: Second Wind, Rage, Cunning Action, Healing Word, a Nimble Escape. Casting a bonus-action spell means the only other spell you can cast this turn is a cantrip.\n\n" +
-		"[b]Reaction[/b] — one per round, and never a button. The free ones fire by themselves the moment something triggers them, on your turn or anyone else's: an opportunity attack when a foe walks out of your reach, Uncanny Dodge halving a hit. The ones that spend a spell slot stop the fight and ask you first — Hellish Rebuke burning whoever just swung at you, [b]Counterspell[/b] unravelling an enemy spell mid-cast (a CON save at DC 10 + the spell's level; it costs you the slot either way, and a countered caster keeps theirs). The question comes just before the roll, so it names the hit chance you are deciding against, and a swing that misses costs you nothing. Turn the asking off under Settings if you would rather the engine always spend it. Your reaction comes back at the start of your turn.\n\n" +
+		"[b]Reaction[/b] — one per round, and never a button. It comes back at the start of your turn.\n" +
+		_list([_li("The free ones fire by themselves", "the moment something triggers them, on your turn or anyone else's: an opportunity attack when a foe walks out of your reach, Uncanny Dodge halving a hit."),
+			_li("The ones that spend a spell slot stop the fight and ask you first", "Hellish Rebuke burning whoever just swung at you; [b]Counterspell[/b] unravelling an enemy spell mid-cast (a CON save at DC 10 + the spell's level; it costs you the slot either way, and a countered caster keeps theirs)."),
+			_li("The question comes just before the roll", "so it names the hit chance you are deciding against, and a swing that misses costs you nothing. Turn the asking off under Settings if you would rather the engine always spend it.")]) + "\n" +
 		"[b]Movement[/b] — %d ft per hex, so 30 ft of speed is %d hexes. Rough ground costs double. You can walk through allies but not stop on them; you can never pass through an enemy." % [ft, Adapter.hexes(30)]})
 	out.append({"id": "attack", "section": "Fighting", "title": "Attacking",
 		"tags": ["attack roll", "d20", "armor class", "ac", "critical", "crit", "advantage", "disadvantage", "to hit", "hit chance", "natural 20", "natural 1", "damage"],

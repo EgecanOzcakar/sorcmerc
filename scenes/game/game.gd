@@ -671,7 +671,25 @@ func show_summary(run) -> void:
 	head.add_theme_color_override("font_color", _end_color(run.state))
 	col.add_child(head)
 
-	for line in summary_lines(run):
+	# The three numbers the run comes down to, set large in a row; the
+	# per-hero lines and the haul as the dim text they always were.
+	var stats := HBoxContainer.new()
+	stats.add_theme_constant_override("separation", 36)
+	col.add_child(stats)
+	for pair in [["%d / %d" % [run.stage, Campaign.STAGE_COUNT], "stages cleared"],
+			["%d ◉" % run.party.gold, "in the purse"], [str(run.xp), "run XP"]]:
+		var v := VBoxContainer.new()
+		var big := Label.new()
+		big.text = pair[0]
+		big.theme_type_variation = "Head"
+		big.add_theme_color_override("font_color", Icons.COL_GOLD)
+		v.add_child(big)
+		var cap := Label.new()
+		cap.text = pair[1]
+		cap.theme_type_variation = "Caption"
+		v.add_child(cap)
+		stats.add_child(v)
+	for line in summary_lines(run).slice(3):
 		col.add_child(_dim(line))
 
 	# The journal, verbatim — it already holds every notable thing that happened.

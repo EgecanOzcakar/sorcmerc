@@ -237,27 +237,38 @@ func _earlier_levels_are_locked() -> void:
 	check(str(Creator.picks_from_decision(locked_pt, ch.choices.get(locked_pt["key"]))) == was,
 		"pressing every option on it changes nothing (%s)" % was)
 
-	# On screen: every button belonging to a locked choice is dead, and what it
-	# took is still marked, so the page reads as a record rather than a blank.
-	# _render() removes the old rows outright rather than at end of frame, so
-	# the buttons below are this call's, not the last one's.
+	# On screen: a locked choice has no buttons at all — it is one dim line
+	# under "Chosen at earlier levels" that names what was taken, so the page
+	# reads as a record without offering a press. _render() removes the old
+	# rows outright rather than at end of frame, so what is read below is this
+	# call's, not the last one's.
 	scr.commit()
-	var marked := 0
 	var live := 0
 	for b in _buttons_of(scr._body):
-		if String(b.get_meta("choice_key", "")) != locked_pt["key"]:
-			continue
-		if not b.disabled:
+		if String(b.get_meta("choice_key", "")) == locked_pt["key"]:
 			live += 1
-		if b.text.begins_with("●"):
-			marked += 1
-	check(live == 0, "not one of its buttons can be pressed (%d live)" % live)
-	check(marked > 0, "and what it chose still wears the mark (%d)" % marked)
+	check(live == 0, "not one button belongs to it (%d)" % live)
+	var record := ""
+	for l in _labels_of(scr._body):
+		if String(l.get_meta("choice_key", "")) == locked_pt["key"]:
+			record = l.text
+	var picks := Creator.picks_from_decision(locked_pt, ch.choices.get(locked_pt["key"]))
+	check(record != "" and (picks.is_empty() or record.to_lower().contains(
+		Creator.humanize(String(picks[0])).to_lower().substr(0, 3))),
+		"and the line says what it chose (%s)" % record)
 
 	# This level's own choices, raised by the commit above, are open as ever.
 	for p in Leveling.pending(ch):
 		check(not scr._locked.has(p["key"]), "this level's own %s is open" % p["type"])
 	scr.queue_free()
+
+func _labels_of(node: Node) -> Array:
+	var out: Array = []
+	for c in node.get_children():
+		if c is Label:
+			out.append(c)
+		out.append_array(_labels_of(c))
+	return out
 
 func _buttons_of(node: Node) -> Array:
 	var out: Array = []
