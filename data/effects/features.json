@@ -335,7 +335,8 @@
     "kind": "self_buff",
     "cost": "bonus",
     "pool": "rage",
-    "duration": "encounter",
+    "duration": "rage",
+    "_note": "2024: lasts until the end of your next turn unless you attacked or forced a save that turn; ten rounds at most; ends if Incapacitated (combat._rage_upkeep)",
     "status": "raging",
     "bonus_damage": {
       "by": "class_level",
@@ -398,11 +399,14 @@
     "cost": "none",
     "trigger": "on_weapon_hit",
     "pool": "focus-points",
+    "once_per": "turn",
     "save": "con",
     "conditions": [
       "stunned"
     ],
-    "duration": "round"
+    "duration": "round",
+    "on_save_vex": true,
+    "_note": "2024: on a hit, a Focus Point, once per turn, CON save or Stunned until your next turn; a made save still gives you advantage on your next attack against it (the half-speed half is not modelled)"
   },
   "cleric-channel-divinity": {
     "kind": "save_effect",
@@ -559,6 +563,7 @@
     "kind": "reaction",
     "cost": "reaction",
     "trigger": "would_be_hit",
+    "melee_only": true,
     "ac_bonus": 2
   },
   "monster-parry-3": {
@@ -566,6 +571,7 @@
     "kind": "reaction",
     "cost": "reaction",
     "trigger": "would_be_hit",
+    "melee_only": true,
     "ac_bonus": 3
   },
   "monster-undead-fortitude": {
@@ -710,20 +716,51 @@
     "value": 2
   },
   "assassin-assassinate": {
+    "_note": "2024: advantage on Initiative; in the first round, advantage against anything that has not acted, and a Sneak Attack that lands then deals extra damage equal to your Rogue level (Surprising Strikes)",
     "kind": "attack_modifier",
     "cost": "none",
     "trigger": "passive",
     "requires": [
-      "target_has_not_acted"
+      "target_has_not_acted",
+      "first_round"
     ],
-    "self": "adv"
+    "self": "adv",
+    "init_adv": true,
+    "also": [
+      {
+        "kind": "passive_damage",
+        "cost": "none",
+        "trigger": "on_weapon_hit",
+        "label": "Surprising Strike",
+        "once_per": "turn",
+        "requires": [
+          "first_round",
+          "target_has_not_acted",
+          "advantage_or_ally_adjacent",
+          "not_disadvantage"
+        ],
+        "dice": {
+          "count": 0,
+          "sides": 1,
+          "plus": {
+            "by": "class_level",
+            "class": "rogue"
+          }
+        }
+      }
+    ]
   },
   "wardomain-war-priest": {
     "kind": "grant_action",
     "cost": "bonus",
     "pool": "war-priest",
+    "uses": {
+      "by": "ability_mod",
+      "ability": "wis"
+    },
     "amount": 0,
-    "extra_attacks": 1
+    "extra_attacks": 1,
+    "_note": "2024: WIS-modifier uses (minimum 1), back on a Short or Long Rest; the export's PB-sized pool grant was dropped from subclasses.json"
   },
   "celestialpatron-healing-light": {
     "kind": "heal_ally",
@@ -733,12 +770,19 @@
     "dice": {
       "count": 1,
       "sides": 6
-    }
+    },
+    "max_dice": {
+      "by": "ability_mod",
+      "ability": "cha"
+    },
+    "_note": "RAW: up to CHA-mod dice in one use — combat.perform spends as many as the wound calls for"
   },
   "warriorofmercy-hand-of-healing": {
     "kind": "heal_ally",
     "cost": "bonus",
     "pool": "focus-points",
+    "flurry_swap": true,
+    "_note": "2024: may replace one Flurry of Blows strike for free — no Focus Point, no Bonus Action (combat._flurry_swap)",
     "range_ft": 5,
     "dice": {
       "count": 1,
@@ -852,17 +896,23 @@
     }
   },
   "gloomstalker-dread-ambusher": {
+    "_note": "2024: Ambusher's Leap (+10 ft on your first turn), advantage on Initiative, and Dreadful Strike: +2d6 psychic on a weapon hit, once per turn, WIS-mod uses per Long Rest (the extra damage lands as the weapon's type — riders are not typed separately)",
     "kind": "passive_damage",
     "cost": "none",
     "trigger": "on_weapon_hit",
+    "label": "Dreadful Strike",
     "once_per": "turn",
-    "requires": [
-      "first_round"
-    ],
+    "uses": {
+      "by": "ability_mod",
+      "ability": "wis"
+    },
+    "init_adv": true,
+    "first_round_speed_ft": 10,
     "dice": {
       "count": 2,
       "sides": 6
-    }
+    },
+    "damage_type": "psychic"
   },
   "lightdomain-warding-flare": {
     "kind": "reaction",
@@ -886,19 +936,21 @@
   },
   "_note_classes_c": "T-classes-c: the features that needed the engine to learn a new word. Three ride `requires` predicates combat._requires_met() did not have (a damaged target, an active Rage, the first round); Warding Flare rides a reaction payload that imposes Disadvantage instead of adding AC; Aura of Protection is the first `aura`, which is not a verb anyone presses but a standing fact combat.aura_bonus() reads where a save is rolled.",
   "paladin-divine-smite": {
+    "_note": "2024: a bonus-action spell — a spell slot, once per turn, 2d8 radiant +1d8 per slot level above 1st, on the next blow that lands (the extra d8 vs undead/fiends is not modelled)",
     "kind": "self_buff",
     "cost": "bonus",
     "status": "divine-smite",
     "once": true,
+    "once_per": "turn",
+    "slot_dice": {
+      "base": 2,
+      "per_level": 1
+    },
     "dice": {
       "count": 2,
       "sides": 8
     },
-    "damage_type": "radiant",
-    "uses": {
-      "by": "ability_mod",
-      "ability": "cha"
-    }
+    "damage_type": "radiant"
   },
   "oathofdevotion-aura-of-devotion": {
     "kind": "aura",

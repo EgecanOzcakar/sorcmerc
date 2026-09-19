@@ -183,7 +183,8 @@ func test_downed_body_rules() -> void:
 	pike.crit_range = 21
 	var r2 := cb.resolve_attack(pike, gob2)
 	check(r2.get("hit", false) and not r2.get("crit", false), "an arrow into a downed body is a plain hit")
-	check(gob2.death_f == 1, "...worth one failed save (%d)" % gob2.death_f)
+	check(gob2.death_f == 1 or (gob2.is_dead() and int(r2.get("damage", 0)) >= gob2.max_hp),
+		"...worth one failed save, unless it met the 7-HP goblin's max HP and killed outright (massive damage) (%d)" % gob2.death_f)
 
 # --- 2. where everybody starts, on every board ----------------------------------
 func test_spawn_geometry() -> void:

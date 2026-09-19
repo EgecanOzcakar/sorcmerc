@@ -450,7 +450,7 @@ func test_mercy_rule() -> void:
 		_find(c, "vera").pos = Vector2i(0, 2)   # far, unreachable at speed 1
 		c.begin_turn_for(g)
 		AI._foe_turn(c, g)
-		if _find(c, "pike").death_f > 0:
+		if _find(c, "pike").death_f > 0 or _find(c, "pike").is_dead():   # a big enough blow on a body kills outright
 			finished = true
 	check(finished, "no conscious PC in reach -> foe attacks the downed one (some seed lands it)")
 

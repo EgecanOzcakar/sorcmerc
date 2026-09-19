@@ -54,20 +54,14 @@ var log: Array[String] = []
 var downed: Dictionary = {}
 
 # T39: the party opened the fight unseen (Stealth beat the foes' passive
-# Perception, or they scouted the node). One surprise round — the foe team
-# loses its round-1 turns entirely; round 2 on is a normal fight.
+# Perception, or they scouted the node). 2024 PHB surprise: the surprised side
+# rolls Initiative with Disadvantage — no lost round (that was 2014's rule, and
+# the one this engine used until 2026-09-19). See _surprise().
 var unseen := false
 
-# T9x: the reverse — a camp ambush the party's watch failed to spot. Unlike
-# `unseen`, this does NOT skip every party turn for the whole round — with a
-# multi-foe roster that was every enemy getting a free, unanswered action
-# before the party could do anything at all, which read as a near-guaranteed
-# rout rather than a bad break. Capped instead: at most AMBUSH_EXPOSURE foe
-# turns land before the party starts acting normally, still within round 1.
+# T9x: the reverse — a camp ambush the party's watch failed to spot. The party
+# is the surprised side and takes the Disadvantage.
 var ambushed := false
-const AMBUSH_EXPOSURE := 2
-var _ambush_foe_turns: int = 0
-var _ambush_cap: int = 0   # min(AMBUSH_EXPOSURE, foes actually on the field) — set in begin_ambush_round()
 
 # T26 barks: a cosmetic side channel. Entries are {"id": combatant id, "text": line};
 # the board scene drains it each frame. Nothing in this file reads it back.
@@ -214,7 +208,7 @@ func _destroy_in_area(hexes: Array, by = null) -> void:
 
 func _roll_initiative() -> void:
 	for c in combatants:
-		c.init_roll = Dice.d20(rng).nat + c.init_mod
+		c.init_roll = Dice.d20(rng, Dice.ADV if c.init_adv else Dice.NORMAL).nat + c.init_mod
 	order = combatants.duplicate()
 	order.sort_custom(_init_before)
 	var names: Array = []
@@ -261,6 +255,22 @@ func begin_turn_for(c) -> void:
 		c.econ["move_left"] = int(c.econ["move_left"]) * _buff_sum(c, "speed_mult")
 	_regenerate(c)
 	_auto_stand(c)
+	_release_helps(c)
+	_release_grapples()
+	if round_num == 1:
+		for v in c.verbs:   # Ambusher's Leap: +10 ft on the first turn of a fight
+			if v.has("first_round_speed_ft"):
+				c.econ["move_left"] = int(c.econ["move_left"]) + hexes_from_ft(int(v["first_round_speed_ft"]))
+	if _no_economy(c, "action"):
+		_end_lapsing_buffs(c, "is too dazed to keep it up")   # Rage ends when Incapacitated
+
+# Help's advantage is "before the start of the helper's next turn" (RAW): the
+# helper's turn is what takes it back, not the ally's.
+func _release_helps(helper) -> void:
+	for o in combatants:
+		var h = o.statuses.get("helped")
+		if h is Dictionary and h.get("by") == helper:
+			o.statuses.erase("helped")
 
 # A summon with a clock on it (Invoke Duplicity's minute) goes at the start of
 # its own turn. Killed, not erased: a corpse is what `order` is built to carry,
@@ -342,43 +352,46 @@ func end_turn() -> void:
 	var c0 = current()
 	c0.has_acted = true
 	_repeat_saves(c0, "end_turn")
-	if ambushed and round_num == 1 and c0.team == "foe":
-		_ambush_foe_turns += 1
+	_rage_upkeep(c0)
 	for _i in order.size() + 1:
 		turn_idx += 1
 		if turn_idx >= order.size():
 			turn_idx = 0
 			round_num += 1
 		var c = current()
-		if c.is_dead() or c.is_stable() or skips_turn(c):
+		if c.is_dead() or c.is_stable():
 			continue
 		return
 
-func skips_turn(c) -> bool:
-	if round_num != 1:
-		return false
-	if unseen and c.team == "foe":
-		return true
-	return ambushed and c.team == "party" and _ambush_foe_turns < _ambush_cap
+# 2024 PHB: a surprised creature has Disadvantage on its Initiative roll. The
+# side that was caught re-rolls (with Disadvantage — an Assassin's Advantage
+# cancels it) and the order is rebuilt. Called once, before the first turn.
+# Rolled on a side stream so the fight's own dice are the same whether or not
+# the check happened (tests/test_encounter.gd pins that).
+func _surprise(team: String) -> void:
+	var side = Rng.new((rng.seed_value ^ 0x5A1E5EED) & 0xFFFFFFFF)
+	for c in combatants:
+		if c.team == team:
+			c.init_roll = Dice.d20(side, Dice.combine(c.init_adv, true)).nat + c.init_mod
+	order.sort_custom(_init_before)
+	turn_idx = 0
+	var names: Array = []
+	for c in order:
+		names.append("%s(%d)" % [c.cname, c.init_roll])
+	log.append("Initiative, re-rolled: " + ", ".join(names))
 
-# Called once, before the turn loop starts. Skipping rides on end_turn()'s
-# existing skip path, so every driver (UI, autoplay, tests) honours it.
 func begin_surprise_round() -> void:
 	unseen = true
-	log.append("The party has the drop on them — the enemy loses the first round.")
-	if skips_turn(current()):
-		end_turn()
+	log.append("The party has the drop on them — the enemy is surprised and rolls initiative at disadvantage.")
+	_surprise("foe")
 
 # T9x: camp-ambush counterpart — called unconditionally (no roll here; the
 # watch/DC check already happened in core/world_camp.gd) when the party's
 # watch failed to spot it coming.
 func begin_ambush_round() -> void:
 	ambushed = true
-	var foe_count: int = combatants.filter(func(c): return c.team == "foe" and c.conscious()).size()
-	_ambush_cap = mini(AMBUSH_EXPOSURE, foe_count)
-	log.append("The camp is jumped in the night — the party is caught flat-footed.")
-	if skips_turn(current()):
-		end_turn()
+	log.append("The camp is jumped in the night — the party is surprised and rolls initiative at disadvantage.")
+	_surprise("party")
 
 # The party yielded (main.gd's Admit defeat). Resolves exactly like a wipe —
 # resolve_outcome and every caller only ever read outcome() — minus the wait.
@@ -474,7 +487,7 @@ func in_reach(attacker, target) -> bool:
 	var d := Hex.distance(attacker.pos, target.pos)
 	if attacker.ranged:
 		return d <= attacker.atk_range
-	return d <= int(board.get("reach_melee", 1))
+	return d <= attacker.reach
 
 func effective_ac(c) -> int:
 	var ac: int = c.ac + _buff_sum(c, "ac")
@@ -498,20 +511,41 @@ func save_fail_chance(target, dc: int, ability := "dex", ignore_cover := false) 
 	if is_cover(target.pos) and not ignore_cover:
 		bonus += 2
 	var p_make: float = clampf((21.0 - (dc - bonus)) / 20.0, 0.0, 1.0)
-	if target.has("dodging"):
+	if _dodging(target) and ability == "dex":
 		p_make = 1.0 - (1.0 - p_make) * (1.0 - p_make)
 	return 1.0 - p_make
 
-# Probability a Shove by `attacker` beats `target`'s contest (ties lose). UI-only.
+# Probability a Shove or Grapple by `attacker` lands: the target fails its save
+# against the Unarmed Strike DC (2024 PHB). UI-only.
 func shove_chance(attacker, target) -> float:
-	var am: int = attacker.athletics
-	var dm: int = maxi(target.athletics, target.acro)
-	var wins := 0
-	for a in range(1, 21):
-		for d in range(1, 21):
-			if a + am > d + dm:
-				wins += 1
-	return wins / 400.0
+	return save_fail_chance(target, unarmed_dc(attacker), _shove_save(target))
+
+# 2024 Unarmed Strike: DC 8 + STR modifier + Proficiency Bonus.
+func unarmed_dc(c) -> int:
+	return 8 + c.str_mod + c.pb
+
+# "a Strength or Dexterity saving throw (the target chooses)": the better one.
+func _shove_save(target) -> String:
+	return "str" if int(target.saves.get("str", 0)) >= int(target.saves.get("dex", 0)) else "dex"
+
+const SIZES := ["Tiny", "Small", "Medium", "Large", "Huge", "Gargantuan"]
+func _size_rank(size: String) -> int:
+	var i := SIZES.find(size)
+	return i if i >= 0 else 2
+
+# Dodge's benefit is lost while Incapacitated or at speed 0 (2024 PHB).
+func _dodging(c) -> bool:
+	if not c.has("dodging"):
+		return false
+	for id in c.statuses:
+		if id == "dodging":
+			continue
+		var e: Dictionary = Effects.condition("unconscious" if id == "down" else id)
+		if e.is_empty():
+			e = ENGINE_CONDS.get(id, {})
+		if e.get("no_action", false) or (e.has("speed") and int(e["speed"]) == 0):
+			return false
+	return true
 
 # --- action economy + verbs (spec §6/§7) -------------------------------
 #
@@ -527,6 +561,8 @@ const BASIC := [
 		"cost": "action", "targeting": "enemy", "range": 1},
 	{"id": "shove_brazier", "label": "Shove → brazier", "kind": "shove", "choice": "brazier",
 		"cost": "action", "targeting": "enemy", "range": 1},
+	{"id": "grapple", "label": "Grapple", "kind": "grapple", "cost": "action", "targeting": "enemy", "range": 1},
+	{"id": "escape", "label": "Break free", "kind": "escape", "cost": "action", "targeting": "self"},
 	{"id": "smash", "label": "Smash it", "kind": "smash", "cost": "action", "targeting": "object", "range": 1},
 	{"id": "help", "label": "Help an ally", "kind": "help", "cost": "action", "targeting": "ally", "range": 1},
 	{"id": "dodge", "label": "Dodge", "kind": "dodge", "cost": "action", "targeting": "self"},
@@ -537,6 +573,10 @@ const BASIC := [
 
 # Feature kinds that are a button. The rest are passive: passive_damage folds into
 # resolve_attack, attacks_per_action into new_turn(), reaction fires on its trigger.
+# 2024: Shove and Grapple are Unarmed Strikes — each is one of the Attack
+# action's attacks, so they are priced the way a swing is (_take_attack).
+const ATTACK_KINDS := ["attack", "shove", "grapple"]
+
 const OFFERABLE := ["heal_self", "heal_ally", "self_buff", "ally_buff", "grant_action",
 	"attack_modifier", "save_effect", "spell", "offhand_attack",
 	# T-summon. A feature that puts a second token on the board — Primal
@@ -619,9 +659,42 @@ func can_spend(actor, cost: String) -> bool:
 # action was spent — with the banked swing still sitting in the economy — so
 # Extra Attack, Flurry of Blows and War Priest were all unreachable from the bar.
 func can_afford(actor, v: Dictionary) -> bool:
-	if v["kind"] == "attack" and int(actor.econ.get("attacks_left", 0)) > 0:
+	if v["kind"] in ATTACK_KINDS and int(actor.econ.get("attacks_left", 0)) > 0:
 		return not _no_economy(actor, "action")
+	if _flurry_swap(actor, v):
+		return true
 	return can_spend(actor, v.get("cost", "action"))
+
+# Warrior of Mercy: Hand of Healing may replace one Flurry of Blows strike —
+# no Bonus Action (Flurry took it) and no Focus Point. True when that is the
+# price on offer right now.
+func _flurry_swap(actor, v: Dictionary) -> bool:
+	return v.get("flurry_swap", false) and actor.econ.get("flurry", false) \
+		and int(actor.econ.get("attacks_left", 0)) > 0
+
+# The Attack action buys `attacks_per_action` swings; the first press pays the
+# action and banks the rest in attacks_left. ADD, don't assign: Flurry of Blows
+# banks its two as a Bonus Action before the Attack action is taken, and
+# assigning threw them away on the first swing (measured: banked 2, one swing
+# later attacks_left was 1). False when there is nothing left to swing with.
+func _take_attack(attacker) -> bool:
+	if int(attacker.econ.get("attacks_left", 0)) > 0:
+		attacker.econ["attacks_left"] = int(attacker.econ["attacks_left"]) - 1
+		return true
+	if _spend(attacker, "action"):
+		attacker.econ["attacks_left"] = int(attacker.econ["attacks_left"]) \
+			+ int(attacker.econ.get("attacks_per_action", 1)) - 1
+		return true
+	return false
+
+# 2024 PHB: a Bonus Action leveled spell forbids any other leveled spell on the
+# same turn, in either order. Cantrips are free of it.
+func _leveled_spell_allowed(actor, v: Dictionary) -> bool:
+	if actor.econ.get("cast_bonus_spell", false):
+		return false
+	if v.get("cost", "") == "bonus" and actor.econ.get("cast_leveled_spell", false):
+		return false
+	return true
 
 func _spend(actor, cost: String) -> bool:
 	if not can_spend(actor, cost):
@@ -637,11 +710,8 @@ func _spend(actor, cost: String) -> bool:
 func is_button(actor, v: Dictionary) -> bool:
 	if v.get("cost", "") == "reaction":
 		return false   # a reaction is never a button — fire_reactions() casts it
-	if v.get("trigger", "") in NON_BUTTON_TRIGGERS \
-			or (v.get("trigger", "") == "on_weapon_hit" and v["kind"] == "save_effect" and not v.has("pool")):
-		return false   # fires from resolve_attack / begin_turn, never a button
-	if v["kind"] == "shove" and actor.athletics <= 0:
-		return false   # not something this character is ever going to manage
+	if v.get("trigger", "") in NON_BUTTON_TRIGGERS or v.get("trigger", "") == "on_weapon_hit":
+		return false   # fires from resolve_attack / begin_turn, never a button (Stunning Strike too)
 	return true
 
 func _offerable(actor, v: Dictionary) -> bool:
@@ -653,14 +723,13 @@ func _offerable(actor, v: Dictionary) -> bool:
 		return false
 	if v.get("once_per", "") == "turn" and actor.econ.get("used", {}).has(v["id"]):
 		return false
-	if v.has("pool") and actor.pool_left(v["pool"]) <= 0:
+	if v.has("pool") and actor.pool_left(v["pool"]) <= 0 and not _flurry_swap(actor, v):
 		return false
 	var slot := int(v.get("slot_level", 0))
 	if slot > 0:
 		if slot > actor.slots.size() or actor.slots[slot - 1] <= 0:
 			return false
-		# a bonus-action leveled spell forbids a leveled spell with your action (§7)
-		if v["cost"] == "action" and actor.econ.get("cast_bonus_spell", false):
+		if not _leveled_spell_allowed(actor, v):
 			return false
 	if _buff_flag(actor, "no_attack") and v["kind"] in ["attack", "offhand_attack", "spell"]:
 		return false
@@ -673,6 +742,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 		"summon": return not _already_out(actor, String(v["summon"]["id"])) \
 			and _free_near(actor.pos) != NOWHERE
 		"attack_modifier", "grant_action": return true
+		"escape": return _grappler_of(actor) != null
 	match v.get("targeting", "self"):
 		"enemy": return enemies_of(actor).any(func(e): return legal_target(actor, v, e))
 		"ally": return combatants.any(func(a): return legal_target(actor, v, a))
@@ -713,6 +783,10 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 				return false
 			if c.has("illusion"):
 				return false  # Invoke Duplicity's double is not a creature (an area still catches it)
+			if v["kind"] in ["shove", "grapple"] and _size_rank(c.size) > _size_rank(actor.size) + 1:
+				return false  # 2024: no more than one size larger than you
+			if v["kind"] == "grapple" and _grappler_of(c) == actor:
+				return false  # already in hand
 			if _source_of(actor, "cannot_target_source") == c:
 				return false  # charmed
 			if String(v.get("target_type", "")) != "" \
@@ -745,16 +819,36 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 	# the target — a turn gone with not a line in the log to say why.
 	if kind == "shove" and v.get("choice", "") == "brazier" and not can_shove_into_hazard(target):
 		return {"error": "nothing to shove them into"}
-	if kind != "attack" and not _spend(actor, v.get("cost", "action")):
+	if kind in ["shove", "grapple"] and target != null and _size_rank(target.size) > _size_rank(actor.size) + 1:
+		return {"error": "too big to %s" % kind}
+	var swap := _flurry_swap(actor, v)
+	if swap:
+		actor.econ["attacks_left"] = int(actor.econ["attacks_left"]) - 1
+	elif kind in ["shove", "grapple"]:
+		if _no_economy(actor, "action") or not _take_attack(actor):
+			return {"error": "no action left"}
+	elif kind != "attack" and not _spend(actor, v.get("cost", "action")):
 		return {"error": "no %s left" % v.get("cost", "action")}
 	if v.get("once_per", "") == "turn":
 		actor.econ["used"][v["id"]] = true
-	if v.has("pool"):
+	if v.has("pool") and not swap:
 		if actor.pool_left(v["pool"]) <= 0:
 			return {"error": "pool empty"}
 		actor.pools[v["pool"]]["cur"] = actor.pool_left(v["pool"]) - 1
+	var slot := int(v.get("slot_level", 0))
+	if kind != "spell" and slot > 0:
+		# Divine Smite (2024) is a spell in all but the button: it spends the
+		# slot and counts against the bonus-action spell rule like any other.
+		if slot > actor.slots.size() or actor.slots[slot - 1] <= 0:
+			return {"error": "no slot"}
+		actor.slots[slot - 1] -= 1
+		if v.get("cost", "") == "bonus":
+			actor.econ["cast_bonus_spell"] = true
+		actor.econ["cast_leveled_spell"] = true
 	match kind:
 		"attack": return resolve_attack(actor, target)
+		"grapple": return act_grapple(actor, target)
+		"escape": return act_escape(actor)
 		"offhand_attack":
 			# Costs its own bonus action (or nothing, with Nick) — never an Attack-action
 			# swing, so it rides the same "free" path Cleave's second swing uses. Mastery
@@ -774,9 +868,18 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			log.append("%s disengages." % actor.cname)
 		"heal_self", "heal_ally":
 			var who = actor if kind == "heal_self" else target
-			log.append("%s uses %s." % [actor.cname, v["label"]])
-			heal(who, Dice.roll(rng, "%dd%d+%d" % [int(v.get("dice_count", 1)),
-				int(v.get("dice_sides", 10)), int(v.get("dice_bonus", 0))]))
+			var n := int(v.get("dice_count", 1))
+			if v.has("max_dice") and v.has("pool") and not swap:
+				# Healing Light: "spend up to CHA-mod dice at once" — as many as the
+				# wound calls for, out of what is left (one is already paid above).
+				var avg: float = (int(v.get("dice_sides", 6)) + 1) / 2.0
+				var want: int = maxi(1, ceili((who.max_hp - maxi(who.hp, 0)) / avg))
+				var extra: int = clampi(want, 1, mini(int(v["max_dice"]), actor.pool_left(v["pool"]) + 1)) - 1
+				actor.pools[v["pool"]]["cur"] = actor.pool_left(v["pool"]) - extra
+				n += extra
+			log.append("%s uses %s%s." % [actor.cname, v["label"],
+				(" (%d dice)" % n) if v.has("max_dice") and n > 1 else ""])
+			heal(who, Dice.roll(rng, "%dd%d+%d" % [n, int(v.get("dice_sides", 10)), int(v.get("dice_bonus", 0))]))
 		"self_buff":
 			# `once` and the dice are a Smite's shape: Rage is a standing buff that
 			# adds a flat bonus to every swing until the fight ends, a Smite is
@@ -785,7 +888,9 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			actor.statuses[v.get("status", v["id"])] = {
 				"bonus_damage": int(v.get("bonus_damage", 0)), "resist": v.get("resist", []),
 				"once": v.get("once", false),
-				"dice_count": int(v.get("dice_count", 0)), "dice_sides": int(v.get("dice_sides", 0))}
+				"dice_count": int(v.get("dice_count", 0)), "dice_sides": int(v.get("dice_sides", 0)),
+				# duration "rage" lapses on its own (2024 PHB) — see _rage_upkeep
+				"duration": String(v.get("duration", "")), "started_round": round_num, "active_round": round_num}
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"ally_buff":
 			target.statuses[v.get("status", v["id"])] = {"dice_sides": int(v.get("dice_sides", 6))}
@@ -796,6 +901,8 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 		"grant_action":
 			actor.econ["action"] = int(actor.econ["action"]) + int(v.get("amount", 1))
 			actor.econ["attacks_left"] = int(actor.econ["attacks_left"]) + int(v.get("extra_attacks", 0))
+			if int(v.get("extra_attacks", 0)) > 0:
+				actor.econ["flurry"] = true   # what Hand of Healing may swap into (_flurry_swap)
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"save_effect": return _save_effect(actor, v, target)
 		"summon":
@@ -815,8 +922,14 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 func _save_effect(actor, v: Dictionary, target) -> Dictionary:
 	var saved := _saving_throw(target, actor.save_dc, v.get("save", "dex"), false,
 		v.get("magical", false))
+	_mark_active(actor)   # forcing a save keeps a Rage going (2024)
 	log.append("%s uses %s on %s — %s the save." % [
 		actor.cname, v["label"], target.cname, "makes" if saved else "fails"])
+	if saved and v.get("on_save_vex", false):
+		# Stunning Strike 2024: a made save still leaves the target open —
+		# advantage on the monk's next attack against it.
+		actor.statuses["vex"] = {"target": target, "until_tick": _next_round_tick()}
+		log.append("  ...but is thrown off balance: %s has advantage on the next swing." % actor.cname)
 	var dmg := 0
 	if int(v.get("dice_count", 0)) > 0:
 		dmg = Dice.roll(rng, "%dd%d" % [int(v["dice_count"]), int(v["dice_sides"])])
@@ -833,16 +946,37 @@ func _save_effect(actor, v: Dictionary, target) -> Dictionary:
 # Pooled ones (Stunning Strike) stay a button — the pool is the player's to spend.
 func _hit_riders(attacker, target) -> void:
 	for v in attacker.verbs:
-		if v["kind"] == "save_effect" and v.get("trigger", "") == "on_weapon_hit" and not v.has("pool"):
-			_save_effect(attacker, v, target)
+		if v["kind"] != "save_effect" or v.get("trigger", "") != "on_weapon_hit":
+			continue
+		if v.get("once_per", "") == "turn" and attacker.econ.get("used", {}).has(v["id"]):
+			continue
+		if v.has("pool"):
+			# Stunning Strike: a Focus Point on the hit, once a turn (2024), and
+			# never on a target already wearing what it inflicts.
+			if attacker.pool_left(v["pool"]) <= 0 \
+					or v.get("conditions", []).any(func(cond): return target.has(cond)):
+				continue
+			attacker.pools[v["pool"]]["cur"] = attacker.pool_left(v["pool"]) - 1
+		if v.get("once_per", "") == "turn":
+			attacker.econ["used"][v["id"]] = true
+		_save_effect(attacker, v, target)
 
 # --- spells ------------------------------------------------------------
 
 # `target` is a Combatant (single / ally) or a direction (cone).
 func cast(caster, v: Dictionary, target) -> Dictionary:
+	# An upcast Hold Person and kin: the player hands over every target they
+	# picked, primary first. A single Combatant still auto-fills the rest
+	# (extra_targets) for the AI and the autopilot.
+	var hand_picked: bool = target is Array and not target.is_empty() and target[0] is Object
+	var chosen: Array = target.slice(1) if hand_picked else []
+	if hand_picked:
+		target = target[0]
 	var lvl := int(v.get("slot_level", 0))
 	if lvl > 0 and (lvl > caster.slots.size() or caster.slots[lvl - 1] <= 0):
 		return {"error": "no slot"}
+	if lvl > 0 and v.get("cost", "") != "reaction" and not _leveled_spell_allowed(caster, v):
+		return {"error": "one leveled spell a turn beside a bonus-action one"}
 	# The one moment a reaction reaches into somebody else's turn: the spell is
 	# announced, and anything holding an answer gets it in before the slot is
 	# spent. A countered spell costs the action already paid for it and nothing
@@ -854,6 +988,10 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		caster.slots[lvl - 1] -= 1
 		if v["cost"] == "bonus":
 			caster.econ["cast_bonus_spell"] = true
+		if v["cost"] != "reaction":
+			caster.econ["cast_leveled_spell"] = true
+	if String(v.get("save", "")) != "":
+		_mark_active(caster)   # forcing a save keeps a Rage going (2024)
 	# T27: past the slot check, so a refused cast is silent. T9z: the school
 	# picks the sting — evocation booms, necromancy drones, abjuration chimes.
 	Sound.play_sfx(WeaponSfx.for_spell(String(v.get("spell", ""))))
@@ -887,19 +1025,22 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 				if c.team == caster.team and not c.is_dead() and Hex.distance(caster.pos, c.pos) <= int(v.get("range", 1)):
 					who.append(c)
 		"ally": who = [target]
-	if not who.is_empty() and (v.has("heal_count") or v.has("buff")):
+	if not who.is_empty() and (v.has("heal_count") or v.has("buff") or v.has("temp_count")):
 		log.append("%s casts %s%s." % [caster.cname, v["label"],
 			"" if who.size() == 1 and who[0] == caster else " on " + ", ".join(who.map(func(c): return c.cname))])
 		for c in who:
 			if v.has("heal_count"):
 				heal(c, Dice.roll(rng, "%dd%d+%d" % [int(v["heal_count"]), int(v["heal_sides"]),
 					int(v.get("heal_bonus", 0))]))
+			if v.has("temp_count"):   # False Life, Heroism: a buffer, not a heal
+				grant_temp_hp(c, Dice.roll(rng, "%dd%d+%d" % [int(v["temp_count"]), int(v.get("temp_sides", 4)),
+					int(v.get("temp_bonus", 0))]))
 			if v.has("buff"):
 				_apply_buff(caster, c, v)
 		return {}
 	if not (v.has("dice_count") or v.has("conditions") or v.has("buff")):
 		return {}
-	var notation := "%dd%d" % [int(v.get("dice_count", 0)), int(v.get("dice_sides", 6))]
+	var notation := "%dd%d+%d" % [int(v.get("dice_count", 0)), int(v.get("dice_sides", 6)), int(v.get("dice_bonus", 0))]
 	var dc := int(v.get("save_dc", caster.save_dc))
 	var area := area_hexes(caster, v, target)
 	if v.get("zone", false) and not area.is_empty():
@@ -924,7 +1065,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		return {"area": area, "caught": hit_any}
 	log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
 	var out := _spell_hit(target, v, notation, dc, caster)
-	for c in extra_targets(caster, v, target):
+	for c in (chosen if hand_picked else extra_targets(caster, v, target)):
 		log.append("  ...and on %s." % c.cname)
 		_spell_hit(c, v, notation, dc, caster)
 	return out
@@ -1102,7 +1243,7 @@ func summon(caster, v: Dictionary):
 # current index has missed its turn this round and starts next round; keeping
 # turn_idx pointed at the same combatant is the whole job.
 func _join_order(c) -> void:
-	c.init_roll = Dice.d20(rng).nat + c.init_mod
+	c.init_roll = Dice.d20(rng, Dice.ADV if c.init_adv else Dice.NORMAL).nat + c.init_mod
 	var at := 0
 	while at < order.size() and _init_before(order[at], c):
 		at += 1
@@ -1224,6 +1365,8 @@ func _zone_touch(c) -> bool:
 func _cond_effects(c) -> Array:
 	var out: Array = []
 	for id in c.statuses:
+		if id == "dodging" and not _dodging(c):
+			continue   # Incapacitated or held fast: the Dodge is wasted (2024)
 		# 0 HP is the Unconscious condition: advantage against, auto-fail STR/DEX,
 		# any melee hit from reach a crit — the same entry, under the engine's name.
 		var e: Dictionary = Effects.condition("unconscious" if id == "down" else id)
@@ -1286,10 +1429,15 @@ func apply_condition(target, cond: String, source = null, duration := "", v: Dic
 		return
 	var e := Effects.condition(cond)
 	var s := {}
-	if source != null and (e.get("cannot_target_source", false) or e.get("cannot_approach_source", false)):
+	if source != null and (e.get("cannot_target_source", false) or e.get("cannot_approach_source", false)
+			or e.get("held_by_source", false)):
 		s["source"] = source
 	if duration == "round":
 		s["until_tick"] = _tick()
+	elif duration == "minute":
+		# Sleep and kin: a minute on the clock, shaken off the way the spell says.
+		s["until_tick"] = _tick() + CONCENTRATION_ROUNDS * TICK_STRIDE
+		s["repeat"] = String(v.get("repeat_save", "none"))
 	elif duration == "concentration" and source != null:
 		# Held by the caster: ends with their concentration, or when the target
 		# shakes it off the way the spell allows (see _repeat_saves).
@@ -1337,7 +1485,7 @@ func _end_concentration(caster, why: String) -> void:
 func _repeat_saves(c, when: String) -> void:
 	for id in c.statuses.keys():
 		var s = c.statuses[id]
-		if not (s is Dictionary and s.has("held_by")):
+		if not (s is Dictionary and (s.has("held_by") or s.has("repeat"))):
 			continue
 		var mode := String(s.get("repeat", "end_turn"))
 		if when == "on_damage" and mode == "damage_ends":
@@ -1447,9 +1595,10 @@ func _attack_mode(attacker, target, opts := {}) -> int:
 # still the common one.
 func _distracted(attacker, target) -> bool:
 	for c in combatants:
-		if c.team == attacker.team and c.has("illusion") and not c.is_dead() \
+		var s = c.statuses.get("summoned")
+		if c.has("illusion") and not c.is_dead() and s is Dictionary and s.get("by") == attacker \
 				and Hex.distance(c.pos, target.pos) <= 1:
-			return true
+			return true   # RAW: the cleric's own Advantage, nobody else's
 	return false
 
 # Paralyzed/unconscious: any melee hit from within reach is a crit.
@@ -1503,12 +1652,16 @@ func _passive_damage(attacker, target, mode: int, crit: bool) -> Array:
 			continue
 		if v.get("once_per", "") == "turn" and attacker.econ.get("used", {}).has(v["id"]):
 			continue
+		if v.has("pool") and attacker.pool_left(v["pool"]) <= 0:
+			continue   # Dreadful Strike: WIS-mod uses a day
 		if not _requires_met(attacker, target, mode, v.get("requires", [])):
 			continue
 		if v.get("once_per", "") == "turn":
 			attacker.econ["used"][v["id"]] = true
+		if v.has("pool"):
+			attacker.pools[v["pool"]]["cur"] = attacker.pool_left(v["pool"]) - 1
 		out.append({"label": v["label"], "amount": Dice.roll(rng,
-			"%dd%d" % [int(v["dice_count"]), int(v["dice_sides"])], crit)})
+			"%dd%d+%d" % [int(v["dice_count"]), int(v["dice_sides"]), int(v.get("dice_bonus", 0))], crit)})
 	return out
 
 # --- reactions (spec §7) ------------------------------------------------
@@ -1707,6 +1860,8 @@ func _reaction_applies(c, v: Dictionary, ctx: Dictionary, trigger: String) -> bo
 			if trigger == "would_be_hit" and ctx.has("total") and not v.get("disadvantage", false) \
 					and int(ctx["ac"]) + int(v.get("ac_bonus", 0)) <= int(ctx["total"]):
 				return false
+			if v.get("melee_only", false) and ctx.get("ranged", false):
+				return false   # Parry answers a blade, not an arrow; Shield answers both
 			var atk = ctx.get("attacker")
 			return atk == null or _reaction_reaches(c, v, atk)
 		"spell_cast":
@@ -1723,8 +1878,8 @@ func _reaction_applies(c, v: Dictionary, ctx: Dictionary, trigger: String) -> bo
 func _reaction_reaches(c, v: Dictionary, other) -> bool:
 	if other.has("hidden"):
 		return false
-	if not v.has("range"):
-		return true
+	if not v.has("range") or v.get("shape", "") == "self":
+		return true   # Shield is about its own caster, whoever is shooting
 	return Hex.distance(c.pos, other.pos) <= int(v["range"])
 
 # Fire `trigger`. Returns the context back with whatever the answers changed:
@@ -1763,6 +1918,14 @@ func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
 			log.append("%s %ss — AC %d, and the blow goes wide." % [
 				c.cname, String(v["label"]).to_lower(),
 				int(ctx.get("ac", 0)) + int(v["ac_bonus"])])
+			if v["kind"] == "spell":
+				# Shield: the slot is spent, and the +5 stays up until the caster's
+				# next turn as a buff on top of the one blow it just turned.
+				var lvl := int(v.get("slot_level", 0))
+				if lvl > 0:
+					c.slots[lvl - 1] -= 1
+				if v.has("buff"):
+					_apply_buff(c, c, v)
 			break   # the swing is already a miss; a second answer has nothing to stop
 		elif v.get("disadvantage", false):
 			# Warding Flare and kin: "impose Disadvantage on the attack roll".
@@ -1807,7 +1970,7 @@ func _counter(reactor, v: Dictionary, ctx: Dictionary) -> bool:
 # came from. Rage is the one that is melee-only; the rest ride any weapon.
 const MELEE_ONLY_BUFFS := ["raging"]
 
-func _buff_damage_extras(attacker, ranged: bool) -> Array:
+func _buff_damage_extras(attacker, ranged: bool, crit := false) -> Array:
 	var out: Array = []
 	var spent: Array = []
 	for id in attacker.statuses:
@@ -1823,7 +1986,7 @@ func _buff_damage_extras(attacker, ranged: bool) -> Array:
 			continue
 		var amount: int = int(s.get("bonus_damage", 0))
 		if dice > 0:
-			amount += Dice.roll(rng, "%dd%d" % [dice, int(s.get("dice_sides", 6))])
+			amount += Dice.roll(rng, "%dd%d" % [dice, int(s.get("dice_sides", 6))], crit)   # a crit doubles a Smite too
 		out.append({"amount": amount, "label": id})
 		if s.get("once", false):
 			spent.append(id)   # the blow that read it is the blow that spends it
@@ -1852,24 +2015,12 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		return {"error": "there is nothing there to hit"}
 	if not free and not in_reach(attacker, target):
 		return {"error": "out of range"}
-	if not free:
-		# the Attack action buys `attacks_per_action` swings; OAs are free (§7)
-		if int(attacker.econ.get("attacks_left", 0)) > 0:
-			attacker.econ["attacks_left"] = int(attacker.econ["attacks_left"]) - 1
-		elif _spend(attacker, "action"):
-			# ADD, don't assign. Flurry of Blows banks its two swings in
-			# `attacks_left` as a Bonus Action, before the Attack action is taken;
-			# assigning here threw both of them away the moment the monk swung
-			# (measured: banked 2, one swing later attacks_left was 1). The Attack
-			# action buys attacks_per_action swings ON TOP of whatever a bonus
-			# action already bought — it is one of them, hence the -1.
-			attacker.econ["attacks_left"] = int(attacker.econ["attacks_left"]) \
-				+ int(attacker.econ.get("attacks_per_action", 1)) - 1
-		else:
-			return {"error": "no action left"}
+	if not free and not _take_attack(attacker):   # the Attack action buys its swings; OAs are free (§7)
+		return {"error": "no action left"}
 	var notation: String = opts.get("damage", attacker.damage)
 	var mode = _attack_mode(attacker, target, opts)
 	var r = Dice.d20(rng, mode)
+	_mark_active(attacker)   # an attack roll keeps a Rage going (2024)
 	var nat: int = r.nat
 	var insp: int = _consume_inspired(attacker)
 	var atk_bonus: int = int(opts.get("atk_bonus", attacker.atk_bonus)) + insp - _d20_penalty(attacker) \
@@ -1881,9 +2032,10 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	# T94 — Parry: "adds N to its AC against one melee attack that would hit it".
 	# Fired only once the roll is known to land, which is what the SRD wording
 	# says. A crit cannot be parried, and a shot cannot: it is a melee reaction.
-	if hit and not crit and not (attacker.ranged and not opts.get("melee", false)):
+	if hit and not crit:
 		var answer := fire_reactions("would_be_hit", {
 			"attacker": attacker, "target": target, "total": total, "ac": ac,
+			"ranged": attacker.ranged and not opts.get("melee", false),
 		})
 		var parry := int(answer.get("ac_bonus", 0))
 		if parry > 0:
@@ -1913,7 +2065,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		out["dmg_detail"] = dmg_detail
 		out.extras = _passive_damage(attacker, target, mode, crit)
 		out.extras.append_array(_buff_damage_extras(attacker,
-			attacker.ranged and not opts.get("melee", false)))
+			attacker.ranged and not opts.get("melee", false), crit))
 		for e in out.extras:
 			dmg += int(e["amount"])
 		out.damage = dmg
@@ -2150,13 +2302,12 @@ func _defense_verb(c, dtype: String) -> String:
 func _damage_after_defenses(c, dmg: int, dtype: String) -> int:
 	if dmg <= 0:
 		return dmg
-	if dtype != "":
-		if dtype in c.immune:
-			return 0
-		if dtype in c.vulnerable:
-			dmg *= 2
+	if dtype != "" and dtype in c.immune:
+		return 0
 	if _resists(c, dtype):
-		dmg = dmg / 2
+		dmg = dmg / 2   # "resistance and then vulnerability" (RAW): halve first
+	if dtype != "" and dtype in c.vulnerable:
+		dmg *= 2
 	return dmg
 
 func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
@@ -2173,7 +2324,17 @@ func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 			_end_concentration(target, "loses concentration")
 	if dmg > 0:
 		_repeat_saves(target, "on_damage")
+	if dmg > 0 and target.temp_hp > 0:
+		var soak: int = mini(target.temp_hp, dmg)
+		target.temp_hp -= soak
+		dmg -= soak
+		log.append("  %s's temporary hit points take %d%s." % [target.cname, soak,
+			"" if target.temp_hp > 0 else ", and are gone"])
 	if target.is_down():
+		if dmg >= target.max_hp:
+			log.append("%s is struck past all saving — the blow alone would have killed them whole." % target.cname)
+			_kill(target)   # RAW massive damage applies at 0 HP too
+			return
 		# Damage to a downed body is a failed death save; a crit (which any melee
 		# hit from reach is, via _auto_crit) is two.
 		target.death_f += (2 if crit else 1) if dmg > 0 else 0
@@ -2207,6 +2368,15 @@ func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 			target.death_f = 0
 			log.append("%s falls unconscious." % target.cname)
 			bark(target, "down")
+			_release_grapples()
+
+# Temporary hit points never stack: the higher of the two stays (RAW).
+func grant_temp_hp(c, n: int) -> void:
+	if n <= c.temp_hp:
+		log.append("%s already has %d temporary HP — the %d would not add." % [c.cname, c.temp_hp, n])
+		return
+	c.temp_hp = n
+	log.append("%s gains %d temporary HP." % [c.cname, n])
 
 # T94 — a `survive_damage` feature turns lethal damage into 1 HP left. Two
 # shapes, both straight off the SRD:
@@ -2265,6 +2435,7 @@ func _kill(c) -> void:
 	log.append("%s is dead." % c.cname)
 	bark(c, "down")
 	_death_triggers(c)
+	_release_grapples()
 	if _team_out(c.team):   # that was the last of them — the winners get a word in
 		for w in combatants:
 			if w.team != c.team and w.conscious():
@@ -2306,8 +2477,11 @@ func _death_save(c) -> void:
 	if c.death_f >= 3:
 		_kill(c)
 	elif c.death_s >= 3:
-		c.statuses["stable"] = true
-		log.append("%s stabilises, still unconscious." % c.cname)
+		c.statuses.erase("down")
+		c.death_s = 0
+		c.death_f = 0
+		c.hp = 1
+		log.append("%s comes round — three saves made, up at 1 HP." % c.cname)
 		_survived_down(c)
 	else:
 		log.append("%s death save: rolled %d  [%d ok / %d fail]" % [c.cname, r.nat, c.death_s, c.death_f])
@@ -2373,7 +2547,7 @@ func _provocations(mover, dest: Vector2i) -> Array:
 		if not can_spend(f, "reaction") or f in taken or _buff_flag(f, "no_attack"):
 			continue   # an illusion swings at nobody, here least of all
 		for i in range(path.size() - 1):
-			if Hex.distance(f.pos, path[i]) <= 1 and Hex.distance(f.pos, path[i + 1]) > 1:
+			if Hex.distance(f.pos, path[i]) <= f.reach and Hex.distance(f.pos, path[i + 1]) > f.reach:
 				out.append([f, path[i]])
 				taken.append(f)
 				break
@@ -2407,6 +2581,7 @@ func move_to(mover, dest: Vector2i, disengage := false) -> void:
 	if region_at(dest) != before_region:
 		log.append("%s moves to the %s." % [mover.cname, region_at(dest)])
 	_zone_touch(mover)
+	_release_grapples()
 
 # --- actions -------------------------------------------------------
 
@@ -2419,7 +2594,7 @@ func act_help(helper, ally) -> void:
 	if ally.is_down():
 		heal(ally, 1)   # First Aid: stir a downed ally back to their feet on 1 HP
 		return
-	ally.statuses["helped"] = true
+	ally.statuses["helped"] = {"by": helper}   # cleared at the helper's next turn (_release_helps)
 	log.append("%s helps %s — advantage on their next attack." % [helper.cname, ally.cname])
 
 # T94 — how hard it is to slip past ONE creature. Passive Perception is the
@@ -2472,23 +2647,27 @@ func act_hide(c) -> bool:
 	log.append("%s fails to hide — Stealth %d vs %d." % [c.cname, roll, dc])
 	return false
 
+# 2024 PHB: Shove is an Unarmed Strike. The target makes a STR or DEX save (its
+# pick) against 8 + STR mod + PB and, failing, goes prone or 5 ft back. A
+# creature more than one size larger cannot be shoved (legal_target / perform).
 func act_shove(attacker, target, choice: String) -> Dictionary:
-	var a = Dice.d20(rng).nat + attacker.athletics
-	var d = Dice.d20(rng).nat + maxi(target.athletics, target.acro)
-	if a <= d:
-		log.append("%s tries to shove %s — %d vs %d, fails." % [attacker.cname, target.cname, a, d])
+	var dc := unarmed_dc(attacker)
+	var ab := _shove_save(target)
+	if _saving_throw(target, dc, ab):
+		log.append("%s tries to shove %s — it keeps its footing (DC %d %s)." % [
+			attacker.cname, target.cname, dc, ab.to_upper()])
 		return {"success": false}
 	if tracked and attacker.team == "party":
 		Ach.bump("shoves")
 	match choice:
 		"prone":
 			target.statuses["prone"] = true
-			log.append("%s shoves %s prone (%d vs %d)." % [attacker.cname, target.cname, a, d])
+			log.append("%s shoves %s prone (DC %d)." % [attacker.cname, target.cname, dc])
 		"push":
 			var dest = target.pos + Hex.direction_to(attacker.pos, target.pos)
 			if passable(dest) and _hex_free(dest, target):
 				target.pos = dest
-				log.append("%s shoves %s back into the %s." % [attacker.cname, target.cname, region_at(dest)])
+				log.append("%s shoves %s back into the %s (DC %d)." % [attacker.cname, target.cname, region_at(dest), dc])
 				_zone_touch(target)
 			else:
 				target.statuses["prone"] = true
@@ -2506,8 +2685,85 @@ func act_shove(attacker, target, choice: String) -> Dictionary:
 				haz["type"], notation, burn])
 			if tracked and attacker.team == "party":
 				Ach.unlock("shove_hazard")
-			_apply_damage(target, burn)
+			_apply_damage(target, burn, String(haz["hazard"].get("damage_type", "fire")))
 	return {"success": true}
+
+# 2024 PHB Grapple: the same Unarmed Strike save; a failure is Grappled (speed
+# 0) until the target breaks free, the grappler is Incapacitated or downed, or
+# the two are ever further apart than the grappler's reach (_release_grapples).
+# ponytail: the grappler moving does not drag the target along (RAW: it may, at
+# half speed) — moving out of reach simply lets go.
+func act_grapple(attacker, target) -> Dictionary:
+	var dc := unarmed_dc(attacker)
+	var ab := _shove_save(target)
+	if _saving_throw(target, dc, ab):
+		log.append("%s grabs at %s — it twists free (DC %d %s)." % [attacker.cname, target.cname, dc, ab.to_upper()])
+		return {"success": false}
+	apply_condition(target, "grappled", attacker)
+	if _grappler_of(target) == attacker:
+		log.append("%s grapples %s (DC %d)." % [attacker.cname, target.cname, dc])
+		return {"success": true}
+	return {"success": false}   # immune
+
+# The Grappled creature's action: a STR (Athletics) or DEX (Acrobatics) check
+# against the grappler's Unarmed Strike DC.
+func act_escape(actor) -> Dictionary:
+	var g = _grappler_of(actor)
+	if g == null:
+		return {"error": "not grappled"}
+	var dc := unarmed_dc(g)
+	var roll: int = Dice.d20(rng).nat + maxi(actor.athletics, actor.acro)
+	if roll >= dc:
+		actor.statuses.erase("grappled")
+		log.append("%s breaks %s's grip (%d vs DC %d)." % [actor.cname, g.cname, roll, dc])
+		return {"success": true}
+	log.append("%s strains against %s's grip (%d vs DC %d) and stays held." % [actor.cname, g.cname, roll, dc])
+	return {"success": false}
+
+func _grappler_of(c):
+	var s = c.statuses.get("grappled")
+	return s.get("source") if s is Dictionary else null
+
+func _release_grapples() -> void:
+	for c in combatants:
+		var g = _grappler_of(c)
+		if g == null:
+			continue
+		if not g.conscious() or _no_economy(g, "action") or Hex.distance(g.pos, c.pos) > g.reach:
+			c.statuses.erase("grappled")
+			log.append("%s slips free of %s's grip." % [c.cname, g.cname])
+
+# --- Rage's clock (2024 PHB) ----------------------------------------------
+#
+# A self_buff with duration "rage" lasts until the end of the barbarian's
+# NEXT turn unless, on that turn, they made an attack roll or forced a save
+# (each of which stamps active_round). Ten rounds is the ceiling either way,
+# and Incapacitated ends it at once (begin_turn_for).
+func _mark_active(c) -> void:
+	for id in c.statuses:
+		var s = c.statuses[id]
+		if s is Dictionary and s.get("duration", "") == "rage":
+			s["active_round"] = round_num
+
+func _rage_upkeep(c) -> void:
+	for id in c.statuses.keys():
+		var s = c.statuses[id]
+		if not (s is Dictionary and s.get("duration", "") == "rage"):
+			continue
+		var started := int(s.get("started_round", round_num))
+		if round_num - started >= CONCENTRATION_ROUNDS:
+			c.statuses.erase(id)
+			log.append("%s's %s runs its course." % [c.cname, id])
+		elif started != round_num and int(s.get("active_round", -1)) != round_num:
+			c.statuses.erase(id)
+			log.append("%s's %s subsides — nothing was fought this turn." % [c.cname, id])
+
+func _end_lapsing_buffs(c, why: String) -> void:
+	for id in c.statuses.keys():
+		var s = c.statuses[id]
+		if s is Dictionary and s.get("duration", "") == "rage":
+			c.statuses.erase(id)
+			log.append("%s %s — the %s ends." % [c.cname, why, id])
 
 # A barrel or crate: one action, no roll, the hex clears. Explosive ones burst.
 func act_smash(actor) -> Dictionary:
@@ -2526,7 +2782,7 @@ func act_smash(actor) -> Dictionary:
 # ghoul's paralysis force saves but are not magic, so they are unaffected, which
 # is RAW and also what keeps this from becoming a blanket +5 on 20 statblocks.
 func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false, magical := false) -> bool:
-	var adv: bool = c.has("dodging")
+	var adv: bool = _dodging(c) and ability == "dex"   # Dodge: DEX saves only (RAW)
 	var dis := false
 	if magical:
 		for v in c.verbs:

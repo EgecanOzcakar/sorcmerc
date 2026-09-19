@@ -3,7 +3,7 @@
 
   "prone":       {"attacks_against": {"melee": "adv", "ranged": "dis"}, "own_attacks": "dis", "stand_costs": "half_move"},
   "restrained":  {"attacks_against": "adv", "own_attacks": "dis", "speed": 0, "saves": {"dex": "dis"}},
-  "grappled":    {"speed": 0},
+  "grappled":    {"speed": 0, "held_by_source": true},
   "frightened":  {"own_attacks": "dis", "own_checks": "dis", "cannot_approach_source": true},
   "blinded":     {"attacks_against": "adv", "own_attacks": "dis", "auto_fail": ["sight"]},
   "deafened":    {"auto_fail": ["hearing"]},

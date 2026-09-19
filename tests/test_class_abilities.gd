@@ -407,7 +407,6 @@ func test_known_pool_sizes() -> void:
 		"paladin/oathofdevotion": {4: {"channel-divinity": 2}, 8: {"channel-divinity": 3}},
 		"monk/warrioropenhand":   {4: {"focus-points": 4}, 8: {"focus-points": 8}},
 		"fighter/psiwarrior":     {4: {"psionic-energy": 4}, 8: {"psionic-energy": 6}},
-		"cleric/wardomain":       {4: {"war-priest": 2}, 8: {"war-priest": 3}},
 	}
 	for key in want:
 		var parts: PackedStringArray = String(key).split("/")
@@ -561,8 +560,8 @@ func test_authored_abilities() -> void:
 	var wp := verb(war, "wardomain-war-priest")
 	check(wp.get("cost", "") == "bonus" and int(wp.get("extra_attacks", 0)) == 1,
 		"war domain: War Priest is a bonus-action swing (%s)" % str(wp))
-	check(int(war.pools.get("war-priest", {}).get("max", 0)) == 3,
-		"war domain L8: War Priest has PB uses")
+	check(int(war.pools.get("war-priest", {}).get("max", 0)) == maxi(1, war.sheet.mod("wis")),
+		"war domain L8: War Priest has WIS-mod uses (2024)")
 
 	# Healing Light: a pool of d6s, warlock level + 1, spent a die at a time.
 	var cel = Adapter.to_combatant(build("warlock", "celestialpatron", 8), "party", Vector2i.ZERO)
@@ -617,11 +616,11 @@ func test_new_mechanics() -> void:
 	check(rider_fires("barbarian", "berserker", "Frenzy", {"rage": true}),
 		"...and fires once the Rage is up")
 
-	# `first_round` — Dread Ambusher.
-	check(rider_fires("ranger", "gloomstalker", "Dread Ambusher", {"round": 1}),
-		"Dread Ambusher lands in the round the ambush happens")
-	check(not rider_fires("ranger", "gloomstalker", "Dread Ambusher", {"round": 2}),
-		"...and not a round later")
+	# Dreadful Strike (2024) — any round, off a WIS-mod pool per long rest.
+	check(rider_fires("ranger", "gloomstalker", "Dreadful Strike", {"round": 1}),
+		"Dreadful Strike lands in the first round")
+	check(rider_fires("ranger", "gloomstalker", "Dreadful Strike", {"round": 2}),
+		"...and in the second (2024: any round, WIS-mod uses)")
 
 	# The first aura. "You and allies within 10 feet", so the paladin is inside
 	# their own, a neighbour is inside it, and someone across the board is not.
@@ -697,15 +696,18 @@ func test_smite_and_aura_immunity() -> void:
 	dummy.hp = dummy.max_hp
 	var cb = Combat.new(RNG.new(5), [pal, dummy], board)
 	var smite := verb(pal, "paladin-divine-smite")
-	check(int(smite.get("dice_count", 0)) == 2 and int(smite.get("dice_sides", 0)) == 8,
-		"paladin: Divine Smite is 2d8 (%s)" % str(smite))
-	check(int(pal.pools.get("paladin-divine-smite", {}).get("max", 0)) == pal.sheet.mod("cha"),
-		"paladin: CHA-mod smites per long rest")
+	check(int(smite.get("dice_count", 0)) == 2 and int(smite.get("dice_sides", 0)) == 8
+		and int(smite.get("slot_level", 0)) == 1 and smite.get("cost", "") == "bonus",
+		"paladin: Divine Smite is 2d8 for a 1st-level slot, as a bonus action (2024) (%s)" % str(smite))
+	check(not pal.pools.has("paladin-divine-smite"), "...no pool of its own any more")
+	check(int(verb(pal, "paladin-divine-smite@2").get("dice_count", 0)) == 3, "...3d8 from a 2nd-level slot")
 
-	# Pressed, it rides the NEXT blow and only that one.
+	# Pressed, it spends the slot and rides the NEXT blow and only that one.
 	cb.begin_turn_for(pal)
+	var slots0: int = pal.slots[0]
 	cb.perform(pal, smite, null)
-	check(pal.has("divine-smite"), "the smite is held until a blow reads it")
+	check(pal.has("divine-smite") and pal.slots[0] == slots0 - 1, "the smite is held until a blow reads it, and the slot is gone")
+	check(not cb._offerable(pal, verb(pal, "paladin-divine-smite@2")), "once per turn — and a bonus-action spell besides")
 	var landed := 0
 	var smited := 0
 	for _swing in 3:

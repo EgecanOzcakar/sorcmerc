@@ -69,7 +69,8 @@ static func spell(id: String) -> Dictionary:
 		merged.erase("damage")
 	if not (merged.has("damage") or merged.has("heal") or merged.has("healing")
 			or merged.has("conditions") or merged.has("buff") or merged.has("teleport")
-			or merged.has("summon") or merged.has("reaction")):   # a reaction block is a mechanic too (Counterspell)
+			or merged.has("summon") or merged.has("reaction")   # a reaction block is a mechanic too (Counterspell)
+			or merged.has("temp_hp")):
 		return {}
 	merged["level"] = int(def.get("level", 0))
 	merged["concentration"] = def.get("concentration", false)
@@ -141,11 +142,38 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 		var e := feature(fid)
 		if e.is_empty():
 			continue  # flavor feature
+		var v := _verb_from(String(fid), e, sheet)
+		if e.has("slot_dice") and sheet != null:
+			# Divine Smite: one button per slot level the paladin can spend,
+			# base dice plus one per level above the first — a spell's upcast.
+			var sd: Dictionary = e["slot_dice"]
+			var slots: Array = sheet.spellcasting.get("slots", [])
+			for lvl in range(1, 10):
+				if lvl - 1 >= slots.size() or int(slots[lvl - 1]) <= 0:
+					continue
+				var s := v.duplicate(true)
+				s["slot_level"] = lvl
+				s["dice_count"] = int(sd.get("base", 2)) + int(sd.get("per_level", 1)) * (lvl - 1)
+				if lvl > 1:
+					s["id"] = "%s@%d" % [fid, lvl]
+					s["label"] = "%s ★%d" % [v["label"], lvl]
+				out.append(s)
+		else:
+			out.append(v)
+		# A feature that is two mechanics at once (Assassinate: advantage AND a
+		# damage rider) authors the second under `also`, keyed off the same id.
+		var i := 0
+		for sub in e.get("also", []):
+			i += 1
+			out.append(_verb_from("%s#%d" % [fid, i], sub, sheet))
+	return out
+
+static func _verb_from(fid: String, e: Dictionary, sheet) -> Dictionary:
 		assert(e["kind"] in KINDS, "unknown effect kind \"%s\" on \"%s\"" % [e.get("kind"), fid])
 		# An authored `label` wins: "monster-relentless-10" is the id that keeps the
 		# three SRD thresholds apart, but the log should just say "Relentless".
 		var v := {"id": fid, "kind": e["kind"], "cost": e.get("cost", "action"),
-			"label": String(e.get("label", verb_label(fid))),
+			"label": String(e.get("label", verb_label(fid.get_slice("#", 0)))),
 			"targeting": e.get("targeting", TARGETING.get(e["kind"], "self"))}
 		for k in ["trigger", "once_per", "requires", "verbs", "status", "duration", "resist",
 				"save", "conditions", "shape", "range_ft", "halve_damage", "self",
@@ -158,9 +186,15 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 				# the flag that separates a Smite from a Rage.
 				"disadvantage", "cond_immune", "once", "aura_resist",
 				# T-summon
-				"summon", "rounds"]:
+				"summon", "rounds",
+				# 2026-09-19 (2024 PHB pass): advantage on initiative, Ambusher's
+				# Leap, Hand of Healing's Flurry swap, Stunning Strike's made-save
+				# rider, Parry's melee-only clause, Rage's own clock
+				"init_adv", "first_round_speed_ft", "flurry_swap", "on_save_vex", "melee_only"]:
 			if e.has(k):
 				v[k] = e[k]
+		if e.has("max_dice"):   # Healing Light: up to CHA-mod dice in one use
+			v["max_dice"] = maxi(1, scale(e["max_dice"], sheet))
 		if e.has("dice"):
 			var d: Dictionary = e["dice"]
 			v["dice_count"] = scale(d.get("count", 1), sheet)
@@ -192,8 +226,7 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 		elif e.has("uses"):
 			v["pool"] = fid          # synthetic pool: the export grants no pool for this feature
 			v["uses"] = _uses(e["uses"], sheet)
-		out.append(v)
-	return out
+		return v
 
 # An authored `uses`, floored at one. Several are sized off an ability modifier
 # and RAW says "a minimum of once" every time (Warding Flare, Divine Smite);
@@ -270,6 +303,8 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 		v["trigger"] = rx.get("trigger", "")
 		v["counter"] = rx.get("counter", false)
 		v["min_level"] = int(rx.get("min_level", 0))
+		if rx.has("ac_bonus"):   # Shield: +5 AC against the blow that would have hit
+			v["ac_bonus"] = int(rx["ac_bonus"])
 	if m.has("conditions"):
 		# A save-or-suffer spell. Default "round" (until the target's next turn):
 		# apply_condition's other duration is "forever", and nothing in the engine
@@ -288,17 +323,29 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 		var rays := int(m["rays"])
 		if up > 0 and m.has("upcast"):
 			rays += up * int(m["upcast"]["per_level"].get("rays", 0))
+		if base == 0:     # Eldritch Blast: one beam more at 5, 11 and 17
+			rays = _cantrip_scale(m, rays, sheet.level, "rays")
 		v["rays"] = rays
 	if m.has("damage"):
 		var d: Dictionary = m["damage"][0]
 		var n := int(d.get("count", 1))
+		var plus := int(d.get("plus", 0))   # Magic Missile's +1 a dart
 		if up > 0 and m.has("upcast"):
 			n += up * int(m["upcast"]["per_level"].get("count", 0))
+			plus += up * int(m["upcast"]["per_level"].get("plus", 0))
 		if base == 0:
 			n = _cantrip_count(m, n, sheet.level)
 		v["dice_count"] = n
 		v["dice_sides"] = int(d.get("sides", 6))
 		v["damage_type"] = d.get("type", "")
+		if plus != 0:
+			v["dice_bonus"] = plus
+	if m.has("temp_hp"):  # False Life, Heroism: temporary hit points, never a heal
+		var t: Dictionary = m["temp_hp"]
+		v["temp_count"] = int(t.get("count", 0)) + (up * int(m["upcast"]["per_level"].get("temp_count", 0)) if up > 0 and m.has("upcast") else 0)
+		v["temp_sides"] = int(t.get("sides", 4))
+		v["temp_bonus"] = (abil_mod if str(t.get("plus", "")) == "ability_mod" else int(t.get("plus", 0))) \
+			+ (up * int(m["upcast"]["per_level"].get("temp_plus", 0)) if up > 0 and m.has("upcast") else 0)
 	if m.has("heal"):
 		var h: Dictionary = m["heal"]
 		var n := int(h.get("count", 1))
@@ -324,14 +371,18 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 	elif shape == "allies":
 		v["targeting"] = "allies"        # everyone on the caster's side within range, caster included
 	else:
-		v["targeting"] = "ally" if (v.has("heal_count") or (v.has("buff") and v.get("save", "") == "" \
+		v["targeting"] = "ally" if (v.has("heal_count") or v.has("temp_count") or (v.has("buff") and v.get("save", "") == "" \
 			and not m.has("attack"))) else "enemy"
 	return v
 
 static func _cantrip_count(m: Dictionary, n: int, char_level: int) -> int:
+	return _cantrip_scale(m, n, char_level, "count")
+
+# cantrip_scale: [{min, count}] for dice, [{min, rays}] for beams (Eldritch Blast).
+static func _cantrip_scale(m: Dictionary, n: int, char_level: int, key: String) -> int:
 	for s in m.get("cantrip_scale", []):
-		if char_level >= int(s["min"]):
-			n = int(s["count"])
+		if char_level >= int(s["min"]) and s.has(key):
+			n = int(s[key])
 	return n
 
 # Fallback until F1 re-exports feature/pool prose (SCHEMA gap #4).

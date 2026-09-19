@@ -63,7 +63,7 @@ static func _can_engage(cb, m, c) -> bool:
 		if m.ranged:
 			if d > 1 and d <= m.atk_range:
 				return true
-		elif d <= 1:
+		elif d <= m.reach:
 			return true
 	return false
 
@@ -224,7 +224,7 @@ static func _foe_turn(cb, m) -> void:
 		return
 	_use_kit(cb, m)
 
-	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1)
+	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.reach)
 	if not adj.is_empty() and m.ranged and _step_clear(cb, m, pcs):
 		adj = []   # an archer with someone in its face backs off first, then shoots (falls through)
 	if not m.conscious():
@@ -243,7 +243,7 @@ static func _foe_turn(cb, m) -> void:
 	# no conscious PC adjacent — a downed neighbour gets finished only if we
 	# couldn't have engaged a conscious PC this turn (mercy rule, §7 rule 5)
 	var downed_adj: Array = cb.combatants.filter(func(c):
-		return c.team == "party" and c.is_down() and Hex.distance(c.pos, m.pos) <= 1)
+		return c.team == "party" and c.is_down() and Hex.distance(c.pos, m.pos) <= m.reach)
 	if not downed_adj.is_empty():
 		if not MERCY or not pcs.any(func(c): return _can_engage(cb, m, c)):
 			await cb.offer_reactions(m, cb.attack_verb(), downed_adj[0])
@@ -267,7 +267,7 @@ static func _foe_turn(cb, m) -> void:
 	# melee, nobody adjacent: close on the nearest PC, then swing if we arrived
 	var target = _nearest(m.pos, pcs)
 	_move_by(cb, m, _toward(target.pos))
-	var now: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1 and c.conscious())
+	var now: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.reach and c.conscious())
 	if not m.conscious():
 		return
 	if not now.is_empty():

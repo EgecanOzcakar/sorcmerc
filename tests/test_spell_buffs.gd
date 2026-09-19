@@ -81,7 +81,7 @@ func test_group_buff_and_heal() -> void:
 	cb._end_concentration(ilsa, "drops it")
 	check(cb._buff_sum(vera, "bonus_to_hit") == 0, "...and goes when she drops it")
 	ilsa.hp = 1; vera.hp = 1
-	ilsa.econ["bonus"] = 1
+	cb.begin_turn_for(ilsa)   # Bless was this turn's leveled spell: a bonus-action one needs the next (RAW)
 	cb.perform(ilsa, _verb(ilsa, "mass-healing-word"))
 	check(ilsa.hp > 1 and vera.hp > 1, "Mass Healing Word heals everyone on the side")
 
@@ -93,6 +93,7 @@ func test_single_buffs() -> void:
 	var ac0: int = cb.effective_ac(vera)
 	cb.perform(ilsa, sof, vera)
 	check(cb.effective_ac(vera) == ac0 + 2, "+2 AC on Vera")
+	cb.begin_turn_for(ilsa)   # a bonus-action leveled spell shuts out every other leveled spell that turn (RAW)
 	cb.perform(ilsa, _verb(ilsa, "haste"), vera)
 	check(cb._buff_sum(vera, "extra_action") == 1 and not cb._buff_sum(ilsa, "ac") == 2,
 		"Haste replaced Shield of Faith (one concentration) and rides Vera")
@@ -174,7 +175,7 @@ func test_teleport_obscure_summon() -> void:
 	var r: Dictionary = cb.perform(ilsa, step, dest)
 	check(not r.has("error") and ilsa.pos == dest and ilsa.hp == hp0, "...and she is there, with no opportunity attack taken (%s)" % str(r))
 	check(cb.perform(ilsa, _verb(ilsa, "misty-step"), gob.pos).has("error"), "an occupied hex is refused")
-	ilsa.econ["action"] = 1
+	cb.begin_turn_for(ilsa)   # Misty Step (a bonus-action leveled spell) closes the turn to other leveled spells (RAW)
 	var dark := _verb(ilsa, "darkness")
 	dark["save_dc"] = 0
 	cb.perform(ilsa, dark, gob.pos if dark["targeting"] == "hex" else [gob.pos, gob.pos + Vector2i(1, 0), gob.pos + Vector2i(0, 1)])

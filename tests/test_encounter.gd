@@ -87,6 +87,10 @@ func test_surprise_check() -> void:
 	var plain = _fight(11)
 	check(_play(checked)["rounds"] == _play(plain)["rounds"], "the surprise roll doesn't disturb the fight's RNG")
 
+# 2024 PHB (2026-09-19): surprise is Disadvantage on the surprised side's
+# Initiative roll, not a lost round. Everyone acts in round 1; the surprised
+# side just tends to act later. Asserted in aggregate over seeds, since one
+# re-roll can land high on its own.
 func test_surprise_round_skips_only_the_foes_first_turn() -> void:
 	var cb = _fight(5)
 	check(Encounter.surprise_check(cb, true), "scouted: the party comes in unseen")
@@ -94,16 +98,13 @@ func test_surprise_round_skips_only_the_foes_first_turn() -> void:
 	while cb.round_num <= 2:
 		acted[cb.round_num].append(cb.current())
 		cb.end_turn()
-	check(acted[1].all(func(c): return c.team == "party"), "no foe acts in the surprise round")
-	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.team_of("party").size(),
-		"every party member still gets its round-1 turn")
+	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.combatants.size(),
+		"2024 surprise: nobody loses a round — everyone acts in round 1")
 	check(_uniq(acted[2].map(func(c): return c.id)).size() == cb.combatants.size(),
-		"round 2 is a normal round again — everyone acts")
+		"...and in round 2")
+	check(_surprised_init_sum("foe", true) < _surprised_init_sum("foe", false),
+		"the surprised foes roll initiative at disadvantage (lower over 40 seeds)")
 
-# T9x: the camp-ambush counterpart — same one-round skip, the other team eats
-# it. Unlike surprise_check, begin_ambush_round() is called unconditionally
-# (the watch-check roll already happened in core/world_camp.gd), so this
-# tests the combat-engine half only.
 func test_ambush_round_skips_only_the_partys_first_turn() -> void:
 	var cb = _fight(5)
 	cb.begin_ambush_round()
@@ -112,11 +113,24 @@ func test_ambush_round_skips_only_the_partys_first_turn() -> void:
 	while cb.round_num <= 2:
 		acted[cb.round_num].append(cb.current())
 		cb.end_turn()
-	check(acted[1].all(func(c): return c.team == "foe"), "no party member acts in the ambush round")
-	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.team_of("foe").size(),
-		"every foe still gets its round-1 turn")
-	check(_uniq(acted[2].map(func(c): return c.id)).size() == cb.combatants.size(),
-		"round 2 is a normal round again — everyone acts")
+	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.combatants.size(),
+		"an ambushed party still acts in round 1 (2024)")
+	check(_surprised_init_sum("party", true) < _surprised_init_sum("party", false),
+		"the ambushed party rolls initiative at disadvantage (lower over 40 seeds)")
+
+# The summed initiative of `team` over 40 seeded fights, surprised or not.
+func _surprised_init_sum(team: String, surprised: bool) -> int:
+	var total := 0
+	for s in range(1, 41):
+		var cb = _fight(s)
+		if surprised:
+			if team == "foe":
+				cb.begin_surprise_round()
+			else:
+				cb.begin_ambush_round()
+		for c in cb.team_of(team):
+			total += c.init_roll
+	return total
 
 func test_build_spec() -> void:
 	var chars := _chars()
