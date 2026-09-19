@@ -265,7 +265,27 @@ func _free_panel() -> void:
 		var def := Catalog.spell(sid)
 		var lvl := int(def.get("level", 0))
 		_line(v, "%s" % def.get("name", sid),
-			"cantrip" if lvl == 0 else "level %d" % lvl, "free_" + sid, COL_DIM)
+			"cantrip" if lvl == 0 else "level %d" % lvl, "free_" + sid, COL_DIM, sid)
+
+# Issue #122: the same badge the action bar puts on the button that casts this
+# spell (assets/icons/skills, falling back to the school disc) — so a spell is
+# recognised here by the mark it will wear in the fight, rather than read as a
+# name and met again as a picture. Null for a build with no icons imported, and
+# the row is a row of text again, exactly as it was.
+const BADGE_PX := 28
+
+func _badge(sid: String) -> TextureRect:
+	var tex := Icons.skill_icon({"spell": sid})
+	if tex == null:
+		return null
+	var pic := TextureRect.new()
+	pic.texture = tex
+	pic.custom_minimum_size = Vector2(BADGE_PX, BADGE_PX)
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pic.tooltip_text = String(Catalog.spell(sid).get("name", sid))
+	return pic
 
 func _pool_panel() -> void:
 	var picks := pool(_ch)
@@ -296,6 +316,10 @@ func _pick_row(box: VBoxContainer, sid: String, full: bool) -> void:
 	var def := Catalog.spell(sid)
 	var on: bool = sid in _ch.prepared
 	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	var pic := _badge(sid)
+	if pic != null:
+		h.add_child(pic)
 	var name := Label.new()
 	name.text = String(def.get("name", sid))
 	name.add_theme_color_override("font_color", COL_TEXT if on else COL_DIM)
@@ -344,9 +368,11 @@ func _summary(sid: String) -> String:
 	if m.has("buff"):
 		bits.append("buff")
 	if m.has("summon"):
-		# {"id": "dire-wolf"} — the bestiary id, not a name.
+		# {"id": "dire-wolf"} — the bestiary id, not a name. Both monsters.json
+		# and bestiary.json spell the name `cname`; reading "name" meant this
+		# line had always printed the raw id.
 		var mid := String(m["summon"].get("id", "")) if m["summon"] is Dictionary else String(m["summon"])
-		bits.append("summons %s" % Catalog.monster(mid).get("name", mid))
+		bits.append("summons %s" % Catalog.monster(mid).get("cname", mid))
 	if m.get("teleport", false):
 		bits.append("teleport")
 	if m.get("concentration", false):
@@ -366,8 +392,14 @@ func _panel(title: String) -> VBoxContainer:
 	v.add_child(cap)
 	return v
 
-func _line(box: VBoxContainer, left: String, right: String, key := "", tint := COL_TEXT) -> void:
+func _line(box: VBoxContainer, left: String, right: String, key := "", tint := COL_TEXT,
+		badge_spell := "") -> void:
 	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	if badge_spell != "":
+		var pic := _badge(badge_spell)
+		if pic != null:
+			h.add_child(pic)
 	var l := Label.new()
 	l.text = left
 	l.add_theme_color_override("font_color", tint)

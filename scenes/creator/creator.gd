@@ -62,8 +62,10 @@ static func max_per_option(p: Dictionary) -> int:
 	return 2 if p["type"] == "asi" else 1
 
 # [{id, label}] — `sheet` narrows the pools that depend on the current build
-# (expertise: only skills you are proficient in).
-static func options_for(p: Dictionary, sheet = null) -> Array:
+# (expertise: only skills you are proficient in). `picks` is what this choice
+# has already been answered with; it only matters for expertise, where a pick
+# changes the very grade the pool is filtered on — see below.
+static func options_for(p: Dictionary, sheet = null, picks: Array = []) -> Array:
 	var ids: Array = []
 	match p["type"]:
 		"skill-choice":
@@ -78,8 +80,17 @@ static func options_for(p: Dictionary, sheet = null) -> Array:
 			if p["from"] != null:
 				ids = p["from"].duplicate()
 			elif sheet != null:
+				# Proficient — or already expert BECAUSE OF THIS CHOICE. Issue
+				# #119: pass_profs grades a skill this choice picked "expert",
+				# not "prof", so reading only "prof" dropped a decided choice's
+				# own two picks off its own row. The heading said "✓ Expertise
+				# — pick 2 (2 chosen)" and not one button wore the mark, and
+				# clicking any of the rest evicted an invisible pick. A skill
+				# some OTHER grant made expert stays off the list: expertise
+				# twice over buys nothing.
 				for s in sheet.skill_prof:
-					if sheet.skill_prof[s] == "prof":
+					if sheet.skill_prof[s] == "prof" \
+							or (sheet.skill_prof[s] == "expert" and s in picks):
 						ids.append(s)
 			else:
 				ids = Catalog.skills().keys()
@@ -972,7 +983,7 @@ func _choice_widget(p: Dictionary) -> void:
 	_note("from %s %s%s" % [src["origin"], humanize(src["id"]),
 		"  ·  already chosen, click to change" if p.get("decided", false) else ""])
 	var f := _flow()
-	var opts := options_for(p, sheet)
+	var opts := options_for(p, sheet, picks)
 	if opts.is_empty():
 		_note("No options available.", COL_WARN)
 	for o in opts:

@@ -43,6 +43,7 @@ func _init() -> void:
 	test_the_double_is_not_a_creature()
 	test_the_double_fades()
 	test_the_double_does_not_prop_up_a_lost_fight()
+	test_spiritual_weapon()
 	await test_the_ai_copes_with_it()
 	print("test_summons: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -341,3 +342,66 @@ func test_the_ai_copes_with_it() -> void:
 	check(cb.resolve_attack(foes[1], dbl).has("error"),
 		"a swing aimed straight at it is refused")
 
+
+# --- issue #123: Spiritual Weapon -----------------------------------------
+#
+# The reporter asked whether the cleric's Spiritual Weapon makes a minion the
+# player drives. It did not: it was modelled as a one-shot melee spell attack
+# at 60 ft, costing an Action. The 2024 spell is a weapon that keeps standing
+# there and swings where you send it, which in this engine is a summon on the
+# caster's team — and a summon on the party's team is driven from the action
+# bar like any hero (scenes/main.gd dispatches on team).
+#
+# It is also the first summon in the game that concentration does not hold, so
+# the other half of combat.summon()'s clock — `rounds` — had to start reaching
+# the verb at all.
+func test_spiritual_weapon() -> void:
+	var ilsa = Presets.ilsa(8)
+	if not "spiritual-weapon" in ilsa.prepared:
+		ilsa.prepared.append("spiritual-weapon")
+	var caster = Adapter.to_combatant(ilsa, "party", Vector2i(2, 0))
+	var foe = Encounter.spawn("goblin", 1.0, "foe", Vector2i(3, 0), 1)
+	var cb := Combat.new(RNG.new(7), [caster, foe], Encounter.board_for("goblin-camp"))
+	for c in cb.combatants:
+		cb.begin_turn_for(c)
+	cb.turn_idx = cb.order.find(caster)
+
+	var tiers: Array = cb.available(caster).filter(
+		func(v): return String(v.get("spell", "")) == "spiritual-weapon")
+	check(tiers.size() == 1,
+		"one entry on the bar, not a tier per slot — a bigger slot calls the same weapon (%d)"
+		% tiers.size())
+	if tiers.is_empty():
+		return
+	var v: Dictionary = tiers[0]
+	check(String(v.get("cost", "")) == "bonus", "it costs a Bonus Action, as the spell says")
+	check(not bool(v.get("concentration", false)), "2024 dropped its concentration")
+	check(int(v.get("rounds", 0)) == 10, "and its minute reaches the verb as ten rounds")
+
+	var w = cb.perform(caster, v, null).get("summoned")
+	check(w != null, "casting it puts a weapon on the board")
+	if w == null:
+		return
+	check(w.team == caster.team, "on the caster's side — which is what makes it the player's to drive")
+	check(cb.order.has(w), "it takes a place in the turn order of its own")
+	var held = w.statuses.get("summoned")
+	check(held is Dictionary and held.get("by") == caster, "it is stamped as this caster's")
+	check(int(held.get("fades_tick", 0)) > 0 and not held.has("held_by"),
+		"held by a clock rather than by concentration (%s)" % str(held))
+
+	# The whole point of it: it swings.
+	cb.begin_turn_for(w)
+	var bar: Array = cb.available(w).map(func(x): return String(x["id"]))
+	check("attack" in bar, "its own bar offers an attack, with a foe in reach (%s)" % str(bar))
+	if not "attack" in bar:
+		return
+	var hp0: int = foe.hp
+	var res := cb.resolve_attack(w, foe)
+	check(not res.has("error"), "it can be aimed at a foe (%s)" % str(res.get("error", "")))
+	check(bool(res.get("hit", false)) == (foe.hp < hp0), "and the swing lands or misses honestly")
+	check(String(w.damage).contains("d8"), "it deals the spell's d8 (%s)" % w.damage)
+
+	# Not an illusion: it is a real token, and the engine has no way to make
+	# something both untouchable and able to swing.
+	check(not w.has("illusion"), "it is not flagged as an illusion")
+	check(not cb.resolve_attack(foe, w).has("error"), "so a foe can strike back at it")

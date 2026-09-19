@@ -13,6 +13,7 @@
 extends SceneTree
 
 const Travel = preload("res://core/travel.gd")
+const Leveling = preload("res://core/leveling.gd")   # #118: the roster row's Level up
 
 var _pass := 0
 var _fail := 0
@@ -224,5 +225,70 @@ func _init() -> void:
 	check(String(Travel.orders(screen.party)["watch"]) == "thrun",
 		"...while the watch, still marching, keeps their job")
 
+	await _level_up_per_character(screen)
 	print("test_party_screen: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# Issue #118: a level is spent per character, so the roster row is where the
+# button that spends it belongs — live for whoever has the XP, greyed with the
+# reason for everyone else. And the profile it opens draws its way out inside
+# its own header, because a Button floated in the top-right corner landed on
+# top of that screen's Level up.
+func _level_up_per_character(screen) -> void:
+	screen._refresh()
+	await process_frame
+	var rows := _buttons_named(screen._roster_col, "Level up")
+	check(rows.size() == screen.party.roster.size(),
+		"one Level up button per roster row (%d for %d)" % [rows.size(), screen.party.roster.size()])
+	check(rows.all(func(b): return b.disabled),
+		"nobody in a fresh demo party has the XP, so every one of them is greyed")
+	check(rows.all(func(b): return b.tooltip_text.contains("XP") or b.tooltip_text.contains("dead")),
+		"...and each says why")
+
+	var who = screen.party.roster[0]
+	who.xp = Leveling.xp_for_level(who.level() + 1)
+	screen._refresh()
+	await process_frame
+	rows = _buttons_named(screen._roster_col, "Level up")
+	var live: Array = rows.filter(func(b): return not b.disabled)
+	check(live.size() == 1, "banking a level lights exactly one row's button (%d)" % live.size())
+	if live.is_empty():
+		return
+	check(live[0].tooltip_text.contains("level %d" % (who.level() + 1)),
+		"and it names the level waiting (%s)" % live[0].tooltip_text)
+
+	# Pressing it is the profile plus the level-up page, in one press.
+	live[0].pressed.emit()
+	await process_frame
+	var prof = _node_with_method(screen, "level_up")
+	check(prof != null, "the row's button opens that character's profile")
+	if prof == null:
+		return
+	check(prof.character() == who, "...the right character's")
+	check(_node_with_method(prof, "commit") != null, "...with the level-up page already on it")
+	# The way out is a control in the header, not a floating button over it.
+	check(String(prof.exit_label) != "", "the profile was handed a way out")
+	var ex = prof._fields.get("exit_btn")
+	var lvl = prof._fields.get("level_up_btn")
+	check(ex != null and lvl != null, "both the exit and Level up are laid out controls")
+	if ex == null or lvl == null:
+		return
+	check(ex.get_parent() == lvl.get_parent(),
+		"and they share the header row, so neither can be drawn over the other")
+
+func _buttons_named(node: Node, text: String) -> Array:
+	var out: Array = []
+	for c in node.get_children():
+		if c is Button and String(c.text) == text and not c.is_queued_for_deletion():
+			out.append(c)
+		out.append_array(_buttons_named(c, text))
+	return out
+
+func _node_with_method(node: Node, m: String):
+	for c in node.get_children():
+		if c.has_method(m) and not c.is_queued_for_deletion():
+			return c
+		var hit = _node_with_method(c, m)
+		if hit != null:
+			return hit
+	return null

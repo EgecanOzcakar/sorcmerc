@@ -27,6 +27,15 @@ const COL_ACCENT := Icons.COL_ACCENT
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 
+# Issue #118: whoever opens this screen as an overlay names the way out, and it
+# is drawn as the last thing in the header row rather than floated over the
+# screen. scenes/party/party.gd already does this for its own exit and says why
+# (a Button anchored to the top-right corner covers whatever the screen under
+# it put in that corner) — here the thing it covered was the Level up button,
+# which is the one control on this page a player is looking for.
+signal exit_requested
+var exit_label := ""
+
 var _ch                                 # core/character.gd
 var _party                              # core/party.gd — the shared stash (T10)
 var _fields: Dictionary = {}            # key -> Label, for tests
@@ -154,9 +163,19 @@ func _header() -> Control:
 	b.theme_type_variation = "Primary"
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.disabled = need > 0
-	b.pressed.connect(_level_up)
+	b.pressed.connect(level_up)
 	box.add_child(b)
 	_fields["level_up_btn"] = b
+
+	if exit_label != "":
+		var out := Button.new()
+		Icons.clicks(out)
+		out.text = exit_label
+		out.theme_type_variation = "Quiet"
+		out.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		out.pressed.connect(func(): exit_requested.emit())
+		box.add_child(out)
+		_fields["exit_btn"] = out
 	return box
 
 func _class_line(s) -> String:
@@ -171,7 +190,11 @@ const LEVELUP_SCENE := "res://scenes/creator/levelup.tscn"
 
 # T2's level-up, as a full-screen overlay over the sheet (the party screen opens
 # the profile the same way). It mutates the same build, so closing just re-renders.
-func _level_up() -> void:
+#
+# Public since #118: the party screen's own per-character "Level up" opens this
+# sheet and this overlay in one press, rather than growing a second copy of the
+# same two screens.
+func level_up() -> void:
 	if not ResourceLoader.exists(LEVELUP_SCENE):
 		return
 	var overlay = load(LEVELUP_SCENE).instantiate()

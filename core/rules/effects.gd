@@ -230,6 +230,11 @@ static func spell_verbs_for(sheet, spell_ids: Array, slots_override: Array = [])
 					top = l
 		if m.has("reaction") and not m.has("upcast"):
 			top = base   # a bigger slot counters exactly what the smallest one does
+		if m.has("summon") and not m.has("upcast"):
+			# #123: and a bigger slot calls exactly the same creature. The tier
+			# picker offering ★3/★4/★5 that resolve to one stat block is a row
+			# of buttons for spending a better slot on nothing.
+			top = base
 		for lvl in range(base, top + 1):
 			out.append(_spell_verb(sid, m, lvl, base, sheet, abil_mod, int(sc.get("save_dc", 0))))
 	return out
@@ -257,6 +262,12 @@ static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,
 	if m.has("summon"):            # Summon Beast: a bestiary creature on the caster's side
 		v["summon"] = m["summon"]
 		v["text"] = String(m.get("text", ""))
+		# Issue #123: every summon spell before Spiritual Weapon was held by
+		# concentration, so combat.summon()'s other clock — `rounds` — was
+		# never handed one. A summon with neither stands on the board until the
+		# fight ends, which is not what "1 minute" means.
+		if not v["concentration"] and m.has("rounds"):
+			v["rounds"] = int(m["rounds"])
 	if m.has("buff"):     # Bless, Haste, Bane: a status the target wears (combat.gd _apply_buff)
 		v["buff"] = m["buff"]
 		v["rounds"] = int(m.get("rounds", 10))
