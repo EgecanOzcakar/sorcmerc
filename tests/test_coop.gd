@@ -12,6 +12,9 @@ const Party = preload("res://core/party.gd")
 const Presets = preload("res://core/presets.gd")
 const AI = preload("res://core/ai.gd")
 const Hex = preload("res://core/hex.gd")
+const Leveling = preload("res://core/leveling.gd")
+const CharacterSave = preload("res://core/character_save.gd")
+const Creator = preload("res://scenes/creator/creator.gd")
 
 const SEEDS := 40
 
@@ -40,6 +43,8 @@ func _init() -> void:
 	for sd in range(1, 11):
 		lockstep_fight(sd, true)
 	check(_asked > 0 and _said_no > 0, "prompted: %d reactions asked, %d refused" % [_asked, _said_no])
+	await guest_levelup()
+	test_intify()
 	print("  through the codec: ", JSON.stringify(_seen))
 	print("test_coop: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -207,3 +212,49 @@ func pick_target(cb, h, v: Dictionary):
 						return Hex.corner(c.pos, k)
 			return null
 	return null
+
+# A guest levels their hero on the real level-up screen, against a mirrored
+# copy; the steps it records, sent as JSON, make the host's copy identical.
+func guest_levelup() -> void:
+	var mine = Presets.ilsa()
+	mine.xp = Leveling.xp_for_level(4)
+	var theirs = CharacterSave.from_dict(CharacterSave.to_dict(mine))   # the host's real one
+	check(Leveling.can_level_up(mine), "levelup: the copy has a level waiting")
+	var overlay = load("res://scenes/creator/levelup.tscn").instantiate()
+	var steps: Array = []
+	overlay.persist = false
+	overlay.on_step = func(step: Dictionary): steps.append(step)
+	root.add_child(overlay)
+	overlay.set_character(mine)
+	overlay.commit()
+	var picked := 0
+	for _round in 6:   # a choice can open another (a subclass, its features): go until none is left
+		if Leveling.pending(mine).is_empty():
+			break
+		for p in Leveling.pending(mine):
+			var opts: Array = Creator.options_for(p, mine.sheet(), [])
+			for i in mini(Creator.pick_count(p), opts.size()):
+				overlay._pick(p, String(opts[i]["id"]))
+				picked += 1
+	check(Leveling.can_finalize(mine), "levelup: every choice made on the copy (%d picks, %s left)" % [picked,
+		str(Leveling.pending(mine).map(func(p): return p["key"]))])
+	var done := [false]   # a lambda copies a bool; it shares an Array
+	overlay.finished.connect(func(_ok): done[0] = true)
+	overlay._on_confirm()
+	check(done[0], "levelup: the screen finished")
+	overlay.queue_free()
+	var m := wire(Coop.levelup(mine.id, steps))
+	check(m["steps"].size() == 1 + picked, "levelup: %d steps crossed the wire" % m["steps"].size())
+	for step in m["steps"]:   # what scenes/world/world.gd's _apply_guest_levelup does
+		match String(step["op"]):
+			"add_level": Leveling.add_level(theirs)
+			"decide": Leveling.decide(theirs, String(step["key"]), Coop.intify(step["decision"]))
+	check(theirs.level() == 4 and mine.level() == 4, "levelup: both copies are level 4")
+	check(CharacterSave.to_dict(theirs) == CharacterSave.to_dict(mine), "levelup: the host's sheet equals the guest's")
+
+func test_intify() -> void:
+	var d = Coop.intify(JSON.parse_string(JSON.stringify({"a": 3, "b": 2.5, "c": [1, 2, {"d": 7}], "e": "x"})))
+	check(d["a"] is int and d["a"] == 3, "intify: whole floats become ints")
+	check(d["b"] is float and d["b"] == 2.5, "intify: real floats stay")
+	check(d["c"][2]["d"] is int, "intify: nested")
+	check(d["e"] == "x", "intify: strings untouched")

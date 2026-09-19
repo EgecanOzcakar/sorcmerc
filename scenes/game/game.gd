@@ -481,9 +481,10 @@ func _process(_dt: float) -> void:
 	# host autosaves; each autosave is a full save on the wire). A fresh screen
 	# each time — the map is cheap to rebuild, and it keeps world.gd's
 	# spectator to "do not tick" rather than "also merge".
-	if not Coop.link.world_pending.is_empty():
+	if not Coop.link.world_pending.is_empty() and not (_guest_on_map and _screen.has_method("mirror_busy") and _screen.mirror_busy()):
 		var saved = WorldSave.from_dict(Coop.link.world_pending)
 		Coop.link.world_pending = {}
+		Coop.split = Coop.link.owners_latest   # the host's choice of who plays whom, so Coop.mine() agrees here
 		if saved != null:
 			var old = _screen if _guest_on_map else null   # keep the guest's own camera across the rebuild
 			_guest_combat = null

@@ -19,6 +19,8 @@ const Coop = preload("res://core/coop.gd")
 const Hex = preload("res://core/hex.gd")
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
+const Leveling = preload("res://core/leveling.gd")
+const Creator = preload("res://scenes/creator/creator.gd")
 
 const MAX_PRESSES = 400
 const PATIENCE := 60.0   # seconds of nothing to press before giving up on the other peer
@@ -188,8 +190,20 @@ func _map_mirror() -> void:
 			elif fought and screen._combat == null:
 				break   # the fight is over and the map is back
 		await create_timer(4.0).timeout   # an autosave's full map reaches the guest
+		# The road's other screens: a counter, then a level on the guest's hero.
+		screen._open_visit(w.settlements[0])
+		screen._goto_page("market")
+		await create_timer(3.0).timeout
+		screen._close_visit()
+		var theirs = screen.party.party_characters()[1]   # alternating split: the second hero is the guest's
+		var was: int = theirs.level()
+		theirs.xp = Leveling.xp_for_level(was + 1)
+		screen._autosave()
+		var t1 := Time.get_ticks_msec()
+		while theirs.level() == was and Time.get_ticks_msec() - t1 < 30000:
+			await process_frame
 		var q = screen.world.player()
-		print("host: fought=%s party=(%.0f, %.0f)" % [str(fought), q.position.x, q.position.y])
+		print("host: fought=%s party=(%.0f, %.0f) %s=%d->%d" % [str(fought), q.position.x, q.position.y, theirs.cname, was, theirs.level()])
 	else:
 		game.show_coop_guest()
 		while Time.get_ticks_msec() - t0 < 70000:
@@ -206,6 +220,53 @@ func _map_mirror() -> void:
 			print("*** guest is not on the map (fought=%s) — wedged ***" % str(fought))
 			quit(1)
 			return
+		# The counter, mirrored: the host's market page, every button greyed.
+		var visit := ""
+		t0 = Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t0 < 15000:
+			await process_frame
+			var sc = game._screen
+			if sc != null and "_visit_page" in sc and sc._visit_page == "market" and sc._visit_panel != null:
+				visit = "market:%s:%s" % [sc._visit["settlement"].id, "greyed" if _all_disabled(sc._visit_panel) else "LIVE"]
+				break
+		while game._screen != null and "_visit" in game._screen and not game._screen._visit.is_empty():
+			await process_frame   # the host leaves; the panel goes
+		# The level: the #118 panel names our hero; take it on the real screen.
+		var leveled := ""
+		t0 = Time.get_ticks_msec()
+		while leveled == "" and Time.get_ticks_msec() - t0 < 30000:
+			await process_frame
+			var sc = game._screen
+			if sc == null or not ("_levelup_panel" in sc):
+				continue
+			if sc._levelup_overlay != null:
+				var ov = sc._levelup_overlay
+				var ch = ov.character()
+				ov.commit()
+				for _round in 6:
+					for p in Leveling.pending(ch):
+						var opts: Array = Creator.options_for(p, ch.sheet(), [])
+						for i in mini(Creator.pick_count(p), opts.size()):
+							ov._pick(p, String(opts[i]["id"]))
+				ov._on_confirm()
+				leveled = "%s->%d" % [ch.cname, ch.level()]
+			elif sc._levelup_panel != null:
+				for b in _buttons_under(sc._levelup_panel):
+					if b.text.begins_with("Level up"):
+						b.pressed.emit()
+						break
+		await create_timer(2.0).timeout
 		var q = game._screen.world.player()
-		print("guest: fought=%s party=(%.0f, %.0f) spectator=%s" % [str(fought), q.position.x, q.position.y, str(game._screen.spectator)])
+		print("guest: fought=%s party=(%.0f, %.0f) spectator=%s visit=%s leveled=%s" % [str(fought), q.position.x, q.position.y, str(game._screen.spectator), visit, leveled])
 	quit(0)
+
+func _buttons_under(n: Node) -> Array:
+	var out: Array = []
+	for c in n.get_children():
+		if c is Button:
+			out.append(c)
+		out.append_array(_buttons_under(c))
+	return out
+
+func _all_disabled(n: Node) -> bool:
+	return _buttons_under(n).all(func(b): return b.disabled)

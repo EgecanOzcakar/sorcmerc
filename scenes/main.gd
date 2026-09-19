@@ -856,6 +856,12 @@ func _coop_recv(m: Dictionary) -> void:
 				for e in m["log"]:
 					_coop_recv(e)
 		"setup":   # a guest joining, or either peer rejoining: the relay replays it
+			if m.has("build") and String(m["build"]) != Coop.build_stamp():
+				# Lockstep on different code is a desync waiting for its first
+				# roll; better to say so at the door.
+				_actor.text = "[b]Different builds.[/b]  The host runs %s; this is %s. Update, then join again." % [m["build"], Coop.build_stamp()]
+				_set_buttons([])
+				return
 			_dismiss_wash()   # the last fight's verdict, if it is still up
 			result = {}
 			party = Coop.party_from(m)

@@ -21,6 +21,7 @@ const ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # no 0/O/1/I to read out 
 const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
 const WorldSave = preload("res://core/world_save.gd")
+const BugReport = preload("res://core/bug_report.gd")   # the build stamp: both peers must run the same game
 
 # Where tools/coop-relay is deployed. SORCMERC_RELAY overrides it for one run
 # (a local `wrangler dev` is ws://127.0.0.1:8787). Not a secret: a public
@@ -75,12 +76,35 @@ static func owners_for(party) -> Dictionary:
 		i += 1
 	return owners
 
+# Whether this peer plays `id` — on the road as in the fight. Always yes in
+# single player.
+static func mine(party, id: String) -> bool:
+	return link == null or owners_for(party).get(id, "host") == link.role
+
+# Lockstep needs the same code on both ends: same game build, same engine.
+static func build_stamp() -> String:
+	return "%s / Godot %s" % [BugReport.version(), Engine.get_version_info()["string"]]
+
+# JSON has no ints. Anything that came over the wire and is a whole number
+# goes back to being one, so `%d`, `range()` and `int == float` all behave.
+static func intify(v):
+	if v is float and v == floorf(v):
+		return int(v)
+	if v is Dictionary:
+		var d := {}
+		for k in v:
+			d[k] = intify(v[k])
+		return d
+	if v is Array:
+		return v.map(intify)
+	return v
+
 static func setup_for(seed: int, spec: Dictionary, party) -> Dictionary:
 	assert(seed > 0, "seed 0 means 'roll one from the clock' — the peers would differ")
 	var roster: Array = []
 	for ch in party.roster:
 		roster.append(CharacterSave.to_dict(ch))
-	return {"t": "setup", "seed": seed, "spec": spec, "owners": owners_for(party),
+	return {"t": "setup", "seed": seed, "spec": spec, "owners": owners_for(party), "build": build_stamp(),
 		"party": {"roster": roster, "active": Array(party.active), "gold": party.gold,
 			"stash": party.stash.duplicate(true)}}
 
@@ -141,7 +165,24 @@ static func hover(hex: Vector2i, verb: Dictionary) -> Dictionary:
 # party stands. The guest's map does not tick; it is drawn from these. Both
 # are forwarded by the relay and never logged.
 static func world_full(world, party, story) -> Dictionary:
-	return {"t": "world", "save": WorldSave.to_dict(world, party, story)}
+	return {"t": "world", "save": WorldSave.to_dict(world, party, story), "owners": owners_for(party)}
+
+# The settlement the host is in, as the host's screen has it: the page, the
+# counter, the market dict (minus the settlement object — its id goes) and
+# the purse and shelf, which move on every buy without an autosave.
+static func visit(world_screen) -> Dictionary:
+	if world_screen._visit.is_empty():
+		return {"t": "visit", "closed": true}
+	var m: Dictionary = world_screen._visit.duplicate(true)
+	var s = m["settlement"]
+	m.erase("settlement")
+	return {"t": "visit", "sid": s.id, "page": world_screen._visit_page, "tab": world_screen._market_tab,
+		"m": m, "gold": world_screen.party.gold, "stash": world_screen.party.stash.duplicate(true)}
+
+# A level the guest took on their own hero, as the steps the level-up screen
+# made on their mirrored copy; the host makes the same steps on the real one.
+static func levelup(hero_id: String, steps: Array) -> Dictionary:
+	return {"t": "levelup", "hero": hero_id, "steps": steps}
 
 static func map_delta(world) -> Dictionary:
 	var at := {}
@@ -208,6 +249,8 @@ class Link extends RefCounted:
 	var arrivals := 0          # times the other seat went from empty to taken; the host resends the map on each
 	var world_pending: Dictionary = {}   # the latest full map save received (guest), until a screen takes it
 	var map_latest: Dictionary = {}      # the latest map delta received (guest), until the map applies it
+	var visit_latest: Dictionary = {}    # the latest settlement page received (guest), until the map shows it
+	var owners_latest: Dictionary = {}   # who plays whom, per the last full save; game.gd copies it into Coop.split
 	var _pending: Array = []   # said before the socket opened; sent on the first pump after
 	var _url: String
 	var _retry_at := 0        # msec; a dropped socket is reopened, and the relay replays what we missed
@@ -261,8 +304,11 @@ class Link extends RefCounted:
 						arrivals += 1
 				"world":
 					world_pending = m["save"]
+					owners_latest = m.get("owners", {})
 				"map":
 					map_latest = m
+				"visit":
+					visit_latest = m
 				_:
 					if m.get("t", "") == "replay":
 						m["reconnect"] = _reconnects > 0   # not the first: whoever is fighting resyncs from it

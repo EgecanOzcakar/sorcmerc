@@ -43,8 +43,9 @@ to the other seat, with these exceptions:
 - `perform` / `move` are kept only from the seat that owns `hero`;
   `swap` / `go` only from the host. `end_turn` and `reaction` cannot be
   checked without knowing whose turn it is, which is the game's business.
-- `hover`, `map` and `world` (the host's map, mirrored to the guest) are
-  forwarded and never logged.
+- `hover`, `map`, `world`, `visit` (the host's road, mirrored to the guest)
+  and `levelup` (a guest's choices for their own hero, applied by the host)
+  are forwarded and never logged.
 - `{"t":"peers","roles":[...]}` is the relay's own, sent to everyone whenever
   a seat changes.
 

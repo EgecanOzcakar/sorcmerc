@@ -37,7 +37,9 @@ What is on the branch:
   rejoined; the host's socket closed under it mid-fight and reconnected; the
   guest coming in through the title screen's Join. All end on the same state
   hash. A fifth walks the road: the host's open world marches into a hunting
-  band, both play the fight, and both are back on the map at the same spot.
+  band, both play the fight, both are back on the map at the same spot, the
+  host opens a market and the guest's screen shows it greyed, and the guest
+  takes a level on their hero that lands on the host's copy.
 
 ## 1. Turn-based is the whole design
 
@@ -145,7 +147,10 @@ world starts a new fight, must ignore a stale replay from the room.
 the real relay with two real Godot processes — guest killed mid-turn and
 rejoined, host killed and rejoined, host's socket dropped and reconnected
 mid-fight, guest in through the title screen, and the road itself (map →
-fight → map, positions equal) — all finishing on the same hash; relay seats, ownership, replay, new-fight cut,
+fight → map → a mirrored counter → a guest's level-up applied on the host)
+— all finishing on the same hash; the level-up screen's step transcript
+replayed onto a second copy of the character gives an identical sheet
+(`test_coop.gd`); relay seats, ownership, replay, new-fight cut,
 hover, expiry wiring in `relay.test.js`.
 
 **Not tested:** a disconnect *during* a foe turn's animation on one side;
@@ -200,20 +205,52 @@ clock and the purse, loses every order, and gains *Leave the room*. When a
 fight opens, the guest's screen is the fight; when the host banks it, the
 autosave's full save puts the map back — camera carried over.
 
-What the guest still does not get: a hand on the map. The shop, the rest,
-the route and the save are the host's. Sharing *control* — two cursors, a
-vote on the route — is a different and much larger design, and the
-watching problem the game-designer named is solved by seeing, not steering.
-"Each player brings their own party" stays out, for §4's reasons.
+**The guest sees the counter.** A settlement visit is one panel with four
+pages (square, market, inn, notice board), built from the host's market
+dict. Every time the host's panel rebuilds — a page, a buy, a haggle — the
+dict goes over the wire (minus the settlement object; its id goes) with the
+purse and the shelf, which move on every buy without an autosave, and the
+guest's screen builds the same panel from it with every button greyed. When
+the host leaves, so does the panel. "Buy the potion, not the sword" is now a
+conversation two people can have.
+
+**The guest takes their own hero's levels.** A hero levels on the screen of
+whoever plays them: the #118 "level waiting" panel names only your own, and
+the party screen's *Level up* is greyed on a friend's ("the level is theirs
+to take"). The guest's panel opens the real level-up screen on their
+mirrored copy of the hero; every step it makes — `add_level`, then each
+`decide(key, decision)` — is recorded, and on Confirm goes to the host as
+one `levelup` message. The host makes the same steps on the real character,
+saves it, autosaves the world, and the guest's copy is replaced by the truth
+a moment later. This works because a character's choices were already data:
+the same `decide` dictionaries the creator writes. The guest's copy is never
+written to their own barracks (`persist = false`), and a full-save rebuild of
+the guest's map is held back while their level-up screen is open.
+
+What the guest still does not get: a hand on the road. Buying, resting,
+taking a job, choosing the route and the save are the host's. Sharing
+*control* of those — two hands in one purse, a vote on the route — is a
+different design; the fight and the guest's own heroes are where two hands
+belong, and the watching problem the game-designer named is solved by
+seeing. Market purchases by the guest would be the next step if the purse
+turns out to be table-talk rather than friction: host-authoritative
+requests, ~35 lines. "Each player brings their own party" stays out, for
+§4's reasons.
+
+**Same build on both ends.** Lockstep on different code is a desync waiting
+for its first roll, so the setup carries a build stamp (the game version and
+the Godot version) and a guest on a different one is told so at the door.
 
 ## 8. What is still not built
 
 - **Host takeover** of an absent player's hero after a timeout (§5).
 - **The guest's map is a mirror, not a model.** An NPC band that appears or
   vanishes between two autosaves is a few seconds late on the guest's map;
-  the shop, the inn, the event cards the host is reading do not show at all
-  — the guest sees the party stop and the clock pause. A ticker line of
-  "what the host is doing" would be cheap; a mirrored visit panel would not.
+  the event cards, the camp and the party screen the host is reading do not
+  show — the guest sees the party stop and the clock pause. The counter does
+  show (§7). A ticker line of "what the host is doing" would be cheap.
+- **Guest purchases** (§7): the guest reads the counter and advises; the host
+  presses Buy.
 - **Three or more players.** The relay has two seats; the split is host/guest.
 - **Hover replication is the cursor and the verb in hand**, not the aimed
   target list — the watcher sees the reach wash and the hot hex, not the

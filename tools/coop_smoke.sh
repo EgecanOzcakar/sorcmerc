@@ -45,7 +45,9 @@ case "$MODE" in
 		wait $OTHER
 		grep -h "^host:\|^guest:\|wedged\|SCRIPT ERROR" "$LOG"/host "$LOG"/guest
 		HP=$(grep -o "party=([^)]*)" "$LOG/host"); GP=$(grep -o "party=([^)]*)" "$LOG/guest")
-		if [ -n "$HP" ] && [ "$HP" = "$GP" ] && grep -q "fought=true" "$LOG/host" && grep -q "fought=true.*spectator=true" "$LOG/guest"; then echo "coop smoke (map): OK — a fight on the road, and both back on the map at $HP"; exit 0; fi
+		if [ -n "$HP" ] && [ "$HP" = "$GP" ] && grep -q "fought=true.*=[0-9]*->[0-9]*" "$LOG/host" && grep -q "fought=true.*spectator=true visit=market:.*:greyed leveled=.*->[0-9]" "$LOG/guest" \
+				&& [ "$(grep -o '[0-9]*->[0-9]*' "$LOG/host" | cut -d'>' -f2)" = "$(grep -o '>[0-9]*' "$LOG/guest" | tail -1 | tr -d '>')" ]; then
+			echo "coop smoke (map): OK — a fight on the road, the counter mirrored, the guest's hero levelled on both ends, both back on the map at $HP"; exit 0; fi
 		echo "coop smoke (map): FAIL (host $HP, guest $GP); logs in $LOG"; exit 1 ;;
 	drop)
 		SORCMERC_COOP="$CODE" $DRIVE >"$LOG/guest" 2>&1 &

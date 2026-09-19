@@ -491,6 +491,31 @@ func _coop_share(delta: float) -> void:
 	if _map_share_t >= 0.5:
 		_map_share_t = 0.0
 		link.send(Coop.map_delta(world))
+	for m in link.take():   # between fights the road owns the inbox; only one thing on it is for the host
+		if m.get("t", "") == "levelup":
+			_apply_guest_levelup(m)
+
+func _coop_share_visit() -> void:
+	if Coop.link != null and Coop.link.role == "host":
+		Coop.link.send(Coop.visit(self))
+
+# A guest's level on their own hero: the same steps their screen made on the
+# mirrored copy, made here on the real one, then saved and mirrored back.
+func _apply_guest_levelup(m: Dictionary) -> void:
+	var ch = party.get_member(String(m.get("hero", "")))
+	if ch == null or Coop.mine(party, ch.id):
+		return   # not theirs to level
+	for step in m.get("steps", []):
+		match String(step.get("op", "")):
+			"add_level":
+				if Leveling.can_level_up(ch):
+					Leveling.add_level(ch)
+			"decide":
+				Leveling.decide(ch, String(step["key"]), Coop.intify(step["decision"]))
+	ch.dirty()
+	CharacterSave.save(ch)
+	_levelup_told[ch.id] = ch.level()
+	_autosave()
 
 # Apply what the host last said. A party in the delta the map does not know
 # yet waits for the next full save; one the delta no longer names is stale
@@ -515,6 +540,40 @@ func _spectate() -> void:
 		world.reveal(p0.position)
 	if _pause_btn != null:
 		_pause_btn.text = "Paused" if bool(m.get("paused", false)) else "Travelling"
+	if not link.visit_latest.is_empty():
+		var v: Dictionary = link.visit_latest
+		link.visit_latest = {}
+		_mirror_visit(v)
+	_check_level_ready()   # a level on one of OUR heroes is ours to take (see _ready_to_level)
+
+# The host's counter, on our screen: the same panel, from their market dict,
+# with every button greyed. The purse and the shelf ride along because a buy
+# moves them without an autosave.
+func _mirror_visit(v: Dictionary) -> void:
+	if bool(v.get("closed", false)):
+		_visit = {}
+		if _visit_panel != null:
+			_visit_panel.queue_free()
+			_visit_panel = null
+		return
+	var s = null
+	for cand in world.settlements:
+		if cand.id == String(v["sid"]):
+			s = cand
+	if s == null:
+		return
+	_visit = Coop.intify(v["m"])
+	_visit["settlement"] = s
+	_visit_page = String(v["page"])
+	_market_tab = String(v["tab"])
+	party.gold = int(v.get("gold", party.gold))
+	party.stash.assign(Coop.intify(v.get("stash", party.stash)))   # typed Array: assign, not replace
+	_build_visit_panel()
+
+# Whether a rebuild from the host's next full save would pull the rug: the
+# guest is choosing a level, and the choice is not finished.
+func mirror_busy() -> bool:
+	return _levelup_overlay != null
 
 # The guest's HUD: the clock and the purse stay, every order goes, and the one
 # button is the way out of the room.
@@ -735,6 +794,7 @@ func _autosave() -> void:
 	WorldSave.save(world, party, story)
 	if Coop.link != null and Coop.link.role == "host":
 		Coop.link.send(Coop.world_full(world, party, story))   # something structural changed: the guest's map follows
+		_coop_share_visit()   # a full save rebuilds the guest's screen; the counter has to be put back on it
 
 # Closing the window mid-march is a quit too. The menu's "Save and quit" goes
 # through _leave_world and saves; the title bar's X went through nothing.
@@ -1551,10 +1611,12 @@ func _close_spoils() -> void:
 # ONCE PER LEVEL, PER CHARACTER: _levelup_told remembers who was told and at
 # what level, so backing out with "Not now" does not put the panel straight
 # back up, and the next level says so again.
+# Co-op: a hero levels up on the screen of whoever plays them, so each peer
+# is only told about its own.
 func _ready_to_level() -> Array:
 	var out: Array = []
 	for ch in party.roster:
-		if not ch.dead and Leveling.can_level_up(ch):
+		if not ch.dead and Leveling.can_level_up(ch) and Coop.mine(party, ch.id):
 			out.append(ch)
 	return out
 
@@ -1614,7 +1676,8 @@ func _build_levelup_panel(who: Array) -> void:
 		box.add_child(l)
 
 	var note := Label.new()
-	note.text = "There is a level waiting on the party screen — pick it up there, per character."
+	note.text = "There is a level waiting on the party screen — pick it up there, per character." if not spectator \
+		else "Your hero, your choices — take the level here; your host's sheet follows."
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.add_theme_color_override("font_color", Icons.COL_MUTED)
@@ -1625,11 +1688,14 @@ func _build_levelup_panel(who: Array) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_child(row)
 	var go := Button.new()
-	go.text = "Open the party  [Enter]"
+	go.text = "Open the party  [Enter]" if not spectator else "Level up %s  [Enter]" % who[0].cname
 	go.theme_type_variation = "Primary"
 	go.pressed.connect(func():
 		_close_levelup()
-		_open_party())
+		if spectator:
+			_guest_levelup(who[0])
+		else:
+			_open_party())
 	row.add_child(go)
 	var later := Button.new()
 	later.text = "Not now  [Esc]"
@@ -1642,6 +1708,27 @@ func _close_levelup() -> void:
 	if _levelup_panel != null:
 		_levelup_panel.queue_free()
 		_levelup_panel = null
+
+const LEVELUP_SCENE := "res://scenes/creator/levelup.tscn"
+var _levelup_overlay = null   # the guest's level-up screen, while one is up
+
+# The guest takes a level on their mirrored copy of the hero — the same
+# screen the profile opens — and every step it makes goes to the host as one
+# message on Confirm. Nothing is saved here; the host's save comes back as the
+# next full map.
+func _guest_levelup(ch) -> void:
+	var overlay = load(LEVELUP_SCENE).instantiate()
+	var steps: Array = []
+	overlay.persist = false
+	overlay.on_step = func(step: Dictionary): steps.append(step)
+	add_child(overlay)
+	_levelup_overlay = overlay
+	overlay.set_character(ch)
+	overlay.finished.connect(func(_leveled):
+		overlay.queue_free()
+		_levelup_overlay = null
+		if not steps.is_empty() and Coop.link != null:
+			Coop.link.send(Coop.levelup(ch.id, steps)))
 
 # A death is a death regardless of who won — encounter.gd always fills
 # `deaths`, campaign.gd's linear run already benches+marks them the same way;
@@ -2365,6 +2452,7 @@ func _close_visit() -> void:
 	world.clock.resume()
 	_pause_btn.text = "Pause"
 	_autosave()   # O13 autosave: the purse and the shelf both moved
+	_coop_share_visit()
 
 func _buy(item_id: String) -> void:
 	if Visit.buy(_visit, party, item_id):
@@ -2750,6 +2838,16 @@ func _build_visit_panel() -> void:
 	leave.text = "Leave"
 	leave.pressed.connect(_close_visit)
 	bar.add_child(leave)
+	if spectator:
+		_disable_all(centre)   # the guest reads the counter; the host runs it
+	else:
+		_coop_share_visit()
+
+static func _disable_all(n: Node) -> void:
+	for c in n.get_children():
+		if c is Button:
+			c.disabled = true
+		_disable_all(c)
 
 # The settlement panel's column width. Every list inside it is sized against
 # this, so one long job title wraps instead of widening the whole counter.
