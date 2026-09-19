@@ -341,16 +341,17 @@ func test_combat_hooks() -> void:
 	check(PartyOpinion.bicker_penalty(p, vera, cb) == 0, "apart: they can behave")
 
 func test_rally_status_survives_new_turn() -> void:
-	# The reason rally has its own status: "helped" is a TURN_STATUS and is
-	# erased at the top of the bearer's own turn — before an attack can spend it.
+	# Rally keeps its own status rather than riding Help's "helped": Help's is
+	# the helper's to take back (combat._release_helps, 2024 RAW), a rally is
+	# nobody's. Both survive the bearer's own turn reset.
 	var p := _party()
 	var cb := _fight(p)
 	var vera = _c(cb, "vera")
-	vera.statuses["helped"] = true
+	vera.statuses["helped"] = {"by": _c(cb, "ilsa")}
 	vera.statuses[PartyOpinion.RALLY_STATUS] = true
 	vera.new_turn()
-	check(not vera.has("helped"), "(Help's advantage does not outlive the ally's turn reset — pre-existing)")
-	check(vera.has(PartyOpinion.RALLY_STATUS), "a rally does")
+	check(vera.has("helped"), "Help's advantage survives the ally's own turn reset (the helper's next turn ends it)")
+	check(vera.has(PartyOpinion.RALLY_STATUS), "a rally does too")
 
 func test_save_round_trip() -> void:
 	var p := _party()

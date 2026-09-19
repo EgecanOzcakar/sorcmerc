@@ -50,7 +50,9 @@ static func _is_warlock(s) -> bool:
 # Inspiration flips it to short-rest — _synthetic_regen() below is where that
 # one feature-specific exception lives, everything else uses the flat default.
 const LONG_REST_ONLY_FEATURES := ["bard-bardic-inspiration", "wizard-arcane-recovery",
-	"beastmaster-primal-companion"]   # RAW: the beast's uses come back on a long rest
+	"beastmaster-primal-companion",   # RAW: the beast's uses come back on a long rest
+	"lightdomain-warding-flare", "warrioropenhand-wholeness-of-body",   # 2024: Long Rest
+	"gloomstalker-dread-ambusher"]    # Dreadful Strike: WIS-mod uses per Long Rest
 const FONT_OF_INSPIRATION_LEVEL := 5
 
 static func _synthetic_regen(pool_id: String, sheet) -> String:
@@ -134,7 +136,11 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 	c.attacks = s.attacks.duplicate(true)
 	var offhand := _take_offhand(c.attacks, ch.offhand)   # main hand must stay attacks[0]
 	_apply_main_attack(c)
-	c.crit_range = 19 if s.has_feature("champion-improved-critical") else 20
+	# Champion: Improved Critical at 3 (19-20), Superior Critical at 15 (18-20).
+	c.crit_range = 18 if s.has_feature("champion-superior-critical") \
+		else (19 if s.has_feature("champion-improved-critical") else 20)
+	c.str_mod = s.mod("str")
+	c.pb = s.proficiency_bonus
 
 	c.saves = s.saves.duplicate()
 	c.save_dc = int(s.spellcasting.get("save_dc", 0))
@@ -177,6 +183,7 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 	c.spell_ids = castable
 
 	c.verbs = Effects.verbs_for(s)
+	c.init_adv = c.verbs.any(func(v): return v.get("init_adv", false))   # Assassinate, Dread Ambusher
 	c.verbs.append_array(Effects.spell_verbs_for(s, castable, full_slots))
 	var twf := _offhand_verb(offhand, c.attacks, s)
 	if not twf.is_empty():
@@ -194,6 +201,7 @@ static func _apply_main_attack(c) -> void:
 	c.damage = a["notation"]
 	c.ranged = a["range"] == "ranged"
 	c.atk_range = mini(RANGE_CAP, hexes(int(a["normal_ft"]))) if c.ranged else 1
+	c.reach = 2 if "reach" in a.get("properties", []) else 1   # a glaive threatens 10 ft
 
 # T29: the melee/ranged toggle. Moves the named attack to the front and
 # recomputes; false if this combatant has no such attack.
@@ -238,7 +246,7 @@ static func _offhand_verb(offhand: Dictionary, attacks: Array, s) -> Dictionary:
 		return {}   # no main-hand weapon: not dual-wielding
 	var dmg := int(offhand["dmg_bonus"]) if TWF_STYLE in s.fighting_styles else 0
 	var nick: bool = String(main.get("mastery", "")) == "nick"
-	var reach := 1
+	var reach := 2 if "reach" in offhand.get("properties", []) else 1
 	if offhand["range"] == "ranged":
 		reach = mini(RANGE_CAP, hexes(int(offhand["normal_ft"])))
 	return {
@@ -302,7 +310,12 @@ static func from_monster(m: Dictionary, team: String, pos: Vector2i):
 	for fid in m.get("features", []):
 		c.features[fid] = true
 	c.darkvision = m.get("senses", {}).has("darkvision")   # #85
+	# The Unarmed Strike DC (Shove / Grapple, 2024): STR off the statblock's
+	# abilities and a proficiency bonus off its CR, the way the MM tables do.
+	c.str_mod = floori((int(m.get("abilities", {}).get("str", 10)) - 10) / 2.0)
+	c.pb = 2 + maxi(0, ceili(float(m.get("cr", 0)) / 4.0) - 1)
 	c.verbs = Effects.verbs_for(null, c.features.keys())
+	c.init_adv = c.verbs.any(func(v): return v.get("init_adv", false))
 	_finish_verbs(c, {})
 	return c
 

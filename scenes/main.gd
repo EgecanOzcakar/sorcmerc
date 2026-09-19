@@ -889,7 +889,7 @@ static func _slots_of(opt: Array) -> Array:
 	var out: Array = []
 	if key.begins_with("spell:"):
 		out.append("spells")
-	elif key.begins_with("shove") or key in ["smash", "help"]:
+	elif key.begins_with("shove") or key in ["smash", "help", "grapple", "escape"]:
 		out.append("other")
 	elif key in ["attack", "dash", "disengage", "dodge", "hide"] and cost == "action":
 		out.append(key)
@@ -1074,7 +1074,9 @@ const KIND_BLURB := {
 	"disengage": "Your movement doesn't provoke opportunity attacks this turn.",
 	"hide": "Make a Stealth check to become hidden from enemies who can't see you.",
 	"help": "Grant an ally advantage on their next check or attack roll.",
-	"shove": "Contested Athletics check: knock the target prone or push it back.",
+	"shove": "An unarmed strike (one of your attacks): the target saves against DC 8 + STR + proficiency or is knocked prone / pushed back.",
+	"grapple": "An unarmed strike (one of your attacks): the target saves against DC 8 + STR + proficiency or is held at speed 0 until it breaks free.",
+	"escape": "Athletics or Acrobatics against your grappler's DC to break the hold.",
 	"smash": "Destroy a barrel or crate within reach.",
 	"attack": "Swing the weapon in your main hand.",
 	"offhand_attack": "A second swing with your off-hand weapon.",
@@ -1197,6 +1199,7 @@ func _area_aim(h) -> Array:
 func _enter_target(h, v: Dictionary) -> void:
 	_mode = "target"
 	_tgt_verb = v
+	_picked.clear()
 	_actor.text = "%s — %s: hover a target for the odds, click to apply.  (Esc / right-click cancels)" % [
 		h.cname, v["label"]]
 	_set_buttons([["Cancel", func(): board_cancel(), "Cancel",
@@ -1204,16 +1207,26 @@ func _enter_target(h, v: Dictionary) -> void:
 	_paint_order_aim()
 	_board.queue_redraw()
 
-# Is `c` a legal target for the pending verb?
+# A verb that takes several targets (an upcast Hold Person): the ones clicked
+# so far, in order. The player picks each; the engine only auto-fills when it
+# is handed a single Combatant (the AI's path).
+var _picked: Array = []
+
+# Is `c` a legal target for the pending verb? For a multi-target verb, also not
+# one already picked and within the "30 feet of each other" of the first.
 func _valid_target(h, c) -> bool:
-	return not _tgt_verb.is_empty() and cb.legal_target(h, _tgt_verb, c)
+	if _tgt_verb.is_empty() or not cb.legal_target(h, _tgt_verb, c):
+		return false
+	if _picked.is_empty():
+		return true
+	return not c in _picked and Hex.distance(_picked[0].pos, c.pos) <= cb.SPREAD_HEXES
 
 # The number shown over a valid target while aiming.
 func target_readout(h, c) -> String:
 	var v := _tgt_verb
 	match v["kind"]:
 		"attack": return "%d%%" % int(round(cb.hit_chance(h, c) * 100.0))
-		"shove": return "%d%%" % int(round(cb.shove_chance(h, c) * 100.0))
+		"shove", "grapple": return "%d%%" % int(round(cb.shove_chance(h, c) * 100.0))
 		"help": return "advantage"
 	if v.has("heal_count") or v["kind"] in ["heal_self", "heal_ally"]:
 		if c.is_down():
@@ -1289,6 +1302,20 @@ func board_hex_clicked(hx: Vector2i) -> void:
 			_after_hero_action(h)
 
 func _apply_target(h, c) -> void:
+	var want := int(_tgt_verb.get("targets", 1))
+	if want > 1:
+		_picked.append(c)
+		var more: bool = _picked.size() < want and cb.combatants.any(func(o): return _valid_target(h, o))
+		if more:
+			_actor.text = "%s — %s: %d of %d picked. Click another, or cast now.  (Esc cancels)" % [
+				h.cname, _tgt_verb["label"], _picked.size(), want]
+			_set_buttons([["Cast on %d" % _picked.size(), func(): _apply_target_list(h), "Cast now",
+				_mark(Icons.verb_icon("spell"), "✓")],
+				["Cancel", func(): board_cancel(), "Cancel", _mark(Icons.verb_icon("back"), "‹")]])
+			_board.queue_redraw()
+			return
+		_apply_target_list(h)
+		return
 	_mode = "idle"
 	var v := _tgt_verb
 	_tgt_verb = {}
@@ -1304,6 +1331,26 @@ func _apply_target(h, c) -> void:
 		# never reached.
 		var on = res.get("by") if res.get("countered", false) else c
 		_board.show_reveal((on if on != null else c).id, res, _reveal_head(res))
+		await get_tree().create_timer(REVEAL_PAUSE / _anim).timeout
+		_busy = false
+	_after_hero_action(h)
+
+# Every target the player picked, primary first; cast() reads the Array as
+# "these and no others".
+func _apply_target_list(h) -> void:
+	_mode = "idle"
+	var v := _tgt_verb
+	_tgt_verb = {}
+	var picked: Array = _picked.duplicate()
+	_picked.clear()
+	if picked.is_empty():
+		_after_hero_action(h)
+		return
+	var res = cb.perform(h, v, picked)
+	_attack_fx(h, picked[0], v)
+	if typeof(res) == TYPE_DICTIONARY and (res.has("hit") or res.has("saved")):
+		_busy = true
+		_board.show_reveal(picked[0].id, res, _reveal_head(res))
 		await get_tree().create_timer(REVEAL_PAUSE / _anim).timeout
 		_busy = false
 	_after_hero_action(h)
@@ -1609,7 +1656,7 @@ func _build_order_strip() -> void:
 		# label keeps the roll so you can read the actual initiative, and HP
 		# shows alongside it rather than replacing it.
 		var hp := Label.new()
-		hp.text = "%d/%d" % [c.hp, c.max_hp]
+		hp.text = "%d/%d%s" % [c.hp, c.max_hp, ("+%d" % c.temp_hp) if c.temp_hp > 0 else ""]
 		hp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		hp.add_theme_font_size_override("font_size", int(Icons.FS_SMALL * u))
 		hp.add_theme_color_override("font_color", _hp_color(c))
@@ -1687,7 +1734,8 @@ static func _hp_color(c) -> Color:
 # The actor line's HP readout, colored by the same three bands as the token's
 # own bar — one glance tells you if the acting hero is in trouble.
 static func _hp_bb(c) -> String:
-	return "[color=#%s]♥ %d/%d[/color]" % [_hp_color(c).to_html(false), c.hp, c.max_hp]
+	return "[color=#%s]♥ %d/%d%s[/color]" % [_hp_color(c).to_html(false), c.hp, c.max_hp,
+		(" +%d" % c.temp_hp) if c.temp_hp > 0 else ""]
 
 # Action-economy badges: a filled glyph per resource still available this
 # turn, gone (not just dimmed) once spent — the request was "more compact",
@@ -2689,7 +2737,7 @@ class Board extends Control:
 		var targeting := String(v.get("targeting", "self"))
 		var r := int(v.get("range", 1))
 		if v["kind"] in ["attack", "offhand_attack"] and (targeting == "enemy"):
-			r = cur.atk_range if cur.ranged else int(cb.board.get("reach_melee", 1))
+			r = cur.atk_range if cur.ranged else cur.reach
 		elif targeting == "direction":
 			r = int(v.get("radius", 2))
 		elif targeting in ["self", "self_area"]:
@@ -2732,7 +2780,8 @@ class Board extends Control:
 		elif frac < 0.66: hpcol = Color("d9a441")
 		canvas.draw_rect(Rect2(br.position, Vector2(br.size.x * frac, br.size.y)), hpcol)
 		canvas.draw_string(ThemeDB.fallback_font, br.position + Vector2(0, 12 + 8 * fz),
-			"%d/%d" % [c.hp, c.max_hp], HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * fz), Color("c9ccd6"))
+			"%d/%d%s" % [c.hp, c.max_hp, ("+%d" % c.temp_hp) if c.temp_hp > 0 else ""],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * fz), Color("c9ccd6"))
 
 		# condition strip, centred over the token (the shoulder is the class badge's)
 		var tags: String = Icons.status_glyphs(c)

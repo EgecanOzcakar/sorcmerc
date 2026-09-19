@@ -415,8 +415,8 @@ static func bicker_penalty(party, c, cb) -> int:
 
 # `fallen` just hit 0 HP. Everyone close to them who can still swing gets
 # RALLY_STATUS: advantage on their next attack, spent by that attack. Its own
-# status rather than Help's "helped" because new_turn() erases "helped" at the
-# top of the bearer's turn — before they can use it (see the doc).
+# status rather than Help's "helped" because "helped" belongs to a helper (it
+# lapses at that helper's next turn, combat._release_helps) and a rally has none.
 static func rally(party, fallen, cb) -> Array:
 	var out: Array = []
 	if fallen.team != "party":

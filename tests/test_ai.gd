@@ -103,8 +103,8 @@ func test_never_specials_a_downed_pc() -> void:
 func test_falls_back_to_the_swing() -> void:
 	var f := _fight("giant-rat", Vector2i(4, 0))
 	var cb: Combat = f[0]
-	check(not cb.available(f[1]).any(func(v): return v["kind"] != "attack" and v.get("targeting", "self") == "enemy"),
-		"giant rat has no offensive special")
+	check(not cb.available(f[1]).any(func(v): return not v["kind"] in Combat.ATTACK_KINDS and v.get("targeting", "self") == "enemy"),
+		"giant rat has no offensive special (Shove and Grapple are everyone's)")
 	f[1].atk_bonus = 20
 	AI.take_turn(cb, f[1])
 	check(f[2].hp < 200, "it swings")

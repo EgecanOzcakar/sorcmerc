@@ -72,7 +72,7 @@ func test_catalog_loads() -> void:
 	var counts := {
 		"classes.json": 12, "subclasses.json": 48, "species.json": 10,
 		"backgrounds.json": 16, "feats.json": 74, "fighting-styles.json": 10,
-		"spells.json": 146, "weapons.json": 39, "armor.json": 13,
+		"spells.json": 151, "weapons.json": 39, "armor.json": 13,
 		# magic items: 262 exported + the game-authored scroll-of-resurrection
 		"magic-items.json": 264, "conditions.json": 15, "skills.json": 18,
 	}
@@ -834,8 +834,10 @@ func test_spell_mechanics_merge() -> void:
 	check(bh["save"] == "dex" and bh["half_on_save"], "burning hands: DEX save for half")
 	check(int(bh["damage"][0]["count"]) == 3 and int(bh["damage"][0]["sides"]) == 6, "burning hands 3d6")
 	check(int(bh["level"]) == 1, "burning hands is a level-1 spell")
-	# healing-word and magic-missile are absent from the 146-spell export — F1 gap.
-	check(Effects.spell("healing-word").is_empty(), "an uncatalogued spell has no mechanics")
+	# healing-word and magic-missile were absent from the 146-spell export (F1 gap);
+	# 2026-09-19 added both by hand. A spell the catalog does not carry still has none.
+	check(Effects.spell("no-such-spell").is_empty(), "an uncatalogued spell has no mechanics")
+	check(Effects.spell("healing-word").get("cost", "") == "bonus", "Healing Word is catalogued and a bonus action")
 	var cw := Effects.spell("cure-wounds")
 	check(int(cw["heal"]["count"]) == 2 and int(cw["heal"]["sides"]) == 8,
 		"cure wounds is authored where the regex parse gave nothing usable")
@@ -931,12 +933,14 @@ func test_t33_spell_overrides() -> void:
 		var m := Effects.spell(id)
 		check(not m.is_empty() and not m.has("damage"), "%s is castable on its condition alone" % id)
 		check(m.get("save", "") == "wis", "%s forces a WIS save" % id)
-		# one round, or held by concentration (which combat.gd ends) — never forever
-		check(m.get("duration", "round") == "round" or m.get("concentration", false),
+		# one round, a minute on the clock, or held by concentration (which
+		# combat.gd ends) — never forever
+		check(m.get("duration", "round") in ["round", "minute"] or m.get("concentration", false),
 			"%s's condition is not a permanent lockout" % id)
 	check(Effects.spell("hideous-laughter")["conditions"] == ["prone", "incapacitated"],
 		"Hideous Laughter drops the target prone AND incapacitated")
-	check(Effects.spell("sleep")["conditions"] == ["incapacitated"], "Sleep incapacitates")
+	check(Effects.spell("sleep")["conditions"] == ["unconscious"] and Effects.spell("sleep")["repeat_save"] == "damage_ends",
+		"Sleep (2024): Unconscious for a minute, until damaged")
 	check(Effects.spell("fear")["conditions"] == ["frightened"] and Effects.spell("fear")["shape"] == "cone"
 		and int(Effects.spell("fear")["size_ft"]) == 30, "Fear frightens a 30 ft cone")
 

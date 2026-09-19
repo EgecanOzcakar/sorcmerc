@@ -346,7 +346,7 @@ static func spell_school(spell_id: String) -> String:
 # mark is more informative than one generic wand icon for every spell.
 const VERB_GLYPHS := {
 	"attack": "⚔", "offhand_attack": "⚔",
-	"shove": "⇉", "smash": "⚒", "help": "✚",
+	"shove": "⇉", "grapple": "⊗", "escape": "⛓", "smash": "⚒", "help": "✚",
 	"dodge": "◈", "dash": "➤", "disengage": "↩", "hide": "☁",
 	"heal_self": "☤", "heal_ally": "☤",
 	"self_buff": "⬆", "ally_buff": "⬆",

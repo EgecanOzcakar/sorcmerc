@@ -112,8 +112,9 @@
   },
   "sleep": {
     "cost": "action", "shape": "sphere", "size_ft": 5, "range_ft": 60, "save": "wis",
-    "conditions": ["incapacitated"], "duration": "round",
-    "upcast": {"per_level": {"count": 0}}
+    "conditions": ["unconscious"], "duration": "minute", "repeat_save": "damage_ends",
+    "upcast": {"per_level": {"count": 0}},
+    "_note": "2024: WIS save or Unconscious for a minute; damage wakes it. (RAW's first-round Incapacitated stage before the second save is folded into one save.)"
   },
   "fear": {
     "cost": "action", "shape": "cone", "size_ft": 30, "range_ft": 5, "save": "wis",
@@ -153,7 +154,7 @@
   "insect-plague": {"zone": true, "shape": "sphere", "size_ft": 20, "range_ft": 300, "save": "con", "half_on_save": true, "damage": [{"count": 4, "sides": 10, "type": "piercing"}], "upcast": {"per_level": {"count": 1}}},
   "modify-memory": {"shape": "single", "range_ft": 30},
   "steel-wind-strike": {"shape": "single", "range_ft": 30, "attack": "melee", "damage": [{"count": 6, "sides": 10, "type": "force"}]},
-  "heroism": {"shape": "single", "range_ft": 5, "conditions": [], "buff": {"bonus_save": 2}, "heal": {"count": 0, "sides": 4, "plus": "ability_mod"}, "text": "A few hit points now and +2 on saves while you concentrate"},
+  "heroism": {"shape": "single", "range_ft": 5, "conditions": [], "buff": {"bonus_save": 2}, "temp_hp": {"count": 0, "sides": 4, "plus": "ability_mod"}, "text": "Temporary HP equal to your casting modifier and +2 on saves while you concentrate"},
   "invisibility": {"shape": "single", "range_ft": 5, "conditions": [], "buff": {"condition": "invisible"}, "text": "Invisible until they attack or cast"},
   "greater-invisibility": {"shape": "single", "range_ft": 5, "conditions": [], "buff": {"condition": "invisible", "sticky": true}, "text": "Invisible, and it survives attacking"},
   "freedom-of-movement": {"non_combat": true},
@@ -165,6 +166,39 @@
   "counterspell": {
     "cost": "reaction", "shape": "single", "range_ft": 60, "save": "con",
     "reaction": {"trigger": "spell_cast", "counter": true, "min_level": 1}
+  },
+  "shield": {
+    "cost": "reaction", "shape": "self",
+    "reaction": {"trigger": "would_be_hit", "ac_bonus": 5},
+    "buff": {"ac": 5}, "rounds": 0,
+    "text": "Reaction: +5 AC against the blow that would have hit, and until your next turn"
+  },
+  "_note_2024_additions": "2026-09-19: the five spells every 5e CRPG ships that the export lacked, added to data/spells.json by hand and authored here. Magic Missile is the one flat-bonus damage entry (`plus`, per dart); Eldritch Blast scales BEAMS with character level rather than dice; Vicious Mockery rides the engine's `sapped` status (disadvantage on the next attack roll, the Sap mastery's shape).",
+  "magic-missile": {
+    "cost": "action", "shape": "single", "range_ft": 120,
+    "damage": [{"count": 3, "sides": 4, "plus": 3, "type": "force"}],
+    "upcast": {"per_level": {"count": 1, "plus": 1}},
+    "text": "Three darts, 1d4+1 force each, no roll to hit and no save"
+  },
+  "healing-word": {
+    "cost": "bonus", "shape": "single", "range_ft": 60,
+    "heal": {"count": 2, "sides": 4, "plus": "ability_mod"},
+    "upcast": {"per_level": {"count": 2}},
+    "text": "Bonus action: 2d4 + your modifier at 60 ft"
+  },
+  "eldritch-blast": {
+    "cost": "action", "shape": "single", "range_ft": 120, "attack": "ranged",
+    "damage": [{"count": 1, "sides": 10, "type": "force"}],
+    "rays": 1,
+    "cantrip_scale": [{"min": 5, "rays": 2}, {"min": 11, "rays": 3}, {"min": 17, "rays": 4}],
+    "text": "A beam of 1d10 force; two beams at level 5, three at 11, four at 17"
+  },
+  "vicious-mockery": {
+    "cost": "action", "shape": "single", "range_ft": 60, "save": "wis",
+    "damage": [{"count": 1, "sides": 6, "type": "psychic"}],
+    "conditions": ["sapped"], "duration": "round",
+    "cantrip_scale": [{"min": 5, "count": 2}, {"min": 11, "count": 3}, {"min": 17, "count": 4}],
+    "text": "WIS save or 1d6 psychic and disadvantage on its next attack roll"
   },
   "_note_zones": "2026-09-16: `zone: true` on an area spell keeps it on its hexes (combat.gd zones) instead of resolving once against whoever stood there: a buff zone (Darkness, Fog Cloud) dresses and undresses occupants as they come and go, a save/damage zone (Web, Spirit Guardians, Wall of Fire) rolls against a creature the turn it starts inside or steps in, once per turn. Concentration zones end with the caster's concentration; emanations walk with the caster.",
   "_note_buffs": "2026-09-16: `buff` is a status the target wears (combat.gd _apply_buff): ac, bonus_to_hit, bonus_save, bonus_damage, resist / resist_random, extra_action, speed_mult, no_attack, condition (+sticky), and an `effects` dict of conditions.json-style adv/dis. shape self = the caster, allies = everyone on the caster's side within range_ft, single = one ally (or the enemy who fails the save when the spell has one). `rounds` is its life without concentration. Dice bonuses are their averages (Bless 1d4 -> 2). `conditions: []` blanks the regex draft's guess. Marked non_combat: nothing on this board models what they do.",
@@ -178,7 +212,7 @@
   "haste": {"shape": "single", "range_ft": 30, "buff": {"extra_action": 1, "speed_mult": 2, "ac": 2}, "text": "An extra action, double speed, +2 AC", "save": ""},
   "protection-from-energy": {"shape": "single", "range_ft": 5, "buff": {"resist_random": ["acid", "cold", "fire", "lightning", "thunder"]}, "text": "Resistance to one element, rolled on cast"},
   "stoneskin": {"shape": "single", "range_ft": 5, "buff": {"resist": ["bludgeoning", "piercing", "slashing"]}, "text": "Resist bludgeoning, piercing and slashing"},
-  "false-life": {"shape": "self", "heal": {"count": 1, "sides": 4, "plus": 4}, "text": "1d4+4 HP (temporary, in spirit)"},
+  "false-life": {"shape": "self", "temp_hp": {"count": 1, "sides": 4, "plus": 4}, "upcast": {"per_level": {"temp_plus": 5}}, "text": "1d4+4 temporary HP, +5 per slot level above 1st"},
   "resistance": {"shape": "single", "range_ft": 5, "buff": {"bonus_save": 2}, "rounds": 10, "text": "+2 (1d4) on saves"},
   "mass-healing-word": {"shape": "allies", "range_ft": 60, "heal": {"count": 1, "sides": 4, "plus": "ability_mod"}, "upcast": {"per_level": {"count": 1}}, "text": "Every ally within 60 ft heals 1d4 + your modifier"},
   "mass-cure-wounds": {"shape": "allies", "range_ft": 60, "heal": {"count": 3, "sides": 8, "plus": "ability_mod"}, "upcast": {"per_level": {"count": 1}}, "text": "Every ally within 60 ft heals 3d8 + your modifier"},

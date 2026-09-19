@@ -13,6 +13,7 @@ var team: String  # "party" | "foe"
 var ac: int
 var max_hp: int
 var hp: int
+var temp_hp: int = 0       # a buffer in front of hp; never healed, never stacks (RAW)
 var init_mod: int = 0
 var speed: int = 4          # move points (hexes) per turn
 var pos: Vector2i = Vector2i.ZERO
@@ -43,7 +44,13 @@ var immune: Array = []
 var vulnerable: Array = []
 var cond_immune: Array = []
 var atk_range: int = 1     # hexes; melee = 1, shortbow set in encounter.gd
+var reach: int = 1         # melee reach in hexes: 1 (5 ft), 2 for a reach weapon (10 ft)
 var crit_range: int = 20  # Vera crits on 19
+var init_adv := false      # advantage on the initiative roll (Assassinate, Dread Ambusher)
+# Unarmed Strike's DC (2024 Shove / Grapple): 8 + STR mod + PB. Heroes read
+# both off the sheet; a monster's PB comes off its CR (adapter.from_monster).
+var str_mod: int = 0
+var pb: int = 2
 
 # checks / spellcasting
 var save_dc: int = 0
@@ -77,7 +84,9 @@ var econ: Dictionary = {
 	"attacks_left": 0, "attacks_per_action": 1, "used": {}, "cast_bonus_spell": false,
 }
 
-const TURN_STATUSES := ["dodging", "disengaged", "helped", "reckless"]
+# "helped" is not here: Help's advantage lasts until the start of the HELPER's
+# next turn (RAW), so combat.begin_turn_for(helper) is what clears it.
+const TURN_STATUSES := ["dodging", "disengaged", "reckless"]
 
 func new_turn() -> void:
 	econ = {
@@ -119,8 +128,8 @@ func clone() -> RefCounted:
 	var c = get_script().new()
 	for prop in [
 		"id","src_id","cname","team","ac","max_hp","hp","init_mod","speed","pos","size",
-		"atk_bonus","damage","ranged","atk_range","crit_range","save_dc","athletics",
-		"acro","stealth","passive_perception","sheet","darkvision",
+		"atk_bonus","damage","ranged","atk_range","reach","crit_range","save_dc","athletics",
+		"acro","stealth","passive_perception","sheet","darkvision","temp_hp","init_adv","str_mod","pb",
 	]:
 		c.set(prop, get(prop))
 	c.saves = saves.duplicate()

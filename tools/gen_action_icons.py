@@ -384,6 +384,18 @@ ACTIONS = {
         arrow(16, 32, 90, 24, 11, GOLD),
     ),
 
+    # Grapple (2024: an Unarmed Strike): two figures locked together.
+    "grapple": badge(
+        group([figure(0, 0, 0, STEEL)], 26, 28, 14, scale=1.25),
+        group([figure(0, 0, 0, GOLD)], 38, 28, -14, scale=1.25),
+    ),
+    # Break free: the held figure, and the hold flying apart either side.
+    "escape": badge(
+        group([figure(0, 0, 0, STEEL)], 32, 27, 0, scale=1.25),
+        arrow(13, 34, -90, 16, 8, GOLD),
+        arrow(51, 34, 90, 16, 8, GOLD),
+    ),
+
     # A maul mid-swing, and the object coming apart under it.
     "smash": badge(
         group([
@@ -1170,6 +1182,12 @@ SPELLS = {
     "faerie-fire": (person(E("force"), "stand", 0.8), star(46, 16, 6, 2, 4, E("lightning"), sw=1.0)),
     "spiritual-weapon": (sword(32, 32, -30, 44), halo(E("radiant"), 0.5)),
     "fire-bolt": (dart(E("fire"), -45, 1),),
+    # 2026-09-19: the five the export lacked
+    "magic-missile": (dart(E("force"), -45, 3),),
+    "eldritch-blast": (beam(E("shadow")), star(45, 18, 5.5, 2, 4, LIGHT, sw=1.0)),
+    "vicious-mockery": (mask(E("psychic"), "laugh", 0.8), waves(E("psychic"), 0.55)),
+    "healing-word": (heart(32, 32, 13, E("life")), note(LIGHT, 0.55)),
+    "shield": (hexagon(32, 32, 17, E("force")[1], sw=1.6), star(32, 32, 5, 2, 4, LIGHT, sw=1.0)),
     "ray-of-frost": (beam(E("cold")),),
     "shocking-grasp": (hand(E("steel")), bolt(E("lightning"), 0.55)),
     "sacred-flame": (halo(E("radiant")), flame(E("radiant"), 32, 34, 0.5)),
