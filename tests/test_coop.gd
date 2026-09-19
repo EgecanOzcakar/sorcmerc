@@ -32,6 +32,14 @@ func _init() -> void:
 	check(not ("0" in code or "O" in code or "1" in code or "I" in code), "room code avoids 0/O/1/I")
 	for sd in range(1, SEEDS + 1):
 		lockstep_fight(sd)
+	# The same, with reaction prompts on: the reactor's owner decides, the
+	# answer crosses the wire and the other peer consumes it in order (what
+	# scenes/main.gd's _coop_decide does). Ilsa's Warding Flare is the prompt.
+	_asked = 0
+	_said_no = 0
+	for sd in range(1, 11):
+		lockstep_fight(sd, true)
+	check(_asked > 0 and _said_no > 0, "prompted: %d reactions asked, %d refused" % [_asked, _said_no])
 	print("  through the codec: ", JSON.stringify(_seen))
 	print("test_coop: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -50,7 +58,10 @@ static func build(setup: Dictionary):
 static func wire(d: Dictionary) -> Dictionary:
 	return JSON.parse_string(JSON.stringify(d))
 
-func lockstep_fight(sd: int) -> void:
+var _asked := 0
+var _said_no := 0
+
+func lockstep_fight(sd: int, prompted := false) -> void:
 	var party = Party.new()
 	for ch in Presets.party():
 		party.add_member(ch)
@@ -63,6 +74,20 @@ func lockstep_fight(sd: int) -> void:
 	var guest = build(setup)
 	check(Coop.state_hash(host) == Coop.state_hash(guest), "seed %d: same setup, same fight" % sd)
 	var log: Array = []      # what the relay would have kept
+	var answers: Array = []  # reaction answers, host's decider -> the wire -> guest's decider
+	var answer_log: Array = []   # every answer, in order: what the relay would replay to a rejoiner
+	if prompted:
+		host.reaction_decider = func(_r, _v, _t, _c) -> bool:
+			_asked += 1
+			var yes: bool = _asked % 3 != 0   # refuse every third, so a "no" is exercised
+			if not yes:
+				_said_no += 1
+			answers.append(wire(Coop.reaction(yes)))
+			answer_log.append(yes)
+			return yes
+		guest.reaction_decider = func(_r, _v, _t, _c) -> bool:
+			check(not answers.is_empty(), "seed %d: an answer was there when the guest asked" % sd)
+			return bool(answers.pop_front()["yes"]) if not answers.is_empty() else true
 	var intents := 0
 	var drift := false
 	while not host.is_over() and host.round_num < 30 and not drift:
@@ -98,6 +123,9 @@ func lockstep_fight(sd: int) -> void:
 	check(host.is_over(), "seed %d: fight resolved (%s)" % [sd, host.outcome()])
 	# The late joiner: setup + log, nothing else.
 	var late = build(setup)
+	if prompted:
+		late.reaction_decider = func(_r, _v, _t, _c) -> bool:
+			return bool(answer_log.pop_front()) if not answer_log.is_empty() else true
 	var k := 0
 	while not late.is_over():
 		var h = late.current()

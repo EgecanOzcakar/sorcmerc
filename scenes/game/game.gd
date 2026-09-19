@@ -32,6 +32,7 @@ const Sound = preload("res://core/audio.gd")
 const Tutorial = preload("res://core/tutorial.gd")
 const Registry = preload("res://core/mod/registry.gd")
 const StoryRuntime = preload("res://core/mod/story_runtime.gd")
+const Coop = preload("res://core/coop.gd")
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 const CAMPAIGN_SCENE := "res://scenes/campaign/campaign.tscn"
@@ -135,6 +136,7 @@ func show_title() -> void:
 		col.add_child(_dim("One autosave slot. A new run writes over the one above."))
 		col.add_child(_gap(6))
 	col.add_child(_button("Campaigns & mods", show_content))
+	col.add_child(_button("Play together" if Coop.link == null else "Play together  ·  room %s" % Coop.link.code, show_coop))
 	col.add_child(_button("Tutorial", show_tutorial))
 	var roster := CharacterSave.list_slugs().size()
 	col.add_child(_dim("%d in the barracks." % roster if roster != 1 else "1 in the barracks."))
@@ -325,6 +327,148 @@ func show_random_battle() -> void:
 	back.pressed.connect(show_title)
 	wrap.add_child(back)
 	_swap(wrap, "random battle (debug)")
+
+# --- play together (docs/spike-coop.md) ------------------------------------
+#
+# Two players, one party, a six-letter room code and no accounts. The host
+# runs the road exactly as in single player — every fight their world puts up
+# is announced on the room (scenes/main.gd sees Coop.link) — and the guest's
+# screen is the fight, and between fights the wait for the next one. The link
+# is made here and lives in Coop.link until "Leave the room".
+
+var _lobby_status: Label = null      # "waiting for your friend" / "your friend is here", live
+var _guest_combat = null             # the guest's live scenes/main.tscn, while one is up
+
+func show_coop() -> void:
+	var col := VBoxContainer.new()
+	col.custom_minimum_size.x = 520
+	col.add_theme_constant_override("separation", 8)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	var title := Label.new()
+	title.text = "Play together"
+	title.theme_type_variation = "Title"
+	col.add_child(title)
+	var tag := Label.new()
+	tag.text = "One party, two players. The host runs the road; you both fight."
+	tag.theme_type_variation = "Serif"
+	tag.add_theme_color_override("font_color", Icons.COL_BODY)
+	col.add_child(tag)
+	col.add_child(_gap(18))
+	_lobby_status = null
+	if Coop.link == null:
+		col.add_child(_button("Host a room", func():
+			Coop.link = Coop.Link.new(Coop.relay_url(), Coop.room_code(), "host")
+			show_coop(), true))
+		col.add_child(_dim("You get a code to read out. Then start a run as usual."))
+		col.add_child(_gap(6))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var code := LineEdit.new()
+		code.placeholder_text = "ROOM CODE"
+		code.max_length = 6
+		code.custom_minimum_size.x = 170
+		row.add_child(code)
+		var join := func():
+			var c := code.text.strip_edges().to_upper()
+			if not Coop.valid_code(c):
+				code.text = ""
+				code.placeholder_text = "SIX LETTERS"
+				return
+			Coop.link = Coop.Link.new(Coop.relay_url(), c, "guest")
+			show_coop_guest()
+		code.text_submitted.connect(func(_t): join.call())
+		row.add_child(_button("Join", join))
+		col.add_child(row)
+		col.add_child(_dim("Your friend's code. You play the heroes they hand you."))
+	else:
+		var code := Label.new()
+		code.text = " ".join(Coop.link.code.split(""))
+		code.theme_type_variation = "Title"
+		code.add_theme_font_size_override("font_size", 56)
+		col.add_child(code)
+		col.add_child(_dim("Read it out. Your friend types it under Play together → Join."))
+		_lobby_status = _dim("")
+		col.add_child(_lobby_status)
+		col.add_child(_gap(12))
+		var slot: Dictionary = WorldSave.summary()
+		if not slot.is_empty():
+			col.add_child(_button("Resume the open world", _resume_world, true))
+		col.add_child(_button("New run", show_party_setup, slot.is_empty()))
+		col.add_child(_button("Quick fight — the preset party", show_random_battle))
+		col.add_child(_dim("You choose who plays whom as each fight begins. Your friend can join any time, even mid-fight."))
+		col.add_child(_gap(6))
+		col.add_child(_quiet("Leave the room", func():
+			Coop.link.close()
+			Coop.link = null
+			Coop.split = {}
+			show_coop()))
+	col.add_child(_gap(12))
+	col.add_child(_quiet("Back", show_title))
+	var centre := CenterContainer.new()
+	centre.add_child(col)
+	_swap(centre, "play together")
+
+# The guest between fights: the room, who is here, and nothing to press but
+# Leave. The next setup the host announces puts the fight up over this.
+func show_coop_guest() -> void:
+	_guest_combat = null
+	var col := VBoxContainer.new()
+	col.custom_minimum_size.x = 520
+	col.add_theme_constant_override("separation", 8)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	var title := Label.new()
+	title.text = "Riding along"
+	title.theme_type_variation = "Title"
+	col.add_child(title)
+	var tag := Label.new()
+	tag.text = "Room %s. The next fight your host walks into opens here." % Coop.link.code
+	tag.theme_type_variation = "Serif"
+	tag.add_theme_color_override("font_color", Icons.COL_BODY)
+	col.add_child(tag)
+	_lobby_status = _dim("")
+	col.add_child(_lobby_status)
+	col.add_child(_gap(12))
+	col.add_child(_quiet("Leave the room", func():
+		Coop.link.close()
+		Coop.link = null
+		show_coop()))
+	var centre := CenterContainer.new()
+	centre.add_child(col)
+	_swap(centre, "co-op guest")
+
+# The guest's fight: scenes/main.tscn with the message that announced it. The
+# screen keeps the link's inbox from here on — the next setup rebuilds the
+# fight in place — so this is only ever entered from the waiting screen.
+func _guest_fight(first: Dictionary) -> void:
+	_guest_combat = load(COMBAT_SCENE).instantiate()
+	_guest_combat.coop_first = first
+	var wrap := Control.new()
+	wrap.add_child(_guest_combat)
+	var leave := Button.new()
+	leave.text = "Leave the room"
+	leave.theme_type_variation = "Quiet"
+	leave.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)   # under the action log; the header's corner is taken
+	leave.offset_left = 16; leave.offset_top = -48; leave.offset_right = 200; leave.offset_bottom = -12
+	leave.pressed.connect(func():
+		Coop.link.close()
+		Coop.link = null
+		_guest_combat = null
+		show_coop())
+	wrap.add_child(leave)
+	_swap(wrap, "co-op fight")
+
+func _process(_dt: float) -> void:
+	if Coop.link == null:
+		return
+	Coop.link.pump()   # keeps the socket alive between fights; the fight screen takes what it needs
+	if _lobby_status != null and is_instance_valid(_lobby_status):
+		_lobby_status.text = ("Your friend is here." if Coop.link.role == "host" else "The host is here. Waiting for a fight…") \
+			if Coop.link.other_here() else ("Waiting for your friend…" if Coop.link.role == "host" else "Waiting for the host…")
+	if Coop.link.role == "guest" and _guest_combat == null:
+		for m in Coop.link.take():
+			if m.get("t", "") == "setup" or (m.get("t", "") == "replay" and not m["log"].is_empty()):
+				_guest_fight(m)
+				return
 
 # --- party setup ----------------------------------------------------------
 #

@@ -1,29 +1,42 @@
 # Spike: two-player co-op over a room code
 
-2026-09-19. A feasibility spike, not a feature: **nothing in the shipped game
-reaches any of this unless `SORCMERC_COOP` is set.** The question was "can two
-people play one sorcmerc fight together, joining by a code instead of a friend
-list, and what does that cost?" Short answer: yes, cheaply, because the fight
-is turn-based and already deterministic — the whole thing is ~250 lines of
-GDScript, a 60-line Cloudflare Worker, and no change to `core/combat.gd`.
+2026-09-19. Started as a feasibility spike — "can two people play one
+sorcmerc fight together, joining by a code instead of a friend list, and what
+does that cost?" — and, the answer being yes and cheap, grew the same day into
+the feature: **Play together** on the title screen. Nothing changes for a
+player who never presses it (`Coop.link` stays null and every hook is behind
+it). The fight is turn-based and already deterministic, so the whole thing is
+~400 lines of GDScript, a 100-line Cloudflare Worker, and no change to
+`core/combat.gd`.
 
 What is on the branch:
 
 - `core/coop.gd` — the seam. Turns a combat-screen press into a small JSON
   intent and back, hashes a fight's state, serialises the setup a guest needs,
-  and wraps a `WebSocketPeer` to the relay.
-- `tools/coop-relay/` — the relay: one Durable Object per room code.
-- `scenes/main.gd` — ~90 lines under `_coop`: the host announces the setup,
-  each local press is sent, a remote-owned hero's turn is driven from the wire.
+  holds the session (`Coop.link`, the host's `Coop.split`), and wraps a
+  `WebSocketPeer` to the relay.
+- `tools/coop-relay/` — the relay: one Durable Object per room code, two
+  seats, the fight's log, expiry.
+- `scenes/game/game.gd` — the lobby (host a room, join a room) and the
+  guest's between-fights screen. The host then plays the game exactly as
+  single player; every fight their world puts up is announced on the room.
+- `scenes/main.gd` — ~150 lines under `_coop`: the host's "who plays whom"
+  before each fight, each local press sent, a remote-owned hero's turn driven
+  from the wire, reaction prompts routed to the reactor's owner, the acting
+  player's cursor shown to the watcher.
 - `tests/test_coop.gd` — two fights in lockstep over 40 seeds, hashes equal
-  after every intent, and a third peer that rebuilds from setup + log to the
-  same hash (202 checks).
+  after every intent; a third peer that rebuilds from setup + log to the same
+  hash; the same again with reaction prompts answered by the owner and
+  replayed to the rejoiner (357 checks).
 - `tools/coop-relay/relay.test.js` — the relay end to end on the real Worker
-  runtime (`wrangler dev`): replay-on-join, fan-out, rejoin, refusals.
+  runtime (`wrangler dev`): replay-on-join, fan-out, rejoin, seats, ownership,
+  new-fight cut, hover, refusals.
 - `tests/drive_coop.gd` + `tools/coop_smoke.sh` — two real headless Godot
-  processes on the real combat screen through the real relay, the guest
-  killed mid-turn and started again on the same code, both ending on the
-  same state hash.
+  processes on the real combat screen through the real relay, in four
+  variants: the guest killed mid-turn and rejoined; the host killed and
+  rejoined; the host's socket closed under it mid-fight and reconnected; the
+  guest coming in through the title screen's Join. All end on the same state
+  hash.
 
 ## 1. Turn-based is the whole design
 
@@ -103,31 +116,44 @@ the fix is fewer, faster turns, not more bodies.
 turn ownership serialises the writes. Only the peer whose hero is up sends,
 so "the order the relay received them in" is "the order they were applied
 in". Each peer applies its own press immediately (optimistic) — safe because
-the other peer is provably not sending during your turn.
+the other peer is provably not sending during your turn. The relay enforces
+the part it can see: a hero's `perform`/`move` are accepted only from the
+seat the setup named as its owner, `setup`/`swap`/`go` only from the host,
+and `from` is stamped from the seat, never read from the client.
 
 **Disconnect.** The relay keeps the log; the other peer's screen says
-"waiting for the other player…" and blocks. No host takeover, no timeout:
-that needs ownership reassignment *in the log* and a relay-enforced clock,
-and is the wrong thing to get subtly wrong first.
+"your friend's turn" and blocks. No host takeover, no timeout: that needs
+ownership reassignment *in the log* and a relay-enforced clock, and is the
+wrong thing to get subtly wrong first.
 
 **Rejoin** = connect with the same code, receive the replay, rebuild from the
 setup, apply the log. Same code path as a first join. Foe turns replay
-without the animation beats. Two cases were found and fixed by the smoke
-test: (a) the log ends *mid-turn on the rejoiner's own hero* — the replay
-must hand that half-finished turn back to the local menu rather than wait
-for "the other player" (who is waiting for you); (b) a rejoining host must
-not announce a second setup.
+without the animation beats. A new socket in a seat evicts the old one, so a
+crashed peer's lingering socket never blocks its own return. A socket that
+merely drops (a sleep, a hiccup, a relay restart) is reopened by the link
+itself two seconds later, and the replay it gets is applied the same way —
+the fight is rebuilt under whatever turn loop was suspended, which notices
+(`_gen`) and ends, so a peer never goes blind for the rest of a fight. Cases found and
+fixed by the smoke test: (a) the log ends *mid-turn on the rejoiner's own
+hero* — the replay must hand that half-finished turn back to the local menu
+rather than wait for "the other player" (who is waiting for you); (b) a
+rejoining host must not announce a second setup; (c) the lobby's host, whose
+world starts a new fight, must ignore a stale replay from the room.
 
-**Tested:** happy path headless (40 seeds); happy path through the real relay
-with two real Godot processes; the guest process killed after four presses
-mid-turn and restarted on the same code, both peers finishing on the same
-hash; relay ordering, fan-out and replay in `relay.test.js`.
+**Tested:** lockstep headless (40 seeds, and 10 more with reaction prompts);
+the real relay with two real Godot processes — guest killed mid-turn and
+rejoined, host killed and rejoined, host's socket dropped and reconnected
+mid-fight, guest in through the title screen — all finishing on the same
+hash; relay seats, ownership, replay, new-fight cut,
+hover, expiry wiring in `relay.test.js`.
 
-**Not tested:** a host disconnect (symmetric in code, not exercised); a
-disconnect *during* a foe turn's animation on one side; two peers with
-different Godot builds (desktop vs web); latency above localhost; a room
-older than a process (the relay stores the log durably but nothing expires
-it); anything with three peers.
+**Not tested:** a disconnect *during* a foe turn's animation on one side;
+two peers with different Godot builds (desktop vs web — the web export
+cannot run headless here); latency above localhost; the relay's 24-hour
+expiry actually firing (the alarm is set; a day was not waited); the host's
+*world* path with a live guest (the code path is the same `main.tscn`
+instantiation the lobby's Quick fight uses, which is tested, but no robot
+walks the 3D map into a fight); anything with three peers.
 
 ## 6. What could still desync
 
@@ -141,40 +167,59 @@ in the same order on the same engine version. The one data-dependent float is
 would show. The real risk is the web export: GDScript floats are f64 on both,
 but it is the pairing the smoke test does not run.
 
-**Reaction prompts are off in co-op.** The yes/no is a hidden intent the
-other peer never sees; `reaction_decider` is left unset so slot-costing
-reactions are not offered and free ones auto-fire as they always did
-headless. Wiring the answer as an intent, asked of the reactor's *owner*, is
-the first follow-up (the `await` seam in `_ask_reaction` already exists).
+**Reaction prompts** are answered by the reactor's *owner* — through the
+card if their prompts are on, else the auto-yes the resolver always gave —
+and the answer crosses the wire as a `reaction` message; the other peer waits
+on it. Both peers reach the same prompts in the same order (they run the same
+resolver), so answers are consumed in order, which is also what lets a
+rejoiner replay them. Both peers install the co-op decider whatever their
+setting: with it unset on one side that side would auto-resolve, and the
+two would diverge on the first refused Shield.
 
-## 7. What the spike deliberately did not build
+## 7. The campaign layer: the host runs the road
 
-- **A join screen.** Entry is `SORCMERC_COOP=host` / `=CODE` and
-  `SORCMERC_RELAY=wss://…`. A code box on the title screen is ~30 lines and
-  a deployed relay URL compiled in like `BUG_RELAY_URL`.
-- **Hover replication.** The designer's one anti-tedium feature: send the
-  active peer's aimed hex so the watcher sees what is *about* to happen, not
-  just what did. `board_hex_hovered` → `_paint_order_aim` already paints it
-  locally; it is one ephemeral message the relay should forward but not log.
-- **Ownership on the order strip**, and letting the watcher `view_hero` their
-  own heroes during the other peer's turn.
-- **Host picks the split** on the deployment screen. Alternating is the
-  default; 3/1 and "you take the caster" need a control.
-- **Campaign integration.** The spike is the standalone combat scene with the
-  preset party; co-op *across* the campaign/world layer (who holds the save,
-  who chooses the route) is a separate design and a much bigger one.
-- **Relay hygiene**: room expiry (an `alarm`), a peer cap, ownership checks.
+Co-op across the world map was the big open design question, and the answer
+that costs nothing is the right one: **the host plays the game exactly as in
+single player, and the guest is in the fights.** The host's world, sites,
+camps and the linear campaign all put a fight up the same way — instantiate
+`scenes/main.tscn`, hand it the party and the spec — and that screen sees
+`Coop.link` and announces the fight on the room. The guest's screen between
+fights says "Riding along — the next fight your host walks into opens
+here", and the next `setup` puts the fight up over it (and, if the guest is
+still looking at the last verdict, replaces it in place). Each `setup` cuts
+the room's log back to itself on the relay, so a rejoin replays *this*
+fight, not the whole run.
 
-## 8. Play it
+What the guest does not get: the map, the shop, the rest, the route. Those
+are the host's, and the save is the host's. Sharing them — two cursors on the
+3D map, a vote on the route — is a different and much larger design, and
+nothing about it is needed for the co-op that matters here, which is the
+fight. "Each player brings their own party" stays out, for §4's reasons.
 
-```
-cd tools/coop-relay && npx wrangler dev             # or wrangler deploy, once
-SORCMERC_COOP=host godot --path .                    # header shows the code
-SORCMERC_COOP=ABC234 godot --path .                  # the other machine
-```
+## 8. What is still not built
 
-Both default to `ws://127.0.0.1:8787`; set `SORCMERC_RELAY` for a deployed
-one. `tools/coop_smoke.sh` runs the whole thing headless, crash and all.
+- **Host takeover** of an absent player's hero after a timeout (§5).
+- **Watching the road.** The guest cannot see the host's map between fights;
+  a read-only mirror of the world screen is the obvious next step if the
+  waits between fights turn out to be long.
+- **Three or more players.** The relay has two seats; the split is host/guest.
+- **Hover replication is the cursor and the verb in hand**, not the aimed
+  target list — the watcher sees the reach wash and the hot hex, not the
+  per-target rings (`_mode == "target"` stays local).
+
+## 9. Play it
+
+Title → **Play together** → *Host a room*: a six-letter code appears; read it
+out. Then *Resume the open world*, *New run* or *Quick fight* as usual —
+before each fight, click a hero's name to hand it to your friend, then Begin.
+Your friend: **Play together** → type the code → *Join* → "Riding along" until
+your first fight opens.
+
+The relay is `Coop.RELAY_URL` (`tools/coop-relay`, `npx wrangler deploy`
+once from that directory); `SORCMERC_RELAY=ws://127.0.0.1:8787` points a run
+at a local `wrangler dev`. The bare combat scene still takes
+`SORCMERC_COOP=host` / `=CODE` / `=host:CODE`, which is what
+`tools/coop_smoke.sh` and `tests/drive_coop.gd` use.
 
 The one thing to watch in a real two-person session, per the game-designer:
 **does the watching player talk about the active player's turn?** ("hit the

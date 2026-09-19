@@ -3,7 +3,13 @@
 # Prints the fight's final state hash so two of these can be compared. Run by
 # tools/coop_smoke.sh, which starts the relay and both peers.
 #   SORCMERC_COOP=host:ABCDEF SORCMERC_RELAY=ws://127.0.0.1:8799 godot --headless --path . -s tests/drive_coop.gd
-#   SORCMERC_COOP_QUIT_AFTER=N   quit (exit 3) after N presses — the guest's "crash"
+#   SORCMERC_COOP_QUIT_AFTER=N   quit (exit 3) after N presses — a peer's "crash"
+#   SORCMERC_COOP_DROP_AT=N      close the socket under the game after N presses
+#                                (a hiccup, not a crash): the link reconnects and
+#                                resyncs from the relay's replay
+#   SORCMERC_COOP_VIA=game       come in through the front door instead: the
+#                                title's Play together → Join, and the guest's
+#                                waiting screen puts the fight up (game.gd)
 extends SceneTree
 
 const Coop = preload("res://core/coop.gd")
@@ -13,19 +19,36 @@ const MAX_PRESSES = 400
 const PATIENCE := 60.0   # seconds of nothing to press before giving up on the other peer
 
 var main
+var game = null   # the front door, under SORCMERC_COOP_VIA=game
 var _presses = 0
 var _quit_after: int = int(OS.get_environment("SORCMERC_COOP_QUIT_AFTER")) if OS.get_environment("SORCMERC_COOP_QUIT_AFTER") != "" else -1
+var _drop_at: int = int(OS.get_environment("SORCMERC_COOP_DROP_AT")) if OS.get_environment("SORCMERC_COOP_DROP_AT") != "" else -1
 
 func _init() -> void:
 	OS.set_environment("SORCMERC_FAST", "1")
-	main = load("res://scenes/main.tscn").instantiate()
-	root.add_child(main)
+	if OS.get_environment("SORCMERC_COOP_VIA") == "game":
+		game = load("res://scenes/game/game.tscn").instantiate()
+		root.add_child(game)
+		await process_frame
+		Coop.link = Coop.Link.new(Coop.relay_url(), OS.get_environment("SORCMERC_COOP"), "guest")
+		game.show_coop_guest()
+	else:
+		main = load("res://scenes/main.tscn").instantiate()
+		root.add_child(main)
 	_run()
 
 func _run() -> void:
 	var waited_since := Time.get_ticks_msec()
 	while _presses < MAX_PRESSES:
 		await process_frame
+		if game != null:
+			main = game._guest_combat
+			if main == null:
+				if Time.get_ticks_msec() - waited_since > PATIENCE * 1000:
+					print("*** guest waited %ds on the front door — wedged ***" % PATIENCE)
+					quit(1)
+					return
+				continue
 		if main.cb != null and main.cb.is_over():
 			break
 		if main.cb == null or main._busy or (main._mode == "deploy" and main._coop.role == "guest"):
@@ -39,6 +62,10 @@ func _run() -> void:
 			print("%s: quitting on purpose after %d presses" % [main._coop.role, _presses])
 			quit(3)
 			return
+		if _presses == _drop_at:
+			print("%s: dropping the socket on purpose after %d presses" % [main._coop.role, _presses])
+			_drop_at = -1
+			main._coop.ws.close()
 		if main._mode == "cone" or main._mode == "target":
 			_board_click()
 		elif main._mode == "idle" and _presses % 3 == 0 and main.cb.current().econ["move_left"] > 0:

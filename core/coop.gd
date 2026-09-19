@@ -21,28 +21,65 @@ const ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # no 0/O/1/I to read out 
 const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
 
+# Where tools/coop-relay is deployed. SORCMERC_RELAY overrides it for one run
+# (a local `wrangler dev` is ws://127.0.0.1:8787). Not a secret: a public
+# endpoint that relays only what a room code lets you into.
+const RELAY_URL := "wss://sorcmerc-coop-relay.egecanozcakar.workers.dev"
+
+# The session: one link for the whole run, from the lobby (scenes/game/game.gd)
+# through every fight the host's world puts up. Null is single player.
+static var link = null
+# The host's choice of who plays whom, hero id -> "host" | "guest", kept across
+# fights so it is asked once. A hero not in it alternates (setup_for).
+static var split := {}
+
+static func relay_url() -> String:
+	var env := OS.get_environment("SORCMERC_RELAY")
+	return env if env != "" else RELAY_URL
+
 static func room_code() -> String:
 	var s := ""
 	for i in 6:
 		s += ALPHABET[randi() % ALPHABET.length()]
 	return s
 
+static func valid_code(code: String) -> bool:
+	if code.length() != 6:
+		return false
+	for ch in code:
+		if not ALPHABET.contains(ch):
+			return false
+	return true
+
+# A link from the env var, for the bare combat scene and the headless drivers
+# (SORCMERC_COOP=host | CODE | host:CODE — see scenes/main.gd); null without it.
+static func from_env():
+	var room := OS.get_environment("SORCMERC_COOP")
+	if room == "":
+		return null
+	var role := "host" if room.begins_with("host") else "guest"
+	var code := room.trim_prefix("host:") if room != "host" else room_code()
+	return Link.new(relay_url(), code, role)
+
 # --- setup: what the guest needs to build the same fight -------------------
 
-# Heroes alternate between the peers in party order (host, guest, host, ...):
-# neither waits through two friendly turns in a row more often than initiative
-# makes them anyway.
+# Who plays whom: the host's `split` where it has said, otherwise alternating
+# in party order (host, guest, host, ...) so neither waits through two friendly
+# turns in a row more often than initiative makes them anyway.
+static func owners_for(party) -> Dictionary:
+	var owners := {}
+	var i := 0
+	for ch in party.party_characters():
+		owners[ch.id] = split.get(ch.id, "host" if i % 2 == 0 else "guest")
+		i += 1
+	return owners
+
 static func setup_for(seed: int, spec: Dictionary, party) -> Dictionary:
 	assert(seed > 0, "seed 0 means 'roll one from the clock' — the peers would differ")
 	var roster: Array = []
 	for ch in party.roster:
 		roster.append(CharacterSave.to_dict(ch))
-	var owners := {}
-	var i := 0
-	for ch in party.party_characters():
-		owners[ch.id] = "host" if i % 2 == 0 else "guest"
-		i += 1
-	return {"t": "setup", "seed": seed, "spec": spec, "owners": owners,
+	return {"t": "setup", "seed": seed, "spec": spec, "owners": owners_for(party),
 		"party": {"roster": roster, "active": Array(party.active), "gold": party.gold,
 			"stash": party.stash.duplicate(true)}}
 
@@ -83,6 +120,17 @@ static func end_turn(cb) -> Dictionary:
 
 static func swap(a, b) -> Dictionary:
 	return {"t": "swap", "a": a.id, "b": b.id}
+
+# The answer to a reaction prompt, from the reactor's owner. Consumed in order:
+# both peers reach the same prompts in the same order.
+static func reaction(yes: bool) -> Dictionary:
+	return {"t": "reaction", "yes": yes}
+
+# What the acting peer is pointing at — the hex under the cursor and the verb
+# in hand, so the watcher sees the swing coming. Forwarded by the relay, never
+# logged.
+static func hover(hex: Vector2i, verb: Dictionary) -> Dictionary:
+	return {"t": "hover", "hex": [hex.x, hex.y], "verb": String(verb.get("id", ""))}
 
 static func find(cb, id: String):
 	for c in cb.combatants:
@@ -131,18 +179,30 @@ static func state_hash(cb) -> int:
 
 # --- the wire ---------------------------------------------------------------
 
-# A WebSocket to one room on the relay. Poll it from _process; everything the
-# room has said since last time comes back parsed, oldest first.
+# A WebSocket to one room on the relay. pump() it every frame (scenes/game/
+# game.gd does, and so does the combat screen — twice is harmless); what the
+# room said lands in `inbox` for whichever screen owns the fight to take().
 class Link extends RefCounted:
 	var ws := WebSocketPeer.new()
 	var role: String
 	var code: String
-	var _pending: Array = []   # said before the socket opened; sent on the first poll after
+	var inbox: Array = []      # parsed messages, oldest first, not yet taken
+	var peers: Array = []      # roles connected right now, per the relay
+	var _pending: Array = []   # said before the socket opened; sent on the first pump after
+	var _url: String
+	var _retry_at := 0        # msec; a dropped socket is reopened, and the relay replays what we missed
+	var _closed := false
+	var _reconnects := 0
 
 	func _init(url: String, room: String, as_role: String) -> void:
 		role = as_role
 		code = room
-		ws.connect_to_url("%s/room/%s" % [url.trim_suffix("/"), room])
+		_url = "%s/room/%s?role=%s" % [url.trim_suffix("/"), room, as_role]
+		ws.connect_to_url(_url)
+
+	func close() -> void:
+		_closed = true
+		ws.close()
 
 	func send(msg: Dictionary) -> void:
 		msg["from"] = role
@@ -158,13 +218,34 @@ class Link extends RefCounted:
 	func open() -> bool:
 		return ws.get_ready_state() == WebSocketPeer.STATE_OPEN
 
-	func poll() -> Array:
+	func pump() -> void:
 		ws.poll()
+		if ws.get_ready_state() == WebSocketPeer.STATE_CLOSED and not _closed:
+			if Time.get_ticks_msec() >= _retry_at:   # a hiccup, a sleep, a relay restart: come back
+				_retry_at = Time.get_ticks_msec() + 2000
+				_reconnects += 1
+				ws = WebSocketPeer.new()
+				ws.connect_to_url(_url)
+			return
 		if open():
 			flush()
-		var out: Array = []
 		while ws.get_ready_state() == WebSocketPeer.STATE_OPEN and ws.get_available_packet_count() > 0:
 			var m = JSON.parse_string(ws.get_packet().get_string_from_utf8())
-			if m is Dictionary:
-				out.append(m)
+			if not m is Dictionary:
+				continue
+			if m.get("t", "") == "peers":
+				peers = m["roles"]
+			else:
+				if m.get("t", "") == "replay":
+					m["reconnect"] = _reconnects > 0   # not the first: whoever is fighting resyncs from it
+				inbox.append(m)
+
+	func other_here() -> bool:
+		return peers.has("guest" if role == "host" else "host")
+
+	# Everything received since the last take, oldest first.
+	func take() -> Array:
+		pump()
+		var out := inbox
+		inbox = []
 		return out

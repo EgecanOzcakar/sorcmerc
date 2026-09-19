@@ -25,16 +25,29 @@ node --test               # end to end against wrangler dev, on port 8799
 npx wrangler deploy       # prints the URL; the game wants wss://<that>
 ```
 
-Then start the game with `SORCMERC_RELAY=wss://sorcmerc-coop-relay.<you>.workers.dev`.
+That URL is `Coop.RELAY_URL` in `core/coop.gd`; `SORCMERC_RELAY` overrides it
+for one run.
 
 ## Protocol
 
-Connect to `/room/<CODE>` (six characters from `A-HJ-NP-Z2-9`). The first
-message back is `{"t":"replay","log":[...]}` — every JSON object anyone has
-sent to that room, in the order the relay received them. After that, every
-text frame you send is appended to the log and forwarded to the other sockets
-in the room; frames that are not a JSON object, or over 64 KB, are dropped.
-That is all of it. Ordering across peers is the game's problem, and in a
-turn-based game it is no problem: only the peer whose hero is up sends.
+Connect to `/room/<CODE>?role=host|guest` (six characters from
+`A-HJ-NP-Z2-9`). A room has those two seats and no more; a new socket in a
+seat evicts the old one, which is what lets a crashed peer come straight
+back. The first message back is `{"t":"replay","log":[...]}` — the current
+fight, in the order the relay received it. After that, every JSON object you
+send is stamped with your seat as `from`, appended to the log and forwarded
+to the other seat, with these exceptions:
 
-Not built (spike): room expiry, peer limits, any check on who may send what.
+- `setup` (host only) starts a new fight: the log is cut back to it, and its
+  `owners` (hero id → seat) gate what follows.
+- `perform` / `move` are kept only from the seat that owns `hero`;
+  `swap` / `go` only from the host. `end_turn` and `reaction` cannot be
+  checked without knowing whose turn it is, which is the game's business.
+- `hover` is forwarded and never logged.
+- `{"t":"peers","roles":[...]}` is the relay's own, sent to everyone whenever
+  a seat changes.
+
+Frames that are not a JSON object, or over 64 KB, are dropped. A room nobody
+has spoken in for 24 hours is deleted. Ordering across peers is the game's
+problem, and in a turn-based game it is no problem: only the peer whose hero
+is up sends.
