@@ -25,6 +25,12 @@ const COL_WARN := Creator.COL_WARN
 
 var _ch
 var _committed := false
+# Co-op: a guest levels their own hero on a mirrored copy; every step made
+# here is also handed to `on_step`, and the host makes the same steps on the
+# real one (scenes/world/world.gd). `persist` is off there — the copy is not
+# the guest's to write into their barracks.
+var on_step: Callable = Callable()
+var persist := true
 var _before                                  # the sheet as it was before the level
 # Issue #120: the choice keys that were already answered when this screen
 # opened — the picks of every level before this one. They are drawn, with what
@@ -114,6 +120,8 @@ func commit() -> void:
 	# roguelite default. Rolling is one Dice.roll away — pass it as the third arg
 	# to Leveling.add_level when a mode wants the swing.
 	Leveling.add_level(_ch)
+	if on_step.is_valid():
+		on_step.call({"op": "add_level"})
 	_committed = true
 	_render()
 
@@ -124,7 +132,7 @@ func _on_confirm() -> void:
 	if not Leveling.can_finalize(_ch):
 		_status.text = "%d choice(s) still unmade." % Leveling.pending(_ch).size()
 		return
-	if _ch.id != "":
+	if _ch.id != "" and persist:
 		Save.save(_ch)
 	finished.emit(true)
 
@@ -137,7 +145,10 @@ func _pick(p: Dictionary, id: String) -> void:
 	if _locked.has(p["key"]):   # #120: an earlier level's pick, here to be read
 		return
 	var picks := Creator.picks_from_decision(p, _ch.choices.get(p["key"]))
-	Leveling.decide(_ch, p["key"], Creator.decision_for(p, Creator.toggle(p, picks, id)))
+	var decision: Dictionary = Creator.decision_for(p, Creator.toggle(p, picks, id))
+	Leveling.decide(_ch, p["key"], decision)
+	if on_step.is_valid():
+		on_step.call({"op": "decide", "key": p["key"], "decision": decision})
 	_render()
 
 # --- render ----------------------------------------------------------------

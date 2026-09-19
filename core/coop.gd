@@ -20,6 +20,24 @@ extends RefCounted
 const ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # no 0/O/1/I to read out loud
 const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
+const WorldSave = preload("res://core/world_save.gd")
+const BugReport = preload("res://core/bug_report.gd")   # the build stamp: both peers must run the same game
+
+# Where tools/coop-relay is deployed. SORCMERC_RELAY overrides it for one run
+# (a local `wrangler dev` is ws://127.0.0.1:8787). Not a secret: a public
+# endpoint that relays only what a room code lets you into.
+const RELAY_URL := "wss://sorcmerc-coop-relay.egecanozcakar.workers.dev"
+
+# The session: one link for the whole run, from the lobby (scenes/game/game.gd)
+# through every fight the host's world puts up. Null is single player.
+static var link = null
+# The host's choice of who plays whom, hero id -> "host" | "guest", kept across
+# fights so it is asked once. A hero not in it alternates (setup_for).
+static var split := {}
+
+static func relay_url() -> String:
+	var env := OS.get_environment("SORCMERC_RELAY")
+	return env if env != "" else RELAY_URL
 
 static func room_code() -> String:
 	var s := ""
@@ -27,22 +45,66 @@ static func room_code() -> String:
 		s += ALPHABET[randi() % ALPHABET.length()]
 	return s
 
+static func valid_code(code: String) -> bool:
+	if code.length() != 6:
+		return false
+	for ch in code:
+		if not ALPHABET.contains(ch):
+			return false
+	return true
+
+# A link from the env var, for the bare combat scene and the headless drivers
+# (SORCMERC_COOP=host | CODE | host:CODE — see scenes/main.gd); null without it.
+static func from_env():
+	var room := OS.get_environment("SORCMERC_COOP")
+	if room == "":
+		return null
+	var role := "host" if room.begins_with("host") else "guest"
+	var code := room.trim_prefix("host:") if room != "host" else room_code()
+	return Link.new(relay_url(), code, role)
+
 # --- setup: what the guest needs to build the same fight -------------------
 
-# Heroes alternate between the peers in party order (host, guest, host, ...):
-# neither waits through two friendly turns in a row more often than initiative
-# makes them anyway.
+# Who plays whom: the host's `split` where it has said, otherwise alternating
+# in party order (host, guest, host, ...) so neither waits through two friendly
+# turns in a row more often than initiative makes them anyway.
+static func owners_for(party) -> Dictionary:
+	var owners := {}
+	var i := 0
+	for ch in party.party_characters():
+		owners[ch.id] = split.get(ch.id, "host" if i % 2 == 0 else "guest")
+		i += 1
+	return owners
+
+# Whether this peer plays `id` — on the road as in the fight. Always yes in
+# single player.
+static func mine(party, id: String) -> bool:
+	return link == null or owners_for(party).get(id, "host") == link.role
+
+# Lockstep needs the same code on both ends: same game build, same engine.
+static func build_stamp() -> String:
+	return "%s / Godot %s" % [BugReport.version(), Engine.get_version_info()["string"]]
+
+# JSON has no ints. Anything that came over the wire and is a whole number
+# goes back to being one, so `%d`, `range()` and `int == float` all behave.
+static func intify(v):
+	if v is float and v == floorf(v):
+		return int(v)
+	if v is Dictionary:
+		var d := {}
+		for k in v:
+			d[k] = intify(v[k])
+		return d
+	if v is Array:
+		return v.map(intify)
+	return v
+
 static func setup_for(seed: int, spec: Dictionary, party) -> Dictionary:
 	assert(seed > 0, "seed 0 means 'roll one from the clock' — the peers would differ")
 	var roster: Array = []
 	for ch in party.roster:
 		roster.append(CharacterSave.to_dict(ch))
-	var owners := {}
-	var i := 0
-	for ch in party.party_characters():
-		owners[ch.id] = "host" if i % 2 == 0 else "guest"
-		i += 1
-	return {"t": "setup", "seed": seed, "spec": spec, "owners": owners,
+	return {"t": "setup", "seed": seed, "spec": spec, "owners": owners_for(party), "build": build_stamp(),
 		"party": {"roster": roster, "active": Array(party.active), "gold": party.gold,
 			"stash": party.stash.duplicate(true)}}
 
@@ -83,6 +145,50 @@ static func end_turn(cb) -> Dictionary:
 
 static func swap(a, b) -> Dictionary:
 	return {"t": "swap", "a": a.id, "b": b.id}
+
+# The answer to a reaction prompt, from the reactor's owner. Consumed in order:
+# both peers reach the same prompts in the same order.
+static func reaction(yes: bool) -> Dictionary:
+	return {"t": "reaction", "yes": yes}
+
+# What the acting peer is pointing at — the hex under the cursor and the verb
+# in hand, so the watcher sees the swing coming. Forwarded by the relay, never
+# logged.
+static func hover(hex: Vector2i, verb: Dictionary) -> Dictionary:
+	return {"t": "hover", "hex": [hex.x, hex.y], "verb": String(verb.get("id", ""))}
+
+# --- the road (scenes/world/world.gd) ---------------------------------------
+#
+# The host's map, mirrored: the whole save when the guest arrives and whenever
+# the host autosaves (a fight banked, a town visited — anything structural),
+# and between those a small delta twice a second: the clock and where every
+# party stands. The guest's map does not tick; it is drawn from these. Both
+# are forwarded by the relay and never logged.
+static func world_full(world, party, story) -> Dictionary:
+	return {"t": "world", "save": WorldSave.to_dict(world, party, story), "owners": owners_for(party)}
+
+# The settlement the host is in, as the host's screen has it: the page, the
+# counter, the market dict (minus the settlement object — its id goes) and
+# the purse and shelf, which move on every buy without an autosave.
+static func visit(world_screen) -> Dictionary:
+	if world_screen._visit.is_empty():
+		return {"t": "visit", "closed": true}
+	var m: Dictionary = world_screen._visit.duplicate(true)
+	var s = m["settlement"]
+	m.erase("settlement")
+	return {"t": "visit", "sid": s.id, "page": world_screen._visit_page, "tab": world_screen._market_tab,
+		"m": m, "gold": world_screen.party.gold, "stash": world_screen.party.stash.duplicate(true)}
+
+# A level the guest took on their own hero, as the steps the level-up screen
+# made on their mirrored copy; the host makes the same steps on the real one.
+static func levelup(hero_id: String, steps: Array) -> Dictionary:
+	return {"t": "levelup", "hero": hero_id, "steps": steps}
+
+static func map_delta(world) -> Dictionary:
+	var at := {}
+	for p in world.parties:
+		at[p.id] = [p.position.x, p.position.y]
+	return {"t": "map", "elapsed": world.clock.elapsed, "paused": world.clock.is_paused(), "at": at}
 
 static func find(cb, id: String):
 	for c in cb.combatants:
@@ -131,18 +237,35 @@ static func state_hash(cb) -> int:
 
 # --- the wire ---------------------------------------------------------------
 
-# A WebSocket to one room on the relay. Poll it from _process; everything the
-# room has said since last time comes back parsed, oldest first.
+# A WebSocket to one room on the relay. pump() it every frame (scenes/game/
+# game.gd does, and so does the combat screen — twice is harmless); what the
+# room said lands in `inbox` for whichever screen owns the fight to take().
 class Link extends RefCounted:
 	var ws := WebSocketPeer.new()
 	var role: String
 	var code: String
-	var _pending: Array = []   # said before the socket opened; sent on the first poll after
+	var inbox: Array = []      # parsed messages, oldest first, not yet taken
+	var peers: Array = []      # roles connected right now, per the relay
+	var arrivals := 0          # times the other seat went from empty to taken; the host resends the map on each
+	var world_pending: Dictionary = {}   # the latest full map save received (guest), until a screen takes it
+	var map_latest: Dictionary = {}      # the latest map delta received (guest), until the map applies it
+	var visit_latest: Dictionary = {}    # the latest settlement page received (guest), until the map shows it
+	var owners_latest: Dictionary = {}   # who plays whom, per the last full save; game.gd copies it into Coop.split
+	var _pending: Array = []   # said before the socket opened; sent on the first pump after
+	var _url: String
+	var _retry_at := 0        # msec; a dropped socket is reopened, and the relay replays what we missed
+	var _closed := false
+	var _reconnects := 0
 
 	func _init(url: String, room: String, as_role: String) -> void:
 		role = as_role
 		code = room
-		ws.connect_to_url("%s/room/%s" % [url.trim_suffix("/"), room])
+		_url = "%s/room/%s?role=%s" % [url.trim_suffix("/"), room, as_role]
+		ws.connect_to_url(_url)
+
+	func close() -> void:
+		_closed = true
+		ws.close()
 
 	func send(msg: Dictionary) -> void:
 		msg["from"] = role
@@ -158,13 +281,45 @@ class Link extends RefCounted:
 	func open() -> bool:
 		return ws.get_ready_state() == WebSocketPeer.STATE_OPEN
 
-	func poll() -> Array:
+	func pump() -> void:
 		ws.poll()
+		if ws.get_ready_state() == WebSocketPeer.STATE_CLOSED and not _closed:
+			if Time.get_ticks_msec() >= _retry_at:   # a hiccup, a sleep, a relay restart: come back
+				_retry_at = Time.get_ticks_msec() + 2000
+				_reconnects += 1
+				ws = WebSocketPeer.new()
+				ws.connect_to_url(_url)
+			return
 		if open():
 			flush()
-		var out: Array = []
 		while ws.get_ready_state() == WebSocketPeer.STATE_OPEN and ws.get_available_packet_count() > 0:
 			var m = JSON.parse_string(ws.get_packet().get_string_from_utf8())
-			if m is Dictionary:
-				out.append(m)
+			if not m is Dictionary:
+				continue
+			match String(m.get("t", "")):
+				"peers":
+					var was := other_here()
+					peers = m["roles"]
+					if other_here() and not was:
+						arrivals += 1
+				"world":
+					world_pending = m["save"]
+					owners_latest = m.get("owners", {})
+				"map":
+					map_latest = m
+				"visit":
+					visit_latest = m
+				_:
+					if m.get("t", "") == "replay":
+						m["reconnect"] = _reconnects > 0   # not the first: whoever is fighting resyncs from it
+					inbox.append(m)
+
+	func other_here() -> bool:
+		return peers.has("guest" if role == "host" else "host")
+
+	# Everything received since the last take, oldest first.
+	func take() -> Array:
+		pump()
+		var out := inbox
+		inbox = []
 		return out

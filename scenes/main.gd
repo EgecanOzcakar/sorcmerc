@@ -55,14 +55,19 @@ var _hover_hex := Vector2i(999, 999)
 var _anim := 1.0             # animation speed multiplier (huge when FAST)
 var _slot_max := {}          # id -> slots at the start of the fight (for the pips)
 var _fx_on := false           # attack animations: off under SORCMERC_FAST / headless
-# Co-op spike (docs/spike-coop.md). null is the whole game exactly as it was.
-# SORCMERC_COOP=host opens a room, =CODE joins one as the guest, =host:CODE
-# hosts that room — fresh if the relay has nothing for it, a rejoin if it has;
-# SORCMERC_RELAY is the relay (tools/coop-relay).
+# Co-op (docs/spike-coop.md). null is the whole game exactly as it was. The
+# link is the lobby's (Coop.link, scenes/game/game.gd) or, for a bare combat
+# scene, the env var: SORCMERC_COOP=host opens a room, =CODE joins one as the
+# guest, =host:CODE hosts that room — fresh if the relay has nothing for it, a
+# rejoin if it has. SORCMERC_RELAY overrides Coop.RELAY_URL.
 var _coop = null              # Coop.Link
+var coop_first: Dictionary = {}   # a message the screen that made us already took off the link (the guest's setup)
 var _owners := {}             # hero id -> "host" | "guest", from the setup
 var _coop_inbox: Array = []   # intents received and not yet applied — drained on the turn they belong to
+var _coop_answers: Array = [] # reaction answers received and not yet consumed, in order
 var _coop_rebuilding := false # this _new_game is from a received setup, not one to announce
+var _coop_waiting := false    # the other player's hero is up: we watch
+var _gen := 0                 # bumped by every _new_game; a turn loop that wakes to find it changed is over
 # T-actionbar: a compact icon grid, up to BTN_COLUMNS*BUTTON_ROWS visible before
 # it scrolls (see _process's _bscroll sizing) — plain text rows read fine up to
 # ~9 verbs but sprawled once a caster's spell list pushed past 20.
@@ -322,15 +327,15 @@ func _ready() -> void:
 	# card describes. _advance() opens it on the first hero turn instead, when
 	# the bar it explains is the bar on screen.
 	_walk_pending = tutorial
-	var room := OS.get_environment("SORCMERC_COOP")
-	if room == "":
+	_coop = Coop.link if Coop.link != null else Coop.from_env()
+	if _coop == null:
 		_new_game()
 		return
-	var relay := OS.get_environment("SORCMERC_RELAY")
-	var role := "host" if room.begins_with("host") else "guest"
-	var code := room.trim_prefix("host:") if room != "host" else Coop.room_code()
-	_coop = Coop.Link.new(relay if relay != "" else "ws://127.0.0.1:8787", code, role)
-	_actor.text = "Joining room [b]%s[/b]…" % code   # the relay's replay decides what happens next
+	_actor.text = "Joining room [b]%s[/b]…" % _coop.code   # the relay's replay decides what happens next
+	if not coop_first.is_empty():
+		_coop_recv(coop_first)
+	elif Coop.link != null and _coop.role == "host":
+		_new_game()   # the lobby's host: every fight the world puts up is announced from here
 
 # Font sizes across the whole combat UI track the zoom level.
 func _apply_ui_scale() -> void:
@@ -484,18 +489,16 @@ func _new_game(forced := 0) -> void:
 	var board: Dictionary = Encounter.board_for(String(sp.get("theme", "")), _seed)   # sp["theme"] picks the board
 	cb = Encounter.build(sp, party.to_combatants(Encounter.party_starts(board, _seed)), board)   # #114
 	cb.party = party   # the stash is the potion shelf (core/potions.gd)
-	if _coop != null and _coop.role == "host" and not _coop_rebuilding:
-		var setup: Dictionary = Coop.setup_for(_seed, sp, party)
-		_owners = setup["owners"]
-		_coop.send(setup)
 	# The one thing that makes a reaction stop the fight and ask. Installed only
 	# here, only for a player who is actually watching: with it unset the
 	# resolver auto-resolves reactions exactly as it always has, which is what
 	# every headless run and every test gets (Settings.reaction_prompts_on()
 	# refuses under SORCMERC_FAST — a prompt nobody answers is a hang).
-	# Co-op: nobody is asked — the answer would be a hidden intent the other
-	# peer never sees (docs/spike-coop.md lists it as deferred).
-	if Settings.reaction_prompts_on() and _coop == null:
+	# Co-op installs its own on both peers whatever the setting: the reactor's
+	# owner answers (or auto-yes, prompts off) and the answer crosses the wire.
+	if _coop != null:
+		cb.reaction_decider = _coop_decide
+	elif Settings.reaction_prompts_on():
 		cb.reaction_decider = _ask_reaction
 	# A foe's action draws the same lunge / shot / flash a hero's does, at the
 	# moment it happens, hit or miss. Heroes draw their own from _apply_target,
@@ -507,6 +510,12 @@ func _new_game(forced := 0) -> void:
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()
 	_deploy_pick = ""
+	_gen += 1            # any suspended turn loop from the last fight ends when it wakes
+	_advancing = false
+	_busy = false
+	_coop_waiting = false
+	_coop_inbox.clear()
+	_coop_answers.clear()
 	_logbox.text = ""
 	_logged = 0
 	_last_round = 1
@@ -514,6 +523,13 @@ func _new_game(forced := 0) -> void:
 	_figures.reset(cb)
 	_flush_log()
 	_refresh()
+	if _coop != null and _coop.role == "host" and not _coop_rebuilding:
+		_split_menu(sp)   # who plays whom, then Begin announces the setup and opens the fight
+		return
+	_open_fight()
+
+# Everything after the board is built: surprise, deployment, the first turn.
+func _open_fight() -> void:
 	# T9x: a failed camp-ambush watch check — the foe gets the surprise round
 	# unconditionally, no Stealth roll (the roll already happened, and failed,
 	# in core/world_camp.gd). Checked first: an ambushed party was never given
@@ -630,6 +646,7 @@ func _advance() -> void:
 	if _advancing:
 		return
 	_advancing = true
+	var gen := _gen
 	while not cb.is_over():
 		var c = cb.current()
 		cb.begin_turn()
@@ -646,12 +663,16 @@ func _advance() -> void:
 				await get_tree().process_frame
 			if _coop_inbox.is_empty():   # a rejoin replays without the beats
 				await get_tree().create_timer(TURN_BEAT / _anim).timeout
+			if gen != _gen:
+				return   # the fight was rebuilt under us (co-op resync); its own loop is running
 			if not c.is_down():
 				# Awaited because the AI now stops between its own actions to
 				# offer the party its reactions (core/ai.gd). With prompts off
 				# it never suspends and this is the same call it always was.
 				# Its swings draw through cb.on_perform (see _start_combat).
 				await AI.take_turn(cb, c)
+				if gen != _gen:
+					return
 			_flush_log()
 			_refresh()
 			_busy = false
@@ -663,8 +684,11 @@ func _advance() -> void:
 			_busy = true
 			_viewing = false
 			_set_buttons([])
-			_actor.text = "[b]%s[/b] — waiting for the other player…" % c.cname
+			_coop_waiting = true
+			_refresh()
 			var ended: bool = await _coop_remote_turn(c)
+			if gen != _gen:
+				return
 			_busy = false
 			if ended:
 				continue
@@ -794,16 +818,52 @@ func _coop_send(m: Dictionary) -> void:
 	if _coop != null:
 		_coop.send(m)
 
+func _mine(c) -> bool:
+	return _coop == null or _owners.get(c.id, "host") == _coop.role
+
+# The host's one pre-fight choice: who plays whom. Remembered across fights
+# (Coop.split), so after the first it is a look and a Begin.
+func _split_menu(sp: Dictionary) -> void:
+	_mode = "split"
+	var opts: Array = []
+	var owners := Coop.owners_for(party)
+	_owners = owners   # so the strip says whose hand each hero is in while choosing
+	_build_order_strip()
+	for h in cb.team_of("party"):
+		var theirs: bool = owners.get(h.id, "host") == "guest"
+		opts.append(["%s — %s" % [h.cname, "your friend" if theirs else "you"], func():
+			Coop.split[h.id] = "host" if theirs else "guest"
+			_split_menu(sp)])
+	opts.append(["Begin", func():
+		_mode = "idle"
+		var setup: Dictionary = Coop.setup_for(_seed, sp, party)
+		_owners = setup["owners"]
+		_coop.send(setup)
+		_open_fight()])
+	_actor.text = "[b]Room %s.[/b]  %s  Click a name to hand them over, then Begin." % [_coop.code,
+		"Your friend is here." if _coop.other_here() else "Your friend can join at any time — even mid-fight."]
+	_set_buttons(opts)
+
 func _coop_recv(m: Dictionary) -> void:
 	match String(m.get("t", "")):
 		"replay":   # the room so far: nothing (a new room — the host starts it) or everything
+			if cb != null and _coop.role == "host" and not m.get("reconnect", false):
+				return   # the lobby's host already has its fight up; what the room holds is stale
 			if m["log"].is_empty():
-				if _coop.role == "host":
-					_new_game()   # announces the setup
-			else:
+				if _coop.role == "host" and cb == null:
+					_new_game()
+			else:   # a join, a rejoin, or a socket that dropped and came back: the log is the truth
 				for e in m["log"]:
 					_coop_recv(e)
 		"setup":   # a guest joining, or either peer rejoining: the relay replays it
+			if m.has("build") and String(m["build"]) != Coop.build_stamp():
+				# Lockstep on different code is a desync waiting for its first
+				# roll; better to say so at the door.
+				_actor.text = "[b]Different builds.[/b]  The host runs %s; this is %s. Update, then join again." % [m["build"], Coop.build_stamp()]
+				_set_buttons([])
+				return
+			_dismiss_wash()   # the last fight's verdict, if it is still up
+			result = {}
 			party = Coop.party_from(m)
 			_own_party = false
 			spec = m["spec"]
@@ -820,17 +880,32 @@ func _coop_recv(m: Dictionary) -> void:
 				_advance()
 		"perform", "move", "end_turn":
 			_coop_inbox.append(m)
+		"reaction":
+			_coop_answers.append(bool(m["yes"]))
+		"hover":
+			if cb != null and _coop_waiting:
+				_board._hover = Vector2i(int(m["hex"][0]), int(m["hex"][1]))
+				_hover_verb = {}
+				for v in cb.all_verbs(cb.current()):
+					if String(v["id"]) == String(m.get("verb", "")):
+						_hover_verb = v
+				_board.queue_redraw()
 
 # One turn off the wire: apply what arrives until its end_turn has been applied
 # (that call does the cb.end_turn()) or the fight is over — true. False when
 # the inbox runs dry on one of OUR heroes: a rejoin replaying our own
 # half-finished turn, which nobody else is going to finish.
 func _coop_remote_turn(c) -> bool:
+	_coop_waiting = true
 	while true:
 		while _coop_inbox.is_empty():
-			if _owners.get(c.id, "host") == _coop.role:
+			if _mine(c):
+				_coop_waiting = false
 				return false
+			var gen := _gen
 			await get_tree().process_frame
+			if gen != _gen:
+				return true
 		var m: Dictionary = _coop_inbox.pop_front()
 		var h = Coop.find(cb, String(m.get("hero", "")))
 		if m["t"] == "move" and h != null:
@@ -844,10 +919,34 @@ func _coop_remote_turn(c) -> bool:
 			if m.has("hash") and int(m["hash"]) != Coop.state_hash(cb):
 				cb.log.append("⚠ DESYNC: this screen's fight no longer matches the other player's (seed %d, round %d)." % [_seed, cb.round_num])
 				_flush_log()
-			return true
+			break
 		if cb.is_over():
-			return true
-	return true   # unreachable; the parser wants a path out of `while true`
+			break
+	_coop_waiting = false
+	_hover_verb = {}
+	return true
+
+# The reaction decider in co-op: the reactor's owner answers — through the
+# card if prompts are on, else the auto-yes the resolver always gave — and the
+# answer crosses the wire; the other peer waits for it. Both peers reach the
+# same prompts in the same order, so answers are consumed in order, which is
+# also what makes a rejoin's replayed answers land on the right prompts.
+func _coop_decide(reactor, v: Dictionary, trigger: String, ctx: Dictionary) -> bool:
+	if not _coop_answers.is_empty():
+		return _coop_answers.pop_front()
+	if _mine(reactor):
+		var yes := true
+		if Settings.reaction_prompts_on():
+			yes = await _ask_reaction(reactor, v, trigger, ctx)
+		_coop_send(Coop.reaction(yes))
+		return yes
+	_actor.text = "[b]%s[/b] — your friend is deciding: %s?" % [reactor.cname, String(v["label"])]
+	var gen := _gen
+	while _coop_answers.is_empty():
+		await get_tree().process_frame
+		if gen != _gen:
+			return false   # the fight was rebuilt under us; this resolver is orphaned
+	return _coop_answers.pop_front()
 
 # --- hero menu ---------------------------------------------------------
 
@@ -1353,7 +1452,7 @@ func target_readout(h, c) -> String:
 # board callbacks -------------------------------------------------------
 
 func board_hex_clicked(hx: Vector2i) -> void:
-	if _busy or cb.is_over():
+	if (_busy and not _coop_waiting) or cb.is_over() or _mode == "split":
 		return
 	# T39: during deployment the board is the control — click a hero to pick
 	# them up, click another to trade places. Nobody has a turn yet, so none of
@@ -1485,7 +1584,11 @@ static func _reveal_head(res: Dictionary) -> Array:
 	return ["FAILED SAVE" + tail, Color("ffc46a")]
 
 func board_hex_hovered(hx: Vector2i) -> void:
+	if _coop_waiting:
+		return   # the board shows the other player's cursor, not ours
 	_hover_hex = hx
+	if _coop != null and cb.current() != null and _mine(cb.current()) and not _busy:
+		_coop_send(Coop.hover(hx, _tgt_verb if _mode in ["target", "area", "cone"] else _hover_verb))
 	if _walk != null:
 		# The stat card is drawn by Board for anybody standing here (see
 		# _stat_card), so a hover that landed on a living token is the
@@ -1667,6 +1770,8 @@ func _refresh() -> void:
 			("    " + res) if res != "" else "",
 			_econ_bb(cur), hint, again,
 		]
+	elif _coop_waiting and not _viewing:
+		_actor.text = "[b]%s[/b] — your friend's turn.  Click one of yours to look at their sheet." % (cur.cname if cur else "?")
 	elif _mode == "idle" and not _viewing:
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
 	_board.queue_redraw()
@@ -1775,6 +1880,13 @@ func _build_order_strip() -> void:
 		hp.add_theme_font_size_override("font_size", int(Icons.FS_SMALL * u))
 		hp.add_theme_color_override("font_color", _hp_color(c))
 		tv.add_child(hp)
+		if _coop != null and c.team == "party":   # whose hand this one is in
+			var who := Label.new()
+			who.text = "yours" if _mine(c) else "theirs"
+			who.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			who.theme_type_variation = "Dim"
+			who.add_theme_font_size_override("font_size", int(Icons.FS_SMALL * u))
+			tv.add_child(who)
 		if c.is_dead():
 			tile.modulate = Color(1, 1, 1, 0.35)
 		elif c.is_down():
@@ -2083,7 +2195,7 @@ func _overlay_up() -> bool:
 
 func _process(dt: float) -> void:
 	if _coop != null:
-		for m in _coop.poll():
+		for m in _coop.take():
 			_coop_recv(m)
 	if _wash != null:
 		_wash_age += dt
@@ -2934,6 +3046,8 @@ class Board extends Control:
 				return
 			var hx := _unpix(e.position)
 			_hover_pt = _iso_inv(e.position - _origin)
+			if main._coop_waiting:
+				return   # the board is showing the other player's cursor
 			if hx != _hover:
 				_hover = hx
 				main.board_hex_hovered(hx)
@@ -3208,7 +3322,7 @@ class Board extends Control:
 		var cur = cb.current()
 		var hero_turn: bool = cur and cur.team == "party" and cur.conscious()
 		if hero_turn and main._mode == "idle" and not main._viewing and main._hover_verb.is_empty() \
-				and cur.econ["move_left"] > 0:   # #92: a hovered skill's reach replaces the move field
+				and cur.econ["move_left"] > 0 and not main._coop_waiting:   # #92: a hovered skill's reach replaces the move field; the watcher is not offered one
 			# One A* per reachable hex — 15-20 ms a frame in GDScript, so it is
 			# memoised on everything it reads until something on the field moves.
 			var key := hash([cur.id, cb.log.size(), cb.board,

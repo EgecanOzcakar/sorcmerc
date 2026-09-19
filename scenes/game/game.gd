@@ -32,6 +32,7 @@ const Sound = preload("res://core/audio.gd")
 const Tutorial = preload("res://core/tutorial.gd")
 const Registry = preload("res://core/mod/registry.gd")
 const StoryRuntime = preload("res://core/mod/story_runtime.gd")
+const Coop = preload("res://core/coop.gd")
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 const CAMPAIGN_SCENE := "res://scenes/campaign/campaign.tscn"
@@ -135,6 +136,7 @@ func show_title() -> void:
 		col.add_child(_dim("One autosave slot. A new run writes over the one above."))
 		col.add_child(_gap(6))
 	col.add_child(_button("Campaigns & mods", show_content))
+	col.add_child(_button("Play together" if Coop.link == null else "Play together  ·  room %s" % Coop.link.code, show_coop))
 	col.add_child(_button("Tutorial", show_tutorial))
 	var roster := CharacterSave.list_slugs().size()
 	col.add_child(_dim("%d in the barracks." % roster if roster != 1 else "1 in the barracks."))
@@ -326,6 +328,172 @@ func show_random_battle() -> void:
 	wrap.add_child(back)
 	_swap(wrap, "random battle (debug)")
 
+# --- play together (docs/spike-coop.md) ------------------------------------
+#
+# Two players, one party, a six-letter room code and no accounts. The host
+# runs the road exactly as in single player — every fight their world puts up
+# is announced on the room (scenes/main.gd sees Coop.link) — and the guest's
+# screen is the fight, and between fights the wait for the next one. The link
+# is made here and lives in Coop.link until "Leave the room".
+
+var _lobby_status: Label = null      # "waiting for your friend" / "your friend is here", live
+var _guest_combat = null             # the guest's live scenes/main.tscn, while one is up
+var _guest_on_map := false           # the guest is looking at the host's map (world.gd, spectator)
+
+func show_coop() -> void:
+	var col := VBoxContainer.new()
+	col.custom_minimum_size.x = 520
+	col.add_theme_constant_override("separation", 8)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	var title := Label.new()
+	title.text = "Play together"
+	title.theme_type_variation = "Title"
+	col.add_child(title)
+	var tag := Label.new()
+	tag.text = "One party, two players. The host runs the road; you both fight."
+	tag.theme_type_variation = "Serif"
+	tag.add_theme_color_override("font_color", Icons.COL_BODY)
+	col.add_child(tag)
+	col.add_child(_gap(18))
+	_lobby_status = null
+	if Coop.link == null:
+		col.add_child(_button("Host a room", func():
+			Coop.link = Coop.Link.new(Coop.relay_url(), Coop.room_code(), "host")
+			show_coop(), true))
+		col.add_child(_dim("You get a code to read out. Then start a run as usual."))
+		col.add_child(_gap(6))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var code := LineEdit.new()
+		code.placeholder_text = "ROOM CODE"
+		code.max_length = 6
+		code.custom_minimum_size.x = 170
+		row.add_child(code)
+		var join := func():
+			var c := code.text.strip_edges().to_upper()
+			if not Coop.valid_code(c):
+				code.text = ""
+				code.placeholder_text = "SIX LETTERS"
+				return
+			Coop.link = Coop.Link.new(Coop.relay_url(), c, "guest")
+			show_coop_guest()
+		code.text_submitted.connect(func(_t): join.call())
+		row.add_child(_button("Join", join))
+		col.add_child(row)
+		col.add_child(_dim("Your friend's code. You play the heroes they hand you."))
+	else:
+		var code := Label.new()
+		code.text = " ".join(Coop.link.code.split(""))
+		code.theme_type_variation = "Title"
+		code.add_theme_font_size_override("font_size", 56)
+		col.add_child(code)
+		col.add_child(_dim("Read it out. Your friend types it under Play together → Join."))
+		_lobby_status = _dim("")
+		col.add_child(_lobby_status)
+		col.add_child(_gap(12))
+		var slot: Dictionary = WorldSave.summary()
+		if not slot.is_empty():
+			col.add_child(_button("Resume the open world", _resume_world, true))
+		col.add_child(_button("New run", show_party_setup, slot.is_empty()))
+		col.add_child(_button("Quick fight — the preset party", show_random_battle))
+		col.add_child(_dim("You choose who plays whom as each fight begins. Your friend can join any time, even mid-fight."))
+		col.add_child(_gap(6))
+		col.add_child(_quiet("Leave the room", func():
+			Coop.link.close()
+			Coop.link = null
+			Coop.split = {}
+			show_coop()))
+	col.add_child(_gap(12))
+	col.add_child(_quiet("Back", show_title))
+	var centre := CenterContainer.new()
+	centre.add_child(col)
+	_swap(centre, "play together")
+
+# The guest before the host has a map up: the room, who is here, and nothing
+# to press but Leave. The host's map replaces this the moment it arrives
+# (Coop.link.world_pending), and a fight replaces either.
+func show_coop_guest() -> void:
+	_guest_combat = null
+	_guest_on_map = false
+	var col := VBoxContainer.new()
+	col.custom_minimum_size.x = 520
+	col.add_theme_constant_override("separation", 8)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	var title := Label.new()
+	title.text = "Riding along"
+	title.theme_type_variation = "Title"
+	col.add_child(title)
+	var tag := Label.new()
+	tag.text = "Room %s. The next fight your host walks into opens here." % Coop.link.code
+	tag.theme_type_variation = "Serif"
+	tag.add_theme_color_override("font_color", Icons.COL_BODY)
+	col.add_child(tag)
+	_lobby_status = _dim("")
+	col.add_child(_lobby_status)
+	col.add_child(_gap(12))
+	col.add_child(_quiet("Leave the room", func():
+		Coop.link.close()
+		Coop.link = null
+		show_coop()))
+	var centre := CenterContainer.new()
+	centre.add_child(col)
+	_swap(centre, "co-op guest")
+
+# The guest's fight: scenes/main.tscn with the message that announced it. The
+# screen keeps the link's inbox from here on — the next setup rebuilds the
+# fight in place — so this is only ever entered from the waiting screen.
+func _guest_fight(first: Dictionary) -> void:
+	_guest_on_map = false
+	_guest_combat = load(COMBAT_SCENE).instantiate()
+	_guest_combat.coop_first = first
+	var wrap := Control.new()
+	wrap.add_child(_guest_combat)
+	var leave := Button.new()
+	leave.text = "Leave the room"
+	leave.theme_type_variation = "Quiet"
+	leave.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)   # under the action log; the header's corner is taken
+	leave.offset_left = 16; leave.offset_top = -48; leave.offset_right = 200; leave.offset_bottom = -12
+	leave.pressed.connect(func():
+		Coop.link.close()
+		Coop.link = null
+		_guest_combat = null
+		show_coop())
+	wrap.add_child(leave)
+	_swap(wrap, "co-op fight")
+
+func _process(_dt: float) -> void:
+	if Coop.link == null:
+		return
+	Coop.link.pump()   # keeps the socket alive between fights; the fight screen takes what it needs
+	if _lobby_status != null and is_instance_valid(_lobby_status):
+		_lobby_status.text = ("Your friend is here." if Coop.link.role == "host" else "The host is here. Waiting for a fight…") \
+			if Coop.link.other_here() else ("Waiting for your friend…" if Coop.link.role == "host" else "Waiting for the host…")
+	if Coop.link.role != "guest":
+		return
+	var fighting: bool = _guest_combat != null and _guest_combat.result.is_empty()
+	if fighting:
+		return   # the fight screen owns the inbox; the map waits
+	for m in Coop.link.take():
+		if m.get("t", "") == "setup" or (m.get("t", "") == "replay" and not m["log"].is_empty()):
+			_guest_fight(m)
+			return
+	# The host's map: on arrival, and again after anything structural (the
+	# host autosaves; each autosave is a full save on the wire). A fresh screen
+	# each time — the map is cheap to rebuild, and it keeps world.gd's
+	# spectator to "do not tick" rather than "also merge".
+	if not Coop.link.world_pending.is_empty() and not (_guest_on_map and _screen.has_method("mirror_busy") and _screen.mirror_busy()):
+		var saved = WorldSave.from_dict(Coop.link.world_pending)
+		Coop.link.world_pending = {}
+		Coop.split = Coop.link.owners_latest   # the host's choice of who plays whom, so Coop.mine() agrees here
+		if saved != null:
+			var old = _screen if _guest_on_map else null   # keep the guest's own camera across the rebuild
+			_guest_combat = null
+			_guest_on_map = true
+			show_world(saved["party"], saved["world"], "small", _story_from(saved), true)
+			if old != null and is_instance_valid(old):
+				_screen._pan = old._pan; _screen._zoom = old._zoom
+				_screen._yaw = old._yaw; _screen._pitch = old._pitch
+
 # --- party setup ----------------------------------------------------------
 #
 # The party screen does the work (roster, slots, the creator, profiles); this
@@ -442,14 +610,15 @@ func _start_pack(party) -> void:
 # built-in ones. `size` ("small" | "large" | "procedural") only matters when
 # `world` is null — a resumed save already has its map, the size that built
 # it is moot.
-func show_world(party, world = null, size := "small", story = null) -> void:
+func show_world(party, world = null, size := "small", story = null, spectator := false) -> void:
 	var screen = load(WORLD_SCENE).instantiate()
 	screen.party = party
 	screen.world_size = size
 	if world != null:
 		screen.world = world
 	screen.story = story
-	_swap(screen, "open world")
+	screen.spectator = spectator
+	_swap(screen, "co-op map" if spectator else "open world")
 
 # --- the run (linear, debug-only) -----------------------------------------
 

@@ -24,6 +24,7 @@ const Prepare = preload("res://scenes/party/prepare.gd")
 # #118: whether a roster row's Level up button is live, and what the tooltip
 # says when it is not. Same source the profile's own button reads.
 const Leveling = preload("res://core/leveling.gd")
+const Coop = preload("res://core/coop.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_EDGE := Icons.COL_EDGE
@@ -430,11 +431,14 @@ func _card(sm: Dictionary) -> Control:
 	# with the reason rather than hidden, the same way Spells below is.
 	var who = party.get_member(sm["id"])
 	var ready: bool = who != null and not sm.get("dead", false) and Leveling.can_level_up(who)
+	var theirs: bool = who != null and not Coop.mine(party, who.id)   # co-op: a friend's hero levels on the friend's screen
 	var lvl := Button.new()
 	Icons.clicks(lvl)
 	lvl.text = "Level up"
-	lvl.disabled = not ready
-	if ready:
+	lvl.disabled = not ready or theirs
+	if ready and theirs:
+		lvl.tooltip_text = "%s is your friend's — the level is theirs to take." % sm["name"]
+	elif ready:
 		lvl.theme_type_variation = "Primary"
 		lvl.tooltip_text = "%s has the XP for level %d" % [sm["name"], who.level() + 1]
 	elif who == null or sm.get("dead", false):
