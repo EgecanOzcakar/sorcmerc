@@ -338,6 +338,7 @@ func show_random_battle() -> void:
 
 var _lobby_status: Label = null      # "waiting for your friend" / "your friend is here", live
 var _guest_combat = null             # the guest's live scenes/main.tscn, while one is up
+var _guest_on_map := false           # the guest is looking at the host's map (world.gd, spectator)
 
 func show_coop() -> void:
 	var col := VBoxContainer.new()
@@ -408,10 +409,12 @@ func show_coop() -> void:
 	centre.add_child(col)
 	_swap(centre, "play together")
 
-# The guest between fights: the room, who is here, and nothing to press but
-# Leave. The next setup the host announces puts the fight up over this.
+# The guest before the host has a map up: the room, who is here, and nothing
+# to press but Leave. The host's map replaces this the moment it arrives
+# (Coop.link.world_pending), and a fight replaces either.
 func show_coop_guest() -> void:
 	_guest_combat = null
+	_guest_on_map = false
 	var col := VBoxContainer.new()
 	col.custom_minimum_size.x = 520
 	col.add_theme_constant_override("separation", 8)
@@ -440,6 +443,7 @@ func show_coop_guest() -> void:
 # screen keeps the link's inbox from here on — the next setup rebuilds the
 # fight in place — so this is only ever entered from the waiting screen.
 func _guest_fight(first: Dictionary) -> void:
+	_guest_on_map = false
 	_guest_combat = load(COMBAT_SCENE).instantiate()
 	_guest_combat.coop_first = first
 	var wrap := Control.new()
@@ -464,11 +468,30 @@ func _process(_dt: float) -> void:
 	if _lobby_status != null and is_instance_valid(_lobby_status):
 		_lobby_status.text = ("Your friend is here." if Coop.link.role == "host" else "The host is here. Waiting for a fight…") \
 			if Coop.link.other_here() else ("Waiting for your friend…" if Coop.link.role == "host" else "Waiting for the host…")
-	if Coop.link.role == "guest" and _guest_combat == null:
-		for m in Coop.link.take():
-			if m.get("t", "") == "setup" or (m.get("t", "") == "replay" and not m["log"].is_empty()):
-				_guest_fight(m)
-				return
+	if Coop.link.role != "guest":
+		return
+	var fighting: bool = _guest_combat != null and _guest_combat.result.is_empty()
+	if fighting:
+		return   # the fight screen owns the inbox; the map waits
+	for m in Coop.link.take():
+		if m.get("t", "") == "setup" or (m.get("t", "") == "replay" and not m["log"].is_empty()):
+			_guest_fight(m)
+			return
+	# The host's map: on arrival, and again after anything structural (the
+	# host autosaves; each autosave is a full save on the wire). A fresh screen
+	# each time — the map is cheap to rebuild, and it keeps world.gd's
+	# spectator to "do not tick" rather than "also merge".
+	if not Coop.link.world_pending.is_empty():
+		var saved = WorldSave.from_dict(Coop.link.world_pending)
+		Coop.link.world_pending = {}
+		if saved != null:
+			var old = _screen if _guest_on_map else null   # keep the guest's own camera across the rebuild
+			_guest_combat = null
+			_guest_on_map = true
+			show_world(saved["party"], saved["world"], "small", _story_from(saved), true)
+			if old != null and is_instance_valid(old):
+				_screen._pan = old._pan; _screen._zoom = old._zoom
+				_screen._yaw = old._yaw; _screen._pitch = old._pitch
 
 # --- party setup ----------------------------------------------------------
 #
@@ -586,14 +609,15 @@ func _start_pack(party) -> void:
 # built-in ones. `size` ("small" | "large" | "procedural") only matters when
 # `world` is null — a resumed save already has its map, the size that built
 # it is moot.
-func show_world(party, world = null, size := "small", story = null) -> void:
+func show_world(party, world = null, size := "small", story = null, spectator := false) -> void:
 	var screen = load(WORLD_SCENE).instantiate()
 	screen.party = party
 	screen.world_size = size
 	if world != null:
 		screen.world = world
 	screen.story = story
-	_swap(screen, "open world")
+	screen.spectator = spectator
+	_swap(screen, "co-op map" if spectator else "open world")
 
 # --- the run (linear, debug-only) -----------------------------------------
 

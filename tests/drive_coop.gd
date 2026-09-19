@@ -10,10 +10,15 @@
 #   SORCMERC_COOP_VIA=game       come in through the front door instead: the
 #                                title's Play together → Join, and the guest's
 #                                waiting screen puts the fight up (game.gd)
+#   SORCMERC_COOP_VIA=map        no fight: the host walks the open world for
+#                                20 s, the guest watches the mirror; both print
+#                                where the party stands at the end
 extends SceneTree
 
 const Coop = preload("res://core/coop.gd")
 const Hex = preload("res://core/hex.gd")
+const World = preload("res://core/world.gd")
+const WorldAI = preload("res://core/world_ai.gd")
 
 const MAX_PRESSES = 400
 const PATIENCE := 60.0   # seconds of nothing to press before giving up on the other peer
@@ -26,6 +31,9 @@ var _drop_at: int = int(OS.get_environment("SORCMERC_COOP_DROP_AT")) if OS.get_e
 
 func _init() -> void:
 	OS.set_environment("SORCMERC_FAST", "1")
+	if OS.get_environment("SORCMERC_COOP_VIA") == "map":
+		_map_mirror()
+		return
 	if OS.get_environment("SORCMERC_COOP_VIA") == "game":
 		game = load("res://scenes/game/game.tscn").instantiate()
 		root.add_child(game)
@@ -66,20 +74,23 @@ func _run() -> void:
 			print("%s: dropping the socket on purpose after %d presses" % [main._coop.role, _presses])
 			_drop_at = -1
 			main._coop.ws.close()
-		if main._mode == "cone" or main._mode == "target":
-			_board_click()
-		elif main._mode == "idle" and _presses % 3 == 0 and main.cb.current().econ["move_left"] > 0:
-			_move_click()
-		else:
-			var btns := _buttons()
-			if btns.is_empty():
-				continue
-			_press(btns)
+		_act()
 	await create_timer(1.0).timeout   # let the last message leave
 	var cb = main.cb
 	print("%s: seed=%d room=%s presses=%d rounds=%d outcome=%s hash=%d" % [
 		main._coop.role, main._seed, main._coop.code, _presses, cb.round_num, cb.outcome(), Coop.state_hash(cb)])
 	quit(0 if cb.is_over() else 1)
+
+# One press on `main`, whatever its mode wants.
+func _act() -> void:
+	if main._mode == "cone" or main._mode == "target":
+		_board_click()
+	elif main._mode == "idle" and _presses % 3 == 0 and main.cb.current().econ["move_left"] > 0:
+		_move_click()
+	else:
+		var btns := _buttons()
+		if not btns.is_empty():
+			_press(btns)
 
 func _board_click() -> void:
 	_presses += 1
@@ -135,3 +146,66 @@ func _press(btns: Array) -> void:
 		pick = btns[-1]   # End turn / Begin the ambush sits last
 	_presses += 1
 	pick.pressed.emit()
+
+# The road, mirrored, with a fight in the middle: the host's game.tscn shows
+# the demo world, a hunting band is set on the party at 8x so a fight comes
+# within seconds, both peers play it, and afterwards both should be back on
+# the same map with the party in the same place.
+func _map_mirror() -> void:
+	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/coop-%d" % randi())   # nobody's real slot
+	game = load("res://scenes/game/game.tscn").instantiate()
+	root.add_child(game)
+	await process_frame
+	var room := OS.get_environment("SORCMERC_COOP")
+	var role := "host" if room.begins_with("host") else "guest"
+	Coop.link = Coop.Link.new(Coop.relay_url(), room.trim_prefix("host:"), role)
+	var fought := false
+	var t0 := Time.get_ticks_msec()
+	if role == "host":
+		game.show_world(null)     # the demo roster and the small map
+		var screen = game._screen
+		await create_timer(3.0).timeout   # the guest sits down, gets the map
+		var w = screen.world
+		var p = w.player()
+		w.set_goal(p, p.position + Vector2(20000, 0))   # a long march: never arrives, never halts
+		var hound = w.add_party(World.RoamingParty.new("hound", p.position - Vector2(40, 0), "goblinoid"))
+		WorldAI.hunt(hound)
+		w.clock.set_speed(8.0)
+		w.clock.resume()
+		while Time.get_ticks_msec() - t0 < 60000:
+			await process_frame
+			if screen._event_card != null:
+				screen._event_card.acknowledged.emit()
+			if screen._approach_card != null:
+				screen._on_approach_chosen("engage")
+			if screen._spoils_panel != null:
+				screen._close_spoils()
+			if screen._combat != null and screen._combat.cb != null and screen._combat.result.is_empty():
+				main = screen._combat
+				fought = true
+				if not main._busy and not main.cb.is_over():
+					_act()
+			elif fought and screen._combat == null:
+				break   # the fight is over and the map is back
+		await create_timer(4.0).timeout   # an autosave's full map reaches the guest
+		var q = screen.world.player()
+		print("host: fought=%s party=(%.0f, %.0f)" % [str(fought), q.position.x, q.position.y])
+	else:
+		game.show_coop_guest()
+		while Time.get_ticks_msec() - t0 < 70000:
+			await process_frame
+			if game._guest_combat != null and game._guest_combat.cb != null and game._guest_combat.result.is_empty():
+				main = game._guest_combat
+				fought = true
+				if not main._busy and not (main._mode == "deploy") and not main.cb.is_over():
+					_act()
+			elif fought and game._guest_on_map:
+				break
+		await create_timer(1.0).timeout
+		if not game._guest_on_map:
+			print("*** guest is not on the map (fought=%s) — wedged ***" % str(fought))
+			quit(1)
+			return
+		var q = game._screen.world.player()
+		print("guest: fought=%s party=(%.0f, %.0f) spectator=%s" % [str(fought), q.position.x, q.position.y, str(game._screen.spectator)])
+	quit(0)

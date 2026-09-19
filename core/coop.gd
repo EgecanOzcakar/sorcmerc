@@ -20,6 +20,7 @@ extends RefCounted
 const ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # no 0/O/1/I to read out loud
 const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
+const WorldSave = preload("res://core/world_save.gd")
 
 # Where tools/coop-relay is deployed. SORCMERC_RELAY overrides it for one run
 # (a local `wrangler dev` is ws://127.0.0.1:8787). Not a secret: a public
@@ -132,6 +133,22 @@ static func reaction(yes: bool) -> Dictionary:
 static func hover(hex: Vector2i, verb: Dictionary) -> Dictionary:
 	return {"t": "hover", "hex": [hex.x, hex.y], "verb": String(verb.get("id", ""))}
 
+# --- the road (scenes/world/world.gd) ---------------------------------------
+#
+# The host's map, mirrored: the whole save when the guest arrives and whenever
+# the host autosaves (a fight banked, a town visited — anything structural),
+# and between those a small delta twice a second: the clock and where every
+# party stands. The guest's map does not tick; it is drawn from these. Both
+# are forwarded by the relay and never logged.
+static func world_full(world, party, story) -> Dictionary:
+	return {"t": "world", "save": WorldSave.to_dict(world, party, story)}
+
+static func map_delta(world) -> Dictionary:
+	var at := {}
+	for p in world.parties:
+		at[p.id] = [p.position.x, p.position.y]
+	return {"t": "map", "elapsed": world.clock.elapsed, "paused": world.clock.is_paused(), "at": at}
+
 static func find(cb, id: String):
 	for c in cb.combatants:
 		if c.id == id:
@@ -188,6 +205,9 @@ class Link extends RefCounted:
 	var code: String
 	var inbox: Array = []      # parsed messages, oldest first, not yet taken
 	var peers: Array = []      # roles connected right now, per the relay
+	var arrivals := 0          # times the other seat went from empty to taken; the host resends the map on each
+	var world_pending: Dictionary = {}   # the latest full map save received (guest), until a screen takes it
+	var map_latest: Dictionary = {}      # the latest map delta received (guest), until the map applies it
 	var _pending: Array = []   # said before the socket opened; sent on the first pump after
 	var _url: String
 	var _retry_at := 0        # msec; a dropped socket is reopened, and the relay replays what we missed
@@ -233,12 +253,20 @@ class Link extends RefCounted:
 			var m = JSON.parse_string(ws.get_packet().get_string_from_utf8())
 			if not m is Dictionary:
 				continue
-			if m.get("t", "") == "peers":
-				peers = m["roles"]
-			else:
-				if m.get("t", "") == "replay":
-					m["reconnect"] = _reconnects > 0   # not the first: whoever is fighting resyncs from it
-				inbox.append(m)
+			match String(m.get("t", "")):
+				"peers":
+					var was := other_here()
+					peers = m["roles"]
+					if other_here() and not was:
+						arrivals += 1
+				"world":
+					world_pending = m["save"]
+				"map":
+					map_latest = m
+				_:
+					if m.get("t", "") == "replay":
+						m["reconnect"] = _reconnects > 0   # not the first: whoever is fighting resyncs from it
+					inbox.append(m)
 
 	func other_here() -> bool:
 		return peers.has("guest" if role == "host" else "host")

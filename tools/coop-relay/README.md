@@ -43,11 +43,12 @@ to the other seat, with these exceptions:
 - `perform` / `move` are kept only from the seat that owns `hero`;
   `swap` / `go` only from the host. `end_turn` and `reaction` cannot be
   checked without knowing whose turn it is, which is the game's business.
-- `hover` is forwarded and never logged.
+- `hover`, `map` and `world` (the host's map, mirrored to the guest) are
+  forwarded and never logged.
 - `{"t":"peers","roles":[...]}` is the relay's own, sent to everyone whenever
   a seat changes.
 
-Frames that are not a JSON object, or over 64 KB, are dropped. A room nobody
+Frames that are not a JSON object, or over 256 KB, are dropped. A room nobody
 has spoken in for 24 hours is deleted. Ordering across peers is the game's
 problem, and in a turn-based game it is no problem: only the peer whose hero
 is up sends.

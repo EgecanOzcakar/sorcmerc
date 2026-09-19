@@ -14,8 +14,9 @@
 //   - `owners` from the setup gate perform/move: a hero's presses come only
 //     from its owner. swap/go are the host's. end_turn cannot be checked
 //     without knowing whose turn it is, which is the game's business.
-//   - `hover` is forwarded and never logged; `peers` is the relay's own, sent
-//     to everyone whenever a seat changes.
+//   - `hover`, `map` and `world` (the host's map, mirrored to the guest) are
+//     forwarded and never logged; `peers` is the relay's own, sent to
+//     everyone whenever a seat changes.
 // Turn order is what keeps the log meaningful: only the peer whose hero is up
 // sends, so "the order the relay received them in" and "the order they were
 // applied in" are the same order. State hashes ride on end_turn and the peers
@@ -23,7 +24,8 @@
 
 const CODE = /^\/room\/([A-Z2-9]{6})$/;    // Coop.ALPHABET: no 0/O/1/I
 const ROLES = ["host", "guest"];
-const MAX_MESSAGE = 64 * 1024;             // a setup with a full party is ~20 KB
+const MAX_MESSAGE = 256 * 1024;            // a setup is ~20 KB; a whole map save ~50 KB
+const EPHEMERAL = ["hover", "map", "world"];   // forwarded, never logged: the host resends what matters
 const EXPIRE_MS = 24 * 60 * 60 * 1000;     // a room nobody has spoken in for a day is gone
 
 export class Room {
@@ -69,7 +71,7 @@ export class Room {
     msg.from = from;
     const out = JSON.stringify(msg);
     const others = this.ctx.getWebSockets().filter((p) => p !== ws);
-    if (msg.t === "hover") {
+    if (EPHEMERAL.includes(msg.t)) {
       for (const p of others) this.send(p, out);
       return;
     }

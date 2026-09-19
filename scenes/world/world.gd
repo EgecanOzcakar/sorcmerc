@@ -278,6 +278,14 @@ var _minimap: Control = null   # T9y: the corner map inset, see _layout_minimap(
 # every run on a built-in map. Everything below treats null as "no story", so a
 # normal run costs one `if` per frame and nothing else.
 var story = null
+# Co-op (docs/spike-coop.md §7). The guest's copy of the host's map: nothing
+# here ticks, nothing is ordered, nothing is saved — positions and the clock
+# come off the wire (Coop.link.map_latest), the whole save when something
+# structural changed. The host's screen is the ordinary one, plus _coop_share.
+const Coop = preload("res://core/coop.gd")
+var spectator := false
+var _map_share_t := 0.0      # host: seconds since the last map delta went out
+var _synced_arrival := 0     # host: Coop.link.arrivals the full save was last sent for
 var story_card: Control = null       # the beat being shown, or null
 var _story_panel: Control = null     # the journal overlay, toggled off the HUD
 var _story_btn: Button
@@ -336,6 +344,8 @@ func _ready() -> void:
 	set_process(true)
 	_build_hud()
 	_refresh_pace_btn()
+	if spectator:
+		_spectator_hud()
 
 # Hand-placed stand-ins so the scene has something to render and move. Real
 # spawning is a later phase's job (O3 onward).
@@ -413,6 +423,10 @@ func _small_world() -> World:
 # World.tick() advances the clock itself and gates movement on it, so one call
 # per frame is the whole update.
 func _process(delta: float) -> void:
+	if spectator:
+		_spectate()
+		_render()
+		return
 	# O7: the clock's own advance (0 while paused) both drains O6's queued opinion
 	# deltas off the settlements and runs the slow drift back toward neutral.
 	var dt := world.tick(delta)
@@ -446,6 +460,12 @@ func _process(delta: float) -> void:
 	_check_level_ready()
 	if _camp_btn != null:
 		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0 or party.safe_camp
+	_coop_share(delta)
+	_render()
+
+# The view, from whatever the model now says: the host's after a tick, the
+# guest's after a delta.
+func _render() -> void:
 	_layout_minimap()   # this Control resizes with the window; the inset follows the corner
 	if _clock_lbl != null:
 		_clock_lbl.text = WorldSave.day_clock(world.clock.elapsed)
@@ -457,6 +477,71 @@ func _process(delta: float) -> void:
 	if _view != null:
 		_view.sync()
 	queue_redraw()
+
+# --- co-op: the host shares the road, the guest watches it -------------------
+
+func _coop_share(delta: float) -> void:
+	var link = Coop.link
+	if link == null or link.role != "host" or _combat != null:
+		return
+	if link.arrivals != _synced_arrival:   # a guest just sat down (or came back): the whole map
+		_synced_arrival = link.arrivals
+		link.send(Coop.world_full(world, party, story))
+	_map_share_t += delta
+	if _map_share_t >= 0.5:
+		_map_share_t = 0.0
+		link.send(Coop.map_delta(world))
+
+# Apply what the host last said. A party in the delta the map does not know
+# yet waits for the next full save; one the delta no longer names is stale
+# until then, which is at most a few seconds — the host autosaves on every
+# structural change and each autosave is a full save on the wire.
+func _spectate() -> void:
+	var link = Coop.link
+	if link == null or link.map_latest.is_empty():
+		return
+	var m: Dictionary = link.map_latest
+	link.map_latest = {}
+	world.clock.elapsed = float(m["elapsed"])
+	party.world_now = world.clock.elapsed
+	var at: Dictionary = m["at"]
+	for p in world.parties:
+		if at.has(p.id):
+			p.position = Vector2(float(at[p.id][0]), float(at[p.id][1]))
+			p.goal = p.position
+			p.route.clear()
+	var p0 := world.player()
+	if p0 != null:
+		world.reveal(p0.position)
+	if _pause_btn != null:
+		_pause_btn.text = "Paused" if bool(m.get("paused", false)) else "Travelling"
+
+# The guest's HUD: the clock and the purse stay, every order goes, and the one
+# button is the way out of the room.
+func _spectator_hud() -> void:
+	for bar in get_children():
+		if not (bar is BoxContainer):
+			continue
+		for c in bar.get_children():
+			if c is Button and c != _pause_btn:
+				c.visible = false
+			elif c is Label and String(c.text).begins_with("Click marches"):
+				c.text = "Your host's road — you watch, they order.  Right-drag pans, middle-drag or Q/E turns, R/F tilts, wheel zooms, Home resets."
+	if _pause_btn != null:
+		_pause_btn.disabled = true
+		_pause_btn.text = "Travelling"
+	var leave := Button.new()
+	leave.text = "Leave the room"
+	leave.theme_type_variation = "Quiet"
+	leave.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	leave.offset_left = -200; leave.offset_top = 12; leave.offset_right = -16; leave.offset_bottom = 48
+	leave.pressed.connect(func():
+		Coop.link.close()
+		Coop.link = null
+		var host := get_parent()
+		if host != null and host.has_method("show_coop"):
+			host.show_coop())
+	add_child(leave)
 
 # #70: pause on reaching the goal; a new goal (a click, or anything else that
 # moves it) resumes. Never over a fight, a market, a delve or a card — each of
@@ -645,17 +730,23 @@ const MINIMAP_MIN := 96.0
 # how far into its story a run is. Every call site used to spell out
 # `WorldSave.save(world, party)`; there were twelve of them.
 func _autosave() -> void:
+	if spectator:
+		return   # the host's world is not ours to write over our own slot
 	WorldSave.save(world, party, story)
+	if Coop.link != null and Coop.link.role == "host":
+		Coop.link.send(Coop.world_full(world, party, story))   # something structural changed: the guest's map follows
 
 # Closing the window mid-march is a quit too. The menu's "Save and quit" goes
 # through _leave_world and saves; the title bar's X went through nothing.
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST and world != null and _combat == null:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and world != null and _combat == null and not spectator:
 		for ch in party.roster:
 			CharacterSave.save(ch)
 		_autosave()
 
 func _leave_world() -> void:
+	if spectator:
+		return   # nothing of the host's gets written here; the guest leaves through _spectator_hud's button
 	for ch in party.roster:
 		CharacterSave.save(ch)
 	_autosave()
@@ -2129,6 +2220,16 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		accept_event()
 		report_bug()
 		return
+	if spectator:   # the camera keys, and nothing that gives an order
+		match event.keycode:
+			KEY_Q: orbit_by(-YAW_STEP)
+			KEY_E: orbit_by(YAW_STEP)
+			KEY_R: tilt_by(PITCH_STEP)
+			KEY_F: tilt_by(-PITCH_STEP)
+			KEY_HOME: reset_view()
+			_: return
+		accept_event()
+		return
 	if _combat != null:
 		return
 	# #106: the party screen opened at the inn's counter sits OVER the visit.
@@ -3257,7 +3358,7 @@ func _gui_input(e: InputEvent) -> void:
 			zoom_at(e.position, 1.1)
 		elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom_at(e.position, 1.0 / 1.1)
-		elif e.button_index == MOUSE_BUTTON_LEFT:
+		elif e.button_index == MOUSE_BUTTON_LEFT and not spectator:   # the guest looks; the host orders
 			var p := world.player()
 			if p != null:
 				world.set_goal(p, _click_target(e.position))

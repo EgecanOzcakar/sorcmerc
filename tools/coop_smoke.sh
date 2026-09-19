@@ -10,6 +10,10 @@
 #                                  title's Play together → Join (game.gd)
 #   tools/coop_smoke.sh drop       nobody crashes; the host's socket is closed
 #                                  under it mid-fight and comes back
+#   tools/coop_smoke.sh map        the road: the host walks the open world into
+#                                  a fight, both play it, and the guest's mirror
+#                                  of the map shows the party in the same place
+#                                  afterwards
 # Needs godot on PATH and npx wrangler.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -33,6 +37,16 @@ sleep 2
 # The peer that crashes runs in the foreground so its exit code can be seen;
 # the other runs behind it.
 case "$MODE" in
+	map)
+		SORCMERC_COOP="$CODE" SORCMERC_COOP_VIA=map $DRIVE >"$LOG/guest" 2>&1 &
+		OTHER=$!
+		sleep 2
+		SORCMERC_COOP="host:$CODE" SORCMERC_COOP_VIA=map $DRIVE >"$LOG/host" 2>&1
+		wait $OTHER
+		grep -h "^host:\|^guest:\|wedged\|SCRIPT ERROR" "$LOG"/host "$LOG"/guest
+		HP=$(grep -o "party=([^)]*)" "$LOG/host"); GP=$(grep -o "party=([^)]*)" "$LOG/guest")
+		if [ -n "$HP" ] && [ "$HP" = "$GP" ] && grep -q "fought=true" "$LOG/host" && grep -q "fought=true.*spectator=true" "$LOG/guest"; then echo "coop smoke (map): OK — a fight on the road, and both back on the map at $HP"; exit 0; fi
+		echo "coop smoke (map): FAIL (host $HP, guest $GP); logs in $LOG"; exit 1 ;;
 	drop)
 		SORCMERC_COOP="$CODE" $DRIVE >"$LOG/guest" 2>&1 &
 		OTHER=$!

@@ -36,7 +36,8 @@ What is on the branch:
   variants: the guest killed mid-turn and rejoined; the host killed and
   rejoined; the host's socket closed under it mid-fight and reconnected; the
   guest coming in through the title screen's Join. All end on the same state
-  hash.
+  hash. A fifth walks the road: the host's open world marches into a hunting
+  band, both play the fight, and both are back on the map at the same spot.
 
 ## 1. Turn-based is the whole design
 
@@ -143,17 +144,16 @@ world starts a new fight, must ignore a stale replay from the room.
 **Tested:** lockstep headless (40 seeds, and 10 more with reaction prompts);
 the real relay with two real Godot processes — guest killed mid-turn and
 rejoined, host killed and rejoined, host's socket dropped and reconnected
-mid-fight, guest in through the title screen — all finishing on the same
-hash; relay seats, ownership, replay, new-fight cut,
+mid-fight, guest in through the title screen, and the road itself (map →
+fight → map, positions equal) — all finishing on the same hash; relay seats, ownership, replay, new-fight cut,
 hover, expiry wiring in `relay.test.js`.
 
 **Not tested:** a disconnect *during* a foe turn's animation on one side;
 two peers with different Godot builds (desktop vs web — the web export
 cannot run headless here); latency above localhost; the relay's 24-hour
-expiry actually firing (the alarm is set; a day was not waited); the host's
-*world* path with a live guest (the code path is the same `main.tscn`
-instantiation the lobby's Quick fight uses, which is tested, but no robot
-walks the 3D map into a fight); anything with three peers.
+expiry actually firing (the alarm is set; a day was not waited); a site
+delve or a linear-campaign fight with a live guest (same hand-off as the
+road fight that is tested, but not walked); anything with three peers.
 
 ## 6. What could still desync
 
@@ -180,28 +180,40 @@ two would diverge on the first refused Shield.
 
 Co-op across the world map was the big open design question, and the answer
 that costs nothing is the right one: **the host plays the game exactly as in
-single player, and the guest is in the fights.** The host's world, sites,
-camps and the linear campaign all put a fight up the same way — instantiate
-`scenes/main.tscn`, hand it the party and the spec — and that screen sees
-`Coop.link` and announces the fight on the room. The guest's screen between
-fights says "Riding along — the next fight your host walks into opens
-here", and the next `setup` puts the fight up over it (and, if the guest is
-still looking at the last verdict, replaces it in place). Each `setup` cuts
-the room's log back to itself on the relay, so a rejoin replays *this*
+single player; the guest watches the road and is in the fights.** The host's
+world, sites, camps and the linear campaign all put a fight up the same way
+— instantiate `scenes/main.tscn`, hand it the party and the spec — and that
+screen sees `Coop.link` and announces the fight on the room. Each `setup`
+cuts the room's log back to itself on the relay, so a rejoin replays *this*
 fight, not the whole run.
 
-What the guest does not get: the map, the shop, the rest, the route. Those
-are the host's, and the save is the host's. Sharing them — two cursors on the
-3D map, a vote on the route — is a different and much larger design, and
-nothing about it is needed for the co-op that matters here, which is the
-fight. "Each player brings their own party" stays out, for §4's reasons.
+**The guest sees the map.** The host's world screen (`scenes/world/
+world.gd`) sends the whole save (`WorldSave.to_dict`, ~50 KB) when the guest
+sits down and on every autosave — the world already autosaves on everything
+structural: an arrival, a visit, a fight banked, a rest — and between those
+a delta twice a second: the clock and where every party stands (~100
+bytes). The guest's screen is the same `world.gd` with `spectator = true`:
+it never ticks, never orders, never saves; positions and the clock come off
+the wire, fog of war is revealed from them with the same `world.reveal`,
+and the camera is the guest's own to pan, turn and zoom. The HUD keeps the
+clock and the purse, loses every order, and gains *Leave the room*. When a
+fight opens, the guest's screen is the fight; when the host banks it, the
+autosave's full save puts the map back — camera carried over.
+
+What the guest still does not get: a hand on the map. The shop, the rest,
+the route and the save are the host's. Sharing *control* — two cursors, a
+vote on the route — is a different and much larger design, and the
+watching problem the game-designer named is solved by seeing, not steering.
+"Each player brings their own party" stays out, for §4's reasons.
 
 ## 8. What is still not built
 
 - **Host takeover** of an absent player's hero after a timeout (§5).
-- **Watching the road.** The guest cannot see the host's map between fights;
-  a read-only mirror of the world screen is the obvious next step if the
-  waits between fights turn out to be long.
+- **The guest's map is a mirror, not a model.** An NPC band that appears or
+  vanishes between two autosaves is a few seconds late on the guest's map;
+  the shop, the inn, the event cards the host is reading do not show at all
+  — the guest sees the party stop and the clock pause. A ticker line of
+  "what the host is doing" would be cheap; a mirrored visit panel would not.
 - **Three or more players.** The relay has two seats; the split is host/guest.
 - **Hover replication is the cursor and the verb in hand**, not the aimed
   target list — the watcher sees the reach wash and the hot hex, not the
@@ -212,8 +224,8 @@ fight. "Each player brings their own party" stays out, for §4's reasons.
 Title → **Play together** → *Host a room*: a six-letter code appears; read it
 out. Then *Resume the open world*, *New run* or *Quick fight* as usual —
 before each fight, click a hero's name to hand it to your friend, then Begin.
-Your friend: **Play together** → type the code → *Join* → "Riding along" until
-your first fight opens.
+Your friend: **Play together** → type the code → *Join* → your map appears on
+their screen as soon as you are on it, and every fight opens on both.
 
 The relay is `Coop.RELAY_URL` (`tools/coop-relay`, `npx wrangler deploy`
 once from that directory); `SORCMERC_RELAY=ws://127.0.0.1:8787` points a run
