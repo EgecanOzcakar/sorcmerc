@@ -40,7 +40,7 @@
 # `_visible_ground()` / `_build_mask()` and hands the result down through
 # `set_ground_mask()`, because that is the fog's memory and it belongs with the
 # fog.
-extends SubViewportContainer
+extends "res://scenes/native_layer.gd"
 
 const GroundShader := preload("res://assets/world/ground/ground3d.gdshader")
 const GrassTex := preload("res://assets/world/ground/grass.png")
@@ -77,7 +77,6 @@ var props: Node3D               # every landmark layer hangs here
 var marks: GroundMarks3D        # the footprints under them
 var scatter: Scatter3D          # the woods
 
-var _sub: SubViewport
 var _cam: Camera3D
 var _sun: DirectionalLight3D
 var _env: Environment
@@ -87,7 +86,6 @@ var _ground_mat: ShaderMaterial
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	stretch = true
 	mouse_filter = Control.MOUSE_FILTER_IGNORE     # clicks and drags belong to the map Control
 	# Behind the parent's own _draw(), so what world.gd still paints in 2D —
 	# the marching route, the name labels, the off-screen chevrons — reads as
@@ -184,6 +182,7 @@ func sync() -> void:
 		return
 	position = Vector2.ZERO
 	size = world_map.size
+	present()                       # native-pixel viewport for this rect (native_layer.gd)
 	_sync_light()
 	var box := _sync_camera()
 	_sync_ground(box)
