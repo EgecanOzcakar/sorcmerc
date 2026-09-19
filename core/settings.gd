@@ -38,7 +38,7 @@ const ANIM_PACES := [
 		"note": "Blows land. Movement covers ground. The default pace."},
 	{"id": "measured", "label": "Measured", "speed": 0.75,
 		"note": "A little more room around every action."},
-	{"id": "normal", "label": "Normal", "speed": 1.0, "note": "The old default."},
+	{"id": "normal", "label": "Normal", "speed": 1.0, "note": "Quick swings, short pauses. Reads at a glance."},
 	{"id": "brisk", "label": "Brisk", "speed": 1.6, "note": "Less waiting between turns."},
 	{"id": "instant", "label": "Instant", "speed": FAST,
 		"note": "No animation at all — the log is the fight."},

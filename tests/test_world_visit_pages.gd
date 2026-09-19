@@ -281,7 +281,7 @@ func _init() -> void:
 	check(has_label(main._visit_panel, "common room"), "the inn has word going round it")
 	var lead_row := false
 	for b in buttons(main._visit_panel):
-		if b.text == "Buy" and not b.disabled:
+		if b.text.begins_with("Buy") and not b.disabled:   # "Buy  39 ◉": the price rides on the button
 			lead_row = true
 	check(lead_row, "...and a lead that can be bought")
 	var gold_before: int = main.party.gold

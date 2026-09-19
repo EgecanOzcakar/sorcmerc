@@ -182,7 +182,8 @@ func _class_line(s) -> String:
 	var parts: Array = []
 	for cid in s.class_levels:
 		var sub: String = s.subclasses.get(cid, "")
-		var label: String = _title(cid) if sub == "" else "%s (%s)" % [_title(cid), _title(sub)]
+		var subname: String = String(Catalog.subclass_src(sub).get("name", _title(sub))) if sub != "" else ""
+		var label: String = _title(cid) if sub == "" else "%s (%s)" % [_title(cid), subname]
 		parts.append("%s %s %d" % [Icons.class_glyph(cid), label, s.class_levels[cid]])
 	return " / ".join(parts) if not parts.is_empty() else "Level 0"
 
@@ -415,7 +416,10 @@ func _features(col: VBoxContainer, s) -> void:
 			right = "combat"
 		# ponytail: humanize() is F2's stated fallback — swap for real prose when F1
 		# re-exports feature descriptions (SCHEMA gap #4).
-		_row(v, Effects.humanize(id), right, "feature_" + id, COL_DIM)
+		# "Channel Divinity" with "Cleric" for the source, not "Cleric Channel
+		# Divinity": the name is what you look for, where it came from is the
+		# footnote.
+		_row(v, Effects.verb_label(id), Effects.feature_source(id) + ("  ·  " + right if right != "" else ""), "feature_" + id, COL_DIM)
 	for st in s.fighting_styles:
 		_row(v, _title(st), "style", "style_" + st, COL_DIM)
 	if ids.is_empty() and s.fighting_styles.is_empty():
@@ -488,8 +492,8 @@ func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qt
 		g.add_child(_fields["item_" + iid])
 		return
 	var offhand: bool = equipped and kind == "weapon" and _ch.is_light(iid)
-	if equipped:
-		caption = "Off-hand" if _ch.offhand == iid else "Equipped"
+	if equipped:   # the tile is in the Equipped panel already; say which item it is
+		caption = String(def.get("name", Effects.humanize(iid))) + (" (off-hand)" if _ch.offhand == iid else "")
 	tip += "\n\nClick: %s" % ("unequip" if equipped else "equip")
 	if offhand:
 		tip += "\nRight-click: %s" % ("main hand" if _ch.offhand == iid else "off-hand")

@@ -885,7 +885,7 @@ func _build_quest_panel() -> void:
 	var live: Array = Quest.active(party)
 	if live.is_empty():
 		var none := Label.new()
-		none.text = "No quests. Settlements have work."
+		none.text = "Nothing taken on yet. Every settlement's notice board has work — walk in and read it."
 		none.theme_type_variation = "Dim"
 		rows.add_child(none)
 	for q in live:
@@ -950,7 +950,7 @@ func _build_inventory_panel() -> void:
 	box.add_child(scroll)
 	var rows: VBoxContainer = scroll.get_child(0)
 	if party.stash.is_empty():
-		_note(rows, "Nothing in the pack.")
+		_note(rows, "Nothing in the pack. Loot from a fight, a stall's shelf and a job's pay all land here.")
 	else:
 		var grid := _item_grid(rows)
 		for entry in party.stash:
@@ -1338,12 +1338,19 @@ func _show_spoils(result: Dictionary) -> void:
 	var won: bool = String(result.get("outcome", "")) == "Victory"
 	var rows: Array = []
 	if won:
-		rows.append(["+%d XP" % int(result.get("xp", 0)), Icons.COL_GOLD])
-		rows.append(["+%d gold" % int(result.get("gold", 0)), Icons.COL_GOLD])
+		rows.append(["+%d XP,  +%d gold" % [int(result.get("xp", 0)), int(result.get("gold", 0))], Icons.COL_GOLD])
+		# One line for the haul, a count on a repeat — "Potion of Healing ×2",
+		# not the same line twice.
+		var counts := {}
 		for item in result.get("loot", []):
-			rows.append(["Taken from the dead: %s" % Campaign.item_name(String(item)), Icons.COL_TEXT])
-		if result.get("loot", []).is_empty():
+			counts[String(item)] = int(counts.get(String(item), 0)) + 1
+		var names: Array = []
+		for item in counts:
+			names.append(Campaign.item_name(item) + (" ×%d" % counts[item] if counts[item] > 1 else ""))
+		if names.is_empty():
 			rows.append(["Nothing worth carrying off the bodies.", Icons.COL_MUTED])
+		else:
+			rows.append(["Taken from the dead: %s" % ", ".join(names), Icons.COL_TEXT])
 	for line in _quest_news:
 		rows.append([String(line), Icons.COL_ACCENT])
 	_quest_news = []
@@ -2650,6 +2657,24 @@ func _build_visit_panel() -> void:
 	leave.pressed.connect(_close_visit)
 	bar.add_child(leave)
 
+# How this settlement's people feel about the party, in a phrase: the faction
+# opinion the prices and the gate already read, said once where it can be read.
+func _standing_line(s) -> String:
+	var op: float = FactionOpinion.get_opinion(s.faction)
+	if FactionOpinion.guards_attack(s.faction):
+		return "The guards would sooner fight you than let you in."
+	if FactionOpinion.refuses_trade(s.faction):
+		return "Nobody here will deal with you."
+	if op >= FactionOpinion.QUEST_GENEROUS:
+		return "They are glad to see you — there is work here for the asking."
+	if op >= FactionOpinion.QUEST_DONE:
+		return "They think well of you."
+	if op <= FactionOpinion.HOSTILE:
+		return "Their bands hunt you on the road; the gate is open, barely."
+	if op <= FactionOpinion.QUEST_MIN:
+		return "They have heard things. No work for you here."
+	return "Strangers here, for now."
+
 # The settlement panel's column width. Every list inside it is sized against
 # this, so one long job title wraps instead of widening the whole counter.
 const VISIT_PANEL_W := 440.0
@@ -2672,6 +2697,14 @@ const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "b
 # shelves were bare — was to walk in and look. All three counts are read off
 # state the page already had to compute anyway.
 func _build_hub_page(box: VBoxContainer, s) -> void:
+	# The place in a line before the doors: what it is, whose, and how they
+	# feel about you — the square used to open on the purse and nothing else.
+	var where := Label.new()
+	where.text = "%s %s.  %s" % [String(s.faction).capitalize(), s.kind, _standing_line(s)]
+	where.theme_type_variation = "Serif"
+	where.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	where.add_theme_color_override("font_color", Icons.COL_BODY)
+	box.add_child(where)
 	var mood := Label.new()
 	mood.text = "%s%s%d ◉ in the purse." % [
 		"Fighting nearby. " if _visit.get("battle", false) else "",
@@ -2945,12 +2978,20 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	if leads.is_empty():
 		_note(box, "Nothing anybody here has not already told you.")
 		return
+	# Five rumours under the art and the table ran the panel off the bottom of
+	# a 900 px screen; the list scrolls inside a fixed height instead.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size.y = minf(RUMOURS_H, 62.0 * leads.size())
+	box.add_child(scroll)
 	var lead_rows := VBoxContainer.new()   # `rows` is the party-status list above
-	box.add_child(lead_rows)
+	lead_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(lead_rows)
 	for lead in leads:
-		_trade_row(lead_rows, "%s  (%s) — %d ◉" % [
-			lead["text"], String(lead.get("where", "")), int(lead["price"])],
-			"Buy", _buy_rumor.bind(lead))
+		_trade_row(lead_rows, String(lead["text"]), "Buy  %d ◉" % int(lead["price"]), _buy_rumor.bind(lead),
+			false, null, String(lead.get("where", "")))
+
+const RUMOURS_H := 200.0
 
 func _build_board_page(box: VBoxContainer, s) -> void:
 	var has_inn: bool = Visit.has_service(s, "innkeeper")
@@ -3070,17 +3111,20 @@ func _counter_offers(s) -> Dictionary:
 func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 	var tier: int = int(offer.get("chain_tier", 0))
 	var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
-	_trade_row(rows, "Job: %s%s — %d ◉" % [
-		offer["title"], tag, int(offer.get("reward", {}).get("gold", 0))],
-		"Take", _take_quest.bind(offer), false, Icons.scene_art("quest-" + String(offer.get("kind", "")), null))
+	_trade_row(rows, "%s%s" % [offer["title"], tag], "Take", _take_quest.bind(offer), false,
+		Icons.scene_art("quest-" + String(offer.get("kind", "")), null),
+		"Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0)))
 
 # Issue #33: the label wraps. Without that its minimum width is the whole
 # string, and a job with a long title pushed the row — and with it the counter,
 # and with it the whole settlement panel — out past the edge of the screen. 330
 # stays as the column width short rows line up on; it is a floor now rather
 # than the only width the row can have.
+# `sub` is a dim second line under the text — where a rumour points, what a
+# job pays — so the thing itself reads as one line of prose and the numbers
+# sit under it instead of in the middle of it.
 func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable, disabled := false,
-		tile: Texture2D = null) -> void:
+		tile: Texture2D = null, sub := "") -> void:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if tile != null:   # the job's kind, as a tile (assets/generated/quest-<kind>.png)
@@ -3097,7 +3141,20 @@ func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Cal
 	lbl.custom_minimum_size = Vector2(330, 0)
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(lbl)
+	if sub == "":
+		row.add_child(lbl)
+	else:
+		var stack := VBoxContainer.new()
+		stack.add_theme_constant_override("separation", 0)
+		stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		stack.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		stack.add_child(lbl)
+		var cap := Label.new()
+		cap.text = sub
+		cap.theme_type_variation = "Dim"
+		cap.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+		stack.add_child(cap)
+		row.add_child(stack)
 	var btn := Button.new()
 	btn.text = action
 	btn.disabled = disabled

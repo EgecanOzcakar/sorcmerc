@@ -28,6 +28,8 @@ var on_back: Callable = Callable()
 var _list: VBoxContainer
 var _note: Label
 
+const READING_W := 820.0   # ~110 characters of the small dim body
+
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	theme = Icons.dark_theme()
@@ -195,14 +197,21 @@ func _edge(pack) -> Color:
 		"disabled": return Icons.COL_EDGE
 		_: return Icons.COL_GOLD_EDGE
 
-func _dim(text: String, color: Color) -> Label:
+# A pack's blurb wraps at a reading width rather than running the whole card:
+# 150 characters on one line is a line nobody finishes. A Label has no max
+# width, so the wrap comes from the box it sits in.
+func _dim(text: String, color: Color) -> Control:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.theme_type_variation = "Dim"
 	if color != Icons.COL_MUTED:
 		l.add_theme_color_override("font_color", color)
-	return l
+	var box := MarginContainer.new()
+	box.custom_minimum_size.x = READING_W
+	box.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	box.add_child(l)
+	return box
 
 func _back() -> void:
 	if on_back.is_valid():

@@ -250,6 +250,11 @@ func _ready() -> void:
 	_logbox.add_theme_font_size_override("normal_font_size", 18)
 	_logbox.add_theme_font_size_override("bold_font_size", 18)
 	_logbox.add_theme_color_override("default_color", Icons.COL_TEXT)
+	# One event, one paragraph: a gap between entries and none inside a wrapped
+	# one, so a swing, its miss and the next actor's move read as three things
+	# rather than one column of ink.
+	_logbox.add_theme_constant_override("paragraph_separation", 7)
+	_logbox.add_theme_constant_override("line_separation", 1)
 	logcol.add_child(_logbox)
 	root.add_child(logwrap)
 	root.add_child(col)
@@ -565,7 +570,7 @@ func _deploy_menu() -> void:
 		opts.append([("Put %s back" % h.cname) if held else "Swap %s" % h.cname,
 			_pick_deploy.bind(h.id)])
 	if _deploy_pick == "":
-		_actor.text = "[b]Unseen.[/b]  Click a hero on the map (or here) to pick them up, then click who they trade places with. Begin when they stand where you want them — the enemy loses its first round."
+		_actor.text = "[b]Unseen — place the party.[/b]  Click a hero, then who they trade places with. Begin when you like it; the enemy loses its first round."
 	else:
 		_actor.text = "[b]Unseen.[/b]  %s is picked up — click another hero to trade places, or click them again to put them back." \
 			% _deploy_name(_deploy_pick)

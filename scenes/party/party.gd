@@ -598,11 +598,23 @@ func _skills_text(sm: Dictionary) -> String:
 		return "no trained skills"
 	var defs: Dictionary = Catalog.skills()
 	var bits: Array = []
+	# A ledger row is one line and clips: five or six skills used to run off
+	# the edge mid-word ("Intimidati"). Best first, as many as fit the row's
+	# character budget, and the rest said as a count.
+	var used := 0
 	for sk in trained:
 		var id := String(sk["id"])
 		var nm: String = String(defs.get(id, {}).get("name", id.capitalize()))
-		bits.append("%s%s %+d" % ["◆" if String(sk["prof"]) == "expert" else "", nm, int(sk["mod"])])
+		var bit := "%s%s %+d" % ["◆" if String(sk["prof"]) == "expert" else "", nm, int(sk["mod"])]
+		if used + bit.length() > SKILLS_CHARS and not bits.is_empty():
+			break
+		bits.append(bit)
+		used += bit.length() + 2
+	if bits.size() < trained.size():
+		bits.append("+%d more" % (trained.size() - bits.size()))
 	return "  ".join(bits)
+
+const SKILLS_CHARS := 44   # what the roster row shows before its clip, at FS_SMALL
 
 # --- interaction ----------------------------------------------------------
 

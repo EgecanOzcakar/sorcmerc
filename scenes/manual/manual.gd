@@ -13,6 +13,7 @@ var _search := LineEdit.new()
 var _list := VBoxContainer.new()
 var _title := Label.new()
 var _body := RichTextLabel.new()
+const READING_W := 760.0   # ~90 characters of 17 px body: the long edge of comfortable
 var _open := ""      # page id showing on the right
 
 static func toggle(host: Control, page_id := ""):
@@ -83,7 +84,9 @@ func _ready() -> void:
 	_list.add_theme_constant_override("separation", 2)
 	scroll.add_child(_list)
 
-	# right: the page
+	# right: the page. A reading column, not the whole width of the panel — a
+	# line of rules prose past ~90 characters is a line the eye loses on the
+	# way back, and at 1400 px wide the panel would give it 140.
 	var right := VBoxContainer.new()
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.add_theme_constant_override("separation", 6)
@@ -92,10 +95,14 @@ func _ready() -> void:
 	right.add_child(_title)
 	_body.bbcode_enabled = true
 	_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_body.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_body.custom_minimum_size.x = READING_W
 	_body.add_theme_color_override("default_color", Icons.COL_TEXT)
 	_body.add_theme_font_size_override("normal_font_size", 17)
 	_body.add_theme_font_size_override("bold_font_size", 17)
-	_body.add_theme_stylebox_override("normal", Icons.box(Icons.COL_INK, Color(0, 0, 0, 0), 0, 16, 12))
+	_body.add_theme_constant_override("line_separation", 3)
+	_body.add_theme_constant_override("paragraph_separation", 6)
+	_body.add_theme_stylebox_override("normal", Icons.box(Icons.COL_INK, Color(0, 0, 0, 0), 0, 20, 14))
 	right.add_child(_body)
 
 	_refresh_list()
