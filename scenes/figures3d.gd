@@ -12,7 +12,7 @@
 # sprite tier. Layering caveat: this draws above Board._draw, so a figure can cover the
 # HP bar of the hex behind it. Moving the HUD to a CanvasLayer above this is the fix;
 # ~30 lines, deliberately not in the spike.
-extends SubViewportContainer
+extends "res://scenes/native_layer.gd"
 
 const Catalog = preload("res://core/rules/catalog.gd")
 const Props3D = preload("res://scenes/world/props3d.gd")
@@ -69,7 +69,6 @@ const CAM_DIST := 40.0
 var board: Control
 var main
 var cb
-var _sub: SubViewport
 var _cam: Camera3D
 var _figs := {}                # combatant id -> Node3D
 var _prev := {}                # combatant id -> last world position, for facing
@@ -78,7 +77,6 @@ var _model_cache := {}         # path -> PackedScene, or null once if missing
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	stretch = true
 	mouse_filter = Control.MOUSE_FILTER_IGNORE     # clicks fall through to the Board
 	_sub = SubViewport.new()
 	_sub.transparent_bg = true
@@ -218,6 +216,7 @@ func _process(_dt: float) -> void:
 	# Anchors alone don't track the Board (it isn't a Container): pin the rect by hand.
 	position = Vector2.ZERO
 	size = board.size
+	present()                       # native-pixel viewport for this rect (native_layer.gd)
 	var th := theta()
 	var target := world_for_screen(board.size * 0.5)          # ground under the centre
 	var back := Vector3(0.0, sin(th), cos(th))

@@ -32,6 +32,17 @@ var _quit_after: int = int(OS.get_environment("SORCMERC_COOP_QUIT_AFTER")) if OS
 var _drop_at: int = int(OS.get_environment("SORCMERC_COOP_DROP_AT")) if OS.get_environment("SORCMERC_COOP_DROP_AT") != "" else -1
 
 func _init() -> void:
+	# This is not a solo robot like its drive_* siblings: it is ONE PEER, and it
+	# needs a relay and a partner sitting on the same room code. tools/run_tests.sh
+	# sweeps `ls tests/drive_*.gd`, so it picks this up too — and bare, with no
+	# SORCMERC_COOP in the environment, main.gd's `Coop.from_env()` returns null,
+	# _run()'s first frame dereferences the null Link, and because a script error
+	# does not quit the SceneTree the loop then spins until the harness kills it at
+	# TEST_TIMEOUT. That one hang was ~900s of a ~1300s suite. Say so and stop.
+	if OS.get_environment("SORCMERC_COOP") == "" and OS.get_environment("SORCMERC_COOP_VIA") == "":
+		print("drive_coop: skipped — needs a relay and two peers; run tools/coop_smoke.sh")
+		quit()
+		return
 	OS.set_environment("SORCMERC_FAST", "1")
 	if OS.get_environment("SORCMERC_COOP_VIA") == "map":
 		_map_mirror()
@@ -61,7 +72,7 @@ func _run() -> void:
 				continue
 		if main.cb != null and main.cb.is_over():
 			break
-		if main.cb == null or main._busy or (main._mode == "deploy" and main._coop.role == "guest"):
+		if main.cb == null or main._busy or (main._mode == "deploy" and main._coop != null and main._coop.role == "guest"):
 			if Time.get_ticks_msec() - waited_since > PATIENCE * 1000:
 				print("*** %s waited %ds for the other peer — wedged ***" % [OS.get_environment("SORCMERC_COOP"), PATIENCE])
 				quit(1)
