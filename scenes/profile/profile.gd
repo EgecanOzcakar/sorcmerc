@@ -9,6 +9,9 @@ const Effects = preload("res://core/rules/effects.gd")
 const Presets = preload("res://core/presets.gd")
 const Leveling = preload("res://core/leveling.gd")
 const Ach = preload("res://core/achievements.gd")
+const Potions = preload("res://core/potions.gd")
+const RoadSpells = preload("res://core/road_spells.gd")
+const RNG = preload("res://core/rng.gd")
 
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
 const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
@@ -23,6 +26,15 @@ const COL_ACCENT := Icons.COL_ACCENT
 
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
+
+# Issue #118: whoever opens this screen as an overlay names the way out, and it
+# is drawn as the last thing in the header row rather than floated over the
+# screen. scenes/party/party.gd already does this for its own exit and says why
+# (a Button anchored to the top-right corner covers whatever the screen under
+# it put in that corner) — here the thing it covered was the Level up button,
+# which is the one control on this page a player is looking for.
+signal exit_requested
+var exit_label := ""
 
 var _ch                                 # core/character.gd
 var _party                              # core/party.gd — the shared stash (T10)
@@ -106,6 +118,7 @@ func _render() -> void:
 	_skills(c2, s)
 	var c3 := _column()
 	_resources(c3, s)
+	_road(c3)
 	_features(c3, s)
 	var c4 := _column()
 	_attacks(c4, s)
@@ -118,13 +131,11 @@ func _header() -> Control:
 	var name_col := VBoxContainer.new()
 	var nm := Label.new()
 	nm.text = _ch.cname
-	nm.add_theme_font_size_override("font_size", Icons.FS_TITLE)
-	nm.add_theme_color_override("font_color", COL_TEXT)
+	nm.theme_type_variation = "Title"
 	name_col.add_child(nm)
 	var sub := Label.new()
-	sub.text = "%s · %s" % [_title(_ch.species_id), _title(_ch.background_id)]
-	sub.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	sub.add_theme_color_override("font_color", Icons.COL_MUTED)
+	sub.text = "%s, %s" % [_title(_ch.species_id), _title(_ch.background_id)]
+	sub.theme_type_variation = "Dim"
 	name_col.add_child(sub)
 	box.add_child(name_col)
 
@@ -134,33 +145,45 @@ func _header() -> Control:
 
 	var lv := Label.new()
 	lv.text = _class_line(s)
-	lv.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	lv.theme_type_variation = "Head"
 	lv.add_theme_color_override("font_color", COL_GOLD)
 	box.add_child(lv)
 	_fields["classes"] = lv
 
 	var need := Leveling.xp_to_next(_ch)
 	var xp := Label.new()
-	xp.text = "%d XP" % int(_ch.xp) if need == 0 else "%d XP  ·  need %d more" % [int(_ch.xp), need]
-	xp.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	xp.add_theme_color_override("font_color", Icons.COL_MUTED)
+	xp.text = "%d XP" % int(_ch.xp) if need == 0 else "%d XP, need %d more" % [int(_ch.xp), need]
+	xp.theme_type_variation = "Dim"
 	box.add_child(xp)
 	_fields["xp"] = xp
 
 	var b := Button.new()
 	Icons.clicks(b)
 	b.text = "Level up"
+	b.theme_type_variation = "Primary"
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.disabled = need > 0
-	b.pressed.connect(_level_up)
+	b.pressed.connect(level_up)
 	box.add_child(b)
 	_fields["level_up_btn"] = b
+
+	if exit_label != "":
+		var out := Button.new()
+		Icons.clicks(out)
+		out.text = exit_label
+		out.theme_type_variation = "Quiet"
+		out.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		out.pressed.connect(func(): exit_requested.emit())
+		box.add_child(out)
+		_fields["exit_btn"] = out
 	return box
 
 func _class_line(s) -> String:
 	var parts: Array = []
 	for cid in s.class_levels:
 		var sub: String = s.subclasses.get(cid, "")
-		var label: String = _title(cid) if sub == "" else "%s (%s)" % [_title(cid), _title(sub)]
+		var subname: String = String(Catalog.subclass_src(sub).get("name", _title(sub))) if sub != "" else ""
+		var label: String = _title(cid) if sub == "" else "%s (%s)" % [_title(cid), subname]
 		parts.append("%s %s %d" % [Icons.class_glyph(cid), label, s.class_levels[cid]])
 	return " / ".join(parts) if not parts.is_empty() else "Level 0"
 
@@ -168,7 +191,11 @@ const LEVELUP_SCENE := "res://scenes/creator/levelup.tscn"
 
 # T2's level-up, as a full-screen overlay over the sheet (the party screen opens
 # the profile the same way). It mutates the same build, so closing just re-renders.
-func _level_up() -> void:
+#
+# Public since #118: the party screen's own per-character "Level up" opens this
+# sheet and this overlay in one press, rather than growing a second copy of the
+# same two screens.
+func level_up() -> void:
 	if not ResourceLoader.exists(LEVELUP_SCENE):
 		return
 	var overlay = load(LEVELUP_SCENE).instantiate()
@@ -191,21 +218,14 @@ func _column() -> VBoxContainer:
 
 func _panel(col: VBoxContainer, title: String) -> VBoxContainer:
 	var p := PanelContainer.new()
-	var st := StyleBoxFlat.new()
-	st.bg_color = COL_PANEL
-	st.set_corner_radius_all(10)
-	st.set_border_width_all(1)
-	st.border_color = COL_EDGE
-	st.set_content_margin_all(12)
-	p.add_theme_stylebox_override("panel", st)
+	p.theme_type_variation = "Card"
 	col.add_child(p)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
 	p.add_child(v)
 	var cap := Label.new()
-	cap.text = "»  " + title.to_upper() + "  «"
-	cap.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
-	cap.add_theme_color_override("font_color", COL_GOLD)
+	cap.text = title
+	cap.theme_type_variation = "Caption"
 	v.add_child(cap)
 	return v
 
@@ -352,6 +372,37 @@ func _apply_hp(delta: int) -> void:
 
 # --- features ----------------------------------------------------------------
 
+# Utility spells with a road door (core/road_spells.gd): cast here, for a slot.
+var last_cast := ""   # the line the last road cast produced; the panel shows it
+
+func _road(col: VBoxContainer) -> void:
+	var known: Array = RoadSpells.known(party(), _ch)
+	if known.is_empty():
+		return
+	var v := _panel(col, "On the road")
+	if last_cast != "":
+		var note := Label.new()
+		note.text = last_cast
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.add_theme_color_override("font_color", COL_DIM)
+		v.add_child(note)
+		_fields["road_note"] = note
+	for r in known:
+		var sid := String(r["id"])
+		var h := _row(v, Catalog.spell(sid).get("name", sid), "L%d" % int(r["level"]), "road_" + sid, COL_DIM)
+		h.tooltip_text = RoadSpells.text(sid)
+		var b := Button.new()
+		b.text = "Cast"
+		b.disabled = not bool(r["castable"])
+		b.tooltip_text = RoadSpells.text(sid) if r["castable"] else "No slot of level %d left" % int(r["level"])
+		b.pressed.connect(cast_road.bind(sid))
+		h.add_child(b)
+		_fields["road_btn_" + sid] = b
+
+func cast_road(sid: String) -> void:
+	last_cast = RoadSpells.cast(party(), _ch, sid, party().world_now)
+	_render()
+
 func _features(col: VBoxContainer, s) -> void:
 	var v := _panel(col, "Features")
 	var ids: Array = s.features.keys()
@@ -365,7 +416,10 @@ func _features(col: VBoxContainer, s) -> void:
 			right = "combat"
 		# ponytail: humanize() is F2's stated fallback — swap for real prose when F1
 		# re-exports feature descriptions (SCHEMA gap #4).
-		_row(v, Effects.humanize(id), right, "feature_" + id, COL_DIM)
+		# "Channel Divinity" with "Cleric" for the source, not "Cleric Channel
+		# Divinity": the name is what you look for, where it came from is the
+		# footnote.
+		_row(v, Effects.verb_label(id), Effects.feature_source(id) + ("  ·  " + right if right != "" else ""), "feature_" + id, COL_DIM)
 	for st in s.fighting_styles:
 		_row(v, _title(st), "style", "style_" + st, COL_DIM)
 	if ids.is_empty() and s.fighting_styles.is_empty():
@@ -379,63 +433,86 @@ func _inventory(col: VBoxContainer, s) -> void:
 	var v := _panel(col, "Equipped")
 	if s.equipment.is_empty():
 		_row(v, "—", "nothing worn")
+	var worn := _grid(v)
 	for it in s.equipment:
-		_item_row(v, String(it["item_id"]), it["def"], String(it["kind"]), int(it["quantity"]), true)
+		_item_tile(worn, String(it["item_id"]), it["def"], String(it["kind"]), int(it["quantity"]), true)
 
 	var stash := _panel(col, "Party stash")
 	if party().stash.is_empty():
 		_row(stash, "—", "empty")
+	var bag := _grid(stash)
 	for e in party().stash:
 		var iid := String(e["item_id"])
-		var def: Dictionary = Catalog.index("weapons.json").get(iid, {})
-		var kind := "weapon"
-		if def.is_empty():
-			def = Catalog.index("armor.json").get(iid, {})
-			kind = "armor"
-		if def.is_empty():
-			def = Catalog.index("magic-items.json").get(iid, {})
-			kind = "unknown"
-		_item_row(stash, iid, def, kind, int(e["quantity"]), false, Party.is_identified(e))
+		var kd: Array = Icons.item_def(iid)
+		var kind: String = kd[0] if not kd[1].is_empty() else "unknown"
+		_item_tile(bag, iid, kd[1], kind, int(e["quantity"]), false, Party.is_identified(e))
 
+func _grid(v: VBoxContainer) -> GridContainer:
+	var g := GridContainer.new()
+	g.columns = 5
+	v.add_child(g)
+	return g
+
+# T9a: the item IS its picture. Everything the row used to say is the hover
+# text; the click is the one action the row offered (Equip/Unequip, or Read
+# identify scroll), and a Light weapon in hand takes the off-hand on right-click.
 # T13: an unidentified item shows as a mystery — rarity only, no name, no Equip.
 # Reading a Scroll of Identification here works any time; the DC 15 Arcana check
 # is the rest node's business (it is made "during a short rest").
-func _item_row(v: VBoxContainer, iid: String, def: Dictionary, kind: String, qty: int,
+func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qty: int,
 		equipped: bool, identified := true) -> void:
-	var nm: String = def.get("name", _title(iid))
+	var tip: String
+	var caption := "×%d" % qty if qty > 1 else ""
 	if not identified:
-		nm = "Unidentified item (%s)" % str(def.get("rarity", "unknown"))
-	if qty > 1:
-		nm += " ×%d" % qty
-	var tag := kind
-	if kind == "armor":
-		tag = str(def.get("category", "armor"))
-	var h := _row(v, nm, tag, "item_" + iid, COL_TEXT if equipped else COL_DIM)
-	h.get_child(0).add_theme_color_override("font_color", Icons.item_color(iid))
-	if not identified:
-		if party().stash_count(Party.IDENTIFY_SCROLL, true) > 0:
-			_btn(h, "Read identify scroll", func():
+		tip = "Unidentified item (%s)" % str(def.get("rarity", "unknown"))
+		var can_read: bool = party().stash_count(Party.IDENTIFY_SCROLL, true) > 0
+		tip += "\n\nClick: read an identify scroll" if can_read else "\n\nNeeds a Scroll of Identification"
+		var m := Icons.item_tile(iid, tip, caption)
+		m.text = "?" if m.icon != null else m.text
+		m.disabled = not can_read
+		_fields["item_" + iid] = m
+		if can_read:
+			m.pressed.connect(func():
 				party().use_identification_scroll(iid)
 				_render())
+		g.add_child(m)
+		return
+	tip = Icons.item_tooltip(iid, def, kind)
+	if not equipped and Potions.is_potion(iid):
+		# A potion is drunk, not worn: heal now, or a buff the next fight inherits.
+		tip += "\n%s\n\nClick: drink" % Potions.text(iid)
+		var d := Icons.item_tile(iid, tip, caption)
+		d.pressed.connect(drink.bind(iid))
+		g.add_child(d)
+		_fields["item_" + iid] = d
+		_fields["drink_btn_" + iid] = d
 		return
 	if kind == "unknown":
+		_fields["item_" + iid] = Icons.item_tile(iid, tip, caption)
+		g.add_child(_fields["item_" + iid])
 		return
-	# T24: a Light weapon already in hand can be moved to the off-hand slot.
-	if equipped and kind == "weapon" and _ch.is_light(iid):
-		var o := Button.new()
-		Icons.clicks(o)
-		o.text = "Main hand" if _ch.offhand == iid else "Off-hand"
-		o.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
-		o.pressed.connect(toggle_offhand.bind(iid))
-		h.add_child(o)
-		_fields["offhand_btn_" + iid] = o
-	var b := Button.new()
-	Icons.clicks(b)
-	b.text = "Unequip" if equipped else "Equip"
-	b.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+	var offhand: bool = equipped and kind == "weapon" and _ch.is_light(iid)
+	if equipped:   # the tile is in the Equipped panel already; say which item it is
+		caption = String(def.get("name", Effects.humanize(iid))) + (" (off-hand)" if _ch.offhand == iid else "")
+	tip += "\n\nClick: %s" % ("unequip" if equipped else "equip")
+	if offhand:
+		tip += "\nRight-click: %s" % ("main hand" if _ch.offhand == iid else "off-hand")
+	var b := Icons.item_tile(iid, tip, caption, Icons.ITEM_ART_PX, Icons.party_compare(kind, party(), def))
 	b.pressed.connect(toggle_equip.bind(iid))
-	h.add_child(b)
+	if offhand:
+		b.gui_input.connect(func(ev: InputEvent):
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT:
+				toggle_offhand(iid))
+	g.add_child(b)
+	_fields["item_" + iid] = b
 	_fields["equip_btn_" + iid] = b
+	if offhand:
+		_fields["offhand_btn_" + iid] = b
+
+# The road door of core/potions.gd; the combat door is combat.gd's drink verb.
+func drink(item_id: String) -> void:
+	Potions.drink_on_road(party(), _ch, item_id, party().world_now, RNG.new(randi()))
+	_render()
 
 # Public for the same reason toggle_equip is: tests drive it without a button.
 func toggle_offhand(item_id: String) -> void:

@@ -7,6 +7,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Character = preload("res://core/character.gd")
 const Party = preload("res://core/party.gd")
 const Ach = preload("res://core/achievements.gd")
+const Icons = preload("res://core/ui_icons.gd")
 
 var _pass := 0
 var _fail := 0
@@ -47,6 +48,8 @@ func _init() -> void:
 	_resources()
 	_pact()
 	_equip_legendary()
+	_drink()
+	_shift_compare()
 	print("test_profile: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -96,7 +99,7 @@ func _equip() -> void:
 	var no_shield: int = vera.sheet().ac
 	check(no_shield == armored - 2, "dropping the shield costs 2 AC (%d -> %d)" % [armored, no_shield])
 	check(p.field("ac") == str(no_shield), "screen re-renders AC after unequip")
-	check(p._fields["equip_btn_shield"].text == "Equip", "button flips to Equip")
+	check(p._fields["equip_btn_shield"].tooltip_text.ends_with("Click: equip"), "tile flips to Equip")
 
 	p.toggle_equip("chain-mail")
 	var naked: int = vera.sheet().ac
@@ -154,9 +157,8 @@ func _unidentified() -> void:
 	p.set_party(pty)
 	p.set_character(pike)
 
-	var row: String = p.field("item_cloak-of-elvenkind")
-	var label: String = p._fields["item_cloak-of-elvenkind"].get_parent().get_child(0).text
-	check(row != "", "the mystery still renders a row")
+	check(p._fields.has("item_cloak-of-elvenkind"), "the mystery still renders a tile")
+	var label: String = p._fields["item_cloak-of-elvenkind"].tooltip_text.get_slice("\n", 0)
 	check(label == "Unidentified item (uncommon)",
 		"it shows rarity only, no name (got %s)" % label)
 	check(not p._fields.has("equip_btn_cloak-of-elvenkind"), "no Equip button on a mystery")
@@ -169,7 +171,7 @@ func _unidentified() -> void:
 	p.set_party(pty)
 	check(pty.use_identification_scroll("cloak-of-elvenkind"), "the scroll reveals it")
 	p.set_party(pty)
-	var known: String = p._fields["item_cloak-of-elvenkind"].get_parent().get_child(0).text
+	var known: String = p._fields["item_cloak-of-elvenkind"].tooltip_text.get_slice("\n", 0)
 	check(known.begins_with("Cloak"), "the identified item shows its real name (got %s)" % known)
 	p.toggle_equip("cloak-of-elvenkind")
 	check(pty.stash_count("cloak-of-elvenkind") == 0, "an identified magic item can be taken")
@@ -213,3 +215,47 @@ func _pact() -> void:
 		"pact slots render at full")
 	check(not p._fields.has("pool_slot:1"), "warlock has no ordinary slot rows")
 	p.queue_free()
+
+# A potion in the stash is a Drink tile, not an Equip one; drinking heals.
+func _drink() -> void:
+	var pike = Presets.pike()
+	var pty = Party.new()
+	pty.add_member(pike)
+	pty.stash_add("potions-of-healing")
+	pike.hp_current = 1
+	var p = _screen(pike)
+	p.set_party(pty)
+	check(p._fields.has("drink_btn_potions-of-healing") and not p._fields.has("equip_btn_potions-of-healing"),
+		"a potion tile drinks, never equips")
+	check(p._fields["item_potions-of-healing"].tooltip_text.ends_with("Click: drink"), "...and says so")
+	p.drink("potions-of-healing")
+	check(pike.hp_current >= 5 and pty.stash_count("potions-of-healing") == 0, "drinking from the stash heals and spends it")
+	check(not p._fields.has("item_potions-of-healing"), "the empty bottle is gone from the screen")
+# Shift on a stash tile reads the item against what every active member wears.
+func _shift_compare() -> void:
+	var pike = Presets.pike()
+	var pty = Party.new()
+	pty.add_member(pike)
+	pty.stash_add("longsword")
+	pike.equipped.assign(["greataxe"])
+	var txt := Icons.party_compare("weapon", pty)
+	check(txt.contains(pike.cname + ": Greataxe — 1d12"), "the compare names who wields what")
+	var martial := Catalog.weapon("greataxe")
+	var simple := Catalog.weapon("club")
+	var m_ok: bool = "martial" in pike.sheet().proficiencies["weapon"]
+	check(Icons.party_compare("weapon", pty, martial).contains(
+		pike.cname + (" (proficient)" if m_ok else " (NOT proficient)")), "a martial weapon says whether Pike can use it")
+	check(Icons.party_compare("weapon", pty, simple).contains(pike.cname + " (proficient)"),
+		"everyone can swing a club")
+	check(Icons.party_compare("armor", pty).contains(pike.cname + ": nothing"), "an empty slot says so")
+	check(Icons.party_compare("unknown", pty) == "" and Icons.party_compare("weapon", null) == "",
+		"nothing to compare gives no Shift text")
+	var p = _screen(pike)
+	p.set_party(pty)
+	var tile = p._fields["item_longsword"]
+	check(tile.compare == Icons.party_compare("weapon", pty, Catalog.weapon("longsword")),
+		"the stash tile carries the compare")
+	var card = tile._make_custom_tooltip(tile.tooltip_text)
+	check(str(card.get_child(0).get_child(-1).text).contains("Shift:"), "the hover card advertises Shift")
+	card.free()
+	check(not tile.tooltip_text.contains("Greataxe"), "the compare stays out of the plain hover")

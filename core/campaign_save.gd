@@ -17,6 +17,7 @@
 #   "opportunity_taken": false,        // this node's one Perception/Survival attempt, spent or not
 #   "scouted": [],                     // next stage's fights, once a Survival check has read them
 #   "node_scouted": false,             // THIS node was scouted: its surprise round is guaranteed
+#   "lost_anyone": false,              // somebody died on this road (T19's "everyone came home")
 #   "seed": 1234,                      // the run RNG's seed, so loot/quest rolls reproduce
 #   "log": ["→ The Hollow Market"],
 #   "party": {
@@ -36,7 +37,7 @@ const Campaign = preload("res://core/campaign.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
 
-const DEFAULT_DIR := "user://autosave"
+const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-campaign"
 const VERSION := 1
 
@@ -47,9 +48,8 @@ const VERSION := 1
 static var _dir := ""
 
 static func dir() -> String:
-	if _dir == "":
-		var env := OS.get_environment("SORCMERC_SAVE_DIR")
-		_dir = env if env != "" else DEFAULT_DIR
+	if _dir == "":   # $SORCMERC_SAVE_DIR itself, or <root>/autosave — see core/save_dir.gd
+		_dir = SaveDir.root() if OS.get_environment("SORCMERC_SAVE_DIR") != "" else SaveDir.path("autosave")
 	return _dir
 
 static func path() -> String:
@@ -70,6 +70,7 @@ static func to_dict(campaign) -> Dictionary:
 		"opportunity_taken": campaign.opportunity_taken,
 		"scouted": campaign.scouted.duplicate(true),
 		"node_scouted": campaign.node_scouted,
+		"lost_anyone": campaign.lost_anyone,
 		"seed": int(campaign.rng.seed_value),
 		"log": campaign.log.duplicate(),
 		"party": {
@@ -107,6 +108,7 @@ static func from_dict(d: Dictionary):
 	campaign.opportunity_taken = bool(d.get("opportunity_taken", false))
 	campaign.scouted = d.get("scouted", [])
 	campaign.node_scouted = bool(d.get("node_scouted", false))
+	campaign.lost_anyone = bool(d.get("lost_anyone", false))
 	campaign.log.assign(d.get("log", []))
 	campaign.node = _node(campaign, String(d.get("node_id", "")))
 	return campaign

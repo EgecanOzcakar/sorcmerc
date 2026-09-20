@@ -4,13 +4,20 @@ extends RefCounted
 
 const Combatant = preload("res://core/combatant.gd")
 const Effects = preload("res://core/rules/effects.gd")
+const Potions = preload("res://core/potions.gd")
 const PassGear = preload("res://core/rules/pass_gear.gd")
 
 # The two calibration knobs. Feet are the rules' unit; hexes are the board's.
 # Changing either re-tunes every encounter — re-run the seed sweep in
 # tests/test_combat.gd when you do.
 const FT_PER_HEX := 6      # 30 ft -> 5 hexes
-const RANGE_CAP := 8       # ranged attacks clamped to this many hexes
+# 12 hexes is BG3's 18 m / 60 ft grammar. Measured 2026-09-15 on the grown
+# boards (tests/sweep_range_detail.gd, 150 seeds): 8 -> 12 frees 17 of Pike's
+# ~740 shots past 8 hexes, moves no win rate, and the bestiary's archers never
+# reach it (atk_range is authored in hexes, not capped here) — so the cap now
+# only separates a longbow from a shortbow, which is the point of having one.
+const RANGE_CAP := 12      # ranged attacks clamped to this many hexes
+const AREA_ONE_HEX_FT := 16   # a radius up to ~5 m is one hex; bigger is a corner circle
 
 static func hexes(ft: int) -> int:
 	return maxi(1, roundi(float(ft) / FT_PER_HEX))
@@ -42,7 +49,10 @@ static func _is_warlock(s) -> bool:
 # always long-rest; bard-bardic-inspiration is long-rest until level 5's Font of
 # Inspiration flips it to short-rest — _synthetic_regen() below is where that
 # one feature-specific exception lives, everything else uses the flat default.
-const LONG_REST_ONLY_FEATURES := ["bard-bardic-inspiration", "wizard-arcane-recovery"]
+const LONG_REST_ONLY_FEATURES := ["bard-bardic-inspiration", "wizard-arcane-recovery",
+	"beastmaster-primal-companion",   # RAW: the beast's uses come back on a long rest
+	"lightdomain-warding-flare", "warrioropenhand-wholeness-of-body",   # 2024: Long Rest
+	"gloomstalker-dread-ambusher"]    # Dreadful Strike: WIS-mod uses per Long Rest
 const FONT_OF_INSPIRATION_LEVEL := 5
 
 static func _synthetic_regen(pool_id: String, sheet) -> String:
@@ -116,11 +126,21 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 		c.statuses["down"] = true
 	c.init_mod = s.initiative
 	c.speed = hexes(int(s.speeds.get("walk", 30)))
+	for pid in ch.buffs:   # Potions drunk on the road, still in effect (core/potions.gd)
+		var b: Dictionary = ch.buffs[pid]
+		if b.has("status"):
+			c.statuses[Potions.STATUS_PREFIX + String(pid)] = b["status"].duplicate()
+		if b.has("condition"):
+			c.statuses[String(b["condition"])] = {}
 
 	c.attacks = s.attacks.duplicate(true)
 	var offhand := _take_offhand(c.attacks, ch.offhand)   # main hand must stay attacks[0]
 	_apply_main_attack(c)
-	c.crit_range = 19 if s.has_feature("champion-improved-critical") else 20
+	# Champion: Improved Critical at 3 (19-20), Superior Critical at 15 (18-20).
+	c.crit_range = 18 if s.has_feature("champion-superior-critical") \
+		else (19 if s.has_feature("champion-improved-critical") else 20)
+	c.str_mod = s.mod("str")
+	c.pb = s.proficiency_bonus
 
 	c.saves = s.saves.duplicate()
 	c.save_dc = int(s.spellcasting.get("save_dc", 0))
@@ -131,6 +151,8 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 
 	for fid in s.features:
 		c.features[fid] = true
+		if String(fid).contains("darkvision"):
+			c.darkvision = true   # #85: the species trait, by its feature id
 	for p in s.pools:
 		c.pools[p["id"]] = {"cur": int(ch.pools.get(p["id"], p["max"])), "max": int(p["max"]),
 			"regen": p["regen"]}
@@ -161,6 +183,7 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 	c.spell_ids = castable
 
 	c.verbs = Effects.verbs_for(s)
+	c.init_adv = c.verbs.any(func(v): return v.get("init_adv", false))   # Assassinate, Dread Ambusher
 	c.verbs.append_array(Effects.spell_verbs_for(s, castable, full_slots))
 	var twf := _offhand_verb(offhand, c.attacks, s)
 	if not twf.is_empty():
@@ -178,6 +201,7 @@ static func _apply_main_attack(c) -> void:
 	c.damage = a["notation"]
 	c.ranged = a["range"] == "ranged"
 	c.atk_range = mini(RANGE_CAP, hexes(int(a["normal_ft"]))) if c.ranged else 1
+	c.reach = 2 if "reach" in a.get("properties", []) else 1   # a glaive threatens 10 ft
 
 # T29: the melee/ranged toggle. Moves the named attack to the front and
 # recomputes; false if this combatant has no such attack.
@@ -222,7 +246,7 @@ static func _offhand_verb(offhand: Dictionary, attacks: Array, s) -> Dictionary:
 		return {}   # no main-hand weapon: not dual-wielding
 	var dmg := int(offhand["dmg_bonus"]) if TWF_STYLE in s.fighting_styles else 0
 	var nick: bool = String(main.get("mastery", "")) == "nick"
-	var reach := 1
+	var reach := 2 if "reach" in offhand.get("properties", []) else 1
 	if offhand["range"] == "ranged":
 		reach = mini(RANGE_CAP, hexes(int(offhand["normal_ft"])))
 	return {
@@ -242,14 +266,23 @@ static func _finish_verbs(c, saved_pools: Dictionary) -> void:
 			v["range"] = mini(RANGE_CAP, hexes(int(v["range_ft"])))
 		if int(v.get("size_ft", 0)) > 0:
 			v["radius"] = area_hexes(int(v["size_ft"]))
+		if v.get("targeting", "") == "area":
+			# Areas on this board: up to a 5 m radius is one hex; anything bigger
+			# is anchored on a hex corner and covers the hexes around it.
+			# ponytail: one corner ring for every 6-9 m area — the ring count is
+			# the knob if a 9 m circle should read bigger than a 6 m one.
+			if int(v["size_ft"]) <= AREA_ONE_HEX_FT:
+				v["targeting"] = "hex"
+			else:
+				v["targeting"] = "corner"
+				v["ring"] = 0
+		if v.get("targeting", "") == "line":
+			v["length"] = mini(RANGE_CAP, area_hexes(int(v.get("size_ft", 0))))
 		if v.has("pool") and not c.pools.has(v["pool"]):
 			var n := int(v.get("uses", 1))
 			var regen := _synthetic_regen(v["pool"], c.sheet)
 			c.pools[v["pool"]] = {"cur": int(saved_pools.get(v["pool"], n)), "max": n, "regen": regen}
-		# ponytail: hex-targeted areas (fireball) need an aiming mode no shipping
-		# build uses yet — drop them rather than offer a verb the UI can't point.
-		if v.get("targeting", "") != "hex":
-			keep.append(v)
+		keep.append(v)
 	c.verbs = keep
 
 # Areas floor rather than round: a 15 ft cone stays the 2-hex wedge the room was
@@ -260,7 +293,8 @@ static func area_hexes(ft: int) -> int:
 static func from_monster(m: Dictionary, team: String, pos: Vector2i):
 	var c = Combatant.new()
 	for k in m:
-		if k in ["attacks", "features", "pools", "saves"]:
+		if k in ["attacks", "features", "pools", "saves",
+				"resist", "immune", "vulnerable", "cond_immune"]:
 			continue
 		c.set(k, m[k])
 	c.team = team
@@ -268,12 +302,53 @@ static func from_monster(m: Dictionary, team: String, pos: Vector2i):
 	c.max_hp = int(m["max_hp"])
 	c.hp = int(m.get("hp", m["max_hp"]))
 	c.saves = m.get("saves", {}).duplicate()
+	c.resist = _damage_types(m.get("resist", []))
+	c.immune = _damage_types(m.get("immune", []))
+	c.vulnerable = _damage_types(m.get("vulnerable", []))
+	c.cond_immune = Array(m.get("cond_immune", []).duplicate())
 	c.attacks = m.get("attacks", []).duplicate(true)
 	for fid in m.get("features", []):
 		c.features[fid] = true
+	c.darkvision = m.get("senses", {}).has("darkvision")   # #85
+	# The Unarmed Strike DC (Shove / Grapple, 2024): STR off the statblock's
+	# abilities and a proficiency bonus off its CR, the way the MM tables do.
+	c.str_mod = floori((int(m.get("abilities", {}).get("str", 10)) - 10) / 2.0)
+	c.pb = 2 + maxi(0, ceili(float(m.get("cr", 0)) / 4.0) - 1)
 	c.verbs = Effects.verbs_for(null, c.features.keys())
+	c.init_adv = c.verbs.any(func(v): return v.get("init_adv", false))
 	_finish_verbs(c, {})
 	return c
+
+# T94 — bestiary.json's damage lists are SRD prose, not ids. Four of the 316
+# entries' worth of strings are a type list plus a weapon clause:
+#   "bludgeoning, piercing, and slashing from nonmagical weapons"
+#   "... from nonmagical weapons that aren't silvered" / "... adamantine"
+# Nothing in this game hands out a magical, silvered or adamantine weapon —
+# core/rules/pass_gear.gd builds every attack from data/weapons.json alone — so
+# the clause is always satisfied and the honest reading is plain resistance to
+# the types it names. If magic weapons ever become gear, this is the one function
+# that has to learn the difference.
+const NONMAGICAL_CLAUSE := " from nonmagical weapon"
+
+static func _damage_types(list) -> Array:
+	var out: Array = []
+	for entry in list:
+		var s := String(entry).to_lower()
+		var cut := s.find(NONMAGICAL_CLAUSE)
+		if cut >= 0:
+			s = s.substr(0, cut)
+		for part in s.replace(" and ", ", ").split(","):
+			var t := part.strip_edges()
+			if t != "" and not t in out:
+				out.append(t)
+	return out
+
+# Unspent slots per level, the sheet's full set less slots_used.
+static func slots_left(ch) -> Array[int]:
+	var left := _full_slots(ch.sheet())
+	for i in mini(9, ch.slots_used.size()):
+		left[i] = maxi(0, left[i] - int(ch.slots_used[i]))
+	return left
 
 # Short/long rest: refill the pools that regain on it, all spell slots on a long
 # rest, and HP on a long rest. T6's rest node is the caller.
@@ -307,7 +382,10 @@ static func rest(ch, kind: String) -> void:
 # What T7 persists when a fight ends: HP, spent slots, spent pool uses.
 # Statuses and position belong to the fight and are dropped.
 static func write_back(c, ch) -> void:
-	ch.hp_current = c.hp
+	# #107: somebody down but stable when the fight ends comes to at 1 HP —
+	# RAW's "a stable creature regains 1 HP after 1d4 hours", spent on the walk
+	# out. Otherwise they started the NEXT fight unconscious on the ground.
+	ch.hp_current = c.hp if c.is_dead() else maxi(1, c.hp)
 	for pid in c.pools:
 		ch.pools[pid] = int(c.pools[pid]["cur"])
 	var full: Array = _full_slots(c.sheet) if c.sheet else []

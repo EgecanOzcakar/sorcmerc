@@ -16,13 +16,23 @@ const Catalog = preload("res://core/rules/catalog.gd")
 # hp_roll sentinel: the resolver substitutes die/2+1 (spec §4, save format's -1).
 const AVERAGE := -1
 
-# The 5e cumulative XP table: XP_TABLE[n] is the total XP needed to reach level n+1.
-const XP_TABLE := [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
-	85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000]
+# Total XP to reach a level. Not the 5e table: that assumes medium fights for
+# a party of four, and open country here pays "easy" fights split three ways
+# (measured 2026-09-17, tests/_tmp_xp sweep: 18 XP each at L1, 39 at L3, 78 at
+# L5, 115 at L8). Against the 5e table that was 17 fights to level 2 and 46 to
+# level 4. Each level here costs XP_PER_LEVEL more than the last, so a level
+# is six or seven open-country fights all the way up; sites and quests pay on
+# top of that.
+const XP_PER_LEVEL := 100
 const MAX_LEVEL := 20
+# Where a class stops being something a character dabbled in: the subclass is
+# in, the signature feature is on the sheet, and the build reads as that class
+# rather than as a dip. Same number milestones() already calls level_5 at.
+const VETERAN_LEVEL := 5
 
 static func xp_for_level(level: int) -> int:
-	return int(XP_TABLE[clampi(level, 1, MAX_LEVEL) - 1])
+	var l: int = clampi(level, 1, MAX_LEVEL)
+	return XP_PER_LEVEL * l * (l - 1) / 2
 
 static func can_level_up(ch) -> bool:
 	return ch.level() < MAX_LEVEL and int(ch.xp) >= xp_for_level(ch.level() + 1)
@@ -35,7 +45,28 @@ static func xp_to_next(ch) -> int:
 
 static func add_level(ch, class_id := "", hp_roll := AVERAGE) -> void:
 	ch.add_level(class_id if class_id != "" else ch.class_id(), hp_roll)
+	# Here rather than in milestones(): decide() calls that one again for a
+	# choice made after the fact, and a spell picked late is not a second level.
+	Ach.bump("levels")
 	milestones(ch)
+
+# Catch-up levels for a character joining a party that is already several levels
+# in (scenes/creator/creator.gd's start_level): append levels in `class_id` until
+# the build sits at `target_level`, and bank exactly the XP that level costs so
+# the new arrival is not instantly owed another one.
+#
+# These levels are a gift, not a haul, so nothing here touches core/progression.gd:
+# lifetime XP — and the species/class unlocks it buys — only ever counts XP earned
+# in a fight, which core/campaign.gd banks on its own. Milestone achievements stay
+# out for the same reason: being handed level 5 is not reaching level 5.
+static func grant_levels(ch, target_level: int, class_id := "") -> void:
+	var cid: String = class_id if class_id != "" else ch.class_id()
+	if cid == "":
+		return
+	var target: int = clampi(target_level, 1, MAX_LEVEL)
+	while ch.level() < target:
+		ch.add_level(cid, AVERAGE, true)
+	ch.xp = maxi(int(ch.xp), xp_for_level(ch.level()))
 
 static func pending(ch) -> Array:
 	return ch.sheet().pending
@@ -51,10 +82,47 @@ static func milestones(ch) -> void:
 	var lvl: int = ch.level()
 	if lvl >= 5:
 		Ach.unlock("level_5")
+	if lvl >= 10:
+		Ach.unlock("level_10")
+	if lvl >= 15:
+		Ach.unlock("level_15")
 	if lvl >= MAX_LEVEL:
 		Ach.unlock("level_20")
 	if _knows_high_spell(ch):
 		Ach.unlock("spell_5th")
+	# What this character is made of, for the profile-wide tallies: every class
+	# they hold a level in, every class they hold FIVE in, and every species
+	# that has ever been fielded.
+	#
+	# Two things the "every class" achievement turns on, and it needs both.
+	#
+	# FIVE IN ONE CLASS, not level five. A fighter 3 / rogue 2 is a level-5
+	# character and a veteran of neither trade.
+	#
+	# EARNED, not handed over. The creator mints a recruit at the party's own
+	# level (scenes/creator/creator.gd's start_level), so at a level-5 party a
+	# brand new character arrives with five levels in a class nobody has played
+	# a round of. grant_levels() does not come through here at all, so those
+	# five never tick anything by themselves — but the next level that IS played
+	# calls this, and without the `granted` flag it would look back at a full
+	# five and hand over the class for one level's work. Counting only what was
+	# earned is what makes the achievement mean what it says.
+	var classes := {}
+	var earned := {}
+	for l in ch.levels:
+		var cid := String(l["class_id"])
+		classes[cid] = true
+		Ach.collect("classes", cid)
+		if not bool(l.get("granted", false)):
+			earned[cid] = int(earned.get(cid, 0)) + 1
+	for cid in earned:
+		if int(earned[cid]) >= VETERAN_LEVEL:
+			Ach.collect("classes_5", String(cid))
+	Ach.collect("species", String(ch.species_id))
+	if classes.size() >= 2:
+		Ach.unlock("multiclass")
+	if classes.size() >= 3:
+		Ach.unlock("multiclass_3")
 
 # Both halves of the split: a known-caster's `known` list carries its own level,
 # a prepared caster (cleric/wizard) only ever names ids, so those cost a lookup.

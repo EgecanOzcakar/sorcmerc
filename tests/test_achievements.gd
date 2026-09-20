@@ -10,6 +10,17 @@ const Encounter = preload("res://core/encounter.gd")
 const Combat = preload("res://core/combat.gd")
 const Leveling = preload("res://core/leveling.gd")
 const RNG = preload("res://core/rng.gd")
+const Encounter2 = preload("res://core/encounter.gd")
+const Travel = preload("res://core/travel.gd")
+const Site = preload("res://core/site.gd")
+const Visit = preload("res://core/settlement_visit.gd")
+const Quest = preload("res://core/quest.gd")
+const Regions = preload("res://core/regions.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Progression = preload("res://core/progression.gd")
+const CharacterSave = preload("res://core/character_save.gd")
 
 const VERY_RARE := "amulet-of-the-planes"
 const MYSTERY := "cloak-of-elvenkind"
@@ -31,10 +42,29 @@ func _init() -> void:
 	test_round_trip()
 	test_all()
 	_wipe()
+	test_counters()
+	test_tally_round_trip()
+	test_toast_queue()
+	test_groups()
+	test_completionist()
+	test_goals_match_their_sources()
+	test_goals_are_reachable()
+	_wipe()
 	test_combat_wiring()
 	test_campaign_wiring()
 	test_leveling_wiring()
 	test_party_wiring()
+	test_roll_scoring()
+	test_kill_scoring()
+	test_untracked_fights_score_nothing()
+	test_fight_scoring()
+	test_identify_tally()
+	test_gold_wiring()
+	test_multiclass_wiring()
+	test_veteran_wiring()
+	test_granted_survives_a_save()
+	test_relationship_wiring()
+	test_world_wiring()
 	await test_viewer()
 	_wipe()
 	print("test_achievements: %d passed, %d failed" % [_pass, _fail])
@@ -43,9 +73,10 @@ func _init() -> void:
 func _wipe() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Ach.PATH))
 	Ach._current = Ach.load_state()
+	Ach.take_toasts()
 
 func test_defs() -> void:
-	check(Ach.DEFS.size() >= 10, "a real list of achievements")
+	check(Ach.DEFS.size() >= 100, "a real list of achievements")
 	var ids := {}
 	var ok := true
 	for d in Ach.DEFS:
@@ -242,3 +273,361 @@ func test_viewer() -> void:
 	await process_frame
 	check(v.get_child_count() > 0, "viewer builds its UI standalone")
 	v.queue_free()
+
+
+# --- the tallies (T19b: counters, high-water marks and sets) ---------------
+
+func test_counters() -> void:
+	_wipe()
+	check(Ach.count("kills") == 0, "an untouched counter reads zero")
+	check(Ach.bump("kills", 4) == 4, "bump adds and returns the total")
+	check(Ach.bump("kills") == 5, "bump defaults to one")
+	check(Ach.bump("kills", 0) == 5, "a zero bump changes nothing")
+	check(not Ach.is_unlocked("kills_100"), "five kills is not a hundred")
+	Ach.bump("kills", 95)
+	check(Ach.is_unlocked("kills_100"), "crossing the goal unlocks it")
+	check(not Ach.is_unlocked("kills_500"), "...and only the goals actually crossed")
+
+	# A high-water mark only ever moves up.
+	check(Ach.record("biggest_hit", 30) == 30, "record takes the new best")
+	check(Ach.record("biggest_hit", 12) == 30, "a worse one does not lower it")
+	check(Ach.is_unlocked("big_hit_25"), "25 damage is 25 damage")
+	check(not Ach.is_unlocked("big_hit_60"), "...and 30 is not 60")
+
+	# A set counts distinct members, not calls.
+	check(Ach.collect("bestiary", "goblin") == 1, "collect returns the new size")
+	check(Ach.collect("bestiary", "goblin") == 1, "the same member twice is one member")
+	check(Ach.collect("bestiary", "kobold") == 2, "a new member counts")
+	check(Ach.collect("bestiary", "") == 2, "an empty member is a no-op")
+	check(Ach.count("bestiary") == 2, "count reads a set's size")
+	check(Ach.members("bestiary").has("kobold"), "members lists what is in it")
+	# A jump straight past several goals earns each of them, not just the last.
+	for i in 26:
+		Ach.collect("bestiary", "beast-%d" % i)
+	check(Ach.is_unlocked("bestiary_25"), "a set threshold unlocks like any other")
+
+func test_tally_round_trip() -> void:
+	_wipe()
+	Ach.bump("kills", 7)
+	Ach.record("peak_gold", 1234)
+	Ach.collect("schools", "evocation")
+	Ach.save_state()
+	var back = Ach.load_state()
+	check(int(back.counters.get("kills", 0)) == 7, "a counter survives a reload")
+	check(int(back.counters.get("peak_gold", 0)) == 1234, "a high-water mark survives a reload")
+	check(back.sets.get("schools", []) == ["evocation"], "a set survives a reload")
+
+	# A v1 file — unlocks only, no tallies — still loads, with the tallies at zero.
+	var f := FileAccess.open(Ach.PATH, FileAccess.WRITE)
+	f.store_string('{"format":"%s","version":1,"unlocked":{"level_5":"2026-01-01T00:00:00"}}' % Ach.FORMAT)
+	f.close()
+	var old = Ach.load_state()
+	check(old.unlocked.has("level_5"), "a version-1 file still reads its unlocks")
+	check(old.counters.is_empty() and old.sets.is_empty(), "...and starts the tallies at nothing")
+	Ach._current = old
+
+func test_toast_queue() -> void:
+	_wipe()
+	check(Ach.take_toasts().is_empty(), "nothing earned, nothing to show")
+	Ach.unlock("first_victory")
+	Ach.unlock("first_victory")
+	var got := Ach.take_toasts()
+	check(got.size() == 1, "one toast per achievement, however often it is unlocked")
+	check(String(got[0]["id"]) == "first_victory", "the toast carries the whole definition")
+	check(Ach.take_toasts().is_empty(), "taking drains the queue")
+
+	# Nobody draining it must not grow it without bound.
+	_wipe()
+	for def in Ach.DEFS:
+		Ach.unlock(String(def["id"]))
+	check(Ach.pending_toasts() <= Ach.TOAST_QUEUE_MAX, "the queue is capped")
+
+func test_groups() -> void:
+	var known := {}
+	for g in Ach.GROUPS:
+		known[String(g["id"])] = 0
+	var ok := true
+	for def in Ach.DEFS:
+		var g := String(def.get("group", ""))
+		if not known.has(g):
+			ok = false
+			printerr("  unknown group %s on %s" % [g, def["id"]])
+			continue
+		known[g] += 1
+		if def.has("counter"):
+			check(int(def.get("goal", 0)) > 0, "%s has a counter, so it needs a goal" % def["id"])
+		if def.has("goal"):
+			check(String(def.get("counter", "")) != "", "%s has a goal, so it needs a counter" % def["id"])
+	check(ok, "every achievement is in a group the viewer knows about")
+	for g in known:
+		check(known[g] > 0, "group %s has something in it" % g)
+	check(Ach.group_label("blood") != "blood", "a group has a label")
+
+func test_completionist() -> void:
+	_wipe()
+	for def in Ach.DEFS:
+		if def["id"] != "completionist":
+			check(not Ach.is_unlocked("completionist"), "not yet — %s is still locked" % def["id"])
+			Ach.unlock(String(def["id"]))
+	check(Ach.is_unlocked("completionist"), "the last one earns the last one")
+
+# Two goals are a number copied by hand out of another file, because
+# core/achievements.gd cannot preload either one (travel -> campaign ->
+# achievements, and regions -> encounter -> combat -> achievements, both
+# already). These are the guard against the copies drifting.
+func test_goals_match_their_sources() -> void:
+	check(int(Ach.find("every_road_event")["goal"]) == Travel.EVENTS.size(),
+		"every_road_event's goal is the size of the road-event table")
+	check(int(Ach.find("regions_4")["goal"]) == Regions.BANDS.size(),
+		"regions_4's goal is how many bands the map actually has")
+	# "Every class" has to mean every class. Adding a thirteenth without moving
+	# this goal would quietly leave the achievement earnable one short of what
+	# it says, which is the one way a threshold can be wrong and still pass.
+	check(int(Ach.find("classes_all_5")["goal"]) == Progression.all_classes().size(),
+		"classes_all_5's goal is how many classes there are to be a veteran of")
+
+# Every threshold has to be reachable with the content that ships. The ones
+# below are bounded by a fixed table rather than by how long somebody plays.
+func test_goals_are_reachable() -> void:
+	check(int(Ach.find("bestiary_150")["goal"]) <= Catalog.all("monsters.json").size()
+			+ Catalog.all("bestiary.json").size(),
+		"there are at least as many monsters as the bestiary goal asks for")
+	check(int(Ach.find("schools_8")["goal"]) == 8, "there are eight schools of magic")
+
+# --- more wiring ----------------------------------------------------------
+
+func _fight():
+	return Combat.new(RNG.new(7), Encounter.party() + Encounter.monsters(), Encounter.board())
+
+func test_roll_scoring() -> void:
+	_wipe()
+	var cb = _fight()
+	var hero = cb.team_of("party")[0]
+	var foe = cb.team_of("foe")[0]
+	cb._score_roll(hero, 20, true)
+	check(Ach.count("crits") == 1, "a crit is counted")
+	check(Ach.is_unlocked("crit_first"), "the first crit is earned")
+	check(not Ach.is_unlocked("both_ends"), "one end of the die is not both")
+	cb._score_roll(hero, 1, false)
+	check(Ach.count("fumbles") == 1, "a natural 1 is counted")
+	check(Ach.is_unlocked("both_ends"), "both ends of the die in one fight")
+	# The foe's dice are the foe's business.
+	cb._score_roll(foe, 20, true)
+	check(Ach.count("crits") == 1, "an enemy crit is not the party's crit")
+
+func test_kill_scoring() -> void:
+	_wipe()
+	var cb = _fight()
+	var foes: Array = cb.team_of("foe")
+	cb._kill(foes[0])
+	check(Ach.count("kills") == 1, "a dead enemy is a kill")
+	check(Ach.count("bestiary") == 1, "...and a line in the bestiary")
+	cb._kill(foes[0])
+	check(Ach.count("kills") == 1, "the same corpse is not killed twice")
+	check(not Ach.is_unlocked("triple_kill"), "one kill is not three")
+	cb._kill(foes[1])
+	cb._kill(foes[2])
+	check(Ach.is_unlocked("triple_kill"), "three in one turn is the achievement")
+	cb.begin_turn()
+	check(cb._kills_this_turn == 0, "a new turn starts the body count over")
+
+	# A hero going down is not a kill for anybody's tally.
+	_wipe()
+	var cb2 = _fight()
+	cb2._kill(cb2.team_of("party")[0])
+	check(Ach.count("kills") == 0, "losing somebody is not killing somebody")
+
+func test_untracked_fights_score_nothing() -> void:
+	_wipe()
+	var cb = _fight()
+	cb.tracked = false      # what core/world_battle.gd sets on an NPC-vs-NPC scrap
+	cb._kill(cb.team_of("foe")[0])
+	cb._score_roll(cb.team_of("party")[0], 20, true)
+	cb.heal(cb.team_of("party")[0], 80)
+	check(Ach.count("kills") == 0, "an off-screen battle kills nothing of ours")
+	check(Ach.count("crits") == 0, "...rolls no dice of ours")
+	check(not Ach.is_unlocked("big_heal"), "...and heals nobody of ours")
+
+func test_fight_scoring() -> void:
+	_wipe()
+	var cb = _fight()
+	Encounter2._score_fight(cb, true)
+	check(Ach.count("wins") == 1, "a win is counted")
+	check(Ach.is_unlocked("one_round"), "a fight over in round 1")
+	check(Ach.is_unlocked("untouched"), "nobody was hurt: not a scratch")
+	check(not Ach.is_unlocked("long_fight"), "round 1 is not fifteen rounds")
+	check(not Ach.is_unlocked("first_wipe"), "a win is not a loss")
+
+	_wipe()
+	var cb2 = _fight()
+	cb2.round_num = 16
+	cb2._apply_damage(cb2.team_of("party")[0], 1)
+	Encounter2._score_fight(cb2, true)
+	check(Ach.is_unlocked("long_fight"), "fifteen rounds and more")
+	check(not Ach.is_unlocked("untouched"), "one hit point is a scratch")
+
+	_wipe()
+	var cb3 = _fight()
+	Encounter2._score_fight(cb3, false)
+	check(Ach.is_unlocked("first_wipe"), "losing earns the one for losing")
+	check(Ach.count("wins") == 0, "...and nothing else")
+
+	# Everybody on the floor, and the room still taken.
+	_wipe()
+	var cb4 = _fight()
+	for c in cb4.team_of("party"):
+		cb4.downed[c.id] = true
+	Encounter2._score_fight(cb4, true)
+	check(Ach.is_unlocked("all_down_win"), "every knee on the ground and still a win")
+
+func test_identify_tally() -> void:
+	_wipe()
+	var c := _campaign()
+	c.node = {"kind": "merchant", "id": "hollow-market"}
+	c.state = "visiting"
+	c.party.stash_add(MYSTERY, 1, false)
+	c.party.stash_add(Campaign.IDENTIFY_SCROLL)
+	check(c.identify_with_scroll(MYSTERY), "the scroll identifies it")
+	check(Ach.count("identified") == 1, "identifying counts towards the tally")
+	check(not Ach.is_unlocked("identify_artifact"), "a cloak is not an artifact")
+
+	# The rarity notes: a legendary is collected, a very rare is not.
+	_wipe()
+	Campaign._note_rarity(VERY_RARE)
+	check(Ach.is_unlocked("loot_very_rare"), "a very rare drop still earns its own")
+	check(Ach.count("legendaries") == 0, "...but only legendaries fill the case")
+
+func test_gold_wiring() -> void:
+	_wipe()
+	var p := _party()
+	p.add_gold(1200)
+	check(Ach.count("gold_earned") == 1200, "earnings are counted")
+	check(Ach.count("peak_gold") >= 1200, "the fattest the purse has been")
+	check(Ach.is_unlocked("gold_1000"), "a thousand gold at once")
+	check(not Ach.is_unlocked("broke"), "not broke yet")
+	check(p.spend_gold(1200), "and it is spent")
+	check(Ach.count("gold_spent") == 1200, "spending is counted")
+	check(Ach.is_unlocked("broke"), "the last gold piece earns its own")
+	p.add_gold(10)
+	check(Ach.count("peak_gold") >= 1200, "a spent purse does not lower the high-water mark")
+
+func test_multiclass_wiring() -> void:
+	_wipe()
+	var ch = Presets.party()[0]
+	Leveling.add_level(ch)
+	check(Ach.count("levels") >= 1, "a level is counted")
+	check(Ach.count("classes") >= 1, "...and the class it was taken in")
+	check(Ach.count("species") >= 1, "...and the species who took it")
+	check(not Ach.is_unlocked("multiclass"), "one class is one class")
+	Leveling.add_level(ch, "rogue")
+	check(Ach.is_unlocked("multiclass"), "levels in two classes")
+	check(not Ach.is_unlocked("multiclass_3"), "two is not three")
+	Leveling.add_level(ch, "cleric")
+	check(Ach.is_unlocked("multiclass_3"), "levels in three classes")
+
+# The two things "a veteran of every class" turns on: five levels IN one class
+# (not a level-5 character), and all five EARNED rather than handed over.
+func test_veteran_wiring() -> void:
+	_wipe()
+	var ch = Presets.party()[0]
+	var cid: String = ch.class_id()
+	check(ch.level() >= 3, "the preset opens with levels already on the sheet")
+	Leveling.milestones(ch)
+	check(Ach.count("classes_5") == 0, "the levels a preset hero opens with are not earned")
+	for i in Leveling.VETERAN_LEVEL - 1:
+		Leveling.add_level(ch, cid)
+	check(Ach.count("classes_5") == 0, "four earned levels in a class is not a veteran of it")
+	Leveling.add_level(ch, cid)
+	check(Ach.members("classes_5") == [cid], "the fifth earned level in a class is")
+	check(not Ach.is_unlocked("classes_all_5"), "one class is not every class")
+
+	# The leak this closes: a recruit minted at the party's level arrives with
+	# five levels already on the sheet, and one played level must not cash them.
+	_wipe()
+	var recruit = Presets.party()[1]
+	recruit.levels.clear()
+	Leveling.grant_levels(recruit, Leveling.VETERAN_LEVEL, "wizard")
+	check(recruit.level() == Leveling.VETERAN_LEVEL, "the creator hands over a level-5 build")
+	check(Ach.count("classes_5") == 0, "handing the levels over ticks nothing by itself")
+	Leveling.add_level(recruit, "wizard")
+	check(Ach.count("classes_5") == 0,
+		"...and one played level on top of five granted ones does not buy the class")
+	for i in Leveling.VETERAN_LEVEL - 1:
+		Leveling.add_level(recruit, "wizard")
+	check(Ach.members("classes_5") == ["wizard"], "five played levels do")
+
+	# A level-5 character who is a veteran of nothing.
+	_wipe()
+	var dip = Presets.party()[2]
+	var first: String = dip.class_id()
+	for i in 4:
+		Leveling.add_level(dip, first)
+	for i in 4:
+		Leveling.add_level(dip, "rogue")
+	check(first != "rogue" and Ach.count("classes_5") == 0,
+		"four earned in each of two classes is a veteran of neither")
+
+	# ...and the whole list earns it.
+	_wipe()
+	for one in Progression.all_classes():
+		Ach.collect("classes_5", String(one["id"]))
+	check(Ach.is_unlocked("classes_all_5"), "a veteran of every class earns The Whole Guild")
+
+# A granted level has to still be granted after a trip through the barracks,
+# or the flag is worth nothing the moment a character is saved and loaded.
+func test_granted_survives_a_save() -> void:
+	_wipe()
+	var ch = Presets.party()[0]
+	ch.id = "granted-probe"
+	Leveling.add_level(ch, ch.class_id())        # one earned level on top
+	CharacterSave.save(ch)
+	var back = CharacterSave.load_slug("granted-probe")
+	CharacterSave.delete("granted-probe")
+	check(back != null, "the probe saved and loaded back")
+	if back == null:
+		return
+	var granted := 0
+	var earned := 0
+	for l in back.levels:
+		if bool(l.get("granted", false)):
+			granted += 1
+		else:
+			earned += 1
+	check(granted == ch.level() - 1, "every handed-over level came back marked")
+	check(earned == 1, "...and the played one came back unmarked")
+
+func test_relationship_wiring() -> void:
+	_wipe()
+	var p := _party()
+	PartyOpinion.adjust(p, "vera", "pike", PartyOpinion.BONDED + 100.0)
+	check(Ach.is_unlocked("bonded"), "a pair that got close")
+	check(not Ach.is_unlocked("rivals"), "...is not a pair that fell out")
+	PartyOpinion.adjust(p, "vera", "ilsa", PartyOpinion.RIVALS - 100.0)
+	check(Ach.is_unlocked("rivals"), "a pair that loathe each other")
+	PartyOpinion.friendly_fire(p, "vera", "pike")
+	check(Ach.is_unlocked("friendly_fire"), "catching your own in your own spell")
+
+func test_world_wiring() -> void:
+	_wipe()
+	var p := _party()
+	Quest.record_settlement_visited(p, "dun-arrow")
+	Quest.record_settlement_visited(p, "dun-arrow")
+	check(Ach.count("settlements") == 1, "the same town twice is one town")
+	Quest.record_region_reached(p, "marches")
+	check(Ach.count("regions") == 1, "a region crossed into is counted")
+
+	FactionOpinion.reset()
+	FactionOpinion.set_opinion("dwarf", 95.0)
+	check(Ach.is_unlocked("faction_loved"), "a faction that thinks the world of you")
+	check(not Ach.is_unlocked("faction_hated"), "...is not one that wants you dead")
+	FactionOpinion.set_opinion("orc", -95.0)
+	check(Ach.is_unlocked("faction_hated"), "a faction that wants you dead")
+	FactionOpinion.reset()
+
+	# The road's own table.
+	Travel._note_event("storm")
+	check(Ach.count("road_events") == 1, "a road event is counted")
+	check(Ach.count("road_event_kinds") == 1, "...and which one it was")
+	Travel._note_event("storm")
+	check(Ach.count("road_events") == 2 and Ach.count("road_event_kinds") == 1,
+		"the same weather twice is two events and one kind")

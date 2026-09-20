@@ -10,6 +10,7 @@ const WorldAI = preload("res://core/world_ai.gd")
 const WorldSave = preload("res://core/world_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Party = preload("res://core/party.gd")
+const Presets = preload("res://core/presets.gd")
 
 var _pass := 0
 var _fail := 0
@@ -54,8 +55,15 @@ func _party() -> Party:
 	for ch in Party.demo_roster():
 		p.add_member(ch)
 	p.add_gold(137)
-	p.stash_add("potion-of-healing", 2)
+	p.stash_add("potions-of-healing", 2)
 	p.overworld_figure = "wizard"
+	# Mid-day campaign state: a caster who has already spent slots, and a hero
+	# who has taken a beating. Both have to be on the other side of the save —
+	# a resume that refills the party is a resume that did not save the day.
+	for ch in p.party_characters():
+		ch.hp_current = maxi(1, ch.sheet().max_hp - 4)
+		if not ch.sheet().spellcasting.is_empty():
+			ch.slots_used.assign([2, 1, 0, 0, 0, 0, 0, 0, 0])
 	return p
 
 func _init() -> void:
@@ -75,6 +83,18 @@ func _init() -> void:
 	# Advance the wander RNG before saving: restoring the seed alone would rewind it.
 	var elk = _find(w, "elk")
 	elk.ai["rng"].roll_die(100)
+	# T-path: a band mid-detour is carrying a route round the water in its `ai`
+	# dict. It is Vector2s in a plain Array, so the generic encoder should take
+	# it without knowing what it is — which is the whole claim that file makes.
+	# Two passes: the patrol's first leg is the spot it is already standing on,
+	# and it is the second — back to Riverhold, over the river — that needs a
+	# way round. (`bandits` is no use here: this fixture spawns it inside the
+	# lake, and a swimming party is O1's problem, not the pathfinder's.)
+	WorldAI.update(w)
+	WorldAI.update(w)
+	var routed = _find(w, "patrol")
+	check(not WorldAI.pending_route(routed).is_empty(), "the patrolling band planned a route to save")
+	var route_before: Array = WorldAI.pending_route(routed).duplicate()
 
 	WorldSave.save(w, party)
 	check(WorldSave.has_save(), "save() writes the slot")
@@ -112,7 +132,16 @@ func _init() -> void:
 	var pat = _find(w2, "patrol")
 	check(pat.ai.get("behavior", "") == "patrol" and pat.ai["waypoints"].size() == 2
 		and pat.ai["waypoints"][1] == Vector2(0, 0), "patrol waypoints are Vector2s again")
-	check(int(pat.ai.get("index", -1)) == 0, "the patrol's place in its route")
+	check(int(pat.ai.get("index", -1)) == 1, "the patrol's place in its route")
+	var routed2 = _find(w2, "patrol")
+	check(WorldAI.pending_route(routed2).size() == route_before.size(), "the detour survives the save")
+	var same := true
+	for i in route_before.size():
+		same = same and WorldAI.pending_route(routed2)[i] is Vector2 \
+			and WorldAI.pending_route(routed2)[i].is_equal_approx(route_before[i])
+	check(same, "...as Vector2s, waypoint for waypoint")
+	check(WorldAI.destination(routed2).is_equal_approx(WorldAI.destination(routed)),
+		"...and so does what it was walking toward")
 	var elk2 = _find(w2, "elk")
 	check(elk2.ai.get("behavior", "") == "wander" and elk2.ai["home"] == Vector2(0, 0)
 		and is_equal_approx(float(elk2.ai["radius"]), 90.0), "wander home/radius")
@@ -156,8 +185,20 @@ func _init() -> void:
 	check(p2.roster.size() == party.roster.size(), "the roster came back")
 	check(Array(p2.active) == Array(party.active), "marching order")
 	check(p2.gold == 137, "the purse")
-	check(p2.stash_count("potion-of-healing") == 2, "the stash")
+	check(p2.stash_count("potions-of-healing") == 2, "the stash")
 	check(p2.overworld_figure == "wizard", "the chosen map figure")
+	# Spent spell slots used to be the one piece of campaign state this format
+	# left behind, so every autosave handed the party a free long rest's worth
+	# of casting — and, since co-op ships the party as these same dictionaries,
+	# gave the guest a different board to fight on (issue #132).
+	for ch in party.party_characters():
+		var back = p2.get_member(ch.id)
+		check(back != null, "%s came back" % ch.id)
+		if back == null:
+			continue
+		check(Array(back.slots_used) == Array(ch.slots_used),
+			"%s's spent slots survive the save (%s vs %s)" % [ch.id, str(back.slots_used), str(ch.slots_used)])
+		check(back.hp_current == ch.hp_current, "%s's wounds survive it too" % ch.id)
 
 	# --- the world still runs ------------------------------------------------
 	w2.tick(0.1)
@@ -200,7 +241,39 @@ func _done() -> void:
 	check(String(Travel.orders(back_old["party"])["pace"]) == "normal",
 		"a save from before standing orders marches at the default")
 
-	_slots()
+		# O13+: the title screen has to be able to say what is in the slot without
+	# rebuilding a World, say that there is only one of them, and clear it.
+	# "Resume the open world" on its own told the player none of that.
+	var Game = load("res://scenes/game/game.gd")
+	WorldSave.clear()
+	check(WorldSave.summary().is_empty(), "no slot, no summary")
+
+	var w2 := World.new()
+	w2.origin = {"kind": "procedural", "seed": 42}
+	w2.clock.elapsed = 1440.0 + 6 * 60.0 + 5.0        # Day 2, 14:05 — the face starts at 08:00 (#85)
+	var p2 := Party.new()
+	for ch in Presets.party():
+		p2.add_member(ch)
+	p2.add_gold(275)
+	WorldSave.save(w2, p2)
+
+	var slot: Dictionary = WorldSave.summary()
+	check(not slot.is_empty(), "a written slot summarises")
+	check(WorldSave.day_clock(float(slot["elapsed"])) == "Day 2  14:05",
+		"the summary reads the same clock the map does (got %s)"
+			% WorldSave.day_clock(float(slot["elapsed"])))
+	check(String(slot["map"]) == "procedural", "and names the map it was built from")
+	check(int(slot["gold"]) == 275, "and the purse")
+	check(not slot["party"].is_empty(), "and who was standing")
+	check(int(slot["written_at"]) > 0, "and when it was written")
+
+	var line: String = Game.slot_line(slot)
+	for bit in ["Day 2  14:05", "procedural", "275 ◉"]:
+		check(line.contains(bit), "the title line says %s (got %s)" % [bit, line])
+
+	WorldSave.clear()
+	check(WorldSave.summary().is_empty(), "and the slot can be cleared from the title")
+
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

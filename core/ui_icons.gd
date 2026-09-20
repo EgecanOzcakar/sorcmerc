@@ -9,6 +9,7 @@
 extends RefCounted
 
 const Catalog = preload("res://core/rules/catalog.gd")
+const PassGear = preload("res://core/rules/pass_gear.gd")
 const Sound = preload("res://core/audio.gd")
 
 
@@ -40,55 +41,232 @@ static func clicks(b: BaseButton) -> BaseButton:
 	return b
 
 # --- palette ---------------------------------------------------------------
-# The established dark, warm-gold fantasy set. Screens alias these into their own
-# COL_* constants so their local names keep working.
-const COL_BG := Color("14161c")          # screen background
-const COL_PANEL := Color("1b1f29")       # card / panel fill
-const COL_INK := Color("0c0e15")         # deep inset fill (log box, profile panels)
-const COL_EDGE := Color("39404f")        # quiet border
-const COL_GOLD := Color("c8a75a")        # captions, accents
-const COL_GOLD_EDGE := Color("6f5a30")   # gilt panel border
-const COL_HEAD := Color("f0e6cf")        # headline text
-const COL_TEXT := Color("e9e9df")        # body text
-const COL_BODY := Color("c2c5cf")        # secondary body text
-const COL_MUTED := Color("8f95a3")       # captions/hints, disabled prose
-const COL_ACCENT := Color("8fb7d8")      # informational highlight
-const COL_PARTY := Color("5fbf6a")
-const COL_FOE := Color("d15750")
+# The company ledger by lamplight: a warm near-black ground (oiled leather, not
+# blue-grey), gilt for the one thing on a screen that matters, verdigris where
+# the old build used a cool blue for "information". Screens alias these into
+# their own COL_* constants so their local names keep working.
+const COL_BG := Color("17130f")          # screen background
+const COL_PANEL := Color("221c16")       # card / panel fill
+const COL_ROW := Color("1d1813")         # the alternate ledger row
+const COL_INK := Color("0f0c09")         # deep inset fill (log box, profile panels)
+const COL_EDGE := Color("4a3d2c")        # quiet border — tarnished brass
+const COL_GOLD := Color("c9a45a")        # captions, accents, the primary button
+const COL_GOLD_EDGE := Color("7a6234")   # gilt panel border
+const COL_HEAD := Color("f1e6cf")        # headline text
+const COL_TEXT := Color("dcd3c2")        # body text
+const COL_BODY := Color("b9ae9b")        # secondary body text
+const COL_MUTED := Color("8a7f6e")       # captions/hints, disabled prose
+const COL_ACCENT := Color("6fa89a")      # informational highlight — verdigris
+const COL_PARTY := Color("7fbf6a")
+const COL_FOE := Color("d35a4a")
 
-# --- type scale ------------------------------------------------------------
-# One size per UI role, shared by all five screens.
-const FS_TITLE := 22      # the screen's one headline
-const FS_HEAD := 17       # section / card title
-const FS_BODY := 15       # default running text and button labels
-const FS_SMALL := 13      # secondary rows, hints, journal
-const FS_CAPTION := 12    # the »  S P A C E D  « panel captions
+# --- type ------------------------------------------------------------------
+# Two faces from one hand (Huerta Tipográfica, OFL): Alegreya carries every
+# title, name and sentence; Alegreya Sans carries controls, stats and the log.
+# DejaVu stays as the glyph fallback — the class / school marks are symbol
+# codepoints neither Alegreya face draws.
+const FS_TITLE := 32      # the screen's one headline
+const FS_HEAD := 21       # section / card title
+const FS_BODY := 16       # default running text and button labels
+const FS_SMALL := 14      # secondary rows, hints, journal
+const FS_CAPTION := 14    # panel captions — sentence case, gilt, no tracking
 
-# The one button/label theme every screen wears. `compact` is the inline-control
-# variant (the profile's ± / equip buttons sit inside text rows).
+static var _fonts := {}
+
+static func _font(kind: String) -> Font:
+	if _fonts.is_empty():
+		var fallback: Font = load("res://assets/fonts/DejaVuSans.ttf")
+		var serif_file: FontFile = load("res://assets/fonts/Alegreya-Variable.ttf")
+		serif_file.fallbacks = [fallback]
+		for w in [400, 500, 700]:
+			var v := FontVariation.new()
+			v.base_font = serif_file
+			v.variation_opentype = {"wght": w}
+			_fonts["serif%d" % w] = v
+		for w in [["", 400], ["-Medium", 500], ["-Bold", 700]]:
+			var f: FontFile = load("res://assets/fonts/AlegreyaSans%s.ttf" % ("-Regular" if w[0] == "" else w[0]))
+			f.fallbacks = [fallback]
+			_fonts["sans%d" % w[1]] = f
+	return _fonts[kind]
+
+static func serif(weight := 400) -> Font:
+	return _font("serif%d" % weight)
+
+static func sans(weight := 400) -> Font:
+	return _font("sans%d" % weight)
+
+# A flat leather block with a darker bottom edge — the button, the field, the
+# row. Radius 3 on anything you press, 0 on anything you read.
+static func box(bg: Color, edge := Color(0, 0, 0, 0), radius := 3, pad_x := 12, pad_y := 6) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.set_corner_radius_all(radius)
+	s.content_margin_left = pad_x; s.content_margin_right = pad_x
+	s.content_margin_top = pad_y; s.content_margin_bottom = pad_y
+	if edge.a > 0.0:
+		s.border_color = edge
+		s.set_border_width_all(1)
+	return s
+
+static func _pressable(bg: Color, pad_y: int) -> StyleBoxFlat:
+	var s := box(bg, Color(0, 0, 0, 0), 3, 12, pad_y)
+	s.border_color = bg.darkened(0.45)
+	s.border_width_bottom = 2
+	return s
+
+# The one theme every screen wears, applied once at the front door
+# (scenes/game/game.gd) and inherited by everything under it. Type variations
+# are the vocabulary a screen speaks — `l.theme_type_variation = "Title"` —
+# instead of a font-size and a colour override on every label:
+#
+#   Label:   Title  Head  Caption  Dim  Stat  Gilt  Serif
+#   Button:  Primary  Quiet  Key
+#   Panel:   Card  Inset  Row  RowAlt  Gilt
+#
+# `compact` is the inline-control variant (the profile's ± / equip buttons sit
+# inside text rows).
 static func dark_theme(compact := false) -> Theme:
 	var th := Theme.new()
 	var pad := 3 if compact else 6
-	var mk := func(bg: Color) -> StyleBoxFlat:
-		var s := StyleBoxFlat.new()
-		s.bg_color = bg
-		s.set_corner_radius_all(6)
-		s.content_margin_left = 10; s.content_margin_right = 10
-		s.content_margin_top = pad; s.content_margin_bottom = pad
-		return s
-	th.set_stylebox("normal", "Button", mk.call(Color("2b3040")))
-	th.set_stylebox("hover", "Button", mk.call(Color("3a4152")))
-	th.set_stylebox("pressed", "Button", mk.call(Color("4a5570")))
-	th.set_stylebox("disabled", "Button", mk.call(Color("22252e")))
-	th.set_color("font_color", "Button", Color("e6e8ee"))
-	th.set_color("font_hover_color", "Button", Color("ffffff"))
-	th.set_color("font_color", "Label", COL_TEXT)
+	th.default_font = sans()
+	th.default_font_size = FS_BODY
+
+	# buttons
+	th.set_stylebox("normal", "Button", _pressable(Color("2e261d"), pad))
+	th.set_stylebox("hover", "Button", _pressable(Color("3b3125"), pad))
+	th.set_stylebox("pressed", "Button", _pressable(Color("4a3d2c"), pad))
+	th.set_stylebox("disabled", "Button", _pressable(Color("1e1913"), pad))
+	th.set_stylebox("focus", "Button", box(Color(0, 0, 0, 0), COL_GOLD, 3, 12, pad))
+	th.set_color("font_color", "Button", COL_TEXT)
+	th.set_color("font_hover_color", "Button", COL_HEAD)
+	th.set_color("font_pressed_color", "Button", COL_HEAD)
+	th.set_color("font_disabled_color", "Button", COL_MUTED)
+	th.set_font("font", "Button", sans(500))
 	th.set_font_size("font_size", "Button", FS_BODY)
+	# the one gilt button a screen gets
+	th.set_type_variation("Primary", "Button")
+	th.set_stylebox("normal", "Primary", _pressable(COL_GOLD, pad))
+	th.set_stylebox("hover", "Primary", _pressable(Color("dbb86a"), pad))
+	th.set_stylebox("pressed", "Primary", _pressable(Color("b08d47"), pad))
+	th.set_stylebox("disabled", "Primary", _pressable(Color("5a4a2c"), pad))
+	th.set_color("font_color", "Primary", COL_INK)
+	th.set_color("font_hover_color", "Primary", COL_INK)
+	th.set_color("font_pressed_color", "Primary", COL_INK)
+	th.set_font("font", "Primary", sans(700))
+	# the chosen one of a set of options: the block with a gilt rim
+	th.set_type_variation("Picked", "Button")
+	for st in ["normal", "hover", "pressed"]:
+		var pk := _pressable(Color("3b3125"), pad)
+		pk.border_color = COL_GOLD
+		pk.set_border_width_all(1)
+		pk.border_width_bottom = 2
+		th.set_stylebox(st, "Picked", pk)
+	th.set_stylebox("disabled", "Picked", _pressable(Color("1e1913"), pad))
+	th.set_color("font_color", "Picked", COL_GOLD)
+	th.set_color("font_hover_color", "Picked", COL_HEAD)
+	th.set_font("font", "Picked", sans(700))
+	# a button that reads as a link: no block, gilt text
+	th.set_type_variation("Quiet", "Button")
+	for st in ["normal", "hover", "pressed", "disabled"]:
+		th.set_stylebox(st, "Quiet", box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 4, pad))
+	th.set_color("font_color", "Quiet", COL_GOLD)
+	th.set_color("font_hover_color", "Quiet", COL_HEAD)
+	# a key cap: the combat bar's [1]…[9]
+	th.set_type_variation("Key", "Button")
+	th.set_stylebox("normal", "Key", _pressable(Color("2e261d"), pad))
+	th.set_stylebox("hover", "Key", _pressable(Color("3b3125"), pad))
+	th.set_stylebox("pressed", "Key", _pressable(COL_GOLD_EDGE, pad))
+	th.set_font("font", "Key", sans(500))
+
+	for t in ["OptionButton", "CheckBox", "CheckButton", "MenuButton"]:
+		th.set_stylebox("normal", t, _pressable(Color("2e261d"), pad))
+		th.set_stylebox("hover", t, _pressable(Color("3b3125"), pad))
+		th.set_stylebox("pressed", t, _pressable(Color("4a3d2c"), pad))
+		th.set_stylebox("disabled", t, _pressable(Color("1e1913"), pad))
+		th.set_stylebox("focus", t, box(Color(0, 0, 0, 0), COL_GOLD, 3, 12, pad))
+		th.set_color("font_color", t, COL_TEXT)
+		th.set_color("font_hover_color", t, COL_HEAD)
+	th.set_stylebox("normal", "LineEdit", box(COL_INK, COL_EDGE, 3, 10, pad))
+	th.set_stylebox("focus", "LineEdit", box(COL_INK, COL_GOLD, 3, 10, pad))
+	th.set_color("font_color", "LineEdit", COL_HEAD)
+	th.set_color("caret_color", "LineEdit", COL_GOLD)
+	th.set_stylebox("panel", "PopupMenu", box(COL_PANEL, COL_EDGE, 3, 6, 6))
+	th.set_stylebox("hover", "PopupMenu", box(Color("3b3125"), Color(0, 0, 0, 0), 2, 8, 4))
+	th.set_color("font_color", "PopupMenu", COL_TEXT)
+	th.set_color("font_hover_color", "PopupMenu", COL_HEAD)
+	th.set_stylebox("panel", "TooltipPanel", box(COL_INK, COL_GOLD_EDGE, 3, 10, 8))
+	th.set_color("font_color", "TooltipLabel", COL_TEXT)
+
+	# labels
+	th.set_color("font_color", "Label", COL_TEXT)
 	th.set_font_size("font_size", "Label", FS_BODY)
-	th.set_stylebox("normal", "LineEdit", mk.call(Color("22252e")))
+	th.set_type_variation("Title", "Label")
+	th.set_font("font", "Title", serif(500))
+	th.set_font_size("font_size", "Title", FS_TITLE)
+	th.set_color("font_color", "Title", COL_HEAD)
+	th.set_type_variation("Head", "Label")
+	th.set_font("font", "Head", serif(500))
+	th.set_font_size("font_size", "Head", FS_HEAD)
+	th.set_color("font_color", "Head", COL_HEAD)
+	th.set_type_variation("Serif", "Label")   # a name or a sentence at body size
+	th.set_font("font", "Serif", serif())
+	th.set_font_size("font_size", "Serif", FS_BODY + 1)
+	th.set_type_variation("Caption", "Label")
+	th.set_font("font", "Caption", sans(700))
+	th.set_font_size("font_size", "Caption", FS_CAPTION)
+	th.set_color("font_color", "Caption", COL_GOLD)
+	th.set_type_variation("Gilt", "Label")
+	th.set_color("font_color", "Gilt", COL_GOLD)
+	th.set_type_variation("Dim", "Label")
+	th.set_font_size("font_size", "Dim", FS_SMALL)
+	th.set_color("font_color", "Dim", COL_MUTED)
+	th.set_type_variation("Stat", "Label")
+	th.set_font("font", "Stat", sans(500))
+	th.set_color("font_color", "Stat", COL_HEAD)
+	th.set_color("default_color", "RichTextLabel", COL_TEXT)
+	th.set_font("normal_font", "RichTextLabel", sans())
+	th.set_font("bold_font", "RichTextLabel", sans(700))
+	th.set_font_size("normal_font_size", "RichTextLabel", FS_BODY)
+
+	# panels
+	th.set_stylebox("panel", "PanelContainer", box(COL_PANEL, Color(0, 0, 0, 0), 0, 14, 10))
+	th.set_type_variation("Card", "PanelContainer")
+	th.set_stylebox("panel", "Card", box(COL_PANEL, COL_EDGE, 0, 14, 10))
+	th.set_type_variation("Inset", "PanelContainer")
+	th.set_stylebox("panel", "Inset", box(COL_INK, COL_EDGE, 0, 12, 10))
+	th.set_type_variation("Gilt", "PanelContainer")
+	th.set_stylebox("panel", "Gilt", box(COL_PANEL, COL_GOLD_EDGE, 0, 14, 10))
+	th.set_type_variation("Row", "PanelContainer")
+	th.set_stylebox("panel", "Row", box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 10, 6))
+	th.set_type_variation("RowAlt", "PanelContainer")
+	th.set_stylebox("panel", "RowAlt", box(COL_ROW, Color(0, 0, 0, 0), 0, 10, 6))
+	# the picked row: a gilt bar down its left edge, nothing else
+	th.set_type_variation("RowPicked", "PanelContainer")
+	var picked := box(COL_ROW, Color(0, 0, 0, 0), 0, 10, 6)
+	picked.border_color = COL_GOLD
+	picked.border_width_left = 3
+	th.set_stylebox("panel", "RowPicked", picked)
+
+	th.set_stylebox("panel", "ScrollContainer", box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 0, 0))
+	th.set_stylebox("scroll", "VScrollBar", box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 0, 0))
+	th.set_stylebox("grabber", "VScrollBar", box(COL_EDGE, Color(0, 0, 0, 0), 2, 0, 0))
+	th.set_stylebox("grabber_highlight", "VScrollBar", box(COL_GOLD_EDGE, Color(0, 0, 0, 0), 2, 0, 0))
+	th.set_stylebox("grabber_pressed", "VScrollBar", box(COL_GOLD, Color(0, 0, 0, 0), 2, 0, 0))
+	th.set_stylebox("panel", "Tree", box(COL_INK, COL_EDGE, 0, 6, 6))
+	th.set_stylebox("normal", "TextEdit", box(COL_INK, COL_EDGE, 0, 10, 8))
+	th.set_color("font_color", "TextEdit", COL_TEXT)
+	th.set_stylebox("background", "ProgressBar", box(COL_INK, Color(0, 0, 0, 0), 0, 0, 0))
+	th.set_stylebox("fill", "ProgressBar", box(COL_GOLD, Color(0, 0, 0, 0), 0, 0, 0))
+	th.set_stylebox("separator", "HSeparator", box(COL_EDGE, Color(0, 0, 0, 0), 0, 0, 0))
+	th.set_constant("separation", "HSeparator", 1)
 	return th
 
 # --- class glyphs ----------------------------------------------------------
+# #84: the coin. Every price and purse says "12 ◉", never "12 gp" — one mark
+# for gold across the HUD, the shops, the receipts and the log. (Bug reports
+# still say "gp": they are markdown for GitHub, not the screen.)
+const GP := "◉"
+
 const CLASS_GLYPHS := {
 	"barbarian": "⚒",   # crossed tools — the axe mark
 	"bard": "♫",
@@ -128,6 +306,8 @@ const FOE_GLYPHS := {
 
 # Heroes get their class mark, monsters their creature-type mark.
 static func combatant_glyph(c) -> String:
+	if c.has("bystander"):
+		return "⚑"   # objectives: a captive, a carter — somebody the fight is about
 	if c.sheet != null:
 		return class_glyph(primary_class(c.sheet))
 	var mtype := String(Catalog.monster(c.src_id).get("type", ""))
@@ -149,7 +329,7 @@ const SCHOOL_COLORS := {
 	"abjuration": Color("6f9bd8"), "conjuration": Color("d98f4a"),
 	"divination": Color("8fd0d8"), "enchantment": Color("d47fc0"),
 	"evocation": Color("e0643c"), "illusion": Color("9d8fd8"),
-	"necromancy": Color("79a86b"), "transmutation": Color("c8a75a"),
+	"necromancy": Color("79a86b"), "transmutation": Color("c9a45a"),
 }
 
 static func school_glyph(school: String) -> String:
@@ -168,15 +348,194 @@ static func spell_school(spell_id: String) -> String:
 # mark is more informative than one generic wand icon for every spell.
 const VERB_GLYPHS := {
 	"attack": "⚔", "offhand_attack": "⚔",
-	"shove": "⇉", "smash": "⚒", "help": "✚",
+	"shove": "⇉", "grapple": "⊗", "escape": "⛓", "smash": "⚒", "help": "✚",
 	"dodge": "◈", "dash": "➤", "disengage": "↩", "hide": "☁",
 	"heal_self": "☤", "heal_ally": "☤",
 	"self_buff": "⬆", "ally_buff": "⬆",
 	"grant_action": "⏩", "attack_modifier": "◎", "save_effect": "⚡",
+	"summon": "✦",
 }
 
 static func verb_glyph(kind: String) -> String:
 	return String(VERB_GLYPHS.get(kind, "·"))
+
+# --- action-bar icons ------------------------------------------------------
+# The glyphs above are the fallback now, not the mark. A codepoint is whatever
+# the shipped font decided it looks like: DejaVu draws ⚔, ⚒ and ⇉ at three
+# different weights and on two different baselines, so a row of them never sat
+# straight however the buttons were laid out. assets/icons/ holds drawn 64x64
+# SVG badges instead — gilt frame, dark medallion, a lit silhouette on it —
+# emitted by tools/gen_action_icons.py in three layers:
+#
+#   skills/    one per skill the bar can name: every combat-castable spell,
+#              every feature that becomes a button, each Shove variant. This is
+#              the layer the bar actually wants, because since T-skillicons the
+#              badge IS the button — the name and the numbers live in the
+#              tooltip — and two spells that share a mark are two buttons a
+#              player cannot tell apart.
+#   schools/   the eight spell schools, for a spell with no badge of its own.
+#   actions/   one per verb kind (VERB_GLYPHS), plus the bar's own controls.
+#
+# Keyed by exactly the ids the game uses, so a new spell needs a recipe there
+# and nothing here.
+#
+# The colour is in the file, not on the button. A school badge already stands on
+# its own SCHOOL_COLORS disc (the same colour spell_bb tints the spell's name
+# with), the martial verbs share steel and gold, and healing is COL_PARTY green
+# — so the bar draws them untouched. Button's icon_*_color defaults are white,
+# which multiplies to a no-op; nothing here overrides them.
+#
+# A miss is not an error. Icons that haven't been imported yet, an export that
+# left them out, a content pack's verb kind with no art of its own: _icon()
+# returns null and the caller keeps the glyph. Every call site pairs the two.
+const ICON_ROOT := "res://assets/icons"
+# The badge IS the button now — the name, the prose and the numbers moved into
+# the hover popup — so it gets the room a 126 px label used to take.
+const ICON_PX := 40          # drawn size on the bar at zoom 1 (_apply_ui_scale scales it)
+# The bar's own controls live alongside the verbs — same row, same weight.
+const BAR_ICONS := ["end_turn", "back", "swap", "generic"]
+
+static var _icon_cache := {}
+
+static func _icon(path: String) -> Texture2D:
+	if _icon_cache.has(path):
+		return _icon_cache[path]
+	var tex: Texture2D = null
+	# exists() first: load()ing a path that isn't there is an engine error, and
+	# a headless test run that never imported the assets would print 28 of them.
+	if ResourceLoader.exists(path):
+		tex = ResourceLoader.load(path) as Texture2D
+	_icon_cache[path] = tex
+	return tex
+
+# The face behind a settlement counter: assets/generated/<faction>-<service>.png,
+# null if nobody has drawn that one yet (callers add nothing rather than a blank).
+# `mood` picks a re-expressed variant of the same portrait ("happy", "frown"
+# — tools: ~/localgen/gen_sorcmerc_moods.py, the face re-sampled, the rest
+# untouched); the plain file when there is none.
+static func portrait(faction: String, service: String, mood := "") -> Texture2D:
+	if mood != "":
+		var tex := _icon("res://assets/generated/%s-%s-%s.png" % [faction, service, mood])
+		if tex != null:
+			return tex
+	return _icon("res://assets/generated/%s-%s.png" % [faction, service])
+
+# A road event's picture (assets/generated/event-<id>[-pass|-fail].png,
+# tools: ~/localgen/gen_sorcmerc_events.py): the outcome's own frame when it
+# has one, the plain scene otherwise, null for an event with no art.
+# The largest rect of `tex_size`'s aspect that fits inside `slot`, centred in
+# it — "contain", the whole picture and no crop (#83).
+static func fit_rect(tex_size: Vector2, slot: Rect2) -> Rect2:
+	var k := minf(slot.size.x / maxf(1.0, tex_size.x), slot.size.y / maxf(1.0, tex_size.y))
+	var sz := tex_size * k
+	return Rect2(slot.position + (slot.size - sz) * 0.5, sz)
+
+static func event_art(event_id: String, ok) -> Texture2D:
+	return scene_art("event-" + event_id, ok)
+
+# Any generated scene by its file stem (assets/generated/<stem>[-pass|-fail].png,
+# tools: ~/localgen/gen_sorcmerc_scenes.py): the outcome's frame when there
+# is one, the plain scene otherwise, null for none.
+# A pack's own image (a story portrait), by the path its manifest resolves:
+# a shipped pack's is imported like any res:// asset; a community pack's
+# under user:// is read off disk, since nothing imported it.
+static func image_at(path: String) -> Texture2D:
+	if path.begins_with("res://"):
+		return _icon(path)
+	if _icon_cache.has(path):
+		return _icon_cache[path]
+	var tex: Texture2D = null
+	if FileAccess.file_exists(path):
+		var img := Image.load_from_file(path)
+		if img != null:
+			tex = ImageTexture.create_from_image(img)
+	_icon_cache[path] = tex
+	return tex
+
+static func scene_art(stem: String, ok) -> Texture2D:
+	if ok != null:
+		var tex := _icon("res://assets/generated/%s-%s.png" % [stem, "pass" if ok else "fail"])
+		if tex != null:
+			return tex
+	return _icon("res://assets/generated/%s.png" % stem)
+
+static func portrait_rect(faction: String, service: String, px := 160, mood := "") -> TextureRect:
+	var tex := portrait(faction, service, mood)
+	if tex == null:
+		return null
+	var pic := TextureRect.new()
+	pic.texture = tex
+	pic.custom_minimum_size = Vector2(px, px)
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	return pic
+
+# The badge for one thing the bar is offering, most specific first: the skill's
+# own art if it has any (assets/icons/skills — every combat-castable spell, every
+# feature that becomes a button, each Shove variant), then the spell's school,
+# then the verb kind, then the generic spark. `v` is a verb straight out of
+# cb.available().
+#
+# Ids arrive with two decorations that are not part of the identity: a granted
+# verb is "<feature>:<basic>" (combat.gd's grant_verb, e.g. Flurry of Blows
+# granting an attack) and an upcast spell is "<spell>@<level>". Both are cut
+# back to the thing that has art.
+static func skill_icon(v: Dictionary) -> Texture2D:
+	var sid := String(v.get("spell", ""))
+	var id := String(v.get("id", "")).get_slice(":", 1) if String(v.get("id", "")).contains(":") \
+		else String(v.get("id", ""))
+	id = id.get_slice("@", 0)
+	var tex: Texture2D = null
+	if v.has("potion"):   # a Drink button wears its bottle
+		tex = item_art(String(v["potion"]))
+	elif sid != "":
+		tex = _icon("%s/skills/%s.svg" % [ICON_ROOT, sid])
+		if tex == null:
+			tex = _icon("%s/schools/%s.svg" % [ICON_ROOT, spell_school(sid)])
+	else:
+		tex = _icon("%s/skills/%s.svg" % [ICON_ROOT, id])
+	if tex == null:
+		tex = verb_icon(String(v.get("kind", "")))
+	return tex
+
+# One per verb `kind`, plus BAR_ICONS. A kind with no art of its own — a
+# content pack's, or one added before its icon was drawn — gets the generic
+# spark; null means the build has no icons at all, and the glyph takes over.
+static func verb_icon(kind: String) -> Texture2D:
+	var tex := _icon("%s/actions/%s.svg" % [ICON_ROOT, kind])
+	return tex if tex != null else _icon("%s/actions/generic.svg" % ICON_ROOT)
+
+# One per SCHOOL_GLYPHS key — a spell button is marked by its school, which
+# says more about it than one generic wand for all 300 of them would. Same
+# generic fallback for a spell whose entry names no school.
+static func school_icon(school: String) -> Texture2D:
+	var tex := _icon("%s/schools/%s.svg" % [ICON_ROOT, school])
+	return tex if tex != null else _icon("%s/actions/generic.svg" % ICON_ROOT)
+
+# Hang `tex` on `b`, sized for the bar. No tint: these are finished art, and a
+# theme colour would multiply the whole badge — frame, disc and all — down to
+# one hue. The one override is the disabled state, where the default theme
+# leaves a badge as bright as a live one. Returns the button so it chains,
+# like clicks().
+static func icon_button(b: Button, tex: Texture2D, px := ICON_PX) -> Button:
+	if tex == null:
+		return b
+	b.icon = tex
+	b.expand_icon = false
+	b.add_theme_constant_override("icon_max_width", px)
+	b.add_theme_constant_override("h_separation", 4)
+	b.add_theme_color_override("icon_disabled_color", Color(1, 1, 1, 0.35))
+	# dark_theme() pads a button by 10 for text; a badge button has no text and
+	# that padding is the difference between a 40 px mark and a 32 px one, so
+	# these get their own boxes — same colours, four pixels of inset.
+	for state in [["normal", "2b3040"], ["hover", "3a4152"], ["pressed", "4a5570"],
+			["disabled", "22252e"]]:
+		var box := StyleBoxFlat.new()
+		box.bg_color = Color(state[1])
+		box.set_corner_radius_all(6)
+		box.set_content_margin_all(4)
+		b.add_theme_stylebox_override(state[0], box)
+	return b
 
 # "⟳ Fire Bolt" as bbcode, school-tinted mark, plain name.
 static func spell_bb(spell_id: String, text: String) -> String:
@@ -254,3 +613,209 @@ static func item_color(item_id: String) -> Color:
 # line) — the ramp only colours it, so an unidentified item still reads as one.
 static func item_bb(item_id: String, text: String) -> String:
 	return "[color=%s]%s[/color]" % [item_color(item_id).to_html(false), text]
+
+# --- item art (T9a) ---------------------------------------------------------
+# One render per item id under assets/art/items (tools/import_item_art.py off
+# the ComfyUI batch). null when nobody has drawn it: the tile then shows the
+# name, so a content pack's item is still a tile, just a plain one.
+const ITEM_ART_PX := 64
+
+static func item_art(item_id: String) -> Texture2D:
+	return _icon("res://assets/art/items/%s.png" % item_id)
+
+# Everything the old row said, as the hover text of a tile: name, the numbers
+# that matter for its kind, then the prose. `def` is the catalog entry (weapon,
+# armor or magic-item), `kind` which of the three it came from.
+static func item_tooltip(item_id: String, def: Dictionary, kind: String) -> String:
+	var lines: Array = [str(def.get("name", item_id.capitalize()))]
+	match kind:
+		"weapon":
+			var dice := str(def.get("damageDice", ""))
+			if def.get("versatileDice") != null and str(def["versatileDice"]) != "None":
+				dice += " (%s two-handed)" % def["versatileDice"]
+			lines.append("%s %s, %s" % [dice, def.get("damageType", ""), def.get("category", "")])
+			var props := str(def.get("properties", "[]")).replace("[", "").replace("]", "").replace("'", "")
+			if str(def.get("range", "melee")) == "ranged" or props.contains("thrown"):
+				lines.append("Range %s/%s ft" % [def.get("normalRange", "?"), def.get("longRange", "?")])
+			if props != "":
+				lines.append(props.capitalize())
+		"armor":
+			var ac := "AC %s" % def.get("baseAc", "?")
+			var dex := str(def.get("maxDexBonus", "None"))
+			if str(def.get("category", "")) == "light":
+				ac += " + Dex"
+			elif dex != "None":
+				ac += " + Dex (max %s)" % dex
+			lines.append("%s, %s" % [ac, def.get("category", "")])
+			if str(def.get("stealthDisadvantage", "False")) == "True":
+				lines.append("Disadvantage on Stealth")
+			if int(def.get("strengthRequirement", 0)) > 0:
+				lines.append("Needs Str %s" % def["strengthRequirement"])
+		_:
+			lines.append(str(def.get("rarity", "")).capitalize()
+				+ (", attunement" if str(def.get("attunement", "False")) == "True" else ""))
+			var desc := str(def.get("description", "")).strip_edges()
+			if desc != "":
+				lines.append("")
+				lines.append(desc.left(600) + ("…" if desc.length() > 600 else ""))
+	var cost := str(def.get("costGp", ""))
+	if cost != "" and cost != "None":
+		lines.append("%s ◉" % cost)
+	return "\n".join(lines)
+
+# A square art tile with the hover text; the caller wires `pressed`. `caption`
+# is the button's own text under the art (a price, "×3", "Equipped"); without
+# art the name stands in for it. The rarity ramp colours the caption.
+# The hover card an ItemTile shows in place of the engine's plain tooltip: the
+# name in its rarity colour, the numbers, the prose wrapped, the click hint
+# dim at the foot. Built from the same tooltip string (first line the name,
+# "Click:"/"Right-click:" lines the hint, everything else the body), so a
+# test can still read tooltip_text and nothing has two sources of truth.
+# The party comparison (`compare`) is built into every card, hidden, and the
+# card itself watches Shift: the engine tears a tooltip down the moment its
+# text changes and only re-arms on real mouse travel, so swapping the text
+# (and faking a mouse nudge to bring the card back) never reliably showed it.
+class ItemTile extends Button:
+	const Icons = preload("res://core/ui_icons.gd")
+	var rarity_color := Icons.COL_TEXT
+	var base_tip := ""
+	var compare := ""
+
+	# The live half of the card: shows `cmp` while Shift is down, and tells the
+	# popup window to refit, since it sized itself once at open.
+	class Card extends PanelContainer:
+		var cmp: Label
+		var hint: Label
+		var hint_text := ""
+		func _process(_dt: float) -> void:
+			var on := Input.is_key_pressed(KEY_SHIFT)
+			if cmp.visible == on:
+				return
+			cmp.visible = on
+			hint.text = hint_text if not on else hint_text.replace("Shift: compare with the party", "Shift: comparing").strip_edges()
+			hint.visible = hint.text != ""
+			var w := get_window()
+			if w != null and w != get_tree().root:
+				w.reset_size()
+
+	func _make_custom_tooltip(for_text: String) -> Object:
+		var card := Card.new()
+		card.add_theme_stylebox_override("panel", Icons.box(Icons.COL_PANEL, Icons.COL_GOLD_EDGE, 4, 12, 8))
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 4)
+		card.add_child(v)
+		var lines: PackedStringArray = for_text.split("\n")
+		var head := Label.new()
+		head.text = lines[0]
+		head.add_theme_font_size_override("font_size", Icons.FS_BODY + 4)
+		head.add_theme_color_override("font_color", rarity_color)
+		v.add_child(head)
+		var body: Array = []
+		var hint: Array = []
+		for i in range(1, lines.size()):
+			var l := String(lines[i])
+			if l.begins_with("Click:") or l.begins_with("Right-click:"):
+				hint.append(l)
+			else:
+				body.append(l)
+		if compare != "":
+			hint.append("Shift: compare with the party")
+		while not body.is_empty() and String(body[-1]).strip_edges() == "":
+			body.pop_back()
+		if not body.is_empty():
+			var txt := Label.new()
+			txt.text = "\n".join(body)
+			txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			txt.custom_minimum_size = Vector2(320, 0)
+			txt.add_theme_color_override("font_color", Icons.COL_TEXT)
+			v.add_child(txt)
+		card.cmp = Label.new()
+		card.cmp.text = compare.strip_edges()
+		card.cmp.visible = false
+		card.cmp.add_theme_color_override("font_color", Icons.COL_TEXT)
+		v.add_child(card.cmp)
+		card.hint = Label.new()
+		card.hint_text = "\n".join(hint)
+		card.hint.text = card.hint_text
+		card.hint.visible = card.hint_text != ""
+		card.hint.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+		card.hint.add_theme_color_override("font_color", Icons.COL_MUTED)
+		v.add_child(card.hint)
+		return card
+
+# `count` > 1 puts a "×N" badge in the picture's bottom-right corner (#88) —
+# the stack size belongs on the item, not tacked onto the price.
+static func item_tile(item_id: String, tooltip: String, caption := "", px := ITEM_ART_PX,
+		compare := "", count := 0) -> Button:
+	var b := ItemTile.new()
+	if count > 1:
+		var badge := Label.new()
+		badge.text = "×%d" % count
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge.add_theme_font_size_override("font_size", FS_SMALL)
+		badge.add_theme_color_override("font_color", COL_HEAD)
+		badge.add_theme_stylebox_override("normal", box(Color(COL_INK, 0.85), COL_GOLD_EDGE, 3, 5, 1))
+		badge.anchor_left = 1.0; badge.anchor_right = 1.0
+		badge.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		badge.offset_right = -6.0
+		badge.offset_top = px - 14.0
+		badge.offset_bottom = px + 4.0
+		b.add_child(badge)
+	b.rarity_color = item_color(item_id)
+	clicks(b)
+	b.tooltip_text = tooltip
+	b.base_tip = tooltip
+	b.compare = compare
+	b.add_theme_color_override("font_color", item_color(item_id))
+	b.add_theme_font_size_override("font_size", FS_CAPTION)
+	var tex := item_art(item_id)
+	if tex == null:
+		b.text = tooltip.get_slice("\n", 0) + ("" if caption == "" else "\n" + caption)
+		b.custom_minimum_size = Vector2(px + 12, px + 12)
+		return b
+	b.icon = tex
+	b.expand_icon = true
+	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	b.text = caption
+	b.custom_minimum_size = Vector2(px + 12, px + (30 if caption != "" else 12))
+	return b
+
+# The Shift half of the hover card: what every active member has equipped of
+# the same kind, one line each, so a shelf or stash item reads against the
+# party at a glance. "" when there is nothing to compare (no party, or a
+# consumable), so the tile never offers a Shift it cannot honour.
+static func party_compare(kind: String, party, def := {}) -> String:
+	if party == null or kind == "unknown":
+		return ""
+	var lines: Array = ["", "Party's %s (Shift):" % kind]
+	for ch in party.party_characters():
+		var who: String = ch.cname
+		if kind in ["weapon", "armor"] and not def.is_empty():
+			var ok: bool = PassGear.proficient(kind, def, ch.sheet().proficiencies[kind])
+			who += " (%s)" % ("proficient" if ok else "NOT proficient")
+		var worn: Array = []
+		for iid in ch.equipped:
+			var kd := item_def(iid)
+			if kd[0] == kind:
+				var tip := item_tooltip(iid, kd[1], kind)
+				worn.append("%s — %s" % [tip.get_slice("\n", 0), tip.get_slice("\n", 1)])
+		lines.append("%s: %s" % [who, "; ".join(worn) if not worn.is_empty() else "nothing"])
+	return "\n".join(lines)
+
+# Kind + catalog entry for any item id, in the order the rest of the UI
+# resolves them (an armor "shield" beats the magic-item "shield").
+static func item_def(item_id: String) -> Array:
+	var def := Catalog.weapon(item_id)
+	if not def.is_empty():
+		return ["weapon", def]
+	def = Catalog.armor(item_id)
+	if not def.is_empty():
+		return ["armor", def]
+	return ["magic", Catalog.magic_item(item_id)]
+
+# The item's picture as bbcode for a RichTextLabel (the combat log's loot
+# line); "" when it has no art, so the name stands alone as before.
+static func item_img_bb(item_id: String, px := 28) -> String:
+	var path := "res://assets/art/items/%s.png" % item_id
+	return "[img=%dx%d]%s[/img] " % [px, px, path] if item_art(item_id) != null else ""

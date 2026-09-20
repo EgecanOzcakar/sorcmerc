@@ -29,6 +29,8 @@ func _init() -> void:
 	test_never_specials_a_downed_pc()
 	test_falls_back_to_the_swing()
 	test_no_second_helping_of_the_same_condition()
+	test_melee_walks_through_its_own_archer()
+	test_avoids_zones()
 	print("test_ai: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -101,8 +103,8 @@ func test_never_specials_a_downed_pc() -> void:
 func test_falls_back_to_the_swing() -> void:
 	var f := _fight("giant-rat", Vector2i(4, 0))
 	var cb: Combat = f[0]
-	check(not cb.available(f[1]).any(func(v): return v["kind"] != "attack" and v.get("targeting", "self") == "enemy"),
-		"giant rat has no offensive special")
+	check(not cb.available(f[1]).any(func(v): return not v["kind"] in Combat.ATTACK_KINDS and v.get("targeting", "self") == "enemy"),
+		"giant rat has no offensive special (Shove and Grapple are everyone's)")
 	f[1].atk_bonus = 20
 	AI.take_turn(cb, f[1])
 	check(f[2].hp < 200, "it swings")
@@ -117,3 +119,53 @@ func test_no_second_helping_of_the_same_condition() -> void:
 	AI.take_turn(cb, f[1])
 	check(f[1].pool_left("monster-web-shot") == 1, "the second web is held, not re-applied")
 	check(f[2].hp < 200, "it bit instead")
+
+# A one-hex corridor: victim at the far end, a goblin archer in range of it,
+# and a bugbear queued behind the archer. Found in play: the bugbear stood
+# there all fight because its own ally counted as a wall. An ally's space is
+# passable, not a place to stop (combat.gd's _blockers / _ally_hexes).
+func test_melee_walks_through_its_own_archer() -> void:
+	var corridor: Array = []
+	for x in 8:
+		corridor.append(Vector2i(x, 1))
+	var board := {"hexes": corridor, "cover": [], "rough": [], "objects": []}
+	var archer = Adapter.from_monster(Catalog.index("bestiary.json")["goblin-archer"], "foe", Vector2i(2, 1))
+	var bugbear = Adapter.from_monster(Catalog.index("bestiary.json")["bugbear"], "foe", Vector2i(0, 1))
+	var v = _victim(Vector2i(5, 1))
+	var cb = Combat.new(RNG.new(3), [archer, bugbear, v], board)
+	for c in cb.combatants:
+		cb.begin_turn_for(c)
+	check(not cb.move_field(bugbear).has(archer.pos), "it cannot stop on the archer's hex")
+	check(cb.move_field(bugbear).has(Vector2i(4, 1)), "but the hexes past the archer are reachable")
+	AI.take_turn(cb, bugbear)
+	check(Hex.distance(bugbear.pos, v.pos) <= 1, "the bugbear walks past its archer and closes")
+	check(bugbear.pos != archer.pos, "without ending up on top of it")
+
+# A monster does not stop inside a lingering zone when a clean hex serves, and
+# steps out of one it woke up in.
+func test_avoids_zones() -> void:
+	var m = Combatant.new()
+	m.id = "thing"; m.cname = "Thing"; m.team = "foe"; m.pos = Vector2i(1, 1)
+	m.ac = 12; m.max_hp = 30; m.hp = 30; m.atk_bonus = 5; m.damage = "1d6"; m.speed = 2
+	var v = _victim(Vector2i(8, 1))
+	var cb = Combat.new(RNG.new(3), [m, v], Encounter.board())
+	# a fake cloud on the straight line toward the victim
+	var web := {"id": "web", "spell": "web", "label": "Web", "kind": "spell", "targeting": "hex",
+		"save": "dex", "save_dc": 30, "conditions": ["restrained"], "concentration": false, "rounds": 10}
+	var bad: Array = [Vector2i(3, 1), Vector2i(3, 0), Vector2i(3, 2)]
+	cb._add_zone(v, web, bad)
+	cb.begin_turn_for(m)
+	AI._move_by(cb, m, AI._toward(v.pos))
+	check(not (m.pos in bad), "the monster stops short of the web rather than in it (at %s)" % str(m.pos))
+	check(m.pos != Vector2i(1, 1), "...but still closes on its prey")
+	# woken up inside a cloud it can still walk in (a web would hold it): it leaves
+	var dark := {"id": "darkness", "spell": "darkness", "label": "Darkness", "kind": "spell", "targeting": "hex",
+		"buff": {"effects": {"own_attacks": "dis"}}, "concentration": false, "rounds": 10}
+	var m2 = Combatant.new()
+	m2.id = "thing2"; m2.cname = "Thing2"; m2.team = "foe"; m2.pos = Vector2i(3, 1)
+	m2.ac = 12; m2.max_hp = 30; m2.hp = 30; m2.atk_bonus = 5; m2.damage = "1d6"; m2.speed = 2
+	var cb2 = Combat.new(RNG.new(3), [m2, v.clone()], Encounter.board())
+	cb2._add_zone(cb2.combatants[1], dark, bad)
+	cb2.begin_turn_for(m2)
+	AI._move_by(cb2, m2, AI._toward(Vector2i(8, 1)))
+	check(not (m2.pos in bad), "a monster that starts its turn in the dark steps out (at %s)" % str(m2.pos))

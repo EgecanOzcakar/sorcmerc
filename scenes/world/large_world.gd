@@ -39,6 +39,9 @@ static func build() -> World:
 	var goblins_f := w.add_party(World.RoamingParty.new("goblins-far", Vector2(1800, -200), "goblinoid"))
 	goblins_f.troops = [{"role": "light", "level": 3}]
 	WorldAI.hunt(goblins_f)
+	var wolves := w.add_party(World.RoamingParty.new("wolves", Vector2(500, -650), "beast"))
+	wolves.troops = [{"role": "light", "level": 2}, {"role": "light", "level": 2}, {"role": "light", "level": 3}]
+	WorldAI.hunt(wolves)
 
 	# Waypoints still start/end on the settlement gates; the party's own
 	# position is nudged off so its label doesn't sit on top of the town's.

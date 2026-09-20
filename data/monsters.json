@@ -78,5 +78,45 @@
     "features": [
       "goblin-nimble-escape"
     ]
+  },
+  {
+    "id": "trickery-duplicate",
+    "cname": "Illusory Double",
+    "ac": 10,
+    "max_hp": 1,
+    "init_mod": 0,
+    "speed": 6,
+    "atk_bonus": 0,
+    "damage": "0",
+    "ranged": false,
+    "atk_range": 1,
+    "athletics": 0,
+    "acro": 0,
+    "saves": {},
+    "features": [],
+    "type": "illusion",
+    "size": "Medium",
+    "_notes": "Invoke Duplicity's double. Not a creature: combat.legal_target refuses it as a target and its `illusion` status carries no_attack, so the numbers above exist only because a Combatant needs them. It moves, and foes beside it are attacked at Advantage (combat._distracted)."
+  },
+  {
+    "id": "spiritual-weapon",
+    "cname": "Spiritual Weapon",
+    "ac": 16,
+    "max_hp": 10,
+    "init_mod": 2,
+    "speed": 4,
+    "atk_bonus": 5,
+    "damage": "1d8+3",
+    "damage_type": "force",
+    "attack_name": "Spectral strike",
+    "ranged": false,
+    "atk_range": 1,
+    "athletics": 0,
+    "acro": 0,
+    "saves": {},
+    "features": [],
+    "type": "construct",
+    "size": "Medium",
+    "_notes": "Issue #123: the cleric's Spiritual Weapon, as the thing the 2024 spell actually is — a weapon that keeps standing there and swings where you send it, which in this engine is a summon on the caster's team and therefore driven by the player (scenes/main.gd dispatches on team). Its clock is the spell's minute: `rounds: 10` in data/effects/spells.json, since 2024 dropped concentration. Two deliberate departures from RAW, both of them the engine's shape rather than the spell's: it takes its own initiative count like every other summon instead of riding the caster's Bonus Action, and it can be attacked (RAW it is an effect with no HP) — nothing here can be both untargetable and able to swing, and swinging is the spell. The numbers are the middle of the levels a cleric casts it at: a 3rd-level slot's worth of hit and a 1d8 + WIS strike."
   }
 ]

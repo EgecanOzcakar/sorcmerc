@@ -58,6 +58,8 @@ static func resolve(world, a, b, spec_for: Callable) -> Dictionary:
 	var side_a: Array = _spawn_side(spec_a)
 	# Both sides fight on the attacker's terrain; one board, one fight.
 	var cb = Encounter.build(spec_b, side_a, Encounter.board_for(String(spec_a.get("theme", ""))))
+	# T19: neither of these bands is the player's. Nothing in here counts.
+	cb.tracked = false
 	var guard := 0
 	while not cb.is_over() and guard < MAX_TURNS:
 		var actor = cb.current()

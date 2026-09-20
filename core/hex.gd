@@ -115,6 +115,73 @@ static func line(a: Vector2i, b: Vector2i) -> Array:
 		out.append(_cube_round(ac.lerp(bc, t)))
 	return out
 
+# A line of `length` hexes from `origin` through `toward`, origin excluded —
+# a lightning bolt: aimed at a hex, it keeps going past it to its full reach.
+static func ray(origin: Vector2i, toward: Vector2i, length: int) -> Array:
+	var n := distance(origin, toward)
+	if n == 0 or length <= 0:
+		return []
+	var oc := _cube(origin)
+	var dir := (_cube(toward) - oc) / float(n)
+	var out: Array = []
+	for i in range(1, length + 1):
+		var h := _cube_round(oc + dir * float(i) + Vector3(1e-6, 2e-6, -3e-6))   # nudge off ties
+		if out.is_empty() or out[-1] != h:
+			out.append(h)
+	return out
+
+# --- corners: an area anchored on a hex vertex ------------------------
+#
+# A corner is the three hexes that meet at a vertex, sorted so the same vertex
+# reached from any of its hexes is the same array. Vertex k of hex `h` sits at
+# angle 60°·k (flat-top, matching to_pixel); its two neighbours are the ones
+# whose centres are 30° either side of it.
+static func corner(h: Vector2i, k: int) -> Array:
+	var i: int = (6 - k) % 6
+	var out: Array = [h, h + DIRS[i], h + DIRS[(i + 1) % 6]]
+	out.sort_custom(func(a, b): return a.x < b.x or (a.x == b.x and a.y < b.y))
+	return out
+
+# Pixel position of a corner (the mean of its three centres is the vertex).
+static func corner_pixel(c: Array, size: float) -> Vector2:
+	return (to_pixel(c[0], size) + to_pixel(c[1], size) + to_pixel(c[2], size)) / 3.0
+
+# The corner nearest a pixel point: the containing hex's closest vertex.
+static func corner_at(v: Vector2, size: float) -> Array:
+	var h := from_pixel(v, size)
+	var c := to_pixel(h, size)
+	var best := 0
+	var best_d := INF
+	for k in 6:
+		var d := v.distance_squared_to(c + Vector2(cos(deg_to_rad(60.0 * k)), sin(deg_to_rad(60.0 * k))) * size)
+		if d < best_d:
+			best_d = d
+			best = k
+	return corner(h, best)
+
+# The hexes a corner-anchored circle covers: the three at the vertex, plus
+# `ring` more steps outward.
+static func corner_area(c: Array, ring: int = 0) -> Array:
+	var out: Array = c.duplicate()
+	for _r in ring:
+		var grown: Array = out.duplicate()
+		for h in out:
+			for n in neighbors(h):
+				if not (n in grown):
+					grown.append(n)
+		out = grown
+	return out
+
+# Hexes within `r` of `center`, center excluded.
+static func within(center: Vector2i, r: int) -> Array:
+	var out: Array = []
+	for dq in range(-r, r + 1):
+		for dr in range(-r, r + 1):
+			var off := Vector2i(dq, dr)
+			if off != Vector2i.ZERO and distance(Vector2i.ZERO, off) <= r:
+				out.append(center + off)
+	return out
+
 # --- render / click mapping (flat-top) --------------------------------
 
 static func to_pixel(p: Vector2i, size: float) -> Vector2:

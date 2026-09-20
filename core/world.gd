@@ -15,6 +15,8 @@
 extends RefCounted
 
 const Scaler = preload("res://core/scaler.gd")
+const Ach = preload("res://core/achievements.gd")
+const WorldPath = preload("res://core/world_path.gd")   # #95
 
 # World-time is counted in MINUTES: everything built on top of this clock (O2's
 # Day/HH:MM readout, O6's RESTOCK, O7's DAY := 1440.0) reads `elapsed` that way.
@@ -26,6 +28,10 @@ const SPEED := 40.0   # map units per world-minute, every party for now
 class WorldClock extends RefCounted:
 	const SPEEDS := [1.0, 2.0, 4.0, 8.0]   # cycled by set_speed_index / the UI's speed button
 
+	# #85: a new world starts in the morning, not at midnight — the first thing
+	# a player sees should not be the night's shrunken sight. `elapsed` still
+	# counts from zero; the hour on the clock face is elapsed + START_HOUR.
+	const START_HOUR := 8
 	var elapsed := 0.0     # world-minutes since start, paused time excluded
 	var speed := 1.0       # multiplies every tick's delta — movement/AI/economy all speed up with it
 	var _paused := false
@@ -52,6 +58,40 @@ class WorldClock extends RefCounted:
 	func set_speed(mult: float) -> void:
 		speed = mult if mult in SPEEDS else SPEEDS[0]
 
+	# #85: how bright the world is right now, 0 (deep night) to 1 (full day),
+	# from the hour of the day. Dawn 5-7, dusk 18-20, a night floor of 0.22 so
+	# the map is still readable. Pure: the map, the dioramas and anything else
+	# that wants to look like the time of day read this one number.
+	const NIGHT_FLOOR := 0.22
+	func hour_of_day() -> float:
+		return fmod(elapsed / 60.0 + START_HOUR, 24.0)
+
+	func daylight() -> float:
+		var h := hour_of_day()
+		var k := 0.0
+		if h >= 5.0 and h < 7.0:
+			k = (h - 5.0) / 2.0
+		elif h >= 7.0 and h < 18.0:
+			k = 1.0
+		elif h >= 18.0 and h < 20.0:
+			k = 1.0 - (h - 18.0) / 2.0
+		k = smoothstep(0.0, 1.0, k)
+		return lerpf(NIGHT_FLOOR, 1.0, k)
+
+	# Dark enough that the mechanics call it night: sight closes in, a band can
+	# jump the party unseen, and a fight begun now is fought by torchlight.
+	func is_night() -> bool:
+		return daylight() < 0.5
+
+	# The colour the light has: warm at the edges of the day, blue at night.
+	func daylight_tint() -> Color:
+		var d := daylight()
+		var night := Color(0.55, 0.62, 0.95)
+		var gold := Color(1.0, 0.82, 0.62)
+		var h := hour_of_day()
+		var edge: float = 1.0 - minf(1.0, absf(h - 6.0) / 1.5) if h < 12.0 else 1.0 - minf(1.0, absf(h - 19.0) / 1.5)
+		return night.lerp(Color.WHITE, (d - NIGHT_FLOOR) / (1.0 - NIGHT_FLOOR)).lerp(gold, edge * 0.6) * d
+
 	# 1x -> 2x -> 4x -> 8x -> 1x, whatever the current speed's nearest slot is.
 	func cycle_speed() -> void:
 		var i: int = maxi(0, SPEEDS.find(speed))
@@ -67,6 +107,7 @@ class Settlement extends RefCounted:
 	# pending_opinion_delta is the O7 hook: O6 adds to it (theft), O7 drains it.
 	var last_visited := -1.0
 	var battle_at := -1.0
+	var stolen_at := -1.0        # the last theft attempt here; the stall is watched for a while after
 	var pending_opinion_delta := 0.0
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String,
@@ -101,6 +142,10 @@ class Lair extends RefCounted:
 	# How it ended if it ended without the party: "cleared" (somebody else got
 	# there) or "abandoned" (they packed up and left). "" while it is still live.
 	var resolved_as := ""
+	# World-clock stamp of the moment it was spent, < 0 = still live. A hole in
+	# the ground does not stay empty: core/world_lairs.gd's RESPAWN lets
+	# something move back into it, and this is the clock that runs.
+	var cleared_at := -1.0
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String, name_v: String = "") -> void:
 		id = id_v
@@ -114,6 +159,10 @@ class RoamingParty extends RefCounted:
 	var faction: String          # one of Scaler.FACTIONS
 	var is_player := false
 	var goal: Vector2            # O3 drives this; O1 just steers toward it
+	# #95: the waypoints still to come after `goal`, for a party the PLAYER
+	# sent somewhere across water (set_goal routes it; move_toward_goal walks
+	# it). Empty for every band the AI steers — core/world_ai.gd keeps its own.
+	var route: Array[Vector2] = []
 	var speed := SPEED
 	var ai := {}                 # O3's behavior + its state; see core/world_ai.gd
 	# T-party3d: who's actually in this band, for the overworld figure (Party3D
@@ -141,7 +190,7 @@ class RoamingParty extends RefCounted:
 		return best
 
 	func at_goal() -> bool:
-		return position.is_equal_approx(goal)
+		return position.is_equal_approx(goal) and route.is_empty()
 
 var clock := WorldClock.new()
 var settlements: Array[Settlement] = []
@@ -241,6 +290,10 @@ func reveal(pos: Vector2) -> void:
 	if _near_waypoint(pos, EXPLORE_STEP - 0.0001):
 		return
 	explored.append(pos)
+	# T19: how much of any one map this machine has ever put behind it. A
+	# high-water mark, not a sum — a new world does not wipe the old score, and
+	# walking the same map twice does not earn it twice.
+	Ach.record("explored", explored.size())
 	_reindex()
 
 # The "remembered" tier: was ever within VISION_RADIUS of some point on the
@@ -253,7 +306,16 @@ func is_explored(pos: Vector2) -> bool:
 # The "currently visible" tier: within sight of the player's position RIGHT
 # NOW, not just remembered from having passed through once.
 func is_visible_now(pos: Vector2, from: Vector2) -> bool:
-	return pos.distance_to(from) <= VISION_RADIUS
+	return pos.distance_to(from) <= sight_radius()
+
+# #85: how far the party sees right now. Full VISION_RADIUS by day, NIGHT_SIGHT
+# of it in the dark; the ground shader's circle and every "is it in view" test
+# read this, so a band walks out of the night at the same distance the fog
+# opens. What is REMEMBERED (is_explored) stays at the day radius.
+const NIGHT_SIGHT := 0.45
+func sight_radius() -> float:
+	var k := (clock.daylight() - WorldClock.NIGHT_FLOOR) / (1.0 - WorldClock.NIGHT_FLOOR)   # 0 at deep night
+	return VISION_RADIUS * lerpf(NIGHT_SIGHT, 1.0, k)
 
 func near_settlement(pos: Vector2) -> bool:
 	for s in settlements:
@@ -311,7 +373,18 @@ func player() -> RoamingParty:
 # been stopped anyway. Clicking the middle of a lake therefore means "walk to
 # that lake", not "walk nowhere"; no pathfinder is involved and none is wanted.
 func set_goal(p: RoamingParty, goal: Vector2) -> void:
-	p.goal = _land_goal(p.position, goal)
+	# #95: around the water, not into it. WorldPath (O16, built for the bands
+	# nobody steers) already knows the way round every blob; the player's click
+	# now takes the same route, one waypoint at a time. [] when the straight
+	# march is dry, or when there is no way round — then the old rule holds:
+	# march at it, stop at the bank.
+	var way: Array[Vector2] = WorldPath.route(self, p.position, WorldPath.nearest_dry(self, goal))
+	if way.is_empty():
+		p.route = []
+		p.goal = _land_goal(p.position, goal)
+		return
+	p.goal = way[0]
+	p.route = way.slice(1)
 
 # `goal` when it is dry; otherwise the dry point closest to it on the segment
 # back toward `from`. `goal` unchanged when the whole segment is wet — which can
@@ -352,6 +425,7 @@ func move_toward_goal(p: RoamingParty, delta: float) -> void:
 		return
 	if waters.is_empty():        # no terrain to respect: the O1 behavior, undisturbed
 		p.position = p.position.move_toward(p.goal, p.speed * delta)
+		p.route = []
 		return
 	var remaining := p.speed * delta
 	while remaining > 0.0:
@@ -359,6 +433,10 @@ func move_toward_goal(p: RoamingParty, delta: float) -> void:
 		remaining -= hop
 		var before := p.position
 		_hop(p, hop)
+		if p.position.is_equal_approx(p.goal) and not p.route.is_empty():
+			p.goal = p.route[0]          # #95: the next leg of a routed walk
+			p.route.remove_at(0)
+			continue
 		if p.position.is_equal_approx(before):
 			return               # arrived, or stopped against a bank
 

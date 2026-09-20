@@ -1,9 +1,13 @@
 # Character persistence. THE format T3 (profile) and T4 (party) load characters with.
 #
 # One JSON file per character at  user://characters/<slug>.json  — the slug is
-# Character.id, or a slugified name when id is empty. It is the *build*, not the
-# sheet: reload it and call ch.sheet() to re-resolve. Nothing derived is stored,
-# so a rules/data fix retroactively fixes every saved character.
+# Character.id, and the file name is the identity: load_slug() hands back a
+# character wearing the slug it was filed under, whatever the `id` inside says.
+# A new character's slug is minted once by unique_slug() (the creator's
+# _confirm), so saving a hero never lands on a hero the barracks already has —
+# two people called Aria Vale are aria-vale and aria-vale-2. It is the *build*,
+# not the sheet: reload it and call ch.sheet() to re-resolve. Nothing derived is
+# stored, so a rules/data fix retroactively fixes every saved character.
 #
 # {
 #   "format": "sorcmerc-character",   // literal, checked on load
@@ -14,11 +18,15 @@
 #   "background_id": "soldier",
 #   "base_abilities": {"str":14,"dex":12,"con":13,"int":10,"wis":12,"cha":10},
 #   "levels": [{"class_id": "fighter", "hp_roll": -1}],   // ordered; -1 = average HP
+#                                                        // optional "granted": true —
+#                                                        // handed over, not earned
 #   "choices": {"skill-choice:class:fighter:0": {"type":"skill-choice","skills":["perception","insight"]}},
 #   "feats": ["alert"],               // feats taken outside a feat-choice grant
 #   "equipped": ["longsword", "chain-mail", "shield"],   // unequipped gear is the party's,
 #                                                        // not the character's (Party.stash)
 #   "pools": {"second-wind": 1},      // campaign state: uses REMAINING
+#   "slots_used": [2, 1],             // campaign state: spell slots SPENT, per level
+#                                     // (absent = none spent; a long rest clears it)
 #   "hp_current": -1,                 // -1 = full
 #   "prepared": ["cure-wounds"],
 #   "xp": 900,                        // banked XP (T10); Leveling gates level-up on it
@@ -31,7 +39,8 @@ extends RefCounted
 
 const Character = preload("res://core/character.gd")
 
-const DIR := "user://characters"
+const SaveDir = preload("res://core/save_dir.gd")
+static var DIR: String = SaveDir.path("characters")
 const FORMAT := "sorcmerc-character"
 const VERSION := 1
 
@@ -47,6 +56,31 @@ static func slugify(s: String) -> String:
 static func path_for(slug: String) -> String:
 	return "%s/%s.json" % [DIR, slug]
 
+static func exists(slug: String) -> bool:
+	return FileAccess.file_exists(path_for(slug))
+
+# A slug no file is using yet — what a NEW character must be saved under.
+#
+# The name is not the identity. Two heroes called Aria Vale are two heroes, and
+# slugify() is lossy besides (any two names made of the same letters and
+# punctuation collapse to the same slug), so minting an id straight off the name
+# meant the second Aria's file landed on top of the first's: the hero already in
+# the barracks was overwritten with no warning, and the new one was then dropped
+# by Party.add_member's duplicate-id guard without a word either. One character
+# destroyed, one never created, nothing on screen about either.
+#
+# `preferred` is an id the character already carries (a preset's "vera", a
+# character being re-saved); it is kept when it is still free, so re-saving is
+# still an overwrite of the same file — only a genuinely new name gets a number.
+static func unique_slug(name: String, preferred := "") -> String:
+	var base: String = preferred if preferred != "" else slugify(name)
+	if not exists(base):
+		return base
+	var n := 2
+	while exists("%s-%d" % [base, n]):
+		n += 1
+	return "%s-%d" % [base, n]
+
 static func to_dict(ch) -> Dictionary:
 	var slug: String = ch.id if ch.id != "" else slugify(ch.cname)
 	return {
@@ -60,7 +94,17 @@ static func to_dict(ch) -> Dictionary:
 		"equipped": ch.equipped.duplicate(),
 		"offhand": ch.offhand,
 		"pools": ch.pools.duplicate(),
+		# Campaign state, exactly as `pools` is, and left out of here until
+		# 2026-09-20: a caster who had spent two slots got them back from any
+		# trip through this format. That is every autosave and every resume
+		# (core/world_save.gd, core/campaign_save.gd) — and, since co-op sends
+		# the party as these dictionaries, it is also what made the guest's
+		# casters start each fight with a full spell list while the host's did
+		# not. Two different boards from the same seed, which is a desync with
+		# nothing to reconcile (issue #132).
+		"slots_used": ch.slots_used.duplicate(),
 		"hp_current": ch.hp_current,
+		"buffs": ch.buffs.duplicate(true),
 		"prepared": ch.prepared.duplicate(),
 		"xp": ch.xp,
 		"dead": ch.dead,
@@ -80,7 +124,10 @@ static func from_dict(d: Dictionary):
 		if d.get("base_abilities", {}).has(a):
 			ch.base_abilities[a] = int(d["base_abilities"][a])
 	for l in d.get("levels", []):
-		ch.levels.append({"class_id": String(l["class_id"]), "hp_roll": int(l.get("hp_roll", -1))})
+		var lvl := {"class_id": String(l["class_id"]), "hp_roll": int(l.get("hp_roll", -1))}
+		if bool(l.get("granted", false)):
+			lvl["granted"] = true      # absent in a file written before this key existed:
+		ch.levels.append(lvl)          # those levels read as earned, and stay earned
 	ch.choices = d.get("choices", {}).duplicate(true)
 	# JSON has no ints: an ASI allocation comes back as floats. Restore them, so a
 	# reloaded build compares equal to the one that was saved.
@@ -94,7 +141,12 @@ static func from_dict(d: Dictionary):
 	ch.offhand = String(d.get("offhand", ""))
 	for k in d.get("pools", {}):
 		ch.pools[k] = int(d["pools"][k])
+	# Missing in a file written before the key existed, which reads as "nothing
+	# spent" — the behaviour those files already had.
+	for n in d.get("slots_used", []):
+		ch.slots_used.append(int(n))
 	ch.hp_current = int(d.get("hp_current", -1))
+	ch.buffs = d.get("buffs", {}).duplicate(true)
 	ch.prepared.assign(d.get("prepared", []))
 	ch.xp = int(d.get("xp", 0))
 	ch.dead = bool(d.get("dead", false))
@@ -121,7 +173,14 @@ static func load_path(path: String):
 	return from_dict(d) if d is Dictionary else null
 
 static func load_slug(slug: String):
-	return load_path(path_for(slug))
+	var ch = load_path(path_for(slug))
+	# The file name IS the identity (see the header). A save whose `id` field
+	# disagrees with it — hand-copied, renamed, written by an older build — would
+	# otherwise come back wearing somebody else's id, and the second of the two
+	# would be dropped silently the moment a Party loaded them both.
+	if ch != null:
+		ch.id = slug
+	return ch
 
 # Every saved character, newest-first by modification time. T4's roster reads this.
 static func list_slugs() -> Array[String]:
@@ -147,3 +206,41 @@ static func load_all() -> Array:
 
 static func delete(slug: String) -> bool:
 	return DirAccess.remove_absolute(path_for(slug)) == OK
+
+# --- #104: presets -----------------------------------------------------------
+# A build kept to make again: the same file shape, in its own folder, keyed by
+# the name. Loading one hands back a copy with no identity (id ""), so the
+# creator mints a fresh character from it rather than resurrecting the original.
+static var PRESET_DIR: String = SaveDir.path("presets")
+
+static func save_preset(ch) -> String:
+	DirAccess.make_dir_recursive_absolute(PRESET_DIR)
+	var d := to_dict(ch)
+	d["id"] = slugify(ch.cname)
+	d["hp_current"] = -1
+	var path := "%s/%s.json" % [PRESET_DIR, d["id"]]
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		push_warning("cannot write %s" % path)
+		return ""
+	f.store_string(JSON.stringify(d, "  "))
+	f.close()
+	return path
+
+static func list_presets() -> Array[String]:
+	var out: Array[String] = []
+	var dir := DirAccess.open(PRESET_DIR)
+	if dir == null:
+		return out
+	for f in dir.get_files():
+		if f.ends_with(".json"):
+			out.append(f.trim_suffix(".json"))
+	out.sort()
+	return out
+
+static func load_preset(slug: String):
+	var ch = load_path("%s/%s.json" % [PRESET_DIR, slug])
+	if ch != null:
+		ch.id = ""
+		ch.hp_current = -1
+	return ch

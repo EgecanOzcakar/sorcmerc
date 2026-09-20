@@ -20,6 +20,7 @@ func check(cond: bool, label: String) -> void:
 		printerr("  FAIL: ", label)
 
 func _init() -> void:
+	test_party_starts_vary()
 	test_build_spec()
 	test_placement()
 	test_placement_overflow_degrades_gracefully()
@@ -86,6 +87,10 @@ func test_surprise_check() -> void:
 	var plain = _fight(11)
 	check(_play(checked)["rounds"] == _play(plain)["rounds"], "the surprise roll doesn't disturb the fight's RNG")
 
+# 2024 PHB (2026-09-19): surprise is Disadvantage on the surprised side's
+# Initiative roll, not a lost round. Everyone acts in round 1; the surprised
+# side just tends to act later. Asserted in aggregate over seeds, since one
+# re-roll can land high on its own.
 func test_surprise_round_skips_only_the_foes_first_turn() -> void:
 	var cb = _fight(5)
 	check(Encounter.surprise_check(cb, true), "scouted: the party comes in unseen")
@@ -93,16 +98,13 @@ func test_surprise_round_skips_only_the_foes_first_turn() -> void:
 	while cb.round_num <= 2:
 		acted[cb.round_num].append(cb.current())
 		cb.end_turn()
-	check(acted[1].all(func(c): return c.team == "party"), "no foe acts in the surprise round")
-	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.team_of("party").size(),
-		"every party member still gets its round-1 turn")
+	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.combatants.size(),
+		"2024 surprise: nobody loses a round — everyone acts in round 1")
 	check(_uniq(acted[2].map(func(c): return c.id)).size() == cb.combatants.size(),
-		"round 2 is a normal round again — everyone acts")
+		"...and in round 2")
+	check(_surprised_init_sum("foe", true) < _surprised_init_sum("foe", false),
+		"the surprised foes roll initiative at disadvantage (lower over 40 seeds)")
 
-# T9x: the camp-ambush counterpart — same one-round skip, the other team eats
-# it. Unlike surprise_check, begin_ambush_round() is called unconditionally
-# (the watch-check roll already happened in core/world_camp.gd), so this
-# tests the combat-engine half only.
 func test_ambush_round_skips_only_the_partys_first_turn() -> void:
 	var cb = _fight(5)
 	cb.begin_ambush_round()
@@ -111,11 +113,24 @@ func test_ambush_round_skips_only_the_partys_first_turn() -> void:
 	while cb.round_num <= 2:
 		acted[cb.round_num].append(cb.current())
 		cb.end_turn()
-	check(acted[1].all(func(c): return c.team == "foe"), "no party member acts in the ambush round")
-	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.team_of("foe").size(),
-		"every foe still gets its round-1 turn")
-	check(_uniq(acted[2].map(func(c): return c.id)).size() == cb.combatants.size(),
-		"round 2 is a normal round again — everyone acts")
+	check(_uniq(acted[1].map(func(c): return c.id)).size() == cb.combatants.size(),
+		"an ambushed party still acts in round 1 (2024)")
+	check(_surprised_init_sum("party", true) < _surprised_init_sum("party", false),
+		"the ambushed party rolls initiative at disadvantage (lower over 40 seeds)")
+
+# The summed initiative of `team` over 40 seeded fights, surprised or not.
+func _surprised_init_sum(team: String, surprised: bool) -> int:
+	var total := 0
+	for s in range(1, 41):
+		var cb = _fight(s)
+		if surprised:
+			if team == "foe":
+				cb.begin_surprise_round()
+			else:
+				cb.begin_ambush_round()
+		for c in cb.team_of(team):
+			total += c.init_roll
+	return total
 
 func test_build_spec() -> void:
 	var chars := _chars()
@@ -182,6 +197,12 @@ func test_mult_scales_the_instance_not_the_data() -> void:
 	check(small.max_hp < base.max_hp and small.atk_bonus < base.atk_bonus, "a mult below 1 weakens")
 	check(Encounter.spawn("grull", 1.0, "foe", Vector2i.ZERO).max_hp == base.max_hp,
 		"monsters.json is untouched by scaling")
+	# a caster's DC moves with its to-hit; a brute with no DC stays at 0
+	var hyena = Encounter.spawn("hyena", 1.5, "foe", Vector2i.ZERO)
+	var hyena1 = Encounter.spawn("hyena", 1.0, "foe", Vector2i.ZERO)
+	check(hyena.save_dc == hyena1.save_dc + (hyena.atk_bonus - hyena1.atk_bonus),
+		"mult raises save DC in step with to-hit (%d -> %d)" % [hyena1.save_dc, hyena.save_dc])
+	check(big.save_dc == 0 if base.save_dc == 0 else true, "no DC stays no DC")
 
 func test_outcome_victory() -> void:
 	var party := Party.new()
@@ -215,10 +236,11 @@ func test_outcome_defeat_and_deaths() -> void:
 	var party := Party.new()
 	for ch in Presets.party():
 		party.add_member(ch)
-	# a wipe is certain; an actual death takes three failed death saves, so sweep seeds
+	# a wipe is certain; a death takes three failed saves or massive damage, so sweep seeds
+	# (x12 since the boards were widened: foes start SPAWN_GAP out, so fewer round-1 swings)
 	var any_death := false
-	for s in range(1, 12):
-		var cb = Encounter.build({"monsters": [{"id": "grull", "count": 8, "mult": 6.0}], "seed": s},
+	for s in range(1, 31):
+		var cb = Encounter.build({"monsters": [{"id": "grull", "count": 8, "mult": 12.0}], "seed": s},
 			party.to_combatants(Encounter.PARTY_STARTS))
 		_play(cb)
 		var r = Encounter.resolve_outcome(cb, party)
@@ -227,7 +249,33 @@ func test_outcome_defeat_and_deaths() -> void:
 		for id in r["deaths"]:
 			any_death = true
 			check(party.get_member(id).hp_current == 0, "a dead hero is written back at 0 HP")
+		# #107: the down-but-alive come to at 1 HP, not 0 — nobody starts the
+		# next fight on the ground.
+		for c in cb.team_of("party"):
+			if not c.is_dead() and c.sheet != null:
+				check(party.get_member(c.id).hp_current >= 1, "%s was down, not dead: back at 1 HP" % c.cname)
 	check(any_death, "some seed kills someone outright")
+
+# #114: the deployment is not the same picture every fight.
+func test_party_starts_vary() -> void:
+	var b := Encounter.board_for("sunken-shrine", 7)
+	var seen := {}
+	for seed in range(1, 25):
+		var starts: Array = Encounter.party_starts(b, seed)
+		check(starts.size() == 4, "four start hexes (seed %d)" % seed)
+		for h in starts:
+			check(h in b["hexes"], "every start is on the board (seed %d)" % seed)
+		check(starts[0].x >= starts[2].x and starts[1].x >= starts[3].x, "the front rank is the higher-q pair (seed %d)" % seed)
+		var d := 0
+		for i in 4:
+			for j in 4:
+				d = maxi(d, Hex.distance(starts[i], starts[j]))
+		check(d <= 3, "the four stand together (spread %d, seed %d)" % [d, seed])
+		seen[str(starts)] = true
+		check(starts == Encounter.party_starts(b, seed), "the same seed is the same deployment")
+	check(seen.size() >= 3, "different seeds put the party in different places (%d layouts over 24 seeds)" % seen.size())
+	check(Encounter.party_starts({"hexes": [Vector2i.ZERO, Vector2i(1, 0)], "objects": []}, 1) == Encounter.PARTY_STARTS,
+		"a board too small to offer a cluster falls back to the fixed starts")
 
 # --- helpers ----------------------------------------------------------
 

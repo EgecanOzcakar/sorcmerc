@@ -1,0 +1,32 @@
+# The bug reporter's fallback relay. See README.md for the deploy steps.
+#
+# NOTHING SECRET GOES IN THIS FILE. It is committed. The GitHub token (and the
+# optional relay key) are Worker secrets, set with `wrangler secret put`.
+
+name = "sorcmerc-bug-relay"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+# The one repository this relay can file against. It is not a secret — the
+# token's scope is what actually confines it.
+GITHUB_REPO = "EgecanOzcakar/sorcmerc"
+
+# Labels put on a relayed issue. A label that does not exist on the repo makes
+# GitHub refuse the create, so worker.js retries once without labels rather
+# than lose the report — but keep this list to labels that exist.
+ISSUE_LABELS = "bug"
+
+# Comma-separated origins allowed to call this from a browser. "*" is the
+# honest default: the web export is served from itch.io's CDN under a host that
+# changes, and an Origin header is not an authenticator anyway — the rate limit
+# and the size caps are. Narrow it if you know your host.
+ALLOWED_ORIGINS = "*"
+
+# Per-IP rate limiting. Create it once with:
+#   wrangler kv namespace create RATE_LIMIT
+# then paste the id it prints here. Without it the Worker still runs — it just
+# fails open on the rate limit, with the size caps still in force.
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "843f4e99c2204ec9b56861e66988616e"

@@ -1,18 +1,43 @@
-# O2 — the open-world map screen: draws core/world.gd's free 2D map in the same
-# dimetric projection the combat board uses, with a drag-pan / scroll-zoom camera,
-# a pause button on the WorldClock, and right-click-to-move for the player party.
-# All state lives in core/world.gd; this only draws it and feeds it goals.
+# O2 — the open-world map screen: core/world.gd's map, drawn as a real 3D world
+# you can turn, tilt, pan and zoom, with a pause button on the WorldClock and
+# click-to-move for the player party. All state lives in core/world.gd; this
+# only shows it and feeds it goals.
 #
 # Run standalone:  godot --path . scenes/world/world.tscn
 #
-# The projection math below is a copy of scenes/main.gd's Board._iso/_ring/_fan/
-# _soft_shadow (~25 lines). It is duplicated rather than shared because those
-# helpers are methods of main.gd's nested `Board extends Control` — they call
-# draw_* on themselves and read Board._origin/main.hex_px — so factoring them out
-# would mean editing scenes/main.gd, which this phase may not touch. The numbers
-# (yaw/squash/gain, light direction) are the contract; keep them equal if either
-# side ever changes. ponytail: a shared `core/iso.gd` is the upgrade path, and is
-# cheap to do the day main.gd is in scope for edits.
+# THE MAP IS 3D NOW. It used to be a painting with models taped on: a
+# canvas_item shader painted the ground by projecting every screen pixel back to
+# a world position, props were sorted 2D sprites drawn over it, and three
+# separate transparent SubViewports — settlements, lairs, parties — each carried
+# a private camera and a private copy of the projection so their models would
+# land on the right pixels. Nothing in any of those four layers could occlude
+# anything in any other.
+#
+# There is one 3D world now (scenes/world/world_view3d.gd): one viewport, one
+# camera, one sun. The ground is a mesh, the woods are trees, the towns and
+# lairs and marching bands are models standing on it, footprints are decals
+# lying on it, and the depth buffer decides what is in front of what — which is
+# the only reason the camera can be turned at all.
+#
+# WHAT DID NOT CHANGE, and why. The old projection was `_iso()`: rotate by
+# ISO_YAW, scale by ISO_GAIN, squash y by ISO_SQUASH. That is not an
+# approximation of an orthographic camera at yaw ISO_YAW and pitch
+# asin(ISO_SQUASH) — it IS one. So the yaw and the pitch stopped being constants
+# and became camera state, and every mechanism built on `_pix()` / `_unpix()`
+# came through untouched: click-to-move, the ground mask's visible-cell box, the
+# off-screen chevrons, the minimap's view rectangle. See world_view3d.gd's
+# header for why the camera stays orthographic rather than becoming perspective.
+#
+# WHAT THIS CONTROL STILL DRAWS IN 2D. Three things, all of them annotation
+# rather than scenery: the marching route and its goal ring, the name label
+# under each landmark, and the chevrons pinned to the frame for settlements that
+# are off screen. Everything that stands on the ground, or lies on it, is
+# geometry in the view.
+#
+# ponytail: scenes/main.gd's combat Board still carries its own copy of the
+# dimetric helpers (_iso/_ring/_fan/_soft_shadow) — a shared `core/iso.gd` was
+# always the upgrade path and is still not taken, because the board's camera is
+# fixed and this one no longer is; they are no longer the same function.
 extends Control
 
 const World = preload("res://core/world.gd")
@@ -26,6 +51,7 @@ const Scaler = preload("res://core/scaler.gd")
 const Party = preload("res://core/party.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const Potions = preload("res://core/potions.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
 const Rumors = preload("res://core/rumors.gd")
 const Site = preload("res://core/site.gd")
@@ -36,13 +62,22 @@ const Travel = preload("res://core/travel.gd")
 const EventCard = preload("res://scenes/world/event_card.gd")
 const Approach = preload("res://core/approach.gd")
 const ApproachCard = preload("res://scenes/world/approach_card.gd")
+const StoryCard = preload("res://scenes/world/story_card.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
+const Dice = preload("res://core/dice.gd")
+const ManualOverlay = preload("res://scenes/manual/manual.gd")
+const SettingsOverlay = preload("res://scenes/settings/settings.gd")
+const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
+const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
+const Objectives = preload("res://core/objectives.gd")
+const Ach = preload("res://core/achievements.gd")
+const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const WorldSave = preload("res://core/world_save.gd")
@@ -75,88 +110,47 @@ const VISIT_RADIUS := 34.0
 # its own in Scaler.THEME_FACTION — open country, which is where the map is.
 const DEFAULT_THEME := "forest-clearing"
 
+# The camera the map opens on, and the numbers the projection is quoted
+# against. ISO_YAW and ISO_SQUASH are no longer the projection — they are its
+# starting point, because the camera turns now — but they are still the
+# contract every asset in scenes/world/ is sized to (settlement_kit.gd,
+# lair_kit.gd and their gallery shots all measure themselves against them), so
+# they keep their names and their values.
 const ISO_YAW := 35.0
 const ISO_SQUASH := 0.38
+# The pitch ISO_SQUASH always was. A squash of s on the depth axis is exactly
+# what an orthographic camera at elevation asin(s) does; writing it down as the
+# angle is the whole of what let the camera start tilting.
+const ISO_PITCH := rad_to_deg(asin(ISO_SQUASH))
 const ISO_GAIN := 1.85
 const LIGHT := Vector2(-0.30, -0.34)
 
 const ZOOM_MIN := 0.25
 const ZOOM_MAX := 2.5
-# O12: was 90, which read as a handful of huge diamonds at the default camera
-# distance; 50 was picked by rendering tests/shot_world.gd at both (and at 60,
-# still coarse) and looking.
-# T-tiles: dropped hard, to 15 — much smaller tiles read as a smoother, less
-# obviously-diamond-tiled field on the current (Screaming Brain Studios
-# Overworld) pack this stayed on; the SBS Floor Pack spike (SORCMERC_ALT_TILES
-# =sbs) was tried and set aside, not adopted. That's (50/15)^2 ~= 11.1x as many
-# cells at any given zoom, so MAX_CELLS is scaled by the same factor to keep
-# the same "give up and flat-fill" zoom threshold rather than tripping it
-# sooner. MAX_CELLS is still not a free number: this viewport needs 783 cells
-# at zoom 1.0 at CELL 50 (it needed 255 at CELL 90), and the old 900 was
-# exactly "still paint at zoom 0.5, give up below it".
-const CELL := 15.0          # ground patch size, in world units
-const MAX_CELLS := 32000    # cap the ground loop when zoomed far out
-# T-tiles: same terrain-variant pick clusters over a TILE_CLUSTER x TILE_CLUSTER
-# block of cells instead of re-rolling every single one — large patches of one
-# texture instead of a different tile every neighbour. Doubled from 4 to 8
-# alongside CELL's halving so a patch still covers the same ~120x120 world
-# units, not a smaller, choppier-looking one. The shoreline's own per-cell
-# dither (_rand(cell, 9) below) is deliberately left alone — that's what frays
-# the bank into an organic edge instead of a hard tile-aligned line,
-# clustering it would make the water's edge blocky instead.
+# How far the camera may be tilted. Not to the horizon and not to straight
+# down: at 0 the ground is edge-on and the map is a line, and past ~82 the
+# footprint rings stop reading as ground and the models stop having a side.
+const PITCH_MIN := 12.0
+const PITCH_MAX := 82.0
+const YAW_STEP := 15.0                   # one keypress of turn — a twelfth of the way round
+const PITCH_STEP := 6.0
+# Degrees per pixel of drag, for the orbit. Tuned so a drag across half the
+# window is about a quarter turn, which is as much as anyone wants to do in one
+# gesture.
+const ORBIT_SENS := Vector2(0.32, 0.22)
+# The ground is a shader over a cell-resolution mask (see _update_ground):
+# CELL is the mask's grain in world units, and the memory (world.explored) is
+# rasterised at the same grain.
+const CELL := 15.0          # ground cell, in world units
+# A forest stands or falls over a TILE_CLUSTER x TILE_CLUSTER block of cells
+# (~120x120 world units) rather than per cell, so the woods come as woods.
 const TILE_CLUSTER := 8
-# T9x: two fog tiers. Never explored is flat and near-black (opaque — there's
-# no tile underneath to show). Explored-but-not-currently-visible is a
-# translucent dark tint OVER the real tile (drawn on top of it, not instead
-# of it), so the shape and color of ground you've already seen still reads,
-# just dimmed — distinct from both full fog and full daylight.
-const FOG_UNKNOWN := Color(0.03, 0.03, 0.045)
-const FOG_REMEMBERED := Color(0.05, 0.05, 0.09, 0.55)
+# T9x: two fog tiers, both the ground shader's. Never explored is flat and
+# near-black; explored-but-not-currently-visible is a translucent dark tint over
+# the real ground, so the shape of ground you've already seen still reads, just
+# dimmed. Declared with the view, which needs them first — see _view below.
 
-# Ground: O11's Screaming Brain Studios Isometric Tiles Overworld pack, CC0.
-# Buildings: O12's rubberduck isometric medieval buildings 1+2, CC0 — the Town
-# pack they replace read as a modern city. See assets/world/README.md for
-# provenance and the edits made to the files.
-const TerrainTex := preload("res://assets/world/overworld/terrain.png")
-const ForestTex := preload("res://assets/world/overworld/forest.png")
-const BuildingTex := preload("res://assets/world/town/buildings.png")
-# T-tiles spike: SORCMERC_ALT_TILES ("kenney" | "sbs") swaps in an
-# alternate ground sheet instead of the Screaming Brain Studios Overworld one
-# above. Neither is the new default — a comparison render is the point of a
-# spike, not a swap.
-#   "kenney" — Kenney's "Isometric Tiles Landscape" (CC0). See
-#     assets/world/overworld_alt/PROVENANCE.md: Kenney's isometric line is
-#     all raised-block art, so the top face is cropped out and reused flat,
-#     which leaves a thin dirt sliver at each tile's front corner the
-#     original flat pack never had.
-#   "sbs" — Screaming Brain Studios' *other* free pack, "Isometric Floor
-#     Pack" (also CC0, same author as the current terrain — see
-#     assets/world/overworld_sbs/PROVENANCE.md). Genuine flat photo-textured
-#     diamonds already at the exact 256x128/3-column layout this file
-#     expects, no cropping workaround needed — the realistic-with-colour-pop
-#     option (grass detail, floral accents, vivid water).
-const TerrainTexAlt := preload("res://assets/world/overworld_alt/terrain_alt.png")
-const ForestTexAlt := preload("res://assets/world/overworld_alt/forest_alt.png")
-const WaterTexAlt := preload("res://assets/world/overworld_alt/water_alt.png")
-const TerrainTexSbs := preload("res://assets/world/overworld_sbs/terrain_sbs.png")
-const ForestTexSbs := preload("res://assets/world/overworld_sbs/forest_sbs.png")
-const WaterTexSbs := preload("res://assets/world/overworld_sbs/water_sbs.png")
-
-const TILE := Vector2(256, 128)   # one ground diamond in the Overworld sheets
-const TILE_COLS := 3              # both sheets are 3x6 tiles
-# The subsets of each 18-tile sheet the ground draws from. Both are deliberately
-# narrow: the cell a tile lands in is picked by hash, with no terrain data behind
-# it, so anything outside one colour family (the sheets' sand, bare rock and clay
-# rows) tiles as a loud checkerboard instead of as one meadow. Forest is the one
-# break in family, and is supposed to read as one.
-const GRASS := [0, 1, 2, 9, 10]
-const FOREST := [0, 1, 2, 3, 4, 5]
-const WOODED := 0.78              # above this, a cell draws from FOREST
-# O15: the Water sheet's left column — its blue-water pair. The other 15 tiles are
-# the pack's swamp, ice and shallow-sand families, which next to grass read as
-# three different lakes rather than one, the same reason GRASS/FOREST are narrow.
-const WaterTex := preload("res://assets/world/overworld/water.png")
-const WATER := [0, 3]
+const WOODED := 0.78              # a cell block whose hash lands above this is forest
 # Half-width of the shoreline band, in world units (~0.7 of a CELL either side).
 # Across it a cell's chance of being water falls from 1 to 0, so the bank frays
 # into the grass over a tile or so instead of ending on a cell boundary — the
@@ -164,20 +158,40 @@ const WATER := [0, 3]
 # against a constant.
 const SHORE := 35.0
 
-# O12: one cell of the sheet tools/pack_buildings.py lays out — 5 columns (the
-# pack's 5 medieval buildings, at their true relative sizes) by 4 rows (the
-# camera rotations each ships). Each cell is pasted so the building's near
-# ground corner sits on BUILDING_ANCHOR, which is what `base` means below.
-const BUILDING := Vector2(128, 120)
-const BUILDING_ANCHOR := Vector2(64, 112)
-const BUILDING_STYLES := 5        # sheet columns: which building
-const BUILDING_PAIRS := 4         # sheet rows: which way it faces
-
-# O14: Kenney's Board Game Pack pawn, cropped to its own silhouette. Its art is
-# flat near-white (243,243,243) with a darker rim, so one file tints to every
-# faction — no per-colour sheet variant needed. PAWN.y/PAWN.x is its aspect.
-const PawnTex := preload("res://assets/world/tokens/pawn.png")
-const PAWN := Vector2(30, 53)
+# How big a landmark's footprint is, in world units — the ring around a town,
+# the disc under a lair, the shadow under a marching band. These are the map's
+# own long-standing radii; they only look different because they used to be
+# written as screen pixels scaled by the zoom, which is the same numbers said
+# the long way round.
+#
+# They are FLOORS now rather than the answer. The ring used to be painted over
+# the map after the buildings were, so a ring the same size as the town it
+# encircled still read. It lies on the ground now and the town stands in front
+# of it, so a ring inside the walls is a ring nobody sees — and the ring is how
+# you tell whose town it is at a glance. What a footprint ends up as is
+# whichever is larger: the floor here, or the model's own measured span grown
+# by FOOTPRINT_CLEARANCE. See _footprint().
+const SETTLEMENT_RADIUS := {"city": 26.0, "town": 17.0, "camp": 12.0}
+const LAIR_RADIUS := 14.0
+const PLAYER_RADIUS := 11.0
+const BAND_RADIUS := 9.0
+# How far the ring stands off the model inside it. Just past the square root of
+# two, and that is the whole of the reason for the number: footprint_of()
+# measures the model's half-span on its widest axis, and a settlement diorama's
+# base is a slab, so its CORNERS reach 1.41 half-spans out. A ring inside that
+# is a ring under the town — which is what the first pass shipped, with one
+# violet sliver showing past the near edge of Ashfell and nothing anywhere else.
+const FOOTPRINT_CLEARANCE := 1.45
+# The ring around a footprint, as a fraction of its radius, and how far the
+# player's own gold halo reaches past their band.
+const RING_WIDTH := 0.11
+const HALO_SCALE := 2.0
+# How strongly the ground inside the ring is tinted. The flat map painted this
+# disc solid, because the disc WAS the settlement — the buildings were sprites
+# standing on it. There is a real town on it now, so a solid disc is a coloured
+# pond around the walls; what the ground wants instead is a tint that says
+# whose country this is and then gets out of the way.
+const SETTLEMENT_FILL := 0.34
 
 var world: World
 var party: Party            # injected by whoever opens the map, or a demo roster
@@ -185,8 +199,11 @@ var _combat = null          # the live scenes/main.tscn instance, while fighting
 var _combat_overlay: Control = null
 var _pan := Vector2.ZERO
 var _zoom := 1.0
+var _yaw := ISO_YAW          # which way is north on screen; the camera turns, the world does not
+var _pitch := ISO_PITCH      # how far the camera is tilted up off the ground
 var _origin := Vector2.ZERO
 var _pause_btn: Button
+var _gold_lbl: Label
 var _speed_btn: Button
 var _clock_lbl: Label
 var _visit: Dictionary = {}      # the open market, or {}
@@ -206,6 +223,13 @@ var _visit_log: Label = null
 var _left: Object = null         # the settlement just left; no re-entry until out of range
 var _party_overlay: Control = null   # T3's party/profile/inventory screen, full-screen
 var _quest_panel: Control = null     # inline quest-log overlay, T9's Quest.active/describe
+var _inventory_panel: Control = null # the shared pack, as tiles — see _toggle_inventory
+var _menu_panel: Control = null      # the Esc pause menu, or null — see _toggle_menu()
+var _spoils_panel: Control = null    # issue #30's after-action page, or null
+var _levelup_panel: Control = null   # issue #118's "somebody can level up" page, or null
+var _levelup_told: Dictionary = {}   # character id -> the level it was announced at
+var _delve_haul: Dictionary = {}     # what the delve in progress has paid so far; {} outside one
+var _quest_news: Array = []          # quest progress the last _bank() made, for that page
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
@@ -215,6 +239,11 @@ var _site = null                     # D1: the delve in progress (core/site.gd),
 # save-format field for something that fires every six world-hours anyway.
 var _last_travel_at: float = 0.0
 var _event_card: Control = null
+# #70: the map halts when the party reaches where it was sent, and runs again
+# the moment it is sent somewhere else — arriving is not a reason to keep the
+# clock burning while nobody is giving orders.
+var _was_travelling := false
+var _halted_on_arrival := false
 # D4: the band the player is deciding how to meet, and the card asking. Bands
 # slipped past go on `_slipped` so walking away does not immediately re-trigger
 # the same meeting — the settlement gate's `_left` does the same job.
@@ -222,6 +251,7 @@ var _approach_foe = null
 var _approach_card: Control = null
 var _slipped := {}
 var _pace_btn: Button
+var _bottom_bar: HBoxContainer       # the road actions and their messages; _layout_minimap seats it
 var _site_screen: Control = null     # ...and the descent screen drawing it
 # D6: the country the party is standing in, and the label that says so. `_region`
 # is last frame's band — a crossing is the only thing anybody wants to be told
@@ -244,23 +274,58 @@ var _settlements3d
 var _lairs3d
 var _party3d
 var _minimap: Control = null   # T9y: the corner map inset, see _layout_minimap()
-# T-tiles spike: which ground sheets _draw_ground() actually samples — set once
-# in _ready() from SORCMERC_ALT_TILES, since preload() can't be conditional on
-# an env var the way a plain assignment can.
-var _terrain_tex: Texture2D
-var _forest_tex: Texture2D
-var _water_tex: Texture2D
+# M7: the content pack's story, mid-telling — a core/mod/story_runtime.gd
+# injected by scenes/game/game.gd alongside the map it belongs to, or null for
+# every run on a built-in map. Everything below treats null as "no story", so a
+# normal run costs one `if` per frame and nothing else.
+var story = null
+# Co-op (docs/spike-coop.md §7). The guest's copy of the host's map: nothing
+# here ticks, nothing is ordered, nothing is saved — positions and the clock
+# come off the wire (Coop.link.map_latest), the whole save when something
+# structural changed. The host's screen is the ordinary one, plus _coop_share.
+const Coop = preload("res://core/coop.gd")
+var spectator := false
+var _map_share_t := 0.0      # host: seconds since the last map delta went out
+const MAP_SHARE_EVERY := 0.5   # host: how often a delta leaves; the guest paces itself off this
+var _synced_arrival := 0     # host: Coop.link.arrivals the full save was last sent for
+# Issue #133: the guest used to write each delta straight onto the map, which
+# made the road two frames a second — a party that jumped a step, stood still
+# for half a second, jumped again. What crosses the wire is the right amount
+# (positions twice a second is nothing to send and nothing to lose); the frames
+# in between are this screen's to draw. A delta is a TARGET now, and _spectate()
+# walks the map toward it over the interval the last two arrived in, so the
+# mirror moves at the speed the host's party is actually moving and is never
+# drawn anywhere the host has not been.
+var _mirror_from := {}       # guest: party id -> where it stood when the last delta landed
+var _mirror_to := {}         # guest: party id -> where the host says it stands
+var _mirror_clock := Vector2.ZERO   # guest: the same for world.clock.elapsed — [from, to]
+var _mirror_span := MAP_SHARE_EVERY # guest: seconds between the last two deltas
+var _mirror_age := 0.0       # guest: seconds since the last one
+var _mirror_seen := false    # guest: the first delta snaps; every one after it glides
+var story_card: Control = null       # the beat being shown, or null
+var _story_panel: Control = null     # the journal overlay, toggled off the HUD
+var _story_btn: Button
+
 var world_size := "small"   # "small" | "large" — which built-in map _ready() falls back to
                              # when nobody injected a `world` (a fresh start, not O13's resume)
 
+# The 3D map itself — viewport, camera, sun, ground mesh, woods, footprints,
+# and the three layers of landmarks. It draws behind this control, so what this
+# control still paints reads as annotation on the map rather than as scenery in
+# it. _update_ground() hands it the fog mask; everything else it works out from
+# the camera state above.
+const WorldView3D := preload("res://scenes/world/world_view3d.gd")
+var _view: WorldView3D
+# The fog's two colours live on the view (the ground shader and the 3D
+# background both need them before this screen has said anything) and are named
+# here so the rest of the map — remembered props, the minimap — reads one copy.
+const FOG_UNKNOWN := WorldView3D.FOG_UNKNOWN
+const FOG_REMEMBERED := WorldView3D.FOG_REMEMBERED
+var _mask_tex: ImageTexture
+var _mask_key: Array = []
+
 func _ready() -> void:
-	match OS.get_environment("SORCMERC_ALT_TILES"):
-		"kenney":
-			_terrain_tex = TerrainTexAlt; _forest_tex = ForestTexAlt; _water_tex = WaterTexAlt
-		"sbs":
-			_terrain_tex = TerrainTexSbs; _forest_tex = ForestTexSbs; _water_tex = WaterTexSbs
-		_:
-			_terrain_tex = TerrainTex; _forest_tex = ForestTex; _water_tex = WaterTex
+	theme = Icons.dark_theme()   # standalone runs; under game.gd it is the same theme inherited
 	if world == null:
 		match world_size:
 			"large": world = _large_world()
@@ -270,23 +335,33 @@ func _ready() -> void:
 		party = Party.new()
 		for ch in Party.demo_roster():
 			party.add_member(ch)
+	# The map opens on the party — a resumed save left them wherever they were,
+	# and the centre of the world is not it.
+	if world.player() != null:
+		center_on(world.player().position)
+	# The 3D map, and the three layers of landmarks standing in it. They are
+	# children of the view's world now rather than of this Control: one
+	# viewport, one camera, one depth buffer, so a figure can walk behind a
+	# town wall. add_layer() is the whole of their wiring.
+	_view = WorldView3D.new()
+	_view.world_map = self
+	add_child(_view)
 	_settlements3d = Settlements3D.new()
-	_settlements3d.world_map = self
-	add_child(_settlements3d)
+	_view.add_layer(_settlements3d)
 	_settlements3d.reset(world)
 	_lairs3d = Lairs3D.new()
-	_lairs3d.world_map = self
-	add_child(_lairs3d)
+	_view.add_layer(_lairs3d)
 	_lairs3d.reset(world)
 	_party3d = Party3D.new()
-	_party3d.world_map = self
-	add_child(_party3d)
+	_view.add_layer(_party3d)
 	_party3d.reset(world)
 	_last_forage_at = world.clock.elapsed   # T9x: start the cadence from load time, not zero
 	_last_travel_at = world.clock.elapsed   # D3: same, for road events
 	set_process(true)
 	_build_hud()
 	_refresh_pace_btn()
+	if spectator:
+		_spectator_hud()
 
 # Hand-placed stand-ins so the scene has something to render and move. Real
 # spawning is a later phase's job (O3 onward).
@@ -316,13 +391,19 @@ func _small_world() -> World:
 	# T-party3d: flavour rosters, for the overworld headcount label and Party3D's
 	# model pick (highest-leveled troop) -- not combat stats, those still come
 	# from Scaler.roster_for(faction). "goblins" has no dwarf/elf/human/orc
-	# counterpart to model, so it keeps a roster (for the headcount) but reads
-	# as no-model to Party3D and stays the plain PawnTex icon.
+	# counterpart to model, so it keeps a roster (for the headcount) and takes
+	# the single figure per faction combat already uses (figures3d.gd's
+	# FOE_MODELS) rather than a role model.
 	bandits.troops = [{"role": "heavy", "level": 3}, {"role": "light", "level": 5}]
 	WorldAI.hunt(bandits)
 	var goblins := w.add_party(World.RoamingParty.new("goblins", Vector2(380, 300), "goblinoid"))
 	goblins.troops = [{"role": "heavy", "level": 1}, {"role": "heavy", "level": 1}, {"role": "light", "level": 2}]
 	WorldAI.hunt(goblins)
+	# A beast pack, now that assets/beasts/ covers the faction: fights it as a
+	# forest-clearing roster (Scaler.THEME_FACTION), so the models get seen.
+	var wolves := w.add_party(World.RoamingParty.new("wolves", Vector2(-150, 180), "beast"))
+	wolves.troops = [{"role": "light", "level": 1}, {"role": "light", "level": 1}, {"role": "light", "level": 2}]
+	WorldAI.hunt(wolves)
 	var patrol := w.add_party(World.RoamingParty.new("patrol", Vector2(-120, 380), "human"))
 	patrol.troops = [{"role": "heavy", "level": 2}, {"role": "heavy", "level": 2}]
 	WorldAI.patrol(patrol, [Vector2(-120, 380), Vector2(-360, 260), Vector2(0, 0)])
@@ -358,12 +439,20 @@ func _small_world() -> World:
 # World.tick() advances the clock itself and gates movement on it, so one call
 # per frame is the whole update.
 func _process(delta: float) -> void:
+	if spectator:
+		_spectate(delta)
+		_render()
+		return
 	# O7: the clock's own advance (0 while paused) both drains O6's queued opinion
 	# deltas off the settlements and runs the slow drift back toward neutral.
 	var dt := world.tick(delta)
+	party.world_now = world.clock.elapsed
+	for ch in party.roster:
+		Potions.expire(ch, party.world_now)
 	var p0 := world.player()
 	if p0 != null:
 		world.reveal(p0.position)   # T9x fog of war: permanent once seen
+		_check_arrival(p0)
 		# D3: the marching order IS the speed, re-read every frame so changing
 		# it on the party screen takes effect the moment you back out.
 		p0.speed = World.SPEED * Travel.speed_mult(party)
@@ -378,19 +467,228 @@ func _process(delta: float) -> void:
 		for r in WorldBattle.check(world, _trigger(dt), encounter_spec):
 			Visit.mark_battle(world, r["loser"].position, world.clock.elapsed)
 	_check_visit()
+	_check_story()
 	_check_lairs()
 	_check_expired_lairs()
 	_check_forage()
 	_check_travel()
 	_check_region()
+	_check_level_ready()
 	if _camp_btn != null:
-		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0
+		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0 or party.safe_camp
+	_coop_share(delta)
+	_render()
+
+# The view, from whatever the model now says: the host's after a tick, the
+# guest's after a delta.
+func _render() -> void:
 	_layout_minimap()   # this Control resizes with the window; the inset follows the corner
 	if _clock_lbl != null:
-		_clock_lbl.text = "Day %d  %02d:%02d" % [
-			int(world.clock.elapsed / 1440.0) + 1,
-			int(world.clock.elapsed / 60.0) % 24, int(world.clock.elapsed) % 60]
+		_clock_lbl.text = WorldSave.day_clock(world.clock.elapsed)
+		_gold_lbl.text = "%d ◉" % party.gold
+	# The fog mask first, then the 3D map, then this Control's own annotation —
+	# all from the same camera state in the same frame. A view rebuilt from last
+	# frame's numbers is a map whose labels sit beside the things they name.
+	_update_ground()
+	if _view != null:
+		_view.sync()
 	queue_redraw()
+
+# --- co-op: the host shares the road, the guest watches it -------------------
+
+func _coop_share(delta: float) -> void:
+	var link = Coop.link
+	if link == null or link.role != "host" or _combat != null:
+		return
+	if link.arrivals != _synced_arrival:   # a guest just sat down (or came back): the whole map
+		_synced_arrival = link.arrivals
+		link.send(Coop.world_full(world, party, story))
+	_map_share_t += delta
+	if _map_share_t >= MAP_SHARE_EVERY:
+		_map_share_t = 0.0
+		link.send(Coop.map_delta(world))
+	for m in link.take():   # between fights the road owns the inbox; only one thing on it is for the host
+		if m.get("t", "") == "levelup":
+			_apply_guest_levelup(m)
+
+func _coop_share_visit() -> void:
+	if Coop.link != null and Coop.link.role == "host":
+		Coop.link.send(Coop.visit(self))
+
+# A guest's level on their own hero: the same steps their screen made on the
+# mirrored copy, made here on the real one, then saved and mirrored back.
+func _apply_guest_levelup(m: Dictionary) -> void:
+	var ch = party.get_member(String(m.get("hero", "")))
+	if ch == null or Coop.mine(party, ch.id):
+		return   # not theirs to level
+	for step in m.get("steps", []):
+		match String(step.get("op", "")):
+			"add_level":
+				if Leveling.can_level_up(ch):
+					Leveling.add_level(ch)
+			"decide":
+				Leveling.decide(ch, String(step["key"]), Coop.intify(step["decision"]))
+	ch.dirty()
+	CharacterSave.save(ch)
+	_levelup_told[ch.id] = ch.level()
+	_autosave()
+
+# Apply what the host last said. A party in the delta the map does not know
+# yet waits for the next full save; one the delta no longer names is stale
+# until then, which is at most a few seconds — the host autosaves on every
+# structural change and each autosave is a full save on the wire.
+#
+# #133: a delta arriving is one event and drawing the map is another. The
+# arrival aims this screen at where the host is; every frame after it moves the
+# screen a little further along, so the guest watches the same journey the host
+# is watching instead of a slide show of it.
+func _spectate(delta: float) -> void:
+	var link = Coop.link
+	if link == null:
+		return
+	if not link.map_latest.is_empty():
+		_aim_mirror(link.map_latest)
+		link.map_latest = {}
+		if not link.visit_latest.is_empty():
+			var v: Dictionary = link.visit_latest
+			link.visit_latest = {}
+			_mirror_visit(v)
+		_check_level_ready()   # a level on one of OUR heroes is ours to take (see _ready_to_level)
+	_mirror_age += delta
+	_draw_mirror()
+
+# A delta just landed: keep where the map is DRAWN right now as the start of the
+# next glide, and take the host's numbers as its end. The span is how long the
+# last two took to arrive rather than the nominal half second, so a slow link
+# stretches the motion instead of stuttering through it; a fast one is capped
+# so a burst cannot make the map lurch. The first delta on a fresh screen has
+# nothing to glide from and snaps.
+func _aim_mirror(m: Dictionary) -> void:
+	_mirror_span = clampf(_mirror_age, 0.1, 2.0) if _mirror_seen else 0.0
+	_mirror_age = 0.0
+	_mirror_from.clear()
+	for p in world.parties:
+		_mirror_from[p.id] = p.position
+	_mirror_to.clear()
+	var at: Dictionary = m["at"]
+	for id in at:
+		_mirror_to[id] = Vector2(float(at[id][0]), float(at[id][1]))
+	_mirror_clock = Vector2(world.clock.elapsed if _mirror_seen else float(m["elapsed"]),
+		float(m["elapsed"]))
+	_mirror_seen = true
+	if _pause_btn != null:
+		_pause_btn.text = "Paused" if bool(m.get("paused", false)) else "Travelling"
+
+# One frame of the glide. Clamped at 1, so a delta that never comes leaves the
+# map standing on the last place the host actually was rather than sliding on
+# past it.
+func _draw_mirror() -> void:
+	if not _mirror_seen:
+		return
+	var t: float = 1.0 if _mirror_span <= 0.0 else clampf(_mirror_age / _mirror_span, 0.0, 1.0)
+	for p in world.parties:
+		if not _mirror_to.has(p.id):
+			continue
+		var to: Vector2 = _mirror_to[p.id]
+		p.position = (_mirror_from.get(p.id, to) as Vector2).lerp(to, t)
+		p.goal = p.position
+		p.route.clear()
+	world.clock.elapsed = lerpf(_mirror_clock.x, _mirror_clock.y, t)
+	party.world_now = world.clock.elapsed
+	var p0 := world.player()
+	if p0 != null:
+		world.reveal(p0.position)
+
+# The host's counter, on our screen: the same panel, from their market dict,
+# with every button greyed. The purse and the shelf ride along because a buy
+# moves them without an autosave.
+func _mirror_visit(v: Dictionary) -> void:
+	if bool(v.get("closed", false)):
+		_visit = {}
+		if _visit_panel != null:
+			_visit_panel.queue_free()
+			_visit_panel = null
+		return
+	var s = null
+	for cand in world.settlements:
+		if cand.id == String(v["sid"]):
+			s = cand
+	if s == null:
+		return
+	_visit = Coop.intify(v["m"])
+	_visit["settlement"] = s
+	_visit_page = String(v["page"])
+	_market_tab = String(v["tab"])
+	party.gold = int(v.get("gold", party.gold))
+	party.stash.assign(Coop.intify(v.get("stash", party.stash)))   # typed Array: assign, not replace
+	_build_visit_panel()
+
+# Whether a rebuild from the host's next full save would pull the rug: the
+# guest is choosing a level, and the choice is not finished.
+func mirror_busy() -> bool:
+	return _levelup_overlay != null
+
+# The guest's HUD: the clock and the purse stay, every order goes, and the one
+# button is the way out of the room.
+func _spectator_hud() -> void:
+	for bar in get_children():
+		if not (bar is BoxContainer):
+			continue
+		for c in bar.get_children():
+			if c is Button and c != _pause_btn:
+				c.visible = false
+			elif c is Label and String(c.text).begins_with("Click marches"):
+				c.text = "Your host's road — you watch, they order.  Right-drag pans, middle-drag or Q/E turns, R/F tilts, wheel zooms, Home resets."
+	if _pause_btn != null:
+		_pause_btn.disabled = true
+		_pause_btn.text = "Travelling"
+	var leave := Button.new()
+	leave.text = "Leave the room"
+	leave.theme_type_variation = "Quiet"
+	leave.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	leave.offset_left = -200; leave.offset_top = 12; leave.offset_right = -16; leave.offset_bottom = 48
+	leave.pressed.connect(func():
+		Coop.link.close()
+		Coop.link = null
+		var host := get_parent()
+		if host != null and host.has_method("show_coop"):
+			host.show_coop())
+	add_child(leave)
+
+# #70: pause on reaching the goal; a new goal (a click, or anything else that
+# moves it) resumes. Never over a fight, a market, a delve or a card — each of
+# those owns the clock already.
+func _check_arrival(p0) -> void:
+	if _halted_on_arrival:
+		if not p0.at_goal():
+			_halted_on_arrival = false
+			world.clock.resume()
+			_pause_btn.text = "Pause"
+	elif _was_travelling and p0.at_goal() and _combat == null and _visit.is_empty() \
+			and _site == null and _event_card == null and not world.clock.is_paused():
+		_halt()
+	_was_travelling = not p0.at_goal()
+
+# Stop the party where it stands and the clock with it, until the next order.
+# #98: also what a fight's end does — the map used to run on the moment the
+# spoils closed, and could walk straight into the next band before the player
+# had touched anything.
+func _halt() -> void:
+	var p := world.player()
+	if p != null:
+		world.set_goal(p, p.position)
+	_halted_on_arrival = true
+	_was_travelling = false
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+
+# Pin a text control's minimum width to what `sample` needs, so live text
+# under that width cannot move its neighbours (#94).
+static func _hold_width(c: Control, sample: String) -> void:
+	var was: String = c.text
+	c.text = sample
+	c.custom_minimum_size.x = c.get_combined_minimum_size().x
+	c.text = was
 
 # --- HUD ---------------------------------------------------------------
 func _build_hud() -> void:
@@ -407,26 +705,66 @@ func _build_hud() -> void:
 	_speed_btn.pressed.connect(_cycle_speed)
 	bar.add_child(_speed_btn)
 	_clock_lbl = Label.new()
+	_clock_lbl.theme_type_variation = "Stat"
 	_clock_lbl.add_theme_color_override("font_color", Icons.COL_GOLD)
 	bar.add_child(_clock_lbl)
+	_gold_lbl = Label.new()
+	_gold_lbl.theme_type_variation = "Stat"
+	_gold_lbl.add_theme_color_override("font_color", Icons.COL_GOLD)
+	bar.add_child(_gold_lbl)
 	# D6: which country this is and who it is for, always on. A band that only
 	# announced itself at the seam would be invisible to a player who saved in
 	# the frontier and came back a week later.
 	_region_lbl = Label.new()
-	_region_lbl.add_theme_color_override("font_color", Icons.COL_MUTED)
+	_region_lbl.theme_type_variation = "Dim"
 	bar.add_child(_region_lbl)
+	# #94: the face has proportional digits, so "08:11" is not the width of
+	# "08:10" and every button to the right of the clock crept a pixel each
+	# minute. Each live label is held at the width of its widest reading.
+	_hold_width(_pause_btn, "Resume")
+	_hold_width(_speed_btn, "8x")
+	_hold_width(_clock_lbl, "Day 999  23:59")
+	_hold_width(_gold_lbl, "99999 ◉")
 	var party_btn := Button.new()
 	party_btn.text = "Party"
 	party_btn.pressed.connect(_open_party)
 	bar.add_child(party_btn)
+	var pack_btn := Button.new()
+	pack_btn.text = "Pack"
+	pack_btn.pressed.connect(_toggle_inventory)
+	bar.add_child(pack_btn)
 	var quests_btn := Button.new()
 	quests_btn.text = "Quests"
 	quests_btn.pressed.connect(_toggle_quests)
 	bar.add_child(quests_btn)
+	# M7: only a run that is telling a story has a story to read.
+	_story_btn = Button.new()
+	_story_btn.text = "Story"
+	_story_btn.visible = story != null
+	_story_btn.pressed.connect(_toggle_story)
+	bar.add_child(_story_btn)
+	var manual := Button.new()
+	manual.text = "Manual"
+	manual.theme_type_variation = "Quiet"
+	manual.pressed.connect(func(): ManualOverlay.toggle(self))
+	bar.add_child(manual)
+	var bug := Button.new()
+	bug.text = "Report a bug  [F3]"
+	bug.theme_type_variation = "Quiet"
+	bug.pressed.connect(report_bug)
+	bar.add_child(bug)
 	var title := Button.new()
-	title.text = "←  Title"
+	title.text = "Title"
+	title.theme_type_variation = "Quiet"
 	title.pressed.connect(_leave_world)
 	bar.add_child(title)
+	# Two bars: the state of the run along the top — clock, screens, the way
+	# out — and what the party can do where it stands along the bottom, with
+	# the messages those actions leave. One row was outrunning the window.
+	_bottom_bar = HBoxContainer.new()
+	_bottom_bar.add_theme_constant_override("separation", 12)
+	add_child(_bottom_bar)
+	bar = _bottom_bar
 	_lair_btn = Button.new()
 	_lair_btn.visible = false
 	_lair_btn.pressed.connect(_lair_action)
@@ -451,16 +789,19 @@ func _build_hud() -> void:
 	_camp_btn.pressed.connect(_make_camp)
 	bar.add_child(_camp_btn)
 	var hint := Label.new()
-	hint.text = "right-click: march here   ·   drag: pan   ·   wheel: zoom"
-	hint.add_theme_color_override("font_color", Icons.COL_MUTED)
+	hint.text = "Click marches.  Right-drag pans, middle-drag or Q/E turns, R/F tilts, wheel zooms, Home resets.  Space pauses, 1/2/4/8 speed, P party, I pack, Esc menu."
+	hint.theme_type_variation = "Dim"
 	bar.add_child(hint)
 	_region_msg = Label.new()
+	_region_msg.theme_type_variation = "Serif"
 	_region_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	bar.add_child(_region_msg)
 	_lair_msg = Label.new()
+	_lair_msg.theme_type_variation = "Serif"
 	_lair_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	bar.add_child(_lair_msg)
 	_camp_msg = Label.new()
+	_camp_msg.theme_type_variation = "Serif"
 	_camp_msg.add_theme_color_override("font_color", Icons.COL_ACCENT)
 	bar.add_child(_camp_msg)
 	# T9y: the map inset. Added last so it sits above the 2D map but below the
@@ -475,6 +816,8 @@ func _build_hud() -> void:
 # re-run every frame because this Control resizes with the window.
 const MINIMAP_GUTTER := 12.0
 func _layout_minimap() -> void:
+	if _bottom_bar != null:
+		_bottom_bar.position = Vector2(MINIMAP_GUTTER, size.y - _bottom_bar.size.y - MINIMAP_GUTTER)
 	if _minimap == null:
 		return
 	var want: Vector2 = Minimap.DEFAULT_SIZE
@@ -495,10 +838,31 @@ const MINIMAP_MIN := 96.0
 # and faction opinion go to core/world_save.gd's slot, which the title screen's
 # "Resume the open world" reads back. Opinion is process-global, so it is still
 # cleared here once saved — the next thing to run must not inherit this run's.
+# M7: one place that knows what an autosave carries, now that it also carries
+# how far into its story a run is. Every call site used to spell out
+# `WorldSave.save(world, party)`; there were twelve of them.
+func _autosave() -> void:
+	if spectator:
+		return   # the host's world is not ours to write over our own slot
+	WorldSave.save(world, party, story)
+	if Coop.link != null and Coop.link.role == "host":
+		Coop.link.send(Coop.world_full(world, party, story))   # something structural changed: the guest's map follows
+		_coop_share_visit()   # a full save rebuilds the guest's screen; the counter has to be put back on it
+
+# Closing the window mid-march is a quit too. The menu's "Save and quit" goes
+# through _leave_world and saves; the title bar's X went through nothing.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and world != null and _combat == null and not spectator:
+		for ch in party.roster:
+			CharacterSave.save(ch)
+		_autosave()
+
 func _leave_world() -> void:
+	if spectator:
+		return   # nothing of the host's gets written here; the guest leaves through _spectator_hud's button
 	for ch in party.roster:
 		CharacterSave.save(ch)
-	WorldSave.save(world, party)
+	_autosave()
 	FactionOpinion.reset()
 	# Duck-typed so world.tscn still runs standalone (godot --path . scenes/world/
 	# world.tscn), where the parent is the scene root and has no title screen.
@@ -508,10 +872,14 @@ func _leave_world() -> void:
 
 # O9 item 7: both are no-ops while a market panel is open. The visit owns the
 # clock (it paused it); letting the button resume the world underneath an open
-# panel desynced the label and set the map running behind it.
+# panel desynced the label and set the map running behind it. M7's beat card
+# and journal own it the same way, for the same reason.
 func _toggle_pause() -> void:
-	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null:
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
+			or _story_panel != null or story_card != null or _menu_panel != null \
+			or _spoils_panel != null:
 		return
+	_halted_on_arrival = false
 	if world.clock.is_paused():
 		world.clock.resume()
 	else:
@@ -519,10 +887,112 @@ func _toggle_pause() -> void:
 	_pause_btn.text = "Resume" if world.clock.is_paused() else "Pause"
 
 func _cycle_speed() -> void:
-	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null:
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
+			or _story_panel != null or story_card != null or _menu_panel != null \
+			or _spoils_panel != null:
 		return
 	world.clock.cycle_speed()
 	_speed_btn.text = "%dx" % int(world.clock.speed)   # every WorldClock.SPEEDS entry is a whole number
+
+func _set_speed(mult: float) -> void:
+	if not _visit.is_empty() or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
+			or _story_panel != null or story_card != null or _menu_panel != null \
+			or _spoils_panel != null:
+		return
+	world.clock.set_speed(mult)
+	_speed_btn.text = "%dx" % int(world.clock.speed)
+
+# --- the pause menu -------------------------------------------------------
+#
+# Esc on the map. The combat screen has had F1 settings since T29 and the title
+# screen has its own footer, but the open world had neither: the only way to
+# reach Settings mid-run was to walk back to the title and lose the map. It
+# holds the clock the same way a market visit does — the world does not move
+# behind an open menu — and every entry on it is something that was already
+# reachable from the HUD bar, gathered behind the one key a player will try.
+
+func _toggle_menu() -> void:
+	if _menu_panel != null:
+		_close_menu()
+		return
+	# Anything that has already taken the screen owns the moment; the menu is
+	# the map's own. (_unhandled_key_input has closed the light panels first,
+	# so reaching here means nothing else is up.)
+	if _combat != null or not _visit.is_empty() or _site != null \
+			or _event_card != null or _approach_card != null or story_card != null \
+			or _party_overlay != null or _quest_panel != null or _inventory_panel != null or _story_panel != null \
+			or _spoils_panel != null:
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_build_menu_panel()
+
+func _close_menu() -> void:
+	if _menu_panel != null:
+		_menu_panel.queue_free()
+		_menu_panel = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+func _build_menu_panel() -> void:
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Eat clicks: the map must not accept a march order through the menu.
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+	_menu_panel = overlay
+
+	var dim := ColorRect.new()
+	dim.color = Color(Icons.COL_BG.r, Icons.COL_BG.g, Icons.COL_BG.b, 0.75)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(dim)
+
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(centre)
+
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.custom_minimum_size = Vector2(320, 0)
+	centre.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "Paused"
+	title.theme_type_variation = "Head"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+
+	var when := Label.new()
+	when.theme_type_variation = "Dim"
+	when.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	when.text = "%s — %s" % [WorldSave.day_clock(world.clock.elapsed, ", "),
+		String(_region.get("label", "the road"))]
+	box.add_child(when)
+
+	var add := func(label: String, fn: Callable, quiet := false) -> void:
+		var b := Button.new()
+		b.text = label
+		if quiet:
+			b.theme_type_variation = "Quiet"
+		b.pressed.connect(fn)
+		box.add_child(b)
+
+	add.call("Resume  [Esc]", _close_menu)
+	# The settings overlay parents itself to this screen, not to the menu, so
+	# it survives the menu closing underneath it — and its own Esc closes it
+	# before this one's ever sees the key.
+	add.call("Settings", func(): SettingsOverlay.toggle(self))
+	add.call("Field manual", func(): ManualOverlay.toggle(self), true)
+	add.call("Report a bug  [F3]", func(): report_bug(), true)
+	add.call("Save and quit to the title screen", func():
+		_close_menu()
+		_leave_world(), true)
 
 # --- party / profile / inventory ----------------------------------------
 #
@@ -533,8 +1003,13 @@ func _cycle_speed() -> void:
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 
-func _open_party() -> void:
-	if _combat != null or not _visit.is_empty() or _party_overlay != null:
+# Issue #27: `at_inn` is what unlocks benching and recruiting. The HUD button
+# opens this out in open country, where a party does not reshuffle itself, so
+# it opens locked; the inn's own entrance (_build_inn_page) opens it unlocked.
+# Everything else on the screen — marching order, standing orders, the map
+# figure, reading a character's gear and skills — works either way.
+func _open_party(at_inn := false) -> void:
+	if _combat != null or _party_overlay != null or (not at_inn and not _visit.is_empty()):
 		return
 	world.clock.pause()
 	var overlay := Control.new()
@@ -543,20 +1018,22 @@ func _open_party() -> void:
 	_party_overlay = overlay
 	var screen = load(PARTY_SCENE).instantiate()
 	screen.party = party
+	screen.roster_locked = not at_inn
+	screen.locked_note = "Benching and recruiting happen at an inn — find one and ask at the counter."
+	screen.exit_label = "←  Back to the inn" if at_inn else "←  Back to the map"
+	screen.exit_requested.connect(_close_party)
 	overlay.add_child(screen)
-	var back := Button.new()
-	back.text = "←  Back to the map"
-	back.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	back.offset_left = -220; back.offset_top = 12; back.offset_right = -16
-	back.pressed.connect(_close_party)
-	overlay.add_child(back)
 
 func _close_party() -> void:
 	if _party_overlay != null:
 		_party_overlay.queue_free()
 		_party_overlay = null
-	world.clock.resume()
-	_pause_btn.text = "Pause"
+	# A visit owns the clock for its whole duration (see _close_visit) — backing
+	# out of the party screen at the inn's counter must not set the map running
+	# underneath the still-open settlement panel.
+	if _visit.is_empty():
+		world.clock.resume()
+		_pause_btn.text = "Pause"
 	_party3d.reset(world)   # T9x: picking a new overworld figure only takes effect on rebuild
 
 # --- quest log ------------------------------------------------------------
@@ -568,7 +1045,8 @@ func _toggle_quests() -> void:
 	if _quest_panel != null:
 		_close_quests()
 		return
-	if _combat != null or not _visit.is_empty() or _party_overlay != null:
+	if _combat != null or not _visit.is_empty() or _party_overlay != null \
+			or _story_panel != null or story_card != null:
 		return
 	world.clock.pause()
 	_build_quest_panel()
@@ -583,34 +1061,36 @@ func _close_quests() -> void:
 func _build_quest_panel() -> void:
 	if _quest_panel != null:
 		_quest_panel.queue_free()
+	# Issue #28. The panel used to place itself by arithmetic — position at
+	# half the screen minus half its own guessed size — which is right only
+	# while the guess is. A CenterContainer centres whatever the panel actually
+	# measures, so nothing hangs off an edge when the content is taller than the
+	# 320 it was told to expect.
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centre)
+	_quest_panel = centre
 	var panel := PanelContainer.new()
-	# No anchor preset: default anchors are top-left (0), so `position` is a plain
-	# pixel offset from the parent's origin — set_anchors_preset(PRESET_CENTER)
-	# used to also be called here, which re-centers the control on its OWN anchor
-	# point and resets the offsets, so this same centering math then applied a
-	# second time on top of it and shoved the panel off-screen.
-	panel.position = size * 0.5 - Vector2(200, 160)
+	panel.theme_type_variation = "Gilt"
 	panel.custom_minimum_size = Vector2(400, 320)
-	add_child(panel)
-	_quest_panel = panel
+	centre.add_child(panel)
 	var box := VBoxContainer.new()
 	panel.add_child(box)
 
 	var title := Label.new()
 	title.text = "Quest log"
-	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	title.theme_type_variation = "Head"
 	box.add_child(title)
 
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(380, 240)
+	var scroll := _scroll_column(Vector2(380, 240))
 	box.add_child(scroll)
-	var rows := VBoxContainer.new()
-	scroll.add_child(rows)
+	var rows: VBoxContainer = scroll.get_child(0)
 	var live: Array = Quest.active(party)
 	if live.is_empty():
 		var none := Label.new()
-		none.text = "No quests. Settlements have work."
-		none.add_theme_color_override("font_color", Icons.COL_MUTED)
+		none.text = "Nothing taken on yet. Every settlement's notice board has work — walk in and read it."
+		none.theme_type_variation = "Dim"
 		rows.add_child(none)
 	for q in live:
 		var l := Label.new()
@@ -623,6 +1103,208 @@ func _build_quest_panel() -> void:
 	var close := Button.new()
 	close.text = "Close"
 	close.pressed.connect(_close_quests)
+	box.add_child(close)
+
+# --- the pack -------------------------------------------------------------
+#
+# The shared stash as the same tiles the market shows — art, rarity colour,
+# the hover card, Shift to compare with what the party wears. View only: gear
+# is equipped and potions drunk from a character's profile, which is where the
+# body that wears or drinks it is.
+func _toggle_inventory() -> void:
+	if _inventory_panel != null:
+		_close_inventory()
+		return
+	if _combat != null or not _visit.is_empty() or _party_overlay != null \
+			or _quest_panel != null or _story_panel != null or story_card != null:
+		return
+	world.clock.pause()
+	_build_inventory_panel()
+
+func _close_inventory() -> void:
+	if _inventory_panel != null:
+		_inventory_panel.queue_free()
+		_inventory_panel = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+func _build_inventory_panel() -> void:
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centre)
+	_inventory_panel = centre
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.custom_minimum_size = Vector2(520, 320)
+	centre.add_child(panel)
+	var box := VBoxContainer.new()
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "The pack"
+	title.theme_type_variation = "Head"
+	box.add_child(title)
+	var purse := Label.new()
+	purse.text = "%d ◉.  Equip and drink from a character's profile (P, then View)." % party.gold
+	purse.theme_type_variation = "Dim"
+	box.add_child(purse)
+
+	var scroll := _scroll_column(Vector2(500, 240))
+	box.add_child(scroll)
+	var rows: VBoxContainer = scroll.get_child(0)
+	if party.stash.is_empty():
+		_note(rows, "Nothing in the pack. Loot from a fight, a stall's shelf and a job's pay all land here.")
+	else:
+		var grid := _item_grid(rows)
+		for entry in party.stash:
+			var id := String(entry["item_id"])
+			var kd: Array = Icons.item_def(id)
+			var known: bool = Party.is_identified(entry)
+			var tip: String = ("Unidentified item (%s)" % Icons.rarity_of(id)) if not known \
+				else Icons.item_tooltip(id, kd[1], kd[0])
+			var qty := int(entry["quantity"])
+			grid.add_child(Icons.item_tile(id, tip, "",
+				Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if known else "", qty))
+
+	var close := Button.new()
+	close.text = "Close"
+	close.pressed.connect(_close_inventory)
+	box.add_child(close)
+
+# A scrolling column that wraps instead of growing sideways. Issue #28: a
+# ScrollContainer that allows horizontal scrolling hands its child the child's
+# own MINIMUM width, and an autowrapping Label's minimum width is one pixel —
+# so eight quests came out as eight 1px-wide, 570px-tall columns of stacked
+# single characters, 4096px of scroll for text that fits in eight lines.
+# Turning horizontal scrolling off is what makes the container stretch the
+# column to its own width, which is the width the labels then wrap at. Every
+# other list in the game (the campaign journal, the manual, the party screen,
+# the mod browser) was already built this way; the four in this file were not.
+func _scroll_column(min_size: Vector2) -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = min_size
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(rows)
+	return scroll
+
+# --- M7: the story ---------------------------------------------------------
+#
+# Polled, once a frame, exactly like the lair/forage/travel checks above it —
+# core/mod/story_runtime.gd asks the live world and party what is true and
+# hands back whatever just became eligible. Nothing publishes an event and
+# nothing subscribes, which is why a content pack can tell a story about
+# systems that have never heard of it.
+
+func _check_story() -> void:
+	if story == null or story_card != null:
+		return
+	# A beat interrupts the map, so it waits its turn behind anything else that
+	# already has: a fight, a market, the party screen, the quest log, a road
+	# event, a band asking to be dealt with.
+	if _combat != null or not _visit.is_empty() or _party_overlay != null \
+			or _quest_panel != null or _inventory_panel != null or _story_panel != null or _menu_panel != null \
+			or _spoils_panel != null \
+			or _event_card != null or _approach_card != null or _site_screen != null:
+		return
+	var pending: Array = story.pending(world, party)
+	if pending.is_empty():
+		if not story.advance(world, party).is_empty():
+			_autosave()
+		return
+	var beat: Dictionary = pending[0]
+	var lines: Array = story.fire(beat, world, party)
+	# A beat with nothing to show (a `note` that only set a flag) must not
+	# stop a map at 8x for a blank card.
+	if beat.get("lines", []).is_empty() and lines.is_empty() \
+			and beat.get("choices", []).is_empty():
+		story.advance(world, party)
+		_autosave()
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	story_card = StoryCard.new()
+	add_child(story_card)
+	story_card.chosen.connect(_on_story_choice.bind(beat))
+	story_card.show_beat(story, beat, lines, world, party)
+
+func _on_story_choice(choice_id: String, beat: Dictionary) -> void:
+	if choice_id != "":
+		story.choose(beat, choice_id, world, party)
+	story.advance(world, party)
+	if story_card != null:
+		story_card.queue_free()
+		story_card = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+	# A beat can hand over a quest, move the purse and put a lair on the map:
+	# everything an autosave exists to remember.
+	_autosave()
+
+# The journal: the synopsis, where the story has got to, and every line it has
+# written down. Same inline-overlay shape as the quest log next to it.
+func _toggle_story() -> void:
+	if _story_panel != null:
+		_close_story()
+		return
+	if story == null or _combat != null or not _visit.is_empty() \
+			or _party_overlay != null or _quest_panel != null or _inventory_panel != null or story_card != null:
+		return
+	world.clock.pause()
+	_build_story_panel()
+
+func _close_story() -> void:
+	if _story_panel != null:
+		_story_panel.queue_free()
+		_story_panel = null
+	world.clock.resume()
+	_pause_btn.text = "Pause"
+
+func _build_story_panel() -> void:
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centre)
+	_story_panel = centre
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.custom_minimum_size = Vector2(460, 380)
+	centre.add_child(panel)
+	var box := VBoxContainer.new()
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = story.story.title
+	title.theme_type_variation = "Head"
+	box.add_child(title)
+
+	var chapter := Label.new()
+	var c: Dictionary = story.story.chapter(story.chapter)
+	chapter.text = "Finished." if story.done else String(c.get("title", "—"))
+	chapter.theme_type_variation = "Dim"
+	chapter.add_theme_color_override("font_color", Icons.COL_ACCENT)
+	box.add_child(chapter)
+
+	var scroll := _scroll_column(Vector2(440, 290))
+	box.add_child(scroll)
+	var rows: VBoxContainer = scroll.get_child(0)
+	var lines: Array = story.journal
+	if lines.is_empty():
+		lines = [story.story.synopsis]
+	for line in lines:
+		var l := Label.new()
+		l.text = String(line)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.theme_type_variation = "Serif"
+		rows.add_child(l)
+
+	var close := Button.new()
+	close.text = "Close"
+	close.pressed.connect(_close_story)
 	box.add_child(close)
 
 # --- O4: encounter trigger + combat hand-off ---------------------------
@@ -664,9 +1346,32 @@ func _check_encounter(dt := 0.0) -> void:
 			if not near:
 				_slipped.erase(q.id)
 			continue
+		if WorldAI.in_truce(q, world.clock.elapsed):
+			continue   # met and parted without blood: they want nothing from you for a while
 		if near:
+			if hostile and world.clock.is_night() and not _night_jump(q):
+				return
 			_open_approach(q, hostile)
 			return
+
+# #85: in the dark a hostile band is on the party before anyone can choose how
+# to meet it — unless someone on watch hears them coming. The same check and the
+# same two outcomes a camp ambush has (core/world_camp.gd): heard, and the card
+# is offered as by day; missed, and they take the first round. Returns true when
+# the card should still open.
+func _night_jump(foe) -> bool:
+	var rng := RNG.new(maxi(1, absi(hash("night|%s|%d" % [foe.id, int(world.clock.elapsed)]))))
+	var watch: Dictionary = WorldCamp.watch_check(party, rng)
+	if watch["ok"]:
+		return true
+	var skill_name: String = String(watch.get("skill", "")).capitalize()
+	var who: String = watch.get("char_id", "")
+	_camp_msg.text = ("%s doesn't catch it in the dark (%s %d+%d vs DC %d) — %s are on the party before anyone can draw!" % [
+		watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"], foe.id.capitalize()]) if who != "" \
+		else "Nobody is watching the dark — %s are on the party before anyone can draw!" % foe.id.capitalize()
+	_camp_card("jumped", "Jumped in the dark", "bad", _camp_msg.text,
+		func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
+	return false
 
 # The roster the encountered party fights with. Scaler takes a *theme*, not a
 # faction, so: THEME_FACTION reversed gives a matching board for the factions
@@ -674,7 +1379,7 @@ func _check_encounter(dt := 0.0) -> void:
 # _faction_order's other documented route — FACTIONS[seed % size] — is snapped
 # onto this faction instead. Seeded off the party id, so meeting the same band
 # twice is the same band.
-func encounter_spec(foe) -> Dictionary:
+func encounter_spec(foe, difficulty := "") -> Dictionary:
 	var theme := ""
 	for t in Scaler.THEME_FACTION:
 		if String(Scaler.THEME_FACTION[t]) == foe.faction:
@@ -691,7 +1396,8 @@ func encounter_spec(foe) -> Dictionary:
 	# range, which is the common case); the party's condition still thins whatever
 	# the country sends, in the same proportion it always did.
 	var spec: Dictionary = Scaler.roster_for(
-		party.party_characters(), String(threat["difficulty"]), {}, theme, seed_v,
+		party.party_characters(), difficulty if difficulty != "" else String(threat["difficulty"]),
+		{}, theme, seed_v,
 		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party))
 	spec["theme"] = theme if theme != "" else DEFAULT_THEME
 	return spec
@@ -706,6 +1412,8 @@ func encounter_spec(foe) -> Dictionary:
 # room (core/site.gd) can run a fight with its own pre-built spec without also
 # inheriting the roaming-band aftermath below — erasing a party that was never
 # on the map, crediting faction opinion for a room in a cave.
+const MINUTES_PER_ROUND := 60.0
+
 func _run_combat(spec: Dictionary, difficulty: String,
 		scouted_ahead := false, forced_ambush := false) -> Dictionary:
 	world.clock.pause()
@@ -715,6 +1423,8 @@ func _run_combat(spec: Dictionary, difficulty: String,
 	add_child(_combat_overlay)
 	_combat = load(COMBAT_SCENE).instantiate()
 	_combat.party = party
+	spec = spec.duplicate()
+	spec["night"] = world.clock.is_night()   # #85: fought by torchlight (core/combat.gd lit())
 	_combat.spec = spec
 	_combat.difficulty = difficulty
 	_combat.scouted_ahead = scouted_ahead
@@ -729,25 +1439,65 @@ func _run_combat(spec: Dictionary, difficulty: String,
 	var result: Dictionary = _combat.result
 	_combat = null
 	Sound.set_combat(false)
+	# A fight costs daylight: an hour a round, so a long brawl eats the afternoon
+	# and a two-round ambush barely dents it. The clock is paused through the
+	# fight itself, so this is the whole bill.
+	world.clock.elapsed += int(result.get("rounds", 0)) * MINUTES_PER_ROUND
 	if _combat_overlay != null:
 		_combat_overlay.queue_free()
 		_combat_overlay = null
 	return result
 
 
-func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dictionary:
+# The objective a road fight carries, by precedence: jumped in the dark (camp,
+# night road) or seen mid-slip is a breakout whatever else is going on; a band
+# a job names is a hunt; a delivery on the road makes every fight an escort.
+# {} is today's fight.
+func _road_objective(foe, jumped: String) -> Dictionary:
+	if jumped != "":
+		return Objectives.make("breakout")
+	for q in party.quests:
+		if q["state"] == "active" and q["kind"] == "hunt_party" and String(q.get("target_party_id", "")) == foe.id:
+			return Objectives.make("hunt")
+	for q in party.quests:
+		if q["state"] == "active" and q["kind"] == "deliver_goods":
+			return Objectives.make("escort")
+	return {}
+
+# `jumped` is "" for no breakout, "seen" for a slip caught mid-flight (the
+# threat roster — the approach card priced it that way), "dark" for jumped in
+# the dark at camp or on the night road (the hard roster: not a fight you are
+# meant to win by standing).
+func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped := "") -> Dictionary:
+	if party.scouted_next:   # Potion of Clairvoyance, spent on this fight
+		scouted_ahead = true
+		party.scouted_next = false
 	var threat: Dictionary = WorldThreat.assess(party)
-	var result: Dictionary = await _run_combat(encounter_spec(foe),
+	var objective: Dictionary = _road_objective(foe, jumped)
+	var kind := String(objective.get("kind", ""))
+	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else "")
+	if kind != "":
+		spec["objective"] = objective
+	var result: Dictionary = await _run_combat(spec,
 		String(threat["difficulty"]), scouted_ahead, forced_ambush)
 	if result.is_empty():
 		return {}
+	var obj: Dictionary = result.get("objective", {})
+	var got_away: bool = String(obj.get("kind", "")) == "hunt" and not bool(obj.get("done", false))
 	if String(result.get("outcome", "")) == "Victory":
 		_bank(result)
-		world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
-		# T91: a no-op for the settlement-guard/lair-raid stand-ins below (their
-		# synthetic ids never match a live hunt_party quest's target), correct
-		# for an actual hostile roaming party from _check_encounter.
-		Quest.record_party_defeated(party, foe.id)
+		if got_away:
+			# The band is beaten but its chief is not: it stays on the map, breaks
+			# off a day's march, and the job that named it stays open.
+			_slipped[foe.id] = true
+			WorldAI.truce(foe, world.player(), world.clock.elapsed)
+			_quest_news.append("Their leader got away — the job is still open.")
+		else:
+			world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
+			# T91: a no-op for the settlement-guard/lair-raid stand-ins below (their
+			# synthetic ids never match a live hunt_party quest's target), correct
+			# for an actual hostile roaming party from _check_encounter.
+			Quest.record_party_defeated(party, foe.id)
 		# O7 raise/lower event: putting down a monster band is a favour to whoever
 		# lives near the bodies; putting down a faction's own band is not.
 		if WorldAI.is_monster(foe.faction):
@@ -756,10 +1506,21 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dict
 			FactionOpinion.lower(foe.faction, FactionOpinion.KILLED_THEIRS)
 	else:
 		_retreat()
+		# The band that beat them is still where the fight was. Left un-slipped
+		# it would ask "fight/parley/ambush?" again the frame the map came back
+		# whenever the nearest settlement was inside its trigger radius — the
+		# same card the beaten party had just answered.
+		_slipped[foe.id] = true
+	# The carter dead, or the party beaten with the crate on the road: the
+	# delivery is lost either way, and the board can post the run again.
+	if String(obj.get("kind", "")) == "escort" and not bool(obj.get("done", false)):
+		for title in Quest.fail_deliveries(party):
+			_quest_news.append("%s — the delivery is lost with the carter." % title)
 	_apply_deaths(result)
 	world.clock.resume()
-	WorldSave.save(world, party)   # O13 autosave: a fight is the biggest thing that
+	_autosave()   # O13 autosave: a fight is the biggest thing that
 	                               # happens to a run — never re-fight it after a crash
+	_show_spoils(result)
 	return result
 
 # O9 item 2: a won fight has to actually pay, or the run is a dead end. The same
@@ -774,12 +1535,302 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dict
 func _bank(result: Dictionary) -> void:
 	Campaign.new(party)._split_xp(int(result.get("xp", 0)))
 	party.add_gold(int(result.get("gold", 0)))
-	for item in result.get("loot", []):
+	var taken: Array = result.get("loot", [])
+	for item in taken:
 		party.stash_add(String(item))
+	# Issue #30: a delve is several fights on one set of resources, so what it
+	# paid is a running total, not the last room's.
+	if not _delve_haul.is_empty():
+		_delve_haul["xp"] = int(_delve_haul.get("xp", 0)) + int(result.get("xp", 0))
+		(_delve_haul["loot"] as Array).append_array(taken)
+		_delve_haul["fights"] = int(_delve_haul.get("fights", 0)) + 1
+	# Said out loud, on the same label the lair outcomes use. The combat screen
+	# lists it in the fight log, but that log is gone by the time the map comes
+	# back, and loot that lands silently in the stash is loot nobody knows they
+	# picked up.
+	if not taken.is_empty():
+		var names: Array = []
+		for item in taken:
+			names.append(Campaign.item_name(String(item)))
+		_lair_msg.text = "Taken from the dead: %s." % ", ".join(names)
 	# Without this an accepted quest can never reach "complete", so O9 item 4's
 	# turn-in row would have nothing to turn in.
-	Quest.record_kills(party, result.get("kills", []),
+	_quest_news = Quest.record_kills(party, result.get("kills", []),
 		RNG.new(maxi(1, int(world.clock.elapsed) + 1)))
+	if not _delve_haul.is_empty():
+		(_delve_haul["quests"] as Array).append_array(_quest_news)
+
+# --- issue #30: the spoils page -------------------------------------------
+#
+# A won fight on the map used to pay in silence. The combat screen writes its
+# own after-action lines — "+400 XP, +50 gold", "Taken from the dead: a
+# handaxe" — but out here the screen is torn down the frame `result` is filled,
+# so nobody ever read them; all that survived was one line on the HUD's lair
+# label, which the next frame's button text could overwrite. The linear
+# campaign never had this problem: it holds the fight screen up behind a "Back
+# to the road" button and the player reads the log. This is the map's version
+# of that button, as a page of its own rather than a lingering board, since the
+# map has a lair delve to summarise as well as a single fight.
+#
+# A delve is several fights on one set of resources (core/site.gd), so its
+# page totals the whole descent instead of firing per room.
+
+func _show_spoils(result: Dictionary) -> void:
+	if result.is_empty() or _spoils_panel != null:
+		return
+	var won: bool = String(result.get("outcome", "")) == "Victory"
+	var rows: Array = []
+	if won:
+		rows.append(["+%d XP,  +%d gold" % [int(result.get("xp", 0)), int(result.get("gold", 0))], Icons.COL_GOLD])
+		# One line for the haul, a count on a repeat — "Potion of Healing ×2",
+		# not the same line twice.
+		var counts := {}
+		for item in result.get("loot", []):
+			counts[String(item)] = int(counts.get(String(item), 0)) + 1
+		var names: Array = []
+		for item in counts:
+			names.append(Campaign.item_name(item) + (" ×%d" % counts[item] if counts[item] > 1 else ""))
+		if names.is_empty():
+			rows.append(["Nothing worth carrying off the bodies.", Icons.COL_MUTED])
+		else:
+			rows.append(["Taken from the dead: %s" % ", ".join(names), Icons.COL_TEXT])
+	var obj: Dictionary = result.get("objective", {})
+	if String(obj.get("kind", "")) != "":
+		rows.append([Objectives.spoils_line(obj), Icons.COL_GOLD if bool(obj.get("done", false)) else Icons.COL_FOE])
+	for line in _quest_news:
+		rows.append([String(line), Icons.COL_ACCENT])
+	_quest_news = []
+	for id in result.get("deaths", []):
+		var fallen = party.get_member(id)
+		rows.append(["%s did not get up." % (fallen.cname if fallen != null else id), Icons.COL_FOE])
+	# The retreat's own accounting (gold tax, where they woke up) is already
+	# written; a lost fight's page is that line, not an empty spoils list.
+	if not won and _lair_msg != null and _lair_msg.text != "":
+		rows.append([_lair_msg.text, Icons.COL_FOE])
+	_build_spoils_panel("Victory" if won else "Defeat", rows)
+
+# What the whole descent paid, once the party is back out on the map.
+func _show_delve_spoils(l, cleared: bool) -> void:
+	if _delve_haul.is_empty():
+		return
+	var haul: Dictionary = _delve_haul
+	_delve_haul = {}
+	var rows: Array = []
+	rows.append(["%d of %d rooms behind them" % [int(l.depth_cleared), Site.depth_for(l)],
+		Icons.COL_TEXT])
+	rows.append(["+%d XP over %d fight%s%s" % [int(haul.get("xp", 0)), int(haul.get("fights", 0)),
+		"" if int(haul.get("fights", 0)) == 1 else "s",
+		"" if not haul.has("cleared_xp") else ", %d of it for reaching the bottom" % int(haul["cleared_xp"])],
+		Icons.COL_GOLD])
+	rows.append(["+%d gold" % maxi(0, party.gold - int(haul.get("gold0", party.gold))), Icons.COL_GOLD])
+	var loot: Array = haul.get("loot", [])
+	if loot.is_empty():
+		rows.append(["Nothing came out of there but coin.", Icons.COL_MUTED])
+	else:
+		var names: Array = []
+		for item in loot:
+			names.append(Campaign.item_name(String(item)))
+		rows.append(["Carried out: %s" % ", ".join(names), Icons.COL_TEXT])
+	for line in haul.get("quests", []):
+		rows.append([String(line), Icons.COL_ACCENT])
+	_build_spoils_panel(
+		"%s is cleared out" % l.sname if cleared else "Out of %s" % l.sname, rows)
+
+func _build_spoils_panel(heading: String, rows: Array) -> void:
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+	_spoils_panel = overlay
+
+	var dim := ColorRect.new()
+	dim.color = Color(Icons.COL_BG.r, Icons.COL_BG.g, Icons.COL_BG.b, 0.72)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(dim)
+
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(centre)
+
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.custom_minimum_size = Vector2(440, 0)
+	centre.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = heading
+	title.theme_type_variation = "Head"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+
+	var scroll := _scroll_column(Vector2(420, 0))
+	# Only as tall as it needs to be, up to a ceiling: a two-line haul should not
+	# open a half-screen box, and a twelve-line one should not run off the bottom.
+	scroll.custom_minimum_size.y = clampf(rows.size() * 26.0, 52.0, 320.0)
+	box.add_child(scroll)
+	var list: VBoxContainer = scroll.get_child(0)
+	for row in rows:
+		var l := Label.new()
+		l.text = String(row[0])
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.add_theme_color_override("font_color", row[1])
+		list.add_child(l)
+
+	var go := Button.new()
+	go.text = "Back to the map  [Esc]"
+	go.pressed.connect(_close_spoils)
+	box.add_child(go)
+	go.grab_focus()
+
+func _close_spoils() -> void:
+	if _spoils_panel != null:
+		_spoils_panel.queue_free()
+		_spoils_panel = null
+	_halt()   # #98: wait for an order
+
+# --- issue #118: somebody can level up ----------------------------------
+#
+# A level used to arrive as one chime (campaign.gd's _split_xp) and a number on
+# a screen two clicks away, so parties walked around owing themselves levels
+# for hours. It gets the after-action page's own treatment instead: the map
+# stops, a gilt panel says who is ready, and its button is the trip to the
+# party screen where the sheets are.
+#
+# WHERE IT CANNOT APPEAR: over a fight. This runs off the map's own _process,
+# which does not tick while combat owns the screen, and _overlay_up() covers
+# the spoils page, a road event, a delve and the rest — so the announcement
+# waits for open country with nothing else on it, which is exactly where
+# somebody is free to go and spend the level.
+#
+# ONCE PER LEVEL, PER CHARACTER: _levelup_told remembers who was told and at
+# what level, so backing out with "Not now" does not put the panel straight
+# back up, and the next level says so again.
+# Co-op: a hero levels up on the screen of whoever plays them, so each peer
+# is only told about its own.
+func _ready_to_level() -> Array:
+	var out: Array = []
+	for ch in party.roster:
+		if not ch.dead and Leveling.can_level_up(ch) and Coop.mine(party, ch.id):
+			out.append(ch)
+	return out
+
+func _check_level_ready() -> void:
+	if _combat != null or _overlay_up() or not _visit.is_empty():
+		return
+	var who: Array = _ready_to_level().filter(
+		func(ch): return int(_levelup_told.get(ch.id, -1)) != ch.level())
+	if who.is_empty():
+		return
+	for ch in who:
+		_levelup_told[ch.id] = ch.level()
+	_build_levelup_panel(who)
+
+func _build_levelup_panel(who: Array) -> void:
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+	_levelup_panel = overlay
+
+	var dim := ColorRect.new()
+	dim.color = Color(Icons.COL_BG.r, Icons.COL_BG.g, Icons.COL_BG.b, 0.72)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(dim)
+
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(centre)
+
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.custom_minimum_size = Vector2(480, 0)
+	centre.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "Level up" if who.size() == 1 else "Level up  ×%d" % who.size()
+	title.theme_type_variation = "Title"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	box.add_child(title)
+
+	for ch in who:
+		var l := Label.new()
+		l.text = "%s  —  %s %d  →  %d" % [ch.cname,
+			Icons.class_glyph(ch.class_id()), ch.level(), ch.level() + 1]
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.theme_type_variation = "Head"
+		box.add_child(l)
+
+	var note := Label.new()
+	note.text = "There is a level waiting on the party screen — pick it up there, per character." if not spectator \
+		else "Your hero, your choices — take the level here; your host's sheet follows."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	note.add_theme_color_override("font_color", Icons.COL_MUTED)
+	box.add_child(note)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(row)
+	var go := Button.new()
+	go.text = "Open the party  [Enter]" if not spectator else "Level up %s  [Enter]" % who[0].cname
+	go.theme_type_variation = "Primary"
+	go.pressed.connect(func():
+		_close_levelup()
+		if spectator:
+			_guest_levelup(who[0])
+		else:
+			_open_party())
+	row.add_child(go)
+	var later := Button.new()
+	later.text = "Not now  [Esc]"
+	later.theme_type_variation = "Quiet"
+	later.pressed.connect(_close_levelup)
+	row.add_child(later)
+	go.grab_focus()
+
+func _close_levelup() -> void:
+	if _levelup_panel != null:
+		_levelup_panel.queue_free()
+		_levelup_panel = null
+
+const LEVELUP_SCENE := "res://scenes/creator/levelup.tscn"
+var _levelup_overlay = null   # the guest's level-up screen, while one is up
+
+# The guest takes a level on their mirrored copy of the hero — the same
+# screen the profile opens — and every step it makes goes to the host as one
+# message on Confirm. Nothing is saved here; the host's save comes back as the
+# next full map.
+func _guest_levelup(ch) -> void:
+	var overlay = load(LEVELUP_SCENE).instantiate()
+	var steps: Array = []
+	overlay.persist = false
+	overlay.on_step = func(step: Dictionary): steps.append(step)
+	add_child(overlay)
+	_levelup_overlay = overlay
+	overlay.set_character(ch)
+	overlay.finished.connect(func(_leveled):
+		overlay.queue_free()
+		_levelup_overlay = null
+		if not steps.is_empty() and Coop.link != null:
+			Coop.link.send(Coop.levelup(ch.id, steps)))
 
 # A death is a death regardless of who won — encounter.gd always fills
 # `deaths`, campaign.gd's linear run already benches+marks them the same way;
@@ -808,21 +1859,33 @@ func _retreat() -> void:
 	var p := world.player()
 	if p == null or world.settlements.is_empty():
 		return
-	party.spend_gold(roundi(party.gold * DEFEAT_GOLD_LOSS_PCT))
+	var lost: int = roundi(party.gold * DEFEAT_GOLD_LOSS_PCT)
+	party.spend_gold(lost)
 	Party.auto_revive_all(party)
-	var safe: Vector2 = world.settlements[0].position
+	var safe = world.settlements[0]
 	for s in world.settlements:
-		if p.position.distance_squared_to(s.position) < p.position.distance_squared_to(safe):
-			safe = s.position
-	p.position = safe
-	world.set_goal(p, safe)
+		if p.position.distance_squared_to(s.position) < p.position.distance_squared_to(safe.position):
+			safe = s
+	p.position = safe.position
+	world.set_goal(p, safe.position)
+	_lair_msg.text = "The party is beaten and left for dead. They come to at %s, %d gold lighter." % [safe.sname, lost]
 
 # --- O6: settlement visit ----------------------------------------------
 # Same shape as _check_encounter above, against the settlement list instead of
 # the party list. `_left` stops the panel reopening on the frame after Leave —
 # it clears once the player is actually outside the radius again.
+# #89: "paused" is not the gate — the halt on arriving (#70) and after a fight
+# (#98) is a pause too, and a party stopped on top of a lair still has to see
+# "Attack" / "Slip past". What these gates are really about is a card or panel
+# owning the screen.
+func _overlay_up() -> bool:
+	return _event_card != null or _approach_card != null or _spoils_panel != null \
+		or _levelup_panel != null \
+		or _site != null or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
+		or _story_panel != null or story_card != null or _menu_panel != null
+
 func _check_visit() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
 	var p := world.player()
 	if p == null:
@@ -856,7 +1919,7 @@ func _check_visit() -> void:
 # Survival check, discovered-and-unlooted offers the fight. A looted lair (or
 # nothing in range) hides the button — there is nothing left to do there.
 func _check_lairs() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		_lair_btn.visible = false
 		_lair_sneak_btn.visible = false
 		return
@@ -886,7 +1949,11 @@ func _check_lairs() -> void:
 	_lair_btn.text = ("Search for a hidden lair (Survival)" if not target.discovered
 		else "Attack %s — %s, levels %d-%d" % [target.sname, String(band["label"]),
 			int(lv[0]), int(lv[1])])
-	_lair_sneak_btn.visible = target.discovered
+	# The quiet way is only on the table while the warren is still quiet: once
+	# the party has been through that door (or tried the quiet way and failed
+	# into the fight below), the guardians are up and stay up — see
+	# core/world_lairs.gd's alerted().
+	_lair_sneak_btn.visible = WorldLairs.can_sneak(target)
 
 # D1: a lair the party walked away from resolves without them after
 # WorldLairs.WINDOW — somebody else clears it, or its tenants move on. Said out
@@ -896,7 +1963,13 @@ func _check_expired_lairs() -> void:
 		return
 	for l in WorldLairs.expire(world, world.clock.elapsed):
 		_lair_msg.text = WorldLairs.resolution_text(l)
-		WorldSave.save(world, party)
+		_autosave()
+	# ...and the other direction: a day after a lair was emptied, something has
+	# moved into it. Said out loud for the same reason the expiry is — a grey
+	# landmark going red again with no explanation reads as a bug.
+	for l in WorldLairs.respawn(world, world.clock.elapsed):
+		_lair_msg.text = WorldLairs.respawn_text(l)
+		_autosave()
 
 func _lair_action() -> void:
 	var l: World.Lair = _lair_target
@@ -920,18 +1993,28 @@ func _lair_action() -> void:
 # (the guardians are alerted either way now, so there's no third attempt).
 func _lair_sneak_action() -> void:
 	var l: World.Lair = _lair_target
-	if l == null or _combat != null or not l.discovered or l.looted:
+	if l == null or _combat != null:
 		return
 	var roll := WorldLairs.sneak_past(l, party)
 	if roll.is_empty():
+		# The one refusal worth saying out loud: they have already been in there,
+		# so there is nobody left to talk past. (An empty roll otherwise means a
+		# party with no one to make the check, which the button being up already
+		# implies is not the case.)
+		if WorldLairs.alerted(l):
+			_lair_msg.text = "%s is already roused — the quiet way is gone." % l.sname
 		return
 	if roll["ok"]:
-		var loot: Dictionary = WorldLairs.loot(l)
+		var loot: Dictionary = WorldLairs.loot(l, world.clock.elapsed)
 		party.add_gold(int(loot.get("gold", 0)))
 		Quest.record_lair_cleared(party, l.id)
 		_lair_msg.text = "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))]
 	else:
 		_lair_msg.text = String(roll["text"])
+		# Roused by the attempt itself, not as a side effect of the fight it
+		# falls into: that is what makes this one attempt rather than one per
+		# visit, and it is the moment the D1 window should start counting from.
+		WorldLairs.mark_entered(l, world.clock.elapsed)
 		await _lair_action()
 
 # --- D1: the delve --------------------------------------------------------
@@ -949,6 +2032,11 @@ func _delve(l) -> void:
 		return
 	world.clock.pause()
 	WorldLairs.mark_entered(l, world.clock.elapsed)   # D1: kicking the door starts the window
+	# Issue #30: the running total the delve's own spoils page is built from.
+	# gold0 rather than a counter, because a site pays from three places (room
+	# caches, the boss hoard, the fights themselves) and only the purse sees all
+	# of them.
+	_delve_haul = {"gold0": party.gold, "xp": 0, "fights": 0, "loot": [], "quests": []}
 	_site = Site.for_lair(l, party, world)
 	_site_screen = SiteScreen.new()
 	_site_screen.site = _site
@@ -982,19 +2070,28 @@ func _on_site_room_chosen(i: int) -> void:
 			_bank(result)
 		_apply_deaths(result)
 		_site.finish_combat(result)
+		var obj: Dictionary = result.get("objective", {})
+		if String(obj.get("kind", "")) != "":
+			_site.say(Objectives.spoils_line(obj))
+		if String(obj.get("kind", "")) == "rescue" and bool(obj.get("done", false)):
+			Quest.record_rescued(party, _site.lair.id)
+			var line := "The captive is out of %s." % _site.lair.sname
+			_site.say(line)
+			if not _delve_haul.is_empty():
+				(_delve_haul["quests"] as Array).append(line)
 	if _site.state == "wiped":
 		_site_wiped()
 	elif not _site.is_over():
 		_site.leave()
 	_site_screen.refresh()
-	WorldSave.save(world, party)
+	_autosave()
 
 func _on_site_advanced() -> void:
 	if _site == null or _site.is_over():
 		return
 	_site.leave()
 	_site_screen.refresh()
-	WorldSave.save(world, party)
+	_autosave()
 
 func _on_site_withdrew() -> void:
 	if _site == null:
@@ -1021,9 +2118,21 @@ func _on_site_done() -> void:
 	if _site == null:
 		return
 	var l = _site.lair
-	if _site.state == "cleared":
+	var ending: String = _site.state
+	var cleared: bool = ending == "cleared"
+	if cleared:
 		Quest.record_lair_cleared(party, l.id)
-		_lair_msg.text = "%s is cleared out, all the way to the bottom." % l.sname
+		# Reaching the bottom is worth something of its own. Every room on the
+		# way down already paid its own XP; this is the part that was missing,
+		# and it is why a delve is now worth more than the same fights strung
+		# out on the road rather than less. Banked through the same split every
+		# other XP award uses, and counted into the delve's own page below.
+		var bonus: int = Site.clear_xp(l)
+		Campaign.new(party)._split_xp(bonus)
+		if not _delve_haul.is_empty():
+			_delve_haul["xp"] = int(_delve_haul.get("xp", 0)) + bonus
+			_delve_haul["cleared_xp"] = bonus
+		_lair_msg.text = "%s is cleared out, all the way to the bottom. +%d XP." % [l.sname, bonus]
 	elif _site.state == "withdrawn":
 		_lair_msg.text = "%s is still down there — %d of %d rooms behind you." % [
 			l.sname, int(l.depth_cleared), Site.depth_for(l)]
@@ -1033,7 +2142,14 @@ func _on_site_done() -> void:
 		_site_screen = null
 	world.clock.resume()
 	_pause_btn.text = "Pause"
-	WorldSave.save(world, party)
+	_autosave()
+	# Issue #30: what the whole descent paid, once they are back out in the air.
+	# Not on a wipe — _site_wiped() has already said what that cost, and a page
+	# headed with a haul is the wrong thing to show a party that was dragged out.
+	if ending in ["cleared", "withdrawn"]:
+		_show_delve_spoils(l, cleared)
+	else:
+		_delve_haul = {}
 
 # T91: split out of _check_visit so it can await the fight — the stand-in id
 # ("%s-guard") never matches a hunt_party quest's target, so raid_settlement
@@ -1076,8 +2192,9 @@ func _open_approach(foe, hostile := true) -> void:
 	_approach_card = ApproachCard.new()
 	add_child(_approach_card)
 	_approach_card.chosen.connect(_on_approach_chosen)
+	var kind := String(_road_objective(foe, "").get("kind", ""))
 	_approach_card.show_approach(Approach.options(party, foe, hostile),
-		"%s (%d)" % [foe.id.capitalize(), foe.troops.size()])
+		"%s (%d)%s" % [foe.id.capitalize(), foe.troops.size(), ("  ·  " + Objectives.title(kind)) if kind != "" else ""])
 
 func _on_approach_chosen(way: String) -> void:
 	var foe = _approach_foe
@@ -1106,16 +2223,26 @@ func _approach_event(r: Dictionary) -> Dictionary:
 		e["gold"] = -int(r["toll"])
 	return e
 
+# Which approach outcome is a breakout, and at what roster: seen mid-slip is
+# caught in the open, at the threat roster the card already showed; a blown
+# ambush attempt is just the ordinary fight its card promised — THEY take the
+# first round, nothing more.
+static func _jumped_for(r: Dictionary) -> String:
+	return "seen" if String(r.get("way", "")) == "avoid" and bool(r.get("forced_ambush", false)) else ""
+
 func _on_approach_reported(foe, r: Dictionary) -> void:
 	_on_event_ack()
 	if not bool(r.get("fight", true)):
 		# No fight: the band is still out there, just not met. Mark it slipped so
-		# standing next to it does not re-open the question every frame.
+		# standing next to it does not re-open the question every frame, and
+		# call a truce so a hunting band breaks off instead of closing again
+		# the moment you step out of reach.
 		_slipped[foe.id] = true
+		WorldAI.truce(foe, world.player(), world.clock.elapsed)
 		world.clock.resume()
 		return
 	await _launch_combat(foe, bool(r.get("scouted_ahead", false)),
-		bool(r.get("forced_ambush", false)))
+		bool(r.get("forced_ambush", false)), _jumped_for(r))
 
 func _close_approach() -> void:
 	if _approach_card != null:
@@ -1151,7 +2278,7 @@ func _check_travel() -> void:
 	add_child(_event_card)
 	_event_card.acknowledged.connect(_on_event_ack)
 	_event_card.show_event(e)
-	WorldSave.save(world, party)   # an event can move gold, HP, the clock and the map
+	_autosave()   # an event can move gold, HP, the clock and the map
 
 # The plain handler for a road event's card. Note it FREES the card without
 # emitting `acknowledged`, so anything that needs a bound follow-up to run
@@ -1180,6 +2307,12 @@ func _check_region() -> void:
 		return
 	var band: Dictionary = Regions.at(world, p0.position)
 	var lv: Array = band["levels"]
+	# D7: a scouting job is done the moment the party is standing in the band it
+	# was sent to look at — the riding back is the turn-in, not the job. Read off
+	# where they ARE rather than off a crossing: a job taken in a town that sits
+	# just inside the seam would otherwise need the party to leave the band and
+	# come back before it would tick.
+	Quest.record_region_reached(party, String(band["id"]))
 	# T27+D6: the map's own ambient bed. The overworld used to be the one screen
 	# with SFX but no music at all — campaign.gd set a bed for every node of a
 	# linear run, and the open world, which is where most of a session is spent,
@@ -1192,7 +2325,7 @@ func _check_region() -> void:
 	if _region_lbl != null:
 		# Short form: this bar already carries nine controls and a hint, and the
 		# long form lives on the lair button, the inn's leads and the crossing card.
-		_region_lbl.text = "%s · lv %d-%d" % [String(band["label"]), int(lv[0]), int(lv[1])]
+		_region_lbl.text = "%s, levels %d to %d" % [String(band["label"]), int(lv[0]), int(lv[1])]
 	if _region.is_empty():
 		_region = band          # first frame: the party is simply somewhere
 		return
@@ -1248,18 +2381,31 @@ func _refresh_pace_btn() -> void:
 func _open_visit(s) -> void:
 	world.clock.pause()
 	world.set_goal(world.player(), world.player().position)   # stop at the gate
+	# D7: walking in this gate IS a courier job's delivery. Before the panel is
+	# built, so the crate is already handed over on the screen that opens.
+	Quest.record_settlement_visited(party, s.id)
 	_visit = Visit.visit(s, world)
 	_visit_page = "hub"
 	_market_tab = MARKET_TAB_ALL
+	Sound.play_sfx("settlement")   # the gate, once, on arriving — not on every page
 	_build_visit_panel()
 
 func _goto_page(page: String) -> void:
 	_visit_page = page
 	if page == "market":
-		_market_tab = MARKET_TAB_ALL   # every visit to the stalls starts at the whole shelf
+		_market_tab = _first_counter()   # every visit to the stalls starts at the first counter
+		Sound.play_sfx("shop")         # the shop door, over the button's own click
 	_build_visit_panel()
 
+# Kept as the fallback for a settlement with no counters at all; the "All"
+# tab itself is gone — one counter at a time, the way the stalls are drawn.
 const MARKET_TAB_ALL := "all"
+
+func _first_counter() -> String:
+	for t in _visit.get("services", []):
+		if t != "innkeeper":
+			return String(t)
+	return MARKET_TAB_ALL
 
 func _goto_market_tab(service: String) -> void:
 	_market_tab = service
@@ -1270,13 +2416,110 @@ func _goto_market_tab(service: String) -> void:
 # which is the one binding a player will try without being told; the initials
 # jump straight to a building from anywhere inside the gates.
 func _unhandled_key_input(event: InputEvent) -> void:
-	if _visit.is_empty() or _combat != null or not (event is InputEventKey) or not event.pressed:
+	# `echo` is the key repeat: a held Space used to re-toggle the pause every
+	# repeat, so the clock ran only while the key was down. One press, one toggle.
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	# The one binding that works everywhere on the map, in a town or out of it:
+	# a bug you can only report from the town square is a bug you lose.
+	if event.keycode == KEY_F3 and _combat == null:
+		accept_event()
+		report_bug()
+		return
+	if spectator:   # the camera keys, and nothing that gives an order
+		match event.keycode:
+			KEY_Q: orbit_by(-YAW_STEP)
+			KEY_E: orbit_by(YAW_STEP)
+			KEY_R: tilt_by(PITCH_STEP)
+			KEY_F: tilt_by(-PITCH_STEP)
+			KEY_HOME: reset_view()
+			_: return
+		accept_event()
+		return
+	if _combat != null:
+		return
+	# #106: the party screen opened at the inn's counter sits OVER the visit.
+	# Esc there used to fall through to the visit's own bindings underneath —
+	# town square, then Leave — so "Back to the inn" put the party on the map
+	# outside town, where the night had bands waiting.
+	if _party_overlay != null and not _visit.is_empty():
+		if event.keycode in [KEY_ESCAPE, KEY_P]:
+			accept_event()
+			_close_party()
+		return
+	# Out on the map, before the settlement bindings below: the two keys every
+	# player presses first. Esc backs out of whatever panel is up and otherwise
+	# opens the pause menu; space is the Pause button without the trip to the
+	# corner. Neither existed here, though both do in the fight (scenes/main.gd).
+	if _visit.is_empty():
+		# The spoils page is modal and has one way on: any of the three keys a
+		# player reaches for takes it.
+		if _spoils_panel != null:
+			if event.keycode in [KEY_ESCAPE, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]:
+				accept_event()
+				_close_spoils()
+			return
+		# #118's level-up page is modal the same way, with two answers rather
+		# than one: Enter goes to the party screen, Esc leaves it for later.
+		if _levelup_panel != null:
+			if event.keycode in [KEY_ENTER, KEY_KP_ENTER]:
+				accept_event()
+				_close_levelup()
+				_open_party()
+			elif event.keycode in [KEY_ESCAPE, KEY_SPACE]:
+				accept_event()
+				_close_levelup()
+			return
+		match event.keycode:
+			KEY_ESCAPE:
+				# A delve, a road event, a band closing in and a story beat each
+				# own the screen and have their own way out; Esc is not it.
+				if _site != null or _event_card != null or _approach_card != null \
+						or story_card != null:
+					return
+				if _party_overlay != null:
+					_close_party()
+				elif _quest_panel != null:
+					_close_quests()
+				elif _inventory_panel != null:
+					_close_inventory()
+				elif _story_panel != null:
+					_close_story()
+				else:
+					_toggle_menu()
+			KEY_SPACE:
+				if _menu_panel != null:
+					_close_menu()
+				else:
+					_toggle_pause()
+			# The clock's four speeds by their own numbers, the party screen by
+			# its letter — the HUD buttons without the trip to the bar.
+			KEY_1, KEY_KP_1: _set_speed(1.0)
+			KEY_2, KEY_KP_2: _set_speed(2.0)
+			KEY_4, KEY_KP_4: _set_speed(4.0)
+			KEY_8, KEY_KP_8: _set_speed(8.0)
+			KEY_P:
+				if _party_overlay != null:
+					_close_party()
+				else:
+					_open_party()
+			KEY_I: _toggle_inventory()
+			# The camera, from the keyboard. Q/E turn it, R/F tilt it, Home puts
+			# it back — the same three things middle-drag and the scroll wheel
+			# do, for players who would rather not hold a button down. Home is
+			# the one that has to exist: once a view can be turned it can be
+			# lost, and finding the angle you started at by hand is not a game.
+			KEY_Q: orbit_by(-YAW_STEP)
+			KEY_E: orbit_by(YAW_STEP)
+			KEY_R: tilt_by(PITCH_STEP)
+			KEY_F: tilt_by(-PITCH_STEP)
+			KEY_HOME: reset_view()
+			_: return
+		accept_event()
 		return
 	match event.keycode:
 		KEY_ESCAPE:
-			if _visit_page == "market" and _market_tab != MARKET_TAB_ALL:
-				_goto_market_tab(MARKET_TAB_ALL)
-			elif _visit_page != "hub":
+			if _visit_page != "hub":
 				_goto_page("hub")
 			else:
 				_close_visit()
@@ -1287,6 +2530,38 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		_: return
 	accept_event()
 
+# Everything a report wants to know about a run in progress, read live. Ordered:
+# the overlay and the issue body both render it in this order.
+func report_bug() -> void:
+	BugReportOverlay.toggle(self, bug_context())
+
+func bug_context() -> Dictionary:
+	var ctx := {"Screen": "the open world (%s map)" % String(world.origin.get("kind", world_size))}
+	if not _visit.is_empty():
+		var s = _visit.get("settlement")
+		ctx["In a settlement"] = "%s, %s page" % [
+			s.sname if s != null else "?", _visit_page]
+	ctx["When"] = WorldSave.day_clock(world.clock.elapsed, ", ")
+	if not _region.is_empty():
+		ctx["Region"] = String(_region.get("label", _region.get("id", "?")))
+	var p0 = world.player()
+	if p0 != null:
+		ctx["Position"] = "%d, %d" % [int(p0.position.x), int(p0.position.y)]
+	var who: Array = []
+	for ch in (party.party_characters() if party != null else []):
+		# hp_current is -1 for "never been hurt" (core/character.gd), not zero.
+		var state := "down" if ch.dead else (
+			"full hp" if ch.hp_current < 0 else "%d hp" % ch.hp_current)
+		who.append("%s (%s)" % [ch.cname, state])
+	ctx["Party"] = ", ".join(who) if not who.is_empty() else "nobody standing"
+	if party != null:
+		ctx["Gold"] = "%d gp" % party.gold
+	if story != null:
+		ctx["Story"] = "%s, chapter %s" % [story.pack_id,
+			story.chapter if story.chapter != "" else "(finished)"]
+	ctx["Paused"] = "yes" if world.clock.is_paused() else "no"
+	return ctx
+
 func _close_visit() -> void:
 	_left = _visit.get("settlement")
 	_visit = {}
@@ -1295,17 +2570,20 @@ func _close_visit() -> void:
 		_visit_panel = null
 	world.clock.resume()
 	_pause_btn.text = "Pause"
-	WorldSave.save(world, party)   # O13 autosave: the purse and the shelf both moved
+	_autosave()   # O13 autosave: the purse and the shelf both moved
+	_coop_share_visit()
 
 func _buy(item_id: String) -> void:
 	if Visit.buy(_visit, party, item_id):
 		Sound.play_sfx("buy")
+		_cheer()
 		_build_visit_panel()
 	else:
 		_say("Not enough gold.")
 
 func _sell(item_id: String) -> void:
 	if Visit.sell(_visit, party, item_id):
+		_cheer()
 		_build_visit_panel()
 
 # T9y: the Healer and the Librarian — T25 services that a settlement has
@@ -1320,7 +2598,15 @@ func _buy_rumor(lead: Dictionary) -> void:
 	var r: Dictionary = Rumors.buy(lead, party, world)
 	if bool(r.get("ok", false)):
 		Sound.play_sfx("quest")
-		WorldSave.save(world, party)
+		_autosave()
+	_build_visit_panel()
+	_say(String(r.get("text", "")))
+
+func _raise_dead(id: String) -> void:
+	var r: Dictionary = Visit.raise_dead(party, id)
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("heal")
+		_autosave()
 	_build_visit_panel()
 	_say(String(r.get("text", "")))
 
@@ -1328,7 +2614,7 @@ func _heal() -> void:
 	var r: Dictionary = Visit.heal(party)
 	if bool(r.get("ok", false)):
 		Sound.play_sfx("heal")
-		WorldSave.save(world, party)
+		_autosave()
 	_build_visit_panel()
 	_say(String(r.get("text", "")))
 
@@ -1336,7 +2622,7 @@ func _identify(item_id: String) -> void:
 	var r: Dictionary = Visit.identify(party, item_id)
 	if bool(r.get("ok", false)):
 		Sound.play_sfx("identify")
-		WorldSave.save(world, party)
+		_autosave()
 	_build_visit_panel()
 	_say(String(r.get("text", "")))
 
@@ -1350,14 +2636,12 @@ func _buy_camp_kit() -> void:
 	else:
 		_say("Not enough gold.")
 
-# O9 item 1: one attempt per visit. The steal roll is seeded off (settlement, hour)
+# O9 item 1: one attempt per visit, and the stall is watched for a day after
+# (Visit.steal_wait). The steal roll is seeded off (settlement, hour)
 # and the clock is paused for the whole visit, so every press rolled the identical
 # result — a nat 20 was an unlimited gold button. The mark lives on `_visit`, so
 # Leave and come back is a fresh attempt (at a fresh hour).
 func _steal() -> void:
-	if _visit.get("stolen", false):
-		_say("They are watching the stall now. Come back another day.")
-		return
 	var r: Dictionary = Visit.steal(_visit["settlement"], party, world, _visit)
 	_visit["stolen"] = true
 	if bool(r.get("ok", false)):
@@ -1367,6 +2651,21 @@ func _steal() -> void:
 
 # T9x: one attempt per visit, same shape as _steal(). Only shown when the
 # market actually refused to trade (see _build_visit_panel).
+# T9x: steal/persuade/investigate/haggle are one-attempt-per-visit flags
+# that live only on this UI's own _visit dict — Visit.visit()/market()/
+# persuade_into_trading() know nothing about them, so any spot that
+# replaces _visit wholesale (a rest's fresh shelf roll, a successful
+# persuade reopening the market) has to carry them forward explicitly or
+# they silently reset, re-enabling an action that was supposed to be spent
+# for the price of pressing a different button.
+func _carry_visit_flags(from: Dictionary, to: Dictionary) -> void:
+	# Both sides added a flag here, and the comment above is exactly why both have
+	# to stay: "worked" is this branch's healer shift, "sour" is the moods work's
+	# soured face. Either one dropped from this list resets itself the next time
+	# anything replaces _visit.
+	for k in ["stolen", "persuaded", "investigated", "haggled", "worked", "sour"]:
+		to[k] = from.get(k, false)
+
 func _persuade() -> void:
 	if _visit.get("persuaded", false):
 		_say("They've made up their mind for today.")
@@ -1374,13 +2673,41 @@ func _persuade() -> void:
 	var r: Dictionary = Visit.persuade(_visit["settlement"], _visit, party)
 	_visit["persuaded"] = true
 	if bool(r.get("ok", false)):
-		var stolen: bool = _visit.get("stolen", false)
-		var persuaded: bool = true
+		var before := _visit
 		_visit = Visit.persuade_into_trading(_visit["settlement"], _visit)
-		_visit["stolen"] = stolen
-		_visit["persuaded"] = persuaded
+		_carry_visit_flags(before, _visit)
 	_build_visit_panel()
 	_say(String(r.get("text", "Nobody here will hear you out.")))
+
+# T9x: haggling — the mirror of persuade(), for a market that's already
+# open. One attempt per visit; moves this visit's prices for better or
+# worse depending on the roll, doesn't touch the underlying faction opinion.
+func _work_healer() -> void:
+	if _visit.get("worked", false):
+		return
+	var r: Dictionary = Visit.work_healer(_visit["settlement"], party)
+	_visit["worked"] = true
+	if bool(r.get("ok", false)):
+		Sound.play_sfx("buy")
+	_autosave()
+	_build_visit_panel()
+	_say(String(r.get("text", "The healer has no work for you.")))
+
+func _haggle() -> void:
+	if _visit.get("haggled", false):
+		_say("They won't budge on price again today.")
+		return
+	var r: Dictionary = Visit.haggle(_visit, party)
+	_visit["haggled"] = true
+	if not r.is_empty():
+		Visit.apply_haggle(_visit, float(r["mult"]))
+		if bool(r["ok"]):
+			Sound.play_sfx("buy")
+			_cheer()
+		else:
+			_visit["sour"] = true   # a bad ask sours the room, and the face, for the visit
+	_build_visit_panel()
+	_say(String(r.get("text", "Nobody here is in the mood to talk price.")))
 
 # T9x: one attempt per visit. Only shown when a fight resolved near this
 # settlement recently (market()'s own `battle` flag).
@@ -1406,16 +2733,17 @@ func _rest() -> void:
 	var s = _visit["settlement"]
 	var cost := Visit.inn_cost(s)
 	if not party.spend_gold(cost):
-		_say("Can't afford a room here (%d gp)." % cost)
+		_say("Can't afford a room here (%d ◉)." % cost)
 		return
-	var stolen: bool = _visit.get("stolen", false)
+	var before := _visit
 	Visit.rest(party, world, "long-rest")
 	Sound.play_sfx("rest")
 	var trance: Dictionary = Trance.apply_rest_bonus(party, world, s.position)
 	_visit = Visit.visit(s, world)
-	_visit["stolen"] = stolen
+	_carry_visit_flags(before, _visit)
+	_cheer()
 	_build_visit_panel()
-	_say("The party takes a long rest (%d gp for the room). Eight hours pass and the stalls fill up again.%s" % [
+	_say("The party takes a long rest (%d ◉ for the room). Eight hours pass and the stalls fill up again.%s" % [
 		cost, _trance_note(trance)])
 
 # T9x: names the check and its result explicitly, same convention every
@@ -1448,10 +2776,13 @@ func _hostile_nearby() -> bool:
 	return false
 
 func _short_rest() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
 	if _hostile_nearby():
 		_camp_msg.text = "Too dangerous to rest here — something hostile is close."
+		return
+	if not Visit.can_short_rest(party):
+		_camp_msg.text = "The party has rested enough for one day — only a long rest will do now."
 		return
 	Visit.rest(party, world, "short-rest")
 	Sound.play_sfx("rest")
@@ -1468,46 +2799,81 @@ func _short_rest() -> void:
 # reason to gate this on can_long_rest() first: no point risking an ambush
 # for a rest that wouldn't grant its benefit yet regardless.
 func _make_camp() -> void:
-	if _combat != null or not _visit.is_empty() or world.clock.is_paused():
+	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
 	if not Visit.can_long_rest(party, world):
 		_camp_msg.text = "The party isn't tired enough for another long rest yet."
 		return
-	if party.stash_count(WorldCamp.CAMP_KIT_ITEM) < 1:
+	var roped: bool = party.safe_camp   # Rope Trick (core/road_spells.gd): the kit is the spell
+	if not roped and party.stash_count(WorldCamp.CAMP_KIT_ITEM) < 1:
 		return
-	party.stash_remove(WorldCamp.CAMP_KIT_ITEM, 1)
+	if roped:
+		party.safe_camp = false
+	else:
+		party.stash_remove(WorldCamp.CAMP_KIT_ITEM, 1)
 	var p := world.player()
+	Ach.bump("camps")
 	var rng := RNG.new(WorldCamp.camp_seed(world.clock.elapsed, p.position))
-	if not WorldCamp.ambush_roll(rng):
+	if roped or not WorldCamp.ambush_roll(rng):
 		Visit.rest(party, world, "long-rest")
 		Sound.play_sfx("rest")
 		var trance: Dictionary = Trance.apply_rest_bonus(party, world, p.position)
 		_camp_msg.text = "The camp holds through the night. Eight hours pass.%s" % _trance_note(trance)
+		_camp_card("night", "The camp holds", "good", _camp_msg.text, _on_event_ack)
 		return
 	var watch: Dictionary = WorldCamp.watch_check(party, rng)
+	if party.alarm_set:   # Alarm: the ward wakes them whatever the watch rolled
+		party.alarm_set = false
+		watch = {"ok": true, "cname": "The alarm", "skill": "ward", "nat": 20, "bonus": 0, "dc": 0, "char_id": "alarm"}
 	var foe := World.RoamingParty.new("camp-ambush-%d" % int(world.clock.elapsed), p.position, WorldCamp.AMBUSH_FACTION)
+	# T19: earned for the night itself, not for the fight — losing it ends the
+	# save's road anyway, and being woken by bandits is the achievement.
+	Ach.unlock("camp_ambush")
 	# T9x: name the check and the roll, not just the outcome — same
 	# "Skill nat+bonus vs DC" shape every other overworld check in this file uses.
 	var skill_name: String = String(watch.get("skill", "")).capitalize()
 	if watch["ok"]:
 		_camp_msg.text = "%s hears them coming (%s %d+%d vs DC %d) — the party gets the drop first." % [
 			watch.get("cname", "Someone"), skill_name, watch["nat"], watch["bonus"], watch["dc"]]
-		await _launch_combat(foe, true, false)
+		_camp_card("watch", "Something in the dark", "good", _camp_msg.text,
+			func(): _on_event_ack(); await _launch_combat(foe, true, false))
 	else:
 		var who: String = watch.get("char_id", "")
 		_camp_msg.text = ("%s doesn't catch it in time (%s %d+%d vs DC %d) — the camp is jumped in the night!" % [
 			watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"]]) if who != "" \
 			else "Nobody's keeping watch — the camp is jumped in the night!"
-		await _launch_combat(foe, false, true)
+		_camp_card("jumped", "The camp is jumped", "bad", _camp_msg.text,
+			func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
+
+# The night, on the same card the road uses: what the camp did, pictured
+# (assets/generated/camp-<night|watch|jumped>.png), and — for an ambush —
+# the fight waits behind the button rather than under the label.
+func _camp_card(id: String, title: String, kind: String, text: String, then: Callable) -> void:
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(then)
+	_event_card.show_event({"id": "camp-" + id, "title": title, "kind": kind, "text": text})
 
 # O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
 # (the board can show several at once now), not re-rolled here.
 func _take_quest(q: Dictionary) -> void:
-	if Quest.accept(party, q):
-		_build_visit_panel()
-		_say("Job taken: %s" % q["title"])
-	else:
+	if not Quest.accept(party, q):
 		_say("No work here just now.")
+		return
+	# D7: being told where it is IS the job. A lair the party has not found yet
+	# (core/world_lairs.gd's Survival check, D5's bought leads) does not draw on
+	# the map, so a clear_lair job about one used to be a contract with no way to
+	# reach the thing it named.
+	var note := ""
+	if String(q["kind"]) in ["clear_lair", "rescue"]:
+		for l in world.lairs:
+			if l.id == String(q.get("target_lair_id", "")) and not l.discovered:
+				l.discovered = true
+				note = "  They mark %s on your map." % l.sname
+	_build_visit_panel()
+	_say("Job taken: %s%s" % [q["title"], note])
 
 func _turn_in(quest: Dictionary) -> void:
 	var reward: int = int(quest.get("reward", {}).get("gold", 0))
@@ -1517,14 +2883,15 @@ func _turn_in(quest: Dictionary) -> void:
 		# to. The board's second payout, and the one that is not gold.
 		var lead: Dictionary = Rumors.free_lead(_visit["settlement"], party, world)
 		_build_visit_panel()
-		_say("%s — paid, +%d gp. They will remember it.%s" % [
-			quest["title"], reward,
+		_say("%s — paid, +%d ◉, +%d XP. They will remember it.%s" % [
+			quest["title"], reward, reward * Quest.XP_PER_GOLD,
 			("  " + String(lead["text"])) if not lead.is_empty() else ""])
-		WorldSave.save(world, party)
+		_autosave()
 
 # The panel is rebuilt after every action, so the last line has to live on the
 # visit rather than on the Label that just got freed.
 func _say(text: String) -> void:
+	BugReport.note(text)
 	if not _visit.is_empty():
 		_visit["log"] = text
 	if _visit_log != null:
@@ -1537,23 +2904,34 @@ func _say(text: String) -> void:
 func _build_visit_panel() -> void:
 	if _visit_panel != null:
 		_visit_panel.queue_free()
+	# D7: a supply_item job's progress is a reading of the pack, not an event,
+	# so it is re-read here — every buy, sell and turn-in rebuilds this panel,
+	# which makes this the one place that cannot show a stale count.
+	Quest.record_stash(party)
 	var s = _visit["settlement"]
+	# Issue #33: this used to place itself by arithmetic — half the screen minus
+	# half the 460x460 it was told to expect — and then measure whatever its
+	# content actually came to. A board with jobs on it comes to more than that
+	# in both directions, so the panel sat off-centre and, on a short window,
+	# hung off the bottom. A CenterContainer centres what it measures; the max
+	# width keeps a long line wrapping inside the panel rather than widening it.
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centre)
+	_visit_panel = centre
 	var panel := PanelContainer.new()
-	# Default (top-left) anchors: `position` is a plain pixel offset from the
-	# parent's origin. set_anchors_preset(PRESET_CENTER) used to be called here
-	# too, which re-centers on its own and resets the offsets — this same
-	# centering math then applied again on top of that shoved the panel
-	# off-screen (see the same fix in _build_quest_panel just above).
-	panel.position = size * 0.5 - Vector2(230, 230)
+	panel.theme_type_variation = "Gilt"
 	panel.custom_minimum_size = Vector2(460, 460)
-	add_child(panel)
-	_visit_panel = panel
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	centre.add_child(panel)
 	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = VISIT_PANEL_W
 	panel.add_child(box)
 
 	var title := Label.new()
-	title.text = "%s — %s" % [s.sname, PAGE_TITLES.get(_visit_page, "")]
-	title.add_theme_color_override("font_color", Icons.COL_GOLD)
+	title.text = "%s, %s" % [s.sname, String(PAGE_TITLES.get(_visit_page, "")).to_lower()]
+	title.theme_type_variation = "Head"
 	box.add_child(title)
 
 	match _visit_page:
@@ -1579,6 +2957,46 @@ func _build_visit_panel() -> void:
 	leave.text = "Leave"
 	leave.pressed.connect(_close_visit)
 	bar.add_child(leave)
+	if spectator:
+		_disable_all(centre)   # the guest reads the counter; the host runs it
+	else:
+		_coop_share_visit()
+
+static func _disable_all(n: Node) -> void:
+	for c in n.get_children():
+		if c is Button:
+			c.disabled = true
+		_disable_all(c)
+
+# How this settlement's people feel about the party, in a phrase: the faction
+# opinion the prices and the gate already read, said once where it can be read.
+func _standing_line(s) -> String:
+	var op: float = FactionOpinion.get_opinion(s.faction)
+	if FactionOpinion.guards_attack(s.faction):
+		return "The guards would sooner fight you than let you in."
+	if FactionOpinion.refuses_trade(s.faction):
+		return "Nobody here will deal with you."
+	if op >= FactionOpinion.QUEST_GENEROUS:
+		return "They are glad to see you — there is work here for the asking."
+	if op >= FactionOpinion.QUEST_DONE:
+		return "They think well of you."
+	if op <= FactionOpinion.HOSTILE:
+		return "Their bands hunt you on the road; the gate is open, barely."
+	if op <= FactionOpinion.QUEST_MIN:
+		return "They have heard things. No work for you here."
+	return "Strangers here, for now."
+
+# The settlement panel's column width. Every list inside it is sized against
+# this, so one long job title wraps instead of widening the whole counter.
+const VISIT_PANEL_W := 440.0
+# How much of the panel is not the list: title, mood line, portrait, the log
+# line and the buttons under it. A page's list gets what the window has left
+# after that, so a short window trims the list instead of running the whole
+# counter off the bottom of the screen (issue #33).
+const VISIT_CHROME_H := 320.0
+
+func _page_scroll_h(want: float) -> float:
+	return clampf(size.y - VISIT_CHROME_H, 120.0, want)
 
 const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board"}
 
@@ -1590,40 +3008,64 @@ const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "b
 # shelves were bare — was to walk in and look. All three counts are read off
 # state the page already had to compute anyway.
 func _build_hub_page(box: VBoxContainer, s) -> void:
+	# The place in a line before the doors: what it is, whose, and how they
+	# feel about you — the square used to open on the purse and nothing else.
+	var where := Label.new()
+	where.text = "%s %s.  %s" % [String(s.faction).capitalize(), s.kind, _standing_line(s)]
+	where.theme_type_variation = "Serif"
+	where.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	where.add_theme_color_override("font_color", Icons.COL_BODY)
+	box.add_child(where)
 	var mood := Label.new()
-	mood.text = "%s%s · your purse: %d gp" % [
+	mood.text = "%s%s%d ◉ in the purse." % [
 		"Fighting nearby. " if _visit.get("battle", false) else "",
-		"They will not trade with you." if _visit.get("refused", false) else "",
+		"They will not trade with you. " if _visit.get("refused", false) else "",
 		party.gold]
-	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
 	var places := VBoxContainer.new()
 	box.add_child(places)
+	# D7: jobs are split across the counters now, so each door has to carry its
+	# own count — otherwise the smith's standing order is a thing you find only
+	# by opening every tab.
+	var jobs: Dictionary = _counter_offers(s)
+	var counter_jobs := 0
+	for key in jobs:
+		if key != "board":
+			counter_jobs += jobs[key].size()
+	var wanted := ""
+	if counter_jobs == 1:
+		wanted = ",  one counter wants something fetched"
+	elif counter_jobs > 1:
+		wanted = ",  %d counters want something fetched" % counter_jobs
 	var stock: Array = _visit.get("stock", [])
 	var market_btn := Button.new()
-	market_btn.text = ("Market — they will not trade with you" if _visit.get("refused", false)
-		else "Market — %d on the shelves" % stock.size())
+	market_btn.text = ("Market.  They will not trade with you" if _visit.get("refused", false)
+		else "Market.  %d on the shelves%s" % [stock.size(), wanted])
+	market_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	market_btn.pressed.connect(_goto_page.bind("market"))
 	places.add_child(market_btn)
 	var counters := Label.new()
 	counters.text = "      %s" % ", ".join(_visit["services"].map(
 		func(x): return String(Campaign.SERVICE_NAMES.get(x, x))))
-	counters.add_theme_color_override("font_color", Icons.COL_MUTED)
+	counters.theme_type_variation = "Dim"
 	places.add_child(counters)
 
 	var inn_btn := Button.new()
 	var wait: float = Visit.long_rest_in(party, world)
-	inn_btn.text = ("Inn — rest the night (%d gp)" % Visit.inn_cost(s) if wait <= 0.0
-		else "Inn — rested recently, a room does nothing for %s yet" % _hours(wait))
+	inn_btn.text = ("Inn.  A night is %d ◉" % Visit.inn_cost(s) if wait <= 0.0
+		else "Inn.  Rested recently, a room does nothing for %s yet" % _hours(wait))
+	inn_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	inn_btn.pressed.connect(_goto_page.bind("inn"))
 	places.add_child(inn_btn)
 
 	var board_btn := Button.new()
-	var offers: int = Visit.quest_offers(s, party, world).size()
+	var offers: int = jobs.get("board", []).size()
 	var ready: int = Visit.turn_ins(party).size()
-	board_btn.text = ("Notice Board — nothing posted" if offers == 0 and ready == 0
-		else "Notice Board — %d posted, %d ready to turn in" % [offers, ready])
+	board_btn.text = ("Notice Board.  Nothing posted" if offers == 0 and ready == 0
+		else "Notice Board.  %d posted, %d ready to turn in" % [offers, ready])
+	board_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	board_btn.pressed.connect(_goto_page.bind("board"))
 	places.add_child(board_btn)
 
@@ -1632,6 +3074,7 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 		var investigated: bool = _visit.get("investigated", false)
 		investigate_btn.text = "Investigated the battlefield" if investigated else "Investigate the battlefield"
 		investigate_btn.disabled = investigated
+		investigate_btn.tooltip_text = Visit.check_preview(party, Visit.INVESTIGATE_SKILL, Visit.INVESTIGATE_DC)   # #87
 		investigate_btn.pressed.connect(_investigate)
 		places.add_child(investigate_btn)
 
@@ -1640,23 +3083,24 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 # hint of who was selling what — and the two services that stock no goods
 # (Healer, Librarian) had nowhere to exist at all, so a city's own services
 # line was advertising people the player could never talk to. A tab strip
-# across the top picks the counter; "All" keeps the old single list, grouped
-# under headers rather than shuffled together.
+# across the top picks the counter, opening on the first one; the old "All"
+# list survives only as the fallback for a place with no counters.
 func _build_market_page(box: VBoxContainer, s) -> void:
 	var mood := Label.new()
-	mood.text = "Shelves %d/%d · prices x%.2f%s · your purse: %d gp" % [
+	mood.text = "Shelves %d of %d, prices x%.2f%s.  %d ◉ in the purse." % [
 		_visit["steps"], Visit.MAX_STEPS, _visit["markup"],
 		"  (they will not trade with you)" if _visit.get("refused", false) else "",
 		party.gold]
-	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
 	var groups: Dictionary = Visit.stock_by_service(s, _visit)
+	# D7: each specialist posts its own order, and it hangs at its own counter.
+	var jobs: Dictionary = _counter_offers(s)
 	var tabs := HBoxContainer.new()
 	box.add_child(tabs)
-	for t in [MARKET_TAB_ALL] + Array(_visit["services"]):
-		var name_of: String = ("All" if t == MARKET_TAB_ALL
-			else String(Campaign.SERVICE_NAMES.get(t, t)))
+	for t in _visit["services"]:
+		var name_of: String = String(Campaign.SERVICE_NAMES.get(t, t))
 		# Innkeeper is the quest-giver role (see campaign.gd's SERVICE_ORDER
 		# comment); its counter is the Notice Board, not a stall here.
 		if t == "innkeeper":
@@ -1666,12 +3110,12 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		btn.disabled = (_market_tab == t)   # the open tab, shown as pressed rather than as a live button
 		btn.pressed.connect(_goto_market_tab.bind(String(t)))
 		tabs.add_child(btn)
+	if _market_tab != MARKET_TAB_ALL:
+		_portrait(box, s.faction, _market_tab)
 
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(440, 250)
+	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(250.0)))
 	box.add_child(scroll)
-	var rows := VBoxContainer.new()
-	scroll.add_child(rows)
+	var rows: VBoxContainer = scroll.get_child(0)
 	var showing_all: bool = _market_tab == MARKET_TAB_ALL
 	for service in _visit["services"]:
 		if service == "innkeeper":
@@ -1679,51 +3123,79 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		if not showing_all and _market_tab != service:
 			continue
 		var shelf: Array = groups.get(service, [])
+		var posted: Array = jobs.get(service, [])
 		var actions: bool = service in ["healer", "librarian"]
-		if shelf.is_empty() and not actions:
+		if shelf.is_empty() and posted.is_empty() and not actions:
 			continue
 		if showing_all:
 			_section(rows, String(Campaign.SERVICE_NAMES.get(service, service)))
+		# T9a: a shelf is a row of pictures; the name, numbers and prose are
+		# the hover text, the price the caption, the click the purchase.
+		var shelf_grid := _item_grid(rows)
 		for e in shelf:
-			_trade_row(rows, "%s — %d gp" % [e["name"], e["price"]], "Buy",
-				_buy.bind(String(e["item_id"])))
+			var iid := String(e["item_id"])
+			var kd: Array = Icons.item_def(iid)
+			var tile := Icons.item_tile(iid, Icons.item_tooltip(iid, kd[1], kd[0])
+				+ "\n\nClick: buy for %d ◉" % int(e["price"]), "%d ◉" % int(e["price"]),
+				Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]))
+			tile.pressed.connect(_buy.bind(iid))
+			shelf_grid.add_child(tile)
+		for offer in posted:
+			_job_row(rows, offer)
 		if service == "healer":
-			_trade_row(rows, "Patch up the whole party — %d gp (no rest, no waiting)" % Visit.HEAL_COST,
+			_trade_row(rows, "Patch up the whole party — %d ◉ (no rest, no waiting)" % Visit.HEAL_COST,
 				"Heal", _heal)
+			for ch in party.roster:   # #109
+				if ch.dead:
+					_trade_row(rows, "Raise %s from the dead — %d ◉" % [ch.cname, Party.REVIVE_COST],
+						"Raise", _raise_dead.bind(ch.id), party.gold < Party.REVIVE_COST)
+			if Visit.can_work_healer(party):
+				var worked: bool = _visit.get("worked", false)
+				_trade_row(rows, "Work a shift in the ward — your restoration spell opens the door, Medicine sets the wage",
+					"Done" if worked else "Work", _work_healer, worked)
 		elif service == "librarian":
 			var mystery: Array = party.unidentified()
 			if mystery.is_empty():
 				_note(rows, "Nothing in the pack needs identifying.")
 			for entry in mystery:
 				var mid := String(entry["item_id"])
-				_trade_row(rows, "Identify the unknown %s — %d gp" % [
+				_trade_row(rows, "Identify the unknown %s — %d ◉" % [
 					Campaign.item_name(mid), Visit.IDENTIFY_COST], "Identify", _identify.bind(mid))
 	# The generalist's own counter also outfits you: the camp kit is a flat
 	# price and never runs out, so it is not part of the T25 shelf/restock
 	# catalog (T9x) and gets its own row rather than a fake catalog entry.
 	if showing_all or _market_tab == "generalist":
-		_trade_row(rows, "%s — %d gp (lets you long-rest away from a settlement)" % [
+		_trade_row(rows, "%s — %d ◉ (lets you long-rest away from a settlement)" % [
 			WorldCamp.CAMP_KIT_NAME, WorldCamp.CAMP_KIT_PRICE], "Buy", _buy_camp_kit)
 	# Selling is not a counter — whoever is behind it takes the whole pack —
 	# so it stays out of the tabs and sits under everything, on every tab.
-	var sellable := 0
+	var pack: GridContainer = null
 	for entry in party.stash:
 		var id := String(entry["item_id"])
 		var paid := Visit.sell_price(_visit, id)
 		if paid <= 0:
 			continue
-		if sellable == 0:
+		if pack == null:
 			_section(rows, "Your pack")
-		sellable += 1
-		_trade_row(rows, "%s x%d — sells for %d gp" % [
-			Campaign.item_name(id), int(entry["quantity"]), paid], "Sell", _sell.bind(id))
+			pack = _item_grid(rows)
+		var kd: Array = Icons.item_def(id)
+		var tip: String = ("Unidentified item (%s)" % Icons.rarity_of(id) if not Party.is_identified(entry)
+			else Icons.item_tooltip(id, kd[1], kd[0]))
+		var qty := int(entry["quantity"])
+		var tile := Icons.item_tile(id, tip + "\n\nClick: sell one for %d ◉" % paid,
+			"%d ◉" % paid,
+			Icons.ITEM_ART_PX, Icons.party_compare(kd[0], party, kd[1]) if Party.is_identified(entry) else "", qty)
+		tile.pressed.connect(_sell.bind(id))
+		pack.add_child(tile)
 
 	var bar := HBoxContainer.new()
 	box.add_child(bar)
 	var steal_btn := Button.new()
-	var spent: bool = _visit.get("stolen", false)
-	steal_btn.text = "Stole from the market" if spent else "Steal from the market"
+	var wait: float = Visit.steal_wait(_visit["settlement"], world)
+	var spent: bool = _visit.get("stolen", false) or wait > 0.0
+	steal_btn.text = ("Stall watched — %dh" % maxi(1, ceili(wait / 60.0))) if wait > 0.0 else "Steal from the market"
 	steal_btn.disabled = spent
+	steal_btn.tooltip_text = Visit.check_preview(party, Visit.STEAL_SKILL, Visit.STEAL_DC)   # #87
 	steal_btn.pressed.connect(_steal)
 	bar.add_child(steal_btn)
 	if _visit.get("refused", false):
@@ -1731,8 +3203,19 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		var persuaded: bool = _visit.get("persuaded", false)
 		persuade_btn.text = "Tried persuasion" if persuaded else "Persuade them to trade"
 		persuade_btn.disabled = persuaded
+		persuade_btn.tooltip_text = Visit.check_preview(party, Visit.PERSUADE_SKILL, Visit.persuade_dc(_visit), _talk_adv())
 		persuade_btn.pressed.connect(_persuade)
 		bar.add_child(persuade_btn)
+	else:
+		# T9x: haggle only makes sense on a market that's actually open —
+		# persuade (above) is what opens a refused one in the first place.
+		var haggle_btn := Button.new()
+		var haggled: bool = _visit.get("haggled", false)
+		haggle_btn.text = "Haggled already" if haggled else "Haggle over prices (Persuasion)"
+		haggle_btn.disabled = haggled
+		haggle_btn.tooltip_text = Visit.check_preview(party, Visit.HAGGLE_SKILL, Visit.HAGGLE_DC, _talk_adv())
+		haggle_btn.pressed.connect(_haggle)
+		bar.add_child(haggle_btn)
 
 # T9y: the inn was one button and a purse. Resting is the one action here
 # whose whole value is the state it changes, so the page now shows that state:
@@ -1742,10 +3225,19 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 func _build_inn_page(box: VBoxContainer, s) -> void:
 	var cost := Visit.inn_cost(s)
 	var mood := Label.new()
-	mood.text = "A %s bed is %d gp a night · your purse: %d gp" % [s.kind, cost, party.gold]
-	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	mood.text = "A %s bed is %d ◉ a night.  %d ◉ in the purse." % [s.kind, cost, party.gold]
+	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
+	var room := Icons.scene_art("inn-" + String(s.faction), null)
+	if room != null:
+		var pic := TextureRect.new()
+		pic.texture = room
+		pic.custom_minimum_size = Vector2(440, 160)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.clip_contents = true
+		box.add_child(pic)
 	var rows := VBoxContainer.new()
 	box.add_child(rows)
 	_section(rows, "Around the table")
@@ -1755,14 +3247,24 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 			continue
 		var line := Label.new()
 		var hurt: bool = int(m["hp"]) < int(m["max_hp"])
-		line.text = "%s — %s %d · %d/%d hp%s" % [m["name"], m["class_name"], m["level"],
+		line.text = "%s, %s %d, %d/%d hp%s" % [m["name"], m["class_name"], m["level"],
 			m["hp"], m["max_hp"], "" if not hurt else "   (hurt)"]
 		line.add_theme_color_override("font_color", Icons.COL_FOE if hurt else Icons.COL_BODY)
 		rows.add_child(line)
 
+	# Issue #27: the one place a party reshuffles itself. Out on the road the
+	# party screen opens with its roster half locked; here it opens unlocked,
+	# because this is where the people who might join you are.
+	var manage := Button.new()
+	manage.text = "Sort out the party (bench, recruit, marching order)"
+	manage.pressed.connect(func(): _open_party(true))
+	box.add_child(manage)
+	if party.roster.size() <= Party.MAX_ACTIVE:
+		_note(box, "Everyone you have is marching. New faces are made here too.")
+
 	var wait: float = Visit.long_rest_in(party, world)
 	var rest_btn := Button.new()
-	rest_btn.text = "Rest the night (%d gp)" % cost
+	rest_btn.text = "Rest the night (%d ◉)" % cost
 	rest_btn.disabled = wait > 0.0 or party.gold < cost
 	rest_btn.pressed.connect(_rest)
 	box.add_child(rest_btn)
@@ -1772,7 +3274,7 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 		# has one can offer it: say so where the player hits the wall, not only
 		# on the counter they would have to guess to open.
 		if Visit.has_service(s, "healer"):
-			_note(box, "The healer will patch everyone up regardless, for %d gp." % Visit.HEAL_COST)
+			_note(box, "The healer will patch everyone up regardless, for %d ◉." % Visit.HEAL_COST)
 	elif party.gold < cost:
 		_note(box, "Not enough gold for a room.")
 	else:
@@ -1787,49 +3289,85 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	if leads.is_empty():
 		_note(box, "Nothing anybody here has not already told you.")
 		return
+	# Five rumours under the art and the table ran the panel off the bottom of
+	# a 900 px screen; the list scrolls inside a fixed height instead.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size.y = minf(RUMOURS_H, 62.0 * leads.size())
+	box.add_child(scroll)
 	var lead_rows := VBoxContainer.new()   # `rows` is the party-status list above
-	box.add_child(lead_rows)
+	lead_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(lead_rows)
 	for lead in leads:
-		_trade_row(lead_rows, "%s  (%s) — %d gp" % [
-			lead["text"], String(lead.get("where", "")), int(lead["price"])],
-			"Buy", _buy_rumor.bind(lead))
+		_trade_row(lead_rows, String(lead["text"]), "Buy  %d ◉" % int(lead["price"]), _buy_rumor.bind(lead),
+			false, null, String(lead.get("where", "")))
+
+const RUMOURS_H := 200.0
 
 func _build_board_page(box: VBoxContainer, s) -> void:
+	var has_inn: bool = Visit.has_service(s, "innkeeper")
 	var mood := Label.new()
-	mood.text = "%s posts the work here · your purse: %d gp" % [
-		Campaign.SERVICE_NAMES.get("innkeeper", "The innkeeper") if Visit.has_service(s, "innkeeper")
+	mood.text = "%s posts the work here.  %d ◉ in the purse." % [
+		Campaign.SERVICE_NAMES.get("innkeeper", "The innkeeper") if has_inn
 		else "A town elder", party.gold]
-	mood.add_theme_color_override("font_color", Icons.COL_MUTED)
+	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(440, 300)
+	if has_inn:
+		_portrait(box, s.faction, "innkeeper")
+	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(300.0)))
 	box.add_child(scroll)
-	var rows := VBoxContainer.new()
-	scroll.add_child(rows)
-	# T9x quest board: every job this settlement can offer right now, one row
-	# each — not the old single ad-hoc offer. A world-target row also shows
-	# its chain tier once it's escalated past the first job.
-	for offer in Visit.quest_offers(s, party, world):
-		var tier: int = int(offer.get("chain_tier", 0))
-		var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
-		_trade_row(rows, "Job: %s%s — %d gp" % [
-			offer["title"], tag, int(offer.get("reward", {}).get("gold", 0))],
-			"Take", _take_quest.bind(offer))
+	var rows: VBoxContainer = scroll.get_child(0)
+	# T9x quest board, D7 placement: the board carries what the settlement posts
+	# in public — bounty and war work where there is an innkeeper to take it,
+	# carting and scouting everywhere. The specialists' own orders are at their
+	# own counters (see _build_market_page), not here.
+	for offer in _counter_offers(s).get("board", []):
+		_job_row(rows, offer)
 	for q in Visit.turn_ins(party):
 		_trade_row(rows, "✔ %s" % Quest.describe(q), "Turn in", _turn_in.bind(q))
 	if rows.get_child_count() == 0:
 		var none := Label.new()
-		none.text = "Nothing posted right now."
+		none.text = ("Nothing posted right now." if has_inn
+			else "Nothing posted right now — and no innkeeper here to hear of more.")
 		none.add_theme_color_override("font_color", Icons.COL_MUTED)
 		rows.add_child(none)
 
 # A counter's heading inside a page's scroll list, and a muted aside. Both
 # exist so a page can explain itself without every builder re-deriving the
 # same Label boilerplate.
+# The face behind the counter reads the visit: a moment's smile after a sale,
+# a purchase or a haggle that went your way (CHEER_S seconds, then back), and
+# a frown for the rest of the visit once a haggle went badly.
+const CHEER_S := 2.5
+var _cheer_until := 0.0     # Time.get_ticks_msec()/1000 the smile lasts to
+var _portrait_pic: TextureRect = null
+var _portrait_of := ["", ""]
+
+func _mood() -> String:
+	if Time.get_ticks_msec() / 1000.0 < _cheer_until:
+		return "happy"
+	return "frown" if _visit.get("sour", false) else ""
+
+func _portrait(box: Control, faction: String, service: String) -> void:
+	var pic := Icons.portrait_rect(faction, service, 160, _mood())
+	if pic != null:
+		box.add_child(pic)
+	_portrait_pic = pic
+	_portrait_of = [faction, service]
+
+func _cheer() -> void:
+	_cheer_until = Time.get_ticks_msec() / 1000.0 + CHEER_S
+	_refresh_portrait()
+	get_tree().create_timer(CHEER_S + 0.05).timeout.connect(_refresh_portrait)
+
+func _refresh_portrait() -> void:
+	if _portrait_pic != null and is_instance_valid(_portrait_pic):
+		_portrait_pic.texture = Icons.portrait(_portrait_of[0], _portrait_of[1], _mood())
+
 func _section(rows: Control, text: String) -> void:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_color_override("font_color", Icons.COL_GOLD)
+	l.theme_type_variation = "Caption"
 	rows.add_child(l)
 
 func _note(rows: Control, text: String) -> void:
@@ -1837,7 +3375,7 @@ func _note(rows: Control, text: String) -> void:
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.custom_minimum_size = Vector2(430, 0)
-	l.add_theme_color_override("font_color", Icons.COL_MUTED)
+	l.theme_type_variation = "Dim"
 	rows.add_child(l)
 
 # World-minutes as something a person would say out loud. Under an hour is
@@ -1856,25 +3394,110 @@ static func _travel_time(minutes: float) -> String:
 		return "%d min" % maxi(1, int(round(minutes)))
 	return "%dh%02d" % [int(minutes / 60.0), int(minutes) % 60]
 
-func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable) -> void:
+func _item_grid(rows: Control) -> GridContainer:
+	var g := GridContainer.new()
+	g.columns = 5
+	rows.add_child(g)
+	return g
+
+# D7: where each job this settlement is posting belongs on screen. The counter
+# core/quest_posting.gd stamped on the offer IS the answer, with one fold: the
+# innkeeper and the generalist both post in public, so both land on the notice
+# board (a camp has no innkeeper, and its board is the generalist's). Every
+# specialist keeps its own orders at its own counter in the market.
+const BOARD_COUNTERS := ["innkeeper", "generalist"]
+
+func _counter_offers(s) -> Dictionary:
+	var by_counter: Dictionary = Visit.quest_offers_by_counter(s, party, world)
+	var out := {}
+	for counter in by_counter:
+		var key: String = "board" if BOARD_COUNTERS.has(counter) else String(counter)
+		if not out.has(key):
+			out[key] = []
+		out[key].append_array(by_counter[counter])
+	return out
+
+# One posted job, ready to take. A world-target row also shows its chain tier
+# once it has escalated past the first job.
+func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
+	var tier: int = int(offer.get("chain_tier", 0))
+	var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
+	_trade_row(rows, "%s%s" % [offer["title"], tag], "Take", _take_quest.bind(offer), false,
+		Icons.scene_art("quest-" + String(offer.get("kind", "")), null),
+		"Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0)))
+
+# Issue #33: the label wraps. Without that its minimum width is the whole
+# string, and a job with a long title pushed the row — and with it the counter,
+# and with it the whole settlement panel — out past the edge of the screen. 330
+# stays as the column width short rows line up on; it is a floor now rather
+# than the only width the row can have.
+# `sub` is a dim second line under the text — where a rumour points, what a
+# job pays — so the thing itself reads as one line of prose and the numbers
+# sit under it instead of in the middle of it.
+func _trade_row(rows: VBoxContainer, text: String, action: String, on_press: Callable, disabled := false,
+		tile: Texture2D = null, sub := "") -> void:
 	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if tile != null:   # the job's kind, as a tile (assets/generated/quest-<kind>.png)
+		var pic := TextureRect.new()
+		pic.texture = tile
+		pic.custom_minimum_size = Vector2(48, 48)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(pic)
 	var lbl := Label.new()
 	lbl.text = text
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl.custom_minimum_size = Vector2(330, 0)
-	row.add_child(lbl)
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	if sub == "":
+		row.add_child(lbl)
+	else:
+		var stack := VBoxContainer.new()
+		stack.add_theme_constant_override("separation", 0)
+		stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		stack.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		stack.add_child(lbl)
+		var cap := Label.new()
+		cap.text = sub
+		cap.theme_type_variation = "Dim"
+		cap.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+		stack.add_child(cap)
+		row.add_child(stack)
 	var btn := Button.new()
 	btn.text = action
+	btn.disabled = disabled
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.pressed.connect(on_press)
 	row.add_child(btn)
 	rows.add_child(row)
 
+# #87: whether the party's talker rolls with advantage right now (a potion or
+# a talk spell) — the same test Visit's own rolls make.
+func _talk_adv() -> bool:
+	var talker = party.get_member(Campaign.new(party).best_at(Visit.PERSUADE_SKILL))
+	return talker != null and Visit._talk_mode(talker, party) == Dice.ADV
+
 # --- projection (see header) -------------------------------------------
+# The map's camera, written as the function it has always been. `_iso()` maps a
+# point on the ground to its screen offset, and it is exactly what an
+# orthographic camera at yaw `_yaw` and pitch `_pitch` does: turn the ground
+# under the camera, then foreshorten the depth axis by sin(pitch). The only
+# thing the 3D refactor changed is that the two angles are now variables —
+# which is why click-to-move, the ground mask, the chevrons and the minimap all
+# came through it untouched.
+#
+# scenes/world/world_view3d.gd builds the real Camera3D from the same two
+# angles and the same ISO_GAIN, so there is one camera and two ways of asking
+# it questions, not two cameras.
 func _iso(v: Vector2) -> Vector2:
-	var r := v.rotated(deg_to_rad(ISO_YAW)) * ISO_GAIN
-	return Vector2(r.x, r.y * ISO_SQUASH)
+	var r := v.rotated(deg_to_rad(_yaw)) * ISO_GAIN
+	return Vector2(r.x, r.y * sin(deg_to_rad(_pitch)))
 
 func _iso_inv(v: Vector2) -> Vector2:
-	return Vector2(v.x, v.y / ISO_SQUASH).rotated(-deg_to_rad(ISO_YAW)) / ISO_GAIN
+	return Vector2(v.x, v.y / sin(deg_to_rad(_pitch))).rotated(-deg_to_rad(_yaw)) / ISO_GAIN
 
 # world point -> screen point
 func _pix(w: Vector2) -> Vector2:
@@ -1884,6 +3507,11 @@ func _pix(w: Vector2) -> Vector2:
 func _unpix(sp: Vector2) -> Vector2:
 	return _iso_inv((sp - _origin) / _zoom)
 
+# A circle on the GROUND, as the polygon it projects to. Still an ellipse, but
+# one whose tilt and squash follow the camera rather than two fixed constants —
+# used now only by the goal marker at the end of the marching route, since every
+# other ring on the map became a decal lying in the 3D world
+# (scenes/world/ground_marks3d.gd).
 func _ring(center: Vector2, r: float, flat := true, closed := false, segs := 24) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	for i in segs:
@@ -1893,17 +3521,12 @@ func _ring(center: Vector2, r: float, flat := true, closed := false, segs := 24)
 		pts.append(pts[0])
 	return pts
 
-func _fan(apex: Vector2, rim: PackedVector2Array, inner: Color, outer: Color) -> void:
-	var n := rim.size()
-	var cols := PackedColorArray([inner, outer, outer])
-	var uv := PackedVector2Array()
-	for i in n:
-		draw_primitive(PackedVector2Array([apex, rim[i], rim[(i + 1) % n]]), cols, uv)
-
-func _soft_shadow(at: Vector2, r: float, strength := 1.0) -> void:
-	for i in 3:
-		draw_colored_polygon(_ring(at, r * (1.0 + 0.26 * i)),
-			Color(0.02, 0.01, 0.04, strength * (0.20 - 0.05 * i)))
+# How tall a footprint of world radius `r` stands on screen: the semi-minor
+# axis of the ellipse _ring() would draw. What a name label is pushed down by,
+# so it clears the landmark it names at any tilt. Floored, because at a shallow
+# pitch the ellipse collapses and a label with no clearance sits on the model.
+func _footprint_drop(r: float) -> float:
+	return maxf(r * ISO_GAIN * _zoom * sin(deg_to_rad(_pitch)), 3.0)
 
 # Stable per-cell noise: same cell, same salt -> same value, every frame.
 static func _rand(c: Vector2i, salt: int) -> float:
@@ -1932,6 +3555,46 @@ func set_zoom(z: float) -> void:
 func pan_by(d: Vector2) -> void:
 	_pan += d
 
+func yaw() -> float:
+	return _yaw
+
+func pitch() -> float:
+	return _pitch
+
+# Turn the camera about the point it is looking at, not about the world's
+# origin: a map that slides sideways as you turn it is a map you cannot turn on
+# purpose. The ground point under the middle of the screen is read first, and
+# put back under the middle afterwards, which is the same trick zoom_at() plays
+# with the point under the cursor.
+func orbit_by(d: float) -> void:
+	var anchor := _unpix(size * 0.5)
+	_yaw = fposmod(_yaw + d, 360.0)
+	center_on(anchor)
+
+# Tilt, between edge-on and nearly overhead. Same "hold the middle" rule as the
+# turn, and for the same reason — at a shallow pitch a degree of tilt moves the
+# ground a very long way.
+func tilt_by(d: float) -> void:
+	var anchor := _unpix(size * 0.5)
+	_pitch = clampf(_pitch + d, PITCH_MIN, PITCH_MAX)
+	center_on(anchor)
+
+# Back to the view the map opens on, keeping whatever is in the middle of the
+# screen in the middle of the screen. The one binding that has to exist once a
+# camera can be turned: having got lost, you must be able to get un-lost
+# without hunting for the angle you started at.
+func reset_view() -> void:
+	var anchor := _unpix(size * 0.5)
+	_yaw = ISO_YAW
+	_pitch = ISO_PITCH
+	set_zoom(1.0)
+	center_on(anchor)
+
+# Put world point `w` in the middle of the view.
+func center_on(w: Vector2) -> void:
+	_pan = -_iso(w) * _zoom
+	_layout()
+
 # zoom keeping the world point under `sp` fixed
 func zoom_at(sp: Vector2, factor: float) -> void:
 	var anchor := _unpix(sp)
@@ -1943,9 +3606,18 @@ func zoom_at(sp: Vector2, factor: float) -> void:
 func _layout() -> void:
 	_origin = size * 0.5 + _pan
 
+# Right-drag pans, middle-drag orbits. They used to do the same thing, which
+# was fine while there was nothing to orbit; the split keeps the gesture every
+# player already knows on the button they already use it with, and puts the new
+# one on the button that was duplicating it. Q/E/R/F and Home do the same from
+# the keyboard — see _unhandled_key_input().
 func _gui_input(e: InputEvent) -> void:
 	if e is InputEventMouseMotion:
-		if e.button_mask & (MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_MIDDLE):
+		if e.button_mask & MOUSE_BUTTON_MASK_MIDDLE:
+			orbit_by(-e.relative.x * ORBIT_SENS.x)
+			tilt_by(e.relative.y * ORBIT_SENS.y)
+			queue_redraw()
+		elif e.button_mask & MOUSE_BUTTON_MASK_RIGHT:
 			pan_by(e.relative)
 			queue_redraw()
 	elif e is InputEventMouseButton and e.pressed:
@@ -1953,21 +3625,119 @@ func _gui_input(e: InputEvent) -> void:
 			zoom_at(e.position, 1.1)
 		elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom_at(e.position, 1.0 / 1.1)
-		elif e.button_index == MOUSE_BUTTON_RIGHT:
+		elif e.button_index == MOUSE_BUTTON_LEFT and not spectator:   # the guest looks; the host orders
 			var p := world.player()
 			if p != null:
-				world.set_goal(p, _unpix(e.position))
+				world.set_goal(p, _click_target(e.position))
 		queue_redraw()
 
+# #110/#113: a settlement or lair is drawn as a diorama standing UP from its
+# ground point, so a click on its roofs lands on the ground behind it and the
+# party walks past the town. A click anywhere on a landmark's model is a click
+# on the landmark: the goal is its position, and the ring is drawn there.
+func _click_target(sp: Vector2) -> Vector2:
+	var best := Vector2.INF
+	var best_d := INF
+	for s in world.settlements:
+		var at := _pix(s.position)
+		var h: float = float(Settlements3D.TARGET_HEIGHT.get(s.kind, 25.7)) * ISO_GAIN * _zoom
+		if _in_model_box(sp, at, h):
+			var d := sp.distance_to(at)
+			if d < best_d:
+				best = s.position; best_d = d
+	for l in world.lairs:
+		if not l.discovered:
+			continue
+		var at := _pix(l.position)
+		var h: float = Lairs3D.TARGET_HEIGHT * ISO_GAIN * _zoom
+		if _in_model_box(sp, at, h):
+			var d := sp.distance_to(at)
+			if d < best_d:
+				best = l.position; best_d = d
+	return best if best != Vector2.INF else _unpix(sp)
+
+# The screen box a diorama of height `h` (px) fills over its ground point `at`:
+# roughly as wide as it is tall, standing on a shallow ellipse.
+static func _in_model_box(sp: Vector2, at: Vector2, h: float) -> bool:
+	return absf(sp.x - at.x) <= h * 0.7 and sp.y <= at.y + h * 0.3 and sp.y >= at.y - h
+
 # --- drawing -----------------------------------------------------------
+# Three things, and every one of them is annotation rather than scenery: the
+# route the party is marching, the name under each landmark, and the chevrons
+# pinned to the frame for the settlements that are off screen. Everything that
+# stands on the ground (towns, lairs, bands, woods) or lies on it (footprints,
+# rings, shadows) is geometry in the 3D view, where the depth buffer can sort
+# it — see ground_marks() below and scenes/world/world_view3d.gd.
 func _draw() -> void:
 	_layout()
-	draw_rect(Rect2(Vector2.ZERO, size), Icons.COL_BG)
-	_draw_ground()
 	var p := world.player()
 	if p != null and not p.at_goal():
-		draw_polyline(_ring(_pix(p.goal), 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
+		# #95/#115: the way there — a faint gold thread from the party through
+		# any corners to the ring at the end. Straight or routed, same thread.
+		var pts := PackedVector2Array([_pix(p.position), _pix(p.goal)])
+		for wp in p.route:
+			pts.append(_pix(wp))
+		draw_polyline(pts, Color(Icons.COL_GOLD, 0.45), 1.5, true)
+		# `pts` is already in screen space — p.goal is the NEXT corner and p.route
+		# the ones after it, so pts[-1] is the destination, projected. This used
+		# to read _ring(_pix(pts[-1]), ...), projecting a screen point a second
+		# time and putting the marker at the end of the march somewhere that was
+		# not the end of the march. The radius is still quoted in world units,
+		# which is what the * _zoom is for: _ring() applies _iso() but not the
+		# zoom, the way _pix() does.
+		draw_polyline(_ring(pts[-1], 9.0 * _zoom, true, true, 18), Icons.COL_GOLD, 1.5, true)
+	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
+	_draw_labels()
+	_draw_offscreen_markers(ppos)
 
+
+# The name under every landmark the player can see, painter-sorted so a nearer
+# label is drawn over a further one. Which landmarks those are is the same
+# question ground_marks() answers — the fog rules live there, once, and this
+# reads the list it produced.
+func _draw_labels() -> void:
+	var labels: Array = []
+	for m in ground_marks():
+		if not m.has("label"):
+			continue
+		labels.append({"at": _pix(m["pos"]) + Vector2(0.0, _footprint_drop(m["radius"]) + 12.0),
+			"text": m["label"], "col": _remembered(Icons.COL_BODY, m["live"])})
+	labels.sort_custom(func(a, b): return a["at"].y < b["at"].y)
+	for l in labels:
+		var w := ThemeDB.fallback_font.get_string_size(l["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		# A one-pixel drop shadow, for the same reason the chevron labels have
+		# one: a name can land on bright water, a pale roof or black fog, and it
+		# has to stay readable over all three.
+		draw_string(ThemeDB.fallback_font, l["at"] - Vector2(w * 0.5, 0.0) + Vector2(1, 1),
+			l["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.6))
+		draw_string(ThemeDB.fallback_font, l["at"] - Vector2(w * 0.5, 0.0), l["text"],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, l["col"])
+
+
+# Every footprint on the ground this frame, and the name that goes under it:
+# one list, rebuilt per frame, read by scenes/world/ground_marks3d.gd (which
+# draws the discs, rings, shadows and haloes as one MultiMesh) and by
+# _draw_labels() above.
+#
+# It exists as a list rather than as three draw calls because the fog rules are
+# the interesting part and they must not be written twice. T9x: settlements are
+# landmarks, always shown regardless of fog — the whole point of the beacon is
+# to give the player something to walk toward on a still-dark map. Lairs and
+# roaming bands stay fog-gated: those are meant to be found, not signposted.
+# T9y: "live" is the currently-visible tier the ground is dimmed by — a
+# landmark the party can see right now reads in full colour, one they are only
+# remembering reads washed out.
+#
+#   pos     where it stands, in world units
+#   radius  the footprint's radius, in world units
+#   color   its tint, alpha already faded for the fog
+#   ring    ring width as a fraction of the radius, 0 for no ring
+#   fill    how strongly the disc inside the ring is painted, 0 for none
+#   shadow  how dark the soft shadow under it is, 0 for none
+#   label   the name to draw under it; absent means no name
+#   live    whether the party can see it right now
+func ground_marks() -> Array:
+	var p := world.player()
 	# One painter's-order pass over everything standing on the ground.
 	# T9x: settlements are landmarks, always drawn regardless of fog — the
 	# whole point of the beacon is to give the player something to walk
@@ -1980,40 +3750,96 @@ func _draw() -> void:
 	# standing in, which threw away the distinction the three-tier fog had
 	# just bought.
 	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
-	var props: Array = []
+	var out: Array = []
 	for s in world.settlements:
-		props.append({"at": _pix(s.position), "s": s, "live": world.is_visible_now(s.position, ppos)})
+		var live: bool = world.is_visible_now(s.position, ppos)
+		out.append({"pos": s.position,
+			"radius": _footprint(float(SETTLEMENT_RADIUS.get(s.kind, 17.0)),
+				_settlements3d.footprint(s) if _settlements3d != null else 0.0),
+			"color": _remembered(faction_color(s.faction), live), "ring": RING_WIDTH,
+			"fill": SETTLEMENT_FILL, "shadow": 0.9, "label": s.sname, "live": live})
 	for l in world.lairs:
-		if l.discovered and world.is_explored(l.position):   # T91: undiscovered lairs draw nothing — that's the point
-			props.append({"at": _pix(l.position), "l": l, "live": world.is_visible_now(l.position, ppos)})
+		# T91: an undiscovered lair draws nothing at all — that is the mechanic.
+		if not (l.discovered and world.is_explored(l.position)):
+			continue
+		var live: bool = world.is_visible_now(l.position, ppos)
+		out.append({"pos": l.position,
+			"radius": _footprint(LAIR_RADIUS, _lairs3d.footprint(l) if _lairs3d != null else 0.0),
+			"color": _remembered(Icons.COL_MUTED if l.looted else Icons.COL_FOE, live),
+			"ring": RING_WIDTH, "fill": SETTLEMENT_FILL, "shadow": 0.85, "label": l.sname, "live": live})
 	for q in world.parties:
 		if q.is_player and not _visit.is_empty():
 			continue   # inside the gates for the duration of the visit, not standing on the map
 		if not q.is_player and not world.is_explored(q.position):
 			continue
-		# A roaming band is the one prop whose remembered position is a lie —
-		# it has walked on since. Drawn at its live position either way (the
-		# map has no last-known-position memory to draw instead), but washed
+		# A roaming band is the one landmark whose remembered position is a lie
+		# — it has walked on since. Shown at its live position either way (the
+		# map has no last-known-position memory to show instead), but washed
 		# out, which is the honest reading: "they were around here".
-		props.append({"at": _pix(q.position), "p": q,
-			"live": q.is_player or world.is_visible_now(q.position, ppos)})
-	props.sort_custom(func(a, b): return a["at"].y < b["at"].y)
-	for d in props:
-		if d.has("s"):
-			_draw_settlement(d["s"], d["at"], d["live"])
-		elif d.has("l"):
-			_draw_lair(d["l"], d["at"], d["live"])
-		else:
-			_draw_party(d["p"], d["at"], d["live"])
-	_draw_offscreen_markers(ppos)
+		var live: bool = q.is_player or world.is_visible_now(q.position, ppos)
+		var rad: float = PLAYER_RADIUS if q.is_player else BAND_RADIUS
+		if q.is_player:
+			# T9x: a halo, not just an outline — it has to read as "this one is
+			# you" whichever hero figure is standing there, now that the player
+			# can pick any of them from the Party screen. First in the list so
+			# the band's own shadow blends over it, not under it.
+			out.append({"pos": q.position, "radius": rad * HALO_SCALE,
+				"color": Color(Icons.COL_GOLD, 0.55), "ring": 0.14, "fill": 0.22,
+				"shadow": 0.0, "live": true})
+		# The player's own headcount comes off the real Party (active roster),
+		# everyone else's off their troops[] flavour roster.
+		var count: int = party.active.size() if q.is_player else q.troops.size()
+		var who: String = "You" if q.is_player else q.id.capitalize()
+		out.append({"pos": q.position, "radius": rad,
+			"color": _remembered(faction_color(q.faction, q.is_player), live),
+			"ring": 0.0, "fill": 0.0, "shadow": 1.0,
+			"label": "%s (%d)" % [who, count], "live": live})
+	return out
 
-# O11: one Overworld Pack tile per ground cell, on the same grid the procedural
-# patches used. ISO_YAW is 35°, not the 45° the art is drawn for, so a cell lands
-# on screen as a sheared parallelogram rather than a 2:1 diamond — the tile is
-# mapped onto it by an affine transform (its diamond's corners to the cell's
-# corners) instead of being blitted upright. The projection stays the contract;
-# the art bends to it, so tiles line up with the camera and click-to-move math.
-func _draw_ground() -> void:
+
+# The radius a landmark's footprint is drawn at: its old flat-map radius, or
+# enough to clear the model standing on it, whichever is more.
+#
+# It has to be measured rather than declared. On the flat map the ring was
+# painted over the buildings, so a ring narrower than the town it encircled
+# still read; lying on the ground it does not, and how wide a town is depends
+# on which art source built it — a GLB fitted to a target height and a kit
+# assembled from primitives come out different widths, and
+# Settlements3D.source switches between them. `model` is 0.0 when the layer has
+# nothing to measure, and then the floor is the answer, which is also what
+# keeps this honest headless.
+func _footprint(floor_r: float, model: float) -> float:
+	return maxf(floor_r, model * FOOTPRINT_CLEARANCE)
+
+
+# The fog's memory, as a texture: R forest, G water, B explored, one texel per
+# ground cell. scenes/world/world_view3d.gd puts it on the ground mesh and
+# assets/world/ground/ground3d.gdshader reads it; this side owns WHICH cells and
+# HOW OFTEN, because that is the fog's business and the expensive part.
+#
+# Issue #31 — the frame-rate drop. Three things were wrong with the loop this
+# grew out of, and all three were about doing work per cell, per frame, that
+# does not change per frame:
+#
+#  1. It walked every cell of the VIEWPORT and asked world.is_explored() about
+#     each one (3.7us a cell measured, since it folds in a scan of every
+#     settlement) even though the answer is no for most of a map nobody has
+#     walked yet. It walks the explored ground instead — the cells around each
+#     remembered waypoint and each settlement beacon, clipped to the viewport —
+#     so the unwalked map costs a box test per waypoint, not a distance query
+#     per cell. The set it arrives at is the same set is_explored() would have
+#     said yes to; it is reached from the other end.
+#  2. Never-explored cells were a draw call each. They are one channel of one
+#     texture now, and the shader paints them.
+#  3. The tile a cell shows is a pure function of the cell and the world's
+#     water, and was recomputed every frame at ~5.8us a cell — water_depth()
+#     alone is a linear scan of every lake. It is cached; terrain does not move.
+#
+# Called from _process() rather than from _draw(): the ground is no longer
+# something this Control paints, but the mask still has to be ready before the
+# view's camera looks at it in the same frame.
+func _update_ground() -> void:
+	_layout()
 	var mn := Vector2(1e9, 1e9)
 	var mx := Vector2(-1e9, -1e9)
 	for corner in [Vector2.ZERO, Vector2(size.x, 0), Vector2(0, size.y), size]:
@@ -2021,52 +3847,97 @@ func _draw_ground() -> void:
 		mn = mn.min(w); mx = mx.max(w)
 	var i0 := int(floor(mn.x / CELL)); var i1 := int(ceil(mx.x / CELL))
 	var j0 := int(floor(mn.y / CELL)); var j1 := int(ceil(mx.y / CELL))
-	if (i1 - i0 + 1) * (j1 - j0 + 1) > MAX_CELLS:   # far-out zoom: don't paint the world
-		draw_rect(Rect2(Vector2.ZERO, size), Color("4a5333"))   # the tiles' own average
+	# The mask covers the screen's cell box plus a quarter of it each side, and
+	# is rebuilt only when the screen leaves that box (or the map's memory
+	# grows) — a pan of a few cells costs nothing.
+	var step := 1
+	while (i1 - i0 + 1) / step > MASK_MAX or (j1 - j0 + 1) / step > MASK_MAX:
+		step += 1
+	var pad_x := maxi(2, (i1 - i0) / 4)
+	var pad_y := maxi(2, (j1 - j0) / 4)
+	var inside: bool = _mask_key.size() == 7 and i0 >= _mask_key[0] and i1 <= _mask_key[1] \
+		and j0 >= _mask_key[2] and j1 <= _mask_key[3] and step == _mask_key[4] \
+		and world.explored.size() == _mask_key[5] and world.settlements.size() == _mask_key[6]
+	if not inside:
+		var a0 := i0 - pad_x; var a1 := i1 + pad_x
+		var b0 := j0 - pad_y; var b1 := j1 + pad_y
+		_mask_tex = _build_mask(a0, a1, b0, b1, step, _visible_ground(a0, a1, b0, b1))
+		_mask_key = [a0, a1, b0, b1, step, world.explored.size(), world.settlements.size()]
+	if _view == null:
 		return
-	# The cell's two projected edges. _iso is linear, so these are the same for
-	# every cell and the whole grid is one transform plus a translation per tile.
-	var ex := _iso(Vector2(CELL, 0)) * _zoom
-	var ey := _iso(Vector2(0, CELL)) * _zoom
-	draw_set_transform_matrix(Transform2D((ex + ey) / TILE.x, (ey - ex) / TILE.y, _origin))
-	# T9x: three fog tiers, not two. Currently-visible (near the player right
-	# now) draws clean; explored-but-not-visible ("remembered") draws the
-	# real tile with a translucent dark tint over it so the shape still
-	# reads; never-explored draws as flat, opaque, darker fog. Only one
-	# live-position check needed — is_explored() already folds in the
-	# settlement-beacon radius (world.gd's near_settlement()).
-	var p := world.player()
-	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
-	for i in range(i0, i1 + 1):
-		for j in range(j0, j1 + 1):
-			var cell := Vector2i(i, j)
-			var center := Vector2(i + 0.5, j + 0.5) * CELL
-			var rect := Rect2(Vector2(i + j, j - i - 1) * TILE * 0.5, TILE)
-			# ponytail: an O(cells x waypoints) distance scan every frame, fine at
-			# this map's scale (screen-visible cells, a few hundred waypoints);
-			# a spatial grid is the upgrade if a very long walk makes it drag.
-			if not world.is_explored(center):
-				draw_rect(rect, FOG_UNKNOWN)
-				continue
-			var cl := _cluster(cell, TILE_CLUSTER)
-			# 1.0 deep in a lake, 0.0 well inland, a ramp across the bank between.
-			var wet := 0.5 - world.water_depth(center) / (SHORE * 2.0)
-			var tex := _terrain_tex
-			var pool: Array = GRASS
-			# Left un-clustered on purpose: this per-cell dither is what frays the
-			# bank into an organic edge (see TILE_CLUSTER's own comment above).
-			if _rand(cell, 9) < wet:
-				tex = _water_tex
-				pool = WATER
-			elif _rand(cl, 5) > WOODED:
-				tex = _forest_tex
-				pool = FOREST
-			var idx: int = pool[int(_rand(cl, 1) * pool.size()) % pool.size()]
-			draw_texture_rect_region(tex, rect,
-				Rect2(Vector2(idx % TILE_COLS, idx / TILE_COLS) * TILE, TILE))
-			if not world.is_visible_now(center, ppos):
-				draw_rect(rect, FOG_REMEMBERED)
-	draw_set_transform_matrix(Transform2D.IDENTITY)
+	var mw: int = (_mask_key[1] - _mask_key[0]) / step + 1
+	var mh: int = (_mask_key[3] - _mask_key[2]) / step + 1
+	_view.set_ground_mask(_mask_tex, Vector2(_mask_key[0], _mask_key[2]) * CELL,
+		Vector2(mw, mh) * float(step) * CELL, Vector2(1.0 / mw, 1.0 / mh))
+
+const MASK_MAX := 96      # texels a side; far out a texel spans several cells, and nobody can tell
+
+# R forest, G water, B explored — the ground's kinds and the fog's memory,
+# one texel per cell (per `step` cells far out). The shader softens it; this
+# only has to be right. Water is the bank ramp itself rather than
+# a per-cell dithered pick, which is what makes a shore a shore.
+func _build_mask(i0: int, i1: int, j0: int, j1: int, step: int, cells: Dictionary) -> ImageTexture:
+	var w := (i1 - i0) / step + 1
+	var h := (j1 - j0) / step + 1
+	var bytes := PackedByteArray()
+	bytes.resize(w * h * 3)
+	var o := 0
+	for y in h:
+		var cy: int = j0 + y * step
+		for x in w:
+			var cell := Vector2i(i0 + x * step, cy)
+			var wet := 0.5 - world.water_depth(Vector2(cell.x + 0.5, cell.y + 0.5) * CELL) / (SHORE * 2.0)
+			var water := smoothstep(0.3, 0.7, wet)
+			bytes[o] = 255 if (water < 0.5 and _rand(_cluster(cell, TILE_CLUSTER), 5) > WOODED) else 0
+			bytes[o + 1] = int(water * 255.0)
+			bytes[o + 2] = 255 if cells.has(cell) else 0
+			o += 3
+	return ImageTexture.create_from_image(Image.create_from_data(w, h, false, Image.FORMAT_RGB8, bytes))
+
+# The explored cells inside the viewport's cell box, as a set. Walks out from
+# each remembered waypoint and each settlement beacon rather than testing every
+# cell on screen, so an unwalked map costs one box intersection per waypoint.
+# Every cell it yields is one world.is_explored() would have said yes to: the
+# same VISION_RADIUS around the same trail, and the same beacon radius around
+# the same settlements (core/world.gd).
+func _visible_ground(i0: int, i1: int, j0: int, j1: int) -> Dictionary:
+	# Memoised on what it depends on and nothing else: the box of cells on
+	# screen, and how much trail there is to walk out from. The box is in whole
+	# cells, so marching only invalidates it once every CELL units of ground
+	# rather than every frame, and a camera that is sitting still (a menu, a
+	# paused clock, a player reading the map) recomputes nothing at all.
+	var key := [i0, i1, j0, j1, world.explored.size(), world.settlements.size()]
+	if key == _ground_key:
+		return _ground_set
+	var out := {}
+	var seeds: Array = []
+	for w in world.explored:
+		seeds.append([w, World.VISION_RADIUS])
+	for s in world.settlements:
+		seeds.append([s.position, World.SETTLEMENT_BEACON_RADIUS])
+	for seed_at in seeds:
+		var at: Vector2 = seed_at[0]
+		var r: float = seed_at[1]
+		var a0: int = maxi(i0, int(floor((at.x - r) / CELL)))
+		var a1: int = mini(i1, int(ceil((at.x + r) / CELL)))
+		var b0: int = maxi(j0, int(floor((at.y - r) / CELL)))
+		var b1: int = mini(j1, int(ceil((at.y + r) / CELL)))
+		if a0 > a1 or b0 > b1:
+			continue      # this waypoint is nowhere near the screen
+		var rsq: float = r * r
+		for i in range(a0, a1 + 1):
+			for j in range(b0, b1 + 1):
+				var cell := Vector2i(i, j)
+				if out.has(cell):
+					continue
+				if (Vector2(i + 0.5, j + 0.5) * CELL).distance_squared_to(at) <= rsq:
+					out[cell] = true
+	_ground_key = key
+	_ground_set = out
+	return out
+
+var _ground_key: Array = []       # what _ground_set was computed for
+var _ground_set: Dictionary = {}  # the explored-and-on-screen cells, memoised
 
 # T9y: the one place the "you can see it now" vs "you only remember it"
 # distinction turns into a colour. Desaturate toward the fog's own blue-black
@@ -2172,107 +4043,13 @@ func _draw_offscreen_marker(s, frame: Rect2, ppos: Vector2) -> void:
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.75))
 	draw_string(ThemeDB.fallback_font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, col)
 
-# O11/O12: a medieval building on each footprint the blocks stood on — a city
-# gets three, a town two, painter-sorted among themselves. The footprint ring
-# stays: every faction's walls are the same stone, and faction is the one thing
-# the map still has to read at a glance.
-# T91: a discovered lair. Grey once looted, faction-tinted red while there's
-# still a fight in it, so a glance says which lairs are done. Tier 0: a 3D
-# diorama in the Lairs3D layer above this map, same contract as Settlements3D
-# — it replaces the "☠" glyph only; shadow, ring and name label stay shared.
-func _draw_lair(l, at: Vector2, live := true) -> void:
-	var col := _remembered(Icons.COL_MUTED if l.looted else Icons.COL_FOE, live)
-	var r := 14.0 * _zoom
-	_soft_shadow(at, r * 0.85)
-	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
-	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
-	if not (_lairs3d and _lairs3d.has_model(l)):
-		var fs := int(18 * _zoom)
-		draw_string(ThemeDB.fallback_font, at - Vector2(fs * 0.35, -fs * 0.3), "☠",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, _remembered(Icons.COL_HEAD, live))
-	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), l.sname,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _remembered(Icons.COL_BODY, live))
-
-func _draw_settlement(s, at: Vector2, live := true) -> void:
-	var col := _remembered(faction_color(s.faction), live)
-	var big: bool = s.kind == "city"
-	# T90: "camp" is the smallest tier (one lean-to, no ring flourish scale-up) —
-	# everything below city was "town" before there were three sizes.
-	var small: bool = s.kind == "camp"
-	var r := (26.0 if big else (12.0 if small else 17.0)) * _zoom
-	_soft_shadow(at, r * 0.9)
-	_fan(at + _iso(LIGHT) * r * 0.5, _ring(at, r), col.darkened(0.35), col.darkened(0.62))
-	draw_polyline(_ring(at, r, true, true), col.darkened(0.15), 1.5, true)
-	# Style off the faction so a faction's towns look like each other, pair off the
-	# id so two of its towns are not the same building twice.
-	var style: int = absi(hash(s.faction))
-	var pair: int = absi(hash(s.id))
-	var blocks := [Vector2(0, 0), Vector2(-0.5, 0.35), Vector2(0.5, 0.3)] if big \
-		else ([Vector2(0, 0)] if small else [Vector2(0, 0), Vector2(0.45, 0.3)])
-	var h := r * (3.2 if big else (2.4 if small else 2.8))
-	# BUILDING_ANCHOR sits near the sprite's bottom (112 of 120px tall), so a house
-	# drawn at `base` reads as mostly-above it — a cluster whose bases sit on the
-	# ring reads as pushed toward the ring's back half. Nudge every base down by
-	# the gap between the anchor and the sprite's true vertical centre so the
-	# cluster's visual mass, not its ground corner, is what centres on the ring.
-	var vcenter := Vector2(0.0, (BUILDING_ANCHOR.y - BUILDING.y * 0.5) * 0.3 * h / BUILDING.y)
-	# Tier 0: a 3D diorama in the Settlements3D layer above this map. Same
-	# contract as Figures3D on the combat board — it replaces the building
-	# blocks only; shadow, ring and name label above/below stay shared.
-	if not (_settlements3d and _settlements3d.has_model(s)):
-		var bases: Array = []
-		for b in blocks:
-			bases.append(at + _iso(b * r) + vcenter)
-		bases.sort_custom(func(a, b): return a.y < b.y)
-		for k in bases.size():
-			_draw_building(bases[k], h, style + k, pair + k, live)
-	draw_string(ThemeDB.fallback_font, at + Vector2(-r, r * 0.9 + 12.0), s.sname,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, _remembered(Icons.COL_BODY, live))
-
-# One building: a whole house in one cell now (the old Town Pack's modular
-# left/right wall halves are gone with it). `base` is the house's near ground
-# corner, i.e. the point it stands on; `h` scales the cell, whose own 128x120
-# proportions are kept so the five buildings stay at their relative sizes.
-func _draw_building(base: Vector2, h: float, style: int, pair: int, live := true) -> void:
-	var cell := BUILDING * (h / BUILDING.y)
-	var src := Vector2(style % BUILDING_STYLES, pair % BUILDING_PAIRS) * BUILDING
-	draw_texture_rect_region(BuildingTex,
-		Rect2(base - BUILDING_ANCHOR * (h / BUILDING.y), cell), Rect2(src, BUILDING),
-		_remembered(Color.WHITE, live))
-
-# O14: a board-game pawn standing on the party's position, tinted to its faction.
-# `at` is the ground point, so the sprite hangs above it rather than centring on
-# it, the way a building sits on its near corner. Sizes are the old ball token's
-# radii kept as the token's half-width, so parties read at the same scale as before.
-func _draw_party(p, at: Vector2, live := true) -> void:
-	var col := _remembered(faction_color(p.faction, p.is_player), live)
-	var rad := (11.0 if p.is_player else 9.0) * _zoom
-	var h := rad * 2.0 * PAWN.y / PAWN.x
-	_soft_shadow(at, rad * 0.8)
-	if p.is_player:
-		# T9x: a layered glow, not just a thin outline — needs to read as
-		# "this one is you" regardless of which hero figure is showing, now
-		# that the player can pick any of them from the Party screen. Drawn
-		# under the sprite so the ring's far arc reads as behind the pawn.
-		# (the old single ring was also never actually closed — draw_polyline's
-		# 3rd arg is antialiasing, not _ring()'s own `closed`, so it was
-		# missing one segment; fixed here too.)
-		for i in 3:
-			draw_colored_polygon(_ring(at, rad * (1.5 + 0.35 * i)),
-				Color(Icons.COL_GOLD, 0.18 - 0.05 * i))
-		draw_polyline(_ring(at, rad * 1.7, true, true), Icons.COL_GOLD, 2.5, true)
-	# Tier 0: a 3D troop figure in the Party3D layer above this map, picked from
-	# the band's highest-leveled troop — same contract as Settlements3D/Lairs3D,
-	# replaces the PawnTex icon (and its faction tint) only.
-	if not (_party3d and _party3d.has_model(p)):
-		draw_texture_rect(PawnTex, Rect2(at - Vector2(rad, h - rad * 0.22),
-			Vector2(rad * 2.0, h)), false, col)
-	# T-party3d: name + headcount, floating below the token — same label
-	# treatment World._draw_settlement()/_draw_lair() already use. The player's
-	# own headcount comes off the real Party (active roster), everyone else's
-	# off their troops[] flavour roster (RoamingParty.highest_troop's source).
-	var count: int = party.active.size() if p.is_player else p.troops.size()
-	var label: String = "You" if p.is_player else p.id.capitalize()
-	draw_string(ThemeDB.fallback_font, at + Vector2(-rad * 1.3, rad * 1.3 + 12.0),
-		"%s (%d)" % [label, count], HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-		_remembered(Icons.COL_BODY, live))
+# The 2D prop tier that used to live here — _draw_settlement()'s painted
+# building blocks, _draw_lair()'s "☠" glyph, _draw_building() and
+# _draw_party()'s pawn sprite — is gone, with the sheet textures it read from.
+# A flat sprite pasted over the map was only ever a stand-in for a model, and a
+# camera that turns walks straight round the back of one. Every landmark is a
+# model in the 3D view now: scenes/world/settlements3d.gd, lairs3d.gd and
+# party3d.gd, each of which covers everything the game can produce (the
+# settlement and lair kits build from primitives, and a band with no character
+# figure marches as a 3D pawn), so there is nothing left for a fallback tier to
+# cover.

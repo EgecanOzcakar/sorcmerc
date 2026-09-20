@@ -9,6 +9,7 @@ const World = preload("res://core/world.gd")
 const Site = preload("res://core/site.gd")
 const Party = preload("res://core/party.gd")
 const Scaler = preload("res://core/scaler.gd")
+const Regions = preload("res://core/regions.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 
 var _pass := 0
@@ -241,6 +242,27 @@ func _init() -> void:
 		sf.enter(0)
 		check(not sf.combat_spec().get("monsters", []).is_empty(), "%s lairs have a boss with a roster" % f)
 
+	# A "bestiary" boss is the creature itself, and it must not show up as plain
+	# escort on the floors above it. The giant hold sits in the frontier, so
+	# core/regions.gd builds its rooms for a level-6 party whoever walks in — and
+	# at that budget the giant pool hands the oni out as a normal pick (found in
+	# play: first fight of the giant hold was an oni). Every room, every pick.
+	var far = World.Lair.new("giant-hold", Vector2(-520, -260), "giant")
+	var s8 = Site.for_lair(far, _party(), _world())
+	check(Regions.band_of(_world(), far.position) == "frontier", "the giant hold is frontier country")
+	var leaked := false
+	for d in s8.depth_total() - 1:
+		for i in s8.rooms[d].size():
+			s8.depth = d; s8.state = "picking"
+			if String(s8.enter(i).get("kind", "")) != "combat":
+				continue
+			for m in s8.combat_spec()["monsters"]:
+				leaked = leaked or String(m["id"]) == "oni"
+	check(not leaked, "the oni never turns up before the boss room")
+	s8.depth = s8.depth_total() - 1; s8.state = "picking"; s8.enter(0)
+	check(s8.combat_spec()["monsters"].any(func(m): return String(m["id"]) == "oni"),
+		"...but it is still the boss")
+
 	# --- D1: a disturbed lair does not wait forever ------------------------
 	# Locked with the user: enter a lair and you have a day or two to finish it.
 	# Walk away longer and it resolves without you — somebody else clears it, or
@@ -293,5 +315,80 @@ func _init() -> void:
 	Site.wipe_penalty(_party(), lair9)
 	check(not lair9.looted, "a wipe leaves the lair standing to try again")
 
+	test_objective_rooms()
+
 	print("test_site: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# Objectives: a gate room holds, a pens room rescues, and a rescue job can only
+# be posted about a lair whose pens the party has not yet fought past.
+func test_objective_rooms() -> void:
+	var Objectives = load("res://core/objectives.gd")
+	var ids: Array = Site.COMBAT_ROOMS.map(func(r): return String(r["id"]))
+	check(ids.has("gate") and ids.has("pens"), "the gate and the pens are combat rooms")
+	# find a lair id whose interior has a pens room, and one whose has not
+	var with_pens = null
+	var without = null
+	for i in 400:
+		var l = World.Lair.new("warren-%d" % i, Vector2(100, 100), "goblinoid")
+		if Site.pens_ahead(l):
+			if with_pens == null: with_pens = l
+		elif without == null:
+			without = l
+		if with_pens != null and without != null:
+			break
+	check(with_pens != null and without != null, "some lairs hold captives and some do not")
+	var w := _world()
+	var p := _party()
+	var s = Site.for_lair(with_pens, p, w)
+	var pens := {}
+	for depth in s.rooms:
+		for r in depth:
+			if String(r.get("objective", "")) == "rescue": pens = r
+	check(not pens.is_empty(), "the pens are in there")
+	s.room = pens
+	s.state = "combat"
+	var spec: Dictionary = s.combat_spec()
+	check(spec.get("objective", {}).get("kind", "") == "rescue", "the pens room's spec carries a rescue")
+
+	# gate rooms are their own draw — a lair with pens ahead is not guaranteed to
+	# also have one (with_pens above usually does not), so search independently.
+	var gate := {}
+	var s2
+	for i in 400:
+		var gl = World.Lair.new("gate-%d" % i, Vector2(100, 100), "goblinoid")
+		s2 = Site.for_lair(gl, p, w)
+		for depth in s2.rooms:
+			for r in depth:
+				if String(r.get("objective", "")) == "hold": gate = r
+		if not gate.is_empty():
+			break
+	check(not gate.is_empty(), "some lairs have a gate to hold")
+	s2.room = gate
+	s2.state = "combat"
+	spec = s2.combat_spec()
+	check(spec["objective"]["kind"] == "hold" and spec["objective"]["waves"].size() == Objectives.WAVE_ROUNDS.size(),
+		"the gate's spec carries a hold with one wave per wave round")
+	var waves: Array = spec["objective"]["waves"]
+	check(waves.all(func(wave): return wave is Array and not wave.is_empty() and wave.all(func(m): return m is Dictionary and m.has("id"))),
+		"every wave is an actual roster, not just a shape")
+
+	# an ordinary combat room of that same site — no hold, no rescue — must not
+	# pick up an objective it was never given
+	var ordinary := {}
+	for depth in s2.rooms:
+		for r in depth:
+			if ordinary.is_empty() and String(r.get("kind", "")) == "combat" and not r.has("objective"):
+				ordinary = r
+	s2.room = ordinary
+	s2.state = "combat"
+	check(not s2.combat_spec().has("objective"), "an ordinary room carries no objective")
+
+	# fought past: a lair whose pens are behind the party no longer qualifies
+	var deep: int = 0
+	for d in s.rooms.size():
+		if s.rooms[d].has(pens):
+			deep = d
+	with_pens.depth_cleared = deep + 1
+	check(not Site.pens_ahead(with_pens), "pens the party has fought past do not count")
+	with_pens.depth_cleared = 0

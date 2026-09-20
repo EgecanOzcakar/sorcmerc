@@ -23,6 +23,9 @@ var quests: Array = []            # T9's quest log — dicts owned by core/quest
 # -INF — keeps the value a normal float through a JSON save round-trip) so a
 # fresh party can always rest immediately.
 var last_long_rest_at: float = -1e12
+# #86: RAW allows two short rests per long rest. Bumped by Visit.rest("short-rest"),
+# cleared by a long rest; Visit.can_short_rest() reads it.
+var short_rests_since_long: int = 0
 # T9x: who stands for the party on the open-world map — the MEMBER ID of one
 # of the active party (picked on the Party screen), resolved to that
 # character's class figure (figures3d.gd's HERO_MODELS) only at render time,
@@ -34,8 +37,29 @@ var overworld_figure := ""
 # owns every rule about them. A dict rather than three fields so the save format
 # grows a key, not a column, when travel gains another order.
 var travel_orders: Dictionary = {}
+var world_now := 0.0        # world-minutes, stamped by world.gd each frame; potion buffs expire against it
+var scouted_next := false   # Potion of Clairvoyance / Clairvoyance cast: the next fight starts scouted
+var swift_until := 0.0      # Fly / Longstrider: forced-march speed, no road penalty, until this world-minute
+var safe_camp := false      # Rope Trick: the next camp needs no kit and can't be jumped
+var alarm_set := false      # Alarm: the next camp's ambush is heard coming
+# SPIKE (docs/spike-party-opinions.md): what members think of each other —
+# "a|b" pair key -> {score, status}. Owned entirely by core/party_opinion.gd;
+# nothing in the shipped game reads or saves it yet.
+var relations: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
+
+# T19: how big a bench this machine has ever kept, and who is on it. Called
+# wherever the roster or the marching order changes.
+func _note_roster() -> void:
+	Ach.record("roster_size", roster.size())
+	var species := {}
+	for id in active:
+		var ch = get_member(String(id))
+		if ch != null:
+			species[String(ch.species_id)] = true
+	if active.size() >= MAX_ACTIVE and species.size() == 1:
+		Ach.unlock("one_species")
 
 func add_member(ch) -> bool:
 	if ch == null or get_member(ch.id) != null:
@@ -43,6 +67,7 @@ func add_member(ch) -> bool:
 	roster.append(ch)
 	if active.size() < MAX_ACTIVE:
 		active.append(ch.id)
+	_note_roster()
 	return true
 
 func remove_member(id: String) -> bool:
@@ -67,11 +92,24 @@ func bench_list() -> Array:
 func is_active(id: String) -> bool:
 	return id in active
 
+# The level the party is actually playing at: the highest among the <= 4 who
+# fight. 1 while nobody is active, so the very first hero still starts where a
+# first hero starts. A character created later joins here rather than at 1 —
+# see scenes/creator/creator.gd's start_level.
+func active_max_level() -> int:
+	var best := 1
+	for id in active:
+		var ch = get_member(id)
+		if ch != null:
+			best = maxi(best, ch.level())
+	return best
+
 func activate(id: String) -> bool:
 	var ch = get_member(id)
 	if is_active(id) or ch == null or ch.dead or active.size() >= MAX_ACTIVE:
 		return false
 	active.append(id)
+	_note_roster()
 	return true
 
 func bench(id: String) -> bool:
@@ -87,18 +125,34 @@ func swap(active_id: String, bench_id: String) -> bool:
 	if i < 0 or is_active(bench_id) or ch == null or ch.dead:
 		return false
 	active[i] = bench_id
+	_note_roster()
 	return true
 
 # --- overworld figure ------------------------------------------------------
 
-# The member whose figure stands for the party on the open-world map, or null
-# for the plain gold-ringed pawn. The single place overworld_figure is
-# resolved — the Party screen's picker and scenes/world/party3d.gd both come
-# through here, so "is this pick still good?" has exactly one answer. It is an
-# identity, not a class: benching or removing that character falls back to the
-# pawn even when somebody else in the party shares their class. (A removed
-# member keeps their id in the field rather than clearing it — re-recruit them
-# and the pick comes back; until then it just reads as the pawn.)
+# The member whose figure stands for the party on the open-world map: the
+# player's pick while it is still marching, otherwise the highest-level active
+# member (marching order breaks ties), and null only for an empty party — the
+# plain gold-ringed pawn used to be the default, and a band of real people
+# read as a green blob until somebody found the picker. (A removed member
+# keeps their id in the field rather than clearing it — re-recruit them and
+# the pick comes back; until then the default stands in.)
+func overworld_member():
+	var ch = overworld_pick()
+	if ch != null:
+		return ch
+	for id in active:
+		var m = get_member(id)
+		if m != null and (ch == null or m.level() > ch.level()):
+			ch = m
+	return ch
+
+# The explicit pick only, or null when there is none or it is not marching.
+# The single place overworld_figure is resolved — the Party screen's picker
+# and overworld_member() both come through here, so "is this pick still
+# good?" has exactly one answer. It is an identity, not a class: benching or
+# removing that character drops the pick even when somebody else in the party
+# shares their class.
 #
 # ponytail: two shapes in one field. It holds a member id now, but saves
 # written before that hold a CLASS id ("wizard") — and core/world_save.gd
@@ -109,7 +163,7 @@ func swap(active_id: String, bench_id: String) -> bool:
 # anything looks at it. The one ambiguity left is a character whose id happens
 # to be a class id ("wizard"), which resolves as the member — the new shape
 # wins, and that is the right way round.
-func overworld_member():
+func overworld_pick():
 	if overworld_figure == "":
 		return null
 	var ch = get_member(overworld_figure)
@@ -144,11 +198,21 @@ func to_combatants(positions: Array, team := "party") -> Array:
 
 func add_gold(n: int) -> void:
 	gold = maxi(0, gold + n)
+	# T19: lifetime earnings and the fattest the purse has ever been. Losses go
+	# through here too (the road takes gold with a negative `n`), and those are
+	# nobody's income.
+	if n > 0:
+		Ach.bump("gold_earned", n)
+	Ach.record("peak_gold", gold)
 
 func spend_gold(n: int) -> bool:
 	if n < 0 or n > gold:
 		return false
 	gold -= n
+	if n > 0:
+		Ach.bump("gold_spent", n)
+	if gold == 0 and n > 0:
+		Ach.unlock("broke")
 	return true
 
 # Identified and unidentified units of the same item stack separately.
@@ -224,6 +288,21 @@ const REVIVE_SCROLL := "scroll-of-resurrection"
 const REVIVE_COST := 300
 const REVIVE_SLOT := 3        # Revivify is 3rd level: any free slot of 3+ pays for it
 
+# The first active member who knows any of `spell_ids`, or null. The road's
+# "a spell you know changes the roll" hook (Revivify's pattern): Pass Without
+# Trace on the approach, Detect Thoughts at the stall, a restoration spell
+# behind the healer's counter.
+func caster_of(spell_ids: Array):
+	return caster_and_spell(spell_ids).get("ch")
+
+# {ch, spell} for the first active member who knows any of `spell_ids`; {} if none.
+func caster_and_spell(spell_ids: Array) -> Dictionary:
+	for ch in party_characters():
+		for sid in spell_ids:
+			if _knows(ch, String(sid)):
+				return {"ch": ch, "spell": String(sid)}
+	return {}
+
 static func _knows(ch, spell_id: String) -> bool:
 	if spell_id in ch.prepared:
 		return true
@@ -293,12 +372,23 @@ static func resurrect(party, dead_id: String, method: String, caster_id: String 
 	target.hp_current = 1
 	target.dirty()
 	Ach.unlock("resurrect_ally")   # T19 — spell or scroll, both route through here
+	Ach.bump("resurrections")
 	return true
 
 # End of a run: death is a within-run cost, not permanent. Leaves the benching alone.
+#
+# Everybody comes to, not only the dead. Losing a fight writes the field back
+# verbatim (core/adapter.gd's write_back), so a hero who went DOWN rather than
+# died lands here at 0 HP, alive and unconscious — and the old version, which
+# only looked at `dead`, left them there. On the open world that is a soft-lock,
+# not a setback: world.gd's _retreat() puts the beaten party down at the nearest
+# settlement, the next encounter opens with nobody on their feet and is over on
+# round 1, and if the settlement they woke at was the one whose garrison beat
+# them, the loop has no exit. "They come to" is what both callers narrate, so it
+# is what this does — for the dead and the merely flattened alike.
 static func auto_revive_all(party) -> void:
 	for ch in party.roster:
-		if ch.dead:
+		if ch.dead or (ch.hp_current >= 0 and ch.hp_current < 1):
 			ch.dead = false
 			ch.hp_current = maxi(1, ch.hp_current)
 			ch.dirty()
@@ -323,7 +413,40 @@ func summary(id: String) -> Dictionary:
 		"hp": ch.hp_current if ch.hp_current >= 0 else s.max_hp,
 		"max_hp": s.max_hp,
 		"active": is_active(id),
+		"dead": ch.dead,
+		# Issue #27: what a party page needs to say about somebody without
+		# making the player open their sheet one at a time. Trained skills only
+		# — all eighteen of them, most at +0, is the profile screen's job — and
+		# what is actually on them, which is the thing a stash listing cannot
+		# tell you. Ids and numbers; the names are the UI's business.
+		"skills": trained_skills(s),
+		"equipped": equipped_items(s),
 	}
+
+# The skills this sheet is actually trained in, best first: [{id, mod, prof}]
+# where prof is "expert" or "prof". Untrained skills are left out — a roster
+# row that lists all eighteen says nothing.
+static func trained_skills(s) -> Array:
+	var out: Array = []
+	for id in s.skill_prof:
+		var how := String(s.skill_prof[id])
+		if how != "prof" and how != "expert":
+			continue
+		out.append({"id": String(id), "mod": int(s.skills.get(id, 0)), "prof": how})
+	out.sort_custom(func(a, b):
+		if a["mod"] != b["mod"]:
+			return a["mod"] > b["mod"]
+		return a["id"] < b["id"])
+	return out
+
+# What is worn and wielded: [{id, kind, quantity}], in the order the sheet
+# resolved it.
+static func equipped_items(s) -> Array:
+	var out: Array = []
+	for it in s.equipment:
+		out.append({"id": String(it["item_id"]), "kind": String(it.get("kind", "")),
+			"quantity": int(it.get("quantity", 1))})
+	return out
 
 # --- fixtures -------------------------------------------------------------
 
@@ -343,8 +466,8 @@ static func _demo_barbarian(id: String, name: String, species: String) -> Charac
 	ch.species_id = species
 	ch.background_id = "soldier"
 	ch.base_abilities = {"str": 15, "dex": 12, "con": 14, "int": 8, "wis": 10, "cha": 10}
-	ch.add_level("barbarian", -1)
-	ch.add_level("barbarian", -1)
+	ch.add_level("barbarian", -1, true)   # a demo hero, handed over the same way
+	ch.add_level("barbarian", -1, true)
 	ch.decide("asi:background:soldier:0", {"type": "asi", "allocation": {"str": 2, "con": 1}})
 	ch.decide("skill-choice:class:barbarian:0", {"type": "skill-choice", "skills": ["athletics", "survival"]})
 	ch.decide("weapon-mastery-choice:class:barbarian:0",

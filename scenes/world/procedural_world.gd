@@ -31,7 +31,7 @@ const LAIRS := [
 ]
 const LAKE_RADIUS := 100.0            # the one lake, same size the small map's has
 const MIN_WATER_GAP := 60.0           # dry margin between the lake's edge and anything placed
-const MONSTER_FACTIONS := ["bandit", "goblinoid"]
+const MONSTER_FACTIONS := ["bandit", "goblinoid", "beast"]
 const MONSTER_BAND_COUNT := 4
 
 static func _randf(rng) -> float:

@@ -41,6 +41,9 @@ const Scaler = preload("res://core/scaler.gd")
 const Regions = preload("res://core/regions.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const RNG = preload("res://core/rng.gd")
+const WorldLairs = preload("res://core/world_lairs.gd")
+const Ach = preload("res://core/achievements.gd")
+const Objectives = preload("res://core/objectives.gd")
 
 # How deep a site runs. Three rooms is the shallowest thing that can still be
 # called an adventuring day (two fights and a boss on one set of slots); six is
@@ -68,6 +71,22 @@ const TREASURE_GOLD := 55
 const TREASURE_PER_DEPTH := 15
 const BOSS_CACHE := 180
 const BOSS_CACHE_PER_DEPTH := 30
+
+# What clearing the place out is worth on top of the rooms themselves. Every
+# fight on the way down already pays its own XP (encounter.gd resolves it per
+# room), but reaching the bottom paid nothing extra — so a delve was worth
+# strictly less than the same number of fights out on the road, which is the
+# wrong way round for the one piece of content you commit to blind.
+#
+# Flat, and scaled by depth the way the hoard above is: a 3-room warren pays
+# about what one more fight would at the levels a party clears one, a 6-room
+# hold rather more. Only on a clear — withdrawing keeps what the rooms paid
+# and nothing else, which is the whole tension of deciding to turn back.
+const CLEAR_XP := 60
+const CLEAR_XP_PER_DEPTH := 30
+
+static func clear_xp(lair) -> int:
+	return CLEAR_XP + CLEAR_XP_PER_DEPTH * depth_for(lair)
 
 # Interior flavour. Deliberately faction-agnostic: a collapsed gallery reads the
 # same whether goblins or the dead are holding it, and one pool that works
@@ -104,6 +123,11 @@ const COMBAT_ROOMS := [
 		"desc": "You have woken them. All of them."},
 	{"id": "choke", "title": "The choke", "difficulty": "normal",
 		"desc": "One way through, and they know it better than you do."},
+	# Objectives (core/objectives.gd): the room asks a different question.
+	{"id": "gate", "title": "The gate", "difficulty": "normal", "objective": "hold",
+		"desc": "Hold the passage while the way behind is barred. More of them will come from the far side."},
+	{"id": "pens", "title": "The pens", "difficulty": "normal", "objective": "rescue",
+		"desc": "Somebody is chained at the back, and their keepers know exactly how long you will take to reach them."},
 ]
 const TREASURE_ROOMS := [
 	{"id": "strongbox", "title": "The strongbox", "desc": "Whatever they took off the road, they put in here."},
@@ -131,6 +155,7 @@ var room: Dictionary = {}
 var state := "picking"
 var log: Array = []
 var rng
+var _rested := false     # T19: did this delve stop for its short rest?
 
 
 static func for_lair(lair, party, world):
@@ -152,6 +177,19 @@ static func for_lair(lair, party, world):
 static func depth_for(lair) -> int:
 	var idx: int = maxi(0, Scaler.FACTIONS.find(lair.faction))
 	return clampi(MIN_DEPTH + idx / DEPTH_PER_FACTION_STEP, MIN_DEPTH, MAX_DEPTH)
+
+
+# Whether a rescue job about this lair can still be done: a pens room at a
+# depth the party has not yet fought past. core/quest_posting.gd asks before
+# posting, so a job is only ever posted about captives that are actually
+# reachable. Same seed as for_lair(), so it is the same interior.
+static func pens_ahead(lair) -> bool:
+	var rooms: Array = _build(lair, RNG.new(maxi(1, absi(hash("site|%s" % lair.id)))))
+	for d in range(int(lair.depth_cleared), rooms.size()):
+		for r in rooms[d]:
+			if String(r.get("objective", "")) == "rescue":
+				return true
+	return false
 
 
 # The board a fight in this lair happens on: the theme whose faction matches.
@@ -239,6 +277,19 @@ static func _boss_room(lair, theme: String, total: int) -> Dictionary:
 		"depth": total - 1, "gold": BOSS_CACHE + BOSS_CACHE_PER_DEPTH * total}
 
 
+# The creature the last room is built around must not be a regular pick on the
+# way down. Once a party is strong enough (~level 6 for the oni), the faction
+# pool would hand it out as plain escort, and "THE ONI OF THE DEEP ICE" is not a
+# reveal after you have already killed two. Only for "bestiary" bosses — an
+# "elite" lead (the arrow-chief's goblin archer) IS the common creature with a
+# title, and pulling it from the warren would gut every goblin roster.
+func _boss_lead_exclusion() -> Array:
+	var boss: Dictionary = rooms[-1][0] if not rooms.is_empty() else {}
+	if String(boss.get("archetype", "")) == "bestiary" and boss.has("lead"):
+		return [String(boss["lead"])]
+	return []
+
+
 func say(line: String) -> void:
 	log.append(line)
 
@@ -293,7 +344,15 @@ func combat_spec() -> Dictionary:
 	var spec: Dictionary = Scaler.boss_for(party.party_characters(), room, seed_v,
 			maxf(1.0, band)) if room.has("lead") \
 		else Scaler.roster_for(party.party_characters(), String(room.get("difficulty", "normal")),
-			{}, theme, seed_v, band)
+			{}, theme, seed_v, band, _boss_lead_exclusion())
+	# Objectives: the gate holds against waves drawn from the same faction at
+	# WAVE_SCALE of an easy roster; the pens hold a captive on a deadline.
+	match String(room.get("objective", "")):
+		"hold":
+			spec["objective"] = Objectives.make("hold", {"waves": Objectives.waves_for(
+				party.party_characters(), theme, seed_v, band, _boss_lead_exclusion())})
+		"rescue":
+			spec["objective"] = Objectives.make("rescue")
 	spec["theme"] = theme if theme != "" else Campaign.BOSS["theme"]
 	return spec
 
@@ -307,6 +366,7 @@ func finish_combat(result: Dictionary) -> void:
 		return
 	if String(result.get("outcome", "")) != "Victory":
 		state = "wiped"
+		Ach.unlock("lair_wipe")
 		say("The party goes down in %s." % room.get("title", "the dark"))
 		return
 	say("%s is cleared." % room.get("title", "The room"))
@@ -338,7 +398,11 @@ func take() -> int:
 func short_rest() -> bool:
 	if state != "visiting" or room.get("kind", "") != "rest" or room.get("rested", false):
 		return false
+	if not Visit.can_short_rest(party):
+		say("Nobody can rest any more today — only a night's sleep will do now.")
+		return false
 	room["rested"] = true
+	_rested = true
 	Visit.rest(party, world, "short-rest")
 	say("An hour in %s. Not a night's sleep, but it is something." % room.get("title", "the dark"))
 	return true
@@ -356,7 +420,14 @@ func leave() -> void:
 	lair.depth_cleared = maxi(int(lair.depth_cleared), depth)
 	if was_boss or depth >= rooms.size():
 		state = "cleared"
-		lair.looted = true          # the stash is spent; the marker greys out on the map
+		# The stash is spent and the marker greys out — and the respawn clock
+		# starts, so something can move back in a day from now
+		# (core/world_lairs.gd's RESPAWN).
+		WorldLairs.mark_cleared(lair, world.clock.elapsed if world != null else -1.0)
+		Ach.bump("lairs")
+		Ach.record("deepest_lair", rooms.size())
+		if not _rested:
+			Ach.unlock("lair_no_rest")
 		say("%s is cleared out." % lair.sname)
 		return
 	state = "picking"
@@ -419,5 +490,6 @@ func withdraw() -> bool:
 	if state != "picking":
 		return false
 	state = "withdrawn"
+	Ach.unlock("lair_withdraw")
 	say("The party backs out of %s, and it is still down there." % lair.sname)
 	return true

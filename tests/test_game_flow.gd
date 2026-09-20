@@ -31,6 +31,22 @@ func _campaign() -> Campaign:
 	p.add_gold(120)
 	return Campaign.new(p, 7)
 
+# A real left click at a viewport point, the way a player makes one — picked by
+# Godot through whatever is over that pixel, rather than posted to a handler.
+func _click(at: Vector2) -> void:
+	var motion := InputEventMouseMotion.new()
+	motion.position = at
+	# in_local_coords, or the root window puts the event through its screen
+	# transform and it lands somewhere else entirely (nothing moves, and the
+	# test passes for the wrong reason).
+	root.push_input(motion, true)
+	for down in [true, false]:
+		var e := InputEventMouseButton.new()
+		e.button_index = MOUSE_BUTTON_LEFT
+		e.pressed = down
+		e.position = at
+		root.push_input(e, true)
+
 func _press(under: Node, label: String) -> void:
 	for b in under.find_children("*", "Button", true, false):
 		if label in b.text:
@@ -155,7 +171,20 @@ func _tutorial_checks() -> void:
 	await process_frame
 	var combat = game2._screen.get_child(0)
 	check(combat.tutorial, "the title screen's Tutorial launches with the walkthrough on")
-	check(combat._walk != null, "...and the first step is up, blocking play")
+	# The walkthrough waits for the first HERO turn before it opens, so that the
+	# bar its cards describe is the bar underneath them. Depending on the
+	# surprise roll and initiative that is either this frame or a couple after
+	# the goblin has swung, so this waits rather than asserting on frame one.
+	for _i in 30:
+		if combat._walk != null:
+			break
+		await process_frame
+	check(combat._walk != null, "...and the first step comes up, blocking play")
+	check(combat._mode != "deploy", "the guided fight never opens T39's deployment phase")
+	# ...over the ordinary nine slots + Swap + End turn, not the deployment bar.
+	check(combat._buttons.get_children().size() == combat.SLOTS.size() + 2,
+		"the bar under the walkthrough is the fixed one the cards describe (%d buttons)"
+		% combat._buttons.get_children().size())
 	# Next walks every step and the last one hands the fight over; Skip does it at once.
 	for n in Tutorial.STEPS.size():
 		check(combat._walk != null, "step %d is up" % (n + 1))
@@ -166,6 +195,7 @@ func _tutorial_checks() -> void:
 	_press(combat._walk, "Skip")
 	check(combat._walk == null, "Skip tutorial drops straight into normal play")
 	check(combat.cb != null and not combat.cb.is_over(), "the fight underneath was never touched")
+	await _tutorial_practice_checks(combat)
 	game2.queue_free()
 
 	# T42: the title screen's debug "Random battle" cycles a fixed list rather
@@ -186,3 +216,106 @@ func _tutorial_checks() -> void:
 
 	print("test_game_flow: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# T32: the cards that name an action let it be done, through the ordinary
+# handlers, while everything else on the screen stays blocked. Runs on the live
+# tutorial screen the checks above built, after they have put the walkthrough
+# away — every step below is re-opened by hand.
+func _tutorial_practice_checks(combat) -> void:
+	var acts := {}
+	for n in Tutorial.STEPS.size():
+		var t: Dictionary = Tutorial.STEPS[n].get("try", {})
+		if t.is_empty():
+			continue
+		acts[String(t.get("act", ""))] = n
+		check(t.has("hint") and t.has("done"),
+			"step %d's practice carries both its lines" % (n + 1))
+	for want in ["move", "inspect", "hover_slot", "open_list"]:
+		check(acts.has(want), "the walkthrough invites the player to try '%s'" % want)
+
+	# A card that only reads is deaf everywhere, its own region included.
+	combat._walk_show(0)
+	await process_frame
+	check(not combat._walk.live, "the action-log card blocks the whole screen")
+	check(combat._walk._has_point(combat._walk._spot().get_center()),
+		"...the region it points at along with the rest")
+
+	# A card with something to do is deaf everywhere BUT its own region.
+	combat._walk_show(acts["move"])
+	await process_frame
+	check(combat._walk.live, "the board card hands the board back")
+	check(not combat._walk._has_point(combat._walk._spot().get_center()),
+		"...so a click inside the spotlight falls through to it")
+	check(combat._walk._has_point(Vector2(2, 2)),
+		"...while everything outside the spotlight is still blocked")
+
+	# ...and the move it asks for is the ordinary move: the same handler a
+	# click goes through in any other fight, off the real movement budget.
+	var hero = combat.cb.current()
+	var walked := Vector2i(999, 999)
+	for hx in combat.cb.move_field(hero):
+		if hx != hero.pos:
+			walked = hx
+			break
+	check(walked != Vector2i(999, 999), "the hero has somewhere to walk")
+	var move_left: int = hero.econ["move_left"]
+	# Pushed at the viewport rather than handed to board_hex_clicked: what is
+	# under test is whether the overlay lets a real click through to the board
+	# at all, which is Walk._has_point and nothing the board knows about.
+	var at: Vector2 = combat._board.global_position + combat._board._pix(walked)
+	combat._walk_show(0)
+	await process_frame
+	_click(at)
+	await process_frame
+	check(hero.pos != walked, "a click on the board under a card that only reads goes nowhere")
+	combat._walk_show(acts["move"])
+	await process_frame
+	_click(at)
+	await process_frame
+	check(hero.pos == walked and hero.econ["move_left"] < move_left,
+		"...and the same click under the board card moves them for real")
+	check(combat._walk != null and combat._walk.done,
+		"...and the card heard about it")
+	check(combat._walk.hint != null and combat._walk.hint.text.begins_with("✓"),
+		"...and says so on its own line")
+
+	# Hovering a token is the next card's practice; hovering a slot the bar's.
+	combat._walk_show(acts["inspect"])
+	await process_frame
+	combat.board_hex_hovered(hero.pos)
+	check(combat._walk.done, "hovering a token is what the stat-card step waits for")
+	combat._walk_show(acts["hover_slot"])
+	await process_frame
+	check(not combat._walk.done, "the action-bar step starts undone")
+	combat._buttons.get_child(0).mouse_entered.emit()
+	check(combat._walk.done, "...and hovering a badge on the bar finishes it")
+
+	# Keys: the view always, the bar only where a card asks for it, the end of
+	# the turn never — _advance holds the goblin while a card is up.
+	check(combat._walk_key_ok(KEY_HOME), "the view controls work under every card")
+	check(not combat._walk_key_ok(KEY_2), "the bar's keys stay locked on a card that doesn't ask for them")
+	check(not combat._walk_key_ok(KEY_SPACE), "no card lets the turn be handed over under it")
+	var space := InputEventKey.new()
+	space.keycode = KEY_SPACE
+	space.pressed = true
+	var turn: int = combat.cb.turn_idx
+	combat._unhandled_key_input(space)
+	check(combat.cb.turn_idx == turn, "...Space under a card really does nothing")
+
+	combat._walk_show(acts["open_list"])
+	await process_frame
+	check(combat._walk_key_ok(KEY_2), "the list card unlocks the number row")
+	var opened := false
+	for idx in [1, 2, 3, 8]:   # the list slots, in bar order: 2, 3, 4, 9
+		combat._press_hotkey(idx)
+		await process_frame
+		if combat._submenu != "":
+			opened = true
+			break
+	check(opened, "a list slot's key opens its list from under the card")
+	check(combat._walk.done, "...which is the practice that card was waiting for")
+	combat._walk_show(acts["open_list"] + 1)
+	await process_frame
+	check(combat._submenu == "", "moving on puts the bar back where ordinary play expects it")
+	combat._walk_end()
+	check(combat.cb != null and not combat.cb.is_over(), "the fight survived the practice")

@@ -1,6 +1,6 @@
 # O2/O4 — scene-driver smoke test for the open-world map screen: it renders, the
-# clock runs, a right-click moves the player party, pause stops it, the camera
-# pans/zooms without crashing, and closing on a hostile party hands off to a real
+# clock runs, a left-click moves the player party, pause stops it, the camera
+# pans/turns/zooms without crashing, and closing on a hostile party hands off to a real
 # scenes/main.tscn fight that freezes the map until it is won.
 #   godot --headless --path . -s tests/drive_world.gd
 extends SceneTree
@@ -16,6 +16,12 @@ func _init() -> void:
 	screen = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(screen)
 	_run()
+
+# #98: the map halts after every fight until the next order. A step that
+# teleports the party somewhere is giving that order by hand.
+func _unhalt() -> void:
+	screen._halted_on_arrival = false
+	screen.world.clock.resume()
 
 func fail(msg: String) -> void:
 	_fail += 1
@@ -50,6 +56,11 @@ func step(n: int, dt := 0.1) -> void:
 		# tests/test_approach.gd.
 		if screen._approach_card != null:
 			screen._on_approach_chosen("engage")
+		# Issue #30: a fight now pays on a page of its own instead of in silence,
+		# and that page holds the clock until it is read. Same deal as the road
+		# event above — the robot does what a player does and walks on.
+		if screen._spoils_panel != null:
+			screen._close_spoils()
 
 func _run() -> void:
 	await process_frame
@@ -64,11 +75,11 @@ func _run() -> void:
 		fail("the scene has nothing to render: %d settlements, %d parties"
 			% [screen.world.settlements.size(), screen.world.parties.size()])
 
-	# --- right-click sets a goal and the party actually walks there ---------
+	# --- left-click sets a goal and the party actually walks there ----------
 	var start: Vector2 = p.position
-	click(MOUSE_BUTTON_RIGHT, Vector2(1000, 600))
+	click(MOUSE_BUTTON_LEFT, Vector2(1000, 600))
 	if p.goal.is_equal_approx(start):
-		fail("right-click did not set a goal away from the party")
+		fail("left-click did not set a goal away from the party")
 	await step(5)
 	if p.position.is_equal_approx(start):
 		fail("the player party never moved toward the clicked point")
@@ -104,15 +115,66 @@ func _run() -> void:
 	if screen.world.clock.speed != 1.0:
 		fail("cycling four times did not wrap back to 1x")
 
-	# --- camera: drag-pan and scroll-zoom ----------------------------------
+	# --- #110/#113: a click on a town's roofs is a click on the town -----------
+	var town = screen.world.settlements[0]
+	var town_px: Vector2 = screen._pix(town.position)
+	var roof: Vector2 = town_px + Vector2(0, -30.0 * screen._zoom)   # up the model, off the ground point
+	if not screen._click_target(roof).is_equal_approx(town.position):
+		fail("a click on the diorama above %s did not resolve to it (%s)" % [town.sname, screen._click_target(roof)])
+	var far: Vector2 = town_px + Vector2(400, 300)
+	if screen._click_target(far).is_equal_approx(town.position):
+		fail("a click well away from the town snapped to it")
+
+	# --- #94: the clock's neighbours do not creep as the digits change --------
+	var gold_x: float = screen._gold_lbl.global_position.x
+	var clock_text: String = screen._clock_lbl.text
+	screen.world.clock.elapsed += 1.0
+	await step(2)
+	if screen._clock_lbl.text == clock_text:
+		fail("a minute on the clock did not change the face")
+	if not is_equal_approx(screen._gold_lbl.global_position.x, gold_x):
+		fail("the gold label moved when the clock ticked (%.1f -> %.1f)" % [gold_x, screen._gold_lbl.global_position.x])
+	if screen._pause_btn.custom_minimum_size.x <= 0.0 or screen._clock_lbl.custom_minimum_size.x <= 0.0:
+		fail("the live HUD labels are not held at a fixed width")
+
+	# --- #70: arriving halts the clock; a new goal starts it again ----------
+	screen.world.set_goal(p, p.position + Vector2(20, 0))   # half a second's walk
+	await step(10)
+	if not p.at_goal():
+		fail("the party never reached a goal 20 units away")
+	if not screen.world.clock.is_paused() or screen._pause_btn.text != "Resume":
+		fail("reaching the destination did not halt the clock")
+	screen.world.set_goal(p, p.position + Vector2(400, 0))
+	await step(2)
+	if screen.world.clock.is_paused() or p.at_goal():
+		fail("a new destination did not start the clock again")
+
+	# --- camera: drag-pan, middle-drag orbit and scroll-zoom ---------------
 	var pan0: Vector2 = screen._pan
 	var m := InputEventMouseMotion.new()
-	m.button_mask = MOUSE_BUTTON_MASK_LEFT
+	m.button_mask = MOUSE_BUTTON_MASK_RIGHT
 	m.position = Vector2(600, 400)
 	m.relative = Vector2(-40, 25)
 	screen._gui_input(m)
 	if screen._pan.is_equal_approx(pan0):
 		fail("drag did not pan the camera")
+
+	# The same drag on the middle button turns and tilts instead of panning.
+	# Driven through _gui_input so the button split itself is what is tested —
+	# tests/test_world_camera.gd has the projection maths.
+	var yaw0: float = screen.yaw()
+	var pitch0: float = screen.pitch()
+	var o := InputEventMouseMotion.new()
+	o.button_mask = MOUSE_BUTTON_MASK_MIDDLE
+	o.position = Vector2(600, 400)
+	o.relative = Vector2(90, -35)
+	screen._gui_input(o)
+	if is_equal_approx(screen.yaw(), yaw0) or is_equal_approx(screen.pitch(), pitch0):
+		fail("middle-drag did not turn and tilt the camera")
+	await step(2)     # a frame at a turned camera, so the ground and the props are rebuilt at one
+	screen.reset_view()
+	if not (is_equal_approx(screen.yaw(), screen.ISO_YAW) and is_equal_approx(screen.pitch(), screen.ISO_PITCH)):
+		fail("reset_view did not put the camera back")
 
 	# Zoom keeps the world point under the cursor put, and clamps at both ends.
 	var at := Vector2(700, 350)
@@ -355,6 +417,7 @@ func _hostile_settlement(p) -> void:
 	screen._left = null
 	p.position = s.position
 	screen.world.set_goal(p, s.position)
+	_unhalt()
 	screen._check_visit()
 	if screen._visit.is_empty():
 		fail("a merely hostile settlement refused to open its gate")
@@ -398,6 +461,7 @@ func _hostile_settlement(p) -> void:
 	screen._left = null
 	p.position = s.position
 	screen.world.set_goal(p, s.position)
+	_unhalt()
 	screen._check_visit()
 	if not screen._visit.is_empty():
 		fail("a hostile settlement still opened its market")
@@ -472,6 +536,7 @@ func _encounter_handoff(p) -> void:
 	var open_country := Vector2(3000, -3000)
 	p.position = open_country
 	screen.world.set_goal(p, open_country)
+	screen._was_travelling = false   # #70: teleported here, not walked — no arrival halt
 	foe.position = open_country + Vector2(screen.ENCOUNTER_RADIUS + 10.0, 0)
 	foe.goal = open_country
 	screen._check_encounter()
@@ -516,8 +581,8 @@ func _encounter_handoff(p) -> void:
 		fail("the combat scene was never torn down after the fight")
 	if screen.world.parties.has(foe):
 		fail("the defeated party is still on the map")
-	if screen.world.clock.is_paused():
-		fail("the world clock did not resume after the fight")
+	if not screen.world.clock.is_paused() or not screen._halted_on_arrival:
+		fail("the map did not halt for an order after the fight (#98)")
 
 	# A faction with no board of its own still gets a roster and a board.
 	var World = load("res://core/world.gd")

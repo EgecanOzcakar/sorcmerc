@@ -1,0 +1,30 @@
+{
+  "format": "sorcmerc-world",
+  "version": 1,
+  "name": "The Coldmarch",
+  "settlements": [
+    {"id": "hearthgate", "name": "Hearthgate", "position": [0, 0], "faction": "human", "kind": "town"},
+    {"id": "silverpine", "name": "Silverpine", "position": [-480, -220], "faction": "elf", "kind": "town"},
+    {"id": "stonewake", "name": "Stonewake", "position": [520, 240], "faction": "dwarf", "kind": "city"},
+    {"id": "the-bell-camp", "name": "The Bell Camp", "position": [-120, 560], "faction": "orc", "kind": "camp"}
+  ],
+  "lairs": [
+    {"id": "frost-warren", "name": "The Frost Warren", "position": [300, -180], "faction": "goblinoid"},
+    {"id": "coldmarch-cairns", "name": "The Coldmarch Cairns", "position": [-700, 430], "faction": "undead"},
+    {"id": "the-crown-vault", "name": "Vault of the Ember Crown", "position": [900, -520], "faction": "construct",
+     "discovered": true}
+  ],
+  "parties": [
+    {"id": "crown-seekers", "position": [420, -360], "faction": "cultist",
+     "troops": [{"role": "spellcaster", "level": 6}, {"role": "heavy", "level": 5}],
+     "ai": {"behavior": "hunt"}},
+    {"id": "stonewake-column", "position": [400, 200], "faction": "dwarf",
+     "troops": [{"role": "heavy", "level": 4}, {"role": "heavy", "level": 4}],
+     "ai": {"behavior": "patrol", "waypoints": ["stonewake", "hearthgate", [400, 200]]}}
+  ],
+  "waters": [
+    {"position": [140, -120], "radius": 120},
+    {"river": [[60, -40], [10, 120], [-60, 260], [-100, 420]], "radius": 45}
+  ],
+  "start": {"at": "hearthgate", "offset": [30, 40], "faction": "human"}
+}

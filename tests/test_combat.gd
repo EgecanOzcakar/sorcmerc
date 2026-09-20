@@ -26,6 +26,8 @@ func check(cond: bool, label: String) -> void:
 		printerr("  FAIL: ", label)
 
 func _init() -> void:
+	test_line_of_sight_stops_at_the_wall()
+	test_night_on_the_board()
 	test_rng_deterministic()
 	test_parse()
 	test_advantage_beats_normal()
@@ -48,10 +50,14 @@ func _init() -> void:
 	test_action_economy()
 	test_pool_spend_and_rest()
 	test_rage_full_turn()
+	test_buff_rider_ranged()
+	test_zones()
+	test_heal_self()
 	test_action_surge_full_turn()
 	test_spell_slot_spend()
 	test_reaction_and_concentration()
 	test_barks()
+	test_surrender()
 
 	print("test_combat: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -444,7 +450,7 @@ func test_mercy_rule() -> void:
 		_find(c, "vera").pos = Vector2i(0, 2)   # far, unreachable at speed 1
 		c.begin_turn_for(g)
 		AI._foe_turn(c, g)
-		if _find(c, "pike").death_f > 0:
+		if _find(c, "pike").death_f > 0 or _find(c, "pike").is_dead():   # a big enough blow on a body kills outright
 			finished = true
 	check(finished, "no conscious PC in reach -> foe attacks the downed one (some seed lands it)")
 
@@ -561,6 +567,65 @@ func _barbarian(n := 5):
 	ch.equipped = ["greataxe"] as Array[String]
 	return ch
 
+# #79: the board's edge is rock. A board with a bite out of it: a shot across
+# the bite is blocked, a shot along the ground is not, and adjacency always is.
+func test_line_of_sight_stops_at_the_wall() -> void:
+	var board := Encounter.board()
+	var hexes: Array = []
+	for q in 7:
+		for r in 3:
+			if not (r == 1 and q in [2, 3, 4]):   # a wall three hexes long across the middle row
+				hexes.append(Vector2i(q, r))
+	board["hexes"] = hexes
+	board["cover"] = []
+	board["objects"] = []
+	var ch = _barbarian()
+	ch.equipped = ["longbow"] as Array[String]
+	var archer = Adapter.to_combatant(ch, "party", Vector2i(3, 0))
+	var grull = Adapter.from_monster(Catalog.all("monsters.json")[0], "foe", Vector2i(3, 2))
+	var cb = Combat.new(RNG.new(1), [archer, grull], board)
+	check(not cb.has_line_of_sight(Vector2i(3, 0), Vector2i(3, 2)), "the wall between them blocks sight")
+	check(cb.has_line_of_sight(Vector2i(0, 0), Vector2i(6, 0)), "along the open row, sight is clear")
+	check(cb.has_line_of_sight(Vector2i(3, 0), Vector2i(3, 1)), "an adjacent hex is always seen, wall or not")
+	var bow := cb.attack_verb()
+	bow = bow.duplicate(); bow["range"] = 30
+	check(not cb.legal_target(archer, bow, grull), "so a bow cannot be aimed through it")
+	check(not cb.legal_area(archer, {"targeting": "hex", "range": 30}, Vector2i(3, 2)), "nor a fireball")
+	grull.pos = Vector2i(6, 0)
+	check(cb.legal_target(archer, bow, grull), "...and can along the open row")
+
+# #85: after dark a hex is lit by a flame or a hero's own torch, and the unseen
+# are hard to hit and easy to be hit by — unless you have darkvision.
+func test_night_on_the_board() -> void:
+	var board := Encounter.board()
+	board["objects"] = [{"type": "torch", "pos": Vector2i(0, 0)}]
+	board["cover"] = []
+	var ch = _barbarian()   # a human: no darkvision
+	ch.equipped = ["longbow"] as Array[String]
+	var hero = Adapter.to_combatant(ch, "party", Vector2i(3, 1))
+	var mons: Array = Catalog.all("monsters.json")
+	var foe = Adapter.from_monster(mons[0], "foe", Vector2i(7, 1))
+	foe.darkvision = false
+	var cb = Combat.new(RNG.new(1), [hero, foe], board)
+	check(cb.lit(Vector2i(7, 1)), "by day every hex is lit")
+	board["night"] = true
+	check(cb.is_night(), "the board carries the night")
+	check(cb.lit(Vector2i(0, 2)) and not cb.lit(Vector2i(0, 3)), "a torch lights %d hexes around it" % Combat.LIGHT_RADIUS)
+	check(cb.lit(Vector2i(3, 1)) and cb.lit(Vector2i(4, 1)), "a standing hero carries a light")
+	check(not cb.lit(Vector2i(7, 1)), "and the far side of the board is dark")
+	check(cb._attack_mode(hero, foe) == Dice.DIS, "shooting into the dark is at disadvantage")
+	check(cb._attack_mode(foe, hero) == Dice.ADV, "and a shot from the dark at a lit hero has advantage")
+	foe.darkvision = true
+	check(cb._attack_mode(foe, hero) == Dice.ADV, "darkvision does not stop the foe being unseen in the dark")
+	hero.darkvision = true
+	check(cb._attack_mode(hero, foe) == Dice.NORMAL, "...but a hero with darkvision sees them fine")
+	check(Adapter.from_monster(mons[0], "foe", Vector2i.ZERO).darkvision == mons[0].get("senses", {}).has("darkvision"),
+		"a monster's darkvision comes off its senses")
+	var elf = _barbarian()
+	elf.species_id = "elf"
+	check(Adapter.to_combatant(elf, "party", Vector2i.ZERO).darkvision, "an elf has darkvision off the species trait")
+	check(not Adapter.to_combatant(_barbarian(), "party", Vector2i.ZERO).darkvision, "a human does not")
+
 func test_rage_full_turn() -> void:
 	var ch = _barbarian()
 	var brak = Adapter.to_combatant(ch, "party", Vector2i(4, 1))
@@ -669,7 +734,7 @@ func test_reaction_and_concentration() -> void:
 	var v: Dictionary = ilsa.verb("burning-hands").duplicate()
 	v["concentration"] = true
 	cb.perform(ilsa, v, Vector2i(1, 0))
-	check(ilsa.statuses.get("concentrating") == "burning-hands", "casting sets concentration")
+	check(ilsa.statuses.get("concentrating", {}).get("spell") == "burning-hands", "casting sets concentration")
 	ilsa.max_hp = 500; ilsa.hp = 500
 	cb._apply_damage(ilsa, 60)                 # DC 30 — nobody makes that
 	check(not ilsa.has("concentrating"), "damage breaks concentration on a failed CON save")
@@ -756,3 +821,71 @@ func _lucky_rng():
 	while RNG.new(s).roll_die(100) > load("res://core/barks.gd").CHANCE_PCT:
 		s += 1
 	return RNG.new(s)
+
+func test_surrender() -> void:
+	var cb = Combat.new(RNG.new(1), Encounter.all(), Encounter.board())
+	check(not cb.is_over() and cb.outcome() == "ongoing", "fresh fight is ongoing")
+	cb.surrender()
+	check(cb.is_over() and cb.outcome() == "Defeat", "surrender ends the fight as a defeat")
+
+# Hunter's Mark / Magic Weapon / potions ride any weapon hit; Rage is melee-only.
+func test_buff_rider_ranged() -> void:
+	var ch = _barbarian()
+	var a = Adapter.to_combatant(ch, "party", Vector2i(2, 1))
+	var g = Adapter.from_monster(Catalog.all("monsters.json")[0], "foe", Vector2i(6, 1))
+	var cb = Combat.new(RNG.new(3), [a, g], Encounter.board())
+	a.ranged = true
+	a.statuses["hunters-mark"] = {"bonus_damage": 3}
+	a.statuses["raging"] = {"bonus_damage": 2}
+	var ex := cb._buff_damage_extras(a, true)
+	check(ex.size() == 1 and ex[0]["label"] == "hunters-mark", "ranged hit: Hunter's Mark rides, Rage does not")
+	check(cb._buff_damage_extras(a, false).size() == 2, "melee hit: both ride")
+
+# Darkness lingers on its hexes: whoever stands in it wears the buff, whoever
+# walks out sheds it, and the cloud dies with the caster's concentration.
+func test_zones() -> void:
+	var cb = _sandbox()
+	var ilsa = _find(cb, "ilsa"); var grull = _find(cb, "grull")
+	ilsa.pos = Vector2i(2, 1); grull.pos = Vector2i(8, 1)
+	ilsa.slots = [4, 3, 3, 3, 3, 0, 0, 0, 0] as Array[int]
+	var dark := _t33_verb("darkness")
+	check(dark.get("zone", false), "Darkness is flagged as a zone")
+	dark["targeting"] = "hex"   # one-hex cloud, so where it lies is unambiguous
+	cb.begin_turn_for(ilsa)
+	var hex := Vector2i(6, 1)
+	cb.cast(ilsa, dark, hex)
+	check(cb.live_zones().size() == 1 and hex in cb.live_zones()[0]["hexes"], "the cloud stays on the hex")
+	check(not grull.statuses.has("spell:darkness"), "nobody in it yet, nobody is dark")
+	grull.pos = hex
+	cb.begin_turn_for(grull)
+	check(grull.statuses.has("spell:darkness"), "starting a turn in the cloud puts you in the dark")
+	grull.pos = Vector2i(8, 1)
+	cb._zone_touch(grull)
+	check(not grull.statuses.has("spell:darkness"), "stepping out sheds it")
+	grull.pos = hex
+	cb._zone_touch(grull)
+	cb._end_concentration(ilsa, "drops it")
+	check(cb.live_zones().is_empty(), "the cloud dies with concentration")
+	check(not grull.statuses.has("spell:darkness"), "...and takes the dark with it")
+	# Web: a save zone rolls once per turn against whoever stands in it
+	var web := _t33_verb("web")
+	web["targeting"] = "hex"
+	cb.begin_turn_for(ilsa)
+	cb.cast(ilsa, web, hex)
+	var z: Dictionary = cb.live_zones()[0]
+	cb.begin_turn_for(grull)
+	check(int(z["hit"].get(grull.id, -1)) == cb._tick(), "Web rolled against the one standing in it")
+
+# Cure Wounds is a touch spell and the caster is in reach of their own hand.
+func test_heal_self() -> void:
+	var cb = _sandbox()
+	var ilsa = _find(cb, "ilsa")
+	ilsa.slots = [4, 3, 3, 3, 3, 0, 0, 0, 0] as Array[int]
+	var cw := _t33_verb("cure-wounds")
+	check(cb.legal_target(ilsa, cw, ilsa), "a heal may target its own caster")
+	check(not cb.legal_target(ilsa, {"targeting": "ally", "kind": "help", "range": 1}, ilsa),
+		"Help still cannot target yourself")
+	ilsa.hp = 1
+	cb.begin_turn_for(ilsa)
+	cb.perform(ilsa, cw, ilsa)
+	check(ilsa.hp > 1, "...and it heals them")

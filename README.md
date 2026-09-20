@@ -17,13 +17,23 @@ core/            pure rules + game state, mostly no engine deps
   ai.gd                          monster turn logic (prioritizes special attacks)
   character.gd, adapter.gd       a build (Character) <-> a fight (Combatant), the seam
   encounter.gd, scaler.gd        board assembly + the difficulty/roster estimator
+  loot.gd                        what a won fight leaves: who died decides what
+                                  was on them, how dangerous they were decides
+                                  how often and how good
   campaign.gd, campaign_save.gd  the run: generated route, shop/rest/treasure,
                                   autosave
   party.gd                       shared inventory, resurrection, marching order
-  quest.gd                       kill/collect quests offered by settlement NPCs
+  quest.gd                       what a quest is, and how each kind makes progress
+  quest_posting.gd               which counter in which settlement posts which kind
   leveling.gd, progression.gd    per-character XP/level, and the meta-progression
                                   (lifetime XP unlocks species/classes/subclasses)
-  achievements.gd, character_save.gd, settings.gd   local user:// persistence
+  achievements.gd                the local achievement profile: the list, the
+                                  running tallies behind the threshold ones, and
+                                  the queue the toast layer drains
+  character_save.gd, settings.gd  the rest of the local user:// persistence
+  bug_report.gd                  the in-game bug reporter's model: a breadcrumb
+                                  ring of the last things that happened, the
+                                  markdown body, and the prefilled GitHub link
   audio.gd, barks.gd, enemy_names.gd, ui_icons.gd, tutorial.gd   presentation
                                   data/helpers (procedural SFX, combat flavor
                                   lines, fantasy enemy names, the shared icon/
@@ -33,24 +43,78 @@ core/            pure rules + game state, mostly no engine deps
                     features step by step, resolve.gd assembles the final
                     sheet, effects.gd + data/effects/*.json layer sorcmerc-
                     authored combat mechanics over the (prose-only) export
+  mod/             the content-pack API (M1-M8): manifest/registry/entitlement
+                    find and gate packs, world_pack.gd builds a map from JSON,
+                    story.gd + story_runtime.gd are a campaign's schema and its
+                    playthrough. Data only — a pack ships no code. See
+                    docs/modding.md
 scenes/
   game/            the one entry point (title -> party setup -> campaign ->
                     summary), routes every other screen
+  mods/            the campaign/mod browser: everything installed, what state
+                    it is in, and the button that starts one
   main.gd/.tscn    the combat screen: hex board, tokens, action log, buttons
   campaign/        the run screen: route choices, shop/rest/treasure, journal
+  world/           the overworld map, as a real 3D world you can turn, tilt,
+                    pan and zoom. world.gd owns the screen (the camera, the
+                    HUD, and every mechanism that happens on the map — travel,
+                    encounters, town visits, delves); world_view3d.gd owns the
+                    3D scene it draws into — one viewport, one camera, one sun,
+                    with the ground as a mesh (assets/world/ground/*.gdshader),
+                    the woods as instanced trees (scatter3d.gd), footprints as
+                    decals lying on the ground (ground_marks3d.gd) and every
+                    town, lair and marching band as a model standing on it
+                    (settlements3d/lairs3d/party3d, over props3d.gd). The
+                    *_kit.gd files build a settlement or a lair out of
+                    primitives for whatever the generated GLBs do not cover
   creator/, party/, profile/, progression/, achievements/, settings/
-                   character creation + leveling, roster management, the
+                   character creation + leveling, roster management (and
+                   party/prepare.gd, the daily-prep page a cleric, druid,
+                   paladin or ranger fills their spell list on), the
                    character sheet, the meta-progression viewer, the
-                   achievements viewer, the settings overlay
+                   achievements viewer (and toast.gd, the AchievementToasts
+                   autoload that slides an earned one in from the top-right
+                   corner of whatever screen you are on), the settings overlay
+  bugreport/       the "Report a bug" overlay: a title, what happened, and a
+                   look at the diagnostics before any of it leaves the machine
+tools/bug-relay/   the reporter's optional fallback: a Cloudflare Worker that
+                   holds a repo-scoped token and files a report as an issue when
+                   the player's browser will not open. Opt-in; see its README
 data/              the 5e SRD export (classes/spells/species/...), a 316-
                    entry hand-tagged bestiary, and data/effects/*.json (the
                    sorcmerc-authored mechanics layer over the raw export)
-tests/             32 files, headless, one per subsystem (test_*.gd) plus
-                   drive_*.gd (robots pressing real UI buttons end-to-end)
-                   and a couple of dev tools (shot.gd renders a frame to PNG)
+content/           content packs that ship with the game: an example map, a
+                   free campaign, and a paid DLC — all three written against
+                   the same public API a player's mod uses
+tests/             136 files, headless: one per subsystem (102 test_*.gd) plus
+                   11 drive_*.gd (robots pressing real UI buttons end-to-end).
+                   Eight walk a written script; drive_coop.gd is one peer of a
+                   two-process co-op fight (tools/coop_smoke.sh runs the pair,
+                   and tests/test_coop_screens.gd is the part of it that needs
+                   no relay); the last two play the open
+                   world two ways that miss different bugs — drive_random.gd
+                   samples it like a person (a seeded, human-shaped session
+                   asserting invariants rather than outcomes) and
+                   drive_completionist.gd works a checklist of every door in it
+                   to the end, asserting each one's contract and failing on any
+                   it could not reach. Plus check_scripts.gd (every .gd in the
+                   project still parses) and a few dev tools (shot.gd renders a
+                   frame to PNG). Run them all with tools/run_tests.sh
 docs/              docs/expansion-plan.md is the current source of truth;
-                   combat-design.md and the docs/superpowers/specs/ hex
-                   design doc are the original pre-expansion design record
+                   modding.md is the content-pack authoring guide (worlds,
+                   campaigns, data overlays, free/paid DLC); combat-design.md
+                   and the docs/superpowers/specs/ hex design doc are the
+                   original pre-expansion design record
+tools/run_tests.sh the whole headless suite in one command — the asset import,
+                   a project-wide script parse check (tests/check_scripts.gd),
+                   then every test_*.gd and drive_*.gd. What CI runs on every
+                   pull request, and what a contributor runs locally, so the
+                   two are the same claim
+tools/gen_audio_elevenlabs.py
+                   the same SFX and bark file names from the ElevenLabs sound-
+                   effects API instead, per sound, for anything the synthesis
+                   cannot make sound like a recording. Needs a key; the
+                   synthesized set stays the default and the fallback
 tools/gen_audio.py procedurally synthesizes every SFX/music/bark asset under
                    assets/audio/ — no external audio assets, run it again
                    after editing it to regenerate. `--rate`/`--loop` trade
@@ -63,6 +127,16 @@ tools/check_audio.py
                    loop seams continuous) — the waveform half of the audio
                    tests, since tests/test_audio.gd can only prove the engine
                    parses them
+tools/gen_action_icons.py
+                   draws assets/icons/ — a gilt-framed 64x64 SVG badge for
+                   every skill the action bar can offer (each combat-castable
+                   spell, each feature that becomes a button, each Shove
+                   variant) plus the verb-kind and spell-school fallbacks and
+                   the bar's own controls, and the .import each one is read
+                   through. Motifs are composed from a shared library and
+                   coloured by what the skill does, so the disc says school and
+                   the mark says fire/frost/poison. `--check` fails if a
+                   committed icon has drifted from its recipe
 ```
 
 ## Assets and provenance
@@ -83,9 +157,8 @@ in separate directories, so any file's origin is answerable from its path alone:
 | Path | Origin | Recorded in |
 |---|---|---|
 | `assets/audio/` | procedurally synthesized, stdlib only — **not AI** | `tools/gen_audio.py`, `tools/synth.py` |
-| `assets/lpc/` | Liberated Pixel Cup art, CC-BY-SA 3.0 / GPL-3.0 / OGA-BY 3.0 | `assets/lpc/CREDITS.csv`, `LICENSES/` |
-| `assets/generated/` | sheets composited from `assets/lpc/` | `*_credits.txt` per sheet |
-| `assets/world/` | sourced packs | `License.txt` per subdirectory |
+| `assets/icons/` | SVG path data written as source, stdlib only — **no image model**; the coordinates were authored with a coding assistant, which the disclosure exempts | `tools/gen_action_icons.py` |
+| `assets/world/` | in-house ground textures + shaders written as source | `assets/world/README.md` |
 | `assets/fonts/` | DejaVu | `LICENSE-DejaVu.txt` |
 
 **As of 2026-09-12 nothing in this repo is AI-generated.** Anything added under the new
@@ -126,13 +199,34 @@ applies it (`Esc` or right-click cancels, number keys still switch actions
 while aiming). Mouse wheel or `+`/`-` zooms, drag or arrow keys pan, `Home`
 resets the view, `F1` opens settings.
 
-Headless checks (no display):
+Headless checks (no display). The whole suite, which is also exactly what CI
+runs on every pull request (`.github/workflows/tests.yml`):
+
+```sh
+tools/run_tests.sh            # asset import, script parse check, every test
+tools/run_tests.sh --unit     # just tests/test_*.gd
+tools/run_tests.sh --drive    # just the robots
+tools/run_tests.sh tests/test_story.gd        # just these
+GODOT=/path/to/godot tools/run_tests.sh       # if `godot` is not on PATH
+```
+
+Or one at a time:
 
 ```sh
 godot --headless --path . -s tests/test_combat.gd     # any single subsystem test
 SORCMERC_SEED=5 SORCMERC_FAST=1 godot --headless --path . -s tests/drive_ui.gd      # a robot plays a real fight
 SORCMERC_SEED=5 SORCMERC_FAST=1 godot --headless --path . -s tests/drive_campaign.gd # a robot plays a whole run
 SORCMERC_SEED=5 SORCMERC_FAST=1 godot --headless --path . -s tests/drive_game.gd     # title -> run -> summary, end to end
+godot --headless --path . -s tests/test_mod_packs.gd   # every shipped content pack loads clean
+godot --headless --path . -s tests/drive_story.gd      # a robot plays a pack campaign's first chapter
+```
+
+Writing a content pack? `docs/modding.md` is the guide, and the browser behind
+the title screen's **Campaigns & mods** lists every pack with every problem it
+has. To poke at one without the game:
+
+```sh
+SORCMERC_MODS_DIR=/path/to/mods godot --path . scenes/mods/mods.tscn
 ```
 
 `SORCMERC_SEED` replays an exact fight/route; `SORCMERC_FAST` zeroes UI tween
@@ -140,6 +234,111 @@ timing and skips cosmetic-only systems (barks, audio) that have nothing
 meaningful to assert on in a headless run. `SORCMERC_LINEAR_CAMPAIGN=1` puts the
 old linear node-route campaign (and its Resume-the-last-run autosave) back on the
 title screen; without it, "New run" goes straight to the open world.
+`SORCMERC_MODS_DIR` moves where community packs are read from, and
+`SORCMERC_UNLOCK_DLC=1` (like `SORCMERC_PLAYTEST=1`) owns every paid pack — see
+`docs/modding.md`.
+
+## Pull requests
+
+Every feature or visible change in a PR comes with a **screenshot of it
+working** — one per feature, attached to the PR description. Green tests say
+the code runs; the screenshot says it looks right. Reviewers reject a PR that
+changes what the player sees without showing it.
+
+The `tests/shot_*.gd` scripts render one for you:
+
+```sh
+godot --path . -s tests/shot.gd                        # a combat board mid-fight -> combat_screen.png
+godot --path . -s tests/shot_world.gd                  # the open world, from two camera angles -> world_screen.png, world_turned.png (not headless: the capture hangs)
+godot --headless --path . -s tests/shot_screens.gd     # every menu screen -> shots_tmp/ (SHOT_ONLY=party for one)
+```
+
+or just run the game (`godot --path . scenes/main.tscn`) and capture the window.
+For a change that is not visual — a rule, a save format, a balance number —
+say so in the PR and paste the test output instead. `.github/PULL_REQUEST_TEMPLATE.md`
+has the checklist.
+
+## Reporting a bug
+
+Every screen has a way in: **Report a bug** on the title screen's footer, in the
+open world's HUD bar (or `F3`), and in the combat screen's header (or `F3`). It
+opens GitHub's own new-issue form with the title, the description and a block of
+diagnostics already written, and the player presses Submit there.
+
+That last part is deliberate. A GitHub token in a shipped game is a token every
+player owns — the web export is a zip anyone can read — so the game holds no
+credentials at all and files nothing on anyone's behalf. The reporter's own
+account opens the issue, which also means we can reply to them. `core/bug_report.gd`
+has the long version of the argument.
+
+When that path is shut — a popup blocker on the web export, a machine with no
+handler for `https` — there is an optional second door: **Send it anonymously**
+posts the report to a small Cloudflare Worker (`tools/bug-relay/`) that holds a
+repo-scoped token and files the issue. It is the fallback and it stays the
+fallback, because the issue arrives with nobody to reply to; the filed issue
+says so on its own face. The button only appears in a build with a relay
+compiled in — this repo has one deployed and its URL baked into
+`core/bug_report.gd` (the URL is a public endpoint; the GitHub token lives in
+the Worker and the shared key is never committed). `SORCMERC_BUG_RELAY=off`
+runs as if there were none. See `tools/bug-relay/README.md` to deploy your own,
+or don't, and the browser path is the only path.
+
+What rides along with the description: the build and engine version, the
+platform, the screen it was filed from and that screen's live state (the board
+mid-fight; the day, region, party and purse on the map), and a ring buffer of
+the last two dozen things the game narrated (repeats collapse to a count) — combat log lines, settlement
+messages, screen changes. The overlay shows all of it, verbatim, behind a fold
+before anything is sent. Every report is also written to `user://bug_reports/`
+first, so a blocked popup or a machine with no browser costs nothing.
+
+The version on a report comes from `application/config/version` in
+`project.godot`; `.github/workflows/release.yml` stamps the real build version
+into it at export time, so a run from source says `0.1.0-dev` and a published
+build says what `tools/build_version.sh` decided (see **Versions** below).
+That workflow also stamps the relay URL, from a `BUG_RELAY_URL` repository
+variable, the same way. `SORCMERC_BUG_RELAY` overrides it for a local run
+against `wrangler dev`.
+
+## Versions
+
+Every published build carries one version string, and the same one twice: it is
+stamped into `project.godot` so it rides on every bug report, and handed to
+butler as the itch.io build's user version. `tools/build_version.sh` is the only
+thing that decides it — `tools/build_version.sh --help` has the long version.
+
+| pushed | itch.io channel | version |
+| --- | --- | --- |
+| tag `v0.2.1` | `web` | `0.2.1` |
+| tag `test-2026-09-11` | `web-playtest` | `0.2.2-playtest.7+g1a2b3c4` |
+| `master` | `web-dev` | `0.2.2-dev.7+g1a2b3c4` |
+| nothing (run from source) | — | `0.1.0-dev` |
+
+All of it is SemVer 2.0.0, which is the point: the three channels used to
+publish `v0.2.1`, `test-2026-09-11` and `dev-47-1a2b3c4` — three shapes that
+compare against each other only by accident, and two that never named the
+commit they were built from. Now `0.2.1 < 0.2.2-dev.7 < 0.2.2-playtest.7 <
+0.2.2` by the spec's own precedence rules, and every pre-release build says
+which commit it is.
+
+Two things worth knowing about the shape:
+
+- A pre-release build is named for the release it is **heading toward**, not the
+  one behind it. Seven commits past `v0.2.1` is `0.2.2-dev.7`, because anything
+  spelled `0.2.1-…` sorts *below* the `0.2.1` it is already newer than. (If the
+  nearest tag is itself a pre-release, `v0.3.0-rc.1`, the release it heads for
+  is `0.3.0` and nothing is bumped.)
+- The number after the channel is commits since the nearest `v*` tag, so it only
+  goes up; the `+g…` is the short commit sha, in build metadata, which SemVer
+  precedence is required to ignore. Until the first `v*` tag exists there is no
+  release to count from, so builds are `0.1.0-dev.N` — heading for a first
+  `0.1.0`.
+
+A `v*` tag that is not `v<semver>` fails the run instead of publishing: `v0.2.1`
+and `v0.3.0-rc.1` are releases, `v2026-09-11` is a mistake. Playtest tags are
+free-form labels for humans and are not versions — the build they produce is
+versioned by its commit, and the tag names the run in the Actions log.
+`tools/build_version.sh --self-test` checks all of this against a throwaway git
+repo, and `.github/workflows/tests.yml` runs it on every pull request.
 
 ## Status
 
@@ -153,8 +352,16 @@ properties, a 316-monster bestiary with faction/habitat-aware encounter
 building, a generated campaign route (sized settlements, quests, rest/
 treasure nodes, a seed-picked boss pool), shared party inventory with
 rarity-gated pricing and magic item identification, meta-progression
-unlocks, local achievements, procedural audio, and a guided tutorial fight.
-Explicit, deliberate TODOs: no narrative/dialogue layer (held back on
-purpose), and an isometric board presentation exists as an unmerged
-experiment (`git branch -a` for the current list of `feature/isometric-*`
+unlocks, procedural audio, and a guided tutorial fight. Achievements are local
+to the machine and there are 139 of them across eight sections — the
+plain milestones, running tallies (kills, crits, spells cast, distinct monsters
+killed), high-water marks (the biggest single blow, the fattest purse) and a
+cabinet of hidden ones for the things nobody sets out to do — each announced by
+a card that slides in from the top-right corner as it is earned.
+There is now a narrative layer, and it arrived as a modding API rather than as
+a hardcoded campaign: content packs (`core/mod/`, `docs/modding.md`) carry
+worlds, chapters, a cast, dialogue with choices and quest chains, plus data
+overlays over `data/*.json`, and the same pipeline carries the team's own free
+and paid story packs. Still an unmerged experiment: an isometric board
+presentation (`git branch -a` for the current list of `feature/isometric-*`
 branches).

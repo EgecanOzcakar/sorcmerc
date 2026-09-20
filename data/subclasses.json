@@ -689,15 +689,6 @@
             }
           },
           {
-            "type": "resource-pool",
-            "poolId": "war-priest",
-            "max": {
-              "mode": "proficiency-bonus",
-              "classId": "cleric"
-            },
-            "regen": "long-rest"
-          },
-          {
             "type": "feature",
             "feature": {
               "id": "wardomain-guided-strike"

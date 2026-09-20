@@ -11,6 +11,7 @@
 extends RefCounted
 
 const Quest = preload("res://core/quest.gd")
+const Potions = preload("res://core/potions.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Icons = preload("res://core/ui_icons.gd")
@@ -271,7 +272,7 @@ const POOL := [
 const BOSS := {"id": "sunken-shrine", "kind": "combat", "stage_position": ["boss"],
 	"title": "THE SUNKEN SHRINE", "desc": "Whatever has been calling them lives down here.",
 	"difficulty": "hard", "boss": true, "archetype": "classic", "gold": 250,
-	"theme": "sunken-shrine", "win_rate": 0.645}
+	"theme": "sunken-shrine", "win_rate": 0.77}
 
 # win_rate is each boss's measured sweep result (scaler.gd's TUNING header, T18)
 # — how much harder it plays than a plain "hard" node. finish_combat() turns the
@@ -282,36 +283,38 @@ const BOSS_POOL := [
 	{"id": "the-oni", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE ONI OF THE DEEP ICE", "desc": "It has worn a friendlier face all week.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "frozen-cave", "lead": "oni", "win_rate": 0.325},
+		"theme": "frozen-cave", "lead": "oni", "win_rate": 0.825},
 	{"id": "the-assassin", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE KNIFE IN THE SQUARE", "desc": "Whoever paid the warband is here to collect.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "city-square", "lead": "assassin", "win_rate": 0.75},
+		"theme": "city-square", "lead": "assassin", "win_rate": 0.925},
 	{"id": "the-mammoth", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE THING IN THE TREELINE", "desc": "The forest has been getting out of its way.",
 		"difficulty": "hard", "boss": true, "archetype": "bestiary", "gold": 250,
-		"theme": "forest-clearing", "lead": "mammoth", "win_rate": 0.675},
+		"theme": "forest-clearing", "lead": "mammoth", "win_rate": 0.65},
 	{"id": "the-arrow-chief", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE ARROW-CHIEF", "desc": "The little archer from the road. He has been eating well.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
 		"theme": "goblin-camp", "lead": "goblin-archer", "lead_features": ["monster-multiattack-2"],
-		"win_rate": 0.325},
+		# mult_max: a x3 multiattack archer was a 47-65% node against hard's 75;
+		# capped at x1.75 the budget goes to escort instead (60 seeds: 76.7%).
+		"mult_max": 1.75, "win_rate": 0.825},
 	{"id": "the-shop-captain", "kind": "combat", "stage_position": ["boss"],
 		"title": "THE CAPTAIN COMES BACK", "desc": "He took the shop once. This time he brought the company.",
 		"difficulty": "hard", "boss": true, "archetype": "elite", "gold": 250,
 		"theme": "merchant-shop", "lead": "bandit", "lead_features": ["monster-multiattack-2"],
-		"win_rate": 0.175},
+		"win_rate": 0.925},
 ]
 
 # Reference win rate a boss's XP bonus is measured against: the average of the
-# scaler's own easy/hard sweep results (94.5%/75.0% as of T40's 95/85/75 target
-# retune, scaler.gd's TUNING header) rather than normal's own 83.5% — CURVE was
+# scaler's own easy/hard sweep results (93.0%/79.0% as of T94's re-measurement,
+# scaler.gd's TUNING header) rather than normal's own 83.5% — CURVE was
 # calibrated so normal sits near that average already, and it keeps this
 # constant tied to the two extremes instead of a third independently-drifting
 # number. A boss under this rate is harder than the curve's middle, and earns
 # XP in proportion. T38 found this stale at 0.698 (it still carried T23's
 # extremes); re-derive it from the header numbers on every TIER retune.
-const BOSS_REF_WIN_RATE := 0.8475
+const BOSS_REF_WIN_RATE := 0.86   # (93.0 + 79.0) / 2, T94's re-measurement
 # ponytail: the win_rate spread above is power.gd's known chaff-vs-chunk
 # mispricing (T23: a lone big bruiser like the mammoth prices for a fight it
 # doesn't survive) — cap the bonus so that ceiling doesn't turn into a
@@ -357,6 +360,10 @@ var long_rests_used := 0
 var log: Array = []
 var rng
 var route: Array = []         # this run's stages, generated from the seed
+# T19: did anybody die on this road at all? A resurrection does not clear it —
+# "everyone came home" is a claim about the whole run, not about the roster at
+# the end of it.
+var lost_anyone := false
 
 func _init(p, seed_value := 0) -> void:
 	party = p
@@ -465,11 +472,20 @@ func enter(i: int) -> Dictionary:
 	# T27: the bed follows the place, the tension layer follows the fight.
 	Sound.set_environment(String(node.get("theme", "")) if node["kind"] == "combat" else "settlement")
 	Sound.set_combat(node["kind"] == "combat")
-	if node["kind"] == "rest":
-		Sound.play_sfx("rest")
-	if node["kind"] == "treasure":
-		Sound.play_sfx("pickup")
-		_take_treasure()
+	# One sting per arrival, chosen by what you arrived AT — not stacked, because
+	# two one-shots fired on the same frame read as one muddy noise rather than
+	# two events. `travel` is the default: getting anywhere took walking, and a
+	# combat node wants footsteps-into-ambush under its tension layer, not silence.
+	match String(node["kind"]):
+		"rest":
+			Sound.play_sfx("rest")
+		"treasure":
+			Sound.play_sfx("pickup")
+			_take_treasure()
+		"merchant":
+			Sound.play_sfx("settlement")
+		_:
+			Sound.play_sfx("travel")
 	_autosave()
 	return node
 
@@ -482,6 +498,13 @@ func leave() -> void:
 	if state == "won":
 		say("The road ends. The party lives.")
 		Ach.unlock("campaign_clear")
+		# T19: the two ways of finishing clean. `lost_anyone` is set by
+		# finish_combat the first time somebody dies, and survives a reload
+		# because campaign_save.gd carries it.
+		if not lost_anyone:
+			Ach.unlock("clean_run")
+		if short_rests_used == 0 and long_rests_used == 0:
+			Ach.unlock("no_rest_run")
 		_conclude()
 	_autosave()
 
@@ -508,6 +531,7 @@ func _autosave() -> void:
 
 # The run is over, win or lose: the dead come back for free (T10's locked rule).
 func _conclude() -> void:
+	Ach.bump("runs")
 	var Party = load("res://core/party.gd")
 	for ch in party.roster:
 		if ch.dead:
@@ -519,7 +543,7 @@ func resurrect(dead_id: String, method: String, caster_id: String = "") -> bool:
 	var Party = load("res://core/party.gd")
 	if not Party.resurrect(party, dead_id, method, caster_id):
 		return false
-	say("%s is brought back at 1 HP (−%d gp)." % [dead_id, Party.REVIVE_COST])
+	say("%s is brought back at 1 HP (−%d ◉)." % [dead_id, Party.REVIVE_COST])
 	_autosave()
 	return true
 
@@ -572,7 +596,15 @@ func finish_combat(result: Dictionary) -> void:
 		_note_rarity(String(item))
 	say("Victory. +%d XP, +%d gold." % [earned_xp,
 		int(result.get("gold", 0)) + int(node.get("gold", 0))])
+	var taken: Array = result.get("loot", [])
+	if not taken.is_empty():
+		var names: Array = []
+		for id in taken:
+			names.append(item_name(String(id)))
+		say("Taken from the dead: %s." % ", ".join(names))
 	for id in result.get("deaths", []):
+		lost_anyone = true
+		Ach.bump("deaths")
 		var fallen = party.get_member(id)
 		if fallen != null:
 			fallen.dead = true
@@ -648,8 +680,20 @@ func _find_item(item_id: String) -> void:
 const GREAT_RARITIES := ["very-rare", "legendary", "artifact"]
 
 static func _note_rarity(item_id: String) -> void:
-	if String(item_data(item_id).get("rarity", "")) in GREAT_RARITIES:
+	var rarity := String(item_data(item_id).get("rarity", ""))
+	if rarity in GREAT_RARITIES:
 		Ach.unlock("loot_very_rare")
+	if rarity == "legendary":
+		Ach.collect("legendaries", item_id)
+
+# T19: every route to a named item — the rest-stop Arcana check, the scroll, the
+# librarian's fee — lands here, so the tally and the artifact case are counted
+# once each rather than at four call sites.
+static func _note_identified(item_id: String) -> void:
+	Ach.unlock("identify_item")
+	Ach.bump("identified")
+	if String(item_data(item_id).get("rarity", "")) == "artifact":
+		Ach.unlock("identify_artifact")
 
 # --- rest -----------------------------------------------------------------
 
@@ -676,8 +720,9 @@ func rest(kind: String) -> bool:
 			return false
 		short_rests_used += 1
 	var Adapter = load("res://core/adapter.gd")
-	for ch in party.party_characters():
-		Adapter.rest(ch, kind)
+	for ch in party.roster:   # #108: the bench rests with the party
+		if not ch.dead:
+			Adapter.rest(ch, kind)
 	Sound.play_sfx("rest")   # T27
 	say("The party takes a %s." % kind.replace("-", " "))
 	_autosave()
@@ -759,12 +804,13 @@ func identify_check(item_id: String, char_id: String) -> bool:
 	var total := nat + bonus
 	if total < dc:
 		identify_failed.append(item_id)
+		Ach.bump("identify_fails")
 		say("%s examines it and learns nothing (%d+%d vs DC %d)." % [ch.cname, nat, bonus, dc])
 		_autosave()
 		return false
 	party.stash_identify(item_id)
 	Sound.play_sfx("identify")   # T27
-	Ach.unlock("identify_item")
+	_note_identified(item_id)
 	say("%s identifies it: %s (%d+%d vs DC %d)." % [ch.cname, item_name(item_id), nat, bonus, dc])
 	_autosave()
 	return true
@@ -774,7 +820,7 @@ func identify_with_scroll(item_id: String) -> bool:
 	if not party.use_identification_scroll(item_id):
 		return false
 	Sound.play_sfx("identify")   # T27
-	Ach.unlock("identify_item")
+	_note_identified(item_id)
 	say("The Scroll of Identification crumbles: %s." % item_name(item_id))
 	_autosave()
 	return true
@@ -900,8 +946,7 @@ func service_stock_ids(service: String) -> Array:
 	return []
 
 static func potion_ids() -> Array:
-	return Catalog.index("magic-items.json").keys().filter(
-		func(id): return String(id).begins_with("potion"))
+	return Potions.ids()   # only the ones with a mechanic; the rest would be 2000 ◉ of nothing
 
 func service_stock(service: String) -> Array:
 	var out: Array = []
@@ -928,7 +973,7 @@ func heal_party() -> bool:
 		if not ch.dead:
 			ch.hp_current = -1
 			ch.dirty()
-	say("The healer works down the line. Everyone stands up whole (−%d gp)." % HEALER_GP)
+	say("The healer works down the line. Everyone stands up whole (−%d ◉)." % HEALER_GP)
 	_autosave()
 	return true
 
@@ -940,8 +985,8 @@ func identify_for_fee(item_id: String) -> bool:
 		return false
 	party.stash_identify(item_id)
 	Sound.play_sfx("identify")   # T27
-	Ach.unlock("identify_item")
-	say("The librarian reads it off in a breath: %s (−%d gp)." % [item_name(item_id), IDENTIFY_FEE_GP])
+	_note_identified(item_id)
+	say("The librarian reads it off in a breath: %s (−%d ◉)." % [item_name(item_id), IDENTIFY_FEE_GP])
 	_autosave()
 	return true
 
@@ -956,7 +1001,7 @@ func buy(item_id: String) -> bool:
 	if spent >= BIG_SPENDER_GP:
 		Ach.unlock("big_spender")
 	_note_rarity(item_id)
-	say("Bought %s for %d gp." % [item_name(item_id), item_price(item_id)])
+	say("Bought %s for %d ◉." % [item_name(item_id), item_price(item_id)])
 	_autosave()
 	return true
 
@@ -967,7 +1012,8 @@ func sell(item_id: String) -> bool:
 		return false
 	var paid := maxi(1, int(item_price(item_id) * SELL_RATE))
 	party.add_gold(paid)
-	say("Sold %s for %d gp." % [item_name(item_id), paid])
+	Ach.record("best_sale", paid)
+	say("Sold %s for %d ◉." % [item_name(item_id), paid])
 	_autosave()
 	return true
 
@@ -988,8 +1034,12 @@ func accept(quest: Dictionary) -> bool:
 func turn_in(quest: Dictionary) -> bool:
 	if node.get("kind", "") != "merchant" or not Quest.turn_in(party, quest):
 		return false
-	Sound.play_sfx("quest")   # T27
-	say("Quest complete: %s (+%d gp)" % [quest["title"], int(quest["reward"].get("gold", 0))])
+	# Accepting and completing a quest used to be the same sting. They are the two
+	# ends of the same arc and the payoff is the one worth hearing, so completing
+	# now resolves where accepting only reaches.
+	Sound.play_sfx("quest_complete")
+	var gold: int = int(quest["reward"].get("gold", 0))
+	say("Quest complete: %s (+%d ◉, +%d XP)" % [quest["title"], gold, gold * Quest.XP_PER_GOLD])
 	_autosave()
 	return true
 

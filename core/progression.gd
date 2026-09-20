@@ -22,8 +22,7 @@
 #     threshold is crossed — nothing is spent, so an unlock is permanent.
 #   * unlocking a class grants 2 free subclass picks out of its 4:
 #     unlock_class(id, [a, b]) records them. The other 2 cost class XP,
-#     SUBCLASS_COST each (2,500 as of the direct-feedback halving), a
-#     per-class counter fed by playing that class.
+#     SUBCLASS_COST each, a per-class counter fed by playing that class.
 #
 # A class whose threshold is crossed is already unlocked; its 2 free picks stay
 # pending until unlock_class() is called, and until then none of its subclasses
@@ -35,12 +34,43 @@
 extends RefCounted
 
 const Catalog = preload("res://core/rules/catalog.gd")
+const Ach = preload("res://core/achievements.gd")
 
-const PATH := "user://progression.json"
+const SaveDir = preload("res://core/save_dir.gd")
+static var PATH: String = SaveDir.path("progression.json")
 const FORMAT := "sorcmerc-progression"
 const VERSION := 1
 
-const SUBCLASS_COST := 2500   # class XP, flat, for each of a class's other 2
+# --- TESTING PACE (temporary) ----------------------------------------------
+#
+# Every threshold below is cut so the whole ladder can be walked in one sitting:
+# roughly one unlock per five fights, measured against what an open-country
+# fight actually pays (core/encounter.gd's power * XP_PER_POWER at
+# WorldThreat's "easy" baseline, resolved for the preset party — 2026-09-17):
+#
+#   levels 1-2   55-75 xp a fight
+#   levels 3-5   120-240
+#   level 8      ~350
+#
+# So a species step is 250 (five early fights) and a class step is 1000 (five
+# fights at the level you reach them). The shipping numbers, to put back when
+# this stops being a testing build, were:
+#
+#   SUBCLASS_COST 2500
+#   SPECIES_COST  gnome 1500, tiefling 3000, dragonborn 4500, goliath 6000,
+#                 aasimar 7500                                  (step 1500)
+#   CLASS_COST    rogue 10000, fighter 15000, bard 20000, monk 25000,
+#                 druid 30000, paladin 35000, sorcerer 40000    (step 5000)
+#
+# The ORDER and the shape are untouched — same ladder, same "every species
+# costs less than every class" invariant tests/test_progression.gd checks, at
+# a tenth of the distance.
+
+# Class XP, flat, for each of a class's other 2. Class XP is banked per
+# character share (campaign.gd's _split_xp hands each fighter total/4), so this
+# accrues at about a quarter of the lifetime rate — 200 is three fights' worth
+# of it around the levels a player is buying subclasses at.
+const SUBCLASS_COST := 200
 
 # Open from day one, with every one of their lineages.
 const STARTING_SPECIES := ["human", "orc", "elf", "dwarf"]
@@ -51,11 +81,11 @@ const STARTING_SPECIES := ["human", "orc", "elf", "dwarf"]
 # flashy lineages (dragonborn, goliath) come next, and the celestial-blooded
 # aasimar is the rarest thing on the list, so it costs the most.
 const SPECIES_COST := {
-	"gnome": 1500,
-	"tiefling": 3000,
-	"dragonborn": 4500,
-	"goliath": 6000,
-	"aasimar": 7500,
+	"gnome": 250,
+	"tiefling": 500,
+	"dragonborn": 750,
+	"goliath": 1000,
+	"aasimar": 1250,
 }
 
 # Open from day one, each with exactly 2 of its 4 subclasses pre-chosen.
@@ -72,13 +102,13 @@ const STARTING_CLASSES := {
 # player re-opens familiar ground early, then the rest by how many moving parts
 # they ask a new player to juggle, ending on the sorcerer's metamagic economy.
 const CLASS_COST := {
-	"rogue": 10000,
-	"fighter": 15000,
-	"bard": 20000,
-	"monk": 25000,
-	"druid": 30000,
-	"paladin": 35000,
-	"sorcerer": 40000,
+	"rogue": 2000,
+	"fighter": 3000,
+	"bard": 4000,
+	"monk": 5000,
+	"druid": 6000,
+	"paladin": 7000,
+	"sorcerer": 8000,
 }
 
 var lifetime_xp := 0
@@ -120,6 +150,7 @@ static func save_state(p = null) -> String:
 	if p == null:
 		p = current()
 	_current = p
+	DirAccess.make_dir_recursive_absolute(PATH.get_base_dir())
 	var f := FileAccess.open(PATH, FileAccess.WRITE)
 	if f == null:
 		push_warning("cannot write %s" % PATH)
@@ -136,6 +167,8 @@ static func add_lifetime_xp(n: int) -> int:
 	if n > 0:
 		current().lifetime_xp += n
 		save_state()
+		Ach.record("lifetime_xp", current().lifetime_xp)
+		_note_unlocks()
 	return current().lifetime_xp
 
 # XP earned while playing a character of `class_id`, banked per class.
@@ -143,7 +176,29 @@ static func add_class_xp(class_id: String, n: int) -> int:
 	if n > 0 and (CLASS_COST.has(class_id) or STARTING_CLASSES.has(class_id)):
 		current().class_xp[class_id] = class_xp_of(class_id) + n
 		save_state()
+		for sub_id in paid_subclasses(class_id):
+			if is_subclass_unlocked(String(sub_id)):
+				Ach.unlock("unlock_subclass")
+				break
 	return class_xp_of(class_id)
+
+# T19 — an unlock here is a threshold crossed, not an event fired: nothing in
+# this file ever "grants" a species or a class, they simply become true. So the
+# achievements for them are read off the same predicates the viewer reads,
+# whenever the number that decides them moves. A playtest build has everything
+# open from the start and is deliberately left out — earning nothing is the
+# honest answer when nothing was earned.
+static func _note_unlocks() -> void:
+	if _playtest_build():
+		return
+	for id in SPECIES_COST:
+		if is_species_unlocked(String(id)):
+			Ach.unlock("unlock_species")
+			break
+	for id in CLASS_COST:
+		if is_class_unlocked(String(id)):
+			Ach.unlock("unlock_class")
+			break
 
 static func lifetime_xp_total() -> int:
 	return current().lifetime_xp

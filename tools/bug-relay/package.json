@@ -1,0 +1,12 @@
+{
+  "name": "sorcmerc-bug-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker that files a sorcmerc in-game bug report as a GitHub issue",
+  "scripts": {
+    "test": "node --test",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  }
+}

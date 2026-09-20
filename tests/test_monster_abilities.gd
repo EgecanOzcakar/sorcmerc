@@ -1,4 +1,4 @@
-# T16: the monster template library actually fires in a fight.
+# T16/T94: the monster template library actually fires in a fight.
 #   godot --headless --path . -s tests/test_monster_abilities.gd
 extends SceneTree
 
@@ -28,6 +28,11 @@ func _init() -> void:
 	test_pack_tactics()
 	test_regeneration()
 	test_action_save_effect()
+	test_martial_advantage()
+	test_monster_sneak_attack()
+	test_assassinate()
+	test_divine_eminence()
+	test_fey_charm()
 	print("test_monster_abilities: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -126,3 +131,90 @@ func test_action_save_effect() -> void:
 	check(f[1].pool_left("monster-frightful-presence") == 0, "one use, then spent")
 	check(not cb.available(f[1]).any(func(v): return v["id"] == "monster-frightful-presence"),
 		"an empty pool takes the verb off the list")
+
+# --- T94 -------------------------------------------------------------------
+
+func _extras_of(out: Dictionary, label: String) -> int:
+	for e in out.get("extras", []):
+		if String(e.get("label", "")) == label:
+			return int(e["amount"])
+	return 0
+
+# The hobgoblins are the second and third most frequently spawned bodies in the
+# game (core/scaler.gd draws them all through the goblinoid faction), and their
+# one statblock ability was the `requires` predicate pack tactics already used.
+func test_martial_advantage() -> void:
+	var mate = Adapter.from_monster(Catalog.index("bestiary.json")["hobgoblin"], "foe", Vector2i(3, 1))
+	var f := _fight("hobgoblin", [mate])
+	var cb: Combat = f[0]
+	check(not cb.available(f[1]).any(func(v): return v["id"] == "monster-martial-advantage"),
+		"martial advantage is a rider, never a button")
+	var with_mate: Dictionary = cb.resolve_attack(f[1], f[2])
+	check(_extras_of(with_mate, "Martial Advantage") > 0,
+		"an ally beside the target adds the extra dice")
+	# once per turn, and only while an ally is actually there
+	cb.begin_turn_for(f[1])
+	mate.pos = Vector2i(0, 0)
+	var alone: Dictionary = cb.resolve_attack(f[1], f[2])
+	check(_extras_of(alone, "Martial Advantage") == 0, "alone, it adds nothing")
+	mate.pos = Vector2i(3, 1)
+	cb.begin_turn_for(f[1])
+	check(_extras_of(cb.resolve_attack(f[1], f[2]), "Martial Advantage") > 0, "and is back next turn")
+	var again: Dictionary = cb.resolve_attack(f[1], f[2])
+	check(_extras_of(again, "Martial Advantage") == 0, "but only once in a turn")
+
+func test_monster_sneak_attack() -> void:
+	var mate = Adapter.from_monster(Catalog.index("bestiary.json")["spy"], "foe", Vector2i(3, 1))
+	var f := _fight("spy", [mate])
+	var cb: Combat = f[0]
+	check(_extras_of(cb.resolve_attack(f[1], f[2]), "Sneak Attack") > 0,
+		"a monster sneak attack fires off an adjacent ally")
+	check(f[1].verb("rogue-cunning-action")["cost"] == "bonus",
+		"and the spy's Cunning Action is the existing rogue grant_verb")
+	check(cb.available(f[1]).any(func(v): return v["id"] == "rogue-cunning-action:hide"),
+		"which offers Hide for a bonus action")
+	# the assassin's is the same template with the SRD's bigger dice
+	var a := _fight("assassin", [Adapter.from_monster(
+		Catalog.index("bestiary.json")["assassin"], "foe", Vector2i(3, 1))])
+	check(_extras_of(a[0].resolve_attack(a[1], a[2]), "Sneak Attack") > 0,
+		"the assassin's fires the same way")
+	check(int(a[1].verb("monster-sneak-attack-greater")["dice_count"]) == 4
+			and int(f[1].verb("monster-sneak-attack")["dice_count"]) == 2,
+		"but on 4d6 against the spy's 2d6, per the SRD text")
+	check(a[1].verb("monster-sneak-attack-greater")["label"] == "Sneak Attack",
+		"and an authored label keeps the id's tier out of the log")
+
+func test_assassinate() -> void:
+	var f := _fight("assassin")
+	var cb: Combat = f[0]
+	f[2].has_acted = false
+	check(cb._attack_mode(f[1], f[2]) == Dice.ADV, "assassinate: advantage on a target yet to act")
+	f[2].has_acted = true
+	check(cb._attack_mode(f[1], f[2]) == Dice.NORMAL, "and nothing once it has")
+
+func test_divine_eminence() -> void:
+	var f := _fight("priest")
+	var cb: Combat = f[0]
+	var buff := _kind_verb(cb, f[1], "self_buff")
+	check(not buff.is_empty(), "the priest's Divine Eminence is a self_buff it can press")
+	cb.perform(f[1], buff)
+	var out: Dictionary = cb.resolve_attack(f[1], f[2])
+	check(_extras_of(out, "divine-eminence") > 0, "and its melee swings carry the bonus damage")
+	check(not cb.available(f[1]).any(func(v): return v["id"] == "monster-divine-eminence"),
+		"one use, then spent")
+
+# The dryad's "action: Fey Charm" is, word for word, the charm gaze template T16
+# already wrote for something else: 30 ft, a WIS save, charmed.
+func test_fey_charm() -> void:
+	var f := _fight("dryad")
+	var cb: Combat = f[0]
+	var charm: Dictionary = f[1].verb("monster-charm-gaze")
+	check(not charm.is_empty(), "the dryad carries the charm gaze")
+	cb.perform(f[1], charm, f[2])
+	check(f[2].has("charmed"), "and charms a hopeless save")
+
+func _kind_verb(cb, m, kind: String) -> Dictionary:
+	for v in cb.available(m):
+		if v["kind"] == kind:
+			return v
+	return {}

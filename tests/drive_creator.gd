@@ -149,10 +149,64 @@ func _run() -> void:
 	if main._confirmed == null:
 		fail("confirm did not produce a character: " + main._status.text)
 	else:
-		var slug := Save.slugify(main.ch.cname)
+		# ch.id, not slugify(cname): a new hero's slug is minted against what is
+		# already in the barracks, so a leftover smoke-testerson.json from an
+		# earlier run makes this one smoke-testerson-2 — and deleting the name's
+		# slug would then tidy up the wrong file and leave this one behind.
+		var slug: String = main.ch.id
 		if Save.load_slug(slug) == null:
 			fail("the confirmed character did not save")
 		Save.delete(slug)
+
+	# #104: the finished build can be kept as a preset, and a new hero started from it
+	main._goto(5)
+	if not press("Save as preset"):
+		fail("no Save as preset button on the Review step")
+	if Save.list_presets().is_empty():
+		fail("Save as preset wrote nothing (%s)" % main._status.text)
+	else:
+		var kept_name: String = main.ch.cname
+		main._goto(0)
+		if not press(kept_name):
+			fail("the kept preset is not offered on the Basics page")
+		elif main._step != 5 or main.ch.cname != kept_name or main.ch.id != "":
+			fail("loading the preset did not hand back a fresh copy at Review (step %d, id '%s')" % [main._step, main.ch.id])
+		for slug in Save.list_presets():
+			DirAccess.remove_absolute("%s/%s.json" % [Save.PRESET_DIR, slug])
+	main._goto(0)
+
+	# #103: the manual opens over the creator and closes again
+	var manual_btn: Button = null
+	for b in _buttons(main):
+		if b.text.begins_with("Manual"):
+			manual_btn = b
+	if manual_btn == null:
+		fail("no Manual button on the creator")
+	else:
+		manual_btn.pressed.emit()
+		if main.get_node_or_null("ManualOverlay") == null:
+			fail("the Manual button did not open the manual")
+		manual_btn.pressed.emit()
+	await process_frame
+	if main.get_node_or_null("ManualOverlay") != null:
+		fail("pressing Manual again did not close it")
+
+	# #82: the outline bar at the bottom — every step a button, back is free,
+	# forward stops on the first gate that says no.
+	if main._steps.get_child_count() != main.STEPS.size():
+		fail("the step bar does not list every step")
+	main._steps.get_child(0).pressed.emit()
+	if main._step != 0:
+		fail("clicking 1. Basics on the bar did not go back to it")
+	var species: String = main.ch.species_id
+	main.ch.species_id = ""
+	main._steps.get_child(4).pressed.emit()
+	if main._step != 0 or main._status.text == "":
+		fail("jumping to Equipment with no species picked was not stopped at the gate (step %d)" % main._step)
+	main.ch.species_id = species
+	main._steps.get_child(5).pressed.emit()
+	if main._step != 5:
+		fail("jumping to Review on a finished build did not land there (step %d)" % main._step)
 
 	var s = main.ch.sheet()
 	print("drive_creator: %d presses, %s, AC %d HP %d, %d pending — %s" % [

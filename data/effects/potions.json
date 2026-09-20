@@ -1,0 +1,32 @@
+{
+  "_note": "sorcmerc-authored mechanics for data/magic-items.json's potion-* ids (the export is prose only). A potion is drinkable — a combat action, or from the profile stash on the road — only if it is listed here; core/campaign.gd sells and core/loot.gd drops only these. `status` is stored under the potion id in combatant.statuses and read by the keys combat.gd already honours (resist, bonus_damage) plus bonus_to_hit / extra_action / speed_mult / ac / no_attack; `rounds` is its combat life, `minutes` its world-clock life when drunk on the road (adapter.gd carries an unexpired road buff into the next fight). `condition` is a conditions.json id. Unlisted potions (climbing, water-breathing, flying) have no board or road concept here and stay out of the game.",
+
+  "potions-of-healing": {"heal": "2d4+2", "text": "Regain 2d4+2 HP"},
+  "potion-of-poison": {"damage": "4d6", "damage_type": "poison", "condition": "poisoned", "rounds": 10,
+    "text": "Looks like healing. It is not: 4d6 poison and Poisoned"},
+
+  "potion-of-invisibility": {"condition": "invisible", "rounds": 100, "minutes": 60,
+    "text": "Invisible until you attack or cast — attacks against you at disadvantage, yours at advantage"},
+  "potion-of-speed": {"status": {"extra_action": 1, "speed_mult": 2, "ac": 2}, "rounds": 10, "minutes": 1,
+    "text": "Haste: an extra action, double speed, +2 AC for 10 rounds"},
+  "potion-of-resistance": {"status": {"resist_random": ["acid", "cold", "fire", "force", "lightning",
+    "necrotic", "poison", "psychic", "radiant", "thunder"]}, "rounds": 100, "minutes": 60,
+    "text": "Resistance to one damage type, rolled when you drink"},
+  "potion-of-heroism": {"heal": "10", "status": {"bonus_to_hit": 2, "bonus_save": 2}, "rounds": 100, "minutes": 60,
+    "text": "10 HP and +2 to attacks and saves (Bless) for an hour"},
+  "potion-of-giant-strength": {"status": {"str_score": 21}, "rounds": 100, "minutes": 60,
+    "text": "Strength 21 (Hill Giant): melee attacks and damage use +5 for an hour"},
+  "potion-of-growth": {"status": {"bonus_damage": 2}, "rounds": 10, "minutes": 10,
+    "text": "Enlarge: +2 (1d4) weapon damage for 10 rounds"},
+  "potion-of-diminution": {"status": {"bonus_damage": -2}, "rounds": 100, "minutes": 60,
+    "text": "Reduce: -2 (1d4) weapon damage. Why would you"},
+  "potion-of-gaseous-form": {"status": {"resist": ["bludgeoning", "piercing", "slashing"], "no_attack": true},
+    "rounds": 100, "minutes": 60,
+    "text": "Mist: resist bludgeoning, piercing and slashing; no attacks or spells"},
+  "potion-of-animal-friendship": {"target": "beast", "save": "wis", "save_dc": 13, "condition": "charmed",
+    "rounds": 100, "range_ft": 30, "text": "A beast within 30 ft: DC 13 WIS save or Charmed for the fight"},
+
+  "potion-of-clairvoyance": {"road": "scout", "text": "Your next fight starts scouted: surprise is yours"},
+  "potion-of-mind-reading": {"road": "persuasion_adv", "minutes": 10,
+    "text": "Detect Thoughts: advantage on Persuasion at a settlement for 10 minutes"}
+}

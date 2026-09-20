@@ -4,6 +4,19 @@ name: Build and publish to itch.io
 #   - a `v*` tag        -> the Release export (real lifetime-XP gating)  -> "web"
 #   - a `test*` tag     -> the Playtest export (everything unlocked)     -> "web-playtest"
 #   - master's "latest build" channel                                   -> "web-dev"
+#
+# What each one calls itself is tools/build_version.sh's decision, not this
+# file's — every channel publishes one SemVer string that sorts against the
+# others and names the commit it was built from:
+#
+#   v0.2.1 tag            -> 0.2.1
+#   test-* tag            -> 0.2.2-playtest.7+g1a2b3c4
+#   master                -> 0.2.2-dev.7+g1a2b3c4
+#
+# (The pre-release builds are named for the release they are heading TOWARD;
+# the number after the channel is commits since the last v* tag. Run
+# `tools/build_version.sh --help` for the whole convention and why.)
+#
 # Tags are the deliberate, versioned releases and always publish. The
 # web-dev channel used to publish on every single push to master; that's
 # throttled to every 10th commit on master, or a manual run from the
@@ -30,8 +43,11 @@ jobs:
     container:
       image: barichello/godot-ci:4.7.2
     steps:
-      # Full history, not the default shallow clone — the master-push
-      # throttle below counts commits off `git rev-list --count HEAD`.
+      # Full history and tags, not the default shallow clone: the master-push
+      # throttle below counts commits off `git rev-list --count HEAD`, and
+      # tools/build_version.sh needs the v* tags and the distance to the
+      # nearest one to name the build. (It refuses to guess from a shallow
+      # clone rather than publish a version that goes backwards.)
       #
       # ...but full history of a repository with 47 models in it used to mean
       # downloading every version of every texture ever committed, on every
@@ -53,31 +69,60 @@ jobs:
           # actions/checkout's own safe.directory trust (that's set up for
           # its own git invocations, in a different context) — hence this.
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          # Every branch sets the same five variables and nothing else; they are
+          # written to $GITHUB_OUTPUT once, below. (The old version of this step
+          # echoed into $GITHUB_OUTPUT from inside each branch, which is how the
+          # three channels drifted into three different version shapes.)
+          should_publish=true
           if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == test* ]]; then
-            echo "preset=Web (Playtest)" >> "$GITHUB_OUTPUT"
-            echo "channel=web-playtest" >> "$GITHUB_OUTPUT"
-            echo "outdir=build/web-playtest" >> "$GITHUB_OUTPUT"
-            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            preset="Web (Playtest)"
+            channel=web-playtest
+            outdir=build/web-playtest
+            version=$(tools/build_version.sh playtest)
           elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            echo "preset=Web (Release)" >> "$GITHUB_OUTPUT"
-            echo "channel=web" >> "$GITHUB_OUTPUT"
-            echo "outdir=build/web-release" >> "$GITHUB_OUTPUT"
-            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            preset="Web (Release)"
+            channel=web
+            outdir=build/web-release
+            # Exits non-zero on a tag that is not v<semver> — a malformed tag
+            # fails the run here rather than publishing a build to itch.io
+            # under a version nothing can compare.
+            version=$(tools/build_version.sh release "${GITHUB_REF_NAME}")
           else
-            echo "preset=Web (Release)" >> "$GITHUB_OUTPUT"
-            echo "channel=web-dev" >> "$GITHUB_OUTPUT"
-            echo "outdir=build/web-dev" >> "$GITHUB_OUTPUT"
-            echo "version=dev-${GITHUB_RUN_NUMBER}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            preset="Web (Release)"
+            channel=web-dev
+            outdir=build/web-dev
+            version=$(tools/build_version.sh dev)
             # T-itch: publish on a manual run, or every 10th commit on master
             # — not on every push, which is what this branch used to do.
             commit_count=$(git rev-list --count HEAD)
             if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" || $(( commit_count % 10 )) -eq 0 ]]; then
-              echo "should_publish=true" >> "$GITHUB_OUTPUT"
+              should_publish=true
             else
-              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              should_publish=false
             fi
+          fi
+
+          # `shell: bash` runs with -e -o pipefail, so a build_version.sh that
+          # exited non-zero has already failed the step by here. This catches the
+          # other way it could go wrong — a version that came back empty —
+          # because stamping "" into project.godot would publish a build that
+          # reports no version at all, and nothing downstream would notice.
+          [[ -n "$version" ]] || { echo "build_version.sh produced nothing"; exit 1; }
+
+          {
+            echo "preset=${preset}"
+            echo "channel=${channel}"
+            echo "outdir=${outdir}"
+            echo "version=${version}"
+            echo "should_publish=${should_publish}"
+          } >> "$GITHUB_OUTPUT"
+
+          # The version is computed on every run, including the master pushes the
+          # throttle skips — so say which this was, rather than implying a publish.
+          if [[ "$should_publish" == "true" ]]; then
+            echo "Publishing \`${version}\` to the \`${channel}\` channel" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Built \`${version}\`, not published — the \`${channel}\` channel is throttled to every 10th commit on master. Re-run this workflow from the Actions tab to publish it now." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # godot-ci's image bakes every export template into /root/.local/share/
@@ -90,6 +135,43 @@ jobs:
         run: |
           mkdir -p "$HOME/.local/share/godot/export_templates"
           cp -r /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/"
+
+      # The build stamps its own version into project.godot before the export
+      # reads it, so core/bug_report.gd can put it on every bug report — "it
+      # happens on 0.2.2-dev.7" and "it happens on some build" are different
+      # reports, and the first one names the commit to check out.
+      # Before the import, because that is what bakes project.godot into the pack.
+      - name: Stamp the version into project.godot
+        if: steps.pick.outputs.should_publish == 'true'
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+        run: |
+          grep -q '^config/version=' project.godot \
+            || { echo "project.godot lost config/version"; exit 1; }
+          sed -i "s|^config/version=.*|config/version=\"$VERSION\"|" project.godot
+          grep '^config/version=' project.godot
+
+      # The bug reporter's optional second door (tools/bug-relay/). Set the
+      # BUG_RELAY_URL repository VARIABLE — not a secret; the URL ends up inside
+      # the shipped client either way, and its Worker is what enforces anything.
+      # Leave it unset and the export simply has no relay, which is a perfectly
+      # good place to stop: the browser path is the primary one regardless.
+      - name: Stamp the bug relay into the build
+        if: steps.pick.outputs.should_publish == 'true' && vars.BUG_RELAY_URL != ''
+        env:
+          RELAY_URL: ${{ vars.BUG_RELAY_URL }}
+          RELAY_KEY: ${{ vars.BUG_RELAY_KEY }}
+          F: core/bug_report.gd
+        run: |
+          case "$RELAY_URL" in
+            https://*) ;;
+            *) echo "BUG_RELAY_URL must be an https URL"; exit 1 ;;
+          esac
+          grep -q '^const RELAY_URL := ""' "$F" \
+            || { echo "$F no longer has an empty RELAY_URL to stamp"; exit 1; }
+          sed -i "s|^const RELAY_URL := \"\"|const RELAY_URL := \"$RELAY_URL\"|" "$F"
+          sed -i "s|^const RELAY_KEY := \"\"|const RELAY_KEY := \"$RELAY_KEY\"|" "$F"
+          grep '^const RELAY_URL' "$F"
 
       - name: Import resources once
         if: steps.pick.outputs.should_publish == 'true'

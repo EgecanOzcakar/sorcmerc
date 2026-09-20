@@ -18,6 +18,74 @@
 # Level-8 party (the presets levelled to 8, score 108.8), 60 seeds: 95 / 88 / 78%
 # (was 92 / 73 / 58 at T38's tiers).
 #
+# Re-measured 2026-09-15 on the grown boards (encounter._grow: 9 rows, lumpy
+# perimeter) with areas castable and concentration held — the party got
+# Fireball, the foes got room, and both ends of the curve moved. TIER down,
+# CURVE up to 1.15 so a level-8 party (score 116) buys a roster it can lose to:
+#   easy   TIER 0.64 -> avg 4.1 foes x0.89 : 189W/11L  (94.5%)  avg 6.3 rounds
+#   normal TIER 0.78 -> avg 4.2 foes x0.88 : 168W/32L  (84.0%)  avg 7.7 rounds
+#   hard   TIER 0.92 -> avg 4.4 foes x0.93 : 151W/49L  (75.5%)  avg 8.2 rounds
+# Level 8, 150 seeds: 98 / 83 / 70% (was 99 / 96 / 90 before CURVE moved).
+#
+# RETUNED 2026-09-15. 6b098e8 let a mover pass through allies (correct 5e; the
+# same rule BG3 uses), and the numbers below fell to easy 80 / normal 68 / hard
+# 51.5 — bisected, it is that commit alone. The side with more bodies gains more
+# turns-in-contact when nobody queues behind its own archer, which is the
+# action-economy effect measured further down. So TIER moved, not the rule:
+# 0.96/1.10/1.32 -> 0.77/0.90/1.04, picked off tests/sweep_tier.gd (200 seeds a
+# point, scale 0.75..0.90 per tier), then confirmed by test_scaler:
+#   easy   avg 3.9 foes x0.90 : 188W/12L (94.0%)  avg 7.2 rounds
+#   normal avg 4.3 foes x0.91 : 173W/27L (86.5%)  avg 8.1 rounds
+#   hard   avg 4.5 foes x0.94 : 144W/56L (72.0%)  avg 8.4 rounds
+#   level-8, 60 seeds: 98.3 / 91.7 / 68.3%
+# Fights are shorter (7-8 rounds, was 9-10) with fewer bodies: the thing the
+# movement fix bought is a faster fight at the same win rate.
+#
+# RE-MEASURED 2026-09-16 (T94), and NO KNOB HERE MOVED. T94 gave the bestiary
+# the defences its own catalog had always carried (damage resistance / immunity /
+# vulnerability and condition immunity, dropped on the floor until then — see
+# core/combatant.gd) plus Magic Resistance, Parry, Undead Fortitude / Relentless,
+# Death Burst, and a second pass of on-hit riders. power.gd prices all of it
+# (Power._defense_mult and the ehp arm of estimate()), so the generator answers
+# a tougher monster by buying FEWER of it, which is the mechanism that kept the
+# curve inside the band without touching TIER. Both columns are this same test,
+# 200 seeds a tier, run back-to-back on master (6c9a5ab) and on the branch:
+#                 master            T94
+#   L3 easy    4.1 foes 94.5%    4.0 foes 93.0%   -1.5
+#   L3 normal  4.2 foes 83.0%    3.9 foes 83.5%   +0.5
+#   L3 hard    4.4 foes 73.5%    4.2 foes 79.0%   +5.5
+#   L8 easy    5.8 foes 91.3%    5.9 foes 90.0%   -1.3   (150 seeds)
+#   L8 normal  6.0 foes 80.0%    5.9 foes 74.0%   -6.0
+#   L8 hard    6.1 foes 62.0%    6.1 foes 60.0%   -2.0
+#   shrine     3.1 foes 82.5%    2.5 foes 77.0%   -5.5
+# Re-measured twice as the base moved under it, because a tuning comparison is
+# only worth the base it was taken against. After master's reaction layer (#38,
+# Counterspell) every number came back byte-identical — the sweep installs no
+# reaction_decider and the autopilot prepares no Counterspell, so that layer is
+# inert under autoplay. After the potions/spells work (#35) the LEVEL-8 column
+# moved on BOTH sides and had to be retaken: that PR gave the preset party real
+# buff spells, so its team score went 116.2 -> 123.9, it buys a bigger budget,
+# and both master and this branch lose ground at level 8 for reasons that have
+# nothing to do with T94. The level-3 numbers did not move at all. Quoting the
+# pre-#35 level-8 column against a post-#35 branch would have credited T94 with
+# somebody else's change, in both directions.
+# Every tier stays inside test_scaler's +/-10 BAND and ordered. Read the sizes
+# of those moves against the standard error, which is ~3 points at 200 seeds and
+# ~4 at 150: only L3 hard and L8 normal are much past one, and L3 hard is the
+# direction the pricing predicts — a hard budget spent on fewer, tougher bodies is EASIER, because
+# what kills a party is the number of turns the other side gets (the action-
+# economy measurement further down this header), not any one stat line.
+# The one number to watch is the shrine at 2.5 bodies: it is the thinnest roster
+# the generator produces, because an undead roster is now the most expensive one
+# per body in the game (poison immunity, a physical-resistance line, Undead
+# Fortitude). If it drops under ~2 it stops being a warband; the fix would be a
+# floor on body count for a boss theme, not a TIER change.
+# Fights also got LONGER at level 8 (normal 10.5 -> 12.9 rounds, hard 11.4 ->
+# 12.7) — resistance and immunity are duration, not difficulty, which is the
+# cost of this pass and is not visible in a win rate. That is also the most
+# likely reading of the -6.0 at L8 normal: a fight that runs two and a half
+# rounds longer is two and a half more rounds of the foes' action economy.
+#
 # RE-MEASURED 2026-09-13 (D1), same harness, no knob touched since:
 #   easy   avg 4.4 foes x0.93 : 175W/25L (87.5%)  avg 9.3 rounds
 #   normal avg 4.7 foes x0.96 : 166W/34L (83.0%)  avg 9.5 rounds
@@ -121,6 +189,33 @@
 # needs a survival term in estimate(), not another constant. Re-run the sweep
 # after touching power.gd, the bestiary's features, adapter.gd's FT_PER_HEX/
 # RANGE_CAP, or any verb.
+#
+# T-classes-b, 2026-09-17: the sweep the line above asks for, run for real.
+# `attacks_per_action` had never reached the board — combat._offerable() would
+# not offer a second swing, resolve_attack assigned over the banked ones, and
+# ai.gd took one _strike a turn — so every Extra Attack class and every
+# Multiattack monster fought at one swing while power.gd priced them at two or
+# three. Making the economy honest roughly doubled both sides at once, and the
+# monsters gained by far the more of it: at the old TIER the level-3 sweep fell
+# to normal 69.5% / hard 46.5% against targets of 85 / 75.
+#
+# TIER re-measured against that, 200 seeds a point, two rounds:
+#
+#   normal  0.780 -> 69.5    hard  0.920 -> 46.5    easy  0.640 -> 89.0
+#           0.624 -> 86.5          0.764 -> 74.0          0.512 -> 99.0
+#           0.663 -> 85.0          0.718 -> 78.0
+#           0.585 -> 90.5          0.690 -> 81.5
+#
+# Landed at 0.56 / 0.66 / 0.76, which measures 93.5 / 86.0 / 73.0 — closer to
+# the 95 / 85 / 75 targets than the old triple ever was (91.5 / 80.0 / 65.0).
+# The level-8 curve is unmoved (76.7/54.0/34.7 -> 72.7/55.3/35.3, still ordered)
+# and the boss pool stays in band (72.5% -> 67.5%). CURVE stays 1.15 and
+# REF_SCORE stays 46.6 — one knob was enough this time, so the other two were
+# left where they were rather than re-fitted for the sake of it.
+#
+# The other measured effect is worth having on its own: fights are SHORTER now
+# that everyone's damage is real. The level-8 sweep went from ~12.9 rounds to
+# ~9.6.
 extends RefCounted
 
 const Adapter = preload("res://core/adapter.gd")
@@ -128,9 +223,9 @@ const Encounter = preload("res://core/encounter.gd")
 const Power = preload("res://core/rules/power.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
-const TIER := {"easy": 0.96, "normal": 1.10, "hard": 1.32}
+const TIER := {"easy": 0.56, "normal": 0.66, "hard": 0.76}   # T-classes-b; see the header
 const REF_SCORE := 46.6   # the level-3 preset party — where TIER was calibrated
-const CURVE := 0.90       # budget grows sublinearly with party power (see the header)
+const CURVE := 1.15       # budget grows sublinearly with party power (see the header)
 const MAX_FOES := 8
 const MULT_MIN := 0.6
 const MULT_MAX := 2.5
@@ -166,6 +261,12 @@ const BIGGEST_SHARE := 0.6  # no single foe may be worth more than this of the b
 
 static var _fac_cache := {}   # faction -> [{id, score}], strongest first
 
+# M6: the pools are built from the bestiary once and kept. A content pack that
+# adds or retunes monsters changes what the bestiary IS, so the cache has to go
+# with it — core/mod/registry.gd calls this whenever the overlay set changes.
+static func forget_pools() -> void:
+	_fac_cache.clear()
+
 # `theme` is the board this fight is on (Encounter.THEMES); with none, `seed`
 # picks a faction. A quest bias keeps the hand-tuned MIX — the quest target has
 # to be in the roster, and a snik among sahuagin is not a coherent warband.
@@ -180,10 +281,13 @@ static var _fac_cache := {}   # faction -> [{id, score}], strongest first
 # bit-for-bit what it was, and every existing call site keeps its measured
 # numbers. It multiplies the budget only; nothing about TIER, CURVE, REF_SCORE
 # or the two knobs in _build() moves.
+# `exclude` keeps named ids out of the faction draw — core/site.gd uses it so
+# a warren's own boss creature never turns up as escort three rooms before the
+# room it is built around.
 static func roster_for(party_characters: Array, difficulty: String, quest_bias: Dictionary = {},
-		theme: String = "", seed: int = 0, power_scale: float = 1.0) -> Dictionary:
+		theme: String = "", seed: int = 0, power_scale: float = 1.0, exclude: Array = []) -> Dictionary:
 	var budget := _budget(party_characters, difficulty, power_scale)
-	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() else _faction_order(theme, seed, budget))
+	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() else _faction_order(theme, seed, budget, exclude))
 
 static func _budget(party_characters: Array, difficulty: String, power_scale: float = 1.0) -> float:
 	var party: Array = []
@@ -238,10 +342,16 @@ static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
 	var lead := String(boss.get("lead", ""))
 	var count: int = maxi(1, int(boss.get("lead_count", 1)))
 	var extras: Array = boss.get("lead_features", [])
+	# Per-boss knobs off the BOSS_POOL entry, for the chaff-vs-chunk ceiling the
+	# header describes: `mult_max` caps how far the lead is pumped, `lead_share`
+	# how much of the fight it is (less lead = more escort bodies = harder, by the
+	# action-economy measurement above). Defaults are the globals.
+	var mult_max: float = minf(BOSS_MULT_MAX, float(boss.get("mult_max", BOSS_MULT_MAX)))
+	var share: float = float(boss.get("lead_share", BOSS_LEAD_SHARE))
 	var mult := MULT_MIN
-	while mult < BOSS_MULT_MAX and _lead_score(lead, count, mult, extras) < budget * BOSS_LEAD_SHARE:
+	while mult < mult_max and _lead_score(lead, count, mult, extras) < budget * share:
 		mult += MULT_STEP
-	mult = snappedf(minf(mult, BOSS_MULT_MAX), 0.01)
+	mult = snappedf(minf(mult, mult_max), 0.01)
 	var entry := {"id": lead, "count": count, "mult": mult}
 	if not extras.is_empty():
 		entry["features"] = extras
@@ -251,8 +361,11 @@ static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
 	# would spawn two combatants sharing an id.
 	var order: Array = _faction_order(String(boss.get("theme", "")), seed, rest).filter(
 		func(id): return id != lead)
-	if rest > 0.0 and not order.is_empty():
-		monsters.append_array(_build(rest, order, MAX_FOES - count)["monsters"])
+	# A boss always brings an escort: when the lead at MULT_MIN already overruns
+	# the budget (the mammoth against a level-3 hard budget after the 2026-09-15
+	# retune), _build() with nothing left still seats one body at MULT_MIN.
+	if not order.is_empty():
+		monsters.append_array(_build(maxf(rest, 0.0), order, MAX_FOES - count)["monsters"])
 	return {"monsters": monsters}
 
 static func _lead_score(id: String, count: int, mult: float, extras: Array) -> float:
@@ -282,14 +395,14 @@ static func _build(budget: float, order: Array, max_foes: int = MAX_FOES) -> Dic
 # One faction's ids, strongest first, capped so the bodies knob still has room to
 # work. Falls back to the hand-tuned MIX when nothing in the faction is small
 # enough for the party (a level-1 party meets no CR 8 giant).
-static func _faction_order(theme: String, seed: int, budget: float) -> Array:
+static func _faction_order(theme: String, seed: int, budget: float, exclude: Array = []) -> Array:
 	var fac: String = String(THEME_FACTION.get(theme, "")) if THEME_FACTION.has(theme) \
 		else FACTIONS[absi(seed) % FACTIONS.size()]
 	if fac == "":
 		return MIX.duplicate()
 	var need_habitat: String = String(THEME_HABITAT.get(theme, ""))
 	var pool: Array = _faction_pool(fac).filter(
-		func(e): return _in_budget_and_habitat(e, budget, need_habitat))
+		func(e): return _in_budget_and_habitat(e, budget, need_habitat) and not e["id"] in exclude)
 	if pool.is_empty():
 		return MIX.duplicate()
 	var start: int = absi(seed) % maxi(1, pool.size() / 2)

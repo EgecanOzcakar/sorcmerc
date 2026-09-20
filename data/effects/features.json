@@ -184,7 +184,8 @@
       "charmed"
     ],
     "duration": "round",
-    "uses": 1
+    "uses": 1,
+    "magical": true
   },
   "monster-petrifying-gaze": {
     "kind": "save_effect",
@@ -195,7 +196,8 @@
       "restrained"
     ],
     "duration": "round",
-    "uses": 1
+    "uses": 1,
+    "magical": true
   },
   "monster-web-shot": {
     "kind": "save_effect",
@@ -242,7 +244,8 @@
     "dice": {
       "count": 3,
       "sides": 6
-    }
+    },
+    "magical": true
   },
   "monster-pack-tactics": {
     "kind": "attack_modifier",
@@ -332,7 +335,8 @@
     "kind": "self_buff",
     "cost": "bonus",
     "pool": "rage",
-    "duration": "encounter",
+    "duration": "rage",
+    "_note": "2024: lasts until the end of your next turn unless you attacked or forced a save that turn; ten rounds at most; ends if Incapacitated (combat._rage_upkeep)",
     "status": "raging",
     "bonus_damage": {
       "by": "class_level",
@@ -395,16 +399,37 @@
     "cost": "none",
     "trigger": "on_weapon_hit",
     "pool": "focus-points",
+    "once_per": "turn",
     "save": "con",
     "conditions": [
       "stunned"
     ],
-    "duration": "round"
+    "duration": "round",
+    "on_save_vex": true,
+    "_note": "2024: on a hit, a Focus Point, once per turn, CON save or Stunned until your next turn; a made save still gives you advantage on your next attack against it (the half-speed half is not modelled)"
   },
   "cleric-channel-divinity": {
     "kind": "save_effect",
     "cost": "action",
     "pool": "channel-divinity",
+    "uses": {
+      "by": "class_level",
+      "class": "cleric",
+      "steps": [
+        {
+          "min": 2,
+          "value": 2
+        },
+        {
+          "min": 6,
+          "value": 3
+        },
+        {
+          "min": 18,
+          "value": 4
+        }
+      ]
+    },
     "save": "wis",
     "shape": "single",
     "range_ft": 30,
@@ -417,6 +442,7 @@
     "kind": "ally_buff",
     "cost": "bonus",
     "status": "inspired",
+    "range_ft": 60,
     "dice": {
       "count": 1,
       "sides": {
@@ -464,5 +490,552 @@
   "_test-nimble-stand": {
     "_note": "Test-only fixture for the stand_cost_mult hook (tests/test_conditions.gd). No real feature grants a stand-up discount yet — this proves the mechanism works once one does.",
     "stand_cost_mult": 0
+  },
+  "_note_t94": "T94: the second monster pass. Everything above is T16's library; these are the templates the engine could already express (or could after one contained addition apiece) and nothing had been authored for. Numbers come from each ability's real SRD text (5e-bits/5e-database @ the commit data/SCHEMA.md pins), not from the regex-parsed `_notes`. An authored `label` wins over the id-derived one, which is why an id may carry its threshold.",
+  "monster-martial-advantage": {
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "ally_adjacent_to_target"
+    ],
+    "dice": {
+      "count": 2,
+      "sides": 6
+    }
+  },
+  "monster-sneak-attack": {
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "advantage_or_ally_adjacent",
+      "not_disadvantage"
+    ],
+    "dice": {
+      "count": 2,
+      "sides": 6
+    }
+  },
+  "monster-sneak-attack-greater": {
+    "label": "Sneak Attack",
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "advantage_or_ally_adjacent",
+      "not_disadvantage"
+    ],
+    "dice": {
+      "count": 4,
+      "sides": 6
+    }
+  },
+  "monster-assassinate": {
+    "kind": "attack_modifier",
+    "cost": "none",
+    "trigger": "passive",
+    "requires": [
+      "target_has_not_acted"
+    ],
+    "self": "adv"
+  },
+  "monster-divine-eminence": {
+    "kind": "self_buff",
+    "cost": "bonus",
+    "status": "divine-eminence",
+    "bonus_damage": 10,
+    "damage_type": "radiant",
+    "uses": 1
+  },
+  "monster-magic-resistance": {
+    "kind": "save_modifier",
+    "cost": "none",
+    "trigger": "passive",
+    "vs": "magic",
+    "self": "adv"
+  },
+  "monster-parry-2": {
+    "label": "Parry",
+    "kind": "reaction",
+    "cost": "reaction",
+    "trigger": "would_be_hit",
+    "melee_only": true,
+    "ac_bonus": 2
+  },
+  "monster-parry-3": {
+    "label": "Parry",
+    "kind": "reaction",
+    "cost": "reaction",
+    "trigger": "would_be_hit",
+    "melee_only": true,
+    "ac_bonus": 3
+  },
+  "monster-undead-fortitude": {
+    "kind": "survive_damage",
+    "cost": "none",
+    "save": "con",
+    "dc": 5,
+    "dc_plus_damage": true,
+    "except": [
+      "radiant",
+      "critical"
+    ]
+  },
+  "monster-relentless-7": {
+    "label": "Relentless",
+    "kind": "survive_damage",
+    "cost": "none",
+    "max_damage": 7,
+    "uses": 1
+  },
+  "monster-relentless-10": {
+    "label": "Relentless",
+    "kind": "survive_damage",
+    "cost": "none",
+    "max_damage": 10,
+    "uses": 1
+  },
+  "monster-relentless-14": {
+    "label": "Relentless",
+    "kind": "survive_damage",
+    "cost": "none",
+    "max_damage": 14,
+    "uses": 1
+  },
+  "monster-death-burst": {
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_death",
+    "save": "dex",
+    "range_ft": 5,
+    "damage_type": "fire",
+    "dice": {
+      "count": 1,
+      "sides": 8
+    }
+  },
+  "monster-death-burst-ice": {
+    "label": "Death Burst",
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_death",
+    "save": "dex",
+    "range_ft": 5,
+    "halve_damage": true,
+    "damage_type": "slashing",
+    "dice": {
+      "count": 1,
+      "sides": 8
+    }
+  },
+  "monster-death-burst-greater": {
+    "label": "Death Burst",
+    "kind": "save_effect",
+    "cost": "none",
+    "trigger": "on_death",
+    "save": "dex",
+    "range_ft": 10,
+    "halve_damage": true,
+    "damage_type": "fire",
+    "dice": {
+      "count": 2,
+      "sides": 6
+    }
+  },
+  "monster-keen-smell": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "smell"
+    ],
+    "passive_bonus": 5
+  },
+  "monster-keen-hearing": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "hearing"
+    ],
+    "passive_bonus": 5
+  },
+  "monster-keen-sight": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "sight"
+    ],
+    "passive_bonus": 5
+  },
+  "monster-keen-hearing-smell": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "hearing",
+      "smell"
+    ],
+    "passive_bonus": 5
+  },
+  "monster-keen-hearing-sight": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "hearing",
+      "sight"
+    ],
+    "passive_bonus": 5
+  },
+  "monster-keen-sight-smell": {
+    "kind": "keen_senses",
+    "cost": "none",
+    "trigger": "passive",
+    "relies_on": [
+      "sight",
+      "smell"
+    ],
+    "passive_bonus": 5
+  },
+  "paladin-extra-attack": {
+    "kind": "attacks_per_action",
+    "value": 2
+  },
+  "ranger-extra-attack": {
+    "kind": "attacks_per_action",
+    "value": 2
+  },
+  "collegevalor-extra-attack": {
+    "kind": "attacks_per_action",
+    "value": 2
+  },
+  "assassin-assassinate": {
+    "_note": "2024: advantage on Initiative; in the first round, advantage against anything that has not acted, and a Sneak Attack that lands then deals extra damage equal to your Rogue level (Surprising Strikes)",
+    "kind": "attack_modifier",
+    "cost": "none",
+    "trigger": "passive",
+    "requires": [
+      "target_has_not_acted",
+      "first_round"
+    ],
+    "self": "adv",
+    "init_adv": true,
+    "also": [
+      {
+        "kind": "passive_damage",
+        "cost": "none",
+        "trigger": "on_weapon_hit",
+        "label": "Surprising Strike",
+        "once_per": "turn",
+        "requires": [
+          "first_round",
+          "target_has_not_acted",
+          "advantage_or_ally_adjacent",
+          "not_disadvantage"
+        ],
+        "dice": {
+          "count": 0,
+          "sides": 1,
+          "plus": {
+            "by": "class_level",
+            "class": "rogue"
+          }
+        }
+      }
+    ]
+  },
+  "wardomain-war-priest": {
+    "kind": "grant_action",
+    "cost": "bonus",
+    "pool": "war-priest",
+    "uses": {
+      "by": "ability_mod",
+      "ability": "wis"
+    },
+    "amount": 0,
+    "extra_attacks": 1,
+    "_note": "2024: WIS-modifier uses (minimum 1), back on a Short or Long Rest; the export's PB-sized pool grant was dropped from subclasses.json"
+  },
+  "celestialpatron-healing-light": {
+    "kind": "heal_ally",
+    "cost": "bonus",
+    "pool": "healing-light",
+    "range_ft": 60,
+    "dice": {
+      "count": 1,
+      "sides": 6
+    },
+    "max_dice": {
+      "by": "ability_mod",
+      "ability": "cha"
+    },
+    "_note": "RAW: up to CHA-mod dice in one use — combat.perform spends as many as the wound calls for"
+  },
+  "warriorofmercy-hand-of-healing": {
+    "kind": "heal_ally",
+    "cost": "bonus",
+    "pool": "focus-points",
+    "flurry_swap": true,
+    "_note": "2024: may replace one Flurry of Blows strike for free — no Focus Point, no Bonus Action (combat._flurry_swap)",
+    "range_ft": 5,
+    "dice": {
+      "count": 1,
+      "sides": {
+        "by": "class_level",
+        "class": "monk",
+        "steps": [
+          {
+            "min": 1,
+            "value": 6
+          },
+          {
+            "min": 5,
+            "value": 8
+          },
+          {
+            "min": 11,
+            "value": 10
+          },
+          {
+            "min": 17,
+            "value": 12
+          }
+        ]
+      },
+      "plus": {
+        "by": "ability_mod",
+        "ability": "wis"
+      }
+    }
+  },
+  "warrioropenhand-wholeness-of-body": {
+    "kind": "heal_self",
+    "cost": "bonus",
+    "uses": {
+      "by": "pb"
+    },
+    "dice": {
+      "count": 1,
+      "sides": {
+        "by": "class_level",
+        "class": "monk",
+        "steps": [
+          {
+            "min": 1,
+            "value": 6
+          },
+          {
+            "min": 5,
+            "value": 8
+          },
+          {
+            "min": 11,
+            "value": 10
+          },
+          {
+            "min": 17,
+            "value": 12
+          }
+        ]
+      },
+      "plus": {
+        "by": "ability_mod",
+        "ability": "wis"
+      }
+    }
+  },
+  "_note_classes": "T-classes-a: class and subclass features expressible with the vocabulary as it stands. The three -extra-attack entries are parity, not new content: barbarian, fighter and monk had theirs and paladin, ranger and College of Valour did not, so those three swung once at level 5+ while the others swung twice. The rest give a verb to a pool the engine already granted and nothing could spend.",
+  "hunter-hunters-prey-colossus-slayer": {
+    "label": "Colossus Slayer",
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "target_damaged"
+    ],
+    "dice": {
+      "count": 1,
+      "sides": 8
+    }
+  },
+  "berserker-frenzy": {
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "once_per": "turn",
+    "requires": [
+      "while_raging"
+    ],
+    "dice": {
+      "count": {
+        "by": "class_level",
+        "class": "barbarian",
+        "steps": [
+          {
+            "min": 1,
+            "value": 2
+          },
+          {
+            "min": 9,
+            "value": 3
+          },
+          {
+            "min": 16,
+            "value": 4
+          }
+        ]
+      },
+      "sides": 6
+    }
+  },
+  "gloomstalker-dread-ambusher": {
+    "_note": "2024: Ambusher's Leap (+10 ft on your first turn), advantage on Initiative, and Dreadful Strike: +2d6 psychic on a weapon hit, once per turn, WIS-mod uses per Long Rest (the extra damage lands as the weapon's type — riders are not typed separately)",
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "label": "Dreadful Strike",
+    "once_per": "turn",
+    "uses": {
+      "by": "ability_mod",
+      "ability": "wis"
+    },
+    "init_adv": true,
+    "first_round_speed_ft": 10,
+    "dice": {
+      "count": 2,
+      "sides": 6
+    },
+    "damage_type": "psychic"
+  },
+  "lightdomain-warding-flare": {
+    "kind": "reaction",
+    "cost": "reaction",
+    "trigger": "would_be_hit",
+    "disadvantage": true,
+    "uses": {
+      "by": "ability_mod",
+      "ability": "wis"
+    }
+  },
+  "paladin-aura-of-protection": {
+    "kind": "aura",
+    "cost": "none",
+    "trigger": "passive",
+    "range_ft": 10,
+    "save_bonus": {
+      "by": "ability_mod",
+      "ability": "cha"
+    }
+  },
+  "_note_classes_c": "T-classes-c: the features that needed the engine to learn a new word. Three ride `requires` predicates combat._requires_met() did not have (a damaged target, an active Rage, the first round); Warding Flare rides a reaction payload that imposes Disadvantage instead of adding AC; Aura of Protection is the first `aura`, which is not a verb anyone presses but a standing fact combat.aura_bonus() reads where a save is rolled.",
+  "paladin-divine-smite": {
+    "_note": "2024: a bonus-action spell — a spell slot, once per turn, 2d8 radiant +1d8 per slot level above 1st, on the next blow that lands (the extra d8 vs undead/fiends is not modelled)",
+    "kind": "self_buff",
+    "cost": "bonus",
+    "status": "divine-smite",
+    "once": true,
+    "once_per": "turn",
+    "slot_dice": {
+      "base": 2,
+      "per_level": 1
+    },
+    "dice": {
+      "count": 2,
+      "sides": 8
+    },
+    "damage_type": "radiant"
+  },
+  "oathofdevotion-aura-of-devotion": {
+    "kind": "aura",
+    "cost": "none",
+    "trigger": "passive",
+    "range_ft": 10,
+    "cond_immune": [
+      "charmed"
+    ]
+  },
+  "oathofancients-aura-of-warding": {
+    "kind": "aura",
+    "cost": "none",
+    "trigger": "passive",
+    "range_ft": 10,
+    "aura_resist": [
+      "necrotic",
+      "psychic",
+      "radiant"
+    ]
+  },
+  "beastmaster-primal-companion": {
+    "kind": "summon",
+    "cost": "action",
+    "label": "Primal Companion",
+    "summon": {
+      "id": "dire-wolf"
+    },
+    "mult_pct": {
+      "by": "class_level",
+      "class": "ranger",
+      "steps": [
+        {
+          "min": 3,
+          "value": 70
+        },
+        {
+          "min": 5,
+          "value": 90
+        },
+        {
+          "min": 9,
+          "value": 110
+        },
+        {
+          "min": 13,
+          "value": 130
+        },
+        {
+          "min": 17,
+          "value": 150
+        }
+      ]
+    },
+    "uses": {
+      "by": "pb"
+    }
+  },
+  "trickerydomain-invoke-duplicity": {
+    "kind": "summon",
+    "cost": "bonus",
+    "label": "Invoke Duplicity",
+    "pool": "channel-divinity",
+    "uses": {
+      "by": "class_level",
+      "class": "cleric",
+      "steps": [
+        {
+          "min": 2,
+          "value": 2
+        },
+        {
+          "min": 6,
+          "value": 3
+        },
+        {
+          "min": 18,
+          "value": 4
+        }
+      ]
+    },
+    "summon": {
+      "id": "trickery-duplicate",
+      "illusion": true
+    },
+    "rounds": 10
   }
 }

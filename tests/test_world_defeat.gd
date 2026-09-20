@@ -40,6 +40,34 @@ func _init() -> void:
 	check(main.world.player().position == main.world.settlements[0].position
 		or main.world.settlements.any(func(s): return s.position == main.world.player().position),
 		"the party falls back to a real settlement")
+	check(main._lair_msg.text.contains("beaten"), "...and the map says so (%s)" % main._lair_msg.text)
+
+	# The whole thing, lost against a band standing right by that settlement:
+	# the map must NOT come back with the same fight/parley/ambush card the
+	# party just answered — the band is marked slipped until it is out of range.
+	var World = load("res://core/world.gd")
+	var p = main.world.player()
+	p.position = main.world.settlements[0].position + Vector2(10, 0)
+	var foe = main.world.add_party(World.RoamingParty.new("hound", p.position + Vector2(1, 0), "goblinoid"))
+	main._process(0.1); await process_frame
+	check(main._approach_card != null, "sanity: a hostile band next to the party opens the approach card")
+	main._on_approach_chosen("engage")
+	main._process(0.1); await process_frame
+	if main._event_card != null:
+		main._event_card.acknowledged.emit()
+	for i in 2:
+		main._process(0.1); await process_frame
+	check(main._combat != null, "sanity: engaging launches the fight")
+	var clock_before: float = main.world.clock.elapsed
+	if main._combat != null:
+		main._combat.result = {"outcome": "Defeat", "xp": 0, "gold": 0, "rounds": 5}
+	for i in 3:
+		main._process(0.1); await process_frame
+	check(main._combat == null, "the lost fight is torn down")
+	check(main.world.clock.elapsed - clock_before == 5 * main.MINUTES_PER_ROUND,
+		"five rounds cost the party five hours of daylight")
+	check(main._approach_card == null, "...and the band that won does not re-open its approach card")
+	check(main._slipped.has(foe.id), "it is marked slipped instead")
 
 	# The soft landing is specific to a retreat (a run-ending loss) — a death
 	# in a fight the party still WON is not touched by _retreat() at all, so

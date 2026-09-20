@@ -74,9 +74,18 @@ func test_fresh_party_is_untouched() -> void:
 	check(str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5, 1.0))
 		== str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5)),
 		"the scale knob is still an exact identity at 1.0")
-	check(str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5, t["power_scale"]))
-		!= str(Scaler.roster_for(chars, t["difficulty"], {}, "", 5)),
-		"...and the flat wilderness discount really does change the roster")
+	# Asked across seeds, not on one. A discount of a tenth does not move every
+	# roster — the budget buys whole monsters, so on a seed where the cut lands
+	# inside a rounding step the spec comes out identical, which is arithmetic
+	# rather than the knob failing. Pinned to seed 5 alone this read as a
+	# regression the first time a TIER re-tune shifted which seeds those were
+	# (T-classes-b: 28 of 30 seeds differ, and 5 stopped being one of them).
+	var moved := 0
+	for seed_value in range(1, 11):
+		if str(Scaler.roster_for(chars, t["difficulty"], {}, "", seed_value, t["power_scale"])) \
+				!= str(Scaler.roster_for(chars, t["difficulty"], {}, "", seed_value)):
+			moved += 1
+	check(moved >= 7, "...and the flat wilderness discount really does change the roster (%d of 10 seeds)" % moved)
 
 func test_baseline_is_easy() -> void:
 	check(WorldThreat.BASELINE == "easy", "the wilderness baseline is easy, not normal — sites are the hard content")
@@ -117,10 +126,19 @@ func test_hurt_party_gets_a_thinner_roster() -> void:
 func test_flat_wilderness_discount() -> void:
 	check(WorldThreat.SCALE_MAX < 1.0, "a fresh party still gets a kinder road than the bare tier")
 	check(WorldThreat.SCALE_MAX == WorldThreat.WILDERNESS_SCALE, "...by exactly the flat discount")
+	# Over a spread of seeds, not one: the mult knob is 0.05-lumpy, so a single
+	# seed can land on the same roster either side of the discount.
 	var chars := Presets.party()
-	var bare := _spec_power(Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", 7))
-	var road := _spec_power(Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", 7, WorldThreat.SCALE_MAX))
-	check(road < bare, "and it really reaches the roster (%.1f vs %.1f)" % [road, bare])
+	var thinner := 0
+	var fatter := 0
+	for s in range(1, 11):
+		var bare := _spec_power(Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", s))
+		var road := _spec_power(Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", s, WorldThreat.SCALE_MAX))
+		if road < bare:
+			thinner += 1
+		elif road > bare:
+			fatter += 1
+	check(thinner > 0 and fatter == 0, "and it really reaches the roster (%d/10 thinner, %d fatter)" % [thinner, fatter])
 
 func test_floor_holds() -> void:
 	check(WorldThreat.power_scale(0.0) == WorldThreat.SCALE_FLOOR, "zero HP bottoms out at the floor exactly")

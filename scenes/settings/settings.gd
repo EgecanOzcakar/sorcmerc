@@ -9,15 +9,16 @@
 extends Control
 
 const Settings = preload("res://core/settings.gd")
+const Icons = preload("res://core/ui_icons.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
 const Sound = preload("res://core/audio.gd")
 const CAMPAIGN_SAVE := "res://core/campaign_save.gd"
 
-const COL_BG := Color("14161c")
-const COL_CARD := Color("1b1f29")
-const COL_EDGE := Color("39404f")
-const COL_GOLD := Color("c8a75a")
-const COL_DIM := Color("8f95a3")
+const COL_BG := Icons.COL_BG
+const COL_CARD := Icons.COL_PANEL
+const COL_EDGE := Icons.COL_EDGE
+const COL_GOLD := Icons.COL_GOLD
+const COL_DIM := Icons.COL_MUTED
 
 signal changed
 
@@ -50,35 +51,64 @@ func _ready() -> void:
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 
+	# A CenterContainer rather than PRESET_CENTER: that preset moves the anchors
+	# to the middle and leaves the offsets alone, so the panel hangs DOWN AND
+	# RIGHT from the centre by its own size rather than sitting on it — which
+	# the pace picker's extra row made plain. Same fix the quest log and the
+	# settlement counter got.
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(centre)
 	var panel := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = COL_CARD
-	box.set_corner_radius_all(10)
-	box.set_border_width_all(1)
-	box.border_color = COL_EDGE
-	box.set_content_margin_all(18)
-	panel.add_theme_stylebox_override("panel", box)
-	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.add_theme_stylebox_override("panel", Icons.box(COL_CARD, Icons.COL_GOLD_EDGE, 0, 24, 20))
 	panel.custom_minimum_size = Vector2(380, 0)
-	add_child(panel)
+	centre.add_child(panel)
 
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
 	panel.add_child(col)
 
 	var cap := Label.new()
-	cap.text = "»   S E T T I N G S   «"
-	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cap.add_theme_color_override("font_color", COL_GOLD)
+	cap.text = "Settings"
+	cap.theme_type_variation = "Title"
 	col.add_child(cap)
 
-	var fast := CheckButton.new()
-	fast.text = "Reduced animations (fast)"
-	fast.button_pressed = _s.anim_speed_multiplier > 1.0
-	fast.toggled.connect(func(on: bool):
-		_s.anim_speed_multiplier = Settings.FAST if on else 1.0
+	# Combat pace. This was a "Reduced animations (fast)" checkbox, which is to
+	# say the dial only turned one way: the fight could be made quicker and
+	# never weightier. Both halves are here now, slowest first, and the note
+	# under it says what the chosen one actually does.
+	var pace_row := HBoxContainer.new()
+	pace_row.add_theme_constant_override("separation", 8)
+	var pace_lbl := Label.new()
+	pace_lbl.text = "Combat pace"
+	pace_lbl.theme_type_variation = "Dim"
+	pace_row.add_child(pace_lbl)
+	var pace := OptionButton.new()
+	pace.name = "PacePicker"
+	for p in Settings.ANIM_PACES:
+		pace.add_item(String(p["label"]))
+		pace.set_item_metadata(pace.item_count - 1, float(p["speed"]))
+		pace.set_item_tooltip(pace.item_count - 1, String(p["note"]))
+	var pace_note := Label.new()
+	pace_note.name = "PaceNote"
+	pace_note.theme_type_variation = "Dim"
+	pace_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var select_pace := func(speed: float) -> void:
+		var chosen: Dictionary = Settings.pace_for(speed)
+		for i in pace.item_count:
+			if is_equal_approx(float(pace.get_item_metadata(i)), float(chosen["speed"])):
+				pace.select(i)
+				break
+		pace_note.text = String(chosen["note"])
+	select_pace.call(_s.anim_speed_multiplier)
+	pace.item_selected.connect(func(i: int):
+		_s.anim_speed_multiplier = float(pace.get_item_metadata(i))
+		select_pace.call(_s.anim_speed_multiplier)
 		_apply())
-	col.add_child(fast)
+	pace_row.add_child(pace)
+	col.add_child(pace_row)
+	col.add_child(pace_note)
 
 	col.add_child(_volume_row("Sound effects", _s.sfx_volume, func(v: float):
 		_s.sfx_volume = v
@@ -89,11 +119,37 @@ func _ready() -> void:
 		Sound.set_music_volume(v)
 		_apply()))
 
+	# A reaction that spends a slot is a real decision, so the fight can stop and
+	# let you make it. The free ones never ask either way — see core/settings.gd.
+	var react := CheckButton.new()
+	react.name = "ReactionPrompts"
+	react.text = "Ask before a reaction spends a slot"
+	react.tooltip_text = "Counterspell and Hellish Rebuke stop the fight and ask.\n" \
+		+ "Opportunity attacks and Uncanny Dodge always fire by themselves."
+	react.button_pressed = _s.reaction_prompts
+	react.toggled.connect(func(on: bool):
+		_s.reaction_prompts = on
+		_apply())
+	col.add_child(react)
+
+	# The toast itself, not the achievement: unticking this stops the card, and
+	# the achievements screen still fills up either way.
+	var toasts := CheckButton.new()
+	toasts.name = "AchievementPopups"
+	toasts.text = "Show achievement popups"
+	toasts.tooltip_text = "A card slides in from the top-right corner when something is earned.\n" \
+		+ "Achievements are still recorded with this off."
+	toasts.button_pressed = _s.achievement_popups
+	toasts.toggled.connect(func(on: bool):
+		_s.achievement_popups = on
+		_apply())
+	col.add_child(toasts)
+
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	var lbl := Label.new()
 	lbl.text = "New campaign difficulty"
-	lbl.add_theme_color_override("font_color", COL_DIM)
+	lbl.theme_type_variation = "Dim"
 	row.add_child(lbl)
 	var pick := OptionButton.new()
 	for d in Settings.DIFFICULTIES:
@@ -110,19 +166,12 @@ func _ready() -> void:
 	wipe.pressed.connect(_clear_autosave)
 	col.add_child(wipe)
 
-	# The LPC art is CC-BY-SA/GPL/OGA-BY: crediting its authors is a license
-	# obligation, so it gets a reachable screen, not a line in a README.
-	var art := Button.new()
-	art.text = "Art credits"
-	art.pressed.connect(_show_credits)
-	col.add_child(art)
-
-	_note.add_theme_color_override("font_color", COL_DIM)
-	_note.add_theme_font_size_override("font_size", 12)
+	_note.theme_type_variation = "Dim"
 	col.add_child(_note)
 
 	var close := Button.new()
 	close.text = "Close"
+	close.theme_type_variation = "Primary"
 	close.pressed.connect(queue_free)
 	col.add_child(close)
 
@@ -134,7 +183,7 @@ func _volume_row(label: String, value: float, on_value: Callable) -> HBoxContain
 	var lbl := Label.new()
 	lbl.text = label
 	lbl.custom_minimum_size = Vector2(140, 0)
-	lbl.add_theme_color_override("font_color", COL_DIM)
+	lbl.theme_type_variation = "Dim"
 	row.add_child(lbl)
 	var slider := HSlider.new()
 	slider.min_value = 0
@@ -153,55 +202,6 @@ func _volume_row(label: String, value: float, on_value: Callable) -> HBoxContain
 		pct.text = "%d%%" % int(v)
 		on_value.call(v))
 	return row
-
-# Art credits: the generated, author-deduplicated list from lpc_compose.py, shown
-# verbatim in a scrollable panel. No parsing here on purpose — if the art changes,
-# regenerating the file is the whole update.
-const CREDITS_TXT := "res://assets/generated/credits.txt"
-
-func _show_credits() -> void:
-	var body := FileAccess.get_file_as_string(CREDITS_TXT)
-	if body.is_empty():
-		_note.text = "No credits file — run tools/lpc_compose.py."
-		return
-	# A CenterContainer, not PRESET_CENTER: the preset anchors the top-left at the
-	# middle of the screen because the panel has no size yet when it is applied.
-	var wrap := CenterContainer.new()
-	wrap.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(wrap)
-	var over := PanelContainer.new()
-	var box := StyleBoxFlat.new()
-	box.bg_color = COL_CARD
-	box.set_corner_radius_all(10)
-	box.set_border_width_all(1)
-	box.border_color = COL_EDGE
-	box.set_content_margin_all(16)
-	over.add_theme_stylebox_override("panel", box)
-	over.custom_minimum_size = Vector2(560, 460)
-	wrap.add_child(over)
-
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 8)
-	over.add_child(col)
-	var cap := Label.new()
-	cap.text = "»   A R T   C R E D I T S   «"
-	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cap.add_theme_color_override("font_color", COL_GOLD)
-	col.add_child(cap)
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(scroll)
-	var text := Label.new()
-	text.text = body
-	text.add_theme_font_size_override("font_size", 12)
-	text.add_theme_color_override("font_color", COL_DIM)
-	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	text.custom_minimum_size = Vector2(520, 0)
-	scroll.add_child(text)
-	var close := Button.new()
-	close.text = "Close"
-	close.pressed.connect(wrap.queue_free)
-	col.add_child(close)
 
 func _apply() -> void:
 	Settings.save_settings(_s)

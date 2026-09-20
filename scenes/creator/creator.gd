@@ -10,10 +10,14 @@ extends Control
 
 const Character = preload("res://core/character.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Effects = preload("res://core/rules/effects.gd")
 const Save = preload("res://core/character_save.gd")
+const Ach = preload("res://core/achievements.gd")
 const Presets = preload("res://core/presets.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Prog = preload("res://core/progression.gd")
+const Leveling = preload("res://core/leveling.gd")
+const ManualOverlay = preload("res://scenes/manual/manual.gd")   # #103
 
 signal character_created(ch)
 
@@ -58,8 +62,10 @@ static func max_per_option(p: Dictionary) -> int:
 	return 2 if p["type"] == "asi" else 1
 
 # [{id, label}] — `sheet` narrows the pools that depend on the current build
-# (expertise: only skills you are proficient in).
-static func options_for(p: Dictionary, sheet = null) -> Array:
+# (expertise: only skills you are proficient in). `picks` is what this choice
+# has already been answered with; it only matters for expertise, where a pick
+# changes the very grade the pool is filtered on — see below.
+static func options_for(p: Dictionary, sheet = null, picks: Array = []) -> Array:
 	var ids: Array = []
 	match p["type"]:
 		"skill-choice":
@@ -74,8 +80,17 @@ static func options_for(p: Dictionary, sheet = null) -> Array:
 			if p["from"] != null:
 				ids = p["from"].duplicate()
 			elif sheet != null:
+				# Proficient — or already expert BECAUSE OF THIS CHOICE. Issue
+				# #119: pass_profs grades a skill this choice picked "expert",
+				# not "prof", so reading only "prof" dropped a decided choice's
+				# own two picks off its own row. The heading said "✓ Expertise
+				# — pick 2 (2 chosen)" and not one button wore the mark, and
+				# clicking any of the rest evicted an invisible pick. A skill
+				# some OTHER grant made expert stays off the list: expertise
+				# twice over buys nothing.
 				for s in sheet.skill_prof:
-					if sheet.skill_prof[s] == "prof":
+					if sheet.skill_prof[s] == "prof" \
+							or (sheet.skill_prof[s] == "expert" and s in picks):
 						ids.append(s)
 			else:
 				ids = Catalog.skills().keys()
@@ -85,7 +100,7 @@ static func options_for(p: Dictionary, sheet = null) -> Array:
 				if not i in p.get("already_chosen", []):
 					ids.append(i)
 		"spell-choice":
-			ids = Catalog.spell_list(p["spellList"], int(p["spellLevel"]))
+			ids = Effects.pick_pool(p["spellList"], int(p["spellLevel"]))
 		"feature-choice":
 			for o in p["options"]:
 				ids.append(o["optionId"])
@@ -216,7 +231,26 @@ static func lock_note(kind: String, id: String) -> String:
 static func _price(currency: String, remaining: int) -> String:
 	return "locked — %d more %s" % [remaining, currency] if remaining > 0 else "locked"
 
+# The few ids whose words are not their meaning: an acronym, a run-together
+# subclass, a tool with its apostrophe dropped. Everything else reads fine
+# capitalized.
+const PLAIN := {
+	"asi": "Ability score increase", "asi-choice": "Ability score increase",
+	"skill-choice": "Skill", "spell-choice": "Spell", "language-choice": "Language",
+	"lineage-choice": "Lineage", "feature-choice": "Feature", "fighting-style-choice": "Fighting style",
+	"expertise-choice": "Expertise", "weapon-mastery-choice": "Weapon mastery",
+	"cantrip-choice": "Cantrip", "feat-choice": "Feat", "subclass": "Subclass",
+	"calligrapherstools": "Calligrapher's tools", "thievestools": "Thieves' tools",
+	"artisanstools": "Artisan's tools", "gamingset": "Gaming set", "musicalinstrument": "Musical instrument",
+	"handcrossbow": "Hand crossbow", "lightcrossbow": "Light crossbow", "heavycrossbow": "Heavy crossbow",
+	"simple": "Simple weapons", "martial": "Martial weapons",
+	"light": "Light armor", "medium": "Medium armor", "heavy": "Heavy armor",
+	"medium-nonmetal": "Medium armor (non-metal)", "shields-nonmetal": "Shields (non-metal)",
+}
+
 static func humanize(id: String) -> String:
+	if PLAIN.has(id):
+		return PLAIN[id]
 	return id.replace("-", " ").replace("_", " ").capitalize()
 
 static func _all_tools() -> Array:
@@ -280,18 +314,23 @@ const MAX_WEAPONS := 2
 # =========================================================================
 
 var ch
+# The level the finished character joins at — the active party's highest, handed
+# in by scenes/party/party.gd before the creator is shown. 1 (a fresh level-1
+# hero) standalone, or while the party is still empty.
+var start_level := 1
 var _step := 0
 var _abil_mode := "array"     # array | pointbuy
 var _confirmed = null         # the Character handed back
 var _free_picks: Array = []   # T22: the 2 subclasses a freshly unlocked class owes
 
 var _title := Label.new()
-var _crumbs := Label.new()
+var _steps := HBoxContainer.new()   # #82: the outline bar — every step, the current one lit, all clickable
 var _body := VBoxContainer.new()
-var _summary := RichTextLabel.new()
+var _summary := VBoxContainer.new()   # #81: the live sheet — tiles on top, prose under
 var _back := Button.new()
 var _next := Button.new()
 var _status := Label.new()
+var _target: Container = null   # where _head/_note/_flow append: _body, or a split's right column
 
 func _ready() -> void:
 	# Class-scope Buttons, so they cannot be armed at their declaration the way
@@ -315,12 +354,20 @@ func _ready() -> void:
 	root.add_theme_constant_override("separation", 8)
 	add_child(root)
 
-	_title.add_theme_font_size_override("font_size", Icons.FS_TITLE)
-	_title.add_theme_color_override("font_color", COL_GOLD)
-	root.add_child(_title)
-	_crumbs.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	_crumbs.add_theme_color_override("font_color", COL_DIM)
-	root.add_child(_crumbs)
+	_title.theme_type_variation = "Title"
+	var head := HBoxContainer.new()
+	root.add_child(head)
+	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(_title)
+	# #103: the rules the build is judged by, one press away — a class's dice,
+	# a skill's use, what a background buys — same overlay the fight offers.
+	var manual := Button.new()
+	Icons.clicks(manual)
+	manual.text = "Manual  [F2]"
+	manual.theme_type_variation = "Quiet"
+	manual.focus_mode = Control.FOCUS_NONE
+	manual.pressed.connect(func(): ManualOverlay.toggle(self))
+	head.add_child(manual)
 
 	var split := HBoxContainer.new()
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -337,11 +384,9 @@ func _ready() -> void:
 
 	var side := PanelContainer.new()
 	side.custom_minimum_size = Vector2(330, 0)
-	side.add_theme_stylebox_override("panel", _panel_style())
+	side.theme_type_variation = "Card"
 	split.add_child(side)
-	_summary.bbcode_enabled = true
-	_summary.scroll_following = false
-	_summary.add_theme_color_override("default_color", COL_TEXT)
+	_summary.add_theme_constant_override("separation", 6)
 	side.add_child(_summary)
 
 	_status.add_theme_color_override("font_color", COL_WARN)
@@ -350,12 +395,20 @@ func _ready() -> void:
 	var nav := HBoxContainer.new()
 	nav.add_theme_constant_override("separation", 8)
 	root.add_child(nav)
-	_back.text = "‹ Back"
+	_back.text = "Back"
+	_next.theme_type_variation = "Primary"
 	_back.pressed.connect(func(): _goto(_step - 1))
 	nav.add_child(_back)
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	nav.add_child(spacer)
+	_steps.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_steps.alignment = BoxContainer.ALIGNMENT_CENTER
+	_steps.add_theme_constant_override("separation", 4)
+	nav.add_child(_steps)
+	for i in STEPS.size():
+		var b := Button.new()
+		Icons.clicks(b)
+		b.text = "%d. %s" % [i + 1, STEPS[i]]
+		b.pressed.connect(_jump.bind(i))
+		_steps.add_child(b)
 	_next.pressed.connect(_on_next)
 	nav.add_child(_next)
 
@@ -368,21 +421,17 @@ static func new_character():
 		c.base_abilities[ABILS[i]] = STANDARD_ARRAY[i]
 	return c
 
-func _panel_style() -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = COL_PANEL
-	s.set_corner_radius_all(10)
-	s.set_border_width_all(1)
-	s.border_color = Icons.COL_EDGE
-	s.set_content_margin_all(12)
-	return s
-
 func _build_theme() -> void:
 	theme = dark_theme()
 
 # Static so other screens (scenes/creator/levelup.gd, campaign.gd) share one copy.
 static func dark_theme() -> Theme:
 	return Icons.dark_theme()
+
+func _unhandled_key_input(e: InputEvent) -> void:
+	if e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_F2:
+		ManualOverlay.toggle(self)   # #103
+		accept_event()
 
 # --- navigation -----------------------------------------------------------
 
@@ -392,16 +441,23 @@ func _goto(step: int) -> void:
 
 func _on_next() -> void:
 	if _step < STEPS.size() - 1:
-		var why := _blocker()
-		if why != "":
-			_status.text = why
-			return
-		_goto(_step + 1)
+		_jump(_step + 1)
 	else:
 		_confirm()
 
-func _blocker() -> String:
-	match _step:
+# #82: the outline bar. Back is always free; forward runs every gate on the
+# way there, and stops on the first one that says no.
+func _jump(step: int) -> void:
+	for i in range(_step, step):
+		var why := _blocker(i)
+		if why != "":
+			_goto(i)
+			_status.text = why
+			return
+	_goto(step)
+
+func _blocker(step := _step) -> String:
+	match step:
 		0: return "" if ch.species_id != "" else "Pick a species first."
 		1: return "" if ch.levels.size() > 0 else "Pick a class first."
 		3: return "" if ch.background_id != "" else "Pick a background first."
@@ -412,26 +468,39 @@ func _confirm() -> void:
 	if not sheet.pending.is_empty():
 		_status.text = "%d choice(s) still unmade." % sheet.pending.size()
 		return
-	if ch.id == "":
-		ch.id = Save.slugify(ch.cname)
+	# A new hero is a new file, always. The name is not the identity — two Aria
+	# Vales are two characters — so the slug is minted against what is already in
+	# the barracks rather than straight off the name, which used to write the new
+	# build over the hero who happened to slugify the same way (and then lose the
+	# new one too, to Party.add_member's duplicate-id guard). Minted once: press
+	# Confirm twice and the second press re-saves this file, it does not fork it.
+	var wanted: String = ch.id if ch.id != "" else Save.slugify(ch.cname)
+	if _confirmed == null:
+		ch.id = Save.unique_slug(ch.cname, ch.id)
 	var path := Save.save(ch)
+	# Only the first Confirm mints a character; pressing it again re-saves the
+	# same file, and re-counting that would make "make 10 characters" a matter
+	# of clicking one button ten times.
+	if _confirmed == null:
+		Ach.bump("created")
 	_confirmed = ch
 	_status.text = "Saved to %s" % path
+	if ch.id != wanted:
+		_status.text += "   —   the barracks already has someone called %s; this one is filed beside them, not over them." % ch.cname
 	character_created.emit(ch)
 
 # --- render ---------------------------------------------------------------
 
 func _refresh() -> void:
+	_target = null
 	for c in _body.get_children():
 		c.queue_free()
 		_body.remove_child(c)
 	_title.text = "%d. %s" % [_step + 1, STEPS[_step]]
-	var crumbs: Array = []
-	for i in STEPS.size():
-		crumbs.append(("[%s]" % STEPS[i]) if i == _step else STEPS[i])
-	_crumbs.text = "  ›  ".join(crumbs)
+	for i in _steps.get_child_count():
+		_steps.get_child(i).theme_type_variation = "Picked" if i == _step else "Quiet"
 	_back.disabled = _step == 0
-	_next.text = "Confirm & Save" if _step == STEPS.size() - 1 else "Next ›"
+	_next.text = "Confirm and save" if _step == STEPS.size() - 1 else "Next"
 	_status.text = ""
 
 	match _step:
@@ -444,36 +513,73 @@ func _refresh() -> void:
 	_refresh_summary()
 
 func _refresh_summary() -> void:
-	_summary.text = _sheet_bbcode(false)
+	_sheet_into(_summary, false)
 
 func _head(text: String) -> void:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", Icons.FS_HEAD)
-	l.add_theme_color_override("font_color", COL_GOLD)
-	_body.add_child(l)
+	l.theme_type_variation = "Head"
+	_into().add_child(l)
 
 func _note(text: String, col: Color = COL_DIM) -> void:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	l.add_theme_color_override("font_color", col)
-	_body.add_child(l)
+	l.theme_type_variation = "Dim"
+	if col != COL_DIM:
+		l.add_theme_color_override("font_color", col)
+	_into().add_child(l)
 
 func _flow() -> HFlowContainer:
 	var f := HFlowContainer.new()
 	f.add_theme_constant_override("h_separation", 6)
 	f.add_theme_constant_override("v_separation", 6)
-	_body.add_child(f)
+	_into().add_child(f)
 	return f
+
+func _into() -> Container:
+	return _target if _target != null else _body
+
+# #80: a pick with a lock on it — species, class — is a column down the left,
+# the ones this profile has opened first and each group alphabetical, with a
+# rule between them; what the pick means goes on the right (_target, until the
+# caller puts it back). `entries` are {label, extra, on, cb, note}: `note` is
+# lock_note()'s price, "" for open.
+func _pick_column(entries: Array) -> void:
+	var split := HBoxContainer.new()
+	split.add_theme_constant_override("separation", 18)
+	_body.add_child(split)
+	var col := VBoxContainer.new()
+	col.custom_minimum_size = Vector2(300, 0)
+	col.add_theme_constant_override("separation", 4)
+	split.add_child(col)
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.add_theme_constant_override("separation", 10)
+	split.add_child(right)
+	_target = right
+	var by_name := func(a, b): return String(a.get("sort", a["label"])).naturalnocasecmp_to(String(b.get("sort", b["label"]))) < 0
+	var open: Array = entries.filter(func(e): return String(e["note"]) == "")
+	var locked: Array = entries.filter(func(e): return String(e["note"]) != "")
+	open.sort_custom(by_name)
+	locked.sort_custom(by_name)
+	for e in open + locked:
+		if not locked.is_empty() and e == locked[0]:
+			var cap := Label.new()
+			cap.text = "Locked"
+			cap.theme_type_variation = "Caption"
+			col.add_child(cap)
+		var b := _opt(col, e["label"], e["on"], e["cb"], e["extra"])
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_gate(b, e["note"])
 
 func _opt(parent: Control, label: String, on: bool, cb: Callable, extra := "") -> Button:
 	var b := Button.new()
 	Icons.clicks(b)
 	b.text = ("● " if on else "") + label + extra
 	if on:
-		b.add_theme_color_override("font_color", COL_GOLD)
+		b.theme_type_variation = "Picked"
 	b.pressed.connect(cb)
 	parent.add_child(b)
 	return b
@@ -484,9 +590,7 @@ func _gate(b: Button, note: String) -> void:
 	if note == "":
 		return
 	b.disabled = true
-	b.text += "  · " + note
-	b.add_theme_color_override("font_color", COL_DIM)
-	b.add_theme_color_override("font_disabled_color", COL_DIM)
+	b.text += "   " + note
 
 # 1. basics ---------------------------------------------------------------
 
@@ -501,13 +605,14 @@ func _build_basics() -> void:
 	_body.add_child(name_edit)
 
 	_head("Species")
-	var f := _flow()
+	var entries: Array = []
 	for s in Catalog.all("species.json"):
 		var sid: String = s["id"]
-		var b := _opt(f, s["name"], ch.species_id == sid, func(): _set_species(sid),
-			"  (%d ft)" % int(s["speed"]))
-		if ch.species_id != sid:   # never take away what this character already is
-			_gate(b, lock_note("species", sid))
+		entries.append({"label": s["name"], "extra": "  (%d ft)" % int(s["speed"]),
+			"on": ch.species_id == sid, "cb": func(): _set_species(sid),
+			# never take away what this character already is
+			"note": lock_note("species", sid) if ch.species_id != sid else ""})
+	_pick_column(entries)
 	if ch.species_id != "":
 		var src := Catalog.species_src(ch.species_id)
 		_note("Size %s · speed %d ft · languages: %s" % [src["size"], int(src["speed"]),
@@ -515,6 +620,7 @@ func _build_basics() -> void:
 	# lineage / sub-species, when the data has one
 	for p in _choice_points_of(["lineage-choice"]):
 		_choice_widget(p)
+	_target = null
 
 	_head("Load a preset")
 	_note("Vera, Pike and Ilsa as real 5.5e builds — hand one back instead of building.")
@@ -522,6 +628,17 @@ func _build_basics() -> void:
 	for pre in [["Vera Kord (Fighter 3)", "vera"], ["Pike Sallow (Rogue 3)", "pike"],
 			["Ilsa Vane (Cleric 3)", "ilsa"]]:
 		_opt(pf, pre[0], false, func(): _load_preset(pre[1]))
+	# #104: the player's own, saved from the Review step
+	var mine: Array = Save.list_presets()
+	if not mine.is_empty():
+		_head("Your presets")
+		var mf := _flow()
+		for slug in mine:
+			var pre = Save.load_preset(slug)
+			if pre == null:
+				continue
+			_opt(mf, "%s (%s %d)" % [pre.cname, humanize(pre.class_id()), pre.level()], false,
+				func(): _load_user_preset(slug))
 
 func _set_species(sid: String) -> void:
 	if ch.species_id == sid:
@@ -536,32 +653,50 @@ func _load_preset(which: String) -> void:
 		"vera": ch = Presets.vera()
 		"pike": ch = Presets.pike()
 		"ilsa": ch = Presets.ilsa()
+	# The presets are level-3 builds; a preset joins a higher-level party at its
+	# level too. Topped up rather than rebuilt — what they already are is a real
+	# build with its choices made, and only the levels above it are missing.
+	Leveling.grant_levels(ch, start_level)
+	_goto(STEPS.size() - 1)
+
+func _load_user_preset(slug: String) -> void:
+	var pre = Save.load_preset(slug)
+	if pre == null:
+		_status.text = "That preset is gone."
+		return
+	ch = pre
+	Leveling.grant_levels(ch, start_level)
 	_goto(STEPS.size() - 1)
 
 # 2. class ----------------------------------------------------------------
 
 func _build_class() -> void:
 	_head("Class")
-	var f := _flow()
+	if start_level > 1:
+		_note("Joins at level %d to match the party, with %d XP banked. Catch-up levels are granted, not earned: none of that XP counts toward the lifetime XP that unlocks species and classes."
+			% [start_level, Leveling.xp_for_level(start_level)], COL_GOLD)
+	var entries: Array = []
 	for c in Catalog.all("classes.json"):
 		var cid: String = c["id"]
-		var b := _opt(f, "%s  %s" % [Icons.class_glyph(cid), c["name"]], ch.class_id() == cid,
-			func(): _set_class(cid), "  d%d" % int(c["hitDie"]))
-		if ch.class_id() != cid:
-			_gate(b, lock_note("class", cid))
+		entries.append({"label": "%s  %s" % [Icons.class_glyph(cid), c["name"]], "sort": c["name"], "extra": "  d%d" % int(c["hitDie"]),
+			"on": ch.class_id() == cid, "cb": func(): _set_class(cid),
+			"note": lock_note("class", cid) if ch.class_id() != cid else ""})
+	_pick_column(entries)
 	_build_free_picks()
 	if ch.class_id() != "":
 		var src := Catalog.class_src(ch.class_id())
 		var q: Dictionary = src["quickBuild"]
-		_note("Primary ability: %s · Hit die: d%d · Saves: %s" % [
+		_head(String(src["name"]))
+		_note("Leans on %s.  Hit die d%d.  Saves %s." % [
 			ABIL_NAME.get(src["primaryAbility"], "?"), int(src["hitDie"]),
-			", ".join(src["savingThrows"]).to_upper()])
-		_note("Quick build: highest %s, then %s; suggested background %s." % [
+			", ".join(src["savingThrows"]).to_upper()], COL_TEXT)
+		_note("Quick build: highest %s, then %s; %s makes a good background." % [
 			", ".join(q["highestAbility"]).to_upper(), String(q["secondaryAbility"]).to_upper(),
 			humanize(q["suggestedBackground"])])
-		_note("Armor: %s · Weapons: %s" % [
-			", ".join(src["armorProficiencies"]) if src["armorProficiencies"] else "none",
-			", ".join(src["weaponProficiencies"]) if src["weaponProficiencies"] else "none"])
+		_note("Armor: %s.  Weapons: %s." % [
+			", ".join(src["armorProficiencies"].map(humanize)) if src["armorProficiencies"] else "none",
+			", ".join(src["weaponProficiencies"].map(humanize)) if src["weaponProficiencies"] else "none"])
+	_target = null
 
 # T22: buying a class with lifetime XP comes with 2 of its 4 subclasses, free and
 # permanent. Until they are named none of the class's subclasses read as unlocked,
@@ -594,10 +729,33 @@ func _set_class(cid: String) -> void:
 	if ch.class_id() == cid:
 		return
 	_prune_choices(ch.class_id())
-	ch.levels.clear()
-	ch.add_level(cid, -1)
 	ch.equipped.clear()
+	_relevel(cid)
 	_refresh()
+
+# Builds the class out to start_level. Every level's grants arrive as pending
+# choices (subclass at 3, ASI/feat at 4, more spells...), so the Skills &
+# Background and Review steps ask for them exactly the way level 1's are asked
+# for, and Confirm stays blocked until they are all made. The banked XP is the
+# level's own cost and no more — a gift, never lifetime XP (see leveling.gd's
+# grant_levels).
+func _relevel(cid := "") -> void:
+	var class_id: String = cid if cid != "" else ch.class_id()
+	if class_id == "":
+		return
+	ch.levels.clear()
+	ch.xp = 0
+	Leveling.grant_levels(ch, start_level, class_id)
+
+# Injected before the creator is shown (scenes/party/party.gd). Also safe later:
+# the build is re-leveled in place and the screen redrawn.
+func set_start_level(n: int) -> void:
+	start_level = clampi(n, 1, Leveling.MAX_LEVEL)
+	if ch == null or ch.class_id() == "":
+		return
+	_relevel()
+	if is_inside_tree():
+		_refresh()
 
 # 3. abilities ------------------------------------------------------------
 
@@ -652,7 +810,7 @@ func _build_abilities() -> void:
 		tot.text = "→ %d (%+d)" % [t, (t - 10) / 2 if t >= 10 else int(floor((t - 10) / 2.0))]
 		tot.add_theme_color_override("font_color", COL_DIM)
 		grid.add_child(tot)
-	_note("Species and background bonuses (the → column) are applied by the resolver; the background's points are chosen on the next step.")
+	_note("The → column is the score after bonuses. The background's +2/+1 is picked on the next step and lands there too.")
 
 # Used to silently no-op outside Standard Array mode (the button looked
 # broken — nothing happened, no message). It also only ever set ability
@@ -713,9 +871,9 @@ func _build_choices() -> void:
 		_opt(f, b["name"], ch.background_id == bid, func(): _set_background(bid))
 	if ch.background_id != "":
 		var src := Catalog.background_src(ch.background_id)
-		_note("Skills: %s · Tools: %s · Origin feat: %s" % [
-			", ".join(src["skillProficiencies"]),
-			", ".join(src["toolProficiencies"]) if src["toolProficiencies"] else "none",
+		_note("Skills: %s.  Tools: %s.  Origin feat: %s." % [
+			", ".join(src["skillProficiencies"].map(humanize)),
+			", ".join(src["toolProficiencies"].map(humanize)) if src["toolProficiencies"] else "none",
 			humanize(src["originFeat"]) if src["originFeat"] != null else "none"])
 
 	_head("Choices")
@@ -740,12 +898,11 @@ func _set_background(bid: String) -> void:
 func _build_equipment() -> void:
 	var sheet = ch.sheet()
 	_head("Weapons  (pick up to %d)" % MAX_WEAPONS)
-	_note("Only weapons and armor are modeled — no PHB equipment packs in the export yet.")
+	_note("What they carry into the first fight. Packs, tools and trinkets are not on the shelf.")
 	var wf := _flow()
 	for wid in proficient_weapons(sheet):
 		var w := Catalog.weapon(wid)
-		var extra := "  %s %s" % [w["damageDice"], String(w["damageType"]).substr(0, 4)]
-		_opt(wf, w["name"], wid in ch.equipped, func(): _toggle_weapon(wid), extra)
+		_item_opt(wf, wid, w, "weapon", wid in ch.equipped, func(): _toggle_weapon(wid))
 
 	_head("Armor")
 	var af := _flow()
@@ -754,10 +911,21 @@ func _build_equipment() -> void:
 		if aid == "shield":
 			continue
 		var a := Catalog.armor(aid)
-		_opt(af, a["name"], aid in ch.equipped, func(): _set_armor(aid), "  AC %d" % int(a["baseAc"]))
+		_item_opt(af, aid, a, "armor", aid in ch.equipped, func(): _set_armor(aid))
 	if "shield" in proficient_armor(sheet):
-		_opt(_flow(), "Shield (+2 AC)", "shield" in ch.equipped, func(): _toggle_equip("shield"))
+		_item_opt(_flow(), "shield", Catalog.armor("shield"), "armor", "shield" in ch.equipped,
+			func(): _toggle_equip("shield"))
 	_note("Equipped: %s" % (", ".join(ch.equipped) if ch.equipped else "nothing"))
+
+# T9a: gear is picked off its picture, like the inventory — the numbers are
+# the hover text, the name the caption, "Picked" the same highlight _opt uses.
+func _item_opt(parent: Control, iid: String, def: Dictionary, kind: String, on: bool, cb: Callable) -> Button:
+	var b := Icons.item_tile(iid, Icons.item_tooltip(iid, def, kind), String(def.get("name", iid)))
+	if on:
+		b.theme_type_variation = "Picked"
+	b.pressed.connect(cb)
+	parent.add_child(b)
+	return b
 
 func _has_body_armor() -> bool:
 	for e in ch.equipped:
@@ -800,13 +968,16 @@ func _toggle_equip(id: String) -> void:
 
 func _build_review() -> void:
 	var sheet = ch.sheet()
-	_head(ch.cname)
-	var r := RichTextLabel.new()
-	r.bbcode_enabled = true
-	r.fit_content = true
-	r.add_theme_color_override("default_color", COL_TEXT)
-	r.text = _sheet_bbcode(true)
-	_body.add_child(r)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	_body.add_child(box)
+	_sheet_into(box, true)
+	# #104: keep the build to make again later, whoever this one becomes
+	var keep := _opt(_flow(), "Save as preset", false, func():
+		var path := Save.save_preset(ch)
+		_status.text = ("Kept as a preset: %s — it is on the Basics page from now on." % ch.cname) if path != "" \
+			else "Could not write the preset.")
+	keep.tooltip_text = "Keeps this build under its name. Start a new character from it on the Basics page."
 	if not sheet.choice_points.is_empty():
 		_head("Unmade choices" if not sheet.pending.is_empty() else "Choices")
 		for p in _choice_points_of([]):
@@ -814,28 +985,25 @@ func _build_review() -> void:
 
 # --- choice widgets -------------------------------------------------------
 
-# Every choice point the build has reached, optionally filtered to a set of types.
-# Still-open ones first so the screen reads top-down as "what's left, then what you
-# already picked" (and so a driver pressing the first matching option hits an open one).
+# Every choice point the build has reached, optionally filtered to a set of types,
+# in the resolver's own order — a choice keeps its place on the page whether or
+# not it is made yet, so picking one never shuffles the rest under the cursor.
 func _choice_points_of(types: Array) -> Array:
-	var out: Array = []
-	for want_decided in [false, true]:
-		for p in ch.sheet().choice_points:
-			if bool(p.get("decided", false)) == want_decided and (types.is_empty() or p["type"] in types):
-				out.append(p)
-	return out
+	return ch.sheet().choice_points.filter(func(p): return types.is_empty() or p["type"] in types)
 
 func _choice_widget(p: Dictionary) -> void:
 	var sheet = ch.sheet()
 	var picks := picks_from_decision(p, ch.choices.get(p["key"]))
 	var n := pick_count(p)
 	var src: Dictionary = p["source"]
+	if p["type"] == "spell-choice":   # a pool shorter than the grant asks for all of it
+		n = mini(n, Effects.pick_pool(p["spellList"], int(p["spellLevel"])).size())
 	_head("%s%s — pick %d  (%d chosen)" % ["✓ " if p.get("decided", false) else "",
 		humanize(p["type"]).replace(" choice", ""), n, picks.size()])
 	_note("from %s %s%s" % [src["origin"], humanize(src["id"]),
 		"  ·  already chosen, click to change" if p.get("decided", false) else ""])
 	var f := _flow()
-	var opts := options_for(p, sheet)
+	var opts := options_for(p, sheet, picks)
 	if opts.is_empty():
 		_note("No options available.", COL_WARN)
 	for o in opts:
@@ -863,48 +1031,115 @@ func _pick(p: Dictionary, id: String) -> void:
 
 # --- the live sheet -------------------------------------------------------
 
-func _sheet_bbcode(full: bool) -> String:
+# #81: the sheet, laid out like one. A name block, the five numbers a fight
+# reads first as a row of tiles, the six abilities as tiles with modifier and
+# save under each, then the captioned prose (_sheet_bbcode). Built into
+# `parent` fresh each time; the side panel and the Review page share it.
+func _sheet_into(parent: Container, full: bool) -> void:
+	for c in parent.get_children():
+		parent.remove_child(c)
+		c.queue_free()
 	var sheet = ch.sheet()
 	var cls := humanize(ch.class_id()) if ch.class_id() != "" else "—"
 	var sub := ""
 	if sheet.subclasses.has(ch.class_id()):
 		sub = " (%s)" % humanize(sheet.subclasses[ch.class_id()])
-	var s := "[b][color=#c8a75a]%s[/color][/b]\n%s %s %s%s %d\n\n" % [ch.cname,
+	var name := Label.new()
+	name.text = ch.cname
+	name.theme_type_variation = "Head"
+	name.add_theme_color_override("font_color", COL_GOLD)
+	parent.add_child(name)
+	var line := Label.new()
+	line.text = "%s  ·  %s %s%s  ·  level %d" % [
 		humanize(ch.species_id) if ch.species_id != "" else "—",
 		Icons.class_glyph(ch.class_id()), cls, sub, max(1, sheet.level)]
-	s += "[b]AC[/b] %d   [b]HP[/b] %d   [b]Speed[/b] %d ft   [b]PB[/b] +%d   [b]Init[/b] %+d\n\n" % [
-		sheet.ac, sheet.max_hp, int(sheet.speeds.get("walk", 30)), sheet.proficiency_bonus, sheet.initiative]
-	var ab: Array = []
+	line.theme_type_variation = "Dim"
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	parent.add_child(line)
+	parent.add_child(_rule())
+	var stats := GridContainer.new()
+	stats.columns = 5
+	parent.add_child(stats)
+	for st in [["AC", str(sheet.ac)], ["HP", str(sheet.max_hp)],
+			["Speed", "%d ft" % int(sheet.speeds.get("walk", 30))],
+			["Prof.", "+%d" % sheet.proficiency_bonus], ["Init.", "%+d" % sheet.initiative]]:
+		stats.add_child(_tile(st[0], [[st[1], Icons.COL_HEAD, 22]]))
+	parent.add_child(_rule())
+	var abils := GridContainer.new()
+	abils.columns = 6
+	parent.add_child(abils)
 	for a in ABILS:
 		var t := int(sheet.abilities[a]["total"]) if sheet.abilities.has(a) else 10
-		ab.append("%s %d (%+d)" % [ABIL_NAME[a], t, sheet.mod(a)])
-	s += "  ".join(ab) + "\n\n"
-	var sv: Array = []
-	for a in ABILS:
-		sv.append("%s %+d%s" % [ABIL_NAME[a], int(sheet.saves.get(a, 0)),
-			"*" if sheet.save_prof.get(a, false) else ""])
-	s += "[b]Saves[/b] " + "  ".join(sv) + "\n"
+		var prof: bool = sheet.save_prof.get(a, false)
+		abils.add_child(_tile(ABIL_NAME[a], [
+			[str(t), Icons.COL_HEAD, 20], ["%+d" % sheet.mod(a), COL_TEXT, Icons.FS_BODY],
+			[("● " if prof else "") + "%+d" % int(sheet.saves.get(a, 0)), COL_GOLD if prof else COL_DIM, Icons.FS_SMALL]]))
+	var key := Label.new()
+	key.text = "score · modifier · save (● proficient)"
+	key.theme_type_variation = "Dim"
+	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	parent.add_child(key)
+	parent.add_child(_rule())
+	var r := RichTextLabel.new()
+	r.bbcode_enabled = true
+	r.fit_content = true
+	r.add_theme_color_override("default_color", COL_TEXT)
+	r.text = _sheet_bbcode(full)
+	parent.add_child(r)
+
+# One tile of the sheet: a gilt caption over one or more values, each
+# [text, colour, font size], centred.
+static func _tile(caption: String, rows: Array) -> Control:
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 0)
+	var c := Label.new()
+	c.text = caption.to_upper()
+	c.theme_type_variation = "Caption"
+	c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(c)
+	for row in rows:
+		var l := Label.new()
+		l.text = String(row[0])
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.add_theme_color_override("font_color", row[1])
+		l.add_theme_font_size_override("font_size", int(row[2]))
+		v.add_child(l)
+	return v
+
+static func _rule() -> Control:
+	var h := ColorRect.new()
+	h.color = Icons.COL_GOLD_EDGE
+	h.custom_minimum_size = Vector2(0, 1)
+	return h
+
+# The prose half of the sheet: skills, attacks, spells, features — and on the
+# Review page, everything.
+func _sheet_bbcode(full: bool) -> String:
+	var sheet = ch.sheet()
+	var s := ""
 	var sk: Array = []
 	for k in sheet.skill_prof:
 		if sheet.skill_prof[k] != "none":
-			sk.append("%s %+d%s" % [Catalog.skills().get(k, {}).get("name", k),
-				int(sheet.skills[k]), "E" if sheet.skill_prof[k] == "expert" else ""])
-	s += "[b]Skills[/b] " + (", ".join(sk) if sk else "none") + "\n"
-	s += "[b]Passive Perception[/b] %d\n\n" % sheet.passive_perception
-	s += "[b]Attacks[/b]\n"
+			sk.append("%s [color=#f1e6cf]%+d[/color]%s" % [Catalog.skills().get(k, {}).get("name", k),
+				int(sheet.skills[k]), " [color=#c9a45a]E[/color]" if sheet.skill_prof[k] == "expert" else ""])
+	s += _cap("Skills") + "  " + (", ".join(sk) if sk else "[color=#8a7f6e]none[/color]") + "\n"
+	s += _cap("Passive Perception") + "  [color=#f1e6cf]%d[/color]\n[hr color=#7a6234]\n" % sheet.passive_perception
+	s += _cap("Attacks") + "\n"
 	if sheet.attacks.is_empty():
-		s += "  none\n"
+		s += "[color=#8a7f6e]  none[/color]\n"
 	for atk in sheet.attacks:
-		s += "  %s %+d, %s %s\n" % [atk["name"], int(atk["to_hit"]), atk["notation"], atk["damage_type"]]
+		s += "  %s  [color=#f1e6cf]%+d[/color]  [color=#b9ae9b]%s %s[/color]\n" % [
+			atk["name"], int(atk["to_hit"]), atk["notation"], atk["damage_type"]]
 	if not sheet.spellcasting.is_empty():
 		var sc: Dictionary = sheet.spellcasting
 		var slots: Array = []
 		for i in sc.get("slots", []).size():
 			if int(sc["slots"][i]) > 0:
 				slots.append("L%d×%d" % [i + 1, int(sc["slots"][i])])
-		s += "\n[b]Spellcasting[/b] %s  DC %d  atk %+d\n  slots: %s\n" % [
-			String(sc["ability"]).to_upper(), int(sc["save_dc"]), int(sc["attack_bonus"]),
-			", ".join(slots) if slots else "none"]
+		s += "[hr color=#7a6234]\n" + _cap("Spellcasting") + "  %s  ·  DC [color=#f1e6cf]%d[/color]  ·  attack [color=#f1e6cf]%+d[/color]\n" % [
+			String(sc["ability"]).to_upper(), int(sc["save_dc"]), int(sc["attack_bonus"])]
+		s += "  slots: %s\n" % (", ".join(slots) if slots else "[color=#8a7f6e]none[/color]")
 		if full:
 			var known: Array = []
 			for k in sc.get("cantrips", []):
@@ -916,24 +1151,35 @@ func _sheet_bbcode(full: bool) -> String:
 			if known:
 				s += "  spells: %s\n" % ", ".join(known)
 	if full:
-		s += "\n[b]Features[/b]\n"
+		s += "[hr color=#7a6234]\n" + _cap("Features") + "\n"
 		for fid in sheet.features:
-			s += "  · %s\n" % humanize(fid)
+			s += "  · %s [color=#8a8478]%s[/color]\n" % [Effects.verb_label(fid), Effects.feature_source(fid)]
 		if not sheet.pools.is_empty():
-			s += "\n[b]Resources[/b]\n"
+			s += "[hr color=#7a6234]\n" + _cap("Resources") + "\n"
 			for p in sheet.pools:
 				s += "  · %s ×%d\n" % [humanize(p["id"]), int(p["max"])]
 		if not sheet.equipment.is_empty():
-			s += "\n[b]Equipment[/b] %s\n" % ", ".join(ch.equipped)
+			s += "[hr color=#7a6234]\n" + _cap("Equipment") + "  %s\n" % ", ".join(ch.equipped)
 	if not sheet.pending.is_empty():
-		s += "\n[color=#d15750][b]%d choice(s) left[/b][/color]\n" % sheet.pending.size()
+		s += "[hr color=#7a6234]\n[color=#d15750][b]%d choice%s left[/b][/color]\n" % [sheet.pending.size(), "" if sheet.pending.size() == 1 else "s"]
+		var kinds := {}   # the same kind twice is one line with a count, not two lines
+		var order: Array = []
 		for p in sheet.pending:
-			s += "[color=#d15750]  · %s[/color]\n" % humanize(p["type"])
+			var k := humanize(p["type"])
+			if not kinds.has(k):
+				order.append(k)
+			kinds[k] = int(kinds.get(k, 0)) + 1
+		for k in order:
+			s += "[color=#d15750]  · %s%s[/color]\n" % [k, ("  ×%d" % kinds[k]) if kinds[k] > 1 else ""]
 	if not sheet.warnings.is_empty() and full:
-		s += "\n[color=#c8a75a]warnings:[/color]\n"
+		s += "[hr color=#7a6234]\n[color=#c9a45a]warnings:[/color]\n"
 		for w in sheet.warnings:
 			s += "  %s\n" % w
 	return s
+
+# A section caption on the sheet: small, gilt, the way Icons' "Caption" type reads.
+static func _cap(text: String) -> String:
+	return "[font_size=13][color=#c9a45a]%s[/color][/font_size]" % text.to_upper()
 
 # A class/species/background swap leaves that source's decisions behind; drop them
 # so the old pick can't silently satisfy a same-keyed grant on the new one.

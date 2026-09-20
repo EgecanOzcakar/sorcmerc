@@ -8,19 +8,21 @@
 # camera tilts with it; there is no second source of truth for the projection.
 #
 # What this layer does NOT own: shadow, active-turn ring, hit flash, HP bar, condition
-# tags. Those stay in Board._draw, shared with every tier — same contract as the LPC
+# tags. Those stay in Board._draw, shared with every tier — same contract as the
 # sprite tier. Layering caveat: this draws above Board._draw, so a figure can cover the
 # HP bar of the hex behind it. Moving the HUD to a CanvasLayer above this is the fix;
 # ~30 lines, deliberately not in the spike.
-extends SubViewportContainer
+extends "res://scenes/native_layer.gd"
 
 const Catalog = preload("res://core/rules/catalog.gd")
+const Props3D = preload("res://scenes/world/props3d.gd")
 
-# Same contract as LpcArt.BY_MONSTER (core/lpc_art.gd): a lookup, not a hardcoded
+# A lookup, not a hardcoded
 # model, because coverage will always trail the 316-entry bestiary. A key with no
 # file on disk yet (roster generation is a slow background batch, see kitbashforge)
 # just falls through has_figure() to the vector disc/glyph tier — that's the
-# design, same as an uncovered LPC loadout, not a bug to chase per-monster.
+# design — the vector disc/glyph draws whoever the models do not cover — not a
+# bug to chase per-monster.
 #
 # Heroes key by class id (core/character.gd, ids from data/classes.json — all 12);
 # foes by Catalog.monster(id)["faction"] (data/bestiary.json) — one look per
@@ -48,14 +50,25 @@ const FOE_MODELS := {
 	"cultist": "res://assets/figures/cultist_idle.glb",
 	"kobold": "res://assets/figures/kobold_idle.glb",
 	"undead": "res://assets/figures/undead_idle.glb",
+	# The one beast without its own file under BEAST_DIR stands in as a wolf, and
+	# so does a beast band on the overworld (party3d.gd reads this table).
+	"beast": "res://assets/beasts/wolf.glb",
 }
+# Beasts key by bestiary id, one static Meshy model each (tools/import_beasts.py
+# writes assets/beasts/<id>.glb); a missing file falls through to FOE_MODELS by
+# faction, then to the vector tier, same as before.
+const BEAST_DIR := "res://assets/beasts/%s.glb"
+# A beast arrives at whatever scale and origin Meshy chose, with no rig to
+# normalise it the way the 1.2 m hero rigs are. Fit by the bestiary's size
+# category instead: the model's longest extent, in rig metres, so a Medium wolf
+# is about as long as a hero is tall and a rat is a rat.
+const BEAST_SPAN := {"Tiny": 0.5, "Small": 1.0, "Medium": 1.5, "Large": 2.0, "Huge": 2.6, "Gargantuan": 3.2}
 const FIGURE_SCALE := 1.25     # rig is 1.2 m tall, feet at y=0; ~1.5 hex radii so neighbours do not stack
 const CAM_DIST := 40.0
 
 var board: Control
 var main
 var cb
-var _sub: SubViewport
 var _cam: Camera3D
 var _figs := {}                # combatant id -> Node3D
 var _prev := {}                # combatant id -> last world position, for facing
@@ -64,7 +77,6 @@ var _model_cache := {}         # path -> PackedScene, or null once if missing
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	stretch = true
 	mouse_filter = Control.MOUSE_FILTER_IGNORE     # clicks fall through to the Board
 	_sub = SubViewport.new()
 	_sub.transparent_bg = true
@@ -116,7 +128,25 @@ func _model_path(c) -> String:
 		return String(HERO_MODELS.get(cid, ""))
 	if c.src_id == "":
 		return ""
+	var by_id := BEAST_DIR % c.src_id
+	if ResourceLoader.exists(by_id):
+		return by_id
 	return String(FOE_MODELS.get(String(Catalog.monster(c.src_id).get("faction", "")), ""))
+
+
+# Uniform-scale a beast model to BEAST_SPAN for its bestiary size, centred on
+# its hex with its lowest point on the ground. The hero/faction rigs skip this:
+# Meshy normalised those to 1.2 m itself. (The one rigged beast, the ape, is
+# 0.005 units tall raw, so it goes through here like the rest — _bounds() reads
+# mesh space, one level up, which is the right answer for it too.)
+static func fit_beast(m: Node3D, id: String) -> void:
+	var aabb := Props3D._bounds(m)
+	var extent := maxf(aabb.size.x, maxf(aabb.size.y, aabb.size.z))
+	if extent <= 0.0001:
+		return
+	var k: float = float(BEAST_SPAN.get(Catalog.monster(id).get("size", "Medium"), 1.5)) / extent
+	m.scale = Vector3.ONE * k
+	m.position = -Vector3(aabb.position.x + aabb.size.x * 0.5, aabb.position.y, aabb.position.z + aabb.size.z * 0.5) * k
 
 
 func _model(path: String) -> PackedScene:
@@ -136,7 +166,8 @@ func reset(_cb) -> void:
 	_figs.clear()
 	_prev.clear()
 	for c in cb.combatants:
-		var scene := _model(_model_path(c))
+		var path := _model_path(c)
+		var scene := _model(path)
 		if scene == null:
 			continue          # no model for this class/faction yet — vector disc/glyph tier draws it
 		var holder := Node3D.new()
@@ -149,6 +180,8 @@ func reset(_cb) -> void:
 			ap.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
 			ap.play(clip)
 			ap.seek(randf() * ap.get_animation(clip).length)   # desync the roster
+		if path.begins_with(BEAST_DIR.get_base_dir()):
+			fit_beast(m, c.src_id)
 		_figs[c.id] = holder
 
 
@@ -183,6 +216,7 @@ func _process(_dt: float) -> void:
 	# Anchors alone don't track the Board (it isn't a Container): pin the rect by hand.
 	position = Vector2.ZERO
 	size = board.size
+	present()                       # native-pixel viewport for this rect (native_layer.gd)
 	var th := theta()
 	var target := world_for_screen(board.size * 0.5)          # ground under the centre
 	var back := Vector3(0.0, sin(th), cos(th))

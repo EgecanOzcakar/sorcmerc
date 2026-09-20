@@ -28,6 +28,7 @@
 #    keep it for the next event.
 extends Control
 
+const Catalog = preload("res://core/rules/catalog.gd")
 const Icons = preload("res://core/ui_icons.gd")
 
 # The only thing the world screen has to listen for. Emitted exactly once per
@@ -48,10 +49,13 @@ const BAR_W := 5.0            # the kind stripe down the panel's left edge
 # strength; this is that, in whichever colour the event's kind is.
 const BORDER_ALPHA := 0.5
 
-# travel.gd's longest text (a passed "tracks" plus the lair name it appends) is
-# three lines at PANEL_MAX_W and six at ~400px. The cap exists only so a future
-# event with a paragraph in it cannot grow the card off the screen.
-const BODY_LINES := 6
+# travel.gd's longest text (D3.1's carter, plus the settlement name it appends)
+# measures three lines at PANEL_MAX_W, four at ~400px and seven at PANEL_MIN_W.
+# The cap exists only so a future event with a paragraph in it cannot grow the
+# card off the screen — which means it has to sit ABOVE the longest thing the
+# table can actually say, because _wrap() drops what does not fit rather than
+# scrolling it. Six was under the carter at the narrow end; eight clears it.
+const BODY_LINES := 8
 const TITLE_LINES := 2
 const LINE_GAP := 5.0         # between wrapped lines of the same block
 const BLOCK_GAP := 12.0       # between blocks
@@ -102,6 +106,10 @@ var _dismissed := true        # nothing to dismiss until show_event() says so
 # cannot drift apart — the same contract site_screen.gd's _rows()/_xs() keeps.
 var _ops: Array = []
 var _panel := Rect2()
+var _art: Texture2D = null   # the event's picture, its outcome's frame when it has one
+var _art_rect := Rect2()
+const ART_H := 320.0         # the picture's height on the card (#83: the whole 1:1 picture, so square-ish)
+const ART_MIN_H := 110.0     # below this it is a strip, not a picture: leave it out
 
 
 func _ready() -> void:
@@ -126,6 +134,8 @@ func _notification(what: int) -> void:
 # concerned, including all of them.
 func show_event(e: Dictionary) -> void:
 	_e = e.duplicate() if e != null else {}
+	_art = Icons.scene_art(("" if _s("id").begins_with("camp-") else "event-") + _s("id"),
+		_e.get("ok") if _e.has("ok") else null) if _e.has("id") else null
 	_dismissed = false
 	visible = true
 	_ensure_button()
@@ -189,9 +199,23 @@ func _flag(key: String) -> bool:
 # the roll. Signed bonus rather than world.gd's "%d+%d": a forced march is a -2
 # (travel.gd's PACE), and "14+-2" is not a roll anybody can read.
 func _roll_text() -> String:
-	var skill := _s("skill", "check").capitalize()
-	return "%s %d%s vs DC %d" % [skill, int(_num("nat")),
+	return "%s %d%s vs DC %d" % [_skill_label(), int(_num("nat")),
 		"%+d" % int(_num("bonus")), int(_num("dc"))]
+
+
+# The catalog's own name for the skill, falling back to the id dressed up.
+# capitalize() alone is right for every single-word skill and wrong for the one
+# that is two: "animalhandling" is an id, "Animal Handling" is what the sheet
+# calls it, and the road rolls it (travel.gd's carter). Catalog.skills() is a
+# cached parse, so this is a dictionary lookup per draw.
+func _skill_label() -> String:
+	var id := _s("skill", "check")
+	var entry: Variant = Catalog.skills().get(id, null)
+	if entry is Dictionary:
+		var named := String(entry.get("name", ""))
+		if named != "":
+			return named
+	return id.capitalize()
 
 
 func _cname() -> String:
@@ -212,7 +236,9 @@ func _ensure_button() -> void:
 	add_child(_btn)
 
 
-func _layout() -> void:
+# `art_h` < 0 asks for the full banner; the pass below hands back a smaller
+# one (or 0) when the card would run off the window with it.
+func _layout(art_h := -1.0) -> void:
 	_ops.clear()
 	var pw := minf(PANEL_MAX_W, maxf(PANEL_MIN_W, size.x - MARGIN * 2.0))
 	var tx := BAR_W + PAD                                   # text inset, panel-relative
@@ -231,6 +257,13 @@ func _layout() -> void:
 	rel.append(_op(Vector2(tx, y + Icons.FS_CAPTION), glyph, Icons.FS_HEAD, kind_col, avail))
 	rel.append(_op(Vector2(tx + gw, y + Icons.FS_CAPTION), cap, Icons.FS_CAPTION, kind_col, avail - gw))
 	y += Icons.FS_CAPTION + 10.0
+
+	_art_rect = Rect2()
+	if art_h < 0.0:
+		art_h = ART_H
+	if _art != null and art_h >= ART_MIN_H:
+		_art_rect = Rect2(tx, y, avail, art_h)   # panel-relative; moved with the ops below
+		y += art_h + BLOCK_GAP
 
 	var title := _s("title", NO_TITLE)
 	for tline in _wrap(title, Icons.FS_TITLE, avail, TITLE_LINES):
@@ -313,9 +346,15 @@ func _layout() -> void:
 	# Centred, and clamped off the top so a tall card on a short window loses its
 	# bottom (which is the button, still reachable by Enter) rather than its title.
 	var ph := y
+	var over := ph - (size.y - MARGIN * 2.0)   # the banner yields to the words (see approach_card.gd)
+	if over > 0.0 and _art_rect.size.y > 0.0:
+		var less := _art_rect.size.y - over
+		_layout(less if less >= ART_MIN_H else 0.0)
+		return
 	var px := (size.x - pw) * 0.5
 	var py := maxf(MARGIN, (size.y - ph) * 0.5)
 	_panel = Rect2(px, py, pw, ph)
+	_art_rect.position += _panel.position
 	for op in rel:
 		var moved: Dictionary = op.duplicate()
 		if moved.has("pos"):
@@ -340,20 +379,38 @@ func _op(pos: Vector2, text: String, fs: int, col: Color, max_w: float) -> Dicti
 # what happened, the chips say what it is worth.
 func _chips() -> Array:
 	var out: Array = []
+	# Signed rather than always "+": D3.1 put costs on the purse too (a ford that
+	# takes a pack, a toll post that is paid), and "+-40 gold" is not a number
+	# anybody can read. Colour carries the sign as well, so the direction is
+	# legible before the digits are.
 	var gold := int(_num("gold"))
 	if gold != 0:
-		out.append({"text": "+%d gold" % gold, "col": Icons.COL_GOLD})
+		out.append({"text": "%+d gold" % gold,
+			"col": Icons.COL_GOLD if gold > 0 else Icons.COL_FOE})
 	var hurt := int(_num("hurt"))
 	if hurt > 0:
 		out.append({"text": "-%d hp across the party" % hurt, "col": Icons.COL_FOE})
+	var healed := int(_num("healed"))
+	if healed > 0:
+		out.append({"text": "+%d hp across the party" % healed, "col": Icons.COL_PARTY})
 	var m := _num("minutes")
 	# Under a minute is not a consequence, it is rounding.
 	if absf(m) >= 1.0:
 		out.append({"text": "%s %s" % [_span(absf(m)), "lost on the road" if m > 0.0 else "saved"],
 			"col": Icons.COL_FOE if m > 0.0 else Icons.COL_PARTY})
+	var item := _s("item_name")
+	if item != "":
+		out.append({"text": "%s — in the stash" % item, "col": Icons.COL_GOLD})
 	var lair := _s("lair")
 	if lair != "":
 		out.append({"text": "%s — on the map now" % lair, "col": Icons.COL_ACCENT})
+	# Goodwill has no number on this card on purpose: the score it moves is a
+	# faction's (core/faction_opinion.gd) and it is read in their markets and
+	# their quest boards, not here. Naming who heard about it is the part the
+	# player can act on.
+	var thanks := _s("thanks")
+	if thanks != "":
+		out.append({"text": "%s hears of it" % thanks, "col": Icons.COL_ACCENT})
 	return out
 
 
@@ -408,6 +465,12 @@ func _draw() -> void:
 	# border is COL_GOLD at half strength, and a kind-tinted one is the same idea
 	# one step further, so a bad card is not a red stripe inside a gold box.
 	draw_rect(_panel, Color(_kind_color(), BORDER_ALPHA), false, 1.0)
+	if _art != null and _art_rect.size.x > 0.0:
+		# #83: the whole picture, fitted inside the slot and centred — it used
+		# to be cropped to a banner, which lost most of a 1:1 scene.
+		var dst := Icons.fit_rect(_art.get_size(), _art_rect)
+		draw_texture_rect(_art, dst, false)
+		draw_rect(dst, Color(_kind_color(), 0.55), false, 1.0)
 	for op in _ops:
 		var o: Dictionary = op
 		if o.has("rect"):
@@ -427,12 +490,12 @@ func _draw() -> void:
 func _text(at: Vector2, s: String, fs: int, col: Color, max_w := -1.0) -> void:
 	if s == "":
 		return
-	draw_string(ThemeDB.fallback_font, at, s, HORIZONTAL_ALIGNMENT_LEFT,
+	draw_string(Icons.sans(), at, s, HORIZONTAL_ALIGNMENT_LEFT,
 		max_w if max_w > 0.0 else -1.0, fs, col)
 
 
 func _w(s: String, fs: int) -> float:
-	return ThemeDB.fallback_font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	return Icons.sans().get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 
 
 func _wrap(text: String, fs: int, max_w: float, max_lines: int) -> PackedStringArray:

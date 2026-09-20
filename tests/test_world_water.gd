@@ -34,6 +34,7 @@ func _init() -> void:
 	test_shoreline_march_slides()
 	test_a_party_in_water_can_leave()
 	test_npc_bands_obey_the_bank()
+	test_a_destination_in_the_lake_still_resolves()
 	test_built_in_maps_are_dry_where_they_matter()
 	print("test_world_water: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -49,27 +50,35 @@ func test_march_stops_at_the_bank() -> void:
 	var w := _lake_world()
 	var p := w.add_party(World.RoamingParty.new("player", Vector2(-200, 0), "human", true))
 	w.set_goal(p, Vector2(200, 0))   # dry goal, straight through the lake
-	check(p.goal == Vector2(200, 0), "a dry goal is taken as given")
+	# #95: the click is routed round the water (core/world_path.gd), a waypoint
+	# at a time: the first goal is a bank corner, the rest queue on the party.
+	check(p.goal != Vector2(200, 0) and not p.route.is_empty() and p.route[-1] == Vector2(200, 0),
+		"a goal across a lake is routed round it, ending where the click was")
+	check(not p.at_goal(), "...and a party with legs still to walk is not 'arrived' at its first corner")
 
 	for i in 20:
 		w.tick(1.0)
 	check(not w.is_water(p.position), "the party never ends up in the water")
-	check(p.position.x < -LAKE_R, "it stopped on the near side, it did not cross")
-	check(w.water_depth(p.position) < World.WATER_STEP,
-		"...and it got within one step of the bank rather than halting early")
-
-	# One absurd tick is the tunnelling case: 8x speed and a fat frame must not
-	# teleport a party over a river between two water checks.
-	var before := p.position
+	check(p.position.x > -LAKE_R, "it is on its way round, not stuck on the near bank")
+	# One absurd tick: 8x speed and a fat frame walk the whole route, hop by
+	# hop, and still never set foot in the water.
 	w.tick(100.0)
-	check(p.position.is_equal_approx(before), "a huge tick does not jump the lake either")
+	check(p.position.is_equal_approx(Vector2(200, 0)) and p.at_goal(), "a huge tick walks the rest of the way round and arrives")
+	check(not w.is_water(p.position), "...dry-shod")
+	# The old rule still holds where there is no way round: an island goal.
+	var island := World.new()
+	island.add_water(Vector2.ZERO, 100.0)
+	var q := island.add_party(World.RoamingParty.new("q", Vector2(-200, 0), "human", true))
+	island.set_goal(q, Vector2(-150, 0))
+	check(q.route.is_empty() and q.goal == Vector2(-150, 0), "a dry goal on a dry line is taken as given, no route")
 
 func test_goal_in_a_lake_snaps_to_land() -> void:
 	var w := _lake_world()
 	var p := w.add_party(World.RoamingParty.new("player", Vector2(-200, 0), "human", true))
 	w.set_goal(p, LAKE)
 	check(not w.is_water(p.goal), "a goal in the middle of a lake resolves to land")
-	check(p.goal.x < 0.0 and p.goal.x >= -200.0, "...on the party's own side of it")
+	var last: Vector2 = p.route[-1] if not p.route.is_empty() else p.goal
+	check(not w.is_water(last) and w.water_depth(last) < World.WATER_STEP, "...at the bank nearest the click (#95)")
 	check(p.goal.distance_to(LAKE) - LAKE_R < World.WATER_STEP, "...right at the bank, not back at the party")
 
 	for i in 20:
@@ -117,12 +126,47 @@ func test_npc_bands_obey_the_bank() -> void:
 	var prey := w.add_party(World.RoamingParty.new("player", Vector2(200, 0), "human", true))
 	var band := w.add_party(World.RoamingParty.new("bandits", Vector2(-200, 0), "bandit"))
 	WorldAI.hunt(band)
-	for i in 20:
+	WorldAI.update(w)
+	# T-path: the band used to aim straight through the lake, walk to its own
+	# bank and hunt from there for the rest of the campaign. It still WANTS the
+	# spot the prey is standing on — that is its destination — but the goal it
+	# marches at is now the first corner of a route round the water.
+	check(WorldAI.destination(band) == prey.position, "the band still hunts the party across the water")
+	check(band.goal != prey.position, "...but it marches at a waypoint round the lake, not through it")
+	check(not WorldAI.pending_route(band).is_empty(), "...because a route was planned for it")
+	for wp in WorldAI.pending_route(band):
+		check(not w.is_water(wp), "every waypoint of that route is on dry land")
+
+	var swung := 0.0
+	for i in 30:
 		WorldAI.update(w)
 		w.tick(1.0)
 		check(not w.is_water(band.position), "an NPC band never wades in either")
-	check(band.goal == prey.position, "...even though its goal is set straight across the water")
-	check(band.position.x < -LAKE_R, "the band is held on its own bank")
+		swung = maxf(swung, absf(band.position.y))
+	check(swung > LAKE_R, "it swung clear of the lake rather than skimming the bank")
+	check(band.position.distance_to(prey.position) < 1.0, "...and got round to its prey")
+	check(WorldAI.pending_route(band).is_empty(), "the route is dropped once the line is clear")
+
+# T-path: a band's destination is not always somewhere it can stand. A wander
+# roll lands in the lake sooner or later, and a hand-placed patrol leg can run
+# over one — both used to mean the band walked to the bank and waited there
+# forever for an arrival that could not happen, so the behavior on top of it
+# (the next patrol leg, the next wander roll) never ran again.
+func test_a_destination_in_the_lake_still_resolves() -> void:
+	var w := _lake_world()
+	var band := w.add_party(World.RoamingParty.new("goblins", Vector2(-200, 0), "goblinoid"))
+	WorldAI.patrol(band, [LAKE, Vector2(-200, 0)])
+	WorldAI.update(w)
+	check(not w.is_water(WorldAI.destination(band)), "a patrol leg dropped in the lake resolves to the bank")
+	check(WorldAI.destination(band).distance_to(LAKE) - LAKE_R < World.WATER_STEP,
+		"...at the bank, not back where the band was standing")
+	var legs := 0
+	for i in 60:
+		WorldAI.update(w)
+		w.tick(1.0)
+		if band.position.is_equal_approx(WorldAI.destination(band)):
+			legs += 1
+	check(legs > 0, "the band arrives, so the patrol goes on instead of stalling at the water")
 
 # Every map owns its own placement (ProceduralWorld picks the lake's spot; the
 # two hand-placed maps stamp theirs by hand), so a band or a lair standing in

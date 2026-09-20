@@ -11,9 +11,24 @@ lpc_spike.png*
 lpc_spike_credits.png*
 tools/__pycache__/
 world_screen.png*
-icon_sheet.png
+world_turned.png*
+icon_sheet.png*
 figures_screen.png*
 shots_move/
+shots_summons/
 figures_idle_*.png
 move_sequence.png
 idle_sequence.png
+shots_tmp/
+# tests/shot_settlement_kit.gd output — dev-only renders, same as the rest here
+kit_gallery_*.png*
+kit_variety.png*
+kit_vs_glb.png*
+# tests/shot_lair_kit.gd output
+lair_kit_gallery.png*
+lair_kit_vs_glb.png*
+# tests/shot_beast_gallery.gd output
+beast_gallery.png*
+# tests/shot_damage.gd output
+damage_numbers.png*
+/assets/NewlyDownloadedModels/*

@@ -20,6 +20,7 @@ func _init() -> void:
 	test_patrol_cycles_waypoints_in_order()
 	test_wander_stays_near_home_and_moves_on()
 	test_hunt_tracks_the_nearest_hostile()
+	test_truce_breaks_off_the_hunt()
 	test_civilized_parties_never_target_each_other()
 	test_low_opinion_turns_a_civilized_faction_hostile()
 	print("test_world_ai: %d passed, %d failed" % [_pass, _fail])
@@ -146,3 +147,22 @@ func test_low_opinion_turns_a_civilized_faction_hostile() -> void:
 	FactionOpinion.raise("human", 100.0)
 	check(not WorldAI.is_hostile(guard, player), "making it up to them ends the hunt")
 	FactionOpinion.reset()
+
+# Slipped past / paid off / talked round: the hunter walks away and ignores the
+# player for TRUCE_MINUTES, then picks the scent back up.
+func test_truce_breaks_off_the_hunt() -> void:
+	var w = World.new()
+	var hunter = w.add_party(World.RoamingParty.new("orcs", Vector2.ZERO, "orc"))
+	var prey = w.add_party(World.RoamingParty.new("player", Vector2(100, 0), "human", true))
+	WorldAI.hunt(hunter)
+	WorldAI.update(w)
+	check(hunter.goal == prey.position, "hunting before the truce")
+	WorldAI.truce(hunter, prey, w.clock.elapsed)
+	check(WorldAI.in_truce(hunter, w.clock.elapsed), "the truce holds now")
+	check(hunter.goal.x < 0.0, "...and the band breaks off away from the player")
+	WorldAI.update(w)
+	check(hunter.goal != prey.position, "the hunt skips the player while it holds")
+	check(not WorldAI.in_truce(hunter, w.clock.elapsed + WorldAI.TRUCE_MINUTES), "two hours on, it lapses")
+	w.clock.elapsed += WorldAI.TRUCE_MINUTES
+	WorldAI.update(w)
+	check(hunter.goal == prey.position, "...and the hunt resumes")

@@ -1137,6 +1137,75 @@ tutorial encounter (in campaign.gd or a new small file, agent's call).
   steps as pure data. **Full suite: 24 test files, 0 failures;
   drive_ui/drive_game both pass.** Pushed.
 
+- 2026-09-16: **The walkthrough re-cut against the action bar as it is now.**
+  The one card that explained the buttons was written against the bar T32
+  shipped over, and the bar has moved under it twice since. Spells no longer
+  open by level: `[2]` is one flat list, cantrips first, and a spell castable
+  from more than one slot opens its own tier picker (`★2`, `★3`) with
+  Shift+key jumping straight there. A list slot holding a single thing now
+  fires that thing instead of opening a list of one — which is what Ilsa's
+  `[4]` Channel Divinity is on the tutorial's own party. A list longer than
+  nine pages on `[9]`. And the economy line has read `Ⓐ Ⓑ ➤ n` since T29,
+  not `[action] [bonus]`. The action step is therefore two cards now — the
+  fixed nine slots, the badges, the greying and Tab/Space on one; lists,
+  spell levels and the two-press confirm on the other — so the walkthrough is
+  seven steps rather than six, and the greying explanation names the two
+  slots that are genuinely grey on turn one (Attack and Help & Shove, with
+  nobody in reach yet) instead of leaving the player to wonder.
+  `tests/test_action_bar.gd` now reads `Tutorial.STEPS` and fails if the card
+  stops naming all nine slots, by key, in the order `_slotted()` lays them
+  out, so the prose and the layout cannot drift apart again in silence.
+
+  Rendering the cards to check them (`tests/shot_tutorial.gd`, new — one PNG
+  per step, the proof a PR touching this file owes) turned up the reason the
+  drift was invisible: **the walkthrough was not opening over the bar it
+  describes at all.** `_ready` showed step 1 the instant the screen existed,
+  which is before the fight has settled — so the card about the nine slots
+  was landing over an empty bar while the goblin took the first turn, or,
+  when the party won its Stealth roll, over T39's deployment bar reading
+  "Swap Vera Kord", "Swap Ilsa Vane", "Begin the ambush". Three fixes:
+  the overlay is armed in `_ready` and opened by `_advance()` on the first
+  hero turn, when there is a bar to explain; the guided fight keeps the free
+  round surprise buys it but skips the deployment phase, which is a mechanic
+  no card explains; and the overlay moved onto `_hud_layer` (above
+  `_hud_overlay`, carrying the screen's theme, since a CanvasLayer breaks
+  both the draw order and the theme chain) because T-hud's HP bars and
+  condition glyphs are on a CanvasLayer and were painting straight through
+  any card parked over a token. `tests/test_game_flow.gd` now waits for the
+  overlay rather than assuming frame one, and asserts the bar underneath it
+  is the eleven-button one and not a deployment phase.
+
+- 2026-09-17: **The cards that name an action now let you do it.** Every
+  step was read-only: the overlay was one full-screen `MOUSE_FILTER_STOP`
+  Control and `_unhandled_key_input` dropped every key while it was up, so
+  "click one to move there", "hover any token for the full stat card",
+  "the popup you get by hovering it" and "pressing one opens its list"
+  were all instructions you could only follow after the walkthrough was
+  over. The four steps that name an action now carry a `try` block in
+  `core/tutorial.gd` (`act`, `hint`, `done`, and `keys` for the one that is
+  about key presses), and while such a step is up **its own region is
+  live**: `Walk._has_point` cuts the spotlight out of the overlay, so the
+  click, the hover and the tooltip fall straight through to the board or
+  the bar on the canvas below, while everything outside the ring stays
+  blocked and the goblin still waits. The practice is the ordinary code
+  path — `board_hex_clicked`, `board_hex_hovered`, `_open_list`, the bar's
+  own `mouse_entered` — reporting to `_walk_try()`, so nothing is faked or
+  duplicated for the tutorial: the move is a real move off a real movement
+  budget. Doing it turns the card's `▸ Try it` line into a green `✓` line;
+  nothing is a gate, and `Next` leaves any card whether or not anybody
+  tried. The keys a card lets through are now a small allowlist
+  (`_walk_key_ok`): the view controls always, the number row / Tab / Esc
+  only on a step that asks for them, and Space or `[0]` never — a turn
+  handed over under a card would stall in `_advance()`'s hold on the AI.
+  Leaving a step puts the bar back on its nine slots, so practice cannot
+  hand the next card (or ordinary play, after Skip) a half-open list or an
+  aim with the board behind the dim. The live ring is brighter and breathes
+  while its practice is outstanding, which is the only thing on screen that
+  can say "this half is yours again". `tests/test_game_flow.gd` pushes a
+  real click at the viewport — not at the handler — over the same board hex
+  under a read-only card and under the live one, and asserts it goes
+  nowhere in the first case and moves the hero in the second.
+
 ## T33 — author combat mechanics for the missing spells (locked 2026-09-11, dispatched now)
 
 Of the 146 catalogued spells, only 8 have a hand-authored combat mechanics
@@ -1721,8 +1790,8 @@ O2 (`e641747`) — `scenes/world/world.tscn`+`.gd`, runnable standalone
 (`godot --path . scenes/world/world.tscn`). Isometric ground as tessellating
 projected quads (discs like combat's hexes overlapped into domes at this
 scale — quads fixed it), tokens matching the combat board's flat-base +
-camera-facing-ball look. Camera: drag pans, wheel zooms about the cursor
-(0.25-2.5x clamped), right-click sets the player's goal (goal ringed gold),
+camera-facing-ball look. Camera: right-drag pans, wheel zooms about the cursor
+(0.25-2.5x clamped), left-click sets the player's goal (goal ringed gold),
 a Pause/Resume button + Day/HH:MM readout. Deliberately duplicated (not
 extracted) `scenes/main.gd`'s ~25 lines of iso-projection math rather than
 touching that file, which this phase couldn't edit — flagged as the
@@ -3322,7 +3391,8 @@ are a deliberate follow-up (one more `sweep()` call each), and combat itself
 stays `drive_ui.gd`'s job.
 
 **Honest gaps left:** no pathfinding around water (a march into a lake stops
-at the bank, by design); the roaming-band props are drawn at their live
+at the bank, by design — for NPC bands this was a bug rather than a design,
+and T-path below fixes it); the roaming-band props are drawn at their live
 position even when only remembered, because the map keeps no last-known
 position to draw instead; the diorama fade fades without desaturating, where
 the 2D layer does both; and persistent faction warfare (the note above) is
@@ -3524,7 +3594,9 @@ tiers; this is placing them on the map. Depends D2, D5.
 
 ### Non-goals for this arc
 
-No narrative/dialogue layer yet (still deliberate — see README); no crafting;
+No narrative/dialogue layer yet (still deliberate — see README) — *superseded
+by M1–M8 below, which added one as a content-pack API rather than as a
+hardcoded campaign*; no crafting;
 no settlement building; no mounts; no romance; no simulation of anything the
 player cannot see. The party is four people. If a feature only makes sense
 for an army or a lord, it is out by construction.
@@ -3691,3 +3763,2413 @@ have been an empty bubble.
   works either way and assumes the node graph, which is what exists.
 - **Whether withdrawing from a part-cleared site restocks it over time.**
   Currently it does not; the D1 window expires the whole lair instead.
+
+## M1–M8 — the content pack API: worlds, campaigns, and DLC (built 2026-09-14)
+
+The narrative layer landed, and it landed as a public API rather than as a
+hardcoded campaign. The ask was three things that turned out to be one thing:
+let the community build worlds out of the features the game already has; grow
+that into campaigns with stories, quest chains and characters; and ship the
+team's own stories through the same route, some free and some paid.
+
+They are one thing because the alternative — a DLC pipeline for us and a mod
+pipeline for everyone else — has a known ending: the mod half rots, because
+nothing anybody cares about is running through it. So there is one format, one
+loader, one validator, and the three packs the game ships (`content/`) are
+written against the same API a stranger's zip file uses. `docs/modding.md` is
+the authoring guide; this is the record of what was built and why it is shaped
+this way.
+
+**M1 manifest / M6 registry.** A pack is a directory with a `pack.json`. Two
+roots — `res://content/` (ours) and `user://mods/` (theirs) — one pipeline. A
+pack's `official` flag comes from the root it was found in, never from
+anything it can write about itself, and the first root wins a duplicate id, so
+a mod cannot shadow a DLC by claiming its name. Everything a pack declares is
+parsed and checked at **scan** time, not play time: an author learns their
+story is broken from the browser, and a player never gets three chapters into
+one that cannot finish.
+
+**Data only, and that is the security model.** A pack ships no GDScript, and
+there is no hook or script field anywhere in the formats. Community content is
+downloaded from strangers and run on a player's machine; a pack that could
+carry code would be a way to run that code. Everything is JSON interpreted by
+`core/mod/`, which is also what lets official and community content share one
+trust level instead of needing two.
+
+**M3 worlds.** `world.json` places everything the three built-in builders
+place: settlements, hidden lairs, roaming bands with a behavior and a roster,
+water (a `river` polyline is the one piece of sugar, because every hand-placed
+river in this project is a for-loop stamping blobs and making an author write
+that in JSON means making them write it wrong), and the start. Nothing in it is
+a new concept, which is the point.
+
+The thing that makes a pack map read like a designed map is that **it declares
+no difficulty at all**. D6's bands are measured off the map's own extent and
+anchored on its human settlement, so an author gets the level curve by placing
+things — goblins near home, the dragon at the edge. `tests/test_world_pack.gd`
+asserts exactly that on the shipped campaign: three lairs, three different
+bands, no region data in the pack.
+
+**M4/M5 stories, and the decision the whole layer rests on.** A story is
+chapters of beats; a beat fires the first time its condition holds. Conditions
+are **predicates over state the game already keeps** — a flag the story set, a
+quest's state in the party's own log, where the player is standing, which lairs
+are cleared, party level, the day, faction opinion — and the runtime is
+*polled*, once a frame, next to the lair and forage and travel checks it sits
+beside in `world.gd`.
+
+Events would have been the obvious design and would have been worse: an event
+bus means every system in the game has to publish into it before a story can
+react to it, which means a modder can only write stories about the systems
+somebody remembered to wire. Predicates need nothing. A content pack can tell a
+story about systems that have never heard of it, and the integration into a
+2278-line world screen is one `_check_story()` call.
+
+The second decision: **a story quest is an ordinary quest**. A quest beat
+appends to `party.quests`, and from there the existing machinery — kill
+tracking, the turn-in at any merchant, the log panel, the encounter spawn bias
+— picks it up with no idea a story is involved. A quest chain is quests that
+unlock each other, not a second quest system.
+
+**M2 free and paid.** `"access": "paid"` plus a `product_id`. A paid pack the
+player does not own is listed but **not loaded** — not loaded-and-hidden, so a
+locked DLC cannot leak a monster, an item name or a line of its story through
+some other system that reads the catalog. What is owned lives in
+`user://entitlements.json`; a storefront integration calls `Entitlement.sync()`
+once at boot and everything downstream keeps working, offline. Playtest builds
+own everything, through the same switch `progression.gd` already uses. The game
+is not the storefront and has no purchase button.
+
+**M5 data overlays.** A pack's records are folded into `catalog.gd`'s own
+parsed arrays, merged by id — so a pack can add a monster *and* retune one of
+ours, and the result is a monster to the faction rosters, the encounter builder
+and the bestiary screen with nothing anywhere made pack-aware. The one trap
+found on the way: `scaler.gd` caches its faction pools off the bestiary, so
+changing what the bestiary is has to drop that cache (`Scaler.forget_pools()`),
+or a pack's monsters exist everywhere except in a fight.
+
+**M7/M8 the screens.** A browser on the title screen (every pack, its state,
+and every problem with the broken ones spelled out in full — an author's only
+feedback loop is that list, so a truncated error is a bug report nobody can
+act on), a beat card, and a journal. The autosave carries the story's progress
+and the id of the pack it belongs to; a resume whose pack has since been
+uninstalled, disabled or locked comes back as the map it already is, with the
+story simply not being told, rather than as a broken save.
+
+### Shipped content
+
+| Pack | |
+|---|---|
+| `content/example-world/` | a map and nothing else — the shortest thing that is a working pack, and the one to copy |
+| `content/ashen-road/` | free, three chapters, its own map, three cast members, a quest chain, two monsters and two items |
+| `content/vault-of-the-ember-crown/` | paid, `requires` the above, and the reason the DLC path is exercised by our own content rather than only by a test |
+
+### Fixed on the way
+
+- `WorldAI.wander()` documented taking a bare point and crashed on one
+  (`"position" in <Vector2>` is an error, not a false). The Vector2 half of its
+  own contract now works, which is what data-driven placement needs.
+- `world.gd` had twelve copies of `WorldSave.save(world, party)`; they are one
+  `_autosave()`, which is also where the story now rides along.
+
+### Still open
+
+- **A story cannot yet author a fight.** Beats can hand over quests, move the
+  purse, reveal lairs and spawn bands, but a scripted set-piece encounter (this
+  roster, on this board, at this moment) goes through the same generated
+  pipeline as everything else. `Encounter`'s spec dictionary is the obvious
+  seam and is deliberately not exposed yet — designed, not built, in **M9**
+  below.
+- **Story-only packs have nowhere to be told.** The format allows a pack with a
+  story and no world; starting one drops it on the default map, where its
+  `near`/`lair_cleared` conditions name places that do not exist. Either they
+  should declare a world they attach to, or the browser should ask which map to
+  tell them on.
+- **No localisation seam.** Every string in a pack is the string the player
+  reads.
+- **`user://mods/` on the web build.** The browser export has no real user
+  directory to drop a zip into, so community packs are a desktop feature for
+  now; `res://content/` ships everywhere.
+
+## A new hero joins at the party's level (2026-09-14)
+
+Creating a character mid-game handed you a level-1 hero to walk into content
+the rest of the party is levels past — a replacement for a dead veteran was a
+liability, and the fifth build you wanted to try was unplayable. The creator
+now builds at `Party.active_max_level()`: the highest level among the <= 4 who
+fight (1 while nobody does, so the first hero is still a first hero).
+
+`scenes/party/party.gd` injects it with `creator.set_start_level(...)` before
+the overlay opens; `Leveling.grant_levels()` appends the levels and banks
+exactly `xp_for_level(target)`, so the new arrival is not instantly owed
+another one. Nothing else in the creator changed: every grant those levels
+bring arrives as a pending choice the way level 1's do, so the Skills &
+Background and Review steps ask for the subclass, the ASI-or-feat and the
+spells, and Confirm stays blocked until they are all made. The three presets
+go the same way — they are level-3 builds with their choices already made, so
+they are topped up to the party's level rather than rebuilt.
+
+The catch-up is a gift, not a haul, and the meta-progression must not be able
+to tell the difference — so it touches neither side of `core/progression.gd`:
+lifetime XP (which buys species and classes) and class XP (which buys
+subclasses) are still only ever written by `core/campaign.gd` out of XP earned
+in a fight. Milestone achievements stay out for the same reason: being handed
+level 5 is not reaching level 5. Covered by `tests/test_leveling.gd`'s
+`_catch_up` / `_catch_up_in_creator` (the model, then the real creator scene)
+and `tests/test_party.gd`'s `test_active_max_level`.
+
+## M9 (design note, not built) — scripted fights for content packs
+
+The one thing a pack cannot do that a pack author will want on day one: say
+*this* fight, with *these* foes, on *this* board, at *this* moment in the
+story. Written down now, while the shape of M1–M8 is fresh, so whoever picks
+it up is not re-deriving the seam.
+
+### Why it is not already possible
+
+Every fight in the game is generated. `Scaler.roster_for(chars, difficulty,
+bias, theme, seed, power_scale)` builds a roster for the party that is standing
+there, and hands back a spec:
+
+```gdscript
+{"monsters": [{"id": "snik", "count": 3, "mult": 1.2, "features": [...]}],
+ "theme": "goblin-camp", "mult": 1.0, "seed": 1234}
+```
+
+`Encounter.build(spec, party_combatants, board := {})` turns that into a
+`Combat`. Note what that means: **the spec is already exactly the thing an
+author would want to write**, and `Encounter.build()` already accepts a
+hand-written one — `Tutorial.SPEC` is a hand-authored spec that ships today,
+and `core/site.gd` already runs a room off a pre-built spec without going
+through the scaler at all. The machinery is there. What is missing is a way for
+a *pack* to supply one, and a way for a *story* to trigger it.
+
+### The shape
+
+A `fights` block in the pack, referenced by id — beside `cast`, not inside a
+beat, because the same set-piece may be reachable from more than one place:
+
+```json
+"fights": [
+  {
+    "id": "warren-mouth",
+    "title": "At the mouth of the Ash Warren",
+    "theme": "goblin-camp",
+    "monsters": [
+      {"id": "warren-firecaller", "count": 1, "mult": 1.4,
+       "features": ["monster-surprise-attack"]},
+      {"id": "snik", "count": 4}
+    ],
+    "scale_to_party": false,
+    "seed": 91
+  }
+]
+```
+
+and a beat kind that runs one:
+
+```json
+{"id": "the-ambush", "kind": "fight", "fight": "warren-mouth",
+ "when": {"near": "ash-warren", "within": 90},
+ "lines": ["Something has been waiting at the mouth of it."],
+ "on_win":  {"flags": ["mouth-cleared"], "gold": 120},
+ "on_loss": {"flags": ["driven-off"], "journal": ["You were thrown back down the slope."]}}
+```
+
+`on_win` / `on_loss` are the point. A generated encounter is a thing that
+happens to you; a beat that branches on its outcome is a thing the story is
+about. Both take the ordinary M4 effects block, so nothing new has to be
+learned to write one.
+
+### The actual work, and why it is its own pass
+
+The M5 runtime is polled and **never blocks** — rule 2 of
+`core/mod/story_runtime.gd` is that it never asks the player anything, which is
+what lets a beat fire, apply, and be done inside one `_check_story()` call. A
+fight is the first beat that must *suspend*: the world screen has to put
+`scenes/main.tscn` up, wait for it, and bring a result back.
+
+That means:
+
+- a new runtime state — "waiting on fight X, from beat Y" — which has to be in
+  `to_dict()`, because a reload mid-fight must neither lose the beat nor re-fire
+  it;
+- `resolve_fight(beat, result)` on the runtime, applying `on_win`/`on_loss`;
+- one more branch in `_check_story()`, next to the card, using the
+  `_run_combat()` hand-off `world.gd` already has for lairs and bands;
+- and a decision about what a *defeat* means, which the open world has never
+  settled either (`world.gd`'s `_retreat()` soft landing was written for the
+  linear campaign map — see "Not yet decided", above).
+
+None of it is large. It is a new contract for the story layer rather than more
+of the existing one, which is exactly why it was not bolted onto M5.
+
+### Two rules it must keep
+
+1. **One combat path.** A scripted fight still goes through
+   `Encounter.build()` and the normal combat screen. A pack that could open its
+   own fight screen is a pack that can ship a broken one.
+2. **`scale_to_party` is the whole difficulty question.** Default `false`: the
+   author's numbers are absolute, which is what makes a set-piece a set-piece.
+   But an absolute fight is also how a pack hands a level-2 party an
+   unwinnable wall — so the validator should price the roster with
+   `Power.score()` against the band the trigger sits in (`Regions.at()`) and
+   warn when they are a country apart. `true` keeps the numbers as a base and
+   lets the scaler adjust, for an author who wants a named encounter that is
+   still fair at any level.
+
+### What the validator owes an author
+
+All of it at scan time, like everything else in M1–M8:
+
+- every monster id known — including the pack's own `bestiary.json` overlay,
+  which the catalog has not loaded yet at validation time (`_own_item_ids()` in
+  `registry.gd` already does this dance for item rewards; it wants a sibling);
+- `theme` in `Encounter.THEMES`;
+- every id in `features` present in `data/effects/features.json`;
+- `count >= 1`, and `mult` inside the range `Scaler` itself uses
+  (`MULT_MIN` 0.6 to `MULT_MAX` 2.5) — outside it the numbers stop meaning what
+  the bestiary says they mean;
+- **total foes within the board's capacity.** `Encounter.build()` falls back to
+  `PARTY_STARTS[0]` when it runs out of spawn spots, which stacks every extra
+  foe on top of the party's own start hex. Measured capacity, with a four-hero
+  party: merchant-shop 15, frozen-cave 18, sunken-shrine 20, goblin-camp 22,
+  city-square 22, forest-clearing 23. (Generated fights never hit this —
+  `Scaler.MAX_FOES` is 8.)
+- a `fight` id a beat references actually existing, and — worth a warning —
+  every declared fight being referenced by something.
+
+### Where else it plugs in
+
+A story beat is the first customer, but the same `fights` block would serve two
+others already in the code: `core/site.gd`, which builds a spec per lair room
+(a pack naming its boss room's fight is the obvious second step), and the
+`raid_settlement` quest kind. Neither should be in the first pass.
+
+## CI — the suite runs on pull requests now (2026-09-14)
+
+Nothing checked a branch before this. `release.yml` builds and publishes on a
+push to master or a tag; a pull request ran nothing at all, so every "the suite
+is green" in a PR description was a claim about somebody's laptop, unverifiable
+by the person reading it.
+
+**`tools/run_tests.sh`** is the whole suite in one command, and
+`.github/workflows/tests.yml` runs exactly that on every pull request and every
+push to master. The script rather than steps in the YAML is the point: a
+contributor runs the identical thing locally, so local green and CI green are
+the same claim rather than two similar ones.
+
+Three things the script knows that a bare `for f in tests/*.gd` loop does not,
+all three learned the hard way today:
+
+1. **Assets must be imported first.** A script that preloads a texture cannot
+   *compile* without `.godot/imported/`, so on a fresh checkout half the suite
+   fails with parse errors that have nothing to do with any test. Godot's own
+   `--import` is incremental, so running it every time costs nothing after the
+   first.
+2. **The verdict is the exit code, never the output.** Most tests print
+   "N passed, M failed"; `test_bestiary.gd` prints `OK`; the drive robots each
+   print a line of their own. All of them `quit(1)` on failure.
+3. **A failed `assert()` hangs.** The SceneTree never reaches its `quit()`, so
+   the process sits in the main loop forever — measured, not guessed. Every
+   test therefore runs under `timeout`, and a timeout is reported as a failure
+   rather than waited on.
+
+**`tests/check_scripts.gd`** runs first: every `.gd` under `core/`, `scenes/`
+and `tests/` is loaded and must compile (170 of them, ~3s). No test can do
+this job — a test only compiles the scripts it happens to preload, so a parse
+error in a file nothing imports, or in a screen no robot drives, survives a
+green suite and is found by running the game. This session shipped exactly that
+bug and caught it by accident; now it is a check.
+
+The signal is `can_instantiate()`, **not** a null return: a script that fails to
+parse still comes back from `load()` as a GDScript object, so the obvious
+`if load(path) == null` check quietly passes everything. Verified by breaking a
+file on purpose and watching the null check miss it.
+
+Measured on this machine: the whole suite — import, script check, 64 subsystem
+tests, 8 UI robots — is **177 seconds**. That is why the workflow is one job
+and not a shard matrix; an earlier 30-minute figure turned out to be three
+copies of the runner fighting each other for the CPU, not the suite.
+
+## Five things play found (2026-09-14)
+
+Five reports from actually playing the game, and what each one turned out to
+be. Four were bugs; one was a design decision that had drifted into a bug.
+
+### A created ranger vanished off the party page
+
+The one that started as "where did my character go". The barracks is one JSON
+file per character at `user://characters/<slug>.json`, and the slug was minted
+by slugifying the name at the moment of saving. So a name is an identity, which
+is wrong twice over: two heroes called Aria Vale are two heroes, and
+`slugify()` is lossy besides — any two names built from the same letters and
+punctuation collapse together, and a name with no ASCII letters in it at all
+collapses to `character`.
+
+Naming a second hero after one already in the barracks therefore did two silent
+things at once. The new build was written **over** the existing one, so the
+ranger already on disk was destroyed with no warning; and then `Party.add_member`
+refused the new hero for carrying an id the roster already had — silently,
+because the refusal was an ignored return value — so the hero you had just
+built was not on the page either. One character deleted, one never created,
+nothing on screen about either. Reproduced end to end through the real screens:
+a ranger in the barracks, a hero built on the pack's party-setup page with the
+same name, and afterwards the page still showed a ranger who was now a
+barbarian on disk.
+
+The fix is that a new character gets a slug nothing is using —
+`CharacterSave.unique_slug()`, called once in the creator's `_confirm()`, so
+Aria Vale and Aria Vale are `aria-vale` and `aria-vale-2` — and that the file
+name is the identity: `load_slug()` now stamps the slug it loaded from onto the
+character, so a hand-copied or renamed save cannot come back wearing somebody
+else's id and get dropped. The creator says so when it has to number one. The
+refused `add_member` is reported on the party screen rather than swallowed;
+it should not be reachable any more, but a hero disappearing without a word is
+what this whole entry is about.
+
+### Shove → brazier worked with nothing to shove anyone into
+
+"You can only put somebody in the fire if they are standing next to it" was a
+rule of the *button*, not of the verb: `legal_target()` asked it, so the UI
+never offered or accepted an illegal target, but `Combat.perform()` would take
+the action, roll the contested Athletics, win it, and then quietly do nothing —
+`act_shove` returned `{"success": true}` on an empty hazard lookup, without so
+much as a line in the log. A turn gone and no explanation. The rule is now
+`can_shove_into_hazard()`, asked in both places, and asked in `perform()`
+*before* anything is spent.
+
+### Slipping past lair guardians the party had already been fighting
+
+`WorldLairs.sneak_past()` — the Animal Handling alternative to attacking a lair
+— checked that the lair was discovered and unlooted, and nothing else. Its own
+comment said "one attempt per lair" and world.gd's said "the guardians are
+alerted either way now, so there's no third attempt", but neither was true: the
+party could kick the door in, fight half-way down, withdraw, come back and then
+*talk their way past the guardians they had been killing*, collecting the
+sneak-past stash on top of the rooms they had already looted.
+
+`alerted()` is the missing rule, and it needs no new state: `entered_at` is
+already stamped the first time the party goes in (it is what starts the D1
+window) and already round-trips through `core/world_save.gd`, so a lair that
+has been disturbed reads as roused, including in saves written before this
+existed. A failed attempt now rouses the lair itself rather than relying on the
+fight it falls into, which is what makes it one attempt rather than one per
+visit. The button hides once they are up, and says why if it is pressed anyway.
+
+### Barks hidden behind the models
+
+Same bug the HP bar and the odds chip were each fixed for, one tier further
+down: a Figures3D model is a **Board child**, so it draws after everything
+`Board._draw()` paints, whatever the order within that function. Barks sat
+lower over their hex than either of the other two — right at a tall rig's chest
+— so what a character said was routinely covered by whoever was standing in
+front of them. They paint in `_draw_hud_overlay` now, on the CanvasLayer above
+Board and every tier including the figures, with a dropped shadow since they
+now land on top of the art rather than behind it. `tests/test_hud_layer.gd`
+pins both halves: that `Board._draw` no longer paints them and the overlay
+does, and that the two names the overlay reaches across for still exist.
+
+### The ambush deployment, and the action bar that would not hold still
+
+Two UI changes, both of them about the same thing: a control that moves under
+the hand reaching for it.
+
+**Deployment** offered one button per *pair* of heroes — six lines of
+"Swap Vera ↔ Pike" at four heroes, fifteen at six, none of which say anything
+about where on the board anybody is standing. It is a spatial choice, so it is
+made on the board now: click a hero to pick them up, click another to trade
+places. The swappable hexes are ringed, the held one brighter, and clicking the
+held hero again puts them back. The bar still lists them, so the phase is
+playable without the map and the robot can still drive it.
+
+**The action bar** re-sorted itself live. `_prioritize()` ordered the badges
+most-used-first and ran on every single rebuild, while `_bump_freq` counted
+every press — so using a verb could promote it past another and slide every
+badge to its right, mid-turn, under a player who was reaching for slot 3. On
+top of that the bar was built from `available()`, which only returns what is
+usable *this instant*, so spending a bonus action made a badge vanish and
+everything after it shift left. The hotkeys are positional, so [3] genuinely
+meant something different from one press to the next.
+
+Both halves are fixed. `Combat.all_verbs()` is `available()` without the
+can-they-afford-it-right-now filter (the structural half is now `is_button()`),
+so the bar is laid out along a character's whole kit and a verb that is merely
+spent holds its slot greyed out instead of collapsing the row. And the order is
+settled once per character per fight: `_prioritize()` still decides that first
+layout — the verbs this player reaches for still claim the low hotkeys — but it
+decides it once, and `_bar_order` replays it for the rest of the fight. What
+the frequency counter buys is the *next* fight's opening layout, which is all
+it was ever really worth.
+
+## Four more from play: loot, the save slot, the dead art, the sound (2026-09-14)
+
+### Winning a fight left nothing on the field
+
+`resolve_outcome()` has always returned a `loot` array, and both banking paths
+— `core/campaign.gd`'s `finish_combat` and `scenes/world/world.gd`'s `_bank` —
+have always stashed whatever is in it. It was always empty. The array was built
+from one source: a monster's own hand-authored `loot` key, and **not one of the
+316 entries in `data/bestiary.json` has one**. You could clear a bandit camp and
+come away with gold, XP, and nothing you could hold.
+
+`core/loot.gd` fills it, on two axes that are both "appropriate to what you just
+killed" rather than a flat table:
+
+- **Who it was decides what it was carrying.** `CARRIED` is keyed on the
+  bestiary's `faction` (the axis `core/scaler.gd` builds rosters along) and
+  falls back to `type`. A bandit is holding a shortsword and a leather jerkin; a
+  goblin a scimitar and a shortbow; a wolf is holding nothing, because a wolf is
+  holding nothing. Anything not in the table is a creature you loot rather than a
+  person you rob, and its odds are halved — what turns up is what the last person
+  it ate was carrying.
+- **How dangerous it was decides how often, and how good.** A flat CR ramp
+  (12% + 9%/CR, capped at 70%) on the odds, and a cumulative CR band on the
+  quality: common under CR 3, uncommon to 6, rare to 9, very-rare above. A CR 10
+  kill can still turn up a climbing potion; a CR 1/8 one cannot turn up a potion
+  of speed. Past CR 8 a kill is searched twice.
+
+Capped at three drops for the whole fight, because eight goblins should not come
+to eight swords. Rolled on the fight's own RNG, so `SORCMERC_SEED` replays the
+drops with the fight.
+
+Every id it can hand back is a **real catalog id**. That is load-bearing rather
+than tidy: the stash names an item with `Campaign.item_name()`, the shop pays
+`Campaign.item_price()` and the rarity colour comes off `Icons.rarity_of()`, and
+all three degrade silently — an invented `wolf-pelt` would show as "Wolf-pelt",
+worth 0 gp, in common grey, and look like loot while behaving like litter.
+`tests/test_loot.gd` checks every id in every hand-written table resolves.
+
+One judgement call worth writing down: `potions-of-healing` sits in the
+**uncommon** band rather than the obvious common one. The SRD files
+healing/greater/superior under one heading, so its rarity is `varies`, and
+`item_price` deliberately prices `varies` as rare — 2025 gp. Handing that over
+for a CR 1/8 bandit is not a healing potion, it is a purse.
+
+And it is said out loud in all three places a fight can end: the combat log
+names what came off the bodies in its rarity colour, the linear run's journal
+says it, and the open world puts it on the same label the lair outcomes use —
+the fight log is gone by the time the map comes back, and loot that lands
+silently in the stash is loot nobody knows they picked up.
+
+### The autosave slot was invisible
+
+There is exactly one open-world slot and it rolls. Fine, until you look at what
+the title screen said about it: `▶ Resume the open world`. Nothing about what
+you would be resuming, nothing about `✦ New run` being the thing that writes
+over it, and no way to clear it short of deleting a file by hand.
+
+`WorldSave.summary()` reads the slot's JSON without rebuilding a World — the
+clock, the map it was built from, who was standing, the purse, the story pack if
+there is one, and the file's own mtime. The title prints that under Resume,
+says in as many words that there is one slot and a new run takes it, and offers
+a Delete that goes through its own confirm screen naming what is about to be
+lost (and what is not — the characters are in the barracks, which is a different
+file).
+
+### The art credits, and the art
+
+Settings → Art credits listed every Liberated Pixel Cup author whose work went
+into the composited sprite sheets. Except the sprite tier had been switched off
+when the 3D figures landed (`USE_LPC_SPRITES := false`, "clashed against the 3D
+foes") and had been dead ever since — so the screen credited art that is not in
+the game.
+
+Removing just the screen was the wrong half: the art was still in the repo and
+still in every export, and CC-BY-SA 3.0 / OGA-BY require attribution for
+distributing it, not for displaying it. So both halves went — `assets/lpc/`,
+`assets/generated/`, `core/lpc_art.gd`, `Board._draw_sprite`, the
+`tools/lpc_compose.py` pipeline, `LICENSES/`, the credits screen, and the tests
+and shot scripts for all of it. Nothing changes visually, because nothing was
+drawing it. The README's provenance table and `assets/figures/PROVENANCE.md`
+lose the two rows that no longer describe anything.
+
+### Sound effects
+
+`tools/gen_audio.py` synthesizes all 39 assets offline out of the stdlib, and
+that is what makes `assets/audio/` reproducible from source with no network, no
+account and no bill. What it cannot do is sound like a recording — it is
+oscillators and filters, and several of the stings read as exactly that.
+
+`tools/gen_audio_elevenlabs.py` writes the same file names into the same
+directories from the ElevenLabs sound-effects API instead, one sound at a time
+(`--only hit,crit`), so the choice is per-sound rather than all-or-nothing: the
+synthesized `click` is fine, the synthesized `hit` is not. Output is 16-bit mono
+PCM at 44.1 kHz wrapped in a RIFF header, which `core/audio.gd` already handles
+— it reads rate and channel count out of each file's `fmt ` chunk rather than
+assuming them, so a mono generated file sits beside the synthesized stereo ones.
+
+Two things it deliberately is not. It is not the default: `gen_audio.py` stays
+the supported path and can rewrite any of these back. And it is not
+deterministic — the same prompt is a different take every run — so the WAVs stay
+committed and this is a tool you reach for when a sound needs replacing, never
+part of a build.
+
+The prompts describe the *sound*, not the game event: "a single heavy sword
+strike landing on chain mail armor, dry, no reverb tail" is something a model has
+heard; "hit.wav" is not. Lengths match what the game gives each sting room for,
+since `core/audio.gd` fires them as one-shots over live combat.
+
+**All 14 stings are now generated ones** — `assets/audio/sfx/` is the model's,
+`assets/audio/music/` and `assets/audio/barks/` are still the synthesized set.
+(`assets/audio/barks/` stopped being that on 2026-09-16 — see
+`docs/bug-fixes-2026-09-16.md`; `assets/audio/music/` is still synthesized.)
+Three things had to be true before a take was drop-in, and none of them were:
+
+1. **The API has a half-second floor** (`duration_seconds` under 0.5 is a 400)
+   and overruns whatever it is given by about 2×. A UI click is a tick, not a
+   second, so the request is floored and the result trimmed.
+2. **Level.** `gen_audio.py` peak-normalizes every sting to 28480 (-1.2 dBFS),
+   uniformly, all fourteen. The takes came back anywhere from 2944 to clipping
+   at full scale — a tenfold spread, which dropped in unchanged would make some
+   sounds inaudible next to their neighbours and others the loudest thing in the
+   game. Matched to `gen_audio.py`'s own number rather than a new one, so the
+   two sets mix.
+3. **Silence.** Trimming is judged on RMS over a 10 ms window rather than per
+   sample. The first usable click was over by 200 ms and carried one stray
+   sample at 0.8% FS near the end — enough to defeat a per-sample scan and keep
+   three quarters of a second of nothing. Window RMS ignores the stray and still
+   catches a real decay tail. It took `click` from 0.96s to 0.18s.
+
+And one take came back **silent** (peak 14 of 32767). That is why the tool
+measures the peak and says `** silent take, re-run this one **` rather than
+writing a dead file and reporting success: a generative API can hand you nothing
+with a 200, and the only thing that catches it is looking at the samples.
+
+### The moments that fired silently (2026-09-15)
+
+Everything the game had a sound for fired when something *landed*. Twelve
+moments that fired with no audio at all now have one, generated the same way:
+a prompt in `tools/gen_audio_elevenlabs.py`, a synthesized recipe of the same
+name in `tools/gen_audio.py`, so either tool can still write any id. **All
+twelve committed WAVs are the generated takes**, like the 31 stings before
+them; the synthesized recipes are the fallback, not what shipped.
+
+All twelve came back usable on the first pass, which is worth recording
+because the earlier batch did not: peaks landed between 23464 and 63957 — a
+spread of nearly 9 dB, one of them clipping at full scale — and every one was
+normalized to `gen_audio.py`'s 28480 so the set mixes with its neighbours.
+Lengths came back at roughly 2× what was asked, as before, and trimming took
+`quest_complete` from 4.00s to 2.44s and `shop` from 2.40s to 1.11s. `miss`
+matters most here and landed at 0.66s — short enough to fire on every other
+attack roll without queueing, which is what the half-second API floor and the
+window-RMS trim exist to get.
+
+`miss` / `miss_ranged` are the ones that change how a fight reads. A missed
+attack was silent, which meant roughly half of all attack rolls resolved into
+nothing and the only thing a player ever heard was their own successes — a
+fight sounded like it was going better than it was. Misses split melee/ranged
+and stop there, not nine ways like hits: what you hear when a blow lands is the
+weapon meeting armour, which is what makes an axe and a mace different sounds;
+what you hear when it misses is air, and air moved by an axe and a mace is the
+same air. `WeaponSfx.for_miss()` is the classifier, same contract as
+`for_attack()`. Both takes are deliberately quieter and shorter than `hit`.
+
+`save_made` / `save_failed` are a pair, written to read against each other —
+the same moment resolving two ways, bright and glancing off versus dull and
+sinking. They fire only when there *was* a save to make; a no-save spell logs
+"fails" through the same line and would otherwise get a second sting under
+every magic missile.
+
+`down` was `kill`'s asset until now, so a hero dropping sounded exactly like a
+foe dying and a party wipe sounded like a victory. Same armour and body, softer
+attack, no sub-bass crash: it settles rather than stops.
+
+`condition` fires only on a status that is actually new. Concentration spells
+re-apply their status every round to refresh the duration, and a sting on each
+refresh would put a buzz under every round of a running Hold Person.
+
+The rest: `burst` (an explosive barrel), `collapse` (exhaustion's last level),
+and four for the world between fights — `travel`, `settlement`, `shop`, and
+`quest_complete`, which resolves where accepting a quest only reaches. Arrival
+at a node picks exactly one sting rather than stacking them, because two
+one-shots on the same frame read as one muddy noise rather than two events.
+
+One thing this forced in `core/audio.gd`, and it is the reason the new stings
+are safe to fire where they fire: **a sound will not restart within 50 ms of
+itself**. An area spell resolves a save per target and a condition per target in
+one frame, so a fireball catching five bodies fired five copies of the same
+sample on the same frame — phasey, five times as loud, and loud enough to drown
+the cast it was answering. The floor is per sound rather than global (a miss and
+a hit landing together are still two events) and far shorter than the gap
+between two things a player reads as separate, since a second attack is turns or
+animation away. `_should_play()` is split out of `_play_one_shot()` so the rule
+is testable: headless never builds a voice pool, so the caller cannot run under
+the suite at all.
+
+`tools/gen_audio.py` grew `--only`, the same spelling its sibling already had,
+and it is load-bearing now rather than a convenience: `assets/audio/` is a
+**mixed** set — the stings and (since 2026-09-16) the barks are the ElevenLabs
+tool's, the beds are the synthesized ones — so a bare `gen_audio.py sfx` would
+quietly overwrite 31 generated takes with their synthesized versions. A bare name is matched across
+every group and must be unambiguous, because `settlement` is now both a sting
+and a bed; `sfx/settlement` says which.
+
+## Spike — hex distances, spell ranges, ranged↔melee (2026-09-15, measurement only)
+
+Full write-up in `docs/spike-hex-ranges.md`; tooling `tests/sweep_range_detail.gd`
+(throwaway). Headlines: `RANGE_CAP` 6/8/10/12 and "spells uncapped" are
+byte-identical on current boards (nobody ever shoots past 7 hexes);
+`FT_PER_HEX` only rescales the party because the bestiary is hex-native
+(FT 5 = +10.7 win-rate points, all from a 3-hex Burning Hands and speed 6);
+29 of 53 castable spells have no authored `range_ft` and default to touch
+(Hold Person, Web, Hypnotic Pattern…). Recommendation: author the 29 ranges
+first, then decide whether range is a 3-tier grammar (cap 5) or needs bigger
+boards + a `_foe_spots` fix — no more constant sweeps until that's chosen.
+
+## The open bug reports, worked through (2026-09-16)
+
+Nine issues filed from the in-game reporter over one play session, plus two
+follow-up asks. One commit and one test each; the tests all fail against the
+code as it was. What each one actually turned out to be:
+
+**#24, "berserker rage needs twice keyboard press"** — it needed four. Rage
+burns a pool so it wears the two-press confirm guard `_costly()` puts on every
+costly verb, and the guard was right; where it put the second press was not.
+Arming rebuilt the MAIN BAR, and Rage lives one level down in the `[3]` Bonus
+submenu (a barbarian has two bonus-cost things, Rage and Reckless Attack, so
+that slot is a list rather than a straight fire). First press armed Rage and
+dropped the player onto a bar with no confirm anywhere on it — second press of
+the same key swung the greataxe. 3-1-3-1. The fix is structural: a page's
+entries are re-derived on every render (`_menu_entries()`, the old
+`_build_hero_menu`'s first half) instead of being carried in the button's
+binding, so `_refresh_menu()` can rebuild whichever page is open — main bar,
+slot list, or spell tier picker — from what is true after arming.
+
+**#25 / #26, Esc and space on the map** — every other screen answers those two
+keys and the open world answered neither, so Settings mid-run meant going back
+to the title and losing the map. Esc backs out of whatever light panel is up
+and otherwise opens a pause menu; space is the Pause button. The menu holds the
+clock the way a market visit does and refuses to open over anything that
+already owns the screen.
+
+**#28, "quests page has verticality issue"** — a `ScrollContainer` hands its
+child the child's MINIMUM size on any axis it can still scroll, and an
+autowrapping `Label`'s minimum width is one pixel. Every quest line measured
+1px wide and ~570px tall: eight quests, 4096px of scroll, for text that fits in
+eight lines. Horizontal scrolling off is what makes the column stretch to the
+container's width and the labels wrap at it. Four lists in `world.gd` were
+built this way and now share `_scroll_column()`.
+
+**#33, "quest complete screen stretches and overflows"** — the other end of the
+same rope, and a regression #28's fix would otherwise have introduced: with
+horizontal scrolling off, a row's own minimum width reaches the panel instead
+of being scrolled past, and `_trade_row`'s label had no wrapping, so one long
+job title took the settlement counter to 717px where 468 was meant to be. The
+floating panels also placed themselves by arithmetic against a size they were
+told to expect and then measured whatever they came to; they sit in
+`CenterContainer`s now, and a page's list takes the height the window can spare.
+
+**#29** — the turn strip borders every tile the current aim lands on. For a
+cone or a burst, which NAMES are standing in the shape is exactly what the
+strip knows and the board does not spell out.
+
+**#30, "no loot page"** — the combat screen writes its own after-action lines,
+but out on the map it is torn down the frame its `result` is filled, so nobody
+ever read them; the linear campaign never had the problem because it holds the
+fight screen up behind "Back to the road". The map's version is a page of its
+own, since the map has a delve to summarise as well as a single fight: a delve
+totals the whole descent and reads its gold off the purse, because a site pays
+from room caches, the boss hoard and the fights themselves and only the purse
+sees all three.
+
+**#27** — roster rows carry equipped gear and trained skills (best first,
+expertise marked) out of `Party.summary()`, so comparing two characters no
+longer means opening both sheets. And the roster reshuffled anywhere: the
+screen takes a `roster_locked` flag from whoever opens it, so the HUD button
+opens it locked and the inn's "Sort out the party" opens it unlocked. The lock
+covers benching, recruiting and Create new and nothing else — marching order is
+a travel decision, and travel is what you are doing out there.
+
+**#31, the frame-rate drop** — three things, all per cell, per frame, for
+answers that do not change per frame. `_draw_ground()` walked every cell of the
+VIEWPORT and asked `world.is_explored()` about each one (3.7µs a cell measured,
+since that folds in a scan of every settlement), then recomputed each surviving
+cell's tile through `world.water_depth()`, another linear scan, at 4.8µs. It
+walks the explored ground now — out from each remembered waypoint and each
+settlement beacon, clipped to the viewport and memoised on the cell box plus
+the trail's length — which reaches exactly the set `is_explored()` would have
+said yes to, from the other end. Unexplored cells are one rect for the whole
+viewport rather than one each, and the tile pick is cached.
+
+Measured on a large map with a party a good way into a run (900 reveals, 32
+waypoints), at the viewport the game actually uses, cold — the memo defeated
+on every iteration, so this is the worst case rather than the steady state:
+
+| zoom | viewport cells | painted | before | after |
+|---|---|---|---|---|
+| 2.00 | 3,575 | 2,617 | 31.3 ms | **4.0 ms** |
+| 1.00 | 13,843 | 6,502 | 96.6 ms | **9.4 ms** |
+| 0.50 | 54,901 | 7,450 | 4.8 ms (nothing painted) | **8.7 ms** |
+| 0.25 | 217,655 | 7,450 | 19.1 ms (nothing painted) | **8.4 ms** |
+
+The `ponytail` note in that function predicted the whole thing ("a spatial
+grid is the upgrade if a very long walk makes it drag").
+
+**A correction, recorded because it was published before it was checked.** The
+first version of this entry, and of PR #32's description, claimed the reporter's
+3840×2118 window tripped `MAX_CELLS` at zoom 1.0 and painted the map as one
+flat green rectangle, and guessed that this was what #23 ("overworld tiles
+bad") was seeing. That is **wrong**, and the mistake was measuring
+`_draw_ground()` against a hand-set `size = Vector2(3840, 2118)` rather than
+against what the screen reports. The project stretches `canvas_items`, so the
+Control's logical size stays around 1280×800 whatever the window is — 8,455
+viewport cells at zoom 1.0 on a 4K window, comfortably under the cap. Rendering
+master at 3840×2118 paints its tiles perfectly well, and no zoom reproduced a
+flat fill on screen. #23 is still unexplained, and this branch should not be
+read as fixing it. What survives is the table above: the per-frame cost, at the
+viewport the game really has, is roughly a tenth of what it was.
+
+### Two asks alongside them
+
+**A testing pace for the unlock ladder.** Every `SPECIES_COST` / `CLASS_COST` /
+`SUBCLASS_COST` threshold is cut so the ladder can be walked in one sitting —
+about one unlock per three fights. The pace is measured rather than guessed: a
+fight pays `power * XP_PER_POWER`, which resolves to 55–190 at levels 1–3 and
+500–720 by level 12, so a species step is 450 and a class step is 1500. Order
+and shape are untouched. This is TEMPORARY and says so: the header carries the
+shipping numbers verbatim and `tests/test_progression.gd` pins the claim, so
+putting the real ones back is a red test rather than a silent balance change.
+
+**Clearing a lair pays.** Every room on the way down already paid its own XP,
+but reaching the bottom paid nothing, which made a delve worth strictly less
+than the same number of fights out on the road — the wrong way round for the
+one piece of content you commit to blind. `Site.clear_xp()` is flat and scaled
+by depth the way the boss hoard beside it is. Only on a clear; withdrawing
+keeps what the rooms paid and nothing else.
+
+**A lair does not stay empty.** A spent lair used to sit grey for the rest of
+the run — five lairs, five clears, nothing left underground. One in-game day
+after it is emptied (however: fought to the bottom, talked past, or resolved
+without the party while `WINDOW` ran out) something moves back in. The party
+keeps knowing WHERE it is; the rooms they cleared, the clock that was running
+and whether the guardians are awake all start over. Every "this is spent" stamp
+goes through `WorldLairs.mark_cleared()` so the clock cannot be started in one
+place and forgotten in another, and an old save with no stamp stays spent
+rather than repopulating on load.
+
+**Weight in the combat animations.** The reported feel was "like they are in
+fast mode", and the reported question was which setting would help. The answer
+was none: `anim_speed_multiplier` was floored at 1.0 both on load and in
+`anim()`, so the only thing the dial could ever do was make the fight quicker.
+Both halves are fixed. The setting turns both ways now (`ANIM_MIN` 0.4 to
+`ANIM_MAX` 3.0, with `FAST` passing through as a real stored choice), the
+checkbox is a five-way pace picker — Weighty / Measured / Normal / Brisk /
+Instant — and `SORCMERC_FAST` still wins outright so the headless suite cannot
+be slowed by whatever `settings.json` is on the machine.
+
+The animations themselves carry weight at 1x, which is the part that does not
+need a setting. Token movement was exponential smoothing at a fixed rate,
+`cur.lerp(target, dt * 12)`, which has no idea how far the token is going — a
+six-hex dash and a one-hex sidestep both took about a quarter of a second — and
+starts at full speed and creeps into the destination, the exact opposite of how
+something with mass moves. A token crosses the board at a speed measured in
+HEXES now, smoothstepped, clamped between `STEP_MIN` and `STEP_MAX`. `FX_TTL`
+went up across the board (melee 0.30 → 0.46; at 0.30 a swing was over before
+the eye found it, which is most of the "fast mode" reading), the melee
+step-in's curve is skewed to strike out fast and recover slow instead of
+`sin(t * PI)`'s symmetric nudge, and the beat before a monster acts went 0.5 →
+0.75 so the last swing is off screen before the next turn starts.
+
+## Cover you can see, and benching where you are looking (2026-09-16)
+
+Two asks off the back of playing the branch.
+
+**Cover in the combat map should be more obvious.** Half cover is +2 AC and +2
+on Dex saves (`core/combat.gd`'s `effective_ac` and `_saving_throw`) — the
+difference between a 55% swing against you and a 45% one, and the reason to
+spend a move getting into it. It was announced by a slab two shades off the
+ordinary floor (`2a3a3a` against a `COL_HEX` that is barely different) and the
+word "cover" in 10px grey-teal at the bottom-LEFT corner of the hex — under the
+foliage that always grows on a cover hex, over a textured floor, at whatever
+zoom the board happened to auto-fit to. On the Sunken Shrine that is
+`hex_px = 15.3`: the label was smaller than the plant standing on top of it.
+
+Cover says it twice now. A rim around the tile in `COL_COVER_EDGE`, a teal
+nothing else on the board wears (the test asserts the distance from every other
+board colour, so it cannot quietly drift into meaning "selected"), with a faint
+inner line so it reads as the lip of something rather than as a selection
+outline. And a chip carrying **the number** rather than the noun — `+2`, on a
+dark backing plate, because it lands on a textured floor with a plant on it and
+without one it is legible on some tiles and not others. The chip scales with
+the hex and drops out below 10px; the rim does not, so zooming out loses the
+value and keeps the shape, which is the right way round — at board scale you
+want to see WHERE the cover is, and close up you want to know what it is worth.
+
+`tests/test_cover_readable.gd` cannot look at a picture, so it checks what is
+decidable: the palette really is distinct, the chip states the number the
+engine actually applies (it moves a combatant onto a cover hex and compares
+`effective_ac`), and the rim is thicker than an ordinary hex seam.
+
+**Clicking somebody who is marching benches them.** The roster column on the
+left has always had a Bench button per row. The marching order on the right —
+the side of the screen you are actually looking at when you decide somebody
+should sit this one out — had no way to do it, so the move was to look away,
+find that person's row again on the left, and press the button there.
+
+A marching slot with nothing picked up is now that person, and clicking them
+takes them out of the line. With somebody picked up it still places or swaps
+them, so the old interaction is untouched; the bench click is the
+no-selection case. It respects issue #27's inn lock like every other way of
+benching, the tooltip says which of the two things the click will do, and the
+hint line leads with it.
+
+## D3.1 — eight more road events, and the gates that keep them honest (2026-09-16)
+
+D3 shipped the road with six events on it. Six was enough to settle the
+question it was built to answer — a map with something on it beats a corridor
+between menus, and a clock that stops for it beats a fast-forward that skips
+the game. It was not enough to ride for an evening. At one roll per six
+world-hours the table came round inside a single crossing, and the second time
+a stream ran wrong in the same afternoon the card stopped being news.
+
+`core/travel.gd` now carries fourteen. Both of D3's rules are untouched:
+standing orders are still set once on the party screen, and an event still
+resolves itself against the orders already standing rather than stopping to ask
+anything. What changed is how much road there is between repeats, what the road
+asks for, and what it deals.
+
+**What it asks for.** The six originals rolled Survival, Perception,
+Persuasion, Insight, Investigation and Medicine. Everything else on a sheet —
+Athletics, History, Religion, Nature, Animal Handling, and the two lying
+skills — was dead weight the moment a fight ended. Each of the eight new events
+is anchored on one of those: a ford that wants Athletics, a waystone that wants
+History, a crossroads shrine that wants Religion, a storm that wants Nature, a
+carter's spooked team that wants Animal Handling, and a toll post that will
+take Intimidation, Deception or Persuasion, whichever the party is best at.
+
+**What it deals.** D3's events could cost time, cost HP, pay gold, or reveal a
+lair. These add four more payoffs, one event each so that none of them is a
+reskin of another: a wound taken off at the shrine (a share of max HP, to
+everyone still standing — never the dead, because a shrine by the road must not
+look like a cheaper resurrection), gear lost to a river, coin lost at a toll
+post, plain sellable salvage out of a dead company's wreck, and goodwill with
+the locals' faction for pulling a cart out of a ditch — the one road event whose
+payoff is not on the party sheet at all, and the only place `FactionOpinion`
+moves outside a town.
+
+**The gates.** A card nobody can argue with had better not describe a world the
+player can see is not there. Two optional keys on an event decline the roll
+instead:
+
+| key | what it gates on | why |
+|---|---|---|
+| `bands` | the D6 country underfoot (`core/regions.gd`) | nobody is manning a toll post in the Far Deeps; nobody's company lies dead on a farm road |
+| `needs` | a state of the party or the map | the shrine only comes up when somebody is actually hurt; the carter only when there are locals whose goodwill is worth something |
+
+An unknown `needs` fails closed — a requirement this version does not
+understand is a card it must not show. A world too small to band, or one with
+no player on it (a test harness, a save mid-load), drops the band gate rather
+than the event.
+
+**Sizes.** Everything on this table stays small on purpose: a road event is
+something that happened between two places, not a fight and not a reward node.
+A storm sat out costs less than the worst ground (180 world-minutes against
+240); the old straight road hands back more than a clear day does (120 against 90,
+because clear running asks for no check at all); the snare's toll is under the
+bad water's;
+and the `maxi(1, ...)` floor that has always kept foul water from dropping
+anybody is now shared by every HP cost on the table, because there is no fight
+out there to drop somebody in and nobody to pick them back up. A toll takes
+what is in the purse and never more, and says so on the card when the purse
+would not cover it.
+
+**The card.** `scenes/world/event_card.gd` grew chips for the new payoffs
+(healing, salvage, and who heard about a favour) and — the one fix that was not
+new work — gold now renders signed. D4's parley toll has always passed a
+negative gold through this card, and the card has always drawn it as
+`+-40 gold`. The skill on the roll line is read off the catalog rather than
+`capitalize()`d, which is the difference between "Animal Handling" and
+"Animalhandling".
+
+`tests/test_travel.gd` pins the gates in both directions (no toll posts in the
+deeps, no wrecks in the heartland, no shrines for a party at full HP), the four
+new payoffs, and the invariants: the purse never goes negative, the healing
+never goes past full, the dead stay dead, and nothing on the road drops
+anybody. Two of those tests replay a known seed onto a party in a known state
+rather than searching with the party under test — a search spends and earns as
+it goes, so by the time it finds a failed toll the purse it was told to empty
+has been paid twice over by wayfarers.
+
+## Spike — opinions between party members, and romance (2026-09-16, feasibility)
+
+Full write-up in `docs/spike-party-opinions.md`; model `core/party_opinion.gd`
+(plus one `relations` field on `core/party.gd`), test
+`tests/test_party_opinion.gd`, throwaway sweep `tests/sweep_party_opinion.gd`.
+Nothing in the shipped game calls it. Headlines: every companion is
+player-made, so the shape has to be systemic rather than authored — a
+symmetric score per pair that drifts toward a baseline read off the two
+sheets, labelled by band, told in one-line camp beats, with no written NPC
+for a dialogue tree to hang on. Romance is a camp beat that ASKS through D4's
+options card, never a roll, one partner at a time, and declined is
+remembered. The road is where it pays — a morale point beside the pace bonus
+on every D3 check, and the roll feeding back into who the party likes. The
+three combat effects at 5e-honest sizes (+1 AC bonded and adjacent, -1 to hit
+rivals adjacent, advantage when a partner falls) are all inside the sweep's
+±2.7-point noise: a rally every other fight is a moment, not a balance
+change. The healer–faller pair bonds too fast at +12 a save (Ilsa+Pike +5.3
+per fight); cap saves once per fight before wiring anything. Side finding:
+Help's advantage is erased by the ally's own `new_turn()` before it can be
+spent — pre-existing, one line, its own PR.
+
+**Appendix A (same doc, added the same day)** — uncontrollable actions, which
+the spike above does not touch: a character who refuses an order or swings at
+the wrong person because of how they feel about somebody. Every effect §6
+measured is a modifier the player still steers around. The appendix argues
+this game can take less control loss than the genre does, for two reasons: a
+character here is an investment the player built across a dozen 5e choices
+rather than a recruit they hired, and the brief promises that every hit
+traces to a visible number, which an unannounced roll at the top of a turn
+does not. 5e's own answer to control loss is a **saving throw**, which is a
+visible number with a published DC.
+
+The finding that makes it cheap: `data/effects/conditions.json` plus
+`apply_condition()` already express every category of act-out as a 5e
+condition — refusing to act is `incapacitated`, refusing your chosen target
+is `charmed`, backing away is `frightened`, and the signature already stores
+a `source`, which is exactly what "frightened **of Pike**" needs. There is
+also a `held_by` + repeat-save path for shaking it off, and `take_turn()`
+already routes a party member to `_party_auto()`. So an act-out needs no new
+engine machinery at all, which is an argument for deciding it on design
+grounds rather than on cost.
+
+Two findings argue against decisions this spike already made, which is the
+point of having run it. Rivalry as a combat *penalty* is probably wrong here:
+designs built around characters the player made themselves make every
+relationship state a different bonus, rivalry included, with no punishing
+state at all — so `bicker_penalty` should be a different bonus rather than a
+malus, which is one sign flip. And symmetric storage was the easy call: it is
+right for a bond, which is mutual, but an opinion wants to be directed so
+that A can count B a friend while B counts A a rival, and so it can carry the
+rule this shape cannot express — one hated member floors the whole marching
+order's reading however many friends are in it. That is a save-format
+decision, so now or never.
+
+What transfers, in order: measuring the score off combat behaviour the player
+was going to choose anyway (and losing points for treating yourself first
+while an ally is down); a positional formula, since this is a hex game — sum
+a per-character bonus vector over nearby related allies and scale by band,
+which generalises both of §6's adjacency hooks into one line; making the
+relationship the **cure** for a condition and not only its cause, by having a
+move that ends beside a bonded ally shed `frightened`; narrowing the menu
+rather than seizing the turn, so a rival pair simply loses the cooperative
+verbs with each other; putting the real control loss in town and at camp,
+where the clock is stopped and it costs coin — our inn prices and standing
+orders are the surfaces; letting the campaign layer **cap** the combat layer
+rather than set it; and a timer that writes a permanent relationship on
+expiry, as the bridge between authored and simulated.
+
+What does not: a second stress or mood resource (a worse version of
+exhaustion, which is already in the engine), contagion, a real-time social
+tick, any break that seizes a whole turn (a fifth of the action economy in a
+party this size), marriage that produces recruitable children, and anything
+that can remove or kill a character over a feud. `core/travel.gd`'s
+`_hp_toll` invariant — nothing rolled between towns may drop anybody — is the
+right precedent, and a relationship should respect it too.
+
+The appendix carries the decisions and the reasons, not the survey behind
+them: a design doc here should not be a competitive analysis of other
+people's games assembled from fan wikis. The workings are in the pull
+request's history.
+
+## T94 — the bestiary's second pass: defences, and the abilities the engine could already express
+
+The question this started from was narrow: which monster abilities does the
+engine *already* have the mechanics for, for the monsters that actually turn up?
+"Actually turn up" is measurable — `core/scaler.gd` draws one faction, filters
+it to entries under `budget * BIGGEST_SHARE`, and cycles three ids into bodies —
+and simulating that draw across party levels, difficulties and seeds puts
+hobgoblin and hobgoblin-archer at ~9.4% of every body spawned in the game, spy
+and spy-archer at ~4.3%. Their statblock abilities (Martial Advantage, Sneak
+Attack, Cunning Action) needed no engine change at all: `passive_damage` with
+`requires: ["ally_adjacent_to_target"]` is the predicate pack tactics has used
+since T16, and `rogue-cunning-action` was already written.
+
+**The part that was data, not code.** 106 bestiary entries gained a feature.
+New templates for Martial Advantage, Sneak Attack (2d6 and the assassin's 4d6),
+Assassinate, Divine Eminence; existing templates re-tagged where T16's sweep had
+missed them (`monster-charm-gaze` *is* the dryad's Fey Charm, word for word;
+`monster-charge` was on the gnoll and not its archer variant). Numbers come from
+the SRD text at the commit `data/SCHEMA.md` pins, not from the regex-parsed
+`_notes`. Three archer variants were deliberately NOT given their melee twin's
+rider — the centaur's Charge is a pike attack, the wight's Life Drain and the
+weretiger's Pounce are melee actions, and a bow does not do any of them. Brute
+is not modelled either, on both monsters that have it: the SRD says "(included
+in the attack)" and the damage line already carries the extra die.
+
+**The part that was a bug.** `data/bestiary.json` has carried `resist`,
+`immune`, `vulnerable` and `cond_immune` on all 316 entries since F1b, and the
+engine threw every one of them away: `Adapter.from_monster` copies with a
+generic `c.set(k, v)`, and `Object.set()` on a property no script declares is a
+silent no-op — the same trap `core/combatant.gd` already documented for
+`damage_type`. 135 entries had a defence that did nothing. Four properties, a
+prose normaliser for the "from nonmagical weapons" clause (no weapon in this
+game is magical, silvered or adamantine, so the clause always holds), and the
+RAW order in `_damage_after_defenses`: immunity wins, then vulnerability
+doubles, then resistance halves once however many sources claim it.
+
+**The rest of Tier B**, each one contained: Magic Resistance (20 monsters) as a
+`save_modifier` passive plus a `magical` flag on the save path, which is what
+keeps it off a dragon's breath and a ghoul's claws; Parry (5) as a reaction that
+raises AC on a swing that would otherwise land; Undead Fortitude and Relentless
+(7) as one `survive_damage` hook in `_apply_damage`; Death Burst (4) as an
+`on_death` trigger in `_kill`. `_kill` also stopped being re-entrant, which was
+cosmetic before this pass and is not once a corpse can explode.
+
+**Senses and hiding.** `conditions.json` has carried `auto_fail: ["sight"]` on
+Blinded and `["hearing"]` on Deafened since T14 and nothing read them. Hiding is
+the engine's one perception check, so that is where they landed: `hide_dc_against`
+adds RAW advantage-as-+5 for a keen sense (~60 entries), suppresses it when the
+observer has lost every sense it relies on, and takes 5 off a watcher who cannot
+see at all. Blinding a wolf now costs it its eyes and leaves its nose working;
+blinding a hawk takes its Keen Sight entirely.
+
+**Balance.** `core/rules/power.gd` prices all of it, which is the mechanism that
+kept the curve inside its band without touching a single knob in `scaler.gd`: a
+tougher monster costs more budget, so the generator buys fewer of them. Both
+columns of the before/after are in `scaler.gd`'s TUNING header, measured
+back-to-back on master and on the branch with `tests/test_scaler.gd`'s own
+200-seed sweep. Every tier stayed ordered and inside the ±10 BAND; the
+per-boss numbers `campaign.gd`'s BOSS_POOL copies verbatim were re-copied. The
+cost that does not show up in a win rate is length: a level-8 fight went from
+~9.8 rounds to ~12. Resistance is duration, not difficulty.
+
+## T19b — the achievement list, filled out, and a toast to go with it
+
+T19 shipped 13 achievements, a model and a viewer nothing opened. This pass is
+the other three quarters of it: **139 achievements across eight sections**, the
+unlock calls for every one of them, a card that slides in from the top-right
+corner the moment something is earned, and a door onto the viewer from the
+title screen.
+
+**The model grew two things.** `unlock()` was the whole API and it can only
+express "did this ever happen". Anything counted — a hundred kills, 25 crits,
+a 60-damage blow, every school of magic — needed a tally underneath it, so
+`core/achievements.gd` now carries `counters` and `sets` beside `unlocked` and
+three ways to move them:
+
+```
+Ach.bump("kills")                 # a running total
+Ach.record("biggest_hit", 47)     # a high-water mark; only ever moves up
+Ach.collect("bestiary", "goblin") # distinct things; count() is its size
+```
+
+All three read back through one `count(key)` and check the same threshold
+definitions afterwards, so a call site is one line and never names an
+achievement id — moving a goal, or adding a fourth achievement to an existing
+counter, touches the list and nothing else. The file is the same
+`user://achievements.json` at `version: 2`, and a v1 file loads with its
+unlocks intact and the tallies at zero. Unlocks write through as before;
+tallies coalesce into one write every few seconds, because a busy fight bumps
+half a dozen of them a round.
+
+**The toast is an autoload**, `scenes/achievements/toast.gd`, for the same
+reason `core/audio.gd` is one: `core/*.gd` is pure logic the headless suite
+exercises and cannot own scene-tree nodes. The model appends whatever it just
+unlocked to a small capped queue; the layer drains it every frame, at most
+three cards at once, and nothing in the game — a fight, a shop, a level-up, the
+world map — knows it exists. A script run as the main loop instantiates no
+autoloads, so the whole suite earns achievements with nobody drawing them,
+which is exactly right. The player can turn the cards off in Settings; the
+achievement is still earned and still shows in the viewer.
+
+**What is actually hooked up.** Roughly fifty call sites across `combat.gd`,
+`encounter.gd`, `campaign.gd`, `party.gd`, `leveling.gd`, `progression.gd`,
+`site.gd`, `settlement_visit.gd`, `travel.gd`, `quest.gd`, `party_opinion.gd`,
+`faction_opinion.gd`, `potions.gd`, `trance.gd`, `road_spells.gd`,
+`world.gd` and five screens. The fight-shaped ones (won in one round, ran
+fifteen, nobody took a scratch, every knee on the ground and still a win) live
+in `Encounter.resolve_outcome`, which is the one function every real fight ends
+in.
+
+**One correctness fix fell out of it.** `Combat` gained a `tracked` flag, false
+for the NPC-vs-NPC battles `core/world_battle.gd` resolves off-screen. Those
+build a `Combat` whose two sides are called "party" and "foe" only because
+`Encounter.build` spawns the foe side — so before this, two bandit bands
+meeting on the far side of the map could earn the player `death_save`. Every
+new hook is gated on it, and so is the old one.
+
+**Hidden ones stay hidden.** 26 of the 139 draw as `???` in the viewer until
+they are earned, which is the ones that would otherwise read as a to-do list
+("go and lose a fight", "get caught stealing") or spoil their own joke. The
+rest show their progress bar while they are locked.
+
+## T19c — the twelve settlement models, rebuilt low-poly, and a kit with a town in it
+
+Two things were wrong with the settlement dioramas, and they wanted opposite
+fixes. `assets/settlements/*.glb` were Meshy text-to-3D output: real building
+shapes, but 82k fused triangles under a 2048 atlas of 3.3k-5.3k tiny UV
+islands, which at the 29-83px a settlement is actually drawn averages to one
+brown. `settlement_kit.gd` answered that by building the opposite thing out of
+primitives — crisp, seeded per settlement id, and, once you looked at it beside
+the models it was replacing, too plain to be a town.
+
+**The models were rebuilt rather than replaced.** `tools/lowpoly_glb.py` runs
+four steps, each of which needs the one before it:
+
+1. **Weld.** Meshy splits a vertex at every UV seam (67,847 vertices for 82,219
+   faces). Decimating that collapses nothing and shreds the model into
+   confetti; welding first gets to 41,269 shared vertices. Colour is sampled
+   from the atlas *before* the weld, while the UVs still exist.
+2. **Smooth** (Taubin), to take the reconstruction fuzz off before the
+   decimator spends triangles describing it.
+3. **Decimate** 82k → 4k. Quadric error collapses flat regions first, so a roof
+   slope becomes two triangles and the ridge between slopes survives.
+4. **Facet**, and punch the colour. One normal and one colour per triangle.
+   This is the step that reads as "sharp": the same mesh with interpolated
+   normals is a lump of clay, and faceted it is planes meeting at a line.
+
+Measured, not guessed: **the face budget is the smoothing control.** Taubin
+converges — 14, 35 and 60 iterations render identically, and raising lambda to
+0.75 changes almost nothing. What visibly takes the lumps out is decimating
+harder, because the same noisy wall described with a quarter of the triangles
+*is* fewer, bigger, flatter planes. 8k still reads busy; 4k is where a roof
+becomes a roof; 3k starts rounding a tent off.
+
+`assets/settlements/` went **54 MB → 8.2 MB**: 44 MB of .glb down to 4.7 MB,
+and the 48 extracted atlas .jpg/.import files deleted outright, because the
+colour lives in the mesh now. The originals are in git history; the tool is
+re-runnable against them. Godot needs `vertex_color_use_as_albedo` to show any
+of it, so `Settlements3D.dress()` puts one shared flat material on every
+instance — forget it and the settlement renders white, which is exactly what
+the gallery shot did until it called the same helper.
+
+`Settlements3D.source` now defaults to `"glb"`. Twelve models still means two
+towns of a faction are the same model, so each instance takes a seeded yaw off
+its settlement id — enough to change which gable faces the camera, not enough
+to swing its lit side away from the sun the map shares.
+
+**The kit got its detail pass anyway**, because it is still the only source
+that draws a different town per id:
+
+* **Camps are camps.** A camp builds tents (the roof shape resting on the
+  ground with a pole through it) instead of little houses, and its landmark is
+  a standard on a mast, not a keep. Dwarves are the exception and hut it.
+* **One landmark per faction**, not one shape in four palettes: a keep with a
+  side tower, a tiered elven spire, a forge hall under a chimney that runs the
+  full height from the ground, a longhouse under a totem.
+* **A kitbash set** — `DRESSING` — of wells, market stalls, carts, ore carts,
+  mine heads, woodpiles, haystacks, trees, standing stones, totems, trophy
+  stakes and cook fires, placed at golden angles in the gaps the houses left.
+  A new `ember` palette role carries the one lit thing in a settlement.
+* **Houses grow things**: a jetty, a lean-to annex, a porch, a dormer, a dark
+  door, a ridge beam — all on the inward face, which is the side the map camera
+  sees and the one direction that cannot push a part out through the footprint.
+* **A gate that is a gate**: two squared gateposts and a lintel in the gap the
+  palisade leaves, at the wall's own scale.
+
+Three things the tests learned along the way. Dwellings are now **tagged** in
+the plan rather than identified by `role == "wall"`, because a stall's counter
+and a totem's skull are wall-coloured too and the overlap test was quietly
+counting them. Palisade posts are counted **on the ring**, since the kit puts
+posts inside the town now. And a house that cannot find room is rebuilt at
+three-fifths size instead of being placed inside its neighbour, which is what a
+crowded town does anyway.
+
+The palettes, meanwhile, come out of the game's own painted art rather than the
+eye: `tools/palette_from_art.py --ring assets/generated/<faction>-*.png` drops
+the middle of each counter portrait and quantises what is left, which is the
+room behind the shopkeeper — the only painted architecture each faction has.
+Hues only; the value spread stays deliberate, or the whole thing goes brown.
+
+## T-path — the bands find their way round the water (2026-09-17)
+
+T9y made water terrain and listed what it deliberately did not do: *"no
+pathfinding around water (a march into a lake stops at the bank, by design)"*.
+That is the right call for the player, who can see the map and click again. It
+was never the right call for a band nobody is steering, and the two maps that
+ship with the game were both quietly broken by it:
+
+* **`bandits` on the small map hunt the player across the river.** Their goal
+  is re-read every frame as the player's live position, so the moment the
+  player is on the far bank the band walks to the near one and stands there —
+  not for a while, for the rest of the campaign.
+* **The `patrol` band's leg back to (0, 0) crosses the river too.** Worse: a
+  patrol advances to its next waypoint when it *arrives*, so a leg it can never
+  finish does not just stall that leg, it kills the whole circuit. The band
+  never patrols again.
+* **A wander roll lands in the lake sooner or later**, with the same ending —
+  the destination is never reached, so a new one is never rolled.
+
+`core/world_path.gd` (new) is the router; `core/world_ai.gd` is where it is
+used. O1 is untouched: it still steers toward `party.goal` and still refuses
+every step from land into a blob. The player is untouched too — clicking the
+middle of a lake still means "walk to that lake".
+
+**The model picks the algorithm.** `World.waters` is circles and nothing else,
+and the shortest path around a circle hugs it, so a route only ever bends at a
+bank. The nodes are a ring of points stamped just outside each blob, keeping
+the ones that are not swallowed by some *other* blob — a river is overlapping
+blobs, so that filter leaves exactly its two banks and throws the middle away.
+The edges are the pairs that can see each other over dry ground, the path is
+Dijkstra across them, and a string-pull afterwards drops the corners the band
+could have walked straight past.
+
+Visibility is exact circle geometry — a segment is blocked when its closest
+approach to a centre falls inside that radius — rather than walking the line in
+steps and asking `is_water()`. It is one distance test per blob instead of one
+per step, and it cannot miss a thin blob that happens to fall between two
+samples. Two details earn their keep: the test ignores the first and last half
+unit of a segment (a band stopped hard against a bank is *exactly* `radius`
+from that centre, and without the slack every step it could take reads as
+blocked by the blob it is standing next to), and a destination that is itself
+in the water is pushed out to the bank first, because a destination nobody can
+stand on is a destination nobody ever "arrives" at.
+
+**Cost.** The graph depends on `waters` alone, and no map adds water after it is
+built, so it is built once per distinct set of blobs and cached on a signature
+of the water itself rather than on the world (two worlds with the same lakes
+want the same graph; a freed world leaves no stale entry). Measured: small map
+22 blobs → 86 nodes / 927 edges, 9ms; large map 26 blobs → 134 nodes / 1911
+edges, 22ms; a query across either, ~1ms. On top of that, `update()` plans at
+most two routes per frame, and a band the router could find no way round at all
+waits five world-minutes before asking again — otherwise one band aiming at an
+island burns the whole budget every frame and the bands that *could* be helped
+never get a turn.
+
+**The shape of the change in `world_ai.gd`.** A behavior no longer writes
+`party.goal`; it names a *destination*, and one `_steer()` turns that into the
+next goal — the destination itself whenever the straight line is dry, which is
+every line on a map with no water in it. Arrival is judged against the
+destination and not against `party.goal`, which on a detour is a waypoint
+halfway round a lake; getting that backwards is exactly how a patrol would tick
+through its whole waypoint list while walking one shoreline. The route rides in
+the party's own `ai` dictionary, so `world_save.gd`'s generic encoder carries it
+through a save with no changes at all — which is the claim that file makes about
+itself, now tested.
+
+One behavior needed a nudge to survive the refactor. The truce break-off (a
+band that met you and left without blood walks away for two hours) used to work
+by accident: `truce()` wrote `party.goal`, and the behaviors happened to leave
+it alone because `at_goal()` was false. With a destination going through
+`_steer()` every frame, a patrolling band would have resumed its circuit
+immediately. The break-off is now a destination in its own right, outranking
+the behavior until it is walked or the truce lapses — and it gets routed round
+the water like anything else.
+
+**Tests.** `tests/test_world_path.gd` (new, 264 assertions) covers the geometry
+(including the clip case a sampled test would miss and the band-on-the-bank
+case the end slack exists for), that a route's every leg is dry and ends where
+it was going, that it is pulled tight (no waypoint the band could have skipped),
+that a band handed one actually reaches the far bank under O1's own stepper,
+that "no way round" comes back as an honest empty answer with the band falling
+back to the old march-to-the-bank, and that every band on every built-in map
+can find its way to every settlement on it. `tests/test_world_water.gd`'s
+NPC-band case asserted the old bug as the design (*"the band is held on its own
+bank"*) and now asserts the fix.
+
+**Still not done:** the player still gets no pathfinder, on purpose. Water is
+still the only terrain, so this routes around lakes and rivers and nothing
+else. And a band's route is drawn nowhere — the map shows the player's goal
+ring and has never shown anyone else's.
+
+## Spike — the floating damage number (2026-09-17, measurement only)
+
+Full write-up in `docs/spike-damage-numbers.md`. Play feedback asked for the
+damage number to be red, big, and to stay longer. The measurement says all
+three are downstream of something else: `Board.tick()` spawns a float **per
+frame** while the HP bar is still lerping (`scenes/main.gd:2293–2299`), each
+carrying the shrinking *gap* rather than the damage, so one 14-damage hit
+draws 21 numbers stacked inside 11 px — `-14 -11 -9 … -1 -0 -0 -0 -0 -0` —
+fading red→orange→yellow on the way. The newest is on top and opaque, so
+what the player reads is `-0` in yellow. It is worse the slower you play
+(Weighty: 39 floats) and scales with frame rate (53 at 144 fps); at Instant
+it is correctly one float, which is why the headless robots have never seen
+it. Two more: the red band (`amount >= 12`) is unreachable for the whole
+preset party on a normal hit — longsword/shortbow/mace all cap at `1d8+3 =
+11` — and the float is the last transient readout still painted on `Board`
+rather than the HUD overlay, i.e. under the `Figures3D` models, the same bug
+the HP bar, the odds chip and the barks were each moved to fix. Foe attacks
+and every AoE get no reveal headline at all, so for incoming damage the
+float is the only readout there is. Recommendation: latch the HP goal and
+spawn one float per damage event first (~8 lines, leaves the bar's easing
+alone); only then re-cut the colour on fraction-of-max-HP plus crit, scale
+the size with `fz`, give it a hold-then-fade curve, and move the paint to
+`_draw_hud_overlay`. Raising the TTL or the font size on today's code just
+makes a bigger, longer-lived pile of `-0`.
+
+## T-dmg — the hit, the miss and the damage, said loudly enough to read (2026-09-17)
+
+Follows the spike above, and the same playtester's follow-up: *improve hit /
+miss / damage font weight and size*. Both readouts — the roll reveal's
+headline and the floating damage number — now paint in the game's own bold
+face (`Icons.sans(700)`, not `ThemeDB.fallback_font`, which is Godot's
+built-in and a face this game does not ship) with an ink outline, through one
+`Board._shout`.
+
+**The size ask needed a fix under it first.** The damage number was spawned as
+a side effect of the HP bar's easing — one per frame while the bar was still
+travelling, each carrying the gap it had left rather than the damage. A
+14-damage hit drew 21 numbers stacked inside 11 px, fading red→orange→yellow
+and ending on a pile of `-0`; the newest drew last and opaque, so `-0` in
+yellow is what the player actually read. Making *that* bigger and bolder makes
+a bigger, bolder pile of `-0`, so the number is latched off the real hp now
+(`_dmg_goal`) and the bar keeps its own easing untouched. First sight primes
+the latch with a real write rather than defaulting to the current hp — the
+version that defaults re-primes every frame and never sees a blow at all.
+
+**Sizes.** The number ran at a literal 18px: the only text on the board that
+ignored `fz`, so zooming *in* to watch a fight made the damage relatively
+smaller. It now scales with the zoom like everything else, and with the share
+of the body the blow took (`sqrt` of damage over max HP, 23→42px), because 12
+damage ends a goblin and scratches a giant and those should not be the same
+size. The reveal headline goes 26→32, keeping its punch-in.
+
+**And the fourth and fifth move to the HUD layer.** The damage numbers and the
+whole roll reveal now paint in `_draw_hud_overlay`, joining the HP bar, the
+odds chip and the barks, for the reason this file has now recorded three times:
+a `Figures3D` model is a `Board` child and draws after everything `Board`
+paints. The reveal needed it most — its dice row sits lowest of any of them,
+right at a tall rig's chest, and a figure standing in front sliced the headline
+in half. `docs/shots/damage-readouts-before-after.png` is that, before and
+after, on the same seed.
+
+One readout per event: where the reveal is up over a body its headline already
+reads `HIT  7`, so the float for that same body is skipped rather than drawn on
+top of it. The reveal only ever fires on the hero's single-target path, so
+every foe attack and every area spell still gets its number.
+
+`tests/test_damage_numbers.gd` (17 assertions) drives `Board.tick()` at an
+explicit dt — the suite otherwise runs at the Instant pace, where the easing
+constant clamps to 1 and the bug does not reproduce, which is why the robots
+ran past it — and asserts one number per blow across three paces and three
+frame rates, that it says the damage, that a body's *first* hit still reports,
+and that healing stays silent. `tests/test_hud_layer.gd` grew four checks for
+the two new moves. `tests/shot_damage.gd` renders the proof.
+
+Not done, and still open in the spike: the colour bands are still cut on
+absolute damage (`>= 12` for red), which the preset party cannot reach on a
+normal hit at all — longsword, shortbow and mace all cap at `1d8+3 = 11`; the
+number still fades from the frame it is born rather than holding first; and
+healing still draws nothing.
+
+## T-classes — every class and subclass, built and played (2026-09-17)
+
+The rules engine had 48 subclasses and three of them were ever built. Every
+rules test that needed a character reached for `core/presets.gd` — Vera the
+Champion, Pike the Thief, Ilsa of the Light Domain — or for a bare
+`_build("sorcerer", 5)` fixture. Both shapes share a blind spot that turns out
+to matter more than the missing subclasses: **nothing was decided**. A fixture
+with no ASI taken, no fighting style, no spells picked exercises maybe half of
+what the resolver does, because the other half only exists once a build has
+answered its choice points.
+
+`tests/test_class_abilities.gd` deals the 48 (class, subclass) pairs into twelve
+four-hero teams — round-robin, so a team is four different classes — builds each
+team at **level 4** and again at **level 8**, resolving every pending choice
+through the creator's own static choice model the way a player would, equips the
+best weapon and armor each build is proficient with, and then puts all four on a
+board and presses every button their kit offers. 96 builds, ~7,600 assertions.
+
+Level 4 and 8 because those are the two rungs where there is something to see:
+the subclass has landed (3), the first ASI or feat is spent (4), Extra Attack and
+the level-5/6/7 subclass features have arrived by 8, and the proficiency bonus
+has moved once.
+
+**Six bugs, all of them only visible on a decided build.**
+
+1. **`Bundles.class_level()` counted bundles, not levels.** `collect()` gives
+   each class level one bundle — and then appends *derived* bundles carrying the
+   source they came from, which for a class-origin grant is that same
+   `{origin: class, id, level}` dict: one per chosen fighting style, one per
+   chosen damage type, one per decided feature-choice, and one **per spell
+   picked in a class spell-choice**. Counting them read a decided level-4 bard
+   as level 11, a sorcerer as 12, a wizard as 13. Everything keyed on that
+   number scaled off a level the character never had: a level-4 sorcerer had
+   **12 sorcery points instead of 4**, a level-4 paladin 3 Channel Divinity uses
+   instead of 2, a level-4 Psi Warrior 6 psionic dice instead of 4, a level-8
+   warlock's proficiency-bonus pools 5 instead of 3, and an Eldritch Knight read
+   the third-caster slot table at the wrong row. The bundles carry the level;
+   the highest one seen is the answer.
+
+2. **College of Dance wore its Bardic Inspiration die as armor.** `Dazzling
+   Footwork` is 10 + DEX + CHA; `pass_defense.ac()` added the inspiration *die
+   size* instead. With bug 1 feeding it a level-11 bard, a level-4 dancer stood
+   at **AC 23**, and a level-8 one at 25.
+
+3. **Unarmored Defense ignored whether you were wearing armor.** All three of
+   them are "10 + DEX + something, *while you aren't wearing armor*", and the
+   rider was never read: the resolver took the best of the armored and unarmored
+   calculations whichever you had on. A barbarian in padded armor kept the
+   unarmored number.
+
+4. **…and armor did nothing for a barbarian or a monk.** The flip side of 3,
+   found by fixing it: the export emits the `armored` calculation only for the
+   ten classes with no Unarmored Defense, so once the unarmored one is gated off
+   a barbarian in chain mail had no calculation left at all. Wearing armor is
+   something every class can do; the calculation is now implicit whenever body
+   armor is worn.
+
+5. **The Cleric's Channel Divinity could never be pressed.** The export grants
+   the `channel-divinity` resource pool to the paladin and not to the cleric
+   (SCHEMA gap #4), so `Effects.verbs_for` built the cleric's verb with
+   `uses = pool_max() = 0`, `adapter.gd` synthesized a 0-max pool from it, and
+   the button has sat on the bar greyed out for every cleric in the game. The
+   uses are now authored in `data/effects/features.json` (2/3/4 at cleric 2/6/18)
+   and an authored `uses` is the fallback whenever the export grants no pool.
+   The test's general form of this claim is the one worth keeping: *a button
+   that names a pool must have a pool with something in it.*
+
+6. **Bardic Inspiration only reached an adjacent ally.** No `range_ft` was
+   authored on the `ally_buff`, so it fell through to adapter.gd's 5 ft default.
+   It is 60 feet, which is 10 hexes.
+
+Plus one that is not a bug so much as a sharp edge: two grants may name the same
+spell (a class cantrip pick and Magic Initiate's, a subclass's always-prepared
+list and a wizard's spellbook), and nothing deduplicated them, so a druid who
+took Poison Spray twice carried **three Poison Sprays on the action bar**.
+`pass_spells.gd` now keeps the first.
+
+**What the sweep does not assert, and prints instead.** A feature with no
+`data/effects/features.json` entry is a flavor feature by design — that default
+is what makes 430 feature ids tractable (`core/rules/effects.gd`). The test ends
+with the inventory of what the default currently costs, per class and subclass:
+
+```
+TOTAL 16 mechanical, 175 flavor (92% of the features these builds carry do
+nothing in a fight)
+```
+
+Sixteen. Barbarian's Rage / Reckless Attack / Extra Attack, the fighter's three,
+the rogue's three, the monk's five, the bard's inspiration and the cleric's
+Channel Divinity — and **not one subclass feature in the game**, at any level, in
+any class. Every Berserker's Frenzy, every Assassin's Assassinate, every
+Warding Flare and Sacred Weapon and Sneak-Attack-with-a-psychic-blade is prose on
+a sheet. Alongside it the same report lists the eleven resource pools the engine
+grants and no verb can spend (`sorcery-points`, `psionic-energy`, `war-priest`,
+`portent`, …) — a resource bar the player watches fill and can never use.
+
+That is the backlog this test exists to make visible, and it is deliberately a
+`print`, not a `check`: authoring a subclass's mechanics should make the number
+go down, never make the suite go red.
+
+**One knock-on that wants a measured re-run.** Fixing the cleric's Channel
+Divinity makes a cleric genuinely stronger, and `core/rules/power.gd` scores
+that honestly: Ilsa goes 19.6 → 23.9, and the level-3 preset trio the whole
+difficulty curve is anchored on goes 46.6 → 53.9. `core/scaler.gd`'s
+`_budget()` reads the party's live score, so the preset party now buys about
+18% more roster than it did — and that file's own header says to re-run the tier
+sweep after touching any verb. `REF_SCORE`, `TIER` and `CURVE` are deliberately
+left alone here (retuning them is the three-knob measured exercise the header
+describes, not a side effect of a bug fix); `tests/test_rules.gd` and
+`tests/test_regions.gd` had their two anchor assertions restated to claim the
+tier rather than the coincidence, each with the number written down. **The tier
+sweep is owed.**
+
+**Still not done.** The prepared casters have no way to prepare anything: the
+export carries leveled `spell-choice` grants for the bard, sorcerer, warlock and
+wizard, and for the cleric and druid it carries cantrips only — so a level-8
+Circle of the Moon druid has 4/3/3/2 spell slots and **nothing but cantrips to
+spend them on**, and a cleric casts their domain list or nothing. That wants a
+daily-prep screen (or `prepared_count`, which the resolver already computes and
+nobody reads), not a one-line fix, so it is written down here rather than
+patched over.
+
+## T-classes-a — the features the vocabulary could already express (2026-09-17)
+
+T-classes left an inventory: 16 features mechanical, 175 flavor, and a per-class
+list of which was which. This is the first pass over it — deliberately only the
+entries `data/effects/features.json` could already express, with no change to
+`core/` at all.
+
+Two corrections to T-classes' own write-up first, because both were overstated:
+
+* **"Not one subclass feature does anything"** was wrong. It counted entries in
+  `data/effects/features.json`, and a feature's mechanic can live elsewhere:
+  Champion's Improved Critical is `crit_range = 19` in `adapter.gd`, College of
+  Dance's Dazzling Footwork is an `armor-class` grant, Martial Arts is computed
+  in `pass_gear.attacks()`, every pool is a `resource-pool` grant. The accurate
+  claim is narrower: **no subclass feature becomes a combat verb.**
+* **"Roughly half the list is JSON only"** was optimistic. It was judged off the
+  `kind` names, and the engine's *conditions* and *payloads* are much narrower
+  than those names suggest. `requires` knows four predicates and none of them is
+  "while raging" or "on your first turn"; a `reaction` can add AC or halve
+  damage and cannot subtract a die or impose Disadvantage; `save_effect` hits
+  one target, not a radius. So Frenzy, Dread Ambusher, Warding Flare, Cutting
+  Words, Radiance of the Dawn and Open Hand Technique all *look* expressible and
+  are not. Eight entries were, not eighty.
+
+**What landed.** Three of them are parity, not content:
+`paladin-extra-attack`, `ranger-extra-attack` and `collegevalor-extra-attack`.
+Barbarian, fighter and monk had an `attacks_per_action` entry and those three
+did not, so the sheet said a level-8 paladin swung once and a level-8 fighter
+twice. Five are features whose shape the file already had a template for:
+
+| feature | shape | what it retires |
+|---|---|---|
+| `assassin-assassinate` | `attack_modifier`, `requires: target_has_not_acted` | the same entry `monster-assassinate` has had since T16 |
+| `wardomain-war-priest` | `grant_action`, `extra_attacks: 1` | the `war-priest` pool |
+| `celestialpatron-healing-light` | `heal_ally`, 1d6 a die, 60 ft | the `healing-light` pool |
+| `warriorofmercy-hand-of-healing` | `heal_ally`, Martial Arts die + WIS | — |
+| `warrioropenhand-wholeness-of-body` | `heal_self`, PB per long rest | — |
+
+Dead pools: 11 → 9. Each of the five carries a new gilt badge from
+`tools/gen_action_icons.py` (`tests/test_action_icons.gd` refuses a button
+feature with no mark) — Assassinate wears exactly the one `monster-assassinate`
+wears, since it is the same ability and a rogue's version of it should not be a
+different picture.
+
+**And the thing found on the way, which is bigger than all of it.**
+`attacks_per_action` **does nothing on the board, for anybody, and never has.**
+The chain breaks in three places at once:
+
+1. `combat._offerable()` gates the Attack verb on `can_spend("action")` alone.
+   `resolve_attack` banks the second swing in `econ.attacks_left`, but by then
+   the action is gone, so the Attack button greys out with `attacks_left = 1`
+   sitting in the economy. The player never gets it.
+2. `resolve_attack` **assigns** `attacks_left = attacks_per_action - 1` rather
+   than adding, so anything banked earlier is destroyed. Flurry of Blows banks
+   two swings as a Bonus Action and the monk's first Attack overwrites both —
+   measured: `flurry banked 2, after one swing attacks_left=1`.
+3. `ai.gd` takes exactly one `_strike` per `take_turn`, so the AI never spends a
+   banked swing either — which means every `monster-multiattack-2` and `-3` in
+   the bestiary is a single-attack monster.
+
+Meanwhile `power.gd` reads `attacks_per_action` straight into `dpr` as a
+multiplier, so every Extra Attack class and every multiattack monster is
+**priced at two or three times the damage it actually deals**, and `scaler.gd`'s
+budgets are built on that price.
+
+Fixing it roughly doubles the output of every multiattack creature on both sides
+of the board at once. That is not a small change and it is not this one: it
+belongs with the tier sweep that T-classes already said was owed. The three new
+`-extra-attack` entries are therefore **inert today**, exactly as the three that
+preceded them are — they make the sheet right and wait.
+
+## T-classes-b — the attack economy, and the tier sweep that was owed (2026-09-17)
+
+T-classes-a found it and deliberately did not fix it: **`attacks_per_action` had
+never reached the board, for anybody.** Three separate breaks in one chain.
+
+1. `combat._offerable()` gated the Attack verb on `can_spend("action")` alone.
+   `resolve_attack` banks the swings the Attack action buys in
+   `econ.attacks_left`, but the action is spent on the first of them — so the
+   button greyed out with a swing still sitting in the economy. Now there is a
+   `can_afford()` beside `can_spend()`, and Attack is the one verb whose price
+   is not just its `cost`.
+2. `resolve_attack` **assigned** `attacks_left = attacks_per_action - 1` instead
+   of adding to it. Flurry of Blows banks two swings as a Bonus Action *before*
+   the Attack action is taken, so the monk's own first swing destroyed both
+   (measured: banked 2, one swing later `attacks_left` was 1). It adds now.
+3. `ai.gd`'s `_strike()` took one swing and returned, so no monster ever used
+   its Multiattack and the party autopilot never used Extra Attack. It loops to
+   the economy's end now, re-targeting between swings — the second swing of a
+   Multiattack should not be thrown at a corpse.
+
+Measured off `available()`, which is the list the action bar renders: fighter 1
+at level 4 and 2 at level 8, paladin / ranger / College of Valour 2 at level 8
+(the entries T-classes-a added, now live), rogue 1 at both, and a level-8 monk
+who spends a Focus Point on Flurry swings **four** times. A Multiattack-2
+monster takes two.
+
+**The re-tune.** This roughly doubles both sides of the board at once, and the
+monsters gain by far the more of it — at level 3 the party has no Extra Attack
+at all and the bestiary is full of Multiattack. At the old TIER the level-3
+sweep fell to normal 69.5% / hard 46.5% against targets of 85 / 75. So the tier
+sweep T-classes said was owed got run, 200 seeds a point, two rounds:
+
+```
+normal  0.780 -> 69.5    hard  0.920 -> 46.5    easy  0.640 -> 89.0
+        0.624 -> 86.5          0.764 -> 74.0          0.512 -> 99.0
+        0.663 -> 85.0          0.718 -> 78.0
+        0.585 -> 90.5          0.690 -> 81.5
+```
+
+`TIER` lands at **0.56 / 0.66 / 0.76**, measuring 93.5 / 86.0 / 73.0 against
+targets of 95 / 85 / 75 — *closer than the old triple ever was* (91.5 / 80.0 /
+65.0, with hard sitting exactly on the edge of the ±10 band). The level-8 curve
+is unmoved and still ordered (76.7/54.0/34.7 → 72.7/55.3/35.3) and the boss pool
+stays in band (72.5% → 67.5%). `CURVE` stays 1.15 and `REF_SCORE` stays 46.6:
+one knob was enough, so the other two were left alone rather than re-fitted for
+the sake of it.
+
+A second measured effect worth having on its own: **fights are shorter** now
+that everyone's damage is real. The level-8 sweep went from ~12.9 rounds to
+~9.6.
+
+**One test changed rather than re-pinned.** `test_world_threat.gd` asserted that
+the flat wilderness discount "really does change the roster" on seed 5. A tenth
+off the budget does not move every roster — the budget buys whole monsters, so
+on a seed where the cut lands inside a rounding step the spec is identical. The
+re-tune shifted which seeds those were and 5 became one of them. It asks across
+ten seeds now (28 of 30 differ), which is the property it always wanted.
+
+**Still not done.** The mechanics that need genuinely new engine support are
+untouched and still listed in T-classes: Wild Shape (swap a combatant's
+statblock mid-fight), Metamagic (modify a spell as it is cast), Portent (replace
+a d20 result), Arcane Ward (an absorbing damage pool), the paladin auras (a
+persistent radius buff), Primal Companion and Invoke Duplicity (a second token
+on the board), and Divine Smite, which is a near-miss — the rider shape exists
+(Stunning Strike spends a pool on a hit) but nothing outside `cast()` can spend
+a spell slot. The vocabulary gaps T-classes-a ran into are the other half of
+that list: `requires` predicates ("while raging", "on your first turn", "target
+is damaged"), reaction payloads (subtract a die, impose Disadvantage), and an
+area `save_effect`.
+
+## T-classes-c — three words the engine did not have (2026-09-17)
+
+T-classes-a stopped where the vocabulary stopped, and wrote down exactly where
+that was: `requires` knew four predicates and none of them was "while raging";
+a `reaction` could add AC or halve damage and could not impose Disadvantage;
+nothing at all could express a standing radius. Frenzy, Colossus Slayer, Dread
+Ambusher, Warding Flare and every paladin aura *looked* expressible from their
+`kind` alone and were not. This adds the three words and the five features that
+ride them.
+
+**1. Three `requires` predicates** (`combat._requires_met`). Each is one
+sentence of a subclass's text that previously had nowhere to go:
+
+| predicate | the sentence | feature |
+|---|---|---|
+| `target_damaged` | "a creature that is missing any of its Hit Points" | `hunter-hunters-prey-colossus-slayer`, 1d8 |
+| `while_raging` | "while your Rage is active" | `berserker-frenzy`, d6s on the Rage Damage track |
+| `first_round` | "on your first turn of each combat" | `gloomstalker-dread-ambusher`, 2d6 |
+
+**2. A reaction that imposes Disadvantage** rather than raising AC.
+`would_be_hit` fires once a swing is known to land, so the honest reading of
+Disadvantage at that moment is the second d20 the attacker should have rolled:
+the reactor answers with `second_d20`, and `resolve_attack` takes the lower of
+the two and re-decides. `lightdomain-warding-flare` is the first of them.
+
+That needed a second fix to be reachable at all. `_reaction_applies` carries
+T94's guard against wasting Parry on a swing its AC could not have stopped —
+and that test is about AC and only about AC. With `ac_bonus` 0 it refused
+Warding Flare **every single time**; measured before the fix, a cleric with the
+feature took exactly as many hits as one without (44 of 60 either way). After:
+31 of 60.
+
+**3. `aura`** — the first thing in the game that is neither a button nor a rider
+on a roll of its own, but a standing fact about a piece of the board, read by
+whoever happens to be rolling inside it. It is deliberately not in
+`combat.gd`'s `OFFERABLE`, so it never reaches the action bar and needs no
+badge; `combat.aura_bonus()` reads it where a number is wanted.
+`paladin-aura-of-protection` is the first: +CHA to saves for the paladin and
+every ally within 10 feet, and nobody across the room. Auras do not stack — the
+best one in reach wins, which is RAW for two paladins and conservative for
+anything else.
+
+Every predicate is asserted from **both** sides in
+`tests/test_class_abilities.gd`. A rider that fires when it should is half the
+claim; the half that matters is that it stays quiet otherwise, and that is the
+half a happy-path test never checks.
+
+**No re-tune this time.** The five features make the party stronger and the
+level-3 sweep moved to 97.0 / 87.0 / 76.5 against targets of 95 / 85 / 75 —
+every one of them inside the ±10 band and none more than 2 points out, which is
+precisely what `core/scaler.gd`'s header calls noise rather than a knob that
+wants turning ("TIER is steep and lumpy here … do not read a 2-point miss as a
+knob that wants turning"). `TIER` is left at T-classes-b's 0.56 / 0.66 / 0.76.
+
+Worth noting for whoever tunes next: the party's *score* did not move at all
+(53.9, unchanged), because `power.gd` prices neither `reaction` nor `aura`. The
+win rate moved and the price did not, so both are currently free in the
+estimator's eyes. That belongs with the "Known ceiling" note in `scaler.gd`
+rather than being patched here.
+
+**Still not done**, and now the whole of the remaining list: Divine Smite (the
+near-miss — the rider shape exists, but nothing outside `cast()` can spend a
+spell slot), Wild Shape, Metamagic, Portent, Arcane Ward, Primal Companion and
+Invoke Duplicity. The other three paladin auras (Devotion's charm immunity,
+Ancients' resistance, Glory's speed) need aura *payloads* beyond `save_bonus`,
+which is a smaller job now the kind exists.
+
+## T-classes-d — a Smite rides one blow, and an aura can say no (2026-09-17)
+
+Two more shapes the engine could not hold, and the two features that wanted
+them. Both turned out to be a single flag or a single payload on machinery
+T-classes-c had already built, which is the point of having built it.
+
+**A `self_buff` was a standing fact.** Rage is +2 on every swing until the
+fight ends, and `_buff_damage_extras` read every damage buff that way — so
+Divine Smite modelled as a self_buff would have added 2d8 to *every blow of the
+fight* off one Bonus Action. `once` is the flag that separates them: the blow
+that reads the buff is the blow that spends it. The same function also rolls
+dice now, rather than only adding a flat number, because a Smite is 2d8 and not
+9 — guarded on `dice_count` rather than `dice_sides`, since an `ally_buff`
+writes `dice_sides` into `inspired` and that is a bonus to a d20, emphatically
+not damage.
+
+`paladin-divine-smite` is 2024's: a Bonus Action, 2d8 radiant, CHA-mod free
+casts per Long Rest. It is the same shape `monster-divine-eminence` has used
+since T16, plus `once`.
+
+**An aura carried a number; Aura of Devotion carries a refusal.**
+`aura_immunities()` is the condition half of `aura_bonus()`, read at the top of
+`apply_condition` beside the statblock's own `cond_immune`.
+`oathofdevotion-aura-of-devotion` is "you and your allies in your aura can't be
+Charmed", and it is asserted from both sides: the condition bounces off an ally
+standing beside the paladin and lands on one across the room.
+
+**And a floor under every ability-sized pool.** Warding Flare is WIS-mod uses,
+Divine Smite is CHA-mod, and RAW says "a minimum of once" for both. Without the
+floor a cleric who dumped WIS carried the button and could never press it —
+which is exactly the 0-max-pool bug T-classes fixed once already, from the
+other end. `Effects._uses()` is the single place that floor lives now.
+
+**Two known simplifications, written down rather than hidden.** A buff's
+`damage_type` is authored and unread: every extra folds into the blow's own
+damage type, so a Smite's radiant reads as the weapon's slashing against
+anything that resists one and not the other. Typing the extras pipeline is a
+real change and not this one. And `power.gd` still prices neither `reaction`
+nor `aura`, so Warding Flare, Aura of Protection and Aura of Devotion are all
+free in the estimator's eyes — the same note T-classes-c left.
+
+**The third aura payload, while the kind was open.** `aura_types()` is the list
+half of `aura_bonus()`, and both Aura of Devotion's condition immunity and
+`oathofancients-aura-of-warding`'s damage resistance are lists — so they share
+one reader, hung off `_resists()`, which is already the single choke point every
+resistance in the game passes through. Asserted where it is actually read:
+20 necrotic on an ally inside the aura lands as 10, the same blow on one across
+the room lands as 20, and 20 slashing on the ally inside it lands as 20,
+because the oath is set against three types and not all of them.
+
+**Still not done, and why each one is not a data entry.**
+
+* **Oath of Glory's Aura of Alacrity** is a speed bonus, which wants a read in
+  `begin_turn_for` — small, but the 2024 wording (whose speed, what radius, and
+  the aura growing at 18) is not something to guess at from memory.
+* **Portent** replaces a d20 roll with one rolled at dawn, and *which* roll is
+  the whole feature. In an engine with no prompts (combat-design.md §2) it
+  would have to auto-spend on the first roll it saw, which is strictly worse
+  than not having it.
+* **Arcane Ward** is a pool of hit points that soaks damage before its owner
+  does — a fourth read in `_apply_damage`, plus a refill rule keyed on casting
+  abjuration spells, which the engine does not track by school.
+* **Wild Shape** swaps a combatant's whole statblock mid-fight, and the open
+  questions are design ones: which forms, whether the druid keeps their own
+  verbs, what happens to concentration, and what the form's HP does on the way
+  out.
+* **Primal Companion** and **Invoke Duplicity** put a second token on the board
+  under one player's control, which is an initiative and an AI question before
+  it is a rules one.
+
+The first three are a branch each. The last two are a design note first.
+
+## T-prep — the page the prepared casters never had (2026-09-17)
+
+T-classes found it and left it written down: `core/rules/pass_spells.gd` has
+computed `prepared_count` since F2 and **nothing ever read it**, because no
+screen existed to spend it. The export carries leveled `spell-choice` grants
+for the bard, sorcerer, warlock and wizard, and for the cleric and druid it
+carries cantrips only — so a level-8 Circle of the Moon druid stood on the
+board with 4/3/3/2 spell slots and nothing but cantrips to spend them on.
+`scenes/party/prepare.gd` is where that list gets filled in.
+
+Measured, on exactly the build T-classes named: **0 leveled-spell buttons → 16**
+after four picks. That is the whole point of the page, and it is the last
+assertion in `tests/test_prepare_spells.gd` for that reason — the rest is
+bookkeeping in service of it.
+
+**Who gets it.** The five in `PassSpells.PREPARED_CASTERS`. A bard, sorcerer or
+warlock *knows* their spells; the list is settled at level-up and there is
+nothing here to decide. The button is on every roster row regardless, greyed
+with the reason on it, so "where do I prepare spells" has an answer on whatever
+row the person asking happens to be looking at.
+
+**What may be prepared.** The class's own list, at the levels the character has
+slots for, filtered through `Effects.pick_pool` — the same filter the creator's
+spell picks use, because a spell that does nothing on the board and has no door
+off it is a preparation spent on nothing. Two exclusions do real work:
+
+* **Nothing already castable is offered.** Cantrips, a subclass's
+  always-prepared list, and a wizard's spellbook are all castable via
+  `adapter.gd` whatever this page says, so charging a pick for one would be
+  charging for something the character has either way. They are shown, in their
+  own panel, marked as not counting — the page reads as the whole kit rather
+  than as the part of it that happens to be editable.
+* **Nothing above the character's top slot.** A 4th-level pick a level-8
+  paladin can never cast is a pick that does nothing.
+
+**The wizard is the odd one.** A wizard prepares from their spellbook and
+nowhere else, and the spellbook here is `spellcasting.known` — which is smaller
+than `prepared_count` at every level this game reaches. So a wizard's
+preparation is settled the moment the book is, the pool is empty, and the page
+says so rather than offering the whole wizard list as if RAW allowed it.
+
+**Not gated on a rest.** RAW ties preparation to a Long Rest, and this page is
+reachable from the party screen wherever that screen is. The party screen
+already has the machinery for this (`roster_locked`, which is how benching and
+recruiting became inn-only), so gating it later is a one-line change — but
+choosing to gate it is a design decision about how much re-tooling mid-run
+should cost, and that is not one to make as a side effect of adding the screen.
+
+## T-summon — a second token, on its own initiative count (2026-09-17)
+
+T-classes-c ended with five mechanics written down and not built, and two of
+them — **Primal Companion** and **Invoke Duplicity** — were held back for a
+reason that was not a rules question: *"a second token on the board under one
+player's control, which is an initiative and an AI question before it is a
+rules one."* Both answers are now in.
+
+**The AI question was already answered and nobody had noticed.** `scenes/main.gd`
+dispatches on team, not on whether a combatant has a sheet: anything on the
+party's side gets the action bar, anything on the foe's side gets `core/ai.gd`.
+Summon Beast has shipped that way since T-spells — the player drives the wolf
+like a hero. So a companion needs no new control path at all.
+
+**The initiative question needed a call, and the call is: it rolls its own.**
+Not "acts immediately after its owner", which is what `combat.summon()` did
+(and what the SRD's elemental-summoning wondrous items say). One thing costs
+attention when a creature joins mid-fight: `order` is indexed by `turn_idx`, so
+a creature landing at or above the live index slides the current actor down a
+slot and the fight quietly continues as somebody else. `_join_order` moves
+`turn_idx` with it. Landing *below* the live index is not a bug either — that
+is a creature whose count has already gone by this round, and it waits for the
+next one, which is what RAW says. `tests/test_summons.gd` drives thirty seeds
+and asserts both sides of the index were exercised, because a one-seed test
+here proves nothing.
+
+One existing assertion changed rather than being re-pinned:
+`test_spell_buffs.gd` asserted the wolf sat at `order.find(ilsa) + 1`. That was
+the old rule stated as a fact. It now asserts what has to hold under the new
+one — the wolf is in the order once, on a roll of its own, and the live turn
+did not move.
+
+**Primal Companion** (`beastmaster-primal-companion`, ranger 3). A new effect
+kind, `summon`: an entry naming a stat block, a `mult_pct` curve that scales it
+off the owner's level, and `uses`. The beast is a dire wolf at 70% of its block
+at ranger 3, 110% at 9, 150% at 17 — one bestiary entry serving every level,
+through `encounter._scale`, rather than five hand-authored companions. Uses are
+the ranger's proficiency bonus and come back on a long rest, which is why
+`beastmaster-primal-companion` joins `adapter.LONG_REST_ONLY_FEATURES` (the
+default for a synthetic pool is short-rest). The button greys out while a beast
+is standing: RAW gives the Beast Master one, and stacking a second is the
+failure mode a `summon` button has that a `self_buff` button does not.
+
+**Invoke Duplicity** (`trickerydomain-invoke-duplicity`, cleric 3) is the same
+kind with three things turned on. It spends the cleric's `channel-divinity`
+pool, so it competes with Channel Divinity's other use rather than carrying a
+pool of its own. Its `summon` carries `illusion: true`, which buys two reads:
+`legal_target` refuses it as a target (it is not a creature, and nothing swings
+at it) and its status carries `no_attack` (it does not swing back). And
+`rounds: 10` puts RAW's minute on it — `_fade_if_expired` kills it at the start
+of its own turn rather than erasing it from `order`, for the same reason
+`_end_concentration` leaves a faded summon standing as a body.
+
+What it actually buys is one read in `_attack_mode`: a foe within 5 feet of the
+double is attacked at Advantage. **One liberty taken there, deliberately.** RAW
+says *you* have Advantage; this gives it to the double's whole side, because a
+double that helps only the one person who cannot also be standing where it
+stands is a Channel Divinity spent on almost nothing. The cleric's own swing is
+the RAW case and still the common one.
+
+RAW moves the double 30 feet as a Bonus Action on the cleric's turn. Here it
+walks on its own turn like anything else on the board, which follows from the
+initiative call rather than sitting beside it — one rule for where a summoned
+token acts, not two.
+
+**Three things "not a creature" turned out to mean**, none of which the phrase
+made obvious:
+
+* `_team_out` counted anything conscious on a side as that side still standing,
+  so a wiped party with a double up left the fight "ongoing" until MAX_ROUNDS —
+  nothing can attack the double, so nothing could ever end it.
+* `ai.gd` builds its own target list off `combatants` and swings through
+  `resolve_attack` without asking `legal_target`, so the AI simply killed it.
+  The guard belongs in `resolve_attack` — the one place every swing in the game
+  passes, opportunity attacks included — and the double is *also* out of
+  `_foe_turn`'s list rather than merely unhittable. A foe that only refused the
+  swing would still pick the double first (1 hp, and the list sorts on hp) and
+  lose its whole turn to it, which is much stronger than RAW and reads as the
+  AI being broken.
+* `_provocations` would have had it readying opportunity attacks. It swings at
+  nobody, here least of all.
+
+**A latent bug the double walked into.** `Encounter.monsters()` iterated every
+`data/monsters.json` id and looked each one up in `START` — so that file had
+quietly been doubling as "the four things standing in the demo room", and a
+fifth entry (a stat block that is summoned and never spawned) walked straight
+into the sandbox fight on top of Vera. Three assertions in `test_combat.gd`
+caught it. `monsters()` now skips ids `START` has nothing to say about, which
+is the assumption it always had, written down.
+
+![the turn strip](shots/summon-own-initiative.png)
+
+A Beast Master and a Trickery cleric, both tokens up: **Dire Wolf (19)** at the
+head of the order and **Illusory Double (3)** at the tail — neither of them
+next to its owner, which is the whole point of the change.
+
+**Still not done**, and still for the reasons T-classes-c gave: Aura of
+Alacrity (the 2024 wording, not guessed at), Portent (*which* d20 you replace
+is the feature, and a no-prompt engine would auto-spend on the first roll it
+saw), Arcane Ward (a fourth read in `_apply_damage` plus school-tracking the
+engine does not do) and Wild Shape (a statblock swap whose open questions are
+design ones). Two smaller simplifications also stand: a buff's `damage_type` is
+authored and unread, and `power.gd` prices neither `reaction` nor `aura` — and
+now not `summon` either, so a Beast Master's estimated power does not count the
+beast.
+
+## drive_random — a robot that has not been told what to do (2026-09-18)
+
+`tests/drive_random.gd`. Eight `drive_*.gd` robots already press real buttons
+end-to-end, and every one of them walks a script somebody wrote down. Between
+them they cover the paths we thought of. A run of this game is not a path: it is
+a few hundred small decisions about where to walk, what to buy, whether to
+charge a band or slip round it, and which spell to burn on the third round of a
+fight that is going badly. The bugs that survive the scripted suite live in the
+joins between those decisions.
+
+So this one decides for itself. It is a monkey **with taste**: every choice is a
+weighted roll, but the weights are read off the game state the way a player
+reads them — it rests when it is hurt, shops when it is rich, parleys with a
+band it cannot take, walks its melee characters into reach before it swings, and
+aims an area spell at the hex that catches the most foes. Orders are given the
+way a player gives them: `center_on` then a real left-click on the map, a real
+`pressed` on a real Button, a real mouse motion to set the board's hover before
+an area spell commits. Nothing in it writes to the model behind the screen.
+
+**Five dials, rolled off the seed** — bold, greedy, careful, curious, fidgety —
+are what make two seeds two different *players* rather than the same player with
+different dice. They decide how the approach card is answered, how long a visit
+to town lasts before boredom wins, whether a lair gets searched or sneaked into,
+and how often the session stops to re-zoom the camera and look in the pack.
+
+**It asserts invariants, never outcomes.** "The party won" is not a fact about
+this build; the fight is a dice game and it is allowed to lose. What is checked
+on every one of the ~2,200 frames: the purse never goes negative, nobody sits
+outside 0..max HP, the active party never over-fills or empties, a market and a
+fight are never both up, the world clock never runs under a fight, and — the one
+that catches what no assertion can name in advance — a fingerprint of everything
+a frame may change, which must not sit still for 300 frames while the driver is
+still pressing things. Plus a handful the driver is uniquely placed to make: a
+click has to land where it was aimed (`_pix`/`_unpix` round-trip), a click on a
+hex in a hero's own move field has to move them *somewhere*, closing an overlay
+has to give the clock back, and backing out of aiming has to leave the board in
+`idle`.
+
+**The clock is not monotonic, and that is deliberate** — `core/travel.gd` pays
+the party for a good day's road by winding `elapsed` *back* (TIME_SAVED,
+WAYSTONE_SAVED). The first version asserted monotonicity and went red on a
+seeded good-day event; the invariant is now "never back further than travel.gd
+can refund", which still catches a reset to zero or a rewind nobody announced.
+
+Two nudges are decisions rather than randomness with a thumb on the scale: a
+session that has not seen a town by a quarter of the way through goes and finds
+the nearest one, and one that has not had a fight by halfway marches on a
+monster faction's gate — the one place on either map where a fight is a
+certainty rather than a hope. Both are things players do, and they are why the
+coverage assertions at the end (a settlement, a fight, a real order given) are
+not a lottery.
+
+`SORCMERC_SEED` pins the session, so CI (which pins it already) walks one fixed
+game and a red CI replays exactly; the seed is printed at the top of the run and
+again with the failure. `SORCMERC_RANDOM_RUNS=20` is the soak — what you point
+at a branch before you believe a systems change. One session is ~23s.
+
+### What it found on its first thirty seeds
+
+**A soft-lock after a lost open-world fight.** `core/adapter.gd`'s `write_back`
+persists the field verbatim, so a hero who went *down* rather than *died* lands
+back on the map at 0 HP — alive, unconscious. `Party.auto_revive_all`, which the
+retreat calls, only ever looked at `dead`, so it left them there. The next
+encounter then opens with nobody on their feet and is over on round 1 — and
+since `world.gd`'s `_retreat()` sets the beaten party down at the *nearest*
+settlement, losing to a town's garrison wakes you up on that town's doorstep,
+where the guards turn out again. The loop has no exit. `auto_revive_all` now
+brings up the merely flattened as well as the dead, which is what both of its
+callers already narrate ("they come to at %s").
+
+**An acting hero who goes down mid-turn leaves their own bar up.** Walk into an
+opportunity attack that drops you and `_after_hero_action` sees economy left, so
+it rebuilds the menu for an unconscious character: every slot dead, and the only
+live control is End turn behind its "action unspent!" confirm. A player gets out
+in two presses — the driver now does the same — but the turn arguably ought to
+end itself. Left as it is, deliberately: whether a hero downed and then revived
+mid-turn should keep their action is a design call, not a bug fix.
+
+## drive_completionist — the other kind of player (2026-09-18)
+
+`tests/drive_completionist.gd`, the counterpart to last commit's
+`drive_random.gd`. That one plays like a person: it wanders, takes what the map
+offers, and over a session *samples* the game. Sampling is the right shape for
+finding the bugs nobody wrote a case for and the wrong shape for answering
+"does every door in this screen still open?" — a door the sampler did not
+happen to walk past is a door nobody checked, and the sampler cannot tell the
+difference between a door it skipped and a door that stopped existing.
+
+So this one works a written checklist to the end: every control on the HUD,
+every page of a settlement, every counter behind the market, both ways into a
+lair, every way of meeting a band, every settlement on the map. Six chapters,
+in the shape `drive_world.gd` already uses — a tour, not a planner — each
+walking there with real march orders and pressing the real buttons.
+
+**Two rules keep it from being a second, slower drive_random.**
+
+*Every deed asserts its own contract, not just its press.* Buying moves gold
+AND the pack; selling moves both back. A night at the inn spends the fee, eight
+hours and the party's wounds. The healer's fee is exactly `HEAL_COST` and the
+party comes out full. A job turned in pays and closes. A **second** theft in one
+visit pays nothing — the only way to check O9 item 1 is to press twice and watch
+nothing happen. The press is the setup; the assertion is the test.
+
+*The ledger is the verdict.* Forty-two REQUIRED deeds and twelve OPPORTUNISTIC
+ones are listed at the top of the file, each with the sentence it is checking. A
+required deed the tour never reached fails the run **by name** — which is the
+failure a driver that only asserts what it happens to touch can never report. A
+deed ticked that is on neither list fails too, so the checklist cannot quietly
+drift away from what the file actually does.
+
+What is arranged rather than played for is listed in the header and nowhere
+else: a working purse (this is not a test of the economy), an unidentified
+trinket for the librarian, a scratch for the healer, a job forced to `complete`,
+bands spawned for the four approach ways, mid-morning before those meetings
+(#85: at night a band jumps you instead of asking, which is that rule working),
+and the long-rest cooldown wound back before the camp kit. Everything else is
+walked and pressed.
+
+It runs in ~17s and ends on an early exit rather than a budget: the tour is
+over when the list is.
+
+### Three things building it turned up
+
+**The lair Search button re-rolls nothing.** `WorldLairs.search()` seeds its RNG
+off `hash("lair|" + lair.id)` when nobody hands it one, and `world.gd`'s
+`_lair_action()` never does — so every search of the same lair by the same party
+returns the identical d20, for ever:
+
+```
+goblin-warren  six searches: 12+3, 12+3, 12+3, 12+3, 12+3, 12+3
+dragon-cave    six searches: 2+3 miss, 2+3 miss, 2+3 miss, 2+3 miss, 2+3 miss, 2+3 miss
+```
+
+The demo party can never find the Dragon's Cave by searching, however many times
+it presses — while the button answers "Nothing **this time** (Survival 2+3 vs DC
+13)", which promises another attempt that cannot land. Every neighbouring roll in
+this codebase (the approach, road events, the camp) seeds off the clock precisely
+so a repeat is a real repeat; this is the outlier. **Not changed here**, because
+the fix is a design call with three reasonable answers: seed it off the clock
+like its neighbours, charge world-time per search so the clock moves anyway, or
+keep the fixed roll and say "these tracks are beyond you" instead of "not this
+time". The driver routes around it the way a player would — it buys the lead at
+the inn, which is the other door onto a lair and is deterministic.
+
+**A fight can sit decided but unfinished.** Letting the AI move the party (this
+file and `drive_campaign.gd` both do, because the fight is not what they are
+about) goes *round* the combat screen rather than through it, and the screen only
+notices a decided fight on its way out of a turn (`_after_hero_action` /
+`_advance`). So the turn has to be handed back through the real End turn button
+even once the last foe is down, or the board sits there with `cb.is_over()` true
+and `result` empty. A driver gotcha rather than a bug — a player's every action
+goes through the screen — but it cost an afternoon, so it is written down.
+
+**A gate you are standing in front of does not open twice.** `world.gd`'s `_left`
+stops the market reopening the frame after Leave, and clears only once the party
+is out of range. A tour that ends a chapter inside the walls and starts the next
+one walking *to* that settlement is already there, and nothing opens. Both
+drivers now walk out and come back, which is what a player does and what makes
+"walking in opens the market" a fact rather than a leftover.
+
+## The Whole Guild — one achievement, and the levels that count toward it (2026-09-18)
+
+A 140th achievement, and the smallest model change that makes it mean what it
+says.
+
+**The achievement.** `classes_all_5`, "The Whole Guild", in Legends beside
+`classes_6`: *keep a veteran of every class in the barracks — five levels earned
+in each, not handed over.* It reads a new `classes_5` set collected in
+`core/leveling.gd`'s `milestones()`, goal 12, and the viewer draws it as a
+`3 / 12` bar like every other threshold. `tests/test_achievements.gd` holds the
+goal to `Progression.all_classes().size()`, so a thirteenth class cannot quietly
+leave this one earnable a class short of what it claims.
+
+**Five in one class, not level five.** A fighter 3 / rogue 2 is a level-5
+character and a veteran of neither trade, which is the distinction the whole
+thing turns on. `milestones()` counts per class, not per character.
+
+**Earned, not handed over — the part that needed a model change.** The creator
+mints a recruit at the party's own level (`creator.gd`'s `start_level`), so at a
+level-5 party a brand new character arrives holding five levels in a class
+nobody has played a round of. `Leveling.grant_levels()` already refused to fire
+milestones for exactly this reason ("being handed level 5 is not reaching level
+5") — but that only deferred it. The *next* level the character actually played
+called `milestones()`, which looked back at a full five and handed the class
+over for one level's work.
+
+So a level now remembers which kind it is. `Character.add_level()` takes a
+`granted` flag, written into the level dict only when true (so an earned level
+looks in a save file exactly as it always did) and carried through
+`character_save.gd` both ways — a file written before the key existed loads as
+all-earned, which is the only kind answer: nothing here is ever locked back.
+Three places hand levels over and now say so: a preset hero's opening levels,
+`Party._demo_barbarian`, and `grant_levels()`'s catch-up levels. Everything that
+comes through `Leveling.add_level()` — which is to say, the level-up screen — is
+earned. Nothing else reads the flag: a granted level is a level in every rule
+that matters, including the other achievements, and this is deliberately the
+smallest blast radius that closes the hole.
+
+**Why no gate on creating characters.** The obvious alternative was to constrain
+the creator instead — a cooldown, a roster cap, a fee. None of them were needed
+once the levels themselves carried the distinction, and all of them would have
+cost a player something at a screen that is not where the problem was. A
+real-time cooldown in particular buys nothing here: it is an offline
+single-player game, so it reads as an annoyance rather than a pace, and the
+system clock defeats it anyway.
+
+Four tests cover it: four earned levels is not a veteran, the fifth is, a 3/2
+multiclass is neither, and — the leak itself — five granted levels plus one
+played does not buy the class, while five played does. Plus a round-trip: a
+granted level is still granted after a trip through the barracks, or the flag is
+worth nothing the moment a character is saved.
+
+## Seven open issues, worked through (2026-09-18)
+
+Every issue open on the tracker, none of them started. One test each, and each
+test fails against the code as it was. What each one turned out to be:
+
+**#119, "tried to level up to 9 and expertise choice is bugged"** — the choice
+could not show its own answer. `pass_profs` grades a skill an expertise choice
+picked `"expert"`, not `"prof"`, and `creator.gd`'s `options_for` filtered the
+expertise pool on `"prof"` alone. So a *decided* expertise row — T34 keeps
+those on the page and editable — drew every skill the character had NOT spent
+expertise on and none of the two it had. The heading read "✓ Expertise — pick 2
+(2 chosen)" over a row of buttons with not one mark on it, and pressing any of
+them fed `toggle()`, which is capped at two, so it silently evicted a pick the
+player could not see. `options_for` takes the current picks now and admits a
+skill that is expert *because of this choice*; a skill some other grant spent
+stays off the list, because expertise twice over buys nothing.
+
+**#120, "feats, and background points spent in previous levels should not be
+able to change. only the spell choices"** — the level-up screen iterated the
+whole of `sheet.choice_points`, which is every choice the build has ever
+reached. The feat taken at 4 and the background's skills taken at 1 were as
+live there as the ones the level just raised. It now snapshots which keys were
+already answered when the screen opened and locks those: they are still drawn,
+with what they took still marked, but their buttons are dead and `_pick()`
+refuses them. Spell choices are the one exception the reporter asked for, and
+5e grants it anyway — and in this game a prepared caster's real picking happens
+on the prepare page, which was never part of this screen.
+
+**#118, "there should be huge level up pop up that leads to party view, and
+level up button per character should not be overlapped"** — three things.
+
+A level used to arrive as one chime in `Campaign._split_xp()` and a number two
+screens away, so parties walked around owing themselves levels. It gets the
+after-action page's own treatment now: `world.gd` raises a gilt panel naming
+whoever is ready, with the trip to the party screen as its button. It rides the
+map's own `_process`, which does not tick while combat owns the screen, and it
+is behind `_overlay_up()` — so it cannot appear over a fight, a road event, a
+delve, a settlement or the spoils page, which is the "wait for the campaign
+map" half of the ask. `_levelup_told` stamps who was told at what level, so
+"Not now" is respected and the next level says so again.
+
+*Overlapped* was literal. The party screen opened the profile and floated a
+"← Back to party" Button anchored to the top-right corner over it — the same
+corner the profile's header ends in, which is where "Level up" sits. The
+profile carries `exit_label` / `exit_requested` now and draws the way out as
+the last control in its own header row, which is exactly what `party.gd` does
+for its own exit and for the same reason (it says so in a comment dated to the
+last time this happened).
+
+*Per character* was missing. A level is spent one character at a time, so the
+roster row is where the button belongs: it is on every row, live for whoever
+has the XP and greyed with the reason for everyone else — the same idiom the
+Spells button next to it already used — and it opens that character's sheet
+with the level-up page already on it.
+
+**#121, "fix hp bars showing on manual screen"** — T-hud put the HP bars,
+barks, damage numbers and the odds chip on a `CanvasLayer` above `Board` and
+everything `Board` parents. A full-screen overlay is an ordinary child on layer
+0, so the manual opened *underneath* the HUD and wore a row of HP bars across
+its index. The tutorial card hit this first and answered it by moving onto the
+HUD layer itself; the manual, settings and bug-report overlays are shared
+screens opened over five different hosts and cannot. So the layer stands down
+instead: `main.gd` hides it while one of the three is up, which is honest —
+they are modal, and the screen underneath is asleep anyway.
+
+**#122, "add images of spells to the prepare spell page"** — the page was a
+list of names, and the action bar it feeds is nothing but art. Each row (and
+each "always yours" line) now wears the spell's own badge, through the same
+`Icons.skill_icon` the bar uses — `assets/icons/skills/<spell>.svg`, falling
+back to the school disc, and nothing at all in a build with no icons imported,
+where the row is a row of text exactly as before. All 27 entries on a level-8
+cleric's page resolve to real art. While in there: the summon summary read
+`Catalog.monster(mid).get("name")` and both monster files spell it `cname`, so
+that line had always printed the raw id.
+
+**#123, "check spiritual weapon creating a minion in control of player"** — it
+was not. It was modelled as a one-shot melee spell attack at 60 ft costing an
+Action; the 2024 spell is a Bonus Action that leaves a weapon standing there
+for a minute, swinging where you send it. That is a summon on the caster's
+team, and a summon on the party's team is driven from the action bar like any
+hero — so it is one now, with a stat block in `data/monsters.json` beside the
+Illusory Double. Two deliberate departures, both the engine's shape rather than
+the spell's: it takes its own initiative count like every other summon instead
+of riding the caster's Bonus Action, and it can be attacked, because nothing
+here can be both untargetable and able to swing, and swinging is the spell.
+
+It is also the first summon concentration does not hold, which turned up a gap:
+`_spell_verb` never copied `rounds` onto a summon verb, because every summon
+before it was a concentration spell. A summon with neither clock stands there
+for the rest of the fight. And since a bigger slot calls the same creature, a
+summon spell with no authored upcast stops offering tiers — the same rule
+reaction spells already had, for the same reason.
+
+**#124, "use the full spellbar even if they dont have numbers from keyboard
+assigned"** — a submenu page was nine entries long because nine is how many
+number keys there are, while the bar has room for `BTN_COLUMNS * BUTTON_ROWS`
+= 33 badges. A caster read their spell list eight at a time, across three
+pages, in front of two empty rows. The keys and the page are two different
+things now: a page is as many badges as the bar can show, `[1]`..`[9]` land on
+the first nine, and everything past the ninth is click-only — which is what the
+badges were drawn for. Paging survives for a list longer than the bar, on Tab,
+because every number is spoken for by the page it would be turning.
+
+## Objectives — the same fight, asked a different question (2026-09-20)
+
+Sub-project 1 of the content batch (objectives → landmarks → threat clocks and
+reclaiming → faction ladder and renown → callings with party relations →
+downtime → the lodge). Spec: `docs/superpowers/specs/2026-09-20-encounter-objectives-design.md`;
+plan: `docs/superpowers/plans/2026-09-20-encounter-objectives.md`.
+
+Every fight was "kill everyone". Five objectives now ride the encounter spec
+(`spec["objective"] = {kind, ...}`, absent = the fight as it was) and change
+what the fight is for on the same board, roster, AI and dice: **hold** (the
+top of round N+1 with anyone standing is a win; waves from the far side),
+**rescue** (a bound captive at the deepest hex; adjacency frees it; the
+captors kill it on the deadline; foes never target it), **breakout** (the
+party in the middle, foes both ends, every conscious hero on the far-edge
+road ends it), **hunt** (the roster's strongest is the quarry; it runs for the
+treeline unless a hero is within QUARRY_CORNERED; on the edge it is gone; down,
+the rest scatter), **escort** (a carter in the huddle; the AI already hits the
+weakest adjacent target, so the puzzle is body-blocking). Outcomes stay
+two-valued: "Victory, objective failed" is a real spoils row.
+
+One reward rule: an objective done pays half the whole roster's worth in XP on
+top of the kills — the batch's "XP for deeds" rule in its first form. Gold and
+loot stay kills-only; an escaped quarry drops nothing.
+
+One world source per kind, so all five are reachable from this PR: the *gate*
+site room (hold), the *pens* room and a `rescue` board job posted only about a
+lair whose pens the party has not fought past (rescue), a failed camp watch at
+the tier's hard roster (breakout), `hunt_party` jobs — a chief that gets away
+keeps the band on the map and the job open (hunt), `deliver_goods` jobs — the
+carter dead loses the crate (escort).
+
+Measured, `tests/test_objectives.gd` `test_sweep`, 80 seeds a kind, presets at
+level 3, normal roster, the autopilot with `ai.gd`'s one movement rule per
+kind (the grid is also in `core/objectives.gd`'s header):
+
+| kind | done | won | knob it was tuned by |
+|---|---|---|---|
+| hold | 51/80 | 51/80 | `WAVE_SCALE` = 0.8 (from 0.4) |
+| rescue | 55/80 | 68/80 | `RESCUE_DEADLINE` = 4 (untouched) |
+| breakout | 41/80 | 79/80 | `EXIT_W` = 3 (from 4) |
+| hunt | 33/80 | 79/80 | `QUARRY_CORNERED` = 4 (from 3) |
+| escort | 38/80 | 73/80 | `CARTER_HP_BASE` = 10 (from 6), per level 2 |
+
+Breakout needed one more rule the sweep exposed: a plain rout at a normal
+roster made "done" 99% of the time, so the deed is reaching the road, and a
+rout is a win the kills already paid for.
+
+The band is 40–75%: an objective that is nearly free is a modifier, one that
+is nearly impossible is a trap. Nothing in `scaler.gd` moved; a spec without an
+objective is the fight it was, and the 200-seed sweep's numbers are unchanged.
+
+Co-op needed no wire change: the objective is a key on the spec `setup`
+already carries, bystanders and waves are built from the seed on both peers,
+and `test_coop.gd` replays each kind to the same hash.
+
+### Still open
+
+- A story cannot yet author an objective — the M9 seam, one key away.
+- Raids (C1) will be the second source for hold; callings (B3) the second for rescue.
+- The freed captive is a line, not a person who walks home with the party.
+- ~~A bystander is still listed in the co-op host's who-plays-whom menu
+  (`_split_menu`)~~ — fixed in the whole-branch review's fix wave, along
+  with the road never being narrower than the party (`EXIT_W` had been
+  tuned to 3 with a four-hero cap), the carter throwing opportunity
+  punches, and bystanders counting for achievements.
+
+### Pictures
+
+`tests/shot_objectives.gd` renders these (it needs a display; not part of
+the suite).
+
+| | |
+|---|---|
+| ![the brief and the HUD line](shots/objectives/01-hold-brief.png) *hold — the brief is the fight's first line, the status rides the header* | ![a wave arrives](shots/objectives/02-hold-wave.png) *round 2 — "More of them, from the far side", at the far edge* |
+| ![the captive, bound at the back](shots/objectives/03-rescue-captive.png) *rescue — the captive (⚑, 4 HP) at the deepest hex, the deadline counting down* | ![the captive freed](shots/objectives/04-rescue-freed.png) *a hero adjacent cuts them loose — no action spent* |
+| ![the road out](shots/objectives/05-breakout-road.png) *breakout — the party in the middle, foes both sides, the road painted at the far edge* | ![the quarry](shots/objectives/06-hunt-quarry.png) *hunt — the strongest foe is the quarry; the header counts its hexes to the treeline* |
+| ![the quarry gone](shots/objectives/07-hunt-escaped.png) *ending its turn on the treeline, it is gone — the fight goes on against the escort* | ![the carter](shots/objectives/08-escort-carter.png) *escort — the carter in the huddle, the AI's favourite target* |
+| ![the approach card](shots/objectives/10-approach-hunt.png) *a band a job names: the approach card says which question the fight will ask* | ![the spoils page](shots/objectives/11-spoils-hunt-done.png) *the deed done — the objective row and its own XP* |
+| ![the spoils page, failed](shots/objectives/12-spoils-escort-failed.png) *"Victory, objective failed" is a real result — and the delivery is lost with the carter* | ![the pens](shots/objectives/13-site-pens-card.png) *a site's room card — the pens, one of the ways in* |
+| ![the pens, inside](shots/objectives/14-site-pens-fight.png) *the pens from the inside: a warren roster, the captive at the back* | |
+## Three co-op issues, and the save bug under two of them (2026-09-20)
+
+The first three reports filed against co-op after it shipped: a desync (#132),
+a guest whose map moved twice a second (#133), and "same combat but killed
+enemies arent updated and the combat result ends up bugged" (#134). The first
+and the third are one bug seen from two ends; the middle one is its own.
+
+**The party that crossed the wire was not the party.** `CharacterSave.to_dict`
+carries `pools` — per-rest uses remaining — and did not carry `slots_used`,
+the spell slots a caster has already spent. Every trip through that format
+handed the caster their slots back. Co-op sends the party as exactly those
+dictionaries, so the host built its fight from the party it had been playing
+and the guest built the same fight from a party whose casters had a full
+spell list. Different boards from the same seed, and lockstep has nothing to
+reconcile with: `state_hash` differed from the first `end_turn`, which is the
+"⚠ DESYNC" the player saw on #132, and the enemies the host had killed were
+still standing on the guest's screen, which is #134's first half.
+
+It is not only co-op's bug. `core/world_save.gd` and `core/campaign_save.gd`
+save the roster through the same function, so every autosave and every resume
+was quietly refilling the party's spell slots — a free long rest's worth of
+casting, in single player, since the day the open world's autosave landed.
+`slots_used` is in the format now, absent meaning "nothing spent", which is
+what the files already out there say.
+
+**And the first round was the host's alone.** The seed, the encounter spec and
+the party build the same board on both ends. How the fight *opens* does not:
+`scouted_ahead` (the road read the ground ahead, so the party comes in unseen)
+and `forced_ambush` (a camp watch that failed) are set on the combat screen by
+whoever put the fight up, and `scenes/game/game.gd` builds the guest's screen
+with both at their defaults. A scouted node opened unseen for the host while
+the guest rolled its own Stealth check and opened an ordinary fight; an ambush
+gave the host's foes a free round the guest never gave them. The setup carries
+an `opening` now. `tutorial` rides along with them for one reason: it is what
+makes `_open_fight()` skip the deployment phase, and a host that skips it never
+presses Begin — so a guest that did not skip it waited out the fight on
+"waiting for the host to place the party".
+
+**The verdict read a dictionary that is deliberately empty.** #74 holds the
+result behind a tinted wash the player clicks through, and `result` is not
+filled in until they do. `_finish()` read `result["xp"]` anyway — so every
+played Victory threw "Invalid access to key 'xp'" and lost the rest of the
+function with it: the spoils line and the loot line never printed. Headless
+and `SORCMERC_FAST` skip the wash and fill `result` at once, which is why the
+whole suite was blind to it. That is #134's second half.
+
+**#133, the guest's map.** The host sends where everyone stands twice a second
+and the guest wrote each delta straight onto the map, so the road moved at the
+rate the packets arrived: a step, half a second of nothing, another step. What
+crosses the wire is the right amount; the frames between arrivals are the
+screen's to draw. A delta is a target now, and `_spectate()` walks the map
+toward it over the interval the last two arrived in — so the mirror moves at
+the speed the host's party is actually moving, stretches instead of stuttering
+on a slow link, and never draws the party anywhere the host has not been.
+
+### What now checks it
+
+`tests/test_coop.gd` built both peers with `Coop.party_from()`, so anything the
+save format dropped was dropped identically on both and stayed invisible. It
+builds one side from the host's own party object now, across a party per class,
+which is the check that catches `slots_used` — and would have caught it the day
+it was written.
+
+`tests/test_coop_screens.gd` is new and is the bigger gap closed: two real
+`scenes/main.tscn` screens in one process, wired to each other through a
+stand-in for `tools/coop-relay` that obeys the same rules the Worker does, with
+`drive_coop.gd`'s robot pressing whichever screen owns the hero that is up.
+Everything `scenes/main.gd` decides for itself — which is where both halves of
+#132 lived — is in front of it now, and unlike `tools/coop_smoke.sh` it needs
+no relay, no second process and no network, so it runs on every pull request.
+
+`tests/test_coop_mirror.gd` checks the frames between two deltas, and
+`tests/test_victory_summary.gd` turns the wash back on so the verdict is read
+the way a player reads it.
+
+Also, while in the log: `region_at` returns "the treeline" on five boards and
+"Brazier Hall" on the sixth, and the move line wrote "the" in front of whichever
+it got — "Thokk the Orc moves to the the treeline", which is in the log quoted
+on #132 itself. It asks for the article now instead of assuming it is missing.

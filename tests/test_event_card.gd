@@ -13,6 +13,7 @@
 extends SceneTree
 
 const EventCard = preload("res://scenes/world/event_card.gd")
+const Icons = preload("res://core/ui_icons.gd")
 const Travel = preload("res://core/travel.gd")
 const World = preload("res://core/world.gd")
 const Party = preload("res://core/party.gd")
@@ -172,10 +173,50 @@ func _init() -> void:
 	check("Blackfen Barrow" in drawn(g), "a revealed lair is named")
 	check("on the map" in drawn(g), "...and says where to look for it")
 
+	# D3.1: the road can take coin as well as hand it over (a ford that keeps a
+	# pack, a toll post that gets paid — and D4's parley toll, which has always
+	# passed a negative gold through this card and always drew it as "+-40").
+	var robbed := bad()
+	robbed["gold"] = -40
+	b.show_event(robbed)
+	check("-40 gold" in drawn(b), "gold taken renders as a subtraction, not as +-")
+	check(not ("+-" in drawn(b)), "...with no doubled sign anywhere on the card")
+
+	var mended := good()
+	mended["healed"] = 9
+	g.show_event(mended)
+	check("+9 hp" in drawn(g), "hp healed is shown")
+	check("across the party" in drawn(g), "...and says who got it")
+
+	var salvaged := good()
+	salvaged.merge({"item": "chain-shirt", "item_name": "Chain Shirt"}, true)
+	g.show_event(salvaged)
+	check("Chain Shirt" in drawn(g), "salvage is named")
+	check("stash" in drawn(g), "...and says where it went")
+
+	var thanked := good()
+	thanked["thanks"] = "Riverhold"
+	g.show_event(thanked)
+	check("Riverhold hears of it" in drawn(g), "goodwill names who heard about it")
+
+	# The skill is labelled the way the character sheet labels it. Every other
+	# skill id is one word and capitalize() is right; "animalhandling" is the one
+	# that is two, and "Animalhandling" on a card is a typo with a reason.
+	var beasts := good()
+	beasts["skill"] = "animalhandling"
+	g.show_event(beasts)
+	check("Animal Handling" in drawn(g), "a two-word skill reads as two words")
+	check(not ("Animalhandling" in drawn(g)), "...and not as the id it came from")
+
 	var everything := good()
 	everything.merge({"gold": 20, "hurt": 3, "minutes": 60.0, "lair": "Grey Fen"}, true)
 	g.show_event(everything)
 	check(chip_count(g) == 4, "all four consequences can coexist")
+	var the_lot := good()
+	the_lot.merge({"gold": -20, "hurt": 3, "healed": 2, "minutes": 60.0, "lair": "Grey Fen",
+		"item": "dagger", "item_name": "Dagger", "thanks": "Riverhold"}, true)
+	g.show_event(the_lot)
+	check(chip_count(g) == 7, "...and so can every consequence D3.1 added (%d)" % chip_count(g))
 	g.show_event(good())
 	check(chip_count(g) == 0, "...and none of them stick around for the next event")
 
@@ -250,6 +291,22 @@ func _init() -> void:
 			check(String(real["cname"]) in rt, "...and whoever travel.gd picked")
 	else:
 		check(false, "Travel.check() produced no event to render")
+
+	# --- the picture: the outcome's frame when there is one, and space made for it
+	var pic = card()
+	pic.show_event({"id": "tracks", "title": "Tracks", "kind": "good", "ok": true, "text": "x"})
+	check(pic._art == Icons.event_art("tracks", true) and pic._art != null, "a passed Tracks shows the pass frame")
+	check(pic._art_rect.size.y == pic.ART_H and pic._art_rect.position.y > pic._panel.position.y,
+		"...and the card makes room for it")
+	var pf = card()
+	pf.show_event({"id": "tracks", "title": "Tracks", "kind": "bad", "ok": false, "text": "x"})
+	check(pf._art == Icons.event_art("tracks", false) and pf._art != pic._art, "a failed one shows the fail frame")
+	var none = card()
+	none.show_event({"id": "no-such-event", "title": "?", "kind": "good", "text": "x"})
+	check(none._art == null and none._art_rect.size == Vector2.ZERO, "an event with no art reserves no space")
+	check(Icons.event_art("good-ground", false) == Icons.event_art("good-ground", null), "no fail frame: the plain scene")
+	for e in Travel.EVENTS:
+		check(Icons.event_art(String(e["id"]), true) != null, "every road event has a picture (%s)" % e["id"])
 
 	print("test_event_card: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

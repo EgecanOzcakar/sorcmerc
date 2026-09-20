@@ -6,6 +6,11 @@
 #   godot --headless --path . -s tests/test_world_visit_pages.gd
 extends SceneTree
 
+const Campaign = preload("res://core/campaign.gd")
+const Visit = preload("res://core/settlement_visit.gd")
+const Icons = preload("res://core/ui_icons.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
+
 var _pass := 0
 var _fail := 0
 
@@ -88,6 +93,82 @@ func _init() -> void:
 	check(press(main._visit_panel, "Leave"), "Leave actually closes the visit")
 	check(main._visit.is_empty(), "...and the visit is really over")
 
+	# --- regression: a rest (fresh shelf roll) must not reset the other
+	# one-per-visit flags (steal/persuade/investigate) — they used to
+	# silently reset because Visit.visit()'s fresh dict only ever had
+	# "stolen" carried forward by hand, not persuaded/investigated too.
+	var s2 = load("res://scenes/world/world.tscn").instantiate()
+	root.add_child(s2)
+	for i in 10:
+		await process_frame
+	var home = s2.world.settlements[0]
+	FactionOpinion.set_opinion(home.faction, FactionOpinion.REFUSE_TRADE - 1.0)
+	Visit.mark_battle(s2.world, home.position, s2.world.clock.elapsed)
+	s2.party.gold = 10000
+	s2._open_visit(home)
+	s2._goto_page("hub")
+	s2._investigate()
+	check(s2._visit.get("investigated", false), "investigate sets its one-shot flag")
+	s2._goto_page("market")
+	s2._persuade()
+	check(s2._visit.get("persuaded", false), "persuade sets its one-shot flag")
+	s2._steal()
+	check(s2._visit.get("stolen", false), "steal sets its one-shot flag")
+
+	s2._goto_page("inn")
+	s2._rest()
+	check(s2._visit.get("investigated", false), "a rest does not reset the investigate flag")
+	check(s2._visit.get("persuaded", false), "a rest does not reset the persuade flag")
+	check(s2._visit.get("stolen", false), "a rest does not reset the steal flag")
+	FactionOpinion.reset()
+
+	# --- haggle: shown on an open market, hidden on a refused one, and vice
+	# versa for persuade — they're mutually exclusive by construction.
+	var s3 = load("res://scenes/world/world.tscn").instantiate()
+	root.add_child(s3)
+	for i in 10:
+		await process_frame
+	s3._open_visit(s3.world.settlements[0])
+	s3._goto_page("market")
+	check(has_button(s3._visit_panel, "Haggle over prices"), "an open market offers haggling")
+	check(not has_button(s3._visit_panel, "Persuade them to trade"), "...but not persuasion")
+	check(press(s3._visit_panel, "Haggle"), "the Haggle button works")
+	check(s3._visit.get("haggled", false), "...and spends the one-per-visit attempt")
+
+	# --- the face behind the counter: a smile for a moment after business
+	# goes your way, a frown for the visit once a haggle goes badly.
+	check(Icons.portrait("human", "healer", "happy") != Icons.portrait("human", "healer")
+		and Icons.portrait("human", "healer", "frown") != Icons.portrait("human", "healer"),
+		"the healer has a happy and a frowning face on disk")
+	check(Icons.portrait("human", "healer", "bored") == Icons.portrait("human", "healer"),
+		"an unknown mood falls back to the plain portrait")
+	var s4 = load("res://scenes/world/world.tscn").instantiate()
+	root.add_child(s4)
+	for i in 10:
+		await process_frame
+	s4._open_visit(s4.world.settlements[0])
+	s4._goto_page("market")
+	check(s4._mood() == "", "a fresh visit: a neutral face")
+	s4.party.gold = 100000
+	s4._buy(String(s4._visit["stock"][0]["item_id"]))
+	check(s4._mood() == "happy", "a sale makes them happy")
+	s4._cheer_until = 0.0
+	check(s4._mood() == "", "...for a moment")
+	s4._visit["sour"] = true      # what a failed haggle sets
+	check(s4._mood() == "frown", "a failed haggle sours the face for the visit")
+	s4._cheer()
+	check(s4._mood() == "happy", "...a sale still gets a flicker of a smile")
+	s4._cheer_until = 0.0
+	check(s4._mood() == "frown", "...and then it's back to the frown")
+	var before = s4._visit
+	s4._visit = {}
+	s4._carry_visit_flags(before, s4._visit)
+	check(s4._visit.get("sour", false), "the sour flag survives a market re-roll, like the others")
+	s4._visit = before
+	s4._goto_market_tab("healer")
+	check(s4._portrait_pic != null and s4._portrait_pic.texture == Icons.portrait(
+		s4._visit["settlement"].faction, "healer", "frown"), "the healer's counter shows the frowning face")
+
 	# --- T9y: the hub says what is behind each door -----------------------
 	main._open_visit(s)
 	check(has_button(main._visit_panel, "on the shelves")
@@ -101,18 +182,18 @@ func _init() -> void:
 	# --- T9y: the market's counters ---------------------------------------
 	var services: Array = main._visit["services"]
 	press(main._visit_panel, "Market")
-	check(main._market_tab == "all", "the market opens on the whole shelf")
-	check(has_button(main._visit_panel, "All"), "...with a tab strip to narrow it")
+	var first: String = main._first_counter()
+	check(main._market_tab == first and first != "all", "the market opens on the first counter, not an All shelf")
+	check(not has_button(main._visit_panel, "All"), "...there is no All tab")
 	check(has_button(main._visit_panel, "Generalist"), "...one tab per counter the settlement staffs")
 	# The open tab is shown as a pressed (disabled) button, so press() — which
 	# skips disabled buttons — must find nothing to do on the tab already open.
-	check(not press(main._visit_panel, "All"), "the open tab isn't also a live button")
+	check(not press(main._visit_panel, String(Campaign.SERVICE_NAMES.get(first, first))), "the open tab isn't also a live button")
 	if "weaponsmith" in services:
 		check(press(main._visit_panel, "Weaponsmith"), "a counter tab can be opened")
 		check(main._market_tab == "weaponsmith", "...and the page follows it")
-		check(not has_label(main._visit_panel, "Your pack") or true, "")
-		press(main._visit_panel, "All")
-		check(main._market_tab == "all", "...and back to the whole shelf")
+		press(main._visit_panel, String(Campaign.SERVICE_NAMES.get(first, first)))
+		check(main._market_tab == first, "...and back to the first counter")
 
 	# The two services that stock no goods: before this they existed only as
 	# words in the hub's services line (see core/settlement_visit.gd's heal()).
@@ -120,7 +201,7 @@ func _init() -> void:
 		var hurt = main.party.get_member(main.party.active[0])
 		hurt.hp_current = 1
 		var gold_before: int = main.party.gold
-		main.party.add_gold(Visit().HEAL_COST)
+		main.party.add_gold(Visit.HEAL_COST)
 		main._goto_market_tab("healer")
 		check(has_button(main._visit_panel, "Heal"), "a settlement with a healer offers the healer")
 		check(press(main._visit_panel, "Heal"), "...and the healer can be paid")
@@ -129,11 +210,36 @@ func _init() -> void:
 		check(main.party.gold == gold_before, "...for exactly the posted fee")
 	if "librarian" in services:
 		main.party.stash_add("spell-scroll", 1, false)
-		main.party.add_gold(Visit().IDENTIFY_COST)
+		main.party.add_gold(Visit.IDENTIFY_COST)
 		main._goto_market_tab("librarian")
 		check(has_button(main._visit_panel, "Identify"), "the librarian lists what needs identifying")
 		check(press(main._visit_panel, "Identify"), "...and reads it for the fee")
 		check(main.party.stash_count("spell-scroll", true) >= 1, "...leaving it identified")
+
+	# --- D7: a job hangs at the counter whose job it is -------------------
+	# The notice board used to be the only place work appeared. A specialist's
+	# standing order now sits at that specialist's own tab, and must NOT also be
+	# on the board — a job in two places is a job you take twice by accident.
+	press(main._visit_panel, "Town Square")
+	var counter_jobs: Dictionary = main._counter_offers(main._visit["settlement"])
+	for counter in counter_jobs:
+		if counter == "board":
+			continue
+		var job: Dictionary = counter_jobs[counter][0]
+		var headline: String = String(job["title"]).split(":")[0]
+		press(main._visit_panel, "Town Square")
+		press(main._visit_panel, "Notice Board")
+		check(not has_label(main._visit_panel, headline),
+			"the %s's own order is not also on the notice board" % counter)
+		press(main._visit_panel, "Town Square")
+		press(main._visit_panel, "Market")
+		main._goto_market_tab(counter)
+		check(has_label(main._visit_panel, headline),
+			"...it is at the %s's counter" % counter)
+		var logged: int = main.party.quests.size()
+		check(press(main._visit_panel, "Take"), "...where it can be taken")
+		check(main.party.quests.size() == logged + 1, "...and lands in the log")
+		break
 
 	# --- T9y: the inn explains itself -------------------------------------
 	press(main._visit_panel, "Town Square")
@@ -175,7 +281,7 @@ func _init() -> void:
 	check(has_label(main._visit_panel, "common room"), "the inn has word going round it")
 	var lead_row := false
 	for b in buttons(main._visit_panel):
-		if b.text == "Buy" and not b.disabled:
+		if b.text.begins_with("Buy") and not b.disabled:   # "Buy  39 ◉": the price rides on the button
 			lead_row = true
 	check(lead_row, "...and a lead that can be bought")
 	var gold_before: int = main.party.gold
@@ -199,6 +305,21 @@ func _init() -> void:
 	check(not has_button(main._visit_panel, "Buy"), "...and offers nothing to press")
 	press(main._visit_panel, "Leave")
 
+	# #106: Esc on the party screen opened at the inn closes the party screen,
+	# not the inn under it. It used to fall through to the visit's bindings —
+	# hub, then Leave — and "Back to the inn" put the party outside town.
+	main._open_visit(s)
+	press(main._visit_panel, "Inn")
+	main._open_party(true)
+	check(main._party_overlay != null and main._visit_page == "inn", "the party screen is up over the inn")
+	main._unhandled_key_input(key(KEY_ESCAPE))
+	check(main._party_overlay == null, "Esc closes the party screen")
+	check(not main._visit.is_empty() and main._visit_page == "inn", "...and the inn is still there under it")
+	check(main.world.clock.is_paused(), "...with the clock still stopped for the visit")
+	main._unhandled_key_input(key(KEY_ESCAPE))
+	check(main._visit_page == "hub", "the next Esc goes to the town square, as before")
+	press(main._visit_panel, "Leave")
+
 	print("test_world_visit_pages: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -207,9 +328,6 @@ func key(code: int) -> InputEventKey:
 	e.keycode = code
 	e.pressed = true
 	return e
-
-func Visit():
-	return preload("res://core/settlement_visit.gd")
 
 func WorldCampName() -> String:
 	return preload("res://core/world_camp.gd").CAMP_KIT_NAME

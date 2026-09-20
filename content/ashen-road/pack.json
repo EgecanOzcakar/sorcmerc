@@ -1,0 +1,18 @@
+{
+  "format": "sorcmerc-pack",
+  "api": 1,
+  "id": "ashen-road",
+  "title": "The Ashen Road",
+  "summary": "Something is burning the marches, one holding at a time, and the Reeve of Emberwatch is out of soldiers. Three chapters, a map of her own, and an end you pick.",
+  "authors": ["The sorcmerc team"],
+  "pack_version": "1.0.0",
+  "kind": "campaign",
+  "access": "free",
+  "priority": 10,
+  "world": "world.json",
+  "story": "story.json",
+  "data": {
+    "bestiary.json": "monsters.json",
+    "magic-items.json": "items.json"
+  }
+}

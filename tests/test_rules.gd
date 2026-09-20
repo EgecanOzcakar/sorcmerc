@@ -72,7 +72,7 @@ func test_catalog_loads() -> void:
 	var counts := {
 		"classes.json": 12, "subclasses.json": 48, "species.json": 10,
 		"backgrounds.json": 16, "feats.json": 74, "fighting-styles.json": 10,
-		"spells.json": 146, "weapons.json": 39, "armor.json": 13,
+		"spells.json": 151, "weapons.json": 39, "armor.json": 13,
 		# magic items: 262 exported + the game-authored scroll-of-resurrection
 		"magic-items.json": 264, "conditions.json": 15, "skills.json": 18,
 	}
@@ -834,8 +834,10 @@ func test_spell_mechanics_merge() -> void:
 	check(bh["save"] == "dex" and bh["half_on_save"], "burning hands: DEX save for half")
 	check(int(bh["damage"][0]["count"]) == 3 and int(bh["damage"][0]["sides"]) == 6, "burning hands 3d6")
 	check(int(bh["level"]) == 1, "burning hands is a level-1 spell")
-	# healing-word and magic-missile are absent from the 146-spell export — F1 gap.
-	check(Effects.spell("healing-word").is_empty(), "an uncatalogued spell has no mechanics")
+	# healing-word and magic-missile were absent from the 146-spell export (F1 gap);
+	# 2026-09-19 added both by hand. A spell the catalog does not carry still has none.
+	check(Effects.spell("no-such-spell").is_empty(), "an uncatalogued spell has no mechanics")
+	check(Effects.spell("healing-word").get("cost", "") == "bonus", "Healing Word is catalogued and a bonus action")
 	var cw := Effects.spell("cure-wounds")
 	check(int(cw["heal"]["count"]) == 2 and int(cw["heal"]["sides"]) == 8,
 		"cure wounds is authored where the regex parse gave nothing usable")
@@ -890,7 +892,7 @@ func test_t33_spell_overrides() -> void:
 		"chromatic-orb":      [3, 8, "fire", "dex", "single", 0, 90],
 		"dissonant-whispers": [3, 6, "psychic", "wis", "single", 0, 60],
 		"hellish-rebuke":     [2, 10, "fire", "dex", "single", 0, 60],
-		"ray-of-sickness":    [2, 8, "poison", "", "single", 0, 60],
+		"ray-of-sickness":    [2, 8, "poison", "con", "single", 0, 60],   # the save is for the Poisoned rider, not the damage
 		"arms-of-hadar":      [2, 6, "necrotic", "str", "emanation", 10, 5],
 		"blight":             [8, 8, "necrotic", "con", "single", 0, 30],
 		"cone-of-cold":       [8, 8, "cold", "con", "cone", 60, 5],
@@ -903,12 +905,21 @@ func test_t33_spell_overrides() -> void:
 			"%s is %dd%d (got %sd%s)" % [id, w[0], w[1], d.get("count"), d.get("sides")])
 		check(d.get("type", "") == w[2], "%s deals %s damage" % [id, w[2]])
 		check(m.get("save", "") == w[3], "%s: save \"%s\"" % [id, w[3]])
-		check(m.has("attack") == (w[3] == ""), "%s rolls %s" % [id, "to hit" if w[3] == "" else "a save"])
+		# Ray of Sickness is the one that does both: to hit for the damage, then
+		# a CON save against the Poisoned rider.
+		check(m.has("attack") == (w[3] == "" or m.has("conditions")), "%s rolls %s" % [id, "to hit" if w[3] == "" else "a save"])
 		check(m.get("shape", "") == w[4] and int(m.get("size_ft", 0)) == w[5],
 			"%s is a %s%s" % [id, w[4], "" if w[5] == 0 else " of %d ft" % w[5]])
 		check(int(m.get("range_ft", 0)) == w[6], "%s reaches %d ft" % [id, w[6]])
 		check(int(m.get("level", -1)) == 0 or m.has("upcast"), "%s: upcast authored" % id)
 		check(int(m.get("level", -1)) > 0 or m.has("cantrip_scale"), "%s: cantrip scaling authored" % id)
+
+	# Unauthored spells take their range from the export's prose, not touch.
+	for pair in [["hold-person", 60], ["web", 60], ["fireball", 150], ["burning-hands", 5],
+			["hypnotic-pattern", 120], ["cure-wounds", 5]]:
+		check(int(Effects.spell(pair[0]).get("range_ft", 0)) == pair[1],
+			"%s reaches %d ft off its prose" % pair)
+	check(Effects.range_ft("1 mile") == 5280 and Effects.range_ft("Unlimited") == 5, "range prose edges")
 
 	# half-on-save is the difference between a dodge and a reduction — spot-check both ways.
 	check(Effects.spell("blight")["half_on_save"] and Effects.spell("cone-of-cold")["half_on_save"],
@@ -922,10 +933,14 @@ func test_t33_spell_overrides() -> void:
 		var m := Effects.spell(id)
 		check(not m.is_empty() and not m.has("damage"), "%s is castable on its condition alone" % id)
 		check(m.get("save", "") == "wis", "%s forces a WIS save" % id)
-		check(m.get("duration", "") == "round", "%s's condition is not a permanent lockout" % id)
+		# one round, a minute on the clock, or held by concentration (which
+		# combat.gd ends) — never forever
+		check(m.get("duration", "round") in ["round", "minute"] or m.get("concentration", false),
+			"%s's condition is not a permanent lockout" % id)
 	check(Effects.spell("hideous-laughter")["conditions"] == ["prone", "incapacitated"],
 		"Hideous Laughter drops the target prone AND incapacitated")
-	check(Effects.spell("sleep")["conditions"] == ["incapacitated"], "Sleep incapacitates")
+	check(Effects.spell("sleep")["conditions"] == ["unconscious"] and Effects.spell("sleep")["repeat_save"] == "damage_ends",
+		"Sleep (2024): Unconscious for a minute, until damaged")
 	check(Effects.spell("fear")["conditions"] == ["frightened"] and Effects.spell("fear")["shape"] == "cone"
 		and int(Effects.spell("fear")["size_ft"]) == 30, "Fear frightens a 30 ft cone")
 
@@ -943,8 +958,8 @@ func test_t33_spell_overrides() -> void:
 	check(by_id["ray-of-frost"]["targeting"] == "enemy" and int(by_id["ray-of-frost"]["dice_count"]) == 1,
 		"a cantrip is one die below level 5")
 	var hl: Dictionary = by_id["hideous-laughter"]
-	check(hl["conditions"] == ["prone", "incapacitated"] and hl["duration"] == "round",
-		"the conditions and their duration ride the verb")
+	check(hl["conditions"] == ["prone", "incapacitated"] and hl["duration"] == "concentration"
+		and hl["repeat_save"] == "on_damage", "the conditions, their duration and the repeat save ride the verb")
 	check(not hl.has("dice_count") and int(hl["save_dc"]) == 13, "no damage, but the caster's DC")
 	check(by_id.has("cone-of-cold") and not by_id.has("cone-of-cold@6"),
 		"a 5th-level spell offers its base level only — Ilsa has no headroom above it")
@@ -967,8 +982,17 @@ func test_power_ranks_the_heroes() -> void:
 	# a Light cleric with real access to Burning Hands AND Scorching Ray outdamages
 	# a sword-and-board fighter over 4 rounds, which is the estimator being honest,
 	# not a bug. Pike last: single-target, 21 HP, AC 15.
-	check(scores["vera"] > scores["pike"] and absf(scores["vera"] - scores["ilsa"]) < 1.0,
-		"vera clears the weaker martial, and stays close to the front-loaded caster")
+	# Areas now price at two targets (the corner circle / the line land on a
+	# cluster, and the autopilot only throws one where it nets two): ilsa 19.6,
+	# a clear step over vera rather than a dead heat, still the same tier.
+	# T-classes: ilsa 23.9. Her Channel Divinity had been built with a 0-use pool
+	# since the cleric's `resource-pool` grant is the one the export omits, so the
+	# button was on her bar and unpressable and the estimator scored its control
+	# at zero. It works now, so a Light cleric with two encounter-long fears on
+	# top of Burning Hands and Scorching Ray really is half again a sword-and-
+	# board fighter over four rounds. The claim is the tier, not the dead heat.
+	check(scores["vera"] > scores["pike"] and scores["ilsa"] < scores["vera"] * 1.6,
+		"vera clears the weaker martial, and stays within a tier of the front-loaded caster")
 	check(scores["pike"] > float(goblin["score"]), "even the squishiest hero beats a mook")
 	check(float(boss["score"]) > float(goblin["score"]) * 2.0, "the brute outscores a mook several times over")
 	# "an order of magnitude" (spec §10 step 9) is a level-10 statement; at level 3 vs a

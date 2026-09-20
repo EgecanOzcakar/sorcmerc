@@ -8,6 +8,7 @@ const World = preload("res://core/world.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Party = preload("res://core/party.gd")
+const Campaign = preload("res://core/campaign.gd")
 const RNG = preload("res://core/rng.gd")
 const Quest = preload("res://core/quest.gd")
 
@@ -21,13 +22,54 @@ func check(cond: bool, label: String) -> void:
 		_fail += 1
 		printerr("  FAIL: ", label)
 
+# #87: the button says what it would roll before it is pressed.
+func test_check_preview() -> void:
+	var party := _party()
+	var line := Visit.check_preview(party, Visit.STEAL_SKILL, Visit.STEAL_DC)
+	check("vs DC %d" % Visit.STEAL_DC in line and "Sleight" in line and "%" in line, "a steal preview names the skill, the DC and the odds (%s)" % line)
+	var c = Campaign.new(party)
+	var who: String = c.best_at(Visit.STEAL_SKILL)
+	check(party.get_member(who).cname in line, "...and who rolls it")
+	var bonus: int = c.skill_bonus(who, Visit.STEAL_SKILL)
+	var need := clampi(Visit.STEAL_DC - bonus, 2, 20)
+	check(("needs %d+" % need) in line and ("%d%%" % int(round((21 - need) / 20.0 * 100.0))) in line, "the odds are the d20's (%s)" % line)
+	var adv := Visit.check_preview(party, Visit.HAGGLE_SKILL, Visit.HAGGLE_DC, true)
+	check("advantage" in adv, "advantage is said when it applies")
+	check("Nobody" in Visit.check_preview(Party.new(), Visit.STEAL_SKILL, Visit.STEAL_DC), "an empty party cannot try")
+
+# #108/#109: the bench rests too, and the healer raises the dead.
+func test_bench_rests_and_healer_raises() -> void:
+	var w := World.new()
+	w.add_settlement(World.Settlement.new("home", Vector2.ZERO, "human", "city"))
+	var party := _party()
+	var benched = party.roster[0]
+	for ch in party.roster:
+		ch.hp_current = 1
+	party.bench(benched.id)
+	Visit.rest(party, w, "long-rest")
+	check(benched.hp_current == -1, "a long rest heals the benched member too (#108)")
+	benched.dead = true
+	benched.hp_current = 0
+	party.gold = Party.REVIVE_COST - 1
+	var r: Dictionary = Visit.raise_dead(party, benched.id)
+	check(not r["ok"] and benched.dead, "a purse short of the fee raises nobody")
+	party.gold = Party.REVIVE_COST
+	r = Visit.raise_dead(party, benched.id)
+	check(r["ok"] and not benched.dead and benched.hp_current == 1 and party.gold == 0,
+		"the healer raises the dead for REVIVE_COST, no caster asked (#109)")
+	check(not Visit.raise_dead(party, benched.id)["ok"], "...and only the dead")
+	check(party.summary(benched.id).get("dead", true) == false, "the summary carries the flag the party card reads")
+
 func _init() -> void:
+	test_check_preview()
+	test_bench_rests_and_healer_raises()
 	test_market_is_deterministic()
 	test_gap_changes_the_market()
 	test_visit_stamps_and_second_visit_is_thinner()
 	test_battle_flag_changes_it()
 	test_battle_marking_is_local()
 	test_trade()
+	test_full_shelf_is_a_fraction_of_the_catalog()
 	test_steal_deterministic_and_hooks()
 	test_opinion_moves_prices_and_can_refuse_trade()
 	test_rest_and_quests()
@@ -136,13 +178,23 @@ func test_steal_deterministic_and_hooks() -> void:
 	check(party.gold == gold0 + int(hit["gold"]), "the gold landed in the purse")
 	check(s.pending_opinion_delta == Visit.OPINION_STEAL_SUCCESS,
 		"a clean theft queued the O7 opinion hit")
+	check(String(hit["text"]).contains("opinion %d" % int(Visit.OPINION_STEAL_SUCCESS)),
+		"...and says so on the spot")
+	# The stall is watched now: a second try today does not even roll.
+	var again := Visit.steal(s, party, w, m, _rng_rolling(20))
+	check(again.get("watched", false) and int(again["gold"]) == 0, "no second theft while the stall is watched")
+	check(Visit.steal_wait(s, w) > 0.0, "...and the wait is visible")
+	w.clock.elapsed += Visit.STEAL_COOLDOWN_MINUTES
+	check(Visit.steal_wait(s, w) == 0.0, "a day later the watch is off")
 	var miss := Visit.steal(s, party, w, m, _rng_rolling(1))
 	check(not miss["ok"] and int(miss["gold"]) == 0, "a nat 1 gets caught with nothing")
 	check(s.pending_opinion_delta
 			== Visit.OPINION_STEAL_SUCCESS + Visit.OPINION_STEAL_CAUGHT,
 		"getting caught queued the bigger O7 opinion hit, on top of the first")
 	# Unseeded: same settlement, same hour, same outcome.
+	s.stolen_at = -1.0
 	var a := Visit.steal(s, _party(), w, m)
+	s.stolen_at = -1.0
 	var b := Visit.steal(s, _party(), w, m)
 	check(a["nat"] == b["nat"] and a["ok"] == b["ok"], "the same attempt rolls the same")
 	check(String(a["text"]) != "", "the attempt is narrated")
@@ -303,6 +355,31 @@ func test_persuade_and_investigate() -> void:
 	var r2 := Visit.persuade(s, very_refused, party, RNG.new(1))
 	check(r2["dc"] > r1["dc"], "a settlement that loathes you is a harder sell than one that merely refuses")
 
+	# --- haggle: the mirror of persuade, for a market that's already open ---
+	check(Visit.haggle(refused, party).is_empty(), "nothing to haggle over on a market that's refusing")
+	var saw_hok := false
+	var saw_hfail := false
+	for seed_v in range(40):
+		var roll: Dictionary = Visit.haggle(open_market, party, RNG.new(seed_v + 1))
+		check(not roll.is_empty(), "haggle() rolls for a party that has members")
+		check(String(roll["text"]) != "", "the attempt is narrated")
+		if roll["ok"]:
+			saw_hok = true
+			check(roll["mult"] < 1.0, "a win discounts this visit's prices")
+		else:
+			saw_hfail = true
+			check(roll["mult"] > 1.0, "a loss makes this visit's prices worse")
+	check(saw_hok and saw_hfail, "both outcomes reachable across seeds (got ok=%s fail=%s)" % [saw_hok, saw_hfail])
+
+	var priced := Visit.market(s, 120.0, false)
+	var id2: String = priced["stock"][0]["item_id"]
+	var before_price: int = Visit.price_of(priced, id2)
+	var before_markup: float = priced["markup"]
+	Visit.apply_haggle(priced, 0.85)
+	check(Visit.price_of(priced, id2) == maxi(1, int(round(before_price * 0.85))),
+		"apply_haggle rescales every shelf price")
+	check(is_equal_approx(priced["markup"], before_markup * 0.85), "...and the markup itself, so sell prices follow too")
+
 	# --- investigate_battle ---
 	var no_battle := Visit.market(s, 120.0, false)
 	check(Visit.investigate_battle(s, no_battle, party).is_empty(), "nothing to investigate without a recent battle")
@@ -390,3 +467,9 @@ func test_counters_and_the_two_services_that_sell_nothing() -> void:
 	check(party.gold == Visit.IDENTIFY_COST, "...for the flat fee")
 	check(party.unidentified().is_empty(), "...leaving nothing unidentified")
 	check(party.stash_count("spell-scroll", true) == 1, "...and the item itself is still there, known")
+
+func test_full_shelf_is_a_fraction_of_the_catalog() -> void:
+	var s = _world().settlements[0]
+	var full := Visit.market(s, Visit.RESTOCK * Visit.MAX_STEPS, false)
+	check(full["stock"].size() == int(ceil(Visit.catalog(s).size() * Visit.FULL_SHELF)),
+		"a rested market shows FULL_SHELF of its catalog, not all of it")

@@ -67,6 +67,13 @@ static func armor_ac(items: Array, dex_mod: int, armor_profs: Array):
 		"non_proficient_body": not _armor_prof(body["category"], armor_profs),
 		"non_proficient_shield": np_shield}
 
+# Can this sheet use the item without the non-proficiency penalties? `profs`
+# is r.proficiencies["weapon"] or ["armor"] to match `kind`.
+static func proficient(kind: String, def: Dictionary, profs: Array) -> bool:
+	if kind == "weapon":
+		return str(def.get("weaponProficiencyId", "")) in profs or str(def.get("category", "")) in profs
+	return _armor_prof(str(def.get("category", "")), profs)
+
 static func _armor_prof(category: String, profs: Array) -> bool:
 	match category:
 		"light": return "light" in profs
@@ -117,6 +124,15 @@ static func attacks(items: Array, abilities: Dictionary, pb: int, weapon_profs: 
 			"versatile_notation": _versatile(w, dmg),
 			"mastery": masteries.get(w["id"], ""),
 		})
+		# Thrown: the same weapon as a ranged attack (same ability, no Archery bonus),
+		# so a javelin or dagger shows up in the wield toggle as a real ranged option.
+		if "thrown" in w["properties"] and w["range"] == "melee" and w["normalRange"] != null:
+			var thrown: Dictionary = out[-1].duplicate(true)
+			thrown["id"] = w["id"] + "-thrown"
+			thrown["name"] = w["name"] + " (thrown)"
+			thrown["range"] = "ranged"
+			thrown["versatile_notation"] = ""
+			out.append(thrown)
 
 	var unarmed_fighting: bool = "unarmed-fighting" in styles
 	if equipped.is_empty() or monk_level > 0 or unarmed_fighting:

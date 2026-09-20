@@ -77,7 +77,7 @@ const WAYS := {
 	"avoid": {"label": "Slip away", "role": "scout", "skills": ["stealth"], "dc": AVOID_DC,
 		"note": "No fight, and nothing to show for it.",
 		"win": "No fight — and no XP, no loot, nothing.",
-		"lose": "Seen mid-slip: they take the first round, and you fight strung out."},
+		"lose": "Seen mid-slip: they take the first round, and you fight strung out — get everyone to the road at the far edge, or through them."},
 	"parley": {"label": "Parley", "role": "", "skills": ["persuasion", "deception"],
 		"dc": PARLEY_DC, "note": "Buy your way past. They will want something.",
 		"win": "No fight. The toll is %d gold, and there is no loot.",
@@ -207,7 +207,7 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 			out["forced_ambush"] = not ok
 			out["text"] = ("%s takes them wide around it. Nobody ever knew they were there."
 				% who["cname"]) if ok else (
-				"%s is seen. They come in fast, and the party is still strung out."
+				"%s is seen. They come in fast, and the party is strung out — the road is the far edge."
 				% who["cname"])
 		"ambush":
 			out["scouted_ahead"] = ok
@@ -223,8 +223,8 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 				var toll: int = _toll(party)
 				party.spend_gold(toll)
 				out["toll"] = toll
-				out["text"] = "%s talks them down. They take %d gold to have seen nobody." % [
-					who["cname"], toll]
+				out["text"] = "%s talks them down. They take %s to have seen nobody." % [
+					who["cname"], ("%d gold" % toll) if toll > 0 else "nothing — the purse was empty"]
 			else:
 				out["text"] = "%s gets nowhere. They were never going to be talked to." % who["cname"]
 	return out

@@ -11,6 +11,8 @@ const Party = preload("res://core/party.gd")
 const Quest = preload("res://core/quest.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
+const ManualOverlay = preload("res://scenes/manual/manual.gd")
+const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 
 const Icons = preload("res://core/ui_icons.gd")
 
@@ -22,7 +24,7 @@ const COL_DIM := Icons.COL_MUTED
 const COL_PARTY := Icons.COL_PARTY
 const COL_FOE := Icons.COL_FOE
 
-const KIND_COL := {"combat": COL_FOE, "treasure": COL_GOLD, "merchant": Color("8fb7d8"),
+const KIND_COL := {"combat": COL_FOE, "treasure": COL_GOLD, "merchant": Icons.COL_ACCENT,
 	"rest": COL_PARTY}
 
 var party: Party            # injected, or a demo roster
@@ -64,17 +66,15 @@ func _ready() -> void:
 	root.add_theme_constant_override("separation", 8)
 	add_child(root)
 
-	_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_header.add_theme_font_size_override("font_size", Icons.FS_TITLE)
-	_header.add_theme_color_override("font_color", COL_GOLD)
+	_header.theme_type_variation = "Title"
 	root.add_child(_header)
 
 	var cols := HBoxContainer.new()
 	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cols.add_theme_constant_override("separation", 16)
 	root.add_child(cols)
-	cols.add_child(_column("T H E   R O A D", _body, 1.7))
-	cols.add_child(_column("Q U E S T   L O G", _quests, 1.0))
+	cols.add_child(_column("The road", _body, 1.7))
+	cols.add_child(_column("Quest log", _quests, 1.0))
 
 	_journal.bbcode_enabled = true
 	_journal.scroll_following = true
@@ -93,6 +93,19 @@ func _ready() -> void:
 	sbtn.text = "⚙  Settings"
 	sbtn.pressed.connect(func(): SettingsOverlay.toggle(self))
 	footer.add_child(sbtn)
+	var mbtn := Button.new()
+	mbtn.text = "Manual"
+	mbtn.pressed.connect(func(): ManualOverlay.toggle(self))
+	footer.add_child(mbtn)
+	var bbtn := Button.new()
+	bbtn.text = "Report a bug"
+	bbtn.pressed.connect(func(): BugReportOverlay.toggle(self, {
+		"Screen": "the linear campaign map",
+		"Stage": "%d of %d" % [run.stage, Campaign.STAGE_COUNT],
+		"State": run.state,
+		"Gold": "%d gp" % run.party.gold,
+	}))
+	footer.add_child(bbtn)
 
 	_refresh()
 	# A run saved mid-fight comes back to the fight — otherwise the map sits on
@@ -112,7 +125,7 @@ func _offer_continue() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	overlay.add_child(col)
-	col.add_child(_caption("A   R U N   I S   S A V E D"))
+	col.add_child(_caption("A run is saved"))
 	var cont := Button.new()
 	cont.text = "Resume the last run"
 	cont.pressed.connect(func():
@@ -135,8 +148,7 @@ func _column(title: String, body: VBoxContainer, stretch: float) -> Control:
 	wrap.size_flags_stretch_ratio = stretch
 	var cap := Label.new()
 	cap.text = title
-	cap.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
-	cap.add_theme_color_override("font_color", COL_GOLD)
+	cap.theme_type_variation = "Caption"
 	wrap.add_child(cap)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -153,7 +165,7 @@ func _refresh() -> void:
 	for c in _body.get_children():
 		c.queue_free()
 		_body.remove_child(c)
-	_header.text = "»   S T A G E   %d / %d   ·   %d gp   ·   %d XP   «" % [
+	_header.text = "Stage %d of %d.  %d ◉, %d XP" % [
 		mini(run.stage + 1, Campaign.STAGE_COUNT), Campaign.STAGE_COUNT, party.gold, run.xp]
 
 	var fallen: Array = party.roster.filter(func(ch): return ch.dead)
@@ -187,13 +199,12 @@ func _node_card(index: int, node: Dictionary) -> Control:
 	panel.add_child(col)
 	var title := Label.new()
 	title.text = "%s  %s" % [Icons.node_glyph(node["kind"]), node["title"]]
-	title.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	title.theme_type_variation = "Head"
 	title.add_theme_color_override("font_color", KIND_COL.get(node["kind"], COL_DIM))
 	col.add_child(title)
 	var desc := Label.new()
-	desc.text = "%s  ·  %s" % [node["kind"], node.get("desc", "")]
-	desc.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	desc.add_theme_color_override("font_color", COL_DIM)
+	desc.text = "%s.  %s" % [String(node["kind"]).capitalize(), node.get("desc", "")]
+	desc.theme_type_variation = "Dim"
 	col.add_child(desc)
 	var go := Button.new()
 	go.text = "Take this road"
@@ -213,7 +224,7 @@ func _retire_card() -> Control:
 	panel.add_child(col)
 	var title := Label.new()
 	title.text = "⌂  Retire from the road"
-	title.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	title.theme_type_variation = "Head"
 	title.add_theme_color_override("font_color", COL_GOLD)
 	col.add_child(title)
 	col.add_child(_dim("Walk home with the gold, XP and loot you have. The run ends here."))
@@ -236,7 +247,7 @@ func _node_panel() -> Control:
 	panel.add_child(col)
 	var title := Label.new()
 	title.text = "%s  %s" % [Icons.node_glyph(run.node.get("kind", "")), run.node.get("title", "")]
-	title.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	title.theme_type_variation = "Head"
 	title.add_theme_color_override("font_color", COL_GOLD)
 	col.add_child(title)
 
@@ -265,7 +276,7 @@ func _node_panel() -> Control:
 # Every tab buys/sells through the same run.buy()/run.sell(); the only difference
 # is which catalog it shows. The NPC's one flavour line heads their tab.
 func _merchant_ui(col: VBoxContainer) -> void:
-	col.add_child(_caption("%s   ·   %d gp in purse" % [
+	col.add_child(_caption("%s.  %d ◉ in the purse" % [
 		String(run.node.get("size", "camp")).to_upper(), party.gold]))
 	var tabs := TabContainer.new()
 	tabs.custom_minimum_size = Vector2(0, 300)
@@ -274,15 +285,25 @@ func _merchant_ui(col: VBoxContainer) -> void:
 		var page := VBoxContainer.new()
 		page.name = String(Campaign.SERVICE_NAMES.get(service, service))
 		tabs.add_child(page)
+		# Campaign merchant nodes have no faction; the road is human country.
+		var pic := Icons.portrait_rect(String(run.node.get("faction", "human")), service, 120)
 		var line := run.npc_line(service)
+		var head := HBoxContainer.new()
+		page.add_child(head)
+		if pic != null:
+			pic.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+			head.add_child(pic)
 		if line != "":
-			page.add_child(_dim(line))
+			var l := _dim(line)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			head.add_child(l)
 		_service_page(service, page)
 
 func _service_page(service: String, page: VBoxContainer) -> void:
 	for e in run.service_stock(service):
 		var b := Button.new()
-		b.text = "Buy  %s   —   %d gp" % [e["name"], e["price"]]
+		b.text = "Buy  %s   —   %d ◉" % [e["name"], e["price"]]
 		b.add_theme_color_override("font_color", Icons.item_color(String(e["item_id"])))
 		b.disabled = party.gold < int(e["price"]) or int(e["price"]) <= 0
 		b.pressed.connect(func(): run.buy(String(e["item_id"])); _refresh())
@@ -291,51 +312,51 @@ func _service_page(service: String, page: VBoxContainer) -> void:
 	match service:
 		"generalist":
 			if not party.stash.is_empty():
-				page.add_child(_caption("Y O U R   S T A S H"))
+				page.add_child(_caption("Your stash"))
 				for e in party.stash:
 					var id := String(e["item_id"])
 					var b := Button.new()
 					var nm: String = Campaign.item_name(id) if Party.is_identified(e) \
 						else Campaign.mystery_name(id)
-					b.text = "Sell  %s ×%d   —   %d gp" % [nm, int(e["quantity"]),
+					b.text = "Sell  %s ×%d   —   %d ◉" % [nm, int(e["quantity"]),
 						maxi(1, int(Campaign.item_price(id) * Campaign.SELL_RATE))]
 					b.add_theme_color_override("font_color", Icons.item_color(id))
 					b.pressed.connect(func(): run.sell(id); _refresh())
 					page.add_child(b)
 		"librarian":
-			page.add_child(_caption("R E A D I N G S   ·   %d gp, no roll" % Campaign.IDENTIFY_FEE_GP))
+			page.add_child(_caption("Readings, %d ◉ and no roll" % Campaign.IDENTIFY_FEE_GP))
 			var mysteries: Array = party.unidentified()
 			if mysteries.is_empty():
 				page.add_child(_dim("Nothing of yours needs reading."))
 			for e in mysteries:
 				var id := String(e["item_id"])
 				var b := Button.new()
-				b.text = "Identify  %s   —   %d gp" % [Campaign.mystery_name(id),
+				b.text = "Identify  %s   —   %d ◉" % [Campaign.mystery_name(id),
 					Campaign.IDENTIFY_FEE_GP]
 				b.disabled = party.gold < Campaign.IDENTIFY_FEE_GP
 				b.pressed.connect(func(): run.identify_for_fee(id); _refresh())
 				page.add_child(b)
 		"healer":
 			var b := Button.new()
-			b.text = "Tend the whole party   —   %d gp" % Campaign.HEALER_GP
+			b.text = "Tend the whole party   —   %d ◉" % Campaign.HEALER_GP
 			b.disabled = party.gold < Campaign.HEALER_GP
 			b.pressed.connect(func(): run.heal_party(); _refresh())
 			page.add_child(b)
 		"innkeeper":
-			page.add_child(_caption("W O R K"))
+			page.add_child(_caption("Work"))
 			var offer := run.offer()
 			if offer.is_empty():
 				page.add_child(_dim("Nothing else needs doing here."))
 			else:
 				var b := Button.new()
-				b.text = "Accept:  %s   (%d gp)" % [offer["title"], int(offer["reward"].get("gold", 0))]
+				b.text = "Accept:  %s   (%d ◉)" % [offer["title"], int(offer["reward"].get("gold", 0))]
 				b.pressed.connect(func(): run.accept(offer); _refresh())
 				page.add_child(b)
 			for q in Quest.active(party):
 				if not Quest.can_turn_in(q):
 					continue
 				var b := Button.new()
-				b.text = "Turn in:  %s   (+%d gp)" % [q["title"], int(q["reward"].get("gold", 0))]
+				b.text = "Turn in:  %s   (+%d ◉)" % [q["title"], int(q["reward"].get("gold", 0))]
 				b.pressed.connect(func(): run.turn_in(q); _refresh())
 				page.add_child(b)
 
@@ -347,7 +368,7 @@ func _service_page(service: String, page: VBoxContainer) -> void:
 # fight: one attempt, pass or fail, no retry at this node.
 func _opportunity_ui(col: VBoxContainer) -> void:
 	if not run.scouted.is_empty():
-		col.add_child(_caption("T H E   R O A D   A H E A D"))
+		col.add_child(_caption("The road ahead"))
 		for n in run.scouted:
 			col.add_child(_dim("%s — %s" % [n["title"], String(n.get("difficulty", "?"))]))
 		return
@@ -369,7 +390,7 @@ func _identify_ui(col: VBoxContainer) -> void:
 	var mysteries: Array = party.unidentified()
 	if mysteries.is_empty():
 		return
-	col.add_child(_caption("U N I D E N T I F I E D   ·   Arcana check"))
+	col.add_child(_caption("Unidentified, an Arcana check each"))
 	var who := run.arcana_examiner()
 	for e in mysteries:
 		var id := String(e["item_id"])
@@ -394,20 +415,20 @@ func _fallen_panel(fallen: Array) -> Control:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
-	col.add_child(_caption("T H E   F A L L E N   ·   %d gp to raise one" % Party.REVIVE_COST))
+	col.add_child(_caption("The fallen, %d ◉ to raise one" % Party.REVIVE_COST))
 	var caster := Party.resurrection_caster(party)
 	var scroll := Party.has_resurrection_scroll(party)
 	for ch in fallen:
 		col.add_child(_dim("%s lies dead." % ch.cname))
 		if caster != "":
 			var b := Button.new()
-			b.text = "Revivify  %s   (%s casts, −%d gp)" % [ch.cname, caster, Party.REVIVE_COST]
+			b.text = "Revivify  %s   (%s casts, −%d ◉)" % [ch.cname, caster, Party.REVIVE_COST]
 			b.disabled = not Party.can_resurrect(party)
 			b.pressed.connect(func(): run.resurrect(ch.id, "spell", caster); _refresh())
 			col.add_child(b)
 		if scroll:
 			var b2 := Button.new()
-			b2.text = "Read the Scroll of Resurrection over %s   (−%d gp)" % [ch.cname, Party.REVIVE_COST]
+			b2.text = "Read the Scroll of Resurrection over %s   (−%d ◉)" % [ch.cname, Party.REVIVE_COST]
 			b2.disabled = not Party.can_resurrect(party)
 			b2.pressed.connect(func(): run.resurrect(ch.id, "scroll"); _refresh())
 			col.add_child(b2)
@@ -422,10 +443,10 @@ func _end_panel() -> Control:
 	var col := VBoxContainer.new()
 	panel.add_child(col)
 	var l := Label.new()
-	l.text = "The road is walked. %d XP, %d gp." % [run.xp, party.gold] if run.state == "won" \
-		else "Retired. %d XP, %d gp brought home." % [run.xp, party.gold] if run.state == "retired" \
+	l.text = "The road is walked. %d XP, %d ◉." % [run.xp, party.gold] if run.state == "won" \
+		else "Retired. %d XP, %d ◉ brought home." % [run.xp, party.gold] if run.state == "retired" \
 		else "The party falls. The run ends here."
-	l.add_theme_font_size_override("font_size", Icons.FS_HEAD)
+	l.theme_type_variation = "Head"
 	l.add_theme_color_override("font_color", COL_PARTY if won else COL_FOE)
 	col.add_child(l)
 	var again := Button.new()
@@ -465,25 +486,22 @@ func _refresh_quests() -> void:
 func _caption(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
-	l.add_theme_color_override("font_color", COL_GOLD)
+	l.theme_type_variation = "Caption"
 	return l
 
 func _dim(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
-	l.add_theme_color_override("font_color", COL_DIM)
+	l.theme_type_variation = "Dim"
 	return l
 
+# A node card: the ledger row's left bar in the kind's colour — a fight is
+# red down the edge, a cache gilt — over the plain panel.
 func _box(bg: Color, edge: Color) -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = bg
-	s.set_corner_radius_all(8)
-	s.set_border_width_all(1)
+	var s := Icons.box(bg, Color(0, 0, 0, 0), 0, 14, 10)
 	s.border_color = edge
-	s.set_content_margin_all(10)
+	s.border_width_left = 3
 	return s
 
 # --- node entry / combat handoff ------------------------------------------

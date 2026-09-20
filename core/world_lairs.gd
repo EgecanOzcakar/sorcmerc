@@ -64,10 +64,10 @@ static func search(lair, party, rng = null) -> Dictionary:
 
 # Called once, after the attacking fight is won. Second call on an already-
 # looted lair returns an empty stash rather than paying out twice.
-static func loot(lair) -> Dictionary:
+static func loot(lair, now := -1.0) -> Dictionary:
 	if lair.looted:
 		return {"gold": 0}
-	lair.looted = true
+	mark_cleared(lair, now)
 	var Scaler = load("res://core/scaler.gd")
 	var idx: int = maxi(0, Scaler.FACTIONS.find(lair.faction))
 	return {"gold": LOOT_BASE + idx * LOOT_PER_FACTION_INDEX}
@@ -114,9 +114,57 @@ static func expire(world, now: float) -> Array:
 		# Seeded off the lair, so the same warren always ends the same way —
 		# reloading cannot reroll it into the outcome you preferred.
 		l.resolved_as = OUTCOMES[absi(hash("resolve|%s" % l.id)) % OUTCOMES.size()]
-		l.looted = true
+		mark_cleared(l, now)
 		gone.append(l)
 	return gone
+
+# --- a hole in the ground does not stay empty -------------------------------
+#
+# A spent lair used to sit grey on the map forever: cleared once, and that was
+# the end of that landmark for the rest of the run. Five lairs, five clears,
+# and the map had nothing left underground to do.
+#
+# So something moves back in. One in-game day after it was emptied — however it
+# was emptied: fought to the bottom, talked past, or resolved without the party
+# while the window ran out — the place is live again, with a fresh interior and
+# guardians who have never met you. The party keeps knowing WHERE it is
+# (`discovered` survives; finding a hole once is finding it), but everything
+# about what is in it starts over: the rooms they cleared, the clock that was
+# running on them, and whether the guardians are awake.
+#
+# RESPAWN is deliberately the shortest interval that still reads as "time
+# passed" — a day is one long rest, so a party can clear a warren, sleep, and
+# find it occupied again. Raise it if a lair should be scarcer than that.
+const RESPAWN := 1440.0           # one in-game day, in world-minutes
+
+# Every stamp of "this lair is spent" goes through here, so the respawn clock
+# cannot be started in one place and forgotten in another.
+static func mark_cleared(lair, now := -1.0) -> void:
+	lair.looted = true
+	lair.cleared_at = now
+
+# Brings back every lair whose day is up, and returns them so the caller can say
+# so — a grey landmark going red again with no explanation reads as a bug in the
+# same way going grey did. Polled once a frame beside expire(); there are five.
+static func respawn(world, now: float) -> Array:
+	var back: Array = []
+	for l in world.lairs:
+		if not l.looted or l.cleared_at < 0.0:
+			continue          # live already, or spent before this rule existed
+		if now - l.cleared_at < RESPAWN:
+			continue
+		l.looted = false
+		l.cleared_at = -1.0
+		l.depth_cleared = 0       # a fresh interior, not the one they fought through
+		l.entered_at = -1.0       # ...guarded by something that has not met them
+		l.resolved_as = ""
+		back.append(l)
+	return back
+
+# What moved in, in words. Separate from respawn() for the same reason
+# resolution_text is separate from expire().
+static func respawn_text(lair) -> String:
+	return "Something has moved into %s again." % lair.sname
 
 # What happened, in words. Separate from expire() so the world screen is not
 # the only thing that can explain it.
@@ -136,11 +184,32 @@ const SNEAK_DC := 14
 # lair is discovered: calm whatever's guarding it instead of fighting
 # through. A pass loots the lair clean, same payout as winning the fight,
 # with no combat at all; a fail just means the guardians didn't buy it —
-# the caller falls through to the normal attack. One attempt per lair — like
-# search(), no cooldown, but here failing has a real cost (a fight anyway)
-# so there's no spam to guard against.
+# the caller falls through to the normal attack. Exactly one attempt per lair,
+# and alerted() below is what enforces it.
+#
+# Only on a lair nobody has been into yet. The guardians are awake the moment
+# somebody comes through the door — the party kicked it in, or the quiet way was
+# tried and failed and fell straight through to the attack (world.gd's
+# _lair_sneak_action) — and they do not settle back down because the party
+# withdrew and came back a day later. Without this you could fight half-way into
+# a warren, walk out, and then talk your way past the very guardians you had
+# been killing, for a second payout on top of the rooms you already looted.
+#
+# `entered_at` is the stamp already: mark_entered() sets it the first time the
+# party goes in, it is what starts WINDOW, and core/world_save.gd round-trips it
+# — so there is no second piece of state to keep in step, and an old save that
+# was disturbed before this rule existed reads correctly too.
+static func alerted(lair) -> bool:
+	return lair.entered_at >= 0.0
+
+# The quiet way is open at all only on a discovered, unspent, undisturbed lair.
+# world.gd asks this to decide whether to show the button; sneak_past() asks it
+# again so the rule holds whoever calls it.
+static func can_sneak(lair) -> bool:
+	return lair.discovered and not lair.looted and not alerted(lair)
+
 static func sneak_past(lair, party, rng = null) -> Dictionary:
-	if not lair.discovered or lair.looted:
+	if not can_sneak(lair):
 		return {}
 	var c = Campaign.new(party)
 	var char_id := c.best_at(SNEAK_SKILL)

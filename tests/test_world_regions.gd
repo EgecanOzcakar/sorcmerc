@@ -52,7 +52,7 @@ func _init() -> void:
 	await _stand(main, Regions.anchor(w) + Vector2(200, 0))
 	check(main._region_lbl != null and main._region_lbl.text != "", "the HUD says which country this is")
 	check(main._region_lbl.text.find("Heartland") >= 0, "home reads as the heartland (%s)" % main._region_lbl.text)
-	check(main._region_lbl.text.find("lv 1-3") >= 0, "...and who it is for (%s)" % main._region_lbl.text)
+	check(main._region_lbl.text.find("levels 1 to 3") >= 0, "...and who it is for (%s)" % main._region_lbl.text)
 
 	# --- crossing out -------------------------------------------------------
 	var deeps: Array = Regions.ring(w, "deeps")
@@ -107,6 +107,11 @@ func _init() -> void:
 	check(main._lair_btn.text.find("Deeps") >= 0,
 		"the button that walks into a lair says what country it is in (%s)" % main._lair_btn.text)
 	check(main._lair_btn.text.find("levels") >= 0, "...and what it will take")
+	# #89: a party halted on top of it (paused) is still offered the way in
+	main.world.clock.pause()
+	main._check_lairs()
+	check(main._lair_btn.visible, "...and still does while the clock is paused")
+	main.world.clock.resume()
 
 	print("test_world_regions: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

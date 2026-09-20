@@ -3,17 +3,24 @@
 extends RefCounted
 
 const Hex = preload("res://core/hex.gd")
+const Objectives = preload("res://core/objectives.gd")
 
 # combat-design.md §7 rule 5: foes won't execute a downed PC while they could
 # instead engage a conscious one this turn. The difference between tense and
 # feels-bad — flip to false to let monsters finish people off.
 const MERCY := true
 
+# A coroutine, but only on paper: the only thing below that can suspend is
+# cb.offer_reactions(), and that returns without ever reaching an await unless
+# somebody installed a reaction decider (scenes/main.gd does, when the player
+# asked for prompts). It returns void precisely so the callers that don't —
+# the whole headless suite, autoplay — can go on calling it as a bare statement
+# and get the same straight-through turn they always got.
 static func take_turn(cb, actor) -> void:
 	if not actor.conscious():
 		return
 	if actor.team == "foe":
-		_foe_turn(cb, actor)
+		await _foe_turn(cb, actor)
 	else:
 		_party_auto(cb, actor)
 
@@ -31,12 +38,17 @@ static func _nearest(from: Vector2i, list: Array):
 
 # Step as far as this turn's move points allow toward `goal`; returns nothing,
 # mutates via cb.move_to. `score` picks the destination among reachable hexes.
+# A hex inside a Wall of Fire or a Web costs this much score — a few hexes'
+# worth, so a monster routes around a cloud and steps out of one it woke up in,
+# but still wades through when the only way to its prey runs through it.
+const ZONE_PENALTY := 4.0
+
 static func _move_by(cb, m, score: Callable, disengage := false) -> void:
 	var field: Dictionary = cb.move_field(m)
 	var best: Vector2i = m.pos
-	var best_s: float = score.call(m.pos)
+	var best_s: float = score.call(m.pos) - (ZONE_PENALTY if cb.zone_hurts(m, m.pos) else 0.0)
 	for h in field:
-		var s: float = score.call(h)
+		var s: float = score.call(h) - (ZONE_PENALTY if cb.zone_hurts(m, h) else 0.0)
 		if s > best_s:
 			best_s = s
 			best = h
@@ -52,7 +64,7 @@ static func _can_engage(cb, m, c) -> bool:
 		if m.ranged:
 			if d > 1 and d <= m.atk_range:
 				return true
-		elif d <= 1:
+		elif d <= m.reach:
 			return true
 	return false
 
@@ -101,15 +113,46 @@ static func _use_special(cb, m, targets: Array) -> bool:
 		if legal.is_empty():
 			continue
 		legal.sort_custom(func(a, b): return a.hp < b.hp)
+		await cb.offer_reactions(m, v, legal[0])
 		cb.perform(m, v, legal[0])
 		return true
 	return false
 
 # Hit `targets` (already in the caller's preference order) — the special first,
 # the plain swing at the head of the list otherwise.
+#
+# The offer goes immediately before the blow, not after it: the resolver cannot
+# stop to ask (see combat.gd's "being asked first"), so the moment before the
+# action is committed is the last one at which the question can be put. The
+# answer is therefore given against the hit chance rather than against the
+# damage — and nothing is spent if the swing misses.
+#
+# One _strike is one Attack ACTION, which is however many swings
+# attacks_per_action buys — a hobgoblin's Multiattack, a fighter's Extra Attack,
+# the two a monk's Flurry banked. Taking one swing and returning left every one
+# of those on the table: the resolver banked the rest in `attacks_left` and the
+# turn ended with them unspent, so every multiattack monster in the bestiary
+# fought as a single-attack monster.
+#
+# Re-targeted between swings rather than pounded into the same body: the second
+# swing of a Multiattack should not be thrown at a corpse. The loop stops when
+# the resolver says the economy is out, which is the same answer it gives the
+# action bar.
 static func _strike(cb, m, targets: Array) -> void:
-	if not _use_special(cb, m, targets):
-		cb.resolve_attack(m, targets[0])
+	if await _use_special(cb, m, targets):
+		return
+	for _swing in MAX_SWINGS:
+		var live: Array = targets.filter(func(c): return c.conscious() and cb.in_reach(m, c))
+		if live.is_empty() or not m.conscious():
+			return
+		live.sort_custom(func(a, b): return a.hp < b.hp)
+		await cb.offer_reactions(m, cb.attack_verb(), live[0])
+		if cb.resolve_attack(m, live[0]).has("error"):
+			return
+
+# A guard on the loop above, not a rule: nothing in the game grants more than
+# four swings, and a runaway would be an infinite turn rather than a wrong one.
+const MAX_SWINGS := 6
 
 static func _toward(goal: Vector2i) -> Callable:
 	return func(h: Vector2i) -> float: return -float(Hex.distance(h, goal))
@@ -121,18 +164,77 @@ static func _away(threats: Array) -> Callable:
 			m = mini(m, Hex.distance(h, t.pos))
 		return float(m)
 
+# The aim for an area verb that catches the most foes net of allies — every
+# enemy's hex (and, for a corner circle, each corner of it) is a candidate.
+# null unless some aim nets at least two.
+static func _best_area(cb, h, v: Dictionary):
+	var best = null
+	var best_net := 1
+	var cands: Array = []
+	for f in cb.enemies_of(h):
+		if not f.conscious():
+			continue
+		if v["targeting"] == "corner":
+			for k in 6:
+				cands.append(Hex.corner(f.pos, k))
+		else:
+			cands.append(f.pos)
+	for aim in cands:
+		if not cb.legal_area(h, v, aim):
+			continue
+		var hexes: Array = cb.area_hexes(h, v, aim)
+		var net: int = cb.enemies_of(h).filter(func(c): return c.conscious() and c.pos in hexes).size() \
+			- cb.allies_of(h).filter(func(c): return c.conscious() and c.pos in hexes).size()
+		if net > best_net:
+			best_net = net
+			best = aim
+	return best
+
 # --- foes ------------------------------------------------------------
 
+# A shooter with an enemy adjacent fires at disadvantage. If one move can reach a
+# hex that is clear of every PC and still within range of one, take it (eating
+# the opportunity attack — a bow at full effect is worth more than a free swing
+# avoided) and report true so the caller shoots instead of swinging point-blank.
+static func _step_clear(cb, m, pcs: Array) -> bool:
+	var best := Vector2i.ZERO
+	var best_d := -1
+	for h in cb.move_field(m):
+		var near := 1 << 30
+		for c in pcs:
+			near = mini(near, Hex.distance(h, c.pos))
+		if near <= 1 or near > m.atk_range:
+			continue
+		if near > best_d:   # the farthest still-in-range hex: the most room before they close again
+			best_d = near
+			best = h
+	if best_d < 0:
+		return false
+	cb.move_to(m, best)
+	return m.conscious()
+
 static func _foe_turn(cb, m) -> void:
-	var pcs: Array = cb.combatants.filter(func(c): return c.team == "party" and c.conscious())
+	# `illusion` (Invoke Duplicity's double) is out of the list rather than
+	# merely unhittable. A foe that only refused the swing would still pick the
+	# double first — it has 1 hp and the list sorts on hp — and lose its whole
+	# turn to it, which makes the double far stronger than RAW's "Advantage
+	# against creatures within 5 feet" and reads as the AI being broken.
+	var pcs: Array = cb.combatants.filter(func(c): return c.team == "party" \
+		and c.conscious() and not c.has("illusion") and not c.has("captive"))
 	if pcs.is_empty():
+		return
+	if m.has("quarry") and _quarry_runs(cb, m, pcs):
 		return
 	_use_kit(cb, m)
 
-	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1)
+	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.reach)
+	if not adj.is_empty() and m.ranged and _step_clear(cb, m, pcs):
+		adj = []   # an archer with someone in its face backs off first, then shoots (falls through)
+	if not m.conscious():
+		return     # the opportunity attack on the way out dropped it
 	if not adj.is_empty():
 		adj.sort_custom(func(a, b): return a.hp < b.hp if a.hp != b.hp else a.ac < b.ac)
-		_strike(cb, m, adj)
+		await _strike(cb, m, adj)
 		if m.hp * 2 <= m.max_hp:
 			# Nimble Escape and friends: a bonus-action Disengage, then back off
 			var esc := _pick(cb, m, func(v): return v["kind"] == "disengage" and v["cost"] == "bonus")
@@ -144,9 +246,10 @@ static func _foe_turn(cb, m) -> void:
 	# no conscious PC adjacent — a downed neighbour gets finished only if we
 	# couldn't have engaged a conscious PC this turn (mercy rule, §7 rule 5)
 	var downed_adj: Array = cb.combatants.filter(func(c):
-		return c.team == "party" and c.is_down() and Hex.distance(c.pos, m.pos) <= 1)
+		return c.team == "party" and c.is_down() and Hex.distance(c.pos, m.pos) <= m.reach)
 	if not downed_adj.is_empty():
 		if not MERCY or not pcs.any(func(c): return _can_engage(cb, m, c)):
+			await cb.offer_reactions(m, cb.attack_verb(), downed_adj[0])
 			cb.resolve_attack(m, downed_adj[0])
 			return
 
@@ -161,20 +264,41 @@ static func _foe_turn(cb, m) -> void:
 		var shootable: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.atk_range and Hex.distance(c.pos, m.pos) > 1)
 		if not shootable.is_empty():
 			shootable.sort_custom(func(a, b): return a.hp < b.hp)
-			_strike(cb, m, shootable)
+			await _strike(cb, m, shootable)
 		return
 
 	# melee, nobody adjacent: close on the nearest PC, then swing if we arrived
 	var target = _nearest(m.pos, pcs)
 	_move_by(cb, m, _toward(target.pos))
-	var now: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= 1 and c.conscious())
+	var now: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.reach and c.conscious())
 	if not m.conscious():
 		return
 	if not now.is_empty():
 		now.sort_custom(func(a, b): return a.hp < b.hp)
-		_strike(cb, m, now)
+		await _strike(cb, m, now)
 	else:
-		_use_special(cb, m, pcs)   # closed, but not close enough to swing — a gaze still reaches
+		await _use_special(cb, m, pcs)   # closed, but not close enough to swing — a gaze still reaches
+
+# hunt: the quarry runs for the far edge unless a hero is close enough that
+# running is the worse choice — then it fights this turn like anybody else.
+# Ending a turn on the edge is the escape (combat.gd's end_turn).
+static func _quarry_runs(cb, m, pcs: Array) -> bool:
+	if cb.objective_kind() != "hunt" or m.has("escaped"):
+		return false
+	for c in pcs:
+		if Hex.distance(c.pos, m.pos) <= Objectives.QUARRY_CORNERED:
+			return false
+	var exit: Array = cb.objective.get("exit", [])
+	if exit.is_empty():
+		return false
+	var away := _away(pcs)
+	var score := func(h: Vector2i) -> float:
+		var d := 1 << 30
+		for e in exit:
+			d = mini(d, Hex.distance(h, e))
+		return -3.0 * float(d) + float(away.call(h))
+	_move_by(cb, m, score)
+	return true
 
 # --- party autopilot (demo / test only) ----------------------------
 
@@ -192,16 +316,29 @@ static func _party_auto(cb, h) -> void:
 				cb.perform(h, heal, c)
 				break
 
+	# the objective's one rule for where to stand (spec §7), before any chasing
+	var moved := _objective_move(cb, h)
+	var walking: bool = cb.objective_kind() == "breakout"
+
 	# close distance if nothing is in reach and we're not a shooter
 	var reach: Array = foes.filter(func(c): return cb.in_reach(h, c))
-	if reach.is_empty() and not h.ranged:
+	if reach.is_empty() and not h.ranged and not moved:
 		var t = _nearest(h.pos, foes)
 		_move_by(cb, h, _toward(t.pos))
 		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
 
+	# caster: an area spell (a hex, a corner circle, a line) where it nets 2+ foes
+	# ...that actually hurts: Faerie Fire and friends are the player's call, not a nuke
+	var area := _pick(cb, h, func(v): return v.get("targeting", "") in ["hex", "corner", "line"] and v.has("dice_count"))
+	if not area.is_empty() and not walking:   # a breakout doesn't stop to nuke what it's walking past
+		var aim = _best_area(cb, h, area)
+		if aim != null:
+			cb.perform(h, area, aim)
+			return
+
 	# caster: a cone spell if the wedge catches 2+ foes and no ally
-	var cone := _pick(cb, h, func(v): return v.get("targeting", "") == "direction")
-	if not cone.is_empty():
+	var cone := _pick(cb, h, func(v): return v.get("targeting", "") == "direction" and v.has("dice_count"))
+	if not cone.is_empty() and not walking:   # same rule: no stopping to cast on the way out
 		var best_dir := Vector2i.ZERO
 		var best_net := 1
 		for d in Hex.DIRS:
@@ -218,11 +355,48 @@ static func _party_auto(cb, h) -> void:
 	var targets: Array = reach if not reach.is_empty() else foes
 	if targets.is_empty():
 		return
+	if cb.objective_kind() == "breakout" and reach.is_empty():
+		return   # heading for the road: swing only at what is already in the way
+	if cb.objective_kind() == "hunt":
+		var q: Array = reach.filter(func(c): return c.has("quarry"))
+		if not q.is_empty():
+			targets = q
 	targets.sort_custom(func(a, b): return a.hp < b.hp)
 	if cb.in_reach(h, targets[0]):
 		cb.resolve_attack(h, targets[0])
 		return
 	# no weapon reach: a single-target attack spell (a cantrip needs no slot)
-	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy")
+	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count"))
 	if not bolt.is_empty() and cb.legal_target(h, bolt, targets[0]):
 		cb.perform(h, bolt, targets[0])
+
+# One movement preference per kind — not to make the autopilot good, but so
+# the sweep in tests/test_objectives.gd measures a party that is trying.
+# Returns true if it spent the move, so the caller does not chase as well.
+static func _objective_move(cb, h) -> bool:
+	match cb.objective_kind():
+		"rescue":
+			var cap = cb.with_status("captive")
+			if cap == null or cap.has("freed") or cap.is_dead():
+				return false
+			if _nearest(cap.pos, cb.heroes()) != h or Hex.distance(h.pos, cap.pos) <= 1:
+				return false
+			_move_by(cb, h, _toward(cap.pos))
+			return true
+		"breakout":
+			var exit: Array = cb.objective.get("exit", [])
+			if exit.is_empty() or h.pos in exit:
+				return false
+			var goal: Vector2i = exit[0]
+			for e in exit:
+				if Hex.distance(h.pos, e) < Hex.distance(h.pos, goal):
+					goal = e
+			_move_by(cb, h, _toward(goal))
+			return true
+		"escort":
+			var car = cb.with_status("carter")
+			if car == null or car.is_dead() or Hex.distance(h.pos, car.pos) <= 2:
+				return false
+			_move_by(cb, h, _toward(car.pos))
+			return true
+	return false

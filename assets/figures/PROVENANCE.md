@@ -2,8 +2,8 @@
 
 **Everything in this directory is AI-generated** and carries the Steam AI-content
 disclosure obligation described in the README's asset policy. It is kept apart from
-`assets/lpc/`, `assets/generated/`, `assets/world/` and `assets/audio/`, none of which
-are AI-generated, so provenance stays decidable per path.
+`assets/world/` and `assets/audio/`, neither of which is AI-generated, so provenance
+stays decidable per path.
 
 | File | Tool | Model | Date | Task id | Credits |
 |---|---|---|---|---|---|

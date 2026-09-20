@@ -1,0 +1,32 @@
+{
+  "format": "sorcmerc-world",
+  "version": 1,
+  "name": "The Ashen Vale",
+  "settlements": [
+    {"id": "emberwatch", "name": "Emberwatch", "position": [0, 0], "faction": "human", "kind": "city"},
+    {"id": "thornfell", "name": "Thornfell", "position": [420, -180], "faction": "elf", "kind": "town"},
+    {"id": "karrock", "name": "Karrock Deep", "position": [-360, 260], "faction": "dwarf", "kind": "camp"},
+    {"id": "gravebell", "name": "Gravebell", "position": [160, 470], "faction": "orc", "kind": "city"}
+  ],
+  "lairs": [
+    {"id": "ash-warren", "name": "The Ash Warren", "position": [250, 120], "faction": "goblinoid"},
+    {"id": "barrow-of-kings", "name": "Barrow of Kings", "position": [-500, 300], "faction": "undead"},
+    {"id": "wyrmscar", "name": "Wyrmscar", "position": [700, -400], "faction": "dragon"}
+  ],
+  "parties": [
+    {"id": "ash-raiders", "position": [-300, -200], "faction": "bandit",
+     "troops": [{"role": "heavy", "level": 3}, {"role": "light", "level": 2}],
+     "ai": {"behavior": "hunt"}},
+    {"id": "warren-scouts", "position": [300, 220], "faction": "goblinoid",
+     "troops": [{"role": "light", "level": 1}, {"role": "light", "level": 2}],
+     "ai": {"behavior": "wander", "home": "ash-warren", "radius": 120, "seed": 91}},
+    {"id": "emberwatch-riders", "position": [-120, 200], "faction": "human",
+     "troops": [{"role": "heavy", "level": 2}, {"role": "heavy", "level": 2}],
+     "ai": {"behavior": "patrol", "waypoints": ["emberwatch", "karrock", [-120, 200]]}}
+  ],
+  "waters": [
+    {"position": [-190, -70], "radius": 100},
+    {"river": [[-110, -20], [-40, 100], [-10, 210], [60, 320], [140, 400]], "radius": 40}
+  ],
+  "start": {"at": "emberwatch", "offset": [20, 30], "faction": "human"}
+}

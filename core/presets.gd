@@ -14,7 +14,7 @@ static func _base(id: String, name: String, species: String, background: String,
 	ch.background_id = background
 	ch.base_abilities = abil
 	for i in n:
-		ch.add_level(cid, -1)
+		ch.add_level(cid, -1, true)   # the starting party was handed to you, not played up
 	# Human: two languages, a skill, and an origin feat.
 	ch.decide("language-choice:species:human:0", {"type": "language-choice", "languages": ["elvish", "dwarvish"]})
 	ch.decide("feat-choice:species:human:0", {"type": "feat-choice", "featId": "savage-attacker"})

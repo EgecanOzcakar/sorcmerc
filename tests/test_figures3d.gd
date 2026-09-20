@@ -59,5 +59,26 @@ func _init() -> void:
 	var dy: Vector2 = fig.screen_for_world(Vector3(0, 1, 0)) - fig.screen_for_world(Vector3.ZERO)
 	check(is_equal_approx(-dy.y / K, cos(fig.theta())), "1 unit of height -> cos(theta) px/unit on screen")
 
+	# #71/#78: a pan or a zoom moves the whole view at once — the displayed token
+	# is carried with it, never walked to its new screen spot (which lagged the
+	# drag and turned the figure to face it).
+	for i in 20:
+		await process_frame   # any opening slide settles
+	var c0 = main.cb.combatants[0]
+	var yaw_before: float = fig._figs[c0.id].rotation.y if fig._figs.has(c0.id) else 0.0
+	main.pan_by(Vector2(300, 120))
+	await process_frame; await process_frame
+	check(board._tok[c0.id].is_equal_approx(board._pix(c0.pos)), "after a pan the token is already on its hex — no slide")
+	main.set_zoom(main._zoom * 1.5)
+	await process_frame; await process_frame
+	check(board._tok[c0.id].is_equal_approx(board._pix(c0.pos)), "after a zoom the token is already on its hex — no slide")
+	# #112: and within the SAME tick, not a frame later — a drag pans every
+	# frame, so a one-frame lag is a wobble the whole way.
+	main.pan_by(Vector2(-90, 40))
+	board.tick(0.016)
+	check(board._tok[c0.id].is_equal_approx(board._pix(c0.pos)), "the tick that follows a pan already has the token on its hex")
+	if fig._figs.has(c0.id):
+		check(is_equal_approx(fig._figs[c0.id].rotation.y, yaw_before), "moving the camera does not turn the figure")
+
 	print("test_figures3d: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
