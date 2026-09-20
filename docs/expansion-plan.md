@@ -6174,6 +6174,62 @@ Also, while in the log: `region_at` returns "the treeline" on five boards and
 it got — "Thokk the Orc moves to the the treeline", which is in the log quoted
 on #132 itself. It asks for the article now instead of assuming it is missing.
 
+## Landmarks — places on the map that are not a fight (2026-09-20)
+
+Sub-project 2 of the content batch. Spec:
+`docs/superpowers/specs/2026-09-20-landmarks-design.md`; plan:
+`docs/superpowers/plans/2026-09-20-landmarks.md`.
+
+The map had towns, lairs and bands, and every one of them ended in a menu or
+a fight. It now has a fourth thing: six kinds of landmark — ruins, a shrine,
+standing stones, a hermit's hut, a wreck, a watchtower — each a place the
+party walks up to and answers with a skill the world barely used (History,
+Religion, Arcana, Nature, Performance, Insight, Perception, Athletics,
+Investigation). Two choices a kind and *Leave*, on the approach card as it
+is; the event card names the check and the roll; one visit each. Rewards
+that are not fights: a cache, a blessing (temp HP at the next fight), a
+lead, a scouted fight, a safe camp, a quicker road, the map opening from a
+tower, marked bands, a camp kit, a free identification. The deed pays
+`LANDMARK_XP` × (ring + 1); DC and cache climb with the ring.
+
+A third row rides every card too, gated by who you are: each kind carries
+one more choice that appears only when a party member *is* the right kind
+of person — an acolyte or cleric at the shrine, a sage or scribe in the
+ruins, a druid or an elf at the stones, a hermit, guide or ranger at the
+hut, a merchant, sailor or artisan at the wreck, a soldier, guard or
+fighter at the tower — answered in their own name, no roll, opening a door
+a rolled row already opens: flavour, not power. The roller for the rolled
+rows stays the party's best at the skill, the road's own rule.
+
+Visible kinds are found by walking; the hut and the tower the way lairs are
+— the same Survival roll (`WorldLairs.search_roll`, split out so there is
+one), on their own button, or bought at the inn at half a lair's price. The
+three builders place 1.5 per lair; a pack's `world.json` declares its own
+under `landmarks`, validated at scan time; a story's `near` can name one.
+Saved under `landmarks`; an old save loads with none.
+
+### Still open
+
+- No art yet for the cards (`assets/generated/landmark-<kind>.png`); the card
+  draws without it.
+- Trainers belong to downtime (B2); a landmark that wakes something to threat
+  clocks (C1).
+- A landmark never restocks.
+- The bottom bar's hint label already fills 1400px, so "%s — a landmark, on
+  the map now." runs under the minimap — as every `_lair_msg` does. Older
+  than this batch; the bar wants a fix of its own.
+
+### Pictures
+
+`tests/shot_landmarks.gd` renders these (it needs a display; not part of
+the suite).
+
+| | |
+|---|---|
+| ![the visit button and the marker](shots/landmarks/01-map-visit-button.png) *a shrine on the map, and the button that walks up to it* | ![the shrine's card](shots/landmarks/02-card-shrine.png) *the card — two rolled rows, the cleric's own row with no roll, the offering priced, and Leave* |
+| ![the offering paid](shots/landmarks/03-outcome-offering.png) *the outcome card — the blessing bought, the faction hears of it, the deed's XP* | ![the ruins' card](shots/landmarks/04-card-ruins.png) *ruins — the party's best at each skill rolls, named on the row* |
+| ![the dig](shots/landmarks/05-outcome-dig.png) *a cache, or a snare — the roll named on the outcome* | ![the tower's card](shots/landmarks/06-card-tower.png) *the tower — a fighter reads the sightline without a roll* |
+| ![the watch](shots/landmarks/07-map-watch-marks.png) *the tower's watch: bands marked on the map while it holds, the fog opened around it* | ![the hut, for sale](shots/landmarks/08-inn-hut-lead.png) *the inn sells the hidden kinds at half a lair's price* |
 ## One cache for the big files, and a loader that starts early (2026-09-20)
 
 `assets/figures`, `assets/troops`, `assets/beasts` and `assets/lairs` are about

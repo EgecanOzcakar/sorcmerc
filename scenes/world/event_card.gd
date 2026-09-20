@@ -393,6 +393,9 @@ func _chips() -> Array:
 	var healed := int(_num("healed"))
 	if healed > 0:
 		out.append({"text": "+%d hp across the party" % healed, "col": Icons.COL_PARTY})
+	var xp := int(_num("xp"))
+	if xp > 0:
+		out.append({"text": "+%d XP" % xp, "col": Icons.COL_GOLD})
 	var m := _num("minutes")
 	# Under a minute is not a consequence, it is rounding.
 	if absf(m) >= 1.0:

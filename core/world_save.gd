@@ -193,6 +193,12 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 			"depth_cleared": l.depth_cleared,
 			"entered_at": l.entered_at, "resolved_as": l.resolved_as,
 		})
+	# Landmarks postdate this format like lairs and water did: an old save
+	# without the key loads with none (from_dict below).
+	var landmarks: Array = []
+	for l in world.landmarks:
+		landmarks.append({"id": l.id, "kind": l.kind, "sname": l.sname, "position": _v(l.position),
+			"found": l.found, "spent": l.spent})
 	# T-water: same story as lairs -- terrain postdates this format, so an old
 	# save with no "waters" key loads as a world with none rather than crashing.
 	# It has to be saved at all: a lake nobody remembers is a lake the player
@@ -212,6 +218,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"settlements": settlements,
 		"parties": parties,
 		"lairs": lairs,
+		"landmarks": landmarks,
 		"waters": waters,
 		"explored": explored,
 		"party": _party_dict(party),
@@ -260,6 +267,12 @@ static func from_dict(d: Dictionary):
 		# them spent for good rather than repopulating them all on load.
 		l.cleared_at = float(ld.get("cleared_at", -1.0))
 		world.add_lair(l)
+	for md in d.get("landmarks", []):
+		var m := World.Landmark.new(String(md["id"]), String(md.get("kind", "ruins")),
+			_vec(md.get("position")), String(md.get("sname", "")))
+		m.found = bool(md.get("found", false))
+		m.spent = bool(md.get("spent", false))
+		world.add_landmark(m)
 	for wd in d.get("waters", []):
 		world.add_water(_vec(wd.get("position")), float(wd.get("radius", 0.0)))
 	# T9x: an old save without "explored" just loads with none — everything
@@ -301,7 +314,7 @@ static func _party_dict(party) -> Dictionary:
 		"overworld_figure": party.overworld_figure,
 		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 		"road": {"scouted_next": party.scouted_next, "swift_until": party.swift_until,
-			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set},   # potions / road spells
+			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set, "blessed": party.blessed},   # potions / road spells
 	}
 
 static func _party_from(pd: Dictionary):
@@ -325,6 +338,7 @@ static func _party_from(pd: Dictionary):
 	party.swift_until = float(road.get("swift_until", 0.0))
 	party.safe_camp = bool(road.get("safe_camp", false))
 	party.alarm_set = bool(road.get("alarm_set", false))
+	party.blessed = bool(road.get("blessed", false))
 	return party
 
 # JSON gives every number back as a float; quest counters are compared as ints.

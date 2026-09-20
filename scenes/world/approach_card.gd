@@ -134,6 +134,13 @@ const FALLBACK_OPTION := {"id": "engage", "label": NO_LABEL, "dc": 0,
 # never hand the world screen a way its rules cannot resolve.
 const FALLBACK_WAY := "engage"
 
+# A landmark card is this card with different words: core/landmarks.gd's rows
+# are Approach's shape, so only the dressing changes.
+var caption := CAPTION
+var glyph := GLYPH
+var hint := "Choose how to meet them"
+var art_stem := ""          # assets/generated/<stem>.png when set; the way's own scene art otherwise
+
 var _opts: Array = []
 var _foe := ""
 var _btns: Array[Button] = []
@@ -205,7 +212,7 @@ func show_approach(options: Array, foe_label: String) -> void:
 		_opts.append(FALLBACK_OPTION)
 	_foe = foe_label if foe_label != "" else NO_FOE
 	_chosen = false
-	_art = Icons.event_art(FRIENDLY_SCENE_ART if _friendly() else SCENE_ART, null)
+	_art = Icons.scene_art(art_stem, null) if art_stem != "" else Icons.event_art(FRIENDLY_SCENE_ART if _friendly() else SCENE_ART, null)
 	visible = true
 	_build_buttons()
 	_layout()
@@ -284,7 +291,7 @@ func _has_check(o: Dictionary) -> bool:
 # would be the one number on this card that must never be wrong.
 func _roll_line(o: Dictionary) -> String:
 	if not _has_check(o):
-		return ""
+		return _os(o, "cname")   # a gated row: no roll to price, but its name still belongs on the row
 	var parts: Array[String] = []
 	var skill := _os(o, "skill")
 	if skill != "":
@@ -387,9 +394,9 @@ func _layout(art_h := -1.0) -> void:
 
 	# Caption and glyph share a baseline, the mark sized to the title under it,
 	# so the stripe, the mark and the caption land on the eye as one block.
-	var gw := _w(GLYPH, Icons.FS_HEAD) + 8.0
-	rel.append(_op(Vector2(tx, y + Icons.FS_CAPTION), GLYPH, Icons.FS_HEAD, Icons.COL_FOE, avail))
-	rel.append(_op(Vector2(tx + gw, y + Icons.FS_CAPTION), CAPTION, Icons.FS_CAPTION,
+	var gw := _w(glyph, Icons.FS_HEAD) + 8.0
+	rel.append(_op(Vector2(tx, y + Icons.FS_CAPTION), glyph, Icons.FS_HEAD, Icons.COL_FOE, avail))
+	rel.append(_op(Vector2(tx + gw, y + Icons.FS_CAPTION), caption, Icons.FS_CAPTION,
 		Icons.COL_FOE, avail - gw))
 	y += Icons.FS_CAPTION + 10.0
 
@@ -414,10 +421,10 @@ func _layout(art_h := -1.0) -> void:
 
 	# Say what is bound, in the header, once. A player at 8x who has just been
 	# stopped will not go looking for the keys.
-	var hint := "Choose how to meet them — click a row, or press 1-%d." % _opts.size()
+	var hint_line := "%s — click a row, or press 1-%d." % [hint, _opts.size()]
 	if _any_named():
-		hint += NAMED_HINT
-	for hline in _wrap(hint, Icons.FS_SMALL, avail, HINT_LINES):
+		hint_line += NAMED_HINT
+	for hline in _wrap(hint_line, Icons.FS_SMALL, avail, HINT_LINES):
 		y += Icons.FS_SMALL
 		rel.append(_op(Vector2(tx, y), hline, Icons.FS_SMALL, Icons.COL_MUTED, avail))
 		y += LINE_GAP

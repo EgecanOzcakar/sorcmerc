@@ -14,6 +14,7 @@ const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const RNG = preload("res://core/rng.gd")
 const Regions = preload("res://core/regions.gd")
+const Landmarks = preload("res://core/landmarks.gd")
 
 const SPAN := 1400.0                  # settlements/lairs scatter within +/- this, world units
 const MIN_SETTLEMENT_GAP := 500.0     # no two settlements closer than this
@@ -135,4 +136,5 @@ static func build(seed_v: int = 0) -> World:
 	for l in w.lairs:
 		occupied.append(l.position)
 	w.add_water(_place(rng, occupied, LAKE_RADIUS + MIN_WATER_GAP), LAKE_RADIUS)
+	Landmarks.place(w, seed_v + 1)
 	return w

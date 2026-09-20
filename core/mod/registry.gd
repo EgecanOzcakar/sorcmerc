@@ -356,7 +356,7 @@ static func _world_ids(src) -> Dictionary:
 	var out := {}
 	if not (src is Dictionary):
 		return out
-	for group in [["settlements", "settlement"], ["lairs", "lair"], ["parties", "party"]]:
+	for group in [["settlements", "settlement"], ["lairs", "lair"], ["parties", "party"], ["landmarks", "landmark"]]:
 		for e in src.get(group[0], []):
 			if e is Dictionary and e.has("id"):
 				out[String(e["id"])] = group[1]

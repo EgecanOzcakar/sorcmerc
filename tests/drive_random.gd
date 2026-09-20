@@ -304,6 +304,9 @@ func _watch() -> void:
 		fail("a settlement visit is open with no panel to close it")
 	if screen._site != null and screen._site_screen == null:
 		fail("a delve is in progress with no screen on it")
+	# A spent landmark never offers a card.
+	if screen._place_open != null and screen._place_open.spent:
+		fail("the card is up for a spent landmark: %s" % screen._place_open.sname)
 	_wedge_check(p)
 
 # The one check that catches a class of bug no assertion can name in advance:
@@ -408,6 +411,8 @@ func _meet_them() -> void:
 		return
 	var b: Button = _weighted(rows)
 	_saw["approach:" + String(b.name).get_slice("_", 2)] = true
+	if screen._place_open != null:   # the same card, asked by a landmark: say so in the coverage
+		_saw["place:" + String(b.name).get_slice("_", 2)] = true
 	_acts += 1
 	b.pressed.emit()
 
@@ -847,6 +852,14 @@ func _map_beat() -> void:
 			_saw["lair:" + ("attack" if _lair_known() else "search")] = true
 			_acts += 1
 			screen._lair_btn.pressed.emit()
+		return
+
+	# A landmark under the party's nose: visit it (and answer the first row the
+	# card offers), or search the ground for a hidden one.
+	if screen._place_btn != null and screen._place_btn.visible and _chance(40 + _me["nosy"] / 2):
+		_saw["place:" + ("visit" if "Visit" in screen._place_btn.text else "search")] = true
+		_acts += 1
+		screen._place_btn.pressed.emit()
 		return
 
 	# Hurt, out in the open: a breather, or a camp if the party is carrying a kit.

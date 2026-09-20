@@ -275,8 +275,11 @@ static func _lair(world, id: String):
 			return l
 	return null
 
-# "Near" takes a settlement or a lair — an author should not have to know
-# which list the game keeps a place in.
+static func _landmark(world, id: String):
+	return world.landmark(id) if world != null else null
+
+# "Near" takes a settlement, a lair, or a landmark — an author should not
+# have to know which list the game keeps a place in.
 static func _near(world, id: String, within: float) -> bool:
 	if world == null:
 		return false
@@ -288,6 +291,9 @@ static func _near(world, id: String, within: float) -> bool:
 	if at == null:
 		var l = _lair(world, id)
 		at = l.position if l != null else null
+	if at == null:
+		var m = _landmark(world, id)
+		at = m.position if m != null else null
 	return at != null and p.position.distance_to(at) <= within
 
 # --- effects --------------------------------------------------------------
@@ -385,10 +391,13 @@ static func _spawn(spec, world) -> Array[String]:
 	if spec.has("near"):
 		var s = _settlement(world, String(spec["near"]))
 		var l = _lair(world, String(spec["near"]))
+		var m = _landmark(world, String(spec["near"]))
 		if s != null:
 			at = s.position
 		elif l != null:
 			at = l.position
+		elif m != null:
+			at = m.position
 	if spec.has("offset") and spec["offset"] is Array and spec["offset"].size() >= 2:
 		at += Vector2(float(spec["offset"][0]), float(spec["offset"][1]))
 	elif spec.has("position") and spec["position"] is Array and spec["position"].size() >= 2:
