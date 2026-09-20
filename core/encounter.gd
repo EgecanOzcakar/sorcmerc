@@ -699,10 +699,12 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 	Adapter.write_back_all(cb.team_of("party"), chars)
 
 	var power := 0.0
+	var roster := 0.0
 	var loot: Array = []
 	var kills: Array[String] = []
 	for c in cb.team_of("foe"):
-		if not c.is_dead():
+		roster += float(Power.estimate(c)["score"])
+		if not c.is_dead() or c.has("escaped"):   # the quarry that got away took its loot with it
 			continue
 		kills.append(c.src_id)
 		power += float(Power.estimate(c)["score"])
@@ -720,15 +722,22 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 	if res == "Victory":
 		loot.append_array(Loot.for_kills(kills, cb.rng))
 	_score_fight(cb, res == "Victory")
+	# Spec §4: an objective done pays half the whole roster's worth in XP on
+	# top of the kills — dead or standing, because holding against them,
+	# slipping past them or dropping their leader is the deed. Gold and loot
+	# stay kills-only: a foe you did not kill did not drop anything.
+	var done: bool = res == "Victory" and cb.objective_result()
+	var bonus: int = roundi(roster * XP_PER_POWER * Objectives.BONUS_XP_SHARE) if done else 0
 	return {
 		"outcome": "Victory" if res == "Victory" else "Defeat",   # a round-cap timeout is not a win
-		"xp": roundi(power * XP_PER_POWER),
+		"xp": roundi(power * XP_PER_POWER) + bonus,
 		"gold": roundi(power * GOLD_PER_POWER),
 		"loot": loot,
 		"deaths": deaths,
 		"kills": kills,   # source monster ids, for T9's kill-count quests
 		"downed": cb.downed.keys(),   # T19: party ids that hit 0 HP, even if they got back up
 		"rounds": cb.round_num,       # world.gd bills the clock an hour a round
+		"objective": {"kind": cb.objective_kind(), "done": done, "xp": bonus},
 	}
 
 

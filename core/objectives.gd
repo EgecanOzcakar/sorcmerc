@@ -119,3 +119,16 @@ const TITLES := {"hold": "Hold the line", "rescue": "Rescue", "breakout": "Break
 
 static func title(kind: String) -> String:
 	return String(TITLES.get(kind, ""))
+
+# The spoils page's row.
+static func spoils_line(o: Dictionary) -> String:
+	var done := bool(o.get("done", false))
+	var text := ""
+	match String(o.get("kind", "")):
+		"hold": text = "the passage held" if done else "the passage was lost"
+		"rescue": text = "the captive is out" if done else "the captive was not saved"
+		"breakout": text = "the party got clear" if done else "nobody got clear"
+		"hunt": text = "the quarry is down" if done else "the quarry got away"
+		"escort": text = "the carter lived" if done else "the carter is dead"
+	var xp := int(o.get("xp", 0))
+	return "Objective — %s%s" % [text, ("  (+%d XP)" % xp) if done and xp > 0 else ""]

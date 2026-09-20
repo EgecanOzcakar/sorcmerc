@@ -31,6 +31,7 @@ func _init() -> void:
 	test_escort()
 	test_quarry_runs()
 	test_autopilot_rules()
+	test_rewards()
 	print("test_objectives: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -394,3 +395,54 @@ func test_autopilot_rules() -> void:
 	var qhp0: int = q.hp
 	AI.take_turn(cb, h)
 	check(q.hp < qhp0 and goblin.hp == 1000, "hunt: reach prefers the quarry over the lower-HP goblin (%d -> %d)" % [qhp0, q.hp])
+
+# --- Task 5: rewards — the objective row and the deed's XP ------------------
+
+func test_rewards() -> void:
+	# rout: the row is there and empty
+	var cb := _fight(_goblins(1), 37)
+	for f in cb.team_of("foe"):
+		cb._apply_damage(f, 999)
+	var res: Dictionary = Encounter.resolve_outcome(cb, Presets.party())
+	check(res["objective"] == {"kind": "", "done": false, "xp": 0}, "rout: an empty objective row")
+
+	# hunt won: the escort's power counts for the bonus though it never died
+	var spec := {"monsters": [{"id": "snik", "count": 2}, {"id": "grull", "count": 1}], "theme": "goblin-camp",
+		"objective": Objectives.make("hunt")}
+	cb = _fight(spec, 37)
+	var q = cb.with_status("quarry")
+	cb._apply_damage(q, 999)
+	res = Encounter.resolve_outcome(cb, Presets.party())
+	var roster := 0.0
+	for f in cb.team_of("foe"):
+		roster += float(Encounter.Power.estimate(f)["score"])
+	var quarry_xp: int = roundi(float(Encounter.Power.estimate(q)["score"]) * Encounter.XP_PER_POWER)
+	var bonus: int = roundi(roster * Encounter.XP_PER_POWER * Objectives.BONUS_XP_SHARE)
+	check(res["outcome"] == "Victory" and res["objective"]["done"], "the hunt is won")
+	check(int(res["objective"]["xp"]) == bonus and bonus > 0, "the bonus is half the whole roster's worth (%d)" % bonus)
+	check(int(res["xp"]) == quarry_xp + bonus, "xp = the kill + the bonus (%d = %d + %d)" % [res["xp"], quarry_xp, bonus])
+	check(res["kills"] == ["grull"], "only the dead are kills")
+
+	# hunt lost to an escape: no kill, no loot, no bonus for the one that got away
+	cb = _fight(spec, 37)
+	q = cb.with_status("quarry")
+	cb._quarry_escape(q)
+	for f in cb.team_of("foe"):
+		if f != q:
+			cb._apply_damage(f, 999)
+	res = Encounter.resolve_outcome(cb, Presets.party())
+	check(res["outcome"] == "Victory" and not res["objective"]["done"] and int(res["objective"]["xp"]) == 0,
+		"escort routed, quarry gone: a victory with the objective failed and no bonus")
+	check(not res["kills"].has("grull"), "the escaped quarry is not a kill")
+
+	# a dead bystander is not a death
+	cb = _fight(_goblins(1).merged({"objective": Objectives.make("escort")}), 37)
+	cb._apply_damage(cb.with_status("carter"), 99)
+	for f in cb.team_of("foe"):
+		cb._apply_damage(f, 999)
+	res = Encounter.resolve_outcome(cb, Presets.party())
+	check(res["deaths"] == [] and not res["downed"].has("carter"), "the carter is in neither deaths nor downed")
+	check(not res["objective"]["done"], "...and the escort failed")
+
+	check(Objectives.spoils_line({"kind": "hunt", "done": true, "xp": 40}) == "Objective — the quarry is down  (+40 XP)", "spoils line, done")
+	check(Objectives.spoils_line({"kind": "escort", "done": false, "xp": 0}) == "Objective — the carter is dead", "spoils line, failed")
