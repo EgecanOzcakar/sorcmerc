@@ -72,15 +72,20 @@ func _init() -> void:
 			break
 	held.discovered = true
 	held.sname = "the Ash Warren"
-	w.world.lairs.clear()   # only this one, so the rescue row sits above the fold
+	w.world.lairs.clear()   # only this one, and no bands to hunt, so the rescue row sits above the fold
 	w.world.add_lair(held)
+	for q in w.world.parties.duplicate():
+		if not q.is_player:
+			w.world.parties.erase(q)
 	w._open_visit(s)
 	w._goto_page("board")
 	await shot("board-rescue-job")
 	w._close_visit()
 
 	# the approach card names the hunt when a job names the band
-	var foe = w.world.parties[1]
+	var foe = w.world.add_party(World.RoamingParty.new("bandits", p.position + Vector2(90, 0), "bandit"))
+	foe.troops.append({"role": "heavy", "level": 3})
+	foe.troops.append({"role": "light", "level": 2})
 	Quest.accept(w.party, {"id": "world:hunt_party:%s:0" % foe.id, "kind": "hunt_party", "state": "offered",
 		"target_party_id": foe.id, "required": 1, "progress": 0,
 		"title": "Hunt down the %s band" % foe.id.capitalize(), "reward": {"gold": 120},

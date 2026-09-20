@@ -6215,3 +6215,18 @@ Saved under `landmarks`; an old save loads with none.
 - Trainers belong to downtime (B2); a landmark that wakes something to threat
   clocks (C1).
 - A landmark never restocks.
+- The bottom bar's hint label already fills 1400px, so "%s — a landmark, on
+  the map now." runs under the minimap — as every `_lair_msg` does. Older
+  than this batch; the bar wants a fix of its own.
+
+### Pictures
+
+`tests/shot_landmarks.gd` renders these (it needs a display; not part of
+the suite).
+
+| | |
+|---|---|
+| ![the visit button and the marker](shots/landmarks/01-map-visit-button.png) *a shrine on the map, and the button that walks up to it* | ![the shrine's card](shots/landmarks/02-card-shrine.png) *the card — two rolled rows, the cleric's own row with no roll, the offering priced, and Leave* |
+| ![the offering paid](shots/landmarks/03-outcome-offering.png) *the outcome card — the blessing bought, the faction hears of it, the deed's XP* | ![the ruins' card](shots/landmarks/04-card-ruins.png) *ruins — the party's best at each skill rolls, named on the row* |
+| ![the dig](shots/landmarks/05-outcome-dig.png) *a cache, or a snare — the roll named on the outcome* | ![the tower's card](shots/landmarks/06-card-tower.png) *the tower — a fighter reads the sightline without a roll* |
+| ![the watch](shots/landmarks/07-map-watch-marks.png) *the tower's watch: bands marked on the map while it holds, the fog opened around it* | ![the hut, for sale](shots/landmarks/08-inn-hut-lead.png) *the inn sells the hidden kinds at half a lair's price* |
