@@ -45,6 +45,7 @@ const WorldAI = preload("res://core/world_ai.gd")
 const WorldBattle = preload("res://core/world_battle.gd")
 const Settlements3D := preload("res://scenes/world/settlements3d.gd")
 const Lairs3D := preload("res://scenes/world/lairs3d.gd")
+const Landmarks3D := preload("res://scenes/world/landmarks3d.gd")
 const Party3D := preload("res://scenes/world/party3d.gd")
 const Minimap := preload("res://scenes/world/minimap.gd")
 const Scaler = preload("res://core/scaler.gd")
@@ -272,6 +273,7 @@ var _camp_btn: Button                # T9x: "Make camp" — visible only while t
 var _last_forage_at: float = 0.0
 var _settlements3d
 var _lairs3d
+var _landmarks3d
 var _party3d
 var _minimap: Control = null   # T9y: the corner map inset, see _layout_minimap()
 # M7: the content pack's story, mid-telling — a core/mod/story_runtime.gd
@@ -310,7 +312,7 @@ var world_size := "small"   # "small" | "large" — which built-in map _ready() 
                              # when nobody injected a `world` (a fresh start, not O13's resume)
 
 # The 3D map itself — viewport, camera, sun, ground mesh, woods, footprints,
-# and the three layers of landmarks. It draws behind this control, so what this
+# and the four layers of landmarks. It draws behind this control, so what this
 # control still paints reads as annotation on the map rather than as scenery in
 # it. _update_ground() hands it the fog mask; everything else it works out from
 # the camera state above.
@@ -339,7 +341,7 @@ func _ready() -> void:
 	# and the centre of the world is not it.
 	if world.player() != null:
 		center_on(world.player().position)
-	# The 3D map, and the three layers of landmarks standing in it. They are
+	# The 3D map, and the four layers of landmarks standing in it. They are
 	# children of the view's world now rather than of this Control: one
 	# viewport, one camera, one depth buffer, so a figure can walk behind a
 	# town wall. add_layer() is the whole of their wiring.
@@ -352,6 +354,9 @@ func _ready() -> void:
 	_lairs3d = Lairs3D.new()
 	_view.add_layer(_lairs3d)
 	_lairs3d.reset(world)
+	_landmarks3d = Landmarks3D.new()
+	_view.add_layer(_landmarks3d)
+	_landmarks3d.reset(world)
 	_party3d = Party3D.new()
 	_view.add_layer(_party3d)
 	_party3d.reset(world)
