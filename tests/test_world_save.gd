@@ -214,6 +214,32 @@ func _init() -> void:
 	check(not WorldSave.has_save(), "clear() removes the slot")
 	check(WorldSave.load_latest() == null, "…and nothing loads afterwards")
 	FactionOpinion.reset()
+
+	# --- raids: six fields ride the save; an old save starts its clocks at load
+	var wr := World.new()
+	var sr := wr.add_settlement(World.Settlement.new("riverhold", Vector2.ZERO, "human", "city"))
+	var lr := wr.add_lair(World.Lair.new("warren", Vector2(300, 0), "goblinoid"))
+	wr.clock.elapsed = 5000.0
+	lr.raid_at = 4000.0
+	lr.raids = 2
+	lr.raid_band = "warren-raiders"
+	lr.spawned_from = "root"
+	sr.raided_by = "warren"
+	sr.raided_at = 4500.0
+	var dr: Dictionary = WorldSave.to_dict(wr)
+	var back = WorldSave.from_dict(dr)["world"]
+	var lb = back.lairs[0]
+	var sb = back.settlements[0]
+	check(lb.raid_at == 4000.0 and lb.raids == 2 and lb.raid_band == "warren-raiders" and lb.spawned_from == "root",
+		"a lair's four raid fields round-trip")
+	check(sb.raided_by == "warren" and sb.raided_at == 4500.0, "a settlement's two raid fields round-trip")
+	dr["lairs"][0].erase("raid_at")
+	dr["lairs"][0].erase("raids")
+	dr["settlements"][0].erase("raided_by")
+	var old = WorldSave.from_dict(dr)["world"]
+	check(old.lairs[0].raid_at == 5000.0, "an old save's clock starts at load time, not day 0 (%s)" % old.lairs[0].raid_at)
+	check(old.lairs[0].raids == 0 and old.settlements[0].raided_by == "", "...and nothing is raided")
+
 	_done()
 
 func _find(w, id: String):

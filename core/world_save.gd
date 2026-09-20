@@ -172,6 +172,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 			"faction": s.faction, "kind": s.kind,
 			"last_visited": s.last_visited, "battle_at": s.battle_at, "stolen_at": s.stolen_at,
 			"pending_opinion_delta": s.pending_opinion_delta,
+			"raided_by": s.raided_by, "raided_at": s.raided_at,
 		})
 	var parties: Array = []
 	for p in world.parties:
@@ -192,6 +193,8 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 			"cleared_at": l.cleared_at,
 			"depth_cleared": l.depth_cleared,
 			"entered_at": l.entered_at, "resolved_as": l.resolved_as,
+			"raid_at": l.raid_at, "raids": l.raids, "raid_band": l.raid_band,
+			"spawned_from": l.spawned_from,
 		})
 	# Landmarks postdate this format like lairs and water did: an old save
 	# without the key loads with none (from_dict below).
@@ -241,6 +244,8 @@ static func from_dict(d: Dictionary):
 		s.battle_at = float(sd.get("battle_at", -1.0))
 		s.stolen_at = float(sd.get("stolen_at", -1.0))
 		s.pending_opinion_delta = float(sd.get("pending_opinion_delta", 0.0))
+		s.raided_by = String(sd.get("raided_by", ""))
+		s.raided_at = float(sd.get("raided_at", -1.0))
 		world.add_settlement(s)
 	for pd in d.get("parties", []):
 		var p := World.RoamingParty.new(String(pd["id"]), _vec(pd.get("position")),
@@ -266,6 +271,12 @@ static func from_dict(d: Dictionary):
 		# An old save spent its lairs before the respawn rule existed; -1 leaves
 		# them spent for good rather than repopulating them all on load.
 		l.cleared_at = float(ld.get("cleared_at", -1.0))
+		# A save from before the clocks starts them now, not at day 0 — a day-ten
+		# save must not send every lair on the map out at once on load.
+		l.raid_at = float(ld.get("raid_at", world.clock.elapsed))
+		l.raids = int(ld.get("raids", 0))
+		l.raid_band = String(ld.get("raid_band", ""))
+		l.spawned_from = String(ld.get("spawned_from", ""))
 		world.add_lair(l)
 	for md in d.get("landmarks", []):
 		var m := World.Landmark.new(String(md["id"]), String(md.get("kind", "ruins")),

@@ -134,5 +134,15 @@ func _init() -> void:
 		check(WorldLairs.respawn(world_old, 1e9).is_empty(),
 			"...and stays spent rather than refilling on load")
 
+	# raids: something new moved in, with its own patience — the clock restarts
+	var wq := World.new()
+	var lq := wq.add_lair(World.Lair.new("q", Vector2.ZERO, "goblinoid"))
+	lq.raids = 2
+	lq.raid_at = 100.0
+	WorldLairs.mark_cleared(lq, 1000.0)
+	var came: Array = WorldLairs.respawn(wq, 1000.0 + WorldLairs.RESPAWN)
+	check(came.size() == 1 and lq.raids == 0 and lq.raid_at == 1000.0 + WorldLairs.RESPAWN,
+		"a respawned lair's raid clock restarts at the respawn (%s, %d)" % [lq.raid_at, lq.raids])
+
 	print("test_lair_respawn: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
