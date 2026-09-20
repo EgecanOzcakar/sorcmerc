@@ -24,6 +24,7 @@ const Campaign = preload("res://core/campaign.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Ach = preload("res://core/achievements.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
+const Ladder = preload("res://core/ladder.gd")
 
 const KINDS := ["ruins", "shrine", "stones", "hut", "wreck", "tower"]
 const HIDDEN := ["hut", "tower"]   # found the way lairs are; the rest are hard to miss
@@ -360,6 +361,7 @@ static func _open(reward: String, l, party, world, rng, e: Dictionary) -> void:
 			var near = _nearest_settlement(world, l.position)
 			if near != null:
 				FactionOpinion.raise(near.faction, 2.0)
+				Ladder.deed(near.faction)   # ...and a deed on the ladder
 				e["thanks"] = near.sname
 		"scouted":
 			party.scouted_next = true

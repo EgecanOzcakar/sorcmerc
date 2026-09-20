@@ -35,6 +35,7 @@ extends RefCounted
 
 const Campaign = preload("res://core/campaign.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Ladder = preload("res://core/ladder.gd")
 const Quest = preload("res://core/quest.gd")
 const Regions = preload("res://core/regions.gd")
 const RNG = preload("res://core/rng.gd")
@@ -188,7 +189,7 @@ static func _build(kind: String, counter: String, s, party, world, world_jobs: A
 		"kill_count", "collect_item":
 			# Both curated kinds resolve to the same single offer; offers()
 			# de-duplicates by id, so reading it twice costs nothing.
-			var q: Dictionary = Quest.offer_for(party, giver_node_id(s), opinion)
+			var q: Dictionary = Quest.offer_for(party, giver_node_id(s), opinion, Ladder.rung(s.faction))
 			return [q] if not q.is_empty() else []
 		"hunt_party", "raid_settlement", "clear_lair":
 			return _world_offers(kind, s, world, world_jobs)

@@ -25,6 +25,7 @@ func _init() -> void:
 	test_drain_settlement_hook()
 	test_credit_fight_is_local_and_skips_the_dead()
 	test_thresholds_are_ordered()
+	test_credit_fight_is_a_deed()
 	print("test_faction_opinion: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -128,3 +129,14 @@ func test_thresholds_are_ordered() -> void:
 	FactionOpinion.set_opinion("soldier", FactionOpinion.GUARDS_ATTACK - 1.0)
 	check(FactionOpinion.guards_attack("soldier"), "...and below that the guards come out")
 	FactionOpinion.reset()
+
+func test_credit_fight_is_a_deed() -> void:
+	var Ladder = load("res://core/ladder.gd")
+	Ladder.reset()
+	var wf := World.new()
+	wf.add_settlement(World.Settlement.new("h", Vector2.ZERO, "human", "town"))
+	wf.add_settlement(World.Settlement.new("e", Vector2(50, 0), "elf", "town"))
+	wf.add_settlement(World.Settlement.new("o", Vector2(50, 50), "orc", "town"))
+	FactionOpinion.credit_fight(wf, Vector2.ZERO, 5.0)
+	check(Ladder.deeds("human") == 1 and Ladder.deeds("elf") == 1 and Ladder.deeds("orc") == 0,
+		"a fight near their towns is a deed for each civilized people credited")

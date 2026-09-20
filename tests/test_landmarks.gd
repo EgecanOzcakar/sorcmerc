@@ -240,8 +240,11 @@ func test_resolve() -> void:
 	check(cs[0].temp_hp == 2 * p.party_characters()[0].level() and not p.blessed, "the blessing is temp HP at the next fight, once")
 	w = _world(); p = _party(); p.gold = 100
 	var gold0: int = p.gold
+	var Ladder = load("res://core/ladder.gd")
+	var deeds0: int = Ladder.deeds("human")   # riverhold (human) is nearest the offering's mark
 	r = _roll(w, "shrine", "offering", p, 1)
 	check(p.gold == gold0 - Landmarks.OFFERING_GOLD and p.blessed and not r.has("nat"), "offering: costs, blesses, no roll")
+	check(Ladder.deeds("human") == deeds0 + 1, "the offering is a deed for the nearest settlement's people")
 	w = _world(); p = _party()
 	r = _roll(w, "stones", "marks", p, _seed_where(null, "stones", "marks", null, true))
 	check(p.scouted_next, "marks: the next fight starts scouted")

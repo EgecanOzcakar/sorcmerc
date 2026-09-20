@@ -24,6 +24,7 @@ const RNG = preload("res://core/rng.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Ach = preload("res://core/achievements.gd")
 const Campaign = preload("res://core/campaign.gd")
+const Ladder = preload("res://core/ladder.gd")
 
 # How far a lair's raiders will walk: quest_posting.gd's clear_lair reach — a
 # lair a town would post work about is a lair that can reach it.
@@ -199,6 +200,7 @@ static func tick(world, now: float) -> Array:
 		s.raided_by = ""
 		s.raided_at = -1.0
 		FactionOpinion.raise(s.faction, LIFTED_FOR)
+		Ladder.deed(s.faction, 2)   # ...and two deeds on the ladder
 		Ach.bump("raids_lifted")
 		lines.append("%s breathes again — %s is done raiding." % [s.sname, l.sname if l != null else "the lair"])
 	for l in world.lairs:
@@ -331,5 +333,6 @@ static func settle(world, lair, party, now: float):
 	s.last_visited = now
 	Campaign.new(party)._split_xp(SETTLE_XP * (ring + 1))
 	FactionOpinion.raise(home.faction, LIFTED_FOR)
+	Ladder.deed(home.faction, 3)   # ...and three deeds on the ladder — the biggest going
 	Ach.collect("waystations", s.id)
 	return s
