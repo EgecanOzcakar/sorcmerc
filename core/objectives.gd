@@ -12,6 +12,16 @@
 # Preloads nothing that preloads core/encounter.gd (scaler.gd does): this file
 # is preloaded by encounter.gd, combat.gd and ai.gd, so anything heavier goes
 # through load() at call time.
+#
+# Measured (tests/test_objectives.gd test_sweep, 80 seeds a kind, presets at
+# level 3, normal roster, autopilot with ai.gd's one rule per kind):
+#   hold      done 51/80 (63.8%)   won 51/80
+#   rescue    done 55/80 (68.8%)   won 68/80
+#   breakout  done 41/80 (51.2%)   won 79/80
+#   hunt      done 33/80 (41.2%)   won 79/80
+#   escort    done 38/80 (47.5%)   won 73/80
+# The band is 40–75%: an objective nearly free is a modifier, one nearly
+# impossible is a trap. Tuned by the knobs below and never by the roster.
 extends RefCounted
 
 const Combatant = preload("res://core/combatant.gd")
@@ -22,14 +32,14 @@ const KINDS := ["hold", "rescue", "breakout", "hunt", "escort"]
 # --- knobs: the only things the sweep in tests/test_objectives.gd may turn ----
 const HOLD_ROUNDS := 5          # hold: Victory at the top of round HOLD_ROUNDS + 1
 const WAVE_ROUNDS := [2, 4]     # hold: a wave arrives at the top of each of these rounds
-const WAVE_SCALE := 0.4         # hold: a wave's budget, as a share of an easy roster's
+const WAVE_SCALE := 0.8         # hold: a wave's budget, as a share of an easy roster's
 const RESCUE_DEADLINE := 4      # rescue: unfreed at the top of round RESCUE_DEADLINE + 1, the captive dies
 const CAPTIVE_AC := 10
 const CAPTIVE_HP := 4
-const EXIT_W := 4               # breakout / hunt: how many far-edge hexes are the road out
-const QUARRY_CORNERED := 3      # hunt: a hero this close makes the quarry fight rather than run
+const EXIT_W := 3               # breakout / hunt: how many far-edge hexes are the road out
+const QUARRY_CORNERED := 4      # hunt: a hero this close makes the quarry fight rather than run
 const CARTER_AC := 11
-const CARTER_HP_BASE := 6
+const CARTER_HP_BASE := 10
 const CARTER_HP_PER_LEVEL := 2
 const BONUS_XP_SHARE := 0.5     # an objective done pays this share of the whole roster's worth in XP
 

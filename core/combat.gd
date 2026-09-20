@@ -173,8 +173,10 @@ func objective_result() -> bool:
 		"escort":
 			var car = with_status("carter")
 			return car != null and not car.is_dead()
-		"hold", "breakout":
-			return objective_done or _team_out("foe")   # a rout holds the gate and clears the road too
+		"hold":
+			return objective_done or _team_out("foe")   # a rout holds the gate too
+		"breakout":
+			return objective_done   # the deed is the road; a rout is a win the kills already paid for
 		"hunt":
 			return objective_done
 	return false

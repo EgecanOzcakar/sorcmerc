@@ -32,6 +32,7 @@ func _init() -> void:
 	test_quarry_runs()
 	test_autopilot_rules()
 	test_rewards()
+	test_sweep()
 	print("test_objectives: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -100,8 +101,9 @@ func test_bystander() -> void:
 	check(cb.order.size() == cb.combatants.size(), "rout: everybody who is in the fight has a turn")
 
 	var car = Objectives.carter(Vector2i(0, 1), 3)
-	check(car.team == "party" and car.has("bystander") and car.hp == 12 and car.ac == 11,
-		"a carter is a party-side bystander with 6 + 2/level HP")
+	check(car.team == "party" and car.has("bystander") and car.ac == 11
+		and car.hp == Objectives.CARTER_HP_BASE + Objectives.CARTER_HP_PER_LEVEL * 3,
+		"a carter is a party-side bystander with base + 2/level HP (%d)" % car.hp)
 	var cap = Objectives.captive(Vector2i(8, 0))
 	check(cap.has("bystander") and cap.has("captive") and cap.hp == 4, "a captive is a bystander that is also a captive")
 
@@ -446,3 +448,36 @@ func test_rewards() -> void:
 
 	check(Objectives.spoils_line({"kind": "hunt", "done": true, "xp": 40}) == "Objective — the quarry is down  (+40 XP)", "spoils line, done")
 	check(Objectives.spoils_line({"kind": "escort", "done": false, "xp": 0}) == "Objective — the carter is dead", "spoils line, failed")
+
+# --- Task 6: the sweep — 80 seeds a kind, tuned by the knob ------------------
+
+const SWEEP_SEEDS := 80
+const DONE_MIN := 40.0
+const DONE_MAX := 75.0
+
+# Spec §8: at normal, the autopilot trying, a kind's done rate must land in
+# 40–75%. Tuned ONLY by the kind's own knob in core/objectives.gd — never the
+# roster, which is scaler.gd's promise.
+func test_sweep() -> void:
+	print("  objective sweep, %d seeds a kind at normal:" % SWEEP_SEEDS)
+	for kind in Objectives.KINDS:
+		var done := 0
+		var won := 0
+		for s in range(1, SWEEP_SEEDS + 1):
+			var chars: Array = Presets.party()
+			var spec: Dictionary = Scaler.roster_for(chars, "normal", {}, "", s)
+			spec["theme"] = "goblin-camp"
+			var extra := {}
+			if kind == "hold":
+				extra["waves"] = Objectives.waves_for(chars, "", s, 1.0)
+			spec["objective"] = Objectives.make(kind, extra)
+			var cb := _fight(spec, s)
+			_autoplay(cb)
+			var res: Dictionary = Encounter.resolve_outcome(cb, chars)
+			if res["outcome"] == "Victory":
+				won += 1
+			if res["objective"]["done"]:
+				done += 1
+		var rate := 100.0 * done / SWEEP_SEEDS
+		print("    %-9s done %2d/%d (%.1f%%)   won %2d/%d" % [kind, done, SWEEP_SEEDS, rate, won, SWEEP_SEEDS])
+		check(rate >= DONE_MIN and rate <= DONE_MAX, "%s: done rate %.1f%% is inside %d–%d%%" % [kind, rate, DONE_MIN, DONE_MAX])
