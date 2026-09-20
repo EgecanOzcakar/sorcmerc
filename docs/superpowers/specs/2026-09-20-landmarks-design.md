@@ -117,7 +117,7 @@ power. The roller for the rolled rows stays the party's best at the skill
 | **safe camp** | `party.safe_camp = true` (exists) |
 | **quicker road** | `world.clock.elapsed -= Travel.TIME_SAVED` (the good-day refund; `drive_random`'s clock invariant already allows it) |
 | **map opens** | `world.reveal()` at the tower and around it (exists) |
-| **marked bands** | **new:** `world.marked_until := clock + DAY`; the marker pass draws every band as explored while it holds. Not saved — it lapses with the day |
+| **marked bands** | **new:** `world.marked_until := clock + DAY`, `world.marked_at := tower position`; every band within two vision radii of the tower draws as explored until tomorrow. Not saved — it lapses with the day |
 | **camp kit / identify** | `party.stash_add("camp-kit")`; the librarian's identification path (T13) without the fee |
 
 **The deed pays:** `LANDMARK_XP` (40) × (ring + 1), split the way a fight's
@@ -197,8 +197,10 @@ frame invariants gain "a spent landmark never offers a card".
 - A landmark is answered once per map and never restocks. If the world later
   gets a "years pass" mechanic, that is where it would.
 - The hermit does not teach. Training is downtime's, where it costs days.
-- Hidden landmarks share the lair's Survival DC (13) and radius, and the same
-  button, so there is one way to search the ground, not two.
+- Hidden landmarks share the lair's Survival DC (13) and radius — the same
+  roll, so there is one way to search the ground, not two — but get their own
+  button (`_place_btn`, §3): the lair button is already two-state, and a third
+  state on it would have been worse than a second button.
 - The blessing is temp HP, not a to-hit bonus: it is visible on the sheet,
   costs nothing to explain, and cannot stack with itself.
 - Landmarks do not spawn fights. A landmark that wakes something is a threat

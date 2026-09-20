@@ -486,7 +486,7 @@ func _draw_marks(w) -> void:
 	for q in w.parties:
 		if q.is_player:
 			player = q
-		elif w.is_explored(q.position):
+		elif w.band_seen(q.position):
 			draw_circle(_to_widget(q.position), R_PARTY, _faction_color(q.faction))
 	if player != null:
 		var at := _to_widget(player.position)

@@ -236,8 +236,8 @@ var _lair_btn: Button                # T91: "Search for a lair" / "Attack the la
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
 var _place_btn: Button                # landmarks: "Visit the Nine Sisters" / "Search the ground (Survival)", or hidden
-var _place_target = null              # whichever landmark _check_places() last found in range
-var _place_open = null                # the one whose card is up
+var _place_target: World.Landmark = null   # whichever landmark _check_places() last found in range
+var _place_open: World.Landmark = null     # the one whose card is up
 var _site = null                     # D1: the delve in progress (core/site.gd), or null
 # D3: last road-event roll, and the card showing one. Scene-local like the
 # forage stamp — a reload just restarts the cadence, which is not worth a
@@ -3863,9 +3863,10 @@ func ground_marks() -> Array:
 	for q in world.parties:
 		if q.is_player and not _visit.is_empty():
 			continue   # inside the gates for the duration of the visit, not standing on the map
-		# A watchtower's "keep watch" marks every band for a day: treat the map as
-		# explored under them too, same as a place the party actually walked past.
-		if not q.is_player and not world.is_explored(q.position) and world.marked_until <= world.clock.elapsed:
+		# A watchtower's "keep watch" marks every band within two vision radii for
+		# a day: treat the map as explored under them too, same as a place the
+		# party actually walked past.
+		if not q.is_player and not world.band_seen(q.position):
 			continue
 		# A roaming band is the one landmark whose remembered position is a lie
 		# — it has walked on since. Shown at its live position either way (the
@@ -3890,13 +3891,6 @@ func ground_marks() -> Array:
 			"ring": 0.0, "fill": 0.0, "shadow": 1.0,
 			"label": "%s (%d)" % [who, count], "live": live})
 	return out
-
-
-# ground_marks(), by the name a test asks for. scenes/world/ground_marks3d.gd
-# is the other caller and keeps the longer name; this exists so a marker row
-# can be checked without instantiating the 3D layer that draws it.
-func _marker_rows() -> Array:
-	return ground_marks()
 
 
 # The radius a landmark's footprint is drawn at: its old flat-map radius, or

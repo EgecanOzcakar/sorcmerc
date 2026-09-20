@@ -113,6 +113,21 @@ func test_placement() -> void:
 	check(w2.landmarks.map(func(m): return [m.id, m.position]) == w.landmarks.map(func(m): return [m.id, m.position]),
 		"the same seed places the same landmarks")
 	check(w.landmarks.all(func(m): return m.id.begins_with("landmark-")), "ids are namespaced")
+	# 6 lairs, 9+ landmarks: name_for() hashes the id and a kind only has a
+	# handful of names, so round-robin placement collides sooner or later —
+	# place() must resolve it, not just hope the hash spreads them out
+	var w3 := _world()
+	for n in 4:
+		w3.add_lair(World.Lair.new("lair-%d" % n, Vector2(600 + n * 200, 600), "goblinoid"))
+	Landmarks.place(w3, 11)
+	check(w3.landmarks.size() >= 9, "6 lairs place 9+ landmarks (%d)" % w3.landmarks.size())
+	var seen := {}
+	var dup := false
+	for m in w3.landmarks:
+		if seen.has(m.sname):
+			dup = true
+		seen[m.sname] = true
+	check(not dup, "no two landmarks share a name")
 
 # --- Task 3: the cards and the doors ----------------------------------------
 
@@ -159,6 +174,8 @@ func test_cards() -> void:
 	p.gold = 500
 	rows = Landmarks.options(shrine, p, w)
 	check(rows.any(func(r): return r["id"] == "offering"), "...with one, it is offered")
+	var offering: Dictionary = rows.filter(func(r): return r["id"] == "offering")[0]
+	check(offering["win"].contains(str(offering["toll"])), "the offering's price is on the row, not just the tooltip")
 	# DC climbs with the ring
 	var far = _mark(w, "ruins", Vector2(4000, 4000))
 	var near = _mark(w, "ruins", Vector2(60, 60))
@@ -257,6 +274,8 @@ func test_resolve() -> void:
 	var hp0: int = p.party_characters()[0].sheet().max_hp
 	r = _roll(w, "wreck", "search", p, _seed_where(null, "wreck", "search", null, false))
 	check(int(r["hurt"]) > 0 and p.party_characters().all(func(ch): return ch.hp_current == -1 or ch.hp_current >= 1), "a snare hurts and never drops")
+	check(w.landmark("m-wreck").spent, "a loss spends the landmark too")
+	check(Landmarks.resolve(w.landmark("m-wreck"), "search", p, w, RNG.new(1)).is_empty(), "...and resolving a spent landmark answers nothing")
 	w = _world(); p = _party()
 	r = _roll(w, "ruins", "read", p, _seed_where(null, "ruins", "read", null, true))
 	check(w.lairs.any(func(l): return l.discovered) or w.landmarks.any(func(x): return x.found and Landmarks.is_hidden(x.kind)), "read: a lead marks something")
@@ -269,6 +288,10 @@ func test_resolve() -> void:
 	m2 = _mark(w, "tower", Vector2(900, 900))
 	r = Landmarks.resolve(m2, "watch", p, w, RNG.new(_seed_where(null, "tower", "watch", null, true, m2.position)))
 	check(w.marked_until > w.clock.elapsed, "watch: bands are marked for the day")
+	check(w.band_seen(w.landmark("m-tower").position + Vector2(100, 0)), "a band within two vision radii of the tower is seen")
+	check(not w.band_seen(Vector2(9000, 9000)), "...one far off the tower is not")
+	w.clock.elapsed = w.marked_until + 1.0
+	check(not w.band_seen(w.landmark("m-tower").position + Vector2(100, 0)), "...and the watch lapses with the day")
 
 # --- Task 10: gated by who you are ------------------------------------------
 
@@ -302,6 +325,10 @@ func test_gated() -> void:
 	var far_rows: Array = Landmarks.options(far_shrine, p, w)
 	var far_gated: Array = far_rows.filter(func(r): return r.get("gated", false))
 	check(far_gated.size() == 1 and int(far_gated[0]["dc"]) == 0, "a gated row far out still prices no roll")
+	# finding 1: a no-skill row never prices a roll, not even the offering
+	p.gold = 500
+	var far_offering: Array = Landmarks.options(far_shrine, p, w).filter(func(r): return r["id"] == "offering")
+	check(far_offering.size() == 1 and int(far_offering[0]["dc"]) == 0, "the offering far out prices no roll either")
 	# answering it: no roll, the door opens, the deed pays, the place is spent
 	var xp0: int = who.xp
 	var r: Dictionary = Landmarks.resolve(shrine, String(gated[0]["id"]), p, w, RNG.new(1))

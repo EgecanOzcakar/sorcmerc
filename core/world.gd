@@ -250,6 +250,7 @@ var explored: Array[Vector2] = []
 # A watchtower's "keep watch": every band draws as explored while this holds
 # (world-minutes; < 0 = nothing marked). Runtime only — it lapses with the day.
 var marked_until := -1.0
+var marked_at := Vector2.ZERO   # where the watch was kept — band_seen()'s two-radii center
 
 # T9y: the waypoint trail, indexed. `explored` stays the flat, saved list —
 # it is what world_save.gd round-trips and what a reader expects to find —
@@ -323,6 +324,11 @@ func is_explored(pos: Vector2) -> bool:
 	if near_settlement(pos):
 		return true
 	return _near_waypoint(pos, VISION_RADIUS)
+
+# A band is drawn if the fog is off it, or while a watchtower's watch holds
+# and it is within two vision radii of the tower (core/landmarks.gd "marked").
+func band_seen(pos: Vector2) -> bool:
+	return is_explored(pos) or (marked_until > clock.elapsed and pos.distance_to(marked_at) <= 2.0 * VISION_RADIUS)
 
 # The "currently visible" tier: within sight of the player's position RIGHT
 # NOW, not just remembered from having passed through once.

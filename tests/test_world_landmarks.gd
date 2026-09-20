@@ -74,7 +74,7 @@ func _init() -> void:
 	check(main._place_btn.visible and "Search" in main._place_btn.text, "a hidden place offers a search: %s" % main._place_btn.text)
 
 	# markers: found landmarks draw, unfound ones do not
-	var rows: Array = main._marker_rows()
+	var rows: Array = main.ground_marks()
 	check(rows.any(func(r): return r.get("label", "") == shrine.sname), "a found landmark is a marker")
 	check(not rows.any(func(r): return r.get("label", "") == hut.sname), "an unfound one is not")
 	print("test_world_landmarks: %d passed, %d failed" % [_pass, _fail])

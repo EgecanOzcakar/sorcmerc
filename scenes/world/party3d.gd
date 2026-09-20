@@ -268,8 +268,9 @@ func reposition() -> void:
 			continue
 		# T9x fog of war: everyone else is fog-gated; the player is exempt —
 		# same "you can always see yourself" rule World._draw()'s 2D props
-		# loop already applies.
-		n.visible = p.is_player or _explored(p.position)
+		# loop already applies. band_seen(), not _explored(): a watchtower's
+		# watch marks a band drawn on the ground too (core/world.gd).
+		n.visible = p.is_player or world_map.world.band_seen(p.position)
 		# The band's own position on the map's floor. It used to be
 		# world_for_screen(_pix(pos)) — a round trip out to a screen pixel and
 		# back, which the old per-layer camera needed and which cancelled to

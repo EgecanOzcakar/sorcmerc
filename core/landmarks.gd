@@ -23,7 +23,6 @@ const Loot = preload("res://core/loot.gd")
 const Campaign = preload("res://core/campaign.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Ach = preload("res://core/achievements.gd")
-const Catalog = preload("res://core/rules/catalog.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
 
 const KINDS := ["ruins", "shrine", "stones", "hut", "wreck", "tower"]
@@ -76,8 +75,21 @@ static func place(world, seed: int) -> void:
 				lo.y + (hi.y - lo.y) * float(rng.roll_die(1000) - 1) / 999.0)
 			if world.is_water(pos) or not _clear(world, pos):
 				continue
-			world.add_landmark(World.Landmark.new("landmark-%s-%d" % [kind, i], kind, pos))
+			_dedupe_name(world, world.add_landmark(World.Landmark.new("landmark-%s-%d" % [kind, i], kind, pos)))
 			break
+
+# name_for() hashes the id, and a kind's pool is only a handful of names —
+# round-robin placement puts more than one of a kind on the map often enough
+# that two share a name by chance. If this one already collides with an
+# earlier landmark of the same kind, hand it the next name in the pool.
+static func _dedupe_name(world, l) -> void:
+	var pool: Array = NAMES.get(l.kind, ["a landmark"])
+	var idx: int = maxi(0, pool.find(l.sname))
+	for _t in pool.size():
+		if not world.landmarks.any(func(m): return m != l and m.kind == l.kind and m.sname == l.sname):
+			return
+		idx = (idx + 1) % pool.size()
+		l.sname = String(pool[idx])
 
 static func _clear(world, pos: Vector2) -> bool:
 	for s in world.settlements:
@@ -134,7 +146,7 @@ const CARDS := {
 			"reward": "blessing", "snare": "none"},
 		{"id": "offering", "label": "Leave an offering", "skills": [], "dc": 0,
 			"note": "%d ◉ on the stone. No roll.",
-			"win": "The blessing, and the people who keep this shrine hear of it.", "lose": "",
+			"win": "The blessing for %d ◉, and the people who keep this shrine hear of it.", "lose": "",
 			"reward": "offering", "snare": "none"},
 		{"id": "rite", "label": "Say the rite", "skills": [], "dc": 0,
 			"gate": {"backgrounds": ["acolyte"], "classes": ["cleric", "paladin"]},
@@ -229,8 +241,10 @@ static func options(l, party, world) -> Array:
 		return []
 	var out: Array = []
 	for c in CARDS[l.kind]:
+		# A no-skill row never rolls, so it must never price one either — the
+		# gate and offering rows both have empty skills, dc stays 0 for both.
 		var o: Dictionary = {"id": c["id"], "label": c["label"], "note": c["note"],
-			"dc": dc_for(c, world, l.position), "win": c["win"]}
+			"dc": dc_for(c, world, l.position) if not c["skills"].is_empty() else 0, "win": c["win"]}
 		if String(c["lose"]) != "":
 			o["lose"] = c["lose"]
 		if c.has("gate"):
@@ -239,7 +253,6 @@ static func options(l, party, world) -> Array:
 				continue
 			o["note"] = String(c["note"]) % who.cname
 			o.merge({"char_id": who.id, "cname": who.cname, "gated": true}, true)
-			o["dc"] = 0  # no roll: the card must not price one
 			out.append(o)
 			continue
 		if c["skills"].is_empty():
@@ -247,6 +260,7 @@ static func options(l, party, world) -> Array:
 			if party.gold < price:
 				continue
 			o["note"] = String(c["note"]) % price
+			o["win"] = String(c["win"]) % price
 			o["toll"] = price
 		else:
 			var who: Dictionary = Approach._roller(party, c)
@@ -272,6 +286,7 @@ static func resolve(l, choice_id: String, party, world, rng) -> Dictionary:
 	if c.is_empty():
 		return {}
 	var e: Dictionary = {"id": "landmark-%s-%s" % [l.kind, choice_id], "title": l.sname, "ok": true}
+	var price := 0   # >0 only for the offering: the one win text with a price in it
 	if c.has("gate"):
 		var who = gate_match(party, c["gate"])
 		if who == null:
@@ -287,14 +302,14 @@ static func resolve(l, choice_id: String, party, world, rng) -> Dictionary:
 		e.merge({"char_id": who["id"], "cname": who["cname"], "skill": who["skill"],
 			"nat": nat, "bonus": bonus, "dc": dc, "ok": nat + bonus >= dc, "named": bool(who["named"])}, true)
 	else:
-		var price: int = OFFERING_GOLD * (ring(world, l.position) + 1)
+		price = OFFERING_GOLD * (ring(world, l.position) + 1)
 		if not party.spend_gold(price):
 			return {}
 		e["gold"] = -price
 	l.spent = true
 	if e["ok"]:
 		e["kind"] = "good"
-		e["text"] = String(c["win"])
+		e["text"] = String(c["win"]) % price if price > 0 else String(c["win"])
 		_open(String(c["reward"]), l, party, world, rng, e)
 		var xp: int = LANDMARK_XP * (ring(world, l.position) + 1)
 		Campaign.new(party)._split_xp(xp)
@@ -373,6 +388,7 @@ static func _open(reward: String, l, party, world, rng, e: Dictionary) -> void:
 				world.reveal(l.position + Vector2(cos(a), sin(a)) * World.VISION_RADIUS)
 		"marked":
 			world.marked_until = world.clock.elapsed + FactionOpinion.DAY
+			world.marked_at = l.position
 
 # The nearest unfound lair or hidden landmark gets marked, and the card says which.
 static func _lead(world, from: Vector2, e: Dictionary) -> void:
@@ -389,6 +405,7 @@ static func _lead(world, from: Vector2, e: Dictionary) -> void:
 			best = x
 			best_d = d
 	if best == null:
+		e["text"] = String(e["text"]) + " Nothing left to find."
 		return
 	if "discovered" in best:
 		best.discovered = true

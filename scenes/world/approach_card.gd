@@ -291,7 +291,7 @@ func _has_check(o: Dictionary) -> bool:
 # would be the one number on this card that must never be wrong.
 func _roll_line(o: Dictionary) -> String:
 	if not _has_check(o):
-		return ""
+		return _os(o, "cname")   # a gated row: no roll to price, but its name still belongs on the row
 	var parts: Array[String] = []
 	var skill := _os(o, "skill")
 	if skill != "":

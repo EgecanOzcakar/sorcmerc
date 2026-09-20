@@ -194,7 +194,7 @@ func to_combatants(positions: Array, team := "party") -> Array:
 		var p: Vector2i = positions[i] if i < positions.size() else Vector2i.ZERO
 		var c = Adapter.to_combatant(chars[i], team, p)
 		if blessed:   # a shrine's blessing (core/landmarks.gd): something extra, at the next fight, once
-			c.temp_hp = 2 * chars[i].level()
+			c.temp_hp = maxi(c.temp_hp, 2 * chars[i].level())   # RAW: temp HP takes the higher, never stacks
 		out.append(c)
 	blessed = false
 	return out

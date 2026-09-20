@@ -95,7 +95,7 @@ static func offers(settlement, world) -> Array:
 		})
 	# A hidden landmark is worth a word too — half a lair's base price, and
 	# only the hidden kinds: a ruin you can see from the road nobody sells.
-	var Landmarks = load("res://core/landmarks.gd")   # load: landmarks.gd preloads nothing of ours, but keep the graph flat
+	var Landmarks = load("res://core/landmarks.gd")   # load: landmarks.gd preloads world.gd and friends; load() keeps this file out of that closure
 	for m in world.landmarks:
 		if m.found or not Landmarks.is_hidden(m.kind):
 			continue
