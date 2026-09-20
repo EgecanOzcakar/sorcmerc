@@ -47,6 +47,7 @@ const WorldSave = preload("res://core/world_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Party = preload("res://core/party.gd")
 const Travel = preload("res://core/travel.gd")
+const Ladder = preload("res://core/ladder.gd")
 
 # One driver frame. The same 0.1 tests/drive_world.gd drives the map with —
 # headless deltas are microseconds, so world time has to be handed over by
@@ -101,6 +102,7 @@ var _clock0 := 0.0
 var _last_clock := -1.0
 var _stamp := ""
 var _still := 0
+var _deeds_seen := 0         # Ladder.renown(), watched for the one direction it may move
 
 func _init() -> void:
 	# This process's own autosave slots, so a concurrent godot run cannot clobber
@@ -153,6 +155,7 @@ func _session(sd: int) -> void:
 	_last_clock = -1.0
 	_stamp = ""
 	_still = 0
+	_deeds_seen = 0
 	WorldSave.clear()
 	FactionOpinion.reset()
 	# The map's own generators read this (a procedural world, a campaign route).
@@ -268,6 +271,10 @@ func _watch() -> void:
 	var party = screen.party
 	if party.gold < 0:
 		fail("the purse went negative: %d" % party.gold)
+	var r := Ladder.renown()
+	if r < _deeds_seen:
+		fail("renown went down: %d -> %d" % [_deeds_seen, r])
+	_deeds_seen = r
 	if party.active.size() > Party.MAX_ACTIVE:
 		fail("%d characters are in an active party of %d" % [party.active.size(), Party.MAX_ACTIVE])
 	if party.party_characters().is_empty():
@@ -766,6 +773,12 @@ func _town_beat() -> void:
 		fail("a settlement panel came up with no buttons at all")
 		screen._close_visit()
 		return
+	for b in btns:
+		if "Seek an audience" in _btn_name(b) and _chance(80):
+			_saw["audience"] = true
+			_acts += 1
+			b.pressed.emit()
+			return
 	var leave: Button = null
 	var rows: Array = []
 	for b in btns:

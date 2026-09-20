@@ -6375,3 +6375,58 @@ the map mid-run.
   stash the raw theme and seed on the spec.
 - A raid band carries nothing home; the halved market is what it took.
 - Towns are never taken. A town that falls is the faction ladder's war (#4).
+
+## The ladder and renown — standing with a people, and a name across the map (2026-09-21)
+
+Sub-project 4 of the content batch (objectives → landmarks → threat clocks and
+reclaiming → faction ladder and renown → callings with party relations →
+downtime → the lodge). Spec: `docs/superpowers/specs/2026-09-21-ladder-renown-design.md`;
+plan: `docs/superpowers/plans/2026-09-21-ladder-renown.md`.
+
+Two tracks now sit beside faction opinion (`core/faction_opinion.gd`), which
+stays exactly what it was: this week's mood, moving prices and the gate, and
+drifting back to nothing while the party is away. The ladder
+(`core/ladder.gd`) is what the party has *done* for a people, counted per
+civilized faction and never lost — read as four rungs, Stranger, Known,
+Trusted, Sworn. Renown is the same deeds summed across every people, read as
+one title, Nobodies to Legends. Neither drifts, and neither is opinion under
+another name: a faction can be furious with the party this week and still
+owe them the standing of a hundred deeds.
+
+A deed is a job turned in (the faction that paid it), a fight won near one of
+its settlements (a fight at the gate — `FactionOpinion.credit_fight`, every
+civilized faction close enough to hear about it), a raid lifted by clearing
+the lair behind it (two deeds), a lair settled into a waystation (three, the
+biggest going), or an offering left at a landmark (one). `Ladder.deed()`
+credits the faction and hands back the new rung only the frame it changed, so
+a caller says so once. Each rung opens a door a stranger does not get: Known
+passes on a neighbour's job once a settlement's own work is taken, and halves
+the price of a room; Trusted opens the back room (uncommon stock, where there
+is a smith) and, at the chief settlement, lets the patron post the far
+country's work instead of just its own; Sworn makes the room free, adds two
+rare items to the back room's uncommon ones, and opens a once-per-people
+audience with the lord — a rare item and a milestone's XP, held once and
+never offered again. Renown's title puts a flat premium on every job's pay
+(`Ladder.pay_mult()`, +10% a title above Nobodies), and both numbers show
+where a player already looks: the HUD line under the party's name, the log
+line the moment a title changes, the settlement door's own text ("Sworn to
+this people. Their doors are yours.", with the title named once it reaches
+Famous), and the pay screen's own line.
+
+The four achievements (`core/achievements.gd`) read the same two high-water
+marks the world screen already keeps for its own display — `best_rung` (the
+best rung held with any civilized faction) and `renown_title` — plus the
+`audiences` set: Known Faces, Sworn, Famous, An Audience. `tests/drive_random.gd`
+now seeks an audience itself when the button is up and watches renown for the
+one direction it is not allowed to move.
+
+### Still open
+
+- No pictures of the screens yet — only the audience event card has art
+  (`event-audience-<faction>.png`); the ladder and renown lines on the HUD
+  and the door text draw without any of their own.
+- The audience's gift is seeded per faction — the same item every run. A list
+  of a lord's gifts per people, rolled instead of fixed, would be the next
+  step.
+- Standing has no downward path, by design: a deed done for a people is never
+  taken back, whatever opinion does in the meantime.

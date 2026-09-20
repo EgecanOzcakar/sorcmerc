@@ -72,6 +72,11 @@ func _init() -> void:
 		check(not Ach.find(id).is_empty(), "%s is defined" % id)
 	check(int(Ach.find("waystations_3")["goal"]) == 3 and Ach.find("waystations_3")["counter"] == "waystations",
 		"Founder counts three waystations")
+	# the ladder and renown: four deeds off the world screen's high-water marks
+	for id in ["known_first", "sworn_first", "renown_famous", "audience_first"]:
+		check(not Ach.find(id).is_empty(), "%s is defined" % id)
+	check(int(Ach.find("sworn_first")["goal"]) == 3 and Ach.find("sworn_first")["counter"] == "best_rung",
+		"Sworn counts a best_rung of 3")
 	print("test_achievements: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
