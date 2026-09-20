@@ -139,6 +139,7 @@ func _spawn_wave(roster: Array) -> void:
 			i += 1
 	if not names.is_empty():
 		log.append("More of them, from the far side: %s." % ", ".join(names))
+		Sound.play_sfx("wave_arrives")
 
 # The deeds that are a matter of standing somewhere — reaching the captive,
 # reaching the road — checked after every hero move and at every turn's end.
@@ -151,6 +152,7 @@ func _objective_touch(c) -> void:
 			if cap != null and not cap.has("freed") and not cap.is_dead() and Hex.distance(c.pos, cap.pos) <= 1:
 				cap.statuses["freed"] = true
 				log.append("%s cuts %s loose." % [c.cname, cap.cname])
+				Sound.play_sfx("captive_freed")
 		"breakout":
 			if objective_done:
 				return
@@ -170,6 +172,7 @@ func _quarry_escape(q) -> void:
 	q.hp = 0
 	objective_failed = true
 	log.append("%s is into the trees and gone." % q.cname)
+	Sound.play_sfx("quarry_gone")
 
 func _objective_over() -> bool:
 	return objective_done and objective_kind() in ["hold", "breakout", "hunt"]
@@ -2620,6 +2623,7 @@ func _kill(c) -> void:
 	c.hp = 0
 	if c.has("bystander"):
 		objective_failed = true   # whoever it was, they were the point
+		Sound.play_sfx("carter_down")   # the captive too: one stinger for the point of the fight going down
 	if c.has("quarry") and not c.has("escaped"):
 		objective_done = true
 		log.append("The quarry is down — the rest break and run.")

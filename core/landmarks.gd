@@ -24,6 +24,7 @@ const Campaign = preload("res://core/campaign.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Ach = preload("res://core/achievements.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
+const Sound = preload("res://core/audio.gd")
 
 const KINDS := ["ruins", "shrine", "stones", "hut", "wreck", "tower"]
 const HIDDEN := ["hut", "tower"]   # found the way lairs are; the rest are hard to miss
@@ -319,6 +320,8 @@ static func resolve(l, choice_id: String, party, world, rng) -> Dictionary:
 	else:
 		e["kind"] = "bad"
 		e["text"] = String(c["lose"])
+		# Heard as the search that found nothing, unless the snare drew blood.
+		Sound.play_sfx("hit_pierce" if String(c["snare"]) == "toll" else "search_nothing")
 		match String(c["snare"]):
 			"hour":
 				world.clock.elapsed += HOUR
@@ -340,7 +343,16 @@ static func toll(ch, pct: float) -> int:
 
 # --- the doors --------------------------------------------------------------
 
+# What each door sounds like. The tower's two doors open the map, and the
+# phrase over them is the road's rather than the discovery's; the doors that
+# already had a sound elsewhere in the game (a camp kit is a pickup, a night
+# in the ring is a rest, a fight scouted is a thing identified) reuse it.
+const DOOR_SFX := {"cache": "cache_open", "blessing": "blessing", "offering": "offering",
+	"scouted": "identify", "road": "rest", "safe_camp": "rest", "camp_kit": "pickup",
+	"lead": "lead_marked", "hermit": "lead_marked", "reveal": "map_reveal", "marked": "map_reveal"}
+
 static func _open(reward: String, l, party, world, rng, e: Dictionary) -> void:
+	Sound.play_sfx(String(DOOR_SFX[reward]))
 	match reward:
 		"cache":
 			var gold: int = CACHE_GOLD * (ring(world, l.position) + 1)

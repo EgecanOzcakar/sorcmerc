@@ -3,7 +3,7 @@
 
     export ELEVENLABS_API_KEY=...
     python3 tools/gen_audio_elevenlabs.py --list          # the prompts, writes nothing
-    python3 tools/gen_audio_elevenlabs.py sfx             # regenerate all 43 stings
+    python3 tools/gen_audio_elevenlabs.py sfx             # regenerate EVERY sting (63)
     python3 tools/gen_audio_elevenlabs.py --only hit,crit # just those two
     python3 tools/gen_audio_elevenlabs.py sfx barks       # stings and the voice stingers
 
@@ -30,7 +30,7 @@ API: POST https://api.elevenlabs.io/v1/sound-generation, `xi-api-key` header.
 `prompt_influence` trades faithfulness to the prompt against the model's own
 judgement -- high for a sound with a precise brief (a click), lower where the
 model has more room (a victory sting). Cost is per generation and this writes
-43 of them for `sfx`, so --only is the normal way to use it.
+63 of them for `sfx`, so --only is the normal way to use it.
 """
 import argparse
 import json
@@ -210,6 +210,68 @@ SFX = {
     "quest_complete": ("A short warm triumphant flourish for completing a task, a bright "
                        "horn phrase resolving over a purse of coins landing on wood, "
                        "medieval fantasy, ending cleanly", 2.0, 0.45),
+
+    # Landmarks (core/landmarks.gd). The place turning up, the card opening,
+    # the search on the ground, and one sound per door the card can open. The
+    # doors that already had a sound (a camp kit is a pickup, a night in the
+    # ring is a rest) reuse it rather than getting a twin.
+    "landmark_found": ("A soft curious two-note wooden flute call, like a question asked "
+                       "quietly, with a faint rustle of parchment, short, gentle, dry", 1.2, 0.5),
+    "landmark_open": ("A soft rising inquisitive pizzicato string phrase, three plucked "
+                      "notes climbing like a raised eyebrow, with a light breath of wind, "
+                      "short, dry", 1.2, 0.5),
+    "search_found": ("Boots scuffing through leaves, a hand brushing dirt aside, then a "
+                     "small bright tick of something found and a short satisfied exhale, "
+                     "outdoors, dry", 1.4, 0.6),
+    "search_nothing": ("Boots scuffing through dry leaves and gravel, a hand sweeping dirt "
+                       "aside, then nothing: a short disappointed exhale, outdoors, dry", 1.4, 0.6),
+    "cache_open": ("A buried wooden strongbox lid prised open with a creak, then a spill "
+                   "of coins and small trinkets tumbling out, short, close, dry", 1.5, 0.65),
+    "blessing": ("A gentle sacred blessing: a soft warm wordless choir breath swelling "
+                 "briefly, a single clear small bell, holy and calm, short, light reverb", 2.0, 0.45),
+    "offering": ("A few coins set down one by one on a stone altar, a small clink each, "
+                 "then a brief hush of wind, reverent, close", 1.6, 0.65),
+    "lead_marked": ("A quill pen scratching a quick mark onto parchment, then a firm tap "
+                    "of the pen, with a faint low thoughtful hum, short, dry", 1.0, 0.7),
+    "map_reveal": ("A large parchment map unrolling with a sweep, a rush of wind across "
+                   "open country, and a bright rising airy shimmer as the distance opens "
+                   "up, medieval fantasy", 2.5, 0.45),
+
+    # Encounter objectives (core/objectives.gd, fired from core/combat.gd). The
+    # wave and the quarry are things happening at the far edge of the board,
+    # so they are further away than a hit; the carter and the captive are
+    # stingers over the body drop the kill already makes.
+    "wave_arrives": ("Distant war shouts and a horn from beyond a doorway, then many "
+                     "armored feet rushing in fast, a wave of attackers arriving, brief", 2.0, 0.55),
+    "captive_freed": ("A knife sawing quickly through thick rope and the rope snapping "
+                      "loose, then a gasp of relief, close, dry", 1.2, 0.65),
+    "quarry_gone": ("Running footsteps crashing through undergrowth and leaves, receding "
+                    "fast into the distance until gone, outdoors, brief", 2.0, 0.6),
+    "carter_down": ("A heavy body slumping against a wooden cart with a creak, a load of "
+                    "crates tumbling off, then one low grim string note, brief", 2.0, 0.55),
+
+    # Threat clocks (core/raids.gd). Heard on the map, mostly from far away:
+    # a raid is something happening to a town over the horizon until it is not.
+    "raid_horn": ("A single long war horn sounding far away across hills, ominous, low, "
+                  "distant, with a faint echo, then silence", 3.0, 0.5),
+    "raid_drums": ("Distant war drums beating steadily from a camp outside town walls at "
+                   "night, low and menacing, with faint crackling fires, a few beats then "
+                   "fading", 3.5, 0.5),
+    "raid_bell": ("A church alarm bell in a town square ringing urgently and fast, with "
+                  "distant shouting and panic, medieval town under attack", 3.5, 0.5),
+    "raid_lifted": ("A single warm church bell tolling once over a quiet town, then "
+                    "birdsong returning and a relieved murmur of townsfolk, calm", 3.5, 0.45),
+    "lair_dug": ("Claws and shovels digging into packed earth, rocks tumbling and dirt "
+                 "shifting underground, with a low ominous rumble, dark, brief", 2.0, 0.55),
+    "settle": ("Carpenters raising a timber frame: a mallet driving a wooden peg, a saw "
+               "stroke, a beam dropped into place, and a cheer from a few settlers, "
+               "outdoors", 3.0, 0.5),
+
+    # The board. Taking a job already had `quest` (the parchment and the horn);
+    # a bought rumour was borrowing it, and is a coin and a whisper instead.
+    "rumour_bought": ("A coin slid across a wooden tavern table and a hushed conspiratorial "
+                      "murmur of a man's voice leaning in close, wordless, tavern "
+                      "ambience, brief", 1.8, 0.55),
 }
 
 # Wordless voice stingers, three takes per archetype (core/barks.gd picks one at
@@ -238,6 +300,14 @@ BARK_MAX_SECONDS = 1.0
 # because that is a voice stopping rather than a sound finishing. Squared, so the
 # last few milliseconds are already at nothing rather than a ramp cut short.
 BARK_FADE_MS = 120
+# The same rule for a sting, looser. The API returns about twice the length
+# asked for, and a sound with no silence to trim -- a bell still ringing, a
+# cheer still going -- comes back the full window: settle.wav was 6.0 s and
+# cut off mid-cheer, raid_bell.wav 7 s of bell. Nothing on the map or the board
+# earns more than this; the fade is longer than a bark's because these are
+# scenes, not shouts, and a scene stopping dead is what the fade is for.
+SFX_MAX_SECONDS = 4.5
+SFX_FADE_MS = 300
 
 
 def jobs(groups, only, take=0):
@@ -415,6 +485,8 @@ def main():
         pcm, was, now, peak = trim_and_normalize(pcm)
         if group == "barks":
             pcm, now = cap(pcm, BARK_MAX_SECONDS)
+        else:
+            pcm, now = cap(pcm, SFX_MAX_SECONDS, SFX_FADE_MS)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(wav(pcm))
