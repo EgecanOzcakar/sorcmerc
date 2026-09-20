@@ -6013,3 +6013,66 @@ things now: a page is as many badges as the bar can show, `[1]`..`[9]` land on
 the first nine, and everything past the ninth is click-only — which is what the
 badges were drawn for. Paging survives for a list longer than the bar, on Tab,
 because every number is spoken for by the page it would be turning.
+
+## Objectives — the same fight, asked a different question (2026-09-20)
+
+Sub-project 1 of the content batch (objectives → landmarks → threat clocks and
+reclaiming → faction ladder and renown → callings with party relations →
+downtime → the lodge). Spec: `docs/superpowers/specs/2026-09-20-encounter-objectives-design.md`;
+plan: `docs/superpowers/plans/2026-09-20-encounter-objectives.md`.
+
+Every fight was "kill everyone". Five objectives now ride the encounter spec
+(`spec["objective"] = {kind, ...}`, absent = the fight as it was) and change
+what the fight is for on the same board, roster, AI and dice: **hold** (the
+top of round N+1 with anyone standing is a win; waves from the far side),
+**rescue** (a bound captive at the deepest hex; adjacency frees it; the
+captors kill it on the deadline; foes never target it), **breakout** (the
+party in the middle, foes both ends, every conscious hero on the far-edge
+road ends it), **hunt** (the roster's strongest is the quarry; it runs for the
+treeline unless a hero is within QUARRY_CORNERED; on the edge it is gone; down,
+the rest scatter), **escort** (a carter in the huddle; the AI already hits the
+weakest adjacent target, so the puzzle is body-blocking). Outcomes stay
+two-valued: "Victory, objective failed" is a real spoils row.
+
+One reward rule: an objective done pays half the whole roster's worth in XP on
+top of the kills — the batch's "XP for deeds" rule in its first form. Gold and
+loot stay kills-only; an escaped quarry drops nothing.
+
+One world source per kind, so all five are reachable from this PR: the *gate*
+site room (hold), the *pens* room and a `rescue` board job posted only about a
+lair whose pens the party has not fought past (rescue), a failed camp watch at
+the tier's hard roster (breakout), `hunt_party` jobs — a chief that gets away
+keeps the band on the map and the job open (hunt), `deliver_goods` jobs — the
+carter dead loses the crate (escort).
+
+Measured, `tests/test_objectives.gd` `test_sweep`, 80 seeds a kind, presets at
+level 3, normal roster, the autopilot with `ai.gd`'s one movement rule per
+kind (the grid is also in `core/objectives.gd`'s header):
+
+| kind | done | won | knob it was tuned by |
+|---|---|---|---|
+| hold | 51/80 | 51/80 | `WAVE_SCALE` = 0.8 (from 0.4) |
+| rescue | 55/80 | 68/80 | `RESCUE_DEADLINE` = 4 (untouched) |
+| breakout | 41/80 | 79/80 | `EXIT_W` = 3 (from 4) |
+| hunt | 33/80 | 79/80 | `QUARRY_CORNERED` = 4 (from 3) |
+| escort | 38/80 | 73/80 | `CARTER_HP_BASE` = 10 (from 6), per level 2 |
+
+Breakout needed one more rule the sweep exposed: a plain rout at a normal
+roster made "done" 99% of the time, so the deed is reaching the road, and a
+rout is a win the kills already paid for.
+
+The band is 40–75%: an objective that is nearly free is a modifier, one that
+is nearly impossible is a trap. Nothing in `scaler.gd` moved; a spec without an
+objective is the fight it was, and the 200-seed sweep's numbers are unchanged.
+
+Co-op needed no wire change: the objective is a key on the spec `setup`
+already carries, bystanders and waves are built from the seed on both peers,
+and `test_coop.gd` replays each kind to the same hash.
+
+### Still open
+
+- A story cannot yet author an objective — the M9 seam, one key away.
+- Raids (C1) will be the second source for hold; callings (B3) the second for rescue.
+- The freed captive is a line, not a person who walks home with the party.
+- A bystander is still listed in the co-op host's who-plays-whom menu
+  (`_split_menu`) — cosmetic, one line.
