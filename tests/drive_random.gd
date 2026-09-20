@@ -304,6 +304,9 @@ func _watch() -> void:
 		fail("a settlement visit is open with no panel to close it")
 	if screen._site != null and screen._site_screen == null:
 		fail("a delve is in progress with no screen on it")
+	# A spent landmark never offers a card.
+	if screen._place_open != null and screen._place_open.spent:
+		fail("the card is up for a spent landmark: %s" % screen._place_open.sname)
 	_wedge_check(p)
 
 # The one check that catches a class of bug no assertion can name in advance:
@@ -847,6 +850,25 @@ func _map_beat() -> void:
 			_saw["lair:" + ("attack" if _lair_known() else "search")] = true
 			_acts += 1
 			screen._lair_btn.pressed.emit()
+		return
+
+	# A landmark under the party's nose: visit it (and answer the first row the
+	# card offers), or search the ground for a hidden one.
+	if screen._place_btn != null and screen._place_btn.visible and _chance(40 + _me["nosy"] / 2):
+		_saw["place:" + ("visit" if "Visit" in screen._place_btn.text else "search")] = true
+		_acts += 1
+		screen._place_btn.pressed.emit()
+		return
+	# ...and if visiting opened the card, answer it by pressing the real row
+	# button (same as _meet_them()), so the `chosen` signal fires for real
+	# rather than calling _on_place_chosen by hand.
+	if screen._approach_card != null and screen._place_open != null:
+		var rows: Array = screen._approach_card._opts
+		var i: int = _d(rows.size()) - 1
+		var pick: Dictionary = rows[i]
+		_saw["place:" + String(pick["id"])] = true
+		_acts += 1
+		screen._approach_card._btns[i].pressed.emit()
 		return
 
 	# Hurt, out in the open: a breather, or a camp if the party is carrying a kit.
