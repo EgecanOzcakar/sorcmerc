@@ -54,6 +54,11 @@ scenes/
   mods/            the campaign/mod browser: everything installed, what state
                     it is in, and the button that starts one
   main.gd/.tscn    the combat screen: hex board, tokens, action log, buttons
+  model_cache.gd   one process-wide cache, and one background loader, for the
+                   ~220 MB of GLBs under assets/ — every 3D layer reads its
+                   models through it, so a file the overworld already loaded is
+                   free to the fight that follows, and a screen asks for its
+                   whole list up front instead of loading them one at a time
   campaign/        the run screen: route choices, shop/rest/treasure, journal
   world/           the overworld map, as a real 3D world you can turn, tilt,
                     pan and zoom. world.gd owns the screen (the camera, the
@@ -86,7 +91,7 @@ data/              the 5e SRD export (classes/spells/species/...), a 316-
 content/           content packs that ship with the game: an example map, a
                    free campaign, and a paid DLC — all three written against
                    the same public API a player's mod uses
-tests/             136 files, headless: one per subsystem (102 test_*.gd) plus
+tests/             141 files, headless: one per subsystem (106 test_*.gd) plus
                    11 drive_*.gd (robots pressing real UI buttons end-to-end).
                    Eight walk a written script; drive_coop.gd is one peer of a
                    two-process co-op fight (tools/coop_smoke.sh runs the pair,

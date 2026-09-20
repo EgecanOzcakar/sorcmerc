@@ -115,6 +115,11 @@ static func _migrate_legacy() -> void:
 
 # One row per slot, newest first — enough to label a "Resume" button without the
 # caller having to load (and re-decode RNGs/Vector2s for) the whole world.
+#
+# A row is summary()'s reading of that slot plus its `id`, deliberately: the
+# title screen draws a button per slot and says the same things under each one
+# it used to say under the single "Resume the open world", and there is no
+# second opinion about what a slot's facts are (see _facts).
 static func list_slots() -> Array:
 	_migrate_legacy()
 	var out: Array = []
@@ -129,16 +134,30 @@ static func list_slots() -> Array:
 			var full := slots_dir + "/" + fname
 			var d = JSON.parse_string(FileAccess.get_file_as_string(full))
 			if d is Dictionary and d.get("format") == FORMAT:
-				out.append({
-					"id": fname.get_basename(),
-					"elapsed": float(d.get("elapsed", 0.0)),
-					"gold": int(d.get("party", {}).get("gold", 0)),
-					"mtime": FileAccess.get_modified_time(full),
-				})
+				var row := _facts(d, FileAccess.get_modified_time(full))
+				row["id"] = fname.get_basename()
+				out.append(row)
 		fname = da.get_next()
 	da.list_dir_end()
-	out.sort_custom(func(a, b): return a["mtime"] > b["mtime"])
+	# Newest first, with a tie broken by which slot was MADE last. A file's
+	# mtime is whole seconds, so two saves in the same second compare equal —
+	# not hypothetical, since leaving one playthrough and the next lands two
+	# writes back to back — and sort_custom is not a stable sort, so equal
+	# rows would come out in whatever order the directory was read in. A slot
+	# id carries the microsecond clock it was minted at (new_slot), which is
+	# the one monotone thing on hand; "legacy" parses to 0 and sorts last,
+	# which is exactly what a pre-slots save is.
+	out.sort_custom(func(a, b):
+		if a["written_at"] != b["written_at"]:
+			return a["written_at"] > b["written_at"]
+		return _minted(a["id"]) > _minted(b["id"]))
 	return out
+
+# A slot id is "<microsecond clock>-<random>" (new_slot); the clock in front of
+# it is the only record of the order slots were made in. "legacy" has neither
+# and answers 0, which is right: it predates slots entirely.
+static func _minted(slot_id: String) -> int:
+	return slot_id.get_slice("-", 0).to_int()
 
 # M7: `story` is a core/mod/story_runtime.gd, or null for a run with no story
 # on it (every built-in map). A save that carries one also carries the pack id
@@ -394,13 +413,14 @@ static func load_latest():
 static func has_save() -> bool:
 	return FileAccess.file_exists(path())
 
-# What is in the slot, in words, without rebuilding a World to find out.
+# What is in the ACTIVE slot, in words, without rebuilding a World to find out.
 #
-# There is exactly ONE slot and it rolls (see the header), which is a fine model
-# right up until the title screen says nothing but "Resume the open world" — at
-# which point the player cannot tell what they would be resuming, cannot tell
-# that starting a new run is going to write over it, and has no way to clear it.
-# scenes/game/game.gd's title reads this to say all three.
+# A button that says nothing but "Resume the open world" cannot tell the player
+# what they would be resuming; this is what the words under it are made of. The
+# title screen reads list_slots() rather than this, since it draws one button
+# per slot and each needs its own reading — but a row there is this same
+# dictionary (see _facts), and this is still the answer for whoever is asking
+# about the slot in hand.
 #
 # {} when there is no slot or the file is unreadable — same "a bad autosave is
 # just no autosave" contract as load_latest().
@@ -410,6 +430,12 @@ static func summary() -> Dictionary:
 	var d = JSON.parse_string(FileAccess.get_file_as_string(path()))
 	if not (d is Dictionary) or d.get("format") != FORMAT:
 		return {}
+	return _facts(d, FileAccess.get_modified_time(path()))
+
+# What one slot says about itself, off its already-parsed save. Shared by
+# summary() (the active slot) and list_slots() (every slot), so a row in the
+# picker and the line under the single Resume button cannot drift apart.
+static func _facts(d: Dictionary, written_at: int) -> Dictionary:
 	var pd: Dictionary = d.get("party", {})
 	var names: Array = []
 	for ch in pd.get("roster", []):
@@ -421,7 +447,7 @@ static func summary() -> Dictionary:
 		"party": names,
 		"gold": int(pd.get("gold", 0)),
 		"story": String(d.get("story", {}).get("pack", "")),
-		"written_at": FileAccess.get_modified_time(path()),
+		"written_at": written_at,
 	}
 
 # "Day 3  14:05" off world-minutes — the same reading scenes/world/world.gd's

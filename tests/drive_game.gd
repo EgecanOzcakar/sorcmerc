@@ -191,7 +191,7 @@ func _run() -> void:
 	if party_screen == null:
 		fail("New run did not open the party screen for the second playthrough")
 	else:
-		press("Begin — Small World")
+		press("Begin, small world")   # the button's own words — see line 104
 		await process_frame
 		await process_frame
 		var second_world = find_node(main, "res://scenes/world/world.gd")

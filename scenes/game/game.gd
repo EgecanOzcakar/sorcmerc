@@ -117,23 +117,27 @@ func show_title() -> void:
 	col.add_child(tag)
 	col.add_child(_gap(18))
 
-	# Two slots, two doors: the linear run's autosave is debug-only (behind the flag),
-	# the open world's is normal play's.
+	# Two doors: the linear run's autosave is debug-only (behind the flag), the
+	# open world's is normal play's.
 	#
-	# Both of them ROLL — one slot each, written over as you play — and the title
-	# used to say nothing about that at all. "Resume the open world" was the whole
-	# of it: no saying what you would be resuming, no saying that New run is going
-	# to write over it, and no way to clear it. All three are here now.
+	# The linear one still ROLLS — one slot, written over as you play. The open
+	# world's does not, as of O13x: a playthrough takes a slot of its own
+	# (core/world_save.gd's new_slot, called where a run begins, below), so
+	# "New run" can no longer write over the map you left. That turns one
+	# Resume button into a list of them — every slot, newest first, each one
+	# saying when you stopped, on which map, with whom and how much — and the
+	# gilt goes to the newest, which is the one you are most likely to want.
 	if linear_campaign() and CampaignSave.has_save():
 		col.add_child(_button("Resume the last run", _resume))
-	var slot: Dictionary = WorldSave.summary()
-	if not slot.is_empty():
-		col.add_child(_button("Resume the open world", _resume_world, true))
+	var slots: Array = WorldSave.list_slots()
+	for i in slots.size():
+		var slot: Dictionary = slots[i]
+		col.add_child(_button("Resume the open world", _resume_world.bind(String(slot["id"])), i == 0))
 		col.add_child(_dim(slot_lines(slot)))
 		col.add_child(_gap(6))
-	col.add_child(_button("New run", show_party_setup, slot.is_empty()))
-	if not slot.is_empty():
-		col.add_child(_dim("One autosave slot. A new run writes over the one above."))
+	col.add_child(_button("New run", show_party_setup, slots.is_empty()))
+	if not slots.is_empty():
+		col.add_child(_dim("One autosave per run, written as you play. A new run takes its own."))
 		col.add_child(_gap(6))
 	col.add_child(_button("Campaigns & mods", show_content))
 	col.add_child(_button("Play together" if Coop.link == null else "Play together  ·  room %s" % Coop.link.code, show_coop))
@@ -392,10 +396,13 @@ func show_coop() -> void:
 		_lobby_status = _dim("")
 		col.add_child(_lobby_status)
 		col.add_child(_gap(12))
-		var slot: Dictionary = WorldSave.summary()
-		if not slot.is_empty():
-			col.add_child(_button("Resume the open world", _resume_world, true))
-		col.add_child(_button("New run", show_party_setup, slot.is_empty()))
+		# The newest slot only, unlike the title's full list: the lobby is about
+		# the room, and the map you want to show a friend is the one you just
+		# left. Picking an older one is the title screen's job.
+		var slots: Array = WorldSave.list_slots()
+		if not slots.is_empty():
+			col.add_child(_button("Resume the open world", _resume_world.bind(String(slots[0]["id"])), true))
+		col.add_child(_button("New run", show_party_setup, slots.is_empty()))
 		col.add_child(_button("Quick fight — the preset party", show_random_battle))
 		col.add_child(_dim("You choose who plays whom as each fight begins. Your friend can join any time, even mid-fight."))
 		col.add_child(_gap(6))
@@ -526,6 +533,10 @@ func show_party_setup() -> void:
 		if linear_campaign():
 			_show_campaign(Campaign.new(party, int(OS.get_environment("SORCMERC_SEED"))))
 		else:
+			# O13x: its own autosave slot, chosen before the first save can
+			# happen. Without this a second playthrough marches straight over
+			# the first one's file, which is the whole reason slots exist.
+			WorldSave.new_slot()
 			show_world(party, null, size)
 
 	# M8: a chosen pack replaces the three built-in maps with its own — there is
@@ -590,6 +601,7 @@ func show_party_setup() -> void:
 # party, the same autosave. The pack supplies the map, and (when it has one) a
 # core/mod/story_runtime.gd that the world screen polls.
 func _start_pack(party) -> void:
+	WorldSave.new_slot()   # a pack run is a new run: its own slot, same as the rest
 	var world = Registry.world_of(_pack, int(OS.get_environment("SORCMERC_SEED")))
 	var story_def = Registry.story_of(_pack)
 	var run = StoryRuntime.new(story_def, {}, _pack.id()) if story_def != null else null

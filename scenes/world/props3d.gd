@@ -22,15 +22,26 @@
 # every layer asks.
 extends Node3D
 
+# Models are read through the shared cache rather than a dictionary of this
+# layer's own: the player's figure on the map and the same hero in the fight
+# are one file, and each layer keeping its own copy read and held it twice.
+# See scenes/model_cache.gd.
+const ModelCache := preload("res://scenes/model_cache.gd")
+
 var world_map: Control         # scenes/world/world.gd
 var view                       # scenes/world/world_view3d.gd — the shared 3D world
-var _model_cache := {}         # path -> PackedScene, or null once if missing
 
 
 func _model(path: String) -> PackedScene:
-	if not _model_cache.has(path):
-		_model_cache[path] = load(path) if ResourceLoader.exists(path) else null
-	return _model_cache[path]
+	return ModelCache.get_scene(path)
+
+
+# Every model a reset() is about to want, asked for in one go so the loader
+# pool reads them in parallel instead of the screen paying for them one at a
+# time. Subclasses call this at the top of their reset(), then build as they
+# always did — _model() collects each one when it gets there.
+func _prefetch(paths: Array) -> void:
+	ModelCache.prefetch(paths)
 
 
 # Uniform-scale `m` so its own mesh AABB is `target` tall, feet at y=0 — a
