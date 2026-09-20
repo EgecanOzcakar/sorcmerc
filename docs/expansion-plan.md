@@ -6074,5 +6074,23 @@ and `test_coop.gd` replays each kind to the same hash.
 - A story cannot yet author an objective — the M9 seam, one key away.
 - Raids (C1) will be the second source for hold; callings (B3) the second for rescue.
 - The freed captive is a line, not a person who walks home with the party.
-- A bystander is still listed in the co-op host's who-plays-whom menu
-  (`_split_menu`) — cosmetic, one line.
+- ~~A bystander is still listed in the co-op host's who-plays-whom menu
+  (`_split_menu`)~~ — fixed in the whole-branch review's fix wave, along
+  with the road never being narrower than the party (`EXIT_W` had been
+  tuned to 3 with a four-hero cap), the carter throwing opportunity
+  punches, and bystanders counting for achievements.
+
+### Pictures
+
+`tests/shot_objectives.gd` renders these (it needs a display; not part of
+the suite).
+
+| | |
+|---|---|
+| ![the brief and the HUD line](shots/objectives/01-hold-brief.png) *hold — the brief is the fight's first line, the status rides the header* | ![a wave arrives](shots/objectives/02-hold-wave.png) *round 2 — "More of them, from the far side", at the far edge* |
+| ![the captive, bound at the back](shots/objectives/03-rescue-captive.png) *rescue — the captive (⚑, 4 HP) at the deepest hex, the deadline counting down* | ![the captive freed](shots/objectives/04-rescue-freed.png) *a hero adjacent cuts them loose — no action spent* |
+| ![the road out](shots/objectives/05-breakout-road.png) *breakout — the party in the middle, foes both sides, the road painted at the far edge* | ![the quarry](shots/objectives/06-hunt-quarry.png) *hunt — the strongest foe is the quarry; the header counts its hexes to the treeline* |
+| ![the quarry gone](shots/objectives/07-hunt-escaped.png) *ending its turn on the treeline, it is gone — the fight goes on against the escort* | ![the carter](shots/objectives/08-escort-carter.png) *escort — the carter in the huddle, the AI's favourite target* |
+| ![the approach card](shots/objectives/10-approach-hunt.png) *a band a job names: the approach card says which question the fight will ask* | ![the spoils page](shots/objectives/11-spoils-hunt-done.png) *the deed done — the objective row and its own XP* |
+| ![the spoils page, failed](shots/objectives/12-spoils-escort-failed.png) *"Victory, objective failed" is a real result — and the delivery is lost with the carter* | ![the pens](shots/objectives/13-site-pens-card.png) *a site's room card — the pens, one of the ways in* |
+| ![the pens, inside](shots/objectives/14-site-pens-fight.png) *the pens from the inside: a warren roster, the captive at the back* | |
