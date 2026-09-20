@@ -6094,3 +6094,82 @@ the suite).
 | ![the approach card](shots/objectives/10-approach-hunt.png) *a band a job names: the approach card says which question the fight will ask* | ![the spoils page](shots/objectives/11-spoils-hunt-done.png) *the deed done — the objective row and its own XP* |
 | ![the spoils page, failed](shots/objectives/12-spoils-escort-failed.png) *"Victory, objective failed" is a real result — and the delivery is lost with the carter* | ![the pens](shots/objectives/13-site-pens-card.png) *a site's room card — the pens, one of the ways in* |
 | ![the pens, inside](shots/objectives/14-site-pens-fight.png) *the pens from the inside: a warren roster, the captive at the back* | |
+## Three co-op issues, and the save bug under two of them (2026-09-20)
+
+The first three reports filed against co-op after it shipped: a desync (#132),
+a guest whose map moved twice a second (#133), and "same combat but killed
+enemies arent updated and the combat result ends up bugged" (#134). The first
+and the third are one bug seen from two ends; the middle one is its own.
+
+**The party that crossed the wire was not the party.** `CharacterSave.to_dict`
+carries `pools` — per-rest uses remaining — and did not carry `slots_used`,
+the spell slots a caster has already spent. Every trip through that format
+handed the caster their slots back. Co-op sends the party as exactly those
+dictionaries, so the host built its fight from the party it had been playing
+and the guest built the same fight from a party whose casters had a full
+spell list. Different boards from the same seed, and lockstep has nothing to
+reconcile with: `state_hash` differed from the first `end_turn`, which is the
+"⚠ DESYNC" the player saw on #132, and the enemies the host had killed were
+still standing on the guest's screen, which is #134's first half.
+
+It is not only co-op's bug. `core/world_save.gd` and `core/campaign_save.gd`
+save the roster through the same function, so every autosave and every resume
+was quietly refilling the party's spell slots — a free long rest's worth of
+casting, in single player, since the day the open world's autosave landed.
+`slots_used` is in the format now, absent meaning "nothing spent", which is
+what the files already out there say.
+
+**And the first round was the host's alone.** The seed, the encounter spec and
+the party build the same board on both ends. How the fight *opens* does not:
+`scouted_ahead` (the road read the ground ahead, so the party comes in unseen)
+and `forced_ambush` (a camp watch that failed) are set on the combat screen by
+whoever put the fight up, and `scenes/game/game.gd` builds the guest's screen
+with both at their defaults. A scouted node opened unseen for the host while
+the guest rolled its own Stealth check and opened an ordinary fight; an ambush
+gave the host's foes a free round the guest never gave them. The setup carries
+an `opening` now. `tutorial` rides along with them for one reason: it is what
+makes `_open_fight()` skip the deployment phase, and a host that skips it never
+presses Begin — so a guest that did not skip it waited out the fight on
+"waiting for the host to place the party".
+
+**The verdict read a dictionary that is deliberately empty.** #74 holds the
+result behind a tinted wash the player clicks through, and `result` is not
+filled in until they do. `_finish()` read `result["xp"]` anyway — so every
+played Victory threw "Invalid access to key 'xp'" and lost the rest of the
+function with it: the spoils line and the loot line never printed. Headless
+and `SORCMERC_FAST` skip the wash and fill `result` at once, which is why the
+whole suite was blind to it. That is #134's second half.
+
+**#133, the guest's map.** The host sends where everyone stands twice a second
+and the guest wrote each delta straight onto the map, so the road moved at the
+rate the packets arrived: a step, half a second of nothing, another step. What
+crosses the wire is the right amount; the frames between arrivals are the
+screen's to draw. A delta is a target now, and `_spectate()` walks the map
+toward it over the interval the last two arrived in — so the mirror moves at
+the speed the host's party is actually moving, stretches instead of stuttering
+on a slow link, and never draws the party anywhere the host has not been.
+
+### What now checks it
+
+`tests/test_coop.gd` built both peers with `Coop.party_from()`, so anything the
+save format dropped was dropped identically on both and stayed invisible. It
+builds one side from the host's own party object now, across a party per class,
+which is the check that catches `slots_used` — and would have caught it the day
+it was written.
+
+`tests/test_coop_screens.gd` is new and is the bigger gap closed: two real
+`scenes/main.tscn` screens in one process, wired to each other through a
+stand-in for `tools/coop-relay` that obeys the same rules the Worker does, with
+`drive_coop.gd`'s robot pressing whichever screen owns the hero that is up.
+Everything `scenes/main.gd` decides for itself — which is where both halves of
+#132 lived — is in front of it now, and unlike `tools/coop_smoke.sh` it needs
+no relay, no second process and no network, so it runs on every pull request.
+
+`tests/test_coop_mirror.gd` checks the frames between two deltas, and
+`tests/test_victory_summary.gd` turns the wash back on so the verdict is read
+the way a player reads it.
+
+Also, while in the log: `region_at` returns "the treeline" on five boards and
+"Brazier Hall" on the sixth, and the move line wrote "the" in front of whichever
+it got — "Thokk the Orc moves to the the treeline", which is in the log quoted
+on #132 itself. It asks for the article now instead of assuming it is missing.

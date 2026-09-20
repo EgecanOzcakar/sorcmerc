@@ -29,6 +29,7 @@ func _init() -> void:
 	test_cone_spell_destroys_a_barrel_in_its_blast()
 	test_every_combat_node_has_a_board()
 	test_hex_tips()
+	test_region_names_read_as_english()
 	print("test_boards: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -266,3 +267,19 @@ func test_hex_tips() -> void:
 			check(tip.contains("Shove"), "%s explains the shove" % o["type"])
 		if o.get("explosive", false):
 			check(tip.contains("bursts"), "%s warns that it bursts" % o["type"])
+
+# Every board names its own regions, and they do not agree about the article —
+# the outdoor ones say "the treeline", the shrine says "Brazier Hall". The move
+# line asks for the article now instead of writing one in front of whatever it
+# got, which used to narrate "moves to the the treeline" on five boards out of
+# six (it is in the log quoted on issue #132).
+func test_region_names_read_as_english() -> void:
+	for theme in Encounter.THEMES:
+		var cb = Encounter.build({"monsters": [{"id": "goblin", "count": 1}], "theme": theme, "seed": 3}, [])
+		var seen := {}
+		for hx in cb.board["hexes"]:
+			seen[cb.region_at(hx)] = true
+		for name in seen:
+			var line: String = "Grix moves to %s." % Combat._the(String(name))
+			check(not line.contains("the the"), "%s: \"%s\" is named once, not twice" % [theme, line])
+			check(line.to_lower().contains(" to the "), "%s: \"%s\" names somewhere" % [theme, line])

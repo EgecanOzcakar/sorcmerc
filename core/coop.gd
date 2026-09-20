@@ -99,12 +99,22 @@ static func intify(v):
 		return v.map(intify)
 	return v
 
-static func setup_for(seed: int, spec: Dictionary, party) -> Dictionary:
+# `opening` is how the host's screen is about to START this fight — see
+# scenes/main.gd's _opening(). Issue #132: the seed, the spec and the party
+# build the same BOARD on both ends, but the first round is decided by three
+# flags that live on the combat screen rather than in the encounter, and the
+# road sets them on the host alone. A scouted node opened unseen for the host
+# while the guest rolled its own Stealth check and opened an ordinary fight; a
+# camp ambush gave the host's foes a free round the guest never gave them.
+# Same seed, same party, two different fights from turn one — and lockstep has
+# nothing to reconcile with, so every hash after it mismatched.
+static func setup_for(seed: int, spec: Dictionary, party, opening := {}) -> Dictionary:
 	assert(seed > 0, "seed 0 means 'roll one from the clock' — the peers would differ")
 	var roster: Array = []
 	for ch in party.roster:
 		roster.append(CharacterSave.to_dict(ch))
 	return {"t": "setup", "seed": seed, "spec": spec, "owners": owners_for(party), "build": build_stamp(),
+		"opening": opening,
 		"party": {"roster": roster, "active": Array(party.active), "gold": party.gold,
 			"stash": party.stash.duplicate(true)}}
 

@@ -843,13 +843,35 @@ func _split_menu(sp: Dictionary) -> void:
 			_split_menu(sp)])
 	opts.append(["Begin", func():
 		_mode = "idle"
-		var setup: Dictionary = Coop.setup_for(_seed, sp, party)
+		var setup: Dictionary = Coop.setup_for(_seed, sp, party, _opening())
 		_owners = setup["owners"]
 		_coop.send(setup)
 		_open_fight()])
 	_actor.text = "[b]Room %s.[/b]  %s  Click a name to hand them over, then Begin." % [_coop.code,
 		"Your friend is here." if _coop.other_here() else "Your friend can join at any time — even mid-fight."]
 	_set_buttons(opts)
+
+# Issue #132: everything the board is built from crosses in the setup — the
+# seed, the encounter spec, the party. These three do not: they are set on this
+# screen by whoever put the fight up (world.gd's scouted node and its camp
+# ambush, game.gd's guided fight), and the guest's screen is built by game.gd
+# with all three at their defaults. Left out, the guest rolled its own Stealth
+# check in _open_fight() and opened a fight that was not the host's — a
+# different first round, and a hash mismatch on every end_turn after it.
+func _opening() -> Dictionary:
+	return {"scouted": scouted_ahead, "ambush": forced_ambush, "tutorial": tutorial}
+
+# The same, on the guest, before _new_game() builds the fight the flags decide.
+# `tutorial` is taken for one reason only: it is what makes _open_fight() skip
+# the deployment phase, and a host that skips it never presses Begin — so a
+# guest that did not skip it sat in "waiting for the host to place the party"
+# for the rest of the fight. The walkthrough cards themselves are armed in
+# _ready() and are not re-armed here; they are the host's screen's business.
+func _take_opening(m: Dictionary) -> void:
+	var o: Dictionary = m.get("opening", {})
+	scouted_ahead = bool(o.get("scouted", false))
+	forced_ambush = bool(o.get("ambush", false))
+	tutorial = bool(o.get("tutorial", false))
 
 func _coop_recv(m: Dictionary) -> void:
 	match String(m.get("t", "")):
@@ -875,6 +897,7 @@ func _coop_recv(m: Dictionary) -> void:
 			_own_party = false
 			spec = m["spec"]
 			_owners = m["owners"]
+			_take_opening(m)   # #132: how the host is opening it, before the board is built
 			_coop_rebuilding = true
 			_new_game(int(m["seed"]))
 			_coop_rebuilding = false
@@ -1690,7 +1713,7 @@ func _set_buttons(opts: Array) -> void:
 				hotkey = "Esc"
 			elif i == count - 1:
 				hotkey = "0"
-			elif i < 9:
+			elif i < LIST_KEYS:   # #124: the keys run out long before the bar does
 				hotkey = str(i + 1)
 		var tex: Texture2D = meta.get("icon")
 		Icons.icon_button(b, tex, int(Icons.ICON_PX * u))
@@ -2115,12 +2138,18 @@ func _finish() -> void:
 		"#7dff9d" if res == "Victory" else "#ff5a4a", res, cb.round_num,
 	])
 	if res == "Victory":
-		_logbox.append_text("[color=#c9a45a]+%d XP, +%d gold.[/color]\n" % [result["xp"], result["gold"]])
+		# `outcome`, not `result`: with a screen to look at (#74) the verdict is
+		# held behind the wash and `result` stays empty until it is clicked
+		# through, so reading it here threw "Invalid access to key 'xp'" and
+		# took the rest of this function with it — the XP line and the loot line
+		# below never printed in a played game. Headless and FAST set `result`
+		# straight away, which is the whole reason no test saw it.
+		_logbox.append_text("[color=#c9a45a]+%d XP, +%d gold.[/color]\n" % [outcome["xp"], outcome["gold"]])
 		# What came off the bodies, by name and in its rarity colour. It goes
 		# into the shared stash either way (campaign.gd's finish_combat /
 		# world.gd's _bank) — but loot that lands silently is loot nobody knows
 		# they have.
-		var taken: Array = result.get("loot", [])
+		var taken: Array = outcome.get("loot", [])
 		if not taken.is_empty():
 			var names: Array = []
 			for id in taken:
@@ -2152,6 +2181,8 @@ func _dismiss_wash() -> void:
 	result = _wash_result
 
 func _draw_wash(res: String) -> void:
+	if _wash == null:
+		return   # dismissed this frame: the node lives until queue_free lands, and still draws
 	var won := res == "Victory"
 	var t := _wash_age
 	var k := clampf(t / 0.8, 0.0, 1.0)
