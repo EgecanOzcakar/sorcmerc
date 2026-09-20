@@ -174,6 +174,7 @@ const SHORE := 35.0
 # by FOOTPRINT_CLEARANCE. See _footprint().
 const SETTLEMENT_RADIUS := {"city": 26.0, "town": 17.0, "camp": 12.0}
 const LAIR_RADIUS := 14.0
+const LANDMARK_RADIUS := 10.0
 const PLAYER_RADIUS := 11.0
 const BAND_RADIUS := 9.0
 # How far the ring stands off the model inside it. Just past the square root of
@@ -234,6 +235,9 @@ var _quest_news: Array = []          # quest progress the last _bank() made, for
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
+var _place_btn: Button                # landmarks: "Visit the Nine Sisters" / "Search the ground (Survival)", or hidden
+var _place_target = null              # whichever landmark _check_places() last found in range
+var _place_open = null                # the one whose card is up
 var _site = null                     # D1: the delve in progress (core/site.gd), or null
 # D3: last road-event roll, and the card showing one. Scene-local like the
 # forage stamp — a reload just restarts the cadence, which is not worth a
@@ -476,6 +480,7 @@ func _process(delta: float) -> void:
 	_check_visit()
 	_check_story()
 	_check_lairs()
+	_check_places()
 	_check_expired_lairs()
 	_check_forage()
 	_check_travel()
@@ -776,6 +781,10 @@ func _build_hud() -> void:
 	_lair_btn.visible = false
 	_lair_btn.pressed.connect(_lair_action)
 	bar.add_child(_lair_btn)
+	_place_btn = Button.new()
+	_place_btn.visible = false
+	_place_btn.pressed.connect(_place_action)
+	bar.add_child(_place_btn)
 	_lair_sneak_btn = Button.new()
 	_lair_sneak_btn.text = "Slip past the guardians (Animal Handling)"
 	_lair_sneak_btn.visible = false
@@ -1977,6 +1986,75 @@ func _check_expired_lairs() -> void:
 	for l in WorldLairs.respawn(world, world.clock.elapsed):
 		_lair_msg.text = WorldLairs.respawn_text(l)
 		_autosave()
+
+# --- landmarks: places on the map that are not a fight -----------------------
+# The lair button's shape again: one button, two states. A found place offers a
+# visit; a hidden one in range offers the same Survival search a lair does.
+func _check_places() -> void:
+	for l in Landmarks.found_on_explore(world):
+		_lair_msg.text = "%s — a landmark, on the map now." % l.sname
+	if _combat != null or not _visit.is_empty() or _overlay_up():
+		_place_btn.visible = false
+		return
+	var p := world.player()
+	if p == null:
+		_place_btn.visible = false
+		return
+	var open = Landmarks.nearest_open(world, p.position)
+	var hidden = Landmarks.nearby_hidden(world, p.position) if open == null else null
+	_place_target = open if open != null else hidden
+	if _place_target == null:
+		_place_btn.visible = false
+		return
+	_place_btn.visible = true
+	_place_btn.text = ("Visit %s" % open.sname) if open != null else "Search the ground (Survival)"
+
+func _place_action() -> void:
+	var l = _place_target
+	if l == null or _combat != null:
+		return
+	if not l.found:
+		var roll: Dictionary = Landmarks.search(l, party)
+		if roll.is_empty():
+			return
+		_lair_msg.text = ("%s finds it — %s is here (Survival %d+%d vs DC %d)." % [
+			roll["cname"], l.sname, roll["nat"], roll["bonus"], roll["dc"]]) if roll["ok"] else (
+			"Nothing this time (Survival %d+%d vs DC %d)." % [roll["nat"], roll["bonus"], roll["dc"]])
+		return
+	_open_place(l)
+
+func _open_place(l) -> void:
+	if _approach_card != null:
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_place_open = l
+	_approach_card = ApproachCard.new()
+	_approach_card.caption = "A   P L A C E   O N   T H E   R O A D"
+	_approach_card.glyph = "◆"
+	_approach_card.hint = "Choose what to do here"
+	_approach_card.art_stem = "landmark-" + l.kind
+	add_child(_approach_card)
+	_approach_card.chosen.connect(_on_place_chosen)
+	_approach_card.show_approach(Landmarks.options(l, party, world), l.sname)
+
+func _on_place_chosen(id: String) -> void:
+	var l = _place_open
+	_place_open = null
+	_close_approach()
+	if l == null:
+		return
+	var e: Dictionary = Landmarks.resolve(l, id, party, world,
+		RNG.new(maxi(1, absi(hash("%s|%s|%d" % [l.id, id, int(world.clock.elapsed)])))))
+	if e.is_empty():   # leave, or nothing to do
+		world.clock.resume()
+		_pause_btn.text = "Pause"
+		return
+	_autosave()
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(_on_event_ack)
+	_event_card.show_event(e)
 
 func _lair_action() -> void:
 	var l: World.Lair = _lair_target
@@ -3774,10 +3852,20 @@ func ground_marks() -> Array:
 			"radius": _footprint(LAIR_RADIUS, _lairs3d.footprint(l) if _lairs3d != null else 0.0),
 			"color": _remembered(Icons.COL_MUTED if l.looted else Icons.COL_FOE, live),
 			"ring": RING_WIDTH, "fill": SETTLEMENT_FILL, "shadow": 0.85, "label": l.sname, "live": live})
+	for m in world.landmarks:
+		if not m.found or not world.is_explored(m.position):
+			continue
+		var live: bool = world.is_visible_now(m.position, ppos)
+		out.append({"pos": m.position,
+			"radius": _footprint(LANDMARK_RADIUS, _landmarks3d.footprint(m) if _landmarks3d != null else 0.0),
+			"color": _remembered(Icons.COL_MUTED if m.spent else Icons.COL_ACCENT, live),
+			"ring": RING_WIDTH, "fill": SETTLEMENT_FILL, "shadow": 0.8, "label": m.sname, "live": live})
 	for q in world.parties:
 		if q.is_player and not _visit.is_empty():
 			continue   # inside the gates for the duration of the visit, not standing on the map
-		if not q.is_player and not world.is_explored(q.position):
+		# A watchtower's "keep watch" marks every band for a day: treat the map as
+		# explored under them too, same as a place the party actually walked past.
+		if not q.is_player and not world.is_explored(q.position) and world.marked_until <= world.clock.elapsed:
 			continue
 		# A roaming band is the one landmark whose remembered position is a lie
 		# — it has walked on since. Shown at its live position either way (the
@@ -3802,6 +3890,13 @@ func ground_marks() -> Array:
 			"ring": 0.0, "fill": 0.0, "shadow": 1.0,
 			"label": "%s (%d)" % [who, count], "live": live})
 	return out
+
+
+# ground_marks(), by the name a test asks for. scenes/world/ground_marks3d.gd
+# is the other caller and keeps the longer name; this exists so a marker row
+# can be checked without instantiating the 3D layer that draws it.
+func _marker_rows() -> Array:
+	return ground_marks()
 
 
 # The radius a landmark's footprint is drawn at: its old flat-map radius, or

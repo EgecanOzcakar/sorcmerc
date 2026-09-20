@@ -379,6 +379,8 @@ static func nearest_open(world, from: Vector2):
 # The lair's Survival check, verbatim (core/world_lairs.gd search()), so there
 # is one way to search the ground. A pass marks the place found.
 static func search(l, party, rng = null) -> Dictionary:
+	if rng == null:
+		rng = RNG.new(maxi(1, absi(hash("landmark|%s" % l.id))))   # seeded off the landmark, same as a lair's own search
 	var r: Dictionary = WorldLairs.search_roll(party, rng)
 	if not r.is_empty() and r["ok"]:
 		l.found = true

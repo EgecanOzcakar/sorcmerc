@@ -189,7 +189,7 @@ func _ensure_fit() -> void:
 	if w == null:
 		_fit_span(Vector2.ZERO, FALLBACK_SPAN)
 		return
-	var content: int = w.settlements.size() * 1000003 + w.lairs.size() * 1009 + w.waters.size()
+	var content: int = w.settlements.size() * 1000003 + w.lairs.size() * 1009 + w.waters.size() + w.landmarks.size() * 1013
 	if size == _stamp_size and w.explored.size() == _stamp_explored and content == _stamp_content:
 		return
 	_stamp_size = size
@@ -479,6 +479,9 @@ func _draw_marks(w) -> void:
 	for l in w.lairs:
 		if l.discovered and w.is_explored(l.position):
 			_draw_diamond(_to_widget(l.position), R_LAIR, Icons.COL_MUTED if l.looted else Icons.COL_FOE)
+	for m in w.landmarks:
+		if m.found and w.is_explored(m.position):
+			_draw_diamond(_to_widget(m.position), R_LAIR - 1, Icons.COL_MUTED if m.spent else Icons.COL_ACCENT)
 	var player = null
 	for q in w.parties:
 		if q.is_player:
