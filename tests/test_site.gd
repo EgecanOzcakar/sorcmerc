@@ -342,21 +342,48 @@ func test_objective_rooms() -> void:
 	var p := _party()
 	var s = Site.for_lair(with_pens, p, w)
 	var pens := {}
-	var gate := {}
 	for depth in s.rooms:
 		for r in depth:
 			if String(r.get("objective", "")) == "rescue": pens = r
-			if String(r.get("objective", "")) == "hold": gate = r
 	check(not pens.is_empty(), "the pens are in there")
 	s.room = pens
 	s.state = "combat"
 	var spec: Dictionary = s.combat_spec()
 	check(spec.get("objective", {}).get("kind", "") == "rescue", "the pens room's spec carries a rescue")
-	if not gate.is_empty():
-		s.room = gate
-		spec = s.combat_spec()
-		check(spec["objective"]["kind"] == "hold" and spec["objective"]["waves"].size() == Objectives.WAVE_ROUNDS.size(),
-			"the gate's spec carries a hold with one wave per wave round")
+
+	# gate rooms are their own draw — a lair with pens ahead is not guaranteed to
+	# also have one (with_pens above usually does not), so search independently.
+	var gate := {}
+	var s2
+	for i in 400:
+		var gl = World.Lair.new("gate-%d" % i, Vector2(100, 100), "goblinoid")
+		s2 = Site.for_lair(gl, p, w)
+		for depth in s2.rooms:
+			for r in depth:
+				if String(r.get("objective", "")) == "hold": gate = r
+		if not gate.is_empty():
+			break
+	check(not gate.is_empty(), "some lairs have a gate to hold")
+	s2.room = gate
+	s2.state = "combat"
+	spec = s2.combat_spec()
+	check(spec["objective"]["kind"] == "hold" and spec["objective"]["waves"].size() == Objectives.WAVE_ROUNDS.size(),
+		"the gate's spec carries a hold with one wave per wave round")
+	var waves: Array = spec["objective"]["waves"]
+	check(waves.all(func(wave): return wave is Array and not wave.is_empty() and wave.all(func(m): return m is Dictionary and m.has("id"))),
+		"every wave is an actual roster, not just a shape")
+
+	# an ordinary combat room of that same site — no hold, no rescue — must not
+	# pick up an objective it was never given
+	var ordinary := {}
+	for depth in s2.rooms:
+		for r in depth:
+			if ordinary.is_empty() and String(r.get("kind", "")) == "combat" and not r.has("objective"):
+				ordinary = r
+	s2.room = ordinary
+	s2.state = "combat"
+	check(not s2.combat_spec().has("objective"), "an ordinary room carries no objective")
+
 	# fought past: a lair whose pens are behind the party no longer qualifies
 	var deep: int = 0
 	for d in s.rooms.size():
