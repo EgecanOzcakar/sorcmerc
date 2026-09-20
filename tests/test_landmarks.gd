@@ -28,6 +28,7 @@ func _init() -> void:
 	test_placement()
 	test_cards()
 	test_resolve()
+	test_gated()
 	test_discovery()
 	print("test_landmarks: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -126,7 +127,7 @@ func test_cards() -> void:
 	p.gold = 500   # so a zero-skill choice (the offering) survives into rows below
 	for k in Landmarks.KINDS:
 		var card: Array = Landmarks.CARDS[k]
-		check(card.size() == 2, "%s: two choices" % k)
+		check(card.size() == 3, "%s: three choices" % k)
 		for c in card:
 			for s in c["skills"]:
 				check(Catalog.skills().has(s), "%s/%s rolls a real skill (%s)" % [k, c["id"], s])
@@ -135,7 +136,10 @@ func test_cards() -> void:
 		var rows: Array = Landmarks.options(m, p, w)
 		check(rows.back()["id"] == Landmarks.LEAVE, "%s: Leave is last" % k)
 		# priced by the card's own choices, matched by id, not by a "skills" key rows never carry
+		# (the gated row prices in nothing — no roll, no toll — that's test_gated's job)
 		for c2 in card:
+			if c2.has("gate"):
+				continue
 			var matches: Array = rows.filter(func(r): return r["id"] == c2["id"])
 			if matches.is_empty():
 				continue
@@ -190,8 +194,11 @@ func _seed_where(w, kind: String, id: String, p, ok: bool, at = null) -> int:
 
 func test_resolve() -> void:
 	# every win pays the deed; a spent landmark is spent; leave spends nothing
+	# (the gated row isn't a roll a seed can find or miss — test_gated covers it)
 	for k in Landmarks.KINDS:
 		for c in Landmarks.CARDS[k]:
+			if c.has("gate"):
+				continue
 			var s := _seed_where(null, k, String(c["id"]), null, true)
 			check(s > 0, "%s/%s can be passed" % [k, c["id"]])
 			var w := _world()
@@ -262,6 +269,58 @@ func test_resolve() -> void:
 	m2 = _mark(w, "tower", Vector2(900, 900))
 	r = Landmarks.resolve(m2, "watch", p, w, RNG.new(_seed_where(null, "tower", "watch", null, true, m2.position)))
 	check(w.marked_until > w.clock.elapsed, "watch: bands are marked for the day")
+
+# --- Task 10: gated by who you are ------------------------------------------
+
+func test_gated() -> void:
+	# every kind has a gated third row; a party without the person never sees it
+	var w := _world()
+	var nobody := Party.new()
+	var ch = Party.demo_roster()[0]   # whoever they are, make them nobody special
+	ch.background_id = "farmer"
+	ch.species_id = "human"
+	ch.levels.clear()   # levels is Array[Dictionary]; a plain literal won't assign over it
+	ch.add_level("rogue", -1)
+	nobody.add_member(ch)
+	for k in Landmarks.KINDS:
+		var card: Array = Landmarks.CARDS[k]
+		check(card.size() == 3 and card[2].has("gate") and card[2]["skills"].is_empty(), "%s: a third, gated row" % k)
+		var m = _mark(w, k, Vector2(200, 40))
+		check(not Landmarks.options(m, nobody, w).any(func(r): return r.get("gated", false)), "%s: nobody special, no gated row" % k)
+	# the right person opens it, and it names them
+	var p := _party()
+	var who = p.party_characters()[0]
+	who.background_id = "acolyte"
+	var shrine = _mark(w, "shrine", Vector2(300, 300))
+	var rows: Array = Landmarks.options(shrine, p, w)
+	var gated: Array = rows.filter(func(r): return r.get("gated", false))
+	check(gated.size() == 1 and gated[0]["cname"] == who.cname and gated[0]["char_id"] == who.id
+		and not gated[0].has("needs"), "an acolyte sees the shrine's rite, in their own name, with no roll")
+	check(rows.back()["id"] == Landmarks.LEAVE, "leave is still last")
+	# answering it: no roll, the door opens, the deed pays, the place is spent
+	var xp0: int = who.xp
+	var r: Dictionary = Landmarks.resolve(shrine, String(gated[0]["id"]), p, w, RNG.new(1))
+	check(r["ok"] and not r.has("nat") and r["cname"] == who.cname, "no dice: %s" % str(r))
+	check(p.blessed and shrine.spent and who.xp > xp0 and int(r.get("xp", 0)) > 0, "the rite blesses, spends and pays")
+	# a class gate, matched through the levels list
+	var p2 := _party()
+	var w2 := _world()
+	for c in p2.party_characters():
+		c.background_id = "farmer"
+		c.species_id = "human"
+	var druid = p2.party_characters()[0]
+	druid.levels.clear()
+	druid.add_level("druid", -1)
+	var stones = _mark(w2, "stones", Vector2(300, 300))
+	check(Landmarks.options(stones, p2, w2).any(func(r): return r.get("gated", false)), "a druid remembers what the stones are")
+	# gate_match honours party order and species
+	var p3 := _party()
+	for c in p3.party_characters():
+		c.background_id = "farmer"
+		c.species_id = "human"
+	p3.party_characters()[1].species_id = "elf"
+	check(Landmarks.gate_match(p3, {"species": ["elf"]}) == p3.party_characters()[1], "species gates match")
+	check(Landmarks.gate_match(p3, {"classes": ["nope"]}) == null, "...and an unmatched gate is null")
 
 # --- Task 4: discovery — exploring, searching, and the inn -----------------
 

@@ -96,6 +96,13 @@ static func _clear(world, pos: Vector2) -> bool:
 # Two choices a kind, in Approach.WAYS' shape so the approach card draws them
 # and Approach._roller/needs price them. `reward` names the door resolve()
 # opens on a win; `snare` is what a loss costs (nothing, an hour, or the toll).
+#
+# A third row, gated by who you are: a class, a background, a species. The
+# roller for the two choices above stays the party's best at the skill,
+# automatically (Approach._roller) — composition never touches who rolls.
+# It shows up here instead, as flavour: an acolyte answers the shrine, a sage
+# reads the ruins, in their own name, with no roll. It is not a third power —
+# it opens a door one of the two rolled rows already opens.
 
 const LEAVE := "leave"
 const CACHE_GOLD := 60
@@ -114,6 +121,11 @@ const CARDS := {
 			"note": "Whatever fell in here is still in here.",
 			"win": "A cache.", "lose": "A snare in the rubble — somebody bleeds for it.",
 			"reward": "cache", "snare": "toll"},
+		{"id": "script", "label": "Read the old script", "skills": [], "dc": 0,
+			"gate": {"backgrounds": ["sage", "scribe"], "classes": ["wizard"]},
+			"note": "%s reads it the way it was written.",
+			"win": "A lead — the nearest thing nobody has found yet is marked.", "lose": "",
+			"reward": "lead", "snare": "none"},
 	],
 	"shrine": [
 		{"id": "kneel", "label": "Kneel", "skills": ["religion"], "dc": 12,
@@ -124,6 +136,11 @@ const CARDS := {
 			"note": "%d ◉ on the stone. No roll.",
 			"win": "The blessing, and the people who keep this shrine hear of it.", "lose": "",
 			"reward": "offering", "snare": "none"},
+		{"id": "rite", "label": "Say the rite", "skills": [], "dc": 0,
+			"gate": {"backgrounds": ["acolyte"], "classes": ["cleric", "paladin"]},
+			"note": "%s knows the words.",
+			"win": "A blessing: every hero fights the next fight with something extra.", "lose": "",
+			"reward": "blessing", "snare": "none"},
 	],
 	"stones": [
 		{"id": "marks", "label": "Read the marks", "skills": ["arcana"], "dc": 14,
@@ -134,6 +151,11 @@ const CARDS := {
 			"note": "The ground here is kinder than it looks.",
 			"win": "The road is quicker for a day.", "lose": "An hour, and a stiff neck.",
 			"reward": "road", "snare": "hour"},
+		{"id": "remember", "label": "Remember what they are", "skills": [], "dc": 0,
+			"gate": {"classes": ["druid", "wizard"], "species": ["elf"]},
+			"note": "%s has stood in a ring like this before.",
+			"win": "The next fight starts scouted.", "lose": "",
+			"reward": "scouted", "snare": "none"},
 	],
 	"hut": [
 		{"id": "knock", "label": "Knock", "skills": ["persuasion", "performance"], "dc": 13,
@@ -144,6 +166,11 @@ const CARDS := {
 			"note": "They know which hollows are safe.",
 			"win": "A safe camp tonight.", "lose": "Nothing they will say.",
 			"reward": "safe_camp", "snare": "none"},
+		{"id": "kin", "label": "Talk as one who knows the wild", "skills": [], "dc": 0,
+			"gate": {"backgrounds": ["hermit", "guide"], "classes": ["ranger"]},
+			"note": "%s and the hermit have the same mud on their boots.",
+			"win": "A lead for nothing, and the hermit knows what one of your things is.", "lose": "",
+			"reward": "hermit", "snare": "none"},
 	],
 	"wreck": [
 		{"id": "search", "label": "Search it", "skills": ["investigation"], "dc": 14,
@@ -154,6 +181,11 @@ const CARDS := {
 			"note": "Canvas, rope, an axle.",
 			"win": "A camp kit.", "lose": "An hour, and nothing worth the carrying.",
 			"reward": "camp_kit", "snare": "hour"},
+		{"id": "appraise", "label": "Know what is worth taking", "skills": [], "dc": 0,
+			"gate": {"backgrounds": ["merchant", "sailor", "artisan"]},
+			"note": "%s has loaded a wagon or two.",
+			"win": "A cache.", "lose": "",
+			"reward": "cache", "snare": "none"},
 	],
 	"tower": [
 		{"id": "climb", "label": "Climb", "skills": ["athletics"], "dc": 12,
@@ -164,6 +196,11 @@ const CARDS := {
 			"note": "An hour at the top, looking.",
 			"win": "Every band for two days' walk is marked until tomorrow.", "lose": "Nothing moves.",
 			"reward": "marked", "snare": "none"},
+		{"id": "sightline", "label": "Read the ground like a soldier", "skills": [], "dc": 0,
+			"gate": {"backgrounds": ["soldier", "guard"], "classes": ["fighter"]},
+			"note": "%s knows what a watch is for.",
+			"win": "Every band for two days' walk is marked until tomorrow.", "lose": "",
+			"reward": "marked", "snare": "none"},
 	],
 }
 
@@ -172,6 +209,17 @@ static func ring(world, pos: Vector2) -> int:
 
 static func dc_for(choice: Dictionary, world, pos: Vector2) -> int:
 	return int(choice["dc"]) + ring(world, pos)
+
+# The first party member the gate admits (party order), or null. A gate is
+# {classes, backgrounds, species}; any match on any list admits.
+static func gate_match(party, gate: Dictionary):
+	for ch in party.party_characters():
+		if gate.get("backgrounds", []).has(ch.background_id) or gate.get("species", []).has(ch.species_id):
+			return ch
+		for lv in ch.levels:
+			if gate.get("classes", []).has(String(lv.get("class_id", ""))):
+				return ch
+	return null
 
 # The rows the approach card draws. A skill nobody can roll is not offered
 # (Approach's rule); an offering the purse cannot cover is not offered.
@@ -185,6 +233,14 @@ static func options(l, party, world) -> Array:
 			"dc": dc_for(c, world, l.position), "win": c["win"]}
 		if String(c["lose"]) != "":
 			o["lose"] = c["lose"]
+		if c.has("gate"):
+			var who = gate_match(party, c["gate"])
+			if who == null:
+				continue
+			o["note"] = String(c["note"]) % who.cname
+			o.merge({"char_id": who.id, "cname": who.cname, "gated": true}, true)
+			out.append(o)
+			continue
 		if c["skills"].is_empty():
 			var price: int = OFFERING_GOLD * (ring(world, l.position) + 1)
 			if party.gold < price:
@@ -215,7 +271,12 @@ static func resolve(l, choice_id: String, party, world, rng) -> Dictionary:
 	if c.is_empty():
 		return {}
 	var e: Dictionary = {"id": "landmark-%s-%s" % [l.kind, choice_id], "title": l.sname, "ok": true}
-	if not c["skills"].is_empty():
+	if c.has("gate"):
+		var who = gate_match(party, c["gate"])
+		if who == null:
+			return {}
+		e.merge({"char_id": who.id, "cname": who.cname}, true)
+	elif not c["skills"].is_empty():
 		var who: Dictionary = Approach._roller(party, c)
 		if who.is_empty():
 			return {}

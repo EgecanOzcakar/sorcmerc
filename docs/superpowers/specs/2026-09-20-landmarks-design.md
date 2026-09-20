@@ -73,6 +73,15 @@ the landmark. A win or a loss on either choice spends it: one visit, one
 answer — that is the anti-grind rule, and it is why there are two choices and
 not five.
 
+**A third row, gated by who you are.** Each kind carries one more choice that
+appears only when a party member *is* the right kind of person — an acolyte
+or cleric at the shrine, a sage in the ruins, a druid or an elf at the
+stones, a hermit or ranger at the hut, a merchant or sailor at the wreck, a
+soldier at the tower. They answer it in their own name, without a roll, and
+it opens a door one of the two rolled rows already opens: flavour, not
+power. The roller for the rolled rows stays the party's best at the skill
+(`Approach._roller`), which is the rule the road already uses.
+
 ## 3. Placement and discovery
 
 - **Built-in maps:** the three builders in `world.gd` (small, large,
