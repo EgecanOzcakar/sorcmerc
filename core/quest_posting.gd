@@ -234,7 +234,7 @@ static func _target_position(world, q: Dictionary):
 			for x in world.settlements:
 				if x.id == String(q.get("target_settlement_id", "")):
 					return x.position
-		"clear_lair", "rescue":
+		"clear_lair":
 			for l in world.lairs:
 				if l.id == String(q.get("target_lair_id", "")):
 					return l.position
