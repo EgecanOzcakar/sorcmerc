@@ -378,5 +378,34 @@ func _init() -> void:
 	check(e_empty.is_empty() or e_empty.has("title"),
 		"an empty roster yields no event rather than a fake one")
 
+	# --- refugees: only on a raided road, and their pass finds the lair --------
+	var wf := _world()
+	var pf := _party()
+	var raided_town = wf.settlements[0]
+	var hidden = wf.add_lair(World.Lair.new("raider-hole", raided_town.position + Vector2(300, 0), "goblinoid", "the Raider Hole"))
+	var fired := false
+	for seed_v in range(1, 300):
+		if String(Travel.check(pf, wf, RNG.new(seed_v)).get("id", "")) == "refugees":
+			fired = true
+	check(not fired, "no raid on the map: no refugees")
+	raided_town.raided_by = "raider-hole"
+	var passed := {}
+	for seed_v in range(1, 400):
+		hidden.discovered = false
+		var e: Dictionary = Travel.check(pf, wf, RNG.new(seed_v))
+		if String(e.get("id", "")) != "refugees":
+			continue
+		passed[bool(e["ok"])] = e
+		check(bool(e["ok"]) == hidden.discovered, "a pass finds the lair, a fail does not (ok=%s)" % e["ok"])
+	check(passed.has(true) and passed.has(false), "both outcomes reachable")
+	check("on the map now" in String(passed[true]["text"]) and String(passed[true].get("lair", "")) == "the Raider Hole",
+		"the pass says where they came from: %s" % passed[true]["text"])
+	hidden.discovered = true
+	fired = false
+	for seed_v in range(1, 300):
+		if String(Travel.check(pf, wf, RNG.new(seed_v)).get("id", "")) == "refugees":
+			fired = true
+	check(not fired, "the lair already found: nothing left for them to tell, no event")
+
 	print("test_travel: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

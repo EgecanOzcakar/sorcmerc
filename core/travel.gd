@@ -213,6 +213,15 @@ const EVENTS := [
 		"title": "A wheel in the ditch",
 		"pass": "%s calms the team and lifts the cart clear. The carter pays what he has, and looks hard at the faces.",
 		"fail": "The axle is sheared clean through. There is nothing to be done for him but wish him well."},
+	# Raids (core/raids.gd): the people a raided town lost, on the road. Their
+	# pass is the one thing the clock gives back — the lair the raiders came
+	# from goes on the map. Gated (needs "raided") on there being a lair left
+	# to find, so the card never promises what the map cannot show.
+	{"id": "refugees", "role": "", "skills": ["persuasion", "insight", "medicine"], "dc": 12, "kind": "good",
+		"bands": ["heartland", "marches"], "needs": "raided",
+		"title": "Families on the road with what they could carry.",
+		"pass": "%s gets the story out of them, and the way back to where it came from.",
+		"fail": "They have nothing left to give but the road, and they give that."},
 ]
 
 # What a failed "rough-going" costs, and what "good-ground" gives back — both in
@@ -358,6 +367,7 @@ static func _needs_met(need: String, party, world) -> bool:
 		"": return true
 		"hurt": return _wounded(party) > 0
 		"settlement": return not world.settlements.is_empty()
+		"raided": return _raiders_lair(world) != null
 	return false
 
 
@@ -427,6 +437,14 @@ static func _apply(e: Dictionary, ok: bool, party, world, rng, out: Dictionary) 
 					# Nothing left to find: say so rather than implying a discovery
 					# the map cannot show.
 					out["text"] = "%s  Nothing they do not already know about." % out["text"]
+		"refugees":
+			if ok:
+				var from = _raiders_lair(world)
+				if from != null:
+					from.discovered = true
+					out["lair"] = from.sname
+					out["text"] = "%s  %s is where they came from — it is on the map now." % [
+						out["text"], from.sname]
 		"wayfarer", "cache":
 			if ok:
 				var gold: int = COIN_MIN + rng.roll_die(COIN_MAX - COIN_MIN + 1) - 1
@@ -579,3 +597,16 @@ static func _reveal_nearest_lair(party, world):
 	if best != null:
 		best.discovered = true
 	return best
+
+
+# The lair behind a raid that stands on some town, while it is still hidden —
+# what the refugees can tell the party. null when every raider is known, or
+# nothing is raided.
+static func _raiders_lair(world):
+	for s in world.settlements:
+		if s.raided_by == "":
+			continue
+		for l in world.lairs:
+			if l.id == s.raided_by and not l.discovered and not l.looted:
+				return l
+	return null

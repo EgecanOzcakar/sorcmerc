@@ -311,7 +311,7 @@ const DEFS := [
 		"desc": "Weather 50 road events.", "counter": "road_events", "goal": 50},
 	{"id": "every_road_event", "group": "road", "title": "Every Mile of It", "hidden": true,
 		"desc": "See every kind of thing the road has to offer.",
-		"counter": "road_event_kinds", "goal": 14},
+		"counter": "road_event_kinds", "goal": 15},
 	{"id": "forage_first", "group": "road", "title": "Living Off the Land",
 		"desc": "Forage something worth having.", "counter": "forages", "goal": 1},
 	{"id": "forage_25", "group": "road", "title": "Nothing Goes to Waste",
