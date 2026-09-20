@@ -6368,6 +6368,6 @@ the map mid-run.
 
 ### Still open
 
-- No pictures yet.
+- No pictures yet, and the refugees event borrows the wayfarer's frames until one is generated.
 - A raid band carries nothing home; the halved market is what it took.
 - Towns are never taken. A town that falls is the faction ladder's war (#4).
