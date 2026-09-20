@@ -411,6 +411,8 @@ func _meet_them() -> void:
 		return
 	var b: Button = _weighted(rows)
 	_saw["approach:" + String(b.name).get_slice("_", 2)] = true
+	if screen._place_open != null:   # the same card, asked by a landmark: say so in the coverage
+		_saw["place:" + String(b.name).get_slice("_", 2)] = true
 	_acts += 1
 	b.pressed.emit()
 
@@ -858,17 +860,6 @@ func _map_beat() -> void:
 		_saw["place:" + ("visit" if "Visit" in screen._place_btn.text else "search")] = true
 		_acts += 1
 		screen._place_btn.pressed.emit()
-		return
-	# ...and if visiting opened the card, answer it by pressing the real row
-	# button (same as _meet_them()), so the `chosen` signal fires for real
-	# rather than calling _on_place_chosen by hand.
-	if screen._approach_card != null and screen._place_open != null:
-		var rows: Array = screen._approach_card._opts
-		var i: int = _d(rows.size()) - 1
-		var pick: Dictionary = rows[i]
-		_saw["place:" + String(pick["id"])] = true
-		_acts += 1
-		screen._approach_card._btns[i].pressed.emit()
 		return
 
 	# Hurt, out in the open: a breather, or a camp if the party is carrying a kit.
