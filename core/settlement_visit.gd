@@ -284,7 +284,9 @@ static func market(s, gap: float, battle: bool, opinion := 0.0) -> Dictionary:
 static func visit(s, world) -> Dictionary:
 	var now: float = world.clock.elapsed
 	var gap: float = now - s.last_visited if s.last_visited >= 0.0 else -1.0
-	var m := market(s, gap, battle_recent(s, now), FactionOpinion.get_opinion(s.faction))
+	# A raid that stands on the town (core/raids.gd) is the battle shelf for as
+	# long as it stands — half the stock, the markup — not for four hours.
+	var m := market(s, gap, battle_recent(s, now) or s.raided_by != "", FactionOpinion.get_opinion(s.faction))
 	m["settlement"] = s
 	m["services"] = services(s)
 	s.last_visited = now

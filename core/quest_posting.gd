@@ -336,19 +336,23 @@ static func rescue_offer(s, world, _party) -> Dictionary:
 	var best_d := INF
 	for l in world.lairs:
 		var d: float = s.position.distance_to(l.position)
-		if l.looted or d > reach or d >= best_d or not Site.pens_ahead(l):
+		# The lair raiding this town (core/raids.gd) is where the people it took
+		# are: it wins the posting outright, pens permitting.
+		var rank: float = 0.0 if l.id == s.raided_by else d
+		if l.looted or d > reach or rank >= best_d or not Site.pens_ahead(l):
 			continue
 		best = l
-		best_d = d
+		best_d = rank
 	if best == null:
 		return {}
-	var who: String = CAPTIVES[absi(hash("%s|%s" % [s.id, best.id])) % CAPTIVES.size()]
+	var who: String = ("the people taken in the raid" if best.id == s.raided_by
+		else CAPTIVES[absi(hash("%s|%s" % [s.id, best.id])) % CAPTIVES.size()])
 	return {
 		"id": "rescue:%s:%s" % [s.id, best.id],
 		"giver_node_id": s.id, "kind": "rescue", "state": "offered",
 		"target_lair_id": best.id, "required": 1, "progress": 0,
 		"title": "Bring back %s from %s" % [who, best.sname],
-		"reward": {"gold": RESCUE_BASE + int(best_d / RESCUE_PER_UNIT)},
+		"reward": {"gold": RESCUE_BASE + int(s.position.distance_to(best.position) / RESCUE_PER_UNIT)},
 	}
 
 # Ride out one ring further than this settlement stands and come back able to

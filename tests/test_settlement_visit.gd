@@ -76,6 +76,19 @@ func _init() -> void:
 	test_quest_board_and_chains()
 	test_persuade_and_investigate()
 	test_counters_and_the_two_services_that_sell_nothing()
+
+	# raids: a raided town's shelf is the battle shelf for as long as the raid stands
+	var wv := World.new()
+	var sv := wv.add_settlement(World.Settlement.new("raided", Vector2.ZERO, "human", "town"))
+	wv.clock.elapsed = 10000.0
+	sv.battle_at = -1.0
+	sv.raided_by = "warren"
+	var mv: Dictionary = Visit.visit(sv, wv)
+	check(bool(mv["battle"]), "a raided town reads as a battle market with no battle_at at all")
+	sv.raided_by = ""
+	sv.last_visited = -1.0
+	check(not bool(Visit.visit(sv, wv)["battle"]), "...and not once lifted")
+
 	print("test_settlement_visit: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

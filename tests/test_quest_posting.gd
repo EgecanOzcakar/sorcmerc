@@ -12,6 +12,7 @@ const Quest = preload("res://core/quest.gd")
 const Party = preload("res://core/party.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Regions = preload("res://core/regions.gd")
+const RNG = preload("res://core/rng.gd")
 
 var _pass = 0
 var _fail = 0
@@ -32,6 +33,7 @@ func _init() -> void:
 	test_supply_orders()
 	test_deliver_and_scout()
 	test_rescue_offer()
+	test_raid_premium_and_rescue()
 	test_the_whole_settlement_can_run_out_of_work()
 	FactionOpinion.reset()
 	print("test_quest_posting: %d passed, %d failed" % [_pass, _fail])
@@ -275,3 +277,47 @@ func test_rescue_offer() -> void:
 	held.looted = false
 	held.position = Vector2(0, Posting.PLACEMENT["rescue"]["reach"] + 50.0)
 	check(Posting.rescue_offer(city, w, p).is_empty(), "out of reach, out of mind")
+
+func test_raid_premium_and_rescue() -> void:
+	var Site = load("res://core/site.gd")
+	var w := _world()
+	var p := _party()
+	var city = w.settlements[0]
+	var warren = w.lairs[0]
+	var rng_a = RNG.new(7)
+	var plain: Dictionary = Quest._world_quest_from_pick(
+		{"kind": "clear_lair", "id": warren.id, "name": warren.sname, "faction": warren.faction}, city, p, rng_a)
+	city.raided_by = warren.id
+	var rng_b = RNG.new(7)
+	var dear: Dictionary = Quest._world_quest_from_pick(
+		{"kind": "clear_lair", "id": warren.id, "name": warren.sname, "faction": warren.faction}, city, p, rng_b)
+	check(int(dear["reward"]["gold"]) == int(int(plain["reward"]["gold"]) * Quest.RAID_PREMIUM),
+		"the raiding lair's job pays RAID_PREMIUM (%d -> %d)" % [plain["reward"]["gold"], dear["reward"]["gold"]])
+	var rng_c = RNG.new(7)
+	var other: Dictionary = Quest._world_quest_from_pick(
+		{"kind": "clear_lair", "id": "far-barrow", "name": "Far Barrow", "faction": "undead"}, city, p, rng_c)
+	check(int(other["reward"]["gold"]) == int(plain["reward"]["gold"]), "another lair's job does not")
+	# the rescue names the raider, even when a nearer lair has pens too. The
+	# interior is seeded off the lair's id (core/site.gd), so each is found by
+	# trying ids until one has pens — never renamed after the fact.
+	var near = null
+	var far = null
+	for i in 400:
+		var l = World.Lair.new("pens-%d" % i, Vector2(120, 60), "goblinoid")
+		if Site.pens_ahead(l):
+			near = l
+			break
+	for i in 400:
+		var l = World.Lair.new("raider-%d" % i, Vector2(500, 0), "goblinoid", "the Raider Hole")
+		if Site.pens_ahead(l):
+			far = l
+			break
+	check(near != null and far != null, "two lairs with pens")
+	w.add_lair(near)
+	w.add_lair(far)
+	city.raided_by = far.id
+	var q: Dictionary = Posting.rescue_offer(city, w, p)
+	check(q["target_lair_id"] == far.id and q["title"] == "Bring back the people taken in the raid from the Raider Hole",
+		"the rescue is from the raiding lair, and says who (%s)" % q.get("title", ""))
+	city.raided_by = ""
+	check(Posting.rescue_offer(city, w, p)["target_lair_id"] == near.id, "lifted, the nearest pens win again")

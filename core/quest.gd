@@ -155,6 +155,10 @@ const CHAIN_LABELS := {
 	"clear_lair": ["Clear out %s", "Purge %s", "Finish %s, once and for all"],
 }
 
+# A lair whose raid stands on the giver's town (core/raids.gd) pays this much
+# more for its own job: the town wants it answered, and says so in gold.
+const RAID_PREMIUM := 1.5
+
 static func faction_chain_tier(party, faction: String) -> int:
 	if party == null:
 		return 0
@@ -178,6 +182,8 @@ static func _world_quest_from_pick(pick: Dictionary, giver_settlement, party, rn
 		"hunt_party": out["target_party_id"] = pick["id"]
 		"raid_settlement": out["target_settlement_id"] = pick["id"]
 		"clear_lair": out["target_lair_id"] = pick["id"]
+	if "raided_by" in giver_settlement and String(giver_settlement.raided_by) == String(pick["id"]):
+		out["reward"]["gold"] = int(int(out["reward"]["gold"]) * RAID_PREMIUM)
 	return out
 
 # A quest targeting a live open-world object instead of a curated monster id —
