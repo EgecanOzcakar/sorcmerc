@@ -1541,9 +1541,11 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 			# for an actual hostile roaming party from _check_encounter.
 			Quest.record_party_defeated(party, foe.id)
 			if raid_target != null:
-				# A raid turned before it landed: worth two bands put down to the
-				# town it was going to hit. raids.gd resets the lair's clock on its
-				# next poll when it finds the band gone.
+				# A raid turned before it landed: TURNED_FOR (two bands' worth) on
+				# top of the FOUGHT_FOR every monster band already earns at that
+				# town below, so a turned raid is worth three bands put down there.
+				# raids.gd resets the lair's clock on its next poll when it finds
+				# the band gone.
 				FactionOpinion.credit_fight(world, raid_target.position, Raids.TURNED_FOR, foe.faction)
 				Ach.bump("raids_turned")
 				_quest_news.append("The raid on %s is turned." % raid_target.sname)

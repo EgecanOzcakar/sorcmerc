@@ -151,11 +151,13 @@ static func land(world, lair, s, now: float) -> Array:
 # The second landing's child: same faction, named after its parent, hidden,
 # with a clock of its own that starts now. One per root, ever — a respawned
 # parent counts its landings from zero again, and the id check is what keeps
-# it from digging a second child on the same ground. A child never spreads
-# (land() checks spawned_from), so a map at most doubles its lairs and stops.
+# it from digging a second child on the same ground; a child that was settled
+# (the "way-" camp standing where it was) counts as dug too. A child never
+# spreads (land() checks spawned_from), so a map at most doubles its lairs
+# and stops.
 static func spread(world, parent, now: float):
 	var id := "%s-2" % parent.id
-	if lair_of(world, id) != null:
+	if lair_of(world, id) != null or settlement_of(world, "way-" + id) != null:
 		return null
 	var rng = RNG.new(maxi(1, absi(hash("spread|%s" % parent.id))))
 	for i in SPREAD_TRIES:
@@ -164,7 +166,8 @@ static func spread(world, parent, now: float):
 		var pos: Vector2 = parent.position + Vector2(cos(angle), sin(angle)) * dist
 		if world.is_water(pos) or not _room_for(world, pos):
 			continue
-		var child = world.add_lair(World.Lair.new(id, pos, parent.faction, "%s's outpost" % parent.sname))
+		var child = world.add_lair(World.Lair.new(id, pos, parent.faction,
+			("%s' outpost" if parent.sname.ends_with("s") else "%s's outpost") % parent.sname))
 		child.spawned_from = parent.id
 		child.raid_at = now
 		return child
@@ -179,10 +182,12 @@ static func _room_for(world, pos: Vector2) -> bool:
 			return false
 	return true
 
-# Once a frame. Order matters: lifts first, so a lair cleared this frame does
-# not also set out; then every band out is advanced or, if it is gone from the
-# map (beaten on the road by the party or a patrol), the clock resets; then
-# any lair whose time has come sets out.
+# Once a frame: lifts, then every band out, then any lair whose time has come.
+# A looted lair is gated out of setting out regardless; the order that matters
+# is erase-before-advance — a band whose lair was looted this frame is erased
+# before its phase is advanced, so it never sieges or lands for a lair that is
+# gone. A band gone from the map (beaten on the road by the party or a patrol)
+# resets its lair's clock.
 static func tick(world, now: float) -> Array:
 	var lines: Array = []
 	for s in world.settlements:
@@ -230,6 +235,9 @@ static func _advance(world, lair, b, now: float, lines: Array) -> void:
 		return
 	match String(st.get("phase", "")):
 		"march":
+			# ponytail: a band whose siege point _steer can never reach (walled
+			# in, an island town) never arrives, and that lair's clock and label
+			# freeze on "raiding"; a march timeout is the upgrade if it ever shows.
 			if WorldAI.arrived(b):
 				st["phase"] = "siege"
 				st["until"] = now + SIEGE

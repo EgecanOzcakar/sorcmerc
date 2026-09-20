@@ -139,7 +139,9 @@ room by room. `faction` must be one the bestiary can fill a fight from
 (`goblinoid`, `undead`, `dragon`, `giant`, `orc`, `gnoll`, `kobold`, `bandit`,
 `beast`, `cultist`, `monstrosity`, `fey`, `elemental`, `construct`,
 `soldier`) — a lair is *made of* its faction's roster. `"discovered": true`
-puts it on the map from the start.
+puts it on the map from the start. A lair on heartland or marches ground with
+a civilized settlement within 800 runs a raid clock like the built-in maps'
+(`core/raids.gd`); there is no opt-out today.
 
 **Landmarks** are places on the map that are not a fight — ruins, a shrine,
 standing stones, a hermit's hut, a wreck, a watchtower (`kind`: `ruins` |

@@ -27,8 +27,10 @@ func _world() -> World:
 	w.add_lair(World.Lair.new("warren", Vector2(300, 0), "goblinoid", "the Ash Warren"))
 	return w
 
-# One frame of the world without the screen: steer, walk, then the raids poll —
-# the same order scenes/world/world.gd's _process keeps.
+# One frame of the world without the screen: steer, walk, then the raids poll.
+# The screen walks before it steers (world.tick is first in _process); this
+# steers before it walks. What both keep is that the steer precedes Raids.tick,
+# so the poll reads a band whose destination is this frame's.
 func _frame(w: World, minutes := 1.0) -> Array:
 	WorldAI.update(w)
 	w.tick(minutes)
@@ -258,6 +260,20 @@ func test_spread() -> void:
 	Raids.land(w, c, s, 500.0)
 	Raids.land(w, c, s, 600.0)
 	check(w.lairs.size() == 2 and c.raids == 2, "a child's second landing seeds nothing")
+	# a child that was settled is a child that was dug: no second one on its ground
+	w.lairs.erase(c)
+	w.add_settlement(World.Settlement.new("way-warren-2", c.position, "human", "camp", "Fairstead"))
+	l.raids = 0
+	Raids.land(w, l, s, 700.0)
+	Raids.land(w, l, s, 800.0)
+	check(w.lairs.size() == 1 and l.raids == 2, "a settled child stands in for the dug one")
+	w.settlements.pop_back()
+	# the possessive: a parent whose name ends in s takes a bare apostrophe
+	var w4 := _world()
+	w4.lairs[0].sname = "the Sunken Ruins"
+	Raids.land(w4, w4.lairs[0], w4.settlements[0], 100.0)
+	Raids.land(w4, w4.lairs[0], w4.settlements[0], 200.0)
+	check(w4.lairs.size() == 2 and w4.lairs[1].sname == "the Sunken Ruins' outpost", "the Sunken Ruins' outpost (%s)" % w4.lairs[1].sname)
 	# determinism: the same parent puts its child in the same place
 	var w2 := _world()
 	Raids.land(w2, w2.lairs[0], w2.settlements[0], 100.0)

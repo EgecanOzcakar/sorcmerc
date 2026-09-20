@@ -46,7 +46,7 @@ func _init() -> void:
 	var w = main.world
 	var p = w.player()
 	var town = w.settlements[0]     # Riverhold, at the origin, where the party starts
-	# a lair of our own 300 out, due now; the map's own lairs are not due for two days
+	# a lair of our own, due now; the map's own lairs are not due for two days.
 	# 220 out: inside the fog the party has already lifted (VISION_RADIUS 260
 	# from where it stands), so the lair's label draws; still heartland ground.
 	var l = w.add_lair(World.Lair.new("t-warren", town.position + Vector2(220, 0), "goblinoid", "the Test Warren"))

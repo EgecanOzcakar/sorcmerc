@@ -96,8 +96,8 @@ When it is due, `Raids.tick`:
    (`Regions.at(world, lair.position).levels[0]`), heavy and light — the same
    shape the procedural builder gives a band;
 3. gives it the `raid` behaviour (§3), pointed at the **siege point** —
-   `SIEGE_DIST` units out from the settlement on the lair's side, moved onto
-   dry ground with `world._land_goal` if it lands in water;
+   `SIEGE_DIST` units out from the settlement on the lair's side (`_steer`
+   nudges it onto dry ground if it lands in water);
 4. sets `lair.raid_band = band.id`, `lair.raid_at = now`;
 5. returns the line *"Raiders are out from the Ash Warren, making for
    Riverhold."* — said whether or not the party can see either. Word travels;
@@ -128,7 +128,8 @@ The step only names the destination (`to`; `dest` is `_steer()`'s own key,
 the dry point it actually aims at); `_steer()` routes it round the water
 like every other behaviour, and `move_toward_goal` walks it. The phases are
 `Raids.tick`'s to advance, by reading the band each frame
-(`WorldAI.arrived(party)`, a public name for `_arrived`):
+(`WorldAI.arrived(party)`, a public name for `_arrived` that never reads a
+truce's break-off point as arriving):
 
 - **march** — walking to the siege point. On arrival (`party.at_goal()`):
   `phase = "siege"`, `until = now + SIEGE`, line *"Raiders from the Ash
@@ -161,8 +162,10 @@ stands until the lair is cleared.
 
 **Hold the line.** When the party fights a raid band whose phase is `march`
 or `siege` within `Visit.BATTLE_RADIUS` of its target settlement,
-`_road_objective` returns `Objectives.make("hold")`: the town is behind you
-and more are coming. Anywhere else on the road it is a plain fight (or a
+`_road_objective` returns `Objectives.make("hold", {"waves":
+Objectives.waves_for(...)})` — the waves drawn like a site's gate room's, at
+the band's own power: the town is behind you and more are coming. Anywhere
+else on the road it is a plain fight (or a
 *hunt*, if the job is taken). A raid band's *hold* takes precedence over the
 *escort* a delivery would give.
 
