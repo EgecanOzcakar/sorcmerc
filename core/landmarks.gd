@@ -24,6 +24,7 @@ const Campaign = preload("res://core/campaign.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Ach = preload("res://core/achievements.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const WorldLairs = preload("res://core/world_lairs.gd")
 
 const KINDS := ["ruins", "shrine", "stones", "hut", "wreck", "tower"]
 const HIDDEN := ["hut", "tower"]   # found the way lairs are; the rest are hard to miss
@@ -342,3 +343,43 @@ static func _nearest_settlement(world, from: Vector2):
 			best = s
 			best_d = d
 	return best
+
+# --- discovery ----------------------------------------------------------------
+
+# Visible kinds are found by walking: the first frame the fog is off them.
+# Returns the ones that just turned, so the screen can say so.
+static func found_on_explore(world) -> Array:
+	var out: Array = []
+	for l in world.landmarks:
+		if l.found or is_hidden(l.kind):
+			continue
+		if world.is_explored(l.position):
+			l.found = true
+			out.append(l)
+	return out
+
+# A hidden landmark in search range — the same radius a lair hides at.
+static func nearby_hidden(world, from: Vector2):
+	for l in world.landmarks:
+		if not l.found and is_hidden(l.kind) and from.distance_to(l.position) <= WorldLairs.DISCOVER_RADIUS:
+			return l
+	return null
+
+# A found, unspent landmark near enough to walk up to.
+static func nearest_open(world, from: Vector2):
+	var best = null
+	var best_d := INF
+	for l in world.landmarks:
+		var d: float = from.distance_to(l.position)
+		if l.found and not l.spent and d <= WorldLairs.DISCOVER_RADIUS and d < best_d:
+			best = l
+			best_d = d
+	return best
+
+# The lair's Survival check, verbatim (core/world_lairs.gd search()), so there
+# is one way to search the ground. A pass marks the place found.
+static func search(l, party, rng = null) -> Dictionary:
+	var r: Dictionary = WorldLairs.search_roll(party, rng)
+	if not r.is_empty() and r["ok"]:
+		l.found = true
+	return r

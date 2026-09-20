@@ -62,6 +62,13 @@ const TALK := {
 }
 const TALK_DEFAULT := "There is something out that way that was not out that way last year."
 
+# What the locals say about a hidden landmark — keyed by kind, since a
+# landmark has no faction to hang the line on the way a lair does.
+const LANDMARK_TALK := {
+	"hut": "There is an old one living out past the trees who sees everything that passes.",
+	"tower": "The old watch still stands, if you know which ridge.",
+}
+
 
 # Every lair this settlement's people could plausibly know about: near enough,
 # still hidden, still worth going to. Sorted nearest first, because the closest
@@ -86,6 +93,23 @@ static func offers(settlement, world) -> Array:
 			"text": String(TALK.get(l.faction, TALK_DEFAULT)),
 			"where": "%s, levels %d-%d" % [String(band["label"]), int(lv[0]), int(lv[1])],
 		})
+	# A hidden landmark is worth a word too — half a lair's base price, and
+	# only the hidden kinds: a ruin you can see from the road nobody sells.
+	var Landmarks = load("res://core/landmarks.gd")   # load: landmarks.gd preloads nothing of ours, but keep the graph flat
+	for m in world.landmarks:
+		if m.found or not Landmarks.is_hidden(m.kind):
+			continue
+		var d: float = settlement.position.distance_to(m.position)
+		if d > RANGE:
+			continue
+		var band: Dictionary = Regions.at(world, m.position)
+		out.append({
+			"landmark_id": m.id, "distance": d,
+			"price": int(round(PRICE_BASE * 0.5 * float(PRICE_BY_KIND.get(settlement.kind, 1.0)))),
+			"region": String(band["label"]),
+			"text": String(LANDMARK_TALK.get(m.kind, "Somebody out there knows the country.")),
+			"where": "%s" % String(band["label"]),
+		})
 	out.sort_custom(func(a, b): return float(a["distance"]) < float(b["distance"]))
 	return out
 
@@ -99,6 +123,16 @@ static func price_of(settlement, lair) -> int:
 # Pay for a lead. Returns what happened, named — never a silent success, same
 # contract as every other purse movement in this codebase.
 static func buy(offer: Dictionary, party, world) -> Dictionary:
+	if offer.has("landmark_id"):
+		var m = world.landmark(String(offer["landmark_id"]))
+		if m == null or m.found:
+			return {"ok": false, "text": "That is old news now."}
+		var lprice := int(offer.get("price", 0))
+		if not party.spend_gold(lprice):
+			return {"ok": false, "price": lprice, "text": "They will not talk for less than %d ◉." % lprice}
+		m.found = true
+		return {"ok": true, "price": lprice, "landmark_id": m.id, "sname": m.sname,
+			"text": "%s  %s is on the map now (-%d ◉)." % [String(offer.get("text", "")), m.sname, lprice]}
 	var lair = _lair(world, String(offer.get("lair_id", "")))
 	if lair == null or lair.discovered:
 		return {"ok": false, "text": "That is old news now."}
@@ -124,6 +158,14 @@ static func free_lead(settlement, party, world) -> Dictionary:
 	if avail.is_empty():
 		return {}
 	var offer: Dictionary = avail[0].duplicate()
+	if offer.has("landmark_id"):
+		var m = world.landmark(String(offer["landmark_id"]))
+		if m == null:
+			return {}
+		m.found = true
+		return {"ok": true, "price": 0, "landmark_id": m.id, "sname": m.sname,
+			"text": "%s  They mark %s on your map, and will not take anything for it." % [
+				String(offer["text"]), m.sname]}
 	offer["price"] = 0
 	var lair = _lair(world, String(offer["lair_id"]))
 	if lair == null:

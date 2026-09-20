@@ -12,6 +12,8 @@ const Approach = preload("res://core/approach.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Travel = preload("res://core/travel.gd")
 const Adapter = preload("res://core/adapter.gd")
+const WorldLairs = preload("res://core/world_lairs.gd")
+const Rumors = preload("res://core/rumors.gd")
 
 var _pass := 0
 var _fail := 0
@@ -26,6 +28,7 @@ func _init() -> void:
 	test_placement()
 	test_cards()
 	test_resolve()
+	test_discovery()
 	print("test_landmarks: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -241,3 +244,42 @@ func test_resolve() -> void:
 	m2 = _mark(w, "tower", Vector2(900, 900))
 	r = Landmarks.resolve(m2, "watch", p, w, RNG.new(_seed_where(null, "tower", "watch", null, true, m2.position)))
 	check(w.marked_until > w.clock.elapsed, "watch: bands are marked for the day")
+
+# --- Task 4: discovery — exploring, searching, and the inn -----------------
+
+func test_discovery() -> void:
+	var w := _world()
+	var p := _party()
+	var seen = w.add_landmark(World.Landmark.new("m-ruins", "ruins", Vector2(90, 130)))
+	var hid = w.add_landmark(World.Landmark.new("m-hut", "hut", Vector2(100, 150)))
+	check(Landmarks.found_on_explore(w).is_empty() and not seen.found, "nothing explored, nothing found")
+	w.reveal(Vector2(90, 130))
+	var just: Array = Landmarks.found_on_explore(w)
+	check(just == [seen] and seen.found and not hid.found, "exploring finds the ruins, not the hut")
+	check(Landmarks.found_on_explore(w).is_empty(), "...and says so once")
+	check(Landmarks.nearby_hidden(w, Vector2(100, 140)) == hid, "the hut is there to search for")
+	check(Landmarks.nearby_hidden(w, Vector2(900, 900)) == null, "...within the lair's radius")
+	check(Landmarks.nearest_open(w, Vector2(95, 135)) == seen, "the found ruins are open to visit")
+	seen.spent = true
+	check(Landmarks.nearest_open(w, Vector2(95, 135)) == null, "...until spent")
+	# the search is the lair's check, on the same skill and DC
+	var found := false
+	for s in range(1, 40):
+		var r: Dictionary = Landmarks.search(hid, p, RNG.new(s))
+		check(r["skill"] == WorldLairs.DISCOVER_SKILL and int(r["dc"]) == WorldLairs.DISCOVER_DC, "seed %d: Survival vs the lair's DC" % s)
+		if r["ok"]:
+			found = true
+			break
+	check(found and hid.found, "a passed search finds the hut")
+	# the inn sells a hidden landmark, cheaper than a lair
+	w = _world()
+	var hut = w.add_landmark(World.Landmark.new("m-hut2", "hut", Vector2(150, 150)))
+	var offers: Array = Rumors.offers(w.settlements[0], w)
+	var mine: Array = offers.filter(func(o): return o.get("landmark_id", "") == "m-hut2")
+	check(mine.size() == 1 and int(mine[0]["price"]) < Rumors.PRICE_BASE, "the inn offers the hut, under a lair's price")
+	p.gold = 500
+	var bought: Dictionary = Rumors.buy(mine[0], p, w)
+	check(bought["ok"] and hut.found and bought["text"].contains(hut.sname), "buying it marks it, and says so")
+	check(Rumors.offers(w.settlements[0], w).filter(func(o): return o.get("landmark_id", "") == "m-hut2").is_empty(), "...and it is off the list")
+	w.add_landmark(World.Landmark.new("m-ruins2", "ruins", Vector2(160, 160)))
+	check(Rumors.offers(w.settlements[0], w).filter(func(o): return o.get("landmark_id", "") == "m-ruins2").is_empty(), "a visible kind is never sold — it is found by walking")

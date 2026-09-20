@@ -44,23 +44,33 @@ static func nearby_undiscovered(world, from: Vector2, radius: float = DISCOVER_R
 			best = l
 	return best
 
-# One roll, pass or fail — no retry spam; the caller (world.gd) offers the
-# button again next frame if it's still in range and still undiscovered, so a
-# failed check just means "try again," same texture as T30's opportunity check.
-static func search(lair, party, rng = null) -> Dictionary:
+# The roll alone, seeded off nothing in particular — a landmark's search
+# (core/landmarks.gd) shares this exact check, so there is one Survival roll
+# in the game, not two that happen to agree.
+static func search_roll(party, rng = null) -> Dictionary:
 	var c = Campaign.new(party)
 	var char_id := c.best_at(DISCOVER_SKILL)
 	var ch = party.get_member(char_id) if char_id != "" else null
 	if ch == null:
 		return {}
 	if rng == null:
-		rng = RNG.new(maxi(1, absi(hash("lair|%s" % lair.id))))
+		rng = RNG.new()   # no lair to seed off here (landmarks share this too) — RNG's own time-based default
 	var bonus: int = c.skill_bonus(char_id, DISCOVER_SKILL)
 	var nat: int = int(Dice.d20(rng)["nat"])
 	var ok: bool = nat + bonus >= DISCOVER_DC
-	if ok:
+	return {"ok": ok, "char_id": char_id, "cname": ch.cname, "skill": DISCOVER_SKILL,
+		"nat": nat, "bonus": bonus, "dc": DISCOVER_DC}
+
+# One roll, pass or fail — no retry spam; the caller (world.gd) offers the
+# button again next frame if it's still in range and still undiscovered, so a
+# failed check just means "try again," same texture as T30's opportunity check.
+static func search(lair, party, rng = null) -> Dictionary:
+	if rng == null:
+		rng = RNG.new(maxi(1, absi(hash("lair|%s" % lair.id))))
+	var r: Dictionary = search_roll(party, rng)
+	if not r.is_empty() and r["ok"]:
 		lair.discovered = true
-	return {"ok": ok, "char_id": char_id, "cname": ch.cname, "nat": nat, "bonus": bonus, "dc": DISCOVER_DC}
+	return r
 
 # Called once, after the attacking fight is won. Second call on an already-
 # looted lair returns an empty stash rather than paying out twice.
