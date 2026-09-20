@@ -28,6 +28,8 @@ const Potions = preload("res://core/potions.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Ach = preload("res://core/achievements.gd")
 const Party = preload("res://core/party.gd")   # #109: REVIVE_COST, for the healer's raise
+const Ladder = preload("res://core/ladder.gd")
+const Loot = preload("res://core/loot.gd")      # not a cycle: loot.gd only preloads catalog.gd
 
 # World-time is in minutes (scenes/world/world.gd's HUD reads elapsed/60 as hours).
 # Calibration knobs — a party crosses the demo map in ~20 world-minutes, so a
@@ -61,8 +63,19 @@ const KIND_SERVICES := {
 # own cost (the kit price + ambush risk) and isn't staying at anyone's inn.
 const INN_COST := {"city": 40, "town": 20, "camp": 10}
 
+# The ladder (core/ladder.gd): a Known company pays half for its bed, a Sworn
+# one nothing — the one thing every rung is for is people, and an innkeeper
+# is people.
+const INN_KNOWN := 0.5
+
 static func inn_cost(s) -> int:
-	return int(INN_COST.get(s.kind, INN_COST["town"]))
+	var base := int(INN_COST.get(s.kind, INN_COST["town"]))
+	var r: int = Ladder.rung(s.faction)
+	if r >= Ladder.SWORN:
+		return 0
+	if r >= Ladder.KNOWN:
+		return int(ceil(base * INN_KNOWN))
+	return base
 
 # --- T9x: persuading a hostile market into trading anyway -------------------
 const PERSUADE_SKILL := "persuasion"
@@ -279,6 +292,36 @@ static func market(s, gap: float, battle: bool, opinion := 0.0) -> Dictionary:
 	return {"steps": steps, "markup": markup, "battle": battle, "gap": gap,
 		"opinion": opinion, "refused": false, "stock": out}
 
+# The back room: where the magic items are, for a company the smith trusts.
+# Uncommon at Trusted, two rare beside them at Sworn; only where there is a
+# smith at all. Seeded off the settlement and the shelf's restock step, the
+# way the shelf is, so it is the same shelf on the same day.
+const BACK_ROOM_N := 3
+const BACK_ROOM_RARE := 2
+
+static func back_room(s, m: Dictionary) -> Array:
+	var r: int = Ladder.rung(s.faction)
+	if r < Ladder.TRUSTED:
+		return []
+	var svc: Array = services(s)
+	if not ("armorsmith" in svc or "weaponsmith" in svc):
+		return []
+	var out: Array = []
+	var rng = RNG.new(maxi(1, absi(hash("backroom|%s|%d" % [s.id, int(m.get("steps", 0))]))))
+	var wants := [["uncommon", BACK_ROOM_N]]
+	if r >= Ladder.SWORN:
+		wants.append(["rare", BACK_ROOM_RARE])
+	for w in wants:
+		var pool: Array = Loot.items_of_rarity(String(w[0])).duplicate()
+		for i in int(w[1]):
+			if pool.is_empty():
+				break
+			var id: String = pool.pop_at(rng.roll_die(pool.size()) - 1)
+			out.append({"item_id": id, "name": Campaign.item_name(id),
+				"price": maxi(1, int(round(Campaign.item_price(id) * float(m.get("markup", 1.0))))),
+				"service": "backroom"})
+	return out
+
 # A visit: reads the gap off the world clock, then stamps it, so visiting twice in
 # a row is a bare shelf and coming back tomorrow is a full one.
 static func visit(s, world) -> Dictionary:
@@ -289,6 +332,7 @@ static func visit(s, world) -> Dictionary:
 	var m := market(s, gap, battle_recent(s, now) or s.raided_by != "", FactionOpinion.get_opinion(s.faction))
 	m["settlement"] = s
 	m["services"] = services(s)
+	m["stock"].append_array(back_room(s, m))
 	s.last_visited = now
 	return m
 
@@ -415,6 +459,12 @@ static func stock_by_service(s, m: Dictionary) -> Dictionary:
 		if not claimed.has(String(e["item_id"])):
 			rest_rows.append(e)
 	out["generalist"] = rest_rows
+	var back: Array = []
+	for e in m.get("stock", []):
+		if String(e.get("service", "")) == "backroom":
+			back.append(e)
+	if not back.is_empty():
+		out["backroom"] = back
 	return out
 
 # The Healer: everyone standing back to full, flat fee, no clock time and no

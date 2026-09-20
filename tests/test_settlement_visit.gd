@@ -89,6 +89,53 @@ func _init() -> void:
 	sv.last_visited = -1.0
 	check(not bool(Visit.visit(sv, wv)["battle"]), "...and not once lifted")
 
+	# the ladder: the bed by rung, and the back room at Trusted
+	var Ladder = load("res://core/ladder.gd")
+	var Loot = load("res://core/loot.gd")
+	Ladder.reset()
+	var wb := World.new()
+	var city = wb.add_settlement(World.Settlement.new("riverhold", Vector2.ZERO, "human", "city"))
+	var camp = wb.add_settlement(World.Settlement.new("dun", Vector2(500, 0), "human", "camp"))
+	wb.clock.elapsed = 20000.0
+	check(Visit.inn_cost(city) == 40, "a stranger pays the city's 40")
+	Ladder.deed("human", 4)
+	check(Visit.inn_cost(city) == 20 and Visit.inn_cost(camp) == 5, "Known: half (ceil)")
+	var m0: Dictionary = Visit.visit(city, wb)
+	check(Visit.stock_by_service(city, m0).get("backroom", []).is_empty(), "Known: no back room")
+	Ladder.deed("human", 8)
+	city.last_visited = -1.0
+	var m1: Dictionary = Visit.visit(city, wb)
+	var br: Array = Visit.stock_by_service(city, m1).get("backroom", [])
+	check(br.size() == Visit.BACK_ROOM_N, "Trusted: three in the back room (%d)" % br.size())
+	for e in br:
+		check(String(Campaign.item_data(String(e["item_id"])).get("rarity", "")) == "uncommon", "...uncommon (%s)" % e["item_id"])
+		check(int(e["price"]) == maxi(1, int(round(Campaign.item_price(String(e["item_id"])) * float(m1["markup"])))), "...at list times the market's markup")
+		check(String(e.get("service", "")) == "backroom", "...tagged for the tab")
+	var ids0: Array = br.map(func(e): return e["item_id"])
+	city.last_visited = -1.0
+	var ids1: Array = Visit.stock_by_service(city, Visit.visit(city, wb)).get("backroom", []).map(func(e): return e["item_id"])
+	check(ids0 == ids1, "the same shelf on the same day (seeded off the settlement and the steps)")
+	camp.last_visited = -1.0
+	check(Visit.stock_by_service(camp, Visit.visit(camp, wb)).get("backroom", []).is_empty(), "a camp has no back room: nobody there deals in these")
+	Ladder.deed("human", 13)
+	city.last_visited = -1.0
+	var m2: Dictionary = Visit.visit(city, wb)
+	var br2: Array = Visit.stock_by_service(city, m2).get("backroom", [])
+	var rares := 0
+	for e in br2:
+		if String(Campaign.item_data(String(e["item_id"])).get("rarity", "")) == "rare":
+			rares += 1
+	check(br2.size() == Visit.BACK_ROOM_N + Visit.BACK_ROOM_RARE and rares == Visit.BACK_ROOM_RARE, "Sworn: two rare beside the three")
+	check(Visit.inn_cost(city) == 0, "Sworn: on the house")
+	# buying one lands it in the stash, identified
+	var pb := _party()
+	pb.gold = 100000
+	var pick := String(br2[0]["item_id"])
+	check(Visit.buy(m2, pb, pick), "bought")
+	check(pb.stash_count(pick, true) == 1, "...identified in the stash")
+	check(Visit.stock_by_service(city, m2).get("backroom", []).size() == br2.size() - 1, "...and off the shelf")
+	Ladder.reset()
+
 	print("test_settlement_visit: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
