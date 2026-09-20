@@ -312,6 +312,11 @@ static func settle(world, lair, party, now: float):
 		return null
 	var home = settlers_from(world, lair.position)
 	var ring: int = int(Regions.at(world, lair.position)["index"])
+	# A band still out for this lair has nowhere to go home to — tick()'s
+	# lift would erase it next poll, but the lair is leaving the map now.
+	var b = band_of(world, lair)
+	if b != null:
+		world.parties.erase(b)
 	world.lairs.erase(lair)
 	var s = world.add_settlement(World.Settlement.new("way-" + lair.id, lair.position, home.faction, "camp",
 		waystation_name(world, lair)))

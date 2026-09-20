@@ -287,4 +287,15 @@ func test_settle() -> void:
 		"SETTLE_XP x (ring 0 + 1), split (%d -> %d)" % [xp_before, p.party_characters()[0].xp])
 	check(FactionOpinion.get_opinion("human") == Raids.LIFTED_FOR, "the settlers' faction thanks you")
 	check(Ach.count("waystations") == ways_before + 1, "the deed is collected")
+	# a lair settled while its band is still out takes the band with it
+	var w4 := _world()
+	var l4 = w4.lairs[0]
+	w4.clock.elapsed = Raids.due_at(l4)
+	Raids.tick(w4, w4.clock.elapsed)
+	var b4 = Raids.band_of(w4, l4)
+	check(b4 != null, "a band is out")
+	WorldLairs.mark_cleared(l4, w4.clock.elapsed)
+	p.gold = 500
+	check(Raids.settle(w4, l4, p, w4.clock.elapsed) != null, "settled with the band out")
+	check(not w4.parties.has(b4), "...and the band is gone from the map with it")
 	check(Raids.settle(w, l, p, 1600.0) == null, "a lair no longer on the map cannot be settled twice")
