@@ -27,6 +27,9 @@
 #     {"id": "goblin-warren", "name": "The Warren", "position": [330, 130],
 #      "faction": "goblinoid", "discovered": false}
 #   ],
+#   "landmarks": [
+#     {"id": "chapel", "kind": "shrine", "position": [200, 40], "name": "the Broken Chapel"}
+#   ],                                              // kind: ruins | shrine | stones | hut | wreck | tower
 #   "parties": [
 #     {"id": "bandits", "position": [-320, -180], "faction": "bandit",
 #      "troops": [{"role": "heavy", "level": 3}],   // flavour: the map figure + headcount
@@ -131,6 +134,18 @@ static func validate(src) -> Dictionary:
 		if not Scaler.FACTIONS.has(String(l.get("faction", ""))):
 			errors.append("lair \"%s\": faction \"%s\" has no bestiary roster"
 				% [l.get("id", "?"), l.get("faction", "")])
+
+	var Landmarks = load("res://core/landmarks.gd")
+	for m in d.get("landmarks", []):
+		if not (m is Dictionary):
+			errors.append("a landmark is not an object")
+			continue
+		seen.call(String(m.get("id", "")), "landmark")
+		if not _is_point(m.get("position")):
+			errors.append("landmark \"%s\" has no [x, y] position" % m.get("id", "?"))
+		if not Landmarks.KINDS.has(String(m.get("kind", ""))):
+			errors.append("landmark \"%s\": kind \"%s\" is not one of %s"
+				% [m.get("id", "?"), m.get("kind", ""), Landmarks.KINDS])
 
 	for p in d.get("parties", []):
 		if not (p is Dictionary):
@@ -241,6 +256,12 @@ static func build(src, pack_id := "", seed_v := 0):
 		lair.discovered = bool(l.get("discovered", false))
 		by_id[lair.id] = lair.position
 		w.add_lair(lair)
+
+	for m in d.get("landmarks", []):
+		var mark := World.Landmark.new(String(m["id"]), String(m.get("kind", "ruins")),
+			_vec(m.get("position")), String(m.get("name", "")))
+		by_id[mark.id] = mark.position
+		w.add_landmark(mark)
 
 	# Water before the parties so nothing is placed into a blob that does not
 	# exist yet... and before the player, whose start is snapped to dry land.

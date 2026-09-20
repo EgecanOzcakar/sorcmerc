@@ -14,6 +14,11 @@
     {"id": "old-quarry", "name": "The Old Quarry", "position": [-560, -380], "faction": "undead"}
   ],
 
+  "landmarks": [
+    {"id": "vale-shrine", "kind": "shrine", "position": [600, 100], "name": "the Wayside Shrine"},
+    {"id": "vale-stones", "kind": "stones", "position": [-600, 20]}
+  ],
+
   "parties": [
     {"id": "vale-bandits", "position": [-240, -160], "faction": "bandit",
      "troops": [{"role": "heavy", "level": 2}, {"role": "light", "level": 2}],

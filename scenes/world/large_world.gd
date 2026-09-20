@@ -9,6 +9,7 @@ extends RefCounted
 
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
+const Landmarks = preload("res://core/landmarks.gd")
 
 static func build() -> World:
 	var w := World.new()
@@ -70,4 +71,5 @@ static func build() -> World:
 	w.add_lair(World.Lair.new("sunken-ruins", Vector2(-700, -850), "undead", "Sunken Ruins"))
 	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(750, 1550), "undead", "Zombie Graveyard"))
 	w.add_lair(World.Lair.new("dragon-cave", Vector2(1700, -1000), "dragon", "Dragon's Cave"))
+	Landmarks.place(w, 43)   # a fixed seed: the large map is hand-placed, and so are its landmarks
 	return w

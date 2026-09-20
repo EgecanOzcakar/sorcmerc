@@ -24,6 +24,7 @@ func _init() -> void:
 	test_rejects()
 	test_warnings()
 	test_shipped_map_is_banded()
+	test_landmarks()
 	print("test_world_pack: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -158,3 +159,17 @@ func _lair(w, id):
 
 func _errs(src) -> Array:
 	return WorldPack.validate(src)["errors"]
+
+func test_landmarks() -> void:
+	var src := _src({"landmarks": [
+		{"id": "chapel", "kind": "shrine", "position": [200, 40], "name": "the Broken Chapel"},
+		{"id": "ring", "kind": "stones", "position": [-200, 90]}]})
+	check(WorldPack.validate(src)["errors"].is_empty(), "two landmarks validate")
+	var w = WorldPack.build(src)
+	check(w.landmarks.size() == 2 and w.landmark("chapel").sname == "the Broken Chapel"
+		and w.landmark("ring").kind == "stones" and w.landmark("ring").sname != "", "...and are built, named when no name is given")
+	var bad := _src({"landmarks": [{"id": "x", "kind": "pyramid", "position": [1, 1]}]})
+	var errs: Array = WorldPack.validate(bad)["errors"]
+	check(errs.any(func(e): return "pyramid" in String(e)), "an unknown kind is a scan-time error: %s" % str(errs))
+	var dup := _src({"landmarks": [{"id": "hold", "kind": "ruins", "position": [1, 1]}]})
+	check(not WorldPack.validate(dup)["errors"].is_empty(), "a landmark cannot reuse a settlement's id")

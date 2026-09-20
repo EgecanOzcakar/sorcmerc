@@ -141,6 +141,13 @@ room by room. `faction` must be one the bestiary can fill a fight from
 `soldier`) — a lair is *made of* its faction's roster. `"discovered": true`
 puts it on the map from the start.
 
+**Landmarks** are places on the map that are not a fight — ruins, a shrine,
+standing stones, a hermit's hut, a wreck, a watchtower (`kind`: `ruins` |
+`shrine` | `stones` | `hut` | `wreck` | `tower`). `name` is optional, the same
+as everywhere else. A pack that declares no `landmarks` gets none — the
+built-in builders place their own by hand or by seed, but that placement never
+runs for a pack; if you want them on your map, write them here.
+
 **Parties** are roaming bands. `troops` is flavour — the map figure and the
 headcount label; their actual fight is built from the faction. `ai.behavior`:
 

@@ -367,6 +367,7 @@ func _ready() -> void:
 # spawning is a later phase's job (O3 onward).
 const LargeWorld = preload("res://scenes/world/large_world.gd")
 const ProceduralWorld = preload("res://scenes/world/procedural_world.gd")
+const Landmarks = preload("res://core/landmarks.gd")
 
 func _large_world() -> World:
 	return LargeWorld.build()
@@ -434,6 +435,7 @@ func _small_world() -> World:
 	w.add_lair(World.Lair.new("sunken-ruins", Vector2(-280, -340), "undead", "Sunken Ruins"))
 	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(300, 620), "undead", "Zombie Graveyard"))
 	w.add_lair(World.Lair.new("dragon-cave", Vector2(680, -400), "dragon", "Dragon's Cave"))
+	Landmarks.place(w, 41)   # a fixed seed: the small map is hand-placed, and so are its landmarks
 	return w
 
 # World.tick() advances the clock itself and gates movement on it, so one call

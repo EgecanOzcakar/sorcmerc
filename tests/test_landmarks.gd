@@ -19,6 +19,7 @@ func check(cond: bool, label: String) -> void:
 func _init() -> void:
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/landmarks-%d-%d" % [OS.get_process_id(), randi()])
 	test_model()
+	test_placement()
 	print("test_landmarks: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -68,3 +69,37 @@ func test_model() -> void:
 	check(back["party"].blessed, "the blessing rides the road dict")
 	d.erase("landmarks")
 	check(WorldSave.from_dict(d)["world"].landmarks.is_empty(), "an old save loads with none")
+
+# --- Task 2: placement ---------------------------------------------------
+
+func test_placement() -> void:
+	# count, gap, dry ground, round-robin kinds — on a hundred seeds
+	var bad := 0
+	for s in range(1, 101):
+		var w := _world()
+		w.add_water(Vector2(120, 120), 60.0)
+		Landmarks.place(w, s)
+		var want: int = ceili(Landmarks.LANDMARKS_PER_LAIR * w.lairs.size())
+		if w.landmarks.size() != want:
+			bad += 1
+			continue
+		var taken: Array = []
+		for st in w.settlements: taken.append(st.position)
+		for l in w.lairs: taken.append(l.position)
+		for m in w.landmarks:
+			if w.is_water(m.position):
+				bad += 1
+			for t in taken:
+				if t.distance_to(m.position) < Landmarks.LANDMARK_GAP:
+					bad += 1
+			taken.append(m.position)
+	check(bad == 0, "100 seeds: the right count, off the water, the gap kept (%d bad)" % bad)
+	var w := _world()
+	Landmarks.place(w, 7)
+	var kinds: Array = w.landmarks.map(func(m): return m.kind)
+	check(kinds.size() == 3 and kinds[0] != kinds[1] and kinds[1] != kinds[2], "kinds go round-robin")
+	var w2 := _world()
+	Landmarks.place(w2, 7)
+	check(w2.landmarks.map(func(m): return [m.id, m.position]) == w.landmarks.map(func(m): return [m.id, m.position]),
+		"the same seed places the same landmarks")
+	check(w.landmarks.all(func(m): return m.id.begins_with("landmark-")), "ids are namespaced")
