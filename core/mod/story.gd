@@ -156,7 +156,7 @@ static func parse(src):
 	return s
 
 # The rest of validation, split out because it is long and because parse()
-# has to survive anything. `world_ids` is {id: "settlement"|"lair"|"party"}
+# has to survive anything. `world_ids` is {id: "settlement"|"lair"|"party"|"landmark"}
 # from the pack's own map when it has one — with it, a story that sends the
 # party to a settlement the map does not have is caught by the validator
 # rather than by a player standing somewhere waiting for a beat that cannot

@@ -7,6 +7,7 @@ extends SceneTree
 
 const Story = preload("res://core/mod/story.gd")
 const StoryRuntime = preload("res://core/mod/story_runtime.gd")
+const World = preload("res://core/world.gd")
 const WorldPack = preload("res://core/mod/world_pack.gd")
 const Registry = preload("res://core/mod/registry.gd")
 const Quest = preload("res://core/quest.gd")
@@ -95,6 +96,10 @@ func test_validation() -> void:
 	check(String(s.beat("job")["id"]) == "job", "...and by id, across chapters")
 	check(s.speaker_label("a") == "Ann — Reeve", "a speaker label names the part")
 	check(s.speaker_label("ghost") == "ghost", "an unknown speaker still reads as something")
+	var near_landmark = Story.parse({"format": "sorcmerc-story", "chapters": [{"id": "one", "beats": [
+		{"id": "b", "kind": "scene", "lines": ["x"], "when": {"near": "chapel"}}]}]})
+	near_landmark.check({"chapel": "landmark"})
+	check(near_landmark.errors.is_empty(), "a story can stand near a landmark its pack declares")
 
 func test_validation_rejects() -> void:
 	check(not _bad({"chapters": []}).is_empty(), "a story needs a chapter")
@@ -176,6 +181,9 @@ func test_conditions() -> void:
 	check(run.holds({"near": "warren", "within": 500}, w, p), "within widens the reach")
 	w.player().position = Vector2(395, 0)
 	check(run.holds({"near": "warren"}, w, p), "near works on lairs too, not just settlements")
+	w.add_landmark(World.Landmark.new("chapel", "shrine", Vector2(300, 300)))
+	w.player().position = Vector2(300, 300)
+	check(run.holds({"near": "chapel"}, w, p), "...and on landmarks")
 	w.player().position = Vector2(10, 0)
 
 	check(not run.holds({"visited": "hold"}, w, p), "nowhere is visited yet")
