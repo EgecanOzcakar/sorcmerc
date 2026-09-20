@@ -90,13 +90,24 @@ the numbers agree — a flatness under 0.012 and, on the seven theme beds, a
 comb of 13–19 harmonic peaks is a saw pad through a filter, however good the
 reverb. Eight-second loops of
 a four-chord progression also wear through inside a minute on the map screen,
-which is where most of a session is spent. Replaced with 45–60 s pieces from
-the Music API, each prompt written from the recipe's own mood (the key, the
-instruments, the texture — `bed_frozen_cave`'s "vast and still, ice bells far
-apart" is the prompt), the file names kept, and the loop seam crossfaded in
-the writer since the API has no loop flag. `tension.wav` keeps its one rule:
-it plays *over* whichever theme bed is running, so it is asked for as
-percussion and a single-note pulse with no chord changes.
+which is where most of a session is spent. Replaced with 58 s loops, each
+prompt written from the recipe's own mood (the key, the instruments, the
+texture — `bed_frozen_cave`'s "vast and still, ice bells far apart" is the
+prompt), the file names kept, and the loop seam crossfaded in the writer.
+`tension.wav` keeps its one rule: it plays *over* whichever theme bed is
+running, so it is asked for as percussion and a single-note pulse with no
+chord changes — and the first take of it was a few hits and silence, so the
+prompt now says "dense from start to finish" in so many words, and the retry
+is.
+
+The plan was the Music API (`tools/gen_music_elevenlabs.py`, 45–60 s pieces,
+MP3 back through ffmpeg). The account this ran on gets a 402 from it —
+`paid_plan_required` — so every bed and every music sting came through the
+tool's `--engine sfx` road instead: the sound-effects model the sfx tool
+already uses, which takes a `loop` flag and up to thirty seconds. Asked for
+thirty it returns sixty, and the fold takes two, so the beds are 58 s, mono
+like every other take, at the synthesized set's 0.89 peak. The day the
+account can compose, `beds` with the default engine writes the same names.
 
 **The four country beds — condemned, replaced.** The worst files in the set:
 the pre-rebuild synthesis (one held chord, a tremolo, a saw), 22 kHz mono,
@@ -116,7 +127,10 @@ None of these made a sound before this branch. Every id is a
 `Sound.play_sfx` at the moment it names; `music_*` ids go through
 `Sound.play_sting`, which is `play_sfx` on the Music bus without the pitch
 drift (a ±6 % drift is right for a sword and wrong for a phrase that has to
-sit in a key over the bed).
+sit in a key over the bed), on one player of its own. The stings came back
+from the sound-effects model as a phrase, half a second of nothing, and the
+phrase again; the post-pass keeps the one with the most in it, so they run
+3.4 s (relief) to 11.7 s (alarm) rather than the 6–12 s asked for.
 
 | moment | where | id |
 |---|---|---|
