@@ -31,6 +31,7 @@ func _init() -> void:
 	test_reach_keeps_a_job_local()
 	test_supply_orders()
 	test_deliver_and_scout()
+	test_rescue_offer()
 	test_the_whole_settlement_can_run_out_of_work()
 	FactionOpinion.reset()
 	print("test_quest_posting: %d passed, %d failed" % [_pass, _fail])
@@ -249,3 +250,28 @@ func test_the_whole_settlement_can_run_out_of_work() -> void:
 	for q in _at(city, party, w):
 		check(Quest.get_quest(party, String(q["id"])).is_empty(),
 			"%s is offered again after being taken" % q["id"])
+
+func test_rescue_offer() -> void:
+	var Site = load("res://core/site.gd")
+	var w := _world()
+	var p := _party()
+	# a lair with captives in it, near the city, and a spent one beside it
+	var held = null
+	for i in 400:
+		var l = World.Lair.new("pens-%d" % i, Vector2(120, 60), "goblinoid")
+		if Site.pens_ahead(l):
+			held = l
+			break
+	check(held != null, "a lair with pens exists")
+	w.add_lair(held)
+	var city = w.settlements[0]
+	var q: Dictionary = Posting.rescue_offer(city, w, p)
+	check(q["kind"] == "rescue" and q["target_lair_id"] == held.id and q["title"].begins_with("Bring back "),
+		"the city posts a rescue about it: %s" % q.get("title", ""))
+	check(int(q["reward"]["gold"]) >= Posting.RESCUE_BASE, "...that pays at least the base")
+	check(_kinds(_at(city, p, w)).has("rescue"), "...on its board")
+	held.looted = true
+	check(Posting.rescue_offer(city, w, p).is_empty(), "a spent lair holds nobody")
+	held.looted = false
+	held.position = Vector2(0, Posting.PLACEMENT["rescue"]["reach"] + 50.0)
+	check(Posting.rescue_offer(city, w, p).is_empty(), "out of reach, out of mind")
