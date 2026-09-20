@@ -49,6 +49,7 @@ func _init() -> void:
 	test_gates()
 	test_march_siege_land_home()
 	test_turned()
+	test_truce()
 	test_lift()
 	test_spread()
 	test_settle()
@@ -164,6 +165,39 @@ func test_turned() -> void:
 	check(lines.is_empty(), "the lair says nothing about a band it has lost")
 	check(Raids.due_at(l) - now >= Raids.RAID_EVERY and Raids.due_at(l) - now < Raids.RAID_EVERY + Raids.RAID_JITTER,
 		"the next try is RAID_EVERY plus the lair's own jitter (%s)" % (Raids.due_at(l) - now))
+
+# A band met and left without blood walks its break-off leg and then carries
+# on to the gate. Landing exactly on the break-off point must not read as
+# arriving at the siege point: the phase stays march through the truce and
+# turns only at the gate. (_break_off_step erases the leg the frame after the
+# band reaches it, so the band turns for the gate at once, truce or no.)
+func test_truce() -> void:
+	var w := _world()
+	var l = w.lairs[0]
+	w.clock.elapsed = Raids.due_at(l)
+	Raids.tick(w, w.clock.elapsed)
+	var b = Raids.band_of(w, l)
+	_frame(w)
+	WorldAI.truce(b, w.player(), w.clock.elapsed)
+	var away: Vector2 = b.ai["break_off"]
+	check(away.distance_to(b.position) == WorldAI.BREAK_OFF_DIST, "the break-off point is BREAK_OFF_DIST off")
+	var marched := true
+	var reached := false
+	for i in 60:
+		_frame(w)
+		marched = marched and b.ai["phase"] == "march"
+		if b.position.distance_to(away) <= WorldAI.WAYPOINT_SLACK:
+			reached = true
+			break
+	check(reached, "the band walks its break-off leg")
+	check(marched, "standing on the break-off point is not arriving at the gate: still march")
+	check(WorldAI.in_truce(b, w.clock.elapsed), "...and the truce is still running")
+	for i in 600:
+		if b.ai["phase"] == "siege":
+			break
+		_frame(w)
+	check(b.ai["phase"] == "siege" and b.position.distance_to(Vector2(b.ai["to"])) <= 1.0,
+		"then it reaches the gate and the phase turns there (%s at %s)" % [b.ai["phase"], b.position])
 
 func test_lift() -> void:
 	var w := _world()

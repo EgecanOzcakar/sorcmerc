@@ -193,9 +193,11 @@ static func _arrived(party) -> bool:
 		return false
 	return party.position.is_equal_approx(dest)
 
-# The same test, for the module that advances a raid's phases.
+# The same test, for the module that advances a raid's phases — but never
+# while a truce is walking the band away: standing on the break-off point is
+# not arriving anywhere.
 static func arrived(party) -> bool:
-	return _arrived(party)
+	return not _state(party).has("break_off") and _arrived(party)
 
 # The waypoints still to walk before the destination, outermost first. Empty
 # when the march is a straight line (which is every march on a dry map).
