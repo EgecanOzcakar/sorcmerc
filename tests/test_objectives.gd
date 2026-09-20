@@ -29,6 +29,8 @@ func _init() -> void:
 	test_breakout()
 	test_hunt()
 	test_escort()
+	test_quarry_runs()
+	test_autopilot_rules()
 	print("test_objectives: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -293,3 +295,78 @@ func test_escort() -> void:
 	cb._apply_damage(car, 99)
 	check(car.is_dead() and cb.objective_failed and not cb.is_over(), "the carter dead fails the objective and the fight goes on")
 	check(not cb.objective_result() and cb.objective_line() == "Carter — dead", "HUD: %s" % cb.objective_line())
+
+# --- Task 4: the AI — the quarry runs, and the autopilot tries --------------
+
+func test_quarry_runs() -> void:
+	var spec := {"monsters": [{"id": "snik", "count": 1}, {"id": "grull", "count": 1}], "theme": "goblin-camp",
+		"objective": Objectives.make("hunt")}
+	var cb := _fight(spec, 29)
+	var q = cb.with_status("quarry")
+	var exit: Array = cb.objective["exit"]
+	var far := func(p: Vector2i) -> int:
+		var d := 1 << 30
+		for e in exit:
+			d = mini(d, Hex.distance(p, e))
+		return d
+	# nobody near (the party starts SPAWN_GAP away, past QUARRY_CORNERED): it runs, and swings at nobody
+	for c in cb.combatants:
+		if c.team == "party":
+			c.speed = 0   # the heroes stay put, so it is the quarry's own choice being tested
+	check(_until_turn_of(cb, q), "the quarry's turn")
+	var before: int = far.call(q.pos)
+	var hp_before: Array = cb.heroes().map(func(h): return h.hp)
+	AI.take_turn(cb, q)
+	check(far.call(q.pos) < before, "with nobody within %d, the quarry runs for the treeline (%d -> %d)" % [Objectives.QUARRY_CORNERED, before, far.call(q.pos)])
+	check(cb.heroes().map(func(h): return h.hp) == hp_before, "...and attacks nobody")
+	# a hero on its heels: it fights
+	cb = _fight(spec, 29)
+	q = cb.with_status("quarry")
+	check(_until_turn_of(cb, q), "the quarry's turn again")
+	var h = cb.heroes()[0]
+	h.pos = Hex.neighbors(q.pos)[0]
+	var at: Vector2i = q.pos
+	var log_n: int = cb.log.size()
+	AI.take_turn(cb, q)
+	check(cb.log.size() > log_n and (q.pos == at or Hex.distance(q.pos, h.pos) <= 1),
+		"cornered, it stands and fights (%s)" % str(cb.log.slice(log_n)))
+
+func test_autopilot_rules() -> void:
+	# rescue: the hero nearest the captive closes on it before anything else
+	var cb := _fight(_goblins(1).merged({"objective": Objectives.make("rescue")}), 31)
+	var cap = cb.with_status("captive")
+	for f in cb.team_of("foe"):
+		f.speed = 0; f.max_hp = 100000; f.hp = 100000
+	var runner = AI._nearest(cap.pos, cb.heroes())
+	check(_until_turn_of(cb, runner), "the runner's turn")
+	var d0: int = Hex.distance(runner.pos, cap.pos)
+	AI.take_turn(cb, runner)
+	check(Hex.distance(runner.pos, cap.pos) < d0, "rescue: the nearest hero moves toward the captive (%d -> %d)" % [d0, Hex.distance(runner.pos, cap.pos)])
+
+	# breakout: heroes head for the road and do not chase
+	cb = _fight(_goblins(2).merged({"objective": Objectives.make("breakout")}), 31)
+	for f in cb.team_of("foe"):
+		f.speed = 0; f.max_hp = 100000; f.hp = 100000
+	var exit: Array = cb.objective["exit"]
+	var near_exit := func(p: Vector2i) -> int:
+		var d := 1 << 30
+		for e in exit:
+			d = mini(d, Hex.distance(p, e))
+		return d
+	var h = cb.heroes()[0]
+	check(_until_turn_of(cb, h), "a hero's turn")
+	var e0: int = near_exit.call(h.pos)
+	AI.take_turn(cb, h)
+	check(near_exit.call(h.pos) < e0, "breakout: a hero moves toward the road (%d -> %d)" % [e0, near_exit.call(h.pos)])
+
+	# escort: a hero that has drifted comes back to the carter
+	cb = _fight(_goblins(1).merged({"objective": Objectives.make("escort")}), 31)
+	for f in cb.team_of("foe"):
+		f.speed = 0; f.max_hp = 100000; f.hp = 100000
+	var car = cb.with_status("carter")
+	h = cb.heroes()[0]
+	check(_until_turn_of(cb, h), "a hero's turn")
+	h.pos = Encounter.far_hexes(cb.board, cb.combatants.map(func(c): return c.pos), 1)[0]
+	var c0: int = Hex.distance(h.pos, car.pos)
+	AI.take_turn(cb, h)
+	check(Hex.distance(h.pos, car.pos) < c0, "escort: a hero more than 2 away closes on the carter (%d -> %d)" % [c0, Hex.distance(h.pos, car.pos)])

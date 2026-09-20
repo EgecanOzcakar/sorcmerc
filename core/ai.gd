@@ -3,6 +3,7 @@
 extends RefCounted
 
 const Hex = preload("res://core/hex.gd")
+const Objectives = preload("res://core/objectives.gd")
 
 # combat-design.md §7 rule 5: foes won't execute a downed PC while they could
 # instead engage a conscious one this turn. The difference between tense and
@@ -219,8 +220,10 @@ static func _foe_turn(cb, m) -> void:
 	# turn to it, which makes the double far stronger than RAW's "Advantage
 	# against creatures within 5 feet" and reads as the AI being broken.
 	var pcs: Array = cb.combatants.filter(func(c): return c.team == "party" \
-		and c.conscious() and not c.has("illusion"))
+		and c.conscious() and not c.has("illusion") and not c.has("captive"))
 	if pcs.is_empty():
+		return
+	if m.has("quarry") and _quarry_runs(cb, m, pcs):
 		return
 	_use_kit(cb, m)
 
@@ -276,6 +279,27 @@ static func _foe_turn(cb, m) -> void:
 	else:
 		await _use_special(cb, m, pcs)   # closed, but not close enough to swing — a gaze still reaches
 
+# hunt: the quarry runs for the far edge unless a hero is close enough that
+# running is the worse choice — then it fights this turn like anybody else.
+# Ending a turn on the edge is the escape (combat.gd's end_turn).
+static func _quarry_runs(cb, m, pcs: Array) -> bool:
+	if cb.objective_kind() != "hunt" or m.has("escaped"):
+		return false
+	for c in pcs:
+		if Hex.distance(c.pos, m.pos) <= Objectives.QUARRY_CORNERED:
+			return false
+	var exit: Array = cb.objective.get("exit", [])
+	if exit.is_empty():
+		return false
+	var away := _away(pcs)
+	var score := func(h: Vector2i) -> float:
+		var d := 1 << 30
+		for e in exit:
+			d = mini(d, Hex.distance(h, e))
+		return -3.0 * float(d) + float(away.call(h))
+	_move_by(cb, m, score)
+	return true
+
 # --- party autopilot (demo / test only) ----------------------------
 
 static func _party_auto(cb, h) -> void:
@@ -292,9 +316,12 @@ static func _party_auto(cb, h) -> void:
 				cb.perform(h, heal, c)
 				break
 
+	# the objective's one rule for where to stand (spec §7), before any chasing
+	var moved := _objective_move(cb, h)
+
 	# close distance if nothing is in reach and we're not a shooter
 	var reach: Array = foes.filter(func(c): return cb.in_reach(h, c))
-	if reach.is_empty() and not h.ranged:
+	if reach.is_empty() and not h.ranged and not moved:
 		var t = _nearest(h.pos, foes)
 		_move_by(cb, h, _toward(t.pos))
 		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
@@ -327,6 +354,12 @@ static func _party_auto(cb, h) -> void:
 	var targets: Array = reach if not reach.is_empty() else foes
 	if targets.is_empty():
 		return
+	if cb.objective_kind() == "breakout" and reach.is_empty():
+		return   # heading for the road: swing only at what is already in the way
+	if cb.objective_kind() == "hunt":
+		var q: Array = reach.filter(func(c): return c.has("quarry"))
+		if not q.is_empty():
+			targets = q
 	targets.sort_custom(func(a, b): return a.hp < b.hp)
 	if cb.in_reach(h, targets[0]):
 		cb.resolve_attack(h, targets[0])
@@ -335,3 +368,34 @@ static func _party_auto(cb, h) -> void:
 	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count"))
 	if not bolt.is_empty() and cb.legal_target(h, bolt, targets[0]):
 		cb.perform(h, bolt, targets[0])
+
+# One movement preference per kind — not to make the autopilot good, but so
+# the sweep in tests/test_objectives.gd measures a party that is trying.
+# Returns true if it spent the move, so the caller does not chase as well.
+static func _objective_move(cb, h) -> bool:
+	match cb.objective_kind():
+		"rescue":
+			var cap = cb.with_status("captive")
+			if cap == null or cap.has("freed") or cap.is_dead():
+				return false
+			if _nearest(cap.pos, cb.heroes()) != h or Hex.distance(h.pos, cap.pos) <= 1:
+				return false
+			_move_by(cb, h, _toward(cap.pos))
+			return true
+		"breakout":
+			var exit: Array = cb.objective.get("exit", [])
+			if exit.is_empty() or h.pos in exit:
+				return false
+			var goal: Vector2i = exit[0]
+			for e in exit:
+				if Hex.distance(h.pos, e) < Hex.distance(h.pos, goal):
+					goal = e
+			_move_by(cb, h, _toward(goal))
+			return true
+		"escort":
+			var car = cb.with_status("carter")
+			if car == null or car.is_dead() or Hex.distance(h.pos, car.pos) <= 2:
+				return false
+			_move_by(cb, h, _toward(car.pos))
+			return true
+	return false
