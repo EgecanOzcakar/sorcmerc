@@ -24,6 +24,11 @@ func _init() -> void:
 	test_bystander()
 	test_make_and_brief()
 	test_placement()
+	test_hold()
+	test_rescue()
+	test_breakout()
+	test_hunt()
+	test_escort()
 	print("test_objectives: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -53,6 +58,36 @@ func _autoplay(cb: Combat) -> void:
 
 func _goblins(n: int) -> Dictionary:
 	return {"monsters": [{"id": "snik", "count": n}], "theme": "goblin-camp"}
+
+# Walk the order until `who` is current, beginning turns and letting the AI
+# take everyone else's. Returns false if the fight ended first.
+func _until_turn_of(cb: Combat, who) -> bool:
+	var g := 0
+	while not cb.is_over() and g < 200:
+		var a = cb.current()
+		cb.begin_turn()
+		if a == who:
+			return true
+		AI.take_turn(cb, a)
+		cb.end_turn()
+		g += 1
+	return false
+
+# Nobody moves and nobody dies: for the rule tests that place tokens by hand.
+func _freeze(cb: Combat) -> void:
+	for c in cb.combatants:
+		if not c.has("bystander"):
+			c.speed = 0
+			c.max_hp = 100000
+			c.hp = 100000
+
+func _rounds_until_over(cb: Combat, cap := 40) -> int:
+	while not cb.is_over() and cb.round_num <= cap:
+		var a = cb.current()
+		cb.begin_turn()
+		AI.take_turn(cb, a)
+		cb.end_turn()
+	return cb.round_num
 
 # --- Task 1: the contract and the bystanders --------------------------------
 
@@ -169,3 +204,92 @@ func test_placement() -> void:
 	check(Encounter.starts_for({"objective": Objectives.make("hunt")}, board, 7) == Encounter.party_starts(board, 7), "so does a hunt")
 	check(Encounter.starts_for({"objective": Objectives.make("breakout")}, board, 7) != Encounter.party_starts(board, 7), "a breakout starts elsewhere")
 	check(not _fight(_goblins(1).merged({"objective": Objectives.make("escort")}), 7).objective.has("exit"), "only breakout and hunt carry an exit")
+
+# --- Task 3: the rules of each kind, inside the fight ------------------
+
+func test_hold() -> void:
+	# An unkillable wall of goblins: the only way this ends is the clock.
+	var spec := {"monsters": [{"id": "snik", "count": 2, "mult": 6.0}], "theme": "goblin-camp",
+		"objective": Objectives.make("hold", {"rounds": 3, "waves": [[{"id": "snik", "count": 2}], [{"id": "snik", "count": 1}]]})}
+	var cb := _fight(spec, 11)
+	var opening: int = cb.team_of("foe").size()
+	_freeze(cb)   # nothing dies either way: only the clock can end this
+	_rounds_until_over(cb, 10)
+	check(cb.round_num == 4, "hold ends at the top of round rounds + 1 (%d)" % cb.round_num)
+	check(cb.outcome() == "Victory" and cb.objective_done, "...and it is a victory with foes standing")
+	check(cb.team_of("foe").size() == opening + 3, "two waves arrived (%d foes)" % cb.team_of("foe").size())
+	check(cb.team_of("foe").any(func(f): return f.id.begins_with("w2-")), "wave ids are prefixed by their round")
+	check(cb.objective_result(), "the deed is done")
+	check(cb.objective_line().begins_with("Hold — round"), "HUD: %s" % cb.objective_line())
+
+func test_rescue() -> void:
+	var spec := _goblins(1).merged({"objective": Objectives.make("rescue", {"deadline": 2})})
+	var cb := _fight(spec, 13)
+	var cap = cb.with_status("captive")
+	_freeze(cb)   # nobody can walk to the captive, so the deadline is what happens
+	check(cb.objective_line() == "Captive — 2 rounds left", "HUD counts down: %s" % cb.objective_line())
+	_rounds_until_over(cb, 4)
+	check(cap.is_dead() and cb.objective_failed, "unfreed at the top of round deadline + 1, the captive is killed")
+	check(not cb.is_over(), "...and the fight goes on")
+	check(cb.objective_line() == "Captive — lost", "HUD says so")
+
+	# freed by adjacency, no action needed, before the deadline
+	cb = _fight(spec, 13)
+	cap = cb.with_status("captive")
+	_freeze(cb)
+	var h = cb.heroes()[0]
+	check(_until_turn_of(cb, h), "it is a hero's turn")
+	h.pos = Hex.neighbors(cap.pos)[0]
+	cb.end_turn()
+	check(cap.has("freed") and not cb.objective_failed, "ending a turn adjacent frees the captive")
+	check(cb.objective_result(), "...which is the deed")
+	for i in 6:
+		cb.begin_turn(); cb.end_turn()
+	check(not cap.is_dead(), "the deadline no longer applies")
+
+func test_breakout() -> void:
+	var spec := _goblins(2).merged({"objective": Objectives.make("breakout")})
+	var cb := _fight(spec, 17)
+	var exit: Array = cb.objective["exit"]
+	_freeze(cb)
+	var heroes: Array = cb.heroes()
+	check(cb.objective_line() == "Road — 0 of %d heroes there" % heroes.size(), "HUD: %s" % cb.objective_line())
+	check(_until_turn_of(cb, heroes[0]), "a hero's turn")
+	heroes[0].pos = exit[0]
+	cb.end_turn()
+	check(not cb.is_over(), "one hero on the road is not a breakout")
+	for i in heroes.size():
+		heroes[i].pos = exit[i]
+	cb._objective_touch(heroes[1])
+	check(cb.objective_done and cb.is_over() and cb.outcome() == "Victory", "everyone on the road ends it, a victory, foes standing")
+
+func test_hunt() -> void:
+	var spec := {"monsters": [{"id": "snik", "count": 2}, {"id": "grull", "count": 1}], "theme": "goblin-camp",
+		"objective": Objectives.make("hunt")}
+	var cb := _fight(spec, 19)
+	_freeze(cb)
+	var q = cb.with_status("quarry")
+	var exit: Array = cb.objective["exit"]
+	check(_until_turn_of(cb, q), "the quarry's turn")
+	q.pos = exit[0]
+	cb.end_turn()
+	check(q.has("escaped") and q.is_dead() and cb.objective_failed, "ending its turn on the far edge, the quarry is gone")
+	check(not cb.is_over(), "...and the escort is still there to fight")
+	check(cb.objective_line() == "Quarry — gone", "HUD: %s" % cb.objective_line())
+
+	cb = _fight(spec, 19)
+	q = cb.with_status("quarry")
+	cb._apply_damage(q, 999)
+	check(q.is_dead() and cb.objective_done and cb.is_over() and cb.outcome() == "Victory",
+		"the quarry down ends the fight as a victory with the escort standing")
+	check(cb.objective_result(), "...and the deed is done")
+
+func test_escort() -> void:
+	var spec := _goblins(2).merged({"objective": Objectives.make("escort")})
+	var cb := _fight(spec, 23)
+	var car = cb.with_status("carter")
+	check(cb.objective_line() == "Carter — %d HP" % car.hp, "HUD: %s" % cb.objective_line())
+	check(cb.objective_result(), "alive = the deed, so far")
+	cb._apply_damage(car, 99)
+	check(car.is_dead() and cb.objective_failed and not cb.is_over(), "the carter dead fails the objective and the fight goes on")
+	check(not cb.objective_result() and cb.objective_line() == "Carter — dead", "HUD: %s" % cb.objective_line())
