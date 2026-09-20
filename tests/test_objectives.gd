@@ -88,6 +88,15 @@ func test_bystander() -> void:
 	cb2._apply_damage(car, 50)
 	check(car.is_dead() and not car.is_down(), "a bystander at 0 HP is dead, not down")
 	check(not cb2.downed.has("carter"), "...and is not in the downed list")
+	check(cb2.objective_failed, "a dead bystander fails the objective")
+
+	# car's overkill (38) alone satisfies the pre-existing massive-damage clause
+	# (overkill >= max_hp) no matter the target, so that death doesn't pin the
+	# bystander rule specifically. Zero-overkill damage on the captive does:
+	# only target.has("bystander") explains this kill.
+	cb2._apply_damage(cap, cap.max_hp)
+	check(cap.is_dead() and not cap.is_down(), "a bystander dies at 0 HP with no overkill too")
+
 	for h in cb2.heroes():
 		cb2._apply_damage(h, 500)
 	check(cb2._team_out("party"), "a party with only a bystander standing is out")
