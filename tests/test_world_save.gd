@@ -276,3 +276,49 @@ func _done() -> void:
 
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# O13x: multiple open-world slots, one per playthrough, plus the legacy migration
+# that carries an already-affected player's pre-slots save forward.
+func _slots() -> void:
+	# A raw legacy save, written the old way — no slot ever chosen.
+	WorldSave.set_active_slot("")
+	var legacy_world := _world()
+	legacy_world.clock.elapsed = 111.0
+	WorldSave.save(legacy_world, _party())
+
+	var a := WorldSave.new_slot()
+	var world_a := _world()
+	world_a.clock.elapsed = 222.0
+	var party_a := _party()
+	party_a.add_gold(9000)
+	WorldSave.save(world_a, party_a)
+
+	var b := WorldSave.new_slot()
+	check(b != a, "two slots never collide")
+	var world_b := _world()
+	world_b.clock.elapsed = 333.0
+	WorldSave.save(world_b, _party())
+
+	var slots := WorldSave.list_slots()
+	var ids: Array = []
+	for s in slots:
+		ids.append(s["id"])
+	check(a in ids and b in ids and "legacy" in ids,
+		"both fresh slots and the migrated legacy save all show up")
+
+	WorldSave.set_active_slot(a)
+	var back_a = WorldSave.load_latest()
+	check(is_equal_approx(back_a["world"].clock.elapsed, 222.0)
+		and back_a["party"].gold == party_a.gold, "slot a loads its own data")
+
+	WorldSave.set_active_slot(b)
+	var back_b = WorldSave.load_latest()
+	check(is_equal_approx(back_b["world"].clock.elapsed, 333.0),
+		"slot b is untouched by slot a's save — not sharing one file")
+
+	WorldSave.set_active_slot("legacy")
+	var back_legacy = WorldSave.load_latest()
+	check(is_equal_approx(back_legacy["world"].clock.elapsed, 111.0),
+		"the migrated legacy slot still holds the pre-slots save")
+
+	WorldSave.set_active_slot("")

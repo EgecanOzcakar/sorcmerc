@@ -229,7 +229,8 @@ func _resume() -> void:
 
 # O13: the open world has no terminal state to check — there is no "finished" world,
 # only the map you left. WorldSave.from_dict re-applies faction opinion itself.
-func _resume_world() -> void:
+func _resume_world(slot_id: String) -> void:
+	WorldSave.set_active_slot(slot_id)
 	var saved = WorldSave.load_latest()
 	if saved == null:
 		show_title()
