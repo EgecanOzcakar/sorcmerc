@@ -60,3 +60,53 @@ static func captive(pos: Vector2i):
 static func carter(pos: Vector2i, level: int):
 	return bystander("carter", "The carter", pos, CARTER_AC, CARTER_HP_BASE + CARTER_HP_PER_LEVEL * maxi(1, level),
 		["carter"])
+
+# --- builders ---------------------------------------------------------------
+
+# An objective dict with the kind's defaults; `extra` overrides (a site passes
+# its waves, a story its own deadline). Stays JSON-clean: it rides the spec
+# over the co-op wire.
+static func make(kind: String, extra: Dictionary = {}) -> Dictionary:
+	var o := {"kind": kind}
+	match kind:
+		"hold":
+			o["rounds"] = HOLD_ROUNDS
+			o["waves"] = []
+		"rescue":
+			o["deadline"] = RESCUE_DEADLINE
+	o.merge(extra, true)
+	return o
+
+# The carter's HP scales with the party; `party_c` are combatants, whose sheet
+# (null for a preset-less test party) carries the level.
+static func party_level(party_c: Array) -> int:
+	var total := 0
+	var n := 0
+	for c in party_c:
+		if c.sheet != null:
+			total += int(c.sheet.level)
+			n += 1
+	return maxi(1, roundi(float(total) / n)) if n > 0 else 1
+
+# --- words ------------------------------------------------------------------
+
+# One line, read before the board comes up: the question this fight asks.
+static func brief(o: Dictionary) -> String:
+	match String(o.get("kind", "")):
+		"hold":
+			return "Hold the passage for %d rounds. More of them will come from the far side." % int(o.get("rounds", HOLD_ROUNDS))
+		"rescue":
+			return "A captive is bound at the back of the room. Reach them by the end of round %d, or the captors will make sure you cannot." % int(o.get("deadline", RESCUE_DEADLINE))
+		"breakout":
+			return "Surrounded. Get everyone still standing to the road at the far edge — or cut your way through the lot of them."
+		"hunt":
+			return "Their leader will run for the far edge. Drop them before they reach it and the rest will scatter."
+		"escort":
+			return "The carter stands with you. If the carter dies, the delivery dies with them."
+	return ""
+
+const TITLES := {"hold": "Hold the line", "rescue": "Rescue", "breakout": "Break out",
+	"hunt": "The hunt", "escort": "Escort"}
+
+static func title(kind: String) -> String:
+	return String(TITLES.get(kind, ""))

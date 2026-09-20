@@ -22,6 +22,8 @@ func check(cond: bool, label: String) -> void:
 
 func _init() -> void:
 	test_bystander()
+	test_make_and_brief()
+	test_placement()
 	print("test_objectives: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -33,12 +35,7 @@ func _fight(spec: Dictionary, seed: int) -> Combat:
 	var sp: Dictionary = spec.duplicate(true)
 	sp["seed"] = seed
 	var board: Dictionary = Encounter.board_for(String(sp.get("theme", "")), seed)
-	# const Encounter = preload(...) makes Encounter.foo() a compile-time static call
-	# here, so Encounter.has_method(...) is a parse error regardless of whether the
-	# method exists — load() the same file at runtime just to ask the question.
-	var enc = load("res://core/encounter.gd")
-	var starts: Array = enc.starts_for(sp, board, seed) if enc.has_method("starts_for") \
-		else Encounter.party_starts(board, seed)
+	var starts: Array = Encounter.starts_for(sp, board, seed)
 	var chars: Array = Presets.party()
 	var party_c: Array = []
 	for i in chars.size():
@@ -101,3 +98,71 @@ func test_bystander() -> void:
 		cb2._apply_damage(h, 500)
 	check(cb2._team_out("party"), "a party with only a bystander standing is out")
 	check(cb2.is_over() and cb2.outcome() == "Defeat", "...and that is a defeat")
+
+# --- Task 2: placement --------------------------------------------------
+
+func test_make_and_brief() -> void:
+	var h := Objectives.make("hold")
+	check(h["kind"] == "hold" and int(h["rounds"]) == Objectives.HOLD_ROUNDS and h["waves"] == [], "hold has its defaults")
+	check(int(Objectives.make("rescue")["deadline"]) == Objectives.RESCUE_DEADLINE, "rescue has its deadline")
+	check(Objectives.make("hold", {"rounds": 9})["rounds"] == 9, "extra overrides a default")
+	for k in Objectives.KINDS:
+		check(Objectives.brief(Objectives.make(k)) != "", "%s has a brief" % k)
+	check(Objectives.brief({}) == "", "rout has no brief")
+
+func test_placement() -> void:
+	# rescue: the captive is the deepest free hex, and foes are not on top of it
+	var cb := _fight(_goblins(3).merged({"objective": Objectives.make("rescue")}), 7)
+	var cap = cb.with_status("captive")
+	check(cap != null and cap.pos in cb.board["hexes"], "rescue puts a captive on the board")
+	var nearest := 99
+	for h in cb.heroes():
+		nearest = mini(nearest, Hex.distance(h.pos, cap.pos))
+	check(nearest >= Encounter.SPAWN_GAP, "...well beyond the party (%d)" % nearest)
+	check(cb.combatants.filter(func(c): return c.pos == cap.pos).size() == 1, "...on a hex of its own")
+	check(cb.log[cb.log.size() - 1] == Objectives.brief(cb.objective) or cb.log.has(Objectives.brief(cb.objective)),
+		"the brief is in the log")
+
+	# escort: the carter is in among the party
+	cb = _fight(_goblins(3).merged({"objective": Objectives.make("escort")}), 7)
+	var car = cb.with_status("carter")
+	var far := 0
+	for h in cb.heroes():
+		far = maxi(far, Hex.distance(h.pos, car.pos))
+	check(car != null and far <= 3, "escort puts the carter in among the party (farthest hero %d)" % far)
+	check(car.max_hp == Objectives.CARTER_HP_BASE + Objectives.CARTER_HP_PER_LEVEL * 3, "...with HP for a level-3 party")
+
+	# breakout: the party in the middle, foes both sides, the exit at the far edge and free of foes
+	cb = _fight(_goblins(6).merged({"objective": Objectives.make("breakout")}), 7)
+	var exit: Array = cb.objective.get("exit", [])
+	check(exit.size() == Objectives.EXIT_W, "breakout has %d exit hexes" % Objectives.EXIT_W)
+	var max_q := -99
+	for h in cb.board["hexes"]:
+		max_q = maxi(max_q, h.x)
+	check(exit.all(func(e): return e.x >= max_q - 2), "...at the far (high-q) edge")
+	check(cb.team_of("foe").all(func(f): return not (f.pos in exit)), "...and nobody spawns on the road")
+	var qs: Array = cb.heroes().map(func(h): return h.pos.x)
+	var lo: int = cb.team_of("foe").filter(func(f): return f.pos.x < qs.min()).size()
+	var hi: int = cb.team_of("foe").filter(func(f): return f.pos.x > qs.max()).size()
+	check(lo > 0 and hi > 0, "foes stand on both sides of the party (%d behind, %d ahead)" % [lo, hi])
+
+	# hunt: the strongest foe is the quarry and it starts nearest the party — it has the whole board to cross
+	cb = _fight({"monsters": [{"id": "snik", "count": 3}, {"id": "grull", "count": 1}], "theme": "goblin-camp",
+		"objective": Objectives.make("hunt")}, 7)
+	var q = cb.with_status("quarry")
+	check(q != null and q.src_id == "grull", "the quarry is the strongest foe")
+	check(cb.objective.get("exit", []).size() == Objectives.EXIT_W, "hunt has an escape edge")
+	var qd := 99
+	for h in cb.heroes():
+		qd = mini(qd, Hex.distance(h.pos, q.pos))
+	for f in cb.team_of("foe"):
+		var fd := 99
+		for h in cb.heroes():
+			fd = mini(fd, Hex.distance(h.pos, f.pos))
+		check(fd >= qd, "no foe starts nearer the party than the quarry (%s %d vs %d)" % [f.cname, fd, qd])
+
+	# starts_for: breakout is the only kind that moves the party
+	var board: Dictionary = Encounter.board_for("goblin-camp", 7)
+	check(Encounter.starts_for(_goblins(3), board, 7) == Encounter.party_starts(board, 7), "rout starts where it always did")
+	check(Encounter.starts_for({"objective": Objectives.make("hunt")}, board, 7) == Encounter.party_starts(board, 7), "so does a hunt")
+	check(Encounter.starts_for({"objective": Objectives.make("breakout")}, board, 7) != Encounter.party_starts(board, 7), "a breakout starts elsewhere")
