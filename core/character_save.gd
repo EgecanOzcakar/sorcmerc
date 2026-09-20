@@ -25,6 +25,8 @@
 #   "equipped": ["longsword", "chain-mail", "shield"],   // unequipped gear is the party's,
 #                                                        // not the character's (Party.stash)
 #   "pools": {"second-wind": 1},      // campaign state: uses REMAINING
+#   "slots_used": [2, 1],             // campaign state: spell slots SPENT, per level
+#                                     // (absent = none spent; a long rest clears it)
 #   "hp_current": -1,                 // -1 = full
 #   "prepared": ["cure-wounds"],
 #   "xp": 900,                        // banked XP (T10); Leveling gates level-up on it
@@ -92,6 +94,15 @@ static func to_dict(ch) -> Dictionary:
 		"equipped": ch.equipped.duplicate(),
 		"offhand": ch.offhand,
 		"pools": ch.pools.duplicate(),
+		# Campaign state, exactly as `pools` is, and left out of here until
+		# 2026-09-20: a caster who had spent two slots got them back from any
+		# trip through this format. That is every autosave and every resume
+		# (core/world_save.gd, core/campaign_save.gd) — and, since co-op sends
+		# the party as these dictionaries, it is also what made the guest's
+		# casters start each fight with a full spell list while the host's did
+		# not. Two different boards from the same seed, which is a desync with
+		# nothing to reconcile (issue #132).
+		"slots_used": ch.slots_used.duplicate(),
 		"hp_current": ch.hp_current,
 		"buffs": ch.buffs.duplicate(true),
 		"prepared": ch.prepared.duplicate(),
@@ -130,6 +141,10 @@ static func from_dict(d: Dictionary):
 	ch.offhand = String(d.get("offhand", ""))
 	for k in d.get("pools", {}):
 		ch.pools[k] = int(d["pools"][k])
+	# Missing in a file written before the key existed, which reads as "nothing
+	# spent" — the behaviour those files already had.
+	for n in d.get("slots_used", []):
+		ch.slots_used.append(int(n))
 	ch.hp_current = int(d.get("hp_current", -1))
 	ch.buffs = d.get("buffs", {}).duplicate(true)
 	ch.prepared.assign(d.get("prepared", []))
