@@ -75,6 +75,13 @@ WINDOW_MS = 10
 SILENCE_RMS = 0.004         # 0.4% FS averaged over a window: room tone, not sound
 LEAD_MS = 5                 # kept before the first live window, so nothing clicks in
 TAIL_MS = 60                # kept after the last, so a decay is not chopped
+# The lead is only kept when there is one to keep. A take whose sound starts
+# at sample 0 -- most impacts, and some chimes -- has no silence in front of
+# it, and after normalization its first sample is a step from nothing to
+# 0.6 FS: a click, masked under a slam and plain under a bell (defeat, level_up
+# and cast_abjuration all shipped with it). Four milliseconds is under any
+# attack the ear can tell from instant and long enough to be no step at all.
+HEAD_FADE_MS = 4
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
 
@@ -299,8 +306,17 @@ def trim_and_normalize(pcm):
 
     gain = PEAK / float(peak)
     vals = [max(-32768, min(32767, int(round(v * gain)))) for v in vals]
-    return (struct.pack("<%dh" % len(vals), *vals),
+    return (struct.pack("<%dh" % len(head_fade(vals)), *vals),
             before, len(vals) / float(SR), peak)
+
+
+def head_fade(vals, fade_ms=HEAD_FADE_MS):
+    """Ramp the first `fade_ms` in, in place. Linear: at 4 ms nothing shapes the
+    attack, it only takes the step out of it."""
+    fade = min(len(vals), max(1, int(SR * fade_ms / 1000.0)))
+    for i in range(fade):
+        vals[i] = int(round(vals[i] * (i + 1) / float(fade)))
+    return vals
 
 
 def cap(pcm, seconds, fade_ms=BARK_FADE_MS):

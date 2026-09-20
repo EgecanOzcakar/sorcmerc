@@ -105,6 +105,13 @@ def main():
                     if rms(b, len(b) - win) > 0.05:
                         fails.append("%s ch%d: ends abruptly (tail rms %.3f)"
                                      % (rel, ci, rms(b, len(b) - win)))
+                    # ...and must not START on a step either: sample 0 at
+                    # 0.6 FS is a click before the sound (see HEAD_FADE_MS in
+                    # tools/gen_audio_elevenlabs.py). The sfx bus starts a
+                    # voice from silence, so the first sample IS the step.
+                    if abs(b[0]) > 0.05:
+                        fails.append("%s ch%d: starts abruptly (first sample %.3f)"
+                                     % (rel, ci, b[0]))
     print("checked %d files" % checked)
     for f in fails:
         print("  FAIL %s" % f)
