@@ -307,6 +307,15 @@ func _watch() -> void:
 	# A spent landmark never offers a card.
 	if screen._place_open != null and screen._place_open.spent:
 		fail("the card is up for a spent landmark: %s" % screen._place_open.sname)
+	for s in w.settlements:
+		if s.id.begins_with("way-"):
+			for l in w.lairs:
+				if l.id == s.id.trim_prefix("way-"):
+					fail("%s stands on a lair that is still on the map" % s.sname)
+	if not screen._visit.is_empty():
+		var vs = screen._visit.get("settlement")
+		if vs != null and vs.raided_by != "" and not bool(screen._visit.get("battle", false)):
+			fail("a raided town's market is not the halved shelf")
 	_wedge_check(p)
 
 # The one check that catches a class of bug no assertion can name in advance:
@@ -852,6 +861,14 @@ func _map_beat() -> void:
 			_saw["lair:" + ("attack" if _lair_known() else "search")] = true
 			_acts += 1
 			screen._lair_btn.pressed.emit()
+		return
+
+	# A cleared lair under the party's feet, for sale: a careful robot buys it.
+	if screen._lair_settle_btn != null and screen._lair_settle_btn.visible \
+			and not screen._lair_settle_btn.disabled and _chance(20 + _me["care"] / 2):
+		_saw["lair:settle"] = true
+		_acts += 1
+		screen._lair_settle_btn.pressed.emit()
 		return
 
 	# A landmark under the party's nose: visit it (and answer the first row the

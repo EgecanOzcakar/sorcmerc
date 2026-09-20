@@ -6335,3 +6335,39 @@ on substring, so it never matched. Fixed to the button's own words.
 `tests/test_world_save.gd` now also checks that a row carries the summary's
 fields, reads them from its own file rather than the active one, and that two
 slots written in the same second still come back newest first.
+
+## Threat clocks and reclaiming — a lair left alone does something about it (2026-09-20)
+
+Sub-project 3 of the content batch. Spec:
+`docs/superpowers/specs/2026-09-20-threat-clocks-design.md`; plan:
+`docs/superpowers/plans/2026-09-20-threat-clocks.md`.
+
+A lair the party never touched used to be a red dot that waited. Now every
+lair on heartland or marches ground runs a clock (`core/raids.gd`) against
+the nearest town inside 800: two days in, plus under a day of its own
+jitter, a band sets out — a `RoamingParty` like any other, with a `raid`
+behaviour on the world AI — walks to the town's edge, stands there eight
+hours (and comes for anyone who comes near), and then the raid lands: the
+town's market is the halved battle shelf for as long as the raid stands,
+its board pays half again for that lair's own job, its rescue names the
+people taken, and refugees walk the roads of the settled country — whose
+pass puts the raiders' lair on the map. The second landing digs a child
+lair in beside the parent, once. Clearing the lair, however it is cleared,
+lifts every town it raided; a raid met on its way in is *hold the line*,
+and turning one is worth two bands put down to the town. Measured on the
+shipped maps, two lairs a map raid — the goblin warren and the Sunken
+Ruins; the giant, the graveyard and the dragon sit in country that is
+nobody's problem until you make it yours.
+
+And the other direction: a cleared lair on settled ground can be bought
+inside the respawn's own day — *Settle it*, 120 in the heartland, 240 in
+the marches — and is gone for good, a `camp` settlement of the nearest
+town's faction standing where it was, with a name off a list and a fresh
+market. The `camp` kind had existed all along; nothing had ever put one on
+the map mid-run.
+
+### Still open
+
+- No pictures yet.
+- A raid band carries nothing home; the halved market is what it took.
+- Towns are never taken. A town that falls is the faction ladder's war (#4).

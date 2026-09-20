@@ -67,6 +67,11 @@ func _init() -> void:
 	test_world_wiring()
 	await test_viewer()
 	_wipe()
+	# raids: four deeds on the road
+	for id in ["raid_turned", "raids_lifted_3", "waystations_1", "waystations_3"]:
+		check(not Ach.find(id).is_empty(), "%s is defined" % id)
+	check(int(Ach.find("waystations_3")["goal"]) == 3 and Ach.find("waystations_3")["counter"] == "waystations",
+		"Founder counts three waystations")
 	print("test_achievements: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

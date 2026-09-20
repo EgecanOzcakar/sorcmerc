@@ -2161,11 +2161,16 @@ func _lair_settle_action() -> void:
 	var l: World.Lair = _settle_target
 	if l == null:
 		return
-	var home = Raids.settlers_from(world, l.position)
+	var home = Raids.settlers_from(world, l.position)  # before settle(): afterwards the nearest civilized settlement is the camp itself
 	var s = Raids.settle(world, l, party, world.clock.elapsed)
 	if s == null:
 		return
 	_lair_msg.text = "Settlers from %s put up the first roof at %s." % [home.sname, s.sname]
+	# The party stands on the new camp: without this _check_visit opens its
+	# page next frame, over the line above and the camp appearing on the map.
+	# `_left` is the visit gate's own "just left, no re-entry until out of
+	# range" — walk out and back in to go inside.
+	_left = s
 	_settle_target = null
 	_lair_target = null
 	_settlements3d.reset(world)
