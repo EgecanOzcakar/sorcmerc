@@ -29,6 +29,9 @@ const BASE_SFX_IDS := ["hit", "crit", "kill", "cast", "heal", "level_up", "victo
 	"wave_arrives", "captive_freed", "quarry_gone", "carter_down",
 	"raid_horn", "raid_drums", "raid_bell", "raid_lifted", "lair_dug", "settle",
 	"rumour_bought"]
+# Music stings, Sound.play_sting: the same directory, the Music bus.
+const STING_IDS := ["music_discovery", "music_road", "music_alarm", "music_relief",
+	"music_founding", "music_deed"]
 
 var _pass := 0
 var _fail := 0
@@ -52,7 +55,7 @@ func _init() -> void:
 	for kind in Landmarks.CARDS:
 		for c in Landmarks.CARDS[kind]:
 			check(Landmarks.DOOR_SFX.has(String(c["reward"])), "landmark door %s has a sound" % c["reward"])
-	for id in sfx_ids:
+	for id in sfx_ids + STING_IDS:
 		var s = a._stream(Audio.SFX_DIR + id + ".wav", false)
 		check(s != null and s.data.size() > 1000, "sfx %s parses" % id)
 		if s != null:
@@ -80,7 +83,7 @@ func _init() -> void:
 		if not f.ends_with(".wav"):
 			continue
 		var id: String = Audio._take_key(f).get_basename()
-		check(id in sfx_ids, "sfx/%s has a caller" % f)
+		check(id in sfx_ids or id in STING_IDS, "sfx/%s has a caller" % f)
 	# The same sting twice in one frame is one event heard twice. An area spell
 	# resolves a save and a condition PER TARGET, so this is what stops a fireball
 	# catching five bodies from stacking five copies of one sample.
@@ -125,6 +128,7 @@ func _init() -> void:
 	# test run does when combat.gd fires a bark.
 	Audio.play_sfx("hit")
 	Audio.play_bark("hero1")
+	Audio.play_sting("music_discovery")
 	Audio.set_environment("frozen-cave")
 	Audio.set_combat(true)
 	Audio.set_sfx_volume(80.0)

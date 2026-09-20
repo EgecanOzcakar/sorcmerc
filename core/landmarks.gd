@@ -353,6 +353,7 @@ const DOOR_SFX := {"cache": "cache_open", "blessing": "blessing", "offering": "o
 
 static func _open(reward: String, l, party, world, rng, e: Dictionary) -> void:
 	Sound.play_sfx(String(DOOR_SFX[reward]))
+	Sound.play_sting("music_road" if reward in ["reveal", "marked"] else "music_discovery")
 	match reward:
 		"cache":
 			var gold: int = CACHE_GOLD * (ring(world, l.position) + 1)

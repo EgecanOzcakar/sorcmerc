@@ -1549,6 +1549,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 				FactionOpinion.credit_fight(world, raid_target.position, Raids.TURNED_FOR, foe.faction)
 				Ach.bump("raids_turned")
 				_quest_news.append("The raid on %s is turned." % raid_target.sname)
+				Sound.play_sting("music_deed")
 		# O7 raise/lower event: putting down a monster band is a favour to whoever
 		# lives near the bodies; putting down a faction's own band is not.
 		if WorldAI.is_monster(foe.faction):
@@ -2183,6 +2184,7 @@ func _lair_settle_action() -> void:
 		return
 	_lair_msg.text = "Settlers from %s put up the first roof at %s." % [home.sname, s.sname]
 	Sound.play_sfx("settle")
+	Sound.play_sting("music_founding")
 	# The party stands on the new camp: without this _check_visit opens its
 	# page next frame, over the line above and the camp appearing on the map.
 	# `_left` is the visit gate's own "just left, no re-entry until out of
@@ -3057,6 +3059,7 @@ func _turn_in(quest: Dictionary) -> void:
 	var reward: int = int(quest.get("reward", {}).get("gold", 0))
 	if Quest.turn_in(party, quest, _visit["settlement"].faction):
 		Sound.play_sfx("buy")
+		Sound.play_sting("music_deed")
 		# D5: a job well done is how a town decides you are worth telling things
 		# to. The board's second payout, and the one that is not gold.
 		var lead: Dictionary = Rumors.free_lead(_visit["settlement"], party, world)

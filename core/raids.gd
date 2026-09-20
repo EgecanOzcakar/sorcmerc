@@ -147,6 +147,7 @@ static func land(world, lair, s, now: float) -> Array:
 	var lines: Array = ["%s is raided — the market is half what it was, and %s wants it answered."
 		% [s.sname, lair.sname]]
 	Sound.play_sfx("raid_bell")
+	Sound.play_sting("music_alarm")
 	if lair.raids == 2 and lair.spawned_from == "":
 		var child = spread(world, lair, now)
 		if child != null:
@@ -208,6 +209,7 @@ static func tick(world, now: float) -> Array:
 		Ach.bump("raids_lifted")
 		lines.append("%s breathes again — %s is done raiding." % [s.sname, l.sname if l != null else "the lair"])
 		Sound.play_sfx("raid_lifted")
+		Sound.play_sting("music_relief")
 	for l in world.lairs:
 		if l.raid_band == "":
 			continue

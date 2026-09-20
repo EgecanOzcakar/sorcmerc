@@ -30,7 +30,8 @@ API: POST https://api.elevenlabs.io/v1/sound-generation, `xi-api-key` header.
 `prompt_influence` trades faithfulness to the prompt against the model's own
 judgement -- high for a sound with a precise brief (a click), lower where the
 model has more room (a victory sting). Cost is per generation and this writes
-63 of them for `sfx`, so --only is the normal way to use it.
+63 of them for `sfx`, so --only is the normal way to use it. The beds and the
+music stings are tools/gen_music_elevenlabs.py's, off the Music API.
 """
 import argparse
 import json
@@ -419,12 +420,14 @@ def wav(pcm):
     return struct.pack("<4sI", b"RIFF", len(body)) + body
 
 
-def generate(key, prompt, seconds, influence, timeout=180):
-    """One call. Returns raw 16-bit PCM at SR, or raises."""
+def generate(key, prompt, seconds, influence, timeout=180, loop=False):
+    """One call. Returns raw 16-bit PCM at SR, or raises. `loop` asks the model
+    for a take that loops smoothly -- tools/gen_music_elevenlabs.py's beds."""
     body = json.dumps({
         "text": prompt,
         "duration_seconds": round(max(MIN_SECONDS, min(MAX_SECONDS, seconds)), 2),
         "prompt_influence": influence,
+        "loop": loop,
     }).encode()
     req = urllib.request.Request(
         "%s?output_format=%s" % (API_URL, OUTPUT_FORMAT),
