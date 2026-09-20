@@ -6232,3 +6232,50 @@ touches no disk, a prefetched path is collected from its background request
 rather than re-read, a missing path is answered from the negative cache, an
 abandoned prefetch is drained rather than left in flight, and the cap clears
 the hot set it is supposed to.
+
+## O13x, finished: one Resume per run, and a run that takes its own slot (2026-09-20)
+
+`96789cf` landed the multi-slot autosave half-built, and `master` went red on
+`tests/drive_game.gd` with it. `core/world_save.gd` got the slot machinery
+(`new_slot()` / `set_active_slot()` / `list_slots()`, plus the migration that
+carries a pre-slots `world.json` forward as a "legacy" slot), and the driver
+got the walk that checks two playthroughs do not share a file — but
+`scenes/game/game.gd` got only the new signature. `_resume_world(slot_id)` was
+still wired to a `pressed` signal, which hands a callable no arguments:
+
+```
+ERROR: 'game.gd::_resume_world': Method expected 1 argument(s), but called with 0.
+```
+
+and nothing outside `tests/` ever called `new_slot()`, so a second run still
+marched over the first one's save. The two other failures in that run were the
+same press: with the map never reopened it was never left either, and the rest
+of the walk ran with a live world screen still mounted.
+
+**The title screen draws the list now.** One "Resume the open world" per slot,
+newest first, each with its own line of who and when and where — the same
+words the single button carried, per run. The gilt goes to the newest, because
+the title's rule is that the one thing you are most likely to do next is the
+one in gold. "New run" no longer warns that it writes over anything, because
+it does not: it mints a slot first (`begin`, and `_start_pack` for a content
+pack's run, which is a new run like any other). The co-op lobby keeps a single
+Resume, for the newest — the lobby is about the room, and picking an older run
+is the title's job.
+
+**A row is a summary.** `list_slots()` used to return `id`/`elapsed`/`gold`/
+`mtime`, which is not enough to label a button the way the old one was
+labelled, so both readings come out of one `_facts()` now: the picker's row and
+the line under the active slot cannot say different things about the same save.
+
+**And the order is deterministic.** A file's mtime is whole seconds, leaving
+one run and starting the next writes twice inside one second, and `sort_custom`
+is not stable — so "newest first" was a coin flip exactly when it mattered, in
+the driver and for a player. A slot id carries the microsecond clock it was
+minted at, so that is the tie-break.
+
+`tests/drive_game.gd` also pressed `"Begin — Small World"` for its second run,
+a button that has read `"Begin, small world"` since T-worlds; `press()` matches
+on substring, so it never matched. Fixed to the button's own words.
+`tests/test_world_save.gd` now also checks that a row carries the summary's
+fields, reads them from its own file rather than the active one, and that two
+slots written in the same second still come back newest first.

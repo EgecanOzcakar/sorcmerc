@@ -321,4 +321,28 @@ func _slots() -> void:
 	check(is_equal_approx(back_legacy["world"].clock.elapsed, 111.0),
 		"the migrated legacy slot still holds the pre-slots save")
 
+	# O13x: the title draws a button per row and says the same things under each
+	# one it used to say under the single Resume, so a row has to BE a summary —
+	# and it has to be the newest run's row that comes first. Slots a and b were
+	# written in the same second, which is all the resolution a file mtime has,
+	# so this is the tie-break (core/world_save.gd's _minted) under test as much
+	# as the sort. (The migrated legacy row is deliberately not pinned to a
+	# position: its file is a copy made when list_slots() first ran, so its
+	# mtime is the migration's, not the run's.)
+	var rows := WorldSave.list_slots()
+	var order: Array = []
+	var by_id := {}
+	for r in rows:
+		by_id[String(r["id"])] = r
+		if String(r["id"]) in [a, b]:
+			order.append(String(r["id"]))
+	check(order == [b, a],
+		"the newer of two slots written in the same second still sorts first (got %s)" % str(order))
+	for key in ["elapsed", "map", "party", "gold", "story", "written_at"]:
+		check(by_id.get(b, {}).has(key), "a slot row carries the summary's %s" % key)
+	var older: Dictionary = by_id.get(a, {})
+	check(is_equal_approx(float(older.get("elapsed", 0.0)), 222.0)
+		and int(older.get("gold", 0)) == party_a.gold,
+		"...read from that slot's own file, not from whichever one is active")
+
 	WorldSave.set_active_slot("")
