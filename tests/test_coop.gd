@@ -43,6 +43,17 @@ func _init() -> void:
 	for sd in range(1, 11):
 		lockstep_fight(sd, true)
 	check(_asked > 0 and _said_no > 0, "prompted: %d reactions asked, %d refused" % [_asked, _said_no])
+	# Objectives ride the spec: both peers place the same captive, roll the
+	# same waves, and watch the same quarry run.
+	var Objectives = load("res://core/objectives.gd")
+	var chars: Array = Presets.party()
+	var i := 0
+	for kind in Objectives.KINDS:
+		var extra := {}
+		if kind == "hold":
+			extra["waves"] = Objectives.waves_for(chars, "", 40 + i, 1.0)
+		lockstep_fight(40 + i, false, Objectives.make(kind, extra))
+		i += 1
 	await guest_levelup()
 	test_intify()
 	print("  through the codec: ", JSON.stringify(_seen))
@@ -55,7 +66,7 @@ static func build(setup: Dictionary):
 	var sp: Dictionary = setup["spec"]
 	var sd := int(setup["seed"])
 	var board: Dictionary = Encounter.board_for(String(sp.get("theme", "")), sd)
-	var cb = Encounter.build(sp, party.to_combatants(Encounter.party_starts(board, sd)), board)
+	var cb = Encounter.build(sp, party.to_combatants(Encounter.starts_for(sp, board, sd)), board)
 	cb.party = party
 	return cb
 
@@ -66,12 +77,14 @@ static func wire(d: Dictionary) -> Dictionary:
 var _asked := 0
 var _said_no := 0
 
-func lockstep_fight(sd: int, prompted := false) -> void:
+func lockstep_fight(sd: int, prompted := false, objective: Dictionary = {}) -> void:
 	var party = Party.new()
 	for ch in Presets.party():
 		party.add_member(ch)
 	var spec: Dictionary = Scaler.roster_for(party.party_characters(), "normal")
 	spec["seed"] = sd
+	if not objective.is_empty():
+		spec["objective"] = objective
 	var setup := wire(Coop.setup_for(sd, spec, party))
 	check(setup["owners"].size() == 3 and setup["owners"].values().count("guest") == 1,
 		"seed %d: heroes alternate host/guest" % sd)
@@ -126,6 +139,10 @@ func lockstep_fight(sd: int, prompted := false) -> void:
 				break
 	check(not drift, "seed %d: no drift over %d intents, %d rounds" % [sd, intents, host.round_num])
 	check(host.is_over(), "seed %d: fight resolved (%s)" % [sd, host.outcome()])
+	if not objective.is_empty():
+		check(Coop.state_hash(host) == Coop.state_hash(guest) and host.objective_done == guest.objective_done \
+			and host.objective_failed == guest.objective_failed,
+			"seed %d: a %s ends the same way on both peers" % [sd, objective["kind"]])
 	# The late joiner: setup + log, nothing else.
 	var late = build(setup)
 	if prompted:
