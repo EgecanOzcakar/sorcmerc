@@ -454,17 +454,20 @@ static func stock_by_service(s, m: Dictionary) -> Dictionary:
 				claimed[item_id] = true
 		if not rows.is_empty():
 			out[service] = rows
+	# The back room (core/ladder.gd's Trusted door): its rows are tagged, and
+	# claimed here so the generalist's remainder below does not sell them twice.
+	var back: Array = []
+	for e in m.get("stock", []):
+		if String(e.get("service", "")) == "backroom":
+			back.append(e)
+			claimed[String(e["item_id"])] = true
+	if not back.is_empty():
+		out["backroom"] = back
 	var rest_rows: Array = []
 	for e in m.get("stock", []):
 		if not claimed.has(String(e["item_id"])):
 			rest_rows.append(e)
 	out["generalist"] = rest_rows
-	var back: Array = []
-	for e in m.get("stock", []):
-		if String(e.get("service", "")) == "backroom":
-			back.append(e)
-	if not back.is_empty():
-		out["backroom"] = back
 	return out
 
 # The Healer: everyone standing back to full, flat fee, no clock time and no

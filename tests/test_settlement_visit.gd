@@ -127,6 +127,7 @@ func _init() -> void:
 			rares += 1
 	check(br2.size() == Visit.BACK_ROOM_N + Visit.BACK_ROOM_RARE and rares == Visit.BACK_ROOM_RARE, "Sworn: two rare beside the three")
 	check(Visit.inn_cost(city) == 0, "Sworn: on the house")
+	check(not Visit.stock_by_service(city, m2).get("generalist", []).any(func(e): return String(e.get("service", "")) == "backroom"), "a back-room item is not also on the generalist's shelf")
 	# buying one lands it in the stash, identified
 	var pb := _party()
 	pb.gold = 100000
