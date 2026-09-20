@@ -80,6 +80,9 @@ const Quest = preload("res://core/quest.gd")
 const Objectives = preload("res://core/objectives.gd")
 const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
+const Ladder = preload("res://core/ladder.gd")
+const Posting = preload("res://core/quest_posting.gd")
+const Loot = preload("res://core/loot.gd")
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const WorldSave = preload("res://core/world_save.gd")
@@ -270,6 +273,7 @@ var _warned_bands := {}              # bands already warned about; a seam you st
 var _region_lbl: Label
 var _region_msg: Label               # the last crossing, same "persists" contract as _lair_msg
 
+var _ladder_title_seen := 0          # the last renown title _check_title() said; set on load
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _camp_msg: Label                 # T9x: last short-rest/camp outcome, same "persists" contract as _lair_msg
@@ -361,6 +365,7 @@ func _ready() -> void:
 	_lairs3d = Lairs3D.new()
 	_view.add_layer(_lairs3d)
 	_lairs3d.reset(world)
+	_ladder_title_seen = Ladder.title_index()   # a loaded save's title is not news
 	_landmarks3d = Landmarks3D.new()
 	_view.add_layer(_landmarks3d)
 	_landmarks3d.reset(world)
@@ -486,6 +491,7 @@ func _process(delta: float) -> void:
 	_check_places()
 	_check_expired_lairs()
 	_check_raids()
+	_check_title()
 	_check_forage()
 	_check_travel()
 	_check_region()
@@ -888,6 +894,7 @@ func _leave_world() -> void:
 		CharacterSave.save(ch)
 	_autosave()
 	FactionOpinion.reset()
+	Ladder.reset()   # process-global like opinion: the next new game starts as strangers
 	# Duck-typed so world.tscn still runs standalone (godot --path . scenes/world/
 	# world.tscn), where the parent is the scene root and has no title screen.
 	var host := get_parent()
@@ -1122,6 +1129,27 @@ func _build_quest_panel() -> void:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.add_theme_color_override("font_color",
 			Icons.COL_GOLD if q["state"] == "complete" else Icons.COL_PARTY)
+		rows.add_child(l)
+	# Standing (core/ladder.gd): the company's name across the map, then its
+	# rung with each people that has a settlement here — deeds never drift, so
+	# this is the one page where a number is worth reading.
+	_section(rows, "Standing")
+	var t := Ladder.title_index()
+	var renown := Label.new()
+	renown.text = "%s — %d deeds%s" % [Ladder.title().capitalize(), Ladder.renown(),
+		", %s at %d" % [String(Ladder.TITLES[t + 1]), int(Ladder.TITLE_AT[t + 1])] if t + 1 < Ladder.TITLES.size() else ""]
+	renown.theme_type_variation = "Dim"
+	rows.add_child(renown)
+	var seen := {}
+	for s in world.settlements:
+		if WorldAI.is_monster(s.faction) or seen.has(s.faction):
+			continue
+		seen[s.faction] = true
+		var r: int = Ladder.rung(s.faction)
+		var l := Label.new()
+		l.text = "%s: %s, %d deeds%s" % [String(s.faction).capitalize(), Ladder.rung_name(s.faction), Ladder.deeds(s.faction),
+			", %s at %d" % [String(Ladder.RUNGS[r + 1]), int(Ladder.RUNG_AT[r + 1])] if r + 1 < Ladder.RUNGS.size() else ""]
+		l.theme_type_variation = "Dim"
 		rows.add_child(l)
 
 	var close := Button.new()
@@ -2054,6 +2082,22 @@ func _check_raids() -> void:
 	_lairs3d.reset(world)
 	_autosave()
 
+# Renown's title, said once when it changes — deeds are credited in five
+# places, none of which is this screen, so the screen watches the sum. The
+# two high-water marks the achievements read are kept here for the same reason.
+func _check_title() -> void:
+	var t := Ladder.title_index()
+	var best := 0
+	for f in WorldAI.CIVILIZED:
+		best = maxi(best, Ladder.rung(f))
+	Ach.record("best_rung", best)
+	if t == _ladder_title_seen:
+		return
+	if t > _ladder_title_seen:
+		_lair_msg.text = "The company is spoken of now: %s." % Ladder.title()
+	_ladder_title_seen = t
+	Ach.record("renown_title", t)
+
 # --- landmarks: places on the map that are not a fight -----------------------
 # The lair button's shape again: one button, two states. A found place offers a
 # visit; a hidden one in range offers the same Survival search a lair does.
@@ -2498,6 +2542,8 @@ func _check_region() -> void:
 		# Short form: this bar already carries nine controls and a hint, and the
 		# long form lives on the lair button, the inn's leads and the crossing card.
 		_region_lbl.text = "%s, levels %d to %d" % [String(band["label"]), int(lv[0]), int(lv[1])]
+		if Ladder.title_index() > 0:
+			_region_lbl.text += " · %s" % Ladder.title()
 	if _region.is_empty():
 		_region = band          # first frame: the party is simply somewhere
 		return
@@ -3148,15 +3194,24 @@ func _standing_line(s) -> String:
 		return "The guards would sooner fight you than let you in."
 	if FactionOpinion.refuses_trade(s.faction):
 		return "Nobody here will deal with you."
+	# The ladder (core/ladder.gd): what the party has DONE here outranks how
+	# they feel this week — unless the guards are already out.
+	var tail := ""   # Famous or better rides on the end of every line
+	if Ladder.title_index() >= 3:
+		tail = "  %s, they say." % Ladder.title().capitalize()
+	match Ladder.rung(s.faction):
+		Ladder.SWORN: return "Sworn to this people. Their doors are yours." + tail
+		Ladder.TRUSTED: return "Trusted here — the back room is open to you." + tail
+		Ladder.KNOWN: return "Known here — they will pass you a neighbour's work." + tail
 	if op >= FactionOpinion.QUEST_GENEROUS:
-		return "They are glad to see you — there is work here for the asking."
+		return "They are glad to see you — there is work here for the asking." + tail
 	if op >= FactionOpinion.QUEST_DONE:
-		return "They think well of you."
+		return "They think well of you." + tail
 	if op <= FactionOpinion.HOSTILE:
-		return "Their bands hunt you on the road; the gate is open, barely."
+		return "Their bands hunt you on the road; the gate is open, barely." + tail
 	if op <= FactionOpinion.QUEST_MIN:
-		return "They have heard things. No work for you here."
-	return "Strangers here, for now."
+		return "They have heard things. No work for you here." + tail
+	return "Strangers here, for now." + tail
 
 # The settlement panel's column width. Every list inside it is sized against
 # this, so one long job title wraps instead of widening the whole counter.
@@ -3226,11 +3281,18 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 
 	var inn_btn := Button.new()
 	var wait: float = Visit.long_rest_in(party, world)
-	inn_btn.text = ("Inn.  A night is %d ◉" % Visit.inn_cost(s) if wait <= 0.0
+	var cost := Visit.inn_cost(s)
+	inn_btn.text = (("Inn.  On the house." if cost == 0 else "Inn.  A night is %d ◉" % cost) if wait <= 0.0
 		else "Inn.  Rested recently, a room does nothing for %s yet" % _hours(wait))
 	inn_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	inn_btn.pressed.connect(_goto_page.bind("inn"))
 	places.add_child(inn_btn)
+	if Posting.is_patron(s, world) and Ladder.rung(s.faction) >= Ladder.SWORN and not Ladder.audience_held(s.faction):
+		var aud_btn := Button.new()
+		aud_btn.text = "Seek an audience with the lord"
+		aud_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		aud_btn.pressed.connect(_audience_action)
+		places.add_child(aud_btn)
 
 	var board_btn := Button.new()
 	var offers: int = jobs.get("board", []).size()
@@ -3249,6 +3311,36 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 		investigate_btn.tooltip_text = Visit.check_preview(party, Visit.INVESTIGATE_SKILL, Visit.INVESTIGATE_DC)   # #87
 		investigate_btn.pressed.connect(_investigate)
 		places.add_child(investigate_btn)
+
+# The audience: once per people, at its chief settlement, for a Sworn company.
+# A rare item and a milestone's worth of XP, on the event card, art
+# event-audience-<faction>.
+const AUDIENCE_XP := 200
+
+func _audience_action() -> void:
+	var s = _visit.get("settlement")
+	if s == null or Ladder.audience_held(s.faction):
+		return
+	var pool: Array = Loot.items_of_rarity("rare")
+	var gift := String(pool[absi(hash("audience|%s" % s.faction)) % pool.size()]) if not pool.is_empty() else ""
+	if gift != "":
+		party.stash_add(gift)
+		Campaign._note_rarity(gift)
+	Campaign.new(party)._split_xp(AUDIENCE_XP)
+	Ladder.hold_audience(s.faction)
+	Ach.collect("audiences", s.faction)
+	var e := {"id": "audience-%s" % s.faction, "title": "An audience with the lord", "kind": "good", "ok": true,
+		"text": "The hall is cleared for you. The lord speaks of what the company has done for %s's people, and of what a lord owes such a company." % String(s.faction).capitalize(),
+		"xp": AUDIENCE_XP, "thanks": s.sname}
+	if gift != "":
+		e["item"] = gift
+		e["item_name"] = Campaign.item_name(gift)
+	_close_visit()   # autosaves, and resumes the clock — which the card stops again
+	world.clock.pause()
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(_on_event_ack)
+	_event_card.show_event(e)
 
 # T9y: one counter at a time. T25 sizes a settlement's specialists and the
 # hub line names them, but the shelf itself was one alphabetical list with no
@@ -3282,16 +3374,24 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		btn.disabled = (_market_tab == t)   # the open tab, shown as pressed rather than as a live button
 		btn.pressed.connect(_goto_market_tab.bind(String(t)))
 		tabs.add_child(btn)
+	# The back room (core/ladder.gd's Trusted door): the smith's own tab, after
+	# the counters the town advertises.
+	var counters: Array = _visit["services"].filter(func(x): return x != "innkeeper")
+	if groups.has("backroom"):
+		var back := Button.new()
+		back.text = "Back room"
+		back.disabled = (_market_tab == "backroom")
+		back.pressed.connect(_goto_market_tab.bind("backroom"))
+		tabs.add_child(back)
+		counters.append("backroom")
 	if _market_tab != MARKET_TAB_ALL:
-		_portrait(box, s.faction, _market_tab)
+		_portrait(box, s.faction, "armorsmith" if _market_tab == "backroom" else _market_tab)
 
 	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(250.0)))
 	box.add_child(scroll)
 	var rows: VBoxContainer = scroll.get_child(0)
 	var showing_all: bool = _market_tab == MARKET_TAB_ALL
-	for service in _visit["services"]:
-		if service == "innkeeper":
-			continue
+	for service in counters:
 		if not showing_all and _market_tab != service:
 			continue
 		var shelf: Array = groups.get(service, [])
@@ -3299,8 +3399,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		var actions: bool = service in ["healer", "librarian"]
 		if shelf.is_empty() and posted.is_empty() and not actions:
 			continue
-		if showing_all:
-			_section(rows, String(Campaign.SERVICE_NAMES.get(service, service)))
+		if showing_all or service == "backroom":
+			_section(rows, "The back room" if service == "backroom" else String(Campaign.SERVICE_NAMES.get(service, service)))
 		# T9a: a shelf is a row of pictures; the name, numbers and prose are
 		# the hover text, the price the caption, the click the purchase.
 		var shelf_grid := _item_grid(rows)
@@ -3484,6 +3584,16 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 		else "A town elder", party.gold]
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
+	if Posting.is_patron(s, world):
+		var patron := Label.new()
+		patron.text = "The patron's table: word of work from all over."
+		patron.theme_type_variation = "Dim"
+		box.add_child(patron)
+	if Ladder.title_index() > 0:
+		var pay := Label.new()
+		pay.text = "%s — work pays +%d %%." % [Ladder.title().capitalize(), int(round(Ladder.PAY_PER_TITLE * 100 * Ladder.title_index()))]
+		pay.theme_type_variation = "Dim"
+		box.add_child(pay)
 	if s.raided_by != "":
 		var raider = Raids.lair_of(world, s.raided_by)
 		var hit := Label.new()
