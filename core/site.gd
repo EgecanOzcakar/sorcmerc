@@ -43,6 +43,7 @@ const Visit = preload("res://core/settlement_visit.gd")
 const RNG = preload("res://core/rng.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
 const Ach = preload("res://core/achievements.gd")
+const Objectives = preload("res://core/objectives.gd")
 
 # How deep a site runs. Three rooms is the shallowest thing that can still be
 # called an adventuring day (two fights and a boss on one set of slots); six is
@@ -122,6 +123,11 @@ const COMBAT_ROOMS := [
 		"desc": "You have woken them. All of them."},
 	{"id": "choke", "title": "The choke", "difficulty": "normal",
 		"desc": "One way through, and they know it better than you do."},
+	# Objectives (core/objectives.gd): the room asks a different question.
+	{"id": "gate", "title": "The gate", "difficulty": "normal", "objective": "hold",
+		"desc": "Hold the passage while the way behind is barred. More of them will come from the far side."},
+	{"id": "pens", "title": "The pens", "difficulty": "normal", "objective": "rescue",
+		"desc": "Somebody is chained at the back, and their keepers know exactly how long you will take to reach them."},
 ]
 const TREASURE_ROOMS := [
 	{"id": "strongbox", "title": "The strongbox", "desc": "Whatever they took off the road, they put in here."},
@@ -171,6 +177,19 @@ static func for_lair(lair, party, world):
 static func depth_for(lair) -> int:
 	var idx: int = maxi(0, Scaler.FACTIONS.find(lair.faction))
 	return clampi(MIN_DEPTH + idx / DEPTH_PER_FACTION_STEP, MIN_DEPTH, MAX_DEPTH)
+
+
+# Whether a rescue job about this lair can still be done: a pens room at a
+# depth the party has not yet fought past. core/quest_posting.gd asks before
+# posting, so a job is only ever posted about captives that are actually
+# reachable. Same seed as for_lair(), so it is the same interior.
+static func pens_ahead(lair) -> bool:
+	var rooms: Array = _build(lair, RNG.new(maxi(1, absi(hash("site|%s" % lair.id)))))
+	for d in range(int(lair.depth_cleared), rooms.size()):
+		for r in rooms[d]:
+			if String(r.get("objective", "")) == "rescue":
+				return true
+	return false
 
 
 # The board a fight in this lair happens on: the theme whose faction matches.
@@ -326,6 +345,14 @@ func combat_spec() -> Dictionary:
 			maxf(1.0, band)) if room.has("lead") \
 		else Scaler.roster_for(party.party_characters(), String(room.get("difficulty", "normal")),
 			{}, theme, seed_v, band, _boss_lead_exclusion())
+	# Objectives: the gate holds against waves drawn from the same faction at
+	# WAVE_SCALE of an easy roster; the pens hold a captive on a deadline.
+	match String(room.get("objective", "")):
+		"hold":
+			spec["objective"] = Objectives.make("hold", {"waves": Objectives.waves_for(
+				party.party_characters(), theme, seed_v, band, _boss_lead_exclusion())})
+		"rescue":
+			spec["objective"] = Objectives.make("rescue")
 	spec["theme"] = theme if theme != "" else Campaign.BOSS["theme"]
 	return spec
 

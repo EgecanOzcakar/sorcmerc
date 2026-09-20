@@ -37,12 +37,13 @@ const BIAS_WEIGHT := 2.0   # what an unfulfilled quest is worth to Scaler.roster
 # validates an authored quest against these (its own copy drifted the moment a
 # kind was added) and core/quest_posting.gd reads KINDS to know what it may post.
 const KINDS := ["kill_count", "collect_item", "hunt_party", "raid_settlement",
-	"clear_lair", "supply_item", "deliver_goods", "scout_region"]
+	"clear_lair", "supply_item", "deliver_goods", "scout_region", "rescue"]
 const TARGET_FIELD := {
 	"kill_count": "target_monster_id", "collect_item": "target_monster_id",
 	"hunt_party": "target_party_id", "raid_settlement": "target_settlement_id",
 	"clear_lair": "target_lair_id", "supply_item": "target_item_id",
 	"deliver_goods": "target_settlement_id", "scout_region": "target_region_id",
+	"rescue": "target_lair_id",
 }
 # The subset of those fields that names something standing on the map, so a
 # caller holding a world can check the id against it. An item id and a region id
@@ -269,6 +270,24 @@ static func record_settlement_raided(party, settlement_id: String) -> void:
 
 static func record_lair_cleared(party, lair_id: String) -> void:
 	_complete_world_target(party, "clear_lair", "target_lair_id", lair_id)
+
+# rescue — somebody chained in a lair's pens (core/site.gd's pens room, an
+# objective in core/objectives.gd). Completes when the rescue objective is done
+# in that lair; scenes/world/world.gd calls this off the fight's result.
+static func record_rescued(party, lair_id: String) -> void:
+	_complete_world_target(party, "rescue", "target_lair_id", lair_id)
+
+# The carter is dead (the escort objective failed), or the party was beaten with
+# the crate on the road: every live delivery is lost. Removed from the log rather
+# than marked, so the board can post the run again. Returns the titles, for the
+# spoils page.
+static func fail_deliveries(party) -> Array:
+	var lost: Array = []
+	for q in party.quests.duplicate():
+		if q["kind"] == "deliver_goods" and q["state"] == "active":
+			lost.append(String(q["title"]))
+			party.quests.erase(q)
+	return lost
 
 # --- D7: the three kinds that finish on something other than a body ---------
 

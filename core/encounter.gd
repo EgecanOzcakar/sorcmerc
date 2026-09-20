@@ -11,6 +11,7 @@ const Power = preload("res://core/rules/power.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")
 const Loot = preload("res://core/loot.gd")
 const Ach = preload("res://core/achievements.gd")
+const Objectives = preload("res://core/objectives.gd")
 
 # --- ranges (hexes) — tune here ---------------------------------------
 const REACH_MELEE := 1
@@ -354,6 +355,147 @@ static func party_starts(b: Dictionary, seed: int) -> Array:
 	var cluster: Array = near.slice(0, 4)
 	cluster.sort_custom(func(a, c): return a.x > c.x or (a.x == c.x and a.y < c.y))
 	return cluster
+
+# Where the party stands for this spec: the low-q edge as always, or — for a
+# breakout — the middle of the board with the foes on both sides. The one
+# place scenes/main.gd and the co-op guest ask, so both peers agree.
+static func starts_for(spec: Dictionary, b: Dictionary, seed: int) -> Array:
+	if String(spec.get("objective", {}).get("kind", "")) == "breakout":
+		return middle_starts(b, seed)
+	return party_starts(b, seed)
+
+# Open = on the board, not blocked by an object, not in `taken`.
+static func _open(b: Dictionary, taken: Array) -> Array:
+	var blocked: Array = b.get("objects", []).filter(
+		func(o): return o.get("blocks_movement", false)).map(func(o): return o["pos"])
+	return b["hexes"].filter(func(h): return not (h in blocked) and not (h in taken))
+
+# party_starts' shape, anchored near the board's centre instead of its low-q edge.
+static func middle_starts(b: Dictionary, seed: int) -> Array:
+	var open: Array = _open(b, [])
+	if open.size() < 8:
+		return PARTY_STARTS
+	var cx := 0.0
+	var cy := 0.0
+	for h in open:
+		cx += h.x
+		cy += h.y
+	var mid := Vector2i(roundi(cx / open.size()), roundi(cy / open.size()))
+	var near: Array = open.duplicate()
+	near.sort_custom(func(a, c): return Hex.distance(a, mid) < Hex.distance(c, mid))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var anchor: Vector2i = near[rng.randi() % mini(6, near.size())]   # a little seeded jitter, as party_starts has
+	near.sort_custom(func(a, c): return Hex.distance(a, anchor) < Hex.distance(c, anchor))
+	var cluster: Array = near.slice(0, 4)
+	cluster.sort_custom(func(a, c): return a.x > c.x or (a.x == c.x and a.y < c.y))
+	return cluster
+
+# The n open hexes nearest the far (high-q) end: the road out of a breakout,
+# the treeline a quarry runs for, where a wave comes in. Deterministic order,
+# so both co-op peers hold the same hexes.
+static func far_hexes(b: Dictionary, taken: Array, n: int) -> Array:
+	var open: Array = _open(b, taken)
+	open.sort_custom(func(a, c): return a.x > c.x or (a.x == c.x and a.y < c.y))
+	return open.slice(0, n)
+
+# The open hex farthest from every party member (ties: higher q, then lower r):
+# where a captive is chained.
+static func deepest_hex(b: Dictionary, party_c: Array, taken: Array) -> Vector2i:
+	var best := Vector2i.ZERO
+	var best_d := -1
+	for h in _open(b, taken):
+		var d := 1 << 30
+		for c in party_c:
+			d = mini(d, Hex.distance(h, c.pos))
+		if d > best_d or (d == best_d and (h.x > best.x or (h.x == best.x and h.y < best.y))):
+			best_d = d
+			best = h
+	return best
+
+# The open hex closest to everyone in the party at once: where the carter huddles.
+static func huddle_hex(b: Dictionary, party_c: Array, taken: Array) -> Vector2i:
+	var best := Vector2i.ZERO
+	var best_s := 1 << 30
+	for h in _open(b, taken):
+		var s := 0
+		for c in party_c:
+			s += Hex.distance(h, c.pos)
+		if s < best_s or (s == best_s and (h.x < best.x or (h.x == best.x and h.y < best.y))):
+			best_s = s
+			best = h
+	return best
+
+# Breakout: foes on both sides of a party standing in the middle — ahead and
+# behind alternating, nearest first, never on the road out (`exclude`).
+static func surround_spots(b: Dictionary, party_c: Array, exclude: Array) -> Array:
+	var taken: Array = party_c.map(func(c): return c.pos)
+	var front := -(1 << 30)
+	var back := 1 << 30
+	for p in taken:
+		front = maxi(front, p.x)
+		back = mini(back, p.x)
+	var open: Array = _open(b, taken + exclude)
+	# Bucket by side at a gap; a board too narrow for the full gap on one side
+	# takes half of it there — surrounded means both sides, closer if it must be.
+	var bucket := func(gap: int) -> Array:
+		var ahead: Array = []
+		var behind: Array = []
+		var rest: Array = []
+		for h in open:
+			var d := 99
+			for p in taken:
+				d = mini(d, Hex.distance(h, p))
+			if d >= gap and h.x > front:
+				ahead.append([d, h])
+			elif d >= gap and h.x < back:
+				behind.append([d, h])
+			else:
+				rest.append([-d, h])   # overflow: the least-bad remaining hexes, as _foe_spots does
+		return [ahead, behind, rest]
+	var sides: Array = bucket.call(SPAWN_GAP)
+	if sides[0].is_empty() or sides[1].is_empty():
+		sides = bucket.call(SPAWN_GAP / 2)
+	var ahead: Array = sides[0]
+	var behind: Array = sides[1]
+	var rest: Array = sides[2]
+	ahead.sort_custom(func(a, c): return a[0] < c[0])
+	behind.sort_custom(func(a, c): return a[0] < c[0])
+	rest.sort_custom(func(a, c): return a[0] < c[0])
+	var out: Array = []
+	while not ahead.is_empty() or not behind.is_empty():
+		if not ahead.is_empty():
+			out.append(ahead.pop_front()[1])
+		if not behind.is_empty():
+			out.append(behind.pop_front()[1])
+	for e in rest:
+		out.append(e[1])
+	return out
+
+# Hunt: the strongest foe is the quarry, and it trades places with whichever foe
+# stands nearest the party — it has the whole board to cross, and the party has
+# a chance to close before it does.
+static func mark_quarry(foes: Array, party_c: Array) -> void:
+	if foes.is_empty():
+		return
+	var quarry = foes[0]
+	for f in foes:
+		if float(Power.estimate(f)["score"]) > float(Power.estimate(quarry)["score"]):
+			quarry = f
+	quarry.statuses["quarry"] = true
+	var nearest = foes[0]
+	var nd := 1 << 30
+	for f in foes:
+		var d := 1 << 30
+		for c in party_c:
+			d = mini(d, Hex.distance(f.pos, c.pos))
+		if d < nd:
+			nd = d
+			nearest = f
+	var p: Vector2i = quarry.pos
+	quarry.pos = nearest.pos
+	nearest.pos = p
+
 const SPAWN_GAP := 6    # no foe spawns closer than this to any party member
 # T36/T37: measured lever, not a guess -- 150-seed sweeps found this the best
 # single difficulty knob (+6.6 win-rate points over gap 3, no fight-length
@@ -381,8 +523,16 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 	var b: Dictionary = board if not board.is_empty() else board_for(String(spec.get("theme", "")), int(spec.get("seed", 0)))
 	if spec.get("night", false):
 		b["night"] = true   # #85
+	var o: Dictionary = spec.get("objective", {}).duplicate(true)
+	var kind := String(o.get("kind", ""))
 	var all_c: Array = party_combatants.duplicate()
-	var spots := _foe_spots(b, party_combatants)
+	# The road out / the treeline: the far edge, held free of spawns. Never
+	# narrower than the party — a breakout needs a distinct hex for every
+	# conscious hero.
+	var exit: Array = far_hexes(b, [], maxi(Objectives.EXIT_W, party_combatants.size())) if kind in ["breakout", "hunt"] else []
+	var spots: Array = surround_spots(b, party_combatants, exit) if kind == "breakout" else _foe_spots(b, party_combatants)
+	if kind == "hunt":
+		spots = spots.filter(func(h): return not (h in exit))
 	var i := 0
 	for e in spec.get("monsters", []):
 		var count: int = maxi(1, int(e.get("count", 1)))
@@ -393,10 +543,24 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 			if c != null:
 				all_c.append(c)
 			i += 1
+	var foes: Array = all_c.filter(func(c): return c.team == "foe")
+	match kind:
+		"rescue":
+			all_c.append(Objectives.captive(deepest_hex(b, party_combatants, all_c.map(func(c): return c.pos))))
+		"escort":
+			all_c.append(Objectives.carter(huddle_hex(b, party_combatants, all_c.map(func(c): return c.pos)), Objectives.party_level(party_combatants)))
+		"hunt":
+			mark_quarry(foes, party_combatants)
 	var RNG = load("res://core/rng.gd")
 	var sd: int = int(spec.get("seed", 0))
-	return Combat.new(RNG.new(sd if sd > 0 else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)),
+	var cb := Combat.new(RNG.new(sd if sd > 0 else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)),
 		all_c, b)
+	if kind != "":
+		if kind in ["breakout", "hunt"]:
+			o["exit"] = exit
+		cb.objective = o
+		cb.log.append(Objectives.brief(o))
+	return cb
 
 # `extra_features` (T18) bolts feature ids onto this one spawn — how a boss gets a
 # second attack out of the existing verb machinery instead of a second stat block.
@@ -537,10 +701,12 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 	Adapter.write_back_all(cb.team_of("party"), chars)
 
 	var power := 0.0
+	var roster := 0.0
 	var loot: Array = []
 	var kills: Array[String] = []
 	for c in cb.team_of("foe"):
-		if not c.is_dead():
+		roster += float(Power.estimate(c)["score"])
+		if not c.is_dead() or c.has("escaped"):   # the quarry that got away took its loot with it
 			continue
 		kills.append(c.src_id)
 		power += float(Power.estimate(c)["score"])
@@ -558,15 +724,22 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 	if res == "Victory":
 		loot.append_array(Loot.for_kills(kills, cb.rng))
 	_score_fight(cb, res == "Victory")
+	# Spec §4: an objective done pays half the whole roster's worth in XP on
+	# top of the kills — dead or standing, because holding against them,
+	# slipping past them or dropping their leader is the deed. Gold and loot
+	# stay kills-only: a foe you did not kill did not drop anything.
+	var done: bool = res == "Victory" and cb.objective_result()
+	var bonus: int = roundi(roster * XP_PER_POWER * Objectives.BONUS_XP_SHARE) if done else 0
 	return {
 		"outcome": "Victory" if res == "Victory" else "Defeat",   # a round-cap timeout is not a win
-		"xp": roundi(power * XP_PER_POWER),
+		"xp": roundi(power * XP_PER_POWER) + bonus,
 		"gold": roundi(power * GOLD_PER_POWER),
 		"loot": loot,
 		"deaths": deaths,
 		"kills": kills,   # source monster ids, for T9's kill-count quests
 		"downed": cb.downed.keys(),   # T19: party ids that hit 0 HP, even if they got back up
 		"rounds": cb.round_num,       # world.gd bills the clock an hour a round
+		"objective": {"kind": cb.objective_kind(), "done": done, "xp": bonus},
 	}
 
 
@@ -590,8 +763,10 @@ static func _score_fight(cb, won: bool) -> void:
 	if cb.ambushed:
 		Ach.unlock("ambush_win")
 	# The heroes, not the wolf one of them called: a summon carries the
-	# monsters.json id it was spawned from, a character carries nothing.
-	var heroes: Array = cb.team_of("party").filter(func(c): return String(c.src_id) == "")
+	# monsters.json id it was spawned from, a character carries nothing. A
+	# bystander carries nothing either, but it is not a hero — a scratched
+	# carter must not spoil "whole", and all_down must stay reachable.
+	var heroes: Array = cb.team_of("party").filter(func(c): return String(c.src_id) == "" and not c.has("bystander"))
 	if heroes.is_empty():
 		return
 	var whole := true

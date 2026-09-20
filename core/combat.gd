@@ -53,6 +53,183 @@ var log: Array[String] = []
 # messy one; "down" itself is erased the moment someone gets back up.
 var downed: Dictionary = {}
 
+# --- objectives (core/objectives.gd; the spec is docs/superpowers/specs/
+# 2026-09-20-encounter-objectives-design.md). {} = rout: the fight every fight
+# was before. `exit` is written here by Encounter.build, never into the spec.
+const Objectives = preload("res://core/objectives.gd")
+var objective: Dictionary = {}
+var objective_done := false      # the deed is done: the gate held, the road reached, the quarry down
+var objective_failed := false    # the captive killed, the carter dead, the quarry gone — the fight goes on
+
+func objective_kind() -> String:
+	return String(objective.get("kind", ""))
+
+# The one combatant carrying a status (captive, carter, quarry), or null.
+func with_status(s: String):
+	for c in combatants:
+		if c.has(s):
+			return c
+	return null
+
+# The conscious party without its bystanders: who can act, who must reach the road.
+# A summon or an illusion is on the team but is not a hero — a called wolf
+# never needs a road hex.
+func heroes() -> Array:
+	return combatants.filter(func(c): return c.team == "party" and c.conscious() and not c.has("bystander") \
+		and not c.has("summoned") and not c.has("illusion"))
+
+# --- the rules of each kind ---------------------------------------------------
+#
+# hold     Victory at the top of round `rounds` + 1 with anyone standing; a
+#          wave arrives at the top of each Objectives.WAVE_ROUNDS round.
+# rescue   a hero adjacent to the captive frees it (no action); unfreed at the
+#          top of round `deadline` + 1, the captors kill it. The fight goes on.
+# breakout every conscious hero on an exit hex ends the fight, a Victory.
+# hunt     the quarry ending its turn on an exit hex is gone (objective failed,
+#          fight goes on vs the escort); the quarry dead ends the fight, a Victory.
+# escort   the carter dead fails the objective; the fight goes on.
+
+# The top of a new round: waves, and the captors' deadline.
+func _objective_round() -> void:
+	match objective_kind():
+		"hold":
+			# Checked before a wave gets a chance to spawn: the hold ending and a
+			# wave arriving can land on the same tick (rounds 3 and 4, waves at
+			# [2, 4]), and the wave due on the round the hold ends never comes.
+			if round_num > int(objective.get("rounds", 0)) and not _team_out("party") and not objective_done:
+				objective_done = true
+				log.append("The way behind is barred — the passage held.")
+				return
+			var waves: Array = objective.get("waves", [])
+			var i: int = Objectives.WAVE_ROUNDS.find(round_num)
+			if i >= 0 and i < waves.size():
+				_spawn_wave(waves[i])
+				# A round-boundary arrival starts the round: _join_order's bump is
+				# for a mid-turn arrival protecting the live turn, and here it can
+				# shove the wave's own best initiative past the slot it just won.
+				turn_idx = 0
+		"rescue":
+			var cap = with_status("captive")
+			if cap != null and not cap.has("freed") and not cap.is_dead() \
+					and round_num > int(objective.get("deadline", 0)):
+				log.append("Nobody reached %s in time. The captors make sure of it." % cap.cname)
+				_kill(cap)
+
+# A wave comes in from the far side and rolls its own initiative (_join_order),
+# on the fight's own stream so both co-op peers see the same arrivals.
+func _spawn_wave(roster: Array) -> void:
+	var Enc = load("res://core/encounter.gd")   # load: encounter.gd preloads this file
+	var taken: Array = combatants.filter(func(c): return not c.is_dead()).map(func(c): return c.pos)
+	var spots: Array = Enc.far_hexes(board, taken, 12)
+	var i := 0
+	var names: Array = []
+	for e in roster:
+		var count: int = maxi(1, int(e.get("count", 1)))
+		for n in count:
+			if i >= spots.size():
+				break
+			var c = Enc.spawn(String(e["id"]), float(e.get("mult", 1.0)), "foe", spots[i],
+				n + 1 if count > 1 else 0, e.get("features", []))
+			if c == null:
+				continue
+			c.id = "w%d-%s" % [round_num, c.id]
+			combatants.append(c)
+			_join_order(c)
+			names.append(c.cname)
+			i += 1
+	if not names.is_empty():
+		log.append("More of them, from the far side: %s." % ", ".join(names))
+
+# The deeds that are a matter of standing somewhere — reaching the captive,
+# reaching the road — checked after every hero move and at every turn's end.
+func _objective_touch(c) -> void:
+	if c == null or c.team != "party" or not c.conscious() or c.has("bystander"):
+		return
+	match objective_kind():
+		"rescue":
+			var cap = with_status("captive")
+			if cap != null and not cap.has("freed") and not cap.is_dead() and Hex.distance(c.pos, cap.pos) <= 1:
+				cap.statuses["freed"] = true
+				log.append("%s cuts %s loose." % [c.cname, cap.cname])
+		"breakout":
+			if objective_done:
+				return
+			var exit: Array = objective.get("exit", [])
+			for h in heroes():
+				if not (h.pos in exit):
+					return
+			objective_done = true
+			log.append("The party is through — the road is under their feet, and the rest can chase.")
+
+# The quarry ending its turn on the far edge is off the board: not killed (no
+# loot, no XP — it took those with it), but `dead` is what `order` carries
+# for a gap, the same reason _fade_if_expired leaves a body.
+func _quarry_escape(q) -> void:
+	q.statuses["escaped"] = true
+	q.statuses["dead"] = true
+	q.hp = 0
+	objective_failed = true
+	log.append("%s is into the trees and gone." % q.cname)
+
+func _objective_over() -> bool:
+	return objective_done and objective_kind() in ["hold", "breakout", "hunt"]
+
+# Was the deed done — for the spoils page and the pay. The kinds that end the
+# fight themselves are judged the moment they do; rescue and escort at the end.
+func objective_result() -> bool:
+	match objective_kind():
+		"rescue":
+			var cap = with_status("captive")
+			return cap != null and cap.has("freed") and not cap.is_dead()
+		"escort":
+			var car = with_status("carter")
+			return car != null and not car.is_dead()
+		"hold":
+			return objective_done or _team_out("foe")   # a rout holds the gate too
+		"breakout":
+			return objective_done   # the deed is the road; a rout is a win the kills already paid for
+		"hunt":
+			return objective_done
+	return false
+
+# The HUD's one line under the round counter.
+func objective_line() -> String:
+	match objective_kind():
+		"hold":
+			var r: int = int(objective.get("rounds", 0))
+			return "Hold — round %d of %d" % [mini(round_num, r), r]
+		"rescue":
+			var cap = with_status("captive")
+			if cap == null or cap.is_dead():
+				return "Captive — lost"
+			if cap.has("freed"):
+				return "Captive — freed"
+			var left: int = maxi(0, int(objective.get("deadline", 0)) - round_num + 1)
+			return "Captive — %d round%s left" % [left, "" if left == 1 else "s"]
+		"breakout":
+			var exit: Array = objective.get("exit", [])
+			var hs: Array = heroes()
+			var there: int = hs.filter(func(h): return h.pos in exit).size()
+			return "Road — %d of %d heroes there" % [there, hs.size()]
+		"hunt":
+			var q = with_status("quarry")
+			if q == null:
+				return ""
+			if q.has("escaped"):
+				return "Quarry — gone"
+			if q.is_dead():
+				return "Quarry — down"
+			var d := 1 << 30
+			for e in objective.get("exit", []):
+				d = mini(d, Hex.distance(q.pos, e))
+			return "Quarry — %d hex%s from the treeline" % [d, "" if d == 1 else "es"]
+		"escort":
+			var car = with_status("carter")
+			if car == null:
+				return ""
+			return "Carter — dead" if car.is_dead() else "Carter — %d HP" % car.hp
+	return ""
+
 # T39: the party opened the fight unseen (Stealth beat the foes' passive
 # Perception, or they scouted the node). 2024 PHB surprise: the surprised side
 # rolls Initiative with Disadvantage — no lost round (that was 2014's rule, and
@@ -217,7 +394,8 @@ func _destroy_in_area(hexes: Array, by = null) -> void:
 func _roll_initiative() -> void:
 	for c in combatants:
 		c.init_roll = Dice.d20(rng, Dice.ADV if c.init_adv else Dice.NORMAL).nat + c.init_mod
-	order = combatants.duplicate()
+	# A bystander (a captive, a carter) has no turn: it stands where it is put.
+	order = combatants.filter(func(c): return not c.has("bystander"))
 	order.sort_custom(_init_before)
 	var names: Array = []
 	for c in order:
@@ -361,11 +539,15 @@ func end_turn() -> void:
 	c0.has_acted = true
 	_repeat_saves(c0, "end_turn")
 	_rage_upkeep(c0)
+	_objective_touch(c0)
+	if c0.has("quarry") and c0.conscious() and c0.pos in objective.get("exit", []):
+		_quarry_escape(c0)
 	for _i in order.size() + 1:
 		turn_idx += 1
 		if turn_idx >= order.size():
 			turn_idx = 0
 			round_num += 1
+			_objective_round()
 		var c = current()
 		if c.is_dead() or c.is_stable():
 			continue
@@ -410,14 +592,14 @@ func surrender() -> void:
 	log.append("The party lays down its arms.")
 
 func is_over() -> bool:
-	return surrendered or round_num > MAX_ROUNDS or _team_out("party") or _team_out("foe")
+	return surrendered or round_num > MAX_ROUNDS or _team_out("party") or _team_out("foe") or _objective_over()
 
 # An illusion is not a creature, so it cannot be the last one standing. Without
 # this, Invoke Duplicity's double kept a wiped party's fight "ongoing" until
 # MAX_ROUNDS — nothing can attack the double, so nothing could ever end it.
 func _team_out(team: String) -> bool:
 	for c in combatants:
-		if c.team == team and c.conscious() and not c.has("illusion"):
+		if c.team == team and c.conscious() and not c.has("illusion") and not c.has("bystander"):
 			return false
 	return true
 
@@ -426,6 +608,8 @@ func outcome() -> String:
 		return "Victory"
 	if surrendered or _team_out("party"):
 		return "Defeat"
+	if _objective_over():
+		return "Victory"   # the gate held, the road reached, the quarry down — with foes still standing
 	return "ongoing"
 
 # --- queries used by UI and AI ------------------------------------------
@@ -438,7 +622,8 @@ func enemies_of(c) -> Array:
 	# you can't perceive. This is the shared choke point for targeting on both
 	# sides: the player's target list (legal_target/available route through
 	# it) and the AI's own candidate gathering (ai.gd's reach/cone lists).
-	return combatants.filter(func(o): return o.team != c.team and o.conscious() and not o.has("hidden"))
+	return combatants.filter(func(o): return o.team != c.team and o.conscious() and not o.has("hidden") \
+		and not o.has("captive"))
 
 func allies_of(c) -> Array:
 	return combatants.filter(func(o): return o.team == c.team and o != c and o.conscious())
@@ -791,6 +976,8 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 				return false
 			if c.has("illusion"):
 				return false  # Invoke Duplicity's double is not a creature (an area still catches it)
+			if c.has("captive"):
+				return false  # bound and worthless dead: not a target, and not shovable
 			if v["kind"] in ["shove", "grapple"] and _size_rank(c.size) > _size_rank(actor.size) + 1:
 				return false  # 2024: no more than one size larger than you
 			if v["kind"] == "grapple" and _grappler_of(c) == actor:
@@ -2361,9 +2548,9 @@ func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 	if target.hp <= 0:
 		var overkill: int = -target.hp
 		target.hp = 0
-		if target.team == "party":
+		if target.team == "party" and not target.has("bystander"):
 			downed[target.id] = true
-		if target.team == "foe" or overkill >= target.max_hp:
+		if target.team == "foe" or target.has("bystander") or overkill >= target.max_hp:
 			if tracked and target.team == "foe" and overkill >= target.max_hp:
 				Ach.unlock("overkill")
 			_kill(target)
@@ -2431,6 +2618,11 @@ func _kill(c) -> void:
 	c.statuses["dead"] = true
 	c.statuses.erase("down")
 	c.hp = 0
+	if c.has("bystander"):
+		objective_failed = true   # whoever it was, they were the point
+	if c.has("quarry") and not c.has("escaped"):
+		objective_done = true
+		log.append("The quarry is down — the rest break and run.")
 	if tracked and c.team == "foe":
 		Ach.bump("kills")
 		# src_id is what Encounter.spawn stamps on a generated foe; the
@@ -2590,6 +2782,7 @@ func move_to(mover, dest: Vector2i, disengage := false) -> void:
 		log.append("%s moves to %s." % [mover.cname, _the(region_at(dest))])
 	_zone_touch(mover)
 	_release_grapples()
+	_objective_touch(mover)
 
 # --- actions -------------------------------------------------------
 

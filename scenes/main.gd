@@ -153,6 +153,8 @@ const COL_NIGHT := Color(0.02, 0.03, 0.09, 0.62)   # #85: an unlit hex after dar
 const FLOOR_ALPHA := 0.9    # the texture is the ground now, not a wash over a slab
 const FLOOR_TONE := 0.72    # ...held down to the board's dark palette, the board light on top
 const COL_MOVE := Color(0.30, 0.55, 0.95, 0.35)
+const COL_EXIT := Color(0.85, 0.72, 0.30, 0.32)      # objectives: the road out / the treeline
+const COL_BYSTANDER := Color("d8cfae")               # objectives: a captive's or carter's token
 const COL_TARGET := Color(0.95, 0.35, 0.30, 0.9)
 const COL_CONE := Color(0.98, 0.55, 0.15, 0.30)
 const COL_GOLD_EDGE := Icons.COL_GOLD_EDGE
@@ -492,7 +494,7 @@ func _new_game(forced := 0) -> void:
 	sp["seed"] = _seed
 	result = {}
 	var board: Dictionary = Encounter.board_for(String(sp.get("theme", "")), _seed)   # sp["theme"] picks the board
-	cb = Encounter.build(sp, party.to_combatants(Encounter.party_starts(board, _seed)), board)   # #114
+	cb = Encounter.build(sp, party.to_combatants(Encounter.starts_for(sp, board, _seed)), board)   # #114; objectives pick the starts
 	cb.party = party   # the stash is the potion shelf (core/potions.gd)
 	# The one thing that makes a reaction stop the fight and ask. Installed only
 	# here, only for a player who is actually watching: with it unset the
@@ -576,7 +578,7 @@ func _deploy_menu() -> void:
 		_actor.text = "[b]Unseen.[/b]  Waiting for the host to place the party…"
 		_set_buttons([])
 		return
-	var heroes: Array = cb.team_of("party").filter(func(c): return c.conscious())
+	var heroes: Array = cb.heroes()
 	if _deploy_pick != "" and not heroes.any(func(c): return c.id == _deploy_pick):
 		_deploy_pick = ""          # they went down between menus; nobody is held
 	var opts: Array = []
@@ -643,7 +645,7 @@ func _swap_deploy(a, b) -> void:
 # Who on the board can be picked up right now: the conscious party, since the
 # whole phase is permuting where they stand.
 func deploy_swappable(c) -> bool:
-	return _mode == "deploy" and c != null and c.team == "party" and c.conscious()
+	return _mode == "deploy" and c != null and c.team == "party" and c.conscious() and not c.has("bystander")
 
 # --- turn driver --------------------------------------------------------
 
@@ -834,7 +836,7 @@ func _split_menu(sp: Dictionary) -> void:
 	var owners := Coop.owners_for(party)
 	_owners = owners   # so the strip says whose hand each hero is in while choosing
 	_build_order_strip()
-	for h in cb.team_of("party"):
+	for h in cb.heroes():
 		var theirs: bool = owners.get(h.id, "host") == "guest"
 		opts.append(["%s — %s" % [h.cname, "your friend" if theirs else "you"], func():
 			Coop.split[h.id] = "host" if theirs else "guest"
@@ -1782,6 +1784,8 @@ func _refresh() -> void:
 	_header.tooltip_text = "seed %d" % _seed
 	if _coop != null:
 		_header.text += "  ·  room %s" % _coop.code
+	if not cb.objective.is_empty():
+		_header.text += "  ·  " + cb.objective_line()
 
 	var n: int = cb.order.size()
 	var ci: int = cb.order.find(cb.current())
@@ -3388,6 +3392,10 @@ class Board extends Control:
 			var col: Color = Icons.school_color(String(Catalog.spell(String(z["spell"])).get("school", "")))
 			for hx in z["hexes"]:
 				zone_tint[hx] = col
+		# objectives: the road out of a breakout, the treeline a quarry runs for
+		var road := {}
+		for e in cb.objective.get("exit", []):
+			road[e] = true
 		# tiles: the ground itself is on _ground (see Ground); only what moves
 		# frame to frame is painted here, on top of it.
 		var night: bool = cb.is_night()
@@ -3407,6 +3415,8 @@ class Board extends Control:
 				draw_polyline(rim, Color(zc.r, zc.g, zc.b, 0.75), 1.5, true)
 			if field.has(hx) and hx != cur.pos:
 				draw_colored_polygon(poly, main.COL_MOVE)
+			if road.has(hx):
+				draw_colored_polygon(poly, main.COL_EXIT)
 			if cone_hexes.has(hx):
 				draw_colored_polygon(poly, main.COL_CONE)
 			if provoke.has(hx):
@@ -3460,6 +3470,8 @@ class Board extends Control:
 		for c in order:
 			var p: Vector2 = _tok.get(c.id, _pix(c.pos)) + _lunge(c.id)
 			var base: Color = main.COL_PARTY if c.team == "party" else main.COL_FOE
+			if c.has("bystander"):
+				base = main.COL_BYSTANDER
 			if c.is_down():
 				base = Color("6a6a6a")
 			if _flash.has(c.id):

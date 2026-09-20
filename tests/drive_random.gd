@@ -290,6 +290,11 @@ func _watch() -> void:
 	if fighting and not _in_fight:
 		_fights += 1
 	_in_fight = fighting
+	# Objectives: a bystander (a captive, a carter) is never given a turn.
+	if fighting and screen._combat.cb != null and not screen._combat.cb.order.is_empty():
+		var cur = screen._combat.cb.current()
+		if cur != null and cur.has("bystander"):
+			fail("a bystander (%s) was given a turn" % cur.cname)
 	# Two screens that own the world cannot both own it.
 	if screen._combat != null and not screen._visit.is_empty():
 		fail("a market was open while a fight was on")

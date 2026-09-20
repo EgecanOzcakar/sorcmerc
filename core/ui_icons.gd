@@ -306,6 +306,8 @@ const FOE_GLYPHS := {
 
 # Heroes get their class mark, monsters their creature-type mark.
 static func combatant_glyph(c) -> String:
+	if c.has("bystander"):
+		return "⚑"   # objectives: a captive, a carter — somebody the fight is about
 	if c.sheet != null:
 		return class_glyph(primary_class(c.sheet))
 	var mtype := String(Catalog.monster(c.src_id).get("type", ""))

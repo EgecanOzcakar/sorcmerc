@@ -35,6 +35,7 @@ func _init() -> void:
 	test_collect_item()
 	test_bias()
 	test_the_kinds_that_count_no_bodies()
+	test_rescue_and_failed_delivery()
 	print("test_quest: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -220,3 +221,23 @@ func test_turn_in_raises_the_faction() -> void:
 	check(FactionOpinion.get_opinion("soldier") == FactionOpinion.QUEST_DONE,
 		"...and moves nobody's opinion")
 	FactionOpinion.reset()
+
+func test_rescue_and_failed_delivery() -> void:
+	check(Quest.KINDS.has("rescue") and Quest.TARGET_FIELD["rescue"] == "target_lair_id", "rescue is a kind that names a lair")
+	var p := _party()
+	Quest.accept(p, {"id": "rescue:t:warren", "kind": "rescue", "state": "offered", "target_lair_id": "warren",
+		"required": 1, "progress": 0, "title": "Bring back the miller's boy from the warren", "reward": {"gold": 90}})
+	Quest.record_rescued(p, "other-lair")
+	check(Quest.get_quest(p, "rescue:t:warren")["state"] == "active", "a rescue elsewhere is not this one")
+	Quest.record_rescued(p, "warren")
+	check(Quest.get_quest(p, "rescue:t:warren")["state"] == "complete", "the captive out of that lair completes the job")
+
+	Quest.accept(p, {"id": "deliver:a:b", "kind": "deliver_goods", "state": "offered", "target_settlement_id": "b",
+		"required": 1, "progress": 0, "title": "Run a crate of goods to B", "reward": {"gold": 40}})
+	Quest.accept(p, {"id": "look-out-2", "kind": "scout_region", "state": "offered", "target_region_id": "deeps",
+		"required": 1, "progress": 0, "title": "Scout", "reward": {"gold": 60}})
+	var lost: Array = Quest.fail_deliveries(p)
+	check(lost == ["Run a crate of goods to B"], "the delivery is the one that fails: %s" % str(lost))
+	check(Quest.get_quest(p, "deliver:a:b").is_empty(), "...and it is gone from the log, so the board can post it again")
+	check(Quest.get_quest(p, "look-out-2")["state"] == "active", "the scouting job is untouched")
+	check(Quest.fail_deliveries(p) == [], "nothing to fail twice")

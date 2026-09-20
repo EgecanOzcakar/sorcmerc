@@ -75,6 +75,7 @@ const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
+const Objectives = preload("res://core/objectives.gd")
 const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const RNG = preload("res://core/rng.gd")
@@ -1369,7 +1370,7 @@ func _night_jump(foe) -> bool:
 		watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"], foe.id.capitalize()]) if who != "" \
 		else "Nobody is watching the dark — %s are on the party before anyone can draw!" % foe.id.capitalize()
 	_camp_card("jumped", "Jumped in the dark", "bad", _camp_msg.text,
-		func(): _on_event_ack(); await _launch_combat(foe, false, true))
+		func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
 	return false
 
 # The roster the encountered party fights with. Scaler takes a *theme*, not a
@@ -1378,7 +1379,7 @@ func _night_jump(foe) -> bool:
 # _faction_order's other documented route — FACTIONS[seed % size] — is snapped
 # onto this faction instead. Seeded off the party id, so meeting the same band
 # twice is the same band.
-func encounter_spec(foe) -> Dictionary:
+func encounter_spec(foe, difficulty := "") -> Dictionary:
 	var theme := ""
 	for t in Scaler.THEME_FACTION:
 		if String(Scaler.THEME_FACTION[t]) == foe.faction:
@@ -1395,7 +1396,8 @@ func encounter_spec(foe) -> Dictionary:
 	# range, which is the common case); the party's condition still thins whatever
 	# the country sends, in the same proportion it always did.
 	var spec: Dictionary = Scaler.roster_for(
-		party.party_characters(), String(threat["difficulty"]), {}, theme, seed_v,
+		party.party_characters(), difficulty if difficulty != "" else String(threat["difficulty"]),
+		{}, theme, seed_v,
 		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party))
 	spec["theme"] = theme if theme != "" else DEFAULT_THEME
 	return spec
@@ -1447,22 +1449,55 @@ func _run_combat(spec: Dictionary, difficulty: String,
 	return result
 
 
-func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dictionary:
+# The objective a road fight carries, by precedence: jumped in the dark (camp,
+# night road) or seen mid-slip is a breakout whatever else is going on; a band
+# a job names is a hunt; a delivery on the road makes every fight an escort.
+# {} is today's fight.
+func _road_objective(foe, jumped: String) -> Dictionary:
+	if jumped != "":
+		return Objectives.make("breakout")
+	for q in party.quests:
+		if q["state"] == "active" and q["kind"] == "hunt_party" and String(q.get("target_party_id", "")) == foe.id:
+			return Objectives.make("hunt")
+	for q in party.quests:
+		if q["state"] == "active" and q["kind"] == "deliver_goods":
+			return Objectives.make("escort")
+	return {}
+
+# `jumped` is "" for no breakout, "seen" for a slip caught mid-flight (the
+# threat roster — the approach card priced it that way), "dark" for jumped in
+# the dark at camp or on the night road (the hard roster: not a fight you are
+# meant to win by standing).
+func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped := "") -> Dictionary:
 	if party.scouted_next:   # Potion of Clairvoyance, spent on this fight
 		scouted_ahead = true
 		party.scouted_next = false
 	var threat: Dictionary = WorldThreat.assess(party)
-	var result: Dictionary = await _run_combat(encounter_spec(foe),
+	var objective: Dictionary = _road_objective(foe, jumped)
+	var kind := String(objective.get("kind", ""))
+	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else "")
+	if kind != "":
+		spec["objective"] = objective
+	var result: Dictionary = await _run_combat(spec,
 		String(threat["difficulty"]), scouted_ahead, forced_ambush)
 	if result.is_empty():
 		return {}
+	var obj: Dictionary = result.get("objective", {})
+	var got_away: bool = String(obj.get("kind", "")) == "hunt" and not bool(obj.get("done", false))
 	if String(result.get("outcome", "")) == "Victory":
 		_bank(result)
-		world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
-		# T91: a no-op for the settlement-guard/lair-raid stand-ins below (their
-		# synthetic ids never match a live hunt_party quest's target), correct
-		# for an actual hostile roaming party from _check_encounter.
-		Quest.record_party_defeated(party, foe.id)
+		if got_away:
+			# The band is beaten but its chief is not: it stays on the map, breaks
+			# off a day's march, and the job that named it stays open.
+			_slipped[foe.id] = true
+			WorldAI.truce(foe, world.player(), world.clock.elapsed)
+			_quest_news.append("Their leader got away — the job is still open.")
+		else:
+			world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
+			# T91: a no-op for the settlement-guard/lair-raid stand-ins below (their
+			# synthetic ids never match a live hunt_party quest's target), correct
+			# for an actual hostile roaming party from _check_encounter.
+			Quest.record_party_defeated(party, foe.id)
 		# O7 raise/lower event: putting down a monster band is a favour to whoever
 		# lives near the bodies; putting down a faction's own band is not.
 		if WorldAI.is_monster(foe.faction):
@@ -1476,6 +1511,11 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dict
 		# whenever the nearest settlement was inside its trigger radius — the
 		# same card the beaten party had just answered.
 		_slipped[foe.id] = true
+	# The carter dead, or the party beaten with the crate on the road: the
+	# delivery is lost either way, and the board can post the run again.
+	if String(obj.get("kind", "")) == "escort" and not bool(obj.get("done", false)):
+		for title in Quest.fail_deliveries(party):
+			_quest_news.append("%s — the delivery is lost with the carter." % title)
 	_apply_deaths(result)
 	world.clock.resume()
 	_autosave()   # O13 autosave: a fight is the biggest thing that
@@ -1554,6 +1594,9 @@ func _show_spoils(result: Dictionary) -> void:
 			rows.append(["Nothing worth carrying off the bodies.", Icons.COL_MUTED])
 		else:
 			rows.append(["Taken from the dead: %s" % ", ".join(names), Icons.COL_TEXT])
+	var obj: Dictionary = result.get("objective", {})
+	if String(obj.get("kind", "")) != "":
+		rows.append([Objectives.spoils_line(obj), Icons.COL_GOLD if bool(obj.get("done", false)) else Icons.COL_FOE])
 	for line in _quest_news:
 		rows.append([String(line), Icons.COL_ACCENT])
 	_quest_news = []
@@ -2027,6 +2070,15 @@ func _on_site_room_chosen(i: int) -> void:
 			_bank(result)
 		_apply_deaths(result)
 		_site.finish_combat(result)
+		var obj: Dictionary = result.get("objective", {})
+		if String(obj.get("kind", "")) != "":
+			_site.say(Objectives.spoils_line(obj))
+		if String(obj.get("kind", "")) == "rescue" and bool(obj.get("done", false)):
+			Quest.record_rescued(party, _site.lair.id)
+			var line := "The captive is out of %s." % _site.lair.sname
+			_site.say(line)
+			if not _delve_haul.is_empty():
+				(_delve_haul["quests"] as Array).append(line)
 	if _site.state == "wiped":
 		_site_wiped()
 	elif not _site.is_over():
@@ -2140,8 +2192,9 @@ func _open_approach(foe, hostile := true) -> void:
 	_approach_card = ApproachCard.new()
 	add_child(_approach_card)
 	_approach_card.chosen.connect(_on_approach_chosen)
+	var kind := String(_road_objective(foe, "").get("kind", ""))
 	_approach_card.show_approach(Approach.options(party, foe, hostile),
-		"%s (%d)" % [foe.id.capitalize(), foe.troops.size()])
+		"%s (%d)%s" % [foe.id.capitalize(), foe.troops.size(), ("  ·  " + Objectives.title(kind)) if kind != "" else ""])
 
 func _on_approach_chosen(way: String) -> void:
 	var foe = _approach_foe
@@ -2170,6 +2223,13 @@ func _approach_event(r: Dictionary) -> Dictionary:
 		e["gold"] = -int(r["toll"])
 	return e
 
+# Which approach outcome is a breakout, and at what roster: seen mid-slip is
+# caught in the open, at the threat roster the card already showed; a blown
+# ambush attempt is just the ordinary fight its card promised — THEY take the
+# first round, nothing more.
+static func _jumped_for(r: Dictionary) -> String:
+	return "seen" if String(r.get("way", "")) == "avoid" and bool(r.get("forced_ambush", false)) else ""
+
 func _on_approach_reported(foe, r: Dictionary) -> void:
 	_on_event_ack()
 	if not bool(r.get("fight", true)):
@@ -2182,7 +2242,7 @@ func _on_approach_reported(foe, r: Dictionary) -> void:
 		world.clock.resume()
 		return
 	await _launch_combat(foe, bool(r.get("scouted_ahead", false)),
-		bool(r.get("forced_ambush", false)))
+		bool(r.get("forced_ambush", false)), _jumped_for(r))
 
 func _close_approach() -> void:
 	if _approach_card != null:
@@ -2783,7 +2843,7 @@ func _make_camp() -> void:
 			watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"]]) if who != "" \
 			else "Nobody's keeping watch — the camp is jumped in the night!"
 		_camp_card("jumped", "The camp is jumped", "bad", _camp_msg.text,
-			func(): _on_event_ack(); await _launch_combat(foe, false, true))
+			func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
 
 # The night, on the same card the road uses: what the camp did, pictured
 # (assets/generated/camp-<night|watch|jumped>.png), and — for an ambush —
@@ -2807,7 +2867,7 @@ func _take_quest(q: Dictionary) -> void:
 	# the map, so a clear_lair job about one used to be a contract with no way to
 	# reach the thing it named.
 	var note := ""
-	if String(q["kind"]) == "clear_lair":
+	if String(q["kind"]) in ["clear_lair", "rescue"]:
 		for l in world.lairs:
 			if l.id == String(q.get("target_lair_id", "")) and not l.discovered:
 				l.discovered = true

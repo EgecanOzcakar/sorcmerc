@@ -64,6 +64,9 @@ const PLACEMENT := {
 	# A lair down the valley is everybody's problem, including a camp's — so
 	# where there is no innkeeper the generalist posts it instead.
 	"clear_lair": {"counters": ["innkeeper", "generalist"], "kinds": [], "reach": 800.0},
+	# Somebody taken to a lair down the valley: the innkeeper hears it first,
+	# the generalist where there is no inn.
+	"rescue": {"counters": ["innkeeper", "generalist"], "kinds": [], "reach": 800.0},
 	# One per specialist counter: each of them runs out of its own stock.
 	"supply_item": {"counters": ["weaponsmith", "armorsmith", "alchemist", "librarian", "healer"],
 		"each": true, "kinds": [], "reach": 0.0},
@@ -198,6 +201,9 @@ static func _build(kind: String, counter: String, s, party, world, world_jobs: A
 		"scout_region":
 			var q: Dictionary = scout_offer(s, world)
 			return [q] if not q.is_empty() else []
+		"rescue":
+			var q: Dictionary = rescue_offer(s, world, party)
+			return [q] if not q.is_empty() else []
 	return []
 
 # T91's world-target jobs, narrowed to this kind and to what is close enough to
@@ -310,6 +316,39 @@ static func deliver_offer(s, world) -> Dictionary:
 		"target_settlement_id": best.id, "required": 1, "progress": 0,
 		"title": "Run a crate of goods to %s" % best.sname,
 		"reward": {"gold": DELIVER_BASE + int(best_d / DELIVER_PER_UNIT)},
+	}
+
+const RESCUE_BASE := 90
+const RESCUE_PER_UNIT := 8.0      # map units of road per extra gold piece
+const CAPTIVES := ["the miller's boy", "a carter's daughter", "the reeve's clerk",
+	"a pedlar off the north road", "two charcoal-burners"]
+
+# Somebody was taken to a lair near here and is still alive in it: the nearest
+# unlooted lair with a pens room the party has not yet fought past
+# (core/site.gd's pens_ahead — a job is only posted when it can still be done).
+# `party` is unused for now and kept so the signature matches the other offers.
+static func rescue_offer(s, world, _party) -> Dictionary:
+	if world == null:
+		return {}
+	var Site = load("res://core/site.gd")   # load: site.gd preloads settlement_visit.gd, which preloads this file
+	var reach: float = float(PLACEMENT["rescue"]["reach"])
+	var best = null
+	var best_d := INF
+	for l in world.lairs:
+		var d: float = s.position.distance_to(l.position)
+		if l.looted or d > reach or d >= best_d or not Site.pens_ahead(l):
+			continue
+		best = l
+		best_d = d
+	if best == null:
+		return {}
+	var who: String = CAPTIVES[absi(hash("%s|%s" % [s.id, best.id])) % CAPTIVES.size()]
+	return {
+		"id": "rescue:%s:%s" % [s.id, best.id],
+		"giver_node_id": s.id, "kind": "rescue", "state": "offered",
+		"target_lair_id": best.id, "required": 1, "progress": 0,
+		"title": "Bring back %s from %s" % [who, best.sname],
+		"reward": {"gold": RESCUE_BASE + int(best_d / RESCUE_PER_UNIT)},
 	}
 
 # Ride out one ring further than this settlement stands and come back able to
