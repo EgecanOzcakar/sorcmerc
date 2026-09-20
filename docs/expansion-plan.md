@@ -6230,3 +6230,108 @@ the suite).
 | ![the offering paid](shots/landmarks/03-outcome-offering.png) *the outcome card — the blessing bought, the faction hears of it, the deed's XP* | ![the ruins' card](shots/landmarks/04-card-ruins.png) *ruins — the party's best at each skill rolls, named on the row* |
 | ![the dig](shots/landmarks/05-outcome-dig.png) *a cache, or a snare — the roll named on the outcome* | ![the tower's card](shots/landmarks/06-card-tower.png) *the tower — a fighter reads the sightline without a roll* |
 | ![the watch](shots/landmarks/07-map-watch-marks.png) *the tower's watch: bands marked on the map while it holds, the fog opened around it* | ![the hut, for sale](shots/landmarks/08-inn-hut-lead.png) *the inn sells the hidden kinds at half a lair's price* |
+## One cache for the big files, and a loader that starts early (2026-09-20)
+
+`assets/figures`, `assets/troops`, `assets/beasts` and `assets/lairs` are about
+220 MB of Meshy exports — a hero rig is ~3 MB, `goblin_std.glb` is 23 MB — and
+every one of them was read by a bare `load()` on the main thread, out of two
+private dictionaries that knew nothing about each other: one in
+`scenes/figures3d.gd` (the board), one in `scenes/world/props3d.gd` (every
+overworld layer). Two costs came out of that, both of them paid on the frame a
+screen opens.
+
+**The models were read one at a time.** A `reset()` walked its list and loaded
+each file where it reached it, so opening the overworld paid for a settlement
+model per (faction, kind) and a troop model per band in series, and starting a
+fight paid for a class figure per hero and a faction figure per foe the same
+way. Godot's loader is a thread pool; nothing was using it.
+
+**And the same file was read twice, and kept twice.** The player's figure
+walking the map and that same hero standing on the board are one
+`wizard_idle.glb`, and a beast band marching and that beast in the fight are
+one `wolf.glb` — but with a cache per layer, entering a fight re-read from disk
+what the map already had in memory, and held both copies until the screen died.
+
+`scenes/model_cache.gd` is one cache for all of them, static on a RefCounted
+the way `core/rules/catalog.gd` is, so a test can drive it with no SceneTree.
+`get_scene()` keeps exactly the contract the two dictionaries had — the
+PackedScene, or null when there is no such file, which is not an error but how
+a class or faction the art has not covered yet falls through to the vector or
+pawn tier. What is new is `prefetch()`: every layer's `reset()` now hands the
+loader its whole list before it builds the first thing on it, and `get_scene()`
+collects each one when the loop reaches it, waiting out only what is left. A
+path already in memory from another screen costs nothing at all.
+
+It has a ceiling, which the per-layer dictionaries did not need: they died with
+their screen, and a shared one does not, so `MAX_KEPT` (40, LRU) bounds it at
+roughly 120 MB rather than letting a long session accumulate all of `assets/`.
+The number clears a whole screen's hot set on purpose — twelve settlement
+models and twelve troop models can be live at once, plus what the fight
+launched from there adds — because a cap that fits the average would evict
+inside a single `reset()` and re-read what it had just dropped. Evicting is
+cheap either way: an instantiated figure does not need the PackedScene it came
+from to stay alive.
+
+Two smaller things fell out of reading those paths carefully. `lairs3d.gd`
+loaded every lair's GLB and *then* asked whether the kit was going to build it
+instead — and the kit is the default source, so every lair on the map read
+several megabytes nothing ever drew. It asks first now (`_wants_model()`, which
+is also what the prefetch filters on, in both the lair and settlement layers).
+And `figures3d.gd`'s beast lookup called `ResourceLoader.exists()` once per
+combatant per roster to decide whether a bestiary id has its own model; that
+answer cannot change while the game runs, so the cache remembers it.
+
+`tests/test_model_cache.gd` asserts the parts that are otherwise invisible —
+a figure looks the same whether its file was read once or twice, so the claim
+is made on the cache's own counters: the second ask for a path is a hit that
+touches no disk, a prefetched path is collected from its background request
+rather than re-read, a missing path is answered from the negative cache, an
+abandoned prefetch is drained rather than left in flight, and the cap clears
+the hot set it is supposed to.
+
+## O13x, finished: one Resume per run, and a run that takes its own slot (2026-09-20)
+
+`96789cf` landed the multi-slot autosave half-built, and `master` went red on
+`tests/drive_game.gd` with it. `core/world_save.gd` got the slot machinery
+(`new_slot()` / `set_active_slot()` / `list_slots()`, plus the migration that
+carries a pre-slots `world.json` forward as a "legacy" slot), and the driver
+got the walk that checks two playthroughs do not share a file — but
+`scenes/game/game.gd` got only the new signature. `_resume_world(slot_id)` was
+still wired to a `pressed` signal, which hands a callable no arguments:
+
+```
+ERROR: 'game.gd::_resume_world': Method expected 1 argument(s), but called with 0.
+```
+
+and nothing outside `tests/` ever called `new_slot()`, so a second run still
+marched over the first one's save. The two other failures in that run were the
+same press: with the map never reopened it was never left either, and the rest
+of the walk ran with a live world screen still mounted.
+
+**The title screen draws the list now.** One "Resume the open world" per slot,
+newest first, each with its own line of who and when and where — the same
+words the single button carried, per run. The gilt goes to the newest, because
+the title's rule is that the one thing you are most likely to do next is the
+one in gold. "New run" no longer warns that it writes over anything, because
+it does not: it mints a slot first (`begin`, and `_start_pack` for a content
+pack's run, which is a new run like any other). The co-op lobby keeps a single
+Resume, for the newest — the lobby is about the room, and picking an older run
+is the title's job.
+
+**A row is a summary.** `list_slots()` used to return `id`/`elapsed`/`gold`/
+`mtime`, which is not enough to label a button the way the old one was
+labelled, so both readings come out of one `_facts()` now: the picker's row and
+the line under the active slot cannot say different things about the same save.
+
+**And the order is deterministic.** A file's mtime is whole seconds, leaving
+one run and starting the next writes twice inside one second, and `sort_custom`
+is not stable — so "newest first" was a coin flip exactly when it mattered, in
+the driver and for a player. A slot id carries the microsecond clock it was
+minted at, so that is the tie-break.
+
+`tests/drive_game.gd` also pressed `"Begin — Small World"` for its second run,
+a button that has read `"Begin, small world"` since T-worlds; `press()` matches
+on substring, so it never matched. Fixed to the button's own words.
+`tests/test_world_save.gd` now also checks that a row carries the summary's
+fields, reads them from its own file rather than the active one, and that two
+slots written in the same second still come back newest first.

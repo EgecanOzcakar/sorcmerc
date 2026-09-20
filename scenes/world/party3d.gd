@@ -187,6 +187,10 @@ func reset(world) -> void:
 	_gait.clear()
 	_step.clear()
 	_models.clear()
+	# Every band on the map at once: a few dozen parties, but only the troop
+	# and hero files behind them, and the loader reads those while this loop
+	# is still assembling the first pawn.
+	_prefetch(world.parties.map(_model_path))
 	for p in world.parties:
 		var holder := Node3D.new()
 		add_child(holder)

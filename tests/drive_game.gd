@@ -184,6 +184,58 @@ func _run() -> void:
 		await process_frame
 		await process_frame
 
+	# --- O13x: a second run gets its own slot, not the first run's file -----
+	press("New run")
+	await process_frame
+	party_screen = find_node(main, "res://scenes/party/party.gd")
+	if party_screen == null:
+		fail("New run did not open the party screen for the second playthrough")
+	else:
+		press("Begin, small world")   # the button's own words — see line 104
+		await process_frame
+		await process_frame
+		var second_world = find_node(main, "res://scenes/world/world.gd")
+		if second_world == null:
+			fail("the second New run did not reach the open world")
+		else:
+			var where2 := Vector2(-90, 15)
+			second_world.world.player().position = where2
+			second_world.world.set_goal(second_world.world.player(), where2)
+			second_world._leave_world()
+			await process_frame
+			await process_frame
+			var resume_buttons := buttons(main).filter(
+				func(b): return "Resume the open world" in b.text)
+			if resume_buttons.size() != 2:
+				fail("expected 2 open-world slots on the title screen, found %d"
+					% resume_buttons.size())
+			else:
+				# Newest (this second run) sorts first.
+				resume_buttons[0].pressed.emit(); _presses += 1
+				await process_frame
+				await process_frame
+				var w2 = find_node(main, "res://scenes/world/world.gd")
+				if w2 == null or not w2.world.player().position.is_equal_approx(where2):
+					fail("the newest slot's button did not resume the newest slot")
+				else:
+					w2._leave_world()
+					await process_frame
+					await process_frame
+				resume_buttons = buttons(main).filter(
+					func(b): return "Resume the open world" in b.text)
+				if resume_buttons.size() == 2:
+					resume_buttons[1].pressed.emit(); _presses += 1
+					await process_frame
+					await process_frame
+					var w1 = find_node(main, "res://scenes/world/world.gd")
+					if w1 == null or not w1.world.player().position.is_equal_approx(where):
+						fail("the older slot's button did not resume the older slot,"
+							+ " a fresh run must not have overwritten it")
+					else:
+						w1._leave_world()
+						await process_frame
+						await process_frame
+
 	# --- the same walk with the debug flag on: the linear route ------------
 	OS.set_environment("SORCMERC_LINEAR_CAMPAIGN", "1")
 	main.show_title()

@@ -279,3 +279,73 @@ func _done() -> void:
 
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# O13x: multiple open-world slots, one per playthrough, plus the legacy migration
+# that carries an already-affected player's pre-slots save forward.
+func _slots() -> void:
+	# A raw legacy save, written the old way — no slot ever chosen.
+	WorldSave.set_active_slot("")
+	var legacy_world := _world()
+	legacy_world.clock.elapsed = 111.0
+	WorldSave.save(legacy_world, _party())
+
+	var a := WorldSave.new_slot()
+	var world_a := _world()
+	world_a.clock.elapsed = 222.0
+	var party_a := _party()
+	party_a.add_gold(9000)
+	WorldSave.save(world_a, party_a)
+
+	var b := WorldSave.new_slot()
+	check(b != a, "two slots never collide")
+	var world_b := _world()
+	world_b.clock.elapsed = 333.0
+	WorldSave.save(world_b, _party())
+
+	var slots := WorldSave.list_slots()
+	var ids: Array = []
+	for s in slots:
+		ids.append(s["id"])
+	check(a in ids and b in ids and "legacy" in ids,
+		"both fresh slots and the migrated legacy save all show up")
+
+	WorldSave.set_active_slot(a)
+	var back_a = WorldSave.load_latest()
+	check(is_equal_approx(back_a["world"].clock.elapsed, 222.0)
+		and back_a["party"].gold == party_a.gold, "slot a loads its own data")
+
+	WorldSave.set_active_slot(b)
+	var back_b = WorldSave.load_latest()
+	check(is_equal_approx(back_b["world"].clock.elapsed, 333.0),
+		"slot b is untouched by slot a's save — not sharing one file")
+
+	WorldSave.set_active_slot("legacy")
+	var back_legacy = WorldSave.load_latest()
+	check(is_equal_approx(back_legacy["world"].clock.elapsed, 111.0),
+		"the migrated legacy slot still holds the pre-slots save")
+
+	# O13x: the title draws a button per row and says the same things under each
+	# one it used to say under the single Resume, so a row has to BE a summary —
+	# and it has to be the newest run's row that comes first. Slots a and b were
+	# written in the same second, which is all the resolution a file mtime has,
+	# so this is the tie-break (core/world_save.gd's _minted) under test as much
+	# as the sort. (The migrated legacy row is deliberately not pinned to a
+	# position: its file is a copy made when list_slots() first ran, so its
+	# mtime is the migration's, not the run's.)
+	var rows := WorldSave.list_slots()
+	var order: Array = []
+	var by_id := {}
+	for r in rows:
+		by_id[String(r["id"])] = r
+		if String(r["id"]) in [a, b]:
+			order.append(String(r["id"]))
+	check(order == [b, a],
+		"the newer of two slots written in the same second still sorts first (got %s)" % str(order))
+	for key in ["elapsed", "map", "party", "gold", "story", "written_at"]:
+		check(by_id.get(b, {}).has(key), "a slot row carries the summary's %s" % key)
+	var older: Dictionary = by_id.get(a, {})
+	check(is_equal_approx(float(older.get("elapsed", 0.0)), 222.0)
+		and int(older.get("gold", 0)) == party_a.gold,
+		"...read from that slot's own file, not from whichever one is active")
+
+	WorldSave.set_active_slot("")

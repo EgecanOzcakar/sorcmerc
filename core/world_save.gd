@@ -1,13 +1,23 @@
-# O13 — open-world autosave. One rolling slot, same shape as core/campaign_save.gd
-# (that file is the linear run's slot; this one is normal play's).
+# O13 — open-world autosave, one rolling slot per playthrough (a sibling of
+# core/campaign_save.gd, the linear run's single dev-only slot).
 #
-#   WorldSave.save(world, party)            # on every overlay teardown, and on exit
+#   WorldSave.new_slot()                    # once, starting a fresh run
+#   WorldSave.set_active_slot(id)           # once, resuming a chosen one
+#   WorldSave.save(world, party)            # on every overlay teardown, and on exit —
+#                                            # always into whichever slot is active
 #   var s = WorldSave.load_latest()         # {"world": World, "party": Party}, or null
+#   WorldSave.list_slots()                  # every slot, newest first, for a picker
+#
+# The player only ever autosaves (automatic) or loads (picks a slot) — there is no
+# manual save, and no rename/delete. Never calling new_slot()/set_active_slot() is
+# the original single-slot behaviour, still what every test/driver gets by default.
 #
 # Loading also re-applies the saved faction opinion (it is process-global state in
 # core/faction_opinion.gd, so there is nowhere else to put it).
 #
-# user://autosave/world.json (or $SORCMERC_SAVE_DIR/world.json):
+# user://autosave/worlds/<slot id>.json (or $SORCMERC_SAVE_DIR/worlds/<slot id>.json;
+# the pre-slots user://autosave/world.json is migrated into a "legacy" slot the first
+# time list_slots() runs — see _migrate_legacy()):
 #
 # {
 #   "format": "sorcmerc-world",       // literal, checked on load
@@ -62,8 +72,92 @@ static func dir() -> String:
 		_dir = SaveDir.root() if OS.get_environment("SORCMERC_SAVE_DIR") != "" else SaveDir.path("autosave")
 	return _dir
 
+# Multiple slots, one per open-world playthrough — a "New run" must never land on
+# the same file an earlier run is still using (that was the actual bug: two runs
+# sharing one slot means the second overwrites the first the moment anything
+# autosaves). "" is the original single-slot behaviour and is what every test/
+# driver that never calls new_slot()/set_active_slot() still gets, unchanged.
+static var _active_slot := ""
+
+static func new_slot() -> String:
+	_active_slot = "%d-%d" % [Time.get_ticks_usec(), randi() % 1000000]
+	return _active_slot
+
+static func set_active_slot(id: String) -> void:
+	_active_slot = id
+
+static func active_slot() -> String:
+	return _active_slot
+
 static func path() -> String:
-	return dir() + "/world.json"
+	if _active_slot == "":
+		return dir() + "/world.json"
+	return dir() + "/worlds/%s.json" % _active_slot
+
+# A save from before slots existed is still just user://autosave/world.json — copied
+# (not moved, so an old test/driver that only knows the legacy path still finds it)
+# into the slot list the first time anything asks for it, so it shows up as
+# "Resume" instead of quietly vanishing the first time this ships.
+static func _migrate_legacy() -> void:
+	var legacy := dir() + "/world.json"
+	if not FileAccess.file_exists(legacy):
+		return
+	var slots_dir := dir() + "/worlds"
+	var migrated := slots_dir + "/legacy.json"
+	if FileAccess.file_exists(migrated):
+		return
+	DirAccess.make_dir_recursive_absolute(slots_dir)
+	var f := FileAccess.open(migrated, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_string(FileAccess.get_file_as_string(legacy))
+	f.close()
+
+# One row per slot, newest first — enough to label a "Resume" button without the
+# caller having to load (and re-decode RNGs/Vector2s for) the whole world.
+#
+# A row is summary()'s reading of that slot plus its `id`, deliberately: the
+# title screen draws a button per slot and says the same things under each one
+# it used to say under the single "Resume the open world", and there is no
+# second opinion about what a slot's facts are (see _facts).
+static func list_slots() -> Array:
+	_migrate_legacy()
+	var out: Array = []
+	var slots_dir := dir() + "/worlds"
+	var da := DirAccess.open(slots_dir)
+	if da == null:
+		return out
+	da.list_dir_begin()
+	var fname := da.get_next()
+	while fname != "":
+		if not da.current_is_dir() and fname.ends_with(".json"):
+			var full := slots_dir + "/" + fname
+			var d = JSON.parse_string(FileAccess.get_file_as_string(full))
+			if d is Dictionary and d.get("format") == FORMAT:
+				var row := _facts(d, FileAccess.get_modified_time(full))
+				row["id"] = fname.get_basename()
+				out.append(row)
+		fname = da.get_next()
+	da.list_dir_end()
+	# Newest first, with a tie broken by which slot was MADE last. A file's
+	# mtime is whole seconds, so two saves in the same second compare equal —
+	# not hypothetical, since leaving one playthrough and the next lands two
+	# writes back to back — and sort_custom is not a stable sort, so equal
+	# rows would come out in whatever order the directory was read in. A slot
+	# id carries the microsecond clock it was minted at (new_slot), which is
+	# the one monotone thing on hand; "legacy" parses to 0 and sorts last,
+	# which is exactly what a pre-slots save is.
+	out.sort_custom(func(a, b):
+		if a["written_at"] != b["written_at"]:
+			return a["written_at"] > b["written_at"]
+		return _minted(a["id"]) > _minted(b["id"]))
+	return out
+
+# A slot id is "<microsecond clock>-<random>" (new_slot); the clock in front of
+# it is the only record of the order slots were made in. "legacy" has neither
+# and answers 0, which is right: it predates slots entirely.
+static func _minted(slot_id: String) -> int:
+	return slot_id.get_slice("-", 0).to_int()
 
 # M7: `story` is a core/mod/story_runtime.gd, or null for a run with no story
 # on it (every built-in map). A save that carries one also carries the pack id
@@ -315,7 +409,7 @@ static func _dec(v):
 static func save(world, party = null, story = null) -> void:
 	if world == null:
 		return
-	DirAccess.make_dir_recursive_absolute(dir())
+	DirAccess.make_dir_recursive_absolute(path().get_base_dir())
 	var f := FileAccess.open(path(), FileAccess.WRITE)
 	if f == null:
 		push_warning("cannot write %s" % path())
@@ -333,13 +427,14 @@ static func load_latest():
 static func has_save() -> bool:
 	return FileAccess.file_exists(path())
 
-# What is in the slot, in words, without rebuilding a World to find out.
+# What is in the ACTIVE slot, in words, without rebuilding a World to find out.
 #
-# There is exactly ONE slot and it rolls (see the header), which is a fine model
-# right up until the title screen says nothing but "Resume the open world" — at
-# which point the player cannot tell what they would be resuming, cannot tell
-# that starting a new run is going to write over it, and has no way to clear it.
-# scenes/game/game.gd's title reads this to say all three.
+# A button that says nothing but "Resume the open world" cannot tell the player
+# what they would be resuming; this is what the words under it are made of. The
+# title screen reads list_slots() rather than this, since it draws one button
+# per slot and each needs its own reading — but a row there is this same
+# dictionary (see _facts), and this is still the answer for whoever is asking
+# about the slot in hand.
 #
 # {} when there is no slot or the file is unreadable — same "a bad autosave is
 # just no autosave" contract as load_latest().
@@ -349,6 +444,12 @@ static func summary() -> Dictionary:
 	var d = JSON.parse_string(FileAccess.get_file_as_string(path()))
 	if not (d is Dictionary) or d.get("format") != FORMAT:
 		return {}
+	return _facts(d, FileAccess.get_modified_time(path()))
+
+# What one slot says about itself, off its already-parsed save. Shared by
+# summary() (the active slot) and list_slots() (every slot), so a row in the
+# picker and the line under the single Resume button cannot drift apart.
+static func _facts(d: Dictionary, written_at: int) -> Dictionary:
 	var pd: Dictionary = d.get("party", {})
 	var names: Array = []
 	for ch in pd.get("roster", []):
@@ -360,7 +461,7 @@ static func summary() -> Dictionary:
 		"party": names,
 		"gold": int(pd.get("gold", 0)),
 		"story": String(d.get("story", {}).get("pack", "")),
-		"written_at": FileAccess.get_modified_time(path()),
+		"written_at": written_at,
 	}
 
 # "Day 3  14:05" off world-minutes — the same reading scenes/world/world.gd's

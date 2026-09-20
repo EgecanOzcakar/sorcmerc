@@ -16,6 +16,10 @@ extends "res://scenes/native_layer.gd"
 
 const Catalog = preload("res://core/rules/catalog.gd")
 const Props3D = preload("res://scenes/world/props3d.gd")
+# The same cache the overworld layers read through, so the hero already
+# standing on the map arrives in the fight without a second trip to disk.
+# See scenes/model_cache.gd.
+const ModelCache = preload("res://scenes/model_cache.gd")
 
 # A lookup, not a hardcoded
 # model, because coverage will always trail the 316-entry bestiary. A key with no
@@ -72,7 +76,6 @@ var cb
 var _cam: Camera3D
 var _figs := {}                # combatant id -> Node3D
 var _prev := {}                # combatant id -> last world position, for facing
-var _model_cache := {}         # path -> PackedScene, or null once if missing
 
 
 func _ready() -> void:
@@ -129,7 +132,7 @@ func _model_path(c) -> String:
 	if c.src_id == "":
 		return ""
 	var by_id := BEAST_DIR % c.src_id
-	if ResourceLoader.exists(by_id):
+	if ModelCache.exists(by_id):
 		return by_id
 	return String(FOE_MODELS.get(String(Catalog.monster(c.src_id).get("faction", "")), ""))
 
@@ -150,9 +153,7 @@ static func fit_beast(m: Node3D, id: String) -> void:
 
 
 func _model(path: String) -> PackedScene:
-	if not _model_cache.has(path):
-		_model_cache[path] = load(path) if ResourceLoader.exists(path) else null
-	return _model_cache[path]
+	return ModelCache.get_scene(path)
 
 
 func has_figure(c) -> bool:
@@ -165,6 +166,12 @@ func reset(_cb) -> void:
 		n.queue_free()
 	_figs.clear()
 	_prev.clear()
+	# The whole roster's models asked for in one go, before the first one is
+	# instantiated: a fight fields up to a dozen figures at ~3 MB each, and
+	# read one at a time that is a visible stall on the frame the board opens.
+	# Whatever the overworld already loaded (the player's own class figure, a
+	# beast band's model) is a cache hit and costs nothing here.
+	ModelCache.prefetch(cb.combatants.map(_model_path))
 	for c in cb.combatants:
 		var path := _model_path(c)
 		var scene := _model(path)
