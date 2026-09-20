@@ -122,6 +122,14 @@ func region_at(p: Vector2i) -> String:
 	var f = board.get("region_at")
 	return f.call(p) if f is Callable else ""
 
+# A board names its own regions, and they do not agree about the article: the
+# outdoor boards say "the treeline" and the shrine says "Brazier Hall". The
+# move line used to write "the" in front of whichever it got, so five boards out
+# of six narrated "moves to the the treeline" — it is in the log quoted on
+# issue #132. Ask for the article instead of assuming it is missing.
+static func _the(place: String) -> String:
+	return place if place.to_lower().begins_with("the ") else "the " + place
+
 # Only hostiles wall a hex off. An ally's space can be walked THROUGH (5.5e
 # "Moving Around Other Creatures") — it just cannot be stopped in, which
 # move_field() enforces by erasing those hexes after the flood. Before this, a
@@ -2579,7 +2587,7 @@ func move_to(mover, dest: Vector2i, disengage := false) -> void:
 	mover.pos = dest
 	mover.econ["move_left"] = int(mover.econ.get("move_left", 0)) - field[dest]
 	if region_at(dest) != before_region:
-		log.append("%s moves to the %s." % [mover.cname, region_at(dest)])
+		log.append("%s moves to %s." % [mover.cname, _the(region_at(dest))])
 	_zone_touch(mover)
 	_release_grapples()
 

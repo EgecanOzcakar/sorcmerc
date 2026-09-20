@@ -285,7 +285,22 @@ var story = null
 const Coop = preload("res://core/coop.gd")
 var spectator := false
 var _map_share_t := 0.0      # host: seconds since the last map delta went out
+const MAP_SHARE_EVERY := 0.5   # host: how often a delta leaves; the guest paces itself off this
 var _synced_arrival := 0     # host: Coop.link.arrivals the full save was last sent for
+# Issue #133: the guest used to write each delta straight onto the map, which
+# made the road two frames a second — a party that jumped a step, stood still
+# for half a second, jumped again. What crosses the wire is the right amount
+# (positions twice a second is nothing to send and nothing to lose); the frames
+# in between are this screen's to draw. A delta is a TARGET now, and _spectate()
+# walks the map toward it over the interval the last two arrived in, so the
+# mirror moves at the speed the host's party is actually moving and is never
+# drawn anywhere the host has not been.
+var _mirror_from := {}       # guest: party id -> where it stood when the last delta landed
+var _mirror_to := {}         # guest: party id -> where the host says it stands
+var _mirror_clock := Vector2.ZERO   # guest: the same for world.clock.elapsed — [from, to]
+var _mirror_span := MAP_SHARE_EVERY # guest: seconds between the last two deltas
+var _mirror_age := 0.0       # guest: seconds since the last one
+var _mirror_seen := false    # guest: the first delta snaps; every one after it glides
 var story_card: Control = null       # the beat being shown, or null
 var _story_panel: Control = null     # the journal overlay, toggled off the HUD
 var _story_btn: Button
@@ -424,7 +439,7 @@ func _small_world() -> World:
 # per frame is the whole update.
 func _process(delta: float) -> void:
 	if spectator:
-		_spectate()
+		_spectate(delta)
 		_render()
 		return
 	# O7: the clock's own advance (0 while paused) both drains O6's queued opinion
@@ -488,7 +503,7 @@ func _coop_share(delta: float) -> void:
 		_synced_arrival = link.arrivals
 		link.send(Coop.world_full(world, party, story))
 	_map_share_t += delta
-	if _map_share_t >= 0.5:
+	if _map_share_t >= MAP_SHARE_EVERY:
 		_map_share_t = 0.0
 		link.send(Coop.map_delta(world))
 	for m in link.take():   # between fights the road owns the inbox; only one thing on it is for the host
@@ -521,30 +536,67 @@ func _apply_guest_levelup(m: Dictionary) -> void:
 # yet waits for the next full save; one the delta no longer names is stale
 # until then, which is at most a few seconds — the host autosaves on every
 # structural change and each autosave is a full save on the wire.
-func _spectate() -> void:
+#
+# #133: a delta arriving is one event and drawing the map is another. The
+# arrival aims this screen at where the host is; every frame after it moves the
+# screen a little further along, so the guest watches the same journey the host
+# is watching instead of a slide show of it.
+func _spectate(delta: float) -> void:
 	var link = Coop.link
-	if link == null or link.map_latest.is_empty():
+	if link == null:
 		return
-	var m: Dictionary = link.map_latest
-	link.map_latest = {}
-	world.clock.elapsed = float(m["elapsed"])
-	party.world_now = world.clock.elapsed
-	var at: Dictionary = m["at"]
+	if not link.map_latest.is_empty():
+		_aim_mirror(link.map_latest)
+		link.map_latest = {}
+		if not link.visit_latest.is_empty():
+			var v: Dictionary = link.visit_latest
+			link.visit_latest = {}
+			_mirror_visit(v)
+		_check_level_ready()   # a level on one of OUR heroes is ours to take (see _ready_to_level)
+	_mirror_age += delta
+	_draw_mirror()
+
+# A delta just landed: keep where the map is DRAWN right now as the start of the
+# next glide, and take the host's numbers as its end. The span is how long the
+# last two took to arrive rather than the nominal half second, so a slow link
+# stretches the motion instead of stuttering through it; a fast one is capped
+# so a burst cannot make the map lurch. The first delta on a fresh screen has
+# nothing to glide from and snaps.
+func _aim_mirror(m: Dictionary) -> void:
+	_mirror_span = clampf(_mirror_age, 0.1, 2.0) if _mirror_seen else 0.0
+	_mirror_age = 0.0
+	_mirror_from.clear()
 	for p in world.parties:
-		if at.has(p.id):
-			p.position = Vector2(float(at[p.id][0]), float(at[p.id][1]))
-			p.goal = p.position
-			p.route.clear()
+		_mirror_from[p.id] = p.position
+	_mirror_to.clear()
+	var at: Dictionary = m["at"]
+	for id in at:
+		_mirror_to[id] = Vector2(float(at[id][0]), float(at[id][1]))
+	_mirror_clock = Vector2(world.clock.elapsed if _mirror_seen else float(m["elapsed"]),
+		float(m["elapsed"]))
+	_mirror_seen = true
+	if _pause_btn != null:
+		_pause_btn.text = "Paused" if bool(m.get("paused", false)) else "Travelling"
+
+# One frame of the glide. Clamped at 1, so a delta that never comes leaves the
+# map standing on the last place the host actually was rather than sliding on
+# past it.
+func _draw_mirror() -> void:
+	if not _mirror_seen:
+		return
+	var t: float = 1.0 if _mirror_span <= 0.0 else clampf(_mirror_age / _mirror_span, 0.0, 1.0)
+	for p in world.parties:
+		if not _mirror_to.has(p.id):
+			continue
+		var to: Vector2 = _mirror_to[p.id]
+		p.position = (_mirror_from.get(p.id, to) as Vector2).lerp(to, t)
+		p.goal = p.position
+		p.route.clear()
+	world.clock.elapsed = lerpf(_mirror_clock.x, _mirror_clock.y, t)
+	party.world_now = world.clock.elapsed
 	var p0 := world.player()
 	if p0 != null:
 		world.reveal(p0.position)
-	if _pause_btn != null:
-		_pause_btn.text = "Paused" if bool(m.get("paused", false)) else "Travelling"
-	if not link.visit_latest.is_empty():
-		var v: Dictionary = link.visit_latest
-		link.visit_latest = {}
-		_mirror_visit(v)
-	_check_level_ready()   # a level on one of OUR heroes is ours to take (see _ready_to_level)
 
 # The host's counter, on our screen: the same panel, from their market dict,
 # with every button greyed. The purse and the shelf ride along because a buy
