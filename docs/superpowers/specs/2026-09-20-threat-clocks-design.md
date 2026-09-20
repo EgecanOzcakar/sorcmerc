@@ -57,9 +57,11 @@ class Settlement:
 	var raided_at := -1.0       # when it landed, for the label and the board line
 ```
 
-`core/threat.gd` (new, static, like `world_lairs.gd`) owns the clock, the
-raid, the spread, the lift and the reclaim. It preloads nothing that
-preloads `world.gd`. `scenes/world/world.gd` calls `Threat.tick(world, now)`
+`core/raids.gd` (new, static, like `world_lairs.gd`; `Raids` — `WorldThreat`
+already names the difficulty assessor) owns the clock, the raid, the
+spread, the lift and the reclaim. It preloads `world.gd` (for the classes)
+and `world_ai.gd`; neither preloads it back. `scenes/world/world.gd` calls
+`Raids.tick(world, now)`
 once a frame beside `_check_expired_lairs()` and speaks the lines it returns
 through `_lair_msg`, exactly as it does for `expire()` and `respawn()`.
 
@@ -86,7 +88,7 @@ jitter`, where `jitter = hash("raid|" + id) % RAID_JITTER` in world-minutes
 — so five lairs do not all set out on the same morning, and the same lair
 always sets out on the same morning across a reload.
 
-When it is due, `Threat.tick`:
+When it is due, `Raids.tick`:
 
 1. picks the target: the nearest civilized settlement within `RAID_REACH`;
 2. adds a `RoamingParty` `"%s-raiders" % lair.id` at the lair's position,
@@ -106,17 +108,27 @@ When it is due, `Threat.tick`:
 `core/world_ai.gd` gains a fourth behaviour:
 
 ```gdscript
-static func raid(party, dest: Vector2, target: String, home: String) -> void:
-	party.ai = {"behavior": "raid", "dest": dest, "phase": "march",
+static func raid(party, to: Vector2, target: String, home: String) -> void:
+	party.ai = {"behavior": "raid", "to": to, "phase": "march",
 		"target": target, "home": home, "until": -1.0}
 
-static func _raid_step(party):
-	return party.ai["dest"]
+static func _raid_step(world, party):
+	# At the gate they come for anyone who comes near: the siege is a thing you
+	# meet, not a dot you can walk round. RAID_SIGHT = Visit.BATTLE_RADIUS.
+	var s: Dictionary = party.ai
+	if String(s.get("phase", "")) == "siege":
+		var p = world.player()
+		if p != null and not in_truce(party, world.clock.elapsed) \
+				and party.position.distance_to(p.position) <= RAID_SIGHT:
+			return p.position
+	return s["to"]
 ```
 
-The step only names the destination; `_steer()` routes it round the water
+The step only names the destination (`to`; `dest` is `_steer()`'s own key,
+the dry point it actually aims at); `_steer()` routes it round the water
 like every other behaviour, and `move_toward_goal` walks it. The phases are
-`Threat.tick`'s to advance, by reading the band each frame:
+`Raids.tick`'s to advance, by reading the band each frame
+(`WorldAI.arrived(party)`, a public name for `_arrived`):
 
 - **march** — walking to the siege point. On arrival (`party.at_goal()`):
   `phase = "siege"`, `until = now + SIEGE`, line *"Raiders from the Ash
@@ -138,7 +150,7 @@ posts a `hunt_party` job for it automatically (its id capitalizes to
 *"Ash Warren Raiders"*), and that job's fight is a *hunt*.
 
 **Turned.** If the band is gone from `world.parties` — the party beat it,
-a patrol beat it — `Threat.tick` finds `lair.raid_band` naming nobody:
+a patrol beat it — `Raids.tick` finds `lair.raid_band` naming nobody:
 `raid_band = ""`, `raid_at = now` (they try again in `RAID_EVERY`). The
 credit is the world screen's, and only when the party's own fight beat a
 band whose phase was `march` or `siege`: `FactionOpinion.credit_fight(world,
@@ -180,9 +192,10 @@ When the siege runs out the raid lands on the settlement:
   the road, and they give that."* `_needs_met("raided")` is *some settlement
   has `raided_by != ""` and that lair is still undiscovered*, so the event
   only rolls when its pass would do something.
-- **Label.** The settlement's map label and minimap tooltip read
-  *"Riverhold — raided"* until lifted; the lair's read *"the Ash Warren —
-  raiding"*.
+- **Label.** The settlement's map label (`ground_marks()`) reads
+  *"Riverhold — raided"* until lifted; the lair's reads *"the Ash Warren —
+  raiding"* while its band is out. The minimap has no labels and stays as it
+  is.
 - `raids += 1`. If `raids == 2` and `spawned_from == ""`, the lair spreads
   (§5).
 
@@ -193,7 +206,7 @@ refreshes the stamp — worse does not get worse than halved.
 ## 5. Spread
 
 On its second landing a root lair (one with no `spawned_from`) seeds a
-child: `Threat.spread(world, lair, now)` places a new `Lair` of the same
+child: `Raids.spread(world, lair, now)` places a new `Lair` of the same
 faction between `SPREAD_MIN` and `SPREAD_MAX` units from the parent, on dry
 ground (`not world.is_water`), at least `ProceduralWorld.MIN_MONSTER_GAP`
 from every settlement and `SPREAD_MIN` from every other lair, trying
@@ -213,11 +226,13 @@ it is paid once.
 
 `WorldLairs.mark_cleared` is already the one place a lair is spent — fought
 to the bottom, sneaked past, resolved by D1's window as *cleared* or
-*abandoned*. `Threat.lift(world, lair)` hangs off it: every settlement with
-`raided_by == lair.id` gets `raided_by = ""`, `raided_at = -1.0`; a band out
-raiding for that lair (`raid_band`) is erased wherever it stands — its lair
-is gone and it has nowhere to go home to; `raid_band = ""`. The world screen
-says *"Riverhold breathes again — the Ash Warren is done raiding."* for
+*abandoned* — and `Raids.tick` polls for it rather than hooking it: any
+settlement whose `raided_by` names a lair that is looted, or gone from the
+map, is lifted — `raided_by = ""`, `raided_at = -1.0` — and a band out
+raiding for a looted lair (`raid_band`) is erased wherever it stands: its
+lair is gone and it has nowhere to go home to; `raid_band = ""`. Polling
+keeps every way of spending a lair covered, including the ones an old save
+took before this rule existed. The world screen says *"Riverhold breathes again — the Ash Warren is done raiding."* for
 each lifted settlement and credits the deed: `FactionOpinion.raise(s.faction,
 LIFTED_FOR)` per lifted settlement, `Ach.bump("raids_lifted")`.
 
@@ -238,7 +253,7 @@ send settlers. The lair button row gains a third button beside *Attack* and
 such a lair: **Settle it (120 ◉)** — `RECLAIM_COST[band]`, heartland 120,
 marches 240, greyed with *"not enough gold"* if the purse is short.
 
-`Threat.settle(world, lair, party, now)`:
+`Raids.settle(world, lair, party, now)`:
 
 - takes the gold; erases the lair from `world.lairs` for good (no respawn —
   it is not a hole any more);
@@ -293,7 +308,7 @@ and the deeps). Do nothing for six days and both have raided twice and
 spread: two towns at half a market, four lairs where there were two. Clear
 one and its town is whole again inside the same visit.
 
-Tests (`tests/test_threat.gd`, pure, no scene): a near, live, undisturbed
+Tests (`tests/test_raids.gd`, pure, no scene): a near, live, undisturbed
 lair sets out at its due time and not before; a far, a disturbed and a
 looted one never do; the band marches, sieges for `SIEGE`, lands (market
 halved, board premium, label, `raids == 1`), walks home and is erased; a
@@ -317,17 +332,16 @@ the halved shelf".
 | file | change |
 |---|---|
 | `core/world.gd` | four `Lair` fields, two `Settlement` fields |
-| `core/threat.gd` | new: `tick()`, `spread()`, `lift()`, `can_settle()`, `settle()`, the constants, `WAYSTATION_NAMES` |
-| `core/world_ai.gd` | `raid()` behaviour and `_raid_step()` |
-| `core/world_lairs.gd` | `mark_cleared` calls `Threat.lift`; `respawn` resets the clock |
+| `core/raids.gd` | new: `tick()`, `spread()`, `settle_cost()`, `settle()`, the tags, the constants, `WAYSTATION_NAMES` |
+| `core/world_ai.gd` | `raid()` behaviour, `_raid_step()`, `arrived()`, `RAID_SIGHT` |
+| `core/world_lairs.gd` | `respawn` resets the clock |
 | `core/world_save.gd` | the six fields in and out; old-save clock start |
 | `core/settlement_visit.gd` | `market`'s `battle` flag includes `raided_by` |
 | `core/quest.gd`, `core/quest_posting.gd` | `RAID_PREMIUM`; `rescue_offer` prefers the raider |
 | `core/travel.gd` | the `refugees` event and `needs: "raided"` |
 | `core/achievements.gd` | `raids_turned`, `raids_lifted`, `waystations_1/3` |
-| `scenes/world/world.gd` | `Threat.tick` in `_process`; the lines; the *Settle it* button; `hold` in `_road_objective`; the turned credit; labels; the board line |
-| `scenes/world/minimap.gd` | raided/raiding in the tooltip |
-| `tests/test_threat.gd`, `tests/test_world_save.gd`, `tests/test_quest_posting.gd`, `tests/drive_random.gd` | §8 |
+| `scenes/world/world.gd` | `Raids.tick` in `_process`; the lines; the *Settle it* button; `hold` in `_road_objective`; the turned credit; labels; the board line |
+| `tests/test_raids.gd`, `tests/test_world_raids.gd`, `tests/test_world_save.gd`, `tests/test_quest_posting.gd`, `tests/drive_random.gd` | §8 |
 | `docs/expansion-plan.md` | the shipped record |
 
 ## 10. Open, decided here unless overruled
