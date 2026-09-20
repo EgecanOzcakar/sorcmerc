@@ -61,6 +61,16 @@ const SPREAD_MAX := 300.0
 const SPREAD_TRIES := 24
 const SPREAD_TOWN_GAP := 300.0
 
+# Reclaiming. A cleared lair on settled ground can be bought into a camp
+# settlement inside the respawn's own one-day window — the one deadline there
+# already is. Priced as nights at a town inn (three and six): a real sink,
+# once, for a permanent bed. SETTLE_XP is a landmark and a half — the biggest
+# deed on the map that is not a fight — times (ring + 1) like every deed.
+const RECLAIM_COST := {"heartland": 120, "marches": 240}
+const SETTLE_XP := 60
+const WAYSTATION_NAMES := ["Fairstead", "Newhold", "Hollowell", "Whitecross", "Longwater",
+	"Kingsrest", "Ashford", "Stonebridge", "Greenhalt", "Oldwell"]
+
 static func is_settled(world, lair) -> bool:
 	return Regions.band_of(world, lair.position) in SETTLED_BANDS
 
@@ -251,3 +261,62 @@ static func settlement_tag(world, s, now: float) -> String:
 
 static func lair_tag(lair) -> String:
 	return " — raiding" if lair.raid_band != "" else ""
+
+# --- reclaiming --------------------------------------------------------------
+
+# The nearest civilized settlement to a point, any distance — where the
+# settlers come from, and whose faction the camp flies. null on a map with none.
+static func settlers_from(world, pos: Vector2):
+	var best = null
+	var best_d := INF
+	for s in world.settlements:
+		if WorldAI.is_monster(s.faction):
+			continue
+		var d: float = s.position.distance_to(pos)
+		if d < best_d:
+			best_d = d
+			best = s
+	return best
+
+# Gold to settle this lair, or 0 when it cannot be: live, spent before the
+# respawn rule (no window), on frontier or deeps ground, or nobody to send.
+static func settle_cost(world, lair) -> int:
+	if not lair.looted or lair.cleared_at < 0.0 or not world.lairs.has(lair):
+		return 0
+	var band := Regions.band_of(world, lair.position)
+	if not RECLAIM_COST.has(band) or settlers_from(world, lair.position) == null:
+		return 0
+	return int(RECLAIM_COST[band])
+
+# Seeded off the lair, stepping past any name already on the map.
+static func waystation_name(world, lair) -> String:
+	var n := WAYSTATION_NAMES.size()
+	var start: int = absi(hash("way|%s" % lair.id)) % n
+	for i in n:
+		var name: String = WAYSTATION_NAMES[(start + i) % n]
+		var taken := false
+		for s in world.settlements:
+			if s.sname == name:
+				taken = true
+				break
+		if not taken:
+			return name
+	return "%s Halt" % lair.sname.trim_prefix("the ")
+
+# The purchase: the lair is gone for good (not a hole any more — no respawn),
+# a camp of the settlers' faction stands where it was with a fresh market, and
+# the deed pays. null when it cannot be settled or the purse is short.
+static func settle(world, lair, party, now: float):
+	var cost := settle_cost(world, lair)
+	if cost <= 0 or not party.spend_gold(cost):
+		return null
+	var home = settlers_from(world, lair.position)
+	var ring: int = int(Regions.at(world, lair.position)["index"])
+	world.lairs.erase(lair)
+	var s = world.add_settlement(World.Settlement.new("way-" + lair.id, lair.position, home.faction, "camp",
+		waystation_name(world, lair)))
+	s.last_visited = now
+	Campaign.new(party)._split_xp(SETTLE_XP * (ring + 1))
+	FactionOpinion.raise(home.faction, LIFTED_FOR)
+	Ach.collect("waystations", s.id)
+	return s

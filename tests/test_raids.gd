@@ -50,6 +50,7 @@ func _init() -> void:
 	test_turned()
 	test_lift()
 	test_spread()
+	test_settle()
 	print("test_raids: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -235,3 +236,55 @@ func test_spread() -> void:
 	Raids.land(w3, w3.lairs[0], w3.settlements[0], 100.0)
 	var lines3: Array = Raids.land(w3, w3.lairs[0], w3.settlements[0], 200.0)
 	check(w3.lairs.size() == 1 and lines3.size() == 1, "nowhere to dig in: no child, no line")
+
+func test_settle() -> void:
+	var Party = load("res://core/party.gd")
+	var w := _world()
+	var l = w.lairs[0]
+	var p = Party.new()
+	for ch in Party.demo_roster():
+		p.add_member(ch)
+	p.gold = 500
+	check(Raids.settle_cost(w, l) == 0, "a live lair cannot be settled")
+	WorldLairs.mark_cleared(l, 1000.0)
+	check(Raids.settle_cost(w, l) == 120, "cleared, in the heartland: 120")
+	l.cleared_at = -1.0                                   # spent before the respawn rule: no window
+	check(Raids.settle_cost(w, l) == 0, "no respawn window, no settling")
+	l.cleared_at = 1000.0
+	var w2 := _world()
+	w2.add_settlement(World.Settlement.new("far", Vector2(2000, 0), "elf", "town"))
+	var m = w2.add_lair(World.Lair.new("m", Vector2(1100, 0), "orc"))   # 1100/2000 = marches
+	WorldLairs.mark_cleared(m, 1000.0)
+	check(Raids.settle_cost(w2, m) == 240, "the marches cost 240")
+	var deep = w2.add_lair(World.Lair.new("d", Vector2(1900, 0), "undead"))
+	WorldLairs.mark_cleared(deep, 1000.0)
+	check(Raids.settle_cost(w2, deep) == 0, "the deeps cannot be settled")
+	var w3 := _world()
+	w3.settlements[0].faction = "orc"
+	WorldLairs.mark_cleared(w3.lairs[0], 1000.0)
+	check(Raids.settle_cost(w3, w3.lairs[0]) == 0, "nobody civilized to send settlers: no settling")
+	# the purchase
+	check(Raids.settlers_from(w, l.position) == w.settlements[0], "settlers come from the nearest civilized town")
+	var name := Raids.waystation_name(w, l)
+	check(name in Raids.WAYSTATION_NAMES, "named off the list (%s)" % name)
+	w.add_settlement(World.Settlement.new("taken", Vector2(5000, 5000), "human", "camp", name))
+	check(Raids.waystation_name(w, l) != name and Raids.waystation_name(w, l) in Raids.WAYSTATION_NAMES,
+		"a name already on the map is skipped")
+	w.settlements.pop_back()
+	p.gold = 100
+	check(Raids.settle(w, l, p, 1500.0) == null and w.lairs.has(l), "short of gold: nothing happens")
+	p.gold = 500
+	FactionOpinion.reset()
+	var xp_before: int = p.party_characters()[0].xp
+	var ways_before: int = Ach.count("waystations")
+	var s = Raids.settle(w, l, p, 1500.0)
+	check(s != null and not w.lairs.has(l), "settled: the lair is gone for good")
+	check(w.settlements.has(s) and s.id == "way-warren" and s.kind == "camp" and s.faction == "human"
+		and s.position == Vector2(300, 0) and s.sname == name, "a camp of the settlers' faction stands where it was")
+	check(s.last_visited == 1500.0, "with a fresh market")
+	check(p.gold == 380, "120 paid")
+	check(p.party_characters()[0].xp == xp_before + Raids.SETTLE_XP / p.party_characters().size(),
+		"SETTLE_XP x (ring 0 + 1), split (%d -> %d)" % [xp_before, p.party_characters()[0].xp])
+	check(FactionOpinion.get_opinion("human") == Raids.LIFTED_FOR, "the settlers' faction thanks you")
+	check(Ach.count("waystations") == ways_before + 1, "the deed is collected")
+	check(Raids.settle(w, l, p, 1600.0) == null, "a lair no longer on the map cannot be settled twice")
