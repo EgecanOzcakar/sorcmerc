@@ -123,6 +123,7 @@ func _mark(w, kind: String, pos := Vector2(200, 40)):
 func test_cards() -> void:
 	var w := _world()
 	var p := _party()
+	p.gold = 500   # so a zero-skill choice (the offering) survives into rows below
 	for k in Landmarks.KINDS:
 		var card: Array = Landmarks.CARDS[k]
 		check(card.size() == 2, "%s: two choices" % k)
@@ -133,9 +134,16 @@ func test_cards() -> void:
 		var m = _mark(w, k)
 		var rows: Array = Landmarks.options(m, p, w)
 		check(rows.back()["id"] == Landmarks.LEAVE, "%s: Leave is last" % k)
-		for r in rows.slice(0, rows.size() - 1):
-			if not r.get("skills", []).is_empty():
-				check(r.has("cname") and r.has("needs") and r.has("dc"), "%s/%s is priced with who rolls and what they need" % [k, r["id"]])
+		# priced by the card's own choices, matched by id, not by a "skills" key rows never carry
+		for c2 in card:
+			var matches: Array = rows.filter(func(r): return r["id"] == c2["id"])
+			if matches.is_empty():
+				continue
+			var row: Dictionary = matches[0]
+			if not c2["skills"].is_empty():
+				check(row.has("cname") and row.has("needs") and row.has("dc") and row.has("bonus"), "%s/%s is priced with who rolls and what they need" % [k, c2["id"]])
+			else:
+				check(row.has("toll"), "%s/%s is priced with a toll" % [k, c2["id"]])
 	# a choice nobody can roll is dropped; a paid choice the purse cannot cover is dropped
 	var poor := Party.new()
 	var shrine = _mark(w, "shrine", Vector2(300, 300))
@@ -219,8 +227,18 @@ func test_resolve() -> void:
 	r = _roll(w, "stones", "sleep", p, _seed_where(null, "stones", "sleep", null, true))
 	check(w.clock.elapsed == 1000.0 - Travel.TIME_SAVED and int(r["minutes"]) < 0, "sleep: the road is quicker")
 	w = _world(); p = _party()
+	w.clock.elapsed = 10.0
+	r = _roll(w, "stones", "sleep", p, _seed_where(null, "stones", "sleep", null, true))
+	check(w.clock.elapsed == 0.0, "sleep: the refund floors at zero, not negative")
+	w = _world(); p = _party()
 	r = _roll(w, "hut", "road", p, _seed_where(null, "hut", "road", null, true))
 	check(p.safe_camp, "road: a safe camp tonight")
+	w = _world(); p = _party()
+	p.stash_add("adamantine-armor", 1, false)
+	r = _roll(w, "hut", "knock", p, _seed_where(null, "hut", "knock", null, true))
+	check(p.unidentified().is_empty(), "knock: the hermit identifies it")
+	check(r["item_name"] != "", "knock: and names it")
+	check(r.has("lair") or w.lairs.any(func(l): return l.discovered), "knock: a lead too")
 	w = _world(); p = _party()
 	r = _roll(w, "wreck", "salvage", p, _seed_where(null, "wreck", "salvage", null, true))
 	check(p.stash_count("camp-kit") == 1 and r["item_name"] != "", "salvage: a camp kit")

@@ -287,7 +287,7 @@ static func _open(reward: String, l, party, world, rng, e: Dictionary) -> void:
 		"scouted":
 			party.scouted_next = true
 		"road":
-			world.clock.elapsed -= Travel.TIME_SAVED
+			world.clock.elapsed = maxf(0.0, world.clock.elapsed - Travel.TIME_SAVED)   # floors at zero, like Travel's own refund
 			e["minutes"] = -Travel.TIME_SAVED
 		"safe_camp":
 			party.safe_camp = true
