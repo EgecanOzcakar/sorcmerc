@@ -315,5 +315,53 @@ func _init() -> void:
 	Site.wipe_penalty(_party(), lair9)
 	check(not lair9.looted, "a wipe leaves the lair standing to try again")
 
+	test_objective_rooms()
+
 	print("test_site: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# Objectives: a gate room holds, a pens room rescues, and a rescue job can only
+# be posted about a lair whose pens the party has not yet fought past.
+func test_objective_rooms() -> void:
+	var Objectives = load("res://core/objectives.gd")
+	var ids: Array = Site.COMBAT_ROOMS.map(func(r): return String(r["id"]))
+	check(ids.has("gate") and ids.has("pens"), "the gate and the pens are combat rooms")
+	# find a lair id whose interior has a pens room, and one whose has not
+	var with_pens = null
+	var without = null
+	for i in 400:
+		var l = World.Lair.new("warren-%d" % i, Vector2(100, 100), "goblinoid")
+		if Site.pens_ahead(l):
+			if with_pens == null: with_pens = l
+		elif without == null:
+			without = l
+		if with_pens != null and without != null:
+			break
+	check(with_pens != null and without != null, "some lairs hold captives and some do not")
+	var w := _world()
+	var p := _party()
+	var s = Site.for_lair(with_pens, p, w)
+	var pens := {}
+	var gate := {}
+	for depth in s.rooms:
+		for r in depth:
+			if String(r.get("objective", "")) == "rescue": pens = r
+			if String(r.get("objective", "")) == "hold": gate = r
+	check(not pens.is_empty(), "the pens are in there")
+	s.room = pens
+	s.state = "combat"
+	var spec: Dictionary = s.combat_spec()
+	check(spec.get("objective", {}).get("kind", "") == "rescue", "the pens room's spec carries a rescue")
+	if not gate.is_empty():
+		s.room = gate
+		spec = s.combat_spec()
+		check(spec["objective"]["kind"] == "hold" and spec["objective"]["waves"].size() == Objectives.WAVE_ROUNDS.size(),
+			"the gate's spec carries a hold with one wave per wave round")
+	# fought past: a lair whose pens are behind the party no longer qualifies
+	var deep: int = 0
+	for d in s.rooms.size():
+		if s.rooms[d].has(pens):
+			deep = d
+	with_pens.depth_cleared = deep + 1
+	check(not Site.pens_ahead(with_pens), "pens the party has fought past do not count")
+	with_pens.depth_cleared = 0

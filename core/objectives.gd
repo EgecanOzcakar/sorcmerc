@@ -77,6 +77,15 @@ static func make(kind: String, extra: Dictionary = {}) -> Dictionary:
 	o.merge(extra, true)
 	return o
 
+# hold's reinforcements: one easy roster per WAVE_ROUNDS entry at WAVE_SCALE of
+# its budget, on its own seed. `chars` are Characters (what Scaler wants).
+static func waves_for(chars: Array, theme: String, seed: int, power_scale: float, exclude: Array = []) -> Array:
+	var Scaler = load("res://core/scaler.gd")   # load: scaler.gd preloads encounter.gd, which preloads this file
+	var out: Array = []
+	for i in WAVE_ROUNDS.size():
+		out.append(Scaler.roster_for(chars, "easy", {}, theme, seed + 17 * (i + 1), power_scale * WAVE_SCALE, exclude)["monsters"])
+	return out
+
 # The carter's HP scales with the party; `party_c` are combatants, whose sheet
 # (null for a preset-less test party) carries the level.
 static func party_level(party_c: Array) -> int:
