@@ -8,10 +8,11 @@
     python3 tools/gen_audio.py --only sfx/settlement    # when a name spans groups
     python3 tools/gen_audio.py --rate 44100 --loop 12   # bigger, longer
 
-`--only` matters more than it looks: assets/audio/ is a MIXED set now. The
-stings are tools/gen_audio_elevenlabs.py's generated takes, the beds and barks
-are this file's, so a bare `gen_audio.py sfx` overwrites all of the former.
-Name the sounds you actually want synthesized back.
+`--only` matters more than it looks: nothing in assets/audio/ is this file's
+output any more. The stings and barks are tools/gen_audio_elevenlabs.py's
+takes and the beds are tools/gen_music_elevenlabs.py's (docs/audio-pass.md),
+so a bare `gen_audio.py` overwrites all of it with the offline fallback. Name
+the sounds you actually want synthesized back.
 
 Writes 16-bit PCM WAVs that core/audio.gd reads straight off disk with
 FileAccess (no editor import round-trip):
