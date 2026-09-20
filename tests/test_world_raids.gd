@@ -8,6 +8,7 @@ const World = preload("res://core/world.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
 const Raids = preload("res://core/raids.gd")
 const Objectives = preload("res://core/objectives.gd")
+const WorldThreat = preload("res://core/world_threat.gd")
 
 var _pass := 0
 var _fail := 0
@@ -68,6 +69,19 @@ func _init() -> void:
 	check(" — raiders at the gate, " in _label_for(main, town.sname), "the town's label counts the hours: %s" % _label_for(main, town.sname))
 	# the fight at the gate is a hold; on the road it is not
 	check(String(main._road_objective(b, "").get("kind", "")) == "hold", "meeting the raiders at the gate is hold the line")
+	# ...and a hold has waves, or combat.gd calls it held at round six whatever
+	# stands: one roster per WAVE_ROUNDS entry, each a list of {id, count, mult}
+	var spec: Dictionary = main.encounter_spec(b)
+	check(not Objectives.waves_for(main.party.party_characters(), String(spec["theme"]), absi(hash(b.id)), 1.0).is_empty(),
+		"the band's theme draws waves")
+	var waves: Array = main._hold_waves(b, spec, WorldThreat.assess(main.party))
+	check(waves.size() == Objectives.WAVE_ROUNDS.size(), "the gate fight's waves: one per WAVE_ROUNDS entry (%d)" % waves.size())
+	var shaped := not waves.is_empty()
+	for wave in waves:
+		shaped = shaped and wave is Array and not wave.is_empty()
+		for m in wave:
+			shaped = shaped and m is Dictionary and m.has("id") and int(m.get("count", 0)) > 0 and m.has("mult")
+	check(shaped, "...each a roster of {id, count, mult} with something in it (%s)" % str(waves))
 	b.position = town.position + Vector2(600, 0)
 	check(main._road_objective(b, "").is_empty(), "...and out on the road it is a plain fight")
 	b.position = Vector2(b.ai["to"])

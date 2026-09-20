@@ -1495,6 +1495,14 @@ func _road_objective(foe, jumped: String) -> Dictionary:
 			return Objectives.make("escort")
 	return {}
 
+# Hold the line at a town's gate: the waves the objective is built on, drawn
+# the way a site's gate room draws them (core/site.gd), at the same power the
+# band itself was rostered at (encounter_spec's own product). Without them
+# combat.gd's hold is done at round HOLD_ROUNDS + 1 whatever stands.
+func _hold_waves(foe, spec: Dictionary, threat: Dictionary) -> Array:
+	return Objectives.waves_for(party.party_characters(), String(spec["theme"]),
+		absi(hash(foe.id)), float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party))
+
 # `jumped` is "" for no breakout, "seen" for a slip caught mid-flight (the
 # threat roster — the approach card priced it that way), "dark" for jumped in
 # the dark at camp or on the night road (the hard roster: not a fight you are
@@ -1507,6 +1515,8 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 	var objective: Dictionary = _road_objective(foe, jumped)
 	var kind := String(objective.get("kind", ""))
 	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else "")
+	if kind == "hold":
+		objective["waves"] = _hold_waves(foe, spec, threat)
 	if kind != "":
 		spec["objective"] = objective
 	var raid_target = Raids.settlement_of(world, String(foe.ai.get("target", ""))) if Raids.turnable(foe) else null
