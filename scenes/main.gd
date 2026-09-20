@@ -836,7 +836,7 @@ func _split_menu(sp: Dictionary) -> void:
 	var owners := Coop.owners_for(party)
 	_owners = owners   # so the strip says whose hand each hero is in while choosing
 	_build_order_strip()
-	for h in cb.team_of("party"):
+	for h in cb.heroes():
 		var theirs: bool = owners.get(h.id, "host") == "guest"
 		opts.append(["%s — %s" % [h.cname, "your friend" if theirs else "you"], func():
 			Coop.split[h.id] = "host" if theirs else "guest"

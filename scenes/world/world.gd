@@ -2016,6 +2016,8 @@ func _on_site_room_chosen(i: int) -> void:
 		_apply_deaths(result)
 		_site.finish_combat(result)
 		var obj: Dictionary = result.get("objective", {})
+		if String(obj.get("kind", "")) != "":
+			_site.say(Objectives.spoils_line(obj))
 		if String(obj.get("kind", "")) == "rescue" and bool(obj.get("done", false)):
 			Quest.record_rescued(party, _site.lair.id)
 			var line := "The captive is out of %s." % _site.lair.sname

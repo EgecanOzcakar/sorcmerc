@@ -27,6 +27,8 @@ func _init() -> void:
 	test_hold()
 	test_rescue()
 	test_breakout()
+	test_breakout_party_size()
+	test_wave_arrival_turn_order()
 	test_hunt()
 	test_escort()
 	test_quarry_runs()
@@ -41,11 +43,15 @@ func _init() -> void:
 # A fight from a spec, the way scenes/main.gd builds one: board from the theme
 # and seed, starts from the objective, presets at level 3 for the party.
 func _fight(spec: Dictionary, seed: int) -> Combat:
+	return _fight_with(Presets.party(), spec, seed)
+
+# _fight with a party of your own choosing — the four-hero breakout check
+# needs one bigger than the three presets.
+func _fight_with(chars: Array, spec: Dictionary, seed: int) -> Combat:
 	var sp: Dictionary = spec.duplicate(true)
 	sp["seed"] = seed
 	var board: Dictionary = Encounter.board_for(String(sp.get("theme", "")), seed)
 	var starts: Array = Encounter.starts_for(sp, board, seed)
-	var chars: Array = Presets.party()
 	var party_c: Array = []
 	for i in chars.size():
 		party_c.append(Adapter.to_combatant(chars[i], "party", starts[i]))
@@ -139,6 +145,31 @@ func test_bystander() -> void:
 	check(cb2._team_out("party"), "a party with only a bystander standing is out")
 	check(cb2.is_over() and cb2.outcome() == "Defeat", "...and that is a defeat")
 
+	# The carter never takes an opportunity attack: no reaction to spend, and
+	# the same no_attack gate the illusion uses.
+	var cb3 := _fight(_goblins(1).merged({"objective": Objectives.make("escort")}), 47)
+	var car3 = cb3.with_status("carter")
+	var foe3 = cb3.team_of("foe")[0]
+	# The heroes deploy huddled right on the carter (test_placement), which
+	# boxes the foe in with nowhere to step back to — tuck them out of the way
+	# first; this is a geometry check on the carter, not on the party's feet.
+	var heroes3: Array = cb3.heroes()
+	var far3: Array = Encounter.far_hexes(cb3.board, [car3.pos], heroes3.size())
+	for i in heroes3.size():
+		heroes3[i].pos = far3[i]
+		heroes3[i].speed = 0
+	foe3.max_hp = 100000
+	foe3.hp = 100000
+	foe3.pos = Hex.neighbors(car3.pos).filter(func(h): return h in cb3.board["hexes"] and not (h in far3))[0]
+	check(_until_turn_of(cb3, foe3), "the foe's turn")
+	var away: Vector2i = cb3.move_field(foe3).keys().filter(func(h): return Hex.distance(h, car3.pos) > 1)[0]
+	var hp_before: int = foe3.hp
+	var log_n: int = cb3.log.size()
+	cb3.move_to(foe3, away)
+	check(foe3.hp == hp_before, "stepping out of the carter's reach costs the foe nothing")
+	check(not cb3.log.slice(log_n).any(func(l): return l.contains("The carter") and (l.contains("hits") or l.contains("misses"))),
+		"...and no log line has the carter swinging")
+
 # --- Task 2: placement --------------------------------------------------
 
 func test_make_and_brief() -> void:
@@ -222,10 +253,27 @@ func test_hold() -> void:
 	_rounds_until_over(cb, 10)
 	check(cb.round_num == 4, "hold ends at the top of round rounds + 1 (%d)" % cb.round_num)
 	check(cb.outcome() == "Victory" and cb.objective_done, "...and it is a victory with foes standing")
-	check(cb.team_of("foe").size() == opening + 3, "two waves arrived (%d foes)" % cb.team_of("foe").size())
+	# rounds: 3 ends the hold the same tick the round-4 wave was due — the
+	# done check runs first, so only the round-2 wave ever arrives.
+	check(cb.team_of("foe").size() == opening + 2, "the wave due on the round the hold ends never comes (%d foes)" % cb.team_of("foe").size())
 	check(cb.team_of("foe").any(func(f): return f.id.begins_with("w2-")), "wave ids are prefixed by their round")
+	check(not cb.team_of("foe").any(func(f): return f.id.begins_with("w4-")), "...and the round-4 wave is not among them")
 	check(cb.objective_result(), "the deed is done")
 	check(cb.objective_line().begins_with("Hold — round"), "HUD: %s" % cb.objective_line())
+
+# A wave arrival takes the room's initiative it just rolled, even when that is
+# the best in the fight — the round-boundary reset must not cost it the slot
+# _join_order's mid-turn bump would otherwise take back (whole-branch review).
+func test_wave_arrival_turn_order() -> void:
+	var spec := {"monsters": [{"id": "snik", "count": 2}], "theme": "goblin-camp",
+		"objective": Objectives.make("hold", {"waves": [[{"id": "snik", "count": 2}]]})}
+	var cb := _fight(spec, 53)
+	_freeze(cb)
+	for c in cb.combatants:
+		c.init_roll = -999   # so whatever the wave rolls, it sorts to the front
+	_rounds_until_over(cb, 1)
+	check(cb.round_num == 2, "stopped right as the round-2 wave arrives")
+	check(cb.current() == cb.order[0], "the wave's own best initiative still gets it the turn")
 
 func test_rescue() -> void:
 	var spec := _goblins(1).merged({"objective": Objectives.make("rescue", {"deadline": 2})})
@@ -267,6 +315,50 @@ func test_breakout() -> void:
 		heroes[i].pos = exit[i]
 	cb._objective_touch(heroes[1])
 	check(cb.objective_done and cb.is_over() and cb.outcome() == "Victory", "everyone on the road ends it, a victory, foes standing")
+
+	# A rout is a Victory the kills pay for, but it is not the deed: nobody
+	# reached the road, so no bonus.
+	cb = _fight(spec, 17)
+	for f in cb.team_of("foe"):
+		cb._apply_damage(f, 999)
+	check(cb.is_over() and cb.outcome() == "Victory", "killing every foe also ends it, a victory")
+	check(not cb.objective_result(), "...but nobody was on the road, so the deed is not done")
+	var res: Dictionary = Encounter.resolve_outcome(cb, Presets.party())
+	check(res["objective"]["done"] == false and int(res["objective"]["xp"]) == 0,
+		"no bonus for a rout that never reached the road")
+
+# The road is never narrower than the party (whole-branch review): Party.MAX_ACTIVE
+# is 4, and a summon is on the team but is not a hero who needs a hex on it.
+func test_breakout_party_size() -> void:
+	var extra = Presets.vera()
+	extra.id = "vera2"
+	extra.cname = "Vera the Second"
+	var chars: Array = Presets.party() + [extra]
+	var cb := _fight_with(chars, _goblins(2).merged({"objective": Objectives.make("breakout")}), 41)
+	var exit: Array = cb.objective["exit"]
+	check(exit.size() >= 4, "the road widens to fit a four-hero party (%d exit hexes)" % exit.size())
+	_freeze(cb)
+	var heroes: Array = cb.heroes()
+	check(heroes.size() == 4, "all four are heroes")
+	for i in heroes.size():
+		heroes[i].pos = exit[i]
+	cb._objective_touch(heroes[3])
+	check(cb.objective_done and cb.is_over() and cb.outcome() == "Victory", "all four on the road ends it")
+
+	# A summon on the party's side never needs a road hex of its own.
+	cb = _fight(_goblins(2).merged({"objective": Objectives.make("breakout")}), 43)
+	_freeze(cb)
+	var exit2: Array = cb.objective["exit"]
+	var taken: Array = cb.combatants.map(func(c): return c.pos)
+	var wolf = Encounter.spawn("snik", 1.0, "party", Encounter._open(cb.board, taken + exit2)[0])
+	wolf.statuses["summoned"] = {"by": null, "of": "snik"}
+	cb.combatants.append(wolf)
+	var heroes2: Array = cb.heroes()
+	check(not heroes2.has(wolf) and heroes2.size() == 3, "heroes() excludes the summon")
+	for i in heroes2.size():
+		heroes2[i].pos = exit2[i]
+	cb._objective_touch(heroes2[2])
+	check(cb.objective_done and cb.is_over(), "the real heroes on the road end it; the summon needed no hex")
 
 func test_hunt() -> void:
 	var spec := {"monsters": [{"id": "snik", "count": 2}, {"id": "grull", "count": 1}], "theme": "goblin-camp",

@@ -25,7 +25,6 @@
 extends RefCounted
 
 const Combatant = preload("res://core/combatant.gd")
-const Hex = preload("res://core/hex.gd")
 
 const KINDS := ["hold", "rescue", "breakout", "hunt", "escort"]
 
@@ -59,7 +58,8 @@ static func bystander(id: String, cname: String, pos: Vector2i, ac: int, hp: int
 	c.max_hp = hp
 	c.hp = hp
 	c.speed = 0
-	c.statuses["bystander"] = true
+	c.statuses["bystander"] = {"no_attack": true}   # same mechanism as the illusion: never provokes, never swings
+	c.econ["reaction"] = 0
 	for s in extra:
 		c.statuses[s] = true
 	return c
@@ -117,7 +117,7 @@ static func brief(o: Dictionary) -> String:
 		"rescue":
 			return "A captive is bound at the back of the room. Reach them by the end of round %d, or the captors will make sure you cannot." % int(o.get("deadline", RESCUE_DEADLINE))
 		"breakout":
-			return "Surrounded. Get everyone still standing to the road at the far edge — or cut your way through the lot of them."
+			return "Surrounded. Get everyone still standing to the road at the far edge."
 		"hunt":
 			return "Their leader will run for the far edge. Drop them before they reach it and the rest will scatter."
 		"escort":

@@ -72,8 +72,11 @@ func with_status(s: String):
 	return null
 
 # The conscious party without its bystanders: who can act, who must reach the road.
+# A summon or an illusion is on the team but is not a hero — a called wolf
+# never needs a road hex.
 func heroes() -> Array:
-	return combatants.filter(func(c): return c.team == "party" and c.conscious() and not c.has("bystander"))
+	return combatants.filter(func(c): return c.team == "party" and c.conscious() and not c.has("bystander") \
+		and not c.has("summoned") and not c.has("illusion"))
 
 # --- the rules of each kind ---------------------------------------------------
 #
@@ -90,13 +93,21 @@ func heroes() -> Array:
 func _objective_round() -> void:
 	match objective_kind():
 		"hold":
+			# Checked before a wave gets a chance to spawn: the hold ending and a
+			# wave arriving can land on the same tick (rounds 3 and 4, waves at
+			# [2, 4]), and the wave due on the round the hold ends never comes.
+			if round_num > int(objective.get("rounds", 0)) and not _team_out("party") and not objective_done:
+				objective_done = true
+				log.append("The way behind is barred — the passage held.")
+				return
 			var waves: Array = objective.get("waves", [])
 			var i: int = Objectives.WAVE_ROUNDS.find(round_num)
 			if i >= 0 and i < waves.size():
 				_spawn_wave(waves[i])
-			if round_num > int(objective.get("rounds", 0)) and not _team_out("party") and not objective_done:
-				objective_done = true
-				log.append("The way behind is barred — the passage held.")
+				# A round-boundary arrival starts the round: _join_order's bump is
+				# for a mid-turn arrival protecting the live turn, and here it can
+				# shove the wave's own best initiative past the slot it just won.
+				turn_idx = 0
 		"rescue":
 			var cap = with_status("captive")
 			if cap != null and not cap.has("freed") and not cap.is_dead() \

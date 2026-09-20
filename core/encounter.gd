@@ -526,8 +526,10 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 	var o: Dictionary = spec.get("objective", {}).duplicate(true)
 	var kind := String(o.get("kind", ""))
 	var all_c: Array = party_combatants.duplicate()
-	# The road out / the treeline: the far edge, held free of spawns.
-	var exit: Array = far_hexes(b, [], Objectives.EXIT_W) if kind in ["breakout", "hunt"] else []
+	# The road out / the treeline: the far edge, held free of spawns. Never
+	# narrower than the party — a breakout needs a distinct hex for every
+	# conscious hero.
+	var exit: Array = far_hexes(b, [], maxi(Objectives.EXIT_W, party_combatants.size())) if kind in ["breakout", "hunt"] else []
 	var spots: Array = surround_spots(b, party_combatants, exit) if kind == "breakout" else _foe_spots(b, party_combatants)
 	if kind == "hunt":
 		spots = spots.filter(func(h): return not (h in exit))
@@ -761,8 +763,10 @@ static func _score_fight(cb, won: bool) -> void:
 	if cb.ambushed:
 		Ach.unlock("ambush_win")
 	# The heroes, not the wolf one of them called: a summon carries the
-	# monsters.json id it was spawned from, a character carries nothing.
-	var heroes: Array = cb.team_of("party").filter(func(c): return String(c.src_id) == "")
+	# monsters.json id it was spawned from, a character carries nothing. A
+	# bystander carries nothing either, but it is not a hero — a scratched
+	# carter must not spoil "whole", and all_down must stay reachable.
+	var heroes: Array = cb.team_of("party").filter(func(c): return String(c.src_id) == "" and not c.has("bystander"))
 	if heroes.is_empty():
 		return
 	var whole := true

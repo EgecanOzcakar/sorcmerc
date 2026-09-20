@@ -94,14 +94,15 @@ Defaults are starting points; §8 says how they get tuned.
   nearest the high-q edge, painted on the board like a move field.
 - **Win.** End of any turn on which every conscious hero stands on an exit hex
   → Victory. Downed heroes are carried (the retreat narrative already says
-  "they come to at…"). Rout also wins, and pays more — the card says so.
+  "they come to at…"). Rout also wins, and pays more — the card says so — but
+  the deed is the road: a rout is a Victory paid by its kills, not the deed.
 - **Fail.** Party out → Defeat.
 - **HUD.** "Road — 2 of 4 heroes there".
 
 ### hunt — "Kill the quarry before it reaches the treeline."
 - **Setup.** The roster's strongest monster (`Power.estimate`) is the
-  **quarry** (`quarry` status, spawned at the farthest foe spot). The far edge
-  is its escape.
+  **quarry** (`quarry` status, swapped to the foe spot nearest the party, so
+  it has the whole board to cross). The far edge is its escape.
 - **AI rule (the one new foe behaviour).** On its turn, if a conscious hero is
   within 3 hexes it fights as normal (cornered); otherwise it moves with
   `AI._away(pcs)` biased toward the high-q edge and uses no action. Ending a
@@ -172,9 +173,9 @@ comes up.
 
 ## 6. UI
 
-- **Deploy screen:** the brief as the banner ("Hold the passage — five
-  rounds. Reinforcements will come from the tunnel."). Breakout's deploy field
-  is the middle band; its exit hexes are painted from the first frame.
+- **Deploy screen:** the brief is the fight log's first line, not a separate
+  banner — the header carries the status line instead. Breakout's deploy
+  field is the middle band; its exit hexes are painted from the first frame.
 - **HUD:** one line under the round counter, per kind as listed in §2,
   refreshed in `_refresh()`.
 - **Log:** wave arrival, the captive freed / killed, the quarry cornered /
