@@ -54,6 +54,7 @@ const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const Potions = preload("res://core/potions.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
+const Raids = preload("res://core/raids.gd")
 const Rumors = preload("res://core/rumors.gd")
 const Site = preload("res://core/site.gd")
 const SiteScreen = preload("res://scenes/world/site_screen.gd")
@@ -235,6 +236,8 @@ var _quest_news: Array = []          # quest progress the last _bank() made, for
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
+var _lair_settle_btn: Button
+var _settle_target: World.Lair = null   # a cleared lair in range the party could settle (core/raids.gd)
 var _place_btn: Button                # landmarks: "Visit the Nine Sisters" / "Search the ground (Survival)", or hidden
 var _place_target: World.Landmark = null   # whichever landmark _check_places() last found in range
 var _place_open: World.Landmark = null     # the one whose card is up
@@ -482,6 +485,7 @@ func _process(delta: float) -> void:
 	_check_lairs()
 	_check_places()
 	_check_expired_lairs()
+	_check_raids()
 	_check_forage()
 	_check_travel()
 	_check_region()
@@ -790,6 +794,10 @@ func _build_hud() -> void:
 	_lair_sneak_btn.visible = false
 	_lair_sneak_btn.pressed.connect(_lair_sneak_action)
 	bar.add_child(_lair_sneak_btn)
+	_lair_settle_btn = Button.new()
+	_lair_settle_btn.visible = false
+	_lair_settle_btn.pressed.connect(_lair_settle_action)
+	bar.add_child(_lair_settle_btn)
 	# T9x: short rest works anywhere (when safe) — always visible, _short_rest()
 	# itself says why not rather than the button toggling in and out.
 	_pace_btn = Button.new()
@@ -1472,6 +1480,13 @@ func _run_combat(spec: Dictionary, difficulty: String,
 func _road_objective(foe, jumped: String) -> Dictionary:
 	if jumped != "":
 		return Objectives.make("breakout")
+	# Raiders on their way to a town, or standing at its gate: the town is
+	# behind you and more are coming. Anywhere else on the road they are a
+	# band like any other (or a hunt, if the job is taken).
+	if Raids.turnable(foe):
+		var target = Raids.settlement_of(world, String(foe.ai.get("target", "")))
+		if target != null and foe.position.distance_to(target.position) <= Visit.BATTLE_RADIUS:
+			return Objectives.make("hold")
 	for q in party.quests:
 		if q["state"] == "active" and q["kind"] == "hunt_party" and String(q.get("target_party_id", "")) == foe.id:
 			return Objectives.make("hunt")
@@ -1494,6 +1509,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else "")
 	if kind != "":
 		spec["objective"] = objective
+	var raid_target = Raids.settlement_of(world, String(foe.ai.get("target", ""))) if Raids.turnable(foe) else null
 	var result: Dictionary = await _run_combat(spec,
 		String(threat["difficulty"]), scouted_ahead, forced_ambush)
 	if result.is_empty():
@@ -1514,6 +1530,13 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 			# synthetic ids never match a live hunt_party quest's target), correct
 			# for an actual hostile roaming party from _check_encounter.
 			Quest.record_party_defeated(party, foe.id)
+			if raid_target != null:
+				# A raid turned before it landed: worth two bands put down to the
+				# town it was going to hit. raids.gd resets the lair's clock on its
+				# next poll when it finds the band gone.
+				FactionOpinion.credit_fight(world, raid_target.position, Raids.TURNED_FOR, foe.faction)
+				Ach.bump("raids_turned")
+				_quest_news.append("The raid on %s is turned." % raid_target.sname)
 		# O7 raise/lower event: putting down a monster band is a favour to whoever
 		# lives near the bodies; putting down a faction's own band is not.
 		if WorldAI.is_monster(foe.faction):
@@ -1938,11 +1961,13 @@ func _check_lairs() -> void:
 	if _combat != null or not _visit.is_empty() or _overlay_up():
 		_lair_btn.visible = false
 		_lair_sneak_btn.visible = false
+		_lair_settle_btn.visible = false
 		return
 	var p := world.player()
 	if p == null:
 		_lair_btn.visible = false
 		_lair_sneak_btn.visible = false
+		_lair_settle_btn.visible = false
 		return
 	var undiscovered = WorldLairs.nearby_undiscovered(world, p.position)
 	var target = undiscovered
@@ -1952,6 +1977,21 @@ func _check_lairs() -> void:
 				target = l
 				break
 	_lair_target = target
+	# A cleared lair the party is standing on, inside the respawn's day, on
+	# settled ground: it can be bought into a camp (core/raids.gd). Its own
+	# button, since _lair_btn is already two-state and hides on a looted lair.
+	_settle_target = null
+	for l in world.lairs:
+		if l.looted and l.position.distance_to(p.position) <= WorldLairs.DISCOVER_RADIUS \
+				and Raids.settle_cost(world, l) > 0:
+			_settle_target = l
+			break
+	_lair_settle_btn.visible = _settle_target != null
+	if _settle_target != null:
+		var cost := Raids.settle_cost(world, _settle_target)
+		_lair_settle_btn.text = "Settle it (%d ◉)" % cost
+		_lair_settle_btn.disabled = party.gold < cost
+		_lair_settle_btn.tooltip_text = "" if party.gold >= cost else "not enough gold"
 	if target == null:
 		_lair_btn.visible = false
 		_lair_sneak_btn.visible = false
@@ -1986,6 +2026,21 @@ func _check_expired_lairs() -> void:
 	for l in WorldLairs.respawn(world, world.clock.elapsed):
 		_lair_msg.text = WorldLairs.respawn_text(l)
 		_autosave()
+
+# Raids (core/raids.gd): the clock every lair in the settled country runs
+# against the nearest town. Said out loud as it happens, like the expiry and
+# the respawn are; a landing can add a lair to the map, so the dioramas are
+# rebuilt whenever the poll had anything to say.
+func _check_raids() -> void:
+	if _combat != null or _site != null:
+		return
+	var lines: Array = Raids.tick(world, world.clock.elapsed)
+	if lines.is_empty():
+		return
+	for line in lines:
+		_lair_msg.text = String(line)
+	_lairs3d.reset(world)
+	_autosave()
 
 # --- landmarks: places on the map that are not a fight -----------------------
 # The lair button's shape again: one button, two states. A found place offers a
@@ -2101,6 +2156,21 @@ func _lair_sneak_action() -> void:
 		# visit, and it is the moment the D1 window should start counting from.
 		WorldLairs.mark_entered(l, world.clock.elapsed)
 		await _lair_action()
+
+func _lair_settle_action() -> void:
+	var l: World.Lair = _settle_target
+	if l == null:
+		return
+	var home = Raids.settlers_from(world, l.position)
+	var s = Raids.settle(world, l, party, world.clock.elapsed)
+	if s == null:
+		return
+	_lair_msg.text = "Settlers from %s put up the first roof at %s." % [home.sname, s.sname]
+	_settle_target = null
+	_lair_target = null
+	_settlements3d.reset(world)
+	_lairs3d.reset(world)
+	_autosave()
 
 # --- D1: the delve --------------------------------------------------------
 #
@@ -3397,6 +3467,15 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 		else "A town elder", party.gold]
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
+	if s.raided_by != "":
+		var raider = Raids.lair_of(world, s.raided_by)
+		var hit := Label.new()
+		hit.text = "Raiders from %s hit the town on %s. The market is half what it was." % [
+			raider.sname if raider != null else "the hills", WorldSave.day_clock(s.raided_at).split("  ")[0]]
+		hit.theme_type_variation = "Serif"
+		hit.add_theme_color_override("font_color", Icons.COL_FOE)
+		hit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(hit)
 	if has_inn:
 		_portrait(box, s.faction, "innkeeper")
 	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(300.0)))
@@ -3842,7 +3921,8 @@ func ground_marks() -> Array:
 			"radius": _footprint(float(SETTLEMENT_RADIUS.get(s.kind, 17.0)),
 				_settlements3d.footprint(s) if _settlements3d != null else 0.0),
 			"color": _remembered(faction_color(s.faction), live), "ring": RING_WIDTH,
-			"fill": SETTLEMENT_FILL, "shadow": 0.9, "label": s.sname, "live": live})
+			"fill": SETTLEMENT_FILL, "shadow": 0.9,
+			"label": s.sname + Raids.settlement_tag(world, s, world.clock.elapsed), "live": live})
 	for l in world.lairs:
 		# T91: an undiscovered lair draws nothing at all — that is the mechanic.
 		if not (l.discovered and world.is_explored(l.position)):
@@ -3851,7 +3931,8 @@ func ground_marks() -> Array:
 		out.append({"pos": l.position,
 			"radius": _footprint(LAIR_RADIUS, _lairs3d.footprint(l) if _lairs3d != null else 0.0),
 			"color": _remembered(Icons.COL_MUTED if l.looted else Icons.COL_FOE, live),
-			"ring": RING_WIDTH, "fill": SETTLEMENT_FILL, "shadow": 0.85, "label": l.sname, "live": live})
+			"ring": RING_WIDTH, "fill": SETTLEMENT_FILL, "shadow": 0.85,
+			"label": l.sname + Raids.lair_tag(l), "live": live})
 	for m in world.landmarks:
 		if not m.found or not world.is_explored(m.position):
 			continue
