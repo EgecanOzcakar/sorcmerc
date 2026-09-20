@@ -356,8 +356,12 @@ func test_autopilot_rules() -> void:
 	var h = cb.heroes()[0]
 	check(_until_turn_of(cb, h), "a hero's turn")
 	var e0: int = near_exit.call(h.pos)
+	var foes: Array = cb.team_of("foe")
+	var hp0: Array = foes.map(func(f): return f.hp)
 	AI.take_turn(cb, h)
 	check(near_exit.call(h.pos) < e0, "breakout: a hero moves toward the road (%d -> %d)" % [e0, near_exit.call(h.pos)])
+	check(foes.map(func(f): return f.hp) == hp0, "...and does not chase: no foe takes damage")
+	check(foes.all(func(f): return Hex.distance(h.pos, f.pos) > 1), "...nor ends adjacent to one")
 
 	# escort: a hero that has drifted comes back to the carter
 	cb = _fight(_goblins(1).merged({"objective": Objectives.make("escort")}), 31)
@@ -370,3 +374,23 @@ func test_autopilot_rules() -> void:
 	var c0: int = Hex.distance(h.pos, car.pos)
 	AI.take_turn(cb, h)
 	check(Hex.distance(h.pos, car.pos) < c0, "escort: a hero more than 2 away closes on the carter (%d -> %d)" % [c0, Hex.distance(h.pos, car.pos)])
+
+	# hunt: the quarry and a weaker foe are both in reach — the hero swings at the quarry
+	cb = _fight({"monsters": [{"id": "snik", "count": 1}, {"id": "grull", "count": 1}], "theme": "goblin-camp",
+		"objective": Objectives.make("hunt")}, 31)
+	for f in cb.team_of("foe"):
+		f.speed = 0; f.max_hp = 100000; f.hp = 100000
+	var q = cb.with_status("quarry")
+	var goblin = cb.team_of("foe").filter(func(c): return not c.has("quarry"))[0]
+	h = cb.heroes().filter(func(c): return not c.ranged)[0]
+	check(_until_turn_of(cb, h), "a melee hero's turn")
+	# only now, on h's own turn, weaken and place them — an earlier hero's turn
+	# during the walk above must not get first crack at the softened goblin
+	goblin.hp = 1000   # far below the quarry's: the old lowest-HP rule would swing here instead
+	h.atk_bonus = 100   # the swing cannot miss
+	var nbrs: Array = Hex.neighbors(h.pos)
+	goblin.pos = nbrs[0]
+	q.pos = nbrs[1]
+	var qhp0: int = q.hp
+	AI.take_turn(cb, h)
+	check(q.hp < qhp0 and goblin.hp == 1000, "hunt: reach prefers the quarry over the lower-HP goblin (%d -> %d)" % [qhp0, q.hp])
