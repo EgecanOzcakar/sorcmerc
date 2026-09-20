@@ -53,6 +53,28 @@ var log: Array[String] = []
 # messy one; "down" itself is erased the moment someone gets back up.
 var downed: Dictionary = {}
 
+# --- objectives (core/objectives.gd; the spec is docs/superpowers/specs/
+# 2026-09-20-encounter-objectives-design.md). {} = rout: the fight every fight
+# was before. `exit` is written here by Encounter.build, never into the spec.
+const Objectives = preload("res://core/objectives.gd")
+var objective: Dictionary = {}
+var objective_done := false      # the deed is done: the gate held, the road reached, the quarry down
+var objective_failed := false    # the captive killed, the carter dead, the quarry gone — the fight goes on
+
+func objective_kind() -> String:
+	return String(objective.get("kind", ""))
+
+# The one combatant carrying a status (captive, carter, quarry), or null.
+func with_status(s: String):
+	for c in combatants:
+		if c.has(s):
+			return c
+	return null
+
+# The conscious party without its bystanders: who can act, who must reach the road.
+func heroes() -> Array:
+	return combatants.filter(func(c): return c.team == "party" and c.conscious() and not c.has("bystander"))
+
 # T39: the party opened the fight unseen (Stealth beat the foes' passive
 # Perception, or they scouted the node). 2024 PHB surprise: the surprised side
 # rolls Initiative with Disadvantage — no lost round (that was 2014's rule, and
@@ -209,7 +231,8 @@ func _destroy_in_area(hexes: Array, by = null) -> void:
 func _roll_initiative() -> void:
 	for c in combatants:
 		c.init_roll = Dice.d20(rng, Dice.ADV if c.init_adv else Dice.NORMAL).nat + c.init_mod
-	order = combatants.duplicate()
+	# A bystander (a captive, a carter) has no turn: it stands where it is put.
+	order = combatants.filter(func(c): return not c.has("bystander"))
 	order.sort_custom(_init_before)
 	var names: Array = []
 	for c in order:
@@ -409,7 +432,7 @@ func is_over() -> bool:
 # MAX_ROUNDS — nothing can attack the double, so nothing could ever end it.
 func _team_out(team: String) -> bool:
 	for c in combatants:
-		if c.team == team and c.conscious() and not c.has("illusion"):
+		if c.team == team and c.conscious() and not c.has("illusion") and not c.has("bystander"):
 			return false
 	return true
 
@@ -430,7 +453,8 @@ func enemies_of(c) -> Array:
 	# you can't perceive. This is the shared choke point for targeting on both
 	# sides: the player's target list (legal_target/available route through
 	# it) and the AI's own candidate gathering (ai.gd's reach/cone lists).
-	return combatants.filter(func(o): return o.team != c.team and o.conscious() and not o.has("hidden"))
+	return combatants.filter(func(o): return o.team != c.team and o.conscious() and not o.has("hidden") \
+		and not o.has("captive"))
 
 func allies_of(c) -> Array:
 	return combatants.filter(func(o): return o.team == c.team and o != c and o.conscious())
@@ -783,6 +807,8 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 				return false
 			if c.has("illusion"):
 				return false  # Invoke Duplicity's double is not a creature (an area still catches it)
+			if c.has("captive"):
+				return false  # bound and worthless dead: not a target, and not shovable
 			if v["kind"] in ["shove", "grapple"] and _size_rank(c.size) > _size_rank(actor.size) + 1:
 				return false  # 2024: no more than one size larger than you
 			if v["kind"] == "grapple" and _grappler_of(c) == actor:
@@ -2353,9 +2379,9 @@ func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 	if target.hp <= 0:
 		var overkill: int = -target.hp
 		target.hp = 0
-		if target.team == "party":
+		if target.team == "party" and not target.has("bystander"):
 			downed[target.id] = true
-		if target.team == "foe" or overkill >= target.max_hp:
+		if target.team == "foe" or target.has("bystander") or overkill >= target.max_hp:
 			if tracked and target.team == "foe" and overkill >= target.max_hp:
 				Ach.unlock("overkill")
 			_kill(target)
@@ -2423,6 +2449,8 @@ func _kill(c) -> void:
 	c.statuses["dead"] = true
 	c.statuses.erase("down")
 	c.hp = 0
+	if c.has("bystander"):
+		objective_failed = true   # whoever it was, they were the point
 	if tracked and c.team == "foe":
 		Ach.bump("kills")
 		# src_id is what Encounter.spawn stamps on a generated foe; the
