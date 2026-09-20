@@ -24,8 +24,8 @@ func said(node: Node, text: String) -> bool:
 			return true
 	return false
 
-func _open_fight(main, foe, forced_ambush := false) -> bool:
-	main._launch_combat(foe, false, forced_ambush)
+func _open_fight(main, foe, forced_ambush := false, jumped := "") -> bool:
+	main._launch_combat(foe, false, forced_ambush, jumped)
 	var guard := 0
 	while main._combat == null and guard < 60:
 		await process_frame
@@ -91,11 +91,34 @@ func _init() -> void:
 
 	# --- breakout: a jumped camp ---------------------------------------------
 	var foe3 = World.RoamingParty.new("camp-ambush-t", main.world.player().position, "bandit")
-	check(await _open_fight(main, foe3, true), "the ambush opened")
+	check(await _open_fight(main, foe3, true, "dark"), "the ambush opened")
 	check(main._combat.spec["objective"]["kind"] == "breakout", "a failed watch is a breakout")
 	await _finish(main, {"outcome": "Victory", "xp": 30, "gold": 5, "loot": [], "kills": [], "deaths": [],
 		"objective": {"kind": "breakout", "done": true, "xp": 20}})
 	check(said(main._spoils_panel, "party got clear"), "the spoils page says so")
+	main._close_spoils()
+	await process_frame
+
+	# --- _jumped_for: which approach outcomes are a breakout -----------------
+	check(main._jumped_for({"way": "avoid", "forced_ambush": true}) == "seen", "a blown slip is seen mid-slip")
+	check(main._jumped_for({"way": "ambush", "forced_ambush": true}) == "", "a blown ambush attempt is not a breakout")
+	check(main._jumped_for({"way": "avoid", "forced_ambush": false}) == "", "a clean slip is nothing")
+
+	# --- breakout: seen mid-slip, at the threat roster, not the hard one -----
+	var foe5 = World.RoamingParty.new("bandits-seen", main.world.player().position + Vector2(10, 0), "bandit")
+	check(await _open_fight(main, foe5, false, "seen"), "the seen-mid-slip fight opened")
+	check(main._combat.spec["objective"]["kind"] == "breakout", "seen mid-slip is a breakout")
+	await _finish(main, {"outcome": "Victory", "xp": 30, "gold": 5, "loot": [], "kills": [], "deaths": [],
+		"objective": {"kind": "breakout", "done": true, "xp": 20}})
+	main._close_spoils()
+	await process_frame
+
+	# --- a failed ambush attempt is just the ordinary fight its card promised -
+	var foe6 = World.RoamingParty.new("bandits-ambushed", main.world.player().position + Vector2(10, 0), "bandit")
+	check(await _open_fight(main, foe6, true), "the failed-ambush fight opened")
+	check(not main._combat.spec.has("objective"), "a failed ambush attempt carries no objective")
+	await _finish(main, {"outcome": "Victory", "xp": 30, "gold": 5, "loot": [], "kills": [], "deaths": [],
+		"objective": {"kind": "", "done": false, "xp": 0}})
 	main._close_spoils()
 	await process_frame
 

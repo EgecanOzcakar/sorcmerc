@@ -318,6 +318,7 @@ static func _party_auto(cb, h) -> void:
 
 	# the objective's one rule for where to stand (spec §7), before any chasing
 	var moved := _objective_move(cb, h)
+	var walking: bool = cb.objective_kind() == "breakout"
 
 	# close distance if nothing is in reach and we're not a shooter
 	var reach: Array = foes.filter(func(c): return cb.in_reach(h, c))
@@ -329,7 +330,7 @@ static func _party_auto(cb, h) -> void:
 	# caster: an area spell (a hex, a corner circle, a line) where it nets 2+ foes
 	# ...that actually hurts: Faerie Fire and friends are the player's call, not a nuke
 	var area := _pick(cb, h, func(v): return v.get("targeting", "") in ["hex", "corner", "line"] and v.has("dice_count"))
-	if not area.is_empty():
+	if not area.is_empty() and not walking:   # a breakout doesn't stop to nuke what it's walking past
 		var aim = _best_area(cb, h, area)
 		if aim != null:
 			cb.perform(h, area, aim)
@@ -337,7 +338,7 @@ static func _party_auto(cb, h) -> void:
 
 	# caster: a cone spell if the wedge catches 2+ foes and no ally
 	var cone := _pick(cb, h, func(v): return v.get("targeting", "") == "direction" and v.has("dice_count"))
-	if not cone.is_empty():
+	if not cone.is_empty() and not walking:   # same rule: no stopping to cast on the way out
 		var best_dir := Vector2i.ZERO
 		var best_net := 1
 		for d in Hex.DIRS:

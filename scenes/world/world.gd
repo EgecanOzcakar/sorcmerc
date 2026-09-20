@@ -1318,7 +1318,7 @@ func _night_jump(foe) -> bool:
 		watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"], foe.id.capitalize()]) if who != "" \
 		else "Nobody is watching the dark — %s are on the party before anyone can draw!" % foe.id.capitalize()
 	_camp_card("jumped", "Jumped in the dark", "bad", _camp_msg.text,
-		func(): _on_event_ack(); await _launch_combat(foe, false, true))
+		func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
 	return false
 
 # The roster the encountered party fights with. Scaler takes a *theme*, not a
@@ -1397,11 +1397,12 @@ func _run_combat(spec: Dictionary, difficulty: String,
 	return result
 
 
-# The objective a road fight carries, by precedence: jumped at camp is a
-# breakout whatever else is going on; a band a job names is a hunt; a delivery
-# on the road makes every fight an escort. {} is today's fight.
-func _road_objective(foe, forced_ambush: bool) -> Dictionary:
-	if forced_ambush:
+# The objective a road fight carries, by precedence: jumped in the dark (camp,
+# night road) or seen mid-slip is a breakout whatever else is going on; a band
+# a job names is a hunt; a delivery on the road makes every fight an escort.
+# {} is today's fight.
+func _road_objective(foe, jumped: String) -> Dictionary:
+	if jumped != "":
 		return Objectives.make("breakout")
 	for q in party.quests:
 		if q["state"] == "active" and q["kind"] == "hunt_party" and String(q.get("target_party_id", "")) == foe.id:
@@ -1411,16 +1412,18 @@ func _road_objective(foe, forced_ambush: bool) -> Dictionary:
 			return Objectives.make("escort")
 	return {}
 
-func _launch_combat(foe, scouted_ahead := false, forced_ambush := false) -> Dictionary:
+# `jumped` is "" for no breakout, "seen" for a slip caught mid-flight (the
+# threat roster — the approach card priced it that way), "dark" for jumped in
+# the dark at camp or on the night road (the hard roster: not a fight you are
+# meant to win by standing).
+func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped := "") -> Dictionary:
 	if party.scouted_next:   # Potion of Clairvoyance, spent on this fight
 		scouted_ahead = true
 		party.scouted_next = false
 	var threat: Dictionary = WorldThreat.assess(party)
-	var objective: Dictionary = _road_objective(foe, forced_ambush)
+	var objective: Dictionary = _road_objective(foe, jumped)
 	var kind := String(objective.get("kind", ""))
-	# A breakout is a fight you are not meant to win by standing: the roster is
-	# the tier's hard one whatever the party's condition.
-	var spec: Dictionary = encounter_spec(foe, "hard" if kind == "breakout" else "")
+	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else "")
 	if kind != "":
 		spec["objective"] = objective
 	var result: Dictionary = await _run_combat(spec,
@@ -2137,7 +2140,7 @@ func _open_approach(foe, hostile := true) -> void:
 	_approach_card = ApproachCard.new()
 	add_child(_approach_card)
 	_approach_card.chosen.connect(_on_approach_chosen)
-	var kind := String(_road_objective(foe, false).get("kind", ""))
+	var kind := String(_road_objective(foe, "").get("kind", ""))
 	_approach_card.show_approach(Approach.options(party, foe, hostile),
 		"%s (%d)%s" % [foe.id.capitalize(), foe.troops.size(), ("  ·  " + Objectives.title(kind)) if kind != "" else ""])
 
@@ -2168,6 +2171,13 @@ func _approach_event(r: Dictionary) -> Dictionary:
 		e["gold"] = -int(r["toll"])
 	return e
 
+# Which approach outcome is a breakout, and at what roster: seen mid-slip is
+# caught in the open, at the threat roster the card already showed; a blown
+# ambush attempt is just the ordinary fight its card promised — THEY take the
+# first round, nothing more.
+static func _jumped_for(r: Dictionary) -> String:
+	return "seen" if String(r.get("way", "")) == "avoid" and bool(r.get("forced_ambush", false)) else ""
+
 func _on_approach_reported(foe, r: Dictionary) -> void:
 	_on_event_ack()
 	if not bool(r.get("fight", true)):
@@ -2180,7 +2190,7 @@ func _on_approach_reported(foe, r: Dictionary) -> void:
 		world.clock.resume()
 		return
 	await _launch_combat(foe, bool(r.get("scouted_ahead", false)),
-		bool(r.get("forced_ambush", false)))
+		bool(r.get("forced_ambush", false)), _jumped_for(r))
 
 func _close_approach() -> void:
 	if _approach_card != null:
@@ -2781,7 +2791,7 @@ func _make_camp() -> void:
 			watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"]]) if who != "" \
 			else "Nobody's keeping watch — the camp is jumped in the night!"
 		_camp_card("jumped", "The camp is jumped", "bad", _camp_msg.text,
-			func(): _on_event_ack(); await _launch_combat(foe, false, true))
+			func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
 
 # The night, on the same card the road uses: what the camp did, pictured
 # (assets/generated/camp-<night|watch|jumped>.png), and — for an ambush —

@@ -458,6 +458,22 @@ func test_autopilot_rules() -> void:
 	check(foes.map(func(f): return f.hp) == hp0, "...and does not chase: no foe takes damage")
 	check(foes.all(func(f): return Hex.distance(h.pos, f.pos) > 1), "...nor ends adjacent to one")
 
+	# breakout: a caster does not stop to burn a cone on what it's walking past
+	cb = _fight(_goblins(2).merged({"objective": Objectives.make("breakout")}), 31)
+	for f in cb.team_of("foe"):
+		f.speed = 0; f.max_hp = 100000; f.hp = 100000
+	var ilsa = cb.heroes()[2]   # Presets.party()'s caster: Light Domain's Burning Hands is a cone
+	ilsa.speed = 0   # begin_turn() banks the move before this line runs otherwise
+	check(_until_turn_of(cb, ilsa), "the caster's turn")
+	foes = cb.team_of("foe")
+	var dir0: Vector2i = Hex.DIRS[0]
+	var far: Array = Hex.cone(ilsa.pos, dir0, 2).filter(func(p): return Hex.distance(ilsa.pos, p) >= 2)
+	foes[0].pos = far[0]
+	foes[1].pos = far[1]   # both in the same wedge: two foes, no ally, the old code nets 2 and fires
+	hp0 = foes.map(func(f): return f.hp)
+	AI.take_turn(cb, ilsa)
+	check(foes.map(func(f): return f.hp) == hp0, "breakout: a caster does not cone what it is walking past")
+
 	# escort: a hero that has drifted comes back to the carter
 	cb = _fight(_goblins(1).merged({"objective": Objectives.make("escort")}), 31)
 	for f in cb.team_of("foe"):
