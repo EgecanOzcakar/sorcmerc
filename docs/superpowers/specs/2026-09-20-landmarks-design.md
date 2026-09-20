@@ -97,10 +97,12 @@ power. The roller for the rolled rows stays the party's best at the skill
 - **Visible kinds** (ruins, shrine, stones, wreck) become `found` the first
   time `world.is_explored(position)` is true — a ruin is hard to miss.
 - **Hidden kinds** (hut, watchtower) are found the way lairs are:
-  `WorldLairs.search`'s Survival check when within `DISCOVER_RADIUS`, on the
-  same button (`_lair_btn` reads "Search the ground" when either is near),
-  or by an inn lead — `core/rumors.gd`'s offer pool gains hidden landmarks
-  at half a lair's price, and `free_lead()` may hand one out.
+  `WorldLairs.search`'s Survival check when within `DISCOVER_RADIUS`, on
+  their own button (`_place_btn` reads "Search the ground (Survival)" when
+  one is near — the lair button is already two-state, so a second button
+  was cleaner than a third state on it), or by an inn lead —
+  `core/rumors.gd`'s offer pool gains hidden landmarks at half a lair's
+  price, and `free_lead()` may hand one out.
 - **Story:** `near` accepts a landmark id (`story.gd`'s `world_ids` map
   gains `"landmark"`). Nothing else in the story layer changes.
 

@@ -6173,3 +6173,45 @@ Also, while in the log: `region_at` returns "the treeline" on five boards and
 "Brazier Hall" on the sixth, and the move line wrote "the" in front of whichever
 it got — "Thokk the Orc moves to the the treeline", which is in the log quoted
 on #132 itself. It asks for the article now instead of assuming it is missing.
+
+## Landmarks — places on the map that are not a fight (2026-09-20)
+
+Sub-project 2 of the content batch. Spec:
+`docs/superpowers/specs/2026-09-20-landmarks-design.md`; plan:
+`docs/superpowers/plans/2026-09-20-landmarks.md`.
+
+The map had towns, lairs and bands, and every one of them ended in a menu or
+a fight. It now has a fourth thing: six kinds of landmark — ruins, a shrine,
+standing stones, a hermit's hut, a wreck, a watchtower — each a place the
+party walks up to and answers with a skill the world barely used (History,
+Religion, Arcana, Nature, Performance, Insight, Perception, Athletics,
+Investigation). Two choices a kind and *Leave*, on the approach card as it
+is; the event card names the check and the roll; one visit each. Rewards
+that are not fights: a cache, a blessing (temp HP at the next fight), a
+lead, a scouted fight, a safe camp, a quicker road, the map opening from a
+tower, marked bands, a camp kit, a free identification. The deed pays
+`LANDMARK_XP` × (ring + 1); DC and cache climb with the ring.
+
+A third row rides every card too, gated by who you are: each kind carries
+one more choice that appears only when a party member *is* the right kind
+of person — an acolyte or cleric at the shrine, a sage or scribe in the
+ruins, a druid or an elf at the stones, a hermit, guide or ranger at the
+hut, a merchant, sailor or artisan at the wreck, a soldier, guard or
+fighter at the tower — answered in their own name, no roll, opening a door
+a rolled row already opens: flavour, not power. The roller for the rolled
+rows stays the party's best at the skill, the road's own rule.
+
+Visible kinds are found by walking; the hut and the tower the way lairs are
+— the same Survival roll (`WorldLairs.search_roll`, split out so there is
+one), on their own button, or bought at the inn at half a lair's price. The
+three builders place 1.5 per lair; a pack's `world.json` declares its own
+under `landmarks`, validated at scan time; a story's `near` can name one.
+Saved under `landmarks`; an old save loads with none.
+
+### Still open
+
+- No art yet for the cards (`assets/generated/landmark-<kind>.png`); the card
+  draws without it.
+- Trainers belong to downtime (B2); a landmark that wakes something to threat
+  clocks (C1).
+- A landmark never restocks.
