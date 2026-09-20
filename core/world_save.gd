@@ -24,6 +24,7 @@
 #   "version": 1,
 #   "elapsed": 742.5,                 // World.clock.elapsed, world-minutes
 #   "opinion": {"soldier": -12.0},    // FactionOpinion.all()
+#   "ladder": {"deeds": {"human": 13}, "audiences": ["human"]},   // Ladder.all()
 #   "origin": {"kind": "procedural", "seed": 42},   // which builder made this map
 #   "settlements": [
 #     {"id": "riverhold", "sname": "Riverhold", "position": [0, 0], "faction": "soldier",
@@ -58,6 +59,7 @@ const RNG = preload("res://core/rng.gd")
 const Party = preload("res://core/party.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Ladder = preload("res://core/ladder.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-world"
@@ -216,6 +218,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"format": FORMAT, "version": VERSION,
 		"elapsed": world.clock.elapsed,
 		"opinion": FactionOpinion.all(),
+		"ladder": Ladder.all(),
 		"origin": {"kind": String(world.origin.get("kind", "small")),
 			"seed": int(world.origin.get("seed", 0))},
 		"settlements": settlements,
@@ -300,6 +303,9 @@ static func from_dict(d: Dictionary):
 	var opinion: Dictionary = d.get("opinion", {})
 	for faction in opinion:
 		FactionOpinion.set_opinion(String(faction), float(opinion[faction]))
+	# The ladder (core/ladder.gd) is process-global like opinion; a save from
+	# before it had one loads as strangers everywhere.
+	Ladder.load(d.get("ladder", {}))
 	# M7: the story's progress rides home as a plain dictionary — rebuilding a
 	# runtime from it needs the pack, which is scenes/game/game.gd's job, not
 	# this file's. An old save (or one with no story) simply has {}.

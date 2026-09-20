@@ -303,6 +303,21 @@ func _done() -> void:
 	WorldSave.clear()
 	check(WorldSave.summary().is_empty(), "and the slot can be cleared from the title")
 
+	# the ladder rides the save beside opinion; an old save is a fresh ladder
+	var Ladder = load("res://core/ladder.gd")
+	Ladder.reset()
+	Ladder.deed("human", 13)
+	Ladder.hold_audience("human")
+	var wl := World.new()
+	var dl: Dictionary = WorldSave.to_dict(wl)
+	check(dl["ladder"]["deeds"]["human"] == 13 and dl["ladder"]["audiences"] == ["human"], "written under ladder")
+	Ladder.reset()
+	WorldSave.from_dict(dl)
+	check(Ladder.deeds("human") == 13 and Ladder.audience_held("human"), "read back")
+	dl.erase("ladder")
+	WorldSave.from_dict(dl)
+	check(Ladder.renown() == 0 and not Ladder.audience_held("human"), "an old save loads a fresh ladder")
+
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
