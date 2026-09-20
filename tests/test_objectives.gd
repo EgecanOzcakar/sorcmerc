@@ -131,6 +131,7 @@ func test_placement() -> void:
 		far = maxi(far, Hex.distance(h.pos, car.pos))
 	check(car != null and far <= 3, "escort puts the carter in among the party (farthest hero %d)" % far)
 	check(car.max_hp == Objectives.CARTER_HP_BASE + Objectives.CARTER_HP_PER_LEVEL * 3, "...with HP for a level-3 party")
+	check(cb.combatants.filter(func(c): return c.pos == car.pos).size() == 1, "...on a hex of its own")
 
 	# breakout: the party in the middle, foes both sides, the exit at the far edge and free of foes
 	cb = _fight(_goblins(6).merged({"objective": Objectives.make("breakout")}), 7)
@@ -152,6 +153,7 @@ func test_placement() -> void:
 	var q = cb.with_status("quarry")
 	check(q != null and q.src_id == "grull", "the quarry is the strongest foe")
 	check(cb.objective.get("exit", []).size() == Objectives.EXIT_W, "hunt has an escape edge")
+	check(cb.team_of("foe").all(func(f): return not (f.pos in cb.objective["exit"])), "no foe starts on the treeline")
 	var qd := 99
 	for h in cb.heroes():
 		qd = mini(qd, Hex.distance(h.pos, q.pos))
@@ -166,3 +168,4 @@ func test_placement() -> void:
 	check(Encounter.starts_for(_goblins(3), board, 7) == Encounter.party_starts(board, 7), "rout starts where it always did")
 	check(Encounter.starts_for({"objective": Objectives.make("hunt")}, board, 7) == Encounter.party_starts(board, 7), "so does a hunt")
 	check(Encounter.starts_for({"objective": Objectives.make("breakout")}, board, 7) != Encounter.party_starts(board, 7), "a breakout starts elsewhere")
+	check(not _fight(_goblins(1).merged({"objective": Objectives.make("escort")}), 7).objective.has("exit"), "only breakout and hunt carry an exit")

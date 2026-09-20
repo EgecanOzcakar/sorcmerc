@@ -413,15 +413,14 @@ static func deepest_hex(b: Dictionary, party_c: Array, taken: Array) -> Vector2i
 			best = h
 	return best
 
-# The free hex closest to everyone in the party at once: where the carter huddles.
-static func huddle_hex(b: Dictionary, party_c: Array) -> Vector2i:
-	var taken: Array = party_c.map(func(c): return c.pos)
+# The open hex closest to everyone in the party at once: where the carter huddles.
+static func huddle_hex(b: Dictionary, party_c: Array, taken: Array) -> Vector2i:
 	var best := Vector2i.ZERO
 	var best_s := 1 << 30
 	for h in _open(b, taken):
 		var s := 0
-		for p in taken:
-			s += Hex.distance(h, p)
+		for c in party_c:
+			s += Hex.distance(h, c.pos)
 		if s < best_s or (s == best_s and (h.x < best.x or (h.x == best.x and h.y < best.y))):
 			best_s = s
 			best = h
@@ -530,6 +529,8 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 	# The road out / the treeline: the far edge, held free of spawns.
 	var exit: Array = far_hexes(b, [], Objectives.EXIT_W) if kind in ["breakout", "hunt"] else []
 	var spots: Array = surround_spots(b, party_combatants, exit) if kind == "breakout" else _foe_spots(b, party_combatants)
+	if kind == "hunt":
+		spots = spots.filter(func(h): return not (h in exit))
 	var i := 0
 	for e in spec.get("monsters", []):
 		var count: int = maxi(1, int(e.get("count", 1)))
@@ -545,7 +546,7 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 		"rescue":
 			all_c.append(Objectives.captive(deepest_hex(b, party_combatants, all_c.map(func(c): return c.pos))))
 		"escort":
-			all_c.append(Objectives.carter(huddle_hex(b, party_combatants), Objectives.party_level(party_combatants)))
+			all_c.append(Objectives.carter(huddle_hex(b, party_combatants, all_c.map(func(c): return c.pos)), Objectives.party_level(party_combatants)))
 		"hunt":
 			mark_quarry(foes, party_combatants)
 	var RNG = load("res://core/rng.gd")
@@ -553,7 +554,8 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 	var cb := Combat.new(RNG.new(sd if sd > 0 else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)),
 		all_c, b)
 	if kind != "":
-		o["exit"] = exit
+		if kind in ["breakout", "hunt"]:
+			o["exit"] = exit
 		cb.objective = o
 		cb.log.append(Objectives.brief(o))
 	return cb
