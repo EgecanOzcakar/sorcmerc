@@ -6369,5 +6369,9 @@ the map mid-run.
 ### Still open
 
 - No pictures yet, and the refugees event borrows the wayfarer's frames until one is generated.
+- A gate fight's waves for a lair faction with no theme of its own (a pack's orcs,
+  say) come from `encounter_spec`'s default forest theme, not the raiders'
+  own kin: `_hold_waves` reads the stamped theme. Two lines when it shows —
+  stash the raw theme and seed on the spec.
 - A raid band carries nothing home; the halved market is what it took.
 - Towns are never taken. A town that falls is the faction ladder's war (#4).
