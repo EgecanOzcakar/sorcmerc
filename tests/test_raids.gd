@@ -43,6 +43,7 @@ func _run(w: World, minutes: int) -> Array:
 func _init() -> void:
 	# A scratch save dir, so the deed counters below never touch the real
 	# achievements file (the same isolation tests/test_landmarks.gd uses).
+	randomize()   # randi() is unseeded in a -s run: without this every run shares one scratch dir
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/raids-%d-%d" % [OS.get_process_id(), randi()])
 	FactionOpinion.reset()
 	test_gates()
