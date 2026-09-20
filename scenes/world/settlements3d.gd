@@ -95,6 +95,13 @@ func _model_path(s) -> String:
 	return String(MODELS.get(s.faction, {}).get(s.kind, ""))
 
 
+# Whether this settlement's GLB is going to be read at all — the same question
+# _build() opens with, asked ahead of it so the prefetch does not fetch a file
+# the kit source will never look at.
+func _wants_model(s) -> bool:
+	return not (source == "kit" and SettlementKit.has(s.faction, s.kind))
+
+
 func has_model(s) -> bool:
 	return _dioramas.has(s.id)
 
@@ -104,6 +111,11 @@ func reset(world) -> void:
 		n.queue_free()
 	_dioramas.clear()
 	_radius.clear()
+	# A map has more settlements than there are models, so this is a dozen
+	# distinct files at most — asked for together, read in parallel, collected
+	# below by _build() as it reaches each one. Skipping the ones the kit is
+	# going to build anyway, which never read their GLB.
+	_prefetch(world.settlements.filter(_wants_model).map(_model_path))
 	for s in world.settlements:
 		var m := _build(s)
 		if m == null:

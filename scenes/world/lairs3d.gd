@@ -57,6 +57,10 @@ func reset(world) -> void:
 		n.queue_free()
 	_dioramas.clear()
 	_radius.clear()
+	# Only the lairs this source will actually read a file for: with the kit
+	# preferred (the default) a lair the kit covers never touches its GLB, and
+	# asking for it anyway would read several megabytes to throw them away.
+	_prefetch(world.lairs.filter(_wants_model).map(_model_path))
 	for l in world.lairs:
 		var m := _build(l)
 		if m == null:
@@ -74,15 +78,22 @@ func reset(world) -> void:
 # World units at its final size and must NOT go through _fit_height(), which
 # exists to normalise a GLB whose raw scale is whatever Meshy generated it at.
 func _build(l) -> Node3D:
-	var kit: bool = LairKit.has(l.id)
-	var scene := _model(_model_path(l))
-	if source == "kit" and kit:
+	if not _wants_model(l):
 		return LairKit.build(l.id)
+	var scene := _model(_model_path(l))
 	if scene != null:
 		var m := scene.instantiate()
 		_fit_height(m, TARGET_HEIGHT)
 		return m
-	return LairKit.build(l.id) if kit else null
+	return LairKit.build(l.id) if LairKit.has(l.id) else null
+
+
+# Whether this lair's GLB is going to be read at all. It used to be loaded
+# unconditionally and then discarded when the kit won, which with source ==
+# "kit" — the default — meant every lair on the map paid for a model nothing
+# ever drew.
+func _wants_model(l) -> bool:
+	return not (source == "kit" and LairKit.has(l.id))
 
 
 func reposition() -> void:

@@ -6173,3 +6173,62 @@ Also, while in the log: `region_at` returns "the treeline" on five boards and
 "Brazier Hall" on the sixth, and the move line wrote "the" in front of whichever
 it got — "Thokk the Orc moves to the the treeline", which is in the log quoted
 on #132 itself. It asks for the article now instead of assuming it is missing.
+
+## One cache for the big files, and a loader that starts early (2026-09-20)
+
+`assets/figures`, `assets/troops`, `assets/beasts` and `assets/lairs` are about
+220 MB of Meshy exports — a hero rig is ~3 MB, `goblin_std.glb` is 23 MB — and
+every one of them was read by a bare `load()` on the main thread, out of two
+private dictionaries that knew nothing about each other: one in
+`scenes/figures3d.gd` (the board), one in `scenes/world/props3d.gd` (every
+overworld layer). Two costs came out of that, both of them paid on the frame a
+screen opens.
+
+**The models were read one at a time.** A `reset()` walked its list and loaded
+each file where it reached it, so opening the overworld paid for a settlement
+model per (faction, kind) and a troop model per band in series, and starting a
+fight paid for a class figure per hero and a faction figure per foe the same
+way. Godot's loader is a thread pool; nothing was using it.
+
+**And the same file was read twice, and kept twice.** The player's figure
+walking the map and that same hero standing on the board are one
+`wizard_idle.glb`, and a beast band marching and that beast in the fight are
+one `wolf.glb` — but with a cache per layer, entering a fight re-read from disk
+what the map already had in memory, and held both copies until the screen died.
+
+`scenes/model_cache.gd` is one cache for all of them, static on a RefCounted
+the way `core/rules/catalog.gd` is, so a test can drive it with no SceneTree.
+`get_scene()` keeps exactly the contract the two dictionaries had — the
+PackedScene, or null when there is no such file, which is not an error but how
+a class or faction the art has not covered yet falls through to the vector or
+pawn tier. What is new is `prefetch()`: every layer's `reset()` now hands the
+loader its whole list before it builds the first thing on it, and `get_scene()`
+collects each one when the loop reaches it, waiting out only what is left. A
+path already in memory from another screen costs nothing at all.
+
+It has a ceiling, which the per-layer dictionaries did not need: they died with
+their screen, and a shared one does not, so `MAX_KEPT` (40, LRU) bounds it at
+roughly 120 MB rather than letting a long session accumulate all of `assets/`.
+The number clears a whole screen's hot set on purpose — twelve settlement
+models and twelve troop models can be live at once, plus what the fight
+launched from there adds — because a cap that fits the average would evict
+inside a single `reset()` and re-read what it had just dropped. Evicting is
+cheap either way: an instantiated figure does not need the PackedScene it came
+from to stay alive.
+
+Two smaller things fell out of reading those paths carefully. `lairs3d.gd`
+loaded every lair's GLB and *then* asked whether the kit was going to build it
+instead — and the kit is the default source, so every lair on the map read
+several megabytes nothing ever drew. It asks first now (`_wants_model()`, which
+is also what the prefetch filters on, in both the lair and settlement layers).
+And `figures3d.gd`'s beast lookup called `ResourceLoader.exists()` once per
+combatant per roster to decide whether a bestiary id has its own model; that
+answer cannot change while the game runs, so the cache remembers it.
+
+`tests/test_model_cache.gd` asserts the parts that are otherwise invisible —
+a figure looks the same whether its file was read once or twice, so the claim
+is made on the cache's own counters: the second ask for a path is a hit that
+touches no disk, a prefetched path is collected from its background request
+rather than re-read, a missing path is answered from the negative cache, an
+abandoned prefetch is drained rather than left in flight, and the cap clears
+the hot set it is supposed to.
