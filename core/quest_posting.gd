@@ -106,6 +106,26 @@ const SUPPLY_TITLES := {
 
 # --- deliver_goods / scout_region ----------------------------------------
 
+# The ladder (core/ladder.gd): a people's chief settlement — the largest kind
+# it holds, ties by id — is where its patron sits.
+const KIND_RANK := {"city": 3, "town": 2, "camp": 1}
+
+static func chief_settlement(world, faction: String):
+	var best = null
+	for s in world.settlements:
+		if s.faction != faction:
+			continue
+		if best == null or int(KIND_RANK.get(s.kind, 0)) > int(KIND_RANK.get(best.kind, 0)) \
+				or (int(KIND_RANK.get(s.kind, 0)) == int(KIND_RANK.get(best.kind, 0)) and s.id < best.id):
+			best = s
+	return best
+
+# Trusted or better, at the chief settlement: the patron posts work about
+# anything on the map. What a stranger lacks is not a kind of job but a town
+# willing to post the far country's.
+static func is_patron(s, world) -> bool:
+	return world != null and Ladder.rung(s.faction) >= Ladder.TRUSTED and chief_settlement(world, s.faction) == s
+
 const DELIVER_BASE := 40
 const DELIVER_PER_UNIT := 10.0   # map units of road per extra gold piece
 const SCOUT_BASE := 60
@@ -152,6 +172,9 @@ static func offers(s, services: Array, party, world = null) -> Array:
 					continue
 				seen[id] = true
 				q["counter"] = counter
+				# Renown's premium: a famous company charges more, on every job.
+				if q.has("reward") and q["reward"].has("gold"):
+					q["reward"]["gold"] = int(int(q["reward"]["gold"]) * Ladder.pay_mult())
 				out.append(q)
 	return out
 
@@ -212,7 +235,7 @@ static func _build(kind: String, counter: String, s, party, world, world_jobs: A
 static func _world_offers(kind: String, s, world, world_jobs: Array) -> Array:
 	if world == null:
 		return []
-	var reach: float = float(PLACEMENT[kind]["reach"])
+	var reach: float = INF if is_patron(s, world) else float(PLACEMENT[kind]["reach"])
 	var out: Array = []
 	for q in world_jobs:
 		if String(q["kind"]) != kind:
