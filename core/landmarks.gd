@@ -239,6 +239,7 @@ static func options(l, party, world) -> Array:
 				continue
 			o["note"] = String(c["note"]) % who.cname
 			o.merge({"char_id": who.id, "cname": who.cname, "gated": true}, true)
+			o["dc"] = 0  # no roll: the card must not price one
 			out.append(o)
 			continue
 		if c["skills"].is_empty():

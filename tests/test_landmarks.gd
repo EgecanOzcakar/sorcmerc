@@ -297,6 +297,11 @@ func test_gated() -> void:
 	check(gated.size() == 1 and gated[0]["cname"] == who.cname and gated[0]["char_id"] == who.id
 		and not gated[0].has("needs"), "an acolyte sees the shrine's rite, in their own name, with no roll")
 	check(rows.back()["id"] == Landmarks.LEAVE, "leave is still last")
+	# a gated row on a far landmark still has dc = 0, no roll to price
+	var far_shrine = _mark(w, "shrine", Vector2(4000, 4000))
+	var far_rows: Array = Landmarks.options(far_shrine, p, w)
+	var far_gated: Array = far_rows.filter(func(r): return r.get("gated", false))
+	check(far_gated.size() == 1 and int(far_gated[0]["dc"]) == 0, "a gated row far out still prices no roll")
 	# answering it: no roll, the door opens, the deed pays, the place is spent
 	var xp0: int = who.xp
 	var r: Dictionary = Landmarks.resolve(shrine, String(gated[0]["id"]), p, w, RNG.new(1))
