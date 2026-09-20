@@ -15,6 +15,15 @@ extends RefCounted
 
 const World = preload("res://core/world.gd")
 const RNG = preload("res://core/rng.gd")
+const Approach = preload("res://core/approach.gd")
+const Travel = preload("res://core/travel.gd")
+const Regions = preload("res://core/regions.gd")
+const Dice = preload("res://core/dice.gd")
+const Loot = preload("res://core/loot.gd")
+const Campaign = preload("res://core/campaign.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Ach = preload("res://core/achievements.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 const KINDS := ["ruins", "shrine", "stones", "hut", "wreck", "tower"]
 const HIDDEN := ["hut", "tower"]   # found the way lairs are; the rest are hard to miss
@@ -80,3 +89,256 @@ static func _clear(world, pos: Vector2) -> bool:
 		if m.position.distance_to(pos) < LANDMARK_GAP:
 			return false
 	return true
+
+# --- the cards --------------------------------------------------------------
+#
+# Two choices a kind, in Approach.WAYS' shape so the approach card draws them
+# and Approach._roller/needs price them. `reward` names the door resolve()
+# opens on a win; `snare` is what a loss costs (nothing, an hour, or the toll).
+
+const LEAVE := "leave"
+const CACHE_GOLD := 60
+const LANDMARK_XP := 40
+const SNARE_PCT := 0.15
+const OFFERING_GOLD := 25
+const HOUR := 60.0
+
+const CARDS := {
+	"ruins": [
+		{"id": "read", "label": "Read the stones", "skills": ["history", "investigation"], "dc": 13,
+			"note": "Somebody wrote what happened here.",
+			"win": "A lead — the nearest thing nobody has found yet is marked.", "lose": "An hour, and no wiser.",
+			"reward": "lead", "snare": "hour"},
+		{"id": "dig", "label": "Dig in the rubble", "skills": ["athletics", "investigation"], "dc": 14,
+			"note": "Whatever fell in here is still in here.",
+			"win": "A cache.", "lose": "A snare in the rubble — somebody bleeds for it.",
+			"reward": "cache", "snare": "toll"},
+	],
+	"shrine": [
+		{"id": "kneel", "label": "Kneel", "skills": ["religion"], "dc": 12,
+			"note": "Whoever kept this place, they kept it for travellers.",
+			"win": "A blessing: every hero fights the next fight with something extra.", "lose": "Nothing answers.",
+			"reward": "blessing", "snare": "none"},
+		{"id": "offering", "label": "Leave an offering", "skills": [], "dc": 0,
+			"note": "%d ◉ on the stone. No roll.",
+			"win": "The blessing, and the people who keep this shrine hear of it.", "lose": "",
+			"reward": "offering", "snare": "none"},
+	],
+	"stones": [
+		{"id": "marks", "label": "Read the marks", "skills": ["arcana"], "dc": 14,
+			"note": "The ring is older than the road.",
+			"win": "The next fight starts scouted.", "lose": "A headache, and nothing else.",
+			"reward": "scouted", "snare": "none"},
+		{"id": "sleep", "label": "Sleep in the ring", "skills": ["nature"], "dc": 13,
+			"note": "The ground here is kinder than it looks.",
+			"win": "The road is quicker for a day.", "lose": "An hour, and a stiff neck.",
+			"reward": "road", "snare": "hour"},
+	],
+	"hut": [
+		{"id": "knock", "label": "Knock", "skills": ["persuasion", "performance"], "dc": 13,
+			"note": "Somebody lives out here on purpose.",
+			"win": "A lead for nothing, and the hermit knows what one of your things is.", "lose": "The door stays shut.",
+			"reward": "hermit", "snare": "hour"},
+		{"id": "road", "label": "Ask about the road", "skills": ["insight"], "dc": 12,
+			"note": "They know which hollows are safe.",
+			"win": "A safe camp tonight.", "lose": "Nothing they will say.",
+			"reward": "safe_camp", "snare": "none"},
+	],
+	"wreck": [
+		{"id": "search", "label": "Search it", "skills": ["investigation"], "dc": 14,
+			"note": "Whoever lost it did not come back for it.",
+			"win": "A cache.", "lose": "A snare under the boards — somebody bleeds for it.",
+			"reward": "cache", "snare": "toll"},
+		{"id": "salvage", "label": "Salvage", "skills": ["athletics"], "dc": 13,
+			"note": "Canvas, rope, an axle.",
+			"win": "A camp kit.", "lose": "An hour, and nothing worth the carrying.",
+			"reward": "camp_kit", "snare": "hour"},
+	],
+	"tower": [
+		{"id": "climb", "label": "Climb", "skills": ["athletics"], "dc": 12,
+			"note": "The stair is half there.",
+			"win": "The country opens up for miles.", "lose": "An hour on a stair that goes nowhere.",
+			"reward": "reveal", "snare": "hour"},
+		{"id": "watch", "label": "Keep watch", "skills": ["perception"], "dc": 13,
+			"note": "An hour at the top, looking.",
+			"win": "Every band for two days' walk is marked until tomorrow.", "lose": "Nothing moves.",
+			"reward": "marked", "snare": "none"},
+	],
+}
+
+static func ring(world, pos: Vector2) -> int:
+	return int(Regions.at(world, pos)["index"])
+
+static func dc_for(choice: Dictionary, world, pos: Vector2) -> int:
+	return int(choice["dc"]) + ring(world, pos)
+
+# The rows the approach card draws. A skill nobody can roll is not offered
+# (Approach's rule); an offering the purse cannot cover is not offered.
+# A spent landmark offers nothing at all.
+static func options(l, party, world) -> Array:
+	if l.spent:
+		return []
+	var out: Array = []
+	for c in CARDS[l.kind]:
+		var o: Dictionary = {"id": c["id"], "label": c["label"], "note": c["note"],
+			"dc": dc_for(c, world, l.position), "win": c["win"]}
+		if String(c["lose"]) != "":
+			o["lose"] = c["lose"]
+		if c["skills"].is_empty():
+			var price: int = OFFERING_GOLD * (ring(world, l.position) + 1)
+			if party.gold < price:
+				continue
+			o["note"] = String(c["note"]) % price
+			o["toll"] = price
+		else:
+			var who: Dictionary = Approach._roller(party, c)
+			if who.is_empty():
+				continue
+			var bonus: int = int(who["bonus"]) + Travel.pace_bonus(party)
+			o.merge({"char_id": who["id"], "cname": who["cname"], "skill": who["skill"],
+				"bonus": bonus, "named": bool(who["named"]), "needs": Approach.needs(o["dc"], bonus)}, true)
+		out.append(o)
+	out.append({"id": LEAVE, "label": "Leave it", "note": "Nothing spent, nothing gained.", "dc": 0, "win": "The road goes on."})
+	return out
+
+# One answer: roll the check, open the door, spend the place, pay the deed.
+# Returns the event card's dict (core/travel.gd's shape) — the check named,
+# the roll named, the reward said — or {} for leave.
+static func resolve(l, choice_id: String, party, world, rng) -> Dictionary:
+	if choice_id == LEAVE or l.spent:
+		return {}
+	var c: Dictionary = {}
+	for cand in CARDS[l.kind]:
+		if String(cand["id"]) == choice_id:
+			c = cand
+	if c.is_empty():
+		return {}
+	var e: Dictionary = {"id": "landmark-%s-%s" % [l.kind, choice_id], "title": l.sname, "ok": true}
+	if not c["skills"].is_empty():
+		var who: Dictionary = Approach._roller(party, c)
+		if who.is_empty():
+			return {}
+		var bonus: int = int(who["bonus"]) + Travel.pace_bonus(party)
+		var nat: int = int(Dice.d20(rng)["nat"])
+		var dc: int = dc_for(c, world, l.position)
+		e.merge({"char_id": who["id"], "cname": who["cname"], "skill": who["skill"],
+			"nat": nat, "bonus": bonus, "dc": dc, "ok": nat + bonus >= dc, "named": bool(who["named"])}, true)
+	else:
+		var price: int = OFFERING_GOLD * (ring(world, l.position) + 1)
+		if not party.spend_gold(price):
+			return {}
+		e["gold"] = -price
+	l.spent = true
+	if e["ok"]:
+		e["kind"] = "good"
+		e["text"] = String(c["win"])
+		_open(String(c["reward"]), l, party, world, rng, e)
+		var xp: int = LANDMARK_XP * (ring(world, l.position) + 1)
+		Campaign.new(party)._split_xp(xp)
+		e["xp"] = xp
+		Ach.collect("landmarks", l.id)
+		Ach.collect("landmark_kinds", l.kind)
+	else:
+		e["kind"] = "bad"
+		e["text"] = String(c["lose"])
+		match String(c["snare"]):
+			"hour":
+				world.clock.elapsed += HOUR
+				e["minutes"] = HOUR
+			"toll":
+				e["hurt"] = toll(party.get_member(String(e["char_id"])), SNARE_PCT)
+	return e
+
+# The road's rule, for one person: a share of what they have, never below 1.
+static func toll(ch, pct: float) -> int:
+	if ch == null:
+		return 0
+	var s = ch.sheet()
+	var cur: int = ch.hp_current if ch.hp_current >= 0 else s.max_hp
+	var after: int = maxi(1, cur - maxi(1, int(floor(cur * pct))))
+	ch.hp_current = after
+	ch.dirty()
+	return cur - after
+
+# --- the doors --------------------------------------------------------------
+
+static func _open(reward: String, l, party, world, rng, e: Dictionary) -> void:
+	match reward:
+		"cache":
+			var gold: int = CACHE_GOLD * (ring(world, l.position) + 1)
+			gold = gold * (75 + rng.roll_die(51) - 1) / 100   # ±25 %
+			party.add_gold(gold)
+			e["gold"] = gold
+			if rng.roll_die(3) == 1:
+				var pool: Array = Loot.items_of_rarity("common")
+				if not pool.is_empty():
+					var item: String = String(pool[rng.roll_die(pool.size()) - 1])
+					party.stash_add(item)
+					e["item_name"] = Campaign.item_name(item)
+		"blessing":
+			party.blessed = true
+		"offering":
+			party.blessed = true
+			var near = _nearest_settlement(world, l.position)
+			if near != null:
+				FactionOpinion.raise(near.faction, 2.0)
+				e["thanks"] = near.sname
+		"scouted":
+			party.scouted_next = true
+		"road":
+			world.clock.elapsed -= Travel.TIME_SAVED
+			e["minutes"] = -Travel.TIME_SAVED
+		"safe_camp":
+			party.safe_camp = true
+		"camp_kit":
+			party.stash_add("camp-kit")
+			e["item_name"] = Campaign.item_name("camp-kit")
+		"lead":
+			_lead(world, l.position, e)
+		"hermit":
+			_lead(world, l.position, e)
+			var unknown: Array = party.unidentified()
+			if not unknown.is_empty():
+				var item: String = String(unknown[0]["item_id"])
+				party.stash_identify(item)
+				Campaign._note_identified(item)
+				e["item_name"] = Campaign.item_name(item)
+		"reveal":
+			world.reveal(l.position)
+			for i in 8:
+				var a := TAU * float(i) / 8.0
+				world.reveal(l.position + Vector2(cos(a), sin(a)) * World.VISION_RADIUS)
+		"marked":
+			world.marked_until = world.clock.elapsed + FactionOpinion.DAY
+
+# The nearest unfound lair or hidden landmark gets marked, and the card says which.
+static func _lead(world, from: Vector2, e: Dictionary) -> void:
+	var best = null
+	var best_d := INF
+	for x in world.lairs:
+		var d: float = from.distance_to(x.position)
+		if not x.discovered and not x.looted and d < best_d:
+			best = x
+			best_d = d
+	for x in world.landmarks:
+		var d: float = from.distance_to(x.position)
+		if not x.found and is_hidden(x.kind) and d < best_d:
+			best = x
+			best_d = d
+	if best == null:
+		return
+	if "discovered" in best:
+		best.discovered = true
+	else:
+		best.found = true
+	e["lair"] = best.sname
+
+static func _nearest_settlement(world, from: Vector2):
+	var best = null
+	var best_d := INF
+	for s in world.settlements:
+		var d: float = from.distance_to(s.position)
+		if d < best_d:
+			best = s
+			best_d = d
+	return best

@@ -192,7 +192,11 @@ func to_combatants(positions: Array, team := "party") -> Array:
 	var chars := party_characters()
 	for i in chars.size():
 		var p: Vector2i = positions[i] if i < positions.size() else Vector2i.ZERO
-		out.append(Adapter.to_combatant(chars[i], team, p))
+		var c = Adapter.to_combatant(chars[i], team, p)
+		if blessed:   # a shrine's blessing (core/landmarks.gd): something extra, at the next fight, once
+			c.temp_hp = 2 * chars[i].level()
+		out.append(c)
+	blessed = false
 	return out
 
 # --- gold & stash ---------------------------------------------------------

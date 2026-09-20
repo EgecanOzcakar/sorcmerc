@@ -8,6 +8,10 @@ const WorldSave = preload("res://core/world_save.gd")
 const Landmarks = preload("res://core/landmarks.gd")
 const Party = preload("res://core/party.gd")
 const RNG = preload("res://core/rng.gd")
+const Approach = preload("res://core/approach.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
+const Travel = preload("res://core/travel.gd")
+const Adapter = preload("res://core/adapter.gd")
 
 var _pass := 0
 var _fail := 0
@@ -20,6 +24,8 @@ func _init() -> void:
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/landmarks-%d-%d" % [OS.get_process_id(), randi()])
 	test_model()
 	test_placement()
+	test_cards()
+	test_resolve()
 	print("test_landmarks: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -103,3 +109,135 @@ func test_placement() -> void:
 	check(w2.landmarks.map(func(m): return [m.id, m.position]) == w.landmarks.map(func(m): return [m.id, m.position]),
 		"the same seed places the same landmarks")
 	check(w.landmarks.all(func(m): return m.id.begins_with("landmark-")), "ids are namespaced")
+
+# --- Task 3: the cards and the doors ----------------------------------------
+
+func _mark(w, kind: String, pos := Vector2(200, 40)):
+	var m = w.add_landmark(World.Landmark.new("m-" + kind, kind, pos))
+	m.found = true
+	return m
+
+func test_cards() -> void:
+	var w := _world()
+	var p := _party()
+	for k in Landmarks.KINDS:
+		var card: Array = Landmarks.CARDS[k]
+		check(card.size() == 2, "%s: two choices" % k)
+		for c in card:
+			for s in c["skills"]:
+				check(Catalog.skills().has(s), "%s/%s rolls a real skill (%s)" % [k, c["id"], s])
+			check(c.has("win") and c.has("lose") and c.has("label") and c.has("note"), "%s/%s has its words" % [k, c["id"]])
+		var m = _mark(w, k)
+		var rows: Array = Landmarks.options(m, p, w)
+		check(rows.back()["id"] == Landmarks.LEAVE, "%s: Leave is last" % k)
+		for r in rows.slice(0, rows.size() - 1):
+			if not r.get("skills", []).is_empty():
+				check(r.has("cname") and r.has("needs") and r.has("dc"), "%s/%s is priced with who rolls and what they need" % [k, r["id"]])
+	# a choice nobody can roll is dropped; a paid choice the purse cannot cover is dropped
+	var poor := Party.new()
+	var shrine = _mark(w, "shrine", Vector2(300, 300))
+	var rows: Array = Landmarks.options(shrine, poor, w)
+	check(rows.size() == 1 and rows[0]["id"] == Landmarks.LEAVE, "an empty party can only leave")
+	p.gold = 0
+	rows = Landmarks.options(shrine, p, w)
+	check(not rows.any(func(r): return r["id"] == "offering"), "no purse, no offering")
+	p.gold = 500
+	rows = Landmarks.options(shrine, p, w)
+	check(rows.any(func(r): return r["id"] == "offering"), "...with one, it is offered")
+	# DC climbs with the ring
+	var far = _mark(w, "ruins", Vector2(4000, 4000))
+	var near = _mark(w, "ruins", Vector2(60, 60))
+	check(Landmarks.dc_for(Landmarks.CARDS["ruins"][0], w, far.position) > Landmarks.dc_for(Landmarks.CARDS["ruins"][0], w, near.position),
+		"further out, the same check is harder")
+
+func _roll(w, kind: String, id: String, p, seed: int) -> Dictionary:
+	var m = _mark(w, kind, Vector2(200 + seed, 40))
+	return Landmarks.resolve(m, id, p, w, RNG.new(seed))
+
+# Find a seed where the named choice passes (or fails), so each door can be
+# opened deliberately — the roll is a d20, so a few tries always find one.
+# `w`/`p` are unused (always null from the callers below): a fresh world and
+# party are built per attempt so the search never disturbs the caller's own.
+# `at`, when given, is the landmark's position — the DC the search rolls
+# against has to be the DC the real resolve() call will use, and that climbs
+# with the ring (dc_for), so a search at the default near-origin spot would
+# find a seed that passes there and still fails at a landmark placed further
+# out (the tower tests park theirs at (900, 900) to also probe is_explored).
+func _seed_where(w, kind: String, id: String, p, ok: bool, at = null) -> int:
+	for s in range(1, 60):
+		var w2 := _world()
+		var p2 := _party()
+		p2.gold = 500
+		var r: Dictionary
+		if at == null:
+			r = _roll(w2, kind, id, p2, s)
+		else:
+			r = Landmarks.resolve(_mark(w2, kind, at), id, p2, w2, RNG.new(s))
+		if bool(r.get("ok", false)) == ok:
+			return s
+	return -1
+
+func test_resolve() -> void:
+	# every win pays the deed; a spent landmark is spent; leave spends nothing
+	for k in Landmarks.KINDS:
+		for c in Landmarks.CARDS[k]:
+			var s := _seed_where(null, k, String(c["id"]), null, true)
+			check(s > 0, "%s/%s can be passed" % [k, c["id"]])
+			var w := _world()
+			var p := _party()
+			p.gold = 500
+			var xp0: int = p.party_characters()[0].xp
+			var r := _roll(w, k, String(c["id"]), p, s)
+			check(r["ok"] and r.has("cname") and r.has("nat") and r.has("dc") or c["skills"].is_empty(), "%s/%s names its roll" % [k, c["id"]])
+			check(int(r.get("xp", 0)) > 0 and p.party_characters()[0].xp > xp0, "%s/%s: the deed pays" % [k, c["id"]])
+			check(w.landmark("m-" + k).spent, "%s/%s: spent" % [k, c["id"]])
+			check(Landmarks.options(w.landmark("m-" + k), p, w).is_empty(), "...and offers nothing more")
+	var w := _world()
+	var p := _party()
+	var m = _mark(w, "wreck")
+	check(Landmarks.resolve(m, Landmarks.LEAVE, p, w, RNG.new(1)).is_empty() and not m.spent, "leave spends nothing")
+
+	# the doors, one by one
+	w = _world(); p = _party(); p.gold = 100
+	var r := _roll(w, "shrine", "kneel", p, _seed_where(null, "shrine", "kneel", null, true))
+	check(p.blessed, "kneel: blessed")
+	var cs: Array = p.to_combatants([Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)])
+	check(cs[0].temp_hp == 2 * p.party_characters()[0].level() and not p.blessed, "the blessing is temp HP at the next fight, once")
+	w = _world(); p = _party(); p.gold = 100
+	var gold0: int = p.gold
+	r = _roll(w, "shrine", "offering", p, 1)
+	check(p.gold == gold0 - Landmarks.OFFERING_GOLD and p.blessed and not r.has("nat"), "offering: costs, blesses, no roll")
+	w = _world(); p = _party()
+	r = _roll(w, "stones", "marks", p, _seed_where(null, "stones", "marks", null, true))
+	check(p.scouted_next, "marks: the next fight starts scouted")
+	w = _world(); p = _party()
+	var t0: float = w.clock.elapsed
+	w.clock.elapsed = 1000.0
+	r = _roll(w, "stones", "sleep", p, _seed_where(null, "stones", "sleep", null, true))
+	check(w.clock.elapsed == 1000.0 - Travel.TIME_SAVED and int(r["minutes"]) < 0, "sleep: the road is quicker")
+	w = _world(); p = _party()
+	r = _roll(w, "hut", "road", p, _seed_where(null, "hut", "road", null, true))
+	check(p.safe_camp, "road: a safe camp tonight")
+	w = _world(); p = _party()
+	r = _roll(w, "wreck", "salvage", p, _seed_where(null, "wreck", "salvage", null, true))
+	check(p.stash_count("camp-kit") == 1 and r["item_name"] != "", "salvage: a camp kit")
+	w = _world(); p = _party()
+	gold0 = p.gold
+	r = _roll(w, "wreck", "search", p, _seed_where(null, "wreck", "search", null, true))
+	check(p.gold > gold0 and int(r["gold"]) == p.gold - gold0, "search: a cache")
+	w = _world(); p = _party()
+	var hp0: int = p.party_characters()[0].sheet().max_hp
+	r = _roll(w, "wreck", "search", p, _seed_where(null, "wreck", "search", null, false))
+	check(int(r["hurt"]) > 0 and p.party_characters().all(func(ch): return ch.hp_current == -1 or ch.hp_current >= 1), "a snare hurts and never drops")
+	w = _world(); p = _party()
+	r = _roll(w, "ruins", "read", p, _seed_where(null, "ruins", "read", null, true))
+	check(w.lairs.any(func(l): return l.discovered) or w.landmarks.any(func(x): return x.found and Landmarks.is_hidden(x.kind)), "read: a lead marks something")
+	w = _world(); p = _party()
+	var m2 = _mark(w, "tower", Vector2(900, 900))
+	var before: int = w.explored.size()
+	r = Landmarks.resolve(m2, "climb", p, w, RNG.new(_seed_where(null, "tower", "climb", null, true, m2.position)))
+	check(w.explored.size() > before and w.is_explored(Vector2(900, 900)), "climb: the map opens")
+	w = _world(); p = _party()
+	m2 = _mark(w, "tower", Vector2(900, 900))
+	r = Landmarks.resolve(m2, "watch", p, w, RNG.new(_seed_where(null, "tower", "watch", null, true, m2.position)))
+	check(w.marked_until > w.clock.elapsed, "watch: bands are marked for the day")
