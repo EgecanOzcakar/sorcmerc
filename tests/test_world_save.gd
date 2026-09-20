@@ -57,6 +57,13 @@ func _party() -> Party:
 	p.add_gold(137)
 	p.stash_add("potions-of-healing", 2)
 	p.overworld_figure = "wizard"
+	# Mid-day campaign state: a caster who has already spent slots, and a hero
+	# who has taken a beating. Both have to be on the other side of the save —
+	# a resume that refills the party is a resume that did not save the day.
+	for ch in p.party_characters():
+		ch.hp_current = maxi(1, ch.sheet().max_hp - 4)
+		if not ch.sheet().spellcasting.is_empty():
+			ch.slots_used.assign([2, 1, 0, 0, 0, 0, 0, 0, 0])
 	return p
 
 func _init() -> void:
@@ -180,6 +187,18 @@ func _init() -> void:
 	check(p2.gold == 137, "the purse")
 	check(p2.stash_count("potions-of-healing") == 2, "the stash")
 	check(p2.overworld_figure == "wizard", "the chosen map figure")
+	# Spent spell slots used to be the one piece of campaign state this format
+	# left behind, so every autosave handed the party a free long rest's worth
+	# of casting — and, since co-op ships the party as these same dictionaries,
+	# gave the guest a different board to fight on (issue #132).
+	for ch in party.party_characters():
+		var back = p2.get_member(ch.id)
+		check(back != null, "%s came back" % ch.id)
+		if back == null:
+			continue
+		check(Array(back.slots_used) == Array(ch.slots_used),
+			"%s's spent slots survive the save (%s vs %s)" % [ch.id, str(back.slots_used), str(ch.slots_used)])
+		check(back.hp_current == ch.hp_current, "%s's wounds survive it too" % ch.id)
 
 	# --- the world still runs ------------------------------------------------
 	w2.tick(0.1)

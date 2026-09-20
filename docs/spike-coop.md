@@ -181,6 +181,28 @@ rejoiner replay them. Both peers install the co-op decider whatever their
 setting: with it unset on one side that side would auto-resolve, and the
 two would diverge on the first refused Shield.
 
+**What did desync, once it met real players (2026-09-20, issue #132).** Not the
+dice: both were things the two screens were never told to agree about.
+
+1. `CharacterSave.to_dict` — which is what `setup_for` sends the party as —
+   carried `pools` and not `slots_used`, so the guest's casters arrived with a
+   full spell list and the host's did not. Different boards from the same seed.
+   (It was also refilling slots on every ordinary autosave; see
+   `docs/expansion-plan.md`.) The setup crossing the party is only as good as
+   the format it crosses in, which is now checked: `test_coop.gd` builds the
+   host's side from the host's own party object rather than from the wire.
+2. `scouted_ahead`, `forced_ambush` and `tutorial` live on the combat screen,
+   not in the encounter, and the road sets them on the host alone — so the host
+   could open unseen, or hand its foes an ambush round, while the guest rolled
+   its own Stealth check and opened something else. The setup carries an
+   `opening` now.
+
+Both are the same shape of mistake: the setup names everything the *board* is
+built from and used to stop there, while the screen decides how the first round
+goes. `tests/test_coop_screens.gd` is the answer to that shape — two real
+combat screens in one process over an in-memory relay, so whatever
+`scenes/main.gd` decides for itself is in front of a test in CI.
+
 ## 7. The campaign layer: the host runs the road
 
 Co-op across the world map was the big open design question, and the answer
@@ -197,7 +219,8 @@ world.gd`) sends the whole save (`WorldSave.to_dict`, ~50 KB) when the guest
 sits down and on every autosave — the world already autosaves on everything
 structural: an arrival, a visit, a fight banked, a rest — and between those
 a delta twice a second: the clock and where every party stands (~100
-bytes). The guest's screen is the same `world.gd` with `spectator = true`:
+bytes) — which the guest *interpolates* between rather than snapping to, or
+the road moves at the rate the packets arrive (issue #133). The guest's screen is the same `world.gd` with `spectator = true`:
 it never ticks, never orders, never saves; positions and the clock come off
 the wire, fog of war is revealed from them with the same `world.reveal`,
 and the camera is the guest's own to pan, turn and zoom. The HUD keeps the

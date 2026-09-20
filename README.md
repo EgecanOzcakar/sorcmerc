@@ -86,9 +86,12 @@ data/              the 5e SRD export (classes/spells/species/...), a 316-
 content/           content packs that ship with the game: an example map, a
                    free campaign, and a paid DLC — all three written against
                    the same public API a player's mod uses
-tests/             126 files, headless: one per subsystem (95 test_*.gd) plus
-                   10 drive_*.gd (robots pressing real UI buttons end-to-end).
-                   Eight walk a written script; the other two play the open
+tests/             136 files, headless: one per subsystem (102 test_*.gd) plus
+                   11 drive_*.gd (robots pressing real UI buttons end-to-end).
+                   Eight walk a written script; drive_coop.gd is one peer of a
+                   two-process co-op fight (tools/coop_smoke.sh runs the pair,
+                   and tests/test_coop_screens.gd is the part of it that needs
+                   no relay); the last two play the open
                    world two ways that miss different bugs — drive_random.gd
                    samples it like a person (a seeded, human-shaped session
                    asserting invariants rather than outcomes) and

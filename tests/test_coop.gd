@@ -15,6 +15,8 @@ const Hex = preload("res://core/hex.gd")
 const Leveling = preload("res://core/leveling.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
+const Character = preload("res://core/character.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 const SEEDS := 40
 
@@ -43,6 +45,7 @@ func _init() -> void:
 	for sd in range(1, 11):
 		lockstep_fight(sd, true)
 	check(_asked > 0 and _said_no > 0, "prompted: %d reactions asked, %d refused" % [_asked, _said_no])
+	test_the_wire_keeps_a_party_whole()
 	await guest_levelup()
 	test_intify()
 	print("  through the codec: ", JSON.stringify(_seen))
@@ -51,7 +54,11 @@ func _init() -> void:
 
 # The same steps scenes/main.gd takes, so the guest builds what the host built.
 static func build(setup: Dictionary):
-	var party = Coop.party_from(setup)
+	return build_with(Coop.party_from(setup), setup)
+
+# The host's own version of it: the same board and the same spec, from the party
+# object the road has been playing rather than from its JSON.
+static func build_with(party, setup: Dictionary):
 	var sp: Dictionary = setup["spec"]
 	var sd := int(setup["seed"])
 	var board: Dictionary = Encounter.board_for(String(sp.get("theme", "")), sd)
@@ -258,3 +265,88 @@ func test_intify() -> void:
 	check(d["b"] is float and d["b"] == 2.5, "intify: real floats stay")
 	check(d["c"][2]["d"] is int, "intify: nested")
 	check(d["e"] == "x", "intify: strings untouched")
+
+# --- the party that crossed the wire -----------------------------------------
+#
+# Lockstep's oldest assumption, and the one nothing above can check: the HOST
+# builds its fight from the party object the road has been playing, and the
+# guest builds the same fight from that party's JSON. Every check further up
+# builds both sides with Coop.party_from(), so anything CharacterSave quietly
+# drops is dropped identically on both and stays invisible — while in a real
+# room it would be two different boards before a die is rolled, which is a
+# desync with nothing to reconcile (#132).
+#
+# So: one party per class, three species deep, every choice the build opens
+# answered, hit points spent and a spell list prepared — then one fight built
+# each way, and the same state hash out of both.
+func test_the_wire_keeps_a_party_whole() -> void:
+	var sd := 0
+	for cid in Catalog.index("classes.json").keys():
+		sd += 1
+		var party = Party.new()
+		var i := 0
+		for species in ["human", "elf", "dwarf"]:
+			party.add_member(_grown(String(cid), species, 5, i))
+			i += 1
+		party.gold = 425
+		party.stash_add("potion-of-healing", 2, true)
+		party.stash_add("potion-of-healing", 1, false)   # the same item, unidentified: a second stack
+		var spec: Dictionary = Scaler.roster_for(party.party_characters(), "normal")
+		spec["seed"] = sd
+		var setup := wire(Coop.setup_for(sd, spec, party))
+		for ch in party.party_characters():
+			var there := CharacterSave.to_dict(ch)
+			var back := CharacterSave.to_dict(CharacterSave.from_dict(there))
+			check(back == there, "%s: %s survives the wire whole" % [cid, ch.id])
+		var mirrored = Coop.party_from(setup)
+		check(mirrored.gold == party.gold and mirrored.stash == party.stash,
+			"%s: the purse and the shelf cross too" % cid)
+		check(Coop.state_hash(build_with(party, setup)) == Coop.state_hash(build(setup)),
+			"%s: the host's party and the guest's build the same fight" % cid)
+
+# A character of `cid` at `levels`, with every choice the build opens answered
+# the way the creator would answer it, and then roughed up the way a day on the
+# road roughs one up — hit points gone, a pool spent, a level's worth of XP
+# banked. All of it is state CharacterSave has to carry.
+func _grown(cid: String, species_id: String, levels: int, idx: int):
+	var ch = Character.new()
+	ch.id = "%s-%s-%d" % [cid, species_id, idx]
+	ch.cname = "%s %d" % [Creator.humanize(cid), idx]
+	ch.species_id = species_id
+	ch.background_id = "soldier"
+	ch.base_abilities = {"str": 15, "dex": 14, "con": 14, "int": 12, "wis": 13, "cha": 10}
+	for _n in levels:
+		ch.add_level(cid, -1)
+	for _round in 8:            # a choice can open another (a subclass, its features)
+		var pending: Array = ch.sheet().pending
+		if pending.is_empty():
+			break
+		for p in pending:
+			var picks: Array = _autopick(p, ch.sheet())
+			if not picks.is_empty():
+				ch.decide(String(p["key"]), Creator.decision_for(p, picks))
+	ch.xp = Leveling.xp_for_level(levels)
+	ch.hp_current = maxi(1, ch.sheet().max_hp - 3 - idx)
+	for pid in ch.pools:
+		ch.pools[pid] = 0       # every per-rest use spent
+		break
+	# A caster who has already cast today. This is the one the wire used to drop.
+	var slots: Array = ch.sheet().spellcasting.get("slots", [])
+	for i in slots.size():
+		ch.slots_used.append(1 if int(slots[i]) > 1 else 0)
+	return ch
+
+# The creator's own toggle, pressed until the choice is full: an ASI that takes
+# the same ability twice and a skill list that will not are both answered the
+# way a player answering them would be.
+func _autopick(p: Dictionary, sheet) -> Array:
+	var picks: Array = []
+	var opts: Array = Creator.options_for(p, sheet, picks)
+	for _k in Creator.pick_count(p):
+		for o in opts:
+			var t: Array = Creator.toggle(p, picks, String(o["id"]))
+			if t.size() > picks.size():
+				picks = t
+				break
+		opts = Creator.options_for(p, sheet, picks)
+	return picks
