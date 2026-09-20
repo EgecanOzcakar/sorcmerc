@@ -153,6 +153,23 @@ class Lair extends RefCounted:
 		faction = faction_v
 		sname = name_v if name_v != "" else id_v.capitalize()
 
+# A place on the map that is not a fight: ruins, a shrine, standing stones…
+# (core/landmarks.gd owns the kinds and what happens there). Found = drawn
+# and visitable; spent = answered, once, for good.
+class Landmark extends RefCounted:
+	var id: String
+	var kind: String            # one of Landmarks.KINDS
+	var sname: String
+	var position: Vector2
+	var found := false
+	var spent := false
+
+	func _init(_id: String, _kind: String, _position: Vector2, _sname := "") -> void:
+		id = _id
+		kind = _kind
+		position = _position
+		sname = _sname if _sname != "" else load("res://core/landmarks.gd").name_for(_id, _kind)   # load: landmarks.gd preloads this file
+
 class RoamingParty extends RefCounted:
 	var id: String
 	var position: Vector2
@@ -196,6 +213,7 @@ var clock := WorldClock.new()
 var settlements: Array[Settlement] = []
 var parties: Array[RoamingParty] = []
 var lairs: Array[Lair] = []
+var landmarks: Array[Landmark] = []
 # O15 — the only terrain the map has: hand-placed blobs of water, `{position, radius}`
 # each. A circle is the whole vocabulary; a lake is one, a river is a chain of
 # overlapping ones (see scenes/world/world.gd's _demo_world). Plain dictionaries
@@ -229,6 +247,9 @@ const EXPLORE_STEP := 150.0
 # parties stay fog-gated; those are meant to be found, not signposted.
 const SETTLEMENT_BEACON_RADIUS := 55.0
 var explored: Array[Vector2] = []
+# A watchtower's "keep watch": every band draws as explored while this holds
+# (world-minutes; < 0 = nothing marked). Runtime only — it lapses with the day.
+var marked_until := -1.0
 
 # T9y: the waypoint trail, indexed. `explored` stays the flat, saved list —
 # it is what world_save.gd round-trips and what a reader expects to find —
@@ -330,6 +351,16 @@ func add_settlement(s: Settlement) -> Settlement:
 func add_lair(l: Lair) -> Lair:
 	lairs.append(l)
 	return l
+
+func add_landmark(l: Landmark) -> Landmark:
+	landmarks.append(l)
+	return l
+
+func landmark(id: String):
+	for l in landmarks:
+		if l.id == id:
+			return l
+	return null
 
 func add_party(p: RoamingParty) -> RoamingParty:
 	parties.append(p)

@@ -39,6 +39,7 @@ var overworld_figure := ""
 var travel_orders: Dictionary = {}
 var world_now := 0.0        # world-minutes, stamped by world.gd each frame; potion buffs expire against it
 var scouted_next := false   # Potion of Clairvoyance / Clairvoyance cast: the next fight starts scouted
+var blessed := false        # a shrine's blessing: temp HP for every hero at the next fight (core/landmarks.gd)
 var swift_until := 0.0      # Fly / Longstrider: forced-march speed, no road penalty, until this world-minute
 var safe_camp := false      # Rope Trick: the next camp needs no kit and can't be jumped
 var alarm_set := false      # Alarm: the next camp's ambush is heard coming

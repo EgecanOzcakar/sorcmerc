@@ -41,6 +41,7 @@ func _world() -> World:
 	var l := w.add_lair(World.Lair.new("goblin-warren", Vector2(560, 60), "goblinoid"))
 	l.discovered = true
 	w.add_lair(World.Lair.new("dragon-cave", Vector2(680, -400), "dragon", "Dragon's Cave"))
+	w.add_landmark(World.Landmark.new("stones-1", "stones", Vector2(90, 90)))
 	# T-water: a lake and two river blobs — terrain the resumed world has to
 	# still be wet, now that it also blocks movement.
 	w.add_water(Vector2(-190, -70), 100.0)
@@ -159,6 +160,8 @@ func _init() -> void:
 		and gw.position == Vector2(560, 60) and gw.discovered and not gw.looted,
 		"a lair's identity and discovery state")
 	check(w2.lairs[1].sname == "Dragon's Cave", "a lair's custom display name survives, not just its id")
+
+	check(w2.landmarks.size() == 1, "landmarks survive the save")
 
 	# --- water (T-water -- likewise newer than the format) --------------------
 	check(w2.waters.size() == 3, "every water blob came back (got %d)" % w2.waters.size())
