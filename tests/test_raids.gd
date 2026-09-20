@@ -41,10 +41,10 @@ func _run(w: World, minutes: int) -> Array:
 	return lines
 
 func _init() -> void:
-	# A scratch save dir, so the deed counters below never touch the real
-	# achievements file (the same isolation tests/test_landmarks.gd uses).
-	randomize()   # randi() is unseeded in a -s run: without this every run shares one scratch dir
-	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/raids-%d-%d" % [OS.get_process_id(), randi()])
+	# Achievements' save path is fixed when the script loads, before _init can
+	# point it anywhere — so the deed counters below start from a fresh state
+	# in memory instead (the shape tests/test_achievements.gd uses).
+	Ach._current = Ach.new()
 	FactionOpinion.reset()
 	test_gates()
 	test_march_siege_land_home()
