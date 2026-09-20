@@ -51,6 +51,15 @@ const SETTLED_BANDS := ["heartland", "marches"]
 # clearing the lair is a job done (QUEST_DONE), posted or not.
 const TURNED_FOR := 10.0
 const LIFTED_FOR := 10.0
+# Where a child lair goes: close enough to read as the same trouble, far enough
+# to be its own dot; clear of every town by the procedural builder's own
+# MIN_MONSTER_GAP (300, scenes/world/procedural_world.gd) and of every lair by
+# SPREAD_MIN. SPREAD_TRIES seeded angles, then give up — no child is better
+# than one in a lake or a front yard.
+const SPREAD_MIN := 150.0
+const SPREAD_MAX := 300.0
+const SPREAD_TRIES := 24
+const SPREAD_TOWN_GAP := 300.0
 
 static func is_settled(world, lair) -> bool:
 	return Regions.band_of(world, lair.position) in SETTLED_BANDS
@@ -129,9 +138,36 @@ static func land(world, lair, s, now: float) -> Array:
 			lines.append("Something has dug in near %s." % lair.sname)
 	return lines
 
-# Task 3 fills this in: the second landing's child lair.
-static func spread(_world, _parent, _now: float):
+# The second landing's child: same faction, named after its parent, hidden,
+# with a clock of its own that starts now. One per root, ever — a respawned
+# parent counts its landings from zero again, and the id check is what keeps
+# it from digging a second child on the same ground. A child never spreads
+# (land() checks spawned_from), so a map at most doubles its lairs and stops.
+static func spread(world, parent, now: float):
+	var id := "%s-2" % parent.id
+	if lair_of(world, id) != null:
+		return null
+	var rng = RNG.new(maxi(1, absi(hash("spread|%s" % parent.id))))
+	for i in SPREAD_TRIES:
+		var angle := deg_to_rad(float(rng.roll_die(360)))
+		var dist: float = SPREAD_MIN + float(rng.roll_die(int(SPREAD_MAX - SPREAD_MIN)))
+		var pos: Vector2 = parent.position + Vector2(cos(angle), sin(angle)) * dist
+		if world.is_water(pos) or not _room_for(world, pos):
+			continue
+		var child = world.add_lair(World.Lair.new(id, pos, parent.faction, "%s's outpost" % parent.sname))
+		child.spawned_from = parent.id
+		child.raid_at = now
+		return child
 	return null
+
+static func _room_for(world, pos: Vector2) -> bool:
+	for s in world.settlements:
+		if s.position.distance_to(pos) < SPREAD_TOWN_GAP:
+			return false
+	for l in world.lairs:
+		if l.position.distance_to(pos) < SPREAD_MIN:
+			return false
+	return true
 
 # Once a frame. Order matters: lifts first, so a lair cleared this frame does
 # not also set out; then every band out is advanced or, if it is gone from the

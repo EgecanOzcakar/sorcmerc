@@ -49,6 +49,7 @@ func _init() -> void:
 	test_march_siege_land_home()
 	test_turned()
 	test_lift()
+	test_spread()
 	print("test_raids: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -194,3 +195,43 @@ func test_lift() -> void:
 	w3.lairs.clear()
 	Raids.tick(w3, 200.0)
 	check(w3.settlements[0].raided_by == "", "a lair no longer on the map lifts its raid")
+
+func test_spread() -> void:
+	var w := _world()
+	var l = w.lairs[0]
+	var s = w.settlements[0]
+	Raids.land(w, l, s, 100.0)
+	check(w.lairs.size() == 1, "the first landing seeds nothing")
+	var lines: Array = Raids.land(w, l, s, 200.0)
+	check(w.lairs.size() == 2, "the second landing seeds a child")
+	check(lines.size() == 2 and "Something has dug in near the Ash Warren." in lines[1], "...and says so (%s)" % str(lines))
+	var c = w.lairs[1]
+	check(c.id == "warren-2" and c.sname == "the Ash Warren's outpost" and c.faction == "goblinoid",
+		"named after its parent, same faction (%s / %s)" % [c.id, c.sname])
+	check(c.spawned_from == "warren" and c.raid_at == 200.0 and c.raids == 0 and not c.discovered and not c.looted,
+		"a child: parent named, clock started at the landing, hidden, live")
+	var d: float = c.position.distance_to(l.position)
+	check(d >= Raids.SPREAD_MIN and d <= Raids.SPREAD_MAX, "placed SPREAD_MIN..SPREAD_MAX from the parent (%.0f)" % d)
+	check(c.position.distance_to(s.position) >= Raids.SPREAD_TOWN_GAP, "...and clear of the town")
+	check(not w.is_water(c.position), "...on dry ground")
+	var again = Raids.spread(w, l, 300.0)
+	check(again == null and w.lairs.size() == 2, "a root spreads once, even asked again")
+	Raids.land(w, l, s, 400.0)
+	check(w.lairs.size() == 2, "the third landing seeds nothing")
+	# a child never spreads
+	Raids.land(w, c, s, 500.0)
+	Raids.land(w, c, s, 600.0)
+	check(w.lairs.size() == 2 and c.raids == 2, "a child's second landing seeds nothing")
+	# determinism: the same parent puts its child in the same place
+	var w2 := _world()
+	Raids.land(w2, w2.lairs[0], w2.settlements[0], 100.0)
+	Raids.land(w2, w2.lairs[0], w2.settlements[0], 200.0)
+	check(w2.lairs[1].position == c.position, "seeded off the parent's id")
+	# no room: a town on every side of the parent
+	var w3 := _world()
+	for i in 12:
+		var a := deg_to_rad(float(i) * 30.0)
+		w3.add_settlement(World.Settlement.new("ring-%d" % i, w3.lairs[0].position + Vector2(cos(a), sin(a)) * 220.0, "human", "camp"))
+	Raids.land(w3, w3.lairs[0], w3.settlements[0], 100.0)
+	var lines3: Array = Raids.land(w3, w3.lairs[0], w3.settlements[0], 200.0)
+	check(w3.lairs.size() == 1 and lines3.size() == 1, "nowhere to dig in: no child, no line")
