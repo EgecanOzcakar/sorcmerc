@@ -48,6 +48,7 @@ const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Party = preload("res://core/party.gd")
 const Travel = preload("res://core/travel.gd")
 const Ladder = preload("res://core/ladder.gd")
+const Callings = preload("res://core/callings.gd")
 
 # One driver frame. The same 0.1 tests/drive_world.gd drives the map with —
 # headless deltas are microseconds, so world time has to be handed over by
@@ -103,6 +104,7 @@ var _last_clock := -1.0
 var _stamp := ""
 var _still := 0
 var _deeds_seen := 0         # Ladder.renown(), watched for the one direction it may move
+var _callings_done := {}     # char_id -> true once their calling was seen done (and its heirloom checked)
 
 func _init() -> void:
 	# This process's own autosave slots, so a concurrent godot run cannot clobber
@@ -156,6 +158,7 @@ func _session(sd: int) -> void:
 	_stamp = ""
 	_still = 0
 	_deeds_seen = 0
+	_callings_done = {}
 	WorldSave.clear()
 	FactionOpinion.reset()
 	Ladder.reset()
@@ -280,6 +283,16 @@ func _watch() -> void:
 		fail("%d characters are in an active party of %d" % [party.active.size(), Party.MAX_ACTIVE])
 	if party.party_characters().is_empty():
 		fail("the active party emptied itself mid-run")
+	# A calling just done paid its heirloom into the stash (core/callings.gd's
+	# complete). Checked the frame it turns done, not forever after — the
+	# stash is the player's to sell.
+	for id in party.callings:
+		if String(party.callings[id]["state"]) == "done" and not _callings_done.has(id):
+			_callings_done[id] = true
+			_saw["calling:done"] = true
+			var item := String(Callings.templates()[party.callings[id]["id"]]["item"])
+			if party.stash_count(item) < 1:
+				fail("%s's calling is done and its heirloom (%s) is not in the stash" % [id, item])
 	for ch in party.party_characters():
 		var s: Dictionary = party.summary(ch.id)
 		if int(s["hp"]) < 0 or int(s["hp"]) > int(s["max_hp"]):
@@ -396,6 +409,8 @@ func _cards() -> bool:
 		if _hold(THINK_TOWN):
 			return true
 		_saw["event-card"] = true
+		if String(screen._event_card._e.get("id", "")).begins_with("calling-"):
+			_saw["calling:card"] = true    # a telling or a resolution: acked like any other
 		# The signal, not the plain handler: an outcome card can carry a bound
 		# follow-up (the fight an ambush just started), and freeing the card by
 		# hand would drop it. Same reason drive_world does it this way.
@@ -442,6 +457,10 @@ func _way_weight(way: String) -> int:
 		"avoid":  return 5 + _me["care"] / 3 + (100 - fit) / 2
 		"greet":  return 30 + _me["nosy"] / 3
 		"pass":   return 20
+		# The fireside's courtship (world.gd's _fireside), on the same card: a
+		# careful player says yes, anyone else lets it lie.
+		"accept":  return 100 if _me["care"] >= 70 else 0
+		"decline": return 0 if _me["care"] >= 70 else 100
 	return 8   # something new on the card: try it now and then
 
 # --- the fight ----------------------------------------------------------------
@@ -1184,8 +1203,8 @@ func _final_checks() -> void:
 func _report() -> void:
 	var keys: Array = _saw.keys()
 	keys.sort()
-	print("  %d frames, %d acts, %d fights, %d gp, day-clock %.0f -> %.0f  %s" % [
-		_tick_no, _acts, _fights, screen.party.gold, _clock0, screen.world.clock.elapsed,
+	print("  %d frames, %d acts, %d fights, %d callings done, %d gp, day-clock %.0f -> %.0f  %s" % [
+		_tick_no, _acts, _fights, _callings_done.size(), screen.party.gold, _clock0, screen.world.clock.elapsed,
 		"OK" if _fail == 0 else "*** %d FAILED ***" % _fail])
 	print("  exercised: ", keys)
 	if _fail > 0:
