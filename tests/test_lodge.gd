@@ -16,6 +16,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const WorldSave = preload("res://core/world_save.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
 const Campaign = preload("res://core/campaign.gd")
+const Leveling = preload("res://core/leveling.gd")
 
 var _pass := 0
 var _fail := 0
@@ -31,6 +32,7 @@ func _init() -> void:
 	test_garden()
 	test_maproom()
 	test_yard()
+	test_yard_and_trainer()
 	test_shrine()
 	test_restamp()
 	test_save()
@@ -84,12 +86,12 @@ func test_buy() -> void:
 	var camp = w.settlements[2]
 	var party := _party(Lodge.HOUSE_COST)
 	check(party.lodge.is_empty() and Lodge.settlement(party, w) == null and Lodge.rooms_built(party) == 0, "a fresh company has no lodge")
-	check(not Lodge.can_buy(party, w, city) and Lodge.buy(party, w, city).is_empty(), "a Stranger cannot buy a house")
+	check(not Lodge.for_sale(party, city) and not Lodge.can_buy(party, w, city) and Lodge.buy(party, w, city).is_empty(), "a Stranger is not sold a house")
 	Ladder.deed("human", Ladder.RUNG_AT[Ladder.KNOWN])
-	check(Lodge.can_buy(party, w, city), "a Known one can")
-	check(not Lodge.can_buy(party, w, camp), "not among orcs")
+	check(Lodge.for_sale(party, city) and Lodge.can_buy(party, w, city), "a Known one is, and can pay")
+	check(not Lodge.for_sale(party, camp) and not Lodge.can_buy(party, w, camp), "not among orcs")
 	party.gold = Lodge.HOUSE_COST - 1
-	check(not Lodge.can_buy(party, w, city), "not a coin short of it")
+	check(Lodge.for_sale(party, city) and not Lodge.can_buy(party, w, city), "a coin short of it: the house is for sale, the button is not lit")
 	party.gold = Lodge.HOUSE_COST
 	var deeds_before: int = Ladder.deeds("human")
 	var r: Dictionary = Lodge.buy(party, w, city)
@@ -101,7 +103,7 @@ func test_buy() -> void:
 	check(Ach.count("lodges") == 1 and Ach.is_unlocked("lodge_bought"), "A Door of Our Own")
 	party.gold = 10000
 	Ladder.deed("elf", Ladder.RUNG_AT[Ladder.KNOWN])
-	check(not Lodge.can_buy(party, w, town) and Lodge.buy(party, w, town).is_empty() and party.gold == 10000, "one lodge only")
+	check(not Lodge.for_sale(party, town) and not Lodge.can_buy(party, w, town) and Lodge.buy(party, w, town).is_empty() and party.gold == 10000, "one lodge only")
 
 # --- the rooms ------------------------------------------------------------
 
@@ -143,8 +145,6 @@ func test_strongroom() -> void:
 	check(Lodge.deposit(party, 300) and party.gold == 200 and Lodge.stored(party) == 300, "300 ◉ goes into the strongroom")
 	check(not Lodge.withdraw(party, 301) and not Lodge.withdraw(party, 0), "the strongroom bounds a withdrawal")
 	check(Lodge.withdraw(party, 100) and party.gold == 300 and Lodge.stored(party) == 200, "100 ◉ comes back out")
-	check(Lodge.spare_from_loss(party, 1000) == 300 and Lodge.stored(party) == 200, "a loss is the purse's at most; the strongroom is not in it")
-	check(Lodge.spare_from_loss(party, 50) == 50, "a small loss is itself")
 
 # --- the garden -----------------------------------------------------------
 
@@ -251,6 +251,43 @@ func test_yard() -> void:
 	Visit.visit(city, w)
 	check(Lodge.can_retrain(party, w, vera), "a new visit, a new swap")
 	check(Lodge.retrain(party, w, vera, "durable", "sentinel").get("ok", false) and "sentinel" in vera.feats and not "durable" in vera.feats, "...back again")
+	# A feat the level-up screen put down with a skill to pick as well as a +1:
+	# every decision it asked for goes with it, not only the ability.
+	var pike = party.get_member("pike")
+	pike.feats.append("keen-mind")
+	pike.dirty()
+	Downtime.decide_ability(pike, "keen-mind")
+	pike.decide("skill-choice:feat:keen-mind:0", {"type": "skill-choice", "skills": ["arcana"]})
+	check(pike.choices.keys().filter(func(k): return ":feat:keen-mind:" in String(k)).size() == 2, "keen-mind decided twice over (the test's own setup)")
+	check(Lodge.retrain(party, w, pike, "keen-mind", "durable").get("ok", false) and not "keen-mind" in pike.feats, "keen-mind put down")
+	check(not pike.choices.keys().any(func(k): return ":feat:keen-mind:" in String(k)), "...and every choice it asked for forgotten with it")
+	check(not pike.sheet().pending.any(func(p): return ":feat:" in String(p["key"])), "nothing pending off either feat")
+
+# The yard and the trainer are two gates: the trainer's once-ever (downtime.trained)
+# and the yard's once-a-visit (lodge.retrained) neither see nor move each other.
+func test_yard_and_trainer() -> void:
+	var hp := _housed(Lodge.ROOMS["yard"]["cost"] + 10000)
+	var w: World = hp[0]
+	var party: Party = hp[1]
+	var city = w.settlements[0]
+	for ch in party.roster:
+		Leveling.grant_levels(ch, Downtime.TRAIN_MIN_LEVEL)
+	Visit.visit(city, w)
+	Lodge.build(party, w, "yard")
+	# a hero the trainer already schooled may put that very feat down in the yard
+	var vera = party.get_member("vera")
+	check(Downtime.train(party, w, city, vera, "sentinel").get("ok", false) and not Downtime.can_train(party, vera), "Vera trained once, ever")
+	check(Lodge.can_retrain(party, w, vera), "...and the yard will still take her")
+	check(Lodge.retrain(party, w, vera, "sentinel", "durable").get("ok", false) and "durable" in vera.feats and not "sentinel" in vera.feats, "the trained feat, put down")
+	check(not Downtime.can_train(party, vera), "the trainer's gate stays shut behind it")
+	# a hero not yet trained retrains first, then trains, the same visit
+	var pike = party.get_member("pike")
+	pike.feats.append("sentinel")
+	pike.dirty()
+	Downtime.decide_ability(pike, "sentinel")
+	check(Lodge.retrain(party, w, pike, "sentinel", "durable").get("ok", false), "Pike retrains")
+	check(not Lodge.can_retrain(party, w, pike) and Downtime.can_train(party, pike), "the yard is done with him this visit; the trainer is not")
+	check(Downtime.train(party, w, city, pike, Downtime.trainable(pike)[0]).get("ok", false) and pike.feats.size() >= 2, "...and he trains the same visit")
 
 # --- the shrine -----------------------------------------------------------
 
@@ -316,6 +353,19 @@ func test_save() -> void:
 	check(back.lodge.is_empty(), "nothing loads as nothing")
 	Lodge.from_dict(back, {"rooms": ["yard"]})
 	check(back.lodge.is_empty(), "a lodge with no town is no lodge")
+	# a town the world no longer has: the house is nowhere, and every room a no-op
+	Lodge.from_dict(back, {"settlement_id": "nowhere", "rooms": ["strongroom", "yard", "garden", "shrine", "maproom"],
+		"gold": 40, "garden_at": 0.0, "maproom_at": 0.0})
+	back.gold = 1000
+	w.clock.elapsed += 100 * Downtime.DAY
+	check(Lodge.settlement(back, w) == null and not w.settlements.any(func(s): return Lodge.at(back, s)), "a lodge whose town is missing is at no town")
+	var stash_before: int = back.stash_count(Lodge.GARDEN_POTION, true)
+	var c: Dictionary = Lodge.collect(back, w)
+	check(c["potions"] == 0 and c["leads"].is_empty() and back.stash_count(Lodge.GARDEN_POTION, true) == stash_before, "nothing collects from nowhere")
+	check(Lodge.bless(back, w).is_empty() and not back.blessed, "nothing blesses from nowhere")
+	back.get_member("vera").feats.append("sentinel")
+	check(not Lodge.can_retrain(back, w, back.get_member("vera")), "nothing retrains from nowhere")
+	check(Lodge.stored(back) == 40 and Lodge.withdraw(back, 40) and back.gold == 1040, "the strongroom's coin still comes home")
 	# the world save and the campaign save carry it beside downtime
 	var rd: Dictionary = WorldSave.to_dict(w, party)
 	check(rd["party"].get("lodge", {}).get("settlement_id", "") == "riverhold", "the lodge rides the world save's party dict")

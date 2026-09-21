@@ -3519,7 +3519,7 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 		lodge_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		lodge_btn.pressed.connect(_goto_page.bind("lodge"))
 		places.add_child(lodge_btn)
-	elif party.lodge.is_empty() and not WorldAI.is_monster(s.faction) and Ladder.rung(s.faction) >= Ladder.KNOWN:
+	elif Lodge.for_sale(party, s):
 		var buy_btn := Button.new()
 		buy_btn.text = "Buy a lodge here (%d ◉)" % Lodge.HOUSE_COST
 		buy_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -4119,7 +4119,7 @@ func _retrain_row(rows: VBoxContainer, pupils: Array) -> void:
 		line.text = "Retrain %s in the yard (%d ◉, three days)" % [ch.cname, Lodge.RETRAIN_COST]
 		old.clear()
 		for fid in ch.feats:
-			if Lodge._general(fid):
+			if Lodge.general(fid):
 				old.add_item(String(Catalog.feat_src(fid).get("name", fid)))
 				old.set_item_metadata(old.item_count - 1, fid)
 		new.clear()

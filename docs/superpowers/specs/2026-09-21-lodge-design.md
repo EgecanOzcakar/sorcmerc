@@ -46,7 +46,8 @@ const ROOMS := {
 	"shrine":     {"cost": 200, "title": "the shrine"},
 	"maproom":    {"cost": 250, "title": "the map room"},
 }
-static func can_buy(party, world, s) -> bool          # no lodge yet; s civilized; Ladder.rung(s.faction) >= KNOWN; gold >= HOUSE_COST
+static func for_sale(party, s) -> bool                # no lodge yet; s civilized; Ladder.rung(s.faction) >= KNOWN — the square shows the button
+static func can_buy(party, world, s) -> bool          # for_sale and gold >= HOUSE_COST — the button is lit
 static func buy(party, world, s) -> Dictionary        # {"text"}; Ach; a deed for the town's faction
 static func at(party, s) -> bool                      # this settlement holds the lodge
 static func has(party, room: String) -> bool
@@ -72,7 +73,7 @@ static func to_dict / from_dict
 
 Buying is gated by standing: the town has to know the company (*Known*).
 Rooms build at once (the sink is the gold; the days are downtime's). Total
-sink 1 400 ◉ + retraining — a campaign's worth of jobs, visible as it goes.
+sink 1 500 ◉ + retraining — a campaign's worth of jobs, visible as it goes.
 
 ## 3. Where it shows
 

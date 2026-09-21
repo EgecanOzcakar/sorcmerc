@@ -20,14 +20,13 @@
 # screen re-reads the visit. docs/superpowers/specs/2026-09-21-lodge-design.md.
 extends RefCounted
 
-const Visit = preload("res://core/settlement_visit.gd")
 const Downtime = preload("res://core/downtime.gd")
 const Ladder = preload("res://core/ladder.gd")
 const Rumors = preload("res://core/rumors.gd")
 const Ach = preload("res://core/achievements.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 
-# A campaign's worth of jobs, visible as it goes: 1 400 ◉ for the lot.
+# A campaign's worth of jobs, visible as it goes: 1 500 ◉ for the lot.
 const HOUSE_COST := 400
 const ROOMS := {
 	"strongroom": {"cost": 200, "title": "the strongroom"},
@@ -36,7 +35,7 @@ const ROOMS := {
 	"shrine":     {"cost": 200, "title": "the shrine"},
 	"maproom":    {"cost": 250, "title": "the map room"},
 }
-# The yard: a feat's worth of days at a third of the trainer's price.
+# The yard: three days, and a third of what the trainer asks at level 4.
 const RETRAIN_COST := 100
 const RETRAIN_DAYS := 3
 # The garden and the map room grow while the party is away, to a cap: a
@@ -47,7 +46,7 @@ const GARDEN_POTION := "potions-of-healing"
 const MAPROOM_DAYS := 4
 const MAPROOM_CAP := 2
 
-const WORDS := ["no", "one", "two", "three"]   # the caps' worth
+const WORDS := ["no", "one", "two", "three"]   # indexed by a count; every cap above is <= 3
 
 # --- the house --------------------------------------------------------------
 
@@ -63,10 +62,14 @@ static func at(party, s) -> bool:
 	return not party.lodge.is_empty() and party.lodge["settlement_id"] == s.id
 
 # A house is a relationship with a town before it is a building: one lodge,
-# in a civilized town that knows the company.
-static func can_buy(party, _world, s) -> bool:
+# in a civilized town that knows the company. for_sale is the square's
+# button; can_buy is whether it is lit.
+static func for_sale(party, s) -> bool:
 	return party.lodge.is_empty() and not load("res://core/world_ai.gd").is_monster(s.faction) \
-		and Ladder.rung(s.faction) >= Ladder.KNOWN and party.gold >= HOUSE_COST
+		and Ladder.rung(s.faction) >= Ladder.KNOWN
+
+static func can_buy(party, _world, s) -> bool:
+	return for_sale(party, s) and party.gold >= HOUSE_COST
 
 static func buy(party, world, s) -> Dictionary:
 	if not can_buy(party, world, s) or not party.spend_gold(HOUSE_COST):
@@ -124,12 +127,10 @@ static func withdraw(party, n: int) -> bool:
 	party.gold += n
 	return true
 
-# The one thing the road cannot take. A loss (the retreat's fifteenth, a tab
-# run up) is computed from party.gold and taken from party.gold; the
-# strongroom is never in the sum. This is that rule written down: the most a
-# loss can be is what the purse holds.
-static func spare_from_loss(party, lost: int) -> int:
-	return clampi(lost, 0, party.gold)
+# The one thing the road cannot take: a loss (the retreat's fifteenth, a tab
+# run up) is computed from party.gold and taken from party.gold, and the
+# strongroom is never in the sum. The rule lives in world.gd's _retreat;
+# tests/test_world_lodge.gd drives it against a stocked strongroom.
 
 # --- the garden and the map room ------------------------------------------
 
@@ -179,23 +180,25 @@ static func collect(party, world) -> Dictionary:
 
 # --- the yard ---------------------------------------------------------------
 
-static func _general(feat_id: String) -> bool:
+static func general(feat_id: String) -> bool:
 	return String(Catalog.feat_src(feat_id).get("category", "")) == Downtime.TRAIN_CATEGORY
 
 # The yard takes a hero with a general feat to swap, once a visit.
 static func can_retrain(party, world, ch) -> bool:
 	var s = settlement(party, world)
-	if ch == null or s == null or not has(party, "yard") or not ch.feats.any(func(f): return _general(f)):
+	if ch == null or s == null or not has(party, "yard") or not ch.feats.any(func(f): return general(f)):
 		return false
 	return not is_equal_approx(float(party.lodge["retrained"].get(ch.id, -2.0)), s.last_visited)
 
-# One general feat off the build for another off the trainer's list; the old
-# feat's +1 is forgotten with it (the decision sits in ch.choices under the
-# grant's key) and the new one decided the way the trainer decides it. {} when
-# the yard will not take them; {"ok": false} when the purse is short of the
-# fee and the bed. The days are downtime's: spend_days pays the bed and rests.
+# One general feat off the build for another off the trainer's list; every
+# decision the old feat asked for — its +1, and a skill or an expertise if
+# the level-up screen put it there — is forgotten with it (each sits in
+# ch.choices under its grant's key) and the new one decided the way the
+# trainer decides it. {} when the yard will not take them; {"ok": false} when
+# the purse is short of the fee and the bed. The days are downtime's:
+# spend_days pays the bed and rests.
 static func retrain(party, world, ch, old_feat: String, new_feat: String) -> Dictionary:
-	if not can_retrain(party, world, ch) or not old_feat in ch.feats or not _general(old_feat) \
+	if not can_retrain(party, world, ch) or not old_feat in ch.feats or not general(old_feat) \
 			or new_feat == old_feat or not new_feat in Downtime.trainable(ch):
 		return {}
 	var s = settlement(party, world)
@@ -206,7 +209,7 @@ static func retrain(party, world, ch, old_feat: String, new_feat: String) -> Dic
 	party.spend_gold(RETRAIN_COST)
 	ch.feats.erase(old_feat)
 	for g in Catalog.feat_src(old_feat).get("grants", []):
-		if String(g["type"]) == "ability-choice":
+		if String(g["type"]).ends_with("-choice"):
 			ch.choices.erase(String(g["key"]))
 	ch.feats.append(new_feat)
 	ch.dirty()
