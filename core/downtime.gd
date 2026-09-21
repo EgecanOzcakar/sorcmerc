@@ -70,13 +70,15 @@ const INSULT := 5.0
 
 # --- days -----------------------------------------------------------------
 
-static func bed_cost(s, days: int) -> int:
-	return Visit.inn_cost(s) * days
+# `party` for the lodge's free bed (Visit.inn_cost); without one it is the
+# inn's rate, which is every bed but that one.
+static func bed_cost(s, days: int, party = null) -> int:
+	return Visit.inn_cost(s, party) * days
 
-static func bed_line(s, days: int) -> String:
+static func bed_line(s, days: int, party = null) -> String:
 	if days == 1:
-		return "A day, a night: %d ◉ for the bed." % bed_cost(s, 1)
-	return "%d days, %d nights: %d ◉ for the bed." % [days, days, bed_cost(s, days)]
+		return "A day, a night: %d ◉ for the bed." % bed_cost(s, 1, party)
+	return "%d days, %d nights: %d ◉ for the bed." % [days, days, bed_cost(s, days, party)]
 
 # The clock moves exactly `days` — Visit.rest() adds its own eight hours, so
 # those are taken off first and the long rest is the last night of the stay
@@ -85,7 +87,7 @@ static func bed_line(s, days: int) -> String:
 # passes (-1). Every last_visited/battle_at stamp stays: the market restocks
 # on its own clock, and "once a visit" means this visit.
 static func spend_days(party, world, s, days: int) -> int:
-	var bed := bed_cost(s, days)
+	var bed := bed_cost(s, days, party)
 	if days <= 0 or not party.spend_gold(bed):
 		return -1
 	world.clock.elapsed += days * DAY - Visit.LONG_REST_MINUTES
@@ -143,7 +145,7 @@ static func train(party, world, s, ch, feat_id: String) -> Dictionary:
 	if not can_train(party, ch) or not feat_id in trainable(ch):
 		return {}
 	var fee := train_cost(ch)
-	var bed := bed_cost(s, TRAIN_DAYS)
+	var bed := bed_cost(s, TRAIN_DAYS, party)
 	if party.gold < fee + bed:
 		return {"ok": false, "cost": fee, "bed": bed,
 			"text": "The master-at-arms wants %d ◉, and the bed %d more." % [fee, bed]}
@@ -159,7 +161,7 @@ static func train(party, world, s, ch, feat_id: String) -> Dictionary:
 	var feat_name := String(Catalog.feat_src(feat_id).get("name", feat_id.capitalize()))
 	return {"ok": true, "feat_name": feat_name, "days": TRAIN_DAYS, "cost": fee, "bed": bed,
 		"text": "Five days with a master-at-arms, and %s comes out of it with %s.  %s" % [
-			ch.cname, feat_name, bed_line(s, TRAIN_DAYS)]}
+			ch.cname, feat_name, bed_line(s, TRAIN_DAYS, party)]}
 
 # --- the roll ---------------------------------------------------------------
 
@@ -195,7 +197,7 @@ static func carouse(party, world, s, rng = null) -> Dictionary:
 		return {}
 	var ch = party.get_member(who["char_id"])
 	var cost := int(CAROUSE_COST.get(s.kind, CAROUSE_COST["town"]))
-	var bed := bed_cost(s, 1)
+	var bed := bed_cost(s, 1, party)
 	if party.gold < cost + bed:
 		return {"ok": false, "cost": cost, "bed": bed,
 			"text": "A night on the town is %d ◉, and the bed %d more." % [cost, bed]}
@@ -344,7 +346,7 @@ static func craft(party, world, s, item_id: String, m: Dictionary) -> Dictionary
 	var crafted: Dictionary = party.downtime.get("crafted", {})
 	var here: Dictionary = crafted.get(s.id, {})
 	var cost := craft_cost(item_id)
-	var bed := bed_cost(s, CRAFT_DAYS)
+	var bed := bed_cost(s, CRAFT_DAYS, party)
 	if party.gold < cost + bed:
 		return {"ok": false, "cost": cost, "bed": bed,
 			"text": "The %s is %d ◉ for the day, and the bed %d more." % ["bench" if brew else "desk", cost, bed]}
@@ -358,7 +360,7 @@ static func craft(party, world, s, item_id: String, m: Dictionary) -> Dictionary
 	var name := Campaign.item_name(item_id)
 	return {"ok": true, "item_id": item_id, "name": name, "cost": cost, "bed": bed, "days": CRAFT_DAYS,
 		"text": "A day at the %s, and %s goes into the pack (-%d ◉).  %s" % [
-			"bench" if brew else "desk", name, cost, bed_line(s, CRAFT_DAYS)]}
+			"bench" if brew else "desk", name, cost, bed_line(s, CRAFT_DAYS, party)]}
 
 # --- the pit ----------------------------------------------------------------
 

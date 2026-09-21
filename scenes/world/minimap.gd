@@ -475,6 +475,12 @@ func _draw_marks(w) -> void:
 		elif s.kind == "camp":
 			r = R_CAMP
 		_draw_square(_to_widget(s.position), r, _faction_color(s.faction))
+		# The company's lodge (core/lodge.gd): one small mark beside its town,
+		# in the town's colour. Read off the host's party; a host without one
+		# (the test's stub) has no lodge.
+		var party = world_map.get("party") if world_map != null else null
+		if party != null and not party.lodge.is_empty() and party.lodge["settlement_id"] == s.id:
+			_draw_square(_to_widget(s.position) + Vector2(r + R_CAMP + 1.0, 0.0), R_CAMP * 0.7, _faction_color(s.faction))
 	# Lairs and roaming parties stay fog-gated: found, not signposted.
 	for l in w.lairs:
 		if l.discovered and w.is_explored(l.position):

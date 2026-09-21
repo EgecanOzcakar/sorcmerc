@@ -65,10 +65,14 @@ const INN_COST := {"city": 40, "town": 20, "camp": 10}
 
 # The ladder (core/ladder.gd): a Known company pays half for its bed, a Sworn
 # one nothing — the one thing every rung is for is people, and an innkeeper
-# is people.
+# is people. And a company with a house in this town (core/lodge.gd) sleeps
+# in its own bed: `party` is optional because most callers price the room
+# before there is a party to ask, and nobody without one has a lodge.
 const INN_KNOWN := 0.5
 
-static func inn_cost(s) -> int:
+static func inn_cost(s, party = null) -> int:
+	if party != null and load("res://core/lodge.gd").at(party, s):
+		return 0
 	var base := int(INN_COST.get(s.kind, INN_COST["town"]))
 	var r: int = Ladder.rung(s.faction)
 	if r >= Ladder.SWORN:

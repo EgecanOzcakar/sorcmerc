@@ -84,6 +84,7 @@ const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const Ladder = preload("res://core/ladder.gd")
 const Callings = preload("res://core/callings.gd")
 const Downtime = preload("res://core/downtime.gd")
+const Lodge = preload("res://core/lodge.gd")   # the company's house: the square's door, the lodge page
 const Catalog = preload("res://core/rules/catalog.gd")   # the trainer's feat names
 const Posting = preload("res://core/quest_posting.gd")
 const Loot = preload("res://core/loot.gd")
@@ -2701,6 +2702,11 @@ func _open_visit(s) -> void:
 	_market_tab = MARKET_TAB_ALL
 	Sound.play_sfx("settlement")   # the gate, once, on arriving — not on every page
 	_build_visit_panel()
+	# Home: the garden's potions and the map room's marks, gathered on the step.
+	if Lodge.at(party, s):
+		var c: Dictionary = Lodge.collect(party, world)
+		if String(c["text"]) != "":
+			_say(String(c["text"]))
 
 func _goto_page(page: String) -> void:
 	_visit_page = page
@@ -2887,6 +2893,12 @@ func _close_visit() -> void:
 		_visit_panel = null
 	world.clock.resume()
 	_pause_btn.text = "Pause"
+	# The shrine: the blessing is taken on the way out, once a visit, and said
+	# on the map since the panel that would have said it is gone.
+	if _left != null and Lodge.at(party, _left):
+		var b: Dictionary = Lodge.bless(party, world)
+		if not b.is_empty():
+			_lair_msg.text = String(b["text"])
 	_autosave()   # O13 autosave: the purse and the shelf both moved
 	_coop_share_visit()
 
@@ -3048,7 +3060,7 @@ func _rest() -> void:
 		_say("The party isn't tired enough for another long rest yet.")
 		return
 	var s = _visit["settlement"]
-	var cost := Visit.inn_cost(s)
+	var cost := Visit.inn_cost(s, party)
 	if not party.spend_gold(cost):
 		_say("Can't afford a room here (%d ◉)." % cost)
 		return
@@ -3060,6 +3072,7 @@ func _rest() -> void:
 	_visit = Visit.visit(s, world)
 	_carry_visit_flags(before, _visit)
 	Downtime.restamp(party, s, stamp, s.last_visited)   # the game and the bench are still this visit's
+	Lodge.restamp(party, s, stamp, s.last_visited)      # ...and the yard's swap and the shrine's blessing
 	_cheer()
 	_build_visit_panel()
 	_say("The party takes a long rest (%s). Eight hours pass and the stalls fill up again.%s" % [
@@ -3346,6 +3359,7 @@ func _build_visit_panel() -> void:
 		"market": _build_market_page(box, s)
 		"inn": _build_inn_page(box, s)
 		"board": _build_board_page(box, s)
+		"lodge": _build_lodge_page(box, s)
 		_: _build_hub_page(box, s)
 
 	_visit_log = Label.new()
@@ -3415,7 +3429,7 @@ const VISIT_CHROME_H := 320.0
 func _page_scroll_h(want: float) -> float:
 	return clampf(size.y - VISIT_CHROME_H, 120.0, want)
 
-const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board"}
+const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board", "lodge": "Your Lodge"}
 
 # The town square: where to go, plus the one thing that belongs to no single
 # building — picking over a battlefield nearby.
@@ -3471,7 +3485,7 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 
 	var inn_btn := Button.new()
 	var wait: float = Visit.long_rest_in(party, world)
-	var cost := Visit.inn_cost(s)
+	var cost := Visit.inn_cost(s, party)
 	inn_btn.text = (("Inn.  On the house." if cost == 0 else "Inn.  A night is %d ◉" % cost) if wait <= 0.0
 		else "Inn.  Rested recently, a room does nothing for %s yet" % _hours(wait))
 	inn_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -3492,6 +3506,30 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 	board_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	board_btn.pressed.connect(_goto_page.bind("board"))
 	places.add_child(board_btn)
+
+	# The lodge (core/lodge.gd): the company's own door once it has one here, a
+	# house for sale where the town knows the company (the price shown and the
+	# button disabled while the purse is short — a shrug is the e3cc910 bug),
+	# and at any other town a line pointing home.
+	if Lodge.at(party, s):
+		var lodge_btn := Button.new()
+		var n: int = Lodge.rooms_built(party)
+		lodge_btn.text = "Your lodge.  %s" % ("The house alone" if n == 0
+			else "Every room built" if n == Lodge.ROOMS.size() else "The house and %d room%s" % [n, "" if n == 1 else "s"])
+		lodge_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		lodge_btn.pressed.connect(_goto_page.bind("lodge"))
+		places.add_child(lodge_btn)
+	elif party.lodge.is_empty() and not WorldAI.is_monster(s.faction) and Ladder.rung(s.faction) >= Ladder.KNOWN:
+		var buy_btn := Button.new()
+		buy_btn.text = "Buy a lodge here (%d ◉)" % Lodge.HOUSE_COST
+		buy_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		buy_btn.disabled = not Lodge.can_buy(party, world, s)
+		buy_btn.pressed.connect(_buy_lodge)
+		places.add_child(buy_btn)
+	elif not party.lodge.is_empty():
+		var home = Lodge.settlement(party, world)
+		if home != null:
+			_note(places, "The company's lodge is at %s." % home.sname)
 
 	if _visit.get("battle", false):
 		var investigate_btn := Button.new()
@@ -3700,7 +3738,7 @@ func _craft_row(rows: VBoxContainer, verb: String, item_id: String, s) -> void:
 # — how long until it says yes. A disabled button with a number beside it is
 # an answer; a button that shrugs is the silent-no-op bug again (e3cc910).
 func _build_inn_page(box: VBoxContainer, s) -> void:
-	var cost := Visit.inn_cost(s)
+	var cost := Visit.inn_cost(s, party)
 	var mood := Label.new()
 	mood.text = "A %s bed is %s a night.  %d ◉ in the purse." % [s.kind, "on the house" if cost == 0 else "%d ◉" % cost, party.gold]
 	mood.theme_type_variation = "Dim"
@@ -3936,6 +3974,7 @@ func _reopen_visit(s) -> void:
 	var stamp: float = s.last_visited
 	_open_visit(s)
 	Downtime.restamp(party, s, stamp, s.last_visited)
+	Lodge.restamp(party, s, stamp, s.last_visited)
 
 # A bout in the pit: the city's bandit roster (hired blades — humanoid, always
 # fielded) cut to one champion by Downtime.pit_spec, fought in the square with
@@ -3976,6 +4015,159 @@ func _pit_bout() -> void:
 	_card({"id": "downtime-pit", "title": "The pit", "kind": "good" if won else "bad", "ok": won,
 		"text": text, "gold": int(r["purse"]), "xp": int(result.get("xp", 0)) if won else 0},
 		func(): _on_event_ack(); _reopen_visit(s))
+
+# --- The lodge (core/lodge.gd): the company's own house -----------------------
+# A visit page like the inn's: the house's line, the bed (free), and per room
+# its Build row or its use — the strongroom's deposit and withdraw, the yard's
+# retrain pickers, and a line each for the rooms that work while the party is
+# away (the garden and the map room are collected on arriving, _open_visit;
+# the shrine's blessing is taken on leaving, _close_visit).
+const DEPOSIT_STEPS := [50, 100, 200]
+
+func _build_lodge_page(box: VBoxContainer, s) -> void:
+	var mood := Label.new()
+	mood.text = "The company's house at %s.  %d ◉ in the purse." % [s.sname, party.gold]
+	mood.theme_type_variation = "Dim"
+	box.add_child(mood)
+	var wait: float = Visit.long_rest_in(party, world)
+	var rest_btn := Button.new()
+	rest_btn.text = "Rest at the lodge (free)"
+	rest_btn.disabled = wait > 0.0
+	rest_btn.pressed.connect(_rest)
+	box.add_child(rest_btn)
+	if wait > 0.0:
+		_note(box, "They rested less than a day ago — another night does nothing for %s." % _hours(wait))
+	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(INN_LIST_H)))
+	box.add_child(scroll)
+	var rows: VBoxContainer = scroll.get_child(0)
+	_section(rows, "The rooms")
+	for room in Lodge.ROOMS:   # the order the map builds them in (SettlementKit.LODGE_ROOMS)
+		var title := String(Lodge.ROOMS[room]["title"])
+		var cap := title[0].to_upper() + title.substr(1)
+		if not Lodge.has(party, room):
+			_trade_row(rows, "Build %s (%d ◉)" % [title, int(Lodge.ROOMS[room]["cost"])], "Build",
+				_build_room.bind(room), not Lodge.can_build(party, room))
+			continue
+		match room:
+			"strongroom":
+				_note(rows, "The strongroom holds %d ◉ — gold the road cannot take." % Lodge.stored(party))
+				_purse_row(rows, "Deposit", party.gold, _deposit)
+				if Lodge.stored(party) > 0:
+					_purse_row(rows, "Withdraw", Lodge.stored(party), _withdraw)
+			"yard":
+				var pupils: Array = party.party_characters().filter(func(ch): return Lodge.can_retrain(party, world, ch))
+				if pupils.is_empty():
+					_note(rows, "%s: one general feat put down for another, %d ◉ and three days; once a visit, and nobody is ready for it now." % [cap, Lodge.RETRAIN_COST])
+				else:
+					_retrain_row(rows, pupils)
+			"garden":
+				_note(rows, "%s: a potion of healing every %d days the company is away, up to %d, on the step when it comes home." % [cap, Lodge.GARDEN_DAYS, Lodge.GARDEN_CAP])
+			"shrine":
+				_note(rows, "%s: the company carries its blessing onto the road when it leaves." % cap)
+			"maproom":
+				_note(rows, "%s: a new mark on the wall every %d days the company is away, up to %d." % [cap, Lodge.MAPROOM_DAYS, Lodge.MAPROOM_CAP])
+
+# A picker of DEPOSIT_STEPS the sum covers, and "all" (id -1) for the sum itself.
+func _purse_row(rows: VBoxContainer, verb: String, have: int, on_go: Callable) -> void:
+	var row := HBoxContainer.new()
+	rows.add_child(row)
+	var lbl := Label.new()
+	lbl.text = verb
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(lbl)
+	var pick := OptionButton.new()
+	for n in DEPOSIT_STEPS:
+		if int(n) <= have:
+			pick.add_item("%d ◉" % int(n), int(n))
+	pick.add_item("all (%d ◉)" % have, -1)
+	row.add_child(pick)
+	var go := Button.new()
+	go.text = "Go"
+	go.disabled = have <= 0
+	go.pressed.connect(func(): on_go.call(have if pick.get_selected_id() == -1 else pick.get_selected_id()))
+	row.add_child(go)
+
+# The yard's pickers: who, which of their general feats, and what for — the
+# trainer's row (_train_row) with the old feat between.
+func _retrain_row(rows: VBoxContainer, pupils: Array) -> void:
+	var line := Label.new()
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	line.custom_minimum_size = Vector2(430, 0)
+	rows.add_child(line)
+	var row := HBoxContainer.new()
+	rows.add_child(row)
+	var who := OptionButton.new()
+	for ch in pupils:
+		who.add_item(ch.cname)
+	row.add_child(who)
+	var old := OptionButton.new()
+	row.add_child(old)
+	var new := OptionButton.new()
+	new.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(new)
+	var pick := func(i: int) -> void:
+		var ch = pupils[i]
+		line.text = "Retrain %s in the yard (%d ◉, three days)" % [ch.cname, Lodge.RETRAIN_COST]
+		old.clear()
+		for fid in ch.feats:
+			if Lodge._general(fid):
+				old.add_item(String(Catalog.feat_src(fid).get("name", fid)))
+				old.set_item_metadata(old.item_count - 1, fid)
+		new.clear()
+		for fid in Downtime.trainable(ch):
+			new.add_item(String(Catalog.feat_src(fid).get("name", fid)))
+			new.set_item_metadata(new.item_count - 1, fid)
+	who.item_selected.connect(pick)
+	pick.call(0)
+	var go := Button.new()
+	go.text = "Go"
+	go.pressed.connect(func(): _retrain(pupils[who.selected],
+		String(old.get_item_metadata(old.selected)) if old.selected >= 0 else "",
+		String(new.get_item_metadata(new.selected)) if new.selected >= 0 else ""))
+	row.add_child(go)
+
+# The deed, then the map: the house stands beside the town from this moment.
+func _buy_lodge() -> void:
+	var r: Dictionary = Lodge.buy(party, world, _visit["settlement"])
+	if r.is_empty():
+		_say("Not enough gold.")
+		return
+	Sound.play_sfx("buy")
+	_cheer()
+	_settlements3d.reset(world)
+	_autosave()
+	_build_visit_panel()
+	_say(String(r["text"]))
+
+func _build_room(room: String) -> void:
+	var r: Dictionary = Lodge.build(party, world, room)
+	if r.is_empty():
+		_say("Not enough gold.")
+		return
+	Sound.play_sfx("buy")
+	_settlements3d.reset(world)
+	_autosave()
+	_build_visit_panel()
+	_say(String(r["text"]))
+
+# A transfer either way: the coin sound, a save (the purse moved), the line.
+# The pickers only offer what the purse or the strongroom holds, so a refusal
+# is the module's own bounds and reads as one.
+func _deposit(n: int) -> void:
+	_moved(Lodge.deposit(party, n), "%d ◉ into the strongroom" % n)
+
+func _withdraw(n: int) -> void:
+	_moved(Lodge.withdraw(party, n), "%d ◉ out of the strongroom" % n)
+
+func _moved(ok: bool, text: String) -> void:
+	if ok:
+		Sound.play_sfx("buy")
+		_autosave()
+	_build_visit_panel()
+	_say("%s; it holds %d." % [text, Lodge.stored(party)] if ok else "The strongroom's door stays shut.")
+
+func _retrain(ch, old_feat: String, new_feat: String) -> void:
+	_downtime_done(Lodge.retrain(party, world, ch, old_feat, new_feat), "The yard will not take them.")
 
 func _build_board_page(box: VBoxContainer, s) -> void:
 	var has_inn: bool = Visit.has_service(s, "innkeeper")
@@ -4450,7 +4642,8 @@ func ground_marks() -> Array:
 				_settlements3d.footprint(s) if _settlements3d != null else 0.0),
 			"color": _remembered(faction_color(s.faction), live), "ring": RING_WIDTH,
 			"fill": SETTLEMENT_FILL, "shadow": 0.9,
-			"label": s.sname + Raids.settlement_tag(world, s, world.clock.elapsed), "live": live})
+			"label": s.sname + Raids.settlement_tag(world, s, world.clock.elapsed)
+				+ (" · your lodge" if Lodge.at(party, s) else ""), "live": live})
 	for l in world.lairs:
 		# T91: an undiscovered lair draws nothing at all — that is the mechanic.
 		if not (l.discovered and world.is_explored(l.position)):

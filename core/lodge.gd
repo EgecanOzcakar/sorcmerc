@@ -199,7 +199,7 @@ static func retrain(party, world, ch, old_feat: String, new_feat: String) -> Dic
 			or new_feat == old_feat or not new_feat in Downtime.trainable(ch):
 		return {}
 	var s = settlement(party, world)
-	var bed: int = Downtime.bed_cost(s, RETRAIN_DAYS)
+	var bed: int = Downtime.bed_cost(s, RETRAIN_DAYS, party)
 	if party.gold < RETRAIN_COST + bed:
 		return {"ok": false, "cost": RETRAIN_COST, "bed": bed,
 			"text": "The yard wants %d ◉ for the three days, and the bed %d more." % [RETRAIN_COST, bed]}
@@ -217,7 +217,7 @@ static func retrain(party, world, ch, old_feat: String, new_feat: String) -> Dic
 	var new_name := String(Catalog.feat_src(new_feat).get("name", new_feat.capitalize()))
 	return {"ok": true, "old_name": old_name, "feat_name": new_name, "days": RETRAIN_DAYS, "cost": RETRAIN_COST, "bed": bed,
 		"text": "Three days in the yard, and %s puts down %s for %s.  %s" % [
-			ch.cname, old_name, new_name, Downtime.bed_line(s, RETRAIN_DAYS)]}
+			ch.cname, old_name, new_name, Downtime.bed_line(s, RETRAIN_DAYS, party)]}
 
 # --- the shrine -------------------------------------------------------------
 

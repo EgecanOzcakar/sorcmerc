@@ -227,7 +227,7 @@ func test_yard() -> void:
 	check(Lodge.retrain(party, w, vera, "alert", "durable").is_empty(), "an origin feat is not swapped")
 	check(Lodge.retrain(party, w, vera, "sentinel", "alert").is_empty(), "nor swapped for")
 	check(Lodge.retrain(party, w, vera, "sentinel", "sentinel").is_empty(), "nor for itself")
-	var bed: int = Downtime.bed_cost(city, Lodge.RETRAIN_DAYS)
+	var bed: int = Downtime.bed_cost(city, Lodge.RETRAIN_DAYS, party)   # the lodge's own bed: nothing
 	party.gold = Lodge.RETRAIN_COST + bed - 1
 	var r: Dictionary = Lodge.retrain(party, w, vera, "sentinel", "durable")
 	check(not r.get("ok", true) and "sentinel" in vera.feats, "a purse short of the fee and the bed swaps nothing")
