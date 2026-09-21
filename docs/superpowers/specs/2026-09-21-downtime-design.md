@@ -62,7 +62,11 @@ inn). *Train %s in a feat.* Picks a hero; the row opens a picker of the
 filtered), level 4 or better. Costs `TRAIN_COST` (150 + 50 × level) and
 `TRAIN_DAYS` (5). Adds the feat id to `ch.feats` (`core/rules/bundles.gd`
 step 9 expands it at the next resolve — `ch.dirty()`), records the hero in
-`party.downtime.trained`. Once per hero, ever. Copy: *"Five days with a
+`party.downtime.trained`. The feat's +1 is decided for you — the highest of
+the scores the feat allows (ties to the first listed) — so the trained feat
+is whole the day it lands; a feat that asks for anything else (a skill, an
+expertise, a feature) is the level-up screen's to finish and is not on the
+list. Once per hero, ever. Copy: *"Five days with a
 master-at-arms, and %s comes out of it with %s."*
 
 **Carousing** — inn page, any settlement with an inn. *A night on the town
@@ -89,14 +93,16 @@ bench is the door: a party with no caster scribes nothing; anyone can brew
 
 **The pit** — inn page, city only. *The pit: %s, %s and %s stand this week
 (purse %d ◉).* A bracket of three champions seeded off `(s.id, week)`
-(`week = int(elapsed / (7 × DAY))`): each a named foe (`EnemyNames`) from the
-city's own faction roster at the party's level +1, +2, +3 in turn, fought as
-an ordinary encounter (`encounter_spec` with a one-foe roster and the
-champion's name; theme `city-square`; no objective). A bout is an evening. Win
-→ `PIT_PURSE[bout]` (60 / 120 / 240) and a deed (`Ladder.deed(s.faction)`);
+(`week = int(elapsed / (7 × DAY))`, read before the bout so a fight that runs
+past midnight is still its week's): each a named foe (`EnemyNames`), the
+city roster's strongest humanoid alone at `PIT_MULT[bout]` (1.3 / 1.7 / 2.2)
+in turn, fought as an ordinary encounter (`encounter_spec` with a one-foe
+roster and the champion's name; theme `city-square`; no objective). A bout
+is an evening. Win → what a fight pays (XP, the kill's gold, loot), plus
+`PIT_PURSE[bout]` (60 / 120 / 240) and a deed (`Ladder.deed(s.faction)`);
 the third win → `Ach.unlock("pit_champion")`. Lose → the party is carried out
-(`_retreat`'s rule: no death, gold lighter by the purse of that bout — the
-house keeps its stake) and the bracket closes for the week. Once per bracket:
+(everyone revived, gold lighter by the purse of that bout — the house keeps
+its stake) and the bracket closes for the week. Once per bracket:
 `party.downtime.pit[s.id] = {week, beaten}`; a new week, a new bracket.
 
 ## 3. Days, and what they cost
@@ -116,7 +122,7 @@ One of four, seeded off the activity and the visit; each is an event card
 | kind | line | consequence |
 |---|---|---|
 | tab | *"The morning brings a bill nobody remembers running up."* | `−2 × the activity's cost` in gold (to zero) |
-| brawl | *"Somebody's cousin takes exception to the company."* | a fight at the inn: a `bandit` roster at `easy`, the *drunk brawlers*, no objective; a win pays nothing; a loss is `_retreat` |
+| brawl | *"Somebody's cousin takes exception to the company."* | a fight at the inn: a `bandit` roster at `easy`, the *drunk brawlers*, no objective, no opinion or deed for the town; a win pays what a fight pays; a loss is `_retreat`; the inn reopens behind the spoils page |
 | insult | *"Something was said that should not have been, and it was heard."* | `FactionOpinion.lower(s.faction, 5)` |
 | bad lead | *"A man at the bar knew exactly where the treasure was."* | a rumour that names nothing (`Rumors` gets a `dud` offer id shown as a lead that marks no landmark — the party page shows it as a rumour bought for 0 that goes nowhere) |
 
@@ -126,7 +132,8 @@ The inn page gains a **Downtime** section under the bed: Train (with a hero
 and feat picker), A night on the town, Sit in on a game (with a stake picker),
 and at a city, The pit. The alchemist's and librarian's counters gain Brew /
 Scribe rows beside their stock. Results are lines under the row, cards for
-complications and the pit's bouts. The party page's hero card shows a
+complications, the pit's bouts, a feat trained (*Schooled*) and a contact
+made (*A night on the town*). The party page's hero card shows a
 trained feat like any feat. Achievements (`road` group): `trained_first`
 *Schooled*, `carouse_contact` *Friends in Low Places*, `gamble_treble` *The
 House Loses* (a 3×), `pit_champion` *Champion of the Pit*.
@@ -142,7 +149,7 @@ House Loses* (a 3×), `pit_champion` *Champion of the Pit*.
 | `GAMBLE_STAKES` | 25 / 50 / 100 / 200 | a potion to a magic item |
 | `CRAFT_RATE` | 0.5 | half price for a day |
 | `PIT_PURSE` | 60 / 120 / 240 | a job, two jobs, a rare item's tenth |
-| `PIT_LEVELS` | +1 / +2 / +3 | each bout harder than a road fight |
+| `PIT_MULT` | 1.3 / 1.7 / 2.2 | one champion, pumped: each bout harder than a road fight |
 
 Tests (`tests/test_downtime.gd`): `spend_days` moves the clock, rests, pays
 the bed by rung; training adds the feat, charges, takes five days, refuses a
@@ -168,7 +175,7 @@ the purse never goes negative through downtime.
 | `scenes/world/world.gd` | the inn page's Downtime section; counter rows; the pit fight launch (a one-foe spec, a named champion) |
 | `core/enemy_names.gd` | reuse |
 | `core/achievements.gd` | four entries |
-| tests, `docs/expansion-plan.md`, pictures `event-downtime-{train,carouse,gamble,craft,pit,tab,brawl,insult,bad-lead}` | §5, §6 |
+| tests, `docs/expansion-plan.md`, pictures `event-downtime-{train,carouse,pit,tab,brawl,insult,bad-lead}` (the game and the bench are lines, not cards) | §5, §6 |
 
 ## 8. Decided here
 
