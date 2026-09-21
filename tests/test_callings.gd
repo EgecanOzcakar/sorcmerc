@@ -337,6 +337,19 @@ func test_describe_and_save() -> void:
 	check(Callings.describe(p, "vera") == "The defiled shrine — done", "done")
 	check(Callings.describe(p, "thrun") == "", "no entry: nothing")
 
+	# a told band calling with the target erased and no replacement: waiting for the road
+	var w_band = World.new()
+	w_band.add_party(World.RoamingParty.new("player", Vector2.ZERO, "human", true))
+	var debt = w_band.add_party(World.RoamingParty.new("debt-men", Vector2(100, 0), "bandit"))
+	var p_band := _party(["criminal"])
+	Callings.assign(p_band, w_band)
+	Callings.beat(p_band, w_band)
+	check(p_band.callings["vera"]["state"] == "told", "the criminal's debt collectors, told")
+	w_band.parties.erase(debt)
+	Callings.assign(p_band, w_band)
+	check(p_band.callings["vera"]["target_id"] == "" and Callings.describe(p_band, "vera").contains("waiting for the road"),
+		"told band erased, no other band: waiting for the road")
+
 	var d: Dictionary = Callings.to_dict(p)
 	check(d["vera"]["state"] == "done" and d["pike"]["state"] == "" and d["pike"]["target_id"] == "near-warren", "to_dict")
 	d["vera"]["state"] = "told"

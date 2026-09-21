@@ -6503,6 +6503,7 @@ in the stash the frame a calling turns done.
 
 ### Still open
 
+- A hero who dies in the fight that beats their band is still paid (the check runs before the deaths are applied).
 - One calling per hero, then done. A second — a different past, or the
   same one coming back — would need a reason the sheet does not give.
 - Relations are between active pairs only, as the spike says; the bench

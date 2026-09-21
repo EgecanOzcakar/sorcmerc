@@ -343,6 +343,8 @@ static func describe(party, char_id: String) -> String:
 		return ""
 	match String(c["state"]):
 		"told":
+			if _waiting(c):
+				return "%s — told, waiting for the road" % t["title"]
 			return "%s — told, marked on the map" % t["title"]
 		"done":
 			return "%s — done" % t["title"]
