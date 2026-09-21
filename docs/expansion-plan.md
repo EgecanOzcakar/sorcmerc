@@ -6473,12 +6473,20 @@ lairs, done by clearing them; the criminal's debt, the guard's one that got
 away and the soldier's deserters are monster bands, done by beating them;
 the charlatan's old mark is a town and the noble's rival envoy a city, done
 by visiting; the entertainer's hall is the ladder's audience, any lord's.
-`assign()` runs every frame and every camp and takes the nearest thing of
-the kind — no such thing on this map, no calling yet. The fireside's order
-is: a calling's telling (once per hero, ever — the target is marked as it is
-spoken, a hidden landmark found, a lair discovered), then a resolution the
-road could not show, then the opinion moment; one card a night. Done, a
-calling pays `CALLING_XP` (120) split, an uncommon heirloom named by the
+`assign()` runs every frame and takes the nearest thing of the kind — a
+band of people (bandits, goblinoids, orcs, gnolls, kobolds, cultists) before
+a beast pack, never a band raiding a town — no such thing on this map, no
+calling yet; and the same pass re-points any calling whose target the world
+has since lost (a shrine spent before the telling, a band beaten by someone
+else, a lair the map dropped), or holds it with no target until one
+appears. The fireside's order is: a calling's telling (once per hero, ever
+— the target is marked as it is spoken, a hidden landmark found, a lair
+discovered, the ground it stands on revealed so the mark draws), then a
+resolution the road could not show, then the opinion moment; one card a
+night; a past told at the inn of the very town it names is done as the
+party leaves. Done, a calling is paid the frame the thing is done — in the
+same save the doing makes, so a quit at the outcome card loses only the
+card — with `CALLING_XP` (120) split, an uncommon heirloom named by the
 template identified into the stash, and the bond — +15 with the one who did
 the thing, or, when that was the hero themself (the acolyte is the party's
 best at Religion, so at her own shrine it usually is), with whoever stands

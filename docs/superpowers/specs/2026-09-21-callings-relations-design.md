@@ -65,46 +65,53 @@ Numbers are the spike's (`RIVALS −40`, `COLD −15`, `WARM 20`, `BONDED 50`,
 # party.callings: Dictionary  # char_id -> {"id", "target_kind", "target_id", "state", "told_at"}
 #   state: "" (none yet) | "told" (the beat has fired; the target is marked) | "done"
 const TEMPLATES := {background_id: {...}}     # sixteen, §4
-static func assign(party, world, rng) -> Array        # heroes newly given a calling (once each; the target must exist)
-static func beat(party, world, rng) -> Dictionary     # the next untold calling's telling, or {}: {"char_id", "id", "title", "text", "target_kind", "target_id"}
-static func check(party, world, event: Dictionary) -> Array   # events from the world screen; returns the callings completed
-static func complete(party, world, char_id) -> Dictionary     # the resolution: rewards applied; {"text", "xp", "item", "bond"}
+static func assign(party, world) -> Array             # heroes newly given a calling (once each; the target must exist); re-validates the rest
+static func beat(party, world) -> Dictionary          # the next untold calling's telling, or {}: {"char_id", "cname", "id", "title", "text"}
+static func check(party, world, event: Dictionary) -> Array   # events from the world screen; returns the callings to complete
+static func complete(party, world, char_id, who) -> Dictionary  # the resolution: rewards applied; {"text", "xp", "item", "item_name", "bond_with"}
 static func describe(party, char_id) -> String        # one line for the party page / quest log
 static func to_dict(party) / from_dict(party, d)
 ```
 
-`assign()` runs when a hero joins the active party (creation, recruit, the
-first world tick) and picks the template's target from the live world: the
-nearest landmark of the kind (`world.landmarks`, found or hidden — a hidden
-one is found by the telling), the nearest live lair, a civilized settlement
-of a given kind, or a monster band — each template says which (§4). No
-target on this map → no calling yet; `assign()` tries again at every camp.
+`assign()` runs every frame over the active party and picks the template's
+target from the live world for anyone without one: the nearest landmark of
+the kind (`world.landmarks`, found or hidden — a hidden one is found by the
+telling), the nearest live lair, a civilized settlement of a given kind, or
+a monster band — each template says which (§4). No target on this map → no
+calling yet; the next frame tries again. The same pass re-validates every
+calling not yet done (§5): a target the world has lost is re-picked.
 
-`beat()` is the telling: the next hero with a calling in state `""` speaks
-at the fire — one paragraph of second person in the template — and the
-target is **marked** (a landmark becomes found; a lair becomes discovered;
-a band or town is named in the line). It fires from `_make_camp` and the inn
-before the opinion moment (a calling outranks a warming: it happens once).
+`beat()` is the telling: the next hero with a calling in state `""` (and a
+target to point at) speaks at the fire — one paragraph of second person in
+the template — and the target is **marked** (a landmark becomes found; a
+lair becomes discovered; the ground it stands on is revealed, since every
+layer that draws a mark gates on `is_explored`; a band or town is named in
+the line). It fires from `_make_camp` and the inn before the opinion moment
+(a calling outranks a warming: it happens once). A calling told at the inn
+of the very town it names is done as the party leaves: `_rest()` asks
+`check()` again after the fire.
 
 `check()` is the world screen telling the module what just happened, in one
 shape: `{"kind": "landmark_answered", "id": ...}`, `{"kind":
 "lair_cleared", "id"}`, `{"kind": "band_beaten", "id"}`, `{"kind":
-"visited", "id"}`, `{"kind": "audience", "faction"}`. A told calling whose
-target and kind match completes.
+"visited", "id"}`, `{"kind": "audience", "id": faction}`. A told calling
+whose target and kind match completes — unless its hero is dead.
 
-`complete()` pays: `CALLING_XP` (120) split; the heirloom — one **uncommon**
-magic item named by the template (a real id from `data/magic-items.json`,
-chosen to fit: the acolyte's *amulet of proof*, the soldier's *javelin of
-lightning*, the sage's *pearl of power*, …), identified, into the stash; and
-the **bond** — `PartyOpinion.adjust(party, hero, other, CALLING_BOND)` (+15)
-with the one who did the thing (the roller of the landmark row, the one who
-struck the killing blow in the fight, the party's leader at a visit — the
-screen passes `who`) — or, when that was the hero themself, with whoever
-stood closest to them: the active companion whose score with the hero is
-highest, ties by marching order (the acolyte is the party's best at Religion,
-so at the shrine the hero is usually their own roller, and the bond is the
-reward that matters; a hero marching alone gets none). So the calling leaves
-a friendship behind it, not only an item. The line, on the event card, art `event-calling-<background>`.
+`complete()` pays, the frame the thing is done (so the autosave the doing
+makes carries it; only the card waits for the map to clear): `CALLING_XP`
+(120) split; the heirloom — one **uncommon** magic item named by the
+template (a real id from `data/magic-items.json`, chosen to fit: the
+acolyte's *amulet of proof*, the soldier's *javelin of lightning*, the
+sage's *pearl of power*, …), identified, into the stash; and the **bond** —
+`PartyOpinion.adjust(party, hero, other, CALLING_BOND)` (+15) with the one
+who did the thing (the roller of the landmark row; the party's leader at a
+fight, a lair, a visit or an audience — the screen passes `who`) — or, when
+that was the hero themself or nobody, with whoever stands closest to them:
+the active companion whose score with the hero is highest, ties by marching
+order (the acolyte is the party's best at Religion, so at the shrine the
+hero is usually their own roller, and the bond is the reward that matters;
+a hero marching alone gets none). So the calling leaves a friendship behind
+it, not only an item. The line, on the event card, art `event-calling-<background>`.
 
 ## 3. What a calling adds to the fireside
 
@@ -123,8 +130,12 @@ The quest log's Standing section (the ladder's) gains the same lines under a
 
 `{title, target_kind, target: {…}, tell, done, item}`. Target kinds:
 `landmark` (with `kind`), `lair` (any live; the nearest), `band` (a monster
-band; the nearest), `settlement` (with `kind`, civilized), `audience` (the
-ladder's, any faction). Completion is the matching `check()` event.
+band; the nearest of the *people* — bandit, goblinoid, orc, gnoll, kobold,
+cultist, since the copy is about deserters and debt collectors — falling
+back to any monster band; never a band raiding a town, which is gone or
+dead before the party gets there), `settlement` (with `kind`, civilized),
+`audience` (the ladder's, any faction). Completion is the matching
+`check()` event.
 
 | background | title | target | done by |
 |---|---|---|---|
@@ -159,6 +170,7 @@ at scan time like landmarks.
 | `CALLING_XP` | 120 | two landmarks; a personal milestone |
 | `CALLING_BOND` | 15 | the spike's `COURTSHIP_ACCEPTED`: the biggest warming short of a rescue |
 | targets | nearest of kind | a calling points down the road you are on |
+| re-validation | every `assign()` pass | a target the world lost — a landmark spent before the telling, a band beaten by someone else or gone home, a lair the map dropped, a settlement gone — is re-picked the same way; a told calling's new target is marked; nothing fits → the entry stays with an empty target, untold and uncompletable until one appears (a looted lair is not lost: it respawns) |
 
 Tests (`tests/test_callings.gd`): every background has a template whose item
 exists and is uncommon and whose target kind is one of the five; `assign`

@@ -162,7 +162,7 @@ static func validate(src, own_items := {}) -> Array:
 # as the old one was, so the map never points at nothing; no fit yet leaves
 # the entry with an empty target, which beat() and check() skip until the
 # next pass finds one.
-static func assign(party, world, _rng = null) -> Array:
+static func assign(party, world) -> Array:
 	var out: Array = []
 	var from: Vector2 = world.player().position if world.player() != null else Vector2.ZERO
 	for id in party.active:

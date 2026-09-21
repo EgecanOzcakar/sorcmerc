@@ -66,8 +66,9 @@ const BREAKUP := 20.0            # the extra drop when lovers fall out
 const DRIFT_PER_DAY := 1.0       # toward the pair's baseline; half FactionOpinion's — people are stickier
 const DAY := 1440.0              # world-minutes (core/faction_opinion.gd's DAY)
 
-# Combat. All three are read by hooks the sweep subclasses in
-# (tests/sweep_party_opinion.gd); the doc says where they go in combat.gd.
+# Combat. All three are read by core/combat.gd's hooks (shoulder_bonus on AC,
+# bicker_penalty on to-hit, rally when a partner goes down); the sweep
+# (tests/sweep_party_opinion.gd) measured them before they were wired.
 const SHOULDER_AC := 1           # bonded/lovers adjacent to each other: +1 AC each
 const BICKER_TO_HIT := 1         # rivals adjacent to each other: -1 to hit each
 const RALLY_STATUS := "rallied"  # a partner just went down: advantage on the next attack

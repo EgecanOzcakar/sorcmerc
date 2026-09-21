@@ -1,5 +1,9 @@
 # Spike: opinions between party members, and romance
 
+**Shipped 2026-09-21** — §4–§9 as designed, all seven call sites, the numbers
+measured here (`docs/superpowers/specs/2026-09-21-callings-relations-design.md`).
+The rest of this page is the spike as it was written.
+
 2026-09-16. A feasibility spike, not a feature: **nothing in the shipped game
 reads any of this yet.** What exists on the branch is a model
 (`core/party_opinion.gd`, one new field on `core/party.gd`), a headless test

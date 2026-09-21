@@ -8,7 +8,6 @@ const Party = preload("res://core/party.gd")
 const Callings = preload("res://core/callings.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
-const RNG = preload("res://core/rng.gd")
 
 var _pass := 0
 var _fail := 0
@@ -88,7 +87,7 @@ func test_templates() -> void:
 func test_assign() -> void:
 	var w := _world()
 	var p := _party(["acolyte", "sage", "soldier", "noble"])
-	var got: Array = Callings.assign(p, w, RNG.new(1))
+	var got: Array = Callings.assign(p, w)
 	check(got == ["vera", "pike", "ilsa", "thrun"], "the four newly assigned, in marching order (got %s)" % [got])
 	check(p.callings["vera"]["target_kind"] == "landmark" and p.callings["vera"]["target_id"] == "shrine-near",
 		"the acolyte gets the nearest shrine, hidden or not")
@@ -99,18 +98,18 @@ func test_assign() -> void:
 		"the noble gets the city")
 	check(p.callings["vera"]["id"] == "acolyte" and p.callings["vera"]["state"] == "" and float(p.callings["vera"]["told_at"]) < 0.0,
 		"an entry: the background, untold, never told")
-	check(Callings.assign(p, w, RNG.new(1)).is_empty(), "a second call assigns nobody new")
+	check(Callings.assign(p, w).is_empty(), "a second call assigns nobody new")
 	check(not w.landmarks[0].found and not w.lairs[1].discovered, "assigning marks nothing — that is the telling's job")
 
 	p = _party(["charlatan", "entertainer", "hermit", "farmer"])
-	got = Callings.assign(p, w, RNG.new(1))
+	got = Callings.assign(p, w)
 	check(got == ["vera", "pike", "thrun"], "the hermit is skipped: no stones on this map (got %s)" % [got])
 	check(p.callings["vera"]["target_id"] == "greenmarch", "the charlatan gets the civilized town, not the orc one")
 	check(p.callings["pike"]["target_kind"] == "audience" and p.callings["pike"]["target_id"] == "",
 		"the entertainer needs no target")
 	check(not p.callings.has("ilsa"), "...and the hermit has no entry to be told")
 	w.add_landmark(World.Landmark.new("ring", "stones", Vector2(900, 0)))
-	check(Callings.assign(p, w, RNG.new(1)) == ["ilsa"] and p.callings["ilsa"]["target_id"] == "ring",
+	check(Callings.assign(p, w) == ["ilsa"] and p.callings["ilsa"]["target_id"] == "ring",
 		"the stones appear, the hermit is assigned on the next call")
 
 	# a settlement kind that is missing falls back to a larger one, never a smaller
@@ -118,18 +117,18 @@ func test_assign() -> void:
 	w2.add_party(World.RoamingParty.new("player", Vector2.ZERO, "human", true))
 	w2.add_settlement(World.Settlement.new("riverhold", Vector2(500, 0), "human", "city"))
 	p = _party(["charlatan", "noble"])
-	Callings.assign(p, w2, RNG.new(1))
+	Callings.assign(p, w2)
 	check(p.callings.get("vera", {}).get("target_id", "") == "riverhold", "no town: the charlatan's old mark is in the city")
 	var w3 = World.new()
 	w3.add_party(World.RoamingParty.new("player", Vector2.ZERO, "human", true))
 	w3.add_settlement(World.Settlement.new("greenmarch", Vector2(200, 0), "elf", "town"))
 	p = _party(["noble"])
-	check(Callings.assign(p, w3, RNG.new(1)).is_empty(), "no city: the noble waits")
+	check(Callings.assign(p, w3).is_empty(), "no city: the noble waits")
 
 	p = _party(["acolyte"])
 	p.get_member("pike").background_id = "nobody"
 	p.get_member("ilsa").background_id = ""
-	got = Callings.assign(p, w, RNG.new(1))
+	got = Callings.assign(p, w)
 	check(got.has("vera") and not got.has("pike") and not got.has("ilsa"), "a hero without a template gets no calling")
 
 	# a spent landmark is never handed out — mirrors the lair's "not looted"
@@ -138,24 +137,24 @@ func test_assign() -> void:
 	var near_spent = w4.add_landmark(World.Landmark.new("shrine-near-spent", "shrine", Vector2(50, 0)))
 	near_spent.spent = true
 	p = _party(["acolyte"])
-	check(Callings.assign(p, w4, RNG.new(1)).is_empty(), "the only shrine is spent: the acolyte gets no calling")
+	check(Callings.assign(p, w4).is_empty(), "the only shrine is spent: the acolyte gets no calling")
 	var far_live = w4.add_landmark(World.Landmark.new("shrine-far-live", "shrine", Vector2(300, 0)))
-	check(Callings.assign(p, w4, RNG.new(1)) == ["vera"] and p.callings["vera"]["target_id"] == "shrine-far-live",
+	check(Callings.assign(p, w4) == ["vera"] and p.callings["vera"]["target_id"] == "shrine-far-live",
 		"an unspent shrine further away: the acolyte gets that one, not the nearer spent one")
 
 	# --- re-validated every pass: a target the world lost is re-picked ---
 	# the shrine spent before the telling (answered on the way, nobody told yet)
 	far_live.spent = true
 	var farther = w4.add_landmark(World.Landmark.new("shrine-farther", "shrine", Vector2(600, 0)))
-	check(Callings.assign(p, w4, RNG.new(1)).is_empty() and p.callings["vera"]["target_id"] == "shrine-farther",
+	check(Callings.assign(p, w4).is_empty() and p.callings["vera"]["target_id"] == "shrine-farther",
 		"a shrine spent before the telling: the next pass moves the calling to the next live shrine, assigning nobody new")
 	check(p.callings["vera"]["state"] == "" and not farther.found, "...still untold, and the new one is not marked yet")
 	farther.spent = true
-	Callings.assign(p, w4, RNG.new(1))
+	Callings.assign(p, w4)
 	check(p.callings.has("vera") and p.callings["vera"]["target_id"] == "", "no live shrine left: the entry stays, its target empty")
 	check(Callings.beat(p, w4).is_empty() and p.callings["vera"]["state"] == "", "...and the fire does not tell a calling with nowhere to point")
 	var back = w4.add_landmark(World.Landmark.new("shrine-back", "shrine", Vector2(900, 0)))
-	Callings.assign(p, w4, RNG.new(1))
+	Callings.assign(p, w4)
 	check(p.callings["vera"]["target_id"] == "shrine-back", "a shrine appears: the waiting calling takes it")
 	Callings.beat(p, w4)
 	check(back.found and w4.is_explored(back.position) and p.callings["vera"]["state"] == "told", "...and is told, the shrine found and its ground revealed")
@@ -165,11 +164,11 @@ func test_assign() -> void:
 	var debt = w5.add_party(World.RoamingParty.new("debt-men", Vector2(100, 0), "bandit"))
 	w5.add_party(World.RoamingParty.new("gnolls", Vector2(400, 0), "gnoll"))
 	p = _party(["criminal"])
-	Callings.assign(p, w5, RNG.new(1))
+	Callings.assign(p, w5)
 	Callings.beat(p, w5)
 	check(p.callings["vera"]["target_id"] == "debt-men" and p.callings["vera"]["state"] == "told", "the criminal's debt collectors, told")
 	w5.parties.erase(debt)
-	Callings.assign(p, w5, RNG.new(1))
+	Callings.assign(p, w5)
 	check(p.callings["vera"]["target_id"] == "gnolls" and p.callings["vera"]["state"] == "told",
 		"the band erased: the next pass points the told calling at another band, still told")
 	check(w5.is_explored(Vector2(400, 0)), "...and reveals where it stands, as the telling would have")
@@ -180,17 +179,17 @@ func test_assign() -> void:
 	var hole = w6.add_lair(World.Lair.new("hole", Vector2(100, 0), "kobold"))
 	w6.add_lair(World.Lair.new("den", Vector2(300, 0), "kobold"))
 	p = _party(["sage"])
-	Callings.assign(p, w6, RNG.new(1))
+	Callings.assign(p, w6)
 	hole.looted = true
-	Callings.assign(p, w6, RNG.new(1))
+	Callings.assign(p, w6)
 	check(p.callings["vera"]["target_id"] == "hole", "a looted lair keeps the calling: it respawns")
 	w6.lairs.erase(hole)
-	Callings.assign(p, w6, RNG.new(1))
+	Callings.assign(p, w6)
 	check(p.callings["vera"]["target_id"] == "den", "a lair the map dropped does not")
 	# a done calling is left alone whatever became of its target
 	p.callings["vera"]["state"] = "done"
 	w6.lairs.clear()
-	Callings.assign(p, w6, RNG.new(1))
+	Callings.assign(p, w6)
 	check(p.callings["vera"]["target_id"] == "den", "done: never re-pointed")
 
 	# --- bands: people before beasts, never a raiding band ---
@@ -199,7 +198,7 @@ func test_assign() -> void:
 	w7.add_party(World.RoamingParty.new("wolves", Vector2(200, 0), "beast"))
 	w7.add_party(World.RoamingParty.new("bandits", Vector2(-200, 0), "bandit"))
 	p = _party(["guard"])
-	Callings.assign(p, w7, RNG.new(1))
+	Callings.assign(p, w7)
 	check(p.callings["vera"]["target_id"] == "bandits", "wolves and bandits at the same distance: the bandits")
 	var w8 = World.new()
 	w8.add_party(World.RoamingParty.new("player", Vector2.ZERO, "human", true))
@@ -207,11 +206,11 @@ func test_assign() -> void:
 	raiders.ai = {"behavior": "raid", "to": "greenmarch", "phase": "march"}
 	w8.add_party(World.RoamingParty.new("wolves", Vector2(500, 0), "beast"))
 	p = _party(["guard"])
-	Callings.assign(p, w8, RNG.new(1))
+	Callings.assign(p, w8)
 	check(p.callings["vera"]["target_id"] == "wolves", "a raiding band is never chosen, even over beasts")
 	w8.parties.erase(w8.parties[2])
 	p = _party(["guard"])
-	check(Callings.assign(p, w8, RNG.new(1)).is_empty(), "only raiders on the map: no calling yet")
+	check(Callings.assign(p, w8).is_empty(), "only raiders on the map: no calling yet")
 
 # --- beat -------------------------------------------------------------------
 
@@ -220,7 +219,7 @@ func test_beat() -> void:
 	w.clock.elapsed = 42.0
 	var p := _party(["acolyte", "sage", "entertainer"])
 	p.get_member("thrun").background_id = "hermit"   # no stones: never assigned, never told
-	Callings.assign(p, w, RNG.new(1))
+	Callings.assign(p, w)
 	var shrine = w.landmarks[0]
 	var lair = w.lairs[1]
 	check(not shrine.found and not lair.discovered, "hidden before the fire")
@@ -243,7 +242,7 @@ func test_beat() -> void:
 
 	# a band's name is its id, capitalized
 	p = _party(["soldier"])
-	Callings.assign(p, w, RNG.new(1))
+	Callings.assign(p, w)
 	b = Callings.beat(p, w)
 	check(String(b.get("text", "")) == Callings.TEMPLATES["soldier"]["tell"] % "Goblins", "a band is named by its id")
 	check(Callings.target_name(p, w, "vera") == "Goblins", "target_name says the same")
@@ -254,7 +253,7 @@ func test_beat() -> void:
 func test_check() -> void:
 	var w := _world()
 	var p := _party(["acolyte", "sage", "entertainer", "soldier"])
-	Callings.assign(p, w, RNG.new(1))
+	Callings.assign(p, w)
 	check(Callings.check(p, w, {"kind": "landmark_answered", "id": "shrine-near"}).is_empty(), "an untold calling never completes")
 	for _i in 4:
 		Callings.beat(p, w)
@@ -263,7 +262,7 @@ func test_check() -> void:
 	check(Callings.check(p, w, {"kind": "lair_cleared", "id": "shrine-near"}).is_empty(), "the wrong kind")
 	check(Callings.check(p, w, {"kind": "lair_cleared", "id": "near-warren"}) == ["pike"], "the sage's lair")
 	check(Callings.check(p, w, {"kind": "band_beaten", "id": "goblins"}) == ["thrun"], "the soldier's band")
-	check(Callings.check(p, w, {"kind": "audience", "faction": "elf"}) == ["ilsa"], "any audience is the entertainer's")
+	check(Callings.check(p, w, {"kind": "audience", "id": "elf"}) == ["ilsa"], "any audience is the entertainer's")
 	check(Callings.check(p, w, {"kind": "visited", "id": "riverhold"}).is_empty(), "nobody is waiting on a visit")
 	check(p.callings["vera"]["state"] == "told", "check() decides; it does not complete")
 	p.get_member("thrun").dead = true
@@ -277,7 +276,7 @@ func test_check() -> void:
 func test_complete() -> void:
 	var w := _world()
 	var p := _party(["acolyte", "entertainer"])
-	Callings.assign(p, w, RNG.new(1))
+	Callings.assign(p, w)
 	check(Callings.complete(p, w, "vera", "pike").is_empty(), "an untold calling cannot be completed")
 	Callings.beat(p, w)
 	Callings.beat(p, w)
@@ -307,7 +306,7 @@ func test_complete() -> void:
 	check(String(r.get("text", "")) == Callings.TEMPLATES["entertainer"]["done"], "the entertainer's done line is verbatim")
 	check(p.stash_count("pipes-of-haunting", true) == 1, "the pipes")
 	p = _party(["sage"])
-	Callings.assign(p, w, RNG.new(1))
+	Callings.assign(p, w)
 	Callings.beat(p, w)
 	PartyOpinion.set_score(p, "vera", "pike", 5.0)
 	PartyOpinion.set_score(p, "vera", "ilsa", 0.0)
@@ -318,7 +317,7 @@ func test_complete() -> void:
 	p = _party(["sage"])
 	for id in ["pike", "ilsa", "thrun"]:
 		p.bench(id)
-	Callings.assign(p, w, RNG.new(1))
+	Callings.assign(p, w)
 	Callings.beat(p, w)
 	r = Callings.complete(p, w, "vera")
 	check(r.get("bond_with", "") == "" and p.callings["vera"]["state"] == "done" and p.relations.is_empty(),
@@ -330,7 +329,7 @@ func test_describe_and_save() -> void:
 	var w := _world()
 	var p := _party(["acolyte", "sage"])
 	check(Callings.describe(p, "vera") == "", "no calling: nothing")
-	Callings.assign(p, w, RNG.new(1))
+	Callings.assign(p, w)
 	check(Callings.describe(p, "vera") == "", "untold: nothing to show yet")
 	Callings.beat(p, w)
 	check(Callings.describe(p, "vera") == "The defiled shrine — told, marked on the map", "told")
