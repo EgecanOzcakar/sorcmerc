@@ -2979,6 +2979,16 @@ func _rest() -> void:
 	_build_visit_panel()
 	_say("The party takes a long rest (%s). Eight hours pass and the stalls fill up again.%s" % [
 		"on the house" if cost == 0 else "%d ◉ for the room" % cost, _trance_note(trance)])
+	# The same fire as a camp's, over the inn page; the panel under it has
+	# already said what the night cost.
+	_fireside(RNG.new(maxi(1, absi(hash("inn|%s|%d" % [s.id, int(world.clock.elapsed)])))), _on_inn_card_ack)
+
+# The inn's fireside card comes down over a visit that is still holding the
+# clock, so its ack cannot be the plain one — that would set the map running
+# behind the market.
+func _on_inn_card_ack() -> void:
+	_on_event_ack()
+	world.clock.pause()
 
 # T9x: names the check and its result explicitly, same convention every
 # other overworld roll in this file uses — never just "something happened".
@@ -3053,7 +3063,8 @@ func _make_camp() -> void:
 		Sound.play_sfx("rest")
 		var trance: Dictionary = Trance.apply_rest_bonus(party, world, p.position)
 		_camp_msg.text = "The camp holds through the night. Eight hours pass.%s" % _trance_note(trance)
-		_camp_card("night", "The camp holds", "good", _camp_msg.text, _on_event_ack)
+		if not _fireside(rng, _on_event_ack):
+			_camp_card("night", "The camp holds", "good", _camp_msg.text, _on_event_ack)
 		return
 	var watch: Dictionary = WorldCamp.watch_check(party, rng)
 	if party.alarm_set:   # Alarm: the ward wakes them whatever the watch rolled
@@ -3089,6 +3100,54 @@ func _camp_card(id: String, title: String, kind: String, text: String, then: Cal
 	add_child(_event_card)
 	_event_card.acknowledged.connect(then)
 	_event_card.show_event({"id": "camp-" + id, "title": title, "kind": kind, "text": text})
+
+# spike-party-opinions §9 row 6: the fire after a long rest. One beat, half the
+# nights (core/party_opinion.gd's camp_moment): a warming or a quarrel, already
+# resolved, on the night's card in place of the plain one — or a courtship,
+# the one beat in the game that ASKS, and it asks on the approach card the way
+# a landmark does, so nothing is applied until the player answers. Returns
+# false when the fire has nothing to say and the caller shows its own night.
+# `then` is the outcome card's ack: the camp's resumes the clock, the inn's
+# leaves it to the visit.
+func _fireside(rng: RNG, then: Callable) -> bool:
+	# The calling beats go here, ahead of the moment.
+	var m: Dictionary = PartyOpinion.camp_moment(party, rng)
+	if m.is_empty():
+		return false
+	var kind := String(m["kind"])
+	if kind != "courtship":
+		_camp_card("fireside", "At the fire", "bad" if kind == "quarrel" else "good", String(m["text"]), then)
+		return true
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_approach_card = ApproachCard.new()
+	_approach_card.caption = "A T   T H E   F I R E"
+	_approach_card.glyph = "♥"
+	# The line is the hint, not the title: the title wraps twice at headline
+	# size and the line is a sentence, so it would lose its second half.
+	_approach_card.hint = String(m["text"]).trim_suffix(".")
+	_approach_card.art_stem = "camp-night"
+	add_child(_approach_card)
+	_approach_card.chosen.connect(_on_courtship_chosen.bind(String(m["a"]), String(m["b"]), then))
+	_approach_card.show_approach([
+		{"id": "accept", "label": "Say yes", "dc": 0,
+			"win": "Lovers, and %d warmer for it." % int(PartyOpinion.COURTSHIP_ACCEPTED)},
+		{"id": "decline", "label": "Let it lie", "dc": 0,
+			"lose": "Awkward around the fire for a while (-%d), and never asked again." % int(PartyOpinion.COURTSHIP_DECLINED)}],
+		"%s and %s" % [String(m["a_name"]), String(m["b_name"])])
+	return true
+
+# The answer. answer_courtship applies it and says nothing, so the line is
+# this file's; `a` asked, `b` was asked.
+func _on_courtship_chosen(id: String, a: String, b: String, then: Callable) -> void:
+	_close_approach()
+	var accepted := id == "accept"
+	PartyOpinion.answer_courtship(party, a, b, accepted)
+	var an: String = party.get_member(a).cname
+	var bn: String = party.get_member(b).cname
+	var line := ("%s and %s come back to the fire together. Nobody says anything, and everybody knows." % [an, bn]) if accepted \
+		else "%s lets it lie, as kindly as it can be done. It is awkward around the fire for a while." % bn
+	_camp_card("courtship", "At the fire", "good" if accepted else "bad", line, then)
 
 # O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
 # (the board can show several at once now), not re-rolled here.
