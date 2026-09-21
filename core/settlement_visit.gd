@@ -361,7 +361,8 @@ static func buy(m: Dictionary, party, item_id: String) -> bool:
 # Sell price follows the same market swing the buy price does.
 static func sell_price(m: Dictionary, item_id: String) -> int:
 	var list := Campaign.item_price(item_id)
-	return 0 if list <= 0 else maxi(1, int(round(list * SELL_RATE * float(m.get("markup", 1.0)))))
+	# A thin shelf is dear to buy from; it does not pay a premium for your goods.
+	return 0 if list <= 0 else maxi(1, int(round(list * SELL_RATE * minf(1.0, float(m.get("markup", 1.0))))))
 
 static func sell(m: Dictionary, party, item_id: String) -> bool:
 	var paid := sell_price(m, item_id)

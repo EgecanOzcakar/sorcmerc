@@ -60,10 +60,13 @@ func _finish(main, result: Dictionary) -> void:
 
 # A visit stamp whose seeded night on the town fails the roll and draws
 # `want` as the story — searched, not guessed, the way test_downtime's _rng is.
-func _stamp_for(s, party, want: String) -> int:
+# The seed takes the clock too (each night of a stay is its own roll), and the
+# night moves it by a day before the die is thrown.
+func _stamp_for(s, party, want: String, world) -> int:
 	var bonus := int(Downtime.best_of(party, Downtime.CAROUSE_SKILLS)["bonus"])
+	var clock := int(world.clock.elapsed + Downtime.DAY)
 	for t in range(1, 200000):
-		var r = RNG.new(maxi(1, absi(hash("carouse|%s|%d" % [s.id, t]))))
+		var r = RNG.new(maxi(1, absi(hash("carouse|%s|%d|%d" % [s.id, t, clock]))))
 		var nat := int(Dice.d20(r)["nat"])
 		if nat == 1 or nat == 20 or nat + bonus >= Downtime.CAROUSE_DC:
 			continue
@@ -112,7 +115,7 @@ func _init() -> void:
 	check(buttons_named(main, "Go").size() == 1, "once: the trainer's row is gone, the game's stays")
 
 	# --- carouse: a line under the row; a seeded fail is a card ---------------
-	city.last_visited = float(_stamp_for(city, party, "insult"))
+	city.last_visited = float(_stamp_for(city, party, "insult", w))
 	check(city.last_visited > 0.0, "a stamp whose night fails and draws the insult")
 	var opinion_before: float = FactionOpinion.get_opinion(city.faction)
 	gold_before = party.gold
@@ -216,7 +219,7 @@ func _init() -> void:
 	check(button_named(main, "Fight") == null and said(main, "closed"), "the bracket is closed for the week")
 
 	# --- the brawl: the one story that is a fight, behind the card's button ---
-	city.last_visited = float(_stamp_for(city, party, "brawl"))
+	city.last_visited = float(_stamp_for(city, party, "brawl", w))
 	button_named(main, "Go out").pressed.emit()
 	for i in 3:
 		await process_frame

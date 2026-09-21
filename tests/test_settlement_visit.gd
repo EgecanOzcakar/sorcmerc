@@ -11,6 +11,7 @@ const Party = preload("res://core/party.gd")
 const Campaign = preload("res://core/campaign.gd")
 const RNG = preload("res://core/rng.gd")
 const Quest = preload("res://core/quest.gd")
+const Downtime = preload("res://core/downtime.gd")
 
 var _pass = 0
 var _fail = 0
@@ -245,6 +246,12 @@ func test_trade() -> void:
 	check(not Visit.buy(m, party, id), "the bought item left the shelf")
 	check(Visit.sell(m, party, id) and party.gold == before - price + Visit.sell_price(m, id),
 		"selling it back pays the market sell price")
+	# A bare shelf is dear to buy from; it does not pay a premium for what the
+	# party crafted at half list (core/downtime.gd's bench).
+	var bare := Visit.market(w.settlements[0], 0.0, false)
+	var potion: String = Campaign.potion_ids()[0]
+	check(bare["markup"] > 1.0 and Visit.sell_price(bare, potion) <= Downtime.craft_cost(potion),
+		"a bare shelf pays no more for a potion than the bench charged for it")
 	check(not Visit.buy(m, party, "not-a-thing"), "unstocked ids cannot be bought")
 
 func test_steal_deterministic_and_hooks() -> void:
@@ -383,7 +390,11 @@ func test_opinion_moves_prices_and_can_refuse_trade() -> void:
 	check(loved["markup"] < neutral["markup"], "...and one that likes you charges less")
 	var id: String = neutral["stock"][0]["item_id"]
 	check(Visit.price_of(hated, id) > Visit.price_of(neutral, id), "the shelf price follows")
-	check(Visit.sell_price(loved, id) < Visit.sell_price(neutral, id), "so does the sell price")
+	var full := Visit.RESTOCK * Visit.MAX_STEPS
+	check(Visit.sell_price(Visit.market(s, full, false, 40.0), id) < Visit.sell_price(Visit.market(s, full, false), id),
+		"so does the sell price, off a full shelf")
+	check(Visit.sell_price(hated, id) == Visit.sell_price(neutral, id) and Visit.sell_price(neutral, id) == Visit.sell_price(Visit.market(s, full, false), id),
+		"...but a dear shelf pays list, never a premium")
 
 	var refused := Visit.market(s, 120.0, false, FactionOpinion.REFUSE_TRADE - 1.0)
 	check(refused["refused"] and refused["stock"].is_empty(), "below the floor they will not deal")

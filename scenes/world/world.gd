@@ -3926,7 +3926,7 @@ func _pit_bout() -> void:
 		_apply_deaths(result)
 	else:
 		Party.auto_revive_all(party)
-	var r: Dictionary = Downtime.pit_result(party, s, world, bout, won)
+	var r: Dictionary = Downtime.pit_result(party, s, world, bout, won, int(st["week"]))
 	_autosave()
 	_card({"id": "downtime-pit", "title": "The pit", "kind": "good" if won else "bad", "ok": won,
 		"text": String(r["text"]), "gold": int(r["purse"])}, func(): _on_event_ack(); _open_visit(s))

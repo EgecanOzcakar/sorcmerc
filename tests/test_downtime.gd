@@ -17,6 +17,7 @@ const Campaign = preload("res://core/campaign.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Bundles = preload("res://core/rules/bundles.gd")
 const RNG = preload("res://core/rng.gd")
+const Dice = preload("res://core/dice.gd")
 const WorldSave = preload("res://core/world_save.gd")
 
 var _pass := 0
@@ -130,7 +131,19 @@ func test_train() -> void:
 	vera.feats.append("durable")
 	vera.dirty()
 	check(not "durable" in Downtime.trainable(vera), "a feat the sheet already has is not offered again")
-	var feat: String = Downtime.trainable(vera)[0]
+	for fid in ["resilient", "elemental-adept", "keen-mind", "observant", "skill-expert"]:
+		check(not fid in pool, "%s asks for a choice the trainer cannot make: not offered" % fid)
+	check("sentinel" in pool and "durable" in pool, "a feat whose only choice is its +1 is")
+	var chosen: Dictionary = {}
+	for k in party.get_member("pike").sheet().pending.map(func(p): return String(p["key"])):
+		if k.begins_with("feat-choice:"):
+			chosen[k] = true
+	var pike = party.get_member("pike")
+	var fc_key: String = chosen.keys()[0] if not chosen.is_empty() else ""
+	check(fc_key != "", "a level-4 hero has a feat-choice to decide (%s)" % fc_key)
+	pike.decide(fc_key, {"type": "feat-choice", "featId": "sentinel"})
+	check(not "sentinel" in Downtime.trainable(pike), "a feat taken through a feat-choice is not offered again")
+	var feat := "sentinel"
 	var fee: int = Downtime.train_cost(vera)
 	var bed: int = Downtime.bed_cost(city, Downtime.TRAIN_DAYS)
 	party.gold = fee + bed - 1
@@ -138,9 +151,14 @@ func test_train() -> void:
 	check(not r.get("ok", true) and not feat in vera.feats, "a purse short of the fee and the bed trains nobody")
 	party.gold = fee + bed
 	var before: float = w.clock.elapsed
+	var str_before: int = vera.sheet().abilities["str"]["total"]
+	var dex_before: int = vera.sheet().abilities["dex"]["total"]
 	r = Downtime.train(party, w, city, vera, feat)
 	check(r.get("ok", false) and feat in vera.feats and Bundles.collect(vera)["expanded_feats"].has(feat),
 		"the feat is on the build, and the sheet expands it")
+	check(not vera.sheet().pending.any(func(p): return ":feat:sentinel:" in String(p["key"])), "the trainer finishes what it starts: nothing pending off the feat")
+	var rose: Array = [vera.sheet().abilities["str"]["total"] - str_before, vera.sheet().abilities["dex"]["total"] - dex_before]
+	check(rose == [1, 0] if str_before >= dex_before else rose == [0, 1], "...the +1 lands on the higher of the two it allows (%s)" % [rose])
 	check(r["feat_name"] == Catalog.feat_src(feat)["name"] and r["days"] == Downtime.TRAIN_DAYS and r["cost"] == fee, "the row reports what it took")
 	check("Five days with a master-at-arms, and Vera Kord comes out of it with %s." % r["feat_name"] in r["text"], "the copy")
 	check(party.gold == 0 and is_equal_approx(w.clock.elapsed, before + Downtime.TRAIN_DAYS * Downtime.DAY), "five days and the fee, and the bed")
@@ -198,6 +216,17 @@ func test_carouse() -> void:
 	check(not r["ok"] and r["complication"] in Downtime.COMPLICATIONS and r["complication"] != "tab", "a 1 is a story that is not the tab...")
 	check(r["tab"] == Downtime.TAB_MULT * cost and party.gold == gold - cost - bed - Downtime.TAB_MULT * cost, "...because the tab comes too, twice the night's cost")
 	check("bill nobody remembers" in r["text"], "and the morning says so")
+
+	# two nights of one stay are two rolls: the day spent moves the clock, and the seed with it
+	var pair := _stay_pair(w, city, party)
+	check(pair[0] >= 0, "a stamp whose first two nights roll different nats (%s)" % [pair])
+	if pair[0] >= 0:
+		city.last_visited = float(pair[0])
+		w.clock.elapsed = float(pair[1])
+		party.gold = 1000
+		var first: Dictionary = Downtime.carouse(party, w, city)
+		var second: Dictionary = Downtime.carouse(party, w, city)
+		check(first["nat"] != second["nat"], "...and they do (%d, %d)" % [first["nat"], second["nat"]])
 
 	# the purse
 	var poor := _party(cost + bed - 1)
@@ -258,6 +287,18 @@ func test_gamble() -> void:
 	check(Downtime.gamble(party, city, 0, _rng(20)).is_empty(), "nor nothing")
 	check(Downtime.GAMBLE_STAKES == [25, 50, 100, 200], "the stakes")
 
+# A (stamp, clock) whose first night and the next (one DAY on) draw different
+# nats off Downtime.carouse's own seed — searched, not guessed.
+func _stay_pair(w, s, party) -> Array:
+	for t in range(1, 5000):
+		var nats: Array = []
+		for night in 2:
+			var r = RNG.new(maxi(1, absi(hash("carouse|%s|%d|%d" % [s.id, t, t + int(night * Downtime.DAY)]))))
+			nats.append(int(Dice.d20(r)["nat"]))
+		if nats[0] != nats[1]:
+			return [t, t]
+	return [-1, -1]
+
 func _revisit(s, w) -> void:
 	w.clock.elapsed += Visit.RESTOCK
 	Visit.visit(s, w)
@@ -300,6 +341,13 @@ func test_craft() -> void:
 	check(Downtime.craft(party, w, city, pid, shelf)["ok"], "...and again next visit")
 	check(Downtime.craft(party, w, city, "longsword", shelf).is_empty(), "the bench brews and scribes, nothing else")
 
+	# what the bench made sells for no more than it cost, whatever the shelf
+	var bare: Dictionary = Visit.market(city, 0.0, true, -40.0)   # picked over, a fight nearby, disliked: the dearest shelf
+	check(bare["markup"] > 1.0 and Visit.sell_price(bare, pid) <= half, "crafted at half, sold at a bare shelf: never above the bench's price (%d vs %d)" % [Visit.sell_price(bare, pid), half])
+	for gap in [0.0, Visit.RESTOCK * Visit.MAX_STEPS]:
+		for op in [-40.0, 0.0, 40.0]:
+			check(Visit.sell_price(Visit.market(city, gap, false, op), pid) <= Downtime.craft_cost(pid), "gap %d opinion %d: sell <= craft" % [gap, op])
+
 	# scribe
 	var sid: String = Downtime.scribable(city, m, party)[0]
 	party.gold = 5000   # a scroll is a rare item's price; half of it is still most of a purse
@@ -317,7 +365,7 @@ func test_pit() -> void:
 	var city = w.settlements[0]
 	var party := _party(100)
 	var br: Dictionary = Downtime.pit_bracket(city, w)
-	check(br["week"] == 0 and br["names"].size() == 3 and br["levels"] == Downtime.PIT_LEVELS, "a bracket: three champions, a level harder each")
+	check(br["week"] == 0 and br["names"].size() == 3 and Downtime.PIT_MULT.size() == 3, "a bracket: three champions, each pumped harder")
 	check(br["names"][0] != br["names"][1] and br["names"][1] != br["names"][2] and br["names"][0] != br["names"][2], "three different names")
 	check(Downtime.pit_bracket(city, w) == br, "seeded: the same week, the same three")
 	w.clock.elapsed += 6 * Downtime.DAY
@@ -343,12 +391,12 @@ func test_pit() -> void:
 	check(Downtime.pit_spec(party, city, w, 0, beasts)["monsters"][0]["id"] == "brown-bear", "no humanoid: the strongest of whatever came")
 
 	# the purse, the deed, the bracket
-	var r: Dictionary = Downtime.pit_result(party, city, w, 0, true)
+	var r: Dictionary = Downtime.pit_result(party, city, w, 0, true, 0)
 	check(r["purse"] == Downtime.PIT_PURSE[0] and party.gold == 100 + Downtime.PIT_PURSE[0] and Ladder.deeds(city.faction) == 1, "a win: the purse and a deed")
 	st = Downtime.pit_state(party, city, w)
 	check(st["open"] and st["beaten"] == 1, "one down, the bracket stands")
-	Downtime.pit_result(party, city, w, 1, true)
-	r = Downtime.pit_result(party, city, w, 2, true)
+	Downtime.pit_result(party, city, w, 1, true, 0)
+	r = Downtime.pit_result(party, city, w, 2, true, 0)
 	check(party.gold == 100 + Downtime.PIT_PURSE[0] + Downtime.PIT_PURSE[1] + Downtime.PIT_PURSE[2], "three purses")
 	st = Downtime.pit_state(party, city, w)
 	check(not st["open"] and st["beaten"] == 3, "the bracket is done for the week")
@@ -357,9 +405,20 @@ func test_pit() -> void:
 	w.clock.elapsed += Downtime.PIT_WEEK
 	check(Downtime.pit_state(party, city, w)["open"], "next week it stands again")
 
+	# a bout begun on the week's last evening is that week's, whatever the clock says after
+	party.gold = 50
+	w.clock.elapsed = Downtime.PIT_WEEK * 2 - 1.0
+	var wk: int = Downtime.pit_state(party, city, w)["week"]
+	w.clock.elapsed += 3 * 60.0   # three rounds: the fight ran past midnight
+	r = Downtime.pit_result(party, city, w, 0, true, wk)
+	check(party.downtime["pit"]["riverhold"]["week"] == wk and wk == 1 and Downtime.pit_state(party, city, w)["beaten"] == 0,
+		"the win is banked to the week the bout was fought in; the new week's bracket stands fresh")
+	check(wk < Downtime.pit_state(party, city, w)["week"], "...though the clock is into the next")
+	w.clock.elapsed = Downtime.PIT_WEEK * 2
+
 	# a loss: carried out, the house keeps its stake, the bracket closes
 	party.gold = 50
-	r = Downtime.pit_result(party, city, w, 0, false)
+	r = Downtime.pit_result(party, city, w, 0, false, Downtime.pit_state(party, city, w)["week"])
 	check(r["purse"] == -Downtime.PIT_PURSE[0] and party.gold == 0, "a loss costs the bout's purse, to zero")
 	st = Downtime.pit_state(party, city, w)
 	check(not st["open"] and st["beaten"] == -1, "...and closes the bracket")
@@ -401,7 +460,7 @@ func test_save() -> void:
 	Downtime.gamble(party, city, 25, _rng(10))
 	var sid: String = Downtime.scribable(city, {}, party)[0]
 	Downtime.craft(party, w, city, sid, {})
-	Downtime.pit_result(party, city, w, 0, true)
+	Downtime.pit_result(party, city, w, 0, true, 0)
 	var d: Dictionary = JSON.parse_string(JSON.stringify(Downtime.to_dict(party)))
 	var back := _party(0)
 	Downtime.from_dict(back, d)

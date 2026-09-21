@@ -33,6 +33,7 @@ const Ach = preload("res://core/achievements.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Bundles = preload("res://core/rules/bundles.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")
+const Abilities = preload("res://core/rules/pass_abilities.gd")
 
 const DAY := 1440.0   # world-minutes
 
@@ -55,10 +56,10 @@ const GAMBLE_SKILLS := ["insight", "deception", "sleightofhand"]
 # Half price for a day.
 const CRAFT_RATE := 0.5
 const CRAFT_DAYS := 1
-# A job, two jobs, a rare item's tenth; each bout harder than a road fight.
+# A job, two jobs, a rare item's tenth; each bout harder than a road fight
+# (one champion, pumped: core/scaler.gd's mult).
 const PIT_PURSE := [60, 120, 240]
 const PIT_MULT := [1.3, 1.7, 2.2]
-const PIT_LEVELS := [1, 2, 3]
 const PIT_WEEK := 7 * DAY
 const PIT_BOUTS := 3
 const PIT_THEME := "city-square"
@@ -102,15 +103,37 @@ static func train_cost(ch) -> int:
 
 # The general-category feats the sheet does not have — neither taken outright
 # (ch.feats) nor granted by anything on the build (bundles.gd's expanded
-# feats: a background's origin feat, a chosen one).
+# feats: a background's origin feat, a chosen one) — and that the trainer can
+# finish: a feat's +1 is decided here (train()), but a skill, an expertise or
+# a feature to pick is the level-up screen's, and a trained feat that lands
+# "1 choice left" is no feat at all.
 static func trainable(ch) -> Array:
 	var have: Dictionary = Bundles.collect(ch)["expanded_feats"]
 	var out: Array = []
 	for f in Catalog.all("feats.json"):
 		var fid := String(f["id"])
-		if String(f.get("category", "")) == TRAIN_CATEGORY and not fid in ch.feats and not have.has(fid):
-			out.append(fid)
+		if String(f.get("category", "")) != TRAIN_CATEGORY or fid in ch.feats or have.has(fid):
+			continue
+		if f.get("grants", []).any(func(g): return String(g["type"]).ends_with("-choice") and String(g["type"]) != "ability-choice"):
+			continue
+		out.append(fid)
 	return out
+
+# The feat's +1, decided for them: the highest of the scores the feat allows
+# (all six when it does not say), ties to the first listed. The grant's key is
+# the pending entry's key (core/rules/choice.gd).
+static func _decide_ability(ch, feat_id: String) -> String:
+	for g in Catalog.feat_src(feat_id).get("grants", []):
+		if String(g["type"]) != "ability-choice":
+			continue
+		var from: Array = g["from"] if g["from"] != null else Abilities.KEYS
+		var best := ""
+		for a in from:
+			if best == "" or ch.sheet().abilities[a]["total"] > ch.sheet().abilities[best]["total"]:
+				best = String(a)
+		ch.decide(String(g["key"]), {"type": "ability-choice", "abilities": [best]})
+		return best
+	return ""
 
 # {} when the trainer will not take them (level, a second feat, a feat that is
 # not on the list); {"ok": false} when the purse is short. bundles.gd step 9
@@ -124,9 +147,10 @@ static func train(party, world, s, ch, feat_id: String) -> Dictionary:
 		return {"ok": false, "cost": fee, "bed": bed,
 			"text": "The master-at-arms wants %d ◉, and the bed %d more." % [fee, bed]}
 	party.spend_gold(fee)
-	spend_days(party, world, s, TRAIN_DAYS)
 	ch.feats.append(feat_id)
 	ch.dirty()
+	_decide_ability(ch, feat_id)
+	spend_days(party, world, s, TRAIN_DAYS)
 	var trained: Array = party.downtime.get("trained", [])
 	trained.append(ch.id)
 	party.downtime["trained"] = trained
@@ -176,8 +200,10 @@ static func carouse(party, world, s, rng = null) -> Dictionary:
 			"text": "A night on the town is %d ◉, and the bed %d more." % [cost, bed]}
 	party.spend_gold(cost)
 	spend_days(party, world, s, 1)
+	# Seeded off the visit and the clock: the day just spent moved it, so each
+	# night of a stay is its own roll.
 	if rng == null:
-		rng = RNG.new(maxi(1, absi(hash("carouse|%s|%d" % [s.id, int(s.last_visited)]))))
+		rng = RNG.new(maxi(1, absi(hash("carouse|%s|%d|%d" % [s.id, int(s.last_visited), int(world.clock.elapsed)]))))
 	var skill := String(who["skill"])
 	var bonus := int(who["bonus"])
 	var nat: int = int(Dice.d20(rng)["nat"])
@@ -328,6 +354,9 @@ static func _week(world) -> int:
 # roster's business (pit_spec), not the bracket's.
 static func pit_bracket(s, world) -> Dictionary:
 	var week := _week(world)
+	return {"week": week, "names": _names(s, week)}
+
+static func _names(s, week: int) -> Array:
 	var names: Array = []
 	for i in PIT_BOUTS:
 		var key := "pit|%s|%d|%d" % [s.id, week, i]
@@ -337,7 +366,7 @@ static func pit_bracket(s, world) -> Dictionary:
 			k += 1
 			n = EnemyNames.name_for(s.faction, "%s|%d" % [key, k])
 		names.append(n)
-	return {"week": week, "names": names, "levels": PIT_LEVELS.duplicate()}
+	return names
 
 # `beaten` is the next bout to fight while the bracket is open: 0..2; 3 when
 # the bracket is done; -1 when a loss closed it. A new week is a new bracket.
@@ -373,12 +402,14 @@ static func pit_spec(_party, s, world, bout: int, base_spec: Dictionary) -> Dict
 const ORDINAL := ["first", "second", "third"]
 
 # A win: the bout's purse, a deed with the city's people, the next bout opens;
-# the third is the bracket. A loss: the party is carried out (no death — that
-# is the screen's _retreat rule), the house keeps the purse of that bout (to
-# zero), and the bracket is closed until next week. `purse` is signed.
-static func pit_result(party, s, world, bout: int, won: bool) -> Dictionary:
+# the third is the bracket. A loss: the party is carried out (the screen
+# revives everyone after a lost bout), the house keeps the purse of that bout
+# (to zero), and the bracket is closed until next week. `purse` is signed.
+# `week` is the bracket's, read before the bout: the fight itself moves the
+# clock, and a bout begun on the week's last evening is still that week's.
+static func pit_result(party, s, world, bout: int, won: bool, week: int) -> Dictionary:
 	var b := clampi(bout, 0, PIT_BOUTS - 1)
-	var name: String = pit_bracket(s, world)["names"][b]
+	var name: String = _names(s, week)[b]
 	var purse: int = PIT_PURSE[b]
 	var beaten: int
 	var text: String
@@ -399,7 +430,7 @@ static func pit_result(party, s, world, bout: int, won: bool) -> Dictionary:
 		text = "%s is still standing when the party is carried out. The house keeps its stake: %d ◉, and the bracket is closed for the week." % [
 			name, purse]
 	var pit: Dictionary = party.downtime.get("pit", {})
-	pit[s.id] = {"week": _week(world), "beaten": beaten}
+	pit[s.id] = {"week": week, "beaten": beaten}
 	party.downtime["pit"] = pit
 	return {"text": text, "purse": purse, "won": won, "beaten": beaten}
 
