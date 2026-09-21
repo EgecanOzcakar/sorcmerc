@@ -50,6 +50,9 @@ var relations: Dictionary = {}
 # The past each hero's background hands them — char_id -> {id, target_kind,
 # target_id, state, told_at}. Owned entirely by core/callings.gd.
 var callings: Dictionary = {}
+# What the company has done in town that takes days — who trained, the
+# once-a-visit stamps, the pit's bracket. Owned entirely by core/downtime.gd.
+var downtime: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 

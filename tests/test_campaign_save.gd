@@ -113,6 +113,13 @@ func _init() -> void:
 	check(CampaignSave.from_dict(rd).party.callings.get("vera", {}).get("target_id", "") == "shrine-1", "...and reads back")
 	check(cr_old.party.callings.is_empty(), "an old campaign save with no callings loads with none")
 
+	# Downtime rides there too.
+	cr.party.downtime = {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}
+	rd = CampaignSave.to_dict(cr)
+	check(rd["party"].get("downtime", {}).get("trained", []) == ["vera"], "downtime rides the campaign save's party dict")
+	check(CampaignSave.from_dict(rd).party.downtime.get("trained", []) == ["vera"], "...and reads back")
+	check(cr_old.party.downtime.is_empty(), "an old campaign save with no downtime loads with none")
+
 	# The screen's own Continue-vs-New-Game choice is driven by tests/drive_campaign.gd
 	# ("Begin a new run") — instantiating campaign.tscn from a -s script hangs headless.
 	CampaignSave.clear()

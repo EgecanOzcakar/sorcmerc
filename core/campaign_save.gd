@@ -28,6 +28,7 @@
 #     "quests": [ <core/quest.gd dicts, stored verbatim> ],
 #     "relations": {"pike|vera": {"score": 33.0, "status": ""}},  // PartyOpinion.to_dict
 #     "callings": {"ilsa": {"id": "acolyte", "target_kind": "landmark", ...}}  // Callings.to_dict
+#     "downtime": {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}  // Downtime.to_dict
 #   }
 # }
 #
@@ -40,6 +41,7 @@ const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Callings = preload("res://core/callings.gd")
+const Downtime = preload("res://core/downtime.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-campaign"
@@ -85,6 +87,7 @@ static func to_dict(campaign) -> Dictionary:
 			"quests": campaign.party.quests.duplicate(true),
 			"relations": PartyOpinion.to_dict(campaign.party),   # spike-party-opinions §8
 			"callings": Callings.to_dict(campaign.party),
+			"downtime": Downtime.to_dict(campaign.party),
 		},
 	}
 
@@ -106,6 +109,7 @@ static func from_dict(d: Dictionary):
 	party.quests = _ints(pd.get("quests", []))
 	PartyOpinion.from_dict(party, pd.get("relations", {}))   # an old save with no key loads as a fresh party
 	Callings.from_dict(party, pd.get("callings", {}))
+	Downtime.from_dict(party, pd.get("downtime", {}))
 
 	var campaign := Campaign.new(party, int(d.get("seed", 1)))
 	campaign.stage = int(d.get("stage", 0))

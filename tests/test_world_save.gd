@@ -341,6 +341,15 @@ func _done() -> void:
 		"...and reads back")
 	check(pr_old.callings.is_empty(), "an old save with no callings loads with none")
 
+	# Downtime rides there too.
+	pr.downtime = {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}
+	rd = WorldSave.to_dict(wo, pr)
+	check(rd["party"].get("downtime", {}).get("trained", []) == ["vera"], "downtime rides the save's party dict")
+	pr_back = WorldSave.from_dict(rd)["party"]
+	check(pr_back.downtime.get("trained", []) == ["vera"] and int(pr_back.downtime.get("pit", {}).get("riverhold", {}).get("beaten", 0)) == 1,
+		"...and reads back")
+	check(pr_old.downtime.is_empty(), "an old save with no downtime loads with none")
+
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

@@ -83,6 +83,11 @@ func _init() -> void:
 		check(not Ach.find(id).is_empty(), "%s is defined" % id)
 	check(int(Ach.find("callings_4")["goal"]) == 4 and Ach.find("callings_4")["counter"] == "callings",
 		"Four Pasts counts four heroes' callings")
+	# downtime: four deeds off core/downtime.gd's bumps
+	for id in ["trained_first", "carouse_contact", "gamble_treble", "pit_champion"]:
+		check(not Ach.find(id).is_empty() and Ach.find(id)["group"] == "road", "%s is defined, on the road" % id)
+	check(Ach.find("pit_champion")["counter"] == "pit_brackets" and int(Ach.find("pit_champion")["goal"]) == 1,
+		"Champion of the Pit is one bracket")
 	print("test_achievements: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
