@@ -37,6 +37,7 @@ func _init() -> void:
 	test_the_kinds_that_count_no_bodies()
 	test_rescue_and_failed_delivery()
 	test_the_ladder()
+	test_map_marks()
 	print("test_quest: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -265,3 +266,36 @@ func test_the_ladder() -> void:
 	check(Ladder.deeds("human") == before + 1, "a job turned in is a deed for the taker's people")
 	Quest.turn_in(pk, own, "human")
 	check(Ladder.deeds("human") == before + 1, "...once")
+
+# #153: an open job points at what it names on the map, under the map's own
+# fog rules; a done one points back at the town that pays; a job that names
+# nothing standing on the map has no mark.
+func test_map_marks() -> void:
+	var World = load("res://core/world.gd")
+	var w = World.new()
+	w.add_settlement(World.Settlement.new("home", Vector2(0, 0), "human", "town"))
+	w.add_settlement(World.Settlement.new("far", Vector2(900, 0), "orc", "town"))
+	var lair = w.add_lair(World.Lair.new("warren", Vector2(300, 300), "goblinoid"))
+	w.add_party(World.RoamingParty.new("player", Vector2.ZERO, "human", true))
+	var band = w.add_party(World.RoamingParty.new("goblins-s", Vector2(2000, 2000), "goblinoid"))
+	var p := Party.new()
+	var job := func(id: String, kind: String, field: String, target: String) -> Dictionary:
+		return {"id": id, "kind": kind, field: target, "giver_node_id": "home", "state": "offered",
+			"required": 1, "progress": 0, "title": id, "reward": {"gold": 10}}
+	Quest.accept(p, job.call("raid", "raid_settlement", "target_settlement_id", "far"))
+	Quest.accept(p, job.call("clear", "clear_lair", "target_lair_id", "warren"))
+	Quest.accept(p, job.call("hunt", "hunt_party", "target_party_id", "goblins-s"))
+	Quest.accept(p, job.call("ears", "collect_item", "target_monster_id", "snik"))
+	var kinds := func() -> Array: return Quest.map_marks(w, p).map(func(m): return m["kind"])
+	check(kinds.call() == ["raid_settlement"], "a town is always pointed at; a hidden lair and an unseen band are not: %s" % str(kinds.call()))
+	lair.discovered = true
+	w.reveal(band.position)
+	var marks: Array = Quest.map_marks(w, p)
+	check(marks.size() == 3 and not marks.any(func(m): return m["done"]), "found and seen, the lair and the band are pointed at")
+	check(marks.any(func(m): return m["kind"] == "clear_lair" and m["pos"] == Vector2(300, 300)), "...the lair where it is")
+	check(marks.any(func(m): return m["kind"] == "hunt_party" and m["pos"] == band.position), "...the band where it was seen")
+	Quest.record_lair_cleared(p, "warren")
+	marks = Quest.map_marks(w, p)
+	var done: Array = marks.filter(func(m): return m["done"])
+	check(done.size() == 1 and done[0]["kind"] == "clear_lair" and done[0]["pos"] == Vector2.ZERO,
+		"done, the job points at the town that pays")

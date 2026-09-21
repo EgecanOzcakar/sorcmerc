@@ -24,6 +24,7 @@ extends Control
 
 const World = preload("res://core/world.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const Quest = preload("res://core/quest.gd")   # #153: the open jobs' marks
 
 # Big enough that the explored footprint has a readable shape at ~18x18 fog
 # samples, small enough to sit in a corner of the map without covering it.
@@ -494,6 +495,11 @@ func _draw_marks(w) -> void:
 			player = q
 		elif w.band_seen(q.position):
 			draw_circle(_to_widget(q.position), R_PARTY, _faction_color(q.faction))
+	# #153: an open job's target, ringed in gold — the same marks the map floats
+	# its tiles over, at a size the widget can afford.
+	if party != null:
+		for m in Quest.map_marks(w, party):
+			draw_arc(_to_widget(m["pos"]), R_PARTY + 2.0, 0.0, TAU, 10, Icons.COL_GOLD, 1.0, true)
 	if player != null:
 		var at := _to_widget(player.position)
 		draw_circle(at, R_PLAYER, Icons.COL_GOLD)

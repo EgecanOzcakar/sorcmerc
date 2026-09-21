@@ -4605,7 +4605,35 @@ func _draw() -> void:
 	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
 	_draw_labels()
 	_draw_offscreen_markers(ppos)
+	_draw_quest_marks(ppos)
 
+
+# #153: the job's own tile (assets/generated/quest-<kind>.png, the one the
+# offer card shows) floated over whatever it names on the map, gilt-framed; a
+# job that is done wears it over the town that pays. Off screen, it pins to the
+# frame as a chevron the way a settlement does, in gold, so an open job is
+# never a name you have to remember the way to. Which jobs, and where, is
+# Quest.map_marks — testable without a viewport.
+const QUEST_TILE := 22.0
+func _draw_quest_marks(ppos: Vector2) -> void:
+	var frame := _marker_frame()
+	for m in Quest.map_marks(world, party):
+		var at: Vector2 = _pix(m["pos"])
+		if not frame.has_point(at):
+			if frame.size.x > 0.0 and frame.size.y > 0.0:
+				_draw_offscreen_marker(m["pos"], m["title"], Icons.COL_GOLD, frame, ppos)
+			continue
+		at.y -= QUEST_TILE * 1.4   # above the footprint and the figure standing in it
+		var r := Rect2(at - Vector2.ONE * QUEST_TILE * 0.5, Vector2.ONE * QUEST_TILE)
+		var tex: Texture2D = Icons.scene_art("quest-" + String(m["kind"]), null)
+		draw_rect(r.grow(2.0), Icons.COL_INK)
+		if tex != null:
+			draw_texture_rect(tex, r, false)
+		draw_rect(r.grow(2.0), Icons.COL_GOLD if m["done"] else Icons.COL_GOLD_EDGE, false, 1.5)
+		# A pin down to the footprint, so a tile over a crowded town is not
+		# ambiguous about which roof it is over.
+		draw_line(at + Vector2(0.0, QUEST_TILE * 0.5 + 2.0), at + Vector2(0.0, QUEST_TILE * 1.4),
+			Icons.COL_GOLD_EDGE, 1.0, true)
 
 # The name under every landmark the player can see, painter-sorted so a nearer
 # label is drawn over a further one. Which landmarks those are is the same
@@ -4922,11 +4950,11 @@ func _draw_offscreen_markers(ppos: Vector2) -> void:
 	if frame.size.x <= 0.0 or frame.size.y <= 0.0:
 		return      # a viewport too small to have an inside; nothing to pin to
 	for s in _offscreen_settlements(frame, ppos):
-		_draw_offscreen_marker(s, frame, ppos)
+		_draw_offscreen_marker(s.position, s.sname, faction_color(s.faction), frame, ppos)
 
-func _draw_offscreen_marker(s, frame: Rect2, ppos: Vector2) -> void:
+func _draw_offscreen_marker(pos: Vector2, sname: String, col: Color, frame: Rect2, ppos: Vector2) -> void:
 	var center := frame.position + frame.size * 0.5
-	var to := _pix(s.position) - center
+	var to := _pix(pos) - center
 	if to.length() < 0.001:
 		return
 	# Push out along the direction until one axis hits the frame, then take the
@@ -4937,7 +4965,6 @@ func _draw_offscreen_marker(s, frame: Rect2, ppos: Vector2) -> void:
 	var scale_y: float = (frame.size.y * 0.5) / maxf(absf(to.y), 0.001)
 	var at := center + to * minf(scale_x, scale_y)
 	var dir := to.normalized()
-	var col := faction_color(s.faction)
 	var tip := at + dir * OFFSCREEN_SIZE
 	var side := Vector2(-dir.y, dir.x) * OFFSCREEN_SIZE * 0.62
 	draw_colored_polygon(PackedVector2Array([tip, at - dir * OFFSCREEN_SIZE * 0.5 + side,
@@ -4947,8 +4974,8 @@ func _draw_offscreen_marker(s, frame: Rect2, ppos: Vector2) -> void:
 	# party's own speed (World.SPEED is units per world-minute).
 	var p := world.player()
 	var speed: float = p.speed if p != null and p.speed > 0.0 else World.SPEED
-	var mins: float = ppos.distance_to(s.position) / speed
-	var label := "%s  %s" % [s.sname, _travel_time(mins)]
+	var mins: float = ppos.distance_to(pos) / speed
+	var label := "%s  %s" % [sname, _travel_time(mins)]
 	var w := ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
 	# Keep the text inside the frame whichever edge the chevron landed on. On a
 	# side edge the plain clamp is not enough on its own: centring the label on
