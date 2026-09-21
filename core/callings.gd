@@ -19,11 +19,14 @@ extends RefCounted
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")
 const Ach = preload("res://core/achievements.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 const CALLING_XP := 120
 
 # What check() is told, and what each kind of target is done by.
 const EVENT_KINDS := ["landmark_answered", "lair_cleared", "band_beaten", "visited", "audience"]
+const DONE_BY := {"landmark": "landmark_answered", "lair": "lair_cleared", "band": "band_beaten",
+	"settlement": "visited", "audience": "audience"}   # target kind -> the one event that completes it
 const SETTLEMENT_SIZES := ["camp", "town", "city"]   # a missing kind falls back to a larger one
 
 const TEMPLATES := {  # background -> template
@@ -93,9 +96,60 @@ const TEMPLATES := {  # background -> template
 		"done": "%s was the end of the road, and someone did live there. They knew the way on. So do you, now."},
 }
 
-# The built-in sixteen; a pack's callings.json merges over them (core/mod/registry.gd).
+# The built-in sixteen, with every live pack's callings.json merged over them
+# by background — Registry.apply_data() pushes those here the way it pushes
+# data overlays into the catalog, in scan order, so a later pack wins.
+static var _packs := {}
+
+static func set_packs(merged: Dictionary) -> void:
+	_packs = {}
+	for k in merged:
+		if not String(k).begins_with("_"):   # _note and friends: authoring comments
+			_packs[String(k)] = merged[k]
+
 static func templates() -> Dictionary:
-	return TEMPLATES
+	if _packs.is_empty():
+		return TEMPLATES
+	var out := TEMPLATES.duplicate(true)
+	out.merge(_packs, true)
+	return out
+
+# A pack's callings.json, checked at scan time the way a world is: the shape
+# of one template per background, a target kind the game can point at, the
+# event that kind is done by, and an item that exists (in the catalog or in
+# the pack's own overlay — `own_items`). Returns the errors, empty when clean.
+static func validate(src, own_items := {}) -> Array:
+	var errors: Array = []
+	if not (src is Dictionary):
+		return ["callings.json must be an object of {background: calling}"]
+	var Landmarks = load("res://core/landmarks.gd")
+	var items: Dictionary = Catalog.index("magic-items.json")
+	for key in src:
+		var bg := String(key)
+		if bg.begins_with("_"):
+			continue          # _note and friends: authoring comments, by convention
+		var t = src[key]
+		if not (t is Dictionary):
+			errors.append("calling \"%s\" must be an object" % bg)
+			continue
+		for k in ["title", "tell", "done", "item"]:
+			if String(t.get(k, "")).is_empty():
+				errors.append("calling \"%s\" needs a %s" % [bg, k])
+		var item := String(t.get("item", ""))
+		if item != "" and not items.has(item) and not own_items.has(item):
+			errors.append("calling \"%s\": item \"%s\" is not a magic item in the catalog or in this pack" % [bg, item])
+		var target = t.get("target", {})
+		var kind := String(target.get("kind", "")) if target is Dictionary else ""
+		if not DONE_BY.has(kind):
+			errors.append("calling \"%s\": target kind \"%s\" is not one of %s" % [bg, kind, DONE_BY.keys()])
+			continue
+		if String(t.get("done_by", "")) != String(DONE_BY[kind]):
+			errors.append("calling \"%s\": a %s is done by \"%s\", not \"%s\"" % [bg, kind, DONE_BY[kind], t.get("done_by", "")])
+		if kind == "landmark" and not Landmarks.KINDS.has(String(target.get("landmark", ""))):
+			errors.append("calling \"%s\": landmark \"%s\" is not one of %s" % [bg, target.get("landmark", ""), Landmarks.KINDS])
+		if kind == "settlement" and not SETTLEMENT_SIZES.has(String(target.get("settlement", ""))):
+			errors.append("calling \"%s\": settlement \"%s\" is not one of %s" % [bg, target.get("settlement", ""), SETTLEMENT_SIZES])
+	return errors
 
 # --- assign -----------------------------------------------------------------
 
