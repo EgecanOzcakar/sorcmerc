@@ -45,7 +45,7 @@ var _pan := Vector2.ZERO
 # is kept in frame, which lowers it for a long shot). The chrome — bar, strip,
 # chips — scales by _ui_zoom, the player's own zoom, not the camera's: a bar
 # that breathed with every action was the first thing wrong with the prototype.
-const ZOOM_FOLLOW := 1.65
+const ZOOM_FOLLOW := 1.1     # ~2x the fit-all view; 1.65 read as a close-up once the group was tight
 # A turn is framed with its context — the actor and every enemy within
 # CAM_CONTEXT hexes — so the camera never shows one figure and nothing to
 # act on. Nearer enemies fit at ZOOM_FOLLOW; a spread-out fight lowers it.
