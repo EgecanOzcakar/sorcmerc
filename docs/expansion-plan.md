@@ -6210,8 +6210,6 @@ Saved under `landmarks`; an old save loads with none.
 
 ### Still open
 
-- No art yet for the cards (`assets/generated/landmark-<kind>.png`); the card
-  draws without it.
 - Trainers belong to downtime (B2); a landmark that wakes something to threat
   clocks (C1).
 - A landmark never restocks.
@@ -6368,7 +6366,7 @@ the map mid-run.
 
 ### Still open
 
-- No pictures yet, and the refugees event borrows the wayfarer's frames until one is generated.
+- No pictures yet.
 - A gate fight's waves for a lair faction with no theme of its own (a pack's orcs,
   say) come from `encounter_spec`'s default forest theme, not the raiders'
   own kin: `_hold_waves` reads the stamped theme. Two lines when it shows —
