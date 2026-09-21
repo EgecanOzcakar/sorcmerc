@@ -6675,16 +6675,17 @@ random session, stored gold never falling except by a withdraw the robot
 itself just pressed.
 
 The house shows on the map before it shows on any page. `settlement_kit.gd`'s
-`lodge_plan` seeds a house beside the town, off its own faction's palette,
-past the town's footprint plus `LODGE_OFFSET` (30), and gains a part per
-room the party builds: the strongroom an annex, the yard four posts round a
-taller training post, the garden three stone discs, the shrine a rock and
-an ember cone, the map room a box and a tower — `settlements3d.gd` rebuilds
-it on every buy and every build, and every room built trips `lodge_full`,
+`lodge_plan` seeds a house off its own faction's palette that gains a part
+per room the party builds: the strongroom an annex, the yard four posts
+round a taller training post, the garden three stone discs, the shrine a
+rock and an ember cone, the map room a box and a tower. `settlements3d.gd`
+stands it beside the town, past the footprint plus its own `LODGE_OFFSET`
+(30), and rebuilds it on every buy and every build; every room built trips
+`lodge_full`,
 *Every Room Built*. Six scenes (`event-lodge-house` on the lodge page
 itself, one per room on its own Build row) put a picture under numbers that
 were otherwise just a cost and a word. Total cost for the lot, retraining
-aside, is 1 400 ◉ — 400 for the house, then 200+300+150+200+250 for the
+aside, is 1 500 ◉ — 400 for the house, then 200+300+150+200+250 for the
 rooms — a campaign's worth of jobs turned into something standing on the
 map next to the town rather than a line in the purse.
 
@@ -6705,3 +6706,13 @@ map next to the town rather than a line in the purse.
 - The minimap's mark is a fixed pixel offset beside the town's square, not
   the diorama's own world position — sub-pixel at that scale, and not worth
   the reprojection.
+- The blessing is "the next fight", whichever it is: a pit bout or a brawl
+  fought from the lodge's own town spends the shrine's blessing on itself,
+  and the road after gets nothing.
+- A lodge town whose faction's opinion reaches the gate fight
+  (`FactionOpinion.guards_attack`) locks the strongroom behind it — the
+  guards come out where the square would have opened — until the opinion
+  drifts back. A house is a relationship with a town, and it ends the way
+  one does.
+- `_settlements3d.reset` rebuilds every diorama on a buy or a build, not
+  only the lodge's: a `rebuild_lodge` if it ever shows.
