@@ -22,6 +22,8 @@ const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
 const WorldSave = preload("res://core/world_save.gd")
 const BugReport = preload("res://core/bug_report.gd")   # the build stamp: both peers must run the same game
+const PartyOpinion = preload("res://core/party_opinion.gd")
+const Callings = preload("res://core/callings.gd")
 
 # Where tools/coop-relay is deployed. SORCMERC_RELAY overrides it for one run
 # (a local `wrangler dev` is ws://127.0.0.1:8787). Not a secret: a public
@@ -113,10 +115,17 @@ static func setup_for(seed: int, spec: Dictionary, party, opening := {}) -> Dict
 	var roster: Array = []
 	for ch in party.roster:
 		roster.append(CharacterSave.to_dict(ch))
+	# T2 fix round 1: relations now feed the fight itself (shoulder_bonus,
+	# bicker_penalty, rally all read party.relations off the Combatant's team),
+	# so the guest needs the host's copy or its rolls draw from the rng in a
+	# different order — a rally alone burns an extra d20 the host's side never
+	# spent. Callings aren't read mid-fight, but they ride along the same way
+	# so the guest's party page shows what the host's does.
 	return {"t": "setup", "seed": seed, "spec": spec, "owners": owners_for(party), "build": build_stamp(),
 		"opening": opening,
 		"party": {"roster": roster, "active": Array(party.active), "gold": party.gold,
-			"stash": party.stash.duplicate(true)}}
+			"stash": party.stash.duplicate(true), "relations": PartyOpinion.to_dict(party),
+			"callings": Callings.to_dict(party)}}
 
 static func party_from(setup: Dictionary):
 	var pd: Dictionary = setup["party"]
@@ -129,6 +138,8 @@ static func party_from(setup: Dictionary):
 	party.gold = int(pd.get("gold", 0))
 	for e in pd.get("stash", []):
 		party.stash_add(String(e["item_id"]), int(e.get("quantity", 1)), bool(e.get("identified", true)))
+	PartyOpinion.from_dict(party, pd.get("relations", {}))
+	Callings.from_dict(party, pd.get("callings", {}))
 	return party
 
 # --- intents ----------------------------------------------------------------
