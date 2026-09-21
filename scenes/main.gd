@@ -45,7 +45,11 @@ var _pan := Vector2.ZERO
 # is kept in frame, which lowers it for a long shot). The chrome — bar, strip,
 # chips — scales by _ui_zoom, the player's own zoom, not the camera's: a bar
 # that breathed with every action was the first thing wrong with the prototype.
-const ZOOM_FOLLOW := 2.2
+const ZOOM_FOLLOW := 1.65
+# A turn is framed with its context — the actor and every enemy within
+# CAM_CONTEXT hexes — so the camera never shows one figure and nothing to
+# act on. Nearer enemies fit at ZOOM_FOLLOW; a spread-out fight lowers it.
+const CAM_CONTEXT := 7
 var _ui_zoom := ZOOM_DEFAULT
 var _cam_follow := true       # Home toggles it; a new fight sets it
 var _cam_ids: Array = []      # who the camera is on: combatant ids, their tokens tracked as they slide
@@ -402,6 +406,14 @@ func focus_cam(ids: Array) -> void:
 	if _cam_follow and _board:
 		_board._auto_fit = false
 
+# The actor and every enemy within CAM_CONTEXT hexes, nearest first.
+func _cam_context(c) -> Array:
+	var ids: Array = [c.id]
+	for o in cb.enemies_of(c):
+		if Hex.distance(c.pos, o.pos) <= CAM_CONTEXT:
+			ids.append(o.id)
+	return ids
+
 # Home: the whole board, or back to following — one key, both ways.
 func toggle_cam() -> void:
 	_cam_follow = not _cam_follow
@@ -699,7 +711,7 @@ func _advance() -> void:
 		if c.is_dead() or c.is_stable():
 			cb.end_turn()
 			continue
-		focus_cam([c.id])   # #152: whoever's turn it is
+		focus_cam(_cam_context(c))   # #152: whoever's turn it is, and what is near them
 		if c.team == "foe" or c.is_down():
 			_busy = true
 			_viewing = false
@@ -1703,6 +1715,7 @@ func _after_hero_action(h) -> void:
 	_armed = ""
 	_flush_log()
 	_refresh()
+	focus_cam(_cam_context(h))   # #152: the swing framed the target; the next choice needs the room
 	if cb.is_over():
 		_finish()
 		return

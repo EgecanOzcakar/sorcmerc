@@ -73,5 +73,11 @@ func _init() -> void:
 		await process_frame
 	check(main._cam_follow and is_equal_approx(main._zoom, main.ZOOM_FOLLOW), "Home again is back on the action")
 
+	# A turn is framed with the enemies near the actor, not the actor alone.
+	var ctx: Array = main._cam_context(ilsa)
+	check(ctx[0] == ilsa.id and ctx.size() > 1, "a turn's frame holds the actor and the enemies within reach (%d)" % ctx.size())
+	check(ctx.all(func(id): return id == ilsa.id or main.cb.combatants.any(func(c): return c.id == id and c.team == "foe" and c.pos.distance_to(ilsa.pos) < 40)),
+		"...only enemies, only near ones")
+
 	print("test_combat_camera: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
