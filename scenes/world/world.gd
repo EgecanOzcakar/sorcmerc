@@ -69,6 +69,7 @@ const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
 const Dice = preload("res://core/dice.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
@@ -479,6 +480,7 @@ func _process(delta: float) -> void:
 		# it on the party screen takes effect the moment you back out.
 		p0.speed = World.SPEED * Travel.speed_mult(party)
 	FactionOpinion.tick(world, dt)
+	PartyOpinion.decay(party, dt)   # spike-party-opinions §7: a paused clock drifts nothing, same contract
 	WorldAI.update(world, delta)
 	_check_encounter(dt)
 	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not

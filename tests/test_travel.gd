@@ -6,6 +6,7 @@ extends SceneTree
 
 const Campaign = preload("res://core/campaign.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 const Regions = preload("res://core/regions.gd")
 const World = preload("res://core/world.gd")
 const Travel = preload("res://core/travel.gd")
@@ -406,6 +407,55 @@ func _init() -> void:
 		if String(Travel.check(pf, wf, RNG.new(seed_v)).get("id", "")) == "refugees":
 			fired = true
 	check(not fired, "the lair already found: nothing left for them to tell, no event")
+
+	# --- relations (spike-party-opinions §7): morale rides every roll -------
+	var pm := _party()
+	var wm := _world()
+	for pair in PartyOpinion.active_pairs(pm):
+		PartyOpinion.set_score(pm, pair[0], pair[1], 40.0)
+	var em: Dictionary = _force(pm, wm, "tracks")
+	check(int(em.get("morale", 0)) == 1, "a party that pulls together reads +1 (%s)" % em.get("morale"))
+	var cm := Campaign.new(pm)
+	check(int(em["bonus"]) - Travel.pace_bonus(pm) - cm.skill_bonus(String(em["char_id"]), String(em["skill"])) == 1,
+		"...and the +1 is actually on the roll's bonus")
+
+	var pc := _party()
+	var wc := _world()
+	for pair in PartyOpinion.active_pairs(pc):
+		PartyOpinion.set_score(pc, pair[0], pair[1], -30.0)
+	var ec: Dictionary = _force(pc, wc, "tracks")
+	check(int(ec.get("morale", 0)) == -1, "a party at odds reads -1 (%s)" % ec.get("morale"))
+
+	var pn := _party()
+	var wn := _world()
+	var en: Dictionary = _force(pn, wn, "tracks")
+	check(not en.has("morale"), "a neutral party carries no morale term at all")
+
+	# The roll feeds back: a pass earns the roller a little from everyone else
+	# marching; a failed "bad" event costs them instead.
+	var wp := _world()
+	var seed_pass := _seed_of(wp, "tracks", func(e): return bool(e["ok"]))
+	var pp := _party()
+	var ep: Dictionary = Travel.check(pp, wp, RNG.new(seed_pass)) if seed_pass > 0 else {}
+	check(not ep.is_empty(), "a passed tracks is reachable")
+	var roller_p: String = String(ep.get("char_id", ""))
+	for id in pp.active:
+		if String(id) != roller_p:
+			check(PartyOpinion.score(pp, roller_p, String(id)) ==
+				PartyOpinion.baseline_of(pp, roller_p, String(id)) + PartyOpinion.ROAD_PASS,
+				"a passed event warms the roller to %s" % id)
+
+	var wb := _world()
+	var seed_fail := _seed_of(wb, "rough-going", func(e): return not bool(e["ok"]))
+	var pb := _party()
+	var eb: Dictionary = Travel.check(pb, wb, RNG.new(seed_fail)) if seed_fail > 0 else {}
+	check(not eb.is_empty(), "a failed rough-going is reachable")
+	var roller_b: String = String(eb.get("char_id", ""))
+	for id in pb.active:
+		if String(id) != roller_b:
+			check(PartyOpinion.score(pb, roller_b, String(id)) ==
+				PartyOpinion.baseline_of(pb, roller_b, String(id)) - PartyOpinion.ROAD_FAIL,
+				"a failed bad event costs the roller with %s" % id)
 
 	print("test_travel: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

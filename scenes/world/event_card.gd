@@ -198,9 +198,19 @@ func _flag(key: String) -> bool:
 # "Vera Kord · Survival 14+5 vs DC 13" — the house rule, name the check and name
 # the roll. Signed bonus rather than world.gd's "%d+%d": a forced march is a -2
 # (travel.gd's PACE), and "14+-2" is not a roll anybody can read.
+#
+# spike-party-opinions §7: travel.gd already folded morale into "bonus" — the
+# roll itself moved — so this only names it, the same way the verdict names
+# a standing order's doing.
 func _roll_text() -> String:
-	return "%s %d%s vs DC %d" % [_skill_label(), int(_num("nat")),
+	var line := "%s %d%s vs DC %d" % [_skill_label(), int(_num("nat")),
 		"%+d" % int(_num("bonus")), int(_num("dc"))]
+	var morale := int(_num("morale"))
+	if morale > 0:
+		line += " (a party that pulls together +1)"
+	elif morale < 0:
+		line += " (a party at odds −1)"
+	return line
 
 
 # The catalog's own name for the skill, falling back to the id dressed up.

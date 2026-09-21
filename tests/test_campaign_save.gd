@@ -5,6 +5,7 @@ extends SceneTree
 const Campaign = preload("res://core/campaign.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
 const Party = preload("res://core/party.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 const Quest = preload("res://core/quest.gd")
 
 var _pass := 0
@@ -92,6 +93,18 @@ func _init() -> void:
 		"deaths": [], "kills": []})
 	resumed.leave()
 	check(resumed.stage == c2.stage + 1 and resumed.state == "picking", "and carries on down the road")
+
+	# Task 1: relations ride the campaign save the same way the roster does.
+	var cr := _campaign()
+	PartyOpinion.set_score(cr.party, "vera", "pike", 33.0)
+	var rd: Dictionary = CampaignSave.to_dict(cr)
+	check(float(rd["party"].get("relations", {}).get(PartyOpinion.key("vera", "pike"), {}).get("score", 0.0)) == 33.0,
+		"a relation rides the campaign save's party dict")
+	var cr_back = CampaignSave.from_dict(rd)
+	check(PartyOpinion.score(cr_back.party, "vera", "pike") == 33.0, "...and reads back through the model")
+	rd["party"].erase("relations")
+	var cr_old = CampaignSave.from_dict(rd)
+	check(cr_old.party.relations.is_empty(), "an old campaign save with no relations loads with none")
 
 	# The screen's own Continue-vs-New-Game choice is driven by tests/drive_campaign.gd
 	# ("Begin a new run") — instantiating campaign.tscn from a -s script hangs headless.

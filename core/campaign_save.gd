@@ -25,7 +25,8 @@
 #     "active": ["vera", "pike"],      // ids, marching order
 #     "gold": 120,
 #     "stash": [{"item_id": "dagger", "quantity": 1, "identified": true}],
-#     "quests": [ <core/quest.gd dicts, stored verbatim> ]
+#     "quests": [ <core/quest.gd dicts, stored verbatim> ],
+#     "relations": {"pike|vera": {"score": 33.0, "status": ""}}   // PartyOpinion.to_dict
 #   }
 # }
 #
@@ -36,6 +37,7 @@ extends RefCounted
 const Campaign = preload("res://core/campaign.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const Party = preload("res://core/party.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-campaign"
@@ -79,6 +81,7 @@ static func to_dict(campaign) -> Dictionary:
 			"gold": campaign.party.gold,
 			"stash": campaign.party.stash.duplicate(true),
 			"quests": campaign.party.quests.duplicate(true),
+			"relations": PartyOpinion.to_dict(campaign.party),   # spike-party-opinions §8
 		},
 	}
 
@@ -98,6 +101,7 @@ static func from_dict(d: Dictionary):
 		party.stash_add(String(e["item_id"]), int(e.get("quantity", 1)),
 			bool(e.get("identified", true)))
 	party.quests = _ints(pd.get("quests", []))
+	PartyOpinion.from_dict(party, pd.get("relations", {}))   # an old save with no key loads as a fresh party
 
 	var campaign := Campaign.new(party, int(d.get("seed", 1)))
 	campaign.stage = int(d.get("stage", 0))

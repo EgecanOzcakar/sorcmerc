@@ -9,6 +9,7 @@ const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const WorldSave = preload("res://core/world_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 const Party = preload("res://core/party.gd")
 const Presets = preload("res://core/presets.gd")
 
@@ -317,6 +318,19 @@ func _done() -> void:
 	dl.erase("ladder")
 	WorldSave.from_dict(dl)
 	check(Ladder.renown() == 0 and not Ladder.audience_held("human"), "an old save loads a fresh ladder")
+
+	# Task 1: relations ride the party dict like standing orders do.
+	var pr := _party()
+	PartyOpinion.set_score(pr, "vera", "pike", 33.0)
+	var rd: Dictionary = WorldSave.to_dict(wo, pr)
+	check(float(rd["party"].get("relations", {}).get(PartyOpinion.key("vera", "pike"), {}).get("score", 0.0)) == 33.0,
+		"a relation rides the save's party dict")
+	var pr_back = WorldSave.from_dict(rd)["party"]
+	check(PartyOpinion.score(pr_back, "vera", "pike") == 33.0, "...and reads back through the model")
+	var d_no_rel: Dictionary = WorldSave.to_dict(wo, _party())
+	d_no_rel["party"].erase("relations")
+	var pr_old = WorldSave.from_dict(d_no_rel)["party"]
+	check(pr_old.relations.is_empty(), "an old save with no relations loads with none")
 
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

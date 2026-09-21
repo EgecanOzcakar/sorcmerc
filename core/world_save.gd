@@ -41,7 +41,8 @@
 #     "roster": [ <character_save.gd dicts> ],   // the barracks, but gold/stash/quests
 #     "active": ["vera"], "gold": 120,           // and marching order live nowhere else
 #     "stash": [...], "quests": [...], "last_long_rest_at": 742.5,  // T9x rest cooldown
-#     "overworld_figure": "wizard"  // T9x: chosen map token, "" = the flat pawn
+#     "overworld_figure": "wizard",  // T9x: chosen map token, "" = the flat pawn
+#     "relations": {"pike|vera": {"score": 33.0, "status": ""}}  // PartyOpinion.to_dict
 #   },
 #   "story": {                        // M7: the content pack's story, mid-telling.
 #     "pack": "ashen-road",           //   {} on every run with no story on it.
@@ -60,6 +61,7 @@ const Party = preload("res://core/party.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Ladder = preload("res://core/ladder.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-world"
@@ -332,6 +334,7 @@ static func _party_dict(party) -> Dictionary:
 		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 		"road": {"scouted_next": party.scouted_next, "swift_until": party.swift_until,
 			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set, "blessed": party.blessed},   # potions / road spells
+		"relations": PartyOpinion.to_dict(party),   # spike-party-opinions §8: who thinks what of whom
 	}
 
 static func _party_from(pd: Dictionary):
@@ -356,6 +359,7 @@ static func _party_from(pd: Dictionary):
 	party.safe_camp = bool(road.get("safe_camp", false))
 	party.alarm_set = bool(road.get("alarm_set", false))
 	party.blessed = bool(road.get("blessed", false))
+	PartyOpinion.from_dict(party, pd.get("relations", {}))   # an old save with no key loads as a fresh party
 	return party
 
 # JSON gives every number back as a float; quest counters are compared as ints.
