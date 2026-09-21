@@ -82,11 +82,10 @@ Deception or Sleight of Hand rolls vs `GAMBLE_DC` 12: nat 20 → 3×; ≥ DC + 5
 
 **Crafting** — at the counter. *Brew %s (%d ◉, a day)* on the alchemist's
 stall for every potion it stocks; *Scribe %s (%d ◉, a day)* on the
-librarian's for every scroll it stocks whose spell a party caster knows
-(`party.caster_of([spell])`). Half list price (`CRAFT_RATE` 0.5), one day
-each, the item into the stash identified. The bench is the door: a party
-with no caster scribes nothing; anyone can brew (the alchemist supervises).
-Once per item per visit.
+librarian's for its own scrolls (`Campaign.SCROLL_IDS`). Half list price
+(`CRAFT_RATE` 0.5), one day each, the item into the stash identified. The
+bench is the door: a party with no caster scribes nothing; anyone can brew
+(the alchemist supervises). Once per item per visit.
 
 **The pit** — inn page, city only. *The pit: %s, %s and %s stand this week
 (purse %d ◉).* A bracket of three champions seeded off `(s.id, week)`
