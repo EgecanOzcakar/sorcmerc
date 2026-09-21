@@ -77,6 +77,12 @@ func _init() -> void:
 		check(not Ach.find(id).is_empty(), "%s is defined" % id)
 	check(int(Ach.find("sworn_first")["goal"]) == 3 and Ach.find("sworn_first")["counter"] == "best_rung",
 		"Sworn counts a best_rung of 3")
+	# callings: two deeds off Callings.complete()'s collect("callings", hero); the
+	# pair ones (bonded, lovers) were on the list already and are checked above
+	for id in ["calling_first", "callings_4"]:
+		check(not Ach.find(id).is_empty(), "%s is defined" % id)
+	check(int(Ach.find("callings_4")["goal"]) == 4 and Ach.find("callings_4")["counter"] == "callings",
+		"Four Pasts counts four heroes' callings")
 	print("test_achievements: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -616,6 +622,12 @@ func test_relationship_wiring() -> void:
 	check(Ach.is_unlocked("rivals"), "a pair that loathe each other")
 	PartyOpinion.friendly_fire(p, "vera", "pike")
 	check(Ach.is_unlocked("friendly_fire"), "catching your own in your own spell")
+	PartyOpinion.set_score(p, "pike", "ilsa", PartyOpinion.COURTSHIP_MIN)
+	PartyOpinion.answer_courtship(p, "pike", "ilsa", true)
+	check(Ach.is_unlocked("lovers"), "a courtship said yes to")
+	for id in ["vera", "pike", "ilsa", "thrun"]:
+		Ach.collect("callings", id)
+	check(Ach.is_unlocked("calling_first") and Ach.is_unlocked("callings_4"), "four callings seen through")
 
 func test_world_wiring() -> void:
 	_wipe()

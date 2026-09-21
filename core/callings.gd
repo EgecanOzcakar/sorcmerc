@@ -197,7 +197,11 @@ static func check(party, world, event: Dictionary) -> Array:
 
 # The rewards: the XP split, the heirloom identified into the stash, and the
 # bond with `who` — the member who rolled the row, struck the blow, led the
-# visit — when that is somebody else. A calling completes once.
+# visit. When that was the hero themself (the acolyte is the party's best at
+# Religion, so at the shrine it usually is) or nobody, the bond goes to
+# whoever stands closest to them instead: the active companion they already
+# think most of, ties by marching order. Alone, there is nobody to bond with.
+# A calling completes once.
 static func complete(party, world, char_id: String, who := "") -> Dictionary:
 	var c: Dictionary = party.callings.get(char_id, {})
 	var t: Dictionary = templates().get(String(c.get("id", "")), {})
@@ -209,12 +213,25 @@ static func complete(party, world, char_id: String, who := "") -> Dictionary:
 	Campaign._note_rarity(item)
 	var out := {"text": _fmt(t["done"], target_name(party, world, char_id)), "xp": CALLING_XP,
 		"item": item, "item_name": Campaign.item_name(item), "bond_with": ""}
-	if who != "" and who != char_id:
+	if who == "" or who == char_id:
+		who = _closest(party, char_id)
+	if who != "":
 		PartyOpinion.adjust(party, char_id, who, PartyOpinion.CALLING_BOND)
 		out["bond_with"] = who
 	c["state"] = "done"
 	Ach.collect("callings", char_id)
 	return out
+
+# The active companion this hero's score is highest with; "" when alone.
+static func _closest(party, char_id: String) -> String:
+	var best := ""
+	var best_s := -INF
+	for id in party.active:
+		var s: float = PartyOpinion.score(party, char_id, String(id))
+		if String(id) != char_id and s > best_s:
+			best = String(id)
+			best_s = s
+	return best
 
 # --- reading it -------------------------------------------------------------
 

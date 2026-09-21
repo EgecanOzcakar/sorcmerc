@@ -130,7 +130,9 @@ func _init() -> void:
 	check(_card_id(main).begins_with("landmark-shrine-"), "the outcome first: %s" % _card_id(main))
 	var who := String(main._event_card._e.get("char_id", "")) if main._event_card != null else ""
 	check(who == hero.id, "the acolyte rolls Religion at her own shrine: %s" % who)
-	var score_before: float = PartyOpinion.score(party, hero.id, mate.id)
+	# She rolled it herself, so the bond goes to whoever stands closest to her.
+	var closest := Callings._closest(party, hero.id)
+	var score_before: float = PartyOpinion.score(party, hero.id, closest)
 	check(shrine.spent and main._calling_queue.size() == 1, "the calling waits behind the outcome card")
 	main._on_event_ack()
 	w.clock.pause()   # the player's own pause, the moment the card is down: the map is standing still
@@ -145,7 +147,8 @@ func _init() -> void:
 	check(party.stash_count(AMULET, true) == 1, "the amulet, identified, in the stash")
 	check(hero.xp > xp_before, "paid")
 	check(party.callings[hero.id]["state"] == "done" and "done" in Callings.describe(party, hero.id), "describe says done")
-	check(PartyOpinion.score(party, hero.id, mate.id) == score_before, "she did it herself: no bond")
+	check(closest != "" and PartyOpinion.score(party, hero.id, closest) == score_before + PartyOpinion.CALLING_BOND,
+		"she did it herself: the bond goes to the companion closest to her (%s)" % closest)
 	main._event_card.acknowledged.emit()
 	await process_frame
 	check(main._calling_queue.is_empty() and main._event_card == null, "acked: nothing queued, card down")

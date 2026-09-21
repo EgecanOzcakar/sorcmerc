@@ -220,16 +220,33 @@ func test_complete() -> void:
 	check(Callings.complete(p, w, "vera", "pike").is_empty() and p.stash_count("amulet-of-proof-against-detection-and-location") == 1,
 		"a second time pays nothing")
 
-	score_before = PartyOpinion.score(p, "pike", "ilsa")
+	# The hero did the thing themself: the bond goes to whoever stands closest
+	# to them — the active companion they think most of, ties by marching order.
+	p.bench("thrun")
+	PartyOpinion.set_score(p, "pike", "vera", 10.0)
+	PartyOpinion.set_score(p, "pike", "ilsa", 30.0)
 	r = Callings.complete(p, w, "pike", "pike")
-	check(r.get("bond_with", "") == "" and PartyOpinion.score(p, "pike", "ilsa") == score_before, "who == the hero: no bond")
+	check(r.get("bond_with", "") == "ilsa" and PartyOpinion.score(p, "pike", "ilsa") == 45.0
+		and PartyOpinion.score(p, "pike", "vera") == 10.0, "who == the hero: the closest companion gets the bond (got %s)" % r.get("bond_with", ""))
 	check(String(r.get("text", "")) == Callings.TEMPLATES["entertainer"]["done"], "the entertainer's done line is verbatim")
 	check(p.stash_count("pipes-of-haunting", true) == 1, "the pipes")
 	p = _party(["sage"])
 	Callings.assign(p, w, RNG.new(1))
 	Callings.beat(p, w)
+	PartyOpinion.set_score(p, "vera", "pike", 5.0)
+	PartyOpinion.set_score(p, "vera", "ilsa", 0.0)
+	PartyOpinion.set_score(p, "vera", "thrun", 5.0)
 	r = Callings.complete(p, w, "vera")
-	check(r.get("bond_with", "") == "" and p.callings["vera"]["state"] == "done", "no who: done, no bond")
+	check(r.get("bond_with", "") == "pike" and PartyOpinion.score(p, "vera", "pike") == 20.0,
+		"no who: the closest again, ties by marching order (got %s)" % r.get("bond_with", ""))
+	p = _party(["sage"])
+	for id in ["pike", "ilsa", "thrun"]:
+		p.bench(id)
+	Callings.assign(p, w, RNG.new(1))
+	Callings.beat(p, w)
+	r = Callings.complete(p, w, "vera")
+	check(r.get("bond_with", "") == "" and p.callings["vera"]["state"] == "done" and p.relations.is_empty(),
+		"alone: done, and nobody to bond with")
 
 # --- describe, save ---------------------------------------------------------
 

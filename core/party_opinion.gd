@@ -1,7 +1,8 @@
 # SPIKE (2026-09-16) — what the party thinks of each other, and whether two of
 # them are more than friends. Write-up and the numbers behind every constant:
-# docs/spike-party-opinions.md. Nothing in the shipped game calls this yet; the
-# doc lists the seven call sites that would.
+# docs/spike-party-opinions.md. The seven call sites the doc lists are wired
+# (2026-09-21: the save, the party page, the road, decay, the fireside, the
+# fight), and core/callings.gd adds an eighth — the bond a calling pays.
 #
 # One score per PAIR of members, -100..100, symmetric ("Vera and Pike" is one
 # number, not two), plus a status on top of it: "" or "lovers" (a state the

@@ -97,10 +97,14 @@ magic item named by the template (a real id from `data/magic-items.json`,
 chosen to fit: the acolyte's *amulet of proof*, the soldier's *javelin of
 lightning*, the sage's *pearl of power*, …), identified, into the stash; and
 the **bond** — `PartyOpinion.adjust(party, hero, other, CALLING_BOND)` (+15)
-with the member who did the thing (the roller of the landmark row, the one
-who struck the killing blow in the fight, the party's leader at a visit —
-the screen passes `who`), so the calling leaves a friendship behind it, not
-only an item. The line, on the event card, art `event-calling-<background>`.
+with the one who did the thing (the roller of the landmark row, the one who
+struck the killing blow in the fight, the party's leader at a visit — the
+screen passes `who`) — or, when that was the hero themself, with whoever
+stood closest to them: the active companion whose score with the hero is
+highest, ties by marching order (the acolyte is the party's best at Religion,
+so at the shrine the hero is usually their own roller, and the bond is the
+reward that matters; a hero marching alone gets none). So the calling leaves
+a friendship behind it, not only an item. The line, on the event card, art `event-calling-<background>`.
 
 ## 3. What a calling adds to the fireside
 
@@ -194,7 +198,7 @@ envoy's carriage at a city gate, a library under stone…).
 | `scenes/world/world.gd` | decay; the camp/inn beats (calling → resolution → moment); courtship rows; `Callings.check` at landmark answered / lair cleared / band beaten / visit / audience; the marks |
 | `scenes/party/party.gd` | Relations + Callings block |
 | `core/mod/registry.gd`, `docs/modding.md` | `callings.json` |
-| `core/achievements.gd` | `calling_first` (*A Past*), `callings_4` (*Four Pasts*), `bonded_pair` (*Shoulder to Shoulder*), `lovers` (*More Than Friends*) |
+| `core/achievements.gd` | `calling_first` (*A Past*), `callings_4` (*Four Pasts*); the pair ones — `bonded` (*Shoulder to Shoulder*), `lovers` (*Something in the Firelight*) — were on the list already, wired in `adjust` and `answer_courtship` |
 | tests, `docs/expansion-plan.md`, the sixteen scenes | §5, §6 |
 
 ## 8. Decided here
