@@ -10,7 +10,10 @@
 # the lair — however it is cleared — lifts all of it; this module polls for
 # that rather than hooking mark_cleared, so every way of spending a lair is
 # covered. Pure data + math, no scene: scenes/world/world.gd calls tick()
-# once a frame and says the lines it returns.
+# once a frame and says the lines it returns. The sounds fire here beside the
+# lines rather than on the screen, which only gets prose back — matching a
+# sting to a sentence is how it stops playing the day the sentence is reworded.
+# core/audio.gd's statics are no-ops headless, like combat.gd's are.
 #
 #   Raids.tick(world, now)          # -> [String]; sets out, advances, lands, lifts
 #   Raids.settle_cost(world, lair)  # -> gold, 0 when it cannot be settled
@@ -24,6 +27,7 @@ const RNG = preload("res://core/rng.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Ach = preload("res://core/achievements.gd")
 const Campaign = preload("res://core/campaign.gd")
+const Sound = preload("res://core/audio.gd")
 const Ladder = preload("res://core/ladder.gd")
 
 # How far a lair's raiders will walk: quest_posting.gd's clear_lair reach — a
@@ -143,10 +147,13 @@ static func land(world, lair, s, now: float) -> Array:
 	lair.raids += 1
 	var lines: Array = ["%s is raided — the market is half what it was, and %s wants it answered."
 		% [s.sname, lair.sname]]
+	Sound.play_sfx("raid_bell")
+	Sound.play_sting("music_alarm")
 	if lair.raids == 2 and lair.spawned_from == "":
 		var child = spread(world, lair, now)
 		if child != null:
 			lines.append("Something has dug in near %s." % lair.sname)
+			Sound.play_sfx("lair_dug")
 	return lines
 
 # The second landing's child: same faction, named after its parent, hidden,
@@ -203,6 +210,8 @@ static func tick(world, now: float) -> Array:
 		Ladder.deed(s.faction, 2)   # ...and two deeds on the ladder
 		Ach.bump("raids_lifted")
 		lines.append("%s breathes again — %s is done raiding." % [s.sname, l.sname if l != null else "the lair"])
+		Sound.play_sfx("raid_lifted")
+		Sound.play_sting("music_relief")
 	for l in world.lairs:
 		if l.raid_band == "":
 			continue
@@ -225,6 +234,7 @@ static func tick(world, now: float) -> Array:
 			continue
 		set_out(world, l, s, now)
 		lines.append("Raiders are out from %s, making for %s." % [l.sname, s.sname])
+		Sound.play_sfx("raid_horn")
 	return lines
 
 # march -> siege on arrival; siege -> home when the stand runs out (the raid
@@ -245,6 +255,7 @@ static func _advance(world, lair, b, now: float, lines: Array) -> void:
 				st["until"] = now + SIEGE
 				var s = settlement_of(world, String(st["target"]))
 				lines.append("Raiders from %s are camped outside %s." % [lair.sname, s.sname if s != null else "the town"])
+				Sound.play_sfx("raid_drums")
 		"siege":
 			if now >= float(st.get("until", now)):
 				var s = settlement_of(world, String(st["target"]))

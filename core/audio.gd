@@ -5,6 +5,8 @@
 #   const Sound = preload("res://core/audio.gd")
 #   Sound.play_sfx("hit")                  one-shot, ids = assets/audio/sfx/*.wav
 #   Sound.play_bark("hero1")               T31 voice stinger, assets/audio/barks/*.wav
+#   Sound.play_sting("music_discovery")    a short musical phrase over the bed,
+#                                          assets/audio/sfx/music_*.wav on the Music bus
 #   Sound.set_environment("frozen-cave")   crossfade the ambient bed (theme ids =
 #                                          Encounter.THEMES, plus settlement/title)
 #   Sound.set_combat(true)                 fade the shared tension layer in over it
@@ -34,6 +36,7 @@ const FALLBACK_MIX_RATE := 22050   # only if a file's fmt chunk is unreadable
 const FADE := 1.0            # seconds, bed crossfade and tension fade
 const BED_DB := -12.0        # the bed sits under everything
 const TENSION_DB := -9.0
+const STING_DB := -6.0       # a phrase over the bed: above it, under the sfx
 const QUIET_DB := -60.0      # "off" without stopping the loop
 const VOICES := 8            # concurrent one-shots; oldest gets reused
 # The same sting starting twice within this window is one event heard twice, not
@@ -55,6 +58,7 @@ var _last_start := {}        # path -> Time.get_ticks_msec() of its last start
 var _beds: Array = []        # two players, ping-ponged for the crossfade
 var _bed := 0
 var _tension: AudioStreamPlayer = null
+var _sting: AudioStreamPlayer = null
 var _theme := ""
 
 # --- static API (safe with no autoload: every call is a no-op) --------------
@@ -71,6 +75,16 @@ static func play_sfx(id: String) -> void:
 static func play_bark(id: String) -> void:
 	if _i != null:
 		_i._play_one_shot(BARK_DIR + id + ".wav")
+
+# A musical sting — a landmark answered, a raid landing — from the same
+# directory as the sfx but NOT through play_sfx: it rides the Music bus (the
+# music slider is what should govern a phrase of music), takes no pitch drift
+# (a few percent is right for a sword and puts a phrase out of key with the
+# bed), and has one player of its own, because two phrases at once is noise
+# and the newer one is the event that just happened.
+static func play_sting(id: String) -> void:
+	if _i != null:
+		_i._play_sting(SFX_DIR + id + ".wav")
 
 static func set_environment(theme: String) -> void:
 	if _i != null:
@@ -102,6 +116,7 @@ func _ready() -> void:
 	for i in 2:
 		_beds.append(_player("Music", QUIET_DB))
 	_tension = _player("Music", QUIET_DB)
+	_sting = _player("Music", STING_DB)
 	_i = self
 
 func _play_one_shot(path: String, pitch := 1.0) -> void:
@@ -115,6 +130,13 @@ func _play_one_shot(path: String, pitch := 1.0) -> void:
 	p.stream = stream
 	p.pitch_scale = pitch
 	p.play()
+
+func _play_sting(path: String) -> void:
+	var stream = _stream(path, false)
+	if stream == null:
+		return
+	_sting.stream = stream
+	_sting.play()
 
 # The takes of `id` on disk, counted once: id.wav, id_2.wav, id_3.wav ... until
 # one is missing. Picks one at random; the plain file when there is only one.

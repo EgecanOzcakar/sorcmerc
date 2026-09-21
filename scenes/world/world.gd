@@ -1609,6 +1609,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 				FactionOpinion.credit_fight(world, raid_target.position, Raids.TURNED_FOR, foe.faction)
 				Ach.bump("raids_turned")
 				_quest_news.append("The raid on %s is turned." % raid_target.sname)
+				Sound.play_sting("music_deed")
 		# O7 raise/lower event: putting down a monster band is a favour to whoever
 		# lives near the bodies; putting down a faction's own band is not. A
 		# brawl at the inn is neither.
@@ -2195,6 +2196,7 @@ func _calling_done(char_id: String, r: Dictionary, then: Callable) -> void:
 func _check_places() -> void:
 	for l in Landmarks.found_on_explore(world):
 		_lair_msg.text = "%s — a landmark, on the map now." % l.sname
+		Sound.play_sfx("landmark_found")
 	if _combat != null or not _visit.is_empty() or _overlay_up():
 		_place_btn.visible = false
 		return
@@ -2219,6 +2221,7 @@ func _place_action() -> void:
 		var roll: Dictionary = Landmarks.search(l, party)
 		if roll.is_empty():
 			return
+		Sound.play_sfx("search_found" if roll["ok"] else "search_nothing")
 		_lair_msg.text = ("%s finds it — %s is here (Survival %d+%d vs DC %d)." % [
 			roll["cname"], l.sname, roll["nat"], roll["bonus"], roll["dc"]]) if roll["ok"] else (
 			"Nothing this time (Survival %d+%d vs DC %d)." % [roll["nat"], roll["bonus"], roll["dc"]])
@@ -2239,6 +2242,7 @@ func _open_place(l) -> void:
 	add_child(_approach_card)
 	_approach_card.chosen.connect(_on_place_chosen)
 	_approach_card.show_approach(Landmarks.options(l, party, world), l.sname)
+	Sound.play_sfx("landmark_open")
 
 func _on_place_chosen(id: String) -> void:
 	var l = _place_open
@@ -2267,6 +2271,7 @@ func _lair_action() -> void:
 		var roll := WorldLairs.search(l, party)
 		if roll.is_empty():
 			return
+		Sound.play_sfx("search_found" if roll["ok"] else "search_nothing")
 		if roll["ok"]:
 			_lair_msg.text = "%s finds the tracks — %s is here (Survival %d+%d vs DC %d)." % [
 				roll["cname"], l.sname, roll["nat"], roll["bonus"], roll["dc"]]
@@ -2315,6 +2320,8 @@ func _lair_settle_action() -> void:
 	if s == null:
 		return
 	_lair_msg.text = "Settlers from %s put up the first roof at %s." % [home.sname, s.sname]
+	Sound.play_sfx("settle")
+	Sound.play_sting("music_founding")
 	# The party stands on the new camp: without this _check_visit opens its
 	# page next frame, over the line above and the camp appearing on the map.
 	# `_left` is the visit gate's own "just left, no re-entry until out of
@@ -2928,7 +2935,7 @@ func _sell(item_id: String) -> void:
 func _buy_rumor(lead: Dictionary) -> void:
 	var r: Dictionary = Rumors.buy(lead, party, world)
 	if bool(r.get("ok", false)):
-		Sound.play_sfx("quest")
+		Sound.play_sfx("rumour_bought")
 		_autosave()
 	_build_visit_panel()
 	_say(String(r.get("text", "")))
@@ -3285,6 +3292,7 @@ func _take_quest(q: Dictionary) -> void:
 	if not Quest.accept(party, q):
 		_say("No work here just now.")
 		return
+	Sound.play_sfx("quest")
 	# D7: being told where it is IS the job. A lair the party has not found yet
 	# (core/world_lairs.gd's Survival check, D5's bought leads) does not draw on
 	# the map, so a clear_lair job about one used to be a contract with no way to
@@ -3302,6 +3310,7 @@ func _turn_in(quest: Dictionary) -> void:
 	var reward: int = int(quest.get("reward", {}).get("gold", 0))
 	if Quest.turn_in(party, quest, _visit["settlement"].faction):
 		Sound.play_sfx("buy")
+		Sound.play_sting("music_deed")
 		# D5: a job well done is how a town decides you are worth telling things
 		# to. The board's second payout, and the one that is not gold.
 		var lead: Dictionary = Rumors.free_lead(_visit["settlement"], party, world)
