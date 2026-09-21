@@ -2093,19 +2093,24 @@ const RUNG_LINES := {Ladder.KNOWN: "Known among the %s now.",
 	Ladder.TRUSTED: "Trusted among the %s now.", Ladder.SWORN: "Sworn to the %s now."}
 
 func _check_ladder() -> void:
+	var lines: Array = []
 	var best := 0
 	for f in WorldAI.CIVILIZED:
 		var r: int = Ladder.rung(f)
 		best = maxi(best, r)
 		if r > int(_rungs_seen.get(f, 0)):
-			_lair_msg.text = String(RUNG_LINES[r]) % Ladder.people(f)
+			lines.append(String(RUNG_LINES[r]) % Ladder.people(f))
 		_rungs_seen[f] = r
 	Ach.record("best_rung", best)
 	var t := Ladder.title_index()
 	Ach.record("renown_title", t)
 	if t > _ladder_title_seen:
-		_lair_msg.text = "The company is spoken of now: %s." % Ladder.title()
+		lines.append("The company is spoken of now: %s." % Ladder.title())
 	_ladder_title_seen = t
+	# Appended, not set: the deed that earned it may have just said its own
+	# line here (a raid lifted, a lair settled), and that is not news to lose.
+	for line in lines:
+		_lair_msg.text = (_lair_msg.text + "  " + String(line)).strip_edges()
 
 # --- landmarks: places on the map that are not a fight -----------------------
 # The lair button's shape again: one button, two states. A found place offers a

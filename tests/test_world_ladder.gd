@@ -64,11 +64,12 @@ func _init() -> void:
 	check(button_named(main, "Seek an audience") == null, "no audience for a stranger")
 	main._close_visit()
 	await process_frame
+	main._lair_msg.text = "Riverhold breathes again."   # the deed's own line, said the same frame
 	Ladder.deed("human", 4)
 	main._open_visit(town)
 	await process_frame
 	check(said(main, "Known here — they will pass you a neighbour's work."), "Known: the line")
-	check("Known among the humans now." in main._lair_msg.text, "the rung gained is said: %s" % main._lair_msg.text)
+	check(main._lair_msg.text == "Riverhold breathes again.  Known among the humans now.", "the rung gained is said after the deed's own line, not over it: %s" % main._lair_msg.text)
 	check(button_named(main, "Inn.  A night is 20") != null, "Known: half a bed")
 	main._close_visit()
 	await process_frame
