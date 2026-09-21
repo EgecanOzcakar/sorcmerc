@@ -328,6 +328,45 @@ static func record_stash(party) -> void:
 		q["progress"] = mini(int(q["required"]), have)
 		q["state"] = "complete" if have >= int(q["required"]) else "active"
 
+# #153: where each open job points on the map — [{pos, kind, title, done}].
+# A job still being done points at what it names (the band, the lair, the
+# town); a job done and not yet paid points back at whoever posted it. The
+# fog rules the map draws by hold here too: a lair is only pointed at once it
+# is found and a band once it is seen — a job is a name, not a signpost. A
+# kind that names nothing standing on the map (a monster, an item, a region)
+# has no mark until it is done.
+static func map_marks(world, party) -> Array:
+	var out: Array = []
+	for q in party.quests:
+		var state := String(q.get("state", ""))
+		if state != "active" and state != "complete":
+			continue
+		var pos = null
+		if state == "complete":
+			pos = _position_of(world.settlements, String(q.get("giver_node_id", "")))
+		else:
+			match String(q.get("kind", "")):
+				"hunt_party":
+					for p in world.parties:
+						if p.id == String(q.get("target_party_id", "")) and world.band_seen(p.position):
+							pos = p.position
+				"raid_settlement", "deliver_goods":
+					pos = _position_of(world.settlements, String(q.get("target_settlement_id", "")))
+				"clear_lair", "rescue":
+					for l in world.lairs:
+						if l.id == String(q.get("target_lair_id", "")) and l.discovered:
+							pos = l.position
+		if pos != null:
+			out.append({"pos": pos, "kind": String(q.get("kind", "")), "title": String(q.get("title", "")),
+				"done": state == "complete"})
+	return out
+
+static func _position_of(things: Array, id: String):
+	for t in things:
+		if t.id == id:
+			return t.position
+	return null
+
 static func can_turn_in(quest: Dictionary) -> bool:
 	return not quest.is_empty() and quest["state"] in ["active", "complete"] \
 		and int(quest["progress"]) >= int(quest["required"])

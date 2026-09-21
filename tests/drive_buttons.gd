@@ -221,8 +221,8 @@ func sweep(page: String, arrange: Callable, model: Callable, expect: Callable,
 		await process_frame
 		var now: Array = controls(screen)
 		if i >= now.size() or key(i, now[i]) != keys[i]:
-			check(false, "%s: re-arranging did not reproduce the page (wanted '%s')"
-				% [page, keys[i]])
+			check(false, "%s: re-arranging did not reproduce the page (wanted '%s', got '%s')"
+				% [page, keys[i], key(i, now[i]) if i < now.size() else "nothing (%d controls)" % now.size()])
 			continue
 		var c: BaseButton = now[i]
 		var verdict: String = String(expect.call(c))

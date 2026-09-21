@@ -32,6 +32,7 @@
 extends Control
 
 const Icons = preload("res://core/ui_icons.gd")
+const Tips = preload("res://core/tips.gd")   # #151: one line of advice under the ways
 
 # The only thing the world screen listens for. Emitted exactly once per
 # show_approach(), whichever of the several doors the player goes through.
@@ -140,6 +141,7 @@ var caption := CAPTION
 var glyph := GLYPH
 var hint := "Choose how to meet them"
 var art_stem := ""          # assets/generated/<stem>.png when set; the way's own scene art otherwise
+var _tip := ""              # #151: drawn once per show_approach(), so it does not change under the eye
 var foe_faction := ""       # the band's faction: its own painting of the way's art when there is one
 
 var _opts: Array = []
@@ -213,6 +215,7 @@ func show_approach(options: Array, foe_label: String) -> void:
 		_opts.append(FALLBACK_OPTION)
 	_foe = foe_label if foe_label != "" else NO_FOE
 	_chosen = false
+	_tip = Tips.pick()
 	_art = Icons.scene_art(art_stem if art_stem != "" \
 		else Icons.scene_stem("event-" + (FRIENDLY_SCENE_ART if _friendly() else SCENE_ART), foe_faction), null)
 	visible = true
@@ -434,6 +437,16 @@ func _layout(art_h := -1.0) -> void:
 
 	for i in _opts.size():
 		y += _row(rel, rel_rows, i, tx, avail, y)
+		y += ROW_GAP
+	# #151: the tip, small and muted, under the ways — the half of a loading
+	# screen that is not the picture. Two lines at most; a long one clips.
+	if _tip != "":
+		y += BLOCK_GAP - ROW_GAP
+		for tline in _wrap(_tip, Icons.FS_SMALL, avail, 2):
+			y += Icons.FS_SMALL
+			rel.append(_op(Vector2(tx, y), tline, Icons.FS_SMALL, Icons.COL_MUTED, avail))
+			y += LINE_GAP
+		y -= LINE_GAP
 		y += ROW_GAP
 	y += PAD - ROW_GAP
 

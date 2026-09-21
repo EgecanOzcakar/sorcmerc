@@ -118,6 +118,11 @@ func _ready() -> void:
 		_s.music_volume = v
 		Sound.set_music_volume(v)
 		_apply()))
+	# The combat screen's chrome. The only place it is set: the map's own zoom
+	# no longer grows the buttons with it (#152).
+	col.add_child(_volume_row("Combat UI size", _s.ui_scale * 100.0, func(v: float):
+		_s.ui_scale = v / 100.0
+		_apply(), Settings.UI_SCALE_MIN * 100.0, Settings.UI_SCALE_MAX * 100.0, 10.0))
 
 	# A reaction that spends a slot is a real decision, so the fight can stop and
 	# let you make it. The free ones never ask either way — see core/settings.gd.
@@ -177,7 +182,7 @@ func _ready() -> void:
 
 # T27: one 0-100 audio slider. `on_value` gets the new value (already stepped),
 # and is responsible for writing it through to settings + the bus.
-func _volume_row(label: String, value: float, on_value: Callable) -> HBoxContainer:
+func _volume_row(label: String, value: float, on_value: Callable, lo := 0.0, hi := 100.0, step := 5.0) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	var lbl := Label.new()
@@ -186,9 +191,9 @@ func _volume_row(label: String, value: float, on_value: Callable) -> HBoxContain
 	lbl.theme_type_variation = "Dim"
 	row.add_child(lbl)
 	var slider := HSlider.new()
-	slider.min_value = 0
-	slider.max_value = 100
-	slider.step = 5
+	slider.min_value = lo
+	slider.max_value = hi
+	slider.step = step
 	slider.value = value
 	slider.custom_minimum_size = Vector2(150, 0)
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL

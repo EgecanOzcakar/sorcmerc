@@ -231,6 +231,8 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 			"seed": int(world.origin.get("seed", 0))},
 		"settlements": settlements,
 		"parties": parties,
+		"fallen": world.fallen.map(func(f): return {"id": f["id"], "faction": f["faction"],
+			"position": _v(f["position"]), "troops": f["troops"], "at": f["at"]}),
 		"lairs": lairs,
 		"landmarks": landmarks,
 		"waters": waters,
@@ -271,6 +273,9 @@ static func from_dict(d: Dictionary):
 			troops.append(t)
 		p.troops = troops
 		world.add_party(p)
+	for fd in d.get("fallen", []):   # #142; an old save has none
+		world.fallen.append({"id": String(fd["id"]), "faction": String(fd["faction"]),
+			"position": _vec(fd.get("position")), "troops": fd.get("troops", []), "at": float(fd.get("at", 0.0))})
 	for ld in d.get("lairs", []):
 		var l := World.Lair.new(String(ld["id"]), _vec(ld.get("position")),
 			String(ld.get("faction", "goblinoid")), String(ld.get("sname", "")))

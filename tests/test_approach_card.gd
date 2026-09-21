@@ -394,6 +394,14 @@ func _init() -> void:
 	check(card().mouse_filter == Control.MOUSE_FILTER_STOP,
 		"the card stops mouse events rather than passing them through")
 
+	# #151: one line of advice under the ways, drawn from core/tips.gd.
+	var Tips = load("res://core/tips.gd")
+	var tipped = card()
+	tipped.show_approach(four(), "Goblins (3)")
+	check(Tips.TIPS.any(func(t): return drawn(tipped).contains(String(t).substr(0, 24))),
+		"the card carries a tip, drawn with the rest")
+	check(tipped._ops.size() > 0 and _last_text(tipped) != "Goblins (3)", "...under the ways, not over them")
+
 	print("test_approach_card: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -408,3 +416,9 @@ func _party():
 		p.add_member(ch)
 	Travel.set_orders(p, "careful", "thrun", "")
 	return p
+
+func _last_text(c) -> String:
+	for i in range(c._ops.size() - 1, -1, -1):
+		if c._ops[i].has("text"):
+			return String(c._ops[i]["text"])
+	return ""

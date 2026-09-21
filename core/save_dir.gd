@@ -14,11 +14,15 @@ extends RefCounted
 static var _root := ""
 
 static func root() -> String:
+	# The env is read every time, never cached: an autoload (achievements.gd's
+	# PATH) asks before a test's _init has set it, and a cached fallback then
+	# sent every drive_*.gd's world slots into the same auto-<pid>-<randi> dir
+	# (randi is not yet randomized at autoload time), one more slot per run.
+	var env := OS.get_environment("SORCMERC_SAVE_DIR")
+	if env != "":
+		return env.trim_suffix("/")
 	if _root == "":
-		var env := OS.get_environment("SORCMERC_SAVE_DIR")
-		if env != "":
-			_root = env.trim_suffix("/")
-		elif _under_test():
+		if _under_test():
 			_root = "user://test/auto-%d-%d" % [OS.get_process_id(), randi()]   # flatpak pids are tiny and reused
 		else:
 			_root = "user:/"   # so root() + "/x" is user://x

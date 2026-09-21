@@ -78,6 +78,7 @@ const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
+const Tips = preload("res://core/tips.gd")   # #151
 const Objectives = preload("res://core/objectives.gd")
 const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
@@ -1594,6 +1595,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 			WorldAI.truce(foe, world.player(), world.clock.elapsed)
 			_quest_news.append("Their leader got away — the job is still open.")
 		else:
+			WorldAI.fell(world, foe)      # #142: it comes back in two days
 			world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
 			# T91: a no-op for the settlement-guard/lair-raid stand-ins below (their
 			# synthetic ids never match a live hunt_party quest's target), correct
@@ -1784,6 +1786,17 @@ func _build_spoils_panel(heading: String, rows: Array) -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 
+	# #151: the verdict pictured — the run summary's own two paintings — so the
+	# page after a fight reads like the card before it, and not a receipt.
+	var art := Icons.scene_art({"Victory": "summary-victory", "Defeat": "summary-defeat"}.get(heading, ""), null)
+	if art != null:
+		var pic := TextureRect.new()
+		pic.texture = art
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.custom_minimum_size = Vector2(420, 180)
+		box.add_child(pic)
+
 	var scroll := _scroll_column(Vector2(420, 0))
 	# Only as tall as it needs to be, up to a ceiling: a two-line haul should not
 	# open a half-screen box, and a twelve-line one should not run off the bottom.
@@ -1796,6 +1809,12 @@ func _build_spoils_panel(heading: String, rows: Array) -> void:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.add_theme_color_override("font_color", row[1])
 		list.add_child(l)
+
+	var tip := Label.new()   # #151: one line of advice, the way the approach card carries one
+	tip.text = Tips.pick()
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tip.theme_type_variation = "Dim"
+	box.add_child(tip)
 
 	var go := Button.new()
 	go.text = "Back to the map  [Esc]"
@@ -2099,6 +2118,13 @@ func _check_expired_lairs() -> void:
 	# landmark going red again with no explanation reads as a bug.
 	for l in WorldLairs.respawn(world, world.clock.elapsed):
 		_lair_msg.text = WorldLairs.respawn_text(l)
+		_autosave()
+	# #142: and the bands the party put down, two days on, out of those lairs.
+	var back: Array = WorldAI.respawn(world, world.clock.elapsed)
+	for line in back:
+		_lair_msg.text = String(line)
+	if not back.is_empty():
+		_party3d.reset(world)   # a figure is only built on reset (party3d.gd)
 		_autosave()
 
 # Raids (core/raids.gd): the clock every lair in the settled country runs
@@ -4597,7 +4623,35 @@ func _draw() -> void:
 	var ppos: Vector2 = p.position if p != null else Vector2.ZERO
 	_draw_labels()
 	_draw_offscreen_markers(ppos)
+	_draw_quest_marks(ppos)
 
+
+# #153: the job's own tile (assets/generated/quest-<kind>.png, the one the
+# offer card shows) floated over whatever it names on the map, gilt-framed; a
+# job that is done wears it over the town that pays. Off screen, it pins to the
+# frame as a chevron the way a settlement does, in gold, so an open job is
+# never a name you have to remember the way to. Which jobs, and where, is
+# Quest.map_marks — testable without a viewport.
+const QUEST_TILE := 22.0
+func _draw_quest_marks(ppos: Vector2) -> void:
+	var frame := _marker_frame()
+	for m in Quest.map_marks(world, party):
+		var at: Vector2 = _pix(m["pos"])
+		if not frame.has_point(at):
+			if frame.size.x > 0.0 and frame.size.y > 0.0:
+				_draw_offscreen_marker(m["pos"], m["title"], Icons.COL_GOLD, frame, ppos)
+			continue
+		at.y -= QUEST_TILE * 1.4   # above the footprint and the figure standing in it
+		var r := Rect2(at - Vector2.ONE * QUEST_TILE * 0.5, Vector2.ONE * QUEST_TILE)
+		var tex: Texture2D = Icons.scene_art("quest-" + String(m["kind"]), null)
+		draw_rect(r.grow(2.0), Icons.COL_INK)
+		if tex != null:
+			draw_texture_rect(tex, r, false)
+		draw_rect(r.grow(2.0), Icons.COL_GOLD if m["done"] else Icons.COL_GOLD_EDGE, false, 1.5)
+		# A pin down to the footprint, so a tile over a crowded town is not
+		# ambiguous about which roof it is over.
+		draw_line(at + Vector2(0.0, QUEST_TILE * 0.5 + 2.0), at + Vector2(0.0, QUEST_TILE * 1.4),
+			Icons.COL_GOLD_EDGE, 1.0, true)
 
 # The name under every landmark the player can see, painter-sorted so a nearer
 # label is drawn over a further one. Which landmarks those are is the same
@@ -4914,11 +4968,11 @@ func _draw_offscreen_markers(ppos: Vector2) -> void:
 	if frame.size.x <= 0.0 or frame.size.y <= 0.0:
 		return      # a viewport too small to have an inside; nothing to pin to
 	for s in _offscreen_settlements(frame, ppos):
-		_draw_offscreen_marker(s, frame, ppos)
+		_draw_offscreen_marker(s.position, s.sname, faction_color(s.faction), frame, ppos)
 
-func _draw_offscreen_marker(s, frame: Rect2, ppos: Vector2) -> void:
+func _draw_offscreen_marker(pos: Vector2, sname: String, col: Color, frame: Rect2, ppos: Vector2) -> void:
 	var center := frame.position + frame.size * 0.5
-	var to := _pix(s.position) - center
+	var to := _pix(pos) - center
 	if to.length() < 0.001:
 		return
 	# Push out along the direction until one axis hits the frame, then take the
@@ -4929,7 +4983,6 @@ func _draw_offscreen_marker(s, frame: Rect2, ppos: Vector2) -> void:
 	var scale_y: float = (frame.size.y * 0.5) / maxf(absf(to.y), 0.001)
 	var at := center + to * minf(scale_x, scale_y)
 	var dir := to.normalized()
-	var col := faction_color(s.faction)
 	var tip := at + dir * OFFSCREEN_SIZE
 	var side := Vector2(-dir.y, dir.x) * OFFSCREEN_SIZE * 0.62
 	draw_colored_polygon(PackedVector2Array([tip, at - dir * OFFSCREEN_SIZE * 0.5 + side,
@@ -4939,8 +4992,8 @@ func _draw_offscreen_marker(s, frame: Rect2, ppos: Vector2) -> void:
 	# party's own speed (World.SPEED is units per world-minute).
 	var p := world.player()
 	var speed: float = p.speed if p != null and p.speed > 0.0 else World.SPEED
-	var mins: float = ppos.distance_to(s.position) / speed
-	var label := "%s  %s" % [s.sname, _travel_time(mins)]
+	var mins: float = ppos.distance_to(pos) / speed
+	var label := "%s  %s" % [sname, _travel_time(mins)]
 	var w := ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
 	# Keep the text inside the frame whichever edge the chevron landed on. On a
 	# side edge the plain clamp is not enough on its own: centring the label on
