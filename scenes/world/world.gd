@@ -78,6 +78,7 @@ const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
+const Tips = preload("res://core/tips.gd")   # #151
 const Objectives = preload("res://core/objectives.gd")
 const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
@@ -1785,6 +1786,17 @@ func _build_spoils_panel(heading: String, rows: Array) -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 
+	# #151: the verdict pictured — the run summary's own two paintings — so the
+	# page after a fight reads like the card before it, and not a receipt.
+	var art := Icons.scene_art({"Victory": "summary-victory", "Defeat": "summary-defeat"}.get(heading, ""), null)
+	if art != null:
+		var pic := TextureRect.new()
+		pic.texture = art
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.custom_minimum_size = Vector2(420, 180)
+		box.add_child(pic)
+
 	var scroll := _scroll_column(Vector2(420, 0))
 	# Only as tall as it needs to be, up to a ceiling: a two-line haul should not
 	# open a half-screen box, and a twelve-line one should not run off the bottom.
@@ -1797,6 +1809,12 @@ func _build_spoils_panel(heading: String, rows: Array) -> void:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.add_theme_color_override("font_color", row[1])
 		list.add_child(l)
+
+	var tip := Label.new()   # #151: one line of advice, the way the approach card carries one
+	tip.text = Tips.pick()
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tip.theme_type_variation = "Dim"
+	box.add_child(tip)
 
 	var go := Button.new()
 	go.text = "Back to the map  [Esc]"
