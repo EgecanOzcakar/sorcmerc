@@ -1,9 +1,11 @@
 # Callings on the world screen (docs/superpowers/specs/2026-09-21-callings-
 # relations-design.md §2–§3): assigned the frame the map is up, told at the
 # first fire — the target marked under the card — read on the quest log and
-# the party page, done on the road, and paid on a card of its own the moment
-# the outcome card is down — or the visit it was done at is left. The fire
-# that has nobody left to tell says something else.
+# the party page, done and paid on the road (in the same save the doing
+# makes, so a quit at the outcome card loses nothing), and said on a card of
+# its own the moment the outcome card is down — or the visit it was done at
+# is left, which is where a past told at the inn of the very town it names
+# is done. The fire that has nobody left to tell says something else.
 #   SORCMERC_FAST=1 godot --headless --path . -s tests/test_world_callings.gd
 extends SceneTree
 
@@ -11,6 +13,8 @@ const World = preload("res://core/world.gd")
 const Landmarks = preload("res://core/landmarks.gd")
 const Callings = preload("res://core/callings.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
+const WorldSave = preload("res://core/world_save.gd")
+const Visit = preload("res://core/settlement_visit.gd")
 
 const AMULET := "amulet-of-proof-against-detection-and-location"
 
@@ -92,7 +96,7 @@ func _init() -> void:
 	if main._event_card != null:
 		check(shrine.sname in String(main._event_card._e.get("text", "")), "the tell names the shrine")
 		check(String(main._event_card._e.get("title", "")) == Callings.TEMPLATES["acolyte"]["title"], "titled by the template")
-	check(shrine.found, "the shrine is on the map now")
+	check(shrine.found and w.is_explored(shrine.position), "the shrine is on the map now, its ground revealed so it draws")
 	check(party.callings[hero.id]["state"] == "told" and w.clock.is_paused(), "told, and the card holds the clock")
 	main._on_event_ack()
 	await process_frame
@@ -125,15 +129,21 @@ func _init() -> void:
 	var opts: Array = Landmarks.options(shrine, party, w)
 	check(main._approach_card != null and opts.size() > 1, "the shrine asks (%d rows)" % opts.size())
 	var xp_before: int = hero.xp
+	# She will roll it herself, so the bond goes to whoever stands closest to her.
+	var closest := Callings._closest(party, hero.id)
+	var score_before: float = PartyOpinion.score(party, hero.id, closest)
 	main._on_place_chosen(String(opts[0]["id"]))
 	await process_frame
 	check(_card_id(main).begins_with("landmark-shrine-"), "the outcome first: %s" % _card_id(main))
 	var who := String(main._event_card._e.get("char_id", "")) if main._event_card != null else ""
 	check(who == hero.id, "the acolyte rolls Religion at her own shrine: %s" % who)
-	# She rolled it herself, so the bond goes to whoever stands closest to her.
-	var closest := Callings._closest(party, hero.id)
-	var score_before: float = PartyOpinion.score(party, hero.id, closest)
-	check(shrine.spent and main._calling_queue.size() == 1, "the calling waits behind the outcome card")
+	check(shrine.spent and main._calling_queue.size() == 1, "the calling's card waits behind the outcome card")
+	# ...but the past is already paid, and already in the save the answer made:
+	# a quit here loses the card, never the amulet or the bond.
+	check(party.callings[hero.id]["state"] == "done" and party.stash_count(AMULET, true) == 1,
+		"done and paid before the outcome card is acked")
+	check(String(WorldSave.to_dict(w, party)["party"]["callings"][hero.id]["state"]) == "done",
+		"...and the save already says so")
 	main._on_event_ack()
 	w.clock.pause()   # the player's own pause, the moment the card is down: the map is standing still
 	for i in 3:
@@ -154,26 +164,34 @@ func _init() -> void:
 	check(main._calling_queue.is_empty() and main._event_card == null, "acked: nothing queued, card down")
 	check(w.clock.is_paused(), "...and a map that was standing still is left standing (#98)")
 
-	# --- the second fire tells the second hero; a gate does the thing, with the
-	# leader's help, and the card waits for the visit to close ---
-	await _camp(main)
-	check(_card_id(main) == "calling-charlatan", "the second camp tells the charlatan's: %s" % _card_id(main))
-	if main._event_card != null:
-		check(town.sname in String(main._event_card._e.get("text", "")), "the tell names the town")
-	main._on_event_ack()
+	# --- the inn's fire tells the second hero, in the very town her past names:
+	# the gate was walked before she spoke, so the rest asks again, and the
+	# card waits for the visit to close ---
 	p.position = town.position
 	main._open_visit(town)
 	await process_frame
-	check(not main._visit.is_empty() and main._calling_queue.size() == 1 and main._event_card == null,
-		"walking in the gate does it, and the card waits behind the visit")
+	check(not main._visit.is_empty() and main._calling_queue.is_empty() and party.callings[mate.id]["state"] == "",
+		"walking in untold does nothing")
+	party.gold = Visit.inn_cost(town) + 1
+	party.last_long_rest_at = -99999.0
 	score_before = PartyOpinion.score(party, mate.id, hero.id)
+	main._rest()
+	await process_frame
+	check(_card_id(main) == "calling-charlatan", "the inn's fire tells the charlatan's: %s" % _card_id(main))
+	if main._event_card != null:
+		check(town.sname in String(main._event_card._e.get("text", "")), "the tell names this town")
+	check(party.callings[mate.id]["state"] == "done" and main._calling_queue.size() == 1,
+		"told here, done here: paid at once, the card waiting behind the visit")
+	check(PartyOpinion.score(party, mate.id, hero.id) == score_before + PartyOpinion.CALLING_BOND,
+		"the bond with the leader who walked her in")
+	main._event_card.acknowledged.emit()
+	await process_frame
+	check(main._event_card == null and not main._visit.is_empty(), "the telling acked: the visit is still up, no second card over it")
 	main._close_visit()
 	for i in 3:
 		await process_frame
 	check(_card_id(main) == "calling-charlatan", "the visit closed: the resolution comes down: %s" % _card_id(main))
-	check(party.callings[mate.id]["state"] == "done", "done")
-	check(PartyOpinion.score(party, mate.id, hero.id) == score_before + PartyOpinion.CALLING_BOND,
-		"the bond with the leader who walked her in")
+	check("done" in Callings.describe(party, mate.id), "describe says done")
 	main._on_event_ack()
 	await process_frame
 

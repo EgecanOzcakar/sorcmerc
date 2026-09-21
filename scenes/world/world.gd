@@ -277,7 +277,7 @@ var _region_msg: Label               # the last crossing, same "persists" contra
 
 var _ladder_title_seen := 0          # the last renown title _check_ladder() said; set on load
 var _rungs_seen: Dictionary = {}     # faction -> the last rung _check_ladder() said; set on load
-var _calling_queue: Array = []        # [char_id, who] pairs done on the road while a screen was up; _check_callings() shows them
+var _calling_queue: Array = []        # [char_id, complete()'s result] pairs paid on the road while a screen was up; _check_callings() shows them
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _camp_msg: Label                 # T9x: last short-rest/camp outcome, same "persists" contract as _lair_msg
@@ -2138,10 +2138,10 @@ func _check_ladder() -> void:
 # Dealt here every frame rather than at creation, recruit and load: assign()
 # is one loop over the active four that returns early for anyone already
 # holding one, and a map with no target for a hero yet (no shrine, no band)
-# tries again the frame one appears. Told at the fire (_fireside), done on the
-# road (_calling_check at the landmark, the lair, the fight, the gate, the
-# hall), and paid on a card of its own — shown the frame the map is clear,
-# since the doing always happens under something (an outcome card, the
+# tries again the frame one appears. Told at the fire (_fireside), done and
+# paid on the road (_calling_check at the landmark, the lair, the fight, the
+# gate, the hall), and said on a card of its own — shown the frame the map is
+# clear, since the doing always happens under something (an outcome card, the
 # spoils page, a visit) that a second card must not come down over.
 func _check_callings() -> void:
 	Callings.assign(party, world)
@@ -2151,33 +2151,34 @@ func _check_callings() -> void:
 	# Over a map that was standing still — #98's halt after the spoils page,
 	# or the player's own pause — the ack leaves it standing, not running on.
 	var still: bool = world.clock.is_paused()
-	_calling_done(String(q[0]), String(q[1]), func(): _on_event_ack(); if still: _halt())
+	_calling_done(String(q[0]), q[1], func(): _on_event_ack(); if still: _halt())
 
 # The screen saying what just happened, in callings.gd's one shape; `who` is
 # the member who did it — the row's roller, the fight's leader, the visit's —
-# and is the bond the resolution pays. Queued, never shown here: see above.
+# and is the bond the resolution pays. Paid here and now (core/callings.gd's
+# complete: the XP split, the heirloom into the stash, the bond, the state),
+# so the autosave the doing always makes next carries it — the shrine is
+# spent in that same save, and a quit at the outcome card must not lose the
+# past that spent it. Only the card waits: see above.
 func _calling_check(kind: String, id: String, who: String) -> void:
 	for char_id in Callings.check(party, world, {"kind": kind, "id": id}):
-		_calling_queue.append([String(char_id), who])
+		var r: Dictionary = Callings.complete(party, world, String(char_id), who)
+		if not r.is_empty():
+			_calling_queue.append([String(char_id), r])
 
 # The party's leader: the first of the march, or nobody.
 func _leader() -> String:
 	return String(party.active[0]) if not party.active.is_empty() else ""
 
-# The rewards applied (core/callings.gd's complete: the XP split, the heirloom
-# into the stash, the bond), then said — the done line, the chips. False when
-# there was nothing left to pay (queued twice before the map cleared).
-func _calling_done(char_id: String, who: String, then: Callable) -> bool:
-	var r: Dictionary = Callings.complete(party, world, char_id, who)
-	if r.is_empty():
-		return false
+# The rewards already paid (`r` is complete()'s receipt), said — the done
+# line, the chips.
+func _calling_done(char_id: String, r: Dictionary, then: Callable) -> void:
 	var t: Dictionary = Callings.templates()[party.callings[char_id]["id"]]
 	Sound.play_sfx("quest_complete")
 	_autosave()
 	_card({"id": "calling-" + String(party.callings[char_id]["id"]), "title": String(t["title"]),
 		"kind": "good", "ok": true, "text": String(r["text"]), "xp": int(r["xp"]),
 		"item": String(r["item"]), "item_name": String(r["item_name"]), "thanks": ""}, then)
-	return true
 
 # --- landmarks: places on the map that are not a fight -----------------------
 # The lair button's shape again: one button, two states. A found place offers a
@@ -3056,6 +3057,10 @@ func _rest() -> void:
 	# The same fire as a camp's, over the inn page; the panel under it has
 	# already said what the night cost.
 	_fireside(RNG.new(maxi(1, absi(hash("inn|%s|%d" % [s.id, int(world.clock.elapsed)])))), _on_inn_card_ack)
+	# A past told at this very inn can name this very town — the charlatan's
+	# old mark, the noble's envoy. The gate's check ran before it was told;
+	# asked again, it is done, and the card comes down as the party leaves.
+	_calling_check("visited", s.id, _leader())
 
 # The inn's fireside card comes down over a visit that is still holding the
 # clock, so its ack cannot be the plain one — that would set the map running
@@ -3205,10 +3210,10 @@ func _fireside(rng: RNG, then: Callable) -> bool:
 		_card({"id": "calling-" + String(b["id"]), "title": String(b["title"]), "kind": "good", "ok": true,
 			"text": String(b["text"])}, then)
 		return true
-	while not _calling_queue.is_empty():
+	if not _calling_queue.is_empty():
 		var q: Array = _calling_queue.pop_front()
-		if _calling_done(String(q[0]), String(q[1]), then):
-			return true
+		_calling_done(String(q[0]), q[1], then)
+		return true
 	var m: Dictionary = PartyOpinion.camp_moment(party, rng)
 	if m.is_empty():
 		return false

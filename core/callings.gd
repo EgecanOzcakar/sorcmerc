@@ -157,11 +157,22 @@ static func validate(src, own_items := {}) -> Array:
 # nearest thing of the template's kind. No such thing on this map → no calling
 # yet, tried again next call — so the screen can ask every frame and every
 # camp. Returns the ids newly assigned, in marching order.
+#
+# The same pass re-reads every calling not yet done: a target the world has
+# lost since — a shrine spent before the telling, a band beaten by someone
+# else or gone home, a lair the map dropped — is re-picked the same way (a
+# looted lair is not lost; it respawns). A told calling's new target is marked
+# as the old one was, so the map never points at nothing; no fit yet leaves
+# the entry with an empty target, which beat() and check() skip until the
+# next pass finds one.
 static func assign(party, world, _rng = null) -> Array:
 	var out: Array = []
 	var from: Vector2 = world.player().position if world.player() != null else Vector2.ZERO
 	for id in party.active:
-		if party.callings.has(id):
+		var c: Dictionary = party.callings.get(id, {})
+		if not c.is_empty():
+			if String(c["state"]) != "done" and _gone(world, c):
+				_retarget(world, c, from)
 			continue
 		var ch = party.get_member(id)
 		if ch == null or not templates().has(ch.background_id):
@@ -178,9 +189,29 @@ static func assign(party, world, _rng = null) -> Array:
 		out.append(id)
 	return out
 
+# An audience needs no target; anything else is gone when the world no longer
+# has it — or, a landmark, when it is spent (it can never fire landmark_answered again).
+static func _gone(world, c: Dictionary) -> bool:
+	if String(c["target_kind"]) == "audience":
+		return false
+	var target = _target(world, c)
+	return target == null or ("spent" in target and target.spent)
+
+static func _retarget(world, c: Dictionary, from: Vector2) -> void:
+	var t: Dictionary = templates().get(String(c["id"]), {})
+	var target = _nearest(world, t["target"], from) if not t.is_empty() else null
+	c["target_id"] = "" if target == null else String(target.id)
+	if target != null and String(c["state"]) == "told":
+		_mark(world, target)
+
 # A landmark of the kind, found or hidden (the telling finds it); a lair not yet
-# looted; a monster band; a civilized settlement of the kind, or of a larger one
-# when the map has none (a charlatan's old mark can live in a city).
+# looted; a monster band that is people (the copy is about deserters and debt
+# collectors, so bandits before wolves), any monster band when the map has no
+# people, never a raiding band (it is marching at a town and will be gone or
+# dead before the party gets there); a civilized settlement of the kind, or of
+# a larger one when the map has none (a charlatan's old mark can live in a city).
+const PEOPLE := ["bandit", "goblinoid", "orc", "gnoll", "kobold", "cultist"]
+
 static func _nearest(world, spec: Dictionary, from: Vector2):
 	var WorldAI = load("res://core/world_ai.gd")
 	var pool: Array = []
@@ -191,7 +222,10 @@ static func _nearest(world, spec: Dictionary, from: Vector2):
 		"lair":
 			pool = world.lairs.filter(func(l): return not l.looted)
 		"band":
-			pool = world.parties.filter(func(p): return not p.is_player and WorldAI.is_monster(p.faction))
+			var bands: Array = world.parties.filter(func(p): return not p.is_player and WorldAI.is_monster(p.faction) and String(p.ai.get("behavior", "")) != "raid")
+			pool = bands.filter(func(p): return PEOPLE.has(p.faction))
+			if pool.is_empty():
+				pool = bands
 		"settlement":
 			var civ: Array = world.settlements.filter(func(s): return not WorldAI.is_monster(s.faction))
 			var want: int = SETTLEMENT_SIZES.find(spec["settlement"])
@@ -210,40 +244,55 @@ static func _nearest(world, spec: Dictionary, from: Vector2):
 # --- the telling ------------------------------------------------------------
 
 # The first active hero whose calling is untold speaks: one paragraph, and the
-# target is marked — a landmark found, a lair discovered; a band or a town is
-# only named. Returns {} when nobody has anything to tell.
+# target is marked — a landmark found, a lair discovered, and the ground it
+# stands on revealed, since every layer that would draw the mark gates on
+# is_explored (a hidden mark is no mark); a band or a town is named in the
+# line. A calling waiting on a target (assign() found none yet) is not told.
+# Returns {} when nobody has anything to tell.
 static func beat(party, world) -> Dictionary:
 	for id in party.active:
 		var c: Dictionary = party.callings.get(id, {})
 		var t: Dictionary = templates().get(String(c.get("id", "")), {})
-		if t.is_empty() or String(c["state"]) != "":
+		if t.is_empty() or String(c["state"]) != "" or _waiting(c):
 			continue
 		var ch = party.get_member(id)
 		if ch == null:
 			continue
 		var target = _target(world, c)
-		if target != null and "found" in target:
-			target.found = true
-		elif target != null and "discovered" in target:
-			target.discovered = true
+		if target != null:
+			_mark(world, target)
 		c["state"] = "told"
 		c["told_at"] = world.clock.elapsed
 		return {"char_id": id, "cname": ch.cname, "title": t["title"], "id": String(c["id"]),
 			"text": _fmt(t["tell"], target_name(party, world, id))}
 	return {}
 
+static func _waiting(c: Dictionary) -> bool:
+	return String(c["target_kind"]) != "audience" and String(c["target_id"]) == ""
+
+static func _mark(world, target) -> void:
+	if "found" in target:
+		target.found = true
+	elif "discovered" in target:
+		target.discovered = true
+	world.reveal(target.position)
+
 # --- doing the thing --------------------------------------------------------
 
 # The world screen says what just happened — {"kind": one of EVENT_KINDS, "id":
 # the landmark / lair / band / settlement} — and this says whose told calling
-# that was. Any audience is the entertainer's. Deciding only: the screen shows
-# the card and calls complete().
+# that was. Any audience is the entertainer's. A dead hero's past does not
+# complete: the bond and the line are theirs to have. Deciding only: the
+# screen calls complete() and shows the card.
 static func check(party, world, event: Dictionary) -> Array:
 	var out: Array = []
 	for id in party.callings:
 		var c: Dictionary = party.callings[id]
 		var t: Dictionary = templates().get(String(c["id"]), {})
-		if t.is_empty() or String(c["state"]) != "told" or String(t["done_by"]) != String(event.get("kind", "")):
+		if t.is_empty() or String(c["state"]) != "told" or String(t["done_by"]) != String(event.get("kind", "")) or _waiting(c):
+			continue
+		var ch = party.get_member(String(id))
+		if ch == null or ch.dead:
 			continue
 		if String(c["target_kind"]) == "audience" or String(c["target_id"]) == String(event.get("id", "")):
 			out.append(id)
@@ -315,8 +364,8 @@ static func _fmt(text: String, name: String) -> String:
 	return text % name if "%s" in text else text
 
 static func _target(world, c: Dictionary):
-	var pool: Array = {"landmark": world.landmarks, "lair": world.lairs, "settlement": world.settlements}.get(
-		String(c.get("target_kind", "")), [])
+	var pool: Array = {"landmark": world.landmarks, "lair": world.lairs, "band": world.parties,
+		"settlement": world.settlements}.get(String(c.get("target_kind", "")), [])
 	for x in pool:
 		if x.id == c["target_id"]:
 			return x
