@@ -140,6 +140,7 @@ var caption := CAPTION
 var glyph := GLYPH
 var hint := "Choose how to meet them"
 var art_stem := ""          # assets/generated/<stem>.png when set; the way's own scene art otherwise
+var foe_faction := ""       # the band's faction: its own painting of the way's art when there is one
 
 var _opts: Array = []
 var _foe := ""
@@ -212,7 +213,8 @@ func show_approach(options: Array, foe_label: String) -> void:
 		_opts.append(FALLBACK_OPTION)
 	_foe = foe_label if foe_label != "" else NO_FOE
 	_chosen = false
-	_art = Icons.scene_art(art_stem, null) if art_stem != "" else Icons.event_art(FRIENDLY_SCENE_ART if _friendly() else SCENE_ART, null)
+	_art = Icons.scene_art(art_stem if art_stem != "" \
+		else Icons.scene_stem("event-" + (FRIENDLY_SCENE_ART if _friendly() else SCENE_ART), foe_faction), null)
 	visible = true
 	_build_buttons()
 	_layout()

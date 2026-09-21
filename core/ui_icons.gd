@@ -452,6 +452,17 @@ static func image_at(path: String) -> Texture2D:
 	_icon_cache[path] = tex
 	return tex
 
+# The most specific painting there is: "<stem>-<suffix>" when the frame the
+# caller will show (its -pass/-fail one under `ok`, the plain one otherwise)
+# has been painted, "<stem>" otherwise. The approach card's bands are painted
+# per faction; their outcome frames only for some.
+static func scene_stem(stem: String, suffix: String, ok = null) -> String:
+	if suffix == "":
+		return stem
+	var s := "%s-%s" % [stem, suffix]
+	var frame := s if ok == null else "%s-%s" % [s, "pass" if ok else "fail"]
+	return s if ResourceLoader.exists("res://assets/generated/%s.png" % frame) else stem
+
 static func scene_art(stem: String, ok) -> Texture2D:
 	if ok != null:
 		var tex := _icon("res://assets/generated/%s-%s.png" % [stem, "pass" if ok else "fail"])
