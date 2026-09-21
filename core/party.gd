@@ -43,10 +43,20 @@ var blessed := false        # a shrine's blessing: temp HP for every hero at the
 var swift_until := 0.0      # Fly / Longstrider: forced-march speed, no road penalty, until this world-minute
 var safe_camp := false      # Rope Trick: the next camp needs no kit and can't be jumped
 var alarm_set := false      # Alarm: the next camp's ambush is heard coming
-# SPIKE (docs/spike-party-opinions.md): what members think of each other —
-# "a|b" pair key -> {score, status}. Owned entirely by core/party_opinion.gd;
-# nothing in the shipped game reads or saves it yet.
+# What members think of each other — "a|b" pair key -> {score, status}. Owned
+# entirely by core/party_opinion.gd (docs/spike-party-opinions.md); read on the
+# road, at camp and in the fight, saved beside the party since 2026-09-21.
 var relations: Dictionary = {}
+# The past each hero's background hands them — char_id -> {id, target_kind,
+# target_id, state, told_at}. Owned entirely by core/callings.gd.
+var callings: Dictionary = {}
+# What the company has done in town that takes days — who trained, the
+# once-a-visit stamps, the pit's bracket. Owned entirely by core/downtime.gd.
+var downtime: Dictionary = {}
+# The company's house — the town it is in, the rooms built onto it, the
+# strongroom's gold, the garden's and the map room's clocks. {} until bought.
+# Owned entirely by core/lodge.gd.
+var lodge: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 

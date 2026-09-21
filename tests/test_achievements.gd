@@ -72,6 +72,25 @@ func _init() -> void:
 		check(not Ach.find(id).is_empty(), "%s is defined" % id)
 	check(int(Ach.find("waystations_3")["goal"]) == 3 and Ach.find("waystations_3")["counter"] == "waystations",
 		"Founder counts three waystations")
+	# the ladder and renown: four deeds off the world screen's high-water marks
+	for id in ["known_first", "sworn_first", "renown_famous", "audience_first"]:
+		check(not Ach.find(id).is_empty(), "%s is defined" % id)
+	check(int(Ach.find("sworn_first")["goal"]) == 3 and Ach.find("sworn_first")["counter"] == "best_rung",
+		"Sworn counts a best_rung of 3")
+	# callings: two deeds off Callings.complete()'s collect("callings", hero); the
+	# pair ones (bonded, lovers) were on the list already and are checked above
+	for id in ["calling_first", "callings_4"]:
+		check(not Ach.find(id).is_empty(), "%s is defined" % id)
+	check(int(Ach.find("callings_4")["goal"]) == 4 and Ach.find("callings_4")["counter"] == "callings",
+		"Four Pasts counts four heroes' callings")
+	# downtime: four deeds off core/downtime.gd's bumps
+	for id in ["trained_first", "carouse_contact", "gamble_treble", "pit_champion"]:
+		check(not Ach.find(id).is_empty() and Ach.find(id)["group"] == "road", "%s is defined, on the road" % id)
+	check(Ach.find("pit_champion")["counter"] == "pit_brackets" and int(Ach.find("pit_champion")["goal"]) == 1,
+		"Champion of the Pit is one bracket")
+	# the lodge: two high-water marks off core/lodge.gd's records
+	check(Ach.find("lodge_bought")["counter"] == "lodges" and int(Ach.find("lodge_bought")["goal"]) == 1, "A Door of Our Own is the house")
+	check(Ach.find("lodge_full")["counter"] == "lodge_rooms" and int(Ach.find("lodge_full")["goal"]) == 5, "Every Room Built is five rooms")
 	print("test_achievements: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -611,6 +630,12 @@ func test_relationship_wiring() -> void:
 	check(Ach.is_unlocked("rivals"), "a pair that loathe each other")
 	PartyOpinion.friendly_fire(p, "vera", "pike")
 	check(Ach.is_unlocked("friendly_fire"), "catching your own in your own spell")
+	PartyOpinion.set_score(p, "pike", "ilsa", PartyOpinion.COURTSHIP_MIN)
+	PartyOpinion.answer_courtship(p, "pike", "ilsa", true)
+	check(Ach.is_unlocked("lovers"), "a courtship said yes to")
+	for id in ["vera", "pike", "ilsa", "thrun"]:
+		Ach.collect("callings", id)
+	check(Ach.is_unlocked("calling_first") and Ach.is_unlocked("callings_4"), "four callings seen through")
 
 func test_world_wiring() -> void:
 	_wipe()

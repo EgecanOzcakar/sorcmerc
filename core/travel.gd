@@ -47,6 +47,7 @@ extends RefCounted
 const Campaign = preload("res://core/campaign.gd")
 const Dice = preload("res://core/dice.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 const Regions = preload("res://core/regions.gd")
 const RNG = preload("res://core/rng.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
@@ -309,14 +310,24 @@ static func check(party, world, rng = null) -> Dictionary:
 	var who := _assign(party, e, orders(party))
 	if who.is_empty():
 		return {}                      # nobody left to roll: no event rather than a fake one
-	var bonus: int = int(who["bonus"]) + pace_bonus(party)
+	# spike-party-opinions §7: a party that pulls together reads the road a
+	# point better; one at odds, a point worse. Same term as pace_bonus, so
+	# the card's roll line just grows another signed number.
+	var morale: int = PartyOpinion.travel_bonus(party)
+	var bonus: int = int(who["bonus"]) + pace_bonus(party) + morale
 	var nat: int = int(Dice.d20(rng)["nat"])
 	var ok: bool = nat + bonus >= int(e["dc"])
 	out.merge({"ok": ok, "char_id": who["id"], "cname": who["cname"], "skill": who["skill"],
 		"nat": nat, "bonus": bonus, "dc": int(e["dc"]),
 		"named": bool(who["named"])}, true)
+	if morale != 0:
+		out["morale"] = morale
 	out["text"] = (String(e["pass"]) % who["cname"]) if ok else String(e["fail"])
 	_apply(e, ok, party, world, rng, out)
+	# The roll feeds back: the roller who read the road right (or wrong) is
+	# felt for it by everyone else marching. Only here — nobody rolled on the
+	# spell-pass or no-check exits above.
+	PartyOpinion.road_result(party, String(who["id"]), ok, String(e["kind"]))
 	_note_event(String(e["id"]))
 	return out
 

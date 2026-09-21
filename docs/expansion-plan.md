@@ -6210,8 +6210,6 @@ Saved under `landmarks`; an old save loads with none.
 
 ### Still open
 
-- No art yet for the cards (`assets/generated/landmark-<kind>.png`); the card
-  draws without it.
 - Trainers belong to downtime (B2); a landmark that wakes something to threat
   clocks (C1).
 - A landmark never restocks.
@@ -6368,10 +6366,351 @@ the map mid-run.
 
 ### Still open
 
-- No pictures yet, and the refugees event borrows the wayfarer's frames until one is generated.
+- No pictures yet.
 - A gate fight's waves for a lair faction with no theme of its own (a pack's orcs,
   say) come from `encounter_spec`'s default forest theme, not the raiders'
   own kin: `_hold_waves` reads the stamped theme. Two lines when it shows —
   stash the raw theme and seed on the spec.
 - A raid band carries nothing home; the halved market is what it took.
 - Towns are never taken. A town that falls is the faction ladder's war (#4).
+
+## The ladder and renown — standing with a people, and a name across the map (2026-09-21)
+
+Sub-project 4 of the content batch (objectives → landmarks → threat clocks and
+reclaiming → faction ladder and renown → callings with party relations →
+downtime → the lodge). Spec: `docs/superpowers/specs/2026-09-21-ladder-renown-design.md`;
+plan: `docs/superpowers/plans/2026-09-21-ladder-renown.md`.
+
+Two tracks now sit beside faction opinion (`core/faction_opinion.gd`), which
+stays exactly what it was: this week's mood, moving prices and the gate, and
+drifting back to nothing while the party is away. The ladder
+(`core/ladder.gd`) is what the party has *done* for a people, counted per
+civilized faction and never lost — read as four rungs, Stranger, Known,
+Trusted, Sworn. Renown is the same deeds summed across every people, read as
+one title, Nobodies to Legends. Neither drifts, and neither is opinion under
+another name: a faction can be furious with the party this week and still
+owe them the standing of a hundred deeds.
+
+A deed is a job turned in (the faction that paid it), a fight won near one of
+its settlements (a fight at the gate — `FactionOpinion.credit_fight`, every
+civilized faction close enough to hear about it), a raid lifted by clearing
+the lair behind it (two deeds), a lair settled into a waystation (three, the
+biggest going), or an offering left at a landmark (one). `Ladder.deed()`
+credits the faction and hands back the new rung only the frame it changed, so
+a caller says so once. Each rung opens a door a stranger does not get: Known
+passes on a neighbour's job once a settlement's own work is taken, and halves
+the price of a room; Trusted opens the back room (uncommon stock, where there
+is a smith) and, at the chief settlement, lets the patron post the far
+country's work instead of just its own; Sworn makes the room free, adds two
+rare items to the back room's uncommon ones, and opens a once-per-people
+audience with the lord — a rare item and a milestone's XP, held once and
+never offered again. Renown's title puts a flat premium on every job's pay
+(`Ladder.pay_mult()`, +10% a title above Nobodies), and both numbers show
+where a player already looks: the HUD line under the party's name, the log
+line the moment a title changes or a rung is gained ("Known among the humans
+now."), the settlement door's own text ("Sworn to this people. Their doors
+are yours.", with the title named once it reaches Famous), the quest log's
+Standing section (the title with its count and next threshold, then a line
+per people), the market's Back room tab, the town square's audience button,
+and the board's pay line.
+
+The four achievements (`core/achievements.gd`) read two high-water marks the
+world screen records every frame — `best_rung` (the best rung held with any
+civilized faction, kept only for the achievement) and `renown_title` — plus
+the `audiences` set: Known Faces, Sworn, Famous, An Audience. `tests/drive_random.gd`
+now seeks an audience itself when the button is up and watches renown for the
+one direction it is not allowed to move.
+
+### Still open
+
+- No pictures of the screens yet — only the audience event card has art
+  (`event-audience-<faction>.png`); the ladder and renown lines on the HUD
+  and the door text draw without any of their own.
+- The audience's gift is seeded per faction — the same item every run. A list
+  of a lord's gifts per people, rolled instead of fixed, would be the next
+  step.
+- Standing has no downward path, by design: a deed done for a people is never
+  taken back, whatever opinion does in the meantime.
+- The premium rides into turn-in XP as well — a famous company's jobs are
+  bigger jobs; decided, not changed.
+- A story hook mirroring `opinion` (a `standing` condition, a `deeds` effect)
+  so a pack can gate a beat on standing.
+- `steal()` values the back-room shelf; clamped by STEAL_GOLD_MAX.
+
+## Callings, and the party's own opinions — a quest per hero, and the people beside them (2026-09-21)
+
+Sub-project 5 of the content batch (objectives → landmarks → threat clocks and
+reclaiming → the ladder → **callings and relations** → downtime → the lodge).
+Spec: `docs/superpowers/specs/2026-09-21-callings-relations-design.md`. Two
+things on one branch, because they share a fireside.
+
+The first is the spike's party opinions (`core/party_opinion.gd`,
+`docs/spike-party-opinions.md`), which had sat complete and unused since
+2026-09-16. Its seven call sites are wired, with the numbers measured then:
+the pair scores round-trip in the world save and the campaign save beside
+the party; the party page carries a Relations block ("Vera Kord and Pike
+Sallow — rivals (−44)", one line per active pair); every road check takes
+`travel_bonus` and shows the term on its roll line, and the roller's pairs
+move on the result; the scores drift toward each pair's baseline while the
+world clock runs; the safe night and the inn ask `camp_moment` — a warming
+or a quarrel already resolved on the night's card, or a courtship on the
+approach card with two rows, `accept` and `decline`, applied only when
+answered; and the fight reads `shoulder_bonus` on AC, `bicker_penalty` on
+to-hit, `rally` when a partner goes down, and records `saved`,
+`friendly_fire` and `fought_beside`. Nothing in the module changed but one
+constant, `CALLING_BOND` (15).
+
+The second is the calling (`core/callings.gd`): the past a hero's background
+hands them, systemic because every companion is player-made. Sixteen
+templates, one per background, each pointed at something the live map
+already holds. The acolyte's defiled shrine, the artisan's master's cart,
+the guide's tower, the hermit's stones, the merchant's and the sailor's
+wrecks, the scribe's ruins and the wayfarer's hut are landmarks, done by
+answering any row there; the farmer's steading and the sage's library are
+lairs, done by clearing them; the criminal's debt, the guard's one that got
+away and the soldier's deserters are monster bands, done by beating them;
+the charlatan's old mark is a town and the noble's rival envoy a city, done
+by visiting; the entertainer's hall is the ladder's audience, any lord's.
+`assign()` runs every frame and takes the nearest thing of the kind — a
+band of people (bandits, goblinoids, orcs, gnolls, kobolds, cultists) before
+a beast pack, never a band raiding a town — no such thing on this map, no
+calling yet; and the same pass re-points any calling whose target the world
+has since lost (a shrine spent before the telling, a band beaten by someone
+else, a lair the map dropped), or holds it with no target until one
+appears. The fireside's order is: a calling's telling (once per hero, ever
+— the target is marked as it is spoken, a hidden landmark found, a lair
+discovered, the ground it stands on revealed so the mark draws), then a
+resolution the road could not show, then the opinion moment; one card a
+night; a past told at the inn of the very town it names is done as the
+party leaves. Done, a calling is paid the frame the thing is done — in the
+same save the doing makes, so a quit at the outcome card loses only the
+card — with `CALLING_XP` (120) split, an uncommon heirloom named by the
+template identified into the stash, and the bond — +15 with the one who did
+the thing, or, when that was the hero themself (the acolyte is the party's
+best at Religion, so at her own shrine it usually is), with whoever stands
+closest to them: the active companion they already think most of. It shows
+on the party page's Relations block (a Callings line per told hero), in the
+quest log's Standing section under a Callings header, and on its own event
+card with a picture of the target as the hero sees it
+(`event-calling-<background>.png`, sixteen of them). A pack can add or
+replace templates through `callings.json` (`docs/modding.md` §5.2),
+validated at scan time like its map. Two achievements read the `callings` set: A Past and Four
+Pasts. `tests/drive_random.gd` answers a courtship the way its persona would
+(yes only when careful), acks a calling's cards, and checks the heirloom is
+in the stash the frame a calling turns done.
+
+### Still open
+
+- A hero who dies in the fight that beats their band is still paid (the check runs before the deaths are applied).
+- One calling per hero, then done. A second — a different past, or the
+  same one coming back — would need a reason the sheet does not give.
+- Relations are between active pairs only, as the spike says; the bench
+  neither warms nor sours, and a benched lover is still a lover.
+- The spike's appendix-A4 ideas — positional vectors, conditions that
+  cleanse a pair — are not built.
+- No art of its own for the camp's fireside card or the courtship card; both
+  ride on `camp-night`.
+- The courtship rows are priced "no roll" like an engage row, which is true
+  (nothing is rolled) and reads oddly on a card that is asking a question.
+
+## Downtime — what a company does in town when it is not working (2026-09-21)
+
+Sub-project 6 of the content batch (objectives → landmarks → threat clocks
+and reclaiming → the ladder → callings and relations → **downtime** → the
+lodge). Spec: `docs/superpowers/specs/2026-09-21-downtime-design.md`. Plan:
+`docs/superpowers/plans/2026-09-21-downtime.md`. Three tasks on one branch:
+the module (`core/downtime.gd`), the screen, then the robot, the pictures
+and this record.
+
+A town before this was a market, a board, a bed and four one-shot rows —
+work the healer's ward, steal from the stall, investigate the battle,
+haggle — every one of them a moment, and nothing in a town took *days*, so
+the raid clocks, the lair windows and a calling's road never traded against
+anything a player could spend at the inn. Five activities fix that, from
+the table 5e keeps for exactly this question. **Training** (inn page, city
+or town): pick a hero and a `general`-category feat they lack, level 4 or
+better, for `150 + 50 × level` ◉ and five days; the feat's +1 is decided
+for them (the highest of the scores it allows), and a feat that asks for a
+skill, an expertise or a feature — only the level-up screen can pick those
+— is not on the trainer's list; once per hero, ever — a second pass, or a
+retrain, is the lodge's own training yard (#7), not the trainer in town. **Carousing** (*A night on the town*): 30/20/10 ◉ by
+settlement kind and one day for the party's best at Persuasion or
+Performance against DC 13; a pass is a contact (`FactionOpinion.raise`, +5)
+and a free rumour, or, with none left, a round on the house (+15 ◉); a nat
+20 is both; a fail draws a complication, and a nat 1 draws the complication
+and the tab on top; the roll is seeded off the visit and the clock, so each
+night of a stay is its own. **Gambling** (*Sit in on a game*): a stake of
+25/50/100/200 ◉ capped at the purse, no day spent, once a visit — the
+party's best at Insight, Deception or Sleight of Hand against DC 12 pays 3×
+on a nat 20, 2× at DC+5, 1.5× at DC, loses the stake under DC, and loses it
+plus an insult on a nat 1. **Crafting** (*Brew*/*Scribe*, at the
+alchemist's and librarian's own counters): half list price and a day,
+anyone can brew what the alchemist has on the shelf, only a party with a
+caster can scribe the librarian's own two scrolls — once per item per
+visit, into the stash identified. **The pit** (inn page, city only): a
+bracket of three named champions seeded per city per week (`EnemyNames`),
+each the city roster's strongest humanoid alone at `PIT_MULT` 1.3/1.7/2.2,
+fought one at a time as an ordinary encounter in `city-square` with no
+objective; a win banks what a fight banks (XP, the kill's gold, loot) and
+pays 60/120/240 ◉ and a deed on top, a won bout also counts its kill toward
+a kill job, like any fight, the third unlocks *Champion of the Pit*; a loss
+carries the party out (everyone revived) for that bout's purse and closes
+the bracket until the next week. The week is read before the
+bout, so a fight that runs past midnight on the week's last evening is
+still that week's.
+
+Every activity but gambling moves through `spend_days`: the clock advances
+exactly `n × DAY`, the party takes one long rest, and the bed is paid up
+front at `Visit.inn_cost(s)` a night (free at Sworn) — a short purse pays
+nothing and no day passes. Days are the currency the batch's own clocks
+eat: five days training is two raid clocks, and every stamp the market and
+the board keep (`last_visited`, `battle_at`) stays exactly where it was, so
+"once a visit" still means this visit even after a week spent at the
+trainer's yard — and still means it across a rest at the inn, or the inn
+reopening behind a bout or a brawl, each of which re-reads the shelf
+(`Downtime.restamp` carries the game's and the bench's stamps over). What
+the bench made sells for no more than it cost: `sell_price` caps the shelf's
+markup at one, since a thin shelf is dear to buy from and pays no premium
+for your goods.
+
+A fail at carousing, or a nat 1 at the table, draws one of four
+complications, seeded off the roll and shown as an event card (art
+`event-downtime-<kind>`, matching the pit's own `event-downtime-pit`): the
+**tab** (twice the activity's cost, gone by morning), a **brawl** (a
+`bandit` roster at `easy` fought at the inn with the road's rules kept off
+it — no objective, no opinion, no deed; a win pays what a fight pays, a
+loss is the ordinary `_retreat`, and the inn reopens behind the spoils
+page), an **insult** (`FactionOpinion.lower`, −5), and a **bad lead**
+(`Rumors.dud` — a rumour that names nothing). Each is a card the size of a
+story, never a quest. Two good evenings are cards too — *Schooled* after
+the trainer, *A night on the town* for a contact made; the game and the
+bench stay lines under their rows.
+
+It shows on the inn page's new Downtime section, under the bed and above
+the rumours (Train, A night on the town, Sit in on a game, and at a city
+the pit), on the alchemist's and librarian's counters as Brew/Scribe rows
+beside their stock, on the party page's hero card (a trained feat reads
+like any other), and in four new achievements under the `road` group:
+*Schooled*, *Friends in Low Places*, *The House Loses*, *Champion of the
+Pit*. `tests/drive_random.gd`'s visit beat presses these rows by their own
+shape rather than by a button's name (two "Go" buttons on the same page
+read the same) — a night on the town, the smallest stake at the table, a
+hero the purse can afford to send to the yard, the pit at `_me`'s
+curiosity — and acks the cards the way it acks any other; the purse-never-
+negative and no-hero-with-a-duplicate-feat invariants run every frame,
+downtime included.
+
+### Still open
+
+- No tools, no languages: the sheet carries neither, so there is nothing
+  here to train, brew or scribe toward.
+- Retraining, and a second trained feat, are the lodge's own training yard
+  (#7) — the trainer in town teaches once, ever.
+- No wagers on somebody else's bout in the pit; only the party's own three
+  ever pay out.
+- The complication table is four kinds (a tab, a brawl, an insult, a bad
+  lead), not a growing list.
+- The bench cannot train: the trainer's row lists active heroes only. A
+  choice, not an oversight — the yard is for who is fighting.
+- A lone champion's balance is unmeasured: `PIT_MULT` 1.3/1.7/2.2 on one
+  foe is a guess at "harder than a road fight", not a measured grid.
+- The pit's loss revives everyone (the spec says carried out, not buried)
+  while a win keeps its deaths — a bout won at a cost is paid for, a bout
+  lost is not.
+
+## The lodge — one house in a town, and what a company builds onto it (2026-09-21)
+
+Sub-project 7, the last of the 2026-09-20 content batch (objectives →
+landmarks → threat clocks and reclaiming → the ladder → callings and
+relations → downtime → **the lodge**). Spec:
+`docs/superpowers/specs/2026-09-21-lodge-design.md`. Plan:
+`docs/superpowers/plans/2026-09-21-lodge.md`. Three tasks on one branch:
+the module (`core/lodge.gd`), the screen and the diorama, then the robot,
+the pictures and this record.
+
+Everything the batch gave the party a way to earn — jobs, raids turned, the
+pit, renown's premium — had somewhere to be spent already (the shelf, the
+back room) but nowhere of its own. `Lodge.buy(party, world, s)` fixes that
+at 400 ◉, and only where `Ladder.rung(s.faction) >= Ladder.KNOWN`: a house
+is a relationship with a town before it is a building, and a company
+nobody has heard of yet cannot buy one no matter how deep its purse. One
+ever, on the whole map — `can_buy` refuses a second while `party.lodge`
+already names a first — and the square knows which line to show for it:
+*Buy a lodge here (400 ◉)*, disabled rather than silently doing nothing
+while the purse is short; *Your lodge* once it stands; at any other town, a
+line pointing home, *"The company's lodge is at Riverhold."* The deed
+itself trips `lodge_bought`, *A Door of Our Own*.
+
+Five rooms build onto the house at whatever pace the road affords, each
+paid at once — the sink is the gold, not the wait, and the wait already
+belongs to downtime. The training yard (300 ◉) is the trainer's second
+chance: swap one general feat a hero already carries for another
+`Downtime.trainable` offers, the old feat's ability choice forgotten and
+the new one re-decided, `RETRAIN_COST` 100 ◉ and `RETRAIN_DAYS` three days
+through `Downtime.spend_days` — once per hero per visit, re-armed the next
+time the party walks back in. The herb garden (150 ◉) and the map room
+(250 ◉) both run while the party is away and settle the moment it comes
+home: a potion of healing every `GARDEN_DAYS`, capped at `GARDEN_CAP`; a
+free lead every `MAPROOM_DAYS` off `Rumors.free_lead`, capped at
+`MAPROOM_CAP`; both accrued and re-stamped the instant `_open_visit` reads
+`Lodge.at` true, so a season away comes home to a full haul and not a debt
+still owed. The shrine (200 ◉) is the cheapest room and the easiest to
+forget about: `party.blessed` set the moment the company leaves its own
+town, once a visit, spent the instant the next fight opens with it still
+standing.
+
+The strongroom (200 ◉) is worth its cost for what it stops reaching, not
+for the storage. `_retreat`'s fifteenth and any tab a bad night runs up are
+computed off `party.gold` alone; `deposit`/`withdraw` move coin between
+`party.gold` and `party.lodge.gold` directly rather than through
+`spend_gold`/`add_gold`, so banking the purse full does not quietly light
+up *broke*. A company that banks before it marches keeps what it banked no
+matter how the march goes — a lost fight, a bad haggle, a brawl it didn't
+start — the strongroom does not move for any of it. `tests/test_world_lodge.gd`
+drives `_retreat` for real against a stocked strongroom to prove it once;
+`tests/drive_random.gd` checks the same thing on every frame of a whole
+random session, stored gold never falling except by a withdraw the robot
+itself just pressed.
+
+The house shows on the map before it shows on any page. `settlement_kit.gd`'s
+`lodge_plan` seeds a house off its own faction's palette that gains a part
+per room the party builds: the strongroom an annex, the yard four posts
+round a taller training post, the garden three stone discs, the shrine a
+rock and an ember cone, the map room a box and a tower. `settlements3d.gd`
+stands it beside the town, past the footprint plus its own `LODGE_OFFSET`
+(30), and rebuilds it on every buy and every build; every room built trips
+`lodge_full`,
+*Every Room Built*. Six scenes (`event-lodge-house` on the lodge page
+itself, one per room on its own Build row) put a picture under numbers that
+were otherwise just a cost and a word. Total cost for the lot, retraining
+aside, is 1 500 ◉ — 400 for the house, then 200+300+150+200+250 for the
+rooms — a campaign's worth of jobs turned into something standing on the
+map next to the town rather than a line in the purse.
+
+### Still open
+
+- A second lodge, anywhere: one company, one house, ever — `can_buy`
+  refuses a second even at a fourth Known town.
+- Moving the lodge: the house that gets bought is the house that stands;
+  there is no way to sell it and buy again somewhere else.
+- Hirelings, or any staff of its own: the rooms work themselves — nobody
+  mans the strongroom's door or stands at the yard's post.
+- The lodge as a raid target: a raid on its town halves the market same as
+  ever — the strongroom and the diorama sit outside anything a raid
+  touches.
+- The bench cannot retrain: like the trainer's own row, the yard's pickers
+  list active heroes only, a choice carried over from downtime rather than
+  reconsidered here.
+- The minimap's mark is a fixed pixel offset beside the town's square, not
+  the diorama's own world position — sub-pixel at that scale, and not worth
+  the reprojection.
+- The blessing is "the next fight", whichever it is: a pit bout or a brawl
+  fought from the lodge's own town spends the shrine's blessing on itself,
+  and the road after gets nothing.
+- A lodge town whose faction's opinion reaches the gate fight
+  (`FactionOpinion.guards_attack`) locks the strongroom behind it — the
+  guards come out where the square would have opened — until the opinion
+  drifts back. A house is a relationship with a town, and it ends the way
+  one does.
+- `_settlements3d.reset` rebuilds every diorama on a buy or a build, not
+  only the lodge's: a `rebuild_lodge` if it ever shows.

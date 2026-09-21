@@ -176,6 +176,14 @@ static func free_lead(settlement, party, world) -> Dictionary:
 			String(offer["text"]), lair.sname]}
 
 
+# A rumour that names nothing — downtime's bad lead (core/downtime.gd). The
+# shape of a bought lead so the screen shows it as one, at no price, marking
+# no lair and no landmark: it goes nowhere, and that is the story.
+static func dud(_settlement) -> Dictionary:
+	return {"ok": true, "price": 0, "dud": true,
+		"text": "A man at the bar knew exactly where the treasure was. He drew it on a napkin. The napkin is blank in daylight."}
+
+
 static func _lair(world, id: String):
 	for l in world.lairs:
 		if l.id == id:

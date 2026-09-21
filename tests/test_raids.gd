@@ -10,6 +10,7 @@ const WorldLairs = preload("res://core/world_lairs.gd")
 const Raids = preload("res://core/raids.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Ach = preload("res://core/achievements.gd")
+const Ladder = preload("res://core/ladder.gd")
 
 var _pass := 0
 var _fail := 0
@@ -48,6 +49,7 @@ func _init() -> void:
 	# in memory instead (the shape tests/test_achievements.gd uses).
 	Ach._current = Ach.new()
 	FactionOpinion.reset()
+	Ladder.reset()
 	test_gates()
 	test_march_siege_land_home()
 	test_turned()
@@ -210,6 +212,7 @@ func test_lift() -> void:
 	check(s.raided_by == "warren", "raided")
 	var before: int = Ach.count("raids_lifted")
 	var op: float = FactionOpinion.get_opinion("human")
+	var lifted_before: int = Ladder.deeds("human")
 	WorldLairs.mark_cleared(l, 200.0)
 	var lines: Array = Raids.tick(w, 200.0)
 	check(s.raided_by == "" and s.raided_at == -1.0, "clearing the lair lifts the raid")
@@ -217,6 +220,7 @@ func test_lift() -> void:
 		"...and it is said (%s)" % str(lines))
 	check(FactionOpinion.get_opinion("human") == op + Raids.LIFTED_FOR, "the town's faction thanks you")
 	check(Ach.count("raids_lifted") == before + 1, "the deed is counted")
+	check(Ladder.deeds("human") == lifted_before + 2, "lifting a raid is two deeds")
 	check(Raids.tick(w, 201.0).is_empty(), "lifted once")
 	# a band out for a lair that gets cleared under it has nowhere to go
 	var w2 := _world()
@@ -328,6 +332,7 @@ func test_settle() -> void:
 	FactionOpinion.reset()
 	var xp_before: int = p.party_characters()[0].xp
 	var ways_before: int = Ach.count("waystations")
+	var settle_before: int = Ladder.deeds("human")
 	var s = Raids.settle(w, l, p, 1500.0)
 	check(s != null and not w.lairs.has(l), "settled: the lair is gone for good")
 	check(w.settlements.has(s) and s.id == "way-warren" and s.kind == "camp" and s.faction == "human"
@@ -338,6 +343,7 @@ func test_settle() -> void:
 		"SETTLE_XP x (ring 0 + 1), split (%d -> %d)" % [xp_before, p.party_characters()[0].xp])
 	check(FactionOpinion.get_opinion("human") == Raids.LIFTED_FOR, "the settlers' faction thanks you")
 	check(Ach.count("waystations") == ways_before + 1, "the deed is collected")
+	check(Ladder.deeds("human") == settle_before + 3, "settling a lair is three deeds")
 	# a lair settled while its band is still out takes the band with it
 	var w4 := _world()
 	var l4 = w4.lairs[0]

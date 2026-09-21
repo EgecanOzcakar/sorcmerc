@@ -87,8 +87,14 @@ static func dress(m: Node3D) -> void:
 # change how big a settlement is on the map).
 const TARGET_HEIGHT := {"camp": 15.6, "town": 25.7, "city": 45.0}
 
-var _dioramas := {}            # settlement id -> Node3D
+# The company's lodge (core/lodge.gd) stands this far past its town's
+# footprint along +x: outside the wall, inside the town's ring on the ground.
+const LODGE_OFFSET := 30.0
+const WorldPath := preload("res://core/world_path.gd")
+
+var _dioramas := {}            # settlement id -> Node3D; "lodge" for the company's house
 var _radius := {}              # ...and how much ground it stands on, measured (props3d.footprint_of)
+var _lodge_pos := Vector2.ZERO # where the lodge stands, once it does
 
 
 func _model_path(s) -> String:
@@ -125,6 +131,26 @@ func reset(world) -> void:
 		holder.add_child(m)
 		_dioramas[s.id] = holder
 		_radius[s.id] = footprint_of(m)
+	_build_lodge(world)
+
+
+# The lodge: the kit's house in its town's style, one part group per room
+# built (SettlementKit.lodge_plan), rebuilt with the rest on buy and on build.
+# The party is the screen's; a layer with no screen (a gallery shot) has no
+# lodge to show.
+func _build_lodge(world) -> void:
+	var party = world_map.get("party") if world_map != null else null
+	if party == null or party.lodge.is_empty():
+		return
+	for s in world.settlements:
+		if s.id != party.lodge["settlement_id"] or not SettlementKit.PROFILES.has(s.faction):
+			continue
+		var holder := Node3D.new()
+		add_child(holder)
+		holder.add_child(SettlementKit.build_lodge(s.faction, party.lodge["rooms"], s.id))
+		_dioramas["lodge"] = holder
+		_lodge_pos = WorldPath.nearest_dry(world, s.position + Vector2(footprint(s) + LODGE_OFFSET, 0.0))
+		return
 
 
 # The one place the two sources differ. A kit diorama is built in World units at
@@ -166,6 +192,10 @@ func reposition() -> void:
 		n.visible = true
 		n.position = at(s.position)
 		_fade(n, not world_map.world.is_visible_now(s.position, ppos))
+	var lodge: Node3D = _dioramas.get("lodge")
+	if lodge != null:
+		lodge.position = at(_lodge_pos)
+		_fade(lodge, not world_map.world.is_visible_now(_lodge_pos, ppos))
 
 
 # How much ground this settlement's model covers, in world units — what

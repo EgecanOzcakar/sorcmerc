@@ -4,7 +4,7 @@
 #   Registry.scan()                 # Array of packs, official first, then by priority
 #   Registry.playable()             # the ones with a world or a story to start
 #   Registry.find("ashen-road")
-#   Registry.apply_data()           # push every live pack's data overlays into the catalog
+#   Registry.apply_data()           # push every live pack's data overlays into the catalog (and its callings)
 #   Registry.world_of(pack)         # a built World, or null (pack.errors says why)
 #   Registry.story_of(pack)         # a core/mod/story.gd, or null
 #
@@ -39,6 +39,7 @@ const WorldPack = preload("res://core/mod/world_pack.gd")
 const Story = preload("res://core/mod/story.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
+const Callings = preload("res://core/callings.gd")
 
 const OFFICIAL_ROOT := "res://content"
 const USER_ROOT := "user://mods"
@@ -56,6 +57,7 @@ class Pack extends RefCounted:
 	var warnings: Array[String] = []
 	var _world = null                 # parsed world.json, cached
 	var _story = null                 # core/mod/story.gd, cached
+	var _callings = null              # parsed callings.json, cached
 
 	func id() -> String: return manifest.id
 	func title() -> String: return manifest.title if manifest.title != "" else manifest.id
@@ -237,6 +239,12 @@ static func _validate_content(pack) -> void:
 		pack.warnings.append_array(story.warnings)
 		if story.ok():
 			pack._story = story
+	if m.has_callings():
+		var src = _json(m.path_of(m.callings_file), pack.errors)
+		var errs: Array = Callings.validate(src, _own_item_ids(m)) if src != null else []
+		pack.errors.append_array(errs)
+		if src != null and errs.is_empty():
+			pack._callings = src
 	var overlays := {}
 	for target in m.data_files:
 		var src = _json(m.path_of(String(m.data_files[target])), pack.errors)
@@ -398,8 +406,11 @@ static func playable() -> Array:
 # base data lazily afterwards).
 static func apply_data() -> void:
 	var layers: Array = []
+	var callings := {}
 	for pack in live():
 		var m = pack.manifest
+		if pack._callings != null:
+			callings.merge(pack._callings, true)   # scan order: a later pack's background wins
 		if m.data_files.is_empty():
 			continue
 		var files := {}
@@ -410,6 +421,7 @@ static func apply_data() -> void:
 		if not files.is_empty():
 			layers.append({"id": m.id, "files": files})
 	Catalog.set_overlays(layers)
+	Callings.set_packs(callings)
 	# Pools built from the old bestiary are now wrong: a pack's monsters have to
 	# be able to show up in a roster, and a pack that retuned one has to have
 	# retuned it everywhere.

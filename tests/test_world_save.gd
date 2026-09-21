@@ -9,6 +9,7 @@ const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const WorldSave = preload("res://core/world_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 const Party = preload("res://core/party.gd")
 const Presets = preload("res://core/presets.gd")
 
@@ -302,6 +303,61 @@ func _done() -> void:
 
 	WorldSave.clear()
 	check(WorldSave.summary().is_empty(), "and the slot can be cleared from the title")
+
+	# the ladder rides the save beside opinion; an old save is a fresh ladder
+	var Ladder = load("res://core/ladder.gd")
+	Ladder.reset()
+	Ladder.deed("human", 13)
+	Ladder.hold_audience("human")
+	var wl := World.new()
+	var dl: Dictionary = WorldSave.to_dict(wl)
+	check(dl["ladder"]["deeds"]["human"] == 13 and dl["ladder"]["audiences"] == ["human"], "written under ladder")
+	Ladder.reset()
+	WorldSave.from_dict(dl)
+	check(Ladder.deeds("human") == 13 and Ladder.audience_held("human"), "read back")
+	dl.erase("ladder")
+	WorldSave.from_dict(dl)
+	check(Ladder.renown() == 0 and not Ladder.audience_held("human"), "an old save loads a fresh ladder")
+
+	# Task 1: relations ride the party dict like standing orders do.
+	var pr := _party()
+	PartyOpinion.set_score(pr, "vera", "pike", 33.0)
+	var rd: Dictionary = WorldSave.to_dict(wo, pr)
+	check(float(rd["party"].get("relations", {}).get(PartyOpinion.key("vera", "pike"), {}).get("score", 0.0)) == 33.0,
+		"a relation rides the save's party dict")
+	var pr_back = WorldSave.from_dict(rd)["party"]
+	check(PartyOpinion.score(pr_back, "vera", "pike") == 33.0, "...and reads back through the model")
+	var d_no_rel: Dictionary = WorldSave.to_dict(wo, _party())
+	d_no_rel["party"].erase("relations")
+	var pr_old = WorldSave.from_dict(d_no_rel)["party"]
+	check(pr_old.relations.is_empty(), "an old save with no relations loads with none")
+
+	# Task 4: callings ride beside them.
+	pr.callings["vera"] = {"id": "acolyte", "target_kind": "landmark", "target_id": "shrine-1", "state": "told", "told_at": 42.0}
+	rd = WorldSave.to_dict(wo, pr)
+	check(rd["party"].get("callings", {}).get("vera", {}).get("state", "") == "told", "a calling rides the save's party dict")
+	pr_back = WorldSave.from_dict(rd)["party"]
+	check(pr_back.callings.get("vera", {}).get("target_id", "") == "shrine-1" and float(pr_back.callings["vera"]["told_at"]) == 42.0,
+		"...and reads back")
+	check(pr_old.callings.is_empty(), "an old save with no callings loads with none")
+
+	# Downtime rides there too.
+	pr.downtime = {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}
+	rd = WorldSave.to_dict(wo, pr)
+	check(rd["party"].get("downtime", {}).get("trained", []) == ["vera"], "downtime rides the save's party dict")
+	pr_back = WorldSave.from_dict(rd)["party"]
+	check(pr_back.downtime.get("trained", []) == ["vera"] and int(pr_back.downtime.get("pit", {}).get("riverhold", {}).get("beaten", 0)) == 1,
+		"...and reads back")
+	check(pr_old.downtime.is_empty(), "an old save with no downtime loads with none")
+
+	# The lodge rides there too.
+	pr.lodge = {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, "garden_at": -1.0, "maproom_at": -1.0, "retrained": {}, "blessed_at": -1.0}
+	rd = WorldSave.to_dict(wo, pr)
+	check(rd["party"].get("lodge", {}).get("gold", 0) == 250, "the lodge rides the save's party dict")
+	pr_back = WorldSave.from_dict(rd)["party"]
+	check(pr_back.lodge.get("settlement_id", "") == "riverhold" and pr_back.lodge.get("rooms", []) == ["strongroom"] and pr_back.lodge.get("gold", 0) == 250,
+		"...and reads back")
+	check(pr_old.lodge.is_empty(), "an old save with no lodge loads with none")
 
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

@@ -12,6 +12,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Potions = preload("res://core/potions.gd")
+const Callings = preload("res://core/callings.gd")
 
 var _pass := 0
 var _fail := 0
@@ -40,6 +41,7 @@ func _init() -> void:
 	test_overlays()
 	test_effect_overlays()
 	test_effect_overlays_reject()
+	test_callings_pack()
 	test_shipped_content()
 	print("test_mod_packs: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -278,6 +280,52 @@ func test_effect_overlays_reject() -> void:
 	Registry.set_enabled("badeffects", false)
 	Catalog.warnings.clear()
 
+# --- callings.json: a pack's own pasts ------------------------------------
+
+func _calling(extra := {}) -> Dictionary:
+	var d := {"title": "The other deserters", "target": {"kind": "band"}, "done_by": "band_beaten",
+		"item": "javelin-of-lightning", "tell": "%s again.", "done": "%s no more."}
+	d.merge(extra, true)
+	return d
+
+func test_callings_pack() -> void:
+	_write("pasts", {"pack.json": _manifest("pasts", {"callings": "callings.json",
+		"data": {"magic-items.json": "items.json"}}),
+		"items.json": [{"id": "vale-blade", "name": "Vale Blade", "rarity": "uncommon", "type": "weapon"}],
+		"callings.json": {"_note": "skipped", "soldier": _calling(),
+			"hermit": _calling({"title": "The Vale stones", "target": {"kind": "landmark", "landmark": "stones"},
+				"done_by": "landmark_answered", "item": "vale-blade"})}})
+	_write("badpasts", {"pack.json": _manifest("badpasts", {"callings": "callings.json"}),
+		"callings.json": {"soldier": "not an object",
+			"guard": _calling({"item": "nowhere-item", "title": ""}),
+			"sage": _calling({"target": {"kind": "planet"}}),
+			"noble": _calling({"target": {"kind": "settlement", "settlement": "hamlet"}, "done_by": "band_beaten"}),
+			"guide": _calling({"target": {"kind": "landmark", "landmark": "pylon"}, "done_by": "landmark_answered"})}})
+	_write("nopasts", {"pack.json": _manifest("nopasts", {"callings": "callings.json"})})
+	Registry.scan(true)
+	Registry.apply_data()
+	var p = Registry.find("pasts")
+	check(p.live(), "a pack with a clean callings.json loads: %s" % ", ".join(p.errors))
+	var t: Dictionary = Callings.templates()
+	check(t.size() == 16 and t["soldier"]["title"] == "The other deserters", "its soldier replaces the built-in")
+	check(t["hermit"]["item"] == "vale-blade", "an item from the pack's own overlay is fine")
+	check(t["acolyte"] == Callings.TEMPLATES["acolyte"], "the rest are the built-in")
+	check(Callings.TEMPLATES["soldier"]["title"] == "The deserters", "...and the built-in table itself is untouched")
+	var b = Registry.find("badpasts")
+	check(b.status == "broken", "a callings.json that cannot work does not load")
+	var said := ", ".join(b.errors)
+	check("\"soldier\" must be an object" in said, "a template that is not an object is named")
+	check("nowhere-item" in said and "\"guard\" needs a title" in said, "a missing item and a missing title are named")
+	check("\"planet\"" in said, "an unknown target kind is named")
+	check("\"hamlet\"" in said and "done by \"visited\"" in said, "a wrong settlement size and a mismatched done_by are named")
+	check("\"pylon\"" in said, "an unknown landmark kind is named")
+	check(Registry.find("nopasts").status == "broken", "a declared callings.json that is not there is an error")
+	Registry.set_enabled("pasts", false)
+	check(Callings.templates()["soldier"]["title"] != "The other deserters", "turning the pack off takes its calling back out")
+	Registry.set_enabled("badpasts", false)
+	Registry.set_enabled("nopasts", false)
+	Catalog.warnings.clear()
+
 # --- what ships in res://content -------------------------------------------
 
 func test_shipped_content() -> void:
@@ -301,3 +349,5 @@ func test_shipped_content() -> void:
 	OS.set_environment("SORCMERC_UNLOCK_DLC", "")
 	Registry.scan(true)
 	Registry.apply_data()
+	check(Callings.templates() == Callings.TEMPLATES, "no shipped pack replaces a calling: the sixteen are the game's own")
+	Callings.set_packs({})

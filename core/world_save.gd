@@ -24,6 +24,7 @@
 #   "version": 1,
 #   "elapsed": 742.5,                 // World.clock.elapsed, world-minutes
 #   "opinion": {"soldier": -12.0},    // FactionOpinion.all()
+#   "ladder": {"deeds": {"human": 13}, "audiences": ["human"]},   // Ladder.all()
 #   "origin": {"kind": "procedural", "seed": 42},   // which builder made this map
 #   "settlements": [
 #     {"id": "riverhold", "sname": "Riverhold", "position": [0, 0], "faction": "soldier",
@@ -40,7 +41,11 @@
 #     "roster": [ <character_save.gd dicts> ],   // the barracks, but gold/stash/quests
 #     "active": ["vera"], "gold": 120,           // and marching order live nowhere else
 #     "stash": [...], "quests": [...], "last_long_rest_at": 742.5,  // T9x rest cooldown
-#     "overworld_figure": "wizard"  // T9x: chosen map token, "" = the flat pawn
+#     "overworld_figure": "wizard",  // T9x: chosen map token, "" = the flat pawn
+#     "relations": {"pike|vera": {"score": 33.0, "status": ""}}  // PartyOpinion.to_dict
+#     "callings": {"ilsa": {"id": "acolyte", "target_kind": "landmark", ...}}  // Callings.to_dict
+#     "downtime": {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}  // Downtime.to_dict
+#     "lodge": {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, ...}  // Lodge.to_dict; {} until bought
 #   },
 #   "story": {                        // M7: the content pack's story, mid-telling.
 #     "pack": "ashen-road",           //   {} on every run with no story on it.
@@ -58,6 +63,11 @@ const RNG = preload("res://core/rng.gd")
 const Party = preload("res://core/party.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Ladder = preload("res://core/ladder.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
+const Callings = preload("res://core/callings.gd")
+const Downtime = preload("res://core/downtime.gd")
+const Lodge = preload("res://core/lodge.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-world"
@@ -216,6 +226,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"format": FORMAT, "version": VERSION,
 		"elapsed": world.clock.elapsed,
 		"opinion": FactionOpinion.all(),
+		"ladder": Ladder.all(),
 		"origin": {"kind": String(world.origin.get("kind", "small")),
 			"seed": int(world.origin.get("seed", 0))},
 		"settlements": settlements,
@@ -300,6 +311,9 @@ static func from_dict(d: Dictionary):
 	var opinion: Dictionary = d.get("opinion", {})
 	for faction in opinion:
 		FactionOpinion.set_opinion(String(faction), float(opinion[faction]))
+	# The ladder (core/ladder.gd) is process-global like opinion; a save from
+	# before it had one loads as strangers everywhere.
+	Ladder.load(d.get("ladder", {}))
 	# M7: the story's progress rides home as a plain dictionary — rebuilding a
 	# runtime from it needs the pack, which is scenes/game/game.gd's job, not
 	# this file's. An old save (or one with no story) simply has {}.
@@ -326,6 +340,10 @@ static func _party_dict(party) -> Dictionary:
 		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 		"road": {"scouted_next": party.scouted_next, "swift_until": party.swift_until,
 			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set, "blessed": party.blessed},   # potions / road spells
+		"relations": PartyOpinion.to_dict(party),   # spike-party-opinions §8: who thinks what of whom
+		"callings": Callings.to_dict(party),
+		"downtime": Downtime.to_dict(party),
+		"lodge": Lodge.to_dict(party),
 	}
 
 static func _party_from(pd: Dictionary):
@@ -350,6 +368,10 @@ static func _party_from(pd: Dictionary):
 	party.safe_camp = bool(road.get("safe_camp", false))
 	party.alarm_set = bool(road.get("alarm_set", false))
 	party.blessed = bool(road.get("blessed", false))
+	PartyOpinion.from_dict(party, pd.get("relations", {}))   # an old save with no key loads as a fresh party
+	Callings.from_dict(party, pd.get("callings", {}))
+	Downtime.from_dict(party, pd.get("downtime", {}))
+	Lodge.from_dict(party, pd.get("lodge", {}))
 	return party
 
 # JSON gives every number back as a float; quest counters are compared as ints.

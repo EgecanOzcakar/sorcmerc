@@ -12,6 +12,7 @@ const EnemyNames = preload("res://core/enemy_names.gd")
 const Loot = preload("res://core/loot.gd")
 const Ach = preload("res://core/achievements.gd")
 const Objectives = preload("res://core/objectives.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 
 # --- ranges (hexes) — tune here ---------------------------------------
 const REACH_MELEE := 1
@@ -516,7 +517,9 @@ const XP_PER_POWER := 4.0
 const GOLD_PER_POWER := 0.6
 
 # spec: {"monsters": [{"id": String, "count": int, "mult": float (optional, default
-# spec.mult or 1.0)}], "seed": int (optional — omit for a random fight)}.
+# spec.mult or 1.0)}], "seed": int (optional — omit for a random fight),
+# "named": {monster_id: "Name"} (optional — the first spawn of that id is
+# "Name the <Species>", the pit's champion; the rest keep EnemyNames' own)}.
 # `mult` is T8's difficulty knob; it scales the spawned instance, never
 # data/monsters.json.
 static func build(spec: Dictionary, party_combatants: Array, board: Dictionary = {}) -> Combat:
@@ -541,6 +544,8 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 			var pos: Vector2i = spots[i] if i < spots.size() else PARTY_STARTS[0]
 			var c = spawn(e["id"], mult, "foe", pos, n + 1 if count > 1 else 0, e.get("features", []))
 			if c != null:
+				if n == 0 and spec.get("named", {}).has(e["id"]):
+					c.cname = "%s the %s" % [spec["named"][e["id"]], Catalog.monster(e["id"])["cname"]]
 				all_c.append(c)
 			i += 1
 	var foes: Array = all_c.filter(func(c): return c.team == "foe")
@@ -723,6 +728,13 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 	# replay with the seed; only on a win, because a wipe does not loot the room.
 	if res == "Victory":
 		loot.append_array(Loot.for_kills(kills, cb.rng))
+		# "We came through that together": every member still on their feet
+		# warms a little to every other who was (PartyOpinion.FOUGHT_BESIDE).
+		# cb.party is the hooks' party too, and null in the sandbox and the
+		# NPC scraps; a summon or a carter has no sheet and is not in it.
+		if cb.party != null:
+			PartyOpinion.fought_beside(cb.party, cb.team_of("party").filter(
+				func(c): return c.conscious() and c.sheet != null).map(func(c): return c.id))
 	_score_fight(cb, res == "Victory")
 	# Spec §4: an objective done pays half the whole roster's worth in XP on
 	# top of the kills — dead or standing, because holding against them,

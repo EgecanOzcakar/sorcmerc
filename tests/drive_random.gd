@@ -47,6 +47,10 @@ const WorldSave = preload("res://core/world_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Party = preload("res://core/party.gd")
 const Travel = preload("res://core/travel.gd")
+const Ladder = preload("res://core/ladder.gd")
+const Callings = preload("res://core/callings.gd")
+const Downtime = preload("res://core/downtime.gd")
+const Lodge = preload("res://core/lodge.gd")
 
 # One driver frame. The same 0.1 tests/drive_world.gd drives the map with —
 # headless deltas are microseconds, so world time has to be handed over by
@@ -101,6 +105,10 @@ var _clock0 := 0.0
 var _last_clock := -1.0
 var _stamp := ""
 var _still := 0
+var _deeds_seen := 0         # Ladder.renown(), watched for the one direction it may move
+var _callings_done := {}     # char_id -> true once their calling was seen done (and its heirloom checked)
+var _stored_gold := -1       # party.lodge's strongroom gold last frame, or -1 before there is a lodge
+var _withdrew := false       # true for the one _watch() after the robot presses the strongroom's Withdraw
 
 func _init() -> void:
 	# This process's own autosave slots, so a concurrent godot run cannot clobber
@@ -153,8 +161,13 @@ func _session(sd: int) -> void:
 	_last_clock = -1.0
 	_stamp = ""
 	_still = 0
+	_deeds_seen = 0
+	_callings_done = {}
+	_stored_gold = -1
+	_withdrew = false
 	WorldSave.clear()
 	FactionOpinion.reset()
+	Ladder.reset()
 	# The map's own generators read this (a procedural world, a campaign route).
 	# Set per session so a soak gets twenty maps, not one map twenty times.
 	OS.set_environment("SORCMERC_SEED", str(sd))
@@ -268,14 +281,45 @@ func _watch() -> void:
 	var party = screen.party
 	if party.gold < 0:
 		fail("the purse went negative: %d" % party.gold)
+	# The strongroom (core/lodge.gd): gold the road cannot take. A decrease is
+	# only ever legitimate off the back of a Withdraw the robot itself pressed
+	# (_town_beat marks _withdrew the frame it lands on that button) — anything
+	# else shrinking it is the one thing the room exists to prevent.
+	var stored: int = int(party.lodge.get("gold", 0))
+	if stored < 0:
+		fail("the strongroom went negative: %d" % stored)
+	elif _stored_gold >= 0 and stored < _stored_gold and not _withdrew:
+		fail("stored gold fell: %d -> %d" % [_stored_gold, stored])
+	_stored_gold = stored
+	_withdrew = false
+	var r := Ladder.renown()
+	if r < _deeds_seen:
+		fail("renown went down: %d -> %d" % [_deeds_seen, r])
+	_deeds_seen = r
 	if party.active.size() > Party.MAX_ACTIVE:
 		fail("%d characters are in an active party of %d" % [party.active.size(), Party.MAX_ACTIVE])
 	if party.party_characters().is_empty():
 		fail("the active party emptied itself mid-run")
+	# A calling just done paid its heirloom into the stash (core/callings.gd's
+	# complete). Checked the frame it turns done, not forever after — the
+	# stash is the player's to sell.
+	for id in party.callings:
+		if String(party.callings[id]["state"]) == "done" and not _callings_done.has(id):
+			_callings_done[id] = true
+			_saw["calling:done"] = true
+			var item := String(Callings.templates()[party.callings[id]["id"]]["item"])
+			if party.stash_count(item) < 1:
+				fail("%s's calling is done and its heirloom (%s) is not in the stash" % [id, item])
 	for ch in party.party_characters():
 		var s: Dictionary = party.summary(ch.id)
 		if int(s["hp"]) < 0 or int(s["hp"]) > int(s["max_hp"]):
 			fail("%s is at %d/%d hp" % [ch.cname, s["hp"], s["max_hp"]])
+	for ch in party.roster:   # the bench too: a trained hero can be benched after
+		var seen_feats := {}
+		for f in ch.feats:
+			if seen_feats.has(f):
+				fail("%s has %s twice in their feats" % [ch.cname, f])
+			seen_feats[f] = true
 	# The clock is deliberately NOT monotonic: core/travel.gd pays the party for
 	# a good day's road (and for finding a waystone) by winding it back, so
 	# "never backwards" is not the invariant — "never backwards by more than the
@@ -388,6 +432,8 @@ func _cards() -> bool:
 		if _hold(THINK_TOWN):
 			return true
 		_saw["event-card"] = true
+		if String(screen._event_card._e.get("id", "")).begins_with("calling-"):
+			_saw["calling:card"] = true    # a telling or a resolution: acked like any other
 		# The signal, not the plain handler: an outcome card can carry a bound
 		# follow-up (the fight an ambush just started), and freeing the card by
 		# hand would drop it. Same reason drive_world does it this way.
@@ -434,6 +480,10 @@ func _way_weight(way: String) -> int:
 		"avoid":  return 5 + _me["care"] / 3 + (100 - fit) / 2
 		"greet":  return 30 + _me["nosy"] / 3
 		"pass":   return 20
+		# The fireside's courtship (world.gd's _fireside), on the same card: a
+		# careful player says yes, anyone else lets it lie.
+		"accept":  return 100 if _me["care"] >= 70 else 0
+		"decline": return 0 if _me["care"] >= 70 else 100
 	return 8   # something new on the card: try it now and then
 
 # --- the fight ----------------------------------------------------------------
@@ -766,6 +816,23 @@ func _town_beat() -> void:
 		fail("a settlement panel came up with no buttons at all")
 		screen._close_visit()
 		return
+	for b in btns:
+		if "Seek an audience" in _btn_name(b) and _chance(80):
+			_saw["audience"] = true
+			_acts += 1
+			b.pressed.emit()
+			return
+	# The lodge's door (core/lodge.gd): worth walking through at twice the
+	# price, not the moment the purse limps over it — the way a player who
+	# actually wants the thing shops for it rather than buying broke.
+	for b in btns:
+		if _btn_name(b).begins_with("Buy a lodge here") and screen.party.gold >= 2 * Lodge.HOUSE_COST and _chance(60):
+			_saw["lodge:buy"] = true
+			_acts += 1
+			b.pressed.emit()
+			return
+	if _downtime_beat(panel):
+		return
 	var leave: Button = null
 	var rows: Array = []
 	for b in btns:
@@ -791,6 +858,9 @@ func _town_beat() -> void:
 		pick = leave
 	_saw["town-press:" + _btn_name(pick).get_slice(" ", 0).get_slice(".", 0)] = true
 	_acts += 1
+	if screen._visit_page == "lodge" and _marks_withdraw(pick):
+		_saw["lodge:withdraw"] = true
+		_withdrew = true
 	pick.pressed.emit()
 
 func _town_weight(name: String) -> int:
@@ -821,6 +891,196 @@ func _town_weight(name: String) -> int:
 	if name.begins_with("←"):
 		return 25                              # back to the square, to try another door
 	return 12                                  # anything new behind a counter
+
+# --- downtime (core/downtime.gd): the inn's rows that take days ---------------
+#
+# Train's and the game's own "Go" buttons read the same as each other by name
+# alone, so these rows are found by shape — the label that names the row, and
+# the button beside or after it — the way the fight beat finds End turn by
+# position rather than by trusting its text. Each row gets its own weighted
+# chance, ahead of the generic press above, so it is worth walking to town for
+# and not just one more thing in the bucket with "anything new behind a
+# counter". A card the roll turns up (a tab, a brawl, an insult, a bad lead)
+# is acked like any other event card — _cards() above already does that.
+func _downtime_beat(panel: Node) -> bool:
+	if screen._visit_page == "inn":
+		if _chance(20) and _press_downtime_row(panel, "A night on the town"):
+			_saw["downtime:carouse"] = true
+			return true
+		if _chance(15) and _gamble_beat(panel):
+			_saw["downtime:gamble"] = true
+			return true
+		if _chance(_me["care"]) and _train_beat(panel):
+			_saw["downtime:train"] = true
+			return true
+		if _chance(_me["nosy"] / 2) and _press_downtime_row(panel, "The pit:"):
+			_saw["downtime:pit"] = true
+			return true
+	elif screen._visit_page == "market" and _chance(15) and _press_downtime_row(panel, "Brew "):
+		_saw["downtime:brew"] = true
+		return true
+	elif screen._visit_page == "lodge":
+		if _chance(30) and _lodge_build_beat(panel):
+			_saw["lodge:build"] = true
+			return true
+		if _chance(20) and _lodge_deposit_beat(panel):
+			_saw["lodge:deposit"] = true
+			return true
+	return false
+
+# A row built by world.gd's _trade_row: a label naming it, its own HBoxContainer,
+# the action button last in it. Found by the label's text rather than the
+# button's — "Go" is not a name, "A night on the town" is — and only when that
+# label sits in a row of its own (a closed pit says "The pit: ..." too, in a
+# plain Label with nothing to press). The pit's own row carries a sub-line
+# (world.gd's _trade_row `sub`), which wraps the label one level deeper in a
+# VBoxContainer of its own — so the row is the label's parent, or the parent
+# of that when the label came with a caption.
+func _downtime_row_button(panel: Node, prefix: String) -> Button:
+	var lbl := _find_label(panel, func(t): return t.begins_with(prefix))
+	if lbl == null:
+		return null
+	var row := lbl.get_parent()
+	if row != null and not (row is HBoxContainer):
+		row = row.get_parent()
+	if not (row is HBoxContainer) or row.get_child_count() == 0:
+		return null
+	var b = row.get_child(row.get_child_count() - 1)
+	return b if b is Button and not b.disabled and b.visible else null
+
+func _press_downtime_row(panel: Node, prefix: String) -> bool:
+	var b := _downtime_row_button(panel, prefix)
+	if b == null:
+		return false
+	_acts += 1
+	b.pressed.emit()
+	return true
+
+func _find_label(node: Node, pred: Callable) -> Label:
+	if node is Label and pred.call(String(node.text)):
+		return node
+	for c in node.get_children():
+		var found := _find_label(c, pred)
+		if found != null:
+			return found
+	return null
+
+# "Sit in on a game": a label, a stake OptionButton, a Go button, all in one
+# row — the smallest stake the purse can cover is the one the picker opens on
+# (world.gd builds the list low to high, capped at the purse), so the only
+# thing to do here is press Go.
+func _gamble_beat(panel: Node) -> bool:
+	var lbl := _find_label(panel, func(t): return t == "Sit in on a game")
+	if lbl == null:
+		return false
+	var row := lbl.get_parent()
+	if not (row is HBoxContainer):
+		return false
+	var stake: OptionButton = null
+	var go: Button = null
+	for c in row.get_children():
+		if c is OptionButton:
+			stake = c
+		elif c is Button:
+			go = c
+	if stake == null or go == null or go.disabled or stake.item_count == 0:
+		return false
+	stake.select(0)
+	_acts += 1
+	go.pressed.emit()
+	return true
+
+# The trainer's row is a label ("Train %s in a feat...") sitting just above its
+# own HBoxContainer (a hero picker, a feat picker, Go) rather than inside it —
+# world.gd adds the label and the row as two separate children of the same
+# list. Go never disables itself on the purse (the trainer just turns you away
+# with a line under the row), so the purse is checked here instead of wasting
+# the act on a hero who cannot afford the five days.
+func _train_beat(panel: Node) -> bool:
+	var lbl := _find_label(panel, func(t): return t.begins_with("Train "))
+	if lbl == null:
+		return false
+	var parent := lbl.get_parent()
+	var i := lbl.get_index()
+	if parent == null or i + 1 >= parent.get_child_count():
+		return false
+	var row := parent.get_child(i + 1)
+	if not (row is HBoxContainer):
+		return false
+	var go: Button = null
+	for c in row.get_children():
+		if c is Button and not (c is OptionButton):
+			go = c
+	if go == null or go.disabled:
+		return false
+	var pupils: Array = screen.party.party_characters().filter(func(ch): return Downtime.can_train(screen.party, ch))
+	if pupils.is_empty():
+		return false
+	var ch = pupils[0]
+	var s = screen._visit.get("settlement")
+	var bed: int = Downtime.bed_cost(s, Downtime.TRAIN_DAYS)
+	if screen.party.gold < Downtime.train_cost(ch) + bed:
+		return false
+	_acts += 1
+	go.pressed.emit()
+	return true
+
+# The lodge page's rooms (core/lodge.gd, world.gd's _build_lodge_page): every
+# unbuilt room gets its own row, and every one of them presses the same way —
+# a _trade_row whose button just says "Build" — so unlike the trainer's or
+# the gambler's row there is nothing to tell them apart by name. Any one of
+# them is as good as another to press.
+func _lodge_build_beat(panel: Node) -> bool:
+	var rows: Array = []
+	for b in _live_buttons(panel):
+		if _btn_name(b) == "Build":
+			rows.append(b)
+	if rows.is_empty():
+		return false
+	_acts += 1
+	_pick(rows).pressed.emit()
+	return true
+
+# The strongroom's Deposit row (_purse_row): a picker built low to high and
+# capped at the purse, so its first entry is already the smallest step the
+# purse covers — select(0) is "the smallest step" without reading the amounts.
+func _lodge_deposit_beat(panel: Node) -> bool:
+	var lbl := _find_label(panel, func(t): return t == "Deposit")
+	if lbl == null:
+		return false
+	var row := lbl.get_parent()
+	if not (row is HBoxContainer):
+		return false
+	var pick: OptionButton = null
+	var go: Button = null
+	for c in row.get_children():
+		if c is OptionButton:
+			pick = c
+		elif c is Button:
+			go = c
+	if pick == null or go == null or go.disabled or pick.item_count == 0:
+		return false
+	pick.select(0)
+	_acts += 1
+	go.pressed.emit()
+	return true
+
+# Deposit and Withdraw are the same row shape with the same "Go" on the end,
+# so once a press has been reduced to "Go" the only thing left that says
+# which row it was is the label beside it. Nothing here deliberately reaches
+# for Withdraw — it only ever lands under _town_beat's generic press, the
+# same as any other row nobody wrote a beat for — so that is where this gets
+# checked, on whatever button the roll happened to land on.
+func _marks_withdraw(b: Button) -> bool:
+	if b is OptionButton or String(b.text) != "Go":
+		return false
+	var row := b.get_parent()
+	if not (row is HBoxContainer):
+		return false
+	for c in row.get_children():
+		if c is Label and String(c.text) == "Withdraw":
+			return true
+	return false
 
 # --- the road -----------------------------------------------------------------
 
@@ -1170,8 +1430,8 @@ func _final_checks() -> void:
 func _report() -> void:
 	var keys: Array = _saw.keys()
 	keys.sort()
-	print("  %d frames, %d acts, %d fights, %d gp, day-clock %.0f -> %.0f  %s" % [
-		_tick_no, _acts, _fights, screen.party.gold, _clock0, screen.world.clock.elapsed,
+	print("  %d frames, %d acts, %d fights, %d callings done, %d gp, day-clock %.0f -> %.0f  %s" % [
+		_tick_no, _acts, _fights, _callings_done.size(), screen.party.gold, _clock0, screen.world.clock.elapsed,
 		"OK" if _fail == 0 else "*** %d FAILED ***" % _fail])
 	print("  exercised: ", keys)
 	if _fail > 0:

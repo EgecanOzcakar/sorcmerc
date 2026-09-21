@@ -135,6 +135,11 @@ func _init() -> void:
 	check(Rumors.free_lead(bare.settlements[0], _party(), bare).is_empty(), "...and gives none away")
 	var bad: Dictionary = Rumors.buy({"lair_id": "nope", "price": 10}, _party(), bare)
 	check(not bool(bad["ok"]), "a lead on a lair that does not exist is refused")
+	# downtime's bad lead: a rumour that names nothing, and marks nothing
+	var dud: Dictionary = Rumors.dud(bare.settlements[0])
+	check(bool(dud["ok"]) and bool(dud["dud"]) and int(dud["price"]) == 0 and not dud.has("lair_id") and not dud.has("landmark_id"),
+		"a dud is a free lead to nowhere")
+	check(dud["text"].begins_with("A man at the bar knew exactly where the treasure was."), "...with the bar's line on it")
 
 	print("test_rumors: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

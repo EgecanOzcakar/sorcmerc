@@ -37,6 +37,11 @@ func _init() -> void:
 func _wipe() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Ach.PATH))
 	Ach._current = Ach.load_state()
+	# Between 02:00 and 05:00 local time Toasts._ready's own check_calendar()
+	# would unlock night_owl and put a card up before the test's; earn it here,
+	# where the queue is about to be drained (unlock is idempotent, so _ready's
+	# second call queues nothing).
+	Ach.check_calendar()
 	Ach.take_toasts()
 	var s = Settings.new()
 	s.achievement_popups = true

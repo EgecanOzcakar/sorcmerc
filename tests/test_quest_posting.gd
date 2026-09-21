@@ -34,6 +34,7 @@ func _init() -> void:
 	test_deliver_and_scout()
 	test_rescue_offer()
 	test_raid_premium_and_rescue()
+	test_patron_and_renown()
 	test_the_whole_settlement_can_run_out_of_work()
 	FactionOpinion.reset()
 	print("test_quest_posting: %d passed, %d failed" % [_pass, _fail])
@@ -321,3 +322,37 @@ func test_raid_premium_and_rescue() -> void:
 		"the rescue is from the raiding lair, and says who (%s)" % q.get("title", ""))
 	city.raided_by = ""
 	check(Posting.rescue_offer(city, w, p)["target_lair_id"] == near.id, "lifted, the nearest pens win again")
+
+func test_patron_and_renown() -> void:
+	var Ladder = load("res://core/ladder.gd")
+	Ladder.reset()
+	var w := _world()
+	var p := _party()
+	var city = w.settlements[0]                       # riverhold, human, city
+	var far = w.lairs[1]                               # far-barrow at (4000, 4000): out of any reach
+	check(Posting.chief_settlement(w, "human") == city, "the city is the humans' chief settlement")
+	check(not Posting.is_patron(city, w), "a stranger has no patron")
+	var ids0: Array = _at(city, p, w).map(func(q): return q["id"])
+	check(not ids0.any(func(id): return String(id).contains(far.id)), "the far barrow is nobody's problem")
+	Ladder.deed("human", 12)
+	check(Posting.is_patron(city, w), "Trusted: the patron's table")
+	var ids1: Array = _at(city, p, w).map(func(q): return q["id"])
+	check(ids1.any(func(id): return String(id).contains(far.id)), "...posts work about the far barrow")
+	var town = w.settlements[1]                       # greenmarch, elf — not the humans', and not chief
+	var ids2: Array = _at(town, p, w).map(func(q): return q["id"])
+	check(not ids2.any(func(id): return String(id).contains(far.id)), "a town of another people does not")
+	# a second human settlement that is only a camp is not the chief
+	w.add_settlement(World.Settlement.new("h-camp", Vector2(300, 300), "human", "camp"))
+	check(Posting.chief_settlement(w, "human") == city and not Posting.is_patron(w.settlements[-1], w), "the camp is not the patron")
+	# renown's premium on every job
+	Ladder.reset()
+	var plain: Array = _at(city, p, w)
+	Ladder.deed("elf", 6)                             # Hirelings, +10 %
+	var dear: Array = _at(city, p, w)
+	check(plain.size() == dear.size() and plain.size() > 0, "same board")
+	var ok := true
+	for i in plain.size():
+		if int(dear[i]["reward"]["gold"]) != int(int(plain[i]["reward"]["gold"]) * 1.1):
+			ok = false
+	check(ok, "every job pays +10 % at Hirelings")
+	Ladder.reset()
