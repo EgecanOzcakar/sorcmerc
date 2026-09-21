@@ -38,6 +38,18 @@ const REVEAL_PAUSE := 0.75  # beat to read the attack roll (0 under SORCMERC_FAS
 const ZOOM_DEFAULT := 1.5     # ceiling: the board fits the whole map first (Board._layout)
 var _zoom := ZOOM_DEFAULT
 var _pan := Vector2.ZERO
+# #152: the camera follows the action. Measured before this (docs/spike-combat-
+# camera.md): the fit-all view gives a hex 17-20 canvas px at 1280x800 — the
+# whole map, and figures the size of a fingernail. ZOOM_FOLLOW is what the
+# camera glides to over the actor (and the target, when there is one — the pair
+# is kept in frame, which lowers it for a long shot). The chrome — bar, strip,
+# chips — scales by _ui_zoom, the player's own zoom, not the camera's: a bar
+# that breathed with every action was the first thing wrong with the prototype.
+const ZOOM_FOLLOW := 2.2
+var _ui_zoom := ZOOM_DEFAULT
+var _cam_follow := true       # Home toggles it; a new fight sets it
+var _cam_ids: Array = []      # who the camera is on: combatant ids, their tokens tracked as they slide
+var _cam_hold := false        # the player panned or zoomed: stay put until the next action
 var hex_px: float:
 	get: return HEX_BASE * _zoom
 var cb
@@ -275,7 +287,7 @@ func _ready() -> void:
 	orderwrap.add_child(_order)
 	col.add_child(orderwrap)
 
-	_hint.text = "1-9 act, Tab swaps weapon, Space ends the turn, Esc backs out.  Scroll zooms, drag pans, Home resets the view."
+	_hint.text = "1-9 act, Tab swaps weapon, Space ends the turn, Esc backs out.  Scroll zooms, drag pans, Home toggles the camera between the action and the whole board."
 	_hint.theme_type_variation = "Dim"
 	col.add_child(_hint)
 
@@ -346,7 +358,7 @@ func _ready() -> void:
 
 # Font sizes across the whole combat UI track the zoom level.
 func _apply_ui_scale() -> void:
-	var u := clampf(_zoom, 0.9, 1.4)
+	var u := clampf(_ui_zoom, 0.9, 1.4)
 	_header.add_theme_font_size_override("font_size", int(Icons.FS_TITLE * u))
 	_actor.add_theme_font_size_override("normal_font_size", int(Icons.FS_HEAD * u))
 	_actor.add_theme_font_size_override("bold_font_size", int(Icons.FS_HEAD * u))
@@ -368,6 +380,8 @@ func _apply_ui_scale() -> void:
 
 func set_zoom(z: float) -> void:
 	_zoom = clampf(z, 0.45, 3.0)
+	_ui_zoom = _zoom
+	_cam_hold = true   # #152: the player's view, until the next action
 	if _board:
 		_board._auto_fit = false
 	_apply_ui_scale()
@@ -376,8 +390,29 @@ func set_zoom(z: float) -> void:
 
 func pan_by(delta: Vector2) -> void:
 	_pan += delta
+	_cam_hold = true   # #152
 	if _board:
 		_board.queue_redraw()
+
+# #152: the camera's next subject — the actor, or the actor and what it is
+# acting on. Ids, not hexes, so a walking token is followed as it slides.
+func focus_cam(ids: Array) -> void:
+	_cam_ids = ids
+	_cam_hold = false
+	if _cam_follow and _board:
+		_board._auto_fit = false
+
+# Home: the whole board, or back to following — one key, both ways.
+func toggle_cam() -> void:
+	_cam_follow = not _cam_follow
+	_cam_hold = false
+	if _cam_follow:
+		_board._auto_fit = false   # or _layout() fits the whole board back every frame
+		return
+	_zoom = ZOOM_DEFAULT; _ui_zoom = ZOOM_DEFAULT; _pan = Vector2.ZERO
+	_board._auto_fit = true
+	_apply_ui_scale()
+	_board.queue_redraw()
 
 func _unhandled_key_input(e: InputEvent) -> void:
 	if not (e is InputEventKey and e.pressed):
@@ -392,7 +427,7 @@ func _unhandled_key_input(e: InputEvent) -> void:
 	match e.keycode:
 		KEY_EQUAL, KEY_KP_ADD: set_zoom(_zoom * 1.1)
 		KEY_MINUS, KEY_KP_SUBTRACT: set_zoom(_zoom / 1.1)
-		KEY_HOME: _zoom = ZOOM_DEFAULT; _pan = Vector2.ZERO; _board._auto_fit = true; _apply_ui_scale(); _board.queue_redraw()
+		KEY_HOME: toggle_cam()   # #152
 		KEY_LEFT: pan_by(Vector2(40, 0))
 		KEY_RIGHT: pan_by(Vector2(-40, 0))
 		KEY_UP: pan_by(Vector2(0, 40))
@@ -511,6 +546,7 @@ func _new_game(forced := 0) -> void:
 	# moment it happens, hit or miss. Heroes draw their own from _apply_target,
 	# which knows the verb before perform() does.
 	cb.on_perform = func(a, v: Dictionary, t) -> void:
+		focus_cam([a.id, t.id] if t is Object and "id" in t and t != a else [a.id])   # #152
 		if a.team == "foe" and t is Object and "pos" in t:
 			_attack_fx(a, t, v)
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
@@ -528,6 +564,7 @@ func _new_game(forced := 0) -> void:
 	_last_round = 1
 	_board.reset(cb)
 	_figures.reset(cb)
+	_cam_follow = true; _cam_ids = []; _cam_hold = false   # #152: fit-all until the first turn
 	_flush_log()
 	_refresh()
 	if _coop != null and _coop.role == "host" and not _coop_rebuilding:
@@ -662,6 +699,7 @@ func _advance() -> void:
 		if c.is_dead() or c.is_stable():
 			cb.end_turn()
 			continue
+		focus_cam([c.id])   # #152: whoever's turn it is
 		if c.team == "foe" or c.is_down():
 			_busy = true
 			_viewing = false
@@ -1703,7 +1741,7 @@ func _set_buttons(opts: Array) -> void:
 		c.queue_free()
 	_hover_verb = {}
 	var count := opts.size()
-	var u := clampf(_zoom, 0.9, 1.4)
+	var u := clampf(_ui_zoom, 0.9, 1.4)
 	for i in count:
 		var b := Button.new()
 		var meta: Dictionary = opts[i][3] if opts[i].size() > 3 else {}
@@ -1865,7 +1903,7 @@ func _build_order_strip() -> void:
 		c.queue_free()
 	_order_tiles.clear()
 	_order_aimed.clear()
-	var u := clampf(_zoom, 0.9, 1.4)
+	var u := clampf(_ui_zoom, 0.9, 1.4)
 	for c in cb.order:
 		var tile := PanelContainer.new()
 		var base: StyleBox
@@ -2254,7 +2292,7 @@ func _process(dt: float) -> void:
 	if _hud_overlay:
 		_hud_overlay.queue_redraw()
 	if _bscroll:   # grow with the wrapped rows, up to BUTTON_ROWS, then scroll
-		var row := BTN_SIZE.y * clampf(_zoom, 0.9, 1.4) + 6.0
+		var row := BTN_SIZE.y * clampf(_ui_zoom, 0.9, 1.4) + 6.0
 		_bscroll.custom_minimum_size.y = minf(_buttons.get_combined_minimum_size().y,
 			row * BUTTON_ROWS)
 
@@ -2737,6 +2775,7 @@ class Board extends Control:
 			var z := clampf(minf(main.ZOOM_DEFAULT, fit), 0.45, 3.0)
 			if not is_equal_approx(z, main._zoom):
 				main._zoom = z
+				main._ui_zoom = z
 				main._apply_ui_scale()
 				_layout()
 				return
@@ -2745,6 +2784,50 @@ class Board extends Control:
 		lim = lim.max(Vector2.ZERO)
 		main._pan = main._pan.clamp(-lim, lim)
 		_origin = (size - span) * 0.5 - mn + main._pan
+
+	# #152: glide the view onto the camera's subjects. Zoom first — ZOOM_FOLLOW,
+	# or less when the pair would not both fit — then pan so their midpoint
+	# sits at the centre of the board. The pan is a delta off where they were
+	# drawn last frame, so it converges instead of computing the layout twice;
+	# under SORCMERC_FAST _anim is huge and both land in one frame.
+	const CAM_RATE := 4.0       # 1/e in a quarter second
+	const CAM_MARGIN := 140.0   # px kept round a pair, so a token is not on the edge
+	func _follow_cam(dt: float) -> void:
+		if not main._cam_follow or main._cam_hold or main._cam_ids.is_empty() or size.y <= 0.0:
+			return
+		var pts: Array = []
+		for id in main._cam_ids:
+			var c = main._combatant(id)
+			if c != null and not c.is_dead():
+				pts.append(_tok.get(id, _pix(c.pos)))
+		if pts.is_empty():
+			return
+		var k := clampf(dt * CAM_RATE * main._anim, 0.0, 1.0)
+		var mn: Vector2 = pts[0]
+		var mx: Vector2 = pts[0]
+		for p in pts:
+			mn = mn.min(p); mx = mx.max(p)
+		var z: float = main.ZOOM_FOLLOW
+		if pts.size() > 1:
+			var spread: Vector2 = (mx - mn) / main._zoom   # at zoom 1
+			z = minf(z, minf((size.x - CAM_MARGIN * 2.0) / maxf(spread.x, 1.0),
+				(size.y - CAM_MARGIN * 2.0) / maxf(spread.y, 1.0)))
+		z = clampf(z, 0.45, 3.0)
+		var mid := (mn + mx) * 0.5
+		if not is_equal_approx(main._zoom, z):
+			# Zoom about the subject, not the origin: the midpoint stays put on
+			# screen while the hexes grow under it.
+			var before: Vector2 = _iso_inv(mid - _origin) / main.hex_px   # flat, zoom-free
+			main._zoom = lerpf(main._zoom, z, k)
+			_layout()
+			mid = _pix_f(before)
+		main._pan += (size * 0.5 - mid) * k
+		queue_redraw()
+
+	# A flat, zoom-free ground point (hex pixels over hex_px) back to the
+	# screen, for the zoom-about-a-point step above; _pix() takes whole hexes.
+	func _pix_f(flat: Vector2) -> Vector2:
+		return _origin + _iso(flat * main.hex_px)
 
 	# --- isometric projection ------------------------------------------
 	# Purely a _draw()-time view transform: hex.gd still speaks flat-top axial
@@ -2903,6 +2986,7 @@ class Board extends Control:
 	func tick(dt: float) -> void:
 		if cb == null:
 			return
+		_follow_cam(dt)
 		# #112: lay out FIRST. _layout() used to run at the end of this, so the
 		# re-base and every _pix() below saw last frame's origin while _draw()
 		# saw this frame's — one frame of lag per frame of drag, which is the
