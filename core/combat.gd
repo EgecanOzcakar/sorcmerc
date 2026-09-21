@@ -1391,8 +1391,13 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 			var hit: bool = crit or (r.nat != 1 and r.nat + int(v["attack_bonus"]) >= effective_ac(c))
 			var d := Dice.roll(rng, notation, crit) if hit else 0
 			var tag := " ray %d/%d" % [i + 1, rays] if rays > 1 else ""
+			# The number on this line is what lands, not what was rolled: five
+			# rays reading "hit for 7, 10, 14, 10" against a fire-resistant target
+			# add up to a kill that never happens (#141). The defence line that
+			# follows says what was rolled and why it shrank.
 			log.append("  d20[%d]%+d vs AC %d%s — %s%s." % [r.nat, int(v["attack_bonus"]), effective_ac(c),
-				tag, "hit for %d" % d if hit else "miss", " (CRIT)" if crit else ""])
+				tag, "hit for %d" % _damage_after_defenses(c, d, v.get("damage_type", "")) if hit else "miss",
+				" (CRIT)" if crit else ""])
 			if hit:
 				hits += 1
 				total += d
