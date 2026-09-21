@@ -300,6 +300,8 @@ const BACK_ROOM_N := 3
 const BACK_ROOM_RARE := 2
 
 static func back_room(s, m: Dictionary) -> Array:
+	if m.get("refused", false):   # a town that will not deal with you has no back room either
+		return []
 	var r: int = Ladder.rung(s.faction)
 	if r < Ladder.TRUSTED:
 		return []
@@ -311,8 +313,11 @@ static func back_room(s, m: Dictionary) -> Array:
 	var wants := [["uncommon", BACK_ROOM_N]]
 	if r >= Ladder.SWORN:
 		wants.append(["rare", BACK_ROOM_RARE])
+	# The counters' own stock (potions, scrolls) is in these rarities too; a
+	# tile that sits under two tabs is bought once and vanishes from both.
+	var own: Array = catalog(s)
 	for w in wants:
-		var pool: Array = Loot.items_of_rarity(String(w[0])).duplicate()
+		var pool: Array = Loot.items_of_rarity(String(w[0])).filter(func(id): return not own.has(id))
 		for i in int(w[1]):
 			if pool.is_empty():
 				break
@@ -440,6 +445,16 @@ static func stock_by_service(s, m: Dictionary) -> Dictionary:
 	c.node = node_for(s)
 	var out := {}
 	var claimed := {}
+	# The back room (core/ladder.gd's Trusted door): its rows are tagged, and
+	# claimed first so no counter below — nor the generalist's remainder —
+	# sells them a second time.
+	var back: Array = []
+	for e in m.get("stock", []):
+		if String(e.get("service", "")) == "backroom":
+			back.append(e)
+			claimed[String(e["item_id"])] = true
+	if not back.is_empty():
+		out["backroom"] = back
 	for service in services(s):
 		if service == "generalist":
 			continue
@@ -454,15 +469,6 @@ static func stock_by_service(s, m: Dictionary) -> Dictionary:
 				claimed[item_id] = true
 		if not rows.is_empty():
 			out[service] = rows
-	# The back room (core/ladder.gd's Trusted door): its rows are tagged, and
-	# claimed here so the generalist's remainder below does not sell them twice.
-	var back: Array = []
-	for e in m.get("stock", []):
-		if String(e.get("service", "")) == "backroom":
-			back.append(e)
-			claimed[String(e["item_id"])] = true
-	if not back.is_empty():
-		out["backroom"] = back
 	var rest_rows: Array = []
 	for e in m.get("stock", []):
 		if not claimed.has(String(e["item_id"])):

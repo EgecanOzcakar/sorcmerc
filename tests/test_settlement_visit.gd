@@ -127,7 +127,27 @@ func _init() -> void:
 			rares += 1
 	check(br2.size() == Visit.BACK_ROOM_N + Visit.BACK_ROOM_RARE and rares == Visit.BACK_ROOM_RARE, "Sworn: two rare beside the three")
 	check(Visit.inn_cost(city) == 0, "Sworn: on the house")
-	check(not Visit.stock_by_service(city, m2).get("generalist", []).any(func(e): return String(e.get("service", "")) == "backroom"), "a back-room item is not also on the generalist's shelf")
+	# every restock step is a different seeded shelf: none draws a potion or
+	# scroll the counters already sell, and no counter claims a tagged row
+	# (greyhaven's unfiltered shelves collide at six of the seven steps)
+	var grey = wb.add_settlement(World.Settlement.new("greyhaven", Vector2(0, 500), "human", "city"))
+	for c2 in [city, grey]:
+		var own2: Array = Visit.catalog(c2)
+		for k in Visit.MAX_STEPS + 1:
+			c2.last_visited = wb.clock.elapsed - k * Visit.RESTOCK
+			var mk: Dictionary = Visit.visit(c2, wb)
+			var tagged: Array = mk["stock"].filter(func(e): return String(e.get("service", "")) == "backroom")
+			check(not tagged.any(func(e): return own2.has(e["item_id"])), "the back room draws nothing the counters already sell (%s, step %d)" % [c2.id, k])
+			var groups: Dictionary = Visit.stock_by_service(c2, mk)
+			for g in groups:
+				if g != "backroom":
+					check(not groups[g].any(func(e): return String(e.get("service", "")) == "backroom"), "a back-room item is not also on the %s's shelf (%s, step %d)" % [g, c2.id, k])
+	# a town that refuses to trade has no back room either
+	FactionOpinion.set_opinion("human", -80.0)
+	city.last_visited = -1.0
+	var mr: Dictionary = Visit.visit(city, wb)
+	check(bool(mr["refused"]) and not Visit.stock_by_service(city, mr).has("backroom"), "refused: no back room")
+	FactionOpinion.reset()
 	# buying one lands it in the stash, identified
 	var pb := _party()
 	pb.gold = 100000
