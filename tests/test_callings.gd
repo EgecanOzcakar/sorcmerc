@@ -132,6 +132,17 @@ func test_assign() -> void:
 	got = Callings.assign(p, w, RNG.new(1))
 	check(got.has("vera") and not got.has("pike") and not got.has("ilsa"), "a hero without a template gets no calling")
 
+	# a spent landmark is never handed out — mirrors the lair's "not looted"
+	var w4 = World.new()
+	w4.add_party(World.RoamingParty.new("player", Vector2.ZERO, "human", true))
+	var near_spent = w4.add_landmark(World.Landmark.new("shrine-near-spent", "shrine", Vector2(50, 0)))
+	near_spent.spent = true
+	p = _party(["acolyte"])
+	check(Callings.assign(p, w4, RNG.new(1)).is_empty(), "the only shrine is spent: the acolyte gets no calling")
+	w4.add_landmark(World.Landmark.new("shrine-far-live", "shrine", Vector2(300, 0)))
+	check(Callings.assign(p, w4, RNG.new(1)) == ["vera"] and p.callings["vera"]["target_id"] == "shrine-far-live",
+		"an unspent shrine further away: the acolyte gets that one, not the nearer spent one")
+
 # --- beat -------------------------------------------------------------------
 
 func test_beat() -> void:

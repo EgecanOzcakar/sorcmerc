@@ -132,7 +132,8 @@ static func _nearest(world, spec: Dictionary, from: Vector2):
 	var pool: Array = []
 	match String(spec["kind"]):
 		"landmark":
-			pool = world.landmarks.filter(func(l): return l.kind == spec["landmark"])
+			# not spent — mirrors the lair's "not looted": a spent one can never fire landmark_answered again.
+			pool = world.landmarks.filter(func(l): return l.kind == spec["landmark"] and not l.spent)
 		"lair":
 			pool = world.lairs.filter(func(l): return not l.looted)
 		"band":
