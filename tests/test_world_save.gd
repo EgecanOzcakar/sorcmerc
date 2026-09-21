@@ -332,6 +332,15 @@ func _done() -> void:
 	var pr_old = WorldSave.from_dict(d_no_rel)["party"]
 	check(pr_old.relations.is_empty(), "an old save with no relations loads with none")
 
+	# Task 4: callings ride beside them.
+	pr.callings["vera"] = {"id": "acolyte", "target_kind": "landmark", "target_id": "shrine-1", "state": "told", "told_at": 42.0}
+	rd = WorldSave.to_dict(wo, pr)
+	check(rd["party"].get("callings", {}).get("vera", {}).get("state", "") == "told", "a calling rides the save's party dict")
+	pr_back = WorldSave.from_dict(rd)["party"]
+	check(pr_back.callings.get("vera", {}).get("target_id", "") == "shrine-1" and float(pr_back.callings["vera"]["told_at"]) == 42.0,
+		"...and reads back")
+	check(pr_old.callings.is_empty(), "an old save with no callings loads with none")
+
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

@@ -58,6 +58,7 @@ const ROAD_FAIL := 2.0           # ...or walked it into one that cost (D3's kind
 const CAMP_WARMING := 8.0
 const CAMP_QUARREL := 8.0
 const COURTSHIP_ACCEPTED := 15.0
+const CALLING_BOND := 15.0       # a calling completed, with the one who did the thing (core/callings.gd)
 const COURTSHIP_DECLINED := 10.0 # lowered: it is awkward around the fire for a while
 const BREAKUP := 20.0            # the extra drop when lovers fall out
 

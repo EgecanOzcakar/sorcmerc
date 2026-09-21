@@ -47,6 +47,9 @@ var alarm_set := false      # Alarm: the next camp's ambush is heard coming
 # "a|b" pair key -> {score, status}. Owned entirely by core/party_opinion.gd;
 # nothing in the shipped game reads or saves it yet.
 var relations: Dictionary = {}
+# The past each hero's background hands them — char_id -> {id, target_kind,
+# target_id, state, told_at}. Owned entirely by core/callings.gd.
+var callings: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 

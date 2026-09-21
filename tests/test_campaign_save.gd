@@ -106,6 +106,13 @@ func _init() -> void:
 	var cr_old = CampaignSave.from_dict(rd)
 	check(cr_old.party.relations.is_empty(), "an old campaign save with no relations loads with none")
 
+	# Task 4: callings ride beside them.
+	cr.party.callings["vera"] = {"id": "acolyte", "target_kind": "landmark", "target_id": "shrine-1", "state": "told", "told_at": 42.0}
+	rd = CampaignSave.to_dict(cr)
+	check(rd["party"].get("callings", {}).get("vera", {}).get("state", "") == "told", "a calling rides the campaign save's party dict")
+	check(CampaignSave.from_dict(rd).party.callings.get("vera", {}).get("target_id", "") == "shrine-1", "...and reads back")
+	check(cr_old.party.callings.is_empty(), "an old campaign save with no callings loads with none")
+
 	# The screen's own Continue-vs-New-Game choice is driven by tests/drive_campaign.gd
 	# ("Begin a new run") — instantiating campaign.tscn from a -s script hangs headless.
 	CampaignSave.clear()
