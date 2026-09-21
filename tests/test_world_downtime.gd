@@ -13,6 +13,7 @@ const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Ladder = preload("res://core/ladder.gd")
 const RNG = preload("res://core/rng.gd")
 const Dice = preload("res://core/dice.gd")
+const Quest = preload("res://core/quest.gd")
 
 var _pass := 0
 var _fail := 0
@@ -62,13 +63,19 @@ func _finish(main, result: Dictionary) -> void:
 # `want` as the story — searched, not guessed, the way test_downtime's _rng is.
 # The seed takes the clock too (each night of a stay is its own roll), and the
 # night moves it by a day before the die is thrown.
+# `want` "contact" is a night that passes (not a 20: one card, not a round too).
 func _stamp_for(s, party, want: String, world) -> int:
 	var bonus := int(Downtime.best_of(party, Downtime.CAROUSE_SKILLS)["bonus"])
 	var clock := int(world.clock.elapsed + Downtime.DAY)
 	for t in range(1, 200000):
 		var r = RNG.new(maxi(1, absi(hash("carouse|%s|%d|%d" % [s.id, t, clock]))))
 		var nat := int(Dice.d20(r)["nat"])
-		if nat == 1 or nat == 20 or nat + bonus >= Downtime.CAROUSE_DC:
+		var passes: bool = nat != 1 and (nat == 20 or nat + bonus >= Downtime.CAROUSE_DC)
+		if want == "contact":
+			if passes and nat != 20:
+				return t
+			continue
+		if nat == 1 or passes:
 			continue
 		if Downtime.COMPLICATIONS[r.roll_die(Downtime.COMPLICATIONS.size()) - 1] == want:
 			return t
@@ -113,6 +120,26 @@ func _init() -> void:
 	check("Five days with a master-at-arms" in String(main._visit.get("log", "")), "the row says so: %s" % main._visit.get("log", ""))
 	check(not main._visit.is_empty() and main._visit_page == "inn", "...without leaving the inn")
 	check(buttons_named(main, "Go").size() == 1, "once: the trainer's row is gone, the game's stays")
+	check(main._event_card != null and String(main._event_card._e.get("id", "")) == "downtime-train"
+		and String(main._event_card._e.get("title", "")) == "Schooled" and String(main._event_card._e.get("art", "")) == "event-downtime-train",
+		"...and Schooled is a card: %s" % (main._event_card._e.get("id", "") if main._event_card != null else "none"))
+	check(not hero.sheet().pending.any(func(pe): return (":feat:%s:" % feat) in String(pe["key"])), "the trainer decided the feat's +1")
+	main._event_card.acknowledged.emit()
+	await process_frame
+	check(main._event_card == null and not main._visit.is_empty() and w.clock.is_paused(), "acked: the inn is still up")
+
+	# --- carouse, a contact: a card too -------------------------------------------
+	city.last_visited = float(_stamp_for(city, party, "contact", w))
+	check(city.last_visited > 0.0, "a stamp whose night passes")
+	button_named(main, "Go out").pressed.emit()
+	for i in 3:
+		await process_frame
+	check("makes friends of half the room" in String(main._visit.get("log", "")), "the contact's line: %s" % main._visit.get("log", ""))
+	check(main._event_card != null and String(main._event_card._e.get("id", "")) == "downtime-carouse"
+		and String(main._event_card._e.get("title", "")) == "A night on the town", "...on a card: %s" % (main._event_card._e.get("id", "") if main._event_card != null else "none"))
+	main._event_card.acknowledged.emit()
+	await process_frame
+	check(main._event_card == null and not main._visit.is_empty(), "acked: the inn is still up")
 
 	# --- carouse: a line under the row; a seeded fail is a card ---------------
 	city.last_visited = float(_stamp_for(city, party, "insult", w))
@@ -143,6 +170,16 @@ func _init() -> void:
 	if main._event_card != null:   # a nat 1's insult is a card too; not the point here
 		main._event_card.acknowledged.emit()
 		await process_frame
+	# a rest re-reads the shelf (a fresh last_visited); the game stays played
+	w.clock.elapsed += Visit.LONG_REST_COOLDOWN
+	var stamp_before: float = city.last_visited
+	main._rest()
+	await process_frame
+	if main._event_card != null:   # the fireside, when it has something to say
+		main._event_card.acknowledged.emit()
+		await process_frame
+	check(city.last_visited != stamp_before, "the rest stamped the visit afresh")
+	check(not Downtime.can_gamble(party, city) and buttons_named(main, "Go")[0].disabled, "...and the game is still over for this visit")
 
 	# --- brew at the alchemist, scribe at the librarian -----------------------
 	main._goto_page("market")
@@ -183,16 +220,20 @@ func _init() -> void:
 	check(foes.size() == 1, "one foe in the pit (%d)" % foes.size())
 	check(not foes.is_empty() and String(foes[0].cname).begins_with(names[0]), "...the first champion, by name: %s" % (foes[0].cname if not foes.is_empty() else ""))
 	check(main._combat != null and main._combat.spec.get("theme", "") == Downtime.PIT_THEME, "in the square")
-	await _finish(main, {"outcome": "Victory", "xp": 30, "gold": 5, "loot": [], "kills": [], "deaths": [], "rounds": 2,
+	var xp_before: int = hero.xp
+	await _finish(main, {"outcome": "Victory", "xp": 30, "gold": 5, "loot": ["dagger"], "kills": [], "deaths": [], "rounds": 2,
 		"objective": {"kind": "", "done": false, "xp": 0}})
 	check(main._event_card != null and String(main._event_card._e.get("id", "")) == "downtime-pit", "a won bout is a card")
 	check(main._event_card != null and int(main._event_card._e.get("gold", 0)) == Downtime.PIT_PURSE[0], "...with the purse on it")
-	check(party.gold == gold_before + Downtime.PIT_PURSE[0], "the purse is paid")
+	check(main._event_card != null and int(main._event_card._e.get("xp", 0)) == 30, "...and the fight's XP")
+	check(party.gold == gold_before + Downtime.PIT_PURSE[0] + 5, "the purse is paid, and the kill's gold banked")
+	check(hero.xp > xp_before and party.stash_count("dagger") >= 1, "the bout banks what a fight banks: XP and loot")
 	check(Ladder.deeds(city.faction) == 1, "and a deed with the city's people")
 	main._event_card.acknowledged.emit()
 	for i in 3:
 		await process_frame
 	check(not main._visit.is_empty() and main._visit["settlement"] == city, "acked: back at the gate")
+	check(not Downtime.can_craft(party, city, brew[0]), "the inn reopened as the same visit: the bench is still spent")
 	main._goto_page("inn")
 	await process_frame
 	check(said(main, "(purse %d ◉)" % Downtime.PIT_PURSE[1]), "the second bout's purse on the row")
@@ -206,6 +247,8 @@ func _init() -> void:
 		await process_frame
 		guard += 1
 	check(main._combat != null and String(main._combat.cb.team_of("foe")[0].cname).begins_with(names[1]), "the second champion")
+	hero.dead = true
+	hero.hp_current = 0
 	await _finish(main, {"outcome": "Defeat", "xp": 0, "gold": 0, "loot": [], "kills": [], "deaths": [hero.id], "rounds": 3,
 		"objective": {"kind": "", "done": false, "xp": 0}})
 	check(main._event_card != null and int(main._event_card._e.get("gold", 0)) == -Downtime.PIT_PURSE[1], "a lost bout: the house keeps its stake")
@@ -219,6 +262,11 @@ func _init() -> void:
 	check(button_named(main, "Fight") == null and said(main, "closed"), "the bracket is closed for the week")
 
 	# --- the brawl: the one story that is a fight, behind the card's button ---
+	Quest.accept(party, {"id": "deliver:t:x", "kind": "deliver_goods", "state": "offered",
+		"target_settlement_id": "x", "required": 1, "progress": 0,
+		"title": "Run a crate of goods to X", "reward": {"gold": 40}})
+	var deeds_before: int = Ladder.deeds(city.faction)
+	opinion_before = FactionOpinion.get_opinion(city.faction)
 	city.last_visited = float(_stamp_for(city, party, "brawl", w))
 	button_named(main, "Go out").pressed.emit()
 	for i in 3:
@@ -231,11 +279,18 @@ func _init() -> void:
 		await process_frame
 		guard += 1
 	check(main._combat != null and main._visit.is_empty(), "acked: the visit closes and the cousin's friends are a fight")
-	check(main._combat != null and main._combat.spec.get("theme", "") == "city-square" and not main._combat.spec.has("objective"), "a bandit roster at the inn, no objective")
+	check(main._combat != null and main._combat.spec.get("theme", "") == "city-square" and not main._combat.spec.has("objective"),
+		"a bandit roster at the inn, no objective — the delivery's carter is not in the common room")
 	await _finish(main, {"outcome": "Victory", "xp": 10, "gold": 2, "loot": [], "kills": [], "deaths": [], "rounds": 1,
 		"objective": {"kind": "", "done": false, "xp": 0}})
 	check(main._spoils_panel != null, "a won brawl is a fight like any other")
+	check(FactionOpinion.get_opinion(city.faction) == opinion_before and Ladder.deeds(city.faction) == deeds_before,
+		"...but no service to the town: opinion and the ladder stay")
+	check(Quest.get_quest(party, "deliver:t:x")["state"] == "active", "the delivery is still on")
+	check(main._visit.is_empty(), "the inn is down while the spoils page is up")
 	main._close_spoils()
-	await process_frame
+	for i in 3:
+		await process_frame
+	check(not main._visit.is_empty() and main._visit["settlement"] == city, "the spoils page closed: the inn reopens behind it")
 	print("test_world_downtime: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

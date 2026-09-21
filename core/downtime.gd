@@ -237,6 +237,21 @@ static func carouse(party, world, s, rng = null) -> Dictionary:
 	out["text"] = line
 	return out
 
+# --- once a visit -------------------------------------------------------------
+
+# The game's and the bench's "once a visit" is the visit's own last_visited
+# stamp. The screen re-reads the shelf mid-visit (a rest, the inn reopening
+# behind a bout or a brawl) through Visit.visit(), which stamps it again;
+# the stamps that were this visit's move with it, or the rows re-arm.
+static func restamp(party, s, old: float, new: float) -> void:
+	var g: Dictionary = party.downtime.get("gambled", {})
+	if g.has(s.id) and is_equal_approx(float(g[s.id]), old):
+		g[s.id] = new
+	var here: Dictionary = party.downtime.get("crafted", {}).get(s.id, {})
+	for item in here:
+		if is_equal_approx(float(here[item]), old):
+			here[item] = new
+
 # --- gambling ---------------------------------------------------------------
 
 # Once a visit: the stamp is the visit's own (Visit.visit() writes it), the

@@ -1560,13 +1560,17 @@ func _hold_waves(foe, spec: Dictionary, threat: Dictionary) -> Array:
 # threat roster — the approach card priced it that way), "dark" for jumped in
 # the dark at camp or on the night road (the hard roster: not a fight you are
 # meant to win by standing). `difficulty` names the roster outright when the
-# caller knows it (the inn's brawl is easy); "" is the country's own.
+# caller knows it — the inn's brawl (_show_complication), easy, is the only
+# one — and a fight named that way is not the road's: no objective rides on
+# it (a delivery's carter is not in the common room) and winning it is no
+# service to the town (no opinion, no deed).
 func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped := "", difficulty := "") -> Dictionary:
 	if party.scouted_next:   # Potion of Clairvoyance, spent on this fight
 		scouted_ahead = true
 		party.scouted_next = false
 	var threat: Dictionary = WorldThreat.assess(party)
-	var objective: Dictionary = _road_objective(foe, jumped)
+	var named: bool = difficulty != ""
+	var objective: Dictionary = {} if named else _road_objective(foe, jumped)
 	var kind := String(objective.get("kind", ""))
 	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else difficulty)
 	if kind == "hold":
@@ -1605,10 +1609,11 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 				Ach.bump("raids_turned")
 				_quest_news.append("The raid on %s is turned." % raid_target.sname)
 		# O7 raise/lower event: putting down a monster band is a favour to whoever
-		# lives near the bodies; putting down a faction's own band is not.
-		if WorldAI.is_monster(foe.faction):
+		# lives near the bodies; putting down a faction's own band is not. A
+		# brawl at the inn is neither.
+		if not named and WorldAI.is_monster(foe.faction):
 			FactionOpinion.credit_fight(world, foe.position, FactionOpinion.FOUGHT_FOR, foe.faction)
-		else:
+		elif not named:
 			FactionOpinion.lower(foe.faction, FactionOpinion.KILLED_THEIRS)
 	else:
 		_retreat()
@@ -3048,11 +3053,13 @@ func _rest() -> void:
 		_say("Can't afford a room here (%d ◉)." % cost)
 		return
 	var before := _visit
+	var stamp: float = s.last_visited
 	Visit.rest(party, world, "long-rest")
 	Sound.play_sfx("rest")
 	var trance: Dictionary = Trance.apply_rest_bonus(party, world, s.position)
 	_visit = Visit.visit(s, world)
 	_carry_visit_flags(before, _visit)
+	Downtime.restamp(party, s, stamp, s.last_visited)   # the game and the bench are still this visit's
 	_cheer()
 	_build_visit_panel()
 	_say("The party takes a long rest (%s). Eight hours pass and the stalls fill up again.%s" % [
@@ -3847,13 +3854,22 @@ func _pit_row(rows: VBoxContainer, s) -> void:
 	else:
 		_note(rows, "The pit: champions of the bracket this week. A new three stand next week.")
 
+# Five days and a feat are a card (Schooled), the way a night that went
+# wrong is; a contact made is one too. The game and the bench stay lines.
 func _train(ch, feat_id: String) -> void:
-	_downtime_done(Downtime.train(party, world, _visit["settlement"], ch, feat_id), "The master-at-arms will not take them.")
+	var r: Dictionary = Downtime.train(party, world, _visit["settlement"], ch, feat_id)
+	_downtime_done(r, "The master-at-arms will not take them.")
+	if bool(r.get("ok", false)):
+		_card({"id": "downtime-train", "title": "Schooled", "kind": "good", "ok": true,
+			"text": String(r["text"]), "art": "event-downtime-train"}, _on_inn_card_ack)
 
 func _carouse() -> void:
 	var r: Dictionary = Downtime.carouse(party, world, _visit["settlement"])
 	var c: Dictionary = _complicate(String(r.get("complication", "")), int(r.get("cost", 0)))
 	_downtime_done(r, "Nobody in the company is fit for a night out.")
+	if bool(r.get("contact", false)):
+		_card({"id": "downtime-carouse", "title": "A night on the town", "kind": "good", "ok": true,
+			"text": String(r["text"]), "gold": int(r.get("coin", 0)), "art": "event-downtime-carouse"}, _on_inn_card_ack)
 	_show_complication(c)
 
 func _gamble(stake: int) -> void:
@@ -3865,11 +3881,13 @@ func _gamble(stake: int) -> void:
 func _craft(item_id: String) -> void:
 	_downtime_done(Downtime.craft(party, world, _visit["settlement"], item_id, _visit), "Nobody here will let you at the bench.")
 
-# The row's answer, the way _work_healer gives its own: a save (the purse and
-# the clock both moved), the panel again, the line under the row.
+# The row's answer, the way _work_healer gives its own: a save (a lost stake
+# and a failed night move the purse as surely as a won one), the panel again,
+# the line under the row.
 func _downtime_done(r: Dictionary, fallback: String, sfx := "rest") -> void:
 	if bool(r.get("ok", false)):
 		Sound.play_sfx(sfx)
+	if not r.is_empty():
 		_autosave()
 	_build_visit_panel()
 	_say(String(r.get("text", fallback)))
@@ -3895,17 +3913,38 @@ func _show_complication(c: Dictionary) -> void:
 		return
 	var s = _visit["settlement"]
 	if c.get("fight", false):
-		_card(c, func(): _on_event_ack(); _close_visit(); await _launch_combat(
-			World.RoamingParty.new("%s-brawl" % s.id, s.position, "bandit"), false, false, "", "easy"))
+		_card(c, func(): _on_event_ack(); _close_visit(); await _brawl(s))
 	else:
 		_card(c, _on_inn_card_ack)
+
+# The cousin's friends: an easy bandit roster fought the way a road fight is
+# (a loss is _retreat's), with the road's own rules kept off it
+# (_launch_combat's `difficulty`). Its spoils page is its ack; the inn reopens
+# behind it, the way it does behind the pit's card.
+func _brawl(s) -> void:
+	var result: Dictionary = await _launch_combat(
+		World.RoamingParty.new("%s-brawl" % s.id, s.position, "bandit"), false, false, "", "easy")
+	if result.is_empty():
+		return   # torn down mid-fight
+	while _spoils_panel != null:
+		await get_tree().process_frame
+	_reopen_visit(s)
+
+# The inn again after a fight closed the visit: Visit.visit() stamps
+# last_visited afresh, and the once-a-visit rows keep their stamp with it.
+func _reopen_visit(s) -> void:
+	var stamp: float = s.last_visited
+	_open_visit(s)
+	Downtime.restamp(party, s, stamp, s.last_visited)
 
 # A bout in the pit: the city's bandit roster (hired blades — humanoid, always
 # fielded) cut to one champion by Downtime.pit_spec, fought in the square with
 # none of the road's aftermath — no band erased, no opinion moved, no spoils
-# page: the purse and the deed are pit_result's, on a card, and the visit
-# reopens behind it. A loss is carried out, not buried — _retreat's revive
-# without its gold or its walk; the house's stake is the purse.
+# page: a win banks what a fight banks (_bank: XP, the kill's gold, loot,
+# quest progress), then the purse and the deed are pit_result's, all on one
+# card, and the visit reopens behind it. A loss is carried out, not buried —
+# _retreat's revive without its gold or its walk; the house's stake is the
+# purse.
 func _pit_bout() -> void:
 	var s = _visit["settlement"]
 	var st: Dictionary = Downtime.pit_state(party, s, world)
@@ -3923,13 +3962,20 @@ func _pit_bout() -> void:
 		return   # torn down mid-fight
 	var won: bool = String(result.get("outcome", "")) == "Victory"
 	if won:
+		_bank(result)
 		_apply_deaths(result)
 	else:
 		Party.auto_revive_all(party)
 	var r: Dictionary = Downtime.pit_result(party, s, world, bout, won, int(st["week"]))
 	_autosave()
+	# The quest news a spoils page would have carried rides the card instead.
+	var text: String = String(r["text"])
+	for line in _quest_news:
+		text += "  " + String(line)
+	_quest_news = []
 	_card({"id": "downtime-pit", "title": "The pit", "kind": "good" if won else "bad", "ok": won,
-		"text": String(r["text"]), "gold": int(r["purse"])}, func(): _on_event_ack(); _open_visit(s))
+		"text": text, "gold": int(r["purse"]), "xp": int(result.get("xp", 0)) if won else 0},
+		func(): _on_event_ack(); _reopen_visit(s))
 
 func _build_board_page(box: VBoxContainer, s) -> void:
 	var has_inn: bool = Visit.has_service(s, "innkeeper")

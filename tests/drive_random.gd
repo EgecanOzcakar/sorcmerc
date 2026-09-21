@@ -298,6 +298,7 @@ func _watch() -> void:
 		var s: Dictionary = party.summary(ch.id)
 		if int(s["hp"]) < 0 or int(s["hp"]) > int(s["max_hp"]):
 			fail("%s is at %d/%d hp" % [ch.cname, s["hp"], s["max_hp"]])
+	for ch in party.roster:   # the bench too: a trained hero can be benched after
 		var seen_feats := {}
 		for f in ch.feats:
 			if seen_feats.has(f):
