@@ -273,7 +273,8 @@ var _warned_bands := {}              # bands already warned about; a seam you st
 var _region_lbl: Label
 var _region_msg: Label               # the last crossing, same "persists" contract as _lair_msg
 
-var _ladder_title_seen := 0          # the last renown title _check_title() said; set on load
+var _ladder_title_seen := 0          # the last renown title _check_ladder() said; set on load
+var _rungs_seen: Dictionary = {}     # faction -> the last rung _check_ladder() said; set on load
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _camp_msg: Label                 # T9x: last short-rest/camp outcome, same "persists" contract as _lair_msg
@@ -366,6 +367,8 @@ func _ready() -> void:
 	_view.add_layer(_lairs3d)
 	_lairs3d.reset(world)
 	_ladder_title_seen = Ladder.title_index()   # a loaded save's title is not news
+	for f in WorldAI.CIVILIZED:                  # ...nor its rungs
+		_rungs_seen[f] = Ladder.rung(f)
 	_landmarks3d = Landmarks3D.new()
 	_view.add_layer(_landmarks3d)
 	_landmarks3d.reset(world)
@@ -491,7 +494,7 @@ func _process(delta: float) -> void:
 	_check_places()
 	_check_expired_lairs()
 	_check_raids()
-	_check_title()
+	_check_ladder()
 	_check_forage()
 	_check_travel()
 	_check_region()
@@ -1136,7 +1139,7 @@ func _build_quest_panel() -> void:
 	_section(rows, "Standing")
 	var t := Ladder.title_index()
 	var renown := Label.new()
-	renown.text = "%s — %d deeds%s" % [Ladder.title().capitalize(), Ladder.renown(),
+	renown.text = "%s — %d deeds%s" % [Ladder.title_cap(), Ladder.renown(),
 		", %s at %d" % [String(Ladder.TITLES[t + 1]), int(Ladder.TITLE_AT[t + 1])] if t + 1 < Ladder.TITLES.size() else ""]
 	renown.theme_type_variation = "Dim"
 	rows.add_child(renown)
@@ -2082,21 +2085,27 @@ func _check_raids() -> void:
 	_lairs3d.reset(world)
 	_autosave()
 
-# Renown's title, said once when it changes — deeds are credited in five
-# places, none of which is this screen, so the screen watches the sum. The
-# two high-water marks the achievements read are kept here for the same reason.
-func _check_title() -> void:
-	var t := Ladder.title_index()
+# A rung gained and renown's title, each said once when it rises — deeds are
+# credited in five places, none of which is this screen, so the screen watches
+# the numbers. The two high-water marks the achievements read are recorded
+# here for the same reason.
+const RUNG_LINES := {Ladder.KNOWN: "Known among the %s now.",
+	Ladder.TRUSTED: "Trusted among the %s now.", Ladder.SWORN: "Sworn to the %s now."}
+
+func _check_ladder() -> void:
 	var best := 0
 	for f in WorldAI.CIVILIZED:
-		best = maxi(best, Ladder.rung(f))
+		var r: int = Ladder.rung(f)
+		best = maxi(best, r)
+		if r > int(_rungs_seen.get(f, 0)):
+			_lair_msg.text = String(RUNG_LINES[r]) % Ladder.people(f)
+		_rungs_seen[f] = r
 	Ach.record("best_rung", best)
-	if t == _ladder_title_seen:
-		return
+	var t := Ladder.title_index()
+	Ach.record("renown_title", t)
 	if t > _ladder_title_seen:
 		_lair_msg.text = "The company is spoken of now: %s." % Ladder.title()
 	_ladder_title_seen = t
-	Ach.record("renown_title", t)
 
 # --- landmarks: places on the map that are not a fight -----------------------
 # The lair button's shape again: one button, two states. A found place offers a
@@ -3198,7 +3207,7 @@ func _standing_line(s) -> String:
 	# they feel this week — unless the guards are already out.
 	var tail := ""   # Famous or better rides on the end of every line
 	if Ladder.title_index() >= 3:
-		tail = "  %s, they say." % Ladder.title().capitalize()
+		tail = "  %s, they say." % Ladder.title_cap()
 	match Ladder.rung(s.faction):
 		Ladder.SWORN: return "Sworn to this people. Their doors are yours." + tail
 		Ladder.TRUSTED: return "Trusted here — the back room is open to you." + tail
@@ -3591,7 +3600,7 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 		box.add_child(patron)
 	if Ladder.title_index() > 0:
 		var pay := Label.new()
-		pay.text = "%s — work pays +%d %%." % [Ladder.title().capitalize(), int(round(Ladder.PAY_PER_TITLE * 100 * Ladder.title_index()))]
+		pay.text = "%s — work pays +%d %%." % [Ladder.title_cap(), int(round(Ladder.PAY_PER_TITLE * 100 * Ladder.title_index()))]
 		pay.theme_type_variation = "Dim"
 		box.add_child(pay)
 	if s.raided_by != "":

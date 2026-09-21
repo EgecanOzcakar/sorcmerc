@@ -68,6 +68,7 @@ func _init() -> void:
 	main._open_visit(town)
 	await process_frame
 	check(said(main, "Known here — they will pass you a neighbour's work."), "Known: the line")
+	check("Known among the humans now." in main._lair_msg.text, "the rung gained is said: %s" % main._lair_msg.text)
 	check(button_named(main, "Inn.  A night is 20") != null, "Known: half a bed")
 	main._close_visit()
 	await process_frame

@@ -39,6 +39,8 @@ func _init() -> void:
 	check(Ladder.title_index() == 1 and Ladder.title() == "Hirelings" and absf(Ladder.pay_mult() - 1.1) < 0.001, "six: Hirelings, +10 %")
 	Ladder.deed("human", 12)
 	check(Ladder.title() == "a Company of Note" and absf(Ladder.pay_mult() - 1.2) < 0.001, "eighteen")
+	check(Ladder.title_cap() == "A Company of Note", "...capitalised for the start of a line, not title-cased: %s" % Ladder.title_cap())
+	check(Ladder.people("elf") == "elves" and Ladder.people("goblin") == "goblins", "the plural people")
 	Ladder.deed("human", 22)
 	check(Ladder.title() == "Famous", "forty")
 	Ladder.deed("elf", 40)

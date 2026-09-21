@@ -30,6 +30,12 @@ const TITLES := ["Nobodies", "Hirelings", "a Company of Note", "Famous", "Legend
 const TITLE_AT := [0, 6, 18, 40, 80]      # total deeds: the first town; the whole map, twice
 const PAY_PER_TITLE := 0.1                # every job pays this much more per title above Nobodies
 
+# The plural, for "Known among the elves now."
+const PEOPLE := {"human": "humans", "elf": "elves", "dwarf": "dwarves"}
+
+static func people(faction: String) -> String:
+	return String(PEOPLE.get(faction, faction + "s"))
+
 static var _deeds: Dictionary = {}        # faction -> int
 static var _audiences: Array = []         # factions whose audience has been held
 
@@ -45,7 +51,7 @@ static func deeds(faction: String) -> int:
 # mood. Returns the new rung when this deed crossed a threshold, so the caller
 # can say so once; -1 otherwise.
 static func deed(faction: String, n := 1) -> int:
-	if n <= 0 or load("res://core/world_ai.gd").is_monster(faction):   # load: world_ai.gd's chain preloads this file
+	if n <= 0 or load("res://core/world_ai.gd").is_monster(faction):   # load(), not preload: this file stays preload-free so every core module can preload it
 		return -1
 	var before := rung(faction)
 	_deeds[faction] = deeds(faction) + n
@@ -81,6 +87,11 @@ static func title_index() -> int:
 
 static func title() -> String:
 	return String(TITLES[title_index()])
+
+# For the start of a line: "A Company of Note", not .capitalize()'s "A Company Of Note".
+static func title_cap() -> String:
+	var t := title()
+	return t[0].to_upper() + t.substr(1)
 
 static func pay_mult() -> float:
 	return 1.0 + PAY_PER_TITLE * float(title_index())
