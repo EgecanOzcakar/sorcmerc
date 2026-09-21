@@ -558,7 +558,13 @@ func _new_game(forced := 0) -> void:
 	# moment it happens, hit or miss. Heroes draw their own from _apply_target,
 	# which knows the verb before perform() does.
 	cb.on_perform = func(a, v: Dictionary, t) -> void:
-		focus_cam([a.id, t.id] if t is Object and "id" in t and t != a else [a.id])   # #152
+		# #152: a melee blow frames the pair; a shot or a spell frames where it
+		# lands — the one who is hit is the one to watch, not the one aiming.
+		if t is Object and "id" in t and t != a:
+			var reach: bool = v.has("spell") or a.ranged or int(v.get("range", a.atk_range)) > 1
+			focus_cam([t.id] if reach else [a.id, t.id])
+		else:
+			focus_cam([a.id])
 		if a.team == "foe" and t is Object and "pos" in t:
 			_attack_fx(a, t, v)
 	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
