@@ -2751,6 +2751,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_: return
 		accept_event()
 		return
+	# The inn's fireside (or the approach card under a courtship) sits over a
+	# visit that is still open; the page keys must not act through it, or
+	# Leave (Esc) can close the visit out from under the card still showing.
+	if _event_card != null or _approach_card != null:
+		return
 	match event.keycode:
 		KEY_ESCAPE:
 			if _visit_page != "hub":
@@ -2985,10 +2990,14 @@ func _rest() -> void:
 
 # The inn's fireside card comes down over a visit that is still holding the
 # clock, so its ack cannot be the plain one — that would set the map running
-# behind the market.
+# behind the market. But the visit can have been closed out from under the
+# card already (Leave, while the card was still up); re-pausing then would
+# leave the map stuck paused with nothing left to hold it.
 func _on_inn_card_ack() -> void:
 	_on_event_ack()
-	world.clock.pause()
+	if not _visit.is_empty():
+		world.clock.pause()
+		_pause_btn.text = "Resume"
 
 # T9x: names the check and its result explicitly, same convention every
 # other overworld roll in this file uses — never just "something happened".

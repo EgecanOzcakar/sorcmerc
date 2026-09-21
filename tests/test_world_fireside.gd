@@ -108,6 +108,7 @@ func _init() -> void:
 		if main._approach_card != null:
 			asked = true
 			break
+	check(asked, "a courtship was asked within the attempts")
 	if asked:
 		main._approach_card.chosen.emit("decline")
 		await process_frame
@@ -156,6 +157,35 @@ func _init() -> void:
 		await process_frame
 		check(main._event_card == null, "acked: the card is down")
 		check(not main._visit.is_empty() and main.world.clock.is_paused(), "...the visit is still up and still holds the clock")
+	main._close_visit()
+
+	# --- Leave, while the inn's card is still up: acking afterward must not
+	# leave the map stuck paused behind a visit that is already gone ---
+	main._open_visit(home)
+	_set_all(party, 30.0)
+	fired = false
+	for i in 30:
+		party.gold = Visit.inn_cost(home) + 1
+		party.last_long_rest_at = -99999.0
+		main._rest()
+		await process_frame
+		if _card_id(main) == "camp-fireside":
+			fired = true
+			break
+		if main._event_card != null:
+			main._event_card.acknowledged.emit()
+	check(fired, "thirty more inn nights: at least one fireside moment")
+	if fired:
+		main._close_visit()
+		check(main._visit.is_empty(), "Leave closed the visit while the card was still up")
+		# The loop above spends in-game days resting; push the road-event clock
+		# forward so a stray travel event doesn't fire on the frame below and
+		# mask what we're actually checking.
+		main._last_travel_at = main.world.clock.elapsed
+		main._event_card.acknowledged.emit()
+		await process_frame
+		check(not main.world.clock.is_paused(), "acking after Leave does not leave the map paused")
+		check(main._pause_btn.text == "Pause", "...and the pause button says so, not stuck on Resume")
 	main._close_visit()
 
 	print("test_world_fireside: %d passed, %d failed" % [_pass, _fail])
