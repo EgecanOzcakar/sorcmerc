@@ -33,11 +33,16 @@ func test_round_trip() -> void:
 	s.anim_speed_multiplier = Settings.FAST
 	s.default_difficulty = "hard"
 	s.reaction_prompts = false
+	s.ui_scale = 1.2
 	check(Settings.save_settings(s) != "", "saved")
 	var back = Settings.load_settings()
 	check(back.anim_speed_multiplier == Settings.FAST, "anim speed survives the round trip")
 	check(back.default_difficulty == "hard", "difficulty survives the round trip")
 	check(back.reaction_prompts == false, "the reaction-prompt choice survives the round trip")
+	check(is_equal_approx(back.ui_scale, 1.2), "the combat UI size survives the round trip")
+	s.ui_scale = 9.0
+	Settings.save_settings(s)
+	check(Settings.load_settings().ui_scale == Settings.UI_SCALE_MAX, "...and is clamped on load")
 	check(Settings.current().default_difficulty == "hard", "save updates the cached instance")
 	# On by default: a slot spent without being asked is the thing the setting exists to stop.
 	var fresh_default = Settings.new()

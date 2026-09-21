@@ -43,14 +43,14 @@ var _pan := Vector2.ZERO
 # whole map, and figures the size of a fingernail. ZOOM_FOLLOW is what the
 # camera glides to over the actor (and the target, when there is one — the pair
 # is kept in frame, which lowers it for a long shot). The chrome — bar, strip,
-# chips — scales by _ui_zoom, the player's own zoom, not the camera's: a bar
-# that breathed with every action was the first thing wrong with the prototype.
+# chips — scales by Settings.chrome_scale() and nothing else: a bar that breathed
+# with every action was the first thing wrong with the prototype, and a bar
+# that grew when the player zoomed the map was the second.
 const ZOOM_FOLLOW := 1.1     # ~2x the fit-all view; 1.65 read as a close-up once the group was tight
 # A turn is framed with its context — the actor and every enemy within
 # CAM_CONTEXT hexes — so the camera never shows one figure and nothing to
 # act on. Nearer enemies fit at ZOOM_FOLLOW; a spread-out fight lowers it.
 const CAM_CONTEXT := 7
-var _ui_zoom := ZOOM_DEFAULT
 var _cam_follow := true       # Home toggles it; a new fight sets it
 var _cam_ids: Array = []      # who the camera is on: combatant ids, their tokens tracked as they slide
 var _cam_hold := false        # the player panned or zoomed: stay put until the next action
@@ -362,7 +362,7 @@ func _ready() -> void:
 
 # Font sizes across the whole combat UI track the zoom level.
 func _apply_ui_scale() -> void:
-	var u := clampf(_ui_zoom, 0.9, 1.4)
+	var u := Settings.chrome_scale()
 	_header.add_theme_font_size_override("font_size", int(Icons.FS_TITLE * u))
 	_actor.add_theme_font_size_override("normal_font_size", int(Icons.FS_HEAD * u))
 	_actor.add_theme_font_size_override("bold_font_size", int(Icons.FS_HEAD * u))
@@ -384,12 +384,9 @@ func _apply_ui_scale() -> void:
 
 func set_zoom(z: float) -> void:
 	_zoom = clampf(z, 0.45, 3.0)
-	_ui_zoom = _zoom
 	_cam_hold = true   # #152: the player's view, until the next action
 	if _board:
 		_board._auto_fit = false
-	_apply_ui_scale()
-	if _board:
 		_board.queue_redraw()
 
 func pan_by(delta: Vector2) -> void:
@@ -421,9 +418,8 @@ func toggle_cam() -> void:
 	if _cam_follow:
 		_board._auto_fit = false   # or _layout() fits the whole board back every frame
 		return
-	_zoom = ZOOM_DEFAULT; _ui_zoom = ZOOM_DEFAULT; _pan = Vector2.ZERO
+	_zoom = ZOOM_DEFAULT; _pan = Vector2.ZERO
 	_board._auto_fit = true
-	_apply_ui_scale()
 	_board.queue_redraw()
 
 func _unhandled_key_input(e: InputEvent) -> void:
@@ -447,7 +443,7 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		KEY_ESCAPE, KEY_B: board_cancel()
 		KEY_TAB: _press_key("Tab")
 		KEY_R: if cb and cb.is_over(): _new_game()
-		KEY_F1: SettingsOverlay.toggle(self, func(): _anim = Settings.anim())
+		KEY_F1: SettingsOverlay.toggle(self, func(): _anim = Settings.anim(); _apply_ui_scale())
 		KEY_F2: ManualOverlay.toggle(self)
 		KEY_F3: report_bug()
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
@@ -1760,7 +1756,7 @@ func _set_buttons(opts: Array) -> void:
 		c.queue_free()
 	_hover_verb = {}
 	var count := opts.size()
-	var u := clampf(_ui_zoom, 0.9, 1.4)
+	var u := Settings.chrome_scale()
 	for i in count:
 		var b := Button.new()
 		var meta: Dictionary = opts[i][3] if opts[i].size() > 3 else {}
@@ -1922,7 +1918,7 @@ func _build_order_strip() -> void:
 		c.queue_free()
 	_order_tiles.clear()
 	_order_aimed.clear()
-	var u := clampf(_ui_zoom, 0.9, 1.4)
+	var u := Settings.chrome_scale()
 	for c in cb.order:
 		var tile := PanelContainer.new()
 		var base: StyleBox
@@ -2311,7 +2307,7 @@ func _process(dt: float) -> void:
 	if _hud_overlay:
 		_hud_overlay.queue_redraw()
 	if _bscroll:   # grow with the wrapped rows, up to BUTTON_ROWS, then scroll
-		var row := BTN_SIZE.y * clampf(_ui_zoom, 0.9, 1.4) + 6.0
+		var row := BTN_SIZE.y * Settings.chrome_scale() + 6.0
 		_bscroll.custom_minimum_size.y = minf(_buttons.get_combined_minimum_size().y,
 			row * BUTTON_ROWS)
 
@@ -2794,8 +2790,6 @@ class Board extends Control:
 			var z := clampf(minf(main.ZOOM_DEFAULT, fit), 0.45, 3.0)
 			if not is_equal_approx(z, main._zoom):
 				main._zoom = z
-				main._ui_zoom = z
-				main._apply_ui_scale()
 				_layout()
 				return
 		# keep the board from being panned entirely off-screen

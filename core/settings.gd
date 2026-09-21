@@ -63,6 +63,13 @@ var reaction_prompts := true
 # (scenes/achievements/toast.gd). Off still earns and still records it — the
 # viewer is the record — it just stops the game talking over itself mid-fight.
 var achievement_popups := true
+# How big the combat screen's chrome is — the bar, the initiative strip, the
+# key chips, the header — as a multiplier. It used to ride the map zoom, so
+# zooming in on a fight grew the buttons with it; the map's zoom is the map's
+# now (#152), and this is the only thing that sizes the chrome.
+const UI_SCALE_MIN := 0.7
+const UI_SCALE_MAX := 1.4
+var ui_scale := 1.0
 
 # Which pace a stored multiplier reads as: the nearest one, so a hand-edited
 # settings.json still selects something rather than nothing.
@@ -98,6 +105,7 @@ static func load_settings():
 		s.music_volume = clampf(float(d.get("music_volume", DEFAULT_VOLUME)), 0.0, 100.0)
 		s.reaction_prompts = bool(d.get("reaction_prompts", true))
 		s.achievement_popups = bool(d.get("achievement_popups", true))
+		s.ui_scale = clampf(float(d.get("ui_scale", 1.0)), UI_SCALE_MIN, UI_SCALE_MAX)
 	return s
 
 static func to_dict(s) -> Dictionary:
@@ -107,7 +115,8 @@ static func to_dict(s) -> Dictionary:
 		"sfx_volume": s.sfx_volume,
 		"music_volume": s.music_volume,
 		"reaction_prompts": s.reaction_prompts,
-		"achievement_popups": s.achievement_popups}
+		"achievement_popups": s.achievement_popups,
+		"ui_scale": s.ui_scale}
 
 # Returns the path written, or "" on failure.
 static func save_settings(s = null) -> String:
@@ -135,6 +144,9 @@ static func anim() -> float:
 # Whether the combat screen installs a reaction decider at all. SORCMERC_FAST
 # wins outright, for the same reason anim() lets it: a headless run has nobody
 # to answer the question, and a prompt nobody answers is a hang, not a pause.
+static func chrome_scale() -> float:
+	return current().ui_scale
+
 static func reaction_prompts_on() -> bool:
 	if OS.get_environment("SORCMERC_FAST") != "":
 		return false

@@ -29,7 +29,7 @@ func _init() -> void:
 	check(ilsa != null and foe != null, "a hero and a foe to look at")
 	var fit: float = main._zoom
 	check(main._cam_follow and fit < main.ZOOM_FOLLOW, "the fight opens fit-all, at less than the follow zoom (%.2f)" % fit)
-	check(main._ui_zoom == fit, "the chrome scales by that zoom")
+	var bar_u: float = main._buttons.get_child(0).custom_minimum_size.x if main._buttons.get_child_count() > 0 else -1.0
 
 	# The camera goes to the actor: FAST lands it in a frame or two.
 	main.focus_cam([ilsa.id])
@@ -38,7 +38,11 @@ func _init() -> void:
 	check(is_equal_approx(main._zoom, main.ZOOM_FOLLOW), "focused, the camera is at ZOOM_FOLLOW (%.2f)" % main._zoom)
 	var at: Vector2 = board._pix(ilsa.pos)
 	check(at.distance_to(board.size * 0.5) < 4.0, "...centred on the actor (%.0f px off)" % at.distance_to(board.size * 0.5))
-	check(main._ui_zoom == fit, "the chrome did not move with the camera")
+	check(main._buttons.get_child_count() == 0 or main._buttons.get_child(0).custom_minimum_size.x == bar_u,
+		"the chrome did not move with the camera")
+	main.set_zoom(main._zoom * 1.3)
+	check(main._buttons.get_child_count() == 0 or main._buttons.get_child(0).custom_minimum_size.x == bar_u,
+		"...nor with the player's own zoom: the chrome is Settings.chrome_scale()'s alone")
 
 	# A pair is kept in frame, the midpoint centred, the zoom lowered if it must.
 	main.focus_cam([ilsa.id, foe.id])
@@ -66,7 +70,7 @@ func _init() -> void:
 	main.toggle_cam()
 	for i in 6:
 		await process_frame
-	check(not main._cam_follow and is_equal_approx(main._zoom, fit) and main._ui_zoom == fit,
+	check(not main._cam_follow and is_equal_approx(main._zoom, fit),
 		"Home fits the whole board again (%.2f)" % main._zoom)
 	main.toggle_cam()
 	for i in 6:
