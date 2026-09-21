@@ -274,6 +274,21 @@ func _init() -> void:
 	check(friendly._art == Icons.event_art(ApproachCard.FRIENDLY_SCENE_ART, null),
 		"a band nobody is fighting gets the picture of a hail instead")
 	check(friendly._art != roomy._art, "...which is not the same picture")
+	# The band's own faction's painting when there is one (the audit of
+	# 2026-09-21 painted the engage banner per faction), the generic one when
+	# nobody has painted that faction yet — and never a missing picture.
+	var orcs = card(1280.0, 900.0)
+	orcs.foe_faction = "orc"
+	orcs.show_approach(four(), "Orc raiders (8)")
+	check(orcs._art != null, "a faction band still has a picture")
+	check(orcs._art == Icons.scene_art(Icons.scene_stem("event-approach-engage", "orc"), null),
+		"...its own faction's when that has been painted")
+	var nobody = card(1280.0, 900.0)
+	nobody.foe_faction = "no-such-faction"
+	nobody.show_approach(four(), "Things (3)")
+	check(nobody._art == roomy._art, "an unpainted faction falls back to the generic meeting")
+	check(Icons.scene_stem("event-approach-engage", "no-such-faction", true) == "event-approach-engage",
+		"...and so does an outcome frame nobody painted")
 	check(tall._panel.position.y >= 0.0, "...from the top edge down")
 	var wide = card(1280.0, 720.0)
 	wide.show_approach(four(), "Goblins (3)")

@@ -2509,6 +2509,7 @@ func _open_approach(foe, hostile := true) -> void:
 	_approach_card = ApproachCard.new()
 	add_child(_approach_card)
 	_approach_card.chosen.connect(_on_approach_chosen)
+	_approach_card.foe_faction = String(foe.faction)
 	var kind := String(_road_objective(foe, "").get("kind", ""))
 	_approach_card.show_approach(Approach.options(party, foe, hostile),
 		"%s (%d)%s" % [foe.id.capitalize(), foe.troops.size(), ("  ·  " + Objectives.title(kind)) if kind != "" else ""])
@@ -2526,12 +2527,14 @@ func _on_approach_chosen(way: String) -> void:
 	_event_card = EventCard.new()
 	add_child(_event_card)
 	_event_card.acknowledged.connect(_on_approach_reported.bind(foe, r))
-	_event_card.show_event(_approach_event(r))
+	_event_card.show_event(_approach_event(r, String(foe.faction)))
 
-# core/approach.gd's result, in the shape event_card.gd already draws.
-func _approach_event(r: Dictionary) -> Dictionary:
+# core/approach.gd's result, in the shape event_card.gd already draws. The
+# picture is the band's own faction's when that way has been painted for it.
+func _approach_event(r: Dictionary, faction := "") -> Dictionary:
 	var e: Dictionary = r.duplicate(true)
 	e["id"] = "approach-%s" % String(r.get("way", ""))
+	e["art"] = Icons.scene_stem("event-" + e["id"], faction, r.get("ok") if r.has("ok") else null)
 	e["title"] = String(Approach.WAYS.get(String(r.get("way", "")), {}).get("label", "The meeting"))
 	# "good" is not the same as "the roll passed": walking into a fight you
 	# meant to walk into is not a setback, and a blown ambush is.
