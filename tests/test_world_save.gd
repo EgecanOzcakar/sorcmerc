@@ -350,6 +350,15 @@ func _done() -> void:
 		"...and reads back")
 	check(pr_old.downtime.is_empty(), "an old save with no downtime loads with none")
 
+	# The lodge rides there too.
+	pr.lodge = {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, "garden_at": -1.0, "maproom_at": -1.0, "retrained": {}, "blessed_at": -1.0}
+	rd = WorldSave.to_dict(wo, pr)
+	check(rd["party"].get("lodge", {}).get("gold", 0) == 250, "the lodge rides the save's party dict")
+	pr_back = WorldSave.from_dict(rd)["party"]
+	check(pr_back.lodge.get("settlement_id", "") == "riverhold" and pr_back.lodge.get("rooms", []) == ["strongroom"] and pr_back.lodge.get("gold", 0) == 250,
+		"...and reads back")
+	check(pr_old.lodge.is_empty(), "an old save with no lodge loads with none")
+
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

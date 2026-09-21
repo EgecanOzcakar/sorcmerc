@@ -45,6 +45,7 @@
 #     "relations": {"pike|vera": {"score": 33.0, "status": ""}}  // PartyOpinion.to_dict
 #     "callings": {"ilsa": {"id": "acolyte", "target_kind": "landmark", ...}}  // Callings.to_dict
 #     "downtime": {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}  // Downtime.to_dict
+#     "lodge": {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, ...}  // Lodge.to_dict; {} until bought
 #   },
 #   "story": {                        // M7: the content pack's story, mid-telling.
 #     "pack": "ashen-road",           //   {} on every run with no story on it.
@@ -66,6 +67,7 @@ const Ladder = preload("res://core/ladder.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Callings = preload("res://core/callings.gd")
 const Downtime = preload("res://core/downtime.gd")
+const Lodge = preload("res://core/lodge.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-world"
@@ -341,6 +343,7 @@ static func _party_dict(party) -> Dictionary:
 		"relations": PartyOpinion.to_dict(party),   # spike-party-opinions §8: who thinks what of whom
 		"callings": Callings.to_dict(party),
 		"downtime": Downtime.to_dict(party),
+		"lodge": Lodge.to_dict(party),
 	}
 
 static func _party_from(pd: Dictionary):
@@ -368,6 +371,7 @@ static func _party_from(pd: Dictionary):
 	PartyOpinion.from_dict(party, pd.get("relations", {}))   # an old save with no key loads as a fresh party
 	Callings.from_dict(party, pd.get("callings", {}))
 	Downtime.from_dict(party, pd.get("downtime", {}))
+	Lodge.from_dict(party, pd.get("lodge", {}))
 	return party
 
 # JSON gives every number back as a float; quest counters are compared as ints.

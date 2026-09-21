@@ -53,6 +53,10 @@ var callings: Dictionary = {}
 # What the company has done in town that takes days — who trained, the
 # once-a-visit stamps, the pit's bracket. Owned entirely by core/downtime.gd.
 var downtime: Dictionary = {}
+# The company's house — the town it is in, the rooms built onto it, the
+# strongroom's gold, the garden's and the map room's clocks. {} until bought.
+# Owned entirely by core/lodge.gd.
+var lodge: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 

@@ -370,6 +370,11 @@ const DEFS := [
 		"desc": "Treble a stake at the table.", "counter": "trebles", "goal": 1},
 	{"id": "pit_champion", "group": "road", "title": "Champion of the Pit",
 		"desc": "Beat all three of a city's champions in one week.", "counter": "pit_brackets", "goal": 1},
+	# the lodge (core/lodge.gd): a house, and the rooms built onto it
+	{"id": "lodge_bought", "group": "road", "title": "A Door of Our Own",
+		"desc": "Buy a house in a town that knows the company.", "counter": "lodges", "goal": 1},
+	{"id": "lodge_full", "group": "road", "title": "Every Room Built",
+		"desc": "Build all five rooms onto the lodge.", "counter": "lodge_rooms", "goal": 5},
 	{"id": "explored_150", "group": "road", "title": "Cartographer",
 		"desc": "Put 150 waypoints of one map behind you.",
 		"counter": "explored", "goal": 150},

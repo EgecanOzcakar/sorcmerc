@@ -120,6 +120,13 @@ func _init() -> void:
 	check(CampaignSave.from_dict(rd).party.downtime.get("trained", []) == ["vera"], "...and reads back")
 	check(cr_old.party.downtime.is_empty(), "an old campaign save with no downtime loads with none")
 
+	# The lodge rides there too.
+	cr.party.lodge = {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, "garden_at": -1.0, "maproom_at": -1.0, "retrained": {}, "blessed_at": -1.0}
+	rd = CampaignSave.to_dict(cr)
+	check(rd["party"].get("lodge", {}).get("gold", 0) == 250, "the lodge rides the campaign save's party dict")
+	check(CampaignSave.from_dict(rd).party.lodge.get("rooms", []) == ["strongroom"], "...and reads back")
+	check(cr_old.party.lodge.is_empty(), "an old campaign save with no lodge loads with none")
+
 	# The screen's own Continue-vs-New-Game choice is driven by tests/drive_campaign.gd
 	# ("Begin a new run") — instantiating campaign.tscn from a -s script hangs headless.
 	CampaignSave.clear()

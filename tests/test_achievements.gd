@@ -88,6 +88,9 @@ func _init() -> void:
 		check(not Ach.find(id).is_empty() and Ach.find(id)["group"] == "road", "%s is defined, on the road" % id)
 	check(Ach.find("pit_champion")["counter"] == "pit_brackets" and int(Ach.find("pit_champion")["goal"]) == 1,
 		"Champion of the Pit is one bracket")
+	# the lodge: two high-water marks off core/lodge.gd's records
+	check(Ach.find("lodge_bought")["counter"] == "lodges" and int(Ach.find("lodge_bought")["goal"]) == 1, "A Door of Our Own is the house")
+	check(Ach.find("lodge_full")["counter"] == "lodge_rooms" and int(Ach.find("lodge_full")["goal"]) == 5, "Every Room Built is five rooms")
 	print("test_achievements: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

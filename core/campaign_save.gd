@@ -29,6 +29,7 @@
 #     "relations": {"pike|vera": {"score": 33.0, "status": ""}},  // PartyOpinion.to_dict
 #     "callings": {"ilsa": {"id": "acolyte", "target_kind": "landmark", ...}}  // Callings.to_dict
 #     "downtime": {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}  // Downtime.to_dict
+#     "lodge": {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, ...}  // Lodge.to_dict; {} until bought
 #   }
 # }
 #
@@ -42,6 +43,7 @@ const Party = preload("res://core/party.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Callings = preload("res://core/callings.gd")
 const Downtime = preload("res://core/downtime.gd")
+const Lodge = preload("res://core/lodge.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-campaign"
@@ -88,6 +90,7 @@ static func to_dict(campaign) -> Dictionary:
 			"relations": PartyOpinion.to_dict(campaign.party),   # spike-party-opinions §8
 			"callings": Callings.to_dict(campaign.party),
 			"downtime": Downtime.to_dict(campaign.party),
+			"lodge": Lodge.to_dict(campaign.party),
 		},
 	}
 
@@ -110,6 +113,7 @@ static func from_dict(d: Dictionary):
 	PartyOpinion.from_dict(party, pd.get("relations", {}))   # an old save with no key loads as a fresh party
 	Callings.from_dict(party, pd.get("callings", {}))
 	Downtime.from_dict(party, pd.get("downtime", {}))
+	Lodge.from_dict(party, pd.get("lodge", {}))
 
 	var campaign := Campaign.new(party, int(d.get("seed", 1)))
 	campaign.stage = int(d.get("stage", 0))

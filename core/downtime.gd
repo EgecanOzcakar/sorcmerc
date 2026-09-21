@@ -121,8 +121,9 @@ static func trainable(ch) -> Array:
 
 # The feat's +1, decided for them: the highest of the scores the feat allows
 # (all six when it does not say), ties to the first listed. The grant's key is
-# the pending entry's key (core/rules/choice.gd).
-static func _decide_ability(ch, feat_id: String) -> String:
+# the pending entry's key (core/rules/choice.gd). The lodge's yard decides a
+# retrained feat the same way (core/lodge.gd).
+static func decide_ability(ch, feat_id: String) -> String:
 	for g in Catalog.feat_src(feat_id).get("grants", []):
 		if String(g["type"]) != "ability-choice":
 			continue
@@ -149,7 +150,7 @@ static func train(party, world, s, ch, feat_id: String) -> Dictionary:
 	party.spend_gold(fee)
 	ch.feats.append(feat_id)
 	ch.dirty()
-	_decide_ability(ch, feat_id)
+	decide_ability(ch, feat_id)
 	spend_days(party, world, s, TRAIN_DAYS)
 	var trained: Array = party.downtime.get("trained", [])
 	trained.append(ch.id)
