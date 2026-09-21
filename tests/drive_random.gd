@@ -50,6 +50,7 @@ const Travel = preload("res://core/travel.gd")
 const Ladder = preload("res://core/ladder.gd")
 const Callings = preload("res://core/callings.gd")
 const Downtime = preload("res://core/downtime.gd")
+const Lodge = preload("res://core/lodge.gd")
 
 # One driver frame. The same 0.1 tests/drive_world.gd drives the map with —
 # headless deltas are microseconds, so world time has to be handed over by
@@ -106,6 +107,8 @@ var _stamp := ""
 var _still := 0
 var _deeds_seen := 0         # Ladder.renown(), watched for the one direction it may move
 var _callings_done := {}     # char_id -> true once their calling was seen done (and its heirloom checked)
+var _stored_gold := -1       # party.lodge's strongroom gold last frame, or -1 before there is a lodge
+var _withdrew := false       # true for the one _watch() after the robot presses the strongroom's Withdraw
 
 func _init() -> void:
 	# This process's own autosave slots, so a concurrent godot run cannot clobber
@@ -160,6 +163,8 @@ func _session(sd: int) -> void:
 	_still = 0
 	_deeds_seen = 0
 	_callings_done = {}
+	_stored_gold = -1
+	_withdrew = false
 	WorldSave.clear()
 	FactionOpinion.reset()
 	Ladder.reset()
@@ -276,6 +281,17 @@ func _watch() -> void:
 	var party = screen.party
 	if party.gold < 0:
 		fail("the purse went negative: %d" % party.gold)
+	# The strongroom (core/lodge.gd): gold the road cannot take. A decrease is
+	# only ever legitimate off the back of a Withdraw the robot itself pressed
+	# (_town_beat marks _withdrew the frame it lands on that button) — anything
+	# else shrinking it is the one thing the room exists to prevent.
+	var stored: int = int(party.lodge.get("gold", 0))
+	if stored < 0:
+		fail("the strongroom went negative: %d" % stored)
+	elif _stored_gold >= 0 and stored < _stored_gold and not _withdrew:
+		fail("stored gold fell: %d -> %d" % [_stored_gold, stored])
+	_stored_gold = stored
+	_withdrew = false
 	var r := Ladder.renown()
 	if r < _deeds_seen:
 		fail("renown went down: %d -> %d" % [_deeds_seen, r])
@@ -806,6 +822,15 @@ func _town_beat() -> void:
 			_acts += 1
 			b.pressed.emit()
 			return
+	# The lodge's door (core/lodge.gd): worth walking through at twice the
+	# price, not the moment the purse limps over it — the way a player who
+	# actually wants the thing shops for it rather than buying broke.
+	for b in btns:
+		if _btn_name(b).begins_with("Buy a lodge here") and screen.party.gold >= 2 * Lodge.HOUSE_COST and _chance(60):
+			_saw["lodge:buy"] = true
+			_acts += 1
+			b.pressed.emit()
+			return
 	if _downtime_beat(panel):
 		return
 	var leave: Button = null
@@ -833,6 +858,9 @@ func _town_beat() -> void:
 		pick = leave
 	_saw["town-press:" + _btn_name(pick).get_slice(" ", 0).get_slice(".", 0)] = true
 	_acts += 1
+	if screen._visit_page == "lodge" and _marks_withdraw(pick):
+		_saw["lodge:withdraw"] = true
+		_withdrew = true
 	pick.pressed.emit()
 
 func _town_weight(name: String) -> int:
@@ -891,6 +919,13 @@ func _downtime_beat(panel: Node) -> bool:
 	elif screen._visit_page == "market" and _chance(15) and _press_downtime_row(panel, "Brew "):
 		_saw["downtime:brew"] = true
 		return true
+	elif screen._visit_page == "lodge":
+		if _chance(30) and _lodge_build_beat(panel):
+			_saw["lodge:build"] = true
+			return true
+		if _chance(20) and _lodge_deposit_beat(panel):
+			_saw["lodge:deposit"] = true
+			return true
 	return false
 
 # A row built by world.gd's _trade_row: a label naming it, its own HBoxContainer,
@@ -989,6 +1024,63 @@ func _train_beat(panel: Node) -> bool:
 	_acts += 1
 	go.pressed.emit()
 	return true
+
+# The lodge page's rooms (core/lodge.gd, world.gd's _build_lodge_page): every
+# unbuilt room gets its own row, and every one of them presses the same way —
+# a _trade_row whose button just says "Build" — so unlike the trainer's or
+# the gambler's row there is nothing to tell them apart by name. Any one of
+# them is as good as another to press.
+func _lodge_build_beat(panel: Node) -> bool:
+	var rows: Array = []
+	for b in _live_buttons(panel):
+		if _btn_name(b) == "Build":
+			rows.append(b)
+	if rows.is_empty():
+		return false
+	_acts += 1
+	_pick(rows).pressed.emit()
+	return true
+
+# The strongroom's Deposit row (_purse_row): a picker built low to high and
+# capped at the purse, so its first entry is already the smallest step the
+# purse covers — select(0) is "the smallest step" without reading the amounts.
+func _lodge_deposit_beat(panel: Node) -> bool:
+	var lbl := _find_label(panel, func(t): return t == "Deposit")
+	if lbl == null:
+		return false
+	var row := lbl.get_parent()
+	if not (row is HBoxContainer):
+		return false
+	var pick: OptionButton = null
+	var go: Button = null
+	for c in row.get_children():
+		if c is OptionButton:
+			pick = c
+		elif c is Button:
+			go = c
+	if pick == null or go == null or go.disabled or pick.item_count == 0:
+		return false
+	pick.select(0)
+	_acts += 1
+	go.pressed.emit()
+	return true
+
+# Deposit and Withdraw are the same row shape with the same "Go" on the end,
+# so once a press has been reduced to "Go" the only thing left that says
+# which row it was is the label beside it. Nothing here deliberately reaches
+# for Withdraw — it only ever lands under _town_beat's generic press, the
+# same as any other row nobody wrote a beat for — so that is where this gets
+# checked, on whatever button the roll happened to land on.
+func _marks_withdraw(b: Button) -> bool:
+	if b is OptionButton or String(b.text) != "Go":
+		return false
+	var row := b.get_parent()
+	if not (row is HBoxContainer):
+		return false
+	for c in row.get_children():
+		if c is Label and String(c.text) == "Withdraw":
+			return true
+	return false
 
 # --- the road -----------------------------------------------------------------
 

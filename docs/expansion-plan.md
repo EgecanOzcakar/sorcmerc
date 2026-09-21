@@ -6619,3 +6619,89 @@ downtime included.
 - The pit's loss revives everyone (the spec says carried out, not buried)
   while a win keeps its deaths — a bout won at a cost is paid for, a bout
   lost is not.
+
+## The lodge — one house in a town, and what a company builds onto it (2026-09-21)
+
+Sub-project 7, the last of the 2026-09-20 content batch (objectives →
+landmarks → threat clocks and reclaiming → the ladder → callings and
+relations → downtime → **the lodge**). Spec:
+`docs/superpowers/specs/2026-09-21-lodge-design.md`. Plan:
+`docs/superpowers/plans/2026-09-21-lodge.md`. Three tasks on one branch:
+the module (`core/lodge.gd`), the screen and the diorama, then the robot,
+the pictures and this record.
+
+Everything the batch gave the party a way to earn — jobs, raids turned, the
+pit, renown's premium — had somewhere to be spent already (the shelf, the
+back room) but nowhere of its own. `Lodge.buy(party, world, s)` fixes that
+at 400 ◉, and only where `Ladder.rung(s.faction) >= Ladder.KNOWN`: a house
+is a relationship with a town before it is a building, and a company
+nobody has heard of yet cannot buy one no matter how deep its purse. One
+ever, on the whole map — `can_buy` refuses a second while `party.lodge`
+already names a first — and the square knows which line to show for it:
+*Buy a lodge here (400 ◉)*, disabled rather than silently doing nothing
+while the purse is short; *Your lodge* once it stands; at any other town, a
+line pointing home, *"The company's lodge is at Riverhold."* The deed
+itself trips `lodge_bought`, *A Door of Our Own*.
+
+Five rooms build onto the house at whatever pace the road affords, each
+paid at once — the sink is the gold, not the wait, and the wait already
+belongs to downtime. The training yard (300 ◉) is the trainer's second
+chance: swap one general feat a hero already carries for another
+`Downtime.trainable` offers, the old feat's ability choice forgotten and
+the new one re-decided, `RETRAIN_COST` 100 ◉ and `RETRAIN_DAYS` three days
+through `Downtime.spend_days` — once per hero per visit, re-armed the next
+time the party walks back in. The herb garden (150 ◉) and the map room
+(250 ◉) both run while the party is away and settle the moment it comes
+home: a potion of healing every `GARDEN_DAYS`, capped at `GARDEN_CAP`; a
+free lead every `MAPROOM_DAYS` off `Rumors.free_lead`, capped at
+`MAPROOM_CAP`; both accrued and re-stamped the instant `_open_visit` reads
+`Lodge.at` true, so a season away comes home to a full haul and not a debt
+still owed. The shrine (200 ◉) is the cheapest room and the easiest to
+forget about: `party.blessed` set the moment the company leaves its own
+town, once a visit, spent the instant the next fight opens with it still
+standing.
+
+The strongroom (200 ◉) is worth its cost for what it stops reaching, not
+for the storage. `_retreat`'s fifteenth and any tab a bad night runs up are
+computed off `party.gold` alone; `deposit`/`withdraw` move coin between
+`party.gold` and `party.lodge.gold` directly rather than through
+`spend_gold`/`add_gold`, so banking the purse full does not quietly light
+up *broke*. A company that banks before it marches keeps what it banked no
+matter how the march goes — a lost fight, a bad haggle, a brawl it didn't
+start — the strongroom does not move for any of it. `tests/test_world_lodge.gd`
+drives `_retreat` for real against a stocked strongroom to prove it once;
+`tests/drive_random.gd` checks the same thing on every frame of a whole
+random session, stored gold never falling except by a withdraw the robot
+itself just pressed.
+
+The house shows on the map before it shows on any page. `settlement_kit.gd`'s
+`lodge_plan` seeds a house beside the town, off its own faction's palette,
+past the town's footprint plus `LODGE_OFFSET` (30), and gains a part per
+room the party builds: the strongroom an annex, the yard four posts round a
+taller training post, the garden three stone discs, the shrine a rock and
+an ember cone, the map room a box and a tower — `settlements3d.gd` rebuilds
+it on every buy and every build, and every room built trips `lodge_full`,
+*Every Room Built*. Six scenes (`event-lodge-house` on the lodge page
+itself, one per room on its own Build row) put a picture under numbers that
+were otherwise just a cost and a word. Total cost for the lot, retraining
+aside, is 1 400 ◉ — 400 for the house, then 200+300+150+200+250 for the
+rooms — a campaign's worth of jobs turned into something standing on the
+map next to the town rather than a line in the purse.
+
+### Still open
+
+- A second lodge, anywhere: one company, one house, ever — `can_buy`
+  refuses a second even at a fourth Known town.
+- Moving the lodge: the house that gets bought is the house that stands;
+  there is no way to sell it and buy again somewhere else.
+- Hirelings, or any staff of its own: the rooms work themselves — nobody
+  mans the strongroom's door or stands at the yard's post.
+- The lodge as a raid target: a raid on its town halves the market same as
+  ever — the strongroom and the diorama sit outside anything a raid
+  touches.
+- The bench cannot retrain: like the trainer's own row, the yard's pickers
+  list active heroes only, a choice carried over from downtime rather than
+  reconsidered here.
+- The minimap's mark is a fixed pixel offset beside the town's square, not
+  the diorama's own world position — sub-pixel at that scale, and not worth
+  the reprojection.
