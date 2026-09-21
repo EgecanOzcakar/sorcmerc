@@ -2701,12 +2701,14 @@ func _open_visit(s) -> void:
 	_visit_page = "hub"
 	_market_tab = MARKET_TAB_ALL
 	Sound.play_sfx("settlement")   # the gate, once, on arriving — not on every page
-	_build_visit_panel()
-	# Home: the garden's potions and the map room's marks, gathered on the step.
+	# Home: the garden's potions and the map room's marks, gathered on the step
+	# — before the build, which records the stash and shares the visit (its log
+	# line included) with a co-op guest.
 	if Lodge.at(party, s):
 		var c: Dictionary = Lodge.collect(party, world)
 		if String(c["text"]) != "":
 			_say(String(c["text"]))
+	_build_visit_panel()
 
 func _goto_page(page: String) -> void:
 	_visit_page = page
@@ -3310,12 +3312,13 @@ func _turn_in(quest: Dictionary) -> void:
 		_autosave()
 
 # The panel is rebuilt after every action, so the last line has to live on the
-# visit rather than on the Label that just got freed.
+# visit rather than on the Label that just got freed (and a line said before
+# the panel is built — _open_visit's — finds the last visit's Label gone).
 func _say(text: String) -> void:
 	BugReport.note(text)
 	if not _visit.is_empty():
 		_visit["log"] = text
-	if _visit_log != null:
+	if is_instance_valid(_visit_log):
 		_visit_log.text = text
 
 # T9x: a settlement is a set of separate screens now (town square / market /

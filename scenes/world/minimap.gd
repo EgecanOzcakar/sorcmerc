@@ -468,6 +468,10 @@ func _draw_marks(w) -> void:
 	# Settlements are permanent beacons (World.SETTLEMENT_BEACON_RADIUS), so
 	# they draw fogged or not — same rule world.gd's _draw() uses, for the same
 	# reason: they're what a dark map gives you to steer toward.
+	# The company's lodge (core/lodge.gd): one small mark beside its town, in
+	# the town's colour. Read off the host's party; a host without one (the
+	# test's stub) has no lodge.
+	var party = world_map.get("party") if world_map != null else null
 	for s in w.settlements:
 		var r := R_TOWN
 		if s.kind == "city":
@@ -475,10 +479,6 @@ func _draw_marks(w) -> void:
 		elif s.kind == "camp":
 			r = R_CAMP
 		_draw_square(_to_widget(s.position), r, _faction_color(s.faction))
-		# The company's lodge (core/lodge.gd): one small mark beside its town,
-		# in the town's colour. Read off the host's party; a host without one
-		# (the test's stub) has no lodge.
-		var party = world_map.get("party") if world_map != null else null
 		if party != null and not party.lodge.is_empty() and party.lodge["settlement_id"] == s.id:
 			_draw_square(_to_widget(s.position) + Vector2(r + R_CAMP + 1.0, 0.0), R_CAMP * 0.7, _faction_color(s.faction))
 	# Lairs and roaming parties stay fog-gated: found, not signposted.
