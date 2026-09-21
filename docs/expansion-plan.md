@@ -6514,3 +6514,86 @@ in the stash the frame a calling turns done.
   ride on `camp-night`.
 - The courtship rows are priced "no roll" like an engage row, which is true
   (nothing is rolled) and reads oddly on a card that is asking a question.
+
+## Downtime — what a company does in town when it is not working (2026-09-21)
+
+Sub-project 6 of the content batch (objectives → landmarks → threat clocks
+and reclaiming → the ladder → callings and relations → **downtime** → the
+lodge). Spec: `docs/superpowers/specs/2026-09-21-downtime-design.md`. Plan:
+`docs/superpowers/plans/2026-09-21-downtime.md`. Three tasks on one branch:
+the module (`core/downtime.gd`), the screen, then the robot, the pictures
+and this record.
+
+A town before this was a market, a board, a bed and four one-shot rows —
+work the healer's ward, steal from the stall, investigate the battle,
+haggle — every one of them a moment, and nothing in a town took *days*, so
+the raid clocks, the lair windows and a calling's road never traded against
+anything a player could spend at the inn. Five activities fix that, from
+the table 5e keeps for exactly this question. **Training** (inn page, city
+or town): pick a hero and a `general`-category feat they lack, level 4 or
+better, for `150 + 50 × level` ◉ and five days; once per hero, ever — a
+second pass, or a retrain, is the lodge's own training yard (#7), not the
+trainer in town. **Carousing** (*A night on the town*): 30/20/10 ◉ by
+settlement kind and one day for the party's best at Persuasion or
+Performance against DC 13; a pass is a contact (`FactionOpinion.raise`, +5)
+and a free rumour, or, with none left, a round on the house (+15 ◉); a nat
+20 is both; a fail draws a complication, and a nat 1 draws the complication
+and the tab on top. **Gambling** (*Sit in on a game*): a stake of
+25/50/100/200 ◉ capped at the purse, no day spent, once a visit — the
+party's best at Insight, Deception or Sleight of Hand against DC 12 pays 3×
+on a nat 20, 2× at DC+5, 1.5× at DC, loses the stake under DC, and loses it
+plus an insult on a nat 1. **Crafting** (*Brew*/*Scribe*, at the
+alchemist's and librarian's own counters): half list price and a day,
+anyone can brew what the alchemist has on the shelf, only a party with a
+caster can scribe the librarian's own two scrolls — once per item per
+visit, into the stash identified. **The pit** (inn page, city only): a
+bracket of three named champions seeded per city per week (`EnemyNames`,
+the party's level +1/+2/+3), fought one at a time as an ordinary encounter
+in `city-square` with no objective; a win pays 60/120/240 ◉ and a deed, the
+third unlocks *Champion of the Pit*; a loss carries the party out for that
+bout's purse and closes the bracket until the next week.
+
+Every activity but gambling moves through `spend_days`: the clock advances
+exactly `n × DAY`, the party takes one long rest, and the bed is paid up
+front at `Visit.inn_cost(s)` a night (free at Sworn) — a short purse pays
+nothing and no day passes. Days are the currency the batch's own clocks
+eat: five days training is two raid clocks, and every stamp the market and
+the board keep (`last_visited`, `battle_at`) stays exactly where it was, so
+"once a visit" still means this visit even after a week spent at the
+trainer's yard.
+
+A fail at carousing, or a nat 1 at the table, draws one of four
+complications, seeded off the roll and shown as an event card (art
+`event-downtime-<kind>`, matching the pit's own `event-downtime-pit`): the
+**tab** (twice the activity's cost, gone by morning), a **brawl** (a
+`bandit` roster at `easy` fought at the inn, a loss the ordinary
+`_retreat`), an **insult** (`FactionOpinion.lower`, −5), and a **bad lead**
+(`Rumors.dud` — a rumour that names nothing). Each is a card the size of a
+story, never a quest.
+
+It shows on the inn page's new Downtime section, under the bed and above
+the rumours (Train, A night on the town, Sit in on a game, and at a city
+the pit), on the alchemist's and librarian's counters as Brew/Scribe rows
+beside their stock, on the party page's hero card (a trained feat reads
+like any other), and in four new achievements under the `road` group:
+*Schooled*, *Friends in Low Places*, *The House Loses*, *Champion of the
+Pit*. `tests/drive_random.gd`'s visit beat presses these rows by their own
+shape rather than by a button's name (two "Go" buttons on the same page
+read the same) — a night on the town, the smallest stake at the table, a
+hero the purse can afford to send to the yard, the pit at `_me`'s
+curiosity — and acks the cards the way it acks any other; the purse-never-
+negative and no-hero-with-a-duplicate-feat invariants run every frame,
+downtime included.
+
+### Still open
+
+- No tools, no languages: the sheet carries neither, so there is nothing
+  here to train, brew or scribe toward.
+- Retraining, and a second trained feat, are the lodge's own training yard
+  (#7) — the trainer in town teaches once, ever.
+- No wagers on somebody else's bout in the pit; only the party's own three
+  ever pay out.
+- The complication table is four kinds (a tab, a brawl, an insult, a bad
+  lead), not a growing list.
+- A pit bout banks only its purse and a deed today; the fight itself pays
+  no XP, no kill gold, no loot. Ruled a follow-up, not a bug.

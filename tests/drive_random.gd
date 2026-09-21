@@ -49,6 +49,7 @@ const Party = preload("res://core/party.gd")
 const Travel = preload("res://core/travel.gd")
 const Ladder = preload("res://core/ladder.gd")
 const Callings = preload("res://core/callings.gd")
+const Downtime = preload("res://core/downtime.gd")
 
 # One driver frame. The same 0.1 tests/drive_world.gd drives the map with —
 # headless deltas are microseconds, so world time has to be handed over by
@@ -297,6 +298,11 @@ func _watch() -> void:
 		var s: Dictionary = party.summary(ch.id)
 		if int(s["hp"]) < 0 or int(s["hp"]) > int(s["max_hp"]):
 			fail("%s is at %d/%d hp" % [ch.cname, s["hp"], s["max_hp"]])
+		var seen_feats := {}
+		for f in ch.feats:
+			if seen_feats.has(f):
+				fail("%s has %s twice in their feats" % [ch.cname, f])
+			seen_feats[f] = true
 	# The clock is deliberately NOT monotonic: core/travel.gd pays the party for
 	# a good day's road (and for finding a waystone) by winding it back, so
 	# "never backwards" is not the invariant — "never backwards by more than the
@@ -799,6 +805,8 @@ func _town_beat() -> void:
 			_acts += 1
 			b.pressed.emit()
 			return
+	if _downtime_beat(panel):
+		return
 	var leave: Button = null
 	var rows: Array = []
 	for b in btns:
@@ -854,6 +862,132 @@ func _town_weight(name: String) -> int:
 	if name.begins_with("←"):
 		return 25                              # back to the square, to try another door
 	return 12                                  # anything new behind a counter
+
+# --- downtime (core/downtime.gd): the inn's rows that take days ---------------
+#
+# Train's and the game's own "Go" buttons read the same as each other by name
+# alone, so these rows are found by shape — the label that names the row, and
+# the button beside or after it — the way the fight beat finds End turn by
+# position rather than by trusting its text. Each row gets its own weighted
+# chance, ahead of the generic press above, so it is worth walking to town for
+# and not just one more thing in the bucket with "anything new behind a
+# counter". A card the roll turns up (a tab, a brawl, an insult, a bad lead)
+# is acked like any other event card — _cards() above already does that.
+func _downtime_beat(panel: Node) -> bool:
+	if screen._visit_page == "inn":
+		if _chance(20) and _press_downtime_row(panel, "A night on the town"):
+			_saw["downtime:carouse"] = true
+			return true
+		if _chance(15) and _gamble_beat(panel):
+			_saw["downtime:gamble"] = true
+			return true
+		if _chance(_me["care"]) and _train_beat(panel):
+			_saw["downtime:train"] = true
+			return true
+		if _chance(_me["nosy"] / 2) and _press_downtime_row(panel, "The pit:"):
+			_saw["downtime:pit"] = true
+			return true
+	elif screen._visit_page == "market" and _chance(15) and _press_downtime_row(panel, "Brew "):
+		_saw["downtime:brew"] = true
+		return true
+	return false
+
+# A row built by world.gd's _trade_row: a label naming it, its own HBoxContainer,
+# the action button last in it. Found by the label's text rather than the
+# button's — "Go" is not a name, "A night on the town" is — and only when that
+# label sits in a row of its own (a closed pit says "The pit: ..." too, in a
+# plain Label with nothing to press). The pit's own row carries a sub-line
+# (world.gd's _trade_row `sub`), which wraps the label one level deeper in a
+# VBoxContainer of its own — so the row is the label's parent, or the parent
+# of that when the label came with a caption.
+func _downtime_row_button(panel: Node, prefix: String) -> Button:
+	var lbl := _find_label(panel, func(t): return t.begins_with(prefix))
+	if lbl == null:
+		return null
+	var row := lbl.get_parent()
+	if row != null and not (row is HBoxContainer):
+		row = row.get_parent()
+	if not (row is HBoxContainer) or row.get_child_count() == 0:
+		return null
+	var b = row.get_child(row.get_child_count() - 1)
+	return b if b is Button and not b.disabled and b.visible else null
+
+func _press_downtime_row(panel: Node, prefix: String) -> bool:
+	var b := _downtime_row_button(panel, prefix)
+	if b == null:
+		return false
+	_acts += 1
+	b.pressed.emit()
+	return true
+
+func _find_label(node: Node, pred: Callable) -> Label:
+	if node is Label and pred.call(String(node.text)):
+		return node
+	for c in node.get_children():
+		var found := _find_label(c, pred)
+		if found != null:
+			return found
+	return null
+
+# "Sit in on a game": a label, a stake OptionButton, a Go button, all in one
+# row — the smallest stake the purse can cover is the one the picker opens on
+# (world.gd builds the list low to high, capped at the purse), so the only
+# thing to do here is press Go.
+func _gamble_beat(panel: Node) -> bool:
+	var lbl := _find_label(panel, func(t): return t == "Sit in on a game")
+	if lbl == null:
+		return false
+	var row := lbl.get_parent()
+	if not (row is HBoxContainer):
+		return false
+	var stake: OptionButton = null
+	var go: Button = null
+	for c in row.get_children():
+		if c is OptionButton:
+			stake = c
+		elif c is Button:
+			go = c
+	if stake == null or go == null or go.disabled or stake.item_count == 0:
+		return false
+	stake.select(0)
+	_acts += 1
+	go.pressed.emit()
+	return true
+
+# The trainer's row is a label ("Train %s in a feat...") sitting just above its
+# own HBoxContainer (a hero picker, a feat picker, Go) rather than inside it —
+# world.gd adds the label and the row as two separate children of the same
+# list. Go never disables itself on the purse (the trainer just turns you away
+# with a line under the row), so the purse is checked here instead of wasting
+# the act on a hero who cannot afford the five days.
+func _train_beat(panel: Node) -> bool:
+	var lbl := _find_label(panel, func(t): return t.begins_with("Train "))
+	if lbl == null:
+		return false
+	var parent := lbl.get_parent()
+	var i := lbl.get_index()
+	if parent == null or i + 1 >= parent.get_child_count():
+		return false
+	var row := parent.get_child(i + 1)
+	if not (row is HBoxContainer):
+		return false
+	var go: Button = null
+	for c in row.get_children():
+		if c is Button and not (c is OptionButton):
+			go = c
+	if go == null or go.disabled:
+		return false
+	var pupils: Array = screen.party.party_characters().filter(func(ch): return Downtime.can_train(screen.party, ch))
+	if pupils.is_empty():
+		return false
+	var ch = pupils[0]
+	var s = screen._visit.get("settlement")
+	var bed: int = Downtime.bed_cost(s, Downtime.TRAIN_DAYS)
+	if screen.party.gold < Downtime.train_cost(ch) + bed:
+		return false
+	_acts += 1
+	go.pressed.emit()
+	return true
 
 # --- the road -----------------------------------------------------------------
 
