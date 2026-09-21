@@ -6438,3 +6438,71 @@ one direction it is not allowed to move.
 - A story hook mirroring `opinion` (a `standing` condition, a `deeds` effect)
   so a pack can gate a beat on standing.
 - `steal()` values the back-room shelf; clamped by STEAL_GOLD_MAX.
+
+## Callings, and the party's own opinions — a quest per hero, and the people beside them (2026-09-21)
+
+Sub-project 5 of the content batch (objectives → landmarks → threat clocks and
+reclaiming → the ladder → **callings and relations** → downtime → the lodge).
+Spec: `docs/superpowers/specs/2026-09-21-callings-relations-design.md`. Two
+things on one branch, because they share a fireside.
+
+The first is the spike's party opinions (`core/party_opinion.gd`,
+`docs/spike-party-opinions.md`), which had sat complete and unused since
+2026-09-16. Its seven call sites are wired, with the numbers measured then:
+the pair scores round-trip in the world save and the campaign save beside
+the party; the party page carries a Relations block ("Vera Kord and Pike
+Sallow — rivals (−44)", one line per active pair); every road check takes
+`travel_bonus` and shows the term on its roll line, and the roller's pairs
+move on the result; the scores drift toward each pair's baseline while the
+world clock runs; the safe night and the inn ask `camp_moment` — a warming
+or a quarrel already resolved on the night's card, or a courtship on the
+approach card with two rows, `accept` and `decline`, applied only when
+answered; and the fight reads `shoulder_bonus` on AC, `bicker_penalty` on
+to-hit, `rally` when a partner goes down, and records `saved`,
+`friendly_fire` and `fought_beside`. Nothing in the module changed but one
+constant, `CALLING_BOND` (15).
+
+The second is the calling (`core/callings.gd`): the past a hero's background
+hands them, systemic because every companion is player-made. Sixteen
+templates, one per background, each pointed at something the live map
+already holds. The acolyte's defiled shrine, the artisan's master's cart,
+the guide's tower, the hermit's stones, the merchant's and the sailor's
+wrecks, the scribe's ruins and the wayfarer's hut are landmarks, done by
+answering any row there; the farmer's steading and the sage's library are
+lairs, done by clearing them; the criminal's debt, the guard's one that got
+away and the soldier's deserters are monster bands, done by beating them;
+the charlatan's old mark is a town and the noble's rival envoy a city, done
+by visiting; the entertainer's hall is the ladder's audience, any lord's.
+`assign()` runs every frame and every camp and takes the nearest thing of
+the kind — no such thing on this map, no calling yet. The fireside's order
+is: a calling's telling (once per hero, ever — the target is marked as it is
+spoken, a hidden landmark found, a lair discovered), then a resolution the
+road could not show, then the opinion moment; one card a night. Done, a
+calling pays `CALLING_XP` (120) split, an uncommon heirloom named by the
+template identified into the stash, and the bond — +15 with the one who did
+the thing, or, when that was the hero themself (the acolyte is the party's
+best at Religion, so at her own shrine it usually is), with whoever stands
+closest to them: the active companion they already think most of. It shows
+on the party page's Relations block (a Callings line per told hero), in the
+quest log's Standing section under a Callings header, and on its own event
+card with a picture of the target as the hero sees it
+(`event-calling-<background>.png`, sixteen of them). A pack can add or
+replace templates through `callings.json` (`docs/modding.md` §5.2),
+validated at scan time like its map; `content/example-world` carries a
+one-entry example. Two achievements read the `callings` set: A Past and Four
+Pasts. `tests/drive_random.gd` answers a courtship the way its persona would
+(yes only when careful), acks a calling's cards, and checks the heirloom is
+in the stash the frame a calling turns done.
+
+### Still open
+
+- One calling per hero, then done. A second — a different past, or the
+  same one coming back — would need a reason the sheet does not give.
+- Relations are between active pairs only, as the spike says; the bench
+  neither warms nor sours, and a benched lover is still a lover.
+- The spike's appendix-A4 ideas — positional vectors, conditions that
+  cleanse a pair — are not built.
+- No art of its own for the camp's fireside card or the courtship card; the
+  courtship rides on `camp-night`.
+- The courtship rows are priced "no roll" like an engage row, which is true
+  (nothing is rolled) and reads oddly on a card that is asking a question.

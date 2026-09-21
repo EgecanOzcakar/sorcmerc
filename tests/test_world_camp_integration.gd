@@ -49,7 +49,10 @@ func _init() -> void:
 	safe.world.clock.elapsed = t_safe
 	var kits0: int = safe.party.stash_count(WorldCamp.CAMP_KIT_ITEM)
 	safe._make_camp()   # no ambush -> synchronous, no await inside it
-	check(safe._event_card != null and safe._event_card._s("id") in ["camp-night", "camp-fireside"], "a quiet night is reported on the card")
+	# The first safe night is the fire's: a hero with an untold calling speaks
+	# first (world.gd's _fireside, "calling-<background>"), else the night itself.
+	check(safe._event_card != null and (safe._event_card._s("id") in ["camp-night", "camp-fireside"]
+		or safe._event_card._s("id").begins_with("calling-")), "a quiet night is reported on the card: %s" % (safe._event_card._s("id") if safe._event_card != null else "none"))
 	safe._event_card.acknowledged.emit()
 	var elapsed_after: float = safe.world.clock.elapsed   # read before any more _process() ticks advance it further
 	check(safe.party.stash_count(WorldCamp.CAMP_KIT_ITEM) == kits0 - 1, "a camp attempt always spends the kit")
