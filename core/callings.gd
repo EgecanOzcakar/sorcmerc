@@ -98,21 +98,18 @@ const TEMPLATES := {  # background -> template
 
 # The built-in sixteen, with every live pack's callings.json merged over them
 # by background — Registry.apply_data() pushes those here the way it pushes
-# data overlays into the catalog, in scan order, so a later pack wins.
-static var _packs := {}
+# data overlays into the catalog, in scan order, so a later pack wins. Merged
+# once, when the packs arrive: templates() is read every frame by assign().
+static var _templates: Dictionary = TEMPLATES
 
 static func set_packs(merged: Dictionary) -> void:
-	_packs = {}
+	_templates = TEMPLATES.duplicate(true)
 	for k in merged:
 		if not String(k).begins_with("_"):   # _note and friends: authoring comments
-			_packs[String(k)] = merged[k]
+			_templates[String(k)] = merged[k]
 
 static func templates() -> Dictionary:
-	if _packs.is_empty():
-		return TEMPLATES
-	var out := TEMPLATES.duplicate(true)
-	out.merge(_packs, true)
-	return out
+	return _templates
 
 # A pack's callings.json, checked at scan time the way a world is: the shape
 # of one template per background, a target kind the game can point at, the

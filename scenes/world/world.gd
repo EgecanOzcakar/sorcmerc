@@ -3174,10 +3174,12 @@ func _make_camp() -> void:
 			func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
 
 # The night, on the same card the road uses: what the camp did, pictured
-# (assets/generated/camp-<night|watch|jumped>.png), and — for an ambush —
-# the fight waits behind the button rather than under the label.
-func _camp_card(id: String, title: String, kind: String, text: String, then: Callable) -> void:
-	_card({"id": "camp-" + id, "title": title, "kind": kind, "text": text}, then)
+# (assets/generated/camp-<night|watch|jumped>.png — or `art`, for a card that
+# has no picture of its own: the fireside and the courtship wear the night),
+# and — for an ambush — the fight waits behind the button rather than under
+# the label.
+func _camp_card(id: String, title: String, kind: String, text: String, then: Callable, art := "") -> void:
+	_card({"id": "camp-" + id, "title": title, "kind": kind, "text": text, "art": art if art != "" else "camp-" + id}, then)
 
 # The road's card over a paused map, `then` its ack. The camp's night wears
 # it, and so do a calling's telling and resolution — those pictured by the
@@ -3219,7 +3221,7 @@ func _fireside(rng: RNG, then: Callable) -> bool:
 		return false
 	var kind := String(m["kind"])
 	if kind != "courtship":
-		_camp_card("fireside", "At the fire", "bad" if kind == "quarrel" else "good", String(m["text"]), then)
+		_camp_card("fireside", "At the fire", "bad" if kind == "quarrel" else "good", String(m["text"]), then, "camp-night")
 		return true
 	world.clock.pause()
 	_pause_btn.text = "Resume"
@@ -3250,7 +3252,7 @@ func _on_courtship_chosen(id: String, a: String, b: String, then: Callable) -> v
 	var bn: String = party.get_member(b).cname
 	var line := ("%s and %s come back to the fire together. Nobody says anything, and everybody knows." % [an, bn]) if accepted \
 		else "%s lets it lie, as kindly as it can be done. It is awkward around the fire for a while." % bn
-	_camp_card("courtship", "At the fire", "good" if accepted else "bad", line, then)
+	_camp_card("courtship", "At the fire", "good" if accepted else "bad", line, then, "camp-night")
 
 # O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
 # (the board can show several at once now), not re-rolled here.

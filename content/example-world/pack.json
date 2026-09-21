@@ -9,6 +9,5 @@
   "kind": "world",
   "access": "free",
   "priority": 0,
-  "world": "world.json",
-  "callings": "callings.json"
+  "world": "world.json"
 }

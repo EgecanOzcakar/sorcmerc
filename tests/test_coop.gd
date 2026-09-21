@@ -312,6 +312,7 @@ func test_the_wire_keeps_a_party_whole() -> void:
 		var spec: Dictionary = Scaler.roster_for(party.party_characters(), "normal")
 		spec["seed"] = sd
 		PartyOpinion.set_score(party, party.active[0], party.active[1], 44.0)
+		party.callings[party.active[0]] = {"id": "soldier", "target_kind": "band", "target_id": "deserters", "state": "told", "told_at": 90.0}
 		var setup := wire(Coop.setup_for(sd, spec, party))
 		for ch in party.party_characters():
 			var there := CharacterSave.to_dict(ch)

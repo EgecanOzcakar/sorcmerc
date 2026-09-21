@@ -304,6 +304,9 @@ func _init() -> void:
 	var none = card()
 	none.show_event({"id": "no-such-event", "title": "?", "kind": "good", "text": "x"})
 	check(none._art == null and none._art_rect.size == Vector2.ZERO, "an event with no art reserves no space")
+	var named = card()
+	named.show_event({"id": "no-such-event", "art": "camp-night", "title": "?", "kind": "good", "text": "x"})
+	check(named._art != null and named._art == Icons.scene_art("camp-night", null), "an `art` key names the picture outright, whatever the id")
 	check(Icons.event_art("good-ground", false) == Icons.event_art("good-ground", null), "no fail frame: the plain scene")
 	for e in Travel.EVENTS:
 		check(Icons.event_art(String(e["id"]), true) != null, "every road event has a picture (%s)" % e["id"])

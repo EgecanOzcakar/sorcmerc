@@ -349,6 +349,5 @@ func test_shipped_content() -> void:
 	OS.set_environment("SORCMERC_UNLOCK_DLC", "")
 	Registry.scan(true)
 	Registry.apply_data()
-	check(Callings.templates()["soldier"]["title"] == "The Vale's deserters",
-		"the example pack's callings.json is live: its soldier calling is the one the game reads")
+	check(Callings.templates() == Callings.TEMPLATES, "no shipped pack replaces a calling: the sixteen are the game's own")
 	Callings.set_packs({})

@@ -552,8 +552,7 @@ The target is chosen from the map the party is on — the nearest thing of the
 kind — so a calling written for your world plays on any world that has the
 kind. No such thing on the map means no calling yet, tried again at every
 camp. The pictures are the game's (`event-calling-<background>.png`); a pack
-cannot ship its own yet. `content/example-world/callings.json` is a one-entry
-worked example. Checked at scan time like everything else: a kind the game
+cannot ship its own yet. Checked at scan time like everything else: a kind the game
 cannot point at, a `done_by` that does not match it, an item that does not
 exist, a missing title — each is a line in the browser, and the pack does not
 load until they are fixed.

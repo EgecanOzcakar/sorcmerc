@@ -6488,8 +6488,7 @@ quest log's Standing section under a Callings header, and on its own event
 card with a picture of the target as the hero sees it
 (`event-calling-<background>.png`, sixteen of them). A pack can add or
 replace templates through `callings.json` (`docs/modding.md` §5.2),
-validated at scan time like its map; `content/example-world` carries a
-one-entry example. Two achievements read the `callings` set: A Past and Four
+validated at scan time like its map. Two achievements read the `callings` set: A Past and Four
 Pasts. `tests/drive_random.gd` answers a courtship the way its persona would
 (yes only when careful), acks a calling's cards, and checks the heirloom is
 in the stash the frame a calling turns done.
@@ -6502,7 +6501,7 @@ in the stash the frame a calling turns done.
   neither warms nor sours, and a benched lover is still a lover.
 - The spike's appendix-A4 ideas — positional vectors, conditions that
   cleanse a pair — are not built.
-- No art of its own for the camp's fireside card or the courtship card; the
-  courtship rides on `camp-night`.
+- No art of its own for the camp's fireside card or the courtship card; both
+  ride on `camp-night`.
 - The courtship rows are priced "no roll" like an engage row, which is true
   (nothing is rolled) and reads oddly on a card that is asking a question.

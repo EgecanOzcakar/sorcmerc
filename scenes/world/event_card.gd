@@ -134,8 +134,12 @@ func _notification(what: int) -> void:
 # concerned, including all of them.
 func show_event(e: Dictionary) -> void:
 	_e = e.duplicate() if e != null else {}
-	_art = Icons.scene_art(("" if _s("id").begins_with("camp-") else "event-") + _s("id"),
-		_e.get("ok") if _e.has("ok") else null) if _e.has("id") else null
+	# The picture: named outright by `art` (a stem under assets/generated), or
+	# else the id's — a camp's own, a road event's under "event-".
+	var stem := _s("art")
+	if stem == "" and _e.has("id"):
+		stem = ("" if _s("id").begins_with("camp-") else "event-") + _s("id")
+	_art = Icons.scene_art(stem, _e.get("ok") if _e.has("ok") else null) if stem != "" else null
 	_dismissed = false
 	visible = true
 	_ensure_button()
