@@ -277,7 +277,8 @@ func test_craft() -> void:
 		if String(e["item_id"]) in potions:
 			expected.append(String(e["item_id"]))
 	check(Downtime.brewable(city, m) == expected, "the alchemist brews what is on the shelf today")
-	check(Downtime.scribable(city, m, party) == Campaign.SCROLL_IDS, "the librarian scribes their own scrolls to order, for a party with a caster")
+	check(Downtime.scribable(city, m, party) == ["scroll-of-resurrection", "scroll-of-identification"],
+		"the librarian scribes their own two scrolls to order, for a party with a caster — not the generic priced by rarity")
 	var tm: Dictionary = Visit.visit(town, w)
 	check(Downtime.scribable(town, tm, party).is_empty(), "no librarian in a town")
 	check(Downtime.brewable(w.settlements[2], {"stock": m["stock"]}).is_empty(), "no alchemist at a camp")
@@ -300,8 +301,8 @@ func test_craft() -> void:
 	check(Downtime.craft(party, w, city, "longsword", shelf).is_empty(), "the bench brews and scribes, nothing else")
 
 	# scribe
-	var sid: String = Campaign.SCROLL_IDS[0]
-	party.gold = 5000   # a spell scroll is a rare item's price; half of it is still most of a purse
+	var sid: String = Downtime.scribable(city, m, party)[0]
+	party.gold = 5000   # a scroll is a rare item's price; half of it is still most of a purse
 	r = Downtime.craft(party, w, city, sid, m)
 	check(r["ok"] and party.stash_count(sid, true) == 1 and r["cost"] == maxi(1, int(round(Campaign.item_price(sid) * Downtime.CRAFT_RATE))), "a scroll at half price")
 	check(Downtime.craft(lay, w, city, sid, m).is_empty(), "a party with no caster scribes nothing")
@@ -398,13 +399,14 @@ func test_save() -> void:
 	_level(party, 4)
 	Downtime.train(party, w, city, party.get_member("vera"), Downtime.trainable(party.get_member("vera"))[0])
 	Downtime.gamble(party, city, 25, _rng(10))
-	Downtime.craft(party, w, city, Campaign.SCROLL_IDS[0], {})
+	var sid: String = Downtime.scribable(city, {}, party)[0]
+	Downtime.craft(party, w, city, sid, {})
 	Downtime.pit_result(party, city, w, 0, true)
 	var d: Dictionary = JSON.parse_string(JSON.stringify(Downtime.to_dict(party)))
 	var back := _party(0)
 	Downtime.from_dict(back, d)
 	check(back.downtime["trained"] == ["vera"], "who trained")
-	check(not Downtime.can_gamble(back, city) and Downtime.craft(back, w, city, Campaign.SCROLL_IDS[0], {}).is_empty(),
+	check(not Downtime.can_gamble(back, city) and not Downtime.can_craft(back, city, sid),
 		"the once-a-visit stamps survive the file")
 	check(Downtime.pit_state(back, city, w)["beaten"] == 1 and Downtime.pit_state(back, city, w)["open"], "the bracket's progress too")
 	check(back.downtime["pit"]["riverhold"]["week"] is int and back.downtime["pit"]["riverhold"]["beaten"] is int, "ints come back ints")

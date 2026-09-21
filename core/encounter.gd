@@ -517,7 +517,9 @@ const XP_PER_POWER := 4.0
 const GOLD_PER_POWER := 0.6
 
 # spec: {"monsters": [{"id": String, "count": int, "mult": float (optional, default
-# spec.mult or 1.0)}], "seed": int (optional — omit for a random fight)}.
+# spec.mult or 1.0)}], "seed": int (optional — omit for a random fight),
+# "named": {monster_id: "Name"} (optional — the first spawn of that id is
+# "Name the <Species>", the pit's champion; the rest keep EnemyNames' own)}.
 # `mult` is T8's difficulty knob; it scales the spawned instance, never
 # data/monsters.json.
 static func build(spec: Dictionary, party_combatants: Array, board: Dictionary = {}) -> Combat:
@@ -542,6 +544,8 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 			var pos: Vector2i = spots[i] if i < spots.size() else PARTY_STARTS[0]
 			var c = spawn(e["id"], mult, "foe", pos, n + 1 if count > 1 else 0, e.get("features", []))
 			if c != null:
+				if n == 0 and spec.get("named", {}).has(e["id"]):
+					c.cname = "%s the %s" % [spec["named"][e["id"]], Catalog.monster(e["id"])["cname"]]
 				all_c.append(c)
 			i += 1
 	var foes: Array = all_c.filter(func(c): return c.team == "foe")

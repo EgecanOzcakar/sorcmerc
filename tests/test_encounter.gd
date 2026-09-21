@@ -28,6 +28,7 @@ func _init() -> void:
 	test_outcome_victory()
 	test_outcome_defeat_and_deaths()
 	test_humanoid_foe_names()
+	test_named_spawn()
 	test_surprise_check()
 	test_surprise_round_skips_only_the_foes_first_turn()
 	test_ambush_round_skips_only_the_partys_first_turn()
@@ -56,6 +57,18 @@ func test_humanoid_foe_names() -> void:
 
 	var beast = Encounter.spawn("grull", 1.0, "foe", Vector2i.ZERO)
 	check(not beast.cname.contains(" the "), "a non-humanoid foe keeps its plain species name")
+
+# The pit's champion (core/downtime.gd): spec["named"] puts a name on the
+# first spawn of that id and leaves the rest to EnemyNames.
+func test_named_spawn() -> void:
+	var cb = Encounter.build({"monsters": [{"id": "goblin", "count": 3}], "seed": 5,
+		"named": {"goblin": "Ash"}}, _combatants(_chars()))
+	var foes: Array = cb.team_of("foe")
+	check(foes[0].cname == "Ash the Goblin", "the first goblin wears the bracket's name: %s" % foes[0].cname)
+	check(foes[1].cname != foes[0].cname and foes[1].cname.contains(" the Goblin"), "the rest are named as they were")
+	var beast = Encounter.build({"monsters": [{"id": "grull", "count": 1}], "seed": 5,
+		"named": {"grull": "Ash"}}, _combatants(_chars()))
+	check(beast.team_of("foe")[0].cname == "Ash the Grull", "a beast takes the name the same way")
 
 # --- T39: surprise + scouting ----------------------------------------
 func _fight(seed_v: int):

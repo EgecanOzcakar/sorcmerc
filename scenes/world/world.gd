@@ -83,6 +83,8 @@ const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const Ladder = preload("res://core/ladder.gd")
 const Callings = preload("res://core/callings.gd")
+const Downtime = preload("res://core/downtime.gd")
+const Catalog = preload("res://core/rules/catalog.gd")   # the trainer's feat names
 const Posting = preload("res://core/quest_posting.gd")
 const Loot = preload("res://core/loot.gd")
 const RNG = preload("res://core/rng.gd")
@@ -1557,15 +1559,16 @@ func _hold_waves(foe, spec: Dictionary, threat: Dictionary) -> Array:
 # `jumped` is "" for no breakout, "seen" for a slip caught mid-flight (the
 # threat roster — the approach card priced it that way), "dark" for jumped in
 # the dark at camp or on the night road (the hard roster: not a fight you are
-# meant to win by standing).
-func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped := "") -> Dictionary:
+# meant to win by standing). `difficulty` names the roster outright when the
+# caller knows it (the inn's brawl is easy); "" is the country's own.
+func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped := "", difficulty := "") -> Dictionary:
 	if party.scouted_next:   # Potion of Clairvoyance, spent on this fight
 		scouted_ahead = true
 		party.scouted_next = false
 	var threat: Dictionary = WorldThreat.assess(party)
 	var objective: Dictionary = _road_objective(foe, jumped)
 	var kind := String(objective.get("kind", ""))
-	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else "")
+	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else difficulty)
 	if kind == "hold":
 		objective["waves"] = _hold_waves(foe, spec, threat)
 	if kind != "":
@@ -3616,6 +3619,11 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 				var mid := String(entry["item_id"])
 				_trade_row(rows, "Identify the unknown %s — %d ◉" % [
 					Campaign.item_name(mid), Visit.IDENTIFY_COST], "Identify", _identify.bind(mid))
+			for iid in Downtime.scribable(s, _visit, party):
+				_craft_row(rows, "Scribe", iid, s)
+		elif service == "alchemist":
+			for iid in Downtime.brewable(s, _visit):
+				_craft_row(rows, "Brew", iid, s)
 	# The generalist's own counter also outfits you: the camp kit is a flat
 	# price and never runs out, so it is not part of the T25 shelf/restock
 	# catalog (T9x) and gets its own row rather than a fake catalog entry.
@@ -3671,6 +3679,13 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		haggle_btn.tooltip_text = Visit.check_preview(party, Visit.HAGGLE_SKILL, Visit.HAGGLE_DC, _talk_adv())
 		haggle_btn.pressed.connect(_haggle)
 		bar.add_child(haggle_btn)
+
+# The bench and the desk (core/downtime.gd): half list price, a day, once per
+# item per visit — spent, the row says Done the way the ward's shift does.
+func _craft_row(rows: VBoxContainer, verb: String, item_id: String, s) -> void:
+	var can: bool = Downtime.can_craft(party, s, item_id)
+	_trade_row(rows, "%s %s (%d ◉, a day)" % [verb, Campaign.item_name(item_id), Downtime.craft_cost(item_id)],
+		verb if can else "Done", _craft.bind(item_id), not can)
 
 # T9y: the inn was one button and a purse. Resting is the one action here
 # whose whole value is the state it changes, so the page now shows that state:
@@ -3735,29 +3750,186 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	else:
 		_note(box, "Eight hours: everyone back to full, spells and abilities back, and the stalls restock while you sleep.")
 
-	# D5: the other half of what an inn is for. Until now a lair was found by
-	# walking close enough to one you had no reason to think existed — discovery
-	# by collision. This is where you hear about it instead, which is what makes
-	# a town worth walking back to.
-	var leads: Array = Rumors.offers(s, world)
-	_section(box, "Word in the common room")
-	if leads.is_empty():
-		_note(box, "Nothing anybody here has not already told you.")
-		return
-	# Five rumours under the art and the table ran the panel off the bottom of
-	# a 900 px screen; the list scrolls inside a fixed height instead.
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size.y = minf(RUMOURS_H, 62.0 * leads.size())
+	# Under the bed, one scrolling list: the things that take days
+	# (core/downtime.gd — the trainer, a night out, a game, at a city the pit),
+	# and D5's rumours, the other half of what an inn is for. Until D5 a lair
+	# was found by walking close enough to one you had no reason to think
+	# existed — discovery by collision. This is where you hear about it
+	# instead, which is what makes a town worth walking back to. Five rumours
+	# under the art and the table ran the panel off the bottom of a 900 px
+	# screen before the Downtime rows came, so the list scrolls.
+	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(INN_LIST_H)))
 	box.add_child(scroll)
-	var lead_rows := VBoxContainer.new()   # `rows` is the party-status list above
-	lead_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(lead_rows)
+	var list: VBoxContainer = scroll.get_child(0)   # `rows` is the party-status list above
+	_section(list, "Downtime")
+	_downtime_rows(list, s)
+	var leads: Array = Rumors.offers(s, world)
+	_section(list, "Word in the common room")
+	if leads.is_empty():
+		_note(list, "Nothing anybody here has not already told you.")
 	for lead in leads:
-		_trade_row(lead_rows, String(lead["text"]), "Buy  %d ◉" % int(lead["price"]), _buy_rumor.bind(lead),
+		_trade_row(list, String(lead["text"]), "Buy  %d ◉" % int(lead["price"]), _buy_rumor.bind(lead),
 			false, null, String(lead.get("where", "")))
 
-const RUMOURS_H := 200.0
+const INN_LIST_H := 300.0
+
+# --- Downtime (core/downtime.gd): the rows in town that take days ------------
+# The trainer, the night out, the game, and at a city the pit. The purse, the
+# days and the roll are the module's; this is the picker. Every result is the
+# line under the row (_downtime_done) and, when the night went wrong, a card
+# (_complicate).
+func _downtime_rows(rows: VBoxContainer, s) -> void:
+	var pupils: Array = party.party_characters().filter(func(ch): return Downtime.can_train(party, ch))
+	if not pupils.is_empty():
+		_train_row(rows, pupils)
+	_trade_row(rows, "A night on the town (%d ◉)" % int(Downtime.CAROUSE_COST.get(s.kind, Downtime.CAROUSE_COST["town"])),
+		"Go out", _carouse)
+	# The game: a stake the purse can cover, once a visit.
+	var row := HBoxContainer.new()
+	rows.add_child(row)
+	var lbl := Label.new()
+	lbl.text = "Sit in on a game"
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(lbl)
+	var stake := OptionButton.new()
+	for st in Downtime.GAMBLE_STAKES:
+		if int(st) <= party.gold:
+			stake.add_item("%d ◉" % int(st), int(st))
+	row.add_child(stake)
+	var go := Button.new()
+	go.text = "Go"
+	go.disabled = not Downtime.can_gamble(party, s) or stake.item_count == 0
+	go.pressed.connect(func(): _gamble(stake.get_selected_id()))
+	row.add_child(go)
+	if s.kind == "city":
+		_pit_row(rows, s)
+
+# The trainer: whoever is picked sets the fee, and the feats on offer.
+func _train_row(rows: VBoxContainer, pupils: Array) -> void:
+	var line := Label.new()
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	line.custom_minimum_size = Vector2(430, 0)
+	rows.add_child(line)
+	var row := HBoxContainer.new()
+	rows.add_child(row)
+	var who := OptionButton.new()
+	for ch in pupils:
+		who.add_item(ch.cname)
+	row.add_child(who)
+	var what := OptionButton.new()
+	what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(what)
+	var pick := func(i: int) -> void:
+		var ch = pupils[i]
+		line.text = "Train %s in a feat (%d ◉, five days)" % [ch.cname, Downtime.train_cost(ch)]
+		what.clear()
+		for fid in Downtime.trainable(ch):
+			what.add_item(String(Catalog.feat_src(fid).get("name", fid)))
+			what.set_item_metadata(what.item_count - 1, fid)
+	who.item_selected.connect(pick)
+	pick.call(0)
+	var go := Button.new()
+	go.text = "Go"
+	go.pressed.connect(func(): _train(pupils[who.selected],
+		String(what.get_item_metadata(what.selected)) if what.selected >= 0 else ""))
+	row.add_child(go)
+
+# The pit's row: the week's three and the next bout's purse; a closed bracket says why.
+func _pit_row(rows: VBoxContainer, s) -> void:
+	var names: Array = Downtime.pit_bracket(s, world)["names"]
+	var st: Dictionary = Downtime.pit_state(party, s, world)
+	var b: int = int(st["beaten"])
+	if st["open"]:
+		_trade_row(rows, "The pit: %s, %s and %s stand this week (purse %d ◉)." % [names[0], names[1], names[2], Downtime.PIT_PURSE[b]],
+			"Fight", _pit_bout, false, null, "%s stands next." % names[b])
+	elif b < 0:
+		_note(rows, "The pit: carried out this week. The bracket is closed until the next.")
+	else:
+		_note(rows, "The pit: champions of the bracket this week. A new three stand next week.")
+
+func _train(ch, feat_id: String) -> void:
+	_downtime_done(Downtime.train(party, world, _visit["settlement"], ch, feat_id), "The master-at-arms will not take them.")
+
+func _carouse() -> void:
+	var r: Dictionary = Downtime.carouse(party, world, _visit["settlement"])
+	var c: Dictionary = _complicate(String(r.get("complication", "")), int(r.get("cost", 0)))
+	_downtime_done(r, "Nobody in the company is fit for a night out.")
+	_show_complication(c)
+
+func _gamble(stake: int) -> void:
+	var r: Dictionary = Downtime.gamble(party, _visit["settlement"], stake)
+	var c: Dictionary = _complicate(String(r.get("complication", "")), stake)
+	_downtime_done(r, "There is no game on tonight.", "buy")
+	_show_complication(c)
+
+func _craft(item_id: String) -> void:
+	_downtime_done(Downtime.craft(party, world, _visit["settlement"], item_id, _visit), "Nobody here will let you at the bench.")
+
+# The row's answer, the way _work_healer gives its own: a save (the purse and
+# the clock both moved), the panel again, the line under the row.
+func _downtime_done(r: Dictionary, fallback: String, sfx := "rest") -> void:
+	if bool(r.get("ok", false)):
+		Sound.play_sfx(sfx)
+		_autosave()
+	_build_visit_panel()
+	_say(String(r.get("text", fallback)))
+
+# A story (Downtime.complication): the consequence lands before the panel
+# under the card is rebuilt — the tab's gold, the insult's opinion; the bad
+# lead is only the card — and the brawl waits behind the card's button: the
+# visit closes and an easy bandit roster is the cousin's friends, fought the
+# way a road fight is (a loss is _retreat's). {} when there is no story.
+func _complicate(kind: String, cost: int) -> Dictionary:
+	if kind == "":
+		return {}
+	var s = _visit["settlement"]
+	var c: Dictionary = Downtime.complication(kind, s, cost)
+	if c.has("gold"):
+		party.add_gold(int(c["gold"]))
+	if c.has("opinion"):
+		FactionOpinion.lower(s.faction, float(c["opinion"]))
+	return c
+
+func _show_complication(c: Dictionary) -> void:
+	if c.is_empty():
+		return
+	var s = _visit["settlement"]
+	if c.get("fight", false):
+		_card(c, func(): _on_event_ack(); _close_visit(); await _launch_combat(
+			World.RoamingParty.new("%s-brawl" % s.id, s.position, "bandit"), false, false, "", "easy"))
+	else:
+		_card(c, _on_inn_card_ack)
+
+# A bout in the pit: the city's bandit roster (hired blades — humanoid, always
+# fielded) cut to one champion by Downtime.pit_spec, fought in the square with
+# none of the road's aftermath — no band erased, no opinion moved, no spoils
+# page: the purse and the deed are pit_result's, on a card, and the visit
+# reopens behind it. A loss is carried out, not buried — _retreat's revive
+# without its gold or its walk; the house's stake is the purse.
+func _pit_bout() -> void:
+	var s = _visit["settlement"]
+	var st: Dictionary = Downtime.pit_state(party, s, world)
+	if not st["open"]:
+		return
+	var bout: int = int(st["beaten"])
+	var base: Dictionary = encounter_spec(World.RoamingParty.new("%s-pit-%d" % [s.id, bout], s.position, "bandit"))
+	var spec: Dictionary = Downtime.pit_spec(party, s, world, bout, base)
+	if spec.is_empty():
+		_say("Nobody stands in the pit tonight.")
+		return
+	_close_visit()
+	var result: Dictionary = await _run_combat(spec, "normal", false, false)
+	if result.is_empty():
+		return   # torn down mid-fight
+	var won: bool = String(result.get("outcome", "")) == "Victory"
+	if won:
+		_apply_deaths(result)
+	else:
+		Party.auto_revive_all(party)
+	var r: Dictionary = Downtime.pit_result(party, s, world, bout, won)
+	_autosave()
+	_card({"id": "downtime-pit", "title": "The pit", "kind": "good" if won else "bad", "ok": won,
+		"text": String(r["text"]), "gold": int(r["purse"])}, func(): _on_event_ack(); _open_visit(s))
 
 func _build_board_page(box: VBoxContainer, s) -> void:
 	var has_inn: bool = Visit.has_service(s, "innkeeper")

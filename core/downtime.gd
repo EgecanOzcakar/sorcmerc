@@ -264,8 +264,9 @@ static func gamble(party, s, stake: int, rng = null) -> Dictionary:
 # --- crafting ---------------------------------------------------------------
 
 # The alchemist brews what is on the shelf today (anyone can — the alchemist
-# supervises); the librarian scribes their own three scrolls to order, shelf
-# or no shelf, for a party that has a caster to hold the pen.
+# supervises); the librarian scribes their own scrolls to order, shelf or no
+# shelf, for a party that has a caster to hold the pen — the two that are a
+# scroll of something, not the generic priced by a rarity it does not have.
 static func brewable(s, m: Dictionary) -> Array:
 	if not Visit.has_service(s, "alchemist"):
 		return []
@@ -281,21 +282,25 @@ static func scribable(s, _m: Dictionary, party) -> Array:
 		return []
 	for ch in party.party_characters():
 		if not ch.sheet().spellcasting.is_empty():
-			return Campaign.SCROLL_IDS.duplicate()
+			return Campaign.SCROLL_IDS.filter(func(id): return String(Campaign.item_data(id).get("rarity", "")) != "varies")
 	return []
 
 static func craft_cost(item_id: String) -> int:
 	return maxi(1, int(round(Campaign.item_price(item_id) * CRAFT_RATE)))
+
+# Once per item per visit — the stamp is the visit's, as gamble's is.
+static func can_craft(party, s, item_id: String) -> bool:
+	return not is_equal_approx(float(party.downtime.get("crafted", {}).get(s.id, {}).get(item_id, -2.0)), s.last_visited)
 
 # Half list price, a day, into the stash identified. Once per item per visit.
 static func craft(party, world, s, item_id: String, m: Dictionary) -> Dictionary:
 	var brew := item_id in brewable(s, m)
 	if not brew and not item_id in scribable(s, m, party):
 		return {}
+	if not can_craft(party, s, item_id):
+		return {}
 	var crafted: Dictionary = party.downtime.get("crafted", {})
 	var here: Dictionary = crafted.get(s.id, {})
-	if is_equal_approx(float(here.get(item_id, -2.0)), s.last_visited):
-		return {}
 	var cost := craft_cost(item_id)
 	var bed := bed_cost(s, CRAFT_DAYS)
 	if party.gold < cost + bed:
