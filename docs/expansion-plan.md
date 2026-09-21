@@ -6409,14 +6409,17 @@ audience with the lord — a rare item and a milestone's XP, held once and
 never offered again. Renown's title puts a flat premium on every job's pay
 (`Ladder.pay_mult()`, +10% a title above Nobodies), and both numbers show
 where a player already looks: the HUD line under the party's name, the log
-line the moment a title changes, the settlement door's own text ("Sworn to
-this people. Their doors are yours.", with the title named once it reaches
-Famous), and the pay screen's own line.
+line the moment a title changes or a rung is gained ("Known among the humans
+now."), the settlement door's own text ("Sworn to this people. Their doors
+are yours.", with the title named once it reaches Famous), the quest log's
+Standing section (the title with its count and next threshold, then a line
+per people), the market's Back room tab, the town square's audience button,
+and the board's pay line.
 
-The four achievements (`core/achievements.gd`) read the same two high-water
-marks the world screen already keeps for its own display — `best_rung` (the
-best rung held with any civilized faction) and `renown_title` — plus the
-`audiences` set: Known Faces, Sworn, Famous, An Audience. `tests/drive_random.gd`
+The four achievements (`core/achievements.gd`) read two high-water marks the
+world screen records every frame — `best_rung` (the best rung held with any
+civilized faction, kept only for the achievement) and `renown_title` — plus
+the `audiences` set: Known Faces, Sworn, Famous, An Audience. `tests/drive_random.gd`
 now seeks an audience itself when the button is up and watches renown for the
 one direction it is not allowed to move.
 
@@ -6430,3 +6433,8 @@ one direction it is not allowed to move.
   step.
 - Standing has no downward path, by design: a deed done for a people is never
   taken back, whatever opinion does in the meantime.
+- The premium rides into turn-in XP as well — a famous company's jobs are
+  bigger jobs; decided, not changed.
+- A story hook mirroring `opinion` (a `standing` condition, a `deeds` effect)
+  so a pack can gate a beat on standing.
+- `steal()` values the back-room shelf; clamped by STEAL_GOLD_MAX.

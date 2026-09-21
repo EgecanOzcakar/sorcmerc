@@ -158,6 +158,7 @@ func _session(sd: int) -> void:
 	_deeds_seen = 0
 	WorldSave.clear()
 	FactionOpinion.reset()
+	Ladder.reset()
 	# The map's own generators read this (a procedural world, a campaign route).
 	# Set per session so a soak gets twenty maps, not one map twenty times.
 	OS.set_environment("SORCMERC_SEED", str(sd))

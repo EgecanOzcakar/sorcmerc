@@ -2970,8 +2970,8 @@ func _rest() -> void:
 	_carry_visit_flags(before, _visit)
 	_cheer()
 	_build_visit_panel()
-	_say("The party takes a long rest (%d ◉ for the room). Eight hours pass and the stalls fill up again.%s" % [
-		cost, _trance_note(trance)])
+	_say("The party takes a long rest (%s). Eight hours pass and the stalls fill up again.%s" % [
+		"on the house" if cost == 0 else "%d ◉ for the room" % cost, _trance_note(trance)])
 
 # T9x: names the check and its result explicitly, same convention every
 # other overworld roll in this file uses — never just "something happened".
@@ -3368,6 +3368,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	box.add_child(mood)
 
 	var groups: Dictionary = Visit.stock_by_service(s, _visit)
+	if _market_tab == "backroom" and not groups.has("backroom"):
+		_market_tab = _first_counter()   # the last back-room item bought: the tab is gone with it
 	# D7: each specialist posts its own order, and it hangs at its own counter.
 	var jobs: Dictionary = _counter_offers(s)
 	var tabs := HBoxContainer.new()
@@ -3394,7 +3396,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		tabs.add_child(back)
 		counters.append("backroom")
 	if _market_tab != MARKET_TAB_ALL:
-		_portrait(box, s.faction, "armorsmith" if _market_tab == "backroom" else _market_tab)
+		_portrait(box, s.faction, ("armorsmith" if Visit.has_service(s, "armorsmith") else "weaponsmith") if _market_tab == "backroom" else _market_tab)
 
 	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(250.0)))
 	box.add_child(scroll)
@@ -3506,7 +3508,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 func _build_inn_page(box: VBoxContainer, s) -> void:
 	var cost := Visit.inn_cost(s)
 	var mood := Label.new()
-	mood.text = "A %s bed is %d ◉ a night.  %d ◉ in the purse." % [s.kind, cost, party.gold]
+	mood.text = "A %s bed is %s a night.  %d ◉ in the purse." % [s.kind, "on the house" if cost == 0 else "%d ◉" % cost, party.gold]
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
@@ -3545,7 +3547,7 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 
 	var wait: float = Visit.long_rest_in(party, world)
 	var rest_btn := Button.new()
-	rest_btn.text = "Rest the night (%d ◉)" % cost
+	rest_btn.text = "Rest the night (%s)" % ("on the house" if cost == 0 else "%d ◉" % cost)
 	rest_btn.disabled = wait > 0.0 or party.gold < cost
 	rest_btn.pressed.connect(_rest)
 	box.add_child(rest_btn)

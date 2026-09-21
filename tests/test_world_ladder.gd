@@ -85,6 +85,13 @@ func _init() -> void:
 		tab.pressed.emit()
 		await process_frame
 	check(not Visit.stock_by_service(town, main._visit).get("backroom", []).is_empty() and said(main, "The back room"), "...and shows the shelf")
+	# buying the last of it: the tab goes, and the page falls back to a counter
+	main.party.gold = 100000
+	for e in Visit.stock_by_service(town, main._visit).get("backroom", []):
+		Visit.buy(main._visit, main.party, String(e["item_id"]))
+	main._build_visit_panel()
+	await process_frame
+	check(main._market_tab != "backroom" and button_named(main, "Back room") == null, "the last back-room item bought: the tab is gone and the page is not stranded on it (%s)" % main._market_tab)
 	main._goto_page("board")
 	await process_frame
 	check(said(main, "The patron's table: word of work from all over."), "the patron's board line")
