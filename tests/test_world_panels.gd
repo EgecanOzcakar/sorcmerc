@@ -86,7 +86,12 @@ func _init() -> void:
 		await process_frame
 	check(main._quest_panel != null, "the quest log opens")
 
+	# the quests are the lines above the ladder's Standing section
 	var rows: Array = labels(main._quest_panel).filter(func(l): return l.text != "Quest log")
+	for i in rows.size():
+		if rows[i].text == "Standing":
+			rows = rows.slice(0, i)
+			break
 	check(rows.size() == live.size(), "one line per quest (%d of %d)" % [rows.size(), live.size()])
 	for l in rows:
 		# A wrapped line is as wide as the column and one or two lines tall. The

@@ -11,6 +11,7 @@ const Party = preload("res://core/party.gd")
 const Campaign = preload("res://core/campaign.gd")
 const RNG = preload("res://core/rng.gd")
 const Quest = preload("res://core/quest.gd")
+const Downtime = preload("res://core/downtime.gd")
 
 var _pass = 0
 var _fail = 0
@@ -76,6 +77,87 @@ func _init() -> void:
 	test_quest_board_and_chains()
 	test_persuade_and_investigate()
 	test_counters_and_the_two_services_that_sell_nothing()
+
+	# raids: a raided town's shelf is the battle shelf for as long as the raid stands
+	var wv := World.new()
+	var sv := wv.add_settlement(World.Settlement.new("raided", Vector2.ZERO, "human", "town"))
+	wv.clock.elapsed = 10000.0
+	sv.battle_at = -1.0
+	sv.raided_by = "warren"
+	var mv: Dictionary = Visit.visit(sv, wv)
+	check(bool(mv["battle"]), "a raided town reads as a battle market with no battle_at at all")
+	sv.raided_by = ""
+	sv.last_visited = -1.0
+	check(not bool(Visit.visit(sv, wv)["battle"]), "...and not once lifted")
+
+	# the ladder: the bed by rung, and the back room at Trusted
+	var Ladder = load("res://core/ladder.gd")
+	var Loot = load("res://core/loot.gd")
+	Ladder.reset()
+	var wb := World.new()
+	var city = wb.add_settlement(World.Settlement.new("riverhold", Vector2.ZERO, "human", "city"))
+	var camp = wb.add_settlement(World.Settlement.new("dun", Vector2(500, 0), "human", "camp"))
+	wb.clock.elapsed = 20000.0
+	check(Visit.inn_cost(city) == 40, "a stranger pays the city's 40")
+	Ladder.deed("human", 4)
+	check(Visit.inn_cost(city) == 20 and Visit.inn_cost(camp) == 5, "Known: half (ceil)")
+	var m0: Dictionary = Visit.visit(city, wb)
+	check(Visit.stock_by_service(city, m0).get("backroom", []).is_empty(), "Known: no back room")
+	Ladder.deed("human", 8)
+	city.last_visited = -1.0
+	var m1: Dictionary = Visit.visit(city, wb)
+	var br: Array = Visit.stock_by_service(city, m1).get("backroom", [])
+	check(br.size() == Visit.BACK_ROOM_N, "Trusted: three in the back room (%d)" % br.size())
+	for e in br:
+		check(String(Campaign.item_data(String(e["item_id"])).get("rarity", "")) == "uncommon", "...uncommon (%s)" % e["item_id"])
+		check(int(e["price"]) == maxi(1, int(round(Campaign.item_price(String(e["item_id"])) * float(m1["markup"])))), "...at list times the market's markup")
+		check(String(e.get("service", "")) == "backroom", "...tagged for the tab")
+	var ids0: Array = br.map(func(e): return e["item_id"])
+	city.last_visited = -1.0
+	var ids1: Array = Visit.stock_by_service(city, Visit.visit(city, wb)).get("backroom", []).map(func(e): return e["item_id"])
+	check(ids0 == ids1, "the same shelf on the same day (seeded off the settlement and the steps)")
+	camp.last_visited = -1.0
+	check(Visit.stock_by_service(camp, Visit.visit(camp, wb)).get("backroom", []).is_empty(), "a camp has no back room: nobody there deals in these")
+	Ladder.deed("human", 13)
+	city.last_visited = -1.0
+	var m2: Dictionary = Visit.visit(city, wb)
+	var br2: Array = Visit.stock_by_service(city, m2).get("backroom", [])
+	var rares := 0
+	for e in br2:
+		if String(Campaign.item_data(String(e["item_id"])).get("rarity", "")) == "rare":
+			rares += 1
+	check(br2.size() == Visit.BACK_ROOM_N + Visit.BACK_ROOM_RARE and rares == Visit.BACK_ROOM_RARE, "Sworn: two rare beside the three")
+	check(Visit.inn_cost(city) == 0, "Sworn: on the house")
+	# every restock step is a different seeded shelf: none draws a potion or
+	# scroll the counters already sell, and no counter claims a tagged row
+	# (greyhaven's unfiltered shelves collide at six of the seven steps)
+	var grey = wb.add_settlement(World.Settlement.new("greyhaven", Vector2(0, 500), "human", "city"))
+	for c2 in [city, grey]:
+		var own2: Array = Visit.catalog(c2)
+		for k in Visit.MAX_STEPS + 1:
+			c2.last_visited = wb.clock.elapsed - k * Visit.RESTOCK
+			var mk: Dictionary = Visit.visit(c2, wb)
+			var tagged: Array = mk["stock"].filter(func(e): return String(e.get("service", "")) == "backroom")
+			check(not tagged.any(func(e): return own2.has(e["item_id"])), "the back room draws nothing the counters already sell (%s, step %d)" % [c2.id, k])
+			var groups: Dictionary = Visit.stock_by_service(c2, mk)
+			for g in groups:
+				if g != "backroom":
+					check(not groups[g].any(func(e): return String(e.get("service", "")) == "backroom"), "a back-room item is not also on the %s's shelf (%s, step %d)" % [g, c2.id, k])
+	# a town that refuses to trade has no back room either
+	FactionOpinion.set_opinion("human", -80.0)
+	city.last_visited = -1.0
+	var mr: Dictionary = Visit.visit(city, wb)
+	check(bool(mr["refused"]) and not Visit.stock_by_service(city, mr).has("backroom"), "refused: no back room")
+	FactionOpinion.reset()
+	# buying one lands it in the stash, identified
+	var pb := _party()
+	pb.gold = 100000
+	var pick := String(br2[0]["item_id"])
+	check(Visit.buy(m2, pb, pick), "bought")
+	check(pb.stash_count(pick, true) == 1, "...identified in the stash")
+	check(Visit.stock_by_service(city, m2).get("backroom", []).size() == br2.size() - 1, "...and off the shelf")
+	Ladder.reset()
+
 	print("test_settlement_visit: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -164,6 +246,12 @@ func test_trade() -> void:
 	check(not Visit.buy(m, party, id), "the bought item left the shelf")
 	check(Visit.sell(m, party, id) and party.gold == before - price + Visit.sell_price(m, id),
 		"selling it back pays the market sell price")
+	# A bare shelf is dear to buy from; it does not pay a premium for what the
+	# party crafted at half list (core/downtime.gd's bench).
+	var bare := Visit.market(w.settlements[0], 0.0, false)
+	var potion: String = Campaign.potion_ids()[0]
+	check(bare["markup"] > 1.0 and Visit.sell_price(bare, potion) <= Downtime.craft_cost(potion),
+		"a bare shelf pays no more for a potion than the bench charged for it")
 	check(not Visit.buy(m, party, "not-a-thing"), "unstocked ids cannot be bought")
 
 func test_steal_deterministic_and_hooks() -> void:
@@ -302,7 +390,11 @@ func test_opinion_moves_prices_and_can_refuse_trade() -> void:
 	check(loved["markup"] < neutral["markup"], "...and one that likes you charges less")
 	var id: String = neutral["stock"][0]["item_id"]
 	check(Visit.price_of(hated, id) > Visit.price_of(neutral, id), "the shelf price follows")
-	check(Visit.sell_price(loved, id) < Visit.sell_price(neutral, id), "so does the sell price")
+	var full := Visit.RESTOCK * Visit.MAX_STEPS
+	check(Visit.sell_price(Visit.market(s, full, false, 40.0), id) < Visit.sell_price(Visit.market(s, full, false), id),
+		"so does the sell price, off a full shelf")
+	check(Visit.sell_price(hated, id) == Visit.sell_price(neutral, id) and Visit.sell_price(neutral, id) == Visit.sell_price(Visit.market(s, full, false), id),
+		"...but a dear shelf pays list, never a premium")
 
 	var refused := Visit.market(s, 120.0, false, FactionOpinion.REFUSE_TRADE - 1.0)
 	check(refused["refused"] and refused["stock"].is_empty(), "below the floor they will not deal")

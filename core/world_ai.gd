@@ -48,6 +48,11 @@ const REPLAN_BUDGET := 2
 # aiming at an island) re-runs the search every single frame and eats the whole
 # budget, so the bands that COULD be helped never get a turn.
 const REPLAN_RETRY_MINUTES := 5.0
+# How near the player has to come to a band standing siege for it to come
+# for them: the siege is a thing you meet at the town's edge, not a dot you
+# can walk round. The same 140 as settlement_visit.gd's BATTLE_RADIUS, so a
+# fight it starts is a fight "at the town".
+const RAID_SIGHT := 140.0
 
 # The split: `soldier` is the one faction in Scaler.FACTIONS that reads as a
 # settled, civilized power (it's what O1's settlements are garrisoned by);
@@ -93,6 +98,14 @@ static func wander(party, home, radius := 80.0, seed_value := 0) -> void:
 
 static func hunt(party) -> void:
 	party.ai = {"behavior": "hunt"}
+
+# A lair's raiders (core/raids.gd): walk to `to`, stand there, walk home.
+# The band only ever names where it is going; raids.gd advances `phase` and
+# rewrites `to` by reading the band each frame. `to` is deliberately not
+# `dest` — that key is _steer()'s own, the dry point it actually aims at.
+static func raid(party, to: Vector2, target: String, home: String) -> void:
+	party.ai = {"behavior": "raid", "to": to, "phase": "march",
+		"target": target, "home": home, "until": -1.0}
 
 # A band met and left without blood — slipped, paid off, talked round — loses
 # interest in the player for a while: it breaks off, walks away from them, and
@@ -140,6 +153,7 @@ static func update(world, _delta := 0.0) -> void:
 				"patrol": dest = _patrol_step(p)
 				"wander": dest = _wander_step(p)
 				"hunt": dest = _hunt_step(world, p)
+				"raid": dest = _raid_step(world, p)
 		if dest == null:
 			continue
 		if _steer(world, p, dest, budget > 0):
@@ -178,6 +192,12 @@ static func _arrived(party) -> bool:
 	if dest == Vector2.INF:
 		return false
 	return party.position.is_equal_approx(dest)
+
+# The same test, for the module that advances a raid's phases — but never
+# while a truce is walking the band away: standing on the break-off point is
+# not arriving anywhere.
+static func arrived(party) -> bool:
+	return not _state(party).has("break_off") and _arrived(party)
 
 # The waypoints still to walk before the destination, outermost first. Empty
 # when the march is a straight line (which is every march on a dry map).
@@ -268,3 +288,14 @@ static func _hunt_step(world, party):
 	# null when there is nothing to chase: a civilized band at peace, or a
 	# truced hunter, which then keeps its break-off goal.
 	return best
+
+# At the gate they come for anyone who comes near, truce permitting; on the
+# road there and back they keep to their own business.
+static func _raid_step(world, party):
+	var s: Dictionary = party.ai
+	if String(s.get("phase", "")) == "siege":
+		var p = world.player()
+		if p != null and not in_truce(party, world.clock.elapsed) \
+				and party.position.distance_to(p.position) <= RAID_SIGHT:
+			return p.position
+	return s["to"]

@@ -25,6 +25,10 @@ const Prepare = preload("res://scenes/party/prepare.gd")
 # says when it is not. Same source the profile's own button reads.
 const Leveling = preload("res://core/leveling.gd")
 const Coop = preload("res://core/coop.gd")
+# What the party thinks of each other — one describe() line per active pair,
+# under the standing orders. The model is core/party_opinion.gd's; this draws it.
+const PartyOpinion = preload("res://core/party_opinion.gd")
+const Callings = preload("res://core/callings.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_EDGE := Icons.COL_EDGE
@@ -64,6 +68,7 @@ var _fig_row := HBoxContainer.new()   # T9x: rebuilt on every _refresh() — its
 # buys. Rebuilt on every _refresh() for the same reason the figure picker is —
 # who can be named for a job is the active roster, and that moves under it.
 var _orders_row := VBoxContainer.new()
+var _relations_row := VBoxContainer.new()
 var _create_btn: Button        # greyed while roster_locked — see roster_locked above
 
 func _ready() -> void:
@@ -180,6 +185,10 @@ func _footer() -> Control:
 	_orders_row.name = "OrdersRow"
 	_orders_row.add_theme_constant_override("separation", 4)
 	col.add_child(_orders_row)
+
+	_relations_row.name = "RelationsRow"
+	_relations_row.add_theme_constant_override("separation", 2)
+	col.add_child(_relations_row)
 	return panel
 
 # Out of the tree now, not at the end of the frame: these rows hold NAMED
@@ -286,6 +295,43 @@ func _build_orders() -> void:
 		Travel.pace_note(pace), Travel.speed_mult(party), _effect(Travel.pace_bonus(party))]
 	_orders_row.add_child(note)
 
+# The Relations block (docs/spike-party-opinions.md §5): "Vera Kord and Pike
+# Sallow — rivals (-44)", one line per active pair, six at most for a party
+# of four. No portraits, no hearts. A party of one has nobody to get on with,
+# and the block is not drawn at all.
+func _build_relations() -> void:
+	_clear(_relations_row)
+	# Callings above it (core/callings.gd): one line per active hero whose
+	# calling has been told — "Ilsa Vane — The defiled shrine — told, marked on
+	# the map". Nothing while untold, so a fresh party sees no caption.
+	var lines: Array = []
+	for id in party.active:
+		var line: String = Callings.describe(party, String(id))
+		if line != "":
+			lines.append("%s — %s" % [party.get_member(id).cname, line])
+	if not lines.is_empty():
+		var ccap := Label.new()
+		ccap.text = "Callings"
+		ccap.theme_type_variation = "Caption"
+		_relations_row.add_child(ccap)
+		for line in lines:
+			var l := Label.new()
+			l.text = String(line)
+			l.theme_type_variation = "Dim"
+			_relations_row.add_child(l)
+	var ps: Array = PartyOpinion.active_pairs(party)
+	if ps.is_empty():
+		return
+	var cap := Label.new()
+	cap.text = "Relations"
+	cap.theme_type_variation = "Caption"
+	_relations_row.add_child(cap)
+	for pr in ps:
+		var l := Label.new()
+		l.text = PartyOpinion.describe(party, pr[0], pr[1])
+		l.theme_type_variation = "Dim"
+		_relations_row.add_child(l)
+
 # One job's picker: the active party by name, over a first row meaning "nobody
 # named, use the party's best". Everybody active is offered — unlike the figure
 # picker there is no asset to be missing, and travel.gd will roll whoever is
@@ -355,6 +401,7 @@ func _refresh() -> void:
 
 	_build_figure_picker()
 	_build_orders()
+	_build_relations()
 
 	_purse.text = "%d ◉" % party.gold
 	if party.stash.is_empty():

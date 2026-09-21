@@ -54,6 +54,7 @@ const Icons = preload("res://core/ui_icons.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const Potions = preload("res://core/potions.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
+const Raids = preload("res://core/raids.gd")
 const Rumors = preload("res://core/rumors.gd")
 const Site = preload("res://core/site.gd")
 const SiteScreen = preload("res://scenes/world/site_screen.gd")
@@ -68,6 +69,7 @@ const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
 const Dice = preload("res://core/dice.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
@@ -79,6 +81,13 @@ const Quest = preload("res://core/quest.gd")
 const Objectives = preload("res://core/objectives.gd")
 const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
+const Ladder = preload("res://core/ladder.gd")
+const Callings = preload("res://core/callings.gd")
+const Downtime = preload("res://core/downtime.gd")
+const Lodge = preload("res://core/lodge.gd")   # the company's house: the square's door, the lodge page
+const Catalog = preload("res://core/rules/catalog.gd")   # the trainer's feat names
+const Posting = preload("res://core/quest_posting.gd")
+const Loot = preload("res://core/loot.gd")
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const WorldSave = preload("res://core/world_save.gd")
@@ -235,6 +244,8 @@ var _quest_news: Array = []          # quest progress the last _bank() made, for
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
+var _lair_settle_btn: Button
+var _settle_target: World.Lair = null   # a cleared lair in range the party could settle (core/raids.gd)
 var _place_btn: Button                # landmarks: "Visit the Nine Sisters" / "Search the ground (Survival)", or hidden
 var _place_target: World.Landmark = null   # whichever landmark _check_places() last found in range
 var _place_open: World.Landmark = null     # the one whose card is up
@@ -267,6 +278,9 @@ var _warned_bands := {}              # bands already warned about; a seam you st
 var _region_lbl: Label
 var _region_msg: Label               # the last crossing, same "persists" contract as _lair_msg
 
+var _ladder_title_seen := 0          # the last renown title _check_ladder() said; set on load
+var _rungs_seen: Dictionary = {}     # faction -> the last rung _check_ladder() said; set on load
+var _calling_queue: Array = []        # [char_id, complete()'s result] pairs paid on the road while a screen was up; _check_callings() shows them
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _camp_msg: Label                 # T9x: last short-rest/camp outcome, same "persists" contract as _lair_msg
@@ -358,6 +372,9 @@ func _ready() -> void:
 	_lairs3d = Lairs3D.new()
 	_view.add_layer(_lairs3d)
 	_lairs3d.reset(world)
+	_ladder_title_seen = Ladder.title_index()   # a loaded save's title is not news
+	for f in WorldAI.CIVILIZED:                  # ...nor its rungs
+		_rungs_seen[f] = Ladder.rung(f)
 	_landmarks3d = Landmarks3D.new()
 	_view.add_layer(_landmarks3d)
 	_landmarks3d.reset(world)
@@ -468,6 +485,7 @@ func _process(delta: float) -> void:
 		# it on the party screen takes effect the moment you back out.
 		p0.speed = World.SPEED * Travel.speed_mult(party)
 	FactionOpinion.tick(world, dt)
+	PartyOpinion.decay(party, dt)   # spike-party-opinions §7: a paused clock drifts nothing, same contract
 	WorldAI.update(world, delta)
 	_check_encounter(dt)
 	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not
@@ -482,6 +500,9 @@ func _process(delta: float) -> void:
 	_check_lairs()
 	_check_places()
 	_check_expired_lairs()
+	_check_raids()
+	_check_ladder()
+	_check_callings()
 	_check_forage()
 	_check_travel()
 	_check_region()
@@ -790,6 +811,10 @@ func _build_hud() -> void:
 	_lair_sneak_btn.visible = false
 	_lair_sneak_btn.pressed.connect(_lair_sneak_action)
 	bar.add_child(_lair_sneak_btn)
+	_lair_settle_btn = Button.new()
+	_lair_settle_btn.visible = false
+	_lair_settle_btn.pressed.connect(_lair_settle_action)
+	bar.add_child(_lair_settle_btn)
 	# T9x: short rest works anywhere (when safe) — always visible, _short_rest()
 	# itself says why not rather than the button toggling in and out.
 	_pace_btn = Button.new()
@@ -880,6 +905,7 @@ func _leave_world() -> void:
 		CharacterSave.save(ch)
 	_autosave()
 	FactionOpinion.reset()
+	Ladder.reset()   # process-global like opinion: the next new game starts as strangers
 	# Duck-typed so world.tscn still runs standalone (godot --path . scenes/world/
 	# world.tscn), where the parent is the scene root and has no title screen.
 	var host := get_parent()
@@ -1115,6 +1141,42 @@ func _build_quest_panel() -> void:
 		l.add_theme_color_override("font_color",
 			Icons.COL_GOLD if q["state"] == "complete" else Icons.COL_PARTY)
 		rows.add_child(l)
+	# Standing (core/ladder.gd): the company's name across the map, then its
+	# rung with each people that has a settlement here — deeds never drift, so
+	# this is the one page where a number is worth reading.
+	_section(rows, "Standing")
+	var t := Ladder.title_index()
+	var renown := Label.new()
+	renown.text = "%s — %d deeds%s" % [Ladder.title_cap(), Ladder.renown(),
+		", %s at %d" % [String(Ladder.TITLES[t + 1]), int(Ladder.TITLE_AT[t + 1])] if t + 1 < Ladder.TITLES.size() else ""]
+	renown.theme_type_variation = "Dim"
+	rows.add_child(renown)
+	var seen := {}
+	for s in world.settlements:
+		if WorldAI.is_monster(s.faction) or seen.has(s.faction):
+			continue
+		seen[s.faction] = true
+		var r: int = Ladder.rung(s.faction)
+		var l := Label.new()
+		l.text = "%s: %s, %d deeds%s" % [String(s.faction).capitalize(), Ladder.rung_name(s.faction), Ladder.deeds(s.faction),
+			", %s at %d" % [String(Ladder.RUNGS[r + 1]), int(Ladder.RUNG_AT[r + 1])] if r + 1 < Ladder.RUNGS.size() else ""]
+		l.theme_type_variation = "Dim"
+		rows.add_child(l)
+	# Callings (core/callings.gd): each active hero's, once told — the same
+	# line the party page carries, so the log is the one place both are read.
+	var callings: Array = []
+	for id in party.active:
+		var line: String = Callings.describe(party, String(id))
+		if line != "":
+			callings.append("%s — %s" % [party.get_member(id).cname, line])
+	if not callings.is_empty():
+		_section(rows, "Callings")
+		for line in callings:
+			var l := Label.new()
+			l.text = String(line)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.theme_type_variation = "Dim"
+			rows.add_child(l)
 
 	var close := Button.new()
 	close.text = "Close"
@@ -1472,6 +1534,13 @@ func _run_combat(spec: Dictionary, difficulty: String,
 func _road_objective(foe, jumped: String) -> Dictionary:
 	if jumped != "":
 		return Objectives.make("breakout")
+	# Raiders on their way to a town, or standing at its gate: the town is
+	# behind you and more are coming. Anywhere else on the road they are a
+	# band like any other (or a hunt, if the job is taken).
+	if Raids.turnable(foe):
+		var target = Raids.settlement_of(world, String(foe.ai.get("target", "")))
+		if target != null and foe.position.distance_to(target.position) <= Visit.BATTLE_RADIUS:
+			return Objectives.make("hold")
 	for q in party.quests:
 		if q["state"] == "active" and q["kind"] == "hunt_party" and String(q.get("target_party_id", "")) == foe.id:
 			return Objectives.make("hunt")
@@ -1480,20 +1549,36 @@ func _road_objective(foe, jumped: String) -> Dictionary:
 			return Objectives.make("escort")
 	return {}
 
+# Hold the line at a town's gate: the waves the objective is built on, drawn
+# the way a site's gate room draws them (core/site.gd), at the same power the
+# band itself was rostered at (encounter_spec's own product). Without them
+# combat.gd's hold is done at round HOLD_ROUNDS + 1 whatever stands.
+func _hold_waves(foe, spec: Dictionary, threat: Dictionary) -> Array:
+	return Objectives.waves_for(party.party_characters(), String(spec["theme"]),
+		absi(hash(foe.id)), float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party))
+
 # `jumped` is "" for no breakout, "seen" for a slip caught mid-flight (the
 # threat roster — the approach card priced it that way), "dark" for jumped in
 # the dark at camp or on the night road (the hard roster: not a fight you are
-# meant to win by standing).
-func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped := "") -> Dictionary:
+# meant to win by standing). `difficulty` names the roster outright when the
+# caller knows it — the inn's brawl (_show_complication), easy, is the only
+# one — and a fight named that way is not the road's: no objective rides on
+# it (a delivery's carter is not in the common room) and winning it is no
+# service to the town (no opinion, no deed).
+func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped := "", difficulty := "") -> Dictionary:
 	if party.scouted_next:   # Potion of Clairvoyance, spent on this fight
 		scouted_ahead = true
 		party.scouted_next = false
 	var threat: Dictionary = WorldThreat.assess(party)
-	var objective: Dictionary = _road_objective(foe, jumped)
+	var named: bool = difficulty != ""
+	var objective: Dictionary = {} if named else _road_objective(foe, jumped)
 	var kind := String(objective.get("kind", ""))
-	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else "")
+	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else difficulty)
+	if kind == "hold":
+		objective["waves"] = _hold_waves(foe, spec, threat)
 	if kind != "":
 		spec["objective"] = objective
+	var raid_target = Raids.settlement_of(world, String(foe.ai.get("target", ""))) if Raids.turnable(foe) else null
 	var result: Dictionary = await _run_combat(spec,
 		String(threat["difficulty"]), scouted_ahead, forced_ambush)
 	if result.is_empty():
@@ -1514,11 +1599,22 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 			# synthetic ids never match a live hunt_party quest's target), correct
 			# for an actual hostile roaming party from _check_encounter.
 			Quest.record_party_defeated(party, foe.id)
+			_calling_check("band_beaten", foe.id, _leader())   # shown after the spoils page
+			if raid_target != null:
+				# A raid turned before it landed: TURNED_FOR (two bands' worth) on
+				# top of the FOUGHT_FOR every monster band already earns at that
+				# town below, so a turned raid is worth three bands put down there.
+				# raids.gd resets the lair's clock on its next poll when it finds
+				# the band gone.
+				FactionOpinion.credit_fight(world, raid_target.position, Raids.TURNED_FOR, foe.faction)
+				Ach.bump("raids_turned")
+				_quest_news.append("The raid on %s is turned." % raid_target.sname)
 		# O7 raise/lower event: putting down a monster band is a favour to whoever
-		# lives near the bodies; putting down a faction's own band is not.
-		if WorldAI.is_monster(foe.faction):
+		# lives near the bodies; putting down a faction's own band is not. A
+		# brawl at the inn is neither.
+		if not named and WorldAI.is_monster(foe.faction):
 			FactionOpinion.credit_fight(world, foe.position, FactionOpinion.FOUGHT_FOR, foe.faction)
-		else:
+		elif not named:
 			FactionOpinion.lower(foe.faction, FactionOpinion.KILLED_THEIRS)
 	else:
 		_retreat()
@@ -1938,11 +2034,13 @@ func _check_lairs() -> void:
 	if _combat != null or not _visit.is_empty() or _overlay_up():
 		_lair_btn.visible = false
 		_lair_sneak_btn.visible = false
+		_lair_settle_btn.visible = false
 		return
 	var p := world.player()
 	if p == null:
 		_lair_btn.visible = false
 		_lair_sneak_btn.visible = false
+		_lair_settle_btn.visible = false
 		return
 	var undiscovered = WorldLairs.nearby_undiscovered(world, p.position)
 	var target = undiscovered
@@ -1952,6 +2050,21 @@ func _check_lairs() -> void:
 				target = l
 				break
 	_lair_target = target
+	# A cleared lair the party is standing on, inside the respawn's day, on
+	# settled ground: it can be bought into a camp (core/raids.gd). Its own
+	# button, since _lair_btn is already two-state and hides on a looted lair.
+	_settle_target = null
+	for l in world.lairs:
+		if l.looted and l.position.distance_to(p.position) <= WorldLairs.DISCOVER_RADIUS \
+				and Raids.settle_cost(world, l) > 0:
+			_settle_target = l
+			break
+	_lair_settle_btn.visible = _settle_target != null
+	if _settle_target != null:
+		var cost := Raids.settle_cost(world, _settle_target)
+		_lair_settle_btn.text = "Settle it (%d ◉)" % cost
+		_lair_settle_btn.disabled = party.gold < cost
+		_lair_settle_btn.tooltip_text = "" if party.gold >= cost else "not enough gold"
 	if target == null:
 		_lair_btn.visible = false
 		_lair_sneak_btn.visible = false
@@ -1986,6 +2099,95 @@ func _check_expired_lairs() -> void:
 	for l in WorldLairs.respawn(world, world.clock.elapsed):
 		_lair_msg.text = WorldLairs.respawn_text(l)
 		_autosave()
+
+# Raids (core/raids.gd): the clock every lair in the settled country runs
+# against the nearest town. Said out loud as it happens, like the expiry and
+# the respawn are; a landing can add a lair to the map, so the dioramas are
+# rebuilt whenever the poll had anything to say.
+func _check_raids() -> void:
+	if _combat != null or _site != null:
+		return
+	var lines: Array = Raids.tick(world, world.clock.elapsed)
+	if lines.is_empty():
+		return
+	for line in lines:
+		_lair_msg.text = String(line)
+	_lairs3d.reset(world)
+	_autosave()
+
+# A rung gained and renown's title, each said once when it rises — deeds are
+# credited in five places, none of which is this screen, so the screen watches
+# the numbers. The two high-water marks the achievements read are recorded
+# here for the same reason.
+const RUNG_LINES := {Ladder.KNOWN: "Known among the %s now.",
+	Ladder.TRUSTED: "Trusted among the %s now.", Ladder.SWORN: "Sworn to the %s now."}
+
+func _check_ladder() -> void:
+	var lines: Array = []
+	var best := 0
+	for f in WorldAI.CIVILIZED:
+		var r: int = Ladder.rung(f)
+		best = maxi(best, r)
+		if r > int(_rungs_seen.get(f, 0)):
+			lines.append(String(RUNG_LINES[r]) % Ladder.people(f))
+		_rungs_seen[f] = r
+	Ach.record("best_rung", best)
+	var t := Ladder.title_index()
+	Ach.record("renown_title", t)
+	if t > _ladder_title_seen:
+		lines.append("The company is spoken of now: %s." % Ladder.title())
+	_ladder_title_seen = t
+	# Appended, not set: the deed that earned it may have just said its own
+	# line here (a raid lifted, a lair settled), and that is not news to lose.
+	for line in lines:
+		_lair_msg.text = (_lair_msg.text + "  " + String(line)).strip_edges()
+
+# --- callings: the past each hero's background hands them (core/callings.gd) ---
+#
+# Dealt here every frame rather than at creation, recruit and load: assign()
+# is one loop over the active four that returns early for anyone already
+# holding one, and a map with no target for a hero yet (no shrine, no band)
+# tries again the frame one appears. Told at the fire (_fireside), done and
+# paid on the road (_calling_check at the landmark, the lair, the fight, the
+# gate, the hall), and said on a card of its own — shown the frame the map is
+# clear, since the doing always happens under something (an outcome card, the
+# spoils page, a visit) that a second card must not come down over.
+func _check_callings() -> void:
+	Callings.assign(party, world)
+	if _calling_queue.is_empty() or _combat != null or not _visit.is_empty() or _overlay_up():
+		return
+	var q: Array = _calling_queue.pop_front()
+	# Over a map that was standing still — #98's halt after the spoils page,
+	# or the player's own pause — the ack leaves it standing, not running on.
+	var still: bool = world.clock.is_paused()
+	_calling_done(String(q[0]), q[1], func(): _on_event_ack(); if still: _halt())
+
+# The screen saying what just happened, in callings.gd's one shape; `who` is
+# the member who did it — the row's roller, the fight's leader, the visit's —
+# and is the bond the resolution pays. Paid here and now (core/callings.gd's
+# complete: the XP split, the heirloom into the stash, the bond, the state),
+# so the autosave the doing always makes next carries it — the shrine is
+# spent in that same save, and a quit at the outcome card must not lose the
+# past that spent it. Only the card waits: see above.
+func _calling_check(kind: String, id: String, who: String) -> void:
+	for char_id in Callings.check(party, world, {"kind": kind, "id": id}):
+		var r: Dictionary = Callings.complete(party, world, String(char_id), who)
+		if not r.is_empty():
+			_calling_queue.append([String(char_id), r])
+
+# The party's leader: the first of the march, or nobody.
+func _leader() -> String:
+	return String(party.active[0]) if not party.active.is_empty() else ""
+
+# The rewards already paid (`r` is complete()'s receipt), said — the done
+# line, the chips.
+func _calling_done(char_id: String, r: Dictionary, then: Callable) -> void:
+	var t: Dictionary = Callings.templates()[party.callings[char_id]["id"]]
+	Sound.play_sfx("quest_complete")
+	_autosave()
+	_card({"id": "calling-" + String(party.callings[char_id]["id"]), "title": String(t["title"]),
+		"kind": "good", "ok": true, "text": String(r["text"]), "xp": int(r["xp"]),
+		"item": String(r["item"]), "item_name": String(r["item_name"]), "thanks": ""}, then)
 
 # --- landmarks: places on the map that are not a fight -----------------------
 # The lair button's shape again: one button, two states. A found place offers a
@@ -2050,6 +2252,7 @@ func _on_place_chosen(id: String) -> void:
 		world.clock.resume()
 		_pause_btn.text = "Pause"
 		return
+	_calling_check("landmark_answered", l.id, String(e.get("char_id", "")))   # shown after this card
 	_autosave()
 	_event_card = EventCard.new()
 	add_child(_event_card)
@@ -2093,6 +2296,7 @@ func _lair_sneak_action() -> void:
 		var loot: Dictionary = WorldLairs.loot(l, world.clock.elapsed)
 		party.add_gold(int(loot.get("gold", 0)))
 		Quest.record_lair_cleared(party, l.id)
+		_calling_check("lair_cleared", l.id, _leader())
 		_lair_msg.text = "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))]
 	else:
 		_lair_msg.text = String(roll["text"])
@@ -2101,6 +2305,26 @@ func _lair_sneak_action() -> void:
 		# visit, and it is the moment the D1 window should start counting from.
 		WorldLairs.mark_entered(l, world.clock.elapsed)
 		await _lair_action()
+
+func _lair_settle_action() -> void:
+	var l: World.Lair = _settle_target
+	if l == null:
+		return
+	var home = Raids.settlers_from(world, l.position)  # before settle(): afterwards the nearest civilized settlement is the camp itself
+	var s = Raids.settle(world, l, party, world.clock.elapsed)
+	if s == null:
+		return
+	_lair_msg.text = "Settlers from %s put up the first roof at %s." % [home.sname, s.sname]
+	# The party stands on the new camp: without this _check_visit opens its
+	# page next frame, over the line above and the camp appearing on the map.
+	# `_left` is the visit gate's own "just left, no re-entry until out of
+	# range" — walk out and back in to go inside.
+	_left = s
+	_settle_target = null
+	_lair_target = null
+	_settlements3d.reset(world)
+	_lairs3d.reset(world)
+	_autosave()
 
 # --- D1: the delve --------------------------------------------------------
 #
@@ -2207,6 +2431,7 @@ func _on_site_done() -> void:
 	var cleared: bool = ending == "cleared"
 	if cleared:
 		Quest.record_lair_cleared(party, l.id)
+		_calling_check("lair_cleared", l.id, _leader())   # shown after the spoils page
 		# Reaching the bottom is worth something of its own. Every room on the
 		# way down already paid its own XP; this is the part that was missing,
 		# and it is why a delve is now worth more than the same fights strung
@@ -2411,6 +2636,8 @@ func _check_region() -> void:
 		# Short form: this bar already carries nine controls and a hint, and the
 		# long form lives on the lair button, the inn's leads and the crossing card.
 		_region_lbl.text = "%s, levels %d to %d" % [String(band["label"]), int(lv[0]), int(lv[1])]
+		if Ladder.title_index() > 0:
+			_region_lbl.text += " · %s" % Ladder.title()
 	if _region.is_empty():
 		_region = band          # first frame: the party is simply somewhere
 		return
@@ -2469,10 +2696,18 @@ func _open_visit(s) -> void:
 	# D7: walking in this gate IS a courier job's delivery. Before the panel is
 	# built, so the crate is already handed over on the screen that opens.
 	Quest.record_settlement_visited(party, s.id)
+	_calling_check("visited", s.id, _leader())   # shown when the visit closes
 	_visit = Visit.visit(s, world)
 	_visit_page = "hub"
 	_market_tab = MARKET_TAB_ALL
 	Sound.play_sfx("settlement")   # the gate, once, on arriving — not on every page
+	# Home: the garden's potions and the map room's marks, gathered on the step
+	# — before the build, which records the stash and shares the visit (its log
+	# line included) with a co-op guest.
+	if Lodge.at(party, s):
+		var c: Dictionary = Lodge.collect(party, world)
+		if String(c["text"]) != "":
+			_say(String(c["text"]))
 	_build_visit_panel()
 
 func _goto_page(page: String) -> void:
@@ -2602,6 +2837,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_: return
 		accept_event()
 		return
+	# The inn's fireside (or the approach card under a courtship) sits over a
+	# visit that is still open; the page keys must not act through it, or
+	# Leave (Esc) can close the visit out from under the card still showing.
+	if _event_card != null or _approach_card != null:
+		return
 	match event.keycode:
 		KEY_ESCAPE:
 			if _visit_page != "hub":
@@ -2655,6 +2895,12 @@ func _close_visit() -> void:
 		_visit_panel = null
 	world.clock.resume()
 	_pause_btn.text = "Pause"
+	# The shrine: the blessing is taken on the way out, once a visit, and said
+	# on the map since the panel that would have said it is gone.
+	if _left != null and Lodge.at(party, _left):
+		var b: Dictionary = Lodge.bless(party, world)
+		if not b.is_empty():
+			_lair_msg.text = String(b["text"])
 	_autosave()   # O13 autosave: the purse and the shelf both moved
 	_coop_share_visit()
 
@@ -2816,20 +3062,41 @@ func _rest() -> void:
 		_say("The party isn't tired enough for another long rest yet.")
 		return
 	var s = _visit["settlement"]
-	var cost := Visit.inn_cost(s)
+	var cost := Visit.inn_cost(s, party)
 	if not party.spend_gold(cost):
 		_say("Can't afford a room here (%d ◉)." % cost)
 		return
 	var before := _visit
+	var stamp: float = s.last_visited
 	Visit.rest(party, world, "long-rest")
 	Sound.play_sfx("rest")
 	var trance: Dictionary = Trance.apply_rest_bonus(party, world, s.position)
 	_visit = Visit.visit(s, world)
 	_carry_visit_flags(before, _visit)
+	Downtime.restamp(party, s, stamp, s.last_visited)   # the game and the bench are still this visit's
+	Lodge.restamp(party, s, stamp, s.last_visited)      # ...and the yard's swap and the shrine's blessing
 	_cheer()
 	_build_visit_panel()
-	_say("The party takes a long rest (%d ◉ for the room). Eight hours pass and the stalls fill up again.%s" % [
-		cost, _trance_note(trance)])
+	_say("The party takes a long rest (%s). Eight hours pass and the stalls fill up again.%s" % [
+		"on the house" if cost == 0 else "%d ◉ for the room" % cost, _trance_note(trance)])
+	# The same fire as a camp's, over the inn page; the panel under it has
+	# already said what the night cost.
+	_fireside(RNG.new(maxi(1, absi(hash("inn|%s|%d" % [s.id, int(world.clock.elapsed)])))), _on_inn_card_ack)
+	# A past told at this very inn can name this very town — the charlatan's
+	# old mark, the noble's envoy. The gate's check ran before it was told;
+	# asked again, it is done, and the card comes down as the party leaves.
+	_calling_check("visited", s.id, _leader())
+
+# The inn's fireside card comes down over a visit that is still holding the
+# clock, so its ack cannot be the plain one — that would set the map running
+# behind the market. But the visit can have been closed out from under the
+# card already (Leave, while the card was still up); re-pausing then would
+# leave the map stuck paused with nothing left to hold it.
+func _on_inn_card_ack() -> void:
+	_on_event_ack()
+	if not _visit.is_empty():
+		world.clock.pause()
+		_pause_btn.text = "Resume"
 
 # T9x: names the check and its result explicitly, same convention every
 # other overworld roll in this file uses — never just "something happened".
@@ -2904,7 +3171,8 @@ func _make_camp() -> void:
 		Sound.play_sfx("rest")
 		var trance: Dictionary = Trance.apply_rest_bonus(party, world, p.position)
 		_camp_msg.text = "The camp holds through the night. Eight hours pass.%s" % _trance_note(trance)
-		_camp_card("night", "The camp holds", "good", _camp_msg.text, _on_event_ack)
+		if not _fireside(rng, _on_event_ack):
+			_camp_card("night", "The camp holds", "good", _camp_msg.text, _on_event_ack)
 		return
 	var watch: Dictionary = WorldCamp.watch_check(party, rng)
 	if party.alarm_set:   # Alarm: the ward wakes them whatever the watch rolled
@@ -2931,15 +3199,85 @@ func _make_camp() -> void:
 			func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
 
 # The night, on the same card the road uses: what the camp did, pictured
-# (assets/generated/camp-<night|watch|jumped>.png), and — for an ambush —
-# the fight waits behind the button rather than under the label.
-func _camp_card(id: String, title: String, kind: String, text: String, then: Callable) -> void:
+# (assets/generated/camp-<night|watch|jumped>.png — or `art`, for a card that
+# has no picture of its own: the fireside and the courtship wear the night),
+# and — for an ambush — the fight waits behind the button rather than under
+# the label.
+func _camp_card(id: String, title: String, kind: String, text: String, then: Callable, art := "") -> void:
+	_card({"id": "camp-" + id, "title": title, "kind": kind, "text": text, "art": art if art != "" else "camp-" + id}, then)
+
+# The road's card over a paused map, `then` its ack. The camp's night wears
+# it, and so do a calling's telling and resolution — those pictured by the
+# background (assets/generated/event-calling-<background>.png) rather than
+# by the night, since a calling is the hero's, not the camp's.
+func _card(e: Dictionary, then: Callable) -> void:
 	world.clock.pause()
 	_pause_btn.text = "Resume"
 	_event_card = EventCard.new()
 	add_child(_event_card)
 	_event_card.acknowledged.connect(then)
-	_event_card.show_event({"id": "camp-" + id, "title": title, "kind": kind, "text": text})
+	_event_card.show_event(e)
+
+# spike-party-opinions §9 row 6: the fire after a long rest. One beat, half the
+# nights (core/party_opinion.gd's camp_moment): a warming or a quarrel, already
+# resolved, on the night's card in place of the plain one — or a courtship,
+# the one beat in the game that ASKS, and it asks on the approach card the way
+# a landmark does, so nothing is applied until the player answers. Returns
+# false when the fire has nothing to say and the caller shows its own night.
+# `then` is the outcome card's ack: the camp's resumes the clock, the inn's
+# leaves it to the visit.
+func _fireside(rng: RNG, then: Callable) -> bool:
+	# A calling outranks a warming: the telling first, once per hero, ever —
+	# beat() marks the target as it speaks, and the map's layers re-read
+	# found/discovered every frame, so the mark is on the map under the card.
+	# Then a resolution the road could not show (the inn's: done at this very
+	# gate, and the visit is still up), then the moment. One card a night.
+	var b: Dictionary = Callings.beat(party, world)
+	if not b.is_empty():
+		_card({"id": "calling-" + String(b["id"]), "title": String(b["title"]), "kind": "good", "ok": true,
+			"text": String(b["text"])}, then)
+		return true
+	if not _calling_queue.is_empty():
+		var q: Array = _calling_queue.pop_front()
+		_calling_done(String(q[0]), q[1], then)
+		return true
+	var m: Dictionary = PartyOpinion.camp_moment(party, rng)
+	if m.is_empty():
+		return false
+	var kind := String(m["kind"])
+	if kind != "courtship":
+		_camp_card("fireside", "At the fire", "bad" if kind == "quarrel" else "good", String(m["text"]), then, "camp-night")
+		return true
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_approach_card = ApproachCard.new()
+	_approach_card.caption = "A T   T H E   F I R E"
+	_approach_card.glyph = "♥"
+	# The line is the hint, not the title: the title wraps twice at headline
+	# size and the line is a sentence, so it would lose its second half.
+	_approach_card.hint = String(m["text"]).trim_suffix(".")
+	_approach_card.art_stem = "camp-night"
+	add_child(_approach_card)
+	_approach_card.chosen.connect(_on_courtship_chosen.bind(String(m["a"]), String(m["b"]), then))
+	_approach_card.show_approach([
+		{"id": "accept", "label": "Say yes", "dc": 0,
+			"win": "Lovers, and %d warmer for it." % int(PartyOpinion.COURTSHIP_ACCEPTED)},
+		{"id": "decline", "label": "Let it lie", "dc": 0,
+			"lose": "Awkward around the fire for a while (-%d), and never asked again." % int(PartyOpinion.COURTSHIP_DECLINED)}],
+		"%s and %s" % [String(m["a_name"]), String(m["b_name"])])
+	return true
+
+# The answer. answer_courtship applies it and says nothing, so the line is
+# this file's; `a` asked, `b` was asked.
+func _on_courtship_chosen(id: String, a: String, b: String, then: Callable) -> void:
+	_close_approach()
+	var accepted := id == "accept"
+	PartyOpinion.answer_courtship(party, a, b, accepted)
+	var an: String = party.get_member(a).cname
+	var bn: String = party.get_member(b).cname
+	var line := ("%s and %s come back to the fire together. Nobody says anything, and everybody knows." % [an, bn]) if accepted \
+		else "%s lets it lie, as kindly as it can be done. It is awkward around the fire for a while." % bn
+	_camp_card("courtship", "At the fire", "good" if accepted else "bad", line, then, "camp-night")
 
 # O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
 # (the board can show several at once now), not re-rolled here.
@@ -2974,12 +3312,13 @@ func _turn_in(quest: Dictionary) -> void:
 		_autosave()
 
 # The panel is rebuilt after every action, so the last line has to live on the
-# visit rather than on the Label that just got freed.
+# visit rather than on the Label that just got freed (and a line said before
+# the panel is built — _open_visit's — finds the last visit's Label gone).
 func _say(text: String) -> void:
 	BugReport.note(text)
 	if not _visit.is_empty():
 		_visit["log"] = text
-	if _visit_log != null:
+	if is_instance_valid(_visit_log):
 		_visit_log.text = text
 
 # T9x: a settlement is a set of separate screens now (town square / market /
@@ -3023,6 +3362,7 @@ func _build_visit_panel() -> void:
 		"market": _build_market_page(box, s)
 		"inn": _build_inn_page(box, s)
 		"board": _build_board_page(box, s)
+		"lodge": _build_lodge_page(box, s)
 		_: _build_hub_page(box, s)
 
 	_visit_log = Label.new()
@@ -3061,15 +3401,24 @@ func _standing_line(s) -> String:
 		return "The guards would sooner fight you than let you in."
 	if FactionOpinion.refuses_trade(s.faction):
 		return "Nobody here will deal with you."
+	# The ladder (core/ladder.gd): what the party has DONE here outranks how
+	# they feel this week — unless the guards are already out.
+	var tail := ""   # Famous or better rides on the end of every line
+	if Ladder.title_index() >= 3:
+		tail = "  %s, they say." % Ladder.title_cap()
+	match Ladder.rung(s.faction):
+		Ladder.SWORN: return "Sworn to this people. Their doors are yours." + tail
+		Ladder.TRUSTED: return "Trusted here — the back room is open to you." + tail
+		Ladder.KNOWN: return "Known here — they will pass you a neighbour's work." + tail
 	if op >= FactionOpinion.QUEST_GENEROUS:
-		return "They are glad to see you — there is work here for the asking."
+		return "They are glad to see you — there is work here for the asking." + tail
 	if op >= FactionOpinion.QUEST_DONE:
-		return "They think well of you."
+		return "They think well of you." + tail
 	if op <= FactionOpinion.HOSTILE:
-		return "Their bands hunt you on the road; the gate is open, barely."
+		return "Their bands hunt you on the road; the gate is open, barely." + tail
 	if op <= FactionOpinion.QUEST_MIN:
-		return "They have heard things. No work for you here."
-	return "Strangers here, for now."
+		return "They have heard things. No work for you here." + tail
+	return "Strangers here, for now." + tail
 
 # The settlement panel's column width. Every list inside it is sized against
 # this, so one long job title wraps instead of widening the whole counter.
@@ -3083,7 +3432,7 @@ const VISIT_CHROME_H := 320.0
 func _page_scroll_h(want: float) -> float:
 	return clampf(size.y - VISIT_CHROME_H, 120.0, want)
 
-const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board"}
+const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board", "lodge": "Your Lodge"}
 
 # The town square: where to go, plus the one thing that belongs to no single
 # building — picking over a battlefield nearby.
@@ -3139,11 +3488,18 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 
 	var inn_btn := Button.new()
 	var wait: float = Visit.long_rest_in(party, world)
-	inn_btn.text = ("Inn.  A night is %d ◉" % Visit.inn_cost(s) if wait <= 0.0
+	var cost := Visit.inn_cost(s, party)
+	inn_btn.text = (("Inn.  On the house." if cost == 0 else "Inn.  A night is %d ◉" % cost) if wait <= 0.0
 		else "Inn.  Rested recently, a room does nothing for %s yet" % _hours(wait))
 	inn_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	inn_btn.pressed.connect(_goto_page.bind("inn"))
 	places.add_child(inn_btn)
+	if Posting.is_patron(s, world) and Ladder.rung(s.faction) >= Ladder.SWORN and not Ladder.audience_held(s.faction):
+		var aud_btn := Button.new()
+		aud_btn.text = "Seek an audience with the lord"
+		aud_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		aud_btn.pressed.connect(_audience_action)
+		places.add_child(aud_btn)
 
 	var board_btn := Button.new()
 	var offers: int = jobs.get("board", []).size()
@@ -3154,6 +3510,30 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 	board_btn.pressed.connect(_goto_page.bind("board"))
 	places.add_child(board_btn)
 
+	# The lodge (core/lodge.gd): the company's own door once it has one here, a
+	# house for sale where the town knows the company (the price shown and the
+	# button disabled while the purse is short — a shrug is the e3cc910 bug),
+	# and at any other town a line pointing home.
+	if Lodge.at(party, s):
+		var lodge_btn := Button.new()
+		var n: int = Lodge.rooms_built(party)
+		lodge_btn.text = "Your lodge.  %s" % ("The house alone" if n == 0
+			else "Every room built" if n == Lodge.ROOMS.size() else "The house and %d room%s" % [n, "" if n == 1 else "s"])
+		lodge_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		lodge_btn.pressed.connect(_goto_page.bind("lodge"))
+		places.add_child(lodge_btn)
+	elif Lodge.for_sale(party, s):
+		var buy_btn := Button.new()
+		buy_btn.text = "Buy a lodge here (%d ◉)" % Lodge.HOUSE_COST
+		buy_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		buy_btn.disabled = not Lodge.can_buy(party, world, s)
+		buy_btn.pressed.connect(_buy_lodge)
+		places.add_child(buy_btn)
+	elif not party.lodge.is_empty():
+		var home = Lodge.settlement(party, world)
+		if home != null:
+			_note(places, "The company's lodge is at %s." % home.sname)
+
 	if _visit.get("battle", false):
 		var investigate_btn := Button.new()
 		var investigated: bool = _visit.get("investigated", false)
@@ -3162,6 +3542,37 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 		investigate_btn.tooltip_text = Visit.check_preview(party, Visit.INVESTIGATE_SKILL, Visit.INVESTIGATE_DC)   # #87
 		investigate_btn.pressed.connect(_investigate)
 		places.add_child(investigate_btn)
+
+# The audience: once per people, at its chief settlement, for a Sworn company.
+# A rare item and a milestone's worth of XP, on the event card, art
+# event-audience-<faction>.
+const AUDIENCE_XP := 200
+
+func _audience_action() -> void:
+	var s = _visit.get("settlement")
+	if s == null or Ladder.audience_held(s.faction):
+		return
+	var pool: Array = Loot.items_of_rarity("rare")
+	var gift := String(pool[absi(hash("audience|%s" % s.faction)) % pool.size()]) if not pool.is_empty() else ""
+	if gift != "":
+		party.stash_add(gift)
+		Campaign._note_rarity(gift)
+	Campaign.new(party)._split_xp(AUDIENCE_XP)
+	Ladder.hold_audience(s.faction)
+	Ach.collect("audiences", s.faction)
+	_calling_check("audience", s.faction, _leader())   # shown after the audience's own card
+	var e := {"id": "audience-%s" % s.faction, "title": "An audience with the lord", "kind": "good", "ok": true,
+		"text": "The hall is cleared for you. The lord speaks of what the company has done for %s's people, and of what a lord owes such a company." % String(s.faction).capitalize(),
+		"xp": AUDIENCE_XP, "thanks": s.sname}
+	if gift != "":
+		e["item"] = gift
+		e["item_name"] = Campaign.item_name(gift)
+	_close_visit()   # autosaves, and resumes the clock — which the card stops again
+	world.clock.pause()
+	_event_card = EventCard.new()
+	add_child(_event_card)
+	_event_card.acknowledged.connect(_on_event_ack)
+	_event_card.show_event(e)
 
 # T9y: one counter at a time. T25 sizes a settlement's specialists and the
 # hub line names them, but the shelf itself was one alphabetical list with no
@@ -3180,6 +3591,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	box.add_child(mood)
 
 	var groups: Dictionary = Visit.stock_by_service(s, _visit)
+	if _market_tab == "backroom" and not groups.has("backroom"):
+		_market_tab = _first_counter()   # the last back-room item bought: the tab is gone with it
 	# D7: each specialist posts its own order, and it hangs at its own counter.
 	var jobs: Dictionary = _counter_offers(s)
 	var tabs := HBoxContainer.new()
@@ -3195,16 +3608,24 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		btn.disabled = (_market_tab == t)   # the open tab, shown as pressed rather than as a live button
 		btn.pressed.connect(_goto_market_tab.bind(String(t)))
 		tabs.add_child(btn)
+	# The back room (core/ladder.gd's Trusted door): the smith's own tab, after
+	# the counters the town advertises.
+	var counters: Array = _visit["services"].filter(func(x): return x != "innkeeper")
+	if groups.has("backroom"):
+		var back := Button.new()
+		back.text = "Back room"
+		back.disabled = (_market_tab == "backroom")
+		back.pressed.connect(_goto_market_tab.bind("backroom"))
+		tabs.add_child(back)
+		counters.append("backroom")
 	if _market_tab != MARKET_TAB_ALL:
-		_portrait(box, s.faction, _market_tab)
+		_portrait(box, s.faction, ("armorsmith" if Visit.has_service(s, "armorsmith") else "weaponsmith") if _market_tab == "backroom" else _market_tab)
 
 	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(250.0)))
 	box.add_child(scroll)
 	var rows: VBoxContainer = scroll.get_child(0)
 	var showing_all: bool = _market_tab == MARKET_TAB_ALL
-	for service in _visit["services"]:
-		if service == "innkeeper":
-			continue
+	for service in counters:
 		if not showing_all and _market_tab != service:
 			continue
 		var shelf: Array = groups.get(service, [])
@@ -3212,8 +3633,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		var actions: bool = service in ["healer", "librarian"]
 		if shelf.is_empty() and posted.is_empty() and not actions:
 			continue
-		if showing_all:
-			_section(rows, String(Campaign.SERVICE_NAMES.get(service, service)))
+		if showing_all or service == "backroom":
+			_section(rows, "The back room" if service == "backroom" else String(Campaign.SERVICE_NAMES.get(service, service)))
 		# T9a: a shelf is a row of pictures; the name, numbers and prose are
 		# the hover text, the price the caption, the click the purchase.
 		var shelf_grid := _item_grid(rows)
@@ -3246,6 +3667,11 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 				var mid := String(entry["item_id"])
 				_trade_row(rows, "Identify the unknown %s — %d ◉" % [
 					Campaign.item_name(mid), Visit.IDENTIFY_COST], "Identify", _identify.bind(mid))
+			for iid in Downtime.scribable(s, _visit, party):
+				_craft_row(rows, "Scribe", iid, s)
+		elif service == "alchemist":
+			for iid in Downtime.brewable(s, _visit):
+				_craft_row(rows, "Brew", iid, s)
 	# The generalist's own counter also outfits you: the camp kit is a flat
 	# price and never runs out, so it is not part of the T25 shelf/restock
 	# catalog (T9x) and gets its own row rather than a fake catalog entry.
@@ -3302,15 +3728,22 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 		haggle_btn.pressed.connect(_haggle)
 		bar.add_child(haggle_btn)
 
+# The bench and the desk (core/downtime.gd): half list price, a day, once per
+# item per visit — spent, the row says Done the way the ward's shift does.
+func _craft_row(rows: VBoxContainer, verb: String, item_id: String, s) -> void:
+	var can: bool = Downtime.can_craft(party, s, item_id)
+	_trade_row(rows, "%s %s (%d ◉, a day)" % [verb, Campaign.item_name(item_id), Downtime.craft_cost(item_id)],
+		verb if can else "Done", _craft.bind(item_id), not can)
+
 # T9y: the inn was one button and a purse. Resting is the one action here
 # whose whole value is the state it changes, so the page now shows that state:
 # who is hurt, what a night costs, and — when the once-a-day cooldown says no
 # — how long until it says yes. A disabled button with a number beside it is
 # an answer; a button that shrugs is the silent-no-op bug again (e3cc910).
 func _build_inn_page(box: VBoxContainer, s) -> void:
-	var cost := Visit.inn_cost(s)
+	var cost := Visit.inn_cost(s, party)
 	var mood := Label.new()
-	mood.text = "A %s bed is %d ◉ a night.  %d ◉ in the purse." % [s.kind, cost, party.gold]
+	mood.text = "A %s bed is %s a night.  %d ◉ in the purse." % [s.kind, "on the house" if cost == 0 else "%d ◉" % cost, party.gold]
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
 
@@ -3349,7 +3782,7 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 
 	var wait: float = Visit.long_rest_in(party, world)
 	var rest_btn := Button.new()
-	rest_btn.text = "Rest the night (%d ◉)" % cost
+	rest_btn.text = "Rest the night (%s)" % ("on the house" if cost == 0 else "%d ◉" % cost)
 	rest_btn.disabled = wait > 0.0 or party.gold < cost
 	rest_btn.pressed.connect(_rest)
 	box.add_child(rest_btn)
@@ -3365,29 +3798,388 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	else:
 		_note(box, "Eight hours: everyone back to full, spells and abilities back, and the stalls restock while you sleep.")
 
-	# D5: the other half of what an inn is for. Until now a lair was found by
-	# walking close enough to one you had no reason to think existed — discovery
-	# by collision. This is where you hear about it instead, which is what makes
-	# a town worth walking back to.
-	var leads: Array = Rumors.offers(s, world)
-	_section(box, "Word in the common room")
-	if leads.is_empty():
-		_note(box, "Nothing anybody here has not already told you.")
-		return
-	# Five rumours under the art and the table ran the panel off the bottom of
-	# a 900 px screen; the list scrolls inside a fixed height instead.
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size.y = minf(RUMOURS_H, 62.0 * leads.size())
+	# Under the bed, one scrolling list: the things that take days
+	# (core/downtime.gd — the trainer, a night out, a game, at a city the pit),
+	# and D5's rumours, the other half of what an inn is for. Until D5 a lair
+	# was found by walking close enough to one you had no reason to think
+	# existed — discovery by collision. This is where you hear about it
+	# instead, which is what makes a town worth walking back to. Five rumours
+	# under the art and the table ran the panel off the bottom of a 900 px
+	# screen before the Downtime rows came, so the list scrolls.
+	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(INN_LIST_H)))
 	box.add_child(scroll)
-	var lead_rows := VBoxContainer.new()   # `rows` is the party-status list above
-	lead_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(lead_rows)
+	var list: VBoxContainer = scroll.get_child(0)   # `rows` is the party-status list above
+	_section(list, "Downtime")
+	_downtime_rows(list, s)
+	var leads: Array = Rumors.offers(s, world)
+	_section(list, "Word in the common room")
+	if leads.is_empty():
+		_note(list, "Nothing anybody here has not already told you.")
 	for lead in leads:
-		_trade_row(lead_rows, String(lead["text"]), "Buy  %d ◉" % int(lead["price"]), _buy_rumor.bind(lead),
+		_trade_row(list, String(lead["text"]), "Buy  %d ◉" % int(lead["price"]), _buy_rumor.bind(lead),
 			false, null, String(lead.get("where", "")))
 
-const RUMOURS_H := 200.0
+const INN_LIST_H := 300.0
+
+# --- Downtime (core/downtime.gd): the rows in town that take days ------------
+# The trainer, the night out, the game, and at a city the pit. The purse, the
+# days and the roll are the module's; this is the picker. Every result is the
+# line under the row (_downtime_done) and, when the night went wrong, a card
+# (_complicate).
+func _downtime_rows(rows: VBoxContainer, s) -> void:
+	var pupils: Array = party.party_characters().filter(func(ch): return Downtime.can_train(party, ch))
+	if not pupils.is_empty():
+		_train_row(rows, pupils)
+	_trade_row(rows, "A night on the town (%d ◉)" % int(Downtime.CAROUSE_COST.get(s.kind, Downtime.CAROUSE_COST["town"])),
+		"Go out", _carouse)
+	# The game: a stake the purse can cover, once a visit.
+	var row := HBoxContainer.new()
+	rows.add_child(row)
+	var lbl := Label.new()
+	lbl.text = "Sit in on a game"
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(lbl)
+	var stake := OptionButton.new()
+	for st in Downtime.GAMBLE_STAKES:
+		if int(st) <= party.gold:
+			stake.add_item("%d ◉" % int(st), int(st))
+	row.add_child(stake)
+	var go := Button.new()
+	go.text = "Go"
+	go.disabled = not Downtime.can_gamble(party, s) or stake.item_count == 0
+	go.pressed.connect(func(): _gamble(stake.get_selected_id()))
+	row.add_child(go)
+	if s.kind == "city":
+		_pit_row(rows, s)
+
+# The trainer: whoever is picked sets the fee, and the feats on offer.
+func _train_row(rows: VBoxContainer, pupils: Array) -> void:
+	var line := Label.new()
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	line.custom_minimum_size = Vector2(430, 0)
+	rows.add_child(line)
+	var row := HBoxContainer.new()
+	rows.add_child(row)
+	var who := OptionButton.new()
+	for ch in pupils:
+		who.add_item(ch.cname)
+	row.add_child(who)
+	var what := OptionButton.new()
+	what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(what)
+	var pick := func(i: int) -> void:
+		var ch = pupils[i]
+		line.text = "Train %s in a feat (%d ◉, five days)" % [ch.cname, Downtime.train_cost(ch)]
+		what.clear()
+		for fid in Downtime.trainable(ch):
+			what.add_item(String(Catalog.feat_src(fid).get("name", fid)))
+			what.set_item_metadata(what.item_count - 1, fid)
+	who.item_selected.connect(pick)
+	pick.call(0)
+	var go := Button.new()
+	go.text = "Go"
+	go.pressed.connect(func(): _train(pupils[who.selected],
+		String(what.get_item_metadata(what.selected)) if what.selected >= 0 else ""))
+	row.add_child(go)
+
+# The pit's row: the week's three and the next bout's purse; a closed bracket says why.
+func _pit_row(rows: VBoxContainer, s) -> void:
+	var names: Array = Downtime.pit_bracket(s, world)["names"]
+	var st: Dictionary = Downtime.pit_state(party, s, world)
+	var b: int = int(st["beaten"])
+	if st["open"]:
+		_trade_row(rows, "The pit: %s, %s and %s stand this week (purse %d ◉)." % [names[0], names[1], names[2], Downtime.PIT_PURSE[b]],
+			"Fight", _pit_bout, false, null, "%s stands next." % names[b])
+	elif b < 0:
+		_note(rows, "The pit: carried out this week. The bracket is closed until the next.")
+	else:
+		_note(rows, "The pit: champions of the bracket this week. A new three stand next week.")
+
+# Five days and a feat are a card (Schooled), the way a night that went
+# wrong is; a contact made is one too. The game and the bench stay lines.
+func _train(ch, feat_id: String) -> void:
+	var r: Dictionary = Downtime.train(party, world, _visit["settlement"], ch, feat_id)
+	_downtime_done(r, "The master-at-arms will not take them.")
+	if bool(r.get("ok", false)):
+		_card({"id": "downtime-train", "title": "Schooled", "kind": "good", "ok": true,
+			"text": String(r["text"]), "art": "event-downtime-train"}, _on_inn_card_ack)
+
+func _carouse() -> void:
+	var r: Dictionary = Downtime.carouse(party, world, _visit["settlement"])
+	var c: Dictionary = _complicate(String(r.get("complication", "")), int(r.get("cost", 0)))
+	_downtime_done(r, "Nobody in the company is fit for a night out.")
+	if bool(r.get("contact", false)):
+		_card({"id": "downtime-carouse", "title": "A night on the town", "kind": "good", "ok": true,
+			"text": String(r["text"]), "gold": int(r.get("coin", 0)), "art": "event-downtime-carouse"}, _on_inn_card_ack)
+	_show_complication(c)
+
+func _gamble(stake: int) -> void:
+	var r: Dictionary = Downtime.gamble(party, _visit["settlement"], stake)
+	var c: Dictionary = _complicate(String(r.get("complication", "")), stake)
+	_downtime_done(r, "There is no game on tonight.", "buy")
+	_show_complication(c)
+
+func _craft(item_id: String) -> void:
+	_downtime_done(Downtime.craft(party, world, _visit["settlement"], item_id, _visit), "Nobody here will let you at the bench.")
+
+# The row's answer, the way _work_healer gives its own: a save (a lost stake
+# and a failed night move the purse as surely as a won one), the panel again,
+# the line under the row.
+func _downtime_done(r: Dictionary, fallback: String, sfx := "rest") -> void:
+	if bool(r.get("ok", false)):
+		Sound.play_sfx(sfx)
+	if not r.is_empty():
+		_autosave()
+	_build_visit_panel()
+	_say(String(r.get("text", fallback)))
+
+# A story (Downtime.complication): the consequence lands before the panel
+# under the card is rebuilt — the tab's gold, the insult's opinion; the bad
+# lead is only the card — and the brawl waits behind the card's button: the
+# visit closes and an easy bandit roster is the cousin's friends, fought the
+# way a road fight is (a loss is _retreat's). {} when there is no story.
+func _complicate(kind: String, cost: int) -> Dictionary:
+	if kind == "":
+		return {}
+	var s = _visit["settlement"]
+	var c: Dictionary = Downtime.complication(kind, s, cost)
+	if c.has("gold"):
+		party.add_gold(int(c["gold"]))
+	if c.has("opinion"):
+		FactionOpinion.lower(s.faction, float(c["opinion"]))
+	return c
+
+func _show_complication(c: Dictionary) -> void:
+	if c.is_empty():
+		return
+	var s = _visit["settlement"]
+	if c.get("fight", false):
+		_card(c, func(): _on_event_ack(); _close_visit(); await _brawl(s))
+	else:
+		_card(c, _on_inn_card_ack)
+
+# The cousin's friends: an easy bandit roster fought the way a road fight is
+# (a loss is _retreat's), with the road's own rules kept off it
+# (_launch_combat's `difficulty`). Its spoils page is its ack; the inn reopens
+# behind it, the way it does behind the pit's card.
+func _brawl(s) -> void:
+	var result: Dictionary = await _launch_combat(
+		World.RoamingParty.new("%s-brawl" % s.id, s.position, "bandit"), false, false, "", "easy")
+	if result.is_empty():
+		return   # torn down mid-fight
+	while _spoils_panel != null:
+		await get_tree().process_frame
+	_reopen_visit(s)
+
+# The inn again after a fight closed the visit: Visit.visit() stamps
+# last_visited afresh, and the once-a-visit rows keep their stamp with it.
+func _reopen_visit(s) -> void:
+	var stamp: float = s.last_visited
+	_open_visit(s)
+	Downtime.restamp(party, s, stamp, s.last_visited)
+	Lodge.restamp(party, s, stamp, s.last_visited)
+
+# A bout in the pit: the city's bandit roster (hired blades — humanoid, always
+# fielded) cut to one champion by Downtime.pit_spec, fought in the square with
+# none of the road's aftermath — no band erased, no opinion moved, no spoils
+# page: a win banks what a fight banks (_bank: XP, the kill's gold, loot,
+# quest progress), then the purse and the deed are pit_result's, all on one
+# card, and the visit reopens behind it. A loss is carried out, not buried —
+# _retreat's revive without its gold or its walk; the house's stake is the
+# purse.
+func _pit_bout() -> void:
+	var s = _visit["settlement"]
+	var st: Dictionary = Downtime.pit_state(party, s, world)
+	if not st["open"]:
+		return
+	var bout: int = int(st["beaten"])
+	var base: Dictionary = encounter_spec(World.RoamingParty.new("%s-pit-%d" % [s.id, bout], s.position, "bandit"))
+	var spec: Dictionary = Downtime.pit_spec(party, s, world, bout, base)
+	if spec.is_empty():
+		_say("Nobody stands in the pit tonight.")
+		return
+	_close_visit()
+	var result: Dictionary = await _run_combat(spec, "normal", false, false)
+	if result.is_empty():
+		return   # torn down mid-fight
+	var won: bool = String(result.get("outcome", "")) == "Victory"
+	if won:
+		_bank(result)
+		_apply_deaths(result)
+	else:
+		Party.auto_revive_all(party)
+	var r: Dictionary = Downtime.pit_result(party, s, world, bout, won, int(st["week"]))
+	_autosave()
+	# The quest news a spoils page would have carried rides the card instead.
+	var text: String = String(r["text"])
+	for line in _quest_news:
+		text += "  " + String(line)
+	_quest_news = []
+	_card({"id": "downtime-pit", "title": "The pit", "kind": "good" if won else "bad", "ok": won,
+		"text": text, "gold": int(r["purse"]), "xp": int(result.get("xp", 0)) if won else 0},
+		func(): _on_event_ack(); _reopen_visit(s))
+
+# --- The lodge (core/lodge.gd): the company's own house -----------------------
+# A visit page like the inn's: the house's line, the bed (free), and per room
+# its Build row or its use — the strongroom's deposit and withdraw, the yard's
+# retrain pickers, and a line each for the rooms that work while the party is
+# away (the garden and the map room are collected on arriving, _open_visit;
+# the shrine's blessing is taken on leaving, _close_visit).
+const DEPOSIT_STEPS := [50, 100, 200]
+
+func _build_lodge_page(box: VBoxContainer, s) -> void:
+	var mood := Label.new()
+	mood.text = "The company's house at %s.  %d ◉ in the purse." % [s.sname, party.gold]
+	mood.theme_type_variation = "Dim"
+	box.add_child(mood)
+	var house := Icons.scene_art("event-lodge-house", null)
+	if house != null:
+		var pic := TextureRect.new()
+		pic.texture = house
+		pic.custom_minimum_size = Vector2(440, 160)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.clip_contents = true
+		box.add_child(pic)
+	var wait: float = Visit.long_rest_in(party, world)
+	var rest_btn := Button.new()
+	rest_btn.text = "Rest at the lodge (free)"
+	rest_btn.disabled = wait > 0.0
+	rest_btn.pressed.connect(_rest)
+	box.add_child(rest_btn)
+	if wait > 0.0:
+		_note(box, "They rested less than a day ago — another night does nothing for %s." % _hours(wait))
+	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(INN_LIST_H)))
+	box.add_child(scroll)
+	var rows: VBoxContainer = scroll.get_child(0)
+	_section(rows, "The rooms")
+	for room in Lodge.ROOMS:   # the order the map builds them in (SettlementKit.LODGE_ROOMS)
+		var title := String(Lodge.ROOMS[room]["title"])
+		var cap := title[0].to_upper() + title.substr(1)
+		if not Lodge.has(party, room):
+			_trade_row(rows, "Build %s (%d ◉)" % [title, int(Lodge.ROOMS[room]["cost"])], "Build",
+				_build_room.bind(room), not Lodge.can_build(party, room), Icons.scene_art("event-lodge-" + room, null))
+			continue
+		match room:
+			"strongroom":
+				_note(rows, "The strongroom holds %d ◉ — gold the road cannot take." % Lodge.stored(party))
+				_purse_row(rows, "Deposit", party.gold, _deposit)
+				if Lodge.stored(party) > 0:
+					_purse_row(rows, "Withdraw", Lodge.stored(party), _withdraw)
+			"yard":
+				var pupils: Array = party.party_characters().filter(func(ch): return Lodge.can_retrain(party, world, ch))
+				if pupils.is_empty():
+					_note(rows, "%s: one general feat put down for another, %d ◉ and three days; once a visit, and nobody is ready for it now." % [cap, Lodge.RETRAIN_COST])
+				else:
+					_retrain_row(rows, pupils)
+			"garden":
+				_note(rows, "%s: a potion of healing every %d days the company is away, up to %d, on the step when it comes home." % [cap, Lodge.GARDEN_DAYS, Lodge.GARDEN_CAP])
+			"shrine":
+				_note(rows, "%s: the company carries its blessing onto the road when it leaves." % cap)
+			"maproom":
+				_note(rows, "%s: a new mark on the wall every %d days the company is away, up to %d." % [cap, Lodge.MAPROOM_DAYS, Lodge.MAPROOM_CAP])
+
+# A picker of DEPOSIT_STEPS the sum covers, and "all" (id -1) for the sum itself.
+func _purse_row(rows: VBoxContainer, verb: String, have: int, on_go: Callable) -> void:
+	var row := HBoxContainer.new()
+	rows.add_child(row)
+	var lbl := Label.new()
+	lbl.text = verb
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(lbl)
+	var pick := OptionButton.new()
+	for n in DEPOSIT_STEPS:
+		if int(n) <= have:
+			pick.add_item("%d ◉" % int(n), int(n))
+	pick.add_item("all (%d ◉)" % have, -1)
+	row.add_child(pick)
+	var go := Button.new()
+	go.text = "Go"
+	go.disabled = have <= 0
+	go.pressed.connect(func(): on_go.call(have if pick.get_selected_id() == -1 else pick.get_selected_id()))
+	row.add_child(go)
+
+# The yard's pickers: who, which of their general feats, and what for — the
+# trainer's row (_train_row) with the old feat between.
+func _retrain_row(rows: VBoxContainer, pupils: Array) -> void:
+	var line := Label.new()
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	line.custom_minimum_size = Vector2(430, 0)
+	rows.add_child(line)
+	var row := HBoxContainer.new()
+	rows.add_child(row)
+	var who := OptionButton.new()
+	for ch in pupils:
+		who.add_item(ch.cname)
+	row.add_child(who)
+	var old := OptionButton.new()
+	row.add_child(old)
+	var new := OptionButton.new()
+	new.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(new)
+	var pick := func(i: int) -> void:
+		var ch = pupils[i]
+		line.text = "Retrain %s in the yard (%d ◉, three days)" % [ch.cname, Lodge.RETRAIN_COST]
+		old.clear()
+		for fid in ch.feats:
+			if Lodge.general(fid):
+				old.add_item(String(Catalog.feat_src(fid).get("name", fid)))
+				old.set_item_metadata(old.item_count - 1, fid)
+		new.clear()
+		for fid in Downtime.trainable(ch):
+			new.add_item(String(Catalog.feat_src(fid).get("name", fid)))
+			new.set_item_metadata(new.item_count - 1, fid)
+	who.item_selected.connect(pick)
+	pick.call(0)
+	var go := Button.new()
+	go.text = "Go"
+	go.pressed.connect(func(): _retrain(pupils[who.selected],
+		String(old.get_item_metadata(old.selected)) if old.selected >= 0 else "",
+		String(new.get_item_metadata(new.selected)) if new.selected >= 0 else ""))
+	row.add_child(go)
+
+# The deed, then the map: the house stands beside the town from this moment.
+func _buy_lodge() -> void:
+	var r: Dictionary = Lodge.buy(party, world, _visit["settlement"])
+	if r.is_empty():
+		_say("Not enough gold.")
+		return
+	Sound.play_sfx("buy")
+	_cheer()
+	_settlements3d.reset(world)
+	_autosave()
+	_build_visit_panel()
+	_say(String(r["text"]))
+
+func _build_room(room: String) -> void:
+	var r: Dictionary = Lodge.build(party, world, room)
+	if r.is_empty():
+		_say("Not enough gold.")
+		return
+	Sound.play_sfx("buy")
+	_settlements3d.reset(world)
+	_autosave()
+	_build_visit_panel()
+	_say(String(r["text"]))
+
+# A transfer either way: the coin sound, a save (the purse moved), the line.
+# The pickers only offer what the purse or the strongroom holds, so a refusal
+# is the module's own bounds and reads as one.
+func _deposit(n: int) -> void:
+	_moved(Lodge.deposit(party, n), "%d ◉ into the strongroom" % n)
+
+func _withdraw(n: int) -> void:
+	_moved(Lodge.withdraw(party, n), "%d ◉ out of the strongroom" % n)
+
+func _moved(ok: bool, text: String) -> void:
+	if ok:
+		Sound.play_sfx("buy")
+		_autosave()
+	_build_visit_panel()
+	_say("%s; it holds %d." % [text, Lodge.stored(party)] if ok else "The strongroom's door stays shut.")
+
+func _retrain(ch, old_feat: String, new_feat: String) -> void:
+	_downtime_done(Lodge.retrain(party, world, ch, old_feat, new_feat), "The yard will not take them.")
 
 func _build_board_page(box: VBoxContainer, s) -> void:
 	var has_inn: bool = Visit.has_service(s, "innkeeper")
@@ -3397,6 +4189,25 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 		else "A town elder", party.gold]
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
+	if Posting.is_patron(s, world):
+		var patron := Label.new()
+		patron.text = "The patron's table: word of work from all over."
+		patron.theme_type_variation = "Dim"
+		box.add_child(patron)
+	if Ladder.title_index() > 0:
+		var pay := Label.new()
+		pay.text = "%s — work pays +%d %%." % [Ladder.title_cap(), int(round(Ladder.PAY_PER_TITLE * 100 * Ladder.title_index()))]
+		pay.theme_type_variation = "Dim"
+		box.add_child(pay)
+	if s.raided_by != "":
+		var raider = Raids.lair_of(world, s.raided_by)
+		var hit := Label.new()
+		hit.text = "Raiders from %s hit the town on %s. The market is half what it was." % [
+			raider.sname if raider != null else "the hills", WorldSave.day_clock(s.raided_at).split("  ")[0]]
+		hit.theme_type_variation = "Serif"
+		hit.add_theme_color_override("font_color", Icons.COL_FOE)
+		hit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(hit)
 	if has_inn:
 		_portrait(box, s.faction, "innkeeper")
 	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(300.0)))
@@ -3842,7 +4653,9 @@ func ground_marks() -> Array:
 			"radius": _footprint(float(SETTLEMENT_RADIUS.get(s.kind, 17.0)),
 				_settlements3d.footprint(s) if _settlements3d != null else 0.0),
 			"color": _remembered(faction_color(s.faction), live), "ring": RING_WIDTH,
-			"fill": SETTLEMENT_FILL, "shadow": 0.9, "label": s.sname, "live": live})
+			"fill": SETTLEMENT_FILL, "shadow": 0.9,
+			"label": s.sname + Raids.settlement_tag(world, s, world.clock.elapsed)
+				+ (" · your lodge" if Lodge.at(party, s) else ""), "live": live})
 	for l in world.lairs:
 		# T91: an undiscovered lair draws nothing at all — that is the mechanic.
 		if not (l.discovered and world.is_explored(l.position)):
@@ -3851,7 +4664,8 @@ func ground_marks() -> Array:
 		out.append({"pos": l.position,
 			"radius": _footprint(LAIR_RADIUS, _lairs3d.footprint(l) if _lairs3d != null else 0.0),
 			"color": _remembered(Icons.COL_MUTED if l.looted else Icons.COL_FOE, live),
-			"ring": RING_WIDTH, "fill": SETTLEMENT_FILL, "shadow": 0.85, "label": l.sname, "live": live})
+			"ring": RING_WIDTH, "fill": SETTLEMENT_FILL, "shadow": 0.85,
+			"label": l.sname + Raids.lair_tag(l), "live": live})
 	for m in world.landmarks:
 		if not m.found or not world.is_explored(m.position):
 			continue

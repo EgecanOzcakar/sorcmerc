@@ -10,8 +10,9 @@
 #   1. How often would each SOURCE fire — how fast do scores actually move in
 #      play? (saves, friendly fire, downs, won fights — counted on the baseline.)
 #   2. What does each combat EFFECT cost or buy — win rate and fight length with
-#      one relationship pinned per variant, hooks subclassed in the way the doc
-#      proposes wiring them into combat.gd.
+#      one relationship pinned per variant. The hooks were subclassed in here
+#      when this was measured; they live in combat.gd now, and Measured only
+#      counts what they did.
 extends SceneTree
 
 const AI = preload("res://core/ai.gd")
@@ -28,30 +29,24 @@ const PartyOpinion = preload("res://core/party_opinion.gd")
 const SEEDS := 150
 const DIFFICULTY := "normal"
 
-# Each variant pins the relations a fresh preset party would have to earn, and
-# says which hooks are live. "baseline" has all three hooks on but no
-# relations, which must equal "hooks off" — a check that the wiring is inert
-# for a neutral party.
+# Each variant pins the relations a fresh preset party would have to earn.
+# "baseline" has no relations, and must read like a fight with no hooks at all
+# — a check that the wiring is inert for a neutral party. (The "shoulder only"
+# and "rally only" rows the doc's table carries were measured while the hooks
+# could be switched off one at a time; combat.gd's cannot.)
 const VARIANTS := [
-	{"id": "baseline", "pairs": {}, "shoulder": true, "bicker": true, "rally": true},
-	{"id": "lovers vera+ilsa", "pairs": {"vera|ilsa": "lovers"}, "shoulder": true, "bicker": true, "rally": true},
-	{"id": "  shoulder only", "pairs": {"vera|ilsa": "lovers"}, "shoulder": true, "bicker": false, "rally": false},
-	{"id": "  rally only", "pairs": {"vera|ilsa": "lovers"}, "shoulder": false, "bicker": false, "rally": true},
-	{"id": "bonded vera+pike", "pairs": {"vera|pike": "bonded"}, "shoulder": true, "bicker": true, "rally": true},
-	{"id": "rivals vera+pike", "pairs": {"vera|pike": "rivals"}, "shoulder": true, "bicker": true, "rally": true},
-	{"id": "rivals vera+ilsa", "pairs": {"vera|ilsa": "rivals"}, "shoulder": true, "bicker": true, "rally": true},
-	{"id": "everyone bonded", "pairs": {"vera|ilsa": "bonded", "vera|pike": "bonded", "pike|ilsa": "bonded"},
-		"shoulder": true, "bicker": true, "rally": true},
+	{"id": "baseline", "pairs": {}},
+	{"id": "lovers vera+ilsa", "pairs": {"vera|ilsa": "lovers"}},
+	{"id": "bonded vera+pike", "pairs": {"vera|pike": "bonded"}},
+	{"id": "rivals vera+pike", "pairs": {"vera|pike": "rivals"}},
+	{"id": "rivals vera+ilsa", "pairs": {"vera|ilsa": "rivals"}},
+	{"id": "everyone bonded", "pairs": {"vera|ilsa": "bonded", "vera|pike": "bonded", "pike|ilsa": "bonded"}},
 ]
 
-# combat.gd with the three hooks the doc proposes, plus counters for the sources.
+# combat.gd, counting what its own hooks and sources did. Every override reads
+# the same question the hook reads, calls super, and looks at the answer —
+# it applies nothing itself, or the effect would land twice.
 class Measured extends Combat:
-	# `party` is Combat's own now — feature/spells-fix gave it one for the potion
-	# shelf, with the same meaning and the same null default this spike declared
-	# for itself when Combat had none. Redeclaring it here is a parse error.
-	var use_shoulder := true
-	var use_bicker := true
-	var use_rally := true
 	# effects
 	var shoulder_hits := 0      # attacks against a member who had the +1 at the time
 	var shoulder_saved := 0     # ...that missed by exactly the bonus
@@ -65,32 +60,18 @@ class Measured extends Combat:
 	var downs := 0              # a member hit 0 HP
 	var _was_down := {}
 
-	func effective_ac(c) -> int:
-		var ac := super(c)
-		if use_shoulder and party != null:
-			ac += PartyOpinion.shoulder_bonus(party, c, self)
-		return ac
-
 	func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		var pen := 0
 		var rally := false
 		if party != null and attacker.team == "party" and not opts.get("opportunity", false):
-			if use_bicker and not opts.has("atk_bonus"):
+			if not opts.has("atk_bonus"):
 				pen = PartyOpinion.bicker_penalty(party, attacker, self)
-				if pen > 0:
-					opts = opts.duplicate()
-					opts["atk_bonus"] = attacker.atk_bonus - pen
-			if use_rally and attacker.has(PartyOpinion.RALLY_STATUS):
-				rally = true
-				opts = opts.duplicate()
-				opts["advantage"] = true
-		var had_shoulder: int = PartyOpinion.shoulder_bonus(party, target, self) \
-			if use_shoulder and party != null and target.team == "party" else 0
+			rally = attacker.has(PartyOpinion.RALLY_STATUS)
+		var had_shoulder: int = PartyOpinion.shoulder_bonus(party, target, self) if party != null else 0
 		var r := super(attacker, target, opts)
 		if r.has("error"):
 			return r
 		if rally:
-			attacker.statuses.erase(PartyOpinion.RALLY_STATUS)
 			rally_swings += 1
 		if pen > 0:
 			bicker_swings += 1
@@ -104,19 +85,19 @@ class Measured extends Combat:
 
 	func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 		var before: bool = target.is_down() or target.is_dead()
+		var rallied_before: Array = allies_of(target).filter(func(c): return c.has(PartyOpinion.RALLY_STATUS))
 		super(target, dmg, dtype, crit)
 		if target.team == "party" and not before and (target.is_down() or target.is_dead()):
 			downs += 1
-			if party != null and use_rally:
-				rallies += PartyOpinion.rally(party, target, self).size()
+			for c in allies_of(target):
+				if c.has(PartyOpinion.RALLY_STATUS) and not c in rallied_before:
+					rallies += 1
 
 	func perform(actor, v: Dictionary, target = null) -> Dictionary:
 		var down_before: bool = target is Object and target != null and target.get("statuses") != null and target.is_down()
 		var r := super(actor, v, target)
 		if v["kind"] == "heal_ally" and down_before and target.team == "party" and not target.is_down():
 			saves += 1
-			if party != null:
-				PartyOpinion.saved(party, actor.id, target.id)
 		return r
 
 	func cast(caster, v: Dictionary, target) -> Dictionary:
@@ -127,14 +108,10 @@ class Measured extends Combat:
 			return r
 		if v.has("heal_count") and down_before and caster.team == "party" and not target.is_down():
 			saves += 1
-			if party != null:
-				PartyOpinion.saved(party, caster.id, target.id)
 		if r.has("area") and caster.team == "party":
 			for c in allies_up:
 				if c.pos in r["area"]:
 					friendly += 1
-					if party != null:
-						PartyOpinion.friendly_fire(party, caster.id, c.id)
 		return r
 
 func _init() -> void:
@@ -199,9 +176,6 @@ func _fight(v: Dictionary, theme: String, seed_value: int) -> Dictionary:
 	var spec: Dictionary = Scaler.roster_for(chars, DIFFICULTY, {}, theme, seed_value)
 	var cb := _build(spec, theme, seed_value, chars)
 	cb.party = p
-	cb.use_shoulder = v["shoulder"]
-	cb.use_bicker = v["bicker"]
-	cb.use_rally = v["rally"]
 	var guard := 0
 	while not cb.is_over() and guard < 5000:
 		var a = cb.current()

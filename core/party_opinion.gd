@@ -1,7 +1,8 @@
 # SPIKE (2026-09-16) — what the party thinks of each other, and whether two of
 # them are more than friends. Write-up and the numbers behind every constant:
-# docs/spike-party-opinions.md. Nothing in the shipped game calls this yet; the
-# doc lists the seven call sites that would.
+# docs/spike-party-opinions.md. The seven call sites the doc lists are wired
+# (2026-09-21: the save, the party page, the road, decay, the fireside, the
+# fight), and core/callings.gd adds an eighth — the bond a calling pays.
 #
 # One score per PAIR of members, -100..100, symmetric ("Vera and Pike" is one
 # number, not two), plus a status on top of it: "" or "lovers" (a state the
@@ -58,14 +59,16 @@ const ROAD_FAIL := 2.0           # ...or walked it into one that cost (D3's kind
 const CAMP_WARMING := 8.0
 const CAMP_QUARREL := 8.0
 const COURTSHIP_ACCEPTED := 15.0
+const CALLING_BOND := 15.0       # a calling completed, with the one who did the thing (core/callings.gd)
 const COURTSHIP_DECLINED := 10.0 # lowered: it is awkward around the fire for a while
 const BREAKUP := 20.0            # the extra drop when lovers fall out
 
 const DRIFT_PER_DAY := 1.0       # toward the pair's baseline; half FactionOpinion's — people are stickier
 const DAY := 1440.0              # world-minutes (core/faction_opinion.gd's DAY)
 
-# Combat. All three are read by hooks the sweep subclasses in
-# (tests/sweep_party_opinion.gd); the doc says where they go in combat.gd.
+# Combat. All three are read by core/combat.gd's hooks (shoulder_bonus on AC,
+# bicker_penalty on to-hit, rally when a partner goes down); the sweep
+# (tests/sweep_party_opinion.gd) measured them before they were wired.
 const SHOULDER_AC := 1           # bonded/lovers adjacent to each other: +1 AC each
 const BICKER_TO_HIT := 1         # rivals adjacent to each other: -1 to hit each
 const RALLY_STATUS := "rallied"  # a partner just went down: advantage on the next attack

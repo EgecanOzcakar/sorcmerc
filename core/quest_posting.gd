@@ -35,6 +35,7 @@ extends RefCounted
 
 const Campaign = preload("res://core/campaign.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Ladder = preload("res://core/ladder.gd")
 const Quest = preload("res://core/quest.gd")
 const Regions = preload("res://core/regions.gd")
 const RNG = preload("res://core/rng.gd")
@@ -105,6 +106,26 @@ const SUPPLY_TITLES := {
 
 # --- deliver_goods / scout_region ----------------------------------------
 
+# The ladder (core/ladder.gd): a people's chief settlement — the largest kind
+# it holds, ties by id — is where its patron sits.
+const KIND_RANK := {"city": 3, "town": 2, "camp": 1}
+
+static func chief_settlement(world, faction: String):
+	var best = null
+	for s in world.settlements:
+		if s.faction != faction:
+			continue
+		if best == null or int(KIND_RANK.get(s.kind, 0)) > int(KIND_RANK.get(best.kind, 0)) \
+				or (int(KIND_RANK.get(s.kind, 0)) == int(KIND_RANK.get(best.kind, 0)) and s.id < best.id):
+			best = s
+	return best
+
+# Trusted or better, at the chief settlement: the patron posts work about
+# anything on the map. What a stranger lacks is not a kind of job but a town
+# willing to post the far country's.
+static func is_patron(s, world) -> bool:
+	return world != null and Ladder.rung(s.faction) >= Ladder.TRUSTED and chief_settlement(world, s.faction) == s
+
 const DELIVER_BASE := 40
 const DELIVER_PER_UNIT := 10.0   # map units of road per extra gold piece
 const SCOUT_BASE := 60
@@ -151,6 +172,9 @@ static func offers(s, services: Array, party, world = null) -> Array:
 					continue
 				seen[id] = true
 				q["counter"] = counter
+				# Renown's premium: a famous company charges more, on every job.
+				if q.has("reward") and q["reward"].has("gold"):
+					q["reward"]["gold"] = int(int(q["reward"]["gold"]) * Ladder.pay_mult())
 				out.append(q)
 	return out
 
@@ -188,7 +212,7 @@ static func _build(kind: String, counter: String, s, party, world, world_jobs: A
 		"kill_count", "collect_item":
 			# Both curated kinds resolve to the same single offer; offers()
 			# de-duplicates by id, so reading it twice costs nothing.
-			var q: Dictionary = Quest.offer_for(party, giver_node_id(s), opinion)
+			var q: Dictionary = Quest.offer_for(party, giver_node_id(s), opinion, Ladder.rung(s.faction))
 			return [q] if not q.is_empty() else []
 		"hunt_party", "raid_settlement", "clear_lair":
 			return _world_offers(kind, s, world, world_jobs)
@@ -211,7 +235,7 @@ static func _build(kind: String, counter: String, s, party, world, world_jobs: A
 static func _world_offers(kind: String, s, world, world_jobs: Array) -> Array:
 	if world == null:
 		return []
-	var reach: float = float(PLACEMENT[kind]["reach"])
+	var reach: float = INF if is_patron(s, world) else float(PLACEMENT[kind]["reach"])
 	var out: Array = []
 	for q in world_jobs:
 		if String(q["kind"]) != kind:
@@ -336,19 +360,23 @@ static func rescue_offer(s, world, _party) -> Dictionary:
 	var best_d := INF
 	for l in world.lairs:
 		var d: float = s.position.distance_to(l.position)
-		if l.looted or d > reach or d >= best_d or not Site.pens_ahead(l):
+		# The lair raiding this town (core/raids.gd) is where the people it took
+		# are: it wins the posting outright, pens permitting.
+		var rank: float = 0.0 if l.id == s.raided_by else d
+		if l.looted or d > reach or rank >= best_d or not Site.pens_ahead(l):
 			continue
 		best = l
-		best_d = d
+		best_d = rank
 	if best == null:
 		return {}
-	var who: String = CAPTIVES[absi(hash("%s|%s" % [s.id, best.id])) % CAPTIVES.size()]
+	var who: String = ("the people taken in the raid" if best.id == s.raided_by
+		else CAPTIVES[absi(hash("%s|%s" % [s.id, best.id])) % CAPTIVES.size()])
 	return {
 		"id": "rescue:%s:%s" % [s.id, best.id],
 		"giver_node_id": s.id, "kind": "rescue", "state": "offered",
 		"target_lair_id": best.id, "required": 1, "progress": 0,
 		"title": "Bring back %s from %s" % [who, best.sname],
-		"reward": {"gold": RESCUE_BASE + int(best_d / RESCUE_PER_UNIT)},
+		"reward": {"gold": RESCUE_BASE + int(s.position.distance_to(best.position) / RESCUE_PER_UNIT)},
 	}
 
 # Ride out one ring further than this settlement stands and come back able to

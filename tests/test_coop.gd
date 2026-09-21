@@ -17,6 +17,7 @@ const CharacterSave = preload("res://core/character_save.gd")
 const Creator = preload("res://scenes/creator/creator.gd")
 const Character = preload("res://core/character.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 
 const SEEDS := 40
 
@@ -310,6 +311,8 @@ func test_the_wire_keeps_a_party_whole() -> void:
 		party.stash_add("potion-of-healing", 1, false)   # the same item, unidentified: a second stack
 		var spec: Dictionary = Scaler.roster_for(party.party_characters(), "normal")
 		spec["seed"] = sd
+		PartyOpinion.set_score(party, party.active[0], party.active[1], 44.0)
+		party.callings[party.active[0]] = {"id": "soldier", "target_kind": "band", "target_id": "deserters", "state": "told", "told_at": 90.0}
 		var setup := wire(Coop.setup_for(sd, spec, party))
 		for ch in party.party_characters():
 			var there := CharacterSave.to_dict(ch)
@@ -318,6 +321,8 @@ func test_the_wire_keeps_a_party_whole() -> void:
 		var mirrored = Coop.party_from(setup)
 		check(mirrored.gold == party.gold and mirrored.stash == party.stash,
 			"%s: the purse and the shelf cross too" % cid)
+		check(mirrored.relations == party.relations, "%s: the wire carries the party's opinions of each other" % cid)
+		check(mirrored.callings == party.callings, "%s: the wire carries what each hero is owed" % cid)
 		check(Coop.state_hash(build_with(party, setup)) == Coop.state_hash(build(setup)),
 			"%s: the host's party and the guest's build the same fight" % cid)
 

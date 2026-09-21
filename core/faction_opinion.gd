@@ -129,4 +129,5 @@ static func credit_fight(world, at: Vector2, amount: float, skip_faction := "") 
 			continue
 		moved.append(s.faction)
 		set_opinion(s.faction, get_opinion(s.faction) + amount)
+		load("res://core/ladder.gd").deed(s.faction)   # and a deed on the ladder
 	return moved

@@ -24,6 +24,7 @@ extends RefCounted
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const Ach = preload("res://core/achievements.gd")
+const Ladder = preload("res://core/ladder.gd")
 
 # A fight pays XP at about 6.7x its gold (core/encounter.gd's XP_PER_POWER /
 # GOLD_PER_POWER); a quest pays less per coin because it also hands over gear
@@ -112,15 +113,15 @@ static func get_quest(party, id: String) -> Dictionary:
 # The one quest a merchant node offers: its own, not already in the log.
 # O7: `opinion` is the giver's faction's opinion of the player (0 = neutral, which
 # is every T9 caller and so T9's behavior unchanged). Below QUEST_MIN they have no
-# work for you; above QUEST_GENEROUS they will pass you a neighbour's job once
-# their own is taken.
-static func offer_for(party, node_id: String, opinion := 0.0) -> Dictionary:
+# work for you; above QUEST_GENEROUS — or once the ladder calls you Known to their
+# people — they will pass you a neighbour's job once their own is taken.
+static func offer_for(party, node_id: String, opinion := 0.0, rung := 0) -> Dictionary:
 	if opinion <= FactionOpinion.QUEST_MIN:
 		return {}
 	for q in CURATED:
 		if q["giver_node_id"] == node_id and get_quest(party, q["id"]).is_empty():
 			return fresh(q["id"])
-	if opinion >= FactionOpinion.QUEST_GENEROUS:
+	if opinion >= FactionOpinion.QUEST_GENEROUS or rung >= Ladder.KNOWN:
 		for q in CURATED:
 			if get_quest(party, q["id"]).is_empty():
 				return fresh(q["id"])
@@ -155,6 +156,10 @@ const CHAIN_LABELS := {
 	"clear_lair": ["Clear out %s", "Purge %s", "Finish %s, once and for all"],
 }
 
+# A lair whose raid stands on the giver's town (core/raids.gd) pays this much
+# more for its own job: the town wants it answered, and says so in gold.
+const RAID_PREMIUM := 1.5
+
 static func faction_chain_tier(party, faction: String) -> int:
 	if party == null:
 		return 0
@@ -178,6 +183,8 @@ static func _world_quest_from_pick(pick: Dictionary, giver_settlement, party, rn
 		"hunt_party": out["target_party_id"] = pick["id"]
 		"raid_settlement": out["target_settlement_id"] = pick["id"]
 		"clear_lair": out["target_lair_id"] = pick["id"]
+	if "raided_by" in giver_settlement and String(giver_settlement.raided_by) == String(pick["id"]):
+		out["reward"]["gold"] = int(int(out["reward"]["gold"]) * RAID_PREMIUM)
 	return out
 
 # A quest targeting a live open-world object instead of a curated monster id —
@@ -333,6 +340,7 @@ static func turn_in(party, quest: Dictionary, faction := "") -> bool:
 		return false
 	if faction != "":
 		FactionOpinion.raise(faction, FactionOpinion.QUEST_DONE)
+		Ladder.deed(faction)   # a job is a deed for the people who paid
 	var reward: Dictionary = quest.get("reward", {})
 	party.add_gold(int(reward.get("gold", 0)))
 	# A finished job teaches something too: XP pegged to the purse, split the

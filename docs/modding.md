@@ -69,6 +69,7 @@ and a mod from a forum can go through one pipeline with one trust level.
   "requires": [],
   "world": "world.json",
   "story": "story.json",
+  "callings": "callings.json",
   "data": {"bestiary.json": "monsters.json", "magic-items.json": "items.json"}
 }
 ```
@@ -85,13 +86,14 @@ and a mod from a forum can go through one pipeline with one trust level.
 | `requires` | pack ids that must be installed and loaded, or this one is marked broken and says why |
 | `world` | a world file (§3) |
 | `story` | a story file (§4) |
+| `callings` | a callings file (§5.2) |
 | `data` | `{game data file: your file}` (§5) |
 
 Everything but `format`, `id` and `title` is optional.
 
-The API level is still **1**. The `data/effects/` files in §5.1 are new in this
-build, and no pack written before it mentioned them; a capability a pack can
-decline to use is not a break. `api` moves only when something a pack already
+The API level is still **1**. The `data/effects/` files in §5.1 and the
+`callings` file in §5.2 are new, and no pack written before them mentioned
+them; a capability a pack can decline to use is not a break. `api` moves only when something a pack already
 wrote stops meaning what it meant.
 
 ---
@@ -139,7 +141,9 @@ room by room. `faction` must be one the bestiary can fill a fight from
 (`goblinoid`, `undead`, `dragon`, `giant`, `orc`, `gnoll`, `kobold`, `bandit`,
 `beast`, `cultist`, `monstrosity`, `fey`, `elemental`, `construct`,
 `soldier`) — a lair is *made of* its faction's roster. `"discovered": true`
-puts it on the map from the start.
+puts it on the map from the start. A lair on heartland or marches ground with
+a civilized settlement within 800 runs a raid clock like the built-in maps'
+(`core/raids.gd`); there is no opt-out today.
 
 **Landmarks** are places on the map that are not a fight — ruins, a shrine,
 standing stones, a hermit's hut, a wreck, a watchtower (`kind`: `ruins` |
@@ -507,6 +511,54 @@ was using to see.
 
 Turning the pack off takes all of this back out, the same as any other overlay.
 
+### 5.2 `callings.json` — a past for each background
+
+Every hero's background hands them a **calling** — a personal quest pointed
+at something the live map holds (`core/callings.gd`: the acolyte's defiled
+shrine, the soldier's deserters, the sage's lost library under a lair), told
+once at the campfire, done on the road, paid in XP, an heirloom and a bond.
+The game ships sixteen, one per background. A pack can add or replace them:
+
+```json
+"callings": "callings.json"
+```
+
+```json
+{
+  "soldier": {
+    "title": "The Vale's deserters",
+    "target": {"kind": "band"},
+    "done_by": "band_beaten",
+    "item": "javelin-of-lightning",
+    "tell": "%s came over the Vale's passes last winter: men from a company you served in...",
+    "done": "%s are accounted for, and the Vale's roads are the quieter for it."
+  }
+}
+```
+
+Keyed by background id, merged over the built-in table **by background**: a
+background the game already has is replaced, one it does not (a background
+your `backgrounds.json` overlay adds) is added. Each entry:
+
+| Key | Meaning |
+|---|---|
+| `title` | the line on the party page and the quest log |
+| `target.kind` | what the calling points at: `landmark` (with `landmark`: `ruins` \| `shrine` \| `stones` \| `hut` \| `wreck` \| `tower`), `lair` (the nearest not yet looted), `band` (the nearest monster band), `settlement` (with `settlement`: `camp` \| `town` \| `city`, civilized; a missing size falls back to a larger one), or `audience` (the ladder's, with any lord) |
+| `done_by` | the one event that completes that kind — `landmark_answered`, `lair_cleared`, `band_beaten`, `visited`, `audience`, respectively; anything else is an error |
+| `item` | the heirloom: a `magic-items.json` id, the game's or your pack's overlay's |
+| `tell`, `done` | the telling at the fire and the resolution line, second person; `%s` is the target's name (an audience has none to name) |
+
+The target is chosen from the map the party is on — the nearest thing of the
+kind — so a calling written for your world plays on any world that has the
+kind. No such thing on the map means no calling yet, tried again at every
+camp. The pictures are the game's (`event-calling-<background>.png`); a pack
+cannot ship its own yet. Checked at scan time like everything else: a kind the game
+cannot point at, a `done_by` that does not match it, an item that does not
+exist, a missing title — each is a line in the browser, and the pack does not
+load until they are fixed.
+
+Turning the pack off takes its callings back out with its records.
+
 ---
 
 ## 6. Free and paid packs
@@ -612,6 +664,7 @@ without rewriting the chapter around it.
 | `core/mod/world_pack.gd` | `world.json` → a live `World` |
 | `core/mod/story.gd` | `story.json`: the schema, and the validator |
 | `core/mod/story_runtime.gd` | the playthrough: conditions, effects, chapters, save state |
+| `core/callings.gd` | `callings.json`: the built-in sixteen, the validator, where a pack's land |
 | `core/rules/catalog.gd` | where data overlays land |
 | `core/rules/effects.gd` | the `data/effects/*.json` vocabulary, and what reads it |
 | `core/potions.gd` | `effects/potions.json`: the two doors a bottle opens |

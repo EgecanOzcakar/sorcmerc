@@ -925,3 +925,65 @@ static func build(faction: String, kind: String, id: String) -> Node3D:
 
 static func triangles(faction: String, kind: String, id: String) -> int:
 	return KitParts.triangles(plan(faction, kind, id))
+
+# --- the lodge (core/lodge.gd) ----------------------------------------------
+
+# The company's house beside its town: one town-sized house at the origin in
+# the town's own style, and per room built a part group around it. The rooms
+# go up in LODGE_ROOMS order whatever order they were bought in, so the same
+# lodge is the same lodge across saves, and each room's parts carry its tag so
+# the map can be read back against party.lodge["rooms"]. Sized off the town
+# plan's house, so it is a house among the town's houses and not a second town.
+const LODGE_ROOMS := ["strongroom", "yard", "garden", "shrine", "maproom"]
+
+static func lodge_plan(faction: String, rooms: Array, id: String) -> Array:
+	if not PROFILES.has(faction):
+		return []
+	var p: Dictionary = PLANS["town"]
+	var prof: Dictionary = PROFILES[faction]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("%s/lodge/%s" % [faction, id])
+	var parts: Array = []
+	var shade: int = rng.randi() % KitParts.SHADES.size()
+	var w: float = float(p["house_w"]) * float(prof["slender"])
+	var h: float = float(p["house_h"]) * float(prof["squat"])
+	var body: Vector3 = _house(parts, faction, Vector2.ZERO, w, h, w * 1.3,
+		float(p["height"]) * float(p["house_cap"]), 0.0, shade, rng)
+	_house_details(parts, faction, Vector2.ZERO, body, 0.0, shade, rng)   # the door faces +x
+	w = body.x
+	h = body.y
+	var d: float = body.z
+	var u: float = h * 0.1   # about a world unit; everything below is in these
+	for room in LODGE_ROOMS:
+		if not room in rooms:
+			continue
+		match room:
+			"strongroom":   # a stone annex against the back wall, under its own roof
+				var ax: float = -(w * 0.5 + w * 0.22)
+				_part(parts, "box", "stone", 1, Vector3(ax, h * 0.2, 0.0), Vector3(w * 0.44, h * 0.4, d * 0.6), 0.0, 0.0, room)
+				_part(parts, "prism", "roof", shade, Vector3(ax, h * 0.4 + h * 0.06, 0.0), Vector3(w * 0.5, h * 0.12, d * 0.66), 0.0, 0.0, room)
+			"yard":   # four posts in a square, and the training post in the middle
+				for sx: float in [-1.0, 1.0]:
+					for sz: float in [1.5, 6.0]:
+						_part(parts, "post", "post", 1, Vector3(sx * w * 0.35, u * 1.3, d * 0.5 + u * sz), Vector3(u * 0.4, u * 2.6, u * 0.4), 0.0, 0.0, room)
+				_part(parts, "post", "post", 0, Vector3(0.0, u * 2.1, d * 0.5 + u * 3.75), Vector3(u * 0.6, u * 4.2, u * 0.6), 0.0, 0.0, room)
+			"garden":   # three beds in a row along the far wall
+				for i in 3:
+					_part(parts, "disc", "stone", 0, Vector3((i - 1) * w * 0.35, u * 0.25, -(d * 0.5 + u * 2.5)), Vector3(u * 2.2, u * 0.5, u * 2.2), 0.0, 0.0, room)
+			"shrine":   # a stone at the corner, and the lantern on it
+				var sx: float = w * 0.5 + u * 4.0
+				var sz: float = -(d * 0.5 + u * 2.0)
+				_part(parts, "rock", "stone", 2, Vector3(sx, u * 0.8, sz), Vector3(u * 2.0, u * 1.6, u * 2.0), 0.0, 0.0, room)
+				_part(parts, "cone", "ember", 2, Vector3(sx, u * 1.6 + u * 0.5, sz), Vector3(u * 0.8, u * 1.0, u * 0.8), 0.0, 0.0, room)
+			"maproom":   # a small tower at the other corner, under a spire
+				var tx: float = -(w * 0.5 + u * 2.5)
+				var tz: float = d * 0.5 + u * 2.5
+				_part(parts, "box", "wall", shade, Vector3(tx, h * 0.55, tz), Vector3(u * 2.6, h * 1.1, u * 2.6), 0.0, 0.0, room)
+				_part(parts, "cone", "roof", shade, Vector3(tx, h * 1.1 + h * 0.2, tz), Vector3(u * 3.0, h * 0.4, u * 3.0), 0.0, 0.0, room)
+	KitParts.apron(parts, "ground", maxf(w, d) * 0.5 + u * 8.0)
+	return parts
+
+
+# The town's own palette and material cache: it is one of the town's houses.
+static func build_lodge(faction: String, rooms: Array, id: String) -> Node3D:
+	return KitParts.assemble(lodge_plan(faction, rooms, id), PROFILES[faction], "%s_town" % faction)

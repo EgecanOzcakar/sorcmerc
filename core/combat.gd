@@ -14,6 +14,7 @@ const WeaponSfx = preload("res://core/weapon_sfx.gd")
 const Rng = preload("res://core/rng.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Potions = preload("res://core/potions.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 
 const FT_PER_HEX := 6  # adapter.gd's convention
 
@@ -33,6 +34,13 @@ const MAX_ROUNDS := 60  # safety guard; a real fight ends in ~4-6
 var rng
 var combatants: Array = []
 var party = null   # core/party.gd when a real party fights: its stash is the potion shelf
+# What the party thinks of each other, felt in the fight (docs/spike-party-
+# opinions.md §6): bonded neighbours cover each other (effective_ac), rivals
+# get in each other's way (resolve_attack), a partner going down rallies the
+# ones close to them (_apply_damage). Every hook is inert without a `party`.
+# The first time a pair's closeness or grudge is felt this fight, the log says
+# so — a -1 nobody can see is nothing — and then not again: pair key -> said.
+var _said: Dictionary = {}
 # T19: does what happens in here count towards this machine's achievements?
 # False for the off-screen fights core/world_battle.gd resolves between two NPC
 # bands — both sides are strangers, and one of them is only called "party"
@@ -686,7 +694,30 @@ func effective_ac(c) -> int:
 	var ac: int = c.ac + _buff_sum(c, "ac")
 	if is_cover(c.pos):
 		ac += 2  # half cover
+	if party != null:
+		ac += PartyOpinion.shoulder_bonus(party, c, self)   # a bonded partner at their side
 	return ac
+
+# One of `party`'s own: not a wolf a member called, not a carter they are
+# walking home — those have ids too, and no relations to write.
+func _member(c) -> bool:
+	return party != null and c.team == "party" and c.sheet != null
+
+# The log line for a pair standing together — or in each other's way — the
+# first time it matters this fight. The hooks return a number, not a name, so
+# this walks the same neighbours they do.
+func _say_pair(c, close: bool, line: String) -> void:
+	if party == null or c.team != "party":
+		return
+	for ally in allies_of(c):
+		if Hex.distance(ally.pos, c.pos) > 1:
+			continue
+		if not (PartyOpinion.is_close(party, c.id, ally.id) if close else PartyOpinion.is_rival(party, c.id, ally.id)):
+			continue
+		var k: String = PartyOpinion.key(c.id, ally.id)
+		if not _said.has(k):
+			_said[k] = true
+			log.append(line % [c.cname, ally.cname])
 
 func hit_chance(attacker, target, opts := {}) -> float:
 	var mode = _attack_mode(attacker, target, opts)
@@ -1074,7 +1105,7 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 				n += extra
 			log.append("%s uses %s%s." % [actor.cname, v["label"],
 				(" (%d dice)" % n) if v.has("max_dice") and n > 1 else ""])
-			heal(who, Dice.roll(rng, "%dd%d+%d" % [n, int(v.get("dice_sides", 10)), int(v.get("dice_bonus", 0))]))
+			heal(who, Dice.roll(rng, "%dd%d+%d" % [n, int(v.get("dice_sides", 10)), int(v.get("dice_bonus", 0))]), actor)
 		"self_buff":
 			# `once` and the dice are a Smite's shape: Rage is a standing buff that
 			# adds a flat bonus to every swing until the fight ends, a Smite is
@@ -1226,7 +1257,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		for c in who:
 			if v.has("heal_count"):
 				heal(c, Dice.roll(rng, "%dd%d+%d" % [int(v["heal_count"]), int(v["heal_sides"]),
-					int(v.get("heal_bonus", 0))]))
+					int(v.get("heal_bonus", 0))]), caster)
 			if v.has("temp_count"):   # False Life, Heroism: a buffer, not a heal
 				grant_temp_hp(c, Dice.roll(rng, "%dd%d+%d" % [int(v["temp_count"]), int(v.get("temp_sides", 4)),
 					int(v.get("temp_bonus", 0))]))
@@ -1238,6 +1269,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	var notation := "%dd%d+%d" % [int(v.get("dice_count", 0)), int(v.get("dice_sides", 6)), int(v.get("dice_bonus", 0))]
 	var dc := int(v.get("save_dc", caster.save_dc))
 	var area := area_hexes(caster, v, target)
+	var allies_up: Array = allies_of(caster)   # before the blast: whoever it drops was still caught in it
 	if v.get("zone", false) and not area.is_empty():
 		log.append("%s casts %s — it settles over %d hexes." % [caster.cname, v["label"], area.size()])
 		_add_zone(caster, v, area)
@@ -1245,6 +1277,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		for c in combatants:
 			caught = _zone_touch(c) or caught
 		_destroy_in_area(area, caster)
+		_friendly_fire(caster, v, allies_up, area)
 		return {"area": area, "caught": caught}
 	if not area.is_empty() or v.get("targeting", "") in AREA_KINDS:
 		log.append("%s casts %s — DC %d save." % [caster.cname, v["label"], dc])
@@ -1257,6 +1290,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 			_spell_hit(c, v, notation, dc, caster)
 			hit_any = true
 		_destroy_in_area(area, caster)
+		_friendly_fire(caster, v, allies_up, area)
 		return {"area": area, "caught": hit_any}
 	log.append("%s casts %s on %s." % [caster.cname, v["label"], target.cname])
 	var out := _spell_hit(target, v, notation, dc, caster)
@@ -1264,6 +1298,18 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		log.append("  ...and on %s." % c.cname)
 		_spell_hit(c, v, notation, dc, caster)
 	return out
+
+# Your own side, standing in the area your spell just hit: each one caught
+# costs the caster with them (PartyOpinion.FRIENDLY_FIRE). Once per cast, not
+# per tick of a zone — the burn is the moment it lands. Spirit Guardians
+# spares its allies and a fog is not a burn, so neither counts.
+func _friendly_fire(caster, v: Dictionary, allies_up: Array, area: Array) -> void:
+	if not _member(caster) or v.get("spare_allies", false) or (v.get("zone", false) and v.has("buff")):
+		return
+	for c in allies_up:
+		if c.pos in area and _member(c):
+			log.append("%s catches %s in it." % [caster.cname, c.cname])
+			PartyOpinion.friendly_fire(party, caster.id, c.id)
 
 # An upcast single-target spell (`targets` > 1) also lands on the nearest
 # other legal targets within SPREAD_HEXES of the aimed one — the rules' "within
@@ -2212,6 +2258,21 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		return {"error": "out of range"}
 	if not free and not _take_attack(attacker):   # the Attack action buys its swings; OAs are free (§7)
 		return {"error": "no action left"}
+	# The party's own grudges and rallies ride the swing. Not on an opportunity
+	# attack, and not over a caller that already set the bonus (an off-hand
+	# swing carries its own to-hit).
+	var rallied := false
+	if party != null and attacker.team == "party" and not oa:
+		if not opts.has("atk_bonus"):
+			var pen: int = PartyOpinion.bicker_penalty(party, attacker, self)
+			if pen > 0:
+				opts = opts.duplicate()
+				opts["atk_bonus"] = attacker.atk_bonus - pen
+				_say_pair(attacker, false, "%s and %s get in each other's way.")
+		if attacker.has(PartyOpinion.RALLY_STATUS):
+			rallied = true
+			opts = opts.duplicate()
+			opts["advantage"] = true
 	var notation: String = opts.get("damage", attacker.damage)
 	var mode = _attack_mode(attacker, target, opts)
 	var r = Dice.d20(rng, mode)
@@ -2222,6 +2283,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		+ _buff_sum(attacker, "bonus_to_hit")
 	var total: int = nat + atk_bonus
 	var ac = effective_ac(target)
+	_say_pair(target, true, "%s and %s stand shoulder to shoulder.")
 	var crit: bool = nat >= attacker.crit_range
 	var hit: bool = crit or (nat != 1 and total >= ac)
 	# T94 — Parry: "adds N to its AC against one melee attack that would hit it".
@@ -2271,6 +2333,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	if not (attacker.statuses.get("invisible") is Dictionary and attacker.statuses["invisible"].get("sticky", false)):
 		attacker.statuses.erase("invisible")   # gone the moment you swing — unless it's Greater
 	attacker.statuses.erase("sapped")   # Sap is spent on the next roll, hit or miss
+	if rallied:
+		attacker.statuses.erase(PartyOpinion.RALLY_STATUS)   # the rally was this swing
 	var vx = attacker.statuses.get("vex")
 	if vx is Dictionary and vx.get("target") == target:
 		attacker.statuses.erase("vex")
@@ -2564,6 +2628,11 @@ func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
 			log.append("%s falls unconscious." % target.cname)
 			bark(target, "down")
 			_release_grapples()
+		if _member(target):
+			var rallied: Array = PartyOpinion.rally(party, target, self)
+			for ally in allies_of(target):
+				if ally.id in rallied:
+					log.append("%s rallies — %s is down." % [ally.cname, target.cname])
 
 # Temporary hit points never stack: the higher of the two stays (RAW).
 func grant_temp_hp(c, n: int) -> void:
@@ -2686,7 +2755,10 @@ func _death_save(c) -> void:
 	else:
 		log.append("%s death save: rolled %d  [%d ok / %d fail]" % [c.cname, r.nat, c.death_s, c.death_f])
 
-func heal(c, amount: int) -> void:
+# `by` is whoever did the healing, when somebody did (a regenerating troll
+# heals itself and passes nobody): getting a downed member back up is the
+# biggest thing that can happen between two people here (PartyOpinion.SAVED).
+func heal(c, amount: int, by = null) -> void:
 	if c.is_dead():
 		return
 	Sound.play_sfx("heal")   # T27
@@ -2704,6 +2776,9 @@ func heal(c, amount: int) -> void:
 			Ach.bump("allies_saved")
 	if revived:
 		_survived_down(c)
+	if revived and by != null and by != c and _member(by) and _member(c):
+		log.append("%s gets %s back on their feet." % [by.cname, c.cname])
+		PartyOpinion.saved(party, by.id, c.id)
 
 # T19: a hero who went to 0 HP and came back — stabilised, nat-20'd, or healed.
 func _survived_down(c) -> void:
@@ -2793,7 +2868,7 @@ func act_dodge(c) -> void:
 # Help: the named ally's next attack roll (before your next turn) has advantage.
 func act_help(helper, ally) -> void:
 	if ally.is_down():
-		heal(ally, 1)   # First Aid: stir a downed ally back to their feet on 1 HP
+		heal(ally, 1, helper)   # First Aid: stir a downed ally back to their feet on 1 HP
 		return
 	ally.statuses["helped"] = {"by": helper}   # cleared at the helper's next turn (_release_helps)
 	log.append("%s helps %s — advantage on their next attack." % [helper.cname, ally.cname])

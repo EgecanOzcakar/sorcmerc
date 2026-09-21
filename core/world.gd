@@ -109,6 +109,11 @@ class Settlement extends RefCounted:
 	var battle_at := -1.0
 	var stolen_at := -1.0        # the last theft attempt here; the stall is watched for a while after
 	var pending_opinion_delta := 0.0
+	# Raids: the lair whose raid stands on this town, "" when none. The market
+	# reads it (halved shelf), the board reads it (that lair's job pays more),
+	# the road reads it (refugees). Lifted when that lair is spent.
+	var raided_by := ""
+	var raided_at := -1.0
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String,
 			kind_v: String = "town", name_v: String = "") -> void:
@@ -146,6 +151,16 @@ class Lair extends RefCounted:
 	# the ground does not stay empty: core/world_lairs.gd's RESPAWN lets
 	# something move back into it, and this is the clock that runs.
 	var cleared_at := -1.0
+	# Raids (core/raids.gd): the clock a lair left alone runs against the
+	# nearest town. raid_at is what it counts from — world start, the last
+	# set-out, or the last raid turned — and is never < 0; raids counts the ones
+	# that LANDED (the second seeds a child); raid_band names the band out
+	# raiding right now; spawned_from names a child's parent, and a child never
+	# spawns one of its own.
+	var raid_at := 0.0
+	var raids := 0
+	var raid_band := ""
+	var spawned_from := ""
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String, name_v: String = "") -> void:
 		id = id_v

@@ -181,6 +181,48 @@ func _init() -> void:
 	check(Settlements3D.MODELS.size() == Kit.PROFILES.size(),
 		"...and the kit still answers for every faction they do")
 
+	# --- the lodge (core/lodge.gd): a house, and a part group per room -------
+	# Built in a fixed order whatever order the rooms were bought in, so the
+	# same lodge is the same lodge across saves; each room's parts carry its
+	# tag, so the map can be read back against the party's rooms.
+	var rooms: Array = ["strongroom", "yard", "garden", "shrine", "maproom"]
+	var shapes := {"strongroom": "box", "yard": "post", "garden": "disc", "shrine": "rock", "maproom": "cone"}
+	for faction in factions:
+		var prev: int = Kit.lodge_plan(faction, [], "riverhold").size()
+		check(prev > 0, "%s lodge: a house with no rooms is still a house" % faction)
+		var built: Array = []
+		for room in rooms:
+			built.append(room)
+			var parts: Array = Kit.lodge_plan(faction, built, "riverhold")
+			check(parts.size() > prev, "%s lodge grows with %s (%d -> %d)" % [faction, room, prev, parts.size()])
+			prev = parts.size()
+			check(parts.any(func(x): return String(x.get("tag", "")) == room and String(x["part"]) == shapes[room]),
+				"%s lodge: %s is a %s" % [faction, room, shapes[room]])
+		var lowest := 1e9
+		var reach := 0.0
+		for part in Kit.lodge_plan(faction, rooms, "riverhold"):
+			var pos: Vector3 = part["pos"]
+			var size: Vector3 = part["size"]
+			lowest = minf(lowest, pos.y - size.y * 0.5)
+			reach = maxf(reach, Vector2(pos.x, pos.z).length() + maxf(size.x, size.z) * 0.5)
+		check(lowest > -0.01, "%s lodge has nothing sunk below the ground (got %.2f)" % [faction, lowest])
+		check(reach < float(Kit.PLANS["town"]["radius"]), "%s lodge is smaller than a town (reach %.1f)" % [faction, reach])
+		check(_same(Kit.lodge_plan(faction, rooms, "riverhold"), Kit.lodge_plan(faction, rooms, "riverhold")),
+			"%s lodge is the same lodge twice" % faction)
+	check(Kit.lodge_plan("human", rooms, "riverhold").filter(func(x): return String(x.get("tag", "")) == "yard" and String(x["part"]) == "post").size() == 5,
+		"the yard is four posts and the training post")
+	check(Kit.lodge_plan("human", rooms, "riverhold").filter(func(x): return String(x.get("tag", "")) == "garden").size() == 3,
+		"the garden is three beds")
+	check(_same(Kit.lodge_plan("human", rooms, "riverhold"),
+		Kit.lodge_plan("human", ["maproom", "shrine", "garden", "yard", "strongroom"], "riverhold")),
+		"the rooms stand where they stand whatever order they were bought in")
+	check(not _same(Kit.lodge_plan("human", [], "riverhold"), Kit.lodge_plan("human", [], "ashfell")), "two lodges are two houses")
+	check(Kit.lodge_plan("gnoll", rooms, "x").is_empty(), "no lodge among a people the kit does not dress")
+	var lodge: Node3D = Kit.build_lodge("human", rooms, "riverhold")
+	check(lodge != null and lodge.get_child_count() == Kit.lodge_plan("human", rooms, "riverhold").size(),
+		"build_lodge(): one MeshInstance3D per planned part")
+	lodge.free()
+
 	print("test_settlement_kit: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

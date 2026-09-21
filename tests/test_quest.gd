@@ -36,6 +36,7 @@ func _init() -> void:
 	test_bias()
 	test_the_kinds_that_count_no_bodies()
 	test_rescue_and_failed_delivery()
+	test_the_ladder()
 	print("test_quest: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -241,3 +242,26 @@ func test_rescue_and_failed_delivery() -> void:
 	check(Quest.get_quest(p, "deliver:a:b").is_empty(), "...and it is gone from the log, so the board can post it again")
 	check(Quest.get_quest(p, "look-out-2")["state"] == "active", "the scouting job is untouched")
 	check(Quest.fail_deliveries(p) == [], "nothing to fail twice")
+
+# the ladder: Known passes a neighbour's job at neutral opinion; turn-in is a deed
+func test_the_ladder() -> void:
+	var Ladder = load("res://core/ladder.gd")
+	Ladder.reset()
+	var pk := _party()
+	var own: Dictionary = Quest.offer_for(pk, "wayside-camp", 0.0)
+	check(not own.is_empty(), "the giver's own job first")
+	Quest.accept(pk, own)
+	# wayside-camp has two curated jobs of its own — take both before it goes quiet
+	var next := Quest.offer_for(pk, "wayside-camp", 0.0)
+	while not next.is_empty():
+		Quest.accept(pk, next)
+		next = Quest.offer_for(pk, "wayside-camp", 0.0)
+	check(Quest.offer_for(pk, "wayside-camp", 0.0).is_empty(), "own jobs taken, neutral, stranger: nothing more")
+	var neighbour := Quest.offer_for(pk, "wayside-camp", 0.0, Ladder.KNOWN)
+	check(neighbour.get("id", "") == "kritch-bounty", "...but Known gets a neighbour's")
+	var before: int = Ladder.deeds("human")
+	own["progress"] = own["required"]
+	Quest.turn_in(pk, own, "human")
+	check(Ladder.deeds("human") == before + 1, "a job turned in is a deed for the taker's people")
+	Quest.turn_in(pk, own, "human")
+	check(Ladder.deeds("human") == before + 1, "...once")

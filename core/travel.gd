@@ -47,6 +47,7 @@ extends RefCounted
 const Campaign = preload("res://core/campaign.gd")
 const Dice = preload("res://core/dice.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 const Regions = preload("res://core/regions.gd")
 const RNG = preload("res://core/rng.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
@@ -213,6 +214,15 @@ const EVENTS := [
 		"title": "A wheel in the ditch",
 		"pass": "%s calms the team and lifts the cart clear. The carter pays what he has, and looks hard at the faces.",
 		"fail": "The axle is sheared clean through. There is nothing to be done for him but wish him well."},
+	# Raids (core/raids.gd): the people a raided town lost, on the road. Their
+	# pass is the one thing the clock gives back — the lair the raiders came
+	# from goes on the map. Gated (needs "raided") on there being a lair left
+	# to find, so the card never promises what the map cannot show.
+	{"id": "refugees", "role": "", "skills": ["persuasion", "insight", "medicine"], "dc": 12, "kind": "good",
+		"bands": ["heartland", "marches"], "needs": "raided",
+		"title": "Families on the road with what they could carry.",
+		"pass": "%s gets the story out of them, and the way back to where it came from.",
+		"fail": "They have nothing left to give but the road, and they give that."},
 ]
 
 # What a failed "rough-going" costs, and what "good-ground" gives back — both in
@@ -300,14 +310,24 @@ static func check(party, world, rng = null) -> Dictionary:
 	var who := _assign(party, e, orders(party))
 	if who.is_empty():
 		return {}                      # nobody left to roll: no event rather than a fake one
-	var bonus: int = int(who["bonus"]) + pace_bonus(party)
+	# spike-party-opinions §7: a party that pulls together reads the road a
+	# point better; one at odds, a point worse. Same term as pace_bonus, so
+	# the card's roll line just grows another signed number.
+	var morale: int = PartyOpinion.travel_bonus(party)
+	var bonus: int = int(who["bonus"]) + pace_bonus(party) + morale
 	var nat: int = int(Dice.d20(rng)["nat"])
 	var ok: bool = nat + bonus >= int(e["dc"])
 	out.merge({"ok": ok, "char_id": who["id"], "cname": who["cname"], "skill": who["skill"],
 		"nat": nat, "bonus": bonus, "dc": int(e["dc"]),
 		"named": bool(who["named"])}, true)
+	if morale != 0:
+		out["morale"] = morale
 	out["text"] = (String(e["pass"]) % who["cname"]) if ok else String(e["fail"])
 	_apply(e, ok, party, world, rng, out)
+	# The roll feeds back: the roller who read the road right (or wrong) is
+	# felt for it by everyone else marching. Only here — nobody rolled on the
+	# spell-pass or no-check exits above.
+	PartyOpinion.road_result(party, String(who["id"]), ok, String(e["kind"]))
 	_note_event(String(e["id"]))
 	return out
 
@@ -358,6 +378,7 @@ static func _needs_met(need: String, party, world) -> bool:
 		"": return true
 		"hurt": return _wounded(party) > 0
 		"settlement": return not world.settlements.is_empty()
+		"raided": return _raiders_lair(world) != null
 	return false
 
 
@@ -427,6 +448,14 @@ static func _apply(e: Dictionary, ok: bool, party, world, rng, out: Dictionary) 
 					# Nothing left to find: say so rather than implying a discovery
 					# the map cannot show.
 					out["text"] = "%s  Nothing they do not already know about." % out["text"]
+		"refugees":
+			if ok:
+				var from = _raiders_lair(world)
+				if from != null:
+					from.discovered = true
+					out["lair"] = from.sname
+					out["text"] = "%s  %s is where they came from — it is on the map now." % [
+						out["text"], from.sname]
 		"wayfarer", "cache":
 			if ok:
 				var gold: int = COIN_MIN + rng.roll_die(COIN_MAX - COIN_MIN + 1) - 1
@@ -579,3 +608,16 @@ static func _reveal_nearest_lair(party, world):
 	if best != null:
 		best.discovered = true
 	return best
+
+
+# The lair behind a raid that stands on some town, while it is still hidden —
+# what the refugees can tell the party. null when every raider is known, or
+# nothing is raided.
+static func _raiders_lair(world):
+	for s in world.settlements:
+		if s.raided_by == "":
+			continue
+		for l in world.lairs:
+			if l.id == s.raided_by and not l.discovered and not l.looted:
+				return l
+	return null

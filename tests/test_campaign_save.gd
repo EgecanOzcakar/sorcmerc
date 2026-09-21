@@ -5,6 +5,7 @@ extends SceneTree
 const Campaign = preload("res://core/campaign.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
 const Party = preload("res://core/party.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 const Quest = preload("res://core/quest.gd")
 
 var _pass := 0
@@ -92,6 +93,39 @@ func _init() -> void:
 		"deaths": [], "kills": []})
 	resumed.leave()
 	check(resumed.stage == c2.stage + 1 and resumed.state == "picking", "and carries on down the road")
+
+	# Task 1: relations ride the campaign save the same way the roster does.
+	var cr := _campaign()
+	PartyOpinion.set_score(cr.party, "vera", "pike", 33.0)
+	var rd: Dictionary = CampaignSave.to_dict(cr)
+	check(float(rd["party"].get("relations", {}).get(PartyOpinion.key("vera", "pike"), {}).get("score", 0.0)) == 33.0,
+		"a relation rides the campaign save's party dict")
+	var cr_back = CampaignSave.from_dict(rd)
+	check(PartyOpinion.score(cr_back.party, "vera", "pike") == 33.0, "...and reads back through the model")
+	rd["party"].erase("relations")
+	var cr_old = CampaignSave.from_dict(rd)
+	check(cr_old.party.relations.is_empty(), "an old campaign save with no relations loads with none")
+
+	# Task 4: callings ride beside them.
+	cr.party.callings["vera"] = {"id": "acolyte", "target_kind": "landmark", "target_id": "shrine-1", "state": "told", "told_at": 42.0}
+	rd = CampaignSave.to_dict(cr)
+	check(rd["party"].get("callings", {}).get("vera", {}).get("state", "") == "told", "a calling rides the campaign save's party dict")
+	check(CampaignSave.from_dict(rd).party.callings.get("vera", {}).get("target_id", "") == "shrine-1", "...and reads back")
+	check(cr_old.party.callings.is_empty(), "an old campaign save with no callings loads with none")
+
+	# Downtime rides there too.
+	cr.party.downtime = {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}
+	rd = CampaignSave.to_dict(cr)
+	check(rd["party"].get("downtime", {}).get("trained", []) == ["vera"], "downtime rides the campaign save's party dict")
+	check(CampaignSave.from_dict(rd).party.downtime.get("trained", []) == ["vera"], "...and reads back")
+	check(cr_old.party.downtime.is_empty(), "an old campaign save with no downtime loads with none")
+
+	# The lodge rides there too.
+	cr.party.lodge = {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, "garden_at": -1.0, "maproom_at": -1.0, "retrained": {}, "blessed_at": -1.0}
+	rd = CampaignSave.to_dict(cr)
+	check(rd["party"].get("lodge", {}).get("gold", 0) == 250, "the lodge rides the campaign save's party dict")
+	check(CampaignSave.from_dict(rd).party.lodge.get("rooms", []) == ["strongroom"], "...and reads back")
+	check(cr_old.party.lodge.is_empty(), "an old campaign save with no lodge loads with none")
 
 	# The screen's own Continue-vs-New-Game choice is driven by tests/drive_campaign.gd
 	# ("Begin a new run") — instantiating campaign.tscn from a -s script hangs headless.

@@ -168,6 +168,8 @@ static func respawn(world, now: float) -> Array:
 		l.depth_cleared = 0       # a fresh interior, not the one they fought through
 		l.entered_at = -1.0       # ...guarded by something that has not met them
 		l.resolved_as = ""
+		l.raid_at = now           # raids: something new moved in, with its own patience
+		l.raids = 0
 		back.append(l)
 	return back
 
