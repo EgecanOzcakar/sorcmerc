@@ -4029,6 +4029,15 @@ func _build_lodge_page(box: VBoxContainer, s) -> void:
 	mood.text = "The company's house at %s.  %d ◉ in the purse." % [s.sname, party.gold]
 	mood.theme_type_variation = "Dim"
 	box.add_child(mood)
+	var house := Icons.scene_art("event-lodge-house", null)
+	if house != null:
+		var pic := TextureRect.new()
+		pic.texture = house
+		pic.custom_minimum_size = Vector2(440, 160)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.clip_contents = true
+		box.add_child(pic)
 	var wait: float = Visit.long_rest_in(party, world)
 	var rest_btn := Button.new()
 	rest_btn.text = "Rest at the lodge (free)"
@@ -4046,7 +4055,7 @@ func _build_lodge_page(box: VBoxContainer, s) -> void:
 		var cap := title[0].to_upper() + title.substr(1)
 		if not Lodge.has(party, room):
 			_trade_row(rows, "Build %s (%d ◉)" % [title, int(Lodge.ROOMS[room]["cost"])], "Build",
-				_build_room.bind(room), not Lodge.can_build(party, room))
+				_build_room.bind(room), not Lodge.can_build(party, room), Icons.scene_art("event-lodge-" + room, null))
 			continue
 		match room:
 			"strongroom":
