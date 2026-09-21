@@ -82,6 +82,7 @@ const Objectives = preload("res://core/objectives.gd")
 const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const Ladder = preload("res://core/ladder.gd")
+const Callings = preload("res://core/callings.gd")
 const Posting = preload("res://core/quest_posting.gd")
 const Loot = preload("res://core/loot.gd")
 const RNG = preload("res://core/rng.gd")
@@ -276,6 +277,7 @@ var _region_msg: Label               # the last crossing, same "persists" contra
 
 var _ladder_title_seen := 0          # the last renown title _check_ladder() said; set on load
 var _rungs_seen: Dictionary = {}     # faction -> the last rung _check_ladder() said; set on load
+var _calling_queue: Array = []        # [char_id, who] pairs done on the road while a screen was up; _check_callings() shows them
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
 var _camp_msg: Label                 # T9x: last short-rest/camp outcome, same "persists" contract as _lair_msg
@@ -497,6 +499,7 @@ func _process(delta: float) -> void:
 	_check_expired_lairs()
 	_check_raids()
 	_check_ladder()
+	_check_callings()
 	_check_forage()
 	_check_travel()
 	_check_region()
@@ -1156,6 +1159,21 @@ func _build_quest_panel() -> void:
 			", %s at %d" % [String(Ladder.RUNGS[r + 1]), int(Ladder.RUNG_AT[r + 1])] if r + 1 < Ladder.RUNGS.size() else ""]
 		l.theme_type_variation = "Dim"
 		rows.add_child(l)
+	# Callings (core/callings.gd): each active hero's, once told — the same
+	# line the party page carries, so the log is the one place both are read.
+	var callings: Array = []
+	for id in party.active:
+		var line: String = Callings.describe(party, String(id))
+		if line != "":
+			callings.append("%s — %s" % [party.get_member(id).cname, line])
+	if not callings.is_empty():
+		_section(rows, "Callings")
+		for line in callings:
+			var l := Label.new()
+			l.text = String(line)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.theme_type_variation = "Dim"
+			rows.add_child(l)
 
 	var close := Button.new()
 	close.text = "Close"
@@ -1573,6 +1591,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 			# synthetic ids never match a live hunt_party quest's target), correct
 			# for an actual hostile roaming party from _check_encounter.
 			Quest.record_party_defeated(party, foe.id)
+			_calling_check("band_beaten", foe.id, _leader())   # shown after the spoils page
 			if raid_target != null:
 				# A raid turned before it landed: TURNED_FOR (two bands' worth) on
 				# top of the FOUGHT_FOR every monster band already earns at that
@@ -2114,6 +2133,52 @@ func _check_ladder() -> void:
 	for line in lines:
 		_lair_msg.text = (_lair_msg.text + "  " + String(line)).strip_edges()
 
+# --- callings: the past each hero's background hands them (core/callings.gd) ---
+#
+# Dealt here every frame rather than at creation, recruit and load: assign()
+# is one loop over the active four that returns early for anyone already
+# holding one, and a map with no target for a hero yet (no shrine, no band)
+# tries again the frame one appears. Told at the fire (_fireside), done on the
+# road (_calling_check at the landmark, the lair, the fight, the gate, the
+# hall), and paid on a card of its own — shown the frame the map is clear,
+# since the doing always happens under something (an outcome card, the
+# spoils page, a visit) that a second card must not come down over.
+func _check_callings() -> void:
+	Callings.assign(party, world)
+	if _calling_queue.is_empty() or _combat != null or not _visit.is_empty() or _overlay_up():
+		return
+	var q: Array = _calling_queue.pop_front()
+	# Over a map that was standing still — #98's halt after the spoils page,
+	# or the player's own pause — the ack leaves it standing, not running on.
+	var still: bool = world.clock.is_paused()
+	_calling_done(String(q[0]), String(q[1]), func(): _on_event_ack(); if still: _halt())
+
+# The screen saying what just happened, in callings.gd's one shape; `who` is
+# the member who did it — the row's roller, the fight's leader, the visit's —
+# and is the bond the resolution pays. Queued, never shown here: see above.
+func _calling_check(kind: String, id: String, who: String) -> void:
+	for char_id in Callings.check(party, world, {"kind": kind, "id": id}):
+		_calling_queue.append([String(char_id), who])
+
+# The party's leader: the first of the march, or nobody.
+func _leader() -> String:
+	return String(party.active[0]) if not party.active.is_empty() else ""
+
+# The rewards applied (core/callings.gd's complete: the XP split, the heirloom
+# into the stash, the bond), then said — the done line, the chips. False when
+# there was nothing left to pay (queued twice before the map cleared).
+func _calling_done(char_id: String, who: String, then: Callable) -> bool:
+	var r: Dictionary = Callings.complete(party, world, char_id, who)
+	if r.is_empty():
+		return false
+	var t: Dictionary = Callings.templates()[party.callings[char_id]["id"]]
+	Sound.play_sfx("quest_complete")
+	_autosave()
+	_card({"id": "calling-" + String(party.callings[char_id]["id"]), "title": String(t["title"]),
+		"kind": "good", "ok": true, "text": String(r["text"]), "xp": int(r["xp"]),
+		"item": String(r["item"]), "item_name": String(r["item_name"]), "thanks": ""}, then)
+	return true
+
 # --- landmarks: places on the map that are not a fight -----------------------
 # The lair button's shape again: one button, two states. A found place offers a
 # visit; a hidden one in range offers the same Survival search a lair does.
@@ -2177,6 +2242,7 @@ func _on_place_chosen(id: String) -> void:
 		world.clock.resume()
 		_pause_btn.text = "Pause"
 		return
+	_calling_check("landmark_answered", l.id, String(e.get("char_id", "")))   # shown after this card
 	_autosave()
 	_event_card = EventCard.new()
 	add_child(_event_card)
@@ -2220,6 +2286,7 @@ func _lair_sneak_action() -> void:
 		var loot: Dictionary = WorldLairs.loot(l, world.clock.elapsed)
 		party.add_gold(int(loot.get("gold", 0)))
 		Quest.record_lair_cleared(party, l.id)
+		_calling_check("lair_cleared", l.id, _leader())
 		_lair_msg.text = "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))]
 	else:
 		_lair_msg.text = String(roll["text"])
@@ -2354,6 +2421,7 @@ func _on_site_done() -> void:
 	var cleared: bool = ending == "cleared"
 	if cleared:
 		Quest.record_lair_cleared(party, l.id)
+		_calling_check("lair_cleared", l.id, _leader())   # shown after the spoils page
 		# Reaching the bottom is worth something of its own. Every room on the
 		# way down already paid its own XP; this is the part that was missing,
 		# and it is why a delve is now worth more than the same fights strung
@@ -2618,6 +2686,7 @@ func _open_visit(s) -> void:
 	# D7: walking in this gate IS a courier job's delivery. Before the panel is
 	# built, so the crate is already handed over on the screen that opens.
 	Quest.record_settlement_visited(party, s.id)
+	_calling_check("visited", s.id, _leader())   # shown when the visit closes
 	_visit = Visit.visit(s, world)
 	_visit_page = "hub"
 	_market_tab = MARKET_TAB_ALL
@@ -3103,12 +3172,19 @@ func _make_camp() -> void:
 # (assets/generated/camp-<night|watch|jumped>.png), and — for an ambush —
 # the fight waits behind the button rather than under the label.
 func _camp_card(id: String, title: String, kind: String, text: String, then: Callable) -> void:
+	_card({"id": "camp-" + id, "title": title, "kind": kind, "text": text}, then)
+
+# The road's card over a paused map, `then` its ack. The camp's night wears
+# it, and so do a calling's telling and resolution — those pictured by the
+# background (assets/generated/event-calling-<background>.png) rather than
+# by the night, since a calling is the hero's, not the camp's.
+func _card(e: Dictionary, then: Callable) -> void:
 	world.clock.pause()
 	_pause_btn.text = "Resume"
 	_event_card = EventCard.new()
 	add_child(_event_card)
 	_event_card.acknowledged.connect(then)
-	_event_card.show_event({"id": "camp-" + id, "title": title, "kind": kind, "text": text})
+	_event_card.show_event(e)
 
 # spike-party-opinions §9 row 6: the fire after a long rest. One beat, half the
 # nights (core/party_opinion.gd's camp_moment): a warming or a quarrel, already
@@ -3119,7 +3195,20 @@ func _camp_card(id: String, title: String, kind: String, text: String, then: Cal
 # `then` is the outcome card's ack: the camp's resumes the clock, the inn's
 # leaves it to the visit.
 func _fireside(rng: RNG, then: Callable) -> bool:
-	# The calling beats go here, ahead of the moment.
+	# A calling outranks a warming: the telling first, once per hero, ever —
+	# beat() marks the target as it speaks, and the map's layers re-read
+	# found/discovered every frame, so the mark is on the map under the card.
+	# Then a resolution the road could not show (the inn's: done at this very
+	# gate, and the visit is still up), then the moment. One card a night.
+	var b: Dictionary = Callings.beat(party, world)
+	if not b.is_empty():
+		_card({"id": "calling-" + String(b["id"]), "title": String(b["title"]), "kind": "good", "ok": true,
+			"text": String(b["text"])}, then)
+		return true
+	while not _calling_queue.is_empty():
+		var q: Array = _calling_queue.pop_front()
+		if _calling_done(String(q[0]), String(q[1]), then):
+			return true
 	var m: Dictionary = PartyOpinion.camp_moment(party, rng)
 	if m.is_empty():
 		return false
@@ -3413,6 +3502,7 @@ func _audience_action() -> void:
 	Campaign.new(party)._split_xp(AUDIENCE_XP)
 	Ladder.hold_audience(s.faction)
 	Ach.collect("audiences", s.faction)
+	_calling_check("audience", s.faction, _leader())   # shown after the audience's own card
 	var e := {"id": "audience-%s" % s.faction, "title": "An audience with the lord", "kind": "good", "ok": true,
 		"text": "The hall is cleared for you. The lord speaks of what the company has done for %s's people, and of what a lord owes such a company." % String(s.faction).capitalize(),
 		"xp": AUDIENCE_XP, "thanks": s.sname}

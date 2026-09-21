@@ -28,6 +28,7 @@ const Coop = preload("res://core/coop.gd")
 # What the party thinks of each other — one describe() line per active pair,
 # under the standing orders. The model is core/party_opinion.gd's; this draws it.
 const PartyOpinion = preload("res://core/party_opinion.gd")
+const Callings = preload("res://core/callings.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_EDGE := Icons.COL_EDGE
@@ -300,6 +301,24 @@ func _build_orders() -> void:
 # and the block is not drawn at all.
 func _build_relations() -> void:
 	_clear(_relations_row)
+	# Callings above it (core/callings.gd): one line per active hero whose
+	# calling has been told — "Ilsa Vane — The defiled shrine — told, marked on
+	# the map". Nothing while untold, so a fresh party sees no caption.
+	var lines: Array = []
+	for id in party.active:
+		var line: String = Callings.describe(party, String(id))
+		if line != "":
+			lines.append("%s — %s" % [party.get_member(id).cname, line])
+	if not lines.is_empty():
+		var ccap := Label.new()
+		ccap.text = "Callings"
+		ccap.theme_type_variation = "Caption"
+		_relations_row.add_child(ccap)
+		for line in lines:
+			var l := Label.new()
+			l.text = String(line)
+			l.theme_type_variation = "Dim"
+			_relations_row.add_child(l)
 	var ps: Array = PartyOpinion.active_pairs(party)
 	if ps.is_empty():
 		return
