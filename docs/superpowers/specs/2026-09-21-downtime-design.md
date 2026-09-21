@@ -100,6 +100,7 @@ in turn, fought as an ordinary encounter (`encounter_spec` with a one-foe
 roster and the champion's name; theme `city-square`; no objective). A bout
 is an evening. Win → what a fight pays (XP, the kill's gold, loot), plus
 `PIT_PURSE[bout]` (60 / 120 / 240) and a deed (`Ladder.deed(s.faction)`);
+a won bout also counts its kill toward a kill job, like any fight;
 the third win → `Ach.unlock("pit_champion")`. Lose → the party is carried out
 (everyone revived, gold lighter by the purse of that bout — the house keeps
 its stake) and the bracket closes for the week. Once per bracket:
@@ -170,7 +171,7 @@ the purse never goes negative through downtime.
 |---|---|
 | `core/downtime.gd` | new |
 | `core/party.gd`, saves | `downtime` |
-| `core/settlement_visit.gd` | nothing (rows call `Downtime`) |
+| `core/settlement_visit.gd` | sell_price caps the markup at list — a thin shelf is dear to buy from, it does not pay a premium for your goods |
 | `core/rumors.gd` | `dud` offer for the bad lead |
 | `scenes/world/world.gd` | the inn page's Downtime section; counter rows; the pit fight launch (a one-foe spec, a named champion) |
 | `core/enemy_names.gd` | reuse |

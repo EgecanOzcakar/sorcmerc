@@ -6554,9 +6554,10 @@ bracket of three named champions seeded per city per week (`EnemyNames`),
 each the city roster's strongest humanoid alone at `PIT_MULT` 1.3/1.7/2.2,
 fought one at a time as an ordinary encounter in `city-square` with no
 objective; a win banks what a fight banks (XP, the kill's gold, loot) and
-pays 60/120/240 ◉ and a deed on top, the third unlocks *Champion of the
-Pit*; a loss carries the party out (everyone revived) for that bout's purse
-and closes the bracket until the next week. The week is read before the
+pays 60/120/240 ◉ and a deed on top, a won bout also counts its kill toward
+a kill job, like any fight, the third unlocks *Champion of the Pit*; a loss
+carries the party out (everyone revived) for that bout's purse and closes
+the bracket until the next week. The week is read before the
 bout, so a fight that runs past midnight on the week's last evening is
 still that week's.
 

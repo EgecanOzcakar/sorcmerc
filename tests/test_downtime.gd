@@ -293,7 +293,7 @@ func _stay_pair(w, s, party) -> Array:
 	for t in range(1, 5000):
 		var nats: Array = []
 		for night in 2:
-			var r = RNG.new(maxi(1, absi(hash("carouse|%s|%d|%d" % [s.id, t, t + int(night * Downtime.DAY)]))))
+			var r = RNG.new(maxi(1, absi(hash("carouse|%s|%d|%d" % [s.id, t, t + (night + 1) * int(Downtime.DAY)]))))
 			nats.append(int(Dice.d20(r)["nat"]))
 		if nats[0] != nats[1]:
 			return [t, t]
