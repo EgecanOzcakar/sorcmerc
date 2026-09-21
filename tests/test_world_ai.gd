@@ -47,6 +47,7 @@ func _init() -> void:
 	WorldAI.truce(rb, pl, wr.clock.elapsed)
 	WorldAI.update(wr)
 	check(rb.goal != pl.position, "a truced raid band does not chase")
+	test_a_beaten_band_comes_back()
 	print("test_world_ai: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -190,3 +191,38 @@ func test_truce_breaks_off_the_hunt() -> void:
 	w.clock.elapsed += WorldAI.TRUCE_MINUTES
 	WorldAI.update(w)
 	check(hunter.goal == prey.position, "...and the hunt resumes")
+
+# #142: a beaten monster band is back two days later, hunting, out of the
+# nearest live lair of its kind — with the same id and troops, through a save.
+func test_a_beaten_band_comes_back() -> void:
+	var w := World.new()
+	w.add_settlement(World.Settlement.new("t", Vector2.ZERO, "human", "town"))
+	w.add_lair(World.Lair.new("far-warren", Vector2(900, 0), "goblinoid"))
+	var near := w.add_lair(World.Lair.new("near-warren", Vector2(500, 0), "goblinoid"))
+	var spent := w.add_lair(World.Lair.new("spent-warren", Vector2(450, 0), "goblinoid"))
+	spent.looted = true
+	var g := w.add_party(World.RoamingParty.new("goblins-south", Vector2(400, 0), "goblinoid"))
+	g.troops.append({"role": "heavy", "level": 2})
+	var pat := w.add_party(World.RoamingParty.new("patrol", Vector2(0, 0), "human"))
+	var raiders := w.add_party(World.RoamingParty.new("w-raiders", Vector2(0, 0), "goblinoid"))
+	WorldAI.raid(raiders, Vector2.ZERO, "t", "w")
+	for b in [g, pat, raiders]:
+		WorldAI.fell(w, b)
+		w.parties.erase(b)
+	check(w.fallen.size() == 1 and w.fallen[0]["id"] == "goblins-south",
+		"only the monster band is kept — not a patrol, not a lair's raiders")
+	# ...and it survives the save, since that is where the bug was reported
+	var WorldSave = load("res://core/world_save.gd")
+	var d: Dictionary = WorldSave.to_dict(w, load("res://core/party.gd").new())
+	var w2 = WorldSave.from_dict(d)["world"]
+	check(w2.fallen.size() == 1 and w2.fallen[0]["position"] is Vector2, "the note rides the save")
+	check(WorldAI.respawn(w2, WorldAI.BAND_RESPAWN - 1.0).is_empty(), "not yet")
+	var lines: Array = WorldAI.respawn(w2, WorldAI.BAND_RESPAWN)
+	check(lines.size() == 1 and w2.fallen.is_empty(), "two days on, it is back: %s" % str(lines))
+	var back = null
+	for p in w2.parties:
+		if p.id == "goblins-south":
+			back = p
+	check(back != null and back.position == near.position, "out of the nearest LIVE lair of its faction")
+	check(back != null and back.ai.get("behavior") == "hunt" and back.troops.size() == 1, "hunting, with its troops")
+	check(back != null and back.position != Vector2(450, 0), "not the spent one, though it is nearer")

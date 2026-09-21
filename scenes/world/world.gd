@@ -1594,6 +1594,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 			WorldAI.truce(foe, world.player(), world.clock.elapsed)
 			_quest_news.append("Their leader got away — the job is still open.")
 		else:
+			WorldAI.fell(world, foe)      # #142: it comes back in two days
 			world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
 			# T91: a no-op for the settlement-guard/lair-raid stand-ins below (their
 			# synthetic ids never match a live hunt_party quest's target), correct
@@ -2099,6 +2100,13 @@ func _check_expired_lairs() -> void:
 	# landmark going red again with no explanation reads as a bug.
 	for l in WorldLairs.respawn(world, world.clock.elapsed):
 		_lair_msg.text = WorldLairs.respawn_text(l)
+		_autosave()
+	# #142: and the bands the party put down, two days on, out of those lairs.
+	var back: Array = WorldAI.respawn(world, world.clock.elapsed)
+	for line in back:
+		_lair_msg.text = String(line)
+	if not back.is_empty():
+		_party3d.reset(world)   # a figure is only built on reset (party3d.gd)
 		_autosave()
 
 # Raids (core/raids.gd): the clock every lair in the settled country runs

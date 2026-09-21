@@ -70,6 +70,7 @@ static func resolve(world, a, b, spec_for: Callable) -> Dictionary:
 	var outcome := cb.outcome()
 	var a_wins := outcome == "Victory" if outcome != "ongoing" else _ahead(cb)
 	var loser = b if a_wins else a
+	WorldAI.fell(world, loser)   # #142: a monster band comes back
 	world.parties.erase(loser)
 	return {"winner": a if a_wins else b, "loser": loser, "outcome": outcome}
 

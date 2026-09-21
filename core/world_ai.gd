@@ -27,6 +27,7 @@ const Scaler = preload("res://core/scaler.gd")
 const RNG = preload("res://core/rng.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const WorldPath = preload("res://core/world_path.gd")
+const World = preload("res://core/world.gd")   # respawn() builds a RoamingParty; world.gd never preloads this file
 
 # How close to a waypoint counts as having walked it: slack for a band that
 # slid along a bank on its way there, not an arrival radius. Arrival at the
@@ -75,6 +76,59 @@ static func is_hostile(party, other) -> bool:
 	if not is_monster(party.faction):
 		return other_is_player and FactionOpinion.is_hostile_to_player(party.faction)
 	return other_is_player or not is_monster(other.faction)
+
+# --- #142: a band put down comes back ----------------------------------------
+#
+# A monster band the player (or another band) beat used to be erased and that
+# was that: five bands, five fights, and an empty map for the rest of the run.
+# fell() keeps a note of it on the world instead, and respawn() — polled once a
+# frame like WorldLairs.respawn — puts it back after BAND_RESPAWN, hunting
+# again, at its home: the nearest live lair of its faction, else the nearest
+# hold of its faction (orcs), else where it fell. Same id, same troops; what
+# the world keeps is that this band exists, not that it has met you.
+#
+# Raiders (ai.behavior == "raid") are NOT kept: their lair sends the next lot
+# on its own clock (core/raids.gd). Civilized patrols are not kept either —
+# that is the town's loss, not a spawn.
+const BAND_RESPAWN := 2880.0   # two in-game days; a lair takes one (WorldLairs.RESPAWN)
+
+static func fell(world, band) -> void:
+	if band.is_player or not is_monster(band.faction) \
+			or String(band.ai.get("behavior", "")) == "raid":
+		return
+	world.fallen.append({"id": band.id, "faction": band.faction, "position": band.position,
+		"troops": band.troops.duplicate(true), "at": world.clock.elapsed})
+
+static func respawn(world, now: float) -> Array:
+	var lines: Array = []
+	for f in world.fallen.duplicate():
+		if now - float(f["at"]) < BAND_RESPAWN:
+			continue
+		world.fallen.erase(f)
+		var home = _home_of(world, String(f["faction"]), f["position"])
+		var at: Vector2 = f["position"] if home == null else home.position
+		var b = world.add_party(World.RoamingParty.new(String(f["id"]), at, String(f["faction"])))
+		for t in f["troops"]:
+			b.troops.append(t)
+		hunt(b)
+		lines.append("The %s band is on the roads again%s." % [b.id.capitalize(),   # quest.gd names it the same way
+			"" if home == null else ", out of " + home.sname])
+	return lines
+
+# Nearest live lair of the faction, else its nearest settlement, else null.
+static func _home_of(world, faction: String, near: Vector2):
+	var best = null
+	for l in world.lairs:
+		if l.faction == faction and not l.looted \
+				and (best == null or l.position.distance_to(near) < best.position.distance_to(near)):
+			best = l
+	if best != null:
+		return best
+	for s in world.settlements:
+		if s.faction == faction \
+				and (best == null or s.position.distance_to(near) < best.position.distance_to(near)):
+			best = s
+	return best
 
 # --- behavior assignment ---------------------------------------------
 
