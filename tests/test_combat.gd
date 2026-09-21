@@ -14,6 +14,8 @@ const Character = preload("res://core/character.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Presets = preload("res://core/presets.gd")
 const Effects = preload("res://core/rules/effects.gd")
+const Party = preload("res://core/party.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 
 var _pass = 0
 var _fail = 0
@@ -58,6 +60,7 @@ func _init() -> void:
 	test_reaction_and_concentration()
 	test_barks()
 	test_surrender()
+	test_party_opinions_in_the_fight()
 
 	print("test_combat: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -889,3 +892,125 @@ func test_heal_self() -> void:
 	cb.begin_turn_for(ilsa)
 	cb.perform(ilsa, cw, ilsa)
 	check(ilsa.hp > 1, "...and it heals them")
+
+
+# What the party thinks of each other, felt in the fight (docs/spike-party-
+# opinions.md §6): bonded neighbours cover each other, rivals get in each
+# other's way, a partner going down rallies the ones close to them — and the
+# fight writes back: a save, a friendly-fire burn, a won fight stood through.
+# The numbers themselves are core/party_opinion.gd's and tested there; this
+# is the wiring, so every check reads through Combat's own methods.
+func _party_of(cb: Combat) -> Party:
+	var p := Party.new()
+	for ch in Presets.party():
+		p.add_member(ch)
+	cb.party = p
+	return p
+
+func test_party_opinions_in_the_fight() -> void:
+	# Shoulder to shoulder: +1 AC while a bonded partner stands adjacent.
+	var cb = _sandbox()
+	var vera = _find(cb, "vera"); var ilsa = _find(cb, "ilsa"); var pike = _find(cb, "pike")
+	var grull = _find(cb, "grull")
+	for o in cb.combatants:
+		o.pos = Vector2i(0, 0)   # out of the picture
+	vera.pos = Vector2i(4, 1); ilsa.pos = Vector2i(4, 2); grull.pos = Vector2i(4, 0)
+	var base: int = cb.effective_ac(vera)
+	var p := _party_of(cb)
+	check(cb.effective_ac(vera) == base, "a neutral pair adds nothing")
+	PartyOpinion.set_score(p, "vera", "ilsa", PartyOpinion.BONDED + 10.0)
+	check(cb.effective_ac(vera) == base + PartyOpinion.SHOULDER_AC, "bonded and adjacent: +1 AC")
+	ilsa.pos = Vector2i(4, 3)
+	check(cb.effective_ac(vera) == base, "...two hexes apart, nothing")
+	ilsa.pos = Vector2i(4, 2)
+
+	# In each other's way: rivals adjacent swing at -1, said once a fight, and
+	# never on an opportunity attack.
+	PartyOpinion.set_score(p, "vera", "ilsa", PartyOpinion.RIVALS - 10.0)
+	var r: Dictionary = cb.resolve_attack(vera, grull)
+	check(not r.has("error") and r["bonus"] == vera.atk_bonus - PartyOpinion.BICKER_TO_HIT,
+		"rivals adjacent: the swing is one lower (%s)" % str(r))
+	check(r["total"] == r["nat"] + r["bonus"], "...and the total carries it")
+	r = cb.resolve_attack(vera, grull, {"free": true})
+	check(r["bonus"] == vera.atk_bonus - PartyOpinion.BICKER_TO_HIT, "every swing, not just the first")
+	var bicker_lines: int = cb.log.filter(func(l): return "get in each other's way" in l).size()
+	check(bicker_lines == 1, "the log says so once a fight (%d)" % bicker_lines)
+	r = cb.resolve_attack(vera, grull, {"opportunity": true})
+	check(r["bonus"] == vera.atk_bonus, "an opportunity attack is not the moment for it")
+
+	# A rally: the bonded partner of someone who just went down has advantage
+	# on the next swing, spent by that swing. Pike is nobody's partner.
+	PartyOpinion.set_score(p, "vera", "ilsa", PartyOpinion.BONDED + 10.0)
+	cb._apply_damage(ilsa, ilsa.hp)
+	check(ilsa.is_down(), "Ilsa is down")
+	check(vera.has(PartyOpinion.RALLY_STATUS), "...and Vera rallies")
+	check(not pike.has(PartyOpinion.RALLY_STATUS), "...but Pike, who is not close to her, does not")
+	check(cb.log.any(func(l): return l == "%s rallies — %s is down." % [vera.cname, ilsa.cname]),
+		"the log has the rally")
+	r = cb.resolve_attack(vera, grull, {"free": true})
+	check(r["mode"] == Dice.ADV, "the rallied swing has advantage")
+	check(not vera.has(PartyOpinion.RALLY_STATUS), "...and spends the rally")
+	r = cb.resolve_attack(vera, grull, {"free": true})
+	check(r["mode"] != Dice.ADV, "only the one swing")
+
+	# Saved: whoever gets a downed member back up is +SAVED with them — a
+	# heal_ally feature, a heal spell, or plain First Aid.
+	var before: float = PartyOpinion.score(p, "ilsa", "pike")
+	pike.pos = Vector2i(3, 2); pike.statuses["down"] = true; pike.hp = 0
+	ilsa.statuses.erase("down"); ilsa.hp = ilsa.max_hp
+	ilsa.new_turn()
+	cb.perform(ilsa, {"id": "kit", "kind": "heal_ally", "label": "a field kit", "cost": "action",
+		"dice_count": 1, "dice_sides": 8, "dice_bonus": 1}, pike)
+	check(not pike.is_down(), "the kit brings Pike up")
+	check(is_equal_approx(PartyOpinion.score(p, "ilsa", "pike"), before + PartyOpinion.SAVED),
+		"...and Ilsa is +SAVED with her")
+	check(cb.log.any(func(l): return l == "%s gets %s back on their feet." % [ilsa.cname, pike.cname]),
+		"the log says who did it")
+	pike.statuses["down"] = true; pike.hp = 0
+	ilsa.new_turn()
+	cb.perform(ilsa, _verb(cb, ilsa, "cure-wounds"), pike)
+	check(not pike.is_down() and is_equal_approx(PartyOpinion.score(p, "ilsa", "pike"), before + 2 * PartyOpinion.SAVED),
+		"a heal spell counts the same")
+	pike.statuses["down"] = true; pike.hp = 0
+	cb.act_help(ilsa, pike)
+	check(not pike.is_down() and is_equal_approx(PartyOpinion.score(p, "ilsa", "pike"), before + 3 * PartyOpinion.SAVED),
+		"and so does First Aid")
+	ilsa.new_turn()
+	cb.perform(ilsa, _verb(cb, ilsa, "cure-wounds"), pike)
+	check(is_equal_approx(PartyOpinion.score(p, "ilsa", "pike"), before + 3 * PartyOpinion.SAVED),
+		"healing someone who is up is not a save")
+
+	# Friendly fire: an ally caught in your cone is -FRIENDLY_FIRE with you.
+	cb = _sandbox()
+	p = _party_of(cb)
+	ilsa = _find(cb, "ilsa"); vera = _find(cb, "vera"); pike = _find(cb, "pike")
+	ilsa.pos = Vector2i(4, 1); vera.pos = Vector2i(5, 1); pike.pos = Vector2i(3, 1)   # Vera east, in the cone; Pike behind
+	before = PartyOpinion.score(p, "ilsa", "vera")
+	var before_pike: float = PartyOpinion.score(p, "ilsa", "pike")
+	cb.perform(ilsa, _verb(cb, ilsa, "burning-hands"), Vector2i(1, 0))
+	check(is_equal_approx(PartyOpinion.score(p, "ilsa", "vera"), before - PartyOpinion.FRIENDLY_FIRE),
+		"Vera, in the cone, is -FRIENDLY_FIRE with Ilsa")
+	check(is_equal_approx(PartyOpinion.score(p, "ilsa", "pike"), before_pike), "Pike, behind it, is not")
+	check(cb.log.any(func(l): return l == "%s catches %s in it." % [ilsa.cname, vera.cname]), "the log says so")
+
+	# Fought beside: a won fight is +FOUGHT_BESIDE for every pair still
+	# standing at the end of it — not the one who spent it on the floor.
+	cb = _sandbox()
+	p = _party_of(cb)
+	pike = _find(cb, "pike")
+	var vi: float = PartyOpinion.score(p, "vera", "ilsa")
+	var vp: float = PartyOpinion.score(p, "vera", "pike")
+	pike.statuses["down"] = true; pike.hp = 0
+	for o in cb.team_of("foe"):
+		cb._kill(o)
+	check(cb.outcome() == "Victory", "the room is cleared")
+	Encounter.resolve_outcome(cb, p)
+	check(is_equal_approx(PartyOpinion.score(p, "vera", "ilsa"), vi + PartyOpinion.FOUGHT_BESIDE),
+		"the two still standing are +FOUGHT_BESIDE")
+	check(is_equal_approx(PartyOpinion.score(p, "vera", "pike"), vp), "Pike, down at the end, earns nothing")
+
+	# No party (the sandbox, NPC scraps): every hook is inert.
+	cb = _sandbox()
+	vera = _find(cb, "vera"); ilsa = _find(cb, "ilsa")
+	cb._apply_damage(ilsa, ilsa.hp)
+	check(not vera.has(PartyOpinion.RALLY_STATUS), "no party, no rally")

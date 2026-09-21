@@ -14,6 +14,7 @@ extends SceneTree
 
 const Travel = preload("res://core/travel.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: the roster row's Level up
+const PartyOpinion = preload("res://core/party_opinion.gd")
 
 var _pass := 0
 var _fail := 0
@@ -226,6 +227,7 @@ func _init() -> void:
 		"...while the watch, still marching, keeps their job")
 
 	await _level_up_per_character(screen)
+	await _relations(screen)
 	print("test_party_screen: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -292,3 +294,36 @@ func _node_with_method(node: Node, m: String):
 		if hit != null:
 			return hit
 	return null
+
+# The Relations block under the standing orders (docs/spike-party-opinions.md
+# §5): one describe() line per active pair, so a pair the road has soured is
+# visible without waiting for a fight to show it. A party of one has nobody
+# to get on with, and shows nothing.
+func _relations(screen) -> void:
+	var p = screen.party
+	var a: String = p.active[0]
+	var b: String = p.active[1]
+	PartyOpinion.set_score(p, a, b, -44.0)
+	screen._refresh()
+	await process_frame
+	var lines := _label_texts(node_named(screen, "RelationsRow"))
+	check(lines.size() > 0 and lines[0] == "Relations", "the block is captioned")
+	var want := PartyOpinion.describe(p, a, b)
+	check("rivals (-44)" in want and want in lines, "a soured pair reads as describe() says (%s)" % want)
+	check(lines.size() == 1 + PartyOpinion.active_pairs(p).size(),
+		"one line per active pair (%d for %d)" % [lines.size() - 1, PartyOpinion.active_pairs(p).size()])
+	for id in p.active.duplicate():
+		if id != a:
+			p.bench(id)
+	screen._refresh()
+	await process_frame
+	check(_label_texts(node_named(screen, "RelationsRow")).is_empty(), "a party of one shows no block at all")
+
+func _label_texts(node: Node) -> Array:
+	var out: Array = []
+	if node == null:
+		return out
+	for c in node.get_children():
+		if c is Label and not c.is_queued_for_deletion():
+			out.append(c.text)
+	return out
