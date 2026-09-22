@@ -14,10 +14,12 @@
 # woods wherever the trees are thinned out.
 #
 # THE RULE IS NOT COPIED. Which cells are forest is decided by exactly the
-# expression World._build_mask() writes into the mask's red channel — the same
-# `_rand(cluster, 5) > WOODED` off the same TILE_CLUSTER block, read from
-# world.gd rather than restated here. A second copy of that rule is a wood that
-# grows where the ground is grass.
+# rule World._build_mask() writes into the mask's red channel: world.gd's own
+# `block_wooded()`, called off the same TILE_CLUSTER block, rather than
+# restated here. A second copy of that rule is a wood that grows where the
+# ground is grass — and since O-biome the rule is a hash against a threshold
+# that varies with the biome disc under the block (core/world.gd), so there is
+# more of it to keep in step than one constant.
 #
 # WHAT IT COSTS, AND THE TWO THINGS THAT KEEP IT DOWN. The trees are two
 # MultiMeshes, so the whole map is two draw calls. And the instance arrays are
@@ -152,7 +154,7 @@ func rebuild(world_map: Control) -> void:
 	# How many of the forest cells get planted. Quantised to powers of two so
 	# that panning across a boundary does not make the whole wood flicker
 	# between two densities frame after frame.
-	var want := maxi(1, int(cells.size() * (1.0 - world_map.WOODED) * TREES_PER_CELL))
+	var want := maxi(1, int(cells.size() * world_map.FOREST_FRACTION_EST * TREES_PER_CELL))
 	var keep := 1.0
 	while keep > 0.03 and want * keep > MAX_TREES:
 		keep *= 0.5
@@ -169,7 +171,6 @@ func _plant(world_map: Control, cells: Dictionary, keep: float) -> void:
 	var grow: float = minf(1.0 / sqrt(maxf(keep, 0.03)), 3.2)
 	var CELL: float = world_map.CELL
 	var cluster_n: int = world_map.TILE_CLUSTER
-	var wooded: float = world_map.WOODED
 	var dry: float = world_map.SHORE * 0.4
 	var world = world_map.world
 	var conifers: Array[Transform3D] = []
@@ -180,7 +181,8 @@ func _plant(world_map: Control, cells: Dictionary, keep: float) -> void:
 	# walks tens of thousands of cells, and the order below is the difference
 	# between a replant nobody notices and one that drops a frame:
 	#   thin      one hash, rejects ~7 in 8 when it is doing anything at all
-	#   forest    two hashes, but memoised per TILE_CLUSTER block, so ~1 in 64
+	#   forest    a hash plus a scan of the biome discs, but memoised per
+	#             TILE_CLUSTER block, so ~1 in 64
 	#   water     a scan of every lake, so it runs last and on almost nothing
 	var forest := {}
 	# The thinning roll is written out rather than called: it runs on every
@@ -197,7 +199,11 @@ func _plant(world_map: Control, cells: Dictionary, keep: float) -> void:
 		var wood: bool = forest.get(block, false)
 		if not forest.has(block):
 			# The mask's own forest rule, read from world.gd — see the header.
-			wood = world_map._rand(block, 5) > wooded
+			# O-biome: it is a threshold per biome now, so the whole rule lives
+			# in block_wooded() rather than being a hash against a constant this
+			# file could have read for itself. Still one call per block, not per
+			# cell, which is what the memo above is for.
+			wood = world_map.block_wooded(block)
 			forest[block] = wood
 		if not wood:
 			continue
