@@ -77,15 +77,26 @@ const BOARD_ROWS := 9        # rows of floor, room rows included (the room is 4)
 const BOARD_BITES := 8       # perimeter discs removed — how badly shaped it gets
 const BOARD_BULGES := 5      # perimeter discs added outside the rectangle
 const BOARD_ROUGH := 6       # rough patches sprinkled on the new ground
-# #156: raised ground. Two shelves per board, each a disc of one or two rings,
-# each exactly ONE level up — see combat.gd's height notes for what a level
-# buys. One level is deliberate: a step of two is a cliff nothing can walk, so
-# a generator that cut one would have to prove the board still joined up
+# #156: raised ground. ONE shelf per board, a disc of one or two rings, exactly
+# ONE level up — see combat.gd's height notes for what a level buys.
+#
+# One level is deliberate: a step of two is a cliff nothing can walk, so a
+# generator that cut one would have to prove the board still joined up
 # afterwards. One level can never disconnect anything (it only ever costs a
 # point to climb), so the shape _grow worked to keep connected stays connected.
 # An authored board, or a content pack's, is free to cut a real cliff and take
 # that proof on itself.
-const BOARD_SHELVES := 2
+#
+# ONE SHELF IS A BALANCE NUMBER, not a taste one, and tests/test_scaler.gd owns
+# it. Ground that costs a point to climb taxes whoever is APPROACHING, and at
+# level 3 that is mostly the monsters while the party shoots and casts — so
+# raised ground moves the win rate the party's way. Measured, level-3 preset
+# party on hard, 200 fights a tier: flat 83.5%, one shelf 85.0%, two shelves
+# 87.5%. The band is 65-85%, so two shelves puts the game outside the
+# difficulty it is calibrated to and one keeps it in. Raising this means
+# re-measuring core/scaler.gd's knobs, which is a balance pass and not a
+# side-effect of a map feature.
+const BOARD_SHELVES := 1
 const SHELF_RINGS := 2       # the widest a shelf gets
 
 static func _grow(b: Dictionary, seed: int) -> Dictionary:

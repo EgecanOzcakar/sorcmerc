@@ -3,6 +3,7 @@
 #   godot --headless --path . -s tests/test_height.gd
 extends SceneTree
 
+const AI = preload("res://core/ai.gd")
 const Adapter = preload("res://core/adapter.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Combat = preload("res://core/combat.gd")
@@ -25,6 +26,7 @@ func _init() -> void:
 	test_cliff()
 	test_high_ground()
 	test_ridge_blocks_sight()
+	test_the_ai_wants_it_but_not_that_much()
 	test_flat_boards_unchanged()
 	test_generated_boards()
 	print("test_height: %d passed, %d failed" % [_pass, _fail])
@@ -125,6 +127,31 @@ func test_ridge_blocks_sight() -> void:
 	check(low.has_line_of_sight(Vector2i(0, 0), Vector2i(4, 0)),
 		"low ground between two shelves does not block")
 
+# The high ground is worth a tie-break to the AI and NOT a hex of approach.
+# Every score callable in ai.gd is in hexes, so a draw of 1.0 or more buys the
+# shelf at the price of closing distance — permanently, because the monster
+# re-scores from up there next turn and the shelf still wins. It was 1.5 for
+# one afternoon and monsters simply stopped coming down; drive_completionist
+# caught it by running out of frames with unfinished fights behind it. This is
+# the same assertion in two seconds instead of twenty-four.
+func test_the_ai_wants_it_but_not_that_much() -> void:
+	check(AI.HIGH_GROUND_DRAW < 1.0,
+		"the draw is worth less than one hex of approach (it is %s)" % str(AI.HIGH_GROUND_DRAW))
+	# A shelf one step FARTHER from the goal than the best hex available must
+	# lose to the best hex. This is the tightest case there is: at 1.5 the shelf
+	# wins it, at anything under 1.0 it cannot.
+	var goal := Vector2i(8, 0)
+	var m = _fighter("m", "foe", Vector2i(4, 0), 6)
+	var cb = _fight(_strip({Vector2i(7, 0): 1}), [m])
+	AI._move_by(cb, m, AI._toward(goal))
+	check(m.pos == goal, "a monster walks to its goal, not onto the shelf one hex short of it (got %s)" % str(m.pos))
+	# ...and where nothing else separates two hexes, the high ground decides.
+	var n = _fighter("n", "foe", Vector2i(4, 0), 6)
+	var flat_score := func(_h: Vector2i) -> float: return 0.0
+	var cb2 = _fight(_strip({Vector2i(5, 0): 1}), [n])
+	AI._move_by(cb2, n, flat_score)
+	check(cb2.height_at(n.pos) == 1, "with every hex otherwise equal, it takes the high ground (got %s)" % str(n.pos))
+
 func test_flat_boards_unchanged() -> void:
 	var hero = _fighter("hero", "party", Vector2i(0, 0))
 	var foe = _fighter("foe", "foe", Vector2i(3, 0))
@@ -159,7 +186,7 @@ func test_generated_boards() -> void:
 			# Walkable end to end, climbing allowed, cliffs not: one flood fill
 			# from any hex has to reach every other.
 			var cb = _fight(b, [_fighter("hero", "party", b["hexes"][0], 4000)])
-			var seen: Dictionary = Hex.reachable(cb.passable, b["hexes"][0], 4000, [], [], cb.climb_cost)
+			var seen: Dictionary = Hex.reachable(cb.passable, b["hexes"][0], 4000, [], [], cb.heights())
 			var reach := 0
 			for h in floor:
 				if seen.has(h) and cb.passable(h):

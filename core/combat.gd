@@ -327,25 +327,24 @@ func _rough() -> Array:
 #      to hit — the mirror of the +2 AC half cover already gives, and the same
 #      size of thumb on the scale. sorcmerc's own rule, not the 2024 PHB's:
 #      see data/effects/README or docs/combat-design.md §"the high ground".
-const CLIMB_STEP := 1        # extra movement to climb one level
-const CLIMB_MAX := 1         # levels a step may change before it is a cliff
+# The climb rule itself lives in hex.gd beside the flood fills that read it —
+# CLIMB_STEP, CLIMB_MAX and Hex.climb() — because it is the one cost that is a
+# property of a STEP between two hexes rather than of a hex, and passing it in
+# as a Callable cost 42% of the hottest function in a fight (see hex.gd).
 const HIGH_GROUND_HIT := 2   # to-hit bonus for shooting or swinging downhill
 
+# The board's relief, or the shared empty one. Not cached on the instance: a
+# test hands a Combat a new board, and a dictionary lookup is not worth an
+# invalidation bug.
+func heights() -> Dictionary:
+	return board.get("height", Hex.NO_HEIGHT)
+
 func height_at(p: Vector2i) -> int:
-	return int(board.get("height", {}).get(p, 0))
+	return int(heights().get(p, 0))
 
 # The extra cost of the step from `a` to `b`, or Hex.STEP_BLOCKED for a cliff.
-# Handed to Hex.reachable/path_to, which is why it takes the pair.
 func climb_cost(a: Vector2i, b: Vector2i) -> int:
-	var d: int = height_at(b) - height_at(a)
-	if absi(d) > CLIMB_MAX:
-		return Hex.STEP_BLOCKED
-	return CLIMB_STEP if d > 0 else 0
-
-# Nothing to hand the pathfinder on a board with no height in it: a Callable
-# that is never called is one less indirection per edge of every flood fill.
-func _climb() -> Callable:
-	return climb_cost if not board.get("height", {}).is_empty() else Callable()
+	return Hex.climb(heights(), a, b)
 
 # The to-hit bonus `attacker` gets for standing over `target`. Zero both ways
 # on the flat, which is every board that declares no height.
@@ -1048,12 +1047,15 @@ func has_line_of_sight(a: Vector2i, b: Vector2i) -> bool:
 	var line: Array = Hex.line(a, b)
 	# #156: ground higher than BOTH ends is a ridge between them — the pair
 	# cannot see each other over it. Higher than only one is a slope somebody
-	# is standing on or under, and you can always see up or down a slope.
-	var ridge: int = maxi(height_at(a), height_at(b))
+	# is standing on or under, and you can always see up or down a slope. The
+	# dictionary is fetched once, not per hex: this is called for every target
+	# the AI considers.
+	var up: Dictionary = heights()
+	var ridge: int = -1 if up.is_empty() else maxi(int(up.get(a, 0)), int(up.get(b, 0)))
 	for i in range(1, line.size() - 1):
 		if not (line[i] in board["hexes"]):
 			return false
-		if height_at(line[i]) > ridge:
+		if ridge >= 0 and int(up.get(line[i], 0)) > ridge:
 			return false
 	return true
 
@@ -2860,7 +2862,7 @@ func _survived_down(c) -> void:
 
 # Hexes reachable by `mover` with the move points left this turn.
 func move_field(mover) -> Dictionary:
-	var field := Hex.reachable(passable, mover.pos, move_left(mover), _blockers(mover), _rough(), _climb())
+	var field := Hex.reachable(passable, mover.pos, move_left(mover), _blockers(mover), _rough(), heights())
 	for h in _ally_hexes(mover):
 		field.erase(h)
 	# frightened: you can never end a step closer to what scares you
@@ -2874,7 +2876,7 @@ func move_field(mover) -> Dictionary:
 
 # The shortest route `mover` would walk to `dest`.
 func move_path(mover, dest: Vector2i) -> Array:
-	return Hex.path_to(passable, mover.pos, dest, _blockers(mover), _rough(), _climb())
+	return Hex.path_to(passable, mover.pos, dest, _blockers(mover), _rough(), heights())
 
 # Hostiles that get an opportunity attack somewhere along `mover`'s walk to `dest`.
 func provokers_for(mover, dest: Vector2i) -> Array:

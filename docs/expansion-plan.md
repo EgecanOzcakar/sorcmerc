@@ -6742,12 +6742,33 @@ than only one end is a slope somebody is standing on or under, and you can
 always see up or down a slope.
 
 The step cost is the one number that belongs to the *step* rather than to the
-hex it lands on, which the pathfinder had no way to express — `Hex.reachable`
-and `Hex.path_to` take an optional `step` Callable now (`(from, to) -> extra`,
-or `STEP_BLOCKED`), left unset by every caller but this one.
+hex it lands on, which the pathfinder had no way to express, so `Hex.reachable`
+and `Hex.path_to` take the height dictionary. It was a `Callable(from, to)`
+first, which is the better-looking API and is what the rule reads as — but
+measured on a 79-hex board that Callable, invoked once per edge, took
+`reachable` from 353 us to 500 us, and it is the hottest thing in a fight:
+every AI move scores its destinations off a flood fill and every hero turn
+draws its move field from one. The rule itself moved to `hex.gd` beside the
+loops that read it, and the loops hoist the level a step leaves from out of the
+neighbour loop, so height costs two dictionary lookups per node and about 7%.
 
-**The generator only ever raises ground one level.** `Encounter._grow` drops two
-shelves of one or two rings onto the apron it grew — never on the authored room
+**The AI's appetite for it had to be measured too, and the first number was
+wrong.** Every score callable in `ai.gd` is in HEXES — minus the distance to a
+goal, or the distance from whatever is chasing you — so `HIGH_GROUND_DRAW`,
+added to every destination per level, is denominated in hexes of approach. At
+1.5 it bought the shelf at the price of a hex, *permanently*, because the
+monster re-scores from up there next turn and the shelf still wins: monsters
+climbed the nearest rise and stopped coming down, fights stopped converging,
+and `drive_completionist` ran out of frames walking between towns with
+unfinished fights behind it. Strictly under one is the whole rule — it can then
+only ever decide between hexes that are otherwise equally good, which is what a
+tie-break is. It is 0.35, and `test_height.gd` asserts both the bound and the
+behaviour (a shelf one step short of the goal loses; with every hex otherwise
+equal, the high ground wins) so the next person to reach for that number is
+told in two seconds rather than twenty-four.
+
+**The generator only ever raises ground one level.** `Encounter._grow` drops one
+shelf of one or two rings onto the apron it grew — never on the authored room
 and never on the party's starting hexes, so a fight always opens on the flat
 and the high ground is somewhere to go rather than somewhere one side begins.
 One level is the whole safety argument: a two-level step is a cliff, and a
@@ -6756,6 +6777,18 @@ joined up. One level cannot disconnect anything — it only ever costs a point t
 climb — so the connected shape `_grow` already works to keep stays connected.
 An authored board, or a content pack's, declares its own `height` and is left
 alone; it is free to cut a real cliff and owes that proof itself.
+
+**One shelf and not two is a balance number, and `test_scaler.gd` owns it.**
+Ground that costs a point to climb taxes whoever is *approaching*, and at level
+3 that is mostly the monsters while the party shoots and casts — so raised
+ground moves the win rate the party's way. Measured, level-3 preset party on
+hard, 200 fights per tier: flat **83.5%**, one shelf **85.0%**, two shelves
+**87.5%**. The calibrated band is 65-85%, so two shelves puts the game outside
+the difficulty it is tuned to and one keeps it inside. The margin at one shelf
+is thin because master was already at 83.5, a point and a half under the
+ceiling; anything that helps the party at all is close to it. Raising the shelf
+count is a real option, but it means re-measuring `core/scaler.gd`'s knobs —
+which is a balance pass, not a side-effect of a map feature.
 
 **On the screen** a raised tile is drawn `RISE` hex radii up, with the cut earth
 under the edges that face the camera and a bright rim line along them, and the
