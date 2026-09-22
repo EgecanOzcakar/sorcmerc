@@ -2646,22 +2646,49 @@ class Board extends Control:
 	# in GDScript) — every frame of every slide, float and flash. It lives on
 	# this child, drawn behind the Board, and tick() redraws it only when
 	# what it depends on moves. Board._draw keeps what changes per frame.
+	#
+	# #140: "what it depends on" deliberately no longer includes _origin. The
+	# ground is painted in WORLD space — every tile at _pix(hx) — so moving the
+	# view is a pure translation of the picture, and translating a Control is
+	# free where repainting it is 124 hexes of GDScript. The cache used to key
+	# on _origin, which was fine while only a drag or a zoom moved the view;
+	# since the camera started following the action (#152) the pan glides after
+	# every single action and converges asymptotically, so the key changed on
+	# essentially every frame and the cache never hit once. Measured on this
+	# board: 410 repaints in 411 frames. Now the ground is painted once per
+	# board (and per zoom, which really does change the picture) and carried by
+	# _ground.position; see _ground_at.
 	class Ground extends Control:
 		var board
 		func _draw() -> void:
 			if board.cb != null:
 				board._paint_ground(self)
+	# The backdrop is the one part of the old ground that is NOT world-fixed:
+	# it fills the frame and crops, so it belongs to the viewport, not to the
+	# hexes. It rode along inside Ground, which is why the ground could not be
+	# translated. Its own child now, added first so it stays behind the ground
+	# (both show_behind_parent, drawn in child order), and repainted only when
+	# the rect, the palette or nightfall change.
+	class Backdrop extends Control:
+		var board
+		func _draw() -> void:
+			if board.cb != null:
+				board._paint_backdrop(self)
+	var _backdrop := Backdrop.new()
+	var _backdrop_key := 0
 	var _ground := Ground.new()
 	var _ground_key := 0
+	var _ground_at := Vector2.ZERO   # the _origin the ground was last painted in
 	var _field := {}      # move_field of the hero whose turn it is, memoised
 	var _provoke := {}    # ...and the hexes a walk there would draw an OA on
 	var _field_key := 0
 
 	func _init() -> void:
-		_ground.board = self
-		_ground.show_behind_parent = true
-		_ground.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(_ground)
+		for layer in [_backdrop, _ground]:
+			layer.board = self
+			layer.show_behind_parent = true
+			layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(layer)
 	var _auto_fit := false    # zoom-to-fit each layout until the user zooms (new fight, Home)
 	var _tok := {}        # id -> displayed pixel pos (for slide)
 	var _slide := {}      # id -> {from, to, t, dur}: the traversal in progress, see tick()
@@ -2760,6 +2787,11 @@ class Board extends Control:
 		texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED   # the floor texture wraps across hexes
 		_tok.clear(); _slide.clear(); _hp.clear(); _floats.clear(); _flash.clear()
 		_dmg_goal.clear()
+		# A new board is a new picture: drop both cached layers rather than
+		# trusting the hash to differ (an identical board at an identical zoom
+		# is a legal thing for a rematch to be).
+		_ground_key = 0; _backdrop_key = 0; _ground_at = _origin
+		_ground.queue_redraw(); _backdrop.queue_redraw()
 		_view_origin = _origin; _view_hex = main.hex_px   # fresh _pix()es are in this view
 		for c in cb.combatants:
 			_tok[c.id] = _pix(c.pos)
@@ -3160,10 +3192,19 @@ class Board extends Control:
 			dirty = true
 		if dirty:
 			queue_redraw()
-		var key := hash([_origin, main.hex_px, cb.board])
+		# #140: no _origin here — see the Ground comment. A pan is carried by
+		# _ground.position in _draw(); only the scale and the board itself
+		# change the picture. cb.board stays in the key because a smashed crate
+		# or a spent hazard is painted into the ground.
+		var key := hash([main.hex_px, cb.board])
 		if key != _ground_key:
 			_ground_key = key
+			_ground_at = _origin
 			_ground.queue_redraw()
+		var back := hash([size, cb.board.get("palette", "shrine"), cb.is_night()])
+		if back != _backdrop_key:
+			_backdrop_key = back
+			_backdrop.queue_redraw()
 
 	# #92: the reach of `v` from where `cur` stands. Range is the verb's own
 	# (a weapon's is the wielder's reach); a cone is everything it could sweep;
@@ -3279,15 +3320,42 @@ class Board extends Control:
 	# Everything about the ground that is the same picture every frame: the
 	# slab, floor texture, mottling, seams, the cover label and the foliage.
 	# Hazards are skipped — their glow pulses, so Board._draw paints them live.
+	# #73: fill the frame, crop the overflow, keep the horizon high. Its own
+	# layer since #140 — it is the one thing here that belongs to the viewport
+	# rather than to the hexes, and keeping it inside the ground is what stopped
+	# the ground from being translated instead of repainted.
+	func _paint_backdrop(canvas: CanvasItem) -> void:
+		var back: Texture2D = Icons.image_at(String(main.BACKDROPS.get(cb.board.get("palette", "shrine"), "")))
+		if back == null:
+			return
+		var k := maxf(size.x / back.get_width(), size.y / back.get_height())
+		var sz := back.get_size() * k
+		canvas.draw_texture_rect(back, Rect2(Vector2((size.x - sz.x) * 0.5, minf(0.0, (size.y - sz.y) * 0.3)), sz),
+			false, BACKDROP_NIGHT if cb.is_night() else BACKDROP_TONE)
+
+	# Painted in the view _ground_at names, not the one on screen: _draw()
+	# translates the layer onto the live one. Every _pix() below therefore has
+	# to read _ground_at, which is what the swap around the body is for — the
+	# alternative is threading an origin through _pix, _paint_tile, _paint_floor,
+	# _light_board and _foliage_at, all of which exist to be read at a glance.
 	func _paint_ground(canvas: CanvasItem) -> void:
+		var live := _origin
+		_origin = _ground_at
+		_paint_ground_at(canvas)
+		_origin = live
+
+	# #140: where the two cached layers sit this frame — the ground carried from
+	# the view it was painted in onto the one being drawn, the sky viewport-fixed
+	# and so only ever shaken. Its own function rather than four lines inside
+	# _draw() because it is the whole of the cache's correctness, and a test can
+	# ask for it without a draw pass.
+	func _place_layers(shake: Vector2) -> void:
+		_ground.position = _origin - _ground_at
+		_backdrop.position = shake
+
+	func _paint_ground_at(canvas: CanvasItem) -> void:
 		var s: float = main.hex_px
 		var decor: Array = []   # foliage, drawn after every tile so it can overhang
-		var back: Texture2D = Icons.image_at(String(main.BACKDROPS.get(cb.board.get("palette", "shrine"), "")))
-		if back != null:   # #73: fill the frame, crop the overflow, keep the horizon high
-			var k := maxf(size.x / back.get_width(), size.y / back.get_height())
-			var sz := back.get_size() * k
-			canvas.draw_texture_rect(back, Rect2(Vector2((size.x - sz.x) * 0.5, minf(0.0, (size.y - sz.y) * 0.3)), sz),
-				false, BACKDROP_NIGHT if cb.is_night() else BACKDROP_TONE)
 		# The ground goes on past the board's edge and fades into the dark, two
 		# rings deep, the way the map's fog does — a board is a lit patch of a
 		# place, not a lozenge cut out of nothing.
@@ -3579,11 +3647,12 @@ class Board extends Control:
 		if cb == null:
 			return
 		_layout()
-		_ground.position = Vector2.ZERO
+		var shake := Vector2.ZERO
 		if _defeat >= 0.0 and _defeat < 0.6:     # screen shake on the wipe
 			var m := (1.0 - _defeat / 0.6) * 10.0
-			_ground.position = Vector2(randf_range(-m, m), randf_range(-m, m))
-			_origin += _ground.position
+			shake = Vector2(randf_range(-m, m), randf_range(-m, m))
+			_origin += shake
+		_place_layers(shake)
 		var s: float = main.hex_px
 		var fz := clampf(main._zoom, 0.75, 1.7)   # font scale, gentler than the hex scale
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 350.0)
