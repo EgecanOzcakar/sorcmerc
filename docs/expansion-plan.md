@@ -8081,3 +8081,95 @@ a boss.
 - The level-8 corridor (every ordinary room a 100% win) is a separate shape
   from all of the above and stays open: an over-levelled party walks five free
   rooms to reach the only fight in the building.
+
+## A lair is priced for the party that walked in (2026-09-22)
+
+The site-local fix the investigation above recommended, built and measured.
+
+`Scaler.party_score()` is the reading `_budget` was already taking, extracted
+and made public — the same three lines, no behaviour change.
+`Scaler.held_at(then, now)` is `pow(then / now, CURVE)`, which is exactly the
+`power_scale` that makes a budget computed from `now` come out the size it
+would have been at `then`. `Site.for_lair` takes the reading once, at the
+mouth; `combat_spec` multiplies the correction onto the band knob it already
+passed. Withdrawing and coming back calls `for_lair` again, which re-takes it,
+because they walked in again.
+
+Verified by construction rather than by a win rate: the same dragon boss room,
+entered fresh and met at 100/100, 49/50, 67/64, 67/0 and 20/100 HP/slots, now
+fields a byte-identical roster while the correction itself moves 1.000 to
+1.985. `tests/test_site.gd` pins that.
+
+### The floor goes on the composed scale
+
+The first cut wrote `maxf(1.0, band) * held` and turned the level-8 boss into
+a 0-of-48 wall — 1.8% even for a party that took every rest, against 23.7%
+before any of this. Two upward corrections were stacking.
+
+Finding that needed the sweep to stop asserting what it should have been
+measuring. `tests/sweep_site_depth.gd` printed `lair at the origin (band 1.0)`
+for every run, and the level-8 column was read against that claim twice. The
+band is measured and printed now, and **at the origin a level-8 party reads
+0.320, not 1.0**.
+
+Which exposes something in master worth its own look. An outgrown lair prices
+its ROOMS at the band — 0.320 — while T92's rule floors its BOSS at 1.000. The
+last room is a **3.1x jump** over every room before it. That the climax is
+never scaled down by the country is deliberate and right; that the step is 3.1x
+is not obviously anybody's decision, and it is most of why a level-8 delve
+reads as five free rooms and a wall.
+
+So the floor belongs on the composed scale, `maxf(1.0, band * held)`. At the
+origin a level-8 party composes `0.320 * ~1.2 = 0.384`, still under the floor,
+so an outgrown lair's climax is exactly the fight it always was; at level 3 it
+composes `1.0 * ~1.2` and `held` bites, which is the case it was built for.
+
+### Measured
+
+`tests/sweep_site_depth.gd`, 20 seeds a faction, the three 6-room factions,
+conditional win rate at the boss:
+
+| | never rests | takes the rests |
+|---|---|---|
+| level 8, master | 23.7% | **18.3%** |
+| level 8, now | 18.8% | **26.8%** |
+| level 3, master | 0.0% | 29.2% |
+| level 3, now | never reaches it | 29.4% |
+
+**The incentive is the right way round now, at both levels.** On master a
+level-8 party that used the rest rooms did WORSE at the boss than one that
+ground straight through, because resting handed back slots and the scaler
+priced the fight up by more than the healing was worth. It is 26.8% against
+18.8% now. At level 3 it is starker: of 60 delves the resting party reaches
+the boss 17 times and wins 5, and the never-resting party reaches it none.
+
+What it cost: level-8-never-rests is 18.8% against master's 23.7%, and the
+whole path is harder (d4 84.2% where master was 100%), because the drained
+party's discount is gone. That was the trade, named before it was built — a
+drained party now meets the fight the lair actually is. Level 3 is the cleaner
+read, because there the climax is untouched (29.4% against 29.2%) while the
+path to it got harder: the fix bit where it was meant to and left the
+calibrated endpoint alone. Worth one caveat on that pair — only 17 parties
+reach the boss now against 24 before, so it is a smaller and more
+self-selected sample than the number it is set beside.
+
+No global number moves. A party at a lair's mouth is the full-HP party every
+existing sweep already measures, and `test_scaler` is unchanged at 212.
+
+### Still open
+
+- **The 3.1x boss cliff**, above. An outgrown lair's rooms take the band's
+  discount and its boss refuses it, so `d0`-`d4` are 100% wins and `d5` is
+  19-27%. Whether the floor should be a floor or a taper is a balance question
+  with a sweep behind it, and this pass only stopped making it worse.
+- The root fix is still `ehp` reading `c.hp` rather than `max_hp`, and still a
+  re-tune of everything — it would double-count against `core/world_threat.gd`,
+  which exists as a patch over exactly this blindness. What changed here is
+  that a site no longer needs it to be coherent.
+- `held` is unclamped in both directions. A party that levels mid-delve (the
+  world screen banks XP per room) pulls it under 1.0, which is the same
+  statement read the other way: the lair does not get harder because the party
+  got stronger halfway down it. Nothing measures that case yet.
+- Only a SITE prices this way. The road still prices every fight off the
+  party's live condition through `core/world_threat.gd`, which is a different
+  answer to the same blindness, and the two have never been compared.
