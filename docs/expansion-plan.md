@@ -6764,3 +6764,38 @@ place) and the party page's hero cards (48 px beside the name).
   per-model head offset if a beast portrait ever matters.
 - Nothing warms the party page ahead of its first open; the first look at a
   hero card is the glyph, the second is the face.
+## The roads are busy — a spawn table and a population cap (2026-09-22)
+
+Issue #163: the shipped maps hand-placed four (small) or seven (large)
+bands, and on a ~3000-unit map the party rarely met one. `core/world_bands.gd`
+keeps every hand-placed band and fills the rest from a table. `KINDS` is
+fourteen rows — bandit gang, goblin raiders, gnoll pack, orc warband, beast
+pack, kobold skulk, undead shamble, cultist procession, giant, monstrosity,
+a patrol per civilized race, and a merchant caravan — each a faction, a
+troop template, a behaviour and a weight; the weight is the frequency.
+Monster kinds are placed in a ring `Regions.HOMES` says their faction lives
+in (no undead inside the marches), with troop levels from that ring; the
+civilized kinds walk between towns (`WorldAI.patrol`, so a caravan reads as
+a human/elf/dwarf band and is met the way a patrol is), spawned on the road
+between two of them. Every spawn lands on dry ground, 120 clear of any
+town and 60 from the player's start.
+
+The cap is one number: `CAP_AREA` (250) — one band per 250×250 of the
+map's extent squared, which is 62 on the large map and 10 on the small.
+`seed(world, seed)` fills to it at build (`_small_world`, `LargeWorld
+.build`, `ProceduralWorld.build`, all after the water is stamped);
+`refill(world, now, rng)` is polled beside `WorldAI.respawn` and puts one
+band back every `REFILL_MINUTES` (720) while the map is under, 400 from the
+party and out of the explored trail — said out loud only when it lands
+within 800. Raiders and the player never count. `World.bands_refilled_at`
+rides in the save; a spawned band round-trips like a hand-placed one
+(`ai.kind` names its row). Test: `tests/test_world_bands.gd`.
+
+### Still open
+
+- Rosters in a fight still come from `Scaler` by faction: a "caravan" is
+  fought as a human band, and carries nothing to rob.
+- Hand-placed kinds do not deduplicate against the table: the small map
+  may hold "bandits" and "bandit-gang-1" a field apart.
+- Refill picks the spot blind to the rings' fill: a heartland stripped bare
+  refills at the table's global weights, not where the gap is.
