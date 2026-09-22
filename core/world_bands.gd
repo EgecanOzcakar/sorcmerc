@@ -46,8 +46,11 @@ const KINDS := [
 ]
 
 # One band per this-by-this square of the map's extent (Regions.extent): the
-# large map (~1970) caps at 62, the small (~790) at 10.
-const CAP_AREA := 250.0
+# large map (~1970) caps at 31, the small (~790) at 5 (plus, on either, the
+# hand-placed bands and the lairs' raiders already there). Was 250 — 62 on the
+# large map — and the user's look at that map was "a bit dense": every label
+# overlapped another.
+const CAP_AREA := 350.0
 const REFILL_MINUTES := 720.0   # half a day between refills
 const SETTLEMENT_GAP := 120.0   # a spawn keeps this far from every town
 const START_GAP := 60.0         # ...and from the player, at build

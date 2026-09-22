@@ -54,10 +54,10 @@ func _init() -> void:
 	var small: World = scene._small_world()
 	scene.free()
 	_seeded(small, "small")
-	check(WorldBands.cap(small) >= 8 and WorldBands.cap(small) <= 14, "small map caps near 10 (%d)" % WorldBands.cap(small))
+	check(WorldBands.cap(small) >= 3 and WorldBands.cap(small) <= 6, "small map caps near 5 (%d)" % WorldBands.cap(small))
 	var large: World = LargeWorld.build()
 	_seeded(large, "large")
-	check(WorldBands.cap(large) >= 40 and WorldBands.cap(large) <= 75, "large map caps at 40-75 (%d)" % WorldBands.cap(large))
+	check(WorldBands.cap(large) >= 25 and WorldBands.cap(large) <= 38, "large map caps at 25-38 (%d)" % WorldBands.cap(large))
 	var proc: World = ProceduralWorld.build(5)
 	check(WorldBands.population(proc) == WorldBands.cap(proc), "a generated map is filled to its cap too (%d)" % WorldBands.cap(proc))
 	var kinds := {}
