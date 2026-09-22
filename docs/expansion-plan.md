@@ -6791,6 +6791,14 @@ within 800. Raiders and the player never count. `World.bands_refilled_at`
 rides in the save; a spawned band round-trips like a hand-placed one
 (`ai.kind` names its row). Test: `tests/test_world_bands.gd`.
 
+**Measured, the first road a new company walks** (`tests/test_road_trip.gd`,
+the real screen, real fights played by the monsters' AI on the heroes' side,
+every hostile band fought): Riverhold → Oakford (949 units) and Oakford →
+Greenmarch (243), four runs with the bands reseeded each time — 8/8 legs
+arrived, 1.5 bands met and 0.9 fought per leg, 86 % HP on arrival, nobody
+died. The floors the test holds: ≤ 3 bands met per leg on average and ≥ 0.5,
+four legs in five nobody dies, three in five arrive with half their HP.
+
 ### Still open
 
 - Rosters in a fight still come from `Scaler` by faction: a "caravan" is
