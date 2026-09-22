@@ -330,6 +330,11 @@ func _creator_expect(c: BaseButton) -> String:
 	# #82: the outline bar's lit step is the page already showing.
 	if c.get_parent() == _cre._steps and c.theme_type_variation == &"Picked":
 		return "inert: the step bar's lit step is the page already showing"
+	# The class step carries the climb now, so it inherits the level-up page's one
+	# excuse verbatim — same widget, same reason, and found the same way. See
+	# _levelup_expect below for why the marking is what identifies it.
+	if c.has_meta("level") and c.has_theme_stylebox_override("normal"):
+		return "inert: the climb's open rung — the panel beside it already reads this level"
 	if not c.text.begins_with("● "):
 		return ""
 	var group: String = _creator_group(c)
@@ -373,6 +378,11 @@ func _creator() -> void:
 	await sweep("creator/basics+species", func(): return _creator_at(0, "elf", "", "", "array"),
 		_creator_model, _creator_expect)
 	await sweep("creator/class", func(): return _creator_at(1, "elf", "", "", "array"),
+		_creator_model, _creator_expect)
+	# ...and again with a class already picked, which is the only thing that renders
+	# the climb: the sweep above stands on a step with no class chosen, so its twenty
+	# rungs and its four path branches were never driven at all.
+	await sweep("creator/class+picked", func(): return _creator_at(1, "elf", "rogue", "", "array"),
 		_creator_model, _creator_expect)
 	# Both ability modes. The bug this whole file exists for lived on exactly this
 	# page, in exactly the mode nobody drove — and a second one was still sitting
