@@ -397,8 +397,20 @@ static func _cantrip_scale(m: Dictionary, n: int, char_level: int, key: String) 
 	return n
 
 # Fallback until F1 re-exports feature/pool prose (SCHEMA gap #4).
+#
+# capitalize() title-cases every word, which is right until an id has a small
+# word in it: "rogue-stroke-of-luck" came back "Stroke Of Luck" and
+# "zealot-rage-of-the-gods" came back "Rage Of The Gods". Sentence case with
+# the joining words left down reads as a name instead of a headline, and the
+# level ladder (core/climb.gd) puts a great many of these on one screen.
+const SMALL_WORDS := ["of", "the", "and", "a", "an", "to", "in", "on", "or", "at", "from", "with"]
+
 static func humanize(id: String) -> String:
-	return id.replace("-", " ").capitalize()
+	var words: PackedStringArray = id.replace("-", " ").capitalize().split(" ")
+	for i in range(1, words.size()):
+		if words[i].to_lower() in SMALL_WORDS:
+			words[i] = words[i].to_lower()
+	return " ".join(words)
 
 # Feature ids are "<class>-<name>"; a button says "Second Wind", not "Fighter Second Wind".
 static func verb_label(id: String) -> String:

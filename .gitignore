@@ -38,3 +38,11 @@ spoils_*.png*
 height_board.png*
 # tests/shot_strip.gd output
 combat_strip.png*
+# tests/shot_biomes.gd output
+/biome_*.png*
+/shots_biome_walk/
+# tests/shot_board_pan.gd output
+/shots_pan/
+
+# tests/shot_climb.gd output
+/climb_*.png*

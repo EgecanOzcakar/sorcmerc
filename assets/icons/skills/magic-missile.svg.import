@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/magic-missile.svg-922a3defd956d7d1a40190c3811
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

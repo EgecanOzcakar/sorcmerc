@@ -516,6 +516,23 @@ static func verb_icon(kind: String) -> Texture2D:
 	var tex := _icon("%s/actions/%s.svg" % [ICON_ROOT, kind])
 	return tex if tex != null else _icon("%s/actions/generic.svg" % ICON_ROOT)
 
+# The class's own emblem, and the path's (assets/icons/classes, /paths). One
+# motif each, drawn for the level ladder: the class says what you are, the path
+# says which way you went at 3. Null when the id has no art, so a caller can
+# fall through to the next thing that does.
+static func class_icon(class_id: String) -> Texture2D:
+	return _icon("%s/classes/%s.svg" % [ICON_ROOT, class_id])
+
+static func path_icon(subclass_id: String) -> Texture2D:
+	return _icon("%s/paths/%s.svg" % [ICON_ROOT, subclass_id])
+
+# A feature's own badge, or null. Unlike skill_icon() this does NOT fall back to
+# the generic spark: 324 of the catalog's 340 features have no badge, so a
+# caller that wants to fall through to something better (the path's emblem, the
+# class's) needs to be able to tell "no art" from "the spark".
+static func feature_icon(feature_id: String) -> Texture2D:
+	return _icon("%s/skills/%s.svg" % [ICON_ROOT, feature_id])
+
 # One per SCHOOL_GLYPHS key — a spell button is marked by its school, which
 # says more about it than one generic wand for all 300 of them would. Same
 # generic fallback for a spell whose entry names no school.

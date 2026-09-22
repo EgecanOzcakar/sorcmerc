@@ -7301,6 +7301,217 @@ default. Test: `tests/test_world_biomes.gd`.
 - The worldgen climate option (`origin["climate"]`, biasing how the discs are
   distributed) is designed but not built.
 
+## What the level tables are missing — an audit, not a fix (2026-09-22, measurement only)
+
+Designing a screen that draws the whole 1-20 ladder meant asking whether the
+data has twenty levels in it. It does not. `tools/audit_levels.py` counts the
+holes and writes `docs/audit-class-levels.md`; the numbers there are the
+report, and this entry is only why it exists and what it does not claim.
+
+The measurement worth repeating: **the rogue's class table stops at level 10
+and the fighter's at 16.** Rogue gains nothing at all from 11 on — no Reliable
+Talent, no Elusive, no Stroke of Luck, and not even the Ability Score
+Improvements at 12 and 16 that every class gets. Fighter loses its ASIs at 12
+and 16 the same way. That is not obscure content: `core/regions.gd`'s Far
+Deeps band is levels 10-20, so the campaign already sends parties there.
+
+Across all twelve classes: 23 class levels with no grant of any kind, and 40
+missing subclass tiers. Most of the empty class levels are the same hole
+counted twice — a class whose four paths all lack their level-14 feature shows
+an empty level 14 — so filling the path tiers closes them without touching the
+class table. Fighter and rogue are what is left.
+
+Two false positives were removed from the count before it was written down. A
+caster's "empty" level is not empty: a wizard gains nothing named at 7, 9, 11,
+13, 15 or 17, but the slot table opens a new rank there, which a ladder draws
+as a rung. Counting slot growth as a grant took the figure from 43 to 23.
+Sorcerer, wizard, bard and paladin come out whole.
+
+Expectations are not invented here. The subclass milestones, the ASI levels
+and the Epic Boon level are transcribed from dnd-maintainer's own
+`coverage-matrix.ts`, which is careful about what it proves: that a level is
+*shaped* right, never that it matches the book. A level the audit calls whole
+may still hold the wrong feature. A level it calls empty is empty for certain.
+
+The same run counts the art the ladder would need, since it walks every
+feature anyway: 286 features are granted by a class or a path, 270 of them
+have no badge under `assets/icons/skills/` (the existing 199 badges were
+authored for the action bar, which only ever needed the features you can
+press), and 253 have no entry in `data/effects/features.json`.
+
+### Still open
+
+- Filled the same day by the entry below. The inventory stands as the record
+  of what was missing and `tools/audit_levels.py --markdown` regenerates it.
+- The audit is structural only. No entry in it is verified against the 2024
+  Player's Handbook, and `coverage-matrix.ts`'s `GOLDEN_VERIFIED` set is
+  empty upstream for the same reason.
+- Fighter and rogue subclass tiers (13/17 for rogue, none missing for
+  fighter) are counted, but the *contents* of every missing tier are not
+  listed — the audit says which slots are empty, not what belongs in them.
+- The progression screen this was measured for is designed but unbuilt: the
+  ladder replaces the level-up screen and the creator's class step, with
+  levels past current+1 drawn as silhouettes.
+
+## The level tables reach 20 — the holes, filled (2026-09-22)
+
+64 grants, written by `tools/fill_levels.py`, which holds the table of what was
+added and re-runs with `--check` to prove it stayed added. The audit that
+counted the holes now reads zero of both kinds.
+
+What went in: the rogue's entire back half (Reliable Talent at 11, Devious
+Strikes at 14, Slippery Mind at 15, Elusive at 18, Stroke of Luck at 20), the
+fighter's (Extra Attack twice at 11 and three times at 20, Studied Attacks and
+the second Indomitable at 13, the second Action Surge at 17), the cleric's
+Improved Blessed Strikes at 14, and the seven Ability Score Improvements those
+two classes had lost — fighter at 12, 14, 16 and 19, rogue at 12, 16 and 19.
+Then 42 subclass features: every barbarian path's 14, every bard college's 14,
+every cleric domain's 17, every druid circle's 14, monk 11 and 17, ranger 11
+and 15, rogue 13 and 17.
+
+Choice keys are stable slots (`core/rules/choice.gd` — "F1 emits them; never
+regenerate one"), so the new ASIs took the next free index per class rather
+than renumbering anything: `asi:class:fighter:3` through `:6`, and
+`asi:class:rogue:3` through `:5`.
+
+One correction rather than an addition. The Path of the Berserker's tiers all
+sat a rung early — Mindless Rage on level 3 beside Frenzy, Retaliation on 6,
+Intimidating Presence on 10 — where the book puts them at 6, 10 and 14. They
+were moved. This is exactly the failure the audit warned it could not catch:
+shape-checking proves a tier exists, never that it holds the right thing.
+
+`tests/test_subclass_features.gd` refused the change until all 42 new features
+had an inventory note, which is the contract working as designed — the repo
+will not let a feature into the catalog without one line saying what the book
+says it does and whether the board can do it. 40 of the 42 are marked `[C]`:
+mechanics the board does not have. Two are `[P]`, carried by the sheet.
+
+### Still open
+
+- The names are from the 2024 book, not transcribed from a machine source —
+  neither repo has one. `coverage-matrix.ts`'s `GOLDEN_VERIFIED` set is empty
+  upstream for the same reason. Good, not golden.
+- None of the 64 has a mechanic. 307 of the catalog's 340 features have no
+  entry in `data/effects/features.json`, so they behave like the majority: the
+  sheet lists them and nothing in a fight reads them.
+- **Do not run `npm run export:sorcmerc`.** `data/SCHEMA.md` tells you to, and
+  measured 2026-09-22 a clean re-export deletes `magic-missile`,
+  `healing-word`, `shield`, `eldritch-blast` and `vicious-mockery` from
+  `data/spells.json`, plus two scrolls from `data/magic-items.json` — content
+  added downstream that exists nowhere upstream. The export is lossy in this
+  direction and the warning is now in `tools/fill_levels.py`'s header.
+- The warlock's level 18 stays bare, which is correct: Mystic Arcanum lands on
+  17 and 19 and the pact slots stop growing at 17. `EXPECTED_BLANK` in
+  `tools/audit_levels.py` records it so nobody fills it by mistake.
+
+## The climb — the whole ladder, 1 to 20, on one screen (2026-09-22)
+
+The character screens only ever drew the level you were standing on. You could
+not see that Extra Attack waits at 5, or what taking the Berserker at 3 buys at
+14, without leaving the game. `core/climb.gd` reads the whole track and
+`scenes/creator/climb_view.gd` draws it: twenty rungs down the left, what the
+selected one gives on the right.
+
+It is a reading problem, not a rules one — the data was always twenty entries
+deep in `data/classes.json`. The one real piece of work is the merge, because a
+class level that looks empty is usually a level where the *path* grants: the
+barbarian's 14, the monk's 11, the rogue's 9. `Climb.build()` folds
+`subclasses.json`'s `classLevel` tiers into the class array, which is why a
+Thief's level 9 says Supreme Sneak instead of nothing.
+
+Three states, and the middle one is the point. A rung at or below your level is
+taken and set in gilt; the one above it is next; everything higher is **veiled**
+— its name, its marks and its level stay legible, but the panel will not read
+out what it does until you are one level away. That is the whole difference
+between a plan and a spoiler, and it is computed in core so both screens agree
+on it rather than each deciding for itself.
+
+The level-up page now carries it under its gains card: the card says what this
+level brings, the climb says where the level sits. Before Confirm the build is
+still on the old level, so the rung marked "next" is exactly the one the card is
+describing.
+
+`Effects.humanize()` was fixed on the way. It title-cased every word, which is
+right until an id has a small word in it — the restored `rogue-stroke-of-luck`
+came back "Stroke Of Luck" and `zealot-rage-of-the-gods` came back "Rage Of The
+Gods". Small words are left down now, which reads as a name rather than a
+headline, and the climb puts a great many of these on one screen at once.
+
+And twelve class emblems (`assets/icons/classes/`, `tools/gen_action_icons.py`'s
+new `classes` group), because the only thing standing in for a class until now
+was a text glyph. Each is one motif, not a scene: an emblem sits at 28-46 px
+beside a class name that is already on screen, so it identifies rather than
+illustrates. Where two classes would reach for the same motif the tie breaks on
+what the class does — the barbarian's fist against the monk's open hand, the
+sorcerer's flame against the wizard's worked orb.
+
+That generator had been failing its own `--check` on all 161 icons in the repo:
+its template wrote `compress/mode=0` where Godot 4.7's importer writes 1. The
+template was corrected to match what Godot actually produces, so `--check` is
+clean again at 360 files. Exactly seven sidecars had held `mode=0` — and five
+of them are `magic-missile`, `healing-word`, `shield`, `eldritch-blast` and
+`vicious-mockery`, the same five the export deletes. They were added by hand
+downstream and never went through the editor, which is what left them behind.
+
+### Still open
+
+- The creator's class step is untouched. The design is for it to open the same
+  widget at level 0 so a class is chosen by reading where it goes, and
+  `Climb.build(id, "", 0)` already returns exactly that track — it is the
+  wiring that is missing, not the model.
+- 324 of the catalog's 340 features still have no badge of their own. They no
+  longer fall back to the generic spark, though: see the entry below.
+- The ranger's emblem is an arrow without the bow arc behind it — the `band`
+  did not render at that radius. It reads distinctly enough beside the rogue's
+  dagger to ship, and wants one more pass.
+- Multiclass shows the first class's track only (`ponytail:` in
+  `core/climb.gd`), which matches the resolver's own single-class assumption
+  (`data/SCHEMA.md` gap #6).
+- The detail panel reads mechanics straight out of `data/effects/features.json`,
+  so on most rungs it says nothing. That is honest rather than broken: the sheet
+  lists the feature and no fight reads it yet.
+
+## Forty-eight path emblems, and a badge on every rung (2026-09-22)
+
+The twelve class emblems left the other half of the fork bare: the ladder draws
+four branches at level 3 and had four identical text marks to draw them with.
+`assets/icons/paths/` is one emblem per subclass, a new `paths` group in
+`tools/gen_action_icons.py`, and the fork now shows each branch wearing its own
+with the taken one marked as well as lit — a colour alone is not a choice a
+reader can see.
+
+Distinctness is judged *within* a class, not across the set. The four on screen
+at the fork are the four a player is comparing, so no two of a class share a
+motif; across classes a motif repeats freely in another element, because the
+Berserker's fangs are fire, the Beast Master's are wood, and they are never on
+screen together.
+
+Five had to be redrawn after looking at them. `heart()` fills near-black at
+badge size, which cost the Life Domain and the Oath of the Ancients, and
+`beam()` is a pale slab with no silhouette, which cost the Light Domain and the
+Oath of Glory. The Gloom Stalker's eye in the shadow element disappeared into
+its own disc. Neither motif is used in this set now, and the registry says why
+where the next reader will look.
+
+The more useful half is the fallback. A rung's badge is now the most specific
+art that exists: the feature's own, then the path's emblem, then the class's,
+then the generic spark. Only 16 of the catalog's 340 features have a badge —
+the 199 that exist were drawn for the action bar, which only ever needed the
+features you can *press* — so before this nearly every rung showed the same
+spark and the panel read as unfinished. Now a rung without its own art still
+says which class and which path it belongs to. `Icons.feature_icon()` exists
+for exactly that: unlike `skill_icon()` it returns null rather than the spark,
+so a caller can tell "no art" from "the generic one".
+
+### Still open
+
+- Per-feature badges are still 324 short, and that is a drawing job rather than
+  a wiring one. The fallback makes their absence cost a reader information
+  rather than legibility.
+- The Wild Heart's claw and the Light Domain's burst are the weakest two of the
+  48; both read, neither sings.
+- The creator's class step is still unwired, and `Climb.build(id, "", 0)` still
+  returns exactly the track it wants.
 ## Two the road got wrong — the raiders' own kin, and a past paid to the dead (2026-09-22)
 
 Two bugs in the open world's fight hand-off, both of them ordering rather than
