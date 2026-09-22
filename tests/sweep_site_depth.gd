@@ -23,6 +23,17 @@
 # The last room of every site is the boss (core/site.gd's _boss_room), so its
 # column is marked: a boss is meant to be harder than the room before it, and
 # the question is by how much rather than whether.
+#
+# POLICY is the thing to set before trusting a row. core/site.gd's _build puts
+# a COMBAT room at picks[0] always — "at least one way on is always a fight" —
+# and a rest or a cache can only ever be picks[1] or [2]. So a robot that takes
+# opts[0] never rests, never loots, and fights every floor: that is the worst
+# case a site can produce and not what a player does.
+#   POLICY=fight   take opts[0]. Every floor a fight, no rest ever.
+#   POLICY=rest    take a rest room when one is offered, else opts[0].
+#   POLICY=support take any support room when offered (rest or cache).
+# Run at least `fight` and `rest`; they bracket real play, and the gap between
+# them is what a rest room is worth, which is a number nothing else here says.
 extends SceneTree
 
 const AI = preload("res://core/ai.gd")
@@ -35,6 +46,18 @@ const World = preload("res://core/world.gd")
 const Site = preload("res://core/site.gd")
 
 static var _extra := 0
+static var _policy := "fight"
+
+# Which way on to take. core/site.gd guarantees picks[0] is a fight, so "fight"
+# is the robot that never rests and "rest"/"support" are the ones that do.
+func _pick_room(opts: Array) -> int:
+	if _policy == "fight":
+		return 0
+	for i in opts.size():
+		var k := String(opts[i].get("kind", ""))
+		if k == "rest" or (_policy == "support" and k == "treasure"):
+			return i
+	return 0
 
 func _world() -> World:
 	var w = World.new()
@@ -111,7 +134,7 @@ func _delve(faction: String, seed: int, into: Dictionary) -> void:
 		var opts: Array = s.options()
 		if opts.is_empty():
 			break
-		var room: Dictionary = s.enter(0)
+		var room: Dictionary = s.enter(_pick_room(opts))
 		if String(room["kind"]) == "combat":
 			var cond: Array = _condition(party)
 			var row: Dictionary = into.get(at, {"reached": 0, "won": 0, "hp": 0.0, "slots": 0.0, "boss": 0})
@@ -149,7 +172,9 @@ func _print(label: String, rows: Dictionary) -> void:
 func _init() -> void:
 	var seeds := int(OS.get_environment("SEEDS")) if OS.get_environment("SEEDS") != "" else 20
 	_extra = int(OS.get_environment("LEVEL")) if OS.get_environment("LEVEL") != "" else 5
-	print("seeds per faction: %d, party level 3+%d, lair at the origin (band 1.0)" % [seeds, _extra])
+	_policy = OS.get_environment("POLICY") if OS.get_environment("POLICY") != "" else "fight"
+	print("seeds per faction: %d, party level 3+%d, policy %s, lair at the origin (band 1.0)" % [
+		seeds, _extra, _policy])
 	print("")
 	# Pooled over every faction: the depth curve with the people averaged out.
 	var all := {}
