@@ -152,7 +152,8 @@ static func _mechanics() -> Array:
 		"body": _h("%d ft to a hex; every range is capped at %d hexes on this board." % [ft, cap]) +
 		"A weapon's normal range in feet becomes hexes (30 ft = %d, 60 ft = %d, anything from %d ft up = %d). Spells are the same: 30-ft spells reach %d hexes, everything 60 ft and over reaches %d. Touch spells and melee are 1.\n\n" % [Adapter.hexes(30), mini(cap, Adapter.hexes(60)), cap * ft, cap, Adapter.hexes(30), mini(cap, Adapter.hexes(60))] +
 		"[b]Point-blank[/b]: a ranged attack or spell attack made with an enemy adjacent to you has disadvantage. Step away first — and eat the opportunity attack — or let the fighter handle what's in your face. Enemy archers do exactly this.\n\n" +
-		"[b]Half cover[/b] (stalls, tents, the alcove — the board marks them) gives the occupant +2 AC and +2 on every saving throw. Sacred Flame and a few others ignore it.\n\n" +
+		"[b]Solid props[/b] — trees, standing stones, pillars, ice columns — block movement and line of sight: nothing is aimed past one. [b]Stacked stalls, shelves and stake walls[/b] do the same until somebody smashes them (one action from beside it, or any blast that catches it).\n\n" +
+		"[b]Half cover[/b] (reed banks — the board marks them) gives the occupant +2 AC and +2 on every saving throw. Sacred Flame and a few others ignore it. Reeds are tall, too: you can see into them and out of them, but not across.\n\n" +
 		"[b]Thrown weapons[/b] — javelin, dagger, handaxe, spear, trident — appear twice in the wield toggle: in hand as melee, or thrown as a ranged attack at their listed range with the same STR/DEX bonus (no Archery bonus).\n\n" +
 		"[b]Cones[/b] (Burning Hands, Fear) are aimed at a direction, not a target, and catch allies too. A 15-ft cone is a %d-hex wedge." % Adapter.area_hexes(15)})
 	out.append({"id": "spells", "section": "Fighting", "title": "Spells, slots and concentration",

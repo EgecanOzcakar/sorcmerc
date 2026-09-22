@@ -8521,3 +8521,48 @@ render was a grey cut-out silhouette.
   are narrowed hardest and are the first place to look if something does.
 - `tests/shot_board_props.gd`'s gallery frames the old kit sizes and draws the
   models small; the two board shots are the ones to judge by.
+
+## Props sorted by height and durability: walls, breakables, cover (2026-09-23)
+
+Cover was one rule for every prop — stand in the hex for +2 AC and +2 on
+saves — and nothing on a board ever blocked a line of sight except its edge
+and #156's ridges. A tree and a reed bank were the same thing to the rules.
+`Encounter.SOLID_COVER` now sorts each palette's cover, applied by
+`_solidify()` at the end of `board_for()`:
+
+- **Solid** (full height, durable): tree, menhir, pillar, icicle. The cover
+  hex becomes an object that blocks movement and sight, for good.
+- **Breakable** (full height, wooden): crate-stack 10 HP, shelf 8, stakes 6.
+  The same, until smashed — the barrel's existing rule, one action from
+  beside it or any blast that catches it; `destroy_object()` opening the line
+  needed no new code.
+- **Screen** (tall, soft): the marsh's reeds stay cover and also block the
+  line *across* them (`board["screens"]`), never into or out of them.
+- Barrels and crates were already low breakables and are untouched.
+
+A wall the board cannot afford stays cover: one on a `PARTY_STARTS` hex (the
+forest's (2,0), the downs' (1,1), the city's (1,0)) or one whose removal
+splits the floor (the frozen cave's crawl; the shrine's Alcove once mirrored).
+`Encounter.board()` — the raw authored room 116 test sites stand on — is not
+solidified, so its Alcove is still the half cover those tests measure; every
+real fight goes through `board_for()`. Walls stand centred in their hex;
+standable props keep #167's offset.
+
+Measured, test_scaler at 200 seeds, hard: the set went 85.0% -> 80.5%
+(TARGET 75 +- 10: closer to the calibration, not further), downs with it,
+the marsh unchanged at 88.5% — now 8.0 points easier than the set against a
+6-point BIOME_DRIFT, so test_biome_boards_are_neutral fails. Reed screens were
+the proposed answer and measured at exactly nothing: 0 of 16,683
+attacker/enemy pairs over the 200 marsh fights were out of sight because of a
+reed alone, and the sweep came out 177W/23L to the fight either way. Five reed
+hexes on ~110 are not where the lines run.
+
+### Still open
+
+- **The marsh drift.** Unresolved and red: the marsh is the one board with no
+  walls, and it plays 8 points easier. Screens are in, correct, and inert.
+- Areas ignore walls: a fireball still reaches round a pillar. Cones and
+  bursts would need their own sight check per hex.
+- The AI never smashes a breakable to open a line; it only walks round.
+- docs/combat-design.md §7 still describes the Alcove as half cover; it is
+  true of Encounter.board() and no longer of a real sunken-shrine fight.

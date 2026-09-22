@@ -29,6 +29,7 @@ func _init() -> void:
 	test_cone_spell_destroys_a_barrel_in_its_blast()
 	test_every_combat_node_has_a_board()
 	test_hex_tips()
+	test_solid_props_block_sight()
 	test_region_names_read_as_english()
 	print("test_boards: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -250,9 +251,13 @@ func _connected(b: Dictionary) -> bool:
 # Special tiles explain themselves on hover: what they are and what they change.
 func test_hex_tips() -> void:
 	var Board = load("res://scenes/main.gd").Board
-	var cb = Encounter.build({"monsters": [{"id": "goblin", "count": 1}], "theme": "goblin-camp", "seed": 1}, [])
+	var cb = Encounter.build({"monsters": [{"id": "goblin", "count": 1}], "theme": "marsh", "seed": 1}, [])
 	var b: Dictionary = cb.board
 	check(Board.hex_tip(cb, b["cover"][0]).contains("+2 AC"), "cover says what it does for AC")
+	var wood = Encounter.build({"monsters": [{"id": "goblin", "count": 1}], "theme": "forest-clearing", "seed": 1}, [])
+	var tree: Array = wood.board["objects"].filter(func(o): return o["type"] == "tree")
+	check(not tree.is_empty() and Board.hex_tip(wood, tree[0]["pos"]).contains("see through it"),
+		"a tree says it blocks sight")
 	check(Board.hex_tip(cb, b["rough"][0]).contains("costs two"), "rough ground says what it costs")
 	var plain := Vector2i(999, 999)
 	for hx in b["hexes"]:
@@ -283,3 +288,46 @@ func test_region_names_read_as_english() -> void:
 			var line: String = "Grix moves to %s." % Combat._the(String(name))
 			check(not line.contains("the the"), "%s: \"%s\" is named once, not twice" % [theme, line])
 			check(line.to_lower().contains(" to the "), "%s: \"%s\" names somewhere" % [theme, line])
+
+
+# Encounter.SOLID_COVER: a full-height prop between two hexes is a wall to the
+# line of sight, and a breakable one stops being one the moment it is smashed.
+# The pair is the prop's two opposite neighbours, so the line runs through it.
+func test_solid_props_block_sight() -> void:
+	for theme in ["forest-clearing", "city-square"]:
+		var cb = Encounter.build({"monsters": [{"id": "goblin", "count": 1}], "theme": theme, "seed": 1}, [])
+		var hexes: Array = cb.board["hexes"]
+		var found := false
+		for o in cb.board["objects"].filter(func(o): return o.get("blocks_sight", false)):
+			var t: Vector2i = o["pos"]
+			for a in Hex.neighbors(t):
+				var b: Vector2i = t * 2 - a
+				if not (a in hexes and b in hexes and cb.passable(a) and cb.passable(b)):
+					continue
+				found = true
+				check(not cb.has_line_of_sight(a, b), "%s: nothing sees past the %s" % [theme, o["type"]])
+				if int(o.get("hp", 0)) > 0:
+					cb.destroy_object(o)
+					check(cb.has_line_of_sight(a, b), "%s: the smashed %s no longer blocks" % [theme, o["type"]])
+				break
+			if found:
+				break
+		check(found, "%s has a sight-blocking prop with open ground either side" % theme)
+		var soft := Encounter.board_for("marsh")
+		check(soft["objects"].all(func(o): return not o.get("blocks_sight", false)) and not soft["cover"].is_empty()
+			and soft["screens"] == soft["cover"], "the marsh's reeds stay cover, and screen sight instead of walling it")
+	# ...and a reed hex screens the line across it, never the one into it
+	var cb = Encounter.build({"monsters": [{"id": "goblin", "count": 1}], "theme": "marsh", "seed": 1}, [])
+	var hexes: Array = cb.board["hexes"]
+	var tested := false
+	for r in cb.board["screens"]:
+		for a in Hex.neighbors(r):
+			var b: Vector2i = r * 2 - a
+			if a in hexes and b in hexes and not (a in cb.board["screens"]) and not (b in cb.board["screens"]):
+				check(not cb.has_line_of_sight(a, b), "nothing sees across the reeds at %s" % str(r))
+				check(cb.has_line_of_sight(a, r), "...but into them is fine")
+				tested = true
+				break
+		if tested:
+			break
+	check(tested, "the marsh has a reed hex with open ground either side")

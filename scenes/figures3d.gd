@@ -335,6 +335,8 @@ func _process(_dt: float) -> void:
 		var n: Node3D = _props[key]
 		var hx: Vector2i = _prop_hex[key]
 		var off := Vector2(_prop_jitter(hx, 0), _prop_jitter(hx, 1)) * PROP_OFFSET
+		if cb.object_at(hx).get("blocks_movement", false):
+			off = Vector2.ZERO    # nobody stands here to make room for: a wall stands centred
 		var lift: float = -board._rise(hx)
 		n.position = world_for_screen(board._pix(hx) + Vector2(0, lift))
 		n.position.y = lift / maxf(0.001, px_per_unit() * cos(th))
