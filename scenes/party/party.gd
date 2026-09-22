@@ -16,6 +16,7 @@ const Travel = preload("res://core/travel.gd")
 # the same dict for the player) — reused here rather than duplicated so the
 # picker can never drift out of sync with what actually has a model.
 const HeroModels = preload("res://scenes/figures3d.gd").HERO_MODELS
+const Portraits = preload("res://scenes/portraits.gd")
 # Skill ids -> names/abilities, the same table the profile screen reads.
 const Catalog = preload("res://core/rules/catalog.gd")
 # The prepare page's own model: who prepares, what they may prepare, and the
@@ -627,7 +628,22 @@ func _summary_label(sm: Dictionary) -> Control:
 	# tiles you can click stay the profile screen's job.
 	col.add_child(_detail_line("⚔", _gear_text(sm), COL_GOLD, "gear"))
 	col.add_child(_detail_line("◆", _skills_text(sm), COL_PARTY, "skills"))
-	return col
+	# #165: the class model's face beside the card when it has rendered; the
+	# glyph in the name line stays either way.
+	var face := Portraits.bust(String(HeroModels.get(sm["class_id"], "")), 48)
+	if face == null:
+		return col
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tr := TextureRect.new()
+	tr.texture = face
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(tr)
+	row.add_child(col)
+	return row
 
 # One of the two lines under a roster row's numbers. Named so a test can find
 # it without counting children.

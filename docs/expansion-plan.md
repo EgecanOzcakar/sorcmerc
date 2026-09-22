@@ -6743,3 +6743,24 @@ divide by nothing, and a saved-and-reloaded undead band keeps its 0.6.
 one exception), so the slow-walker case is exercised through a small
 duck-typed stand-in rather than a real hero — the rule is ready for the
 day a species or a wound gives one.
+## Portraits — a face cut from the model that stands on the board (2026-09-22)
+
+Issue #165. `scenes/portraits.gd`: `bust(path, px)` renders a
+head-and-shoulders bust of a figure GLB into a transparent SubViewport
+(orthographic, upper third of the bounds, the board's own ambient and key
+light, MSAA 4x, `UPDATE_ONCE`) and keeps an `ImageTexture` copy for the
+session under `path@px`. No PNGs. A render takes a frame, so the first ask
+answers null and the caller keeps its glyph until its next rebuild; headless
+answers null always. Which file a face comes from is
+`Figures3D.model_path_for(sheet, src_id)`, now static, the same lookup the
+board draws by. Used by the combat turn strip (a 28-px bust in the glyph's
+place) and the party page's hero cards (48 px beside the name).
+
+### Still open
+
+- The after-action page (`_spoils_company` / `_spoils_fallen`, PR #161) is
+  not on this branch; the same two lines go there when it lands.
+- Beasts frame the top of their bounds — a quadruped shows its back. A
+  per-model head offset if a beast portrait ever matters.
+- Nothing warms the party page ahead of its first open; the first look at a
+  hero card is the glyph, the second is the face.
