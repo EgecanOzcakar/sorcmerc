@@ -1948,7 +1948,7 @@ func _build_order_strip() -> void:
 		# #165: the model's own face where there is one (rendered lazily, so
 		# the glyph holds the spot until the next rebuild); team tint stays
 		# on the name, not the portrait.
-		var face := Portraits.bust(Figures3D._model_path(c), int(28 * u))
+		var face := Portraits.bust(Figures3D._model_path(c), int(40 * u))
 		if face != null:
 			var tr := TextureRect.new()
 			tr.texture = face

@@ -22,7 +22,7 @@ func _init() -> void:
 	check(Portraits.bust(Figures3D.HERO_MODELS["wizard"]) == null, "headless: bust() is null")
 	check(Portraits.bust("") == null, "empty path: bust() is null")
 	Portraits.warm(Figures3D.HERO_MODELS.values(), 28)
-	check(Portraits._pending.is_empty(), "headless: warm() starts no renders")
+	check(Portraits._cache.is_empty(), "headless: warm() starts no renders")
 	check(Portraits.key("res://a.glb", 48) == "res://a.glb@48", "cache key is path@px")
 
 	check(Figures3D.model_path_for(FakeSheet.new(), "") == Figures3D.HERO_MODELS["wizard"],
