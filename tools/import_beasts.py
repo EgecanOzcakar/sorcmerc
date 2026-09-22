@@ -42,7 +42,14 @@ SRC = os.environ.get('SRC', 'assets/NewlyDownloadedModels')
 DST = os.environ.get('DST', 'assets/beasts')
 BESTIARY = 'data/bestiary.json'
 TRIS, TEX = 20000, 1024
-FIXUPS = {'pleisosaurus': 'plesiosaurus'}
+# The 2026-09-22 batch came down with the words run together; ogre2 is a second
+# ogre and orcarcher stands in for the one orc the bestiary has.
+FIXUPS = {'pleisosaurus': 'plesiosaurus', 'deathdog': 'death-dog',
+          'frostgiant': 'frost-giant', 'gnollarcher': 'gnoll-archer',
+          'gnollwarrior': 'gnoll', 'hillgiant': 'hill-giant',
+          'hillgiantarcher': 'hill-giant-archer', 'ogre1': 'ogre', 'ogre2': 'ogre',
+          'orcarcher': 'orc', 'phasespider': 'phase-spider',
+          'rustmonster': 'rust-monster', 'winterwolf': 'winter-wolf'}
 
 def bestiary_id(name):
     s = re.sub(r'_alt_\d+$', '', name)
@@ -135,6 +142,10 @@ if __name__ == '__main__':
             print(f"  {n}: REFUSED, '{bid}' is not an id in {BESTIARY} -- "
                   f"nothing would ever draw it. Rename the download, add it to "
                   f"FIXUPS, or pass --force.")
+            continue
+        j, _ = read_glb(f'{SRC}/{n}.glb')
+        if not any('baseColorTexture' in m.get('pbrMetallicRoughness', {}) for m in j.get('materials', [])):
+            print(f"  {n}: skipped, no albedo texture (an untextured download draws as a white blob)")
             continue
         done.add(bid)
         if check_only:
