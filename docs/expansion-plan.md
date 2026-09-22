@@ -7732,12 +7732,141 @@ the same trap for a content pack authoring two groups of one monster.
   fixed by the same change, but nothing rosters them today — `humanoid` and
   `celestial` are not in `Scaler.FACTIONS`. A content pack naming one directly
   would have hit the same wall.
-- **`depth_for` scales a lair's depth by its faction's index in a list**, which
-  is a proxy for "how far into the wild this is" and not a measurement of
-  anything. With bosses in, the grid above shows what that costs: depth 3
-  clears 45-100%, depth 4 15-35%, depth 5 0-70%, depth 6 10-90%. The spread
-  WITHIN a depth is `power.gd`'s pricing; the drop BETWEEN depths is
-  `depth_for`. A depth pass measured against clear rates rather than against a
-  list index is the obvious next one, and it would let the two thin outliers
-  above (cultist at depth 5, construct at depth 6) be fixed where they are
-  actually caused.
+- ~~**`depth_for` scales a lair's depth by its faction's index in a list**~~ —
+  investigated the same day and NOT what is wrong; see "What a room of depth
+  costs" below. That mapping agrees with the authored `Regions.HOMES` ordering
+  on 11 of 15 factions, and the depth curve turned out to be a symptom of
+  something a good deal larger in `core/rules/power.gd`.
+
+## What a room of depth costs — and what the scaler can see (2026-09-22, measurement only)
+
+No code changed. The entry above closed on "a depth pass measured against clear
+rates rather than against a list index", and that turned out to be the wrong
+suspect. `depth_for`'s faction-to-depth mapping agrees with the authored
+`Regions.HOMES` ordering on 11 of 15 factions; the four it disagrees on (undead,
+giant, soldier, fey) are worth a tidy one day and are not what anybody would
+feel. What is wrong is underneath it.
+
+### Taking depth apart from faction
+
+`tests/sweep_site_kin.gd` reports whether a delve was CLEARED, per faction, and
+that column cannot answer the question, because `depth_for` gives each faction
+exactly one depth — "deeper lairs clear less" and "these peoples are harder"
+are the same number. `tests/sweep_site_depth.gd` reports the CONDITIONAL rate
+instead: of the parties that reached room d, how many won room d. Rooms at the
+same index pool across factions, so the curve is the depth cost with the people
+averaged out, and it prints what the party walked in with.
+
+One correction had to come first. `core/site.gd`'s `_build` puts a COMBAT room
+at `picks[0]` always — "at least one way on is always a fight" — so a rest or a
+cache is only ever `picks[1]` or `[2]`. A robot taking `opts[0]` never rests and
+never loots. That is a floor, not a reading, so the sweep takes a `POLICY` and
+the two runs below bracket real play.
+
+20 seeds a faction, the three 6-room factions (elemental, construct, dragon),
+conditional win rate per room with HP and slots on entry:
+
+| | d0 | d1 | d2 | d3 | d4 | d5 (boss) |
+|---|---|---|---|---|---|---|
+| **level 3, never rests** | 93.3% | 76.8% | 55.8% | 41.7% | 50.0% | **0.0%** |
+| *hp / slots in* | 100/100 | 62/76 | 41/45 | 31/11 | 29/5 | 9/0 |
+| **level 3, rests** | 95.5% | 82.5% | 74.3% | 71.0% | 62.5% | **29.2%** |
+| *hp / slots in* | 100/100 | 70/80 | 64/67 | 59/49 | 61/41 | 52/26 |
+| **level 8, never rests** | 100% | 100% | 100% | 98.3% | 100% | **23.7%** |
+| *hp / slots in* | 100/100 | 85/88 | 72/75 | 63/67 | 57/58 | 49/50 |
+| **level 8, rests** | 100% | 100% | 100% | 100% | 100% | **18.3%** |
+| *hp / slots in* | 100/100 | 89/90 | 81/84 | 76/78 | 73/71 | 67/64 |
+
+Two readings, and the second one is the finding.
+
+**At level 3 the delve is a real gradient and at level 8 it is a corridor with
+a wall at the end.** Every ordinary room at level 8 is a 100% win; all of the
+difficulty is the boss. At level 3 every room carries risk. An earlier two-seed
+run of this sweep said "depth adds no risk, only attrition" and that was a
+level-8 artefact stated too early — at the level the content is designed for,
+the rooms are content.
+
+**And resting made the level-8 boss HARDER.** The party arrives at 67% HP
+instead of 49%, and wins 18.3% instead of 23.7%. That is not noise and it is
+not attrition. It is the scaler.
+
+### What the scaler can see
+
+`core/rules/power.gd`'s `estimate()` prices a combatant's effective HP off
+`max_hp`:
+
+```gdscript
+var ehp := float(c.max_hp) * (0.55 / maxf(0.05, p_hit(REF_ATK, c.ac)))
+```
+
+`Scaler._budget` builds the party's budget from `Power.team_score` of exactly
+those estimates, so the same dragon's boss room, built for the same level-8
+party with one variable moved at a time:
+
+| | party score | what the boss room fields |
+|---|---|---|
+| hp 20%, slots 64% | 129.8 | 5 bodies, dragon + 4 wyrmlings @0.75 |
+| hp 49%, slots 64% | 129.8 | 5 bodies, identical |
+| hp 67%, slots 64% | 129.8 | 5 bodies, identical |
+| hp 100%, slots 64% | 129.8 | 5 bodies, identical |
+| hp 67%, slots 0% | 80.1 | 3 bodies, dragon + 2 MIX |
+| hp 67%, slots 26% | 114.3 | 4 bodies @0.70 |
+| hp 67%, slots 50% | 117.7 | 4 bodies @0.85 |
+| hp 67%, slots 64% | 129.8 | 5 bodies @0.75 |
+| hp 67%, slots 100% | 145.3 | 5 bodies @0.95 |
+
+**HP is worth nothing at all.** A party at 20% and a party at 100% get a
+byte-identical roster. **Unspent slots are worth everything** — an 81% swing in
+the budget, three bodies against five.
+
+So the difficulty system's entire read on "how is this party doing" is how many
+spell slots the casters have left, and it reads it backwards for the situation
+a site creates:
+
+1. **HP attrition is unpriced.** Five rooms of damage change nothing about what
+   is waiting in the sixth. A fighter at 1 HP and a fighter at full are the
+   same party.
+2. **Slot attrition is priced the wrong way.** Spending slots makes the next
+   fight smaller; recovering them makes it bigger. The one recovery mechanic
+   inside a site — the rest room, the thing the design leans on — raises the
+   budget of the fight it is preparing the party for, and at level 8 it raises
+   it by more than the healing is worth. At level 3 the rest still wins,
+   because down there the party is near the floor of that curve (80.1) and the
+   HP is survival-critical, which is the whole crossover.
+3. **Only the caster has a condition the game can see.** A party of three
+   fighters is priced identically all the way down.
+
+This is also, retroactively, why `core/world_threat.gd` exists at all as a
+separate bolt-on multiplier with a measured grid of its own, and why its header
+says "tests/test_scaler.gd's sweep starts every party at full HP by
+construction, so it can never see the case this file exists for". It is a patch
+over this blindness, applied on the road and — by its own note — never reaching
+a boss.
+
+### Still open
+
+- **The root fix is `ehp` reading `c.hp`**, and it is not a small change.
+  Monsters spawn full so nothing moves for them, but every party budget in the
+  game would start falling as the party takes damage, which is what
+  `core/world_threat.gd` is already doing on the road — they would
+  double-count. It moves `test_scaler`'s bands, `core/regions.gd`'s grid,
+  `world_threat`'s own grid, `BOSS_POOL`'s six win rates and `FACTION_BOSS`'s
+  ten. A full re-tune, not a line.
+- **A site-local fix that is a line**: price a lair for the party that WALKED
+  IN. Snapshot the entry score in `Site.for_lair` and carry the correction
+  `pow(entry / current, CURVE)` on the `power_scale` knob `combat_spec` already
+  passes. The perverse incentive disappears — resting is unambiguously good,
+  spending is unambiguously costly — and no global number moves, because a
+  party at a lair's mouth is the full-HP party every existing sweep already
+  measures. This is the recommendation.
+- Applying `WorldThreat` inside a site is the option NOT to take: it makes the
+  lair get easier the worse the party is doing, which is the opposite of what
+  `core/site.gd` says it is for ("the adventuring day IS the design"), and it
+  would compound with the slot effect rather than cancel it.
+- **`depth_for` vs `Regions.HOMES`**, the original suspect, is now a tidy
+  rather than a fix: undead and giant are placed shallower than the band they
+  live in, fey deeper, and `soldier` is in no `HOMES` band at all so
+  `home_band` falls through to the deeps for it.
+- The level-8 corridor (every ordinary room a 100% win) is a separate shape
+  from all of the above and stays open: an over-levelled party walks five free
+  rooms to reach the only fight in the building.
