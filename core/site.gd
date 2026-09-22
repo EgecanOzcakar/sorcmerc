@@ -335,6 +335,24 @@ func combat_spec() -> Dictionary:
 		return {}
 	var theme: String = String(room.get("theme", ""))
 	var seed_v: int = rng.seed_value + hash(String(room.get("id", "")))
+	# A lair is its own people, all the way down. theme_for_faction() returns ""
+	# for the ten factions with no board of their own (orc, gnoll, kobold,
+	# cultist, soldier, monstrosity, fey, elemental, construct, dragon), and for
+	# those core/scaler.gd's _faction_order reads the faction off the SEED —
+	# which is per-room here, so without this line each room rolled a fresh
+	# arbitrary people and a dragon's cave was six rooms of six of them.
+	# pin_faction touches only the remainder that carries the faction, so the
+	# rooms still differ from each other in every other way.
+	#
+	# MEASURED — tests/sweep_site_kin.gd, 30 whole delves a faction, level-3
+	# preset party, lair at the origin so the band clamp above is a no-op. The
+	# grid is in docs/expansion-plan.md; the shape of it is that a themeless
+	# lair drew from all fifteen factions before and draws from one after, and
+	# that what the party gets through moves by faction rather than in one
+	# direction — a pinned lair lands on its own people's number instead of on
+	# the average of a random draw. Re-run it before changing anything here.
+	if theme == "":
+		seed_v = Scaler.pin_faction(seed_v, lair.faction)
 	# D6: a lair is built for the country it stands in. Inside the band this is
 	# 1.0 and changes nothing; outside it, a warren three days past the last
 	# waystone is a frontier warren whoever walks in. The boss takes maxf(1.0, x)
@@ -348,17 +366,17 @@ func combat_spec() -> Dictionary:
 	# Objectives: the gate holds against waves drawn from the same faction at
 	# WAVE_SCALE of an easy roster; the pens hold a captive on a deadline.
 	#
-	# No `faction` argument, unlike scenes/world/world.gd's road hold: that
-	# pins a themeless band's waves to its own people, and in here `theme` is
-	# "" for every lair whose faction has no board (orc, dragon, ...) — whose
-	# ROOM roster is itself drawn off a per-room seed and so is already some
-	# other people's. Pinning the waves alone would only make the two disagree.
-	# Both move together or neither does; see the expansion plan's "Two the
-	# road got wrong" entry.
+	# `lair.faction` for the same reason scenes/world/world.gd's road hold
+	# passes the band's: waves_for gives each wave its own roll with a `+ 17`
+	# that is not a multiple of FACTIONS.size(), so without it the offset walks
+	# each wave off the people the room itself was drawn from. Pinning the room
+	# seed above is not enough on its own — both have to move, which is what
+	# the note here used to say was not yet true.
 	match String(room.get("objective", "")):
 		"hold":
 			spec["objective"] = Objectives.make("hold", {"waves": Objectives.waves_for(
-				party.party_characters(), theme, seed_v, band, _boss_lead_exclusion())})
+				party.party_characters(), theme, seed_v, band, _boss_lead_exclusion(),
+				lair.faction)})
 		"rescue":
 			spec["objective"] = Objectives.make("rescue")
 	spec["theme"] = theme if theme != "" else Campaign.BOSS["theme"]

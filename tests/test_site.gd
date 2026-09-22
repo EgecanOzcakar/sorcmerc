@@ -11,6 +11,7 @@ const Party = preload("res://core/party.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Regions = preload("res://core/regions.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 var _pass := 0
 var _fail := 0
@@ -262,6 +263,32 @@ func _init() -> void:
 	s8.depth = s8.depth_total() - 1; s8.state = "picking"; s8.enter(0)
 	check(s8.combat_spec()["monsters"].any(func(m): return String(m["id"]) == "oni"),
 		"...but it is still the boss")
+
+	# A lair is its own people, all the way down — including the ten factions
+	# with no board of their own, which used to roll a fresh arbitrary faction
+	# per room off the per-room seed (a dragon's cave was six rooms of six
+	# peoples; tests/sweep_site_kin.gd has the grid). Scaler.MIX ("snik",
+	# "vess", "kritch", "grull") is the documented fallback when nothing in a
+	# faction fits the budget and carries no faction of its own, so it is what
+	# `kin` skips rather than what it fails on.
+	var saw_own := 0
+	for f in ["dragon", "orc", "kobold", "cultist", "goblinoid", "undead"]:
+		var sk = Site.for_lair(_lair(f, "%s-kin" % f), _party(), _world())
+		var kin := {}
+		for d in sk.depth_total():
+			for i in sk.rooms[d].size():
+				sk.depth = d; sk.state = "picking"
+				if String(sk.enter(i).get("kind", "")) != "combat":
+					continue
+				for m in sk.combat_spec()["monsters"]:
+					var fac := String(Catalog.monster(String(m["id"])).get("faction", ""))
+					if fac != "":
+						kin[fac] = true
+		check(kin.size() <= 1 and (kin.is_empty() or kin.has(f)),
+			"every room of a %s lair draws %s and nothing else (%s)" % [f, f, str(kin.keys())])
+		if kin.has(f):
+			saw_own += 1
+	check(saw_own >= 4, "...and the check is not vacuous: %d of 6 actually fielded their own" % saw_own)
 
 	# --- D1: a disturbed lair does not wait forever ------------------------
 	# Locked with the user: enter a lair and you have a day or two to finish it.
