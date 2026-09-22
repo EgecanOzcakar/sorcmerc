@@ -35,6 +35,11 @@ SUBCLASS_MILESTONES = {
 ASI_LEVELS = [4, 8, 12, 16]
 EPIC_BOON_LEVEL = 19
 
+# Levels the 2024 book leaves genuinely bare, so the report stops flagging them.
+# The warlock gains nothing at 18: Mystic Arcanum lands on the odd levels either
+# side of it and the pact slots stopped growing at 17.
+EXPECTED_BLANK = {"warlock": [18]}
+
 
 def load(name):
     return json.loads((DATA / name).read_text())
@@ -81,7 +86,8 @@ def audit():
                 if g["type"] == "asi":
                     asi_at.add(n)
             every_feature.update(feature_ids(grants))
-            if not grants and n not in sub_levels and not grew(n):
+            if not grants and n not in sub_levels and not grew(n) \
+                    and n not in EXPECTED_BLANK.get(cid, []):
                 empty.append(n)
         for s in subs:
             for e in s["levels"]:
@@ -145,9 +151,17 @@ def report(rows, arts, md=False):
         w("")
         w("**%d empty class levels** and **%d missing subclass tiers** across 12 classes." % (tot_empty, tot_sub))
         w("")
-        w("Most of the empty class levels are the same hole seen twice: a class whose")
-        w("paths all lack their level-14 feature has an empty level 14. Fill the path")
-        w("tiers and those close on their own. What is left over is fighter and rogue.")
+        if tot_empty or tot_sub:
+            w("Most of the empty class levels are the same hole seen twice: a class whose")
+            w("paths all lack their level-14 feature has an empty level 14. Fill the path")
+            w("tiers and those close on their own.")
+        else:
+            w("Every class reaches 20 and every path carries its milestones. The holes")
+            w("this report was written to count were filled by `tools/fill_levels.py`,")
+            w("which re-runs with `--check` to prove they stayed filled. What it does")
+            w("not prove is that each feature is the *right* one: the names came from")
+            w("the 2024 book rather than from a machine source, because neither this")
+            w("repo nor dnd-maintainer has one to transcribe.")
         w("")
         w("## Art the ladder would need\n")
         w("| | count |")

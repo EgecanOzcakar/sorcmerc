@@ -7339,10 +7339,8 @@ press), and 253 have no entry in `data/effects/features.json`.
 
 ### Still open
 
-- Nothing is fixed. This is the inventory; the authoring pass is not started
-  and was deliberately not begun, because the source the data is generated
-  from (`dnd-maintainer`, see `data/SCHEMA.md`) lives outside this repo and
-  hand-filling `data/*.json` would be overwritten by the next export.
+- Filled the same day by the entry below. The inventory stands as the record
+  of what was missing and `tools/audit_levels.py --markdown` regenerates it.
 - The audit is structural only. No entry in it is verified against the 2024
   Player's Handbook, and `coverage-matrix.ts`'s `GOLDEN_VERIFIED` set is
   empty upstream for the same reason.
@@ -7352,3 +7350,54 @@ press), and 253 have no entry in `data/effects/features.json`.
 - The progression screen this was measured for is designed but unbuilt: the
   ladder replaces the level-up screen and the creator's class step, with
   levels past current+1 drawn as silhouettes.
+
+## The level tables reach 20 — the holes, filled (2026-09-22)
+
+64 grants, written by `tools/fill_levels.py`, which holds the table of what was
+added and re-runs with `--check` to prove it stayed added. The audit that
+counted the holes now reads zero of both kinds.
+
+What went in: the rogue's entire back half (Reliable Talent at 11, Devious
+Strikes at 14, Slippery Mind at 15, Elusive at 18, Stroke of Luck at 20), the
+fighter's (Extra Attack twice at 11 and three times at 20, Studied Attacks and
+the second Indomitable at 13, the second Action Surge at 17), the cleric's
+Improved Blessed Strikes at 14, and the seven Ability Score Improvements those
+two classes had lost — fighter at 12, 14, 16 and 19, rogue at 12, 16 and 19.
+Then 42 subclass features: every barbarian path's 14, every bard college's 14,
+every cleric domain's 17, every druid circle's 14, monk 11 and 17, ranger 11
+and 15, rogue 13 and 17.
+
+Choice keys are stable slots (`core/rules/choice.gd` — "F1 emits them; never
+regenerate one"), so the new ASIs took the next free index per class rather
+than renumbering anything: `asi:class:fighter:3` through `:6`, and
+`asi:class:rogue:3` through `:5`.
+
+One correction rather than an addition. The Path of the Berserker's tiers all
+sat a rung early — Mindless Rage on level 3 beside Frenzy, Retaliation on 6,
+Intimidating Presence on 10 — where the book puts them at 6, 10 and 14. They
+were moved. This is exactly the failure the audit warned it could not catch:
+shape-checking proves a tier exists, never that it holds the right thing.
+
+`tests/test_subclass_features.gd` refused the change until all 42 new features
+had an inventory note, which is the contract working as designed — the repo
+will not let a feature into the catalog without one line saying what the book
+says it does and whether the board can do it. 40 of the 42 are marked `[C]`:
+mechanics the board does not have. Two are `[P]`, carried by the sheet.
+
+### Still open
+
+- The names are from the 2024 book, not transcribed from a machine source —
+  neither repo has one. `coverage-matrix.ts`'s `GOLDEN_VERIFIED` set is empty
+  upstream for the same reason. Good, not golden.
+- None of the 64 has a mechanic. 307 of the catalog's 340 features have no
+  entry in `data/effects/features.json`, so they behave like the majority: the
+  sheet lists them and nothing in a fight reads them.
+- **Do not run `npm run export:sorcmerc`.** `data/SCHEMA.md` tells you to, and
+  measured 2026-09-22 a clean re-export deletes `magic-missile`,
+  `healing-word`, `shield`, `eldritch-blast` and `vicious-mockery` from
+  `data/spells.json`, plus two scrolls from `data/magic-items.json` — content
+  added downstream that exists nowhere upstream. The export is lossy in this
+  direction and the warning is now in `tools/fill_levels.py`'s header.
+- The warlock's level 18 stays bare, which is correct: Mystic Arcanum lands on
+  17 and 19 and the pact slots stop growing at 17. `EXPECTED_BLANK` in
+  `tools/audit_levels.py` records it so nobody fills it by mistake.

@@ -1364,7 +1364,14 @@
         }
       ],
       [],
-      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "cleric-improved-blessed-strikes"
+          }
+        }
+      ],
       [],
       [
         {
@@ -2225,22 +2232,113 @@
           "count": 1
         }
       ],
-      [],
-      [],
-      [],
-      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "fighter-extra-attack-2"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:fighter:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:fighter:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "fighter-indomitable-2"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "fighter-studied-attacks"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:fighter:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:fighter:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
       [],
       [
         {
           "type": "weapon-mastery-choice",
           "key": "weapon-mastery-choice:class:fighter:3",
           "count": 1
+        },
+        {
+          "type": "asi",
+          "key": "asi:class:fighter:5",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:fighter:5",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "fighter-action-surge-2"
+          }
+        },
+        {
+          "type": "feature",
+          "feature": {
+            "id": "fighter-indomitable-3"
+          }
         }
       ],
       [],
-      [],
-      [],
-      []
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:fighter:6",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:fighter:6",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "fighter-extra-attack-3"
+          }
+        }
+      ]
     ]
   },
   {
@@ -3743,16 +3841,90 @@
           "category": "general"
         }
       ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "rogue-reliable-talent"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:rogue:3",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:rogue:3",
+          "from": null,
+          "category": "general"
+        }
+      ],
       [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "rogue-devious-strikes"
+          }
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "rogue-slippery-mind"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:rogue:4",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:rogue:4",
+          "from": null,
+          "category": "general"
+        }
+      ],
       [],
-      [],
-      [],
-      [],
-      [],
-      [],
-      [],
-      [],
-      []
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "rogue-elusive"
+          }
+        }
+      ],
+      [
+        {
+          "type": "asi",
+          "key": "asi:class:rogue:5",
+          "points": 2,
+          "from": null
+        },
+        {
+          "type": "feat-choice",
+          "key": "feat-choice:class:rogue:5",
+          "from": null,
+          "category": "general"
+        }
+      ],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "rogue-stroke-of-luck"
+          }
+        }
+      ]
     ]
   },
   {
