@@ -8442,7 +8442,13 @@ six, signed — ability scores for a hero, who has a sheet that carries them, an
 save bonuses for a monster, which has none in this catalog, with the heading
 saying which you are looking at rather than pretending they are the same thing.
 Then conditions, then what the damage types do to it, then spells and traits
-under separate headings.
+under separate headings — **one chip each, explaining itself on hover**. A
+comma-joined run of names tells a reader that a Bugbear has Surprise Attack and
+nothing whatever about what Surprise Attack does. The explanation already
+existed, as the text the action bar puts under a verb's badge, so the card
+reuses `main.gd`'s own `_verb_tooltip` rather than writing a second account of
+the same rules that could drift from it. Chips rather than prose because a
+reader has to be able to SEE that there is something to hover.
 
 The log moves under it at `FS_SMALL`, bounded to 220px, keeping its own
 scrollbar. When the column is short the log is what gives way: it is what
@@ -8480,5 +8486,4 @@ the whole script — and a test script that never compiles never reaches
   side by side for a comparison, is a real reading somebody might want.
 - Nothing on the card is clickable except the ✕ — no targeting, no selection.
   A card that could change the fight would need every guard the action bar has.
-- The card shows a creature's verbs by label only; what a verb DOES is still
-  only in its tooltip on the bar.
+- Nothing on the card is clickable except the ✕ and the chips' tooltips.

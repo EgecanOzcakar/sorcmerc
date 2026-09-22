@@ -34,6 +34,7 @@ func _init() -> void:
 	await test_fills_and_sticks()
 	await test_reads_a_hero_and_a_monster()
 	await test_spells_and_traits_are_separate()
+	await test_every_verb_explains_itself()
 	print("test_combat_card: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -159,3 +160,47 @@ func test_spells_and_traits_are_separate() -> void:
 		check(spells.contains(label), "'%s' is listed as a spell" % label)
 		check(traits == "" or not traits.contains(label), "'%s' is not also a trait" % label)
 	card.queue_free()
+
+
+# The traits and spells on the card explain themselves on hover (a Bugbear
+# having "Surprise Attack" tells a reader nothing about what Surprise Attack
+# does). The text is main.gd's own _verb_tooltip, so what is checked here is
+# that every chip HAS one and that it leads with the name — not the wording,
+# which belongs to the action bar and is tested with it.
+func test_every_verb_explains_itself() -> void:
+	var cb = _fight()
+	var card := _card_with(cb)
+	var checked := 0
+	# Every combatant, so the count is the roster's rather than a guess: the
+	# first pass of this test asked for six chips across two cards and found
+	# three, which was the threshold being wrong rather than the card.
+	for who in cb.combatants:
+		card.show_who(who, cb)
+		await process_frame
+		var tips: Array = _tips(card)
+		for tip in tips:
+			checked += 1
+			check(tip[1] != "", "%s: '%s' has a tooltip" % [who.cname, tip[0]])
+			check(tip[1].begins_with(tip[0]), "%s: '%s' leads with its own name" % [who.cname, tip[0]])
+			check("\n" in tip[1], "%s: '%s' says more than its name" % [who.cname, tip[0]])
+		# The real claim: one chip per distinct labelled verb, none dropped.
+		var want := {}
+		for v in who.verbs:
+			if String(v.get("label", "")) != "":
+				want[String(v["label"])] = true
+		check(tips.size() == want.size(),
+			"%s: a chip for each of its %d verbs (got %d)" % [who.cname, want.size(), tips.size()])
+	check(checked > 0, "the roster fielded verbs to check at all (%d)" % checked)
+	card.queue_free()
+	await process_frame
+
+
+# [label, tooltip] for every chip that takes the mouse.
+func _tips(n: Node) -> Array:
+	var out: Array = []
+	if n is PanelContainer and n.mouse_filter == Control.MOUSE_FILTER_STOP \
+			and n.get_child_count() == 1 and n.get_child(0) is Label:
+		out.append([n.get_child(0).text, n.tooltip_text])
+	for c in n.get_children():
+		out.append_array(_tips(c))
+	return out

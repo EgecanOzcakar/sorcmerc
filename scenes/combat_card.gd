@@ -176,21 +176,8 @@ func _render() -> void:
 	# for. A verb carrying a `spell` is something cast; everything else is
 	# something the creature simply IS, and reading them as one list was how a
 	# dragon's Frightful Presence ended up looking like a cantrip.
-	var spells: Array = []
-	var traits: Array = []
-	for v in c.verbs:
-		var label := String(v.get("label", ""))
-		if label == "":
-			continue
-		var into: Array = spells if v.has("spell") else traits
-		if not label in into:
-			into.append(label)
-	if not spells.is_empty():
-		_cap("Spells")
-		_line(", ".join(spells), Icons.COL_TEXT)
-	if not traits.is_empty():
-		_cap("Traits")
-		_line(", ".join(traits), Icons.COL_TEXT)
+	_verbs_row(c, true, "Spells")
+	_verbs_row(c, false, "Traits")
 
 
 # The figure, or null when the art does not cover this class or faction — which
@@ -210,6 +197,60 @@ func _figure(c) -> Control:
 	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	frame.add_child(r)
 	return frame
+
+
+# One chip per spell or trait, each explaining itself on hover.
+#
+# It was a comma-joined run of names, which tells a reader that a Bugbear has
+# Surprise Attack and nothing whatever about what Surprise Attack does. The
+# explanation already existed — it is the same text the action bar puts under
+# a verb's badge — so this reuses main.gd's own _verb_tooltip rather than
+# writing a second account of the same rules that could drift from it.
+#
+# load() rather than preload(), for the reason core/ladder.gd's header gives
+# for the same trick: scenes/main.gd preloads THIS file, so a preload back the
+# other way is a cycle. Resolved at call time, it is not.
+#
+# Chips rather than a run of text because a reader has to be able to SEE that
+# there is something to hover: an underline-free label in a paragraph looks
+# like prose, and prose does not have tooltips.
+func _verbs_row(c, want_spell: bool, caption: String) -> void:
+	var seen := {}
+	var items: Array = []
+	for v in c.verbs:
+		var label := String(v.get("label", ""))
+		if label == "" or seen.has(label) or v.has("spell") != want_spell:
+			continue
+		seen[label] = true
+		items.append(v)
+	if items.is_empty():
+		return
+	_cap(caption)
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 5)
+	flow.add_theme_constant_override("v_separation", 4)
+	_into().add_child(flow)
+	var Main = load("res://scenes/main.gd")
+	for v in items:
+		flow.add_child(_verb_chip(c, v, Main))
+
+
+func _verb_chip(c, v: Dictionary, Main) -> Control:
+	var label := String(v["label"])
+	var box := PanelContainer.new()
+	box.add_theme_stylebox_override("panel", Icons.box(Icons.COL_ROW, Icons.COL_EDGE, 3, 7, 3))
+	# The tooltip is the point, so the chip has to take the mouse — a Label
+	# alone ignores it and would never show one.
+	box.mouse_filter = Control.MOUSE_FILTER_STOP
+	var what := String(Main._verb_tooltip(c, v))
+	box.tooltip_text = label if what == "" else "%s\n%s" % [label, what]
+	var l := Label.new()
+	l.text = label
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	l.add_theme_color_override("font_color", Icons.COL_TEXT)
+	box.add_child(l)
+	return box
 
 
 func _signed(n: int) -> String:
