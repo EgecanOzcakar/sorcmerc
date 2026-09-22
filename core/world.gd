@@ -232,6 +232,8 @@ var landmarks: Array[Landmark] = []
 # #142: monster bands put down and due back — {id, faction, position, troops,
 # at}; core/world_ai.gd's fell()/respawn() are the only writers.
 var fallen: Array[Dictionary] = []
+# #163: when WorldBands.refill last put a band on the map (world-minutes).
+var bands_refilled_at := 0.0
 # O15 — the only terrain the map has: hand-placed blobs of water, `{position, radius}`
 # each. A circle is the whole vocabulary; a lake is one, a river is a chain of
 # overlapping ones (see scenes/world/world.gd's _demo_world). Plain dictionaries
