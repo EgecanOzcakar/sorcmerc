@@ -8209,3 +8209,281 @@ existing sweep already measures, and `test_scaler` is unchanged at 212.
 - Only a SITE prices this way. The road still prices every fight off the
   party's live condition through `core/world_threat.gd`, which is a different
   answer to the same blindness, and the two have never been compared.
+
+## The ground a fight stands on reaches the fight (2026-09-22)
+
+The biome layer shipped in #169 with a reader nobody read. `core/world.gd`
+grew three kinds of country and one `biome_at()`, its header already said what
+each kind meant — downs no filter, woods `forest`, marsh `water` — and nothing
+between the map and the board ever asked. Every open-country fight was drawn
+on `DEFAULT_THEME`, so a moor, a marsh and a wood were the same wood with
+different foes standing in it.
+
+Built exactly as the deferred design note specified and no further: the biome
+picks the board and names one habitat for the roster; the ring
+(`core/regions.gd`) still owns how dangerous the country is. Those two axes
+stay orthogonal, which is what keeps every measured number in `regions.gd`
+meaning what it says.
+
+Two boards authored, `downs_board()` and `marsh_board()`, with the same counts
+as the six before them — three cover, three or four rough, one light source
+each. The light is not decoration: `lit()`/`can_see()` give an unlit hex
+disadvantage to swing into and advantage to be struck from, and most monsters
+have darkvision while the party's edge is ranged, so a dark board is a
+one-sided gift to the foes. The marsh is the kind that pays for itself: 18
+aquatic beasts that no roster could reach while `forest-clearing` was the only
+board that ever drew a beast.
+
+`_viable_faction` is the half that fails quietly without it, and the design
+note said so a day in advance. The faction is picked by seed BEFORE the habitat
+filter runs, and six of the fifteen (construct, dragon, giant, goblinoid,
+kobold, undead) have no `water`-or-`any` entry at all — so two marsh seeds in
+five emptied the pool and fell through to the hand-tuned MIX, four demo goblins
+on the code path `scaler.gd` records as swinging 6% to 47% across two TIER
+retunes. The walk starts AT the seeded index rather than re-indexing a filtered
+list, so `pin_faction`'s promise survives intact. In the other direction, a
+BUILT place beats the ground it stands on: a goblin camp pitched in a marsh is
+still a goblin camp, so a themed board falls back to its own habitat.
+
+Two things found on the way, both off the previous pass's Still-open list.
+**The map's peoples are not roster factions** — `data/bestiary.json` has no
+human, elf or dwarf, its settled power is `soldier` — so `pin_faction()` found
+no index for "human", handed the seed straight back, and a town patrol fielded
+`FACTIONS[seed % 15]`. Reproducibly, because the seed is the band's own id: the
+same patrol met twice was the same dragon twice. And **a caravan carries its
+cargo** now, through `cb.purse`, a gold-only multiplier off the spec. Gold
+only: XP is what a fight taught you and a cart of cloth teaches nothing.
+
+Verified neutrality rather than assumed, which is the floor that note set. 200
+seeds a board against an unthemed sweep of the same size, and measured against
+the SET's own hard rate rather than TARGET, since the set already sits at the
+top of TARGET's band. Baseline 85.0%, downs 85.0% — an identical roster mix, so
+that figure is the board and nothing else — marsh 88.5%.
+
+### Still open
+
+- The marsh's 3.5 points are inside two sigma at 200 seeds but are not
+  obviously ONLY noise: it also ends 1.4 rounds sooner on a pool of 26 against
+  240. Worth re-measuring if the water half of the bestiary grows.
+- Every knob that would make a marsh PLAY differently from a moor — rough
+  density, shelves, cover, what is lit — is still deferred, and still a
+  measured balance pass rather than a taste call.
+- Lairs and roaming bands are still placed blind to the ground they land on.
+- The minimap still draws water but not biomes.
+- `downs.wav` came back from ElevenLabs; `marsh.wav` is `tools/gen_audio.py`'s
+  synthesized fallback, because the account's quota ran 20 credits short of it.
+  It is the one bed in `assets/audio/music/` that is not a recorded take, and a
+  synthesized bed next to eleven others is audible. `beds --only marsh` on a
+  funded account replaces it under the same name.
+
+## The class step shows the class, not three lines about it (2026-09-22)
+
+The climb was built to replace the level-up page AND the creator's class step.
+It did the first in #172; the second was left as "the wiring is missing, not
+the model", and `Climb.build(id, "", 0)` already returned exactly the track it
+wanted. So: the same widget, on the class step, in the middle column under
+the prose, where the page then reads left to right as one sentence — which
+classes there are, what this one is, where it goes. Not a second widget built
+to look like it: one model, one set of rules about what a reader may see, two
+screens that cannot drift apart.
+
+Opened at the level the character actually stands on rather than always at 0,
+which matters for the case the creator already had: a recruit joining a party
+at level 6 sees six rungs taken, the same as they will after their first fight.
+
+**And it found a bug in the widget that had been there since #172.** A rung is
+a `Button` with its content anchored inside it, and a Button does not grow to
+fit its children — so a rung was 46px tall whatever was in it, and anything
+taller was drawn straight over the rung below. It went unseen because the
+level-up page is wide and a rogue's chips fit on one line. Put the same widget
+in a narrower column, or give it a monk — six grants at level 2 — and every
+rung from the second down overlapped its neighbour.
+
+`_fit_rungs` measures the content after layout and writes the height back,
+which is the whole trick: a wrapping container only knows how many lines it
+needs once it knows how wide it is, so asking for a minimum up front gets one
+line's worth. The first attempt measured to the content's BOTTOM, and since
+`col` is SHRINK_CENTER, growing the rung moved the content down and it measured
+bigger every pass — it grew until the message queue ran out of memory and the
+engine aborted. It measures the content's SPAN now, which does not move when
+the box around it does, and it is capped at three passes: a layout that will
+not settle should draw slightly wrong, not take the process down.
+
+### Still open
+
+- The creator's class step is the last screen the climb was specified for.
+  Nothing else is waiting on it.
+- Multiclass still shows the first class's track only (`ponytail:` in
+  `core/climb.gd`), matching the resolver's own single-class assumption.
+
+## Which features to author a mechanic for, counted rather than guessed (2026-09-22)
+
+289 of the catalog's 340 features do nothing on a board. Taken alphabetically
+that is an unbounded grind; taken in the order play meets them it is a ranked,
+finite list. `tools/audit_features.py` counts the order and writes
+`docs/audit-features.md`.
+
+The measure is character-levels of play: a feature granted at 3 is carried
+through eighteen of the twenty levels a character passes, one granted at 17
+through four. A class feature scores that in full; a subclass feature scores it
+divided by the class's path count, because exactly one path is taken. No
+popularity weighting — nothing here measures which class anybody picks, and
+inventing a distribution would dress a guess as a number.
+
+**The first run was wrong, and usefully so.** It put thirteen level-1 class
+features at the top and most were already implemented: the mechanic arrives as
+a different GRANT TYPE on the same level (`armor-class`, `resource-pool`,
+`weapon-mastery-choice`, `feature-choice`) or as code keyed off the class
+level. Unarmored Defense is `pass_defense.gd`, Martial Arts is `resolve.gd`,
+Improved Critical is `adapter.gd`. `COVERED_ELSEWHERE` is that correction,
+hand-verified with the file named per row, and it moved the count from 307 to
+289 and cleared the entire top of the list.
+
+Six authored, and the choice of six is the finding: every one reuses a shape
+the file already carries — `attacks_per_action` 3 and 4 for the fighter's
+second and third Extra Attack, `init_adv` for Feral Instinct the way
+Assassinate carries it, a `reaction`/`halve_damage` for Deflect Attacks, an
+`aura`/`cond_immune` for Aura of Courage, `passive_damage` 1d8 radiant for
+Radiant Strikes.
+
+What stopped the list at six is not authoring time. The effect vocabulary is a
+CLOSED one and most of the high-reach features need a primitive it does not
+have: `save_modifier` hardcodes `vs == "magic"`, so Danger Sense's advantage on
+DEX saves cannot be written down; `requires` has no `target_is_undead`, so
+Smite Undead cannot; `heal_ally` is dice-and-pool, so Lay on Hands' flat pool
+cannot; Wild Shape needs a transform the engine has no word for at all.
+
+### Still open
+
+- **283 features still have no mechanic**, and the report now says per row what
+  each is waiting on. The next real step is not more authoring — it is four or
+  five new primitives in the closed vocabulary, each of which then unlocks a
+  batch.
+- Deflect Attacks is an approximation and is marked as one: RAW reduces by
+  1d10 + DEX + monk level, which at the level it lands usually negates the blow
+  outright, and halving is the conservative reading of the two options.
+- Class features have no hand-written inventory the way subclass features do
+  (`tests/test_subclass_features.gd`), so 94 of the 289 carry no tag at all.
+
+## Furniture on the combat board, built instead of modelled (2026-09-22, #167)
+
+Issue #167 asks for more and different environment objects in the combat view,
+with 3D models. The board had six object types — torch, brazier, campfire,
+lamp, barrel, fountain — every one a flat shape drawn in `Board._draw_object`
+while the figures standing between them were real 3D. Cover and rough, on every
+board and the two things a player most needs to read, were a hash-picked 2D
+leaf blob.
+
+`scenes/board_props.gd` builds twenty kinds out of `kit_parts.gd`'s seven
+primitives. Not GLBs: a barrel is not worth a Meshy round trip, the kit already
+builds every settlement and lair in the game at ~1-2k triangles against a GLB's
+~82k, and a crate IS a box. Cube placeholders were offered and are kept as the
+fallback for a kind with no plan — the same contract `kit_parts` keeps, where a
+typo draws something visibly wrong rather than crashing a fight — but nothing
+ships as one.
+
+The bigger half is that cover and rough now ARE something. Each board palette
+names its own: a wood has trees, the marsh reed clumps, the downs leaning
+standing stones, the shrine pillars, the ice icicles, the camp stakes, the shop
+shelves, the city a barricade. Rough gets bramble, tussock, gorse, rubble, ash,
+floe — all knee-high, none of it ever mistakable for something to hide behind.
+
+They stand in the figures' own 3D world, for the reason `props3d.gd`'s header
+gives for the overworld: one camera, one depth buffer, so a hero walking behind
+a tree is behind the tree. Placed by the same projection arithmetic including
+#156's height lift, and nudged off the hex centre by a seeded offset — a cover
+hex is a hex you may stand IN, and a tree drawn dead centre swallows whoever is
+there.
+
+No mechanic moved. Cover, rough, hazards, what blocks and what can be smashed
+stay `core/encounter.gd`'s boards and `core/combat.gd`'s rules; this file reads
+a hex's role and draws something that looks like it. That separation is the
+whole reason scenery could be added without re-running the balance sweep.
+
+Four things the renders refused, each fixed and recorded where the next reader
+will look: the city's single crate stood 0.80 units and read as a mark on the
+floor at this board's isometric (it is a barricade now — RAW half cover is
+waist-high, but a board has to say "cover" at the angle it is actually seen
+from); three big gems of scrub read as cut paper (six small ones instead —
+scrub is a count, not a shape); the menhir went up pale and clean and read as a
+headstone; and the lamp's flame was drawn at the centre of its own housing, so
+the one thing a lamp is for was completely enclosed.
+
+### Still open
+
+- Bramble, gorse and tussock are the same six-clump shape in three hues. They
+  are never on screen together — one per board palette — but that is an
+  argument for why it is affordable, not for why it is good.
+- The shelf reads as a stack of planks and the icicle as a plain cone.
+- No prop is destructible or interactive in its own right; `objects` carry
+  every mechanic there is, and scenery carries none.
+
+## The character card, on the left and staying there (2026-09-22, #173)
+
+Issue #173: a card for whoever is hovered, on the left, with stats -/+ and the
+special spells and traits, sticky until clicked to close — and the log smaller,
+at the bottom, scrollable.
+
+What it replaces is `Board._stat_card`: four lines in a box that floated beside
+the token and vanished the moment the mouse moved off it. You could read a
+foe's AC or you could reach for a button, never both. It showed no ability
+score at all, and every verb a creature had went into one comma-separated run,
+which is how a dragon's Frightful Presence read like a cantrip.
+
+`scenes/combat_card.gd` is a real panel at the top of the left column. Sticky
+is the whole point: a hover fills it and leaves it filled, a hover over somebody
+else swaps it, the ✕ empties it, the next hover fills it again. That is what
+makes it usable for the thing it is for — reading a statblock while choosing
+the verb that answers it.
+
+On it: the name in its side's colour, where they are standing, a health bar, AC
+as the fight would actually roll against it, speed and proficiency. Then the
+six, signed — ability scores for a hero, who has a sheet that carries them, and
+save bonuses for a monster, which has none in this catalog, with the heading
+saying which you are looking at rather than pretending they are the same thing.
+Then conditions, then what the damage types do to it, then spells and traits
+under separate headings — **one chip each, explaining itself on hover**. A
+comma-joined run of names tells a reader that a Bugbear has Surprise Attack and
+nothing whatever about what Surprise Attack does. The explanation already
+existed, as the text the action bar puts under a verb's badge, so the card
+reuses `main.gd`'s own `_verb_tooltip` rather than writing a second account of
+the same rules that could drift from it. Chips rather than prose because a
+reader has to be able to SEE that there is something to hover.
+
+The log moves under it at `FS_SMALL`, bounded to 220px, keeping its own
+scrollbar. When the column is short the log is what gives way: it is what
+already happened, and the card is the decision in front of you.
+
+And the header names the board. It had said "The Sunken Shrine" since the MVP,
+when the shrine was the only board there was; with eight of them that is wrong
+seven times in eight.
+
+**And the whole figure on it**, not the bust the turn strip and the party page
+use. A bust answers "who is that", which this card already answers in gilt at
+the top; a full figure answers what the thing actually looks like — how big it
+is, what it is carrying, whether it is armoured — which is most of what you
+want to know about something you have never fought before and none of which a
+head shows. `scenes/portraits.gd` grew a `figure()` beside its `bust()`: the
+same renderer, the same cache, the same headless fall-through, and the only
+difference is where the camera stands. Centred on the model's middle rather
+than its head, and nearly level rather than angled down, because a full figure
+seen from a portrait's downward angle foreshortens into a head on a pair of
+boots.
+
+That framing cost an hour to a lesson worth writing down: the shared helper
+behind both was first called `_get`, which is `Object`'s own property-getter
+virtual. A static method of that name with any other signature fails to COMPILE
+the whole script — and a test script that never compiles never reaches
+`quit()`, so it presents as a hang rather than a failure, exactly as
+`CLAUDE.md` warns a failed `assert()` does.
+
+### Still open
+
+- The figure is the FACTION's model for a foe, not the creature's, so "Snik the
+  Bugbear" is drawn with the goblinoid figure. That is `figures3d.gd`'s
+  documented one-model-per-faction lookup and predates this card.
+- One card at a time. The issue says "cards" plural and a second pinned card,
+  side by side for a comparison, is a real reading somebody might want.
+- Nothing on the card is clickable except the ✕ — no targeting, no selection.
+  A card that could change the fight would need every guard the action bar has.
+- Nothing on the card is clickable except the ✕ and the chips' tooltips.

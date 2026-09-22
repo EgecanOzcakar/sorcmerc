@@ -1,5 +1,5 @@
 {
-  "_note": "sorcmerc-authored. A feature with no entry here is a flavor feature: it shows on the sheet and does nothing in combat. `kind` is a closed vocabulary (spec A0 §6); scaling is {by: class_level|pb|ability_mod, [class], [steps]|[formula]}.",
+  "_note": "sorcmerc-authored. A feature with no entry here is a flavor feature: it shows on the sheet and does nothing in combat. `kind` is a closed vocabulary (spec A0 \u00a76); scaling is {by: class_level|pb|ability_mod, [class], [steps]|[formula]}.",
   "rogue-sneak-attack": {
     "kind": "passive_damage",
     "cost": "none",
@@ -38,7 +38,7 @@
     "kind": "attacks_per_action",
     "value": 3
   },
-  "_note_monsters": "T16: reusable monster templates. Riders (trigger on_weapon_hit, no pool) fire automatically from combat.resolve_attack; `duration: round` conditions lapse at the victim's next turn. Numbers are plain — a monster has no sheet to scale against.",
+  "_note_monsters": "T16: reusable monster templates. Riders (trigger on_weapon_hit, no pool) fire automatically from combat.resolve_attack; `duration: round` conditions lapse at the victim's next turn. Numbers are plain \u2014 a monster has no sheet to scale against.",
   "monster-poison-bite": {
     "kind": "save_effect",
     "cost": "none",
@@ -323,6 +323,16 @@
     "kind": "attacks_per_action",
     "value": 2
   },
+  "fighter-extra-attack-2": {
+    "_note": "2024: Extra Attack (2) at fighter 11 \u2014 three attacks with the Attack action",
+    "kind": "attacks_per_action",
+    "value": 3
+  },
+  "fighter-extra-attack-3": {
+    "_note": "2024: Extra Attack (3) at fighter 20 \u2014 four attacks with the Attack action",
+    "kind": "attacks_per_action",
+    "value": 4
+  },
   "barbarian-extra-attack": {
     "kind": "attacks_per_action",
     "value": 2
@@ -369,6 +379,13 @@
     "self": "adv",
     "attacks_against": "adv"
   },
+  "barbarian-feral-instinct": {
+    "_note": "2024: advantage on Initiative. The kind is attack_modifier with no `self`, exactly as assassin-assassinate carries its own init_adv: adapter.gd reads init_adv off ANY verb, and without `self` nothing touches an attack roll",
+    "kind": "attack_modifier",
+    "cost": "none",
+    "trigger": "passive",
+    "init_adv": true
+  },
   "monk-flurry-of-blows": {
     "kind": "grant_action",
     "cost": "bonus",
@@ -407,6 +424,13 @@
     "duration": "round",
     "on_save_vex": true,
     "_note": "2024: on a hit, a Focus Point, once per turn, CON save or Stunned until your next turn; a made save still gives you advantage on your next attack against it (the half-speed half is not modelled)"
+  },
+  "monk-deflect-attacks": {
+    "_note": "2024: a Reaction that reduces the damage of one attack by 1d10 + DEX mod + monk level. The engine's reaction vocabulary reduces by half or to nothing (halve_damage), and half is the nearer of the two: at the levels this lands, RAW often negates the blow outright, so this is the CONSERVATIVE reading",
+    "kind": "reaction",
+    "cost": "reaction",
+    "trigger": "hit_by_attack",
+    "halve_damage": true
   },
   "cleric-channel-divinity": {
     "kind": "save_effect",
@@ -488,7 +512,7 @@
     }
   },
   "_test-nimble-stand": {
-    "_note": "Test-only fixture for the stand_cost_mult hook (tests/test_conditions.gd). No real feature grants a stand-up discount yet — this proves the mechanism works once one does.",
+    "_note": "Test-only fixture for the stand_cost_mult hook (tests/test_conditions.gd). No real feature grants a stand-up discount yet \u2014 this proves the mechanism works once one does.",
     "stand_cost_mult": 0
   },
   "_note_t94": "T94: the second monster pass. Everything above is T16's library; these are the templates the engine could already express (or could after one contained addition apiece) and nothing had been authored for. Numbers come from each ability's real SRD text (5e-bits/5e-database @ the commit data/SCHEMA.md pins), not from the regex-parsed `_notes`. An authored `label` wins over the id-derived one, which is why an id may carry its threshold.",
@@ -775,14 +799,14 @@
       "by": "ability_mod",
       "ability": "cha"
     },
-    "_note": "RAW: up to CHA-mod dice in one use — combat.perform spends as many as the wound calls for"
+    "_note": "RAW: up to CHA-mod dice in one use \u2014 combat.perform spends as many as the wound calls for"
   },
   "warriorofmercy-hand-of-healing": {
     "kind": "heal_ally",
     "cost": "bonus",
     "pool": "focus-points",
     "flurry_swap": true,
-    "_note": "2024: may replace one Flurry of Blows strike for free — no Focus Point, no Bonus Action (combat._flurry_swap)",
+    "_note": "2024: may replace one Flurry of Blows strike for free \u2014 no Focus Point, no Bonus Action (combat._flurry_swap)",
     "range_ft": 5,
     "dice": {
       "count": 1,
@@ -896,7 +920,7 @@
     }
   },
   "gloomstalker-dread-ambusher": {
-    "_note": "2024: Ambusher's Leap (+10 ft on your first turn), advantage on Initiative, and Dreadful Strike: +2d6 psychic on a weapon hit, once per turn, WIS-mod uses per Long Rest (the extra damage lands as the weapon's type — riders are not typed separately)",
+    "_note": "2024: Ambusher's Leap (+10 ft on your first turn), advantage on Initiative, and Dreadful Strike: +2d6 psychic on a weapon hit, once per turn, WIS-mod uses per Long Rest (the extra damage lands as the weapon's type \u2014 riders are not typed separately)",
     "kind": "passive_damage",
     "cost": "none",
     "trigger": "on_weapon_hit",
@@ -934,9 +958,19 @@
       "ability": "cha"
     }
   },
+  "paladin-aura-of-courage": {
+    "_note": "2024: you and allies within 10 ft cannot be Frightened while you are conscious",
+    "kind": "aura",
+    "cost": "none",
+    "trigger": "passive",
+    "range_ft": 10,
+    "cond_immune": [
+      "frightened"
+    ]
+  },
   "_note_classes_c": "T-classes-c: the features that needed the engine to learn a new word. Three ride `requires` predicates combat._requires_met() did not have (a damaged target, an active Rage, the first round); Warding Flare rides a reaction payload that imposes Disadvantage instead of adding AC; Aura of Protection is the first `aura`, which is not a verb anyone presses but a standing fact combat.aura_bonus() reads where a save is rolled.",
   "paladin-divine-smite": {
-    "_note": "2024: a bonus-action spell — a spell slot, once per turn, 2d8 radiant +1d8 per slot level above 1st, on the next blow that lands (the extra d8 vs undead/fiends is not modelled)",
+    "_note": "2024: a bonus-action spell \u2014 a spell slot, once per turn, 2d8 radiant +1d8 per slot level above 1st, on the next blow that lands (the extra d8 vs undead/fiends is not modelled)",
     "kind": "self_buff",
     "cost": "bonus",
     "status": "divine-smite",
@@ -948,6 +982,17 @@
     },
     "dice": {
       "count": 2,
+      "sides": 8
+    },
+    "damage_type": "radiant"
+  },
+  "paladin-radiant-strikes": {
+    "_note": "2024: your attacks with a weapon or unarmed strike deal an extra 1d8 radiant on a hit \u2014 every hit, not once per turn",
+    "kind": "passive_damage",
+    "cost": "none",
+    "trigger": "on_weapon_hit",
+    "dice": {
+      "count": 1,
       "sides": 8
     },
     "damage_type": "radiant"

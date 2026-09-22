@@ -1016,6 +1016,43 @@ def bed_forest_clearing(rng):
     return b.finish(wet=0.38, size=0.86, damp=0.30)
 
 
+# O-biome's two boards. Open country, which is the whole difference from
+# bed_forest_clearing above: no canopy, so the reverb is wide and dry rather
+# than close, and the wind carries instead of rustling.
+def bed_downs(rng):
+    b = Bed()
+    prog = [[38, 45, 50, 57], [40, 47, 52, 59]]           # Dm -> Em, two chords, unhurried
+    chords(b, prog, amp=0.10, cutoff=980.0, sweep=1.3, detune=9.0)
+    bassline(b, prog, -24, 0.30, 2.2)
+    b.put(wind(LOOP + TAIL, 0.11, 620.0, 0.5, rate=0.31, rng=rng), 0.0, 0.0, send=0.5)
+    for t, n, p in ((2.2, 79, 0.7), (5.4, 76, -0.6), (9.1, 81, 0.4)):   # a curlew, far off
+        b.put(tone(0.34, midi(n), midi(n - 7), 0.07, "sine", 6.0, 0.05), t, p, send=0.9)
+    return b.finish(wet=0.42, size=0.94, damp=0.42)
+
+
+# The one bed in assets/audio/music/ that is this file's own output rather than
+# tools/gen_music_elevenlabs.py's, and the header above says why that matters:
+# everything else there is an ElevenLabs take. This one is synthesized because
+# the account's quota ran 20 credits short of it on 2026-09-22 (downs came back,
+# marsh did not), and a board that ships silent fails tests/test_audio.gd. The
+# prompt for it is in gen_music_elevenlabs.py's BEDS either way, so re-running
+# `beds --only marsh` on a funded account replaces this with the same name.
+def bed_marsh(rng):
+    b = Bed()
+    prog = [[45, 52, 57, 60], [43, 50, 55, 58]]           # Am -> Gm, damp and low
+    chords(b, prog, amp=0.11, cutoff=620.0, sweep=1.1, detune=14.0)
+    bassline(b, prog, -26, 0.30, 1.8)
+    # Reeds: a narrower, hissier wind than the downs', and a second one panned
+    # off it so the bed has width without anything in the middle to hear.
+    b.put(wind(LOOP + TAIL, 0.09, 2600.0, 0.9, rate=0.22, rng=rng), 0.0, -0.4, send=0.35)
+    b.put(wind(LOOP + TAIL, 0.07, 1900.0, 0.8, rate=0.17, rng=rng), 0.0, 0.45, send=0.35)
+    for t, n, p in ((1.1, 34, -0.3), (4.7, 32, 0.35), (8.3, 35, -0.15)):   # frogs
+        b.put(tone(0.22, midi(n), midi(n - 3), 0.16, "saw", 11.0, 0.006), t, p, send=0.5)
+    for t, n, p in ((3.0, 71, 0.6), (7.2, 68, -0.55)):    # a wading bird, further off
+        b.put(tone(0.18, midi(n), midi(n + 4), 0.06, "sine", 9.0, 0.02), t, p, send=1.0)
+    return b.finish(wet=0.50, size=0.90, damp=0.52)
+
+
 def bed_frozen_cave(rng):
     b = Bed()
     prog = [[47, 54, 59, 62], [45, 52, 57, 61]]           # Bm -> A, vast and still
@@ -1094,6 +1131,8 @@ BEDS = {
     "city-square": bed_city_square,
     "forest-clearing": bed_forest_clearing,
     "frozen-cave": bed_frozen_cave,
+    "downs": bed_downs,
+    "marsh": bed_marsh,
     "merchant-shop": bed_merchant_shop,
     "settlement": bed_settlement,
     "title": bed_title,

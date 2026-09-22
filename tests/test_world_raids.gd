@@ -10,6 +10,7 @@ const Raids = preload("res://core/raids.gd")
 const Objectives = preload("res://core/objectives.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Scaler = preload("res://core/scaler.gd")
 
 var _pass := 0
 var _fail := 0
@@ -96,14 +97,22 @@ func _init() -> void:
 	check(shaped, "...each a roster of {id, count, mult} with something in it (%s)" % str(waves))
 	check(_kin_of(waves) == ["goblinoid"], "the warren's waves are the warren's own kin (%s)" % str(_kin_of(waves)))
 	# ...and that holds for a faction with NO board of its own. Those fight on
-	# world.gd's DEFAULT_THEME with `theme` left "" so the roster comes off the
-	# seed instead, and the waves used to be drawn off the stamped board — so an
-	# orc siege was answered by forest-clearing's beasts. They read the pair the
-	# band's own roster was built from now.
-	var orcs = World.RoamingParty.new("t-orc-raid", town.position + Vector2(30, 0), "orc")
+	# whatever board the GROUND names (O-biome; it used to be world.gd's
+	# DEFAULT_THEME for all of them) with `theme` left "" so the roster comes off
+	# the seed instead, and the waves used to be drawn off the stamped board — so
+	# an orc siege was answered by forest-clearing's beasts. They read the pair
+	# the band's own roster was built from now.
+	#
+	# The claim under test is the PAIR, not the board's name: the board is the
+	# country's and the roster's theme is empty. Checking the name against the
+	# biome layer rather than hardcoding it is what keeps this about the seam it
+	# was written for.
+	var at: Vector2 = town.position + Vector2(30, 0)
+	var orcs = World.RoamingParty.new("t-orc-raid", at, "orc")
 	var ospec: Dictionary = main.encounter_spec(orcs)
-	check(String(ospec["theme"]) == "forest-clearing" and String(ospec["roster_theme"]) == "",
-		"an orc band fights on the default board, with no theme of its own")
+	var want := String(Scaler.BIOME_BOARD.get(main.world.biome_at(at), main.DEFAULT_THEME))
+	check(String(ospec["theme"]) == want and String(ospec["roster_theme"]) == "",
+		"an orc band fights on the ground's own board (%s), with no theme of its own" % want)
 	check(_kin_of([ospec["monsters"]]) == ["orc"], "...its own roster is orc (%s)" % str(_kin_of([ospec["monsters"]])))
 	var okin: Array = _kin_of(main._hold_waves(orcs, ospec, WorldThreat.assess(main.party)))
 	check(okin == ["orc"], "...and so are its waves, not the board's beasts (%s)" % str(okin))

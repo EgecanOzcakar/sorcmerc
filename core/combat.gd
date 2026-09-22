@@ -34,6 +34,12 @@ const MAX_ROUNDS := 60  # safety guard; a real fight ends in ~4-6
 var rng
 var combatants: Array = []
 var party = null   # core/party.gd when a real party fights: its stash is the potion shelf
+# What the dead were carrying, over and above what their bodies are worth. 1.0
+# for every fight anyone picks at random; a caravan is the case this exists for
+# (scenes/world/world.gd's PURSE), because a band walking a cargo between two
+# towns is carrying that cargo, and before this it paid out like a beast pack.
+# Gold only — XP is what a fight TAUGHT you and a cart of cloth teaches nothing.
+var purse := 1.0
 # What the party thinks of each other, felt in the fight (docs/spike-party-
 # opinions.md §6): bonded neighbours cover each other (effective_ac), rivals
 # get in each other's way (resolve_attack), a partner going down rallies the

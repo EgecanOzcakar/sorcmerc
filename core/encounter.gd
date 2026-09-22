@@ -49,7 +49,22 @@ static func board() -> Dictionary:
 # blocks_movement?, explosive?}. A hazard object is shovable-into (2d6 fire);
 # an hp object can be smashed (one action); explosive ones burst on death.
 const THEMES := ["sunken-shrine", "goblin-camp", "city-square", "forest-clearing",
-	"frozen-cave", "merchant-shop"]
+	"frozen-cave", "merchant-shop", "downs", "marsh"]
+
+# What to call the place, for the header over the fight. It has said "The Sunken
+# Shrine" since the MVP, when the shrine was the only board there was; with
+# eight of them that is wrong seven times in eight. A definite article and no
+# more — the board is a place, not a level name.
+const BOARD_NAMES := {
+	"sunken-shrine": "The Sunken Shrine", "goblin-camp": "The Goblin Camp",
+	"city-square": "The City Square", "forest-clearing": "The Forest Clearing",
+	"frozen-cave": "The Frozen Cave", "merchant-shop": "The Merchant's Shop",
+	"downs": "The Open Downs", "marsh": "The Reed Marsh",
+}
+
+static func board_name(theme: String) -> String:
+	return String(BOARD_NAMES.get(theme, BOARD_NAMES["sunken-shrine"]))
+
 
 # `seed` shapes the ground around the authored room (see _grow); 0 means "the
 # theme's own fixed shape", so a caller without a fight seed still gets the
@@ -62,7 +77,14 @@ static func board_for(theme: String, seed: int = 0) -> Dictionary:
 		"forest-clearing": b = forest_clearing_board()
 		"frozen-cave": b = frozen_cave_board()
 		"merchant-shop": b = merchant_shop_board()
+		"downs": b = downs_board()
+		"marsh": b = marsh_board()
 		_: b = shrine_board()
+	# The board remembers which theme built it, so anything downstream that has
+	# the board but not the spec can say where the fight is happening —
+	# scenes/main.gd's header is the first such caller. Stamped here rather than
+	# written into each builder: there is one place a theme picks a board.
+	b["theme"] = theme if BOARD_NAMES.has(theme) else "sunken-shrine"
 	return _grow(_widen(b), seed if seed != 0 else theme.hash())
 
 # --- the ground around the room ----------------------------------------
@@ -307,6 +329,59 @@ static func forest_clearing_board() -> Dictionary:
 		"palette": "forest",
 		"reach_melee": REACH_MELEE,
 		"region_at": func(p: Vector2i) -> String: return "the treeline" if p.x <= 2 else "the clearing",
+	}
+
+# O-biome's two boards, and the reason DEFAULT_THEME could finally die: every
+# open-country fight used to be drawn on `forest-clearing` whatever ground the
+# band was standing on, so a marsh and a moor were a wood with different foes.
+#
+# Both are deliberately the same SIZE and carry the same COUNTS as the six that
+# came before — three cover, three or four rough, one light source — because the
+# first pass of the biome design is flavour-only on purpose. Every knob that
+# would make a marsh play differently from a moor (rough density, shelves,
+# cover, what is lit) is a real difficulty change wearing a terrain costume, and
+# core/scaler.gd's numbers are measured, not eyeballed. What differs here is
+# what the pieces ARE, not how many. See docs/expansion-plan.md's biome note for
+# the four knobs and what each one actually moves.
+#
+# The light source is not decoration. core/combat.gd's lit()/can_see() give an
+# unlit hex disadvantage to swing into and advantage to be struck from, and most
+# monsters have darkvision while the party's edge is ranged — so a dark board is
+# a one-sided gift to the foes. A board authored without one is a balance change
+# nobody asked for.
+
+# Open country under a wide sky: standing stones, gorse, and a drover's fire at
+# the wayside. The board the map's default ground never had.
+static func downs_board() -> Dictionary:
+	var h := _rect(0, 6, 0, 3)
+	h.erase(Vector2i(0, 3))
+	h.erase(Vector2i(6, 0))
+	return {
+		"hexes": h,
+		"objects": [{"type": "campfire", "pos": Vector2i(3, 1)}],
+		"cover": [Vector2i(1, 1), Vector2i(4, 3), Vector2i(5, 0)],   # standing stones
+		"rough": [Vector2i(2, 2), Vector2i(3, 0), Vector2i(5, 3)],   # gorse and tussock
+		"palette": "downs",
+		"reach_melee": REACH_MELEE,
+		"region_at": func(p: Vector2i) -> String: return "the low ground" if p.y >= 2 else "the ridge",
+	}
+
+# Reedbed and standing water, a bog-lamp burning on a pole where the causeway
+# gives out. The one biome that makes content the game already had reachable:
+# 18 aquatic beasts no roster could field while forest-clearing was the only
+# board that drew beasts.
+static func marsh_board() -> Dictionary:
+	var h := _rect(0, 6, 0, 3)
+	h.erase(Vector2i(0, 0))
+	h.erase(Vector2i(6, 3))
+	return {
+		"hexes": h,
+		"objects": [{"type": "lamp", "pos": Vector2i(3, 2)}],
+		"cover": [Vector2i(1, 3), Vector2i(4, 0), Vector2i(5, 2)],              # reed banks
+		"rough": [Vector2i(2, 1), Vector2i(2, 3), Vector2i(4, 2), Vector2i(5, 1)],  # bog
+		"palette": "marsh",
+		"reach_melee": REACH_MELEE,
+		"region_at": func(p: Vector2i) -> String: return "the causeway" if p.y <= 1 else "the shallows",
 	}
 
 # Two chambers joined by a crawl, the floor sheeted in ice.
@@ -618,6 +693,7 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 	var sd: int = int(spec.get("seed", 0))
 	var cb := Combat.new(RNG.new(sd if sd > 0 else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)),
 		all_c, b)
+	cb.purse = float(spec.get("purse", 1.0))
 	if kind != "":
 		if kind in ["breakout", "hunt"]:
 			o["exit"] = exit
@@ -803,7 +879,7 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 	return {
 		"outcome": "Victory" if res == "Victory" else "Defeat",   # a round-cap timeout is not a win
 		"xp": roundi(power * XP_PER_POWER) + bonus,
-		"gold": roundi(power * GOLD_PER_POWER),
+		"gold": roundi(power * GOLD_PER_POWER * cb.purse),
 		"loot": loot,
 		"deaths": deaths,
 		"kills": kills,   # source monster ids, for T9's kill-count quests

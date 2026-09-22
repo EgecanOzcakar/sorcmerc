@@ -30,10 +30,15 @@ func _init() -> void:
 	test_control_pricing()
 	test_spec_shape()
 	test_forest_beasts_stay_on_land()
+	test_biome_habitat_filters()
+	test_marsh_never_falls_to_mix()
+	test_built_place_survives_its_ground()
+	test_civilized_roster_is_a_real_faction()
 	test_quest_bias()
 	test_monotone_difficulty()
 	test_power_scale_knob()
 	test_win_rates()
+	test_biome_boards_are_neutral()
 	test_higher_level_party()
 	test_boss_pool()
 	print("test_scaler: %d passed, %d failed" % [_pass, _fail])
@@ -76,6 +81,59 @@ func test_forest_beasts_stay_on_land() -> void:
 			check(habitat in ["forest", "any"],
 				"seed %d: %s (habitat %s) has no business in a forest-clearing roster"
 					% [seed_value, m["id"], habitat])
+
+# O-biome. A biome names ONE habitat and `any` rides along free, so these are
+# the same claim test_forest_beasts_stay_on_land makes, once per kind of ground.
+# The marsh is the one that pays: its water entries were unreachable while
+# forest-clearing was the only board that ever drew a beast.
+func test_biome_habitat_filters() -> void:
+	for pair in [["woods", "forest"], ["marsh", "water"]]:
+		var biome: String = String(pair[0])
+		var want: String = String(pair[1])
+		check(String(Scaler.BIOME_HABITAT[biome]) == want, "%s names habitat %s" % [biome, want])
+		for seed_value in range(1, 41):
+			var spec = Scaler.roster_for(Presets.party(), "normal", {},
+				String(Scaler.BIOME_BOARD[biome]), seed_value, 1.0, [], want)
+			for m in spec["monsters"]:
+				var habitat: String = String(Catalog.monster(m["id"]).get("habitat", "any"))
+				check(habitat in [want, "any"],
+					"seed %d on %s: %s is habitat %s" % [seed_value, biome, m["id"], habitat])
+	check(String(Scaler.BIOME_HABITAT["downs"]) == "", "downs is the unfiltered default fill")
+
+# The half of the wiring that fails QUIETLY, which is why it is worth a test of
+# its own. _faction_order picks a faction by seed before the habitat filter
+# runs, and six of the fifteen (construct, dragon, giant, goblinoid, kobold,
+# undead) have no `water`-or-`any` entry at all — so without _viable_faction two
+# marsh seeds in five emptied the pool and fell through to the hand-tuned MIX,
+# which is four demo goblins and the code path scaler.gd records as swinging
+# 6% to 47% across two TIER retunes. A silent difficulty cliff, on two fights
+# in five, on a whole biome.
+func test_marsh_never_falls_to_mix() -> void:
+	var fell := 0
+	for seed_value in range(1, 61):
+		var spec = Scaler.roster_for(Presets.party(), "normal", {}, "marsh", seed_value, 1.0, [], "water")
+		var ids: Array = spec["monsters"].map(func(m): return String(m["id"]))
+		if ids.all(func(i): return i in Scaler.MIX):
+			fell += 1
+	check(fell == 0, "no marsh seed drops to the demo MIX (%d of 60 did)" % fell)
+
+# A BUILT place beats the ground it stands on. A goblin camp pitched in a marsh
+# is still a goblin camp, and goblinoid has no water entry — so the themed path
+# has to fall back to the theme's own habitat rather than to MIX.
+func test_built_place_survives_its_ground() -> void:
+	for seed_value in range(1, 21):
+		var spec = Scaler.roster_for(Presets.party(), "normal", {}, "goblin-camp", seed_value, 1.0, [], "water")
+		for m in spec["monsters"]:
+			check(String(Catalog.monster(m["id"]).get("faction", "")) == "goblinoid",
+				"seed %d: a goblin camp in a marsh still fields goblinoids, not %s" % [seed_value, m["id"]])
+
+# The map's peoples are not roster factions, and pin_faction can only pin what
+# FACTIONS actually holds.
+func test_civilized_roster_is_a_real_faction() -> void:
+	check(Scaler.CIVILIZED_ROSTER in Scaler.FACTIONS, "the civilized stand-in is a faction a roster can field")
+	var seed_value := 12345
+	check(Scaler.pin_faction(seed_value, "human") == seed_value,
+		"pin_faction still cannot pin a people — which is the bug world.gd now routes around")
 
 func test_quest_bias() -> void:
 	var plain = _counts(Scaler.roster_for(Presets.party(), "normal"))
@@ -145,6 +203,37 @@ func test_win_rates() -> void:
 		var r := _sweep(chars, d, SEEDS)
 		check(absf(r["rate"] - TARGET[d]) <= BAND, "%s win rate %.1f%% is within %.0f of %.0f" % [
 			d, r["rate"], BAND, TARGET[d]])
+
+# The floor the biome design set for itself: a new board is never free. Both
+# carry the same counts as the six that came before — three cover, three or four
+# rough, one light source — and this is the check that the counts did what they
+# were chosen to do. The first pass is flavour-only ON PURPOSE, so a board that
+# played measurably harder or easier than the wood would be a difficulty change
+# nobody asked for, smuggled in behind a palette.
+# Measured against the SAME sweep with no board named, not against TARGET.
+# Neutral here means "plays like the rest of the set", and the set's own hard
+# rate sits at the top of TARGET's band — so checking a new board against TARGET
+# would fail it for the calibration's offset rather than for anything the board
+# does. Measured 2026-09-22 at 200 seeds: baseline 85.0%, downs 85.0% (identical
+# roster mix, so this is the board and nothing else), marsh 88.5%.
+#
+# The marsh's 3.5 points are inside sampling noise — at 200 seeds and p≈0.85,
+# one sigma is 2.5 points — but they are not obviously ONLY noise: the marsh
+# also ends 1.4 rounds sooner on slightly fewer foes, which is what a smaller,
+# squishier pool (26 `water` entries against 240 unfiltered) would look like.
+# Worth re-measuring if the water half of the bestiary grows.
+const BIOME_DRIFT := 6.0   # two sigma at these seeds, rounded up
+
+func test_biome_boards_are_neutral() -> void:
+	var chars := Presets.party()
+	print("  O-biome boards, hard (against an unthemed hard sweep of the same size):")
+	var base: float = _sweep(chars, "hard", SEEDS)["rate"]
+	for biome in ["downs", "marsh"]:
+		var r := _sweep(chars, "hard", SEEDS, String(Scaler.BIOME_BOARD[biome]),
+			String(Scaler.BIOME_HABITAT[biome]))
+		check(absf(r["rate"] - base) <= BIOME_DRIFT,
+			"%s plays like the rest of the set (%.1f%% against the set's %.1f%%, drift %.1f of %.0f)" % [
+				biome, r["rate"], base, absf(r["rate"] - base), BIOME_DRIFT])
 
 func test_higher_level_party() -> void:
 	var chars := [_lvl(Presets.vera(), "fighter", 5), _lvl(Presets.pike(), "rogue", 5),
@@ -233,13 +322,14 @@ func _sweep_boss(chars: Array, boss: Dictionary, seeds: int) -> Dictionary:
 
 # T16: one roster per seed, each its own faction — the shipped distribution, not
 # one lucky warband repeated 200 times.
-func _sweep(chars: Array, difficulty: String, seeds: int, theme: String = "") -> Dictionary:
+func _sweep(chars: Array, difficulty: String, seeds: int, theme: String = "",
+		habitat: String = "") -> Dictionary:
 	var wins := 0
 	var rounds := 0
 	var foes := 0
 	var mult := 0.0
 	for s in range(1, seeds + 1):
-		var spec: Dictionary = Scaler.roster_for(chars, difficulty, {}, theme, s)
+		var spec: Dictionary = Scaler.roster_for(chars, difficulty, {}, theme, s, 1.0, [], habitat)
 		foes += _total(spec)
 		mult += float(spec["monsters"][0]["mult"])
 		var sp: Dictionary = spec.duplicate(true)

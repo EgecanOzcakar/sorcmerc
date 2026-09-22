@@ -17,6 +17,7 @@ const Presets = preload("res://core/presets.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Prog = preload("res://core/progression.gd")
 const Leveling = preload("res://core/leveling.gd")
+const Climb = preload("res://core/climb.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")   # #103
 
 signal character_created(ch)
@@ -696,7 +697,49 @@ func _build_class() -> void:
 		_note("Armor: %s.  Weapons: %s." % [
 			", ".join(src["armorProficiencies"].map(humanize)) if src["armorProficiencies"] else "none",
 			", ".join(src["weaponProficiencies"].map(humanize)) if src["weaponProficiencies"] else "none"])
+		_class_climb()
 	_target = null
+
+# The whole class, 1 to 20, beside the list you are choosing from. Until now a
+# class here was three lines of prose and a hit die — enough to tell a d12 from
+# a d6 and nothing whatever about where the twenty levels go, which is the
+# question somebody choosing one is actually asking. This is the same widget the
+# level-up page carries, and deliberately so: one model, one set of rules about
+# what may be read, and two screens that cannot drift apart.
+#
+# Opened at the level this character actually stands on, which is 0 for a fresh
+# build and start_level for one joining a party mid-campaign — so a level-6
+# recruit sees six rungs already taken, the same as they will after the fight.
+#
+# Veiling still applies, because it is computed in core/climb.gd rather than by
+# each screen for itself: every rung's level, name and marks stay legible all
+# the way to 20, and what a feature DOES is read out only for the level being
+# taken. That is the right amount for choosing on. The question at this step is
+# where a class GOES — that Extra Attack waits at 5, that the fork is at 3, that
+# the rogue's back half is dense and the barbarian's is not — not what each
+# thing will do on the day you get it.
+func _class_climb() -> void:
+	var cid: String = ch.class_id()
+	if cid == "":
+		return
+	var taken := String(ch.sheet().subclasses.get(cid, ""))
+	# In the middle column, under the prose, where _pick_column leaves _target —
+	# so the page reads left to right as one sentence: which classes there are,
+	# what this one is, where it goes.
+	#
+	# It spent a little while across the whole page instead, because at this
+	# column's width a rung's chips wrap and every rung from the second down was
+	# drawn over the one below it. That was never this screen's bug to route
+	# around: a rung is a Button with its content anchored inside, so it was
+	# 46px tall whatever was in it, and climb_view's _fit_rungs fixes it for
+	# both screens. tests/test_climb_layout.gd holds it down at 520px, which is
+	# narrower than this column has ever been.
+	var view = load("res://scenes/creator/climb_view.tscn").instantiate()
+	view.custom_minimum_size.y = 560
+	view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_into().add_child(view)
+	view.show_track(Climb.build(cid, taken, ch.level()), Climb.paths_for(cid), taken, cid)
 
 # T22: buying a class with lifetime XP comes with 2 of its 4 subclasses, free and
 # permanent. Until they are named none of the class's subclasses read as unlocked,

@@ -110,6 +110,7 @@ var _order_aimed := {}    # ids currently wearing the aim highlight — see _pai
 @onready var _hint := Label.new()
 @onready var _board := Board.new()
 const Figures3D := preload("res://scenes/figures3d.gd")
+const CombatCard := preload("res://scenes/combat_card.gd")   # #173
 const Portraits := preload("res://scenes/portraits.gd")
 var _figures
 @onready var _actor := RichTextLabel.new()
@@ -118,6 +119,7 @@ var _figures
 @onready var _logbox := RichTextLabel.new()
 @onready var _cap := Label.new()
 @onready var _logwrap := PanelContainer.new()
+@onready var _card := CombatCard.new()   # #173: who is under the cursor, top of the left column
 
 # --- palette (core/ui_icons.gd is the source; board-only tints stay here) ---
 const COL_BG := Icons.COL_BG
@@ -160,7 +162,9 @@ static func shelf_rim(fill: Color) -> Color:
 	return lit
 # T11: per-theme floor tint, palette only — no mechanical difference.
 const PALETTES := {"shrine": COL_HEX, "camp": Color("2a2a26"), "city": Color("2c2c33"),
-	"forest": Color("1f2a22"), "ice": Color("222c36"), "shop": Color("2b2620")}
+	"forest": Color("1f2a22"), "ice": Color("222c36"), "shop": Color("2b2620"),
+	# O-biome: open moor reads greyer and drier than the wood, marsh darker and wetter.
+	"downs": Color("2e3327"), "marsh": Color("1c2622")}
 # T9b: a seamless ground texture per palette (tools/localgen/gen_floor_textures.py),
 # laid on the hex plane in ground space so it foreshortens with the board and
 # runs unbroken across tiles; the tinted slab underneath still carries the
@@ -172,6 +176,8 @@ const FLOORS := {
 	"forest": preload("res://assets/board/floor_forest.png"),
 	"ice": preload("res://assets/board/floor_ice.png"),
 	"shop": preload("res://assets/board/floor_shop.png"),
+	"downs": preload("res://assets/board/floor_downs.png"),
+	"marsh": preload("res://assets/board/floor_marsh.png"),
 }
 const FLOOR_SPAN := 3.0    # hexes per texture repeat
 # #73: a painted backdrop behind the board, one per palette, from the scene
@@ -184,6 +190,11 @@ const BACKDROPS := {
 	"forest": "res://assets/generated/event-tracks.png",
 	"ice": "res://assets/generated/event-storm.png",
 	"shop": "res://assets/generated/room-forge.png",
+	# Reused rather than newly painted: the road events already have the two
+	# skies these boards stand under, and a backdrop is a blurred tone behind
+	# the board, not a picture anybody reads.
+	"downs": "res://assets/generated/event-good-ground.png",
+	"marsh": "res://assets/generated/event-ford.png",
 }
 const BACKDROP_TONE := Color(0.42, 0.40, 0.40)
 const BACKDROP_NIGHT := Color(0.16, 0.17, 0.26)
@@ -286,14 +297,28 @@ func _ready() -> void:
 	var logcol := VBoxContainer.new()
 	logcol.add_theme_constant_override("separation", 4)
 	logwrap.add_child(logcol)
+	# #173: the character card takes the top of this column and the log moves
+	# under it. The column used to be log from the caption to the floor; a card
+	# that is meant to be READ while you choose an answer to it has to sit
+	# somewhere the board never covers, and this is the only such place.
+	_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	logcol.add_child(_card)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	logcol.add_child(spacer)
 	_cap.text = "Action log"
 	_cap.theme_type_variation = "Caption"
 	logcol.add_child(_cap)
 	_logbox.bbcode_enabled = true
 	_logbox.scroll_following = true
-	_logbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_logbox.add_theme_font_size_override("normal_font_size", 18)
-	_logbox.add_theme_font_size_override("bold_font_size", 18)
+	# Bounded rather than greedy, and smaller type: the log is a record of what
+	# already happened and the card is about the decision in front of you, so
+	# when the column is short the log is what gives way. It keeps its own
+	# scrollbar, so nothing is lost by making it a window instead of a wall.
+	_logbox.custom_minimum_size.y = LOG_MIN_H
+	_logbox.size_flags_vertical = Control.SIZE_FILL
+	_logbox.add_theme_font_size_override("normal_font_size", Icons.FS_SMALL)
+	_logbox.add_theme_font_size_override("bold_font_size", Icons.FS_SMALL)
 	_logbox.add_theme_color_override("default_color", Icons.COL_TEXT)
 	# One event, one paragraph: a gap between entries and none inside a wrapped
 	# one, so a swing, its miss and the next actor's move read as three things
@@ -391,8 +416,8 @@ func _apply_ui_scale() -> void:
 	_actor.custom_minimum_size.y = _actor.get_theme_font("normal_font").get_height(int(Icons.FS_HEAD * u)) \
 		* ACTOR_LINES + _actor.get_theme_constant("line_separation") * (ACTOR_LINES - 1) + 6
 	# the log is a narrow sidebar now — body size wraps far less than head size
-	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_BODY * u))
-	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_BODY * u))
+	_logbox.add_theme_font_size_override("normal_font_size", int(Icons.FS_SMALL * u))
+	_logbox.add_theme_font_size_override("bold_font_size", int(Icons.FS_SMALL * u))
 	for b in _buttons.get_children():
 		if b is Button and b.icon != null:   # the Field Manual search box shares this grid
 			b.custom_minimum_size = BTN_SIZE * u
@@ -596,6 +621,7 @@ func _new_game(forced := 0) -> void:
 	_coop_inbox.clear()
 	_coop_answers.clear()
 	_logbox.text = ""
+	_card.clear()   # #173: a new fight starts with nobody on the card
 	_logged = 0
 	_last_round = 1
 	_board.reset(cb)
@@ -1693,10 +1719,16 @@ func board_hex_hovered(hx: Vector2i) -> void:
 	_hover_hex = hx
 	if _coop != null and cb.current() != null and _mine(cb.current()) and not _busy:
 		_coop_send(Coop.hover(hx, _tgt_verb if _mode in ["target", "area", "cone"] else _hover_verb))
+	# #173: whoever is standing here fills the card on the left, and it STAYS
+	# filled — a hover that lands on nobody leaves the last one up. That is what
+	# makes it readable while you reach for the verb that answers it.
+	for c in cb.combatants:
+		if c.pos == hx and not c.is_dead():
+			_card.show_who(c, cb)
+			break
 	if _walk != null:
-		# The stat card is drawn by Board for anybody standing here (see
-		# _stat_card), so a hover that landed on a living token is the
-		# walkthrough's "inspect". Behind the null check because every other
+		# The card on the left fills for anybody standing here (#173), so a
+		# hover that landed on a living token is the walkthrough's "inspect". Behind the null check because every other
 		# fight there has ever been pays for every hover otherwise.
 		for c in cb.combatants:
 			if c.pos == hx and not c.is_dead():
@@ -1855,7 +1887,8 @@ func _chip(b: Button, text: String, preset: int, col: Color, u: float) -> void:
 	l.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, int(3 * u))
 
 func _refresh() -> void:
-	_header.text = "The Sunken Shrine, round %d%s" % [cb.round_num, "  ·  night" if cb.is_night() else ""]
+	_header.text = "%s, round %d%s" % [Encounter.board_name(String(cb.board.get("theme", ""))),
+		cb.round_num, "  ·  night" if cb.is_night() else ""]
 	_header.tooltip_text = "seed %d" % _seed
 	if _coop != null:
 		_header.text += "  ·  room %s" % _coop.code
@@ -2427,6 +2460,11 @@ func _draw_hud_overlay() -> void:
 	# The roll reveal last, so the outcome of a blow sits over everything.
 	if rv != null and _board._tok.has(rv.tid):
 		Board._paint_reveal(_hud_overlay, rv, _board._tok[rv.tid], s, fz)
+
+# How much of the left column the log keeps when the card is up. Tall enough
+# for roughly eight entries at FS_SMALL, which is a round of a four-a-side
+# fight — the window a player actually scrolls back through.
+const LOG_MIN_H := 220.0
 
 func _log_width() -> float:
 	return clampf(size.x * 0.26, 260.0, 380.0)
@@ -3591,14 +3629,23 @@ class Board extends Control:
 	# How thickly each theme is planted. Cosmetic only — foliage is never
 	# consulted by movement, targeting or line of sight, it is picked from the
 	# hex's own hash at draw time and never stored.
+	# O-biome: the moor is scrubbier than a wood floor but nothing like as
+	# dense; the marsh is reed, which stands in clumps and is the thickest of
+	# the set. Cosmetic only — cover and rough are the board's, not this.
 	const FLORA := {"forest": 0.55, "camp": 0.22, "shrine": 0.12, "ice": 0.14,
-		"city": 0.0, "shop": 0.0}
+		"city": 0.0, "shop": 0.0, "downs": 0.34, "marsh": 0.62}
 	const FLORA_COL := {"forest": "3f6b3a", "camp": "5c5f33", "shrine": "3a5548",
-		"ice": "5d7a84", "city": "3f5240", "shop": "3f5240"}
+		"ice": "5d7a84", "city": "3f5240", "shop": "3f5240",
+		"downs": "6b7a42", "marsh": "4c6b4a"}
 
 	# {} for bare ground, else the plant to draw. Cover hexes always get one —
 	# the thing you are hiding behind should be visible.
 	func _foliage_at(hx: Vector2i, c: Vector2, s: float) -> Dictionary:
+		# #167: when the 3D layer has furniture up, it owns what stands on a hex.
+		# Two answers to "what is on this tile" drawn one over the other reads as
+		# neither, and the 3D layer draws above this one.
+		if main._figures != null and main._figures.props_on():
+			return {}
 		var pal := String(cb.board.get("palette", "shrine"))
 		var r := _rand(hx, 5)
 		var cover: bool = cb.is_cover(hx)
@@ -3632,6 +3679,13 @@ class Board extends Control:
 	# glows), props get a crate mark, torches a small bright flame.
 	# ponytail: a torch could ignite adjacent flammable terrain — not built.
 	func _draw_object(o: Dictionary, c: Vector2, s: float, pulse: float) -> void:
+		# #167: the 3D layer draws the furniture itself when it is up. A hazard
+		# still pulses here whatever is standing on it — that glow is a rule being
+		# told, not a picture of a barrel, and it is the one thing on this hex a
+		# player is entitled to see through anything drawn over it.
+		if main._figures != null and main._figures.props_on() \
+				and not (o.has("hazard") and not o.get("blocks_movement", false)):
+			return
 		match String(o["type"]):
 			"torch":
 				for i in 3:   # a soft glow around the flame, not a hard ring
@@ -3869,47 +3923,11 @@ class Board extends Control:
 		if _defeat >= 0.0:
 			return   # nothing hovers over a wipe (#93: the slam itself is main's wash, on the HUD layer)
 
-		# --- hover stat card ------------------------------------------
-		if main._mode == "idle":
-			for c in cb.combatants:
-				if c.pos == _hover and not c.is_dead():
-					_stat_card(c, fz)
-					break
-
-	func _stat_card(c, fz: float) -> void:
-		var lines: Array = [
-			c.cname,
-			"AC %d   HP %d/%d" % [cb.effective_ac(c), c.hp, c.max_hp],
-			"speed %d   %s" % [c.speed, cb.region_at(c.pos)],
-		]
-		var st: Array = []
-		for s in Icons.CONDITION_ORDER:
-			if s != "down" and c.has(s): st.append("%s %s" % [Icons.condition_glyph(s), s])
-		if c.is_down(): st.append("%s down %d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f])
-		if cb.is_cover(c.pos): st.append("cover")
-		if not st.is_empty(): lines.append(" · ".join(st))
-		var kit: Array = []
-		for v in c.verbs:
-			if not v["label"] in kit: kit.append(v["label"])
-		if not kit.is_empty(): lines.append(", ".join(kit))
-
-		var fs := int(12 * clampf(fz, 0.9, 1.3))
-		var pad := 8.0
-		var w := 0.0
-		for l in lines:
-			w = maxf(w, ThemeDB.fallback_font.get_string_size(l, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
-		var lh := fs + 5.0
-		var box := Vector2(w + pad * 2, lines.size() * lh + pad * 2)
-		var p: Vector2 = _tok.get(c.id, _pix(c.pos)) + Vector2(main.hex_px * 0.8, -box.y * 0.5)
-		p.x = clampf(p.x, 4, size.x - box.x - 4)
-		p.y = clampf(p.y, 4, size.y - box.y - 4)
-		draw_rect(Rect2(p, box), Color(0.05, 0.06, 0.09, 0.94))
-		draw_rect(Rect2(p, box), main.COL_GOLD_EDGE, false, 1.0)
-		for i in lines.size():
-			var col: Color = main.COL_HEAD if i == 0 else main.COL_BODY
-			if i == lines.size() - 1 and not lines[i].begins_with(c.cname): col = main.COL_ACCENT
-			draw_string(ThemeDB.fallback_font, p + Vector2(pad, pad + fs + i * lh),
-				lines[i], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+		# #173: the hover stat card that used to be drawn here is
+		# scenes/combat_card.gd now — top of the left column, sticky, and with
+		# room for the ability scores and the spell/trait split it never had.
+		# Nothing replaces it on the board: a second copy of the same four lines
+		# under the cursor is what made the first one unreadable.
 
 	# The roll reveal: the OUTCOME first, the dice that produced it underneath.
 	# Static and canvas-agnostic for the same reason _paint_token_hud is — it

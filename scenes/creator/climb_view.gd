@@ -28,6 +28,10 @@ const MARKS := {
 	"feature": "✦", "fork": "⚑", "asi": "◈", "pick": "◇", "pool": "◉", "num": "➤",
 }
 const BADGE_PX := 34
+# The floor a rung never goes under, and until _fit_rungs below it was also the
+# ceiling — see there for what that cost.
+const RUNG_MIN_H := 46.0
+const PAD_Y := 5.0        # breathing room above and below a rung's content
 
 var _entries: Array = []
 var _sel := 1
@@ -104,13 +108,75 @@ func _render() -> void:
 	for e in _entries:
 		_rungs.add_child(_rung(e))
 	_render_detail()
+	_fit_rungs.call_deferred()
+
+
+# A rung is a Button, and a Button does not grow to fit its children — the
+# content row is ANCHORED inside it (set_anchors_preset(PRESET_FULL_RECT)), so
+# the rung was 46px tall whatever was in it and anything taller was drawn
+# straight over the rung below.
+#
+# It went unnoticed because the level-up page is wide: a rogue's chips fit on
+# one line there and never wrapped. Put the same widget in the creator's
+# narrower column, or give it a monk — whose level 2 grants six things — and
+# every rung from the second down overlapped its neighbour.
+#
+# Measured after layout rather than predicted before it, which is the whole
+# trick: a wrapping container only knows how many lines it needs once it knows
+# how wide it is, so asking for a minimum size up front gets one line's worth.
+# The children's real laid-out extents are the answer, written back as the
+# button's minimum for the VBox to honour on the next pass.
+func _fit_rungs(pass_n := 0) -> void:
+	var again := false
+	for b in _rungs.get_children():
+		var span := _span(b as Control)
+		var want: float = maxf(RUNG_MIN_H, span + PAD_Y * 2.0)
+		if absf(b.custom_minimum_size.y - want) > 0.5:
+			b.custom_minimum_size.y = want
+			again = true
+	# The SPAN of the content, never its distance from the rung's top, and the
+	# first attempt here got that wrong in a way worth recording: `col` is
+	# SHRINK_CENTER, so growing the rung moves its content DOWN, so measuring to
+	# the content's bottom measured bigger every pass. It grew until the message
+	# queue ran out of memory and the engine aborted. A span does not move when
+	# the box around it does.
+	#
+	# Capped anyway. A layout that will not settle should draw slightly wrong,
+	# not take the process down with it.
+	if again and pass_n < 3:
+		_fit_rungs.bind(pass_n + 1).call_deferred()
+
+
+# The vertical extent of a rung's real content, top-most to bottom-most, over
+# every descendant rather than the immediate children — the chips are the things
+# that wrapped, and every container between them and the rung under-reports its
+# height for exactly the reason the rung did. A laid-out chip sits where it is
+# drawn, so its rect is the truth and its parents' opinions can be ignored.
+func _span(rung: Control) -> float:
+	var lo := INF
+	var hi := -INF
+	for n in _leaves(rung):
+		lo = minf(lo, n.get_global_rect().position.y)
+		hi = maxf(hi, n.get_global_rect().end.y)
+	return 0.0 if lo > hi else hi - lo
+
+
+func _leaves(n: Node) -> Array:
+	var out: Array = []
+	for c in n.get_children():
+		if c.get_child_count() == 0:
+			if c is Control:
+				out.append(c)
+		else:
+			out.append_array(_leaves(c))
+	return out
 
 
 func _rung(e: Dictionary) -> Control:
 	var n := int(e["level"])
 	var b := Button.new()
 	b.flat = true
-	b.custom_minimum_size.y = 46
+	b.custom_minimum_size.y = RUNG_MIN_H
 	b.toggle_mode = false
 	b.focus_mode = Control.FOCUS_ALL
 	b.pressed.connect(func():
@@ -127,6 +193,8 @@ func _rung(e: Dictionary) -> Control:
 	row.set_anchors_preset(Control.PRESET_FULL_RECT)
 	row.offset_left = 8
 	row.offset_right = -8
+	row.offset_top = PAD_Y
+	row.offset_bottom = -PAD_Y
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 10)
 	b.add_child(row)

@@ -80,6 +80,7 @@ func _init() -> void:
 	test_extra_attack_reaches_the_board()
 	test_authored_abilities()
 	test_new_mechanics()
+	test_ranked_authoring()
 	test_smite_and_aura_immunity()
 	report()
 	print("test_class_abilities: %d passed, %d failed" % [_pass, _fail])
@@ -603,6 +604,54 @@ func test_authored_abilities() -> void:
 # Each predicate is asserted from BOTH sides. A rider that fires when it should
 # is half the claim; the half that matters is that it stays quiet otherwise,
 # and that is the half a happy-path test never checks.
+# The six authored from tools/audit_features.py's ranking (2026-09-22). Every
+# one of them reuses a shape this file already carries, which is exactly why
+# these six and not the other 289 — see docs/audit-features.md for what the
+# rest are waiting on, which is engine primitives rather than authoring time.
+#
+# Built at the feature's OWN level rather than at LEVELS' 4 and 8: five of the
+# six land above 8, which is why the sweep above never saw them.
+const RANKED := [
+	["fighter", "champion", 11, "fighter-extra-attack-2", "attacks_per_action"],
+	["fighter", "champion", 20, "fighter-extra-attack-3", "attacks_per_action"],
+	["barbarian", "berserker", 7, "barbarian-feral-instinct", "attack_modifier"],
+	["monk", "warrioropenhand", 3, "monk-deflect-attacks", "reaction"],
+	["paladin", "oathofdevotion", 10, "paladin-aura-of-courage", "aura"],
+	["paladin", "oathofdevotion", 11, "paladin-radiant-strikes", "passive_damage"],
+]
+
+func test_ranked_authoring() -> void:
+	for row in RANKED:
+		var ch = build(String(row[0]), String(row[1]), int(row[2]))
+		var fid := String(row[3])
+		check(ch.sheet().has_feature(fid), "%s L%d carries %s" % [row[0], row[2], fid])
+		var v: Dictionary = {}
+		for verb in Effects.verbs_for(ch.sheet()):
+			if String(verb["id"]) == fid:
+				v = verb
+		check(not v.is_empty(), "%s reaches the board as a verb" % fid)
+		if not v.is_empty():
+			check(String(v["kind"]) == String(row[4]),
+				"%s is a %s (got %s)" % [fid, row[4], v.get("kind", "nothing")])
+	# The two that carry a number worth reading back, since a wrong one here is
+	# a silent balance change rather than a crash.
+	# Read off econ, not off the combatant: new_turn() is what folds every
+	# attacks_per_action verb down to the largest, so the number only exists
+	# once a turn has started.
+	var f11 = Adapter.to_combatant(build("fighter", "champion", 11), "party", Vector2i.ZERO)
+	var f20 = Adapter.to_combatant(build("fighter", "champion", 20), "party", Vector2i.ZERO)
+	f11.new_turn()
+	f20.new_turn()
+	check(int(f11.econ["attacks_per_action"]) == 3,
+		"a fighter at 11 swings three times (got %d)" % int(f11.econ["attacks_per_action"]))
+	check(int(f20.econ["attacks_per_action"]) == 4,
+		"...and four at 20 (got %d)" % int(f20.econ["attacks_per_action"]))
+	# Advantage on Initiative, off a verb that touches nothing else: the kind is
+	# attack_modifier with no `self`, so combat.gd's attack path skips it and
+	# adapter.gd's init_adv sweep still finds it.
+	var bar = Adapter.to_combatant(build("barbarian", "berserker", 7), "party", Vector2i.ZERO)
+	check(bar.init_adv, "Feral Instinct puts advantage on the barbarian's initiative")
+
 func test_new_mechanics() -> void:
 	# `target_damaged` — Colossus Slayer, "a creature that is missing HP".
 	check(not rider_fires("ranger", "hunter", "Colossus Slayer", {"damaged": false}),

@@ -584,12 +584,18 @@ func _encounter_handoff(p) -> void:
 	if not screen.world.clock.is_paused() or not screen._halted_on_arrival:
 		fail("the map did not halt for an order after the fight (#98)")
 
-	# A faction with no board of its own still gets a roster and a board.
+	# A faction with no board of its own still gets a roster and a board. O-biome
+	# changed which board that is — it used to be DEFAULT_THEME for every such
+	# fight on the map, and is now the one the GROUND names — so the claim is the
+	# same and the number it is checked against comes from the biome layer.
 	var World = load("res://core/world.gd")
+	var Scaler = load("res://core/scaler.gd")
+	var at := Vector2.ZERO
 	var spec: Dictionary = screen.encounter_spec(
-		World.RoamingParty.new("cult", Vector2.ZERO, "cultist"))
-	if spec.get("monsters", []).is_empty() or spec.get("theme", "") != screen.DEFAULT_THEME:
-		fail("themeless faction got no usable spec: %s" % [spec])
+		World.RoamingParty.new("cult", at, "cultist"))
+	var want := String(Scaler.BIOME_BOARD.get(screen.world.biome_at(at), screen.DEFAULT_THEME))
+	if spec.get("monsters", []).is_empty() or spec.get("theme", "") != want:
+		fail("themeless faction got no usable spec (wanted the %s board): %s" % [want, spec])
 
 	# ...and the map still runs: the player marches again.
 	var back: Vector2 = p.position

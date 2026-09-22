@@ -16,6 +16,7 @@ extends "res://scenes/native_layer.gd"
 
 const Catalog = preload("res://core/rules/catalog.gd")
 const Props3D = preload("res://scenes/world/props3d.gd")
+const BoardProps = preload("res://scenes/board_props.gd")
 # The same cache the overworld layers read through, so the hero already
 # standing on the map arrives in the fight without a second trip to disk.
 # See scenes/model_cache.gd.
@@ -69,6 +70,10 @@ const BEAST_DIR := "res://assets/beasts/%s.glb"
 const BEAST_SPAN := {"Tiny": 0.5, "Small": 1.0, "Medium": 1.5, "Large": 2.0, "Huge": 2.6, "Gargantuan": 3.2}
 const FIGURE_SCALE := 1.25     # rig is 1.2 m tall, feet at y=0; ~1.5 hex radii so neighbours do not stack
 const CAM_DIST := 40.0
+# How far off its hex centre a prop stands, in world units (one unit = one hex
+# radius). 0.42 clears a figure's shoulders without letting anything drift into
+# the neighbouring hex and lie about which tile it is cover for.
+const PROP_OFFSET := 0.42
 
 var board: Control
 var main
@@ -76,6 +81,14 @@ var cb
 var _cam: Camera3D
 var _figs := {}                # combatant id -> Node3D
 var _prev := {}                # combatant id -> last world position, for facing
+# #167: the board's own furniture, in the same 3D world as the figures and for
+# the same reason props3d.gd's header gives for the overworld — one camera, one
+# depth buffer, so a hero walking behind a tree is behind the tree. Keyed by
+# what it stands for ("o3" the board's fourth object, "c2,1" the cover on that
+# hex, "r4,0" the rough), because a board is rebuilt per fight and nothing here
+# needs to survive one.
+var _props := {}               # key -> Node3D
+var _prop_hex := {}            # key -> Vector2i, the hex it stands on
 
 
 func _ready() -> void:
@@ -197,6 +210,46 @@ func reset(_cb) -> void:
 		if path.begins_with(BEAST_DIR.get_base_dir()):
 			fit_beast(m, c.src_id)
 		_figs[c.id] = holder
+	_reset_props()
+
+
+# One prop per object, per cover hex and per rough hex. Cover and rough are the
+# two things a player most needs to read off a board and were the two drawn with
+# the least — a hash-picked 2D leaf blob — so they get real furniture here and
+# Board._foliage_at stands down for them (see props_on).
+#
+# Seeded off the hex, so a row of trees is a row of different trees and the same
+# board always grows the same ones.
+func _reset_props() -> void:
+	for n in _props.values():
+		n.queue_free()
+	_props.clear()
+	_prop_hex.clear()
+	if cb == null:
+		return
+	var pal := String(cb.board.get("palette", "shrine"))
+	for i in cb.board.get("objects", []).size():
+		var o: Dictionary = cb.board["objects"][i]
+		_add_prop("o%d" % i, o["pos"], String(o["type"]))
+	for hx in cb.board.get("cover", []):
+		_add_prop("c%d,%d" % [hx.x, hx.y], hx, BoardProps.cover_kind(pal))
+	for hx in cb.board.get("rough", []):
+		_add_prop("r%d,%d" % [hx.x, hx.y], hx, BoardProps.rough_kind(pal))
+
+
+func _add_prop(key: String, hx: Vector2i, kind: String) -> void:
+	var holder := Node3D.new()
+	_sub.add_child(holder)
+	holder.add_child(BoardProps.build(kind, hash(hx)))
+	_props[key] = holder
+	_prop_hex[key] = hx
+
+
+# Whether the 3D furniture is up, which is what Board._foliage_at asks before
+# scattering its own 2D plants: two answers to "what is on this hex" drawn one
+# over the other reads as neither.
+func props_on() -> bool:
+	return not _props.is_empty()
 
 
 # --- projection: the exact inverse of Board._iso -------------------------------
@@ -206,6 +259,12 @@ func reset(_cb) -> void:
 #         is one hex radius. An orthographic camera tilted DOWN by theta = asin(SQUASH)
 #         reproduces that squash on the ground and shows height foreshortened by
 #         cos(theta), which is the right thing for a standing figure.
+
+# A stable per-hex number in -1..1, so a prop's offset is the same every frame
+# and the same on every machine.
+func _prop_jitter(hx: Vector2i, salt: int) -> float:
+	return (float(absi(hash([hx.x, hx.y, salt])) % 2000) / 1000.0) - 1.0
+
 
 func px_per_unit() -> float:
 	return board.ISO_GAIN * main.hex_px
@@ -264,3 +323,20 @@ func _process(_dt: float) -> void:
 				n.rotation.y = lerp_angle(n.rotation.y, atan2(d.x, d.z), 0.35)
 		_prev[c.id] = n.position
 		n.rotation.x = deg_to_rad(-80.0) if c.is_down() else 0.0   # unconscious: lying flat
+
+	# The furniture, by the same arithmetic and for the same reason: it stands on
+	# a hex, the hex has a rise, and the board pans and zooms under both.
+	#
+	# Nudged off the hex centre by a seeded offset rather than planted on it. A
+	# cover hex is a hex you may STAND in, and a tree drawn dead centre swallows
+	# whoever is standing there — the offset leaves room for the figure and, as a
+	# bonus, stops a row of props looking like a row of fence posts.
+	for key in _props:
+		var n: Node3D = _props[key]
+		var hx: Vector2i = _prop_hex[key]
+		var off := Vector2(_prop_jitter(hx, 0), _prop_jitter(hx, 1)) * PROP_OFFSET
+		var lift: float = -board._rise(hx)
+		n.position = world_for_screen(board._pix(hx) + Vector2(0, lift))
+		n.position.y = lift / maxf(0.001, px_per_unit() * cos(th))
+		n.position.x += off.x
+		n.position.z += off.y

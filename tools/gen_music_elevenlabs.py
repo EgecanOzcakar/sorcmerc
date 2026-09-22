@@ -112,6 +112,15 @@ BEDS = {
                     "ambient." + LOOP),
     "merchant-shop": ("A small medieval shop: a cheerful lute picking a light tune in F over "
                       "soft strings, a gentle shop bell now and then, cosy, warm, quiet." + LOOP),
+    # O-biome's two boards. Both are OPEN COUNTRY, which is what keeps them
+    # apart from forest-clearing above: no canopy, so no close birdsong and no
+    # enclosed reverb — wind with distance in it, and the ground's own sound.
+    "downs": ("Open moorland under a wide sky: a low drone in D with a slow wooden flute "
+              "over it, steady wind across grass, a distant curlew, spare and unhurried, "
+              "nothing enclosed, no drums." + LOOP),
+    "marsh": ("A cold reed marsh: damp low pads in A minor, reeds hissing in a slow wind, "
+              "water lapping and the occasional deep frog, a far-off wading bird, still "
+              "and uneasy, no melody, no drums." + LOOP),
     # between fights, and the map inside a town
     "settlement": ("A small medieval town at evening: warm plucked lute and gentle strings "
                    "over a homely progression in C, a hurdy-gurdy drone underneath, peaceful "
