@@ -156,6 +156,9 @@ var state := "picking"
 var log: Array = []
 var rng
 var _rested := false     # T19: did this delve stop for its short rest?
+# core/rules/power.gd's reading of the party at the MOUTH of this lair, taken
+# once per entry and used to price every room below it. See _held().
+var entry_score := 0.0
 
 
 static func for_lair(lair, party, world):
@@ -168,7 +171,42 @@ static func for_lair(lair, party, world):
 	s.rng = RNG.new(maxi(1, absi(hash("site|%s" % lair.id))))
 	s.rooms = _build(lair, s.rng)
 	s.depth = clampi(int(lair.depth_cleared), 0, s.rooms.size() - 1)
+	# Taken here and nowhere else: this is the party at the mouth. Withdrawing
+	# and coming back calls for_lair() again, which is correct — they walked in
+	# again, and whatever shape they walked in with is what the rest of the
+	# descent is priced for.
+	s.entry_score = Scaler.party_score(party.party_characters())
 	return s
+
+
+# A lair is priced for the party that WALKED IN, not for the party standing in
+# the doorway of the room it is about to build.
+#
+# MEASURED (2026-09-22, tests/sweep_site_depth.gd) — core/rules/power.gd's
+# estimate() reads a combatant's ehp off max_hp and never off hp, so the only
+# thing the scaler can see about a party's condition is how many spell slots
+# are left. Inside a site that reads backwards. The same dragon's boss room,
+# same party, one variable moved: at 64% slots it is five bodies whether the
+# party is at 20% HP or 100%; hold HP at 67% and walk the slots from 0% to
+# 100% and it goes 80.1 -> 145.3 in budget, three bodies to five. So spending
+# slots used to shrink the next fight and RESTING used to grow it — at level 8
+# the rest room bought 67% HP instead of 49% and the boss win rate fell, 23.7%
+# to 18.3%, because the budget it handed back was worth more than the healing.
+#
+# This is the site-local answer to that: hold the entry reading and correct the
+# scale so every room comes out the size it would have been at the mouth. It
+# moves no global number — a party at a lair's mouth is the full-HP party every
+# existing sweep already measures — and it makes the descent say one thing:
+# the lair is what it is, and your condition decides whether you can take it,
+# rather than deciding what is in it. The root fix, teaching estimate() to read
+# hp, is a re-tune of everything and is in the expansion plan's Still open.
+#
+# Unclamped on purpose. Levelling up mid-delve (the world screen banks XP per
+# room) raises `now` above `then` and pulls this below 1.0, which is the same
+# statement read the other way: the lair does not get harder because the party
+# got stronger halfway down it either.
+func _held() -> float:
+	return Scaler.held_at(entry_score, Scaler.party_score(party.party_characters()))
 
 
 # How many rooms deep this lair runs, before anything is generated — the world
@@ -456,10 +494,16 @@ func combat_spec() -> Dictionary:
 	# — T92's rule that a climax is never scaled DOWN still holds, and it is this
 	# call site that holds it (core/scaler.gd's boss_for takes the knob neutrally).
 	var band: float = Regions.power_scale(world, lair.position, party)
+	# ...times the entry correction, so the two knobs compose the way the world
+	# screen's two do: the band says how dangerous this country is, `held` says
+	# the descent is priced for the party that came through the door. The boss
+	# keeps T92's maxf(1.0, band) — a climax is never scaled DOWN by the COUNTRY
+	# — and `held` rides on top of it, being a different axis.
+	var held: float = _held()
 	var spec: Dictionary = Scaler.boss_for(party.party_characters(), room, seed_v,
-			maxf(1.0, band)) if room.has("lead") \
+			maxf(1.0, band) * held) if room.has("lead") \
 		else Scaler.roster_for(party.party_characters(), String(room.get("difficulty", "normal")),
-			{}, theme, seed_v, band, _boss_lead_exclusion())
+			{}, theme, seed_v, band * held, _boss_lead_exclusion())
 	# Objectives: the gate holds against waves drawn from the same faction at
 	# WAVE_SCALE of an easy roster; the pens hold a captive on a deadline.
 	#
@@ -472,7 +516,7 @@ func combat_spec() -> Dictionary:
 	match String(room.get("objective", "")):
 		"hold":
 			spec["objective"] = Objectives.make("hold", {"waves": Objectives.waves_for(
-				party.party_characters(), theme, seed_v, band, _boss_lead_exclusion(),
+				party.party_characters(), theme, seed_v, band * held, _boss_lead_exclusion(),
 				lair.faction)})
 		"rescue":
 			spec["objective"] = Objectives.make("rescue")

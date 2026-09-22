@@ -289,11 +289,29 @@ static func roster_for(party_characters: Array, difficulty: String, quest_bias: 
 	var budget := _budget(party_characters, difficulty, power_scale)
 	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() else _faction_order(theme, seed, budget, exclude))
 
-static func _budget(party_characters: Array, difficulty: String, power_scale: float = 1.0) -> float:
+# The one number every budget here is priced from: the party as core/rules/
+# power.gd sees it. Public because a caller may need to price a LATER fight
+# from an EARLIER reading of it — core/site.gd holds the score the party had at
+# a lair's mouth and prices the whole descent from that, so that what is in a
+# room stops depending on how much the party has spent getting to it.
+static func party_score(party_characters: Array) -> float:
 	var party: Array = []
 	for ch in party_characters:
 		party.append(Adapter.to_combatant(ch, "party", Vector2i.ZERO))
-	var team: float = maxf(1.0, Power.team_score(party))
+	return maxf(1.0, Power.team_score(party))
+
+# The `power_scale` that makes a fight priced for `now` come out the size it
+# would have been for `then`. _budget is REF_SCORE * pow(team/REF_SCORE, CURVE)
+# * TIER * power_scale, so the correction is pow(then/now, CURVE) exactly, and
+# the budget lands on pow(then, CURVE) whatever `now` says. 1.0 when either
+# reading is missing, so a caller that never took a snapshot is unaffected.
+static func held_at(then: float, now: float) -> float:
+	if then <= 0.0 or now <= 0.0:
+		return 1.0
+	return pow(then / now, CURVE)
+
+static func _budget(party_characters: Array, difficulty: String, power_scale: float = 1.0) -> float:
+	var team: float = party_score(party_characters)
 	return REF_SCORE * pow(team / REF_SCORE, CURVE) * float(TIER.get(difficulty, TIER["normal"])) * power_scale
 
 # T18 — a boss fight: the same budget and the same MULT knob, aimed differently.

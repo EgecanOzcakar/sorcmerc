@@ -12,6 +12,7 @@ const Scaler = preload("res://core/scaler.gd")
 const Regions = preload("res://core/regions.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const Adapter = preload("res://core/adapter.gd")
 
 var _pass := 0
 var _fail := 0
@@ -328,6 +329,36 @@ func _init() -> void:
 		check(not Catalog.monster(String(fb["lead"])).is_empty(), "%s's lead exists" % f)
 		check(String(Catalog.monster(String(fb["lead"])).get("faction", "")) == f,
 			"...and is %s's own kin" % f)
+	# --- a lair is priced for the party that walked in ---------------------
+	# core/rules/power.gd's estimate() reads ehp off max_hp and never off hp, so
+	# the only thing the scaler could see about a party's condition was unspent
+	# slots — and inside a site that read backwards: spending shrank the next
+	# fight and RESTING grew it. Site holds the entry reading and corrects the
+	# scale, so what is in a room stops depending on what it cost to get there.
+	var pw := _party()
+	var lw = _lair("dragon", "held-lair")
+	var sw = Site.for_lair(lw, pw, _world())
+	sw.depth = sw.depth_total() - 1
+	sw.enter(0)
+	var fresh: Array = sw.combat_spec()["monsters"]
+	check(is_equal_approx(sw._held(), 1.0), "at the mouth the correction is a no-op (%.3f)" % sw._held())
+	for state in [[0.49, 0.50], [0.67, 0.0], [0.20, 1.0], [0.05, 0.25]]:
+		for ch in pw.party_characters():
+			var sheet = ch.sheet()
+			ch.hp_current = maxi(1, roundi(sheet.max_hp * float(state[0])))
+			var used: Array[int] = []
+			for n in Adapter._full_slots(sheet):
+				used.append(roundi(int(n) * (1.0 - float(state[1]))))
+			ch.slots_used = used
+		check(str(sw.combat_spec()["monsters"]) == str(fresh),
+			"...and the same room at hp %.0f%%/slots %.0f%% is the same room" % [
+				float(state[0]) * 100.0, float(state[1]) * 100.0])
+	check(sw._held() > 1.0, "...which it is because the correction moved (%.3f)" % sw._held())
+	# Re-entering is a fresh walk in, so the snapshot is re-taken rather than
+	# carrying a drained party's reading into the next visit.
+	var sw2 = Site.for_lair(lw, pw, _world())
+	check(is_equal_approx(sw2._held(), 1.0), "walking back in re-takes the reading (%.3f)" % sw2._held())
+
 	# A content pack's faction this build has never heard of keeps the old shape
 	# rather than crashing on a missing table row.
 	var pk = Site.for_lair(_lair("moonfolk", "pack-lair"), _party(), _world())
