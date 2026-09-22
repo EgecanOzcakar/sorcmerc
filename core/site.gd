@@ -496,12 +496,20 @@ func combat_spec() -> Dictionary:
 	var band: float = Regions.power_scale(world, lair.position, party)
 	# ...times the entry correction, so the two knobs compose the way the world
 	# screen's two do: the band says how dangerous this country is, `held` says
-	# the descent is priced for the party that came through the door. The boss
-	# keeps T92's maxf(1.0, band) — a climax is never scaled DOWN by the COUNTRY
-	# — and `held` rides on top of it, being a different axis.
+	# the descent is priced for the party that came through the door.
+	#
+	# T92's floor goes on the COMPOSED scale, `maxf(1.0, band * held)`, and not
+	# on the band alone with `held` multiplied over it. Stacking two upward
+	# corrections is how the first cut of this made the level-8 boss a 0/48
+	# wall: at the origin a level-8 party reads band 0.320, so its rooms are
+	# priced at a third while the floor already hands the boss a 3.1x jump over
+	# them, and `held` was making that 3.75x. Floored together, an outgrown
+	# lair's climax stays exactly the fight it was (0.320 * 1.2 is still under
+	# 1.0) and `held` only bites where the country is not already discounting —
+	# which is the case it was built for.
 	var held: float = _held()
 	var spec: Dictionary = Scaler.boss_for(party.party_characters(), room, seed_v,
-			maxf(1.0, band) * held) if room.has("lead") \
+			maxf(1.0, band * held)) if room.has("lead") \
 		else Scaler.roster_for(party.party_characters(), String(room.get("difficulty", "normal")),
 			{}, theme, seed_v, band * held, _boss_lead_exclusion())
 	# Objectives: the gate holds against waves drawn from the same faction at

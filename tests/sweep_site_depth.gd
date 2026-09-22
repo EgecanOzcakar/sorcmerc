@@ -44,6 +44,7 @@ const Presets = preload("res://core/presets.gd")
 const Party = preload("res://core/party.gd")
 const World = preload("res://core/world.gd")
 const Site = preload("res://core/site.gd")
+const Regions = preload("res://core/regions.gd")
 
 static var _extra := 0
 static var _policy := "fight"
@@ -173,8 +174,13 @@ func _init() -> void:
 	var seeds := int(OS.get_environment("SEEDS")) if OS.get_environment("SEEDS") != "" else 20
 	_extra = int(OS.get_environment("LEVEL")) if OS.get_environment("LEVEL") != "" else 5
 	_policy = OS.get_environment("POLICY") if OS.get_environment("POLICY") != "" else "fight"
-	print("seeds per faction: %d, party level 3+%d, policy %s, lair at the origin (band 1.0)" % [
-		seeds, _extra, _policy])
+	# The band is MEASURED rather than asserted: an earlier header here claimed
+	# "band 1.0" for every run, and at level 8 the origin actually reads 0.320,
+	# which is most of why that column looked the way it did.
+	var probe_w := _world()
+	var probe_band: float = Regions.power_scale(probe_w, Vector2.ZERO, _party())
+	print("seeds per faction: %d, party level 3+%d, policy %s, lair at the origin (band %.3f, boss floor %.3f)" % [
+		seeds, _extra, _policy, probe_band, maxf(1.0, probe_band)])
 	print("")
 	# Pooled over every faction: the depth curve with the people averaged out.
 	var all := {}
