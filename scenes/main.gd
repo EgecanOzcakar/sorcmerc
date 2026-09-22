@@ -3612,6 +3612,11 @@ class Board extends Control:
 	# {} for bare ground, else the plant to draw. Cover hexes always get one —
 	# the thing you are hiding behind should be visible.
 	func _foliage_at(hx: Vector2i, c: Vector2, s: float) -> Dictionary:
+		# #167: when the 3D layer has furniture up, it owns what stands on a hex.
+		# Two answers to "what is on this tile" drawn one over the other reads as
+		# neither, and the 3D layer draws above this one.
+		if main._figures != null and main._figures.props_on():
+			return {}
 		var pal := String(cb.board.get("palette", "shrine"))
 		var r := _rand(hx, 5)
 		var cover: bool = cb.is_cover(hx)
@@ -3645,6 +3650,13 @@ class Board extends Control:
 	# glows), props get a crate mark, torches a small bright flame.
 	# ponytail: a torch could ignite adjacent flammable terrain — not built.
 	func _draw_object(o: Dictionary, c: Vector2, s: float, pulse: float) -> void:
+		# #167: the 3D layer draws the furniture itself when it is up. A hazard
+		# still pulses here whatever is standing on it — that glow is a rule being
+		# told, not a picture of a barrel, and it is the one thing on this hex a
+		# player is entitled to see through anything drawn over it.
+		if main._figures != null and main._figures.props_on() \
+				and not (o.has("hazard") and not o.get("blocks_movement", false)):
+			return
 		match String(o["type"]):
 			"torch":
 				for i in 3:   # a soft glow around the flame, not a hard ring
