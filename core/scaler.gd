@@ -357,10 +357,20 @@ static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
 		entry["features"] = extras
 	var rest: float = budget - _lead_score(lead, count, mult, extras)
 	var monsters: Array = [entry]
-	# The escort is the lead's kin but never the lead itself — two entries of one id
-	# would spawn two combatants sharing an id.
-	var order: Array = _faction_order(String(boss.get("theme", "")), seed, rest).filter(
-		func(id): return id != lead)
+	# The escort is the lead's kin but never the lead itself — a boss escorted by
+	# copies of the boss is not a boss. (It used to also have to be, because two
+	# entries of one id both spawned an unsuffixed combatant; core/encounter.gd's
+	# build() counts copies per id across the whole spec now, so that is no
+	# longer what is holding this up.)
+	var kin: Array = _faction_order(String(boss.get("theme", "")), seed, rest)
+	var order: Array = kin.filter(func(id): return id != lead)
+	# ...unless there is nobody else. `orc` is ONE bestiary entry and `kin` is
+	# that entry, so filtering it left an empty order and a chief standing alone
+	# in an empty room with the whole escort budget unspent — a 100% boss. More
+	# of its own kind, at whatever mult the budget buys, beats that: it is what
+	# the rest of the lair was full of anyway.
+	if order.is_empty():
+		order = kin
 	# A boss always brings an escort: when the lead at MULT_MIN already overruns
 	# the budget (the mammoth against a level-3 hard budget after the 2026-09-15
 	# retune), _build() with nothing left still seats one body at MULT_MIN.

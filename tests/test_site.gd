@@ -290,6 +290,52 @@ func _init() -> void:
 			saw_own += 1
 	check(saw_own >= 4, "...and the check is not vacuous: %d of 6 actually fielded their own" % saw_own)
 
+	# ...and something is waiting at the bottom of it. campaign.gd's BOSS_POOL is
+	# keyed by THEME and covers five factions, so the other ten used to fall
+	# through to a plain hard roster with no lead and the title "WHAT THE LAIR
+	# WAS BUILT AROUND" — two thirds of the lairs in the game ending in a
+	# slightly bigger version of the room before them. FACTION_BOSS is the
+	# other ten, measured in tests/sweep_faction_boss.gd.
+	for f in Scaler.FACTIONS:
+		var sb = Site.for_lair(_lair(f, "%s-boss" % f), _party(), _world())
+		sb.depth = sb.depth_total() - 1
+		sb.enter(0)
+		var room: Dictionary = sb.room
+		var themed: bool = Site.theme_for_faction(f) != ""
+		check(String(room.get("title", "")) != "WHAT THE LAIR WAS BUILT AROUND",
+			"a %s lair's last room is named, not described" % f)
+		check(String(room.get("difficulty", "")) == "hard", "...and is a hard fight (%s)" % f)
+		# The one boss with no lead is BOSS itself, the hand-tuned four-archetype
+		# shrine fight campaign.gd calls "classic" — deliberate, and measured.
+		check(room.has("lead") or String(room.get("archetype", "")) == "classic",
+			"...and is built round a lead (%s)" % f)
+		var bspec: Dictionary = sb.combat_spec()
+		check(not bspec.get("monsters", []).is_empty(), "...with a roster (%s)" % f)
+		check(bspec["monsters"].size() > 1 or int(bspec["monsters"][0].get("count", 1)) > 1,
+			"...and the boss is not alone in the room (%s: %s)" % [f, str(bspec["monsters"])])
+		if not themed:
+			var own_boss: Dictionary = Site.FACTION_BOSS[f]
+			check(not own_boss.get("lead_features", []).is_empty(),
+				"%s's boss carries a special of its own" % f)
+			var base: Array = Catalog.monster(String(own_boss["lead"])).get("features", [])
+			for feat in own_boss["lead_features"]:
+				check(not feat in base,
+					"...and %s is not something a plain %s already had" % [feat, own_boss["lead"]])
+	# Every lead must be a real creature, and a bestiary lead must be pulled out
+	# of the ordinary pool so meeting it is a reveal (_boss_lead_exclusion).
+	for f in Site.FACTION_BOSS:
+		var fb: Dictionary = Site.FACTION_BOSS[f]
+		check(not Catalog.monster(String(fb["lead"])).is_empty(), "%s's lead exists" % f)
+		check(String(Catalog.monster(String(fb["lead"])).get("faction", "")) == f,
+			"...and is %s's own kin" % f)
+	# A content pack's faction this build has never heard of keeps the old shape
+	# rather than crashing on a missing table row.
+	var pk = Site.for_lair(_lair("moonfolk", "pack-lair"), _party(), _world())
+	pk.depth = pk.depth_total() - 1
+	pk.enter(0)
+	check(String(pk.room.get("title", "")) == "WHAT THE LAIR WAS BUILT AROUND",
+		"an unknown faction still gets the plain last room")
+
 	# --- D1: a disturbed lair does not wait forever ------------------------
 	# Locked with the user: enter a lair and you have a day or two to finish it.
 	# Walk away longer and it resolves without you — somebody else clears it, or

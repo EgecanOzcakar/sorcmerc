@@ -27,6 +27,7 @@ func check(cond: bool, label: String) -> void:
 func _init() -> void:
 	test_catalog_lists_reach_the_combatant()
 	test_nonmagical_weapon_clause()
+	test_qualified_immunity_is_resistance()
 	test_damage_stack()
 	test_condition_immunity()
 	test_magic_resistance()
@@ -86,6 +87,30 @@ func test_nonmagical_weapon_clause() -> void:
 		var c = Encounter.spawn(e["id"], 1.0, "foe", Vector2i.ZERO)
 		for t in c.resist + c.immune + c.vulnerable:
 			check(String(t).find(" ") < 0, "%s: %s is not a damage type id" % [e["id"], t])
+
+# ...but the same clause on an IMMUNITY is not the same statement. Read the way
+# the resist list is read, it says no weapon in this game can ever hurt the
+# creature — and 23 entries carry one (every lycanthrope, the couatl, all three
+# golems). A level-3 party put in a room with a flesh golem at AC 8 swung for
+# six rounds, logged "is immune to slashing — 0 damage" every time, and lost.
+# So a qualified immunity comes back as a resistance instead: shrugged, not
+# untouchable. See core/adapter.gd's NONMAGICAL_CLAUSE note.
+func test_qualified_immunity_is_resistance() -> void:
+	for id in ["flesh-golem", "clay-golem", "stone-golem", "werewolf-hybrid", "couatl"]:
+		var c = _spawn(id)
+		for t in ["bludgeoning", "piercing", "slashing"]:
+			check(not t in c.immune, "%s is not immune to %s" % [id, t])
+		check("slashing" in c.resist, "%s resists slashing instead" % id)
+	# ...and the unqualified half of the same entry is untouched.
+	var golem = _spawn("stone-golem")
+	check("poison" in golem.immune and "psychic" in golem.immune,
+		"a stone golem's plain immunities stay immunities")
+	# The thing that was actually broken: a mundane weapon does damage now.
+	var fg = _spawn("flesh-golem")
+	var cb := _cb([fg, _hero()])
+	fg.hp = fg.max_hp
+	cb._apply_damage(fg, 10, "slashing")
+	check(fg.hp == fg.max_hp - 5, "and a plain sword takes half off rather than nothing")
 
 func test_damage_stack() -> void:
 	var sk = _spawn("skeleton")

@@ -258,11 +258,97 @@ static func _support_room(rng, used: Dictionary, d: int) -> Dictionary:
 	return r
 
 
+# A boss for the ten factions that have no board of their own, and so never had
+# one.
+#
+# campaign.gd's BOSS_POOL is keyed by THEME and holds six entries — the linear
+# route's climaxes, reused here because they carry measured win rates and there
+# was no reason to invent a second unmeasured set. But a theme is a BOARD, and
+# only five factions have one, so _boss_room fell through for orc, gnoll,
+# kobold, cultist, soldier, monstrosity, fey, elemental, construct and dragon:
+# a plain "hard" roster with no lead at all, and the title "WHAT THE LAIR WAS
+# BUILT AROUND" — a description where every real boss has a name. Two thirds of
+# the lairs in the game ended in a slightly bigger version of the room before
+# it, which is what the level-8 column of tests/sweep_site_kin.gd was saying
+# when every one of those lairs came out a flat 100% clear while a giant hold
+# with a real oni in it came out 25%.
+#
+# Same two shapes BOSS_POOL uses, and for the same reasons:
+#   "bestiary" — a rare, high-CR creature of the faction's own kin, pulled out
+#                of the ordinary pool by _boss_lead_exclusion() so that meeting
+#                it is a reveal rather than the third one today.
+#   "elite"    — the faction's ordinary creature with a title and an extra
+#                attack, for the three whose bestiary pool is one or two thin
+#                entries (orc has ONE, gnoll and kobold two). scaler.boss_for's
+#                mult knob does the rest and the budget's remainder buys escort,
+#                exactly as the arrow-chief's does.
+#
+# `lead_features` is the special, and it is the point of the pass: one feature
+# out of data/effects/features.json that the base statblock does NOT already
+# carry, picked so the fight asks a question the rooms above it did not. The
+# specials are deliberately all different — a boss the party has to reach fast
+# (the mage's charm), out-damage (the hag's regeneration), stand up to (the
+# elemental's knockdown), or out-last (the golem's relentless).
+#
+# MEASURED — tests/sweep_faction_boss.gd, the same shape tests/test_scaler.gd's
+# _sweep_boss uses for BOSS_POOL's own numbers: 40 seeds a boss, level-3 preset
+# party at full HP, the boss room's own spec. The grid is in
+# docs/expansion-plan.md. The band to stay inside is test_scaler's climax band
+# (15-85%), and the company to keep is BOSS_POOL's own spread — mammoth 65%,
+# oni 82.5%, arrow-chief 82.5%, shrine 77%, assassin 92.5%, captain 92.5%.
+# `mult_max` is the knob that pulls a lead back out of the top of that band by
+# spending the budget on escort instead; the arrow-chief's note explains why.
+const FACTION_BOSS := {
+	"orc": {"title": "THE WARCHIEF", "archetype": "elite", "lead": "orc",
+		"desc": "The one the rest of them are frightened of.",
+		"lead_features": ["monster-multiattack-2", "monster-relentless-10"]},
+	"gnoll": {"title": "THE ONE THAT EATS FIRST", "archetype": "elite", "lead": "gnoll",
+		"desc": "It has not had to fight for its share in a long time.",
+		"lead_features": ["monster-multiattack-2", "monster-martial-advantage"]},
+	"kobold": {"title": "THE SCALE-SINGER", "archetype": "elite", "lead": "kobold-archer",
+		"desc": "Small, and behind everything else in the room, and the reason the rest of them are brave.",
+		"lead_features": ["monster-multiattack-2", "monster-innate-bolt"]},
+	# lead_share 0.25, not the default 0.40: a mage the budget had pumped to
+	# fill four tenths of the fight came out 97.5%, softer than any boss in the
+	# game. Spending less of the fight on the lead spends more of it on bodies,
+	# and bodies are what the action economy makes dangerous (scaler.gd's own
+	# header). The cult's bodies happen to be other casters, which is the point.
+	"cultist": {"title": "THE VOICE THEY ALL ANSWER", "archetype": "bestiary", "lead": "mage",
+		"desc": "It is not the knives that are the problem. It is what they are listening to.",
+		"lead_features": ["monster-charm-gaze"], "lead_share": 0.25},
+	"soldier": {"title": "THE CAPTAIN WITH THE SCALED ARM", "archetype": "bestiary",
+		"lead": "half-red-dragon-veteran",
+		"desc": "He took something from a dragon once, and it took something back.",
+		"lead_features": ["monster-parry-3"]},
+	"monstrosity": {"title": "THE THING WITH THREE HEADS", "archetype": "bestiary", "lead": "chimera",
+		"desc": "Two of them are watching you. The third is breathing in.",
+		"lead_features": ["monster-frightful-presence"]},
+	"fey": {"title": "THE GREEN MOTHER", "archetype": "bestiary", "lead": "green-hag",
+		"desc": "Everything you have cut so far down here grew back by morning. So does she.",
+		"lead_features": ["monster-regeneration"]},
+	"elemental": {"title": "WHAT THE HILL IS MADE OF", "archetype": "bestiary", "lead": "earth-elemental",
+		"desc": "The floor stands up.",
+		"lead_features": ["monster-knockdown"]},
+	"construct": {"title": "THE THING SOMEBODY MADE", "archetype": "bestiary", "lead": "flesh-golem",
+		"desc": "Whoever built it is one of the parts.",
+		"lead_features": ["monster-relentless-14"]},
+	# CR 6, a notch under the oni's 7, and not the CR 10 young red the first cut
+	# reached for: boss_for's mult knob can raise a lead for the deeps and has no
+	# way to lower one, so a lead priced above the boss band is a lead that is
+	# 0% at every level below it. The dragon still out-carries every other lead
+	# here on features alone — three attacks, a rider and the greater breath.
+	"dragon": {"title": "THE WYRM AT THE BOTTOM", "archetype": "bestiary", "lead": "young-white-dragon",
+		"desc": "Everything above this room was somebody it let live.",
+		"lead_features": ["monster-magic-resistance"]},
+}
+
 # The last room. Where a tuned boss exists for this lair's own board it is used
 # — campaign.gd's BOSS_POOL entries carry measured win rates (scaler.gd's TUNING
-# header), and there is no reason to invent a second, unmeasured set. A faction
-# with no themed boss (dragon, currently) gets a plain hard roster instead,
-# which is the same fallback contract every other lookup in this codebase uses.
+# header), and there is no reason to invent a second, unmeasured set. Failing
+# that, the faction's own boss above. Failing BOTH — a content pack's faction
+# this build has never heard of — the plain hard roster that every lair used to
+# get, which is the same fallback contract every other lookup in this codebase
+# uses.
 static func _boss_room(lair, theme: String, total: int) -> Dictionary:
 	for b in Campaign.BOSS_POOL:
 		if String(b.get("theme", "")) == theme and theme != "":
@@ -271,6 +357,17 @@ static func _boss_room(lair, theme: String, total: int) -> Dictionary:
 			r["depth"] = total - 1
 			r["gold"] = BOSS_CACHE + BOSS_CACHE_PER_DEPTH * total
 			return r
+	var own: Dictionary = FACTION_BOSS.get(lair.faction, {})
+	if not own.is_empty():
+		var r: Dictionary = own.duplicate(true)
+		r["id"] = "%s-master" % lair.id
+		r["kind"] = "combat"
+		r["boss"] = true
+		r["difficulty"] = "hard"
+		r["theme"] = theme          # "" — the roster comes off the pinned seed
+		r["depth"] = total - 1
+		r["gold"] = BOSS_CACHE + BOSS_CACHE_PER_DEPTH * total
+		return r
 	return {"id": "%s-master" % lair.id, "kind": "combat", "boss": true,
 		"title": "WHAT THE LAIR WAS BUILT AROUND", "difficulty": "hard",
 		"desc": "It has been listening to you come down.", "theme": theme,
