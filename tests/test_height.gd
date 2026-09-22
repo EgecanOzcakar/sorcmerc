@@ -9,6 +9,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Combat = preload("res://core/combat.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Hex = preload("res://core/hex.gd")
+const Main = preload("res://scenes/main.gd")
 const RNG = preload("res://core/rng.gd")
 
 var _pass = 0
@@ -29,6 +30,7 @@ func _init() -> void:
 	test_the_ai_wants_it_but_not_that_much()
 	test_flat_boards_unchanged()
 	test_generated_boards()
+	test_the_rim_reads_as_an_edge()
 	print("test_height: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -197,3 +199,36 @@ func test_generated_boards() -> void:
 					walkable += 1
 			check(reach == walkable, "%s: every walkable hex is still reachable (%d of %d)" % [label, reach, walkable])
 	check(raised > 0, "at least some generated boards have raised ground on them")
+
+
+# The one thing about a shelf's colours that a screenshot will not tell you.
+#
+# A raised tile is cut earth under its camera-facing edges and a lit rim along
+# the top of that cut — and the rim is the whole of what says "step" rather
+# than "tile that happens to be lit differently". So it has to be brighter than
+# COL_HEX_GRID, the ordinary line drawn between any two tiles. The first gain
+# (1.7, lerped toward COL_GOLD_EDGE) was not: COL_GOLD_EDGE is a dark gilt, so
+# the mix pulled the blue down faster than the gain lifted it and the shrine's
+# rim came out (88, 81, 71) against the grid's (107, 115, 134). The shelf in
+# this feature's own proof shot was then read as the cover hexes three rows
+# above it, which is exactly the failure this asserts against.
+#
+# Luminance rather than any one channel, because the rim is warm and the grid
+# is cool: comparing red alone would pass a rim nobody can see.
+func test_the_rim_reads_as_an_edge() -> void:
+	var grid := _lum(Main.COL_HEX_GRID)
+	for theme in Main.PALETTES:
+		var fill: Color = Main.PALETTES[theme]
+		var rim: Color = Main.shelf_rim(fill)
+		var face: Color = Main.shelf_face(fill)
+		check(_lum(rim) > grid + 0.05,
+			"%s: the shelf rim is plainly brighter than an ordinary grid line (%.3f vs %.3f)"
+				% [theme, _lum(rim), grid])
+		check(_lum(face) < _lum(fill),
+			"%s: the cut earth under the edge is darker than the floor it is cut into" % theme)
+		check(rim.r >= rim.b, "%s: the rim is lit, not tinted cold" % theme)
+		for c in [rim.r, rim.g, rim.b]:
+			check(c <= 1.0, "%s: no channel blows out" % theme)
+
+func _lum(c: Color) -> float:
+	return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b

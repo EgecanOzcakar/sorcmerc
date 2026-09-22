@@ -136,6 +136,27 @@ const COL_COVER_EDGE := Color("74c2b4")
 const COL_PROP := Color("4a3826")       # barrels, crates, fountains
 const COL_BLOCKED_EDGE := Color("c98a5a")   # the rim on a hex nobody can stand on — ochre, against cover's teal
 const COL_TORCH := Color("ffd98a")
+# #156: the two colours a raised tile is drawn in, from the board's own floor
+# colour so a shelf on the ice board is blue rock and one in the shrine brown.
+# Out here, and static, because the one thing about them that matters cannot be
+# seen in a screenshot and can be asserted: the rim has to come out BRIGHTER
+# than COL_HEX_GRID, which is the ordinary line between two tiles. The first
+# gain (1.7, lerped toward COL_GOLD_EDGE) did not — COL_GOLD_EDGE is itself
+# dark, so the mix pulled the blue down faster than the gain lifted it and the
+# rim landed on (88, 81, 71) against the grid's (107, 115, 134). The edge that
+# was supposed to say "there is a step here" was dimmer than every edge that
+# says nothing, which is how the shelf in this PR's own screenshot got read as
+# the cover hexes three rows above it. tests/test_height.gd holds the floor.
+const SHELF_DARK := 0.34    # the cut earth under the edge, against the floor's fill
+const SHELF_RIM := 3.0      # ...and the lit edge along the top of it
+const SHELF_WARMTH := 0.45  # how far that edge is pulled toward the gilt
+static func shelf_face(fill: Color) -> Color:
+	return Color(fill.r * SHELF_DARK, fill.g * SHELF_DARK, fill.b * SHELF_DARK, 1.0)
+static func shelf_rim(fill: Color) -> Color:
+	var lit := Color(minf(fill.r * SHELF_RIM, 1.0), minf(fill.g * SHELF_RIM, 1.0),
+		minf(fill.b * SHELF_RIM, 1.0)).lerp(Icons.COL_GOLD, SHELF_WARMTH)
+	lit.a = 0.9
+	return lit
 # T11: per-theme floor tint, palette only — no mechanical difference.
 const PALETTES := {"shrine": COL_HEX, "camp": Color("2a2a26"), "city": Color("2c2c33"),
 	"forest": Color("1f2a22"), "ice": Color("222c36"), "shop": Color("2b2620")}
@@ -3317,17 +3338,13 @@ class Board extends Control:
 	# down, and the rim is that colour taken up, so a shelf on the ice board is
 	# blue rock and one in the shrine is brown. A flat dark quad read as a gap
 	# in the ground rather than as a step in it.
-	const SHELF_DARK := 0.34    # the face, against the floor's fill
-	const SHELF_RIM := 1.7      # ...and the lit edge along the top of it
 	func _paint_shelf(canvas: CanvasItem, hx: Vector2i, c: Vector2, s: float) -> void:
 		var here: int = cb.height_at(hx)
 		if here <= 0:
 			return
 		var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
-		var face := Color(fill.r * SHELF_DARK, fill.g * SHELF_DARK, fill.b * SHELF_DARK, 1.0)
-		var rim: Color = Color(minf(fill.r * SHELF_RIM, 1.0), minf(fill.g * SHELF_RIM, 1.0),
-			minf(fill.b * SHELF_RIM, 1.0)).lerp(Icons.COL_GOLD_EDGE, 0.45)
-		rim.a = 0.9
+		var face: Color = main.shelf_face(fill)
+		var rim: Color = main.shelf_rim(fill)
 		var top := _hex_poly(c, s)
 		var lip: Array = []
 		for i in top.size():

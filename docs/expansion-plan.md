@@ -6801,6 +6801,23 @@ from the same constant — the token's screen position already carries the rise,
 so the lift comes back out before the ground projection and goes on again in
 world Y — which is what keeps a model welded to its tile at every zoom.
 
+The rim had to be measured rather than eyeballed. It is what carries "there is
+a step here" — the cut earth alone reads as a dark gap, and the top face's
+`SHELF_LIT` brightening is too small to see against the board's own lighting
+falloff — so it has to be brighter than `COL_HEX_GRID`, the line drawn between
+any two ordinary tiles. The first gain did not clear that bar and nothing said
+so: at `SHELF_RIM = 1.7` lerped toward `COL_GOLD_EDGE`, the shrine's rim came
+out at luminance 0.32 against the grid's 0.45, because `COL_GOLD_EDGE` is
+itself a dark gilt and the mix pulled the blue down faster than the gain lifted
+it. The edge meant to announce a step was dimmer than every edge that announces
+nothing, and on the proof shot for this feature the shelf was read as the cover
+hexes three rows above it — cover's rim being the one loud thing on that board.
+It is `3.0` toward `COL_GOLD` now, which puts every palette between 0.54 and
+0.58 against the grid's 0.45. `shelf_face()`/`shelf_rim()` moved out of `Board`
+to be static for the sake of the assertion; `tests/test_height.gd` holds the
+floor across all six palettes, so the next person to tune those numbers is told
+in two seconds instead of at a screenshot.
+
 Two smaller consequences. Clicking is no longer a function: a point on a
 shelf's top face and a point on the ground behind it are the same pixel, so
 `_unpix` takes the naive inverse and then asks which nearby hex is actually
