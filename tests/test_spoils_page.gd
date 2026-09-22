@@ -51,11 +51,38 @@ func _page(heading := "Victory"):
 	return [p, closed]
 
 func _init() -> void:
+	await test_it_is_actually_a_modal()
 	await test_fast_is_already_open()
 	await test_played_out()
 	await test_skip()
 	print("test_spoils_page: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# The page covers what it is over. set_anchors_preset() moves the anchors and
+# then rewrites the offsets to PRESERVE the rect the control already has — on a
+# Control built with new(), 0x0 — so the page used to come out with offsets
+# (0, 0, -1280, -1280) and no area at all: the dim covered nothing, the
+# CenterContainer centred the panel inside its own minimum size and so put it
+# in the top-left corner, and a MOUSE_FILTER_STOP rect with no area caught no
+# clicks, so the map kept taking them and "click anywhere to skip" could never
+# fire. One word (set_anchors_AND_OFFSETS_preset), and nothing else in the file
+# would have told anybody it was wrong.
+func test_it_is_actually_a_modal() -> void:
+	var host := Control.new()
+	host.size = Vector2(1280, 800)
+	root.add_child(host)
+	var p = Spoils.new()
+	host.add_child(p)
+	p.build("Victory", ROWS, null, "", func(): pass)
+	await process_frame
+	check(p.size.is_equal_approx(host.size),
+		"the page fills what it is laid over (%s of %s)" % [str(p.size), str(host.size)])
+	check(p.mouse_filter == Control.MOUSE_FILTER_STOP, "...and it is the one taking the clicks")
+	for c in p.get_children():
+		check(c.size.is_equal_approx(host.size),
+			"%s fills it too, so the dim dims and the panel centres" % c.get_class())
+	host.queue_free()
+	await process_frame
 
 # The contract every headless run and every UI robot depends on: under
 # SORCMERC_FAST the page is fully open on the frame it is built. A test suite

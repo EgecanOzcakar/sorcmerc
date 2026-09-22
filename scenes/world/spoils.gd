@@ -88,17 +88,26 @@ func _wound(text: String, k: float) -> String:
 # party strip, the fallen, the haul as tiles), dealt on its own beat like a
 # line. `art` and `tip` may be null/"".
 func build(heading: String, rows: Array, art: Texture2D, tip: String, on_close: Callable) -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# ...AND_OFFSETS_, which is the whole difference between a modal and a box in
+	# the corner. set_anchors_preset() moves the anchors and then rewrites the
+	# offsets to PRESERVE the rect the control already has — which, on a Control
+	# built with new(), is 0x0. Measured before this line changed: the page's
+	# offsets came out (0, 0, -1280, -1280) against anchors (0, 0, 1, 1), so the
+	# page was 0x0, the dim covered nothing, the CenterContainer centred the
+	# panel inside its own minimum size (i.e. put it top-left), and a
+	# MOUSE_FILTER_STOP rect with no area caught no clicks — so the map went on
+	# taking them and "click anywhere to skip" could never fire.
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var dim := ColorRect.new()
 	dim.color = Color(Icons.COL_BG.r, Icons.COL_BG.g, Icons.COL_BG.b, 0.72)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim)
 
 	var centre := CenterContainer.new()
-	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(centre)
 
