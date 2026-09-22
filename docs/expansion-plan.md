@@ -6735,22 +6735,34 @@ coverage counts have a floor under them, which is a regression guard and not a
 target: raise it when a batch lands, never lower it to make a red run green.
 
 It also prints the coverage by faction, because that readout is the answer to
-"what should the next batch be". Today:
+"what should the next batch be" — and the 2026-09-22 batch is what it was
+asked. Before it:
 
 ```
 75 of 316 bestiary entries have a model of their own — 75 of the 87 beasts.
 7 of 32 factions have a rig that stands in for the rest of them.
 25 factions have neither, which is 182 entries and, because core/scaler.gd
-draws a roster from ONE faction, a whole fight drawn in discs:
-  aberration, celestial, construct, demon, devil, dragon (22), drow, duergar,
-  elemental (14), fey, fiend, giant (14), gnoll, grimlock, humanoid (22),
-  lizardfolk, merfolk, monstrosity (34), ooze, orc, plant, sahuagin, swarm,
-  townsfolk, tribal
+draws a roster from ONE faction, a whole fight drawn in discs.
 ```
 
-Nothing here guesses at a stand-in for those. An orc drawn with the human
-soldier rig is not coverage, it is a wrong answer given confidently, and the
-disc is the honest one until the art exists.
+After it — 34 monsters for giant, gnoll, monstrosity and orc:
+
+```
+109 of 316 bestiary entries have a model of their own.
+gnoll 2/2 and orc 1/1 are covered outright; giant is 7/14 and
+monstrosity 24/34, so half a giant roster is still discs.
+21 factions still have neither a model nor a rig, which is 126 entries:
+  aberration, celestial, construct, demon, devil, dragon (22), drow, duergar,
+  elemental (14), fey, fiend, grimlock, humanoid (22), lizardfolk, merfolk,
+  ooze, plant, sahuagin, swarm (10), townsfolk, tribal
+```
+
+`dragon` (22), `humanoid` (22) and `elemental` (14) are now the three biggest,
+and the rest of `monstrosity` (10) and `giant` (7) finish two that are started.
+
+Nothing here guesses at a stand-in for the ones with nothing. An orc drawn with
+the human soldier rig is not coverage, it is a wrong answer given confidently,
+and the disc is the honest one until the art exists.
 
 `tools/import_beasts.py` is the other half. Its name is historical — the first
 batch was 81 animals — but nothing in it was ever beast-specific and neither is
@@ -6767,10 +6779,18 @@ drawn the moment its file lands. Three things it does that it did not:
   never be drawn by anything. `--force` writes it anyway, which is a real case
   for an id a content pack adds.
 
+**The refusal earned its keep on the first batch through it.** The 2026-09-22
+downloads came down with their words run together — `frostgiant`,
+`gnollwarrior`, `hillgiantarcher`, `rustmonster`, `winterwolf` — none of which
+resolve to a bestiary id. Every one of them would have converted cleanly,
+committed cleanly and never been drawn by anything; instead they were refused
+by name and became `FIXUPS` entries. The batch also found the case the guard
+did not cover: a download with no albedo texture at all aborted the whole run
+on `albedo_only`'s assert, so an untextured file is now named and skipped the
+same way, since an untextured model draws as a white blob rather than not at
+all.
+
 ### Not built
-- The models themselves. `assets/NewlyDownloadedModels` is gitignored and not
-  in the repository, so a batch that exists on somebody's machine cannot be
-  processed from here.
 - Stand-in rigs for the uncovered factions (see above).
 - A second directory for non-beast monsters. One directory keyed by bestiary id
   is what the lookup already reads, and splitting it would buy a provenance

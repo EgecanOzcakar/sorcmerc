@@ -26,7 +26,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Figures3D = preload("res://scenes/figures3d.gd")
 
 # What is on disk today. Raise these when a batch of models lands.
-const MIN_BY_ID := 75         # assets/beasts/<bestiary id>.glb files
+const MIN_BY_ID := 109        # assets/beasts/<bestiary id>.glb files (2026-09-22 batch: +34)
 const MIN_FACTIONS := 7       # factions FOE_MODELS answers for outright
 
 var _pass := 0
