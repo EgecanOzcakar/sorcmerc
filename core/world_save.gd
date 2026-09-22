@@ -219,6 +219,13 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 	var waters: Array = []
 	for wtr in world.waters:
 		waters.append({"position": _v(wtr["position"]), "radius": float(wtr["radius"])})
+	# O-biome: the same story one layer up — a save written before biomes
+	# existed has no "biomes" key and loads as a map that is entirely
+	# World.DEFAULT_BIOME, which is exactly what such a map always was.
+	var biomes: Array = []
+	for b in world.biomes:
+		biomes.append({"position": _v(b["position"]), "radius": float(b["radius"]),
+			"kind": String(b["kind"])})
 	var explored: Array = []
 	for e in world.explored:
 		explored.append(_v(e))
@@ -237,6 +244,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"lairs": lairs,
 		"landmarks": landmarks,
 		"waters": waters,
+		"biomes": biomes,
 		"explored": explored,
 		"party": _party_dict(party),
 		"story": story.to_dict() if story != null else {},
@@ -304,6 +312,14 @@ static func from_dict(d: Dictionary):
 		world.add_landmark(m)
 	for wd in d.get("waters", []):
 		world.add_water(_vec(wd.get("position")), float(wd.get("radius", 0.0)))
+	# An unknown kind is kept rather than dropped or corrected: a content pack
+	# (or a later slice) may name a biome this build has never heard of, and a
+	# disc that survives the round-trip unchanged is what lets the save be read
+	# by the build that does know it. Everything that READS a kind falls back on
+	# its own (biome_at's callers all key a table with a default).
+	for bd in d.get("biomes", []):
+		world.add_biome(_vec(bd.get("position")), float(bd.get("radius", 0.0)),
+			String(bd.get("kind", World.DEFAULT_BIOME)))
 	# T9x: an old save without "explored" just loads with none — everything
 	# fogged again, same missing-key-falls-back-to-default contract as lairs.
 	for e in d.get("explored", []):

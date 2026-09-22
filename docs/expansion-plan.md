@@ -7100,23 +7100,37 @@ already has — `THEME_HABITAT`, which today holds exactly one row
 in a wood). Biome picks the board and the roster; the ring
 (`core/regions.gd`) still says how dangerous the country is.
 
-The set is four, and `any`'s 66 entries ride along in every one of them
-because `_in_budget_and_habitat` already tests `habitat in [need_habitat,
-"any"]` — so a biome names exactly one habitat and the generic pool is free:
+The set is three, and `any` rides along in every one of them because
+`_in_budget_and_habitat` already tests `habitat in [need_habitat, "any"]` —
+so a biome names exactly one habitat and the generic pool is free:
 
-| biome | `need_habitat` | pool, with `any` | board |
-|---|---|---|---|
-| `downs` (the default fill) | `""` | all 316 | new |
-| `woods` | `forest` | 148 | `forest-clearing`, exists |
-| `marsh` | `water` | 92 | new |
-| `crags` | `cave` | 82 | `frozen-cave`, repalette |
+| biome | `need_habitat` | admits | of those, distinctive | board |
+|---|---|---|---|---|
+| `downs` (the default fill) | `""` | 240 | — | new |
+| `woods` | `forest` | 105 | 76 | `forest-clearing`, exists |
+| `marsh` | `water` | 51 | 22 | new |
 
-Only two of the four need a board authored, which is why the floor below
-counts two — that is a statement about authoring work, not about how many
-biomes there are. `dungeon` (48) is deliberately not among them: it belongs
-to lair interiors via `core/site.gd`, not to open country. Whether `crags`
-earns its place on 16 cave-habitat entries is the one open question in the
-set; three biomes may be the honest answer for the bestiary as it stands.
+Counted over the factions a roster is actually built from (`Scaler.FACTIONS`,
+240 of the bestiary's 316 — the rest are `humanoid`, `swarm`, `devil`,
+`plant` and friends, which no roster can field), and "distinctive" is what is
+left once the generic `any` humanoids are taken out. Only two of the three
+need a board authored, which is why the floor below counts two: that is a
+statement about authoring work, not about the size of the set.
+
+**`crags` was cut, measured 2026-09-22.** `cave` admits 40, but 29 of those
+are the generic `any` humanoids (bandit 12, soldier 8, cultist 6, gnoll 2,
+orc 1) and the 11 that are left are goblinoid 5, cave-monstrosity 4 and
+kobold 2 — which is the fight the `goblin-camp` board already fields. A
+biome earns its place by changing what a fight there puts in front of you,
+and crags would mostly have re-played a fight the game has. `cave` is an
+INTERIOR habitat in the same way `dungeon` (48) is: its home is a lair's
+rooms (`core/site.gd`), not open country.
+
+`marsh` is the one that pays, and for the opposite reason: of its 22
+distinctive entries, the 18 aquatic beasts are unreachable today — the
+`forest-clearing` habitat filter keeps them out of the one themed board that
+draws beasts, and nothing else selects `water`. It is the only biome in the
+set that makes content that already exists reachable.
 
 A correlation worth dismissing before it is noticed and mistaken for a bug:
 `wild` holds the dragons, giants and monstrosities while `forest` holds the
@@ -7133,6 +7147,11 @@ One implementation note that is not optional, because it fails quietly:
 demo goblins, on the code path this file already records as swinging 6 % to
 47 % win rate across two TIER retunes. The faction shortlist has to be
 filtered by habitat before the seed indexes into it.
+
+Measured 2026-09-22, this is not a corner case: of the fifteen factions in
+`Scaler.FACTIONS`, **six** (construct, dragon, giant, goblinoid, kobold,
+undead) have no `water`-or-`any` entry at all, so on a marsh board two seeds
+in five would land on the goblins.
 
 That first pass is **flavour-only on purpose**: board theme, palette,
 `region_at` naming and roster habitat, and nothing that moves a number. Every
@@ -7151,7 +7170,7 @@ measured balance pass of their own, not as a side effect of painting the map.
   the reasoning is `core/encounter.gd`'s own, borrowed from the shelf note
   below, which is the same shape of cost.
 
-- **Height per biome** (crags get two shelves, marsh none). `BOARD_SHELVES`
+- **Height per biome** (broken ground gets two shelves, marsh none). `BOARD_SHELVES`
   is 1 and `core/encounter.gd:90-98` says in capitals that it is a balance
   number, not a taste one: measured at level 3 on hard, 200 fights a tier,
   flat 83.5 %, one shelf 85.0 %, two shelves 87.5 %, against a target band of
@@ -7190,3 +7209,92 @@ The goal is verified neutrality, not assumed neutrality.
 The prize for getting there: `DEFAULT_THEME := "forest-clearing"`
 (`scenes/world/world.gd:123`) finally dies, and open-country fights stop all
 happening in the same clearing regardless of where on the map they started.
+
+## Biomes, the terrain layer — what kind of country this is (2026-09-22)
+
+The map had one kind of terrain: `waters`, a list of `{position, radius}`
+discs. Everything else about how the ground LOOKED was invented by the
+renderer — `scenes/world/world.gd` hashed each 8x8 block of cells against
+`WOODED` (0.78) and called the 22 % that landed above it forest. Nothing read
+that, nowhere on the map was any particular kind of place, and the woods came
+out as a uniform speckle at the same rate from the starting town to the far
+deeps.
+
+`core/world.gd` grows a second disc layer beside the water: `biomes`, each a
+`{position, radius, kind}`, with `biome_at(pos)` the single reader. Three
+kinds — `downs` (the default fill), `woods`, `marsh` — argued from the
+bestiary rather than picked for flavour; the note above this one has the
+counts and why `cave` did not earn one. Only a point actually inside a disc
+claims one, and overlaps resolve to the SMALLEST disc containing the point —
+most specific wins — so a small marsh painted inside a big wood keeps all of
+its own ground rather than a shrunken core of it, whatever order the discs are
+in.
+
+That rule was got wrong first, and `tests/test_world_biomes.gd` caught it on
+the first CI run. The original was "smallest `distance / radius`", which reads
+as whoever's middle the point is relatively nearest and looks equivalent until
+it is measured: a 60-radius marsh inside a 400-radius wood only won where
+`|x-100|/60 < |x|/400`, about 30 units of the 120 it should own, because at
+130 the wood scores 0.325 against the marsh's 0.5. Painting a small biome
+inside a big one is the thing the discs are for, so the test now pins the
+whole radius rather than just the middle.
+
+It is deliberately ORTHOGONAL to `core/regions.gd`'s rings, which is the whole
+reason it can exist without a balance pass: the ring says how dangerous the
+country is, the biome says what kind of place it is, and a marsh in the
+heartland and a marsh in the deeps are the same kind of place at two different
+levels. Nothing in a fight reads a biome yet — not the roster, not the board.
+That is the next slice, and the note above it is why it is a separate one.
+
+**The forest rule moved rather than being copied.** `scatter3d.gd`'s header
+has always been explicit that a second copy of "which cells are forest" is a
+wood that grows where the ground is grass, and it read `_rand`, `TILE_CLUSTER`
+and `WOODED` off world.gd rather than restating them. Now that the threshold
+varies with the disc under the block there is more rule than one constant, so
+it is one function — `World.block_wooded(block)` — that both the ground mask
+and the trees call. It takes a BLOCK, not a cell, which is what lets both
+callers keep memoising per block: one biome lookup and one hash per 64 cells,
+not per cell. That matters, because zoomed out the scatter walks tens of
+thousands of cells per replant and `biome_at()` is a scan over every disc.
+
+`WOODED_BY_BIOME` replaces the single threshold (downs 0.88, woods 0.32, marsh
+0.90 — 12 %, 68 %, 10 %), with `WOODED` kept as the fallback for a kind this
+build does not know. These are a LOOK and not a balance number; nothing in a
+fight reads them. `scatter3d`'s tree budget used to derive the expected forest
+fraction as `1.0 - WOODED`, which stopped being true the moment the threshold
+varied, so it reads a named `FOREST_FRACTION_EST` instead — it only sizes a
+thinning loop that is quantised to powers of two and corrected for by `grow`,
+so it wants to be roughly right, never zero, and over-estimating is the safe
+direction.
+
+All three builders paint discs: the small and large maps by hand (the elf
+towns wooded, the river's lower reach gone to marsh), the procedural one
+seeded — three woods scattered, and the marsh grown off the lake's edge,
+because drowned ground beside open water is the one placement that explains
+itself without a drainage model. The procedural draws happen LAST, after every
+other placement decision, so every seed that ever generated a map still
+generates the same settlements, lairs, bands and lake it did before biomes
+existed; only the discs are new. The HUD bar names the ground after the
+country when it is not the default ("the Marches, levels 3 to 6 · marshland");
+the downs go unsaid, because naming the absence of a biome on most of the map
+is noise.
+
+Saves round-trip the discs beside the waters, with the same missing-key
+contract every layer added since lairs has: a save with no `"biomes"` key
+loads as a map that is entirely `DEFAULT_BIOME`, which is exactly what such a
+map always was. An unknown kind round-trips unchanged rather than being
+dropped or corrected — a later slice or a content pack may name one this build
+has never heard of, and everything that reads a kind keys a table with a
+default. Test: `tests/test_world_biomes.gd`.
+
+### Still open
+
+- Nothing in a fight reads a biome yet: the roster still comes from the foe's
+  faction and the board still falls back to `DEFAULT_THEME`
+  (`forest-clearing`) for every unthemed fight in the open world.
+- Lairs and roaming bands are still placed blind to the ground they land on —
+  a marsh lair and a downs lair are the same lair.
+- The minimap draws water but not biomes, so the ground reads as one colour
+  there while the main map has three.
+- The worldgen climate option (`origin["climate"]`, biasing how the discs are
+  distributed) is designed but not built.

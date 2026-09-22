@@ -62,6 +62,16 @@ static func build() -> World:
 		for t in 6:
 			w.add_water(river[i].lerp(river[i + 1], t / 6.0), 60.0)
 	w.add_water(river[-1], 60.0)
+	# O-biome: the same three kinds the small map uses, at this map's span —
+	# the elf country wooded, the river's lower reach gone to marsh, and
+	# everything else the downs (World.DEFAULT_BIOME, claimed by no disc).
+	# Deliberately not wall-to-wall: unclaimed ground is most of the map, and
+	# the woods only read as woods because there is open country between them.
+	w.add_biome(Vector2(-600, -900), 420.0, "woods")   # Silverleaf's forest
+	w.add_biome(Vector2(1050, -450), 380.0, "woods")   # Greenmarch's, over the ridge from Oakford
+	w.add_biome(Vector2(-950, 620), 300.0, "woods")    # the stands around Dun-Arrow
+	w.add_biome(Vector2(250, 900), 300.0, "marsh")     # where the river flattens out
+	w.add_biome(Vector2(780, 1520), 260.0, "marsh")    # the drowned ground the graveyard sits in
 
 	# All five named lairs (T91) — the two with no diorama yet still work,
 	# just draw the flat skull marker (Lairs3D falls through cleanly).

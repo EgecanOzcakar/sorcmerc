@@ -163,6 +163,33 @@ const TILE_CLUSTER := 8
 # dimmed. Declared with the view, which needs them first — see _view below.
 
 const WOODED := 0.78              # a cell block whose hash lands above this is forest
+# O-biome: the threshold is per biome now, and WOODED above is the fallback for
+# a kind this build does not know (an old save, a content pack). The map used
+# to be one uniform 22 % speckle of wood everywhere; the discs in
+# core/world.gd's `biomes` decide the KIND of ground and these decide how
+# densely that kind grows, so a wood now comes as a wood and the downs between
+# them read as open country instead of the same speckle at the same rate.
+#
+# These are a LOOK, not a balance number — nothing in a fight reads them (see
+# docs/expansion-plan.md's biome note for the knobs that would be, and why they
+# are deferred). Tune them by looking at tests/shot_world.gd.
+const WOODED_BY_BIOME := {
+	"downs": 0.88,   # 12 %: copses and windbreaks, not woods
+	"woods": 0.32,   # 68 %: closed canopy with clearings in it
+	"marsh": 0.90,   # 10 %: a few drowned stands
+}
+# What share of explored ground scatter3d.gd should BUDGET trees for. It used
+# to read `1.0 - WOODED` (0.22), which was the forest fraction back when one
+# threshold covered the whole map; with the table above the real fraction
+# depends on how much of the map is wood, so the estimate is named instead of
+# derived. It only sizes the thinning loop — quantised to powers of two, then
+# corrected for by `grow` — so it wants to be roughly right and never zero.
+# Over-estimating is the safe direction: it thins sooner and plants fewer.
+const FOREST_FRACTION_EST := 0.34
+# What a biome is called in the HUD bar. Keyed loosely (`.get(kind, kind)`) so
+# a kind this build has never heard of — an old save, a content pack — prints
+# its own name rather than vanishing or crashing the bar.
+const BIOME_LABEL := {"woods": "woodland", "marsh": "marshland"}
 # Half-width of the shoreline band, in world units (~0.7 of a CELL either side).
 # Across it a cell's chance of being water falls from 1 to 0, so the bank frays
 # into the grass over a tile or so instead of ending on a cell boundary — the
@@ -450,6 +477,18 @@ func _small_world() -> World:
 		for t in 5:
 			w.add_water(river[i].lerp(river[i + 1], t / 5.0), 40.0)
 	w.add_water(river[-1], 40.0)
+	# O-biome: what KIND of country each part of the map is (core/world.gd's
+	# `biomes`). Hand-placed for the same reason the water is — four towns and
+	# one river is a map you can read off the page — and stamped after it,
+	# because the marsh wants to sit on the river's lower reach.
+	#
+	# Greenmarch is the elf town, so the wood is its country; the river goes
+	# soft where it flattens out before Ashfell. Everything no disc claims is
+	# World.DEFAULT_BIOME, which is most of the map and is the point: the downs
+	# are the ground the woods are an exception to.
+	w.add_biome(Vector2(420, -180), 260.0, "woods")   # Greenmarch's forest
+	w.add_biome(Vector2(-330, 250), 190.0, "woods")   # the stands above Dun-Arrow
+	w.add_biome(Vector2(110, 360), 170.0, "marsh")    # where the river slows
 
 	# T91: five hidden monster lairs — the initial roster the brief named. Hidden
 	# until a Survival check finds them (WorldLairs.DISCOVER_RADIUS), then
@@ -2714,6 +2753,13 @@ func _check_region() -> void:
 		# Short form: this bar already carries nine controls and a hint, and the
 		# long form lives on the lair button, the inn's leads and the crossing card.
 		_region_lbl.text = "%s, levels %d to %d" % [String(band["label"]), int(lv[0]), int(lv[1])]
+		# O-biome: which COUNTRY the party is in and what KIND of ground it is
+		# are two different questions, and the bar answers them in that order.
+		# The downs are the default and go unsaid — naming the absence of a
+		# biome on nine maps out of ten is noise, not information.
+		var ground: String = world.biome_at(p0.position)
+		if ground != World.DEFAULT_BIOME:
+			_region_lbl.text += " · %s" % BIOME_LABEL.get(ground, ground)
 		if Ladder.title_index() > 0:
 			_region_lbl.text += " · %s" % Ladder.title()
 	if _region.is_empty():
@@ -4517,6 +4563,23 @@ static func _rand(c: Vector2i, salt: int) -> float:
 static func _cluster(c: Vector2i, n: int) -> Vector2i:
 	return Vector2i(int(floor(float(c.x) / n)), int(floor(float(c.y) / n)))
 
+# O-biome — THE forest rule, in one place. _build_mask() paints the ground from
+# it and scenes/world/scatter3d.gd grows its trees from it; that file's header
+# is explicit that a second copy of this rule is a wood standing on grass, and
+# now that the threshold varies with the biome under the block there is more of
+# a rule to keep in step than there was.
+#
+# Takes a BLOCK (a TILE_CLUSTER-quantised cell, what _cluster returns), not a
+# cell, which is what lets both callers keep memoising per block: one biome
+# lookup and one hash per 64 cells rather than per cell. That matters — zoomed
+# out, scatter walks tens of thousands of cells per replant, and biome_at() is
+# a scan over every disc on the map.
+func block_wooded(block: Vector2i) -> bool:
+	var centre := (Vector2(block) * float(TILE_CLUSTER)
+		+ Vector2(TILE_CLUSTER, TILE_CLUSTER) * 0.5) * CELL
+	var kind: String = world.biome_at(centre) if world != null else World.DEFAULT_BIOME
+	return _rand(block, 5) > float(WOODED_BY_BIOME.get(kind, WOODED))
+
 # A faction's colour, straight off its name's hash so no table needs maintaining
 # as core/scaler.gd's FACTIONS list grows.
 static func faction_color(faction: String, is_player := false) -> Color:
@@ -4906,7 +4969,7 @@ func _build_mask(i0: int, i1: int, j0: int, j1: int, step: int, cells: Dictionar
 			var cell := Vector2i(i0 + x * step, cy)
 			var wet := 0.5 - world.water_depth(Vector2(cell.x + 0.5, cell.y + 0.5) * CELL) / (SHORE * 2.0)
 			var water := smoothstep(0.3, 0.7, wet)
-			bytes[o] = 255 if (water < 0.5 and _rand(_cluster(cell, TILE_CLUSTER), 5) > WOODED) else 0
+			bytes[o] = 255 if (water < 0.5 and block_wooded(_cluster(cell, TILE_CLUSTER))) else 0
 			bytes[o + 1] = int(water * 255.0)
 			bytes[o + 2] = 255 if cells.has(cell) else 0
 			o += 3

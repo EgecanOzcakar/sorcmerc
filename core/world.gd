@@ -253,6 +253,39 @@ var bands_refilled_at := 0.0
 # T-water: a blob is also a wall — is_water()/set_goal()/move_toward_goal() keep
 # parties out of it, so this is terrain, not decoration.
 var waters: Array[Dictionary] = []
+# O-biome — the map's second terrain layer, after the water. A biome is a
+# `{position, radius, kind}` disc, the same vocabulary `waters` already uses,
+# and biome_at() below is the only reader: what KIND of country a point is.
+#
+# It deliberately does NOT say how dangerous the country is. core/regions.gd's
+# rings own that, and the two axes are orthogonal on purpose — a marsh in the
+# heartland and a marsh in the deeps are the same kind of place at two
+# different levels. Collapsing them would make every measured number in
+# regions.gd stop meaning what it says.
+#
+# THREE KINDS, and the set is argued rather than assumed. A biome only earns
+# its place if it changes what a fight there fields, and a roster is filtered
+# by ONE habitat with `any` riding along free (core/scaler.gd's
+# _in_budget_and_habitat tests `habitat in [need, "any"]`), so each kind names
+# exactly one habitat out of data/bestiary.json's vocabulary:
+#
+#   downs  -> ""        the default fill; no filter, all 240 faction-tagged entries
+#   woods  -> "forest"  105 admitted, 76 of them distinctively forest
+#   marsh  -> "water"    51 admitted, 22 distinctively water — and those 22 are
+#                        unreachable today, which is what makes this the kind
+#                        that pays for itself
+#
+# `cave` did NOT earn a kind (measured 2026-09-22): it admits 40, but 29 are
+# the generic `any` humanoids and the 11 that are left are goblinoid, kobold
+# and cave-monstrosity — which is the fight the goblin-camp board already
+# fields. Like `dungeon`, it is an INTERIOR habitat, and its home is a lair's
+# rooms (core/site.gd), not open country.
+#
+# The habitat mapping itself is not here and not wired yet — this slice is the
+# terrain layer and what draws it. See docs/expansion-plan.md's biome note.
+const BIOMES := ["downs", "woods", "marsh"]
+const DEFAULT_BIOME := "downs"
+var biomes: Array[Dictionary] = []
 # T-water: which builder made this map, and the seed it used (0 for the two
 # hand-placed ones) — saved and restored, so a resumed world can still say what
 # it is instead of looking like a hand-placed map with the furniture moved.
@@ -414,6 +447,49 @@ func add_water(position: Vector2, radius: float) -> Dictionary:
 	var w := {"position": position, "radius": radius}
 	waters.append(w)
 	return w
+
+func add_biome(position: Vector2, radius: float, kind: String) -> Dictionary:
+	var b := {"position": position, "radius": radius, "kind": kind}
+	biomes.append(b)
+	return b
+
+# What kind of country this point is, DEFAULT_BIOME when no disc claims it —
+# which is most of any map, and costs one pass over a handful of discs.
+#
+# Overlaps are resolved by the SMALLEST RADIUS among the discs that actually
+# contain the point: most specific wins. A big wood with a small marsh painted
+# inside it reads as marsh across the whole marsh and as wood everywhere else,
+# which is the point of being able to paint one inside the other.
+#
+# The obvious-looking alternative — smallest `distance / radius`, whoever's
+# middle the point is relatively nearest — was tried first and is wrong, which
+# tests/test_world_biomes.gd caught. It shrinks the inner disc instead of
+# honouring it: a 60-radius marsh inside a 400-radius wood only wins where
+# |x-100|/60 < |x|/400, which is about 30 units of the 120 it should own. The
+# inner disc has to be nearly concentric with the outer one to keep its ground,
+# so "paint a small one inside a big one" quietly does not work.
+#
+# Ties on radius fall to the nearer centre, so two discs of the same size share
+# the ground between them on the midline rather than on list order.
+#
+# ponytail: a linear scan, exactly as water_depth() is and for the same reason —
+# a handful of hand-placed blobs. Both are called per ground cell when the
+# renderer rebuilds its mask; if either list ever grows past a handful, index
+# them together rather than one at a time.
+func biome_at(pos: Vector2) -> String:
+	var best := DEFAULT_BIOME
+	var best_r := INF
+	var best_d := INF
+	for b in biomes:
+		var r := float(b["radius"])
+		var d: float = pos.distance_to(b["position"])
+		if d >= r:
+			continue                      # outside: a disc never reaches past its own edge
+		if r < best_r or (r == best_r and d < best_d):
+			best_r = r
+			best_d = d
+			best = String(b["kind"])
+	return best
 
 # Signed distance to the nearest shoreline: negative in the water (how far in),
 # positive on land (how far from the bank), INF with no water at all. One number

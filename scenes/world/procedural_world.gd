@@ -35,6 +35,13 @@ const LAKE_RADIUS := 100.0            # the one lake, same size the small map's 
 const MIN_WATER_GAP := 60.0           # dry margin between the lake's edge and anything placed
 const MONSTER_FACTIONS := ["bandit", "goblinoid", "beast"]
 const MONSTER_BAND_COUNT := 4
+# O-biome: how much of the map is something other than the downs. Three woods
+# and one marsh at these radii cover roughly a quarter of the span, which is
+# what keeps the default fill reading as the ground rather than as a gap —
+# a map that is wall-to-wall wood has no woods in it.
+const WOODS_COUNT := 3
+const BIOME_R_MIN := 220.0
+const BIOME_R_MAX := 420.0
 
 static func _randf(rng) -> float:
 	return float(rng.roll_die(10000) - 1) / 10000.0
@@ -136,7 +143,27 @@ static func build(seed_v: int = 0) -> World:
 		occupied.append(p.position)
 	for l in w.lairs:
 		occupied.append(l.position)
-	w.add_water(_place(rng, occupied, LAKE_RADIUS + MIN_WATER_GAP), LAKE_RADIUS)
+	var lake := _place(rng, occupied, LAKE_RADIUS + MIN_WATER_GAP)
+	w.add_water(lake, LAKE_RADIUS)
+
+	# O-biome: what kind of country the map is, in the same disc vocabulary the
+	# water uses (core/world.gd's `biomes`). Stamped LAST, and deliberately
+	# against nothing: a biome is a look and — in a later slice — a habitat,
+	# never a position, so no lair, band or town is placed against one and a
+	# disc landing on top of something is not a collision. That is also what
+	# keeps every seed that ever generated a map generating the same one: the
+	# rng draws below come after every placement decision, so the settlements,
+	# lairs, bands and lake a given seed produces are byte-for-byte what they
+	# were before biomes existed.
+	for _i in WOODS_COUNT:
+		w.add_biome(_point(rng), lerpf(BIOME_R_MIN, BIOME_R_MAX, _randf(rng)), "woods")
+	# The marsh grows off the lake's edge rather than landing anywhere at all:
+	# drowned ground beside open water is the one placement that explains itself
+	# without the map having to hold a drainage model.
+	var ang: float = _randf(rng) * TAU
+	w.add_biome(lake + Vector2(cos(ang), sin(ang)) * LAKE_RADIUS,
+		lerpf(BIOME_R_MIN, BIOME_R_MAX, _randf(rng)), "marsh")
+
 	Landmarks.place(w, seed_v + 1)
 	WorldBands.seed(w, seed_v + 2, MIN_MONSTER_GAP)   # #163: last, so the water is already stamped
 	return w
