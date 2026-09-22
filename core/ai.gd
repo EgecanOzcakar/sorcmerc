@@ -42,13 +42,31 @@ static func _nearest(from: Vector2i, list: Array):
 # worth, so a monster routes around a cloud and steps out of one it woke up in,
 # but still wades through when the only way to its prey runs through it.
 const ZONE_PENALTY := 4.0
+# #156: a level of height is +2 to hit from, so every destination is worth this
+# much per level before its own score is read.
+#
+# STRICTLY LESS THAN ONE, and that is the whole of the reasoning: every score
+# callable below is in HEXES (-distance to the goal, or distance from what is
+# chasing you), so a draw of 1.0 or more buys the high ground at the price of a
+# hex of approach — permanently, since the monster re-scores from up there next
+# turn and the shelf still wins. At 1.5 that is exactly what happened: monsters
+# climbed the nearest shelf and stayed on it, fights stopped converging, and
+# tests/drive_completionist.gd ran out of frames walking between towns with
+# unfinished fights behind it. Below one it can only ever decide between hexes
+# that are otherwise equally good, which is what it is for.
+const HIGH_GROUND_DRAW := 0.35
+
+static func _spot(cb, up: Dictionary, m, score: Callable, h: Vector2i) -> float:
+	return score.call(h) - (ZONE_PENALTY if cb.zone_hurts(m, h) else 0.0) \
+		+ HIGH_GROUND_DRAW * float(up.get(h, 0))
 
 static func _move_by(cb, m, score: Callable, disengage := false) -> void:
 	var field: Dictionary = cb.move_field(m)
+	var up: Dictionary = cb.heights()   # once, not once per candidate hex
 	var best: Vector2i = m.pos
-	var best_s: float = score.call(m.pos) - (ZONE_PENALTY if cb.zone_hurts(m, m.pos) else 0.0)
+	var best_s: float = _spot(cb, up, m, score, m.pos)
 	for h in field:
-		var s: float = score.call(h) - (ZONE_PENALTY if cb.zone_hurts(m, h) else 0.0)
+		var s: float = _spot(cb, up, m, score, h)
 		if s > best_s:
 			best_s = s
 			best = h

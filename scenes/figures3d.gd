@@ -236,7 +236,15 @@ func _process(_dt: float) -> void:
 			continue
 		n.visible = not c.is_dead()
 		var p: Vector2 = board._tok.get(c.id, board._pix(c.pos)) + board._lunge(c.id)
-		n.position = world_for_screen(p)
+		# #156: the token's screen position already carries its hex's rise, and
+		# world_for_screen reads every pixel as a point on the ground — so the
+		# lift comes back out before the conversion and goes on again in world
+		# Y, where it belongs. screen_for_world maps (0, y, 0) to -K·cos(theta)·y,
+		# so that product is exactly what the pixel lift divides by, and the
+		# figure lands on the tile the board drew for it at any zoom.
+		var lift: float = -board._rise(c.pos)          # pixels up the screen, positive
+		n.position = world_for_screen(p + Vector2(0, lift))
+		n.position.y = lift / maxf(0.001, px_per_unit() * cos(th))
 		n.scale = Vector3.ONE * FIGURE_SCALE
 		# Face the direction of travel and keep facing it on arrival. The model's
 		# forward is +Z (glTF), so yaw = atan2(dx, dz). _lunge feeds in here too, so a

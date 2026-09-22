@@ -136,6 +136,27 @@ const COL_COVER_EDGE := Color("74c2b4")
 const COL_PROP := Color("4a3826")       # barrels, crates, fountains
 const COL_BLOCKED_EDGE := Color("c98a5a")   # the rim on a hex nobody can stand on — ochre, against cover's teal
 const COL_TORCH := Color("ffd98a")
+# #156: the two colours a raised tile is drawn in, from the board's own floor
+# colour so a shelf on the ice board is blue rock and one in the shrine brown.
+# Out here, and static, because the one thing about them that matters cannot be
+# seen in a screenshot and can be asserted: the rim has to come out BRIGHTER
+# than COL_HEX_GRID, which is the ordinary line between two tiles. The first
+# gain (1.7, lerped toward COL_GOLD_EDGE) did not — COL_GOLD_EDGE is itself
+# dark, so the mix pulled the blue down faster than the gain lifted it and the
+# rim landed on (88, 81, 71) against the grid's (107, 115, 134). The edge that
+# was supposed to say "there is a step here" was dimmer than every edge that
+# says nothing, which is how the shelf in this PR's own screenshot got read as
+# the cover hexes three rows above it. tests/test_height.gd holds the floor.
+const SHELF_DARK := 0.34    # the cut earth under the edge, against the floor's fill
+const SHELF_RIM := 3.0      # ...and the lit edge along the top of it
+const SHELF_WARMTH := 0.45  # how far that edge is pulled toward the gilt
+static func shelf_face(fill: Color) -> Color:
+	return Color(fill.r * SHELF_DARK, fill.g * SHELF_DARK, fill.b * SHELF_DARK, 1.0)
+static func shelf_rim(fill: Color) -> Color:
+	var lit := Color(minf(fill.r * SHELF_RIM, 1.0), minf(fill.g * SHELF_RIM, 1.0),
+		minf(fill.b * SHELF_RIM, 1.0)).lerp(Icons.COL_GOLD, SHELF_WARMTH)
+	lit.a = 0.9
+	return lit
 # T11: per-theme floor tint, palette only — no mechanical difference.
 const PALETTES := {"shrine": COL_HEX, "camp": Color("2a2a26"), "city": Color("2c2c33"),
 	"forest": Color("1f2a22"), "ice": Color("222c36"), "shop": Color("2b2620")}
@@ -2806,11 +2827,16 @@ class Board extends Control:
 	func _layout() -> void:
 		var mn := Vector2(1e9, 1e9)
 		var mx := Vector2(-1e9, -1e9)
+		var tallest := 0
 		for hx in cb.board["hexes"]:
 			var p := _iso(Hex.to_pixel(hx, main.hex_px))
 			mn = mn.min(p); mx = mx.max(p)
+			tallest = maxi(tallest, cb.height_at(hx))
 		# centres only — pad by a hex so the outermost tiles (and their labels) sit inside the frame
 		var pad: Vector2 = Vector2(1.0, ISO_SQUASH) * float(main.hex_px)
+		# #156: a shelf is drawn above where its hex is, so the fit has to leave
+		# room for the tallest one or the top row goes under the header.
+		mn.y -= RISE * float(main.hex_px) * float(tallest)
 		var span: Vector2 = mx - mn + pad * 2.0
 		mn -= pad
 		# TFT-style: the whole map is on screen at once. Zoom down from ZOOM_DEFAULT
@@ -2893,12 +2919,52 @@ class Board extends Control:
 	func _iso_inv(v: Vector2) -> Vector2:
 		return Vector2(v.x, v.y / ISO_SQUASH).rotated(-deg_to_rad(ISO_YAW)) / ISO_GAIN
 
-	func _pix(hx: Vector2i) -> Vector2:
+	# #156: how far UP the screen a hex's floor sits, per level of height. A
+	# level is five feet, one hex radius, and a vertical rise is the one
+	# direction the projection does not squash along the ground — it comes
+	# toward the camera, so it is foreshortened by cos(pitch) and lands as a
+	# plain screen-y offset. The honest number is ISO_GAIN * cos(45°) ≈ 1.3 hex
+	# radii, which reads as a staircase on a board where two shelves can touch;
+	# RISE is the same idea pulled back to where a shelf still says "up" at a
+	# glance without the board looking terraced. scenes/figures3d.gd derives a
+	# figure's world lift from this, so the model and its tile stay welded.
+	const RISE := 0.9
+
+	func _rise(hx: Vector2i) -> float:
+		return -RISE * main.hex_px * float(cb.height_at(hx)) if cb != null else 0.0
+
+	# Where the hex's floor would be with no height in it. This — not _pix — is
+	# a hex's DEPTH in the scene, so it is what the ground sorts on: a shelf is
+	# drawn above its own footprint, but still behind the row in front of it.
+	func _flat_pix(hx: Vector2i) -> Vector2:
 		return _origin + _iso(Hex.to_pixel(hx, main.hex_px))
+
+	func _pix(hx: Vector2i) -> Vector2:
+		return _flat_pix(hx) + Vector2(0, _rise(hx))
 
 	# screen point -> hex, the inverse of _pix
 	func _unpix(sp: Vector2) -> Vector2i:
-		return Hex.from_pixel(_iso_inv(sp - _origin), main.hex_px)
+		var flat := Hex.from_pixel(_iso_inv(sp - _origin), main.hex_px)
+		if cb == null or cb.board.get("height", {}).is_empty():
+			return flat
+		# With height in the board the inverse is no longer a function: a point
+		# on a shelf's top face and a point on the ground behind it are the same
+		# pixel. Take whichever nearby hex is actually drawn with its centre
+		# nearest the cursor, and on a tie the higher one, since that is the one
+		# painted over the other.
+		var best := flat
+		var best_d := (sp - _pix(flat)).length_squared()
+		var best_h: int = cb.height_at(flat)
+		for h in Hex.within(flat, 2):
+			if not (h in cb.board["hexes"]):
+				continue
+			var d := (sp - _pix(h)).length_squared()
+			var hh: int = cb.height_at(h)
+			if d < best_d or (is_equal_approx(d, best_d) and hh > best_h):
+				best = h
+				best_d = d
+				best_h = hh
+		return best
 
 	# The native hover popup, for the tiles that change the rules. A plain
 	# hex says nothing, so the popup only ever appears over something worth
@@ -2930,6 +2996,11 @@ class Board extends Control:
 			lines.append("Half cover — +2 AC and +2 on Dexterity saves for whoever stands here.")
 		if hx in combat._rough():
 			lines.append("Rough ground — every step here costs two.")
+		var up: int = combat.height_at(hx)
+		if up > 0:
+			lines.append(("Raised ground, %d up — climbing on costs a step extra, "
+				+ "and anything you swing at or shoot from up here is +%d to hit.")
+				% [up, combat.HIGH_GROUND_HIT])
 		return "\n".join(lines)
 
 	func _hex_poly(center: Vector2, s: float) -> PackedVector2Array:
@@ -3300,9 +3371,22 @@ class Board extends Control:
 		_light_board()
 		for hx in halo:
 			_paint_floor(canvas, _hex_poly(_pix(hx), s), s, HALO_ALPHA[halo[hx]], _light_at(_pix(hx)))
-		for hx in cb.board["hexes"]:
+		# #156: a raised tile is drawn over its own footprint, so the tiles stop
+		# being disjoint and the order they are painted in starts to matter.
+		# Back to front by DEPTH — where each hex's floor would be with no
+		# height in it — so a shelf covers the ground it stands on and the row
+		# in front of it still covers the shelf. Flat boards skip the sort and
+		# keep the order they always had.
+		var tiles: Array = cb.board["hexes"]
+		var raised: bool = not cb.board.get("height", {}).is_empty()
+		if raised:
+			tiles = tiles.duplicate()
+			tiles.sort_custom(func(a, b): return _flat_pix(a).y < _flat_pix(b).y)
+		for hx in tiles:
 			var c := _pix(hx)
 			var obj: Dictionary = cb.object_at(hx)
+			if raised:
+				_paint_shelf(canvas, hx, c, s)
 			if not _is_hazard(obj):
 				_paint_tile(canvas, hx, c, s, 0.0)
 			if obj.is_empty():
@@ -3312,6 +3396,53 @@ class Board extends Control:
 		decor.sort_custom(func(a, b): return a["at"].y < b["at"].y)
 		for d in decor:
 			_draw_foliage(canvas, d, s)
+
+	# #156: the cut earth under a raised tile. Only the edges facing the camera
+	# are drawn — the other three are behind the tile's own top face — and each
+	# one drops to the height of the neighbour it faces, so a two-level shelf
+	# beside a one-level one shows one level of rock, not two. The rim line is
+	# what makes a shelf read as a step rather than as a differently-lit tile.
+	# Cut earth, not a hole: the face is the board's own floor colour taken
+	# down, and the rim is that colour taken up, so a shelf on the ice board is
+	# blue rock and one in the shrine is brown. A flat dark quad read as a gap
+	# in the ground rather than as a step in it.
+	func _paint_shelf(canvas: CanvasItem, hx: Vector2i, c: Vector2, s: float) -> void:
+		var here: int = cb.height_at(hx)
+		if here <= 0:
+			return
+		var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
+		var face: Color = main.shelf_face(fill)
+		var rim: Color = main.shelf_rim(fill)
+		var top := _hex_poly(c, s)
+		var lip: Array = []
+		for i in top.size():
+			var a: Vector2 = top[i]
+			var b: Vector2 = top[(i + 1) % top.size()]
+			if (a.y + b.y) * 0.5 <= c.y:
+				continue                       # an upper edge: the top face hides it
+			var below: int = cb.height_at(_edge_neighbour(hx, (a + b) * 0.5 - c))
+			var drop: float = RISE * s * float(here - below)
+			if drop <= 0.0:
+				continue
+			canvas.draw_colored_polygon(PackedVector2Array([
+				a, b, b + Vector2(0, drop), a + Vector2(0, drop)]), face)
+			lip.append([a, b])
+		for e in lip:
+			canvas.draw_line(e[0], e[1], rim, maxf(1.5, s * 0.07))
+
+	# Which neighbour of `hx` lies across an edge, given that edge's midpoint as
+	# an offset from the hex's own centre. Asked this way rather than carried
+	# through _hex_poly, whose corner order every other caller depends on.
+	func _edge_neighbour(hx: Vector2i, toward: Vector2) -> Vector2i:
+		var here := _flat_pix(hx)
+		var best: Vector2i = hx
+		var best_d := 1e30
+		for n in Hex.neighbors(hx):
+			var d: float = toward.distance_squared_to(_flat_pix(n) - here)
+			if d < best_d:
+				best_d = d
+				best = n
+		return best
 
 	# Beyond the board's edge the ground fades out over two rings.
 	const HALO_ALPHA := {1: 0.32, 2: 0.10}
@@ -3350,11 +3481,15 @@ class Board extends Control:
 		var tone: float = main.FLOOR_TONE * light
 		canvas.draw_polygon(poly, PackedColorArray([Color(tone, tone, tone * 1.04, main.FLOOR_ALPHA * alpha)]), uvs, floor_tex)
 
+	# #156: and a step up is a step nearer the light. A small brightening, but
+	# it is what stops a shelf's top from reading as the same tile drawn a few
+	# pixels north of where it belongs.
+	const SHELF_LIT := 0.13
 	func _paint_tile(canvas: CanvasItem, hx: Vector2i, c: Vector2, s: float, pulse: float) -> void:
 		var poly := _hex_poly(c, s)   # full size: no gutter between hexes, the texture runs through
 		var obj: Dictionary = cb.object_at(hx)
 		if obj.is_empty():
-			_paint_floor(canvas, poly, s, 1.0, _light_at(c))
+			_paint_floor(canvas, poly, s, 1.0, _light_at(c) * (1.0 + SHELF_LIT * float(cb.height_at(hx))))
 		else:
 			var fill: Color = main.COL_PROP
 			if _is_hazard(obj):
