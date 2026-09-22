@@ -723,8 +723,19 @@ func _class_climb() -> void:
 	if cid == "":
 		return
 	var taken := String(ch.sheet().subclasses.get(cid, ""))
+	# In the middle column, under the prose, where _pick_column leaves _target —
+	# so the page reads left to right as one sentence: which classes there are,
+	# what this one is, where it goes.
+	#
+	# It spent a little while across the whole page instead, because at this
+	# column's width a rung's chips wrap and every rung from the second down was
+	# drawn over the one below it. That was never this screen's bug to route
+	# around: a rung is a Button with its content anchored inside, so it was
+	# 46px tall whatever was in it, and climb_view's _fit_rungs fixes it for
+	# both screens. tests/test_climb_layout.gd holds it down at 520px, which is
+	# narrower than this column has ever been.
 	var view = load("res://scenes/creator/climb_view.tscn").instantiate()
-	view.custom_minimum_size.y = 430
+	view.custom_minimum_size.y = 560
 	view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_into().add_child(view)

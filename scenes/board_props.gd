@@ -34,11 +34,14 @@ const KitParts = preload("res://scenes/world/kit_parts.gd")
 # the same sun as the figures and sit on the same ground, and a per-prop palette
 # made the first render look like a toy box tipped over.
 const PALETTE := {
+	# `pale` was 9a927f and blew out against the shrine's dark floor — a board of
+	# white chess pieces and white gravel, which is the whole reason it is only
+	# ever a trim colour below rather than a whole prop's.
 	"wood": Color("5b4630"), "dark": Color("3a2d20"), "stone": Color("6f6a5e"),
-	"pale": Color("9a927f"), "iron": Color("3c3a36"), "leaf": Color("41603c"),
+	"pale": Color("847c6b"), "iron": Color("3c3a36"), "leaf": Color("41603c"),
 	"reed": Color("6b7a45"), "gorse": Color("5c6b33"), "ice": Color("7f9aa8"),
 	"fire": Color("c8541f"), "cloth": Color("7a5a3a"), "bone": Color("cfc4a4"),
-	"water": Color("2f5560"),
+	"water": Color("22333a"),
 }
 
 # What a cover hex IS, per board palette. Cover is the one piece of terrain a
@@ -160,29 +163,41 @@ static func _tree(parts: Array, rng: RandomNumberGenerator) -> void:
 # Four blades off one clump. Tilted apart rather than parallel: reed that stands
 # straight looks like a fence, and this has to read as something you can see
 # through but not across.
+# The standing water under the clump went out at 1.5 across, which is the whole
+# hex, and in a teal bright enough to read as a lily pad — the first render of
+# the marsh board was a pond with grass in it. Narrower than the hex and much
+# darker now, so the reed is the thing you see and the water is what it is
+# standing in.
 static func _reeds(parts: Array, rng: RandomNumberGenerator) -> void:
-	_p(parts, "disc", "water", 0, Vector3(0, 0.05, 0), Vector3(1.5, 0.1, 1.5))
-	for i in 4:
-		var a: float = TAU * float(i) / 4.0 + _jit(rng, 0.5)
-		var h: float = 1.5 + _jit(rng, 0.35)
-		_p(parts, "post", "reed", i % 3, Vector3(cos(a) * 0.26, h * 0.5, sin(a) * 0.26),
-			Vector3(0.12, h, 0.12), a, deg_to_rad(9.0 + _jit(rng, 6.0)))
+	_p(parts, "disc", "water", 0, Vector3(0, 0.04, 0), Vector3(0.86, 0.08, 0.86))
+	for i in 5:
+		var a: float = TAU * float(i) / 5.0 + _jit(rng, 0.5)
+		var h: float = 1.35 + _jit(rng, 0.3)
+		_p(parts, "post", "reed", i % 3, Vector3(cos(a) * 0.2, h * 0.5, sin(a) * 0.2),
+			Vector3(0.09, h, 0.09), a, deg_to_rad(11.0 + _jit(rng, 7.0)))
 
 
 # A standing stone, leaning. The downs have no trees and no walls, so this is
 # the only thing on that board tall enough to put between you and an archer.
+# A leaning standing stone. The first render made it pale and clean and it read
+# as a headstone in a graveyard — wrong board, wrong millennium. Weathered grey,
+# shorter, and with a rough boulder shouldered against its foot so the
+# silhouette is a thing that fell out of the ground rather than one set into it.
 static func _menhir(parts: Array, rng: RandomNumberGenerator) -> void:
-	var h: float = 1.9 + _jit(rng, 0.3)
-	_p(parts, "box", "stone", 1, Vector3(0, h * 0.5, 0), Vector3(0.62, h, 0.44),
-		rng.randf() * TAU, deg_to_rad(5.0 + _jit(rng, 4.0)))
-	_p(parts, "rock", "pale", 0, Vector3(0, 0.1, 0), Vector3(1.05, 0.2, 1.05))
+	var h: float = 1.55 + _jit(rng, 0.25)
+	_p(parts, "box", "stone", 0, Vector3(0, h * 0.5, 0), Vector3(0.54, h, 0.40),
+		rng.randf() * TAU, deg_to_rad(8.0 + _jit(rng, 5.0)))
+	_p(parts, "rock", "stone", 1, Vector3(0.28, 0.20, 0.16), Vector3(0.62, 0.40, 0.55),
+		rng.randf() * TAU)
+	_p(parts, "rock", "gorse", 2, Vector3(-0.22, 0.09, -0.2), Vector3(0.44, 0.16, 0.40),
+		rng.randf() * TAU)
 
 
 static func _pillar(parts: Array, rng: RandomNumberGenerator) -> void:
 	var h: float = 2.2 + _jit(rng, 0.25)
 	_p(parts, "disc", "pale", 0, Vector3(0, 0.12, 0), Vector3(0.95, 0.24, 0.95))
-	_p(parts, "post", "pale", 1, Vector3(0, h * 0.5, 0), Vector3(0.5, h, 0.5))
-	_p(parts, "box", "stone", 0, Vector3(0, h + 0.1, 0), Vector3(0.8, 0.2, 0.8),
+	_p(parts, "post", "stone", 1, Vector3(0, h * 0.5, 0), Vector3(0.5, h, 0.5))
+	_p(parts, "box", "pale", 0, Vector3(0, h + 0.1, 0), Vector3(0.8, 0.2, 0.8),
 		rng.randf() * 0.3)
 
 
@@ -249,11 +264,17 @@ static func _torch(parts: Array, rng: RandomNumberGenerator) -> void:
 	_p(parts, "cone", "fire", 2, Vector3(0, 1.36, 0), Vector3(0.3, 0.42, 0.3))
 
 
+# The housing used to be a 0.32 box with the flame at the same centre inside it
+# — so the one thing a lamp is for was completely enclosed, and the gallery
+# showed a black stick. The flame sits ABOVE the housing now and the housing is
+# smaller than it: a lamp has to be visibly lit, and on this board it is a light
+# source in the rules (core/combat.gd's LIGHT_TYPES) and not only in the picture.
 static func _lamp(parts: Array, rng: RandomNumberGenerator) -> void:
-	_p(parts, "post", "iron", 0, Vector3(0, 0.72, 0), Vector3(0.1, 1.44, 0.1),
+	_p(parts, "post", "iron", 0, Vector3(0, 0.66, 0), Vector3(0.09, 1.32, 0.09),
 		0.0, deg_to_rad(_jit(rng, 4.0)))
-	_p(parts, "box", "iron", 1, Vector3(0, 1.54, 0), Vector3(0.3, 0.32, 0.3), rng.randf())
-	_p(parts, "cone", "fire", 2, Vector3(0, 1.54, 0), Vector3(0.16, 0.22, 0.16))
+	_p(parts, "disc", "iron", 1, Vector3(0, 1.34, 0), Vector3(0.34, 0.07, 0.34))
+	_p(parts, "cone", "fire", 2, Vector3(0, 1.58, 0), Vector3(0.26, 0.40, 0.26))
+	_p(parts, "box", "iron", 0, Vector3(0, 1.84, 0), Vector3(0.3, 0.08, 0.3), rng.randf())
 
 
 static func _brazier(parts: Array, rng: RandomNumberGenerator) -> void:
@@ -283,19 +304,26 @@ static func _fountain(parts: Array, _rng: RandomNumberGenerator) -> void:
 
 # --- rough: ankle-to-knee, never anything to hide behind --------------------
 
+# Six small clumps rather than three big ones. The first render put three
+# 0.6-wide gems on a hex and kit_parts' "rock" is a faceted low-poly solid, so
+# at that size they read as cut paper laid on the board — scrub has to look
+# like MANY of something, and the fix is count, not shape.
 static func _scrub(parts: Array, rng: RandomNumberGenerator, role: String, h: float) -> void:
-	for i in 3:
-		var a: float = TAU * float(i) / 3.0 + _jit(rng, 0.7)
+	for i in 6:
+		var a: float = TAU * float(i) / 6.0 + _jit(rng, 0.45)
+		var r: float = 0.20 + _jit(rng, 0.10)
+		var w: float = 0.30 + _jit(rng, 0.09)
 		_p(parts, "rock", role, i % 3,
-			Vector3(cos(a) * 0.34, h * 0.45, sin(a) * 0.34),
-			Vector3(0.6 + _jit(rng, 0.14), h, 0.6 + _jit(rng, 0.14)), rng.randf() * TAU)
+			Vector3(cos(a) * (0.22 + r), h * 0.40 * (0.7 + 0.5 * rng.randf()), sin(a) * (0.22 + r)),
+			Vector3(w, h * (0.55 + 0.45 * rng.randf()), w * 0.85), rng.randf() * TAU,
+			deg_to_rad(_jit(rng, 18.0)))
 
 
 static func _rubble(parts: Array, rng: RandomNumberGenerator) -> void:
 	for i in 4:
 		var a: float = TAU * float(i) / 4.0 + _jit(rng, 0.6)
 		var s: float = 0.26 + _jit(rng, 0.09)
-		_p(parts, "rock", "stone" if i % 2 == 0 else "pale", i % 3,
+		_p(parts, "rock", "stone" if i % 3 else "pale", i % 3,
 			Vector3(cos(a) * 0.36, s * 0.4, sin(a) * 0.36),
 			Vector3(s * 2.0, s, s * 1.7), rng.randf() * TAU, deg_to_rad(_jit(rng, 14.0)))
 

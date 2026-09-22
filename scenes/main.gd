@@ -1887,7 +1887,8 @@ func _chip(b: Button, text: String, preset: int, col: Color, u: float) -> void:
 	l.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, int(3 * u))
 
 func _refresh() -> void:
-	_header.text = "The Sunken Shrine, round %d%s" % [cb.round_num, "  ·  night" if cb.is_night() else ""]
+	_header.text = "%s, round %d%s" % [Encounter.board_name(String(cb.board.get("theme", ""))),
+		cb.round_num, "  ·  night" if cb.is_night() else ""]
 	_header.tooltip_text = "seed %d" % _seed
 	if _coop != null:
 		_header.text += "  ·  room %s" % _coop.code

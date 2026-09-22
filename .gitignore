@@ -46,3 +46,7 @@ combat_strip.png*
 
 # tests/shot_climb.gd output
 /climb_*.png*
+/props_gallery.png*
+/board_downs.png*
+/board_marsh.png*
+/combat_card.png*

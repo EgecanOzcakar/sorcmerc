@@ -51,6 +51,21 @@ static func board() -> Dictionary:
 const THEMES := ["sunken-shrine", "goblin-camp", "city-square", "forest-clearing",
 	"frozen-cave", "merchant-shop", "downs", "marsh"]
 
+# What to call the place, for the header over the fight. It has said "The Sunken
+# Shrine" since the MVP, when the shrine was the only board there was; with
+# eight of them that is wrong seven times in eight. A definite article and no
+# more — the board is a place, not a level name.
+const BOARD_NAMES := {
+	"sunken-shrine": "The Sunken Shrine", "goblin-camp": "The Goblin Camp",
+	"city-square": "The City Square", "forest-clearing": "The Forest Clearing",
+	"frozen-cave": "The Frozen Cave", "merchant-shop": "The Merchant's Shop",
+	"downs": "The Open Downs", "marsh": "The Reed Marsh",
+}
+
+static func board_name(theme: String) -> String:
+	return String(BOARD_NAMES.get(theme, BOARD_NAMES["sunken-shrine"]))
+
+
 # `seed` shapes the ground around the authored room (see _grow); 0 means "the
 # theme's own fixed shape", so a caller without a fight seed still gets the
 # same board every time.
@@ -65,6 +80,11 @@ static func board_for(theme: String, seed: int = 0) -> Dictionary:
 		"downs": b = downs_board()
 		"marsh": b = marsh_board()
 		_: b = shrine_board()
+	# The board remembers which theme built it, so anything downstream that has
+	# the board but not the spec can say where the fight is happening —
+	# scenes/main.gd's header is the first such caller. Stamped here rather than
+	# written into each builder: there is one place a theme picks a board.
+	b["theme"] = theme if BOARD_NAMES.has(theme) else "sunken-shrine"
 	return _grow(_widen(b), seed if seed != 0 else theme.hash())
 
 # --- the ground around the room ----------------------------------------

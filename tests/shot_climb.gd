@@ -38,9 +38,27 @@ func _init() -> void:
 	view.queue_free()
 	await process_frame
 	await _levelup()
+	await _creator_step()
 	await _emblems()
 	await _path_emblems()
 	quit()
+
+
+# The creator's Class step with a class picked, which is the other screen the
+# climb was built for and the one it reached second. Level 0, so every rung past
+# the first is veiled and the whole question on the page is where the class
+# GOES — which is what somebody choosing one is actually asking.
+func _creator_step() -> void:
+	var page = load("res://scenes/creator/creator.tscn").instantiate()
+	root.add_child(page)
+	for _i in 12:
+		await process_frame
+	page.ch.species_id = "human"
+	page._set_class("monk")
+	page._jump(1)
+	await _shoot("res://climb_creator.png")
+	page.queue_free()
+	await process_frame
 
 
 # The real level-up page with the climb under its card: a rogue standing on 4,
