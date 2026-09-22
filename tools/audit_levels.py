@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""What the level tables are missing, counted rather than eyeballed.
+
+    python3 tools/audit_levels.py              # the report, to stdout
+    python3 tools/audit_levels.py --markdown   # the same, as docs/audit-class-levels.md
+
+Every class in data/classes.json carries a 20-entry `levels` array and every
+subclass in data/subclasses.json carries its own grants keyed by `classLevel`.
+The character screens only ever drew the level you were standing on, so nobody
+had reason to look at 11-20 — and a screen that draws the whole ladder does.
+
+The expectations are not invented here. They are dnd-maintainer's own
+structural table (src/lib/sources/coverage-matrix.ts), which is honest about
+what it proves: `complete` there means "present and correctly shaped", never
+"matches the Player's Handbook". A level this script calls whole may still hold
+the wrong feature; a level it calls empty is empty for certain.
+
+Read the counts as a floor on the work, not a ceiling.
+"""
+import json
+import pathlib
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+DATA = ROOT / "data"
+
+# dnd-maintainer/src/lib/sources/coverage-matrix.ts — SUBCLASS_MILESTONES_BY_CLASS,
+# EXPECTED_ASI_LEVELS and EPIC_BOON_LEVEL, transcribed. Keep in step if it moves.
+SUBCLASS_MILESTONES = {
+    "barbarian": [3, 6, 10, 14], "bard": [3, 6, 14], "cleric": [3, 6, 17],
+    "druid": [3, 6, 10, 14], "fighter": [3, 7, 10, 15, 18], "monk": [3, 6, 11, 17],
+    "paladin": [3, 7, 15, 20], "ranger": [3, 7, 11, 15], "rogue": [3, 9, 13, 17],
+    "sorcerer": [3, 6, 14, 18], "warlock": [3, 6, 10, 14], "wizard": [3, 6, 10, 14],
+}
+ASI_LEVELS = [4, 8, 12, 16]
+EPIC_BOON_LEVEL = 19
+
+
+def load(name):
+    return json.loads((DATA / name).read_text())
+
+
+def feature_ids(grants):
+    return [g["feature"]["id"] for g in grants if g["type"] == "feature"]
+
+
+def audit():
+    classes = load("classes.json")
+    subclasses = load("subclasses.json")
+    effects = load("effects/features.json")
+    badges = {p.stem for p in (ROOT / "assets/icons/skills").glob("*.svg")}
+
+    by_class = {}
+    for s in subclasses:
+        by_class.setdefault(s["classId"], []).append(s)
+
+    rows = []
+    every_feature = set()
+    for c in classes:
+        cid = c["id"]
+        subs = by_class.get(cid, [])
+        # A level is empty only when neither the class nor ANY of its paths
+        # grants anything there — a path feature still fills the rung.
+        sub_levels = set()
+        for s in subs:
+            sub_levels |= {int(e["classLevel"]) for e in s["levels"]}
+        # A caster's "empty" level is not empty: it is the level the slot table
+        # opens a new rank, or widens one. The ladder draws that as a rung, so
+        # counting it as a gap would invent work that is not there.
+        slots = c.get("spellSlots") or []
+
+        def grew(n):
+            now = slots[n - 1] if n - 1 < len(slots) else []
+            was = slots[n - 2] if 1 < n <= len(slots) else []
+            return list(now) != list(was)
+
+        empty, asi_at = [], set()
+        for n in range(1, 21):
+            grants = c["levels"][n - 1]
+            for g in grants:
+                if g["type"] == "asi":
+                    asi_at.add(n)
+            every_feature.update(feature_ids(grants))
+            if not grants and n not in sub_levels and not grew(n):
+                empty.append(n)
+        for s in subs:
+            for e in s["levels"]:
+                every_feature.update(feature_ids(e["grants"]))
+
+        want = SUBCLASS_MILESTONES.get(cid, [])
+        gaps = {}
+        for s in subs:
+            have = {int(e["classLevel"]) for e in s["levels"]}
+            miss = [n for n in want if n not in have]
+            if miss:
+                gaps[s["name"]] = miss
+
+        # The sharpest number in the report: where the class table stops saying
+        # anything at all. Fighter and rogue stop in the middle of the campaign's
+        # own top band (core/regions.gd's Far Deeps is levels 10-20).
+        last = max([n for n in range(1, 21) if c["levels"][n - 1]] or [0])
+
+        rows.append({
+            "id": cid, "name": c["name"], "empty": empty, "last": last,
+            "asi_missing": [n for n in ASI_LEVELS if n not in asi_at],
+            "boon": EPIC_BOON_LEVEL in asi_at or bool(c["levels"][EPIC_BOON_LEVEL - 1]),
+            "sub_gaps": gaps, "sub_count": len(subs),
+        })
+
+    return rows, {
+        "features": sorted(every_feature),
+        "no_effect": sorted(f for f in every_feature if f not in effects),
+        "no_badge": sorted(f for f in every_feature if f not in badges),
+    }
+
+
+def report(rows, arts, md=False):
+    out = []
+    w = out.append
+    tot_empty = sum(len(r["empty"]) for r in rows)
+    tot_sub = sum(len(v) for r in rows for v in r["sub_gaps"].values())
+
+    if md:
+        w("# Class level tables — what is missing\n")
+        w("Generated by `tools/audit_levels.py`. Expectations are dnd-maintainer's")
+        w("structural table, which proves a level is *shaped* right, never that it")
+        w("matches the book. An empty level, though, is empty for certain.\n")
+        stops = [r for r in rows if r["last"] < 20]
+        if stops:
+            w("The class table stops saying anything at all here:\n")
+            for r in sorted(stops, key=lambda x: x["last"]):
+                w("- **%s** — last grant at level %d" % (r["name"], r["last"]))
+            w("")
+            w("`core/regions.gd`'s Far Deeps band is levels 10-20, so that is play")
+            w("the campaign already sends parties into.\n")
+        w("| class | table ends | levels with no grant at all | ASI missing | subclass tiers missing |")
+        w("|---|---|---|---|---|")
+        for r in rows:
+            gaps = "; ".join("%s %s" % (k, "/".join(map(str, v))) for k, v in r["sub_gaps"].items())
+            w("| %s | %d | %s | %s | %s |" % (
+                r["name"], r["last"],
+                ", ".join(map(str, r["empty"])) or "—",
+                "/".join(map(str, r["asi_missing"])) or "—",
+                gaps or "—"))
+        w("")
+        w("**%d empty class levels** and **%d missing subclass tiers** across 12 classes." % (tot_empty, tot_sub))
+        w("")
+        w("Most of the empty class levels are the same hole seen twice: a class whose")
+        w("paths all lack their level-14 feature has an empty level 14. Fill the path")
+        w("tiers and those close on their own. What is left over is fighter and rogue.")
+        w("")
+        w("## Art the ladder would need\n")
+        w("| | count |")
+        w("|---|---|")
+        w("| features granted by a class or path | %d |" % len(arts["features"]))
+        w("| of those with no badge in `assets/icons/skills/` | %d |" % len(arts["no_badge"]))
+        w("| of those with no entry in `data/effects/features.json` | %d |" % len(arts["no_effect"]))
+    else:
+        for r in rows:
+            w("%-10s empty %-28s asi %-8s paths %d" % (
+                r["name"],
+                ",".join(map(str, r["empty"])) or "-",
+                "/".join(map(str, r["asi_missing"])) or "-",
+                len(r["sub_gaps"])))
+            for k, v in r["sub_gaps"].items():
+                w("           %s missing %s" % (k, "/".join(map(str, v))))
+        w("")
+        w("%d empty class levels, %d missing subclass tiers" % (tot_empty, tot_sub))
+        w("%d features; %d without a badge, %d without an effect entry" % (
+            len(arts["features"]), len(arts["no_badge"]), len(arts["no_effect"])))
+    return "\n".join(out) + "\n"
+
+
+if __name__ == "__main__":
+    rows, arts = audit()
+    md = "--markdown" in sys.argv
+    text = report(rows, arts, md)
+    if md:
+        path = ROOT / "docs/audit-class-levels.md"
+        path.write_text(text)
+        print("wrote %s" % path)
+    else:
+        sys.stdout.write(text)

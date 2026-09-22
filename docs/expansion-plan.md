@@ -7298,3 +7298,57 @@ default. Test: `tests/test_world_biomes.gd`.
   there while the main map has three.
 - The worldgen climate option (`origin["climate"]`, biasing how the discs are
   distributed) is designed but not built.
+
+## What the level tables are missing — an audit, not a fix (2026-09-22, measurement only)
+
+Designing a screen that draws the whole 1-20 ladder meant asking whether the
+data has twenty levels in it. It does not. `tools/audit_levels.py` counts the
+holes and writes `docs/audit-class-levels.md`; the numbers there are the
+report, and this entry is only why it exists and what it does not claim.
+
+The measurement worth repeating: **the rogue's class table stops at level 10
+and the fighter's at 16.** Rogue gains nothing at all from 11 on — no Reliable
+Talent, no Elusive, no Stroke of Luck, and not even the Ability Score
+Improvements at 12 and 16 that every class gets. Fighter loses its ASIs at 12
+and 16 the same way. That is not obscure content: `core/regions.gd`'s Far
+Deeps band is levels 10-20, so the campaign already sends parties there.
+
+Across all twelve classes: 23 class levels with no grant of any kind, and 40
+missing subclass tiers. Most of the empty class levels are the same hole
+counted twice — a class whose four paths all lack their level-14 feature shows
+an empty level 14 — so filling the path tiers closes them without touching the
+class table. Fighter and rogue are what is left.
+
+Two false positives were removed from the count before it was written down. A
+caster's "empty" level is not empty: a wizard gains nothing named at 7, 9, 11,
+13, 15 or 17, but the slot table opens a new rank there, which a ladder draws
+as a rung. Counting slot growth as a grant took the figure from 43 to 23.
+Sorcerer, wizard, bard and paladin come out whole.
+
+Expectations are not invented here. The subclass milestones, the ASI levels
+and the Epic Boon level are transcribed from dnd-maintainer's own
+`coverage-matrix.ts`, which is careful about what it proves: that a level is
+*shaped* right, never that it matches the book. A level the audit calls whole
+may still hold the wrong feature. A level it calls empty is empty for certain.
+
+The same run counts the art the ladder would need, since it walks every
+feature anyway: 286 features are granted by a class or a path, 270 of them
+have no badge under `assets/icons/skills/` (the existing 199 badges were
+authored for the action bar, which only ever needed the features you can
+press), and 253 have no entry in `data/effects/features.json`.
+
+### Still open
+
+- Nothing is fixed. This is the inventory; the authoring pass is not started
+  and was deliberately not begun, because the source the data is generated
+  from (`dnd-maintainer`, see `data/SCHEMA.md`) lives outside this repo and
+  hand-filling `data/*.json` would be overwritten by the next export.
+- The audit is structural only. No entry in it is verified against the 2024
+  Player's Handbook, and `coverage-matrix.ts`'s `GOLDEN_VERIFIED` set is
+  empty upstream for the same reason.
+- Fighter and rogue subclass tiers (13/17 for rogue, none missing for
+  fighter) are counted, but the *contents* of every missing tier are not
+  listed — the audit says which slots are empty, not what belongs in them.
+- The progression screen this was measured for is designed but unbuilt: the
+  ladder replaces the level-up screen and the creator's class step, with
+  levels past current+1 drawn as silhouettes.
