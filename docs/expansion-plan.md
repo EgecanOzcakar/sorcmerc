@@ -8452,8 +8452,30 @@ And the header names the board. It had said "The Sunken Shrine" since the MVP,
 when the shrine was the only board there was; with eight of them that is wrong
 seven times in eight.
 
+**And the whole figure on it**, not the bust the turn strip and the party page
+use. A bust answers "who is that", which this card already answers in gilt at
+the top; a full figure answers what the thing actually looks like — how big it
+is, what it is carrying, whether it is armoured — which is most of what you
+want to know about something you have never fought before and none of which a
+head shows. `scenes/portraits.gd` grew a `figure()` beside its `bust()`: the
+same renderer, the same cache, the same headless fall-through, and the only
+difference is where the camera stands. Centred on the model's middle rather
+than its head, and nearly level rather than angled down, because a full figure
+seen from a portrait's downward angle foreshortens into a head on a pair of
+boots.
+
+That framing cost an hour to a lesson worth writing down: the shared helper
+behind both was first called `_get`, which is `Object`'s own property-getter
+virtual. A static method of that name with any other signature fails to COMPILE
+the whole script — and a test script that never compiles never reaches
+`quit()`, so it presents as a hang rather than a failure, exactly as
+`CLAUDE.md` warns a failed `assert()` does.
+
 ### Still open
 
+- The figure is the FACTION's model for a foe, not the creature's, so "Snik the
+  Bugbear" is drawn with the goblinoid figure. That is `figures3d.gd`'s
+  documented one-model-per-faction lookup and predates this card.
 - One card at a time. The issue says "cards" plural and a second pinned card,
   side by side for a comparison, is a real reading somebody might want.
 - Nothing on the card is clickable except the ✕ — no targeting, no selection.

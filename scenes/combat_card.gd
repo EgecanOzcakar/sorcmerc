@@ -19,6 +19,8 @@
 extends PanelContainer
 
 const Icons = preload("res://core/ui_icons.gd")
+const Portraits = preload("res://scenes/portraits.gd")
+const Figures3D = preload("res://scenes/figures3d.gd")
 
 signal closed
 
@@ -26,9 +28,26 @@ signal closed
 # statblock is reading down a column they already know the shape of.
 const ABILITIES := ["str", "dex", "con", "int", "wis", "cha"]
 
+# The portrait column: the WHOLE figure, not the bust the turn strip and the
+# party page use. A bust answers "who is that" and this card already answers
+# that in gilt at the top; what a full figure adds is what the thing actually
+# looks like — how big it is, what it is carrying, whether it is armoured —
+# which is most of what you want to know about something you have never fought
+# before, and none of which a head shows.
+#
+# Taller than wide because a standing rig is roughly 1:2.6. A model the art does
+# not cover renders nothing and the column simply is not built, which is the
+# same fall-through scenes/figures3d.gd draws the board by.
+const FIGURE_PX := Vector2i(92, 158)
+
 var _who = null               # the Combatant this card is showing, or null
 var _cb = null
 var _rows := VBoxContainer.new()
+# Where _line/_cap/_bar append: the column beside the portrait while the
+# headline numbers are being written, then _rows again for everything that
+# wants the card's whole width. The same shape scenes/creator/creator.gd's
+# _target has, and for the same reason — one set of row helpers, two columns.
+var _target: Container = null
 
 
 func _init() -> void:
@@ -61,11 +80,28 @@ func show_who(c, cb) -> void:
 
 
 func _render() -> void:
+	_target = null
 	for n in _rows.get_children():
 		_rows.remove_child(n)
 		n.queue_free()
 	var c = _who
 	var cb = _cb
+
+	# Figure on the left, the headline numbers beside it, and everything that
+	# wants the full width underneath. The six-ability grid and the spell and
+	# trait lists do not fit in what is left of a 260-380px column next to a
+	# portrait, so they stay below it rather than being squeezed in beside.
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	_rows.add_child(top)
+	var fig := _figure(c)
+	if fig != null:
+		top.add_child(fig)
+	var side := VBoxContainer.new()
+	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	side.add_theme_constant_override("separation", 5)
+	top.add_child(side)
+	_target = side
 
 	var head := HBoxContainer.new()
 	var name_lbl := Label.new()
@@ -84,7 +120,7 @@ func _render() -> void:
 		clear()
 		closed.emit())
 	head.add_child(x)
-	_rows.add_child(head)
+	_into().add_child(head)
 
 	_line("%s · %s" % [
 		"Your company" if c.team == "party" else "Against you",
@@ -93,7 +129,10 @@ func _render() -> void:
 	# Health first and as a bar, because it is the one number read at a glance.
 	_bar(c.hp, c.max_hp, "%d / %d hp%s" % [maxi(0, c.hp), c.max_hp,
 		"  +%d temp" % c.temp_hp if c.temp_hp > 0 else ""])
-	_line("AC %d    Speed %d    Prof +%d" % [cb.effective_ac(c), c.speed, c.pb], Icons.COL_TEXT)
+	_line("AC %d    Speed %d" % [cb.effective_ac(c), c.speed], Icons.COL_TEXT)
+	_line("Proficiency +%d" % c.pb, Icons.COL_MUTED)
+	# Back to the full width for everything that needs it.
+	_target = null
 
 	# "stats -/+": the six, signed. For a hero the score is shown beside the
 	# modifier because the sheet has one; a monster has no ability scores in this
@@ -113,7 +152,7 @@ func _render() -> void:
 			lbl.text = "%s %s" % [a.to_upper(), _signed(int(c.saves.get(a, 0)))]
 		lbl.add_theme_color_override("font_color", Icons.COL_BODY)
 		grid.add_child(lbl)
-	_rows.add_child(grid)
+	_into().add_child(grid)
 
 	var tags: Array = []
 	for s in Icons.CONDITION_ORDER:
@@ -154,15 +193,38 @@ func _render() -> void:
 		_line(", ".join(traits), Icons.COL_TEXT)
 
 
+# The figure, or null when the art does not cover this class or faction — which
+# is common enough that it is the expected case rather than an error. Rendered
+# through scenes/portraits.gd, so it shares the cache, the lighting and the
+# headless fall-through with every other face on screen.
+func _figure(c) -> Control:
+	var tex: Texture2D = Portraits.figure(Figures3D._model_path(c), FIGURE_PX)
+	if tex == null:
+		return null
+	var frame := PanelContainer.new()
+	frame.add_theme_stylebox_override("panel", Icons.box(Icons.COL_INK, Icons.COL_EDGE, 2, 0, 0))
+	frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var r := TextureRect.new()
+	r.texture = tex
+	r.custom_minimum_size = FIGURE_PX
+	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	frame.add_child(r)
+	return frame
+
+
 func _signed(n: int) -> String:
 	return "+%d" % n if n >= 0 else str(n)
+
+
+func _into() -> Container:
+	return _target if _target != null else _rows
 
 
 func _cap(text: String) -> void:
 	var l := Label.new()
 	l.text = text
 	l.theme_type_variation = "Caption"
-	_rows.add_child(l)
+	_into().add_child(l)
 
 
 func _line(text: String, col: Color) -> void:
@@ -171,7 +233,7 @@ func _line(text: String, col: Color) -> void:
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	l.add_theme_color_override("font_color", col)
-	_rows.add_child(l)
+	_into().add_child(l)
 
 
 # The one drawn thing on the card. A number says how hurt something is; a bar
@@ -186,5 +248,5 @@ func _bar(have: int, whole: int, caption: String) -> void:
 		Color(0, 0, 0, 0), 2, 0, 0)
 	p.add_theme_stylebox_override("fill", fill)
 	p.add_theme_stylebox_override("background", Icons.box(Icons.COL_INK, Icons.COL_EDGE, 2, 0, 0))
-	_rows.add_child(p)
+	_into().add_child(p)
 	_line(caption, Icons.COL_BODY)

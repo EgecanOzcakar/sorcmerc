@@ -18,18 +18,43 @@ const ModelCache = preload("res://scenes/model_cache.gd")
 static var _cache := {}        # key -> Texture2D, or null for a path with no model
 
 
-static func key(path: String, px: int) -> String:
-	return "%s@%d" % [path, px]
+# The one cache key builder. A square bust keeps the short "path@px" form it
+# has always had; anything else spells out both axes and marks a whole-figure
+# framing with "!", since that is a different picture of the same model at the
+# same size and must not share a slot with the bust.
+static func key(path: String, px: int, py := -1, whole := false) -> String:
+	if not whole and (py < 0 or py == px):
+		return "%s@%d" % [path, px]
+	return "%s@%dx%d%s" % [path, px, maxi(py, px), "!" if whole else ""]
 
 
 # The bust for a model path, px square, or null: no path, no model, headless.
 static func bust(path: String, px := 64) -> Texture2D:
+	return _tex(path, Vector2i(px, px), false)
+
+
+# The WHOLE figure, head to heel, for a card with room to show one
+# (scenes/combat_card.gd). Same renderer, same cache, same fall-through — the
+# only difference is where the camera stands and how much it takes in, which is
+# the one thing that separates "who is that" from "what does it look like".
+#
+# Taller than wide on purpose: a standing rig is roughly 1:2.6 and a square
+# viewport would spend two thirds of itself on empty air either side.
+static func figure(path: String, size: Vector2i = Vector2i(88, 150)) -> Texture2D:
+	return _tex(path, size, true)
+
+
+# NOT _get: that is Object's own property-getter virtual (_get(StringName) ->
+# Variant), and a static method of that name with any other signature fails to
+# COMPILE the whole script — which in a test is a hang rather than a failure,
+# because a script that never compiles never reaches quit().
+static func _tex(path: String, size: Vector2i, whole: bool) -> Texture2D:
 	if path == "" or DisplayServer.get_name() == "headless":
 		return null
-	var k := key(path, px)
+	var k := key(path, size.x, size.y, whole)
 	if _cache.has(k):
 		return _cache[k]
-	_start(path, px, k)
+	_start(path, size, k, whole)
 	return _cache[k]
 
 
@@ -39,13 +64,13 @@ static func warm(paths: Array, px := 64) -> void:
 		bust(String(p), px)
 
 
-static func _start(path: String, px: int, k: String) -> void:
+static func _start(path: String, size: Vector2i, k: String, whole := false) -> void:
 	var scene := ModelCache.get_scene(path)
 	if scene == null:
 		_cache[k] = null
 		return
 	var sub := SubViewport.new()
-	sub.size = Vector2i(px, px)
+	sub.size = size
 	sub.transparent_bg = true
 	sub.own_world_3d = true
 	sub.msaa_3d = Viewport.MSAA_4X
@@ -85,7 +110,18 @@ static func _start(path: String, px: int, k: String) -> void:
 	cam.near = 0.01
 	cam.far = 50.0
 	# Models face +Z (figures3d.gd), so the camera sits out on +Z, a little above.
-	cam.look_at_from_position(at + Vector3(0, 0.45 if beast else 0.25, 1).normalized() * 10.0, at, Vector3.UP)
+	var eye := Vector3(0, 0.45 if beast else 0.25, 1).normalized()
+	if whole:
+		# The whole thing in frame, centred on its middle rather than its head,
+		# and the KEEP_HEIGHT default means `size` is the vertical extent — so a
+		# tall narrow viewport wants the model's HEIGHT plus a margin, and a wide
+		# one (a beast) would clip at the shoulders without the width check.
+		at = box.get_center()
+		cam.size = maxf(box.size.y, box.size.x * float(size.y) / maxf(1.0, float(size.x))) * 1.12
+		# Nearly level: a full figure seen from a portrait's downward angle
+		# foreshortens into a head on a pair of boots.
+		eye = Vector3(0, 0.10, 1).normalized()
+	cam.look_at_from_position(at + eye * 10.0, at, Vector3.UP)
 	cam.current = true
 
 	Engine.get_main_loop().root.add_child.call_deferred(sub)   # a strip built in _ready finds the root busy
