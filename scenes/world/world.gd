@@ -120,7 +120,12 @@ const ENCOUNTER_RADIUS := 24.0
 const VISIT_RADIUS := 34.0
 # The board an ambush happens on when the encountered faction has no theme of
 # its own in Scaler.THEME_FACTION — open country, which is where the map is.
+# O-biome: only the fallback of a fallback now — Scaler.BIOME_BOARD answers
+# for every biome the map actually has, so this is what a position outside every
+# biome disc gets, which on a built map is nothing.
 const DEFAULT_THEME := "forest-clearing"
+# core/world_bands.gd's KINDS ids, for the ones carrying more than their kit.
+const PURSE := {"caravan": 2.0}
 
 # The camera the map opens on, and the numbers the projection is quoted
 # against. ISO_YAW and ISO_SQUASH are no longer the projection — they are its
@@ -1501,15 +1506,35 @@ func _night_jump(foe) -> bool:
 # _faction_order's other documented route — FACTIONS[seed % size] — is snapped
 # onto this faction instead. Seeded off the party id, so meeting the same band
 # twice is the same band.
+#
+# O-biome: and the GROUND is read here too, which is the seam the biome layer
+# was built for and shipped without. It does two things, both of them narrow.
+# It picks the board for a fight that had none of its own — that is what killed
+# DEFAULT_THEME, which used to draw a moor, a marsh and open downs all as the
+# same wood. And it names one habitat out of the bestiary's vocabulary, which
+# filters the roster to what lives on that ground: the marsh is the one that
+# pays, because its 18 aquatic beasts were unreachable while forest-clearing
+# was the only board that ever drew beasts. The ring (core/regions.gd) still
+# owns how DANGEROUS the country is; these two axes stay orthogonal.
 func encounter_spec(foe, difficulty := "") -> Dictionary:
+	var biome: String = world.biome_at(foe.position)
+	var habitat: String = String(Scaler.BIOME_HABITAT.get(biome, ""))
+	# The map's peoples are not roster factions. data/bestiary.json has no
+	# human/elf/dwarf — `soldier` is its settled power — so pin_faction() found
+	# no index for "human", handed the seed straight back, and a town patrol
+	# fielded FACTIONS[seed % 15]: whatever that landed on, reproducibly,
+	# because the seed is the band's own id. A caravan inherits its home town's
+	# faction and came through the same hole.
+	var faction: String = Scaler.CIVILIZED_ROSTER if WorldAI.CIVILIZED.has(foe.faction) \
+		else String(foe.faction)
 	var theme := ""
 	for t in Scaler.THEME_FACTION:
-		if String(Scaler.THEME_FACTION[t]) == foe.faction:
+		if String(Scaler.THEME_FACTION[t]) == faction:
 			theme = String(t)
 			break
 	var seed_v: int = absi(hash(foe.id))
 	if theme == "":
-		seed_v = Scaler.pin_faction(seed_v, foe.faction)
+		seed_v = Scaler.pin_faction(seed_v, faction)
 	var threat: Dictionary = WorldThreat.assess(party)
 	# D6: the two knobs compose, and they answer different questions. The band
 	# says how dangerous this country is (1.0 while the party is inside its level
@@ -1518,8 +1543,17 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 	var spec: Dictionary = Scaler.roster_for(
 		party.party_characters(), difficulty if difficulty != "" else String(threat["difficulty"]),
 		{}, theme, seed_v,
-		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party))
-	spec["theme"] = theme if theme != "" else DEFAULT_THEME
+		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party), [], habitat)
+	spec["theme"] = theme if theme != "" else String(Scaler.BIOME_BOARD.get(biome, DEFAULT_THEME))
+	# What this band is worth robbing for. A caravan is carrying its cargo; a
+	# patrol, a warband and a beast pack are carrying what they stand up in.
+	# ponytail: a taste number, not a measured one — gold is not in the win-rate
+	# band tests/test_scaler.gd sweeps, so there is nothing here to sweep. Re-cut
+	# it against the economy if a caravan ever becomes the only thing worth
+	# hunting, which at 2x it should not be.
+	var purse: float = float(PURSE.get(String(foe.ai.get("kind", "")), 1.0))
+	if purse != 1.0:
+		spec["purse"] = purse
 	# The board a fight is drawn on is not always the roster's own kin, and the
 	# stamp above is lossy on purpose: a faction with no board of its own
 	# (orc/gnoll/kobold/...) fights on DEFAULT_THEME while `theme` stays "" so

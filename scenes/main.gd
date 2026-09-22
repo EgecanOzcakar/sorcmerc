@@ -160,7 +160,9 @@ static func shelf_rim(fill: Color) -> Color:
 	return lit
 # T11: per-theme floor tint, palette only — no mechanical difference.
 const PALETTES := {"shrine": COL_HEX, "camp": Color("2a2a26"), "city": Color("2c2c33"),
-	"forest": Color("1f2a22"), "ice": Color("222c36"), "shop": Color("2b2620")}
+	"forest": Color("1f2a22"), "ice": Color("222c36"), "shop": Color("2b2620"),
+	# O-biome: open moor reads greyer and drier than the wood, marsh darker and wetter.
+	"downs": Color("2e3327"), "marsh": Color("1c2622")}
 # T9b: a seamless ground texture per palette (tools/localgen/gen_floor_textures.py),
 # laid on the hex plane in ground space so it foreshortens with the board and
 # runs unbroken across tiles; the tinted slab underneath still carries the
@@ -172,6 +174,8 @@ const FLOORS := {
 	"forest": preload("res://assets/board/floor_forest.png"),
 	"ice": preload("res://assets/board/floor_ice.png"),
 	"shop": preload("res://assets/board/floor_shop.png"),
+	"downs": preload("res://assets/board/floor_downs.png"),
+	"marsh": preload("res://assets/board/floor_marsh.png"),
 }
 const FLOOR_SPAN := 3.0    # hexes per texture repeat
 # #73: a painted backdrop behind the board, one per palette, from the scene
@@ -184,6 +188,11 @@ const BACKDROPS := {
 	"forest": "res://assets/generated/event-tracks.png",
 	"ice": "res://assets/generated/event-storm.png",
 	"shop": "res://assets/generated/room-forge.png",
+	# Reused rather than newly painted: the road events already have the two
+	# skies these boards stand under, and a backdrop is a blurred tone behind
+	# the board, not a picture anybody reads.
+	"downs": "res://assets/generated/event-good-ground.png",
+	"marsh": "res://assets/generated/event-ford.png",
 }
 const BACKDROP_TONE := Color(0.42, 0.40, 0.40)
 const BACKDROP_NIGHT := Color(0.16, 0.17, 0.26)
@@ -3591,10 +3600,14 @@ class Board extends Control:
 	# How thickly each theme is planted. Cosmetic only — foliage is never
 	# consulted by movement, targeting or line of sight, it is picked from the
 	# hex's own hash at draw time and never stored.
+	# O-biome: the moor is scrubbier than a wood floor but nothing like as
+	# dense; the marsh is reed, which stands in clumps and is the thickest of
+	# the set. Cosmetic only — cover and rough are the board's, not this.
 	const FLORA := {"forest": 0.55, "camp": 0.22, "shrine": 0.12, "ice": 0.14,
-		"city": 0.0, "shop": 0.0}
+		"city": 0.0, "shop": 0.0, "downs": 0.34, "marsh": 0.62}
 	const FLORA_COL := {"forest": "3f6b3a", "camp": "5c5f33", "shrine": "3a5548",
-		"ice": "5d7a84", "city": "3f5240", "shop": "3f5240"}
+		"ice": "5d7a84", "city": "3f5240", "shop": "3f5240",
+		"downs": "6b7a42", "marsh": "4c6b4a"}
 
 	# {} for bare ground, else the plant to draw. Cover hexes always get one —
 	# the thing you are hiding behind should be visible.

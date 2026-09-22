@@ -251,6 +251,36 @@ const THEME_FACTION := {
 # how a Killer Whale ended up in the same roster as a Giant Elk on a forest
 # board. Only themes whose faction actually needs the extra split are listed.
 const THEME_HABITAT := {"forest-clearing": "forest"}
+# O-biome, the mapping core/world.gd's biome header argued for and left unwired.
+# A biome names exactly ONE habitat out of data/bestiary.json's vocabulary, and
+# `any` rides along free because _in_budget_and_habitat tests
+# `habitat in [need, "any"]` — so naming one never costs the generic pool.
+#
+#   downs  -> ""       the default fill; no filter, all 240 faction-tagged entries
+#   woods  -> "forest" 105 admitted, 76 of them distinctively forest
+#   marsh  -> "water"   51 admitted, 22 distinctively water — and 18 of those 22
+#                       are aquatic beasts that nothing could reach before this,
+#                       which is what makes marsh the kind that pays for itself
+#
+# `cave` did not earn a kind: it admits 40, 29 of them generic `any` humanoids,
+# and the 11 left are the fight goblin-camp already fields. It is an INTERIOR
+# habitat like `dungeon` — its home is a lair's rooms (core/site.gd).
+const BIOME_HABITAT := {"downs": "", "woods": "forest", "marsh": "water"}
+
+# And which board that country is drawn on. `woods` reuses the board that always
+# existed for it; downs and marsh are new (core/encounter.gd). A fight with a
+# board of its OWN — a goblin camp, a shop, a shrine — keeps it: those are built
+# places rather than terrain, and a camp pitched in a marsh is still a camp.
+const BIOME_BOARD := {"downs": "downs", "woods": "forest-clearing", "marsh": "marsh"}
+
+# The map's peoples are not roster factions. data/bestiary.json has no `human`,
+# `elf` or `dwarf` faction — its settled power is `soldier` (10 entries), which
+# is what core/world_ai.gd's header calls the one civilized entry in FACTIONS.
+# Without this, pin_faction() found no index for "human", handed the seed back
+# untouched, and a human patrol fielded whatever FACTIONS[seed % 15] landed on:
+# the town guard turning up as a dragon, reproducibly, because the seed is the
+# band's id.
+const CIVILIZED_ROSTER := "soldier"
 const FACTIONS := ["goblinoid", "beast", "undead", "bandit", "giant", "kobold",
 	"orc", "gnoll", "cultist", "soldier", "monstrosity", "fey", "elemental", "construct",
 	# T91: added for lair encounters (dragon cave) — bestiary.json already carries
@@ -284,10 +314,18 @@ static func forget_pools() -> void:
 # `exclude` keeps named ids out of the faction draw — core/site.gd uses it so
 # a warren's own boss creature never turns up as escort three rooms before the
 # room it is built around.
+# `habitat` is the GROUND the fight stands on (core/world.gd's biome layer,
+# through BIOME_HABITAT below). It overrides the theme's own habitat because it
+# is the more specific claim: forest-clearing means "a wood" only until the wood
+# turns out to be standing in a marsh, and then the water beasts are the ones
+# that belong. "" leaves THEME_HABITAT exactly as it was, so every caller that
+# does not know what ground it is on is unaffected.
 static func roster_for(party_characters: Array, difficulty: String, quest_bias: Dictionary = {},
-		theme: String = "", seed: int = 0, power_scale: float = 1.0, exclude: Array = []) -> Dictionary:
+		theme: String = "", seed: int = 0, power_scale: float = 1.0, exclude: Array = [],
+		habitat: String = "") -> Dictionary:
 	var budget := _budget(party_characters, difficulty, power_scale)
-	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() else _faction_order(theme, seed, budget, exclude))
+	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() \
+		else _faction_order(theme, seed, budget, exclude, habitat))
 
 # The one number every budget here is priced from: the party as core/rules/
 # power.gd sees it. Public because a caller may need to price a LATER fight
@@ -423,14 +461,24 @@ static func _build(budget: float, order: Array, max_foes: int = MAX_FOES) -> Dic
 # One faction's ids, strongest first, capped so the bodies knob still has room to
 # work. Falls back to the hand-tuned MIX when nothing in the faction is small
 # enough for the party (a level-1 party meets no CR 8 giant).
-static func _faction_order(theme: String, seed: int, budget: float, exclude: Array = []) -> Array:
+static func _faction_order(theme: String, seed: int, budget: float, exclude: Array = [],
+		habitat: String = "") -> Array:
+	# The ground first: it decides which factions can field anything here, so it
+	# has to be known before the faction is picked. See _viable_faction.
+	var need_habitat: String = habitat if habitat != "" else String(THEME_HABITAT.get(theme, ""))
 	var fac: String = String(THEME_FACTION.get(theme, "")) if THEME_FACTION.has(theme) \
-		else FACTIONS[absi(seed) % FACTIONS.size()]
+		else _viable_faction(seed, budget, need_habitat, exclude)
 	if fac == "":
 		return MIX.duplicate()
-	var need_habitat: String = String(THEME_HABITAT.get(theme, ""))
-	var pool: Array = _faction_pool(fac).filter(
-		func(e): return _in_budget_and_habitat(e, budget, need_habitat) and not e["id"] in exclude)
+	var pool: Array = _pool_for(fac, budget, need_habitat, exclude)
+	if pool.is_empty() and need_habitat != "" and THEME_FACTION.has(theme):
+		# A BUILT place beats the ground it stands on. _viable_faction guards the
+		# seeded path by walking to a faction that can field something here, but a
+		# themed board has no such freedom — its faction is the whole point of it —
+		# and goblinoid has no `water` entry at all, so a goblin camp pitched in a
+		# marsh would drop to MIX. The biome narrows a roster where it can and gets
+		# out of the way where it cannot.
+		pool = _pool_for(fac, budget, String(THEME_HABITAT.get(theme, "")), exclude)
 	if pool.is_empty():
 		return MIX.duplicate()
 	var start: int = absi(seed) % maxi(1, pool.size() / 2)
@@ -438,6 +486,36 @@ static func _faction_order(theme: String, seed: int, budget: float, exclude: Arr
 	for i in mini(ROSTER_KINDS, pool.size()):
 		out.append(pool[(start + i) % pool.size()]["id"])
 	return out
+
+# One faction's entries that are small enough for this budget and at home on
+# this ground. Split out of _faction_order because _viable_faction has to ask
+# the same question of up to fifteen factions before the roster is built.
+static func _pool_for(fac: String, budget: float, need_habitat: String, exclude: Array) -> Array:
+	return _faction_pool(fac).filter(
+		func(e): return _in_budget_and_habitat(e, budget, need_habitat) and not e["id"] in exclude)
+
+# The half of the biome wiring that fails quietly if it is skipped, and the
+# expansion plan's biome note says so in as many words. The faction is picked by
+# seed BEFORE the habitat filter runs, so a seed landing on `construct` (all six
+# are `dungeon`) in a marsh empties the pool and drops the whole fight to MIX —
+# the four demo goblins, on the code path this file already records as swinging
+# 6% to 47% win rate across two TIER retunes. Measured 2026-09-22: six of the
+# fifteen factions (construct, dragon, giant, goblinoid, kobold, undead) have no
+# `water`-or-`any` entry at all, so on a marsh two seeds in five landed there.
+#
+# The walk starts AT the seeded index instead of indexing a pre-filtered list,
+# because pin_faction() promises that a seed carrying a faction yields that
+# faction — and it still does. A pinned faction that can field anything on this
+# ground is picked exactly as before; only one that can field nothing gives way,
+# and then to the next in FACTIONS order rather than to the demo goblins.
+# "" when no faction can field anything at all, which is MIX's honest case.
+static func _viable_faction(seed: int, budget: float, need_habitat: String, exclude: Array) -> String:
+	var start: int = absi(seed) % FACTIONS.size()
+	for i in FACTIONS.size():
+		var fac: String = String(FACTIONS[(start + i) % FACTIONS.size()])
+		if not _pool_for(fac, budget, need_habitat, exclude).is_empty():
+			return fac
+	return ""
 
 # The other half of that rule, written down: a seed that makes _faction_order
 # pick `faction` when there is no theme to pick it. Only the remainder carries

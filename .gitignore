@@ -9,7 +9,7 @@
 combat_screen.png*
 lpc_spike.png*
 lpc_spike_credits.png*
-tools/__pycache__/
+__pycache__/
 world_screen.png*
 world_turned.png*
 icon_sheet.png*

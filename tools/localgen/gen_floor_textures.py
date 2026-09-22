@@ -7,6 +7,7 @@ sorcmerc/assets/board/floor_<palette>.png at 512 px.
 
     python3 gen_floor_textures.py [shrine ice ...]
 """
+import os
 import sys
 import time
 from pathlib import Path
@@ -17,7 +18,8 @@ from PIL import Image
 import gen_sorcmerc_items as g
 
 OUT = Path("/home/egeo/localgen/ComfyUI/output")
-DST = Path("/home/egeo/sorcmerc-work/assets/board")
+# The working copy this was written against; SORCMERC_DST points it at another.
+DST = Path(os.environ.get("SORCMERC_DST", "/home/egeo/sorcmerc-work/assets/board"))
 TAIL = ("seamless tileable texture, top-down view, flat even lighting, no shadows, no objects, "
         "fantasy game ground material, muted dark colours, subtle detail, photorealistic, 4k")
 NEG = ("seams, border, frame, objects, creatures, text, watermark, perspective, horizon, sky, "
@@ -29,6 +31,18 @@ PALETTES = {
     "forest": "top-down photo of a forest floor, dark soil under brown dead leaves and patches of green moss",
     "ice": "cracked frozen cave floor, blue-grey ice with frost, dark",
     "shop": "old oak floorboards of a merchant shop, dark stained wood with dust",
+    # O-biome's two boards (core/encounter.gd downs_board / marsh_board)
+    # Ask for a MATERIAL, not a place. Two attempts at "open moorland" came
+    # back as aerial landscape — grass fields with chalk tracks and hedgerows
+    # between them — and seamless()'s half-offset then joined those tracks into
+    # a cross through the tile. (It is worth being clear that the cross was the
+    # subject, not the blend: a flat-field pass over the same image changed
+    # nothing.) Naming the surface close-up is what keeps SDXL off the horizon.
+    "downs": "extreme close-up macro photo of dry turf surface, dense fine grass "
+             "blades and moss at ground level, flat material swatch, "
+             "no horizon, no landscape, no paths, muted olive grey-green",
+    "marsh": "top-down photo of marsh ground, dark peat water between mats of reed "
+             "and sedge, silt and rotting leaves, muted brown-green",
 }
 
 
