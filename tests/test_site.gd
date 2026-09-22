@@ -11,6 +11,8 @@ const Party = preload("res://core/party.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Regions = preload("res://core/regions.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
+const Adapter = preload("res://core/adapter.gd")
 
 var _pass := 0
 var _fail := 0
@@ -262,6 +264,108 @@ func _init() -> void:
 	s8.depth = s8.depth_total() - 1; s8.state = "picking"; s8.enter(0)
 	check(s8.combat_spec()["monsters"].any(func(m): return String(m["id"]) == "oni"),
 		"...but it is still the boss")
+
+	# A lair is its own people, all the way down — including the ten factions
+	# with no board of their own, which used to roll a fresh arbitrary faction
+	# per room off the per-room seed (a dragon's cave was six rooms of six
+	# peoples; tests/sweep_site_kin.gd has the grid). Scaler.MIX ("snik",
+	# "vess", "kritch", "grull") is the documented fallback when nothing in a
+	# faction fits the budget and carries no faction of its own, so it is what
+	# `kin` skips rather than what it fails on.
+	var saw_own := 0
+	for f in ["dragon", "orc", "kobold", "cultist", "goblinoid", "undead"]:
+		var sk = Site.for_lair(_lair(f, "%s-kin" % f), _party(), _world())
+		var kin := {}
+		for d in sk.depth_total():
+			for i in sk.rooms[d].size():
+				sk.depth = d; sk.state = "picking"
+				if String(sk.enter(i).get("kind", "")) != "combat":
+					continue
+				for m in sk.combat_spec()["monsters"]:
+					var fac := String(Catalog.monster(String(m["id"])).get("faction", ""))
+					if fac != "":
+						kin[fac] = true
+		check(kin.size() <= 1 and (kin.is_empty() or kin.has(f)),
+			"every room of a %s lair draws %s and nothing else (%s)" % [f, f, str(kin.keys())])
+		if kin.has(f):
+			saw_own += 1
+	check(saw_own >= 4, "...and the check is not vacuous: %d of 6 actually fielded their own" % saw_own)
+
+	# ...and something is waiting at the bottom of it. campaign.gd's BOSS_POOL is
+	# keyed by THEME and covers five factions, so the other ten used to fall
+	# through to a plain hard roster with no lead and the title "WHAT THE LAIR
+	# WAS BUILT AROUND" — two thirds of the lairs in the game ending in a
+	# slightly bigger version of the room before them. FACTION_BOSS is the
+	# other ten, measured in tests/sweep_faction_boss.gd.
+	for f in Scaler.FACTIONS:
+		var sb = Site.for_lair(_lair(f, "%s-boss" % f), _party(), _world())
+		sb.depth = sb.depth_total() - 1
+		sb.enter(0)
+		var room: Dictionary = sb.room
+		var themed: bool = Site.theme_for_faction(f) != ""
+		check(String(room.get("title", "")) != "WHAT THE LAIR WAS BUILT AROUND",
+			"a %s lair's last room is named, not described" % f)
+		check(String(room.get("difficulty", "")) == "hard", "...and is a hard fight (%s)" % f)
+		# The one boss with no lead is BOSS itself, the hand-tuned four-archetype
+		# shrine fight campaign.gd calls "classic" — deliberate, and measured.
+		check(room.has("lead") or String(room.get("archetype", "")) == "classic",
+			"...and is built round a lead (%s)" % f)
+		var bspec: Dictionary = sb.combat_spec()
+		check(not bspec.get("monsters", []).is_empty(), "...with a roster (%s)" % f)
+		check(bspec["monsters"].size() > 1 or int(bspec["monsters"][0].get("count", 1)) > 1,
+			"...and the boss is not alone in the room (%s: %s)" % [f, str(bspec["monsters"])])
+		if not themed:
+			var own_boss: Dictionary = Site.FACTION_BOSS[f]
+			check(not own_boss.get("lead_features", []).is_empty(),
+				"%s's boss carries a special of its own" % f)
+			var base: Array = Catalog.monster(String(own_boss["lead"])).get("features", [])
+			for feat in own_boss["lead_features"]:
+				check(not feat in base,
+					"...and %s is not something a plain %s already had" % [feat, own_boss["lead"]])
+	# Every lead must be a real creature, and a bestiary lead must be pulled out
+	# of the ordinary pool so meeting it is a reveal (_boss_lead_exclusion).
+	for f in Site.FACTION_BOSS:
+		var fb: Dictionary = Site.FACTION_BOSS[f]
+		check(not Catalog.monster(String(fb["lead"])).is_empty(), "%s's lead exists" % f)
+		check(String(Catalog.monster(String(fb["lead"])).get("faction", "")) == f,
+			"...and is %s's own kin" % f)
+	# --- a lair is priced for the party that walked in ---------------------
+	# core/rules/power.gd's estimate() reads ehp off max_hp and never off hp, so
+	# the only thing the scaler could see about a party's condition was unspent
+	# slots — and inside a site that read backwards: spending shrank the next
+	# fight and RESTING grew it. Site holds the entry reading and corrects the
+	# scale, so what is in a room stops depending on what it cost to get there.
+	var pw := _party()
+	var lw = _lair("dragon", "held-lair")
+	var sw = Site.for_lair(lw, pw, _world())
+	sw.depth = sw.depth_total() - 1
+	sw.enter(0)
+	var fresh: Array = sw.combat_spec()["monsters"]
+	check(is_equal_approx(sw._held(), 1.0), "at the mouth the correction is a no-op (%.3f)" % sw._held())
+	for state in [[0.49, 0.50], [0.67, 0.0], [0.20, 1.0], [0.05, 0.25]]:
+		for ch in pw.party_characters():
+			var sheet = ch.sheet()
+			ch.hp_current = maxi(1, roundi(sheet.max_hp * float(state[0])))
+			var used: Array[int] = []
+			for n in Adapter._full_slots(sheet):
+				used.append(roundi(int(n) * (1.0 - float(state[1]))))
+			ch.slots_used = used
+		check(str(sw.combat_spec()["monsters"]) == str(fresh),
+			"...and the same room at hp %.0f%%/slots %.0f%% is the same room" % [
+				float(state[0]) * 100.0, float(state[1]) * 100.0])
+	check(sw._held() > 1.0, "...which it is because the correction moved (%.3f)" % sw._held())
+	# Re-entering is a fresh walk in, so the snapshot is re-taken rather than
+	# carrying a drained party's reading into the next visit.
+	var sw2 = Site.for_lair(lw, pw, _world())
+	check(is_equal_approx(sw2._held(), 1.0), "walking back in re-takes the reading (%.3f)" % sw2._held())
+
+	# A content pack's faction this build has never heard of keeps the old shape
+	# rather than crashing on a missing table row.
+	var pk = Site.for_lair(_lair("moonfolk", "pack-lair"), _party(), _world())
+	pk.depth = pk.depth_total() - 1
+	pk.enter(0)
+	check(String(pk.room.get("title", "")) == "WHAT THE LAIR WAS BUILT AROUND",
+		"an unknown faction still gets the plain last room")
 
 	# --- D1: a disturbed lair does not wait forever ------------------------
 	# Locked with the user: enter a lair and you have a day or two to finish it.

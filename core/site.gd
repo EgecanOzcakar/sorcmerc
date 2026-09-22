@@ -156,6 +156,9 @@ var state := "picking"
 var log: Array = []
 var rng
 var _rested := false     # T19: did this delve stop for its short rest?
+# core/rules/power.gd's reading of the party at the MOUTH of this lair, taken
+# once per entry and used to price every room below it. See _held().
+var entry_score := 0.0
 
 
 static func for_lair(lair, party, world):
@@ -168,7 +171,42 @@ static func for_lair(lair, party, world):
 	s.rng = RNG.new(maxi(1, absi(hash("site|%s" % lair.id))))
 	s.rooms = _build(lair, s.rng)
 	s.depth = clampi(int(lair.depth_cleared), 0, s.rooms.size() - 1)
+	# Taken here and nowhere else: this is the party at the mouth. Withdrawing
+	# and coming back calls for_lair() again, which is correct — they walked in
+	# again, and whatever shape they walked in with is what the rest of the
+	# descent is priced for.
+	s.entry_score = Scaler.party_score(party.party_characters())
 	return s
+
+
+# A lair is priced for the party that WALKED IN, not for the party standing in
+# the doorway of the room it is about to build.
+#
+# MEASURED (2026-09-22, tests/sweep_site_depth.gd) — core/rules/power.gd's
+# estimate() reads a combatant's ehp off max_hp and never off hp, so the only
+# thing the scaler can see about a party's condition is how many spell slots
+# are left. Inside a site that reads backwards. The same dragon's boss room,
+# same party, one variable moved: at 64% slots it is five bodies whether the
+# party is at 20% HP or 100%; hold HP at 67% and walk the slots from 0% to
+# 100% and it goes 80.1 -> 145.3 in budget, three bodies to five. So spending
+# slots used to shrink the next fight and RESTING used to grow it — at level 8
+# the rest room bought 67% HP instead of 49% and the boss win rate fell, 23.7%
+# to 18.3%, because the budget it handed back was worth more than the healing.
+#
+# This is the site-local answer to that: hold the entry reading and correct the
+# scale so every room comes out the size it would have been at the mouth. It
+# moves no global number — a party at a lair's mouth is the full-HP party every
+# existing sweep already measures — and it makes the descent say one thing:
+# the lair is what it is, and your condition decides whether you can take it,
+# rather than deciding what is in it. The root fix, teaching estimate() to read
+# hp, is a re-tune of everything and is in the expansion plan's Still open.
+#
+# Unclamped on purpose. Levelling up mid-delve (the world screen banks XP per
+# room) raises `now` above `then` and pulls this below 1.0, which is the same
+# statement read the other way: the lair does not get harder because the party
+# got stronger halfway down it either.
+func _held() -> float:
+	return Scaler.held_at(entry_score, Scaler.party_score(party.party_characters()))
 
 
 # How many rooms deep this lair runs, before anything is generated — the world
@@ -258,11 +296,97 @@ static func _support_room(rng, used: Dictionary, d: int) -> Dictionary:
 	return r
 
 
+# A boss for the ten factions that have no board of their own, and so never had
+# one.
+#
+# campaign.gd's BOSS_POOL is keyed by THEME and holds six entries — the linear
+# route's climaxes, reused here because they carry measured win rates and there
+# was no reason to invent a second unmeasured set. But a theme is a BOARD, and
+# only five factions have one, so _boss_room fell through for orc, gnoll,
+# kobold, cultist, soldier, monstrosity, fey, elemental, construct and dragon:
+# a plain "hard" roster with no lead at all, and the title "WHAT THE LAIR WAS
+# BUILT AROUND" — a description where every real boss has a name. Two thirds of
+# the lairs in the game ended in a slightly bigger version of the room before
+# it, which is what the level-8 column of tests/sweep_site_kin.gd was saying
+# when every one of those lairs came out a flat 100% clear while a giant hold
+# with a real oni in it came out 25%.
+#
+# Same two shapes BOSS_POOL uses, and for the same reasons:
+#   "bestiary" — a rare, high-CR creature of the faction's own kin, pulled out
+#                of the ordinary pool by _boss_lead_exclusion() so that meeting
+#                it is a reveal rather than the third one today.
+#   "elite"    — the faction's ordinary creature with a title and an extra
+#                attack, for the three whose bestiary pool is one or two thin
+#                entries (orc has ONE, gnoll and kobold two). scaler.boss_for's
+#                mult knob does the rest and the budget's remainder buys escort,
+#                exactly as the arrow-chief's does.
+#
+# `lead_features` is the special, and it is the point of the pass: one feature
+# out of data/effects/features.json that the base statblock does NOT already
+# carry, picked so the fight asks a question the rooms above it did not. The
+# specials are deliberately all different — a boss the party has to reach fast
+# (the mage's charm), out-damage (the hag's regeneration), stand up to (the
+# elemental's knockdown), or out-last (the golem's relentless).
+#
+# MEASURED — tests/sweep_faction_boss.gd, the same shape tests/test_scaler.gd's
+# _sweep_boss uses for BOSS_POOL's own numbers: 40 seeds a boss, level-3 preset
+# party at full HP, the boss room's own spec. The grid is in
+# docs/expansion-plan.md. The band to stay inside is test_scaler's climax band
+# (15-85%), and the company to keep is BOSS_POOL's own spread — mammoth 65%,
+# oni 82.5%, arrow-chief 82.5%, shrine 77%, assassin 92.5%, captain 92.5%.
+# `mult_max` is the knob that pulls a lead back out of the top of that band by
+# spending the budget on escort instead; the arrow-chief's note explains why.
+const FACTION_BOSS := {
+	"orc": {"title": "THE WARCHIEF", "archetype": "elite", "lead": "orc",
+		"desc": "The one the rest of them are frightened of.",
+		"lead_features": ["monster-multiattack-2", "monster-relentless-10"]},
+	"gnoll": {"title": "THE ONE THAT EATS FIRST", "archetype": "elite", "lead": "gnoll",
+		"desc": "It has not had to fight for its share in a long time.",
+		"lead_features": ["monster-multiattack-2", "monster-martial-advantage"]},
+	"kobold": {"title": "THE SCALE-SINGER", "archetype": "elite", "lead": "kobold-archer",
+		"desc": "Small, and behind everything else in the room, and the reason the rest of them are brave.",
+		"lead_features": ["monster-multiattack-2", "monster-innate-bolt"]},
+	# lead_share 0.25, not the default 0.40: a mage the budget had pumped to
+	# fill four tenths of the fight came out 97.5%, softer than any boss in the
+	# game. Spending less of the fight on the lead spends more of it on bodies,
+	# and bodies are what the action economy makes dangerous (scaler.gd's own
+	# header). The cult's bodies happen to be other casters, which is the point.
+	"cultist": {"title": "THE VOICE THEY ALL ANSWER", "archetype": "bestiary", "lead": "mage",
+		"desc": "It is not the knives that are the problem. It is what they are listening to.",
+		"lead_features": ["monster-charm-gaze"], "lead_share": 0.25},
+	"soldier": {"title": "THE CAPTAIN WITH THE SCALED ARM", "archetype": "bestiary",
+		"lead": "half-red-dragon-veteran",
+		"desc": "He took something from a dragon once, and it took something back.",
+		"lead_features": ["monster-parry-3"]},
+	"monstrosity": {"title": "THE THING WITH THREE HEADS", "archetype": "bestiary", "lead": "chimera",
+		"desc": "Two of them are watching you. The third is breathing in.",
+		"lead_features": ["monster-frightful-presence"]},
+	"fey": {"title": "THE GREEN MOTHER", "archetype": "bestiary", "lead": "green-hag",
+		"desc": "Everything you have cut so far down here grew back by morning. So does she.",
+		"lead_features": ["monster-regeneration"]},
+	"elemental": {"title": "WHAT THE HILL IS MADE OF", "archetype": "bestiary", "lead": "earth-elemental",
+		"desc": "The floor stands up.",
+		"lead_features": ["monster-knockdown"]},
+	"construct": {"title": "THE THING SOMEBODY MADE", "archetype": "bestiary", "lead": "flesh-golem",
+		"desc": "Whoever built it is one of the parts.",
+		"lead_features": ["monster-relentless-14"]},
+	# CR 6, a notch under the oni's 7, and not the CR 10 young red the first cut
+	# reached for: boss_for's mult knob can raise a lead for the deeps and has no
+	# way to lower one, so a lead priced above the boss band is a lead that is
+	# 0% at every level below it. The dragon still out-carries every other lead
+	# here on features alone — three attacks, a rider and the greater breath.
+	"dragon": {"title": "THE WYRM AT THE BOTTOM", "archetype": "bestiary", "lead": "young-white-dragon",
+		"desc": "Everything above this room was somebody it let live.",
+		"lead_features": ["monster-magic-resistance"]},
+}
+
 # The last room. Where a tuned boss exists for this lair's own board it is used
 # — campaign.gd's BOSS_POOL entries carry measured win rates (scaler.gd's TUNING
-# header), and there is no reason to invent a second, unmeasured set. A faction
-# with no themed boss (dragon, currently) gets a plain hard roster instead,
-# which is the same fallback contract every other lookup in this codebase uses.
+# header), and there is no reason to invent a second, unmeasured set. Failing
+# that, the faction's own boss above. Failing BOTH — a content pack's faction
+# this build has never heard of — the plain hard roster that every lair used to
+# get, which is the same fallback contract every other lookup in this codebase
+# uses.
 static func _boss_room(lair, theme: String, total: int) -> Dictionary:
 	for b in Campaign.BOSS_POOL:
 		if String(b.get("theme", "")) == theme and theme != "":
@@ -271,6 +395,17 @@ static func _boss_room(lair, theme: String, total: int) -> Dictionary:
 			r["depth"] = total - 1
 			r["gold"] = BOSS_CACHE + BOSS_CACHE_PER_DEPTH * total
 			return r
+	var own: Dictionary = FACTION_BOSS.get(lair.faction, {})
+	if not own.is_empty():
+		var r: Dictionary = own.duplicate(true)
+		r["id"] = "%s-master" % lair.id
+		r["kind"] = "combat"
+		r["boss"] = true
+		r["difficulty"] = "hard"
+		r["theme"] = theme          # "" — the roster comes off the pinned seed
+		r["depth"] = total - 1
+		r["gold"] = BOSS_CACHE + BOSS_CACHE_PER_DEPTH * total
+		return r
 	return {"id": "%s-master" % lair.id, "kind": "combat", "boss": true,
 		"title": "WHAT THE LAIR WAS BUILT AROUND", "difficulty": "hard",
 		"desc": "It has been listening to you come down.", "theme": theme,
@@ -335,22 +470,62 @@ func combat_spec() -> Dictionary:
 		return {}
 	var theme: String = String(room.get("theme", ""))
 	var seed_v: int = rng.seed_value + hash(String(room.get("id", "")))
+	# A lair is its own people, all the way down. theme_for_faction() returns ""
+	# for the ten factions with no board of their own (orc, gnoll, kobold,
+	# cultist, soldier, monstrosity, fey, elemental, construct, dragon), and for
+	# those core/scaler.gd's _faction_order reads the faction off the SEED —
+	# which is per-room here, so without this line each room rolled a fresh
+	# arbitrary people and a dragon's cave was six rooms of six of them.
+	# pin_faction touches only the remainder that carries the faction, so the
+	# rooms still differ from each other in every other way.
+	#
+	# MEASURED — tests/sweep_site_kin.gd, 30 whole delves a faction, level-3
+	# preset party, lair at the origin so the band clamp above is a no-op. The
+	# grid is in docs/expansion-plan.md; the shape of it is that a themeless
+	# lair drew from all fifteen factions before and draws from one after, and
+	# that what the party gets through moves by faction rather than in one
+	# direction — a pinned lair lands on its own people's number instead of on
+	# the average of a random draw. Re-run it before changing anything here.
+	if theme == "":
+		seed_v = Scaler.pin_faction(seed_v, lair.faction)
 	# D6: a lair is built for the country it stands in. Inside the band this is
 	# 1.0 and changes nothing; outside it, a warren three days past the last
 	# waystone is a frontier warren whoever walks in. The boss takes maxf(1.0, x)
 	# — T92's rule that a climax is never scaled DOWN still holds, and it is this
 	# call site that holds it (core/scaler.gd's boss_for takes the knob neutrally).
 	var band: float = Regions.power_scale(world, lair.position, party)
+	# ...times the entry correction, so the two knobs compose the way the world
+	# screen's two do: the band says how dangerous this country is, `held` says
+	# the descent is priced for the party that came through the door.
+	#
+	# T92's floor goes on the COMPOSED scale, `maxf(1.0, band * held)`, and not
+	# on the band alone with `held` multiplied over it. Stacking two upward
+	# corrections is how the first cut of this made the level-8 boss a 0/48
+	# wall: at the origin a level-8 party reads band 0.320, so its rooms are
+	# priced at a third while the floor already hands the boss a 3.1x jump over
+	# them, and `held` was making that 3.75x. Floored together, an outgrown
+	# lair's climax stays exactly the fight it was (0.320 * 1.2 is still under
+	# 1.0) and `held` only bites where the country is not already discounting —
+	# which is the case it was built for.
+	var held: float = _held()
 	var spec: Dictionary = Scaler.boss_for(party.party_characters(), room, seed_v,
-			maxf(1.0, band)) if room.has("lead") \
+			maxf(1.0, band * held)) if room.has("lead") \
 		else Scaler.roster_for(party.party_characters(), String(room.get("difficulty", "normal")),
-			{}, theme, seed_v, band, _boss_lead_exclusion())
+			{}, theme, seed_v, band * held, _boss_lead_exclusion())
 	# Objectives: the gate holds against waves drawn from the same faction at
 	# WAVE_SCALE of an easy roster; the pens hold a captive on a deadline.
+	#
+	# `lair.faction` for the same reason scenes/world/world.gd's road hold
+	# passes the band's: waves_for gives each wave its own roll with a `+ 17`
+	# that is not a multiple of FACTIONS.size(), so without it the offset walks
+	# each wave off the people the room itself was drawn from. Pinning the room
+	# seed above is not enough on its own — both have to move, which is what
+	# the note here used to say was not yet true.
 	match String(room.get("objective", "")):
 		"hold":
 			spec["objective"] = Objectives.make("hold", {"waves": Objectives.waves_for(
-				party.party_characters(), theme, seed_v, band, _boss_lead_exclusion())})
+				party.party_characters(), theme, seed_v, band * held, _boss_lead_exclusion(),
+				lair.faction)})
 		"rescue":
 			spec["objective"] = Objectives.make("rescue")
 	spec["theme"] = theme if theme != "" else Campaign.BOSS["theme"]

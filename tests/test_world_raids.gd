@@ -9,6 +9,7 @@ const WorldLairs = preload("res://core/world_lairs.gd")
 const Raids = preload("res://core/raids.gd")
 const Objectives = preload("res://core/objectives.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 var _pass := 0
 var _fail := 0
@@ -30,6 +31,17 @@ func said(node: Node, text: String) -> bool:
 		if text in l:
 			return true
 	return false
+
+# Every faction a roster list draws from, deduped and sorted — one entry means
+# the whole thing is one people's.
+func _kin_of(waves: Array) -> Array:
+	var seen := {}
+	for wave in waves:
+		for m in wave:
+			seen[String(Catalog.monster(String(m["id"])).get("faction", ""))] = true
+	var out: Array = seen.keys()
+	out.sort()
+	return out
 
 func _label_for(main, id: String) -> String:
 	for m in main.ground_marks():
@@ -72,7 +84,7 @@ func _init() -> void:
 	# ...and a hold has waves, or combat.gd calls it held at round six whatever
 	# stands: one roster per WAVE_ROUNDS entry, each a list of {id, count, mult}
 	var spec: Dictionary = main.encounter_spec(b)
-	check(not Objectives.waves_for(main.party.party_characters(), String(spec["theme"]), absi(hash(b.id)), 1.0).is_empty(),
+	check(not Objectives.waves_for(main.party.party_characters(), String(spec["roster_theme"]), absi(hash(b.id)), 1.0).is_empty(),
 		"the band's theme draws waves")
 	var waves: Array = main._hold_waves(b, spec, WorldThreat.assess(main.party))
 	check(waves.size() == Objectives.WAVE_ROUNDS.size(), "the gate fight's waves: one per WAVE_ROUNDS entry (%d)" % waves.size())
@@ -82,6 +94,19 @@ func _init() -> void:
 		for m in wave:
 			shaped = shaped and m is Dictionary and m.has("id") and int(m.get("count", 0)) > 0 and m.has("mult")
 	check(shaped, "...each a roster of {id, count, mult} with something in it (%s)" % str(waves))
+	check(_kin_of(waves) == ["goblinoid"], "the warren's waves are the warren's own kin (%s)" % str(_kin_of(waves)))
+	# ...and that holds for a faction with NO board of its own. Those fight on
+	# world.gd's DEFAULT_THEME with `theme` left "" so the roster comes off the
+	# seed instead, and the waves used to be drawn off the stamped board — so an
+	# orc siege was answered by forest-clearing's beasts. They read the pair the
+	# band's own roster was built from now.
+	var orcs = World.RoamingParty.new("t-orc-raid", town.position + Vector2(30, 0), "orc")
+	var ospec: Dictionary = main.encounter_spec(orcs)
+	check(String(ospec["theme"]) == "forest-clearing" and String(ospec["roster_theme"]) == "",
+		"an orc band fights on the default board, with no theme of its own")
+	check(_kin_of([ospec["monsters"]]) == ["orc"], "...its own roster is orc (%s)" % str(_kin_of([ospec["monsters"]])))
+	var okin: Array = _kin_of(main._hold_waves(orcs, ospec, WorldThreat.assess(main.party)))
+	check(okin == ["orc"], "...and so are its waves, not the board's beasts (%s)" % str(okin))
 	b.position = town.position + Vector2(600, 0)
 	check(main._road_objective(b, "").is_empty(), "...and out on the road it is a plain fight")
 	b.position = Vector2(b.ai["to"])

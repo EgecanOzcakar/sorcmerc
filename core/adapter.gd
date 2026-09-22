@@ -302,8 +302,15 @@ static func from_monster(m: Dictionary, team: String, pos: Vector2i):
 	c.max_hp = int(m["max_hp"])
 	c.hp = int(m.get("hp", m["max_hp"]))
 	c.saves = m.get("saves", {}).duplicate()
+	# An immunity behind a weapon clause comes back as RESISTANCE, not immunity
+	# — see _damage_types_split for why that is the honest reading and not a
+	# softening.
+	var im: Dictionary = _damage_types_split(m.get("immune", []))
+	c.immune = im["plain"]
 	c.resist = _damage_types(m.get("resist", []))
-	c.immune = _damage_types(m.get("immune", []))
+	for t in im["qualified"]:
+		if not t in c.resist:
+			c.resist.append(t)
 	c.vulnerable = _damage_types(m.get("vulnerable", []))
 	c.cond_immune = Array(m.get("cond_immune", []).duplicate())
 	c.attacks = m.get("attacks", []).duplicate(true)
@@ -319,28 +326,60 @@ static func from_monster(m: Dictionary, team: String, pos: Vector2i):
 	_finish_verbs(c, {})
 	return c
 
-# T94 — bestiary.json's damage lists are SRD prose, not ids. Four of the 316
-# entries' worth of strings are a type list plus a weapon clause:
+# T94 — bestiary.json's damage lists are SRD prose, not ids. 55 of the 316
+# entries carry a type list plus a weapon clause:
 #   "bludgeoning, piercing, and slashing from nonmagical weapons"
 #   "... from nonmagical weapons that aren't silvered" / "... adamantine"
 # Nothing in this game hands out a magical, silvered or adamantine weapon —
 # core/rules/pass_gear.gd builds every attack from data/weapons.json alone — so
-# the clause is always satisfied and the honest reading is plain resistance to
-# the types it names. If magic weapons ever become gear, this is the one function
-# that has to learn the difference.
+# the clause is always satisfied. If magic weapons ever become gear, this is the
+# one function that has to learn the difference.
+#
+# "Always satisfied" reads differently on the two lists, and reading them the
+# same way was a bug rather than a simplification. On a RESISTANCE (32 entries:
+# specters, wraiths, elementals, most of the devils) it means the halving always
+# applies, which is a hard fight and nothing worse. On an IMMUNITY it means the
+# creature cannot be hurt by a weapon AT ALL, ever, by any party in this game —
+# and 23 entries carry one: all nineteen lycanthropes, the couatl, and all three
+# golems. A level-3 trio put in a room with a flesh golem swung at AC 8 for six
+# rounds, logged "is immune to slashing — 0 damage" every time, and lost 40 of
+# 40 seeds (tests/sweep_faction_boss.gd, before this).
+#
+# So a qualified immunity is demoted to a resistance. That is the honest reading
+# of the same sentence rather than a softening of it: the creature shrugs a
+# mundane weapon, which is what this engine's `resist` means, and RAW's own
+# answer to the golem is a weapon the party is allowed to go and find. "Immune"
+# here would be a statement the rules never make — that no weapon works —
+# because the qualifier the SRD uses to make it false is not modelled. When
+# magic weapons become gear, the qualified list moves back to `immune` for
+# anyone still swinging plain steel and this note goes with it.
 const NONMAGICAL_CLAUSE := " from nonmagical weapon"
 
-static func _damage_types(list) -> Array:
-	var out: Array = []
+# The damage types a prose list names, split by whether the entry carried a
+# weapon clause. `plain` holds unconditionally; `qualified` holds only while the
+# party's weapons are mundane, which in this game is always.
+static func _damage_types_split(list) -> Dictionary:
+	var plain: Array = []
+	var qualified: Array = []
 	for entry in list:
 		var s := String(entry).to_lower()
 		var cut := s.find(NONMAGICAL_CLAUSE)
+		var into: Array = plain
 		if cut >= 0:
 			s = s.substr(0, cut)
+			into = qualified
 		for part in s.replace(" and ", ", ").split(","):
 			var t := part.strip_edges()
-			if t != "" and not t in out:
-				out.append(t)
+			if t != "" and not t in into:
+				into.append(t)
+	return {"plain": plain, "qualified": qualified}
+
+static func _damage_types(list) -> Array:
+	var d: Dictionary = _damage_types_split(list)
+	var out: Array = d["plain"]
+	for t in d["qualified"]:
+		if not t in out:
+			out.append(t)
 	return out
 
 # Unspent slots per level, the sheet's full set less slots_used.

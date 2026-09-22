@@ -579,12 +579,28 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 	if kind == "hunt":
 		spots = spots.filter(func(h): return not (h in exit))
 	var i := 0
+	# A spawn's copy number is counted per ID across the WHOLE spec, not per
+	# entry. Two entries may legitimately name the same monster — a boss and an
+	# escort of its own kin, when the faction has only that one creature in
+	# budget (core/scaler.gd's boss_for), or a pack that authors two groups of
+	# one id — and per-entry numbering gave both an unsuffixed `id`, so the
+	# fight carried two combatants answering to the same name. Everything in
+	# core/combat.gd that looks a combatant up by id (statuses, concentration,
+	# a target list) would then have found whichever came first.
+	#
+	# Unchanged for every spec that names an id once, which is all of them until
+	# now: the first copy of a lone single-count entry still spawns unsuffixed,
+	# and a count > 1 entry still numbers 1..n.
+	var copies := {}
 	for e in spec.get("monsters", []):
 		var count: int = maxi(1, int(e.get("count", 1)))
 		var mult: float = float(e.get("mult", spec.get("mult", 1.0)))
 		for n in count:
 			var pos: Vector2i = spots[i] if i < spots.size() else PARTY_STARTS[0]
-			var c = spawn(e["id"], mult, "foe", pos, n + 1 if count > 1 else 0, e.get("features", []))
+			var seen: int = int(copies.get(e["id"], 0))
+			copies[e["id"]] = seen + 1
+			var c = spawn(e["id"], mult, "foe", pos,
+				seen + 1 if (count > 1 or seen > 0) else 0, e.get("features", []))
 			if c != null:
 				if n == 0 and spec.get("named", {}).has(e["id"]):
 					c.cname = "%s the %s" % [spec["named"][e["id"]], Catalog.monster(e["id"])["cname"]]

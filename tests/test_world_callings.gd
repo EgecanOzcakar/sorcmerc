@@ -206,8 +206,60 @@ func _init() -> void:
 		if main._event_card != null:
 			main._on_event_ack()
 
+	# --- the band, and the hero who does not walk away from it ---------------
+	# core/callings.gd has always refused a dead hero's past ("the bond and the
+	# line are theirs to have"), and never got the chance to say so out here:
+	# _launch_combat ran the band_beaten check up in its victory branch, several
+	# lines ahead of _apply_deaths, so nobody in the fight was dead yet and the
+	# one hero who fell putting their own band down was paid anyway.
+	var third = party.get_member(String(party.active[2]))
+	third.background_id = "soldier"
+	var band = World.RoamingParty.new("t-deserters", p.position + Vector2(10, 0), "bandit")
+	w.parties.append(band)
+	party.callings[third.id] = {"id": "soldier", "target_kind": "band", "target_id": band.id,
+		"state": "told", "told_at": w.clock.elapsed}
+	check(await _open_fight(main, band), "the band fight opened")
+	await _finish(main, {"outcome": "Victory", "xp": 30, "gold": 5, "loot": [], "kills": [],
+		"deaths": [third.id], "objective": {}})
+	check(third.dead and not party.is_active(third.id), "the hero fell in the fight that beat their band")
+	check(party.callings[third.id]["state"] == "told" and main._calling_queue.is_empty(),
+		"...so the past is not paid: still told, no card queued")
+	main._close_spoils()
+	await process_frame
+
+	# ...and the same fight, walked away from, does pay.
+	third.dead = false
+	party.activate(third.id)
+	var band2 = World.RoamingParty.new("t-deserters-2", p.position + Vector2(10, 0), "bandit")
+	w.parties.append(band2)
+	party.callings[third.id]["target_id"] = band2.id
+	var xp_was: int = third.xp
+	check(await _open_fight(main, band2), "the rematch opened")
+	await _finish(main, {"outcome": "Victory", "xp": 30, "gold": 5, "loot": [], "kills": [],
+		"deaths": [], "objective": {}})
+	check(party.callings[third.id]["state"] == "done", "the survivor's past completes")
+	check(third.xp > xp_was, "...and is paid")
+	main._close_spoils()
+	await process_frame
+
 	print("test_world_callings: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# The world screen's own fight hand-off, driven the way tests/test_world_
+# objectives.gd drives it: put the overlay up, then fill `result` by hand
+# rather than autoplaying a board nobody is asserting on.
+func _open_fight(main, foe) -> bool:
+	main._launch_combat(foe)
+	var guard := 0
+	while main._combat == null and guard < 60:
+		await process_frame
+		guard += 1
+	return main._combat != null
+
+func _finish(main, result: Dictionary) -> void:
+	main._combat.result = result
+	for i in 8:
+		await process_frame
 
 func _named(node: Node, want: String) -> Node:
 	for c in node.get_children():

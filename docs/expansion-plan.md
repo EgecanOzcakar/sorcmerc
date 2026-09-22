@@ -6367,10 +6367,12 @@ the map mid-run.
 ### Still open
 
 - No pictures yet.
-- A gate fight's waves for a lair faction with no theme of its own (a pack's orcs,
+- ~~A gate fight's waves for a lair faction with no theme of its own (a pack's orcs,
   say) come from `encounter_spec`'s default forest theme, not the raiders'
   own kin: `_hold_waves` reads the stamped theme. Two lines when it shows —
-  stash the raw theme and seed on the spec.
+  stash the raw theme and seed on the spec.~~ — fixed 2026-09-22 (see "Two the
+  road got wrong" below). It was not two lines: the seed had to stop being
+  walked off its faction as well.
 - A raid band carries nothing home; the halved market is what it took.
 - Towns are never taken. A town that falls is the faction ladder's war (#4).
 
@@ -7546,3 +7548,664 @@ passed, 0 failed.
 - The failure was visible on #172's own run before the merge. Nothing in the
   repo makes a red required check block a merge; that is a branch-protection
   setting, not a code change.
+## Two the road got wrong — the raiders' own kin, and a past paid to the dead (2026-09-22)
+
+Two bugs in the open world's fight hand-off, both of them ordering rather than
+mechanism, and both of them the code failing to do a thing it already says in
+its own comments that it does.
+
+**The waves at the gate were somebody else's people.** Meeting a raid on the
+town it is marching on is *hold the line* (the threat-clocks note above), and a
+hold is built round reinforcements: `Objectives.waves_for()` draws one easy
+roster per `WAVE_ROUNDS` entry at `WAVE_SCALE` of the budget. `scenes/world/
+world.gd`'s `_hold_waves()` asked for those off `spec["theme"]` — and the board
+a fight is drawn on is not the same question as whose band this is.
+`encounter_spec()` stamps `theme` for the board and leaves the variable it
+built the roster from as `""` on purpose for the ten factions with no board of
+their own (orc, gnoll, kobold, cultist, soldier, monstrosity, fey, elemental,
+construct, dragon): those fight on `DEFAULT_THEME`, `forest-clearing`, and
+`core/scaler.gd`'s `_faction_order` reads their faction off the SEED instead,
+`FACTIONS[seed % size]`. `forest-clearing`'s faction is `beast`. So an orc
+siege was answered, wave after wave, by the wildlife of the board the orcs
+happened to be standing on.
+
+The threat-clocks note called this two lines — stash the raw theme and seed on
+the spec — and it is not, which is the more interesting half. `waves_for` gives
+each wave its own roll with `seed + 17 * (i + 1)`, and 17 is not a multiple of
+`FACTIONS.size()`, so the offset that makes a wave its own roster also walks it
+onto a different people: handed the raw pair and nothing else, an orc band's
+three waves came back drawn from cultists and monstrosities. Nearer, and still
+not orcs.
+
+So the rule is written down once rather than open-coded: `Scaler.pin_faction
+(seed, faction)` rewrites a seed so the themeless route picks that faction,
+touching only the remainder that carries it and leaving everything else the
+seed decides alone. `encounter_spec()` uses it where it did the arithmetic
+inline; `waves_for()` re-applies it per wave, which is exactly what makes the
+roll free and the people fixed. The pair rides the spec as `roster_theme` and
+`roster_seed` beside the stamped `theme` — NOT under `spec["seed"]`, which is
+`core/encounter.gd`'s board seed and is overwritten by `scenes/main.gd` with
+the fight's own seed before the board is built.
+
+Nothing measured moves. The waves spend the same budget at the same
+`WAVE_SCALE` on the same tier; what changes is which people that budget is
+spent on, and it changes it to the people the fight's FIRST roster was already
+drawn from. `core/scaler.gd`'s per-faction spread (fey 53% … construct 100%,
+in its own header) is the measurement that would care, and this moves the
+waves onto the band's own number instead of a number picked by where it was
+standing.
+
+**A past was paid to a hero who did not walk away from the fight.**
+`core/callings.gd` has always refused a dead hero's calling — "a dead hero's
+past does not complete: the bond and the line are theirs to have" — and
+`tests/test_callings.gd` has always asserted it. Out on the map it never got
+the chance to say so: `_launch_combat()` ran the `band_beaten` check inside its
+victory branch, some thirty lines ahead of `_apply_deaths()`, so nobody in the
+fight was dead yet when `Callings.check()` looked. The one hero who fell
+putting down the band their own past named was paid the XP, handed the
+heirloom, and given the bond.
+
+The check moves below `_apply_deaths()` and stays above the autosave, so the
+save a fight makes still carries whatever it decided — the property
+`tests/test_world_callings.gd` pins. The same reorder fixes the bond as a side
+effect: `_apply_deaths()` benches the fallen, so `_leader()` and
+`Callings._closest()` now read the party that walked away rather than possibly
+naming a corpse.
+
+Non-visual, both of them: no screenshot, `tools/run_tests.sh` is the evidence.
+Tests: `tests/test_world_raids.gd` (an orc band's own roster and its waves are
+both orc, the warren's both goblinoid), `tests/test_world_callings.gd` (the
+hero who falls beating their own band is not paid; the one who does not, is).
+
+### Still open
+
+- ~~**A lair whose faction has no board of its own draws a different people in
+  every room.**~~ — fixed in the next pass, below ("A lair is its own people").
+  The same root cause one floor down, deliberately not fixed in this one. `core/site.gd`'s `_build()` calls `theme_for_faction(lair.faction)`,
+  which returns `""` for those same ten factions, and each room then seeds its
+  roster with `rng.seed_value + hash(room.id)` — so `_faction_order` picks
+  `FACTIONS[seed % size]` afresh per room and a dragon's cave is six rooms of
+  six arbitrary peoples. The fix is the same one call (`pin_faction` on the
+  room seed), but unlike the waves it changes WHO a lair is full of, and the
+  measured per-faction win rates run from fey 53% to construct 100% — so
+  pinning a lair to its own people moves that lair's difficulty off the
+  average of a random draw and onto its faction's own number. That is a
+  balance pass with a sweep behind it, not a side effect of this one.
+- ~~A site's own gate room (`core/site.gd`'s `"hold"` objective) therefore still
+  passes no faction to `waves_for()` and keeps today's behaviour. Its room
+  roster is drawn by the bullet above; pinning its waves while the room itself
+  stays unpinned would only make the two disagree. Both move together, or
+  neither does.~~ — they moved together, below.
+- `Scaler.pin_faction()` is only reachable where a faction is known and a theme
+  is not. A faction that later earns a board of its own (a `THEME_FACTION`
+  entry) stops going through it, which is correct and worth knowing when
+  reading the two call sites.
+
+## A lair is its own people, all the way down (2026-09-22)
+
+The note above left this one open on purpose, because it is the half of the
+bug that changes WHO you fight rather than only which of them arrive second.
+
+`core/site.gd`'s `_build()` asks `theme_for_faction(lair.faction)` for the
+board a lair's rooms are fought on, and that returns `""` for ten of the
+fifteen factions — orc, gnoll, kobold, cultist, soldier, monstrosity, fey,
+elemental, construct, dragon. For those, `core/scaler.gd`'s `_faction_order`
+reads the faction off the seed instead, and the seed in here is per ROOM
+(`rng.seed_value + hash(room.id)`). So every room rolled a fresh arbitrary
+people, and which one was decided by a string hash: a dragon's cave was six
+rooms of six unrelated peoples, and the faction the lair is labelled with —
+the thing that sets its depth, its loot tier and its boss — described nothing
+that was actually in it.
+
+The fix is `Scaler.pin_faction()` on the room seed, the same call the road's
+hold waves got in the note above, plus `lair.faction` into the gate room's
+`waves_for()`. Pinning the room alone would only have made a gate room and
+its own reinforcements disagree, which is exactly what the note left in that
+file said was not yet true.
+
+### The sweep
+
+`tests/sweep_site_kin.gd`, committed with this. It autoplays a whole delve per
+seed on ONE set of resources the way a real one runs — HP, slots and pools
+carry room to room through `Adapter`, a rest room the only thing that gives
+any of it back — and reports, per lair faction, how many rooms the party won
+and how often it reached the bottom. The lair sits at the origin so
+`core/regions.gd`'s band clamp is a no-op and the faction is the only thing
+that moves; it always takes the first option at each depth, which is a fixed
+policy on both sides rather than a model of how anybody plays.
+
+**30 delves a faction, level-3 preset party** (rooms won / cleared):
+
+| faction | board | depth | before | after |
+|---|---|---|---|---|
+| goblinoid | yes | 3 | 2.20 / 43.3% | 2.20 / 43.3% |
+| beast | yes | 3 | 2.30 / 46.7% | 2.30 / 46.7% |
+| undead | yes | 3 | 2.00 / 40.0% | 2.00 / 40.0% |
+| bandit | yes | 3 | 2.00 / 53.3% | 2.00 / 53.3% |
+| giant | yes | 4 | 2.50 / 30.0% | 2.50 / 30.0% |
+| kobold | no | 4 | 2.10 / 20.0% | 2.10 / 13.3% |
+| orc | no | 4 | 2.23 / 23.3% | 2.60 / 30.0% |
+| gnoll | no | 4 | 2.37 / 23.3% | 2.23 / 16.7% |
+| cultist | no | 5 | 2.67 / 13.3% | 1.07 / 0.0% |
+| soldier | no | 5 | 2.27 / 10.0% | 3.00 / 6.7% |
+| monstrosity | no | 5 | 2.90 / 23.3% | 2.90 / 26.7% |
+| fey | no | 5 | 2.67 / 10.0% | 1.93 / 3.3% |
+| elemental | no | 6 | 2.33 / 0.0% | 1.70 / 0.0% |
+| construct | no | 6 | 2.47 / 0.0% | 3.43 / 6.7% |
+| dragon | no | 6 | 2.87 / 16.7% | 1.93 / 0.0% |
+
+**20 delves a faction, level-8 party** — because the deep factions floor at 0%
+cleared down at level 3, and a floor hides whatever the change did:
+
+| faction | board | depth | before | after |
+|---|---|---|---|---|
+| goblinoid | yes | 3 | 2.80 / 80.0% | 2.80 / 80.0% |
+| beast | yes | 3 | 2.80 / 80.0% | 2.80 / 80.0% |
+| undead | yes | 3 | 3.00 / 100% | 3.00 / 100% |
+| bandit | yes | 3 | 2.45 / 45.0% | 2.45 / 45.0% |
+| giant | yes | 4 | 3.25 / 25.0% | 3.25 / 25.0% |
+| kobold | no | 4 | 4.00 / 100% | 3.95 / 95.0% |
+| orc | no | 4 | 4.00 / 100% | 4.00 / 100% |
+| gnoll | no | 4 | 4.00 / 100% | 4.00 / 100% |
+| cultist | no | 5 | 5.00 / 100% | 4.80 / 90.0% |
+| soldier | no | 5 | 5.00 / 100% | 5.00 / 100% |
+| monstrosity | no | 5 | 5.00 / 100% | 5.00 / 100% |
+| fey | no | 5 | 5.00 / 100% | 4.95 / 95.0% |
+| elemental | no | 6 | 6.00 / 100% | 5.55 / 65.0% |
+| construct | no | 6 | 6.00 / 100% | 6.00 / 100% |
+| dragon | no | 6 | 6.00 / 100% | 5.90 / 95.0% |
+
+### What the numbers say
+
+**The control holds.** Every faction with a board of its own is byte-identical
+before and after, at both levels. The pin cannot reach them, and if the
+harness had drifted under the measurement those rows would say so.
+
+**Nothing in the early game moves at all.** `Regions.HOMES` puts bandit, beast
+and goblinoid in the heartland and nothing else — all three have boards. A new
+party's local lairs are exactly the unaffected ones; the marches add kobold,
+orc and gnoll, and those move by 6.7 points or less, in both directions.
+
+**It moves by faction, not in one direction.** orc +6.7 and construct +6.7
+against cultist −13.3 and dragon −16.7. This is `core/scaler.gd`'s own
+per-faction spread (fey 53% … construct 100%, in its header) arriving where it
+always should have: before, a lair averaged over a random draw of all fifteen
+peoples, which is a number that describes no faction in particular. After, it
+lands on the number of the people whose lair it is. The mean across the ten
+does drift down (14.0% → 10.3% cleared at level 3), and the factions doing
+most of that are the frontier and deeps ones, met at a band where the clamp
+raises the roster anyway and a level-3 party has no business standing.
+
+**The level-8 grid found something else.** Before the change, every themeless
+lair was a flat 100% walkover for a level-8 party while a giant hold cleared
+25%. That is not the roster — it is the boss. See below.
+
+Tests: `tests/test_site.gd` walks every room of six lairs and checks no room
+draws a people other than the lair's. `Scaler.MIX` (`snik`, `vess`, `kritch`,
+`grull`) is the documented fallback where nothing in a faction fits the budget
+and carries no faction of its own, so the check skips it rather than failing on
+it — and at the level-3 heartland budget no themeless faction needed it. A
+content pack's unknown faction is handed back unpinned and keeps today's
+behaviour.
+
+### Still open
+
+- **Ten of the fifteen factions have no boss at all.** `core/campaign.gd`'s
+  `BOSS_POOL` is keyed by THEME and holds six entries, covering undead,
+  goblinoid, giant, bandit and beast. `_boss_room()` matches on
+  `b.theme == theme and theme != ""`, so for the other ten it falls through to
+  a generic `"hard"` roster with no `lead` — no pumped elite, no measured win
+  rate, and the title `"WHAT THE LAIR WAS BUILT AROUND"`, which is a
+  description where every real boss has a name (`"THE ONI OF THE DEEP ICE"`,
+  `"THE ARROW-CHIEF"`). That is what the level-8 grid is showing: a lair with
+  a real boss is a fight at the bottom and a lair without one is not.
+  `core/site.gd:263` says "A faction with no themed boss (dragon, currently)";
+  it is ten, not one. Fixing it is authoring — a named lead per faction with
+  its own swept win rate, the way the six existing ones were done — not a
+  line of code.
+- The sweep places every lair at the origin to isolate the faction. Real
+  placement is `Regions.HOMES` plus the band clamp, so the absolute numbers
+  above are a controlled A/B and not what a player meets. A per-band sweep is
+  the follow-up if the boss work above ever changes these.
+- Nothing about a room's PROSE knows its faction: `COMBAT_ROOMS` is
+  deliberately faction-agnostic ("a collapsed gallery reads the same whether
+  goblins or the dead are holding it") and that is still the call. But now
+  that the roster is reliably one people, a per-faction room pool is a content
+  seam that would actually pay — the `ponytail` at `core/site.gd:95` already
+  names it.
+
+## A boss for the ten factions that never had one (2026-09-22)
+
+The note above closed on this: `core/campaign.gd`'s `BOSS_POOL` is keyed by
+THEME and holds six entries, and a theme is a BOARD, so only five factions had
+a climax. `_boss_room()` fell through for the other ten — orc, gnoll, kobold,
+cultist, soldier, monstrosity, fey, elemental, construct, dragon — to a plain
+`"hard"` roster with no lead at all and the title `"WHAT THE LAIR WAS BUILT
+AROUND"`, a description where every real boss has a name (`"THE ONI OF THE
+DEEP ICE"`, `"THE ARROW-CHIEF"`). Two thirds of the lairs in the game ended in
+a slightly bigger version of the room before them, which is what the level-8
+column of the previous entry's grid was saying when every themeless lair came
+out a flat 100% clear and a giant hold with a real oni in it came out 25%.
+
+`core/site.gd`'s `FACTION_BOSS` is the other ten, keyed by faction, in the
+same two shapes `BOSS_POOL` uses and for the same reasons. `"bestiary"` is a
+distinctive creature of the faction's own kin, pulled out of the ordinary pool
+by `_boss_lead_exclusion()` so that meeting it is a reveal rather than the
+third one today. `"elite"` is the faction's ordinary creature with a title and
+an extra attack, for the three whose bestiary pool is one or two thin entries
+— **orc has exactly one**, gnoll and kobold two — and there `boss_for`'s mult
+knob does the work and the budget's remainder buys escort, exactly as the
+arrow-chief's does.
+
+`lead_features` is the special, and it is the point of the pass: one feature
+out of `data/effects/features.json` that the base statblock does NOT already
+carry, picked so the last room asks a question the rooms above it did not. The
+ten are deliberately all different — a boss to reach fast (the mage's charm), to
+out-damage (the hag's regeneration), to stand up to (the elemental's knockdown),
+to out-last (the golem's relentless).
+
+### The boss sweep
+
+`tests/sweep_faction_boss.gd`, committed with this. Deliberately the same shape
+`tests/test_scaler.gd`'s `_sweep_boss` uses for `BOSS_POOL`'s own published
+numbers, so a new row is comparable to an old one: 40 seeds, one boss room per
+seed, a level-3 preset party at FULL HP. That is the boss on its own terms, not
+the boss at the bottom of four rooms of attrition — `tests/sweep_site_kin.gd`
+measures that, and the two are not the same number.
+
+The five themed bosses come through this harness unchanged by the pass and are
+the control and the yardstick at once:
+
+| faction | board | title | win |
+|---|---|---|---|
+| goblinoid | yes | THE ARROW-CHIEF | 70.0% |
+| beast | yes | THE THING IN THE TREELINE | 80.0% |
+| undead | yes | THE SUNKEN SHRINE | 90.0% |
+| bandit | yes | THE KNIFE IN THE SQUARE | 90.0% |
+| giant | yes | THE ONI OF THE DEEP ICE | 77.5% |
+| orc | no | THE WARCHIEF | 67.5% |
+| gnoll | no | THE ONE THAT EATS FIRST | 77.5% |
+| kobold | no | THE SCALE-SINGER | 77.5% |
+| cultist | no | THE VOICE THEY ALL ANSWER | 87.5% |
+| soldier | no | THE CAPTAIN WITH THE SCALED ARM | 95.0% |
+| monstrosity | no | THE THING WITH THREE HEADS | 92.5% |
+| fey | no | THE GREEN MOTHER | 70.0% |
+| elemental | no | WHAT THE HILL IS MADE OF | 55.0% |
+| construct | no | THE THING SOMEBODY MADE | 85.0% |
+| dragon | no | THE WYRM AT THE BOTTOM | 32.5% |
+
+Nine of the ten are inside the control's own 70-90% spread or within a few
+points of it. Two are worth naming rather than smoothing over:
+
+**cultist** first measured 97.5%, softer than any boss in the game, and is
+pulled to 87.5% with `lead_share: 0.25` instead of the default 0.40. Less of
+the fight spent on the lead is more of it spent on bodies, and bodies are what
+the action economy makes dangerous — `core/scaler.gd`'s own header says so, and
+the arrow-chief's `mult_max` note is the same knob from the other end. The
+cult's bodies happen to be other casters, which is the point of it.
+
+**soldier** measures 95.0% and is left there. Its lead is already at `MULT_MIN`,
+so `lead_share` cannot move it, and the cause is not this table: `power.gd`
+prices a guard and a noble well above how they actually fight, so the escort
+budget buys less fight than it thinks it does. That is the chaff-vs-chunk
+ponytail in `core/campaign.gd`, and chasing it from here would be tuning a
+number to hide a pricing bug.
+
+**dragon** at 32.5% is the hardest thing in the game and is meant to be. It is
+inside `test_scaler`'s 15-85% climax band, and it is measured at level 3 for a
+faction `Regions.HOMES` only ever places in the deeps. The first cut reached for
+`young-red-dragon` (CR 10) and measured 0.0% at every seed: `boss_for`'s mult
+knob can raise a lead for the deeps and has no way to lower one, so a lead
+priced above the boss band is a lead that is 0% at every level below it. CR 6
+is the fix, and the dragon still out-carries every other lead here on features
+alone — three attacks, an elemental rider and the greater breath.
+
+### And the delve the boss is at the bottom of
+
+`tests/sweep_site_kin.gd` again, the same two grids the entry above published,
+re-run with the bosses in. Cleared %, 20 delves a faction, level-8 party — the
+column where the gap showed, because down at level 3 most delves never reach
+the last room at all:
+
+| faction | board | depth | before | with a boss |
+|---|---|---|---|---|
+| goblinoid | yes | 3 | 80.0% | 80.0% |
+| beast | yes | 3 | 80.0% | 80.0% |
+| undead | yes | 3 | 100% | 100% |
+| bandit | yes | 3 | 45.0% | 45.0% |
+| giant | yes | 4 | 25.0% | 25.0% |
+| kobold | no | 4 | 95.0% | 35.0% |
+| orc | no | 4 | 100% | 20.0% |
+| gnoll | no | 4 | 100% | 15.0% |
+| cultist | no | 5 | 90.0% | 0.0% |
+| soldier | no | 5 | 100% | 70.0% |
+| monstrosity | no | 5 | 100% | 30.0% |
+| fey | no | 5 | 95.0% | 15.0% |
+| elemental | no | 6 | 65.0% | 10.0% |
+| construct | no | 6 | 100% | 90.0% |
+| dragon | no | 6 | 95.0% | 25.0% |
+
+The controls are byte-identical a third time, which is the guard this pass has
+leaned on throughout: nothing here can reach a faction that already had a boss.
+
+The swing looks enormous read as a column and is mostly the depth curve read
+the wrong way round. **Match the depths and it lines up with the reference it
+was built against**: at depth 4 the giant hold with a real oni in it clears
+25%, and the three new depth-4 lairs clear 35% (kobold), 20% (orc) and 15%
+(gnoll). That is the same fight, priced the same way. There is no themed lair
+at depth 5 or 6 to compare against, because `depth_for` scales depth by faction
+index and every faction past the fifth is one of the ten that had no boss —
+which is exactly why the hole was invisible until something was put in it.
+
+Two rows to name rather than smooth:
+
+**cultist, 0.0%.** Not the boss on its own terms — it measures 87.5% at full
+HP, the softest of the ten. It is the five rooms in front of it: the party wins
+4.00 of them and loses the fifth every time, arriving at a caster with nothing
+left. A cult of casters is the roster that punishes an adventuring day hardest,
+and depth 5 gives it four rooms to do it in.
+
+**construct, 90.0%**, at the same depth as the dragon's 25%. Golems are AC 9-17
+with no ranged option, so a level-8 party kites them; the boss went from
+unkillable to nearly free in one change, and neither number was ever about the
+boss's design.
+
+Both of those are the pre-existing depth curve and `power.gd`'s pricing showing
+through a hole that used to be plugged by "there is no boss". Neither is a
+reason to retune ten bosses that land correctly at the one depth where a
+calibrated comparison exists. A depth-aware pass — `depth_for` against the
+measured clear rates, rather than against a faction's index in a list — is the
+follow-up, and it is in Still open.
+
+### Two bugs the measurement turned up
+
+**Every golem in the bestiary was unkillable.** `core/adapter.gd` strips the
+`" from nonmagical weapons"` clause and keeps the types it names, because
+nothing in this game hands out a magical, silvered or adamantine weapon, so the
+clause always holds. That reading is right on a RESISTANCE — 32 entries, the
+specters and wraiths and elementals and most of the devils, halved damage, a
+hard fight and nothing worse. On an IMMUNITY the same reading says the creature
+cannot be hurt by a weapon AT ALL, by any party, ever — and 23 entries carry
+one: all nineteen lycanthropes, the couatl, and all three golems. A level-3
+trio put in a room with a flesh golem swung at AC 8 for six rounds, logged
+`is immune to slashing — 0 damage` every time, and lost 40 of 40 seeds.
+
+A qualified immunity is demoted to a resistance now. That is the honest reading
+of the same sentence rather than a softening of it: the creature shrugs a
+mundane weapon, which is what this engine's `resist` means, and RAW's own answer
+to the golem is a weapon the party is allowed to go and find. "Immune" here
+would be a statement the rules never make — that no weapon works — because the
+qualifier the SRD uses to make it false is not modelled. The construct boss went
+0% to 85% on that one change. Test: `test_qualified_immunity_is_resistance` in
+`tests/test_monster_defenses.gd`.
+
+Worth saying plainly: the previous entry's pin made construct lairs draw only
+construct, which raised the odds of meeting this rather than causing it. It was
+live on master for every roster that ever drew a golem.
+
+**A boss whose faction has one creature stood alone in an empty room.**
+`Scaler.boss_for` filters the lead out of its own escort, and it had to,
+because two entries naming one id both spawned an UNSUFFIXED combatant and
+`core/combat.gd` looks combatants up by id — statuses, concentration, a target
+list would all have found whichever came first. `orc`'s bestiary pool is that
+one entry, so the filter emptied the order, nothing was appended, and the whole
+escort budget went unspent: a 100% "boss" that was one slightly larger orc.
+
+Fixed at the bottom rather than patched at the top. `core/encounter.gd`'s
+`build()` counts copies per ID across the WHOLE spec instead of per entry, so
+the ids stay distinct however many entries name the same monster; the filter no
+longer carries that weight, and the escort falls back to the lead's own kin when
+there is nobody else to send. Unchanged for every spec that names an id once,
+which is all of them until now — the first copy of a lone single-count entry
+still spawns unsuffixed and a count > 1 entry still numbers 1..n — and it closes
+the same trap for a content pack authoring two groups of one monster.
+
+### Still open
+
+- **`power.gd` misprices the soldier faction**, which is why that boss sits at
+  95% with its budget fully spent. Same family as the chaff-vs-chunk ponytail
+  in `core/campaign.gd` and `core/scaler.gd`'s own note that the win-rate spread
+  is a pricing ceiling rather than a mapping. A re-priced `estimate()` is a
+  balance pass of its own and would move every number in this file.
+- **No lair boss pays anything extra for being harder.** `campaign.gd`'s
+  `_xp_mult()` turns a boss's `win_rate` under `BOSS_REF_WIN_RATE` into bonus
+  XP, and it is read by the linear run only; a site's XP is `Site.clear_xp`,
+  which is flat. So the dragon at 32.5% and the captain at 95.0% pay the same.
+  The measured numbers above are what such a bonus would be built from.
+- **Magic weapons.** They are the SRD's own answer to a golem, and the note in
+  `core/adapter.gd` says what has to change when they become gear: the qualified
+  list moves back to `immune` for anyone still swinging plain steel.
+- The lycanthropes and the couatl carry the same qualified immunity and are
+  fixed by the same change, but nothing rosters them today — `humanoid` and
+  `celestial` are not in `Scaler.FACTIONS`. A content pack naming one directly
+  would have hit the same wall.
+- ~~**`depth_for` scales a lair's depth by its faction's index in a list**~~ —
+  investigated the same day and NOT what is wrong; see "What a room of depth
+  costs" below. That mapping agrees with the authored `Regions.HOMES` ordering
+  on 11 of 15 factions, and the depth curve turned out to be a symptom of
+  something a good deal larger in `core/rules/power.gd`.
+
+## What a room of depth costs — and what the scaler can see (2026-09-22, measurement only)
+
+No code changed. The entry above closed on "a depth pass measured against clear
+rates rather than against a list index", and that turned out to be the wrong
+suspect. `depth_for`'s faction-to-depth mapping agrees with the authored
+`Regions.HOMES` ordering on 11 of 15 factions; the four it disagrees on (undead,
+giant, soldier, fey) are worth a tidy one day and are not what anybody would
+feel. What is wrong is underneath it.
+
+### Taking depth apart from faction
+
+`tests/sweep_site_kin.gd` reports whether a delve was CLEARED, per faction, and
+that column cannot answer the question, because `depth_for` gives each faction
+exactly one depth — "deeper lairs clear less" and "these peoples are harder"
+are the same number. `tests/sweep_site_depth.gd` reports the CONDITIONAL rate
+instead: of the parties that reached room d, how many won room d. Rooms at the
+same index pool across factions, so the curve is the depth cost with the people
+averaged out, and it prints what the party walked in with.
+
+One correction had to come first. `core/site.gd`'s `_build` puts a COMBAT room
+at `picks[0]` always — "at least one way on is always a fight" — so a rest or a
+cache is only ever `picks[1]` or `[2]`. A robot taking `opts[0]` never rests and
+never loots. That is a floor, not a reading, so the sweep takes a `POLICY` and
+the two runs below bracket real play.
+
+20 seeds a faction, the three 6-room factions (elemental, construct, dragon),
+conditional win rate per room with HP and slots on entry:
+
+| | d0 | d1 | d2 | d3 | d4 | d5 (boss) |
+|---|---|---|---|---|---|---|
+| **level 3, never rests** | 93.3% | 76.8% | 55.8% | 41.7% | 50.0% | **0.0%** |
+| *hp / slots in* | 100/100 | 62/76 | 41/45 | 31/11 | 29/5 | 9/0 |
+| **level 3, rests** | 95.5% | 82.5% | 74.3% | 71.0% | 62.5% | **29.2%** |
+| *hp / slots in* | 100/100 | 70/80 | 64/67 | 59/49 | 61/41 | 52/26 |
+| **level 8, never rests** | 100% | 100% | 100% | 98.3% | 100% | **23.7%** |
+| *hp / slots in* | 100/100 | 85/88 | 72/75 | 63/67 | 57/58 | 49/50 |
+| **level 8, rests** | 100% | 100% | 100% | 100% | 100% | **18.3%** |
+| *hp / slots in* | 100/100 | 89/90 | 81/84 | 76/78 | 73/71 | 67/64 |
+
+Two readings, and the second one is the finding.
+
+**At level 3 the delve is a real gradient and at level 8 it is a corridor with
+a wall at the end.** Every ordinary room at level 8 is a 100% win; all of the
+difficulty is the boss. At level 3 every room carries risk. An earlier two-seed
+run of this sweep said "depth adds no risk, only attrition" and that was a
+level-8 artefact stated too early — at the level the content is designed for,
+the rooms are content.
+
+**And resting made the level-8 boss HARDER.** The party arrives at 67% HP
+instead of 49%, and wins 18.3% instead of 23.7%. That is not noise and it is
+not attrition. It is the scaler.
+
+### What the scaler can see
+
+`core/rules/power.gd`'s `estimate()` prices a combatant's effective HP off
+`max_hp`:
+
+```gdscript
+var ehp := float(c.max_hp) * (0.55 / maxf(0.05, p_hit(REF_ATK, c.ac)))
+```
+
+`Scaler._budget` builds the party's budget from `Power.team_score` of exactly
+those estimates, so the same dragon's boss room, built for the same level-8
+party with one variable moved at a time:
+
+| | party score | what the boss room fields |
+|---|---|---|
+| hp 20%, slots 64% | 129.8 | 5 bodies, dragon + 4 wyrmlings @0.75 |
+| hp 49%, slots 64% | 129.8 | 5 bodies, identical |
+| hp 67%, slots 64% | 129.8 | 5 bodies, identical |
+| hp 100%, slots 64% | 129.8 | 5 bodies, identical |
+| hp 67%, slots 0% | 80.1 | 3 bodies, dragon + 2 MIX |
+| hp 67%, slots 26% | 114.3 | 4 bodies @0.70 |
+| hp 67%, slots 50% | 117.7 | 4 bodies @0.85 |
+| hp 67%, slots 64% | 129.8 | 5 bodies @0.75 |
+| hp 67%, slots 100% | 145.3 | 5 bodies @0.95 |
+
+**HP is worth nothing at all.** A party at 20% and a party at 100% get a
+byte-identical roster. **Unspent slots are worth everything** — an 81% swing in
+the budget, three bodies against five.
+
+So the difficulty system's entire read on "how is this party doing" is how many
+spell slots the casters have left, and it reads it backwards for the situation
+a site creates:
+
+1. **HP attrition is unpriced.** Five rooms of damage change nothing about what
+   is waiting in the sixth. A fighter at 1 HP and a fighter at full are the
+   same party.
+2. **Slot attrition is priced the wrong way.** Spending slots makes the next
+   fight smaller; recovering them makes it bigger. The one recovery mechanic
+   inside a site — the rest room, the thing the design leans on — raises the
+   budget of the fight it is preparing the party for, and at level 8 it raises
+   it by more than the healing is worth. At level 3 the rest still wins,
+   because down there the party is near the floor of that curve (80.1) and the
+   HP is survival-critical, which is the whole crossover.
+3. **Only the caster has a condition the game can see.** A party of three
+   fighters is priced identically all the way down.
+
+This is also, retroactively, why `core/world_threat.gd` exists at all as a
+separate bolt-on multiplier with a measured grid of its own, and why its header
+says "tests/test_scaler.gd's sweep starts every party at full HP by
+construction, so it can never see the case this file exists for". It is a patch
+over this blindness, applied on the road and — by its own note — never reaching
+a boss.
+
+### Still open
+
+- **The root fix is `ehp` reading `c.hp`**, and it is not a small change.
+  Monsters spawn full so nothing moves for them, but every party budget in the
+  game would start falling as the party takes damage, which is what
+  `core/world_threat.gd` is already doing on the road — they would
+  double-count. It moves `test_scaler`'s bands, `core/regions.gd`'s grid,
+  `world_threat`'s own grid, `BOSS_POOL`'s six win rates and `FACTION_BOSS`'s
+  ten. A full re-tune, not a line.
+- **A site-local fix that is a line**: price a lair for the party that WALKED
+  IN. Snapshot the entry score in `Site.for_lair` and carry the correction
+  `pow(entry / current, CURVE)` on the `power_scale` knob `combat_spec` already
+  passes. The perverse incentive disappears — resting is unambiguously good,
+  spending is unambiguously costly — and no global number moves, because a
+  party at a lair's mouth is the full-HP party every existing sweep already
+  measures. This is the recommendation.
+- Applying `WorldThreat` inside a site is the option NOT to take: it makes the
+  lair get easier the worse the party is doing, which is the opposite of what
+  `core/site.gd` says it is for ("the adventuring day IS the design"), and it
+  would compound with the slot effect rather than cancel it.
+- **`depth_for` vs `Regions.HOMES`**, the original suspect, is now a tidy
+  rather than a fix: undead and giant are placed shallower than the band they
+  live in, fey deeper, and `soldier` is in no `HOMES` band at all so
+  `home_band` falls through to the deeps for it.
+- The level-8 corridor (every ordinary room a 100% win) is a separate shape
+  from all of the above and stays open: an over-levelled party walks five free
+  rooms to reach the only fight in the building.
+
+## A lair is priced for the party that walked in (2026-09-22)
+
+The site-local fix the investigation above recommended, built and measured.
+
+`Scaler.party_score()` is the reading `_budget` was already taking, extracted
+and made public — the same three lines, no behaviour change.
+`Scaler.held_at(then, now)` is `pow(then / now, CURVE)`, which is exactly the
+`power_scale` that makes a budget computed from `now` come out the size it
+would have been at `then`. `Site.for_lair` takes the reading once, at the
+mouth; `combat_spec` multiplies the correction onto the band knob it already
+passed. Withdrawing and coming back calls `for_lair` again, which re-takes it,
+because they walked in again.
+
+Verified by construction rather than by a win rate: the same dragon boss room,
+entered fresh and met at 100/100, 49/50, 67/64, 67/0 and 20/100 HP/slots, now
+fields a byte-identical roster while the correction itself moves 1.000 to
+1.985. `tests/test_site.gd` pins that.
+
+### The floor goes on the composed scale
+
+The first cut wrote `maxf(1.0, band) * held` and turned the level-8 boss into
+a 0-of-48 wall — 1.8% even for a party that took every rest, against 23.7%
+before any of this. Two upward corrections were stacking.
+
+Finding that needed the sweep to stop asserting what it should have been
+measuring. `tests/sweep_site_depth.gd` printed `lair at the origin (band 1.0)`
+for every run, and the level-8 column was read against that claim twice. The
+band is measured and printed now, and **at the origin a level-8 party reads
+0.320, not 1.0**.
+
+Which exposes something in master worth its own look. An outgrown lair prices
+its ROOMS at the band — 0.320 — while T92's rule floors its BOSS at 1.000. The
+last room is a **3.1x jump** over every room before it. That the climax is
+never scaled down by the country is deliberate and right; that the step is 3.1x
+is not obviously anybody's decision, and it is most of why a level-8 delve
+reads as five free rooms and a wall.
+
+So the floor belongs on the composed scale, `maxf(1.0, band * held)`. At the
+origin a level-8 party composes `0.320 * ~1.2 = 0.384`, still under the floor,
+so an outgrown lair's climax is exactly the fight it always was; at level 3 it
+composes `1.0 * ~1.2` and `held` bites, which is the case it was built for.
+
+### Measured
+
+`tests/sweep_site_depth.gd`, 20 seeds a faction, the three 6-room factions,
+conditional win rate at the boss:
+
+| | never rests | takes the rests |
+|---|---|---|
+| level 8, master | 23.7% | **18.3%** |
+| level 8, now | 18.8% | **26.8%** |
+| level 3, master | 0.0% | 29.2% |
+| level 3, now | never reaches it | 29.4% |
+
+**The incentive is the right way round now, at both levels.** On master a
+level-8 party that used the rest rooms did WORSE at the boss than one that
+ground straight through, because resting handed back slots and the scaler
+priced the fight up by more than the healing was worth. It is 26.8% against
+18.8% now. At level 3 it is starker: of 60 delves the resting party reaches
+the boss 17 times and wins 5, and the never-resting party reaches it none.
+
+What it cost: level-8-never-rests is 18.8% against master's 23.7%, and the
+whole path is harder (d4 84.2% where master was 100%), because the drained
+party's discount is gone. That was the trade, named before it was built — a
+drained party now meets the fight the lair actually is. Level 3 is the cleaner
+read, because there the climax is untouched (29.4% against 29.2%) while the
+path to it got harder: the fix bit where it was meant to and left the
+calibrated endpoint alone. Worth one caveat on that pair — only 17 parties
+reach the boss now against 24 before, so it is a smaller and more
+self-selected sample than the number it is set beside.
+
+No global number moves. A party at a lair's mouth is the full-HP party every
+existing sweep already measures, and `test_scaler` is unchanged at 212.
+
+### Still open
+
+- **The 3.1x boss cliff**, above. An outgrown lair's rooms take the band's
+  discount and its boss refuses it, so `d0`-`d4` are 100% wins and `d5` is
+  19-27%. Whether the floor should be a floor or a taper is a balance question
+  with a sweep behind it, and this pass only stopped making it worse.
+- The root fix is still `ehp` reading `c.hp` rather than `max_hp`, and still a
+  re-tune of everything — it would double-count against `core/world_threat.gd`,
+  which exists as a patch over exactly this blindness. What changed here is
+  that a site no longer needs it to be coherent.
+- `held` is unclamped in both directions. A party that levels mid-delve (the
+  world screen banks XP per room) pulls it under 1.0, which is the same
+  statement read the other way: the lair does not get harder because the party
+  got stronger halfway down it. Nothing measures that case yet.
+- Only a SITE prices this way. The road still prices every fight off the
+  party's live condition through `core/world_threat.gd`, which is a different
+  answer to the same blindness, and the two have never been compared.
