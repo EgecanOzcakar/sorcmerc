@@ -109,13 +109,43 @@ static func pace_note(pace: String) -> String:
 	return String(PACE.get(pace, PACE["normal"])["note"])
 
 static func speed_mult(party) -> float:
-	var m := float(PACE[orders(party)["pace"]]["speed"])
+	var m := float(PACE[orders(party)["pace"]]["speed"]) * walk_mult(party)
 	if RoadSpells.is_swift(party):   # Fly / Longstrider: the forced march's ground, none of its penalty
 		m = maxf(m, RoadSpells.SWIFT_MULT)
 	return m
 
 static func pace_bonus(party) -> int:
 	return int(PACE[orders(party)["pace"]]["bonus"])
+
+# #164: 5e RAW — a group moves at its slowest member's pace. 1.0 (30 ft, the
+# baseline every other speed here is tuned against) while nobody is active, so
+# an empty marching order does not stall the party.
+static func walk_mult(party) -> float:
+	var slowest := slowest_walker(party)
+	if slowest.is_empty():
+		return 1.0
+	return float(slowest["speed"]) / 30.0
+
+# {} if nobody active and living; else {"name", "speed"} for whoever caps the pace.
+static func slowest_walker(party) -> Dictionary:
+	var best := {}
+	if party == null:
+		return best
+	for id in party.active:
+		var ch = party.get_member(String(id))
+		if ch == null or ch.dead:
+			continue
+		var spd := int(ch.sheet().speeds.get("walk", 30))
+		if best.is_empty() or spd < int(best["speed"]):
+			best = {"name": ch.cname, "speed": spd}
+	return best
+
+# "" once every active member keeps the 30 ft baseline — nothing worth a line.
+static func walk_note(party) -> String:
+	var slowest := slowest_walker(party)
+	if slowest.is_empty() or int(slowest["speed"]) >= 30:
+		return ""
+	return "The company moves at %d ft — %s's stride." % [int(slowest["speed"]), String(slowest["name"])]
 
 # --- the events -------------------------------------------------------------
 #

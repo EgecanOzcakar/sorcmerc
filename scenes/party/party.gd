@@ -295,6 +295,17 @@ func _build_orders() -> void:
 		Travel.pace_note(pace), Travel.speed_mult(party), _effect(Travel.pace_bonus(party))]
 	_orders_row.add_child(note)
 
+	# #164: only shown when the slowest active member is under 30 ft — a
+	# standard-speed party gets no extra line.
+	var walk_note_text := Travel.walk_note(party)
+	if walk_note_text != "":
+		var walk_lbl := Label.new()
+		walk_lbl.name = "WalkNote"
+		walk_lbl.theme_type_variation = "Dim"
+		walk_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		walk_lbl.text = walk_note_text
+		_orders_row.add_child(walk_lbl)
+
 # The Relations block (docs/spike-party-opinions.md §5): "Vera Kord and Pike
 # Sallow — rivals (-44)", one line per active pair, six at most for a party
 # of four. No portraits, no hearts. A party of one has nobody to get on with,
