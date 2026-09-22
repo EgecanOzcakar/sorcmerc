@@ -39,6 +39,7 @@ func _init() -> void:
 	await process_frame
 	await _levelup()
 	await _emblems()
+	await _path_emblems()
 	quit()
 
 
@@ -103,3 +104,45 @@ func _emblems() -> void:
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		col.add_child(l)
 	await _shoot("res://climb_emblems.png")
+
+
+# All forty-eight path emblems, grouped by class the way the fork shows them:
+# four at a time, which is the only comparison that matters.
+func _path_emblems() -> void:
+	for c in root.get_children():
+		c.queue_free()
+	await process_frame
+	var bg := ColorRect.new()
+	bg.color = Icons.COL_BG
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(bg)
+	var grid := GridContainer.new()
+	grid.columns = 8
+	grid.theme = Icons.dark_theme()
+	grid.set_anchors_preset(Control.PRESET_FULL_RECT)
+	grid.offset_left = 30; grid.offset_top = 24
+	grid.offset_right = -30; grid.offset_bottom = -24
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 10)
+	root.add_child(grid)
+	var Catalog = load("res://core/rules/catalog.gd")
+	for s in Catalog.all("subclasses.json"):
+		var col := VBoxContainer.new()
+		grid.add_child(col)
+		var art := TextureRect.new()
+		art.texture = Icons.path_icon(String(s["id"]))
+		art.custom_minimum_size = Vector2(56, 56)
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		col.add_child(art)
+		var l := Label.new()
+		l.theme_type_variation = "Small"
+		l.text = String(s["name"]).replace("Path of the ", "").replace("College of ", "") \
+			.replace("Circle of the ", "").replace("Warrior of the ", "").replace("Warrior of ", "") \
+			.replace("Oath of the ", "").replace("Oath of ", "").replace("School of ", "") \
+			.replace("The ", "").replace(" Patron", "").replace(" Sorcery", "").replace(" Domain", "")
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.custom_minimum_size.x = 56
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(l)
+	await _shoot("res://climb_paths.png")

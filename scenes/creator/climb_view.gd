@@ -33,6 +33,7 @@ var _entries: Array = []
 var _sel := 1
 var _paths: Dictionary = {}     # subclass id -> name, for the fork's branches
 var _taken_path := ""
+var _class_id := ""
 
 var _rungs := VBoxContainer.new()
 var _detail := VBoxContainer.new()
@@ -75,9 +76,10 @@ func _build() -> void:
 
 # The one public call. `paths` names the branches at the fork and `taken_path`
 # is the one this build walked, so the fork can light it.
-func show_track(entries: Array, paths: Array = [], taken_path := "") -> void:
+func show_track(entries: Array, paths: Array = [], taken_path := "", class_id := "") -> void:
 	_build()
 	_entries = entries
+	_class_id = class_id
 	_paths = {}
 	for p in paths:
 		_paths[String(p["id"])] = String(p["name"])
@@ -187,7 +189,7 @@ func _chips(e: Dictionary) -> Array:
 		for p in e["fork"]:
 			var pid := String(p["id"])
 			var mine: bool = pid == _taken_path
-			out.append(_chip("%s %s" % ["◆" if mine else "◇", p["name"]], mine, false))
+			out.append(_branch(pid, String(p["name"]), mine))
 		return out
 	# The headline already names one grant; repeating it as the first chip made
 	# every rung read "Expertise / ◇ Expertise".
@@ -214,6 +216,26 @@ func _chips(e: Dictionary) -> Array:
 	if not e["slots"].is_empty():
 		out.append(_chip("slots %s" % _slot_text(e["slots"]), bool(e["taken"]), bool(e["veiled"])))
 	return out
+
+
+# A branch at the fork: its emblem, then its name. The one this build took is
+# marked as well as lit — a colour alone is not a choice a reader can see.
+func _branch(pid: String, name: String, mine: bool) -> Control:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 4)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tex: Texture2D = Icons.path_icon(pid)
+	if tex != null:
+		var r := TextureRect.new()
+		r.texture = tex
+		r.custom_minimum_size = Vector2(20, 20)
+		r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_child(r)
+	h.add_child(_chip("%s%s" % ["◆ " if mine else "", name], mine, false))
+	return h
 
 
 func _chip(text: String, have: bool, veiled: bool) -> Control:
@@ -353,20 +375,32 @@ func _mechanics(e: Dictionary) -> String:
 	return s
 
 
+# The badge beside the rung's name, most specific first: the feature's own art,
+# then the path's emblem, then the class's, then the generic spark. Most rungs
+# land on the path or the class — only 16 of the catalog's 340 features have a
+# badge of their own, because the existing set was drawn for the action bar and
+# the action bar only ever needed the features you can press.
 func _feature_art(e: Dictionary) -> Control:
+	var tex: Texture2D = null
 	for g in e["grants"]:
-		if g["kind"] != "feature":
-			continue
-		var tex: Texture2D = Icons.skill_icon({"id": String(g["id"])})
-		if tex == null:
-			continue
-		var r := TextureRect.new()
-		r.texture = tex
-		r.custom_minimum_size = Vector2(46, 46)
-		r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		return r
-	return null
+		if g["kind"] == "feature":
+			tex = Icons.feature_icon(String(g["id"]))
+			if tex != null:
+				break
+	if tex == null and _taken_path != "":
+		tex = Icons.path_icon(_taken_path)
+	if tex == null and _class_id != "":
+		tex = Icons.class_icon(_class_id)
+	if tex == null:
+		tex = Icons.verb_icon("")
+	if tex == null:
+		return null
+	var r := TextureRect.new()
+	r.texture = tex
+	r.custom_minimum_size = Vector2(46, 46)
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	return r
 
 
 static func _slot_text(slots: Array) -> String:

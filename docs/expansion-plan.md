@@ -7457,10 +7457,8 @@ downstream and never went through the editor, which is what left them behind.
   widget at level 0 so a class is chosen by reading where it goes, and
   `Climb.build(id, "", 0)` already returns exactly that track — it is the
   wiring that is missing, not the model.
-- 324 of the catalog's 340 features still have no badge, so most rungs fall
-  back to the generic spark. The 199 badges that exist were authored for the
-  action bar, which only ever needed the features you can press; a ladder shows
-  the passive ones too. The 48 path emblems are unbuilt for the same reason.
+- 324 of the catalog's 340 features still have no badge of their own. They no
+  longer fall back to the generic spark, though: see the entry below.
 - The ranger's emblem is an arrow without the bow arc behind it — the `band`
   did not render at that radius. It reads distinctly enough beside the rogue's
   dagger to ship, and wants one more pass.
@@ -7470,3 +7468,45 @@ downstream and never went through the editor, which is what left them behind.
 - The detail panel reads mechanics straight out of `data/effects/features.json`,
   so on most rungs it says nothing. That is honest rather than broken: the sheet
   lists the feature and no fight reads it yet.
+
+## Forty-eight path emblems, and a badge on every rung (2026-09-22)
+
+The twelve class emblems left the other half of the fork bare: the ladder draws
+four branches at level 3 and had four identical text marks to draw them with.
+`assets/icons/paths/` is one emblem per subclass, a new `paths` group in
+`tools/gen_action_icons.py`, and the fork now shows each branch wearing its own
+with the taken one marked as well as lit — a colour alone is not a choice a
+reader can see.
+
+Distinctness is judged *within* a class, not across the set. The four on screen
+at the fork are the four a player is comparing, so no two of a class share a
+motif; across classes a motif repeats freely in another element, because the
+Berserker's fangs are fire, the Beast Master's are wood, and they are never on
+screen together.
+
+Five had to be redrawn after looking at them. `heart()` fills near-black at
+badge size, which cost the Life Domain and the Oath of the Ancients, and
+`beam()` is a pale slab with no silhouette, which cost the Light Domain and the
+Oath of Glory. The Gloom Stalker's eye in the shadow element disappeared into
+its own disc. Neither motif is used in this set now, and the registry says why
+where the next reader will look.
+
+The more useful half is the fallback. A rung's badge is now the most specific
+art that exists: the feature's own, then the path's emblem, then the class's,
+then the generic spark. Only 16 of the catalog's 340 features have a badge —
+the 199 that exist were drawn for the action bar, which only ever needed the
+features you can *press* — so before this nearly every rung showed the same
+spark and the panel read as unfinished. Now a rung without its own art still
+says which class and which path it belongs to. `Icons.feature_icon()` exists
+for exactly that: unlike `skill_icon()` it returns null rather than the spark,
+so a caller can tell "no art" from "the generic one".
+
+### Still open
+
+- Per-feature badges are still 324 short, and that is a drawing job rather than
+  a wiring one. The fallback makes their absence cost a reader information
+  rather than legibility.
+- The Wild Heart's claw and the Light Domain's burst are the weakest two of the
+  48; both read, neither sings.
+- The creator's class step is still unwired, and `Climb.build(id, "", 0)` still
+  returns exactly the track it wants.

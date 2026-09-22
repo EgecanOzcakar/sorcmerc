@@ -227,7 +227,7 @@ func _climb_panel() -> void:
 	view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_body.add_child(view)
-	view.show_track(Climb.build(cid, taken, _ch.level()), Climb.paths_for(cid), taken)
+	view.show_track(Climb.build(cid, taken, _ch.level()), Climb.paths_for(cid), taken, cid)
 
 
 # One gain: the figure in the serif, the words after it in the dim body.

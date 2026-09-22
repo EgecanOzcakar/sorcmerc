@@ -1381,8 +1381,84 @@ CLASSES = {
 }
 
 
+# --- the forty-eight paths -------------------------------------------------
+# One emblem per subclass, for the fork the level ladder draws at level 3 and
+# for the four-way choice the creator makes there. The class emblem above says
+# what you are; these say which way you went.
+#
+# Distinctness is judged WITHIN a class, not across the set: the four that the
+# fork shows side by side are the four a player is actually comparing, so no
+# two of a class share a motif. Across classes a motif repeats freely in
+# another element — the Berserker's fangs are fire, the Beast Master's are
+# wood, and they are never on screen together.
+PATHS = {
+    # barbarian — the rage, the beast, the tree, the god
+    "berserker": badge(fangs(E("fire"), 1.05)),
+    "wildheart": badge(hand(WOOD, 0, 1.0, claw=True)),
+    "worldtree": badge(cone_burst(E("nature"), 0.0, 1.05)),
+    "zealot": badge(flame(E("radiant"), 32, 33, 1.0)),
+    # bard
+    "collegedance": badge(person(E("gold"), "stand", 1.05)),
+    "collegeglamour": badge(mask(E("psychic"), "laugh", 1.05)),
+    "collegelore": badge(banner(E("force"), 1.05)),
+    "collegevalor": badge(sword(32, 39, 0, 42)),
+    # cleric. heart() and beam() were tried here and for the paladin and came
+    # out unreadable at badge size — the heart fills near-black and the beam is
+    # a pale slab with no silhouette. Neither is used in this set.
+    "lifedomain": badge(plus(32, 32, 12, 4.6, E("life"))),
+    "lightdomain": badge(cone_burst(E("radiant"), 0.0, 1.05)),
+    "trickerydomain": badge(mask(STEEL, "laugh", 1.05)),
+    "wardomain": badge(banner(E("fire"), 1.05)),
+    # druid
+    "circleland": badge(droplets(E("nature"), 3, 1.1)),
+    "circlemoon": badge(crescent(BONE, 1.15)),
+    "circlesea": badge(cloud(E("cold"), 1.05)),
+    "circlestars": badge(star(32, 32, 18, 7, 6, E("psychic"), sw=1.0)),
+    # fighter
+    "champion": badge(star(32, 32, 17, 7, 5, E("gold"), sw=1.0)),
+    "battlemaster": badge(banner(STEEL, 1.05)),
+    "eldritchknight": badge(bolt(E("force"), 1.05)),
+    "psiwarrior": badge(spiral(E("psychic"), 1.05)),
+    # monk
+    "warriorofmercy": badge(hand(E("life"), 0, 1.02)),
+    "warriorofshadow": badge(cloud(E("shadow"), 1.05)),
+    "warriorofelements": badge(snowflake(E("cold"), 1.0)),
+    "warrioropenhand": badge(fist(BONE, 1.05)),
+    # paladin
+    "oathofdevotion": badge(star(32, 32, 17, 7, 6, E("radiant"), sw=1.0)),
+    "oathofglory": badge(banner(E("gold"), 1.05)),
+    "oathofancients": badge(cone_burst(E("nature"), 0.0, 1.02)),
+    "oathofvengeance": badge(dart(E("necrotic"), -45, 1, 1.1)),
+    # ranger
+    "beastmaster": badge(fangs(WOOD, 1.05)),
+    "feywanderer": badge(swarm(E("psychic"), 1.05)),
+    "gloomstalker": badge(eye(E("necrotic"), 1.05)),
+    "hunter": badge(reticle(STEEL, 1.05)),
+    # rogue
+    "thief": badge(hand(BONE, -20, 1.0)),
+    "assassin": badge(skull(E("poison"), 1.0)),
+    "arcanetrickster": badge(orb(E("psychic"), 1.0, ring=True)),
+    "soulknife": badge(dart(E("psychic"), -45, 2, 1.05)),
+    # sorcerer
+    "aberrantsorcery": badge(tentacles(E("psychic"), 1.05)),
+    "clockworksorcery": badge(chain(STEEL, False, 1.05)),
+    "draconicsorcery": badge(fangs(E("gold"), 1.05)),
+    "wildmagicsorcery": badge(spiral(E("necrotic"), 1.05)),
+    # warlock
+    "archfeypatron": badge(swarm(E("nature"), 1.05)),
+    "celestialpatron": badge(star(32, 32, 17, 7, 7, E("radiant"), sw=1.0)),
+    "fiendpatron": badge(flame(E("fire"), 32, 33, 1.05)),
+    "greatoldonepatron": badge(eye(E("psychic"), 1.1)),
+    # wizard
+    "abjurer": badge(hexagon(32, 32, 16, E("force")[1], sw=1.6)),
+    "diviner": badge(eye(E("radiant"), 1.05)),
+    "evoker": badge(bolt(E("fire"), 1.05)),
+    "illusionist": badge(cloud(E("psychic"), 1.05)),
+}
+
+
 GROUPS = {"actions": ACTIONS, "schools": SCHOOLS, "skills": SKILLS,
-          "classes": CLASSES}
+          "classes": CLASSES, "paths": PATHS}
 
 
 
