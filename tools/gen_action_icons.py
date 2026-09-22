@@ -1349,7 +1349,116 @@ for _fid, _art in FEATURES.items():
 for _bid, _art in SHOVES.items():
     SKILLS[_bid] = badge(*_art)
 
-GROUPS = {"actions": ACTIONS, "schools": SCHOOLS, "skills": SKILLS}
+# --- the twelve classes ----------------------------------------------------
+# One emblem per class, for the level ladder (scenes/creator/climb_view.gd):
+# the fork at level 3 draws a branch per path, and the creator's class step
+# reads as twelve tracks side by side. Both wanted a mark, and the only thing
+# standing in for a class until now was a text glyph in Icons.CLASS_GLYPHS.
+#
+# Each is one motif, not a scene. A class emblem sits at 28-46 px beside a
+# class name that is already on screen — it identifies, it does not illustrate,
+# and a second object in the disc only muddies it at that size. Where two
+# classes would reach for the same motif the tie is broken by what the class
+# does rather than what it carries: the barbarian's fist against the monk's
+# open hand, the sorcerer's flame against the wizard's worked orb.
+CLASSES = {
+    "barbarian": badge(fist(E("fire"), 1.05)),
+    "bard": badge(note(E("gold"), 1.05)),
+    "cleric": badge(star(32, 32, 19, 8, 8, E("radiant"), sw=1.0),
+                    plus(32, 32, 9.5, 3.8, GOLD)),
+    "druid": badge(crescent(E("nature"), 1.05)),
+    "fighter": badge(sword(32, 39, 0, 46)),
+    "monk": badge(hand(BONE, 0, 1.05)),
+    "paladin": badge(hexagon(32, 32, 16, STEEL[1], sw=1.6),
+                     star(32, 31, 8.5, 3.4, 4, GOLD, sw=1.0)),
+    "ranger": badge(band(38, 36, 20, 18.2, 128, 232, WOOD[1], sw=1.5),
+                    arrow(30, 34, -45, 38, 5.2, STEEL)),
+    "rogue": badge(dart(STEEL, -45, 1, 1.15)),
+    "sorcerer": badge(flame(E("fire"), 32, 33, 1.05)),
+    "warlock": badge(eye(E("necrotic"), 1.1)),
+    "wizard": badge(orb(E("force"), 0.92, ring=True),
+                    star(32, 31, 7.5, 2.8, 4, BONE, sw=0.9)),
+}
+
+
+# --- the forty-eight paths -------------------------------------------------
+# One emblem per subclass, for the fork the level ladder draws at level 3 and
+# for the four-way choice the creator makes there. The class emblem above says
+# what you are; these say which way you went.
+#
+# Distinctness is judged WITHIN a class, not across the set: the four that the
+# fork shows side by side are the four a player is actually comparing, so no
+# two of a class share a motif. Across classes a motif repeats freely in
+# another element — the Berserker's fangs are fire, the Beast Master's are
+# wood, and they are never on screen together.
+PATHS = {
+    # barbarian — the rage, the beast, the tree, the god
+    "berserker": badge(fangs(E("fire"), 1.05)),
+    "wildheart": badge(hand(WOOD, 0, 1.0, claw=True)),
+    "worldtree": badge(cone_burst(E("nature"), 0.0, 1.05)),
+    "zealot": badge(flame(E("radiant"), 32, 33, 1.0)),
+    # bard
+    "collegedance": badge(person(E("gold"), "stand", 1.05)),
+    "collegeglamour": badge(mask(E("psychic"), "laugh", 1.05)),
+    "collegelore": badge(banner(E("force"), 1.05)),
+    "collegevalor": badge(sword(32, 39, 0, 42)),
+    # cleric. heart() and beam() were tried here and for the paladin and came
+    # out unreadable at badge size — the heart fills near-black and the beam is
+    # a pale slab with no silhouette. Neither is used in this set.
+    "lifedomain": badge(plus(32, 32, 12, 4.6, E("life"))),
+    "lightdomain": badge(cone_burst(E("radiant"), 0.0, 1.05)),
+    "trickerydomain": badge(mask(STEEL, "laugh", 1.05)),
+    "wardomain": badge(banner(E("fire"), 1.05)),
+    # druid
+    "circleland": badge(droplets(E("nature"), 3, 1.1)),
+    "circlemoon": badge(crescent(BONE, 1.15)),
+    "circlesea": badge(cloud(E("cold"), 1.05)),
+    "circlestars": badge(star(32, 32, 18, 7, 6, E("psychic"), sw=1.0)),
+    # fighter
+    "champion": badge(star(32, 32, 17, 7, 5, E("gold"), sw=1.0)),
+    "battlemaster": badge(banner(STEEL, 1.05)),
+    "eldritchknight": badge(bolt(E("force"), 1.05)),
+    "psiwarrior": badge(spiral(E("psychic"), 1.05)),
+    # monk
+    "warriorofmercy": badge(hand(E("life"), 0, 1.02)),
+    "warriorofshadow": badge(cloud(E("shadow"), 1.05)),
+    "warriorofelements": badge(snowflake(E("cold"), 1.0)),
+    "warrioropenhand": badge(fist(BONE, 1.05)),
+    # paladin
+    "oathofdevotion": badge(star(32, 32, 17, 7, 6, E("radiant"), sw=1.0)),
+    "oathofglory": badge(banner(E("gold"), 1.05)),
+    "oathofancients": badge(cone_burst(E("nature"), 0.0, 1.02)),
+    "oathofvengeance": badge(dart(E("necrotic"), -45, 1, 1.1)),
+    # ranger
+    "beastmaster": badge(fangs(WOOD, 1.05)),
+    "feywanderer": badge(swarm(E("psychic"), 1.05)),
+    "gloomstalker": badge(eye(E("necrotic"), 1.05)),
+    "hunter": badge(reticle(STEEL, 1.05)),
+    # rogue
+    "thief": badge(hand(BONE, -20, 1.0)),
+    "assassin": badge(skull(E("poison"), 1.0)),
+    "arcanetrickster": badge(orb(E("psychic"), 1.0, ring=True)),
+    "soulknife": badge(dart(E("psychic"), -45, 2, 1.05)),
+    # sorcerer
+    "aberrantsorcery": badge(tentacles(E("psychic"), 1.05)),
+    "clockworksorcery": badge(chain(STEEL, False, 1.05)),
+    "draconicsorcery": badge(fangs(E("gold"), 1.05)),
+    "wildmagicsorcery": badge(spiral(E("necrotic"), 1.05)),
+    # warlock
+    "archfeypatron": badge(swarm(E("nature"), 1.05)),
+    "celestialpatron": badge(star(32, 32, 17, 7, 7, E("radiant"), sw=1.0)),
+    "fiendpatron": badge(flame(E("fire"), 32, 33, 1.05)),
+    "greatoldonepatron": badge(eye(E("psychic"), 1.1)),
+    # wizard
+    "abjurer": badge(hexagon(32, 32, 16, E("force")[1], sw=1.6)),
+    "diviner": badge(eye(E("radiant"), 1.05)),
+    "evoker": badge(bolt(E("fire"), 1.05)),
+    "illusionist": badge(cloud(E("psychic"), 1.05)),
+}
+
+
+GROUPS = {"actions": ACTIONS, "schools": SCHOOLS, "skills": SKILLS,
+          "classes": CLASSES, "paths": PATHS}
 
 
 
@@ -1367,7 +1476,9 @@ GROUPS = {"actions": ACTIONS, "schools": SCHOOLS, "skills": SKILLS}
 #                        crawling.
 #
 # The rest are Godot's texture defaults, spelled out because that is what the
-# importer writes back. `path`/`dest_files` are not free-form: Godot addresses
+# importer writes back. compress/mode was 0 here and 1 in all 161 committed
+# sidecars — 4.7's importer writes 1 — so --check had been failing on every
+# icon in the repo. Corrected to match what Godot actually produces. `path`/`dest_files` are not free-form: Godot addresses
 # the imported file by md5 of the *source* res:// path (see
 # EditorFileSystem::_get_import_base_path), so they are computed, not chosen.
 
@@ -1388,7 +1499,7 @@ dest_files=["{dest}"]
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

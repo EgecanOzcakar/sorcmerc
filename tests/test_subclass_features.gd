@@ -634,6 +634,59 @@ const RAW_NOTES := {
 	"illusionist-phantasmal-creatures": "[S] Summon Beast / Summon Fey as illusions, once each without a slot",
 	"illusionist-illusory-self": "[C] reaction when hit: the attack misses instead; 1/short rest (2024: once per short rest, or a slot)",
 	"illusionist-illusory-reality": "[O] make one object of an Illusion spell real for a minute",
+	# --- the tiers restored by tools/fill_levels.py (2026-09-22) ----------------
+	# Every path below was short of its late milestones: the catalog carried
+	# 3/6/10 where the book says 3/6/10/14, and the rogue's paths stopped at 9.
+	# docs/audit-class-levels.md counted them; none of them has a mechanic yet.
+	# barbarian
+	"wildheart-animal-speaker": "[P] Beast Sense and Speak with Animals as rituals, no slot — nothing on the board reads either",
+	"wildheart-nature-speaker": "[P] Commune with Nature as a ritual, no slot — a worldmap answer, not a combat one",
+	"wildheart-power-of-the-wilds": "[C] entering Rage grants a movement mode (flight, or a swim speed) — Rage has no movement-mode hook",
+	"worldtree-travel-along-the-tree": "[C] bonus action: teleport 60 ft, and once per Rage a 30-ft portal that carries allies with you",
+	"zealot-divine-fury": "[C] first hit each turn while raging: +1d6 + half barbarian level, necrotic or radiant",
+	"zealot-rage-of-the-gods": "[C] once per long rest while raging: fly, resist everything but force, and spend your own HP to raise a downed ally",
+	# bard
+	"collegedance-tandem-footwork": "[C] on rolling initiative, you and allies within 30 ft add your Bardic Inspiration die — initiative takes no modifiers here",
+	"collegeglamour-unbreakable-majesty": "[C] bonus action for a minute: an attacker must pass a CHA save or lose the attack and cannot target you that turn",
+	"collegelore-peerless-skill": "[C] spend a Bardic Inspiration die to add it to a check or attack that already failed",
+	"collegevalor-battle-magic": "[C] after casting a spell with your action, one weapon attack as a bonus action",
+	# cleric
+	"lifedomain-supreme-healing": "[C] healing dice are maximised rather than rolled",
+	"lightdomain-corona-of-light": "[C] action for a minute: 60 ft of bright light, and foes in it save at disadvantage against radiant and fire",
+	"trickerydomain-improved-duplicity": "[C] the Duplicity double heals or lends advantage to allies beside it each turn",
+	"wardomain-avatar-of-battle": "[P] resistance to bludgeoning, piercing and slashing from nonmagical attacks — the sheet can carry this one",
+	# druid
+	"circleland-natures-sanctuary": "[C] a 15-ft emanation for a minute: half cover for allies in it, and resistance to the Land's damage type",
+	"circlemoon-lunar-form": "[C] Wild Shape adds radiant damage once a turn and shares Moonlight Step with an ally",
+	"circlesea-oceanic-gift": "[C] Wrath of the Sea can ride on an ally instead of you, and its emanation doubles",
+	"circlestars-full-of-stars": "[P] while in Starry Form, resistance to bludgeoning, piercing and slashing",
+	# monk
+	"warriorofmercy-flurry-of-healing-and-harm": "[C] Flurry of Blows: swap each unarmed strike for a Hand of Healing, spending no Focus",
+	"warriorofmercy-hand-of-ultimate-mercy": "[C] once per long rest: return a creature dead under 24 hours, with HP and its conditions cleared",
+	"warriorofshadow-improved-shadow-step": "[C] Shadow Step also grants advantage on the first unarmed strike that follows it",
+	"warriorofshadow-cloak-of-shadows": "[C] spend Focus to go Invisible for a minute, ending the moment you attack",
+	"warriorofelements-stride-of-the-elements": "[C] Elemental Attunement adds a swim and a fly speed while it lasts",
+	"warriorofelements-elemental-epitome": "[C] while attuned: resistance to a chosen type, +10 ft speed, and extra elemental damage once a turn",
+	"warrioropenhand-fleet-step": "[C] any bonus action that is not already Step of the Wind also takes Step of the Wind",
+	"warrioropenhand-quivering-palm": "[C] spend Focus on an unarmed strike, then an action forces a CON save for 10d12 or 0 HP",
+	# ranger
+	"beastmaster-bestial-fury": "[C] the Primal Companion attacks twice on its Attack action, with force damage added",
+	"beastmaster-share-spells": "[C] a spell you target yourself with also reaches the companion within 30 ft",
+	"feywanderer-fey-reinforcements": "[C] Summon Fey always prepared, and once per long rest without a slot",
+	"feywanderer-misty-wanderer": "[C] Misty Step WIS-mod times per long rest without a slot, carrying an ally with you",
+	"gloomstalker-stalkers-flurry": "[C] once a turn on a miss: a second attack, or a WIS save against being Frightened",
+	"gloomstalker-shadowy-dodge": "[C] reaction: disadvantage on an attack against you, and teleport up to 30 ft",
+	"hunter-superior-hunters-prey": "[C] Hunter\'s Prey damage also lands on a second creature near the target",
+	"hunter-superior-hunters-defense": "[C] reaction: halve one attack\'s damage and take resistance to that type",
+	# rogue
+	"thief-use-magic-device": "[C] attune to four items, read any spell scroll, and reroll a magic item\'s expended charges",
+	"thief-thiefs-reflexes": "[C] two turns in the first round, the second of them at initiative minus 10 — the tracker takes one turn per combatant",
+	"assassin-envenom-weapons": "[C] poison from a Poisoner\'s Kit deals 2d6 more and is saved against your DC",
+	"assassin-death-strike": "[C] against a surprised creature, a hit doubles its damage unless the target passes a CON save",
+	"arcanetrickster-versatile-trickster": "[C] Mage Hand lends advantage on attacks against a creature within 5 ft of it",
+	"arcanetrickster-spell-thief": "[C] once per long rest: a failed save takes the spell off its caster for eight hours",
+	"soulknife-psychic-veil": "[C] once per long rest: Invisible for an hour, and silent while it holds",
+	"soulknife-rend-mind": "[C] a Sneak Attack with a Psychic Blade forces a WIS save or Stunned for a minute",
 }
 
 func report() -> void:

@@ -43,3 +43,6 @@ combat_strip.png*
 /shots_biome_walk/
 # tests/shot_board_pan.gd output
 /shots_pan/
+
+# tests/shot_climb.gd output
+/climb_*.png*

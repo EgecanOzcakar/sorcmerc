@@ -2,7 +2,7 @@
   {
     "id": "berserker",
     "name": "Path of the Berserker",
-    "description": "For some Barbarians, rage is a means to an end — that end being violence. The Path of the Berserker is a path of untrammeled fury, slick with blood.",
+    "description": "For some Barbarians, rage is a means to an end \u2014 that end being violence. The Path of the Berserker is a path of untrammeled fury, slick with blood.",
     "classId": "barbarian",
     "levels": [
       {
@@ -13,7 +13,12 @@
             "feature": {
               "id": "berserker-frenzy"
             }
-          },
+          }
+        ]
+      },
+      {
+        "classLevel": 6,
+        "grants": [
           {
             "type": "feature",
             "feature": {
@@ -23,7 +28,7 @@
         ]
       },
       {
-        "classLevel": 6,
+        "classLevel": 10,
         "grants": [
           {
             "type": "feature",
@@ -34,7 +39,7 @@
         ]
       },
       {
-        "classLevel": 10,
+        "classLevel": 14,
         "grants": [
           {
             "type": "feature",
@@ -65,6 +70,12 @@
             "feature": {
               "id": "wildheart-rage-of-the-wilds"
             }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wildheart-animal-speaker"
+            }
           }
         ]
       },
@@ -86,6 +97,23 @@
             "type": "spell",
             "spellId": "commune-with-nature",
             "alwaysPrepared": true
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wildheart-nature-speaker"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wildheart-power-of-the-wilds"
+            }
           }
         ]
       }
@@ -129,6 +157,17 @@
             }
           }
         ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "worldtree-travel-along-the-tree"
+            }
+          }
+        ]
       }
     ]
   },
@@ -156,6 +195,12 @@
             "feature": {
               "id": "zealot-warrior-of-the-gods"
             }
+          },
+          {
+            "type": "feature",
+            "feature": {
+              "id": "zealot-divine-fury"
+            }
           }
         ]
       },
@@ -177,6 +222,17 @@
             "type": "feature",
             "feature": {
               "id": "zealot-zealous-presence"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "zealot-rage-of-the-gods"
             }
           }
         ]
@@ -229,6 +285,17 @@
             }
           }
         ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegedance-tandem-footwork"
+            }
+          }
+        ]
       }
     ]
   },
@@ -262,6 +329,17 @@
             "type": "feature",
             "feature": {
               "id": "collegeglamour-mantle-of-majesty"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegeglamour-unbreakable-majesty"
             }
           }
         ]
@@ -299,6 +377,17 @@
             "type": "feature",
             "feature": {
               "id": "collegelore-magical-secrets"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegelore-peerless-skill"
             }
           }
         ]
@@ -347,13 +436,24 @@
             }
           }
         ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "collegevalor-battle-magic"
+            }
+          }
+        ]
       }
     ]
   },
   {
     "id": "lifedomain",
     "name": "Life Domain",
-    "description": "The Life Domain focuses on the vibrant positive energy — one of the fundamental forces of the universe — that sustains all life. Clerics who tap into this domain are exceptional healers among the servants of the gods.",
+    "description": "The Life Domain focuses on the vibrant positive energy \u2014 one of the fundamental forces of the universe \u2014 that sustains all life. Clerics who tap into this domain are exceptional healers among the servants of the gods.",
     "classId": "cleric",
     "levels": [
       {
@@ -451,6 +551,17 @@
             "type": "spell",
             "spellId": "mass-cure-wounds",
             "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "lifedomain-supreme-healing"
+            }
           }
         ]
       }
@@ -559,6 +670,17 @@
             "alwaysPrepared": true
           }
         ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "lightdomain-corona-of-light"
+            }
+          }
+        ]
       }
     ]
   },
@@ -658,6 +780,17 @@
             "type": "spell",
             "spellId": "modify-memory",
             "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "trickerydomain-improved-duplicity"
+            }
           }
         ]
       }
@@ -769,6 +902,17 @@
             "type": "spell",
             "spellId": "steel-wind-strike",
             "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "wardomain-avatar-of-battle"
+            }
           }
         ]
       }
@@ -974,6 +1118,17 @@
             }
           }
         ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circleland-natures-sanctuary"
+            }
+          }
+        ]
       }
     ]
   },
@@ -1018,6 +1173,17 @@
             "type": "feature",
             "feature": {
               "id": "circlemoon-elemental-wild-shape"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlemoon-lunar-form"
             }
           }
         ]
@@ -1073,6 +1239,17 @@
             "condition": "not-enclosed"
           }
         ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlesea-oceanic-gift"
+            }
+          }
+        ]
       }
     ]
   },
@@ -1126,6 +1303,17 @@
             "type": "feature",
             "feature": {
               "id": "circlestars-twinkling-constellations"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 14,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "circlestars-full-of-stars"
             }
           }
         ]
@@ -1540,6 +1728,28 @@
             }
           }
         ]
+      },
+      {
+        "classLevel": 11,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofmercy-flurry-of-healing-and-harm"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofmercy-hand-of-ultimate-mercy"
+            }
+          }
+        ]
       }
     ]
   },
@@ -1605,13 +1815,35 @@
             }
           }
         ]
+      },
+      {
+        "classLevel": 11,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofshadow-improved-shadow-step"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofshadow-cloak-of-shadows"
+            }
+          }
+        ]
       }
     ]
   },
   {
     "id": "warriorofelements",
     "name": "Warrior of the Elements",
-    "description": "Warriors of the Elements channel the power of the four elements — air, earth, fire, and water — through their Unarmored body.",
+    "description": "Warriors of the Elements channel the power of the four elements \u2014 air, earth, fire, and water \u2014 through their Unarmored body.",
     "classId": "monk",
     "levels": [
       {
@@ -1641,6 +1873,28 @@
               "saveDC": {
                 "dcAbility": "wis"
               }
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 11,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofelements-stride-of-the-elements"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warriorofelements-elemental-epitome"
             }
           }
         ]
@@ -1674,6 +1928,28 @@
             "type": "feature",
             "feature": {
               "id": "warrioropenhand-wholeness-of-body"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 11,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warrioropenhand-fleet-step"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "warrioropenhand-quivering-palm"
             }
           }
         ]
@@ -2070,7 +2346,7 @@
   {
     "id": "oathofvengeance",
     "name": "Oath of Vengeance",
-    "description": "The Oath of Vengeance is a solemn commitment to punish those who have committed a grievous sin. When evil forces slaughter helpless villagers, when an entire people turns against the will of the gods, when a thieves' guild grows too violent and powerful, when a dragon rampages through the countryside — at times like these, a Paladin arises to restore justice.",
+    "description": "The Oath of Vengeance is a solemn commitment to punish those who have committed a grievous sin. When evil forces slaughter helpless villagers, when an entire people turns against the will of the gods, when a thieves' guild grows too violent and powerful, when a dragon rampages through the countryside \u2014 at times like these, a Paladin arises to restore justice.",
     "classId": "paladin",
     "levels": [
       {
@@ -2192,7 +2468,7 @@
   {
     "id": "beastmaster",
     "name": "Beast Master",
-    "description": "The Beast Master subclass forges a primal bond with an animal, and that bond — the ranger and the beast acting as one — lets the ranger do exceptional things. The subclass features give the ranger powerful options in combat, exploration, and social situations.",
+    "description": "The Beast Master subclass forges a primal bond with an animal, and that bond \u2014 the ranger and the beast acting as one \u2014 lets the ranger do exceptional things. The subclass features give the ranger powerful options in combat, exploration, and social situations.",
     "classId": "ranger",
     "levels": [
       {
@@ -2213,6 +2489,28 @@
             "type": "feature",
             "feature": {
               "id": "beastmaster-exceptional-training"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 11,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "beastmaster-bestial-fury"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "beastmaster-share-spells"
             }
           }
         ]
@@ -2290,12 +2588,34 @@
         ]
       },
       {
+        "classLevel": 11,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "feywanderer-fey-reinforcements"
+            }
+          }
+        ]
+      },
+      {
         "classLevel": 13,
         "grants": [
           {
             "type": "spell",
             "spellId": "dimension-door",
             "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "feywanderer-misty-wanderer"
+            }
           }
         ]
       },
@@ -2376,12 +2696,34 @@
         ]
       },
       {
+        "classLevel": 11,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gloomstalker-stalkers-flurry"
+            }
+          }
+        ]
+      },
+      {
         "classLevel": 13,
         "grants": [
           {
             "type": "spell",
             "spellId": "greater-invisibility",
             "alwaysPrepared": true
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "gloomstalker-shadowy-dodge"
+            }
           }
         ]
       },
@@ -2450,6 +2792,28 @@
             ]
           }
         ]
+      },
+      {
+        "classLevel": 11,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "hunter-superior-hunters-prey"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 15,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "hunter-superior-hunters-defense"
+            }
+          }
+        ]
       }
     ]
   },
@@ -2492,6 +2856,28 @@
             "type": "feature",
             "feature": {
               "id": "thief-supreme-sneak"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 13,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "thief-use-magic-device"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "thief-thiefs-reflexes"
             }
           }
         ]
@@ -2539,6 +2925,28 @@
             }
           }
         ]
+      },
+      {
+        "classLevel": 13,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "assassin-envenom-weapons"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "assassin-death-strike"
+            }
+          }
+        ]
       }
     ]
   },
@@ -2571,6 +2979,28 @@
             "type": "feature",
             "feature": {
               "id": "arcanetrickster-magical-ambush"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 13,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "arcanetrickster-versatile-trickster"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "arcanetrickster-spell-thief"
             }
           }
         ]
@@ -2659,6 +3089,28 @@
             "type": "feature",
             "feature": {
               "id": "soulknife-soul-blades"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 13,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "soulknife-psychic-veil"
+            }
+          }
+        ]
+      },
+      {
+        "classLevel": 17,
+        "grants": [
+          {
+            "type": "feature",
+            "feature": {
+              "id": "soulknife-rend-mind"
             }
           }
         ]
@@ -2800,7 +3252,7 @@
   {
     "id": "clockworksorcery",
     "name": "Clockwork Sorcery",
-    "description": "The cosmic force of order has suffused you with magic. That power arises from the plane of Mechanus or a realm like it — a clockwork cosmos of perfect law and order.",
+    "description": "The cosmic force of order has suffused you with magic. That power arises from the plane of Mechanus or a realm like it \u2014 a clockwork cosmos of perfect law and order.",
     "classId": "sorcerer",
     "levels": [
       {
@@ -3710,7 +4162,7 @@
   {
     "id": "abjurer",
     "name": "School of Abjuration",
-    "description": "The School of Abjuration emphasizes magic that blocks, banishes, or protects. Detractors of this school say that its adherents are cowardly — that abjuration is the magic of hiding behind walls and barriers. Practitioners clarify that no one wants to be behind a wall more than the enemy.",
+    "description": "The School of Abjuration emphasizes magic that blocks, banishes, or protects. Detractors of this school say that its adherents are cowardly \u2014 that abjuration is the magic of hiding behind walls and barriers. Practitioners clarify that no one wants to be behind a wall more than the enemy.",
     "classId": "wizard",
     "levels": [
       {
