@@ -76,9 +76,15 @@ func _init() -> void:
 	check(said(main._spoils_panel, "Victory"), "it says who won")
 	check(said(main._spoils_panel, "+400 XP"), "it says what the XP was")
 	check(said(main._spoils_panel, "+50 gold"), "it says what the purse got")
-	check(said(main._spoils_panel, "Handaxe") or said(main._spoils_panel, "handaxe"),
-		"it names what came off the bodies (%s)" % str(labels(main._spoils_panel)))
-	var on := buttons(main._spoils_panel)
+	# #157: the haul is tiles now, and a tile is a button captioned with the name.
+	var tiles := buttons(main._spoils_panel).filter(func(b): return b.icon != null)
+	check(tiles.size() == 1 and "Handaxe" in tiles[0].text,
+		"it shows what came off the bodies as a tile (%s)" % str(tiles.map(func(b): return b.text)))
+	check(said(main._spoils_panel, "Vera Kord") and said(main._spoils_panel, "28/28"),
+		"the company that fought, with the HP they walked out with")
+	# The haul's tiles are buttons too (Icons.item_tile) — the way on is the one
+	# without an icon.
+	var on := buttons(main._spoils_panel).filter(func(b): return "Back to the map" in b.text or not b.icon)
 	check(on.size() == 1 and "Back to the map" in on[0].text, "one way on")
 
 	# Esc takes it, and the world runs again.
