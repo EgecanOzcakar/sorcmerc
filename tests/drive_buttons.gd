@@ -448,10 +448,23 @@ func _levelup_model() -> String:
 	return "%d|%s|%s|%s|%s" % [_lvl._ch.level(), _lvl._committed, _lvl._ch.choices,
 		_lvl._status.text, _lvl_finished]
 
-# Nothing on this screen is excused. Its "● " options are all choice widgets, where
-# a second press un-picks, and Cancel/Confirm/Done are all observable now that the
-# overlay has a listener.
-func _levelup_expect(_c: BaseButton) -> String:
+# Nothing on this screen is excused except one rung of the climb. Its "● " options
+# are all choice widgets, where a second press un-picks, and Cancel/Confirm/Done are
+# all observable now that the overlay has a listener.
+#
+# The climb (scenes/creator/climb_view.gd) hangs twenty label-only buttons under the
+# card, one per level, and a rung press moves the right-hand panel to that level.
+# Nineteen of them rewrite that panel and are pressed for real; the twentieth is the
+# rung the page opened at — levelup.gd opens the climb on the level being taken — so
+# its panel already reads that level and re-picking it is the same no-op as the
+# creator's lit step above. climb_view marks the open rung, and only the open rung,
+# with a "normal" stylebox (_mark_selected clears every other), which is how we find
+# it: the sweep does not fingerprint theme overrides, so were that marking to move
+# elsewhere this excuse would go with it and the rung would fail again rather than
+# pass quietly.
+func _levelup_expect(c: BaseButton) -> String:
+	if c.has_meta("level") and c.has_theme_stylebox_override("normal"):
+		return "inert: the climb's open rung — the panel beside it already reads this level"
 	return ""
 
 func _levelup() -> void:

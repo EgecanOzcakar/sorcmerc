@@ -7512,6 +7512,42 @@ so a caller can tell "no art" from "the generic one".
   48; both read, neither sings.
 - The creator's class step is still unwired, and `Climb.build(id, "", 0)` still
   returns exactly the track it wants.
+
+## Master went red on the climb's open rung (2026-09-22, repair)
+
+The ladder shipped with `tests/drive_buttons.gd` failing, and the merge carried
+that failure onto master:
+
+```
+FAIL: levelup/preview: pressing '' changed nothing — silent no-op
+FAIL: levelup/committed: pressing '' changed nothing — silent no-op
+```
+
+The sweep's whole job is to catch a button wired to a handler that does nothing
+(`e3cc910`), so an empty-labelled button doing nothing is exactly what it is
+built to shout about. Here it is right about the observation and wrong about the
+verdict. `_climb_panel()` hangs twenty label-only rungs under the level-up card;
+a rung press moves the right-hand panel to that level, and the panel opens on
+the level being taken. Nineteen rungs per page rewrite it. The twentieth is the
+one already showing, and re-picking it is the same legitimate no-op as the
+creator's lit step in the outline bar, which the sweep has excused since #82.
+
+So the excuse is written the way that one is: per control, with a reason, found
+by the mark the widget itself uses. `climb_view._mark_selected()` gives the open
+rung — and only the open rung, it clears every other — a `normal` stylebox
+override. The sweep does not fingerprint theme overrides, so if that marking
+ever moves the excuse goes with it and the rung fails again rather than passing
+quietly, which is the direction this sweep should fail in.
+
+`drive_buttons` reads 894 passed, 0 failed, 795 presses with 19 inert by design
+— two more than before, which is the two rungs and nothing else. Full suite 142
+passed, 0 failed.
+
+### Still open
+
+- The failure was visible on #172's own run before the merge. Nothing in the
+  repo makes a red required check block a merge; that is a branch-protection
+  setting, not a code change.
 ## Two the road got wrong — the raiders' own kin, and a past paid to the dead (2026-09-22)
 
 Two bugs in the open world's fight hand-off, both of them ordering rather than
