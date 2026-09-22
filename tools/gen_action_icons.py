@@ -1246,6 +1246,13 @@ FEATURES = {
                              star(50, 16, 6, 2, 4, LIGHT, sw=1.0)),
     "barbarian-rage": (mask(E("fire"), "scream"), waves(E("fire"), 0.5)),
     "barbarian-reckless-attack": (slashes(E("steel"), 2), star(46, 18, 6, 2, 4, E("fire"), sw=1.0)),
+    # Feral Instinct is advantage on INITIATIVE — knowing before you are told —
+    # so it is the open eye, in the barbarian's own fire rather than the
+    # shadow the watchers elsewhere wear. It never reaches the action bar
+    # (trigger "passive", core/combat.gd's NON_BUTTON_TRIGGERS), but
+    # tests/test_action_icons.gd asks every OFFERABLE kind for art whether it
+    # is pressed or not, and the sheet shows it either way.
+    "barbarian-feral-instinct": (eye(E("fire"), 1.0), star(48, 17, 6, 2, 4, LIGHT, sw=1.0)),
     "monk-flurry-of-blows": (fist(E("steel")), chevron(52, 22, 0, 8, 4, E("gold"))),
     "monk-stunning-strike": (fist(E("gold")), star(48, 18, 7, 2.4, 4, LIGHT, sw=1.0),
                              star(16, 22, 5, 1.8, 4, LIGHT, sw=1.0)),
