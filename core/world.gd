@@ -22,6 +22,16 @@ const WorldPath = preload("res://core/world_path.gd")   # #95
 # Day/HH:MM readout, O6's RESTOCK, O7's DAY := 1440.0) reads `elapsed` that way.
 const SPEED := 40.0   # map units per world-minute, every party for now
 
+# #164: an NPC band's SPEED multiplier by faction — beasts and dragons outrun a
+# soldier company, undead and constructs shamble. The player's own speed does
+# not read this table at all; core/travel.gd's slowest-walker rule owns that.
+const FACTION_SPEED := {
+	"beast": 1.3, "gnoll": 1.2, "kobold": 1.0, "goblinoid": 1.0, "bandit": 1.0,
+	"human": 1.0, "elf": 1.0, "dwarf": 0.9, "orc": 1.0, "undead": 0.6,
+	"giant": 0.8, "construct": 0.7, "monstrosity": 1.1, "dragon": 1.5,
+	"elemental": 1.2, "fey": 1.2, "cultist": 0.9, "soldier": 1.0,
+}
+
 # Real-time-with-pause. RefCounted, not a Node: O2's world scene drives it with
 # one line in _process (`world.tick(delta)`), which is also how headless tests
 # drive it with fixed deltas.
@@ -212,6 +222,8 @@ class RoamingParty extends RefCounted:
 		faction = faction_v
 		is_player = is_player_v
 		goal = position_v
+		if not is_player_v:
+			speed = SPEED * FACTION_SPEED.get(faction_v, 1.0)
 
 	# {} if this party has no troop roster at all.
 	func highest_troop() -> Dictionary:

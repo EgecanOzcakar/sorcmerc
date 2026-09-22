@@ -6714,3 +6714,32 @@ map next to the town rather than a line in the purse.
   one does.
 - `_settlements3d.reset` rebuilds every diorama on a buy or a build, not
   only the lodge's: a `rebuild_lodge` if it ever shows.
+
+## Party speed from a stat — the slowest hero sets the pace (2026-09-22)
+
+Issue #164. `World.SPEED` was one number for every party; the road now
+listens to who is actually walking it. `Travel.speed_mult(party)`
+(`core/travel.gd`) gains a second factor on top of the pace multiplier: the
+slowest active, living member's `sheet().speeds["walk"]` over 30 — RAW's
+"a group moves at its slowest member's pace" — with an empty marching
+order reading 1.0 rather than dividing by nothing. `Travel.slowest_walker`
+finds that hero; `Travel.walk_note` turns it into a sentence, shown on the
+party screen's standing-orders row only when it says something ("The
+company moves at 25 ft — Thrun's stride."), silent for the common case of
+an all-30-ft company. A swift spell (Fly/Longstrider) still takes the max
+over the slowed-down pace, same as it already did over a forced march's.
+
+NPC bands read a flat multiplier off their faction instead —
+`World.FACTION_SPEED`, set once in `RoamingParty._init` for anyone who
+isn't the player (beasts and dragons outrun a soldier company, undead and
+constructs shamble) — and it round-trips through a save/load unchanged,
+since `core/world_save.gd` already carried `speed` as a plain field.
+
+`tests/test_travel.gd` pins the formula: a party of 30-ft heroes still
+reads ×1.0, a 25-ft straggler caps normal pace at 25/30 and stacks under a
+forced march's 1.4, a swift spell still wins, an empty party doesn't
+divide by nothing, and a saved-and-reloaded undead band keeps its 0.6.
+`data/species.json` has no species under 30 ft today (goliath is 35, the
+one exception), so the slow-walker case is exercised through a small
+duck-typed stand-in rather than a real hero — the rule is ready for the
+day a species or a wound gives one.
