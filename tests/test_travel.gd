@@ -490,6 +490,18 @@ func _init() -> void:
 	check(is_equal_approx(Travel.speed_mult(pd), 1.40 * 25.0 / 30.0),
 		"...and a forced march still stacks its ×1.4 on top (%.3f)" % Travel.speed_mult(pd))
 
+	# ...and the real way a hero gets there: heavy armour under its Str floor
+	# (core/rules/resolve.gd, #164). Vera in chain mail needs Str 13.
+	var weak := Presets.vera()
+	weak.base_abilities["str"] = 9   # 11 with the soldier background's +2, under chain mail's 13
+	weak.dirty()
+	check(int(weak.sheet().speeds["walk"]) == 20, "chain mail under Str 13 is 20 ft (%d)" % int(weak.sheet().speeds["walk"]))
+	check(int(Presets.vera().sheet().speeds["walk"]) == 30, "...and at her own Str it is 30")
+	var pw := Party.new()
+	pw.add_member(weak)
+	Travel.set_orders(pw, "normal")
+	check(is_equal_approx(Travel.speed_mult(pw), 20.0 / 30.0), "so she sets the company's pace at 20/30")
+
 	# All-standard-speed party: no penalty, no note.
 	var p30 := Party.new()
 	for ch in [Presets.vera(), Presets.pike(), Presets.ilsa()]:
