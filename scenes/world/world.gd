@@ -1699,20 +1699,29 @@ func _show_spoils(result: Dictionary) -> void:
 	if won:
 		# "tally": #157 — the one row worth counting up rather than simply
 		# arriving, because it is the number the fight was fought for.
+		# #157's reference: the company that fought, each with the HP they have
+		# left and how far to the next level; then who fell to them, with what
+		# each was worth; then the tally; then the haul as tiles, not a list.
+		rows.append(_spoils_company())
+		var fallen := _spoils_fallen(result.get("kills", []))
+		if fallen != null:
+			rows.append(fallen)
 		rows.append(["+%d XP,  +%d gold" % [int(result.get("xp", 0)), int(result.get("gold", 0))],
 			Icons.COL_GOLD, "tally"])
-		# One line for the haul, a count on a repeat — "Potion of Healing ×2",
-		# not the same line twice.
-		var counts := {}
+		var counts := {}   # a count on a repeat — "×2", not the same tile twice
 		for item in result.get("loot", []):
 			counts[String(item)] = int(counts.get(String(item), 0)) + 1
-		var names: Array = []
-		for item in counts:
-			names.append(Campaign.item_name(item) + (" ×%d" % counts[item] if counts[item] > 1 else ""))
-		if names.is_empty():
+		if counts.is_empty():
 			rows.append(["Nothing worth carrying off the bodies.", Icons.COL_MUTED])
 		else:
-			rows.append(["Taken from the dead: %s" % ", ".join(names), Icons.COL_TEXT])
+			var haul := HBoxContainer.new()
+			haul.add_theme_constant_override("separation", 6)
+			haul.custom_minimum_size.y = Icons.ITEM_ART_PX + 30
+			for item in counts:
+				var kd := Icons.item_def(item)
+				haul.add_child(Icons.item_tile(item, Icons.item_tooltip(item, kd[1], kd[0]),
+					Campaign.item_name(item), Icons.ITEM_ART_PX, "", counts[item]))
+			rows.append(haul)
 	var obj: Dictionary = result.get("objective", {})
 	if String(obj.get("kind", "")) != "":
 		rows.append([Objectives.spoils_line(obj), Icons.COL_GOLD if bool(obj.get("done", false)) else Icons.COL_FOE])
@@ -1727,6 +1736,77 @@ func _show_spoils(result: Dictionary) -> void:
 	if not won and _lair_msg != null and _lair_msg.text != "":
 		rows.append([_lair_msg.text, Icons.COL_FOE])
 	_build_spoils_panel("Victory" if won else "Defeat", rows)
+
+# The company on the after-action page: a card each for the ones who marched —
+# glyph, name, the HP they walked out with and how far to the next level.
+func _spoils_company() -> Control:
+	var strip := HBoxContainer.new()
+	strip.add_theme_constant_override("separation", 8)
+	strip.alignment = BoxContainer.ALIGNMENT_CENTER
+	strip.custom_minimum_size.y = 62
+	for id in party.active:
+		var ch = party.get_member(id)
+		if ch == null:
+			continue
+		var card := VBoxContainer.new()
+		card.add_theme_constant_override("separation", 2)
+		card.custom_minimum_size.x = 96
+		var name := Label.new()
+		name.text = "%s %s" % [Icons.class_glyph(ch.class_id()), ch.cname]
+		name.clip_text = true
+		name.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+		name.add_theme_color_override("font_color", Icons.COL_FOE if ch.dead else Icons.COL_HEAD)
+		card.add_child(name)
+		var max_hp: int = maxi(1, int(ch.sheet().max_hp))
+		var hp: int = 0 if ch.dead else (max_hp if ch.hp_current < 0 else ch.hp_current)
+		card.add_child(_spoils_bar(hp, max_hp, Icons.COL_FOE, "%d/%d" % [hp, max_hp]))
+		var need: int = Leveling.xp_for_level(ch.level() + 1)
+		card.add_child(_spoils_bar(int(ch.xp), need, Icons.COL_GOLD, "%d xp" % int(ch.xp)))
+		strip.add_child(card)
+	return strip
+
+func _spoils_bar(have: int, goal: int, ink: Color, caption: String) -> Control:
+	var bar := ProgressBar.new()
+	bar.max_value = goal
+	bar.value = have
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 14)
+	bar.tooltip_text = caption
+	bar.add_theme_stylebox_override("background", Icons.box(Icons.COL_INK, Icons.COL_EDGE, 2, 0, 0))
+	bar.add_theme_stylebox_override("fill", Icons.box(ink, Color(0, 0, 0, 0), 2, 0, 0))
+	var l := Label.new()
+	l.text = caption
+	l.set_anchors_preset(Control.PRESET_FULL_RECT)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_font_size_override("font_size", Icons.FS_SMALL - 2)
+	l.add_theme_color_override("font_color", Icons.COL_HEAD)
+	bar.add_child(l)
+	return bar
+
+# Who fell to them — one chip per kind, a count on a repeat, and what the
+# bestiary says each was worth. Null when nothing died (a rout, an escort).
+func _spoils_fallen(kills: Array) -> Control:
+	if kills.is_empty():
+		return null
+	var counts := {}
+	for k in kills:
+		counts[String(k)] = int(counts.get(String(k), 0)) + 1
+	var strip := HBoxContainer.new()
+	strip.add_theme_constant_override("separation", 6)
+	strip.alignment = BoxContainer.ALIGNMENT_CENTER
+	strip.custom_minimum_size.y = 40
+	for id in counts:
+		var m: Dictionary = Catalog.monster(id)
+		var chip := Label.new()
+		chip.text = "%s%s  %d xp" % [String(m.get("cname", id.capitalize())),
+			" ×%d" % counts[id] if counts[id] > 1 else "", int(m.get("xp", 0)) * counts[id]]
+		chip.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+		chip.add_theme_color_override("font_color", Icons.COL_FOE)
+		chip.add_theme_stylebox_override("normal", Icons.box(Icons.COL_INK, Icons.COL_FOE, 3, 8, 3))
+		strip.add_child(chip)
+	return strip
 
 # What the whole descent paid, once the party is back out on the map.
 func _show_delve_spoils(l, cleared: bool) -> void:

@@ -83,8 +83,10 @@ func _wound(text: String, k: float) -> String:
 		at = m.get_end()
 	return out + text.substr(at)
 
-# `rows` are [text, colour] or [text, colour, "tally"] — a tally row counts its
-# numbers up instead of simply arriving. `art` and `tip` may be null/"".
+# `rows` are [text, colour], [text, colour, "tally"] — a tally row counts its
+# numbers up instead of simply arriving — or a Control the caller built (the
+# party strip, the fallen, the haul as tiles), dealt on its own beat like a
+# line. `art` and `tip` may be null/"".
 func build(heading: String, rows: Array, art: Texture2D, tip: String, on_close: Callable) -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -144,7 +146,10 @@ func build(heading: String, rows: Array, art: Texture2D, tip: String, on_close: 
 		box.add_child(_art)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(420, clampf(rows.size() * 26.0, 52.0, 320.0))
+	var tall := 0.0   # a text line is a line; a built row says how tall it is
+	for row in rows:
+		tall += row.custom_minimum_size.y + 6.0 if row is Control else 26.0
+	scroll.custom_minimum_size = Vector2(420, clampf(tall, 52.0, 420.0))
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -155,6 +160,11 @@ func build(heading: String, rows: Array, art: Texture2D, tip: String, on_close: 
 
 	var at := ROWS_AT
 	for row in rows:
+		if row is Control:
+			list.add_child(row)
+			_rows.append({"node": row, "at": at, "text": "", "tally": false})
+			at += ROW_GAP
+			continue
 		var l := Label.new()
 		l.text = String(row[0])
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -236,7 +246,7 @@ func _apply() -> void:
 		_art.modulate.a = _k(ART_AT, ART_FOR)
 	for r in _rows:
 		var kr := _k(float(r["at"]), ROW_FOR)
-		var node: Label = r["node"]
+		var node: Control = r["node"]
 		# Colour AND opacity in one write: modulate multiplies the theme colour
 		# the row was given, so a line lands hot and cools into its own ink.
 		node.modulate = Color(FLASH.lerp(Color.WHITE, kr), kr)

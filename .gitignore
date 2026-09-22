@@ -33,4 +33,4 @@ beast_gallery.png*
 damage_numbers.png*
 /assets/NewlyDownloadedModels/*
 # tests/shot_spoils.gd output
-spoils_sequence.png*
+spoils_*.png*

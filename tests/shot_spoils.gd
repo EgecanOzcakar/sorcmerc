@@ -1,48 +1,50 @@
-# Dev-only: three frames of the after-action page's sequence, side by side, so
-# a PR can show an animation in one still. Needs a display (it renders); not
-# part of run_tests.sh.
-#   godot --path . --resolution 900x700 -s tests/shot_spoils.gd
-#   -> spoils_sequence.png
+# Dev-only: the after-action page as the map builds it — the company, the
+# fallen, the tally, the haul as tiles — captured every few frames of its
+# sequence so a PR can show the deal as a GIF. Needs a display (it renders);
+# not part of run_tests.sh.
+#   godot --path . --resolution 900x760 -s tests/shot_spoils.gd
+#   -> spoils_NN.png (a frame every 3), then e.g.
+#      ffmpeg -framerate 20 -i spoils_%02d.png spoils.gif
 extends SceneTree
 
-const Icons = preload("res://core/ui_icons.gd")
-const Spoils = preload("res://scenes/world/spoils.gd")
-
-const ROWS := [
-	["+400 XP,  +50 gold", Icons.COL_GOLD, "tally"],
-	["Taken from the dead: Handaxe, Potion of Healing ×2", Icons.COL_TEXT],
-	["The bandits' camp is burned out — the job is done.", Icons.COL_GOLD],
-	["Vera Kord did not get up.", Icons.COL_FOE],
-]
-
-# Where in the sequence each panel is taken, as a fraction of the whole.
-const AT := [0.14, 0.52, 1.0]
+const World = preload("res://core/world.gd")
 
 func _init() -> void:
-	var bg := ColorRect.new()
-	bg.color = Icons.COL_BG
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(bg)
-	var page = Spoils.new()
-	root.add_child(page)
-	page.build("Victory", ROWS,
-		Icons.scene_art("summary-victory", null),
-		"Tip: the high ground is +2 to hit anything below you.",
-		func(): pass)
+	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
+	OS.set_environment("SORCMERC_FAST", "")
+	var main = load("res://scenes/world/world.tscn").instantiate()
+	root.add_child(main)
+	for i in 10:
+		await process_frame
+	var p = main.world.player()
+	var foe = World.RoamingParty.new("bandits-shot", p.position + Vector2(10, 0), "bandit")
+	main.world.parties.append(foe)
+	main._launch_combat(foe)
+	var guard := 0
+	while main._combat == null and guard < 60:
+		await process_frame
+		guard += 1
+	main.party.get_member(main.party.active[1]).hp_current = 9
+	main._combat.result = {"outcome": "Victory", "xp": 400, "gold": 50,
+		"loot": ["handaxe", "potion-of-healing", "potion-of-healing"],
+		"kills": ["bandit", "bandit", "bandit-captain"], "deaths": []}
+	guard = 0
+	while main._spoils_panel == null and guard < 60:
+		await process_frame
+		guard += 1
+	var page = main._spoils_panel
 	page._done = true          # driven by hand, frame by frame
-
-	var strip: Image = null
-	for i in AT.size():
-		page._t = page._end * float(AT[i])
+	var n := 0
+	var t := 0.0
+	while t <= page._end + 0.3:
+		page._t = t
 		page._apply()
-		for _f in 3:
+		for _f in 2:
 			await process_frame
 		RenderingServer.force_draw()
 		await process_frame
-		var img := root.get_viewport().get_texture().get_image()
-		if strip == null:
-			strip = Image.create_empty(img.get_width() * AT.size(), img.get_height(), false, img.get_format())
-		strip.blit_rect(img, Rect2i(Vector2i.ZERO, img.get_size()), Vector2i(img.get_width() * i, 0))
-	strip.save_png("res://spoils_sequence.png")
-	print("saved spoils_sequence.png  %dx%d" % [strip.get_width(), strip.get_height()])
+		root.get_viewport().get_texture().get_image().save_png("res://spoils_%02d.png" % n)
+		n += 1
+		t += 0.05
+	print("saved %d frames" % n)
 	quit()
