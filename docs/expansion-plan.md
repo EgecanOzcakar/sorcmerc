@@ -8487,3 +8487,37 @@ the whole script — and a test script that never compiles never reaches
 - Nothing on the card is clickable except the ✕ — no targeting, no selection.
   A card that could change the fight would need every guard the action bar has.
 - Nothing on the card is clickable except the ✕ and the chips' tooltips.
+
+## Board props from models, fitted to the kit (2026-09-23)
+
+The downloaded batch for #167's twenty-two prop kinds — torch to crate-low,
+with `bush` standing in for bramble — was 1.5 GB of Meshy output at 1-5M
+triangles a file (the tree 2.2M, the bush 5.2M). `tools/import_beasts.py`
+already did this job for monsters, so it did it here: `DST=assets/board
+TRIS=10000 --force`, which gltfpacks each to 10k, keeps the albedo alone at
+1024, and lands them at ~0.5 MB each. 10k rather than the settlements' 4k
+because a fight zooms in on the props a settlement never gets close to.
+
+`BoardProps.build()` draws the model when one exists and still builds the kit
+every time — to measure it. The kit's box is the contract: cover and objects
+keep the kit's HEIGHT and are held to `HEX_SPAN` (1.6) across, squeezed if
+wider; rough keeps the kit's WIDTH and is squashed to its height. A uniform
+"tighter of the two" fit was the first try and failed both ways: the gorse
+came out 0.4 across a 1.3 hex (a speck), and the stakes 0.47 high, the reeds
+1.06 and the crate-stack 0.9 — cover no longer worth hiding behind.
+`test_board_props.gd` now asserts every model against the same height rules as
+the plans, and a hex across.
+
+The doppelganger, skipped in the 09-22 batch for having no texture, is in on
+`--untextured`: a flat grey material, and smooth normals the importer now
+computes — the download is POSITION only, Godot makes none, and the first
+render was a grey cut-out silhouette.
+
+### Still open
+
+- Every hex of one kind is the same model under a seeded yaw; the kit varied
+  per seed. Two alts per kind would do it where the download has them.
+- The squeeze is non-uniform. Nothing looks wrong at board zoom, but the stakes
+  are narrowed hardest and are the first place to look if something does.
+- `tests/shot_board_props.gd`'s gallery frames the old kit sizes and draws the
+  models small; the two board shots are the ones to judge by.
