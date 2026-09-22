@@ -32,5 +32,7 @@ beast_gallery.png*
 # tests/shot_damage.gd output
 damage_numbers.png*
 /assets/NewlyDownloadedModels/*
+# tests/shot_spoils.gd output
+spoils_*.png*
 # tests/shot_height.gd output
 height_board.png*

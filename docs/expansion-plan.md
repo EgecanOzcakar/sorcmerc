@@ -6797,6 +6797,69 @@ all.
   question — everything in there came from the same place — and cost a second
   path to keep in step.
 
+## The after-action page, played instead of printed (2026-09-22, #157)
+
+Issue #30 gave a won fight a page, so the haul stopped being paid in silence.
+What that page *was*, was a receipt: a gilt box appeared with every line of it
+already on screen — heading, painting, "+400 XP, +50 gold", what came off the
+bodies, who did not get up, a tip and a button. Nothing moved and nothing
+arrived, and the biggest moment in a run read exactly like the merchant's stock
+list two screens over.
+
+It is the same rows in the same order now, dealt out over about a second and a
+half (`scenes/world/spoils.gd`). The verdict lands first, at `FS_TITLE + 6` in
+gilt rather than as a section heading — the combat screen's own wash says
+V I C T O R Y at 54 px about the same fight, and the word should not shrink on
+the way out — punching down from oversized to its own size, with a rule opening
+under it from the middle. The painting comes up beneath that. Then each line
+arrives on its own beat out of a bright flash, the XP-and-gold row counting up
+to what was won. The way on appears last.
+
+Three things it is careful about, and each of them is a thing a later editor
+can break without noticing:
+
+- **Every label carries its final text from the first frame.** The stagger is
+  opacity and colour, never text that has not arrived yet — so a screen reader,
+  a test asking "does this page say +400 XP", and a player who clicked straight
+  through all read the same page.
+- **A counting row is its own final text with the digits wound back**, and at
+  `k >= 1` the original string is returned rather than recomputed, so a counter
+  cannot land on 399. `_wound()` scales every run of digits, so the row writes
+  itself and nothing has to be passed in twice.
+- **`Settings.anim()` zeroes the whole thing.** At Instant, and under
+  `SORCMERC_FAST` — every headless run and the entire suite — the page is fully
+  open on the frame it is built, button and all. An after-action page that had
+  to be waited out would turn every UI robot into a timing test.
+
+A click or a key anywhere on the page finishes the sequence at once. That is
+deliberately not a button: the page has exactly one of those and it is the way
+on, which is also what `tests/test_world_spoils.gd` counts.
+
+Rows animate by opacity and colour rather than by sliding because they are
+children of a `VBoxContainer`, and a container owns its children's positions —
+an animated `position` survives only until something queues a sort, which an
+autowrapping label inside a scroll does whenever the panel settles. The flash
+is what is left of the motion and it is enough to make a line read as dealt.
+
+`tests/test_spoils_page.gd` winds the sequence forward by hand rather than
+waiting for it: that a plain row carries its final text at every frame, that
+some row is faded out before its beat (so the page is staggered rather than
+merely slow), that the tally only ever counts up and lands on the exact string
+it started from, that the way on is not pressable while the page is still
+talking, and that a click finishes everything without adding a second button.
+`tests/shot_spoils.gd` renders three frames of it side by side, which is how an
+animation gets into a PR that asks for one screenshot per feature.
+
+### Not built
+- The linear campaign's own end-of-fight screen (`scenes/campaign/`), which
+  holds the fight up behind a "Back to the road" button and never had #30's
+  problem.
+- Per-hero rows — who landed the killing blow, who took the most, an XP bar
+  filling per character. The page reports the party's haul, not the fight's
+  statistics, and the character sheets are two clicks away.
+- Sound. The page is silent; the fight's victory sting already played under the
+  combat screen's wash a moment earlier.
+
 ## Height on the combat map — a board with a shelf on it (2026-09-22, #156)
 
 The hex board has been flat since the zones became hexes: every tile the same
