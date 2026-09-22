@@ -7083,3 +7083,76 @@ four legs in five nobody dies, three in five arrive with half their HP.
   may hold "bandits" and "bandit-gang-1" a field apart.
 - Refill picks the spot blind to the rings' fill: a heartland stripped bare
   refills at the table's global weights, not where the gap is.
+
+## Biomes on the combat board — deferred, and what it would cost (2026-09-22, design note)
+
+**Nothing here is built.** This is the half of the biome design that was
+deliberately left out of it, written down so the reasons survive the
+conversation that produced them.
+
+The shape biomes are planned in: `core/world.gd` grows a `biomes` array of
+`{position, radius, kind}` blobs beside `waters` and one `biome_at(pos)`
+reader, a blob names one habitat out of `data/bestiary.json`'s vocabulary
+(`forest` 82 entries, `wild` 78, `any` 66, `dungeon` 48, `water` 26, `cave`
+16), and that habitat reaches a fight through the seam `core/scaler.gd`
+already has — `THEME_HABITAT`, which today holds exactly one row
+(`forest-clearing` -> `forest`, added so a killer whale would stop turning up
+in a wood). Biome picks the board and the roster; the ring
+(`core/regions.gd`) still says how dangerous the country is.
+
+That first pass is **flavour-only on purpose**: board theme, palette,
+`region_at` naming and roster habitat, and nothing that moves a number. Every
+knob below is a real difficulty change wearing a terrain costume, and each one
+costs a `tests/test_scaler.gd` sweep rather than a judgement call. They are
+worth doing — a marsh that plays like a wood is a wasted biome — but as a
+measured balance pass of their own, not as a side effect of painting the map.
+
+### The knobs, and what each one actually moves
+
+- **Rough density per biome** (a sticky marsh, clean downs). Rough is a
+  movement cost, spent through `Hex.reachable` (`core/combat.gd:2865`), so it
+  taxes whoever is *approaching* — and at the levels the scaler is calibrated
+  at, that is mostly the monsters while the party shoots and casts. So "the
+  swamp slows you down" reads as flavour and lands as *easier*. Unmeasured;
+  the reasoning is `core/encounter.gd`'s own, borrowed from the shelf note
+  below, which is the same shape of cost.
+
+- **Height per biome** (crags get two shelves, marsh none). `BOARD_SHELVES`
+  is 1 and `core/encounter.gd:90-98` says in capitals that it is a balance
+  number, not a taste one: measured at level 3 on hard, 200 fights a tier,
+  flat 83.5 %, one shelf 85.0 %, two shelves 87.5 %, against a target band of
+  65-85 %. Two shelves is already outside the difficulty the game is
+  calibrated to. A biome that varies this is re-measuring `core/scaler.gd`,
+  which is exactly what that comment forbids doing casually.
+
+- **Cover density per biome** (dense woods, open downs). Half cover is +2 AC
+  (`core/combat.gd:745`) and a saving-throw bonus (`:3148`), and it is worth
+  more to whoever is being shot at. Same asymmetry as rough, opposite sign,
+  and the two do not cancel in any way anybody has measured.
+
+- **Which light sources a board carries.** A marsh with no campfire is not a
+  darker *picture*, it is a darker *board*: `is_night()` / `lit()` /
+  `can_see()` (`core/combat.gd:1833-1862`) turn an unlit hex into
+  disadvantage to swing at what is in it and advantage to be struck from it.
+  This one is the trap — **most monsters have darkvision and the party's edge
+  is ranged attacks**, so an unlit biome is a systematic, one-sided gift to
+  the monsters. Any fog or weather effect built on the same machinery inherits
+  the same bias. It will not be obvious without a sweep; it will be obvious
+  in play.
+
+- **Biome-specific hazards and props** (a tar pit, a rockfall). New object
+  types rather than new numbers on old ones, so this is the one that could be
+  additive — but `objects` carry 2d6 hazards and explosives today, and a
+  hazard the AI will shove into is a damage source the budget never priced.
+
+### The floor, whenever it does get built
+
+Even under flavour-only, **a new board is never free**. The two boards the
+first pass needs (open downs, marsh) should carry cover, rough and object
+counts comparable to the existing six — *including at least one light
+source* — and go through `tests/test_scaler.gd` to confirm they land in band.
+The goal is verified neutrality, not assumed neutrality.
+
+The prize for getting there: `DEFAULT_THEME := "forest-clearing"`
+(`scenes/world/world.gd:123`) finally dies, and open-country fights stop all
+happening in the same clearing regardless of where on the map they started.
