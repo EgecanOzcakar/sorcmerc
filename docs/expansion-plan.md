@@ -7526,3 +7526,218 @@ behaviour.
   that the roster is reliably one people, a per-faction room pool is a content
   seam that would actually pay — the `ponytail` at `core/site.gd:95` already
   names it.
+
+## A boss for the ten factions that never had one (2026-09-22)
+
+The note above closed on this: `core/campaign.gd`'s `BOSS_POOL` is keyed by
+THEME and holds six entries, and a theme is a BOARD, so only five factions had
+a climax. `_boss_room()` fell through for the other ten — orc, gnoll, kobold,
+cultist, soldier, monstrosity, fey, elemental, construct, dragon — to a plain
+`"hard"` roster with no lead at all and the title `"WHAT THE LAIR WAS BUILT
+AROUND"`, a description where every real boss has a name (`"THE ONI OF THE
+DEEP ICE"`, `"THE ARROW-CHIEF"`). Two thirds of the lairs in the game ended in
+a slightly bigger version of the room before them, which is what the level-8
+column of the previous entry's grid was saying when every themeless lair came
+out a flat 100% clear and a giant hold with a real oni in it came out 25%.
+
+`core/site.gd`'s `FACTION_BOSS` is the other ten, keyed by faction, in the
+same two shapes `BOSS_POOL` uses and for the same reasons. `"bestiary"` is a
+distinctive creature of the faction's own kin, pulled out of the ordinary pool
+by `_boss_lead_exclusion()` so that meeting it is a reveal rather than the
+third one today. `"elite"` is the faction's ordinary creature with a title and
+an extra attack, for the three whose bestiary pool is one or two thin entries
+— **orc has exactly one**, gnoll and kobold two — and there `boss_for`'s mult
+knob does the work and the budget's remainder buys escort, exactly as the
+arrow-chief's does.
+
+`lead_features` is the special, and it is the point of the pass: one feature
+out of `data/effects/features.json` that the base statblock does NOT already
+carry, picked so the last room asks a question the rooms above it did not. The
+ten are deliberately all different — a boss to reach fast (the mage's charm), to
+out-damage (the hag's regeneration), to stand up to (the elemental's knockdown),
+to out-last (the golem's relentless).
+
+### The boss sweep
+
+`tests/sweep_faction_boss.gd`, committed with this. Deliberately the same shape
+`tests/test_scaler.gd`'s `_sweep_boss` uses for `BOSS_POOL`'s own published
+numbers, so a new row is comparable to an old one: 40 seeds, one boss room per
+seed, a level-3 preset party at FULL HP. That is the boss on its own terms, not
+the boss at the bottom of four rooms of attrition — `tests/sweep_site_kin.gd`
+measures that, and the two are not the same number.
+
+The five themed bosses come through this harness unchanged by the pass and are
+the control and the yardstick at once:
+
+| faction | board | title | win |
+|---|---|---|---|
+| goblinoid | yes | THE ARROW-CHIEF | 70.0% |
+| beast | yes | THE THING IN THE TREELINE | 80.0% |
+| undead | yes | THE SUNKEN SHRINE | 90.0% |
+| bandit | yes | THE KNIFE IN THE SQUARE | 90.0% |
+| giant | yes | THE ONI OF THE DEEP ICE | 77.5% |
+| orc | no | THE WARCHIEF | 67.5% |
+| gnoll | no | THE ONE THAT EATS FIRST | 77.5% |
+| kobold | no | THE SCALE-SINGER | 77.5% |
+| cultist | no | THE VOICE THEY ALL ANSWER | 87.5% |
+| soldier | no | THE CAPTAIN WITH THE SCALED ARM | 95.0% |
+| monstrosity | no | THE THING WITH THREE HEADS | 92.5% |
+| fey | no | THE GREEN MOTHER | 70.0% |
+| elemental | no | WHAT THE HILL IS MADE OF | 55.0% |
+| construct | no | THE THING SOMEBODY MADE | 85.0% |
+| dragon | no | THE WYRM AT THE BOTTOM | 32.5% |
+
+Nine of the ten are inside the control's own 70-90% spread or within a few
+points of it. Two are worth naming rather than smoothing over:
+
+**cultist** first measured 97.5%, softer than any boss in the game, and is
+pulled to 87.5% with `lead_share: 0.25` instead of the default 0.40. Less of
+the fight spent on the lead is more of it spent on bodies, and bodies are what
+the action economy makes dangerous — `core/scaler.gd`'s own header says so, and
+the arrow-chief's `mult_max` note is the same knob from the other end. The
+cult's bodies happen to be other casters, which is the point of it.
+
+**soldier** measures 95.0% and is left there. Its lead is already at `MULT_MIN`,
+so `lead_share` cannot move it, and the cause is not this table: `power.gd`
+prices a guard and a noble well above how they actually fight, so the escort
+budget buys less fight than it thinks it does. That is the chaff-vs-chunk
+ponytail in `core/campaign.gd`, and chasing it from here would be tuning a
+number to hide a pricing bug.
+
+**dragon** at 32.5% is the hardest thing in the game and is meant to be. It is
+inside `test_scaler`'s 15-85% climax band, and it is measured at level 3 for a
+faction `Regions.HOMES` only ever places in the deeps. The first cut reached for
+`young-red-dragon` (CR 10) and measured 0.0% at every seed: `boss_for`'s mult
+knob can raise a lead for the deeps and has no way to lower one, so a lead
+priced above the boss band is a lead that is 0% at every level below it. CR 6
+is the fix, and the dragon still out-carries every other lead here on features
+alone — three attacks, an elemental rider and the greater breath.
+
+### And the delve the boss is at the bottom of
+
+`tests/sweep_site_kin.gd` again, the same two grids the entry above published,
+re-run with the bosses in. Cleared %, 20 delves a faction, level-8 party — the
+column where the gap showed, because down at level 3 most delves never reach
+the last room at all:
+
+| faction | board | depth | before | with a boss |
+|---|---|---|---|---|
+| goblinoid | yes | 3 | 80.0% | 80.0% |
+| beast | yes | 3 | 80.0% | 80.0% |
+| undead | yes | 3 | 100% | 100% |
+| bandit | yes | 3 | 45.0% | 45.0% |
+| giant | yes | 4 | 25.0% | 25.0% |
+| kobold | no | 4 | 95.0% | 35.0% |
+| orc | no | 4 | 100% | 20.0% |
+| gnoll | no | 4 | 100% | 15.0% |
+| cultist | no | 5 | 90.0% | 0.0% |
+| soldier | no | 5 | 100% | 70.0% |
+| monstrosity | no | 5 | 100% | 30.0% |
+| fey | no | 5 | 95.0% | 15.0% |
+| elemental | no | 6 | 65.0% | 10.0% |
+| construct | no | 6 | 100% | 90.0% |
+| dragon | no | 6 | 95.0% | 25.0% |
+
+The controls are byte-identical a third time, which is the guard this pass has
+leaned on throughout: nothing here can reach a faction that already had a boss.
+
+The swing looks enormous read as a column and is mostly the depth curve read
+the wrong way round. **Match the depths and it lines up with the reference it
+was built against**: at depth 4 the giant hold with a real oni in it clears
+25%, and the three new depth-4 lairs clear 35% (kobold), 20% (orc) and 15%
+(gnoll). That is the same fight, priced the same way. There is no themed lair
+at depth 5 or 6 to compare against, because `depth_for` scales depth by faction
+index and every faction past the fifth is one of the ten that had no boss —
+which is exactly why the hole was invisible until something was put in it.
+
+Two rows to name rather than smooth:
+
+**cultist, 0.0%.** Not the boss on its own terms — it measures 87.5% at full
+HP, the softest of the ten. It is the five rooms in front of it: the party wins
+4.00 of them and loses the fifth every time, arriving at a caster with nothing
+left. A cult of casters is the roster that punishes an adventuring day hardest,
+and depth 5 gives it four rooms to do it in.
+
+**construct, 90.0%**, at the same depth as the dragon's 25%. Golems are AC 9-17
+with no ranged option, so a level-8 party kites them; the boss went from
+unkillable to nearly free in one change, and neither number was ever about the
+boss's design.
+
+Both of those are the pre-existing depth curve and `power.gd`'s pricing showing
+through a hole that used to be plugged by "there is no boss". Neither is a
+reason to retune ten bosses that land correctly at the one depth where a
+calibrated comparison exists. A depth-aware pass — `depth_for` against the
+measured clear rates, rather than against a faction's index in a list — is the
+follow-up, and it is in Still open.
+
+### Two bugs the measurement turned up
+
+**Every golem in the bestiary was unkillable.** `core/adapter.gd` strips the
+`" from nonmagical weapons"` clause and keeps the types it names, because
+nothing in this game hands out a magical, silvered or adamantine weapon, so the
+clause always holds. That reading is right on a RESISTANCE — 32 entries, the
+specters and wraiths and elementals and most of the devils, halved damage, a
+hard fight and nothing worse. On an IMMUNITY the same reading says the creature
+cannot be hurt by a weapon AT ALL, by any party, ever — and 23 entries carry
+one: all nineteen lycanthropes, the couatl, and all three golems. A level-3
+trio put in a room with a flesh golem swung at AC 8 for six rounds, logged
+`is immune to slashing — 0 damage` every time, and lost 40 of 40 seeds.
+
+A qualified immunity is demoted to a resistance now. That is the honest reading
+of the same sentence rather than a softening of it: the creature shrugs a
+mundane weapon, which is what this engine's `resist` means, and RAW's own answer
+to the golem is a weapon the party is allowed to go and find. "Immune" here
+would be a statement the rules never make — that no weapon works — because the
+qualifier the SRD uses to make it false is not modelled. The construct boss went
+0% to 85% on that one change. Test: `test_qualified_immunity_is_resistance` in
+`tests/test_monster_defenses.gd`.
+
+Worth saying plainly: the previous entry's pin made construct lairs draw only
+construct, which raised the odds of meeting this rather than causing it. It was
+live on master for every roster that ever drew a golem.
+
+**A boss whose faction has one creature stood alone in an empty room.**
+`Scaler.boss_for` filters the lead out of its own escort, and it had to,
+because two entries naming one id both spawned an UNSUFFIXED combatant and
+`core/combat.gd` looks combatants up by id — statuses, concentration, a target
+list would all have found whichever came first. `orc`'s bestiary pool is that
+one entry, so the filter emptied the order, nothing was appended, and the whole
+escort budget went unspent: a 100% "boss" that was one slightly larger orc.
+
+Fixed at the bottom rather than patched at the top. `core/encounter.gd`'s
+`build()` counts copies per ID across the WHOLE spec instead of per entry, so
+the ids stay distinct however many entries name the same monster; the filter no
+longer carries that weight, and the escort falls back to the lead's own kin when
+there is nobody else to send. Unchanged for every spec that names an id once,
+which is all of them until now — the first copy of a lone single-count entry
+still spawns unsuffixed and a count > 1 entry still numbers 1..n — and it closes
+the same trap for a content pack authoring two groups of one monster.
+
+### Still open
+
+- **`power.gd` misprices the soldier faction**, which is why that boss sits at
+  95% with its budget fully spent. Same family as the chaff-vs-chunk ponytail
+  in `core/campaign.gd` and `core/scaler.gd`'s own note that the win-rate spread
+  is a pricing ceiling rather than a mapping. A re-priced `estimate()` is a
+  balance pass of its own and would move every number in this file.
+- **No lair boss pays anything extra for being harder.** `campaign.gd`'s
+  `_xp_mult()` turns a boss's `win_rate` under `BOSS_REF_WIN_RATE` into bonus
+  XP, and it is read by the linear run only; a site's XP is `Site.clear_xp`,
+  which is flat. So the dragon at 32.5% and the captain at 95.0% pay the same.
+  The measured numbers above are what such a bonus would be built from.
+- **Magic weapons.** They are the SRD's own answer to a golem, and the note in
+  `core/adapter.gd` says what has to change when they become gear: the qualified
+  list moves back to `immune` for anyone still swinging plain steel.
+- The lycanthropes and the couatl carry the same qualified immunity and are
+  fixed by the same change, but nothing rosters them today — `humanoid` and
+  `celestial` are not in `Scaler.FACTIONS`. A content pack naming one directly
+  would have hit the same wall.
+- **`depth_for` scales a lair's depth by its faction's index in a list**, which
+  is a proxy for "how far into the wild this is" and not a measurement of
+  anything. With bosses in, the grid above shows what that costs: depth 3
+  clears 45-100%, depth 4 15-35%, depth 5 0-70%, depth 6 10-90%. The spread
+  WITHIN a depth is `power.gd`'s pricing; the drop BETWEEN depths is
+  `depth_for`. A depth pass measured against clear rates rather than against a
+  list index is the obvious next one, and it would let the two thin outliers
+  above (cultist at depth 5, construct at depth 6) be fixed where they are
+  actually caused.
