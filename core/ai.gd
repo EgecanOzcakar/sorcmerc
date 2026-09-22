@@ -42,13 +42,22 @@ static func _nearest(from: Vector2i, list: Array):
 # worth, so a monster routes around a cloud and steps out of one it woke up in,
 # but still wades through when the only way to its prey runs through it.
 const ZONE_PENALTY := 4.0
+# #156: a level of height is +2 to hit from, so every destination is worth this
+# much per level before its own score is read. Deliberately small — enough to
+# break a tie and to pay back the extra step climbing costs, nowhere near
+# enough to send a monster up a shelf instead of at the thing it came to kill.
+const HIGH_GROUND_DRAW := 1.5
+
+static func _spot(cb, m, score: Callable, h: Vector2i) -> float:
+	return score.call(h) - (ZONE_PENALTY if cb.zone_hurts(m, h) else 0.0) \
+		+ HIGH_GROUND_DRAW * float(cb.height_at(h))
 
 static func _move_by(cb, m, score: Callable, disengage := false) -> void:
 	var field: Dictionary = cb.move_field(m)
 	var best: Vector2i = m.pos
-	var best_s: float = score.call(m.pos) - (ZONE_PENALTY if cb.zone_hurts(m, m.pos) else 0.0)
+	var best_s: float = _spot(cb, m, score, m.pos)
 	for h in field:
-		var s: float = score.call(h) - (ZONE_PENALTY if cb.zone_hurts(m, h) else 0.0)
+		var s: float = _spot(cb, m, score, h)
 		if s > best_s:
 			best_s = s
 			best = h

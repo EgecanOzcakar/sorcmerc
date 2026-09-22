@@ -35,7 +35,19 @@ static func direction_to(a: Vector2i, b: Vector2i) -> Vector2i:
 # shape), `blocked` are hexes you may not enter (occupied), `rough` hexes cost 2
 # to enter. You may still END adjacent to a blocked hex — it just isn't steppable.
 # Returns {Vector2i: cost}.
-static func reachable(passable: Callable, start: Vector2i, steps: int, blocked: Array, rough: Array = []) -> Dictionary:
+#
+# #156: `step` is the one cost that belongs to the STEP rather than to the hex
+# it ends on — Callable(from, to) -> extra cost, or STEP_BLOCKED for a pair of
+# hexes nothing can walk between. Height is what wanted it (climbing a shelf
+# costs, a cliff cannot be climbed at all); every other caller leaves it unset
+# and pays one is_valid() per edge for it.
+const STEP_BLOCKED := -1
+
+static func _step_cost(step: Callable, from: Vector2i, to: Vector2i) -> int:
+	return int(step.call(from, to)) if step.is_valid() else 0
+
+static func reachable(passable: Callable, start: Vector2i, steps: int, blocked: Array,
+		rough: Array = [], step: Callable = Callable()) -> Dictionary:
 	var dist := {start: 0}
 	var q: Array = [start]
 	while not q.is_empty():
@@ -50,7 +62,10 @@ static func reachable(passable: Callable, start: Vector2i, steps: int, blocked: 
 		for n in neighbors(cur):
 			if n in blocked or not passable.call(n):
 				continue
-			var nd: int = cost + (2 if n in rough else 1)
+			var extra := _step_cost(step, cur, n)
+			if extra == STEP_BLOCKED:
+				continue
+			var nd: int = cost + (2 if n in rough else 1) + extra
 			if nd <= steps and (not dist.has(n) or nd < dist[n]):
 				dist[n] = nd
 				if not n in q:
@@ -59,7 +74,8 @@ static func reachable(passable: Callable, start: Vector2i, steps: int, blocked: 
 
 # Shortest-cost path start→dest (inclusive) as a Vector2i list, or [] if none.
 # Used for path-aware opportunity attacks.
-static func path_to(passable: Callable, start: Vector2i, dest: Vector2i, blocked: Array, rough: Array = []) -> Array:
+static func path_to(passable: Callable, start: Vector2i, dest: Vector2i, blocked: Array,
+		rough: Array = [], step: Callable = Callable()) -> Array:
 	var dist := {start: 0}
 	var prev := {}
 	var q: Array = [start]
@@ -74,7 +90,10 @@ static func path_to(passable: Callable, start: Vector2i, dest: Vector2i, blocked
 		for n in neighbors(cur):
 			if n in blocked or not passable.call(n):
 				continue
-			var nd: int = dist[cur] + (2 if n in rough else 1)
+			var extra := _step_cost(step, cur, n)
+			if extra == STEP_BLOCKED:
+				continue
+			var nd: int = dist[cur] + (2 if n in rough else 1) + extra
 			if not dist.has(n) or nd < dist[n]:
 				dist[n] = nd
 				prev[n] = cur

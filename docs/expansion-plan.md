@@ -6714,3 +6714,84 @@ map next to the town rather than a line in the purse.
   one does.
 - `_settlements3d.reset` rebuilds every diorama on a buy or a build, not
   only the lodge's: a `rebuild_lodge` if it ever shows.
+
+## Height on the combat map — a board with a shelf on it (2026-09-22, #156)
+
+The hex board has been flat since the zones became hexes: every tile the same
+height, and the only thing the ground could say about itself was rough, cover,
+or a hazard. Height is the fourth thing, and it is deliberately the cheapest
+version of it that still changes where a player wants to stand.
+
+`board["height"]` is `{Vector2i: level}`, absent meaning ground level. One
+level is five feet — one hex radius — and three rules read it, chosen because
+all three are answerable from the board at a glance:
+
+- **Climbing costs.** A step up one level costs one extra, the same as rough
+  ground; 5e charges a foot per foot climbed and on a hex board that is the
+  same answer. Stepping down is free — you drop.
+- **More than one level is a cliff.** Nothing walks it, in either direction:
+  the scramble up is out of reach and the fall down is not a move, it is an
+  accident. Go round.
+- **The high ground is +2 to hit.** The mirror of the +2 AC half cover already
+  gives, and the same size of thumb on the scale. sorcmerc's own rule, not the
+  2024 PHB's, which has no general high-ground bonus.
+
+And one that is about seeing rather than about rolling: ground higher than
+*both* ends of a line is a ridge between them and blocks line of sight. Higher
+than only one end is a slope somebody is standing on or under, and you can
+always see up or down a slope.
+
+The step cost is the one number that belongs to the *step* rather than to the
+hex it lands on, which the pathfinder had no way to express — `Hex.reachable`
+and `Hex.path_to` take an optional `step` Callable now (`(from, to) -> extra`,
+or `STEP_BLOCKED`), left unset by every caller but this one.
+
+**The generator only ever raises ground one level.** `Encounter._grow` drops two
+shelves of one or two rings onto the apron it grew — never on the authored room
+and never on the party's starting hexes, so a fight always opens on the flat
+and the high ground is somewhere to go rather than somewhere one side begins.
+One level is the whole safety argument: a two-level step is a cliff, and a
+generator that cut one would have to prove afterwards that the board still
+joined up. One level cannot disconnect anything — it only ever costs a point to
+climb — so the connected shape `_grow` already works to keep stays connected.
+An authored board, or a content pack's, declares its own `height` and is left
+alone; it is free to cut a real cliff and owes that proof itself.
+
+**On the screen** a raised tile is drawn `RISE` hex radii up, with the cut earth
+under the edges that face the camera and a bright rim line along them, and the
+ground's tiles are painted back to front by their *flat* position so a shelf
+covers the ground it stands on while the row in front still covers the shelf.
+The physically honest rise is `ISO_GAIN·cos(45°) ≈ 1.3` radii, which reads as a
+staircase where two shelves touch; `RISE` is that pulled back to where a shelf
+still says "up" at a glance. `scenes/figures3d.gd` derives a figure's world lift
+from the same constant — the token's screen position already carries the rise,
+so the lift comes back out before the ground projection and goes on again in
+world Y — which is what keeps a model welded to its tile at every zoom.
+
+Two smaller consequences. Clicking is no longer a function: a point on a
+shelf's top face and a point on the ground behind it are the same pixel, so
+`_unpix` takes the naive inverse and then asks which nearby hex is actually
+drawn nearest the cursor, preferring the higher one on a tie since that is the
+one painted over the other. And the AI wants the high ground now, worth
+`HIGH_GROUND_DRAW` per level on every destination it scores — enough to break a
+tie and to pay back the step the climb costs, nowhere near enough to send a
+monster up a shelf instead of at the thing it came to kill.
+
+`tests/test_height.gd` pins the climb cost both ways, a full-width two-level
+cliff cutting a board in half, the +2 appearing in `resolve_attack`'s roll, in
+`hit_chance` (the odds chip and the swing have to agree) and in the log line, a
+ridge hiding two people who are level with each other and not hiding two people
+standing on shelves of their own, that a board with no `height` behaves exactly
+as it did before, and — over six themes and four seeds each — that the
+generator raises one level at most, never under the party, and always leaves
+every walkable hex reachable with the climb rule applied.
+
+### Not built
+- Falling. Shoving somebody off a ledge does what a shove always did; there is
+  no damage for the drop and no prone at the bottom.
+- Climb speeds, and anything that ignores the climb cost — a spider does not
+  walk a cliff.
+- Height on the overworld, which has its own relief already and shares none of
+  this code.
+- Cover from being below a shelf: the +2 to hit is the whole of what height is
+  worth to an attack, and low ground is not a penalty, just no bonus.

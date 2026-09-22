@@ -77,6 +77,16 @@ const BOARD_ROWS := 9        # rows of floor, room rows included (the room is 4)
 const BOARD_BITES := 8       # perimeter discs removed — how badly shaped it gets
 const BOARD_BULGES := 5      # perimeter discs added outside the rectangle
 const BOARD_ROUGH := 6       # rough patches sprinkled on the new ground
+# #156: raised ground. Two shelves per board, each a disc of one or two rings,
+# each exactly ONE level up — see combat.gd's height notes for what a level
+# buys. One level is deliberate: a step of two is a cliff nothing can walk, so
+# a generator that cut one would have to prove the board still joined up
+# afterwards. One level can never disconnect anything (it only ever costs a
+# point to climb), so the shape _grow worked to keep connected stays connected.
+# An authored board, or a content pack's, is free to cut a real cliff and take
+# that proof on itself.
+const BOARD_SHELVES := 2
+const SHELF_RINGS := 2       # the widest a shelf gets
 
 static func _grow(b: Dictionary, seed: int) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
@@ -130,7 +140,28 @@ static func _grow(b: Dictionary, seed: int) -> Dictionary:
 		if not (h in rough):
 			rough.append(h)
 	b["rough"] = rough
+	_raise(b, rng, core, floor)
 	return b
+
+# #156: the shelves. On the grown apron only — never on `core`, which is the
+# authored room and the hexes the party stands on, so a fight always opens on
+# the flat and the high ground is somewhere to go rather than somewhere one
+# side starts. An authored board that wants its own relief declares "height"
+# and keeps it: this only fills the key in when it is not already there.
+static func _raise(b: Dictionary, rng: RandomNumberGenerator, core: Dictionary, floor: Dictionary) -> void:
+	if b.has("height"):
+		return
+	var apron: Array = b["hexes"].filter(func(h): return not core.has(h))
+	if apron.is_empty():
+		return
+	var height := {}
+	for _i in BOARD_SHELVES:
+		var at: Vector2i = apron[rng.randi_range(0, apron.size() - 1)]
+		for h in [at] + Hex.within(at, rng.randi_range(1, SHELF_RINGS)):
+			if floor.has(h) and not core.has(h):
+				height[h] = 1
+	if not height.is_empty():
+		b["height"] = height
 
 # Floor hexes with at least one non-floor neighbour.
 static func _perimeter(floor: Dictionary) -> Array:
