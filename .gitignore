@@ -36,3 +36,5 @@ damage_numbers.png*
 spoils_*.png*
 # tests/shot_height.gd output
 height_board.png*
+# tests/shot_strip.gd output
+combat_strip.png*

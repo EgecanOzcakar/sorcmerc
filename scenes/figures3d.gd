@@ -119,22 +119,29 @@ func _ready() -> void:
 	_cam.current = true
 
 
-func _model_path(c) -> String:
-	if c.sheet != null:
+static func _model_path(c) -> String:
+	return model_path_for(c.sheet, c.src_id)
+
+
+# The one lookup every face on screen goes through: the board's figure and the
+# portrait cut from the same model (scenes/portraits.gd, #165) must agree on
+# which file that is. A hero sheet, or null and a bestiary id for a foe.
+static func model_path_for(sheet, src_id: String) -> String:
+	if sheet != null:
 		# ResolvedCharacter.class_levels: {"rogue": 5, ...} — no single-class
 		# accessor (core/resolved.gd), so take the class carrying the most levels.
 		var cid := ""
 		var best := -1
-		for k in c.sheet.class_levels:
-			if c.sheet.class_levels[k] > best:
-				best = c.sheet.class_levels[k]; cid = k
+		for k in sheet.class_levels:
+			if sheet.class_levels[k] > best:
+				best = sheet.class_levels[k]; cid = k
 		return String(HERO_MODELS.get(cid, ""))
-	if c.src_id == "":
+	if src_id == "":
 		return ""
-	var by_id := BEAST_DIR % c.src_id
+	var by_id := BEAST_DIR % src_id
 	if ModelCache.exists(by_id):
 		return by_id
-	return String(FOE_MODELS.get(String(Catalog.monster(c.src_id).get("faction", "")), ""))
+	return String(FOE_MODELS.get(String(Catalog.monster(src_id).get("faction", "")), ""))
 
 
 # Uniform-scale a beast model to BEAST_SPAN for its bestiary size, centred on

@@ -6990,3 +6990,96 @@ every walkable hex reachable with the climb rule applied.
   this code.
 - Cover from being below a shelf: the +2 to hit is the whole of what height is
   worth to an attack, and low ground is not a penalty, just no bonus.
+
+## Party speed from a stat — the slowest hero sets the pace (2026-09-22)
+
+Issue #164. `World.SPEED` was one number for every party; the road now
+listens to who is actually walking it. `Travel.speed_mult(party)`
+(`core/travel.gd`) gains a second factor on top of the pace multiplier: the
+slowest active, living member's `sheet().speeds["walk"]` over 30 — RAW's
+"a group moves at its slowest member's pace" — with an empty marching
+order reading 1.0 rather than dividing by nothing. `Travel.slowest_walker`
+finds that hero; `Travel.walk_note` turns it into a sentence, shown on the
+party screen's standing-orders row only when it says something ("The
+company moves at 25 ft — Thrun's stride."), silent for the common case of
+an all-30-ft company. A swift spell (Fly/Longstrider) still takes the max
+over the slowed-down pace, same as it already did over a forced march's.
+
+NPC bands read a flat multiplier off their faction instead —
+`World.FACTION_SPEED`, set once in `RoamingParty._init` for anyone who
+isn't the player (beasts and dragons outrun a soldier company, undead and
+constructs shamble) — and it round-trips through a save/load unchanged,
+since `core/world_save.gd` already carried `speed` as a plain field.
+
+`tests/test_travel.gd` pins the formula: a party of 30-ft heroes still
+reads ×1.0, a 25-ft straggler caps normal pace at 25/30 and stacks under a
+forced march's 1.4, a swift spell still wins, an empty party doesn't
+divide by nothing, and a saved-and-reloaded undead band keeps its 0.6.
+`data/species.json` has no species under 30 ft today (goliath is 35, the
+one exception), so the slow-walker case is exercised through a small
+duck-typed stand-in rather than a real hero — the rule is ready for the
+day a species or a wound gives one.
+## Portraits — a face cut from the model that stands on the board (2026-09-22)
+
+Issue #165. `scenes/portraits.gd`: `bust(path, px)` renders a
+head-and-shoulders bust of a figure GLB into a transparent SubViewport
+(orthographic, upper third of the bounds, the board's own ambient and key
+light, MSAA 4x, `UPDATE_ONCE`) and keeps an `ImageTexture` copy for the
+session under `path@px`. No PNGs. A render takes a frame, so the first ask
+answers null and the caller keeps its glyph until its next rebuild; headless
+answers null always. Which file a face comes from is
+`Figures3D.model_path_for(sheet, src_id)`, now static, the same lookup the
+board draws by. Used by the combat turn strip (a 28-px bust in the glyph's
+place) and the party page's hero cards (48 px beside the name).
+
+### Still open
+
+- The after-action page (`_spoils_company` / `_spoils_fallen`, PR #161) is
+  not on this branch; the same two lines go there when it lands.
+- Beasts frame the top of their bounds — a quadruped shows its back. A
+  per-model head offset if a beast portrait ever matters.
+- Nothing warms the party page ahead of its first open; the first look at a
+  hero card is the glyph, the second is the face.
+## The roads are busy — a spawn table and a population cap (2026-09-22)
+
+Issue #163: the shipped maps hand-placed four (small) or seven (large)
+bands, and on a ~3000-unit map the party rarely met one. `core/world_bands.gd`
+keeps every hand-placed band and fills the rest from a table. `KINDS` is
+fourteen rows — bandit gang, goblin raiders, gnoll pack, orc warband, beast
+pack, kobold skulk, undead shamble, cultist procession, giant, monstrosity,
+a patrol per civilized race, and a merchant caravan — each a faction, a
+troop template, a behaviour and a weight; the weight is the frequency.
+Monster kinds are placed in a ring `Regions.HOMES` says their faction lives
+in (no undead inside the marches), with troop levels from that ring; the
+civilized kinds walk between towns (`WorldAI.patrol`, so a caravan reads as
+a human/elf/dwarf band and is met the way a patrol is), spawned on the road
+between two of them. Every spawn lands on dry ground, 120 clear of any
+town and 60 from the player's start.
+
+The cap is one number: `CAP_AREA` (250) — one band per 250×250 of the
+map's extent squared, which is 62 on the large map and 10 on the small.
+`seed(world, seed)` fills to it at build (`_small_world`, `LargeWorld
+.build`, `ProceduralWorld.build`, all after the water is stamped);
+`refill(world, now, rng)` is polled beside `WorldAI.respawn` and puts one
+band back every `REFILL_MINUTES` (720) while the map is under, 400 from the
+party and out of the explored trail — said out loud only when it lands
+within 800. Raiders and the player never count. `World.bands_refilled_at`
+rides in the save; a spawned band round-trips like a hand-placed one
+(`ai.kind` names its row). Test: `tests/test_world_bands.gd`.
+
+**Measured, the first road a new company walks** (`tests/test_road_trip.gd`,
+the real screen, real fights played by the monsters' AI on the heroes' side,
+every hostile band fought): Riverhold → Oakford (949 units) and Oakford →
+Greenmarch (243), four runs with the bands reseeded each time — 8/8 legs
+arrived, 1.5 bands met and 0.9 fought per leg, 86 % HP on arrival, nobody
+died. The floors the test holds: ≤ 3 bands met per leg on average and ≥ 0.5,
+four legs in five nobody dies, three in five arrive with half their HP.
+
+### Still open
+
+- Rosters in a fight still come from `Scaler` by faction: a "caravan" is
+  fought as a human band, and carries nothing to rob.
+- Hand-placed kinds do not deduplicate against the table: the small map
+  may hold "bandits" and "bandit-gang-1" a field apart.
+- Refill picks the spot blind to the rings' fill: a heartland stripped bare
+  refills at the table's global weights, not where the gap is.

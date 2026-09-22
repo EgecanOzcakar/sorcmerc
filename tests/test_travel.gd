@@ -11,7 +11,21 @@ const Regions = preload("res://core/regions.gd")
 const World = preload("res://core/world.gd")
 const Travel = preload("res://core/travel.gd")
 const Party = preload("res://core/party.gd")
+const Presets = preload("res://core/presets.gd")
+const RoadSpells = preload("res://core/road_spells.gd")
+const WorldSave = preload("res://core/world_save.gd")
 const RNG = preload("res://core/rng.gd")
+
+# #164: a duck-typed stand-in for Character, limited to the id/dead/sheet()
+# surface Travel.gd reads — for a walking speed no real species data has today.
+class _SlowChar extends RefCounted:
+	var id: String
+	var cname: String
+	var dead := false
+	var speeds: Dictionary
+	func _init(id_v: String, name_v: String, walk: int) -> void:
+		id = id_v; cname = name_v; speeds = {"walk": walk}
+	func sheet(): return self
 
 var _pass := 0
 var _fail := 0
@@ -456,6 +470,75 @@ func _init() -> void:
 			check(PartyOpinion.score(pb, roller_b, String(id)) ==
 				PartyOpinion.baseline_of(pb, roller_b, String(id)) - PartyOpinion.ROAD_FAIL,
 				"a failed bad event costs the roller with %s" % id)
+
+	# #164: the party moves at its slowest active member's walking speed (5e
+	# RAW). No species in data/species.json is under 30 ft today, so a slow
+	# walker is faked here — a duck-typed stand-in with the id/dead/sheet()
+	# surface Travel.gd actually reads (party.gd's real Character is 5e-rules
+	# heavy and has no "give this hero a 25 ft stride" knob to turn).
+	var pd := _party()
+	for id in ["thrun", "gera"]:   # demo_roster's two extra heroes, unused here
+		pd.remove_member(id)
+	pd.roster.append(_SlowChar.new("thrun", "Thrun Stonefist", 25))
+	pd.active.append("thrun")
+	Travel.set_orders(pd, "normal")
+	check(is_equal_approx(Travel.speed_mult(pd), 25.0 / 30.0),
+		"a 25 ft straggler caps normal pace at 25/30 (%.3f)" % Travel.speed_mult(pd))
+	check(String(Travel.slowest_walker(pd)["name"]) == "Thrun Stonefist",
+		"...and Thrun is named as the one setting it")
+	Travel.set_orders(pd, "forced")
+	check(is_equal_approx(Travel.speed_mult(pd), 1.40 * 25.0 / 30.0),
+		"...and a forced march still stacks its ×1.4 on top (%.3f)" % Travel.speed_mult(pd))
+
+	# ...and the real way a hero gets there: heavy armour under its Str floor
+	# (core/rules/resolve.gd, #164). Vera in chain mail needs Str 13.
+	var weak := Presets.vera()
+	weak.base_abilities["str"] = 9   # 11 with the soldier background's +2, under chain mail's 13
+	weak.dirty()
+	check(int(weak.sheet().speeds["walk"]) == 20, "chain mail under Str 13 is 20 ft (%d)" % int(weak.sheet().speeds["walk"]))
+	check(int(Presets.vera().sheet().speeds["walk"]) == 30, "...and at her own Str it is 30")
+	var pw := Party.new()
+	pw.add_member(weak)
+	Travel.set_orders(pw, "normal")
+	check(is_equal_approx(Travel.speed_mult(pw), 20.0 / 30.0), "so she sets the company's pace at 20/30")
+
+	# All-standard-speed party: no penalty, no note.
+	var p30 := Party.new()
+	for ch in [Presets.vera(), Presets.pike(), Presets.ilsa()]:
+		p30.add_member(ch)
+	Travel.set_orders(p30, "normal")
+	check(is_equal_approx(Travel.speed_mult(p30), 1.0),
+		"a party of 30-ft heroes marches at ×1.0 (%.3f)" % Travel.speed_mult(p30))
+	check(Travel.walk_note(p30) == "", "...and gets no walk-speed note")
+	check(Travel.walk_note(pd) != "", "...while the straggler's company does")
+
+	# Fly / Longstrider still wins over a slow walker.
+	pd.swift_until = 1.0
+	pd.world_now = 0.0
+	check(is_equal_approx(Travel.speed_mult(pd), RoadSpells.SWIFT_MULT),
+		"a swift spell outruns even a 25 ft straggler (%.3f)" % Travel.speed_mult(pd))
+
+	# Nobody active: keeps the pace multiplier alone, no divide-by-nothing.
+	var p_empty := Party.new()
+	Travel.set_orders(p_empty, "normal")
+	check(is_equal_approx(Travel.speed_mult(p_empty), 1.0),
+		"an empty marching order keeps ×1.0")
+
+	# #164: NPC bands read World.FACTION_SPEED off their faction, set once at
+	# creation — undead shamble, beasts outrun a soldier company.
+	var w_bands := World.new()
+	var undead_band = w_bands.add_party(World.RoamingParty.new("u1", Vector2.ZERO, "undead"))
+	var beast_band = w_bands.add_party(World.RoamingParty.new("b1", Vector2.ZERO, "beast"))
+	check(undead_band.speed < beast_band.speed, "undead lags beast (%.1f vs %.1f)" %
+		[undead_band.speed, beast_band.speed])
+	check(is_equal_approx(undead_band.speed, World.SPEED * 0.6), "...at exactly the faction multiplier")
+
+	# A saved-and-reloaded band keeps its faction speed (it round-trips as a
+	# plain field, core/world_save.gd never recomputes it).
+	var loaded: Dictionary = WorldSave.from_dict(WorldSave.to_dict(w_bands))
+	var undead_loaded = loaded["world"].parties.filter(func(p): return p.id == "u1")[0]
+	check(is_equal_approx(undead_loaded.speed, World.SPEED * 0.6),
+		"a reloaded undead band still shambles (%.1f)" % undead_loaded.speed)
 
 	print("test_travel: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

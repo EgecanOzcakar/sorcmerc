@@ -110,6 +110,7 @@ var _order_aimed := {}    # ids currently wearing the aim highlight — see _pai
 @onready var _hint := Label.new()
 @onready var _board := Board.new()
 const Figures3D := preload("res://scenes/figures3d.gd")
+const Portraits := preload("res://scenes/portraits.gd")
 var _figures
 @onready var _actor := RichTextLabel.new()
 @onready var _buttons := GridContainer.new()
@@ -1965,12 +1966,22 @@ func _build_order_strip() -> void:
 		var tint: Color = COL_PARTY if c.team == "party" else COL_FOE
 		if c == cb.current():
 			tint = Icons.COL_GOLD
-		var g := Label.new()
-		g.text = Icons.combatant_glyph(c)
-		g.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		g.add_theme_font_size_override("font_size", int(28 * u))
-		g.add_theme_color_override("font_color", tint)
-		tv.add_child(g)
+		# #165: the model's own face where there is one (rendered lazily, so
+		# the glyph holds the spot until the next rebuild); team tint stays
+		# on the name, not the portrait.
+		var face := Portraits.bust(Figures3D._model_path(c), int(40 * u))
+		if face != null:
+			var tr := TextureRect.new()
+			tr.texture = face
+			tr.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+			tv.add_child(tr)
+		else:
+			var g := Label.new()
+			g.text = Icons.combatant_glyph(c)
+			g.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			g.add_theme_font_size_override("font_size", int(28 * u))
+			g.add_theme_color_override("font_color", tint)
+			tv.add_child(g)
 		var nm := Label.new()
 		nm.text = "%s (%d)" % [c.short_name(), c.init_roll]
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

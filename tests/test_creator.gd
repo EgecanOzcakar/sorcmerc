@@ -91,7 +91,8 @@ func assert_sane(ch, label: String) -> void:
 	check(s.ac >= 8 and s.ac <= 21, "%s: AC in range (got %d)" % [label, s.ac])
 	check(s.max_hp >= hit_die and s.max_hp <= hit_die + 6,
 		"%s: HP between d%d and d%d+6 (got %d)" % [label, hit_die, hit_die, s.max_hp])
-	check(int(s.speeds.get("walk", 0)) >= 25, "%s: has a walk speed (got %s)" % [label, s.speeds])
+	# 20 = heavy armour under its Strength floor (#164): Thrun's chain mail at Str 12
+	check(int(s.speeds.get("walk", 0)) >= 20, "%s: has a walk speed (got %s)" % [label, s.speeds])
 	check(not s.attacks.is_empty(), "%s: has at least one attack" % label)
 	for a in s.attacks:
 		check(int(a["to_hit"]) >= -1 and int(a["to_hit"]) <= 9, "%s: %s to-hit sane (%d)" % [label, a["name"], int(a["to_hit"])])

@@ -225,6 +225,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 	return {
 		"format": FORMAT, "version": VERSION,
 		"elapsed": world.clock.elapsed,
+		"bands_refilled_at": world.bands_refilled_at,   # #163
 		"opinion": FactionOpinion.all(),
 		"ladder": Ladder.all(),
 		"origin": {"kind": String(world.origin.get("kind", "small")),
@@ -249,6 +250,7 @@ static func from_dict(d: Dictionary):
 		return null
 	var world := World.new()
 	world.clock.elapsed = float(d.get("elapsed", 0.0))
+	world.bands_refilled_at = float(d.get("bands_refilled_at", 0.0))
 	for sd in d.get("settlements", []):
 		var s := World.Settlement.new(String(sd["id"]), _vec(sd.get("position")),
 			String(sd.get("faction", "soldier")), String(sd.get("kind", "town")),

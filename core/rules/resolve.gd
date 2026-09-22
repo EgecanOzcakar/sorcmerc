@@ -60,6 +60,14 @@ static func resolve(ch) -> Resolved:
 	r.equipment = eq["items"]
 	r.warnings.append_array(eq["warnings"])
 	var armor_ac = PassGear.armor_ac(r.equipment, r.mod("dex"), r.proficiencies["armor"])
+	# #164: heavy armour worn under its Strength floor is 10 ft off the walk
+	# (PHB 2024, Armor table) — the one thing on a level-1 sheet that can put
+	# a hero under 30 and so set the company's pace on the road (core/travel.gd).
+	for it in r.equipment:
+		var need = it["def"].get("strengthRequirement") if it["equipped"] and it["kind"] == "armor" else null
+		if need != null and int(need) > int(r.abilities["str"]["total"]):   # null in the JSON for light and medium
+			r.speeds["walk"] = maxi(0, int(r.speeds.get("walk", 30)) - 10)
+			break
 
 	# 6. ac
 	var acr := PassDefense.ac(b, r.abilities, armor_ac)

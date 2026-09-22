@@ -396,6 +396,8 @@ func _ready() -> void:
 const LargeWorld = preload("res://scenes/world/large_world.gd")
 const ProceduralWorld = preload("res://scenes/world/procedural_world.gd")
 const Landmarks = preload("res://core/landmarks.gd")
+const WorldBands = preload("res://core/world_bands.gd")
+var _bands_rng := RNG.new()   # #163: refills are not replayable; a live clock is the seed
 
 func _large_world() -> World:
 	return LargeWorld.build()
@@ -464,6 +466,7 @@ func _small_world() -> World:
 	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(300, 620), "undead", "Zombie Graveyard"))
 	w.add_lair(World.Lair.new("dragon-cave", Vector2(680, -400), "dragon", "Dragon's Cave"))
 	Landmarks.place(w, 41)   # a fixed seed: the small map is hand-placed, and so are its landmarks
+	WorldBands.seed(w, 41)   # #163: fill the roads to the cap, around the bands above
 	return w
 
 # World.tick() advances the clock itself and gates movement on it, so one call
@@ -2158,7 +2161,11 @@ func _check_expired_lairs() -> void:
 	var back: Array = WorldAI.respawn(world, world.clock.elapsed)
 	for line in back:
 		_lair_msg.text = String(line)
-	if not back.is_empty():
+	# #163: and a map under its cap gets a fresh band every half day, out of sight.
+	var word: String = WorldBands.refill(world, world.clock.elapsed, _bands_rng)
+	if word != "":
+		_lair_msg.text = word
+	if not back.is_empty() or world.bands_refilled_at == world.clock.elapsed:
 		_party3d.reset(world)   # a figure is only built on reset (party3d.gd)
 		_autosave()
 
