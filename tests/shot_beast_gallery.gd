@@ -11,8 +11,10 @@ const CELL := 3.0
 
 func _init() -> void:
 	var paths: Array = []
+	# SORCMERC_BEASTS="ogre troll ..." narrows it to a fresh batch.
+	var only := OS.get_environment("SORCMERC_BEASTS").split(" ", false)
 	for f in DirAccess.get_files_at("res://assets/beasts"):
-		if f.ends_with(".glb"):
+		if f.ends_with(".glb") and (only.is_empty() or only.has(f.get_basename())):
 			paths.append("res://assets/beasts/" + f)
 	paths.sort()
 	var rows: int = ceili(float(paths.size()) / COLS)

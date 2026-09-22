@@ -80,6 +80,7 @@ const Sound = preload("res://core/audio.gd")
 const Quest = preload("res://core/quest.gd")
 const Tips = preload("res://core/tips.gd")   # #151
 const Objectives = preload("res://core/objectives.gd")
+const Spoils = preload("res://scenes/world/spoils.gd")   # #157: the after-action page
 const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const Ladder = preload("res://core/ladder.gd")
@@ -1699,19 +1700,36 @@ func _show_spoils(result: Dictionary) -> void:
 	var won: bool = String(result.get("outcome", "")) == "Victory"
 	var rows: Array = []
 	if won:
-		rows.append(["+%d XP,  +%d gold" % [int(result.get("xp", 0)), int(result.get("gold", 0))], Icons.COL_GOLD])
-		# One line for the haul, a count on a repeat — "Potion of Healing ×2",
-		# not the same line twice.
-		var counts := {}
+		# "tally": #157 — the one row worth counting up rather than simply
+		# arriving, because it is the number the fight was fought for.
+		# #157's reference: the company that fought, each with the HP they have
+		# left and how far to the next level; then who fell to them, with what
+		# each was worth; then the tally; then the haul as tiles, not a list.
+		rows.append(_spoils_company())
+		var fallen := _spoils_fallen(result.get("kills", []))
+		if fallen != null:
+			rows.append(fallen)
+		rows.append(["+%d XP,  +%d gold" % [int(result.get("xp", 0)), int(result.get("gold", 0))],
+			Icons.COL_GOLD, "tally"])
+		var counts := {}   # a count on a repeat — "×2", not the same tile twice
 		for item in result.get("loot", []):
 			counts[String(item)] = int(counts.get(String(item), 0)) + 1
-		var names: Array = []
-		for item in counts:
-			names.append(Campaign.item_name(item) + (" ×%d" % counts[item] if counts[item] > 1 else ""))
-		if names.is_empty():
+		if counts.is_empty():
 			rows.append(["Nothing worth carrying off the bodies.", Icons.COL_MUTED])
 		else:
-			rows.append(["Taken from the dead: %s" % ", ".join(names), Icons.COL_TEXT])
+			var haul := HFlowContainer.new()   # wraps when the haul is long
+			haul.add_theme_constant_override("h_separation", 6)
+			haul.custom_minimum_size.y = Icons.ITEM_ART_PX + 30
+			for item in counts:
+				var kd := Icons.item_def(item)
+				# A tile with no art is already its name; captioning it says it twice.
+				var tile := Icons.item_tile(item, Icons.item_tooltip(item, kd[1], kd[0]),
+					Campaign.item_name(item) if Icons.item_art(item) != null else "",
+					Icons.ITEM_ART_PX, "", counts[item])
+				tile.custom_minimum_size.x = 118   # room for "Potion of Healing" under the art
+				tile.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				haul.add_child(tile)
+			rows.append(haul)
 	var obj: Dictionary = result.get("objective", {})
 	if String(obj.get("kind", "")) != "":
 		rows.append([Objectives.spoils_line(obj), Icons.COL_GOLD if bool(obj.get("done", false)) else Icons.COL_FOE])
@@ -1727,6 +1745,77 @@ func _show_spoils(result: Dictionary) -> void:
 		rows.append([_lair_msg.text, Icons.COL_FOE])
 	_build_spoils_panel("Victory" if won else "Defeat", rows)
 
+# The company on the after-action page: a card each for the ones who marched —
+# glyph, name, the HP they walked out with and how far to the next level.
+func _spoils_company() -> Control:
+	var strip := HBoxContainer.new()
+	strip.add_theme_constant_override("separation", 8)
+	strip.alignment = BoxContainer.ALIGNMENT_CENTER
+	strip.custom_minimum_size.y = 62
+	for id in party.active:
+		var ch = party.get_member(id)
+		if ch == null:
+			continue
+		var card := VBoxContainer.new()
+		card.add_theme_constant_override("separation", 2)
+		card.custom_minimum_size.x = 118
+		var name := Label.new()
+		name.text = "%s %s" % [Icons.class_glyph(ch.class_id()), ch.cname]
+		name.clip_text = true
+		name.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+		name.add_theme_color_override("font_color", Icons.COL_FOE if ch.dead else Icons.COL_HEAD)
+		card.add_child(name)
+		var max_hp: int = maxi(1, int(ch.sheet().max_hp))
+		var hp: int = 0 if ch.dead else (max_hp if ch.hp_current < 0 else ch.hp_current)
+		card.add_child(_spoils_bar(hp, max_hp, Icons.COL_FOE, "%d/%d" % [hp, max_hp]))
+		var need: int = Leveling.xp_for_level(ch.level() + 1)
+		card.add_child(_spoils_bar(int(ch.xp), need, Icons.COL_GOLD, "%d xp" % int(ch.xp)))
+		strip.add_child(card)
+	return strip
+
+func _spoils_bar(have: int, goal: int, ink: Color, caption: String) -> Control:
+	var bar := ProgressBar.new()
+	bar.max_value = goal
+	bar.value = have
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 14)
+	bar.tooltip_text = caption
+	bar.add_theme_stylebox_override("background", Icons.box(Icons.COL_INK, Icons.COL_EDGE, 2, 0, 0))
+	bar.add_theme_stylebox_override("fill", Icons.box(ink, Color(0, 0, 0, 0), 2, 0, 0))
+	var l := Label.new()
+	l.text = caption
+	l.set_anchors_preset(Control.PRESET_FULL_RECT)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_font_size_override("font_size", Icons.FS_SMALL - 2)
+	l.add_theme_color_override("font_color", Icons.COL_HEAD)
+	bar.add_child(l)
+	return bar
+
+# Who fell to them — one chip per kind, a count on a repeat, and what the
+# bestiary says each was worth. Null when nothing died (a rout, an escort).
+func _spoils_fallen(kills: Array) -> Control:
+	if kills.is_empty():
+		return null
+	var counts := {}
+	for k in kills:
+		counts[String(k)] = int(counts.get(String(k), 0)) + 1
+	var strip := HBoxContainer.new()
+	strip.add_theme_constant_override("separation", 6)
+	strip.alignment = BoxContainer.ALIGNMENT_CENTER
+	strip.custom_minimum_size.y = 40
+	for id in counts:
+		var m: Dictionary = Catalog.monster(id)
+		var chip := Label.new()
+		chip.text = "%s%s  %d xp" % [String(m.get("cname", id.capitalize())),
+			" ×%d" % counts[id] if counts[id] > 1 else "", int(m.get("xp", 0)) * counts[id]]
+		chip.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+		chip.add_theme_color_override("font_color", Icons.COL_FOE)
+		chip.add_theme_stylebox_override("normal", Icons.box(Icons.COL_INK, Icons.COL_FOE, 3, 8, 3))
+		strip.add_child(chip)
+	return strip
+
 # What the whole descent paid, once the party is back out on the map.
 func _show_delve_spoils(l, cleared: bool) -> void:
 	if _delve_haul.is_empty():
@@ -1740,7 +1829,8 @@ func _show_delve_spoils(l, cleared: bool) -> void:
 		"" if int(haul.get("fights", 0)) == 1 else "s",
 		"" if not haul.has("cleared_xp") else ", %d of it for reaching the bottom" % int(haul["cleared_xp"])],
 		Icons.COL_GOLD])
-	rows.append(["+%d gold" % maxi(0, party.gold - int(haul.get("gold0", party.gold))), Icons.COL_GOLD])
+	rows.append(["+%d gold" % maxi(0, party.gold - int(haul.get("gold0", party.gold))),
+		Icons.COL_GOLD, "tally"])
 	var loot: Array = haul.get("loot", [])
 	if loot.is_empty():
 		rows.append(["Nothing came out of there but coin.", Icons.COL_MUTED])
@@ -1754,76 +1844,21 @@ func _show_delve_spoils(l, cleared: bool) -> void:
 	_build_spoils_panel(
 		"%s is cleared out" % l.sname if cleared else "Out of %s" % l.sname, rows)
 
+# #157: the page itself is scenes/world/spoils.gd now — the same rows, in the
+# same order, dealt out instead of printed all at once. Everything that is
+# about the MAP rather than about the page stays here: stopping the clock,
+# and agreeing with the HUD button about it.
 func _build_spoils_panel(heading: String, rows: Array) -> void:
 	world.clock.pause()
 	_pause_btn.text = "Resume"
-	var overlay := Control.new()
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(overlay)
-	_spoils_panel = overlay
-
-	var dim := ColorRect.new()
-	dim.color = Color(Icons.COL_BG.r, Icons.COL_BG.g, Icons.COL_BG.b, 0.72)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.add_child(dim)
-
-	var centre := CenterContainer.new()
-	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
-	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.add_child(centre)
-
-	var panel := PanelContainer.new()
-	panel.theme_type_variation = "Gilt"
-	panel.custom_minimum_size = Vector2(440, 0)
-	centre.add_child(panel)
-
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
-	panel.add_child(box)
-
-	var title := Label.new()
-	title.text = heading
-	title.theme_type_variation = "Head"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
-
-	# #151: the verdict pictured — the run summary's own two paintings — so the
-	# page after a fight reads like the card before it, and not a receipt.
-	var art := Icons.scene_art({"Victory": "summary-victory", "Defeat": "summary-defeat"}.get(heading, ""), null)
-	if art != null:
-		var pic := TextureRect.new()
-		pic.texture = art
-		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		pic.custom_minimum_size = Vector2(420, 180)
-		box.add_child(pic)
-
-	var scroll := _scroll_column(Vector2(420, 0))
-	# Only as tall as it needs to be, up to a ceiling: a two-line haul should not
-	# open a half-screen box, and a twelve-line one should not run off the bottom.
-	scroll.custom_minimum_size.y = clampf(rows.size() * 26.0, 52.0, 320.0)
-	box.add_child(scroll)
-	var list: VBoxContainer = scroll.get_child(0)
-	for row in rows:
-		var l := Label.new()
-		l.text = String(row[0])
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.add_theme_color_override("font_color", row[1])
-		list.add_child(l)
-
-	var tip := Label.new()   # #151: one line of advice, the way the approach card carries one
-	tip.text = Tips.pick()
-	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tip.theme_type_variation = "Dim"
-	box.add_child(tip)
-
-	var go := Button.new()
-	go.text = "Back to the map  [Esc]"
-	go.pressed.connect(_close_spoils)
-	box.add_child(go)
-	go.grab_focus()
+	var page = Spoils.new()
+	add_child(page)
+	_spoils_panel = page
+	page.build(heading,
+		rows,
+		Icons.scene_art({"Victory": "summary-victory", "Defeat": "summary-defeat"}.get(heading, ""), null),
+		Tips.pick(),
+		_close_spoils)
 
 func _close_spoils() -> void:
 	if _spoils_panel != null:

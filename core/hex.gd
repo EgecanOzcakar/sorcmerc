@@ -35,7 +35,35 @@ static func direction_to(a: Vector2i, b: Vector2i) -> Vector2i:
 # shape), `blocked` are hexes you may not enter (occupied), `rough` hexes cost 2
 # to enter. You may still END adjacent to a blocked hex — it just isn't steppable.
 # Returns {Vector2i: cost}.
-static func reachable(passable: Callable, start: Vector2i, steps: int, blocked: Array, rough: Array = []) -> Dictionary:
+#
+# #156: `height` is {Vector2i: level}, and it is the one cost that belongs to
+# the STEP rather than to the hex it ends on — climbing a level costs, and a
+# cliff cannot be climbed at all. An empty dictionary is a flat board and skips
+# the whole thing.
+#
+# It is passed as DATA rather than as a Callable(from, to), which is what this
+# started as and is the better-looking API. Measured on a 79-hex board: a
+# Callable invoked once per edge took this function from 353 us to 500 us, and
+# it is the hottest thing in a fight — every AI move scores its destinations
+# off a flood fill, every hero turn draws its move field from one, and
+# tests/drive_completionist.gd ran out of frame budget on the difference.
+# Two dictionary lookups per NODE (the level a step leaves from is hoisted out
+# of the neighbour loop) is what it costs instead.
+const STEP_BLOCKED := -1
+const CLIMB_STEP := 1     # extra movement to climb one level
+const CLIMB_MAX := 1      # levels a single step may change before it is a cliff
+const NO_HEIGHT := {}     # the flat board, shared: never written to
+
+# The extra cost of the step a -> b, or STEP_BLOCKED for a cliff. The rule, for
+# anyone who wants it a pair at a time rather than inside a flood fill.
+static func climb(height: Dictionary, a: Vector2i, b: Vector2i) -> int:
+	var d: int = int(height.get(b, 0)) - int(height.get(a, 0))
+	if d > CLIMB_MAX or d < -CLIMB_MAX:
+		return STEP_BLOCKED
+	return CLIMB_STEP if d > 0 else 0
+
+static func reachable(passable: Callable, start: Vector2i, steps: int, blocked: Array,
+		rough: Array = [], height: Dictionary = NO_HEIGHT) -> Dictionary:
 	var dist := {start: 0}
 	var q: Array = [start]
 	while not q.is_empty():
@@ -47,10 +75,19 @@ static func reachable(passable: Callable, start: Vector2i, steps: int, blocked: 
 		var cost: int = dist[cur]
 		if cost >= steps:
 			continue
+		var flat: bool = height.is_empty()
+		var here: int = 0 if flat else int(height.get(cur, 0))
 		for n in neighbors(cur):
 			if n in blocked or not passable.call(n):
 				continue
-			var nd: int = cost + (2 if n in rough else 1)
+			var extra := 0
+			if not flat:
+				var d: int = int(height.get(n, 0)) - here
+				if d > CLIMB_MAX or d < -CLIMB_MAX:
+					continue        # a cliff: not a step, in either direction
+				if d > 0:
+					extra = CLIMB_STEP
+			var nd: int = cost + (2 if n in rough else 1) + extra
 			if nd <= steps and (not dist.has(n) or nd < dist[n]):
 				dist[n] = nd
 				if not n in q:
@@ -59,7 +96,8 @@ static func reachable(passable: Callable, start: Vector2i, steps: int, blocked: 
 
 # Shortest-cost path start→dest (inclusive) as a Vector2i list, or [] if none.
 # Used for path-aware opportunity attacks.
-static func path_to(passable: Callable, start: Vector2i, dest: Vector2i, blocked: Array, rough: Array = []) -> Array:
+static func path_to(passable: Callable, start: Vector2i, dest: Vector2i, blocked: Array,
+		rough: Array = [], height: Dictionary = NO_HEIGHT) -> Array:
 	var dist := {start: 0}
 	var prev := {}
 	var q: Array = [start]
@@ -71,10 +109,19 @@ static func path_to(passable: Callable, start: Vector2i, dest: Vector2i, blocked
 		var cur = q.pop_at(bi)
 		if cur == dest:
 			break
+		var flat: bool = height.is_empty()
+		var here: int = 0 if flat else int(height.get(cur, 0))
 		for n in neighbors(cur):
 			if n in blocked or not passable.call(n):
 				continue
-			var nd: int = dist[cur] + (2 if n in rough else 1)
+			var extra := 0
+			if not flat:
+				var d: int = int(height.get(n, 0)) - here
+				if d > CLIMB_MAX or d < -CLIMB_MAX:
+					continue
+				if d > 0:
+					extra = CLIMB_STEP
+			var nd: int = dist[cur] + (2 if n in rough else 1) + extra
 			if not dist.has(n) or nd < dist[n]:
 				dist[n] = nd
 				prev[n] = cur

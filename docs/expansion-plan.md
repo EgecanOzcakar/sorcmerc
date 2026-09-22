@@ -6715,6 +6715,282 @@ map next to the town rather than a line in the purse.
 - `_settlements3d.reset` rebuilds every diorama on a buy or a build, not
   only the lodge's: a `rebuild_lodge` if it ever shows.
 
+## What a monster model is connected to, and what is still a disc (2026-09-22, #158)
+
+`scenes/figures3d.gd` decides what draws a combatant from three tables and a
+naming convention: `HERO_MODELS` by class id, a file at
+`assets/beasts/<bestiary id>.glb`, then `FOE_MODELS` by faction, then the
+vector disc/glyph tier. Every one of those is a string matched against
+something else — a class id out of `data/classes.json`, a bestiary id, a
+faction — and nothing had ever checked that the two sides still agreed. A class
+renamed, a monster id respelled, a `.glb` dropped from a batch: all three fail
+the same silent way, where that figure quietly stops being 3D and nobody finds
+out until a screenshot.
+
+`tests/test_figure_models.gd` closes that. Every path named is on disk, every
+class in the data has a figure, every `FOE_MODELS` key is a faction the
+bestiary actually has, and every `.glb` in the model directory is named for a
+real bestiary id — a file that is not is a model nothing will ever ask for. The
+coverage counts have a floor under them, which is a regression guard and not a
+target: raise it when a batch lands, never lower it to make a red run green.
+
+It also prints the coverage by faction, because that readout is the answer to
+"what should the next batch be" — and the 2026-09-22 batch is what it was
+asked. Before it:
+
+```
+75 of 316 bestiary entries have a model of their own — 75 of the 87 beasts.
+7 of 32 factions have a rig that stands in for the rest of them.
+25 factions have neither, which is 182 entries and, because core/scaler.gd
+draws a roster from ONE faction, a whole fight drawn in discs.
+```
+
+After it — 34 monsters for giant, gnoll, monstrosity and orc:
+
+```
+109 of 316 bestiary entries have a model of their own.
+gnoll 2/2 and orc 1/1 are covered outright; giant is 7/14 and
+monstrosity 24/34, so half a giant roster is still discs.
+21 factions still have neither a model nor a rig, which is 126 entries:
+  aberration, celestial, construct, demon, devil, dragon (22), drow, duergar,
+  elemental (14), fey, fiend, grimlock, humanoid (22), lizardfolk, merfolk,
+  ooze, plant, sahuagin, swarm (10), townsfolk, tribal
+```
+
+`dragon` (22), `humanoid` (22) and `elemental` (14) are now the three biggest,
+and the rest of `monstrosity` (10) and `giant` (7) finish two that are started.
+
+Nothing here guesses at a stand-in for the ones with nothing. An orc drawn with
+the human soldier rig is not coverage, it is a wrong answer given confidently,
+and the disc is the honest one until the art exists.
+
+`tools/import_beasts.py` is the other half. Its name is historical — the first
+batch was 81 animals — but nothing in it was ever beast-specific and neither is
+the lookup it feeds: the by-id path is tried for EVERY foe before the faction
+rig, so an ogre, a wyvern or a gelatinous cube named after its bestiary id is
+drawn the moment its file lands. Three things it does that it did not:
+
+- `SRC=` / `DST=` out of the environment, so a batch downloaded anywhere is one
+  command away instead of a folder to move first.
+- `--check`, which names what each download would become and converts nothing.
+- **A name that does not resolve to an id in `data/bestiary.json` is refused
+  rather than written.** The id is the whole of how the game finds the file, so
+  `DragonRed.glb` -> `dragon-red.glb` would convert cleanly, commit cleanly and
+  never be drawn by anything. `--force` writes it anyway, which is a real case
+  for an id a content pack adds.
+
+**The refusal earned its keep on the first batch through it.** The 2026-09-22
+downloads came down with their words run together — `frostgiant`,
+`gnollwarrior`, `hillgiantarcher`, `rustmonster`, `winterwolf` — none of which
+resolve to a bestiary id. Every one of them would have converted cleanly,
+committed cleanly and never been drawn by anything; instead they were refused
+by name and became `FIXUPS` entries. The batch also found the case the guard
+did not cover: a download with no albedo texture at all aborted the whole run
+on `albedo_only`'s assert, so an untextured file is now named and skipped the
+same way, since an untextured model draws as a white blob rather than not at
+all.
+
+### Not built
+- Stand-in rigs for the uncovered factions (see above).
+- A second directory for non-beast monsters. One directory keyed by bestiary id
+  is what the lookup already reads, and splitting it would buy a provenance
+  question — everything in there came from the same place — and cost a second
+  path to keep in step.
+
+## The after-action page, played instead of printed (2026-09-22, #157)
+
+Issue #30 gave a won fight a page, so the haul stopped being paid in silence.
+What that page *was*, was a receipt: a gilt box appeared with every line of it
+already on screen — heading, painting, "+400 XP, +50 gold", what came off the
+bodies, who did not get up, a tip and a button. Nothing moved and nothing
+arrived, and the biggest moment in a run read exactly like the merchant's stock
+list two screens over.
+
+It is the same rows in the same order now, dealt out over about a second and a
+half (`scenes/world/spoils.gd`). The verdict lands first, at `FS_TITLE + 6` in
+gilt rather than as a section heading — the combat screen's own wash says
+V I C T O R Y at 54 px about the same fight, and the word should not shrink on
+the way out — punching down from oversized to its own size, with a rule opening
+under it from the middle. The painting comes up beneath that. Then each line
+arrives on its own beat out of a bright flash, the XP-and-gold row counting up
+to what was won. The way on appears last.
+
+Three things it is careful about, and each of them is a thing a later editor
+can break without noticing:
+
+- **Every label carries its final text from the first frame.** The stagger is
+  opacity and colour, never text that has not arrived yet — so a screen reader,
+  a test asking "does this page say +400 XP", and a player who clicked straight
+  through all read the same page.
+- **A counting row is its own final text with the digits wound back**, and at
+  `k >= 1` the original string is returned rather than recomputed, so a counter
+  cannot land on 399. `_wound()` scales every run of digits, so the row writes
+  itself and nothing has to be passed in twice.
+- **`Settings.anim()` zeroes the whole thing.** At Instant, and under
+  `SORCMERC_FAST` — every headless run and the entire suite — the page is fully
+  open on the frame it is built, button and all. An after-action page that had
+  to be waited out would turn every UI robot into a timing test.
+
+A click or a key anywhere on the page finishes the sequence at once. That is
+deliberately not a button: the page has exactly one of those and it is the way
+on, which is also what `tests/test_world_spoils.gd` counts.
+
+Rows animate by opacity and colour rather than by sliding because they are
+children of a `VBoxContainer`, and a container owns its children's positions —
+an animated `position` survives only until something queues a sort, which an
+autowrapping label inside a scroll does whenever the panel settles. The flash
+is what is left of the motion and it is enough to make a line read as dealt.
+
+`tests/test_spoils_page.gd` winds the sequence forward by hand rather than
+waiting for it: that a plain row carries its final text at every frame, that
+some row is faded out before its beat (so the page is staggered rather than
+merely slow), that the tally only ever counts up and lands on the exact string
+it started from, that the way on is not pressable while the page is still
+talking, and that a click finishes everything without adding a second button.
+`tests/shot_spoils.gd` renders three frames of it side by side, which is how an
+animation gets into a PR that asks for one screenshot per feature.
+
+### Not built
+- The linear campaign's own end-of-fight screen (`scenes/campaign/`), which
+  holds the fight up behind a "Back to the road" button and never had #30's
+  problem.
+- Per-hero rows — who landed the killing blow, who took the most, an XP bar
+  filling per character. The page reports the party's haul, not the fight's
+  statistics, and the character sheets are two clicks away.
+- Sound. The page is silent; the fight's victory sting already played under the
+  combat screen's wash a moment earlier.
+
+## Height on the combat map — a board with a shelf on it (2026-09-22, #156)
+
+The hex board has been flat since the zones became hexes: every tile the same
+height, and the only thing the ground could say about itself was rough, cover,
+or a hazard. Height is the fourth thing, and it is deliberately the cheapest
+version of it that still changes where a player wants to stand.
+
+`board["height"]` is `{Vector2i: level}`, absent meaning ground level. One
+level is five feet — one hex radius — and three rules read it, chosen because
+all three are answerable from the board at a glance:
+
+- **Climbing costs.** A step up one level costs one extra, the same as rough
+  ground; 5e charges a foot per foot climbed and on a hex board that is the
+  same answer. Stepping down is free — you drop.
+- **More than one level is a cliff.** Nothing walks it, in either direction:
+  the scramble up is out of reach and the fall down is not a move, it is an
+  accident. Go round.
+- **The high ground is +2 to hit.** The mirror of the +2 AC half cover already
+  gives, and the same size of thumb on the scale. sorcmerc's own rule, not the
+  2024 PHB's, which has no general high-ground bonus.
+
+And one that is about seeing rather than about rolling: ground higher than
+*both* ends of a line is a ridge between them and blocks line of sight. Higher
+than only one end is a slope somebody is standing on or under, and you can
+always see up or down a slope.
+
+The step cost is the one number that belongs to the *step* rather than to the
+hex it lands on, which the pathfinder had no way to express, so `Hex.reachable`
+and `Hex.path_to` take the height dictionary. It was a `Callable(from, to)`
+first, which is the better-looking API and is what the rule reads as — but
+measured on a 79-hex board that Callable, invoked once per edge, took
+`reachable` from 353 us to 500 us, and it is the hottest thing in a fight:
+every AI move scores its destinations off a flood fill and every hero turn
+draws its move field from one. The rule itself moved to `hex.gd` beside the
+loops that read it, and the loops hoist the level a step leaves from out of the
+neighbour loop, so height costs two dictionary lookups per node and about 7%.
+
+**The AI's appetite for it had to be measured too, and the first number was
+wrong.** Every score callable in `ai.gd` is in HEXES — minus the distance to a
+goal, or the distance from whatever is chasing you — so `HIGH_GROUND_DRAW`,
+added to every destination per level, is denominated in hexes of approach. At
+1.5 it bought the shelf at the price of a hex, *permanently*, because the
+monster re-scores from up there next turn and the shelf still wins: monsters
+climbed the nearest rise and stopped coming down, fights stopped converging,
+and `drive_completionist` ran out of frames walking between towns with
+unfinished fights behind it. Strictly under one is the whole rule — it can then
+only ever decide between hexes that are otherwise equally good, which is what a
+tie-break is. It is 0.35, and `test_height.gd` asserts both the bound and the
+behaviour (a shelf one step short of the goal loses; with every hex otherwise
+equal, the high ground wins) so the next person to reach for that number is
+told in two seconds rather than twenty-four.
+
+**The generator only ever raises ground one level.** `Encounter._grow` drops one
+shelf of one or two rings onto the apron it grew — never on the authored room
+and never on the party's starting hexes, so a fight always opens on the flat
+and the high ground is somewhere to go rather than somewhere one side begins.
+One level is the whole safety argument: a two-level step is a cliff, and a
+generator that cut one would have to prove afterwards that the board still
+joined up. One level cannot disconnect anything — it only ever costs a point to
+climb — so the connected shape `_grow` already works to keep stays connected.
+An authored board, or a content pack's, declares its own `height` and is left
+alone; it is free to cut a real cliff and owes that proof itself.
+
+**One shelf and not two is a balance number, and `test_scaler.gd` owns it.**
+Ground that costs a point to climb taxes whoever is *approaching*, and at level
+3 that is mostly the monsters while the party shoots and casts — so raised
+ground moves the win rate the party's way. Measured, level-3 preset party on
+hard, 200 fights per tier: flat **83.5%**, one shelf **85.0%**, two shelves
+**87.5%**. The calibrated band is 65-85%, so two shelves puts the game outside
+the difficulty it is tuned to and one keeps it inside. The margin at one shelf
+is thin because master was already at 83.5, a point and a half under the
+ceiling; anything that helps the party at all is close to it. Raising the shelf
+count is a real option, but it means re-measuring `core/scaler.gd`'s knobs —
+which is a balance pass, not a side-effect of a map feature.
+
+**On the screen** a raised tile is drawn `RISE` hex radii up, with the cut earth
+under the edges that face the camera and a bright rim line along them, and the
+ground's tiles are painted back to front by their *flat* position so a shelf
+covers the ground it stands on while the row in front still covers the shelf.
+The physically honest rise is `ISO_GAIN·cos(45°) ≈ 1.3` radii, which reads as a
+staircase where two shelves touch; `RISE` is that pulled back to where a shelf
+still says "up" at a glance. `scenes/figures3d.gd` derives a figure's world lift
+from the same constant — the token's screen position already carries the rise,
+so the lift comes back out before the ground projection and goes on again in
+world Y — which is what keeps a model welded to its tile at every zoom.
+
+The rim had to be measured rather than eyeballed. It is what carries "there is
+a step here" — the cut earth alone reads as a dark gap, and the top face's
+`SHELF_LIT` brightening is too small to see against the board's own lighting
+falloff — so it has to be brighter than `COL_HEX_GRID`, the line drawn between
+any two ordinary tiles. The first gain did not clear that bar and nothing said
+so: at `SHELF_RIM = 1.7` lerped toward `COL_GOLD_EDGE`, the shrine's rim came
+out at luminance 0.32 against the grid's 0.45, because `COL_GOLD_EDGE` is
+itself a dark gilt and the mix pulled the blue down faster than the gain lifted
+it. The edge meant to announce a step was dimmer than every edge that announces
+nothing, and on the proof shot for this feature the shelf was read as the cover
+hexes three rows above it — cover's rim being the one loud thing on that board.
+It is `3.0` toward `COL_GOLD` now, which puts every palette between 0.54 and
+0.58 against the grid's 0.45. `shelf_face()`/`shelf_rim()` moved out of `Board`
+to be static for the sake of the assertion; `tests/test_height.gd` holds the
+floor across all six palettes, so the next person to tune those numbers is told
+in two seconds instead of at a screenshot.
+
+Two smaller consequences. Clicking is no longer a function: a point on a
+shelf's top face and a point on the ground behind it are the same pixel, so
+`_unpix` takes the naive inverse and then asks which nearby hex is actually
+drawn nearest the cursor, preferring the higher one on a tie since that is the
+one painted over the other. And the AI wants the high ground now, worth
+`HIGH_GROUND_DRAW` per level on every destination it scores — enough to break a
+tie and to pay back the step the climb costs, nowhere near enough to send a
+monster up a shelf instead of at the thing it came to kill.
+
+`tests/test_height.gd` pins the climb cost both ways, a full-width two-level
+cliff cutting a board in half, the +2 appearing in `resolve_attack`'s roll, in
+`hit_chance` (the odds chip and the swing have to agree) and in the log line, a
+ridge hiding two people who are level with each other and not hiding two people
+standing on shelves of their own, that a board with no `height` behaves exactly
+as it did before, and — over six themes and four seeds each — that the
+generator raises one level at most, never under the party, and always leaves
+every walkable hex reachable with the climb rule applied.
+
+### Not built
+- Falling. Shoving somebody off a ledge does what a shove always did; there is
+  no damage for the drop and no prone at the bottom.
+- Climb speeds, and anything that ignores the climb cost — a spider does not
+  walk a cliff.
+- Height on the overworld, which has its own relief already and shares none of
+  this code.
+- Cover from being below a shelf: the +2 to hit is the whole of what height is
+  worth to an attack, and low ground is not a penalty, just no bonus.
+
 ## Party speed from a stat — the slowest hero sets the pace (2026-09-22)
 
 Issue #164. `World.SPEED` was one number for every party; the road now
