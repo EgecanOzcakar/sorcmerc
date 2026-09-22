@@ -7224,10 +7224,20 @@ deeps.
 `{position, radius, kind}`, with `biome_at(pos)` the single reader. Three
 kinds — `downs` (the default fill), `woods`, `marsh` — argued from the
 bestiary rather than picked for flavour; the note above this one has the
-counts and why `cave` did not earn one. Overlaps resolve by the smallest
-`distance / radius`, so a small marsh painted inside a big wood keeps its own
-ground instead of being swallowed by whichever disc is first in the list, and
-only a point actually inside a disc claims it.
+counts and why `cave` did not earn one. Only a point actually inside a disc
+claims one, and overlaps resolve to the SMALLEST disc containing the point —
+most specific wins — so a small marsh painted inside a big wood keeps all of
+its own ground rather than a shrunken core of it, whatever order the discs are
+in.
+
+That rule was got wrong first, and `tests/test_world_biomes.gd` caught it on
+the first CI run. The original was "smallest `distance / radius`", which reads
+as whoever's middle the point is relatively nearest and looks equivalent until
+it is measured: a 60-radius marsh inside a 400-radius wood only won where
+`|x-100|/60 < |x|/400`, about 30 units of the 120 it should own, because at
+130 the wood scores 0.325 against the marsh's 0.5. Painting a small biome
+inside a big one is the thing the discs are for, so the test now pins the
+whole radius rather than just the middle.
 
 It is deliberately ORTHOGONAL to `core/regions.gd`'s rings, which is the whole
 reason it can exist without a balance pass: the ring says how dangerous the

@@ -37,14 +37,25 @@ func _one_disc() -> void:
 	check(w.biome_at(Vector2(200, 0)) == World.DEFAULT_BIOME, "and outside is the default")
 
 
-# The overlap rule: smallest distance/radius wins, so a small disc painted
-# inside a big one keeps its own ground instead of being swallowed.
-func _overlap_is_by_relative_distance() -> void:
+# The overlap rule: of the discs that contain the point, the SMALLEST wins —
+# most specific, so a small disc painted inside a big one keeps ALL of its own
+# ground rather than a shrunken core of it.
+#
+# The whole-radius assertions below are the point of this case. An earlier rule
+# here picked the smallest distance/radius instead, which reads as "whoever's
+# middle is relatively nearest" and looks equivalent until you measure it: it
+# gave this marsh about 30 units of its 120, because at (130, 0) the wood scores
+# 130/400 = 0.325 against the marsh's 30/60 = 0.5. Painting a small biome inside
+# a big one is exactly what the discs are for, so it has to survive doing it.
+func _overlap_is_most_specific() -> void:
 	var w := World.new()
 	w.add_biome(Vector2.ZERO, 400.0, "woods")     # a big wood, first in the list
 	w.add_biome(Vector2(100, 0), 60.0, "marsh")   # a small marsh inside it
 	check(w.biome_at(Vector2(100, 0)) == "marsh", "the small disc wins at its own middle")
 	check(w.biome_at(Vector2(130, 0)) == "marsh", "...and inside its edge")
+	check(w.biome_at(Vector2(159, 0)) == "marsh", "...right out to its rim, not a shrunken core")
+	check(w.biome_at(Vector2(41, 0)) == "marsh", "...on the side facing the big disc's middle too")
+	check(w.biome_at(Vector2(161, 0)) == "woods", "the big disc takes over past the small one's rim")
 	check(w.biome_at(Vector2(300, 0)) == "woods", "the big disc still owns the rest of itself")
 	check(w.biome_at(Vector2(500, 0)) == World.DEFAULT_BIOME, "and neither owns what is outside both")
 	# Order must not decide it: the same two discs the other way round.
@@ -52,7 +63,15 @@ func _overlap_is_by_relative_distance() -> void:
 	w2.add_biome(Vector2(100, 0), 60.0, "marsh")
 	w2.add_biome(Vector2.ZERO, 400.0, "woods")
 	check(w2.biome_at(Vector2(100, 0)) == "marsh", "list order does not decide an overlap")
-	check(w2.biome_at(Vector2(300, 0)) == "woods", "...either way round")
+	check(w2.biome_at(Vector2(159, 0)) == "marsh", "...out to the rim either way round")
+	check(w2.biome_at(Vector2(300, 0)) == "woods", "...and the big one still owns the rest")
+	# Same radius: the nearer centre takes it, so the ground is split on the
+	# midline rather than on which disc happens to be first in the list.
+	var w3 := World.new()
+	w3.add_biome(Vector2.ZERO, 100.0, "woods")
+	w3.add_biome(Vector2(120, 0), 100.0, "marsh")
+	check(w3.biome_at(Vector2(40, 0)) == "woods", "equal discs: the nearer middle takes the point")
+	check(w3.biome_at(Vector2(80, 0)) == "marsh", "...on both sides of the midline")
 
 
 func _round_trips(w, name: String) -> void:
@@ -161,10 +180,12 @@ func _procedural_marsh_sits_on_the_lake() -> void:
 		for b in w.biomes:
 			if String(b["kind"]) != "marsh":
 				continue
-			# Placed one LAKE_RADIUS from the middle, so the disc overlaps the
-			# bank whenever its own radius reaches back to it — which the
-			# BIOME_R_MIN floor guarantees.
-			if lake.distance_to(b["position"]) <= ProceduralWorld.LAKE_RADIUS + float(b["radius"]):
+			# Its middle sits exactly on the lake's rim, which is the placement
+			# rule itself rather than a consequence of it — and since every
+			# radius is at least BIOME_R_MIN (220) against a LAKE_RADIUS of 100,
+			# that also means the disc always covers the water it drains.
+			if is_equal_approx(lake.distance_to(b["position"]), ProceduralWorld.LAKE_RADIUS) \
+					and float(b["radius"]) > ProceduralWorld.LAKE_RADIUS:
 				ok += 1
 	check(ok == seeds.size(), "every seed's marsh touches its lake (%d of %d)" % [ok, seeds.size()])
 
@@ -172,7 +193,7 @@ func _procedural_marsh_sits_on_the_lake() -> void:
 func _init() -> void:
 	_empty_map()
 	_one_disc()
-	_overlap_is_by_relative_distance()
+	_overlap_is_most_specific()
 	_old_save_has_no_biomes()
 	_unknown_kind_survives()
 	_procedural_is_still_deterministic()

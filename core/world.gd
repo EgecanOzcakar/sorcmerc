@@ -456,12 +456,21 @@ func add_biome(position: Vector2, radius: float, kind: String) -> Dictionary:
 # What kind of country this point is, DEFAULT_BIOME when no disc claims it —
 # which is most of any map, and costs one pass over a handful of discs.
 #
-# Overlaps are resolved by the smallest `distance / radius`: the disc whose
-# middle the point is nearest RELATIVE to that disc's own size. A big wood with
-# a small marsh painted inside it therefore reads as marsh at the marsh, rather
-# than the marsh being swallowed by whichever disc happens to be first in the
-# list. Only a point actually inside a disc claims it (the ratio has to be < 1),
-# so discs do not reach past their own edge.
+# Overlaps are resolved by the SMALLEST RADIUS among the discs that actually
+# contain the point: most specific wins. A big wood with a small marsh painted
+# inside it reads as marsh across the whole marsh and as wood everywhere else,
+# which is the point of being able to paint one inside the other.
+#
+# The obvious-looking alternative — smallest `distance / radius`, whoever's
+# middle the point is relatively nearest — was tried first and is wrong, which
+# tests/test_world_biomes.gd caught. It shrinks the inner disc instead of
+# honouring it: a 60-radius marsh inside a 400-radius wood only wins where
+# |x-100|/60 < |x|/400, which is about 30 units of the 120 it should own. The
+# inner disc has to be nearly concentric with the outer one to keep its ground,
+# so "paint a small one inside a big one" quietly does not work.
+#
+# Ties on radius fall to the nearer centre, so two discs of the same size share
+# the ground between them on the midline rather than on list order.
 #
 # ponytail: a linear scan, exactly as water_depth() is and for the same reason —
 # a handful of hand-placed blobs. Both are called per ground cell when the
@@ -469,11 +478,16 @@ func add_biome(position: Vector2, radius: float, kind: String) -> Dictionary:
 # them together rather than one at a time.
 func biome_at(pos: Vector2) -> String:
 	var best := DEFAULT_BIOME
-	var best_k := 1.0
+	var best_r := INF
+	var best_d := INF
 	for b in biomes:
-		var k: float = pos.distance_to(b["position"]) / maxf(1.0, float(b["radius"]))
-		if k < best_k:
-			best_k = k
+		var r := float(b["radius"])
+		var d: float = pos.distance_to(b["position"])
+		if d >= r:
+			continue                      # outside: a disc never reaches past its own edge
+		if r < best_r or (r == best_r and d < best_d):
+			best_r = r
+			best_d = d
 			best = String(b["kind"])
 	return best
 
