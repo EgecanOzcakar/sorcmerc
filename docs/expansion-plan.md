@@ -7372,9 +7372,9 @@ hero who falls beating their own band is not paid; the one who does not, is).
 
 ### Still open
 
-- **A lair whose faction has no board of its own draws a different people in
-  every room.** The same root cause one floor down, deliberately not fixed
-  here. `core/site.gd`'s `_build()` calls `theme_for_faction(lair.faction)`,
+- ~~**A lair whose faction has no board of its own draws a different people in
+  every room.**~~ — fixed in the next pass, below ("A lair is its own people").
+  The same root cause one floor down, deliberately not fixed in this one. `core/site.gd`'s `_build()` calls `theme_for_faction(lair.faction)`,
   which returns `""` for those same ten factions, and each room then seeds its
   roster with `rng.seed_value + hash(room.id)` — so `_faction_order` picks
   `FACTIONS[seed % size]` afresh per room and a dragon's cave is six rooms of
@@ -7384,12 +7384,145 @@ hero who falls beating their own band is not paid; the one who does not, is).
   pinning a lair to its own people moves that lair's difficulty off the
   average of a random draw and onto its faction's own number. That is a
   balance pass with a sweep behind it, not a side effect of this one.
-- A site's own gate room (`core/site.gd`'s `"hold"` objective) therefore still
+- ~~A site's own gate room (`core/site.gd`'s `"hold"` objective) therefore still
   passes no faction to `waves_for()` and keeps today's behaviour. Its room
   roster is drawn by the bullet above; pinning its waves while the room itself
   stays unpinned would only make the two disagree. Both move together, or
-  neither does.
+  neither does.~~ — they moved together, below.
 - `Scaler.pin_faction()` is only reachable where a faction is known and a theme
   is not. A faction that later earns a board of its own (a `THEME_FACTION`
   entry) stops going through it, which is correct and worth knowing when
   reading the two call sites.
+
+## A lair is its own people, all the way down (2026-09-22)
+
+The note above left this one open on purpose, because it is the half of the
+bug that changes WHO you fight rather than only which of them arrive second.
+
+`core/site.gd`'s `_build()` asks `theme_for_faction(lair.faction)` for the
+board a lair's rooms are fought on, and that returns `""` for ten of the
+fifteen factions — orc, gnoll, kobold, cultist, soldier, monstrosity, fey,
+elemental, construct, dragon. For those, `core/scaler.gd`'s `_faction_order`
+reads the faction off the seed instead, and the seed in here is per ROOM
+(`rng.seed_value + hash(room.id)`). So every room rolled a fresh arbitrary
+people, and which one was decided by a string hash: a dragon's cave was six
+rooms of six unrelated peoples, and the faction the lair is labelled with —
+the thing that sets its depth, its loot tier and its boss — described nothing
+that was actually in it.
+
+The fix is `Scaler.pin_faction()` on the room seed, the same call the road's
+hold waves got in the note above, plus `lair.faction` into the gate room's
+`waves_for()`. Pinning the room alone would only have made a gate room and
+its own reinforcements disagree, which is exactly what the note left in that
+file said was not yet true.
+
+### The sweep
+
+`tests/sweep_site_kin.gd`, committed with this. It autoplays a whole delve per
+seed on ONE set of resources the way a real one runs — HP, slots and pools
+carry room to room through `Adapter`, a rest room the only thing that gives
+any of it back — and reports, per lair faction, how many rooms the party won
+and how often it reached the bottom. The lair sits at the origin so
+`core/regions.gd`'s band clamp is a no-op and the faction is the only thing
+that moves; it always takes the first option at each depth, which is a fixed
+policy on both sides rather than a model of how anybody plays.
+
+**30 delves a faction, level-3 preset party** (rooms won / cleared):
+
+| faction | board | depth | before | after |
+|---|---|---|---|---|
+| goblinoid | yes | 3 | 2.20 / 43.3% | 2.20 / 43.3% |
+| beast | yes | 3 | 2.30 / 46.7% | 2.30 / 46.7% |
+| undead | yes | 3 | 2.00 / 40.0% | 2.00 / 40.0% |
+| bandit | yes | 3 | 2.00 / 53.3% | 2.00 / 53.3% |
+| giant | yes | 4 | 2.50 / 30.0% | 2.50 / 30.0% |
+| kobold | no | 4 | 2.10 / 20.0% | 2.10 / 13.3% |
+| orc | no | 4 | 2.23 / 23.3% | 2.60 / 30.0% |
+| gnoll | no | 4 | 2.37 / 23.3% | 2.23 / 16.7% |
+| cultist | no | 5 | 2.67 / 13.3% | 1.07 / 0.0% |
+| soldier | no | 5 | 2.27 / 10.0% | 3.00 / 6.7% |
+| monstrosity | no | 5 | 2.90 / 23.3% | 2.90 / 26.7% |
+| fey | no | 5 | 2.67 / 10.0% | 1.93 / 3.3% |
+| elemental | no | 6 | 2.33 / 0.0% | 1.70 / 0.0% |
+| construct | no | 6 | 2.47 / 0.0% | 3.43 / 6.7% |
+| dragon | no | 6 | 2.87 / 16.7% | 1.93 / 0.0% |
+
+**20 delves a faction, level-8 party** — because the deep factions floor at 0%
+cleared down at level 3, and a floor hides whatever the change did:
+
+| faction | board | depth | before | after |
+|---|---|---|---|---|
+| goblinoid | yes | 3 | 2.80 / 80.0% | 2.80 / 80.0% |
+| beast | yes | 3 | 2.80 / 80.0% | 2.80 / 80.0% |
+| undead | yes | 3 | 3.00 / 100% | 3.00 / 100% |
+| bandit | yes | 3 | 2.45 / 45.0% | 2.45 / 45.0% |
+| giant | yes | 4 | 3.25 / 25.0% | 3.25 / 25.0% |
+| kobold | no | 4 | 4.00 / 100% | 3.95 / 95.0% |
+| orc | no | 4 | 4.00 / 100% | 4.00 / 100% |
+| gnoll | no | 4 | 4.00 / 100% | 4.00 / 100% |
+| cultist | no | 5 | 5.00 / 100% | 4.80 / 90.0% |
+| soldier | no | 5 | 5.00 / 100% | 5.00 / 100% |
+| monstrosity | no | 5 | 5.00 / 100% | 5.00 / 100% |
+| fey | no | 5 | 5.00 / 100% | 4.95 / 95.0% |
+| elemental | no | 6 | 6.00 / 100% | 5.55 / 65.0% |
+| construct | no | 6 | 6.00 / 100% | 6.00 / 100% |
+| dragon | no | 6 | 6.00 / 100% | 5.90 / 95.0% |
+
+### What the numbers say
+
+**The control holds.** Every faction with a board of its own is byte-identical
+before and after, at both levels. The pin cannot reach them, and if the
+harness had drifted under the measurement those rows would say so.
+
+**Nothing in the early game moves at all.** `Regions.HOMES` puts bandit, beast
+and goblinoid in the heartland and nothing else — all three have boards. A new
+party's local lairs are exactly the unaffected ones; the marches add kobold,
+orc and gnoll, and those move by 6.7 points or less, in both directions.
+
+**It moves by faction, not in one direction.** orc +6.7 and construct +6.7
+against cultist −13.3 and dragon −16.7. This is `core/scaler.gd`'s own
+per-faction spread (fey 53% … construct 100%, in its header) arriving where it
+always should have: before, a lair averaged over a random draw of all fifteen
+peoples, which is a number that describes no faction in particular. After, it
+lands on the number of the people whose lair it is. The mean across the ten
+does drift down (14.0% → 10.3% cleared at level 3), and the factions doing
+most of that are the frontier and deeps ones, met at a band where the clamp
+raises the roster anyway and a level-3 party has no business standing.
+
+**The level-8 grid found something else.** Before the change, every themeless
+lair was a flat 100% walkover for a level-8 party while a giant hold cleared
+25%. That is not the roster — it is the boss. See below.
+
+Tests: `tests/test_site.gd` walks every room of six lairs and checks no room
+draws a people other than the lair's. `Scaler.MIX` (`snik`, `vess`, `kritch`,
+`grull`) is the documented fallback where nothing in a faction fits the budget
+and carries no faction of its own, so the check skips it rather than failing on
+it — and at the level-3 heartland budget no themeless faction needed it. A
+content pack's unknown faction is handed back unpinned and keeps today's
+behaviour.
+
+### Still open
+
+- **Ten of the fifteen factions have no boss at all.** `core/campaign.gd`'s
+  `BOSS_POOL` is keyed by THEME and holds six entries, covering undead,
+  goblinoid, giant, bandit and beast. `_boss_room()` matches on
+  `b.theme == theme and theme != ""`, so for the other ten it falls through to
+  a generic `"hard"` roster with no `lead` — no pumped elite, no measured win
+  rate, and the title `"WHAT THE LAIR WAS BUILT AROUND"`, which is a
+  description where every real boss has a name (`"THE ONI OF THE DEEP ICE"`,
+  `"THE ARROW-CHIEF"`). That is what the level-8 grid is showing: a lair with
+  a real boss is a fight at the bottom and a lair without one is not.
+  `core/site.gd:263` says "A faction with no themed boss (dragon, currently)";
+  it is ten, not one. Fixing it is authoring — a named lead per faction with
+  its own swept win rate, the way the six existing ones were done — not a
+  line of code.
+- The sweep places every lair at the origin to isolate the faction. Real
+  placement is `Regions.HOMES` plus the band clamp, so the absolute numbers
+  above are a controlled A/B and not what a player meets. A per-band sweep is
+  the follow-up if the boss work above ever changes these.
+- Nothing about a room's PROSE knows its faction: `COMBAT_ROOMS` is
+  deliberately faction-agnostic ("a collapsed gallery reads the same whether
+  goblins or the dead are holding it") and that is still the call. But now
+  that the roster is reliably one people, a per-faction room pool is a content
+  seam that would actually pay — the `ponytail` at `core/site.gd:95` already
+  names it.
