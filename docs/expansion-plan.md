@@ -7100,6 +7100,40 @@ already has — `THEME_HABITAT`, which today holds exactly one row
 in a wood). Biome picks the board and the roster; the ring
 (`core/regions.gd`) still says how dangerous the country is.
 
+The set is four, and `any`'s 66 entries ride along in every one of them
+because `_in_budget_and_habitat` already tests `habitat in [need_habitat,
+"any"]` — so a biome names exactly one habitat and the generic pool is free:
+
+| biome | `need_habitat` | pool, with `any` | board |
+|---|---|---|---|
+| `downs` (the default fill) | `""` | all 316 | new |
+| `woods` | `forest` | 148 | `forest-clearing`, exists |
+| `marsh` | `water` | 92 | new |
+| `crags` | `cave` | 82 | `frozen-cave`, repalette |
+
+Only two of the four need a board authored, which is why the floor below
+counts two — that is a statement about authoring work, not about how many
+biomes there are. `dungeon` (48) is deliberately not among them: it belongs
+to lair interiors via `core/site.gd`, not to open country. Whether `crags`
+earns its place on 16 cave-habitat entries is the one open question in the
+set; three biomes may be the honest answer for the bestiary as it stands.
+
+A correlation worth dismissing before it is noticed and mistaken for a bug:
+`wild` holds the dragons, giants and monstrosities while `forest` holds the
+low-tier beasts, so habitat looks like it leaks danger into biome. It does
+not. The habitat filter runs *after* the ring has set the budget, and
+`_in_budget_and_habitat` also drops anything scoring above `budget *
+BIGGEST_SHARE` — so a `wild` roster in the heartland is simply the cheap end
+of the wild pool. Danger stays the ring's job.
+
+One implementation note that is not optional, because it fails quietly:
+`_faction_order` (`core/scaler.gd:398-400`) picks the faction by seed
+*before* the habitat filter runs. A seed landing on `construct` (all six are
+`dungeon`) in a marsh empties the pool and falls through to `MIX` — the four
+demo goblins, on the code path this file already records as swinging 6 % to
+47 % win rate across two TIER retunes. The faction shortlist has to be
+filtered by habitat before the seed indexes into it.
+
 That first pass is **flavour-only on purpose**: board theme, palette,
 `region_at` naming and roster habitat, and nothing that moves a number. Every
 knob below is a real difficulty change wearing a terrain costume, and each one
