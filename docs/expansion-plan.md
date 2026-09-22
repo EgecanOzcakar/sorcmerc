@@ -7401,3 +7401,72 @@ mechanics the board does not have. Two are `[P]`, carried by the sheet.
 - The warlock's level 18 stays bare, which is correct: Mystic Arcanum lands on
   17 and 19 and the pact slots stop growing at 17. `EXPECTED_BLANK` in
   `tools/audit_levels.py` records it so nobody fills it by mistake.
+
+## The climb — the whole ladder, 1 to 20, on one screen (2026-09-22)
+
+The character screens only ever drew the level you were standing on. You could
+not see that Extra Attack waits at 5, or what taking the Berserker at 3 buys at
+14, without leaving the game. `core/climb.gd` reads the whole track and
+`scenes/creator/climb_view.gd` draws it: twenty rungs down the left, what the
+selected one gives on the right.
+
+It is a reading problem, not a rules one — the data was always twenty entries
+deep in `data/classes.json`. The one real piece of work is the merge, because a
+class level that looks empty is usually a level where the *path* grants: the
+barbarian's 14, the monk's 11, the rogue's 9. `Climb.build()` folds
+`subclasses.json`'s `classLevel` tiers into the class array, which is why a
+Thief's level 9 says Supreme Sneak instead of nothing.
+
+Three states, and the middle one is the point. A rung at or below your level is
+taken and set in gilt; the one above it is next; everything higher is **veiled**
+— its name, its marks and its level stay legible, but the panel will not read
+out what it does until you are one level away. That is the whole difference
+between a plan and a spoiler, and it is computed in core so both screens agree
+on it rather than each deciding for itself.
+
+The level-up page now carries it under its gains card: the card says what this
+level brings, the climb says where the level sits. Before Confirm the build is
+still on the old level, so the rung marked "next" is exactly the one the card is
+describing.
+
+`Effects.humanize()` was fixed on the way. It title-cased every word, which is
+right until an id has a small word in it — the restored `rogue-stroke-of-luck`
+came back "Stroke Of Luck" and `zealot-rage-of-the-gods` came back "Rage Of The
+Gods". Small words are left down now, which reads as a name rather than a
+headline, and the climb puts a great many of these on one screen at once.
+
+And twelve class emblems (`assets/icons/classes/`, `tools/gen_action_icons.py`'s
+new `classes` group), because the only thing standing in for a class until now
+was a text glyph. Each is one motif, not a scene: an emblem sits at 28-46 px
+beside a class name that is already on screen, so it identifies rather than
+illustrates. Where two classes would reach for the same motif the tie breaks on
+what the class does — the barbarian's fist against the monk's open hand, the
+sorcerer's flame against the wizard's worked orb.
+
+That generator had been failing its own `--check` on all 161 icons in the repo:
+its template wrote `compress/mode=0` where Godot 4.7's importer writes 1. The
+template was corrected to match what Godot actually produces, so `--check` is
+clean again at 360 files. Exactly seven sidecars had held `mode=0` — and five
+of them are `magic-missile`, `healing-word`, `shield`, `eldritch-blast` and
+`vicious-mockery`, the same five the export deletes. They were added by hand
+downstream and never went through the editor, which is what left them behind.
+
+### Still open
+
+- The creator's class step is untouched. The design is for it to open the same
+  widget at level 0 so a class is chosen by reading where it goes, and
+  `Climb.build(id, "", 0)` already returns exactly that track — it is the
+  wiring that is missing, not the model.
+- 324 of the catalog's 340 features still have no badge, so most rungs fall
+  back to the generic spark. The 199 badges that exist were authored for the
+  action bar, which only ever needed the features you can press; a ladder shows
+  the passive ones too. The 48 path emblems are unbuilt for the same reason.
+- The ranger's emblem is an arrow without the bow arc behind it — the `band`
+  did not render at that radius. It reads distinctly enough beside the rogue's
+  dagger to ship, and wants one more pass.
+- Multiclass shows the first class's track only (`ponytail:` in
+  `core/climb.gd`), which matches the resolver's own single-class assumption
+  (`data/SCHEMA.md` gap #6).
+- The detail panel reads mechanics straight out of `data/effects/features.json`,
+  so on most rungs it says nothing. That is honest rather than broken: the sheet
+  lists the feature and no fight reads it yet.

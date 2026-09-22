@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://beamwf1vcg0ne"
-path="res://.godot/imported/magic-missile.svg-922a3defd956d7d1a40190c38116d76d.ctex"
+uid="uid://jbiwvvh8he54"
+path="res://.godot/imported/warlock.svg-210142bd072904f4059bc4e4cc4ee329.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/icons/skills/magic-missile.svg"
-dest_files=["res://.godot/imported/magic-missile.svg-922a3defd956d7d1a40190c38116d76d.ctex"]
+source_file="res://assets/icons/classes/warlock.svg"
+dest_files=["res://.godot/imported/warlock.svg-210142bd072904f4059bc4e4cc4ee329.ctex"]
 
 [params]
 

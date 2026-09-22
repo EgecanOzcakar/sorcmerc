@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://beamwf1vcg0ne"
-path="res://.godot/imported/magic-missile.svg-922a3defd956d7d1a40190c38116d76d.ctex"
+uid="uid://3bvwgs53agmj"
+path="res://.godot/imported/bard.svg-6a1b33db4a3fb233c356389b91cd3978.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/icons/skills/magic-missile.svg"
-dest_files=["res://.godot/imported/magic-missile.svg-922a3defd956d7d1a40190c38116d76d.ctex"]
+source_file="res://assets/icons/classes/bard.svg"
+dest_files=["res://.godot/imported/bard.svg-6a1b33db4a3fb233c356389b91cd3978.ctex"]
 
 [params]
 

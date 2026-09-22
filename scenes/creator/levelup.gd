@@ -13,6 +13,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Save = preload("res://core/character_save.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const Climb = preload("res://core/climb.gd")
 
 # leveled = the build actually gained a level (a cancel before Confirm leaves it false).
 signal finished(leveled: bool)
@@ -164,6 +165,7 @@ func _render() -> void:
 		_confirm.text = "Done"
 		_cancel.text = "Close"
 		_gains_panel(Leveling.gains(_before, _ch.sheet()))
+		_climb_panel()
 		_choices()
 	else:
 		_title.text = "%s — %s %d → %d" % [_ch.cname, Creator.humanize(cls),
@@ -171,9 +173,10 @@ func _render() -> void:
 		_confirm.text = "Confirm level %d" % (_ch.level() + 1)
 		_cancel.text = "Cancel"
 		_gains_panel(Leveling.preview(_ch))
+		_climb_panel()
 	# Before the level is taken the card is the whole page, so it sits in the
 	# middle of it; after, the choices follow it down from the top.
-	_body.alignment = BoxContainer.ALIGNMENT_BEGIN if _committed else BoxContainer.ALIGNMENT_CENTER
+	_body.alignment = BoxContainer.ALIGNMENT_BEGIN
 	_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_status.text = ""
 
@@ -208,6 +211,24 @@ func _gains_panel(g: Dictionary) -> void:
 		_gain(box, "%d → %d" % [int(s["from"]), int(s["to"])], "level %d spell slots" % int(s["level"]))
 	if not _committed and int(g["choices"]) > 0:
 		_gain(box, str(int(g["choices"])), "choice%s to make, once you confirm" % ("" if int(g["choices"]) == 1 else "s"))
+
+# The whole climb under the card (core/climb.gd). The card says what this level
+# brings; this says where the level sits — what is behind, what is one rung up,
+# and what is still veiled. Before Confirm the build is still on the old level,
+# so the rung about to be taken is the one marked "next", which is exactly the
+# one the card is describing.
+func _climb_panel() -> void:
+	var cid: String = _ch.class_id()
+	if cid == "":
+		return
+	var taken := String(_ch.sheet().subclasses.get(cid, ""))
+	var view = load("res://scenes/creator/climb_view.tscn").instantiate()
+	view.custom_minimum_size.y = 430
+	view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_body.add_child(view)
+	view.show_track(Climb.build(cid, taken, _ch.level()), Climb.paths_for(cid), taken)
+
 
 # One gain: the figure in the serif, the words after it in the dim body.
 func _gain(box: VBoxContainer, figure: String, words: String) -> void:

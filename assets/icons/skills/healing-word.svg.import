@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/healing-word.svg-69b6a5d31dbc2f8e4be48d00c9f6
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

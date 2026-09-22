@@ -1349,7 +1349,40 @@ for _fid, _art in FEATURES.items():
 for _bid, _art in SHOVES.items():
     SKILLS[_bid] = badge(*_art)
 
-GROUPS = {"actions": ACTIONS, "schools": SCHOOLS, "skills": SKILLS}
+# --- the twelve classes ----------------------------------------------------
+# One emblem per class, for the level ladder (scenes/creator/climb_view.gd):
+# the fork at level 3 draws a branch per path, and the creator's class step
+# reads as twelve tracks side by side. Both wanted a mark, and the only thing
+# standing in for a class until now was a text glyph in Icons.CLASS_GLYPHS.
+#
+# Each is one motif, not a scene. A class emblem sits at 28-46 px beside a
+# class name that is already on screen — it identifies, it does not illustrate,
+# and a second object in the disc only muddies it at that size. Where two
+# classes would reach for the same motif the tie is broken by what the class
+# does rather than what it carries: the barbarian's fist against the monk's
+# open hand, the sorcerer's flame against the wizard's worked orb.
+CLASSES = {
+    "barbarian": badge(fist(E("fire"), 1.05)),
+    "bard": badge(note(E("gold"), 1.05)),
+    "cleric": badge(star(32, 32, 19, 8, 8, E("radiant"), sw=1.0),
+                    plus(32, 32, 9.5, 3.8, GOLD)),
+    "druid": badge(crescent(E("nature"), 1.05)),
+    "fighter": badge(sword(32, 39, 0, 46)),
+    "monk": badge(hand(BONE, 0, 1.05)),
+    "paladin": badge(hexagon(32, 32, 16, STEEL[1], sw=1.6),
+                     star(32, 31, 8.5, 3.4, 4, GOLD, sw=1.0)),
+    "ranger": badge(band(38, 36, 20, 18.2, 128, 232, WOOD[1], sw=1.5),
+                    arrow(30, 34, -45, 38, 5.2, STEEL)),
+    "rogue": badge(dart(STEEL, -45, 1, 1.15)),
+    "sorcerer": badge(flame(E("fire"), 32, 33, 1.05)),
+    "warlock": badge(eye(E("necrotic"), 1.1)),
+    "wizard": badge(orb(E("force"), 0.92, ring=True),
+                    star(32, 31, 7.5, 2.8, 4, BONE, sw=0.9)),
+}
+
+
+GROUPS = {"actions": ACTIONS, "schools": SCHOOLS, "skills": SKILLS,
+          "classes": CLASSES}
 
 
 
@@ -1367,7 +1400,9 @@ GROUPS = {"actions": ACTIONS, "schools": SCHOOLS, "skills": SKILLS}
 #                        crawling.
 #
 # The rest are Godot's texture defaults, spelled out because that is what the
-# importer writes back. `path`/`dest_files` are not free-form: Godot addresses
+# importer writes back. compress/mode was 0 here and 1 in all 161 committed
+# sidecars — 4.7's importer writes 1 — so --check had been failing on every
+# icon in the repo. Corrected to match what Godot actually produces. `path`/`dest_files` are not free-form: Godot addresses
 # the imported file by md5 of the *source* res:// path (see
 # EditorFileSystem::_get_import_base_path), so they are computed, not chosen.
 
@@ -1388,7 +1423,7 @@ dest_files=["{dest}"]
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
