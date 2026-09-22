@@ -6367,10 +6367,12 @@ the map mid-run.
 ### Still open
 
 - No pictures yet.
-- A gate fight's waves for a lair faction with no theme of its own (a pack's orcs,
+- ~~A gate fight's waves for a lair faction with no theme of its own (a pack's orcs,
   say) come from `encounter_spec`'s default forest theme, not the raiders'
   own kin: `_hold_waves` reads the stamped theme. Two lines when it shows —
-  stash the raw theme and seed on the spec.
+  stash the raw theme and seed on the spec.~~ — fixed 2026-09-22 (see "Two the
+  road got wrong" below). It was not two lines: the seed had to stop being
+  walked off its faction as well.
 - A raid band carries nothing home; the halved market is what it took.
 - Towns are never taken. A town that falls is the faction ladder's war (#4).
 
@@ -7298,3 +7300,96 @@ default. Test: `tests/test_world_biomes.gd`.
   there while the main map has three.
 - The worldgen climate option (`origin["climate"]`, biasing how the discs are
   distributed) is designed but not built.
+
+## Two the road got wrong — the raiders' own kin, and a past paid to the dead (2026-09-22)
+
+Two bugs in the open world's fight hand-off, both of them ordering rather than
+mechanism, and both of them the code failing to do a thing it already says in
+its own comments that it does.
+
+**The waves at the gate were somebody else's people.** Meeting a raid on the
+town it is marching on is *hold the line* (the threat-clocks note above), and a
+hold is built round reinforcements: `Objectives.waves_for()` draws one easy
+roster per `WAVE_ROUNDS` entry at `WAVE_SCALE` of the budget. `scenes/world/
+world.gd`'s `_hold_waves()` asked for those off `spec["theme"]` — and the board
+a fight is drawn on is not the same question as whose band this is.
+`encounter_spec()` stamps `theme` for the board and leaves the variable it
+built the roster from as `""` on purpose for the ten factions with no board of
+their own (orc, gnoll, kobold, cultist, soldier, monstrosity, fey, elemental,
+construct, dragon): those fight on `DEFAULT_THEME`, `forest-clearing`, and
+`core/scaler.gd`'s `_faction_order` reads their faction off the SEED instead,
+`FACTIONS[seed % size]`. `forest-clearing`'s faction is `beast`. So an orc
+siege was answered, wave after wave, by the wildlife of the board the orcs
+happened to be standing on.
+
+The threat-clocks note called this two lines — stash the raw theme and seed on
+the spec — and it is not, which is the more interesting half. `waves_for` gives
+each wave its own roll with `seed + 17 * (i + 1)`, and 17 is not a multiple of
+`FACTIONS.size()`, so the offset that makes a wave its own roster also walks it
+onto a different people: handed the raw pair and nothing else, an orc band's
+three waves came back drawn from cultists and monstrosities. Nearer, and still
+not orcs.
+
+So the rule is written down once rather than open-coded: `Scaler.pin_faction
+(seed, faction)` rewrites a seed so the themeless route picks that faction,
+touching only the remainder that carries it and leaving everything else the
+seed decides alone. `encounter_spec()` uses it where it did the arithmetic
+inline; `waves_for()` re-applies it per wave, which is exactly what makes the
+roll free and the people fixed. The pair rides the spec as `roster_theme` and
+`roster_seed` beside the stamped `theme` — NOT under `spec["seed"]`, which is
+`core/encounter.gd`'s board seed and is overwritten by `scenes/main.gd` with
+the fight's own seed before the board is built.
+
+Nothing measured moves. The waves spend the same budget at the same
+`WAVE_SCALE` on the same tier; what changes is which people that budget is
+spent on, and it changes it to the people the fight's FIRST roster was already
+drawn from. `core/scaler.gd`'s per-faction spread (fey 53% … construct 100%,
+in its own header) is the measurement that would care, and this moves the
+waves onto the band's own number instead of a number picked by where it was
+standing.
+
+**A past was paid to a hero who did not walk away from the fight.**
+`core/callings.gd` has always refused a dead hero's calling — "a dead hero's
+past does not complete: the bond and the line are theirs to have" — and
+`tests/test_callings.gd` has always asserted it. Out on the map it never got
+the chance to say so: `_launch_combat()` ran the `band_beaten` check inside its
+victory branch, some thirty lines ahead of `_apply_deaths()`, so nobody in the
+fight was dead yet when `Callings.check()` looked. The one hero who fell
+putting down the band their own past named was paid the XP, handed the
+heirloom, and given the bond.
+
+The check moves below `_apply_deaths()` and stays above the autosave, so the
+save a fight makes still carries whatever it decided — the property
+`tests/test_world_callings.gd` pins. The same reorder fixes the bond as a side
+effect: `_apply_deaths()` benches the fallen, so `_leader()` and
+`Callings._closest()` now read the party that walked away rather than possibly
+naming a corpse.
+
+Non-visual, both of them: no screenshot, `tools/run_tests.sh` is the evidence.
+Tests: `tests/test_world_raids.gd` (an orc band's own roster and its waves are
+both orc, the warren's both goblinoid), `tests/test_world_callings.gd` (the
+hero who falls beating their own band is not paid; the one who does not, is).
+
+### Still open
+
+- **A lair whose faction has no board of its own draws a different people in
+  every room.** The same root cause one floor down, deliberately not fixed
+  here. `core/site.gd`'s `_build()` calls `theme_for_faction(lair.faction)`,
+  which returns `""` for those same ten factions, and each room then seeds its
+  roster with `rng.seed_value + hash(room.id)` — so `_faction_order` picks
+  `FACTIONS[seed % size]` afresh per room and a dragon's cave is six rooms of
+  six arbitrary peoples. The fix is the same one call (`pin_faction` on the
+  room seed), but unlike the waves it changes WHO a lair is full of, and the
+  measured per-faction win rates run from fey 53% to construct 100% — so
+  pinning a lair to its own people moves that lair's difficulty off the
+  average of a random draw and onto its faction's own number. That is a
+  balance pass with a sweep behind it, not a side effect of this one.
+- A site's own gate room (`core/site.gd`'s `"hold"` objective) therefore still
+  passes no faction to `waves_for()` and keeps today's behaviour. Its room
+  roster is drawn by the bullet above; pinning its waves while the room itself
+  stays unpinned would only make the two disagree. Both move together, or
+  neither does.
+- `Scaler.pin_faction()` is only reachable where a faction is known and a theme
+  is not. A faction that later earns a board of its own (a `THEME_FACTION`
+  entry) stops going through it, which is correct and worth knowing when
+  reading the two call sites.

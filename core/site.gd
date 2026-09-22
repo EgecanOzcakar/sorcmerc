@@ -347,6 +347,14 @@ func combat_spec() -> Dictionary:
 			{}, theme, seed_v, band, _boss_lead_exclusion())
 	# Objectives: the gate holds against waves drawn from the same faction at
 	# WAVE_SCALE of an easy roster; the pens hold a captive on a deadline.
+	#
+	# No `faction` argument, unlike scenes/world/world.gd's road hold: that
+	# pins a themeless band's waves to its own people, and in here `theme` is
+	# "" for every lair whose faction has no board (orc, dragon, ...) — whose
+	# ROOM roster is itself drawn off a per-room seed and so is already some
+	# other people's. Pinning the waves alone would only make the two disagree.
+	# Both move together or neither does; see the expansion plan's "Two the
+	# road got wrong" entry.
 	match String(room.get("objective", "")):
 		"hold":
 			spec["objective"] = Objectives.make("hold", {"waves": Objectives.waves_for(

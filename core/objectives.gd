@@ -89,11 +89,23 @@ static func make(kind: String, extra: Dictionary = {}) -> Dictionary:
 
 # hold's reinforcements: one easy roster per WAVE_ROUNDS entry at WAVE_SCALE of
 # its budget, on its own seed. `chars` are Characters (what Scaler wants).
-static func waves_for(chars: Array, theme: String, seed: int, power_scale: float, exclude: Array = []) -> Array:
+#
+# `faction` is the people the FIRST roster was drawn from, and it matters only
+# when there is no theme: core/scaler.gd's _faction_order reads the faction off
+# the seed itself in that case (FACTIONS[seed % size]), so the plain `+ 17` that
+# gives each wave its own roll also walks it onto a different people. That is
+# how an orc siege came to be reinforced by forest beasts. Re-pinned per wave,
+# the roll still moves and the people do not. With a theme the theme already
+# names the faction and this is a no-op.
+static func waves_for(chars: Array, theme: String, seed: int, power_scale: float,
+		exclude: Array = [], faction := "") -> Array:
 	var Scaler = load("res://core/scaler.gd")   # load: scaler.gd preloads encounter.gd, which preloads this file
 	var out: Array = []
 	for i in WAVE_ROUNDS.size():
-		out.append(Scaler.roster_for(chars, "easy", {}, theme, seed + 17 * (i + 1), power_scale * WAVE_SCALE, exclude)["monsters"])
+		var s: int = seed + 17 * (i + 1)
+		if theme == "" and faction != "":
+			s = Scaler.pin_faction(s, faction)
+		out.append(Scaler.roster_for(chars, "easy", {}, theme, s, power_scale * WAVE_SCALE, exclude)["monsters"])
 	return out
 
 # The carter's HP scales with the party; `party_c` are combatants, whose sheet

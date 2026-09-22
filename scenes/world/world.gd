@@ -1509,9 +1509,7 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 			break
 	var seed_v: int = absi(hash(foe.id))
 	if theme == "":
-		var idx: int = Scaler.FACTIONS.find(foe.faction)
-		if idx >= 0:
-			seed_v = seed_v - seed_v % Scaler.FACTIONS.size() + idx
+		seed_v = Scaler.pin_faction(seed_v, foe.faction)
 	var threat: Dictionary = WorldThreat.assess(party)
 	# D6: the two knobs compose, and they answer different questions. The band
 	# says how dangerous this country is (1.0 while the party is inside its level
@@ -1522,6 +1520,23 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 		{}, theme, seed_v,
 		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party))
 	spec["theme"] = theme if theme != "" else DEFAULT_THEME
+	# The board a fight is drawn on is not always the roster's own kin, and the
+	# stamp above is lossy on purpose: a faction with no board of its own
+	# (orc/gnoll/kobold/...) fights on DEFAULT_THEME while `theme` stays "" so
+	# that _faction_order takes the faction off the seed instead. Anything that
+	# has to build a SECOND roster for this same fight — the gate hold's waves —
+	# needs that pair back, or it reads "forest-clearing" off the spec and sends
+	# beasts to an orc siege. core/site.gd never had this one — both are still
+	# in scope where it builds its waves — but it has the sibling, and the
+	# expansion plan's "Two the road got wrong" entry says why that one waits.
+	# Out here the spec is the only thing that crosses between the two rosters,
+	# so the pair rides along under names of its own.
+	# NOT `spec["seed"]`: that is core/encounter.gd's board seed and
+	# scenes/main.gd overwrites it with the fight's own seed before the board
+	# is built, so a wave roster hung on it would be drawn off whatever the
+	# clock said.
+	spec["roster_theme"] = theme
+	spec["roster_seed"] = seed_v
 	return spec
 
 # The same hand-off scenes/campaign/campaign.gd's _launch_combat() does: the map
@@ -1597,9 +1612,15 @@ func _road_objective(foe, jumped: String) -> Dictionary:
 # the way a site's gate room draws them (core/site.gd), at the same power the
 # band itself was rostered at (encounter_spec's own product). Without them
 # combat.gd's hold is done at round HOLD_ROUNDS + 1 whatever stands.
+#
+# Off `roster_theme`/`roster_seed`, never the stamped `theme`: those are the
+# pair the band's own roster was drawn with, so the waves are the raiders' own
+# kin. Read off `theme` this used to send beasts (forest-clearing's faction) at
+# any raid whose faction has no board of its own.
 func _hold_waves(foe, spec: Dictionary, threat: Dictionary) -> Array:
-	return Objectives.waves_for(party.party_characters(), String(spec["theme"]),
-		absi(hash(foe.id)), float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party))
+	return Objectives.waves_for(party.party_characters(), String(spec.get("roster_theme", "")),
+		int(spec.get("roster_seed", absi(hash(foe.id)))),
+		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party), [], foe.faction)
 
 # `jumped` is "" for no breakout, "seen" for a slip caught mid-flight (the
 # threat roster — the approach card priced it that way), "dark" for jumped in
@@ -1629,6 +1650,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 		return {}
 	var obj: Dictionary = result.get("objective", {})
 	var got_away: bool = String(obj.get("kind", "")) == "hunt" and not bool(obj.get("done", false))
+	var beat_band := false
 	if String(result.get("outcome", "")) == "Victory":
 		_bank(result)
 		if got_away:
@@ -1644,7 +1666,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 			# synthetic ids never match a live hunt_party quest's target), correct
 			# for an actual hostile roaming party from _check_encounter.
 			Quest.record_party_defeated(party, foe.id)
-			_calling_check("band_beaten", foe.id, _leader())   # shown after the spoils page
+			beat_band = true   # the calling waits for _apply_deaths, below
 			if raid_target != null:
 				# A raid turned before it landed: TURNED_FOR (two bands' worth) on
 				# top of the FOUGHT_FOR every monster band already earns at that
@@ -1675,6 +1697,16 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 		for title in Quest.fail_deliveries(party):
 			_quest_news.append("%s — the delivery is lost with the carter." % title)
 	_apply_deaths(result)
+	# After the deaths, not before them: core/callings.gd already refuses to
+	# complete a dead hero's past ("the bond and the line are theirs to have"),
+	# but nobody in this fight was dead yet when the check ran up in the victory
+	# branch, so the one hero who fell putting their own band down was paid
+	# anyway. The same reorder hands the bond to a living leader — bench() has
+	# taken the fallen out of `active` by now, so _leader() and Callings._closest
+	# both read the party that walked away. Still ahead of the autosave, so the
+	# save the fight makes carries the completion (tests/test_world_callings.gd).
+	if beat_band:
+		_calling_check("band_beaten", foe.id, _leader())   # shown after the spoils page
 	world.clock.resume()
 	_autosave()   # O13 autosave: a fight is the biggest thing that
 	                               # happens to a run — never re-fight it after a crash

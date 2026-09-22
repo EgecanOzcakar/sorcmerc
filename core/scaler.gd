@@ -411,6 +411,21 @@ static func _faction_order(theme: String, seed: int, budget: float, exclude: Arr
 		out.append(pool[(start + i) % pool.size()]["id"])
 	return out
 
+# The other half of that rule, written down: a seed that makes _faction_order
+# pick `faction` when there is no theme to pick it. Only the remainder carries
+# the faction, so everything else the seed decides (which slice of the pool the
+# roster starts at, and whatever the caller does with it) is left alone — which
+# is what lets a caller re-roll a roster without re-rolling the people.
+# Unknown faction: handed back untouched, since there is nothing to pin to.
+# scenes/world/world.gd builds a band's roster this way and core/objectives.gd
+# re-pins every reinforcement wave after it.
+static func pin_faction(seed: int, faction: String) -> int:
+	var idx: int = FACTIONS.find(faction)
+	if idx < 0:
+		return seed
+	var s: int = absi(seed)
+	return s - s % FACTIONS.size() + idx
+
 static func _in_budget_and_habitat(e: Dictionary, budget: float, need_habitat: String) -> bool:
 	if float(e["score"]) > budget * BIGGEST_SHARE:
 		return false
