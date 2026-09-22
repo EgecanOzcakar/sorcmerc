@@ -1714,13 +1714,18 @@ func _show_spoils(result: Dictionary) -> void:
 		if counts.is_empty():
 			rows.append(["Nothing worth carrying off the bodies.", Icons.COL_MUTED])
 		else:
-			var haul := HBoxContainer.new()
-			haul.add_theme_constant_override("separation", 6)
+			var haul := HFlowContainer.new()   # wraps when the haul is long
+			haul.add_theme_constant_override("h_separation", 6)
 			haul.custom_minimum_size.y = Icons.ITEM_ART_PX + 30
 			for item in counts:
 				var kd := Icons.item_def(item)
-				haul.add_child(Icons.item_tile(item, Icons.item_tooltip(item, kd[1], kd[0]),
-					Campaign.item_name(item), Icons.ITEM_ART_PX, "", counts[item]))
+				# A tile with no art is already its name; captioning it says it twice.
+				var tile := Icons.item_tile(item, Icons.item_tooltip(item, kd[1], kd[0]),
+					Campaign.item_name(item) if Icons.item_art(item) != null else "",
+					Icons.ITEM_ART_PX, "", counts[item])
+				tile.custom_minimum_size.x = 118   # room for "Potion of Healing" under the art
+				tile.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				haul.add_child(tile)
 			rows.append(haul)
 	var obj: Dictionary = result.get("objective", {})
 	if String(obj.get("kind", "")) != "":
@@ -1750,7 +1755,7 @@ func _spoils_company() -> Control:
 			continue
 		var card := VBoxContainer.new()
 		card.add_theme_constant_override("separation", 2)
-		card.custom_minimum_size.x = 96
+		card.custom_minimum_size.x = 118
 		var name := Label.new()
 		name.text = "%s %s" % [Icons.class_glyph(ch.class_id()), ch.cname]
 		name.clip_text = true

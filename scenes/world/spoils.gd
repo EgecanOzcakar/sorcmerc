@@ -113,7 +113,7 @@ func build(heading: String, rows: Array, art: Texture2D, tip: String, on_close: 
 
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Gilt"
-	panel.custom_minimum_size = Vector2(440, 0)
+	panel.custom_minimum_size = Vector2(520, 0)   # #157: wide enough for four cards
 	centre.add_child(panel)
 
 	var box := VBoxContainer.new()
@@ -151,14 +151,14 @@ func build(heading: String, rows: Array, art: Texture2D, tip: String, on_close: 
 		_art.texture = art
 		_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		_art.custom_minimum_size = Vector2(420, 180)
+		_art.custom_minimum_size = Vector2(500, 190)
 		box.add_child(_art)
 
 	var scroll := ScrollContainer.new()
 	var tall := 0.0   # a text line is a line; a built row says how tall it is
 	for row in rows:
 		tall += row.custom_minimum_size.y + 6.0 if row is Control else 26.0
-	scroll.custom_minimum_size = Vector2(420, clampf(tall, 52.0, 420.0))
+	scroll.custom_minimum_size = Vector2(500, clampf(tall, 52.0, 420.0))
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
