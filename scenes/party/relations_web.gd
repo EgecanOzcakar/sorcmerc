@@ -60,7 +60,7 @@ var _hover_edge := -1         # an index into edges()
 
 func _init() -> void:
 	name = "RelationsWeb"
-	custom_minimum_size = Vector2(540, 290)
+	custom_minimum_size = Vector2(460, 250)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
@@ -112,9 +112,9 @@ func face_positions() -> Array:
 		2:
 			rel = [Vector2(0.22, 0.45), Vector2(0.78, 0.45)]
 		3:
-			rel = [Vector2(0.5, 0.2), Vector2(0.8, 0.78), Vector2(0.2, 0.78)]
+			rel = [Vector2(0.5, 0.25), Vector2(0.8, 0.77), Vector2(0.2, 0.77)]
 		_:
-			rel = [Vector2(0.14, 0.2), Vector2(0.86, 0.2), Vector2(0.86, 0.78), Vector2(0.14, 0.78)]
+			rel = [Vector2(0.14, 0.25), Vector2(0.86, 0.25), Vector2(0.86, 0.77), Vector2(0.14, 0.77)]
 	var out: Array = []
 	for i in mini(_ids.size(), rel.size()):
 		out.append(f.position + Vector2(rel[i].x * w, rel[i].y * h))

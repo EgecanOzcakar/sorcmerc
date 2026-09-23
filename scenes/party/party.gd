@@ -73,7 +73,8 @@ var _fig_row := HBoxContainer.new()   # T9x: rebuilt on every _refresh() — its
 # who can be named for a job is the active roster, and that moves under it.
 var _orders_row := VBoxContainer.new()
 var _callings_row := VBoxContainer.new()   # each told calling, one line — under the orders
-var _relations_row := VBoxContainer.new()  # the Relations caption and web, beside them
+var _relations_row := VBoxContainer.new()  # the Relations caption and web, in their own card
+var _relations_card := PanelContainer.new()  # hidden for a party of one, which has no pairs
 var _create_btn: Button        # greyed while roster_locked — see roster_locked above
 var _offer: Control = null     # #176: the one-time personality-trait offer, while it is up
 
@@ -158,21 +159,21 @@ func _column(title: String, body: VBoxContainer, stretch: float, corner: Control
 	wrap.add_child(scroll)
 	return wrap
 
+# Two cards side by side. The left holds the purse/stash/figure line the
+# screen already had, D3's standing orders under it (their own line, because
+# the pace note is a sentence, not a widget, and has to stay readable), and
+# the Callings. The right card is the Relations web alone: who gets on with
+# whom is not an order you give, so it does not share the orders' frame.
 func _footer() -> Control:
+	var split := HBoxContainer.new()
+	split.add_theme_constant_override("separation", 12)
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Card"
-	# Two lines: the purse/stash/figure line the screen already had, and D3's
-	# standing orders under it. The orders get their own line because the pace
-	# note is a sentence, not a widget, and it has to stay readable.
-	# The Relations web stands to the right of all of that, the full height of
-	# the footer, rather than under it: a picture wants a square, not a strip.
-	var split := HBoxContainer.new()
-	split.add_theme_constant_override("separation", 18)
-	panel.add_child(split)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	split.add_child(panel)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	split.add_child(col)
+	panel.add_child(col)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	col.add_child(row)
@@ -202,10 +203,13 @@ func _footer() -> Control:
 	_callings_row.add_theme_constant_override("separation", 2)
 	col.add_child(_callings_row)
 
+	_relations_card.theme_type_variation = "Card"
+	_relations_card.name = "RelationsCard"
 	_relations_row.name = "RelationsRow"
 	_relations_row.add_theme_constant_override("separation", 2)
-	split.add_child(_relations_row)
-	return panel
+	_relations_card.add_child(_relations_row)
+	split.add_child(_relations_card)
+	return split
 
 # Out of the tree now, not at the end of the frame: these rows hold NAMED
 # controls, and a queue_free()d child still sitting there would make Godot
@@ -350,7 +354,8 @@ func _build_relations() -> void:
 			l.text = String(line)
 			l.theme_type_variation = "Dim"
 			_callings_row.add_child(l)
-	if PartyOpinion.active_pairs(party).is_empty():
+	_relations_card.visible = not PartyOpinion.active_pairs(party).is_empty()
+	if not _relations_card.visible:
 		return
 	var cap := Label.new()
 	cap.text = "Relations"
@@ -418,8 +423,18 @@ func _refresh() -> void:
 	for c in _slot_col.get_children():
 		c.queue_free()
 
-	for ch in party.roster:
+	# The bench first, under its own head: who you could swap in is what this
+	# column is for, and with the marching party listed first (they usually
+	# are, in roster order) the substitutes sat below the fold. The marching
+	# party follows, in marching order, the same four as the column on the right.
+	var benched: Array = party.roster.filter(func(ch): return not party.is_active(ch.id))
+	_roster_col.add_child(_group_head("On the bench", benched.size(),
+		"Nobody on the bench. A new face is recruited at an inn, or made with Create new."))
+	for ch in benched:
 		_roster_col.add_child(_card(party.summary(ch.id)))
+	_roster_col.add_child(_group_head("Marching", party.active.size(), ""))
+	for id in party.active:
+		_roster_col.add_child(_card(party.summary(id)))
 
 	for i in Party.MAX_ACTIVE:
 		if i < party.active.size():
@@ -473,13 +488,49 @@ func _maybe_offer_traits() -> void:
 			_offer.offer(ch)
 			return
 
-# One roster row: summary + select/bench/profile/dismiss.
+# A group's head in the roster column: its name and count, a rule, and (for an
+# empty bench) the one line saying where a substitute comes from.
+func _group_head(title: String, n: int, empty_note: String) -> Control:
+	var box := VBoxContainer.new()
+	# Tagged, not named: _refresh() queue_free()s the old column, and a new node
+	# asking for a name the old one still holds gets renamed ("@VBoxContainer@12").
+	box.set_meta("group", title)
+	box.add_theme_constant_override("separation", 2)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	box.add_child(head)
+	var l := Label.new()
+	l.text = "%s · %d" % [title, n]
+	l.theme_type_variation = "Gilt"
+	l.add_theme_color_override("font_color", COL_PARTY if title == "Marching" else Icons.COL_ACCENT)
+	head.add_child(l)
+	var rule := HSeparator.new()
+	rule.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(rule)
+	if n == 0 and empty_note != "":
+		var note := Label.new()
+		note.text = empty_note
+		note.theme_type_variation = "Dim"
+		box.add_child(note)
+	return box
+
+# One roster row: summary + select/bench/profile/dismiss. A substitute's row
+# wears a verdigris bar down its left edge and its To party button is the primary
+# one while there is a slot free; a marching row is a step quieter, since the
+# right-hand column already shows them.
 func _card(sm: Dictionary) -> Control:
 	# A ledger row, not a card: alternate rows take a faint tint, the picked
 	# one a gilt bar down its left edge. The whole row is the pick button.
 	var panel := PanelContainer.new()
 	var picked: bool = sm["id"] == _selected
 	panel.theme_type_variation = "RowPicked" if picked else ("RowAlt" if _roster_col.get_child_count() % 2 == 1 else "Row")
+	if not picked and not sm["active"] and not sm.get("dead", false):
+		var bar := Icons.box(Icons.COL_ROW, Color(0, 0, 0, 0), 0, 10, 6)
+		bar.border_color = Icons.COL_ACCENT   # verdigris: the picked row keeps the gilt bar
+		bar.border_width_left = 4
+		panel.add_theme_stylebox_override("panel", bar)
+	elif not picked and sm["active"]:
+		panel.modulate = Color(1, 1, 1, 0.78)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
@@ -499,6 +550,8 @@ func _card(sm: Dictionary) -> Control:
 		or (not sm["active"] and party.active.size() >= Party.MAX_ACTIVE)
 	if roster_locked:
 		bench.tooltip_text = locked_note
+	elif not sm["active"] and not bench.disabled:
+		bench.theme_type_variation = "Primary"
 	if sm.get("dead", false):   # #109: say so, and say what brings them back
 		bench.text = "Dead"
 		bench.disabled = true

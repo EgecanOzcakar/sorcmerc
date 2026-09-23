@@ -7,6 +7,7 @@
 #   godot --path . --resolution 1400x900 -s tests/shot_relations_web.gd
 #     -> docs/shots/relations-web.png        every band at once
 #     -> docs/shots/relations-web-hover.png  what everyone thinks of the second face
+#     -> docs/shots/party-bench.png          the same page with two on the bench, listed first
 extends SceneTree
 
 const PartyOpinion = preload("res://core/party_opinion.gd")
@@ -19,7 +20,7 @@ func _init() -> void:
 	for _i in 10:
 		await process_frame
 	var p = screen.party
-	var ids: Array = Array(p.active)
+	var ids: Array = Array(p.active).duplicate()
 	for ch in p.party_characters():
 		ch.traits_offered = true   # the one-time offer would cover the page
 	Traits.set_family(p.get_member(ids[0]), "temperament", "brave")
@@ -37,6 +38,14 @@ func _init() -> void:
 	for _i in 4:
 		await process_frame
 	await _save("docs/shots/relations-web-hover.png")
+	# Two on the bench: they head the roster column, under their own group.
+	web._set_hover(Vector2(-100, -100))
+	p.bench(ids[2])
+	p.bench(ids[3])
+	screen._refresh()
+	for _i in 30:
+		await process_frame
+	await _save("docs/shots/party-bench.png")
 	quit()
 
 func _find(n: Node, want: String) -> Node:

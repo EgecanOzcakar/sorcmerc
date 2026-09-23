@@ -227,6 +227,7 @@ func _init() -> void:
 		"...while the watch, still marching, keeps their job")
 
 	await _level_up_per_character(screen)
+	await _bench_first(screen)
 	await _relations(screen)
 	print("test_party_screen: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -295,6 +296,44 @@ func _node_with_method(node: Node, m: String):
 			return hit
 	return null
 
+# The roster column leads with the bench, under its own head, so a substitute
+# is the first thing on the left rather than below the marching four; the
+# marching party follows under theirs, in marching order. A substitute's To
+# party is the primary button while a slot is free. The Relations web has a
+# card of its own, apart from the standing orders.
+func _bench_first(screen) -> void:
+	var p = screen.party
+	var out: String = p.active[p.active.size() - 1]
+	p.bench(out)
+	screen._refresh()
+	await process_frame
+	var kids: Array = screen._roster_col.get_children().filter(func(c): return not c.is_queued_for_deletion())
+	var benched: Array = p.roster.filter(func(ch): return not p.is_active(ch.id))
+	check(kids.size() > 0 and String(kids[0].get_meta("group", "")) == "On the bench",
+		"the column opens with the bench's head (%s)" % (str(kids[0].get_meta("group", kids[0].name)) if kids.size() > 0 else "nothing"))
+	if kids.size() < 3 + benched.size():
+		check(false, "the column holds both heads and every row (%d)" % kids.size())
+		return
+	check(_all_labels(kids[0]) == ["On the bench · %d" % benched.size()], "...which counts them: %s" % str(_all_labels(kids[0])))
+	var names_after_head: Array = []
+	for k in range(1, 1 + benched.size()):
+		names_after_head.append(_all_labels(kids[k])[0])
+	check(benched.all(func(ch): return names_after_head.any(func(t): return ch.cname in t)),
+		"...and the substitutes come straight after it: %s" % str(names_after_head))
+	var mhead = kids[1 + benched.size()]
+	check(String(mhead.get_meta("group", "")) == "Marching" and _all_labels(mhead) == ["Marching · %d" % p.active.size()],
+		"then the marching party's head")
+	var first_marching: Array = _all_labels(kids[2 + benched.size()])
+	check(p.get_member(p.active[0]).cname in first_marching[0], "...in marching order: %s" % first_marching[0])
+	var to_party := _buttons_named(kids[1], "To party")
+	check(to_party.size() == 1 and to_party[0].theme_type_variation == "Primary",
+		"a substitute's To party is the primary button while a slot is free")
+	check(node_named(screen, "RelationsCard") != null and node_named(screen, "RelationsCard").visible,
+		"the relations sit in a card of their own")
+	p.activate(out)
+	screen._refresh()
+	await process_frame
+
 # The Relations block beside the standing orders: a caption and a drawn web
 # (scenes/party/relations_web.gd) with one line per active pair, each line's
 # band the pair's band() and its hover the pair's describe(), so the words are
@@ -339,6 +378,16 @@ func _relations(screen) -> void:
 	await process_frame
 	check(_label_texts(node_named(screen, "RelationsRow")).is_empty() and node_named(screen, "RelationsWeb") == null,
 		"a party of one shows no block at all")
+
+# Every Label under a node, depth first — a roster row's name sits a few
+# containers down.
+func _all_labels(node: Node) -> Array:
+	var out: Array = []
+	for c in node.get_children():
+		if c is Label:
+			out.append(String(c.text))
+		out.append_array(_all_labels(c))
+	return out
 
 func _label_texts(node: Node) -> Array:
 	var out: Array = []

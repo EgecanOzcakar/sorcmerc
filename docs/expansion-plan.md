@@ -9287,8 +9287,10 @@ Tests:
 The owner asked for opinion between characters to be "less text oriented".
 The party page used to list one line per active pair, e.g. "Vera Kord and
 Pike Sallow — rivals (-44)", which is six lines for a party of four. It now
-draws a web instead (`scenes/party/relations_web.gd`), to the right of the
-standing orders.
+draws a web instead (`scenes/party/relations_web.gd`), in a Relations card of
+its own to the right of the standing orders' card. The owner's second ask
+was to "split relations and marching orders", so the two no longer share a
+frame.
 
 - **Faces.** The marching party's busts sit in a ring, in marching order,
   with a first name on each face's outer side. Two members stand side by
@@ -9312,12 +9314,27 @@ standing orders.
 - **Callings.** The Callings lines are still text, now in their own
   `CallingsRow` under the orders.
 
+**The bench first.** The owner also asked to "make substitute characters
+easier to see on the left". The Roster column used to list everyone in
+roster order, so the marching four came first and the substitutes sat below
+the fold. It now has two groups:
+- **"On the bench · N"** comes first. Each substitute's row has a verdigris
+  bar down its left edge; the picked row keeps the gilt one. While a
+  marching slot is free, the row's To party is the primary button. An empty
+  bench says where a new face comes from.
+- **"Marching · N"** follows, in marching order, a step quieter, since the
+  right-hand column already shows them.
+
 The web only reads from `PartyOpinion` and writes nothing, so no rule
 changed.
 
-Screenshots: `docs/shots/relations-web.png` (every band at once) and
-`relations-web-hover.png` (Pike hovered), from `tests/shot_relations_web.gd`.
-Tests: `tests/test_party_screen.gd`'s relations section now reads the web.
+Screenshots: `docs/shots/relations-web.png` (every band at once),
+`relations-web-hover.png` (Pike hovered) and `party-bench.png` (three on the
+bench, heading the column), from `tests/shot_relations_web.gd`.
+Tests: `tests/test_party_screen.gd`'s new `_bench_first` checks the bench's
+head and count, the substitutes straight after it, the marching head and
+order, the primary To party, and the Relations card. Its relations section
+now reads the web.
 It checks one edge per pair, the soured pair's band, that the tooltip on a
 line equals `describe()`, that a face's tooltip lists each of its pairs, and
 that a party of one draws no block. `test_world_callings` reads
