@@ -431,6 +431,17 @@ func _traits(col: VBoxContainer) -> void:
 			e.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 			e.add_theme_color_override("font_color", COL_ACCENT if line["live"] else Icons.COL_MUTED)
 			v.add_child(e)
+		# #176 step 3: a scar or a wound says what mends it, and a lapsing one
+		# how long it has left.
+		var mend := Traits.mend_text(_ch, id, float(party().world_now))
+		if mend != "":
+			var m := Label.new()
+			m.text = "Mends: " + mend
+			m.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			m.custom_minimum_size = Vector2(220, 0)
+			m.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+			m.add_theme_color_override("font_color", Icons.COL_MUTED)
+			v.add_child(m)
 
 func _features(col: VBoxContainer, s) -> void:
 	var v := _panel(col, "Features")

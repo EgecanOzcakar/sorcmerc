@@ -5,8 +5,9 @@
 #
 #   SORCMERC_FAST=1 godot --path . --resolution 1400x900 -s tests/shot_traits_earned.gd
 #     -> docs/shots/traits-earned-spoils.png   the page: who came out of it as what
+#     -> docs/shots/traits-earned-bane.png     the moment: the tenth goblin, a bane (counted, first)
 #     -> docs/shots/traits-earned-scar.png     the moment: downed by fire, the save failed
-#     -> docs/shots/traits-earned-bane.png     the moment: the tenth goblin, a bane
+#     -> docs/shots/traits-earned-profile.png  the profile: the scar and what mends it
 extends SceneTree
 
 const Traits = preload("res://core/traits.gd")
@@ -40,11 +41,21 @@ func _init() -> void:
 	s._process(0.016)
 	for _i in 10:
 		await process_frame
-	await _save("docs/shots/traits-earned-scar.png")
+	await _save("docs/shots/traits-earned-bane.png")
 	s._moment._skip_or_advance()
 	for _i in 10:
 		await process_frame
-	await _save("docs/shots/traits-earned-bane.png")
+	await _save("docs/shots/traits-earned-scar.png")
+	while s._moment != null:
+		s._moment._skip_or_advance()
+		await process_frame
+	var page = load("res://scenes/profile/profile.tscn").instantiate()
+	root.add_child(page)
+	page.set_party(s.party)
+	page.set_character(burned)
+	for _i in 10:
+		await process_frame
+	await _save("docs/shots/traits-earned-profile.png")
 	quit()
 
 func _fire(burned_id: String, slayer_id: String) -> Dictionary:

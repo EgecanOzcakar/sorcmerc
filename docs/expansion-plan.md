@@ -9120,7 +9120,13 @@ change gets the full-screen moment built earlier
 (`scenes/world/trait_moment.gd`): one hero at a time, the save rolled in front
 of them. Moments queue like a calling's card, wait for the map to be clear and
 for any live die to land, and hold the clock. A trait that lapses is said on
-the HUD line. A night at an inn says what it mended.
+the HUD line. A night at an inn says what it mended. The profile's Personality
+traits panel adds a "Mends:" line under a scar or a wound — what cures it, and
+for one that lapses, how many days are left (`Traits.mend_text`).
+
+Pictures: `docs/shots/traits-earned-{spoils,bane,scar,profile}.png`, from
+`tests/shot_traits_earned.gd`, which plays a real earned outcome through the
+world screen: the seeded minute is found, not forced.
 
 **Plumbing:**
 - `core/traits.gd` has the earning section (`after_fight`, `after_lair`,
@@ -9139,14 +9145,14 @@ the HUD line. A night at an inn says what it mended.
   the spoils page. The completionist's ledger has the deed as opportunistic.
 
 Tests:
-- `tests/test_traits_earn.gd` (56 checks) covers:
+- `tests/test_traits_earn.gd` (59 checks) covers:
   - the instanced rows
   - the flawless rate (about 40% over 400 minutes)
   - one story per hero
   - every degree landing exactly as its own dice say
   - Brave, Craven and Calm on the save
   - the Wrathful grudge
-  - banes, Veteran, cures, lapses and rest
+  - banes, Veteran, cures, lapses and rest, and the profile's mend line
   - the save round trip
   - Maimed in a fight and the death-save credit
   - determinism

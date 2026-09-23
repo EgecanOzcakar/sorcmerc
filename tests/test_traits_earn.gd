@@ -268,6 +268,14 @@ func test_lapse_and_rest() -> void:
 	var m := _hero("pike")
 	Traits.grant(m, "maimed", "t", 0.0)
 	check(Traits.heal_rest(m, false).is_empty() and Traits.heal_rest(m, true) == ["Maimed"], "Maimed wants a city's healers")
+	# The profile's line: what mends it, and how long is left.
+	var w := _hero("pike")
+	Traits.grant(w, "wounded", "t", 0.0)
+	check(Traits.mend_text(w, "wounded", Traits.DAY * 0.5) == "A long rest at an inn, or three days — 3 days left",
+		"a wound says what mends it and how long: %s" % Traits.mend_text(w, "wounded", Traits.DAY * 0.5))
+	Traits.grant(w, "burn-shy", "t", 0.0, {"cure": {"deals": ["fire"]}})
+	check(Traits.mend_text(w, "burn-shy", 0.0).begins_with("Win against something that deals fire"), "...a scar what cures it")
+	check(Traits.mend_text(w, "brave", 0.0) == "", "...and a temperament nothing")
 
 func test_save_round_trip() -> void:
 	var ch := _hero("pike")

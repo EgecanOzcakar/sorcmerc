@@ -314,7 +314,7 @@ static func _when_text(w: Dictionary) -> String:
 	if w.get("alone", false):
 		parts.append("with no ally beside them")
 	if w.has("vs_faction"):
-		parts.append("against " + ", ".join(w["vs_faction"]))
+		parts.append("against " + " or ".join(w["vs_faction"].map(func(f): return faction_name(String(f)))))
 	if w.has("vs_type"):
 		parts.append("against " + " or ".join(w["vs_type"].map(func(t): return String(t) + "s")))
 	if w.has("dtype_in"):
@@ -704,6 +704,19 @@ static func grant(ch, id: String, why: String, now: float, extra := {}) -> Dicti
 	t.merge(extra)
 	ch.traits.append(t)
 	return t
+
+
+# For a page: what would mend a scar or a wound, and how long a lapsing one
+# has left — "" for a trait nothing mends.
+static func mend_text(ch, id: String, now: float) -> String:
+	var r := row(id)
+	var how := String(r.get("cure", r.get("heals", "")))
+	for t in ch.traits:
+		if t is Dictionary and String(t.get("id", "")) == id and t.has("until"):
+			var days := maxf(0.0, (float(t["until"]) - now) / DAY)
+			var left := "less than a day left" if days < 1.0 else "%d day%s left" % [ceili(days), "" if ceili(days) == 1 else "s"]
+			return (how + " — " + left) if how != "" else left.capitalize()
+	return how
 
 
 static func remove(ch, id: String) -> bool:
