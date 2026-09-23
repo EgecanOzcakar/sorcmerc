@@ -3540,11 +3540,11 @@ func _say(text: String) -> void:
 
 # Live rolls in town (scenes/dice_roll.gd): the action has already happened —
 # core/ rolled it and moved the gold — and this is the telling. The die rolls
-# in a popup over the dimmed page (the owner: "a dice popup in shop screen
+# in a popup over the darkened page (the owner: "a dice popup in shop screen
 # rather than moving the elements in the shop page" — it first rolled inline,
-# in the line's place, and the page jumped under it). The panel's buttons wait,
-# and when it lands the popup goes, the line is said, the success sting plays
-# and `then` runs (a card that would otherwise give the roll away before it
+# in the line's place, and the page jumped under it; see _dice_popup). The
+# panel's buttons wait, and when it lands the popup goes, the line is said,
+# the success sting plays and `then` runs (a card that would otherwise give the roll away before it
 # landed). A result with no roll, and every run under SORCMERC_FAST, says it
 # at once, exactly as _say always did.
 var _visit_dice: Control = null
@@ -3561,33 +3561,9 @@ func _say_rolled(r: Dictionary, text: String, sfx := "", then := Callable()) -> 
 		return
 	_visit_pending = {"text": text, "sfx": sfx, "then": then, "ok": bool(r.get("ok", false))}
 	_say("")
-	# The popup: the whole screen, so a click anywhere lands the die rather
-	# than reaching a button under it; the page stays exactly where it was.
-	var overlay := Control.new()
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	overlay.tooltip_text = "Click to land it"
-	add_child(overlay)
-	var dim := ColorRect.new()
-	dim.color = Color(Icons.COL_BG.r, Icons.COL_BG.g, Icons.COL_BG.b, 0.55)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.add_child(dim)
-	var centre := CenterContainer.new()
-	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
-	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay.add_child(centre)
-	var panel := PanelContainer.new()
-	panel.theme_type_variation = "Gilt"
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	centre.add_child(panel)
-	var d = DiceRoll.new()
-	d.custom_minimum_size = Vector2(380, DiceRoll.DIE + DiceRoll.TALLY_SIZE + 40)
-	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(d)
-	overlay.gui_input.connect(func(e):
-		if e is InputEventMouseButton and e.pressed:
-			d.finish())
+	var pop: Array = _dice_popup(true)
+	var overlay: Control = pop[0]
+	var d = pop[1]
 	_visit_die_popup = overlay
 	_visit_dice = d
 	if is_instance_valid(_visit_panel):
@@ -3599,13 +3575,51 @@ func _say_rolled(r: Dictionary, text: String, sfx := "", then := Callable()) -> 
 		"label": "%s — %s" % [String(Catalog.skills().get(skill, {}).get("name", skill.capitalize())),
 			String(r.get("cname", ""))]})
 
+# The live-roll popup, the town's and the map's: no frame and no panel of its
+# own — the whole screen darkened, and only the die and its tally left bright
+# in the middle (the owner: "no background color, only darken everything
+# except the dice and result"). `block` is the town's: the overlay takes every
+# click, so a click anywhere lands the die and none reaches a button under it.
+# The map's lets clicks through to the map, and only the die itself lands it.
+# Returns [overlay, die]; the caller frees the overlay.
+const DICE_DIM := 0.7
+
+func _dice_popup(block: bool) -> Array:
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP if block else Control.MOUSE_FILTER_IGNORE
+	add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, DICE_DIM)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(dim)
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(centre)
+	var d = DiceRoll.new()
+	d.custom_minimum_size = Vector2(440, DiceRoll.DIE + DiceRoll.TALLY_SIZE + 40)
+	d.mouse_filter = Control.MOUSE_FILTER_STOP
+	d.tooltip_text = "Click to land it"
+	centre.add_child(d)
+	var land := func(e):
+		if e is InputEventMouseButton and e.pressed:
+			d.finish()
+	d.gui_input.connect(land)
+	if block:
+		overlay.gui_input.connect(land)
+	return [overlay, d]
+
 # The map's own quick checks — a lair's or a landmark's search, sneaking past
 # a lair, a forage on the march — report on the HUD bar, not on a card. Their
-# die rolls in a small panel just above the bar; the line (and its sting, and
-# `then`) waits for it to land. Nothing here pauses the clock: a forage rolls
-# on the march. One at a time — a second lands the first. SORCMERC_FAST says
-# the line at once, as the HUD always did.
+# die rolls in the same popup as a town's (_dice_popup); the line (and its
+# sting, and `then`) waits for it to land. Nothing here pauses the clock or
+# takes the mouse — a forage rolls on the march, and a click on the map still
+# marches; a click on the die lands it. One at a time — a second lands the
+# first. SORCMERC_FAST says the line at once, as the HUD always did.
 var _map_die: Control = null
+var _map_dice: Control = null
 var _map_pending: Dictionary = {}
 
 func _map_roll(roll: Dictionary, label: Label, text: String, sfx := "", then := Callable()) -> void:
@@ -3618,20 +3632,10 @@ func _map_roll(roll: Dictionary, label: Label, text: String, sfx := "", then := 
 			then.call()
 		return
 	label.text = ""
-	var panel := PanelContainer.new()
-	panel.theme_type_variation = "Gilt"
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.tooltip_text = "Click to land it"
-	var d = DiceRoll.new()
-	d.custom_minimum_size = Vector2(340, DiceRoll.DIE + DiceRoll.TALLY_SIZE + 28)
-	panel.add_child(d)
-	add_child(panel)
-	panel.reset_size()
-	panel.position = Vector2((size.x - panel.size.x) * 0.5, size.y - panel.size.y - 90.0)
-	panel.gui_input.connect(func(e):
-		if e is InputEventMouseButton and e.pressed:
-			d.finish())
-	_map_die = panel
+	var pop: Array = _dice_popup(false)
+	var d = pop[1]
+	_map_die = pop[0]
+	_map_dice = d
 	_map_pending = {"label": label, "text": text, "sfx": sfx, "then": then}
 	d.landed.connect(_land_map_roll)
 	var skill := String(roll.get("skill", "survival"))
@@ -3650,6 +3654,7 @@ func _land_map_roll() -> void:
 	if is_instance_valid(_map_die):
 		_map_die.queue_free()
 	_map_die = null
+	_map_dice = null
 	var label: Label = p["label"]
 	if is_instance_valid(label):
 		label.text = String(p["text"])

@@ -3,9 +3,9 @@
 # of run_tests.sh. Run WITHOUT SORCMERC_FAST:
 #
 #   godot --path . --resolution 1400x900 -s tests/shot_live_roll_town.gd
-#     -> docs/shots/live-roll-town-rolling.png   the popup die in the air over the dimmed shop
+#     -> docs/shots/live-roll-town-rolling.png   the die in the air, the shop darkened behind it
 #     -> docs/shots/live-roll-town-landed.png    landed: the line, the buttons back
-#     -> docs/shots/live-roll-map.png            a lair's search: the die over the HUD bar
+#     -> docs/shots/live-roll-map.png            a lair's search: the same popup over the map
 extends SceneTree
 
 const Settings = preload("res://core/settings.gd")

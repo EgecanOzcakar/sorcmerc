@@ -8812,10 +8812,13 @@ anything, and a reload still cannot reroll a result.
 
 **In town** (`_say_rolled` in `scenes/world/world.gd`), steal, persuade,
 haggle, investigate, working at the healer's, carouse and gamble roll the die
-in a popup over the dimmed shop page. It first rolled inline, in the log
-line's place, and the page jumped under it. The owner preferred "a dice popup
-in shop screen rather than moving the elements in the shop page", so the page
-now stays exactly where it was.
+in a popup over the shop page. It first rolled inline, in the log line's
+place, and the page jumped under it. The owner preferred "a dice popup in shop
+screen rather than moving the elements in the shop page", so the page now
+stays exactly where it was. The popup has no frame or background of its own
+("no background color, only darken everything except the dice and result"):
+the whole screen darkens, and only the die and its tally stay bright in the
+middle (`_dice_popup`).
 - While it is in the air the action buttons wait. A click anywhere, Enter,
   Space or Esc lands it and never skips the result.
 - After it lands comes the line, the success sting, and anything that would
@@ -8834,17 +8837,19 @@ didn't count. `SettlementVisit.check_preview`'s odds now follow the plain
 said the preview assumed a natural 1 always missed and a 20 always hit.
 
 **On the map** (`_map_roll`), foraging on the march, a lair's search, a
-landmark's search and sneaking past a lair roll in a small gilt panel just
-above the HUD bar. The HUD line (and its sting and follow-up) waits for the
-die to land. A click on the panel lands it. It does not pause the clock: a
-forage rolls while the party marches. Only one is in the air at a time; a second check lands the first. A
+landmark's search and sneaking past a lair roll in the same popup: the screen
+darkened, the die and its tally in the middle. The HUD line (and its sting and
+follow-up) waits for the die to land. A click on the die lands it. The popup
+does not pause the clock or take the mouse: a forage rolls while the party
+marches, and a click on the map still gives a march order. Only one is in the air at a time; a second check lands the first. A
 failed sneak's follow-up, the lair's own prompt, waits for the landing too, so
 the die says "missed" before the lair notices you. `WorldLairs.sneak_past`'s
 result now names its skill.
 
 `DiceRoll` used to set its size and mouse filter in `_ready()`, which runs
 after the caller's own settings and quietly undid them. Both popups collapsed
-to a thin strip, and a click on the map's die never landed it. The defaults
+to a thin strip while they still had frames, and a click on the map's die
+never landed it. The defaults
 are now set in `_init()`.
 
 Under SORCMERC_FAST (every test and robot), and at the Instant pace, every one

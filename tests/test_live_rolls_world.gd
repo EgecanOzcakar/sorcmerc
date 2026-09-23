@@ -3,8 +3,8 @@
 # gamble) roll their die in a popup over the visit panel — never inside it, so
 # the page does not move — before the line says what happened
 # (scenes/world/world.gd's _say_rolled); the map's quick checks (a lair's or a
-# landmark's search, sneaking past a lair, a forage) roll theirs over the HUD
-# bar (_map_roll). Drives the real world scene with SORCMERC_FAST off and the
+# landmark's search, sneaking past a lair, a forage) roll theirs in the same popup
+# (_map_roll). Drives the real world scene with SORCMERC_FAST off and the
 # pace pinned, since that is the only way there is a die in the air at all.
 #   godot --headless --path . -s tests/test_live_rolls_world.gd
 extends SceneTree
@@ -91,11 +91,11 @@ func _init() -> void:
 		s._lair_msg.text = "stale"
 		s._lair_action()
 		await process_frame
-		check(is_instance_valid(s._map_die), "a lair's search rolls its die over the HUD")
+		check(is_instance_valid(s._map_die), "a lair's search rolls its die in the popup")
 		check(s._lair_msg.text == "", "...with the line held back")
-		s._map_die.get_child(0).finish()
+		s._map_dice.finish()
 		await process_frame
-		check(not is_instance_valid(s._map_die) or s._map_die.is_queued_for_deletion(), "landed, the panel goes")
+		check(not is_instance_valid(s._map_die) or s._map_die.is_queued_for_deletion(), "landed, the popup goes")
 		check("Survival" in s._lair_msg.text, "...and the line is said: %s" % s._lair_msg.text)
 	else:
 		check(false, "the map has an undiscovered lair to search")
