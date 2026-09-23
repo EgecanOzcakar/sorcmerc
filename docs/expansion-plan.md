@@ -8662,3 +8662,71 @@ has always read `c.resist` and a hero's was empty.
   owner said "possibly yes" and it is noted in the spec's §10, not designed.
 - A summoned creature's kill credits nobody (a `ponytail:` in
   `core/combat.gd`). Credit its caller if a trait ever counts it.
+
+## Triumphs on chance, scars on a save, and the moment that shows it (2026-09-23, #176)
+
+This is the second round of the personality traits design, from the owner:
+- **Triumph traits are the likelier kind.**
+- **Whether a hardship scars a hero or tempers them is decided on a saving
+  throw.**
+- **Every such occasion gets a huge popup that makes it obvious something
+  important is happening to the character.**
+
+The spec (`docs/superpowers/specs/2026-09-23-traits-design.md`) §6 now has two
+tables in place of one weighted roll.
+
+**Triumphs** roll on chance, 35–50%, and only on notable wins: a flawless
+hard fight, a boss killed, a lair cleared, an ally brought back, a killing
+blow above your level. The company wins nine road fights in ten, so a trait on
+every win would bury them. A permanent triumph trait still has a cost, and a
+pure buff does not last.
+
+**Hardships** are decided by a save that the event names:
+- **WIS** for the mind (fire's fear, a haunting, a friend's death);
+- **CON** for the body (cold, poison, death saves).
+
+The DC is 10 + half the attacker's CR, plus 2 for each aggravation, capped at
+20. The degree of the result decides the outcome:
+
+| The roll | What it leaves |
+|---|---|
+| Nat 20, or made by 5+ | a resilience trait |
+| Made | nothing |
+| Failed | a scar |
+| Nat 1, or failed by 5+ | a scar and a wound |
+
+Temperament rides the save:
+- **Brave:** advantage on a fear save.
+- **Craven:** disadvantage on a fear save.
+- **Calm:** +2 on WIS.
+- **Wrathful:** a failed faction save turns fear into a grudge.
+
+A cure is the same save, asked again when the hero beats the thing that
+scarred them.
+
+**Built: the moment** (`scenes/world/trait_moment.gd`). It is the whole
+screen: a near-black scrim with the kind's colour rising from the floor (gilt,
+verdigris, red, amber, green). The hero's full figure stands at 300×520 off
+the board's model. A d20 ticks and lands on the save the rules made. Then the
+trait's name is pressed in at 84px, the largest text in the game, with a
+sting. Any press during the ~2.5 s show finishes it rather than skipping, so
+nobody misses a scar by accident. Several heroes queue up. `Settings.anim()`
+scales the show and SORCMERC_FAST lands it in its end state.
+
+It is built ahead of the traits so the design can be judged on screen. It is
+fed a dict and owns nothing but the ceremony. `tests/test_trait_moment.gd`
+(24 checks) covers what it says, the order, skip-then-advance, `finished`
+exactly once, the fallbacks and a nat 20. `tests/shot_trait_moment.gd` renders
+the three pictures in `docs/shots/trait-moment-*.png`.
+
+The first render sat in the top-left corner of a dark screen, because
+`set_anchors_preset` without offsets gives a zero-size rect under a Window.
+`set_anchors_and_offsets_preset` is what `event_card.gd` has always used.
+
+### Still open
+
+- Nothing opens the moment yet. Step 3 of the build order (earning) is what
+  hands it dicts, after the spoils page and on the camp card.
+- The DC formula, the triumph chances and the degree thresholds are
+  placeholders until `tests/sweep_traits.gd` measures how often each fires
+  over a run.
