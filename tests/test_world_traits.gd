@@ -2,11 +2,14 @@
 # the after-action page, then shown one hero at a time on the full-screen moment
 # (scenes/world/trait_moment.gd) once the page is closed, with the clock held;
 # a lapsing trait said on the HUD; a night at an inn mending a wound; a cleared
-# lair asking its triumph. Drives the real world scene. Headless.
+# lair asking its triumph; and (step 4) where the party is stamped for the
+# road's checks, and a trait earned said at the next fire. Drives the real
+# world scene. Headless.
 #   godot --headless --path . -s tests/test_world_traits.gd
 extends SceneTree
 
 const Traits = preload("res://core/traits.gd")
+const RNG = preload("res://core/rng.gd")
 
 var _pass := 0
 var _fail := 0
@@ -91,5 +94,35 @@ func _init() -> void:
 			break
 	check(got, "a cleared lair can leave a Delver or a Reckless")
 	check(s._trait_news.any(func(t): return "Delver" in t or "Reckless" in t), "...with its line for the page")
+
+	# Step 4: where the party is, stamped for the road's checks every frame.
+	s._process(0.016)
+	check(s.party.here.has("biome") and s.party.here.get("site") == "road" and s.party.here.has("night"),
+		"the map stamps where the party is: %s" % str(s.party.here))
+	s._open_visit(home)
+	s._process(0.016)
+	check(s.party.here.get("site") == "town", "...a town while visiting it")
+	s._close_visit()
+	while s._event_card != null:
+		s._event_card.acknowledged.emit()
+		await process_frame
+	# ...and a trait earned since the last fire is said at the next one.
+	Traits.grant(hero, "burn-shy", "test", s.world.clock.elapsed)
+	# A calling's telling outranks it (one card a night), so ask a few nights.
+	var heard := ""
+	for night in 6:
+		if not s._fireside(RNG.new(3 + night), func(): pass):
+			continue
+		heard = String(s._event_card._e.get("text", "")) if s._event_card != null else ""
+		for _k in 20:
+			if s._event_card == null:
+				break
+			s._event_card.acknowledged.emit()
+			await process_frame
+		if s._approach_card != null:
+			s._close_approach()
+		if "sits well back from the fire" in heard:
+			break
+	check("%s sits well back from the fire tonight" % hero.cname in heard, "the fire says the burn: %s" % heard)
 	print("test_world_traits: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 or _pass == 0 else 0)

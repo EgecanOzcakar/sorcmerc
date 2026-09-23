@@ -71,8 +71,11 @@ const ROLL_WHEN := ["bloodied", "first_round", "alone", "vs_faction", "vs_type",
 # to kill, asked by the death save), and the four a hardship's save reads —
 # hardship_adv/_dis (Brave, Craven on a fear save), hardship_bonus (Calm's +2
 # WIS) and grudge (Wrathful turning a haunting into a grudge).
+# Step 4 adds the road's and the company's: skill, travel, forage, gold,
+# sale_price, opinion, opinion_drift.
 const LIVE_GIVES := ["ac", "to_hit", "save", "initiative", "damage", "ward", "save_adv",
-	"speed", "death_save_adv", "hardship_adv", "hardship_dis", "hardship_bonus", "grudge"]
+	"speed", "death_save_adv", "hardship_adv", "hardship_dis", "hardship_bonus", "grudge",
+	"skill", "travel", "forage", "gold", "sale_price", "opinion", "opinion_drift"]
 const STAMPED := ["ac", "to_hit", "save", "initiative"]
 
 const STATUS := "traits"   # the one status dict every live term is summed into
@@ -1026,3 +1029,148 @@ static func _cures(out: Dictionary, ch, kills: Array, now: float) -> void:
 			_gain(out, ch, "cure", id, "Faced it again, and won", sv, "is no longer")
 		else:
 			out["lines"].append("%s is still %s%s." % [ch.cname, name_of(id), _save_words(sv)])
+
+
+# --- the road (step 4) -----------------------------------------------------------------
+#
+# The half of a trait that is not about a fight: the road's checks, the purse,
+# and how the company gets on (spec §5.3, §7). The world screen stamps where
+# the party is on the party every frame (party.here: biome, band, site, night),
+# the way it stamps world_now; a check reads it through Campaign.skill_bonus,
+# so every overworld skill roll — the road's events, the approach, the search,
+# the watch, the town's persuading and haggling — gets its trait term in one
+# place. A term is capped at ±CAP like a fight's, and says who gave it, for
+# the card's roll line ("+2 (Marsh-bred)").
+
+# Whether a road `when` holds here. Only the where-it-is keys can: a board or a
+# per-roll key belongs to a fight, and never holds on the road.
+static func _road_holds(when: Dictionary, here: Dictionary) -> bool:
+	for k in when:
+		if not k in ["biome", "band", "site", "night"] or not here.has(k):
+			return false
+		var want = when[k]
+		if want is Array:
+			if not here[k] in want:
+				return false
+		elif want != here[k]:
+			return false
+	return true
+
+
+# The trait term on one skill check (or a named job — "avoid", the approach's
+# slip-away): {"n": capped sum, "who": [trait names]}.
+static func skill_term(ch, skill: String, here: Dictionary) -> Dictionary:
+	var out := {"n": 0, "who": []}
+	if ch == null:
+		return out
+	var n := 0
+	for id in ids(ch):
+		var used := false
+		for e in row(id).get("effects", []):
+			var sk = e.get("gives", {}).get("skill")
+			if sk is Dictionary and sk.has(skill) and _road_holds(e.get("when", {}), here):
+				n += int(sk[skill])
+				used = true
+		if used:
+			out["who"].append(name_of(id))
+	out["n"] = clampi(n, -CAP, CAP)
+	return out
+
+
+# The same, for a flat road key a trait gives outright: "travel" (the road's
+# checks for whoever rolls them), "forage".
+static func road_term(ch, key: String, here: Dictionary) -> Dictionary:
+	var out := {"n": 0, "who": []}
+	if ch == null:
+		return out
+	var n := 0
+	for id in ids(ch):
+		for e in row(id).get("effects", []):
+			var g: Dictionary = e.get("gives", {})
+			if g.has(key) and _road_holds(e.get("when", {}), here):
+				n += int(g[key])
+				if not name_of(id) in out["who"]:
+					out["who"].append(name_of(id))
+	out["n"] = clampi(n, -CAP, CAP)
+	return out
+
+
+# A company's percentage: "gold" (Greedy's +10% of a fight's purse), or
+# "sale_price" (Generous's −10% on what they sell). One holder is enough, and
+# two do not stack — it is the company's purse, not each hero's.
+static func party_pct(party, key: String) -> int:
+	var best := 0
+	for ch in party.party_characters():
+		for id in ids(ch):
+			for e in row(id).get("effects", []):
+				var v = e.get("gives", {}).get(key)
+				if v != null and absi(int(v)) > absi(best):
+					best = int(v)
+	return best
+
+
+# --- how the company gets on (§7) -----------------------------------------------------------
+
+const SHARED_TEMPER := 5.0      # per temperament two heroes share
+const OPPOSED_TEMPER := -10.0   # Brave and Craven do not get on
+const WRATHFUL_FIRE := 1.5      # friendly fire from a Wrathful caster looks deliberate
+
+# What two heroes' traits say about each other, on top of PartyOpinion's
+# backgrounds and species: {"n", "why": [a phrase each]}. Greedy costs 5 with
+# everyone who is not also Greedy; Arrogant costs 5 with everyone (a gives
+# "opinion" on the trait, read from both sides).
+static func opinion_terms(ca, cb) -> Dictionary:
+	var out := {"n": 0.0, "why": []}
+	if ca == null or cb == null:
+		return out
+	var a := ids(ca)
+	var b := ids(cb)
+	for t in a:
+		if family_of(t) != "temperament":
+			continue
+		if t in b:
+			out["n"] += SHARED_TEMPER
+			out["why"].append("both " + name_of(t))
+		for u in b:
+			if opposed(t, u):
+				out["n"] += OPPOSED_TEMPER
+				out["why"].append("%s and %s" % [name_of(t), name_of(u)])
+	for side in [[a, b], [b, a]]:
+		for t in side[0]:
+			for e in row(t).get("effects", []):
+				var v = e.get("gives", {}).get("opinion")
+				if v == null or (t in side[1]):
+					continue   # two Greedy heroes understand each other
+				out["n"] += float(v)
+				out["why"].append(name_of(t))
+	return out
+
+
+static func warms_faster(ca, cb) -> bool:
+	return flag(ca, "opinion_drift") != null or flag(cb, "opinion_drift") != null
+
+
+# --- the camp beat ---------------------------------------------------------------------------
+
+const CAMP_BEAT_DAYS := 3.0     # a trait earned more than this long ago is old news at the fire
+
+# A line at the fire about a trait somebody earned since the last one was
+# said: {"text", "kind", "char_id"}, or {} — and the trait is marked told, so
+# each is said once. The row's `camp` line, with the hero's name.
+static func camp_beat(chars: Array, now: float) -> Dictionary:
+	for ch in chars:
+		if ch == null or ch.dead:
+			continue
+		for t in ch.traits:
+			if not t is Dictionary or bool(t.get("told", false)) or not t.has("since"):
+				continue
+			if now - float(t["since"]) > CAMP_BEAT_DAYS * DAY:
+				continue
+			var line := String(row(String(t["id"])).get("camp", ""))
+			if line == "":
+				continue
+			t["told"] = true
+			var kind := String(row(String(t["id"])).get("kind", ""))
+			return {"text": line.replace("%s", ch.cname), "kind": "bad" if kind in ["scar", "wound"] else "good",
+				"char_id": ch.id}
+	return {}

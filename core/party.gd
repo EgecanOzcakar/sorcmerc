@@ -38,6 +38,7 @@ var overworld_figure := ""
 # owns every rule about them. A dict rather than three fields so the save format
 # grows a key, not a column, when travel gains another order.
 var travel_orders: Dictionary = {}
+var here: Dictionary = {}   # #176 step 4: where the party is — biome, band, site, night — stamped by world.gd each frame for the road's trait terms; {} off the map
 var world_now := 0.0        # world-minutes, stamped by world.gd each frame; potion buffs expire against it
 var scouted_next := false   # Potion of Clairvoyance / Clairvoyance cast: the next fight starts scouted
 var blessed := false        # a shrine's blessing: temp HP for every hero at the next fight (core/landmarks.gd)
