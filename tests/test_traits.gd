@@ -46,8 +46,11 @@ func test_data_is_whole() -> void:
 			check(id in Traits.row(o).get("opposes", []), "%s and %s oppose each other both ways" % [id, o])
 		for line in Traits.effect_lines(id):
 			check(String(line["text"]).strip_edges() != "", "%s: every effect says something" % id)
-		check(Traits.effect_lines(id).any(func(l): return l["live"]) or r["family"] == "temperament",
+		check(Traits.effect_lines(id).any(func(l): return l["live"]) or r["family"] != "origin",
 			"%s: an origin always does something in a fight now" % id)
+		# Step 3's earned rows: each says what kind of moment it is.
+		if r["family"] in ["mark", "bane", "wound"]:
+			check(String(r.get("kind", "")) in ["triumph", "resilience", "scar", "wound"], "%s: an earned row has a kind" % id)
 	for b in Catalog.all("backgrounds.json"):
 		for fam in Traits.FAMILIES:
 			var d := Traits.default_for(b["id"], fam)

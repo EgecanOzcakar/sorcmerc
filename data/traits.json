@@ -1,5 +1,5 @@
 {
-  "_comment": "Personality traits (#176). docs/superpowers/specs/2026-09-23-traits-design.md is the design; core/traits.gd reads this file. Every effect is {when, gives, text?}: `when` keys biome/board/night/band/site are decided at fight start (step 1) and bloodied/first_round/alone/vs_faction/vs_type/dtype_in/dtype_out at the roll (step 2); `gives` keys ac/to_hit/save/initiative/damage/ward/save_adv are live in a fight, the rest (skill, travel, forage, gold, opinion, the hardship ones...) are shown and marked not yet in play. Each live trait's `_measured` line is tests/sweep_traits.gd's (2026-09-23): none moves the win rate by more than 3 points, which is the seed noise floor — re-run it when a number here changes.",
+  "_comment": "Personality traits (#176). docs/superpowers/specs/2026-09-23-traits-design.md is the design; core/traits.gd reads this file. Every effect is {when, gives, text?}: `when` keys biome/board/night/band/site are decided at fight start (step 1) and bloodied/first_round/alone/vs_faction/vs_type/dtype_in/dtype_out at the roll (step 2); `gives` keys ac/to_hit/save/initiative/damage/ward/save_adv/speed/death_save_adv are live in a fight and hardship_adv/hardship_dis/hardship_bonus/grudge on a hardship's save (step 3), the rest (skill, travel, forage, gold, opinion...) are shown and marked not yet in play. Earned rows (step 3) carry `kind` (triumph/resilience/scar/wound), `lasts_days` for one that lapses, `heals`/`cure` for the page; an id may be instanced as `id@arg` (grudge@goblinoid), and `$arg`/`$name`/`$Name` in the row are that faction. Each live trait's `_measured` line is tests/sweep_traits.gd's (2026-09-23): none moves the win rate by more than 3 points, which is the seed noise floor — re-run it when a number here changes.",
   "traits": {
     "brave": {
       "name": "Brave",
@@ -435,6 +435,484 @@
           }
         }
       ]
+    },
+    "emboldened": {
+      "name": "Emboldened",
+      "family": "mark",
+      "text": "Came through it without a scratch, and has not stopped moving since.",
+      "kind": "triumph",
+      "lasts_days": 3,
+      "effects": [
+        {
+          "gives": {
+            "initiative": 1
+          }
+        }
+      ]
+    },
+    "overconfident": {
+      "name": "Overconfident",
+      "family": "mark",
+      "text": "Came through it without a scratch, and has decided that is how it goes.",
+      "kind": "triumph",
+      "effects": [
+        {
+          "gives": {
+            "to_hit": 1
+          }
+        },
+        {
+          "when": {
+            "first_round": true
+          },
+          "gives": {
+            "ac": -1
+          }
+        }
+      ]
+    },
+    "renowned": {
+      "name": "Renowned",
+      "family": "mark",
+      "text": "The one who killed it. People have started saying the name first.",
+      "kind": "triumph",
+      "effects": [
+        {
+          "gives": {
+            "skill": {
+              "persuasion": 2
+            }
+          }
+        },
+        {
+          "gives": {
+            "sought": true
+          },
+          "text": "That faction's bands come looking for them"
+        }
+      ]
+    },
+    "arrogant": {
+      "name": "Arrogant",
+      "family": "mark",
+      "text": "The one who killed it, and nobody is allowed to forget.",
+      "kind": "triumph",
+      "effects": [
+        {
+          "gives": {
+            "damage": 1
+          }
+        },
+        {
+          "gives": {
+            "opinion": -5
+          },
+          "text": "−5 with every hero in the company"
+        }
+      ]
+    },
+    "delver": {
+      "name": "Delver",
+      "family": "mark",
+      "text": "Has been to the bottom of one, and knows what the walls are telling them.",
+      "kind": "triumph",
+      "effects": [
+        {
+          "when": {
+            "site": [
+              "lair"
+            ]
+          },
+          "gives": {
+            "to_hit": 1
+          }
+        },
+        {
+          "gives": {
+            "skill": {
+              "investigation": 2
+            }
+          },
+          "text": "+2 to search a lair's rooms"
+        }
+      ]
+    },
+    "reckless": {
+      "name": "Reckless",
+      "family": "mark",
+      "text": "Has been to the bottom of one, and has stopped looking where they step.",
+      "kind": "triumph",
+      "effects": [
+        {
+          "when": {
+            "site": [
+              "lair"
+            ]
+          },
+          "gives": {
+            "to_hit": 1
+          }
+        },
+        {
+          "gives": {
+            "save_vs_hazard": -1
+          },
+          "text": "−1 on saves against traps and hazards"
+        }
+      ]
+    },
+    "protector": {
+      "name": "Protector",
+      "family": "mark",
+      "text": "Got a friend back up once. Stands over the fallen now without deciding to.",
+      "kind": "triumph",
+      "effects": [
+        {
+          "when": {
+            "guarding": true
+          },
+          "gives": {
+            "ac": 1
+          }
+        }
+      ]
+    },
+    "steady-hands": {
+      "name": "Steady hands",
+      "family": "mark",
+      "text": "Got a friend back up once. The hands remember how.",
+      "kind": "triumph",
+      "effects": [
+        {
+          "gives": {
+            "skill": {
+              "medicine": 2
+            }
+          }
+        }
+      ]
+    },
+    "giant-killer": {
+      "name": "Giant-killer",
+      "family": "mark",
+      "text": "Has put down something that should have been out of their reach.",
+      "kind": "triumph",
+      "effects": [
+        {
+          "when": {
+            "vs_size": [
+              "Large",
+              "Huge",
+              "Gargantuan"
+            ]
+          },
+          "gives": {
+            "to_hit": 1
+          }
+        }
+      ]
+    },
+    "veteran": {
+      "name": "Veteran",
+      "family": "mark",
+      "text": "Twenty fights won. Knows the shape of the first few seconds.",
+      "kind": "triumph",
+      "effects": [
+        {
+          "gives": {
+            "initiative": 1
+          }
+        }
+      ]
+    },
+    "fire-tempered": {
+      "name": "Fire-tempered",
+      "family": "mark",
+      "text": "Went down in the fire, and came back up out of it.",
+      "kind": "resilience",
+      "effects": [
+        {
+          "when": {
+            "dtype_in": [
+              "fire"
+            ]
+          },
+          "gives": {
+            "ward": 3
+          }
+        }
+      ]
+    },
+    "burn-shy": {
+      "name": "Burn-shy",
+      "family": "mark",
+      "text": "Went down in the fire. Flinches at the smell of it now.",
+      "kind": "scar",
+      "cure": "Win against something that deals fire, then make the save again",
+      "effects": [
+        {
+          "when": {
+            "vs_deals": [
+              "fire"
+            ]
+          },
+          "gives": {
+            "to_hit": -1
+          }
+        }
+      ]
+    },
+    "frost-hardened": {
+      "name": "Frost-hardened",
+      "family": "mark",
+      "text": "The cold had them once and let go. It will not get the same grip twice.",
+      "kind": "resilience",
+      "effects": [
+        {
+          "when": {
+            "dtype_in": [
+              "cold"
+            ]
+          },
+          "gives": {
+            "ward": 3
+          }
+        }
+      ]
+    },
+    "chilled": {
+      "name": "Chilled",
+      "family": "mark",
+      "text": "The cold had them once. They have never quite warmed up.",
+      "kind": "scar",
+      "cure": "Win against something that deals cold, then make the save again",
+      "effects": [
+        {
+          "when": {
+            "board": [
+              "frozen-cave"
+            ]
+          },
+          "gives": {
+            "initiative": -1
+          }
+        },
+        {
+          "when": {
+            "vs_deals": [
+              "cold"
+            ]
+          },
+          "gives": {
+            "to_hit": -1
+          }
+        }
+      ]
+    },
+    "storm-struck": {
+      "name": "Storm-struck",
+      "family": "mark",
+      "text": "Lightning found them and they are still here. They move before the flash now.",
+      "kind": "resilience",
+      "effects": [
+        {
+          "gives": {
+            "save": {
+              "dex": 1
+            }
+          }
+        }
+      ]
+    },
+    "storm-shy": {
+      "name": "Storm-shy",
+      "family": "mark",
+      "text": "Lightning found them. Every open sky at night is waiting to do it again.",
+      "kind": "scar",
+      "cure": "Win against something that deals lightning, then make the save again",
+      "effects": [
+        {
+          "when": {
+            "night": true,
+            "board": [
+              "downs",
+              "marsh",
+              "forest-clearing",
+              "goblin-camp",
+              "city-square"
+            ]
+          },
+          "gives": {
+            "ac": -1
+          }
+        },
+        {
+          "when": {
+            "vs_deals": [
+              "lightning",
+              "thunder"
+            ]
+          },
+          "gives": {
+            "to_hit": -1
+          }
+        }
+      ]
+    },
+    "grudge": {
+      "name": "Grudge: $name",
+      "family": "mark",
+      "text": "$Name put them down twice. They have not forgotten, and they are not frightened — they are angry.",
+      "kind": "resilience",
+      "effects": [
+        {
+          "when": {
+            "vs_faction": [
+              "$arg"
+            ]
+          },
+          "gives": {
+            "damage": 1
+          }
+        },
+        {
+          "when": {
+            "vs_faction": [
+              "$arg"
+            ]
+          },
+          "gives": {
+            "ac": -1
+          }
+        }
+      ]
+    },
+    "haunted": {
+      "name": "Haunted by $name",
+      "family": "mark",
+      "text": "$Name put them down twice. They see them in every treeline.",
+      "kind": "scar",
+      "cure": "Win a fight against them, then make the save again",
+      "effects": [
+        {
+          "when": {
+            "vs_faction": [
+              "$arg"
+            ]
+          },
+          "gives": {
+            "to_hit": -1
+          }
+        }
+      ]
+    },
+    "hardened": {
+      "name": "Hardened",
+      "family": "mark",
+      "text": "Watched a friend die and kept their feet. Something in them set, like mortar.",
+      "kind": "resilience",
+      "effects": [
+        {
+          "gives": {
+            "save": {
+              "wis": 1
+            }
+          }
+        }
+      ]
+    },
+    "hard-to-kill": {
+      "name": "Hard to kill",
+      "family": "mark",
+      "text": "Two breaths from the end, and came back. Death has had its chance.",
+      "kind": "resilience",
+      "effects": [
+        {
+          "gives": {
+            "death_save_adv": true
+          },
+          "text": "Advantage on death saves"
+        }
+      ]
+    },
+    "wounded": {
+      "name": "Wounded",
+      "family": "wound",
+      "text": "Went down and nearly stayed down. It is still healing.",
+      "kind": "wound",
+      "lasts_days": 3,
+      "heals": "A long rest at an inn, or three days",
+      "effects": [
+        {
+          "gives": {
+            "to_hit": -1
+          }
+        },
+        {
+          "gives": {
+            "ac": -1
+          }
+        }
+      ]
+    },
+    "shaken": {
+      "name": "Shaken",
+      "family": "wound",
+      "text": "Something happened they cannot put down yet.",
+      "kind": "wound",
+      "lasts_days": 5,
+      "heals": "Five days (two for a Calm hero)",
+      "effects": [
+        {
+          "gives": {
+            "save": -1
+          }
+        }
+      ]
+    },
+    "maimed": {
+      "name": "Maimed",
+      "family": "wound",
+      "text": "Two breaths from the end, and it took something with it.",
+      "kind": "wound",
+      "lasts_days": 10,
+      "heals": "A long rest in a city, where the healers are; or ten days",
+      "effects": [
+        {
+          "gives": {
+            "speed": -1
+          },
+          "text": "−1 hex of movement"
+        }
+      ]
+    },
+    "bane": {
+      "name": "$One-bane",
+      "family": "bane",
+      "text": "Has killed enough of $name to know how they die.",
+      "kind": "triumph",
+      "effects": [
+        {
+          "when": {
+            "vs_faction": [
+              "$arg"
+            ]
+          },
+          "gives": {
+            "to_hit": 1
+          }
+        },
+        {
+          "when": {
+            "vs_faction": [
+              "$arg"
+            ]
+          },
+          "gives": {
+            "damage": 1
+          }
+        }
+      ]
     }
   },
   "defaults": {
@@ -473,6 +951,172 @@
       "sailor": "generous",
       "wayfarer": "generous",
       "entertainer": "wrathful"
+    }
+  },
+  "events": {
+    "_comment": "What an event can leave (spec §6). A triumph rolls `chance`% per hero it touched, then picks an outcome by weight, each weight leaned by the hero's temperament. A hardship is a save: `ability`, `fear` (Brave has advantage, Craven disadvantage), and its `resilience` / `scar`; the DC is 10 + half the attacker's CR, +2 per aggravation, capped at 20.",
+    "flawless": {
+      "kind": "triumph",
+      "who": "party",
+      "chance": 40,
+      "label": "A hard fight, and nobody went down",
+      "outcomes": [
+        {
+          "trait": "emboldened",
+          "weight": 60,
+          "lean": {
+            "cautious": 20,
+            "calm": 10
+          }
+        },
+        {
+          "trait": "overconfident",
+          "weight": 40,
+          "lean": {
+            "wrathful": 20,
+            "brave": 10,
+            "cautious": -30
+          }
+        }
+      ]
+    },
+    "boss_kill": {
+      "kind": "triumph",
+      "who": "killer",
+      "chance": 50,
+      "label": "Killed the worst of them",
+      "outcomes": [
+        {
+          "trait": "renowned",
+          "weight": 55,
+          "lean": {
+            "generous": 20,
+            "calm": 10
+          }
+        },
+        {
+          "trait": "arrogant",
+          "weight": 45,
+          "lean": {
+            "greedy": 20,
+            "wrathful": 15,
+            "generous": -30
+          }
+        }
+      ]
+    },
+    "lair_cleared": {
+      "kind": "triumph",
+      "who": "standing",
+      "chance": 40,
+      "label": "Cleared a lair to the bottom",
+      "outcomes": [
+        {
+          "trait": "delver",
+          "weight": 60,
+          "lean": {
+            "curious": 20,
+            "cautious": 10
+          }
+        },
+        {
+          "trait": "reckless",
+          "weight": 40,
+          "lean": {
+            "wrathful": 20,
+            "cautious": -30
+          }
+        }
+      ]
+    },
+    "revived": {
+      "kind": "triumph",
+      "who": "reviver",
+      "chance": 35,
+      "label": "Got a friend back on their feet",
+      "outcomes": [
+        {
+          "trait": "protector",
+          "weight": 50,
+          "lean": {
+            "brave": 20
+          }
+        },
+        {
+          "trait": "steady-hands",
+          "weight": 50,
+          "lean": {
+            "calm": 20
+          }
+        }
+      ]
+    },
+    "giant_kill": {
+      "kind": "triumph",
+      "who": "killer",
+      "chance": 35,
+      "label": "Killed something far above them",
+      "outcomes": [
+        {
+          "trait": "giant-killer",
+          "weight": 100
+        }
+      ]
+    },
+    "downed_fire": {
+      "kind": "hardship",
+      "who": "downed",
+      "ability": "wis",
+      "fear": true,
+      "label": "Went down in the fire",
+      "resilience": "fire-tempered",
+      "scar": "burn-shy"
+    },
+    "downed_cold": {
+      "kind": "hardship",
+      "who": "downed",
+      "ability": "con",
+      "fear": false,
+      "label": "Went down to the cold",
+      "resilience": "frost-hardened",
+      "scar": "chilled"
+    },
+    "downed_storm": {
+      "kind": "hardship",
+      "who": "downed",
+      "ability": "wis",
+      "fear": true,
+      "label": "Went down to the lightning",
+      "resilience": "storm-struck",
+      "scar": "storm-shy"
+    },
+    "downed_twice": {
+      "kind": "hardship",
+      "who": "downed",
+      "ability": "wis",
+      "fear": true,
+      "faction": true,
+      "label": "Put down by the same kind twice",
+      "resilience": "grudge",
+      "scar": "haunted"
+    },
+    "ally_died": {
+      "kind": "hardship",
+      "who": "standing",
+      "ability": "wis",
+      "fear": false,
+      "label": "Watched a friend die",
+      "resilience": "hardened",
+      "scar": "shaken"
+    },
+    "death_door": {
+      "kind": "hardship",
+      "who": "downed",
+      "ability": "con",
+      "fear": false,
+      "label": "Two death saves failed",
+      "resilience": "hard-to-kill",
+      "scar": "maimed"
     }
   }
 }

@@ -410,6 +410,13 @@ func _react() -> void:
 		screen._close_spoils()
 		_acts += 1
 		return
+	if screen._moment != null:
+		# #176: a personality trait earned — read it, and go on (the button's own
+		# press, one moment at a time, as a player would).
+		_saw["trait_moment"] = true
+		screen._moment._skip_or_advance()
+		_acts += 1
+		return
 	if not screen._visit.is_empty():
 		_town_beat()
 		return

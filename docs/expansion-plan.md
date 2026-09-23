@@ -9049,3 +9049,124 @@ Pictures: `docs/shots/live-roll-town-{rolling,landed}.png` and
   shows in the corner a beat early. Holding the purse display is the fix.
 - A lair found by a search is marked on the map at once, under the die.
 - Still no dice-rattle sound (see part 1).
+
+## Personality traits, step 3 — what a fight leaves on the people in it (2026-09-23, #176)
+
+Step 3 of `docs/superpowers/specs/2026-09-23-traits-design.md`. Until now a
+hero's personality traits were only what the player picked at creation. Now
+the road writes on them. Every fight, and every lair cleared to the bottom,
+asks each hero in it what it did to them, and each hero rolls on their own. The
+same fire can temper one of them, scar another and leave a third as they were
+(the owner: "when an event happens, there might be different outcomes for a
+person").
+
+**Triumphs, on chance** (the likelier kind, by the owner's call). A notable
+win, not every win: the company wins nine road fights in ten, and a trait on
+each would bury them by level five.
+
+| triumph | who rolls | chance | outcomes |
+|---|---|---|---|
+| a boss killed | the killer | 50% | Renowned or Arrogant |
+| a kill above your level | the killer | 35% | Giant-killer |
+| a downed ally brought back | the reviver | 35% | Protector or Steady hands |
+| a hard fight nobody went down in | everyone | 40% | Emboldened (3 days) or Overconfident |
+| a lair cleared | everyone standing | 40% | Delver or Reckless |
+
+The boss is the fight's highest-CR kill, when that is at least the company's
+level. The hero's temperament leans which outcome they get: a Cautious hero
+comes out of a flawless fight Emboldened more often, a Wrathful one
+Overconfident. A permanent triumph trait trades something (Overconfident gives
+up AC in round 1, Arrogant is disliked, Reckless flinches less at traps). A
+pure buff lapses, like Emboldened. So a party that wins more does not simply
+get stronger for it.
+
+**Hardships, on a save.** A WIS save for the mind, CON for the body, on the
+hero's own save bonus. The DC is 10 + half the attacker's CR, +2 if the boss did
+it, +2 if a death save was failed, capped at 20.
+
+| hardship | save | tempered (made by 5+, or a nat 20) | scarred (failed) |
+|---|---|---|---|
+| downed by fire | WIS | Fire-tempered (3 less fire damage per hit) | Burn-shy (−1 to hit vs a fire-dealer) |
+| downed by cold | CON | Frost-hardened | Chilled |
+| downed by lightning or thunder | WIS | Storm-struck (+1 DEX saves) | Storm-shy |
+| downed by one faction twice | WIS | Grudge: <faction> | Haunted by <faction> |
+| an ally died | WIS | Hardened (+1 WIS saves) | Shaken (a wound) |
+| two death saves failed | CON | Hard to kill (advantage on death saves) | Maimed (a wound) |
+
+- **Made:** nothing happens — the commonest result, on purpose.
+- **Failed by 5 or more, or a nat 1:** Shaken on top of the scar.
+- **Temperament rides the save:** Brave rolls a fear save with advantage,
+  Craven with disadvantage, Calm gets +2 on WIS, and a Wrathful hero's failed
+  faction save turns into a Grudge rather than a haunting.
+- **Cures:** a scar is cured by the same save asked again. A Burn-shy hero who
+  beats a fire-dealer rolls the save once more at the old DC, and on a made
+  save the scar is gone, with its own moment.
+
+**Counted, not rolled:**
+- Ten kills of one faction make a bane (three for dragons): +1 to hit and +1
+  damage against them, two banes at most.
+- Twenty won fights make a Veteran.
+
+**Wounds:**
+- **Wounded** comes from being downed and failing a death save. It lasts three
+  days or until a night at an inn.
+- **Shaken** lasts five days, or two for a Calm hero.
+- **Maimed** takes a hex of movement for ten days, or until a long rest in a
+  city.
+
+**On screen.** Each change is one line on the after-action page, in gilt ("Pike
+Sallow is now Burn-shy (WIS 6 + 1 vs DC 14)."). Once the page is closed, each
+change gets the full-screen moment built earlier
+(`scenes/world/trait_moment.gd`): one hero at a time, the save rolled in front
+of them. Moments queue like a calling's card, wait for the map to be clear and
+for any live die to land, and hold the clock. A trait that lapses is said on
+the HUD line. A night at an inn says what it mended.
+
+**Plumbing:**
+- `core/traits.gd` has the earning section (`after_fight`, `after_lair`,
+  `grant`, `expire`, `heal_rest`, the cures).
+- Instanced ids: `grudge@goblinoid` is the `grudge` row with its `$arg` tokens
+  filled.
+- New `when` keys: `guarding`, `vs_size`, `vs_deals`. New `gives` keys:
+  `speed`, `death_save_adv`.
+- `Combat.credit` gains `death_fails`.
+- `Character.trait_counts` and the earned keys (`since`, `until`, `event`,
+  `dc`, `cure`) go through `CharacterSave`. An older save reads with none.
+- `world.gd`'s `_run_combat` calls `_earn_from_fight`; both lair-cleared paths
+  call `_earn_from_lair`; `_check_moments` shows the queue.
+- The robots (`drive_random`, `drive_world`, `drive_completionist`,
+  `drive_coop`, `test_road_trip`) read a moment and press on, the way they close
+  the spoils page. The completionist's ledger has the deed as opportunistic.
+
+Tests:
+- `tests/test_traits_earn.gd` (56 checks) covers:
+  - the instanced rows
+  - the flawless rate (about 40% over 400 minutes)
+  - one story per hero
+  - every degree landing exactly as its own dice say
+  - Brave, Craven and Calm on the save
+  - the Wrathful grudge
+  - banes, Veteran, cures, lapses and rest
+  - the save round trip
+  - Maimed in a fight and the death-save credit
+  - determinism
+- `tests/test_world_traits.gd` (14 checks) drives the real screen: the line on
+  the page, the moment after it with the clock held, a lapse on the HUD, the
+  inn mending a wound, and a lair's triumph.
+
+### Still open
+
+- **Unmeasured numbers.** The chances, the DC formula and the degree thresholds
+  are the spec's, not measured. The next sweep should count how many traits a
+  run of N days leaves on the preset party, and how many of those are scars.
+  The presets carry no traits at the start but do earn them in a long robot
+  run. `tests/sweep_traits.gd` measures fights with traits held, not what a
+  run earns.
+- **Poisoned a third time** is not built: nothing counts poisonings yet.
+- **The bonded ally's +2** is not built: the aggravation for a bonded or
+  loving ally's death waits for step 4's opinion terms.
+- **Road-only triumph traits are shown but do nothing yet.** Renowned's
+  persuasion, Steady hands' medicine and Delver's search are step 4's road
+  checks. Arrogant's opinion cost is step 4's opinion term, and Renowned's
+  "their bands seek you out" is not designed.
+- **Bond traits** (the owner's "possibly, later") are still not designed.

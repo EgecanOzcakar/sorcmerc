@@ -61,6 +61,9 @@ func step(n: int, dt := 0.1) -> void:
 		# event above — the robot does what a player does and walks on.
 		if screen._spoils_panel != null:
 			screen._close_spoils()
+		# #176: what the fight left on somebody — a whole screen, read and passed.
+		while screen._moment != null:
+			screen._moment._skip_or_advance()
 
 func _run() -> void:
 	await process_frame

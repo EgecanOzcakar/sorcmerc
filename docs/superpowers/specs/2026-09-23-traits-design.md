@@ -541,10 +541,31 @@ Each step is one PR, green on its own, and each is playable without the next.
    (`tests/sweep_traits.gd`, 300 seeds): no trait moves the 88.7% baseline by
    more than +3.0, which is the seed noise floor — each live trait's
    `_measured` line in `data/traits.json` carries its row.
-3. **Earning.** `Traits.after_fight` over `result.credit`: the triumph tables
-   on chance, the hardship saves with their DCs and degrees (§6), banes and
-   wounds, the cures as a second save, each one opening the moment (§8, already
-   built), and the after-action line.
+3. **Earning — BUILT (2026-09-23).** `Traits.after_fight(chars, result, ctx)`
+   over `result.credit`, and `Traits.after_lair` for a cleared lair: the
+   triumph tables on chance, the hardship saves with their DCs and degrees
+   (§6), banes and Veteran by count, wounds, the cures as a second save. Each
+   change is a line on the after-action page and a moment (§8), queued and
+   shown once the page is closed. The earned rows and the event tables are in
+   `data/traits.json` (`events`). Decisions made building it:
+   - **One story per hero per fight:** at most one triumph and one hardship
+     each, the first that applies in a fixed order (a boss kill, a kill above
+     your level, a revive, a flawless hard win; two death saves failed, the
+     same faction twice, the element, an ally's death).
+   - **Instanced traits** (`grudge@goblinoid`, `bane@dragon`): a row with
+     `$arg` tokens, filled per faction and named for it ("Grudge: goblins",
+     "Dragon-bane").
+   - **Four new `when` / `gives` keys:** `guarding` (a downed ally beside
+     you: Protector), `vs_size` (Giant-killer), `vs_deals` (what a foe's
+     blows are made of: its attack's damage type, or what it is immune to — a
+     fire giant swings a sword and is fire either way), `speed` (Maimed) and
+     `death_save_adv` (Hard to kill).
+   - **The fight records** the most death saves a hero failed
+     (`credit.death_fails`); the character keeps `trait_counts` (kills per
+     faction, wins, downs per faction) through `CharacterSave`.
+   - **Poisoned a third time** is not built: nothing counts poisonings yet.
+     Neither is the +2 aggravation for a bonded or loving ally's death, which
+     waits for step 4's opinion terms.
 4. **The road and the fire.** `skill_bonus` and the three check sums (§5.3),
    the opinion terms (§7), a camp beat when a trait is gained ("Pike hasn't
    slept since the fire").

@@ -83,6 +83,9 @@ const Quest = preload("res://core/quest.gd")
 const Tips = preload("res://core/tips.gd")   # #151
 const Objectives = preload("res://core/objectives.gd")
 const Spoils = preload("res://scenes/world/spoils.gd")   # #157: the after-action page
+const Traits = preload("res://core/traits.gd")            # #176 step 3: what a fight leaves on the people in it
+const TraitMoment = preload("res://scenes/world/trait_moment.gd")
+const Figures3D = preload("res://scenes/figures3d.gd")
 const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const Ladder = preload("res://core/ladder.gd")
@@ -316,6 +319,9 @@ var _region_msg: Label               # the last crossing, same "persists" contra
 
 var _ladder_title_seen := 0          # the last renown title _check_ladder() said; set on load
 var _rungs_seen: Dictionary = {}     # faction -> the last rung _check_ladder() said; set on load
+var _moment_queue: Array = []         # #176: trait_moment dicts earned while a screen was up; _check_moments() shows them
+var _moment: Control = null            # the moment on screen, or null
+var _trait_news: Array = []            # #176: one line per trait gained or lost in the last fight, for the spoils page
 var _calling_queue: Array = []        # [char_id, complete()'s result] pairs paid on the road while a screen was up; _check_callings() shows them
 var _lair_msg: Label                 # the last search/loot outcome — persists past the
                                       # button's own text, which _check_lairs() overwrites every frame
@@ -528,6 +534,10 @@ func _process(delta: float) -> void:
 	party.world_now = world.clock.elapsed
 	for ch in party.roster:
 		Potions.expire(ch, party.world_now)
+		# #176: Emboldened runs out, a wound heals with time — said on the HUD
+		# line, since nothing is happening to put a whole screen up for.
+		for gone in Traits.expire(ch, party.world_now):
+			_lair_msg.text = "%s is no longer %s." % [ch.cname, gone]
 	var p0 := world.player()
 	if p0 != null:
 		world.reveal(p0.position)   # T9x fog of war: permanent once seen
@@ -553,6 +563,7 @@ func _process(delta: float) -> void:
 	_check_expired_lairs()
 	_check_raids()
 	_check_ladder()
+	_check_moments()
 	_check_callings()
 	_check_forage()
 	_check_travel()
@@ -1618,6 +1629,7 @@ func _run_combat(spec: Dictionary, difficulty: String,
 	var result: Dictionary = _combat.result
 	_combat = null
 	Sound.set_combat(false)
+	_earn_from_fight(result, difficulty, site)
 	# A fight costs daylight: an hour a round, so a long brawl eats the afternoon
 	# and a two-round ambush barely dents it. The clock is paused through the
 	# fight itself, so this is the whole bill.
@@ -1849,6 +1861,7 @@ func _show_spoils(result: Dictionary) -> void:
 	for line in _quest_news:
 		rows.append([String(line), Icons.COL_ACCENT])
 	_quest_news = []
+	_trait_rows(rows)
 	for id in result.get("deaths", []):
 		var fallen = party.get_member(id)
 		rows.append(["%s did not get up." % (fallen.cname if fallen != null else id), Icons.COL_FOE])
@@ -1954,6 +1967,7 @@ func _show_delve_spoils(l, cleared: bool) -> void:
 		rows.append(["Carried out: %s" % ", ".join(names), Icons.COL_TEXT])
 	for line in haul.get("quests", []):
 		rows.append([String(line), Icons.COL_ACCENT])
+	_trait_rows(rows)   # every room's, gathered — the moments themselves come after this page
 	_build_spoils_panel(
 		"%s is cleared out" % l.sname if cleared else "Out of %s" % l.sname, rows)
 
@@ -2165,7 +2179,7 @@ func _overlay_up() -> bool:
 	return _event_card != null or _approach_card != null or _spoils_panel != null \
 		or _levelup_panel != null \
 		or _site != null or _party_overlay != null or _quest_panel != null or _inventory_panel != null \
-		or _story_panel != null or story_card != null or _menu_panel != null
+		or _story_panel != null or story_card != null or _menu_panel != null or _moment != null
 
 func _check_visit() -> void:
 	if _combat != null or not _visit.is_empty() or _overlay_up():
@@ -2357,6 +2371,61 @@ func _calling_check(kind: String, id: String, who: String) -> void:
 		if not r.is_empty():
 			_calling_queue.append([String(char_id), r])
 
+# --- #176 step 3: personality traits, earned -------------------------------
+#
+# What a fight or a cleared lair did to the people in it (core/traits.gd's
+# after_fight / after_lair — rolled there, seeded, already on the sheets when
+# this returns). Each change is one line for the after-action page and one
+# full-screen moment (scenes/world/trait_moment.gd), queued like a calling's
+# card: the doing happens under the spoils page, the showing waits for the map
+# to be clear, and every moment in the queue plays back to back, one hero at a
+# time, before anything else comes up. SORCMERC_FAST lands each in its end
+# state, so the robots walk through them.
+func _earn_from_fight(result: Dictionary, difficulty: String, site: String) -> void:
+	if result.is_empty():
+		return
+	var earned: Dictionary = Traits.after_fight(party.party_characters(), result,
+		{"now": world.clock.elapsed, "difficulty": difficulty, "site": site})
+	_trait_news.append_array(earned["lines"])
+	_queue_moments(earned["moments"])
+
+func _earn_from_lair() -> void:
+	var standing: Array = party.party_characters().filter(func(ch): return not ch.dead and int(ch.hp_current) != 0)
+	var earned: Dictionary = Traits.after_lair(standing, world.clock.elapsed)
+	_trait_news.append_array(earned["lines"])
+	_queue_moments(earned["moments"])
+
+func _queue_moments(moments: Array) -> void:
+	for m in moments:
+		var ch = party.get_member(String(m.get("char_id", "")))
+		if ch != null:
+			m["figure"] = Figures3D.model_path_for(ch.sheet(), "")
+		_moment_queue.append(m)
+
+func _trait_rows(rows: Array) -> void:
+	for line in _trait_news:
+		rows.append([String(line), Icons.COL_GOLD])
+	_trait_news = []
+
+func _check_moments() -> void:
+	if _moment_queue.is_empty() or _combat != null or not _visit.is_empty() or _overlay_up() or DiceRoll.in_air():
+		return
+	var still: bool = world.clock.is_paused()
+	world.clock.pause()
+	_moment = TraitMoment.new()
+	_moment.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_moment)
+	_moment.finished.connect(func():
+		_moment.queue_free()
+		_moment = null
+		if still:
+			_halt()
+		else:
+			world.clock.resume())
+	var batch := _moment_queue
+	_moment_queue = []
+	_moment.show_moments(batch)
+
 # The party's leader: the first of the march, or nobody.
 func _leader() -> String:
 	return String(party.active[0]) if not party.active.is_empty() else ""
@@ -2480,6 +2549,7 @@ func _lair_sneak_action() -> void:
 		party.add_gold(int(loot.get("gold", 0)))
 		Quest.record_lair_cleared(party, l.id)
 		_calling_check("lair_cleared", l.id, _leader())
+		_earn_from_lair()
 		_map_roll(roll, _lair_msg, "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))])
 	else:
 		# Roused by the attempt itself, not as a side effect of the fight it
@@ -2617,6 +2687,7 @@ func _on_site_done() -> void:
 	if cleared:
 		Quest.record_lair_cleared(party, l.id)
 		_calling_check("lair_cleared", l.id, _leader())   # shown after the spoils page
+		_earn_from_lair()                                  # ...and so is what it did to them
 		# Reaching the bottom is worth something of its own. Every room on the
 		# way down already paid its own XP; this is the part that was missing,
 		# and it is why a delve is now worth more than the same fights strung
@@ -3277,8 +3348,14 @@ func _rest() -> void:
 	Lodge.restamp(party, s, stamp, s.last_visited)      # ...and the yard's swap and the shrine's blessing
 	_cheer()
 	_build_visit_panel()
-	_say("The party takes a long rest (%s). Eight hours pass and the stalls fill up again.%s" % [
-		"on the house" if cost == 0 else "%d ◉ for the room" % cost, _trance_note(trance)])
+	# #176: a night in a bed mends a Wounded hero; a city's healers mend Maimed.
+	var mended: Array = []
+	for ch in party.party_characters():
+		for n in Traits.heal_rest(ch, String(s.kind) == "city"):
+			mended.append("%s is no longer %s." % [ch.cname, n])
+	_say("The party takes a long rest (%s). Eight hours pass and the stalls fill up again.%s%s" % [
+		"on the house" if cost == 0 else "%d ◉ for the room" % cost, _trance_note(trance),
+		(" " + " ".join(mended)) if not mended.is_empty() else ""])
 	# The same fire as a camp's, over the inn page; the panel under it has
 	# already said what the night cost.
 	_fireside(RNG.new(maxi(1, absi(hash("inn|%s|%d" % [s.id, int(world.clock.elapsed)])))), _on_inn_card_ack)
