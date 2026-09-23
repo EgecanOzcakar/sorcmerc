@@ -83,10 +83,10 @@ class Measured extends Combat:
 				shoulder_saved += 1
 		return r
 
-	func _apply_damage(target, dmg: int, dtype := "", crit := false) -> void:
+	func _apply_damage(target, dmg: int, dtype := "", crit := false, source = null) -> void:
 		var before: bool = target.is_down() or target.is_dead()
 		var rallied_before: Array = allies_of(target).filter(func(c): return c.has(PartyOpinion.RALLY_STATUS))
-		super(target, dmg, dtype, crit)
+		super(target, dmg, dtype, crit, source)
 		if target.team == "party" and not before and (target.is_down() or target.is_dead()):
 			downs += 1
 			for c in allies_of(target):

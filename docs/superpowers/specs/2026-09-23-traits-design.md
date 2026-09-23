@@ -1,13 +1,19 @@
-# Traits — who a hero is, and what the road has done to them (#176)
+# Personality traits — who a hero is, and what the road has done to them (#176)
 
-A design for discussion, not yet a build. Issue #176 asks for "character traits,
+A design, agreed with the owner on 2026-09-23 (§10), not yet built — its step 0
+(three gaps in the fight the design stands on) is. Issue #176 asks for "character traits,
 these can be what they start with and what they receive after some event they
 were affected" — Crusader Kings' traits, in a 5e company. This document says
 what a trait *is* here, what it can touch (the place a fight stands in, the
 element a blow carries, the people across the board), how a hero gets and loses
 one, and — most of it — which existing hook each piece hangs on, because
-nearly every seam this needs is already cut. Nothing here is built. §9 is the
-order it would be built in, §10 the questions the owner should answer first.
+nearly every seam this needs is already cut. §9 is the order it is built in,
+§10 what the owner decided.
+
+**On screen they are "Personality traits"** — the whole system, every family
+below. The one family that is about temper alone (Brave/Craven and its kin) is
+called *temperament* in this document and in the data, so "personality" never
+means two things.
 
 ## 0. What Crusader Kings does, and what of it survives the trip
 
@@ -47,12 +53,14 @@ Four ideas travel well into sorcmerc. The rest are about dynasties and do not.
 ## 1. Scope
 
 **In:** the trait model and its data file; the save key; the starting pick at
-character creation; the effect vocabulary (§3) and the hooks that read it
+character creation, and the same pick offered once to a hero from an older
+save; the effect vocabulary (§3) and the hooks that read it
 (§5); earning and losing traits from events (§6); opinion between traits (§7);
 showing them (§8).
 
 **Out:** traits for monsters (a bestiary entry already carries its own
-defences and verbs); dynasty/inheritance anything; stress as a meter (§10, Q4);
+defences and verbs); dynasty/inheritance anything; stress as a meter (§10,
+decided no); refusing an earned trait (§10, decided no);
 authored event chains beyond one line of text per gain or loss; traits that
 change *class* features (that is what feats and subclasses are for).
 
@@ -68,8 +76,8 @@ A trait is a row of data, like an effect or a calling template, not code:
 // data/traits.json — content packs may add rows (data only, like everything under content/)
 "marsh-bred": {
   "name": "Marsh-bred",
-  "family": "origin",                 // personality | origin | mark | bane | wound
-  "opposes": [],                      // personality pairs name each other
+  "family": "origin",                 // temperament | origin | mark | bane | wound
+  "opposes": [],                      // temperament pairs name each other
   "text": "Grew up where the ground is half water. Knows which of it holds.",
   "effects": [
     {"when": {"biome": ["marsh"]},       "gives": {"ac": 1}},
@@ -98,7 +106,7 @@ asked (the world screen and the fight do) or the drawing.
 
 | family | how many | how you get one | leaves? |
 |---|---|---|---|
-| personality | 1 at creation, at most 2 | picked at creation; a second only from an event | no |
+| temperament | 1 at creation, at most 2 | picked at creation; a second only from an event | no |
 | origin | 1 | picked at creation, defaulted from the background | no |
 | mark | any | earned (§6) | only a *fear* mark, by its cure |
 | bane | up to 2 | earned: kills of one faction/type | no |
@@ -206,9 +214,8 @@ Foe faction and type are one lookup away — `Catalog.monster(target.src_id)`,
 the way the barks already do it (combat.gd ~292). The log gets a once-per-fight
 line through the existing `_said` dedupe ("Brenna is Orc-bane: +1 to hit").
 
-`hit_chance` (combat.gd ~778, the odds chip) today leaves out `bonus_to_hit`
-and the bicker penalty, so it already disagrees with the roll it describes.
-The trait hook has to go into both, and fixing the existing gap comes with it.
+The odds chip and the roll now share one sum, `Combat.to_hit_bonus()` (step 0,
+§9), so the trait's attack term goes in there once and both see it.
 
 ### 5.3 On the road
 
@@ -235,26 +242,69 @@ calls `Traits.after(party, event)` beside `_calling_check`
 (`scenes/world/world.gd` ~2346) for lair cleared, band beaten, calling done,
 and from the camp and downtime flows.
 
-**One gap has to be filled first.** The fight result
+**One gap had to be filled first.** The fight result
 (`resolve_outcome`, encounter.gd ~879) knows *which monsters died* but not
 *who killed them*, and knows *who went down* but not *what put them there*.
-`_kill` takes no killer; `_apply_damage` takes no source. Both are in scope at
-the call sites (`resolve_attack` ~2423–2441, `_spell_hit` ~1439), so the fix
-is to record `result.credit = {hero_id: {"kills": [src_id…], "downed_by":
-{"dtype", "src_id"}, "revived_by": id, "crits": n}}` as it happens. The
-after-action page's own "Not built" list (per-hero killing blows, damage
-taken — expansion-plan ~6855) wants the same record.
+`_kill` took no killer; `_apply_damage` took no source, though both were in
+scope at every call site that has one. The after-action page's own "Not
+built" list (per-hero killing blows, damage taken — expansion-plan ~6855)
+wants the same record.
 
-**Seeding.** Every roll a trait event makes is seeded off the event
-(`hash("trait|%s|%s|%d" % [hero_id, cause, world_minutes])`), so a reload
-cannot reroll the scar the player did not want.
+**Built (step 0).** `Combat.credit` records it as it happens, and
+`resolve_outcome` hands a copy back as `result.credit`:
+`{hero_id: {"kills": [bestiary id…], "downed_by": [{"dtype", "by", "team"}…],
+"revived_by": [hero id…]}}`. `_apply_damage` takes the blow's `source`; a
+hazard's burn and a death save name nobody and credit nobody.
+
+### One event, several outcomes — and not the same one for everybody
+
+An event does not hand out a trait; it rolls on a small **outcome table**, and
+every hero it touched rolls on their own. Two heroes downed by the same fire
+giant can walk away one Fire-tempered and one Burn-shy, and a third who only
+watched can come out of it with nothing at all. That is the CK stress event:
+the same thing happens to everybody, and who they are decides what it does to
+them.
+
+```jsonc
+// data/traits.json, beside the traits themselves
+"events": {
+  "downed_by_fire": {
+    "who": "the downed",                               // or "the witnesses", "the party", "the killer"
+    "outcomes": [
+      {"trait": "fire-tempered", "weight": 30, "lean": {"brave": 20, "craven": -15}},
+      {"trait": "burn-shy",      "weight": 30, "lean": {"craven": 20, "brave": -15, "calm": -10}},
+      {"trait": "scarred",       "weight": 15},
+      {"trait": "",              "weight": 25, "lean": {"calm": 15}}  // walks it off
+    ]
+  }
+}
+```
+
+- **Weights, leaned by who you are.** Each `lean` adds to an outcome's weight
+  when the hero has that trait (temperament mostly, but any trait may lean:
+  a hero already *Burn-shy* is likelier to go further than to recover). A
+  weight never goes under 0.
+- **"Nothing" is an outcome.** Most events should mostly do nothing, or every
+  hero is a list of scars by level five. The empty row is what keeps a trait
+  worth reading when it does land.
+- **A trait already held is re-rolled as "nothing"**, and a family at its cap
+  (§2) drops the rows it cannot take before the roll.
+- **Some outcomes remove.** `{"lose": "burn-shy"}` is a row like any other — the
+  cure for a fear can itself be a roll, on the event that ought to cure it.
+- **Applied, never asked** (§10, decided): the after-action page and the camp
+  card *tell* the player what the event did; there is no accept/decline.
+
+**Seeding.** Every roll is seeded off the event and the hero
+(`hash("trait|%s|%s|%d" % [hero_id, event_id, world_minutes])`), so a reload
+cannot reroll the scar the player did not want, and two heroes in one event
+roll independently.
 
 ### A first catalogue
 
 Enough to test the vocabulary on every axis the issue names — location,
 element, attack type, event. Numbers are placeholders until the sweep (§9).
 
-**Personality** (pick one at creation; opposed pairs):
+**Temperament** (pick one at creation; opposed pairs):
 
 | trait | gives | costs | opposes |
 |---|---|---|---|
@@ -278,18 +328,24 @@ element, attack type, event. Numbers are placeholders until the sweep (§9).
 | Street-raised | +2 persuasion/haggle and +1 AC on `city-square` | −2 survival in the wild |
 | Night-owl | +1 to hit at `night` | −1 initiative by day |
 
-**Marks** (earned; the *element* axis; one event, two outcomes weighted by personality):
+**Marks** (earned; the *element* axis; each event an outcome table as above,
+every row but the empty one shown):
 
-| event | outcome A ("tempered") | outcome B ("afraid") | cure for B |
-|---|---|---|---|
-| downed by `fire` | **Fire-tempered**: `ward` fire 3 | **Burn-shy**: −1 to hit vs a foe that deals fire | down a fire-dealer yourself |
-| downed by `cold` | **Frost-hardened**: `ward` cold 3 | **Chilled**: −1 initiative on `frozen-cave` | a long rest at an inn |
-| downed by `lightning`/`thunder` | **Storm-struck**: +1 DEX saves | **Storm-shy**: −1 AC at `night` in the open | kill the caster type |
-| poisoned 3 times | **Venom-proof**: `save_adv` vs poisoned | — | — |
-| downed by one faction twice | — | **Haunted by <faction>**: −1 to hit vs them | clear one of their lairs |
+| event (who rolls) | outcomes | leans |
+|---|---|---|
+| downed by `fire` (the downed) | **Fire-tempered** (`ward` fire 3) · **Burn-shy** (−1 to hit vs a fire-dealer; cured by downing one) · **Scarred** (+2 intimidation) · nothing | Brave → tempered, Craven → shy, Calm → nothing |
+| downed by `cold` (the downed) | **Frost-hardened** (`ward` cold 3) · **Chilled** (−1 initiative on `frozen-cave`; an inn's long rest) · nothing | Brave → hardened, Craven → chilled |
+| downed by `lightning`/`thunder` (the downed) | **Storm-struck** (+1 DEX saves) · **Storm-shy** (−1 AC at `night` in the open) · nothing | as fire |
+| poisoned a third time (the poisoned) | **Venom-proof** (`save_adv` vs poisoned) · **Weak stomach** (−1 CON saves) · nothing | Wrathful → venom-proof |
+| downed by one faction twice (the downed) | **Haunted by <faction>** (−1 to hit vs them; cured by clearing one of their lairs) · **Grudge: <faction>** (+1 damage vs them, −1 AC vs them) · nothing | Craven → haunted, Wrathful → grudge |
+| an ally died (every hero who saw it) | **Shaken** (wound) · **Vengeful** (+1 to hit vs the killer's faction, 5 days) · **Hardened** (+1 WIS saves) · nothing | Calm → nothing, Wrathful → vengeful, Craven → shaken |
+| brought back from 0 (the revived) | **Hard to kill** (after the third: advantage on death saves) · **Grateful** (+10 baseline with the reviver) · nothing | Generous → grateful |
+| a lair cleared (the party) | **Delver** (+1 to hit on lair boards) · nothing | Curious → delver |
 
-Brave leans A (say 70/30), Craven leans B, everyone else 50/50 — the same
-"who you are weights the fallout" as CK's stress events.
+The same event, different heroes: in a fight where a fire giant drops Vera
+(Brave) and Pike (Craven) and Ilsa (Calm) watches, Vera most likely comes out
+Fire-tempered, Pike most likely Burn-shy, and Ilsa most likely nothing — but
+any of them can land anywhere on their table.
 
 **Banes** (earned; the *attack type / foe* axis): ten killing blows on one
 bestiary `type` or `faction` — *Orc-bane*, *Undead-hunter*, *Dragon-slayer*
@@ -306,7 +362,7 @@ death saves); *Veteran* (twenty won fights: +1 initiative); *Blade-sworn* /
 | wound | from | gives | heals |
 |---|---|---|---|
 | Wounded | downed and failed a death save | −1 to hit, −1 AC | a long rest at an inn, or 3 days |
-| Shaken | an ally died beside you | −1 to all saves | 5 days; Calm heroes shed it in 2 |
+| Shaken | the "an ally died" table | −1 to all saves | 5 days; Calm heroes shed it in 2 |
 | Maimed | two failed death saves in one fight | −5 ft speed | a healer in a city (`Downtime` / `SettlementVisit.work_healer`) |
 
 `until` on the trait row carries the world-minute it lapses, the way
@@ -315,7 +371,7 @@ death saves); *Veteran* (twenty won fights: +1 initiative); *Blade-sworn* /
 ## 7. Opinion — the part that makes it Crusader Kings
 
 `PartyOpinion.baseline()` gains one more term beside `SAME_TEMPER` and
-`TEMPER_GRUDGE`: **+5 per personality trait two heroes share, −10 per opposed
+`TEMPER_GRUDGE`: **+5 per temperament two heroes share, −10 per opposed
 pair between them** (Brave and Craven do not get on). Drift already pulls every
 pair toward its baseline (`DRIFT_PER_DAY`), so this needs no new machinery —
 two Wrathful fighters will warm to each other on the road, and a Greedy rogue
@@ -329,19 +385,25 @@ because it looks deliberate.
 
 ## 8. Showing it
 
-- **Character creation** — a step, or a row on the background step: pick one
-  personality (a chip per trait, the opposed one greyed) and an origin
-  (defaulted from the background).
-- **Profile page** (`scenes/profile/profile.gd`) — a Traits panel beside
+- **Character creation** — the player picks (§10, decided): a step, or a row
+  on the background step, "Personality traits" — one temperament (a chip per
+  trait, the opposed one greyed) and an origin (defaulted from the
+  background, changeable).
+- **Heroes from an older save** — `traits` reads `[]`, and the first time the
+  party page opens with such a hero on it, the same pick is offered once
+  (§10, decided). A flag on the character (`traits_offered`) stops it asking
+  twice, and closing it without choosing still sets the flag — the offer is an
+  offer, not a gate.
+- **Profile page** (`scenes/profile/profile.gd`) — a "Personality traits" panel beside
   Features (~406), each trait's name, its `text` and a line per effect ("+1 AC
   in the marsh"), and for a wound or a fear, what cures it.
 - **Party page** — a trait chip line on the roster row (`_summary_label`
   ~599); the Relations block names the trait behind a pull ("Vera and Pike —
   cold (−18): Greedy and Generous").
-- **Combat card** (`scenes/combat_card.gd`) — the traits *live right now*
-  (whose `when` holds on this board) as chips, with a tooltip. **Naming
-  collision:** the card already has a row headed "Traits" that means non-spell
-  verbs (~180). One of the two has to be renamed (§10, Q1).
+- **Combat card** (`scenes/combat_card.gd`) — a "Personality traits" row: the
+  ones *live right now* (whose `when` holds on this board) as chips, with a
+  tooltip. The card's existing "Traits" row (non-spell verbs, ~180) keeps its
+  name; the two headings differ by the word that matters.
 - **After-action page** — one line per gain or loss, under the hero's card
   ("Brenna came back from the fire **Fire-tempered**"); a picture per mark
   later, the way each calling has one.
@@ -350,15 +412,24 @@ because it looks deliberate.
 
 Each step is one PR, green on its own, and each is playable without the next.
 
-0. **Hero resistances reach the fight.** Separate from traits, but traits
-   depend on it: `Adapter.to_combatant` never copies `sheet.resistances` /
-   `sheet.immunities` into `c.resist` / `c.immune` (it does for monsters,
-   `from_monster` ~309). A dwarf's poison resistance and a tiefling's fire
-   resistance show on the profile page and do nothing in combat. Fixing it
-   changes balance, so it wants its own sweep and its own PR, and it should
-   land before `ward` is designed against it.
+0. **The fight tells the truth — BUILT (2026-09-23).** Three gaps the hook
+   survey found, fixed before anything is designed on top of them
+   (`tests/test_combat_credit.gd`):
+   - *Hero resistances reach the fight.* `Adapter.to_combatant` never copied
+     `sheet.resistances` / `sheet.immunities` into `c.resist` / `c.immune`
+     (`from_monster` always did), so a dwarf's poison resistance showed on the
+     profile page and did nothing in combat. The presets are all human, so
+     `Regions.ref_score` and every sweep anchored on them are unchanged; a
+     player party with a dwarf, a tiefling, a dragonborn or an aasimar is a
+     little sturdier than it was, by exactly what the rules say.
+   - *The odds chip agrees with the roll.* `Combat.to_hit_bonus()` is the one
+     sum both `hit_chance` and `resolve_attack` use — it now counts
+     `bonus_to_hit` statuses, a condition's d20 penalty and a rival's bicker,
+     and a rally shows as advantage. Only Bardic Inspiration stays off the
+     chip: it is a die rolled when it is spent.
+   - *The fight says who did what.* `Combat.credit` / `result.credit` (§6).
 1. **Model, save, creation, the static half.** `data/traits.json` (the
-   personality and origin rows), `core/traits.gd`, `ch.traits` through
+   temperament and origin rows), `core/traits.gd`, `ch.traits` through
    `CharacterSave`, the creation pick, `spec.where`, the fight-start stamp
    (§5.1), the profile panel. Tests: save round-trip incl. a pre-traits save;
    a Marsh-bred hero's AC in a marsh fight vs a downs fight.
@@ -367,8 +438,9 @@ Each step is one PR, green on its own, and each is playable without the next.
    shape of `sweep_party_opinion.gd` measures the win-rate movement of each
    trait, and the numbers in `data/traits.json` get their measurement in
    capitals, like every other balance number in the repo.
-3. **Earning.** `result.credit`, `Traits.after_fight`, marks, banes and
-   wounds, the after-action line, the cures.
+3. **Earning.** `Traits.after_fight` over `result.credit`, the outcome tables
+   (§6) with their leans, marks, banes and wounds, the after-action line, the
+   cures.
 4. **The road and the fire.** `skill_bonus` and the three check sums (§5.3),
    the opinion terms (§7), a camp beat when a trait is gained ("Pike hasn't
    slept since the fire").
@@ -376,27 +448,23 @@ Each step is one PR, green on its own, and each is playable without the next.
    so a trait that softlocks or crashes a run is caught the way everything
    else is.
 
-## 10. Questions for the owner before step 1
+## 10. Decided (the owner, 2026-09-23)
 
-1. **What are they called on screen?** "Traits" is taken on the combat card
-   (non-spell verbs). Options: rename that row "Abilities" and keep *Traits*
-   for these; or call these *Temperament* / *Marks* / *Nature*.
-2. **Does the player choose, or does the sheet?** Proposed: the player picks
-   one personality and one origin at creation. The alternative is rolling
-   them off the background, CK-style, with a reroll.
-3. **Can the player refuse a mark?** Proposed: no — earned traits are rolled
-   (seeded, weighted by personality) and applied, because a scar you can
-   decline is a menu, not a scar. The courtship precedent (asked, never
-   rolled) is the other way to go, for the good/bad fork only.
-4. **Stress?** CK3's stress meter is what makes a trait *cost* something when
-   you act against it (a Craven hero ordered to hold the line). It would be a
-   second meter per hero beside HP and exhaustion. Proposed: not in this
-   design; revisit once traits exist and we see whether they feel inert.
-5. **Heroes in old saves.** Proposed: they keep `traits: []` and are offered
-   the creation pick once, the first time the party page opens. The
-   alternative is to seed one silently off `hash("traits|%s" % ch.id)` and
-   the background.
-6. **Can a trait be lost to death or retirement for the others?** A hero who
-   saw a friend die gets *Shaken*; should the *bond* traits (a pair who were
-   lovers) carry something permanent? Proposed: later, with the relations
-   pass.
+1. **Name:** "Personality traits", for the whole system. The combat card's
+   existing "Traits" row keeps its name.
+2. **The player picks** one temperament and one origin at creation — yes.
+3. **An earned trait cannot be refused** — no accept/decline; it is rolled
+   (seeded, leaned by who the hero is) and applied, and the game says so.
+4. **No stress meter** — no.
+5. **Heroes from an older save are offered the pick once** — yes (§8).
+6. **Bond traits — possibly yes, later.** Noted, not designed: when a hero's
+   lover or closest friend (`PartyOpinion` `lovers` / `bonded`) dies, the
+   survivor rolls on a table of their own that can leave something
+   *permanent* — *Widowed*, *Oath-sworn* against the killer's faction,
+   *Hollow* — rather than the five-day *Shaken* anyone gets. It wants the
+   relations pass it depends on and the outcome tables (step 3) first.
+
+And one from the owner that shapes §6: **an event can have different outcomes,
+and not the same one for every person in it** — every event is an outcome
+table, every hero it touched rolls on it separately, and who they are leans
+the roll.

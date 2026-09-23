@@ -8488,43 +8488,70 @@ the whole script — and a test script that never compiles never reaches
   A card that could change the fight would need every guard the action bar has.
 - Nothing on the card is clickable except the ✕ and the chips' tooltips.
 
-## Traits — who a hero is, and what the road has done to them (2026-09-23, #176, design note)
+## Personality traits — designed, and the three gaps under them fixed (2026-09-23, #176)
 
-**Nothing here is built.** Issue #176 asks for character traits that a hero
-starts with and that events give them, and the owner's pointer is Crusader
-Kings: buffs and debuffs keyed on where a fight is, on the element a blow
-carries, on the kind of thing across the board. The design is
-`docs/superpowers/specs/2026-09-23-traits-design.md`. Traits live on the
-character (`ch.traits`, through `CharacterSave`) because a hero carries them
-across the barracks, presets and co-op. They come in five families:
-personality in opposed pairs, origin, marks, banes and wounds. Each trait is a
-row in `data/traits.json` with a small closed `when`/`gives` vocabulary and a
-cap of ±2 on any one roll. It does most of its work through hooks that
-already exist:
-- the potion path in `Adapter.to_combatant` for anything known at fight start
-  (biome, board, night, band);
-- the four places `PartyOpinion` already reaches into `core/combat.gd` for
-  anything decided per roll (foe faction or type, damage type in or out,
-  bloodied);
-- `Campaign.skill_bonus` on the road;
-- `PartyOpinion.baseline()` for CK's opinion from shared and opposed traits.
+Issue #176 asks for character traits that a hero starts with and that events
+give them. The owner points to Crusader Kings: buffs and debuffs keyed on
+where a fight is, on the element a blow carries, on the kind of thing across
+the board. The design is `docs/superpowers/specs/2026-09-23-traits-design.md`,
+agreed with the owner the same day. The system is called **"Personality
+traits"** on screen. The player picks a temperament and an origin at creation,
+and a hero from an older save is offered that pick once. There is no stress
+meter. Earned traits are rolled and applied, never asked. **An event is an
+outcome table that every hero it touched rolls on separately**, weighted by
+who they are. So the same fire giant can leave one hero Fire-tempered,
+another Burn-shy, and the one who watched with nothing.
 
-Surveying the hooks turned up three facts:
-- **A hero's own resistances never reach the fight.** `to_combatant` never
-  copies `sheet.resistances` / `immunities` into the Combatant, although
-  `from_monster` does this for monsters. A dwarf's poison resistance shows on
-  the profile page and does nothing in combat. This is step 0 of the spec's
-  build order.
-- **The odds chip is incomplete.** `Combat.hit_chance` leaves out
-  `bonus_to_hit` and the bicker penalty, so the odds chip already disagrees
-  with the roll.
-- **The fight result does not credit anyone.** It knows which monsters died
-  but not who killed them, and who went down but not what put them there. An
-  earned trait needs both.
+Traits live on the character (`ch.traits`, through `CharacterSave`). They come
+in five families:
+- temperament, in opposed pairs that feed `PartyOpinion.baseline()` the way
+  CK's opinion does;
+- origin, keyed on biome, board and night;
+- marks, keyed on damage type;
+- banes, keyed on a foe's bestiary faction or type;
+- wounds, which heal.
+
+Each trait is a row in `data/traits.json` with a closed `when`/`gives`
+vocabulary and a cap of ±2 on any one roll. Almost every hook already exists:
+- the potion path in `Adapter.to_combatant` for what is known at fight start;
+- the four places `PartyOpinion` reaches into `core/combat.gd` for what is
+  decided per roll;
+- `Campaign.skill_bonus` on the road.
+
+**Built: step 0, the three gaps the hook survey found**
+(`tests/test_combat_credit.gd`, 26 checks):
+- **A hero's own resistances reach the fight.** `to_combatant` copies
+  `sheet.resistances` / `immunities` into `c.resist` / `c.immune`, as
+  `from_monster` always did for a statblock. Before this, a dwarf's poison
+  resistance showed on the profile page and a dwarf took poison in full. The
+  presets are all human, so `Regions.ref_score` and every sweep anchored on
+  them do not move.
+- **The odds chip agrees with the roll.** `Combat.to_hit_bonus()` is now the
+  one sum that `hit_chance` and `resolve_attack` both add. The chip used to
+  count only the weapon's bonus and the high ground. It now also counts:
+  - a `bonus_to_hit` status;
+  - a condition's d20 penalty;
+  - a rival's bicker.
+  A rally shows as advantage. Only Bardic Inspiration is left off, because it
+  is a die rolled when it is spent.
+- **The fight says who did what.** `Combat.credit` is keyed by hero and holds
+  three lists:
+  - `kills`, by bestiary id;
+  - `downed_by`, each entry giving the damage type and the attacker;
+  - `revived_by`.
+  `_apply_damage` now takes the blow's `source`. `resolve_outcome` returns a
+  copy of the record as `result.credit`. `tests/sweep_party_opinion.gd`'s
+  override of `_apply_damage` takes the new argument.
+
+The combat card now shows a dwarf hero's "Resists poison", because the card
+has always read `c.resist` and a hero's was empty.
 
 ### Still open
 
-- Everything; the spec's §9 is the build order and §10 the six questions to
-  answer before step 1 (what the screen calls them — the combat card's
-  "Traits" row is taken; picked or rolled at creation; whether a mark can be
-  refused; stress; heroes in old saves; bond traits after a death).
+- Steps 1–5 of the spec's build order: the model, save and creation pick;
+  the per-roll hooks with their sweep; the outcome tables; the road and the
+  camp; the robots.
+- Bond traits: when a lover or closest friend dies, something permanent. The
+  owner said "possibly yes" and it is noted in the spec's §10, not designed.
+- A summoned creature's kill credits nobody (a `ponytail:` in
+  `core/combat.gd`). Credit its caller if a trait ever counts it.

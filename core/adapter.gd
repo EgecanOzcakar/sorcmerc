@@ -143,6 +143,19 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 	c.pb = s.proficiency_bonus
 
 	c.saves = s.saves.duplicate()
+	# #176: a dwarf's poison, a tiefling's fire, a dragonborn's breath-kin, the
+	# few subclasses that grant one. The sheet has always resolved them
+	# (resolve.gd's "resistance" grants) and the profile page has always shown
+	# them, but nothing copied them onto the Combatant, so combat.gd's
+	# _damage_after_defenses never saw them and a hero took every one in full.
+	# from_monster does the same for a statblock. The presets are all human, so
+	# Regions.ref_score and every sweep anchored on them do not move.
+	for t in s.resistances:
+		if not String(t).to_lower() in c.resist:
+			c.resist.append(String(t).to_lower())
+	for t in s.immunities:
+		if not String(t).to_lower() in c.immune:
+			c.immune.append(String(t).to_lower())
 	c.save_dc = int(s.spellcasting.get("save_dc", 0))
 	c.athletics = int(s.skills.get("athletics", 0))
 	c.acro = int(s.skills.get("acrobatics", 0))
