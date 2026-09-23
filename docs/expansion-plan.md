@@ -9281,3 +9281,79 @@ Tests:
   board's hazards burn without a save today.
 - **Renowned's "that faction's bands seek you out"** is not designed.
 - **Step 5** (the robots playing with traits held from the start) is next.
+
+## Relations web — the party page draws who gets on with whom (2026-09-23)
+
+The owner asked for opinion between characters to be "less text oriented".
+The party page used to list one line per active pair, e.g. "Vera Kord and
+Pike Sallow — rivals (-44)", which is six lines for a party of four. It now
+draws a web instead (`scenes/party/relations_web.gd`).
+
+The page's layout changed with it, in three owner requests: "split relations
+and marching orders", then "minimize orders tab to the bottom" and "relations
+tab should match the active squad tab horizontal dimension".
+- **Relations** now have a card of their own under the Marching column, as
+  wide as it, since the card is about the same four people. It is hidden
+  for a party of one.
+- **The bottom strip** is kept to two lines. The first holds the purse,
+  stash and map figure. The second holds the standing orders, with the pace
+  note beside them, cut to one line with the whole sentence on hover.
+- **The Callings** add a third line only once one has been told, also cut
+  to fit, each on its own line in the tooltip.
+
+- **Faces.** The marching party's busts sit in a ring, in marching order,
+  with a first name on each face's outer side. Two members stand side by
+  side, three form a triangle, four form the corners of a box. Headless,
+  the class glyph stands in for a bust.
+- **Lines.** There is one line per pair, and it shows the band three ways:
+  - Colour: red rivals, frost-blue cold, grey neutral, green warm, gold
+    bonded, rose lovers.
+  - Shape: a zigzag, dashes, dots, a solid line, and a double line for
+    lovers, so the band still reads without colour.
+  - Weight: |score|.
+- **Badges.** A mark sits on each line (⚡ ❄ ☀ ∞ ♥; neutral gets none). A
+  gilt spark is added when a personality trait is part of the pull (#176
+  step 4's `opinion_terms`). On the two crossing diagonals, the badge sits
+  at 30% of the way along, so the two never overlap.
+- **Hover.** The text is still there on hover:
+  - Over a line, the tooltip is that pair's `describe()`, with the band,
+    the score and the traits behind it.
+  - Over a face, it lists every pair that person is in, and the rest dims.
+- **Key.** A short key of the six strokes runs along the bottom.
+- **Callings.** The Callings are still text, one line in the bottom strip
+  (`CallingsRow`).
+
+**The bench first.** The owner also asked to "make substitute characters
+easier to see on the left". The Roster column used to list everyone in
+roster order, so the marching four came first and the substitutes sat below
+the fold. It now has two groups:
+- **"On the bench · N"** comes first. Each substitute's row has a verdigris
+  bar down its left edge; the picked row keeps the gilt one. While a
+  marching slot is free, the row's To party is the primary button. An empty
+  bench says where a new face comes from.
+- **"Marching · N"** follows, in marching order, a step quieter, since the
+  right-hand column already shows them.
+
+The web only reads from `PartyOpinion` and writes nothing, so no rule
+changed.
+
+Screenshots: `docs/shots/relations-web.png` (every band at once),
+`relations-web-hover.png` (Pike hovered) and `party-bench.png` (three on the
+bench, heading the column), from `tests/shot_relations_web.gd`.
+Tests: `tests/test_party_screen.gd`'s new `_bench_first` checks the bench's
+head and count, the substitutes straight after it, the marching head and
+order, the primary To party, the Relations card under the marching column
+and as wide as it, and the one-line pace note. Its relations section
+now reads the web.
+It checks one edge per pair, the soured pair's band, that the tooltip on a
+line equals `describe()`, that a face's tooltip lists each of its pairs, and
+that a party of one draws no block. `test_world_callings` reads
+`CallingsRow`.
+
+### Still open
+
+- **Only the party page draws it.** The profile could show one hero's lines
+  on their own, and the fireside card could flash the line that just moved.
+- **No history.** The web shows where a pair stands, not which way it is
+  heading. `party.relations` keeps no past scores to draw an arrow from.
+- **Bench members aren't drawn,** because only the marching party is.

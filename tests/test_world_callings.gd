@@ -113,7 +113,7 @@ func _init() -> void:
 	screen.party = party
 	root.add_child(screen)
 	await process_frame
-	var rel: Array = labels(_named(screen, "RelationsRow"))
+	var rel: Array = labels(_named(screen, "CallingsRow"))
 	check(rel.size() > 0 and rel[0] == "Callings" and rel.size() > 1 and hero.cname in rel[1] and line in rel[1],
 		"the party page's Callings caption and line: %s" % str(rel.slice(0, 2)))
 	screen.queue_free()
