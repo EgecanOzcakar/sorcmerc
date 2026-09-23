@@ -237,5 +237,5 @@ static func sneak_past(lair, party, rng = null) -> Dictionary:
 		% [ch.cname, nat, bonus, SNEAK_DC, lair.sname]) if ok else (
 		"%s can't settle them (Animal Handling %d+%d vs DC %d) — they attack."
 		% [ch.cname, nat, bonus, SNEAK_DC])
-	return {"ok": ok, "char_id": char_id, "cname": ch.cname, "nat": nat, "bonus": bonus,
+	return {"ok": ok, "char_id": char_id, "cname": ch.cname, "skill": SNEAK_SKILL, "nat": nat, "bonus": bonus,
 		"dc": SNEAK_DC, "text": line}

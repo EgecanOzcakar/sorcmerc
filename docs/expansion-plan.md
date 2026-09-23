@@ -8865,3 +8865,187 @@ The cap stays at ±2, and each live trait's `_measured` line carries its row.
 - `save_fail_chance` (the UI's save odds) does not count traits, or the other
   save bonuses it already skipped before this.
 - A summoned creature's hits carry no traits of its summoner.
+
+## Live rolls, part 1 — the road's card rolls the die before it says what happened (2026-09-23)
+
+The owner: "these trait rolls, and campaign map rolls, settlement interactions
+rolls need to be all rolled live to hype up interest". Until now, every check
+off the fight board was rolled and applied in `core/` and then reported as a
+finished line: "Vera Kord · Survival 14+5 vs DC 13 ✓ made it". The rules
+already keep the natural on every result dict, and the roll is seeded off the
+thing it belongs to. So a screen can replay the real roll without rolling
+anything, and reloading still cannot reroll it.
+
+**The die** (`scenes/dice_roll.gd`) is a Control that draws a d20 the way
+every table knows it: a hexagon with its facets and the number on the front
+face. It plays in four beats:
+1. It tumbles for about three quarters of a second at normal speed, clicking
+   on every face. The faces it passes through are counted off the tick, not
+   drawn from an RNG, so the show is the same every time it is watched.
+2. It lands on the face the rules rolled, with a bounce and a sting:
+   `save_made`, `save_failed`, or `crit` on a natural 20.
+3. The tally comes up: "16 + 5 = 21 vs DC 13 — made it".
+4. It holds for a beat so that line can be read.
+
+The verdict is always the caller's `ok` and never re-decided. The road ignores
+naturals and a carouse honours them, and the die must not disagree with the
+rules. A roll with advantage or disadvantage can pass both dice, and the other
+one is drawn beside the kept one. `Settings.anim()` scales the timing, and
+SORCMERC_FAST lands it on the first frame, which is what every test and robot
+sees.
+
+**The card** (`scenes/world/event_card.gd`) is what the road, the approach's
+result, a landmark and now a camp's watch all report on. It rolls in two
+stages:
+- **While the die is in the air**, the card shows only what was known before
+  the dice: the caption, the title, and "Vera Kord rolls Athletics (+5)
+  against DC 13." It holds back the picture (the outcome's own frame), the
+  prose (what happened) and the chips (what it cost).
+- **When the die lands**, the card opens as it always was.
+
+A press or a click while the die is in the air lands it and never skips the
+result. The next press is the way back to the road. An event with no check,
+and every run under SORCMERC_FAST, gets the open card on the first frame,
+exactly as before.
+
+**The camp's watch** used to keep its roll inside the prose, as "(Survival
+14+5 vs DC 13)", so its card drew no roll line. It now hands the card the roll
+(`_watch_roll` in `world.gd`) for the live die, and the card's prose drops the
+parenthesis. The HUD line keeps the numbers. The Alarm spell's automatic
+wake-up is not a roll and stays prose.
+
+Tests: `tests/test_dice_roll.gd` (21 checks). It covers the die fast and live,
+the card holding the outcome back, a press landing the die rather than
+skipping it, and the open card under SORCMERC_FAST. `tests/test_event_card.gd`
+now sets SORCMERC_FAST itself, because it checks the open card and failed when
+run by hand without it. Pictures: `docs/shots/live-roll-*.png`, from
+`tests/shot_live_roll.gd`.
+
+### Still open
+
+- Part 2: the settlement's actions (persuade, haggle, investigate, work at the
+  healer's, steal) and downtime (carouse, gamble). They report into the visit
+  log, not on a card.
+- Part 3: the quick checks on the map (forage, a lair's or a landmark's
+  search, sneaking past a lair), and the linear campaign's identify and
+  opportunity checks.
+- There is no dice-rattle sound. The tumble clicks the UI tick. A proper
+  rattle is an entry in `tools/gen_audio.py` and `tests/test_audio.gd`'s
+  `BASE_SFX_IDS`.
+- `SettlementVisit.check_preview`'s odds assume a natural 1 always misses and
+  a 20 always hits. The rolls it previews do not follow that rule, so its "%
+  to make it" is off by up to 5 points at either end.
+
+## Live rolls, parts 2 and 3 — a town's actions and the map's quick checks roll where their line goes (2026-09-23)
+
+Part 1 put the live die on the road's card. The owner asked for every roll
+off the board to be live, and the checks that don't report on a card still
+rolled in silence: the settlement's actions and downtime (in the visit panel's
+log line), and the map's quick checks (in the HUD bar). Both now use the same
+`DiceRoll`, replaying the roll `core/` already made. Nothing on screen rolls
+anything, and a reload still cannot reroll a result.
+
+**In town** (`_say_rolled` in `scenes/world/world.gd`), steal, persuade,
+haggle, investigate, working at the healer's, carouse and gamble roll the die
+in a popup over the shop page. It first rolled inline, in the log line's
+place, and the page jumped under it. The owner preferred "a dice popup in shop
+screen rather than moving the elements in the shop page", so the page now
+stays exactly where it was. The popup has no frame or background of its own
+("no background color, only darken everything except the dice and result"):
+the whole screen darkens, and only the die and its tally stay bright in the
+middle (`_dice_popup`).
+- While it is in the air the action buttons wait. A click anywhere, Enter,
+  Space or Esc lands it and never skips the result.
+- After it lands comes the line, the success sting, and anything that would
+  give the roll away: a contact met, a complication's card, the haggled
+  prices (`apply_haggle` itself now runs on landing).
+- A panel rebuilt under a die still in the air (a page change, closing the
+  visit) says the held line rather than losing it (`_flush_visit_roll`).
+- Achievement toasts wait while any die is in the air (`DiceRoll.in_air()`),
+  because "Talked Down" popping up mid-tumble told the player the haggle had
+  worked.
+
+`core/`: every result names its skill and roller (`skill`, `cname`). Persuade
+and haggle keep both dice under advantage, so the die can draw the one that
+didn't count. `SettlementVisit.check_preview`'s odds now follow the plain
+`nat + bonus >= DC` rule the checks actually use. Part 1's still-open note
+said the preview assumed a natural 1 always missed and a 20 always hit.
+
+**On the map** (`_map_roll`), foraging on the march, a lair's search, a
+landmark's search and sneaking past a lair roll their own way. The owner: "in
+the campaign map, the background darkening shouldnt work, and the dice should
+be more to the bottom, popping up, showing the result. and disappearing after
+2-3 seconds by fading".
+- Nothing is darkened. The die pops up from the bottom, just above the HUD
+  bar (scale and fade in over `MAP_POP`, 0.25 s).
+- It rolls without the town's drop from above (`DiceRoll.drop_in = false`).
+- On landing, the HUD line (and its sting and follow-up) is said. The die
+  stays up with its verdict for `MAP_LINGER`, then fades out over
+  `MAP_FADE`: about 2.5 s of result in all.
+- A click on the die lands it. The die doesn't pause the clock or take the
+  mouse: a forage rolls while the party marches, and a click on the map still
+  gives a march order.
+- A new check replaces a die that is still fading at once.
+
+`docs/shots/live-roll-map.gif` is recorded from the real world scene by
+`tests/gif_map_roll.gd`, under Godot's movie maker at a fixed 25 fps. Only one is in the air at a time; a second check lands the first. A
+failed sneak's follow-up, the lair's own prompt, waits for the landing too, so
+the die says "missed" before the lair notices you. `WorldLairs.sneak_past`'s
+result now names its skill.
+
+**Bigger and flashier** (the owner: "make the dice larger and animations
+flashy"). The die is 150 px, up from 92. Everything runs off one clock
+(`_t`, stepped by the tween, 2.55 s at normal speed):
+- **The tumble** (1.05 s): the die drops in from above, spins fast and spins
+  down, wobbling, with a motion trail. The faces tick slower as it settles,
+  and it never shows the face it will land on before it lands.
+- **Touchdown:** the die slams, springs back, and flashes white. Two
+  shockwave rings go out, rays spear from it, and sparks fly off.
+  - A miss shakes, and its sparks are red shards that fall.
+  - A natural 20 that counted is gold and keeps a slow sunburst turning
+    behind it.
+- **The verdict:** a big word ("MADE IT!", "MISSED", "NATURAL 20!",
+  "NATURAL 1") slams in from twice its size, and the arithmetic slides up
+  under it.
+
+The angles, the shake and the faces are all counted off the clock and the
+natural, never an RNG. `DiceRoll.HEIGHT` is what a caller sizes it to; the
+road's card and the popup both use it. The GIF is `docs/shots/live-roll.gif`,
+from `tests/gif_dice_roll.gd`, which steps the clock by hand one frame at a
+time.
+
+`DiceRoll` used to set its size and mouse filter in `_ready()`, which runs
+after the caller's own settings and quietly undid them. Both popups collapsed
+to a thin strip while they still had frames, and a click on the map's die
+never landed it. The defaults
+are now set in `_init()`.
+
+Under SORCMERC_FAST (every test and robot), and at the Instant pace, every one
+of these says its line on the first frame, exactly as before.
+
+Tests: `tests/test_dice_roll.gd` gains the verdict words and the no-early-face
+check (28 checks). `tests/test_live_rolls_world.gd` (22 checks, renamed from
+`test_live_rolls_town.gd`), covering both halves:
+- an investigate's die holds back the line, and the buttons wait for it
+- Enter lands it: the line is said, the buttons come back, and the visit's
+  log is the line
+- the die is in a popup, not in the page, and the popup goes when it lands
+- a panel rebuilt under a steal's die in the air keeps the held
+  line
+- a lair search's die holds the HUD line, darkens nothing, and sits near the
+  bottom; landed, it says the line, stays up, then fades out on its own
+- the FAST path is the old behaviour
+
+Pictures: `docs/shots/live-roll-town-{rolling,landed}.png` and
+`docs/shots/live-roll-map.png`, from `tests/shot_live_roll_town.gd`.
+
+### Still open
+
+- The linear campaign's (`SORCMERC_LINEAR_CAMPAIGN=1`) identify and
+  opportunity checks return a bool, not a roll, so there is nothing to replay.
+  Making them live means those checks returning the result dict first.
+- The HUD's gold and the visit panel's purse update when the rules apply the
+  result, which is before the die lands. A success that pays gold therefore
+  shows in the corner a beat early. Holding the purse display is the fix.
+- A lair found by a search is marked on the map at once, under the die.
+- Still no dice-rattle sound (see part 1).

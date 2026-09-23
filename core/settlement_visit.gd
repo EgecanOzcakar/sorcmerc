@@ -105,12 +105,24 @@ static func persuade(s, m: Dictionary, party, rng = null) -> Dictionary:
 	if rng == null:
 		rng = RNG.new(maxi(1, absi(hash("persuade|%s|%d" % [s.id, int(s.last_visited)]))))
 	var bonus: int = c.skill_bonus(char_id, PERSUADE_SKILL)
-	var nat: int = int(Dice.d20(rng, _talk_mode(ch, party))["nat"])
+	var mode: int = _talk_mode(ch, party)
+	var roll: Dictionary = Dice.d20(rng, mode)
+	var nat: int = int(roll["nat"])
 	var ok: bool = nat + bonus >= dc
 	var line := ("%s talks them into it, grudgingly (Persuasion %d+%d vs DC %d)."
 		% [ch.cname, nat, bonus, dc]) if ok else (
 		"%s can't budge them (Persuasion %d+%d vs DC %d)." % [ch.cname, nat, bonus, dc])
-	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": dc, "char_id": char_id, "text": line}
+	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": dc, "char_id": char_id, "text": line,
+		"cname": ch.cname, "skill": PERSUADE_SKILL, "dice": roll["dice"], "mode": _mode_word(mode)}
+
+# The screen's word for a roll's mode: both dice are kept on the result
+# (`dice`) so the live roll can show the one that did not count beside the
+# one that did (scenes/dice_roll.gd).
+static func _mode_word(mode: int) -> String:
+	match mode:
+		Dice.ADV: return "adv"
+		Dice.DIS: return "dis"
+	return ""
 
 # A refused market opened up for this visit only — same markup math as any
 # other trade at this opinion, just with the outright refusal lifted (still
@@ -143,13 +155,18 @@ static func check_preview(party, skill: String, dc: int, adv := false) -> String
 	if ch == null:
 		return "Nobody in the party can attempt this."
 	var bonus: int = c.skill_bonus(char_id, skill)
-	var need: int = clampi(dc - bonus, 2, 20)   # a natural 1 always misses; a 20 always lands
-	var p: float = (21 - need) / 20.0
+	# The checks this previews are plain nat + bonus >= DC — no natural-1 miss,
+	# no natural-20 hit (persuade, haggle, investigate, steal). The preview used
+	# to clamp the need to 2..20 as if they had both, and so promised 95% on a
+	# roll that could not fail and 5% on one that could not pass.
+	var need: int = dc - bonus
+	var p: float = clampf((21 - need) / 20.0, 0.0, 1.0)
 	if adv:
 		p = 1.0 - (1.0 - p) * (1.0 - p)
 	var name: String = String(Catalog.skills().get(skill, {}).get("name", skill.capitalize()))
-	return "%s rolls %s %+d vs DC %d — needs %d+ on the d20%s, %d%% to make it." % [
-		ch.cname, name, bonus, dc, need, " (advantage)" if adv else "", int(round(p * 100.0))]
+	var needs: String = "can't fail" if need <= 1 else ("out of reach" if need > 20 else "needs %d+ on the d20" % need)
+	return "%s rolls %s %+d vs DC %d — %s%s, %d%% to make it." % [
+		ch.cname, name, bonus, dc, needs, " (advantage)" if adv else "", int(round(p * 100.0))]
 
 const HAGGLE_SKILL := "persuasion"
 const HAGGLE_DC := 13
@@ -174,7 +191,9 @@ static func haggle(m: Dictionary, party, rng = null) -> Dictionary:
 	if rng == null:
 		rng = RNG.new(maxi(1, absi(hash("haggle|%s|%d" % [String(s.id) if s != null else "", int(m.get("steps", 0))]))))
 	var bonus: int = c.skill_bonus(char_id, HAGGLE_SKILL)
-	var nat: int = int(Dice.d20(rng, _talk_mode(ch, party))["nat"])
+	var mode: int = _talk_mode(ch, party)
+	var roll: Dictionary = Dice.d20(rng, mode)
+	var nat: int = int(roll["nat"])
 	var ok: bool = nat + bonus >= HAGGLE_DC
 	var mult := (1.0 - HAGGLE_DISCOUNT) if ok else (1.0 + HAGGLE_PENALTY)
 	if ok:
@@ -183,7 +202,8 @@ static func haggle(m: Dictionary, party, rng = null) -> Dictionary:
 		% [ch.cname, nat, bonus, HAGGLE_DC, int(HAGGLE_DISCOUNT * 100)]) if ok else (
 		"%s oversells it and gets a cold shoulder (Persuasion %d+%d vs DC %d) — prices just got worse."
 		% [ch.cname, nat, bonus, HAGGLE_DC])
-	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": HAGGLE_DC, "mult": mult, "char_id": char_id, "text": line}
+	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": HAGGLE_DC, "mult": mult, "char_id": char_id, "text": line,
+		"cname": ch.cname, "skill": HAGGLE_SKILL, "dice": roll["dice"], "mode": _mode_word(mode)}
 
 # Rescales the market's own markup and every already-priced shelf item by
 # `mult` — in place, on the live visit dict, not a fresh market() roll (a
@@ -225,7 +245,7 @@ static func investigate_battle(s, m: Dictionary, party, rng = null) -> Dictionar
 		"%s finds nothing worth taking (Investigation %d+%d vs DC %d)."
 		% [ch.cname, nat, bonus, INVESTIGATE_DC])
 	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": INVESTIGATE_DC, "gold": gold,
-		"char_id": char_id, "text": line}
+		"char_id": char_id, "text": line, "cname": ch.cname, "skill": INVESTIGATE_SKILL}
 
 # --- stealing (T30's opportunity_check shape) ------------------------------
 const STEAL_SKILL := "sleightofhand"
@@ -557,7 +577,8 @@ static func work_healer(s, party, rng = null) -> Dictionary:
 		% [caster.cname, spell, ch.cname, nat, bonus, WORK_DC, pay]) if ok else (
 		"%s's %s gets them in the door, but %s is more hindrance than help (Medicine %d+%d vs DC %d) — %d ◉ for the trouble."
 		% [caster.cname, spell, ch.cname, nat, bonus, WORK_DC, pay])
-	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": WORK_DC, "pay": pay, "char_id": ch.id, "text": line}
+	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": WORK_DC, "pay": pay, "char_id": ch.id, "text": line,
+		"cname": ch.cname, "skill": WORK_SKILL}
 
 static func spell_name(sid: String) -> String:
 	return String(Catalog.spell(sid).get("name", sid.capitalize()))
@@ -659,4 +680,4 @@ static func steal(s, party, world, m: Dictionary = {}, rng = null) -> Dictionary
 	# The cost is said where it is incurred, not discovered on the next visit.
 	line += "  The %s will hear of it: opinion %d." % [String(s.faction).capitalize(), int(delta)]
 	return {"ok": ok, "nat": nat, "bonus": bonus, "dc": STEAL_DC, "gold": gold,
-		"char_id": char_id, "text": line}
+		"char_id": char_id, "text": line, "cname": ch.cname, "skill": STEAL_SKILL}

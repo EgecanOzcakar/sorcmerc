@@ -62,6 +62,8 @@ const WorldThreat = preload("res://core/world_threat.gd")
 const Regions = preload("res://core/regions.gd")
 const Travel = preload("res://core/travel.gd")
 const EventCard = preload("res://scenes/world/event_card.gd")
+const DiceRoll = preload("res://scenes/dice_roll.gd")
+const Settings = preload("res://core/settings.gd")
 const Approach = preload("res://core/approach.gd")
 const ApproachCard = preload("res://scenes/world/approach_card.gd")
 const StoryCard = preload("res://scenes/world/story_card.gd")
@@ -1496,8 +1498,10 @@ func _night_jump(foe) -> bool:
 	_camp_msg.text = ("%s doesn't catch it in the dark (%s %d+%d vs DC %d) — %s are on the party before anyone can draw!" % [
 		watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"], foe.id.capitalize()]) if who != "" \
 		else "Nobody is watching the dark — %s are on the party before anyone can draw!" % foe.id.capitalize()
-	_camp_card("jumped", "Jumped in the dark", "bad", _camp_msg.text,
-		func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
+	var rolled: Dictionary = _watch_roll(watch)
+	_camp_card("jumped", "Jumped in the dark", "bad",
+		"%s doesn't catch it in the dark — %s are on the party before anyone can draw!" % [watch.get("cname", ""), foe.id.capitalize()] if not rolled.is_empty() else _camp_msg.text,
+		func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"), "", rolled)
 	return false
 
 # The roster the encountered party fights with. Scaler takes a *theme*, not a
@@ -2398,10 +2402,10 @@ func _place_action() -> void:
 		var roll: Dictionary = Landmarks.search(l, party)
 		if roll.is_empty():
 			return
-		Sound.play_sfx("search_found" if roll["ok"] else "search_nothing")
-		_lair_msg.text = ("%s finds it — %s is here (Survival %d+%d vs DC %d)." % [
+		_map_roll(roll, _lair_msg, ("%s finds it — %s is here (Survival %d+%d vs DC %d)." % [
 			roll["cname"], l.sname, roll["nat"], roll["bonus"], roll["dc"]]) if roll["ok"] else (
-			"Nothing this time (Survival %d+%d vs DC %d)." % [roll["nat"], roll["bonus"], roll["dc"]])
+			"Nothing this time (Survival %d+%d vs DC %d)." % [roll["nat"], roll["bonus"], roll["dc"]]),
+			"search_found" if roll["ok"] else "search_nothing")
 		return
 	_open_place(l)
 
@@ -2448,13 +2452,10 @@ func _lair_action() -> void:
 		var roll := WorldLairs.search(l, party)
 		if roll.is_empty():
 			return
-		Sound.play_sfx("search_found" if roll["ok"] else "search_nothing")
-		if roll["ok"]:
-			_lair_msg.text = "%s finds the tracks — %s is here (Survival %d+%d vs DC %d)." % [
-				roll["cname"], l.sname, roll["nat"], roll["bonus"], roll["dc"]]
-		else:
-			_lair_msg.text = "Nothing this time (Survival %d+%d vs DC %d)." % [
-				roll["nat"], roll["bonus"], roll["dc"]]
+		_map_roll(roll, _lair_msg, ("%s finds the tracks — %s is here (Survival %d+%d vs DC %d)." % [
+			roll["cname"], l.sname, roll["nat"], roll["bonus"], roll["dc"]]) if roll["ok"] else (
+			"Nothing this time (Survival %d+%d vs DC %d)." % [roll["nat"], roll["bonus"], roll["dc"]]),
+			"search_found" if roll["ok"] else "search_nothing")
 		return
 	await _delve(l)
 
@@ -2479,14 +2480,14 @@ func _lair_sneak_action() -> void:
 		party.add_gold(int(loot.get("gold", 0)))
 		Quest.record_lair_cleared(party, l.id)
 		_calling_check("lair_cleared", l.id, _leader())
-		_lair_msg.text = "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))]
+		_map_roll(roll, _lair_msg, "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))])
 	else:
-		_lair_msg.text = String(roll["text"])
 		# Roused by the attempt itself, not as a side effect of the fight it
 		# falls into: that is what makes this one attempt rather than one per
 		# visit, and it is the moment the D1 window should start counting from.
 		WorldLairs.mark_entered(l, world.clock.elapsed)
-		await _lair_action()
+		# The delve waits for the die: it is how the roll went.
+		_map_roll(roll, _lair_msg, String(roll["text"]), "", func(): _lair_action())
 
 func _lair_settle_action() -> void:
 	var l: World.Lair = _settle_target
@@ -2667,8 +2668,8 @@ func _check_forage() -> void:
 	var roll := WorldForage.check(party, RNG.new(maxi(1, absi(hash("forage|%d" % int(world.clock.elapsed))))))
 	if roll.get("ok", false):
 		party.add_gold(int(roll["gold"]))
-		_camp_msg.text = "%s forages along the way (%s %d+%d vs DC %d) — +%d gold." % [
-			roll["cname"], String(roll["skill"]).capitalize(), roll["nat"], roll["bonus"], roll["dc"], int(roll["gold"])]
+		_map_roll(roll, _camp_msg, "%s forages along the way (%s %d+%d vs DC %d) — +%d gold." % [
+			roll["cname"], String(roll["skill"]).capitalize(), roll["nat"], roll["bonus"], roll["dc"], int(roll["gold"])])
 
 # --- D4: how the party meets a band ---------------------------------------
 #
@@ -2952,6 +2953,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if _combat != null:
 		return
+	# A town's die in the air: Enter, Space or Esc lands it (and never leaves
+	# the town under it).
+	if is_instance_valid(_visit_dice) and _visit_dice.is_playing() \
+			and event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE, KEY_ESCAPE]:
+		accept_event()
+		_visit_dice.finish()
+		return
 	# #106: the party screen opened at the inn's counter sits OVER the visit.
 	# Esc there used to fall through to the visit's own bindings underneath —
 	# town square, then Leave — so "Back to the inn" put the party on the map
@@ -3082,6 +3090,7 @@ func bug_context() -> Dictionary:
 	return ctx
 
 func _close_visit() -> void:
+	_flush_visit_roll()   # the popup is the world's child, not the panel's: it would outlive the town
 	_left = _visit.get("settlement")
 	_visit = {}
 	if _visit_panel != null:
@@ -3169,10 +3178,8 @@ func _buy_camp_kit() -> void:
 func _steal() -> void:
 	var r: Dictionary = Visit.steal(_visit["settlement"], party, world, _visit)
 	_visit["stolen"] = true
-	if bool(r.get("ok", false)):
-		Sound.play_sfx("pickup")
 	_build_visit_panel()
-	_say(String(r.get("text", "Nobody here has the hands for it.")))
+	_say_rolled(r, String(r.get("text", "Nobody here has the hands for it.")), "pickup")
 
 # T9x: one attempt per visit, same shape as _steal(). Only shown when the
 # market actually refused to trade (see _build_visit_panel).
@@ -3202,7 +3209,7 @@ func _persuade() -> void:
 		_visit = Visit.persuade_into_trading(_visit["settlement"], _visit)
 		_carry_visit_flags(before, _visit)
 	_build_visit_panel()
-	_say(String(r.get("text", "Nobody here will hear you out.")))
+	_say_rolled(r, String(r.get("text", "Nobody here will hear you out.")))
 
 # T9x: haggling — the mirror of persuade(), for a market that's already
 # open. One attempt per visit; moves this visit's prices for better or
@@ -3212,11 +3219,9 @@ func _work_healer() -> void:
 		return
 	var r: Dictionary = Visit.work_healer(_visit["settlement"], party)
 	_visit["worked"] = true
-	if bool(r.get("ok", false)):
-		Sound.play_sfx("buy")
 	_autosave()
 	_build_visit_panel()
-	_say(String(r.get("text", "The healer has no work for you.")))
+	_say_rolled(r, String(r.get("text", "The healer has no work for you.")), "buy")
 
 func _haggle() -> void:
 	if _visit.get("haggled", false):
@@ -3224,15 +3229,18 @@ func _haggle() -> void:
 		return
 	var r: Dictionary = Visit.haggle(_visit, party)
 	_visit["haggled"] = true
-	if not r.is_empty():
+	_build_visit_panel()
+	# The new prices wait for the die: a shelf already reading "x0.85" says how
+	# the roll went before it has landed.
+	_say_rolled(r, String(r.get("text", "Nobody here is in the mood to talk price.")), "buy", func():
+		if r.is_empty():
+			return
 		Visit.apply_haggle(_visit, float(r["mult"]))
 		if bool(r["ok"]):
-			Sound.play_sfx("buy")
 			_cheer()
 		else:
 			_visit["sour"] = true   # a bad ask sours the room, and the face, for the visit
-	_build_visit_panel()
-	_say(String(r.get("text", "Nobody here is in the mood to talk price.")))
+		_build_visit_panel())
 
 # T9x: one attempt per visit. Only shown when a fight resolved near this
 # settlement recently (market()'s own `battle` flag).
@@ -3242,10 +3250,8 @@ func _investigate() -> void:
 		return
 	var r: Dictionary = Visit.investigate_battle(_visit["settlement"], _visit, party)
 	_visit["investigated"] = true
-	if bool(r.get("ok", false)):
-		Sound.play_sfx("pickup")
 	_build_visit_panel()
-	_say(String(r.get("text", "There's nobody here who'd know where to look.")))
+	_say_rolled(r, String(r.get("text", "There's nobody here who'd know where to look.")), "pickup")
 
 # O9 item 2: the inn. Time is the cost — see SettlementVisit.rest — and the extra
 # hours restock the shelf, so the market is re-read afterwards.
@@ -3379,26 +3385,45 @@ func _make_camp() -> void:
 	# T9x: name the check and the roll, not just the outcome — same
 	# "Skill nat+bonus vs DC" shape every other overworld check in this file uses.
 	var skill_name: String = String(watch.get("skill", "")).capitalize()
+	# The card rolls the watch live (scenes/dice_roll.gd): it gets the roll as
+	# keys and says the rest in words; the HUD line keeps the numbers.
+	var rolled: Dictionary = _watch_roll(watch)
 	if watch["ok"]:
 		_camp_msg.text = "%s hears them coming (%s %d+%d vs DC %d) — the party gets the drop first." % [
 			watch.get("cname", "Someone"), skill_name, watch["nat"], watch["bonus"], watch["dc"]]
-		_camp_card("watch", "Something in the dark", "good", _camp_msg.text,
-			func(): _on_event_ack(); await _launch_combat(foe, true, false))
+		_camp_card("watch", "Something in the dark", "good",
+			"%s hears them coming — the party gets the drop first." % watch.get("cname", "Someone") if not rolled.is_empty() else _camp_msg.text,
+			func(): _on_event_ack(); await _launch_combat(foe, true, false), "", rolled)
 	else:
 		var who: String = watch.get("char_id", "")
 		_camp_msg.text = ("%s doesn't catch it in time (%s %d+%d vs DC %d) — the camp is jumped in the night!" % [
 			watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"]]) if who != "" \
 			else "Nobody's keeping watch — the camp is jumped in the night!"
-		_camp_card("jumped", "The camp is jumped", "bad", _camp_msg.text,
-			func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
+		_camp_card("jumped", "The camp is jumped", "bad",
+			"%s doesn't catch it in time — the camp is jumped in the night!" % watch.get("cname", "") if not rolled.is_empty() else _camp_msg.text,
+			func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"), "", rolled)
 
 # The night, on the same card the road uses: what the camp did, pictured
 # (assets/generated/camp-<night|watch|jumped>.png — or `art`, for a card that
 # has no picture of its own: the fireside and the courtship wear the night),
 # and — for an ambush — the fight waits behind the button rather than under
 # the label.
-func _camp_card(id: String, title: String, kind: String, text: String, then: Callable, art := "") -> void:
-	_card({"id": "camp-" + id, "title": title, "kind": kind, "text": text, "art": art if art != "" else "camp-" + id}, then)
+func _camp_card(id: String, title: String, kind: String, text: String, then: Callable, art := "", roll := {}) -> void:
+	var e := {"id": "camp-" + id, "title": title, "kind": kind, "text": text, "art": art if art != "" else "camp-" + id}
+	e.merge(roll)   # a watch's roll: the card rolls it live before it says what happened
+	_card(e, then)
+
+# The keys a card rolls live from (scenes/world/event_card.gd), off a watch
+# check — or none, when nobody rolled: nobody on watch, or the Alarm spell
+# that woke them whatever the dice said.
+func _watch_roll(watch: Dictionary) -> Dictionary:
+	if String(watch.get("char_id", "")) in ["", "alarm"]:
+		return {}
+	var out := {}
+	for k in ["ok", "char_id", "cname", "skill", "nat", "bonus", "dc"]:
+		if watch.has(k):
+			out[k] = watch[k]
+	return out
 
 # The road's card over a paused map, `then` its ack. The camp's night wears
 # it, and so do a calling's telling and resolution — those pictured by the
@@ -3517,11 +3542,202 @@ func _say(text: String) -> void:
 	if is_instance_valid(_visit_log):
 		_visit_log.text = text
 
+# Live rolls in town (scenes/dice_roll.gd): the action has already happened —
+# core/ rolled it and moved the gold — and this is the telling. The die rolls
+# in a popup over the darkened page (the owner: "a dice popup in shop screen
+# rather than moving the elements in the shop page" — it first rolled inline,
+# in the line's place, and the page jumped under it; see _dice_popup). The
+# panel's buttons wait, and when it lands the popup goes, the line is said,
+# the success sting plays and `then` runs (a card that would otherwise give the roll away before it
+# landed). A result with no roll, and every run under SORCMERC_FAST, says it
+# at once, exactly as _say always did.
+var _visit_dice: Control = null
+var _visit_die_popup: Control = null
+var _visit_pending: Dictionary = {}
+
+func _say_rolled(r: Dictionary, text: String, sfx := "", then := Callable()) -> void:
+	if not r.has("nat") or Settings.anim() >= Settings.FAST or not is_instance_valid(_visit_log):
+		if sfx != "" and bool(r.get("ok", false)):
+			Sound.play_sfx(sfx)
+		_say(text)
+		if then.is_valid():
+			then.call()
+		return
+	_visit_pending = {"text": text, "sfx": sfx, "then": then, "ok": bool(r.get("ok", false))}
+	_say("")
+	var pop: Array = _dice_popup(true)
+	var overlay: Control = pop[0]
+	var d = pop[1]
+	_visit_die_popup = overlay
+	_visit_dice = d
+	if is_instance_valid(_visit_panel):
+		_disable_all(_visit_panel)   # one thing at a time: the room is watching the dice
+	d.landed.connect(_visit_landed)
+	var skill := String(r.get("skill", ""))
+	d.play({"nat": int(r.get("nat", 1)), "bonus": int(r.get("bonus", 0)), "dc": int(r.get("dc", 10)),
+		"ok": bool(r.get("ok", false)), "dice": r.get("dice", []), "mode": String(r.get("mode", "")),
+		"label": "%s — %s" % [String(Catalog.skills().get(skill, {}).get("name", skill.capitalize())),
+			String(r.get("cname", ""))]})
+
+# The town's live-roll popup: no frame and no panel of its own — the whole
+# screen darkened, and only the die and its tally left bright in the middle
+# (the owner: "no background color, only darken everything except the dice and
+# result"). `block`: the overlay takes every click, so a click anywhere lands
+# the die and none reaches a button under it (the map's die is its own thing —
+# see _map_roll). Returns [overlay, die]; the caller frees the overlay.
+const DICE_DIM := 0.7
+
+func _dice_popup(block: bool) -> Array:
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP if block else Control.MOUSE_FILTER_IGNORE
+	add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, DICE_DIM)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(dim)
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(centre)
+	var d = DiceRoll.new()
+	d.custom_minimum_size = Vector2(560, DiceRoll.HEIGHT)
+	d.mouse_filter = Control.MOUSE_FILTER_STOP
+	d.tooltip_text = "Click to land it"
+	centre.add_child(d)
+	var land := func(e):
+		if e is InputEventMouseButton and e.pressed:
+			d.finish()
+	d.gui_input.connect(land)
+	if block:
+		overlay.gui_input.connect(land)
+	return [overlay, d]
+
+# The map's own quick checks — a lair's or a landmark's search, sneaking past
+# a lair, a forage on the march — report on the HUD bar, not on a card. Their
+# die is not the town's popup: the owner, "in the campaign map, the background
+# darkening shouldnt work, and the dice should be more to the bottom, popping
+# up, showing the result, and disappearing after 2-3 seconds by fading". So it
+# pops up over the map just above the HUD bar with nothing darkened, rolls, and
+# the line (and its sting, and `then`) is said when it lands; the die stays up
+# with its verdict for MAP_LINGER, then fades out on its own over MAP_FADE —
+# about 2.5 s of result in all. Nothing here pauses the clock or takes the
+# mouse — a forage rolls on the march, and a click on the map still marches;
+# a click on the die lands it. One at a time — a second check lands the first
+# and takes its place at once. SORCMERC_FAST says the line at once, as the HUD
+# always did.
+const MAP_POP := 0.25          # seconds at anim() == 1: up from the bottom
+const MAP_LINGER := 0.9        # after `landed` (itself 0.9 s after the tally)...
+const MAP_FADE := 0.6          # ...then gone
+const MAP_BOTTOM := 64.0       # clear of the HUD bar
+
+var _map_die: Control = null   # the die's box: what pops, fades and is freed
+var _map_dice: Control = null  # the DiceRoll in it
+var _map_pending: Dictionary = {}
+
+func _map_roll(roll: Dictionary, label: Label, text: String, sfx := "", then := Callable()) -> void:
+	_land_map_roll()
+	if is_instance_valid(_map_die):
+		_map_die.queue_free()   # a die still fading gives way to the new one
+	_map_die = null
+	_map_dice = null
+	if not roll.has("nat") or Settings.anim() >= Settings.FAST:
+		label.text = text
+		if sfx != "":
+			Sound.play_sfx(sfx)
+		if then.is_valid():
+			then.call()
+		return
+	label.text = ""
+	var k := 1.0 / maxf(Settings.anim(), 0.01)
+	var d = DiceRoll.new()
+	d.drop_in = false
+	d.size = Vector2(560, DiceRoll.HEIGHT)
+	d.mouse_filter = Control.MOUSE_FILTER_STOP
+	d.tooltip_text = "Click to land it"
+	d.gui_input.connect(func(e):
+		if e is InputEventMouseButton and e.pressed:
+			d.finish())
+	var box := Control.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.size = d.size
+	box.position = Vector2((size.x - box.size.x) * 0.5, size.y - box.size.y - MAP_BOTTOM)
+	box.pivot_offset = Vector2(box.size.x * 0.5, box.size.y)
+	box.add_child(d)
+	add_child(box)
+	box.scale = Vector2(0.4, 0.4)
+	box.modulate.a = 0.0
+	var pop := box.create_tween().set_parallel()
+	pop.tween_property(box, "scale", Vector2.ONE, MAP_POP * k).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	pop.tween_property(box, "modulate:a", 1.0, MAP_POP * 0.6 * k)
+	_map_die = box
+	_map_dice = d
+	_map_pending = {"label": label, "text": text, "sfx": sfx, "then": then}
+	d.landed.connect(_land_map_roll)
+	var skill := String(roll.get("skill", "survival"))
+	d.play({"nat": int(roll["nat"]), "bonus": int(roll.get("bonus", 0)), "dc": int(roll.get("dc", 10)),
+		"ok": bool(roll.get("ok", false)), "dice": roll.get("dice", []), "mode": String(roll.get("mode", "")),
+		"label": "%s — %s" % [String(Catalog.skills().get(skill, {}).get("name", skill.capitalize())),
+			String(roll.get("cname", ""))]})
+
+# The held line said, and the die left to linger and fade — on landing, or
+# when another quick check comes along before this one has.
+func _land_map_roll() -> void:
+	if _map_pending.is_empty():
+		return
+	var p := _map_pending
+	_map_pending = {}
+	if is_instance_valid(_map_die):
+		var box := _map_die
+		var k := 1.0 / maxf(Settings.anim(), 0.01)
+		var out := box.create_tween()
+		out.tween_interval(MAP_LINGER * k)
+		out.tween_property(box, "modulate:a", 0.0, MAP_FADE * k)
+		out.tween_callback(box.queue_free)
+	var label: Label = p["label"]
+	if is_instance_valid(label):
+		label.text = String(p["text"])
+	if String(p["sfx"]) != "":
+		Sound.play_sfx(String(p["sfx"]))
+	var then: Callable = p["then"]
+	if then.is_valid():
+		then.call_deferred()
+
+func _visit_landed() -> void:
+	_flush_visit_roll()
+	if not _visit.is_empty():
+		_build_visit_panel()   # the buttons back, and the line the die was holding
+
+# The held line said, its sting and its follow-up run, and the popup gone — on
+# landing, or when anything rebuilds or closes the panel under a die still in
+# the air (what it was about to say must not go with it).
+func _flush_visit_roll() -> void:
+	if _visit_pending.is_empty():
+		return
+	var p := _visit_pending
+	_visit_pending = {}
+	if is_instance_valid(_visit_dice) and _visit_dice.landed.is_connected(_visit_landed):
+		_visit_dice.landed.disconnect(_visit_landed)
+	_visit_dice = null
+	if is_instance_valid(_visit_die_popup):
+		_visit_die_popup.queue_free()
+	_visit_die_popup = null
+	BugReport.note(String(p["text"]))
+	if not _visit.is_empty():
+		_visit["log"] = String(p["text"])
+	if String(p["sfx"]) != "" and bool(p["ok"]):
+		Sound.play_sfx(String(p["sfx"]))
+	var then: Callable = p["then"]
+	if then.is_valid():
+		then.call_deferred()
+
 # T9x: a settlement is a set of separate screens now (town square / market /
 # inn / notice board), not one panel with everything stacked in it — this is
 # just the shell (frame, title, footer) and the page dispatch; each _build_*
 # below only owns its own content between the title and the footer.
 func _build_visit_panel() -> void:
+	_flush_visit_roll()   # a die still in the air says its line before its panel goes
 	if _visit_panel != null:
 		_visit_panel.queue_free()
 	# D7: a supply_item job's progress is a reading of the pack, not an event,
@@ -4103,17 +4319,18 @@ func _train(ch, feat_id: String) -> void:
 func _carouse() -> void:
 	var r: Dictionary = Downtime.carouse(party, world, _visit["settlement"])
 	var c: Dictionary = _complicate(String(r.get("complication", "")), int(r.get("cost", 0)))
-	_downtime_done(r, "Nobody in the company is fit for a night out.")
-	if bool(r.get("contact", false)):
-		_card({"id": "downtime-carouse", "title": "A night on the town", "kind": "good", "ok": true,
-			"text": String(r["text"]), "gold": int(r.get("coin", 0)), "art": "event-downtime-carouse"}, _on_inn_card_ack)
-	_show_complication(c)
+	# The night's card (a contact) or its story (a complication) waits for the
+	# die: it would say how the roll went before the roll had landed.
+	_downtime_done(r, "Nobody in the company is fit for a night out.", "rest", func():
+		if bool(r.get("contact", false)):
+			_card({"id": "downtime-carouse", "title": "A night on the town", "kind": "good", "ok": true,
+				"text": String(r["text"]), "gold": int(r.get("coin", 0)), "art": "event-downtime-carouse"}, _on_inn_card_ack)
+		_show_complication(c))
 
 func _gamble(stake: int) -> void:
 	var r: Dictionary = Downtime.gamble(party, _visit["settlement"], stake)
 	var c: Dictionary = _complicate(String(r.get("complication", "")), stake)
-	_downtime_done(r, "There is no game on tonight.", "buy")
-	_show_complication(c)
+	_downtime_done(r, "There is no game on tonight.", "buy", func(): _show_complication(c))
 
 func _craft(item_id: String) -> void:
 	_downtime_done(Downtime.craft(party, world, _visit["settlement"], item_id, _visit), "Nobody here will let you at the bench.")
@@ -4121,13 +4338,11 @@ func _craft(item_id: String) -> void:
 # The row's answer, the way _work_healer gives its own: a save (a lost stake
 # and a failed night move the purse as surely as a won one), the panel again,
 # the line under the row.
-func _downtime_done(r: Dictionary, fallback: String, sfx := "rest") -> void:
-	if bool(r.get("ok", false)):
-		Sound.play_sfx(sfx)
+func _downtime_done(r: Dictionary, fallback: String, sfx := "rest", then := Callable()) -> void:
 	if not r.is_empty():
 		_autosave()
 	_build_visit_panel()
-	_say(String(r.get("text", fallback)))
+	_say_rolled(r, String(r.get("text", fallback)), sfx, then)
 
 # A story (Downtime.complication): the consequence lands before the panel
 # under the card is rebuilt — the tab's gold, the insult's opinion; the bad

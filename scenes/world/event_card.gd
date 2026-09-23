@@ -30,6 +30,8 @@ extends Control
 
 const Catalog = preload("res://core/rules/catalog.gd")
 const Icons = preload("res://core/ui_icons.gd")
+const Settings = preload("res://core/settings.gd")
+const DiceRoll = preload("res://scenes/dice_roll.gd")
 
 # The only thing the world screen has to listen for. Emitted exactly once per
 # show_event(), whichever of the three ways out the player takes.
@@ -101,6 +103,16 @@ var _e: Dictionary = {}
 var _btn: Button = null
 var _dismissed := true        # nothing to dismiss until show_event() says so
 
+# The live roll (scenes/dice_roll.gd). While it tumbles the card shows only
+# what was known before the dice were thrown — who is rolling, what, against
+# what DC — and holds back the picture (it is the outcome's frame), the prose
+# (it says what happened) and the chips (what it cost). The die lands, the
+# card opens. Under SORCMERC_FAST, and for an event with no roll, it is open
+# from the first frame, exactly as it always was.
+const ROLL_HINT := "Rolling…   (Enter to land it)"
+var _dice: Control = null
+var _rolling := false
+
 # Everything drawn, in absolute coordinates, produced by _layout() and replayed
 # by _draw(). One producer means the panel and the button placed on top of it
 # cannot drift apart — the same contract site_screen.gd's _rows()/_xs() keeps.
@@ -143,8 +155,46 @@ func show_event(e: Dictionary) -> void:
 	_dismissed = false
 	visible = true
 	_ensure_button()
+	_rolling = _has_roll() and Settings.anim() < Settings.FAST
+	if _dice != null and is_instance_valid(_dice):
+		_dice.queue_free()
+		_dice = null
+	if _rolling:
+		_dice = DiceRoll.new()
+		add_child(_dice)
+		_dice.landed.connect(_reveal)
+	_btn.text = ROLL_HINT if _rolling else DISMISS_TEXT
+	_layout()
+	if _rolling:
+		_dice.play({"nat": int(_num("nat")), "bonus": int(_num("bonus")), "dc": int(_num("dc")),
+			"ok": _flag("ok"), "dice": _e.get("dice", []), "mode": _s("mode")})
+	queue_redraw()
+
+
+# Whether the die is still in the air. For the world screen and the tests.
+func rolling() -> bool:
+	return _rolling
+
+
+# The die has landed: open the whole card.
+func _reveal() -> void:
+	if not _rolling:
+		return
+	_rolling = false
+	if _btn != null and is_instance_valid(_btn):
+		_btn.text = DISMISS_TEXT
+	if _dice != null and is_instance_valid(_dice):
+		_dice.queue_free()
+		_dice = null
 	_layout()
 	queue_redraw()
+
+
+# A press while the die is in the air lands it; it never skips the result.
+func _land_now() -> void:
+	if _dice != null and is_instance_valid(_dice):
+		_dice.finish()
+	_reveal()
 
 
 # --- what the dict says -----------------------------------------------------
@@ -236,6 +286,13 @@ func _cname() -> String:
 	return _s("cname")
 
 
+# The roll before it is rolled: "Vera Kord rolls Survival (+5) against DC 13."
+func _roll_ask() -> String:
+	var who := _cname()
+	return "%s rolls %s (%+d) against DC %d." % [who if who != "" else "The party",
+		_skill_label(), int(_num("bonus")), int(_num("dc"))]
+
+
 # --- layout -----------------------------------------------------------------
 
 func _ensure_button() -> void:
@@ -275,6 +332,8 @@ func _layout(art_h := -1.0) -> void:
 	_art_rect = Rect2()
 	if art_h < 0.0:
 		art_h = ART_H
+	if _rolling:
+		art_h = 0.0   # the picture is the outcome's frame: it waits for the die
 	if _art != null and art_h >= ART_MIN_H:
 		_art_rect = Rect2(tx, y, avail, art_h)   # panel-relative; moved with the ops below
 		y += art_h + BLOCK_GAP
@@ -285,6 +344,21 @@ func _layout(art_h := -1.0) -> void:
 		rel.append(_op(Vector2(tx, y), tline, Icons.FS_TITLE, Icons.COL_HEAD, avail))
 		y += LINE_GAP
 	y += BLOCK_GAP - LINE_GAP
+
+	if _rolling:
+		# Before the dice: who rolls, what, against what. The die goes in the
+		# gap below, as a Control of its own laid over the drawn panel.
+		var ask := _roll_ask()
+		for aline in _wrap(ask, Icons.FS_BODY, avail, 2):
+			y += Icons.FS_BODY
+			rel.append(_op(Vector2(tx, y), aline, Icons.FS_BODY, Icons.COL_TEXT, avail))
+			y += LINE_GAP
+		y += BLOCK_GAP
+		var die_top := y
+		y += DiceRoll.HEIGHT + BLOCK_GAP
+		y += BTN_H + PAD
+		_place(pw, y, rel, Rect2(tx, die_top, avail, y - die_top - BTN_H - PAD - BLOCK_GAP))
+		return
 
 	var text := _s("text", NO_TEXT)
 	for bline in _wrap(text, Icons.FS_BODY, avail, BODY_LINES):
@@ -365,6 +439,12 @@ func _layout(art_h := -1.0) -> void:
 		var less := _art_rect.size.y - over
 		_layout(less if less >= ART_MIN_H else 0.0)
 		return
+	_place(pw, ph, rel)
+
+
+# Centre the panel and move the relative ops, the button and (while rolling)
+# the die onto it. `die` is panel-relative.
+func _place(pw: float, ph: float, rel: Array, die := Rect2()) -> void:
 	var px := (size.x - pw) * 0.5
 	var py := maxf(MARGIN, (size.y - ph) * 0.5)
 	_panel = Rect2(px, py, pw, ph)
@@ -382,6 +462,9 @@ func _layout(art_h := -1.0) -> void:
 		var bw := maxf(BTN_MIN_W, minf(pw - PAD * 2.0, _btn.get_combined_minimum_size().x))
 		_btn.size = Vector2(bw, BTN_H)
 		_btn.position = Vector2(px + (pw - bw) * 0.5, py + ph - PAD - BTN_H)
+	if _dice != null and is_instance_valid(_dice) and die.size.x > 0.0:
+		_dice.position = die.position + _panel.position
+		_dice.size = die.size
 
 
 func _op(pos: Vector2, text: String, fs: int, col: Color, max_w: float) -> Dictionary:
@@ -457,6 +540,9 @@ func _input(event: InputEvent) -> void:
 	# close a town behind it.
 	if is_inside_tree():
 		accept_event()
+	if _rolling:
+		_land_now()   # the first press lands the die; the next one closes the card
+		return
 	_dismiss()
 
 
@@ -464,6 +550,9 @@ func _input(event: InputEvent) -> void:
 # room, and the world screen frees this card on the signal — a second emit would
 # be a resume on a clock that is already running.
 func _dismiss() -> void:
+	if _rolling:
+		_land_now()   # the button while the die is in the air lands it too
+		return
 	if _dismissed:
 		return
 	_dismissed = true

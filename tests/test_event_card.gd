@@ -89,6 +89,10 @@ func bad() -> Dictionary:
 
 
 func _init() -> void:
+	# This file checks the OPEN card — what it says once the die has landed.
+	# The live roll that comes first (scenes/dice_roll.gd) is tests/test_dice_roll.gd's;
+	# SORCMERC_FAST opens the card on the first frame, as it does for every robot.
+	OS.set_environment("SORCMERC_FAST", "1")
 	# --- a good event and a bad one both render, and read apart ------------
 	var g = card()
 	g.show_event(good())
