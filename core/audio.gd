@@ -18,21 +18,17 @@
 # to it fails compilation of the whole dependency chain. The statics no-op until the
 # autoload registers itself in _ready, which is exactly the headless behaviour we want.
 #
-# Assets are the WAVs tools/gen_audio.py writes. They are read with FileAccess and
-# turned into AudioStreamWAV by hand rather than load()ed, so no editor import
-# round-trip (.import files) is needed to run from source.
-#
-# Sample rate and channel count come out of each file's `fmt ` chunk rather than
-# being assumed, so a stereo bed and a mono one-shot at a different rate can sit
-# in the same directory and both play at the right speed. gen_audio.py's --rate
-# therefore needs no change here.
-# ponytail: swap to plain load() if these ever become real, editor-imported audio.
+# Assets are WAVs read straight off disk with AudioStreamWAV.load_from_file()
+# rather than load()ed, so no editor import round-trip (.import files) is needed
+# to run from source. That reader takes 8/16-bit PCM and 32-bit float, mono or
+# stereo, at any rate (it reads the `fmt ` chunk), and hands back 16-bit PCM.
+# It refuses WAVE_FORMAT_EXTENSIBLE, which is what ffmpeg writes for 24-bit:
+# export 32-bit float or 16-bit instead.
 extends Node
 
 const SFX_DIR := "res://assets/audio/sfx/"
 const BARK_DIR := "res://assets/audio/barks/"
 const MUSIC_DIR := "res://assets/audio/music/"
-const FALLBACK_MIX_RATE := 22050   # only if a file's fmt chunk is unreadable
 const FADE := 1.0            # seconds, bed crossfade and tension fade
 const BED_DB := -12.0        # the bed sits under everything
 const TENSION_DB := -9.0
@@ -231,40 +227,19 @@ static func _set_bus(bus: String, v: float) -> void:
 	AudioServer.set_bus_mute(i, v <= 0.0)
 	AudioServer.set_bus_volume_db(i, linear_to_db(clampf(v, 1.0, 100.0) / 100.0))
 
-# Read one of our own WAVs (16-bit PCM, mono or stereo) into an AudioStreamWAV,
-# cached. Rate and channel count come from the file's `fmt ` chunk.
-# Returns null if the file is missing or unreadable.
+# Read a WAV into an AudioStreamWAV, cached. Returns null if the file is missing
+# or unreadable. Whatever the file's depth, the stream comes back 16-bit PCM
+# (the engine's own conversion, no compression with default options).
 func _stream(path: String, looped: bool):
 	if _streams.has(path):
 		return _streams[path]
-	var bytes := FileAccess.get_file_as_bytes(path)
-	if bytes.size() < 44:
+	var s = AudioStreamWAV.load_from_file(path) if FileAccess.file_exists(path) else null
+	if s == null:
 		push_warning("audio: cannot read %s" % path)
-		_streams[path] = null
-		return null
-	var at := 12   # past "RIFF" + size + "WAVE"
-	var data := PackedByteArray()
-	var channels := 1
-	var rate := FALLBACK_MIX_RATE
-	while at + 8 <= bytes.size():
-		var id := bytes.slice(at, at + 4).get_string_from_ascii()
-		var size := bytes.decode_u32(at + 4)
-		if id == "fmt " and at + 16 <= bytes.size():
-			channels = maxi(1, bytes.decode_u16(at + 10))
-			rate = maxi(1, bytes.decode_u32(at + 12))
-		elif id == "data":
-			data = bytes.slice(at + 8, mini(at + 8 + size, bytes.size()))
-			break
-		at += 8 + size + (size & 1)
-	var s := AudioStreamWAV.new()
-	s.format = AudioStreamWAV.FORMAT_16_BITS
-	s.mix_rate = rate
-	s.stereo = channels >= 2
-	s.data = data
-	if looped:
+	elif looped:
 		# loop_end is in FRAMES, so a stereo file is data.size() / 4, not / 2.
 		s.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		s.loop_begin = 0
-		s.loop_end = data.size() / (2 * channels)
+		s.loop_end = s.data.size() / (4 if s.stereo else 2)
 	_streams[path] = s
 	return s

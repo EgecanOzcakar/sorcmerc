@@ -8,7 +8,7 @@ that every id the game asks for exists. This checks the things that are true or
 false about the *waveforms* and would otherwise only show up as a click in
 someone's headphones:
 
-  * 16-bit PCM, 1 or 2 channels        -- the only shape audio.gd's reader handles
+  * 16-bit PCM or 32-bit float, 1 or 2 channels -- what audio.gd's reader handles
   * no clipping, no DC offset          -- both audible, both easy to introduce
   * one-shots end near silence         -- otherwise the voice cuts off abruptly
   * beds are seam-continuous           -- a bed loops forever, so a step at the
@@ -20,21 +20,31 @@ import math
 import os
 import struct
 import sys
-import wave
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
 AUDIO = os.path.join(ROOT, "assets", "audio")
 
 
+# The stdlib `wave` module refuses IEEE float, so the two chunks that matter are
+# read by hand: tag 1 at 16 bits, or tag 3 at 32 (a float sample is already -1..1).
 def read(path):
-    with wave.open(path, "rb") as w:
-        ch, width, rate = w.getnchannels(), w.getsampwidth(), w.getframerate()
-        raw = w.readframes(w.getnframes())
-    if width != 2:
-        raise ValueError("sample width %d, expected 2" % width)
-    vals = struct.unpack("<%dh" % (len(raw) // 2), raw)
-    chans = [[vals[i] / 32768.0 for i in range(c, len(vals), ch)]
-             for c in range(ch)]
+    b = open(path, "rb").read()
+    at, fmt, raw = 12, None, b""
+    while at + 8 <= len(b):
+        cid, size = b[at:at + 4], struct.unpack_from("<I", b, at + 4)[0]
+        if cid == b"fmt ":
+            fmt = struct.unpack_from("<HHIIHH", b, at + 8)
+        elif cid == b"data":
+            raw = b[at + 8:at + 8 + size]
+        at += 8 + size + (size & 1)
+    tag, ch, rate, _, _, bits = fmt
+    if (tag, bits) == (1, 16):
+        vals = [v / 32768.0 for v in struct.unpack("<%dh" % (len(raw) // 2), raw)]
+    elif (tag, bits) == (3, 32):
+        vals = struct.unpack("<%df" % (len(raw) // 4), raw)
+    else:
+        raise ValueError("format tag %d at %d bits, expected 16-bit PCM or 32-bit float" % (tag, bits))
+    chans = [list(vals[c::ch]) for c in range(ch)]
     return chans, rate
 
 

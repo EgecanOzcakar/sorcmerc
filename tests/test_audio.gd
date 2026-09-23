@@ -76,6 +76,23 @@ func _init() -> void:
 			check(s.loop_end == frames, "bed %s loops over its whole length" % theme)
 			check(s.mix_rate >= 22050, "bed %s kept its sample rate" % theme)
 	check(a._stream("res://assets/audio/sfx/nope.wav", false) == null, "missing file -> null")
+	# 32-bit float is what a DAW or a sound library exports; it has to load too,
+	# and come out as the 16-bit PCM the loop maths above assumes.
+	var frames32 := 4800
+	var w := StreamPeerBuffer.new()
+	w.put_data("RIFF".to_ascii_buffer()); w.put_u32(36 + frames32 * 8)
+	w.put_data("WAVEfmt ".to_ascii_buffer()); w.put_u32(16)
+	w.put_u16(3); w.put_u16(2); w.put_u32(48000); w.put_u32(48000 * 8); w.put_u16(8); w.put_u16(32)
+	w.put_data("data".to_ascii_buffer()); w.put_u32(frames32 * 8)
+	for i in frames32 * 2:
+		w.put_float(0.5 * sin(i * 0.05))
+	var fw := FileAccess.open("user://f32.wav", FileAccess.WRITE)
+	fw.store_buffer(w.data_array)
+	fw.close()
+	var fl = a._stream("user://f32.wav", false)
+	check(fl != null and fl.stereo and fl.mix_rate == 48000 and fl.format == AudioStreamWAV.FORMAT_16_BITS
+		and fl.data.size() == frames32 * 4, "32-bit float wav loads as 16-bit stereo")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://f32.wav"))
 	# The other direction: a file nothing plays is a generation somebody paid
 	# for and nobody hears. Takes (id_2.wav) ride on their id.
 	var dir := DirAccess.open(Audio.SFX_DIR)
