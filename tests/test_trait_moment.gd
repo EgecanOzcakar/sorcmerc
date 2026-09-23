@@ -7,6 +7,7 @@
 extends SceneTree
 
 const TraitMoment = preload("res://scenes/world/trait_moment.gd")
+const Settings = preload("res://core/settings.gd")
 
 var _pass := 0
 var _fail := 0
@@ -32,7 +33,10 @@ func _init() -> void:
 	await test_fallbacks()
 	await test_nat20_and_unknown_kind()
 	OS.set_environment("SORCMERC_FAST", "")
+	var pace: float = Settings.current().anim_speed_multiplier
+	Settings.current().anim_speed_multiplier = 1.0   # a saved Instant pace is FAST by another door
 	await test_press_during_show_finishes_it_first()
+	Settings.current().anim_speed_multiplier = pace
 	print("test_trait_moment: %d passed, %d failed" % [_pass, _fail])
 	# A script that failed to compile runs no checks at all; that is a failure.
 	quit(1 if _fail > 0 or _pass == 0 else 0)

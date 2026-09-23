@@ -7,6 +7,7 @@
 extends SceneTree
 
 const DiceRoll = preload("res://scenes/dice_roll.gd")
+const Settings = preload("res://core/settings.gd")
 const EventCard = preload("res://scenes/world/event_card.gd")
 
 var _pass := 0
@@ -27,9 +28,14 @@ func _init() -> void:
 	await test_die_fast()
 	await test_card_fast_is_the_old_card()
 	OS.set_environment("SORCMERC_FAST", "")
+	# ...and the saved pace too: an earlier test in the suite can leave the
+	# player's settings at Instant, which is FAST by another door.
+	var pace: float = Settings.current().anim_speed_multiplier
+	Settings.current().anim_speed_multiplier = 1.0
 	await test_die_live()
 	await test_card_rolls_then_opens()
 	await test_card_without_a_roll()
+	Settings.current().anim_speed_multiplier = pace
 	OS.set_environment("SORCMERC_FAST", "1")
 	print("test_dice_roll: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 or _pass == 0 else 0)
