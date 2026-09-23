@@ -679,6 +679,12 @@ const BANE_KILLS := 10
 const BANE_KILLS_DRAGON := 3        # there are fewer dragons, and each one is a story
 const BANE_CAP := 2                 # spec §2: two banes at most — the player chooses what the hero is known for
 const WOUND_CAP := 2
+# The owner's cap (2026-09-23), after tests/sweep_traits_earn.gd's 30-day run
+# left each hero holding 8.0 earned traits: four of a kind at most, the kinds
+# being a row's `kind` (triumph — banes among them — resilience, scar; a wound
+# is capped tighter by WOUND_CAP). A hero at the cap earns no more of that
+# kind until one lapses, is cured or is lost; the event says nothing new.
+const KIND_CAP := 4
 const VETERAN_WINS := 20
 const SHAKEN_CALM_DAYS := 2         # Calm heroes shed Shaken in two days, not five
 # Cures, per hardship: what the hero has to meet again, and beat.
@@ -695,6 +701,9 @@ static func family_of(id: String) -> String:
 
 static func _count_family(ch, family: String) -> int:
 	return ids(ch).filter(func(i): return family_of(i) == family).size()
+
+static func _count_kind(ch, kind: String) -> int:
+	return ids(ch).filter(func(i): return String(row(i).get("kind", "")) == kind).size()
 
 
 static func count(ch, key: String) -> int:
@@ -730,6 +739,9 @@ static func grant(ch, id: String, why: String, now: float, extra := {}) -> Dicti
 	var fam := String(r.get("family", ""))
 	if (fam == "bane" and _count_family(ch, "bane") >= BANE_CAP) \
 			or (fam == "wound" and _count_family(ch, "wound") >= WOUND_CAP):
+		return {}
+	var kind := String(r.get("kind", ""))
+	if kind in ["triumph", "resilience", "scar"] and _count_kind(ch, kind) >= KIND_CAP:
 		return {}
 	var t := {"id": id, "why": why, "since": now}
 	var days := float(r.get("lasts_days", 0))
@@ -998,6 +1010,11 @@ static func _save_roll(ch, ev: Dictionary, dc: int, seed_text: String) -> Dictio
 static func _hardship(out: Dictionary, ch, hit: Dictionary, now: float) -> bool:
 	var ev_id := String(hit["event"])
 	var ev: Dictionary = events().get(ev_id, {})
+	# A hardship with a `chance` is asked only that often (the owner, 2026-09-23:
+	# "Watched a friend die" was the second commonest hardship, every witness
+	# asked every time). Seeded apart from the save, so the two never correlate.
+	if ev.has("chance") and RNG.new(_seed("asks|%s|%s|%d" % [ch.id, ev_id, int(now)])).roll_die(100) > int(ev["chance"]):
+		return false
 	var sv := _save_roll(ch, ev, int(hit["dc"]), "trait|%s|%s|%d" % [ch.id, ev_id, int(now)])
 	var margin := int(sv["nat"]) + int(sv["bonus"]) - int(sv["dc"])
 	var f := String(hit.get("faction", ""))
@@ -1010,9 +1027,13 @@ static func _hardship(out: Dictionary, ch, hit: Dictionary, now: float) -> bool:
 	if int(sv["nat"]) == 20 or margin >= DEGREE:
 		if has(ch, res):
 			return false
-		remove(ch, scar)   # tempered by the thing that scarred them: the scar goes
-		grant(ch, res, label, now)
-		_gain(out, ch, "resilience", res, label, sv)
+		var cured := remove(ch, scar)   # tempered by the thing that scarred them: the scar goes
+		if not grant(ch, res, label, now).is_empty():
+			_gain(out, ch, "resilience", res, label, sv)
+		elif cured:   # four resiliences already (KIND_CAP): the scar still goes
+			_gain(out, ch, "cure", scar, label, sv, "is no longer")
+		else:
+			out["lines"].append("%s shakes it off%s." % [ch.cname, _save_words(sv)])
 		return false
 	if margin >= 0:
 		out["lines"].append("%s shakes it off%s." % [ch.cname, _save_words(sv)])

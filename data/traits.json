@@ -320,6 +320,11 @@
           }
         },
         {
+          "when": {
+            "biome": [
+              "downs"
+            ]
+          },
           "gives": {
             "travel": 1
           }
@@ -1128,6 +1133,7 @@
     "ally_died": {
       "kind": "hardship",
       "who": "standing",
+      "chance": 50,
       "ability": "wis",
       "fear": false,
       "label": "Watched a friend die",
