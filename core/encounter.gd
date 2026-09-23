@@ -964,6 +964,7 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 		"deaths": deaths,
 		"kills": kills,   # source monster ids, for T9's kill-count quests
 		"downed": cb.downed.keys(),   # T19: party ids that hit 0 HP, even if they got back up
+		"credit": cb.credit.duplicate(true),   # #176: per hero — kills, what downed them, who revived them
 		"rounds": cb.round_num,       # world.gd bills the clock an hour a round
 		"objective": {"kind": cb.objective_kind(), "done": done, "xp": bonus},
 	}
