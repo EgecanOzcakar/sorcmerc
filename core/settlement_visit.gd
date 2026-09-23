@@ -16,6 +16,7 @@
 # synthetic merchant `node` (those helpers are instance methods and campaign.gd is
 # out of scope to edit). Make them static the day campaign.gd is in scope.
 extends RefCounted
+const Traits = preload("res://core/traits.gd")   # #176 step 4: Generous sells cheap
 
 const Campaign = preload("res://core/campaign.gd")
 const RNG = preload("res://core/rng.gd")
@@ -383,13 +384,16 @@ static func buy(m: Dictionary, party, item_id: String) -> bool:
 	return true
 
 # Sell price follows the same market swing the buy price does.
-static func sell_price(m: Dictionary, item_id: String) -> int:
+static func sell_price(m: Dictionary, item_id: String, party = null) -> int:
 	var list := Campaign.item_price(item_id)
+	# #176 step 4: a Generous hero in the company lets things go cheap (−10%).
+	var pct: int = Traits.party_pct(party, "sale_price") if party != null else 0
 	# A thin shelf is dear to buy from; it does not pay a premium for your goods.
-	return 0 if list <= 0 else maxi(1, int(round(list * SELL_RATE * minf(1.0, float(m.get("markup", 1.0))))))
+	return 0 if list <= 0 else maxi(1, int(round(list * SELL_RATE * minf(1.0, float(m.get("markup", 1.0)))
+		* (100 + pct) / 100.0)))
 
 static func sell(m: Dictionary, party, item_id: String) -> bool:
-	var paid := sell_price(m, item_id)
+	var paid := sell_price(m, item_id, party)
 	if paid <= 0 or not party.stash_remove(item_id):
 		return false
 	party.add_gold(paid)

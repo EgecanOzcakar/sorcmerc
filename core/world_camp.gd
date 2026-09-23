@@ -46,11 +46,14 @@ static func watch_check(party, rng = null) -> Dictionary:
 	var best_id := ""
 	var best_skill := ""
 	var best_bonus := -99
+	# #176 step 4: the watch is kept at camp, whatever the map says the party is
+	# doing — a Street-raised hero is as lost out here as on the road.
+	var at_camp: Dictionary = party.here.merged({"site": "camp"}, true)
 	for skill in ["survival", "perception"]:
 		var id: String = c.best_at(skill)
 		if id == "":
 			continue
-		var b: int = c.skill_bonus(id, skill)
+		var b: int = c.skill_bonus(id, skill, at_camp)
 		if b > best_bonus:
 			best_bonus = b
 			best_id = id

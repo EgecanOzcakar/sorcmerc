@@ -193,6 +193,8 @@ func _map_mirror() -> void:
 				screen._on_approach_chosen("engage")
 			if screen._spoils_panel != null:
 				screen._close_spoils()
+			if screen._moment != null:   # #176: a trait earned, read and passed
+				screen._moment._skip_or_advance()
 			if screen._combat != null and screen._combat.cb != null and screen._combat.result.is_empty():
 				main = screen._combat
 				fought = true

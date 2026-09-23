@@ -10,6 +10,8 @@
 #   c.leave()                         # -> next stage, or state "won"
 extends RefCounted
 
+const Traits = preload("res://core/traits.gd")   # #176 step 4: a trait's term on a skill check
+
 const Quest = preload("res://core/quest.gd")
 const Potions = preload("res://core/potions.gd")
 const Scaler = preload("res://core/scaler.gd")
@@ -774,9 +776,16 @@ func best_at(skill: String) -> String:
 			best = ch.id
 	return best
 
-func skill_bonus(char_id: String, skill: String) -> int:
+# The sheet's bonus, and (#176 step 4) whatever the hero's personality traits
+# add to this skill where the party is (party.here — {} in the linear
+# campaign, where only a trait with no `when` counts). `here` overrides it for
+# a check made somewhere the party is not standing yet (the camp's watch).
+func skill_bonus(char_id: String, skill: String, here = null) -> int:
 	var ch = party.get_member(char_id)
-	return int(ch.sheet().skills.get(skill, 0)) if ch != null else 0
+	if ch == null:
+		return 0
+	return int(ch.sheet().skills.get(skill, 0)) + int(Traits.skill_term(ch, skill,
+		here if here is Dictionary else party.here)["n"])
 
 # Whose Arcana the examination uses: the best of the active party.
 func arcana_examiner() -> String:

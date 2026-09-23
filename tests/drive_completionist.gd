@@ -144,6 +144,7 @@ const OPPORTUNISTIC := {
 	"fight:deploy": "an unseen approach opened on the deployment phase",
 	"road:event": "the road threw an event card",
 	"road:region": "the party crossed into another country",
+	"fight:trait_moment": "a fight left a personality trait on somebody, shown and passed (#176)",
 }
 
 var screen
@@ -257,6 +258,9 @@ func _step(n := 1) -> void:
 		if screen._spoils_panel != null:
 			did("fight:spoils")
 			screen._close_spoils()
+		if screen._moment != null:
+			did("fight:trait_moment")
+			screen._moment._skip_or_advance()
 		if screen._combat != null:
 			_fight_frame()
 
@@ -321,7 +325,7 @@ func _see_the_fight_out() -> void:
 		fail("a fight did not end in %d frames" % FIGHT_LIMIT)
 		return
 	await _step(6)                               # spoils, banking, the map's halt
-	while screen._spoils_panel != null:
+	while screen._spoils_panel != null or screen._moment != null:
 		await _step()
 	did("fight:ended")
 	if screen.world.player() == null:

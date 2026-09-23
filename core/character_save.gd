@@ -110,6 +110,7 @@ static func to_dict(ch) -> Dictionary:
 		"dead": ch.dead,
 		"traits": ch.traits.duplicate(true),
 		"traits_offered": ch.traits_offered,
+		"trait_counts": ch.trait_counts.duplicate(),
 	}
 
 # null when the dictionary is not a character save.
@@ -156,8 +157,24 @@ static func from_dict(d: Dictionary):
 	# which is exactly what makes the party page offer the pick once.
 	for t in d.get("traits", []):
 		if t is Dictionary and String(t.get("id", "")) != "":
-			ch.traits.append({"id": String(t["id"]), "why": String(t.get("why", ""))})
+			var tr := {"id": String(t["id"]), "why": String(t.get("why", ""))}
+			# Step 3's earned keys, each only when present — JSON has no ints,
+			# so the numbers are put back to the types core/traits.gd compares.
+			for k in ["since", "until"]:
+				if t.has(k):
+					tr[k] = float(t[k])
+			if t.has("dc"):
+				tr["dc"] = int(t["dc"])
+			if t.has("event"):
+				tr["event"] = String(t["event"])
+			if bool(t.get("told", false)):
+				tr["told"] = true   # step 4: said at the fire once already
+			if t.get("cure") is Dictionary:
+				tr["cure"] = t["cure"].duplicate(true)
+			ch.traits.append(tr)
 	ch.traits_offered = bool(d.get("traits_offered", false))
+	for k in d.get("trait_counts", {}):
+		ch.trait_counts[String(k)] = int(d["trait_counts"][k])
 	return ch
 
 # Returns the path written, or "" on failure.

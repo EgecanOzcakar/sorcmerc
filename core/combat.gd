@@ -2900,7 +2900,9 @@ func _death_triggers(c) -> void:
 				_save_effect(c, v, other)
 
 func _death_save(c) -> void:
-	var r = Dice.d20(rng)
+	# #176 step 3: Hard to kill — a hero who came back from two failed saves once
+	# rolls the next ones with advantage.
+	var r = Dice.d20(rng, Dice.ADV if Traits.flag(c, "death_save_adv") != null else Dice.NORMAL)
 	if r.nat == 20:
 		c.statuses.erase("down")
 		c.death_s = 0
@@ -2915,6 +2917,11 @@ func _death_save(c) -> void:
 		c.death_s += 1
 	else:
 		c.death_f += 1
+	if _hero(c):
+		# #176 step 3: the most death saves a hero failed in this fight — a hardship
+		# at two, a wound at one (Traits.after_fight).
+		var cr := _credit_of(c)
+		cr["death_fails"] = maxi(int(cr.get("death_fails", 0)), c.death_f)
 	if c.death_f >= 3:
 		_kill(c)
 	elif c.death_s >= 3:

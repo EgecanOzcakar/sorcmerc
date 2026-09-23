@@ -8,6 +8,7 @@ const Campaign = preload("res://core/campaign.gd")
 const Dice = preload("res://core/dice.gd")
 const RNG = preload("res://core/rng.gd")
 const Ach = preload("res://core/achievements.gd")
+const Traits = preload("res://core/traits.gd")   # #176 step 4: Woods-born forages better in the woods
 
 const INTERVAL := 240.0     # one attempt per 4 world-hours of travel
 const SKILLS := ["survival", "nature"]
@@ -27,7 +28,7 @@ static func check(party, rng = null) -> Dictionary:
 		var id: String = c.best_at(skill)
 		if id == "":
 			continue
-		var b: int = c.skill_bonus(id, skill)
+		var b: int = c.skill_bonus(id, skill) + int(Traits.road_term(party.get_member(id), "forage", party.here)["n"])
 		if b > best_bonus:
 			best_bonus = b
 			best_id = id

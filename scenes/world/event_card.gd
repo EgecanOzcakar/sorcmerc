@@ -264,6 +264,10 @@ func _roll_text() -> String:
 		line += " (a party that pulls together +1)"
 	elif morale < 0:
 		line += " (a party at odds −1)"
+	# #176 step 4: the roller's personality traits, named the same way.
+	var tt = _e.get("trait_term")
+	if tt is Dictionary and int(tt.get("n", 0)) != 0:
+		line += " (%s %s)" % [" and ".join(tt.get("who", [])), "%+d" % int(tt["n"])]
 	return line
 
 

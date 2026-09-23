@@ -35,6 +35,7 @@
 extends RefCounted
 
 const Hex = preload("res://core/hex.gd")
+const Traits = preload("res://core/traits.gd")   # #176 step 4: temperaments and a few traits pull on the baseline
 const Ach = preload("res://core/achievements.gd")
 
 const RANGE := 100.0
@@ -114,6 +115,11 @@ static func baseline(ca, cb) -> float:
 		v += SAME_SPECIES
 	else:
 		v += float(SPECIES_GRUDGE.get(_pair_key(ca.species_id, cb.species_id), 0.0))
+	# #176 step 4 (spec §7): +5 per temperament shared, −10 per opposed pair,
+	# and what a Greedy or Arrogant hero costs with the others. Drift already
+	# pulls every pair toward this, so two Wrathful fighters warm to each other
+	# on the road with no new machinery.
+	v += float(Traits.opinion_terms(ca, cb)["n"])
 	return v
 
 static func baseline_of(party, a: String, b: String) -> float:
@@ -194,7 +200,11 @@ static func describe(party, a: String, b: String) -> String:
 	var cb = party.get_member(b)
 	if ca == null or cb == null:
 		return ""
-	return "%s and %s — %s (%+d)" % [ca.cname, cb.cname, band(party, a, b), int(round(score(party, a, b)))]
+	var line := "%s and %s — %s (%+d)" % [ca.cname, cb.cname, band(party, a, b), int(round(score(party, a, b)))]
+	# #176 step 4 (spec §8): name the traits behind the pull — "...: Brave and
+	# Craven" — so a cold pair the road has not explained is not a mystery.
+	var why: Array = Traits.opinion_terms(ca, cb)["why"]
+	return line + (": " + ", ".join(why) if not why.is_empty() else "")
 
 # --- who is close to whom --------------------------------------------------------
 
@@ -266,7 +276,9 @@ static func saved(party, saver: String, saved_id: String) -> Dictionary:
 
 static func friendly_fire(party, caster: String, victim: String) -> Dictionary:
 	Ach.unlock("friendly_fire")
-	return adjust(party, caster, victim, -FRIENDLY_FIRE)
+	# #176 step 4: from a Wrathful caster it looks deliberate — half again.
+	var hot: bool = Traits.has(party.get_member(caster), "wrathful")
+	return adjust(party, caster, victim, -FRIENDLY_FIRE * (Traits.WRATHFUL_FIRE if hot else 1.0))
 
 # A won fight: everyone still standing at the end of it warms to everyone else
 # who was. Not the dead, and not the downed — "we came through that together"
@@ -306,7 +318,11 @@ static func decay(party, dt: float) -> void:
 		if ca == null or cb == null:
 			continue
 		var e: Dictionary = party.relations[k]
-		e["score"] = move_toward(float(e["score"]), baseline(ca, cb), step)
+		var target := baseline(ca, cb)
+		# #176 step 4: Generous — opinion of them warms a day faster (the drift
+		# up, never the drift down).
+		var s := step * 2.0 if target > float(e["score"]) and Traits.warms_faster(ca, cb) else step
+		e["score"] = move_toward(float(e["score"]), target, s)
 
 # --- camp: the fireside beat -----------------------------------------------------
 

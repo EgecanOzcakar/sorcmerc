@@ -31,6 +31,7 @@
 # What this does NOT own: the fight (scenes/main.tscn, unchanged), what a won
 # fight pays (world.gd's _bank), faction opinion, or any drawing.
 extends RefCounted
+const Traits = preload("res://core/traits.gd")   # #176 step 4
 
 const Campaign = preload("res://core/campaign.gd")
 const Dice = preload("res://core/dice.gd")
@@ -134,7 +135,7 @@ static func options(party, foe, hostile := true) -> Array:
 			var who := _roller(party, w)
 			if who.is_empty():
 				continue          # nobody can roll it: do not offer it
-			var bonus: int = int(who["bonus"]) + Travel.pace_bonus(party)
+			var bonus: int = int(who["bonus"]) + Travel.pace_bonus(party) + _way_term(party, String(who["id"]), id)
 			o.merge({"char_id": who["id"], "cname": who["cname"], "skill": who["skill"],
 				"bonus": bonus, "named": bool(who["named"]),
 				"needs": needs(int(w["dc"]), bonus)}, true)
@@ -152,6 +153,12 @@ static func options(party, foe, hostile := true) -> Array:
 			o["toll"] = _toll(party)
 		out.append(o)
 	return out
+
+
+# #176 step 4: a personality trait's term on this way of meeting them, over and
+# above the skill's own (Brave's −2 on slipping away: they would rather not).
+static func _way_term(party, char_id: String, way: String) -> int:
+	return int(Traits.skill_term(party.get_member(char_id), way, party.here)["n"])
 
 
 # The face the d20 has to come up, which is the only honest way to show odds in
@@ -195,7 +202,7 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 		return out
 	if rng == null:
 		rng = RNG.new()
-	var bonus: int = int(who["bonus"]) + Travel.pace_bonus(party)
+	var bonus: int = int(who["bonus"]) + Travel.pace_bonus(party) + _way_term(party, String(who["id"]), way)
 	var nat: int = int(Dice.d20(rng)["nat"])
 	var ok: bool = nat + bonus >= int(w["dc"])
 	out.merge({"ok": ok, "char_id": who["id"], "cname": who["cname"], "skill": who["skill"],
