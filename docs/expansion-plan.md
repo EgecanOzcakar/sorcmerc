@@ -9050,6 +9050,29 @@ Pictures: `docs/shots/live-roll-town-{rolling,landed}.png` and
 - A lair found by a search is marked on the map at once, under the die.
 - Still no dice-rattle sound (see part 1).
 
+## Update notes — a twice-weekly changelog for players (2026-09-23)
+
+`.github/workflows/update-notes.yml` runs Wednesday and Saturday at 18:00 UTC
+(21:00 Istanbul) and posts the major gameplay changes and fixes merged to master
+since the last note as a GitHub Release, `Update notes — <day date>` on a tag
+`update-YYYY-MM-DD`. A shell step lists the merged PRs; Claude, with read-only
+tools, sorts out what a player would notice (dropping tests, CI, docs, tooling
+and refactors) and writes `## New` / `## Changes` / `## Fixes` bullets with PR
+links; a second shell step publishes. Nothing player-facing merged, and the
+slot posts nothing and rolls into the next one, because the window always opens
+at the previous note's publish time. `gh workflow run update-notes.yml` posts
+one on demand.
+
+The tag shape is chosen to stay out of everything else: `update-*` triggers
+neither of release.yml's `v*`/`test*` channels, `tools/build_version.sh` only
+describes against `v[0-9]*`, and `--latest=false` leaves the "Latest" badge on
+real releases. Not visual; no game code changed.
+
+### Still open
+
+- Notes are posted on GitHub only. An itch.io devlog has no API butler can post
+  to, so mirroring there (or to a Discord webhook) is a manual copy for now.
+
 ## Personality traits, step 3 — what a fight leaves on the people in it (2026-09-23, #176)
 
 Step 3 of `docs/superpowers/specs/2026-09-23-traits-design.md`. Until now a
