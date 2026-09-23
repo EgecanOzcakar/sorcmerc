@@ -8559,8 +8559,11 @@ hexes on ~110 are not where the lines run.
 
 ### Still open
 
-- **The marsh drift.** Unresolved and red: the marsh is the one board with no
-  walls, and it plays 8 points easier. Screens are in, correct, and inert.
+- ~~The marsh drift.~~ Accepted, not tuned. test_scaler no longer holds the
+  biome boards to the set's rate; it tracks each against its own
+  measurement (BIOME_RATE: downs 80.5, woods 92.0, marsh 88.5, within
+  BIOME_DRIFT 6), so a board that moves is caught and one that simply
+  differs is not. Screens stay in, correct and inert.
 - Areas ignore walls: a fireball still reaches round a pillar. Cones and
   bursts would need their own sight check per hex.
 - The AI never smashes a breakable to open a line; it only walks round.
