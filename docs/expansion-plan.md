@@ -8800,3 +8800,68 @@ run by hand without it. Pictures: `docs/shots/live-roll-*.png`, from
 - `SettlementVisit.check_preview`'s odds assume a natural 1 always misses and
   a 20 always hits. The rolls it previews do not follow that rule, so its "%
   to make it" is off by up to 5 points at either end.
+
+## Live rolls, parts 2 and 3 — a town's actions and the map's quick checks roll where their line goes (2026-09-23)
+
+Part 1 put the live die on the road's card. The owner asked for every roll
+off the board to be live, and the checks that don't report on a card still
+rolled in silence: the settlement's actions and downtime (in the visit panel's
+log line), and the map's quick checks (in the HUD bar). Both now use the same
+`DiceRoll`, replaying the roll `core/` already made. Nothing on screen rolls
+anything, and a reload still cannot reroll a result.
+
+**In town** (`_say_rolled` in `scenes/world/world.gd`), steal, persuade,
+haggle, investigate, working at the healer's, carouse and gamble roll the die
+where the line goes.
+- While it is in the air the action buttons wait. A click, Enter, Space or
+  Esc lands it and never skips the result.
+- After it lands comes the line, the success sting, and anything that would
+  give the roll away: a contact met, a complication's card, the haggled
+  prices (`apply_haggle` itself now runs on landing).
+- A panel rebuilt under a die still in the air (a page change, closing the
+  visit) says the held line rather than losing it (`_flush_visit_roll`).
+- Achievement toasts wait while any die is in the air (`DiceRoll.in_air()`),
+  because "Talked Down" popping up mid-tumble told the player the haggle had
+  worked.
+
+`core/`: every result names its skill and roller (`skill`, `cname`). Persuade
+and haggle keep both dice under advantage, so the die can draw the one that
+didn't count. `SettlementVisit.check_preview`'s odds now follow the plain
+`nat + bonus >= DC` rule the checks actually use. Part 1's still-open note
+said the preview assumed a natural 1 always missed and a 20 always hit.
+
+**On the map** (`_map_roll`), foraging on the march, a lair's search, a
+landmark's search and sneaking past a lair roll in a small gilt panel just
+above the HUD bar. The HUD line (and its sting and follow-up) waits for the
+die to land. It does not pause the clock: a forage rolls while the party
+marches. Only one is in the air at a time; a second check lands the first. A
+failed sneak's follow-up, the lair's own prompt, waits for the landing too, so
+the die says "missed" before the lair notices you. `WorldLairs.sneak_past`'s
+result now names its skill.
+
+Under SORCMERC_FAST (every test and robot), and at the Instant pace, every one
+of these says its line on the first frame, exactly as before.
+
+Tests: `tests/test_live_rolls_world.gd` (16 checks, renamed from
+`test_live_rolls_town.gd`), covering both halves:
+- an investigate's die holds back the line, and the buttons wait for it
+- Enter lands it: the line is said, the buttons come back, and the visit's
+  log is the line
+- a panel rebuilt under a steal's die in the air keeps the held
+  line
+- a lair search's die holds the HUD line, and the panel is freed on landing
+- the FAST path is the old behaviour
+
+Pictures: `docs/shots/live-roll-town-{rolling,landed}.png` and
+`docs/shots/live-roll-map.png`, from `tests/shot_live_roll_town.gd`.
+
+### Still open
+
+- The linear campaign's (`SORCMERC_LINEAR_CAMPAIGN=1`) identify and
+  opportunity checks return a bool, not a roll, so there is nothing to replay.
+  Making them live means those checks returning the result dict first.
+- The HUD's gold and the visit panel's purse update when the rules apply the
+  result, which is before the die lands. A success that pays gold therefore
+  shows in the corner a beat early. Holding the purse display is the fix.
+- A lair found by a search is marked on the map at once, under the die.
+- Still no dice-rattle sound (see part 1).

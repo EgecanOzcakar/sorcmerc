@@ -1,10 +1,11 @@
-# Live rolls in town — a settlement's actions (steal, persuade, haggle,
-# investigate, work at the healer's) and the inn's downtime (carouse, gamble)
-# roll their die in the visit panel before the line says what happened
-# (scenes/world/world.gd's _say_rolled, scenes/dice_roll.gd). Drives the real
-# world scene with SORCMERC_FAST off and the pace pinned, since that is the
-# only way there is a die in the air at all.
-#   godot --headless --path . -s tests/test_live_rolls_town.gd
+# Live rolls on the world screen — a settlement's actions (steal, persuade,
+# haggle, investigate, work at the healer's) and the inn's downtime (carouse,
+# gamble) roll their die in the visit panel before the line says what happened
+# (scenes/world/world.gd's _say_rolled); the map's quick checks (a lair's or a
+# landmark's search, sneaking past a lair, a forage) roll theirs over the HUD
+# bar (_map_roll). Drives the real world scene with SORCMERC_FAST off and the
+# pace pinned, since that is the only way there is a die in the air at all.
+#   godot --headless --path . -s tests/test_live_rolls_world.gd
 extends SceneTree
 
 const Visit = preload("res://core/settlement_visit.gd")
@@ -71,13 +72,36 @@ func _init() -> void:
 	check(s._visit_pending.is_empty() and "Sleight of Hand" in String(s._visit.get("log", "")),
 		"a rebuild mid-roll keeps the line rather than losing it: %s" % s._visit.get("log", ""))
 
+	# --- the map's quick checks ------------------------------------------------
+	s._close_visit()
+	await process_frame
+	var l = null
+	for x in s.world.lairs:
+		if not x.discovered:
+			l = x
+			break
+	if l != null:
+		s._lair_target = l
+		s._lair_msg.text = "stale"
+		s._lair_action()
+		await process_frame
+		check(is_instance_valid(s._map_die), "a lair's search rolls its die over the HUD")
+		check(s._lair_msg.text == "", "...with the line held back")
+		s._map_die.get_child(0).finish()
+		await process_frame
+		check(not is_instance_valid(s._map_die) or s._map_die.is_queued_for_deletion(), "landed, the panel goes")
+		check("Survival" in s._lair_msg.text, "...and the line is said: %s" % s._lair_msg.text)
+	else:
+		check(false, "the map has an undiscovered lair to search")
+
 	Settings.current().anim_speed_multiplier = pace
 	OS.set_environment("SORCMERC_FAST", "1")
 	# Under SORCMERC_FAST (every robot) the line is there at once, as before.
+	s._open_visit(home)
 	s._goto_page("hub")
 	s._visit["investigated"] = false
 	s._investigate()
 	check(not is_instance_valid(s._visit_dice) and "Investigation" in s._visit_log.text,
 		"SORCMERC_FAST: no die, the line at once")
-	print("test_live_rolls_town: %d passed, %d failed" % [_pass, _fail])
+	print("test_live_rolls_world: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 or _pass == 0 else 0)

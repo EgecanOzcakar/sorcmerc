@@ -2398,10 +2398,10 @@ func _place_action() -> void:
 		var roll: Dictionary = Landmarks.search(l, party)
 		if roll.is_empty():
 			return
-		Sound.play_sfx("search_found" if roll["ok"] else "search_nothing")
-		_lair_msg.text = ("%s finds it — %s is here (Survival %d+%d vs DC %d)." % [
+		_map_roll(roll, _lair_msg, ("%s finds it — %s is here (Survival %d+%d vs DC %d)." % [
 			roll["cname"], l.sname, roll["nat"], roll["bonus"], roll["dc"]]) if roll["ok"] else (
-			"Nothing this time (Survival %d+%d vs DC %d)." % [roll["nat"], roll["bonus"], roll["dc"]])
+			"Nothing this time (Survival %d+%d vs DC %d)." % [roll["nat"], roll["bonus"], roll["dc"]]),
+			"search_found" if roll["ok"] else "search_nothing")
 		return
 	_open_place(l)
 
@@ -2448,13 +2448,10 @@ func _lair_action() -> void:
 		var roll := WorldLairs.search(l, party)
 		if roll.is_empty():
 			return
-		Sound.play_sfx("search_found" if roll["ok"] else "search_nothing")
-		if roll["ok"]:
-			_lair_msg.text = "%s finds the tracks — %s is here (Survival %d+%d vs DC %d)." % [
-				roll["cname"], l.sname, roll["nat"], roll["bonus"], roll["dc"]]
-		else:
-			_lair_msg.text = "Nothing this time (Survival %d+%d vs DC %d)." % [
-				roll["nat"], roll["bonus"], roll["dc"]]
+		_map_roll(roll, _lair_msg, ("%s finds the tracks — %s is here (Survival %d+%d vs DC %d)." % [
+			roll["cname"], l.sname, roll["nat"], roll["bonus"], roll["dc"]]) if roll["ok"] else (
+			"Nothing this time (Survival %d+%d vs DC %d)." % [roll["nat"], roll["bonus"], roll["dc"]]),
+			"search_found" if roll["ok"] else "search_nothing")
 		return
 	await _delve(l)
 
@@ -2479,14 +2476,14 @@ func _lair_sneak_action() -> void:
 		party.add_gold(int(loot.get("gold", 0)))
 		Quest.record_lair_cleared(party, l.id)
 		_calling_check("lair_cleared", l.id, _leader())
-		_lair_msg.text = "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))]
+		_map_roll(roll, _lair_msg, "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))])
 	else:
-		_lair_msg.text = String(roll["text"])
 		# Roused by the attempt itself, not as a side effect of the fight it
 		# falls into: that is what makes this one attempt rather than one per
 		# visit, and it is the moment the D1 window should start counting from.
 		WorldLairs.mark_entered(l, world.clock.elapsed)
-		await _lair_action()
+		# The delve waits for the die: it is how the roll went.
+		_map_roll(roll, _lair_msg, String(roll["text"]), "", func(): _lair_action())
 
 func _lair_settle_action() -> void:
 	var l: World.Lair = _settle_target
@@ -2667,8 +2664,8 @@ func _check_forage() -> void:
 	var roll := WorldForage.check(party, RNG.new(maxi(1, absi(hash("forage|%d" % int(world.clock.elapsed))))))
 	if roll.get("ok", false):
 		party.add_gold(int(roll["gold"]))
-		_camp_msg.text = "%s forages along the way (%s %d+%d vs DC %d) — +%d gold." % [
-			roll["cname"], String(roll["skill"]).capitalize(), roll["nat"], roll["bonus"], roll["dc"], int(roll["gold"])]
+		_map_roll(roll, _camp_msg, "%s forages along the way (%s %d+%d vs DC %d) — +%d gold." % [
+			roll["cname"], String(roll["skill"]).capitalize(), roll["nat"], roll["bonus"], roll["dc"], int(roll["gold"])])
 
 # --- D4: how the party meets a band ---------------------------------------
 #
@@ -3577,6 +3574,67 @@ func _say_rolled(r: Dictionary, text: String, sfx := "", then := Callable()) -> 
 		"ok": bool(r.get("ok", false)), "dice": r.get("dice", []), "mode": String(r.get("mode", "")),
 		"label": "%s — %s" % [String(Catalog.skills().get(skill, {}).get("name", skill.capitalize())),
 			String(r.get("cname", ""))]})
+
+# The map's own quick checks — a lair's or a landmark's search, sneaking past
+# a lair, a forage on the march — report on the HUD bar, not on a card. Their
+# die rolls in a small panel just above the bar; the line (and its sting, and
+# `then`) waits for it to land. Nothing here pauses the clock: a forage rolls
+# on the march. One at a time — a second lands the first. SORCMERC_FAST says
+# the line at once, as the HUD always did.
+var _map_die: Control = null
+var _map_pending: Dictionary = {}
+
+func _map_roll(roll: Dictionary, label: Label, text: String, sfx := "", then := Callable()) -> void:
+	_land_map_roll()
+	if not roll.has("nat") or Settings.anim() >= Settings.FAST:
+		label.text = text
+		if sfx != "":
+			Sound.play_sfx(sfx)
+		if then.is_valid():
+			then.call()
+		return
+	label.text = ""
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var d = DiceRoll.new()
+	d.custom_minimum_size = Vector2(340, DiceRoll.DIE + DiceRoll.TALLY_SIZE + 28)
+	d.mouse_filter = Control.MOUSE_FILTER_STOP
+	d.tooltip_text = "Click to land it"
+	panel.add_child(d)
+	add_child(panel)
+	panel.reset_size()
+	panel.position = Vector2((size.x - panel.size.x) * 0.5, size.y - panel.size.y - 90.0)
+	d.gui_input.connect(func(e):
+		if e is InputEventMouseButton and e.pressed:
+			d.finish())
+	_map_die = panel
+	_map_pending = {"label": label, "text": text, "sfx": sfx, "then": then}
+	d.landed.connect(_land_map_roll)
+	var skill := String(roll.get("skill", "survival"))
+	d.play({"nat": int(roll["nat"]), "bonus": int(roll.get("bonus", 0)), "dc": int(roll.get("dc", 10)),
+		"ok": bool(roll.get("ok", false)), "dice": roll.get("dice", []), "mode": String(roll.get("mode", "")),
+		"label": "%s — %s" % [String(Catalog.skills().get(skill, {}).get("name", skill.capitalize())),
+			String(roll.get("cname", ""))]})
+
+# The held line said and the panel gone — on landing, or when another quick
+# check comes along before this one has.
+func _land_map_roll() -> void:
+	if _map_pending.is_empty():
+		return
+	var p := _map_pending
+	_map_pending = {}
+	if is_instance_valid(_map_die):
+		_map_die.queue_free()
+	_map_die = null
+	var label: Label = p["label"]
+	if is_instance_valid(label):
+		label.text = String(p["text"])
+	if String(p["sfx"]) != "":
+		Sound.play_sfx(String(p["sfx"]))
+	var then: Callable = p["then"]
+	if then.is_valid():
+		then.call_deferred()
 
 func _visit_landed() -> void:
 	_flush_visit_roll()

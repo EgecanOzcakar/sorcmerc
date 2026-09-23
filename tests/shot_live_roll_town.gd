@@ -5,6 +5,7 @@
 #   godot --path . --resolution 1400x900 -s tests/shot_live_roll_town.gd
 #     -> docs/shots/live-roll-town-rolling.png   the die in the air, the buttons waiting
 #     -> docs/shots/live-roll-town-landed.png    landed: the line, the buttons back
+#     -> docs/shots/live-roll-map.png            a lair's search: the die over the HUD bar
 extends SceneTree
 
 const Settings = preload("res://core/settings.gd")
@@ -34,6 +35,16 @@ func _init() -> void:
 	for _i in 6:
 		await process_frame
 	await _save("docs/shots/live-roll-town-landed.png")
+	s._close_visit()
+	for _i in 6:
+		await process_frame
+	for l in s.world.lairs:
+		if not l.discovered:
+			s._lair_target = l
+			break
+	s._lair_action()
+	await create_timer(1.2).timeout
+	await _save("docs/shots/live-roll-map.png")
 	quit()
 
 func _save(path: String) -> void:
