@@ -3086,6 +3086,7 @@ func bug_context() -> Dictionary:
 	return ctx
 
 func _close_visit() -> void:
+	_flush_visit_roll()   # the popup is the world's child, not the panel's: it would outlive the town
 	_left = _visit.get("settlement")
 	_visit = {}
 	if _visit_panel != null:
@@ -3539,11 +3540,15 @@ func _say(text: String) -> void:
 
 # Live rolls in town (scenes/dice_roll.gd): the action has already happened —
 # core/ rolled it and moved the gold — and this is the telling. The die rolls
-# where the line goes, the panel's buttons wait, and when it lands the line is
-# said, the success sting plays and `then` runs (a card that would otherwise
-# give the roll away before it landed). A result with no roll, and every run
-# under SORCMERC_FAST, says it at once, exactly as _say always did.
+# in a popup over the dimmed page (the owner: "a dice popup in shop screen
+# rather than moving the elements in the shop page" — it first rolled inline,
+# in the line's place, and the page jumped under it). The panel's buttons wait,
+# and when it lands the popup goes, the line is said, the success sting plays
+# and `then` runs (a card that would otherwise give the roll away before it
+# landed). A result with no roll, and every run under SORCMERC_FAST, says it
+# at once, exactly as _say always did.
 var _visit_dice: Control = null
+var _visit_die_popup: Control = null
 var _visit_pending: Dictionary = {}
 
 func _say_rolled(r: Dictionary, text: String, sfx := "", then := Callable()) -> void:
@@ -3556,15 +3561,34 @@ func _say_rolled(r: Dictionary, text: String, sfx := "", then := Callable()) -> 
 		return
 	_visit_pending = {"text": text, "sfx": sfx, "then": then, "ok": bool(r.get("ok", false))}
 	_say("")
+	# The popup: the whole screen, so a click anywhere lands the die rather
+	# than reaching a button under it; the page stays exactly where it was.
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.tooltip_text = "Click to land it"
+	add_child(overlay)
+	var dim := ColorRect.new()
+	dim.color = Color(Icons.COL_BG.r, Icons.COL_BG.g, Icons.COL_BG.b, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(dim)
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(centre)
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "Gilt"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	centre.add_child(panel)
 	var d = DiceRoll.new()
-	d.mouse_filter = Control.MOUSE_FILTER_STOP
-	d.tooltip_text = "Click to land it"
-	var box: Node = _visit_log.get_parent()
-	box.add_child(d)
-	box.move_child(d, _visit_log.get_index())
-	d.gui_input.connect(func(e):
+	d.custom_minimum_size = Vector2(380, DiceRoll.DIE + DiceRoll.TALLY_SIZE + 40)
+	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(d)
+	overlay.gui_input.connect(func(e):
 		if e is InputEventMouseButton and e.pressed:
 			d.finish())
+	_visit_die_popup = overlay
 	_visit_dice = d
 	if is_instance_valid(_visit_panel):
 		_disable_all(_visit_panel)   # one thing at a time: the room is watching the dice
@@ -3597,15 +3621,14 @@ func _map_roll(roll: Dictionary, label: Label, text: String, sfx := "", then := 
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Gilt"
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.tooltip_text = "Click to land it"
 	var d = DiceRoll.new()
 	d.custom_minimum_size = Vector2(340, DiceRoll.DIE + DiceRoll.TALLY_SIZE + 28)
-	d.mouse_filter = Control.MOUSE_FILTER_STOP
-	d.tooltip_text = "Click to land it"
 	panel.add_child(d)
 	add_child(panel)
 	panel.reset_size()
 	panel.position = Vector2((size.x - panel.size.x) * 0.5, size.y - panel.size.y - 90.0)
-	d.gui_input.connect(func(e):
+	panel.gui_input.connect(func(e):
 		if e is InputEventMouseButton and e.pressed:
 			d.finish())
 	_map_die = panel
@@ -3641,9 +3664,9 @@ func _visit_landed() -> void:
 	if not _visit.is_empty():
 		_build_visit_panel()   # the buttons back, and the line the die was holding
 
-# The held line said, its sting and its follow-up run — on landing, or when
-# anything rebuilds the panel under a die still in the air (the die goes with
-# the old panel; what it was about to say must not).
+# The held line said, its sting and its follow-up run, and the popup gone — on
+# landing, or when anything rebuilds or closes the panel under a die still in
+# the air (what it was about to say must not go with it).
 func _flush_visit_roll() -> void:
 	if _visit_pending.is_empty():
 		return
@@ -3652,6 +3675,9 @@ func _flush_visit_roll() -> void:
 	if is_instance_valid(_visit_dice) and _visit_dice.landed.is_connected(_visit_landed):
 		_visit_dice.landed.disconnect(_visit_landed)
 	_visit_dice = null
+	if is_instance_valid(_visit_die_popup):
+		_visit_die_popup.queue_free()
+	_visit_die_popup = null
 	BugReport.note(String(p["text"]))
 	if not _visit.is_empty():
 		_visit["log"] = String(p["text"])

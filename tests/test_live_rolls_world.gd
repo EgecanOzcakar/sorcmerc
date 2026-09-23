@@ -1,6 +1,7 @@
 # Live rolls on the world screen — a settlement's actions (steal, persuade,
 # haggle, investigate, work at the healer's) and the inn's downtime (carouse,
-# gamble) roll their die in the visit panel before the line says what happened
+# gamble) roll their die in a popup over the visit panel — never inside it, so
+# the page does not move — before the line says what happened
 # (scenes/world/world.gd's _say_rolled); the map's quick checks (a lair's or a
 # landmark's search, sneaking past a lair, a forage) roll theirs over the HUD
 # bar (_map_roll). Drives the real world scene with SORCMERC_FAST off and the
@@ -54,9 +55,14 @@ func _init() -> void:
 	check(is_instance_valid(s._visit_dice) and s._visit_dice.is_playing(), "...and its die is in the air")
 	check(s._visit_log.text == "", "...with the line held back until it lands")
 	check(buttons(s._visit_panel).all(func(b): return b.disabled), "...and the panel's buttons waiting for it")
+	check(is_instance_valid(s._visit_die_popup) and s._visit_die_popup.is_ancestor_of(s._visit_dice),
+		"the die rolls in a popup")
+	check(not s._visit_panel.is_ancestor_of(s._visit_dice), "...not in the page, which stays where it was")
+	var popup = s._visit_die_popup
 	s._unhandled_key_input(_key(KEY_ENTER))
 	await process_frame
 	await process_frame
+	check(not is_instance_valid(popup) or popup.is_queued_for_deletion(), "landed, the popup goes")
 	check(not is_instance_valid(s._visit_dice) or not s._visit_dice.is_playing(), "Enter lands it")
 	check("Investigation" in s._visit_log.text, "...and the line is said: %s" % s._visit_log.text)
 	check(s._visit_pending.is_empty(), "...nothing left held")

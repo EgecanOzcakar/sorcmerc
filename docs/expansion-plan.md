@@ -8812,9 +8812,12 @@ anything, and a reload still cannot reroll a result.
 
 **In town** (`_say_rolled` in `scenes/world/world.gd`), steal, persuade,
 haggle, investigate, working at the healer's, carouse and gamble roll the die
-where the line goes.
-- While it is in the air the action buttons wait. A click, Enter, Space or
-  Esc lands it and never skips the result.
+in a popup over the dimmed shop page. It first rolled inline, in the log
+line's place, and the page jumped under it. The owner preferred "a dice popup
+in shop screen rather than moving the elements in the shop page", so the page
+now stays exactly where it was.
+- While it is in the air the action buttons wait. A click anywhere, Enter,
+  Space or Esc lands it and never skips the result.
 - After it lands comes the line, the success sting, and anything that would
   give the roll away: a contact met, a complication's card, the haggled
   prices (`apply_haggle` itself now runs on landing).
@@ -8833,20 +8836,26 @@ said the preview assumed a natural 1 always missed and a 20 always hit.
 **On the map** (`_map_roll`), foraging on the march, a lair's search, a
 landmark's search and sneaking past a lair roll in a small gilt panel just
 above the HUD bar. The HUD line (and its sting and follow-up) waits for the
-die to land. It does not pause the clock: a forage rolls while the party
-marches. Only one is in the air at a time; a second check lands the first. A
+die to land. A click on the panel lands it. It does not pause the clock: a
+forage rolls while the party marches. Only one is in the air at a time; a second check lands the first. A
 failed sneak's follow-up, the lair's own prompt, waits for the landing too, so
 the die says "missed" before the lair notices you. `WorldLairs.sneak_past`'s
 result now names its skill.
 
+`DiceRoll` used to set its size and mouse filter in `_ready()`, which runs
+after the caller's own settings and quietly undid them. Both popups collapsed
+to a thin strip, and a click on the map's die never landed it. The defaults
+are now set in `_init()`.
+
 Under SORCMERC_FAST (every test and robot), and at the Instant pace, every one
 of these says its line on the first frame, exactly as before.
 
-Tests: `tests/test_live_rolls_world.gd` (16 checks, renamed from
+Tests: `tests/test_live_rolls_world.gd` (19 checks, renamed from
 `test_live_rolls_town.gd`), covering both halves:
 - an investigate's die holds back the line, and the buttons wait for it
 - Enter lands it: the line is said, the buttons come back, and the visit's
   log is the line
+- the die is in a popup, not in the page, and the popup goes when it lands
 - a panel rebuilt under a steal's die in the air keeps the held
   line
 - a lair search's die holds the HUD line, and the panel is freed on landing

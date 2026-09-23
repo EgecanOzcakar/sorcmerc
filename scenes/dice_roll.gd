@@ -71,7 +71,10 @@ func _exit_tree() -> void:
 	_count(false)   # freed mid-roll (a panel rebuilt under it): not in the air any more
 
 
-func _ready() -> void:
+# Defaults, set before the caller's own: a popup gives the die a width to
+# centre in, and a click to land it (these were in _ready once, which ran after
+# the caller and quietly undid both).
+func _init() -> void:
 	custom_minimum_size = Vector2(0, DIE + TALLY_SIZE + 28)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 

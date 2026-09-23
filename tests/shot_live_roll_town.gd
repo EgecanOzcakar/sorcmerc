@@ -1,9 +1,9 @@
-# Dev-only: live rolls in town — the visit panel rolling a haggle's die before
+# Dev-only: live rolls in town — a haggle's die rolling in a popup over the shop before
 # the line says how it went. Needs a display (the world renders 3D); not part
 # of run_tests.sh. Run WITHOUT SORCMERC_FAST:
 #
 #   godot --path . --resolution 1400x900 -s tests/shot_live_roll_town.gd
-#     -> docs/shots/live-roll-town-rolling.png   the die in the air, the buttons waiting
+#     -> docs/shots/live-roll-town-rolling.png   the popup die in the air over the dimmed shop
 #     -> docs/shots/live-roll-town-landed.png    landed: the line, the buttons back
 #     -> docs/shots/live-roll-map.png            a lair's search: the die over the HUD bar
 extends SceneTree
