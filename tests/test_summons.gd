@@ -361,7 +361,11 @@ func test_spiritual_weapon() -> void:
 		ilsa.prepared.append("spiritual-weapon")
 	var caster = Adapter.to_combatant(ilsa, "party", Vector2i(2, 0))
 	var foe = Encounter.spawn("goblin", 1.0, "foe", Vector2i(3, 0), 1)
-	var cb := Combat.new(RNG.new(7), [caster, foe], Encounter.board_for("goblin-camp"))
+	# The camp's stake walls come off: one mirrors to (4,0), right beside the
+	# foe, and this is about the weapon, not the furniture.
+	var b := Encounter.board_for("goblin-camp")
+	b["objects"] = b["objects"].filter(func(o): return not o.get("blocks_sight", false))
+	var cb := Combat.new(RNG.new(7), [caster, foe], b)
 	for c in cb.combatants:
 		cb.begin_turn_for(c)
 	cb.turn_idx = cb.order.find(caster)

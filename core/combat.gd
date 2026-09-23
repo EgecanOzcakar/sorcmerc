@@ -2328,6 +2328,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		return {"error": "cannot act"}   # ai.gd swings without asking available()
 	if _source_of(attacker, "cannot_target_source") == target:
 		return {"error": "charmed"}
+	if not has_line_of_sight(attacker.pos, target.pos):
+		return {"error": "no line of sight"}   # the UI asks legal_target(); ai.gd and the autopilot come straight here
 	if target.has("illusion"):
 		# The choke point, not legal_target: ai.gd builds its own target list off
 		# `combatants` and swings through here without asking, and so does the

@@ -8557,6 +8557,31 @@ attacker/enemy pairs over the 200 marsh fights were out of sight because of a
 reed alone, and the sweep came out 177W/23L to the fight either way. Five reed
 hexes on ~110 are not where the lines run.
 
+**What the full suite found, and the fixes (same day).** Walls were only
+half a rule until the AI and the resolver knew about them:
+
+- `resolve_attack()` never asked for a line of sight — the UI does, through
+  `legal_target()`, but `ai.gd` and the autopilot call the resolver straight,
+  so monsters shot through trees. It refuses now, for every caller.
+- The AI archer counted a target in range as shootable; it wants one it can
+  see, and moves when it has none.
+- `AI._toward()` scored hexes by straight-line distance, so a wall between a
+  monster and its target was a local minimum it never left. It floods walking
+  distance out from the goal now, and a hex that can see the goal is worth a
+  step and a half (`SIGHT_DRAW`), or a web-spitter stops one step nearer and
+  blind.
+- `_solidify()`'s connectivity guard judged the grown board, and grown ground
+  always offers a detour: the shrine's Alcove and its mirror stood as two
+  pillar columns straight across the hall, and test_coop's lockstep fight
+  stalled at them for 30 rounds. It judges the room and its mirror as well
+  now, so each column keeps one gap.
+
+Re-measured after all of it: test_scaler holds (the biome rates within their
+drift); test_objectives moved every kind and dropped escort to 38.8%, under
+its 40% floor, because monsters now reach the carter round the camp's stakes.
+Tuned by the kind's own knob as the spec requires — `CARTER_HP_BASE` 10 -> 12,
+escort 41.2% — and the new table is in core/objectives.gd's header.
+
 ### Still open
 
 - ~~The marsh drift.~~ Accepted, not tuned. test_scaler no longer holds the

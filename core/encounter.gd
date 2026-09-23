@@ -85,7 +85,8 @@ static func board_for(theme: String, seed: int = 0) -> Dictionary:
 	# scenes/main.gd's header is the first such caller. Stamped here rather than
 	# written into each builder: there is one place a theme picks a board.
 	b["theme"] = theme if BOARD_NAMES.has(theme) else "sunken-shrine"
-	return _solidify(_grow(_widen(b), seed if seed != 0 else theme.hash()))
+	var room: Array = _widen(b)["hexes"].duplicate()
+	return _solidify(_grow(b, seed if seed != 0 else theme.hash()), room)
 
 # --- what a board's cover IS (2026-09-23) --------------------------------
 #
@@ -121,7 +122,12 @@ const SOLID_COVER := {
 	"marsh": {"screen": true},
 }
 
-static func _solidify(b: Dictionary) -> Dictionary:
+# `room` is the authored room and its mirror, before _grow: the guard judges
+# connectivity there AND on the whole grown board. The room alone, because
+# grown ground always offers a detour — the shrine's two pillar columns sealed
+# its hall shut behind one, and test_coop's fight stalled at it for 30 rounds.
+# The whole board too, because _grow's bites know nothing about walls.
+static func _solidify(b: Dictionary, room: Array = []) -> Dictionary:
 	var solid: Dictionary = SOLID_COVER.get(String(b.get("palette", "")), {})
 	if solid.is_empty():
 		return b
@@ -130,19 +136,27 @@ static func _solidify(b: Dictionary) -> Dictionary:
 		return b
 	# A wall the board cannot afford stays cover: one on a party start (the
 	# forest's (2,0), the downs' (1,1)) or one that splits the floor (the
-	# frozen cave's crawl, the shrine's Alcove once mirrored, where the only
-	# way through IS the cover hex). test_boards and test_height hold both.
+	# frozen cave's crawl; the shrine's Alcove and its mirror, two pillar
+	# columns straight across the hall, each left with one gap). test_boards,
+	# test_height and test_coop's lockstep fights hold it.
 	var floor := {}
+	var inner := {}
 	for h in b["hexes"]:
 		floor[h] = true
+	for h in (room if not room.is_empty() else b["hexes"]):
+		inner[h] = true
 	for o in b["objects"]:
 		if o.get("blocks_movement", false):
 			floor.erase(o["pos"])
+			inner.erase(o["pos"])
 	var soft: Array = []
 	for h in b["cover"]:
 		floor.erase(h)
-		if h in PARTY_STARTS or not _all_connected(floor):
+		var was_inner := inner.erase(h)
+		if h in PARTY_STARTS or not _all_connected(floor) or not _all_connected(inner):
 			floor[h] = true
+			if was_inner:
+				inner[h] = true
 			soft.append(h)
 			continue
 		var o := solid.duplicate()

@@ -162,7 +162,10 @@ func _tutorial_checks() -> void:
 	var foes: Array = tcb.team_of("foe")
 	check(foes.size() == 1, "the tutorial fields exactly one foe")
 	check(foes.size() == 1 and foes[0].max_hp <= 10, "...and a weak one")
-	check(tcb.board["objects"].is_empty(), "the tutorial board is plain — no hazards or props")
+	# Its trees are walls now (Encounter.SOLID_COVER) — the wood's own cover,
+	# not furniture. What the tutorial must not spring is a hazard or a smash.
+	check(tcb.board["objects"].all(func(o): return not o.has("hazard") and int(o.get("hp", 0)) == 0),
+		"the tutorial board is plain — no hazards, nothing to smash")
 	check(Tutorial.STEPS.size() >= 6, "the walkthrough covers every region of the combat screen")
 	var game2 = load("res://scenes/game/game.tscn").instantiate()
 	root.add_child(game2)
