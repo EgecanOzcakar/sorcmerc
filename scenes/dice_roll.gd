@@ -50,6 +50,26 @@ var _pop := 1.0                # the landing scale
 var _tween: Tween = null
 var _emitted := false
 
+# How many dice are in the air anywhere, for whatever must wait for them — the
+# achievement toast (scenes/achievements/toast.gd) holds its queue, or "Talked
+# Down" pops up over a haggle's die before it has landed.
+static var _in_air := 0
+var _counted := false
+
+static func in_air() -> bool:
+	return _in_air > 0
+
+
+func _count(on: bool) -> void:
+	if on == _counted:
+		return
+	_counted = on
+	_in_air = maxi(0, _in_air + (1 if on else -1))
+
+
+func _exit_tree() -> void:
+	_count(false)   # freed mid-roll (a panel rebuilt under it): not in the air any more
+
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(0, DIE + TALLY_SIZE + 28)
@@ -79,6 +99,7 @@ func play(r: Dictionary) -> void:
 		finish()
 		return
 	_playing = true
+	_count(true)
 	var k := 1.0 / maxf(speed, 0.01)
 	_tween = create_tween()
 	_tween.tween_method(_tick, 0.0, 1.0, T_TUMBLE * k)
@@ -127,6 +148,7 @@ func _touchdown() -> void:
 
 func _done() -> void:
 	_playing = false
+	_count(false)
 	queue_redraw()
 	if not _emitted:
 		_emitted = true

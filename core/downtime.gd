@@ -212,6 +212,7 @@ static func carouse(party, world, s, rng = null) -> Dictionary:
 	var nat: int = int(Dice.d20(rng)["nat"])
 	var ok: bool = nat != 1 and (nat == 20 or nat + bonus >= CAROUSE_DC)
 	var out := {"ok": ok, "nat": nat, "bonus": bonus, "dc": CAROUSE_DC, "char_id": ch.id, "cost": cost,
+		"cname": ch.cname, "skill": skill,
 		"contact": ok, "lead": {}, "coin": 0, "complication": "", "tab": 0}
 	if ok:
 		FactionOpinion.raise(s.faction, CAROUSE_CONTACT)
@@ -303,6 +304,7 @@ static func gamble(party, s, stake: int, rng = null) -> Dictionary:
 	else:
 		line = "%s loses the thread of it (%s) — the stake is gone: -%d ◉." % [ch.cname, roll, stake]
 	return {"ok": mult > 0.0, "nat": nat, "bonus": bonus, "dc": GAMBLE_DC, "char_id": ch.id, "stake": stake,
+		"cname": ch.cname, "skill": skill,
 		"mult": mult, "won": won, "complication": "insult" if nat == 1 else "", "text": line}
 
 # --- crafting ---------------------------------------------------------------

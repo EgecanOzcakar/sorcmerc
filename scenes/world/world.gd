@@ -62,6 +62,8 @@ const WorldThreat = preload("res://core/world_threat.gd")
 const Regions = preload("res://core/regions.gd")
 const Travel = preload("res://core/travel.gd")
 const EventCard = preload("res://scenes/world/event_card.gd")
+const DiceRoll = preload("res://scenes/dice_roll.gd")
+const Settings = preload("res://core/settings.gd")
 const Approach = preload("res://core/approach.gd")
 const ApproachCard = preload("res://scenes/world/approach_card.gd")
 const StoryCard = preload("res://scenes/world/story_card.gd")
@@ -2950,6 +2952,13 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if _combat != null:
 		return
+	# A town's die in the air: Enter, Space or Esc lands it (and never leaves
+	# the town under it).
+	if is_instance_valid(_visit_dice) and _visit_dice.is_playing() \
+			and event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE, KEY_ESCAPE]:
+		accept_event()
+		_visit_dice.finish()
+		return
 	# #106: the party screen opened at the inn's counter sits OVER the visit.
 	# Esc there used to fall through to the visit's own bindings underneath —
 	# town square, then Leave — so "Back to the inn" put the party on the map
@@ -3167,10 +3176,8 @@ func _buy_camp_kit() -> void:
 func _steal() -> void:
 	var r: Dictionary = Visit.steal(_visit["settlement"], party, world, _visit)
 	_visit["stolen"] = true
-	if bool(r.get("ok", false)):
-		Sound.play_sfx("pickup")
 	_build_visit_panel()
-	_say(String(r.get("text", "Nobody here has the hands for it.")))
+	_say_rolled(r, String(r.get("text", "Nobody here has the hands for it.")), "pickup")
 
 # T9x: one attempt per visit, same shape as _steal(). Only shown when the
 # market actually refused to trade (see _build_visit_panel).
@@ -3200,7 +3207,7 @@ func _persuade() -> void:
 		_visit = Visit.persuade_into_trading(_visit["settlement"], _visit)
 		_carry_visit_flags(before, _visit)
 	_build_visit_panel()
-	_say(String(r.get("text", "Nobody here will hear you out.")))
+	_say_rolled(r, String(r.get("text", "Nobody here will hear you out.")))
 
 # T9x: haggling — the mirror of persuade(), for a market that's already
 # open. One attempt per visit; moves this visit's prices for better or
@@ -3210,11 +3217,9 @@ func _work_healer() -> void:
 		return
 	var r: Dictionary = Visit.work_healer(_visit["settlement"], party)
 	_visit["worked"] = true
-	if bool(r.get("ok", false)):
-		Sound.play_sfx("buy")
 	_autosave()
 	_build_visit_panel()
-	_say(String(r.get("text", "The healer has no work for you.")))
+	_say_rolled(r, String(r.get("text", "The healer has no work for you.")), "buy")
 
 func _haggle() -> void:
 	if _visit.get("haggled", false):
@@ -3222,15 +3227,18 @@ func _haggle() -> void:
 		return
 	var r: Dictionary = Visit.haggle(_visit, party)
 	_visit["haggled"] = true
-	if not r.is_empty():
+	_build_visit_panel()
+	# The new prices wait for the die: a shelf already reading "x0.85" says how
+	# the roll went before it has landed.
+	_say_rolled(r, String(r.get("text", "Nobody here is in the mood to talk price.")), "buy", func():
+		if r.is_empty():
+			return
 		Visit.apply_haggle(_visit, float(r["mult"]))
 		if bool(r["ok"]):
-			Sound.play_sfx("buy")
 			_cheer()
 		else:
 			_visit["sour"] = true   # a bad ask sours the room, and the face, for the visit
-	_build_visit_panel()
-	_say(String(r.get("text", "Nobody here is in the mood to talk price.")))
+		_build_visit_panel())
 
 # T9x: one attempt per visit. Only shown when a fight resolved near this
 # settlement recently (market()'s own `battle` flag).
@@ -3240,10 +3248,8 @@ func _investigate() -> void:
 		return
 	var r: Dictionary = Visit.investigate_battle(_visit["settlement"], _visit, party)
 	_visit["investigated"] = true
-	if bool(r.get("ok", false)):
-		Sound.play_sfx("pickup")
 	_build_visit_panel()
-	_say(String(r.get("text", "There's nobody here who'd know where to look.")))
+	_say_rolled(r, String(r.get("text", "There's nobody here who'd know where to look.")), "pickup")
 
 # O9 item 2: the inn. Time is the cost — see SettlementVisit.rest — and the extra
 # hours restock the shelf, so the market is re-read afterwards.
@@ -3534,11 +3540,75 @@ func _say(text: String) -> void:
 	if is_instance_valid(_visit_log):
 		_visit_log.text = text
 
+# Live rolls in town (scenes/dice_roll.gd): the action has already happened —
+# core/ rolled it and moved the gold — and this is the telling. The die rolls
+# where the line goes, the panel's buttons wait, and when it lands the line is
+# said, the success sting plays and `then` runs (a card that would otherwise
+# give the roll away before it landed). A result with no roll, and every run
+# under SORCMERC_FAST, says it at once, exactly as _say always did.
+var _visit_dice: Control = null
+var _visit_pending: Dictionary = {}
+
+func _say_rolled(r: Dictionary, text: String, sfx := "", then := Callable()) -> void:
+	if not r.has("nat") or Settings.anim() >= Settings.FAST or not is_instance_valid(_visit_log):
+		if sfx != "" and bool(r.get("ok", false)):
+			Sound.play_sfx(sfx)
+		_say(text)
+		if then.is_valid():
+			then.call()
+		return
+	_visit_pending = {"text": text, "sfx": sfx, "then": then, "ok": bool(r.get("ok", false))}
+	_say("")
+	var d = DiceRoll.new()
+	d.mouse_filter = Control.MOUSE_FILTER_STOP
+	d.tooltip_text = "Click to land it"
+	var box: Node = _visit_log.get_parent()
+	box.add_child(d)
+	box.move_child(d, _visit_log.get_index())
+	d.gui_input.connect(func(e):
+		if e is InputEventMouseButton and e.pressed:
+			d.finish())
+	_visit_dice = d
+	if is_instance_valid(_visit_panel):
+		_disable_all(_visit_panel)   # one thing at a time: the room is watching the dice
+	d.landed.connect(_visit_landed)
+	var skill := String(r.get("skill", ""))
+	d.play({"nat": int(r.get("nat", 1)), "bonus": int(r.get("bonus", 0)), "dc": int(r.get("dc", 10)),
+		"ok": bool(r.get("ok", false)), "dice": r.get("dice", []), "mode": String(r.get("mode", "")),
+		"label": "%s — %s" % [String(Catalog.skills().get(skill, {}).get("name", skill.capitalize())),
+			String(r.get("cname", ""))]})
+
+func _visit_landed() -> void:
+	_flush_visit_roll()
+	if not _visit.is_empty():
+		_build_visit_panel()   # the buttons back, and the line the die was holding
+
+# The held line said, its sting and its follow-up run — on landing, or when
+# anything rebuilds the panel under a die still in the air (the die goes with
+# the old panel; what it was about to say must not).
+func _flush_visit_roll() -> void:
+	if _visit_pending.is_empty():
+		return
+	var p := _visit_pending
+	_visit_pending = {}
+	if is_instance_valid(_visit_dice) and _visit_dice.landed.is_connected(_visit_landed):
+		_visit_dice.landed.disconnect(_visit_landed)
+	_visit_dice = null
+	BugReport.note(String(p["text"]))
+	if not _visit.is_empty():
+		_visit["log"] = String(p["text"])
+	if String(p["sfx"]) != "" and bool(p["ok"]):
+		Sound.play_sfx(String(p["sfx"]))
+	var then: Callable = p["then"]
+	if then.is_valid():
+		then.call_deferred()
+
 # T9x: a settlement is a set of separate screens now (town square / market /
 # inn / notice board), not one panel with everything stacked in it — this is
 # just the shell (frame, title, footer) and the page dispatch; each _build_*
 # below only owns its own content between the title and the footer.
 func _build_visit_panel() -> void:
+	_flush_visit_roll()   # a die still in the air says its line before its panel goes
 	if _visit_panel != null:
 		_visit_panel.queue_free()
 	# D7: a supply_item job's progress is a reading of the pack, not an event,
@@ -4120,17 +4190,18 @@ func _train(ch, feat_id: String) -> void:
 func _carouse() -> void:
 	var r: Dictionary = Downtime.carouse(party, world, _visit["settlement"])
 	var c: Dictionary = _complicate(String(r.get("complication", "")), int(r.get("cost", 0)))
-	_downtime_done(r, "Nobody in the company is fit for a night out.")
-	if bool(r.get("contact", false)):
-		_card({"id": "downtime-carouse", "title": "A night on the town", "kind": "good", "ok": true,
-			"text": String(r["text"]), "gold": int(r.get("coin", 0)), "art": "event-downtime-carouse"}, _on_inn_card_ack)
-	_show_complication(c)
+	# The night's card (a contact) or its story (a complication) waits for the
+	# die: it would say how the roll went before the roll had landed.
+	_downtime_done(r, "Nobody in the company is fit for a night out.", "rest", func():
+		if bool(r.get("contact", false)):
+			_card({"id": "downtime-carouse", "title": "A night on the town", "kind": "good", "ok": true,
+				"text": String(r["text"]), "gold": int(r.get("coin", 0)), "art": "event-downtime-carouse"}, _on_inn_card_ack)
+		_show_complication(c))
 
 func _gamble(stake: int) -> void:
 	var r: Dictionary = Downtime.gamble(party, _visit["settlement"], stake)
 	var c: Dictionary = _complicate(String(r.get("complication", "")), stake)
-	_downtime_done(r, "There is no game on tonight.", "buy")
-	_show_complication(c)
+	_downtime_done(r, "There is no game on tonight.", "buy", func(): _show_complication(c))
 
 func _craft(item_id: String) -> void:
 	_downtime_done(Downtime.craft(party, world, _visit["settlement"], item_id, _visit), "Nobody here will let you at the bench.")
@@ -4138,13 +4209,11 @@ func _craft(item_id: String) -> void:
 # The row's answer, the way _work_healer gives its own: a save (a lost stake
 # and a failed night move the purse as surely as a won one), the panel again,
 # the line under the row.
-func _downtime_done(r: Dictionary, fallback: String, sfx := "rest") -> void:
-	if bool(r.get("ok", false)):
-		Sound.play_sfx(sfx)
+func _downtime_done(r: Dictionary, fallback: String, sfx := "rest", then := Callable()) -> void:
 	if not r.is_empty():
 		_autosave()
 	_build_visit_panel()
-	_say(String(r.get("text", fallback)))
+	_say_rolled(r, String(r.get("text", fallback)), sfx, then)
 
 # A story (Downtime.complication): the consequence lands before the panel
 # under the card is rebuilt — the tab's gold, the insult's opinion; the bad

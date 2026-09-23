@@ -17,6 +17,7 @@ const Ach = preload("res://core/achievements.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Settings = preload("res://core/settings.gd")
 const Sound = preload("res://core/audio.gd")
+const DiceRoll = preload("res://scenes/dice_roll.gd")
 
 const WIDTH := 330.0            # the card, in pixels
 const MARGIN := Vector2(18, 18) # from the top-right corner of the viewport
@@ -53,7 +54,9 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	for def in Ach.take_toasts():
 		_waiting.append(def)
-	while _live.size() < MAX_VISIBLE and not _waiting.is_empty():
+	# A die in the air (scenes/dice_roll.gd): the achievement it earned waits for
+	# it to land, or the toast says how the roll went before the roll does.
+	while _live.size() < MAX_VISIBLE and not _waiting.is_empty() and not DiceRoll.in_air():
 		_show(_waiting.pop_front())
 	_layout()
 	_since_flush += delta

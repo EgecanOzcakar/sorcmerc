@@ -32,8 +32,11 @@ func test_check_preview() -> void:
 	var who: String = c.best_at(Visit.STEAL_SKILL)
 	check(party.get_member(who).cname in line, "...and who rolls it")
 	var bonus: int = c.skill_bonus(who, Visit.STEAL_SKILL)
-	var need := clampi(Visit.STEAL_DC - bonus, 2, 20)
-	check(("needs %d+" % need) in line and ("%d%%" % int(round((21 - need) / 20.0 * 100.0))) in line, "the odds are the d20's (%s)" % line)
+	var need := Visit.STEAL_DC - bonus
+	var pct := int(round(clampf((21 - need) / 20.0, 0.0, 1.0) * 100.0))
+	check(("%d%%" % pct) in line, "the odds are the d20's (%s)" % line)
+	check(("needs %d+" % need) in line if need > 1 and need <= 20 else ("can't fail" in line or "out of reach" in line),
+		"...and the need is said the way the roll decides it (%s)" % line)
 	var adv := Visit.check_preview(party, Visit.HAGGLE_SKILL, Visit.HAGGLE_DC, true)
 	check("advantage" in adv, "advantage is said when it applies")
 	check("Nobody" in Visit.check_preview(Party.new(), Visit.STEAL_SKILL, Visit.STEAL_DC), "an empty party cannot try")
