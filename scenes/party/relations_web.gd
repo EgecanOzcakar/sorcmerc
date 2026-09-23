@@ -60,7 +60,7 @@ var _hover_edge := -1         # an index into edges()
 
 func _init() -> void:
 	name = "RelationsWeb"
-	custom_minimum_size = Vector2(460, 250)
+	custom_minimum_size = Vector2(360, 230)   # it takes the marching column's width; this is the floor
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 

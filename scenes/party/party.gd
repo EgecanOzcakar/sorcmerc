@@ -72,8 +72,8 @@ var _fig_row := HBoxContainer.new()   # T9x: rebuilt on every _refresh() — its
 # buys. Rebuilt on every _refresh() for the same reason the figure picker is —
 # who can be named for a job is the active roster, and that moves under it.
 var _orders_row := VBoxContainer.new()
-var _callings_row := VBoxContainer.new()   # each told calling, one line — under the orders
-var _relations_row := VBoxContainer.new()  # the Relations caption and web, in their own card
+var _callings_row := HBoxContainer.new()   # the told callings, one line in the bottom strip
+var _relations_row := VBoxContainer.new()  # the Relations caption and web, in their own card under the marching column
 var _relations_card := PanelContainer.new()  # hidden for a party of one, which has no pairs
 var _create_btn: Button        # greyed while roster_locked — see roster_locked above
 var _offer: Control = null     # #176: the one-time personality-trait offer, while it is up
@@ -122,7 +122,15 @@ func _ready() -> void:
 			return
 		_on_create_new())
 	cols.add_child(_column("Roster", _roster_col, 1.4, _create_btn))   # #102: the button lives with the list it adds to
-	cols.add_child(_column("Marching, up to %d" % Party.MAX_ACTIVE, _slot_col, 1.0))
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.size_flags_stretch_ratio = 1.0
+	right.add_theme_constant_override("separation", 10)
+	var marching := _column("Marching, up to %d" % Party.MAX_ACTIVE, _slot_col, 1.0)
+	marching.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.add_child(marching)
+	right.add_child(_relations_panel())
+	cols.add_child(right)
 
 	root.add_child(_footer())
 	if exit_label != "":
@@ -159,20 +167,17 @@ func _column(title: String, body: VBoxContainer, stretch: float, corner: Control
 	wrap.add_child(scroll)
 	return wrap
 
-# Two cards side by side. The left holds the purse/stash/figure line the
-# screen already had, D3's standing orders under it (their own line, because
-# the pace note is a sentence, not a widget, and has to stay readable), and
-# the Callings. The right card is the Relations web alone: who gets on with
-# whom is not an order you give, so it does not share the orders' frame.
+# The strip along the bottom, kept to as few lines as it can be: the purse,
+# stash and map figure; D3's standing orders with the pace note beside them
+# (cut to one line, the whole sentence on hover); and the Callings, one line
+# too, only once one has been told. The Relations web is not here: it sits
+# under the marching column, the same width as it, since it is about the
+# same four people.
 func _footer() -> Control:
-	var split := HBoxContainer.new()
-	split.add_theme_constant_override("separation", 12)
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Card"
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	split.add_child(panel)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 8)
+	col.add_theme_constant_override("separation", 4)
 	panel.add_child(col)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
@@ -200,16 +205,18 @@ func _footer() -> Control:
 	col.add_child(_orders_row)
 
 	_callings_row.name = "CallingsRow"
-	_callings_row.add_theme_constant_override("separation", 2)
+	_callings_row.add_theme_constant_override("separation", 14)
 	col.add_child(_callings_row)
+	return panel
 
+# The Relations card, under the marching column and as wide as it.
+func _relations_panel() -> Control:
 	_relations_card.theme_type_variation = "Card"
 	_relations_card.name = "RelationsCard"
 	_relations_row.name = "RelationsRow"
 	_relations_row.add_theme_constant_override("separation", 2)
 	_relations_card.add_child(_relations_row)
-	split.add_child(_relations_card)
-	return split
+	return _relations_card
 
 # Out of the tree now, not at the end of the frame: these rows hold NAMED
 # controls, and a queue_free()d child still sitting there would make Godot
@@ -307,24 +314,32 @@ func _build_orders() -> void:
 	# Both halves earn their place: the note is the sentence that sells the
 	# trade, the numbers are the trade itself. A player should be able to see
 	# that Careful is 0.70x and +2 without opening core/travel.gd.
-	var note := Label.new()
+	# On the pickers' own line, cut to fit, the whole of it on hover.
+	var note := _one_line("%s  %.2f× travel speed, %s." % [
+		Travel.pace_note(pace), Travel.speed_mult(party), _effect(Travel.pace_bonus(party))])
 	note.name = "PaceNote"
-	note.theme_type_variation = "Dim"
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "%s  %.2f× travel speed, %s." % [
-		Travel.pace_note(pace), Travel.speed_mult(party), _effect(Travel.pace_bonus(party))]
-	_orders_row.add_child(note)
+	row.add_child(note)
 
 	# #164: only shown when the slowest active member is under 30 ft — a
 	# standard-speed party gets no extra line.
 	var walk_note_text := Travel.walk_note(party)
 	if walk_note_text != "":
-		var walk_lbl := Label.new()
+		var walk_lbl := _one_line(walk_note_text)
 		walk_lbl.name = "WalkNote"
-		walk_lbl.theme_type_variation = "Dim"
-		walk_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		walk_lbl.text = walk_note_text
 		_orders_row.add_child(walk_lbl)
+
+# A dim line that takes what width is left and ends in "…" rather than
+# wrapping, with the whole text as its tooltip — what keeps the strip short.
+func _one_line(text: String) -> Label:
+	var l := Label.new()
+	l.theme_type_variation = "Dim"
+	l.text = text
+	l.tooltip_text = text
+	l.mouse_filter = Control.MOUSE_FILTER_PASS
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	return l
 
 # The Callings lines and the Relations web. Callings are words — each is a
 # place and a state, and there are only ever a few. Relations were words too
@@ -344,16 +359,15 @@ func _build_relations() -> void:
 		var line: String = Callings.describe(party, String(id))
 		if line != "":
 			lines.append("%s — %s" % [party.get_member(id).cname, line])
+	_callings_row.visible = not lines.is_empty()
 	if not lines.is_empty():
 		var ccap := Label.new()
 		ccap.text = "Callings"
 		ccap.theme_type_variation = "Caption"
 		_callings_row.add_child(ccap)
-		for line in lines:
-			var l := Label.new()
-			l.text = String(line)
-			l.theme_type_variation = "Dim"
-			_callings_row.add_child(l)
+		var l := _one_line("   ·   ".join(lines))
+		l.tooltip_text = "\n".join(lines)
+		_callings_row.add_child(l)
 	_relations_card.visible = not PartyOpinion.active_pairs(party).is_empty()
 	if not _relations_card.visible:
 		return

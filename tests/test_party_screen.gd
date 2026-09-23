@@ -300,7 +300,8 @@ func _node_with_method(node: Node, m: String):
 # is the first thing on the left rather than below the marching four; the
 # marching party follows under theirs, in marching order. A substitute's To
 # party is the primary button while a slot is free. The Relations web has a
-# card of its own, apart from the standing orders.
+# card of its own under the marching column, as wide as it; the standing
+# orders are a short strip along the bottom.
 func _bench_first(screen) -> void:
 	var p = screen.party
 	var out: String = p.active[p.active.size() - 1]
@@ -328,8 +329,17 @@ func _bench_first(screen) -> void:
 	var to_party := _buttons_named(kids[1], "To party")
 	check(to_party.size() == 1 and to_party[0].theme_type_variation == "Primary",
 		"a substitute's To party is the primary button while a slot is free")
-	check(node_named(screen, "RelationsCard") != null and node_named(screen, "RelationsCard").visible,
-		"the relations sit in a card of their own")
+	var card = node_named(screen, "RelationsCard")
+	var marching: Control = screen._slot_col.get_parent().get_parent()   # the column: head, scroll, slots
+	check(card != null and card.visible and card.get_parent() == marching.get_parent(),
+		"the relations sit in a card of their own, under the marching column")
+	await process_frame
+	if card != null:
+		check(absf(card.size.x - marching.size.x) < 1.0,
+			"...as wide as it (%d and %d)" % [card.size.x, marching.size.x])
+	var note := node_named(screen, "PaceNote") as Label
+	check(note != null and note.autowrap_mode == TextServer.AUTOWRAP_OFF and note.tooltip_text == note.text,
+		"the orders strip keeps the pace note to one line, the whole of it on hover")
 	p.activate(out)
 	screen._refresh()
 	await process_frame
