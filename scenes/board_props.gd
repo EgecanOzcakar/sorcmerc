@@ -15,6 +15,13 @@
 # same contract kit_parts.gd's own PARTS table keeps — a typo should draw
 # something visibly wrong, not crash a fight.
 #
+# ...AND THEN GLBs ANYWAY, ON THE KIT'S TERMS (2026-09-23). A batch of props
+# came down from Meshy, 1-5M triangles apiece, and tools/import_beasts.py cut
+# them to 10k (the fight zooms in; 4k read as clay). build() now draws
+# assets/board/<kind>.glb when there is one. The kit still decides how big it
+# is — it is built, measured and thrown away every time — so a model can
+# change how a tree looks and nothing about how tall cover is.
+#
 # WHAT THIS DELIBERATELY DOES NOT OWN. Any mechanic whatsoever. Cover, rough,
 # hazards, what blocks movement and what can be smashed are core/encounter.gd's
 # boards and core/combat.gd's rules; this file reads a hex's role and draws
@@ -29,6 +36,17 @@
 extends RefCounted
 
 const KitParts = preload("res://scenes/world/kit_parts.gd")
+const ModelCache = preload("res://scenes/model_cache.gd")
+const Props3D = preload("res://scenes/world/props3d.gd")
+
+# A converted download for a kind, when there is one (tools/import_beasts.py
+# with DST=assets/board TRIS=10000 --force). The kit plan stays the fallback AND
+# the size: a model is fitted inside the box its kit version fills, so a tree is
+# still 2.6 tall and rough is still knee-high whichever source drew it.
+const MODEL_DIR := "res://assets/board/%s.glb"
+# Widest a model may stand, in hex radii: inside the hex's own flats (sqrt 3),
+# with a little room, so a prop never looks like cover for its neighbour.
+const HEX_SPAN := 1.6
 
 # One palette for the whole board rather than one per prop: these are lit by
 # the same sun as the figures and sit on the same ground, and a per-prop palette
@@ -128,7 +146,40 @@ static func plan(kind: String, seed_v: int = 0) -> Array:
 
 
 static func build(kind: String, seed_v: int = 0) -> Node3D:
-	return KitParts.assemble(plan(kind, seed_v), PALETTE, "boardprop")
+	var kit := KitParts.assemble(plan(kind, seed_v), PALETTE, "boardprop")
+	var scene := ModelCache.get_scene(MODEL_DIR % kind)
+	if scene == null:
+		return kit
+	var m: Node3D = scene.instantiate()
+	var want := Props3D._bounds(kit)
+	kit.free()
+	var got := Props3D._bounds(m)
+	if got.size.y <= 0.0001:
+		return m
+	# The kit's number that MEANS something is kept, and the other is capped.
+	# Cover and objects keep their height (test_board_props: cover is >= 1.2,
+	# worth hiding behind) and are held inside a hex across, squeezed if the
+	# download is wider than that -- the stakes are twice as wide as tall, and
+	# a uniform fit either spilled into three hexes or stood 0.47 high. Rough
+	# is the other way round: its kit is six clumps across the hex at knee
+	# height and the downloads are one round bush, so it fills the width and is
+	# squashed to the kit's height, never rising into something to hide behind.
+	var ky := want.size.y / got.size.y
+	var kw := maxf(want.size.x, want.size.z) / maxf(maxf(got.size.x, got.size.z), 0.0001)
+	var k := kw
+	if kind in ROUGH.values():
+		ky = minf(kw, ky)
+	else:
+		k = minf(ky, HEX_SPAN / maxf(maxf(got.size.x, got.size.z), 0.0001))
+	m.scale = Vector3(k, ky, k)
+	m.position = -Vector3((got.position.x + got.size.x * 0.5) * k, got.position.y * ky,
+		(got.position.z + got.size.z * 0.5) * k)
+	# One model per kind, and a row of cover is six of it: a seeded yaw is what
+	# the kit's per-seed jitter was doing, one level up.
+	var holder := Node3D.new()
+	holder.add_child(m)
+	holder.rotation.y = float(hash("prop/%s/%d" % [kind, seed_v]) % 360) * PI / 180.0
+	return holder
 
 
 static func triangles(kind: String) -> int:

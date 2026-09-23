@@ -46,7 +46,7 @@ static func board() -> Dictionary:
 # --- T11: board themes ------------------------------------------------
 # A board is {hexes, cover, rough, objects, palette, reach_melee, region_at}.
 # `objects` are the interactables combat.gd reads: {type, pos, hazard?, hp?,
-# blocks_movement?, explosive?}. A hazard object is shovable-into (2d6 fire);
+# blocks_movement?, blocks_sight?, explosive?}. A hazard object is shovable-into (2d6 fire);
 # an hp object can be smashed (one action); explosive ones burst on death.
 const THEMES := ["sunken-shrine", "goblin-camp", "city-square", "forest-clearing",
 	"frozen-cave", "merchant-shop", "downs", "marsh"]
@@ -85,7 +85,87 @@ static func board_for(theme: String, seed: int = 0) -> Dictionary:
 	# scenes/main.gd's header is the first such caller. Stamped here rather than
 	# written into each builder: there is one place a theme picks a board.
 	b["theme"] = theme if BOARD_NAMES.has(theme) else "sunken-shrine"
-	return _grow(_widen(b), seed if seed != 0 else theme.hash())
+	var room: Array = _widen(b)["hexes"].duplicate()
+	return _solidify(_grow(b, seed if seed != 0 else theme.hash()), room)
+
+# --- what a board's cover IS (2026-09-23) --------------------------------
+#
+# "Cover" used to be one rule for every prop: stand in the hex, +2 AC and +2
+# on saves. A tree and a reed bank were the same thing to the rules. They are
+# sorted by height and durability now, per palette, because a palette names
+# what its cover is (scenes/board_props.gd's COVER draws the same kinds):
+#
+#   SOLID      full height, durable — a tree, a standing stone, a pillar, an
+#              ice column. Blocks movement AND sight, for good.
+#   BREAKABLE  full height, wooden — a stacked stall, a shelf, a stake wall.
+#              Blocks movement and sight until smashed (the barrel's rule:
+#              one action from beside it, or caught in a blast).
+#   SCREEN     tall and soft — the marsh's reeds. Stays `cover` (stand in it
+#              for +2) and ALSO blocks sight through it: `screens` on the
+#              board. Seeing into or out of the reeds is fine; across is not.
+#              Soft cover alone left the marsh the one open board, 8 points
+#              easier than the walled set (test_scaler, 2026-09-23).
+#   A board whose palette is not here keeps its cover as it was.
+#
+# Barrels and crates were already low breakables (objects with hp that block
+# movement and not sight) and are untouched. Only board_for() solidifies:
+# Encounter.board() is the raw authored room the unit tests stand on, and
+# its Alcove stays the half cover those tests measure.
+const SOLID_COVER := {
+	"forest": {"type": "tree"},
+	"downs": {"type": "menhir"},
+	"shrine": {"type": "pillar"},
+	"ice": {"type": "icicle"},
+	"city": {"type": "crate-stack", "hp": 10},
+	"shop": {"type": "shelf", "hp": 8},
+	"camp": {"type": "stakes", "hp": 6},
+	"marsh": {"screen": true},
+}
+
+# `room` is the authored room and its mirror, before _grow: the guard judges
+# connectivity there AND on the whole grown board. The room alone, because
+# grown ground always offers a detour — the shrine's two pillar columns sealed
+# its hall shut behind one, and test_coop's fight stalled at it for 30 rounds.
+# The whole board too, because _grow's bites know nothing about walls.
+static func _solidify(b: Dictionary, room: Array = []) -> Dictionary:
+	var solid: Dictionary = SOLID_COVER.get(String(b.get("palette", "")), {})
+	if solid.is_empty():
+		return b
+	if solid.get("screen", false):
+		b["screens"] = b["cover"].duplicate()
+		return b
+	# A wall the board cannot afford stays cover: one on a party start (the
+	# forest's (2,0), the downs' (1,1)) or one that splits the floor (the
+	# frozen cave's crawl; the shrine's Alcove and its mirror, two pillar
+	# columns straight across the hall, each left with one gap). test_boards,
+	# test_height and test_coop's lockstep fights hold it.
+	var floor := {}
+	var inner := {}
+	for h in b["hexes"]:
+		floor[h] = true
+	for h in (room if not room.is_empty() else b["hexes"]):
+		inner[h] = true
+	for o in b["objects"]:
+		if o.get("blocks_movement", false):
+			floor.erase(o["pos"])
+			inner.erase(o["pos"])
+	var soft: Array = []
+	for h in b["cover"]:
+		floor.erase(h)
+		var was_inner := inner.erase(h)
+		if h in PARTY_STARTS or not _all_connected(floor) or not _all_connected(inner):
+			floor[h] = true
+			if was_inner:
+				inner[h] = true
+			soft.append(h)
+			continue
+		var o := solid.duplicate()
+		o["pos"] = h
+		o["blocks_movement"] = true
+		o["blocks_sight"] = true
+		b["objects"].append(o)
+	b["cover"] = soft
+	return b
 
 # --- the ground around the room ----------------------------------------
 #

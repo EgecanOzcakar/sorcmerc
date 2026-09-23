@@ -46,7 +46,11 @@ func _setup(spells: Array, goblins: Array, levels := 3) -> Combat:
 	for g in goblins:
 		n += 1
 		all.append(Encounter.spawn("goblin", 1.0, "foe", g, n))
-	var cb := Combat.new(RNG.new(7), all, Encounter.board_for("goblin-camp"))
+	# The marsh has no walls; its reeds screen sight, and this file is about
+	# areas, not sight — so the screens come off.
+	var b := Encounter.board_for("marsh")
+	b.erase("screens")
+	var cb := Combat.new(RNG.new(7), all, b)
 	for c in cb.combatants:
 		cb.begin_turn_for(c)
 	return cb

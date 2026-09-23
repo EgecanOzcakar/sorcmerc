@@ -1047,10 +1047,18 @@ func _already_out(caster, monster_id: String) -> bool:
 # Is `c` a legal target for `v` cast/swung by `actor` right now?
 # #79: the board's edge is a wall. A straight hex line from a to b that leaves
 # the board passes through rock, and nothing can be aimed along it. Adjacent
-# hexes always see each other; solid props are cover, not walls, and do not
-# block.
+# hexes always see each other. A `blocks_sight` object (a tree, a pillar, a
+# stacked stall — Encounter.SOLID_COVER) between them is a wall until it is
+# smashed; the marsh's reeds (`screens`) block the line across them but not
+# into or out of them; low props (barrels, crates) do not block.
 func has_line_of_sight(a: Vector2i, b: Vector2i) -> bool:
 	var line: Array = Hex.line(a, b)
+	var walls := {}
+	for o in objects():
+		if o.get("blocks_sight", false):
+			walls[o["pos"]] = true
+	for h in board.get("screens", []):
+		walls[h] = true
 	# #156: ground higher than BOTH ends is a ridge between them — the pair
 	# cannot see each other over it. Higher than only one is a slope somebody
 	# is standing on or under, and you can always see up or down a slope. The
@@ -1059,7 +1067,7 @@ func has_line_of_sight(a: Vector2i, b: Vector2i) -> bool:
 	var up: Dictionary = heights()
 	var ridge: int = -1 if up.is_empty() else maxi(int(up.get(a, 0)), int(up.get(b, 0)))
 	for i in range(1, line.size() - 1):
-		if not (line[i] in board["hexes"]):
+		if not (line[i] in board["hexes"]) or walls.has(line[i]):
 			return false
 		if ridge >= 0 and int(up.get(line[i], 0)) > ridge:
 			return false
@@ -2320,6 +2328,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		return {"error": "cannot act"}   # ai.gd swings without asking available()
 	if _source_of(attacker, "cannot_target_source") == target:
 		return {"error": "charmed"}
+	if not has_line_of_sight(attacker.pos, target.pos):
+		return {"error": "no line of sight"}   # the UI asks legal_target(); ai.gd and the autopilot come straight here
 	if target.has("illusion"):
 		# The choke point, not legal_target: ai.gd builds its own target list off
 		# `combatants` and swings through here without asking, and so does the

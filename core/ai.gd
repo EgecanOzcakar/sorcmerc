@@ -172,8 +172,24 @@ static func _strike(cb, m, targets: Array) -> void:
 # four swings, and a runaway would be an infinite turn rather than a wrong one.
 const MAX_SWINGS := 6
 
-static func _toward(goal: Vector2i) -> Callable:
-	return func(h: Vector2i) -> float: return -float(Hex.distance(h, goal))
+# Walking distance to `goal`, not hex distance: a tree or a pillar between
+# the two is a wall now (Encounter.SOLID_COVER), and scoring by the straight
+# line parks a monster against it for the rest of the fight. Flooded once
+# outward from the goal; a hex the flood never reached (walled off, or past
+# the budget) falls back to the straight line, a long way behind.
+static func _toward(cb, goal: Vector2i) -> Callable:
+	var walk: Dictionary = Hex.reachable(cb.passable, goal, WALK_BUDGET, [], cb._rough(), cb.heights())
+	return func(h: Vector2i) -> float:
+		return -float(walk.get(h, WALK_BUDGET + Hex.distance(h, goal))) \
+			+ (SIGHT_DRAW if cb.has_line_of_sight(h, goal) else 0.0)
+
+const WALK_BUDGET := 99   # longer than any board is wide, many times over
+# A line to the goal is worth a step and a half of walking. Walls made a hex
+# one step nearer on foot and blind the common case: a web-spitter stopped at
+# (5,0), a step closer than (4,1) and with its line running off the board, and
+# never used the web (test_ai). Under two steps, so a monster never walks the
+# long way round only to look.
+const SIGHT_DRAW := 1.5
 
 static func _away(threats: Array) -> Callable:
 	return func(h: Vector2i) -> float:
@@ -273,13 +289,17 @@ static func _foe_turn(cb, m) -> void:
 
 	if m.ranged:
 		# Kritch: keep clear, stay in range, shoot the softest target.
+		# A target it can see, not only one in range: behind a wall is out of
+		# the fight until somebody moves, and that somebody is the archer.
+		var sees := func(c): return Hex.distance(c.pos, m.pos) <= m.atk_range \
+			and Hex.distance(c.pos, m.pos) > 1 and cb.has_line_of_sight(m.pos, c.pos)
 		var near = _nearest(m.pos, pcs)
 		var d := Hex.distance(m.pos, near.pos)
 		if d <= 1:
 			_move_by(cb, m, _away(pcs), true)
-		elif d > m.atk_range:
-			_move_by(cb, m, _toward(near.pos))
-		var shootable: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.atk_range and Hex.distance(c.pos, m.pos) > 1)
+		elif not pcs.any(sees):
+			_move_by(cb, m, _toward(cb, near.pos))
+		var shootable: Array = pcs.filter(sees)
 		if not shootable.is_empty():
 			shootable.sort_custom(func(a, b): return a.hp < b.hp)
 			await _strike(cb, m, shootable)
@@ -287,7 +307,7 @@ static func _foe_turn(cb, m) -> void:
 
 	# melee, nobody adjacent: close on the nearest PC, then swing if we arrived
 	var target = _nearest(m.pos, pcs)
-	_move_by(cb, m, _toward(target.pos))
+	_move_by(cb, m, _toward(cb, target.pos))
 	var now: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.reach and c.conscious())
 	if not m.conscious():
 		return
@@ -342,7 +362,7 @@ static func _party_auto(cb, h) -> void:
 	var reach: Array = foes.filter(func(c): return cb.in_reach(h, c))
 	if reach.is_empty() and not h.ranged and not moved:
 		var t = _nearest(h.pos, foes)
-		_move_by(cb, h, _toward(t.pos))
+		_move_by(cb, h, _toward(cb, t.pos))
 		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
 
 	# caster: an area spell (a hex, a corner circle, a line) where it nets 2+ foes
@@ -399,7 +419,7 @@ static func _objective_move(cb, h) -> bool:
 				return false
 			if _nearest(cap.pos, cb.heroes()) != h or Hex.distance(h.pos, cap.pos) <= 1:
 				return false
-			_move_by(cb, h, _toward(cap.pos))
+			_move_by(cb, h, _toward(cb, cap.pos))
 			return true
 		"breakout":
 			var exit: Array = cb.objective.get("exit", [])
@@ -409,12 +429,12 @@ static func _objective_move(cb, h) -> bool:
 			for e in exit:
 				if Hex.distance(h.pos, e) < Hex.distance(h.pos, goal):
 					goal = e
-			_move_by(cb, h, _toward(goal))
+			_move_by(cb, h, _toward(cb, goal))
 			return true
 		"escort":
 			var car = cb.with_status("carter")
 			if car == null or car.is_dead() or Hex.distance(h.pos, car.pos) <= 2:
 				return false
-			_move_by(cb, h, _toward(car.pos))
+			_move_by(cb, h, _toward(cb, car.pos))
 			return true
 	return false
