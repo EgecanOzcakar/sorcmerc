@@ -21,6 +21,7 @@ extends PanelContainer
 const Icons = preload("res://core/ui_icons.gd")
 const Portraits = preload("res://scenes/portraits.gd")
 const Figures3D = preload("res://scenes/figures3d.gd")
+const Traits = preload("res://core/traits.gd")
 
 signal closed
 
@@ -178,6 +179,7 @@ func _render() -> void:
 	# dragon's Frightful Presence ended up looking like a cantrip.
 	_verbs_row(c, true, "Spells")
 	_verbs_row(c, false, "Traits")
+	_personality_row(c, cb)
 
 
 # The figure, or null when the art does not cover this class or faction — which
@@ -233,6 +235,37 @@ func _verbs_row(c, want_spell: bool, caption: String) -> void:
 	var Main = load("res://scenes/main.gd")
 	for v in items:
 		flow.add_child(_verb_chip(c, v, Main))
+
+
+# #176: the hero's personality traits — lit in gold where this board makes them
+# count (core/traits.gd's fight-start stamp), muted where it does not. The
+# card's "Traits" row above is the creature's non-spell verbs; this one is who
+# the hero is, and the heading says which.
+func _personality_row(c, cb) -> void:
+	if c.traits.is_empty():
+		return
+	_cap("Personality traits")
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 5)
+	flow.add_theme_constant_override("v_separation", 4)
+	_into().add_child(flow)
+	var live: Array = Traits.live_here(c, cb) if cb != null else []
+	for id in c.traits:
+		var here: bool = id in live
+		var box := PanelContainer.new()
+		box.add_theme_stylebox_override("panel", Icons.box(Icons.COL_ROW,
+			Icons.COL_GOLD if here else Icons.COL_EDGE, 3, 7, 3))
+		box.mouse_filter = Control.MOUSE_FILTER_STOP
+		var lines: Array = Traits.effect_lines(id).map(func(l): return String(l["text"]) + ("" if l["live"] else "  (not yet in play)"))
+		box.tooltip_text = "%s%s\n%s" % [Traits.name_of(id), "  — counts here" if here else "",
+			"\n".join(lines)]
+		var l := Label.new()
+		l.text = Traits.name_of(id)
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+		l.add_theme_color_override("font_color", Icons.COL_GOLD if here else Icons.COL_BODY)
+		box.add_child(l)
+		flow.add_child(box)
 
 
 func _verb_chip(c, v: Dictionary, Main) -> Control:

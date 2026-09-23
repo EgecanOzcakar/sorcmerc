@@ -8730,3 +8730,138 @@ The first render sat in the top-left corner of a dark screen, because
 - The DC formula, the triumph chances and the degree thresholds are
   placeholders until `tests/sweep_traits.gd` measures how often each fires
   over a run.
+
+## Personality traits, step 1 — picked, saved, and counted where the fight is (2026-09-23, #176)
+
+This is step 1 of the build order in
+`docs/superpowers/specs/2026-09-23-traits-design.md`. A hero now has
+personality traits: one **temperament** (Brave, Craven, Wrathful, Calm,
+Greedy, Generous, Curious, Cautious) and one **origin** (Marsh-bred,
+Woods-born, Downs-rider, Cave-dweller, Street-raised, Night-owl). The rows are
+in `data/traits.json` and `core/traits.gd` holds the rules.
+
+**Picked.** The creator's Skills & Background step has a Temperament row and
+an Origin row. The background's defaults are pre-selected and the player can
+change them. When the background changes, a default follows it; a trait the
+player chose stays. Each row spells out what the trait does. Effects this
+build applies in a fight are shown plainly, and the rest are marked "(not yet
+in play)", so nobody picks a line of text believing it is a bonus. Confirm
+fills in any family still empty, so a preset loaded into the creator also
+leaves with traits.
+
+**Saved.** `ch.traits` (`[{id, why}]`) and `ch.traits_offered` go through
+`CharacterSave`, which carries them to the barracks, presets, world and
+campaign saves, and co-op. A file written before this has no traits and was
+never offered them. The first time the party page opens with such a hero, it
+asks **"Who is Owen Marsh?"**, once (`scenes/party/trait_offer.gd`):
+- **Keep these** writes the two picks.
+- **Leave them as they are** writes nothing.
+- Either way the hero is never asked again.
+
+In co-op each player is only offered their own heroes.
+
+**Counted where the fight is.** `world.gd`'s `_run_combat` stamps
+`spec["where"]`:
+- the biome under the company;
+- the region band;
+- the site: road, camp, lair or town.
+
+`Encounter.build` copies it onto the board. The board theme and the night are
+always known, so a board- or night-keyed trait fires even in the demo fight.
+`Traits.stamp` writes each hero's live terms where the engine already reads
+them. AC and to-hit go into a status dict that `_buff_sum` sums. A save goes
+onto the fight's copy of the saves, and initiative goes onto `init_mod`. Each
+number is capped at ±2. One line per hero leads the log, for example "Pike
+Sallow — Cave-dweller here: +1 to hit." The first cut stamped after
+`Combat.new` and missed initiative, because Combat rolls it in its
+constructor. The stamp now runs first, and a test holds the roll itself.
+
+**Shown.** The profile has a Personality traits panel, with each effect in
+verdigris if it applies and muted if it is still to come. The combat card has
+a Personality traits row, gilt where this board makes the trait count. The
+roster card on the party page has a ✦ line naming the traits.
+
+The presets (and the party page's standalone demo roster) carry no traits and
+are never offered them. They are what `Regions.ref_score` and every balance
+sweep measure against, so no measured number moves.
+
+Tests: `tests/test_traits.gd` (136 checks) and `tests/test_trait_pages.gd`
+(24 checks). `tests/drive_buttons.gd` knows the two new creator groups, and
+its snapshot of the hero includes the traits. Pictures:
+`docs/shots/traits-*.png`, from `tests/shot_traits.gd`.
+
+### Still open
+
+- Step 2, the per-roll half: bloodied, first round, the foe's faction or
+  type, and damage type in and out. That covers most temperament effects
+  (Craven, Wrathful, Cautious) and the sweep that measures every number in
+  `data/traits.json`.
+- Step 4, the road: Survival, forage, travel and Persuasion from origins and
+  temperaments, and the opinion terms (§7).
+- `data/traits.json` is not yet a thing a content pack can add rows to. The
+  loader reads the one file.
+- The encounter budget (`Power.estimate`) does not see a trait's status yet;
+  the win-more note in the spec wants it to.
+
+## Personality traits, step 2 — what only the roll knows (2026-09-23, #176)
+
+Step 2 of the build order in `docs/superpowers/specs/2026-09-23-traits-design.md`.
+Step 1 stamped what a fight knows before its first roll: the biome, the board,
+the night. This step answers what only the roll itself knows:
+- whether the hero is **under half HP**;
+- whether it is the **first round**;
+- whether no ally stands **beside them**;
+- the other side's **bestiary faction and type**;
+- the **damage type** coming in or going out.
+
+`Traits.roll(c, key, cb, other, dtype, ability)` returns the term and the
+names behind it. `core/combat.gd` asks it in four places:
+- `to_hit_bonus`, so the odds chip and the roll still agree, and a ray
+  spell's attack too;
+- `effective_ac(c, attacker)`, which grew the attacker it needs for a
+  foe-keyed AC;
+- `_saving_throw(..., vs)`, which grew the conditions a failure would bring,
+  so Brave rolls with advantage against being frightened;
+- the damage sink: a trait's damage rides a hit as a named extra
+  ("+1 wrathful"), and a **ward** comes off after resistance and
+  vulnerability.
+
+The ±2 cap now covers the stamp and the roll together, so a stamped +2 and a
+rolled +1 make +2. A ward is a flat reduction per hit rather than a roll, so
+it sits outside the cap: the spec's Fire-tempered is 3. Each trait says so in
+the log the first time it counts in a fight ("Pike Sallow is Craven: +1 AC.").
+The combat card lights a per-roll trait wherever it can count.
+
+**Now live:** Craven (+1 AC under half HP, −1 to hit in round 1), Wrathful (+1
+damage under half HP), Cautious (+1 AC in round 1) and Brave (advantage against
+being frightened). The foe, element and ward vocabulary has no row in the data
+yet; step 3's earned marks and banes use it. It is tested now on test-only rows
+(`tests/test_traits_roll.gd`, 30 checks).
+
+**Measured** (`tests/sweep_traits.gd`, 300 seeds each, the preset trio all
+holding one trait, `normal`). The baseline wins 88.7%, and no trait moves it
+by more than 3 points:
+
+| Trait | Win % | Change |
+|---|---|---|
+| Craven | 91.7% | +3.0 |
+| Calm | 91.3% | +2.7 |
+| Night-owl | 91.3% | +2.7 |
+| Wrathful, Downs-rider, Cave-dweller | — | +1.0 |
+| Cautious, Street-raised | — | +0.7 |
+| Marsh-bred | — | +0.3 |
+| Woods-born | — | +0.0 |
+| Brave | — | 0 (never fired: no fear save in these rosters) |
+
+Calm and Night-owl produce identical rows. The −1 initiative both carry by day
+only reshuffles the fight, which puts the seed noise floor at about 3 points.
+The cap stays at ±2, and each live trait's `_measured` line carries its row.
+
+### Still open
+
+- Brave's advantage never fired in the sweep. Fear saves are rare in the
+  rosters it fights. Measure it against a fear-heavy roster when step 3 adds
+  the hardship saves that lean on it.
+- `save_fail_chance` (the UI's save odds) does not count traits, or the other
+  save bonuses it already skipped before this.
+- A summoned creature's hits carry no traits of its summoner.

@@ -108,6 +108,8 @@ static func to_dict(ch) -> Dictionary:
 		"prepared": ch.prepared.duplicate(),
 		"xp": ch.xp,
 		"dead": ch.dead,
+		"traits": ch.traits.duplicate(true),
+		"traits_offered": ch.traits_offered,
 	}
 
 # null when the dictionary is not a character save.
@@ -150,6 +152,12 @@ static func from_dict(d: Dictionary):
 	ch.prepared.assign(d.get("prepared", []))
 	ch.xp = int(d.get("xp", 0))
 	ch.dead = bool(d.get("dead", false))
+	# #176. Missing in a file written before traits: no traits, never asked —
+	# which is exactly what makes the party page offer the pick once.
+	for t in d.get("traits", []):
+		if t is Dictionary and String(t.get("id", "")) != "":
+			ch.traits.append({"id": String(t["id"]), "why": String(t.get("why", ""))})
+	ch.traits_offered = bool(d.get("traits_offered", false))
 	return ch
 
 # Returns the path written, or "" on failure.

@@ -30,6 +30,8 @@ const Coop = preload("res://core/coop.gd")
 # under the standing orders. The model is core/party_opinion.gd's; this draws it.
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Callings = preload("res://core/callings.gd")
+const Traits = preload("res://core/traits.gd")
+const TraitOffer = preload("res://scenes/party/trait_offer.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_EDGE := Icons.COL_EDGE
@@ -71,6 +73,7 @@ var _fig_row := HBoxContainer.new()   # T9x: rebuilt on every _refresh() — its
 var _orders_row := VBoxContainer.new()
 var _relations_row := VBoxContainer.new()
 var _create_btn: Button        # greyed while roster_locked — see roster_locked above
+var _offer: Control = null     # #176: the one-time personality-trait offer, while it is up
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -414,6 +417,7 @@ func _refresh() -> void:
 	_build_figure_picker()
 	_build_orders()
 	_build_relations()
+	_maybe_offer_traits()
 
 	_purse.text = "%d ◉" % party.gold
 	if party.stash.is_empty():
@@ -437,6 +441,24 @@ func _refresh() -> void:
 	else:
 		_hint.text = "%s selected — click a party slot to place them, or click them again to cancel." \
 			% party.summary(_selected).get("name", "?")
+
+# #176: a hero from before personality traits is offered the pick once, the
+# first time this page opens with them on it (scenes/party/trait_offer.gd). One
+# at a time, in roster order; in co-op only your own heroes — a friend's are
+# offered on the friend's screen, the way their level-ups are.
+func _maybe_offer_traits() -> void:
+	if _offer != null:
+		return
+	for ch in party.roster:
+		if Traits.needs_offer(ch) and Coop.mine(party, ch.id):
+			_offer = TraitOffer.new()
+			add_child(_offer)
+			_offer.done.connect(func(_kept: bool):
+				_offer.queue_free()
+				_offer = null
+				_refresh())   # re-draws the roster with the traits, and offers the next hero if any
+			_offer.offer(ch)
+			return
 
 # One roster row: summary + select/bench/profile/dismiss.
 func _card(sm: Dictionary) -> Control:
@@ -628,6 +650,8 @@ func _summary_label(sm: Dictionary) -> Control:
 	# tiles you can click stay the profile screen's job.
 	col.add_child(_detail_line("⚔", _gear_text(sm), COL_GOLD, "gear"))
 	col.add_child(_detail_line("◆", _skills_text(sm), COL_PARTY, "skills"))
+	if not sm.get("traits", []).is_empty():   # #176: who they are, by name
+		col.add_child(_detail_line("✦", ", ".join(sm["traits"].map(func(t): return Traits.name_of(t))), Icons.COL_BODY, "traits"))
 	# #165: the class model's face beside the card when it has rendered; the
 	# glyph in the name line stays either way.
 	var face := Portraits.bust(String(HeroModels.get(sm["class_id"], "")), 48)

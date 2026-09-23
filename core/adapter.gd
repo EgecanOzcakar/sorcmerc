@@ -6,6 +6,7 @@ const Combatant = preload("res://core/combatant.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Potions = preload("res://core/potions.gd")
 const PassGear = preload("res://core/rules/pass_gear.gd")
+const Traits = preload("res://core/traits.gd")
 
 # The two calibration knobs. Feet are the rules' unit; hexes are the board's.
 # Changing either re-tunes every encounter — re-run the seed sweep in
@@ -162,6 +163,7 @@ static func to_combatant(ch, team: String, pos: Vector2i):
 	c.stealth = int(s.skills.get("stealth", 0))
 	c.passive_perception = s.passive_perception
 
+	c.traits = Traits.ids(ch)   # #176: stamped where the fight is, by Encounter.build
 	for fid in s.features:
 		c.features[fid] = true
 		if String(fid).contains("darkvision"):

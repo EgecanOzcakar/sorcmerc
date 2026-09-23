@@ -311,13 +311,13 @@ func _creator_at(step: int, species: String, cls: String, background: String,
 
 func _creator_model() -> String:
 	var ch = _cre.ch
-	return "%s|%s|%s|%s|%d|%s|%s|%s|%s|%s" % [ch.cname, ch.species_id, String(ch.class_id()),
+	return "%s|%s|%s|%s|%d|%s|%s|%s|%s|%s|%s" % [ch.cname, ch.species_id, String(ch.class_id()),
 		ch.background_id, _cre._step, _cre._abil_mode, ch.base_abilities,
-		ch.choices, ch.equipped, _cre._confirmed != null]
+		ch.choices, ch.equipped, _cre._confirmed != null, ch.traits]
 
-# The creator marks the currently-picked option in a group with a "● " prefix. Four
+# The creator marks the currently-picked option in a group with a "● " prefix. Six
 # of those are genuinely idempotent, so the allowance is written per group rather
-# than granted to every "● " on the screen: Species, Class and Background, whose
+# than granted to every "● " on the screen: Species, Class, Background and the two personality traits (#176), whose
 # setters all open with "if it is already that, return", and the armor rack's
 # "● None".
 #
@@ -338,7 +338,7 @@ func _creator_expect(c: BaseButton) -> String:
 	if not c.text.begins_with("● "):
 		return ""
 	var group: String = _creator_group(c)
-	if group in ["Species", "Class", "Background"]:
+	if group in ["Species", "Class", "Background", "Temperament", "Origin"]:
 		return "inert: re-picking what the build already is; the setter returns early"
 	if group == "Armor" and c.text.begins_with("● None"):
 		# "● None" is _set_armor("") with nothing to take off: it erases no armor
@@ -353,7 +353,7 @@ func _creator_expect(c: BaseButton) -> String:
 # of heads, notes and option flows in _body, so the nearest heading above a control
 # names its group.
 const CREATOR_GROUPS := ["Name", "Species", "Load a preset", "Class", "Ability scores",
-	"Background", "Choices", "Weapons", "Armor"]
+	"Background", "Temperament", "Origin", "Choices", "Weapons", "Armor"]
 
 func _creator_group(c: BaseButton) -> String:
 	var block: Node = c
