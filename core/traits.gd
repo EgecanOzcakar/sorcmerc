@@ -639,33 +639,35 @@ static func save_mode(c, cb, conds: Array) -> Dictionary:
 #
 # MEASURED 2026-09-23 (tests/sweep_traits_earn.gd, 200 seeds a difficulty, the
 # preset trio holding nothing, a fresh party per fight, the real
-# Encounter.resolve_outcome result). Changes per 100 hero-fights:
+# Encounter.resolve_outcome result), with KIND_CAP and ally_died's chance of
+# 50 in. Changes per 100 hero-fights:
 #
 #               win%   triumph  resilience  scar  wound
-#     easy       98       3.8       4.7      1.8   14.5
-#     normal     94       4.8       6.2      3.7   19.7
-#     hard       89      16.5       8.0      4.3   22.5
-#     deadly     94      16.0       6.3      2.8   20.7
+#     easy       98       3.8       3.5      1.8   13.5
+#     normal     94       4.8       4.5      3.7   17.3
+#     hard       89      16.5       5.2      4.3   19.5
+#     deadly     94      16.0       4.7      2.8   18.8
 #
 # Triumphs outnumber scars at every difficulty, which is the owner's rule: two
 # to one on the road's easy fights, four to six to one where "flawless" can
 # fire (hard and deadly only). The commonest change is a wound, and Wounded is
-# the commonest trait of all (242 times in the 800 fights, Shaken next at 167):
-# a downed hero who failed a death save, lapsing in three days. Of 480 hardship saves, 31% tempered, 24% shook
-# it off, 28% scarred and 17% scarred and Shaken, so a save is close to a coin
-# flip between a good and a bad mark.
+# the commonest trait of all (243 times in the 800 fights, Shaken next at 117):
+# a downed hero who failed a death save, lapsing in three days. Of 355
+# hardship saves, 30% tempered, 23% shook it off, 23% scarred and 23% scarred
+# and Shaken.
+#
+# "Watched a friend die" was asked 163 times before its chance of 50 and 69
+# after; it had been the second commonest hardship, every witness asked every
+# time (heroes die 14 times in 100 of the run's fights, a combat number).
 #
 # The same sweep's 30-day run (20 runs: a road fight a day at easy, a lair
 # every fourth day of two normal rooms and a hard boss room, no inn) gains
-# each hero 5.1 triumphs, 1.8 resiliences, 1.2 scars, 5.0 wounds and 0.75
-# cures, and each ends it holding 8.0 earned traits: 0.5 scars, 0.75 wounds,
-# and 6.8 of the rest (Veteran about halfway through, at 44 fights a run; two
-# banes; grudges; Delver; Hardened). The chances, DCs and degrees stay as the spec set them: the rule
-# they answer to holds.
-# ponytail: nothing limits how many earned traits a hero holds (8 a hero in 30
-# days), and one event can leave both of its outcomes on a hero over two lairs
-# (Delver and Reckless). Revisit if the profile's list gets long enough that
-# the player stops reading it; a cap per family is the cheap fix.
+# each hero 3.7 triumphs, 1.6 resiliences, 1.2 scars, 4.9 wounds and 0.8
+# cures, and each ends it holding 6.1 earned traits (8.0 before KIND_CAP):
+# 5.1 triumphs and resiliences, 0.4 scars, 0.6 wounds.
+# ponytail: one event can still leave both of its outcomes on a hero over two
+# lairs (Delver and Reckless) while there is room under the cap. Revisit if a
+# player reads the pair as a contradiction rather than a story.
 
 const Dice = preload("res://core/dice.gd")
 const RNG = preload("res://core/rng.gd")
@@ -1099,7 +1101,8 @@ static func _cures(out: Dictionary, ch, kills: Array, now: float) -> void:
 # MEASURED 2026-09-23 (tests/sweep_traits_road.gd, 1,500 seeds a biome, the
 # preset trio all holding the trait, normal pace, the best roller). The road's
 # rolls pass 57.4% of the time with no trait. Change in the pass rate:
-#     Downs-rider +4.8 (its +1 travel counts in every roll, in every biome)
+#     Downs-rider +4.8 on the downs, 0 elsewhere (its +1 travel is the downs'
+#       only, the owner's call — it held everywhere before, +4.8 in all three)
 #     Cautious −3.9 (−1 travel, every roll)
 #     Marsh-bred +2.8 in the marsh and −1.3 on the downs (its survival terms
 #       count in about a third of the rolls, the survival events)

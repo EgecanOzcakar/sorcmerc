@@ -983,8 +983,8 @@
     }
   },
   "events": {
-    "_comment": "What an event can leave (spec §6). A triumph rolls `chance`% per hero it touched, then picks an outcome by weight, each weight leaned by the hero's temperament. A hardship is a save: `ability`, `fear` (Brave has advantage, Craven disadvantage), and its `resilience` / `scar`; the DC is 10 + half the attacker's CR, +2 per aggravation, capped at 20.",
-    "_measured": "MEASURED 2026-09-23 (tests/sweep_traits_earn.gd, 200 seeds a difficulty, the preset trio holding nothing): per 100 hero-fights, triumphs 3.8 / 4.8 / 16.5 / 16.0 and scars 1.8 / 3.7 / 4.3 / 2.8 at easy / normal / hard / deadly, so the triumph is the likelier kind at every difficulty. Of 480 hardship saves: 31% tempered, 24% shook it off, 28% scarred, 17% scarred and Shaken. core/traits.gd's earning section has the whole table.",
+    "_comment": "What an event can leave (spec §6). A triumph rolls `chance`% per hero it touched, then picks an outcome by weight, each weight leaned by the hero's temperament. A hardship is a save (asked `chance`% of the time when it has one): `ability`, `fear` (Brave has advantage, Craven disadvantage), and its `resilience` / `scar`; the DC is 10 + half the attacker's CR, +2 per aggravation, capped at 20.",
+    "_measured": "MEASURED 2026-09-23 (tests/sweep_traits_earn.gd, 200 seeds a difficulty, the preset trio holding nothing, with Traits.KIND_CAP and ally_died's chance of 50): per 100 hero-fights, triumphs 3.8 / 4.8 / 16.5 / 16.0 and scars 1.8 / 3.7 / 4.3 / 2.8 at easy / normal / hard / deadly, so the triumph is the likelier kind at every difficulty. Of 355 hardship saves: 30% tempered, 23% shook it off, 23% scarred, 23% scarred and Shaken. ally_died was asked 163 times before its chance, 69 after. core/traits.gd's earning section has the whole table.",
     "flawless": {
       "kind": "triumph",
       "who": "party",

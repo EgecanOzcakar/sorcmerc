@@ -3,8 +3,7 @@
 # them on the road event roller (core/travel.gd's check), which is where the
 # origins' skill terms and the travel term land: Marsh-bred's +2 survival in
 # the marsh, Street-raised's −2 survival in the wild, Downs-rider's +1 travel
-# (everywhere: the spec gives it no place, only the initiative is the downs'),
-# Cautious's −1 travel everywhere. Not a test; its table is the
+# on the downs, Cautious's −1 travel everywhere. Not a test; its table is the
 # one core/traits.gd's road section cites.
 #
 #   godot --headless --path . -s tests/sweep_traits_road.gd

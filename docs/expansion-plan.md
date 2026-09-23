@@ -9410,16 +9410,39 @@ The Careful pace is +2 on every roll, twice Downs-rider's term.
 has monstrosities, duergar and sahuagin, the three the "+s" default got wrong.
 `tests/test_traits_earn.gd` checks every bestiary faction's plural.
 
+**The owner's answers** to what the sweeps turned up, the same day:
+- **Four of a kind at most** (`Traits.KIND_CAP`). A hero can hold at most 4
+  triumphs (banes count as triumphs), 4 resiliences and 4 scars. `grant`
+  refuses a fifth, the way `BANE_CAP` and `WOUND_CAP` already refuse theirs.
+  A tempering save made while at the resilience cap still lifts the scar.
+- **Downs-rider's +1 travel is the downs' only**, like its initiative.
+- **"Watched a friend die" is asked half the time.** Its event carries a
+  `chance` of 50, rolled apart from the save.
+
+Re-measured with all three in:
+
+| difficulty | triumph | resilience | scar | wound |
+|---|---|---|---|---|
+| easy | 3.8 | 3.5 | 1.8 | 13.5 |
+| normal | 4.8 | 4.5 | 3.7 | 17.3 |
+| hard | 16.5 | 5.2 | 4.3 | 19.5 |
+| deadly | 16.0 | 4.7 | 2.8 | 18.8 |
+
+- **Witnesses.** "Watched a friend die" asked 163 times before the change and
+  69 after. Shaken fell from 167 to 117.
+- **The 30-day run.** Each hero now ends it holding 6.1 earned traits, down
+  from 8.0.
+- **Downs-rider** is +4.8 on the downs and 0 in the woods and the marsh.
+
+`tests/test_traits_earn.gd` checks the cap, a bane counting toward it, the
+scar lifted at the resilience cap, and about half the witnesses being asked.
+`tests/test_traits_road.gd` checks Downs-rider on and off the downs.
+
 ### Still open
 
-- **Traits pile up.** Nothing limits how many earned traits a hero holds (8
-  per hero in 30 days). Over two lairs, one event can leave both of its
-  outcomes on the same hero (Delver and Reckless). This is marked `ponytail:`
-  in `core/traits.gd`. A cap per family is the cheap fix.
-- **Downs-rider's +1 travel holds in every biome.** The spec gives it no
-  place: "+1 initiative on the downs; +1 travel". If the owner meant the
-  downs only, the fix is one `when` in `data/traits.json`.
-- **Heroes die often in the run:** 124 hero deaths in 880 fights, 14 per 100
-  fights (the sweep raises them for the next fight). That is a combat number, not a
-  trait one. It is also why "Watched a friend die" is the second commonest
-  hardship.
+- **Both outcomes of one event.** Over two lairs, one event can still leave
+  both of its outcomes on the same hero (Delver and Reckless) while there is
+  room under the cap. This is marked `ponytail:` in `core/traits.gd`.
+- **Heroes die often in the run:** 123 hero deaths in 880 fights, 14 per 100
+  fights (the sweep raises them for the next fight). That is a combat number,
+  not a trait one.
