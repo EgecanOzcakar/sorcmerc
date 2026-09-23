@@ -193,6 +193,7 @@ func _init() -> void:
 	check(not "valdis-hark" in Save.list_slugs(), "delete removes the file")
 
 	same_name_is_not_the_same_hero()
+	casters_keep_their_simple_weapons()
 
 	print("test_creator: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -245,3 +246,32 @@ func same_name_is_not_the_same_hero() -> void:
 	for slug in ["aria-vale", "aria-vale-2"]:
 		Save.delete(slug)
 
+
+# #192: the wizard, sorcerer and druid name their weapons one by one ("dagger",
+# "quarterstaff") where every other class says "simple", and a dagger's own
+# weaponProficiencyId is "simple". Read that way the wizard's shelf held the
+# light crossbow and nothing else, and the druid's the scimitar — and the sheet
+# swung their own quarterstaff without the proficiency bonus.
+func casters_keep_their_simple_weapons() -> void:
+	for cls in ["wizard", "sorcerer"]:
+		var c = build("Test " + cls, "human", cls, "sage", "array")
+		var shelf := Creator.proficient_weapons(c.sheet())
+		for wid in ["dagger", "dart", "sling", "quarterstaff", "light-crossbow"]:
+			check(wid in shelf, "%s: %s is on the equipment shelf (%s)" % [cls, wid, str(shelf)])
+		check(not "longsword" in shelf, "%s: no martial weapon on the shelf" % cls)
+	var druid = build("Test druid", "human", "druid", "sage", "array")
+	var dshelf := Creator.proficient_weapons(druid.sheet())
+	for wid in ["club", "dagger", "quarterstaff", "scimitar", "spear", "sling"]:
+		check(wid in dshelf, "druid: %s is on the equipment shelf" % wid)
+	check("hide" in Creator.proficient_armor(druid.sheet()) and "shield" in Creator.proficient_armor(druid.sheet()),
+		"druid: medium-nonmetal and shields-nonmetal open the armor shelf")
+	var wiz = build("Staff wizard", "human", "wizard", "sage", "array")
+	wiz.equipped.assign(["quarterstaff"])
+	wiz.dirty()
+	var s = wiz.sheet()
+	var staff: Dictionary = {}
+	for a in s.attacks:
+		if String(a.get("id", "")) == "quarterstaff":
+			staff = a
+	check(not staff.is_empty() and int(staff["to_hit"]) == int(s.abilities["str"]["mod"]) + s.proficiency_bonus,
+		"a wizard's quarterstaff adds the proficiency bonus (%s)" % str(staff.get("to_hit", "none")))

@@ -211,6 +211,10 @@ SFX = {
     "quest_complete": ("A short warm triumphant flourish for completing a task, a bright "
                        "horn phrase resolving over a purse of coins landing on wood, "
                        "medieval fantasy, ending cleanly", 2.0, 0.45),
+    # The live rolls' die (scenes/dice_roll.gd), played once as it starts to tumble.
+    "dice_rattle": ("A single twenty-sided plastic die thrown onto a wooden table, one "
+                    "hard strike then quick bouncing clicks slowing down as it spins to "
+                    "rest, close, dry room, no voices", 1.2, 0.5),
 
     # Landmarks (core/landmarks.gd). The place turning up, the card opening,
     # the search on the ground, and one sound per door the card can open. The

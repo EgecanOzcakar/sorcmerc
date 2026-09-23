@@ -785,6 +785,8 @@ func _the_board(s) -> void:
 	var job: Dictionary = active[0]
 	job["progress"] = int(job["required"])
 	job["state"] = "complete"
+	if String(job["kind"]) in ["collect_item", "supply_item"]:   # paid for goods in hand only
+		party.stash_add(String(job["target_item_id"]), int(job["required"]))
 	screen._goto_page("board")
 	await _step()
 	var gold0: int = party.gold

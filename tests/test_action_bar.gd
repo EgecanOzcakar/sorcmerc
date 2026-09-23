@@ -119,6 +119,32 @@ func _init() -> void:
 		var after_back: Array = await _labels(main)
 		check(after_back.size() == 11 and after_back[1].contains("Spells"), "Esc returns to the main bar")
 
+	# #198: the right button pans when dragged and cancels when clicked. A drag
+	# used to cancel on the press, throwing the open list away.
+	main._build_hero_menu(ilsa)
+	await process_frame
+	main._press_hotkey(1)
+	await _labels(main)
+	var rmb := func(pressed: bool) -> void:
+		var b := InputEventMouseButton.new()
+		b.button_index = MOUSE_BUTTON_RIGHT
+		b.pressed = pressed
+		b.position = Vector2(400, 300)
+		main._board._gui_input(b)
+	rmb.call(true)
+	var drag := InputEventMouseMotion.new()
+	drag.button_mask = MOUSE_BUTTON_MASK_RIGHT
+	drag.position = Vector2(460, 320)
+	drag.relative = Vector2(60, 20)
+	main._board._gui_input(drag)
+	rmb.call(false)
+	var dragged: Array = await _labels(main)
+	check(dragged[-1].contains("Back"), "a right-drag pans and leaves the spell list open (#198) (%s)" % str(dragged))
+	rmb.call(true)
+	rmb.call(false)
+	var clicked: Array = await _labels(main)
+	check(clicked.size() == 11 and clicked[1].contains("Spells"), "a right-click still backs out to the main bar (%s)" % str(clicked))
+
 	# A verb that has gone unavailable holds its slot, greyed, instead of
 	# collapsing the row and shifting every badge after it.
 	main._build_hero_menu(ilsa)

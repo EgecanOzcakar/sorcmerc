@@ -3863,12 +3863,24 @@ func _build_visit_panel() -> void:
 	title.theme_type_variation = "Head"
 	box.add_child(title)
 
+	# #201: a page is as long as what the town has — a city's square with every
+	# counter open, a lodge, a battlefield to pick over — and the lists inside a
+	# page were the only part that scrolled. The page body scrolls as a whole
+	# now, capped at what the window has left, so Leave is always on screen.
+	var body_scroll := ScrollContainer.new()
+	body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body_scroll.custom_minimum_size = Vector2(VISIT_PANEL_W, _visit_body_h)
+	var body := VBoxContainer.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body_scroll.add_child(body)
+	box.add_child(body_scroll)
 	match _visit_page:
-		"market": _build_market_page(box, s)
-		"inn": _build_inn_page(box, s)
-		"board": _build_board_page(box, s)
-		"lodge": _build_lodge_page(box, s)
-		_: _build_hub_page(box, s)
+		"market": _build_market_page(body, s)
+		"inn": _build_inn_page(body, s)
+		"board": _build_board_page(body, s)
+		"lodge": _build_lodge_page(body, s)
+		_: _build_hub_page(body, s)
+	_fit_visit_body(body_scroll, body)
 
 	_visit_log = Label.new()
 	_visit_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -3936,6 +3948,24 @@ const VISIT_CHROME_H := 320.0
 
 func _page_scroll_h(want: float) -> float:
 	return clampf(size.y - VISIT_CHROME_H, 120.0, want)
+
+# What the settlement panel keeps for itself around the page body: the title
+# above it, the log line and the Leave bar below, and the panel's own margins.
+const VISIT_BODY_CHROME_H := 170.0
+# The body's last fitted height. A page is rebuilt on every click, so starting
+# the new one at the old one's height keeps the panel from jumping a frame.
+var _visit_body_h := 360.0
+
+# A container cannot measure an autowrapped label before it has a width, so the
+# body is fitted a frame after it is built: as tall as its content, and never
+# taller than the window can show.
+func _fit_visit_body(body_scroll: ScrollContainer, body: Control) -> void:
+	await get_tree().process_frame
+	if not is_instance_valid(body_scroll) or not is_instance_valid(body):
+		return
+	var cap: float = maxf(160.0, size.y - VISIT_BODY_CHROME_H)
+	_visit_body_h = minf(body.get_combined_minimum_size().y, cap)
+	body_scroll.custom_minimum_size.y = _visit_body_h
 
 const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board", "lodge": "Your Lodge"}
 
@@ -5038,6 +5068,8 @@ func _gui_input(e: InputEvent) -> void:
 			pan_by(e.relative)
 			queue_redraw()
 	elif e is InputEventMouseButton and e.pressed:
+		if e.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and _wheel_over_ui():
+			return
 		if e.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom_at(e.position, 1.1)
 		elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
@@ -5047,6 +5079,19 @@ func _gui_input(e: InputEvent) -> void:
 			if p != null:
 				world.set_goal(p, _click_target(e.position))
 		queue_redraw()
+
+# #193: a ScrollContainer that is already at its end, or a list too short to
+# scroll at all, does not accept the wheel, so the event bubbled on up to this
+# screen and a player reading a town's board zoomed the map behind it instead.
+# The wheel belongs to the map only when the pointer is over the map: anything
+# under a panel or a scrolling list is the panel's, whether or not it moved.
+func _wheel_over_ui() -> bool:
+	var c: Control = get_viewport().gui_get_hovered_control()
+	while c != null and c != self:
+		if c is ScrollContainer or c is PanelContainer:
+			return true
+		c = c.get_parent() as Control
+	return false
 
 # #110/#113: a settlement or lair is drawn as a diorama standing UP from its
 # ground point, so a click on its roofs lands on the ground behind it and the

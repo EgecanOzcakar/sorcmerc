@@ -670,6 +670,16 @@ func test_spell_slots() -> void:
 			want.append(0)
 		check(slots == want, "wizard %d slots %s (got %s)" % [pair[0], str(want), str(slots)])
 
+	# A multiclass caster reads the table at the casting class's level, not the
+	# character's: Wizard 2 / Fighter 3 is a level-2 wizard's 3 slots, not 4/3/2.
+	var mc := _build("wizard", 2, abil)
+	for i in 3:
+		mc.add_level("fighter", -1)
+	mc.dirty()
+	var mcs: Array = mc.sheet().spellcasting["slots"]
+	check(int(mcs[0]) == 3 and int(mcs[1]) == 0 and int(mcs[2]) == 0,
+		"wizard 2 / fighter 3 has a level-2 wizard's slots (got %s)" % str(mcs))
+
 	# warlock pact magic replaces the slot table
 	var wl := _build("warlock", 5, abil)
 	var ws: Dictionary = wl.sheet().spellcasting

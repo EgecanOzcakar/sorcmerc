@@ -389,12 +389,21 @@ static func _the(place: String) -> String:
 func _blockers(mover) -> Array:
 	return combatants.filter(func(c): return c.team != mover.team and c.conscious()).map(func(c): return c.pos)
 
+# Every hex a mover may cross but not stop in: anyone else still lying on the
+# board, not just the allies on their feet. A dying hero is still a creature in
+# that space. allies_of() skips them (it answers "who can help"), so a fighter
+# used to walk onto the rogue bleeding out under him. Two tokens on one hex
+# then made the cleric's click pick whichever came first in the list, and the
+# Cure Wounds meant for the rogue went to the fighter (#199). A corpse is an
+# object, not a creature, and can be stood on.
 func _ally_hexes(mover) -> Array:
-	return allies_of(mover).map(func(c): return c.pos)
+	return combatants.filter(func(c): return c != mover and not c.is_dead()).map(func(c): return c.pos)
 
+# Nobody but the dead may already be here. The same rule as _ally_hexes(): a
+# shove, a summon or a wave must not land on a downed hero either.
 func _hex_free(p: Vector2i, ignore = null) -> bool:
 	for c in combatants:
-		if c != ignore and c.conscious() and c.pos == p:
+		if c != ignore and not c.is_dead() and c.pos == p:
 			return false
 	return true
 
@@ -805,13 +814,18 @@ func hit_chance(attacker, target, opts := {}) -> float:
 	return p
 
 # Probability `target` FAILS a DC `dc` save (what a caster wants). UI-only.
-func save_fail_chance(target, dc: int, ability := "dex", ignore_cover := false) -> float:
-	var bonus: int = int(target.saves.get(ability, 0))
-	if is_cover(target.pos) and not ignore_cover:
-		bonus += 2
-	var p_make: float = clampf((21.0 - (dc - bonus)) / 20.0, 0.0, 1.0)
-	if _dodging(target) and ability == "dex":
-		p_make = 1.0 - (1.0 - p_make) * (1.0 - p_make)
+# It reads the same terms _saving_throw() rolls with (_save_terms), so the
+# percentage on a target is the save it will actually make. It used to count the
+# save bonus, cover and Dodge only: a blessed, aura'd, exhausted, restrained or
+# magic-resistant target was previewed as if none of that were there.
+func save_fail_chance(target, dc: int, ability := "dex", ignore_cover := false, magical := false, vs: Array = []) -> float:
+	var t: Dictionary = _save_terms(target, ability, ignore_cover, magical, vs, true)
+	if t["auto_fail"]:
+		return 1.0
+	var p_make: float = clampf((21.0 - (dc - int(t["bonus"]))) / 20.0, 0.0, 1.0)
+	match Dice.combine(t["adv"], t["dis"]):
+		Dice.ADV: p_make = 1.0 - (1.0 - p_make) * (1.0 - p_make)
+		Dice.DIS: p_make = p_make * p_make
 	return 1.0 - p_make
 
 # Probability a Shove or Grapple by `attacker` lands: the target fails its save
@@ -3241,29 +3255,52 @@ func act_smash(actor) -> Dictionary:
 # `vs`: the conditions a failure would bring, when the caller knows them — a
 # Brave hero saves against being frightened with advantage (#176).
 func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false, magical := false, vs: Array = []) -> bool:
-	var adv: bool = _dodging(c) and ability == "dex"   # Dodge: DEX saves only (RAW)
+	var t: Dictionary = _save_terms(c, ability, ignore_cover, magical, vs, false)
+	if t["auto_fail"]:
+		log.append("%s can't resist — the %s save fails automatically." % [c.cname, ability.to_upper()])
+		return false
+	return Dice.d20(rng, Dice.combine(t["adv"], t["dis"])).nat + int(t["bonus"]) >= dc
+
+# Everything a save is rolled with, read once for the roll and the preview both:
+# {bonus, adv, dis, auto_fail}. `peek` is the preview's: it says nothing to the
+# log and spends nothing, so a Bardic Inspiration die is counted at its average
+# rather than consumed.
+func _save_terms(c, ability: String, ignore_cover: bool, magical: bool, vs: Array, peek: bool) -> Dictionary:
+	var out := {"bonus": 0, "adv": _dodging(c) and ability == "dex", "dis": false, "auto_fail": false}   # Dodge: DEX saves only (RAW)
 	var brave: Dictionary = Traits.save_mode(c, self, vs)
 	if brave["adv"]:
-		adv = true
-		_say_trait(c, {"n": 0, "who": brave["who"]}, "advantage")
-	var dis := false
+		out["adv"] = true
+		if not peek:
+			_say_trait(c, {"n": 0, "who": brave["who"]}, "advantage")
 	if magical:
 		for v in c.verbs:
 			if v["kind"] == "save_modifier" and String(v.get("vs", "")) == "magic" \
 					and String(v.get("self", "")) == "adv":
-				adv = true
+				out["adv"] = true
 	for e in _cond_effects(c):
 		if ability in e.get("auto_fail_saves", []):
-			log.append("%s can't resist — the %s save fails automatically." % [c.cname, ability.to_upper()])
-			return false
-		dis = dis or e.get("saves", {}).get(ability, "") == "dis"
+			out["auto_fail"] = true
+			return out
+		out["dis"] = out["dis"] or e.get("saves", {}).get(ability, "") == "dis"
 	var ts: Dictionary = Traits.roll(c, "save", self, null, "", ability)   # #176
-	_say_trait(c, ts, ability.to_upper() + " saves")
-	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c) - _d20_penalty(c) \
+	if not peek:
+		_say_trait(c, ts, ability.to_upper() + " saves")
+	var inspired: int = _consume_inspired(c) if not peek else _inspired_average(c)
+	var bonus: int = int(c.saves.get(ability, 0)) + inspired - _d20_penalty(c) \
 		+ _buff_sum(c, "bonus_save") + aura_bonus(c, "save_bonus") + int(ts["n"])
-	if is_cover(c.pos) and not ignore_cover:
+	# Cover is +2 AC and +2 to DEX saves, nothing else (RAW, and combat-design.md
+	# §2's Alcove). It used to be every save, so a caster by a stall kept
+	# concentration on a CON save the rules give no help with, and a wall
+	# stiffened a mind against Hold Person.
+	if ability == "dex" and is_cover(c.pos) and not ignore_cover:
 		bonus += 2
-	return Dice.d20(rng, Dice.combine(adv, dis)).nat + bonus >= dc
+	out["bonus"] = bonus
+	return out
+
+func _inspired_average(c) -> int:
+	if not c.has("inspired"):
+		return 0
+	return int(round((int(c.statuses["inspired"].get("dice_sides", 6)) + 1) / 2.0))
 
 # Bardic Inspiration (and anything shaped like it): a one-shot die added to the
 # bearer's own next attack or save, auto-applied — this engine has no reaction

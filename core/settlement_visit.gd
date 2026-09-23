@@ -633,7 +633,7 @@ static func quest_offer(s, party, world = null) -> Dictionary:
 	return out[0] if not out.is_empty() else {}
 
 static func turn_ins(party) -> Array:
-	return party.quests.filter(func(q): return Quest.can_turn_in(q))
+	return party.quests.filter(func(q): return Quest.can_turn_in(q, party))
 
 # --- steal (T30's opportunity_check, in a market) --------------------------
 

@@ -529,3 +529,18 @@ static func day_clock(elapsed: float, sep := "  ") -> String:
 static func clear() -> void:
 	if FileAccess.file_exists(path()):
 		DirAccess.remove_absolute(path())
+
+# One run off the title screen's list, for good. Every "New run" mints a slot
+# and nothing ever took one away, so the list only grew. The legacy slot is a
+# copy of the pre-slots world.json (_migrate_legacy), so deleting it has to take
+# that file too — otherwise the next list_slots() copies it straight back.
+static func delete_slot(id: String) -> void:
+	if id == "" or id.contains("/") or id.contains(".."):
+		return
+	var full := dir() + "/worlds/%s.json" % id
+	if FileAccess.file_exists(full):
+		DirAccess.remove_absolute(full)
+	if id == "legacy" and FileAccess.file_exists(dir() + "/world.json"):
+		DirAccess.remove_absolute(dir() + "/world.json")
+	if _active_slot == id:
+		_active_slot = ""

@@ -132,7 +132,13 @@ func show_title() -> void:
 	var slots: Array = WorldSave.list_slots()
 	for i in slots.size():
 		var slot: Dictionary = slots[i]
-		col.add_child(_button("Resume the open world", _resume_world.bind(String(slot["id"])), i == 0))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var resume := _button("Resume the open world", _resume_world.bind(String(slot["id"])), i == 0)
+		resume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(resume)
+		row.add_child(_quiet("Delete…", _confirm_delete_world_save.bind(slot)))
+		col.add_child(row)
 		col.add_child(_dim(slot_lines(slot)))
 		col.add_child(_gap(6))
 	col.add_child(_button("New run", show_party_setup, slots.is_empty()))
@@ -195,8 +201,9 @@ static func slot_lines(slot: Dictionary) -> String:
 	return first + "\n" + second
 
 # Deleting the only copy of a run is not a one-click thing: this is its own
-# screen, and the way back is a button rather than a guess.
-func _confirm_delete_world_save() -> void:
+# screen, and the way back is a button rather than a guess. It was built and
+# never given a door; each slot on the title screen now has one ("Delete…").
+func _confirm_delete_world_save(slot: Dictionary) -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -204,7 +211,7 @@ func _confirm_delete_world_save() -> void:
 	head.text = "Delete the open-world autosave?"
 	head.theme_type_variation = "Title"
 	col.add_child(head)
-	col.add_child(_dim(slot_lines(WorldSave.summary())))
+	col.add_child(_dim(slot_lines(slot)))
 	var body := Label.new()
 	body.text = "The characters stay in the barracks. The map, the purse, the stash and the quests do not. This cannot be undone."
 	body.theme_type_variation = "Serif"
@@ -213,7 +220,7 @@ func _confirm_delete_world_save() -> void:
 	col.add_child(body)
 	col.add_child(_gap(8))
 	col.add_child(_button("Delete it", func():
-		WorldSave.clear()
+		WorldSave.delete_slot(String(slot.get("id", "")))
 		show_title()))
 	col.add_child(_quiet("Keep it", show_title))
 	var centre := CenterContainer.new()

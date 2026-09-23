@@ -304,6 +304,29 @@ func _done() -> void:
 	WorldSave.clear()
 	check(WorldSave.summary().is_empty(), "and the slot can be cleared from the title")
 
+	# The title's "Delete…" takes one run off the list and leaves the others.
+	var keep_slot := WorldSave.new_slot()
+	WorldSave.set_active_slot(keep_slot)
+	WorldSave.save(w2, p2)
+	var drop_slot := WorldSave.new_slot()
+	WorldSave.set_active_slot(drop_slot)
+	WorldSave.save(w2, p2)
+	var ids := func() -> Array: return WorldSave.list_slots().map(func(r): return String(r["id"]))
+	check(drop_slot in ids.call() and keep_slot in ids.call(), "two runs, two slots on the title")
+	WorldSave.delete_slot(drop_slot)
+	check(not drop_slot in ids.call() and keep_slot in ids.call(), "deleting one slot leaves the other")
+	check(WorldSave.active_slot() == "", "and a deleted active slot is no longer the one saves go to")
+	WorldSave.delete_slot("../settings")
+	check(keep_slot in ids.call(), "a slot id with a path in it deletes nothing")
+	# The legacy slot is a copy of the pre-slots world.json: deleting it must
+	# take the original too, or the next listing copies it straight back.
+	WorldSave.set_active_slot("")
+	WorldSave.save(w2, p2)
+	check("legacy" in ids.call(), "a pre-slots save shows up as the legacy slot")
+	WorldSave.delete_slot("legacy")
+	check(not "legacy" in ids.call(), "and a deleted legacy slot stays deleted")
+	WorldSave.delete_slot(keep_slot)
+
 	# the ladder rides the save beside opinion; an old save is a fresh ladder
 	var Ladder = load("res://core/ladder.gd")
 	Ladder.reset()

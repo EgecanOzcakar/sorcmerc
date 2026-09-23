@@ -322,11 +322,15 @@ static func record_region_reached(party, region_id: String) -> void:
 # be shown (world.gd re-reads it on every redraw of a town screen).
 static func record_stash(party) -> void:
 	for q in party.quests:
-		if q["kind"] != "supply_item" or not q["state"] in ["active", "complete"]:
+		if not q["kind"] in ["supply_item", "collect_item"] or not q["state"] in ["active", "complete"]:
 			continue
 		var have: int = party.stash_count(String(q["target_item_id"]))
-		q["progress"] = mini(int(q["required"]), have)
-		q["state"] = "complete" if have >= int(q["required"]) else "active"
+		# collect_item's tally is what the bodies dropped, so the pack can only
+		# pull it DOWN: ears sold at a stall, or lost to a wiped delve's
+		# wipe_penalty, are ears no longer in hand to turn in.
+		var got: int = have if q["kind"] == "supply_item" else mini(int(q["progress"]), have)
+		q["progress"] = mini(int(q["required"]), got)
+		q["state"] = "complete" if int(q["progress"]) >= int(q["required"]) else "active"
 
 # #153: where each open job points on the map — [{pos, kind, title, done}].
 # A job still being done points at what it names (the band, the lair, the
@@ -367,15 +371,21 @@ static func _position_of(things: Array, id: String):
 			return t.position
 	return null
 
-static func can_turn_in(quest: Dictionary) -> bool:
-	return not quest.is_empty() and quest["state"] in ["active", "complete"] \
-		and int(quest["progress"]) >= int(quest["required"])
+# With a party, the two kinds paid for goods also need the goods in the pack.
+# turn_in() used to pay in full and then fail to take ears that had been sold.
+static func can_turn_in(quest: Dictionary, party = null) -> bool:
+	if quest.is_empty() or not quest["state"] in ["active", "complete"] \
+			or int(quest["progress"]) < int(quest["required"]):
+		return false
+	if party != null and quest["kind"] in ["collect_item", "supply_item"]:
+		return party.stash_count(String(quest["target_item_id"])) >= int(quest["required"])
+	return true
 
 # Any merchant takes a finished quest, not just the giver (kept deliberately simple).
 # O7: pass the taker's faction and finishing the job raises their opinion of you;
 # the linear campaign has no factions and passes nothing.
 static func turn_in(party, quest: Dictionary, faction := "") -> bool:
-	if not can_turn_in(quest):
+	if not can_turn_in(quest, party):
 		return false
 	if faction != "":
 		FactionOpinion.raise(faction, FactionOpinion.QUEST_DONE)

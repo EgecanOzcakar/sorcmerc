@@ -9446,3 +9446,118 @@ scar lifted at the resilience cap, and about half the witnesses being asked.
 - **Heroes die often in the run:** 123 hero deaths in 880 fights, 14 per 100
   fights (the sweep raises them for the next fight). That is a combat number,
   not a trait one.
+
+## An audit pass — the player reports, and what four sweeps of the code found (2026-09-23)
+
+The morning's playtest filed fourteen issues (#188–#201), and four read-only
+audits went over combat, the map, the party and build rules, and the screens.
+This entry is what came of both: the bugs a player can reach, fixed with a test
+each, plus two missing pieces the audits turned up (a way to delete a saved run,
+and the dice's own sound).
+
+**From the playtest:**
+- **#199, a heal went to the wrong hero.** A fighter could end his move on the
+  rogue bleeding out under him. `move_field()` kept a mover off allies on their
+  feet only (`allies_of()` skips the downed). With two tokens on one hex, the
+  cleric's click took the first in the list. Now nobody stops on anyone who is
+  not dead, and `_hex_free()` says the same for shoves, summons and waves. A
+  corpse is an object and can still be stood on.
+- **#198, right-drag cancelled the aim.** The board cancelled on the right
+  button's *press*, so panning with it threw away an open spell list. It now
+  cancels on the release, and only if the button moved no more than a click's
+  wobble (`RMB_CLICK_SLOP`, 6 px).
+- **#193, the wheel zoomed the map through a menu.** A ScrollContainer at its
+  end, or too short to scroll, lets the wheel bubble up to the map. The map now
+  ignores the wheel when the pointer is over any panel or scrolling list
+  (`_wheel_over_ui()`).
+- **#201, long town pages ran off the screen.** Each page's lists scrolled, but
+  the page did not. The page body now scrolls as a whole, fitted a frame after
+  it is built to the smaller of its content and the window's height. Leave is
+  always on screen.
+- **#200, presets skipped the unlocks.** On a fresh profile, Vera (Fighter) and
+  Pike (Rogue, Thief) loaded straight into a class the list beside them showed
+  as locked. `Creator.build_lock_note()` asks the same gate of a whole build
+  (species, every class, every subclass). A locked preset is greyed with its
+  price, and `_load_preset()` refuses it. The player's own presets are gated
+  the same way.
+- **#192, a wizard's shelf held one crossbow.** The export names the wizard,
+  sorcerer and druid weapons one by one (`dagger`, `quarterstaff`), while a
+  dagger's `weaponProficiencyId` is `simple`. Read that way, the druid had
+  nothing but the scimitar. This was not only the shelf: the sheet swung their
+  own quarterstaff **without the proficiency bonus**. `PassGear.weapon_proficient()`
+  is now the one reader for the creator, the attack list and both mastery
+  lists. The creator's armour shelf reads `PassGear.proficient()` too, so the
+  druid's `medium-nonmetal` and `shields-nonmetal` open it.
+
+**From the audits:**
+- **Cover helped every save.** It is +2 AC and +2 to DEX saves (RAW, and
+  combat-design.md's Alcove). It was being added to every save: a caster by a
+  stall held concentration on CON saves more often, and a wall helped a mind
+  against Hold Person. It is DEX only now.
+  **This moves fight numbers** that were measured with the bug in (the
+  win-rate table in `core/regions.gd`, the trait sweeps). The effect is small
+  but not zero. The next balance sweep should re-run them rather than trust the
+  old tables.
+- **The save odds on a target were a different save.** `save_fail_chance()`
+  counted the bonus, cover and Dodge. The roll also counts Bless-style buffs,
+  auras, exhaustion, traits, condition disadvantage, auto-fails and Magic
+  Resistance. Both now read one `_save_terms()`. The preview peeks: it logs
+  nothing and counts an inspiration die at its average instead of spending it.
+- **Goods jobs paid with the goods gone.** `turn_in()` paid in full and then
+  ignored `stash_remove()` failing, so ears sold at a stall or lost to a wiped
+  delve were still paid for. `can_turn_in(quest, party)` now wants the goods
+  in the pack. `record_stash()` also pulls a `collect_item` tally *down* to
+  what is in hand (never up: that tally is what bodies dropped).
+- **Two bands under one name.** A new band's number was "live bands of this
+  kind, plus one". With bandit-1 dead and bandit-2 alive, the next spawn was a
+  second bandit-2, and a fallen band respawns under its old id. `hunt_party`
+  lookups take the first match. `WorldBands._fresh_id()` now takes the first
+  number held by neither a live band nor a fallen one. A freshly seeded map
+  comes out the same as before.
+- **The pit printed a signed, nominal stake.** A loss read "The house keeps
+  its stake: -60 ◉" even from a purse of 50. It now reports the coin that
+  moved, and says "all the party had" when that is less than the stake.
+- **A multiclass caster's slots came off the total level.** A Wizard 2 /
+  Fighter 3 got the level-5 wizard row. The slot and pact tables now read the
+  casting class's level when there is a second class. A single-class build
+  keeps the character level, because `Bundles.class_level()` reads the highest
+  level that granted a feature and could read one short. There is no UI for a
+  second class yet, so this could not be reached in play. Marked `ponytail:`.
+
+**Two pieces that were missing:**
+- **Deleting a saved run.** Every New run mints a slot, and nothing removed
+  one. `_confirm_delete_world_save()` was built and never given a door. Each
+  run on the title now has **Delete…** beside it. `WorldSave.delete_slot()`
+  also removes the legacy `world.json` behind the `legacy` slot, since
+  otherwise the next listing copies it straight back. Settings' "Clear
+  autosave" only ever knew the linear run's save, and it reported "No autosave
+  to clear." even after clearing one (`clear()` returns nothing). It now shows
+  only in the linear mode and tells the truth. The open-world settings point
+  to the title instead.
+- **The die's rattle** (the first two live-roll entries both left it open).
+  `sfx_dice_rattle` in `tools/gen_audio.py` is one strike and eleven bounces,
+  closer and quieter as the die spins down, plus a last flutter. It is
+  rendered at 44.1 kHz like the rest. `scenes/dice_roll.gd` plays it once as
+  the tumble starts, in place of the UI click on each of 14 face changes.
+  There is an ElevenLabs prompt beside it for a recorded take.
+
+Screens: `tests/shot_audit.gd` (needs a display).
+
+### Still open
+
+- **Three death-save successes stand the hero up at 1 HP.** RAW, three
+  successes leave you stable and still unconscious; only a natural 20 wakes you.
+  The engine has a complete "stable" status that nothing ever sets
+  (`is_stable()`, the `heal()` erase, `end_turn()`'s skip). Every balance
+  measurement stands on the revive, so this is the owner's call, not a fix.
+- **Two lairs raiding one town.** `Raids.land()` has one `raided_by` slot, so
+  the second raider overwrites the first. Clearing either lifts the town, and
+  the first lair's job loses its raid premium. Fix it with a raider list, or
+  by not setting out for a town already raided.
+- **`SettlementVisit.check_preview`'s natural-1/20 note** (live rolls, part 1)
+  is stale. The preview already reads plain nat + bonus.
+- **Not touched here:** #179 (new heroes joining at level 1 again) is a
+  balance decision. #191 (merging duplicate choice lists), #188–#190 (the
+  creator's layout) and #194–#197 (the combat board's rendering) are each
+  their own piece of work.
+- `Regions.describe()` is only called by its test.

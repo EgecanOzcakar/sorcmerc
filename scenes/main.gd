@@ -1576,7 +1576,8 @@ func target_readout(h, c) -> String:
 		return "≈%d HP" % int(n * (s + 1) / 2.0 + int(v.get("heal_bonus", v.get("dice_bonus", 0))))
 	if v.get("save", "") != "":
 		return "%d%%" % int(round(cb.save_fail_chance(c, int(v.get("save_dc", h.save_dc)),
-			v["save"], v.get("ignores_cover", false)) * 100.0))
+			v["save"], v.get("ignores_cover", false), v.get("magical", v["kind"] == "spell"),
+			v.get("conditions", [])) * 100.0))
 	return ""
 
 # board callbacks -------------------------------------------------------
@@ -2753,6 +2754,12 @@ class Board extends Control:
 	var _flash := {}     # id -> ttl
 	var _hover := Vector2i(999, 999)
 	var _hover_pt := Vector2(1e9, 1e9)   # un-iso'd pixel point under the mouse, for corner aiming
+	# #198: the right button both pans (held and dragged) and cancels (clicked).
+	# Cancelling on the press threw away an aimed spell every time the player
+	# only meant to look round the board, so the cancel waits for the release
+	# and is skipped when the button travelled further than a click wobbles.
+	var _rmb_travel := -1.0   # pixels dragged since the right press; < 0 when it is up
+	const RMB_CLICK_SLOP := 6.0
 
 	# The aim for an area verb at the current hover: a hex, a corner (three
 	# hexes) or the aimed hex of a line; null when the mouse is off the board.
@@ -3346,6 +3353,8 @@ class Board extends Control:
 			return
 		if e is InputEventMouseMotion:
 			if e.button_mask & (MOUSE_BUTTON_MASK_MIDDLE | MOUSE_BUTTON_MASK_RIGHT):
+				if _rmb_travel >= 0.0:
+					_rmb_travel += e.relative.length()
 				main.pan_by(e.relative)
 				return
 			var hx := _unpix(e.position)
@@ -3357,13 +3366,18 @@ class Board extends Control:
 				main.board_hex_hovered(hx)
 			elif main._mode == "area":
 				queue_redraw()   # a corner can change without the hex changing
+		elif e is InputEventMouseButton and not e.pressed and e.button_index == MOUSE_BUTTON_RIGHT:
+			var click := _rmb_travel >= 0.0 and _rmb_travel <= RMB_CLICK_SLOP
+			_rmb_travel = -1.0
+			if click:
+				main.board_cancel()
 		elif e is InputEventMouseButton and e.pressed:
 			if e.button_index == MOUSE_BUTTON_WHEEL_UP:
 				_zoom_at(e.position, 1.1)
 			elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 				_zoom_at(e.position, 1.0 / 1.1)
 			elif e.button_index == MOUSE_BUTTON_RIGHT:
-				main.board_cancel()
+				_rmb_travel = 0.0
 			elif e.button_index == MOUSE_BUTTON_LEFT:
 				main.board_hex_clicked(_unpix(e.position))
 

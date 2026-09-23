@@ -10,6 +10,7 @@ extends Control
 
 const Character = preload("res://core/character.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const PassGear = preload("res://core/rules/pass_gear.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Save = preload("res://core/character_save.gd")
 const Ach = preload("res://core/achievements.gd")
@@ -230,6 +231,30 @@ static func lock_note(kind: String, id: String) -> String:
 				return _price("class XP", Prog.subclass_remaining(id))
 	return ""
 
+# #200: the same gate, asked of a whole build. A preset used to skip it, so on a
+# fresh profile Vera handed over the Fighter and Pike the Rogue (and the Thief)
+# that the class list beside them still showed as locked. The first lock the
+# build runs into is the one it wears; "" when every part of it is open.
+static func build_lock_note(c) -> String:
+	var note := lock_note("species", c.species_id) if c.species_id != "" else ""
+	if note != "":
+		return note
+	var seen: Array = []
+	for l in c.levels:
+		var cid := String(l["class_id"])
+		if cid in seen:
+			continue
+		seen.append(cid)
+		note = lock_note("class", cid)
+		if note != "":
+			return note
+	for d in c.choices.values():
+		if d is Dictionary and d.get("type", "") == "subclass" and String(d.get("subclassId", "")) != "":
+			note = lock_note("subclass", String(d["subclassId"]))
+			if note != "":
+				return note
+	return ""
+
 static func _price(currency: String, remaining: int) -> String:
 	return "locked — %d more %s" % [remaining, currency] if remaining > 0 else "locked"
 
@@ -295,7 +320,7 @@ static func proficient_weapons(sheet) -> Array:
 	var out: Array = []
 	for wid in Catalog.index("weapons.json"):
 		var w: Dictionary = Catalog.index("weapons.json")[wid]
-		if w["weaponProficiencyId"] in profs or w["category"] in profs:
+		if PassGear.weapon_proficient(w, profs):
 			out.append(wid)
 	return out
 
@@ -303,9 +328,9 @@ static func proficient_armor(sheet) -> Array:
 	var profs: Array = sheet.proficiencies["armor"]
 	var out: Array = []
 	for aid in Catalog.index("armor.json"):
-		var a: Dictionary = Catalog.index("armor.json")[aid]
-		var cat: String = a["category"]
-		if cat in profs or (cat == "shield" and "shields" in profs):
+		# The sheet's own rule, so the druid's "medium-nonmetal" and
+		# "shields-nonmetal" open the shelf the way they open the AC.
+		if PassGear.proficient("armor", Catalog.index("armor.json")[aid], profs):
 			out.append(aid)
 	return out
 
@@ -634,7 +659,7 @@ func _build_basics() -> void:
 	var pf := _flow()
 	for pre in [["Vera Kord (Fighter 3)", "vera"], ["Pike Sallow (Rogue 3)", "pike"],
 			["Ilsa Vane (Cleric 3)", "ilsa"]]:
-		_opt(pf, pre[0], false, func(): _load_preset(pre[1]))
+		_gate(_opt(pf, pre[0], false, func(): _load_preset(pre[1])), build_lock_note(_preset(pre[1])))
 	# #104: the player's own, saved from the Review step
 	var mine: Array = Save.list_presets()
 	if not mine.is_empty():
@@ -644,8 +669,8 @@ func _build_basics() -> void:
 			var pre = Save.load_preset(slug)
 			if pre == null:
 				continue
-			_opt(mf, "%s (%s %d)" % [pre.cname, humanize(pre.class_id()), pre.level()], false,
-				func(): _load_user_preset(slug))
+			_gate(_opt(mf, "%s (%s %d)" % [pre.cname, humanize(pre.class_id()), pre.level()], false,
+				func(): _load_user_preset(slug)), build_lock_note(pre))
 
 func _set_species(sid: String) -> void:
 	if ch.species_id == sid:
@@ -655,11 +680,17 @@ func _set_species(sid: String) -> void:
 	ch.dirty()
 	_refresh()
 
-func _load_preset(which: String) -> void:
+static func _preset(which: String):
 	match which:
-		"vera": ch = Presets.vera()
-		"pike": ch = Presets.pike()
-		"ilsa": ch = Presets.ilsa()
+		"vera": return Presets.vera()
+		"pike": return Presets.pike()
+	return Presets.ilsa()
+
+func _load_preset(which: String) -> void:
+	var pre = _preset(which)
+	if build_lock_note(pre) != "":
+		return   # the button is greyed; this is the guard behind it
+	ch = pre
 	# The presets are level-3 builds; a preset joins a higher-level party at its
 	# level too. Topped up rather than rebuilt — what they already are is a real
 	# build with its choices made, and only the levels above it are missing.
@@ -670,6 +701,10 @@ func _load_user_preset(slug: String) -> void:
 	var pre = Save.load_preset(slug)
 	if pre == null:
 		_status.text = "That preset is gone."
+		return
+	var locked := build_lock_note(pre)
+	if locked != "":
+		_status.text = "%s is %s on this profile." % [pre.cname, locked]
 		return
 	ch = pre
 	Leveling.grant_levels(ch, start_level)

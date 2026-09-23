@@ -400,11 +400,23 @@ func _catch_up_in_creator() -> void:
 
 	# The presets are level-3 builds handed straight to Review — they are topped
 	# up to the party's level rather than rebuilt.
+	# Ilsa, because the cleric is open from day one and the fighter is not (#200).
 	scr.set_start_level(7)
-	scr._load_preset("vera")
+	scr._load_preset("ilsa")
 	check(scr.ch.level() == 7, "a preset joins at the party's level too (got %d)"
 		% scr.ch.level())
-	check(scr.ch.class_level("fighter") == 7, "topped up in its own class")
+	check(scr.ch.class_level("cleric") == 7, "topped up in its own class")
 	check(int(scr.ch.xp) == Leveling.xp_for_level(7), "with level 7's XP banked")
 	check(not Leveling.can_finalize(scr.ch), "and the levels above 3 still to choose")
+
+	# #200: a preset is gated like the class list beside it. Vera is a Fighter,
+	# which a fresh profile has not opened; loading her must not hand it over.
+	var Presets = load("res://core/presets.gd")
+	check(scr.build_lock_note(Presets.vera()) == scr.lock_note("class", "fighter"),
+		"Vera wears the Fighter's lock (%s)" % scr.build_lock_note(Presets.vera()))
+	check(scr.build_lock_note(Presets.ilsa()) == "", "Ilsa, a Light Domain cleric, is open from day one")
+	if scr.lock_note("class", "fighter") != "":
+		var before = scr.ch
+		scr._load_preset("vera")
+		check(scr.ch == before, "a locked preset does not load (#200)")
 	scr.queue_free()
