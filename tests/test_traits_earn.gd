@@ -28,6 +28,8 @@ func _init() -> void:
 	test_temperament_rides_the_save()
 	test_wrathful_grudge()
 	test_counted_marks()
+	test_kind_cap()
+	test_witness_chance()
 	test_cures()
 	test_lapse_and_rest()
 	test_save_round_trip()
@@ -64,6 +66,21 @@ func test_instanced_rows() -> void:
 	check(Traits.row("haunted@orc")["effects"][0]["when"]["vs_faction"] == ["orc"], "...and its effects are about that faction")
 	check(Traits.name_of("bane@dragon") == "Dragon-bane", "a bane is named in the singular: %s" % Traits.name_of("bane@dragon"))
 	check(Traits.row("nope@orc").is_empty(), "an instance of no row is no row")
+	# Every faction the bestiary can put in front of a hero reads as English in
+	# the plural: tests/sweep_traits_earn.gd's run printed "Haunted by
+	# monstrositys" before FACTION_PLURAL learned three irregular ones.
+	var Catalog = load("res://core/rules/catalog.gd")
+	var factions := {}
+	for m in Catalog.all("bestiary.json"):
+		if String(m.get("faction", "")) != "":
+			factions[String(m["faction"])] = true
+	var odd: Array = []
+	for f in factions:
+		var n := Traits.faction_name(String(f))
+		if n.ends_with("ys") or n.ends_with("ss") or n in ["duergars", "sahuagins"]:
+			odd.append("%s -> %s" % [f, n])
+	check(factions.size() > 20 and odd.is_empty(), "every faction's plural reads right (%d factions; odd: %s)" % [factions.size(), str(odd)])
+	check(Traits.name_of("haunted@monstrosity") == "Haunted by monstrosities", "...e.g. %s" % Traits.name_of("haunted@monstrosity"))
 	var ch := _hero("vera")
 	ch.traits.append({"id": "bane@goblinoid", "why": "t"})
 	check("bane@goblinoid" in Traits.ids(ch), "a hero holds an instanced trait like any other")
@@ -234,6 +251,48 @@ func test_counted_marks() -> void:
 	v.trait_counts["wins"] = 19
 	Traits.after_fight([v], _won(), {"now": 1.0})
 	check(Traits.has(v, "veteran"), "the twentieth won fight makes a Veteran")
+
+# The owner's cap: four of a kind at most (triumph, banes among them;
+# resilience; scar). A fifth is refused, the way a third bane is.
+func test_kind_cap() -> void:
+	var ch := _hero("vera", ["emboldened", "renowned", "delver", "veteran"])
+	check(Traits.grant(ch, "protector", "t", 0.0).is_empty(), "a fifth triumph is refused")
+	check(not Traits.has(ch, "protector"), "...and not held")
+	var ch2 := _hero("vera", ["emboldened", "renowned", "delver", "bane@orc"])
+	check(Traits.grant(ch2, "veteran", "t", 0.0).is_empty(), "a bane counts as a triumph toward the cap")
+	var ch3 := _hero("vera", ["emboldened", "renowned", "delver"])
+	check(not Traits.grant(ch3, "veteran", "t", 0.0).is_empty(), "the fourth is allowed")
+	check(not Traits.grant(ch3, "burn-shy", "t", 0.0).is_empty(), "a full triumph list does not stop a scar")
+	# Tempered by the thing that scarred you, with four resiliences already:
+	# the scar still goes, and nothing new is claimed.
+	var cured := false
+	for i in 300:
+		var h := _hero("brenna", ["frost-hardened", "storm-struck", "hardened", "hard-to-kill", "burn-shy"])
+		var out := Traits.after_fight([h], _won({"brenna": _downed("fire-giant", "fire")}), {"now": float(i * 11)})
+		var kinds: Array = out["moments"].map(func(m): return String(m["kind"]))
+		if "cure" in kinds:
+			cured = true
+			check(not Traits.has(h, "burn-shy") and not Traits.has(h, "fire-tempered") and not "resilience" in kinds,
+				"at the resilience cap a tempering save still lifts the scar: %s" % str(Traits.ids(h)))
+			break
+	check(cured, "...which turns up over the minutes")
+
+# "Watched a friend die" is asked of each witness half the time (its `chance`),
+# seeded apart from the save.
+func test_witness_chance() -> void:
+	check(int(Traits.events()["ally_died"].get("chance", 100)) == 50, "the witness's hardship carries a chance of 50")
+	var asked := 0
+	var n := 400
+	for i in n:
+		var a := _hero("vera")
+		var dead := _hero("pike")
+		var r := _won({"vera": {"kills": [], "downed_by": [], "revived_by": []},
+			"pike": _downed("ogre", "bludgeoning", 3)}, {"deaths": ["pike"]})
+		var out := Traits.after_fight([a, dead], r, {"now": float(i * 7)})
+		if out["moments"].any(func(m): return m["char_id"] == "vera" and String(m["event"]).begins_with("Watched a friend die")) \
+				or out["lines"].any(func(l): return "Vera shakes it off" in String(l)):
+			asked += 1
+	check(asked > n * 0.4 and asked < n * 0.6, "about half the witnesses are asked (%d of %d)" % [asked, n])
 
 func test_cures() -> void:
 	var cured := false

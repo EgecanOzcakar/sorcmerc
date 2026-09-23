@@ -70,7 +70,9 @@ func test_skill_terms() -> void:
 	check(Traits.skill_term(s, "survival", DOWNS)["n"] == -2, "Street-raised: −2 Survival on the road")
 	check(Traits.skill_term(s, "survival", MARSH.merged({"site": "town"}, true))["n"] == 0, "...but not in town")
 	check(Traits.skill_term(_hero("vera", ["brave"]), "avoid", DOWNS)["n"] == -2, "Brave: −2 on slipping past a band")
-	check(Traits.road_term(_hero("r", ["downs-rider"]), "travel", MARSH)["n"] == 1, "Downs-rider: +1 on the road's checks, anywhere")
+	# The owner (2026-09-23): the downs only, like its initiative.
+	check(Traits.road_term(_hero("r", ["downs-rider"]), "travel", DOWNS)["n"] == 1, "Downs-rider: +1 on the road's checks on the downs")
+	check(Traits.road_term(_hero("r", ["downs-rider"]), "travel", MARSH)["n"] == 0, "...and nothing off them")
 	check(Traits.road_term(_hero("c", ["cautious"]), "travel", MARSH)["n"] == -1, "Cautious: −1 (stops to look at everything)")
 	check(Traits.road_term(_hero("w", ["woods-born"]), "forage", {"biome": "woods"})["n"] == 2, "Woods-born: +2 to forage in the woods")
 	check(Traits.road_term(_hero("w", ["woods-born"]), "forage", MARSH)["n"] == 0, "...and nothing in the marsh")

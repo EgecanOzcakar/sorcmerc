@@ -123,7 +123,10 @@ static func base_of(id: String) -> String:
 # Plural and singular for the handful of factions whose name is not "+s".
 const FACTION_PLURAL := {"goblinoid": "goblins", "humanoid": "people", "undead": "the dead",
 	"townsfolk": "townsfolk", "lizardfolk": "lizardfolk", "merfolk": "merfolk", "fey": "fey",
-	"drow": "drow", "swarm": "swarms", "tribal": "tribesfolk", "bandit": "bandits"}
+	"drow": "drow", "swarm": "swarms", "tribal": "tribesfolk", "bandit": "bandits",
+	# the three the "+s" default gets wrong — tests/sweep_traits_earn.gd's run
+	# printed "Haunted by monstrositys"
+	"monstrosity": "monstrosities", "duergar": "duergar", "sahuagin": "sahuagin"}
 const FACTION_ONE := {"goblinoid": "goblin", "humanoid": "person", "undead": "undead",
 	"townsfolk": "townsfolk", "tribal": "tribal"}
 
@@ -633,6 +636,38 @@ static func save_mode(c, cb, conds: Array) -> Dictionary:
 # What it does NOT own: when a fight or a lair asks (scenes/world/world.gd),
 # the moment that shows it (scenes/world/trait_moment.gd — the dicts this
 # returns are that screen's), or the after-action page's layout.
+#
+# MEASURED 2026-09-23 (tests/sweep_traits_earn.gd, 200 seeds a difficulty, the
+# preset trio holding nothing, a fresh party per fight, the real
+# Encounter.resolve_outcome result), with KIND_CAP and ally_died's chance of
+# 50 in. Changes per 100 hero-fights:
+#
+#               win%   triumph  resilience  scar  wound
+#     easy       98       3.8       3.5      1.8   13.5
+#     normal     94       4.8       4.5      3.7   17.3
+#     hard       89      16.5       5.2      4.3   19.5
+#     deadly     94      16.0       4.7      2.8   18.8
+#
+# Triumphs outnumber scars at every difficulty, which is the owner's rule: two
+# to one on the road's easy fights, four to six to one where "flawless" can
+# fire (hard and deadly only). The commonest change is a wound, and Wounded is
+# the commonest trait of all (243 times in the 800 fights, Shaken next at 117):
+# a downed hero who failed a death save, lapsing in three days. Of 355
+# hardship saves, 30% tempered, 23% shook it off, 23% scarred and 23% scarred
+# and Shaken.
+#
+# "Watched a friend die" was asked 163 times before its chance of 50 and 69
+# after; it had been the second commonest hardship, every witness asked every
+# time (heroes die 14 times in 100 of the run's fights, a combat number).
+#
+# The same sweep's 30-day run (20 runs: a road fight a day at easy, a lair
+# every fourth day of two normal rooms and a hard boss room, no inn) gains
+# each hero 3.7 triumphs, 1.6 resiliences, 1.2 scars, 4.9 wounds and 0.8
+# cures, and each ends it holding 6.1 earned traits (8.0 before KIND_CAP):
+# 5.1 triumphs and resiliences, 0.4 scars, 0.6 wounds.
+# ponytail: one event can still leave both of its outcomes on a hero over two
+# lairs (Delver and Reckless) while there is room under the cap. Revisit if a
+# player reads the pair as a contradiction rather than a story.
 
 const Dice = preload("res://core/dice.gd")
 const RNG = preload("res://core/rng.gd")
@@ -646,6 +681,12 @@ const BANE_KILLS := 10
 const BANE_KILLS_DRAGON := 3        # there are fewer dragons, and each one is a story
 const BANE_CAP := 2                 # spec §2: two banes at most — the player chooses what the hero is known for
 const WOUND_CAP := 2
+# The owner's cap (2026-09-23), after tests/sweep_traits_earn.gd's 30-day run
+# left each hero holding 8.0 earned traits: four of a kind at most, the kinds
+# being a row's `kind` (triumph — banes among them — resilience, scar; a wound
+# is capped tighter by WOUND_CAP). A hero at the cap earns no more of that
+# kind until one lapses, is cured or is lost; the event says nothing new.
+const KIND_CAP := 4
 const VETERAN_WINS := 20
 const SHAKEN_CALM_DAYS := 2         # Calm heroes shed Shaken in two days, not five
 # Cures, per hardship: what the hero has to meet again, and beat.
@@ -662,6 +703,9 @@ static func family_of(id: String) -> String:
 
 static func _count_family(ch, family: String) -> int:
 	return ids(ch).filter(func(i): return family_of(i) == family).size()
+
+static func _count_kind(ch, kind: String) -> int:
+	return ids(ch).filter(func(i): return String(row(i).get("kind", "")) == kind).size()
 
 
 static func count(ch, key: String) -> int:
@@ -697,6 +741,9 @@ static func grant(ch, id: String, why: String, now: float, extra := {}) -> Dicti
 	var fam := String(r.get("family", ""))
 	if (fam == "bane" and _count_family(ch, "bane") >= BANE_CAP) \
 			or (fam == "wound" and _count_family(ch, "wound") >= WOUND_CAP):
+		return {}
+	var kind := String(r.get("kind", ""))
+	if kind in ["triumph", "resilience", "scar"] and _count_kind(ch, kind) >= KIND_CAP:
 		return {}
 	var t := {"id": id, "why": why, "since": now}
 	var days := float(r.get("lasts_days", 0))
@@ -965,6 +1012,11 @@ static func _save_roll(ch, ev: Dictionary, dc: int, seed_text: String) -> Dictio
 static func _hardship(out: Dictionary, ch, hit: Dictionary, now: float) -> bool:
 	var ev_id := String(hit["event"])
 	var ev: Dictionary = events().get(ev_id, {})
+	# A hardship with a `chance` is asked only that often (the owner, 2026-09-23:
+	# "Watched a friend die" was the second commonest hardship, every witness
+	# asked every time). Seeded apart from the save, so the two never correlate.
+	if ev.has("chance") and RNG.new(_seed("asks|%s|%s|%d" % [ch.id, ev_id, int(now)])).roll_die(100) > int(ev["chance"]):
+		return false
 	var sv := _save_roll(ch, ev, int(hit["dc"]), "trait|%s|%s|%d" % [ch.id, ev_id, int(now)])
 	var margin := int(sv["nat"]) + int(sv["bonus"]) - int(sv["dc"])
 	var f := String(hit.get("faction", ""))
@@ -977,9 +1029,13 @@ static func _hardship(out: Dictionary, ch, hit: Dictionary, now: float) -> bool:
 	if int(sv["nat"]) == 20 or margin >= DEGREE:
 		if has(ch, res):
 			return false
-		remove(ch, scar)   # tempered by the thing that scarred them: the scar goes
-		grant(ch, res, label, now)
-		_gain(out, ch, "resilience", res, label, sv)
+		var cured := remove(ch, scar)   # tempered by the thing that scarred them: the scar goes
+		if not grant(ch, res, label, now).is_empty():
+			_gain(out, ch, "resilience", res, label, sv)
+		elif cured:   # four resiliences already (KIND_CAP): the scar still goes
+			_gain(out, ch, "cure", scar, label, sv, "is no longer")
+		else:
+			out["lines"].append("%s shakes it off%s." % [ch.cname, _save_words(sv)])
 		return false
 	if margin >= 0:
 		out["lines"].append("%s shakes it off%s." % [ch.cname, _save_words(sv)])
@@ -1041,6 +1097,20 @@ static func _cures(out: Dictionary, ch, kills: Array, now: float) -> void:
 # the watch, the town's persuading and haggling — gets its trait term in one
 # place. A term is capped at ±CAP like a fight's, and says who gave it, for
 # the card's roll line ("+2 (Marsh-bred)").
+#
+# MEASURED 2026-09-23 (tests/sweep_traits_road.gd, 1,500 seeds a biome, the
+# preset trio all holding the trait, normal pace, the best roller). The road's
+# rolls pass 57.4% of the time with no trait. Change in the pass rate:
+#     Downs-rider +4.8 on the downs, 0 elsewhere (its +1 travel is the downs'
+#       only, the owner's call — it held everywhere before, +4.8 in all three)
+#     Cautious −3.9 (−1 travel, every roll)
+#     Marsh-bred +2.8 in the marsh and −1.3 on the downs (its survival terms
+#       count in about a third of the rolls, the survival events)
+#     Street-raised −3.1 in all three (−2 survival in the wild, 30% of rolls)
+#     Woods-born, Cave-dweller, Night-owl: 0 (no road event rolls their skills)
+# Every origin moves the road less than the pace does (Careful is +2 on every
+# roll, twice Downs-rider's term), so the ±2 skill terms and the ±1 travel
+# terms stay as the spec set them.
 
 # Whether a road `when` holds here. Only the where-it-is keys can: a board or a
 # per-roll key belongs to a fight, and never holds on the road.
