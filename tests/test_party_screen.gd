@@ -295,10 +295,11 @@ func _node_with_method(node: Node, m: String):
 			return hit
 	return null
 
-# The Relations block under the standing orders (docs/spike-party-opinions.md
-# §5): one describe() line per active pair, so a pair the road has soured is
-# visible without waiting for a fight to show it. A party of one has nobody
-# to get on with, and shows nothing.
+# The Relations block beside the standing orders: a caption and a drawn web
+# (scenes/party/relations_web.gd) with one line per active pair, each line's
+# band the pair's band() and its hover the pair's describe(), so the words are
+# still one mouse-over away. A party of one has nobody to get on with, and
+# shows nothing.
 func _relations(screen) -> void:
 	var p = screen.party
 	var a: String = p.active[0]
@@ -306,18 +307,38 @@ func _relations(screen) -> void:
 	PartyOpinion.set_score(p, a, b, -44.0)
 	screen._refresh()
 	await process_frame
-	var lines := _label_texts(node_named(screen, "RelationsRow"))
-	check(lines.size() > 0 and lines[0] == "Relations", "the block is captioned")
+	var row = node_named(screen, "RelationsRow")
+	var lines := _label_texts(row)
+	check(lines == ["Relations"], "the block is captioned, and says nothing else in words (%s)" % str(lines))
+	var web = node_named(screen, "RelationsWeb")
+	check(web != null, "the relations are drawn as a web")
+	if web == null:
+		return
+	web.size = web.custom_minimum_size
+	var es: Array = web.edges()
+	check(es.size() == PartyOpinion.active_pairs(p).size(),
+		"one line per active pair (%d for %d)" % [es.size(), PartyOpinion.active_pairs(p).size()])
+	var first: Dictionary = es[0]
+	check(first["a"] == a and first["b"] == b and first["band"] == "rivals" and int(first["score"]) == -44,
+		"the soured pair's line is a rivals line: %s" % str(first))
+	# Hovering the middle of that line says it in words, as describe() does.
+	var pos: Array = web.face_positions()
+	var mid: Vector2 = (pos[0] + pos[1]) * 0.5
 	var want := PartyOpinion.describe(p, a, b)
-	check("rivals (-44)" in want and want in lines, "a soured pair reads as describe() says (%s)" % want)
-	check(lines.size() == 1 + PartyOpinion.active_pairs(p).size(),
-		"one line per active pair (%d for %d)" % [lines.size() - 1, PartyOpinion.active_pairs(p).size()])
+	check(web.edge_at(mid) == 0, "the mouse on the line finds it")
+	check("rivals (-44)" in want and web.tooltip_at(mid) == want, "...and its tooltip is describe(): %s" % web.tooltip_at(mid))
+	# Over a face: every line that person is on.
+	var mine: String = web.tooltip_at(pos[0])
+	check(mine.split("\n").size() == p.active.size() - 1 and want in mine,
+		"a face's tooltip lists each of its pairs (%d lines)" % mine.split("\n").size())
+	check(web.tooltip_at(Vector2(2, 2)) == "", "empty space says nothing")
 	for id in p.active.duplicate():
 		if id != a:
 			p.bench(id)
 	screen._refresh()
 	await process_frame
-	check(_label_texts(node_named(screen, "RelationsRow")).is_empty(), "a party of one shows no block at all")
+	check(_label_texts(node_named(screen, "RelationsRow")).is_empty() and node_named(screen, "RelationsWeb") == null,
+		"a party of one shows no block at all")
 
 func _label_texts(node: Node) -> Array:
 	var out: Array = []

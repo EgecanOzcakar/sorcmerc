@@ -29,6 +29,7 @@ const Coop = preload("res://core/coop.gd")
 # What the party thinks of each other — one describe() line per active pair,
 # under the standing orders. The model is core/party_opinion.gd's; this draws it.
 const PartyOpinion = preload("res://core/party_opinion.gd")
+const RelationsWeb = preload("res://scenes/party/relations_web.gd")
 const Callings = preload("res://core/callings.gd")
 const Traits = preload("res://core/traits.gd")
 const TraitOffer = preload("res://scenes/party/trait_offer.gd")
@@ -71,7 +72,8 @@ var _fig_row := HBoxContainer.new()   # T9x: rebuilt on every _refresh() — its
 # buys. Rebuilt on every _refresh() for the same reason the figure picker is —
 # who can be named for a job is the active roster, and that moves under it.
 var _orders_row := VBoxContainer.new()
-var _relations_row := VBoxContainer.new()
+var _callings_row := VBoxContainer.new()   # each told calling, one line — under the orders
+var _relations_row := VBoxContainer.new()  # the Relations caption and web, beside them
 var _create_btn: Button        # greyed while roster_locked — see roster_locked above
 var _offer: Control = null     # #176: the one-time personality-trait offer, while it is up
 
@@ -162,9 +164,15 @@ func _footer() -> Control:
 	# Two lines: the purse/stash/figure line the screen already had, and D3's
 	# standing orders under it. The orders get their own line because the pace
 	# note is a sentence, not a widget, and it has to stay readable.
+	# The Relations web stands to the right of all of that, the full height of
+	# the footer, rather than under it: a picture wants a square, not a strip.
+	var split := HBoxContainer.new()
+	split.add_theme_constant_override("separation", 18)
+	panel.add_child(split)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	panel.add_child(col)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	split.add_child(col)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	col.add_child(row)
@@ -190,9 +198,13 @@ func _footer() -> Control:
 	_orders_row.add_theme_constant_override("separation", 4)
 	col.add_child(_orders_row)
 
+	_callings_row.name = "CallingsRow"
+	_callings_row.add_theme_constant_override("separation", 2)
+	col.add_child(_callings_row)
+
 	_relations_row.name = "RelationsRow"
 	_relations_row.add_theme_constant_override("separation", 2)
-	col.add_child(_relations_row)
+	split.add_child(_relations_row)
 	return panel
 
 # Out of the tree now, not at the end of the frame: these rows hold NAMED
@@ -310,15 +322,19 @@ func _build_orders() -> void:
 		walk_lbl.text = walk_note_text
 		_orders_row.add_child(walk_lbl)
 
-# The Relations block (docs/spike-party-opinions.md §5): "Vera Kord and Pike
-# Sallow — rivals (-44)", one line per active pair, six at most for a party
-# of four. No portraits, no hearts. A party of one has nobody to get on with,
-# and the block is not drawn at all.
+# The Callings lines and the Relations web. Callings are words — each is a
+# place and a state, and there are only ever a few. Relations were words too
+# (docs/spike-party-opinions.md §5 had "Vera Kord and Pike Sallow — rivals
+# (-44)", one line per pair) and are a picture now: scenes/party/relations_web.gd
+# draws the marching party's faces joined by a line per pair, its colour and
+# shape the band, with describe() one hover away. A party of one has nobody to
+# get on with, and the block is not drawn at all.
 func _build_relations() -> void:
+	_clear(_callings_row)
 	_clear(_relations_row)
-	# Callings above it (core/callings.gd): one line per active hero whose
-	# calling has been told — "Ilsa Vane — The defiled shrine — told, marked on
-	# the map". Nothing while untold, so a fresh party sees no caption.
+	# Callings (core/callings.gd): one line per active hero whose calling has
+	# been told — "Ilsa Vane — The defiled shrine — told, marked on the map".
+	# Nothing while untold, so a fresh party sees no caption.
 	var lines: Array = []
 	for id in party.active:
 		var line: String = Callings.describe(party, String(id))
@@ -328,24 +344,21 @@ func _build_relations() -> void:
 		var ccap := Label.new()
 		ccap.text = "Callings"
 		ccap.theme_type_variation = "Caption"
-		_relations_row.add_child(ccap)
+		_callings_row.add_child(ccap)
 		for line in lines:
 			var l := Label.new()
 			l.text = String(line)
 			l.theme_type_variation = "Dim"
-			_relations_row.add_child(l)
-	var ps: Array = PartyOpinion.active_pairs(party)
-	if ps.is_empty():
+			_callings_row.add_child(l)
+	if PartyOpinion.active_pairs(party).is_empty():
 		return
 	var cap := Label.new()
 	cap.text = "Relations"
 	cap.theme_type_variation = "Caption"
 	_relations_row.add_child(cap)
-	for pr in ps:
-		var l := Label.new()
-		l.text = PartyOpinion.describe(party, pr[0], pr[1])
-		l.theme_type_variation = "Dim"
-		_relations_row.add_child(l)
+	var web := RelationsWeb.new()
+	web.setup(party)
+	_relations_row.add_child(web)
 
 # One job's picker: the active party by name, over a first row meaning "nobody
 # named, use the party's best". Everybody active is offered — unlike the figure
