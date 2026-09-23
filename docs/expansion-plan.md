@@ -8846,6 +8846,27 @@ failed sneak's follow-up, the lair's own prompt, waits for the landing too, so
 the die says "missed" before the lair notices you. `WorldLairs.sneak_past`'s
 result now names its skill.
 
+**Bigger and flashier** (the owner: "make the dice larger and animations
+flashy"). The die is 150 px, up from 92. Everything runs off one clock
+(`_t`, stepped by the tween, 2.55 s at normal speed):
+- **The tumble** (1.05 s): the die drops in from above, spins fast and spins
+  down, wobbling, with a motion trail. The faces tick slower as it settles,
+  and it never shows the face it will land on before it lands.
+- **Touchdown:** the die slams, springs back, and flashes white. Two
+  shockwave rings go out, rays spear from it, and sparks fly off.
+  - A miss shakes, and its sparks are red shards that fall.
+  - A natural 20 that counted is gold and keeps a slow sunburst turning
+    behind it.
+- **The verdict:** a big word ("MADE IT!", "MISSED", "NATURAL 20!",
+  "NATURAL 1") slams in from twice its size, and the arithmetic slides up
+  under it.
+
+The angles, the shake and the faces are all counted off the clock and the
+natural, never an RNG. `DiceRoll.HEIGHT` is what a caller sizes it to; the
+road's card and the popup both use it. The GIF is `docs/shots/live-roll.gif`,
+from `tests/gif_dice_roll.gd`, which steps the clock by hand one frame at a
+time.
+
 `DiceRoll` used to set its size and mouse filter in `_ready()`, which runs
 after the caller's own settings and quietly undid them. Both popups collapsed
 to a thin strip while they still had frames, and a click on the map's die
@@ -8855,7 +8876,8 @@ are now set in `_init()`.
 Under SORCMERC_FAST (every test and robot), and at the Instant pace, every one
 of these says its line on the first frame, exactly as before.
 
-Tests: `tests/test_live_rolls_world.gd` (19 checks, renamed from
+Tests: `tests/test_dice_roll.gd` gains the verdict words and the no-early-face
+check (28 checks). `tests/test_live_rolls_world.gd` (19 checks, renamed from
 `test_live_rolls_town.gd`), covering both halves:
 - an investigate's die holds back the line, and the buttons wait for it
 - Enter lands it: the line is said, the buttons come back, and the visit's

@@ -3599,7 +3599,7 @@ func _dice_popup(block: bool) -> Array:
 	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(centre)
 	var d = DiceRoll.new()
-	d.custom_minimum_size = Vector2(440, DiceRoll.DIE + DiceRoll.TALLY_SIZE + 40)
+	d.custom_minimum_size = Vector2(560, DiceRoll.HEIGHT)
 	d.mouse_filter = Control.MOUSE_FILTER_STOP
 	d.tooltip_text = "Click to land it"
 	centre.add_child(d)

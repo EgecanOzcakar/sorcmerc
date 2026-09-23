@@ -67,6 +67,18 @@ func test_die_fast() -> void:
 	check(d.tally().ends_with("missed"), "the verdict is the caller's ok, never re-decided (a nat 1 the rule said missed)")
 	d.play({"nat": 17, "bonus": 2, "dc": 10, "ok": true, "dice": [4, 17], "mode": "adv"})
 	check(d._other == 4, "with advantage the other die is kept to show beside the one that counted")
+	# The big word over the tally follows the caller's ok too.
+	d.play({"nat": 14, "bonus": 5, "dc": 13, "ok": true})
+	check(d.verdict() == "MADE IT!", "made: %s" % d.verdict())
+	d.play({"nat": 9, "bonus": 1, "dc": 13, "ok": false})
+	check(d.verdict() == "MISSED", "missed: %s" % d.verdict())
+	d.play({"nat": 20, "bonus": 2, "dc": 10, "ok": true})
+	check(d.verdict() == "NATURAL 20!", "a natural 20 that counted gets the gold word: %s" % d.verdict())
+	d.play({"nat": 20, "bonus": -9, "dc": 15, "ok": false})
+	check(d.verdict() == "MISSED", "...a 20 the rule still called a miss does not: %s" % d.verdict())
+	d.play({"nat": 1, "bonus": 3, "dc": 10, "ok": false})
+	check(d.verdict() == "NATURAL 1", "a natural 1 that missed says so: %s" % d.verdict())
+	check(d.custom_minimum_size.y == DiceRoll.HEIGHT, "the die asks for the height its verdict and tally need")
 	d.queue_free()
 
 func test_card_fast_is_the_old_card() -> void:
@@ -88,6 +100,11 @@ func test_die_live() -> void:
 	d.play({"nat": 9, "bonus": 3, "dc": 15, "ok": false})
 	await process_frame
 	check(d.is_playing() and not d.has_landed() and got[0] == 0, "at normal speed the die tumbles first")
+	var early := false
+	for i in 40:   # the tumble, stepped: every face it passes through
+		d._advance(DiceRoll.T_LAND * i / 40.0)
+		early = early or d._face == 9
+	check(not early and not d.has_landed(), "the tumble never shows the face it will land on")
 	d.finish()
 	check(d.has_landed() and d._face == 9 and got[0] == 1, "finish() lands it on the face the rules rolled, and says so once")
 	d.finish()

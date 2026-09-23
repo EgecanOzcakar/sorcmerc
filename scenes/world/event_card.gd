@@ -355,7 +355,7 @@ func _layout(art_h := -1.0) -> void:
 			y += LINE_GAP
 		y += BLOCK_GAP
 		var die_top := y
-		y += DiceRoll.DIE + DiceRoll.TALLY_SIZE + 28.0 + BLOCK_GAP
+		y += DiceRoll.HEIGHT + BLOCK_GAP
 		y += BTN_H + PAD
 		_place(pw, y, rel, Rect2(tx, die_top, avail, y - die_top - BTN_H - PAD - BLOCK_GAP))
 		return
