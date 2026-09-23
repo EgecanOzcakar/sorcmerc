@@ -55,6 +55,11 @@ const TICKS := 14              # face changes during the tumble — each one cli
 const RAYS := 16
 const SPARKS := 14
 
+# Whether the die drops in from above as it starts to tumble. A caller that
+# brings the die on itself — the map's, which pops up from the bottom — turns
+# it off, or the two entrances fight.
+var drop_in := true
+
 var _r: Dictionary = {}
 var _playing := false
 var _landed := false
@@ -229,7 +234,8 @@ func _draw() -> void:
 	if not _landed:
 		var f := clampf(_t / T_LAND, 0.0, 1.0)
 		var e := _out(f)
-		c.y -= DIE * 1.1 * pow(1.0 - minf(f / 0.32, 1.0), 2.0)   # drops in from above
+		if drop_in:
+			c.y -= DIE * 1.1 * pow(1.0 - minf(f / 0.32, 1.0), 2.0)   # drops in from above
 		rot = pow(1.0 - e, 2.0) * TAU * 3.0                      # spins fast, spins down
 		sc = 1.0 + 0.09 * sin(f * TAU * 4.0) * (1.0 - f)          # wobbles as it goes
 		_glow(c, r * 1.7, Icons.COL_HEAD, 0.10 + 0.05 * sin(_t * 14.0))

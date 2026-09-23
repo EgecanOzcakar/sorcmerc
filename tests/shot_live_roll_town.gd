@@ -5,7 +5,7 @@
 #   godot --path . --resolution 1400x900 -s tests/shot_live_roll_town.gd
 #     -> docs/shots/live-roll-town-rolling.png   the die in the air, the shop darkened behind it
 #     -> docs/shots/live-roll-town-landed.png    landed: the line, the buttons back
-#     -> docs/shots/live-roll-map.png            a lair's search: the same popup over the map
+#     -> docs/shots/live-roll-map.png            a lair's search: the die popped up over the map
 extends SceneTree
 
 const Settings = preload("res://core/settings.gd")
@@ -42,8 +42,9 @@ func _init() -> void:
 		if not l.discovered:
 			s._lair_target = l
 			break
+	s.world.clock.pause()   # or a band finds the party while the camera waits
 	s._lair_action()
-	await create_timer(1.2).timeout
+	await create_timer(4.0).timeout   # the pop up from the bottom is slowed too
 	await _save("docs/shots/live-roll-map.png")
 	quit()
 

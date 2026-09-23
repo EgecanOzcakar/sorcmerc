@@ -3575,13 +3575,12 @@ func _say_rolled(r: Dictionary, text: String, sfx := "", then := Callable()) -> 
 		"label": "%s — %s" % [String(Catalog.skills().get(skill, {}).get("name", skill.capitalize())),
 			String(r.get("cname", ""))]})
 
-# The live-roll popup, the town's and the map's: no frame and no panel of its
-# own — the whole screen darkened, and only the die and its tally left bright
-# in the middle (the owner: "no background color, only darken everything
-# except the dice and result"). `block` is the town's: the overlay takes every
-# click, so a click anywhere lands the die and none reaches a button under it.
-# The map's lets clicks through to the map, and only the die itself lands it.
-# Returns [overlay, die]; the caller frees the overlay.
+# The town's live-roll popup: no frame and no panel of its own — the whole
+# screen darkened, and only the die and its tally left bright in the middle
+# (the owner: "no background color, only darken everything except the dice and
+# result"). `block`: the overlay takes every click, so a click anywhere lands
+# the die and none reaches a button under it (the map's die is its own thing —
+# see _map_roll). Returns [overlay, die]; the caller frees the overlay.
 const DICE_DIM := 0.7
 
 func _dice_popup(block: bool) -> Array:
@@ -3613,17 +3612,32 @@ func _dice_popup(block: bool) -> Array:
 
 # The map's own quick checks — a lair's or a landmark's search, sneaking past
 # a lair, a forage on the march — report on the HUD bar, not on a card. Their
-# die rolls in the same popup as a town's (_dice_popup); the line (and its
-# sting, and `then`) waits for it to land. Nothing here pauses the clock or
-# takes the mouse — a forage rolls on the march, and a click on the map still
-# marches; a click on the die lands it. One at a time — a second lands the
-# first. SORCMERC_FAST says the line at once, as the HUD always did.
-var _map_die: Control = null
-var _map_dice: Control = null
+# die is not the town's popup: the owner, "in the campaign map, the background
+# darkening shouldnt work, and the dice should be more to the bottom, popping
+# up, showing the result, and disappearing after 2-3 seconds by fading". So it
+# pops up over the map just above the HUD bar with nothing darkened, rolls, and
+# the line (and its sting, and `then`) is said when it lands; the die stays up
+# with its verdict for MAP_LINGER, then fades out on its own over MAP_FADE —
+# about 2.5 s of result in all. Nothing here pauses the clock or takes the
+# mouse — a forage rolls on the march, and a click on the map still marches;
+# a click on the die lands it. One at a time — a second check lands the first
+# and takes its place at once. SORCMERC_FAST says the line at once, as the HUD
+# always did.
+const MAP_POP := 0.25          # seconds at anim() == 1: up from the bottom
+const MAP_LINGER := 0.9        # after `landed` (itself 0.9 s after the tally)...
+const MAP_FADE := 0.6          # ...then gone
+const MAP_BOTTOM := 64.0       # clear of the HUD bar
+
+var _map_die: Control = null   # the die's box: what pops, fades and is freed
+var _map_dice: Control = null  # the DiceRoll in it
 var _map_pending: Dictionary = {}
 
 func _map_roll(roll: Dictionary, label: Label, text: String, sfx := "", then := Callable()) -> void:
 	_land_map_roll()
+	if is_instance_valid(_map_die):
+		_map_die.queue_free()   # a die still fading gives way to the new one
+	_map_die = null
+	_map_dice = null
 	if not roll.has("nat") or Settings.anim() >= Settings.FAST:
 		label.text = text
 		if sfx != "":
@@ -3632,9 +3646,28 @@ func _map_roll(roll: Dictionary, label: Label, text: String, sfx := "", then := 
 			then.call()
 		return
 	label.text = ""
-	var pop: Array = _dice_popup(false)
-	var d = pop[1]
-	_map_die = pop[0]
+	var k := 1.0 / maxf(Settings.anim(), 0.01)
+	var d = DiceRoll.new()
+	d.drop_in = false
+	d.size = Vector2(560, DiceRoll.HEIGHT)
+	d.mouse_filter = Control.MOUSE_FILTER_STOP
+	d.tooltip_text = "Click to land it"
+	d.gui_input.connect(func(e):
+		if e is InputEventMouseButton and e.pressed:
+			d.finish())
+	var box := Control.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.size = d.size
+	box.position = Vector2((size.x - box.size.x) * 0.5, size.y - box.size.y - MAP_BOTTOM)
+	box.pivot_offset = Vector2(box.size.x * 0.5, box.size.y)
+	box.add_child(d)
+	add_child(box)
+	box.scale = Vector2(0.4, 0.4)
+	box.modulate.a = 0.0
+	var pop := box.create_tween().set_parallel()
+	pop.tween_property(box, "scale", Vector2.ONE, MAP_POP * k).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	pop.tween_property(box, "modulate:a", 1.0, MAP_POP * 0.6 * k)
+	_map_die = box
 	_map_dice = d
 	_map_pending = {"label": label, "text": text, "sfx": sfx, "then": then}
 	d.landed.connect(_land_map_roll)
@@ -3644,17 +3677,20 @@ func _map_roll(roll: Dictionary, label: Label, text: String, sfx := "", then := 
 		"label": "%s — %s" % [String(Catalog.skills().get(skill, {}).get("name", skill.capitalize())),
 			String(roll.get("cname", ""))]})
 
-# The held line said and the panel gone — on landing, or when another quick
-# check comes along before this one has.
+# The held line said, and the die left to linger and fade — on landing, or
+# when another quick check comes along before this one has.
 func _land_map_roll() -> void:
 	if _map_pending.is_empty():
 		return
 	var p := _map_pending
 	_map_pending = {}
 	if is_instance_valid(_map_die):
-		_map_die.queue_free()
-	_map_die = null
-	_map_dice = null
+		var box := _map_die
+		var k := 1.0 / maxf(Settings.anim(), 0.01)
+		var out := box.create_tween()
+		out.tween_interval(MAP_LINGER * k)
+		out.tween_property(box, "modulate:a", 0.0, MAP_FADE * k)
+		out.tween_callback(box.queue_free)
 	var label: Label = p["label"]
 	if is_instance_valid(label):
 		label.text = String(p["text"])

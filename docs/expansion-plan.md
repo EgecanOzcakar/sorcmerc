@@ -8837,11 +8837,23 @@ didn't count. `SettlementVisit.check_preview`'s odds now follow the plain
 said the preview assumed a natural 1 always missed and a 20 always hit.
 
 **On the map** (`_map_roll`), foraging on the march, a lair's search, a
-landmark's search and sneaking past a lair roll in the same popup: the screen
-darkened, the die and its tally in the middle. The HUD line (and its sting and
-follow-up) waits for the die to land. A click on the die lands it. The popup
-does not pause the clock or take the mouse: a forage rolls while the party
-marches, and a click on the map still gives a march order. Only one is in the air at a time; a second check lands the first. A
+landmark's search and sneaking past a lair roll their own way. The owner: "in
+the campaign map, the background darkening shouldnt work, and the dice should
+be more to the bottom, popping up, showing the result. and disappearing after
+2-3 seconds by fading".
+- Nothing is darkened. The die pops up from the bottom, just above the HUD
+  bar (scale and fade in over `MAP_POP`, 0.25 s).
+- It rolls without the town's drop from above (`DiceRoll.drop_in = false`).
+- On landing, the HUD line (and its sting and follow-up) is said. The die
+  stays up with its verdict for `MAP_LINGER`, then fades out over
+  `MAP_FADE`: about 2.5 s of result in all.
+- A click on the die lands it. The die doesn't pause the clock or take the
+  mouse: a forage rolls while the party marches, and a click on the map still
+  gives a march order.
+- A new check replaces a die that is still fading at once.
+
+`docs/shots/live-roll-map.gif` is recorded from the real world scene by
+`tests/gif_map_roll.gd`, under Godot's movie maker at a fixed 25 fps. Only one is in the air at a time; a second check lands the first. A
 failed sneak's follow-up, the lair's own prompt, waits for the landing too, so
 the die says "missed" before the lair notices you. `WorldLairs.sneak_past`'s
 result now names its skill.
@@ -8877,7 +8889,7 @@ Under SORCMERC_FAST (every test and robot), and at the Instant pace, every one
 of these says its line on the first frame, exactly as before.
 
 Tests: `tests/test_dice_roll.gd` gains the verdict words and the no-early-face
-check (28 checks). `tests/test_live_rolls_world.gd` (19 checks, renamed from
+check (28 checks). `tests/test_live_rolls_world.gd` (22 checks, renamed from
 `test_live_rolls_town.gd`), covering both halves:
 - an investigate's die holds back the line, and the buttons wait for it
 - Enter lands it: the line is said, the buttons come back, and the visit's
@@ -8885,7 +8897,8 @@ check (28 checks). `tests/test_live_rolls_world.gd` (19 checks, renamed from
 - the die is in a popup, not in the page, and the popup goes when it lands
 - a panel rebuilt under a steal's die in the air keeps the held
   line
-- a lair search's die holds the HUD line, and the panel is freed on landing
+- a lair search's die holds the HUD line, darkens nothing, and sits near the
+  bottom; landed, it says the line, stays up, then fades out on its own
 - the FAST path is the old behaviour
 
 Pictures: `docs/shots/live-roll-town-{rolling,landed}.png` and
