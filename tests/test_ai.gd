@@ -155,7 +155,7 @@ func test_avoids_zones() -> void:
 	var bad: Array = [Vector2i(3, 1), Vector2i(3, 0), Vector2i(3, 2)]
 	cb._add_zone(v, web, bad)
 	cb.begin_turn_for(m)
-	AI._move_by(cb, m, AI._toward(v.pos))
+	AI._move_by(cb, m, AI._toward(cb, v.pos))
 	check(not (m.pos in bad), "the monster stops short of the web rather than in it (at %s)" % str(m.pos))
 	check(m.pos != Vector2i(1, 1), "...but still closes on its prey")
 	# woken up inside a cloud it can still walk in (a web would hold it): it leaves
@@ -167,5 +167,5 @@ func test_avoids_zones() -> void:
 	var cb2 = Combat.new(RNG.new(3), [m2, v.clone()], Encounter.board())
 	cb2._add_zone(cb2.combatants[1], dark, bad)
 	cb2.begin_turn_for(m2)
-	AI._move_by(cb2, m2, AI._toward(Vector2i(8, 1)))
+	AI._move_by(cb2, m2, AI._toward(cb2, Vector2i(8, 1)))
 	check(not (m2.pos in bad), "a monster that starts its turn in the dark steps out (at %s)" % str(m2.pos))

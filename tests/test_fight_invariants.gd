@@ -102,6 +102,9 @@ func test_thrown_weapons() -> void:
 # below is one line in _attack_mode/effective_ac and they all have to compose.
 func test_hit_chance_matrix() -> void:
 	var b: Dictionary = Encounter.board_for("sunken-shrine")
+	# The Alcove is pillars now (Encounter.SOLID_COVER), so the hall's far side
+	# stands in for it: open floor, in the archer's sight, beside nobody.
+	b["cover"] = [Vector2i(6, 0), Vector2i(6, 1), Vector2i(6, 2)]
 	var chars := Presets.party()
 	var vera = Adapter.to_combatant(chars[0], "party", Vector2i(2, 0))    # longsword
 	var pike = Adapter.to_combatant(chars[1], "party", Vector2i(2, 2))    # shortbow

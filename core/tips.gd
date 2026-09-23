@@ -26,7 +26,7 @@ const TIPS := [
 	"The party screen's Level up button is per character. A level owed is a level unspent.",
 	"Prepared casters pick their list on the prepare page at the start of the day. The badge on each row is the spell's own.",
 	"Surprise gives the whole side a round nobody answers. Stealth on the approach is what buys it.",
-	"Cover is the terrain's to give: a solid prop between you and the archer is +2 AC, and a wall is not a line of sight at all.",
+	"A tree, a standing stone or a stacked stall is a wall: nothing sees or shoots past it. Reeds are cover: stand in them for +2 AC.",
 	"The field manual (F2) explains every rule the engine applies, in the words the log uses.",
 ]
 

@@ -6,6 +6,7 @@ assets/beasts/<bestiary-id>.glb.
     python3 tools/import_beasts.py Ogre Wolf_alt_1  # just these (basename, no .glb)
     SRC=~/Downloads/batch3 python3 tools/import_beasts.py
     python3 tools/import_beasts.py --check          # name the files, convert nothing
+    DST=assets/board TRIS=10000 python3 tools/import_beasts.py --force tree barrel ...   # board props
 
 ANY MONSTER, not just beasts. The name is historical -- the first batch was 81
 animals -- but nothing in here is beast-specific and neither is the lookup it
@@ -41,7 +42,12 @@ from shrink_glb import read_glb, write_glb, shrink
 SRC = os.environ.get('SRC', 'assets/NewlyDownloadedModels')
 DST = os.environ.get('DST', 'assets/beasts')
 BESTIARY = 'data/bestiary.json'
-TRIS, TEX = 20000, 1024
+# Board props (scenes/board_props.gd, #167) go through here too, at 10k: they
+# are nearer the camera than a figure once the fight zooms in.
+TRIS, TEX = int(os.environ.get('TRIS', 20000)), 1024
+# An untextured download (materials: none, POSITION only) gets this flat colour
+# instead of Godot's default white -- only with --untextured, see below.
+UNTEXTURED = [0.55, 0.55, 0.52, 1.0]
 # The 2026-09-22 batch came down with the words run together; ogre2 is a second
 # ogre and orcarcher stands in for the one orc the bestiary has.
 FIXUPS = {'pleisosaurus': 'plesiosaurus', 'deathdog': 'death-dog',
@@ -105,7 +111,48 @@ def albedo_only(j):
         i['bufferView'] = bv_map[i['bufferView']]
         i['name'] = 'albedo'          # Godot names the extracted file after this
 
-def convert(src, dst):
+NP_TYPE = {5121: '<u1', 5123: '<u2', 5125: '<u4', 5126: '<f4'}
+N_COMP = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}
+
+def accessor(j, b, i):
+    import numpy as np
+    a = j['accessors'][i]
+    bv = j['bufferViews'][a['bufferView']]
+    dt, n = np.dtype(NP_TYPE[a['componentType']]), N_COMP[a['type']]
+    stride = bv.get('byteStride', dt.itemsize * n)
+    start = bv.get('byteOffset', 0) + a.get('byteOffset', 0)
+    raw = np.frombuffer(b, np.uint8, count=stride * (a['count'] - 1) + dt.itemsize * n, offset=start)
+    return np.lib.stride_tricks.as_strided(raw, (a['count'], dt.itemsize * n), (stride, 1)).copy().view(dt).reshape(a['count'], n)
+
+def add_normals(j, b):
+    """Smooth normals for a download that came as POSITION only. Godot does not
+    make its own on import, and a model without them is drawn as one flat grey
+    silhouette -- the doppelganger was, the first time."""
+    import numpy as np
+    b = bytearray(b)
+    for m in j['meshes']:
+        for p in m['primitives']:
+            if 'NORMAL' in p['attributes']:
+                continue
+            pos = accessor(j, b, p['attributes']['POSITION']).astype(np.float64)
+            tri = (accessor(j, b, p['indices']).reshape(-1, 3) if 'indices' in p
+                   else np.arange(len(pos)).reshape(-1, 3))
+            face = np.cross(pos[tri[:, 1]] - pos[tri[:, 0]], pos[tri[:, 2]] - pos[tri[:, 0]])
+            n = np.zeros_like(pos)
+            for c in range(3):
+                np.add.at(n, tri[:, c], face)       # area-weighted, glTF's CCW winding faces out
+            n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+            b += b'\x00' * (-len(b) % 4)
+            data = n.astype('<f4').tobytes()
+            j['bufferViews'].append({'buffer': 0, 'byteOffset': len(b), 'byteLength': len(data)})
+            b += data
+            j['accessors'].append({'bufferView': len(j['bufferViews']) - 1, 'componentType': 5126,
+                                   'count': len(n), 'type': 'VEC3'})
+            p['attributes']['NORMAL'] = len(j['accessors']) - 1
+    j['buffers'][0]['byteLength'] = len(b)
+    return bytes(b)
+
+def convert(src, dst, textured=True):
     j, b = read_glb(src)
     tris = tri_count(j)
     work = src
@@ -114,7 +161,15 @@ def convert(src, dst):
         subprocess.run(['npx', '--yes', 'gltfpack', '-i', src, '-o', work, '-noq',
                         '-si', f'{TRIS / tris:.4f}', '-sa'], check=True, capture_output=True)
         j, b = read_glb(work)
-    albedo_only(j)
+    if textured:
+        albedo_only(j)
+    else:
+        j['materials'] = [{'pbrMetallicRoughness': {'baseColorFactor': UNTEXTURED,
+                                                    'metallicFactor': 0.0, 'roughnessFactor': 0.9}}]
+        for m in j['meshes']:
+            for p in m['primitives']:
+                p['material'] = 0
+        b = add_normals(j, b)
     write_glb(dst, j, b)
     if work != src:
         os.remove(work)
@@ -125,6 +180,7 @@ if __name__ == '__main__':
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     flags = {a for a in sys.argv[1:] if a.startswith('--')}
     check_only, force = '--check' in flags, '--force' in flags
+    untextured = '--untextured' in flags
     ids = known_ids()
     names = args or sorted(os.path.basename(p)[:-4] for p in glob.glob(f'{SRC}/*.glb'))
     if not names:
@@ -144,14 +200,16 @@ if __name__ == '__main__':
                   f"FIXUPS, or pass --force.")
             continue
         j, _ = read_glb(f'{SRC}/{n}.glb')
-        if not any('baseColorTexture' in m.get('pbrMetallicRoughness', {}) for m in j.get('materials', [])):
-            print(f"  {n}: skipped, no albedo texture (an untextured download draws as a white blob)")
+        textured = any('baseColorTexture' in m.get('pbrMetallicRoughness', {}) for m in j.get('materials', []))
+        if not textured and not untextured:
+            print(f"  {n}: skipped, no albedo texture (an untextured download draws as a white blob;"
+                  f" --untextured takes it anyway, in flat grey)")
             continue
         done.add(bid)
         if check_only:
             print(f"  {n} -> {bid}.glb")
             continue
-        before, after = convert(f'{SRC}/{n}.glb', f'{DST}/{bid}.glb')
+        before, after = convert(f'{SRC}/{n}.glb', f'{DST}/{bid}.glb', textured)
         print(f"  {n} -> {bid}.glb  {before} -> {after} tris  {os.path.getsize(f'{DST}/{bid}.glb') / 1e6:.1f} MB")
     print(f"\n{len(done)} model{'' if len(done) == 1 else 's'}"
           f"{' named' if check_only else ' written'}, {refused} refused.")

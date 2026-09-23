@@ -11,6 +11,7 @@ extends SceneTree
 const BoardProps = preload("res://scenes/board_props.gd")
 const KitParts = preload("res://scenes/world/kit_parts.gd")
 const Encounter = preload("res://core/encounter.gd")
+const Props3D = preload("res://scenes/world/props3d.gd")
 
 # One hex radius is one world unit and a hero stands 1.5 tall (figures3d.gd's
 # FIGURE_SCALE), so these two numbers are the words "cover" and "rough" written
@@ -39,6 +40,7 @@ func _init() -> void:
 	test_cover_is_worth_hiding_behind()
 	test_every_board_is_covered()
 	test_seed_varies_and_repeats()
+	test_models_keep_the_kit_promises()
 	print("test_board_props: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -112,3 +114,24 @@ func test_seed_varies_and_repeats() -> void:
 	# it ever gained some, so check the one that must not vary: the fallback.
 	check(str(BoardProps.plan("no-such-prop", 3)) == str(BoardProps.plan("no-such-prop", 3)),
 		"an unknown kind is stable too")
+
+
+# A converted download under assets/board/ replaces the kit's look, never its
+# claims: the same height rules as the plans above, and inside one hex across.
+# Skips any kind with no model, which is the kit and already covered above.
+func test_models_keep_the_kit_promises() -> void:
+	var models := 0
+	for kind in BoardProps.kinds():
+		if not ResourceLoader.exists(BoardProps.MODEL_DIR % kind):
+			continue
+		models += 1
+		var m: Node3D = BoardProps.build(kind, 3).get_child(0)
+		var size: Vector3 = Props3D._bounds(m).size * m.scale
+		if kind in BoardProps.ROUGH.values():
+			check(size.y <= ROUGH_MAX_H, "%s model stands %.2f, want <= %.2f" % [kind, size.y, ROUGH_MAX_H])
+		if kind in BoardProps.COVER.values():
+			check(size.y >= COVER_MIN_H, "%s model stands %.2f, want >= %.2f" % [kind, size.y, COVER_MIN_H])
+		check(maxf(size.x, size.z) <= BoardProps.HEX_SPAN + 0.01,
+			"%s model spans %.2f, want <= %.2f" % [kind, maxf(size.x, size.z), BoardProps.HEX_SPAN])
+		m.get_parent().free()
+	print("  %d board props drawn from a model" % models)

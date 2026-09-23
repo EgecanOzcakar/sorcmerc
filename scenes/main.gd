@@ -3031,18 +3031,24 @@ class Board extends Control:
 			var h: Dictionary = o.get("hazard", {})
 			if int(o.get("hp", 0)) > 0:
 				what += " — smash it from beside it (one action, %d HP)" % int(o["hp"])
+				if o.get("blocks_sight", false):
+					what += "; until then it blocks the way and the line of sight"
 				if o.get("explosive", false):
 					what += "; it bursts for %s %s to everything around it" % [h.get("dice", "2d6"), h.get("damage_type", "fire")]
 				what += "."
 			elif not h.is_empty():
 				what += " — a hazard. Shove somebody standing beside it in for %s %s." % [h.get("dice", "2d6"), h.get("damage_type", "fire")]
+			elif o.get("blocks_sight", false):
+				what += " — solid. Nobody can stand here, see through it or shoot past it."
 			elif o.get("blocks_movement", false):
 				what += " — in the way. Nobody can stand here."
 			else:
 				what += " — light and nothing more."
 			lines.append(what)
 		if combat.is_cover(hx):
-			lines.append("Half cover — +2 AC and +2 on Dexterity saves for whoever stands here.")
+			lines.append("Half cover — +2 AC and +2 on saving throws for whoever stands here.")
+			if hx in combat.board.get("screens", []):
+				lines.append("Tall enough to hide behind — nobody sees or shoots across it.")
 		if hx in combat._rough():
 			lines.append("Rough ground — every step here costs two.")
 		var up: int = combat.height_at(hx)
