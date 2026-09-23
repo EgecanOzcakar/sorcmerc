@@ -65,7 +65,11 @@ func test_creator() -> void:
 	check("Temperament" in t and "Origin" in t, "the background step has both rows")
 	check("● Marsh-bred" in t and "● Generous" in t, "...with the background's picks lit")
 	check("+1 AC in the marsh" in t, "...and says what the origin does")
-	check("(not yet in play)" in t, "...and marks what is still to come")
+	check(not "(not yet in play)" in t, "...and since step 4, every effect of a sailor's defaults is in play")
+	# A trait with something still to come is marked so (Curious's hazard save).
+	cre._set_trait("temperament", "curious")
+	await process_frame
+	check("(not yet in play)" in _text(cre._body), "...and what is still to come is marked")
 	cre._set_trait("temperament", "craven")
 	cre._set_background("soldier")
 	check(Traits.of(cre.ch, "temperament") == "craven", "a temperament the player picked survives a background change")
