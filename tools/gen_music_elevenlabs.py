@@ -151,29 +151,34 @@ BEDS = {
 
 # name -> (prompt, seconds). One-shots: a phrase, not a piece, and each ends.
 STINGS = {
-    "music_discovery": ("Orchestral discovery stinger for a medieval fantasy game: a "
-                        "rising harp glissando into a warm sustained string chord, a soft"
-                        " celesta and small-bell melody on top. A sense of wonder, slow, "
-                        "no drums, no vocals, ends cleanly on the held chord.", 6),
-    "music_road": ("Orchestral vista stinger: French horns swelling from soft to full "
-                   "over sustained strings, a broad hopeful rising melody, the view from "
-                   "a high place. Wide and cinematic, medieval fantasy, slow, no vocals, "
-                   "ends cleanly on a sustained major chord.", 8),
-    "music_alarm": ("Orchestral alarm stinger: a hard low brass and timpani hit, an "
-                    "urgent tolling bell, tense fast staccato strings driving underneath,"
-                    " a town under attack. Medieval fantasy, no vocals, ends cleanly on a"
-                    " final brass hit.", 8),
-    "music_relief": ("Orchestral relief stinger: a held tense suspended string chord "
-                     "easing and resolving into a warm major chord, soft strings and a "
-                     "single gentle bell, a breath let out. Slow, medieval fantasy, no "
-                     "drums, no vocals, ends cleanly.", 8),
-    "music_founding": ("Orchestral founding stinger: a lone French horn melody joined by "
-                       "warm strings and a slow proud timpani beat, grounded and "
-                       "dignified, something built to last. Medieval fantasy, no vocals, "
-                       "ends cleanly on a sustained chord.", 10),
-    "music_deed": ("Orchestral job-done stinger: a brief confident trumpet and horn "
-                   "phrase over a warm sustained string chord, satisfied and rewarding. "
-                   "Medieval fantasy, no vocals, ends cleanly with a short ring-out.", 6),
+    "music_discovery": ("Live orchestral recording of a short discovery phrase: a rising "
+                        "harp glissando into a warm sustained string chord, a soft "
+                        "celesta and small-bell melody on top. Real players in a concert "
+                        "hall, a sense of wonder, slow, no synthesizer, no drums, no "
+                        "vocals, ends cleanly on the held chord.", 6),
+    "music_road": ("Live orchestral recording of a short vista phrase: French horns "
+                   "swelling from soft to full over sustained strings, a broad hopeful "
+                   "rising melody. Real players in a concert hall, wide and cinematic, "
+                   "slow, no synthesizer, no vocals, ends cleanly on a sustained major "
+                   "chord.", 8),
+    "music_alarm": ("Live orchestral recording of a short alarm phrase: a hard low brass "
+                    "and timpani hit, an urgent tolling tubular bell, tense fast staccato"
+                    " strings driving underneath. Real players in a concert hall, no "
+                    "synthesizer, no vocals, ends cleanly on a final brass hit.", 8),
+    "music_relief": ("Live orchestral recording of a short relief phrase: a held tense "
+                     "suspended string chord easing and resolving into a warm major "
+                     "chord, soft strings and one gentle tubular bell. Real players in a "
+                     "concert hall, slow, no synthesizer, no drums, no vocals, ends "
+                     "cleanly.", 8),
+    "music_founding": ("Live orchestral recording of a short founding phrase: a lone "
+                       "French horn melody joined by warm strings and a slow proud "
+                       "timpani beat, grounded and dignified. Real players in a concert "
+                       "hall, no synthesizer, no vocals, ends cleanly on a sustained "
+                       "chord.", 10),
+    "music_deed": ("Live orchestral recording of a short job-done phrase: a brief "
+                   "confident trumpet and horn phrase over a warm sustained string chord,"
+                   " satisfied. Real players in a concert hall, no synthesizer, no "
+                   "vocals, ends cleanly with a short hall ring-out.", 6),
 }
 
 
