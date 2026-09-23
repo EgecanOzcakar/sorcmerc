@@ -566,9 +566,24 @@ Each step is one PR, green on its own, and each is playable without the next.
    - **Poisoned a third time** is not built: nothing counts poisonings yet.
      Neither is the +2 aggravation for a bonded or loving ally's death, which
      waits for step 4's opinion terms.
-4. **The road and the fire.** `skill_bonus` and the three check sums (§5.3),
-   the opinion terms (§7), a camp beat when a trait is gained ("Pike hasn't
-   slept since the fire").
+4. **The road and the fire — BUILT (2026-09-23).** `Traits.skill_term` in
+   `Campaign.skill_bonus`, read against `party.here` (biome, band, site,
+   night), which `world.gd` stamps every frame the way it stamps `world_now`.
+   The rest:
+   - **The checks:** the approach's own job term (Brave's −2 on `avoid`), the
+     road event roller's `travel` term (named on the card: "(Downs-rider
+     +1)"), `forage`, the watch (kept at camp whatever the map says), a lair's
+     search (the `investigation` term on top of its Survival).
+   - **The purse:** Greedy +10% of a fight's gold, Generous −10% on sales.
+   - **Opinion (§7):** the baseline terms, Generous's faster warming, the
+     Wrathful friendly-fire multiplier, and the Relations line naming the
+     traits behind a pull.
+   - **The camp beat:** each earned row carries a `camp` line, said once at
+     the next fire within three days (`Traits.camp_beat`; `told` is saved).
+     "Pike sits well back from the fire tonight, and doesn't eat."
+   - **Still not built:** `save_vs_hazard` (Curious, Reckless) waits for the
+     combat hazards to take a save. Renowned's "that faction's bands seek you
+     out" is not designed.
 5. **The robot.** `drive_random` / `drive_completionist` play with traits on,
    so a trait that softlocks or crashes a run is caught the way everything
    else is.

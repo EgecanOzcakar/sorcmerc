@@ -1,5 +1,5 @@
 {
-  "_comment": "Personality traits (#176). docs/superpowers/specs/2026-09-23-traits-design.md is the design; core/traits.gd reads this file. Every effect is {when, gives, text?}: `when` keys biome/board/night/band/site are decided at fight start (step 1) and bloodied/first_round/alone/vs_faction/vs_type/dtype_in/dtype_out at the roll (step 2); `gives` keys ac/to_hit/save/initiative/damage/ward/save_adv/speed/death_save_adv are live in a fight and hardship_adv/hardship_dis/hardship_bonus/grudge on a hardship's save (step 3), the rest (skill, travel, forage, gold, opinion...) are shown and marked not yet in play. Earned rows (step 3) carry `kind` (triumph/resilience/scar/wound), `lasts_days` for one that lapses, `heals`/`cure` for the page; an id may be instanced as `id@arg` (grudge@goblinoid), and `$arg`/`$name`/`$Name` in the row are that faction. Each live trait's `_measured` line is tests/sweep_traits.gd's (2026-09-23): none moves the win rate by more than 3 points, which is the seed noise floor — re-run it when a number here changes.",
+  "_comment": "Personality traits (#176). docs/superpowers/specs/2026-09-23-traits-design.md is the design; core/traits.gd reads this file. Every effect is {when, gives, text?}: `when` keys biome/board/night/band/site are decided at fight start (step 1) and bloodied/first_round/alone/vs_faction/vs_type/dtype_in/dtype_out at the roll (step 2); `gives` keys ac/to_hit/save/initiative/damage/ward/save_adv/speed/death_save_adv are live in a fight and hardship_adv/hardship_dis/hardship_bonus/grudge on a hardship's save (step 3), skill/travel/forage/gold/sale_price/opinion/opinion_drift on the road and in the company (step 4), and the rest (sought, save_vs_hazard) are shown and marked not yet in play. Earned rows (step 3) carry `kind` (triumph/resilience/scar/wound), `lasts_days` for one that lapses, `heals`/`cure` for the page and `camp` for the line said at the fire after it (step 4); an id may be instanced as `id@arg` (grudge@goblinoid), and `$arg`/`$name`/`$Name` in the row are that faction. Each live trait's `_measured` line is tests/sweep_traits.gd's (2026-09-23): none moves the win rate by more than 3 points, which is the seed noise floor — re-run it when a number here changes.",
   "traits": {
     "brave": {
       "name": "Brave",
@@ -448,7 +448,8 @@
             "initiative": 1
           }
         }
-      ]
+      ],
+      "camp": "%s is up before anyone, pacing, wanting the road."
     },
     "overconfident": {
       "name": "Overconfident",
@@ -469,7 +470,8 @@
             "ac": -1
           }
         }
-      ]
+      ],
+      "camp": "%s tells the fight again, and it has got bigger since this afternoon."
     },
     "renowned": {
       "name": "Renowned",
@@ -490,7 +492,8 @@
           },
           "text": "That faction's bands come looking for them"
         }
-      ]
+      ],
+      "camp": "A carter on the road knew %s by name today. Nobody at the fire has let it go."
     },
     "arrogant": {
       "name": "Arrogant",
@@ -509,7 +512,8 @@
           },
           "text": "−5 with every hero in the company"
         }
-      ]
+      ],
+      "camp": "%s explains, again, how the fight was won. Nobody asked."
     },
     "delver": {
       "name": "Delver",
@@ -535,7 +539,8 @@
           },
           "text": "+2 to search a lair's rooms"
         }
-      ]
+      ],
+      "camp": "%s sits apart with a stick, drawing the rooms they came up through in the dirt."
     },
     "reckless": {
       "name": "Reckless",
@@ -559,7 +564,8 @@
           },
           "text": "−1 on saves against traps and hazards"
         }
-      ]
+      ],
+      "camp": "%s laughs about the pit they nearly went into. Nobody else does."
     },
     "protector": {
       "name": "Protector",
@@ -575,7 +581,8 @@
             "ac": 1
           }
         }
-      ]
+      ],
+      "camp": "%s has taken the watch nearest the one they carried out. Nobody said to."
     },
     "steady-hands": {
       "name": "Steady hands",
@@ -590,7 +597,8 @@
             }
           }
         }
-      ]
+      ],
+      "camp": "%s re-wraps every bandage in the camp and will not be talked out of it."
     },
     "giant-killer": {
       "name": "Giant-killer",
@@ -610,7 +618,8 @@
             "to_hit": 1
           }
         }
-      ]
+      ],
+      "camp": "%s keeps looking at their own hands, like they belong to somebody bigger."
     },
     "veteran": {
       "name": "Veteran",
@@ -623,7 +632,8 @@
             "initiative": 1
           }
         }
-      ]
+      ],
+      "camp": "%s sleeps the moment they lie down. That is how you know."
     },
     "fire-tempered": {
       "name": "Fire-tempered",
@@ -641,7 +651,8 @@
             "ward": 3
           }
         }
-      ]
+      ],
+      "camp": "%s holds a hand in the flames a moment longer than anybody likes."
     },
     "burn-shy": {
       "name": "Burn-shy",
@@ -660,7 +671,8 @@
             "to_hit": -1
           }
         }
-      ]
+      ],
+      "camp": "%s sits well back from the fire tonight, and doesn't eat."
     },
     "frost-hardened": {
       "name": "Frost-hardened",
@@ -678,7 +690,8 @@
             "ward": 3
           }
         }
-      ]
+      ],
+      "camp": "%s sleeps without a blanket, and wakes up fine."
     },
     "chilled": {
       "name": "Chilled",
@@ -707,7 +720,8 @@
             "to_hit": -1
           }
         }
-      ]
+      ],
+      "camp": "%s cannot get warm. Two blankets, and still shaking."
     },
     "storm-struck": {
       "name": "Storm-struck",
@@ -722,7 +736,8 @@
             }
           }
         }
-      ]
+      ],
+      "camp": "%s watches the sky over the fire, not worried — waiting."
     },
     "storm-shy": {
       "name": "Storm-shy",
@@ -757,7 +772,8 @@
             "to_hit": -1
           }
         }
-      ]
+      ],
+      "camp": "%s flinches at the crack of a log. Then at the next one."
     },
     "grudge": {
       "name": "Grudge: $name",
@@ -785,7 +801,8 @@
             "ac": -1
           }
         }
-      ]
+      ],
+      "camp": "%s is sharpening the same edge for the third time, talking about $name."
     },
     "haunted": {
       "name": "Haunted by $name",
@@ -804,7 +821,8 @@
             "to_hit": -1
           }
         }
-      ]
+      ],
+      "camp": "%s hasn't slept. Every sound past the firelight is $name."
     },
     "hardened": {
       "name": "Hardened",
@@ -819,7 +837,8 @@
             }
           }
         }
-      ]
+      ],
+      "camp": "%s says the name of the one they lost, once, and then says nothing else all night."
     },
     "hard-to-kill": {
       "name": "Hard to kill",
@@ -833,7 +852,8 @@
           },
           "text": "Advantage on death saves"
         }
-      ]
+      ],
+      "camp": "%s counts their own breaths before they sleep, and grins at the number."
     },
     "wounded": {
       "name": "Wounded",
@@ -853,7 +873,8 @@
             "ac": -1
           }
         }
-      ]
+      ],
+      "camp": "%s changes the dressing by the fire, jaw tight."
     },
     "shaken": {
       "name": "Shaken",
@@ -868,7 +889,8 @@
             "save": -1
           }
         }
-      ]
+      ],
+      "camp": "%s sits with the others and is not really there."
     },
     "maimed": {
       "name": "Maimed",
@@ -884,7 +906,8 @@
           },
           "text": "−1 hex of movement"
         }
-      ]
+      ],
+      "camp": "%s tries the leg when they think nobody is looking."
     },
     "bane": {
       "name": "$One-bane",
@@ -912,7 +935,8 @@
             "damage": 1
           }
         }
-      ]
+      ],
+      "camp": "%s cuts another notch. That makes enough of $name to count."
     }
   },
   "defaults": {

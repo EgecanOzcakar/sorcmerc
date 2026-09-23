@@ -532,6 +532,12 @@ func _process(delta: float) -> void:
 	# deltas off the settlements and runs the slow drift back toward neutral.
 	var dt := world.tick(delta)
 	party.world_now = world.clock.elapsed
+	# #176 step 4: where the party is, for the road's trait terms — the same
+	# ground, country and kind of place a fight here would be stamped with.
+	var hp := world.player()
+	party.here = {} if hp == null else {"biome": world.biome_at(hp.position),
+		"band": Regions.band_of(world, hp.position), "night": world.clock.is_night(),
+		"site": "town" if not _visit.is_empty() else ("lair" if _site != null else "road")}
 	for ch in party.roster:
 		Potions.expire(ch, party.world_now)
 		# #176: Emboldened runs out, a wound heals with time — said on the HUD
@@ -1778,7 +1784,11 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 #   gold, loot, quest progress — party-level calls, made directly.
 func _bank(result: Dictionary) -> void:
 	Campaign.new(party)._split_xp(int(result.get("xp", 0)))
-	party.add_gold(int(result.get("gold", 0)))
+	# #176 step 4: a Greedy hero goes through the pockets twice (+10%).
+	var gold: int = int(result.get("gold", 0))
+	gold = int(round(gold * (100 + Traits.party_pct(party, "gold")) / 100.0))
+	result["gold"] = gold   # the after-action page's tally says what was banked
+	party.add_gold(gold)
 	var taken: Array = result.get("loot", [])
 	for item in taken:
 		party.stash_add(String(item))
@@ -3537,6 +3547,12 @@ func _fireside(rng: RNG, then: Callable) -> bool:
 		var q: Array = _calling_queue.pop_front()
 		_calling_done(String(q[0]), q[1], then)
 		return true
+	# #176 step 4: a trait somebody earned since the last fire, said once —
+	# "Pike sits well back from the fire tonight, and doesn't eat."
+	var tb: Dictionary = Traits.camp_beat(party.party_characters(), world.clock.elapsed)
+	if not tb.is_empty():
+		_camp_card("fireside", "At the fire", String(tb["kind"]), String(tb["text"]), then, "camp-night")
+		return true
 	var m: Dictionary = PartyOpinion.camp_moment(party, rng)
 	if m.is_empty():
 		return false
@@ -4172,7 +4188,7 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 	var pack: GridContainer = null
 	for entry in party.stash:
 		var id := String(entry["item_id"])
-		var paid := Visit.sell_price(_visit, id)
+		var paid := Visit.sell_price(_visit, id, party)
 		if paid <= 0:
 			continue
 		if pack == null:

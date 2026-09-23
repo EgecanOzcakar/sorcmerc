@@ -167,6 +167,8 @@ static func from_dict(d: Dictionary):
 				tr["dc"] = int(t["dc"])
 			if t.has("event"):
 				tr["event"] = String(t["event"])
+			if bool(t.get("told", false)):
+				tr["told"] = true   # step 4: said at the fire once already
 			if t.get("cure") is Dictionary:
 				tr["cure"] = t["cure"].duplicate(true)
 			ch.traits.append(tr)
