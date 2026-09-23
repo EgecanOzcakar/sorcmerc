@@ -77,6 +77,7 @@ func _offer() -> void:
 func _profile() -> void:
 	var ch := _hero("brenna", "Brenna Tide", "sailor")
 	Traits.fill_defaults(ch)
+	Traits.set_family(ch, "temperament", "craven")   # a per-roll trait, live since step 2
 	var p = load("res://scenes/profile/profile.tscn").instantiate()
 	root.add_child(p)
 	p.set_character(ch)

@@ -3,6 +3,7 @@
 A design, agreed with the owner on 2026-09-23 (§10), being built in the order
 §9 gives. Built so far: step 0 (three gaps in the fight the design stands on),
 step 1 (the traits themselves — picked, saved, and counted where the fight is),
+step 2 (the per-roll half and the sweep that measured it),
 and the full-screen moment every trait gained or lost will open (§8). Issue #176 asks for "character traits,
 these can be what they start with and what they receive after some event they
 were affected" — Crusader Kings' traits, in a 5e company. This document says
@@ -525,11 +526,21 @@ Each step is one PR, green on its own, and each is playable without the next.
    traits and are never offered them: they are the ruler every sweep stands on.
    Effects whose `when`/`gives` the build does not apply yet are shown on every
    page marked "(not yet in play)".
-2. **The per-roll half.** The four combat hooks (§5.2), `hit_chance` agreeing
-   with them, the cap, the combat card chips. `tests/sweep_traits.gd` in the
-   shape of `sweep_party_opinion.gd` measures the win-rate movement of each
-   trait, and the numbers in `data/traits.json` get their measurement in
-   capitals, like every other balance number in the repo.
+2. **The per-roll half — BUILT (2026-09-23).** `Traits.roll(c, key, cb,
+   other, dtype, ability)` answers what only the roll knows (bloodied, first
+   round, alone, the other side's bestiary faction and type, the damage type in
+   and out) and `Traits.save_mode` gives advantage on a save against a named
+   condition. `core/combat.gd` asks at four places: `to_hit_bonus` (so the odds
+   chip and the roll still agree — and a ray spell's attack), `effective_ac(c,
+   attacker)`, `_saving_throw(..., vs)`, and the damage sink (a trait's damage
+   rider on a hit, a ward after resistance and vulnerability). The ±2 cap covers
+   the stamp and the roll together; a ward is a flat reduction per hit and sits
+   outside it. Each counts once in the log ("Pike is Craven: +1 AC."). Craven,
+   Wrathful, Cautious and Brave are live; the foe/element/ward vocabulary is
+   tested on test-only rows, waiting for step 3's earned traits. The sweep
+   (`tests/sweep_traits.gd`, 300 seeds): no trait moves the 88.7% baseline by
+   more than +3.0, which is the seed noise floor — each live trait's
+   `_measured` line in `data/traits.json` carries its row.
 3. **Earning.** `Traits.after_fight` over `result.credit`: the triumph tables
    on chance, the hardship saves with their DCs and degrees (§6), banes and
    wounds, the cures as a second save, each one opening the moment (§8, already

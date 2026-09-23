@@ -8802,3 +8802,66 @@ its snapshot of the hero includes the traits. Pictures:
   loader reads the one file.
 - The encounter budget (`Power.estimate`) does not see a trait's status yet;
   the win-more note in the spec wants it to.
+
+## Personality traits, step 2 — what only the roll knows (2026-09-23, #176)
+
+Step 2 of the build order in `docs/superpowers/specs/2026-09-23-traits-design.md`.
+Step 1 stamped what a fight knows before its first roll: the biome, the board,
+the night. This step answers what only the roll itself knows:
+- whether the hero is **under half HP**;
+- whether it is the **first round**;
+- whether no ally stands **beside them**;
+- the other side's **bestiary faction and type**;
+- the **damage type** coming in or going out.
+
+`Traits.roll(c, key, cb, other, dtype, ability)` returns the term and the
+names behind it. `core/combat.gd` asks it in four places:
+- `to_hit_bonus`, so the odds chip and the roll still agree, and a ray
+  spell's attack too;
+- `effective_ac(c, attacker)`, which grew the attacker it needs for a
+  foe-keyed AC;
+- `_saving_throw(..., vs)`, which grew the conditions a failure would bring,
+  so Brave rolls with advantage against being frightened;
+- the damage sink: a trait's damage rides a hit as a named extra
+  ("+1 wrathful"), and a **ward** comes off after resistance and
+  vulnerability.
+
+The ±2 cap now covers the stamp and the roll together, so a stamped +2 and a
+rolled +1 make +2. A ward is a flat reduction per hit rather than a roll, so
+it sits outside the cap: the spec's Fire-tempered is 3. Each trait says so in
+the log the first time it counts in a fight ("Pike Sallow is Craven: +1 AC.").
+The combat card lights a per-roll trait wherever it can count.
+
+**Now live:** Craven (+1 AC under half HP, −1 to hit in round 1), Wrathful (+1
+damage under half HP), Cautious (+1 AC in round 1) and Brave (advantage against
+being frightened). The foe, element and ward vocabulary has no row in the data
+yet; step 3's earned marks and banes use it. It is tested now on test-only rows
+(`tests/test_traits_roll.gd`, 30 checks).
+
+**Measured** (`tests/sweep_traits.gd`, 300 seeds each, the preset trio all
+holding one trait, `normal`). The baseline wins 88.7%, and no trait moves it
+by more than 3 points:
+
+| Trait | Win % | Change |
+|---|---|---|
+| Craven | 91.7% | +3.0 |
+| Calm | 91.3% | +2.7 |
+| Night-owl | 91.3% | +2.7 |
+| Wrathful, Downs-rider, Cave-dweller | — | +1.0 |
+| Cautious, Street-raised | — | +0.7 |
+| Marsh-bred | — | +0.3 |
+| Woods-born | — | +0.0 |
+| Brave | — | 0 (never fired: no fear save in these rosters) |
+
+Calm and Night-owl produce identical rows. The −1 initiative both carry by day
+only reshuffles the fight, which puts the seed noise floor at about 3 points.
+The cap stays at ±2, and each live trait's `_measured` line carries its row.
+
+### Still open
+
+- Brave's advantage never fired in the sweep. Fear saves are rare in the
+  rosters it fights. Measure it against a fear-heavy roster when step 3 adds
+  the hardship saves that lean on it.
+- `save_fail_chance` (the UI's save odds) does not count traits, or the other
+  save bonuses it already skipped before this.
+- A summoned creature's hits carry no traits of its summoner.

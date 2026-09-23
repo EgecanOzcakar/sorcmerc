@@ -38,8 +38,14 @@ const PATH := "res://data/traits.json"
 const FAMILIES := ["temperament", "origin"]   # the two a hero picks; marks, banes and wounds are earned (step 3)
 
 # Bounded accuracy: however many traits agree, one number moves by at most this
-# much in a fight (spec §3). A placeholder like every other number here until
-# the sweep (spec §9 step 2).
+# much in a fight (spec §3) — the fight-start stamp and the roll together.
+# MEASURED 2026-09-23 (tests/sweep_traits.gd, 300 seeds, the preset trio all
+# holding one trait, normal): baseline 88.7% win; no trait moves it more than
+# +3.0 (Craven 91.7%, Calm and Night-owl 91.3%, the rest +0..+1). Calm's and
+# Night-owl's rows are identical — the −1 initiative both carry by day only
+# reshuffles the fight — which puts the seed noise floor at about 3 points, so
+# at ±2 nothing here stands out of it. Re-run the sweep when CAP or a number in
+# data/traits.json moves.
 const CAP := 2
 
 # The half of `when` that is known before the first roll: stamped once, at
