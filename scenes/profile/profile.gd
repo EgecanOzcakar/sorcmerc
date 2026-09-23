@@ -12,6 +12,7 @@ const Ach = preload("res://core/achievements.gd")
 const Potions = preload("res://core/potions.gd")
 const RoadSpells = preload("res://core/road_spells.gd")
 const RNG = preload("res://core/rng.gd")
+const Traits = preload("res://core/traits.gd")
 
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
 const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
@@ -116,6 +117,7 @@ func _render() -> void:
 	_saves(c1, s)
 	var c2 := _column()
 	_skills(c2, s)
+	_traits(c2)
 	var c3 := _column()
 	_resources(c3, s)
 	_road(c3)
@@ -402,6 +404,33 @@ func _road(col: VBoxContainer) -> void:
 func cast_road(sid: String) -> void:
 	last_cast = RoadSpells.cast(party(), _ch, sid, party().world_now)
 	_render()
+
+# #176: who they are. Each trait's name and family, its line, and what it does —
+# the effects this build applies in the verdigris every live number on this
+# page wears, the ones still to come muted and marked so, never mistaken for a
+# bonus the hero has.
+func _traits(col: VBoxContainer) -> void:
+	var v := _panel(col, "Personality traits")
+	var ids: Array = Traits.ids(_ch)
+	if ids.is_empty():
+		_row(v, "—", "none yet")
+		return
+	for id in ids:
+		_row(v, Traits.name_of(id), String(Traits.row(id).get("family", "")), "trait_" + id, COL_GOLD)
+		var t := Label.new()
+		t.text = String(Traits.row(id).get("text", ""))
+		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		t.custom_minimum_size = Vector2(220, 0)
+		t.theme_type_variation = "Dim"
+		v.add_child(t)
+		for line in Traits.effect_lines(id):
+			var e := Label.new()
+			e.text = "·  " + String(line["text"]) + ("" if line["live"] else "   (not yet in play)")
+			e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			e.custom_minimum_size = Vector2(220, 0)
+			e.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+			e.add_theme_color_override("font_color", COL_ACCENT if line["live"] else Icons.COL_MUTED)
+			v.add_child(e)
 
 func _features(col: VBoxContainer, s) -> void:
 	var v := _panel(col, "Features")

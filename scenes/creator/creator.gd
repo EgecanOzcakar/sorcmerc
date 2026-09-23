@@ -19,6 +19,7 @@ const Prog = preload("res://core/progression.gd")
 const Leveling = preload("res://core/leveling.gd")
 const Climb = preload("res://core/climb.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")   # #103
+const Traits = preload("res://core/traits.gd")   # #176
 
 signal character_created(ch)
 
@@ -465,6 +466,11 @@ func _blocker(step := _step) -> String:
 	return ""
 
 func _confirm() -> void:
+	# #176: a hero made here was offered the pick here. A preset or a build
+	# loaded from before traits picks up its background's defaults rather than
+	# walking out with none.
+	Traits.fill_defaults(ch)
+	ch.traits_offered = true
 	var sheet = ch.sheet()
 	if not sheet.pending.is_empty():
 		_status.text = "%d choice(s) still unmade." % sheet.pending.size()
@@ -868,7 +874,9 @@ func _apply_quick_build() -> void:
 	var bg := String(Catalog.class_src(ch.class_id()).get("quickBuild", {}).get("suggestedBackground", ""))
 	if bg != "" and ch.background_id != bg:
 		_prune_choices(ch.background_id)
+		var prev: String = ch.background_id
 		ch.background_id = bg
+		Traits.fill_defaults(ch, prev)   # #176: the background's temperament and origin, until the player picks
 	ch.dirty()
 	_refresh()
 
@@ -918,6 +926,7 @@ func _build_choices() -> void:
 			", ".join(src["skillProficiencies"].map(humanize)),
 			", ".join(src["toolProficiencies"].map(humanize)) if src["toolProficiencies"] else "none",
 			humanize(src["originFeat"]) if src["originFeat"] != null else "none"])
+		_build_traits()
 
 	_head("Choices")
 	var pts := _choice_points_of([])
@@ -928,11 +937,37 @@ func _build_choices() -> void:
 	for p in pts:
 		_choice_widget(p)
 
+# #176: personality traits — one temperament and one origin, the background's
+# pre-selected and the player's to change. What each does is spelled out under
+# the row, the effects this build applies in fights marked apart from the ones
+# still to come (core/traits.gd's effect_lines), so nobody picks a line of text
+# believing it is a bonus.
+func _build_traits() -> void:
+	for fam in Traits.FAMILIES:
+		_head("Temperament" if fam == "temperament" else "Origin")
+		var f := _flow()
+		var cur := Traits.of(ch, fam)
+		for id in Traits.of_family(fam):
+			var tid: String = id
+			var b := _opt(f, Traits.name_of(tid), cur == tid, func(): _set_trait(fam, tid))
+			b.tooltip_text = String(Traits.row(tid).get("text", ""))
+		if cur != "":
+			var lines: Array = Traits.effect_lines(cur).map(func(l): return String(l["text"]) + ("" if l["live"] else "  (not yet in play)"))
+			_note("%s — %s\n%s" % [Traits.name_of(cur), Traits.row(cur).get("text", ""), "\n".join(lines.map(func(t): return "·  " + t))])
+
+func _set_trait(family: String, id: String) -> void:
+	if Traits.of(ch, family) == id:
+		return
+	Traits.set_family(ch, family, id)
+	_refresh()
+
 func _set_background(bid: String) -> void:
 	if ch.background_id == bid:
 		return
 	_prune_choices(ch.background_id)
+	var prev: String = ch.background_id
 	ch.background_id = bid
+	Traits.fill_defaults(ch, prev)   # #176: follows the background only where the player has not picked
 	ch.dirty()
 	_refresh()
 

@@ -21,6 +21,10 @@ var buffs: Dictionary = {}              # potion id -> {until (world-minute), st
 var prepared: Array[String] = []
 var xp: int = 0                         # banked per character; gates Leveling.can_level_up
 var dead: bool = false                  # died in a fight; benched until revived
+# #176: personality traits, [{"id", "why"}] — core/traits.gd owns what they mean.
+# `traits_offered`: a hero from before traits has been offered the pick once.
+var traits: Array = []
+var traits_offered: bool = false
 
 const Resolve = preload("res://core/rules/resolve.gd")
 const Resolved = preload("res://core/rules/resolved.gd")

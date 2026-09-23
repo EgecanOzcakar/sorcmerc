@@ -69,6 +69,7 @@ var pools: Dictionary = {}          # pool_id -> {cur, max, regen}
 var spell_ids: Array[String] = []   # castable-now spells
 var slots: Array[int] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 var sheet = null                    # ResolvedCharacter; null for monsters
+var traits: Array = []              # #176: personality trait ids (core/traits.gd); [] for monsters
 
 # runtime
 var statuses: Dictionary = {}       # "prone" | "dodging" | "hidden" | "down" | "stable" | "dead"
@@ -138,6 +139,7 @@ func clone() -> RefCounted:
 	c.vulnerable = vulnerable.duplicate()
 	c.cond_immune = cond_immune.duplicate()
 	c.slots = slots.duplicate()
+	c.traits = traits.duplicate()
 	c.attacks = attacks.duplicate(true)
 	c.features = features.duplicate()
 	c.verbs = verbs.duplicate(true)

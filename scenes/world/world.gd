@@ -1590,7 +1590,7 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 const MINUTES_PER_ROUND := 60.0
 
 func _run_combat(spec: Dictionary, difficulty: String,
-		scouted_ahead := false, forced_ambush := false) -> Dictionary:
+		scouted_ahead := false, forced_ambush := false, site := "road") -> Dictionary:
 	world.clock.pause()
 	Sound.set_combat(true)    # T27: campaign.gd did this for run fights; map fights were silent
 	_combat_overlay = Control.new()
@@ -1600,6 +1600,10 @@ func _run_combat(spec: Dictionary, difficulty: String,
 	_combat.party = party
 	spec = spec.duplicate()
 	spec["night"] = world.clock.is_night()   # #85: fought by torchlight (core/combat.gd lit())
+	# #176: where this is, for the heroes' personality traits (core/traits.gd):
+	# the ground under the company, the country it is in, and what kind of place.
+	var here: Vector2 = world.player().position if world.player() != null else Vector2.ZERO
+	spec["where"] = {"biome": world.biome_at(here), "band": Regions.band_of(world, here), "site": site}
 	_combat.spec = spec
 	_combat.difficulty = difficulty
 	_combat.scouted_ahead = scouted_ahead
@@ -1683,7 +1687,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 		spec["objective"] = objective
 	var raid_target = Raids.settlement_of(world, String(foe.ai.get("target", ""))) if Raids.turnable(foe) else null
 	var result: Dictionary = await _run_combat(spec,
-		String(threat["difficulty"]), scouted_ahead, forced_ambush)
+		String(threat["difficulty"]), scouted_ahead, forced_ambush, "camp" if jumped == "dark" else "road")
 	if result.is_empty():
 		return {}
 	var obj: Dictionary = result.get("objective", {})
@@ -2552,7 +2556,7 @@ func _on_site_room_chosen(i: int) -> void:
 	# with the party's condition the way open country does (core/world_threat.gd),
 	# because a lair that got easier the worse you were doing would be no gamble.
 	var result: Dictionary = await _run_combat(_site.combat_spec(),
-		String(_site.room.get("difficulty", "normal")))
+		String(_site.room.get("difficulty", "normal")), false, false, "lair")
 	if _site == null:
 		return
 	if not result.is_empty():
@@ -4406,7 +4410,7 @@ func _pit_bout() -> void:
 		_say("Nobody stands in the pit tonight.")
 		return
 	_close_visit()
-	var result: Dictionary = await _run_combat(spec, "normal", false, false)
+	var result: Dictionary = await _run_combat(spec, "normal", false, false, "town")
 	if result.is_empty():
 		return   # torn down mid-fight
 	var won: bool = String(result.get("outcome", "")) == "Victory"

@@ -15,6 +15,7 @@ const Rng = preload("res://core/rng.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Potions = preload("res://core/potions.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
+const Traits = preload("res://core/traits.gd")
 
 const FT_PER_HEX := 6  # adapter.gd's convention
 
@@ -755,8 +756,11 @@ func in_reach(attacker, target) -> bool:
 		return d <= attacker.atk_range
 	return d <= attacker.reach
 
-func effective_ac(c) -> int:
-	var ac: int = c.ac + _buff_sum(c, "ac")
+# `attacker`, when the question is "against whom": a hero's personality trait
+# can make them harder to hit by one kind of foe, or while bloodied (#176,
+# core/traits.gd's roll). Without it only the traits that name no foe count.
+func effective_ac(c, attacker = null) -> int:
+	var ac: int = c.ac + _buff_sum(c, "ac") + int(Traits.roll(c, "ac", self, attacker)["n"])
 	if is_cover(c.pos):
 		ac += 2  # half cover
 	if party != null:
@@ -792,7 +796,7 @@ func hit_chance(attacker, target, opts := {}) -> float:
 	# The odds chip has to agree with the roll, so the bonus is the one
 	# resolve_attack adds (to_hit_bonus). Only Bardic Inspiration is left out: it
 	# is a die rolled when it is spent, not a number the chip can know.
-	var need: int = effective_ac(target) - to_hit_bonus(attacker, target, opts)
+	var need: int = effective_ac(target, attacker) - to_hit_bonus(attacker, target, opts)
 	var p: float = clampf((21.0 - need) / 20.0, 0.05, 0.95)
 	if mode == Dice.ADV:
 		p = 1.0 - (1.0 - p) * (1.0 - p)
@@ -1235,7 +1239,7 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 
 func _save_effect(actor, v: Dictionary, target) -> Dictionary:
 	var saved := _saving_throw(target, actor.save_dc, v.get("save", "dex"), false,
-		v.get("magical", false))
+		v.get("magical", false), v.get("conditions", []))
 	_mark_active(actor)   # forcing a save keeps a Rage going (2024)
 	log.append("%s uses %s on %s — %s the save." % [
 		actor.cname, v["label"], target.cname, "makes" if saved else "fails"])
@@ -1473,14 +1477,16 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 		for i in rays:
 			var r = Dice.d20(rng)
 			var crit: bool = r.nat == 20
-			var hit: bool = crit or (r.nat != 1 and r.nat + int(v["attack_bonus"]) >= effective_ac(c))
+			var ray_bonus: int = int(v["attack_bonus"]) \
+				+ int(Traits.roll(caster, "to_hit", self, c, String(v.get("damage_type", "")))["n"])   # #176
+			var hit: bool = crit or (r.nat != 1 and r.nat + ray_bonus >= effective_ac(c, caster))
 			var d := Dice.roll(rng, notation, crit) if hit else 0
 			var tag := " ray %d/%d" % [i + 1, rays] if rays > 1 else ""
 			# The number on this line is what lands, not what was rolled: five
 			# rays reading "hit for 7, 10, 14, 10" against a fire-resistant target
 			# add up to a kill that never happens (#141). The defence line that
 			# follows says what was rolled and why it shrank.
-			log.append("  d20[%d]%+d vs AC %d%s — %s%s." % [r.nat, int(v["attack_bonus"]), effective_ac(c),
+			log.append("  d20[%d]%+d vs AC %d%s — %s%s." % [r.nat, ray_bonus, effective_ac(c, caster),
 				tag, "hit for %d" % _damage_after_defenses(c, d, v.get("damage_type", "")) if hit else "miss",
 				" (CRIT)" if crit else ""])
 			if hit:
@@ -1489,7 +1495,7 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 				_apply_damage(c, d, v.get("damage_type", ""), false, caster)
 		if hits > 0 and (v.has("conditions") or v.has("buff")):
 			# Ray of Sickness: the rider needs its own save when the spell names one
-			if v.get("save", "") == "" or not _saving_throw(c, dc, v["save"], v.get("ignores_cover", false), true):
+			if v.get("save", "") == "" or not _saving_throw(c, dc, v["save"], v.get("ignores_cover", false), true, v.get("conditions", [])):
 				for cond in v.get("conditions", []):
 					apply_condition(c, cond, caster, v.get("duration", "round"), v)
 					log.append("  %s is %s." % [c.cname, cond])
@@ -1500,7 +1506,7 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 	var saved := false
 	if v.get("save", "") != "":
 		# every spell is a magical effect, so Magic Resistance applies (T94)
-		saved = _saving_throw(c, dc, v["save"], v.get("ignores_cover", false), true)
+		saved = _saving_throw(c, dc, v["save"], v.get("ignores_cover", false), true, v.get("conditions", []))
 		if saved:
 			dmg = (dmg / 2) if v.get("half_on_save", false) else 0
 	log.append("  %s %s the save — %d %s." % [c.cname, "makes" if saved else "fails", dmg,
@@ -1827,7 +1833,7 @@ func _repeat_saves(c, when: String) -> void:
 			log.append("%s is shaken out of %s." % [c.cname, id])
 		elif mode == when and String(s.get("save", "")) != "":
 			# held by a concentration spell, so the shake-off is magical too (T94)
-			if _saving_throw(c, int(s["dc"]), s["save"], false, true):
+			if _saving_throw(c, int(s["dc"]), s["save"], false, true, [id]):
 				c.statuses.erase(id)
 				log.append("%s shakes off %s (%s save)." % [c.cname, id, String(s["save"]).to_upper()])
 
@@ -2335,7 +2341,20 @@ func _buff_damage_extras(attacker, ranged: bool, crit := false) -> Array:
 # bonus_to_hit, a condition's d20 penalty and a rival's elbow.
 func to_hit_bonus(attacker, target, opts := {}) -> int:
 	return int(opts.get("atk_bonus", attacker.atk_bonus)) - _bicker(attacker, opts) \
-		- _d20_penalty(attacker) + _buff_sum(attacker, "bonus_to_hit") + high_ground(attacker, target)
+		- _d20_penalty(attacker) + _buff_sum(attacker, "bonus_to_hit") + high_ground(attacker, target) \
+		+ int(Traits.roll(attacker, "to_hit", self, target, _damage_type(attacker))["n"])   # #176
+
+# A personality trait that just counted says so, once per hero per fight per
+# thing it did — "Brenna is Craven: +1 AC." — the way a pair's shoulder does.
+func _say_trait(c, term: Dictionary, what: String) -> void:
+	if int(term.get("n", 0)) == 0 and what != "advantage":
+		return
+	var k := "trait|%s|%s" % [c.id, what]
+	if _said.has(k):
+		return
+	_said[k] = true
+	var num := "" if what == "advantage" else "%+d " % int(term["n"])
+	log.append("%s is %s: %s%s." % [c.cname, " and ".join(term["who"]), num, what])
 
 # The party's own grudges and rallies ride the swing. Not on an opportunity
 # attack, and not over a caller that already set the bonus (an off-hand swing
@@ -2390,8 +2409,10 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	var high: int = high_ground(attacker, target)   # #156: swinging or shooting downhill
 	var atk_bonus: int = to_hit_bonus(attacker, target, opts) + insp
 	var total: int = nat + atk_bonus
-	var ac = effective_ac(target)
+	var ac = effective_ac(target, attacker)
 	_say_pair(target, true, "%s and %s stand shoulder to shoulder.")
+	_say_trait(attacker, Traits.roll(attacker, "to_hit", self, target, _damage_type(attacker)), "to hit")
+	_say_trait(target, Traits.roll(target, "ac", self, attacker), "AC")
 	var crit: bool = nat >= attacker.crit_range
 	var hit: bool = crit or (nat != 1 and total >= ac)
 	# T94 — Parry: "adds N to its AC against one melee attack that would hit it".
@@ -2432,6 +2453,10 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		out.extras = _passive_damage(attacker, target, mode, crit)
 		out.extras.append_array(_buff_damage_extras(attacker,
 			attacker.ranged and not opts.get("melee", false), crit))
+		var tb: Dictionary = Traits.roll(attacker, "damage", self, target, _damage_type(attacker))   # #176
+		if int(tb["n"]) != 0:
+			out.extras.append({"amount": int(tb["n"]), "label": " and ".join(tb["who"])})
+			_say_trait(attacker, tb, "damage")
 		for e in out.extras:
 			dmg += int(e["amount"])
 		out.damage = dmg
@@ -2663,6 +2688,8 @@ func _defense_verb(c, dtype: String) -> String:
 		return "is immune to"
 	if dtype != "" and dtype in c.vulnerable and not _resists(c, dtype):
 		return "is vulnerable to"
+	if not _resists(c, dtype) and int(Traits.roll(c, "ward", self, null, dtype)["n"]) > 0:
+		return "shrugs off some of the"   # #176: a trait's ward, the only other thing that shaves a hit
 	return "resists"
 
 # T94 — the whole defence stack, in RAW's order: immunity wins outright, then
@@ -2680,6 +2707,12 @@ func _damage_after_defenses(c, dmg: int, dtype: String) -> int:
 		dmg = dmg / 2   # "resistance and then vulnerability" (RAW): halve first
 	if dtype != "" and dtype in c.vulnerable:
 		dmg *= 2
+	# #176: a ward — a personality trait's "3 less fire damage from every hit" —
+	# comes off last, after the halving and doubling, the way a flat reduction
+	# does in 5e (Heavy Armor Master). Never below 0.
+	var w: int = int(Traits.roll(c, "ward", self, null, dtype)["n"])
+	if w > 0:
+		dmg = maxi(0, dmg - w)
 	return dmg
 
 # The one damage sink. `source` is whoever dealt it, when anybody did: it is
@@ -3198,8 +3231,14 @@ func act_smash(actor) -> Dictionary:
 # magical effects") keys off. Everything else is mundane: a dragon's breath and a
 # ghoul's paralysis force saves but are not magic, so they are unaffected, which
 # is RAW and also what keeps this from becoming a blanket +5 on 20 statblocks.
-func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false, magical := false) -> bool:
+# `vs`: the conditions a failure would bring, when the caller knows them — a
+# Brave hero saves against being frightened with advantage (#176).
+func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false, magical := false, vs: Array = []) -> bool:
 	var adv: bool = _dodging(c) and ability == "dex"   # Dodge: DEX saves only (RAW)
+	var brave: Dictionary = Traits.save_mode(c, self, vs)
+	if brave["adv"]:
+		adv = true
+		_say_trait(c, {"n": 0, "who": brave["who"]}, "advantage")
 	var dis := false
 	if magical:
 		for v in c.verbs:
@@ -3211,8 +3250,10 @@ func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false, magical 
 			log.append("%s can't resist — the %s save fails automatically." % [c.cname, ability.to_upper()])
 			return false
 		dis = dis or e.get("saves", {}).get(ability, "") == "dis"
+	var ts: Dictionary = Traits.roll(c, "save", self, null, "", ability)   # #176
+	_say_trait(c, ts, ability.to_upper() + " saves")
 	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c) - _d20_penalty(c) \
-		+ _buff_sum(c, "bonus_save") + aura_bonus(c, "save_bonus")
+		+ _buff_sum(c, "bonus_save") + aura_bonus(c, "save_bonus") + int(ts["n"])
 	if is_cover(c.pos) and not ignore_cover:
 		bonus += 2
 	return Dice.d20(rng, Dice.combine(adv, dis)).nat + bonus >= dc
