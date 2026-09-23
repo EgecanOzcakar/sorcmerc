@@ -13,6 +13,7 @@ const Loot = preload("res://core/loot.gd")
 const Ach = preload("res://core/achievements.gd")
 const Objectives = preload("res://core/objectives.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
+const Traits = preload("res://core/traits.gd")
 
 # --- ranges (hexes) — tune here ---------------------------------------
 const REACH_MELEE := 1
@@ -723,6 +724,8 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 	var b: Dictionary = board if not board.is_empty() else board_for(String(spec.get("theme", "")), int(spec.get("seed", 0)))
 	if spec.get("night", false):
 		b["night"] = true   # #85
+	if spec.get("where") is Dictionary:
+		b["where"] = spec["where"].duplicate()   # #176: biome, band, site — core/traits.gd reads them
 	var o: Dictionary = spec.get("objective", {}).duplicate(true)
 	var kind := String(o.get("kind", ""))
 	var all_c: Array = party_combatants.duplicate()
@@ -769,6 +772,9 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 			all_c.append(Objectives.carter(huddle_hex(b, party_combatants, all_c.map(func(c): return c.pos)), Objectives.party_level(party_combatants)))
 		"hunt":
 			mark_quarry(foes, party_combatants)
+	# #176: what the heroes' traits make of this place — before Combat.new,
+	# which rolls initiative.
+	var trait_lines: Array = Traits.stamp(all_c, b)
 	var RNG = load("res://core/rng.gd")
 	var sd: int = int(spec.get("seed", 0))
 	var cb := Combat.new(RNG.new(sd if sd > 0 else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)),
@@ -779,6 +785,8 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 			o["exit"] = exit
 		cb.objective = o
 		cb.log.append(Objectives.brief(o))
+	for n in trait_lines.size():
+		cb.log.insert(n, String(trait_lines[n]))   # ahead of the initiative line they fed
 	return cb
 
 # `extra_features` (T18) bolts feature ids onto this one spawn — how a boss gets a

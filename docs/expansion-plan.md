@@ -8662,3 +8662,75 @@ has always read `c.resist` and a hero's was empty.
   owner said "possibly yes" and it is noted in the spec's §10, not designed.
 - A summoned creature's kill credits nobody (a `ponytail:` in
   `core/combat.gd`). Credit its caller if a trait ever counts it.
+
+## Personality traits, step 1 — picked, saved, and counted where the fight is (2026-09-23, #176)
+
+This is step 1 of the build order in
+`docs/superpowers/specs/2026-09-23-traits-design.md`. A hero now has
+personality traits: one **temperament** (Brave, Craven, Wrathful, Calm,
+Greedy, Generous, Curious, Cautious) and one **origin** (Marsh-bred,
+Woods-born, Downs-rider, Cave-dweller, Street-raised, Night-owl). The rows are
+in `data/traits.json` and `core/traits.gd` holds the rules.
+
+**Picked.** The creator's Skills & Background step has a Temperament row and
+an Origin row. The background's defaults are pre-selected and the player can
+change them. When the background changes, a default follows it; a trait the
+player chose stays. Each row spells out what the trait does. Effects this
+build applies in a fight are shown plainly, and the rest are marked "(not yet
+in play)", so nobody picks a line of text believing it is a bonus. Confirm
+fills in any family still empty, so a preset loaded into the creator also
+leaves with traits.
+
+**Saved.** `ch.traits` (`[{id, why}]`) and `ch.traits_offered` go through
+`CharacterSave`, which carries them to the barracks, presets, world and
+campaign saves, and co-op. A file written before this has no traits and was
+never offered them. The first time the party page opens with such a hero, it
+asks **"Who is Owen Marsh?"**, once (`scenes/party/trait_offer.gd`):
+- **Keep these** writes the two picks.
+- **Leave them as they are** writes nothing.
+- Either way the hero is never asked again.
+
+In co-op each player is only offered their own heroes.
+
+**Counted where the fight is.** `world.gd`'s `_run_combat` stamps
+`spec["where"]`:
+- the biome under the company;
+- the region band;
+- the site: road, camp, lair or town.
+
+`Encounter.build` copies it onto the board. The board theme and the night are
+always known, so a board- or night-keyed trait fires even in the demo fight.
+`Traits.stamp` writes each hero's live terms where the engine already reads
+them. AC and to-hit go into a status dict that `_buff_sum` sums. A save goes
+onto the fight's copy of the saves, and initiative goes onto `init_mod`. Each
+number is capped at ±2. One line per hero leads the log, for example "Pike
+Sallow — Cave-dweller here: +1 to hit." The first cut stamped after
+`Combat.new` and missed initiative, because Combat rolls it in its
+constructor. The stamp now runs first, and a test holds the roll itself.
+
+**Shown.** The profile has a Personality traits panel, with each effect in
+verdigris if it applies and muted if it is still to come. The combat card has
+a Personality traits row, gilt where this board makes the trait count. The
+roster card on the party page has a ✦ line naming the traits.
+
+The presets (and the party page's standalone demo roster) carry no traits and
+are never offered them. They are what `Regions.ref_score` and every balance
+sweep measure against, so no measured number moves.
+
+Tests: `tests/test_traits.gd` (136 checks) and `tests/test_trait_pages.gd`
+(24 checks). `tests/drive_buttons.gd` knows the two new creator groups, and
+its snapshot of the hero includes the traits. Pictures:
+`docs/shots/traits-*.png`, from `tests/shot_traits.gd`.
+
+### Still open
+
+- Step 2, the per-roll half: bloodied, first round, the foe's faction or
+  type, and damage type in and out. That covers most temperament effects
+  (Craven, Wrathful, Cautious) and the sweep that measures every number in
+  `data/traits.json`.
+- Step 4, the road: Survival, forage, travel and Persuasion from origins and
+  temperaments, and the opinion terms (§7).
+- `data/traits.json` is not yet a thing a content pack can add rows to. The
+  loader reads the one file.
+- The encounter budget (`Power.estimate`) does not see a trait's status yet;
+  the win-more note in the spec wants it to.

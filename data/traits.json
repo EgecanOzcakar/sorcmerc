@@ -1,0 +1,146 @@
+{
+  "_comment": "Personality traits (#176). docs/superpowers/specs/2026-09-23-traits-design.md is the design; core/traits.gd reads this file. Every effect is {when, gives, text?}: `when` keys biome/board/night/band/site are decided at fight start and are live now; bloodied/first_round/vs_*/dtype_* are per roll and wait on step 2; `gives` keys ac/to_hit/save/initiative are live in a fight now, the rest (skill, travel, forage, save_adv, damage, gold, opinion...) are shown and marked not yet in play. The numbers are placeholders until tests/sweep_traits.gd measures them (spec §9 step 2).",
+  "traits": {
+    "brave": {
+      "name": "Brave", "family": "temperament", "opposes": ["craven"],
+      "text": "Walks toward the thing everyone else is backing away from.",
+      "effects": [
+        {"gives": {"save_adv": {"vs": "frightened"}}},
+        {"gives": {"hardship_adv": "fear"}, "text": "Advantage on a hardship's fear save"},
+        {"gives": {"skill": {"avoid": -2}}, "text": "−2 when the company tries to slip past a band"}
+      ]
+    },
+    "craven": {
+      "name": "Craven", "family": "temperament", "opposes": ["brave"],
+      "text": "Alive, which is more than can be said for some of the brave ones.",
+      "effects": [
+        {"when": {"bloodied": true}, "gives": {"ac": 1}},
+        {"when": {"first_round": true}, "gives": {"to_hit": -1}},
+        {"gives": {"hardship_dis": "fear"}, "text": "Disadvantage on a hardship's fear save"}
+      ]
+    },
+    "wrathful": {
+      "name": "Wrathful", "family": "temperament", "opposes": ["calm"],
+      "text": "Hurt them and they hit back harder. Talk to them and they hit back too.",
+      "effects": [
+        {"when": {"bloodied": true}, "gives": {"damage": 1}},
+        {"gives": {"skill": {"persuasion": -2}}},
+        {"gives": {"grudge": true}, "text": "A failed faction save turns to a grudge, not a haunting"}
+      ]
+    },
+    "calm": {
+      "name": "Calm", "family": "temperament", "opposes": ["wrathful"],
+      "text": "Keeps a spell held and a head level when the room is on fire.",
+      "effects": [
+        {"gives": {"save": {"con": 1}}},
+        {"gives": {"initiative": -1}},
+        {"gives": {"hardship_bonus": {"wis": 2}}, "text": "+2 on a hardship's WIS save"}
+      ]
+    },
+    "greedy": {
+      "name": "Greedy", "family": "temperament", "opposes": ["generous"],
+      "text": "Counts the purse before the wounded.",
+      "effects": [
+        {"gives": {"gold": 10}},
+        {"gives": {"opinion": -5}, "text": "−5 with every hero in the company who is not Greedy"}
+      ]
+    },
+    "generous": {
+      "name": "Generous", "family": "temperament", "opposes": ["greedy"],
+      "text": "Gives away the last of the bread, and people remember it.",
+      "effects": [
+        {"gives": {"opinion_drift": 1}, "text": "Opinion of them warms a day faster"},
+        {"gives": {"sale_price": -10}, "text": "−10% on what they sell"}
+      ]
+    },
+    "curious": {
+      "name": "Curious", "family": "temperament", "opposes": ["cautious"],
+      "text": "Opens the box. Always opens the box.",
+      "effects": [
+        {"gives": {"skill": {"investigation": 2}}, "text": "+2 to investigate and to search a lair"},
+        {"gives": {"save_vs_hazard": -1}, "text": "−1 on saves against traps and hazards"}
+      ]
+    },
+    "cautious": {
+      "name": "Cautious", "family": "temperament", "opposes": ["curious"],
+      "text": "Looks at the floor before stepping on it.",
+      "effects": [
+        {"when": {"first_round": true}, "gives": {"ac": 1}},
+        {"gives": {"travel": -1}, "text": "−1 on the road's checks (stops to look at everything)"}
+      ]
+    },
+
+    "marsh-bred": {
+      "name": "Marsh-bred", "family": "origin",
+      "text": "Grew up where the ground is half water. Knows which half holds.",
+      "effects": [
+        {"when": {"biome": ["marsh"]}, "gives": {"ac": 1}},
+        {"when": {"biome": ["marsh"]}, "gives": {"skill": {"survival": 2}}},
+        {"when": {"biome": ["downs"]}, "gives": {"skill": {"survival": -1}}}
+      ]
+    },
+    "woods-born": {
+      "name": "Woods-born", "family": "origin",
+      "text": "Can tell a deer track from a wolf's by the smell of the mud.",
+      "effects": [
+        {"when": {"biome": ["woods"]}, "gives": {"to_hit": 1}},
+        {"when": {"biome": ["woods"]}, "gives": {"forage": 2}},
+        {"when": {"site": ["town"]}, "gives": {"skill": {"perception": -1}}}
+      ]
+    },
+    "downs-rider": {
+      "name": "Downs-rider", "family": "origin",
+      "text": "Raised on open grass under a big sky. Sees them coming.",
+      "effects": [
+        {"when": {"biome": ["downs"]}, "gives": {"initiative": 1}},
+        {"gives": {"travel": 1}},
+        {"when": {"biome": ["woods"]}, "gives": {"skill": {"stealth": -1}}}
+      ]
+    },
+    "cave-dweller": {
+      "name": "Cave-dweller", "family": "origin",
+      "text": "Born under rock. The sky still feels like it might fall.",
+      "effects": [
+        {"when": {"board": ["frozen-cave", "sunken-shrine"]}, "gives": {"to_hit": 1}},
+        {"when": {"board": ["downs", "marsh", "forest-clearing", "goblin-camp", "city-square"], "night": false}, "gives": {"to_hit": -1}}
+      ]
+    },
+    "street-raised": {
+      "name": "Street-raised", "family": "origin",
+      "text": "Learned to fight in alleys and to talk in taverns.",
+      "effects": [
+        {"when": {"board": ["city-square", "merchant-shop"]}, "gives": {"ac": 1}},
+        {"gives": {"skill": {"persuasion": 2}}},
+        {"when": {"site": ["road", "camp", "lair"]}, "gives": {"skill": {"survival": -2}}}
+      ]
+    },
+    "night-owl": {
+      "name": "Night-owl", "family": "origin",
+      "text": "Most awake when everyone else is asleep.",
+      "effects": [
+        {"when": {"night": true}, "gives": {"to_hit": 1}},
+        {"when": {"night": false}, "gives": {"initiative": -1}}
+      ]
+    }
+  },
+  "defaults": {
+    "origin": {
+      "acolyte": "cave-dweller", "artisan": "cave-dweller", "sage": "cave-dweller",
+      "charlatan": "street-raised", "criminal": "street-raised", "entertainer": "street-raised",
+      "guard": "street-raised", "merchant": "street-raised", "noble": "street-raised",
+      "farmer": "downs-rider", "soldier": "downs-rider",
+      "guide": "woods-born", "hermit": "woods-born",
+      "sailor": "marsh-bred",
+      "scribe": "night-owl", "wayfarer": "night-owl"
+    },
+    "temperament": {
+      "acolyte": "calm", "hermit": "calm",
+      "sage": "curious", "scribe": "curious",
+      "soldier": "brave", "guard": "brave",
+      "criminal": "cautious", "charlatan": "cautious",
+      "noble": "greedy", "merchant": "greedy",
+      "farmer": "generous", "artisan": "generous", "guide": "generous", "sailor": "generous", "wayfarer": "generous",
+      "entertainer": "wrathful"
+    }
+  }
+}

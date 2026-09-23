@@ -7,6 +7,7 @@ const Adapter = preload("res://core/adapter.gd")
 const Character = preload("res://core/character.gd")
 const Presets = preload("res://core/presets.gd")
 const Ach = preload("res://core/achievements.gd")
+const Traits = preload("res://core/traits.gd")
 
 const MAX_ACTIVE := 4
 
@@ -436,6 +437,7 @@ func summary(id: String) -> Dictionary:
 		# tell you. Ids and numbers; the names are the UI's business.
 		"skills": trained_skills(s),
 		"equipped": equipped_items(s),
+		"traits": Traits.ids(ch),   # #176: personality trait ids; the names are the UI's business
 	}
 
 # The skills this sheet is actually trained in, best first: [{id, mod, prof}]
@@ -481,6 +483,7 @@ static func _demo_barbarian(id: String, name: String, species: String) -> Charac
 	ch.species_id = species
 	ch.background_id = "soldier"
 	ch.base_abilities = {"str": 15, "dex": 12, "con": 14, "int": 8, "wis": 10, "cha": 10}
+	ch.traits_offered = true   # #176: a fixture, like the presets it rides with — never asked
 	ch.add_level("barbarian", -1, true)   # a demo hero, handed over the same way
 	ch.add_level("barbarian", -1, true)
 	ch.decide("asi:background:soldier:0", {"type": "asi", "allocation": {"str": 2, "con": 1}})
