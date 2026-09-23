@@ -8730,3 +8730,73 @@ The first render sat in the top-left corner of a dark screen, because
 - The DC formula, the triumph chances and the degree thresholds are
   placeholders until `tests/sweep_traits.gd` measures how often each fires
   over a run.
+
+## Live rolls, part 1 — the road's card rolls the die before it says what happened (2026-09-23)
+
+The owner: "these trait rolls, and campaign map rolls, settlement interactions
+rolls need to be all rolled live to hype up interest". Until now, every check
+off the fight board was rolled and applied in `core/` and then reported as a
+finished line: "Vera Kord · Survival 14+5 vs DC 13 ✓ made it". The rules
+already keep the natural on every result dict, and the roll is seeded off the
+thing it belongs to. So a screen can replay the real roll without rolling
+anything, and reloading still cannot reroll it.
+
+**The die** (`scenes/dice_roll.gd`) is a Control that draws a d20 the way
+every table knows it: a hexagon with its facets and the number on the front
+face. It plays in four beats:
+1. It tumbles for about three quarters of a second at normal speed, clicking
+   on every face. The faces it passes through are counted off the tick, not
+   drawn from an RNG, so the show is the same every time it is watched.
+2. It lands on the face the rules rolled, with a bounce and a sting:
+   `save_made`, `save_failed`, or `crit` on a natural 20.
+3. The tally comes up: "16 + 5 = 21 vs DC 13 — made it".
+4. It holds for a beat so that line can be read.
+
+The verdict is always the caller's `ok` and never re-decided. The road ignores
+naturals and a carouse honours them, and the die must not disagree with the
+rules. A roll with advantage or disadvantage can pass both dice, and the other
+one is drawn beside the kept one. `Settings.anim()` scales the timing, and
+SORCMERC_FAST lands it on the first frame, which is what every test and robot
+sees.
+
+**The card** (`scenes/world/event_card.gd`) is what the road, the approach's
+result, a landmark and now a camp's watch all report on. It rolls in two
+stages:
+- **While the die is in the air**, the card shows only what was known before
+  the dice: the caption, the title, and "Vera Kord rolls Athletics (+5)
+  against DC 13." It holds back the picture (the outcome's own frame), the
+  prose (what happened) and the chips (what it cost).
+- **When the die lands**, the card opens as it always was.
+
+A press or a click while the die is in the air lands it and never skips the
+result. The next press is the way back to the road. An event with no check,
+and every run under SORCMERC_FAST, gets the open card on the first frame,
+exactly as before.
+
+**The camp's watch** used to keep its roll inside the prose, as "(Survival
+14+5 vs DC 13)", so its card drew no roll line. It now hands the card the roll
+(`_watch_roll` in `world.gd`) for the live die, and the card's prose drops the
+parenthesis. The HUD line keeps the numbers. The Alarm spell's automatic
+wake-up is not a roll and stays prose.
+
+Tests: `tests/test_dice_roll.gd` (21 checks). It covers the die fast and live,
+the card holding the outcome back, a press landing the die rather than
+skipping it, and the open card under SORCMERC_FAST. `tests/test_event_card.gd`
+now sets SORCMERC_FAST itself, because it checks the open card and failed when
+run by hand without it. Pictures: `docs/shots/live-roll-*.png`, from
+`tests/shot_live_roll.gd`.
+
+### Still open
+
+- Part 2: the settlement's actions (persuade, haggle, investigate, work at the
+  healer's, steal) and downtime (carouse, gamble). They report into the visit
+  log, not on a card.
+- Part 3: the quick checks on the map (forage, a lair's or a landmark's
+  search, sneaking past a lair), and the linear campaign's identify and
+  opportunity checks.
+- There is no dice-rattle sound. The tumble clicks the UI tick. A proper
+  rattle is an entry in `tools/gen_audio.py` and `tests/test_audio.gd`'s
+  `BASE_SFX_IDS`.
+- `SettlementVisit.check_preview`'s odds assume a natural 1 always misses and
+  a 20 always hits. The rolls it previews do not follow that rule, so its "%
+  to make it" is off by up to 5 points at either end.

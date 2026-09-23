@@ -1496,8 +1496,10 @@ func _night_jump(foe) -> bool:
 	_camp_msg.text = ("%s doesn't catch it in the dark (%s %d+%d vs DC %d) — %s are on the party before anyone can draw!" % [
 		watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"], foe.id.capitalize()]) if who != "" \
 		else "Nobody is watching the dark — %s are on the party before anyone can draw!" % foe.id.capitalize()
-	_camp_card("jumped", "Jumped in the dark", "bad", _camp_msg.text,
-		func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
+	var rolled: Dictionary = _watch_roll(watch)
+	_camp_card("jumped", "Jumped in the dark", "bad",
+		"%s doesn't catch it in the dark — %s are on the party before anyone can draw!" % [watch.get("cname", ""), foe.id.capitalize()] if not rolled.is_empty() else _camp_msg.text,
+		func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"), "", rolled)
 	return false
 
 # The roster the encountered party fights with. Scaler takes a *theme*, not a
@@ -3375,26 +3377,45 @@ func _make_camp() -> void:
 	# T9x: name the check and the roll, not just the outcome — same
 	# "Skill nat+bonus vs DC" shape every other overworld check in this file uses.
 	var skill_name: String = String(watch.get("skill", "")).capitalize()
+	# The card rolls the watch live (scenes/dice_roll.gd): it gets the roll as
+	# keys and says the rest in words; the HUD line keeps the numbers.
+	var rolled: Dictionary = _watch_roll(watch)
 	if watch["ok"]:
 		_camp_msg.text = "%s hears them coming (%s %d+%d vs DC %d) — the party gets the drop first." % [
 			watch.get("cname", "Someone"), skill_name, watch["nat"], watch["bonus"], watch["dc"]]
-		_camp_card("watch", "Something in the dark", "good", _camp_msg.text,
-			func(): _on_event_ack(); await _launch_combat(foe, true, false))
+		_camp_card("watch", "Something in the dark", "good",
+			"%s hears them coming — the party gets the drop first." % watch.get("cname", "Someone") if not rolled.is_empty() else _camp_msg.text,
+			func(): _on_event_ack(); await _launch_combat(foe, true, false), "", rolled)
 	else:
 		var who: String = watch.get("char_id", "")
 		_camp_msg.text = ("%s doesn't catch it in time (%s %d+%d vs DC %d) — the camp is jumped in the night!" % [
 			watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"]]) if who != "" \
 			else "Nobody's keeping watch — the camp is jumped in the night!"
-		_camp_card("jumped", "The camp is jumped", "bad", _camp_msg.text,
-			func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"))
+		_camp_card("jumped", "The camp is jumped", "bad",
+			"%s doesn't catch it in time — the camp is jumped in the night!" % watch.get("cname", "") if not rolled.is_empty() else _camp_msg.text,
+			func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"), "", rolled)
 
 # The night, on the same card the road uses: what the camp did, pictured
 # (assets/generated/camp-<night|watch|jumped>.png — or `art`, for a card that
 # has no picture of its own: the fireside and the courtship wear the night),
 # and — for an ambush — the fight waits behind the button rather than under
 # the label.
-func _camp_card(id: String, title: String, kind: String, text: String, then: Callable, art := "") -> void:
-	_card({"id": "camp-" + id, "title": title, "kind": kind, "text": text, "art": art if art != "" else "camp-" + id}, then)
+func _camp_card(id: String, title: String, kind: String, text: String, then: Callable, art := "", roll := {}) -> void:
+	var e := {"id": "camp-" + id, "title": title, "kind": kind, "text": text, "art": art if art != "" else "camp-" + id}
+	e.merge(roll)   # a watch's roll: the card rolls it live before it says what happened
+	_card(e, then)
+
+# The keys a card rolls live from (scenes/world/event_card.gd), off a watch
+# check — or none, when nobody rolled: nobody on watch, or the Alarm spell
+# that woke them whatever the dice said.
+func _watch_roll(watch: Dictionary) -> Dictionary:
+	if String(watch.get("char_id", "")) in ["", "alarm"]:
+		return {}
+	var out := {}
+	for k in ["ok", "char_id", "cname", "skill", "nat", "bonus", "dc"]:
+		if watch.has(k):
+			out[k] = watch[k]
+	return out
 
 # The road's card over a paused map, `then` its ack. The camp's night wears
 # it, and so do a calling's telling and resolution — those pictured by the
