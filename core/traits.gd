@@ -13,20 +13,26 @@
 #   Traits.needs_offer(ch)                    # an older hero who was never asked
 #   Traits.effect_lines(id)                   # [{text, live}] for a page to print
 #   Traits.stamp(combatants, board)           # Encounter.build, once, before Combat rolls initiative
+#   Traits.roll(c, "to_hit", cb, target, dtype) # step 2: a term decided at the roll, {n, who}
+#   Traits.save_mode(c, cb, ["frightened"])   # step 2: advantage on a save against a condition
 #
 # What it owns: which traits a hero has, what each one says, which of their
-# effects this build applies, and the fight-start stamp. What it does NOT own:
+# effects this build applies, the fight-start stamp and the per-roll terms
+# core/combat.gd asks for (step 2). What it does NOT own:
 # the pages that show them (scenes/creator, scenes/profile, scenes/party,
 # scenes/combat_card.gd), where a fight is (scenes/world/world.gd stamps
-# spec["where"]), the per-roll half (step 2: bloodied, first round, the foe's
-# faction, the damage type), the road's checks (step 4), or earning one (step 3,
-# which opens scenes/world/trait_moment.gd).
+# spec["where"]), when a roll asks (core/combat.gd's four hooks: to_hit_bonus,
+# effective_ac, _saving_throw, the damage sink), the road's checks (step 4), or
+# earning one (step 3, which opens scenes/world/trait_moment.gd).
 #
 # State lives on the character, not the party (spec §2): ch.traits is
 # [{"id", "why"}] and ch.traits_offered is whether an older hero has been asked
 # once. Both go through core/character_save.gd, so the barracks, presets, the
 # world save, the campaign save and co-op all carry them.
 extends RefCounted
+
+const Hex = preload("res://core/hex.gd")
+const Catalog = preload("res://core/rules/catalog.gd")
 
 const PATH := "res://data/traits.json"
 const FAMILIES := ["temperament", "origin"]   # the two a hero picks; marks, banes and wounds are earned (step 3)
@@ -36,13 +42,23 @@ const FAMILIES := ["temperament", "origin"]   # the two a hero picks; marks, ban
 # the sweep (spec §9 step 2).
 const CAP := 2
 
-# The half of `when` that is known before the first roll — the only half this
-# step reads. An effect with any other `when` key waits for step 2.
+# The half of `when` that is known before the first roll: stamped once, at
+# fight start (step 1).
 const FIGHT_START_WHEN := ["biome", "board", "night", "band", "site"]
-# ...and the `gives` this step lands in a fight. Everything else is shown on
-# the pages, marked not yet in play, so the player knows it is coming and
-# never mistakes a line of text for a bonus they have.
-const LIVE_GIVES := ["ac", "to_hit", "save", "initiative"]
+# ...and the half only the roll itself knows (step 2): the hero's own state,
+# the round, who is on the other end of it, and what the blow is made of.
+#   bloodied     under half HP                  first_round   round 1
+#   alone        no conscious ally beside them  vs_faction    the other side's bestiary faction
+#   vs_type      its bestiary type              dtype_in      the damage type coming in
+#   dtype_out    the damage type of their own attack
+const ROLL_WHEN := ["bloodied", "first_round", "alone", "vs_faction", "vs_type", "dtype_in", "dtype_out"]
+# The `gives` this build lands in a fight. Everything else is shown on the
+# pages, marked not yet in play, so the player knows it is coming and never
+# mistakes a line of text for a bonus they have. ac/to_hit/save/initiative
+# with a fight-start `when` are stamped; with a roll `when` they are asked at
+# the roll; damage, ward and save_adv are always asked at the roll.
+const LIVE_GIVES := ["ac", "to_hit", "save", "initiative", "damage", "ward", "save_adv"]
+const STAMPED := ["ac", "to_hit", "save", "initiative"]
 
 const STATUS := "traits"   # the one status dict every live term is summed into
 
@@ -156,7 +172,7 @@ static func opposed(a: String, b: String) -> bool:
 
 static func is_live(e: Dictionary) -> bool:
 	for k in e.get("when", {}):
-		if not k in FIGHT_START_WHEN:
+		if not (k in FIGHT_START_WHEN or k in ROLL_WHEN):
 			return false
 	var g: Dictionary = e.get("gives", {})
 	if g.is_empty():
@@ -211,6 +227,8 @@ static func _gives_text(g: Dictionary) -> String:
 					parts.append("%s %s" % [_signed(int(v[s])), SKILL_NAME.get(s, String(s).capitalize())])
 			"save_adv":
 				parts.append("Advantage on saves against being %s" % String(v.get("vs", "")))
+			"ward":
+				parts.append("%d less damage from every hit" % int(v))
 			_:
 				parts.append(String(k).replace("_", " "))
 	return ", ".join(parts)
@@ -234,6 +252,16 @@ static func _when_text(w: Dictionary) -> String:
 		parts.append("while under half HP")
 	if w.get("first_round", false):
 		parts.append("in the first round")
+	if w.get("alone", false):
+		parts.append("with no ally beside them")
+	if w.has("vs_faction"):
+		parts.append("against " + ", ".join(w["vs_faction"]))
+	if w.has("vs_type"):
+		parts.append("against " + " or ".join(w["vs_type"].map(func(t): return String(t) + "s")))
+	if w.has("dtype_in"):
+		parts.append("against " + " or ".join(w["dtype_in"]))
+	if w.has("dtype_out"):
+		parts.append("with " + " or ".join(w["dtype_out"]) + " attacks")
 	return " ".join(parts)
 
 
@@ -276,7 +304,7 @@ static func terms(trait_ids: Array, where: Dictionary) -> Dictionary:
 	for id in trait_ids:
 		var used := false
 		for e in row(id).get("effects", []):
-			if not is_live(e) or not holds(e.get("when", {}), where):
+			if not is_live(e) or _is_roll(e) or not holds(e.get("when", {}), where):
 				continue
 			var g: Dictionary = e["gives"]
 			for k in ["ac", "to_hit", "initiative"]:
@@ -315,14 +343,14 @@ static func stamp(combatants: Array, board: Dictionary) -> Array:
 		if c.traits.is_empty():
 			continue
 		var t := terms(c.traits, where)
-		var st := {}
+		var st := {"save_terms": t["save"].duplicate()}   # what the stamp already gave, for roll()'s cap
 		if t["ac"] != 0:
 			st["ac"] = t["ac"]
 		if t["to_hit"] != 0:
 			st["bonus_to_hit"] = t["to_hit"]
 		if t["save"].has("all"):
 			st["bonus_save"] = t["save"]["all"]
-		if not st.is_empty():
+		if st.size() > 1 or not st["save_terms"].is_empty():
 			c.statuses[STATUS] = st
 		for a in t["save"]:
 			if a != "all":
@@ -348,13 +376,137 @@ static func _stamp_bits(t: Dictionary) -> Array:
 	return bits
 
 
-# The traits live on this board for one combatant, for the combat card's chips.
+# The traits that can count in this fight, for the combat card's chips: a live
+# effect whose where-it-is half holds here (its roll half — bloodied, the foe —
+# is decided later, at the roll, and does not dim the chip).
 static func live_here(c, cb) -> Array:
 	var where := where_of(cb.board)
 	var out: Array = []
 	for id in c.traits:
 		for e in row(id).get("effects", []):
-			if is_live(e) and holds(e.get("when", {}), where):
+			if is_live(e) and holds(_static_part(e.get("when", {})), where):
 				out.append(id)
 				break
+	return out
+
+
+# --- the roll (step 2) --------------------------------------------------------------
+
+static func _is_roll(e: Dictionary) -> bool:
+	for k in e.get("when", {}):
+		if k in ROLL_WHEN:
+			return true
+	return false
+
+
+static func _static_part(when: Dictionary) -> Dictionary:
+	var out := {}
+	for k in when:
+		if k in FIGHT_START_WHEN:
+			out[k] = when[k]
+	return out
+
+
+# What the roll knows. `other` is whoever is on the far end of it — the target
+# of c's attack, the attacker of c's AC, the source of c's save — or null.
+static func _ctx(c, cb, other, dtype: String) -> Dictionary:
+	var ctx := {
+		"bloodied": c.hp * 2 < c.max_hp,
+		"first_round": int(cb.round_num) <= 1,
+		"alone": not cb.allies_of(c).any(func(a): return a != c and a.conscious() \
+			and Hex.distance(a.pos, c.pos) <= 1),
+		"dtype": dtype,
+	}
+	if other != null and String(other.src_id) != "":
+		var m: Dictionary = Catalog.monster(String(other.src_id))
+		ctx["foe_faction"] = String(m.get("faction", ""))
+		ctx["foe_type"] = String(m.get("type", ""))
+	return ctx
+
+
+static func _roll_holds(when: Dictionary, where: Dictionary, ctx: Dictionary, dtype_key: String) -> bool:
+	if not holds(_static_part(when), where):
+		return false
+	for k in when:
+		match k:
+			"bloodied", "first_round", "alone":
+				if bool(when[k]) != bool(ctx[k]):
+					return false
+			"vs_faction":
+				if not String(ctx.get("foe_faction", "")) in when[k]:
+					return false
+			"vs_type":
+				if not String(ctx.get("foe_type", "")) in when[k]:
+					return false
+			"dtype_in", "dtype_out":
+				# the damage type is only the one the roll is about: dtype_in on a
+				# hit taken, dtype_out on a swing made
+				if k != dtype_key or not String(ctx["dtype"]) in when[k]:
+					return false
+	return true
+
+
+# One term, asked at the roll: {"n": int, "who": [trait names]}. `key` is the
+# gives key — "to_hit" (c attacking `other`), "ac" (c attacked by `other`),
+# "save" (c saving, `ability`), "damage" (c hitting `other`), "ward" (c hit,
+# `dtype` coming in). For the three the stamp also feeds (to_hit, ac, save),
+# only roll-`when` effects are summed here — the rest were stamped — and the
+# cap is taken over both together, so a stamped +2 and a roll +1 are +2, not +3.
+static func roll(c, key: String, cb, other = null, dtype := "", ability := "") -> Dictionary:
+	var out := {"n": 0, "who": []}
+	if c == null or c.traits.is_empty():
+		return out
+	var where := where_of(cb.board)
+	var ctx := _ctx(c, cb, other, dtype)
+	var dtype_key := "dtype_in" if key in ["ac", "save", "ward"] else "dtype_out"
+	var n := 0
+	for id in c.traits:
+		var used := false
+		for e in row(id).get("effects", []):
+			var g: Dictionary = e.get("gives", {})
+			if not g.has(key) or not is_live(e):
+				continue
+			if key in STAMPED and not _is_roll(e):
+				continue   # already on the Combatant from the stamp
+			if not _roll_holds(e.get("when", {}), where, ctx, dtype_key):
+				continue
+			var v = g[key]
+			if key == "save":
+				v = v.get(ability, 0) if v is Dictionary else v
+			n += int(v)
+			used = true
+		if used:
+			out["who"].append(name_of(id))
+	var st: Dictionary = c.statuses.get(STATUS, {}) if c.statuses.get(STATUS) is Dictionary else {}
+	var stamped := 0
+	match key:
+		"to_hit": stamped = int(st.get("bonus_to_hit", 0))
+		"ac": stamped = int(st.get("ac", 0))
+		"save": stamped = int(st.get("bonus_save", 0)) + int(st.get("save_terms", {}).get(ability, 0))
+	if key == "ward":
+		# Not a roll, so not under the ±CAP a d20 is: a flat reduction per hit,
+		# sized in the data (spec §3 — "3 less fire damage", the trait-sized
+		# answer to 5e resistance). It only ever takes damage away.
+		out["n"] = maxi(0, n)
+	else:
+		out["n"] = clampi(stamped + n, -CAP, CAP) - stamped
+	return out
+
+
+# Advantage (Dice.ADV) on a save against one of `conds`, from a save_adv trait
+# (Brave against being frightened), else Dice.NORMAL.
+static func save_mode(c, cb, conds: Array) -> Dictionary:
+	var out := {"adv": false, "who": []}
+	if c == null or c.traits.is_empty() or conds.is_empty():
+		return out
+	var where := where_of(cb.board)
+	var ctx := _ctx(c, cb, null, "")
+	for id in c.traits:
+		for e in row(id).get("effects", []):
+			var sa = e.get("gives", {}).get("save_adv")
+			if sa is Dictionary and String(sa.get("vs", "")) in conds \
+					and _roll_holds(e.get("when", {}), where, ctx, "dtype_in"):
+				out["adv"] = true
+				if not name_of(id) in out["who"]:
+					out["who"].append(name_of(id))
 	return out
