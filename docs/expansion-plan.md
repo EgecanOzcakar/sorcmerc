@@ -9176,3 +9176,85 @@ Tests:
   checks. Arrogant's opinion cost is step 4's opinion term, and Renowned's
   "their bands seek you out" is not designed.
 - **Bond traits** (the owner's "possibly, later") are still not designed.
+
+## Personality traits, step 4 — the road, the purse, and how the company gets on (2026-09-23, #176)
+
+Step 4 of `docs/superpowers/specs/2026-09-23-traits-design.md`. Steps 1 to 3
+made traits count in a fight and be earned in one. This step makes them count
+everywhere else the game rolls, and in how the heroes feel about each other,
+which is the Crusader Kings part the owner asked about.
+
+**Where the party is.** `world.gd` now stamps `party.here` every frame — the
+biome under the party, the country (band), the kind of place (road, town while
+visiting, lair while delving) and the night. It is the same place a fight
+there would be stamped with, and the same way `party.world_now` is stamped.
+`Campaign.skill_bonus` adds `Traits.skill_term(ch, skill, party.here)`, so
+every overworld skill check gets a trait's term in one place: the road's
+events, the approach, a lair's and a landmark's search, the town's persuading,
+haggling and investigating, and the inn's downtime. The linear campaign's
+`here` is `{}`, so only a trait with no `when` counts there. A term is capped
+at ±2 like a fight's.
+
+- **Marsh-bred:** +2 Survival in the marsh, −1 on the downs.
+- **Street-raised:** +2 Persuasion anywhere, −2 Survival out of town.
+- **Wrathful:** −2 Persuasion. A Street-raised Wrathful hero talks exactly as
+  well as anybody.
+- **Woods-born:** −1 Perception in town, +2 to forage in the woods
+  (`WorldForage.check`).
+- **Downs-rider:** −1 Stealth in the woods.
+- **Downs-rider, Cautious:** +1 and −1 on the road's events, for whoever rolls
+  them (`Travel.check`). The card's roll line names it the way it names
+  morale: "Survival 14+6 vs DC 13 (Downs-rider +1)".
+- **Brave:** −2 on slipping past a band (`Approach._way_term`, keyed by the
+  way).
+- **Curious, Delver:** +2 on a lair's search, on top of its Survival.
+- **The watch:** kept at camp whatever the map says, so a Street-raised hero is
+  as lost on watch as on the road.
+- **The purse:** a Greedy hero in the company takes +10% of a fight's gold
+  (the after-action tally shows what was banked). A Generous one lets things
+  go 10% cheaper at market. One holder is enough, and two do not stack.
+
+**How the company gets on (spec §7).** `PartyOpinion.baseline` gains
+`Traits.opinion_terms`. The existing drift pulls every pair toward the
+baseline, so this needs no new machinery: two Wrathful fighters warm to each
+other on the road, and a Greedy rogue and a Generous cleric will not.
+
+| trait term | pull |
+|---|---|
+| a temperament two heroes share | +5 |
+| an opposed pair (Brave and Craven) | −10 |
+| Greedy, with a hero who is not Greedy | −5 |
+| Arrogant, with everyone | −5 |
+
+- **Generous:** a pair with a Generous hero warms twice as fast. It cools no
+  faster.
+- **Wrathful:** friendly fire from a Wrathful caster costs half again, because
+  it looks deliberate.
+- **The party page:** the Relations line names the traits behind a pull: "Vera
+  and Pike — cold (−18): Brave and Craven".
+
+**At the fire.** Every earned trait row carries a `camp` line. The next fire
+within three days says it once — "Pike Sallow sits well back from the fire
+tonight, and doesn't eat." The trait is marked `told`, and that is saved. A
+calling's telling still outranks it (one card a night), and it outranks the
+opinion moments, since it is news.
+
+Tests:
+- `tests/test_traits_road.gd` (50 checks) covers every term above, the
+  checks that read them, the purse, the opinion terms and the Relations line,
+  the drift and friendly fire, and the camp beat (once, remembered through a
+  save, old news after three days, never for a chosen trait, and naming an
+  instanced trait's faction).
+- `tests/test_world_traits.gd` (17 checks) drives the real screen:
+  `party.here` stamped on the road and in town, and the fire saying a burn.
+
+### Still open
+
+- **Unmeasured numbers.** The road terms are the spec's numbers, not measured.
+  A sweep of the road's event pass rate with and without an origin would say
+  whether ±2 is right there. The presets carry no traits, so
+  `Regions.ref_score` and every fight sweep are unchanged.
+- **`save_vs_hazard`** (Curious, Reckless) is shown but not in play: the
+  board's hazards burn without a save today.
+- **Renowned's "that faction's bands seek you out"** is not designed.
+- **Step 5** (the robots playing with traits held from the start) is next.
