@@ -1,7 +1,9 @@
 # Personality traits — who a hero is, and what the road has done to them (#176)
 
-A design, agreed with the owner on 2026-09-23 (§10), not yet built — its step 0
-(three gaps in the fight the design stands on) is. Issue #176 asks for "character traits,
+A design, agreed with the owner on 2026-09-23 (§10), being built in the order
+§9 gives. Built so far: step 0 (three gaps in the fight the design stands on),
+step 1 (the traits themselves — picked, saved, and counted where the fight is),
+and the full-screen moment every trait gained or lost will open (§8). Issue #176 asks for "character traits,
 these can be what they start with and what they receive after some event they
 were affected" — Crusader Kings' traits, in a 5e company. This document says
 what a trait *is* here, what it can touch (the place a fight stands in, the
@@ -44,8 +46,9 @@ Four ideas travel well into sorcmerc. The rest are about dynasties and do not.
    a pair can have is what their sheets say").
 3. **Events leave marks, and who you are weights which mark.** A hero downed
    by a fire giant comes back from it either *tempered* or *afraid of fire*.
-   Which one is seeded off the event (the determinism idiom) and weighted by
-   the hero's personality (Brave leans tempered).
+   Which one is a saving throw (§6) — seeded off the event, the determinism
+   idiom — on the hero's own bonus, and their temperament rides it (a Brave
+   hero rolls it with advantage).
 4. **Some marks heal.** A debuff with a way out is a goal, not a punishment:
    *Haunted by the Bloodfang* goes away when the Bloodfang's lair is cleared,
    which is a calling in all but name.
@@ -258,60 +261,125 @@ hazard's burn and a death save name nobody and credit nobody.
 
 ### One event, several outcomes — and not the same one for everybody
 
-An event does not hand out a trait; it rolls on a small **outcome table**, and
-every hero it touched rolls on their own. Two heroes downed by the same fire
-giant can walk away one Fire-tempered and one Burn-shy, and a third who only
-watched can come out of it with nothing at all. That is the CK stress event:
-the same thing happens to everybody, and who they are decides what it does to
-them.
+Every hero an event touched rolls on their own, so two heroes downed by the
+same fire giant can walk away one Fire-tempered and one Burn-shy, and a third
+who only watched can come out of it with nothing at all. That is the CK stress
+event: the same thing happens to everybody, and who they are decides what it
+does to them. *How* they roll depends on which of the two kinds of event it
+was (the owner, 2026-09-23):
+
+- **A triumph is rolled on chance, and it is the likelier kind.** Earning a
+  trait should feel like a reward far more often than losing one feels like a
+  punishment.
+- **A hardship is decided on a saving throw.** Whether a hero comes out of it
+  scarred or tempered is a d20 the player watches land (§8's moment), on the
+  hero's own save bonus, so the sheet matters: a cleric's proficient WIS keeps
+  them steadier than a rogue's.
+
+#### Triumphs: chance, leaned by temperament
+
+The company wins nine road fights in ten (`core/regions.gd`'s table: 92.5% in
+band), so a trait on every win would bury every hero in them by level five. A
+triumph is a **notable** win, and on one of those the roll is generous:
+
+| triumph (who rolls) | chance | outcomes (temperament leans the pick) |
+|---|---|---|
+| a flawless win on `hard` — nobody downed (the party) | 40% | **Emboldened** (+1 initiative, 3 days) · **Overconfident** (+1 to hit, −1 AC in round 1) |
+| a boss or named foe killed (the killer) | 50% | **Renowned** (+2 persuasion in towns; that faction's bands seek you out) · **Arrogant** (+1 damage, −5 baseline with the party) |
+| a lair cleared (every hero standing) | 40% | **Delver** (+1 to hit on lair boards, +2 to search rooms) · **Reckless** (+1 to hit on lair boards, −1 saves vs traps) |
+| a downed ally brought back up (the reviver) | 35% | **Protector** (+1 AC while adjacent to a downed ally) · **Steady hands** (+1 to First Aid and healing checks) |
+| a killing blow on a foe of CR above your level (the killer) | 35% | a **bane** step toward that foe's faction or type, or **Giant-killer** (+1 to hit vs Large and bigger) |
 
 ```jsonc
-// data/traits.json, beside the traits themselves
 "events": {
-  "downed_by_fire": {
-    "who": "the downed",                               // or "the witnesses", "the party", "the killer"
-    "outcomes": [
-      {"trait": "fire-tempered", "weight": 30, "lean": {"brave": 20, "craven": -15}},
-      {"trait": "burn-shy",      "weight": 30, "lean": {"craven": 20, "brave": -15, "calm": -10}},
-      {"trait": "scarred",       "weight": 15},
-      {"trait": "",              "weight": 25, "lean": {"calm": 15}}  // walks it off
-    ]
-  }
+  "lair_cleared": {"kind": "triumph", "who": "standing", "chance": 40,
+    "outcomes": [{"trait": "delver",   "weight": 60, "lean": {"curious": 20, "cautious": 10}},
+                 {"trait": "reckless", "weight": 40, "lean": {"wrathful": 20, "cautious": -30}}]}
 }
 ```
 
-- **Weights, leaned by who you are.** Each `lean` adds to an outcome's weight
-  when the hero has that trait (temperament mostly, but any trait may lean:
-  a hero already *Burn-shy* is likelier to go further than to recover). A
-  weight never goes under 0.
-- **"Nothing" is an outcome.** Most events should mostly do nothing, or every
-  hero is a list of scars by level five. The empty row is what keeps a trait
-  worth reading when it does land.
-- **A trait already held is re-rolled as "nothing"**, and a family at its cap
-  (§2) drops the rows it cannot take before the roll.
-- **Some outcomes remove.** `{"lose": "burn-shy"}` is a row like any other — the
-  cure for a fear can itself be a roll, on the event that ought to cure it.
-- **Applied, never asked** (§10, decided): the after-action page and the camp
-  card *tell* the player what the event did; there is no accept/decline.
+Triumph traits still obey §3's rule against pure power, because a party that
+wins more should not simply get stronger for it (win-more): a permanent one
+trades something (*Overconfident*, *Arrogant*, *Reckless*), and a pure buff
+does not last (*Emboldened*, three days).
 
-**Seeding.** Every roll is seeded off the event and the hero
-(`hash("trait|%s|%s|%d" % [hero_id, event_id, world_minutes])`), so a reload
-cannot reroll the scar the player did not want, and two heroes in one event
-roll independently.
+#### Hardships: a save, and the degree it is made or failed by
+
+| hardship (who rolls) | save | resilience (made by 5+, or a nat 20) | scar (failed) |
+|---|---|---|---|
+| downed by `fire` (the downed) | WIS | **Fire-tempered** (`ward` fire 3) | **Burn-shy** (−1 to hit vs a fire-dealer) |
+| downed by `cold` (the downed) | CON | **Frost-hardened** (`ward` cold 3) | **Chilled** (−1 initiative on `frozen-cave`) |
+| downed by `lightning`/`thunder` (the downed) | WIS | **Storm-struck** (+1 DEX saves) | **Storm-shy** (−1 AC at `night` in the open) |
+| poisoned a third time (the poisoned) | CON | **Venom-proof** (`save_adv` vs poisoned) | **Weak stomach** (−1 CON saves) |
+| downed by one faction twice (the downed) | WIS | **Grudge: <faction>** (+1 damage vs them, −1 AC vs them) | **Haunted by <faction>** (−1 to hit vs them) |
+| an ally died (every hero who saw it) | WIS | **Hardened** (+1 WIS saves) | **Shaken** (a wound, §6's table below) |
+| two death saves failed in one fight (the downed) | CON | **Hard to kill** (advantage on death saves) | **Maimed** (a wound) |
+
+**Which save.** The save is named by the event, and it is the one that fits
+*what the scar is*: **WIS** for a mental one (a fear, a haunting, a friend's
+death), the 5e save against fear and the mind; **CON** for a physical one (a
+body that held or broke). CHA stays unused, free for a later event that is
+about pride or possession.
+
+**How hard.** A flat DC stops mattering by level ten, so the DC comes off the
+thing that did it: **DC = 10 + half the attacker's CR** (rounded down, at
+least 10), **+2** for each aggravation (downed by a boss; a death save failed;
+the ally who died was *bonded* or a *lover* — PartyOpinion's bands), capped at
+20. A goblin is DC 10, an ogre 11, a young red dragon 15. The attacker is in
+`result.credit`'s `downed_by` (step 0); its CR is one `Catalog.monster()` away.
+
+**The degrees.**
+
+| the roll | what it leaves |
+|---|---|
+| a nat 20, or made by 5 or more | the **resilience** trait |
+| made | nothing: they shake it off (the commonest result, on purpose) |
+| failed | the **scar** |
+| a nat 1, or failed by 5 or more | the scar **and** a wound (*Shaken*) |
+
+**Temperament rides the save, not the table.** *Brave*: advantage on a fear
+save (fire, lightning, a faction's haunting). *Craven*: disadvantage on the
+same. *Calm*: +2 on every WIS save a hardship asks for. *Wrathful*: a failed
+faction save becomes *Grudge* rather than *Haunted* — it is who they are that
+turns the fear outward.
+
+**A cure is the same save, asked again.** When a scarred hero meets the thing
+again and wins — downs a fire-dealer, clears one of the haunting faction's
+lairs — the save is rolled once more at the same DC; made, the scar is gone,
+and the moment says so (§8, kind `cure`). Overcoming a fear is a roll the
+player watches, not a flag that quietly clears.
+
+#### Both kinds
+
+- **A trait already held rolls as nothing**, and a family at its cap (§2)
+  drops the outcomes it cannot take before the roll.
+- **Applied, never asked** (§10, decided): the moment tells the player what
+  the event did; there is no accept/decline.
+- **Seeding.** Every roll is seeded off the event and the hero
+  (`hash("trait|%s|%s|%d" % [hero_id, event_id, world_minutes])`), so a reload
+  cannot reroll the scar the player did not want, and two heroes in one event
+  roll independently.
+
+The same event, different heroes: a fire giant drops Vera (Brave, WIS +1) and
+Pike (Craven, WIS +1) at DC 18. Vera rolls with advantage and Pike with
+disadvantage, so Vera is likelier to come out Fire-tempered and Pike likelier
+to come out Burn-shy — but a made save by 2 leaves either of them unchanged,
+and a nat 20 tempers even a coward.
 
 ### A first catalogue
 
 Enough to test the vocabulary on every axis the issue names — location,
-element, attack type, event. Numbers are placeholders until the sweep (§9).
+element, attack type, event. Numbers are placeholders until the sweep (§9);
+the triumph and hardship tables above are the earned half of it.
 
 **Temperament** (pick one at creation; opposed pairs):
 
 | trait | gives | costs | opposes |
 |---|---|---|---|
-| Brave | `save_adv` vs frightened | −2 on the approach's *avoid* | Craven |
-| Craven | +1 AC while `bloodied` | −1 to hit in `first_round` | Brave |
-| Wrathful | +1 damage while `bloodied` | −2 persuasion | Calm |
-| Calm | +1 CON saves (holds concentration) | −1 initiative | Wrathful |
+| Brave | advantage on a hardship's fear save; `save_adv` vs frightened | −2 on the approach's *avoid* | Craven |
+| Craven | +1 AC while `bloodied` | −1 to hit in `first_round`; disadvantage on a fear save | Brave |
+| Wrathful | +1 damage while `bloodied`; a failed faction save turns to *Grudge* | −2 persuasion | Calm |
+| Calm | +1 CON saves (holds concentration); +2 on a hardship's WIS save | −1 initiative | Wrathful |
 | Greedy | +10% purse | −5 baseline with every hero who is not Greedy (§7) | Generous |
 | Generous | opinion drifts +1/day faster toward warm | −10% sale price | Greedy |
 | Curious | +2 investigation / lair search | −1 on saves vs traps and hazards | Cautious |
@@ -328,32 +396,12 @@ element, attack type, event. Numbers are placeholders until the sweep (§9).
 | Street-raised | +2 persuasion/haggle and +1 AC on `city-square` | −2 survival in the wild |
 | Night-owl | +1 to hit at `night` | −1 initiative by day |
 
-**Marks** (earned; the *element* axis; each event an outcome table as above,
-every row but the empty one shown):
-
-| event (who rolls) | outcomes | leans |
-|---|---|---|
-| downed by `fire` (the downed) | **Fire-tempered** (`ward` fire 3) · **Burn-shy** (−1 to hit vs a fire-dealer; cured by downing one) · **Scarred** (+2 intimidation) · nothing | Brave → tempered, Craven → shy, Calm → nothing |
-| downed by `cold` (the downed) | **Frost-hardened** (`ward` cold 3) · **Chilled** (−1 initiative on `frozen-cave`; an inn's long rest) · nothing | Brave → hardened, Craven → chilled |
-| downed by `lightning`/`thunder` (the downed) | **Storm-struck** (+1 DEX saves) · **Storm-shy** (−1 AC at `night` in the open) · nothing | as fire |
-| poisoned a third time (the poisoned) | **Venom-proof** (`save_adv` vs poisoned) · **Weak stomach** (−1 CON saves) · nothing | Wrathful → venom-proof |
-| downed by one faction twice (the downed) | **Haunted by <faction>** (−1 to hit vs them; cured by clearing one of their lairs) · **Grudge: <faction>** (+1 damage vs them, −1 AC vs them) · nothing | Craven → haunted, Wrathful → grudge |
-| an ally died (every hero who saw it) | **Shaken** (wound) · **Vengeful** (+1 to hit vs the killer's faction, 5 days) · **Hardened** (+1 WIS saves) · nothing | Calm → nothing, Wrathful → vengeful, Craven → shaken |
-| brought back from 0 (the revived) | **Hard to kill** (after the third: advantage on death saves) · **Grateful** (+10 baseline with the reviver) · nothing | Generous → grateful |
-| a lair cleared (the party) | **Delver** (+1 to hit on lair boards) · nothing | Curious → delver |
-
-The same event, different heroes: in a fight where a fire giant drops Vera
-(Brave) and Pike (Craven) and Ilsa (Calm) watches, Vera most likely comes out
-Fire-tempered, Pike most likely Burn-shy, and Ilsa most likely nothing — but
-any of them can land anywhere on their table.
-
 **Banes** (earned; the *attack type / foe* axis): ten killing blows on one
 bestiary `type` or `faction` — *Orc-bane*, *Undead-hunter*, *Dragon-slayer*
 (three, for dragons) — give +1 to hit and +1 damage vs it. Two at most, which
 makes the player choose what the hero is known for.
 
-**Other marks:** *Hard to kill* (revived from 0 three times: advantage on
-death saves); *Veteran* (twenty won fights: +1 initiative); *Blade-sworn* /
+**Other marks:** *Veteran* (twenty won fights: +1 initiative); *Blade-sworn* /
 *Bow-sworn* (twenty killing blows with one weapon damage type — `slashing`,
 `piercing` — for +1 to hit with that type, the `dtype_out` axis).
 
@@ -362,8 +410,8 @@ death saves); *Veteran* (twenty won fights: +1 initiative); *Blade-sworn* /
 | wound | from | gives | heals |
 |---|---|---|---|
 | Wounded | downed and failed a death save | −1 to hit, −1 AC | a long rest at an inn, or 3 days |
-| Shaken | the "an ally died" table | −1 to all saves | 5 days; Calm heroes shed it in 2 |
-| Maimed | two failed death saves in one fight | −5 ft speed | a healer in a city (`Downtime` / `SettlementVisit.work_healer`) |
+| Shaken | a hardship save failed by 5+ or on a nat 1; the "an ally died" save failed | −1 to all saves | 5 days; Calm heroes shed it in 2 |
+| Maimed | the "two death saves failed" CON save failed | −5 ft speed | a healer in a city (`Downtime` / `SettlementVisit.work_healer`) |
 
 `until` on the trait row carries the world-minute it lapses, the way
 `Potions.expire` treats a road buff (`core/potions.gd` ~131).
@@ -405,8 +453,40 @@ because it looks deliberate.
   tooltip. The card's existing "Traits" row (non-spell verbs, ~180) keeps its
   name; the two headings differ by the word that matters.
 - **After-action page** — one line per gain or loss, under the hero's card
-  ("Brenna came back from the fire **Fire-tempered**"); a picture per mark
-  later, the way each calling has one.
+  ("Brenna came back from the fire **Fire-tempered**").
+
+### The moment — a whole screen, because something happened to someone (BUILT)
+
+The owner's brief (2026-09-23): "a huge popup for these occasions — make it
+obvious that something important is happening to their character". Every
+trait gained or lost in play — a triumph, a scar, a resilience, a wound, a
+cure — opens **`scenes/world/trait_moment.gd`**, one hero at a time, after the
+spoils page (a fight) or on the camp card (a night):
+
+- **The whole screen**, not a card over the map: a near-black scrim with the
+  kind's colour rising from the floor — gilt for a triumph, verdigris for a
+  resilience, the foe's red for a scar, amber for a wound, green for a cure —
+  so the player knows good from bad before a word is read.
+- **The hero, whole:** the full figure off the board's model
+  (`Portraits.figure`, 300×520 — larger than they appear anywhere else), or
+  their initial in the kind's colour when the art has no model for them.
+- **The save, rolled in front of them:** a d20 face ticks and lands on the
+  roll `core/traits.gd` already made, then the verdict ("10 — failed by 8."),
+  in red or green. A triumph has no save and no die.
+- **The name lands last**: "is now" / "is no longer", then the trait's name at
+  84px — the largest text in the game — pressed in from larger than life, with
+  a sting (`music_deed` for a triumph or a resilience, `save_failed` for a
+  scar, `music_relief` for a cure). Then what it does, what would mend it, and
+  one line of what it meant.
+- **It cannot be skipped by accident.** Any key or click during the ~2.5 s show
+  finishes the show instead of moving on; the next press moves on. Several
+  heroes in one event queue up ("1 of 3"). `Settings.anim()` scales it, and
+  SORCMERC_FAST lands it in its end state, the way the spoils page does.
+
+It owns nothing but the ceremony: the trait is already on the sheet when it
+opens, the caller pauses the clock and resumes on `finished`. Built ahead of
+the traits themselves so the design could be judged on screen
+(`tests/test_trait_moment.gd`; pictures from `tests/shot_trait_moment.gd`).
 
 ## 9. Build order
 
@@ -450,9 +530,10 @@ Each step is one PR, green on its own, and each is playable without the next.
    shape of `sweep_party_opinion.gd` measures the win-rate movement of each
    trait, and the numbers in `data/traits.json` get their measurement in
    capitals, like every other balance number in the repo.
-3. **Earning.** `Traits.after_fight` over `result.credit`, the outcome tables
-   (§6) with their leans, marks, banes and wounds, the after-action line, the
-   cures.
+3. **Earning.** `Traits.after_fight` over `result.credit`: the triumph tables
+   on chance, the hardship saves with their DCs and degrees (§6), banes and
+   wounds, the cures as a second save, each one opening the moment (§8, already
+   built), and the after-action line.
 4. **The road and the fire.** `skill_bonus` and the three check sums (§5.3),
    the opinion terms (§7), a camp beat when a trait is gained ("Pike hasn't
    slept since the fire").
@@ -462,11 +543,20 @@ Each step is one PR, green on its own, and each is playable without the next.
 
 ## 10. Decided (the owner, 2026-09-23)
 
+Second round, the same day: **triumph traits are the likelier kind**; **a
+hardship's scar-or-resilience is decided on a save** (§6 — WIS for the mind,
+CON for the body, DC off the attacker's CR); and **every such occasion gets a
+huge popup** that makes it obvious something important is happening to the
+character (§8, the moment — built).
+
+First round:
+
 1. **Name:** "Personality traits", for the whole system. The combat card's
    existing "Traits" row keeps its name.
 2. **The player picks** one temperament and one origin at creation — yes.
 3. **An earned trait cannot be refused** — no accept/decline; it is rolled
-   (seeded, leaned by who the hero is) and applied, and the game says so.
+   (seeded, a chance for a triumph and a save for a hardship) and applied, and
+   the moment says so.
 4. **No stress meter** — no.
 5. **Heroes from an older save are offered the pick once** — yes (§8).
 6. **Bond traits — possibly yes, later.** Noted, not designed: when a hero's
@@ -477,6 +567,5 @@ Each step is one PR, green on its own, and each is playable without the next.
    relations pass it depends on and the outcome tables (step 3) first.
 
 And one from the owner that shapes §6: **an event can have different outcomes,
-and not the same one for every person in it** — every event is an outcome
-table, every hero it touched rolls on it separately, and who they are leans
-the roll.
+and not the same one for every person in it** — every hero it touched rolls
+separately, on their own chance or their own save, and who they are leans it.
