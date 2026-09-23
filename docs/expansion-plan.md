@@ -9357,3 +9357,69 @@ that a party of one draws no block. `test_world_callings` reads
 - **No history.** The web shows where a pair stands, not which way it is
   heading. `party.relations` keeps no past scores to draw an arrow from.
 - **Bench members aren't drawn,** because only the marching party is.
+
+## Personality traits, measured — what fights earn, and traits on the road (2026-09-23, #176)
+
+Steps 3 and 4 both ended with "unmeasured numbers" as their first still-open
+line. Two sweeps now measure them. Neither changed a number: the owner's rule
+(triumphs are the likelier kind) holds, and every origin moves the road less
+than the pace does. The measurements are in `core/traits.gd` (the earning and
+road sections) and in `data/traits.json`'s `events._measured`.
+
+**What fights earn** (`tests/sweep_traits_earn.gd`). Real fights are built by
+`Encounter.build`, played by the AI and resolved by
+`Encounter.resolve_outcome`, then passed to `Traits.after_fight`. The preset
+trio holds no traits, with 200 seeds at each difficulty. Changes per 100
+hero-fights:
+
+| difficulty | win% | triumph | resilience | scar | wound |
+|---|---|---|---|---|---|
+| easy | 98 | 3.8 | 4.7 | 1.8 | 14.5 |
+| normal | 94 | 4.8 | 6.2 | 3.7 | 19.7 |
+| hard | 89 | 16.5 | 8.0 | 4.3 | 22.5 |
+| deadly | 94 | 16.0 | 6.3 | 2.8 | 20.7 |
+
+- **Triumphs vs scars.** Triumphs outnumber scars at every difficulty: two to
+  one on easy fights, and four to six to one where "flawless" can fire.
+- **Wounds.** Wounded (downed with a death save failed, gone in three days)
+  is the commonest change of all: 242 of the 800 fights.
+- **Hardship saves.** Of 480 saves, 31% tempered, 24% shook it off, 28%
+  scarred, and 17% scarred and Shaken.
+- **A 30-day run.** 20 runs, each with a road fight a day at easy and a lair
+  every fourth day (normal, normal, hard). Each hero gains 5.1 triumphs, 1.8
+  resiliences, 1.2 scars, 5.0 wounds and 0.75 cures. Each ends holding 8.0
+  earned traits: 0.5 scars, 0.75 wounds, and 6.8 of the rest (Veteran, two
+  banes, grudges, Delver, Hardened).
+
+**Traits on the road** (`tests/sweep_traits_road.gd`). `Travel.check` was run
+in each biome, with 1,500 seeds per biome and all three presets holding the
+trait. The road's rolls pass 57.4% of the time with no trait. Change in the
+pass rate:
+
+| trait | effect |
+|---|---|
+| Downs-rider | +4.8 everywhere (its +1 travel has no place in the spec) |
+| Cautious | −3.9 |
+| Marsh-bred | +2.8 in the marsh, −1.3 on the downs |
+| Street-raised | −3.1 |
+| Woods-born, Cave-dweller, Night-owl | 0 |
+
+The Careful pace is +2 on every roll, twice Downs-rider's term.
+
+**Found by the run:** "Haunted by monstrositys". `Traits.FACTION_PLURAL` now
+has monstrosities, duergar and sahuagin, the three the "+s" default got wrong.
+`tests/test_traits_earn.gd` checks every bestiary faction's plural.
+
+### Still open
+
+- **Traits pile up.** Nothing limits how many earned traits a hero holds (8
+  per hero in 30 days). Over two lairs, one event can leave both of its
+  outcomes on the same hero (Delver and Reckless). This is marked `ponytail:`
+  in `core/traits.gd`. A cap per family is the cheap fix.
+- **Downs-rider's +1 travel holds in every biome.** The spec gives it no
+  place: "+1 initiative on the downs; +1 travel". If the owner meant the
+  downs only, the fix is one `when` in `data/traits.json`.
+- **Heroes die often in the run:** 124 hero deaths in 880 fights, 14 per 100
+  fights (the sweep raises them for the next fight). That is a combat number, not a
+  trait one. It is also why "Watched a friend die" is the second commonest
+  hardship.

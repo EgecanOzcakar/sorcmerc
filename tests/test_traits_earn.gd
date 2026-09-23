@@ -64,6 +64,21 @@ func test_instanced_rows() -> void:
 	check(Traits.row("haunted@orc")["effects"][0]["when"]["vs_faction"] == ["orc"], "...and its effects are about that faction")
 	check(Traits.name_of("bane@dragon") == "Dragon-bane", "a bane is named in the singular: %s" % Traits.name_of("bane@dragon"))
 	check(Traits.row("nope@orc").is_empty(), "an instance of no row is no row")
+	# Every faction the bestiary can put in front of a hero reads as English in
+	# the plural: tests/sweep_traits_earn.gd's run printed "Haunted by
+	# monstrositys" before FACTION_PLURAL learned three irregular ones.
+	var Catalog = load("res://core/rules/catalog.gd")
+	var factions := {}
+	for m in Catalog.all("bestiary.json"):
+		if String(m.get("faction", "")) != "":
+			factions[String(m["faction"])] = true
+	var odd: Array = []
+	for f in factions:
+		var n := Traits.faction_name(String(f))
+		if n.ends_with("ys") or n.ends_with("ss") or n in ["duergars", "sahuagins"]:
+			odd.append("%s -> %s" % [f, n])
+	check(factions.size() > 20 and odd.is_empty(), "every faction's plural reads right (%d factions; odd: %s)" % [factions.size(), str(odd)])
+	check(Traits.name_of("haunted@monstrosity") == "Haunted by monstrosities", "...e.g. %s" % Traits.name_of("haunted@monstrosity"))
 	var ch := _hero("vera")
 	ch.traits.append({"id": "bane@goblinoid", "why": "t"})
 	check("bane@goblinoid" in Traits.ids(ch), "a hero holds an instanced trait like any other")

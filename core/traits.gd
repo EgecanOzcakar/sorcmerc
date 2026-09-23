@@ -123,7 +123,10 @@ static func base_of(id: String) -> String:
 # Plural and singular for the handful of factions whose name is not "+s".
 const FACTION_PLURAL := {"goblinoid": "goblins", "humanoid": "people", "undead": "the dead",
 	"townsfolk": "townsfolk", "lizardfolk": "lizardfolk", "merfolk": "merfolk", "fey": "fey",
-	"drow": "drow", "swarm": "swarms", "tribal": "tribesfolk", "bandit": "bandits"}
+	"drow": "drow", "swarm": "swarms", "tribal": "tribesfolk", "bandit": "bandits",
+	# the three the "+s" default gets wrong — tests/sweep_traits_earn.gd's run
+	# printed "Haunted by monstrositys"
+	"monstrosity": "monstrosities", "duergar": "duergar", "sahuagin": "sahuagin"}
 const FACTION_ONE := {"goblinoid": "goblin", "humanoid": "person", "undead": "undead",
 	"townsfolk": "townsfolk", "tribal": "tribal"}
 
@@ -633,6 +636,36 @@ static func save_mode(c, cb, conds: Array) -> Dictionary:
 # What it does NOT own: when a fight or a lair asks (scenes/world/world.gd),
 # the moment that shows it (scenes/world/trait_moment.gd — the dicts this
 # returns are that screen's), or the after-action page's layout.
+#
+# MEASURED 2026-09-23 (tests/sweep_traits_earn.gd, 200 seeds a difficulty, the
+# preset trio holding nothing, a fresh party per fight, the real
+# Encounter.resolve_outcome result). Changes per 100 hero-fights:
+#
+#               win%   triumph  resilience  scar  wound
+#     easy       98       3.8       4.7      1.8   14.5
+#     normal     94       4.8       6.2      3.7   19.7
+#     hard       89      16.5       8.0      4.3   22.5
+#     deadly     94      16.0       6.3      2.8   20.7
+#
+# Triumphs outnumber scars at every difficulty, which is the owner's rule: two
+# to one on the road's easy fights, four to six to one where "flawless" can
+# fire (hard and deadly only). The commonest change is a wound, and Wounded is
+# the commonest trait of all (242 times in the 800 fights, Shaken next at 167):
+# a downed hero who failed a death save, lapsing in three days. Of 480 hardship saves, 31% tempered, 24% shook
+# it off, 28% scarred and 17% scarred and Shaken, so a save is close to a coin
+# flip between a good and a bad mark.
+#
+# The same sweep's 30-day run (20 runs: a road fight a day at easy, a lair
+# every fourth day of two normal rooms and a hard boss room, no inn) gains
+# each hero 5.1 triumphs, 1.8 resiliences, 1.2 scars, 5.0 wounds and 0.75
+# cures, and each ends it holding 8.0 earned traits: 0.5 scars, 0.75 wounds,
+# and 6.8 of the rest (Veteran about halfway through, at 44 fights a run; two
+# banes; grudges; Delver; Hardened). The chances, DCs and degrees stay as the spec set them: the rule
+# they answer to holds.
+# ponytail: nothing limits how many earned traits a hero holds (8 a hero in 30
+# days), and one event can leave both of its outcomes on a hero over two lairs
+# (Delver and Reckless). Revisit if the profile's list gets long enough that
+# the player stops reading it; a cap per family is the cheap fix.
 
 const Dice = preload("res://core/dice.gd")
 const RNG = preload("res://core/rng.gd")
@@ -1041,6 +1074,19 @@ static func _cures(out: Dictionary, ch, kills: Array, now: float) -> void:
 # the watch, the town's persuading and haggling — gets its trait term in one
 # place. A term is capped at ±CAP like a fight's, and says who gave it, for
 # the card's roll line ("+2 (Marsh-bred)").
+#
+# MEASURED 2026-09-23 (tests/sweep_traits_road.gd, 1,500 seeds a biome, the
+# preset trio all holding the trait, normal pace, the best roller). The road's
+# rolls pass 57.4% of the time with no trait. Change in the pass rate:
+#     Downs-rider +4.8 (its +1 travel counts in every roll, in every biome)
+#     Cautious −3.9 (−1 travel, every roll)
+#     Marsh-bred +2.8 in the marsh and −1.3 on the downs (its survival terms
+#       count in about a third of the rolls, the survival events)
+#     Street-raised −3.1 in all three (−2 survival in the wild, 30% of rolls)
+#     Woods-born, Cave-dweller, Night-owl: 0 (no road event rolls their skills)
+# Every origin moves the road less than the pace does (Careful is +2 on every
+# roll, twice Downs-rider's term), so the ±2 skill terms and the ±1 travel
+# terms stay as the spec set them.
 
 # Whether a road `when` holds here. Only the where-it-is keys can: a board or a
 # per-roll key belongs to a fight, and never holds on the road.
