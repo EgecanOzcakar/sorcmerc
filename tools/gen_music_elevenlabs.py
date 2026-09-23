@@ -151,24 +151,29 @@ BEDS = {
 
 # name -> (prompt, seconds). One-shots: a phrase, not a piece, and each ends.
 STINGS = {
-    "music_discovery": ("A short bright discovery sting: a rising harp flourish resolving "
-                        "into a warm string chord with a soft bell on top, wonder, medieval "
-                        "fantasy, ends cleanly.", 6),
-    "music_road": ("A short sting of the road opening up: horns swelling from soft to open "
-                   "over strings, a view from a high place, hopeful and wide, medieval "
-                   "fantasy, ends cleanly.", 8),
-    "music_alarm": ("A short alarm sting: a hard low brass and drum hit, an urgent tolling "
-                    "bell, tense driving strings, a town under attack, medieval fantasy, "
-                    "ends cleanly.", 8),
-    "music_relief": ("A short sting of relief after danger: a held tense chord easing into "
-                     "a warm resolved major chord, soft strings and a single bell, breath let "
-                     "out, medieval fantasy, ends cleanly.", 8),
-    "music_founding": ("A short founding sting: a lone horn joined by strings and a slow "
-                       "proud drum, something built to last, warm and grounded, medieval "
-                       "fantasy, ends cleanly.", 10),
-    "music_deed": ("A short deed-done sting: a brief confident brass phrase over a warm "
-                   "string chord, a job well done, satisfied, medieval fantasy, ends "
-                   "cleanly.", 6),
+    "music_discovery": ("Orchestral discovery stinger for a medieval fantasy game: a "
+                        "rising harp glissando into a warm sustained string chord, a soft"
+                        " celesta and small-bell melody on top. A sense of wonder, slow, "
+                        "no drums, no vocals, ends cleanly on the held chord.", 6),
+    "music_road": ("Orchestral vista stinger: French horns swelling from soft to full "
+                   "over sustained strings, a broad hopeful rising melody, the view from "
+                   "a high place. Wide and cinematic, medieval fantasy, slow, no vocals, "
+                   "ends cleanly on a sustained major chord.", 8),
+    "music_alarm": ("Orchestral alarm stinger: a hard low brass and timpani hit, an "
+                    "urgent tolling bell, tense fast staccato strings driving underneath,"
+                    " a town under attack. Medieval fantasy, no vocals, ends cleanly on a"
+                    " final brass hit.", 8),
+    "music_relief": ("Orchestral relief stinger: a held tense suspended string chord "
+                     "easing and resolving into a warm major chord, soft strings and a "
+                     "single gentle bell, a breath let out. Slow, medieval fantasy, no "
+                     "drums, no vocals, ends cleanly.", 8),
+    "music_founding": ("Orchestral founding stinger: a lone French horn melody joined by "
+                       "warm strings and a slow proud timpani beat, grounded and "
+                       "dignified, something built to last. Medieval fantasy, no vocals, "
+                       "ends cleanly on a sustained chord.", 10),
+    "music_deed": ("Orchestral job-done stinger: a brief confident trumpet and horn "
+                   "phrase over a warm sustained string chord, satisfied and rewarding. "
+                   "Medieval fantasy, no vocals, ends cleanly with a short ring-out.", 6),
 }
 
 

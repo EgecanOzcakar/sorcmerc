@@ -99,25 +99,45 @@ SFX = {
     "crit": ("A devastating critical sword strike, metal shearing through armor and bone, "
              "sharp crack with a deep impact underneath, brief and brutal", 0.9, 0.65),
     "kill": ("An armored body dropping dead onto flagstones: a heavy final thud, a sword clattering loose, then chain mail settling, dry, no reverb", 1.0, 0.6),
-    "cast": ("A spell being cast: a quick indrawn breath, a rush of air gathering, then a bright snap of release like a struck flint, close, dry", 1.1, 0.5),
-    "heal": ("Healing magic: a warm exhale of light, a soft glassy rising tone with a gentle harp pluck at the top, close and intimate, no reverb tail", 1.2, 0.5),
-    "level_up": ("A triumphant short fanfare for leveling up, bright ascending chime with "
-                 "a warm resonant finish, fantasy RPG", 1.6, 0.45),
-    "victory": ("A short triumphant brass and drum victory fanfare, heroic, medieval "
-                "fantasy, ending cleanly", 2.5, 0.4),
-    "defeat": ("A grim descending tone marking defeat, low strings and a distant drum, "
-               "hollow and final", 2.5, 0.4),
-    "click": ("A single soft click of a wooden game piece set down on a wooden table, tiny, dry, with a natural short decay, no ring", 0.5, 0.9),
-    "buy": ("Coins being counted onto a wooden merchant counter, a few gold pieces, "
-            "short and bright", 0.8, 0.75),
-    "identify": ("A soft magical reveal, shimmering chime resolving into a clear tone, "
-                 "the sound of a mystery being solved", 1.2, 0.5),
-    "quest": ("A short parchment unfurling with a soft horn note, the sound of accepting "
-              "a quest, medieval fantasy", 1.2, 0.5),
-    "pickup": ("Picking up an item, a small leather and metal rustle with a soft bright "
-               "tick, very short", 0.5, 0.8),
-    "rest": ("A campfire settling with a soft exhale and a gentle low drone, the sound of "
-             "making camp, warm and calm", 2.0, 0.45),
+    "cast": ("Generic fantasy spell cast, one-shot: a short sharp inhale of air, a rising"
+             " filtered whoosh of gathering energy with soft electric crackles, then a "
+             "crisp bright release snap like a struck flint with a tiny sparkle tail. "
+             "Close, dry, no voice, no music", 1.1, 0.5),
+    "heal": ("Healing magic one-shot: a soft warm swell of airy shimmer rising in pitch, "
+             "layered glass harmonica and a gently bowed crystal glass, topped with a "
+             "single soft harp pluck and a faint sparkle of small chimes. Soothing, no "
+             "impacts, no drums, no voice, short natural decay", 1.2, 0.5),
+    "level_up": ("Fantasy RPG level-up jingle: a quick bright ascending arpeggio on "
+                 "glockenspiel and harp, answered by a short warm brass swell landing on "
+                 "a major chord, with a light cymbal shimmer. Uplifting, clean studio "
+                 "mix, no vocals, short natural ring-out", 1.6, 0.45),
+    "victory": ("Short medieval fantasy victory fanfare: two bold trumpet and French horn"
+                " calls over a snare roll and timpani hits, resolving to a big sustained "
+                "major chord with a cymbal swell. Heroic, orchestral, clean mix, no "
+                "vocals, ends cleanly with a brief ring-out", 2.5, 0.4),
+    "defeat": ("Short defeat sting for a dark fantasy game: a slow descending minor "
+               "phrase on low cellos and bassoon, one deep muffled timpani hit, ending on"
+               " a hollow sustained low chord that fades out. Somber and final, "
+               "orchestral, no vocals", 2.5, 0.4),
+    "click": ("UI click one-shot: a single small wooden token set down firmly on a "
+              "hardwood tabletop, one tight dry tick with a tiny woody knock. Very short,"
+              " close-miked foley, no ring, no second tap, no reverb", 0.5, 0.9),
+    "buy": ("Foley one-shot: three or four gold coins dropped one after another onto a "
+            "wooden shop counter, bright metallic clinks and a short jingle as they "
+            "settle. Close-miked, dry, no voice, no music", 0.8, 0.75),
+    "identify": ("Magic reveal one-shot: a soft rising shimmer of small glass chimes over"
+                 " a filtered airy swell, resolving into one clear sustained crystal bell"
+                 " tone with a gentle sparkle. Mysterious then satisfying, clean, no "
+                 "drums, no voice, short natural decay", 1.2, 0.5),
+    "quest": ("Accepting a quest: a parchment scroll unrolled with a crisp dry paper "
+              "rustle, followed by one short noble two-note French horn call. Medieval "
+              "fantasy, clean, no drums, no voice, ends cleanly", 1.2, 0.5),
+    "pickup": ("Item pickup foley one-shot: a small leather pouch with a metal buckle "
+               "grabbed quickly off a table, a brief leather rustle and one light "
+               "metallic tick. Very short, close-miked, dry, no reverb", 0.5, 0.8),
+    "rest": ("Making camp: a small wood campfire crackling, a log shifting and settling "
+             "into the embers, soft ember pops over a quiet bed of night crickets. Warm "
+             "and calm, outdoor, no voices, no music, gentle fade out", 2.0, 0.45),
 
     # T9z: per-weapon-class hits. core/weapon_sfx.gd picks one off the attacker's
     # main-hand weapon (or a monster's damage type), so a bow and a mace stop
@@ -143,24 +163,38 @@ SFX = {
 
     # T9z: per-school casts. Picked off data/spells.json's `school`. Same wide,
     # magical space as the generic cast; what differs is the character of it.
-    "cast_evocation": ("A destructive evocation spell being cast, a rising surge of raw "
-                       "energy erupting into a fiery crackling boom, fantasy game magic", 1.2, 0.55),
-    "cast_abjuration": ("A protective ward spell being cast, a bright clear chime blooming "
-                        "into a steady shimmering barrier hum, fantasy game magic", 1.2, 0.5),
-    "cast_conjuration": ("A summoning spell being cast, a swirling portal opening with a "
-                         "whooshing rush of air and a deep arrival thump, fantasy game magic", 1.2, 0.5),
-    "cast_enchantment": ("A charm spell being cast, a soft dreamy descending twinkle of "
-                         "bells with a hypnotic sparkle, fantasy game magic", 1.2, 0.5),
-    "cast_transmutation": ("A transmutation spell reshaping matter, a warbling wobbling "
-                           "tone with bubbling shifting textures settling into a chime, "
-                           "fantasy game magic", 1.2, 0.5),
-    "cast_divination": ("A divination spell revealing a vision, an ascending crystalline "
-                        "cluster of bells with an airy ethereal shimmer, fantasy game magic", 1.3, 0.5),
-    "cast_illusion": ("An illusion spell being cast, a phasing wavering unreal shimmer with "
-                      "a ghostly whisper and an off-key glint, fantasy game magic", 1.2, 0.5),
-    "cast_necromancy": ("A necromancy death spell being cast, a low ominous droning bend "
-                        "downward with a rasping breath and a hollow wrong note, dark "
-                        "fantasy game magic", 1.3, 0.5),
+    "cast_evocation": ("Fire evocation spell cast: a quick rising roar of gathering "
+                       "flame, a whoosh of igniting air, then an explosive fireball burst"
+                       " with crackling embers and a deep sub-bass boom. Powerful and "
+                       "aggressive, fantasy game magic, no voice, no music", 1.2, 0.55),
+    "cast_abjuration": ("Protective ward spell cast: a clear struck crystal bell, then a "
+                        "shimmering magical force field rising and locking in place with "
+                        "a steady humming resonance and soft glassy shimmer. Bright and "
+                        "solid, fantasy game magic, no voice, no music", 1.2, 0.5),
+    "cast_conjuration": ("Summoning spell cast: a swirling vortex of wind spinning up, a "
+                         "rising magical whoosh over a low rumble, ending in a heavy "
+                         "thump of something landing and a short puff of displaced air. "
+                         "Fantasy game magic, no voice, no music", 1.2, 0.5),
+    "cast_enchantment": ("Charm spell cast: a soft descending cascade of small bells and "
+                         "celesta notes with a warm dreamy chorused shimmer. Sweet, "
+                         "hypnotic and gentle, fantasy game magic, no impacts, no voice", 1.2, 0.5),
+    "cast_transmutation": ("Transmutation spell cast: a warbling magical tone bending up "
+                           "and down, bubbling liquid and creaking, stretching material "
+                           "textures morphing, settling into one clean bright chime. "
+                           "Strange and alchemical, fantasy game magic, no voice, no "
+                           "music", 1.2, 0.5),
+    "cast_divination": ("Divination spell cast: an ascending run of crystal bells and "
+                        "glass harmonica tones, a breathy airy shimmer opening up wide "
+                        "above them. Ethereal and revealing, bright, fantasy game magic, "
+                        "no drums, no voice", 1.3, 0.5),
+    "cast_illusion": ("Illusion spell cast: a wavering phased shimmer with a slow flanger"
+                      " sweep, a faint breathy whisper, and a detuned glassy glint that "
+                      "sounds slightly wrong. Eerie and unreal, fantasy game magic, no "
+                      "words, no music", 1.2, 0.5),
+    "cast_necromancy": ("Necromancy spell cast: a low dark drone bending downward, a "
+                        "raspy ghostly exhale, a dry bony rattle, and a dissonant hollow "
+                        "tone. Cold and sinister, dark fantasy game magic, no words, no "
+                        "music", 1.3, 0.5),
 
     # The silent moments. Everything above fires when something LANDS; a fight is
     # at least as much the swings that don't, the saves that hold, and the hero
@@ -171,108 +205,148 @@ SFX = {
     # and no impact. Kept quieter and shorter than `hit` on purpose — it lands
     # on roughly half of all attack rolls, and a miss as loud as a hit is a
     # fight that sounds like it is going twice as well as it is.
-    "miss": ("A sword swung hard through empty air and missing, a fast clean whoosh "
-             "with no impact at all, dry, close, no reverb tail", 0.5, 0.8),
-    "miss_ranged": ("An arrow whistling past close by and clattering off stone somewhere "
-                    "behind, a quick whistle then a small sharp skitter, dry", 0.7, 0.75),
+    "miss": ("Foley whoosh one-shot: a heavy steel longsword swung fast past the "
+             "microphone and missing, a single short air swish that rises and cuts off, "
+             "with a faint cloth and leather rustle from the swing. No impact, no clang, "
+             "no ring, no voice, dry, no reverb tail", 0.5, 0.8),
+    "miss_ranged": ("Foley one-shot: an arrow flying past close to the ear, a short sharp"
+                    " whistling fly-by with a doppler pitch drop, then the wooden shaft "
+                    "clattering and skittering on a stone floor a few meters behind. No "
+                    "bowstring, no body impact, no voice, dry", 0.7, 0.75),
 
     # Saves. A pair, so they read against each other: the same event resolving
     # two ways. Made is bright and upward and over quickly; failed is dull and
     # downward. Neither is a full sting — they ride under the spell that caused
     # them, which is already making noise.
-    "save_made": ("A magical ward deflecting a spell, a short bright metallic shimmer "
-                  "glancing away, resonant but brief", 0.6, 0.65),
-    "save_failed": ("A spell striking home through failing defenses, a dull heavy "
-                    "downward thud with a brief dark shudder, no brightness", 0.7, 0.65),
+    "save_made": ("Magic deflected one-shot: a short bright metallic shing as a spell "
+                  "glances off an invisible shield, a quick shimmering ricochet with a "
+                  "fast ring-out. Crisp and clean, no voice, no music", 0.6, 0.65),
+    "save_failed": ("Magic hitting home one-shot: a dull heavy muffled thud of a spell "
+                    "striking a body, a brief low dark shudder and a sub-bass drop. No "
+                    "brightness, no ring, no voice, no music", 0.7, 0.65),
 
     # `down` was `kill`'s asset until now — the same crash for a hero dropping as
     # for a foe dying, which made a party wipe sound like a victory. A body going
     # down but not out: heavier on the armor, no finality.
-    "down": ("An armored warrior dropping to their knees and slumping onto stone, a "
-             "heavy weary collapse with armor rattling, no final crash", 1.0, 0.6),
-    "burst": ("A wooden barrel exploding, splintering wood and a sharp percussive blast "
-              "with a deep thump underneath, brief and violent, dry", 1.0, 0.7),
+    "down": ("Foley: an armored warrior falling to their knees then slumping sideways "
+             "onto stone flagstones, chain mail and plate rattling, one heavy muffled "
+             "thud, then the armor settling. Weary, not final: no weapon clatter, no "
+             "voice, close, dry", 1.0, 0.6),
+    "burst": ("Wooden barrel explosion one-shot: a sharp percussive blast over a deep low"
+              " thump, oak staves splintering and cracking apart, wood debris and iron "
+              "hoops clattering down on stone. Brief and violent, close, dry, no fire "
+              "roar, no voice", 1.0, 0.7),
 
     # Conditions and exhaustion. `condition` fires whenever a status lands, which
     # is often, so it is deliberately small — a marker, not an event.
-    "condition": ("A poison or curse taking hold: a wet sickly gurgle, a brief low groan of pain, and a faint dry rattle, close, unpleasant", 0.7, 0.6),
-    "collapse": ("An exhausted armored figure collapsing face-first onto stone, a heavy "
-                 "limp fall with a long weary exhale and settling metal", 1.4, 0.55),
+    "condition": ("Poison or curse taking hold, small one-shot: a short wet sickly "
+                  "bubbling gurgle, a faint dark magical hiss, and a dry bony rattle. "
+                  "Unpleasant, close-miked, no voice, no music", 0.7, 0.6),
+    "collapse": ("Foley: an exhausted armored figure collapsing face-first onto stone, a "
+                 "limp heavy body fall, chain mail and plate clanking then slowly "
+                 "settling, a long tired exhale. Close, dry, no weapon clatter", 1.4, 0.55),
 
     # The world outside a fight. These are the places rather than the moments, so
     # they are looser prompts and lower influence — the model has more room, and
     # a settlement that sounds slightly different each generation is fine.
-    "travel": ("Booted footsteps walking steadily on a dirt road with light gear and "
-               "leather creaking, a few paces, outdoors, open air", 1.6, 0.6),
-    "settlement": ("Arriving at a medieval town gate, a heavy wooden gate creaking open "
-                   "with a distant murmuring crowd and a faint bell beyond", 2.0, 0.45),
-    "shop": ("Entering a small medieval shop, a door with a little bell swinging open "
-             "onto a quiet room with a soft wooden creak", 1.2, 0.55),
-    "quest_complete": ("A short warm triumphant flourish for completing a task, a bright "
-                       "horn phrase resolving over a purse of coins landing on wood, "
-                       "medieval fantasy, ending cleanly", 2.0, 0.45),
+    "travel": ("Footsteps foley: leather boots walking at a steady pace on a packed dirt "
+               "road with small gravel, about six paces, a light pack and leather straps "
+               "creaking with each step, faint outdoor wind. No voices, no music", 1.6, 0.6),
+    "settlement": ("Arriving at a medieval town: a heavy wooden gate creaking open on "
+                   "iron hinges, then a distant busy town ambience with a murmuring "
+                   "crowd, a blacksmith's hammer far off and a faint church bell. "
+                   "Outdoor, no music, no clear words", 2.0, 0.45),
+    "shop": ("Entering a small medieval shop: a wooden door opening with a creak, a small"
+             " brass shop bell jingling twice above it, then a quiet room and a single "
+             "floorboard creak. Close, dry, no voices, no music", 1.2, 0.55),
+    "quest_complete": ("Task-complete sting: a short bright trumpet phrase of three "
+                       "rising notes resolving to a warm major chord, with a leather coin"
+                       " purse landing on a wooden table and coins jingling. Medieval "
+                       "fantasy, clean mix, no vocals, ends cleanly", 2.0, 0.45),
 
     # Landmarks (core/landmarks.gd). The place turning up, the card opening,
     # the search on the ground, and one sound per door the card can open. The
     # doors that already had a sound (a camp kit is a pickup, a night in the
     # ring is a rest) reuse it rather than getting a twin.
-    "landmark_found": ("A soft curious two-note wooden flute call, like a question asked "
-                       "quietly, with a faint rustle of parchment, short, gentle, dry", 1.2, 0.5),
-    "landmark_open": ("A soft rising inquisitive pizzicato string phrase, three plucked "
-                      "notes climbing like a raised eyebrow, with a light breath of wind, "
-                      "short, dry", 1.2, 0.5),
-    "search_found": ("Boots scuffing through leaves, a hand brushing dirt aside, then a "
-                     "small bright tick of something found and a short satisfied exhale, "
-                     "outdoors, dry", 1.4, 0.6),
-    "search_nothing": ("Boots scuffing through dry leaves and gravel, a hand sweeping dirt "
-                       "aside, then nothing: a short disappointed exhale, outdoors, dry", 1.4, 0.6),
-    "cache_open": ("A buried wooden strongbox lid prised open with a creak, then a spill "
-                   "of coins and small trinkets tumbling out, short, close, dry", 1.5, 0.65),
-    "blessing": ("A gentle sacred blessing: a soft warm wordless choir breath swelling "
-                 "briefly, a single clear small bell, holy and calm, short, light reverb", 2.0, 0.45),
-    "offering": ("A few coins set down one by one on a stone altar, a small clink each, "
-                 "then a brief hush of wind, reverent, close", 1.6, 0.65),
-    "lead_marked": ("A quill pen scratching a quick mark onto parchment, then a firm tap "
-                    "of the pen, with a faint low thoughtful hum, short, dry", 1.0, 0.7),
-    "map_reveal": ("A large parchment map unrolling with a sweep, a rush of wind across "
-                   "open country, and a bright rising airy shimmer as the distance opens "
-                   "up, medieval fantasy", 2.5, 0.45),
+    "landmark_found": ("Discovery notification: a soft two-note wooden recorder call "
+                       "rising like a quiet question, with a faint parchment rustle. "
+                       "Gentle and curious, medieval fantasy, clean, dry, no drums, no "
+                       "voice", 1.2, 0.5),
+    "landmark_open": ("Curious UI sting: three soft plucked pizzicato violin notes "
+                      "climbing upward, inquisitive and light, with a small airy breath "
+                      "of wind under the last note. Clean, dry, no drums, no voice", 1.2, 0.5),
+    "search_found": ("Searching foley: boots shuffling through dry leaves, a hand "
+                     "brushing dirt and pebbles aside, then a small bright metallic tick "
+                     "of a hidden object uncovered and a short satisfied exhale. Outdoor,"
+                     " close, no music", 1.4, 0.6),
+    "search_nothing": ("Searching foley: boots shuffling through dry leaves and gravel, a"
+                       " hand sweeping dirt and pebbles aside, a short pause, then a "
+                       "quiet disappointed sigh. Nothing found, no object sound, outdoor,"
+                       " close, no music", 1.4, 0.6),
+    "cache_open": ("Foley: a buried wooden chest lid pried open with an iron creak and a "
+                   "crack of old wood, then gold coins and small metal trinkets spilling "
+                   "and jingling out onto dirt. Close, dry, no voice, no music", 1.5, 0.65),
+    "blessing": ("Holy blessing sting: a soft warm wordless choir swelling in on a major "
+                 "chord, a single clear small handbell ring, a gentle shimmer. Sacred and"
+                 " calm, light cathedral reverb, no lyrics, no drums", 2.0, 0.45),
+    "offering": ("Foley: three silver coins placed one by one on a stone altar, a small "
+                 "bright clink each, then a soft reverent breath of wind through a quiet "
+                 "shrine. Close, no voice, no music", 1.6, 0.65),
+    "lead_marked": ("Foley: a feather quill scratching a quick short mark onto rough "
+                    "parchment, then a firm tap of the quill tip, over a faint low warm "
+                    "hum. Close-miked, dry, no voice", 1.0, 0.7),
+    "map_reveal": ("Map reveal sting: a large parchment map unrolled with a big sweeping "
+                   "paper rustle, then a rush of open-country wind and a bright rising "
+                   "airy shimmer of chimes as the view opens. Expansive, medieval "
+                   "fantasy, no voice, no drums", 2.5, 0.45),
 
     # Encounter objectives (core/objectives.gd, fired from core/combat.gd). The
     # wave and the quarry are things happening at the far edge of the board,
     # so they are further away than a hit; the carter and the captive are
     # stingers over the body drop the kill already makes.
-    "wave_arrives": ("Distant war shouts and a horn from beyond a doorway, then many "
-                     "armored feet rushing in fast, a wave of attackers arriving, brief", 2.0, 0.55),
-    "captive_freed": ("A knife sawing quickly through thick rope and the rope snapping "
-                      "loose, then a gasp of relief, close, dry", 1.2, 0.65),
-    "quarry_gone": ("Running footsteps crashing through undergrowth and leaves, receding "
-                    "fast into the distance until gone, outdoors, brief", 2.0, 0.6),
-    "carter_down": ("A heavy body slumping against a wooden cart with a creak, a load of "
-                    "crates tumbling off, then one low grim string note, brief", 2.0, 0.55),
+    "wave_arrives": ("Enemies arriving: distant war cries and a short war-horn blast from"
+                     " beyond a doorway, then a rush of many armored boots running in on "
+                     "stone, shields and weapons rattling, getting closer. Intense, no "
+                     "music", 2.0, 0.55),
+    "captive_freed": ("Foley: a knife sawing fast through thick hemp rope for a few "
+                      "strokes, the rope snapping loose and dropping, then a short "
+                      "relieved gasp. Close, dry, no music", 1.2, 0.65),
+    "quarry_gone": ("A figure fleeing through a forest: fast running footsteps crashing "
+                    "through undergrowth, snapping twigs and rustling leaves, receding "
+                    "into the distance until silent. Outdoor, no voice, no music", 2.0, 0.6),
+    "carter_down": ("Foley: a heavy body slumping against a wooden cart with a loud "
+                    "creak, wooden crates tumbling off and thudding on the ground, then "
+                    "one low grim sustained cello note. Brief, no voice", 2.0, 0.55),
 
     # Threat clocks (core/raids.gd). Heard on the map, mostly from far away:
     # a raid is something happening to a town over the horizon until it is not.
-    "raid_horn": ("A single long war horn sounding far away across hills, ominous, low, "
-                  "distant, with a faint echo, then silence", 3.0, 0.5),
-    "raid_drums": ("Distant war drums beating steadily from a camp outside town walls at "
-                   "night, low and menacing, with faint crackling fires, a few beats then "
-                   "fading", 3.5, 0.5),
-    "raid_bell": ("A church alarm bell in a town square ringing urgently and fast, with "
-                  "distant shouting and panic, medieval town under attack", 3.5, 0.5),
-    "raid_lifted": ("A single warm church bell tolling once over a quiet town, then "
-                    "birdsong returning and a relieved murmur of townsfolk, calm", 3.5, 0.45),
-    "lair_dug": ("Claws and shovels digging into packed earth, rocks tumbling and dirt "
-                 "shifting underground, with a low ominous rumble, dark, brief", 2.0, 0.55),
-    "settle": ("Carpenters raising a timber frame: a mallet driving a wooden peg, a saw "
-               "stroke, a beam dropped into place, and a cheer from a few settlers, "
-               "outdoors", 3.0, 0.5),
+    "raid_horn": ("A single long low war-horn blast from far away across open hills, "
+                  "ominous and menacing, carried on the wind with a natural distant echo,"
+                  " then silence. No music, no voices", 3.0, 0.5),
+    "raid_drums": ("Distant war drums from an enemy camp at night: deep low toms beating "
+                   "a slow steady menacing rhythm, faint crackling campfires and wind, "
+                   "heard from behind town walls, fading out. No melody, no voices", 3.5, 0.5),
+    "raid_bell": ("A medieval town under attack: a church alarm bell ringing fast and "
+                  "urgently, a distant panicked crowd shouting and running feet on "
+                  "cobblestones. Chaotic, outdoor, no music, no clear words", 3.5, 0.5),
+    "raid_lifted": ("Relief after danger: a single warm church bell tolling once and "
+                    "ringing out slowly over a quiet town, then morning birdsong "
+                    "returning and a soft relieved murmur of townsfolk. Calm, outdoor, no"
+                    " music, no clear words", 3.5, 0.45),
+    "lair_dug": ("Monsters digging in underground: claws scraping and shovels biting into"
+                 " packed earth, rocks tumbling and loose dirt shifting, a low ominous "
+                 "subterranean rumble underneath. Dark and muffled, no voices, no music", 2.0, 0.55),
+    "settle": ("Building a settlement: a wooden mallet driving a peg into timber, one "
+               "hand-saw stroke, a heavy wooden beam dropping into place with a solid "
+               "thud, then a short cheer from a small group of settlers. Outdoor, no "
+               "music", 3.0, 0.5),
 
     # The board. Taking a job already had `quest` (the parchment and the horn);
     # a bought rumour was borrowing it, and is a coin and a whisper instead.
-    "rumour_bought": ("A coin slid across a wooden tavern table and a hushed conspiratorial "
-                      "murmur of a man's voice leaning in close, wordless, tavern "
-                      "ambience, brief", 1.8, 0.55),
+    "rumour_bought": ("Tavern foley: a single coin slid across a rough wooden table, then"
+                      " a hushed low whisper leaning in close, conspiratorial and "
+                      "unintelligible, over quiet tavern chatter and a mug set down. No "
+                      "music, no clear words", 1.8, 0.55),
 }
 
 # Wordless voice stingers, three takes per archetype (core/barks.gd picks one at
