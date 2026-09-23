@@ -8487,3 +8487,44 @@ the whole script — and a test script that never compiles never reaches
 - Nothing on the card is clickable except the ✕ — no targeting, no selection.
   A card that could change the fight would need every guard the action bar has.
 - Nothing on the card is clickable except the ✕ and the chips' tooltips.
+
+## Traits — who a hero is, and what the road has done to them (2026-09-23, #176, design note)
+
+**Nothing here is built.** Issue #176 asks for character traits that a hero
+starts with and that events give them, and the owner's pointer is Crusader
+Kings: buffs and debuffs keyed on where a fight is, on the element a blow
+carries, on the kind of thing across the board. The design is
+`docs/superpowers/specs/2026-09-23-traits-design.md`. Traits live on the
+character (`ch.traits`, through `CharacterSave`) because a hero carries them
+across the barracks, presets and co-op. They come in five families:
+personality in opposed pairs, origin, marks, banes and wounds. Each trait is a
+row in `data/traits.json` with a small closed `when`/`gives` vocabulary and a
+cap of ±2 on any one roll. It does most of its work through hooks that
+already exist:
+- the potion path in `Adapter.to_combatant` for anything known at fight start
+  (biome, board, night, band);
+- the four places `PartyOpinion` already reaches into `core/combat.gd` for
+  anything decided per roll (foe faction or type, damage type in or out,
+  bloodied);
+- `Campaign.skill_bonus` on the road;
+- `PartyOpinion.baseline()` for CK's opinion from shared and opposed traits.
+
+Surveying the hooks turned up three facts:
+- **A hero's own resistances never reach the fight.** `to_combatant` never
+  copies `sheet.resistances` / `immunities` into the Combatant, although
+  `from_monster` does this for monsters. A dwarf's poison resistance shows on
+  the profile page and does nothing in combat. This is step 0 of the spec's
+  build order.
+- **The odds chip is incomplete.** `Combat.hit_chance` leaves out
+  `bonus_to_hit` and the bicker penalty, so the odds chip already disagrees
+  with the roll.
+- **The fight result does not credit anyone.** It knows which monsters died
+  but not who killed them, and who went down but not what put them there. An
+  earned trait needs both.
+
+### Still open
+
+- Everything; the spec's §9 is the build order and §10 the six questions to
+  answer before step 1 (what the screen calls them — the combat card's
+  "Traits" row is taken; picked or rolled at creation; whether a mark can be
+  refused; stress; heroes in old saves; bond traits after a death).
