@@ -357,8 +357,12 @@ Overlayable files: `classes.json`, `subclasses.json`, `species.json`,
 `armor.json`, `magic-items.json`, `spells.json`, `conditions.json`,
 `monsters.json`, `bestiary.json`, `skills.json`, and the four mechanics files
 of §5.1: `effects/spells.json`, `effects/potions.json`, `effects/features.json`,
-`effects/conditions.json`. A key that is not one of them is a typo and is
-reported as one.
+`effects/conditions.json`, and the two the inns' hirelings are rolled from:
+`recruit-names.json` (`{"id": "<species id>", "names": [...]}` — a pack's new
+species gets its own names this way, or falls back to the `default` record)
+and `recruit-kits.json` (`{"id": "<class id>", "kits": [{"ability": "str",
+"items": ["longsword", "shield", "chain-mail"]}]}` — any item the class cannot
+use is skipped). A key that is not one of them is a typo and is reported as one.
 
 Copy the shape of an existing record — `data/SCHEMA.md` documents the export,
 and `content/ashen-road/monsters.json` is a two-entry worked example. A

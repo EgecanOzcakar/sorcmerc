@@ -33,6 +33,9 @@ const RelationsWeb = preload("res://scenes/party/relations_web.gd")
 const Callings = preload("res://core/callings.gd")
 const Traits = preload("res://core/traits.gd")
 const TraitOffer = preload("res://scenes/party/trait_offer.gd")
+# Whether this company still makes people, or only hires them (a run started
+# since hiring pools: the founder is the one hero ever made).
+const Recruits = preload("res://core/recruits.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_EDGE := Icons.COL_EDGE
@@ -54,6 +57,7 @@ var _selected := ""                       # roster id armed for a slot click
 # travel decision, and travel is what you are doing out there.
 var roster_locked := false
 var locked_note := "Benching and recruiting happen at an inn."
+const HIRED_NOTE := "The rest of the company is hired at an inn."
 
 # Whoever opens this screen as an overlay names the way out and it is drawn
 # here, top-right — the same corner the profile's and creator's own Back
@@ -118,7 +122,7 @@ func _ready() -> void:
 	_create_btn.text = "Create new"
 	_create_btn.theme_type_variation = "Primary"
 	_create_btn.pressed.connect(func():
-		if roster_locked:
+		if roster_locked or (Recruits.hire_only(party) and not party.roster.is_empty()):
 			return
 		_on_create_new())
 	cols.add_child(_column("Roster", _roster_col, 1.4, _create_btn))   # #102: the button lives with the list it adds to
@@ -443,7 +447,8 @@ func _refresh() -> void:
 	# party follows, in marching order, the same four as the column on the right.
 	var benched: Array = party.roster.filter(func(ch): return not party.is_active(ch.id))
 	_roster_col.add_child(_group_head("On the bench", benched.size(),
-		"Nobody on the bench. A new face is recruited at an inn, or made with Create new."))
+		"Nobody on the bench. A new face is hired at an inn." if Recruits.hire_only(party)
+			else "Nobody on the bench. A new face is recruited at an inn, or made with Create new."))
 	for ch in benched:
 		_roster_col.add_child(_card(party.summary(ch.id)))
 	_roster_col.add_child(_group_head("Marching", party.active.size(), ""))
@@ -473,10 +478,17 @@ func _refresh() -> void:
 			parts.append(Icons.item_bb(id, "%s ×%d" % [nm, int(e["quantity"])]))
 		_stash.text = "[color=%s]Stash:[/color] %s" % [Icons.COL_BODY.to_html(false), ", ".join(parts)]
 
+	# A hiring company makes exactly one hero, the founder, and only while the
+	# roster is empty — every face after that is hired at an inn. The greyed
+	# button says so on its tooltip, never a silent grey; the founding itself
+	# gets the hint line.
+	var founded: bool = Recruits.hire_only(party) and not party.roster.is_empty()
 	if _create_btn != null:
-		_create_btn.disabled = roster_locked
-		_create_btn.tooltip_text = locked_note if roster_locked else ""
-	if roster_locked:
+		_create_btn.disabled = roster_locked or founded
+		_create_btn.tooltip_text = locked_note if roster_locked else (HIRED_NOTE if founded else "")
+	if Recruits.hire_only(party) and party.roster.is_empty():
+		_hint.text = "Make the one who founds the company. Everyone after them is hired at an inn once you are on the road."
+	elif roster_locked:
 		_hint.text = "%s  Marching order, standing orders and the map figure still change here." % locked_note
 	elif _selected == "":
 		_hint.text = "Click anyone marching to bench them.  Or pick up a roster member, then click a slot to place or swap them."

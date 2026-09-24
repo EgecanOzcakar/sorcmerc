@@ -46,6 +46,7 @@
 #     "callings": {"ilsa": {"id": "acolyte", "target_kind": "landmark", ...}}  // Callings.to_dict
 #     "downtime": {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}  // Downtime.to_dict
 #     "lodge": {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, ...}  // Lodge.to_dict; {} until bought
+#     "hiring": {"rule": "hire", "taken": {"riverhold": {"period": 3, "slots": [0]}}}  // Recruits.to_dict; {} = grandfathered
 #   },
 #   "story": {                        // M7: the content pack's story, mid-telling.
 #     "pack": "ashen-road",           //   {} on every run with no story on it.
@@ -68,6 +69,7 @@ const PartyOpinion = preload("res://core/party_opinion.gd")
 const Callings = preload("res://core/callings.gd")
 const Downtime = preload("res://core/downtime.gd")
 const Lodge = preload("res://core/lodge.gd")
+const Recruits = preload("res://core/recruits.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-world"
@@ -367,6 +369,7 @@ static func _party_dict(party) -> Dictionary:
 		"callings": Callings.to_dict(party),
 		"downtime": Downtime.to_dict(party),
 		"lodge": Lodge.to_dict(party),
+		"hiring": Recruits.to_dict(party),
 	}
 
 static func _party_from(pd: Dictionary):
@@ -395,6 +398,7 @@ static func _party_from(pd: Dictionary):
 	Callings.from_dict(party, pd.get("callings", {}))
 	Downtime.from_dict(party, pd.get("downtime", {}))
 	Lodge.from_dict(party, pd.get("lodge", {}))
+	Recruits.from_dict(party, pd.get("hiring", {}))   # no key: a run from before hiring, grandfathered
 	return party
 
 # JSON gives every number back as a float; quest counters are compared as ints.

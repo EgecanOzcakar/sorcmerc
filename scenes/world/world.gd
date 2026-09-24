@@ -93,6 +93,8 @@ const Ladder = preload("res://core/ladder.gd")
 const Callings = preload("res://core/callings.gd")
 const Downtime = preload("res://core/downtime.gd")
 const Lodge = preload("res://core/lodge.gd")   # the company's house: the square's door, the lodge page
+const Recruits = preload("res://core/recruits.gd")   # who is looking for work at the inn, and the fee
+const ChoicePick = preload("res://core/rules/choice_pick.gd")   # humanize(), for a hireling's species and class
 const Catalog = preload("res://core/rules/catalog.gd")   # the trainer's feat names
 const Posting = preload("res://core/quest_posting.gd")
 const Contracts = preload("res://core/contracts.gd")
@@ -4030,6 +4032,11 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 	var cost := Visit.inn_cost(s, party)
 	inn_btn.text = (("Inn.  On the house." if cost == 0 else "Inn.  A night is %d ◉" % cost) if wait <= 0.0
 		else "Inn.  Rested recently, a room does nothing for %s yet" % _hours(wait))
+	# The door has to say there are people behind it: on a new run the inn is
+	# the only place the company grows (core/recruits.gd).
+	var looking: int = Recruits.offers(s, world, party).size()
+	if looking > 0:
+		inn_btn.text += ",  %d looking for work" % looking
 	inn_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	inn_btn.pressed.connect(_goto_page.bind("inn"))
 	places.add_child(inn_btn)
@@ -4317,7 +4324,8 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	manage.pressed.connect(func(): _open_party(true))
 	box.add_child(manage)
 	if party.roster.size() <= Party.MAX_ACTIVE:
-		_note(box, "Everyone you have is marching. New faces are made here too.")
+		_note(box, "Everyone you have is marching. New faces are hired here, from whoever is looking for work." if Recruits.hire_only(party)
+			else "Everyone you have is marching. New faces are made here too, or hired from whoever is looking for work.")
 
 	var wait: float = Visit.long_rest_in(party, world)
 	var rest_btn := Button.new()
@@ -4348,6 +4356,7 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(INN_LIST_H)))
 	box.add_child(scroll)
 	var list: VBoxContainer = scroll.get_child(0)   # `rows` is the party-status list above
+	_hiring_rows(list, s)
 	_section(list, "Downtime")
 	_downtime_rows(list, s)
 	var leads: Array = Rumors.offers(s, world)
@@ -4359,6 +4368,58 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 			false, null, String(lead.get("where", "")))
 
 const INN_LIST_H := 300.0
+
+# --- Looking for work (core/recruits.gd): today's common room ----------------
+# One row per chair: who they are in a line, what they are like under it, and
+# the fee on the button. A row the company cannot take says why in its second
+# line — the roster is full for a company of this name, or the purse is short —
+# rather than greying a button and leaving the player to guess.
+func _hiring_rows(rows: VBoxContainer, s) -> void:
+	_section(rows, "Looking for work")
+	var offers: Array = Recruits.offers(s, world, party)
+	if offers.is_empty():
+		_note(rows, "Nobody here will sign with a company this town will not deal with." if FactionOpinion.refuses_trade(s.faction)
+			else "Nobody else here is looking for work today.")
+		return
+	for offer in offers:
+		var ch = Recruits.build(offer)
+		if ch == null:
+			continue
+		var why: String = Recruits.why_not(party, offer)
+		var what := "%s, %s %s %d%s" % [ch.cname, ChoicePick.humanize(ch.species_id).to_lower(),
+			ChoicePick.humanize(ch.class_id()).to_lower(), ch.level(), "  (a veteran)" if String(offer["veteran"]) != "" else ""]
+		var traits: Array = Traits.ids(ch).map(func(t): return Traits.name_of(t).to_lower())
+		var sub := why if why != "" else "%s background%s" % [ChoicePick.humanize(ch.background_id),
+			", " + ", ".join(traits) if not traits.is_empty() else ""]
+		_trade_row(rows, what, "Take them on (%d ◉)" % int(offer["fee"]), _open_settle_in.bind(s, offer),
+			why != "", null, sub)
+
+# The settle-in page (scenes/creator/levelup.gd's recruit mode): the choices the
+# hire leaves to the company, then the fee. It sits where the party screen does
+# over the counter — in _party_overlay, so Esc and every "is something up"
+# guard already treat it as the full-screen page it is — and Cancel hires nobody.
+func _open_settle_in(s, offer: Dictionary) -> void:
+	if _party_overlay != null or spectator:
+		return
+	var ch = Recruits.build(offer)
+	if ch == null:
+		_say("They have gone.")
+		_build_visit_panel()
+		return
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	_party_overlay = overlay
+	var page = load(LEVELUP_SCENE).instantiate()
+	overlay.add_child(page)
+	page.hire_check = func() -> String: return Recruits.hire(party, world, s, offer, ch)
+	page.set_recruit(ch, int(offer["fee"]))
+	page.finished.connect(func(hired: bool):
+		_close_party()
+		if hired:
+			_say("%s signs on, for %d ◉." % [ch.cname, int(offer["fee"])])
+			_autosave()
+		_build_visit_panel())
 
 # --- Downtime (core/downtime.gd): the rows in town that take days ------------
 # The trainer, the night out, the game, and at a city the pit. The purse, the

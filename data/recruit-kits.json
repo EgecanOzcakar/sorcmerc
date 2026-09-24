@@ -1,0 +1,59 @@
+[
+  {"id": "barbarian", "kits": [
+    {"ability": "str", "items": ["greataxe", "handaxe"]},
+    {"ability": "str", "items": ["greatsword", "javelin"]},
+    {"ability": "str", "items": ["battleaxe", "shield", "javelin"]}
+  ]},
+  {"id": "bard", "kits": [
+    {"ability": "dex", "items": ["rapier", "dagger", "leather"]},
+    {"ability": "dex", "items": ["shortsword", "hand-crossbow", "leather"]}
+  ]},
+  {"id": "cleric", "kits": [
+    {"ability": "str", "items": ["mace", "shield", "chain-shirt"]},
+    {"ability": "str", "items": ["spear", "shield", "scale-mail"]},
+    {"ability": "dex", "items": ["light-crossbow", "mace", "chain-shirt"]}
+  ]},
+  {"id": "druid", "kits": [
+    {"ability": "str", "items": ["quarterstaff", "sling", "leather"]},
+    {"ability": "dex", "items": ["scimitar", "shield", "leather"]},
+    {"ability": "str", "items": ["spear", "shield", "hide"]}
+  ]},
+  {"id": "fighter", "kits": [
+    {"ability": "str", "items": ["longsword", "shield", "chain-mail"]},
+    {"ability": "str", "items": ["greatsword", "javelin", "chain-mail"]},
+    {"ability": "str", "items": ["warhammer", "shield", "chain-mail"]},
+    {"ability": "dex", "items": ["longbow", "shortsword", "studded-leather"]},
+    {"ability": "dex", "items": ["rapier", "shield", "studded-leather"]}
+  ]},
+  {"id": "monk", "kits": [
+    {"ability": "dex", "items": ["quarterstaff", "dart"]},
+    {"ability": "dex", "items": ["shortsword", "sling"]}
+  ]},
+  {"id": "paladin", "kits": [
+    {"ability": "str", "items": ["longsword", "shield", "chain-mail"]},
+    {"ability": "str", "items": ["greatsword", "javelin", "chain-mail"]},
+    {"ability": "str", "items": ["warhammer", "shield", "chain-mail"]}
+  ]},
+  {"id": "ranger", "kits": [
+    {"ability": "dex", "items": ["longbow", "shortsword", "studded-leather"]},
+    {"ability": "dex", "items": ["scimitar", "shortbow", "studded-leather"]},
+    {"ability": "str", "items": ["longsword", "shield", "scale-mail"]}
+  ]},
+  {"id": "rogue", "kits": [
+    {"ability": "dex", "items": ["rapier", "shortbow", "studded-leather"]},
+    {"ability": "dex", "items": ["shortsword", "hand-crossbow", "leather"]},
+    {"ability": "dex", "items": ["dagger", "shortbow", "studded-leather"]}
+  ]},
+  {"id": "sorcerer", "kits": [
+    {"ability": "dex", "items": ["dagger", "light-crossbow"]},
+    {"ability": "str", "items": ["quarterstaff", "dart"]}
+  ]},
+  {"id": "warlock", "kits": [
+    {"ability": "dex", "items": ["dagger", "light-crossbow", "leather"]},
+    {"ability": "str", "items": ["quarterstaff", "sling", "leather"]}
+  ]},
+  {"id": "wizard", "kits": [
+    {"ability": "dex", "items": ["dagger", "light-crossbow"]},
+    {"ability": "str", "items": ["quarterstaff", "sling"]}
+  ]}
+]

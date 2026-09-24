@@ -1315,6 +1315,8 @@
       "fighting-styles.json",
       "magic-items.json",
       "monsters.json",
+      "recruit-kits.json",
+      "recruit-names.json",
       "skills.json",
       "species.json",
       "spells.json",

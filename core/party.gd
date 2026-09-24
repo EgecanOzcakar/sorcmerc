@@ -59,6 +59,12 @@ var downtime: Dictionary = {}
 # strongroom's gold, the garden's and the map room's clocks. {} until bought.
 # Owned entirely by core/lodge.gd.
 var lodge: Dictionary = {}
+# How this company takes people on — {"rule": "hire"} for a run started since
+# hiring pools (only the founder is ever made; everyone else is hired at an
+# inn), {} for a save from before them (Create new still works, and the inns'
+# pools too), plus which chairs were taken today. Owned entirely by
+# core/recruits.gd.
+var hiring: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 
