@@ -104,7 +104,7 @@ const OUTCOMES := {
 		"btn": "Back to the map"},
 	"withdrawn": {
 		"head": "You back out.",
-		"sub": "It is still down there, and it knows the way you came in.",
+		"sub": "It is still down there. By the time you come back, the rooms behind you will have filled in again.",
 		"btn": "Back to the map"},
 	"wiped": {
 		"head": "The party goes down in the dark.",

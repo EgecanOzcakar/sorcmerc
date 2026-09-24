@@ -89,14 +89,18 @@ static func loot(lair, now := -1.0) -> Dictionary:
 # --- D1: a disturbed lair does not wait for you -----------------------------
 #
 # Kicking the door starts a clock. Withdraw from a half-cleared warren and you
-# have a day or two to come back and finish it; leave it longer and it resolves
-# without you — either somebody else got there, or whatever lived in it packed
-# up and moved on now that it is known.
+# have a day or two to come back and try it again; leave it longer and it
+# resolves without you — either somebody else got there, or whatever lived in
+# it packed up and moved on now that it is known.
 #
 # The point is that withdrawing costs something other than time. Without this,
 # "back out and come back at full strength" is free and strictly correct, which
-# makes the press-on-or-get-out decision D1 is built around a fake one. With it,
-# retreating is a real trade: your party's hit points against the lair itself.
+# makes the press-on-or-get-out decision D1 is built around a fake one. Since
+# the design audit (§3.3, 2026-09-24) it costs more than the clock: coming back
+# starts at the mouth again, the rooms fought through filled in and the whole
+# lair priced for a rested party (core/site.gd's for_lair). So the window is
+# now "how long you have to try it again from the top", and a party that walks
+# out trades its progress, not only its time, for its hit points.
 #
 # It is deliberately NOT a punishment for losing. A wipe resets the lair and
 # leaves it standing (core/site.gd's wipe_penalty) — you can always go back and
@@ -170,6 +174,7 @@ static func respawn(world, now: float) -> Array:
 		l.looted = false
 		l.cleared_at = -1.0
 		l.depth_cleared = 0       # a fresh interior, not the one they fought through
+		l.caches_taken = []       # ...with its own coin in it
 		l.entered_at = -1.0       # ...guarded by something that has not met them
 		l.resolved_as = ""
 		l.raid_at = now           # raids: something new moved in, with its own patience

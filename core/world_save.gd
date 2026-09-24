@@ -203,7 +203,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 			"id": l.id, "sname": l.sname, "position": _v(l.position),
 			"faction": l.faction, "discovered": l.discovered, "looted": l.looted,
 			"cleared_at": l.cleared_at,
-			"depth_cleared": l.depth_cleared,
+			"depth_cleared": l.depth_cleared, "caches_taken": l.caches_taken.duplicate(),
 			"entered_at": l.entered_at, "resolved_as": l.resolved_as,
 			"raid_at": l.raid_at, "raids": l.raids, "raid_band": l.raid_band,
 			"spawned_from": l.spawned_from,
@@ -293,7 +293,9 @@ static func from_dict(d: Dictionary):
 			String(ld.get("faction", "goblinoid")), String(ld.get("sname", "")))
 		l.discovered = bool(ld.get("discovered", false))
 		l.looted = bool(ld.get("looted", false))
-		l.depth_cleared = int(ld.get("depth_cleared", 0))   # D1; an old save just starts at the mouth
+		l.depth_cleared = int(ld.get("depth_cleared", 0))   # D1; a record only — every entry starts at the mouth
+		for k in ld.get("caches_taken", []):               # an old save: no cache emptied yet
+			l.caches_taken.append(String(k))
 		l.entered_at = float(ld.get("entered_at", -1.0))    # ...and has never been disturbed
 		l.resolved_as = String(ld.get("resolved_as", ""))
 		# An old save spent its lairs before the respawn rule existed; -1 leaves

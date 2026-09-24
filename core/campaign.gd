@@ -1069,6 +1069,18 @@ const MAGIC_BASE := 25
 const MAGIC_EXPONENT := 4
 const RARITY_TIERS := ["common", "uncommon", "rare", "very-rare", "legendary"]
 const VARIES_TIER := 2        # "varies" items (no single rarity) price as rare
+# Items whose catalog rarity says nothing about the one the game hands out,
+# priced flat. The SRD files healing, greater, superior and supreme under one
+# "potions-of-healing" heading with rarity "varies", so VARIES_TIER priced it
+# as rare — 2,025 ◉ for the 2d4+2 potion data/effects/potions.json actually
+# pours, which made the lodge's herb garden (core/lodge.gd's GARDEN_POTION) a
+# money printer and the alchemist's cheapest cure dearer than a month at the
+# inn (the design audit, docs/audit-game-design.md §1.4). 50 ◉ is the 2024
+# PHB's price for a Potion of Healing, the grade this game grants. Checked
+# before anything else, so a flat price wins over costGp and rarity alike.
+const PRICE_OVERRIDE := {
+	"potions-of-healing": 50,
+}
 
 static func item_data(item_id: String) -> Dictionary:
 	for file in ["weapons.json", "armor.json", "magic-items.json"]:
@@ -1089,6 +1101,8 @@ static func item_name(item_id: String) -> String:
 
 # 0 = not tradeable (artifacts, and anything the catalog has never heard of).
 static func item_price(item_id: String) -> int:
+	if PRICE_OVERRIDE.has(item_id):
+		return int(PRICE_OVERRIDE[item_id])
 	var d := item_data(item_id)
 	if d.has("costGp"):
 		return maxi(1, int(round(float(d["costGp"]))))
