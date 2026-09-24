@@ -307,6 +307,11 @@ var _halted_on_arrival := false
 var _approach_foe = null
 var _approach_card: Control = null
 var _slipped := {}
+# The band the player clicked on and is marching to meet (see _seek()), and the
+# point the march was last aimed at — the order is the player's only while the
+# party's destination is still that point. "" when nobody is being sought.
+var _meet_id := ""
+var _meet_aim := Vector2.INF
 var _pace_btn: Button
 var _bottom_bar: HBoxContainer       # the road actions and their messages; _layout_minimap seats it
 var _site_screen: Control = null     # ...and the descent screen drawing it
@@ -549,6 +554,7 @@ func _process(delta: float) -> void:
 	var p0 := world.player()
 	if p0 != null:
 		world.reveal(p0.position)   # T9x fog of war: permanent once seen
+		_follow_meet(p0, dt)        # before the arrival halt, which would pause the clock under it
 		_check_arrival(p0)
 		# D3: the marching order IS the speed, re-read every frame so changing
 		# it on the party screen takes effect the moment you back out.
@@ -1481,10 +1487,13 @@ func _check_encounter(dt := 0.0) -> void:
 			continue
 		# A hostile band (raiders, monsters — WorldAI.is_hostile() makes every
 		# monster faction hostile to the player unconditionally) gets the
-		# fight/parley/ambush card; a civilized one that ISN'T hostile — a
-		# faction patrol, most often — used to be skipped here entirely and
-		# could never be met at all. It now gets the same card with the
-		# friendly-only ways (T9z).
+		# fight/parley/ambush card the moment it closes: it came for you, and
+		# the card is how you answer. A band that ISN'T hostile — a faction
+		# patrol, most often — is never met by bumping into it. It used to be:
+		# T9z gave it the friendly-only card and opened it on contact, so a
+		# party marching past a patrol on the road was stopped to be asked
+		# whether it wanted to stop. Now it is met only when the player clicks
+		# it (_seek() below); standing next to one does nothing.
 		var hostile: bool = WorldAI.is_hostile(q, p)
 		var near: bool = q.position.distance_to(p.position) <= reach
 		# A band already slipped past stays slipped until it is genuinely out of
@@ -1494,13 +1503,107 @@ func _check_encounter(dt := 0.0) -> void:
 			if not near:
 				_slipped.erase(q.id)
 			continue
+		if not hostile:
+			continue   # met by clicking it, never by standing next to it
 		if WorldAI.in_truce(q, world.clock.elapsed):
 			continue   # met and parted without blood: they want nothing from you for a while
 		if near:
-			if hostile and world.clock.is_night() and not _night_jump(q):
-				return
-			_open_approach(q, hostile)
+			_meet(q, hostile)
 			return
+
+# The card, or — for a hostile band in the dark — whatever the watch makes of it.
+func _meet(q, hostile: bool) -> void:
+	if hostile and world.clock.is_night() and not _night_jump(q):
+		return
+	_open_approach(q, hostile)
+
+# --- meeting a band on purpose ------------------------------------------
+#
+# A click on a band's figure is an order to go and meet it: the party marches at
+# it, follows it if it moves, and the approach card opens when the two are in
+# reach — at once if they already are. It is the only way to meet a band that
+# is not hostile, and for a hostile one it overrides the two things that
+# otherwise keep a card shut (a slip or parley's truce, and _slipped): asking
+# for a meeting by name is asking. A click on the ground calls it off, and so
+# does anything else that sends the party somewhere (_follow_meet() checks).
+
+# The band whose figure is under screen point `sp`, or null. Only the bands the
+# map is drawing (Party3D hides the rest under the fog), and the nearest when
+# two figures overlap.
+func _band_at(sp: Vector2):
+	var p := world.player()
+	var best = null
+	var best_d := INF
+	var h: float = Party3D.TARGET_HEIGHT * ISO_GAIN * _zoom
+	for q in world.parties:
+		if q == p or q.is_player or not world.band_seen(q.position):
+			continue
+		var at := _pix(q.position)
+		if _in_model_box(sp, at, h):
+			var d := sp.distance_to(at)
+			if d < best_d:
+				best = q; best_d = d
+	return best
+
+func _seek(band) -> void:
+	var p := world.player()
+	if p == null or band == null or _combat != null or _approach_card != null:
+		return
+	_slipped.erase(band.id)
+	if band.position.distance_to(p.position) <= ENCOUNTER_RADIUS:
+		_met_sought(p, band)
+		return
+	_meet_id = band.id
+	_aim_meet(p, band)
+	_camp_msg.text = MEET_MSG % band.id.capitalize()
+
+# The HUD line an errand puts up, and takes down again when it ends however it
+# ends — met, called off, or lost in the fog — so it never outlives the march.
+const MEET_MSG := "Marching to meet %s. Click the ground to call it off."
+func _drop_meet() -> void:
+	if _meet_id != "" and _camp_msg != null and _camp_msg.text == MEET_MSG % _meet_id.capitalize():
+		_camp_msg.text = ""
+	_meet_id = ""
+
+func _aim_meet(p, band) -> void:
+	world.set_goal(p, band.position)
+	_meet_aim = _destination(p)
+
+# Where the party is ultimately going: the last corner of a routed march, or
+# the goal of a straight one.
+static func _destination(p) -> Vector2:
+	return p.route[-1] if not p.route.is_empty() else p.goal
+
+# One frame of the march: drop the order if the band is gone, out of sight, or
+# the party has been sent somewhere else; meet it if it is in reach; otherwise
+# re-aim at it once it has drifted far enough to matter (set_goal routes round
+# water, which is not a thing to do every frame).
+func _follow_meet(p, dt: float) -> void:
+	if _meet_id == "" or _combat != null or _approach_card != null or world.clock.is_paused():
+		return
+	var band = null
+	for q in world.parties:
+		if q.id == _meet_id:
+			band = q
+			break
+	if band == null or not world.band_seen(band.position) or _destination(p) != _meet_aim:
+		_drop_meet()
+		return
+	if band.position.distance_to(p.position) <= _trigger(dt):
+		_met_sought(p, band)
+		return
+	if band.position.distance_to(_meet_aim) > ENCOUNTER_RADIUS * 0.5:
+		_aim_meet(p, band)
+
+# The party got where it was going, so it stops there the way #70 stops any
+# arrival — a meeting that ends without a fight hands back a halted map
+# (_on_approach_reported), not one that runs on with nobody giving orders.
+func _met_sought(p, band) -> void:
+	_drop_meet()
+	world.set_goal(p, p.position)
+	_halted_on_arrival = true
+	_was_travelling = false
+	_meet(band, WorldAI.is_hostile(band, p))
 
 # #85: in the dark a hostile band is on the party before anyone can choose how
 # to meet it — unless someone on watch hears them coming. The same check and the
@@ -2821,7 +2924,10 @@ func _on_approach_reported(foe, r: Dictionary) -> void:
 		# the moment you step out of reach.
 		_slipped[foe.id] = true
 		WorldAI.truce(foe, world.player(), world.clock.elapsed)
-		world.clock.resume()
+		if _halted_on_arrival:
+			_halt()   # a band the party walked up to on purpose: it arrived, and waits for orders
+		else:
+			world.clock.resume()
 		return
 	await _launch_combat(foe, bool(r.get("scouted_ahead", false)),
 		bool(r.get("forced_ambush", false)), _jumped_for(r))
@@ -5096,6 +5202,9 @@ func _gui_input(e: InputEvent) -> void:
 		elif e.button_mask & MOUSE_BUTTON_MASK_RIGHT:
 			pan_by(e.relative)
 			queue_redraw()
+		elif not spectator:
+			# A band's figure is a thing to click (_seek), so it says so.
+			mouse_default_cursor_shape = CURSOR_POINTING_HAND if _band_at(e.position) != null else CURSOR_ARROW
 	elif e is InputEventMouseButton and e.pressed:
 		if e.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and _wheel_over_ui():
 			return
@@ -5105,7 +5214,11 @@ func _gui_input(e: InputEvent) -> void:
 			zoom_at(e.position, 1.0 / 1.1)
 		elif e.button_index == MOUSE_BUTTON_LEFT and not spectator:   # the guest looks; the host orders
 			var p := world.player()
-			if p != null:
+			var band = _band_at(e.position)
+			if band != null:
+				_seek(band)
+			elif p != null:
+				_drop_meet()
 				world.set_goal(p, _click_target(e.position))
 		queue_redraw()
 

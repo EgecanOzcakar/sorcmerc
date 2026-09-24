@@ -1,0 +1,138 @@
+# Meeting a band on purpose: a band that is not hostile is never met by
+# standing next to it, only by clicking its figure (world.gd's _seek), which
+# marches the party at it and opens the approach card on contact — or at once,
+# if it is already in reach. A hostile band still closes and forces the card.
+#   godot --headless --path . -s tests/test_world_meet.gd
+extends SceneTree
+const World = preload("res://core/world.gd")
+const WorldAI = preload("res://core/world_ai.gd")
+var _pass := 0
+var _fail := 0
+func check(cond: bool, label: String) -> void:
+	if cond: _pass += 1
+	else: _fail += 1; printerr("  FAIL: ", label)
+
+# The map by hand, the way tests/drive_world.gd steps it: a fixed tick, and a
+# road event (none should come in this few) waved away if one does.
+func step(main, n: int, until := Callable()) -> void:
+	for i in n:
+		main._process(0.1)
+		await process_frame
+		if main._event_card != null:
+			main._event_card.acknowledged.emit()
+		if until.is_valid() and until.call():
+			return
+
+func ways(main) -> Array:
+	var out: Array = []
+	for b in main._approach_card.get_children():
+		if b is Button:
+			out.append(String(b.name).get_slice("_", 2))
+	return out
+
+func _init() -> void:
+	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
+	var main = load("res://scenes/world/world.tscn").instantiate()
+	root.add_child(main)
+	for i in 10:
+		await process_frame
+	var w = main.world
+	var p = w.player()
+	# Open country, midday, nobody else on the road: only the bands placed here
+	# can be met, and no gate or night watch gets in between.
+	for q in w.parties.duplicate():
+		if q != p:
+			w.parties.erase(q)
+	var here := Vector2(3000, -3000)
+	p.position = here
+	w.set_goal(p, here)
+	main._was_travelling = false
+	var clock = w.clock
+	while clock.is_night():
+		clock.elapsed += 60.0
+	clock.resume()
+
+	# --- a friendly patrol in reach does nothing by itself ------------------
+	var patrol = w.add_party(World.RoamingParty.new("patrol-test", here + Vector2(10, 0), "human"))
+	check(not WorldAI.is_hostile(patrol, p), "setup: the patrol is not hostile")
+	patrol.speed = 0.0   # it goes only where this test puts it; a chase at equal speed is its own question
+	await step(main, 10)
+	check(main._approach_card == null, "standing next to a friendly patrol opens no card")
+	check(not clock.is_paused(), "...and does not stop the clock")
+
+	# --- clicking it when it is already in reach meets it at once ------------
+	main._seek(patrol)
+	check(main._approach_card != null, "a click on a patrol in reach opens the card at once")
+	check(main._approach_card != null and ways(main).has("greet") and ways(main).has("pass"),
+		"...the friendly card, greet or move on")
+	check(clock.is_paused(), "...and the clock stops for it")
+	main._on_approach_chosen("pass")
+	main._event_card.acknowledged.emit()
+	await process_frame
+	check(main._approach_card == null, "moving on closes the card")
+	check(clock.is_paused() and main._halted_on_arrival,
+		"...and hands back a halted map, not one that runs on with nobody giving orders")
+
+	# --- clicking it from across the field marches there and meets it -------
+	patrol.position = here + Vector2(160, 0)
+	patrol.goal = patrol.position
+	main._seek(patrol)
+	check(main._approach_card == null, "a patrol out of reach: no card yet")
+	check(main._meet_id == patrol.id, "...the party is on its way to meet it")
+	check(p.goal.distance_to(patrol.position) < 1.0, "...marching straight at it")
+	check("Marching to meet" in String(main._camp_msg.text), "...and the HUD says so")
+	await step(main, 200, func(): return main._approach_card != null)
+	check(main._approach_card != null, "walking up to the clicked patrol opens its card")
+	check(main._meet_id == "", "...and the errand is done")
+	check(not ("Marching to meet" in String(main._camp_msg.text)), "...and the HUD line with it")
+	check(p.position.distance_to(patrol.position) <= main.ENCOUNTER_RADIUS * 2.0, "...next to it")
+	main._on_approach_chosen("greet")
+	main._event_card.acknowledged.emit()
+	await process_frame
+
+	# --- it follows the patrol if the patrol moves -------------------------
+	patrol.position = p.position + Vector2(200, 0)
+	patrol.goal = patrol.position
+	main._seek(patrol)
+	patrol.position = p.position + Vector2(0, 200)
+	patrol.goal = patrol.position
+	await step(main, 2)
+	check(p.goal.distance_to(patrol.position) < 1.0 or main._approach_card != null,
+		"a patrol that moved is followed, not the ground it stood on")
+	await step(main, 200, func(): return main._approach_card != null)
+	check(main._approach_card != null, "...and met where it went")
+	if main._approach_card != null:
+		main._close_approach()
+		clock.resume()
+
+	# --- sending the party anywhere else calls it off -----------------------
+	patrol.position = p.position + Vector2(200, 0)
+	patrol.goal = patrol.position
+	main._halted_on_arrival = false
+	main._seek(patrol)
+	w.set_goal(p, p.position + Vector2(-200, 0))   # an order from somewhere other than the patrol
+	await step(main, 5)
+	check(main._meet_id == "", "a new order drops the errand")
+	patrol.position = p.position + Vector2(10, 0)
+	patrol.goal = patrol.position
+	await step(main, 5)
+	check(main._approach_card == null, "...and bumping into the patrol afterwards still opens nothing")
+
+	# --- the figure is what is clicked -------------------------------------
+	main._layout()
+	check(main._band_at(main._pix(patrol.position)) == patrol, "a click on the patrol's figure finds the patrol")
+	check(main._band_at(main._pix(patrol.position + Vector2(400, 400))) == null, "a click on open ground finds no band")
+
+	# --- a hostile band still closes and forces the card -------------------
+	w.parties.erase(patrol)
+	var gobs = w.add_party(World.RoamingParty.new("gobs-test", p.position + Vector2(10, 0), "goblinoid"))
+	check(WorldAI.is_hostile(gobs, p), "setup: goblinoids are hostile")
+	clock.resume()
+	await step(main, 3, func(): return main._approach_card != null)
+	check(main._approach_card != null, "a hostile band in reach still opens the card by itself")
+	check(main._approach_card != null and ways(main).has("engage"), "...the hostile one")
+	main._close_approach()
+
+	main.queue_free()
+	print("test_world_meet: %d passed, %d failed" % [_pass, _fail])
+	quit(1 if _fail > 0 else 0)

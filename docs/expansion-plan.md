@@ -10359,3 +10359,48 @@ holding its width against 200 words, every bar button carrying a card. Proof:
   That wants the feature prose SCHEMA gap #4 is waiting on.
 - The floating damage numbers over a token still use the one gold band. They
   could wear the damage type's colour, but `_spawn_float` isn't handed the type.
+
+## Meeting a band on purpose — a click, not a collision (2026-09-24)
+
+Any band that came within `ENCOUNTER_RADIUS` of the party opened the approach
+card, friendly or not. For a hostile band that is the point: it came for you,
+and the card is how you answer. For a faction patrol it was not. T9z gave
+friendly bands the greet/move-on card and opened it on contact, so a party
+marching past a patrol on the road was stopped to be asked whether it wanted
+to stop.
+
+**A band that isn't hostile is now met only by clicking it.**
+`_check_encounter()` skips non-hostile bands. A left click on a band's figure
+(`_band_at()`, the same model-box pick `_click_target()` uses for towns and
+lairs, over the bands the fog is drawing) calls `_seek()`. If the band is in
+reach, the card opens at once. If not, the party marches at it, and
+`_follow_meet()` re-aims when the band drifts half a radius. The card opens on
+contact. The pointer turns to a hand over a band's figure.
+
+- **A click on a hostile band works too.** It walks the party into the band,
+  past a slip's `_slipped` mark or a parley's truce. Asking for a meeting by
+  name is asking. At night the watch roll still applies (`_meet()`).
+- **Any other order cancels the errand:** a ground click, or anything else
+  that moves the party's destination off the point it was aimed at, such as a
+  gate or a halt. So does losing the band to the fog.
+- **Walking up to a band counts as arriving (#70).** The party stops there,
+  and a meeting that ends without a fight hands back a halted map, not one
+  that runs on with nobody giving orders.
+
+`tests/test_world_meet.gd` covers these cases: a patrol in reach opens nothing,
+a click meets it at once or across the field, it is followed when it moves,
+another order drops the errand, the figure is what gets picked, and a hostile
+band still forces the card. Non-visual apart from the cursor; no save field
+(the errand is transient).
+
+### Still open
+
+- Nothing on the map says a band is friendly before you click it. The cursor
+  changes over every band. A hover name plate, tinted by hostility, would say
+  what the click will do.
+- A patrol has only greet and move on to offer. Now that meeting one is a
+  choice, it could carry something worth choosing: news, a rumour, an escort.
+- A band walking away at the party's own speed can't be caught. The party
+  follows and never closes. Patrols turn at their waypoints, so this ends in
+  practice, but a meeting a player asked for could reasonably be met halfway:
+  the band pauses when it sees the party coming for it.
