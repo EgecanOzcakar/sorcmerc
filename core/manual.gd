@@ -117,9 +117,10 @@ static func _mechanics() -> Array:
 	var cap := Adapter.RANGE_CAP
 	var out: Array = []
 	out.append({"id": "turn", "section": "Fighting", "title": "Your turn",
-		"tags": ["action", "bonus action", "reaction", "movement", "economy", "dash", "disengage", "dodge", "help", "hide", "shove", "end turn"],
+		"tags": ["action", "bonus action", "reaction", "movement", "economy", "dash", "disengage", "dodge", "help", "hide", "shove", "end turn", "buff", "effects", "advantage mark", "metamagic"],
 		"body": _h("One action, one bonus action, one reaction, and your speed in movement.") +
 		"Spend them in any order. The action line under the board shows what's left; when the action, bonus and movement are all gone the turn ends itself.\n\n" +
+		"[b]What's riding on you[/b] — to the right of the buttons, one chip for each buff, condition or held spell on the hero whose bar it is: green helps, red hurts, verdigris is something you are holding up (concentration). Each chip says how long it lasts (\"3 rounds\", \"next attack\"), and hovering it says what it does. A button it changes is framed in its colour with a mark on the corner: [b]ADV[/b] or [b]DIS[/b] on an attack, [b]±[/b] where they cancel, [b]✦[/b] on the spells an armed Metamagic will ride, [b]+2d8[/b] where a Smite waits for the next hit. The list buttons (Spells ▸, Bonus actions ▸) carry the mark too when something inside them has one.\n\n" +
 		"[b]Action[/b] — Attack (every swing the Attack action buys), cast a spell, or one of the basics:\n" +
 		_list([_li("Dash", "another full move"),
 			_li("Disengage", "leave reach without provoking"),
