@@ -6,7 +6,8 @@
 
 Also the half casters' first level: the export carries the 2014 table, where a
 paladin and a ranger cast nothing until level 2. The 2024 book gives both
-Spellcasting and two 1st-level slots at level 1 (CLASS_SLOTS, CLASS_GRANT_MOVES).
+Spellcasting and two 1st-level slots at level 1 (CLASS_SLOTS, CLASS_GRANT_MOVES),
+and three sorcerer grants sit a level or more off the book (CLASS_FEATURE_MOVES).
 
 Idempotent: a feature already present is left alone, so this can be re-run
 after any future edit to confirm the tables still carry everything.
@@ -85,6 +86,20 @@ CLASS_SLOTS = {
 # {class_id: {grant type: (from level, to level)}}.
 CLASS_GRANT_MOVES = {
     "ranger": {"spellcasting": (2, 1), "spell-choice": (2, 1)},
+}
+
+# Single grants the export files on the wrong level, named by feature id or by
+# choice key. The sorcerer's are the 2024 book's: Sorcerous Restoration at 5
+# (the export had 20), Arcane Apotheosis at 20 (18), and the third pair of
+# Metamagic picks at 17 (18). Choice keys ride along unchanged.
+# {class_id: {feature id or choice key: (from level, to level)}}.
+CLASS_FEATURE_MOVES = {
+    "sorcerer": {
+        "sorcerer-sorcerous-restoration": (20, 5),
+        "sorcerer-arcane-apotheosis": (18, 20),
+        "feature-choice:class:sorcerer:4": (18, 17),
+        "feature-choice:class:sorcerer:5": (18, 17),
+    },
 }
 
 # --- subclass tiers -------------------------------------------------------
@@ -189,6 +204,17 @@ def fill_classes(classes, log):
                 continue
             log.append("%s level %d slots %s -> %s" % (cid, n, c["spellSlots"][n - 1], slots))
             c["spellSlots"][n - 1] = list(slots)
+
+    for cid, moves in CLASS_FEATURE_MOVES.items():
+        c = by_id[cid]
+        for name, (frm, to) in moves.items():
+            def named(g):
+                return g.get("key") == name or (g["type"] == "feature" and g["feature"]["id"] == name)
+            moving = [g for g in c["levels"][frm - 1] if named(g)]
+            for g in moving:
+                c["levels"][frm - 1].remove(g)
+                c["levels"][to - 1].append(g)
+                log.append("%s %s moved %d -> %d" % (cid, name, frm, to))
 
     for cid, moves in CLASS_GRANT_MOVES.items():
         c = by_id[cid]

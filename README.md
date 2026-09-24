@@ -5,7 +5,8 @@ engine, and a roguelike-style campaign layer (a generated route of fights,
 merchants, rest and treasure nodes, a boss at the end). Godot 4.7, GDScript.
 Started as a single hand-authored encounter ("The Sunken Shrine") — that
 fight still exists as the classic boss, but it's one entry in a much larger
-game now. `docs/expansion-plan.md` is the authoritative running log of what
+game now. The build log (`docs/expansion-plan.md` up to 2026-09-24, then one
+file per entry in `docs/plan/`) is the authoritative running record of what
 was built and when; this file is an orientation map, not a changelog.
 
 ## Layout
@@ -105,7 +106,8 @@ tests/             141 files, headless: one per subsystem (106 test_*.gd) plus
                    it could not reach. Plus check_scripts.gd (every .gd in the
                    project still parses) and a few dev tools (shot.gd renders a
                    frame to PNG). Run them all with tools/run_tests.sh
-docs/              docs/expansion-plan.md is the current source of truth;
+docs/              docs/expansion-plan.md + docs/plan/ are the build log and
+                   source of truth (tools/plan_log.py prints them as one);
                    modding.md is the content-pack authoring guide (worlds,
                    campaigns, data overlays, free/paid DLC); combat-design.md
                    and the docs/superpowers/specs/ hex design doc are the
@@ -347,7 +349,8 @@ repo, and `.github/workflows/tests.yml` runs it on every pull request.
 
 ## Status
 
-See `docs/expansion-plan.md` for the full, dated build log — it is the
+See the build log (`docs/expansion-plan.md`, continued one entry per file in
+`docs/plan/`; `python3 tools/plan_log.py` reads both) — it is the
 authoritative record of what exists and when it landed, kept up to date
 after every feature (this README is not re-synced per change, only on a
 health-check pass). Broad strokes as of the last such pass: character

@@ -357,8 +357,12 @@ Overlayable files: `classes.json`, `subclasses.json`, `species.json`,
 `armor.json`, `magic-items.json`, `spells.json`, `conditions.json`,
 `monsters.json`, `bestiary.json`, `skills.json`, and the four mechanics files
 of §5.1: `effects/spells.json`, `effects/potions.json`, `effects/features.json`,
-`effects/conditions.json`. A key that is not one of them is a typo and is
-reported as one.
+`effects/conditions.json`, and the two the inns' hirelings are rolled from:
+`recruit-names.json` (`{"id": "<species id>", "names": [...]}` — a pack's new
+species gets its own names this way, or falls back to the `default` record)
+and `recruit-kits.json` (`{"id": "<class id>", "kits": [{"ability": "str",
+"items": ["longsword", "shield", "chain-mail"]}]}` — any item the class cannot
+use is skipped). A key that is not one of them is a typo and is reported as one.
 
 Copy the shape of an existing record — `data/SCHEMA.md` documents the export,
 and `content/ashen-road/monsters.json` is a two-entry worked example. A
@@ -460,7 +464,7 @@ out of combat. A potion with none of `heal`, `damage`, `condition`, `status` or
 `passive_damage`, `self_buff`, `ally_buff`, `heal_self`, `heal_ally`,
 `grant_action`, `grant_verb`, `attacks_per_action`, `attack_modifier`,
 `damage_bonus`, `save_effect`, `reaction`, `save_modifier`, `survive_damage`,
-`keen_senses`, `aura`, `summon`, `font_of_magic`.
+`keen_senses`, `aura`, `summon`, `font_of_magic`, `metamagic`.
 
 ```json
 "monster-parry-2": {"label": "Parry", "kind": "reaction",
@@ -512,6 +516,13 @@ burn a level-L slot for L points (no action), or pay a `font.create` row's
   "font": {"class": "sorcerer",
            "create": [{"level": 1, "cost": 2, "min": 2}, {"level": 2, "cost": 3, "min": 3}]}}
 ```
+
+A `metamagic` button arms the caster's next spell with one `option`:
+`quickened` (an action spell costs a Bonus Action), `twinned` (one more target
+for a spell that upcasts for targets), `careful` (spares allies in the area),
+`subtle` (it cannot be Counterspelled) or `seeking` (a missed spell attack is
+rolled again). It pays `pool_cost` from its `pool`, and the points come back if
+no spell took the option by the end of the turn.
 
 `cost` is `action`, `bonus`, `reaction`, or `none` for a passive. A reaction
 must name a `trigger` the engine actually fires — `hit_by_attack`,

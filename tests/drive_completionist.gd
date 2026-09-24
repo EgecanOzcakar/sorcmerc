@@ -63,6 +63,8 @@ const Travel = preload("res://core/travel.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const Rumors = preload("res://core/rumors.gd")
 const AI = preload("res://core/ai.gd")
+const Recruits = preload("res://core/recruits.gd")
+const Leveling = preload("res://core/leveling.gd")
 
 const DT := 0.1
 const PURSE := 4000          # see the header: enough to reach every counter
@@ -111,6 +113,7 @@ const REQUIRED := {
 	"town:steal": "stealing is offered, and only once per visit",
 	"town:haggle": "haggling is offered, and is spent once asked",
 	"town:sortparty": "the inn opens the party screen",
+	"town:hire": "someone looking for work at the inn is settled in and taken on, for the fee",
 	"town:rest": "a night at the inn spends the fee, the hours, and the wounds",
 	"town:rumor": "a lead bought at the inn puts a lair on the map",
 	"town:quest-take": "a posted job can be taken, and lands in the log as active",
@@ -736,6 +739,39 @@ func _the_inn(s) -> void:
 		await _step()
 		_goto_page("inn", "Inn", "town:inn")
 
+	# The common room (core/recruits.gd): take the first one looking for work,
+	# settle them in on their page — every choice the hire left open answered
+	# with its first free option, the way a player in a hurry would — and pay.
+	var looking: Array = Recruits.offers(s, screen.world, party)
+	if looking.is_empty():
+		fail("town:hire — nobody at the inn was looking for work")
+	else:
+		var size0: int = party.roster.size()
+		var gold1: int = party.gold
+		var fee: int = int(looking[0]["fee"])
+		if _must_press("Take them on", screen._visit_panel, "on the inn page"):
+			await _step()
+			var page = screen._party_overlay.get_child(0) if screen._party_overlay != null else null
+			if page == null or not page.has_method("set_recruit"):
+				fail("town:hire — Take them on opened no settle-in page")
+			else:
+				for _i in 60:
+					if Leveling.can_finalize(page.character()):
+						break
+					var key: String = String(Leveling.pending(page.character())[0]["key"])
+					var free: Array = _buttons(page).filter(func(b): return _answers(b, key))
+					if free.is_empty():
+						break
+					free[0].pressed.emit()
+					await _step()
+				if _must_press("Take them on", page, "on the settle-in page"):
+					await _step()
+					check("town:hire", party.roster.size() == size0 + 1 and party.gold == gold1 - fee
+						and screen._party_overlay == null,
+						"roster %d -> %d, paid %d (fee %d), page %s" % [size0, party.roster.size(), gold1 - party.gold, fee,
+							"closed" if screen._party_overlay == null else "still up"])
+		_goto_page("inn", "Inn", "town:inn")
+
 	# A lead on a lair: the second way a lair gets onto the map, and the one the
 	# next chapter leans on. The rows are sorted by distance, so the first Buy
 	# is the first lead.
@@ -767,6 +803,10 @@ func _the_inn(s) -> void:
 			"healed=%s, fee %d (wanted %d), clock +%.0f (wanted %.0f)" % [healed,
 				gold0 - party.gold, Visit.inn_cost(s),
 				screen.world.clock.elapsed - clock0, Visit.LONG_REST_MINUTES])
+
+# A settle-in page's option button for choice `key` that is not picked yet.
+static func _answers(b: Button, key: String) -> bool:
+	return String(b.get_meta("choice_key", "")) == key and not String(b.text).begins_with("●")
 
 func _the_board(s) -> void:
 	if not _goto_page("board", "Notice Board", "town:board"):
@@ -863,26 +903,51 @@ func _the_road() -> void:
 
 # --- chapter 4: the lair ------------------------------------------------------
 
+# How many hidden lairs the search may try before calling it (see _the_lair).
+const SEARCH_TRIES := 3
+
 func _the_lair() -> void:
 	# Two ways a lair gets onto the map and a completionist uses both: the
 	# Survival check out in the field, and the lead bought at the inn last
 	# chapter. The search goes first, because it needs a lair nobody has named
 	# yet and the lead names one.
-	var hidden = _nearest_hidden_lair()
-	if hidden == null:
-		fail("lair:search — every lair on the %s map was already on it" % MAP)
-	elif await _walk_to(hidden.position, hidden.id):
+	#
+	# The lair can be found on the way to it: a road event (core/travel.gd's
+	# refugees and lore) names the nearest undiscovered lair, and a walk is long
+	# enough for one to fire. Arriving at a lair something else has just put on
+	# the map, the button is Enter, not Search, and pressing it walked into the
+	# warren — the search "said nothing" and the tour was left inside a delve.
+	# That is the map working, not a door failing, so the robot looks again on
+	# arrival and moves on to the next hidden lair, a few times at most. Which
+	# walk a road event lands in follows the clock, which follows how long the
+	# fights before it took: it showed up once the party autopilot started
+	# spending its whole turn and those fights got shorter.
+	var named_first := 0
+	for _try in SEARCH_TRIES:
+		var hidden = _nearest_hidden_lair()
+		if hidden == null:
+			fail("lair:search — every lair on the %s map was already on it" % MAP)
+			break
+		if not await _walk_to(hidden.position, hidden.id):
+			break
 		await _step(4)
+		if hidden.discovered:
+			named_first += 1
+			print("  lair:search — %s was put on the map on the way there; trying the next hidden lair" % hidden.id)
+			continue
 		if screen._lair_btn == null or not screen._lair_btn.visible:
 			fail("lair:search — standing on %s offers no lair button" % hidden.id)
-		else:
-			screen._lair_msg.text = ""
-			screen._lair_btn.pressed.emit()
-			await _step(2)
-			# Whether the roll lands is the dice's business. That the button
-			# rolls at all, and says what it rolled, is this file's.
-			check("lair:search", "Survival" in screen._lair_msg.text,
-				"searching %s said '%s'" % [hidden.id, screen._lair_msg.text])
+			break
+		screen._lair_msg.text = ""
+		screen._lair_btn.pressed.emit()
+		await _step(2)
+		# Whether the roll lands is the dice's business. That the button
+		# rolls at all, and says what it rolled, is this file's.
+		check("lair:search", "Survival" in screen._lair_msg.text,
+			"searching %s said '%s'" % [hidden.id, screen._lair_msg.text])
+		break
+	if named_first == SEARCH_TRIES:
+		fail("lair:search — each of %d hidden lairs was put on the map by something else before the party reached it" % SEARCH_TRIES)
 
 	var known = _nearest_known_lair()
 	if not check("lair:found", known != null,

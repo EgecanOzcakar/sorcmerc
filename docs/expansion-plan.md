@@ -10360,77 +10360,80 @@ holding its width against 200 words, every bar button carrying a card. Proof:
 - The floating damage numbers over a token still use the one gold band. They
   could wear the damage type's colour, but `_spawn_float` isn't handed the type.
 
-## Meeting a band on purpose — a click, not a collision (2026-09-24)
+## Metamagic: five of the ten, on the board (2026-09-24)
 
-Any band that came within `ENCOUNTER_RADIUS` of the party opened the approach
-card, friendly or not. For a hostile band that is the point: it came for you,
-and the card is how you answer. For a faction patrol it was not. T9z gave
-friendly bands the greet/move-on card and opened it on contact, so a party
-marching past a patrol on the road was stopped to be asked whether it wanted
-to stop.
+The second half of the sorcerer pass. The Metamagic picks at levels 2, 10 and
+17 have always been in the creator, and none of them did anything.
 
-**A band that isn't hostile is now met only by clicking it.**
-`_check_encounter()` skips non-hostile bands. A left click on a band's figure
-(`_band_at()`, the same model-box pick `_click_target()` uses for towns and
-lairs, over the bands the fog is drawing) calls `_seek()`. If the band is in
-reach, the card opens at once. If not, the party marches at it, and
-`_follow_meet()` re-aims when the band drifts half a radius. The card opens on
-contact. The pointer turns to a hand over a band's figure.
+**One button per option known, not a copy of every spell per option.** A
+Metamagic button *arms* the next spell. That is the precedent Divine Smite
+already set, a once-buff sitting beside the swing it rides on, and it keeps the
+bar at one button per option.
 
-- **A click on a hostile band works too.** It walks the party into the band,
-  past a slip's `_slipped` mark or a parley's truce. Asking for a meeting by
-  name is asking. At night the watch roll still applies (`_meet()`).
-- **Any other order cancels the errand:** a ground click, or anything else
-  that moves the party's destination off the point it was aimed at, such as a
-  gate or a halt. So does losing the band to the fog.
-- **Walking up to a band counts as arriving (#70).** The party stops there,
-  and a meeting that ends without a fight hands back a halted map, not one
-  that runs on with nobody giving orders.
+- Arming pays the sorcery points through the ordinary pool spend (`pool_cost`).
+- The next spell the option can apply to takes it (`combat._take_metamagic`).
+  A spell it can't apply to leaves it armed for the next one.
+- If it's still armed when the turn ends, the points come back
+  (`_refund_metamagic`). RAW spends them as the spell is cast, and a spell never
+  cast spent nothing.
+- Only one option is armed at a time.
 
-**A band that outruns the party is run down on a roll** (`core/world_chase.gd`,
-its own file like forage and camp). Following alone never closes on a band
-as fast as the party or faster. That covers a beast pack (1.3x), a dragon
-(1.5x), and a band walking off a truce at the party's pace. So while such a
-band is still in sight, the party's best Athletics or Survival rolls every
-`INTERVAL` (5 world-minutes). The DC is 12, +1 per 10% of speed the band has
-over the party. A hit runs it down: the map holds still under the die, then the
-card opens where it was caught. `MAX_TRIES` (3) misses and it gets away, and
-each roll says so on the HUD line. A band that gets out of sight first is lost
-("Lost sight of X"). Pace is the player's lever: a forced march outpaces
-everything short of a dragon, and then there is no roll at all. The numbers
-are taste, not a sweep, and the file's `ponytail:` says so.
+Built, at their 2024 costs:
 
-"In sight" for the chase is `band_seen()` *or* inside the party's current
-`sight_radius()`. `band_seen()` alone reads the remembered trail, whose last
-waypoint can lag `EXPLORE_STEP` (150) behind a moving party. In the first cut,
-a beast pack 137 units ahead in open daylight was "lost" before a single roll.
+| option | points | here |
+|---|---|---|
+| Quickened | 2 | An action spell costs a bonus action instead (`_cast_view`, so the bar's affordability and the spend agree). No leveled spell after it this turn, cantrip or not. |
+| Twinned | 1 | A spell that upcasts for more targets gets one more. |
+| Careful | 1 | Up to CHA-mod (min 1) allies caught in the area are spared outright. |
+| Subtle | 1 | It can't be Counterspelled. |
+| Seeking | 1 | A missed spell attack rolls its d20 again, once. |
 
-`tests/test_world_meet.gd` covers these cases:
+**The level table.** The export filed three sorcerer grants on the wrong level.
+They are fixed in `tools/fill_levels.py`'s new `CLASS_FEATURE_MOVES`, so
+`--check` keeps them applied:
 
-- a patrol in reach opens nothing
-- a click meets it at once or across the field, and it is followed when it moves
-- another order drops the errand
-- the figure is what gets picked
-- a hostile band still forces the card
-- the chase's DCs and the forced-march exemption
-- twelve fleeing beast packs, where both outcomes occur: run down, and got away
-- a band lost in the fog
+- Sorcerous Restoration: 20 → 5;
+- Arcane Apotheosis: 18 → 20;
+- the third pair of Metamagic picks: 18 → 17.
 
-Non-visual apart from the cursor and the chase's die; no save field (the
-errand and the chase are transient).
+**Balance.** The autopilot never arms Metamagic, so no sweep sees it, and
+`power.gd` prices none of it: the same state Innate Sorcery and Font of Magic
+shipped in. A player who uses it well gets more than the ruler charges. If a
+sweep that arms it ever measures above noise, price it then.
+
+`test_sorcerer` (now 81 checks) covers:
+
+- the level table;
+- arming and refunding;
+- Quickened's bonus-action cast and its leveled-spell lock;
+- Twinned's extra target, and staying armed through a spell that can't take it;
+- Careful sparing a friend in Burning Hands;
+- Subtle taken by any spell;
+- Seeking's reroll (Fire Bolt against AC 20).
+
+`test_class_abilities` presses the new buttons on its sorcerer teams
+(11,841 checks). Shot: `docs/shots/sorcerer-metamagic-bar.png`, the Bonus list
+with Careful Spell.
 
 ### Still open
 
-- Nothing on the map says a band is friendly before you click it. The cursor
-  changes over every band. A hover name plate, tinted by hostility, would say
-  what the click will do.
-- A patrol has only greet and move on to offer. Now that meeting one is a
-  choice, it could carry something worth choosing: news, a rumour, an escort.
-- The band being chased doesn't know it. `core/world_ai.gd` walks it wherever
-  it was going. A hunted band could flee outright, and a friendly patrol could
-  stop and wait for the party that is plainly coming to talk to it.
-- The fog quirk the chase works around is real on the map too. Party3D, the
-  minimap and quest marks all draw bands off `band_seen()`, so a band a hundred
-  units ahead of a moving party can blink out while it stands inside the live
-  sight circle. Folding `is_visible_now()` into `band_seen()` is the likely fix.
-  It touches every fog-gated draw, so it is its own change.
+- **Distant, Empowered, Extended, Heightened, Transmuted.** Still catalogue
+  text.
+  - Distant needs the targeting preview to read the doubled range.
+  - Heightened needs a per-target disadvantage on the first save.
+  - Empowered needs per-die rerolls.
+- **Hiding unbuilt options.** The creator still offers the five unbuilt options
+  as picks; it should grey them or say so.
+- **Sorcerous Restoration** (short-rest points at 5) and **Sorcery Incarnate**
+  (two options on one spell at 7) are still flavour.
+
+## The log continues in docs/plan/
+
+**This file takes no new entries.** From 2026-09-24 on, each entry is its own
+file in `docs/plan/` (`YYYY-MM-DD-slug.md`, the same `## Title — subtitle
+(date)` shape with a `### Still open` section). Every pull request appended to
+the end of this one file, so any two open PRs conflicted and each merge left
+the rest needing a hand-merge. `docs/plan/README.md` has the convention;
+`python3 tools/plan_log.py` prints this file and the folder as one log, oldest
+first. `tests/test_plan_entries.gd` fails on a dated section added below this
+one.

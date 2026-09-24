@@ -217,7 +217,19 @@ func test_win_rates() -> void:
 # unthemed set was 80.5% on the same sweep; downs is identical to it (same
 # roster mix, so the board is the only difference and there is none). Woods
 # (forest-clearing, forest habitat) is the easiest of the three: 92.0%.
-const BIOME_RATE := {"downs": 80.5, "woods": 92.0, "marsh": 88.5}
+#
+# RE-MEASURED 2026-09-24 when the party autopilot learned to spend its Bonus
+# Action and every swing (core/ai.gd _bonus_after / _swing_all). This test's own
+# sweep, back to back on master (0e890f4) and the branch:
+#            09-23   master   branch
+#   downs    80.5    79.5     81.5
+#   woods    92.0    88.0     88.0
+#   marsh    88.5    83.5     81.5
+# Master had already drifted off the 09-23 row (marsh by 5 of the 6 allowed),
+# so the table is retaken from the branch. The marsh's -2 against master is the
+# draw of these 200 seeds, not the autopilot: 600 fresh seeds (201-800) put it
+# at master 82.2% / branch 84.2%.
+const BIOME_RATE := {"downs": 81.5, "woods": 88.0, "marsh": 81.5}
 const BIOME_DRIFT := 6.0   # two sigma at 200 seeds and p~0.85, rounded up
 
 func test_biome_boards_hold_their_rates() -> void:

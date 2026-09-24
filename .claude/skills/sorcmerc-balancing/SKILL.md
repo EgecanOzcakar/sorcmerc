@@ -66,7 +66,7 @@ Difficulty is a product of **independent multipliers**, each answering its own q
 | Boss win rate | 15–85% | `test_scaler.gd` `BOSS_BAND` |
 | Latest measured (2026-09-24) | 96.5 / 90.0 / 79.5%, about 4 foes | `core/scaler.gd` header |
 | Fight length, level 3 | about 7–8 rounds (level 8 about 9.6) | `core/scaler.gd` header |
-| Within the party's band, easy | level 3: 96.2%; level 10: 81.2% (the ruler party); a built level-10 party: 73.3% | `core/regions.gd` header |
+| Within the party's band, easy | 93.8–100% at every level 3–15 (the ruler party, new autopilot); a built level-10 party: 73.3% (old autopilot) | `core/regions.gd` header |
 | One band too deep | level 3 in the Marches: 17.5%; in the Deeps: 2.5% | `core/regions.gd` header |
 
 - Nothing sets a target for early hit rate or for hits-to-kill. The chat's proposed targets (55–70% early hit rate, 3–5 rounds, 3–4 hits to kill) are **not** in the code. Measured fights run longer than 3–5 rounds, and the original MVP brief aimed for 6–15.
@@ -81,15 +81,17 @@ Difficulty is a product of **independent multipliers**, each answering its own q
 4. Run the sweep **back to back on master and on your branch**, and quote both columns. A number measured against an older base can credit your change with someone else's work.
 5. Prefer fixing the rule over re-tuning `TIER`: "a retune for rules that are now right would only be undone by the next rule that is."
 6. Sweep harnesses: `tests/test_scaler.gd`, `tests/sweep_tier.gd`, `tests/sweep_site_depth.gd`, `tests/sweep_built.gd`, `tests/sweep_range_detail.gd`. Set `SORCMERC_SEED` to replay one fight.
-7. Write the new measurement into the owning file's header and add an entry to `docs/expansion-plan.md`.
+7. Write the new measurement into the owning file's header and add a build-log entry: a new file in `docs/plan/` (`docs/plan/README.md`), never an append to `docs/expansion-plan.md`.
 
 ## Decided 2026-09-24 (owner's calls, not yet built)
 
 Each of these is a balance change. Build each one with a re-run sweep and quote master against the branch.
 
+- **The ruler spends its whole turn (built 2026-09-24).** The party autopilot (`core/ai.gd` `_party_auto`) swings every attack the economy holds and spends a Bonus Action wherever one is reasonable (`_bonus_after`; `tests/test_autopilot.gd`). Every sweep measures with it. Before, it wasted Extra Attack, so every level-5+ measurement read a party weaker than anyone plays and fights looked harder than their targets: level-8 hard went 58.7% → 79.3% (target 75) with no knob moved. Re-measured the same day with `sweep_regions`' in-band curve: 93.8–100% at easy from level 3 to 15, on target everywhere, so no knob moved. Quote numbers taken before 2026-09-24 as old-ruler numbers.
+
 - **Slot tables stay 2024 RAW.** Fix only the export's data gap: paladin and ranger get 2 level-1 slots, as the 2024 PHB does. This moves the level-1 and level-2 numbers for those two classes, so re-run `test_scaler`.
 - **Built: the open world stops pricing spent slots.** `WorldThreat.slot_hold()` sizes a road fight off the party **with every slot back**, as `core/site.gd` already did for sites, and wounds still thin it. Measured with `tests/sweep_spent_slots.gd` (level-3 presets, easy, 200 seeds): a party with no slots left went from 3.3 foes and 100% wins to 4.0 foes and 94.5%. At 50% HP it went from 99.5% to 90.0%. A fresh party is unchanged at 99.5%.
-- **Sorcerer features follow 2024 RAW.** Built so far: Innate Sorcery (+1 spell DC, Advantage on spell attacks, 2/long rest) and Font of Magic (slots ↔ sorcery points; made slots persist as negative `slots_used` until a long rest). `power.gd` prices neither. `tests/sweep_sorcerer.gd` measures them at about zero win-rate effect under the autopilot (level 3: 89.5 → 88.5%, level 10: 96.5 → 96.5%). Metamagic is next and needs pricing if it measures above noise.
+- **Sorcerer features follow 2024 RAW.** Built so far: Innate Sorcery (+1 spell DC, Advantage on spell attacks, 2/long rest) and Font of Magic (slots ↔ sorcery points; made slots persist as negative `slots_used` until a long rest). `power.gd` prices neither. `tests/sweep_sorcerer.gd` measures them at about zero win-rate effect under the autopilot (level 3: 89.5 → 88.5%, level 10: 96.5 → 96.5%). Metamagic (five options) is built and also unpriced; the autopilot never arms it, so no sweep sees it. Price it if a sweep that arms it measures above noise.
 - **Enemy casters: built, partly shipped.** The cult fanatic, priest and mage have real slots (`core/enemy_casters.gd`). Foes' area spells are priced against the party's size (`Power.area_targets`), and a caster's highest spell level follows the band (Heartland/Marches 2nd, Frontier 3rd, Deeps any). The ruler still misprices glass cannons (`sqrt(dpr×ehp)` plus the `ROUNDS` cap). So casters are fielded only from the Frontier tier up (the cult's lair boss: level 8 72.7 → 60.0%), and the warband roll ships at 0%. See `tests/sweep_caster.gd` and `tests/sweep_caster_boss.gd`.
 - **Armor stays 5e AC.** No damage reduction and no armor HP.
 - **Hired mercs** come with class, species, background and scores fixed; the player keeps subclass, spells and level-up choices. Recommended (not yet decided): pre-roll their scores within the creator's point-buy/standard-array budget, so a hire is never stronger than a built hero at the same level.

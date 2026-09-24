@@ -5,7 +5,7 @@ description: SorcMerc's design pillars, tone, setting, art direction and scope r
 
 # SorcMerc design bible
 
-Thin on purpose. The facts behind each line are in the files named next to it, and those files win. `docs/expansion-plan.md` is the dated record of what exists, and `README.md` is the orientation map.
+Thin on purpose. The facts behind each line are in the files named next to it, and those files win. The build log (`docs/expansion-plan.md` to 2026-09-24, then `docs/plan/`) is the dated record of what exists, and `README.md` is the orientation map.
 
 ## What the game is (as built)
 
@@ -14,7 +14,7 @@ A **D&D 5.5e (2024) CRPG** in Godot 4.7 with three layers:
 - **Hex tactical combat**: turn-based, initiative order, 5e action economy with actions, bonus actions and reactions (`core/combat.gd`).
 - **Open-world campaign**: a 3D overworld with settlements, lairs, multi-room sites (dungeons), roaming bands, quests, a lodge and a renown ladder (`core/world*.gd`, `core/site.gd`, `core/lodge.gd`, `core/ladder.gd`).
 
-The mercenary-company fantasy is carried by flavour and structure, not by a Battle Brothers stat model. You keep a **roster** of recruited heroes. Up to **4** go into a fight (`Party.MAX_ACTIVE`). The company climbs a renown ladder: *Nobodies → Hirelings → a Company of Note → Famous → Legends* (`core/ladder.gd`). Today, recruits are **built in the character creator** or taken from presets. No hiring pool, wages or upkeep exist. A hiring pool is decided; see below.
+The mercenary-company fantasy is carried by flavour and structure, not by a Battle Brothers stat model. You keep a **roster** of recruited heroes. Up to **4** go into a fight (`Party.MAX_ACTIVE`). The company climbs a renown ladder: *Nobodies → Hirelings → a Company of Note → Famous → Legends* (`core/ladder.gd`). A new run's **founder** is built in the character creator (or taken from a preset); everyone after is **hired** from an inn's pool for a one-time fee, with no wages or upkeep (`core/recruits.gd`, see below).
 
 ## Pillars (decided)
 
@@ -65,20 +65,23 @@ Avoid epic-fantasy capitals-and-prophecy prose, jokes that break the scene, and 
 - **Rules gravity** (`docs/brief.md`): every rule pulls in three more. Add a mechanic only when the loop needs it.
 - **New mechanics go in `core/`** (pure, `RefCounted`, headless-testable). Scenes only draw them.
 - **Content packs are data only** (`core/mod/`, `docs/modding.md`). A feature a mod should be able to use goes in the public data schema, not in code.
-- Every feature gets an appended `docs/expansion-plan.md` entry with a `### Still open` section.
+- Every feature gets its own build-log entry: a new file `docs/plan/YYYY-MM-DD-slug.md` with a `### Still open` section (`docs/plan/README.md`). Never append to `docs/expansion-plan.md`; it is closed.
 - A balance number changes only with a re-run sweep (see the `sorcmerc-balancing` skill).
 
 ## Decided 2026-09-24 (owner's calls, not yet built)
 
-These are direction, not description. The code still does the old thing until each one lands with its own `docs/expansion-plan.md` entry.
+These are direction, not description. The code still does the old thing until each one lands with its own `docs/plan/` entry. A bullet marked **built** has landed.
 
-- **Recruitment.** The player **creates only the first character**, at the start of a run. Every later merc is **hired** from a pool that towns offer: pre-rolled recruits who come with their own traits.
-  - There are **no wages or upkeep**.
-  - Class, species, background and ability scores are **fixed at hire**.
-  - The player controls the merc's **subclass, spells and normal level-up choices** (feats or ability increases, fighting styles).
-  - **Old saves are grandfathered.** Rosters that already exist keep their heroes. The new rule applies to new runs only.
+- **Recruitment — built** (`core/recruits.gd`; expansion-plan "Hired, not made"). The player **creates only the first character**, the founder, at the start of a run. Every later merc is **hired** at an inn, from a pool of pre-rolled recruits who come with their own traits.
+  - The pool is seeded off the settlement and the world-day: 3 chairs at a city, 2 at a town, 1 at a camp. A hire leaves the pool.
+  - A recruit is the local band's level minus one (`Regions.level_here`), floored at 1, and comes only in species and classes the meta-progression has unlocked.
+  - A **one-time fee** of 50 ◉ a level, 10% off per renown title. There are **no wages or upkeep**. The roster cap is 6 as Nobodies, +2 per title. It stops hiring and never trims a roster.
+  - **Fixed at hire:** class, species, background, ability scores (the standard array), skills, tools, languages, expertise, weapon mastery, feature choices like Divine or Primal Order, and gear.
+  - The player makes the merc's **subclass, spells and normal level-up choices** (feats or ability increases, fighting styles) on a settle-in page before the fee is paid.
+  - Heroes from earlier runs stay in the barracks. They turn up now and then as **veterans** in an inn's pool, at their own level, and only where the country fights at that level or higher.
+  - **Old saves are grandfathered.** A save with no hiring rule keeps its roster, its Create new, and the inns' pools too. A new run starts with a 150 ◉ founding purse.
 - **Sorcerer rarity is fiction only.** No recruit odds and no social mechanic. "Uncommon but not rare" lives in the writing.
-- **Sorcerer features follow 2024 RAW.** Innate Sorcery and Font of Magic are built (`test_sorcerer.gd`). Metamagic is next. Until it lands, `core/manual.gd` says it isn't on the board yet.
+- **Sorcerer features follow 2024 RAW.** Built: Innate Sorcery, Font of Magic, and Metamagic Quickened, Twinned, Careful, Subtle and Seeking (`test_sorcerer.gd`). The other five options are still catalogue text; `core/manual.gd` says so.
 - **Enemy magic is rare and named.** Ordinary enemies keep their limited-use innate abilities. Built: the cult's lair boss casts from real slots in Frontier country and beyond, and announces itself. Caster elites in ordinary warbands are built but off, until the power model can price a glass cannon.
 - **Factions post contracts** (built: `core/contracts.gd`). Every job carries its `issuer`, who is credited wherever it is handed in. War work waits for Known and neutral opinion, and regard pays up to +25%.
 - **The player and the factions can fight each other** (the owner's call, 2026-09-24). This lifts the "never civilized-vs-civilized" rule: first rival-raid contracts, then NPC faction warfare. Neither is built yet.

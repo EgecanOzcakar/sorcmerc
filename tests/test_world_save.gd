@@ -382,6 +382,16 @@ func _done() -> void:
 		"...and reads back")
 	check(pr_old.lodge.is_empty(), "an old save with no lodge loads with none")
 
+	# The hiring rule and today's taken chairs (core/recruits.gd) ride there too,
+	# through real JSON so the day and chair numbers come back as floats.
+	pr.hiring = {"rule": "hire", "taken": {"riverhold": {"period": 3, "slots": [0, 2]}}}
+	rd = JSON.parse_string(JSON.stringify(WorldSave.to_dict(wo, pr)))
+	check(rd["party"].get("hiring", {}).get("rule", "") == "hire", "the hiring rule rides the save's party dict")
+	pr_back = WorldSave.from_dict(rd)["party"]
+	check(pr_back.hiring.get("rule", "") == "hire" and pr_back.hiring["taken"]["riverhold"]["period"] is int
+		and pr_back.hiring["taken"]["riverhold"]["slots"] == [0, 2], "...and reads back, as ints")
+	check(pr_old.hiring.is_empty(), "an old save with no hiring key loads grandfathered ({}: Create new still works)")
+
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

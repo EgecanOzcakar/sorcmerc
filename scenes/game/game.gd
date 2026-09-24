@@ -2,7 +2,7 @@
 # nothing but routing: every screen it shows is an existing scene, instantiated
 # as a full-screen child.
 #
-#   title  →  party setup (party.tscn + creator.tscn)  →  world.tscn (the open world)
+#   title  →  party setup (party.tscn + creator.tscn: the founder)  →  world.tscn (the open world)
 #
 # O8: the open world is normal play. The old linear route is still wired up, but
 # only when SORCMERC_LINEAR_CAMPAIGN is in the environment (same debug-gate shape
@@ -33,6 +33,7 @@ const Tutorial = preload("res://core/tutorial.gd")
 const Registry = preload("res://core/mod/registry.gd")
 const StoryRuntime = preload("res://core/mod/story_runtime.gd")
 const Coop = preload("res://core/coop.gd")
+const Recruits = preload("res://core/recruits.gd")   # a new run's founding: one hero made, the rest hired
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 const CAMPAIGN_SCENE := "res://scenes/campaign/campaign.tscn"
@@ -512,14 +513,24 @@ func _process(_dt: float) -> void:
 # --- party setup ----------------------------------------------------------
 #
 # The party screen does the work (roster, slots, the creator, profiles); this
-# only supplies the saved roster and the door out of it.
+# only supplies the roster and the door out of it.
+#
+# The founding (the owner's call, 2026-09-24; core/recruits.gd): a new run
+# starts with nobody. The player makes ONE hero, who founds the company, and
+# everyone after is hired at an inn — the barracks' heroes from earlier runs do
+# not march in, though an inn may offer one as a veteran. The linear debug
+# campaign keeps the old door, the whole barracks, because its determinism is
+# what the test suite leans on and it has no inns to hire at.
 
 func show_party_setup() -> void:
 	var party := Party.new()
-	for ch in CharacterSave.load_all():
-		ch.dead = false                  # the barracks is for the living
-		ch.hp_current = -1               # ...and rested up — a new run starts at full HP,
-		party.add_member(ch)             # not however hurt/downed they were saved
+	if linear_campaign():
+		for ch in CharacterSave.load_all():
+			ch.dead = false                  # the barracks is for the living
+			ch.hp_current = -1               # ...and rested up — a new run starts at full HP,
+			party.add_member(ch)             # not however hurt/downed they were saved
+	else:
+		Recruits.found(party)
 	var wrap := Control.new()
 	var screen = load(PARTY_SCENE).instantiate()
 	screen.party = party
@@ -535,7 +546,7 @@ func show_party_setup() -> void:
 	# open-world path reads it.
 	var begin := func(size: String) -> void:
 		if party.active.is_empty():
-			screen._hint.text = "Put at least one character in the active party first."
+			screen._hint.text = _nobody_yet(party)
 			return
 		if linear_campaign():
 			_show_campaign(Campaign.new(party, int(OS.get_environment("SORCMERC_SEED"))))
@@ -556,7 +567,7 @@ func show_party_setup() -> void:
 		begin_pack.offset_left = -360; begin_pack.offset_top = 12; begin_pack.offset_right = -16
 		begin_pack.pressed.connect(func():
 			if party.active.is_empty():
-				screen._hint.text = "Put at least one character in the active party first."
+				screen._hint.text = _nobody_yet(party)
 				return
 			_start_pack(party))
 		wrap.add_child(begin_pack)
@@ -603,6 +614,13 @@ func show_party_setup() -> void:
 	back.pressed.connect(show_title)
 	wrap.add_child(back)
 	_swap(wrap, "party setup")
+
+# What Begin says to an empty company: on a founding, the one thing missing is
+# the founder.
+static func _nobody_yet(party) -> String:
+	if Recruits.hire_only(party) and party.roster.is_empty():
+		return "Make the founder first: Create new, then Begin."
+	return "Put at least one character in the active party first."
 
 # M8: a pack run is an ordinary open-world run — the same scene, the same
 # party, the same autosave. The pack supplies the map, and (when it has one) a

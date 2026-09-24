@@ -297,6 +297,10 @@ static func build(card: Dictionary) -> Control:
 	if card.has("alert"):
 		var al: Array = card["alert"]
 		col.add_child(_label(String(al[0]), Icons.sans(700), int(Icons.FS_SMALL * u), al[1], w))
+	# What a buff or condition does to this button (core/active_effects.gd), in
+	# the colour of the mark on the badge's corner: [[why, colour], ...].
+	for fx in card.get("effects", []):
+		col.add_child(_label(String(fx[0]), Icons.sans(700), int(Icons.FS_SMALL * u), fx[1], w))
 
 	var title := _label(String(card.get("title", "")), Icons.serif(700), int((Icons.FS_HEAD - 1) * u),
 		card.get("title_color", Icons.COL_HEAD), w)

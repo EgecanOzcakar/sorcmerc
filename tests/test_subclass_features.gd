@@ -204,6 +204,11 @@ func test_no_orphaned_mechanics() -> void:
 			for g in L:
 				if g.get("type", "") == "feature":
 					class_granted[String(g["feature"]["id"])] = true
+				# a class's own pick-list (Metamagic, Eldritch Invocations...):
+				# its options are named for the list, not the class
+				for o in g.get("options", []):
+					if o.has("featureId"):
+						class_granted[String(o["featureId"])] = true
 	var sub_ids := {}
 	for sub in Catalog.all("subclasses.json"):
 		sub_ids[String(sub["id"])] = true
@@ -218,7 +223,7 @@ func test_no_orphaned_mechanics() -> void:
 		elif class_ids.has(prefix):
 			check(class_granted.has(sid), "features.json authors %s but the class never grants it" % sid)
 		else:
-			check(false, "features.json: %s is neither a class, a subclass nor a monster template" % sid)
+			check(class_granted.has(sid), "features.json: %s is neither a class, a subclass, a class option nor a monster template" % sid)
 	check(Effects.validate().is_empty(), "Effects.validate(): %s" % str(Effects.validate()))
 
 # --- every subclass, the level it lands ------------------------------------
