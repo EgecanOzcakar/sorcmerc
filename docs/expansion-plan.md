@@ -9786,3 +9786,43 @@ its first fight. A custom hero already starts at level 1 and keeps doing so.
   "Light armor". Spell names went through `humanize()`, whose `PLAIN` table
   also holds armour categories under bare ids. Spells now read their name from
   the catalogue (`Creator.spell_name`); `test_creator` checks both labels.
+
+## The Frontier stops at level 9 (2026-09-24)
+
+The owner's call on the last *Still open* item of the band pin: "lower
+frontiers top level." `core/regions.gd`'s Frontier goes from levels 6–10 to
+6–9. The Deeps stay 10–20.
+
+With the Frontier at 6–10, a level-10 party was inside its band on both sides
+of the Frontier/Deeps seam, and the two sides built different fights. At the
+Frontier's top, the band pin caps the fight at the preset party's level-10
+fight. At the Deeps' bottom (top 20) nothing caps, so a built party meets its
+own full score. Same level, both bands "yours", 95.0% against 73.3%.
+
+At 6–9, level 10 has outgrown the Frontier and belongs to the Deeps alone.
+Measured (`tests/sweep_built.gd`'s build, 60 seeds, easy):
+
+| built party | where | fight | win |
+|---|---|---|---|
+| L9 | top of the Frontier (capped) | preset L9 | 93.3% |
+| L9 | uncapped, for comparison | own score | 81.7% |
+| L10 | the Frontier, outgrown | preset L9 | 96.7% |
+| L10 | bottom of the Deeps | own score | 73.3% |
+
+**The step at that seam is no smaller.** A level-10 party still wins about 97%
+on one side and 73% on the other. The change is what the step *means*: it's
+now the ordinary border every band has (outgrown behind you, in band ahead),
+not two in-band readings of one level. The last seam is the only one that
+meets without overlapping. Every level is still someone's.
+
+`test_regions`: a level-10 party is in band in the Deeps, has outgrown the
+Frontier (built for level 9), and the band reads "levels 6-9". Proof:
+`docs/shots/frontier-6-9.png`, the crossing card on a real map.
+
+### Still open
+
+- The Deeps' bottom is still uncapped for a strong build. Top 20 means the band
+  pin's ceiling never bites there, so a built level-10 party meets 1.32× of the
+  preset level-10 fight. If that step reads badly in play, the lever is the
+  ceiling (cap every band at the preset party's score for the party's own
+  level, not only at the band's top), not the seams.

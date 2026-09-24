@@ -49,6 +49,17 @@ const Scaler = preload("res://core/scaler.gd")
 # the marches and the bottom of the frontier, and is meant to be able to work
 # either. A gap would make some level nobody's level.
 #
+# Except the last seam, which meets without overlapping: the frontier stops at
+# 9 and the deeps start at 10 (the owner's call, 2026-09-24). With the frontier
+# at 6-10, a level 10 party was in band on both sides of that seam and read two
+# different fights: at the frontier's top, capped at the ruler's level-10 fight
+# (power_scale), a built party won 95.0%; at the deeps' bottom, with no cap
+# under a top of 20, 73.3%. Same level, both "yours", 22 points apart. At 6-9,
+# level 10 has outgrown the frontier (a built party wins 96.7% against its
+# level-9 fight) and belongs to the deeps alone, so the step at that seam is the
+# ordinary one every border has. The step is no smaller; it is now a border.
+# Measured 2026-09-24, tests/sweep_built.gd's build, 60 seeds, easy.
+#
 # The seams are EQUAL-AREA, which is not the same as equally spaced, and getting
 # that wrong is what made the heartland read as a bubble. A ring's share of the
 # map goes as the square of its radius, so the first seams shipped at
@@ -71,7 +82,7 @@ const BANDS := [
 		"blurb": "Patrolled, farmed, and about as dangerous as a bad harvest."},
 	{"id": "marches", "label": "the Marches", "upto": 0.71, "levels": [3, 6],
 		"blurb": "Still somebody's country, but nobody rides it alone after dark."},
-	{"id": "frontier", "label": "the Frontier", "upto": 0.87, "levels": [6, 10],
+	{"id": "frontier", "label": "the Frontier", "upto": 0.87, "levels": [6, 9],
 		"blurb": "Past the last waystone. What lives here has never been taxed."},
 	{"id": "deeps", "label": "the Far Deeps", "upto": 999.0, "levels": [10, 20],
 		"blurb": "Old ground, and old things on it. Nothing out here is anybody's problem but yours."},

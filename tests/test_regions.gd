@@ -98,8 +98,13 @@ func _init() -> void:
 	# free: every win rate core/scaler.gd measured was measured at x1.00.
 	check(Regions.power_scale(w, Vector2(600, 0), p3) == 1.0,
 		"a level 3 party in the marches gets the fight scaler already measured")
-	check(Regions.power_scale(w, Vector2(800, 0), p10) == 1.0,
-		"...and so does a level 10 party in the frontier")
+	check(Regions.power_scale(w, Vector2(980, 0), p10) == 1.0,
+		"...and so does a level 10 party in the deeps")
+	# The frontier stops at 9: level 10 has outgrown it, and belongs to the deeps
+	# alone rather than being in band on both sides of that seam.
+	check(Regions.power_scale(w, Vector2(800, 0), p10) < 1.0,
+		"a level 10 party has outgrown the frontier (x%.2f)" % Regions.power_scale(w, Vector2(800, 0), p10))
+	check(Regions.level_here(w, Vector2(800, 0), p10) == 9, "...which builds for level 9")
 
 	# Outside it, the content stops following.
 	var outgrown := Regions.power_scale(w, Vector2(100, 0), p10)
@@ -210,7 +215,7 @@ func _init() -> void:
 
 	# --- what the player is told --------------------------------------------
 	var here: Dictionary = Regions.at(w, Vector2(800, 0))
-	check(Regions.describe(here).find("levels 6-10") >= 0, "a band says who it is for")
+	check(Regions.describe(here).find("levels 6-9") >= 0, "a band says who it is for")
 	check(String(here["blurb"]) != "", "...and what it is like")
 	var home: Dictionary = Regions.at(w, Vector2(100, 0))
 	check(Regions.crossing_text(home, here).find("out into") >= 0, "going out is narrated as going out")
