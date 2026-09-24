@@ -670,6 +670,16 @@ func test_spell_slots() -> void:
 			want.append(0)
 		check(slots == want, "wizard %d slots %s (got %s)" % [pair[0], str(want), str(slots)])
 
+	# 2024 half casters cast from level 1 (tools/fill_levels.py CLASS_SLOTS): the
+	# export's 2014 row left a paladin and a ranger slotless until level 2.
+	for cid in ["paladin", "ranger"]:
+		for pair in [[1, 2], [2, 2], [3, 3]]:
+			var hc := _build(cid, pair[0], abil)
+			var sc: Dictionary = hc.sheet().spellcasting
+			check(not sc.is_empty() and int(sc["slots"][0]) == pair[1] and int(sc["slots"][1]) == 0,
+				"%s %d has %d first-level slots (got %s)" % [cid, pair[0], pair[1], str(sc.get("slots", []))])
+		check(Adapter.slots_left(_build(cid, 1, abil))[0] == 2, "%s 1 has both slots to spend in a fight" % cid)
+
 	# A multiclass caster reads the table at the casting class's level, not the
 	# character's: Wizard 2 / Fighter 3 is a level-2 wizard's 3 slots, not 4/3/2.
 	var mc := _build("wizard", 2, abil)
