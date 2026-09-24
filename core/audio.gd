@@ -20,7 +20,8 @@
 #
 # Assets are the WAVs tools/gen_audio.py writes. They are read with FileAccess and
 # turned into AudioStreamWAV by hand rather than load()ed, so no editor import
-# round-trip (.import files) is needed to run from source.
+# round-trip (.import files) is needed to run from source. An exported build has
+# no raw WAV to read, only the imported copy, so there _stream falls back to load().
 #
 # Sample rate and channel count come out of each file's `fmt ` chunk rather than
 # being assumed, so a stereo bed and a mono one-shot at a different rate can sit
@@ -148,13 +149,19 @@ func _play_sting(path: String) -> void:
 # your own copy of the bundles), so a fresh clone and CI play the generated
 # takes and a machine with the bundles plays the real ones.
 const LICENSED := "licensed/"
+
+# From source the WAV is on disk; in an exported pack only its imported copy is
+# (see _stream), which ResourceLoader finds and FileAccess does not.
+static func _exists(path: String) -> bool:
+	return FileAccess.file_exists(path) or ResourceLoader.exists(path)
+
 var _takes: Dictionary = {}   # dir+id -> [dir the takes live in, count]
 func _take_of(dir: String, id: String) -> String:
 	var key := dir + id
 	if not _takes.has(key):
-		var home := dir + LICENSED if FileAccess.file_exists(dir + LICENSED + id + ".wav") else dir
+		var home := dir + LICENSED if _exists(dir + LICENSED + id + ".wav") else dir
 		var n := 1
-		while FileAccess.file_exists("%s%s_%d.wav" % [home, id, n + 1]):
+		while _exists("%s%s_%d.wav" % [home, id, n + 1]):
 			n += 1
 		_takes[key] = [home, n]
 	dir = _takes[key][0]
@@ -249,9 +256,23 @@ func _stream(path: String, looped: bool):
 		return _streams[path]
 	var bytes := FileAccess.get_file_as_bytes(path)
 	if bytes.size() < 44:
-		push_warning("audio: cannot read %s" % path)
-		_streams[path] = null
-		return null
+		# An exported build: its pack holds Godot's imported copy of each WAV, not
+		# the file (export_presets.cfg adds non-resource files by *.txt alone), so
+		# the read above gets nothing and load() through the .import remap does.
+		# Measured on a "Web (Release)" pack: FileAccess.file_exists false for
+		# every sfx, ResourceLoader.exists true. Without this the web build is silent.
+		var r = load(path) if ResourceLoader.exists(path) else null
+		if not r is AudioStreamWAV:
+			push_warning("audio: cannot read %s" % path)
+			_streams[path] = null
+			return null
+		var w: AudioStreamWAV = r.duplicate()
+		if looped:
+			w.loop_mode = AudioStreamWAV.LOOP_FORWARD
+			w.loop_begin = 0
+			w.loop_end = int(w.get_length() * w.mix_rate)
+		_streams[path] = w
+		return w
 	var at := 12   # past "RIFF" + size + "WAVE"
 	var data := PackedByteArray()
 	var channels := 1
