@@ -11,6 +11,7 @@ const Posting = preload("res://core/quest_posting.gd")
 const Quest = preload("res://core/quest.gd")
 const Party = preload("res://core/party.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Ladder = preload("res://core/ladder.gd")
 const Regions = preload("res://core/regions.gd")
 const RNG = preload("res://core/rng.gd")
 
@@ -114,9 +115,15 @@ func test_counters_decide_what_a_place_posts() -> void:
 	for missing in ["armorsmith", "librarian", "healer"]:
 		check(not town_counters.has(missing), "a town posts nothing at the %s it does not have" % missing)
 
-	# Ordering a settlement sacked is a city's business only.
-	check(_kinds(city).has("raid_settlement"), "the city posts the raid")
+	# Ordering a settlement sacked is a city's business only — and, since
+	# contracts (core/contracts.gd), only for a company that city's people know.
+	check(not _kinds(city).has("raid_settlement"), "the city does not post war work to strangers")
+	Ladder.deed(w.settlements[0].faction, Ladder.RUNG_AT[Ladder.KNOWN])
+	city = _at(w.settlements[0], party, w)
+	check(_kinds(city).has("raid_settlement"), "the city posts the raid to a company it knows")
 	check(not _kinds(town).has("raid_settlement"), "the town does not")
+	Ladder.reset()
+	city = _at(w.settlements[0], party, w)
 	# ...and a city does not need telling what the next ring out looks like.
 	check(not _kinds(city).has("scout_region"), "the city posts no scouting")
 	check(_kinds(town).has("scout_region"), "the town, with its back to it, does")
@@ -324,7 +331,7 @@ func test_raid_premium_and_rescue() -> void:
 	check(Posting.rescue_offer(city, w, p)["target_lair_id"] == near.id, "lifted, the nearest pens win again")
 
 func test_patron_and_renown() -> void:
-	var Ladder = load("res://core/ladder.gd")
+
 	Ladder.reset()
 	var w := _world()
 	var p := _party()
@@ -344,8 +351,10 @@ func test_patron_and_renown() -> void:
 	# a second human settlement that is only a camp is not the chief
 	w.add_settlement(World.Settlement.new("h-camp", Vector2(300, 300), "human", "camp"))
 	check(Posting.chief_settlement(w, "human") == city and not Posting.is_patron(w.settlements[-1], w), "the camp is not the patron")
-	# renown's premium on every job
+	# renown's premium on every job (opinion back to neutral, so the people's own
+	# regard — core/contracts.gd pay_mult — stays out of this arithmetic)
 	Ladder.reset()
+	FactionOpinion.reset()
 	var plain: Array = _at(city, p, w)
 	Ladder.deed("elf", 6)                             # Hirelings, +10 %
 	var dear: Array = _at(city, p, w)
