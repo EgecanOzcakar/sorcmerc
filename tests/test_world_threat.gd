@@ -10,6 +10,7 @@ const Encounter = preload("res://core/encounter.gd")
 const Power = preload("res://core/rules/power.gd")
 const Party = preload("res://core/party.gd")
 const Presets = preload("res://core/presets.gd")
+const Adapter = preload("res://core/adapter.gd")
 
 var _pass := 0
 var _fail := 0
@@ -53,6 +54,7 @@ func _init() -> void:
 	test_monotone_in_health()
 	test_never_scales_up()
 	test_short_handed_is_not_hurt()
+	test_spent_slots_do_not_shrink_the_fight()
 	print("test_world_threat: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -209,3 +211,44 @@ func test_short_handed_is_not_hurt() -> void:
 	check(float(WorldThreat.assess(empty)["power_scale"]) == WorldThreat.SCALE_MAX,
 		"an empty party reads as unhurt rather than as dying")
 	check(int(WorldThreat.assess(empty)["counted"]) == 0, "and reports that it read nobody")
+
+# Every slot spent, the way a party walks out of a lair.
+func _drained(p: Party) -> Party:
+	for id in p.active:
+		var ch = p.get_member(id)
+		ch.slots_used = Adapter._full_slots(ch.sheet())
+		ch.dirty()
+	return p
+
+# Wounds thin a fight; spent slots do not (2026-09-24). Power.estimate reads the
+# slots left, so without slot_hold() a drained party bought itself a smaller
+# road fight — asked here through real rosters, against the same party fresh.
+func test_spent_slots_do_not_shrink_the_fight() -> void:
+	var fresh := WorldThreat.assess(_party())
+	check(float(fresh["slot_hold"]) == 1.0, "nothing spent: the hold is exactly 1.0 (got %.6f)" % float(fresh["slot_hold"]))
+	var dp := _drained(_party())
+	var drained := WorldThreat.assess(dp)
+	check(float(drained["slot_hold"]) > 1.0, "every slot spent: the hold prices them back (got %.3f)" % float(drained["slot_hold"]))
+	check(float(drained["hp_frac"]) == 1.0, "spending slots is not a wound")
+	var chars := Presets.party()
+	var dchars: Array = dp.party_characters()
+	var same := 0
+	var shrank := 0
+	for s in range(1, 11):
+		var want := _spec_power(Scaler.roster_for(chars, fresh["difficulty"], {}, "", s, fresh["power_scale"]))
+		var got := _spec_power(Scaler.roster_for(dchars, drained["difficulty"], {}, "", s, drained["power_scale"]))
+		var unheld := _spec_power(Scaler.roster_for(dchars, drained["difficulty"], {}, "", s,
+			WorldThreat.power_scale(float(drained["hp_frac"]))))
+		if is_equal_approx(got, want):
+			same += 1
+		if unheld < want:
+			shrank += 1
+	check(same == 10, "a drained party meets the fight it would have met fresh (%d of 10 seeds)" % same)
+	check(shrank >= 5, "...where without the hold it met a smaller one (%d of 10 seeds)" % shrank)
+	# Wounds still count: a drained AND hurt party gets the hurt discount, and
+	# only that one.
+	var both := WorldThreat.assess(_hurt(_drained(_party()), 0.3))
+	check(is_equal_approx(float(both["power_scale"]),
+		WorldThreat.power_scale(float(both["hp_frac"])) * float(both["slot_hold"])),
+		"a drained, hurt party is thinned by its wounds alone")
+	check(float(both["power_scale"]) < float(drained["power_scale"]), "...and that is still a smaller fight than the unhurt one")

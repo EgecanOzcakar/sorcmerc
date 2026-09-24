@@ -244,6 +244,7 @@ const Adapter = preload("res://core/adapter.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Power = preload("res://core/rules/power.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const EnemyCasters = preload("res://core/enemy_casters.gd")
 
 const TIER := {"easy": 0.56, "normal": 0.66, "hard": 0.76}   # T-classes-b; see the header
 const REF_SCORE := 46.6   # the level-3 preset party — where TIER was calibrated
@@ -344,10 +345,79 @@ static func forget_pools() -> void:
 # does not know what ground it is on is unaffected.
 static func roster_for(party_characters: Array, difficulty: String, quest_bias: Dictionary = {},
 		theme: String = "", seed: int = 0, power_scale: float = 1.0, exclude: Array = [],
-		habitat: String = "") -> Dictionary:
+		habitat: String = "", caster_cap: int = 0) -> Dictionary:
 	var budget := _budget(party_characters, difficulty, power_scale)
-	return _build(budget, _order(quest_bias) if not quest_bias.is_empty() \
-		else _faction_order(theme, seed, budget, exclude, habitat))
+	if not quest_bias.is_empty():
+		return _build(budget, _order(quest_bias))
+	var order: Array = _faction_order(theme, seed, budget, exclude, habitat)
+	var elite := _caster_elite(order, seed, budget, exclude, party_characters.size(),
+		caster_cap if caster_cap > 0 else _cap_for(party_characters))
+	return elite if not elite.is_empty() else _build(budget, order)
+
+# --- the caster elite (2026-09-24) ------------------------------------------
+#
+# "Enemy magic is rare and named" (the owner's call): now and then a faction
+# that HAS casters (data/effects/casters.json — the cultists, for now) sends one
+# at the head of its warband. The roll is seeded off the fight's own seed, so a
+# reload meets the same caster; the pick is the strongest caster of this faction
+# the budget can hold under BIGGEST_SHARE, fielded at mult 1.0; the rest of the
+# budget buys its escort out of the same order, exactly the way boss_for buys a
+# boss's. A faction with no caster block, a quest roster (the MIX has none) and a
+# budget too small for even the least of them all come back {} and build as
+# before, so every other faction's measured numbers are untouched.
+#
+# CASTER_ELITE_CHANCE: how often a cultist warband that could field a caster
+# does. 0.0 as shipped — MEASURED 2026-09-24 (tests/sweep_caster.gd, 200 pinned
+# seeds a cell, forced on against off): even at the Frontier tier a caster
+# elite turned a level-8 warband from 81% / 54% (normal / hard) to 59% / 27%,
+# because core/rules/power.gd under-prices a glass cannon with area spells
+# (EnemyCasters.MIN_FIELD_CAP's note). Everything is built and tested — the
+# roll, the pick, the escort, the AI — and a sweep forces it on with
+# caster_chance_override; raise this when the ruler prices a caster honestly.
+const CASTER_ELITE_CHANCE := 0.0
+# Sweeps pin the roll: 0.0 never, 1.0 always, < 0 the shipped chance.
+static var caster_chance_override := -1.0
+
+# The band tier for a party with no map under it: the country its own average
+# level belongs to (core/regions.gd's party_level reads a party the same way).
+static func _cap_for(party_characters: Array) -> int:
+	if party_characters.is_empty():
+		return 9
+	var total := 0
+	for ch in party_characters:
+		total += int(ch.level())
+	return EnemyCasters.cap_for_level(maxi(1, int(round(float(total) / party_characters.size()))))
+
+static func caster_rolls(seed: int) -> bool:
+	var p: float = caster_chance_override if caster_chance_override >= 0.0 else CASTER_ELITE_CHANCE
+	return absi(hash("caster|%d" % seed)) % 1000 < int(round(p * 1000.0))
+
+# `opponents` is the party's size: a caster's area spells are priced against the
+# side they will land on (core/rules/power.gd area_targets).
+# `cap` is the highest spell level the caster may cast (core/enemy_casters.gd's
+# band tiers): the caller that knows the country passes its band's, and
+# roster_for falls back to the band the party's own level belongs to.
+static func _caster_elite(order: Array, seed: int, budget: float, exclude: Array, opponents := 0,
+		cap := 9) -> Dictionary:
+	if order.is_empty() or order == MIX or not caster_rolls(seed) or not EnemyCasters.fielded(cap):
+		return {}
+	var fac := String(Catalog.monster(String(order[0])).get("faction", ""))
+	for id in EnemyCasters.ids_for(fac):
+		if id in exclude:
+			continue
+		var score := caster_score(id, opponents, cap)
+		if score > budget * BIGGEST_SHARE:
+			continue
+		var monsters: Array = [{"id": id, "count": 1, "mult": 1.0, "caster": true, "caster_cap": cap}]
+		monsters.append_array(_build(maxf(budget - score, 0.0), order, MAX_FOES - 1)["monsters"])
+		return {"monsters": monsters}
+	return {}
+
+# What one caster is worth on core/rules/power.gd's ruler, slots and all, against
+# a side of `opponents` (0: unknown), casting up to spell level `cap`.
+static func caster_score(id: String, opponents := 0, cap := 9) -> float:
+	var c = Encounter.spawn(id, 1.0, "foe", Vector2i.ZERO, 0, [], true, cap)
+	return Power.team_score([c], opponents) if c != null else 0.0
 
 # The one number every budget here is priced from: the party as core/rules/
 # power.gd sees it. Public because a caller may need to price a LATER fight
@@ -420,6 +490,13 @@ static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
 	var lead := String(boss.get("lead", ""))
 	var count: int = maxi(1, int(boss.get("lead_count", 1)))
 	var extras: Array = boss.get("lead_features", [])
+	# A caster lead (core/enemy_casters.gd): the first of the lead's copies casts
+	# from real slots, and _lead_score prices it that way.
+	var caster: bool = bool(boss.get("lead_caster", false))
+	var cap: int = int(boss.get("caster_cap", 0))
+	if cap <= 0:
+		cap = _cap_for(party_characters)
+	caster = caster and EnemyCasters.fielded(cap)   # below its tier the lead fights as its statblock
 	# Per-boss knobs off the BOSS_POOL entry, for the chaff-vs-chunk ceiling the
 	# header describes: `mult_max` caps how far the lead is pumped, `lead_share`
 	# how much of the fight it is (less lead = more escort bodies = harder, by the
@@ -427,13 +504,17 @@ static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
 	var mult_max: float = minf(BOSS_MULT_MAX, float(boss.get("mult_max", BOSS_MULT_MAX)))
 	var share: float = float(boss.get("lead_share", BOSS_LEAD_SHARE))
 	var mult := MULT_MIN
-	while mult < mult_max and _lead_score(lead, count, mult, extras) < budget * share:
+	var foes_of: int = party_characters.size()
+	while mult < mult_max and _lead_score(lead, count, mult, extras, caster, foes_of, cap) < budget * share:
 		mult += MULT_STEP
 	mult = snappedf(minf(mult, mult_max), 0.01)
 	var entry := {"id": lead, "count": count, "mult": mult}
 	if not extras.is_empty():
 		entry["features"] = extras
-	var rest: float = budget - _lead_score(lead, count, mult, extras)
+	if caster:
+		entry["caster"] = true
+		entry["caster_cap"] = cap
+	var rest: float = budget - _lead_score(lead, count, mult, extras, caster, foes_of, cap)
 	var monsters: Array = [entry]
 	# The escort is the lead's kin but never the lead itself — a boss escorted by
 	# copies of the boss is not a boss. (It used to also have to be, because two
@@ -456,13 +537,14 @@ static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
 		monsters.append_array(_build(maxf(rest, 0.0), order, MAX_FOES - count)["monsters"])
 	return {"monsters": monsters}
 
-static func _lead_score(id: String, count: int, mult: float, extras: Array) -> float:
+static func _lead_score(id: String, count: int, mult: float, extras: Array, caster := false,
+		opponents := 0, cap := 9) -> float:
 	var roster: Array = []
 	for i in count:
-		var c = Encounter.spawn(id, mult, "foe", Vector2i.ZERO, 0, extras)
+		var c = Encounter.spawn(id, mult, "foe", Vector2i.ZERO, 0, extras, caster and i == 0, cap)
 		if c != null:
 			roster.append(c)
-	return Power.team_score(roster)
+	return Power.team_score(roster, opponents)
 
 # Bodies first, then the stat multiplier for whatever the bodies missed.
 static func _build(budget: float, order: Array, max_foes: int = MAX_FOES) -> Dictionary:

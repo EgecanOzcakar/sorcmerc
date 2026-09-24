@@ -9860,6 +9860,342 @@ and a level-1 one carries both into a fight (`Adapter.slots_left`). Not visual.
   *Divine Smite* spell. The ranger's Favored Enemy (free Hunter's Mark casts) is
   catalogue text. Neither blocks casting at level 1.
 
+## Spent slots no longer buy an easier road fight (2026-09-24)
+
+The owner's call from the skills pass: **wounds thin a fight, spent slots do
+not.** Pillar 3 is "magic is powerful but costly", and the open world was
+refunding the cost.
+
+`core/rules/power.gd` prices a party off max HP and the slots it has *left*.
+So `Scaler.roster_for()` sent a party that had cast everything a smaller
+roster, and a smaller roster pays less. `core/site.gd` already corrected for
+this inside a lair: every room is priced off the party at the mouth. The open
+world never did.
+
+`core/world_threat.gd` gains `slot_hold(party)`. It is
+`Scaler.held_at(Regions.fresh_score(party), Scaler.party_score(...))`, the same
+correction a site makes, taken against the party with every slot back.
+`assess()` multiplies it into the `power_scale` it already returns, so every
+caller picks it up unchanged: `encounter_spec()`, the gate hold's waves, the
+pit bouts. It is exactly 1.0 for a party that has spent nothing, so every
+number measured before this still stands. Wounds still thin the fight through
+the condition curve, which is untouched.
+
+Measured with the new `tests/sweep_spent_slots.gd` (level-3 presets,
+wilderness baseline, 200 seeds a cell, fight seed pinned). *Unheld* is exactly
+what master passed:
+
+| slots left | HP | hold | unheld foes | unheld win | held foes | held win |
+|---|---|---|---|---|---|---|
+| all | 100% | ×1.000 | 4.0 | 99.5% | 4.0 | 99.5% |
+| none | 100% | ×1.429 | 3.3 | **100.0%** | 4.0 | 94.5% |
+| all | 50% | ×1.000 | 3.5 | 95.0% | 3.5 | 95.0% |
+| none | 50% | ×1.429 | 3.2 | 99.5% | 3.5 | 90.0% |
+
+Before this, a party with nothing left to cast won *more* often than the same
+party fresh. The budget the spent slots handed back was worth more than the
+spells. Now a drained party meets the fresh party's roster body for body, and
+casting costs something on the road too.
+
+`test_world_threat`: the hold is exactly 1.0 with nothing spent and above 1.0
+with everything spent. A drained party's roster matches the fresh party's on
+all 10 seeds, where the unheld one was smaller. A drained, hurt party is thinned
+by its wounds alone. Not visual.
+
+### Still open
+
+- The payout follows the roster, so a drained party now also earns a fresh
+  party's XP and gold for the same fight. That is the point, but it is worth
+  watching in play for whether "fight on empty" starts to read as a farm.
+- The campaign's linear mode (`core/campaign.gd`) still prices off the current
+  reading. It has its own per-run rest budget and is not the open world. Leave
+  it alone unless `SORCMERC_LINEAR_CAMPAIGN` comes back into use.
+
+## The sorcerer's own two: Innate Sorcery and Font of Magic (2026-09-24)
+
+The owner's call from the skills pass: sorcerer features follow the 2024 book
+as real combat mechanics. Until now `sorcerer-innate-sorcery` and
+`sorcerer-font-of-magic` were catalogue text. `data/effects/features.json` had
+no entry for either, so the sheet listed them and the board never saw them,
+while `core/manual.gd` told players Font of Magic worked. This is the first
+half. Metamagic is the second and gets its own PR.
+
+**Innate Sorcery** is a `self_buff`: a Bonus Action, two uses per **long** rest
+(added to `Adapter.LONG_REST_ONLY_FEATURES`, or it would have come back on a
+short one), lasting ten rounds.
+
+- A `self_buff` may now carry `rounds`. It gets an `until_tick` and lapses
+  through `_expire_conditions` like a condition. Only Innate Sorcery has one,
+  so Rage and every other self-buff behave exactly as before.
+- **+1 spell save DC.** `Combat.spell_dc(caster, v)` is the one function for it.
+  `cast()` stamps it onto the verb, so a zone or a held Hold Person keeps the DC
+  it was cast at. The action bar's tooltip and hit-chance readout read the same
+  function, so the number on the button is the number rolled against.
+- **Advantage on spell attack rolls.** `_spell_hit` rolls 2d20-keep-high while
+  the buff is up.
+
+**Font of Magic** is a new button kind, `font_of_magic`. One authored entry is
+expanded by `Effects._font_verbs` into buttons each way:
+
+- `…-burn@L`: spend a level-L slot for L sorcery points. **No action.**
+  Refused whole if it would overflow the Sorcery Points maximum (`ponytail:`).
+  It never tops up to the cap, so no slot is ever spent for points it loses.
+- `…@slotL`: a **Bonus Action**, spending points for a slot on the Creating
+  Spell Slots table (2/3/5/6/7 points for levels 1–5, from sorcerer level
+  2/3/5/7/9). Pools can now cost more than one use (`pool_cost`).
+- **A made slot outlives the fight.** `Adapter.write_back` no longer floors
+  `slots_used` at zero: an unspent made slot leaves as a *negative* entry, and
+  every reader already works in "full less used". A long rest clears it, which
+  is RAW's "vanishes when you finish a Long Rest". Saves take the negative int
+  as it is. The `character_save.gd` header says so.
+- The two directions wear different badges: burn is the `font_of_magic` kind's
+  cycle, make is the feature's own orb (`tools/gen_action_icons.py`).
+- The party autopilot (`AI._font_up`) makes the biggest slot it can afford once
+  it has none left. It never burns slots.
+
+**Balance.** `core/rules/power.gd` prices neither feature: a `self_buff` with no
+`bonus_damage`, and a kind it has no arm for. The preset trio has no sorcerer,
+so `test_scaler` and `sweep_tier` cannot see this. The new
+`tests/sweep_sorcerer.gd` puts a built sorcerer in the cleric's seat beside the
+preset fighter and rogue, and fights each seed with the two features stripped
+(exactly what master fields) and as shipped. Easy, 200 seeds, pinned:
+
+| level | without | rounds | with | rounds |
+|---|---|---|---|---|
+| 3 | 89.5% | 7.5 | 88.5% | 7.5 |
+| 10 | 96.5% | 9.7 | 96.5% | 9.3 |
+
+Inside one standard error at both levels. Under the autopilot the two features
+are worth about nothing, so leaving them unpriced moves no budget. A player
+using them well gets more out of them than the autopilot does. That is the
+same gap every class feature has.
+
+`test_sorcerer` (new, 56 checks): buttons by level and the cost table,
+Innate Sorcery's DC, Advantage (Fire Bolt against AC 20, 103 against 170 hits
+of 300) and its ten-round clock, both conversions with their refusals, the
+made slot surviving write-back and a short rest but not a long one, Innate
+Sorcery back on a long rest only, and the autopilot's one use.
+`test_class_abilities` presses every new button on its sorcerer teams
+(11677 → 11809 checks). Shots, from `tests/shot_sorcerer.gd`:
+`docs/shots/sorcerer-bonus-bar.png` and `docs/shots/sorcerer-after-font.png`.
+
+### Still open
+
+- **Metamagic.** The option picks at 2/10 are in the creator, and none of
+  them do anything yet. Next PR.
+- **The export files three sorcerer features on the wrong level.** Sorcerous
+  Restoration is at 20 (2024: 5), Arcane Apotheosis at 18 (20), and the third
+  pair of Metamagic picks at 18 (17). Fix in `tools/fill_levels.py` with the
+  Metamagic PR, since the picks are what moves.
+- **Sorcerous Restoration** (short-rest points) and **Sorcery Incarnate**
+  (Innate Sorcery for 2 points, two Metamagics on one spell).
+- **Font of Magic on the road.** Only in a fight for now. A road conversion
+  would follow `Adapter.arcane_recovery`'s shape, and the profile's road panel
+  is where it would sit.
+- **Spell attacks read no other advantage or disadvantage.** Prone, dodging
+  and invisible still never reach a spell attack roll (`ponytail:` at
+  `_spell_hit`). Innate Sorcery's Advantage is the only source wired.
+
+## Factions post contracts: who hires the company (2026-09-24)
+
+The owner's call from the skills pass: factions and towns offer merc jobs, and
+standing with each faction decides who hires you. Most of the jobs already
+existed:
+
+- **Clear a lair** was `clear_lair`.
+- **Escort** was `deliver_goods`, the carter's run.
+- **Raid** was `raid_settlement` against a monster hold.
+
+What was missing was whose job it was.
+
+**The job knows who posted it.** `core/contracts.gd` stamps every job with its
+`issuer` (the people of the settlement that posted it) and, when it is aimed at
+somebody, who it is `against` (the world job's `chain_faction`). `Quest.turn_in`
+credits the issuer's opinion and a ladder deed **wherever the job is handed
+in**. Before this it credited the hand-in town: a human bounty cashed at an
+elven inn pleased the elves and taught the humans nothing. A job posted before
+contracts has no issuer and credits the hand-in town exactly as before.
+
+**Standing opens the work** (`Contracts.GATE`), on the two readings the game
+already keeps:
+
+- **The ladder** (deeds, never lost: what you have done for them). War work,
+  meaning a raid on a settlement, waits for **Known** (4 deeds).
+- **Opinion** (their mood, which drifts). Bounty and war work wait for at least
+  **neutral**. Everything else stays open down to the board's own floor
+  (`QUEST_MIN`), as it was.
+
+A closed kind is not a greyed button. It is a note under the board's header:
+"War work goes to those the humans know — Known, at 4 deeds (you have 0)."
+The robots press the first *Take* they find, and a job you can't take isn't a
+job on the board.
+
+**Regard pays.** `Contracts.pay_mult` scales a job's gold with their opinion:
++25% at +100, −6% at the floor. It sits on top of the renown premium every job
+already gets. `STANDING_PAY` is a TUNING taste number: gold sits outside every
+sweep, as `world.gd`'s `PURSE` ponytail says of a caravan.
+
+**Two bugs fixed on the way.**
+
+- The hand-in crediting above.
+- The `quest_chain` achievement counted the hand-in town's faction, a civilized
+  people no chain is ever against. It could not be earned in the open world.
+  It now counts the job's own `chain_faction`.
+
+`test_contracts` (new, 42 checks) covers:
+
+- the gates opening across Known and neutral, and closing at the floor;
+- pay at neutral, loved, and below the floor, and stacking on the real board;
+- every offer stamped with its issuer, and closed kinds listed only where
+  they'd be posted;
+- turn-in crediting the issuer, not the hand-in town;
+- a pre-contracts job still crediting the hand-in town;
+- a job against a people costing you with them.
+
+`test_quest_posting`: the city posts its raid only once it knows you.
+
+Shots, from the new `tests/shot_contracts.gd`: `docs/shots/contracts-board-stranger.png`,
+`docs/shots/contracts-board-known.png`.
+
+### Still open
+
+- **Raiding a rival people**, and **faction warfare**: the owner's call
+  (2026-09-24) is that the player *and* the factions can fight each other. That
+  lifts the "never civilized-vs-civilized" rule from the Post-T91 gap note. Next:
+  - a `raid_caravan` contract against another people's caravan or patrol, with
+    an Attack option on the friendly approach card when the band is a contract
+    target;
+  - then NPC factions fighting each other.
+
+  `against` and `Contracts.AGAINST_COST` are already in place for it: every
+  current target is a monster faction, so today it never fires.
+- **Factors.** Other peoples' agents posting their own contracts on a city's
+  board, gated by each people's standing.
+- **Turn-in.** Whether it should be limited to the issuer's own towns.
+- **Co-op.** A guest sees the host's standing and gates, since the offers are
+  the host's.
+
+## Enemy casters: real slots for the cult, and what the ruler can't price (2026-09-24)
+
+The owner's call from the skills pass: **enemy magic is rare and named.**
+Ordinary foes keep their limited-use innate abilities, and a slot-based caster
+is an occasional elite or boss, so an enemy caster is an event. It must be
+priced by `Power.estimate` on the same "each slot is one cast of the best
+spell" rule the party is priced on.
+
+**What is built.**
+
+- `data/effects/casters.json` gives three cult statblocks a real spell list
+  and slots:
+  - cult fanatic: WIS, DC 11, 4/3 slots;
+  - priest: WIS, DC 13, 4/3/2;
+  - mage: INT, DC 14, 4/3/3/3/1, from Fire Bolt up to Cone of Cold.
+
+  Each block `replaces` the innate bolt, the old stand-in for Spellcasting, so
+  the magic isn't counted twice.
+- `core/enemy_casters.gd` turns a spawned statblock into the caster. It builds
+  the spell buttons through the **same** `Effects.spell_verbs_for` a hero's come
+  from, via a five-field stand-in sheet. A scaled caster's DC and spell attack
+  rise with its multiplier, the way `_scale` raises its swing.
+- `Encounter.spawn(…, caster, caster_cap)`.
+- The fight log opens with "Othmar the Magister is a spellcaster — up to Cone
+  of Cold."
+- `core/ai.gd` `_caster_turn` works in this order:
+  1. an area or cone that catches two or more heroes (the autopilot's aims, the
+     cone half now shared as `_best_cone`);
+  2. then control, but not a second concentration lock;
+  3. then the biggest single-target spell, highest slot first.
+
+  A hero in reach: a caster whose swing beats its best spell melees, and one
+  whose swing doesn't steps clear first.
+- `Scaler` has two ways in:
+  - a seeded caster-elite roll in `roster_for` (`caster_rolls`,
+    `_caster_elite`), where the lead is bought at mult 1.0 and the rest buys
+    its escort, as `boss_for` does;
+  - `lead_caster` on a boss, which the cult's lair boss now carries.
+
+**The rule the owner chose, and what it bought.** The first sweep
+(`tests/sweep_caster.gd`, cultist rosters, 200 pinned seeds, the roll forced
+off and on) found the ruler wrong both ways:
+
+- a caster fanatic or priest priced above its worth, so its warband lost a
+  body and got **easier**: level-5 hard 56% → 89.5%;
+- a Magister priced far below its worth: level-8 hard 54% → 14%, the level-8
+  lair boss 63% → 22%.
+
+Two fixes were chosen and built:
+
+1. **Area spells are counted against the other side's actual size.**
+   `Power.area_targets(opponents)`: 2 when unknown, as before, and the party's
+   size when a foe is priced against the party it is bought to fight, capped at
+   4. Heroes are priced before their foes exist, so every hero price is
+   unchanged.
+2. **Caster tiers by band.** `EnemyCasters.SLOT_CAP` limits how far up the
+   spell levels a caster reaches:
+
+   | band | highest spell level |
+   |---|---|
+   | Heartland, Marches | 2nd |
+   | Frontier | 3rd |
+   | Far Deeps | anything |
+
+   On the map it's read off the fight's own country (`world.gd`'s
+   `encounter_spec`, `site.gd`'s rooms). Off the map it's the band the party's
+   level belongs to.
+
+It still wasn't enough. Priced like its plain statblock, a Magister won 90–98%
+of level 5–8 fights, and with both fixes:
+
+| cult warband, caster forced on | normal | hard |
+|---|---|---|
+| level 3 (off → on) | 86.5 → 99.5% | 68.0 → 99.0% |
+| level 5 | 86.0 → 93.0% | 56.0 → 86.0% |
+| level 8 | 81.0 → 59.0% | 54.0 → 27.0% |
+
+The remaining error is structural. The ruler's `sqrt(dpr × ehp)` and its
+four-cast `ROUNDS` cap can't see a glass cannon that flattens a party from
+range. So it ships where it measured in line, and nowhere else:
+
+- **Casters are fielded only from the Frontier tier up** (`MIN_FIELD_CAP`).
+  Below that tier the statblock fights exactly as on master.
+- **The cult's lair boss casts at the Frontier tier.** The new
+  `tests/sweep_caster_boss.gd` (150 seeds; the boss sweep's one-town map reads
+  as all Heartland, so it can't ask this) measures level 6 at 79.3% → 63.3% and
+  level 8 at 72.7% → 60.0%. That is a harder climax, inside the 15–85% band and
+  beside `BOSS_POOL`'s own low-60s.
+- **The warband caster roll ships at 0%** (`CASTER_ELITE_CHANCE`). It is built
+  and tested, and a sweep forces it on with `caster_chance_override`.
+
+Shot, from the new `tests/shot_caster.gd`: `docs/shots/enemy-caster-announced.png`,
+showing "Sable the Magister is a spellcaster — up to Fireball."
+
+`test_scaler` is byte-identical to master. `tests/sweep_faction_boss.gd` gained
+`LEVEL=` to sweep a boss at the level a party meets it.
+
+`test_enemy_casters` (new, 196 checks) covers:
+
+- the data;
+- the spawn (slots, buttons, the innate bolt replaced, the title);
+- scaled DCs;
+- the band caps and the least fielded tier;
+- pricing above the plain statblock;
+- the roll: seeded, at most one caster, cultist-only, forced on and off, and
+  near the shipped rate;
+- the Frontier boss as a caster, the Heartland boss as its statblock;
+- the announcement;
+- the AI: areas first, stepping clear, holding one lock.
+
+### Still open
+
+- **Price a glass cannon** (`core/rules/power.gd`), then raise
+  `CASTER_ELITE_CHANCE` and lower `MIN_FIELD_CAP`. Both are marked `ponytail:`.
+- **More casters.** Casters leading other factions (a mage with bandits, a
+  priest with soldiers), and the druid and the acolyte.
+- **Shield, Counterspell, heals and buffs for foes.** Power doesn't price them
+  and the AI doesn't use them.
+- **Breath weapons** are areas too and still priced as one target. That's a
+  separate pass over ~30 statblocks.
+
 ## The action bar's hover card — two voices, drawn dice, colour-coded types (2026-09-24)
 
 The owner: "tidy up the action bar and spell explanations when hovered. there

@@ -1,0 +1,69 @@
+{
+  "_note": "sorcmerc-authored. A bestiary statblock that casts from real spell slots when it is spawned as a caster (core/enemy_casters.gd). Keyed by the base bestiary id; `replaces` names the innate stand-in features the real list supersedes, so the magic is not counted twice. save_dc and slots are the 2024 Monster Manual's; attack_bonus is save_dc - 8, the proxy core/rules/power.gd prices a spell attack with. `level` sets proficiency and cantrip scaling.",
+  "cult-fanatic": {
+    "title": "Zealot",
+    "ability": "wis",
+    "level": 4,
+    "save_dc": 11,
+    "slots": [
+      4,
+      3
+    ],
+    "spells": [
+      "sacred-flame",
+      "command",
+      "guiding-bolt",
+      "hold-person"
+    ],
+    "replaces": [
+      "monster-innate-bolt"
+    ]
+  },
+  "priest": {
+    "title": "Hierophant",
+    "ability": "wis",
+    "level": 5,
+    "save_dc": 13,
+    "slots": [
+      4,
+      3,
+      2
+    ],
+    "spells": [
+      "sacred-flame",
+      "command",
+      "guiding-bolt",
+      "hold-person"
+    ],
+    "replaces": [
+      "monster-innate-bolt"
+    ]
+  },
+  "mage": {
+    "title": "Magister",
+    "ability": "int",
+    "level": 9,
+    "save_dc": 14,
+    "slots": [
+      4,
+      3,
+      3,
+      3,
+      1
+    ],
+    "spells": [
+      "fire-bolt",
+      "magic-missile",
+      "burning-hands",
+      "scorching-ray",
+      "hold-person",
+      "fireball",
+      "lightning-bolt",
+      "ice-storm",
+      "cone-of-cold"
+    ],
+    "replaces": [
+      "monster-innate-bolt"
+    ]
+  }
+}
