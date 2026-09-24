@@ -385,6 +385,6 @@ none is built yet. Each lands as its own piece of work with its own
 | 8.7 Bible list | **Mark the paladin/ranger slot fix built.** Rival raids and faction warfare stay decided-not-built. |
 | 8.8 Strays | **Delete the orphan root `.import` files and untrack `shots_hiring/`**, **delete `data/lpc/`**, and **make `update-notes.yml` read `docs/plan/`**. This is an owner-approved edit under `.github/`. |
 
-**Open points to confirm when each is built:**
-- **1.6:** does Rope Trick also cancel the ambush roll? This record assumes it does not.
-- **1.3 / 3.3:** a full reset on re-entry still prices the regrown lair for whatever the party is carrying at the door. Does re-entry also use `Regions.fresh_score`, so a drained party is not met by a smaller lair?
+**Two follow-ups the owner settled:**
+- **1.6:** Rope Trick does **not** cancel the ambush roll. It only replaces the kit.
+- **1.3 / 3.3:** re-entry **also** prices the reset lair with `Regions.fresh_score`, so a drained party is never met by a smaller lair.
