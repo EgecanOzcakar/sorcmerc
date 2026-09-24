@@ -622,13 +622,13 @@ func take() -> int:
 func short_rest() -> bool:
 	if state != "visiting" or room.get("kind", "") != "rest" or room.get("rested", false):
 		return false
-	if not Visit.can_short_rest(party):
+	if not Visit.can_short_rest(party, world):
 		say("Nobody can rest any more today — only a night's sleep will do now.")
 		return false
 	room["rested"] = true
 	_rested = true
-	Visit.rest(party, world, "short-rest")
-	say("An hour in %s. Not a night's sleep, but it is something." % room.get("title", "the dark"))
+	var r: Dictionary = Visit.rest(party, world, "short-rest")
+	say("An hour in %s. Not a night's sleep, but it is something.%s" % [room.get("title", "the dark"), Visit.rest_note(r)])
 	return true
 
 

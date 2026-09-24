@@ -1,7 +1,16 @@
 # Character profile: the sheet for one Character, rendered from resolve.gd's output.
 # Dependency-injected — call set_character(ch) with a core/character.gd build.
-# Nothing here derives a stat; every number comes off ch.sheet(). Editing (equip,
-# damage, spend) mutates the build and re-renders, so the sheet re-resolves.
+# Nothing here derives a stat; every number comes off ch.sheet(). Equipping
+# mutates the build and re-renders, so the sheet re-resolves.
+#
+# HP, pools and slots are shown, never edited. The design audit
+# (docs/audit-game-design.md §1.1) found the sheet was a free long rest
+# anywhere: HP ±1/±5/full buttons, a − and + on every pool, and a "Long rest
+# (restore all)" button, reachable from the map's party page in open country —
+# a sorcerer could refill sorcery points here and turn them into slots in the
+# next fight. They are gone; a rest is taken where the world charges for one.
+# The slot rows are Adapter.slot_table() (§4.1), the same reading the party
+# page and the combat pips show: what is left against the sheet's maximum.
 extends Control
 
 const Catalog = preload("res://core/rules/catalog.gd")
@@ -11,6 +20,7 @@ const Leveling = preload("res://core/leveling.gd")
 const Ach = preload("res://core/achievements.gd")
 const Potions = preload("res://core/potions.gd")
 const RoadSpells = preload("res://core/road_spells.gd")
+const Adapter = preload("res://core/adapter.gd")   # audit 4.1: the one reading of slots
 const Traits = preload("res://core/traits.gd")
 
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
@@ -81,7 +91,7 @@ func field(key: String) -> String:
 	return _fields[key].text if _fields.has(key) else ""
 
 func _build_theme() -> void:
-	theme = Icons.dark_theme(true)   # compact: the +/- and equip buttons sit inside text rows
+	theme = Icons.dark_theme(true)   # compact: the equip and cast buttons sit inside text rows
 
 # --- rendering ---------------------------------------------------------------
 
@@ -246,14 +256,6 @@ func _row(box: VBoxContainer, left: String, right: String, key := "", tint := CO
 		_fields[key] = r
 	return h
 
-func _btn(h: HBoxContainer, text: String, fn: Callable) -> void:
-	var b := Button.new()
-	Icons.clicks(b)
-	b.text = text
-	b.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
-	b.pressed.connect(fn)
-	h.add_child(b)
-
 static func _sign(n: int) -> String:
 	return "%+d" % n
 
@@ -271,10 +273,7 @@ func _abilities(col: VBoxContainer, s) -> void:
 func _defense(col: VBoxContainer, s) -> void:
 	var v := _panel(col, "Defense")
 	_row(v, "Armor Class", str(s.ac), "ac")
-	var hp := _row(v, "Hit Points", "%d/%d" % [_hp_current(s), s.max_hp], "hp")
-	for delta in [-5, -1, 1, 5]:
-		_btn(hp, _sign(delta), _apply_hp.bind(delta))
-	_btn(hp, "full", _apply_hp.bind(9999))
+	_row(v, "Hit Points", "%d/%d" % [_hp_current(s), s.max_hp], "hp")
 	for k in s.speeds:
 		_row(v, _title(k) + " speed", "%d ft" % int(s.speeds[k]), "speed_" + k)
 	_row(v, "Initiative", _sign(s.initiative), "initiative")
@@ -319,57 +318,41 @@ func _attacks(col: VBoxContainer, s) -> void:
 
 # --- resources ---------------------------------------------------------------
 
+# Read-only (audit 1.1). Slots are Adapter.slot_table(): left against the
+# sheet's maximum, a spent level still a row, the warlock's Pact Magic named
+# as such. A level Font of Magic has pushed past its maximum reads "4/3",
+# which is what it is until the long rest. Keys: slot_<level>, slot_pact.
 func _resources(col: VBoxContainer, s) -> void:
 	var v := _panel(col, "Resources")
 	var any := false
-	var sc: Dictionary = s.spellcasting
-	if not sc.is_empty():
-		var pact: Dictionary = sc.get("pact", {})
-		if not pact.is_empty():
-			any = true
-			_pool_row(v, "pact", "Pact slots (lv %d)" % int(pact["slotLevel"]), int(pact["count"]))
-		for i in int(sc.get("slots", []).size()):
-			var mx := int(sc["slots"][i])
-			if mx > 0:
-				any = true
-				_pool_row(v, "slot:%d" % (i + 1), "Level %d slots" % (i + 1), mx)
+	for row in Adapter.slot_table(_ch):
+		any = true
+		var lv := int(row["level"])
+		var pact: bool = row["pact"]
+		var left := int(row["left"])
+		_row(v, "Pact slots (lv %d)" % lv if pact else "Level %d slots" % lv,
+			"%d/%d" % [left, int(row["max"])], "slot_pact" if pact else "slot_%d" % lv,
+			COL_TEXT if left > 0 else COL_DIM)
+	# Arcane Recovery is not a pool on the sheet (it is spent by the rest
+	# itself, core/adapter.gd), so it gets its own line: ready or used.
+	var ar_max: int = Adapter.arcane_recovery_max(_ch)
+	if ar_max > 0:
+		any = true
+		var ready: bool = Adapter.arcane_recovery_left(_ch) > 0
+		_row(v, "Arcane Recovery", "ready, up to %d slot levels" % ar_max if ready else "used until a long rest",
+			"arcane_recovery", COL_TEXT if ready else COL_DIM)
 	for p in s.pools:
 		any = true
 		var label: String = _title(p["id"])
 		if int(p["die_size"]) > 0:
 			label += " (d%d)" % int(p["die_size"])
-		_pool_row(v, p["id"], label, int(p["max"]))
+		var mx := int(p["max"])
+		_row(v, label, "%d/%d" % [clampi(int(_ch.pools.get(p["id"], mx)), 0, mx), mx], "pool_" + String(p["id"]))
 	if not any:
 		_row(v, "—", "no tracked resources")
-	else:
-		var h := HBoxContainer.new()
-		v.add_child(h)
-		_btn(h, "Long rest (restore all)", _restore_all)
-
-func _pool_row(v: VBoxContainer, id: String, label: String, mx: int) -> void:
-	var h := _row(v, label, "%d/%d" % [_pool_current(id, mx), mx], "pool_" + id)
-	_btn(h, "−", _spend.bind(id, mx, -1))
-	_btn(h, "+", _spend.bind(id, mx, 1))
-
-func _pool_current(id: String, mx: int) -> int:
-	return clampi(int(_ch.pools.get(id, mx)), 0, mx)
-
-func _spend(id: String, mx: int, delta: int) -> void:
-	_ch.pools[id] = clampi(_pool_current(id, mx) + delta, 0, mx)
-	_render()
-
-func _restore_all() -> void:
-	_ch.pools.clear()
-	_ch.hp_current = -1
-	_render()
 
 func _hp_current(s) -> int:
 	return s.max_hp if _ch.hp_current < 0 else clampi(_ch.hp_current, 0, s.max_hp)
-
-func _apply_hp(delta: int) -> void:
-	var s = _ch.sheet()
-	_ch.hp_current = clampi(_hp_current(s) + delta, 0, s.max_hp)
-	_render()
 
 # --- features ----------------------------------------------------------------
 

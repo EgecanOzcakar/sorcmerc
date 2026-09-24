@@ -9,6 +9,8 @@ extends SceneTree
 
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const WorldCamp = preload("res://core/world_camp.gd")
+const RNG = preload("res://core/rng.gd")
 
 var _pass := 0
 var _fail := 0
@@ -40,8 +42,23 @@ func _camp(main) -> void:
 	main.world.clock.pause()   # nothing else on the map gets a word in
 	main.party.safe_camp = true
 	main.party.last_long_rest_at = -99999.0
+	_quiet_night(main)
 	main._make_camp()
 	await process_frame
+
+# Since the design audit's §1.6 a roped camp can still be jumped (Rope Trick
+# is only the kit), and since §1.7 nobody camps with a hostile band in reach —
+# and the walked nights bring the map's hunters to the town beside the camp.
+# Neither is what this test is about: the clock is nudged to a minute whose
+# camp seed rolls a quiet night (the camp integration test's own search), and
+# a band standing on the camp is sent off the map.
+func _quiet_night(main) -> void:
+	var here: Vector2 = main.world.player().position
+	for q in main.world.parties.duplicate():
+		if not q.is_player and q.position.distance_to(here) < 300.0:
+			main.world.parties.erase(q)
+	while WorldCamp.ambush_roll(RNG.new(WorldCamp.camp_seed(main.world.clock.elapsed, here))):
+		main.world.clock.elapsed += 1.0
 
 func _init() -> void:
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
@@ -182,6 +199,14 @@ func _init() -> void:
 		# forward so a stray travel event doesn't fire on the frame below and
 		# mask what we're actually checking.
 		main._last_travel_at = main.world.clock.elapsed
+		# ...and, since the design audit's §1.7, those days are WALKED: the
+		# hunters on this map spend them making for the town the company sleeps
+		# in, and would meet it at the gate on that same frame. The world moving
+		# is the point of that change; it is not what this block checks.
+		var here: Vector2 = main.world.player().position
+		for q in main.world.parties.duplicate():
+			if not q.is_player and q.position.distance_to(here) < 300.0:
+				main.world.parties.erase(q)
 		main._event_card.acknowledged.emit()
 		await process_frame
 		check(not main.world.clock.is_paused(), "acking after Leave does not leave the map paused")

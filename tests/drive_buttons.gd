@@ -496,10 +496,8 @@ func _profile_at(which: String) -> Control:
 		_: ch = Presets.vera()
 	var pty = Party.new()
 	pty.add_member(ch)
-	# Six points of damage, so all five of the HP row's buttons (−5 −1 +1 +5 full)
-	# have something to do. At full HP three of them are correctly inert, which
-	# would prove nothing.
-	ch.hp_current = maxi(1, ch.sheet().max_hp - 6)
+	# The sheet has no HP, pool or rest buttons any more (audit 1.1: it only
+	# shows them), so nothing here needs a hurt hero to have something to do.
 	pty.stash_add("shortsword")                       # something to equip
 	pty.stash_add("cloak-of-elvenkind", 1, false)     # a mystery, and the scroll
 	pty.stash_add(Party.IDENTIFY_SCROLL)              # that reads it (T13)
@@ -507,32 +505,14 @@ func _profile_at(which: String) -> Control:
 	_prof.set_character(ch)
 	return _prof
 
-# No hp_current and no pools here, deliberately. Both are rendered on the screen as
-# "cur/max" already, and both are stored lazily — a clamped no-op write ("+" on a
-# full pool) materialises the key with the value it already had, which moves the
-# model string without moving anything a player could see. Counting that as a change
-# is how a dead stepper would slip through.
+# What the sheet still edits: the gear and the level. HP, pools and slots are
+# shown, never edited (audit 1.1), so they are the UI half's to see if they move.
 func _profile_model() -> String:
 	var ch = _prof.character()
 	return "%s|%s|%s|%d" % [ch.equipped, ch.offhand, _prof.party().stash, ch.level()]
 
-# A stepper at the end of its range: the row it sits in reads "cur/max", so "+" on
-# a full pool and "−" on an empty one genuinely have nothing to do. That is the pool
-# being full, not a dead button — and the other direction of the same pair is always
-# pressed for real.
-func _profile_expect(c: BaseButton) -> String:
-	if c.text != "+" and c.text != "−":
-		return ""
-	var h: Node = c.get_parent()
-	if h == null or h.get_child_count() < 2 or not (h.get_child(1) is Label):
-		return ""
-	var parts: PackedStringArray = String(h.get_child(1).text).split("/")
-	if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
-		return ""
-	if c.text == "+" and int(parts[0]) >= int(parts[1]):
-		return "inert: the pool is already full"
-	if c.text == "−" and int(parts[0]) <= 0:
-		return "inert: the pool is already empty"
+# Every button the sheet has left is expected to do something.
+func _profile_expect(_c: BaseButton) -> String:
 	return ""
 
 func _profile() -> void:

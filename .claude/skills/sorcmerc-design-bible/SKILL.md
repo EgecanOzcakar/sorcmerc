@@ -27,11 +27,13 @@ The mercenary-company fantasy is carried by flavour and structure, not by a Batt
 - **Decided:** mercs can be sorcerers. Sorcerers are *uncommon but not rare* in the world.
 - **In code:** the sorcerer is one of 12 playable classes, with nothing special about how many exist. No mechanic makes sorcerers uncommon, and that is decided: their rarity is fiction only.
 - **Casting costs slots.** How many slots comes from the class and its level (5e 2024 tables in `data/classes.json`). Slots have **levels 1–9**, and a spell can be upcast from a higher slot.
-- **Slots refill on a long rest only, never per battle.** Spent slots are written back to the character when a fight ends (`Adapter.write_back`) and carry into the next fight. The exceptions are all RAW: warlock Pact Magic comes back on a short rest, a wizard's Arcane Recovery gets some slots back once per day, and an elf's Trance adds a short-rest top-up after a long rest. This supports pillar 3.
+- **Slots refill on a long rest only, never per battle.** Spent slots are written back to the character when a fight ends (`Adapter.write_back`) and carry into the next fight. The exceptions are all RAW: warlock Pact Magic comes back on a short rest, a wizard's Arcane Recovery gets some slots back at a short rest once per long rest (`Adapter.arcane_recovery_auto`), and an elf's Trance banks one extra short rest for later that day (`core/trance.gd`). This supports pillar 3.
+- **The player sees the real slots.** The sheet, the party page and the combat pips all read `Adapter.slot_table()`: left against the sheet's maximum. The sheet only shows HP, pools and slots; it has no rest or refill buttons.
 - **Long rests are expensive:**
   - at most once per 24 in-game hours;
-  - 8 hours of world clock, during which bands keep walking and markets restock;
-  - an inn room costs gold, and camping needs a 150-gold camp kit and carries an 8% ambush risk;
+  - 8 hours of world clock, during which bands keep walking and markets restock (`core/world_rest.gd` steps the night);
+  - an inn room costs gold, and camping needs a 150-gold camp kit (or Rope Trick, whose slot stays spent through that night) and carries an 8% ambush risk; nobody camps with a hostile band in reach;
+  - downtime's nights refill only when the 24-hour gate allows;
   - none at all inside a site.
 - **Spent slots never buy an easier fight.** The encounter budget reads the party's *remaining* slots, so it would send a drained party a smaller, poorer fight. `WorldThreat.slot_hold()` cancels that in the open world, and `core/site.gd` does the same inside sites. Only wounds thin a fight.
 - **Enemy magic is mostly not slot-based.** An ordinary foe's "magic" is a limited-use feature such as `monster-innate-bolt` (2 uses), a breath weapon, a gaze or life drain (`data/effects/features.json`). The exception is the named casters in `data/effects/casters.json`.

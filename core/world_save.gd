@@ -363,10 +363,12 @@ static func _party_dict(party) -> Dictionary:
 		"stash": party.stash.duplicate(true), "quests": party.quests.duplicate(true),
 		"last_long_rest_at": party.last_long_rest_at,
 		"short_rests_since_long": party.short_rests_since_long,
+		"trance_rest_until": party.trance_rest_until,   # audit 4.3: Trance's banked short rest
 		"overworld_figure": party.overworld_figure,
 		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 		"road": {"scouted_next": party.scouted_next, "swift_until": party.swift_until,
-			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set, "blessed": party.blessed},   # potions / road spells
+			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set, "blessed": party.blessed,
+			"camp_holds": party.camp_holds.duplicate(true)},   # potions / road spells; audit 1.6's held slots
 		"relations": PartyOpinion.to_dict(party),   # spike-party-opinions §8: who thinks what of whom
 		"callings": Callings.to_dict(party),
 		"downtime": Downtime.to_dict(party),
@@ -388,6 +390,7 @@ static func _party_from(pd: Dictionary):
 	party.quests = _ints(pd.get("quests", []))
 	party.last_long_rest_at = float(pd.get("last_long_rest_at", -1e12))
 	party.short_rests_since_long = int(pd.get("short_rests_since_long", 0))
+	party.trance_rest_until = float(pd.get("trance_rest_until", -1.0))   # an old save has none banked
 	party.overworld_figure = String(pd.get("overworld_figure", ""))
 	party.travel_orders = pd.get("travel_orders", {}).duplicate(true)   # D3; an old save marches at the default
 	var road: Dictionary = pd.get("road", {})
@@ -396,6 +399,11 @@ static func _party_from(pd: Dictionary):
 	party.safe_camp = bool(road.get("safe_camp", false))
 	party.alarm_set = bool(road.get("alarm_set", false))
 	party.blessed = bool(road.get("blessed", false))
+	party.camp_holds.clear()   # an old save holds nothing: its Rope Trick was cast before slots were held
+	for h in road.get("camp_holds", []):
+		if h is Dictionary:
+			party.camp_holds.append({"id": String(h.get("id", "")), "level": int(h.get("level", 1)),
+				"spell": String(h.get("spell", ""))})
 	PartyOpinion.from_dict(party, pd.get("relations", {}))   # an old save with no key loads as a fresh party
 	Callings.from_dict(party, pd.get("callings", {}))
 	Downtime.from_dict(party, pd.get("downtime", {}))

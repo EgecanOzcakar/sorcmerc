@@ -177,25 +177,34 @@ func _unidentified() -> void:
 	check(pty.stash_count("cloak-of-elvenkind") == 0, "an identified magic item can be taken")
 	p.queue_free()
 
-# HP and pools are editable, and a long rest restores both.
+# Audit 1.1 / 4.1: HP, pools and slots are shown, never edited — no button on
+# the sheet refills anything — and the slot rows are the real ones: what is
+# left of the sheet's maximum after the fights the build has been in.
 func _resources() -> void:
 	var ilsa = Presets.ilsa()
 	var s = ilsa.sheet()
-	var p = _screen(ilsa)
 	var slots: Array = s.spellcasting["slots"]
 	check(int(slots[0]) > 0, "Ilsa has level-1 slots")
-	check(p.field("pool_slot:1") == "%d/%d" % [int(slots[0]), int(slots[0])], "slots start full")
-	p._spend("slot:1", int(slots[0]), -1)
-	check(p.field("pool_slot:1") == "%d/%d" % [int(slots[0]) - 1, int(slots[0])], "spending a slot")
-	check(int(ilsa.pools["slot:1"]) == int(slots[0]) - 1, "spend writes through to the character")
-
-	p._apply_hp(-5)
-	check(p.field("hp") == "%d/%d" % [s.max_hp - 5, s.max_hp], "damage applies")
-	p._apply_hp(-9999)
-	check(p.field("hp") == "0/%d" % s.max_hp, "damage clamps at 0")
-	p._restore_all()
-	check(p.field("hp") == "%d/%d" % [s.max_hp, s.max_hp], "long rest restores HP")
-	check(p.field("pool_slot:1") == "%d/%d" % [int(slots[0]), int(slots[0])], "long rest restores slots")
+	ilsa.hp_current = maxi(1, s.max_hp - 5)
+	ilsa.slots_used.assign([int(slots[0]), 0, 0, 0, 0, 0, 0, 0, 0])   # every 1st spent, two fights ago
+	var p = _screen(ilsa)
+	check(p.field("slot_1") == "0/%d" % int(slots[0]), "a level with none left is still a row, read off slots_used: %s" % p.field("slot_1"))
+	if int(slots[1]) > 0:
+		check(p.field("slot_2") == "%d/%d" % [int(slots[1]), int(slots[1])], "an unspent level reads full")
+	check(not p._fields.has("pool_slot:1"), "the old separate slot counter is gone")
+	check(p.field("hp") == "%d/%d" % [maxi(1, s.max_hp - 5), s.max_hp], "HP is shown as it is")
+	var words: Array = []
+	for b in p.find_children("*", "BaseButton", true, false):
+		words.append(String(b.text))
+	for w in ["−", "+", "full", "+5", "-5", "+1", "-1", "Long rest (restore all)"]:
+		check(not w in words, "no '%s' button on the sheet" % w)
+	check(not p.has_method("_restore_all") and not p.has_method("_apply_hp") and not p.has_method("_spend"),
+		"...and nothing behind one")
+	# Font of Magic's unspent slot rides out of a fight as a negative entry:
+	# one more than the maximum, until the long rest.
+	ilsa.slots_used.assign([-1, 0, 0, 0, 0, 0, 0, 0, 0])
+	p.set_character(ilsa)
+	check(p.field("slot_1") == "%d/%d" % [int(slots[0]) + 1, int(slots[0])], "a Font slot reads over the maximum: %s" % p.field("slot_1"))
 	p.queue_free()
 
 # A warlock renders a pact-magic row instead of a slot table.
@@ -211,9 +220,9 @@ func _pact() -> void:
 	var pact: Dictionary = w.sheet().spellcasting.get("pact", {})
 	check(not pact.is_empty(), "warlock sheet carries pact magic")
 	var p = _screen(w)
-	check(p.field("pool_pact") == "%d/%d" % [int(pact["count"]), int(pact["count"])],
+	check(p.field("slot_pact") == "%d/%d" % [int(pact["count"]), int(pact["count"])],
 		"pact slots render at full")
-	check(not p._fields.has("pool_slot:1"), "warlock has no ordinary slot rows")
+	check(not p._fields.has("slot_%d" % int(pact["slotLevel"])), "warlock has no ordinary slot rows")
 	p.queue_free()
 
 # A potion in the stash is a Drink tile, not an Equip one; drinking heals.

@@ -75,6 +75,12 @@ static func arcane_recovery_max(ch) -> int:
 	var lvl: int = ch.sheet().class_level("wizard")
 	return ceili(lvl / 2.0) if lvl > 0 else 0
 
+# The charges left. A key never written (a wizard who has not long-rested since
+# the build was made) reads as full, the same "missing means full" every pool
+# on the build uses (to_combatant's `ch.pools.get(id, max)`).
+static func arcane_recovery_left(ch) -> int:
+	return int(ch.pools.get(ARCANE_RECOVERY_POOL, arcane_recovery_max(ch)))
+
 # `restore_levels`: which slot levels to refund, e.g. [1, 1, 2] = two 1st- and
 # one 2nd-level slot (cost 4 charges). Refuses and changes nothing if the party
 # can't afford it, a level is above the cap, or the character has no slot of
@@ -83,7 +89,7 @@ static func arcane_recovery(ch, restore_levels: Array) -> bool:
 	var cost := 0
 	for lvl in restore_levels:
 		cost += int(lvl)
-	if cost <= 0 or cost > int(ch.pools.get(ARCANE_RECOVERY_POOL, 0)):
+	if cost <= 0 or cost > arcane_recovery_left(ch):
 		return false
 	var full := _full_slots(ch.sheet())
 	var remaining := full.duplicate()
@@ -101,9 +107,38 @@ static func arcane_recovery(ch, restore_levels: Array) -> bool:
 		ch.slots_used.append(0)
 	for i in refund:
 		ch.slots_used[i] = maxi(0, int(ch.slots_used[i]) - refund[i])
-	ch.pools[ARCANE_RECOVERY_POOL] = int(ch.pools[ARCANE_RECOVERY_POOL]) - cost
+	ch.pools[ARCANE_RECOVERY_POOL] = arcane_recovery_left(ch) - cost
 	ch.dirty()
 	return true
+
+# 4.2 of the design audit (docs/audit-game-design.md): the feature existed and
+# nothing called it. RAW 2024 is one use per long rest, at the end of a short
+# rest, choosing spent slots whose levels add up to no more than half the
+# wizard level (rounded up), none above 5th. The game picks for the player,
+# greedily and highest first: a spent 3rd is worth more than three spent 1sts
+# to anyone about to walk back into a fight, and it is the pick a player makes
+# nine times in ten. Used up the first time it restores anything; a short rest
+# with nothing spent leaves it for a later one. Returns the levels restored,
+# highest first ([] when it did nothing).
+# ponytail: no picker. A player who would rather have two 1sts than a 2nd gets
+# the 2nd; add a choice to the rest's message if anyone ever asks for one.
+static func arcane_recovery_auto(ch) -> Array:
+	var budget := arcane_recovery_left(ch)
+	if budget <= 0 or arcane_recovery_max(ch) <= 0:
+		return []
+	var full := _full_slots(ch.sheet())
+	var left := slots_left(ch)
+	var pick: Array = []
+	for lvl in range(mini(ARCANE_RECOVERY_MAX_SLOT, budget), 0, -1):
+		var spent := maxi(0, full[lvl - 1] - left[lvl - 1])
+		while spent > 0 and lvl <= budget:
+			pick.append(lvl)
+			budget -= lvl
+			spent -= 1
+	if pick.is_empty() or not arcane_recovery(ch, pick):
+		return []
+	ch.pools[ARCANE_RECOVERY_POOL] = 0   # once per long rest, whatever budget is left over
+	return pick
 
 static func to_combatant(ch, team: String, pos: Vector2i):
 	var s = ch.sheet()
@@ -405,9 +440,58 @@ static func slots_left(ch) -> Array[int]:
 		left[i] = maxi(0, left[i] - int(ch.slots_used[i]))
 	return left
 
+# 4.1 of the design audit: the one reading of a caster's slots that every screen
+# shows (the sheet, the party page's rows and the combat pips), so the price of
+# a spell is the same number wherever the player looks. One row per slot level
+# the build has: {level, left, max, pact}. `max` is the SHEET's maximum, never
+# the count a fight started with, so a slot spent three fights ago is an empty
+# pip rather than a pip that is not there, and a level with none left is still
+# a row. `left` can pass `max`: a slot Font of Magic made and did not spend is
+# carried as a negative slots_used (write_back below), and it is a real slot
+# until the long rest. `pact` marks the warlock's Pact Magic level, which
+# _full_slots() folds into the same array.
+static func slot_rows(full: Array, left: Array, pact_level := 0) -> Array:
+	var out: Array = []
+	for i in mini(9, full.size()):
+		var mx := int(full[i])
+		var l := int(left[i]) if i < left.size() else 0
+		if mx <= 0 and l <= 0:
+			continue
+		out.append({"level": i + 1, "left": l, "max": mx, "pact": i + 1 == pact_level})
+	return out
+
+static func _pact_level(s) -> int:
+	if s == null or not "spellcasting" in s:
+		return 0
+	var pact: Dictionary = s.spellcasting.get("pact", {})
+	return int(pact.get("slotLevel", 0)) if not pact.is_empty() else 0
+
+# A Character between fights: the sheet's maximum against slots_used.
+static func slot_table(ch) -> Array:
+	var s = ch.sheet()
+	return slot_rows(_full_slots(s), slots_left(ch), _pact_level(s))
+
+# A Combatant mid-fight: its sheet's maximum against the slots it has left. A
+# foe built from the bestiary has no sheet, so `fallback` (what it walked on
+# with) is its maximum; nobody spent a monster's slots before this fight.
+static func combat_slot_table(c, fallback: Array = []) -> Array:
+	var has_sheet: bool = c.sheet != null and "spellcasting" in c.sheet
+	var full: Array = _full_slots(c.sheet) if has_sheet else fallback
+	if full.is_empty():
+		full = c.slots
+	return slot_rows(full, c.slots, _pact_level(c.sheet) if has_sheet else 0)
+
+# A row as pips: ● a slot left, ○ one spent. The combat actor line and the party
+# page both draw it with this, so the two agree at a glance.
+static func slot_pips(row: Dictionary) -> String:
+	var l := int(row["left"])
+	return "L%d %s%s" % [int(row["level"]), "●".repeat(l), "○".repeat(maxi(0, int(row["max"]) - l))]
+
 # Short/long rest: refill the pools that regain on it, all spell slots on a long
 # rest, and HP on a long rest. T6's rest node is the caller.
-static func rest(ch, kind: String) -> void:
+# Returns the slot levels a short rest's Arcane Recovery brought back ([] for
+# everyone else, and for every long rest), so the rest's message can say so.
+static func rest(ch, kind: String) -> Array:
 	var s = ch.sheet()
 	for p in s.pools:
 		if kind == "long-rest" or p["regen"] == "short-rest":
@@ -432,7 +516,10 @@ static func rest(ch, kind: String) -> void:
 		var missing: int = s.max_hp - cur
 		if missing > 0:
 			ch.hp_current = cur + ceili(missing / 2.0)
+		ch.dirty()
+		return arcane_recovery_auto(ch)   # RAW: "when you finish a Short Rest"
 	ch.dirty()
+	return []
 
 # What T7 persists when a fight ends: HP, spent slots, spent pool uses.
 # Statuses and position belong to the fight and are dropped.
