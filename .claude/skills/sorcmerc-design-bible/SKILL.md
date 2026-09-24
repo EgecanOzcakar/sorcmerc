@@ -81,7 +81,7 @@ These are direction, not description. The code still does the old thing until ea
   - Heroes from earlier runs stay in the barracks. They turn up now and then as **veterans** in an inn's pool, at their own level, and only where the country fights at that level or higher.
   - **Old saves are grandfathered.** A save with no hiring rule keeps its roster, its Create new, and the inns' pools too. A new run starts with a 150 ◉ founding purse.
 - **Sorcerer rarity is fiction only.** No recruit odds and no social mechanic. "Uncommon but not rare" lives in the writing.
-- **Sorcerer features follow 2024 RAW.** Innate Sorcery and Font of Magic are built (`test_sorcerer.gd`). Metamagic is next. Until it lands, `core/manual.gd` says it isn't on the board yet.
+- **Sorcerer features follow 2024 RAW.** Built: Innate Sorcery, Font of Magic, and Metamagic Quickened, Twinned, Careful, Subtle and Seeking (`test_sorcerer.gd`). The other five options are still catalogue text; `core/manual.gd` says so.
 - **Enemy magic is rare and named.** Ordinary enemies keep their limited-use innate abilities. Built: the cult's lair boss casts from real slots in Frontier country and beyond, and announces itself. Caster elites in ordinary warbands are built but off, until the power model can price a glass cannon.
 - **Factions post contracts** (built: `core/contracts.gd`). Every job carries its `issuer`, who is credited wherever it is handed in. War work waits for Known and neutral opinion, and regard pays up to +25%.
 - **The player and the factions can fight each other** (the owner's call, 2026-09-24). This lifts the "never civilized-vs-civilized" rule: first rival-raid contracts, then NPC faction warfare. Neither is built yet.

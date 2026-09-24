@@ -1128,5 +1128,45 @@
       ]
     },
     "_note": "2024: spend a slot for its level in Sorcery Points (no action), or a Bonus Action to spend points on a slot (the Creating Spell Slots table). Expanded by effects._font_verbs into one button per level each way; combat._font_of_magic does the work."
+  },
+  "metamagic-quickened-spell": {
+    "kind": "metamagic",
+    "cost": "free",
+    "pool": "sorcery-points",
+    "pool_cost": 2,
+    "option": "quickened",
+    "_note": "2024: an action spell is cast as a Bonus Action; no level 1+ spell after it this turn, and none before it. Arms the next spell; unspent at turn's end, the points come back (combat._refund_metamagic)."
+  },
+  "metamagic-twinned-spell": {
+    "kind": "metamagic",
+    "cost": "free",
+    "pool": "sorcery-points",
+    "pool_cost": 1,
+    "option": "twinned",
+    "_note": "2024: a spell that can be upcast for another target is cast at one level higher in targets. Arms the next spell; unspent at turn's end, the points come back (combat._refund_metamagic)."
+  },
+  "metamagic-careful-spell": {
+    "kind": "metamagic",
+    "cost": "free",
+    "pool": "sorcery-points",
+    "pool_cost": 1,
+    "option": "careful",
+    "_note": "2024: up to CHA-mod creatures (min 1) of your choice in the area succeed on the save and take no damage; here, your allies caught in it. Arms the next spell; unspent at turn's end, the points come back (combat._refund_metamagic)."
+  },
+  "metamagic-subtle-spell": {
+    "kind": "metamagic",
+    "cost": "free",
+    "pool": "sorcery-points",
+    "pool_cost": 1,
+    "option": "subtle",
+    "_note": "2024: cast without Verbal or Somatic components; here, it cannot be Counterspelled. Arms the next spell; unspent at turn's end, the points come back (combat._refund_metamagic)."
+  },
+  "metamagic-seeking-spell": {
+    "kind": "metamagic",
+    "cost": "free",
+    "pool": "sorcery-points",
+    "pool_cost": 1,
+    "option": "seeking",
+    "_note": "2024: a missed spell attack rolls its d20 again, once. Arms the next spell; unspent at turn's end, the points come back (combat._refund_metamagic)."
   }
 }

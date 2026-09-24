@@ -37,6 +37,13 @@ func _init() -> void:
 	test_made_slot_outlives_the_fight()
 	test_innate_sorcery_comes_back_on_a_long_rest()
 	test_autopilot_makes_a_slot()
+	test_level_table()
+	test_metamagic_arms_and_refunds()
+	test_quickened()
+	test_twinned()
+	test_careful()
+	test_subtle()
+	test_seeking()
 	print("test_sorcerer: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -230,3 +237,136 @@ func test_autopilot_makes_a_slot() -> void:
 	var s2 = g[1]
 	AI._font_up(g[0], s2)
 	check(s2.pool_left(POINTS) == 5, "with slots in hand it leaves the points alone")
+
+# --- Metamagic -----------------------------------------------------------
+
+const Catalog = preload("res://core/rules/catalog.gd")
+const Presets = preload("res://core/presets.gd")
+
+func test_level_table() -> void:
+	var c: Dictionary = {}
+	for x in Catalog.all("classes.json"):
+		if x["id"] == "sorcerer":
+			c = x
+	var at := func(name: String) -> int:
+		for i in c["levels"].size():
+			for g in c["levels"][i]:
+				if g.get("key", "") == name or (g["type"] == "feature" and g["feature"]["id"] == name):
+					return i + 1
+		return -1
+	check(at.call("sorcerer-sorcerous-restoration") == 5, "Sorcerous Restoration at 5 (2024)")
+	check(at.call("sorcerer-arcane-apotheosis") == 20, "Arcane Apotheosis at 20")
+	check(at.call("feature-choice:class:sorcerer:4") == 17 and at.call("feature-choice:class:sorcerer:5") == 17,
+		"the third pair of Metamagic picks at 17")
+
+# A level-5 sorcerer who picked `options` at level 2.
+func _metamage(options: Array) -> Character:
+	var ch := _sorcerer(5)
+	for i in options.size():
+		ch.decide("feature-choice:class:sorcerer:%d" % i, {"type": "feature-choice", "optionId": "%s-spell" % options[i]})
+	ch.prepared.assign(["fire-bolt", "burning-hands", "hold-person", "scorching-ray"])
+	ch.dirty()
+	return ch
+
+func _mm(c, opt: String) -> Dictionary:
+	return _verb(c, "metamagic-%s-spell" % opt)
+
+func test_metamagic_arms_and_refunds() -> void:
+	var f := _fight(_metamage(["quickened", "twinned"]))
+	var cb = f[0]
+	var s = f[1]
+	check(not _mm(s, "quickened").is_empty() and not _mm(s, "twinned").is_empty(), "the two picks are buttons")
+	check(_mm(s, "careful").is_empty(), "an option not picked is not")
+	var r: Dictionary = cb.perform(s, _mm(s, "quickened"))
+	check(not r.has("error"), "arming Quickened performs (%s)" % r.get("error", ""))
+	check(s.pool_left(POINTS) == 3, "it cost 2 of 5 points up front (%d)" % s.pool_left(POINTS))
+	check(int(s.econ["bonus"]) == 1 and int(s.econ["action"]) == 1, "and no action at all")
+	check(not cb._offerable(s, _mm(s, "twinned")), "one option armed at a time")
+	cb.turn_idx = cb.order.find(s)
+	cb.end_turn()
+	check(not s.has("metamagic") and s.pool_left(POINTS) == 5, "unused at the turn's end: the points come back")
+
+func test_quickened() -> void:
+	var f := _fight(_metamage(["quickened", "twinned"]))
+	var cb = f[0]
+	var s = f[1]
+	var bolt := _spell(s, "fire-bolt")
+	cb.perform(s, bolt, f[2])
+	check(int(s.econ["action"]) == 0, "Fire Bolt took the action")
+	check(not cb._offerable(s, _spell(s, "scorching-ray")), "no action left for a second spell")
+	cb.perform(s, _mm(s, "quickened"))
+	check(cb._offerable(s, _spell(s, "scorching-ray")),
+		"Quickened: after a cantrip, a leveled spell on the bonus action is fine (2024)")
+	check(cb._offerable(s, bolt), "Quickened: Fire Bolt again, on the bonus action")
+	var r: Dictionary = cb.perform(s, bolt, f[2])
+	check(not r.has("error") and int(s.econ["bonus"]) == 0, "cast on the bonus action (%s)" % r.get("error", ""))
+	check(not s.has("metamagic"), "and the option is spent")
+	check(s.econ.get("cast_bonus_spell", false), "and no leveled spell may follow this turn")
+
+func test_twinned() -> void:
+	var f := _fight(_metamage(["twinned", "careful"]))
+	var cb = f[0]
+	var s = f[1]
+	var hold := _spell(s, "hold-person")
+	check(Combat._twin_step(hold) >= 1, "Hold Person upcasts for another target")
+	cb.perform(s, _mm(s, "twinned"))
+	var before: int = cb.log.size()
+	cb.perform(s, hold, f[2])
+	var said := "\n".join(cb.log.slice(before))
+	check(said.contains("Twinned"), "the cast takes Twinned:\n%s" % said)
+	check(not s.has("metamagic"), "and spends it")
+	var g := _fight(_metamage(["twinned", "careful"]))
+	g[0].perform(g[1], _mm(g[1], "twinned"))
+	g[0].perform(g[1], _spell(g[1], "fire-bolt"), g[2])
+	check(g[1].has("metamagic"), "a Fire Bolt cannot be twinned, so the option stays armed for the next spell")
+
+func test_careful() -> void:
+	# The sorcerer, a friend in the blast, and a goblin behind the friend.
+	var ch := _metamage(["careful", "twinned"])
+	var s = Adapter.to_combatant(ch, "party", Vector2i(2, 0))
+	var mate = Adapter.to_combatant(Presets.vera(), "party", Vector2i(3, 0))
+	var gob = Encounter.spawn("goblin", 1.0, "foe", Vector2i(4, 0), 1)
+	var cb := Combat.new(RNG.new(5), [s, mate, gob], Encounter.board_for("goblin-camp"))
+	for c in cb.combatants:
+		cb.begin_turn_for(c)
+	cb.perform(s, _mm(s, "careful"))
+	var hp: int = mate.hp
+	var before: int = cb.log.size()
+	cb.perform(s, _spell(s, "burning-hands"), Vector2i(1, 0))
+	var said := "\n".join(cb.log.slice(before))
+	check(said.contains("spared (Careful Spell)"), "the friend is spared:\n%s" % said)
+	check(mate.hp == hp, "and takes nothing (%d -> %d)" % [hp, mate.hp])
+
+func test_subtle() -> void:
+	var f := _fight(_metamage(["subtle", "twinned"]))
+	var cb = f[0]
+	var s = f[1]
+	cb.perform(s, _mm(s, "subtle"))
+	cb.perform(s, _spell(s, "hold-person"), f[2])
+	check(not s.has("metamagic"), "any spell takes Subtle")
+	# Counterspell never gets its chance: fire_reactions is not asked. The
+	# reaction layer's own tests prove Counterspell answers an ordinary cast.
+
+func test_seeking() -> void:
+	var f := _fight(_metamage(["seeking", "twinned"]))
+	var cb = f[0]
+	var s = f[1]
+	var g = f[2]
+	var plain := _seek_hits(cb, s, g, false)
+	var seek := _seek_hits(cb, s, g, true)
+	check(seek > plain + 30, "a second d20 on a miss lands more Fire Bolts (%d vs %d of 300)" % [seek, plain])
+
+func _seek_hits(cb, s, g, seeking: bool) -> int:
+	cb.rng = RNG.new(77)
+	g.ac = 20
+	var bolt := _spell(s, "fire-bolt").duplicate()
+	if seeking:
+		bolt["seeking"] = true
+	var n := 0
+	for i in 300:
+		g.hp = 999
+		g.max_hp = 999
+		if cb._spell_hit(g, bolt, "1d10", 0, s).get("hit", false):
+			n += 1
+	return n
+

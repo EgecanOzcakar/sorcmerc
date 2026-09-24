@@ -10360,6 +10360,73 @@ holding its width against 200 words, every bar button carrying a card. Proof:
 - The floating damage numbers over a token still use the one gold band. They
   could wear the damage type's colour, but `_spawn_float` isn't handed the type.
 
+## Metamagic: five of the ten, on the board (2026-09-24)
+
+The second half of the sorcerer pass. The Metamagic picks at levels 2, 10 and
+17 have always been in the creator, and none of them did anything.
+
+**One button per option known, not a copy of every spell per option.** A
+Metamagic button *arms* the next spell. That is the precedent Divine Smite
+already set, a once-buff sitting beside the swing it rides on, and it keeps the
+bar at one button per option.
+
+- Arming pays the sorcery points through the ordinary pool spend (`pool_cost`).
+- The next spell the option can apply to takes it (`combat._take_metamagic`).
+  A spell it can't apply to leaves it armed for the next one.
+- If it's still armed when the turn ends, the points come back
+  (`_refund_metamagic`). RAW spends them as the spell is cast, and a spell never
+  cast spent nothing.
+- Only one option is armed at a time.
+
+Built, at their 2024 costs:
+
+| option | points | here |
+|---|---|---|
+| Quickened | 2 | An action spell costs a bonus action instead (`_cast_view`, so the bar's affordability and the spend agree). No leveled spell after it this turn, cantrip or not. |
+| Twinned | 1 | A spell that upcasts for more targets gets one more. |
+| Careful | 1 | Up to CHA-mod (min 1) allies caught in the area are spared outright. |
+| Subtle | 1 | It can't be Counterspelled. |
+| Seeking | 1 | A missed spell attack rolls its d20 again, once. |
+
+**The level table.** The export filed three sorcerer grants on the wrong level.
+They are fixed in `tools/fill_levels.py`'s new `CLASS_FEATURE_MOVES`, so
+`--check` keeps them applied:
+
+- Sorcerous Restoration: 20 → 5;
+- Arcane Apotheosis: 18 → 20;
+- the third pair of Metamagic picks: 18 → 17.
+
+**Balance.** The autopilot never arms Metamagic, so no sweep sees it, and
+`power.gd` prices none of it: the same state Innate Sorcery and Font of Magic
+shipped in. A player who uses it well gets more than the ruler charges. If a
+sweep that arms it ever measures above noise, price it then.
+
+`test_sorcerer` (now 81 checks) covers:
+
+- the level table;
+- arming and refunding;
+- Quickened's bonus-action cast and its leveled-spell lock;
+- Twinned's extra target, and staying armed through a spell that can't take it;
+- Careful sparing a friend in Burning Hands;
+- Subtle taken by any spell;
+- Seeking's reroll (Fire Bolt against AC 20).
+
+`test_class_abilities` presses the new buttons on its sorcerer teams
+(11,841 checks). Shot: `docs/shots/sorcerer-metamagic-bar.png`, the Bonus list
+with Careful Spell.
+
+### Still open
+
+- **Distant, Empowered, Extended, Heightened, Transmuted.** Still catalogue
+  text.
+  - Distant needs the targeting preview to read the doubled range.
+  - Heightened needs a per-target disadvantage on the first save.
+  - Empowered needs per-die rerolls.
+- **Hiding unbuilt options.** The creator still offers the five unbuilt options
+  as picks; it should grey them or say so.
+- **Sorcerous Restoration** (short-rest points at 5) and **Sorcery Incarnate**
+  (two options on one spell at 7) are still flavour.
+
 ## Hired, not made — the inns' hiring pool (2026-09-24)
 
 The owner's call on recruitment, built. A new run makes **one** hero, the

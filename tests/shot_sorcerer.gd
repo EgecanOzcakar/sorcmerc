@@ -1,7 +1,10 @@
 # Dev-only: the sorcerer's two features on the bar. Two frames — the Bonus
 # actions list ([3]) on a level-5 sorcerer's turn, with Innate Sorcery and the
 # Font of Magic buttons in it; then the same list after Innate Sorcery and one
-# slot made from points, so the actor line's pips show the extra slot.
+# slot made from points, so the actor line's pips show the extra slot. Then
+# Metamagic: the Bonus list with the sorcerer's two options (Quickened and
+# Twinned, picked on purpose), and the Spells list with Quickened armed, where
+# every action spell now costs a Bonus Action.
 #
 #   SORCMERC_SEED=7 xvfb-run -a -s "-screen 0 1600x900x24" \
 #       godot --path . -s tests/shot_sorcerer.gd   ->  shots_sorcerer/*.png
@@ -12,9 +15,16 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Leveling = preload("res://core/leveling.gd")
 const Party = preload("res://core/party.gd")
 
+const WANT := ["quickened-spell", "twinned-spell"]
+
 func autopick(p: Dictionary, sheet) -> Array:
 	var opts := Creator.options_for(p, sheet)
 	var picks: Array = []
+	for o in opts:
+		if String(o["id"]) in WANT and picks.size() < Creator.pick_count(p):
+			picks = Creator.toggle(p, picks, o["id"])
+	if not picks.is_empty():
+		return picks
 	var i := 0
 	while picks.size() < Creator.pick_count(p) and i < opts.size() * 3 and not opts.is_empty():
 		picks = Creator.toggle(p, picks, opts[i % opts.size()]["id"])
@@ -106,4 +116,41 @@ func _init() -> void:
 	for i in 240:
 		await process_frame
 	await grab("2_after")
+
+	# 3. Metamagic: its options sit in the Bonus list with the Font buttons
+	# (they cost no action of their own). Every page of it, so the two
+	# options are on one of them whatever the list's length.
+	main._build_hero_menu(sorc)
+	main._refresh()
+	var bonus: Array = main._slot_list(main._menu_entries(sorc)["opts"], "bonus")
+	print("bonus list: ", bonus.map(func(o): return o[0]))
+	var at: int = -1
+	for i in bonus.size():
+		if String(bonus[i][0]).contains("Quickened"):
+			at = i
+	var per: int = main.LIST_PAGE if bonus.size() <= main.LIST_PAGE else main.LIST_PAGE - 1
+	main._open_list(sorc, "bonus", maxi(0, at) / per)
+	for i in 30:
+		await process_frame
+	await grab("3_metamagic")
+
+	# 4. Quickened armed: the Spells list, where Fireball and the rest now
+	# read [bonus].
+	for v in sorc.verbs:
+		if String(v["id"]) == "metamagic-quickened-spell":
+			print("quicken -> ", cb.perform(sorc, v))
+	# ...and cast: Fire Bolt goes off as a Bonus Action, the log says so, and
+	# the action is still there for a second spell (a cantrip, by RAW).
+	var foe = cb.combatants.filter(func(c): return c.team == "foe" and not c.is_dead())[0]
+	for v in cb.available(sorc):
+		if String(v.get("spell", "")) == "fire-bolt":
+			print("fire bolt -> ", cb.perform(sorc, v, foe))
+			break
+	print("econ ", sorc.econ)
+	main._flush_log()
+	main._build_hero_menu(sorc)
+	main._refresh()
+	for i in 240:
+		await process_frame
+	await grab("4_quickened")
 	quit()
