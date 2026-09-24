@@ -83,15 +83,41 @@ static func estimate(c) -> Dictionary:
 	# A caster's action is spent EITHER swinging or casting, so a cantrip replaces the
 	# weapon action rather than stacking on it, and a leveled spell only contributes the
 	# margin over that action, amortized across ROUNDS.
-	var leveled := 0.0
+	#
+	# The spell list is a menu, not a stack: one action casts one spell and one
+	# slot pays for one cast. This used to credit EVERY leveled spell with its
+	# level's full slot count and add up every spell's control, so a caster's
+	# score grew with the length of the prepared list, not with the fight they
+	# could put up. A built level-10 cleric (fifteen prepared) scored 416 where
+	# the same cleric without spells scored 20, at a credited 134 damage a round.
+	# The budget bought against that lost 93% of fights (tests/sweep_regions.gd,
+	# docs/expansion-plan.md 2026-09-24). Now each slot is one cast of the best
+	# spell it can pay for, at most ROUNDS casts in the fight (one a turn), and a
+	# spell list's control is its best spell's, not their sum.
+	var spells: Array = []
+	var best_ctrl := 0.0
 	for sid in c.spell_ids:
 		var s := _spell_power(sid, c)
-		control += float(s["control"])
+		best_ctrl = maxf(best_ctrl, float(s["control"]))
 		if int(s["level"]) == 0:
 			dpr = maxf(dpr, float(s["per_cast"]))
 		else:
-			leveled += maxf(0.0, float(s["per_cast"]) - dpr) * minf(float(s["uses"]), ROUNDS) / ROUNDS
-	dpr += leveled
+			spells.append(s)
+	control += best_ctrl
+	var casts: Array = []   # the margin each slot buys over the action it replaces
+	for lvl in range(mini(c.slots.size(), 9), 0, -1):
+		var margin := 0.0
+		for s in spells:
+			if int(s["level"]) <= lvl:
+				margin = maxf(margin, float(s["per_cast"]) - dpr)
+		for _i in int(c.slots[lvl - 1]):
+			casts.append(margin)
+	casts.sort()
+	casts.reverse()
+	var leveled := 0.0
+	for i in mini(casts.size(), ROUNDS):
+		leveled += float(casts[i])
+	dpr += leveled / ROUNDS
 
 	var ehp := float(c.max_hp) * (0.55 / maxf(0.05, p_hit(REF_ATK, c.ac)))
 	for v in c.verbs:

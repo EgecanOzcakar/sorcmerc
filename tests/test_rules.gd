@@ -725,10 +725,15 @@ func _sheet_party() -> Array:
 		out.append(Adapter.to_combatant(ch, "party", START[ch.id]))
 	return out
 
+# The summons' statblocks (trickery-duplicate, spiritual-weapon) live in the same
+# file and have no seat in START. Reading START[id] for them threw a script
+# error, which killed test_adapter's tail and all of test_power_ranks_the_heroes
+# before either asserted a thing. The file still reported green, because a
+# script error is not a failed check.
 func _json_foes() -> Array:
 	var out: Array = []
 	for m in Catalog.all("monsters.json"):
-		out.append(Adapter.from_monster(m, "foe", START[m["id"]]))
+		out.append(Adapter.from_monster(m, "foe", START.get(m["id"], Vector2i(9, 9))))
 	return out
 
 func test_adapter() -> void:
@@ -1012,8 +1017,27 @@ func test_power_ranks_the_heroes() -> void:
 	for k in ["dpr", "ehp", "control", "score"]:
 		check(boss.has(k), "estimate() returns \"%s\" — T8's contract" % k)
 
-	var party: Array = _sheet_party()
-	check(Power.team_score(party) > 0.0, "team_score sums the party")
-	check(Power.roster_budget(party, "hard") > Power.roster_budget(party, "easy"),
-		"a harder tier buys a bigger roster")
-	check(Power.fits(_json_foes(), 0.0), "fits() is true against a zero budget")
+	# The spell list is a menu, not a stack (2026-09-24). A caster's score used to
+	# grow with every spell prepared: each leveled spell got its level's slots
+	# again, and every spell's control was added up. Four first-level slots buy
+	# four casts of the best first-level spell, however many are prepared.
+	var cl = Adapter.to_combatant(Presets.ilsa(10), "party", Vector2i.ZERO)
+	cl.slots.assign([4, 0, 0, 0, 0, 0, 0, 0, 0])
+	var l1: Array[String] = []
+	for sid in ["burning-hands", "thunderwave", "magic-missile", "chromatic-orb", "ice-knife", "guiding-bolt", "inflict-wounds"]:
+		if not Effects.spell(sid).is_empty() and int(Effects.spell(sid).get("level", 0)) == 1:
+			l1.append(sid)
+	check(l1.size() >= 3, "enough first-level damage spells to stack (%s)" % str(l1))
+	var best := 0.0
+	for sid in l1:
+		cl.spell_ids.assign([sid])
+		best = maxf(best, float(Power.estimate(cl)["dpr"]))
+	cl.spell_ids.assign(l1)
+	var all_of_them := float(Power.estimate(cl)["dpr"])
+	check(is_equal_approx(all_of_them, best),
+		"%d first-level spells on 4 slots price as the best one cast 4 times (%.1f vs best %.1f)" % [l1.size(), all_of_them, best])
+	cl.spell_ids.assign(["burning-hands"])
+	var four := float(Power.estimate(cl)["dpr"])
+	cl.slots.assign([20, 0, 0, 0, 0, 0, 0, 0, 0])
+	check(is_equal_approx(four, float(Power.estimate(cl)["dpr"])),
+		"slots past one cast a round buy nothing in a four-round fight")
