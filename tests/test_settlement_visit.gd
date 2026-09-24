@@ -323,6 +323,9 @@ func test_rest_and_quests() -> void:
 	check(Visit.turn_ins(party).is_empty(), "an unfinished job cannot be turned in")
 	offer["progress"] = int(offer["required"])
 	offer["state"] = "complete"
+	if offer["kind"] in ["collect_item", "supply_item"]:
+		check(Visit.turn_ins(party).is_empty(), "a goods job with the goods not in the pack is not offered")
+		party.stash_add(String(offer["target_item_id"]), int(offer["required"]))
 	check(Visit.turn_ins(party).size() == 1, "a finished job is ready to hand in")
 	var gold0: int = party.gold
 	check(Quest.turn_in(party, offer, s.faction) and party.gold > gold0, "handing it in pays")

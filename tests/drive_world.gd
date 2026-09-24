@@ -373,6 +373,8 @@ func _settlement_visit(p) -> void:
 		else:
 			taken["progress"] = int(taken["required"])
 			taken["state"] = "complete"
+			if taken["kind"] in ["collect_item", "supply_item"]:   # paid for goods in hand only
+				screen.party.stash_add(String(taken["target_item_id"]), int(taken["required"]))
 			if screen.Visit.turn_ins(screen.party).is_empty():
 				fail("a finished job is not offered for turn-in")
 			var gold0b: int = screen.party.gold

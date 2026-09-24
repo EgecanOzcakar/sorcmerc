@@ -51,7 +51,7 @@ const T_VERDICT := 0.28        # the verdict word slams in, from big to its size
 const T_TALLY := 0.3           # the arithmetic slides up under it
 const T_HOLD := 0.9            # all of it up, readable, before `landed` lets the caller move on
 const T_TOTAL := T_LAND + 0.3 + T_TALLY + T_HOLD
-const TICKS := 14              # face changes during the tumble — each one clicks
+const TICKS := 14              # face changes during the tumble
 const RAYS := 16
 const SPARKS := 14
 
@@ -123,6 +123,9 @@ func play(r: Dictionary) -> void:
 		return
 	_playing = true
 	_count(true)
+	# The die hitting the table, once, for the whole tumble. Each face change
+	# used to tick the UI click, which read as a menu, not a die.
+	Sound.play_sfx("dice_rattle")
 	_tween = create_tween()
 	_tween.tween_method(_advance, 0.0, T_TOTAL, T_TOTAL / maxf(speed, 0.01))
 	_tween.tween_callback(_done)
@@ -154,7 +157,6 @@ func _advance(t: float) -> void:
 			face = face % 20 + 1   # never show the answer early
 		if face != _face:
 			_face = face
-			Sound.play_sfx("click")
 	elif not _landed:
 		_touchdown()
 	queue_redraw()

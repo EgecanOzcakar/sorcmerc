@@ -831,6 +831,29 @@ def sfx_quest_complete(rng):
     return spread_room(b, wet=0.34, size=0.88, damp=0.34, tail=1.1)
 
 
+def sfx_dice_rattle(rng):
+    """A d20 thrown onto a table: one hard strike, then bounces that come quicker
+    and quieter as it spins down, each a click of hard plastic on wood, and a
+    last flutter as it rocks onto a face. scenes/dice_roll.gd plays it once as
+    the tumble starts; the tumble used to tick the UI click on every face."""
+    b = buf(1.0)
+    t, gap, amp = 0.0, 0.11, 0.34
+    for i in range(11):
+        f = rng.uniform(2200.0, 3600.0)
+        at = int(t * SR)
+        mix(b, noise(0.018, amp, 70.0, f, 1.6, "bp", rng=rng), offset=at)
+        mix(b, tone(0.03, f * 0.62, f * 0.55, amp * 0.45, "tri", 55.0, 0.0005), offset=at)
+        if i < 3:                                                # the table answers the first few, low
+            mix(b, tone(0.08, 180.0 - i * 20.0, 140.0, amp * 0.5, "sine", 30.0, 0.001), offset=at)
+        t += gap * rng.uniform(0.75, 1.15)
+        gap *= 0.82
+        amp *= 0.8
+    for _ in range(8):                                           # rocking onto its face
+        mix(b, noise(0.008, amp * 0.6, 90.0, 3000.0, 1.8, "bp", rng=rng), offset=int(t * SR))
+        t += 0.018
+    return room(b, wet=0.16, size=0.60, damp=0.50, tail=0.3)
+
+
 SFX = {
     "hit": sfx_hit, "crit": sfx_crit, "kill": sfx_kill, "cast": sfx_cast,
     "heal": sfx_heal, "level_up": sfx_level_up, "victory": sfx_victory,
@@ -854,6 +877,8 @@ SFX = {
     "condition": sfx_condition, "collapse": sfx_collapse,
     "travel": sfx_travel, "settlement": sfx_settlement, "shop": sfx_shop,
     "quest_complete": sfx_quest_complete,
+    # The live rolls' die (scenes/dice_roll.gd).
+    "dice_rattle": sfx_dice_rattle,
 }
 
 # --- ambient beds ----------------------------------------------------------

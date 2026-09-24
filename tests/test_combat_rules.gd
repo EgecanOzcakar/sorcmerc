@@ -203,7 +203,39 @@ func test_hit_chance_math() -> void:
 	cb.board["cover"] = [b.pos]
 	check(is_equal_approx(cb.save_fail_chance(b, 13, "dex"), 0.35), "cover is +2 on DEX saves (RAW half cover)")
 	check(is_equal_approx(cb.save_fail_chance(b, 13, "dex", true), 0.45), "...unless the spell ignores cover (Sacred Flame)")
+	b.saves["wis"] = 3
+	check(is_equal_approx(cb.save_fail_chance(b, 13, "wis"), 0.45), "...and on DEX saves only: a wall is no help against Hold Person")
+	# The roll itself, not just its preview: +3 on a d20 against DC 14 needs an
+	# 11 without cover and a 9 with it, so over the same seeded rolls cover can
+	# only ever move a DEX save, never a CON one (the concentration check).
+	var made := {"dex": 0, "con": 0}
+	b.saves["con"] = 3
+	for ab in made.keys():
+		for with_cover in [false, true]:
+			cb.board["cover"] = [b.pos] if with_cover else []
+			cb.rng = RNG.new(99)
+			var n := 0
+			for i in 200:
+				if cb._saving_throw(b, 14, ab):
+					n += 1
+			made[ab] = n - int(made[ab]) if with_cover else n
+	check(int(made["dex"]) > 0 and int(made["con"]) == 0,
+		"cover adds to the DEX roll and not the CON one (extra saves made: %s)" % str(made))
 	cb.board["cover"] = []
+	# The preview reads what the roll reads. It used to see the save bonus,
+	# cover and Dodge only.
+	b.statuses["blessed"] = {"bonus_save": 2}
+	check(is_equal_approx(cb.save_fail_chance(b, 13, "wis"), 0.35), "a +2 save buff shows in the odds")
+	b.statuses.erase("blessed")
+	cb.apply_condition(b, "paralyzed")
+	check(is_equal_approx(cb.save_fail_chance(b, 13, "dex"), 1.0) and not cb._saving_throw(b, 2, "dex"),
+		"a paralysed target auto-fails DEX, and the preview says 100%")
+	b.statuses.erase("paralyzed")
+	var hp_log: int = cb.log.size()
+	b.statuses["inspired"] = {"dice_sides": 6}
+	cb.save_fail_chance(b, 13, "wis")
+	check(b.has("inspired") and cb.log.size() == hp_log, "the preview spends no inspiration and writes no line")
+	b.statuses.erase("inspired")
 	b.statuses["dodging"] = true
 	check(is_equal_approx(cb.save_fail_chance(b, 13, "dex"), 1.0 - (1.0 - 0.45 * 0.45)),
 		"a dodging target's DEX save is rolled with advantage in the preview")
@@ -513,7 +545,16 @@ func test_death_saves() -> void:
 		gb.rng = _rolls([15]); gb._death_save(ga)
 	check(ga.is_down() and ga.death_s == 2, "two successes: still down")
 	gb.rng = _rolls([15]); gb._death_save(ga)
-	check(not ga.is_down() and ga.hp == 1 and ga.death_s == 0, "three successes: back on your feet at 1 HP (house rule, BG3's)")
+	check(ga.is_down() and ga.is_stable() and ga.hp == 0 and ga.death_s == 0 and ga.death_f == 0,
+		"three successes: stable, still down at 0 HP, counters reset (RAW; it used to stand you up, BG3's house rule)")
+	var saves_before: int = gb.log.size()
+	gb.rng = _rolls([15]); gb.begin_turn_for(ga)
+	gb.end_turn()
+	check(gb.current() != ga, "a stable body's turn is skipped: no more rolling")
+	gb._apply_damage(ga, 1)
+	check(not ga.is_stable() and ga.is_down() and ga.death_f == 1 and gb.log.size() > saves_before,
+		"damage knocks a stable body off it: one failure, rolling again (RAW)")
+	ga.statuses["stable"] = true; ga.death_f = 0
 	ga.statuses["down"] = true; ga.statuses["stable"] = true; ga.hp = 0
 	gb.heal(ga, 4)
 	check(not ga.is_down() and not ga.is_stable() and ga.hp == 4, "healing a stable body (one the road handed over) brings it up on the amount healed")
@@ -540,6 +581,15 @@ func test_movement_rules() -> void:
 	cb.combatants.append(ally)
 	var field: Dictionary = cb.move_field(a)
 	check(field.has(Vector2i(4, 0)) and not field.has(Vector2i(3, 0)), "you can move through an ally's space but not stop in it (RAW)")
+	# #199: the fighter ended his move on the rogue bleeding out under him, and
+	# the cleric's Cure Wounds then went to whichever token the list held first.
+	ally.hp = 0; ally.statuses["down"] = true
+	field = cb.move_field(a)
+	check(field.has(Vector2i(4, 0)) and not field.has(Vector2i(3, 0)), "a downed ally's space can be crossed but not stopped in (#199)")
+	check(not cb._hex_free(Vector2i(3, 0)), "a downed ally still fills the hex a shove or a summon would land in (#199)")
+	ally.statuses["dead"] = true
+	check(cb.move_field(a).has(Vector2i(3, 0)) and cb._hex_free(Vector2i(3, 0)), "a corpse is an object: it can be stood on")
+	ally.statuses.erase("dead"); ally.statuses.erase("down"); ally.hp = ally.max_hp
 	ally.pos = Vector2i(-5, 0)
 	b.pos = Vector2i(3, 0)
 	field = cb.move_field(a)

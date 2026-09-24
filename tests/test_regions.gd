@@ -115,6 +115,57 @@ func _init() -> void:
 		check(s >= last, "further out is never easier (at %d: x%.2f)" % [x, s])
 		last = s
 
+	# A country is pinned to scaler's budget for the ruler at its edge level, so
+	# a party that is not the ruler cannot carry its surplus (or its shortfall)
+	# across the border. Two level 10s and a stacked four both meet exactly the
+	# heartland's level-3 fight; the old ruler-ratio gave them x0.66 and x1.33
+	# of it.
+	var ruler3: float = Scaler._budget(Presets.party_at(3), "easy", 1.0)
+	var deeps10: float = Scaler._budget(Presets.party_at(10), "easy", 1.0)
+	var thin := Party.new()
+	var stacked := Party.new()
+	var tens: Array = Presets.party_at(10)
+	for i in 2:
+		thin.add_member(tens[i])
+	var fourth = Presets.party_at(10)[0]
+	fourth.id = "fourth"
+	for ch in tens + [fourth]:
+		stacked.add_member(ch)
+	var ones := Party.new()
+	ones.add_member(Presets.party_at(1)[0])
+	for pr in [[thin, "two level 10s"], [stacked, "four level 10s"], [p10, "the ruler"]]:
+		var pp: Party = pr[0]
+		var b: float = Scaler._budget(pp.party_characters(), "easy",
+			Regions.power_scale(w, Vector2(100, 0), pp))
+		check(absf(b / ruler3 - 1.0) < 0.01,
+			"%s in the heartland meet its level-3 fight (x%.3f of it)" % [pr[1], b / ruler3])
+	var lone: float = Scaler._budget(ones.party_characters(), "easy",
+		Regions.power_scale(w, Vector2(980, 0), ones))
+	check(absf(lone / deeps10 - 1.0) < 0.01,
+		"a lone level 1 in the deeps meets its level-10 fight, not a share of it (x%.3f)" % [lone / deeps10])
+	# The ceiling holds inside the band too. Four level 3s are a level 3 party,
+	# inside the heartland by level, and price above the ruler: they still meet
+	# the heartland's top fight and no more. In the marches (3-6) they are well
+	# under its top, so the fight follows them as scaler measured it.
+	var four3 := _party_at(3)
+	var extra = Presets.party_at(3)[0]
+	extra.id = "extra"
+	four3.add_member(extra)
+	var capped: float = Scaler._budget(four3.party_characters(), "easy",
+		Regions.power_scale(w, Vector2(100, 0), four3))
+	check(absf(capped / ruler3 - 1.0) < 0.01,
+		"four level 3s at home meet the heartland's top fight, not more (x%.3f)" % [capped / ruler3])
+	check(Regions.power_scale(w, Vector2(600, 0), four3) == 1.0,
+		"...and in the marches, a fight their own size")
+
+	# Spent slots still thin it in proportion, as they do in band.
+	var spent: Party = _party_at(10)
+	for ch in spent.party_characters():
+		ch.slots_used.assign([99, 99, 99, 99, 99, 99, 99, 99, 99])
+	var tired: float = Scaler._budget(spent.party_characters(), "easy",
+		Regions.power_scale(w, Vector2(100, 0), spent))
+	check(tired < ruler3, "a party with its slots spent meets less of it (x%.3f)" % [tired / ruler3])
+
 	# The level a fight is built for is the clamp itself, stated plainly.
 	check(Regions.level_here(w, Vector2(100, 0), p10) == 3, "the heartland builds for level 3")
 	check(Regions.level_here(w, Vector2(980, 0), p3) == 10, "the deeps build for level 10")

@@ -158,6 +158,25 @@ func test_collect_item() -> void:
 	check(Quest.turn_in(p2, q2), "collect quest turns in")
 	check(p2.stash_count("goblin-ear") == 0, "the ears are handed over")
 
+	# Ears sold at a stall (or lost to a wiped delve) are not in hand: the job
+	# is not paid for them. turn_in() used to pay in full and then fail to
+	# take them, which is gold for nothing.
+	var p3 := _party()
+	var q3 := Quest.fresh("goblin-ears")
+	Quest.accept(p3, q3)
+	for i in 40:
+		Quest.record_kills(p3, ["snik"], RNG.new(i + 1))
+	check(q3["state"] == "complete", "five ears, the job is done")
+	p3.stash_remove("goblin-ear", 2)
+	var gold3: int = p3.gold
+	check(not Quest.can_turn_in(q3, p3), "three ears in the pack: no turn-in offered")
+	check(not Quest.turn_in(p3, q3) and p3.gold == gold3, "...and none paid for")
+	Quest.record_stash(p3)
+	check(int(q3["progress"]) == 3 and q3["state"] == "active", "the pack pulls the tally back to 3/5, active")
+	p3.stash_add("goblin-ear", 5)
+	Quest.record_stash(p3)
+	check(int(q3["progress"]) == 3, "but a collected tally is what bodies dropped: buying ears does not fill it")
+
 func test_bias() -> void:
 	var p := _party()
 	check(Quest.bias(p).is_empty(), "no quests, no bias")
@@ -262,6 +281,8 @@ func test_the_ladder() -> void:
 	check(neighbour.get("id", "") == "kritch-bounty", "...but Known gets a neighbour's")
 	var before: int = Ladder.deeds("human")
 	own["progress"] = own["required"]
+	if own["kind"] in ["collect_item", "supply_item"]:
+		pk.stash_add(String(own["target_item_id"]), int(own["required"]))   # paid for goods in hand only
 	Quest.turn_in(pk, own, "human")
 	check(Ladder.deeds("human") == before + 1, "a job turned in is a deed for the taker's people")
 	Quest.turn_in(pk, own, "human")

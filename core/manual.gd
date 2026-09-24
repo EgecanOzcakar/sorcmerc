@@ -169,7 +169,7 @@ static func _mechanics() -> Array:
 	out.append({"id": "dying", "section": "Fighting", "title": "Dropping to 0 HP",
 		"tags": ["death", "dying", "down", "death save", "death saving throw", "unconscious", "stable", "revive", "first aid", "healing word", "cure wounds", "dead", "mercy"],
 		"body": _h("At 0 HP you're down and unconscious, and the dice decide from there.") +
-		"At the start of each of your turns you roll a [b]death save[/b]: 10 or higher is a success, lower is a failure. A natural 20 puts you back on your feet at 1 HP; a natural 1 counts as two failures. [b]Three failures and you're dead[/b]; three successes and you're stable — still down, no more rolling.\n\n" +
+		"At the start of each of your turns you roll a [b]death save[/b]: 10 or higher is a success, lower is a failure. A natural 20 puts you back on your feet at 1 HP; a natural 1 counts as two failures. [b]Three failures and you're dead[/b]; three successes and you're stable — still down, no more rolling, until a hit knocks you off it and the rolling starts again. A stable hero comes round at 1 HP when the fight ends.\n\n" +
 		"Being [b]unconscious[/b] means attacks against you have advantage, you fail STR and DEX saves automatically, and any melee hit from reach is a critical. Damage while down is a failed save — a crit is two. Enemies won't finish a downed body while they can reach someone standing (the mercy rule), but a creature with nothing else to hit will.\n\n" +
 		"Any healing brings you back up: Cure Wounds, Healing Word, a potion, or an ally's [b]Help[/b] action (First Aid: up at 1 HP, no roll). Healing a corpse does nothing.\n\n" +
 		"Fights end when one side is entirely down or dead, or after %d rounds." % Combat.MAX_ROUNDS})

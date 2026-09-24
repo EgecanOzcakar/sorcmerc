@@ -193,7 +193,11 @@ func _init() -> void:
 	check(not "valdis-hark" in Save.list_slugs(), "delete removes the file")
 
 	same_name_is_not_the_same_hero()
+	casters_keep_their_simple_weapons()
+	duplicate_lists_merge()
 
+	check(Creator.spell_name("light") == "Light", "the Light cantrip reads as a spell, not as armour (got %s)" % Creator.spell_name("light"))
+	check(Creator.humanize("light") == "Light armor", "...while the armour category keeps its own label")
 	print("test_creator: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -245,3 +249,68 @@ func same_name_is_not_the_same_hero() -> void:
 	for slug in ["aria-vale", "aria-vale-2"]:
 		Save.delete(slug)
 
+
+# #192: the wizard, sorcerer and druid name their weapons one by one ("dagger",
+# "quarterstaff") where every other class says "simple", and a dagger's own
+# weaponProficiencyId is "simple". Read that way the wizard's shelf held the
+# light crossbow and nothing else, and the druid's the scimitar — and the sheet
+# swung their own quarterstaff without the proficiency bonus.
+func casters_keep_their_simple_weapons() -> void:
+	for cls in ["wizard", "sorcerer"]:
+		var c = build("Test " + cls, "human", cls, "sage", "array")
+		var shelf := Creator.proficient_weapons(c.sheet())
+		for wid in ["dagger", "dart", "sling", "quarterstaff", "light-crossbow"]:
+			check(wid in shelf, "%s: %s is on the equipment shelf (%s)" % [cls, wid, str(shelf)])
+		check(not "longsword" in shelf, "%s: no martial weapon on the shelf" % cls)
+	var druid = build("Test druid", "human", "druid", "sage", "array")
+	var dshelf := Creator.proficient_weapons(druid.sheet())
+	for wid in ["club", "dagger", "quarterstaff", "scimitar", "spear", "sling"]:
+		check(wid in dshelf, "druid: %s is on the equipment shelf" % wid)
+	check("hide" in Creator.proficient_armor(druid.sheet()) and "shield" in Creator.proficient_armor(druid.sheet()),
+		"druid: medium-nonmetal and shields-nonmetal open the armor shelf")
+	var wiz = build("Staff wizard", "human", "wizard", "sage", "array")
+	wiz.equipped.assign(["quarterstaff"])
+	wiz.dirty()
+	var s = wiz.sheet()
+	var staff: Dictionary = {}
+	for a in s.attacks:
+		if String(a.get("id", "")) == "quarterstaff":
+			staff = a
+	check(not staff.is_empty() and int(staff["to_hit"]) == int(s.abilities["str"]["mod"]) + s.proficiency_bonus,
+		"a wizard's quarterstaff adds the proficiency bonus (%s)" % str(staff.get("to_hit", "none")))
+
+# #191: a human soldier is asked for a language twice (species and background)
+# from the same list, and for a skill twice (species: any; fighter: eleven).
+# The first pair is one list of two; the second stays two lists, each greying
+# what the other took, and both greying what the soldier already has.
+func duplicate_lists_merge() -> void:
+	var c = Creator.new_character()
+	c.species_id = "human"
+	c.background_id = "soldier"
+	c.add_level("fighter", -1)
+	c.dirty()
+	var pts: Array = c.sheet().choice_points
+	var groups: Array = Creator.choice_groups(pts, c.sheet())
+	var langs: Array = groups.filter(func(g): return g[0]["type"] == "language-choice")
+	check(langs.size() == 1 and langs[0].size() == 2, "the two language lists are one list (%s)" % str(langs.map(func(g): return g.size())))
+	var skills: Array = groups.filter(func(g): return g[0]["type"] == "skill-choice")
+	check(skills.size() == 2, "the human's any-skill and the fighter's eleven stay two lists")
+	if langs.size() != 1 or skills.size() != 2:
+		return
+	var g: Array = langs[0]
+	var by_key := {}
+	for id in ["elvish", "dwarvish", "giant"]:
+		by_key = Creator.toggle_group(g, by_key, id)
+	var sizes: Array = g.map(func(q): return (by_key[q["key"]] as Array).size())
+	check(sizes == [Creator.pick_count(g[0]), Creator.pick_count(g[1])] or sizes.reduce(func(a, b): return a + b) == Creator.pick_count(g[0]) + Creator.pick_count(g[1]),
+		"picks fill the first list, then the next (%s)" % str(by_key))
+	by_key = Creator.toggle_group(g, by_key, "elvish")
+	check(not by_key.values().any(func(v): return "elvish" in v), "a second click takes it off whichever list held it")
+	# the fighter takes Perception: the human's any-skill list greys it
+	var fighter_skill: Dictionary = skills.filter(func(gg): return gg[0]["source"]["origin"] == "class")[0][0]
+	var human_skill: Dictionary = skills.filter(func(gg): return gg[0]["source"]["origin"] == "species")[0][0]
+	c.decide(fighter_skill["key"], Creator.decision_for(fighter_skill, ["perception", "survival"]))
+	var taken: Dictionary = Creator.taken_elsewhere(human_skill, [human_skill], c.sheet().choice_points, c.choices, c.sheet())
+	check(taken.get("perception", "") == "picked in another list", "a skill the fighter list took is greyed in the human's (%s)" % str(taken))
+	check(taken.get("athletics", "") == "already known", "and so is one the soldier background already gave")
+	check(not taken.has("stealth"), "a skill nobody has stays open")

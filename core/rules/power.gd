@@ -22,6 +22,20 @@ const DENIAL := {
 }
 const DENIAL_OTHER := 0.25
 const CTRL_WEIGHT := 36.0  # a full lockout that lands every round, before land odds
+# The most a caster's best control SPELL adds to their score: +25%. Measured
+# (tests/sweep_built.gd, 60 seeds, easy, the trio built like a player's):
+#   pricing                              built L3   built L10
+#   uncapped (1 + 0.08 * control)          81.7%      23.3%
+#   capped at +50%                         83.3%      56.7%
+#   control / 4 (one foe of four)          91.7%      68.3%
+#   as damage the locked foe won't deal    93.3%      70.0%
+#   capped at +25%                         95.0%      73.3%   <- this
+#   not priced                             95.0%      91.7%
+# The preset ruler carries no control spell and is unmoved (95.0% / 83.3%).
+# What stays between 73% and 92% is the party autopilot never casting a lock,
+# so a sweep charges the party for one it never throws. A player who does cast
+# it gets that back.
+const SPELL_LOCK_CAP := 1.25
 
 static func p_hit(to_hit: int, ac: int, crit_range: int = 20) -> float:
 	var need: int = ac - to_hit
@@ -83,15 +97,48 @@ static func estimate(c) -> Dictionary:
 	# A caster's action is spent EITHER swinging or casting, so a cantrip replaces the
 	# weapon action rather than stacking on it, and a leveled spell only contributes the
 	# margin over that action, amortized across ROUNDS.
-	var leveled := 0.0
+	#
+	# The spell list is a menu, not a stack: one action casts one spell and one
+	# slot pays for one cast. This used to credit EVERY leveled spell with its
+	# level's full slot count and add up every spell's control, so a caster's
+	# score grew with the length of the prepared list, not with the fight they
+	# could put up. A built level-10 cleric (fifteen prepared) scored 416 where
+	# the same cleric without spells scored 20, at a credited 134 damage a round.
+	# A control spell is priced as the one lock it is (_held_share).
+	# The budget bought against that lost 93% of fights (tests/sweep_regions.gd,
+	# docs/expansion-plan.md 2026-09-24). Now each slot is one cast of the best
+	# spell it can pay for, at most ROUNDS casts in the fight (one a turn), and a
+	# spell list's control is its best spell's, not their sum.
+	var spells: Array = []
+	var best_ctrl := 0.0
 	for sid in c.spell_ids:
 		var s := _spell_power(sid, c)
-		control += float(s["control"])
+		best_ctrl = maxf(best_ctrl, float(s["control"]))
 		if int(s["level"]) == 0:
 			dpr = maxf(dpr, float(s["per_cast"]))
 		else:
-			leveled += maxf(0.0, float(s["per_cast"]) - dpr) * minf(float(s["uses"]), ROUNDS) / ROUNDS
-	dpr += leveled
+			spells.append(s)
+	# A spell's lock rides its own capped bonus, not the uncapped (1 + 0.08 *
+	# control) the rest of the kit shares. That multiplier was set for a monster
+	# locking one of three heroes. A hero locking one foe of five or six is worth
+	# less, and the uncapped product had one Hold Person tripling a level-10
+	# cleric's whole score. Owner's call, 2026-09-24, measured with
+	# tests/sweep_built.gd against five other pricings (docs/expansion-plan.md).
+	var lock_mult: float = minf(1.0 + 0.08 * best_ctrl, SPELL_LOCK_CAP)
+	var casts: Array = []   # the margin each slot buys over the action it replaces
+	for lvl in range(mini(c.slots.size(), 9), 0, -1):
+		var margin := 0.0
+		for s in spells:
+			if int(s["level"]) <= lvl:
+				margin = maxf(margin, float(s["per_cast"]) - dpr)
+		for _i in int(c.slots[lvl - 1]):
+			casts.append(margin)
+	casts.sort()
+	casts.reverse()
+	var leveled := 0.0
+	for i in mini(casts.size(), ROUNDS):
+		leveled += float(casts[i])
+	dpr += leveled / ROUNDS
 
 	var ehp := float(c.max_hp) * (0.55 / maxf(0.05, p_hit(REF_ATK, c.ac)))
 	for v in c.verbs:
@@ -116,8 +163,8 @@ static func estimate(c) -> Dictionary:
 		ehp *= 1.3
 	ehp *= _defense_mult(c)
 
-	return {"dpr": dpr, "ehp": ehp, "control": control,
-		"score": sqrt(maxf(0.0, dpr) * maxf(0.0, ehp)) * (1.0 + 0.08 * control)}
+	return {"dpr": dpr, "ehp": ehp, "control": control + best_ctrl,
+		"score": sqrt(maxf(0.0, dpr) * maxf(0.0, ehp)) * (1.0 + 0.08 * control) * lock_mult}
 
 # T94 — the statblock defences (combatant.resist/immune/vulnerable), priced
 # against what the party actually throws. Every weapon in data/weapons.json is
@@ -217,8 +264,34 @@ static func _spell_power(sid: String, c) -> Dictionary:
 		elif m.has("attack"):
 			landed = p_hit(c.save_dc - 8, REF_AC)
 		per_cast += amount * targets * landed
-	var ctrl := _control_value(m.get("conditions", []), c, minf(1.0, uses / ROUNDS), false)
+	var ctrl := 0.0
+	if uses >= 1.0:
+		ctrl = _control_value(m.get("conditions", []), c, _held_share(m, c), false)
 	return {"per_cast": per_cast, "uses": uses, "level": lvl, "control": ctrl}
+
+# How much of the fight one cast of a control spell holds its one target, as a
+# share of ROUNDS (the owner's call, 2026-09-24: a spell's control is priced as
+# one concentration lock). It used to be min(1, slots / ROUNDS), a fresh lockout
+# landing every round for as long as the slots lasted, where the spell really
+# holds one creature until it saves its way out. The chance it lands is already
+# in _control_value; this is how long it lasts once it has:
+#   a one-round spell (Command, Vicious Mockery): one round;
+#   a repeat save each turn, or damage ending it: rounds until the first made
+#     save, expected sum of fail^k, capped at the fight;
+#   no repeat save (Banishment, Polymorph): the rest of the fight.
+static func _held_share(m: Dictionary, c) -> float:
+	if String(m.get("duration", "")) == "round":
+		return 1.0 / ROUNDS
+	var rep := String(m.get("repeat_save", "none"))
+	if rep == "none" or rep == "":
+		return 1.0
+	var fail := 1.0 - p_save(c.save_dc, REF_SAVE)
+	var held := 0.0
+	var stays := 1.0
+	for _r in ROUNDS:
+		held += stays
+		stays *= fail
+	return held / ROUNDS
 
 static func team_score(combatants: Array) -> float:
 	var t := 0.0

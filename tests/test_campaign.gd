@@ -460,6 +460,9 @@ func test_quest_flow() -> void:
 	check(not c2.turn_in(q), "cannot turn in an unfinished quest")
 	q["progress"] = int(q["required"])
 	q["state"] = "complete"
+	if q["kind"] in ["collect_item", "supply_item"]:   # a goods job is paid for goods in hand
+		check(not c2.turn_in(q), "a goods job with nothing in the pack is not paid")
+		c2.party.stash_add(String(q["target_item_id"]), int(q["required"]))
 	var gold: int = c2.party.gold
 	check(c2.turn_in(q), "turn in at the merchant")
 	check(c2.party.gold > gold, "the reward is paid")

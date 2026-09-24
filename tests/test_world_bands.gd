@@ -113,6 +113,24 @@ func _init() -> void:
 	WorldAI.raid(raiders, Vector2.ZERO, "t", "x")
 	check(WorldBands.population(w2) == WorldBands.cap(w2), "raiders are not population")
 
+	# Band ids: never two alike. The number used to be "live bands of this kind,
+	# plus one", so a dead bandit-1 beside a live bandit-2 minted a second
+	# bandit-2 — and a fallen band holds its id to come back under.
+	var ids := {}
+	var dup := false
+	for p in w2.parties:
+		dup = dup or ids.has(p.id)
+		ids[p.id] = true
+	check(not dup, "every band on the map has its own id")
+	var wi := World.new()
+	wi.add_party(World.RoamingParty.new("bandit-gang-2", Vector2.ZERO, "bandit"))
+	check(WorldBands._fresh_id(wi, "bandit-gang") == "bandit-gang-1", "a gap below a live band is reused")
+	wi.add_party(World.RoamingParty.new("bandit-gang-1", Vector2.ZERO, "bandit"))
+	check(WorldBands._fresh_id(wi, "bandit-gang") == "bandit-gang-3", "...and a held number is not (the old count said 3 only by luck)")
+	wi.parties.erase(wi.parties[-1])
+	wi.fallen.append({"id": "bandit-gang-1", "faction": "bandit", "position": Vector2.ZERO, "troops": [], "at": 0.0})
+	check(WorldBands._fresh_id(wi, "bandit-gang") == "bandit-gang-3", "a fallen band keeps its number for its return")
+
 	# save round-trip of a spawned band
 	var w3 = WorldSave.from_dict(WorldSave.to_dict(w2))["world"]
 	var back = null

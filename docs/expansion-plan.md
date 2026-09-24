@@ -9446,3 +9446,343 @@ scar lifted at the resilience cap, and about half the witnesses being asked.
 - **Heroes die often in the run:** 123 hero deaths in 880 fights, 14 per 100
   fights (the sweep raises them for the next fight). That is a combat number,
   not a trait one.
+
+## An audit pass — the player reports, and what four sweeps of the code found (2026-09-23)
+
+The morning's playtest filed fourteen issues (#188–#201), and four read-only
+audits went over combat, the map, the party and build rules, and the screens.
+This entry is what came of both: the bugs a player can reach, fixed with a test
+each, plus two missing pieces the audits turned up (a way to delete a saved run,
+and the dice's own sound).
+
+**From the playtest:**
+- **#199, a heal went to the wrong hero.** A fighter could end his move on the
+  rogue bleeding out under him. `move_field()` kept a mover off allies on their
+  feet only (`allies_of()` skips the downed). With two tokens on one hex, the
+  cleric's click took the first in the list. Now nobody stops on anyone who is
+  not dead, and `_hex_free()` says the same for shoves, summons and waves. A
+  corpse is an object and can still be stood on.
+- **#198, right-drag cancelled the aim.** The board cancelled on the right
+  button's *press*, so panning with it threw away an open spell list. It now
+  cancels on the release, and only if the button moved no more than a click's
+  wobble (`RMB_CLICK_SLOP`, 6 px).
+- **#193, the wheel zoomed the map through a menu.** A ScrollContainer at its
+  end, or too short to scroll, lets the wheel bubble up to the map. The map now
+  ignores the wheel when the pointer is over any panel or scrolling list
+  (`_wheel_over_ui()`).
+- **#201, long town pages ran off the screen.** Each page's lists scrolled, but
+  the page did not. The page body now scrolls as a whole, fitted a frame after
+  it is built to the smaller of its content and the window's height. Leave is
+  always on screen.
+- **#200, presets skipped the unlocks.** On a fresh profile, Vera (Fighter) and
+  Pike (Rogue, Thief) loaded straight into a class the list beside them showed
+  as locked. `Creator.build_lock_note()` asks the same gate of a whole build
+  (species, every class, every subclass). A locked preset is greyed with its
+  price, and `_load_preset()` refuses it. The player's own presets are gated
+  the same way.
+- **#192, a wizard's shelf held one crossbow.** The export names the wizard,
+  sorcerer and druid weapons one by one (`dagger`, `quarterstaff`), while a
+  dagger's `weaponProficiencyId` is `simple`. Read that way, the druid had
+  nothing but the scimitar. This was not only the shelf: the sheet swung their
+  own quarterstaff **without the proficiency bonus**. `PassGear.weapon_proficient()`
+  is now the one reader for the creator, the attack list and both mastery
+  lists. The creator's armour shelf reads `PassGear.proficient()` too, so the
+  druid's `medium-nonmetal` and `shields-nonmetal` open it.
+
+**From the audits:**
+- **Cover helped every save.** It is +2 AC and +2 to DEX saves (RAW, and
+  combat-design.md's Alcove). It was being added to every save: a caster by a
+  stall held concentration on CON saves more often, and a wall helped a mind
+  against Hold Person. It is DEX only now.
+  **This moves fight numbers** that were measured with the bug in (the
+  win-rate table in `core/regions.gd`, the trait sweeps). The effect is small
+  but not zero. The next balance sweep should re-run them rather than trust the
+  old tables.
+- **The save odds on a target were a different save.** `save_fail_chance()`
+  counted the bonus, cover and Dodge. The roll also counts Bless-style buffs,
+  auras, exhaustion, traits, condition disadvantage, auto-fails and Magic
+  Resistance. Both now read one `_save_terms()`. The preview peeks: it logs
+  nothing and counts an inspiration die at its average instead of spending it.
+- **Goods jobs paid with the goods gone.** `turn_in()` paid in full and then
+  ignored `stash_remove()` failing, so ears sold at a stall or lost to a wiped
+  delve were still paid for. `can_turn_in(quest, party)` now wants the goods
+  in the pack. `record_stash()` also pulls a `collect_item` tally *down* to
+  what is in hand (never up: that tally is what bodies dropped).
+- **Two bands under one name.** A new band's number was "live bands of this
+  kind, plus one". With bandit-1 dead and bandit-2 alive, the next spawn was a
+  second bandit-2, and a fallen band respawns under its old id. `hunt_party`
+  lookups take the first match. `WorldBands._fresh_id()` now takes the first
+  number held by neither a live band nor a fallen one. A freshly seeded map
+  comes out the same as before.
+- **The pit printed a signed, nominal stake.** A loss read "The house keeps
+  its stake: -60 ◉" even from a purse of 50. It now reports the coin that
+  moved, and says "all the party had" when that is less than the stake.
+- **A multiclass caster's slots came off the total level.** A Wizard 2 /
+  Fighter 3 got the level-5 wizard row. The slot and pact tables now read the
+  casting class's level when there is a second class. A single-class build
+  keeps the character level, because `Bundles.class_level()` reads the highest
+  level that granted a feature and could read one short. There is no UI for a
+  second class yet, so this could not be reached in play. Marked `ponytail:`.
+
+**Two pieces that were missing:**
+- **Deleting a saved run.** Every New run mints a slot, and nothing removed
+  one. `_confirm_delete_world_save()` was built and never given a door. Each
+  run on the title now has **Delete…** beside it. `WorldSave.delete_slot()`
+  also removes the legacy `world.json` behind the `legacy` slot, since
+  otherwise the next listing copies it straight back. Settings' "Clear
+  autosave" only ever knew the linear run's save, and it reported "No autosave
+  to clear." even after clearing one (`clear()` returns nothing). It now shows
+  only in the linear mode and tells the truth. The open-world settings point
+  to the title instead.
+- **The die's rattle** (the first two live-roll entries both left it open).
+  `sfx_dice_rattle` in `tools/gen_audio.py` is one strike and eleven bounces,
+  closer and quieter as the die spins down, plus a last flutter. It is
+  rendered at 44.1 kHz like the rest. `scenes/dice_roll.gd` plays it once as
+  the tumble starts, in place of the UI click on each of 14 face changes.
+  There is an ElevenLabs prompt beside it for a recorded take.
+
+Screens: `tests/shot_audit.gd` (needs a display).
+
+### Still open
+
+- **Three death-save successes stand the hero up at 1 HP.** RAW, three
+  successes leave you stable and still unconscious; only a natural 20 wakes you.
+  The engine has a complete "stable" status that nothing ever sets
+  (`is_stable()`, the `heal()` erase, `end_turn()`'s skip). Every balance
+  measurement stands on the revive, so this is the owner's call, not a fix.
+- **Two lairs raiding one town.** `Raids.land()` has one `raided_by` slot, so
+  the second raider overwrites the first. Clearing either lifts the town, and
+  the first lair's job loses its raid premium. Fix it with a raider list, or
+  by not setting out for a town already raided.
+- **`SettlementVisit.check_preview`'s natural-1/20 note** (live rolls, part 1)
+  is stale. The preview already reads plain nat + bonus.
+- **Not touched here:** #179 (new heroes joining at level 1 again) is a
+  balance decision. #191 (merging duplicate choice lists), #188–#190 (the
+  creator's layout) and #194–#197 (the combat board's rendering) are each
+  their own piece of work.
+- `Regions.describe()` is only called by its test.
+
+## The owner's calls on the audit — RAW death saves, one raider a town, merged picks, a board you can see (2026-09-24)
+
+The owner's answers to the last entry's open items: do the calls (all but new
+heroes joining at level 1, #179, which stays as it is), and build items 1, 2
+and 4 of the suggested next work.
+
+- **Three death-save successes: stable, not standing.** RAW, and what the
+  field manual always told the player. The hero stays down at 0 HP and stops
+  rolling. Their turn is skipped (`end_turn` already skipped `is_stable()`;
+  nothing ever set it). A hit knocks them off stable, adds its failure(s), and
+  they roll again from their next turn. Healing, First Aid, or the fight
+  ending (`Adapter.write_back`: 1 HP) brings them round. The token and the
+  combat card read "stable" in place of the save tally. This is items 1 and 2
+  on the owner's list: the call and the "stable state" feature were the same
+  work.
+- **One raider a town.** `Raids.target_for` skips a town another lair has
+  raided and not been cleared from, or is marching on, or is camped outside.
+  The lair makes for the next town in reach, or waits for its next due time.
+- **#191, duplicate choice lists.** Lists of the same kind with the same
+  options (a human soldier's language from the species and one from the
+  background) show as one list whose count is the sum
+  (`Creator.choice_groups`). The picks are still stored under each grant's own
+  key (`toggle_group` fills the first with room). Lists that only overlap
+  (the human's any-skill and the fighter's eleven) stay apart, and
+  `taken_elsewhere` greys, in each list, what the other took and what the
+  build already has from a grant that asked nothing (a background's skills,
+  Common). It never greys a list into one it cannot finish: when too few
+  options are left, the already-known ones come back. The level-up screen
+  greys the same way.
+- **#194, the floor that vanished on a zoom.** Two causes, both fixed:
+  - The cached ground layer (#140) was a zero-size Control, and Godot culls
+    a Control by its own rect. Zoom in, then pan so that rect's origin leaves
+    the window, and the whole floor was culled with every tile of it still
+    on screen. The layer is a Node2D now, culled by what it draws.
+  - A repaint re-based the layer (`_ground_at = _origin`), but only the
+    board's own `_draw()` moved it. Nothing queued that when auto-fit changed
+    the zoom inside `_layout()`, or while nothing on the board was animating,
+    so the new ground sat at the old offset until something redrew the
+    board: "corrects after a few seconds". `tick()` now places it too.
+    `tests/test_board_ground.gd` asserts this without calling `_place_layers`
+    itself, which is how the old check had hidden it.
+- **#197 (and #156's follow-up), height on the board.**
+  - A raised tile now reads the floor texture at its footprint rather than
+    where it is drawn. Before, its pattern ran straight on from the lower
+    tile behind it and the step vanished into one flat picture.
+  - The cut earth under a shelf's edge is textured rock, lit at the lip,
+    dark at the foot, a shade brighter on the side turned to the board's
+    light, with a dark line where it meets the ground. Before, it was a flat
+    near-black band, which read as a hole.
+  - `tests/shot_height_close.gd` frames it close.
+
+**Measured** (`tests/sweep_tier.gd`, 200 seeds a tier, level-3 presets, master
+e50d6c6 against the branch, identical rosters): easy 97.5% → 96.0%, normal
+91.0% → 87.0%, hard 79.5% → 76.5%. That is cover-on-DEX-only and RAW stable
+together. Every move is within about one and a half standard errors and in
+the predicted direction, and test_scaler's bands hold. TIER did not move. The
+numbers are in `core/scaler.gd`'s header.
+
+The one band this broke: escort's done rate fell to 35.0%, under the
+objective sweep's 40% floor (`tests/test_objectives.gd`). With the old revive
+put back it is 41.2% again, so RAW stable alone moved it: a hero who used to
+stand back up beside the carter now stays down. Per the objective spec, the
+kind's own knob fixes it, never the roster. `CARTER_HP_BASE` went 12 → 15:
+57.5%, and every other kind is unchanged. 14 measured 37.5% and 16 measured
+58.8%, so 15 is the smallest step back into the band (the carter surviving one
+more goblin hit).
+
+### Still open
+
+- **Re-run since, and it had drifted on master.** `core/regions.gd`'s table
+  (2026-09-13, 80 seeds a cell) has a committed script now,
+  `tests/sweep_regions.gd`. This branch moves each row 0–5 points. Master was
+  already far off the table: one band out is 11.2% (was 37.5%), the deeps at
+  level 3 are 0.0% (was 27.5%), and in band at level 10 is 66.2% (was 95.0%).
+  Cause: `Regions.power_scale` reads scaler's `CURVE`, which went 0.90 → 1.15
+  in scaler's 2026-09-15 retune, and nothing re-ran this table. Whether
+  regions keeps its own 0.90 exponent is the owner's call. The full table and
+  the options are in the header, marked `ponytail:`.
+- **Level 10 in band, found and half fixed.** `Power.estimate` credited every
+  leveled spell with its level's whole slot count and summed every spell's
+  control, so a caster's score grew with the length of the prepared list. A
+  built level-10 cleric scored 416 (20 without spells). The budget bought
+  against a built level-10 party won 6.7% of easy fights; against the
+  preset-only one, 60%.
+  - **Fixed:** each slot is one cast of the best spell it pays for, at most
+    ROUNDS casts a fight, and control is the best spell's, not the sum.
+    `test_rules` checks it, and the check fails on the old estimator (four
+    first-level spells priced at 36.8 against the best one's 16.8).
+  - **Measured after the fix:** level 10 in band 61.2% → 81.2%; one band out
+    17.5%; the deeps 2.5%. Level 3 easy/normal/hard (sweep_tier) is
+    96.5/90.0/79.5, back to about master's numbers. Full suite 155/155.
+  - **Was open (settled below):** the rest of the level-10 gap is spell control.
+    A built level-10 party wins 33% at easy. With its spells' control priced
+    at zero it wins 92%. Hold Person alone is priced as a lockout every round,
+    while the party autopilot never casts a spell without dice. Options are
+    in `core/regions.gd`.
+  - **Settled the same day: spell control is one concentration lock, capped.**
+    The owner picked a concentration lock. A lock lasts until the target saves;
+    a one-round spell lasts one round; one with no repeat save lasts the whole
+    fight. Priced that way it went the wrong way (built L10 23.3%), because the
+    trouble was the lock's weight, not its length: the multiplier was set for a
+    monster locking one of three heroes. Six pricings, built L3 / built L10:
+    | pricing | built L3 | built L10 |
+    |---|---|---|
+    | uncapped lock | 81.7% | 23.3% |
+    | lock, bonus capped at +50% | 83.3% | 56.7% |
+    | lock / 4 | 91.7% | 68.3% |
+    | lock as the damage the locked foe won't deal | 93.3% | 70.0% |
+    | **lock, bonus capped at +25%** | **95.0%** | **73.3%** |
+    | not priced | 95.0% | 91.7% |
+
+    Shipped: +25% (`Power.SPELL_LOCK_CAP`). Teaching the autopilot to cast
+    its locks made things worse (built L10 13.3%): a failed save-or-nothing
+    spell costs a turn of damage. So it still never casts one, and what stays
+    between 73% and 92% is the sweep charging the party for a lock nobody
+    throws. The preset ruler has no control spell, so sweep_tier (96.5 /
+    90.0 / 79.5) and sweep_regions are unchanged. Full suite 155/155.
+  - Found on the way: `test_rules`' `test_power_ranks_the_heroes` and the tail
+    of `test_adapter` had not asserted anything since the summon statblocks
+    joined `monsters.json`. The helper threw on them, and the file still
+    reported green. 14 checks run again, all passing.
+- The #197 report's screenshot could not be fetched from here. This fixes what
+  its text describes, which is also what the close shot showed. If the
+  owner's board shows a different gap, it wants that board's seed.
+- A hero at 0 HP between fights still can't be stabilised by Medicine or
+  Spare the Dying. There's no verb for it; Help (First Aid) and healing do it.
+
+## Each country keeps its own level range — the band pin (2026-09-24)
+
+The owner's call on the regions exponent, which was the last open item under
+*The owner's calls on the audit*: "keep level scaling in between the zones. so
+heartlands shouldn't scale beyond its max level. that way keep regions stick to
+their own scalers."
+
+What `Regions.power_scale` did: when the party's level was outside a band, it
+multiplied the budget by (ref_score(band level) / ref_score(party level))^CURVE.
+That's a ratio of two *ruler* parties (the presets), applied to the real one.
+Any party that isn't the ruler brought its difference across the border:
+
+- A built level-10 party (choices made, full prepared list) prices at 1.32× the
+  ruler. It met 1.32× of the Heartland's level-3 fight and 1.32× of the
+  Marches' level-6 fight.
+- Four level 10s met 1.35× of the Heartland's fight. Two met 0.45× of it.
+- A lone level 1 in the Deeps met 0.44× of the Deeps' fight.
+- Inside a band nothing capped at all. A built level-3 party at home met 1.13×
+  of the Heartland's top fight.
+
+Now (`core/regions.gd`):
+
+- **Out of band, the fight is pinned to the band's edge.**
+  `Scaler.held_at(ref_score(edge level), fresh_score(party))` lands the budget
+  on exactly what scaler builds for the ruler at that level, whoever walks in.
+  The Heartland is scaler's level-3 fight and the Deeps its level-10 fight.
+- **The ceiling is read in power as well as in levels.** A party inside a band
+  by level that prices above the ruler at the band's top meets that top fight
+  and no more. The floor stays levels only: a thin party inside its band
+  still gets a fight its own size, which is what scaler's measured numbers
+  assume.
+- **`fresh_score`** is the party at full slots. The pin divides by it, so spent
+  slots still thin the fight in the same proportion they do in band. Wounds
+  are still `WorldThreat`'s, multiplied on top as before.
+- **The exponent question goes away.** Regions keeps no exponent of its own: a
+  country is scaler's fight at a level inside it, so it follows `CURVE`
+  wherever `CURVE` goes. For the ruler party, the pin and the old ratio are the
+  same number. `tests/sweep_regions.gd`'s table therefore stands as re-measured
+  on 2026-09-24 (L3 in band 96.2%, L10 in band 81.2%, one band out 17.5%, the
+  Deeps at L3 2.5%). The sweep now calls `held_at` directly.
+
+Measured on the built party (`tests/sweep_built.gd`'s build, 60 seeds, easy),
+with the budget pinned at the top of a band:
+
+| built party | before | pinned |
+|---|---|---|
+| L3 at the top of the Heartland (1.13× → 1.00×) | 95.0% | 95.0% |
+| L10 at the top of the Frontier (1.32× → 1.00×) | 73.3% | 95.0% |
+
+Budgets for a built party, as a share of the ruler's fight at the band's level:
+
+| built party | Heartland | Marches | Frontier | Deeps |
+|---|---|---|---|---|
+| L3 | 1.13 → **1.00** | 1.13 | 1.13 → 1.00 (L6) | 1.13 → 1.00 (L10) |
+| L6 | 1.27 → 1.00 (L3) | 1.27 → **1.00** | 1.27 | 1.27 → 1.00 (L10) |
+| L10 | 1.32 → 1.00 (L3) | 1.32 → 1.00 (L6) | 1.32 → **1.00** | 1.32 |
+
+Bold: capped inside the band. The Deeps' top is level 20, so nothing is capped
+there, and a built L10 in the Deeps still meets its own 1.32×.
+
+`test_regions` checks each case: two level 10s, four level 10s and the ruler in
+the Heartland; a lone level 1 in the Deeps; four level 3s at home against the
+Marches; and a party with its slots spent. The first three fail on the old
+formula (0.447×, 1.352×, 0.444×).
+
+### Still open
+
+- The level-10 party at the top of the Frontier (95.0% capped) and at the
+  bottom of the Deeps (73.3%, not capped) now differ by 22 points at the same
+  level. That seam overlap is intended ("a level 10 party can work either"),
+  but it's wide. If it reads badly in play, narrow it by lowering the
+  Frontier's top, not by adding an exponent back.
+
+## Ready-made heroes start at level 2 (2026-09-24)
+
+The owner's call: "readymades should start at level 2." Vera, Pike and Ilsa
+are level-3 builds, and level 3 is the Heartland's top (the band pin above).
+Loaded as they were, a run that started with them had outgrown home before
+its first fight. A custom hero already starts at level 1 and keeps doing so.
+
+- `scenes/creator/creator.gd`: `PRESET_START_LEVEL = 2`. A preset loads at
+  `clampi(start_level, 2, 3)` and is topped up from there, so it still joins a
+  higher-level party at that party's level.
+- The subclass decision stays on the build unused and answers the level-3
+  choice when it comes. A new Vera is still a Champion, just not yet: no
+  pending choice at 2, and Champion / Thief / Light Domain at 3.
+- `Presets.party_at()`, the ruler every sweep stands on, is untouched.
+  Measured anyway (`tests/sweep_built.gd`, LEVELS=2, 80 seeds, easy): the
+  trio at level 2 wins 98.8%, beside 96.2% at level 3.
+- Order matters. The creator hands a new hero the party's highest level, so a
+  custom hero made after a preset joins at 2, and one made before it at 1.
+- Tested in `test_leveling` (level 2, finished, 100 XP banked, subclass arriving
+  at 3).
+- Found on the way: the creator's Review page listed the cantrip Light as
+  "Light armor". Spell names went through `humanize()`, whose `PLAIN` table
+  also holds armour categories under bare ids. Spells now read their name from
+  the catalogue (`Creator.spell_name`); `test_creator` checks both labels.

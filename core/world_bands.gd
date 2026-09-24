@@ -97,6 +97,23 @@ static func refill(world, now: float, rng) -> String:
 		return ""
 	return "Word on the road: %s, %s of here." % [label(b), _compass(b.position - at)]
 
+# The first "<kind>-<n>" nobody holds. The number used to be a count of the
+# live bands of that kind plus one, so with bandit-1 dead and bandit-2 alive the
+# next spawn was a second bandit-2. A fallen monster band keeps its id to come
+# back under (WorldAI.respawn), so the fallen list holds its number too. Two
+# bands under one id is two bands a hunt_party job cannot tell apart: every
+# lookup takes the first match, and the job could mark or pay for the wrong one.
+static func _fresh_id(world, kind_id: String) -> String:
+	var taken := {}
+	for p in world.parties:
+		taken[p.id] = true
+	for f in world.fallen:
+		taken[String(f["id"])] = true
+	var n := 1
+	while taken.has("%s-%d" % [kind_id, n]):
+		n += 1
+	return "%s-%d" % [kind_id, n]
+
 # One band from the table, placed by `ok` and the standing rules; null when
 # TRIES spots all failed (a map that is mostly lake, or a cap the roads cannot
 # hold). `ai.kind` names the row it came from, so a save says what it was.
@@ -110,11 +127,7 @@ static func spawn_one(world, rng, ok: Callable, monster_gap := SETTLEMENT_GAP):
 		var pos: Vector2 = placed["position"]
 		if world.is_water(pos) or not ok.call(pos) or _near_settlement(world, pos, gap):
 			continue
-		var n := 1
-		for p in world.parties:
-			if p.id.begins_with(String(kind["id"]) + "-"):
-				n += 1
-		var b = world.add_party(World.RoamingParty.new("%s-%d" % [kind["id"], n], pos, String(placed["faction"])))
+		var b = world.add_party(World.RoamingParty.new(_fresh_id(world, String(kind["id"])), pos, String(placed["faction"])))
 		var lv: Array = Regions.at(world, pos)["levels"]
 		for role in kind["roles"]:
 			b.troops.append({"role": role, "level": int(lv[0]) + rng.roll_die(int(lv[1]) - int(lv[0]) + 1) - 1})

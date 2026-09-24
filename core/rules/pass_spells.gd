@@ -95,11 +95,20 @@ static func resolve(bundles: Array, abilities: Dictionary, pb: int, level: int) 
 			spells_known[lvl] = int(spells_known.get(lvl, 0)) + int(g["count"])
 
 	var class_level: int = Bundles.class_level(bundles, class_id) if class_id != "" else 0
+	# The slot table is read at the casting class's own level. A Wizard 2 /
+	# Fighter 3 used to get the level-5 wizard row, 3rd-level slots and all. A
+	# single-class build keeps the character level, which is the same number and
+	# does not lean on class_level(): that reads the highest level carrying a
+	# feature, and a level that grants nothing but slots would read one short.
+	# ponytail: two casting classes still read the one table, not the 2024
+	# multiclass caster-level sum. Revisit when the level-up screen offers a
+	# second class, which it does not yet.
+	var slot_level: int = level if _single_class(bundles) else class_level
 	var is_warlock: bool = class_id == "warlock"
-	var pact := Catalog.pact_magic(class_id, level) if is_warlock else {}
+	var pact := Catalog.pact_magic(class_id, slot_level) if is_warlock else {}
 	var slots: Array[int] = [] as Array[int]
 	if not is_warlock and class_id != "":
-		slots = Catalog.third_caster_slots(class_level) if not third.is_empty() else Catalog.spell_slots(class_id, level)
+		slots = Catalog.third_caster_slots(class_level) if not third.is_empty() else Catalog.spell_slots(class_id, slot_level)
 	while slots.size() < 9:
 		slots.append(0)
 
@@ -115,3 +124,14 @@ static func resolve(bundles: Array, abilities: Dictionary, pb: int, level: int) 
 		"always_prepared": always, "prepared_count": prepared_count,
 		"ability_overrides": overrides,
 	}, "warnings": warns}
+
+static func _single_class(bundles: Array) -> bool:
+	var seen := ""
+	for b in bundles:
+		var src: Dictionary = b["source"]
+		if src["origin"] == "class":
+			if seen == "":
+				seen = String(src["id"])
+			elif String(src["id"]) != seen:
+				return false
+	return true
