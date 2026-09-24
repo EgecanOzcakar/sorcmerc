@@ -167,9 +167,18 @@ Defaults worth stating because they are choices, not facts:
 
 ## 5. Where the player sees it
 
-- **Party page** (`scenes/party/party.gd`): a Relations block, one
-  `describe()` line per active pair — "Vera Kord and Pike Sallow — rivals
-  (-44)". Six lines at most for a party of four. No portraits, no hearts.
+- **Party page** (`scenes/party/party.gd`): a Relations web
+  (`scenes/party/relations_web.gd`, 2026-09-23). The marching party's faces
+  sit in a ring with one line per pair. The line's colour and shape give the
+  band: a red zigzag for rivals, blue dashes for cold, grey dots for neutral,
+  solid green for warm, solid gold for bonded, a rose double line for lovers.
+  Its weight gives |score|. Each line carries the band's mark (⚡ ❄ ☀ ∞ ♥),
+  plus a gilt spark when a trait is part of the pull. Hovering a line shows
+  that pair's `describe()` line as the tooltip: "Vera Kord and Pike Sallow —
+  rivals (-44)". Hovering a face shows every pair that person is in and dims
+  the rest. The first cut was six lines of text and "no portraits, no
+  hearts". The owner asked for it to be "less text oriented", because six
+  lines don't show who the odd one out is until you've read all six.
 - **The event card** (`scenes/world/event_card.gd`) already draws a D3
   result and D4's options; a camp beat is one more `show_event`. The
   courtship card is the approach card with two buttons.

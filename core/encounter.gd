@@ -13,6 +13,7 @@ const Loot = preload("res://core/loot.gd")
 const Ach = preload("res://core/achievements.gd")
 const Objectives = preload("res://core/objectives.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
+const Traits = preload("res://core/traits.gd")
 
 # --- ranges (hexes) — tune here ---------------------------------------
 const REACH_MELEE := 1
@@ -46,7 +47,7 @@ static func board() -> Dictionary:
 # --- T11: board themes ------------------------------------------------
 # A board is {hexes, cover, rough, objects, palette, reach_melee, region_at}.
 # `objects` are the interactables combat.gd reads: {type, pos, hazard?, hp?,
-# blocks_movement?, explosive?}. A hazard object is shovable-into (2d6 fire);
+# blocks_movement?, blocks_sight?, explosive?}. A hazard object is shovable-into (2d6 fire);
 # an hp object can be smashed (one action); explosive ones burst on death.
 const THEMES := ["sunken-shrine", "goblin-camp", "city-square", "forest-clearing",
 	"frozen-cave", "merchant-shop", "downs", "marsh"]
@@ -85,7 +86,87 @@ static func board_for(theme: String, seed: int = 0) -> Dictionary:
 	# scenes/main.gd's header is the first such caller. Stamped here rather than
 	# written into each builder: there is one place a theme picks a board.
 	b["theme"] = theme if BOARD_NAMES.has(theme) else "sunken-shrine"
-	return _grow(_widen(b), seed if seed != 0 else theme.hash())
+	var room: Array = _widen(b)["hexes"].duplicate()
+	return _solidify(_grow(b, seed if seed != 0 else theme.hash()), room)
+
+# --- what a board's cover IS (2026-09-23) --------------------------------
+#
+# "Cover" used to be one rule for every prop: stand in the hex, +2 AC and +2
+# on saves. A tree and a reed bank were the same thing to the rules. They are
+# sorted by height and durability now, per palette, because a palette names
+# what its cover is (scenes/board_props.gd's COVER draws the same kinds):
+#
+#   SOLID      full height, durable — a tree, a standing stone, a pillar, an
+#              ice column. Blocks movement AND sight, for good.
+#   BREAKABLE  full height, wooden — a stacked stall, a shelf, a stake wall.
+#              Blocks movement and sight until smashed (the barrel's rule:
+#              one action from beside it, or caught in a blast).
+#   SCREEN     tall and soft — the marsh's reeds. Stays `cover` (stand in it
+#              for +2) and ALSO blocks sight through it: `screens` on the
+#              board. Seeing into or out of the reeds is fine; across is not.
+#              Soft cover alone left the marsh the one open board, 8 points
+#              easier than the walled set (test_scaler, 2026-09-23).
+#   A board whose palette is not here keeps its cover as it was.
+#
+# Barrels and crates were already low breakables (objects with hp that block
+# movement and not sight) and are untouched. Only board_for() solidifies:
+# Encounter.board() is the raw authored room the unit tests stand on, and
+# its Alcove stays the half cover those tests measure.
+const SOLID_COVER := {
+	"forest": {"type": "tree"},
+	"downs": {"type": "menhir"},
+	"shrine": {"type": "pillar"},
+	"ice": {"type": "icicle"},
+	"city": {"type": "crate-stack", "hp": 10},
+	"shop": {"type": "shelf", "hp": 8},
+	"camp": {"type": "stakes", "hp": 6},
+	"marsh": {"screen": true},
+}
+
+# `room` is the authored room and its mirror, before _grow: the guard judges
+# connectivity there AND on the whole grown board. The room alone, because
+# grown ground always offers a detour — the shrine's two pillar columns sealed
+# its hall shut behind one, and test_coop's fight stalled at it for 30 rounds.
+# The whole board too, because _grow's bites know nothing about walls.
+static func _solidify(b: Dictionary, room: Array = []) -> Dictionary:
+	var solid: Dictionary = SOLID_COVER.get(String(b.get("palette", "")), {})
+	if solid.is_empty():
+		return b
+	if solid.get("screen", false):
+		b["screens"] = b["cover"].duplicate()
+		return b
+	# A wall the board cannot afford stays cover: one on a party start (the
+	# forest's (2,0), the downs' (1,1)) or one that splits the floor (the
+	# frozen cave's crawl; the shrine's Alcove and its mirror, two pillar
+	# columns straight across the hall, each left with one gap). test_boards,
+	# test_height and test_coop's lockstep fights hold it.
+	var floor := {}
+	var inner := {}
+	for h in b["hexes"]:
+		floor[h] = true
+	for h in (room if not room.is_empty() else b["hexes"]):
+		inner[h] = true
+	for o in b["objects"]:
+		if o.get("blocks_movement", false):
+			floor.erase(o["pos"])
+			inner.erase(o["pos"])
+	var soft: Array = []
+	for h in b["cover"]:
+		floor.erase(h)
+		var was_inner := inner.erase(h)
+		if h in PARTY_STARTS or not _all_connected(floor) or not _all_connected(inner):
+			floor[h] = true
+			if was_inner:
+				inner[h] = true
+			soft.append(h)
+			continue
+		var o := solid.duplicate()
+		o["pos"] = h
+		o["blocks_movement"] = true
+		o["blocks_sight"] = true
+		b["objects"].append(o)
+	b["cover"] = soft
+	return b
 
 # --- the ground around the room ----------------------------------------
 #
@@ -643,6 +724,8 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 	var b: Dictionary = board if not board.is_empty() else board_for(String(spec.get("theme", "")), int(spec.get("seed", 0)))
 	if spec.get("night", false):
 		b["night"] = true   # #85
+	if spec.get("where") is Dictionary:
+		b["where"] = spec["where"].duplicate()   # #176: biome, band, site — core/traits.gd reads them
 	var o: Dictionary = spec.get("objective", {}).duplicate(true)
 	var kind := String(o.get("kind", ""))
 	var all_c: Array = party_combatants.duplicate()
@@ -689,6 +772,9 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 			all_c.append(Objectives.carter(huddle_hex(b, party_combatants, all_c.map(func(c): return c.pos)), Objectives.party_level(party_combatants)))
 		"hunt":
 			mark_quarry(foes, party_combatants)
+	# #176: what the heroes' traits make of this place — before Combat.new,
+	# which rolls initiative.
+	var trait_lines: Array = Traits.stamp(all_c, b)
 	var RNG = load("res://core/rng.gd")
 	var sd: int = int(spec.get("seed", 0))
 	var cb := Combat.new(RNG.new(sd if sd > 0 else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)),
@@ -699,6 +785,8 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 			o["exit"] = exit
 		cb.objective = o
 		cb.log.append(Objectives.brief(o))
+	for n in trait_lines.size():
+		cb.log.insert(n, String(trait_lines[n]))   # ahead of the initiative line they fed
 	return cb
 
 # `extra_features` (T18) bolts feature ids onto this one spawn — how a boss gets a
@@ -884,6 +972,7 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 		"deaths": deaths,
 		"kills": kills,   # source monster ids, for T9's kill-count quests
 		"downed": cb.downed.keys(),   # T19: party ids that hit 0 HP, even if they got back up
+		"credit": cb.credit.duplicate(true),   # #176: per hero — kills, what downed them, who revived them
 		"rounds": cb.round_num,       # world.gd bills the clock an hour a round
 		"objective": {"kind": cb.objective_kind(), "done": done, "xp": bonus},
 	}

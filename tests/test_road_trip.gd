@@ -153,6 +153,9 @@ func _leg(screen, to) -> Dictionary:
 		if screen._spoils_panel != null:
 			screen._close_spoils()
 			continue
+		if screen._moment != null:   # #176: a trait earned on the road
+			screen._moment._skip_or_advance()
+			continue
 		if screen._halted_on_arrival or w.clock.is_paused():
 			w.clock.resume()
 			screen._pause_btn.text = "Pause"

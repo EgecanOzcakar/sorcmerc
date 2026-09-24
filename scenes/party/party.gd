@@ -29,7 +29,10 @@ const Coop = preload("res://core/coop.gd")
 # What the party thinks of each other — one describe() line per active pair,
 # under the standing orders. The model is core/party_opinion.gd's; this draws it.
 const PartyOpinion = preload("res://core/party_opinion.gd")
+const RelationsWeb = preload("res://scenes/party/relations_web.gd")
 const Callings = preload("res://core/callings.gd")
+const Traits = preload("res://core/traits.gd")
+const TraitOffer = preload("res://scenes/party/trait_offer.gd")
 
 const COL_BG := Icons.COL_BG
 const COL_EDGE := Icons.COL_EDGE
@@ -69,8 +72,11 @@ var _fig_row := HBoxContainer.new()   # T9x: rebuilt on every _refresh() — its
 # buys. Rebuilt on every _refresh() for the same reason the figure picker is —
 # who can be named for a job is the active roster, and that moves under it.
 var _orders_row := VBoxContainer.new()
-var _relations_row := VBoxContainer.new()
+var _callings_row := HBoxContainer.new()   # the told callings, one line in the bottom strip
+var _relations_row := VBoxContainer.new()  # the Relations caption and web, in their own card under the marching column
+var _relations_card := PanelContainer.new()  # hidden for a party of one, which has no pairs
 var _create_btn: Button        # greyed while roster_locked — see roster_locked above
+var _offer: Control = null     # #176: the one-time personality-trait offer, while it is up
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -116,7 +122,15 @@ func _ready() -> void:
 			return
 		_on_create_new())
 	cols.add_child(_column("Roster", _roster_col, 1.4, _create_btn))   # #102: the button lives with the list it adds to
-	cols.add_child(_column("Marching, up to %d" % Party.MAX_ACTIVE, _slot_col, 1.0))
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.size_flags_stretch_ratio = 1.0
+	right.add_theme_constant_override("separation", 10)
+	var marching := _column("Marching, up to %d" % Party.MAX_ACTIVE, _slot_col, 1.0)
+	marching.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.add_child(marching)
+	right.add_child(_relations_panel())
+	cols.add_child(right)
 
 	root.add_child(_footer())
 	if exit_label != "":
@@ -153,14 +167,17 @@ func _column(title: String, body: VBoxContainer, stretch: float, corner: Control
 	wrap.add_child(scroll)
 	return wrap
 
+# The strip along the bottom, kept to as few lines as it can be: the purse,
+# stash and map figure; D3's standing orders with the pace note beside them
+# (cut to one line, the whole sentence on hover); and the Callings, one line
+# too, only once one has been told. The Relations web is not here: it sits
+# under the marching column, the same width as it, since it is about the
+# same four people.
 func _footer() -> Control:
 	var panel := PanelContainer.new()
 	panel.theme_type_variation = "Card"
-	# Two lines: the purse/stash/figure line the screen already had, and D3's
-	# standing orders under it. The orders get their own line because the pace
-	# note is a sentence, not a widget, and it has to stay readable.
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 8)
+	col.add_theme_constant_override("separation", 4)
 	panel.add_child(col)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
@@ -187,10 +204,19 @@ func _footer() -> Control:
 	_orders_row.add_theme_constant_override("separation", 4)
 	col.add_child(_orders_row)
 
+	_callings_row.name = "CallingsRow"
+	_callings_row.add_theme_constant_override("separation", 14)
+	col.add_child(_callings_row)
+	return panel
+
+# The Relations card, under the marching column and as wide as it.
+func _relations_panel() -> Control:
+	_relations_card.theme_type_variation = "Card"
+	_relations_card.name = "RelationsCard"
 	_relations_row.name = "RelationsRow"
 	_relations_row.add_theme_constant_override("separation", 2)
-	col.add_child(_relations_row)
-	return panel
+	_relations_card.add_child(_relations_row)
+	return _relations_card
 
 # Out of the tree now, not at the end of the frame: these rows hold NAMED
 # controls, and a queue_free()d child still sitting there would make Godot
@@ -288,61 +314,70 @@ func _build_orders() -> void:
 	# Both halves earn their place: the note is the sentence that sells the
 	# trade, the numbers are the trade itself. A player should be able to see
 	# that Careful is 0.70x and +2 without opening core/travel.gd.
-	var note := Label.new()
+	# On the pickers' own line, cut to fit, the whole of it on hover.
+	var note := _one_line("%s  %.2f× travel speed, %s." % [
+		Travel.pace_note(pace), Travel.speed_mult(party), _effect(Travel.pace_bonus(party))])
 	note.name = "PaceNote"
-	note.theme_type_variation = "Dim"
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "%s  %.2f× travel speed, %s." % [
-		Travel.pace_note(pace), Travel.speed_mult(party), _effect(Travel.pace_bonus(party))]
-	_orders_row.add_child(note)
+	row.add_child(note)
 
 	# #164: only shown when the slowest active member is under 30 ft — a
 	# standard-speed party gets no extra line.
 	var walk_note_text := Travel.walk_note(party)
 	if walk_note_text != "":
-		var walk_lbl := Label.new()
+		var walk_lbl := _one_line(walk_note_text)
 		walk_lbl.name = "WalkNote"
-		walk_lbl.theme_type_variation = "Dim"
-		walk_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		walk_lbl.text = walk_note_text
 		_orders_row.add_child(walk_lbl)
 
-# The Relations block (docs/spike-party-opinions.md §5): "Vera Kord and Pike
-# Sallow — rivals (-44)", one line per active pair, six at most for a party
-# of four. No portraits, no hearts. A party of one has nobody to get on with,
-# and the block is not drawn at all.
+# A dim line that takes what width is left and ends in "…" rather than
+# wrapping, with the whole text as its tooltip — what keeps the strip short.
+func _one_line(text: String) -> Label:
+	var l := Label.new()
+	l.theme_type_variation = "Dim"
+	l.text = text
+	l.tooltip_text = text
+	l.mouse_filter = Control.MOUSE_FILTER_PASS
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	return l
+
+# The Callings lines and the Relations web. Callings are words — each is a
+# place and a state, and there are only ever a few. Relations were words too
+# (docs/spike-party-opinions.md §5 had "Vera Kord and Pike Sallow — rivals
+# (-44)", one line per pair) and are a picture now: scenes/party/relations_web.gd
+# draws the marching party's faces joined by a line per pair, its colour and
+# shape the band, with describe() one hover away. A party of one has nobody to
+# get on with, and the block is not drawn at all.
 func _build_relations() -> void:
+	_clear(_callings_row)
 	_clear(_relations_row)
-	# Callings above it (core/callings.gd): one line per active hero whose
-	# calling has been told — "Ilsa Vane — The defiled shrine — told, marked on
-	# the map". Nothing while untold, so a fresh party sees no caption.
+	# Callings (core/callings.gd): one line per active hero whose calling has
+	# been told — "Ilsa Vane — The defiled shrine — told, marked on the map".
+	# Nothing while untold, so a fresh party sees no caption.
 	var lines: Array = []
 	for id in party.active:
 		var line: String = Callings.describe(party, String(id))
 		if line != "":
 			lines.append("%s — %s" % [party.get_member(id).cname, line])
+	_callings_row.visible = not lines.is_empty()
 	if not lines.is_empty():
 		var ccap := Label.new()
 		ccap.text = "Callings"
 		ccap.theme_type_variation = "Caption"
-		_relations_row.add_child(ccap)
-		for line in lines:
-			var l := Label.new()
-			l.text = String(line)
-			l.theme_type_variation = "Dim"
-			_relations_row.add_child(l)
-	var ps: Array = PartyOpinion.active_pairs(party)
-	if ps.is_empty():
+		_callings_row.add_child(ccap)
+		var l := _one_line("   ·   ".join(lines))
+		l.tooltip_text = "\n".join(lines)
+		_callings_row.add_child(l)
+	_relations_card.visible = not PartyOpinion.active_pairs(party).is_empty()
+	if not _relations_card.visible:
 		return
 	var cap := Label.new()
 	cap.text = "Relations"
 	cap.theme_type_variation = "Caption"
 	_relations_row.add_child(cap)
-	for pr in ps:
-		var l := Label.new()
-		l.text = PartyOpinion.describe(party, pr[0], pr[1])
-		l.theme_type_variation = "Dim"
-		_relations_row.add_child(l)
+	var web := RelationsWeb.new()
+	web.setup(party)
+	_relations_row.add_child(web)
 
 # One job's picker: the active party by name, over a first row meaning "nobody
 # named, use the party's best". Everybody active is offered — unlike the figure
@@ -402,8 +437,18 @@ func _refresh() -> void:
 	for c in _slot_col.get_children():
 		c.queue_free()
 
-	for ch in party.roster:
+	# The bench first, under its own head: who you could swap in is what this
+	# column is for, and with the marching party listed first (they usually
+	# are, in roster order) the substitutes sat below the fold. The marching
+	# party follows, in marching order, the same four as the column on the right.
+	var benched: Array = party.roster.filter(func(ch): return not party.is_active(ch.id))
+	_roster_col.add_child(_group_head("On the bench", benched.size(),
+		"Nobody on the bench. A new face is recruited at an inn, or made with Create new."))
+	for ch in benched:
 		_roster_col.add_child(_card(party.summary(ch.id)))
+	_roster_col.add_child(_group_head("Marching", party.active.size(), ""))
+	for id in party.active:
+		_roster_col.add_child(_card(party.summary(id)))
 
 	for i in Party.MAX_ACTIVE:
 		if i < party.active.size():
@@ -414,6 +459,7 @@ func _refresh() -> void:
 	_build_figure_picker()
 	_build_orders()
 	_build_relations()
+	_maybe_offer_traits()
 
 	_purse.text = "%d ◉" % party.gold
 	if party.stash.is_empty():
@@ -438,13 +484,67 @@ func _refresh() -> void:
 		_hint.text = "%s selected — click a party slot to place them, or click them again to cancel." \
 			% party.summary(_selected).get("name", "?")
 
-# One roster row: summary + select/bench/profile/dismiss.
+# #176: a hero from before personality traits is offered the pick once, the
+# first time this page opens with them on it (scenes/party/trait_offer.gd). One
+# at a time, in roster order; in co-op only your own heroes — a friend's are
+# offered on the friend's screen, the way their level-ups are.
+func _maybe_offer_traits() -> void:
+	if _offer != null:
+		return
+	for ch in party.roster:
+		if Traits.needs_offer(ch) and Coop.mine(party, ch.id):
+			_offer = TraitOffer.new()
+			add_child(_offer)
+			_offer.done.connect(func(_kept: bool):
+				_offer.queue_free()
+				_offer = null
+				_refresh())   # re-draws the roster with the traits, and offers the next hero if any
+			_offer.offer(ch)
+			return
+
+# A group's head in the roster column: its name and count, a rule, and (for an
+# empty bench) the one line saying where a substitute comes from.
+func _group_head(title: String, n: int, empty_note: String) -> Control:
+	var box := VBoxContainer.new()
+	# Tagged, not named: _refresh() queue_free()s the old column, and a new node
+	# asking for a name the old one still holds gets renamed ("@VBoxContainer@12").
+	box.set_meta("group", title)
+	box.add_theme_constant_override("separation", 2)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	box.add_child(head)
+	var l := Label.new()
+	l.text = "%s · %d" % [title, n]
+	l.theme_type_variation = "Gilt"
+	l.add_theme_color_override("font_color", COL_PARTY if title == "Marching" else Icons.COL_ACCENT)
+	head.add_child(l)
+	var rule := HSeparator.new()
+	rule.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(rule)
+	if n == 0 and empty_note != "":
+		var note := Label.new()
+		note.text = empty_note
+		note.theme_type_variation = "Dim"
+		box.add_child(note)
+	return box
+
+# One roster row: summary + select/bench/profile/dismiss. A substitute's row
+# wears a verdigris bar down its left edge and its To party button is the primary
+# one while there is a slot free; a marching row is a step quieter, since the
+# right-hand column already shows them.
 func _card(sm: Dictionary) -> Control:
 	# A ledger row, not a card: alternate rows take a faint tint, the picked
 	# one a gilt bar down its left edge. The whole row is the pick button.
 	var panel := PanelContainer.new()
 	var picked: bool = sm["id"] == _selected
 	panel.theme_type_variation = "RowPicked" if picked else ("RowAlt" if _roster_col.get_child_count() % 2 == 1 else "Row")
+	if not picked and not sm["active"] and not sm.get("dead", false):
+		var bar := Icons.box(Icons.COL_ROW, Color(0, 0, 0, 0), 0, 10, 6)
+		bar.border_color = Icons.COL_ACCENT   # verdigris: the picked row keeps the gilt bar
+		bar.border_width_left = 4
+		panel.add_theme_stylebox_override("panel", bar)
+	elif not picked and sm["active"]:
+		panel.modulate = Color(1, 1, 1, 0.78)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
@@ -464,6 +564,8 @@ func _card(sm: Dictionary) -> Control:
 		or (not sm["active"] and party.active.size() >= Party.MAX_ACTIVE)
 	if roster_locked:
 		bench.tooltip_text = locked_note
+	elif not sm["active"] and not bench.disabled:
+		bench.theme_type_variation = "Primary"
 	if sm.get("dead", false):   # #109: say so, and say what brings them back
 		bench.text = "Dead"
 		bench.disabled = true
@@ -628,6 +730,8 @@ func _summary_label(sm: Dictionary) -> Control:
 	# tiles you can click stay the profile screen's job.
 	col.add_child(_detail_line("⚔", _gear_text(sm), COL_GOLD, "gear"))
 	col.add_child(_detail_line("◆", _skills_text(sm), COL_PARTY, "skills"))
+	if not sm.get("traits", []).is_empty():   # #176: who they are, by name
+		col.add_child(_detail_line("✦", ", ".join(sm["traits"].map(func(t): return Traits.name_of(t))), Icons.COL_BODY, "traits"))
 	# #165: the class model's face beside the card when it has rendered; the
 	# glyph in the name line stays either way.
 	var face := Portraits.bust(String(HeroModels.get(sm["class_id"], "")), 48)

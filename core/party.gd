@@ -7,6 +7,7 @@ const Adapter = preload("res://core/adapter.gd")
 const Character = preload("res://core/character.gd")
 const Presets = preload("res://core/presets.gd")
 const Ach = preload("res://core/achievements.gd")
+const Traits = preload("res://core/traits.gd")
 
 const MAX_ACTIVE := 4
 
@@ -37,6 +38,7 @@ var overworld_figure := ""
 # owns every rule about them. A dict rather than three fields so the save format
 # grows a key, not a column, when travel gains another order.
 var travel_orders: Dictionary = {}
+var here: Dictionary = {}   # #176 step 4: where the party is — biome, band, site, night — stamped by world.gd each frame for the road's trait terms; {} off the map
 var world_now := 0.0        # world-minutes, stamped by world.gd each frame; potion buffs expire against it
 var scouted_next := false   # Potion of Clairvoyance / Clairvoyance cast: the next fight starts scouted
 var blessed := false        # a shrine's blessing: temp HP for every hero at the next fight (core/landmarks.gd)
@@ -436,6 +438,7 @@ func summary(id: String) -> Dictionary:
 		# tell you. Ids and numbers; the names are the UI's business.
 		"skills": trained_skills(s),
 		"equipped": equipped_items(s),
+		"traits": Traits.ids(ch),   # #176: personality trait ids; the names are the UI's business
 	}
 
 # The skills this sheet is actually trained in, best first: [{id, mod, prof}]
@@ -481,6 +484,7 @@ static func _demo_barbarian(id: String, name: String, species: String) -> Charac
 	ch.species_id = species
 	ch.background_id = "soldier"
 	ch.base_abilities = {"str": 15, "dex": 12, "con": 14, "int": 8, "wis": 10, "cha": 10}
+	ch.traits_offered = true   # #176: a fixture, like the presets it rides with — never asked
 	ch.add_level("barbarian", -1, true)   # a demo hero, handed over the same way
 	ch.add_level("barbarian", -1, true)
 	ch.decide("asi:background:soldier:0", {"type": "asi", "allocation": {"str": 2, "con": 1}})

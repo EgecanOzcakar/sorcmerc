@@ -227,6 +227,7 @@ func _init() -> void:
 		"...while the watch, still marching, keeps their job")
 
 	await _level_up_per_character(screen)
+	await _bench_first(screen)
 	await _relations(screen)
 	print("test_party_screen: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -295,10 +296,59 @@ func _node_with_method(node: Node, m: String):
 			return hit
 	return null
 
-# The Relations block under the standing orders (docs/spike-party-opinions.md
-# §5): one describe() line per active pair, so a pair the road has soured is
-# visible without waiting for a fight to show it. A party of one has nobody
-# to get on with, and shows nothing.
+# The roster column leads with the bench, under its own head, so a substitute
+# is the first thing on the left rather than below the marching four; the
+# marching party follows under theirs, in marching order. A substitute's To
+# party is the primary button while a slot is free. The Relations web has a
+# card of its own under the marching column, as wide as it; the standing
+# orders are a short strip along the bottom.
+func _bench_first(screen) -> void:
+	var p = screen.party
+	var out: String = p.active[p.active.size() - 1]
+	p.bench(out)
+	screen._refresh()
+	await process_frame
+	var kids: Array = screen._roster_col.get_children().filter(func(c): return not c.is_queued_for_deletion())
+	var benched: Array = p.roster.filter(func(ch): return not p.is_active(ch.id))
+	check(kids.size() > 0 and String(kids[0].get_meta("group", "")) == "On the bench",
+		"the column opens with the bench's head (%s)" % (str(kids[0].get_meta("group", kids[0].name)) if kids.size() > 0 else "nothing"))
+	if kids.size() < 3 + benched.size():
+		check(false, "the column holds both heads and every row (%d)" % kids.size())
+		return
+	check(_all_labels(kids[0]) == ["On the bench · %d" % benched.size()], "...which counts them: %s" % str(_all_labels(kids[0])))
+	var names_after_head: Array = []
+	for k in range(1, 1 + benched.size()):
+		names_after_head.append(_all_labels(kids[k])[0])
+	check(benched.all(func(ch): return names_after_head.any(func(t): return ch.cname in t)),
+		"...and the substitutes come straight after it: %s" % str(names_after_head))
+	var mhead = kids[1 + benched.size()]
+	check(String(mhead.get_meta("group", "")) == "Marching" and _all_labels(mhead) == ["Marching · %d" % p.active.size()],
+		"then the marching party's head")
+	var first_marching: Array = _all_labels(kids[2 + benched.size()])
+	check(p.get_member(p.active[0]).cname in first_marching[0], "...in marching order: %s" % first_marching[0])
+	var to_party := _buttons_named(kids[1], "To party")
+	check(to_party.size() == 1 and to_party[0].theme_type_variation == "Primary",
+		"a substitute's To party is the primary button while a slot is free")
+	var card = node_named(screen, "RelationsCard")
+	var marching: Control = screen._slot_col.get_parent().get_parent()   # the column: head, scroll, slots
+	check(card != null and card.visible and card.get_parent() == marching.get_parent(),
+		"the relations sit in a card of their own, under the marching column")
+	await process_frame
+	if card != null:
+		check(absf(card.size.x - marching.size.x) < 1.0,
+			"...as wide as it (%d and %d)" % [card.size.x, marching.size.x])
+	var note := node_named(screen, "PaceNote") as Label
+	check(note != null and note.autowrap_mode == TextServer.AUTOWRAP_OFF and note.tooltip_text == note.text,
+		"the orders strip keeps the pace note to one line, the whole of it on hover")
+	p.activate(out)
+	screen._refresh()
+	await process_frame
+
+# The Relations block beside the standing orders: a caption and a drawn web
+# (scenes/party/relations_web.gd) with one line per active pair, each line's
+# band the pair's band() and its hover the pair's describe(), so the words are
+# still one mouse-over away. A party of one has nobody to get on with, and
+# shows nothing.
 func _relations(screen) -> void:
 	var p = screen.party
 	var a: String = p.active[0]
@@ -306,18 +356,48 @@ func _relations(screen) -> void:
 	PartyOpinion.set_score(p, a, b, -44.0)
 	screen._refresh()
 	await process_frame
-	var lines := _label_texts(node_named(screen, "RelationsRow"))
-	check(lines.size() > 0 and lines[0] == "Relations", "the block is captioned")
+	var row = node_named(screen, "RelationsRow")
+	var lines := _label_texts(row)
+	check(lines == ["Relations"], "the block is captioned, and says nothing else in words (%s)" % str(lines))
+	var web = node_named(screen, "RelationsWeb")
+	check(web != null, "the relations are drawn as a web")
+	if web == null:
+		return
+	web.size = web.custom_minimum_size
+	var es: Array = web.edges()
+	check(es.size() == PartyOpinion.active_pairs(p).size(),
+		"one line per active pair (%d for %d)" % [es.size(), PartyOpinion.active_pairs(p).size()])
+	var first: Dictionary = es[0]
+	check(first["a"] == a and first["b"] == b and first["band"] == "rivals" and int(first["score"]) == -44,
+		"the soured pair's line is a rivals line: %s" % str(first))
+	# Hovering the middle of that line says it in words, as describe() does.
+	var pos: Array = web.face_positions()
+	var mid: Vector2 = (pos[0] + pos[1]) * 0.5
 	var want := PartyOpinion.describe(p, a, b)
-	check("rivals (-44)" in want and want in lines, "a soured pair reads as describe() says (%s)" % want)
-	check(lines.size() == 1 + PartyOpinion.active_pairs(p).size(),
-		"one line per active pair (%d for %d)" % [lines.size() - 1, PartyOpinion.active_pairs(p).size()])
+	check(web.edge_at(mid) == 0, "the mouse on the line finds it")
+	check("rivals (-44)" in want and web.tooltip_at(mid) == want, "...and its tooltip is describe(): %s" % web.tooltip_at(mid))
+	# Over a face: every line that person is on.
+	var mine: String = web.tooltip_at(pos[0])
+	check(mine.split("\n").size() == p.active.size() - 1 and want in mine,
+		"a face's tooltip lists each of its pairs (%d lines)" % mine.split("\n").size())
+	check(web.tooltip_at(Vector2(2, 2)) == "", "empty space says nothing")
 	for id in p.active.duplicate():
 		if id != a:
 			p.bench(id)
 	screen._refresh()
 	await process_frame
-	check(_label_texts(node_named(screen, "RelationsRow")).is_empty(), "a party of one shows no block at all")
+	check(_label_texts(node_named(screen, "RelationsRow")).is_empty() and node_named(screen, "RelationsWeb") == null,
+		"a party of one shows no block at all")
+
+# Every Label under a node, depth first — a roster row's name sits a few
+# containers down.
+func _all_labels(node: Node) -> Array:
+	var out: Array = []
+	for c in node.get_children():
+		if c is Label:
+			out.append(String(c.text))
+		out.append_array(_all_labels(c))
+	return out
 
 func _label_texts(node: Node) -> Array:
 	var out: Array = []

@@ -15,6 +15,7 @@
 # the fight itself banks (XP/gold/kills), same relationship a dungeon's treasure
 # room has to the monsters guarding it.
 extends RefCounted
+const Traits = preload("res://core/traits.gd")   # #176 step 4: Curious and Delver search better
 
 const Campaign = preload("res://core/campaign.gd")
 const RNG = preload("res://core/rng.gd")
@@ -55,7 +56,10 @@ static func search_roll(party, rng = null) -> Dictionary:
 		return {}
 	if rng == null:
 		rng = RNG.new()   # no lair to seed off here (landmarks share this too) — RNG's own time-based default
-	var bonus: int = c.skill_bonus(char_id, DISCOVER_SKILL)
+	# #176 step 4: a searching trait — Curious, Delver — reads the ground too,
+	# on top of the Survival the search is.
+	var bonus: int = c.skill_bonus(char_id, DISCOVER_SKILL) \
+		+ int(Traits.skill_term(ch, "investigation", party.here)["n"])
 	var nat: int = int(Dice.d20(rng)["nat"])
 	var ok: bool = nat + bonus >= DISCOVER_DC
 	return {"ok": ok, "char_id": char_id, "cname": ch.cname, "skill": DISCOVER_SKILL,
@@ -237,5 +241,5 @@ static func sneak_past(lair, party, rng = null) -> Dictionary:
 		% [ch.cname, nat, bonus, SNEAK_DC, lair.sname]) if ok else (
 		"%s can't settle them (Animal Handling %d+%d vs DC %d) — they attack."
 		% [ch.cname, nat, bonus, SNEAK_DC])
-	return {"ok": ok, "char_id": char_id, "cname": ch.cname, "nat": nat, "bonus": bonus,
+	return {"ok": ok, "char_id": char_id, "cname": ch.cname, "skill": SNEAK_SKILL, "nat": nat, "bonus": bonus,
 		"dc": SNEAK_DC, "text": line}

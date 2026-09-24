@@ -58,17 +58,26 @@ func _init() -> void:
 	root.add_child(main)
 	for i in 10:
 		await process_frame
-	var cover_hex = null
-	for hx in main.cb.board["hexes"]:
-		if main.cb.is_cover(hx):
-			cover_hex = hx
-			break
-	check(cover_hex != null, "the board has cover on it")
+	# The demo room's Alcove is pillars, and pillars are walls now (SOLID_COVER),
+	# so the board may carry no standable cover at all: lend it one. What this
+	# checks is the chip against the rule, not which board has cover.
 	var open_hex = null
 	for hx in main.cb.board["hexes"]:
 		if not main.cb.is_cover(hx) and main.cb.object_at(hx).is_empty():
 			open_hex = hx
 			break
+	var cover_hex = null
+	for hx in main.cb.board["hexes"]:
+		if main.cb.is_cover(hx):
+			cover_hex = hx
+			break
+	if cover_hex == null:
+		for hx in main.cb.board["hexes"]:
+			if hx != open_hex and main.cb.object_at(hx).is_empty():
+				cover_hex = hx
+				main.cb.board["cover"].append(hx)
+				break
+	check(cover_hex != null, "the board has cover on it")
 	if cover_hex != null and open_hex != null:
 		var c = main.cb.combatants[0]
 		var was: Vector2i = c.pos

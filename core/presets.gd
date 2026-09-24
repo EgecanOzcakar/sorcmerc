@@ -13,6 +13,12 @@ static func _base(id: String, name: String, species: String, background: String,
 	ch.species_id = species
 	ch.background_id = background
 	ch.base_abilities = abil
+	# #176: the presets carry no personality traits and are never offered them.
+	# They are the ruler Regions.ref_score and every balance sweep stand on, and a
+	# trait stamped into those fights would move numbers measured without one.
+	# A preset loaded into the creator picks up its background's defaults on
+	# Confirm (scenes/creator/creator.gd), like any other new hero.
+	ch.traits_offered = true
 	for i in n:
 		ch.add_level(cid, -1, true)   # the starting party was handed to you, not played up
 	# Human: two languages, a skill, and an origin feat.

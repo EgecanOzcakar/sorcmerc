@@ -15,11 +15,15 @@
 #
 # Measured (tests/test_objectives.gd test_sweep, 80 seeds a kind, presets at
 # level 3, normal roster, autopilot with ai.gd's one rule per kind):
-#   hold      done 51/80 (63.8%)   won 51/80
-#   rescue    done 55/80 (68.8%)   won 68/80
-#   breakout  done 41/80 (51.2%)   won 79/80
-#   hunt      done 33/80 (41.2%)   won 79/80
-#   escort    done 38/80 (47.5%)   won 73/80
+#   hold      done 44/80 (55.0%)   won 44/80
+#   rescue    done 45/80 (56.2%)   won 62/80
+#   breakout  done 46/80 (57.5%)   won 76/80
+#   hunt      done 34/80 (42.5%)   won 75/80
+#   escort    done 33/80 (41.2%)   won 72/80
+# Re-measured 2026-09-23 after walls (Encounter.SOLID_COVER) and the AI that
+# walks round them: every kind moved, escort out of the band (38.8%, 31/80) —
+# monsters that used to stand against the camp's stakes now reach the carter.
+# CARTER_HP_BASE 10 -> 12 put it back. It was 47.5% before.
 # The band is 40–75%: an objective nearly free is a modifier, one nearly
 # impossible is a trap. Tuned by the knobs below and never by the roster.
 extends RefCounted
@@ -38,7 +42,7 @@ const CAPTIVE_HP := 4
 const EXIT_W := 3               # breakout / hunt: how many far-edge hexes are the road out
 const QUARRY_CORNERED := 4      # hunt: a hero this close makes the quarry fight rather than run
 const CARTER_AC := 11
-const CARTER_HP_BASE := 10
+const CARTER_HP_BASE := 12
 const CARTER_HP_PER_LEVEL := 2
 const BONUS_XP_SHARE := 0.5     # an objective done pays this share of the whole roster's worth in XP
 

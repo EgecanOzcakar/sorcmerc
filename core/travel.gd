@@ -43,6 +43,7 @@
 # player something are D4's shape, not this one's — when they land, `check()`
 # grows an "options" key and world.gd learns to wait for an answer.
 extends RefCounted
+const Traits = preload("res://core/traits.gd")   # #176 step 4
 
 const Campaign = preload("res://core/campaign.gd")
 const Dice = preload("res://core/dice.gd")
@@ -344,7 +345,10 @@ static func check(party, world, rng = null) -> Dictionary:
 	# point better; one at odds, a point worse. Same term as pace_bonus, so
 	# the card's roll line just grows another signed number.
 	var morale: int = PartyOpinion.travel_bonus(party)
-	var bonus: int = int(who["bonus"]) + pace_bonus(party) + morale
+	# #176 step 4: the roller's own traits on the road (Downs-rider +1,
+	# Cautious −1 — stops to look at everything), named on the card like morale.
+	var tt: Dictionary = Traits.road_term(party.get_member(String(who["id"])), "travel", party.here)
+	var bonus: int = int(who["bonus"]) + pace_bonus(party) + morale + int(tt["n"])
 	var nat: int = int(Dice.d20(rng)["nat"])
 	var ok: bool = nat + bonus >= int(e["dc"])
 	out.merge({"ok": ok, "char_id": who["id"], "cname": who["cname"], "skill": who["skill"],
@@ -352,6 +356,8 @@ static func check(party, world, rng = null) -> Dictionary:
 		"named": bool(who["named"])}, true)
 	if morale != 0:
 		out["morale"] = morale
+	if int(tt["n"]) != 0:
+		out["trait_term"] = {"n": int(tt["n"]), "who": tt["who"]}
 	out["text"] = (String(e["pass"]) % who["cname"]) if ok else String(e["fail"])
 	_apply(e, ok, party, world, rng, out)
 	# The roll feeds back: the roller who read the road right (or wrong) is

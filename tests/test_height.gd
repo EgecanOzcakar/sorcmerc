@@ -145,7 +145,7 @@ func test_the_ai_wants_it_but_not_that_much() -> void:
 	var goal := Vector2i(8, 0)
 	var m = _fighter("m", "foe", Vector2i(4, 0), 6)
 	var cb = _fight(_strip({Vector2i(7, 0): 1}), [m])
-	AI._move_by(cb, m, AI._toward(goal))
+	AI._move_by(cb, m, AI._toward(cb, goal))
 	check(m.pos == goal, "a monster walks to its goal, not onto the shelf one hex short of it (got %s)" % str(m.pos))
 	# ...and where nothing else separates two hexes, the high ground decides.
 	var n = _fighter("n", "foe", Vector2i(4, 0), 6)
