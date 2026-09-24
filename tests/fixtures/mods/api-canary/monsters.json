@@ -1,0 +1,61 @@
+[
+  {
+    "id": "canary-hexwarden",
+    "cname": "Hexwarden",
+    "ac": 13,
+    "max_hp": 22,
+    "init_mod": 2,
+    "speed": 5,
+    "atk_bonus": 4,
+    "damage": "1d4+2",
+    "ranged": false,
+    "atk_range": 1,
+    "athletics": 0,
+    "acro": 2,
+    "stealth": 2,
+    "passive_perception": 11,
+    "saves": {
+      "str": 0,
+      "dex": 2,
+      "con": 1,
+      "int": 0,
+      "wis": 1,
+      "cha": 2
+    },
+    "save_dc": 11,
+    "features": [
+      "canary-ward",
+      "canary-gloom",
+      "canary-mend",
+      "canary-counterstep"
+    ],
+    "cr": 2,
+    "xp": 450,
+    "size": "Medium",
+    "type": "humanoid",
+    "faction": "cultist",
+    "habitat": "any",
+    "attack_name": "Dagger",
+    "damage_type": "piercing",
+    "hit_dice": "6d8-5",
+    "abilities": {
+      "str": 11,
+      "dex": 14,
+      "con": 12,
+      "int": 10,
+      "wis": 13,
+      "cha": 14
+    },
+    "speeds_ft": {
+      "walk": 30
+    },
+    "senses": {
+      "passive_perception": 11
+    },
+    "resist": [],
+    "immune": [],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "api-canary: a third-party monster, written the way docs/modding.md \u00a75 says"
+  }
+]

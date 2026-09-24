@@ -10196,6 +10196,105 @@ showing "Sable the Magister is a spellcaster — up to Fireball."
 - **Breath weapons** are areas too and still priced as one target. That's a
   separate pass over ~30 statblocks.
 
+## Keeping co-op and the modding API stable through heavy features (2026-09-24)
+
+The owner's ask: skills and checks that keep co-op and the modding API stable
+while big features land. Both are promises, and neither is visible from the
+feature being built:
+
+- two co-op peers stay in lockstep;
+- a pack written against an API level keeps loading.
+
+Until now each was held by tests that only exercised a narrow slice.
+
+**Co-op.**
+
+- **`Coop.state_hash` sees more.** It now covers resource pools and every
+  status *payload*, not just status names. A sorcery point spent on one peer
+  only, or a Metamagic armed with a different option, rolls no die until later,
+  so it was invisible to a hash of the rng. A payload that names a Combatant is
+  written as its id (`_plain()`), since its printed form differs on every peer.
+- **The lockstep harness is shared.** It moved out of `test_coop.gd` into
+  `tests/coop_harness.gd`, which `test_coop.gd` now calls.
+- **New `tests/test_coop_kits.gd`.** It covers all 48 (class, subclass) pairs,
+  built the way a player builds them, dealt into four-hero parties at levels 4
+  and 8, and fought in lockstep. Every hero turn presses every button its bar
+  offers, 60 distinct intents through the JSON codec. It also tests the
+  detector itself: a pool or a payload alone must change the hash.
+- **It found a real rules bug on its first run.** `perform()` paid the action,
+  and for a teleport or a summon the slot, *before* `cast()` checked whether
+  the spell could be cast. So a refused cast cost its caster the turn: a War
+  domain cleric's second spell against the bonus-action spell rule, a Misty Step
+  at a taken hex, a summon with nowhere to stand. `Combat._cast_refusal` now
+  asks first, and `test_coop_kits` checks that every kit's refused cast leaves
+  its economy, slots and pools untouched. Players rarely met it, because the
+  bar only offers legal buttons. The AI and the co-op harness both rely on
+  "a refused intent changed nothing".
+- **It found a second one when metamagic was merged onto it as a trial.**
+  `perform()` asked about the pool, a smite's slot and a Font of Magic
+  conversion only *after* paying the economy. Font of Magic's slot-making
+  button was pressed after Metamagic had drained the points, and the sorcerer
+  lost the Bonus Action and made no slot. On a co-op host that is a desync:
+  the host paid, and the guest never heard of it. These are now asked before
+  the spend too, checked by `test_a_drained_pool_changes_nothing`.
+
+**The modding API.**
+
+- **New `tests/test_mod_api.gd`** holds a snapshot, `tests/fixtures/mod_api.json`.
+  It covers:
+  - every vocabulary a pack can write (manifest kinds, access and data files;
+    effect kinds, feature keys (now the explicit `Effects.VERB_KEYS`) and
+    reaction triggers; quest kinds and target fields; story beat kinds,
+    conditions, effects and quest states; world kinds, behaviours, roles,
+    factions, bands and themes; calling completions);
+  - every id a pack can name, across 15 files.
+- **What fails:**
+  - **A term removed** is a break. Bump `Manifest.API`, keep reading the old
+    form, and write the migration.
+  - **A term added** must be documented in `docs/modding.md` and the snapshot
+    regenerated (`SNAPSHOT_WRITE=1`).
+  - **An id removed** strands packs.
+- **A third party's canary pack**, `tests/fixtures/mods/api-canary/`, is written
+  against API 1. It has:
+  - a monster, a spell, a potion, and four features of four kinds;
+  - a map with every AI behaviour and troop role;
+  - a story using every condition and effect key.
+
+  It must load clean, apply, and fight to a finish.
+- **Docs drift found on the first run.** `rescue` was a quest kind a story could
+  use, and `docs/modding.md` did not list it. It does now.
+- **It held on the first merge.** Master brought in the sorcerer's
+  `font_of_magic` kind and the `spell_dc_bonus`/`spell_attack_adv` keys, and
+  the check refused them until they were written into `docs/modding.md`
+  (§5.1, with an example). The snapshot was then regenerated.
+
+**The skill.** `.claude/skills/sorcmerc-compat/SKILL.md` lists the co-op
+lockstep rules (the rng, refusals, the hash, verb ids, what travels with the
+party), the modding promise (add freely if documented, never remove without an
+API bump, never touch the canary to pass), and a checklist for a heavy PR.
+`CLAUDE.md` points at it.
+
+**Enemy casters in co-op.** After the enemy casters landed, `test_coop_kits`
+gained a lockstep fight for each cult caster at each band cap: a foe's AI
+picks its spell, target and hex on each peer by itself, so this is where a
+caster that read anything but `cb.rng` would show. They cast (slots spent),
+and they stay in lockstep.
+
+### Still open
+
+- **Packs in co-op.** Both peers must run the same pack set; the build stamp
+  doesn't include it yet.
+- **World-map lockstep** (the guest's mirrored map) is covered only by
+  `test_coop_mirror`'s one scenario.
+- **The spell-mechanics keys** a pack can write (`shape`, `upcast`,
+  `cantrip_scale`, ...) are read inline in `_spell_verb` and not yet held by
+  the snapshot. Lift them into a constant the way `VERB_KEYS` was.
+- **A runtime script error inside a test function does not fail the test.**
+  The function stops, its checks never run, and the script still exits 0. One
+  slipped through while this check was being written. `tools/run_tests.sh`
+  could treat `SCRIPT ERROR` in a test's output as a failure. That is a runner
+  change for every test, so it is left for its own PR.
+
 ## The action bar's hover card — two voices, drawn dice, colour-coded types (2026-09-24)
 
 The owner: "tidy up the action bar and spell explanations when hovered. there
