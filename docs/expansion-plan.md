@@ -9561,3 +9561,71 @@ Screens: `tests/shot_audit.gd` (needs a display).
   creator's layout) and #194–#197 (the combat board's rendering) are each
   their own piece of work.
 - `Regions.describe()` is only called by its test.
+
+## The owner's calls on the audit — RAW death saves, one raider a town, merged picks, a board you can see (2026-09-24)
+
+The owner's answers to the last entry's open items: do the calls (all but new
+heroes joining at level 1, #179, which stays as it is), and build items 1, 2
+and 4 of the suggested next work.
+
+- **Three death-save successes: stable, not standing.** RAW, and what the
+  field manual always told the player. The hero stays down at 0 HP and stops
+  rolling. Their turn is skipped (`end_turn` already skipped `is_stable()`;
+  nothing ever set it). A hit knocks them off stable, adds its failure(s), and
+  they roll again from their next turn. Healing, First Aid, or the fight
+  ending (`Adapter.write_back`: 1 HP) brings them round. The token and the
+  combat card read "stable" in place of the save tally. This is items 1 and 2
+  on the owner's list: the call and the "stable state" feature were the same
+  work.
+- **One raider a town.** `Raids.target_for` skips a town another lair has
+  raided and not been cleared from, or is marching on, or is camped outside.
+  The lair makes for the next town in reach, or waits for its next due time.
+- **#191, duplicate choice lists.** Lists of the same kind with the same
+  options (a human soldier's language from the species and one from the
+  background) show as one list whose count is the sum
+  (`Creator.choice_groups`). The picks are still stored under each grant's own
+  key (`toggle_group` fills the first with room). Lists that only overlap
+  (the human's any-skill and the fighter's eleven) stay apart, and
+  `taken_elsewhere` greys, in each list, what the other took and what the
+  build already has from a grant that asked nothing (a background's skills,
+  Common). It never greys a list into one it cannot finish: when too few
+  options are left, the already-known ones come back. The level-up screen
+  greys the same way.
+- **#194, the floor that vanished on a zoom.** Two causes, both fixed:
+  - The cached ground layer (#140) was a zero-size Control, and Godot culls
+    a Control by its own rect. Zoom in, then pan so that rect's origin leaves
+    the window, and the whole floor was culled with every tile of it still
+    on screen. The layer is a Node2D now, culled by what it draws.
+  - A repaint re-based the layer (`_ground_at = _origin`), but only the
+    board's own `_draw()` moved it. Nothing queued that when auto-fit changed
+    the zoom inside `_layout()`, or while nothing on the board was animating,
+    so the new ground sat at the old offset until something redrew the
+    board: "corrects after a few seconds". `tick()` now places it too.
+    `tests/test_board_ground.gd` asserts this without calling `_place_layers`
+    itself, which is how the old check had hidden it.
+- **#197 (and #156's follow-up), height on the board.**
+  - A raised tile now reads the floor texture at its footprint rather than
+    where it is drawn. Before, its pattern ran straight on from the lower
+    tile behind it and the step vanished into one flat picture.
+  - The cut earth under a shelf's edge is textured rock, lit at the lip,
+    dark at the foot, a shade brighter on the side turned to the board's
+    light, with a dark line where it meets the ground. Before, it was a flat
+    near-black band, which read as a hole.
+  - `tests/shot_height_close.gd` frames it close.
+
+**Measured** (`tests/sweep_tier.gd`, 200 seeds a tier, level-3 presets, master
+e50d6c6 against the branch, identical rosters): easy 97.5% → 96.0%, normal
+91.0% → 87.0%, hard 79.5% → 76.5%. That is cover-on-DEX-only and RAW stable
+together. Every move is within about one and a half standard errors and in
+the predicted direction, and test_scaler's bands hold. TIER did not move. The
+numbers are in `core/scaler.gd`'s header.
+
+### Still open
+
+- `core/regions.gd`'s win-rate table (2026-09-13, 80 seeds a cell) was not
+  re-run. The in-band rows should move the way sweep_tier's did.
+- The #197 report's screenshot could not be fetched from here. This fixes what
+  its text describes, which is also what the close shot showed. If the
+  owner's board shows a different gap, it wants that board's seed.
+- A hero at 0 HP between fights still can't be stabilised by Medicine or
+  Spare the Dying. There's no verb for it; Help (First Aid) and healing do it.

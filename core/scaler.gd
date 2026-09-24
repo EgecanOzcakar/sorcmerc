@@ -216,6 +216,22 @@
 # The other measured effect is worth having on its own: fights are SHORTER now
 # that everyone's damage is real. The level-8 sweep went from ~12.9 rounds to
 # ~9.6.
+#
+# RE-MEASURED 2026-09-24 (the audit pass), and NO KNOB HERE MOVED. Two rules
+# came back to RAW: cover's +2 is on DEX saves only (it had been on every save,
+# concentration included), and three death-save successes leave a hero stable
+# and down rather than up at 1 HP. Both make the party's day harder. Measured
+# with tests/sweep_tier.gd (200 seeds a tier, level-3 presets, scale 1.0), run
+# back to back on master (e50d6c6) and on the branch:
+#                 master   branch
+#   easy          97.5%    96.0%   -1.5
+#   normal        91.0%    87.0%   -4.0
+#   hard          79.5%    76.5%   -3.0
+# Rosters are identical (same foes, same mult), so this is the rules alone.
+# Every move is within about one and a half standard errors (~2-3 points at
+# 200 seeds), all in the predicted direction, and test_scaler's bands still
+# hold. TIER stays where it is: a retune for rules that are now right would
+# only be undone by the next rule that is.
 extends RefCounted
 
 const Adapter = preload("res://core/adapter.gd")
