@@ -7,7 +7,7 @@
 #
 #   Downtime.train(party, world, s, ch, "sentinel")   # a feat, five days, once per hero
 #   Downtime.carouse(party, world, s)                 # a night on the town: a contact, a lead, or a story
-#   Downtime.gamble(party, s, 50)                     # a stake and a roll; an evening, once a visit
+#   Downtime.gamble(party, world, s, 50)              # a stake and a roll; an evening, once a day a town
 #   Downtime.craft(party, world, s, "potion-of-speed", m)   # the alchemist's bench / the librarian's desk
 #   Downtime.pit_bracket(s, world) / pit_spec / pit_result  # a city's three champions, once a week
 #
@@ -15,7 +15,7 @@
 # nat, bonus, dc, text, ...} and the screen shows it the way it shows
 # work_healer(): a line under the row, and a card when there is a
 # complication. State lives on party.downtime (saved beside callings):
-#   {"trained": [char_id], "gambled": {s.id: last_visited},
+#   {"trained": [char_id], "gambled_day": {s.id: world-day},
 #    "crafted": {s.id: {item_id: last_visited}}, "pit": {s.id: {"week", "beaten"}}}
 # Days go through spend_days(): the clock moves, the party sleeps, the bed is
 # paid. The complication is the anti-grind: a fail is a small story, never
@@ -49,8 +49,30 @@ const CAROUSE_DC := 13
 const CAROUSE_CONTACT := 5.0
 const CAROUSE_COIN := 15
 const CAROUSE_SKILLS := ["persuasion", "performance"]
-# A coin flip with skill; a potion to a magic item.
-const GAMBLE_DC := 12
+# The game. A table in town is a sink with a story in it, not a job: the
+# house wins over an evening unless the company's gambler is exceptional, and
+# a company sits in once a DAY per town, not once a visit — stepping out of
+# the gate and back used to re-arm it (the design audit,
+# docs/audit-game-design.md §1.5). The table used to pay 1.5x at DC 12, 2x at
+# DC 17 and 3x on a 20, a positive return from +2 up (1.33x at +5, 1.53x at
+# +7), so the max stake every visit was the only sensible play.
+#
+# Now the lowest win only pays the stake back (the owner's call), a total of
+# GAMBLE_BIG pays half again, a natural 20 still trebles it, and a natural 1
+# always loses whatever the bonus. The skill is the best of Insight, Deception
+# and Sleight of Hand in the marching party (best_of).
+#
+# EV (exact, d20 arithmetic): what comes back per 1 ◉ staked, by bonus —
+# sum over the twenty faces of the payout, over 20. Not a sweep: nothing here
+# is random but the die, and tests/test_downtime.gd enumerates it.
+#   +0 0.500  +1 0.550  +2 0.600  +3 0.650  +4 0.700  +5 0.750
+#   +6 0.825  +7 0.900  +8 0.975  +9 1.050  +10 1.125 +11 1.200  +12 1.225
+# Below 1 through +8; only a +9 gambler (a level 9+ rogue with Expertise, say)
+# breaks even, and past +11 the curve flattens because every face but the 1
+# already pays.
+const GAMBLE_DC := 13          # the lowest win: the stake comes back
+const GAMBLE_BIG := 25         # half again
+const GAMBLE_MULT := {"even": 1.0, "big": 1.5, "nat20": 3.0}
 const GAMBLE_STAKES := [25, 50, 100, 200]
 const GAMBLE_SKILLS := ["insight", "deception", "sleightofhand"]
 # Half price for a day.
@@ -243,14 +265,12 @@ static func carouse(party, world, s, rng = null) -> Dictionary:
 
 # --- once a visit -------------------------------------------------------------
 
-# The game's and the bench's "once a visit" is the visit's own last_visited
-# stamp. The screen re-reads the shelf mid-visit (a rest, the inn reopening
-# behind a bout or a brawl) through Visit.visit(), which stamps it again;
-# the stamps that were this visit's move with it, or the rows re-arm.
+# The bench's "once a visit" is the visit's own last_visited stamp. The
+# screen re-reads the shelf mid-visit (a rest, the inn reopening behind a bout
+# or a brawl) through Visit.visit(), which stamps it again; the stamps that
+# were this visit's move with it, or the rows re-arm. The game is once a DAY
+# (gambled_day, below), which no re-read of the visit can move.
 static func restamp(party, s, old: float, new: float) -> void:
-	var g: Dictionary = party.downtime.get("gambled", {})
-	if g.has(s.id) and is_equal_approx(float(g[s.id]), old):
-		g[s.id] = new
 	var here: Dictionary = party.downtime.get("crafted", {}).get(s.id, {})
 	for item in here:
 		if is_equal_approx(float(here[item]), old):
@@ -258,46 +278,79 @@ static func restamp(party, s, old: float, new: float) -> void:
 
 # --- gambling ---------------------------------------------------------------
 
-# Once a visit: the stamp is the visit's own (Visit.visit() writes it), the
-# way steal() seeds off it. Approx: a stamp and the settlement's both cross
-# the save as JSON floats, and JSON keeps fewer digits than a float has.
-static func can_gamble(party, s) -> bool:
-	return not is_equal_approx(float(party.downtime.get("gambled", {}).get(s.id, -2.0)), s.last_visited)
+# The world-day a game is counted against: midnight to midnight on the world
+# clock. The same day index the carouse and the market's clocks count in.
+static func world_day(world) -> int:
+	return int(floor(world.clock.elapsed / DAY))
+
+# Once a day per town. The stamp is the world-day itself, not the visit's
+# last_visited: a visit is re-stamped by walking out of the gate and back, a
+# day is not. An old save's once-a-visit stamps ("gambled") are not read.
+static func can_gamble(party, world, s) -> bool:
+	return int(party.downtime.get("gambled_day", {}).get(s.id, -1)) != world_day(world)
+
+# The line for a table that will not have the company again today; "" when a
+# game is on. The screen puts it under the row, where a result would go.
+static func gamble_refusal(party, world, s) -> String:
+	if can_gamble(party, world, s):
+		return ""
+	return "The tables in %s have had the company's coin once today. They will take it again tomorrow." % s.sname
+
+# The payout for a face of the die at a bonus: GAMBLE_MULT's key, or "" for a
+# loss. The whole table in one place, so the EV the header quotes and the test
+# enumerates is the rule the game rolls.
+static func gamble_tier(nat: int, bonus: int) -> String:
+	if nat == 1:
+		return ""
+	if nat == 20:
+		return "nat20"
+	if nat + bonus >= GAMBLE_BIG:
+		return "big"
+	if nat + bonus >= GAMBLE_DC:
+		return "even"
+	return ""
+
+# What comes back per 1 ◉ staked at `bonus`, averaged over the twenty faces.
+static func gamble_ev(bonus: int) -> float:
+	var total := 0.0
+	for nat in range(1, 21):
+		var tier := gamble_tier(nat, bonus)
+		total += float(GAMBLE_MULT.get(tier, 0.0))
+	return total / 20.0
 
 # No days — an evening. The stake is the cost; `won` is what comes back
-# across the table (the purse ends stake down, `won` up).
-static func gamble(party, s, stake: int, rng = null) -> Dictionary:
+# across the table (the purse ends stake down, `won` up). Seeded off the town
+# and the day, so a reload replays the same evening.
+static func gamble(party, world, s, stake: int, rng = null) -> Dictionary:
 	var who := best_of(party, GAMBLE_SKILLS)
-	if who.is_empty() or stake <= 0 or not can_gamble(party, s) or not party.spend_gold(stake):
+	if who.is_empty() or stake <= 0 or not can_gamble(party, world, s) or not party.spend_gold(stake):
 		return {}
-	var gambled: Dictionary = party.downtime.get("gambled", {})
-	gambled[s.id] = s.last_visited
-	party.downtime["gambled"] = gambled
+	var day := world_day(world)
+	var gambled: Dictionary = party.downtime.get("gambled_day", {})
+	gambled[s.id] = day
+	party.downtime["gambled_day"] = gambled
 	var ch = party.get_member(who["char_id"])
 	if rng == null:
-		rng = RNG.new(maxi(1, absi(hash("gamble|%s|%d" % [s.id, int(s.last_visited)]))))
+		rng = RNG.new(maxi(1, absi(hash("gamble|%s|%d" % [s.id, day]))))
 	var skill := String(who["skill"])
 	var bonus := int(who["bonus"])
 	var nat: int = int(Dice.d20(rng)["nat"])
-	var total := nat + bonus
-	var mult := 0.0
-	var how := ""
-	if nat == 20:
-		mult = 3.0
-		how = "threefold"
+	var tier := gamble_tier(nat, bonus)
+	var mult := float(GAMBLE_MULT.get(tier, 0.0))
+	if tier == "nat20":
 		Ach.bump("trebles")
-	elif nat != 1 and total >= GAMBLE_DC + 5:
-		mult = 2.0
-		how = "doubled"
-	elif nat != 1 and total >= GAMBLE_DC:
-		mult = 1.5
-		how = "half again"
 	var won := int(round(stake * mult))
 	party.add_gold(won)
 	var roll := "%s %d+%d vs DC %d" % [_skill_name(skill), nat, bonus, GAMBLE_DC]
 	var line: String
-	if mult > 0.0:
-		line = "%s reads the table (%s) — the stake comes back %s: +%d ◉." % [ch.cname, roll, how, won - stake]
+	if tier == "nat20":
+		line = "%s reads the table (%s), and the table does not see it coming. The stake comes back threefold: +%d ◉." % [
+			ch.cname, roll, won - stake]
+	elif tier == "big":
+		line = "%s reads the table well (%s, against %d for the big pot). The stake comes back half again: +%d ◉." % [
+			ch.cname, roll, GAMBLE_BIG, won - stake]
+	elif tier == "even":
+		line = "%s holds their own (%s). The stake comes back, and nothing with it." % [ch.cname, roll]
 	elif nat == 1:
 		line = "%s is caught with a card up the sleeve, or near enough (%s) — the stake is gone, and so is the room's goodwill: -%d ◉." % [
 			ch.cname, roll, stake]
@@ -499,8 +552,8 @@ static func complication(kind: String, s, cost: int) -> Dictionary:
 static func to_dict(party) -> Dictionary:
 	return party.downtime.duplicate(true)
 
-# JSON hands every number back as a float; the pit's counters are compared
-# as ints, the visit stamps as the floats they are. Only the keys the file
+# JSON hands every number back as a float; the pit's counters and the game's
+# days are compared as ints, the visit stamps as the floats they are. Only the keys the file
 # has are written, so an old save (or an empty one) loads as a fresh party.
 static func from_dict(party, d) -> void:
 	party.downtime = {}
@@ -508,11 +561,14 @@ static func from_dict(party, d) -> void:
 		return
 	if d.get("trained") is Array:
 		party.downtime["trained"] = Array(d["trained"]).map(func(id): return String(id))
-	if d.get("gambled") is Dictionary:
+	# "gambled" was the once-a-visit stamp (before 2026-09-24); a visit stamp
+	# says nothing about which day it was, so an old save simply has no game
+	# played today anywhere.
+	if d.get("gambled_day") is Dictionary:
 		var g := {}
-		for k in d["gambled"]:
-			g[String(k)] = float(d["gambled"][k])
-		party.downtime["gambled"] = g
+		for k in d["gambled_day"]:
+			g[String(k)] = int(d["gambled_day"][k])
+		party.downtime["gambled_day"] = g
 	if d.get("crafted") is Dictionary:
 		var c := {}
 		for sid in d["crafted"]:

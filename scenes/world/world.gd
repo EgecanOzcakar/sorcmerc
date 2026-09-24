@@ -3530,7 +3530,7 @@ func _rest() -> void:
 	var trance: Dictionary = Trance.apply_rest_bonus(party, world, s.position)
 	_visit = Visit.visit(s, world)
 	_carry_visit_flags(before, _visit)
-	Downtime.restamp(party, s, stamp, s.last_visited)   # the game and the bench are still this visit's
+	Downtime.restamp(party, s, stamp, s.last_visited)   # the bench is still this visit's (the game counts days)
 	Lodge.restamp(party, s, stamp, s.last_visited)      # ...and the yard's swap and the shrine's blessing
 	_cheer()
 	_build_visit_panel()
@@ -4603,7 +4603,7 @@ func _downtime_rows(rows: VBoxContainer, s) -> void:
 		_train_row(rows, pupils)
 	_trade_row(rows, "A night on the town (%d ◉)" % int(Downtime.CAROUSE_COST.get(s.kind, Downtime.CAROUSE_COST["town"])),
 		"Go out", _carouse)
-	# The game: a stake the purse can cover, once a visit.
+	# The game: a stake the purse can cover, once a day in this town.
 	var row := HBoxContainer.new()
 	rows.add_child(row)
 	var lbl := Label.new()
@@ -4617,9 +4617,12 @@ func _downtime_rows(rows: VBoxContainer, s) -> void:
 	row.add_child(stake)
 	var go := Button.new()
 	go.text = "Go"
-	go.disabled = not Downtime.can_gamble(party, s) or stake.item_count == 0
+	go.disabled = not Downtime.can_gamble(party, world, s) or stake.item_count == 0
 	go.pressed.connect(func(): _gamble(stake.get_selected_id()))
 	row.add_child(go)
+	var refused: String = Downtime.gamble_refusal(party, world, s)
+	if refused != "":
+		_note(rows, refused)   # why Go is grey: once a day a town, not once a visit
 	if s.kind == "city":
 		_pit_row(rows, s)
 
@@ -4687,9 +4690,11 @@ func _carouse() -> void:
 		_show_complication(c))
 
 func _gamble(stake: int) -> void:
-	var r: Dictionary = Downtime.gamble(party, _visit["settlement"], stake)
+	var s = _visit["settlement"]
+	var refused: String = Downtime.gamble_refusal(party, world, s)
+	var r: Dictionary = Downtime.gamble(party, world, s, stake)
 	var c: Dictionary = _complicate(String(r.get("complication", "")), stake)
-	_downtime_done(r, "There is no game on tonight.", "buy", func(): _show_complication(c))
+	_downtime_done(r, refused if refused != "" else "There is no game on tonight.", "buy", func(): _show_complication(c))
 
 func _craft(item_id: String) -> void:
 	_downtime_done(Downtime.craft(party, world, _visit["settlement"], item_id, _visit), "Nobody here will let you at the bench.")
