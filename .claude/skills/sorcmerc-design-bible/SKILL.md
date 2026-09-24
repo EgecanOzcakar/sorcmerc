@@ -70,7 +70,7 @@ Avoid epic-fantasy capitals-and-prophecy prose, jokes that break the scene, and 
 
 ## Decided 2026-09-24 (owner's calls, not yet built)
 
-These are direction, not description. The code still does the old thing until each one lands with its own `docs/plan/` entry.
+These are direction, not description. The code still does the old thing until each one lands with its own `docs/plan/` entry. A bullet marked **built** has landed.
 
 - **Recruitment.** The player **creates only the first character**, at the start of a run. Every later merc is **hired** from a pool that towns offer: pre-rolled recruits who come with their own traits.
   - There are **no wages or upkeep**.
