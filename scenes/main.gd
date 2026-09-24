@@ -2708,7 +2708,12 @@ class Board extends Control:
 	# board: 410 repaints in 411 frames. Now the ground is painted once per
 	# board (and per zoom, which really does change the picture) and carried by
 	# _ground.position; see _ground_at.
-	class Ground extends Control:
+	# A Node2D, not a Control: Godot culls a Control by its own rect, and this
+	# one is zero-sized and carried off by a pan (_place_layers). Once its
+	# origin left the window (zoom in, then pan so the top of the board's world
+	# is off-screen) the whole floor vanished under the props standing on it,
+	# though every tile of it was on screen. A Node2D is culled by what it draws.
+	class Ground extends Node2D:
 		var board
 		func _draw() -> void:
 			if board.cb != null:
@@ -2737,7 +2742,8 @@ class Board extends Control:
 		for layer in [_backdrop, _ground]:
 			layer.board = self
 			layer.show_behind_parent = true
-			layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if layer is Control:
+				layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(layer)
 	var _auto_fit := false    # zoom-to-fit each layout until the user zooms (new fight, Home)
 	var _tok := {}        # id -> displayed pixel pos (for slide)
@@ -3263,6 +3269,16 @@ class Board extends Control:
 			_ground_key = key
 			_ground_at = _origin
 			_ground.queue_redraw()
+			queue_redraw()   # the tokens, marks and figures are in the new view too
+		# #194: the layer is carried here as well as in _draw(). A repaint above
+		# re-bases it (_ground_at = _origin), but only the board's own _draw()
+		# used to move it, and nothing queues that when the zoom changed inside
+		# a _layout() (auto-fit) or while nothing on the board was animating.
+		# The fresh ground then sat at the OLD offset, out from under the props
+		# and figures, until some animation happened to redraw the board: "the
+		# grid and the ground are off, and correct themselves after a few
+		# seconds".
+		_ground.position = _origin - _ground_at
 		var back := hash([size, cb.board.get("palette", "shrine"), cb.is_night()])
 		if back != _backdrop_key:
 			_backdrop_key = back
@@ -3325,7 +3341,8 @@ class Board extends Control:
 
 		# condition strip, centred over the token (the shoulder is the class badge's)
 		var tags: String = Icons.status_glyphs(c)
-		if c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
+		if c.is_stable(): tags += " %s stable" % Icons.condition_glyph("down")
+		elif c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
 		if tags != "":
 			var fs := int(13 * fz)
 			var f := ThemeDB.fallback_font
@@ -3482,6 +3499,7 @@ class Board extends Control:
 		var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
 		var face: Color = main.shelf_face(fill)
 		var rim: Color = main.shelf_rim(fill)
+		var floor_tex: Texture2D = main.FLOORS.get(cb.board.get("palette", "shrine"))
 		var top := _hex_poly(c, s)
 		var lip: Array = []
 		for i in top.size():
@@ -3493,11 +3511,44 @@ class Board extends Control:
 			var drop: float = RISE * s * float(here - below)
 			if drop <= 0.0:
 				continue
-			canvas.draw_colored_polygon(PackedVector2Array([
-				a, b, b + Vector2(0, drop), a + Vector2(0, drop)]), face)
+			_paint_cliff(canvas, a, b, drop, s, face, floor_tex, hx)
 			lip.append([a, b])
 		for e in lip:
 			canvas.draw_line(e[0], e[1], rim, maxf(1.5, s * 0.07))
+
+	# #197: one face of cut earth. It used to be a flat fill of shelf_face,
+	# which on the dark boards came out near black and read as a hole in the
+	# ground ("empty space between the cells"). It is rock now: the floor's own
+	# texture run down the face, lit at the lip and dark at the foot, a face
+	# turned toward the board's light a shade brighter than one turned away,
+	# and a dark line where it meets the ground so it stands ON something.
+	const CLIFF_TOP := 1.55    # the face's colour at the lip, against shelf_face
+	const CLIFF_FOOT := 0.6    # ...and at the foot
+	const CLIFF_TURN := 0.22   # how much the side turned to the light gains over the side turned away
+	func _paint_cliff(canvas: CanvasItem, a: Vector2, b: Vector2, drop: float, s: float,
+			face: Color, tex: Texture2D, hx: Vector2i) -> void:
+		var down := Vector2(0, drop)
+		var quad := PackedVector2Array([a, b, b + down, a + down])
+		var edge := (b - a).normalized()
+		var toward: float = clampf(Vector2(-edge.y, edge.x).dot(_iso(LIGHT).normalized()) * -1.0, -1.0, 1.0)
+		var k: float = 1.0 + CLIFF_TURN * toward
+		var lit := Color(face.r * CLIFF_TOP * k, face.g * CLIFF_TOP * k, face.b * CLIFF_TOP * k)
+		var foot := Color(face.r * CLIFF_FOOT * k, face.g * CLIFF_FOOT * k, face.b * CLIFF_FOOT * k)
+		canvas.draw_polygon(quad, PackedColorArray([lit, lit, foot, foot]))
+		if tex != null:
+			# u along the edge, v down the face: the strata run level, and each
+			# hex starts the texture somewhere of its own so a long wall does not
+			# repeat one tile's worth of rock.
+			var span: float = s * main.FLOOR_SPAN
+			var u0: float = float(absi(hash(hx)) % 97) / 97.0
+			var w: float = a.distance_to(b) / span
+			var h: float = drop / span
+			var uvs := PackedVector2Array([Vector2(u0, 0.0), Vector2(u0 + w, 0.0),
+				Vector2(u0 + w, h), Vector2(u0, h)])
+			var t: float = main.FLOOR_TONE * 0.55 * k
+			canvas.draw_polygon(quad, PackedColorArray([Color(t, t, t, 0.55), Color(t, t, t, 0.55),
+				Color(t * 0.5, t * 0.5, t * 0.5, 0.55), Color(t * 0.5, t * 0.5, t * 0.5, 0.55)]), uvs, tex)
+		canvas.draw_line(a + down, b + down, Color(0, 0, 0, 0.55), maxf(1.0, s * 0.05))
 
 	# Which neighbour of `hx` lies across an edge, given that edge's midpoint as
 	# an offset from the hex's own centre. Asked this way rather than carried
@@ -3538,7 +3589,12 @@ class Board extends Control:
 	# The floor, laid flat on the board in ground space so it runs continuous
 	# from hex to hex — the same seamless painted texture the map's ground is,
 	# and the whole of what a plain tile is now.
-	func _paint_floor(canvas: CanvasItem, poly: PackedVector2Array, s: float, alpha: float, light := 1.0) -> void:
+	# `lift` is how far up the screen the tile is drawn (_rise). The texture is
+	# read where the tile's FOOTPRINT is, so a shelf carries its own patch of
+	# ground up with it. #197: reading it where the tile is drawn made a raised
+	# top continue the pattern of the lower tile behind it, seamlessly, and the
+	# step vanished into one flat picture.
+	func _paint_floor(canvas: CanvasItem, poly: PackedVector2Array, s: float, alpha: float, light := 1.0, lift := 0.0) -> void:
 		var floor_tex: Texture2D = main.FLOORS.get(cb.board.get("palette", "shrine"))
 		var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
 		canvas.draw_colored_polygon(poly, Color(fill, alpha))
@@ -3546,7 +3602,7 @@ class Board extends Control:
 			return
 		var uvs := PackedVector2Array()
 		for pt in poly:
-			uvs.append(_iso_inv(pt - _origin) / (s * main.FLOOR_SPAN))
+			uvs.append(_iso_inv(pt - Vector2(0, lift) - _origin) / (s * main.FLOOR_SPAN))
 		var tone: float = main.FLOOR_TONE * light
 		canvas.draw_polygon(poly, PackedColorArray([Color(tone, tone, tone * 1.04, main.FLOOR_ALPHA * alpha)]), uvs, floor_tex)
 
@@ -3558,7 +3614,7 @@ class Board extends Control:
 		var poly := _hex_poly(c, s)   # full size: no gutter between hexes, the texture runs through
 		var obj: Dictionary = cb.object_at(hx)
 		if obj.is_empty():
-			_paint_floor(canvas, poly, s, 1.0, _light_at(c) * (1.0 + SHELF_LIT * float(cb.height_at(hx))))
+			_paint_floor(canvas, poly, s, 1.0, _light_at(c) * (1.0 + SHELF_LIT * float(cb.height_at(hx))), _rise(hx))
 		else:
 			var fill: Color = main.COL_PROP
 			if _is_hazard(obj):

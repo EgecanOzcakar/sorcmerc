@@ -303,6 +303,15 @@ func _choice_row(p: Dictionary, sheet, locked: bool) -> void:
 	var opts := Creator.options_for(p, sheet, picks)
 	if opts.is_empty():
 		_note("No options available.", COL_WARN)
+	# #191: a skill, language or tool this build already has, or picked in
+	# another list, is greyed — unless that would leave too few to finish.
+	var taken: Dictionary = Creator.taken_elsewhere(p, [p], sheet.choice_points, _ch.choices, sheet) \
+		if p["type"] in Creator.MERGEABLE else {}
+	var free := opts.filter(func(o): return not taken.has(o["id"]) and not o["id"] in picks).size()
+	if free < n - picks.size():
+		for id in taken.keys():
+			if taken[id] == "already known":
+				taken.erase(id)
 	for o in opts:
 		var count := picks.count(o["id"])
 		var b := Button.new()
@@ -312,6 +321,9 @@ func _choice_row(p: Dictionary, sheet, locked: bool) -> void:
 			b.text += "  +%d" % count
 		if count > 0:
 			b.theme_type_variation = "Picked"
+		elif taken.has(o["id"]):
+			b.disabled = true
+			b.tooltip_text = String(taken[o["id"]]).capitalize()
 		b.pressed.connect(_pick.bind(p, o["id"]))
 		b.set_meta("choice_key", p["key"])   # which choice this answers, for tests
 		f.add_child(b)

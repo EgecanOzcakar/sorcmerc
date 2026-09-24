@@ -160,7 +160,8 @@ func _render() -> void:
 		if s != "down" and c.has(s):
 			tags.append("%s %s" % [Icons.condition_glyph(s), s])
 	if c.is_down():
-		tags.append("%s down %d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f])
+		tags.append("%s stable" % Icons.condition_glyph("down") if c.is_stable() \
+			else "%s down %d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f])
 	if cb.is_cover(c.pos):
 		tags.append("in cover")
 	if not tags.is_empty():

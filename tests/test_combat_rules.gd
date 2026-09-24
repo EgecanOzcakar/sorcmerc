@@ -545,7 +545,16 @@ func test_death_saves() -> void:
 		gb.rng = _rolls([15]); gb._death_save(ga)
 	check(ga.is_down() and ga.death_s == 2, "two successes: still down")
 	gb.rng = _rolls([15]); gb._death_save(ga)
-	check(not ga.is_down() and ga.hp == 1 and ga.death_s == 0, "three successes: back on your feet at 1 HP (house rule, BG3's)")
+	check(ga.is_down() and ga.is_stable() and ga.hp == 0 and ga.death_s == 0 and ga.death_f == 0,
+		"three successes: stable, still down at 0 HP, counters reset (RAW; it used to stand you up, BG3's house rule)")
+	var saves_before: int = gb.log.size()
+	gb.rng = _rolls([15]); gb.begin_turn_for(ga)
+	gb.end_turn()
+	check(gb.current() != ga, "a stable body's turn is skipped: no more rolling")
+	gb._apply_damage(ga, 1)
+	check(not ga.is_stable() and ga.is_down() and ga.death_f == 1 and gb.log.size() > saves_before,
+		"damage knocks a stable body off it: one failure, rolling again (RAW)")
+	ga.statuses["stable"] = true; ga.death_f = 0
 	ga.statuses["down"] = true; ga.statuses["stable"] = true; ga.hp = 0
 	gb.heal(ga, 4)
 	check(not ga.is_down() and not ga.is_stable() and ga.hp == 4, "healing a stable body (one the road handed over) brings it up on the amount healed")

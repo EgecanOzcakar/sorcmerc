@@ -504,7 +504,7 @@ func begin_turn() -> void:
 	# druid who called it has already killed this turn.
 	_kills_this_turn = 0
 	begin_turn_for(c)
-	if c.is_down():
+	if c.is_down() and not c.is_stable():
 		_death_save(c)
 
 func begin_turn_for(c) -> void:
@@ -2780,7 +2780,10 @@ func _take_damage(target, dmg: int, dtype := "", crit := false) -> void:
 			_kill(target)   # RAW massive damage applies at 0 HP too
 			return
 		# Damage to a downed body is a failed death save; a crit (which any melee
-		# hit from reach is, via _auto_crit) is two.
+		# hit from reach is, via _auto_crit) is two. A stable body hit is no
+		# longer stable: it rolls again from its next turn (RAW).
+		if dmg > 0 and target.statuses.erase("stable"):
+			log.append("%s is no longer stable." % target.cname)
 		target.death_f += (2 if crit else 1) if dmg > 0 else 0
 		if target.death_f >= 3:
 			_kill(target)
@@ -2939,11 +2942,15 @@ func _death_save(c) -> void:
 	if c.death_f >= 3:
 		_kill(c)
 	elif c.death_s >= 3:
-		c.statuses.erase("down")
+		# RAW: three successes make you stable, not conscious. You stay down at 0
+		# HP and stop rolling. Healing, First Aid or a fight's end brings you
+		# round (adapter.write_back: 1 HP). Only a natural 20 stands you up on
+		# the spot. This used to revive at 1 HP too, which the field manual never
+		# said and every other rule here assumed it did not.
+		c.statuses["stable"] = true
 		c.death_s = 0
 		c.death_f = 0
-		c.hp = 1
-		log.append("%s comes round — three saves made, up at 1 HP." % c.cname)
+		log.append("%s is stable — three saves made, still out cold." % c.cname)
 		_survived_down(c)
 	else:
 		log.append("%s death save: rolled %d  [%d ok / %d fail]" % [c.cname, r.nat, c.death_s, c.death_f])

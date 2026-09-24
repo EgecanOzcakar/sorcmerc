@@ -198,6 +198,84 @@ static func picks_from_decision(p: Dictionary, d) -> Array:
 			return out
 	return []
 
+# #191: several grants can each ask for the same kind of pick. A human's skill
+# and a class's skills, a species' language and a background's, a species
+# cantrip and a class's. Two lists with the same options are one choice in all
+# but bookkeeping, so they show as one list whose count is the sum; the picks
+# are still stored under each grant's own key (toggle_group fills the first
+# one with room). Lists that only overlap stay apart, and an option picked in
+# one is greyed in the others (taken_elsewhere), since the same proficiency
+# twice buys nothing.
+const MERGEABLE := ["skill-choice", "language-choice", "tool-choice", "spell-choice"]
+
+# The choice points as display groups, each where its first member stood.
+static func choice_groups(points: Array, sheet = null) -> Array:
+	var groups: Array = []
+	var by_opts := {}
+	for p in points:
+		if not p["type"] in MERGEABLE:
+			groups.append([p])
+			continue
+		var ids: Array = options_for(p, sheet).map(func(o): return String(o["id"]))
+		ids.sort()
+		var k := "%s|%s" % [p["type"], ",".join(ids)]
+		if by_opts.has(k):
+			by_opts[k].append(p)
+		else:
+			var g: Array = [p]
+			by_opts[k] = g
+			groups.append(g)
+	return groups
+
+# One click on a merged list: a picked option comes off whichever grant holds
+# it; a new one goes to the first grant with room; with every grant full, the
+# first gives up its oldest pick, the way a single list evicts.
+static func toggle_group(g: Array, picks_by_key: Dictionary, id: String) -> Dictionary:
+	var out := {}
+	for p in g:
+		out[p["key"]] = (picks_by_key.get(p["key"], []) as Array).duplicate()
+	for p in g:
+		if id in out[p["key"]]:
+			out[p["key"]].erase(id)
+			return out
+	for p in g:
+		if out[p["key"]].size() < pick_count(p):
+			out[p["key"]].append(id)
+			return out
+	var first: String = g[0]["key"]
+	if not out[first].is_empty():
+		out[first].remove_at(0)
+	out[first].append(id)
+	return out
+
+# Options of `p` a pick would waste, id -> why: picked in another list of the
+# same kind, or already had from a grant that asked nothing (a background's
+# skills, Common). `group` is p's own display group, whose picks are its own.
+static func taken_elsewhere(p: Dictionary, group: Array, points: Array, choices: Dictionary, sheet) -> Dictionary:
+	var out := {}
+	var chosen := {}   # everything any list of this kind has picked
+	for q in points:
+		if q["type"] != p["type"]:
+			continue
+		for id in picks_from_decision(q, choices.get(q["key"])):
+			chosen[id] = true
+			if not q in group:
+				out[id] = "picked in another list"
+	if sheet == null:
+		return out
+	var known: Array = []
+	match p["type"]:
+		"skill-choice":
+			known = sheet.skill_prof.keys().filter(func(k): return sheet.skill_prof[k] in ["prof", "expert"])
+		"language-choice":
+			known = sheet.proficiencies.get("language", [])
+		"tool-choice":
+			known = sheet.proficiencies.get("tool", [])
+	for id in known:
+		if not chosen.has(id) and not out.has(id):
+			out[id] = "already known"
+	return out
+
 # Toggle one option: adds it, or removes it when already at its per-option cap.
 # Over-picking evicts the oldest, so there is never an invalid state to report.
 static func toggle(p: Dictionary, picks: Array, id: String) -> Array:
@@ -969,8 +1047,7 @@ func _build_choices() -> void:
 		_note("Nothing to choose.")
 	elif ch.sheet().pending.is_empty():
 		_note("Nothing left to choose — the ones below are made and can be changed.")
-	for p in pts:
-		_choice_widget(p)
+	_choice_widgets(pts)
 
 # #176: personality traits — one temperament and one origin, the background's
 # pre-selected and the player's to change. What each does is spelled out under
@@ -1093,8 +1170,7 @@ func _build_review() -> void:
 	keep.tooltip_text = "Keeps this build under its name. Start a new character from it on the Basics page."
 	if not sheet.choice_points.is_empty():
 		_head("Unmade choices" if not sheet.pending.is_empty() else "Choices")
-		for p in _choice_points_of([]):
-			_choice_widget(p)
+		_choice_widgets(_choice_points_of([]))
 
 # --- choice widgets -------------------------------------------------------
 
@@ -1104,30 +1180,65 @@ func _build_review() -> void:
 func _choice_points_of(types: Array) -> Array:
 	return ch.sheet().choice_points.filter(func(p): return types.is_empty() or p["type"] in types)
 
-func _choice_widget(p: Dictionary) -> void:
+# The points, grouped (#191): a merged group is one widget, the rest one each.
+func _choice_widgets(points: Array) -> void:
 	var sheet = ch.sheet()
-	var picks := picks_from_decision(p, ch.choices.get(p["key"]))
-	var n := pick_count(p)
-	var src: Dictionary = p["source"]
-	if p["type"] == "spell-choice":   # a pool shorter than the grant asks for all of it
-		n = mini(n, Effects.pick_pool(p["spellList"], int(p["spellLevel"])).size())
-	_head("%s%s — pick %d  (%d chosen)" % ["✓ " if p.get("decided", false) else "",
+	for g in choice_groups(points, sheet):
+		_choice_widget(g[0], g, points)
+
+func _choice_widget(p: Dictionary, group: Array = [], points: Array = []) -> void:
+	if group.is_empty():
+		group = [p]
+	var sheet = ch.sheet()
+	var picks: Array = []
+	var n := 0
+	var froms: Array = []
+	for q in group:
+		picks.append_array(picks_from_decision(q, ch.choices.get(q["key"])))
+		var qn := pick_count(q)
+		if q["type"] == "spell-choice":   # a pool shorter than the grant asks for all of it
+			qn = mini(qn, Effects.pick_pool(q["spellList"], int(q["spellLevel"])).size())
+		n += qn
+		froms.append("%s %s" % [q["source"]["origin"], humanize(q["source"]["id"])])
+	var decided: bool = group.all(func(q): return q.get("decided", false))
+	_head("%s%s — pick %d  (%d chosen)" % ["✓ " if decided else "",
 		humanize(p["type"]).replace(" choice", ""), n, picks.size()])
-	_note("from %s %s%s" % [src["origin"], humanize(src["id"]),
-		"  ·  already chosen, click to change" if p.get("decided", false) else ""])
+	_note("from %s%s" % [" + ".join(froms),
+		"  ·  already chosen, click to change" if decided else ""])
 	var f := _flow()
 	var opts := options_for(p, sheet, picks)
 	if opts.is_empty():
 		_note("No options available.", COL_WARN)
+	var taken: Dictionary = taken_elsewhere(p, group, points, ch.choices, sheet) if p["type"] in MERGEABLE else {}
+	# Never grey a list into one it cannot finish: when too few options are
+	# left, the ones already known come back (a picked-elsewhere one stays out).
+	var free := opts.filter(func(o): return not taken.has(o["id"]) and not o["id"] in picks).size()
+	if free < n - picks.size():
+		for id in taken.keys():
+			if taken[id] == "already known":
+				taken.erase(id)
 	for o in opts:
-		var count := picks.count(o["id"])
+		var id := String(o["id"])
+		var count := picks.count(id)
 		var extra := ""
 		if allows_repeat(p) and count > 0:
 			extra = "  +%d" % count
-		var b := _opt(f, _decorate(p, String(o["id"]), String(o["label"])), count > 0,
-			func(): _pick(p, o["id"]), extra)
+		var b := _opt(f, _decorate(p, id, String(o["label"])), count > 0,
+			(func(): _pick_group(group, id)) if group.size() > 1 else (func(): _pick(p, id)), extra)
 		if p["type"] == "spell-choice":
-			b.tooltip_text = "%s spell" % humanize(Icons.spell_school(String(o["id"])))
+			b.tooltip_text = "%s spell" % humanize(Icons.spell_school(id))
+		if count == 0 and taken.has(id):
+			b.disabled = true
+			b.tooltip_text = String(taken[id]).capitalize()
+
+func _pick_group(group: Array, id: String) -> void:
+	var by_key := {}
+	for q in group:
+		by_key[q["key"]] = picks_from_decision(q, ch.choices.get(q["key"]))
+	var out := toggle_group(group, by_key, id)
+	for q in group:
+		ch.decide(q["key"], decision_for(q, out[q["key"]]))
+	_refresh()
 
 # A pick's icon, where the option has one: spells wear their school's mark.
 func _decorate(p: Dictionary, id: String, label: String) -> String:
