@@ -215,6 +215,10 @@ class RoamingParty extends RefCounted:
 	# NPC faction nobody's bothered seeding a roster for yet -- both read as
 	# "no model," same fallback contract as everything else this session.
 	var troops: Array[Dictionary] = []
+	# The name a pack gave this band (world.json parties[].name, a story's
+	# spawn_party name), or "" — and "" is nearly every band: EnemyNames
+	# .band_name() seeds one off the id, which is what the player reads.
+	var sname := ""
 
 	func _init(id_v: String, position_v: Vector2, faction_v: String, is_player_v := false) -> void:
 		id = id_v

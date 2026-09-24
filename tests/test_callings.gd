@@ -8,6 +8,8 @@ const Party = preload("res://core/party.gd")
 const Callings = preload("res://core/callings.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const EnemyNames = preload("res://core/enemy_names.gd")
+const WorldAI = preload("res://core/world_ai.gd")
 
 var _pass := 0
 var _fail := 0
@@ -37,6 +39,7 @@ func _world() -> World:
 	w.add_party(World.RoamingParty.new("caravan", Vector2(20, 0), "human"))   # civilized: never a target
 	w.add_party(World.RoamingParty.new("wolves", Vector2(250, 0), "beast"))         # nearer, but not people
 	w.add_party(World.RoamingParty.new("goblins", Vector2(700, 0), "goblinoid"))
+	w.add_party(World.RoamingParty.new("cutthroats", Vector2(800, 0), "bandit"))    # the only deserters on the map
 	w.add_settlement(World.Settlement.new("orc-hold", Vector2(50, 0), "orc", "town"))   # monster: never a target
 	w.add_settlement(World.Settlement.new("greenmarch", Vector2(200, 0), "elf", "town"))
 	w.add_settlement(World.Settlement.new("riverhold", Vector2(500, 0), "human", "city"))
@@ -81,6 +84,15 @@ func test_templates() -> void:
 		check(("%s" in c["tell"]) == (c["target"]["kind"] != "audience"), "%s's tell names the target unless it is an audience" % bg)
 		check(("%s" in c["done"]) == (c["target"]["kind"] != "audience"), "%s's done line likewise" % bg)
 	check(Callings.CALLING_XP == 120 and PartyOpinion.CALLING_BOND == 15.0, "the numbers")
+	# a band target may name the factions it fits; the built-in soldier does
+	check(Callings.TEMPLATES["soldier"]["target"]["factions"] == ["bandit", "soldier"], "deserters are bandits or soldiers")
+	check(Callings.validate(Callings.TEMPLATES).is_empty(), "the built-in sixteen validate as a pack's would: %s" % [Callings.validate(Callings.TEMPLATES)])
+	var bad := {"x": {"title": "t", "tell": "%s", "done": "%s", "item": "cloak-of-elvenkind",
+		"target": {"kind": "band", "factions": ["gnoll", "wizard"]}, "done_by": "band_beaten"}}
+	var errs: Array = Callings.validate(bad)
+	check(errs.size() == 1 and "wizard" in String(errs[0]), "an unknown band faction is a pack error: %s" % [errs])
+	bad["x"]["target"]["factions"] = []
+	check(Callings.validate(bad).size() == 1, "...and so is an empty list")
 
 # --- assign -----------------------------------------------------------------
 
@@ -92,8 +104,22 @@ func test_assign() -> void:
 	check(p.callings["vera"]["target_kind"] == "landmark" and p.callings["vera"]["target_id"] == "shrine-near",
 		"the acolyte gets the nearest shrine, hidden or not")
 	check(p.callings["pike"]["target_id"] == "near-warren", "the sage gets the nearest lair that is not looted")
-	check(p.callings["ilsa"]["target_kind"] == "band" and p.callings["ilsa"]["target_id"] == "goblins",
-		"the soldier gets the nearest band of people — the goblins over the nearer wolves, never the caravan")
+	check(p.callings["ilsa"]["target_kind"] == "band" and p.callings["ilsa"]["target_id"] == "cutthroats",
+		"the soldier's deserters are bandits — over the nearer goblins and wolves, never the caravan")
+	var pg := _party(["guard"])
+	Callings.assign(pg, w)
+	check(pg.callings["vera"]["target_id"] == "goblins",
+		"a band calling with no factions still takes the nearest band of people — the goblins over the nearer wolves")
+	# the design audit §6: "deserters" is never a gnoll pack. No bandit or
+	# soldier band on the map and the soldier waits for one.
+	var wg = World.new()
+	wg.add_party(World.RoamingParty.new("player", Vector2.ZERO, "human", true))
+	wg.add_party(World.RoamingParty.new("gnoll-pack-2", Vector2(100, 0), "gnoll"))
+	var ps := _party(["soldier"])
+	check(Callings.assign(ps, wg).is_empty() and not ps.callings.has("vera"), "gnolls only: the soldier's deserters wait")
+	wg.add_party(World.RoamingParty.new("the-column", Vector2(900, 0), "soldier"))
+	check(Callings.assign(ps, wg) == ["vera"] and ps.callings["vera"]["target_id"] == "the-column",
+		"...and a soldier band, however far, is theirs")
 	check(p.callings["thrun"]["target_kind"] == "settlement" and p.callings["thrun"]["target_id"] == "riverhold",
 		"the noble gets the city")
 	check(p.callings["vera"]["id"] == "acolyte" and p.callings["vera"]["state"] == "" and float(p.callings["vera"]["told_at"]) < 0.0,
@@ -240,13 +266,25 @@ func test_beat() -> void:
 	check(Callings.beat(p, w).is_empty(), "nobody left untold: nothing")
 	check(Callings.beat(p, w).is_empty(), "...and never twice")
 
-	# a band's name is its id, capitalized
+	# a band is named by EnemyNames.band_name, never by its id; the tell opens
+	# on it, so it is capitalised there
 	p = _party(["soldier"])
 	Callings.assign(p, w)
 	b = Callings.beat(p, w)
-	check(String(b.get("text", "")) == Callings.TEMPLATES["soldier"]["tell"] % "Goblins", "a band is named by its id")
-	check(Callings.target_name(p, w, "vera") == "Goblins", "target_name says the same")
-	check(w.is_explored(Vector2(700, 0)), "the telling reveals the ground the band stands on")
+	var cut = null
+	for q in w.parties:
+		if q.id == "cutthroats":
+			cut = q
+	var cut_name := EnemyNames.band_name(cut, w)
+	check(String(b.get("text", "")) == Callings.TEMPLATES["soldier"]["tell"] % EnemyNames.upper_first(cut_name),
+		"a band is named by its seeded name: %s" % b.get("text", ""))
+	check(not ("Cutthroats" in String(b.get("text", ""))), "...and not by its id")
+	check(Callings.target_name(p, w, "vera") == cut_name, "target_name says the same")
+	check(w.is_explored(Vector2(800, 0)), "the telling reveals the ground the band stands on")
+	# beaten, the band is off the map; the done line still names it the same
+	WorldAI.fell(w, cut)
+	w.parties.erase(cut)
+	check(Callings.target_name(p, w, "vera") == cut_name, "a beaten band is named from the fallen list, the same: %s" % Callings.target_name(p, w, "vera"))
 
 # --- check ------------------------------------------------------------------
 
@@ -261,12 +299,13 @@ func test_check() -> void:
 	check(Callings.check(p, w, {"kind": "landmark_answered", "id": "shrine-far"}).is_empty(), "the wrong shrine")
 	check(Callings.check(p, w, {"kind": "lair_cleared", "id": "shrine-near"}).is_empty(), "the wrong kind")
 	check(Callings.check(p, w, {"kind": "lair_cleared", "id": "near-warren"}) == ["pike"], "the sage's lair")
-	check(Callings.check(p, w, {"kind": "band_beaten", "id": "goblins"}) == ["thrun"], "the soldier's band")
+	check(Callings.check(p, w, {"kind": "band_beaten", "id": "goblins"}).is_empty(), "not the goblins: they are nobody's deserters")
+	check(Callings.check(p, w, {"kind": "band_beaten", "id": "cutthroats"}) == ["thrun"], "the soldier's band")
 	check(Callings.check(p, w, {"kind": "audience", "id": "elf"}) == ["ilsa"], "any audience is the entertainer's")
 	check(Callings.check(p, w, {"kind": "visited", "id": "riverhold"}).is_empty(), "nobody is waiting on a visit")
 	check(p.callings["vera"]["state"] == "told", "check() decides; it does not complete")
 	p.get_member("thrun").dead = true
-	check(Callings.check(p, w, {"kind": "band_beaten", "id": "goblins"}).is_empty(), "a dead hero's told calling does not complete")
+	check(Callings.check(p, w, {"kind": "band_beaten", "id": "cutthroats"}).is_empty(), "a dead hero's told calling does not complete")
 	p.get_member("thrun").dead = false
 	p.callings["thrun"]["target_id"] = ""
 	check(Callings.check(p, w, {"kind": "band_beaten", "id": ""}).is_empty(), "a calling waiting on a target matches nothing")
@@ -290,7 +329,8 @@ func test_complete() -> void:
 		and p.stash_count("amulet-of-proof-against-detection-and-location", true) == 1, "the heirloom, identified, in the stash")
 	check(r.get("bond_with", "") == "pike" and PartyOpinion.score(p, "vera", "pike") == score_before + 15.0,
 		"the bond with the one who did the thing")
-	check(String(r.get("text", "")) == Callings.TEMPLATES["acolyte"]["done"] % w.landmarks[0].sname, "the done line names the shrine")
+	check(String(r.get("text", "")) == Callings.TEMPLATES["acolyte"]["done"] % EnemyNames.upper_first(w.landmarks[0].sname),
+		"the done line names the shrine, capitalised at the head of the line: %s" % r.get("text", ""))
 	check(p.callings["vera"]["state"] == "done", "done")
 	check(Callings.complete(p, w, "vera", "pike").is_empty() and p.stash_count("amulet-of-proof-against-detection-and-location") == 1,
 		"a second time pays nothing")

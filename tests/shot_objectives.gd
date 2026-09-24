@@ -9,6 +9,7 @@ const Objectives = preload("res://core/objectives.gd")
 const Quest = preload("res://core/quest.gd")
 const Site = preload("res://core/site.gd")
 const World = preload("res://core/world.gd")
+const EnemyNames = preload("res://core/enemy_names.gd")
 
 const OUT := "res://docs/shots/objectives/%s.png"
 var game
@@ -88,7 +89,7 @@ func _init() -> void:
 	foe.troops.append({"role": "light", "level": 2})
 	Quest.accept(w.party, {"id": "world:hunt_party:%s:0" % foe.id, "kind": "hunt_party", "state": "offered",
 		"target_party_id": foe.id, "required": 1, "progress": 0,
-		"title": "Hunt down the %s band" % foe.id.capitalize(), "reward": {"gold": 120},
+		"title": "Hunt down %s" % EnemyNames.band_name(foe, w.world), "reward": {"gold": 120},
 		"chain_faction": foe.faction, "chain_tier": 0})
 	w._open_approach(foe)
 	await shot("approach-hunt")

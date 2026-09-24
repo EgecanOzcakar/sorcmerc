@@ -153,7 +153,10 @@ built-in builders place their own by hand or by seed, but that placement never
 runs for a pack; if you want them on your map, write them here.
 
 **Parties** are roaming bands. `troops` is flavour — the map figure and the
-headcount label; their actual fight is built from the faction. `ai.behavior`:
+headcount label; their actual fight is built from the faction. `name` is
+optional: without one the game names the band itself ("Ribsnap's goblins",
+"the Low Fen gnolls", seeded off its `id`), and a band is never shown to the
+player by its `id`. A story's `spawn_party` takes the same `name`. `ai.behavior`:
 
 | behavior | extra keys |
 |---|---|
@@ -330,7 +333,7 @@ validator refuses to ship one.
 | `"quest": {...}` | hand over a quest, same shape as a quest beat's |
 | `"opinion": [{"faction": "human", "delta": 25}]` | move a faction's opinion |
 | `"reveal_lair": "ash-warren"` | put it on the map |
-| `"spawn_party": {"id": ..., "near": ..., "offset": [x, y], "faction": ..., "troops": [...]}` | a band takes the field (idempotent: firing twice does not make two) |
+| `"spawn_party": {"id": ..., "name": ..., "near": ..., "offset": [x, y], "faction": ..., "troops": [...]}` | a band takes the field (idempotent: firing twice does not make two); `name` is optional and is what the player reads from then on |
 | `"next_chapter": "barrow"` | jump there |
 | `"end_story": true` | finish |
 
@@ -571,10 +574,10 @@ your `backgrounds.json` overlay adds) is added. Each entry:
 | Key | Meaning |
 |---|---|
 | `title` | the line on the party page and the quest log |
-| `target.kind` | what the calling points at: `landmark` (with `landmark`: `ruins` \| `shrine` \| `stones` \| `hut` \| `wreck` \| `tower`), `lair` (the nearest not yet looted), `band` (the nearest monster band), `settlement` (with `settlement`: `camp` \| `town` \| `city`, civilized; a missing size falls back to a larger one), or `audience` (the ladder's, with any lord) |
+| `target.kind` | what the calling points at: `landmark` (with `landmark`: `ruins` \| `shrine` \| `stones` \| `hut` \| `wreck` \| `tower`), `lair` (the nearest not yet looted), `band` (the nearest monster band; with an optional `factions` list, e.g. `["bandit", "soldier"]`, only a band of one of those — none on the map and the calling waits for one, the way the built-in soldier's deserters do), `settlement` (with `settlement`: `camp` \| `town` \| `city`, civilized; a missing size falls back to a larger one), or `audience` (the ladder's, with any lord) |
 | `done_by` | the one event that completes that kind — `landmark_answered`, `lair_cleared`, `band_beaten`, `visited`, `audience`, respectively; anything else is an error |
 | `item` | the heirloom: a `magic-items.json` id, the game's or your pack's overlay's |
-| `tell`, `done` | the telling at the fire and the resolution line, second person; `%s` is the target's name (an audience has none to name) |
+| `tell`, `done` | the telling at the fire and the resolution line, second person; `%s` is the target's name (an audience has none to name). A band's name is a plural ("Ribsnap's goblins", "the Low Fen gnolls"), so write "%s are..."; a `%s` that opens the line is capitalised for you |
 
 The target is chosen from the map the party is on — the nearest thing of the
 kind — so a calling written for your world plays on any world that has the

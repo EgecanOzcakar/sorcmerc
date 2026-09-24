@@ -296,6 +296,7 @@ static func build(src, pack_id := "", seed_v := 0):
 	for p in d.get("parties", []):
 		var band := w.add_party(World.RoamingParty.new(String(p["id"]),
 			_vec(p.get("position")), String(p.get("faction", "bandit"))))
+		band.sname = String(p.get("name", ""))   # optional; unnamed is seeded (EnemyNames.band_name)
 		for t in p.get("troops", []):
 			if t is Dictionary:
 				band.troops.append({"role": String(t.get("role", "heavy")),
