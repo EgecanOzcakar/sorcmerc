@@ -35,6 +35,7 @@ music stings are tools/gen_music_elevenlabs.py's, off the Music API.
 """
 import argparse
 import json
+import math
 import os
 import struct
 import sys
@@ -104,6 +105,13 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
 #    their silence. "Silent background, no hiss" on everything recorded close.
 #  * THE EVENT FIRST. The game fires a hit when it lands; library takes put the
 #    impact up to 1.3 s in. Combat prompts say where the impact falls.
+# And one sentence every sfx prompt ends with (jobs() appends it, so --list shows
+# it): the handpicked library hits are heavy and dark next to a take -- a 0.9 kHz
+# spectral centroid against 2-3 kHz -- so every take asks for that weight. The
+# model does not reliably honour it, which is what tone_match() below is for.
+SFX_STYLE = ("Full-bodied and weighty, with a deep natural low end and soft rounded "
+             "highs, like a professional cinematic sound library recording; not bright, "
+             "not harsh, not tinny, not retro, not arcade, not 8-bit")
 SFX = {
     "hit": ("Real foley recording of a steel sword blade striking a chain mail shirt on a"
             " padded dummy. The impact lands within the first 0.1 seconds: a sharp bright"
@@ -472,7 +480,7 @@ def jobs(groups, only, take=0):
         for name, (prompt, secs, infl) in SFX.items():
             out.append(("sfx", name,
                         os.path.join(ROOT, "assets", "audio", "sfx", name + suffix + ".wav"),
-                        prompt, secs, infl))
+                        prompt + ". " + SFX_STYLE, secs, infl))
     if "barks" in groups:
         for archetype, prompt in BARKS.items():
             for i in range(1, BARK_TAKES + 1):
@@ -530,6 +538,95 @@ def trim_and_normalize(pcm):
     vals = [max(-32768, min(32767, int(round(v * gain)))) for v in vals]
     return (struct.pack("<%dh" % len(head_fade(vals)), *vals),
             before, len(vals) / float(SR), peak)
+
+
+# Tone. Measured against the handpicked library hits (2026-09-24): the model's
+# takes carry ~17 dB more energy above 15 kHz than a recording does -- a
+# separately generated top band, heard as fizz, and where its hiss and constant
+# tones live -- and 8-20 dB less below 120 Hz. The octave under that (8-16 kHz)
+# is already thinner than a recording's, so the cut sits at 15 kHz, not lower:
+# at 11 kHz it dulled that octave and left fizz on top. So each sfx take is
+# pulled toward the library's balance: the band above AIR_HZ cut, the band below
+# LOW_HZ lifted, each only as far as that take needs, and a take already there is
+# left alone. The caps are per run: a take that hit one moves further if run
+# again, so --retone is once per take. Targets are the library's medians,
+# measured with these same filters.
+# The low target is an impact's (half a library hit's energy is its thump), so
+# the lift is capped at 6 dB: enough to give a chime or a click some body without
+# turning it into a thud. A take with next to nothing down there is not lifted at
+# all -- that would only raise rumble.
+AIR_HZ, AIR_TARGET_DB, AIR_MAX_CUT = 15000.0, -31.8, 24.0
+LOW_HZ, LOW_TARGET_DB, LOW_MAX_BOOST, LOW_FLOOR_DB = 120.0, -2.8, 6.0, -40.0
+
+
+def _biquad(vals, b0, b1, b2, a1, a2):
+    out, x1, x2, y1, y2 = [0.0] * len(vals), 0.0, 0.0, 0.0, 0.0
+    for i, x in enumerate(vals):
+        y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+        x2, x1, y2, y1 = x1, x, y1, y
+        out[i] = y
+    return out
+
+
+def _rbj(kind, f0, sr, db=0.0):
+    """RBJ cookbook coefficients, Q = 0.707 / shelf slope 1, normalized by a0."""
+    w = 2 * math.pi * f0 / sr
+    cw, sw = math.cos(w), math.sin(w)
+    alpha = sw / (2 * 0.7071)
+    if kind == "hp":
+        b = [(1 + cw) / 2, -(1 + cw), (1 + cw) / 2]
+        a = [1 + alpha, -2 * cw, 1 - alpha]
+    elif kind == "lp":
+        b = [(1 - cw) / 2, 1 - cw, (1 - cw) / 2]
+        a = [1 + alpha, -2 * cw, 1 - alpha]
+    else:
+        A = 10 ** (db / 40.0)
+        sa = 2 * math.sqrt(A) * alpha
+        if kind == "high":
+            b = [A * ((A + 1) + (A - 1) * cw + sa), -2 * A * ((A - 1) + (A + 1) * cw),
+                 A * ((A + 1) + (A - 1) * cw - sa)]
+            a = [(A + 1) - (A - 1) * cw + sa, 2 * ((A - 1) - (A + 1) * cw), (A + 1) - (A - 1) * cw - sa]
+        else:
+            b = [A * ((A + 1) - (A - 1) * cw + sa), 2 * A * ((A - 1) - (A + 1) * cw),
+                 A * ((A + 1) - (A - 1) * cw - sa)]
+            a = [(A + 1) + (A - 1) * cw + sa, -2 * ((A - 1) + (A + 1) * cw), (A + 1) + (A - 1) * cw - sa]
+    return [b[0] / a[0], b[1] / a[0], b[2] / a[0], a[1] / a[0], a[2] / a[0]]
+
+
+def band_share_db(vals, sr, kind, f0):
+    """dB of `vals`' energy that lies above (kind "hp") or below ("lp") f0."""
+    c = _rbj(kind, f0, sr)
+    part = _biquad(_biquad(vals, *c), *c)
+    total = sum(v * v for v in vals) or 1.0
+    return 10 * math.log10(sum(v * v for v in part) / total + 1e-12)
+
+
+def tone_match(vals, sr=SR):
+    """Float samples -> the same take pulled toward the library's tonal balance."""
+    cut_left, boost_left = AIR_MAX_CUT, LOW_MAX_BOOST
+    if band_share_db(vals, sr, "lp", LOW_HZ) < LOW_FLOOR_DB:
+        boost_left = 0.0
+    for _ in range(3):   # a shelf moves its band only part-way; re-measure and go again
+        cut = min(cut_left, max(0.0, band_share_db(vals, sr, "hp", AIR_HZ) - AIR_TARGET_DB))
+        boost = min(boost_left, max(0.0, LOW_TARGET_DB - band_share_db(vals, sr, "lp", LOW_HZ)))
+        if cut < 1.5 and boost < 1.5:
+            break
+        if cut >= 1.5:
+            vals = _biquad(vals, *_rbj("high", AIR_HZ, sr, -cut))
+            cut_left -= cut
+        if boost >= 1.5:
+            vals = _biquad(vals, *_rbj("low", LOW_HZ * 1.25, sr, boost))
+            boost_left -= boost
+    return vals
+
+
+def retone(pcm):
+    """16-bit mono PCM -> tone_match()ed 16-bit mono PCM, rescaled only if it
+    would clip; trim_and_normalize() sets the final level after this."""
+    vals = tone_match(list(struct.unpack("<%dh" % (len(pcm) // 2), pcm)))
+    peak = max(abs(v) for v in vals) or 1.0
+    k = min(1.0, 32767.0 / peak)
+    return struct.pack("<%dh" % len(vals), *(int(round(v * k)) for v in vals))
 
 
 def head_fade(vals, fade_ms=HEAD_FADE_MS):
@@ -606,6 +703,9 @@ def main():
                     help="do everything but the API call and the write")
     ap.add_argument("--take", type=int, default=0,
                     help="write name_<N>.wav, an extra take the game round-robins (N >= 2)")
+    ap.add_argument("--retone", action="store_true",
+                    help="no API call: run tone_match over the sfx files already on disk "
+                         "(the ones --only/--take name) and rewrite them in place")
     args = ap.parse_args()
 
     groups = args.groups or ["sfx"]
@@ -625,6 +725,28 @@ def main():
         print("\n%d generation(s)." % len(todo))
         return
 
+    if args.retone:
+        for group, name, path, prompt, secs, infl in todo:
+            if group != "sfx" or not os.path.exists(path):
+                continue
+            with open(path, "rb") as f:
+                raw = f.read()
+            ch, rate, bits = struct.unpack_from("<HIxxxxxxH", raw, 22)
+            if (ch, rate, bits) != (CHANNELS, SR, 16):
+                print("%-10s %-14s skipped: %d ch %d Hz %d-bit is not this tool's output" % (group, name, ch, rate, bits))
+                continue
+            pcm = raw[44:]
+            vals = list(struct.unpack("<%dh" % (len(pcm) // 2), pcm))
+            before = (band_share_db(vals, SR, "hp", AIR_HZ), band_share_db(vals, SR, "lp", LOW_HZ))
+            pcm, _, now, _ = trim_and_normalize(retone(pcm))
+            vals = list(struct.unpack("<%dh" % (len(pcm) // 2), pcm))
+            with open(path, "wb") as f:
+                f.write(wav(pcm))
+            print("%-10s %-14s air %6.1f -> %6.1f dB   low %6.1f -> %6.1f dB" % (
+                group, os.path.basename(path)[:-4], before[0], band_share_db(vals, SR, "hp", AIR_HZ),
+                before[1], band_share_db(vals, SR, "lp", LOW_HZ)))
+        return
+
     key = os.environ.get(KEY_ENV, "")
     if not key and not args.dry_run:
         sys.exit("%s is not set. Get a key from elevenlabs.io and export it, or "
@@ -636,6 +758,8 @@ def main():
             print("(dry run)")
             continue
         pcm = generate(key, prompt, secs, infl)
+        if group == "sfx" and len(pcm) >= 2:
+            pcm = retone(pcm)
         pcm, was, now, peak = trim_and_normalize(pcm)
         if group == "barks":
             pcm, now = cap(pcm, BARK_MAX_SECONDS)
