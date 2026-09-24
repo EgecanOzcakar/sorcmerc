@@ -367,6 +367,7 @@ const VERB_GLYPHS := {
 	"grant_action": "⏩", "attack_modifier": "◎", "save_effect": "⚡",
 	"summon": "✦",
 	"font_of_magic": "✧",
+	"metamagic": "❖",
 }
 
 static func verb_glyph(kind: String) -> String:

@@ -4503,7 +4503,14 @@
           "category": "general"
         }
       ],
-      [],
+      [
+        {
+          "type": "feature",
+          "feature": {
+            "id": "sorcerer-sorcerous-restoration"
+          }
+        }
+      ],
       [],
       [
         {
@@ -4820,14 +4827,7 @@
           "category": "general"
         }
       ],
-      [],
       [
-        {
-          "type": "feature",
-          "feature": {
-            "id": "sorcerer-arcane-apotheosis"
-          }
-        },
         {
           "type": "feature-choice",
           "key": "feature-choice:class:sorcerer:4",
@@ -5081,6 +5081,7 @@
           ]
         }
       ],
+      [],
       [
         {
           "type": "asi",
@@ -5099,7 +5100,7 @@
         {
           "type": "feature",
           "feature": {
-            "id": "sorcerer-sorcerous-restoration"
+            "id": "sorcerer-arcane-apotheosis"
           }
         }
       ]

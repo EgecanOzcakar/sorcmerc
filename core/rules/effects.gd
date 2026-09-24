@@ -25,7 +25,9 @@ const KINDS := ["passive_damage", "self_buff", "ally_buff", "heal_self", "heal_a
 	"summon",
 	# Font of Magic (2024). One authored entry, expanded by verbs_for() into a
 	# button per slot level each way — see _font_verbs and combat._font_of_magic.
-	"font_of_magic"]
+	"font_of_magic",
+	# Metamagic (2024): arms the next spell (combat._cast_view / _take_metamagic).
+	"metamagic"]
 
 # castingTime -> action-economy cost. Anything longer than a Reaction is non-combat.
 const CASTING_TIME := {"Action": "action", "Bonus Action": "bonus", "Reaction": "reaction"}
@@ -236,7 +238,9 @@ const VERB_KEYS := ["trigger", "once_per", "requires", "verbs", "status", "durat
 	# rider, Parry's melee-only clause, Rage's own clock
 	"init_adv", "first_round_speed_ft", "flurry_swap", "on_save_vex", "melee_only",
 	# Innate Sorcery (2024): +1 spell save DC, Advantage on spell attacks
-	"spell_dc_bonus", "spell_attack_adv"]
+	"spell_dc_bonus", "spell_attack_adv",
+	# Metamagic: which option, and its sorcery-point price
+	"option", "pool_cost"]
 
 static func _verb_from(fid: String, e: Dictionary, sheet) -> Dictionary:
 		assert(e["kind"] in KINDS, "unknown effect kind \"%s\" on \"%s\"" % [e.get("kind"), fid])
