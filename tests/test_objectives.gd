@@ -306,7 +306,7 @@ func test_breakout() -> void:
 	var exit: Array = cb.objective["exit"]
 	_freeze(cb)
 	var heroes: Array = cb.heroes()
-	check(cb.objective_line() == "Road — 0 of %d heroes there" % heroes.size(), "HUD: %s" % cb.objective_line())
+	check(cb.objective_line() == "Road — 0 of %d mercs there" % heroes.size(), "HUD: %s" % cb.objective_line())
 	check(_until_turn_of(cb, heroes[0]), "a hero's turn")
 	heroes[0].pos = exit[0]
 	cb.end_turn()

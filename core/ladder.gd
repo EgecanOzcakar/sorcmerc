@@ -26,7 +26,10 @@ const KNOWN := 1
 const TRUSTED := 2
 const SWORN := 3
 
-const TITLES := ["Nobodies", "Hirelings", "a Company of Note", "Famous", "Legends"]
+# Said by the world, not claimed (the design audit, docs/audit-game-design.md
+# §6): a title is what people do about you, never "Famous" or "Legends".
+# Only the index is saved (deeds are), so the words can change freely.
+const TITLES := ["Nobodies", "Hirelings", "a Company of Note", "Asked For by Name", "Sung Wrong in Taverns"]
 const TITLE_AT := [0, 6, 18, 40, 80]      # total deeds: the first town; the whole map, twice
 const PAY_PER_TITLE := 0.1                # every job pays this much more per title above Nobodies
 

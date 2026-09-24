@@ -67,7 +67,7 @@ const POOL := [
 		"difficulty": "easy", "theme": "forest-clearing"},
 	# --- combat: mid ------------------------------------------------------
 	{"id": "warband-camp", "kind": "combat", "stage_position": ["mid"],
-		"title": "The warband camp (hard)",
+		"title": "The warband camp",
 		"desc": "More of them, and they are awake — but the camp is full of coin.",
 		"difficulty": "hard", "gold": 90, "theme": "goblin-camp"},
 	{"id": "warrens", "kind": "combat", "stage_position": ["mid"],
@@ -498,7 +498,7 @@ func leave() -> void:
 	stage += 1
 	state = "won" if stage >= route.size() else "picking"
 	if state == "won":
-		say("The road ends. The party lives.")
+		say("The road ends. The company lives.")
 		Ach.unlock("campaign_clear")
 		# T19: the two ways of finishing clean. `lost_anyone` is set by
 		# finish_combat the first time somebody dies, and survives a reload
@@ -517,7 +517,7 @@ func retire() -> bool:
 		return false
 	node = {}
 	state = "retired"
-	say("The party turns back, purses full. The run ends on their terms.")
+	say("The company turns back, purses full. The run ends on their terms.")
 	Ach.unlock("retire_run")
 	_conclude()
 	_autosave()
@@ -578,7 +578,7 @@ func finish_combat(result: Dictionary) -> void:
 	if result.get("outcome", "") != "Victory":
 		Sound.play_sfx("defeat")
 		state = "lost"
-		say("The party falls. The road ends here.")
+		say("The company falls. The road ends here.")
 		_conclude()
 		_autosave()
 		return
@@ -596,7 +596,7 @@ func finish_combat(result: Dictionary) -> void:
 	for item in result.get("loot", []):
 		party.stash_add(String(item))
 		_note_rarity(String(item))
-	say("Victory. +%d XP, +%d gold." % [earned_xp,
+	say("Victory. +%d XP, +%d ◉." % [earned_xp,
 		int(result.get("gold", 0)) + int(node.get("gold", 0))])
 	var taken: Array = result.get("loot", [])
 	if not taken.is_empty():
@@ -660,7 +660,7 @@ func _bank_progression(total: int, fighters: Array, share: int) -> void:
 # unidentified (T13), mundane steel arrives as itself. Merchants label what they sell.
 func _take_treasure() -> void:
 	party.add_gold(int(node.get("gold", 0)))
-	say("+%d gold." % int(node.get("gold", 0)))
+	say("+%d ◉." % int(node.get("gold", 0)))
 	if node.has("item_id"):
 		_find_item(String(node["item_id"]))
 	if rng.roll_die(SCROLL_DROP_ONE_IN) == 1:
@@ -726,7 +726,7 @@ func rest(kind: String) -> bool:
 		if not ch.dead:
 			Adapter.rest(ch, kind)
 	Sound.play_sfx("rest")   # T27
-	say("The party takes a %s." % kind.replace("-", " "))
+	say("The company takes a %s." % kind.replace("-", " "))
 	_autosave()
 	return true
 
@@ -892,7 +892,7 @@ func opportunity_check(char_id := "") -> bool:
 		var extra: int = maxi(OPPORTUNITY_GOLD_MIN,
 			int(round(int(node.get("gold", 0)) * OPPORTUNITY_GOLD_SHARE)))
 		party.add_gold(extra)
-		say("+%d gold." % extra)
+		say("+%d ◉." % extra)
 		Sound.play_sfx("pickup")
 	else:
 		_scout_next_stage()

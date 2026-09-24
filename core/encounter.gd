@@ -912,7 +912,7 @@ static func surprise_check(cb: Combat, scouted_ahead := false) -> bool:
 	if foes.is_empty() or heroes.is_empty():
 		return false
 	if scouted_ahead:
-		cb.log.append("The ground was read ahead of time — the party comes in unseen.")
+		cb.log.append("The ground was read ahead of time — the company comes in unseen.")
 		cb.begin_surprise_round()
 		return true
 	var bonus := -99

@@ -227,6 +227,21 @@ func _tutorial_checks() -> void:
 		seen.append(combat3.spec["theme"])
 	check(seen == seen.slice(0, Game.TEST_FIGHTS.size()) + seen.slice(0, Game.TEST_FIGHTS.size()),
 		"the sequence repeats exactly, not just eventually reusing themes (%s)" % str(seen))
+	# ...and a player never sees its door: the title screen shows it only under
+	# SORCMERC_DEBUG=1 (the design audit §6.2).
+	var had_debug := OS.get_environment("SORCMERC_DEBUG")
+	OS.set_environment("SORCMERC_DEBUG", "")
+	game3.show_title()
+	await process_frame
+	var labels: Array = game3._screen.find_children("*", "Button", true, false).map(func(b): return String(b.text))
+	check(not labels.any(func(t): return "Random battle" in t), "no debug button on a player's title screen: %s" % str(labels))
+	check(labels.any(func(t): return "Tutorial" in t), "...while the title screen itself is there")
+	OS.set_environment("SORCMERC_DEBUG", "1")
+	game3.show_title()
+	await process_frame
+	labels = game3._screen.find_children("*", "Button", true, false).map(func(b): return String(b.text))
+	check(labels.any(func(t): return "Random battle" in t), "SORCMERC_DEBUG=1 opens it")
+	OS.set_environment("SORCMERC_DEBUG", had_debug)
 	game3.queue_free()
 
 	print("test_game_flow: %d passed, %d failed" % [_pass, _fail])

@@ -39,7 +39,7 @@ signal landed()
 # 92 px high and read as an icon; at 150 it is the thing on the screen.
 const DIE := 150.0             # the die's height
 const FACE_SIZE := 64          # the number on it (scenes/die_icon.gd scales it off DIE)
-const VERDICT_SIZE := 40       # "MADE IT!"
+const VERDICT_SIZE := 40       # "Made it."
 const TALLY_SIZE := 24         # "14 + 5 = 19 vs DC 13  —  made it"
 const LABEL_SIZE := 20         # "Survival — Vera Kord", while it rolls
 const TOP := 16.0              # room above the die for the drop's last bounce
@@ -205,13 +205,16 @@ func tally() -> String:
 	return line + ("  —  made it" if ok() else "  —  missed")
 
 
-# The one big word on top of it.
+# The one big line on top of it, in the house voice (the design audit,
+# docs/audit-game-design.md §6.5): said, not shouted — the gold of a natural
+# 20 is the colour's job (_col), not the capitals'. The same words the trait
+# moment uses (scenes/world/trait_moment.gd).
 func verdict() -> String:
 	if _crit():
-		return "NATURAL 20!"
+		return "A natural 20."
 	if ok():
-		return "MADE IT!"
-	return "NATURAL 1" if _nat() == 1 else "MISSED"
+		return "Made it."
+	return "A natural 1." if _nat() == 1 else "Missed."
 
 
 func _col() -> Color:

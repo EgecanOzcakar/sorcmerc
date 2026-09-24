@@ -185,7 +185,7 @@ func _objective_touch(c) -> void:
 				if not (h.pos in exit):
 					return
 			objective_done = true
-			log.append("The party is through — the road is under their feet, and the rest can chase.")
+			log.append("The company is through — the road is under their feet, and the rest can chase.")
 
 # The quarry ending its turn on the far edge is off the board: not killed (no
 # loot, no XP — it took those with it), but `dead` is what `order` carries
@@ -237,7 +237,7 @@ func objective_line() -> String:
 			var exit: Array = objective.get("exit", [])
 			var hs: Array = heroes()
 			var there: int = hs.filter(func(h): return h.pos in exit).size()
-			return "Road — %d of %d heroes there" % [there, hs.size()]
+			return "Road — %d of %d mercs there" % [there, hs.size()]
 		"hunt":
 			var q = with_status("quarry")
 			if q == null:
@@ -813,7 +813,7 @@ var surrendered := false
 
 func surrender() -> void:
 	surrendered = true
-	log.append("The party lays down its arms.")
+	log.append("The company lays down its arms.")
 
 func is_over() -> bool:
 	return surrendered or round_num > MAX_ROUNDS or _team_out("party") or _team_out("foe") or _objective_over()
@@ -1406,7 +1406,7 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			if int(v.get("rounds", 0)) > 0:
 				buff["until_tick"] = _tick() + int(v["rounds"]) * TICK_STRIDE
 			actor.statuses[v.get("status", v["id"])] = buff
-			log.append("%s — %s!" % [actor.cname, v["label"]])
+			log.append("%s — %s." % [actor.cname, v["label"]])
 		"ally_buff":
 			target.statuses[v.get("status", v["id"])] = {"dice_sides": int(v.get("dice_sides", 6))}
 			log.append("%s inspires %s." % [actor.cname, target.cname])
@@ -1418,7 +1418,7 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			actor.econ["attacks_left"] = int(actor.econ["attacks_left"]) + int(v.get("extra_attacks", 0))
 			if int(v.get("extra_attacks", 0)) > 0:
 				actor.econ["flurry"] = true   # what Hand of Healing may swap into (_flurry_swap)
-			log.append("%s — %s!" % [actor.cname, v["label"]])
+			log.append("%s — %s." % [actor.cname, v["label"]])
 		"save_effect": return _save_effect(actor, v, target)
 		"font_of_magic": return _font_of_magic(actor, v)
 		"metamagic":
@@ -1429,7 +1429,7 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			var called = summon(actor, v)
 			if called == null:
 				return {"error": "nowhere for it to stand"}
-			log.append("%s — %s!" % [actor.cname, v["label"]])
+			log.append("%s — %s." % [actor.cname, v["label"]])
 			return {"summoned": called}
 		"spell": return cast(actor, v, target)
 		"drink":
@@ -3175,7 +3175,7 @@ func _death_save(c) -> void:
 		c.death_s = 0
 		c.death_f = 0
 		c.hp = 1
-		log.append("%s's eyes snap open — nat 20, up at 1 HP!" % c.cname)
+		log.append("%s's eyes snap open. A natural 20: up, at 1 HP." % c.cname)
 		_survived_down(c)
 		return
 	if r.nat == 1:

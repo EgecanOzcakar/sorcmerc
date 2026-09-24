@@ -243,7 +243,8 @@ old linear node-route campaign (and its Resume-the-last-run autosave) back on th
 title screen; without it, "New run" goes straight to the open world.
 `SORCMERC_MODS_DIR` moves where community packs are read from, and
 `SORCMERC_UNLOCK_DLC=1` (like `SORCMERC_PLAYTEST=1`) owns every paid pack — see
-`docs/modding.md`.
+`docs/modding.md`. `SORCMERC_DEBUG=1` puts the developer's "Random battle
+(debug)" button back on the title screen; a player never sees it.
 
 ## Pull requests
 

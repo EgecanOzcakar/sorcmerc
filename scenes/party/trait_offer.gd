@@ -102,7 +102,7 @@ func _build() -> void:
 	head.text = "Who is %s?" % String(_ch.cname)
 	head.theme_type_variation = "Title"
 	_box.add_child(head)
-	_box.add_child(_para("Heroes have personality traits now: a temperament and where they come from. %s was on the road before there were any. Their background suggests the two below — keep them, change them, or leave %s as they are. You are only asked once." % [_ch.cname, _ch.cname], Icons.COL_BODY))
+	_box.add_child(_para("Mercs have personality traits now: a temperament and where they come from. %s was on the road before there were any. Their background suggests the two below — keep them, change them, or leave %s as they are. You are only asked once." % [_ch.cname, _ch.cname], Icons.COL_BODY))
 
 	for fam in Traits.FAMILIES:
 		var h := Label.new()

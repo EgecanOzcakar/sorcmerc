@@ -2,7 +2,7 @@
 #
 # WHAT THIS REPLACES. Issue #30 gave a won fight a page so the haul was not
 # paid in silence; what that page was, was a receipt. A gilt box appeared with
-# every line of it already on screen: heading, painting, "+400 XP, +50 gold",
+# every line of it already on screen: heading, painting, "+400 XP, +50 ◉",
 # what came off the bodies, who did not get up, and a button. Nothing moved,
 # nothing arrived, and the biggest moment in a run read exactly like the
 # merchant's stock list.
@@ -22,7 +22,7 @@
 #     rows, and see 2.
 #  2. **A tally row is its own final text with the digits wound back**, and it
 #     lands on that exact string. `_wound(text, k)` scales every run of digits
-#     by k, so "+400 XP,  +50 gold" counts up to itself and cannot drift off
+#     by k, so "+400 XP,  +50 ◉" counts up to itself and cannot drift off
 #     by a rounding error at the end: at k >= 1 the original string is
 #     returned untouched, not recomputed.
 #  3. **Settings.anim() zeroes it.** At Instant, and under SORCMERC_FAST —

@@ -14,7 +14,7 @@ A **D&D 5.5e (2024) CRPG** in Godot 4.7 with three layers:
 - **Hex tactical combat**: turn-based, initiative order, 5e action economy with actions, bonus actions and reactions (`core/combat.gd`).
 - **Open-world campaign**: a 3D overworld with settlements, lairs, multi-room sites (dungeons), roaming bands, quests, a lodge and a renown ladder (`core/world*.gd`, `core/site.gd`, `core/lodge.gd`, `core/ladder.gd`).
 
-The mercenary-company fantasy is carried by flavour and structure, not by a Battle Brothers stat model. You keep a **roster** of recruited heroes. Up to **4** go into a fight (`Party.MAX_ACTIVE`). The company climbs a renown ladder: *Nobodies → Hirelings → a Company of Note → Famous → Legends* (`core/ladder.gd`). A new run's **founder** is built in the character creator (or taken from a preset); everyone after is **hired** from an inn's pool for a one-time fee, with no wages or upkeep (`core/recruits.gd`, see below).
+The mercenary-company fantasy is carried by flavour and structure, not by a Battle Brothers stat model. You keep a **roster** of recruited heroes. Up to **4** go into a fight (`Party.MAX_ACTIVE`). The company climbs a renown ladder: *Nobodies → Hirelings → a Company of Note → Asked For by Name → Sung Wrong in Taverns* (`core/ladder.gd`). A new run's **founder** is built in the character creator (or taken from a preset); everyone after is **hired** from an inn's pool for a one-time fee, with no wages or upkeep (`core/recruits.gd`, see below).
 
 ## Pillars (decided)
 

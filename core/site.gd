@@ -553,7 +553,7 @@ func finish_combat(result: Dictionary) -> void:
 	if String(result.get("outcome", "")) != "Victory":
 		state = "wiped"
 		Ach.unlock("lair_wipe")
-		say("The party goes down in %s." % room.get("title", "the dark"))
+		say("The company goes down in %s." % room.get("title", "the dark"))
 		return
 	say("%s is cleared." % room.get("title", "The room"))
 	# The boss's cache is the reason to have come. Banked here rather than in a
@@ -562,7 +562,7 @@ func finish_combat(result: Dictionary) -> void:
 		var cache := int(room.get("gold", 0))
 		if cache > 0:
 			party.add_gold(cache)
-			say("The lair's own hoard: +%d gold." % cache)
+			say("The lair's own hoard: +%d ◉." % cache)
 
 
 # --- the rooms that are not a fight ---------------------------------------
@@ -573,7 +573,7 @@ func take() -> int:
 	room["taken"] = true
 	var gold := int(room.get("gold", 0))
 	party.add_gold(gold)
-	say("+%d gold." % gold)
+	say("+%d ◉." % gold)
 	return gold
 
 
@@ -677,5 +677,5 @@ func withdraw() -> bool:
 		return false
 	state = "withdrawn"
 	Ach.unlock("lair_withdraw")
-	say("The party backs out of %s, and it is still down there." % lair.sname)
+	say("The company backs out of %s, and it is still down there." % lair.sname)
 	return true

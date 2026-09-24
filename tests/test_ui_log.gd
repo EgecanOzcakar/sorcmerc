@@ -57,7 +57,7 @@ func test_dice() -> void:
 	check(_plain(out) == "rolls d20[14, 3] and 2d6+2", "dice text unchanged")
 
 func test_numbers() -> void:
-	for phrase in ["7 damage", "12 HP", "30 gold", "50 XP"]:
+	for phrase in ["7 damage", "12 HP", "30 gold", "50 XP", "40 ◉"]:
 		var out: String = Main.colorize("gains " + phrase, {})
 		check("[color=%s]%s[/color]" % [Main.COL_NUM, phrase.split(" ")[0]] in out,
 			"number before '%s' tinted" % phrase.split(" ")[1])

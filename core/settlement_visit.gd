@@ -241,7 +241,7 @@ static func investigate_battle(s, m: Dictionary, party, rng = null) -> Dictionar
 		gold = INVESTIGATE_GOLD_MIN + rng.roll_die(INVESTIGATE_GOLD_MAX - INVESTIGATE_GOLD_MIN + 1) - 1
 		party.add_gold(gold)
 		Ach.unlock("investigate_battle")
-	var line := ("%s picks the battlefield clean (Investigation %d+%d vs DC %d) — +%d gold."
+	var line := ("%s picks the battlefield clean (Investigation %d+%d vs DC %d) — +%d ◉."
 		% [ch.cname, nat, bonus, INVESTIGATE_DC, gold]) if ok else (
 		"%s finds nothing worth taking (Investigation %d+%d vs DC %d)."
 		% [ch.cname, nat, bonus, INVESTIGATE_DC])

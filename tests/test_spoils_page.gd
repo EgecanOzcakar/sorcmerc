@@ -37,7 +37,7 @@ func buttons(node: Node) -> Array:
 	return out
 
 const ROWS := [
-	["+400 XP,  +50 gold", Icons.COL_GOLD, "tally"],
+	["+400 XP,  +50 ◉", Icons.COL_GOLD, "tally"],
 	["Taken from the dead: Handaxe", Icons.COL_TEXT],
 	["Vera Kord did not get up.", Icons.COL_FOE],
 ]
@@ -94,7 +94,7 @@ func test_fast_is_already_open() -> void:
 	await process_frame
 	check(p._done, "at Instant the page is finished the moment it is built")
 	var said := labels(p)
-	check("+400 XP,  +50 gold" in said, "the tally row has landed on its real number (%s)" % str(said))
+	check("+400 XP,  +50 ◉" in said, "the tally row has landed on its real number (%s)" % str(said))
 	var on := buttons(p)
 	check(on.size() == 1, "exactly one button on the page — the way on")
 	check(not on[0].disabled, "...and it is pressable straight away")
@@ -136,7 +136,7 @@ func test_played_out() -> void:
 	check(rising, "...and it only ever counts up (%s)" % str(seen))
 	p._t = p._end
 	p._apply()
-	check(String(tally.text) == "+400 XP,  +50 gold",
+	check(String(tally.text) == "+400 XP,  +50 ◉",
 		"and it lands on the exact string it started from (got %s)" % tally.text)
 	# The way on is the last thing to arrive.
 	p._t = 0.0
@@ -158,7 +158,7 @@ func test_skip() -> void:
 	ev.pressed = true
 	p._skipped(ev)
 	check(p._done, "a click finishes the sequence")
-	check(String(p._rows[0]["node"].text) == "+400 XP,  +50 gold", "...at the real numbers")
+	check(String(p._rows[0]["node"].text) == "+400 XP,  +50 ◉", "...at the real numbers")
 	check(not buttons(p)[0].disabled, "...with the way on pressable")
 	check(buttons(p).size() == 1, "and skipping did not add a button of its own")
 	p.queue_free()

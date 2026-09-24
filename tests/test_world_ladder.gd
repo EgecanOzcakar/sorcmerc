@@ -139,14 +139,14 @@ func _init() -> void:
 	await process_frame
 	# the title-change line
 	Ladder.deed("elf", 6)                  # 31: still a Company of Note
-	Ladder.deed("elf", 9)                  # 40: Famous
+	Ladder.deed("elf", 9)                  # 40: Asked For by Name
 	for i in 3:
 		await process_frame
-	check("The company is spoken of now: Famous." in main._lair_msg.text, "the title change is said: %s" % main._lair_msg.text)
+	check("The company is spoken of now: Asked For by Name." in main._lair_msg.text, "the title change is said: %s" % main._lair_msg.text)
 	town.last_visited = -1.0
 	main._open_visit(town)
 	await process_frame
-	check(said(main, "Sworn to this people. Their doors are yours.  Famous, they say."), "Famous rides the standing line")
+	check(said(main, "Sworn to this people. Their doors are yours.  Asked For by Name, they say."), "the fourth title rides the standing line")
 	main._close_visit()
 	await process_frame
 	print("test_world_ladder: %d passed, %d failed" % [_pass, _fail])

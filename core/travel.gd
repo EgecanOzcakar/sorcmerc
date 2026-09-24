@@ -181,7 +181,7 @@ static func walk_note(party) -> String:
 const EVENTS := [
 	{"id": "rough-going", "role": "scout", "skills": ["survival"], "dc": 13, "kind": "bad",
 		"title": "The going turns bad",
-		"pass": "%s picks a line through it and the party barely slows.",
+		"pass": "%s picks a line through it and the company barely slows.",
 		"fail": "Nobody finds a way round. The detour costs the better part of a day's light."},
 	{"id": "tracks", "role": "scout", "skills": ["survival", "perception"], "dc": 14, "kind": "good",
 		"title": "Tracks across the road",
@@ -198,7 +198,7 @@ const EVENTS := [
 	{"id": "foul-water", "role": "watch", "skills": ["medicine", "survival"], "dc": 13, "kind": "bad",
 		"title": "The stream runs wrong",
 		"pass": "%s stops them drinking it in time.",
-		"fail": "It is noticed too late. The party travels the next stretch sick and slow."},
+		"fail": "It is noticed too late. The company travels the next stretch sick and slow."},
 	{"id": "good-ground", "role": "", "skills": [], "dc": 0, "kind": "good",
 		"title": "Clear running",
 		"pass": "Firm ground, a dry sky, and a road that goes where it says it does.",
@@ -222,7 +222,7 @@ const EVENTS := [
 		"needs": "hurt",
 		"title": "A shrine at the crossroads",
 		"pass": "%s knows whose it is and what it is owed. The hour spent there is worth more than the hour.",
-		"fail": "Nobody can say whose shrine it was. The party leaves it the way they found it."},
+		"fail": "Nobody can say whose shrine it was. The company leaves it the way they found it."},
 	{"id": "waystone", "role": "scout", "skills": ["history", "investigation"], "dc": 13, "kind": "good",
 		"title": "A waystone in the grass",
 		"pass": "%s reads the old cut on it: the straight road ran here once, and most of it still does.",
@@ -529,7 +529,7 @@ static func _apply(e: Dictionary, ok: bool, party, world, rng, out: Dictionary) 
 					# A purse that could not cover it is the more interesting
 					# outcome, and saying nothing would read as the check having
 					# quietly done nothing at all.
-					out["text"] = "%s  The purse will not cover it. They take what is in it and let the party past." % out["text"]
+					out["text"] = "%s  The purse will not cover it. They take what is in it and let the company past." % out["text"]
 		"wreck":
 			if ok:
 				var item: String = SALVAGE[rng.roll_die(SALVAGE.size()) - 1]
@@ -548,7 +548,7 @@ static func _apply(e: Dictionary, ok: bool, party, world, rng, out: Dictionary) 
 					# reminder that it can also be earned on the way to one.
 					FactionOpinion.raise(home.faction, CARTER_GOODWILL)
 					out["thanks"] = home.sname
-					out["text"] = "%s  He is bound for %s, and word will get there before the party does." % [
+					out["text"] = "%s  He is bound for %s, and word will get there before the company does." % [
 						out["text"], home.sname]
 
 

@@ -1,7 +1,7 @@
 # Issue #30: "no loot page after both won combat and finished lair".
 #
 # A won fight on the map paid in silence. The combat screen writes its own
-# after-action lines — "+400 XP, +50 gold", "Taken from the dead: a handaxe" —
+# after-action lines — "+400 XP, +50 ◉", "Taken from the dead: a handaxe" —
 # but out here the screen is torn down the frame `result` is filled, so nobody
 # ever read them. All that survived was one line on the HUD's lair label, which
 # the next frame's button text could overwrite. The linear campaign never had
@@ -75,7 +75,7 @@ func _init() -> void:
 	check(main.world.clock.is_paused(), "which holds the clock until it is read")
 	check(said(main._spoils_panel, "Victory"), "it says who won")
 	check(said(main._spoils_panel, "+400 XP"), "it says what the XP was")
-	check(said(main._spoils_panel, "+50 gold"), "it says what the purse got")
+	check(said(main._spoils_panel, "+50 ◉"), "it says what the purse got")
 	# #157: the haul is tiles now, and a tile is a button captioned with the name.
 	var tiles := buttons(main._spoils_panel).filter(func(b): return b.icon != null)
 	check(tiles.size() == 1 and "Handaxe" in tiles[0].text,
@@ -148,7 +148,7 @@ func _init() -> void:
 	check(said(main._spoils_panel, "cleared out"), "headed with what happened to it")
 	check(said(main._spoils_panel, "+%d XP" % (120 + bonus)), "totalling the XP of the whole descent")
 	check(said(main._spoils_panel, "for reaching the bottom"), "...and saying which part was the clear")
-	check(said(main._spoils_panel, "+%d gold" % (main.party.gold - gold0)),
+	check(said(main._spoils_panel, "+%d ◉" % (main.party.gold - gold0)),
 		"and every place it paid from, read off the purse")
 	check(main._delve_haul.is_empty(), "the running total is closed out")
 	main._close_spoils()

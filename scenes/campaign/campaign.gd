@@ -103,7 +103,7 @@ func _ready() -> void:
 		"Screen": "the linear campaign map",
 		"Stage": "%d of %d" % [run.stage, Campaign.STAGE_COUNT],
 		"State": run.state,
-		"Gold": "%d gp" % run.party.gold,
+		"Gold": "%d ◉" % run.party.gold,
 	}))
 	footer.add_child(bbtn)
 
@@ -203,7 +203,13 @@ func _node_card(index: int, node: Dictionary) -> Control:
 	title.add_theme_color_override("font_color", KIND_COL.get(node["kind"], COL_DIM))
 	col.add_child(title)
 	var desc := Label.new()
-	desc.text = "%s.  %s" % [String(node["kind"]).capitalize(), node.get("desc", "")]
+	# The difficulty rides beside the kind, not in the title: "The warband camp
+	# (hard)" was the only node that said it, and it said it in the fiction.
+	var kind := String(node["kind"]).capitalize()
+	var diff := String(node.get("difficulty", "normal"))
+	if diff != "normal":
+		kind += ", " + diff
+	desc.text = "%s.  %s" % [kind, node.get("desc", "")]
 	desc.theme_type_variation = "Dim"
 	col.add_child(desc)
 	var go := Button.new()
@@ -445,7 +451,7 @@ func _end_panel() -> Control:
 	var l := Label.new()
 	l.text = "The road is walked. %d XP, %d ◉." % [run.xp, party.gold] if run.state == "won" \
 		else "Retired. %d XP, %d ◉ brought home." % [run.xp, party.gold] if run.state == "retired" \
-		else "The party falls. The run ends here."
+		else "The company falls. The run ends here."
 	l.theme_type_variation = "Head"
 	l.add_theme_color_override("font_color", COL_PARTY if won else COL_FOE)
 	col.add_child(l)

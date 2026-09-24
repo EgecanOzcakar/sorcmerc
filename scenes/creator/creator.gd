@@ -271,7 +271,7 @@ func _ready() -> void:
 
 static func new_character():
 	var c = Character.new()
-	c.cname = "New Hero"
+	c.cname = "New Merc"
 	for i in ABILS.size():
 		c.base_abilities[ABILS[i]] = STANDARD_ARRAY[i]
 	return c
@@ -483,7 +483,7 @@ func _build_basics() -> void:
 	_target = null
 
 	_head("Load a preset")
-	_note("Vera, Pike and Ilsa as real 5.5e builds — hand one back instead of building.")
+	_note("Vera, Pike and Ilsa, ready to march — take one of them instead of building your own.")
 	var pf := _flow()
 	for pre in [["Vera Kord (Fighter 3)", "vera"], ["Pike Sallow (Rogue 3)", "pike"],
 			["Ilsa Vane (Cleric 3)", "ilsa"]]:

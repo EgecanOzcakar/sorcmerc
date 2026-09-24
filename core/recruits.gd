@@ -397,8 +397,8 @@ static func _auto_picks(ch, p: Dictionary, sheet, rng) -> Array:
 static func why_not(party, offer: Dictionary) -> String:
 	var cap := roster_cap()
 	if party.roster.size() >= cap:
-		return "%s keep %d on the books at most. The name has to grow before anyone else signs." \
-			% [Ladder.title_cap(), cap]
+		return "The company keeps %d on the books at most while it is %s. The name has to grow before anyone else signs." \
+			% [cap, Ladder.title()]
 	if party.gold < int(offer.get("fee", 0)):
 		return "The fee is %d ◉; the purse is %d short." % [int(offer["fee"]), int(offer["fee"]) - party.gold]
 	return ""
