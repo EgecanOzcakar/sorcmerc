@@ -1,14 +1,14 @@
 # Combat-power estimate for the T8 encounter scaler. Scores a Combatant, not a
 # Character — it has to score monsters too. The contract T8 depends on is
-# estimate()'s four keys and their meanings, not these constants.
+# estimate()'s four keys and their meanings, not these constants. It prices; it
+# does not budget: the difficulty tiers and the curve a roster is bought against
+# live in core/scaler.gd (Scaler.TIER, Scaler.CURVE) and nowhere else.
 extends RefCounted
 
 const REF_AC := 14       # what a party member is assumed to be swinging at
 const REF_ATK := 5       # what a party member is assumed to be swung at by
 const REF_SAVE := 2      # reference save bonus for save-based effects
 const ROUNDS := 4        # the fight length resources are amortized over
-
-const TIER := {"easy": 0.55, "normal": 0.85, "hard": 1.15}  # calibration knobs, expected to move
 
 # T23 — how much of a turn each condition denies the target it lands on. 1.0 is a
 # full lockout (the target does nothing at all), 0.5 is about half a turn's worth
@@ -315,9 +315,6 @@ static func team_score(combatants: Array, opponents := 0) -> float:
 	for c in combatants:
 		t += float(estimate(c, opponents)["score"])
 	return t
-
-static func roster_budget(party: Array, tier: String) -> float:
-	return team_score(party) * float(TIER.get(tier, 1.0))
 
 static func fits(roster: Array, budget: float) -> bool:
 	return team_score(roster) >= budget
