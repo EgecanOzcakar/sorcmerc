@@ -10,6 +10,7 @@
 #   ChoicePick.options_for(p, sheet)          # [{id, label}] for one pending entry
 #   ChoicePick.toggle(p, picks, id)           # one click, never an invalid state
 #   ChoicePick.decision_for(p, picks)         # -> ch.decide(p["key"], ...)
+#   ChoicePick.unbuilt(p)                     # {id: why} offered but not played
 #   ChoicePick.recommended_array(class_id)    # the quick-build standard array
 #
 # What this does NOT own: which choices exist or whether one is still open
@@ -21,6 +22,7 @@ extends RefCounted
 const Catalog = preload("res://core/rules/catalog.gd")
 const PassGear = preload("res://core/rules/pass_gear.gd")
 const Effects = preload("res://core/rules/effects.gd")
+const Metamagic = preload("res://core/metamagic.gd")
 
 const ABILS := ["str", "dex", "con", "int", "wis", "cha"]
 const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
@@ -213,6 +215,20 @@ static func taken_elsewhere(p: Dictionary, group: Array, points: Array, choices:
 	for id in known:
 		if not chosen.has(id) and not out.has(id):
 			out[id] = "already known"
+	return out
+
+# Options of `p` the book offers and the board does not play, id -> why. They
+# stay on the list, greyed with the reason, rather than vanishing: a sorcerer
+# who knows the 2024 book should see Distant Spell is missing on purpose, not
+# wonder where it went. Today that is the five unbuilt Metamagic options
+# (core/metamagic.gd); a picker disables these whatever else it un-greys.
+static func unbuilt(p: Dictionary) -> Dictionary:
+	var out := {}
+	if p["type"] != "feature-choice":
+		return out
+	for o in p["options"]:
+		if not Metamagic.is_built(String(o.get("featureId", ""))):
+			out[String(o["optionId"])] = Metamagic.NOT_BUILT
 	return out
 
 # Toggle one option: adds it, or removes it when already at its per-option cap.

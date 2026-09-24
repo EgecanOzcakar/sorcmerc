@@ -804,9 +804,11 @@ func _the_inn(s) -> void:
 				gold0 - party.gold, Visit.inn_cost(s),
 				screen.world.clock.elapsed - clock0, Visit.LONG_REST_MINUTES])
 
-# A settle-in page's option button for choice `key` that is not picked yet.
+# A settle-in page's option button for choice `key` that is not picked yet,
+# and not greyed (taken elsewhere, or not on the board yet).
 static func _answers(b: Button, key: String) -> bool:
-	return String(b.get_meta("choice_key", "")) == key and not String(b.text).begins_with("●")
+	return String(b.get_meta("choice_key", "")) == key and not String(b.text).begins_with("●") \
+		and not b.disabled
 
 func _the_board(s) -> void:
 	if not _goto_page("board", "Notice Board", "town:board"):

@@ -383,9 +383,11 @@ static func _auto_picks(ch, p: Dictionary, sheet, rng) -> Array:
 			var rest: Array = _shuffled(rng, ids.filter(func(id): return not id in ch.equipped))
 			return (carried + rest).slice(0, n)
 	# A skill, tongue or trade they already have is a wasted pick, while there
-	# is anything else to pick.
+	# is anything else to pick; so is a Metamagic option the board does not play
+	# (core/metamagic.gd), which the player's own picker greys out.
 	var wasted: Dictionary = ChoicePick.taken_elsewhere(p, [p], sheet.choice_points, ch.choices, sheet) \
 		if String(p["type"]) in ["skill-choice", "language-choice", "tool-choice"] else {}
+	wasted.merge(ChoicePick.unbuilt(p))
 	var fresh: Array = _shuffled(rng, ids.filter(func(id): return not wasted.has(id)))
 	var stale: Array = _shuffled(rng, ids.filter(func(id): return wasted.has(id)))
 	return (fresh + stale).slice(0, n)

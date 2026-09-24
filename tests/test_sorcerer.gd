@@ -44,6 +44,7 @@ func _init() -> void:
 	test_careful()
 	test_subtle()
 	test_seeking()
+	test_unbuilt_rides_nothing()
 	print("test_sorcerer: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -370,3 +371,22 @@ func _seek_hits(cb, s, g, seeking: bool) -> int:
 			n += 1
 	return n
 
+
+# core/metamagic.gd's BUILT is the list combat plays: an option word not on
+# it — one of the book's other five, from an old save or a pack — never takes
+# a spell, however it came to be armed, and the turn's end hands its points back.
+func test_unbuilt_rides_nothing() -> void:
+	var f := _fight(_metamage(["distant", "empowered"]))
+	var cb = f[0]
+	var s = f[1]
+	check(_mm(s, "distant").is_empty() and _mm(s, "empowered").is_empty(),
+		"an unbuilt pick puts no button on the bar")
+	s.statuses["metamagic"] = {"option": "distant", "sp": 1, "label": "Distant Spell"}
+	var bolt := _spell(s, "fire-bolt")
+	check(cb.metamagic_for(s, bolt) == "", "the bar marks no spell as taking it")
+	cb.perform(s, bolt, f[2])
+	check(s.has("metamagic"), "the cast does not take it")
+	var left: int = s.pool_left(POINTS)
+	cb.turn_idx = cb.order.find(s)
+	cb.end_turn()
+	check(not s.has("metamagic") and s.pool_left(POINTS) == mini(left + 1, 5), "and the turn's end refunds it")
