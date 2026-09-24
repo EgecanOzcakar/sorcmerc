@@ -9466,6 +9466,20 @@ the window that was auditioned — and rebuilds `assets/audio/sfx/licensed/`
 lets a `licensed/<id>.wav` replace that id's committed takes. A clone without
 the bundles, CI included, plays the ElevenLabs fallback unchanged.
 
+The built files are kept in the private `EgecanOzcakar/sorcmerc-licensed-audio`,
+because sharing within the team is allowed and loose files in public are not.
+`.githooks/_reimport.sh` runs `tools/fetch_licensed_sfx.sh` after every pull and
+checkout, which clones or pulls it into `sfx/licensed/` for anyone who can read
+it and does nothing for anyone who can't. The release workflow's "Fetch the
+licensed sfx" step clones it with a read-only deploy key before the import, so
+the itch build carries the real recordings; without the `LICENSED_AUDIO_SSH_KEY`
+secret it warns and ships the generated takes.
+
+Found on the way: an exported build played no sound at all. The pack holds only
+Godot's imported copy of each WAV, never the raw file `core/audio.gd` parsed by
+hand, so `_stream` now falls back to `load()`. Measured on an exported
+"Web (Release)" pack, by running the game's own `audio.gd` from it.
+
 ### Still open
 
 - The files were fetched from third-party archive.org mirrors of the bundles

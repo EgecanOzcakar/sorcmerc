@@ -18,6 +18,10 @@ assets/audio/sfx/<id>.wav (and all its takes) when it exists, so a clone without
 the bundles still plays the generated sounds. Do not feed these files, or
 anything made from them, to a generator.
 
+Where the output goes: the private EgecanOzcakar/sorcmerc-licensed-audio holds
+it, and tools/fetch_licensed_sfx.sh (the git hooks) and the release workflow
+check that out into licensed/. After a rebuild, commit and push licensed/ there.
+
 Download the bundles from sonniss.com/gameaudiogdc (free) and point --bundles at
 wherever you unpacked them; any layout works, files are found by pack folder and
 name, and a .flac of the same name counts.

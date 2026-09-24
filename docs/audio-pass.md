@@ -27,7 +27,11 @@ Two tools write into `assets/audio/`, and the set is mixed:
   sound files, and this repo is public. `core/audio.gd` plays `licensed/<id>.wav`
   over `<id>.wav` and its takes, so the ElevenLabs files stay as the fallback a
   clone without the bundles plays. Never feed the licensed files to a generator:
-  the license forbids using them to develop or enhance AI.
+  the license forbids using them to develop or enhance AI. The built files live
+  in the private `EgecanOzcakar/sorcmerc-licensed-audio`: the git hooks run
+  `tools/fetch_licensed_sfx.sh` to keep `sfx/licensed/` a checkout of it, and the
+  release workflow clones it with a read-only deploy key (the
+  `LICENSED_AUDIO_SSH_KEY` secret) before the import, so itch builds carry them.
 
 Measured, the split is:
 
