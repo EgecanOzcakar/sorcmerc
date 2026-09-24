@@ -248,6 +248,33 @@ static func ref_score(level: int) -> float:
 # core/scaler.gd measured still stands; one band out is a wall you can see over
 # but not climb; one band back is a victory lap that pays like one (the payout
 # falls with the roster's power, automatically — see core/encounter.gd).
+#
+# RE-MEASURED 2026-09-24, and the shape above NO LONGER HOLDS — on master too.
+# tests/sweep_regions.gd (this method, now committed; 80 seeds a cell, tier
+# easy, fight seed pinned), run back to back on master (e50d6c6) and on the
+# audit branch (RAW death saves, cover on DEX saves only):
+#
+#   party  content   scale   2026-09-13   master   branch
+#   lvl 3   lvl 3    x1.00      92.5%     98.8%    95.0%
+#   lvl 10  lvl 10   x1.00      95.0%     66.2%    61.2%
+#   lvl 6   lvl 3    x0.41       100%      100%     100%
+#   lvl 10  lvl 3    x0.24       100%      100%     100%
+#   lvl 3   lvl 6    x2.42      37.5%     11.2%     8.8%
+#   lvl 3   lvl 10   x4.24      27.5%      0.0%     0.0%
+#
+# The branch moves every row 0-5 points, the same shape tests/sweep_tier.gd
+# showed for those rules. The rest is older. power_scale reads scaler's CURVE,
+# which was 0.90 when this table was taken and is 1.15 since scaler's
+# 2026-09-15 retune, so every scale off the diagonal is steeper than the table
+# says (one band out x1.86 -> x2.42, the deeps x2.45 -> x4.24), and nothing
+# re-ran this table when it moved. One band out is no longer "a wall you can
+# see over" but one you cannot, and the deeps at level 3 are not "survivable,
+# barely" but not at all. In band at level 10 is 61-66%, not 95%: the level-10
+# party is weaker against its own content than scaler's level-8 column says.
+# ponytail: decide whether regions keeps its own exponent (0.90 would put the
+# off-diagonal scales back where this design was argued) or accepts the steeper
+# country. Either way re-run tests/sweep_regions.gd, and look at level 10 in
+# band apart from the curve.
 
 # --- placement, for the world builders ------------------------------------
 

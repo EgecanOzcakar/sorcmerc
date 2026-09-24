@@ -9631,8 +9631,15 @@ more goblin hit).
 
 ### Still open
 
-- `core/regions.gd`'s win-rate table (2026-09-13, 80 seeds a cell) was not
-  re-run. The in-band rows should move the way sweep_tier's did.
+- **Re-run since, and it had drifted on master.** `core/regions.gd`'s table
+  (2026-09-13, 80 seeds a cell) has a committed script now,
+  `tests/sweep_regions.gd`. This branch moves each row 0–5 points. Master was
+  already far off the table: one band out is 11.2% (was 37.5%), the deeps at
+  level 3 are 0.0% (was 27.5%), and in band at level 10 is 66.2% (was 95.0%).
+  Cause: `Regions.power_scale` reads scaler's `CURVE`, which went 0.90 → 1.15
+  in scaler's 2026-09-15 retune, and nothing re-ran this table. Whether
+  regions keeps its own 0.90 exponent is the owner's call. The full table and
+  the options are in the header, marked `ponytail:`.
 - The #197 report's screenshot could not be fetched from here. This fixes what
   its text describes, which is also what the close shot showed. If the
   owner's board shows a different gap, it wants that board's seed.
