@@ -55,10 +55,14 @@ static func pass_time(world, party, minutes: float, each := Callable()) -> Array
 	var lines: Array = []
 	var me = world.player()
 	var left := minutes
+	# The clock is set from the start, never summed a minute at a time: 480
+	# float additions onto a fractional clock can land a hair short of +480,
+	# and a rest that ends at 479.99999 has not rested (drive_completionist).
+	var start: float = world.clock.elapsed
 	while left > 0.0:
 		var dt := minf(CHUNK, left)
 		left -= dt
-		world.clock.elapsed += dt   # the rest's own minutes, paused clock or not: a visit holds the map, not the night
+		world.clock.elapsed = start + (minutes - left)   # the rest's own minutes, paused clock or not: a visit holds the map, not the night
 		WorldAI.update(world, dt, me)
 		for q in world.parties:
 			if q != me:
