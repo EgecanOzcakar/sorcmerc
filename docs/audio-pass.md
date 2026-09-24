@@ -21,6 +21,13 @@ Two tools write into `assets/audio/`, and the set is mixed:
 - `tools/gen_audio_elevenlabs.py` writes the same file names from ElevenLabs'
   sound-effects model: a recording of a thing rather than a recipe for one.
   Not deterministic, so its output is committed.
+- `tools/import_licensed_sfx.py` (2026-09-24) rebuilds 45 sfx from real
+  recordings in the Sonniss GDC bundles into `sfx/licensed/`, which is
+  **gitignored**: that license lets them ship in the game but not be handed out as
+  sound files, and this repo is public. `core/audio.gd` plays `licensed/<id>.wav`
+  over `<id>.wav` and its takes, so the ElevenLabs files stay as the fallback a
+  clone without the bundles plays. Never feed the licensed files to a generator:
+  the license forbids using them to develop or enhance AI.
 
 Measured, the split is:
 

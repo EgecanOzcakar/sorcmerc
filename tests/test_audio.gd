@@ -101,6 +101,18 @@ func _init() -> void:
 	check(seen.size() == 3 and seen.has(Audio.SFX_DIR + "hit_sword.wav") and seen.has(Audio.SFX_DIR + "hit_sword_3.wav"),
 		"hit_sword round-robins its three takes (%s)" % str(seen.keys()))
 	check(a._take_of(Audio.SFX_DIR, "click") == Audio.SFX_DIR + "click.wav", "a sting with one take plays it")
+	# licensed/ overrides: its one take beats two generated ones; an id it lacks keeps its own
+	var tmp := "user://take_test/"
+	DirAccess.make_dir_recursive_absolute(tmp + Audio.LICENSED)
+	for f in ["boom.wav", "boom_2.wav", "hiss.wav", Audio.LICENSED + "boom.wav"]:
+		FileAccess.open(tmp + f, FileAccess.WRITE).close()
+	var boom := {}
+	for i in 20:
+		boom[a._take_of(tmp, "boom")] = true
+	check(boom.keys() == [tmp + Audio.LICENSED + "boom.wav"], "a licensed take replaces the generated ones (%s)" % str(boom.keys()))
+	check(a._take_of(tmp, "hiss") == tmp + "hiss.wav", "an id with no licensed take keeps its own")
+	for f in ["boom.wav", "boom_2.wav", "hiss.wav", Audio.LICENSED + "boom.wav", Audio.LICENSED, ""]:
+		DirAccess.remove_absolute(tmp + f)
 	check(Audio._take_key(Audio.SFX_DIR + "hit_sword_2.wav") == Audio.SFX_DIR + "hit_sword.wav"
 		and Audio._take_key(Audio.SFX_DIR + "level_up.wav") == Audio.SFX_DIR + "level_up.wav",
 		"the retrigger key strips the take number and nothing else")

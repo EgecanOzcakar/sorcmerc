@@ -47,8 +47,10 @@ def rms(b, a=0, z=None):
 def main():
     fails = []
     checked = 0
-    for group in ("sfx", "music", "barks"):
+    for group in ("sfx", "sfx/licensed", "music", "barks"):   # licensed/: gitignored, only if imported
         d = os.path.join(AUDIO, group)
+        if not os.path.isdir(d):
+            continue
         for name in sorted(os.listdir(d)):
             if not name.endswith(".wav"):
                 continue

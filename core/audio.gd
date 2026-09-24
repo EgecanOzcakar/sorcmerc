@@ -140,15 +140,25 @@ func _play_sting(path: String) -> void:
 
 # The takes of `id` on disk, counted once: id.wav, id_2.wav, id_3.wav ... until
 # one is missing. Picks one at random; the plain file when there is only one.
-var _takes: Dictionary = {}   # dir+id -> count
+#
+# A `licensed/` folder beside them wins outright when it holds id.wav: its takes
+# replace the ones above, which stay as the fallback. It is gitignored. It holds
+# real recordings whose license lets them ship inside the game but not sit in a
+# public repo as loose sound files (tools/import_licensed_sfx.py fills it from
+# your own copy of the bundles), so a fresh clone and CI play the generated
+# takes and a machine with the bundles plays the real ones.
+const LICENSED := "licensed/"
+var _takes: Dictionary = {}   # dir+id -> [dir the takes live in, count]
 func _take_of(dir: String, id: String) -> String:
 	var key := dir + id
 	if not _takes.has(key):
+		var home := dir + LICENSED if FileAccess.file_exists(dir + LICENSED + id + ".wav") else dir
 		var n := 1
-		while FileAccess.file_exists("%s%s_%d.wav" % [dir, id, n + 1]):
+		while FileAccess.file_exists("%s%s_%d.wav" % [home, id, n + 1]):
 			n += 1
-		_takes[key] = n
-	var n: int = _takes[key]
+		_takes[key] = [home, n]
+	dir = _takes[key][0]
+	var n: int = _takes[key][1]
 	if n <= 1:
 		return dir + id + ".wav"
 	var k := randi_range(1, n)
