@@ -9951,6 +9951,9 @@ range. So it ships where it measured in line, and nowhere else:
 - **The warband caster roll ships at 0%** (`CASTER_ELITE_CHANCE`). It is built
   and tested, and a sweep forces it on with `caster_chance_override`.
 
+Shot, from the new `tests/shot_caster.gd`: `docs/shots/enemy-caster-announced.png`,
+showing "Sable the Magister is a spellcaster — up to Fireball."
+
 `test_scaler` is byte-identical to master. `tests/sweep_faction_boss.gd` gained
 `LEVEL=` to sweep a boss at the level a party meets it.
 
