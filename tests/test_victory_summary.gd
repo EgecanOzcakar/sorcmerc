@@ -45,7 +45,7 @@ func _init() -> void:
 	var log_text: String = main._logbox.get_parsed_text()
 	check(log_text.contains("Victory"), "the log says who won")
 	check(log_text.contains("XP"), "and what the fight was worth — the line #134 lost")
-	check(log_text.contains("gold"), "including the purse")
+	check(log_text.contains("◉"), "including the purse")
 
 	main._dismiss_wash()
 	check(main._wash == null, "clicking through takes the wash down")
