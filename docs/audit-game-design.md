@@ -288,3 +288,103 @@ the bible says.
    and place lairs for more factions so the cult's caster boss can be met.
 7. **Bring the skills up to date** with the tables in §7 and §8 so the next
    change starts from today's numbers.
+
+---
+
+## The owner's calls (2026-09-24)
+
+Each finding was put to the owner one at a time. These are the decisions;
+none is built yet. Each lands as its own piece of work with its own
+`docs/plan/` entry.
+
+**§1 Side doors**
+
+| # | Decision |
+|---|---|
+| 1.1 Sheet rest | **Remove** the HP ±/full, pool ± and "Long rest (restore all)" buttons from the character sheet entirely. |
+| 1.2 Defeat revive | **Revive the downed only.** The dead stay dead and need a paid raise. Road and site apply deaths in the same order. |
+| 1.3 Lair pricing | **The lair resets when re-entered** (see 3.3). |
+| 1.4 Potion price | **Price potions of healing by grade** with a flat override, which fixes both the garden and the shop. |
+| 1.5 Gambling | **Once a day per town, and an expected return below 1**: the lowest win pays the stake back. |
+| 1.6 Rope Trick | **It replaces the camp kit, and the slot is not refunded** by the rest it enables. The ambush roll is assumed to stay (see open points). |
+| 1.7 Rest clock | **Tick the world through the 8 hours**, and **refuse to camp with a hostile band nearby**. |
+| 1.8 Strongroom | **Add a cost floor not tied to the purse.** Defeat also costs days, an injury or gear. A parley toll can take gear or opinion when the purse is empty. |
+| 1.9 Downtime rest | **Respect the 24 h gate.** Downtime refills only when a long rest is allowed. |
+
+**§2 Pillar 1: memorable mercs**
+
+| # | Decision |
+|---|---|
+| 2.1 Death | All four: **grief for the bonded** (a guaranteed hardship and a camp beat), **a roll of the fallen**, **the dead kept out of the veteran pool**, **deaths counted in the open world**. |
+| 2.2 Service record | All three: **a Service panel on the profile** (fights, wins, kills by faction, downs, bane and Veteran progress), **each trait's reason and day**, **"struck the blow" on spoils**. |
+| 2.3 Barks | **A bark pool per temperament** (8), a line for a bonded partner going down, and the Vera line uses a real ally's name. |
+| 2.4 Bench | **Restless mercs may leave** (told as a moment), and **the bench joins camp moments and the relations web**. No bench XP and no upkeep. |
+| 2.5 Recruits | **A one-line intro** from temperament and background, **a veteran's record** at the inn, and **2–3 callings per background**. Callings that read wrong (e.g. gnolls as "deserters") are fixed. Duplicate names are not addressed. |
+| 2.6 Camp lines | **More lines, picked by the pair's temperaments**, and the stale "player-made" headers fixed. |
+
+**§3 Pillar 2: hard choices**
+
+| # | Decision |
+|---|---|
+| 3.1 Parley | **A failed parley costs faction opinion.** |
+| 3.2 Hurt risk | **Flatten the wounds curve.** This is a balance pass with a re-run sweep, tied to 7.2. |
+| 3.3 Lair re-entry | **Full reset on re-entry.** Leaving a lair undoes all progress: every room regrows and is priced fresh, like a wipe but without the stash loss. |
+| 3.4 Quest expiry | **Deadlines on bounties and rescues**, shown on the posting. Errands and deliveries stay open. |
+| 3.5 Retreat | **Withdraw off the board edge.** The fight's rewards are forfeit but it is not a defeat. Anyone left behind fights on. |
+
+**§4 Pillar 3: the price of magic**
+
+| # | Decision |
+|---|---|
+| 4.1 Slot display | **Show real slots everywhere**: sheet, party rows and combat pips, all from one source. |
+| 4.2 Arcane Recovery | **Wire it into the short rest**, once per long rest, per RAW. |
+| 4.3 Trance | **Bank the bonus short rest** for later that day. It does not count against the 2-per-long-rest cap. |
+| 4.4 Estimates | **Sweep both**: rest gold against income, road fights per long rest by level, and bench rotation. |
+
+**§5 Economy**
+
+| # | Decision |
+|---|---|
+| 5.1 Loot and sinks | **Sell loot for less**, **add sinks that scale with level**, and **make magic items work in a fight**. No wages or upkeep. |
+| 5.2 Resurrection | **Price by level** (≈50 × hero level). |
+| 5.3 Quest XP | **Base it on the region's fight XP.** Renown and regard multiply gold only. |
+| 5.4 Far Deeps | **Split the Deeps into sub-bands**, **slow lair respawn past the Marches**, and **faster levelling from 10 to 20**. |
+| 5.5 Unlocks | **Restore the shipping unlock costs, and keep counting quest and landmark XP** toward lifetime XP. Correct the "only fight XP" comment. |
+| 5.6 Sell price | **Invert opinion for selling**: friendly towns pay more. |
+
+**§6 Tone**
+
+| # | Decision |
+|---|---|
+| 6.1 Band names | **Seeded display names from `EnemyNames`**, used everywhere a band is named. |
+| 6.2 Off-tone lines | **Apply the rewrites in §6 as written.** Hide "Random battle (debug)" behind an env var. |
+| 6.3 Currency | **◉ beside any number**; "coin" or "gold" only in prose. |
+| 6.4 Company/party | **"company" in fiction**; "party" only where a line states a rule. |
+| 6.5 Register | **The authored register everywhere**: no contractions or shouting in system messages or dice verdicts. |
+
+**§7 Balance discipline**
+
+| # | Decision |
+|---|---|
+| 7.1 Skill drift | **Update both skills and the `scaler.gd` comments** to the code's current measurements. |
+| 7.2 Stale measurements | **Re-run the `world_threat` grid, the trait sweeps and the board sweeps** under today's rules, write the results into the headers, then retune (with 3.2). |
+| 7.3 Unmeasured knobs | **Add sweeps for the top three**: the site knobs, the per-mult stat bumps, and XP pacing. |
+| 7.4 Unpriced power | **The autopilot arms Metamagic** so sweeps see it. **`power.gd` prices weapon mastery, road-buff potions and opinion bonds.** |
+| 7.5 Cleanup | **Delete `power.gd`'s dead `TIER` and `roster_budget`.** `FT_PER_HEX` duplication and the fragile-band notes are left. |
+
+**§8 Scope, setting and art**
+
+| # | Decision |
+|---|---|
+| 8.1 Provenance | **Write every PROVENANCE.md now**, recovering prompts from PNG metadata and the import tools. Complete the four existing ones and rewrite the README table. |
+| 8.2 Art style | **Add a 2D house style to the bible**, and correct its icon claim. |
+| 8.3 Lairs | **Lairs for every home faction** from `Regions.HOMES`, the cult included. |
+| 8.4 Deeps content | **More CR 10+ monsters** for the Deeps factions, and **bands for fey, elemental and construct**. Figures and the thin early factions are not now. |
+| 8.5 No way in | **Grey out the 5 unbuilt Metamagic options** and **delete the uncalled helpers** (or wire `price_factor` in place of its inline copy). **Multiclassing is noted for later.** |
+| 8.6 Rules in scenes | **Move `_bank` into `core/`** with a test and remove its `ponytail:`. **Seed the profile's roll.** |
+| 8.7 Bible list | **Mark the paladin/ranger slot fix built.** Rival raids and faction warfare stay decided-not-built. |
+| 8.8 Strays | **Delete the orphan root `.import` files and untrack `shots_hiring/`**, **delete `data/lpc/`**, and **make `update-notes.yml` read `docs/plan/`**. This is an owner-approved edit under `.github/`. |
+
+**Open points to confirm when each is built:**
+- **1.6:** does Rope Trick also cancel the ambush roll? This record assumes it does not.
+- **1.3 / 3.3:** a full reset on re-entry still prices the regrown lair for whatever the party is carrying at the door. Does re-entry also use `Regions.fresh_score`, so a drained party is not met by a smaller lair?
