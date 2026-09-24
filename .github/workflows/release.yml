@@ -173,6 +173,33 @@ jobs:
           sed -i "s|^const RELAY_KEY := \"\"|const RELAY_KEY := \"$RELAY_KEY\"|" "$F"
           grep '^const RELAY_URL' "$F"
 
+      # The real recordings core/audio.gd plays over 45 of the generated sfx live
+      # in the private EgecanOzcakar/sorcmerc-licensed-audio: their license lets
+      # them ship inside the game but not sit in this public repo as sound files
+      # (tools/import_licensed_sfx.py). Read through a read-only deploy key whose
+      # private half is the LICENSED_AUDIO_SSH_KEY secret. With no secret the
+      # step warns and the build plays the committed generated takes, as every
+      # build before it did. Before the import, so Godot packs them.
+      - name: Fetch the licensed sfx
+        if: steps.pick.outputs.should_publish == 'true'
+        env:
+          KEY: ${{ secrets.LICENSED_AUDIO_SSH_KEY }}
+          # GitHub's published ed25519 host key, pinned rather than keyscanned
+          HOST_KEY: github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::warning::LICENSED_AUDIO_SSH_KEY is not set; this build plays the generated sfx"
+            exit 0
+          fi
+          command -v ssh >/dev/null || { apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null; }
+          d=$(mktemp -d)
+          printf '%s\n' "$KEY" > "$d/key" && chmod 600 "$d/key"
+          printf '%s\n' "$HOST_KEY" > "$d/known_hosts"
+          GIT_SSH_COMMAND="ssh -i $d/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$d/known_hosts" \
+            git clone -q --depth 1 git@github.com:EgecanOzcakar/sorcmerc-licensed-audio.git assets/audio/sfx/licensed
+          rm -rf "$d" assets/audio/sfx/licensed/.git
+          echo "licensed sfx: $(ls assets/audio/sfx/licensed/*.wav | wc -l) files"
+
       - name: Import resources once
         if: steps.pick.outputs.should_publish == 'true'
         run: godot --headless --path . --import || true

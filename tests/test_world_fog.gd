@@ -100,6 +100,30 @@ func _init() -> void:
 	w6.explored.clear()
 	check(not w6.is_explored(Vector2(4000, 4000)), "...and a cleared list really is forgotten")
 
+	# --- a band in the party's sight is seen, whatever the trail says ------
+	# reveal() drops a waypoint every EXPLORE_STEP, so a party 149 units into a
+	# march still has its only waypoint back where it set out. A band 200
+	# units ahead of it is 349 from that waypoint (beyond VISION_RADIUS) but
+	# inside the sight circle, and used to blink off the map until the next
+	# waypoint landed.
+	var sight_w := World.new()
+	sight_w.clock.elapsed = (12 - World.WorldClock.START_HOUR) * 60.0   # noon: the full sight radius
+	var walker = sight_w.add_party(World.RoamingParty.new("player", Vector2(0, 0), "human", true))
+	sight_w.reveal(walker.position)
+	walker.position = Vector2(World.EXPLORE_STEP - 1.0, 0)
+	sight_w.reveal(walker.position)
+	check(sight_w.explored.size() == 1, "setup: still one waypoint, back at the start")
+	var ahead: Vector2 = walker.position + Vector2(200, 0)
+	check(not sight_w.is_explored(ahead), "setup: the ground ahead is not on the remembered trail")
+	check(sight_w.band_seen(ahead), "a band inside the party's sight right now is seen")
+	check(not sight_w.band_seen(walker.position + Vector2(sight_w.sight_radius() + 40.0, 0)), "...one past the sight circle, on fogged ground, is not")
+	sight_w.clock.elapsed = (24 + 2 - World.WorldClock.START_HOUR) * 60.0   # 2am
+	check(sight_w.sight_radius() < 200.0, "setup: the night closes sight to under 200")
+	check(not sight_w.band_seen(ahead), "...and at night the same band, past the shrunken sight, is not")
+	var nobody := World.new()
+	nobody.reveal(Vector2(0, 0))
+	check(not nobody.band_seen(Vector2(349, 0)), "with no party on the map there is no live sight, only the trail")
+
 	print("test_world_fog: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
