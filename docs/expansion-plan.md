@@ -9860,6 +9860,57 @@ and a level-1 one carries both into a fight (`Adapter.slots_left`). Not visual.
   *Divine Smite* spell. The ranger's Favored Enemy (free Hunter's Mark casts) is
   catalogue text. Neither blocks casting at level 1.
 
+## Spent slots no longer buy an easier road fight (2026-09-24)
+
+The owner's call from the skills pass: **wounds thin a fight, spent slots do
+not.** Pillar 3 is "magic is powerful but costly", and the open world was
+refunding the cost.
+
+`core/rules/power.gd` prices a party off max HP and the slots it has *left*.
+So `Scaler.roster_for()` sent a party that had cast everything a smaller
+roster, and a smaller roster pays less. `core/site.gd` already corrected for
+this inside a lair: every room is priced off the party at the mouth. The open
+world never did.
+
+`core/world_threat.gd` gains `slot_hold(party)`. It is
+`Scaler.held_at(Regions.fresh_score(party), Scaler.party_score(...))`, the same
+correction a site makes, taken against the party with every slot back.
+`assess()` multiplies it into the `power_scale` it already returns, so every
+caller picks it up unchanged: `encounter_spec()`, the gate hold's waves, the
+pit bouts. It is exactly 1.0 for a party that has spent nothing, so every
+number measured before this still stands. Wounds still thin the fight through
+the condition curve, which is untouched.
+
+Measured with the new `tests/sweep_spent_slots.gd` (level-3 presets,
+wilderness baseline, 200 seeds a cell, fight seed pinned). *Unheld* is exactly
+what master passed:
+
+| slots left | HP | hold | unheld foes | unheld win | held foes | held win |
+|---|---|---|---|---|---|---|
+| all | 100% | ×1.000 | 4.0 | 99.5% | 4.0 | 99.5% |
+| none | 100% | ×1.429 | 3.3 | **100.0%** | 4.0 | 94.5% |
+| all | 50% | ×1.000 | 3.5 | 95.0% | 3.5 | 95.0% |
+| none | 50% | ×1.429 | 3.2 | 99.5% | 3.5 | 90.0% |
+
+Before this, a party with nothing left to cast won *more* often than the same
+party fresh. The budget the spent slots handed back was worth more than the
+spells. Now a drained party meets the fresh party's roster body for body, and
+casting costs something on the road too.
+
+`test_world_threat`: the hold is exactly 1.0 with nothing spent and above 1.0
+with everything spent. A drained party's roster matches the fresh party's on
+all 10 seeds, where the unheld one was smaller. A drained, hurt party is thinned
+by its wounds alone. Not visual.
+
+### Still open
+
+- The payout follows the roster, so a drained party now also earns a fresh
+  party's XP and gold for the same fight. That is the point, but it is worth
+  watching in play for whether "fight on empty" starts to read as a farm.
+- The campaign's linear mode (`core/campaign.gd`) still prices off the current
+  reading. It has its own per-run rest budget and is not the open world. Leave
+  it alone unless `SORCMERC_LINEAR_CAMPAIGN` comes back into use.
+
 ## The sorcerer's own two: Innate Sorcery and Font of Magic (2026-09-24)
 
 The owner's call from the skills pass: sorcerer features follow the 2024 book
