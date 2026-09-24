@@ -31,13 +31,14 @@ extends Control
 const Icons = preload("res://core/ui_icons.gd")
 const Settings = preload("res://core/settings.gd")
 const Sound = preload("res://core/audio.gd")
+const DieIcon = preload("res://scenes/die_icon.gd")
 
 signal landed()
 
 # Sizes. The owner: "make the dice larger and animations flashy" — the die was
 # 92 px high and read as an icon; at 150 it is the thing on the screen.
 const DIE := 150.0             # the die's height
-const FACE_SIZE := 64          # the number on it
+const FACE_SIZE := 64          # the number on it (scenes/die_icon.gd scales it off DIE)
 const VERDICT_SIZE := 40       # "MADE IT!"
 const TALLY_SIZE := 24         # "14 + 5 = 19 vs DC 13  —  made it"
 const LABEL_SIZE := 20         # "Survival — Vera Kord", while it rolls
@@ -349,25 +350,7 @@ func _hex(at: Vector2, r: float, rot: float, col: Color) -> PackedVector2Array:
 
 # A d20 as the icon every table knows: a hexagon with the triangle facets
 # inside it, the number on the front face (none, n = 0, for the motion trail).
+# Drawn by scenes/die_icon.gd, which the action bar's hover card shares so a
+# spell's still dice are this die, not a lookalike.
 func _die(at: Vector2, h: float, rot: float, n: int, col: Color, alpha: float) -> void:
-	var r := h * 0.5
-	var pts := _hex(at, r, rot, Color(Icons.COL_INK, alpha))
-	var edge := Color(col, 0.9 * alpha)
-	pts.append(pts[0])
-	draw_polyline(pts, edge, 3.0, true)
-	# the front triangle and the spokes to the rim
-	var tri := PackedVector2Array()
-	for i in 3:
-		var a := rot + TAU * i / 3.0 - PI / 2.0
-		tri.append(at + Vector2(cos(a), sin(a)) * r * 0.55)
-	tri.append(tri[0])
-	draw_polyline(tri, Color(col, 0.5 * alpha), 2.0, true)
-	for i in 6:
-		draw_line(tri[(i + 1) / 2 % 3], pts[i], Color(col, 0.3 * alpha), 1.5, true)
-	if n <= 0:
-		return
-	var s := str(n)
-	var fs := int(FACE_SIZE * h / DIE)
-	var w := Icons.serif(700).get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	draw_string(Icons.serif(700), at + Vector2(-w * 0.5, fs * 0.36), s, HORIZONTAL_ALIGNMENT_LEFT, -1,
-		fs, Color(col.lightened(0.15), alpha))
+	DieIcon.paint(self, at, h, 20, n, col, alpha, rot)

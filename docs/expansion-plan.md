@@ -10295,6 +10295,71 @@ and they stay in lockstep.
   could treat `SCRIPT ERROR` in a test's output as a failure. That is a runner
   change for every test, so it is left for its own PR.
 
+## The action bar's hover card — two voices, drawn dice, colour-coded types (2026-09-24)
+
+The owner: "tidy up the action bar and spell explanations when hovered. there
+should be a set amount of width so overflows go to next line. tag the effect as:
+single target, cone, or aoe. split the lore-ified explanation and the mechanical
+parts of the explanations with different fonts. show the dice rolled with their
+static image as used in the live rolls. damage types and status effects can have
+their color codes for the whole game."
+
+**The card.** A badge's hover used to be the engine's plain tooltip, as wide as
+its longest line: Scorching Ray's SRD paragraph was one 1080 px line across the
+whole board. `scenes/skill_card.gd` builds a card instead, `CARD_W` (340) wide
+at chrome scale 1, every line wrapping inside it. Head: the name in the serif (a
+spell's in its school colour), then school, cost, range and concentration in a
+sans caption. Then one tag for the shape: **Single target**, **Cone**, **AoE**
+(sphere, line, emanation, "your side"), or **Self** for what touches nobody
+else (Dash, Misty Step). Every bar button is a `SkillCard.HoverButton`. Its
+`tooltip_text` is unchanged, because the tests and the drive robots read it,
+and the card is built from the same verb.
+
+**Two voices.** An SRD description opens with a picture and turns into rules.
+`split_prose()` cuts it at the first sentence that names a die, a save, damage,
+hit points, a condition or a distance. The lore half is set in a slanted
+Alegreya (`Icons.serif_italic()`, a 0.2 shear, since the italic file isn't
+shipped). The rules half and every number are in Alegreya Sans. Cure Wounds is
+rules from its first word, so it simply has no lore half. The martial verbs
+never had SRD prose, so each gets one dry line (`main.gd` `KIND_LORE`) over the
+rules blurb it always had.
+
+**The dice.** Each roll is a row: the dice it rolls, drawn, then the notation.
+A d20 for a to-hit or a save, three d6 in fire's orange for Burning Hands, up to
+six dice and then "+N". `scenes/die_icon.gd` is the one die painter.
+`dice_roll.gd`'s live d20 now calls it too, so the still icon and the tumbling
+one are the same drawing. d4 triangle, d6 square, d8 diamond, d10 kite, d12
+pentagon, d20 the hexagon it always was. The live d20 keeps its exact strokes
+(they only thin below 60 px).
+
+**Colour for the whole game.** `Icons.DAMAGE_COLORS` (13 types plus healing)
+and `CONDITION_COLORS` (the 15 conditions plus the runtime flags), grouped by
+family. Physical damage stays near-neutral steel, because it is most of every
+log. Every colour clears 4.5:1 on both dark grounds (worst 5.12:1).
+`Icons.term_spans()` / `tint_terms()` find the words in running text. They are
+used by the hover card, the combat log's colorizer (after names, so a name keeps
+its team colour), the token status strip (each glyph in its condition's colour),
+the combat card's "Right now" and resist/immune lines, the profile's attack
+rows, and the item hover card's body.
+
+`test_skill_card` (73 checks): the palette and tinting, the four tags, the prose
+split on real SRD text, every die outline fits its box, Burning Hands' card
+(Cone, 3 d6 in fire, a DEX-save d20) built through the real bar, the card
+holding its width against 200 words, every bar button carrying a card. Proof:
+`docs/shots/hover-card-*.png` (`tests/shot_actionbar.gd`).
+
+### Still open
+
+- The rules half of a spell repeats numbers the roll rows state exactly
+  ("takes 3d6 Fire damage" over the 3d6 row). It stays, because the prose also
+  carries what the rows can't (cover, repeated saves, who it can't affect).
+  Revisit if a playtest reads it as clutter.
+- A class feature (Second Wind, Rage) has no lore line. `KIND_LORE` is per
+  verb kind, and one line per kind isn't true of every feature of that kind.
+  That wants the feature prose SCHEMA gap #4 is waiting on.
+- The floating damage numbers over a token still use the one gold band. They
+  could wear the damage type's colour, but `_spawn_float` isn't handed the type.
+
 ## Hired, not made — the inns' hiring pool (2026-09-24)
 
 The owner's call on recruitment, built. A new run makes **one** hero, the
