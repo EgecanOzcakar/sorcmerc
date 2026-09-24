@@ -3518,7 +3518,8 @@ func _rest() -> void:
 		return
 	var before := _visit
 	var stamp: float = s.last_visited
-	Visit.rest(party, world, "long-rest")
+	var night: Dictionary = Visit.rest(party, world, "long-rest", _night_step)
+	_after_night(night)
 	Sound.play_sfx("rest")
 	var trance: Dictionary = Trance.apply_rest_bonus(party, world, s.position)
 	_visit = Visit.visit(s, world)
@@ -3532,8 +3533,8 @@ func _rest() -> void:
 	for ch in party.party_characters():
 		for n in Traits.heal_rest(ch, String(s.kind) == "city"):
 			mended.append("%s is no longer %s." % [ch.cname, n])
-	_say("The party takes a long rest (%s). Eight hours pass and the stalls fill up again.%s%s" % [
-		"on the house" if cost == 0 else "%d ◉ for the room" % cost, _trance_note(trance),
+	_say("The party takes a long rest (%s). Eight hours pass and the stalls fill up again.%s%s%s" % [
+		"on the house" if cost == 0 else "%d ◉ for the room" % cost, Visit.rest_note(night), _trance_note(trance),
 		(" " + " ".join(mended)) if not mended.is_empty() else ""])
 	# The same fire as a camp's, over the inn page; the panel under it has
 	# already said what the night cost.
@@ -3556,10 +3557,13 @@ func _on_inn_card_ack() -> void:
 
 # T9x: names the check and its result explicitly, same convention every
 # other overworld roll in this file uses — never just "something happened".
+# Audit 4.3: the trance no longer tops the party up the moment it wakes (when
+# nobody needed it); it banks a short rest for later in the day.
 func _trance_note(trance: Dictionary) -> String:
 	if trance.is_empty():
 		return ""
-	var note := "  Someone didn't need the sleep: the party gets a short rest on top, and the ground nearby is scouted."
+	var note := "  Someone did not need the sleep: the ground nearby is scouted%s." % (
+		", and the trance banks a short rest for later today that does not count against the day's two" if trance.get("banked", false) else "")
 	var id: Dictionary = trance.get("identify", {})
 	if not id.is_empty():
 		if id["ok"]:
@@ -3573,15 +3577,27 @@ func _trance_note(trance: Dictionary) -> String:
 # T9x: a short rest works anywhere on the map, not just a settlement — but
 # only when it's actually safe: mid-fight, paused, or a hostile band close
 # enough to notice all say no, same radius _check_encounter() uses to decide
-# whether a band has closed in enough to trigger a fight.
+# whether a band has closed in enough to trigger a fight. Audit 1.7: making
+# camp asks the same question (core/world_camp.gd owns it now).
 func _hostile_nearby() -> bool:
-	var p := world.player()
-	if p == null:
-		return false
-	for q in world.parties:
-		if q != p and WorldAI.is_hostile(q, p) and q.position.distance_to(p.position) <= ENCOUNTER_RADIUS:
-			return true
-	return false
+	return WorldCamp.hostile_near(world, ENCOUNTER_RADIUS)
+
+# Audit 1.7: one step of a long rest's night, from core/world_rest.gd — the
+# part of _process() that is the world's but needs this screen's
+# encounter_spec(): bands that meet in the dark fight it out off-screen.
+func _night_step(dt: float) -> void:
+	for r in WorldBattle.check(world, _trigger(dt), encounter_spec):
+		Visit.mark_battle(world, r["loser"].position, world.clock.elapsed)
+
+# The night is over: say what the raids did in it, and rebuild the figures the
+# night added or took away (a raid band out, a band beaten off-screen).
+func _after_night(night: Dictionary) -> void:
+	for line in night.get("lines", []):
+		_lair_msg.text = String(line)
+	if _party3d != null:
+		_party3d.reset(world)
+	if _lairs3d != null:
+		_lairs3d.reset(world)
 
 func _short_rest() -> void:
 	if _combat != null or not _visit.is_empty() or _overlay_up():
@@ -3589,12 +3605,12 @@ func _short_rest() -> void:
 	if _hostile_nearby():
 		_camp_msg.text = "Too dangerous to rest here — something hostile is close."
 		return
-	if not Visit.can_short_rest(party):
+	if not Visit.can_short_rest(party, world):
 		_camp_msg.text = "The party has rested enough for one day — only a long rest will do now."
 		return
-	Visit.rest(party, world, "short-rest")
+	var r: Dictionary = Visit.rest(party, world, "short-rest")
 	Sound.play_sfx("rest")
-	_camp_msg.text = "The party takes a short rest. An hour passes."
+	_camp_msg.text = "The party takes a short rest. An hour passes.%s" % Visit.rest_note(r)
 
 # T9x: the camp-kit item (bought at any settlement, see _build_visit_panel)
 # lets the party long-rest away from town — for a price already paid at
@@ -3606,34 +3622,27 @@ func _short_rest() -> void:
 # Either way an interrupted night grants no rest — same as RAW, and the
 # reason to gate this on can_long_rest() first: no point risking an ambush
 # for a rest that wouldn't grant its benefit yet regardless.
+# The whole decision — the gate, a hostile band in reach, the kit or the Rope
+# Trick, the roll, the night — is WorldCamp.make_camp(); this draws it.
 func _make_camp() -> void:
 	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
-	if not Visit.can_long_rest(party, world):
-		_camp_msg.text = "The party isn't tired enough for another long rest yet."
+	var r: Dictionary = WorldCamp.make_camp(party, world, ENCOUNTER_RADIUS, _night_step)
+	if not bool(r["ok"]):
+		_camp_msg.text = String(r["text"])
 		return
-	var roped: bool = party.safe_camp   # Rope Trick (core/road_spells.gd): the kit is the spell
-	if not roped and party.stash_count(WorldCamp.CAMP_KIT_ITEM) < 1:
-		return
-	if roped:
-		party.safe_camp = false
-	else:
-		party.stash_remove(WorldCamp.CAMP_KIT_ITEM, 1)
 	var p := world.player()
-	Ach.bump("camps")
-	var rng := RNG.new(WorldCamp.camp_seed(world.clock.elapsed, p.position))
-	if roped or not WorldCamp.ambush_roll(rng):
-		Visit.rest(party, world, "long-rest")
+	var rng: RNG = r["rng"]
+	if not bool(r["ambush"]):
+		_after_night(r["rest"])
 		Sound.play_sfx("rest")
 		var trance: Dictionary = Trance.apply_rest_bonus(party, world, p.position)
-		_camp_msg.text = "The camp holds through the night. Eight hours pass.%s" % _trance_note(trance)
+		_camp_msg.text = "The camp holds through the night. Eight hours pass.%s%s" % [
+			Visit.rest_note(r["rest"]), _trance_note(trance)]
 		if not _fireside(rng, _on_event_ack):
 			_camp_card("night", "The camp holds", "good", _camp_msg.text, _on_event_ack)
 		return
-	var watch: Dictionary = WorldCamp.watch_check(party, rng)
-	if party.alarm_set:   # Alarm: the ward wakes them whatever the watch rolled
-		party.alarm_set = false
-		watch = {"ok": true, "cname": "The alarm", "skill": "ward", "nat": 20, "bonus": 0, "dc": 0, "char_id": "alarm"}
+	var watch: Dictionary = r["watch"]
 	var foe := World.RoamingParty.new("camp-ambush-%d" % int(world.clock.elapsed), p.position, WorldCamp.AMBUSH_FACTION)
 	# T19: earned for the night itself, not for the fight — losing it ends the
 	# save's road anyway, and being woken by bandits is the achievement.

@@ -634,7 +634,7 @@ func _new_game(forced := 0) -> void:
 			focus_cam([a.id])
 		if a.team == "foe" and t is Object and "pos" in t:
 			_attack_fx(a, t, v)
-	_slot_max.clear()   # the combatant only tracks slots left; the pips need the max
+	_slot_max.clear()   # a foe with no sheet only tracks slots left; its pips take this as the max
 	for c in cb.combatants:
 		_slot_max[c.id] = c.slots.duplicate()
 	_deploy_pick = ""
@@ -2134,15 +2134,14 @@ func _stop_viewing() -> void:
 # T29 spellcaster resources: one pip row per slot level the caster actually has
 # (● unspent, ○ spent) plus every feature pool by name, replacing the old
 # "slots 2/3" counter that only ever reported level-1 slots.
+# Audit 4.1: the rows are Adapter.combat_slot_table(), whose maximum is the
+# hero's SHEET, not what they walked on with — a slot spent two fights ago is
+# an empty pip, and a level with nothing left is still a row. Only a foe with no
+# sheet falls back to the count it started this fight with.
 func _resources(c) -> String:
 	var bits: Array = []
-	var maxes: Array = _slot_max.get(c.id, [])
-	for i in c.slots.size():
-		var mx: int = int(maxes[i]) if i < maxes.size() else int(c.slots[i])
-		if mx <= 0:
-			continue
-		var left: int = int(c.slots[i])
-		bits.append("L%d %s%s" % [i + 1, "●".repeat(left), "○".repeat(maxi(0, mx - left))])
+	for row in Adapter.combat_slot_table(c, _slot_max.get(c.id, [])):
+		bits.append(Adapter.slot_pips(row))
 	for pid in c.pools:
 		var p: Dictionary = c.pools[pid]
 		if int(p["max"]) > 0:
