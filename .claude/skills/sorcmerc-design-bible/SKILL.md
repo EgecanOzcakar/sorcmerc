@@ -80,7 +80,8 @@ These are direction, not description. The code still does the old thing until ea
 - **Sorcerer rarity is fiction only.** No recruit odds and no social mechanic. "Uncommon but not rare" lives in the writing.
 - **Sorcerer features follow 2024 RAW.** Implement sorcery points, Font of Magic (slot/point conversion), Metamagic and Innate Sorcery as combat mechanics. Until then, don't let `core/manual.gd` promise them.
 - **Enemy magic is rare and named.** Ordinary enemies keep their limited-use innate abilities. Slot-based casters appear only as an occasional elite or boss, so an enemy caster is an event.
-- **Factions post contracts.** Factions and towns offer merc jobs (escort, clear a lair, raid a rival), and standing with each faction decides who hires you. Full faction warfare stays deferred.
+- **Factions post contracts** (built: `core/contracts.gd`). Every job carries its `issuer`, who is credited wherever it is handed in. War work waits for Known and neutral opinion, and regard pays up to +25%.
+- **The player and the factions can fight each other** (the owner's call, 2026-09-24). This lifts the "never civilized-vs-civilized" rule: first rival-raid contracts, then NPC faction warfare. Neither is built yet.
 - **Armor stays 5e AC.** No damage split, no durability.
 - **Art stays 3D.** Rigged Meshy figures in the house prompt style. The 2D cutout plan is dropped.
 - **Slots are scarce by the rest rules, not the tables.** Keep the 2024 slot tables and fix only the paladin/ranger level-1 gap in the export. Open-world encounters are to be sized **as if the party had every slot back**, as sites already do. Spending a slot must never buy an easier next fight. Wounds may still thin a fight. See the `sorcmerc-balancing` skill.

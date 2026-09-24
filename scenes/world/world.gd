@@ -94,6 +94,7 @@ const Downtime = preload("res://core/downtime.gd")
 const Lodge = preload("res://core/lodge.gd")   # the company's house: the square's door, the lodge page
 const Catalog = preload("res://core/rules/catalog.gd")   # the trainer's feat names
 const Posting = preload("res://core/quest_posting.gd")
+const Contracts = preload("res://core/contracts.gd")
 const Loot = preload("res://core/loot.gd")
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
@@ -3620,8 +3621,9 @@ func _turn_in(quest: Dictionary) -> void:
 		# to. The board's second payout, and the one that is not gold.
 		var lead: Dictionary = Rumors.free_lead(_visit["settlement"], party, world)
 		_build_visit_panel()
-		_say("%s — paid, +%d ◉, +%d XP. They will remember it.%s" % [
-			quest["title"], reward, reward * Quest.XP_PER_GOLD,
+		var who := String(quest.get("issuer", _visit["settlement"].faction))
+		_say("%s — paid, +%d ◉, +%d XP. The %s will remember it.%s" % [
+			quest["title"], reward, reward * Quest.XP_PER_GOLD, Ladder.people(who),
 			("  " + String(lead["text"])) if not lead.is_empty() else ""])
 		_autosave()
 
@@ -4733,6 +4735,29 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 		pay.text = "%s — work pays +%d %%." % [Ladder.title_cap(), int(round(Ladder.PAY_PER_TITLE * 100 * Ladder.title_index()))]
 		pay.theme_type_variation = "Dim"
 		box.add_child(pay)
+	# Contracts: what this people's regard is worth on the purse, when it is
+	# worth anything (core/contracts.gd pay_mult).
+	var regard: int = int(round((Contracts.pay_mult(s.faction) - 1.0) * 100.0))
+	if regard != 0:
+		var liked := Label.new()
+		liked.text = "The %s' regard — their work pays %+d %%." % [Ladder.people(s.faction), regard]
+		liked.theme_type_variation = "Dim"
+		box.add_child(liked)
+	# Contracts they will not hand you yet, and why — up here with the other
+	# standing lines, where a scrolled list cannot hide it, and as a note rather
+	# than a greyed Take: the robots press the first "Take" they find, and a job
+	# you cannot take is not a job on the board. Only the board's own kinds; a
+	# specialist's order would say so at its own counter.
+	var here: Array = Visit.services(s)
+	for c in Posting.closed(s, here):
+		if not Posting.counters_for(s, here, String(c["kind"])).any(func(k): return BOARD_COUNTERS.has(k)):
+			continue
+		var note := Label.new()
+		note.text = String(c["why"])
+		note.theme_type_variation = "Dim"
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.custom_minimum_size = Vector2(VISIT_PANEL_W - 40, 0)
+		box.add_child(note)
 	if s.raided_by != "":
 		var raider = Raids.lair_of(world, s.raided_by)
 		var hit := Label.new()
@@ -4852,9 +4877,11 @@ func _counter_offers(s) -> Dictionary:
 func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 	var tier: int = int(offer.get("chain_tier", 0))
 	var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
+	var who := String(offer.get("issuer", ""))
 	_trade_row(rows, "%s%s" % [offer["title"], tag], "Take", _take_quest.bind(offer), false,
 		Icons.scene_art("quest-" + String(offer.get("kind", "")), null),
-		"Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0)))
+		("For the %s · " % Ladder.people(who) if who != "" else "")
+		+ "Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0)))
 
 # Issue #33: the label wraps. Without that its minimum width is the whole
 # string, and a job with a long title pushed the row — and with it the counter,
