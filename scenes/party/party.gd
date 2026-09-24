@@ -844,8 +844,9 @@ func _on_create_new() -> void:
 	add_child(overlay)
 	var creator = load(CREATOR_SCENE).instantiate()
 	# A hero created once the party is under way joins at the level the party is
-	# playing at, not at 1 — the creator asks for every choice those levels bring.
-	creator.set_start_level(party.active_max_level())
+	# playing at, and the first hero of a run at Leveling.START_LEVEL — the
+	# creator asks for every choice those levels bring.
+	creator.set_start_level(party.join_level())
 	overlay.add_child(creator)
 	creator.character_created.connect(func(ch):
 		# add_member refuses a duplicate id, and used to refuse it silently: the

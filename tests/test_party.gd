@@ -256,11 +256,13 @@ func test_overworld_figure() -> void:
 	p.overworld_figure = "not-an-id-and-not-a-class"
 	check(p.overworld_pick() == null, "so is pure nonsense — no crash")
 
-# The level a hero created now would join at (scenes/creator/creator.gd's
-# start_level): the highest among the <= 4 who fight, and 1 while nobody does.
+# The level the party plays at: the highest among the <= 4 who fight, and 1
+# while nobody does. A hero created now joins at join_level(), which floors it
+# at Leveling.START_LEVEL (scenes/creator/creator.gd's start_level).
 func test_active_max_level() -> void:
 	var p := Party.new()
-	check(p.active_max_level() == 1, "an empty party still starts a hero at level 1")
+	check(p.active_max_level() == 1, "an empty party plays at level 1")
+	check(p.join_level() == 2, "...and a hero created for it joins at START_LEVEL, 2")
 	var roster := Party.demo_roster()
 	for ch in roster:
 		p.add_member(ch)

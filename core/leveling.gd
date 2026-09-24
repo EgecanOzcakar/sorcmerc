@@ -29,6 +29,14 @@ const MAX_LEVEL := 20
 # in, the signature feature is on the sheet, and the build reads as that class
 # rather than as a dip. Same number milestones() already calls level_5 at.
 const VETERAN_LEVEL := 5
+# The level a brand-new hero starts at (the owner's call, 2026-09-24). Not 1:
+# the heartland is levels 1-3 (core/regions.gd), and a party that starts at 1
+# spends its first fights on a rung with nothing in it, while one that starts at
+# 3 (the presets' old level) has already outgrown the heartland on day one. At 2
+# the road home is worth one real level, the one that brings the subclass, and
+# the marches open when it is taken. Handed out like any catch-up level: the
+# XP is banked, but none of it is lifetime XP (grant_levels, below).
+const START_LEVEL := 2
 
 static func xp_for_level(level: int) -> int:
 	var l: int = clampi(level, 1, MAX_LEVEL)
