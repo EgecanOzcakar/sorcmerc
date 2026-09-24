@@ -41,6 +41,31 @@
 # Fights are shorter (7-8 rounds, was 9-10) with fewer bodies: the thing the
 # movement fix bought is a faster fight at the same win rate.
 #
+# RE-MEASURED 2026-09-24: the RULER moved, NO KNOB HERE DID. The party
+# autopilot every number in this header was taken with used to swing once and
+# spend a Bonus Action only by accident (Rage, Second Wind): Extra Attack went
+# unswung, no monk flurried, no rogue hid or dashed, no cleric put up Shield of
+# Faith. core/ai.gd now spends every swing and a Bonus Action wherever one is
+# reasonable (test_autopilot). This test, 200 seeds a tier (level 8: 150), back
+# to back on master (0e890f4) and the branch:
+#                 master            branch
+#   L3 easy    4.1 foes 96.5%    4.1 foes 96.5%    0.0
+#   L3 normal  3.8 foes 90.0%    3.8 foes 93.0%   +3.0
+#   L3 hard    4.0 foes 79.5%    4.0 foes 81.5%   +2.0
+#   L8 easy    5.7 foes 87.3%    5.7 foes 96.0%   +8.7
+#   L8 normal  5.8 foes 78.7%    5.8 foes 84.0%   +5.3
+#   L8 hard    6.0 foes 58.7%    6.0 foes 79.3%  +20.6
+#   shrine     3.5 foes 77.0%    3.5 foes 80.0%   +3.0
+#   boss pool  70.0%             72.0%            +2.0
+# Level 3 has no Extra Attack and barely moves. Level 8 is the Extra Attack the
+# old ruler threw away — which every player takes — so the level-8 column was
+# measuring a party weaker than anyone plays. It read level 8 as HARDER than
+# the targets (hard 58.7% against 75); with every swing taken it lands on them
+# (96.0 / 84.0 / 79.3 against 95 / 85 / 75). Whether any band above level 5
+# still needed CURVE/TIER moved was settled the same day with sweep_regions'
+# in-band curve (core/regions.gd): 93.8-100% from level 3 to 15 at easy, on
+# target everywhere. Nothing here moved.
+#
 # RE-MEASURED 2026-09-16 (T94), and NO KNOB HERE MOVED. T94 gave the bestiary
 # the defences its own catalog had always carried (damage resistance / immunity /
 # vulnerability and condition immunity, dropped on the floor until then — see

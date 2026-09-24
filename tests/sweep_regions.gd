@@ -21,8 +21,11 @@ const Scaler = preload("res://core/scaler.gd")
 const Presets = preload("res://core/presets.gd")
 const Regions = preload("res://core/regions.gd")
 
-# [party level, content level] — the six rows of the published table
-const CELLS := [[3, 3], [10, 10], [6, 3], [10, 3], [3, 6], [3, 10]]
+# [party level, content level] — the rows of the published table: the in-band
+# curve (party and content at the same level, 3 to 15), then one band back and
+# one band out
+const CELLS := [[3, 3], [5, 5], [6, 6], [8, 8], [10, 10], [12, 12], [15, 15],
+	[6, 3], [10, 3], [3, 6], [3, 10]]
 
 func _init() -> void:
 	var seeds := int(OS.get_environment("SEEDS")) if OS.get_environment("SEEDS") != "" else 80

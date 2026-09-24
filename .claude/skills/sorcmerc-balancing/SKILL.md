@@ -66,7 +66,7 @@ Difficulty is a product of **independent multipliers**, each answering its own q
 | Boss win rate | 15–85% | `test_scaler.gd` `BOSS_BAND` |
 | Latest measured (2026-09-24) | 96.5 / 90.0 / 79.5%, about 4 foes | `core/scaler.gd` header |
 | Fight length, level 3 | about 7–8 rounds (level 8 about 9.6) | `core/scaler.gd` header |
-| Within the party's band, easy | level 3: 96.2%; level 10: 81.2% (the ruler party); a built level-10 party: 73.3% | `core/regions.gd` header |
+| Within the party's band, easy | 93.8–100% at every level 3–15 (the ruler party, new autopilot); a built level-10 party: 73.3% (old autopilot) | `core/regions.gd` header |
 | One band too deep | level 3 in the Marches: 17.5%; in the Deeps: 2.5% | `core/regions.gd` header |
 
 - Nothing sets a target for early hit rate or for hits-to-kill. The chat's proposed targets (55–70% early hit rate, 3–5 rounds, 3–4 hits to kill) are **not** in the code. Measured fights run longer than 3–5 rounds, and the original MVP brief aimed for 6–15.
@@ -86,6 +86,8 @@ Difficulty is a product of **independent multipliers**, each answering its own q
 ## Decided 2026-09-24 (owner's calls, not yet built)
 
 Each of these is a balance change. Build each one with a re-run sweep and quote master against the branch.
+
+- **The ruler spends its whole turn (built 2026-09-24).** The party autopilot (`core/ai.gd` `_party_auto`) swings every attack the economy holds and spends a Bonus Action wherever one is reasonable (`_bonus_after`; `tests/test_autopilot.gd`). Every sweep measures with it. Before, it wasted Extra Attack, so every level-5+ measurement read a party weaker than anyone plays and fights looked harder than their targets: level-8 hard went 58.7% → 79.3% (target 75) with no knob moved. Re-measured the same day with `sweep_regions`' in-band curve: 93.8–100% at easy from level 3 to 15, on target everywhere, so no knob moved. Quote numbers taken before 2026-09-24 as old-ruler numbers.
 
 - **Slot tables stay 2024 RAW.** Fix only the export's data gap: paladin and ranger get 2 level-1 slots, as the 2024 PHB does. This moves the level-1 and level-2 numbers for those two classes, so re-run `test_scaler`.
 - **Built: the open world stops pricing spent slots.** `WorldThreat.slot_hold()` sizes a road fight off the party **with every slot back**, as `core/site.gd` already did for sites, and wounds still thin it. Measured with `tests/sweep_spent_slots.gd` (level-3 presets, easy, 200 seeds): a party with no slots left went from 3.3 foes and 100% wins to 4.0 foes and 94.5%. At 50% HP it went from 99.5% to 90.0%. A fresh party is unchanged at 99.5%.

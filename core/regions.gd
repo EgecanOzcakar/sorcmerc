@@ -351,6 +351,30 @@ static func ref_score(level: int) -> float:
 # as a lockout landing every round (CTRL_WEIGHT * share) while the party
 # autopilot never casts a spell without dice at all, and a concentration lock
 # holds one target at a time.
+# Every table above was taken with the old party autopilot, which never swung
+# its Extra Attack and spent a Bonus Action only by accident. It does both since
+# 2026-09-24 (core/ai.gd). RE-MEASURED that day, tests/sweep_regions.gd (80
+# seeds a cell, tier easy, fight seed pinned, the in-band curve added), back to
+# back on master (0e890f4) and the new ruler:
+#
+#   party  content   scale   master   new ruler
+#   lvl 3   lvl 3    x1.00   96.2%     93.8%
+#   lvl 5   lvl 5    x1.00   97.5%     98.8%
+#   lvl 6   lvl 6    x1.00   97.5%     98.8%
+#   lvl 8   lvl 8    x1.00   90.0%     97.5%
+#   lvl 10  lvl 10   x1.00   81.2%     96.2%
+#   lvl 12  lvl 12   x1.00   87.5%    100.0%
+#   lvl 15  lvl 15   x1.00   78.8%     93.8%
+#   lvl 6   lvl 3    x0.44    100%      100%
+#   lvl 10  lvl 3    x0.30    100%      100%
+#   lvl 3   lvl 6    x2.26   17.5%     28.8%
+#   lvl 3   lvl 10   x3.38    2.5%      2.5%
+#
+# The in-band curve is flat on scaler's easy target (95, +-10) from level 3 to
+# 15 now. Under the old ruler levels 10 and 15 fell out of the band below; that
+# was the wasted second swing, not the curve. So NO KNOB MOVED: the retune the
+# owner allowed for (2026-09-24) turned out to be unneeded. One band out is a
+# little less of a wall (28.8%), the deeps at level 3 unchanged.
 # Spell control is settled (the owner's call, 2026-09-24): a control spell is
 # priced as one concentration lock, adding at most +25% to its caster
 # (Power.SPELL_LOCK_CAP, six pricings measured there). The built level-10 party

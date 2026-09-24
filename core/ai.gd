@@ -481,20 +481,42 @@ static func _quarry_runs(cb, m, pcs: Array) -> bool:
 # --- party autopilot (demo / test only) ----------------------------
 
 static func _party_auto(cb, h) -> void:
-	var foes: Array = cb.enemies_of(h)
-	if foes.is_empty():
+	if cb.enemies_of(h).is_empty():
 		return
 	_use_kit(cb, h)
 	_font_up(cb, h)
+	_heal_downed(cb, h)
+	_party_action(cb, h)
+	if h.conscious() and not cb.is_over():
+		_bonus_after(cb, h)
 
-	# healer: a downed ally in range comes first
-	var heal := _pick(cb, h, func(v): return v.has("heal_count") or v["kind"] == "heal_ally")
-	if not heal.is_empty():
-		for c in cb.combatants:
-			if c.team == h.team and c.is_down() and cb.legal_target(h, heal, c):
-				cb.perform(h, heal, c)
-				break
+# A downed ally in range comes first. A Bonus Action heal (Healing Word,
+# Healing Light) before an action one, so the action is still there to swing.
+static func _heal_downed(cb, h) -> void:
+	var heals: Array = cb.available(h).filter(func(v): return v.has("heal_count") or v["kind"] == "heal_ally")
+	heals.sort_custom(func(a, b): return _is_bonus(a) and not _is_bonus(b))
+	for c in cb.combatants:
+		if c.team != h.team or not c.is_down():
+			continue
+		for heal in heals:
+			if _can_aim(cb, h, heal, c) and not cb.perform(h, heal, c).has("error"):
+				return
 
+# Whether `v` reaches ally `c`: an "allies" verb (Mass Healing Word) by its
+# range — legal_target() speaks for one chosen creature, not a burst — a self
+# one only its caster, anything else by legal_target().
+static func _can_aim(cb, h, v: Dictionary, c) -> bool:
+	match String(v.get("targeting", "ally")):
+		"allies": return Hex.distance(h.pos, c.pos) <= int(v.get("range", 1))
+		"self": return c == h
+	return cb.legal_target(h, v, c)
+
+static func _is_bonus(v: Dictionary) -> bool:
+	return String(v.get("cost", "")) == "bonus"
+
+# The action: where to stand, then the one thing the turn is for.
+static func _party_action(cb, h) -> void:
+	var foes: Array = cb.enemies_of(h)
 	# the objective's one rule for where to stand (spec §7), before any chasing
 	var moved := _objective_move(cb, h)
 	var walking: bool = cb.objective_kind() == "breakout"
@@ -505,6 +527,13 @@ static func _party_auto(cb, h) -> void:
 		var t = _nearest(h.pos, foes)
 		_move_by(cb, h, _toward(cb, t.pos))
 		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
+		# still short: a Bonus Action Dash (Cunning Action, Step of the Wind)
+		# buys the rest of the way, and the action is still there to swing
+		if reach.is_empty() and _bonus_basic(cb, h, "dash"):
+			t = _nearest(h.pos, cb.enemies_of(h))
+			if t != null:
+				_move_by(cb, h, _toward(cb, t.pos))
+			reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
 
 	# caster: an area spell (a hex, a corner circle, a line) where it nets 2+ foes
 	# ...that actually hurts: Faerie Fire and friends are the player's call, not a nuke
@@ -534,12 +563,200 @@ static func _party_auto(cb, h) -> void:
 			targets = q
 	targets.sort_custom(func(a, b): return a.hp < b.hp)
 	if cb.in_reach(h, targets[0]):
-		cb.resolve_attack(h, targets[0])
+		_swing_all(cb, h, targets)
 		return
 	# no weapon reach: a single-target attack spell (a cantrip needs no slot)
 	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count"))
 	if not bolt.is_empty() and cb.legal_target(h, bolt, targets[0]):
 		cb.perform(h, bolt, targets[0])
+
+# Every swing the economy holds, re-targeted between them — the Attack action's
+# Extra Attack, and whatever a Bonus Action banked on top (Flurry of Blows, War
+# Priest). One resolve_attack and a return used to leave all of those unswung:
+# a level-5 fighter fought as a level-4 one. `targets` is the preference order
+# (quarry, then the weakest); only the ones still standing in reach are swung at.
+static func _swing_all(cb, h, targets: Array) -> void:
+	for _swing in MAX_SWINGS:
+		if not h.conscious() or cb.is_over():
+			return
+		var live: Array = targets.filter(func(c): return c.conscious() and cb.in_reach(h, c))
+		if live.is_empty():
+			live = cb.enemies_of(h).filter(func(c): return c.conscious() and cb.in_reach(h, c))
+			live.sort_custom(func(a, b): return a.hp < b.hp)
+		if live.is_empty():
+			return
+		if cb.resolve_attack(h, live[0]).has("error"):
+			return
+
+# --- the Bonus Action --------------------------------------------------
+#
+# The autopilot's second thing each turn, wherever one is reasonable. Before
+# this it only ever spent one by accident of _use_kit (Rage, Second Wind): a
+# monk never flurried, a rogue never hid, a cleric never put up Shield of Faith,
+# a bard never inspired anyone. The rules, first that applies:
+#
+#   1. more swings — Flurry of Blows, War Priest, an off-hand attack — when a
+#      foe is still in reach to take them
+#   2. a heal on an ally at a third of their HP or less
+#   3. a Bonus Action spell that lasts (Shield of Faith, Magic Weapon, Hunter's
+#      Mark, Spiritual Weapon) when it is not already up and would not end a
+#      concentration already held; a smite-like one (Ensnaring Strike) on a foe
+#      in reach
+#   4. Bardic Inspiration on an ally in the thick of it; a summon (Invoke
+#      Duplicity) when none stands
+#   5. getting out: at a third of HP or less with a foe adjacent — Misty Step
+#      away, or Disengage and walk, or Patient Defense's Dodge
+#   6. a rogue out of reach of everything hides, for Advantage next turn
+#
+# Every one comes off cb.available(), the list the bar renders, so the 2024
+# rule that a Bonus Action spell and a leveled action spell never share a turn
+# is the resolver's to enforce, not this function's.
+const BONUS_TRIES := 4
+
+static func _bonus_after(cb, h) -> void:
+	for _try in BONUS_TRIES:
+		if int(h.econ.get("bonus", 0)) <= 0 or not h.conscious() or cb.is_over():
+			return
+		if not _one_bonus(cb, h):
+			return
+
+static func _one_bonus(cb, h) -> bool:
+	var bonus: Array = cb.available(h).filter(_is_bonus)
+	if bonus.is_empty():
+		return false
+	var foes: Array = cb.enemies_of(h)
+	var in_reach: Array = foes.filter(func(c): return c.conscious() and cb.in_reach(h, c))
+	var adjacent: Array = foes.filter(func(c): return c.conscious() and Hex.distance(h.pos, c.pos) <= 1)
+	var low: bool = h.hp * 3 <= h.max_hp
+	# 1. more swings
+	if not in_reach.is_empty() and not low:
+		for v in bonus:
+			if v["kind"] == "grant_action" and int(v.get("extra_attacks", 0)) > 0:
+				if not cb.perform(h, v).has("error"):
+					_swing_all(cb, h, in_reach)
+					return true
+			if v["kind"] == "offhand_attack":
+				var t = _weakest(in_reach.filter(func(c): return cb.legal_target(h, v, c)))
+				if t != null and not cb.perform(h, v, t).has("error"):
+					return true
+	# 2. a heal on someone badly hurt (the downed were seen to before the action)
+	for v in bonus:
+		if not (v.has("heal_count") or v["kind"] in ["heal_ally", "heal_self"]):
+			continue
+		var who = _hurt_ally(cb, h, v)
+		if who != null and not cb.perform(h, v, who).has("error"):
+			return true
+	# 3. a spell that lasts, or a smite-like one on a foe in reach
+	for v in bonus:
+		if v["kind"] != "spell":
+			continue
+		if String(v.get("targeting", "")) == "enemy":
+			if v.has("heal_count"):
+				continue
+			var t = _weakest(in_reach.filter(func(c): return cb.legal_target(h, v, c) and not _redundant(c, v)))
+			if t != null and not cb.perform(h, v, t).has("error"):
+				return true
+			continue
+		if not (v.has("buff") or v.has("summon") or v.has("temp_count")):
+			continue   # a heal is rule 2's, when someone needs it; nothing else lasts
+		if v.get("concentration", false) and h.has("concentrating"):
+			continue   # would end the spell already held
+		var t = _buff_target(cb, h, v)
+		if t == null:
+			continue
+		if not cb.perform(h, v, t).has("error"):
+			return true
+	# 4. inspiring an ally, a summon
+	for v in bonus:
+		if v["kind"] == "ally_buff":
+			var t = _buff_target(cb, h, v)
+			if t != null and not cb.perform(h, v, t).has("error"):
+				return true
+		if v["kind"] == "summon" and not foes.is_empty():
+			if not cb.perform(h, v).has("error"):
+				return true
+	# 5. getting out
+	if low and not adjacent.is_empty():
+		for v in bonus:
+			if v["kind"] == "spell" and v.get("teleport", false):
+				var dest = _escape_hex(cb, h, v, foes)
+				if dest != null and not cb.perform(h, v, dest).has("error"):
+					return true
+		if _bonus_basic(cb, h, "disengage"):
+			_move_by(cb, h, _away(foes), true)
+			return true
+		if _bonus_basic(cb, h, "dodge"):
+			return true
+	# 6. a rogue with nothing in reach of it hides for next turn's Advantage
+	if adjacent.is_empty() and _bonus_basic(cb, h, "hide"):
+		return true
+	return false
+
+# A basic verb (dash, disengage, dodge, hide) at Bonus Action cost, performed.
+static func _bonus_basic(cb, h, kind: String) -> bool:
+	for v in cb.available(h):
+		if v["kind"] == kind and _is_bonus(v):
+			return not cb.perform(h, v).has("error")
+	return false
+
+static func _weakest(list: Array):
+	var best = null
+	for c in list:
+		if best == null or c.hp < best.hp:
+			best = c
+	return best
+
+# The ally (or self, for heal_self) at a third of their HP or less that `v`
+# can reach, the worst off first.
+static func _hurt_ally(cb, h, v: Dictionary):
+	if v["kind"] == "heal_self":
+		return h if h.hp * 3 <= h.max_hp else null
+	var best = null
+	for c in cb.combatants:
+		if c.team != h.team or not c.conscious() or c.hp * 3 > c.max_hp:
+			continue
+		if not _can_aim(cb, h, v, c):
+			continue
+		if best == null or float(c.hp) / c.max_hp < float(best.hp) / best.max_hp:
+			best = c
+	return best
+
+# Who a lasting buff goes on: yourself for a self spell; else the ally in the
+# thick of it (the most foes beside them), not already wearing it.
+static func _buff_target(cb, h, v: Dictionary):
+	var tgt: String = String(v.get("targeting", "self"))
+	var status: String = String(v.get("status", "spell:" + String(v.get("spell", v["id"]))))
+	if tgt in ["self", "allies"]:
+		return h if not h.has(status) else null
+	var best = null
+	var best_n := -1
+	for c in cb.combatants:
+		if c.team != h.team or not c.conscious() or c.has(status) or c.has("summoned"):
+			continue
+		if not cb.legal_target(h, v, c):
+			continue
+		var n: int = cb.enemies_of(c).filter(func(e): return e.conscious() and Hex.distance(c.pos, e.pos) <= 1).size()
+		if n > best_n:
+			best_n = n
+			best = c
+	return best
+
+# Where a Misty Step goes to get out: the free hex in range furthest from every
+# foe, or null if none is further than where they stand now.
+static func _escape_hex(cb, h, v: Dictionary, foes: Array):
+	var best = null
+	var best_d := Hex.distance(h.pos, _nearest(h.pos, foes).pos)
+	var r: int = int(v.get("range", 6))
+	for q in range(-r, r + 1):
+		for rr in range(-r, r + 1):
+			var hx: Vector2i = h.pos + Vector2i(q, rr)
+			if Hex.distance(h.pos, hx) > r or cb._cast_refusal(h, v, hx) != "":
+				continue   # the resolver's own test for a teleport's landing
+			var d: int = Hex.distance(hx, _nearest(hx, foes).pos)
+			if d > best_d:
+				best_d = d
+				best = hx
+	return best
 
 # Font of Magic, the autopilot's one use of it: a sorcerer with no slot left at
 # all and the points for one makes the biggest it can afford, so the sweeps see
