@@ -9782,3 +9782,7 @@ its first fight. A custom hero already starts at level 1 and keeps doing so.
   custom hero made after a preset joins at 2, and one made before it at 1.
 - Tested in `test_leveling` (level 2, finished, 100 XP banked, subclass arriving
   at 3).
+- Found on the way: the creator's Review page listed the cantrip Light as
+  "Light armor". Spell names went through `humanize()`, whose `PLAIN` table
+  also holds armour categories under bare ids. Spells now read their name from
+  the catalogue (`Creator.spell_name`); `test_creator` checks both labels.

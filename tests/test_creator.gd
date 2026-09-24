@@ -196,6 +196,8 @@ func _init() -> void:
 	casters_keep_their_simple_weapons()
 	duplicate_lists_merge()
 
+	check(Creator.spell_name("light") == "Light", "the Light cantrip reads as a spell, not as armour (got %s)" % Creator.spell_name("light"))
+	check(Creator.humanize("light") == "Light armor", "...while the armour category keeps its own label")
 	print("test_creator: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 

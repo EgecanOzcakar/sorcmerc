@@ -353,6 +353,11 @@ const PLAIN := {
 	"medium-nonmetal": "Medium armor (non-metal)", "shields-nonmetal": "Shields (non-metal)",
 }
 
+# A spell by its catalogue name. Not humanize(): PLAIN is keyed by bare ids from
+# every table at once, so the cantrip `light` read as "Light armor".
+static func spell_name(id: String) -> String:
+	return String(Catalog.spell(id).get("name", id.replace("-", " ").capitalize()))
+
 static func humanize(id: String) -> String:
 	if PLAIN.has(id):
 		return PLAIN[id]
@@ -1377,11 +1382,11 @@ func _sheet_bbcode(full: bool) -> String:
 		if full:
 			var known: Array = []
 			for k in sc.get("cantrips", []):
-				known.append(Icons.spell_bb(k, humanize(k)))
+				known.append(Icons.spell_bb(k, spell_name(k)))
 			for k in sc.get("known", []):
-				known.append(Icons.spell_bb(k["id"], humanize(k["id"])))
+				known.append(Icons.spell_bb(k["id"], spell_name(k["id"])))
 			for k in sc.get("always_prepared", []):
-				known.append(Icons.spell_bb(k, humanize(k)))
+				known.append(Icons.spell_bb(k, spell_name(k)))
 			if known:
 				s += "  spells: %s\n" % ", ".join(known)
 	if full:

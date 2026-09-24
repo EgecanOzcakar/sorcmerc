@@ -6,6 +6,7 @@
 #     -> docs/shots/audit-title-confirm.png    ...and the confirmation it opens
 #     -> docs/shots/audit-presets-locked.png   Vera and Pike wear the class lock (#200)
 #     -> docs/shots/audit-wizard-shelf.png     a wizard's simple weapons on the shelf (#192)
+#     -> docs/shots/preset-level-2.png        a preset starts a fresh run at level 2
 #     -> docs/shots/audit-town-inn.png         the inn page fits a short window (#201);
 #                                              hub, market and board are written too
 #     -> docs/shots/audit-settings.png         the settings note that points at the title
@@ -60,6 +61,9 @@ func _init() -> void:
 	cr._goto(cr.STEPS.find("Equipment"))
 	await _frames(6)
 	await _save("docs/shots/audit-wizard-shelf.png")
+	cr._load_preset("ilsa")   # a fresh run's preset: level 2, and Light is a spell
+	await _frames(8)
+	await _save("docs/shots/preset-level-2.png")
 	cr.queue_free()
 	await _frames(2)
 
