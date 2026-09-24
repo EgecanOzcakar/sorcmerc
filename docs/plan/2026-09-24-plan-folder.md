@@ -27,6 +27,11 @@ drivers, so a PR would still show as conflicted. The fix is structural:
 - `CLAUDE.md`, `README.md`, and the design-bible and balancing skills now say
   "add a file to `docs/plan/`" where they said "append to
   `docs/expansion-plan.md`".
+- **`.gitignore` had the same problem.** Each dev screenshot script's output
+  folder got its own `shots_<name>/` line at the same spot, so two PRs that
+  each added a shot script conflicted there (#216 and #217 did). One
+  `shots_*/` pattern replaces the eight lines; a new shot script needs no
+  `.gitignore` line.
 
 ### Still open
 
