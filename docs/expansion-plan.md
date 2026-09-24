@@ -10426,3 +10426,14 @@ with Careful Spell.
   as picks; it should grey them or say so.
 - **Sorcerous Restoration** (short-rest points at 5) and **Sorcery Incarnate**
   (two options on one spell at 7) are still flavour.
+
+## The log continues in docs/plan/
+
+**This file takes no new entries.** From 2026-09-24 on, each entry is its own
+file in `docs/plan/` (`YYYY-MM-DD-slug.md`, the same `## Title — subtitle
+(date)` shape with a `### Still open` section). Every pull request appended to
+the end of this one file, so any two open PRs conflicted and each merge left
+the rest needing a hand-merge. `docs/plan/README.md` has the convention;
+`python3 tools/plan_log.py` prints this file and the folder as one log, oldest
+first. `tests/test_plan_entries.gd` fails on a dated section added below this
+one.

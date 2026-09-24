@@ -81,7 +81,7 @@ Difficulty is a product of **independent multipliers**, each answering its own q
 4. Run the sweep **back to back on master and on your branch**, and quote both columns. A number measured against an older base can credit your change with someone else's work.
 5. Prefer fixing the rule over re-tuning `TIER`: "a retune for rules that are now right would only be undone by the next rule that is."
 6. Sweep harnesses: `tests/test_scaler.gd`, `tests/sweep_tier.gd`, `tests/sweep_site_depth.gd`, `tests/sweep_built.gd`, `tests/sweep_range_detail.gd`. Set `SORCMERC_SEED` to replay one fight.
-7. Write the new measurement into the owning file's header and add an entry to `docs/expansion-plan.md`.
+7. Write the new measurement into the owning file's header and add a build-log entry: a new file in `docs/plan/` (`docs/plan/README.md`), never an append to `docs/expansion-plan.md`.
 
 ## Decided 2026-09-24 (owner's calls, not yet built)
 
