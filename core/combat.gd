@@ -571,6 +571,67 @@ func _buff_flag(c, key: String) -> bool:
 			return true
 	return false
 
+# The save DC `v` is cast at by `caster` right now: the sheet's, plus what a
+# buff adds (Innate Sorcery's +1). One function, read by cast() and by the
+# action bar's preview, so the number on the button is the number rolled
+# against — the same rule to_hit_bonus() keeps for a swing.
+# Static, so the bar's static tooltip can ask it too.
+static func spell_dc(caster, v: Dictionary) -> int:
+	var dc := int(v.get("save_dc", caster.save_dc))
+	if String(v.get("kind", "")) == "spell":
+		for id in caster.statuses:
+			var s = caster.statuses[id]
+			if s is Dictionary:
+				dc += int(s.get("spell_dc_bonus", 0))
+	return dc
+
+# What a pool-spending verb costs out of its pool: one use, unless it says
+# otherwise (Font of Magic's slot creation, 2-7 sorcery points a slot).
+static func _pool_cost(v: Dictionary) -> int:
+	return maxi(1, int(v.get("pool_cost", 1)))
+
+# --- Font of Magic (2024) ----------------------------------------------------
+#
+# Two directions, one feature. "to_points" spends a slot of `from_slot` for
+# that many sorcery points and costs no action; "to_slot" is a Bonus Action
+# that spends `pool_cost` points (paid in perform(), as any pool is) and makes
+# one slot of `make_slot`. Neither is casting a spell: no slot rule, no
+# Counterspell. A created slot is an ordinary slot from then on; Adapter's
+# write_back carries one that is left unspent out of the fight (slots_used
+# goes negative) and a long rest clears it, which is RAW's "vanishes when you
+# finish a Long Rest".
+const FONT_POOL := "sorcery-points"
+
+func _font_ok(actor, v: Dictionary) -> bool:
+	match String(v.get("font", "")):
+		"to_slot":
+			var l := int(v.get("make_slot", 0))
+			return l >= 1 and l <= actor.slots.size()
+		"to_points":
+			var l := int(v.get("from_slot", 0))
+			if l < 1 or l > actor.slots.size() or actor.slots[l - 1] <= 0:
+				return false
+			var p: Dictionary = actor.pools.get(FONT_POOL, {})
+			# ponytail: RAW caps the points at the Sorcery Points maximum. A
+			# conversion that would overflow it is refused whole rather than
+			# topped up to the cap, so no slot is ever spent for points it loses.
+			return not p.is_empty() and int(p["cur"]) + l <= int(p["max"])
+	return false
+
+func _font_of_magic(actor, v: Dictionary) -> Dictionary:
+	if String(v.get("font", "")) == "to_slot":
+		var l := int(v["make_slot"])
+		actor.slots[l - 1] += 1
+		log.append("%s shapes %d sorcery points into a level-%d slot." % [actor.cname, _pool_cost(v), l])
+		return {"slot": l}
+	var l := int(v["from_slot"])
+	if not _font_ok(actor, v):
+		return {"error": "no room for the points"}
+	actor.slots[l - 1] -= 1
+	actor.pools[FONT_POOL]["cur"] = int(actor.pools[FONT_POOL]["cur"]) + l
+	log.append("%s burns a level-%d slot into %d sorcery points." % [actor.cname, l, l])
+	return {"points": l}
+
 # A condition applied with duration "round" lasts until the bearer's next turn:
 # one lost turn, never a permanent lockout (nothing else in the engine ends them).
 func _expire_conditions(c) -> void:
@@ -895,7 +956,10 @@ const OFFERABLE := ["heal_self", "heal_ally", "self_buff", "ally_buff", "grant_a
 	# T-summon. A feature that puts a second token on the board — Primal
 	# Companion, Invoke Duplicity. It aims at nothing (targeting "self"): the
 	# arrival hex is the free one nearest its owner, as a spell's summon is.
-	"summon"]
+	"summon",
+	# Font of Magic (2024): a sorcerer's slots and sorcery points, one into the
+	# other. Two directions, one kind — see _font_ok / _font_of_magic.
+	"font_of_magic"]
 
 func _basic(id: String) -> Dictionary:
 	for b in BASIC:
@@ -1036,7 +1100,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 		return false
 	if v.get("once_per", "") == "turn" and actor.econ.get("used", {}).has(v["id"]):
 		return false
-	if v.has("pool") and actor.pool_left(v["pool"]) <= 0 and not _flurry_swap(actor, v):
+	if v.has("pool") and actor.pool_left(v["pool"]) < _pool_cost(v) and not _flurry_swap(actor, v):
 		return false
 	var slot := int(v.get("slot_level", 0))
 	if slot > 0:
@@ -1056,6 +1120,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 			and _free_near(actor.pos) != NOWHERE
 		"attack_modifier", "grant_action": return true
 		"escape": return _grappler_of(actor) != null
+		"font_of_magic": return _font_ok(actor, v)
 	match v.get("targeting", "self"):
 		"enemy": return enemies_of(actor).any(func(e): return legal_target(actor, v, e))
 		"ally": return combatants.any(func(a): return legal_target(actor, v, a))
@@ -1176,9 +1241,9 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 	if v.get("once_per", "") == "turn":
 		actor.econ["used"][v["id"]] = true
 	if v.has("pool") and not swap:
-		if actor.pool_left(v["pool"]) <= 0:
+		if actor.pool_left(v["pool"]) < _pool_cost(v):
 			return {"error": "pool empty"}
-		actor.pools[v["pool"]]["cur"] = actor.pool_left(v["pool"]) - 1
+		actor.pools[v["pool"]]["cur"] = actor.pool_left(v["pool"]) - _pool_cost(v)
 	var slot := int(v.get("slot_level", 0))
 	if kind != "spell" and slot > 0:
 		# Divine Smite (2024) is a spell in all but the button: it spends the
@@ -1229,12 +1294,20 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			# adds a flat bonus to every swing until the fight ends, a Smite is
 			# dice on exactly one of them. Both are self_buffs; the difference is
 			# whether the blow that reads the buff also spends it.
-			actor.statuses[v.get("status", v["id"])] = {
+			var buff := {
 				"bonus_damage": int(v.get("bonus_damage", 0)), "resist": v.get("resist", []),
 				"once": v.get("once", false),
 				"dice_count": int(v.get("dice_count", 0)), "dice_sides": int(v.get("dice_sides", 0)),
 				# duration "rage" lapses on its own (2024 PHB) — see _rage_upkeep
-				"duration": String(v.get("duration", "")), "started_round": round_num, "active_round": round_num}
+				"duration": String(v.get("duration", "")), "started_round": round_num, "active_round": round_num,
+				# Innate Sorcery: what spell_dc() and a spell attack's roll read
+				"spell_dc_bonus": int(v.get("spell_dc_bonus", 0)),
+				"spell_attack_adv": v.get("spell_attack_adv", false)}
+			# A buff with a clock of its own (Innate Sorcery's minute) lapses the
+			# way a condition does, through _expire_conditions.
+			if int(v.get("rounds", 0)) > 0:
+				buff["until_tick"] = _tick() + int(v["rounds"]) * TICK_STRIDE
+			actor.statuses[v.get("status", v["id"])] = buff
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"ally_buff":
 			target.statuses[v.get("status", v["id"])] = {"dice_sides": int(v.get("dice_sides", 6))}
@@ -1249,6 +1322,7 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 				actor.econ["flurry"] = true   # what Hand of Healing may swap into (_flurry_swap)
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"save_effect": return _save_effect(actor, v, target)
+		"font_of_magic": return _font_of_magic(actor, v)
 		"summon":
 			var called = summon(actor, v)
 			if called == null:
@@ -1326,6 +1400,14 @@ func _cast_refusal(caster, v: Dictionary, target) -> String:
 
 # `target` is a Combatant (single / ally) or a direction (cone).
 func cast(caster, v: Dictionary, target) -> Dictionary:
+	# The DC a spell is cast at is stamped onto the verb here, once, so a zone
+	# or a concentration hold that rereads v["save_dc"] later keeps the DC it
+	# was cast with — Innate Sorcery lapsing mid-hold does not soften a Hold
+	# Person already landed.
+	var stamped := spell_dc(caster, v)
+	if stamped != int(v.get("save_dc", caster.save_dc)):
+		v = v.duplicate()
+		v["save_dc"] = stamped
 	# An upcast Hold Person and kin: the player hands over every target they
 	# picked, primary first. A single Combatant still auto-fills the rest
 	# (extra_targets) for the AI and the autopilot.
@@ -1517,8 +1599,13 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 		var rays: int = int(v.get("rays", 1))
 		var hits := 0
 		var total := 0
+		# Innate Sorcery's Advantage. ponytail: the only source of advantage a
+		# spell attack reads — the conditions a weapon swing weighs (prone,
+		# dodging, invisible) still never reach a spell attack. Wire them here
+		# through Dice.combine when a spell-attack sweep can measure it.
+		var mode: int = Dice.ADV if caster != null and _buff_flag(caster, "spell_attack_adv") else Dice.NORMAL
 		for i in rays:
-			var r = Dice.d20(rng)
+			var r = Dice.d20(rng, mode)
 			var crit: bool = r.nat == 20
 			var ray_bonus: int = int(v["attack_bonus"]) \
 				+ int(Traits.roll(caster, "to_hit", self, c, String(v.get("damage_type", "")))["n"])   # #176

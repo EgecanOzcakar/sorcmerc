@@ -22,7 +22,10 @@ const KINDS := ["passive_damage", "self_buff", "ally_buff", "heal_self", "heal_a
 	# T-summon. A second token on the board, run by whoever runs its owner's
 	# side. `summon` is {id, illusion?}; `mult` scales the stat block off the
 	# owner's level, `rounds` puts a clock on it. combat.summon() does the work.
-	"summon"]
+	"summon",
+	# Font of Magic (2024). One authored entry, expanded by verbs_for() into a
+	# button per slot level each way — see _font_verbs and combat._font_of_magic.
+	"font_of_magic"]
 
 # castingTime -> action-economy cost. Anything longer than a Reaction is non-combat.
 const CASTING_TIME := {"Action": "action", "Bonus Action": "bonus", "Reaction": "reaction"}
@@ -158,6 +161,8 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 					s["id"] = "%s@%d" % [fid, lvl]
 					s["label"] = "%s ★%d" % [v["label"], lvl]
 				out.append(s)
+		elif e.has("font") and sheet != null:
+			out.append_array(_font_verbs(String(fid), v, e["font"], sheet))
 		else:
 			out.append(v)
 		# A feature that is two mechanics at once (Assassinate: advantage AND a
@@ -166,6 +171,48 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 		for sub in e.get("also", []):
 			i += 1
 			out.append(_verb_from("%s#%d" % [fid, i], sub, sheet))
+	return out
+
+# Font of Magic, one button per slot level each way (2024 PHB):
+#   "<id>-burn@L"  spend a level-L slot for L sorcery points. No action.
+#   "<id>@slotL"   spend `cost` points for a level-L slot, a Bonus Action, once
+#                  the sorcerer is `min` levels in. The table tops out at 5th,
+#                  as RAW does.
+# A slot level the sheet has none of offers no conversion out of it; the
+# creation table is read at the sorcerer's own level, not the character's.
+# The burn buttons carry an id of their own on purpose: Icons.skill_icon finds
+# no skills/ badge for it and falls to the font_of_magic kind's, so the two
+# directions are two different pictures on the bar. The ★ ends the label, which
+# is where the bar reads a button's corner tier from (scenes/main.gd).
+static func _font_verbs(fid: String, base: Dictionary, font: Dictionary, sheet) -> Array:
+	var out: Array = []
+	var title: String = String(base["label"])
+	var slots: Array = sheet.spellcasting.get("slots", [])
+	for l in range(1, 10):
+		if l - 1 >= slots.size() or int(slots[l - 1]) <= 0:
+			continue
+		var v := base.duplicate(true)
+		v.erase("pool")
+		v.erase("uses")
+		v["id"] = "%s-burn@%d" % [fid, l]
+		v["font"] = "to_points"
+		v["from_slot"] = l
+		v["cost"] = "free"
+		v["label"] = "%s: burn a slot for %d SP ★%d" % [title, l, l]
+		out.append(v)
+	var lvl: int = sheet.class_level(String(font.get("class", "sorcerer")))
+	for row in font.get("create", []):
+		if lvl < int(row["min"]):
+			continue
+		var v := base.duplicate(true)
+		var l := int(row["level"])
+		v["id"] = "%s@slot%d" % [fid, l]
+		v["font"] = "to_slot"
+		v["make_slot"] = l
+		v["pool_cost"] = int(row["cost"])
+		v["cost"] = "bonus"
+		v["label"] = "%s: %d SP for a slot ★%d" % [title, int(row["cost"]), l]
+		out.append(v)
 	return out
 
 # The keys a data/effects/features.json entry may carry that are copied onto the
@@ -187,7 +234,9 @@ const VERB_KEYS := ["trigger", "once_per", "requires", "verbs", "status", "durat
 	# 2026-09-19 (2024 PHB pass): advantage on initiative, Ambusher's
 	# Leap, Hand of Healing's Flurry swap, Stunning Strike's made-save
 	# rider, Parry's melee-only clause, Rage's own clock
-	"init_adv", "first_round_speed_ft", "flurry_swap", "on_save_vex", "melee_only"]
+	"init_adv", "first_round_speed_ft", "flurry_swap", "on_save_vex", "melee_only",
+	# Innate Sorcery (2024): +1 spell save DC, Advantage on spell attacks
+	"spell_dc_bonus", "spell_attack_adv"]
 
 static func _verb_from(fid: String, e: Dictionary, sheet) -> Dictionary:
 		assert(e["kind"] in KINDS, "unknown effect kind \"%s\" on \"%s\"" % [e.get("kind"), fid])

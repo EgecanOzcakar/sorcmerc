@@ -53,7 +53,8 @@ static func _is_warlock(s) -> bool:
 const LONG_REST_ONLY_FEATURES := ["bard-bardic-inspiration", "wizard-arcane-recovery",
 	"beastmaster-primal-companion",   # RAW: the beast's uses come back on a long rest
 	"lightdomain-warding-flare", "warrioropenhand-wholeness-of-body",   # 2024: Long Rest
-	"gloomstalker-dread-ambusher"]    # Dreadful Strike: WIS-mod uses per Long Rest
+	"gloomstalker-dread-ambusher",    # Dreadful Strike: WIS-mod uses per Long Rest
+	"sorcerer-innate-sorcery"]        # 2024: two uses per Long Rest
 const FONT_OF_INSPIRATION_LEVEL := 5
 
 static func _synthetic_regen(pool_id: String, sheet) -> String:
@@ -442,10 +443,14 @@ static func write_back(c, ch) -> void:
 	ch.hp_current = c.hp if c.is_dead() else maxi(1, c.hp)
 	for pid in c.pools:
 		ch.pools[pid] = int(c.pools[pid]["cur"])
+	# Not floored at zero: a slot Font of Magic made in the fight and did not
+	# spend is carried out as a NEGATIVE entry — one more than the sheet's full
+	# set — and every reader already works in "full less used". A long rest
+	# clears slots_used, which is RAW's "vanishes when you finish a Long Rest".
 	var full: Array = _full_slots(c.sheet) if c.sheet else []
 	var used: Array[int] = []
 	for i in full.size():
-		used.append(maxi(0, int(full[i]) - int(c.slots[i])))
+		used.append(int(full[i]) - int(c.slots[i]))
 	ch.slots_used = used
 	ch.dirty()
 

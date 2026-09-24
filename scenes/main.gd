@@ -20,6 +20,7 @@ const ManualOverlay = preload("res://scenes/manual/manual.gd")
 const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Coop = preload("res://core/coop.gd")
+const Combat = preload("res://core/combat.gd")   # spell_dc(), for the static tooltip
 
 # What T5 injects before the scene runs: the live party, the node's spec (empty ->
 # the scaler sizes one) and its difficulty. `result` is resolve_outcome() once the
@@ -1428,6 +1429,7 @@ const KIND_BLURB := {
 	"grant_action": "Gain extra actions this turn.",
 	"save_effect": "The target rolls a saving throw or suffers the effect.",
 	"spell": "Cast the spell.",
+	"font_of_magic": "Font of Magic: burn a spell slot into sorcery points (no action), or spend points on a new slot (a bonus action). A made slot lasts until your next long rest.",
 }
 
 # Prose first (a spell's own SRD text, else the kind blurb), then the resolved
@@ -1468,7 +1470,7 @@ static func _verb_tooltip(h, v: Dictionary) -> String:
 		bits.append("Heals %dd%d%s HP" % [int(v["heal_count"]), int(v.get("heal_sides", 8)),
 			("+%d" % hb) if hb > 0 else ""])
 	if String(v.get("save", "")) != "":
-		bits.append("DC %d %s save%s" % [int(v.get("save_dc", 0)), String(v["save"]).to_upper(),
+		bits.append("DC %d %s save%s" % [Combat.spell_dc(h, v) if v["kind"] == "spell" else int(v.get("save_dc", 0)), String(v["save"]).to_upper(),
 			" for half" if v.get("half_on_save", false) else ""])
 	if not v.get("conditions", []).is_empty():
 		bits.append("Inflicts: %s" % ", ".join(v["conditions"]))
@@ -1575,7 +1577,7 @@ func target_readout(h, c) -> String:
 		var s := int(v.get("heal_sides", v.get("dice_sides", 8)))
 		return "≈%d HP" % int(n * (s + 1) / 2.0 + int(v.get("heal_bonus", v.get("dice_bonus", 0))))
 	if v.get("save", "") != "":
-		return "%d%%" % int(round(cb.save_fail_chance(c, int(v.get("save_dc", h.save_dc)),
+		return "%d%%" % int(round(cb.save_fail_chance(c, Combat.spell_dc(h, v) if v["kind"] == "spell" else int(v.get("save_dc", h.save_dc)),
 			v["save"], v.get("ignores_cover", false), v.get("magical", v["kind"] == "spell"),
 			v.get("conditions", [])) * 100.0))
 	return ""
