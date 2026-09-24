@@ -423,7 +423,7 @@ const ORDINAL := ["first", "second", "third"]
 
 # A win: the bout's purse, a deed with the city's people, the next bout opens;
 # the third is the bracket. A loss: the party is carried out (the screen
-# revives everyone after a lost bout), the house keeps the purse of that bout
+# stands the bout's downed up after a lost bout, Party.revive_downed), the house keeps the purse of that bout
 # (to zero), and the bracket is closed until next week. `purse` is signed.
 # `week` is the bracket's, read before the bout: the fight itself moves the
 # clock, and a bout begun on the week's last evening is still that week's.
