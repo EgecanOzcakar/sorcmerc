@@ -18,6 +18,7 @@ const Creator = preload("res://scenes/creator/creator.gd")
 const Character = preload("res://core/character.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
+const Harness = preload("res://tests/coop_harness.gd")
 
 const SEEDS := 40
 
@@ -64,23 +65,19 @@ func _init() -> void:
 	print("test_coop: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
-# The same steps scenes/main.gd takes, so the guest builds what the host built.
+# The shared lockstep helpers live in tests/coop_harness.gd, so every co-op
+# test builds, wires and presses the same way (tests/test_coop_kits.gd too).
 static func build(setup: Dictionary):
-	return build_with(Coop.party_from(setup), setup)
+	return Harness.build(setup)
 
-# The host's own version of it: the same board and the same spec, from the party
-# object the road has been playing rather than from its JSON.
 static func build_with(party, setup: Dictionary):
-	var sp: Dictionary = setup["spec"]
-	var sd := int(setup["seed"])
-	var board: Dictionary = Encounter.board_for(String(sp.get("theme", "")), sd)
-	var cb = Encounter.build(sp, party.to_combatants(Encounter.starts_for(sp, board, sd)), board)
-	cb.party = party
-	return cb
+	return Harness.build_with(party, setup)
 
-# Over the wire and back: what the other peer actually receives.
 static func wire(d: Dictionary) -> Dictionary:
-	return JSON.parse_string(JSON.stringify(d))
+	return Harness.wire(d)
+
+func choose_turn(cb, h) -> Array:
+	return Harness.choose_turn(cb, h)
 
 var _asked := 0
 var _said_no := 0
@@ -176,67 +173,6 @@ func lockstep_fight(sd: int, prompted := false, objective: Dictionary = {}) -> v
 			if m["t"] == "end_turn" or late.is_over():
 				break
 	check(Coop.state_hash(late) == Coop.state_hash(host), "seed %d: rejoin replays to the same state" % sd)
-
-# A hero's turn as a list of intents: step toward the nearest foe, then every
-# verb the bar would offer that has a legal target, then end. The intents are
-# only *chosen* here — lockstep_fight applies them, host first, and drops the
-# ones the resolver refuses. Wide rather than clever: the point is to push as
-# many verbs through the codec as possible.
-func choose_turn(cb, h) -> Array:
-	var out: Array = []
-	var foes: Array = cb.enemies_of(h)
-	if not foes.is_empty() and h.econ["move_left"] > 0:
-		var near = foes[0]
-		for f in foes:
-			if Hex.distance(h.pos, f.pos) < Hex.distance(h.pos, near.pos):
-				near = f
-		var best: Vector2i = h.pos
-		for hx in cb.move_field(h):
-			if Hex.distance(hx, near.pos) < Hex.distance(best, near.pos):
-				best = hx
-		if best != h.pos:
-			out.append(Coop.move(h, best))
-	var verbs: Array = cb.available(h)
-	verbs.reverse()   # spells and class features before the basic attack, so they get the action
-	for v in verbs:
-		var t = pick_target(cb, h, v)
-		if t == null and v.get("targeting", "self") != "self":
-			continue
-		out.append(Coop.perform(h, v, t))
-	out.append({"t": "end_turn", "hero": h.id})
-	return out
-
-func pick_target(cb, h, v: Dictionary):
-	match v.get("targeting", "self"):
-		"enemy", "ally":
-			var want := int(v.get("targets", 1))
-			var picked: Array = []
-			for c in cb.combatants:
-				if cb.legal_target(h, v, c):
-					picked.append(c)
-					if picked.size() == want:
-						break
-			if picked.is_empty():
-				return null
-			return picked[0] if want == 1 else picked
-		"direction":
-			for d in Hex.DIRS:
-				var wedge: Array = Hex.cone(h.pos, d, int(v.get("radius", 2)))
-				if cb.enemies_of(h).any(func(c): return c.pos in wedge):
-					return d
-			return null
-		"hex", "line":
-			for c in cb.enemies_of(h):
-				if cb.legal_area(h, v, c.pos):
-					return c.pos
-			return null
-		"corner":
-			for c in cb.enemies_of(h):
-				for k in 6:
-					if cb.legal_area(h, v, Hex.corner(c.pos, k)):
-						return Hex.corner(c.pos, k)
-			return null
-	return null
 
 # A guest levels their hero on the real level-up screen, against a mirrored
 # copy; the steps it records, sent as JSON, make the host's copy identical.
