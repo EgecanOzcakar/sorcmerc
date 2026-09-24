@@ -9827,6 +9827,39 @@ Frontier (built for level 9), and the band reads "levels 6-9". Proof:
   ceiling (cap every band at the preset party's score for the party's own
   level, not only at the band's top), not the seams.
 
+## Paladins and rangers cast from level 1 (2026-09-24)
+
+The owner's call from the skills pass: keep the 2024 slot tables as the book
+has them, and fix the one row the export got wrong. `data/classes.json` carried
+the 2014 half-caster table. A paladin and a ranger had no slots at level 1, so
+a level-1 paladin picked spells in the creator and could never cast them. The
+ranger's Spellcasting itself sat at level 2.
+
+The fix lives in `tools/fill_levels.py` beside the other hand-filled level
+tables, so `--check` keeps it applied after any future edit:
+
+- `CLASS_SLOTS`: level 1 is `[2]` for both classes, two 1st-level slots. Levels
+  2–20 of both tables were compared against the book and already matched.
+- `CLASS_GRANT_MOVES`: the ranger's `spellcasting` grant and its spell pick
+  (`spell-choice:class:ranger:0`) move from level 2 to level 1. That is the
+  paladin's existing shape. Choice keys are unchanged, so a saved ranger keeps
+  its pick.
+
+Balance: the level-3 preset party that every win-rate sweep uses contains no
+paladin or ranger, and levels 2–20 are unchanged, so no measured number moves.
+Only a hero *created* at level 1 as a paladin or ranger gains anything: two
+slots. Ready-made heroes start at level 2, where the table was already right.
+
+`test_rules`: paladin and ranger at levels 1/2/3 have 2/2/3 first-level slots,
+and a level-1 one carries both into a fight (`Adapter.slots_left`). Not visual.
+
+### Still open
+
+- The rest of the 2024 half-caster level 1 is still 2014-shaped in places.
+  Divine Smite is a level-2 feature here, where 2024 makes it the always-prepared
+  *Divine Smite* spell. The ranger's Favored Enemy (free Hunter's Mark casts) is
+  catalogue text. Neither blocks casting at level 1.
+
 ## Spent slots no longer buy an easier road fight (2026-09-24)
 
 The owner's call from the skills pass: **wounds thin a fight, spent slots do
