@@ -21,6 +21,7 @@ const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Coop = preload("res://core/coop.gd")
 const Combat = preload("res://core/combat.gd")   # spell_dc(), for the static tooltip
+const Active = preload("res://core/active_effects.gd")
 
 # What T5 injects before the scene runs: the live party, the node's spec (empty ->
 # the scaler sizes one) and its difficulty. `result` is resolve_outcome() once the
@@ -117,6 +118,11 @@ var _figures
 @onready var _actor := RichTextLabel.new()
 @onready var _buttons := GridContainer.new()
 @onready var _bscroll := ScrollContainer.new()
+@onready var _fx := HFlowContainer.new()   # what is riding on the bar's hero (core/active_effects.gd)
+@onready var _fxscroll := ScrollContainer.new()
+const FX_ROWS := 2   # the strip's fixed height, in chip rows; more than that scrolls
+const FX_ROW_H := 30.0
+var _fx_sig := ""
 @onready var _logbox := RichTextLabel.new()
 @onready var _cap := Label.new()
 @onready var _logwrap := PanelContainer.new()
@@ -384,9 +390,25 @@ func _ready() -> void:
 	# T29: the row wraps, and once it's wrapped past BUTTON_ROWS it scrolls —
 	# a caster with 20 verbs used to push the rest off the bottom of the screen.
 	_bscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_bscroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_bscroll.add_child(_buttons)
-	col.add_child(_bscroll)
+	# The effect strip rides beside the buttons, in the room the fixed row
+	# leaves to its right: the one place a player is always looking when they
+	# choose what to press, and the only place a buff is said for as long as
+	# it lasts (see _show_effects).
+	var barrow := HBoxContainer.new()
+	barrow.add_theme_constant_override("separation", 14)
+	barrow.add_child(_bscroll)
+	# Held at FX_ROWS tall whatever it carries, the way the actor line is held
+	# (#91): a buff arriving must not shove the board up.
+	_fxscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_fxscroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fx.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fx.add_theme_constant_override("h_separation", 5)
+	_fx.add_theme_constant_override("v_separation", 4)
+	_fxscroll.add_child(_fx)
+	_fxscroll.custom_minimum_size.y = (FX_ROW_H * FX_ROWS + 4.0) * Settings.chrome_scale()
+	barrow.add_child(_fxscroll)
+	col.add_child(barrow)
 
 	set_process(true)
 	_apply_ui_scale()
@@ -1109,6 +1131,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	_submenu_page = 0
 	_tier_spell = ""
 	_set_buttons(_slotted(h, _menu_entries(h)["opts"]))
+	_show_effects(h)   # a bar rebuilt after a press: what that press spent or set
 	_paint_order_aim()   # aim dropped: clear any highlight it left on the strip
 	_board.queue_redraw()
 
@@ -1152,6 +1175,13 @@ func _menu_entries(h) -> Dictionary:
 		if _armed == String(v.get("id", "")):
 			meta["armed"] = true
 		meta["disabled"] = not on
+		# What a buff or condition on this hero does to THIS button — ADV from a
+		# Hide, DIS from Poisoned, ✦ where an armed Metamagic will ride. The
+		# mark goes on the face, the reason at the head of the popup.
+		var fx: Array = Active.marks(cb, h, v)
+		if not fx.is_empty():
+			meta["fx"] = fx
+			tip = label + "\n" + "\n".join(fx.map(func(m): return String(m["why"]))) + "\n\n" + _verb_tooltip(h, v)
 		var entry: Array
 		match v.get("targeting", "self"):
 			"enemy", "ally":
@@ -1255,6 +1285,12 @@ func _slotted(h, opts: Array) -> Array:
 		var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
 		if s in LIST_SLOTS and mine.size() > 1:   # one thing to pick from is no pick: the key fires it
 			var meta := _mark(_slot_icon(s), "▸")
+			# A mark inside the list shows on the list's own button too: an
+			# armed Quickened Spell is no use if you have to open [2] to see it.
+			for o in mine:
+				if o[3].has("fx"):
+					meta["fx"] = o[3]["fx"]
+					break
 			meta["disabled"] = mine.is_empty() or (live == 0 and not _viewing)
 			meta["key"] = str(SLOTS.find(s) + 1)
 			var tip := "%s\n%s" % [SLOT_NAMES[s], ("Nothing to pick from." if mine.is_empty()
@@ -1833,6 +1869,9 @@ func _set_buttons(opts: Array) -> void:
 			b.custom_minimum_size = BTN_SIZE * u
 			_chip(b, hotkey, Control.PRESET_BOTTOM_RIGHT, Icons.COL_HEAD, u)
 			_chip(b, String(meta.get("tier", "")), Control.PRESET_TOP_LEFT, Icons.COL_GOLD, u)
+			if meta.has("fx"):
+				var fx: Array = meta["fx"]
+				_fx_mark(b, " ".join(fx.map(func(m): return String(m["text"]))), _tone_color(String(fx[0]["tone"])), u)
 		else:
 			# no art in this build: the pre-badge bar, verbatim
 			var glyph: String = String(meta.get("glyph", ""))
@@ -1872,6 +1911,36 @@ func _set_buttons(opts: Array) -> void:
 			b.tooltip_text = tip   # native hover popup — the name, then what it does
 		_buttons.add_child(b)
 	_apply_ui_scale()
+
+# What an effect does to this button, loud enough to see without hovering: the
+# badge framed in the effect's colour and a filled pill on its top-right
+# corner ("ADV", "DIS", "✦", "+2d8"). The popup says why (_menu_entries).
+func _fx_mark(b: Button, text: String, col: Color, u: float) -> void:
+	var frame := Panel.new()
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var edge := StyleBoxFlat.new()
+	edge.bg_color = Color(0, 0, 0, 0)
+	edge.border_color = col
+	edge.set_border_width_all(maxi(2, int(2 * u)))
+	edge.set_corner_radius_all(int(5 * u))
+	frame.add_theme_stylebox_override("panel", edge)
+	b.add_child(frame)
+	frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var pill := Label.new()
+	pill.text = text
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill.add_theme_font_size_override("font_size", int(12 * u))
+	pill.add_theme_color_override("font_color", Icons.COL_INK)
+	var box := StyleBoxFlat.new()
+	box.bg_color = col
+	box.set_corner_radius_all(int(4 * u))
+	box.content_margin_left = int(4 * u)
+	box.content_margin_right = int(4 * u)
+	box.content_margin_top = 0
+	box.content_margin_bottom = 0
+	pill.add_theme_stylebox_override("normal", box)
+	b.add_child(pill)
+	pill.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, int(-4 * u))
 
 # A corner chip on a badge button: the hotkey, or an upcast tier. A Label child
 # rather than the Button's own text, because Button lays its text out next to
@@ -1918,7 +1987,65 @@ func _refresh() -> void:
 		_actor.text = "[b]%s[/b] — your friend's turn.  Click one of yours to look at their sheet." % (cur.cname if cur else "?")
 	elif _mode == "idle" and not _viewing:
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
+	if not _viewing:
+		_show_effects(cur if cur != null and cur.team == "party" and cur.conscious() else null)
 	_board.queue_redraw()
+
+# --- the effect strip ------------------------------------------------------
+#
+# Beside the action bar: one chip per buff, hindrance or held spell on the
+# hero whose bar it is (core/active_effects.gd says what they are and what they
+# do). Edges first in green, what you are holding up in verdigris, what hurts
+# you in red; the clock says how long ("3 rounds", "next attack"), the popup
+# says what it does. A foe's turn clears it — nothing on it is theirs.
+func _show_effects(c) -> void:
+	var chips: Array = Active.of(cb, c) if c != null and cb != null else []
+	var sig := var_to_str([c.id if c != null else "", chips.map(func(x): return [x["id"], x["label"], x["clock"], x["tone"]]),
+		Settings.chrome_scale()])
+	if sig == _fx_sig:
+		return
+	_fx_sig = sig
+	for n in _fx.get_children():
+		_fx.remove_child(n)
+		n.queue_free()
+	var u := Settings.chrome_scale()
+	_fxscroll.custom_minimum_size.y = (FX_ROW_H * FX_ROWS + 4.0) * u
+	for x in chips:
+		_fx.add_child(_effect_chip(x, u))
+
+func _effect_chip(x: Dictionary, u: float) -> PanelContainer:
+	var col := _tone_color(String(x["tone"]))
+	var box := Icons.box(Color(col, 0.12), col.darkened(0.15), 4, int(7 * u), int(2 * u))
+	box.border_width_left = int(3 * u)
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", box)
+	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", int(5 * u))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lbl := Label.new()
+	lbl.text = String(x["label"])
+	lbl.add_theme_font_size_override("font_size", int(15 * u))
+	lbl.add_theme_color_override("font_color", col.lightened(0.25))
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(lbl)
+	if String(x["clock"]) != "":
+		var clk := Label.new()
+		clk.text = String(x["clock"])
+		clk.add_theme_font_size_override("font_size", int(12 * u))
+		clk.add_theme_color_override("font_color", Icons.COL_MUTED)
+		clk.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(clk)
+	p.add_child(row)
+	p.tooltip_text = "%s%s\n%s" % [x["label"], (" — " + String(x["clock"])) if String(x["clock"]) != "" else "", x["detail"]]
+	return p
+
+static func _tone_color(tone: String) -> Color:
+	match tone:
+		Active.EDGE: return Icons.COL_PARTY
+		Active.HINDRANCE: return Icons.COL_FOE
+		Active.HOLD: return Icons.COL_ACCENT
+	return Icons.COL_GOLD   # mixed
 
 # --- #72: looking at a party member off their turn ------------------------
 #
@@ -1939,6 +2066,7 @@ func view_hero(c) -> void:
 	_build_hero_menu(c)
 	_build_order_strip()
 	var res := _resources(c)
+	_show_effects(c)
 	_actor.text = "%s    [i]not their turn[/i]    AC %d    %s%s" % [
 		"[b]%s[/b]" % c.cname, cb.effective_ac(c), _hp_bb(c), ("    " + res) if res != "" else ""]
 

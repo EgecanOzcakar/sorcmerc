@@ -67,6 +67,7 @@ When `test_coop_kits` fails, it names the intent it drifted on. Reproduce it wit
 
 - [ ] New combat state: in `statuses`, `econ` or `pools`, or added to `Coop.state_hash`; no Callables or clock values in payloads.
 - [ ] New verbs: unique ids; `perform()` refuses before spending; `test_coop_kits` passes.
+- [ ] New status: the action bar has words for it. It lands in a family in `core/active_effects.gd`, or in its `HIDDEN` list on purpose; `test_active_effects` fails on one that falls through.
 - [ ] New Character or party fields: in `CharacterSave` / `Coop.setup_for`, and they default when missing.
 - [ ] New pack vocabulary: documented in `docs/modding.md`, snapshot regenerated, canary extended if it matters.
 - [ ] Nothing removed or renamed that a pack can write or name, unless it's a declared API bump.

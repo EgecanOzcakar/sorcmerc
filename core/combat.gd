@@ -676,6 +676,15 @@ static func _careful_count(caster) -> int:
 
 # Which option this cast takes, "" if none can apply (it stays armed).
 func _take_metamagic(caster, v: Dictionary) -> String:
+	var opt := _metamagic_option(caster, v)
+	if opt == "":
+		return ""
+	log.append("  (%s)" % String(caster.statuses[METAMAGIC].get("label", opt)))
+	caster.statuses.erase(METAMAGIC)
+	return opt
+
+# The armed option `v` (already through _cast_view) would take, "" if none.
+func _metamagic_option(caster, v: Dictionary) -> String:
 	var opt := _armed(caster)
 	var takes := false
 	match opt:
@@ -684,11 +693,14 @@ func _take_metamagic(caster, v: Dictionary) -> String:
 		"twinned": takes = _twin_step(v) > 0 and String(v.get("targeting", "")) == "enemy"
 		"careful": takes = String(v.get("save", "")) != "" and String(v.get("targeting", "")) in AREA_KINDS
 		"seeking": takes = v.has("attack_bonus")
-	if not takes:
+	return opt if takes else ""
+
+# The same question for a bar button, before anything is cast: which armed
+# option would ride on casting `v` now. Asks nothing but the rule, spends nothing.
+func metamagic_for(caster, v: Dictionary) -> String:
+	if String(v.get("kind", "")) != "spell":
 		return ""
-	log.append("  (%s)" % String(caster.statuses[METAMAGIC].get("label", opt)))
-	caster.statuses.erase(METAMAGIC)
-	return opt
+	return _metamagic_option(caster, _cast_view(caster, v))
 
 func _refund_metamagic(c) -> void:
 	var s = c.statuses.get(METAMAGIC)
@@ -1949,6 +1961,12 @@ func _zone_touch(c) -> bool:
 # exhaustion is the odd shape: {"level": N} with per-level numbers, scaled here.
 
 func _cond_effects(c) -> Array:
+	return cond_sources(c).map(func(p): return p[1])
+
+# The same, with the status each effect came from: [[status id, effect], ...].
+# core/active_effects.gd reads it to say on the action bar WHY a swing has
+# Advantage, from exactly the entries the roll itself weighs.
+func cond_sources(c) -> Array:
 	var out: Array = []
 	for id in c.statuses:
 		if id == "dodging" and not _dodging(c):
@@ -1969,9 +1987,9 @@ func _cond_effects(c) -> Array:
 			var scaled := {}
 			for k in e["per_level"]:
 				scaled[k] = int(e["per_level"][k]) * lvl
-			out.append(scaled)
+			out.append([String(id), scaled])
 		else:
-			out.append(e)
+			out.append([String(id), e])
 	return out
 
 func hexes_from_ft(ft: int) -> int:
