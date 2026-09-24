@@ -9688,3 +9688,76 @@ more goblin hit).
   owner's board shows a different gap, it wants that board's seed.
 - A hero at 0 HP between fights still can't be stabilised by Medicine or
   Spare the Dying. There's no verb for it; Help (First Aid) and healing do it.
+
+## Each country keeps its own level range — the band pin (2026-09-24)
+
+The owner's call on the regions exponent, which was the last open item under
+*The owner's calls on the audit*: "keep level scaling in between the zones. so
+heartlands shouldn't scale beyond its max level. that way keep regions stick to
+their own scalers."
+
+What `Regions.power_scale` did: when the party's level was outside a band, it
+multiplied the budget by (ref_score(band level) / ref_score(party level))^CURVE.
+That's a ratio of two *ruler* parties (the presets), applied to the real one.
+Any party that isn't the ruler brought its difference across the border:
+
+- A built level-10 party (choices made, full prepared list) prices at 1.32× the
+  ruler. It met 1.32× of the Heartland's level-3 fight and 1.32× of the
+  Marches' level-6 fight.
+- Four level 10s met 1.35× of the Heartland's fight. Two met 0.45× of it.
+- A lone level 1 in the Deeps met 0.44× of the Deeps' fight.
+- Inside a band nothing capped at all. A built level-3 party at home met 1.13×
+  of the Heartland's top fight.
+
+Now (`core/regions.gd`):
+
+- **Out of band, the fight is pinned to the band's edge.**
+  `Scaler.held_at(ref_score(edge level), fresh_score(party))` lands the budget
+  on exactly what scaler builds for the ruler at that level, whoever walks in.
+  The Heartland is scaler's level-3 fight and the Deeps its level-10 fight.
+- **The ceiling is read in power as well as in levels.** A party inside a band
+  by level that prices above the ruler at the band's top meets that top fight
+  and no more. The floor stays levels only: a thin party inside its band
+  still gets a fight its own size, which is what scaler's measured numbers
+  assume.
+- **`fresh_score`** is the party at full slots. The pin divides by it, so spent
+  slots still thin the fight in the same proportion they do in band. Wounds
+  are still `WorldThreat`'s, multiplied on top as before.
+- **The exponent question goes away.** Regions keeps no exponent of its own: a
+  country is scaler's fight at a level inside it, so it follows `CURVE`
+  wherever `CURVE` goes. For the ruler party, the pin and the old ratio are the
+  same number. `tests/sweep_regions.gd`'s table therefore stands as re-measured
+  on 2026-09-24 (L3 in band 96.2%, L10 in band 81.2%, one band out 17.5%, the
+  Deeps at L3 2.5%). The sweep now calls `held_at` directly.
+
+Measured on the built party (`tests/sweep_built.gd`'s build, 60 seeds, easy),
+with the budget pinned at the top of a band:
+
+| built party | before | pinned |
+|---|---|---|
+| L3 at the top of the Heartland (1.13× → 1.00×) | 95.0% | 95.0% |
+| L10 at the top of the Frontier (1.32× → 1.00×) | 73.3% | 95.0% |
+
+Budgets for a built party, as a share of the ruler's fight at the band's level:
+
+| built party | Heartland | Marches | Frontier | Deeps |
+|---|---|---|---|---|
+| L3 | 1.13 → **1.00** | 1.13 | 1.13 → 1.00 (L6) | 1.13 → 1.00 (L10) |
+| L6 | 1.27 → 1.00 (L3) | 1.27 → **1.00** | 1.27 | 1.27 → 1.00 (L10) |
+| L10 | 1.32 → 1.00 (L3) | 1.32 → 1.00 (L6) | 1.32 → **1.00** | 1.32 |
+
+Bold: capped inside the band. The Deeps' top is level 20, so nothing is capped
+there, and a built L10 in the Deeps still meets its own 1.32×.
+
+`test_regions` checks each case: two level 10s, four level 10s and the ruler in
+the Heartland; a lone level 1 in the Deeps; four level 3s at home against the
+Marches; and a party with its slots spent. The first three fail on the old
+formula (0.447×, 1.352×, 0.444×).
+
+### Still open
+
+- The level-10 party at the top of the Frontier (95.0% capped) and at the
+  bottom of the Deeps (73.3%, not capped) now differ by 22 points at the same
+  level. That seam overlap is intended ("a level 10 party can work either"),
+  but it's wide. If it reads badly in play, narrow it by lowering the
+  Frontier's top, not by adding an exponent back.

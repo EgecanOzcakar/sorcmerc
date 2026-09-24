@@ -9,8 +9,8 @@
 # Per cell: the preset trio at the party's level (Presets.party_at), a roster
 # from Scaler.roster_for at wilderness tier `easy` (what core/world_threat.gd
 # sends into open country) with the band's power_scale for content at the
-# content's level — the same (score(C)/score(P))^CURVE Regions.power_scale
-# computes — and the fight seed pinned (spec["seed"] = s). Autoplayed both
+# content's level — Scaler.held_at(score(C), score(P)), which is what
+# Regions.power_scale computes when the party is the ruler — and the fight seed pinned (spec["seed"] = s). Autoplayed both
 # sides, the way tests/sweep_tier.gd does.
 extends SceneTree
 
@@ -30,7 +30,7 @@ func _init() -> void:
 	for cell in CELLS:
 		var p: int = cell[0]
 		var c: int = cell[1]
-		var scale: float = 1.0 if p == c else pow(Regions.ref_score(c) / maxf(1.0, Regions.ref_score(p)), Scaler.CURVE)
+		var scale: float = 1.0 if p == c else Scaler.held_at(Regions.ref_score(c), Regions.ref_score(p))
 		var wins := 0
 		for s in range(1, seeds + 1):
 			var chars: Array = Presets.party_at(p)

@@ -186,22 +186,65 @@ static func level_here(world, pos: Vector2, party) -> int:
 # budget — 1.0 whenever the party is already inside the band, which is the
 # common case and costs nothing.
 #
-# The maths is scaler's own: _budget() is REF_SCORE * (team/REF_SCORE)^CURVE *
-# TIER * power_scale, so buying the budget of a level-L party instead of a
-# level-P one is exactly (score(L)/score(P))^CURVE. Nothing is re-tuned and no
-# measured win rate moves; the same curve is simply read at a different point.
+# Outside the band the fight is PINNED to the band's own edge: the budget comes
+# out as scaler's budget for the ruler party at level_here(), whatever this
+# party's build is. _budget() is REF_SCORE * (team/REF_SCORE)^CURVE * TIER *
+# power_scale, so Scaler.held_at(ref_score(L), fresh) lands it on ref_score(L)
+# exactly — each country fights at scaler's own level-L number, and no exponent
+# of this file's own enters into it.
 #
-# It COMPOSES with core/world_threat.gd rather than replacing it: the caller
-# multiplies the two. The band says how dangerous this country is; the party's
-# condition still thins whatever the country sends, in the same proportion. A
-# wrecked party crawling home through the frontier gets the frontier's fights at
-# the frontier's size, cut by how wrecked it is — which is the point of both.
+# That is the difference from the first cut, which scaled by
+# (ref_score(L) / ref_score(P))^CURVE: the ratio of two RULER parties, applied
+# to the real one. A built level-10 party priced above the ruler (a better
+# prepared list, a stronger subclass) carried its surplus into the heartland
+# and met more than level-3 content there; a thin one met less. The owner's
+# call (2026-09-24): a country never scales past its top level nor under its
+# floor, for anybody.
+#
+# `fresh`, not the current reading, is what the pin divides by: the party at
+# full slots (fresh_score). What the party has spent still thins the fight in
+# the same proportion it does in band (the budget's own `team` is the current
+# reading), and the wounds are core/world_threat.gd's, which composes with this
+# by multiplication, as before. The band says how dangerous this country is;
+# the party's condition still thins whatever the country sends.
+#
+# The ceiling is read in score as well as in levels, so it holds inside the
+# band too: a level 3 party is inside the heartland, but a built one (choices
+# made, a full prepared list) prices at x1.13 of the ruler and would have met
+# more than the heartland's top fight standing on its own doorstep. At the top
+# of a band the fight is the ruler's at that level and no more. The floor is
+# levels only: a thin party that is inside its band by level still gets a fight
+# its own size, which is what every measured number in core/scaler.gd assumes.
 static func power_scale(world, pos: Vector2, party) -> float:
-	var want: int = level_here(world, pos, party)
+	var lv: Array = at(world, pos)["levels"]
+	var lo: int = int(lv[0])
+	var hi: int = int(lv[1])
 	var have: int = party_level(party)
-	if want == have:
+	if party == null or party.party_characters().is_empty():
 		return 1.0
-	return pow(ref_score(want) / maxf(1.0, ref_score(have)), Scaler.CURVE)
+	var fresh: float = fresh_score(party)
+	var target := 0.0
+	if have < lo:
+		target = ref_score(lo)
+	elif have > hi or fresh > ref_score(hi):
+		target = ref_score(hi)
+	else:
+		return 1.0
+	return Scaler.held_at(target, fresh)
+
+
+# The party as core/rules/power.gd prices it with every slot back: the reading
+# power_scale pins against. Power.estimate reads max_hp, never current hp, so
+# the slots are the only thing a rest would change about it.
+static func fresh_score(party) -> float:
+	if party == null:
+		return 1.0
+	var team: Array = []
+	for ch in party.party_characters():
+		var c = Adapter.to_combatant(ch, "party", Vector2i.ZERO)
+		c.slots = Adapter._full_slots(c.sheet)
+		team.append(c)
+	return maxf(1.0, Power.team_score(team))
 
 
 # What a level-N party is worth, on core/rules/power.gd's own scale. Measured
@@ -212,9 +255,10 @@ static func power_scale(world, pos: Vector2, party) -> float:
 #
 # For reference, what the ruler reads at the band seams: level 1 -> 23.8,
 # 3 -> 47.2 (which is REF_SCORE 46.6, as it should be — the whole scaler is
-# anchored on a level 3 party), 6 -> 93.9, 10 -> 127.6, 20 -> 203.0. So a level
-# 3 party in the deeps buys a fight at (127.6/47.2)^0.90 = x2.44 budget, and a
-# level 10 party in the heartland gets x0.41 — outgrown, exactly as intended.
+# anchored on a level 3 party), 6 -> 93.9, 10 -> 127.6, 20 -> 203.0 (2026-09-13;
+# the power fix of 2026-09-24 moved them, see the table below). A country's
+# fight is scaler's fight for the ruler at its edge level, so these are the
+# only party this file ever prices against.
 static var _score_cache := {}
 
 static func ref_score(level: int) -> float:
@@ -300,9 +344,13 @@ static func ref_score(level: int) -> float:
 # (Power.SPELL_LOCK_CAP, six pricings measured there). The built level-10 party
 # (tests/sweep_built.gd) goes 33.3% -> 73.3%. This table's ruler carries no
 # control spell, so it does not move.
-# ponytail: one call is open. Does regions keep its own exponent (0.90 would
-# put the off-diagonal scales back where this design was argued) or accept the
-# steeper country? Re-run tests/sweep_regions.gd after it.
+# The exponent is settled too (the owner's call, 2026-09-24): regions keeps no
+# exponent of its own. power_scale pins an out-of-band fight to scaler's budget
+# for the ruler at the band's edge, so each country IS scaler's own fight at a
+# level inside it: level 3 in the deeps meets scaler's level-10 fight, level 10
+# in the heartland scaler's level-3 one. For the ruler party the pin and the old
+# ratio are the same number, so the table above stands as measured; what moved
+# is every party that is not the ruler (see power_scale).
 
 # --- placement, for the world builders ------------------------------------
 
