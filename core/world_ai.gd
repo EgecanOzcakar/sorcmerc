@@ -21,6 +21,10 @@
 # it used to walk to the bank and stand there forever, and a patrol whose next
 # waypoint was over the water never arrived, so it never advanced to the one
 # after it either.
+#
+# Whatever the behavior, a band too weak for something that would fight it
+# runs from it first (_flee_step; core/world_flee.gd owns who is too weak).
+# Only a truce's walk-away outranks that, and it is walking away already.
 extends RefCounted
 
 const Scaler = preload("res://core/scaler.gd")
@@ -28,6 +32,7 @@ const RNG = preload("res://core/rng.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const WorldPath = preload("res://core/world_path.gd")
 const World = preload("res://core/world.gd")   # respawn() builds a RoamingParty; world.gd never preloads this file
+const WorldFlee = preload("res://core/world_flee.gd")   # who is too weak to stand; that file never preloads this one
 
 # How close to a waypoint counts as having walked it: slack for a band that
 # slid along a bank on its way there, not an arrival radius. Arrival at the
@@ -203,6 +208,8 @@ static func update(world, _delta := 0.0) -> void:
 			continue
 		var dest = _break_off_step(world, p)
 		if dest == null:
+			dest = _flee_step(world, p)
+		if dest == null:
 			match String(_state(p).get("behavior", "")):
 				"patrol": dest = _patrol_step(p)
 				"wander": dest = _wander_step(p)
@@ -215,6 +222,52 @@ static func update(world, _delta := 0.0) -> void:
 
 static func _state(party) -> Dictionary:
 	return party.ai if "ai" in party else {}
+
+# Would these two fight if they met? The player only ever fights a band that
+# is hostile to it (the player's side is never the hostile one); two bands
+# fight when either wants the other dead, the rule core/world_battle.gd
+# resolves by.
+static func would_fight(a, b) -> bool:
+	if b.is_player:
+		return is_hostile(a, b)
+	if a.is_player:
+		return is_hostile(b, a)
+	return is_hostile(a, b) or is_hostile(b, a)
+
+# A band too weak for something that would fight it runs from it
+# (core/world_flee.gd says who is too weak). It notices a threat inside
+# WorldFlee.SIGHT and, once running, keeps running until it is CLEAR of it, so
+# a band at the edge of SIGHT does not turn back and forth every frame. The
+# destination is a point STEP straight away from the threat, re-set every
+# frame so the band bends away as the threat moves; _steer() keeps it on dry
+# land. Outranks every behavior but a truce's walk-away (which is already
+# away), and a hunt never picks what it would run from (_hunt_step), so a
+# hunter does not close to SIGHT, turn, and come back.
+static func _flee_step(world, party):
+	var s: Dictionary = party.ai
+	var from_id := String(s.get("fleeing_from", ""))
+	var threat = null
+	var best_d := INF
+	for other in world.parties:
+		if other == party or not would_fight(party, other) or not WorldFlee.outmatched(world, party, other):
+			continue
+		var d: float = party.position.distance_to(other.position)
+		if d > (WorldFlee.CLEAR if other.id == from_id else WorldFlee.SIGHT):
+			continue
+		if d < best_d:
+			best_d = d
+			threat = other
+	if threat == null:
+		s.erase("fleeing_from")
+		return null
+	s["fleeing_from"] = threat.id
+	var away: Vector2 = party.position - threat.position
+	if away.length_squared() < 1.0:
+		away = Vector2.RIGHT
+	return party.position + away.normalized() * WorldFlee.STEP
+
+static func is_fleeing(party) -> bool:
+	return _state(party).has("fleeing_from")
 
 # The walking-away leg a truce starts, while it is still being walked: the
 # destination every behavior yields to. null once the band has got there, or
@@ -248,10 +301,12 @@ static func _arrived(party) -> bool:
 	return party.position.is_equal_approx(dest)
 
 # The same test, for the module that advances a raid's phases — but never
-# while a truce is walking the band away: standing on the break-off point is
-# not arriving anywhere.
+# while a truce is walking the band away, or while it is running from
+# something (_flee_step): standing on the break-off point is not arriving
+# anywhere, and nor is a band backed against a lake, whose flee point
+# nearest_dry() has snapped to where it already stands.
 static func arrived(party) -> bool:
-	return not _state(party).has("break_off") and _arrived(party)
+	return not _state(party).has("break_off") and not _state(party).has("fleeing_from") and _arrived(party)
 
 # The waypoints still to walk before the destination, outermost first. Empty
 # when the march is a straight line (which is every march on a dry map).
@@ -328,6 +383,8 @@ static func _hunt_step(world, party):
 			continue
 		if other.is_player and in_truce(party, world.clock.elapsed):
 			continue
+		if WorldFlee.outmatched(world, party, other):
+			continue   # it would only run on arrival (_flee_step)
 		var d: float = party.position.distance_squared_to(other.position)
 		if d < best_d:
 			best_d = d
@@ -350,6 +407,7 @@ static func _raid_step(world, party):
 	if String(s.get("phase", "")) == "siege":
 		var p = world.player()
 		if p != null and not in_truce(party, world.clock.elapsed) \
+				and not WorldFlee.outmatched(world, party, p) \
 				and party.position.distance_to(p.position) <= RAID_SIGHT:
 			return p.position
 	return s["to"]

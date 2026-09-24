@@ -53,9 +53,18 @@ Avoid epic-fantasy capitals-and-prophecy prose, jokes that break the scene, and 
 
 ## Art direction (as built)
 
-- **Figures are AI-generated 3D models**: Meshy text-to-3D, rigged, with an **Idle** clip, standing on a 3D board and a 3D overworld (`assets/figures/`, `assets/beasts/`, `assets/npcs/`, `assets/troops/`). The house prompt style is *"semi-realistic fantasy, muted earthy palette"*. Portraits are rendered from the same rigs (`scenes/portraits.gd`).
-- Icons are hand-authored SVG from `tools/gen_action_icons.py`, not an image model. Audio is procedural (`tools/gen_audio.py`).
-- **Provenance rule:** AI-generated assets live in their own directories, with a `PROVENANCE.md` giving the tool, model, date and prompt. This keeps Steam's AI-content disclosure answerable (`README.md`, "Assets and provenance").
+Two house styles, one per dimension. Both are AI output; the README's provenance table says which directory holds which.
+
+- **3D: figures and dioramas are Meshy models**: text-to-3D, rigged, with an **Idle** clip, standing on a 3D board and a 3D overworld (`assets/figures/`, `assets/troops/`, `assets/beasts/`, `assets/npcs/`, plus the static `assets/lairs/`, `assets/settlements/` and board props). The one 3D prompt on record, the goblin's, ends *"semi-realistic fantasy, muted earthy palette"*: that is the 3D house style. Hero portraits are rendered from the same rigs (`scenes/portraits.gd`).
+- **2D: everything painted is an SDXL painting in one painterly style** (a local ComfyUI; `assets/generated/`, `assets/art/items/`, the packs' portraits, the board floors, the map's ground). All 243 prompts on record say *"painterly"*. Each is a subject plus one of three tails:
+  - scenes, 110: *"painterly fantasy illustration, rich warm palette, soft rim light, detailed"*;
+  - emblems (achievement badges, job tiles), 122: *"a single emblem, close up, centered, against a plain near-black shadowy backdrop, low-key dramatic lighting, painterly fantasy illustration, oil painting brushwork, rich but muted palette, soft rim light"*;
+  - portraits, 11: *"painterly digital art, bust portrait, fantasy RPG character portrait"*.
+  - The negative (209 of 243) rules out the other looks: cartoon, cel shading, flat colours, vector, 3d render, glossy, plastic, frames. The item icons were repainted in the same hand (2026-09-16).
+  - A picture of the company shows exactly its four, and no crowd is over eight (the 2026-09-21 picture audit).
+- **Icons:** the action, school, skill, class and path icons are hand-authored SVG from `tools/gen_action_icons.py`, no image model. The ~428 item icons and achievement badges are SDXL paintings (above).
+- **Audio** is ElevenLabs sound-effects takes, 120 of 123 files (`assets/audio/PROVENANCE.md`); `tools/gen_audio.py`'s offline synthesis is the fallback and makes two.
+- **Provenance rule:** AI-generated assets live in their own directories, with a `PROVENANCE.md` giving the tool, model, date and prompt, written the day the asset lands. Where something was not recorded, the file says so rather than guessing. This keeps Steam's AI-content disclosure answerable (`README.md`, "Assets and provenance").
 - A 2D cutout-rig direction was considered in chat and **dropped** (2026-09-24): the game stays 3D. The LPC layered-sprite recipes it left in `data/lpc/`, which no script loaded, were removed on 2026-09-24.
 
 ## Scope rules
@@ -86,8 +95,24 @@ These are direction, not description. The code still does the old thing until ea
 - **Factions post contracts** (built: `core/contracts.gd`). Every job carries its `issuer`, who is credited wherever it is handed in. War work waits for Known and neutral opinion, and regard pays up to +25%.
 - **The player and the factions can fight each other** (the owner's call, 2026-09-24). This lifts the "never civilized-vs-civilized" rule: first rival-raid contracts, then NPC faction warfare. Neither is built yet.
 - **Armor stays 5e AC.** No damage split, no durability.
-- **Art stays 3D.** Rigged Meshy figures in the house prompt style. The 2D cutout plan is dropped.
-- **Slots are scarce by the rest rules, not the tables.** Keep the 2024 slot tables and fix only the paladin/ranger level-1 gap in the export. Encounters are sized **as if the party had every slot back** (built: `WorldThreat.slot_hold()`). Spending a slot never buys an easier next fight; wounds still thin one. See the `sorcmerc-balancing` skill.
+- **Art stays 3D.** Rigged Meshy figures in the 3D house style. The 2D cutout plan is dropped.
+- **Slots are scarce by the rest rules, not the tables.** Keep the 2024 slot tables. The paladin/ranger level-1 gap in the export is fixed — **built** (`data/classes.json` gives both `[2]` at level 1; build log "Paladins and rangers cast from level 1"). Encounters are sized **as if the party had every slot back** (built: `WorldThreat.slot_hold()`). Spending a slot never buys an easier next fight; wounds still thin one. See the `sorcmerc-balancing` skill.
+
+## The design audit's calls (2026-09-24)
+
+Direction, not description: each lands as its own piece of work with its own `docs/plan/` entry, and the code does the old thing until then. Detail and evidence: `docs/audit-game-design.md`, "The owner's calls" (section numbers below).
+
+- **Death has weight.** A defeat revives the downed only; the dead stay dead until a paid raise, priced by level (about 50 ◉ a level). The bonded grieve, the fallen get a roll, the dead never come back as veterans, and deaths count in the open world too. (1.2, 2.1, 5.2)
+- **Defeat costs more than coin.** A floor not tied to the purse: days, an injury or gear. An empty purse pays a parley toll in gear or opinion. (1.8)
+- **A lair resets when you leave it.** Every room regrows and is priced fresh off `Regions.fresh_score`, so a drained party never meets a smaller lair. (1.3, 3.3)
+- **Gambling** is once a day per town and loses on average; the lowest win pays the stake back. (1.5)
+- **Rope Trick** replaces the camp kit, not the risk: the slot is not refunded and the ambush roll stands. (1.6)
+- **A rest takes the world's time.** The world ticks through the 8 hours, nobody camps with a hostile band nearby, downtime refills only when a long rest is allowed, and the sheet has no rest or HP buttons. (1.1, 1.7, 1.9)
+- **The bench is people, not storage.** Restless mercs may leave, told as a moment; the bench joins camp moments and the relations web. No bench XP, no upkeep. (2.4)
+- **A failed parley costs faction opinion.** (3.1)
+- **Economy.** Loot sells for less, sinks scale with level, magic items work in a fight, friendly towns pay more. Quest XP follows the region's fight XP; renown and regard multiply gold only. Still no wages or upkeep. (5.1, 5.3, 5.6)
+- **Tone rules.** ◉ beside any number, "coin" or "gold" only in prose. "Company" in fiction, "party" only where a line states a rule. One register everywhere, the authored one: no contractions and no "!" in system messages or dice verdicts. Bands are named from `EnemyNames`, never by id. (6.1, 6.3–6.5)
+- **Art provenance** — built 2026-09-24: every AI asset directory has its `PROVENANCE.md` (see Art direction). (8.1)
 
 ## Open questions
 
