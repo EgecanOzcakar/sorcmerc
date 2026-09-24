@@ -64,6 +64,12 @@ func _finish(main, result: Dictionary) -> void:
 # The seed takes the clock too (each night of a stay is its own roll), and the
 # night moves it by a day before the die is thrown.
 # `want` "contact" is a night that passes (not a 20: one card, not a round too).
+# How far opinion may drift back toward 0 on its own since `since`: a night
+# at the inn runs the world clock now (core/world_rest.gd), and FactionOpinion
+# decays DECAY_PER_DAY a day while it does. Well under an insult or a service.
+func _drift(w, since: float) -> float:
+	return FactionOpinion.DECAY_PER_DAY * maxf(0.0, w.clock.elapsed - since) / FactionOpinion.DAY + 0.001
+
 func _stamp_for(s, party, want: String, world) -> int:
 	var bonus := int(Downtime.best_of(party, Downtime.CAROUSE_SKILLS)["bonus"])
 	var clock := int(world.clock.elapsed + Downtime.DAY)
@@ -92,6 +98,12 @@ func _init() -> void:
 	var w = main.world
 	var party = main.party
 	var city = w.settlements[0]          # Riverhold, human city: an inn, an alchemist, a librarian, a pit
+	# A long rest runs the world clock for its eight hours (core/world_rest.gd),
+	# and a lair left alone that long raids the nearest town and halves its
+	# market, the alchemist's potions with it. That is Raids' test, not this
+	# one: keep every lair at home while the inn's nights pass.
+	for l in w.lairs:
+		l.raid_at = 1e9
 	w.clock.pause()
 	party.gold = 5000
 	var hero = party.party_characters()[0]
@@ -145,6 +157,7 @@ func _init() -> void:
 	city.last_visited = float(_stamp_for(city, party, "insult", w))
 	check(city.last_visited > 0.0, "a stamp whose night fails and draws the insult")
 	var opinion_before: float = FactionOpinion.get_opinion(city.faction)
+	var opinion_clock: float = w.clock.elapsed   # the night's own drift toward 0 (core/world_rest.gd) is not the insult
 	gold_before = party.gold
 	button_named(main, "Go out").pressed.emit()
 	for i in 3:
@@ -152,7 +165,8 @@ func _init() -> void:
 	check("wrong sort of impression" in String(main._visit.get("log", "")), "the night's line: %s" % main._visit.get("log", ""))
 	check(party.gold == gold_before - Downtime.CAROUSE_COST["city"] - Downtime.bed_cost(city, 1), "the night and the bed")
 	check(main._event_card != null and String(main._event_card._e.get("id", "")) == "downtime-insult", "the story is a card: %s" % (main._event_card._e.get("id", "") if main._event_card != null else "none"))
-	check(FactionOpinion.get_opinion(city.faction) == opinion_before - Downtime.INSULT, "...whose consequence is applied under it")
+	check(absf(FactionOpinion.get_opinion(city.faction) - (opinion_before - Downtime.INSULT)) <= _drift(w, opinion_clock),
+		"...whose consequence is applied under it (less the night's drift)")
 	check(w.clock.is_paused(), "the clock is paused under the card")
 	main._event_card.acknowledged.emit()
 	await process_frame
@@ -273,6 +287,7 @@ func _init() -> void:
 		"title": "Run a crate of goods to X", "reward": {"gold": 40}})
 	var deeds_before: int = Ladder.deeds(city.faction)
 	opinion_before = FactionOpinion.get_opinion(city.faction)
+	opinion_clock = w.clock.elapsed
 	city.last_visited = float(_stamp_for(city, party, "brawl", w))
 	button_named(main, "Go out").pressed.emit()
 	for i in 3:
@@ -290,7 +305,7 @@ func _init() -> void:
 	await _finish(main, {"outcome": "Victory", "xp": 10, "gold": 2, "loot": [], "kills": [], "deaths": [], "rounds": 1,
 		"objective": {"kind": "", "done": false, "xp": 0}})
 	check(main._spoils_panel != null, "a won brawl is a fight like any other")
-	check(FactionOpinion.get_opinion(city.faction) == opinion_before and Ladder.deeds(city.faction) == deeds_before,
+	check(absf(FactionOpinion.get_opinion(city.faction) - opinion_before) <= _drift(w, opinion_clock) and Ladder.deeds(city.faction) == deeds_before,
 		"...but no service to the town: opinion and the ladder stay")
 	check(Quest.get_quest(party, "deliver:t:x")["state"] == "active", "the delivery is still on")
 	check(main._visit.is_empty(), "the inn is down while the spoils page is up")
