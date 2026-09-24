@@ -10437,9 +10437,12 @@ old-ruler numbers.
 
 ### Still open
 
-- **The retune question** (next PR): re-run `sweep_tier` and `sweep_regions`
-  against the new ruler, and move CURVE/TIER only where a band is still off
-  target. Level 8 already lands on target.
+- ~~The retune question~~ **settled, no knob moved.** `sweep_regions` with the
+  in-band curve added (80 seeds a cell, easy), master against the new ruler:
+  level 3 96.2 → 93.8%, level 8 90.0 → 97.5%, level 10 81.2 → 96.2%,
+  level 12 87.5 → 100%, level 15 78.8 → 93.8%. Every in-band level is on the
+  95% target; the old ruler's level-10 and level-15 shortfall was the wasted
+  second swing. The table is in `core/regions.gd`.
 - **No Metamagic.** The autopilot arms none (it is not on master yet).
 - **No Steady Aim.** The engine has no such verb.
 - **Melee rogues** stay beside their target rather than Disengaging back out;

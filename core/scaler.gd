@@ -61,9 +61,10 @@
 # old ruler threw away — which every player takes — so the level-8 column was
 # measuring a party weaker than anyone plays. It read level 8 as HARDER than
 # the targets (hard 58.7% against 75); with every swing taken it lands on them
-# (96.0 / 84.0 / 79.3 against 95 / 85 / 75). The owner's call (2026-09-24): ship
-# the ruler now, and settle in the next PR whether any band above level 5 still
-# needs CURVE/TIER moved, re-running sweep_tier and sweep_regions.
+# (96.0 / 84.0 / 79.3 against 95 / 85 / 75). Whether any band above level 5
+# still needed CURVE/TIER moved was settled the same day with sweep_regions'
+# in-band curve (core/regions.gd): 93.8-100% from level 3 to 15 at easy, on
+# target everywhere. Nothing here moved.
 #
 # RE-MEASURED 2026-09-16 (T94), and NO KNOB HERE MOVED. T94 gave the bestiary
 # the defences its own catalog had always carried (damage resistance / immunity /
