@@ -146,10 +146,15 @@ class Lair extends RefCounted:
 	var faction: String          # one of Scaler.FACTIONS — same field driving encounter_spec
 	var discovered := false      # found by a Survival check yet? undiscovered lairs don't draw
 	var looted := false          # cleared once — stays on the map, spent, not removed
-	# D1: how many rooms of the interior the party has already fought through
-	# (core/site.gd). A lair is no longer one fight, so backing out part-way has
-	# to be remembered — otherwise "withdraw" silently means "start over".
+	# D1: how many rooms of the interior the party fought through on its last
+	# (or current) delve (core/site.gd). A record, not a resume point: since the
+	# design audit (§3.3, 2026-09-24) every entry starts at the mouth and the
+	# rooms fill in again behind a party that walks out.
 	var depth_cleared := 0
+	# Which treasure rooms were emptied ("floor|room id", core/site.gd's
+	# _cache_key) since something last moved in. The rooms regrow on re-entry;
+	# the coin already carried out does not. Cleared by WorldLairs.respawn.
+	var caches_taken: Array = []
 	# D1: world-clock stamp of the first time the party went in, < 0 = never.
 	# Kicking the door starts a clock: see core/world_lairs.gd's WINDOW — a
 	# disturbed lair does not sit there waiting forever for you to come back.

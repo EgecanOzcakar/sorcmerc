@@ -1913,7 +1913,10 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 		elif not named:
 			FactionOpinion.lower(foe.faction, FactionOpinion.KILLED_THEIRS)
 	else:
-		_retreat()
+		# Deaths before the retreat, the same order a site wipe uses: the dead
+		# are dead when revive_downed runs, so it cannot stand them up.
+		_apply_deaths(result)
+		_retreat(result.get("deaths", []))
 		# The band that beat them is still where the fight was. Left un-slipped
 		# it would ask "fight/parley/ambush?" again the frame the map came back
 		# whenever the nearest settlement was inside its trigger radius — the
@@ -1924,7 +1927,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 	if String(obj.get("kind", "")) == "escort" and not bool(obj.get("done", false)):
 		for title in Quest.fail_deliveries(party):
 			_quest_news.append("%s — the delivery is lost with the carter." % title)
-	_apply_deaths(result)
+	_apply_deaths(result)   # a second call on a defeat changes nothing: already dead, already benched
 	# After the deaths, not before them: core/callings.gd already refuses to
 	# complete a dead hero's past ("the bond and the line are theirs to have"),
 	# but nobody in this fight was dead yet when the check ran up in the victory
@@ -2307,32 +2310,34 @@ func _apply_deaths(result: Dictionary) -> void:
 			fallen.dead = true
 		party.bench(id)
 
-# Real stakes for a lost fight, but a soft landing — not a death spiral. A
-# world-map encounter is scaled to whatever band you stumbled into, not the
-# curated early-game jobs Party.REVIVE_COST (300gp) was priced against, so
-# charging that per fallen character on top of the retreat tax could leave a
-# beaten party unable to ever afford getting back to full strength. The dead
-# are still handled above (dead + benched, so they can't act, and a party
-# that wins with someone down still pays the normal paid-resurrection price —
-# only a run-ending loss is this forgiving, same "the dead come back for
-# free" rule campaign.gd's own run-ending loss already uses). What actually
-# costs here: no XP/loot/quest progress from the fight, lost time, and the
-# gold the bandits loot off whoever's still standing.
+# Real stakes for a lost fight, but not a death spiral. What a loss costs: no
+# XP/loot/quest progress from the fight, lost time, the gold the victors take
+# off whoever is still breathing — and the dead. Since the design audit
+# (docs/audit-game-design.md §1.2, 2026-09-24) only the DOWNED come to here
+# (Party.revive_downed); the dead stay dead and benched, and come back only the
+# paid way, a healer's raise or Revivify. It used to stand the whole roster up
+# for free, the benched dead of earlier fights included, which made conceding a
+# fight the cheapest resurrection in the game. Every caller applies the
+# fight's deaths FIRST (_apply_deaths), so this fight's dead are already dead
+# when it runs — the road and a site wipe used to do it in opposite orders.
+# `fell` is the fight's own `deaths`, for the line only. Returns the line, which
+# is also put on the map.
 const DEFEAT_GOLD_LOSS_PCT := 0.15
-func _retreat() -> void:
+func _retreat(fell: Array = []) -> String:
 	var p := world.player()
 	if p == null or world.settlements.is_empty():
-		return
+		return ""
 	var lost: int = roundi(party.gold * DEFEAT_GOLD_LOSS_PCT)
 	party.spend_gold(lost)
-	Party.auto_revive_all(party)
+	var revived: Dictionary = Party.revive_downed(party)
 	var safe = world.settlements[0]
 	for s in world.settlements:
 		if p.position.distance_squared_to(s.position) < p.position.distance_squared_to(safe.position):
 			safe = s
 	p.position = safe.position
 	world.set_goal(p, safe.position)
-	_lair_msg.text = "The party is beaten and left for dead. They come to at %s, %d gold lighter." % [safe.sname, lost]
+	_lair_msg.text = party.defeat_line(revived, fell, safe.sname, lost)
+	return _lair_msg.text
 
 # --- O6: settlement visit ----------------------------------------------
 # Same shape as _check_encounter above, against the settlement list instead of
@@ -2811,7 +2816,7 @@ func _on_site_room_chosen(i: int) -> void:
 			if not _delve_haul.is_empty():
 				(_delve_haul["quests"] as Array).append(line)
 	if _site.state == "wiped":
-		_site_wiped()
+		_site_wiped(result.get("deaths", []))
 	elif not _site.is_over():
 		_site.leave()
 	_site_screen.refresh()
@@ -2831,19 +2836,20 @@ func _on_site_withdrew() -> void:
 	_site_screen.refresh()
 
 # Locked with the user: harder than a lost fight on the road, softer than losing
-# people. The map's own soft landing still applies (gold tax, free revival, wake
-# at the nearest settlement) and on top of it the bag is lightened and the lair
+# people. The map's own landing still applies (gold tax, the downed come to and
+# the dead stay dead, wake at the nearest settlement — the fight's deaths were
+# applied before this, the road's order too) and on top of it the bag is lightened and the lair
 # closes up again — see core/site.gd's wipe_penalty() for why it is the stash
 # and never the equipped gear.
-func _site_wiped() -> void:
+func _site_wiped(fell: Array = []) -> void:
 	var toll: Dictionary = Site.wipe_penalty(party, _site.lair)
-	_retreat()
+	var came_to: String = _retreat(fell)
 	var names: Array = []
 	for item_id in toll.get("items", {}):
 		names.append("%s x%d" % [Campaign.item_name(String(item_id)), int(toll["items"][item_id])])
 	var lost: String = ("They lost %s from the packs. " % ", ".join(names)) if not names.is_empty() else ""
-	_lair_msg.text = "The party is dragged out of %s. %sThe way in has closed up behind them." % [
-		_site.lair.sname, lost]
+	_lair_msg.text = "The company is dragged out of %s. %sThe way in has closed up behind them.  %s" % [
+		_site.lair.sname, lost, came_to]
 
 func _on_site_done() -> void:
 	if _site == null:
@@ -2867,7 +2873,8 @@ func _on_site_done() -> void:
 			_delve_haul["cleared_xp"] = bonus
 		_lair_msg.text = "%s is cleared out, all the way to the bottom. +%d XP." % [l.sname, bonus]
 	elif _site.state == "withdrawn":
-		_lair_msg.text = "%s is still down there — %d of %d rooms behind you." % [
+		# core/site.gd: walking out undoes the descent; the next entry is the mouth.
+		_lair_msg.text = "%s is still down there. %d of %d rooms were behind you, and they will fill in again before you are back." % [
 			l.sname, int(l.depth_cleared), Site.depth_for(l)]
 	_site = null
 	if _site_screen != null:
@@ -2954,7 +2961,8 @@ func _approach_event(r: Dictionary, faction := "") -> Dictionary:
 	e["title"] = String(Approach.WAYS.get(String(r.get("way", "")), {}).get("label", "The meeting"))
 	# "good" is not the same as "the roll passed": walking into a fight you
 	# meant to walk into is not a setback, and a blown ambush is.
-	e["kind"] = "bad" if bool(r.get("forced_ambush", false)) else "good"
+	# A parley that cost the company its standing with a people is a setback too.
+	e["kind"] = "bad" if bool(r.get("forced_ambush", false)) or r.has("opinion") else "good"
 	if r.has("toll"):
 		e["gold"] = -int(r["toll"])
 	return e
@@ -3514,7 +3522,7 @@ func _rest() -> void:
 	var trance: Dictionary = Trance.apply_rest_bonus(party, world, s.position)
 	_visit = Visit.visit(s, world)
 	_carry_visit_flags(before, _visit)
-	Downtime.restamp(party, s, stamp, s.last_visited)   # the game and the bench are still this visit's
+	Downtime.restamp(party, s, stamp, s.last_visited)   # the bench is still this visit's (the game counts days)
 	Lodge.restamp(party, s, stamp, s.last_visited)      # ...and the yard's swap and the shrine's blessing
 	_cheer()
 	_build_visit_panel()
@@ -4587,7 +4595,7 @@ func _downtime_rows(rows: VBoxContainer, s) -> void:
 		_train_row(rows, pupils)
 	_trade_row(rows, "A night on the town (%d ◉)" % int(Downtime.CAROUSE_COST.get(s.kind, Downtime.CAROUSE_COST["town"])),
 		"Go out", _carouse)
-	# The game: a stake the purse can cover, once a visit.
+	# The game: a stake the purse can cover, once a day in this town.
 	var row := HBoxContainer.new()
 	rows.add_child(row)
 	var lbl := Label.new()
@@ -4601,9 +4609,12 @@ func _downtime_rows(rows: VBoxContainer, s) -> void:
 	row.add_child(stake)
 	var go := Button.new()
 	go.text = "Go"
-	go.disabled = not Downtime.can_gamble(party, s) or stake.item_count == 0
+	go.disabled = not Downtime.can_gamble(party, world, s) or stake.item_count == 0
 	go.pressed.connect(func(): _gamble(stake.get_selected_id()))
 	row.add_child(go)
+	var refused: String = Downtime.gamble_refusal(party, world, s)
+	if refused != "":
+		_note(rows, refused)   # why Go is grey: once a day a town, not once a visit
 	if s.kind == "city":
 		_pit_row(rows, s)
 
@@ -4671,9 +4682,11 @@ func _carouse() -> void:
 		_show_complication(c))
 
 func _gamble(stake: int) -> void:
-	var r: Dictionary = Downtime.gamble(party, _visit["settlement"], stake)
+	var s = _visit["settlement"]
+	var refused: String = Downtime.gamble_refusal(party, world, s)
+	var r: Dictionary = Downtime.gamble(party, world, s, stake)
 	var c: Dictionary = _complicate(String(r.get("complication", "")), stake)
-	_downtime_done(r, "There is no game on tonight.", "buy", func(): _show_complication(c))
+	_downtime_done(r, refused if refused != "" else "There is no game on tonight.", "buy", func(): _show_complication(c))
 
 func _craft(item_id: String) -> void:
 	_downtime_done(Downtime.craft(party, world, _visit["settlement"], item_id, _visit), "Nobody here will let you at the bench.")
@@ -4761,7 +4774,10 @@ func _pit_bout() -> void:
 		_bank(result)
 		_apply_deaths(result)
 	else:
-		Party.auto_revive_all(party)
+		# The pit is not a death match: a lost bout's fallen are carried out,
+		# not buried (no _apply_deaths on a loss), and come to here. The dead
+		# of earlier fights are not the pit's to give back.
+		Party.revive_downed(party, result.get("deaths", []))
 	var r: Dictionary = Downtime.pit_result(party, s, world, bout, won, int(st["week"]))
 	_autosave()
 	# The quest news a spoils page would have carried rides the card instead.

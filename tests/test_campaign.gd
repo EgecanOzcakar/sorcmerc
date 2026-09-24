@@ -10,6 +10,7 @@ const Encounter = preload("res://core/encounter.gd")
 const Dice = preload("res://core/dice.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
 const Traits = preload("res://core/traits.gd")
+const Lodge = preload("res://core/lodge.gd")
 
 var _pass = 0
 var _fail = 0
@@ -394,6 +395,14 @@ func test_merchant() -> void:
 	check(common < uncommon and uncommon < rare and rare < very_rare and very_rare < legendary,
 		"the tiers are ordered")
 	check(Campaign.item_price("no-such-item") == 0, "an unknown item has no price")
+	# The design audit §1.4: the healing potion the game pours (2d4+2) is the
+	# 2024 PHB's 50 GP potion, not a "varies" item priced as rare — which made
+	# the lodge's garden a money printer. Every other "varies" item keeps rare.
+	check(Campaign.item_price("potions-of-healing") == 50, "a potion of healing costs 50 ◉ (got %d)" % Campaign.item_price("potions-of-healing"))
+	check(Campaign.item_price("potion-of-giant-strength") == rare, "...and another 'varies' item still prices as rare")
+	var garden := int(Lodge.ROOMS["garden"]["cost"]) + Lodge.HOUSE_COST
+	var sold := maxi(1, int(Campaign.item_price(Lodge.GARDEN_POTION) * Campaign.SELL_RATE))
+	check(garden / sold > 10, "the house and garden take %d potions sold to pay back, not one" % (garden / sold))
 
 	# The scroll is stocked at some merchants and buyable there.
 	var scrolls := 0

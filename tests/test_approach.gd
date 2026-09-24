@@ -11,6 +11,7 @@ const Approach = preload("res://core/approach.gd")
 const Travel = preload("res://core/travel.gd")
 const Party = preload("res://core/party.gd")
 const RNG = preload("res://core/rng.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
 
 var _pass := 0
 var _fail := 0
@@ -139,6 +140,39 @@ func _init() -> void:
 	var par_no := _until(_party(), _foe("bandit"), "parley", false)
 	check(bool(par_no["fight"]) and not bool(par_no["forced_ambush"]),
 		"a failed parley is a plain fight, not a disaster")
+
+	# The design audit §3.1: a failed parley with a people that keeps an opinion
+	# costs the company with them — and says so on the row before the press and
+	# in the line after. A monster faction keeps none (WorldAI.CIVILIZED), so a
+	# bandit who will not be bought is only the fight.
+	FactionOpinion.reset()
+	var patrol = _foe("human")
+	check(Approach.parley_costs_opinion(patrol), "a human patrol's people keep an opinion")
+	check(not Approach.parley_costs_opinion(_foe("bandit")), "...bandits keep none")
+	check(not Approach.parley_costs_opinion(_foe("undead")), "...and the dead are not talked to at all")
+	var row: Dictionary = Approach.options(_party(), patrol).filter(func(o): return o["id"] == "parley")[0]
+	check(String(row["lose"]).contains("insult") and String(row["lose"]).contains("humans"),
+		"the row states the cost before the press: %s" % row["lose"])
+	var ins := _until(_party(), patrol, "parley", false)
+	check(is_equal_approx(FactionOpinion.get_opinion("human"), -FactionOpinion.PARLEY_REFUSED),
+		"a failed parley lowers the humans' opinion by %.0f (%.1f)" % [FactionOpinion.PARLEY_REFUSED, FactionOpinion.get_opinion("human")])
+	check(bool(ins["fight"]) and float(ins.get("opinion", 0.0)) == -FactionOpinion.PARLEY_REFUSED,
+		"...it is still the fight, and the result carries the cost")
+	check(String(ins["text"]).contains("insult") and String(ins["text"]).contains("humans"),
+		"...and says so in the line: %s" % ins["text"])
+	print("  failed parley: ", ins["text"])
+	var paid_off := {}
+	for seed_v in range(1, 200):   # _until would count the misses on the way
+		FactionOpinion.reset()
+		paid_off = Approach.resolve(_party(), patrol, "parley", RNG.new(seed_v))
+		if bool(paid_off["ok"]):
+			break
+	check(bool(paid_off["ok"]) and not bool(paid_off["fight"]) and FactionOpinion.get_opinion("human") == 0.0,
+		"a parley that lands costs the toll and no opinion")
+	FactionOpinion.reset()
+	_until(_party(), _foe("bandit"), "parley", false)
+	check(FactionOpinion.all().is_empty(), "a failed parley with bandits moves no opinion anywhere")
+	FactionOpinion.reset()
 
 	# The toll scales, or it is not a decision at either end of the game.
 	var poor := _party(); poor.gold = 20

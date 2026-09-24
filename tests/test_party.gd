@@ -105,6 +105,7 @@ func _init() -> void:
 	check(p.to_combatants([]).size() == chars.size(), "missing positions default, not crash")
 
 	test_death()
+	test_revive_downed()
 	test_identification()
 	test_overworld_figure()
 	test_active_max_level()
@@ -167,6 +168,85 @@ func test_death() -> void:
 	check(not vera.dead and not ilsa.dead, "the run's end revives everyone")
 	check(ilsa.hp_current == 1, "revived at 1 HP, not full")
 	check(p.gold == gold, "the free revival costs nothing")
+
+# The open world's lost fight (the design audit §1.2): the downed come to at
+# 1 HP, the dead stay dead — this fight's and every earlier fight's, benched or
+# not. Nobody left standing puts the living bench on the road; a roster with
+# nobody alive keeps exactly one, so the map is never a save with nobody in it.
+func test_revive_downed() -> void:
+	var p := Party.new()
+	for ch in Party.demo_roster():
+		p.add_member(ch)
+	var vera = p.get_member("vera")
+	var pike = p.get_member("pike")
+	var ilsa = p.get_member("ilsa")
+	# vera fell in an earlier fight and is on the bench; pike fell in this one
+	# (the caller applies the fight's deaths first: dead and benched); ilsa is
+	# down but alive at 0.
+	vera.dead = true
+	vera.hp_current = 0
+	p.bench("vera")
+	pike.dead = true
+	pike.hp_current = 0
+	p.bench("pike")
+	ilsa.hp_current = 0
+	var gold := p.gold
+	var r: Dictionary = Party.revive_downed(p)
+	check(vera.dead and pike.dead, "the dead stay dead, the earlier fallen and this fight's alike")
+	check(not p.is_active("vera") and not p.is_active("pike"), "...and stay benched")
+	check(not ilsa.dead and ilsa.hp_current == 1, "the downed come to at 1 HP (%d)" % ilsa.hp_current)
+	check(r["came_to"] == ["ilsa"], "came_to names only the downed (%s)" % [r["came_to"]])
+	check(r["dead"].size() == 2 and "vera" in r["dead"] and "pike" in r["dead"], "dead names both fallen")
+	check(r["spared"] == "", "nobody is spared while somebody lives")
+	check(p.gold == gold, "coming to costs nothing here; the retreat's tax is the screen's")
+	var others = p.roster.filter(func(c): return not c.id in ["vera", "pike", "ilsa"])
+	check(not others.is_empty() and others.all(func(c): return c.hp_current == -1), "a hero at full (-1) is not touched")
+	var line := p.defeat_line(r, ["pike"], "Ashford", 12)
+	check(line.contains("Ashford") and line.contains("12 ◉") and line.contains("Pike") and line.contains("healer"),
+		"the line names the place, the tax, this fight's dead and the way back: %s" % line)
+	check(not line.contains("Vera"), "...not an earlier fight's dead")
+	print("  defeat line: ", line)
+
+	# The pit's lost bout: its fallen were carried out, not buried; an earlier
+	# fight's dead are not the pit's to give back.
+	var brawler = p.get_member(p.active[0])
+	brawler.dead = true
+	brawler.hp_current = 0
+	Party.revive_downed(p, [brawler.id])
+	check(not brawler.dead and brawler.hp_current == 1, "carried out of the pit: comes to at 1 HP")
+	check(vera.dead and pike.dead, "...and the dead of earlier fights stay dead")
+
+	# Every marcher dead, one hero alive on the bench: the bench marches.
+	var q := Party.new()
+	for ch in Party.demo_roster():
+		q.add_member(ch)
+	var reserve: String = q.bench_list()[0].id
+	for id in q.active.duplicate():
+		q.get_member(id).dead = true
+		q.bench(id)
+	Party.revive_downed(q)
+	check(Array(q.active) == [reserve], "nobody standing: the living bench marches (%s)" % [q.active])
+
+	# The whole roster dead: the company is finished, and the open world has no
+	# end screen, so the highest level of them comes to alone.
+	var w := Party.new()
+	for ch in Party.demo_roster():
+		w.add_member(ch)
+	for id in w.active.duplicate():
+		w.bench(id)
+	var best = w.roster[0]
+	for ch in w.roster:
+		ch.dead = true
+		ch.hp_current = 0
+		if ch.level() > best.level():
+			best = ch
+	var rw: Dictionary = Party.revive_downed(w)
+	check(rw["spared"] == best.id and not best.dead and best.hp_current == 1, "one is spared: the highest level (%s)" % rw["spared"])
+	check(w.roster.filter(func(c): return c.dead).size() == w.roster.size() - 1, "everyone else stays dead")
+	check(Array(w.active) == [best.id], "and marches alone")
+	var wl := w.defeat_line(rw, [], "Ashford", 0)
+	check(wl.contains(best.cname) and wl.contains("alone"), "the line says who is left: %s" % wl)
+	print("  wiped line: ", wl)
 
 # T13: identified/unidentified units of one item stack apart, identified spend first,
 # and a Scroll of Identification burns itself to reveal one item.

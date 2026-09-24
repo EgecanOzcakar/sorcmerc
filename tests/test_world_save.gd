@@ -241,6 +241,15 @@ func _init() -> void:
 	check(old.lairs[0].raid_at == 5000.0, "an old save's clock starts at load time, not day 0 (%s)" % old.lairs[0].raid_at)
 	check(old.lairs[0].raids == 0 and old.settlements[0].raided_by == "", "...and nothing is raided")
 
+	# The caches a lair's rooms have given up (core/site.gd: the rooms regrow
+	# on re-entry, the coin does not) — saved, and empty on a save from before.
+	lr.caches_taken = ["0|strongbox", "2|nook"]
+	var dc: Dictionary = WorldSave.to_dict(wr)
+	check(WorldSave.from_dict(dc)["world"].lairs[0].caches_taken == ["0|strongbox", "2|nook"],
+		"a lair's emptied caches round-trip")
+	dc["lairs"][0].erase("caches_taken")
+	check(WorldSave.from_dict(dc)["world"].lairs[0].caches_taken.is_empty(), "...and an old save has emptied none")
+
 	_done()
 
 func _find(w, id: String):

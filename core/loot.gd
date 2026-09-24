@@ -104,11 +104,15 @@ const UNDROPPABLE_RARITIES := ["artifact"]
 # here resolves in the catalog.
 #
 # potions-of-healing sits in the UNCOMMON band rather than the obvious common
-# one because of how it is priced: the SRD files healing/greater/superior under
-# one heading, so its rarity is "varies", and core/campaign.gd deliberately
-# prices "varies" as rare (VARIES_TIER) — 2025 gp. Handing that to a party for
-# killing a CR 1/8 bandit is not a healing potion, it is a purse. One band up it
-# is worth roughly what the thing that was carrying it was worth.
+# one because of how it USED to be priced: the SRD files healing/greater/
+# superior under one heading, so its rarity is "varies", which core/campaign.gd
+# priced as rare (VARIES_TIER) — 2025 gp, and handing that to a party for
+# killing a CR 1/8 bandit was a purse, not a healing potion. Since 2026-09-24
+# it is priced flat at 50 ◉ (Campaign.PRICE_OVERRIDE, the design audit §1.4),
+# so that reason is gone.
+# ponytail: it still drops one band up. Moving it to "common" changes what the
+# lowest-CR kills hand out, which is a loot-table call for the economy pass
+# (the audit's §5.1), not a pricing fix; revisit there.
 const CONSUMABLE_BANDS := {
 	"common":    ["scroll-of-identification"],
 	"uncommon":  ["potions-of-healing", "potion-of-animal-friendship", "potion-of-growth",

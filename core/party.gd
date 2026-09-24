@@ -398,23 +398,112 @@ static func resurrect(party, dead_id: String, method: String, caster_id: String 
 	Ach.bump("resurrections")
 	return true
 
-# End of a run: death is a within-run cost, not permanent. Leaves the benching alone.
-#
-# Everybody comes to, not only the dead. Losing a fight writes the field back
-# verbatim (core/adapter.gd's write_back), so a hero who went DOWN rather than
-# died lands here at 0 HP, alive and unconscious — and the old version, which
-# only looked at `dead`, left them there. On the open world that is a soft-lock,
-# not a setback: world.gd's _retreat() puts the beaten party down at the nearest
-# settlement, the next encounter opens with nobody on their feet and is over on
-# round 1, and if the settlement they woke at was the one whose garrison beat
-# them, the loop has no exit. "They come to" is what both callers narrate, so it
-# is what this does — for the dead and the merely flattened alike.
+# The LINEAR run's end (core/campaign.gd's _conclude): death is a within-run
+# cost there, not permanent, and the run is over, so everyone walks home —
+# the dead and the merely flattened alike. Leaves the benching alone. The open
+# world does not come here any more: its defeat is revive_downed(), below,
+# which leaves the dead dead (the design audit, docs/audit-game-design.md
+# §1.2). This one keeps T10's locked rule for the node-route run.
 static func auto_revive_all(party) -> void:
 	for ch in party.roster:
 		if ch.dead or (ch.hp_current >= 0 and ch.hp_current < 1):
 			ch.dead = false
 			ch.hp_current = maxi(1, ch.hp_current)
 			ch.dirty()
+
+# A lost fight in the open world (scenes/world/world.gd's _retreat, the pit's
+# lost bout): the DOWNED come to, the DEAD stay dead. A dead hero is the price
+# of the loss and comes back only the paid way — a healer's raise
+# (core/settlement_visit.gd) or Revivify/a scroll (resurrect(), above), 300 ◉
+# either way. Until 2026-09-24 this stood up every dead member of the roster,
+# benched ones included, so conceding a fight was the cheapest resurrection in
+# the game (the design audit, docs/audit-game-design.md §1.2).
+#
+# "Downed" is alive at under 1 HP. write_back (core/adapter.gd) already brings
+# a stable hero out of a fight at 1, so this is mostly the guard behind it —
+# but it is the guard that ended a soft-lock: a beaten party put down at the
+# nearest settlement with nobody on their feet lost the next encounter on
+# round 1, and if that settlement's garrison had beaten them, forever. The
+# same soft-lock with the dead: if nobody who marched is left standing, the
+# living bench marches in their place (roster order, up to MAX_ACTIVE), so
+# the next fight has somebody in it.
+#
+# And if the WHOLE roster is dead, the company is finished — but the open world
+# has no run-ending screen to send it to (the linear run's Campaign.TERMINAL /
+# show_summary is the node route's alone), and a map with nobody alive on it is
+# a save that cannot be played or ended. So exactly one comes back: the
+# highest level of the fallen (roster order breaks ties, so the founder when it
+# is close), at 1 HP, marching alone. `spared` names them so the screen can say
+# it; everyone else stays dead.
+# ponytail: a lone survivor stands in for a game-over the open world does not
+# have. Revisit when the open world gets its own end-of-run summary (a wiped
+# company would end there, and its heroes go to the barracks as they are).
+#
+# `carried_out` is ids a fight put on the ground without killing them, dead
+# flag or not: the pit's lost bout (Downtime.pit_result), which is a brawl for
+# a purse, not a death match. They come to with the downed; nobody else's
+# death is undone by it.
+#
+# Returns {"came_to": [ids], "dead": [ids], "spared": id or ""}. Deterministic:
+# no roll, only the roster's own order and levels.
+static func revive_downed(party, carried_out: Array = []) -> Dictionary:
+	var came_to: Array[String] = []
+	var dead: Array[String] = []
+	for ch in party.roster:
+		if ch.dead and String(ch.id) in carried_out:
+			ch.dead = false
+			ch.hp_current = 0   # comes to just below, like any of the downed
+		if ch.dead:
+			dead.append(String(ch.id))
+		elif ch.hp_current >= 0 and ch.hp_current < 1:   # -1 is "full", not down
+			ch.hp_current = 1
+			ch.dirty()
+			came_to.append(String(ch.id))
+	var spared := ""
+	if not party.roster.is_empty() and dead.size() == party.roster.size():
+		var best = party.roster[0]
+		for ch in party.roster:
+			if ch.level() > best.level():
+				best = ch
+		best.dead = false
+		best.hp_current = 1
+		best.dirty()
+		spared = String(best.id)
+		dead.erase(spared)
+	var standing := false
+	for id in party.active:
+		var ch = party.get_member(id)
+		if ch != null and not ch.dead:
+			standing = true
+	if not standing:
+		for id in party.active.duplicate():
+			party.bench(id)   # only the dead are left in it; they make no room otherwise
+		for ch in party.roster:
+			if not ch.dead and not party.is_active(ch.id):
+				party.activate(ch.id)
+	return {"came_to": came_to, "dead": dead, "spared": spared}
+
+# The line a beaten company reads on the map, from revive_downed()'s answer
+# and the ids this fight killed. Here rather than in the screen so the words
+# and the rule are tested together: the dead are named, and the line says
+# what brings them back.
+func defeat_line(revived: Dictionary, fell: Array, where: String, lost: int) -> String:
+	var spared := String(revived.get("spared", ""))
+	if spared != "":
+		var ch = get_member(spared)
+		return "The company is beaten, and this time nearly all of it stays where it fell. %s comes to alone at %s, %d ◉ lighter. The rest come back only through a healer, at %d ◉ a head." % [
+			ch.cname if ch != null else spared, where, lost, REVIVE_COST]
+	var line := "The company is beaten and left for dead. The living come to at %s, %d ◉ lighter." % [where, lost]
+	var names: Array = []
+	for id in fell:
+		var ch = get_member(String(id))
+		if ch != null and ch.dead:
+			names.append(ch.cname)
+	if not names.is_empty():
+		var who: String = names[0] if names.size() == 1 \
+			else ", ".join(names.slice(0, names.size() - 1)) + " and " + String(names[-1])
+		line += " %s did not get up. A healer can raise the dead, at %d ◉ a head." % [who, REVIVE_COST]
+	return line
 
 # --- display --------------------------------------------------------------
 
