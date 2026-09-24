@@ -72,6 +72,7 @@ const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
 const WorldChase = preload("res://core/world_chase.gd")
+const WorldFlee = preload("res://core/world_flee.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
@@ -321,6 +322,11 @@ var _meet_aim := Vector2.INF
 # next roll to run the band down, and how many of those rolls it has missed.
 var _chase_next_at := 0.0
 var _chase_misses := 0
+# When core/world_flee.gd last sized every band up against the party. -INF so
+# the first frame gauges; after that every GAUGE_MINUTES of world time, which
+# is soon enough to catch a level-up or a band that has walked into a new
+# country, and far cheaper than pricing the party every frame.
+var _gauged_at := -INF
 var _pace_btn: Button
 var _bottom_bar: HBoxContainer       # the road actions and their messages; _layout_minimap seats it
 var _site_screen: Control = null     # ...and the descent screen drawing it
@@ -570,6 +576,9 @@ func _process(delta: float) -> void:
 		p0.speed = World.SPEED * Travel.speed_mult(party)
 	FactionOpinion.tick(world, dt)
 	PartyOpinion.decay(party, dt)   # spike-party-opinions §7: a paused clock drifts nothing, same contract
+	if world.clock.elapsed >= _gauged_at + WorldFlee.GAUGE_MINUTES:
+		world.band_strength = WorldFlee.gauge(world, party)
+		_gauged_at = world.clock.elapsed
 	WorldAI.update(world, delta)
 	_check_encounter(dt)
 	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not
@@ -1599,7 +1608,7 @@ func _follow_meet(p, dt: float) -> void:
 		if q.id == _meet_id:
 			band = q
 			break
-	if band == null or not _in_view(p, band):
+	if band == null or not world.band_seen(band.position):
 		var who := _meet_name
 		_drop_meet()
 		_camp_msg.text = "Lost sight of %s." % who
@@ -1614,13 +1623,6 @@ func _follow_meet(p, dt: float) -> void:
 		return
 	if band.position.distance_to(_meet_aim) > ENCOUNTER_RADIUS * 0.5:
 		_aim_meet(p, band)
-
-# What the chase can still see: a band the map draws, or one inside the party's
-# sight right now. band_seen() alone is the remembered trail, whose last
-# waypoint can sit EXPLORE_STEP behind a party on the move, so a band a hundred
-# units ahead of the chase could drop out of it while plainly in the open.
-func _in_view(p, band) -> bool:
-	return world.band_seen(band.position) or world.is_visible_now(band.position, p.position)
 
 # A band as fast as the party or faster is never caught by following it, so
 # while it is still in sight the party gets a roll every WorldChase.INTERVAL to

@@ -228,13 +228,17 @@ static func level_here(world, pos: Vector2, party) -> int:
 # levels only: a thin party that is inside its band by level still gets a fight
 # its own size, which is what every measured number in core/scaler.gd assumes.
 static func power_scale(world, pos: Vector2, party) -> float:
+	if party == null or party.party_characters().is_empty():
+		return 1.0
+	return scale_for(world, pos, party_level(party), fresh_score(party))
+
+# power_scale with the party already read: its level and its fresh_score. For
+# a caller pricing many points against one party (core/world_flee.gd gauges
+# every band on the map), where re-pricing the party per point is the cost.
+static func scale_for(world, pos: Vector2, have: int, fresh: float) -> float:
 	var lv: Array = at(world, pos)["levels"]
 	var lo: int = int(lv[0])
 	var hi: int = int(lv[1])
-	var have: int = party_level(party)
-	if party == null or party.party_characters().is_empty():
-		return 1.0
-	var fresh: float = fresh_score(party)
 	var target := 0.0
 	if have < lo:
 		target = ref_score(lo)

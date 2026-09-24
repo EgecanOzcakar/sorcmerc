@@ -9446,6 +9446,52 @@ scar lifted at the resilience cap, and about half the witnesses being asked.
 - **Heroes die often in the run:** 123 hero deaths in 880 fights, 14 per 100
   fights (the sweep raises them for the next fight). That is a combat number,
   not a trait one.
+## Real recordings for the sfx, kept out of the public repo (2026-09-24)
+
+Regenerating the ElevenLabs sfx from sharper prompts did not make them sound
+real: across 55 takes the median hiss moved from -62 to -60 dB and the ~11 kHz
+notch stayed in 37, because the model's own fingerprint (hiss, the notch, fizz
+above 15 kHz, thin lows) survives any wording. The model takes text only, so a
+regeneration is a fresh draw, never an edit of the earlier take. Tone matching
+(`tools/gen_audio_elevenlabs.py --retone`) and the part-aware trim
+(`tools/trim_sfx.py`) helped at the edges.
+
+What did work was real recordings. 45 sfx were picked by ear, against the
+current takes, out of the free Sonniss #GameAudioGDC bundles. Their license
+(v2.0) lets them ship inside the game with no credit but forbids handing them out
+as sound files, modified or not, and this repo is public. So
+`tools/import_licensed_sfx.py` holds only the recipe — bundle year, pack, file,
+the window that was auditioned — and rebuilds `assets/audio/sfx/licensed/`
+(gitignored) from a local copy of the bundles, and `core/audio.gd`'s `_take_of`
+lets a `licensed/<id>.wav` replace that id's committed takes. A clone without
+the bundles, CI included, plays the ElevenLabs fallback unchanged.
+
+The built files are kept in the private `EgecanOzcakar/sorcmerc-licensed-audio`,
+because sharing within the team is allowed and loose files in public are not.
+`.githooks/_reimport.sh` runs `tools/fetch_licensed_sfx.sh` after every pull and
+checkout, which clones or pulls it into `sfx/licensed/` for anyone who can read
+it and does nothing for anyone who can't. The release workflow's "Fetch the
+licensed sfx" step clones it with a read-only deploy key before the import, so
+the itch build carries the real recordings; without the `LICENSED_AUDIO_SSH_KEY`
+secret it warns and ships the generated takes.
+
+Found on the way: an exported build played no sound at all. The pack holds only
+Godot's imported copy of each WAV, never the raw file `core/audio.gd` parsed by
+hand, so `_stream` now falls back to `load()`. Measured on an exported
+"Web (Release)" pack, by running the game's own `audio.gd` from it.
+
+### Still open
+
+- The files were fetched from third-party archive.org mirrors of the bundles
+  for auditioning. The license binds whoever downloads the bundle from Sonniss,
+  so download the official bundles and re-run the importer before shipping.
+- `export_presets.cfg` exports non-resource files by `*.txt` only, and
+  `core/audio.gd` reads WAVs as raw files, not through `load()`. Check that an
+  exported build carries `sfx/` and `sfx/licensed/` at all.
+- The 34 handpicked hit/crit/kill files are committed and their source and
+  license are not recorded anywhere.
+- Six sfx kept their generated take by choice: carter_down, cast_divination,
+  click, landmark_open, miss_ranged, wave_arrives.
 
 ## An audit pass — the player reports, and what four sweeps of the code found (2026-09-23)
 

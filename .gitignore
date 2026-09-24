@@ -49,3 +49,7 @@ combat_strip.png*
 /board_downs.png*
 /board_marsh.png*
 /combat_card.png*
+
+# Real recordings that may ship in the game but not sit in this public repo:
+# tools/import_licensed_sfx.py rebuilds them from your own copy of the bundles.
+/assets/audio/sfx/licensed/
