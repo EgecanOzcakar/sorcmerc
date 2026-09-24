@@ -9640,6 +9640,28 @@ more goblin hit).
   in scaler's 2026-09-15 retune, and nothing re-ran this table. Whether
   regions keeps its own 0.90 exponent is the owner's call. The full table and
   the options are in the header, marked `ponytail:`.
+- **Level 10 in band, found and half fixed.** `Power.estimate` credited every
+  leveled spell with its level's whole slot count and summed every spell's
+  control, so a caster's score grew with the length of the prepared list. A
+  built level-10 cleric scored 416 (20 without spells). The budget bought
+  against a built level-10 party won 6.7% of easy fights; against the
+  preset-only one, 60%.
+  - **Fixed:** each slot is one cast of the best spell it pays for, at most
+    ROUNDS casts a fight, and control is the best spell's, not the sum.
+    `test_rules` checks it, and the check fails on the old estimator (four
+    first-level spells priced at 36.8 against the best one's 16.8).
+  - **Measured after the fix:** level 10 in band 61.2% → 81.2%; one band out
+    17.5%; the deeps 2.5%. Level 3 easy/normal/hard (sweep_tier) is
+    96.5/90.0/79.5, back to about master's numbers. Full suite 155/155.
+  - **Open (the owner's):** the rest of the level-10 gap is spell control.
+    A built level-10 party wins 33% at easy. With its spells' control priced
+    at zero it wins 92%. Hold Person alone is priced as a lockout every round,
+    while the party autopilot never casts a spell without dice. Options are
+    in `core/regions.gd`.
+  - Found on the way: `test_rules`' `test_power_ranks_the_heroes` and the tail
+    of `test_adapter` had not asserted anything since the summon statblocks
+    joined `monsters.json`. The helper threw on them, and the file still
+    reported green. 14 checks run again, all passing.
 - The #197 report's screenshot could not be fetched from here. This fixes what
   its text describes, which is also what the close shot showed. If the
   owner's board shows a different gap, it wants that board's seed.

@@ -232,6 +232,12 @@
 # 200 seeds), all in the predicted direction, and test_scaler's bands still
 # hold. TIER stays where it is: a retune for rules that are now right would
 # only be undone by the next rule that is.
+# Same day, after Power.estimate stopped stacking a caster's spell list (each
+# slot one cast of the best spell, at most ROUNDS casts, control the best
+# spell's): easy 96.5%, normal 90.0%, hard 79.5%, foes unchanged (4.1 / 3.8 /
+# 4.0). The level-3 cleric's score fell 23.9 -> 23.2, so her budget is a hair
+# smaller, which is about what the two rules took back. The level-10 column is
+# where it shows: see core/regions.gd's re-measure.
 extends RefCounted
 
 const Adapter = preload("res://core/adapter.gd")

@@ -271,10 +271,35 @@ static func ref_score(level: int) -> float:
 # see over" but one you cannot, and the deeps at level 3 are not "survivable,
 # barely" but not at all. In band at level 10 is 61-66%, not 95%: the level-10
 # party is weaker against its own content than scaler's level-8 column says.
-# ponytail: decide whether regions keeps its own exponent (0.90 would put the
-# off-diagonal scales back where this design was argued) or accepts the steeper
-# country. Either way re-run tests/sweep_regions.gd, and look at level 10 in
-# band apart from the curve.
+#
+# Level 10 in band had its own cause, found the same day. Power.estimate
+# credited every leveled spell with its level's whole slot count and summed
+# every spell's control, so a caster's score grew with the prepared list. The
+# ruler's level-10 cleric (fourteen spell ids) was priced at 113, and a built one
+# (fifteen prepared) at 416 where the same cleric without spells is 20. Fixed
+# in core/rules/power.gd: each slot is one cast of the best spell it pays for, at
+# most ROUNDS casts a fight, and control is the best spell's. Re-run:
+#
+#   party  content   scale   branch before   with the power fix
+#   lvl 3   lvl 3    x1.00      95.0%           96.2%
+#   lvl 10  lvl 10   x1.00      61.2%           81.2%
+#   lvl 6   lvl 3    x0.44       100%            100%
+#   lvl 10  lvl 3    x0.30       100%            100%
+#   lvl 3   lvl 6    x2.26       8.8%           17.5%
+#   lvl 3   lvl 10   x3.38       0.0%            2.5%
+#
+# (The scales moved because ref_score is Power.team_score of the ruler party.)
+# What is left of the level-10 gap is spell CONTROL. A built level-10 party
+# (choices made, a full prepared list) wins 33% at easy in band. Price its
+# spells' control at zero and it wins 92%, because Hold Person alone is priced
+# as a lockout landing every round (CTRL_WEIGHT * share) while the party
+# autopilot never casts a spell without dice at all, and a concentration lock
+# holds one target at a time.
+# ponytail: two calls are open. (1) Does regions keep its own exponent (0.90
+# would put the off-diagonal scales back where this design was argued) or
+# accept the steeper country? (2) Is spell control priced for a concentration
+# lock, or given no price, or does the autopilot learn to cast it? Re-run
+# tests/sweep_regions.gd after either.
 
 # --- placement, for the world builders ------------------------------------
 
