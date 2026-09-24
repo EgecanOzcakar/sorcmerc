@@ -112,6 +112,7 @@ var _order_aimed := {}    # ids currently wearing the aim highlight — see _pai
 @onready var _board := Board.new()
 const Figures3D := preload("res://scenes/figures3d.gd")
 const CombatCard := preload("res://scenes/combat_card.gd")   # #173
+const SkillCard := preload("res://scenes/skill_card.gd")     # the bar's hover card
 const Portraits := preload("res://scenes/portraits.gd")
 var _figures
 @onready var _actor := RichTextLabel.new()
@@ -1135,6 +1136,7 @@ func _menu_entries(h) -> Dictionary:
 		var label: String = _verb_label(h, v)
 		# The name leads the popup now that it has left the button face.
 		var tip: String = label + "\n" + _verb_tooltip(h, v)
+		var prose := _verb_prose(v)
 		var sid: String = String(v.get("spell", ""))
 		var glyph: String = Icons.school_glyph(Icons.spell_school(sid)) if sid != "" \
 			else Icons.verb_glyph(String(v["kind"]))
@@ -1145,6 +1147,9 @@ func _menu_entries(h) -> Dictionary:
 		# the icons aren't there — see Icons.verb_icon.
 		var meta := _mark(Icons.skill_icon(v), glyph, freq_key)
 		meta["verb"] = v   # #92: hovering the button shows the reach on the board
+		# What the popup draws: the same verb, as a card (scenes/skill_card.gd).
+		# `tip` stays the plain string the tests and the robots read.
+		meta["card"] = SkillCard.from_verb(h, v, prose[0], prose[1], _card_title(h, v))
 		meta["slot_level"] = int(v.get("slot_level", 0))
 		meta["cost"] = String(v.get("cost", "action"))
 		if label.contains("★"):
@@ -1191,9 +1196,12 @@ func _menu_entries(h) -> Dictionary:
 			# while ANY of its tiers is — the picker greys the tiers there are
 			# no slots for, the same way the bar greys anything else spent.
 			var head: Dictionary = base[3].duplicate()
+			head["card"] = (head["card"] as Dictionary).duplicate()
 			var castable: int = tiers.filter(func(t): return not bool(t[3].get("disabled", false))).size()
 			head["disabled"] = castable == 0
 			head["shift_fn"] = func(): _spell_tier_menu(h, sid)   # Shift+number: pick the slot level
+			head["card"]["foot"] = "%d of %d slot levels castable — press to pick one (Shift+key for the levels)" % [
+				castable, tiers.size()]
 			opts[i] = [base[0], func(): _spell_tier_menu(h, sid),
 				"%s\n%d of %d levels castable — pick one (Shift+key for the levels)." % [base[0], castable, tiers.size()], head]
 
@@ -1432,6 +1440,43 @@ const KIND_BLURB := {
 	"font_of_magic": "Font of Magic: burn a spell slot into sorcery points (no action), or spend points on a new slot (a bonus action). A made slot lasts until your next long rest.",
 	"metamagic": "Metamagic: bend the next spell you cast. The points are paid now and come back if no spell takes it this turn.",
 }
+
+# The martial verbs' lore line on the hover card (scenes/skill_card.gd). A
+# spell's comes out of its SRD text; the verbs every character has were never
+# given any, and a card that is all rules for Dash and half story for Fireball
+# reads as two different games. Only the verbs everybody has: a class feature
+# (Second Wind, Rage) is too particular for one line per kind to be true of it,
+# and gets its rules blurb alone.
+const KIND_LORE := {
+	"attack": "Steel, and the arm behind it.",
+	"offhand_attack": "The other hand was never only there for balance.",
+	"dodge": "Stop trying to win for a moment. Just don't get hit.",
+	"dash": "Run now; work out where to later.",
+	"disengage": "Back off a step at a time, blade up, and leave them no opening.",
+	"hide": "Get something solid between you and them, and keep still.",
+	"help": "A feint, an elbow, a shout at the right moment.",
+	"shove": "Some fights go better with the other one on the floor.",
+	"grapple": "Get a hand on them and don't let go.",
+	"escape": "Twist, shove, and get loose.",
+	"smash": "It's a barrel. It won't mind.",
+}
+
+# [lore, rules] for the card: a spell's SRD description cut where its rules
+# start (SkillCard.split_prose), else KIND_LORE over the kind blurb.
+static func _verb_prose(v: Dictionary) -> Array:
+	if v.has("spell"):
+		var desc := String(Catalog.spell(v["spell"]).get("description", ""))
+		if desc != "":
+			return SkillCard.split_prose(desc)
+	return [String(KIND_LORE.get(v["kind"], "")), String(KIND_BLURB.get(v["kind"], ""))]
+
+# The card's title: the verb's plain name — its cost and pool, which the bar
+# label carries as " [bonus]" and " 2/3", have their own lines on the card.
+static func _card_title(h, v: Dictionary) -> String:
+	var t := String(v["label"])
+	if v["kind"] == "attack" and not h.attacks.is_empty():
+		t += " (%s)" % h.attacks[0].get("name", "unarmed")
+	return t
 
 # Prose first (a spell's own SRD text, else the kind blurb), then the resolved
 # numbers. Anything that deals or heals damage always names its dice (T29).
@@ -1816,7 +1861,7 @@ func _set_buttons(opts: Array) -> void:
 	var count := opts.size()
 	var u := Settings.chrome_scale()
 	for i in count:
-		var b := Button.new()
+		var b := SkillCard.HoverButton.new()
 		var meta: Dictionary = opts[i][3] if opts[i].size() > 3 else {}
 		var hotkey := String(meta.get("key", ""))
 		if hotkey == "":
@@ -1829,6 +1874,9 @@ func _set_buttons(opts: Array) -> void:
 		var tex: Texture2D = meta.get("icon")
 		Icons.icon_button(b, tex, int(Icons.ICON_PX * u))
 		var tip := String(opts[i][2]) if opts[i].size() > 2 else ""
+		# The popup's card: the verb's own when _menu_entries built one, else
+		# one made of the plain text (the slots, Swap, End turn, Cancel).
+		b.card = (meta["card"] as Dictionary).duplicate() if meta.has("card") else SkillCard.from_text(tip)
 		if tex != null:
 			b.custom_minimum_size = BTN_SIZE * u
 			_chip(b, hotkey, Control.PRESET_BOTTOM_RIGHT, Icons.COL_HEAD, u)
@@ -1847,11 +1895,13 @@ func _set_buttons(opts: Array) -> void:
 			# Appended, not prefixed: the skill's NAME leads every tooltip on
 			# this bar, and it is the line that says which badge you are over.
 			tip = tip + "\n\nNot available right now."
+			b.card["alert"] = ["Not available right now.", Icons.COL_FOE]
 		elif meta.get("armed", false):
 			# A two-press verb is armed: with no label to relabel, the badge says
 			# so by going warm, and the popup says it in words.
 			b.modulate = Color("ffb3a8")
 			tip = "Press again to confirm.\n" + tip
+			b.card["alert"] = ["Press again to confirm.", Color("ffb3a8")]
 		b.pressed.connect(opts[i][1])
 		b.set_meta("hotkey", hotkey)
 		if tutorial:
@@ -1869,7 +1919,7 @@ func _set_buttons(opts: Array) -> void:
 					_hover_verb = {}
 					_board.queue_redraw())
 		if tip != "":
-			b.tooltip_text = tip   # native hover popup — the name, then what it does
+			b.tooltip_text = tip   # the popup's trigger, and what tests read; b.card is what it shows
 		_buttons.add_child(b)
 	_apply_ui_scale()
 
@@ -2172,6 +2222,12 @@ static func colorize(line: String, name_colors: Dictionary) -> String:
 		claim.call(m.get_start(1), m.get_end(1), COL_NUM)
 	for m in _re_verb.search_all(line):
 		claim.call(m.get_start(1), m.get_end(1), VERB_COLORS.get(m.get_string(1), COL_DICE))
+	# Damage types and conditions, in the one colour each has everywhere
+	# (Icons.DAMAGE_COLORS / CONDITION_COLORS): "fire" here is the orange on
+	# the spell's hover card. Last, so a name that happens to hold one of the
+	# words ("Frost Giant" does not, "Poison Drake" would) keeps its team colour.
+	for t in Icons.term_spans(line):
+		claim.call(t[0], t[1], t[2])
 	spans.sort_custom(func(a, b): return a[0] < b[0])
 	var out := ""
 	var cut := 0
@@ -3342,17 +3398,27 @@ class Board extends Control:
 			"%d/%d%s" % [c.hp, c.max_hp, ("+%d" % c.temp_hp) if c.temp_hp > 0 else ""],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * fz), Color("c9ccd6"))
 
-		# condition strip, centred over the token (the shoulder is the class badge's)
-		var tags: String = Icons.status_glyphs(c)
-		if c.is_stable(): tags += " %s stable" % Icons.condition_glyph("down")
-		elif c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
-		if tags != "":
+		# condition strip, centred over the token (the shoulder is the class badge's).
+		# One run per condition, each in its own colour (Icons.CONDITION_COLORS):
+		# a stunned goblin's ✷ is the yellow the log says "stunned" in.
+		var runs: Array = []   # [text, colour]
+		for id in Icons.CONDITION_ORDER:
+			if id != "down" and c.has(id):
+				runs.append([Icons.condition_glyph(id), Icons.condition_color(id)])
+		if c.is_stable(): runs.append([" %s stable" % Icons.condition_glyph("down"), Icons.condition_color("down")])
+		elif c.is_down(): runs.append([" %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f],
+			Icons.condition_color("down")])
+		if not runs.is_empty():
 			var fs := int(13 * fz)
 			var f := ThemeDB.fallback_font
-			var w := f.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-			var at := tp + Vector2(0, -rad * 0.8 - 10)
-			canvas.draw_string(f, at - Vector2(w * 0.5, -fs * 0.36), tags,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("e6c15a"))
+			var w := 0.0
+			for r in runs:
+				w += f.get_string_size(String(r[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var at := tp + Vector2(0, -rad * 0.8 - 10) - Vector2(w * 0.5, -fs * 0.36)
+			for r in runs:
+				canvas.draw_string_outline(f, at, String(r[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 3, Icons.COL_INK)
+				canvas.draw_string(f, at, String(r[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, r[1])
+				at.x += f.get_string_size(String(r[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 
 	# The size is the hit as a fraction of what the body had to lose: 12 damage
 	# ends a goblin and scratches a giant, and the number should not be the same
