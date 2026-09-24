@@ -34,7 +34,7 @@ The mercenary-company fantasy is carried by flavour and structure, not by a Batt
   - an inn room costs gold, and camping needs a 150-gold camp kit and carries an 8% ambush risk;
   - none at all inside a site.
 - **Spent slots never buy an easier fight.** The encounter budget reads the party's *remaining* slots, so it would send a drained party a smaller, poorer fight. `WorldThreat.slot_hold()` cancels that in the open world, and `core/site.gd` does the same inside sites. Only wounds thin a fight.
-- **Enemy magic is not slot-based.** No bestiary entry has spell slots. A foe's "magic" is a limited-use feature such as `monster-innate-bolt` (2 uses), a breath weapon, a gaze or life drain, defined in `data/effects/features.json`.
+- **Enemy magic is mostly not slot-based.** An ordinary foe's "magic" is a limited-use feature such as `monster-innate-bolt` (2 uses), a breath weapon, a gaze or life drain (`data/effects/features.json`). The exception is the named casters in `data/effects/casters.json`.
 
 ## Tone
 
@@ -79,7 +79,7 @@ These are direction, not description. The code still does the old thing until ea
   - **Old saves are grandfathered.** Rosters that already exist keep their heroes. The new rule applies to new runs only.
 - **Sorcerer rarity is fiction only.** No recruit odds and no social mechanic. "Uncommon but not rare" lives in the writing.
 - **Sorcerer features follow 2024 RAW.** Innate Sorcery and Font of Magic are built (`test_sorcerer.gd`). Metamagic is next. Until it lands, `core/manual.gd` says it isn't on the board yet.
-- **Enemy magic is rare and named.** Ordinary enemies keep their limited-use innate abilities. Slot-based casters appear only as an occasional elite or boss, so an enemy caster is an event.
+- **Enemy magic is rare and named.** Ordinary enemies keep their limited-use innate abilities. Built: the cult's lair boss casts from real slots in Frontier country and beyond, and announces itself. Caster elites in ordinary warbands are built but off, until the power model can price a glass cannon.
 - **Factions post contracts** (built: `core/contracts.gd`). Every job carries its `issuer`, who is credited wherever it is handed in. War work waits for Known and neutral opinion, and regard pays up to +25%.
 - **The player and the factions can fight each other** (the owner's call, 2026-09-24). This lifts the "never civilized-vs-civilized" rule: first rival-raid contracts, then NPC faction warfare. Neither is built yet.
 - **Armor stays 5e AC.** No damage split, no durability.

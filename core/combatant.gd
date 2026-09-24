@@ -69,6 +69,7 @@ var pools: Dictionary = {}          # pool_id -> {cur, max, regen}
 var spell_ids: Array[String] = []   # castable-now spells
 var slots: Array[int] = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 var sheet = null                    # ResolvedCharacter; null for monsters
+var caster := false                 # a statblock fielded with real slots (core/enemy_casters.gd)
 var traits: Array = []              # #176: personality trait ids (core/traits.gd); [] for monsters
 
 # runtime
@@ -131,6 +132,7 @@ func clone() -> RefCounted:
 		"id","src_id","cname","team","ac","max_hp","hp","init_mod","speed","pos","size",
 		"atk_bonus","damage","ranged","atk_range","reach","crit_range","save_dc","athletics",
 		"acro","stealth","passive_perception","sheet","darkvision","temp_hp","init_adv","str_mod","pb",
+		"caster",
 	]:
 		c.set(prop, get(prop))
 	c.saves = saves.duplicate()
