@@ -1231,6 +1231,19 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 		if why != "":
 			return {"error": why}
 	var swap := _flurry_swap(actor, v)
+	# The same contract for what a button draws on besides the economy: a pool
+	# too short, a slot a smite has none of, a Font of Magic conversion with
+	# no room. These were all asked after the Bonus Action was paid — Font of
+	# Magic's slot-making button, pressed after Metamagic had drained the
+	# points, cost the sorcerer the bonus action and made no slot.
+	if v.has("pool") and not swap and actor.pool_left(v["pool"]) < _pool_cost(v):
+		return {"error": "pool empty"}
+	if kind != "spell" and int(v.get("slot_level", 0)) > 0:
+		var sl := int(v["slot_level"])
+		if sl > actor.slots.size() or actor.slots[sl - 1] <= 0:
+			return {"error": "no slot"}
+	if kind == "font_of_magic" and not _font_ok(actor, v):
+		return {"error": "no room for the points" if String(v.get("font", "")) == "to_points" else "no such slot"}
 	if swap:
 		actor.econ["attacks_left"] = int(actor.econ["attacks_left"]) - 1
 	elif kind in ["shove", "grapple"]:

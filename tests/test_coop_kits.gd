@@ -41,6 +41,7 @@ func check(cond: bool, label: String) -> void:
 func _init() -> void:
 	test_the_detector()
 	test_a_refusal_changes_nothing()
+	test_a_drained_pool_changes_nothing()
 	var seen := {}
 	var fights := 0
 	for lvl in LEVELS:
@@ -158,3 +159,26 @@ func test_a_refusal_changes_nothing() -> void:
 				"%s: ...and refusing it spent nothing" % sc["id"])
 	check(tried >= 10, "the rule was tried on the kits that can meet it (%d casts)" % tried)
 
+# The same contract for a pool: a sorcerer whose points are gone presses Font
+# of Magic's slot-making button (the bar offered it a moment ago, before
+# Metamagic spent the points). perform() used to pay the Bonus Action and then
+# find the pool empty.
+func test_a_drained_pool_changes_nothing() -> void:
+	var Adapter = load("res://core/adapter.gd")
+	var Combat = load("res://core/combat.gd")
+	var Encounter = load("res://core/encounter.gd")
+	var RNG = load("res://core/rng.gd")
+	var h = Adapter.to_combatant(build("sorcerer", "draconicsorcery", 5), "party", Vector2i(2, 0))
+	var g = Encounter.spawn("ogre", 1.0, "foe", Vector2i(3, 0), 1)
+	var cb = Combat.new(RNG.new(9), [h, g], Encounter.board_for("goblin-camp"))
+	cb.begin_turn_for(h)
+	var make: Array = cb.all_verbs(h).filter(func(v): return String(v.get("font", "")) == "to_slot")
+	check(not make.is_empty(), "a level-5 sorcerer has Font of Magic's slot-making buttons")
+	if make.is_empty():
+		return
+	for pid in h.pools:
+		h.pools[pid]["cur"] = 0
+	var before := var_to_str([h.econ, h.slots, h.pools])
+	var r: Dictionary = cb.perform(h, make[0], h)
+	check(r.has("error"), "with no points left, making a slot is refused (%s)" % r)
+	check(var_to_str([h.econ, h.slots, h.pools]) == before, "...and refusing it spent nothing: the Bonus Action is still there")

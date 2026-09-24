@@ -10030,6 +10030,13 @@ Until now each was held by tests that only exercised a narrow slice.
   its economy, slots and pools untouched. Players rarely met it, because the
   bar only offers legal buttons. The AI and the co-op harness both rely on
   "a refused intent changed nothing".
+- **It found a second one when metamagic was merged onto it as a trial.**
+  `perform()` asked about the pool, a smite's slot and a Font of Magic
+  conversion only *after* paying the economy. Font of Magic's slot-making
+  button was pressed after Metamagic had drained the points, and the sorcerer
+  lost the Bonus Action and made no slot. On a co-op host that is a desync:
+  the host paid, and the guest never heard of it. These are now asked before
+  the spend too, checked by `test_a_drained_pool_changes_nothing`.
 
 **The modding API.**
 
