@@ -197,9 +197,10 @@
 # TIER fell across the board (1.00/1.35/1.80 -> 0.96/1.10/1.32) and the three
 # tiers now sit much closer together: hard is where nearly all of the target rise
 # landed (+23.5 points), so the budget spread that used to separate the tiers
-# has largely collapsed. CURVE stays 0.90 — level 8 still tracks level 3 within
-# ~4 points. REF_SCORE stays 46.6: it is the anchor TIER is expressed against,
-# not a measurement of today's preset party.
+# has largely collapsed. CURVE stayed 0.90 at T40 — level 8 still tracked level
+# 3 within ~4 points then; it moved to 1.15 on 2026-09-15 (above). REF_SCORE
+# stays 46.6: it is the anchor TIER is expressed against, not a measurement of
+# today's preset party.
 # TIER is steep and lumpy here: hard 1.30/1.32/1.33 measured 77.5/75.0/73.5% and
 # normal 1.08/1.10/1.12/1.14 measured 87.5/83.5/83.5/84.0%, so do not read a
 # 2-point miss as a knob that wants turning. Easy has a floor near 95: at TIER
@@ -273,7 +274,7 @@ const EnemyCasters = preload("res://core/enemy_casters.gd")
 
 const TIER := {"easy": 0.56, "normal": 0.66, "hard": 0.76}   # T-classes-b; see the header
 const REF_SCORE := 46.6   # the level-3 preset party — where TIER was calibrated
-const CURVE := 1.15       # budget grows sublinearly with party power (see the header)
+const CURVE := 1.15       # budget grows superlinearly with party power (see the header)
 const MAX_FOES := 8
 const MULT_MIN := 0.6
 const MULT_MAX := 2.5
