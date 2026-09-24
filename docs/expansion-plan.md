@@ -9996,6 +9996,85 @@ Sorcery back on a long rest only, and the autopilot's one use.
   and invisible still never reach a spell attack roll (`ponytail:` at
   `_spell_hit`). Innate Sorcery's Advantage is the only source wired.
 
+## Factions post contracts: who hires the company (2026-09-24)
+
+The owner's call from the skills pass: factions and towns offer merc jobs, and
+standing with each faction decides who hires you. Most of the jobs already
+existed:
+
+- **Clear a lair** was `clear_lair`.
+- **Escort** was `deliver_goods`, the carter's run.
+- **Raid** was `raid_settlement` against a monster hold.
+
+What was missing was whose job it was.
+
+**The job knows who posted it.** `core/contracts.gd` stamps every job with its
+`issuer` (the people of the settlement that posted it) and, when it is aimed at
+somebody, who it is `against` (the world job's `chain_faction`). `Quest.turn_in`
+credits the issuer's opinion and a ladder deed **wherever the job is handed
+in**. Before this it credited the hand-in town: a human bounty cashed at an
+elven inn pleased the elves and taught the humans nothing. A job posted before
+contracts has no issuer and credits the hand-in town exactly as before.
+
+**Standing opens the work** (`Contracts.GATE`), on the two readings the game
+already keeps:
+
+- **The ladder** (deeds, never lost: what you have done for them). War work,
+  meaning a raid on a settlement, waits for **Known** (4 deeds).
+- **Opinion** (their mood, which drifts). Bounty and war work wait for at least
+  **neutral**. Everything else stays open down to the board's own floor
+  (`QUEST_MIN`), as it was.
+
+A closed kind is not a greyed button. It is a note under the board's header:
+"War work goes to those the humans know — Known, at 4 deeds (you have 0)."
+The robots press the first *Take* they find, and a job you can't take isn't a
+job on the board.
+
+**Regard pays.** `Contracts.pay_mult` scales a job's gold with their opinion:
++25% at +100, −6% at the floor. It sits on top of the renown premium every job
+already gets. `STANDING_PAY` is a TUNING taste number: gold sits outside every
+sweep, as `world.gd`'s `PURSE` ponytail says of a caravan.
+
+**Two bugs fixed on the way.**
+
+- The hand-in crediting above.
+- The `quest_chain` achievement counted the hand-in town's faction, a civilized
+  people no chain is ever against. It could not be earned in the open world.
+  It now counts the job's own `chain_faction`.
+
+`test_contracts` (new, 42 checks) covers:
+
+- the gates opening across Known and neutral, and closing at the floor;
+- pay at neutral, loved, and below the floor, and stacking on the real board;
+- every offer stamped with its issuer, and closed kinds listed only where
+  they'd be posted;
+- turn-in crediting the issuer, not the hand-in town;
+- a pre-contracts job still crediting the hand-in town;
+- a job against a people costing you with them.
+
+`test_quest_posting`: the city posts its raid only once it knows you.
+
+Shots, from the new `tests/shot_contracts.gd`: `docs/shots/contracts-board-stranger.png`,
+`docs/shots/contracts-board-known.png`.
+
+### Still open
+
+- **Raiding a rival people**, and **faction warfare**: the owner's call
+  (2026-09-24) is that the player *and* the factions can fight each other. That
+  lifts the "never civilized-vs-civilized" rule from the Post-T91 gap note. Next:
+  - a `raid_caravan` contract against another people's caravan or patrol, with
+    an Attack option on the friendly approach card when the band is a contract
+    target;
+  - then NPC factions fighting each other.
+
+  `against` and `Contracts.AGAINST_COST` are already in place for it: every
+  current target is a monster faction, so today it never fires.
+- **Factors.** Other peoples' agents posting their own contracts on a city's
+  board, gated by each people's standing.
+- **Turn-in.** Whether it should be limited to the issuer's own towns.
+- **Co-op.** A guest sees the host's standing and gates, since the offers are
+  the host's.
+
 ## Keeping co-op and the modding API stable through heavy features (2026-09-24)
 
 The owner's ask: skills and checks that keep co-op and the modding API stable
