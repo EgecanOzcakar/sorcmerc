@@ -34,6 +34,7 @@
 extends RefCounted
 
 const Campaign = preload("res://core/campaign.gd")
+const Contracts = preload("res://core/contracts.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const Ladder = preload("res://core/ladder.gd")
 const Quest = preload("res://core/quest.gd")
@@ -165,6 +166,10 @@ static func offers(s, services: Array, party, world = null) -> Array:
 	var out: Array = []
 	var seen := {}
 	for kind in Quest.KINDS:
+		# Contracts: some work is only handed to those this people knows, or
+		# trusts today (core/contracts.gd). The board says why when it is not.
+		if not Contracts.open(String(kind), s.faction):
+			continue
 		for counter in counters_for(s, services, String(kind)):
 			for q in _build(String(kind), counter, s, party, world, world_jobs, opinion):
 				var id := String(q["id"])
@@ -172,10 +177,25 @@ static func offers(s, services: Array, party, world = null) -> Array:
 					continue
 				seen[id] = true
 				q["counter"] = counter
-				# Renown's premium: a famous company charges more, on every job.
+				Contracts.stamp(q, s.faction)
+				# Renown's premium, and this people's regard: a famous company
+				# charges more everywhere, a liked one here.
 				if q.has("reward") and q["reward"].has("gold"):
-					q["reward"]["gold"] = int(int(q["reward"]["gold"]) * Ladder.pay_mult())
+					q["reward"]["gold"] = int(int(q["reward"]["gold"]) * Ladder.pay_mult() * Contracts.pay_mult(s.faction))
 				out.append(q)
+	return out
+
+# The contract kinds this settlement would post but will not post YOU, each with
+# the line that says why — for the notice board, which shows them as notes
+# rather than as jobs. Only kinds some counter here would actually post.
+static func closed(s, services: Array) -> Array:
+	var out: Array = []
+	for kind in Quest.KINDS:
+		if counters_for(s, services, String(kind)).is_empty():
+			continue
+		var why := Contracts.why_closed(String(kind), s.faction)
+		if why != "":
+			out.append({"kind": String(kind), "why": why})
 	return out
 
 # Which counters here would post this kind — [] when none of them is standing in

@@ -18,6 +18,8 @@ shots_move/
 shots_summons/
 shots_caster/
 shots_sorcerer/
+
+shots_contracts/
 figures_idle_*.png
 move_sequence.png
 idle_sequence.png
