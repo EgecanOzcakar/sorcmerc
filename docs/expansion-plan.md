@@ -10427,6 +10427,7 @@ with Careful Spell.
 - **Sorcerous Restoration** (short-rest points at 5) and **Sorcery Incarnate**
   (two options on one spell at 7) are still flavour.
 
+
 ## What's riding on you — the effect strip on the action bar (2026-09-24)
 
 The owner's ask: make every buff we have (an armed Metamagic, the Advantage
