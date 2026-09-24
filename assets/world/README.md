@@ -1,11 +1,12 @@
 # World map art
 
-Everything here is **CC0 1.0 / Public Domain** — no attribution is required;
-this note is the paper trail the expansion plan asks for.
+Nothing here is licensed from anyone: the ground textures are **AI-generated**
+and the shaders are **written by hand**. The CC0 packs that used to be here are
+listed under "Retired art" at the bottom.
 
-| File | Source pack | Author | Original file |
-|------|-------------|--------|---------------|
-| `ground/{grass,forest,water}.png` | generated in-house (`~/localgen/gen_overworld_ground.py`, SDXL, made seamless) | — | the overworld's painted ground, blended by `ground/ground3d.gdshader` |
+| File | Origin | Recorded in |
+|------|--------|-------------|
+| `ground/{grass,forest,water}.png` | **AI-generated**: SDXL through a local ComfyUI (`~/localgen/gen_overworld_ground.py`, not in this repository), made seamless. The overworld's painted ground, blended by `ground/ground3d.gdshader`. Carries the Steam AI-content disclosure obligation. | `ground/PROVENANCE.md` |
 
 The three shaders next to them are written here, not sourced:
 
