@@ -18,6 +18,11 @@ revive on defeat, a money printer in the lodge garden, a positive-return
 gambling table — each of which removes a cost the rest of the design is built
 on. Closing those is cheap and does more for the pillars than any new system.
 
+Outside the pillars, two things matter before anything ships: most of the
+AI-generated art has no provenance record, though the bible makes that the
+rule the Steam disclosure rests on (§8), and the Far Deeps — where most of a
+run is spent — have the thinnest bestiary in the game (§5, §8).
+
 ---
 
 ## 1. Side doors: costs the bible names that the code lets you skip
@@ -225,7 +230,43 @@ trap for anyone grepping for TIER.
 
 ## 8. Scope, setting and art
 
-_This section is being filled in._
+**Works:** content packs hold no code (`content/` is JSON, one .md and PNGs);
+all 15 factions in `Scaler.FACTIONS` have a lair boss; all four species
+settlement kits exist (`scenes/world/settlement_kit.gd:112-133`); the 2D
+cutout plan left nothing behind but `data/lpc/*.json`, which nothing loads, as
+the bible says.
+
+| Sev | Finding | Evidence | Recommendation |
+|---|---|---|---|
+| **High** | **Most AI-generated art has no PROVENANCE.md**, which is the rule the Steam disclosure rests on. None in `assets/beasts/` (110 Meshy GLBs), `assets/board/` (22 Meshy props + 8 SDXL floors), `assets/settlements/` (12 Meshy dioramas), `assets/generated/` (362 PNGs, 237 still carrying `sd_xl_base_1.0` metadata), `assets/art/items/` (315 SDXL icons), or the six SDXL portraits in `content/`. `README.md:171` still says "As of 2026-09-12 nothing in this repo is AI-generated", and its provenance table lists none of these. `assets/world/README.md` says "Everything here is CC0" while listing SDXL textures. | `tools/import_beasts.py:2`, `tools/localgen/gen_floor_textures.py:3`, `tools/lowpoly_glb.py:2`, `tools/import_item_art.py:2`; `README.md:160-171` | A PROVENANCE.md per directory (most prompts are recoverable from the PNG metadata); rewrite the README table. **Do this before any store page.** |
+| **High** | **The four PROVENANCE.md files that exist are incomplete.** `assets/figures/` records tool/model/date/prompt for the goblin only (17 other rigs have none); `assets/troops/` has no model version or prompts and points outside the repo; `assets/lairs/` has no date or prompt for two lairs and says they are "not yet wired" (`scenes/world/lairs3d.gd:35` loads them); `assets/npcs/` has no date. | `assets/*/PROVENANCE.md` | Fill them in the same pass. |
+| Med | **The house prompt style is not what the prompts say.** "semi-realistic fantasy, muted earthy palette" is in one prompt, the goblin's. The 2D prompts say "painterly" (243) or "oil painting" (122), with "rich warm palette" (110). The bible says icons are "not an image model", which is true of the action icons but not the 428 SDXL item and achievement icons. | `assets/figures/PROVENANCE.md:16`; `assets/generated/` metadata | Add a 2D style line to the bible, or bring the prompts into line. |
+| **High** | **The one enemy that casts from real slots can never be met.** Sites are only built from lairs; every lair in the shipped worlds is goblinoid, giant, undead or dragon (plus one construct lair in a pack). So 9 of the 10 site bosses, including the cult's slot-casting `lead_caster` the bible calls built, are unreachable. | `scenes/world/procedural_world.gd:27-33`; `world.gd:529-532, 2780`; `core/site.gd:340`; `content/*/world.json` | Place lairs for more factions from `Regions.HOMES`. |
+| Med | **The Far Deeps have almost nothing at their level.** The bestiary has 4 entries at CR 10+ (2 dragon, 1 construct, 1 soldier — and soldier has no home). Deeps factions top out low: fey CR 3, undead 5, elemental 6. Orc, gnoll and kobold have 1–2 entries each, below `ROSTER_KINDS = 3`. Fey, elemental and construct never roam the base map (`core/world_bands.gd:31-45`), and fey, elemental, construct and dragon have no 3D figure. With §5's estimate that the Deeps hold most of a run, this is where the content is thinnest and the play is longest. | `data/bestiary.json`; table below | Before any Deeps balance work: more CR 10+ entries, bands for the Deeps factions, figures for four factions. |
+| Med | **Mechanics with no way in for the player.** Arcane Recovery (§4); multiclassing (`Leveling.add_level` is always called without a class, so "Two Roads" and "Dilettante" can't be earned); the 5 unbuilt Metamagic options are still offered as picks in the creator; `FactionOpinion.price_factor` has no callers (`settlement_visit.gd:300` repeats it inline); `Regions.describe` is called only by its test; `Regions.label_of`, `RoadSpells.is_road`, `Hex.corner_pixel` have no callers. | `core/achievements.gd:224-227`; `core/combat.gd:690` | Wire or cut; grey out the unbuilt Metamagic picks. |
+| Med | **Rules living in `scenes/`.** `world.gd:1951` `_bank` does the post-fight XP split and the Greedy gold bonus; its `ponytail:` says move it "the day campaign.gd is in scope", and `campaign.gd` was edited on 2026-09-23, so the condition is met (same for `settlement_visit.gd:15`). `scenes/profile/profile.gd:554` uses an unseeded `RNG.new(randi())`. | as cited | Move `_bank` into `core/`; seed the profile's roll. |
+| Med | **The bible's "decided, not built" list is behind.** Paladin/ranger level-1 slots are built (§7). Rival raids and faction warfare are not: `Quest._world_quest_pool` targets monster settlements only (`core/quest.gd:146`), and the `against`/`AGAINST_COST` hooks never fire. | `core/quest.gd:146` | Mark the slot fix built; give rival raids a `docs/plan/` entry when it starts. |
+| Low | **Strays and forgotten notes.** Six `*.png.import` at the repo root with no PNG; `shots_hiring/` (908 KB) committed in `1165830` despite `.gitignore`'s `shots_*/`; `data/lpc/*.json` unloaded; `docs/plan/2026-09-24-autopilot-bonus-actions.md` says Metamagic is "not on master yet" (it is, and the autopilot still arms none); `update-notes.yml` reads only `expansion-plan.md`, not `docs/plan/`; CLAUDE.md says ~48 `ponytail:` comments and there are 58. | as cited | One cleanup commit. |
+
+**Faction × region coverage** (bestiary entries by CR):
+
+| Faction | Home | ≤1 | 2–4 | 5–9 | 10+ | Lair in shipped worlds | 3D figure |
+|---|---|---|---|---|---|---|---|
+| goblinoid | Heartland, Marches | 5 | 0 | 0 | 0 | yes | rig |
+| beast | Heartland, Marches | 69 | 11 | 7 | 0 | – | 75/87 |
+| bandit | Heartland, Marches | 8 | 2 | 2 | 0 | – | rig |
+| kobold | Marches | 2 | 0 | 0 | 0 | – | rig |
+| orc | Marches, Frontier | 1 | 0 | 0 | 0 | – | 1/1 |
+| gnoll | Marches, Frontier | 2 | 0 | 0 | 0 | – | 2/2 |
+| cultist | Frontier | 2 | 3 | 1 | 0 | **no** | rig |
+| undead | Frontier, Deeps | 7 | 8 | 2 | 0 | yes | rig |
+| monstrosity | Frontier, Deeps | 7 | 17 | 10 | 0 | – | 25/34 |
+| giant | Frontier, Deeps | 0 | 2 | 12 | 0 | yes | 7/14 |
+| dragon | Deeps | 3 | 8 | 9 | 2 | yes | **none** |
+| elemental | Deeps | 5 | 2 | 7 | 0 | – | **none** |
+| construct | Deeps | 3 | 0 | 2 | 1 | pack only | **none** |
+| fey | Deeps | 6 | 2 | 0 | 0 | – | **none** |
+| soldier | *none* | 2 | 4 | 3 | 1 | – | rig |
 
 ---
 
@@ -243,5 +284,7 @@ _This section is being filled in._
    resurrection prices all move the same levers.
 5. **Name the bands** and do one tone pass on barks, achievements, quest chain
    labels and system messages (§6).
-6. **Bring the skills up to date** with the table in §7 so the next change
-   starts from today's numbers.
+6. **Write the provenance files** (§8) before anything goes near a store page,
+   and place lairs for more factions so the cult's caster boss can be met.
+7. **Bring the skills up to date** with the tables in §7 and §8 so the next
+   change starts from today's numbers.
