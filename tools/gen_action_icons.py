@@ -516,6 +516,13 @@ ACTIONS = {
         circle(32, 20, 6.2, LIGHT[1], sw=1.2),
     ),
 
+    # Metamagic: a spell bent — a spark caught between two gold brackets.
+    "metamagic": badge(
+        chevron(18, 32, 180, 11, 5, GOLD),
+        chevron(46, 32, 0, 11, 5, GOLD),
+        star(32, 32, 10, 3.6, 4, LIGHT, sw=1.1),
+    ),
+
     # Font of Magic: one thing turned into another and back — two arcs chasing
     # each other round a spark, gold one way and pale the other.
     "font_of_magic": badge(
@@ -1286,6 +1293,16 @@ FEATURES = {
     # sparks; Font of Magic is the power itself, an orb turned one way and back.
     "sorcerer-innate-sorcery": (flame(E("fire")), star(47, 17, 6, 2, 4, LIGHT, sw=1.0),
                                 star(17, 22, 5, 1.8, 4, LIGHT, sw=1.0)),
+    # Metamagic, one mark per bend: Quickened is the spell on the run, Twinned
+    # two orbs, Careful the spell with a shield in front of a friend, Subtle a
+    # spell with its mouth shut (the veiled orb), Seeking the orb with a sight.
+    "metamagic-quickened-spell": (orb(E("force"), 0.7), chevron(50, 32, 0, 9, 4.5, E("gold")),
+                                  chevron(40, 32, 0, 9, 4.5, E("gold"))),
+    "metamagic-twinned-spell": (group([orb(E("force"), 0.55)], -9, 0),
+                                group([orb(E("psychic"), 0.55)], 9, 0)),
+    "metamagic-careful-spell": (orb(E("force"), 0.7), heart(46, 44, 8, E("life"))),
+    "metamagic-subtle-spell": (orb(E("shadow"), 0.8, ring=True),),
+    "metamagic-seeking-spell": (orb(E("force"), 0.7), reticle(E("gold"))),
     "sorcerer-font-of-magic": (orb(E("force"), 0.8, ring=True),
                                chevron(52, 22, 0, 8, 4, E("gold")),
                                chevron(12, 42, 180, 8, 4, E("gold"))),

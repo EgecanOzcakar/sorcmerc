@@ -1430,6 +1430,7 @@ const KIND_BLURB := {
 	"save_effect": "The target rolls a saving throw or suffers the effect.",
 	"spell": "Cast the spell.",
 	"font_of_magic": "Font of Magic: burn a spell slot into sorcery points (no action), or spend points on a new slot (a bonus action). A made slot lasts until your next long rest.",
+	"metamagic": "Metamagic: bend the next spell you cast. The points are paid now and come back if no spell takes it this turn.",
 }
 
 # Prose first (a spell's own SRD text, else the kind blurb), then the resolved

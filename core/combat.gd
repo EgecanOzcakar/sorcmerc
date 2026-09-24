@@ -632,6 +632,73 @@ func _font_of_magic(actor, v: Dictionary) -> Dictionary:
 	log.append("%s burns a level-%d slot into %d sorcery points." % [actor.cname, l, l])
 	return {"points": l}
 
+# --- Metamagic (2024) --------------------------------------------------------
+#
+# A Metamagic button ARMS the next spell rather than being a second copy of
+# every spell per option: the bar stays one button per option known, the way
+# Divine Smite's once-buff sits beside the swing it rides on. Arming pays the
+# sorcery points (perform's pool spend, `pool_cost`); the next spell the
+# option can apply to takes it (_take_metamagic); an option still armed when
+# the turn ends is handed back (_refund_metamagic), since RAW spends the points
+# as the spell is cast and a spell never cast spent nothing. One option at a
+# time, as RAW's one-Metamagic-per-spell has it.
+#   quickened  an action spell costs a Bonus Action instead (_cast_view); after
+#              it, no leveled spell this turn — cantrip or not
+#   twinned    a spell that upcasts for more targets gets one more (_twin_step)
+#   careful    up to CHA-mod allies (min 1) in the area are spared outright
+#   subtle     no Counterspell: nobody sees it cast
+#   seeking    a missed spell attack rolls its d20 again, once
+const METAMAGIC := "metamagic"
+
+func _armed(actor) -> String:
+	var s = actor.statuses.get(METAMAGIC)
+	return String(s["option"]) if s is Dictionary else ""
+
+# The spell as it would be cast with the armed option: Quickened turns an
+# action's cost into a bonus action's, so the bar's affordability and the
+# resolver's spend both see the cost the cast will really have. A Quickened
+# spell is not on offer after a leveled spell this turn.
+func _cast_view(actor, v: Dictionary) -> Dictionary:
+	if String(v.get("kind", "")) != "spell" or _armed(actor) != "quickened" \
+			or String(v.get("cost", "")) != "action" or actor.econ.get("cast_leveled_spell", false):
+		return v
+	var q := v.duplicate()
+	q["cost"] = "bonus"
+	q["quickened"] = true
+	return q
+
+static func _twin_step(v: Dictionary) -> int:
+	var m: Dictionary = Effects.spell(String(v.get("spell", "")))
+	return int(m.get("upcast", {}).get("per_level", {}).get("targets", 0))
+
+static func _careful_count(caster) -> int:
+	return maxi(1, caster.sheet.mod("cha") if caster.sheet != null else 0)
+
+# Which option this cast takes, "" if none can apply (it stays armed).
+func _take_metamagic(caster, v: Dictionary) -> String:
+	var opt := _armed(caster)
+	var takes := false
+	match opt:
+		"quickened": takes = v.get("quickened", false)
+		"subtle": takes = true
+		"twinned": takes = _twin_step(v) > 0 and String(v.get("targeting", "")) == "enemy"
+		"careful": takes = String(v.get("save", "")) != "" and String(v.get("targeting", "")) in AREA_KINDS
+		"seeking": takes = v.has("attack_bonus")
+	if not takes:
+		return ""
+	log.append("  (%s)" % String(caster.statuses[METAMAGIC].get("label", opt)))
+	caster.statuses.erase(METAMAGIC)
+	return opt
+
+func _refund_metamagic(c) -> void:
+	var s = c.statuses.get(METAMAGIC)
+	if not s is Dictionary:
+		return
+	c.statuses.erase(METAMAGIC)
+	if c.pools.has(FONT_POOL):
+		c.pools[FONT_POOL]["cur"] = mini(int(c.pools[FONT_POOL]["max"]), int(c.pools[FONT_POOL]["cur"]) + int(s["sp"]))
+	log.append("%s lets %s go unspent." % [c.cname, String(s.get("label", "the Metamagic"))])
+
 # A condition applied with duration "round" lasts until the bearer's next turn:
 # one lost turn, never a permanent lockout (nothing else in the engine ends them).
 func _expire_conditions(c) -> void:
@@ -681,6 +748,7 @@ func _auto_stand(c) -> void:
 func end_turn() -> void:
 	var c0 = current()
 	c0.has_acted = true
+	_refund_metamagic(c0)
 	_repeat_saves(c0, "end_turn")
 	_rage_upkeep(c0)
 	_objective_touch(c0)
@@ -959,7 +1027,9 @@ const OFFERABLE := ["heal_self", "heal_ally", "self_buff", "ally_buff", "grant_a
 	"summon",
 	# Font of Magic (2024): a sorcerer's slots and sorcery points, one into the
 	# other. Two directions, one kind — see _font_ok / _font_of_magic.
-	"font_of_magic"]
+	"font_of_magic",
+	# Metamagic (2024): arms the next spell cast — see _cast_view / _take_metamagic.
+	"metamagic"]
 
 func _basic(id: String) -> Dictionary:
 	for b in BASIC:
@@ -1094,6 +1164,7 @@ func is_button(actor, v: Dictionary) -> bool:
 func _offerable(actor, v: Dictionary) -> bool:
 	if not actor.conscious():
 		return false
+	v = _cast_view(actor, v)
 	if not is_button(actor, v):
 		return false
 	if not can_afford(actor, v):
@@ -1121,6 +1192,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 		"attack_modifier", "grant_action": return true
 		"escape": return _grappler_of(actor) != null
 		"font_of_magic": return _font_ok(actor, v)
+		"metamagic": return not actor.has(METAMAGIC)
 	match v.get("targeting", "self"):
 		"enemy": return enemies_of(actor).any(func(e): return legal_target(actor, v, e))
 		"ally": return combatants.any(func(a): return legal_target(actor, v, a))
@@ -1207,6 +1279,7 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 
 # Run a verb. `target` is a Combatant, a direction (Vector2i) or null.
 func perform(actor, v: Dictionary, target = null) -> Dictionary:
+	v = _cast_view(actor, v)
 	var kind: String = v["kind"]
 	if on_perform.is_valid():
 		on_perform.call(actor, v, target)
@@ -1311,6 +1384,10 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"save_effect": return _save_effect(actor, v, target)
 		"font_of_magic": return _font_of_magic(actor, v)
+		"metamagic":
+			actor.statuses[METAMAGIC] = {"option": String(v["option"]), "sp": _pool_cost(v),
+				"label": String(v["label"])}
+			log.append("%s readies %s." % [actor.cname, v["label"]])
 		"summon":
 			var called = summon(actor, v)
 			if called == null:
@@ -1395,9 +1472,23 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	# announced, and anything holding an answer gets it in before the slot is
 	# spent. A countered spell costs the action already paid for it and nothing
 	# more — the slot survives.
-	var answer := fire_reactions("spell_cast", {"caster": caster, "verb": v, "level": lvl})
+	# Metamagic (2024) is applied as the spell is cast; an armed option this
+	# spell cannot take stays armed for the next one.
+	var meta := _take_metamagic(caster, v)
+	if meta != "":
+		v = v.duplicate()
+		v["metamagic"] = meta
+		if meta == "twinned":
+			v["targets"] = int(v.get("targets", 1)) + _twin_step(v)
+		elif meta == "seeking":
+			v["seeking"] = true
+	# Subtle Spell: no verbal or somatic components, so nobody sees it to answer.
+	var answer := {"countered": false} if meta == "subtle" \
+		else fire_reactions("spell_cast", {"caster": caster, "verb": v, "level": lvl})
 	if answer["countered"]:
 		return {"countered": true, "by": answer["by"]}
+	if v.get("quickened", false):
+		caster.econ["cast_bonus_spell"] = true   # 2024: no leveled spell after a Quickened one, cantrip or not
 	if lvl > 0:
 		caster.slots[lvl - 1] -= 1
 		if v["cost"] == "bonus":
@@ -1469,12 +1560,17 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		return {"area": area, "caught": caught}
 	if not area.is_empty() or v.get("targeting", "") in AREA_KINDS:
 		log.append("%s casts %s — DC %d save." % [caster.cname, v["label"], dc])
+		var careful: int = _careful_count(caster) if v.get("metamagic", "") == "careful" else 0
 		var hit_any := false
 		for c in combatants:
 			if c == caster or not c.conscious() or not (c.pos in area):
 				continue
 			if v.get("spare_allies", false) and c.team == caster.team:
 				continue   # Spirit Guardians picks who it spares; here that is your side
+			if careful > 0 and c.team == caster.team:
+				careful -= 1   # Careful Spell: this one is spared, save made and no damage
+				log.append("  %s is spared (Careful Spell)." % c.cname)
+				continue
 			_spell_hit(c, v, notation, dc, caster)
 			hit_any = true
 		_destroy_in_area(area, caster)
@@ -1581,6 +1677,13 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 			var ray_bonus: int = int(v["attack_bonus"]) \
 				+ int(Traits.roll(caster, "to_hit", self, c, String(v.get("damage_type", "")))["n"])   # #176
 			var hit: bool = crit or (r.nat != 1 and r.nat + ray_bonus >= effective_ac(c, caster))
+			if not hit and v.get("seeking", false):
+				v = v.duplicate()
+				v.erase("seeking")   # Seeking Spell: one reroll of the d20, on the first miss
+				log.append("  Seeking Spell — the d20 is rolled again.")
+				r = Dice.d20(rng, mode)
+				crit = r.nat == 20
+				hit = crit or (r.nat != 1 and r.nat + ray_bonus >= effective_ac(c, caster))
 			var d := Dice.roll(rng, notation, crit) if hit else 0
 			var tag := " ray %d/%d" % [i + 1, rays] if rays > 1 else ""
 			# The number on this line is what lands, not what was rolled: five

@@ -78,7 +78,7 @@ These are direction, not description. The code still does the old thing until ea
   - The player controls the merc's **subclass, spells and normal level-up choices** (feats or ability increases, fighting styles).
   - **Old saves are grandfathered.** Rosters that already exist keep their heroes. The new rule applies to new runs only.
 - **Sorcerer rarity is fiction only.** No recruit odds and no social mechanic. "Uncommon but not rare" lives in the writing.
-- **Sorcerer features follow 2024 RAW.** Innate Sorcery and Font of Magic are built (`test_sorcerer.gd`). Metamagic is next. Until it lands, `core/manual.gd` says it isn't on the board yet.
+- **Sorcerer features follow 2024 RAW.** Built: Innate Sorcery, Font of Magic, and Metamagic Quickened, Twinned, Careful, Subtle and Seeking (`test_sorcerer.gd`). The other five options are still catalogue text; `core/manual.gd` says so.
 - **Enemy magic is rare and named.** Ordinary enemies keep their limited-use innate abilities. Slot-based casters appear only as an occasional elite or boss, so an enemy caster is an event.
 - **Factions post contracts.** Factions and towns offer merc jobs (escort, clear a lair, raid a rival), and standing with each faction decides who hires you. Full faction warfare stays deferred.
 - **Armor stays 5e AC.** No damage split, no durability.
