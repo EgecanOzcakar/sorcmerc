@@ -2,7 +2,8 @@
 # A level-5 sorcerer with Innate Sorcery up, Quickened Spell armed, a Bless
 # from the cleric and Poisoned on them: the chips, the ✦ on the Spells slot,
 # then the Spells list with ✦ and ADV on the buttons they change. Then the
-# fighter, Hidden and Helped: ADV on the attack button.
+# fighter, Hidden and Helped: ADV on the attack button, and the attack's hover
+# card saying why.
 #
 #   SORCMERC_SEED=7 xvfb-run -a -s "-screen 0 1600x900x24" \
 #       godot --path . -s tests/shot_effects.gd   ->  shots_effects/*.png
@@ -83,4 +84,14 @@ func _init() -> void:
 	main._refresh()
 	await settle(main, 60)
 	await grab("3_fighter")
+
+	# 4. the attack badge's hover card, with the reason the mark is there
+	var SkillCard = load("res://scenes/skill_card.gd")
+	var b = main._buttons.get_child(0)
+	var card: Control = SkillCard.build(b.card)
+	root.add_child(card)
+	await settle(main, 4)
+	card.position = b.global_position + Vector2(0, -card.size.y - 8)
+	await settle(main, 10)
+	await grab("4_card")
 	quit()

@@ -155,24 +155,28 @@ func _render() -> void:
 		grid.add_child(lbl)
 	_into().add_child(grid)
 
+	# Each condition in its own colour (Icons.CONDITION_COLORS), the one it
+	# wears on the token's strip and in the log.
 	var tags: Array = []
 	for s in Icons.CONDITION_ORDER:
 		if s != "down" and c.has(s):
-			tags.append("%s %s" % [Icons.condition_glyph(s), s])
+			tags.append(Icons.condition_bb(s, "%s %s" % [Icons.condition_glyph(s), s]))
 	if c.is_down():
-		tags.append("%s stable" % Icons.condition_glyph("down") if c.is_stable() \
-			else "%s down %d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f])
+		tags.append(Icons.condition_bb("down", "%s stable" % Icons.condition_glyph("down") if c.is_stable() \
+			else "%s down %d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]))
 	if cb.is_cover(c.pos):
 		tags.append("in cover")
 	if not tags.is_empty():
 		_cap("Right now")
-		_line(" · ".join(tags), Icons.COL_ACCENT)
+		_rich_line(" · ".join(tags), Icons.COL_ACCENT)
 
 	# What the damage types do to it — three lines that decide which spell to
-	# reach for and were nowhere on the old card.
+	# reach for and were nowhere on the old card. Each type in its colour, so
+	# "Resists fire" is the orange of the Fire Bolt badge's card.
 	for pair in [["Resists", c.resist], ["Immune to", c.immune], ["Vulnerable to", c.vulnerable]]:
 		if not (pair[1] as Array).is_empty():
-			_line("%s %s" % [pair[0], ", ".join(pair[1])], Icons.COL_MUTED)
+			var kinds: Array = (pair[1] as Array).map(func(d): return Icons.damage_bb(String(d)))
+			_rich_line("%s %s" % [pair[0], ", ".join(kinds)], Icons.COL_MUTED)
 
 	# Spells and traits kept apart, which is the other half of what #173 asked
 	# for. A verb carrying a `spell` is something cast; everything else is
@@ -309,6 +313,19 @@ func _line(text: String, col: Color) -> void:
 	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
 	l.add_theme_color_override("font_color", col)
 	_into().add_child(l)
+
+# _line, for a line with coloured words in it (bbcode): conditions, damage types.
+func _rich_line(bb: String, col: Color) -> void:
+	var r := RichTextLabel.new()
+	r.bbcode_enabled = true
+	r.fit_content = true
+	r.scroll_active = false
+	r.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.add_theme_font_size_override("normal_font_size", Icons.FS_SMALL)
+	r.add_theme_color_override("default_color", col)
+	r.text = bb
+	_into().add_child(r)
 
 
 # The one drawn thing on the card. A number says how hurt something is; a bar

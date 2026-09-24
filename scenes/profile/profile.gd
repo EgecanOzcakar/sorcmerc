@@ -312,7 +312,7 @@ func _attacks(col: VBoxContainer, s) -> void:
 		var reach := "%d/%d ft" % [int(a["normal_ft"]), int(a["long_ft"])] if a["range"] == "ranged" else "melee"
 		_row(v, "%s  (%s)" % [a["name"], reach],
 			"%s  %s %s" % [_sign(int(a["to_hit"])), a["notation"], a["damage_type"]],
-			"attack_" + str(a["id"]))
+			"attack_" + str(a["id"]), Icons.damage_color(String(a["damage_type"])))   # fire is one orange game-wide
 	if not s.spellcasting.is_empty():
 		var sc: Dictionary = s.spellcasting
 		_row(v, "Spell save DC", str(int(sc["save_dc"])), "spell_dc", COL_ACCENT)
