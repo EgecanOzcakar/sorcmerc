@@ -10274,6 +10274,12 @@ party), the modding promise (add freely if documented, never remove without an
 API bump, never touch the canary to pass), and a checklist for a heavy PR.
 `CLAUDE.md` points at it.
 
+**Enemy casters in co-op.** After the enemy casters landed, `test_coop_kits`
+gained a lockstep fight for each cult caster at each band cap: a foe's AI
+picks its spell, target and hex on each peer by itself, so this is where a
+caster that read anything but `cb.rng` would show. They cast (slots spent),
+and they stay in lockstep.
+
 ### Still open
 
 - **Packs in co-op.** Both peers must run the same pack set; the build stamp
@@ -10283,3 +10289,8 @@ API bump, never touch the canary to pass), and a checklist for a heavy PR.
 - **The spell-mechanics keys** a pack can write (`shape`, `upcast`,
   `cantrip_scale`, ...) are read inline in `_spell_verb` and not yet held by
   the snapshot. Lift them into a constant the way `VERB_KEYS` was.
+- **A runtime script error inside a test function does not fail the test.**
+  The function stops, its checks never run, and the script still exits 0. One
+  slipped through while this check was being written. `tools/run_tests.sh`
+  could treat `SCRIPT ERROR` in a test's output as a failure. That is a runner
+  change for every test, so it is left for its own PR.
