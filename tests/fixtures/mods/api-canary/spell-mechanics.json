@@ -1,0 +1,22 @@
+{
+  "canary-hexbolt": {
+    "cost": "action",
+    "shape": "single",
+    "range_ft": 60,
+    "save": "con",
+    "half_on_save": true,
+    "damage": [
+      {
+        "count": 2,
+        "sides": 8,
+        "type": "necrotic"
+      }
+    ],
+    "upcast": {
+      "per_level": {
+        "count": 1,
+        "sides": 8
+      }
+    }
+  }
+}

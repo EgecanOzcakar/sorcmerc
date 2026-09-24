@@ -168,6 +168,27 @@ static func verbs_for(sheet, feature_ids = null) -> Array:
 			out.append(_verb_from("%s#%d" % [fid, i], sub, sheet))
 	return out
 
+# The keys a data/effects/features.json entry may carry that are copied onto the
+# verb as they are. Public vocabulary: a content pack writes these (docs/
+# modding.md §5.1), and tests/test_mod_api.gd holds a snapshot of the list, so
+# a key cannot be dropped or renamed without the modding API saying so.
+const VERB_KEYS := ["trigger", "once_per", "requires", "verbs", "status", "duration", "resist",
+	"save", "conditions", "shape", "range_ft", "halve_damage", "self",
+	"attacks_against", "extra_attacks", "value", "damage_type",
+	# T94: save_modifier / survive_damage / keen_senses / Parry
+	"vs", "ac_bonus", "dc", "dc_plus_damage", "except", "max_damage",
+	"relies_on", "passive_bonus", "magical",
+	# T-classes-c: a reaction that imposes Disadvantage rather than
+	# adding AC (Warding Flare), the aura payloads, and `once` —
+	# the flag that separates a Smite from a Rage.
+	"disadvantage", "cond_immune", "once", "aura_resist",
+	# T-summon
+	"summon", "rounds",
+	# 2026-09-19 (2024 PHB pass): advantage on initiative, Ambusher's
+	# Leap, Hand of Healing's Flurry swap, Stunning Strike's made-save
+	# rider, Parry's melee-only clause, Rage's own clock
+	"init_adv", "first_round_speed_ft", "flurry_swap", "on_save_vex", "melee_only"]
+
 static func _verb_from(fid: String, e: Dictionary, sheet) -> Dictionary:
 		assert(e["kind"] in KINDS, "unknown effect kind \"%s\" on \"%s\"" % [e.get("kind"), fid])
 		# An authored `label` wins: "monster-relentless-10" is the id that keeps the
@@ -175,22 +196,7 @@ static func _verb_from(fid: String, e: Dictionary, sheet) -> Dictionary:
 		var v := {"id": fid, "kind": e["kind"], "cost": e.get("cost", "action"),
 			"label": String(e.get("label", verb_label(fid.get_slice("#", 0)))),
 			"targeting": e.get("targeting", TARGETING.get(e["kind"], "self"))}
-		for k in ["trigger", "once_per", "requires", "verbs", "status", "duration", "resist",
-				"save", "conditions", "shape", "range_ft", "halve_damage", "self",
-				"attacks_against", "extra_attacks", "value", "damage_type",
-				# T94: save_modifier / survive_damage / keen_senses / Parry
-				"vs", "ac_bonus", "dc", "dc_plus_damage", "except", "max_damage",
-				"relies_on", "passive_bonus", "magical",
-				# T-classes-c: a reaction that imposes Disadvantage rather than
-				# adding AC (Warding Flare), the aura payloads, and `once` —
-				# the flag that separates a Smite from a Rage.
-				"disadvantage", "cond_immune", "once", "aura_resist",
-				# T-summon
-				"summon", "rounds",
-				# 2026-09-19 (2024 PHB pass): advantage on initiative, Ambusher's
-				# Leap, Hand of Healing's Flurry swap, Stunning Strike's made-save
-				# rider, Parry's melee-only clause, Rage's own clock
-				"init_adv", "first_round_speed_ft", "flurry_swap", "on_save_vex", "melee_only"]:
+		for k in VERB_KEYS:
 			if e.has(k):
 				v[k] = e[k]
 		if e.has("max_dice"):   # Healing Light: up to CHA-mod dice in one use

@@ -1153,6 +1153,18 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 		return {"error": "nothing to shove them into"}
 	if kind in ["shove", "grapple"] and target != null and _size_rank(target.size) > _size_rank(actor.size) + 1:
 		return {"error": "too big to %s" % kind}
+	# A cast the resolver would refuse is refused HERE, before a thing is spent.
+	# cast() makes the same checks, but only after this function has already
+	# paid the action (and, for a teleport or a summon, the slot) — so a refused
+	# spell used to cost its caster the turn. The contract every caller leans on
+	# is "an error changed nothing": the co-op harness drops a refused intent
+	# instead of sending it (tests/coop_harness.gd), and the autopilot re-plans
+	# after one. Found by tests/test_coop_kits.gd, a War domain cleric whose
+	# second spell of a turn hit the bonus-action spell rule.
+	if kind == "spell":
+		var why := _cast_refusal(actor, v, target)
+		if why != "":
+			return {"error": why}
 	var swap := _flurry_swap(actor, v)
 	if swap:
 		actor.econ["attacks_left"] = int(actor.econ["attacks_left"]) - 1
@@ -1294,6 +1306,23 @@ func _hit_riders(attacker, target) -> void:
 		_save_effect(attacker, v, target)
 
 # --- spells ------------------------------------------------------------
+
+# Why cast() would refuse this spell with this target, "" if it would not: the
+# checks it makes after perform() has paid, asked before. Kept beside cast() so
+# the two stay one rule.
+func _cast_refusal(caster, v: Dictionary, target) -> String:
+	var lvl := int(v.get("slot_level", 0))
+	if lvl > 0 and (lvl > caster.slots.size() or caster.slots[lvl - 1] <= 0):
+		return "no slot"
+	if lvl > 0 and v.get("cost", "") != "reaction" and not _leveled_spell_allowed(caster, v):
+		return "one leveled spell a turn beside a bonus-action one"
+	if v.get("teleport", false):
+		if not (target is Vector2i and target in board["hexes"] and passable(target) and _hex_free(target)
+				and Hex.distance(caster.pos, target) <= int(v.get("range", 1))):
+			return "not a free hex in range"
+	if v.has("summon") and _free_near(caster.pos) == NOWHERE:
+		return "nowhere to appear"
+	return ""
 
 # `target` is a Combatant (single / ally) or a direction (cone).
 func cast(caster, v: Dictionary, target) -> Dictionary:

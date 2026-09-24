@@ -1,0 +1,44 @@
+{
+  "_note": "one feature per kind a monster can use with plain numbers",
+  "canary-ward": {
+    "kind": "self_buff",
+    "cost": "bonus",
+    "uses": 1,
+    "status": "warded",
+    "resist": [
+      "fire"
+    ]
+  },
+  "canary-gloom": {
+    "kind": "save_effect",
+    "cost": "action",
+    "save": "wis",
+    "range_ft": 30,
+    "conditions": [
+      "frightened"
+    ],
+    "uses": 2,
+    "dice": {
+      "count": 2,
+      "sides": 6
+    },
+    "halve_damage": true
+  },
+  "canary-mend": {
+    "kind": "heal_self",
+    "cost": "bonus",
+    "uses": 1,
+    "dice": {
+      "count": 2,
+      "sides": 8
+    }
+  },
+  "canary-counterstep": {
+    "label": "Counterstep",
+    "kind": "reaction",
+    "cost": "reaction",
+    "trigger": "would_be_hit",
+    "ac_bonus": 2,
+    "melee_only": true
+  }
+}

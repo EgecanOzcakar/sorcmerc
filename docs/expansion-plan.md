@@ -9910,3 +9910,80 @@ by its wounds alone. Not visual.
 - The campaign's linear mode (`core/campaign.gd`) still prices off the current
   reading. It has its own per-run rest budget and is not the open world. Leave
   it alone unless `SORCMERC_LINEAR_CAMPAIGN` comes back into use.
+
+## Keeping co-op and the modding API stable through heavy features (2026-09-24)
+
+The owner's ask: skills and checks that keep co-op and the modding API stable
+while big features land. Both are promises, and neither is visible from the
+feature being built:
+
+- two co-op peers stay in lockstep;
+- a pack written against an API level keeps loading.
+
+Until now each was held by tests that only exercised a narrow slice.
+
+**Co-op.**
+
+- **`Coop.state_hash` sees more.** It now covers resource pools and every
+  status *payload*, not just status names. A sorcery point spent on one peer
+  only, or a Metamagic armed with a different option, rolls no die until later,
+  so it was invisible to a hash of the rng. A payload that names a Combatant is
+  written as its id (`_plain()`), since its printed form differs on every peer.
+- **The lockstep harness is shared.** It moved out of `test_coop.gd` into
+  `tests/coop_harness.gd`, which `test_coop.gd` now calls.
+- **New `tests/test_coop_kits.gd`.** It covers all 48 (class, subclass) pairs,
+  built the way a player builds them, dealt into four-hero parties at levels 4
+  and 8, and fought in lockstep. Every hero turn presses every button its bar
+  offers, 60 distinct intents through the JSON codec. It also tests the
+  detector itself: a pool or a payload alone must change the hash.
+- **It found a real rules bug on its first run.** `perform()` paid the action,
+  and for a teleport or a summon the slot, *before* `cast()` checked whether
+  the spell could be cast. So a refused cast cost its caster the turn: a War
+  domain cleric's second spell against the bonus-action spell rule, a Misty Step
+  at a taken hex, a summon with nowhere to stand. `Combat._cast_refusal` now
+  asks first, and `test_coop_kits` checks that every kit's refused cast leaves
+  its economy, slots and pools untouched. Players rarely met it, because the
+  bar only offers legal buttons. The AI and the co-op harness both rely on
+  "a refused intent changed nothing".
+
+**The modding API.**
+
+- **New `tests/test_mod_api.gd`** holds a snapshot, `tests/fixtures/mod_api.json`.
+  It covers:
+  - every vocabulary a pack can write (manifest kinds, access and data files;
+    effect kinds, feature keys (now the explicit `Effects.VERB_KEYS`) and
+    reaction triggers; quest kinds and target fields; story beat kinds,
+    conditions, effects and quest states; world kinds, behaviours, roles,
+    factions, bands and themes; calling completions);
+  - every id a pack can name, across 15 files.
+- **What fails:**
+  - **A term removed** is a break. Bump `Manifest.API`, keep reading the old
+    form, and write the migration.
+  - **A term added** must be documented in `docs/modding.md` and the snapshot
+    regenerated (`SNAPSHOT_WRITE=1`).
+  - **An id removed** strands packs.
+- **A third party's canary pack**, `tests/fixtures/mods/api-canary/`, is written
+  against API 1. It has:
+  - a monster, a spell, a potion, and four features of four kinds;
+  - a map with every AI behaviour and troop role;
+  - a story using every condition and effect key.
+
+  It must load clean, apply, and fight to a finish.
+- **Docs drift found on the first run.** `rescue` was a quest kind a story could
+  use, and `docs/modding.md` did not list it. It does now.
+
+**The skill.** `.claude/skills/sorcmerc-compat/SKILL.md` lists the co-op
+lockstep rules (the rng, refusals, the hash, verb ids, what travels with the
+party), the modding promise (add freely if documented, never remove without an
+API bump, never touch the canary to pass), and a checklist for a heavy PR.
+`CLAUDE.md` points at it.
+
+### Still open
+
+- **Packs in co-op.** Both peers must run the same pack set; the build stamp
+  doesn't include it yet.
+- **World-map lockstep** (the guest's mirrored map) is covered only by
+  `test_coop_mirror`'s one scenario.
+- **The spell-mechanics keys** a pack can write (`shape`, `upcast`,
+  `cantrip_scale`, ...) are read inline in `_spell_verb` and not yet held by
+  the snapshot. Lift them into a constant the way `VERB_KEYS` was.

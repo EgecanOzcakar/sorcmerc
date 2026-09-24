@@ -286,6 +286,7 @@ kills, the turn-in at any merchant, the log panel, the encounter spawn bias. A
 | `supply_item` | `target_item_id` | that many are in the shared stash |
 | `deliver_goods` | `target_settlement_id` | the party walks into that settlement |
 | `scout_region` | `target_region_id` | the party is standing in that band (`heartland` / `marches` / `frontier` / `deeps`) |
+| `rescue` | `target_lair_id` | the captive in that lair's pens is freed (the room's rescue objective is done) |
 
 ### Conditions (`when`)
 
