@@ -12,6 +12,7 @@ const Adapter = preload("res://core/adapter.gd")
 const Combat = preload("res://core/combat.gd")
 const World = preload("res://core/world.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
+const Visit = preload("res://core/settlement_visit.gd")
 const Encounter = preload("res://core/encounter.gd")
 
 # Class blurbs — the one thing the export doesn't carry. Two lines each: what
@@ -28,7 +29,7 @@ const CLASS_BLURB := {
 	"rogue": "One big hit a turn. Sneak Attack adds dice whenever you have advantage or an ally is adjacent to the target — a shortbow from behind the fighter does it every round. Cunning Action makes Dash, Disengage and Hide bonus actions.",
 	"sorcerer": "Raw arcane damage, fewer spells known than a wizard. Innate Sorcery (a bonus action, twice a day) sharpens every spell for a minute: +1 to the save DC and advantage on spell attacks. From level 2 Font of Magic burns a slot into sorcery points for free, and a bonus action turns points back into a slot. Metamagic arms your next spell for points: Quickened (an action spell on the bonus action), Twinned (one more target), Careful (spare your friends), Subtle (no Counterspell) and Seeking (reroll a miss) work on this board; the rest of the list does not yet.",
 	"warlock": "Two slots that come back on a short rest, and Eldritch Blast every other turn. Hex (bonus action, concentration) adds a d6 per hit; the patron picks the tricks.",
-	"wizard": "The widest spell list and the least HP. Fire Bolt at range, Sleep and Web for control, Fireball when it lands. Arcane Recovery gets slots back on a short rest.",
+	"wizard": "The widest spell list and the least HP. Fire Bolt at range, Sleep and Web for control, Fireball when it lands. Arcane Recovery gets some spent slots back at a short rest, once between long rests.",
 }
 
 # Weapon mastery (2024 rules), as combat.gd's _mastery_rider actually plays them.
@@ -175,10 +176,12 @@ static func _mechanics() -> Array:
 		"Any healing brings you back up: Cure Wounds, Healing Word, a potion, or an ally's [b]Help[/b] action (First Aid: up at 1 HP, no roll). Healing a corpse does nothing.\n\n" +
 		"Fights end when one side is entirely down or dead, or after %d rounds." % Combat.MAX_ROUNDS})
 	out.append({"id": "rest", "section": "Fighting", "title": "Rests and resources",
-		"tags": ["rest", "short rest", "long rest", "second wind", "action surge", "pool", "uses", "camp", "recover", "heal"],
+		"tags": ["rest", "short rest", "long rest", "second wind", "action surge", "pool", "uses", "camp", "recover", "heal", "arcane recovery", "trance", "rope trick", "alarm", "slots"],
 		"body": _h("Short rests patch you up; long rests reset everything.") +
-		"A [b]short rest[/b] restores half of your missing HP (rounded up) and every feature that recharges on one — Second Wind, Action Surge, Channel Divinity, warlock slots, a wizard's Arcane Recovery. A [b]long rest[/b] is full HP, all spell slots, all pools, and clears exhaustion by one level.\n\n" +
-		"In a campaign run, rests are limited per run and taken at rest nodes; in the world, a settlement bed or a camp kit away from one. Feature uses show as pips on your actor line; a spent pip is greyed until the rest that brings it back."})
+		"A [b]short rest[/b] is an hour. It restores half of your missing HP (rounded up) and every feature that recharges on one: Second Wind, Action Surge, Channel Divinity, warlock slots. A company gets %d between long rests; an elf's [b]Trance[/b] banks one more at each long rest, good for a day, that does not count against them and is taken first.\n\n" % Visit.MAX_SHORT_RESTS +
+		"A wizard's [b]Arcane Recovery[/b] works at the end of a short rest, once between long rests: it brings back spent slots whose levels add up to half the wizard's level (rounded up), none above %dth, highest first. The rest's message says what came back.\n\n" % Adapter.ARCANE_RECOVERY_MAX_SLOT +
+		"A [b]long rest[/b] is full HP, all spell slots and all pools, at most once a day. It takes eight hours, and the world does not wait: bands walk, raids move and markets restock while the company sleeps. In the world it is a settlement bed, or a camp away from one: a camp kit, or [b]Rope Trick[/b] in place of the kit. Nobody makes camp with a hostile band in reach, and a camp can be jumped in the night (%d%%) however it was made. The slot spent on Rope Trick or [b]Alarm[/b] stays spent through the night it pays for.\n\n" % WorldCamp.AMBUSH_CHANCE_PCT +
+		"Slots and pools show on the character sheet and the party page between fights, and as pips on your actor line in one: a spent pip stays greyed, fight after fight, until the rest that brings it back. The sheet only shows them; a rest is the only way back. In a campaign run, rests are limited per run and taken at rest nodes."})
 	out.append({"id": "night", "section": "Fighting", "title": "Night and darkness",
 		"tags": ["night", "dark", "darkness", "darkvision", "torch", "light", "lit", "unseen", "ambush", "watch", "sight"],
 		"body": _h("After dark the world closes in, and a fight is fought by torchlight.") +

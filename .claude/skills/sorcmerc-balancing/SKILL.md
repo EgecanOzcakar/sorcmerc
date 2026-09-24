@@ -41,8 +41,9 @@ The rules are **D&D 5e 2024 (SRD) on a hex board**, not a bespoke stat model. Fa
 - **Multiclass** casters read one class's table, not the 2024 caster-level sum. There is a `ponytail:` note on this in `pass_spells.gd`.
 - **Refills** (`Adapter.rest`, `core/settlement_visit.gd`):
   - A **long rest** restores all slots, all pools and full HP. It is allowed at most once per 1440 in-game minutes, costs 480 minutes of clock plus the inn fee or a camp kit, and is unavailable inside a site.
-  - A **short rest** restores short-rest pools and half the missing HP. It also restores **warlock slots**. The limit is 2 per long rest, 60 minutes each.
-  - **Arcane Recovery** gives ceil(wizard level / 2) slot levels back, none above 5th, once per long rest.
+  - A **short rest** restores short-rest pools and half the missing HP. It also restores **warlock slots**. The limit is 2 per long rest, 60 minutes each. An elf's **Trance** banks one more at each long rest, good for 24 hours, taken first and not counted against the 2 (`core/trance.gd`).
+  - **Arcane Recovery** gives ceil(wizard level / 2) slot levels back, none above 5th, once per long rest, automatically at the first short rest that finds a slot spent, highest levels first (`Adapter.arcane_recovery_auto`).
+  - A long rest's 480 minutes are stepped through the world (`core/world_rest.gd`); downtime's last night refills only if the 1440-minute gate allows. A slot spent on **Rope Trick** or **Alarm** stays spent through the rest of the camp it pays for (`party.camp_holds`).
   - The **linear campaign** allows 2 short rests and 1 long rest per *run* (`core/campaign.gd`).
   - Slots **don't** refill between fights (`Adapter.write_back`).
 - **Enemies have no slots.** Their magic is limited-use features in `data/effects/features.json`, for example `monster-innate-bolt` (3d6, DEX save for half, 2 uses) and breath weapons (4d6, 1 use).
