@@ -9910,3 +9910,88 @@ by its wounds alone. Not visual.
 - The campaign's linear mode (`core/campaign.gd`) still prices off the current
   reading. It has its own per-run rest budget and is not the open world. Leave
   it alone unless `SORCMERC_LINEAR_CAMPAIGN` comes back into use.
+
+## The sorcerer's own two: Innate Sorcery and Font of Magic (2026-09-24)
+
+The owner's call from the skills pass: sorcerer features follow the 2024 book
+as real combat mechanics. Until now `sorcerer-innate-sorcery` and
+`sorcerer-font-of-magic` were catalogue text. `data/effects/features.json` had
+no entry for either, so the sheet listed them and the board never saw them,
+while `core/manual.gd` told players Font of Magic worked. This is the first
+half. Metamagic is the second and gets its own PR.
+
+**Innate Sorcery** is a `self_buff`: a Bonus Action, two uses per **long** rest
+(added to `Adapter.LONG_REST_ONLY_FEATURES`, or it would have come back on a
+short one), lasting ten rounds.
+
+- A `self_buff` may now carry `rounds`. It gets an `until_tick` and lapses
+  through `_expire_conditions` like a condition. Only Innate Sorcery has one,
+  so Rage and every other self-buff behave exactly as before.
+- **+1 spell save DC.** `Combat.spell_dc(caster, v)` is the one function for it.
+  `cast()` stamps it onto the verb, so a zone or a held Hold Person keeps the DC
+  it was cast at. The action bar's tooltip and hit-chance readout read the same
+  function, so the number on the button is the number rolled against.
+- **Advantage on spell attack rolls.** `_spell_hit` rolls 2d20-keep-high while
+  the buff is up.
+
+**Font of Magic** is a new button kind, `font_of_magic`. One authored entry is
+expanded by `Effects._font_verbs` into buttons each way:
+
+- `…-burn@L`: spend a level-L slot for L sorcery points. **No action.**
+  Refused whole if it would overflow the Sorcery Points maximum (`ponytail:`).
+  It never tops up to the cap, so no slot is ever spent for points it loses.
+- `…@slotL`: a **Bonus Action**, spending points for a slot on the Creating
+  Spell Slots table (2/3/5/6/7 points for levels 1–5, from sorcerer level
+  2/3/5/7/9). Pools can now cost more than one use (`pool_cost`).
+- **A made slot outlives the fight.** `Adapter.write_back` no longer floors
+  `slots_used` at zero: an unspent made slot leaves as a *negative* entry, and
+  every reader already works in "full less used". A long rest clears it, which
+  is RAW's "vanishes when you finish a Long Rest". Saves take the negative int
+  as it is. The `character_save.gd` header says so.
+- The two directions wear different badges: burn is the `font_of_magic` kind's
+  cycle, make is the feature's own orb (`tools/gen_action_icons.py`).
+- The party autopilot (`AI._font_up`) makes the biggest slot it can afford once
+  it has none left. It never burns slots.
+
+**Balance.** `core/rules/power.gd` prices neither feature: a `self_buff` with no
+`bonus_damage`, and a kind it has no arm for. The preset trio has no sorcerer,
+so `test_scaler` and `sweep_tier` cannot see this. The new
+`tests/sweep_sorcerer.gd` puts a built sorcerer in the cleric's seat beside the
+preset fighter and rogue, and fights each seed with the two features stripped
+(exactly what master fields) and as shipped. Easy, 200 seeds, pinned:
+
+| level | without | rounds | with | rounds |
+|---|---|---|---|---|
+| 3 | 89.5% | 7.5 | 88.5% | 7.5 |
+| 10 | 96.5% | 9.7 | 96.5% | 9.3 |
+
+Inside one standard error at both levels. Under the autopilot the two features
+are worth about nothing, so leaving them unpriced moves no budget. A player
+using them well gets more out of them than the autopilot does. That is the
+same gap every class feature has.
+
+`test_sorcerer` (new, 56 checks): buttons by level and the cost table,
+Innate Sorcery's DC, Advantage (Fire Bolt against AC 20, 103 against 170 hits
+of 300) and its ten-round clock, both conversions with their refusals, the
+made slot surviving write-back and a short rest but not a long one, Innate
+Sorcery back on a long rest only, and the autopilot's one use.
+`test_class_abilities` presses every new button on its sorcerer teams
+(11677 → 11809 checks). Shots, from `tests/shot_sorcerer.gd`:
+`docs/shots/sorcerer-bonus-bar.png` and `docs/shots/sorcerer-after-font.png`.
+
+### Still open
+
+- **Metamagic.** The option picks at 2/10 are in the creator, and none of
+  them do anything yet. Next PR.
+- **The export files three sorcerer features on the wrong level.** Sorcerous
+  Restoration is at 20 (2024: 5), Arcane Apotheosis at 18 (20), and the third
+  pair of Metamagic picks at 18 (17). Fix in `tools/fill_levels.py` with the
+  Metamagic PR, since the picks are what moves.
+- **Sorcerous Restoration** (short-rest points) and **Sorcery Incarnate**
+  (Innate Sorcery for 2 points, two Metamagics on one spell).
+- **Font of Magic on the road.** Only in a fight for now. A road conversion
+  would follow `Adapter.arcane_recovery`'s shape, and the profile's road panel
+  is where it would sit.
+- **Spell attacks read no other advantage or disadvantage.** Prone, dodging
+  and invisible still never reach a spell attack roll (`ponytail:` at
+  `_spell_hit`). Innate Sorcery's Advantage is the only source wired.
