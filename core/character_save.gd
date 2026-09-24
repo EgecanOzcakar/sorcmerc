@@ -26,7 +26,8 @@
 #                                                        // not the character's (Party.stash)
 #   "pools": {"second-wind": 1},      // campaign state: uses REMAINING
 #   "slots_used": [2, 1],             // campaign state: spell slots SPENT, per level
-#                                     // (absent = none spent; a long rest clears it)
+#                                     // (absent = none spent; a long rest clears it;
+#                                     // negative = a slot Font of Magic made, unspent)
 #   "hp_current": -1,                 // -1 = full
 #   "prepared": ["cure-wounds"],
 #   "xp": 900,                        // banked XP (T10); Leveling gates level-up on it

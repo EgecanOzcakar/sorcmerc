@@ -516,6 +516,16 @@ ACTIONS = {
         circle(32, 20, 6.2, LIGHT[1], sw=1.2),
     ),
 
+    # Font of Magic: one thing turned into another and back — two arcs chasing
+    # each other round a spark, gold one way and pale the other.
+    "font_of_magic": badge(
+        band(32, 32, 20, 15.5, 200, 330, GOLD[1]),
+        band_head(32, 32, 20, 15.5, 330, 24, GOLD[1]),
+        band(32, 32, 20, 15.5, 20, 150, LIGHT[1]),
+        band_head(32, 32, 20, 15.5, 150, 24, LIGHT[1]),
+        star(32, 32, 9, 3.2, 4, LIGHT, sw=1.1),
+    ),
+
     # --- bar controls ---
     # The turn is spent.
     "end_turn": badge(
@@ -1272,6 +1282,13 @@ FEATURES = {
                              sword(32, 34, 20, length=44, w=7.0, steel=E("radiant")),
                              star(18, 20, 6, 2, 4, LIGHT, sw=1.0)),
     "celestialpatron-healing-light": (halo(E("radiant")), heart(32, 43, 8, E("life"))),
+    # The sorcerer's two. Innate Sorcery is the class emblem's flame, throwing
+    # sparks; Font of Magic is the power itself, an orb turned one way and back.
+    "sorcerer-innate-sorcery": (flame(E("fire")), star(47, 17, 6, 2, 4, LIGHT, sw=1.0),
+                                star(17, 22, 5, 1.8, 4, LIGHT, sw=1.0)),
+    "sorcerer-font-of-magic": (orb(E("force"), 0.8, ring=True),
+                               chevron(52, 22, 0, 8, 4, E("gold")),
+                               chevron(12, 42, 180, 8, 4, E("gold"))),
     "warriorofmercy-hand-of-healing": (hand(E("life")), heart(46, 18, 7, E("life"))),
     "warrioropenhand-wholeness-of-body": (person(E("life"), "stand", 0.8),
                                           waves(E("life"), 0.45)),
