@@ -9,9 +9,23 @@
 #   var spec := Scaler.roster_for(party.party_characters(), t["difficulty"],
 #       {}, theme, seed_v, t["power_scale"])
 #
-# assess() returns {difficulty, power_scale, hp_frac, counted}: the first two are
-# the call above, the last two are there so the caller can say *why* in a log
-# line or a tooltip. Pure math on a Party — no scenes, no RNG, no world state.
+# assess() returns {difficulty, power_scale, hp_frac, slot_hold, counted}: the
+# first two are the call above, the rest are there so the caller can say *why*
+# in a log line or a tooltip. Pure math on a Party — no scenes, no RNG, no world
+# state.
+#
+# WOUNDS THIN A FIGHT; SPENT SLOTS DO NOT (the owner's call, 2026-09-24). The
+# budget Scaler builds is priced off core/rules/power.gd's reading of the party,
+# which reads max HP and never current HP — so the one piece of a party's
+# condition it CAN see is the spell slots left. Unchecked, that made every slot
+# spent on the road buy a smaller, poorer next fight, which is magic refunding
+# its own cost and the opposite of pillar 3 ("magic is powerful but costly").
+# `slot_hold` undoes exactly that: Scaler.held_at(fresh, now), the correction
+# core/site.gd already makes for a lair's rooms, so the budget comes out the
+# size it would have been for this party with every slot back. It is 1.0 for a
+# party that has spent nothing, so everything measured below (the harness only
+# ever damaged HP) stands as it was. HP is still what thins the fight, through
+# power_scale(), and that is this file's whole answer to a hurt party.
 #
 # It does NOT own: the fight itself (scenes/world/world.gd still builds and
 # launches it), site difficulty (sites are the hard content and do not come
@@ -27,6 +41,9 @@
 # cooldown (core/settlement_visit.gd) is untouched, so this is not a way to farm
 # anything. Do not "fix" this with a payout penalty; that would double-count.
 extends RefCounted
+
+const Regions = preload("res://core/regions.gd")
+const Scaler = preload("res://core/scaler.gd")
 
 # Sites are the hard content now. Open country is the walk between them — the
 # thing that used to be "normal" for every wilderness fight in world.gd, which
@@ -136,8 +153,18 @@ static func party_hp_frac(party) -> float:
 		return 1.0
 	return clampf(hp / max_hp, 0.0, 1.0)
 
+# The budget multiplier that prices the party as if every slot were back (see
+# the header). >= 1.0 whenever a slot is spent, and exactly 1.0 when none is,
+# or when there is nobody to read — both readings then floor at the same 1.0.
+# It never makes a fight bigger than the one a fresh party of this build would
+# meet; it only stops the spent slots from making it smaller.
+static func slot_hold(party) -> float:
+	return Scaler.held_at(Regions.fresh_score(party), Scaler.party_score(party.party_characters()))
+
 # The whole module in one call. `counted` is how many members the fraction was
 # pooled from, so a caller can tell "full strength" from "nobody to read".
+# `power_scale` is the condition curve times slot_hold(): callers pass it
+# through untouched and get both.
 static func assess(party) -> Dictionary:
 	var frac := party_hp_frac(party)
 	var counted := 0
@@ -145,9 +172,11 @@ static func assess(party) -> Dictionary:
 		var ch = party.get_member(id)
 		if ch != null and not ch.dead:
 			counted += 1
+	var hold := slot_hold(party)
 	return {
 		"difficulty": BASELINE,
-		"power_scale": power_scale(frac),
+		"power_scale": power_scale(frac) * hold,
 		"hp_frac": frac,
+		"slot_hold": hold,
 		"counted": counted,
 	}

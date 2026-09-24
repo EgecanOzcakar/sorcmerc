@@ -33,7 +33,7 @@ The mercenary-company fantasy is carried by flavour and structure, not by a Batt
   - 8 hours of world clock, during which bands keep walking and markets restock;
   - an inn room costs gold, and camping needs a 150-gold camp kit and carries an 8% ambush risk;
   - none at all inside a site.
-- **Known softener, to be removed:** in the open world the encounter budget reads the party's *remaining* slots, so a drained party is sent a smaller, poorer fight (`core/world_threat.gd`, `core/regions.gd`). Sites already correct for this (`core/site.gd`). Decided: the open world will do the same.
+- **Spent slots never buy an easier fight.** The encounter budget reads the party's *remaining* slots, so it would send a drained party a smaller, poorer fight. `WorldThreat.slot_hold()` cancels that in the open world, and `core/site.gd` does the same inside sites. Only wounds thin a fight.
 - **Enemy magic is not slot-based.** No bestiary entry has spell slots. A foe's "magic" is a limited-use feature such as `monster-innate-bolt` (2 uses), a breath weapon, a gaze or life drain, defined in `data/effects/features.json`.
 
 ## Tone
@@ -46,7 +46,7 @@ Avoid epic-fantasy capitals-and-prophecy prose, jokes that break the scene, and 
 
 ## Setting
 
-- Four concentric countries, each with a level range: **the Heartland** (levels 1–3), **the Marches** (3–6), **the Frontier** (6–10) and **the Far Deeps** (10–20). Each has home factions (`core/regions.gd` `BANDS`/`HOMES`).
+- Four concentric countries, each with a level range: **the Heartland** (levels 1–3), **the Marches** (3–6), **the Frontier** (6–9) and **the Far Deeps** (10–20). Each has home factions (`core/regions.gd` `BANDS`/`HOMES`).
 - Factions come from the bestiary's hand-tagged `faction` field. The ones that field rosters are listed in `Scaler.FACTIONS`: goblinoid, beast, undead, bandit, giant, kobold, orc, gnoll, cultist, soldier, monstrosity, fey, elemental, construct and dragon.
 - Settlements have per-faction opinion (`core/faction_opinion.gd`). Persistent faction warfare is deferred (expansion-plan, "Post-T91 gap note").
 - Species-flavoured towns exist: human, dwarf, elf and orc settlement kits.
@@ -81,12 +81,12 @@ These are direction, not description. The code still does the old thing until ea
   - Heroes from earlier runs stay in the barracks. They turn up now and then as **veterans** in an inn's pool, at their own level, and only where the country fights at that level or higher.
   - **Old saves are grandfathered.** A save with no hiring rule keeps its roster, its Create new, and the inns' pools too. A new run starts with a 150 ◉ founding purse.
 - **Sorcerer rarity is fiction only.** No recruit odds and no social mechanic. "Uncommon but not rare" lives in the writing.
-- **Sorcerer features follow 2024 RAW.** Implement sorcery points, Font of Magic (slot/point conversion), Metamagic and Innate Sorcery as combat mechanics. Until then, don't let `core/manual.gd` promise them.
+- **Sorcerer features follow 2024 RAW.** Innate Sorcery and Font of Magic are built (`test_sorcerer.gd`). Metamagic is next. Until it lands, `core/manual.gd` says it isn't on the board yet.
 - **Enemy magic is rare and named.** Ordinary enemies keep their limited-use innate abilities. Slot-based casters appear only as an occasional elite or boss, so an enemy caster is an event.
 - **Factions post contracts.** Factions and towns offer merc jobs (escort, clear a lair, raid a rival), and standing with each faction decides who hires you. Full faction warfare stays deferred.
 - **Armor stays 5e AC.** No damage split, no durability.
 - **Art stays 3D.** Rigged Meshy figures in the house prompt style. The 2D cutout plan is dropped.
-- **Slots are scarce by the rest rules, not the tables.** Keep the 2024 slot tables and fix only the paladin/ranger level-1 gap in the export. Open-world encounters are to be sized **as if the party had every slot back**, as sites already do. Spending a slot must never buy an easier next fight. Wounds may still thin a fight. See the `sorcmerc-balancing` skill.
+- **Slots are scarce by the rest rules, not the tables.** Keep the 2024 slot tables and fix only the paladin/ranger level-1 gap in the export. Encounters are sized **as if the party had every slot back** (built: `WorldThreat.slot_hold()`). Spending a slot never buys an easier next fight; wounds still thin one. See the `sorcmerc-balancing` skill.
 
 ## Open questions
 
