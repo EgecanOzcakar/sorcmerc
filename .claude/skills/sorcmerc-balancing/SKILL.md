@@ -83,10 +83,17 @@ Difficulty is a product of **independent multipliers**, each answering its own q
 6. Sweep harnesses: `tests/test_scaler.gd`, `tests/sweep_tier.gd`, `tests/sweep_site_depth.gd`, `tests/sweep_built.gd`, `tests/sweep_range_detail.gd`. Set `SORCMERC_SEED` to replay one fight.
 7. Write the new measurement into the owning file's header and add an entry to `docs/expansion-plan.md`.
 
+## Decided 2026-09-24 (owner's calls, not yet built)
+
+Each of these is a balance change. Build each one with a re-run sweep and quote master against the branch.
+
+- **Slot tables stay 2024 RAW.** Fix only the export's data gap: paladin and ranger get 2 level-1 slots, as the 2024 PHB does. This moves the level-1 and level-2 numbers for those two classes, so re-run `test_scaler`.
+- **The open world stops pricing spent slots.** Size an open-world encounter off the party **with every slot back**, as `core/site.gd` already does for sites, and let wounds keep thinning it through `WorldThreat`. The aim is that spending a slot never buys an easier or poorer next fight. Expect win rates for a drained party to fall. That is intended, and the loss is paid for with the rest rules, not with `TIER`.
+- **Sorcerer features follow 2024 RAW:** sorcery points, Font of Magic conversion, Metamagic and Innate Sorcery. They need `core/rules/power.gd` pricing, or the scaler will under-budget a sorcerer party.
+- **Enemy casters are rare, named elites or bosses** with real slots and spell lists. Ordinary rosters keep their innate abilities. A caster must be priced by `Power.estimate` on the same "each slot is one cast of the best spell" rule the party uses.
+- **Armor stays 5e AC.** No damage reduction and no armor HP.
+- **Hired mercs** come with class, species, background and scores fixed; the player keeps subclass, spells and level-up choices. Recommended (not yet decided): pre-roll their scores within the creator's point-buy/standard-array budget, so a hire is never stronger than a built hero at the same level.
+
 ## Open questions
 
-- **Armor.** Armor is 5e AC only, with no damage split and no armor durability. Is a split wanted? It would be a departure from 5e.
-- **Slot counts.** The per-class counts are RAW 2024. The paladin and ranger's missing level-1 slots are a data gap. Is RAW the target, or should sorcmerc tune its own counts for pillar 3?
-- **Enemy casters.** Should enemies get slot-based casters, and how often? Today enemy magic is innate features only.
-- **Slot-aware scaling.** In the open world a drained party gets smaller fights (see the Pillar 3 softener in the design bible). Is that what we want?
-- **Sorcerer features.** Font of Magic and Metamagic are unimplemented, so the sorcerer is priced and played without them.
+- None outstanding from the 2026-09-24 pass.
