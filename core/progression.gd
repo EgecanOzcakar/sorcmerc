@@ -67,7 +67,7 @@ const VERSION := 1
 # a tenth of the distance.
 
 # Class XP, flat, for each of a class's other 2. Class XP is banked per
-# character share (campaign.gd's _split_xp hands each fighter total/4), so this
+# character share (campaign.gd's split_xp hands each fighter total/4), so this
 # accrues at about a quarter of the lifetime rate — 200 is three fights' worth
 # of it around the levels a player is buying subclasses at.
 const SUBCLASS_COST := 200

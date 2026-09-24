@@ -307,7 +307,7 @@ static func complete(party, world, char_id: String, who := "") -> Dictionary:
 	var t: Dictionary = templates().get(String(c.get("id", "")), {})
 	if t.is_empty() or String(c["state"]) != "told":
 		return {}
-	Campaign.new(party)._split_xp(CALLING_XP)
+	Campaign.split_xp(party, CALLING_XP)
 	var item := String(t["item"])
 	party.stash_add(item)
 	Campaign._note_rarity(item)

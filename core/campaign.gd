@@ -6,6 +6,8 @@
 #   c.enter(i)                        # -> the node dict; state becomes visiting/combat
 #   c.combat_spec()                   # combat nodes: what scenes/main.tscn wants
 #   c.finish_combat(main.result)      # banks xp/gold/loot, quest progress, deaths
+#   Campaign.split_xp(party, xp)      # any XP award, anywhere: the even split + T22
+#   Campaign.bank_win(party, result)  # the open map's won fight: XP, purse, loot
 #   c.rest("long-rest") / c.buy(id) / c.sell(id) / c.offer() / c.accept() / c.turn_in(q)
 #   c.leave()                         # -> next stage, or state "won"
 extends RefCounted
@@ -585,7 +587,7 @@ func finish_combat(result: Dictionary) -> void:
 	Sound.play_sfx("victory")   # T27
 	var earned_xp: int = roundi(int(result.get("xp", 0)) * _xp_mult())
 	xp += earned_xp
-	_split_xp(earned_xp)
+	split_xp(party, earned_xp)
 	Ach.unlock("first_victory")
 	# "Nobody downed" is the real bar: a hero who hit 0 HP and got healed back up
 	# still counts against it (combat.gd's `downed`, carried by resolve_outcome).
@@ -627,8 +629,13 @@ func _xp_mult() -> float:
 	return clampf(BOSS_REF_WIN_RATE / wr, 1.0, BOSS_XP_MULT_CAP)
 
 # Split evenly among whoever was in the fight; the remainder is dropped.
-func _split_xp(total: int) -> void:
-	var fighters: Array = party.party_characters()
+# Static, and handed the party, because every XP award in the game comes
+# through here — the open map's fights, a lair's clearing bonus, landmarks,
+# callings, raids, quests and a pack's story — and until the design audit
+# (docs/audit-game-design.md §8.6) each of them built a throwaway
+# Campaign.new(party) just to reach it.
+static func split_xp(pty, total: int) -> void:
+	var fighters: Array = pty.party_characters()
 	if fighters.is_empty() or total <= 0:
 		return
 	var share: int = total / fighters.size()
@@ -644,7 +651,7 @@ func _split_xp(total: int) -> void:
 # T22: the same XP also feeds the machine-wide meta-progression. Lifetime XP is
 # account-scoped, so the party's whole haul lands once — not once per character —
 # while each fighter's share feeds every class they hold levels in.
-func _bank_progression(total: int, fighters: Array, share: int) -> void:
+static func _bank_progression(total: int, fighters: Array, share: int) -> void:
 	Progression.add_lifetime_xp(total)
 	for ch in fighters:
 		var seen := {}
@@ -653,6 +660,29 @@ func _bank_progression(total: int, fighters: Array, share: int) -> void:
 			if not seen.has(cid):
 				seen[cid] = true
 				Progression.add_class_xp(cid, share)
+
+# The open map's won fight, banked: what finish_combat() banks minus the
+# linear run's own bookkeeping (node gold, achievements, the journal, the
+# autosave, quest progress — the map's screen makes those calls itself, since
+# a delve totals them across rooms). Lived in scenes/world/world.gd's _bank
+# until the design audit (§8.6) moved the rule out of the scene:
+#   XP    split_xp, the even split plus T22's lifetime and class progression;
+#   gold  the fight's purse, a Greedy hero going through the pockets twice
+#         (#176 step 4, fight_purse). `result["gold"]` is rewritten to what was
+#         banked, because the after-action page's tally reads it from there;
+#   loot  into the stash, as it dropped.
+static func bank_win(pty, result: Dictionary) -> void:
+	split_xp(pty, int(result.get("xp", 0)))
+	var gold := fight_purse(pty, int(result.get("gold", 0)))
+	result["gold"] = gold
+	pty.add_gold(gold)
+	for item in result.get("loot", []):
+		pty.stash_add(String(item))
+
+# A fight's purse as this company takes it: +10% with a Greedy hero in it
+# (Traits.party_pct "gold" — one holder is enough, two do not stack), rounded.
+static func fight_purse(pty, gold: int) -> int:
+	return int(round(gold * (100 + Traits.party_pct(pty, "gold")) / 100.0))
 
 # --- treasure -------------------------------------------------------------
 

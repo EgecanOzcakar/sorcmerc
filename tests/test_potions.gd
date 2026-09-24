@@ -32,6 +32,7 @@ func _init() -> void:
 	test_invisibility_ends_on_a_swing()
 	test_animal_friendship_wants_a_beast()
 	test_road_drink()
+	test_road_drink_is_seeded()
 	test_road_buff_walks_into_the_fight_and_expires()
 	print("test_potions: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -158,6 +159,27 @@ func test_road_drink() -> void:
 		"mind reading is advantage on the talk for ten minutes")
 	var again = CharSave.from_dict(CharSave.to_dict(ch))
 	check(again.buffs.has("potion-of-speed"), "buffs survive a save")
+
+# Unpinned, a road drink is seeded off the drink (Potions.road_seed): the same
+# hero, bottle, minute and stash roll the same heal — a reload cannot reroll it —
+# while the next bottle of the same kind is a roll of its own.
+func test_road_drink_is_seeded() -> void:
+	var heals: Array = []
+	for _i in 2:
+		var p := _party(["potions-of-healing", "potions-of-healing"])
+		var ch = p.roster[0]
+		ch.hp_current = 1
+		p.world_now = 250.0
+		Potions.drink_on_road(p, ch, "potions-of-healing", p.world_now)
+		heals.append(ch.hp_current)
+	check(heals[0] == heals[1] and heals[0] > 1, "the same drink heals the same (%s)" % str(heals))
+	var p2 := _party(["potions-of-healing", "potions-of-healing"])
+	var ch2 = p2.roster[0]
+	var a := Potions.road_seed(p2, ch2, "potions-of-healing", 250.0)
+	check(a == Potions.road_seed(p2, ch2, "potions-of-healing", 250.0), "the seed is a function of the drink")
+	p2.stash_remove("potions-of-healing")
+	check(a != Potions.road_seed(p2, ch2, "potions-of-healing", 250.0), "the second bottle rolls its own")
+	check(Potions.road_seed(p2, ch2, "potions-of-healing", 250.0) >= 1, "a seed the xorshift can use")
 
 func test_road_buff_walks_into_the_fight_and_expires() -> void:
 	var p := _party(["potion-of-speed"])

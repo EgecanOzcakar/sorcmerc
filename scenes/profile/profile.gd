@@ -11,7 +11,6 @@ const Leveling = preload("res://core/leveling.gd")
 const Ach = preload("res://core/achievements.gd")
 const Potions = preload("res://core/potions.gd")
 const RoadSpells = preload("res://core/road_spells.gd")
-const RNG = preload("res://core/rng.gd")
 const Traits = preload("res://core/traits.gd")
 
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
@@ -551,7 +550,7 @@ func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qt
 
 # The road door of core/potions.gd; the combat door is combat.gd's drink verb.
 func drink(item_id: String) -> void:
-	Potions.drink_on_road(party(), _ch, item_id, party().world_now, RNG.new(randi()))
+	Potions.drink_on_road(party(), _ch, item_id, party().world_now)   # seeded in core: Potions.road_seed
 	_render()
 
 # Public for the same reason toggle_equip is: tests drive it without a button.

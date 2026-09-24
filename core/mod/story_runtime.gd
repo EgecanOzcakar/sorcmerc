@@ -374,7 +374,7 @@ static func _award_xp(total: int, party) -> Array[String]:
 	if total <= 0:
 		return [] as Array[String]
 	var Campaign = load("res://core/campaign.gd")
-	Campaign.new(party)._split_xp(total)
+	Campaign.split_xp(party, total)
 	return ["%d XP" % total] as Array[String]
 
 static func _spawn(spec, world) -> Array[String]:

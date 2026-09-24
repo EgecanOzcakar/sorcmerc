@@ -14,6 +14,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Dice = preload("res://core/dice.gd")
 const Campaign = preload("res://core/campaign.gd")
 const Ach = preload("res://core/achievements.gd")
+const RNG = preload("res://core/rng.gd")
 
 const STATUS_PREFIX := "potion:"   # statuses key for a potion buff: "potion:potion-of-speed"
 
@@ -95,7 +96,10 @@ static func drink_in_combat(cb, actor, item_id: String, target = null) -> Dictio
 
 # The road: heal lands on hp_current; a timed potion becomes ch.buffs[id] =
 # {"until": world-minute}, and "road" potions set the party flag they promise.
-static func drink_on_road(party, ch, item_id: String, now: float, rng) -> void:
+# `rng` is for tests to pin; left out, the drink is seeded (road_seed).
+static func drink_on_road(party, ch, item_id: String, now: float, rng = null) -> void:
+	if rng == null:
+		rng = RNG.new(road_seed(party, ch, item_id, now))
 	var m := mechanics(item_id)
 	if not party.stash_remove(item_id):
 		return
@@ -119,6 +123,16 @@ static func drink_on_road(party, ch, item_id: String, now: float, rng) -> void:
 		ch.buffs[item_id] = b
 	elif String(m.get("road", "")) == "scout":
 		party.scouted_next = true
+
+# The dice a bottle drunk on the road rolls (a heal, a trap's damage, a buff's
+# own die), seeded off the drink itself: who drinks it, which potion, the world
+# minute, and how many of it the stash holds before this one. Reloading and
+# drinking again is the same roll (the profile used to seed it with randi(),
+# so a bad Potion of Healing was one reload from a good one — the design audit,
+# docs/audit-game-design.md §8.6); the next bottle of the same kind, one fewer
+# in the stash, is a roll of its own.
+static func road_seed(party, ch, item_id: String, now: float) -> int:
+	return maxi(1, absi(hash("drink|%s|%s|%d|%d" % [String(ch.id), item_id, int(now), party.stash_count(item_id)])))
 
 # Does `ch` hold a live road buff that does `road` (e.g. "persuasion_adv")?
 static func road_buff(ch, road: String, now: float) -> bool:
