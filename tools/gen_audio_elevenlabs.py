@@ -42,6 +42,8 @@ import sys
 import urllib.error
 import urllib.request
 
+import trim_sfx
+
 API_URL = "https://api.elevenlabs.io/v1/sound-generation"
 OUTPUT_FORMAT = "pcm_44100"
 # The API's own floor, enforced server-side: anything under half a second is a
@@ -765,6 +767,9 @@ def main():
             pcm, now = cap(pcm, BARK_MAX_SECONDS)
         else:
             pcm, now = cap(pcm, SFX_MAX_SECONDS, SFX_FADE_MS)
+            # the part-aware trim tools/trim_sfx.py gives every sfx one-shot
+            vals = trim_sfx.trim(list(struct.unpack("<%dh" % (len(pcm) // 2), pcm)), CHANNELS, SR)
+            pcm, now = struct.pack("<%dh" % len(vals), *vals), len(vals) / float(SR)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(wav(pcm))
