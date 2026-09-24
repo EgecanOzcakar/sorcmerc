@@ -286,6 +286,7 @@ kills, the turn-in at any merchant, the log panel, the encounter spawn bias. A
 | `supply_item` | `target_item_id` | that many are in the shared stash |
 | `deliver_goods` | `target_settlement_id` | the party walks into that settlement |
 | `scout_region` | `target_region_id` | the party is standing in that band (`heartland` / `marches` / `frontier` / `deeps`) |
+| `rescue` | `target_lair_id` | the captive in that lair's pens is freed (the room's rescue objective is done) |
 
 ### Conditions (`when`)
 
@@ -463,7 +464,7 @@ out of combat. A potion with none of `heal`, `damage`, `condition`, `status` or
 `passive_damage`, `self_buff`, `ally_buff`, `heal_self`, `heal_ally`,
 `grant_action`, `grant_verb`, `attacks_per_action`, `attack_modifier`,
 `damage_bonus`, `save_effect`, `reaction`, `save_modifier`, `survive_damage`,
-`keen_senses`, `aura`, `summon`.
+`keen_senses`, `aura`, `summon`, `font_of_magic`.
 
 ```json
 "monster-parry-2": {"label": "Parry", "kind": "reaction",
@@ -499,6 +500,22 @@ creature: nothing can target it and it cannot attack. It **rolls its own
 initiative** and takes its place in the order by that roll. The button greys
 out while one of the same stat block is still standing, so a feature summon
 cannot be stacked.
+
+A `self_buff` may also carry `spell_dc_bonus` (added to the wearer's spell
+save DC while it lasts) and `spell_attack_adv` (Advantage on spell attack
+rolls), with `rounds` as its clock. That is Innate Sorcery.
+
+A `font_of_magic` trades between a spell-slot pool and a resource `pool` in
+both directions. It is one entry that becomes a button per slot level each way:
+burn a level-L slot for L points (no action), or pay a `font.create` row's
+`cost` for a slot of its `level`, once `font.class` has reached `min` levels.
+
+```json
+"sorcerer-font-of-magic": {"kind": "font_of_magic", "cost": "bonus",
+  "pool": "sorcery-points",
+  "font": {"class": "sorcerer",
+           "create": [{"level": 1, "cost": 2, "min": 2}, {"level": 2, "cost": 3, "min": 3}]}}
+```
 
 `cost` is `action`, `bonus`, `reaction`, or `none` for a passive. A reaction
 must name a `trigger` the engine actually fires — `hit_by_attack`,

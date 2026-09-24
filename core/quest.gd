@@ -19,12 +19,17 @@
 #     record_stash/record_settlement_visited/record_region_reached.
 #   required, progress, state: "offered" | "active" | "complete" | "turned_in",
 #   reward: {gold, item_id (optional)}   — turn-in also pays gold * XP_PER_GOLD in XP
+#   issuer, against — contracts (core/contracts.gd): the people who posted it,
+#     who are credited at turn-in wherever it is handed in, and the faction it
+#     is aimed at ("" for nobody). Absent on a job posted before contracts,
+#     which then credits the hand-in town, as every job did.
 extends RefCounted
 
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const Ach = preload("res://core/achievements.gd")
 const Ladder = preload("res://core/ladder.gd")
+const Contracts = preload("res://core/contracts.gd")
 
 # A fight pays XP at about 6.7x its gold (core/encounter.gd's XP_PER_POWER /
 # GOLD_PER_POWER); a quest pays less per coin because it also hands over gear
@@ -384,12 +389,14 @@ static func can_turn_in(quest: Dictionary, party = null) -> bool:
 # Any merchant takes a finished quest, not just the giver (kept deliberately simple).
 # O7: pass the taker's faction and finishing the job raises their opinion of you;
 # the linear campaign has no factions and passes nothing.
+# Contracts (core/contracts.gd): the regard and the deed go to the people who
+# POSTED the job (its `issuer`), wherever it is handed in. `faction` is only the
+# fallback, for a job posted before jobs carried an issuer.
 static func turn_in(party, quest: Dictionary, faction := "") -> bool:
 	if not can_turn_in(quest, party):
 		return false
-	if faction != "":
-		FactionOpinion.raise(faction, FactionOpinion.QUEST_DONE)
-		Ladder.deed(faction)   # a job is a deed for the people who paid
+	if faction != "" or quest.has("issuer"):
+		Contracts.credit(quest, faction)
 	var reward: Dictionary = quest.get("reward", {})
 	party.add_gold(int(reward.get("gold", 0)))
 	# A finished job teaches something too: XP pegged to the purse, split the
@@ -402,7 +409,12 @@ static func turn_in(party, quest: Dictionary, faction := "") -> bool:
 		party.stash_remove(String(quest["target_item_id"]), int(quest["required"]))
 	quest["state"] = "turned_in"
 	Ach.bump("quests")
-	if faction != "" and faction_chain_tier(party, faction) >= 2:
+	# A chain is the run of jobs against ONE target faction (chain_faction), so
+	# that is what is counted. It used to count the hand-in town's faction, a
+	# civilized people no chain is ever against, so the achievement could not
+	# be earned in the open world.
+	var chain := String(quest.get("chain_faction", ""))
+	if chain != "" and faction_chain_tier(party, chain) >= 2:
 		Ach.unlock("quest_chain")
 	return true
 

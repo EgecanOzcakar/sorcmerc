@@ -1,0 +1,24 @@
+{
+  "format": "sorcmerc-pack",
+  "api": 1,
+  "id": "api-canary",
+  "title": "API Canary",
+  "summary": "A pack written against modding API 1 the way a third party would. tests/test_mod_api.gd loads it: if this stops loading, a change broke every mod like it.",
+  "authors": [
+    "A Third Party"
+  ],
+  "pack_version": "1.0.0",
+  "kind": "campaign",
+  "access": "free",
+  "priority": 0,
+  "world": "world.json",
+  "story": "story.json",
+  "data": {
+    "bestiary.json": "monsters.json",
+    "spells.json": "spells.json",
+    "effects/spells.json": "spell-mechanics.json",
+    "effects/features.json": "features.json",
+    "magic-items.json": "items.json",
+    "effects/potions.json": "potions.json"
+  }
+}

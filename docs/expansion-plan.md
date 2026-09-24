@@ -9996,6 +9996,305 @@ Sorcery back on a long rest only, and the autopilot's one use.
   and invisible still never reach a spell attack roll (`ponytail:` at
   `_spell_hit`). Innate Sorcery's Advantage is the only source wired.
 
+## Factions post contracts: who hires the company (2026-09-24)
+
+The owner's call from the skills pass: factions and towns offer merc jobs, and
+standing with each faction decides who hires you. Most of the jobs already
+existed:
+
+- **Clear a lair** was `clear_lair`.
+- **Escort** was `deliver_goods`, the carter's run.
+- **Raid** was `raid_settlement` against a monster hold.
+
+What was missing was whose job it was.
+
+**The job knows who posted it.** `core/contracts.gd` stamps every job with its
+`issuer` (the people of the settlement that posted it) and, when it is aimed at
+somebody, who it is `against` (the world job's `chain_faction`). `Quest.turn_in`
+credits the issuer's opinion and a ladder deed **wherever the job is handed
+in**. Before this it credited the hand-in town: a human bounty cashed at an
+elven inn pleased the elves and taught the humans nothing. A job posted before
+contracts has no issuer and credits the hand-in town exactly as before.
+
+**Standing opens the work** (`Contracts.GATE`), on the two readings the game
+already keeps:
+
+- **The ladder** (deeds, never lost: what you have done for them). War work,
+  meaning a raid on a settlement, waits for **Known** (4 deeds).
+- **Opinion** (their mood, which drifts). Bounty and war work wait for at least
+  **neutral**. Everything else stays open down to the board's own floor
+  (`QUEST_MIN`), as it was.
+
+A closed kind is not a greyed button. It is a note under the board's header:
+"War work goes to those the humans know — Known, at 4 deeds (you have 0)."
+The robots press the first *Take* they find, and a job you can't take isn't a
+job on the board.
+
+**Regard pays.** `Contracts.pay_mult` scales a job's gold with their opinion:
++25% at +100, −6% at the floor. It sits on top of the renown premium every job
+already gets. `STANDING_PAY` is a TUNING taste number: gold sits outside every
+sweep, as `world.gd`'s `PURSE` ponytail says of a caravan.
+
+**Two bugs fixed on the way.**
+
+- The hand-in crediting above.
+- The `quest_chain` achievement counted the hand-in town's faction, a civilized
+  people no chain is ever against. It could not be earned in the open world.
+  It now counts the job's own `chain_faction`.
+
+`test_contracts` (new, 42 checks) covers:
+
+- the gates opening across Known and neutral, and closing at the floor;
+- pay at neutral, loved, and below the floor, and stacking on the real board;
+- every offer stamped with its issuer, and closed kinds listed only where
+  they'd be posted;
+- turn-in crediting the issuer, not the hand-in town;
+- a pre-contracts job still crediting the hand-in town;
+- a job against a people costing you with them.
+
+`test_quest_posting`: the city posts its raid only once it knows you.
+
+Shots, from the new `tests/shot_contracts.gd`: `docs/shots/contracts-board-stranger.png`,
+`docs/shots/contracts-board-known.png`.
+
+### Still open
+
+- **Raiding a rival people**, and **faction warfare**: the owner's call
+  (2026-09-24) is that the player *and* the factions can fight each other. That
+  lifts the "never civilized-vs-civilized" rule from the Post-T91 gap note. Next:
+  - a `raid_caravan` contract against another people's caravan or patrol, with
+    an Attack option on the friendly approach card when the band is a contract
+    target;
+  - then NPC factions fighting each other.
+
+  `against` and `Contracts.AGAINST_COST` are already in place for it: every
+  current target is a monster faction, so today it never fires.
+- **Factors.** Other peoples' agents posting their own contracts on a city's
+  board, gated by each people's standing.
+- **Turn-in.** Whether it should be limited to the issuer's own towns.
+- **Co-op.** A guest sees the host's standing and gates, since the offers are
+  the host's.
+
+## Enemy casters: real slots for the cult, and what the ruler can't price (2026-09-24)
+
+The owner's call from the skills pass: **enemy magic is rare and named.**
+Ordinary foes keep their limited-use innate abilities, and a slot-based caster
+is an occasional elite or boss, so an enemy caster is an event. It must be
+priced by `Power.estimate` on the same "each slot is one cast of the best
+spell" rule the party is priced on.
+
+**What is built.**
+
+- `data/effects/casters.json` gives three cult statblocks a real spell list
+  and slots:
+  - cult fanatic: WIS, DC 11, 4/3 slots;
+  - priest: WIS, DC 13, 4/3/2;
+  - mage: INT, DC 14, 4/3/3/3/1, from Fire Bolt up to Cone of Cold.
+
+  Each block `replaces` the innate bolt, the old stand-in for Spellcasting, so
+  the magic isn't counted twice.
+- `core/enemy_casters.gd` turns a spawned statblock into the caster. It builds
+  the spell buttons through the **same** `Effects.spell_verbs_for` a hero's come
+  from, via a five-field stand-in sheet. A scaled caster's DC and spell attack
+  rise with its multiplier, the way `_scale` raises its swing.
+- `Encounter.spawn(…, caster, caster_cap)`.
+- The fight log opens with "Othmar the Magister is a spellcaster — up to Cone
+  of Cold."
+- `core/ai.gd` `_caster_turn` works in this order:
+  1. an area or cone that catches two or more heroes (the autopilot's aims, the
+     cone half now shared as `_best_cone`);
+  2. then control, but not a second concentration lock;
+  3. then the biggest single-target spell, highest slot first.
+
+  A hero in reach: a caster whose swing beats its best spell melees, and one
+  whose swing doesn't steps clear first.
+- `Scaler` has two ways in:
+  - a seeded caster-elite roll in `roster_for` (`caster_rolls`,
+    `_caster_elite`), where the lead is bought at mult 1.0 and the rest buys
+    its escort, as `boss_for` does;
+  - `lead_caster` on a boss, which the cult's lair boss now carries.
+
+**The rule the owner chose, and what it bought.** The first sweep
+(`tests/sweep_caster.gd`, cultist rosters, 200 pinned seeds, the roll forced
+off and on) found the ruler wrong both ways:
+
+- a caster fanatic or priest priced above its worth, so its warband lost a
+  body and got **easier**: level-5 hard 56% → 89.5%;
+- a Magister priced far below its worth: level-8 hard 54% → 14%, the level-8
+  lair boss 63% → 22%.
+
+Two fixes were chosen and built:
+
+1. **Area spells are counted against the other side's actual size.**
+   `Power.area_targets(opponents)`: 2 when unknown, as before, and the party's
+   size when a foe is priced against the party it is bought to fight, capped at
+   4. Heroes are priced before their foes exist, so every hero price is
+   unchanged.
+2. **Caster tiers by band.** `EnemyCasters.SLOT_CAP` limits how far up the
+   spell levels a caster reaches:
+
+   | band | highest spell level |
+   |---|---|
+   | Heartland, Marches | 2nd |
+   | Frontier | 3rd |
+   | Far Deeps | anything |
+
+   On the map it's read off the fight's own country (`world.gd`'s
+   `encounter_spec`, `site.gd`'s rooms). Off the map it's the band the party's
+   level belongs to.
+
+It still wasn't enough. Priced like its plain statblock, a Magister won 90–98%
+of level 5–8 fights, and with both fixes:
+
+| cult warband, caster forced on | normal | hard |
+|---|---|---|
+| level 3 (off → on) | 86.5 → 99.5% | 68.0 → 99.0% |
+| level 5 | 86.0 → 93.0% | 56.0 → 86.0% |
+| level 8 | 81.0 → 59.0% | 54.0 → 27.0% |
+
+The remaining error is structural. The ruler's `sqrt(dpr × ehp)` and its
+four-cast `ROUNDS` cap can't see a glass cannon that flattens a party from
+range. So it ships where it measured in line, and nowhere else:
+
+- **Casters are fielded only from the Frontier tier up** (`MIN_FIELD_CAP`).
+  Below that tier the statblock fights exactly as on master.
+- **The cult's lair boss casts at the Frontier tier.** The new
+  `tests/sweep_caster_boss.gd` (150 seeds; the boss sweep's one-town map reads
+  as all Heartland, so it can't ask this) measures level 6 at 79.3% → 63.3% and
+  level 8 at 72.7% → 60.0%. That is a harder climax, inside the 15–85% band and
+  beside `BOSS_POOL`'s own low-60s.
+- **The warband caster roll ships at 0%** (`CASTER_ELITE_CHANCE`). It is built
+  and tested, and a sweep forces it on with `caster_chance_override`.
+
+Shot, from the new `tests/shot_caster.gd`: `docs/shots/enemy-caster-announced.png`,
+showing "Sable the Magister is a spellcaster — up to Fireball."
+
+`test_scaler` is byte-identical to master. `tests/sweep_faction_boss.gd` gained
+`LEVEL=` to sweep a boss at the level a party meets it.
+
+`test_enemy_casters` (new, 196 checks) covers:
+
+- the data;
+- the spawn (slots, buttons, the innate bolt replaced, the title);
+- scaled DCs;
+- the band caps and the least fielded tier;
+- pricing above the plain statblock;
+- the roll: seeded, at most one caster, cultist-only, forced on and off, and
+  near the shipped rate;
+- the Frontier boss as a caster, the Heartland boss as its statblock;
+- the announcement;
+- the AI: areas first, stepping clear, holding one lock.
+
+### Still open
+
+- **Price a glass cannon** (`core/rules/power.gd`), then raise
+  `CASTER_ELITE_CHANCE` and lower `MIN_FIELD_CAP`. Both are marked `ponytail:`.
+- **More casters.** Casters leading other factions (a mage with bandits, a
+  priest with soldiers), and the druid and the acolyte.
+- **Shield, Counterspell, heals and buffs for foes.** Power doesn't price them
+  and the AI doesn't use them.
+- **Breath weapons** are areas too and still priced as one target. That's a
+  separate pass over ~30 statblocks.
+
+## Keeping co-op and the modding API stable through heavy features (2026-09-24)
+
+The owner's ask: skills and checks that keep co-op and the modding API stable
+while big features land. Both are promises, and neither is visible from the
+feature being built:
+
+- two co-op peers stay in lockstep;
+- a pack written against an API level keeps loading.
+
+Until now each was held by tests that only exercised a narrow slice.
+
+**Co-op.**
+
+- **`Coop.state_hash` sees more.** It now covers resource pools and every
+  status *payload*, not just status names. A sorcery point spent on one peer
+  only, or a Metamagic armed with a different option, rolls no die until later,
+  so it was invisible to a hash of the rng. A payload that names a Combatant is
+  written as its id (`_plain()`), since its printed form differs on every peer.
+- **The lockstep harness is shared.** It moved out of `test_coop.gd` into
+  `tests/coop_harness.gd`, which `test_coop.gd` now calls.
+- **New `tests/test_coop_kits.gd`.** It covers all 48 (class, subclass) pairs,
+  built the way a player builds them, dealt into four-hero parties at levels 4
+  and 8, and fought in lockstep. Every hero turn presses every button its bar
+  offers, 60 distinct intents through the JSON codec. It also tests the
+  detector itself: a pool or a payload alone must change the hash.
+- **It found a real rules bug on its first run.** `perform()` paid the action,
+  and for a teleport or a summon the slot, *before* `cast()` checked whether
+  the spell could be cast. So a refused cast cost its caster the turn: a War
+  domain cleric's second spell against the bonus-action spell rule, a Misty Step
+  at a taken hex, a summon with nowhere to stand. `Combat._cast_refusal` now
+  asks first, and `test_coop_kits` checks that every kit's refused cast leaves
+  its economy, slots and pools untouched. Players rarely met it, because the
+  bar only offers legal buttons. The AI and the co-op harness both rely on
+  "a refused intent changed nothing".
+- **It found a second one when metamagic was merged onto it as a trial.**
+  `perform()` asked about the pool, a smite's slot and a Font of Magic
+  conversion only *after* paying the economy. Font of Magic's slot-making
+  button was pressed after Metamagic had drained the points, and the sorcerer
+  lost the Bonus Action and made no slot. On a co-op host that is a desync:
+  the host paid, and the guest never heard of it. These are now asked before
+  the spend too, checked by `test_a_drained_pool_changes_nothing`.
+
+**The modding API.**
+
+- **New `tests/test_mod_api.gd`** holds a snapshot, `tests/fixtures/mod_api.json`.
+  It covers:
+  - every vocabulary a pack can write (manifest kinds, access and data files;
+    effect kinds, feature keys (now the explicit `Effects.VERB_KEYS`) and
+    reaction triggers; quest kinds and target fields; story beat kinds,
+    conditions, effects and quest states; world kinds, behaviours, roles,
+    factions, bands and themes; calling completions);
+  - every id a pack can name, across 15 files.
+- **What fails:**
+  - **A term removed** is a break. Bump `Manifest.API`, keep reading the old
+    form, and write the migration.
+  - **A term added** must be documented in `docs/modding.md` and the snapshot
+    regenerated (`SNAPSHOT_WRITE=1`).
+  - **An id removed** strands packs.
+- **A third party's canary pack**, `tests/fixtures/mods/api-canary/`, is written
+  against API 1. It has:
+  - a monster, a spell, a potion, and four features of four kinds;
+  - a map with every AI behaviour and troop role;
+  - a story using every condition and effect key.
+
+  It must load clean, apply, and fight to a finish.
+- **Docs drift found on the first run.** `rescue` was a quest kind a story could
+  use, and `docs/modding.md` did not list it. It does now.
+- **It held on the first merge.** Master brought in the sorcerer's
+  `font_of_magic` kind and the `spell_dc_bonus`/`spell_attack_adv` keys, and
+  the check refused them until they were written into `docs/modding.md`
+  (§5.1, with an example). The snapshot was then regenerated.
+
+**The skill.** `.claude/skills/sorcmerc-compat/SKILL.md` lists the co-op
+lockstep rules (the rng, refusals, the hash, verb ids, what travels with the
+party), the modding promise (add freely if documented, never remove without an
+API bump, never touch the canary to pass), and a checklist for a heavy PR.
+`CLAUDE.md` points at it.
+
+**Enemy casters in co-op.** After the enemy casters landed, `test_coop_kits`
+gained a lockstep fight for each cult caster at each band cap: a foe's AI
+picks its spell, target and hex on each peer by itself, so this is where a
+caster that read anything but `cb.rng` would show. They cast (slots spent),
+and they stay in lockstep.
+
+### Still open
+
+- **Packs in co-op.** Both peers must run the same pack set; the build stamp
+  doesn't include it yet.
+- **World-map lockstep** (the guest's mirrored map) is covered only by
+  `test_coop_mirror`'s one scenario.
+- **The spell-mechanics keys** a pack can write (`shape`, `upcast`,
+  `cantrip_scale`, ...) are read inline in `_spell_verb` and not yet held by
+  the snapshot. Lift them into a constant the way `VERB_KEYS` was.
+- **A runtime script error inside a test function does not fail the test.**
+  The function stops, its checks never run, and the script still exits 0. One
+  slipped through while this check was being written. `tools/run_tests.sh`
+  could treat `SCRIPT ERROR` in a test's output as a failure. That is a runner
+  change for every test, so it is left for its own PR.
+
 ## Hired, not made — the inns' hiring pool (2026-09-24)
 
 The owner's call on recruitment, built. A new run makes **one** hero, the

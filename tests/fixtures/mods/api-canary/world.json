@@ -1,0 +1,165 @@
+{
+  "format": "sorcmerc-world",
+  "version": 1,
+  "name": "Canary Vale",
+  "settlements": [
+    {
+      "id": "canary-hold",
+      "name": "Canary Hold",
+      "position": [
+        0,
+        0
+      ],
+      "faction": "human",
+      "kind": "town"
+    },
+    {
+      "id": "canary-camp",
+      "name": "Pip Camp",
+      "position": [
+        520,
+        -120
+      ],
+      "faction": "elf",
+      "kind": "camp"
+    }
+  ],
+  "lairs": [
+    {
+      "id": "canary-crypt",
+      "name": "The Canary Crypt",
+      "position": [
+        300,
+        260
+      ],
+      "faction": "cultist",
+      "discovered": false
+    }
+  ],
+  "landmarks": [
+    {
+      "id": "canary-stones",
+      "kind": "stones",
+      "position": [
+        -260,
+        180
+      ],
+      "name": "The Warning Stones"
+    }
+  ],
+  "parties": [
+    {
+      "id": "canary-hunters",
+      "position": [
+        -300,
+        -200
+      ],
+      "faction": "bandit",
+      "troops": [
+        {
+          "role": "heavy",
+          "level": 2
+        }
+      ],
+      "ai": {
+        "behavior": "hunt"
+      }
+    },
+    {
+      "id": "canary-watch",
+      "position": [
+        80,
+        80
+      ],
+      "faction": "human",
+      "troops": [
+        {
+          "role": "light",
+          "level": 2
+        }
+      ],
+      "ai": {
+        "behavior": "patrol",
+        "waypoints": [
+          "canary-hold",
+          "canary-camp"
+        ]
+      }
+    },
+    {
+      "id": "canary-drifters",
+      "position": [
+        200,
+        -300
+      ],
+      "faction": "beast",
+      "troops": [
+        {
+          "role": "light",
+          "level": 1
+        }
+      ],
+      "ai": {
+        "behavior": "wander",
+        "home": [
+          200,
+          -300
+        ],
+        "radius": 120,
+        "seed": 7
+      }
+    },
+    {
+      "id": "canary-sentries",
+      "position": [
+        340,
+        300
+      ],
+      "faction": "cultist",
+      "troops": [
+        {
+          "role": "spellcaster",
+          "level": 3
+        }
+      ],
+      "ai": {
+        "behavior": "idle"
+      }
+    }
+  ],
+  "waters": [
+    {
+      "position": [
+        -140,
+        -60
+      ],
+      "radius": 70
+    },
+    {
+      "river": [
+        [
+          -60,
+          -10
+        ],
+        [
+          -20,
+          120
+        ],
+        [
+          30,
+          240
+        ]
+      ],
+      "radius": 30,
+      "blobs": 5
+    }
+  ],
+  "start": {
+    "at": "canary-hold",
+    "offset": [
+      40,
+      40
+    ],
+    "faction": "human"
+  }
+}

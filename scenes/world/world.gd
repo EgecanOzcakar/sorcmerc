@@ -60,6 +60,7 @@ const Site = preload("res://core/site.gd")
 const SiteScreen = preload("res://scenes/world/site_screen.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
 const Regions = preload("res://core/regions.gd")
+const EnemyCasters = preload("res://core/enemy_casters.gd")
 const Travel = preload("res://core/travel.gd")
 const EventCard = preload("res://scenes/world/event_card.gd")
 const DiceRoll = preload("res://scenes/dice_roll.gd")
@@ -96,6 +97,7 @@ const Recruits = preload("res://core/recruits.gd")   # who is looking for work a
 const ChoicePick = preload("res://core/rules/choice_pick.gd")   # humanize(), for a hireling's species and class
 const Catalog = preload("res://core/rules/catalog.gd")   # the trainer's feat names
 const Posting = preload("res://core/quest_posting.gd")
+const Contracts = preload("res://core/contracts.gd")
 const Loot = preload("res://core/loot.gd")
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
@@ -1566,7 +1568,8 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 	var spec: Dictionary = Scaler.roster_for(
 		party.party_characters(), difficulty if difficulty != "" else String(threat["difficulty"]),
 		{}, theme, seed_v,
-		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party), [], habitat)
+		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party), [], habitat,
+		EnemyCasters.cap_for_band(String(Regions.at(world, foe.position)["id"])))   # this country's casters
 	spec["theme"] = theme if theme != "" else String(Scaler.BIOME_BOARD.get(biome, DEFAULT_THEME))
 	# What this band is worth robbing for. A caravan is carrying its cargo; a
 	# patrol, a warband and a beast pack are carrying what they stand up in.
@@ -3622,8 +3625,9 @@ func _turn_in(quest: Dictionary) -> void:
 		# to. The board's second payout, and the one that is not gold.
 		var lead: Dictionary = Rumors.free_lead(_visit["settlement"], party, world)
 		_build_visit_panel()
-		_say("%s — paid, +%d ◉, +%d XP. They will remember it.%s" % [
-			quest["title"], reward, reward * Quest.XP_PER_GOLD,
+		var who := String(quest.get("issuer", _visit["settlement"].faction))
+		_say("%s — paid, +%d ◉, +%d XP. The %s will remember it.%s" % [
+			quest["title"], reward, reward * Quest.XP_PER_GOLD, Ladder.people(who),
 			("  " + String(lead["text"])) if not lead.is_empty() else ""])
 		_autosave()
 
@@ -4794,6 +4798,29 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 		pay.text = "%s — work pays +%d %%." % [Ladder.title_cap(), int(round(Ladder.PAY_PER_TITLE * 100 * Ladder.title_index()))]
 		pay.theme_type_variation = "Dim"
 		box.add_child(pay)
+	# Contracts: what this people's regard is worth on the purse, when it is
+	# worth anything (core/contracts.gd pay_mult).
+	var regard: int = int(round((Contracts.pay_mult(s.faction) - 1.0) * 100.0))
+	if regard != 0:
+		var liked := Label.new()
+		liked.text = "The %s' regard — their work pays %+d %%." % [Ladder.people(s.faction), regard]
+		liked.theme_type_variation = "Dim"
+		box.add_child(liked)
+	# Contracts they will not hand you yet, and why — up here with the other
+	# standing lines, where a scrolled list cannot hide it, and as a note rather
+	# than a greyed Take: the robots press the first "Take" they find, and a job
+	# you cannot take is not a job on the board. Only the board's own kinds; a
+	# specialist's order would say so at its own counter.
+	var here: Array = Visit.services(s)
+	for c in Posting.closed(s, here):
+		if not Posting.counters_for(s, here, String(c["kind"])).any(func(k): return BOARD_COUNTERS.has(k)):
+			continue
+		var note := Label.new()
+		note.text = String(c["why"])
+		note.theme_type_variation = "Dim"
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.custom_minimum_size = Vector2(VISIT_PANEL_W - 40, 0)
+		box.add_child(note)
 	if s.raided_by != "":
 		var raider = Raids.lair_of(world, s.raided_by)
 		var hit := Label.new()
@@ -4913,9 +4940,11 @@ func _counter_offers(s) -> Dictionary:
 func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 	var tier: int = int(offer.get("chain_tier", 0))
 	var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
+	var who := String(offer.get("issuer", ""))
 	_trade_row(rows, "%s%s" % [offer["title"], tag], "Take", _take_quest.bind(offer), false,
 		Icons.scene_art("quest-" + String(offer.get("kind", "")), null),
-		"Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0)))
+		("For the %s · " % Ladder.people(who) if who != "" else "")
+		+ "Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0)))
 
 # Issue #33: the label wraps. Without that its minimum width is the whole
 # string, and a job with a long title pushed the row — and with it the counter,

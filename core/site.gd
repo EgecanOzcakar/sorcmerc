@@ -39,6 +39,7 @@ extends RefCounted
 const Campaign = preload("res://core/campaign.gd")
 const Scaler = preload("res://core/scaler.gd")
 const Regions = preload("res://core/regions.gd")
+const EnemyCasters = preload("res://core/enemy_casters.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const RNG = preload("res://core/rng.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
@@ -353,7 +354,10 @@ const FACTION_BOSS := {
 	# header). The cult's bodies happen to be other casters, which is the point.
 	"cultist": {"title": "THE VOICE THEY ALL ANSWER", "archetype": "bestiary", "lead": "mage",
 		"desc": "It is not the knives that are the problem. It is what they are listening to.",
-		"lead_features": ["monster-charm-gaze"], "lead_share": 0.25},
+		"lead_features": ["monster-charm-gaze"], "lead_share": 0.25,
+		# 2026-09-24: the voice casts from real slots (core/enemy_casters.gd)
+		# rather than throwing the innate bolt its statblock stands in with.
+		"lead_caster": true},
 	"soldier": {"title": "THE CAPTAIN WITH THE SCALED ARM", "archetype": "bestiary",
 		"lead": "half-red-dragon-veteran",
 		"desc": "He took something from a dragon once, and it took something back.",
@@ -508,10 +512,17 @@ func combat_spec() -> Dictionary:
 	# 1.0) and `held` only bites where the country is not already discounting —
 	# which is the case it was built for.
 	var held: float = _held()
-	var spec: Dictionary = Scaler.boss_for(party.party_characters(), room, seed_v,
+	# An enemy caster in here casts to this country's tier, not the party's
+	# (core/enemy_casters.gd): a level-3 party that walks into the Deeps meets
+	# the Deeps' casters, as it meets the Deeps' budget.
+	var cap: int = EnemyCasters.cap_for_band(String(Regions.at(world, lair.position)["id"])) if world != null else 0
+	var boss_room: Dictionary = room.duplicate()
+	if cap > 0:
+		boss_room["caster_cap"] = cap
+	var spec: Dictionary = Scaler.boss_for(party.party_characters(), boss_room, seed_v,
 			maxf(1.0, band * held)) if room.has("lead") \
 		else Scaler.roster_for(party.party_characters(), String(room.get("difficulty", "normal")),
-			{}, theme, seed_v, band * held, _boss_lead_exclusion())
+			{}, theme, seed_v, band * held, _boss_lead_exclusion(), "", cap)
 	# Objectives: the gate holds against waves drawn from the same faction at
 	# WAVE_SCALE of an easy roster; the pens hold a captive on a deadline.
 	#
