@@ -2744,7 +2744,9 @@
       "suggestedBackground": "noble"
     },
     "spellSlots": [
-      [],
+      [
+        2
+      ],
       [
         2
       ],
@@ -3158,7 +3160,9 @@
       "suggestedBackground": "guide"
     },
     "spellSlots": [
-      [],
+      [
+        2
+      ],
       [
         2
       ],
@@ -3337,14 +3341,21 @@
           "type": "weapon-mastery-choice",
           "key": "weapon-mastery-choice:class:ranger:0",
           "count": 2
-        }
-      ],
-      [
+        },
         {
           "type": "spellcasting",
           "ability": "wis",
           "source": "class"
         },
+        {
+          "type": "spell-choice",
+          "key": "spell-choice:class:ranger:0",
+          "count": 2,
+          "spellList": "ranger",
+          "spellLevel": 1
+        }
+      ],
+      [
         {
           "type": "feature",
           "feature": {
@@ -3367,13 +3378,6 @@
             "two-weapon-fighting",
             "unarmed-fighting"
           ]
-        },
-        {
-          "type": "spell-choice",
-          "key": "spell-choice:class:ranger:0",
-          "count": 2,
-          "spellList": "ranger",
-          "spellLevel": 1
         }
       ],
       [
