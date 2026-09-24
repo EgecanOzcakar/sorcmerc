@@ -9761,3 +9761,24 @@ formula (0.447×, 1.352×, 0.444×).
   level. That seam overlap is intended ("a level 10 party can work either"),
   but it's wide. If it reads badly in play, narrow it by lowering the
   Frontier's top, not by adding an exponent back.
+
+## Ready-made heroes start at level 2 (2026-09-24)
+
+The owner's call: "readymades should start at level 2." Vera, Pike and Ilsa
+are level-3 builds, and level 3 is the Heartland's top (the band pin above).
+Loaded as they were, a run that started with them had outgrown home before
+its first fight. A custom hero already starts at level 1 and keeps doing so.
+
+- `scenes/creator/creator.gd`: `PRESET_START_LEVEL = 2`. A preset loads at
+  `clampi(start_level, 2, 3)` and is topped up from there, so it still joins a
+  higher-level party at that party's level.
+- The subclass decision stays on the build unused and answers the level-3
+  choice when it comes. A new Vera is still a Champion, just not yet: no
+  pending choice at 2, and Champion / Thief / Light Domain at 3.
+- `Presets.party_at()`, the ruler every sweep stands on, is untouched.
+  Measured anyway (`tests/sweep_built.gd`, LEVELS=2, 80 seeds, easy): the
+  trio at level 2 wins 98.8%, beside 96.2% at level 3.
+- Order matters. The creator hands a new hero the party's highest level, so a
+  custom hero made after a preset joins at 2, and one made before it at 1.
+- Tested in `test_leveling` (level 2, finished, 100 XP banked, subclass arriving
+  at 3).

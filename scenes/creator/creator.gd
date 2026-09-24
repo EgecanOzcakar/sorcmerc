@@ -758,19 +758,29 @@ func _set_species(sid: String) -> void:
 	ch.dirty()
 	_refresh()
 
-static func _preset(which: String):
+# The level a ready-made hero starts a run at (the owner's call, 2026-09-24).
+# The presets are level-3 builds with their subclass already chosen, and level
+# 3 is the heartland's top (core/regions.gd): loaded as they are, they had
+# outgrown home before the first fight. Cut to 2, the subclass decision rides
+# along unused and answers the level-3 choice when it comes, so a new Vera is
+# still a Champion, just not yet. A custom hero still starts at 1.
+const PRESET_START_LEVEL := 2
+
+# `levels` is 3 by default so the build-lock checks, and anything else asking
+# "what is this preset", see the whole build.
+static func _preset(which: String, levels := 3):
 	match which:
-		"vera": return Presets.vera()
-		"pike": return Presets.pike()
-	return Presets.ilsa()
+		"vera": return Presets.vera(levels)
+		"pike": return Presets.pike(levels)
+	return Presets.ilsa(levels)
 
 func _load_preset(which: String) -> void:
-	var pre = _preset(which)
+	var pre = _preset(which, clampi(start_level, PRESET_START_LEVEL, 3))
 	if build_lock_note(pre) != "":
 		return   # the button is greyed; this is the guard behind it
 	ch = pre
-	# The presets are level-3 builds; a preset joins a higher-level party at its
-	# level too. Topped up rather than rebuilt — what they already are is a real
+	# A preset starts a run at PRESET_START_LEVEL and joins a higher-level party
+	# at its level. Topped up rather than rebuilt — what they already are is a real
 	# build with its choices made, and only the levels above it are missing.
 	Leveling.grant_levels(ch, start_level)
 	_goto(STEPS.size() - 1)
