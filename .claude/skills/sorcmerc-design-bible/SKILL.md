@@ -70,7 +70,7 @@ Avoid epic-fantasy capitals-and-prophecy prose, jokes that break the scene, and 
 
 ## Decided 2026-09-24 (owner's calls, not yet built)
 
-These are direction, not description. The code still does the old thing until each one lands with its own `docs/expansion-plan.md` entry. A bullet marked **built** has landed.
+These are direction, not description. The code still does the old thing until each one lands with its own `docs/plan/` entry. A bullet marked **built** has landed.
 
 - **Recruitment — built** (`core/recruits.gd`; expansion-plan "Hired, not made"). The player **creates only the first character**, the founder, at the start of a run. Every later merc is **hired** at an inn, from a pool of pre-rolled recruits who come with their own traits.
   - The pool is seeded off the settlement and the world-day: 3 chairs at a city, 2 at a town, 1 at a camp. A hire leaves the pool.
