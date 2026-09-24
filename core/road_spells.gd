@@ -21,9 +21,6 @@ const ROAD := {
 	"alarm":        {"do": "alarm", "text": "The next camp is warded: an ambush is heard coming, and the party gets the drop."},
 }
 
-static func is_road(sid: String) -> bool:
-	return ROAD.has(sid)
-
 static func text(sid: String) -> String:
 	return String(ROAD.get(sid, {}).get("text", ""))
 

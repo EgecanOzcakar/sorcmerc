@@ -160,10 +160,6 @@ static func band_of(world, pos: Vector2) -> String:
 	return String(at(world, pos)["id"])
 
 
-static func label_of(world, pos: Vector2) -> String:
-	return String(at(world, pos)["label"])
-
-
 static func band_by_id(id: String) -> Dictionary:
 	for b in BANDS:
 		if String(b["id"]) == id:
@@ -423,13 +419,6 @@ static func ring(world, band_id: String) -> Array:
 	var ext: float = extent(world)
 	var f: Array = ring_fracs(band_id)
 	return [float(f[0]) * ext, maxf(float(f[0]) * ext + 1.0, float(f[1]) * ext)]
-
-
-# One line for the UI: what this country is and who it is for.
-static func describe(band: Dictionary) -> String:
-	var lv: Array = band.get("levels", [1, 1])
-	return "%s — levels %d-%d. %s" % [
-		String(band.get("label", "")), int(lv[0]), int(lv[1]), String(band.get("blurb", ""))]
 
 
 # What a party is told when it crosses out of one band and into another: which

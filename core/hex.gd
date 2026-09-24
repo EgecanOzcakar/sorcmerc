@@ -189,10 +189,6 @@ static func corner(h: Vector2i, k: int) -> Array:
 	out.sort_custom(func(a, b): return a.x < b.x or (a.x == b.x and a.y < b.y))
 	return out
 
-# Pixel position of a corner (the mean of its three centres is the vertex).
-static func corner_pixel(c: Array, size: float) -> Vector2:
-	return (to_pixel(c[0], size) + to_pixel(c[1], size) + to_pixel(c[2], size)) / 3.0
-
 # The corner nearest a pixel point: the containing hex's closest vertex.
 static func corner_at(v: Vector2, size: float) -> Array:
 	var h := from_pixel(v, size)

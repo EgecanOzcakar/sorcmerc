@@ -215,7 +215,6 @@ func _init() -> void:
 
 	# --- what the player is told --------------------------------------------
 	var here: Dictionary = Regions.at(w, Vector2(800, 0))
-	check(Regions.describe(here).find("levels 6-9") >= 0, "a band says who it is for")
 	check(String(here["blurb"]) != "", "...and what it is like")
 	var home: Dictionary = Regions.at(w, Vector2(100, 0))
 	check(Regions.crossing_text(home, here).find("out into") >= 0, "going out is narrated as going out")

@@ -76,6 +76,7 @@ func _init() -> void:
 	test_full_shelf_is_a_fraction_of_the_catalog()
 	test_steal_deterministic_and_hooks()
 	test_opinion_moves_prices_and_can_refuse_trade()
+	test_market_reads_price_factor()
 	test_rest_and_quests()
 	test_quest_board_and_chains()
 	test_persuade_and_investigate()
@@ -385,6 +386,34 @@ func _rng_rolling(want: int):
 
 # O7: what the faction thinks of you rides on top of the scarcity markup, and
 # past REFUSE_TRADE the stall is closed to you.
+# The design audit (docs/audit-game-design.md §8.5): market() used to spell the
+# opinion markup out inline, a copy of FactionOpinion.price_factor that nothing
+# called. It calls price_factor now, and the markup and every price on the
+# shelf are exactly what the inline formula made — the formula written out
+# here as it stood, over the whole opinion range, both shelves and a battle.
+func test_market_reads_price_factor() -> void:
+	var s = _world().settlements[0]
+	var same := true
+	var bad := ""
+	for gap in [0.0, 120.0, Visit.RESTOCK * Visit.MAX_STEPS, -1.0]:
+		for battle in [false, true]:
+			var base: Dictionary = Visit.market(s, gap, battle)
+			for op in range(-100, 101, 5):
+				var o := float(op)
+				var m: Dictionary = Visit.market(s, gap, battle, o)
+				var inline: float = float(base["markup"]) * (1.0 - FactionOpinion.PRICE_SWING * o / FactionOpinion.RANGE)
+				if m["markup"] != inline or FactionOpinion.price_factor(o) != 1.0 - FactionOpinion.PRICE_SWING * o / FactionOpinion.RANGE:
+					same = false
+					bad = "gap %s battle %s opinion %d: %s vs %s" % [gap, battle, op, m["markup"], inline]
+				for e in m["stock"]:
+					if int(e["price"]) != maxi(1, int(round(Campaign.item_price(String(e["item_id"])) * inline))):
+						same = false
+						bad = "gap %s battle %s opinion %d: %s at %d" % [gap, battle, op, e["item_id"], e["price"]]
+	check(same, "market()'s markup is the old inline formula to the bit (%s)" % bad)
+	check(FactionOpinion.price_factor(0.0) == 1.0, "neutral is list price")
+	check(is_equal_approx(FactionOpinion.price_factor(-100.0), 1.4) and is_equal_approx(FactionOpinion.price_factor(100.0), 0.6),
+		"x1.4 hated, x0.6 loved, as PRICE_SWING says")
+
 func test_opinion_moves_prices_and_can_refuse_trade() -> void:
 	FactionOpinion.reset()
 	var w := _world()
