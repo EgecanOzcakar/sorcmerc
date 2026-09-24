@@ -316,6 +316,12 @@ var explored: Array[Vector2] = []
 # (world-minutes; < 0 = nothing marked). Runtime only — it lapses with the day.
 var marked_until := -1.0
 var marked_at := Vector2.ZERO   # where the watch was kept — band_seen()'s two-radii center
+# How strong each band is against the player's party, keyed by band id: the
+# fight it would field, as a fraction of an even one (core/world_flee.gd). The
+# map screen re-gauges it; core/world_ai.gd reads it to decide who runs from
+# whom. Runtime only, like the watch above: it is recomputed from the party,
+# and empty (everyone an even fight, nobody running) until the first gauge.
+var band_strength := {}
 
 # T9y: the waypoint trail, indexed. `explored` stays the flat, saved list —
 # it is what world_save.gd round-trips and what a reader expects to find —

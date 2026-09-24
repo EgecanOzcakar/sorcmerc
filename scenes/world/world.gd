@@ -72,6 +72,7 @@ const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
 const WorldChase = preload("res://core/world_chase.gd")
+const WorldFlee = preload("res://core/world_flee.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
@@ -319,6 +320,11 @@ var _meet_aim := Vector2.INF
 # next roll to run the band down, and how many of those rolls it has missed.
 var _chase_next_at := 0.0
 var _chase_misses := 0
+# When core/world_flee.gd last sized every band up against the party. -INF so
+# the first frame gauges; after that every GAUGE_MINUTES of world time, which
+# is soon enough to catch a level-up or a band that has walked into a new
+# country, and far cheaper than pricing the party every frame.
+var _gauged_at := -INF
 var _pace_btn: Button
 var _bottom_bar: HBoxContainer       # the road actions and their messages; _layout_minimap seats it
 var _site_screen: Control = null     # ...and the descent screen drawing it
@@ -568,6 +574,9 @@ func _process(delta: float) -> void:
 		p0.speed = World.SPEED * Travel.speed_mult(party)
 	FactionOpinion.tick(world, dt)
 	PartyOpinion.decay(party, dt)   # spike-party-opinions §7: a paused clock drifts nothing, same contract
+	if world.clock.elapsed >= _gauged_at + WorldFlee.GAUGE_MINUTES:
+		world.band_strength = WorldFlee.gauge(world, party)
+		_gauged_at = world.clock.elapsed
 	WorldAI.update(world, delta)
 	_check_encounter(dt)
 	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not
