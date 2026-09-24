@@ -1605,7 +1605,7 @@ func _follow_meet(p, dt: float) -> void:
 		if q.id == _meet_id:
 			band = q
 			break
-	if band == null or not _in_view(p, band):
+	if band == null or not world.band_seen(band.position):
 		var who := _meet_id.capitalize()
 		_drop_meet()
 		_camp_msg.text = "Lost sight of %s." % who
@@ -1620,13 +1620,6 @@ func _follow_meet(p, dt: float) -> void:
 		return
 	if band.position.distance_to(_meet_aim) > ENCOUNTER_RADIUS * 0.5:
 		_aim_meet(p, band)
-
-# What the chase can still see: a band the map draws, or one inside the party's
-# sight right now. band_seen() alone is the remembered trail, whose last
-# waypoint can sit EXPLORE_STEP behind a party on the move, so a band a hundred
-# units ahead of the chase could drop out of it while plainly in the open.
-func _in_view(p, band) -> bool:
-	return world.band_seen(band.position) or world.is_visible_now(band.position, p.position)
 
 # A band as fast as the party or faster is never caught by following it, so
 # while it is still in sight the party gets a roll every WorldChase.INTERVAL to

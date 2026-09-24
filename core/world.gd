@@ -396,10 +396,24 @@ func is_explored(pos: Vector2) -> bool:
 		return true
 	return _near_waypoint(pos, VISION_RADIUS)
 
-# A band is drawn if the fog is off it, or while a watchtower's watch holds
-# and it is within two vision radii of the tower (core/landmarks.gd "marked").
+# A band is drawn if the fog is off it, or it is inside the party's sight right
+# now, or while a watchtower's watch holds and it is within two vision radii
+# of the tower (core/landmarks.gd "marked").
+#
+# The live-sight term is not redundant with the fog. is_explored() is the
+# remembered trail, and reveal() only drops a waypoint every EXPLORE_STEP
+# (150), so the trail's last point can sit 150 units behind a party on the
+# move. A band ahead of it, 110-260 units off and plainly inside the sight
+# circle the ground shader draws, could be more than VISION_RADIUS from any
+# waypoint and blink out of the map, the minimap and the click pick until the
+# next waypoint landed. What the party can see right now, it sees.
 func band_seen(pos: Vector2) -> bool:
-	return is_explored(pos) or (marked_until > clock.elapsed and pos.distance_to(marked_at) <= 2.0 * VISION_RADIUS)
+	if is_explored(pos):
+		return true
+	var p := player()
+	if p != null and is_visible_now(pos, p.position):
+		return true
+	return marked_until > clock.elapsed and pos.distance_to(marked_at) <= 2.0 * VISION_RADIUS
 
 # The "currently visible" tier: within sight of the player's position RIGHT
 # NOW, not just remembered from having passed through once.
