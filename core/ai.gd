@@ -345,6 +345,7 @@ static func _party_auto(cb, h) -> void:
 	if foes.is_empty():
 		return
 	_use_kit(cb, h)
+	_font_up(cb, h)
 
 	# healer: a downed ally in range comes first
 	var heal := _pick(cb, h, func(v): return v.has("heal_count") or v["kind"] == "heal_ally")
@@ -407,6 +408,21 @@ static func _party_auto(cb, h) -> void:
 	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count"))
 	if not bolt.is_empty() and cb.legal_target(h, bolt, targets[0]):
 		cb.perform(h, bolt, targets[0])
+
+# Font of Magic, the autopilot's one use of it: a sorcerer with no slot left at
+# all and the points for one makes the biggest it can afford, so the sweeps see
+# the points as the spells they become. Burning slots into points is left to a
+# player — the autopilot would only ever be turning a spell into a smaller one.
+static func _font_up(cb, h) -> void:
+	for n in h.slots:
+		if int(n) > 0:
+			return
+	var best := {}
+	for v in cb.available(h):
+		if String(v.get("font", "")) == "to_slot" and int(v["make_slot"]) > int(best.get("make_slot", 0)):
+			best = v
+	if not best.is_empty():
+		cb.perform(h, best)
 
 # One movement preference per kind — not to make the autopilot good, but so
 # the sweep in tests/test_objectives.gd measures a party that is trying.
