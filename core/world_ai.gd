@@ -196,7 +196,12 @@ static func in_truce(party, now_minutes: float) -> bool:
 # A behavior returns the destination it wants, or null to leave the goal alone
 # (a hunter with nothing to chase keeps whatever it was doing). `_steer()` is
 # the only writer of `party.goal` in this file.
-static func update(world, _delta := 0.0) -> void:
+#
+# `asleep` is the player's party while it takes a long rest off-screen
+# (core/world_rest.gd): nobody hunts it and no siege comes for it, the same
+# way a band cannot hunt what it cannot see. The camp's own ambush roll
+# (core/world_camp.gd) is the one way a night is interrupted.
+static func update(world, _delta := 0.0, asleep = null) -> void:
 	var budget := REPLAN_BUDGET
 	for p in world.parties:
 		if p.is_player:
@@ -206,8 +211,8 @@ static func update(world, _delta := 0.0) -> void:
 			match String(_state(p).get("behavior", "")):
 				"patrol": dest = _patrol_step(p)
 				"wander": dest = _wander_step(p)
-				"hunt": dest = _hunt_step(world, p)
-				"raid": dest = _raid_step(world, p)
+				"hunt": dest = _hunt_step(world, p, asleep)
+				"raid": dest = _raid_step(world, p, asleep)
 		if dest == null:
 			continue
 		if _steer(world, p, dest, budget > 0):
@@ -320,11 +325,11 @@ static func _wander_step(party):
 # Chases the nearest hostile thing's *current* position, re-read every update —
 # so the goal tracks a target that is itself moving.
 # ponytail: linear scan over 3-8 parties/settlements; index it if the roster grows.
-static func _hunt_step(world, party):
+static func _hunt_step(world, party, asleep = null):
 	var best = null
 	var best_d := INF
 	for other in world.parties:
-		if other == party or not is_hostile(party, other):
+		if other == party or other == asleep or not is_hostile(party, other):
 			continue
 		if other.is_player and in_truce(party, world.clock.elapsed):
 			continue
@@ -345,11 +350,11 @@ static func _hunt_step(world, party):
 
 # At the gate they come for anyone who comes near, truce permitting; on the
 # road there and back they keep to their own business.
-static func _raid_step(world, party):
+static func _raid_step(world, party, asleep = null):
 	var s: Dictionary = party.ai
 	if String(s.get("phase", "")) == "siege":
 		var p = world.player()
-		if p != null and not in_truce(party, world.clock.elapsed) \
+		if p != null and p != asleep and not in_truce(party, world.clock.elapsed) \
 				and party.position.distance_to(p.position) <= RAID_SIGHT:
 			return p.position
 	return s["to"]

@@ -86,12 +86,22 @@ static func bed_line(s, days: int, party = null) -> String:
 # The bed is paid up front; a purse that cannot pays nothing and no day
 # passes (-1). Every last_visited/battle_at stamp stays: the market restocks
 # on its own clock, and "once a visit" means this visit.
+#
+# Audit 1.9 (docs/audit-game-design.md): that last night is a long rest only
+# when RAW's 24-hour gate allows one (Visit.can_long_rest, read as the night
+# begins). A day's work begun the morning after a rest ends with the days gone,
+# the bed paid, and nothing refilled — the company slept, but it had already
+# had its long rest for the day. It used to refill regardless, so a day's craft
+# was a full rest sixteen hours after the last.
 static func spend_days(party, world, s, days: int) -> int:
 	var bed := bed_cost(s, days, party)
 	if days <= 0 or not party.spend_gold(bed):
 		return -1
 	world.clock.elapsed += days * DAY - Visit.LONG_REST_MINUTES
-	Visit.rest(party, world, "long-rest")
+	if Visit.can_long_rest(party, world):
+		Visit.rest(party, world, "long-rest")
+	else:
+		world.clock.elapsed += Visit.LONG_REST_MINUTES
 	Ach.bump("downtime_days", days)
 	return bed
 

@@ -39,7 +39,9 @@ func _init() -> void:
 	var plain := _party(false)
 	check(Trance.apply_rest_bonus(plain, w, Vector2.ZERO).is_empty(), "no Trance -> no bonus at all")
 
-	# --- with Trance: short-rest top-up, wider scouting, a free identify try ---
+	# --- with Trance: wider scouting and a free identify try. The short rest is
+	# banked by the long rest itself now (audit 4.3, tests/test_rest_and_slots.gd),
+	# not spent the moment the party wakes full. ---
 	var elf := _party(true)
 	var ch = elf.party_characters()[0]
 	ch.hp_current = 1
@@ -47,7 +49,7 @@ func _init() -> void:
 	var w2 := World.new()
 	var bonus: Dictionary = Trance.apply_rest_bonus(elf, w2, Vector2.ZERO, RNG.new(1))
 	check(not bonus.is_empty(), "Trance -> a real bonus dict comes back")
-	check(ch.hp_current > 1, "the short-rest top-up actually heals")
+	check(ch.hp_current == 1, "waking tops nobody up: the short rest waits in the bank")
 	check(w2.is_explored(Vector2(w2.VISION_RADIUS * Trance.SCOUT_MULT, 0)),
 		"scouting reaches past the normal VISION_RADIUS in at least one direction")
 	check(bonus["identify"].has("ok"), "an unidentified item in the stash gets a real identify attempt")

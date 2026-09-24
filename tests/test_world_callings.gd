@@ -15,6 +15,8 @@ const Callings = preload("res://core/callings.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const WorldSave = preload("res://core/world_save.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const WorldCamp = preload("res://core/world_camp.gd")
+const RNG = preload("res://core/rng.gd")
 
 const AMULET := "amulet-of-proof-against-detection-and-location"
 
@@ -52,9 +54,24 @@ func _camp(main) -> void:
 	main.world.clock.pause()
 	main.party.safe_camp = true
 	main.party.last_long_rest_at = -99999.0
+	_quiet_night(main)
 	main._make_camp()
 	main._last_travel_at = main.world.clock.elapsed   # the night spent the road-event clock; keep the road quiet
 	await process_frame
+
+# Since the design audit's §1.6 a roped camp can still be jumped (Rope Trick
+# is only the kit), and since §1.7 nobody camps with a hostile band in reach —
+# and the walked nights bring the map's hunters to the town beside the camp.
+# Neither is what this test is about: the clock is nudged to a minute whose
+# camp seed rolls a quiet night (the camp integration test's own search), and
+# a band standing on the camp is sent off the map.
+func _quiet_night(main) -> void:
+	var here: Vector2 = main.world.player().position
+	for q in main.world.parties.duplicate():
+		if not q.is_player and q.position.distance_to(here) < 300.0:
+			main.world.parties.erase(q)
+	while WorldCamp.ambush_roll(RNG.new(WorldCamp.camp_seed(main.world.clock.elapsed, here))):
+		main.world.clock.elapsed += 1.0
 
 func _init() -> void:
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])

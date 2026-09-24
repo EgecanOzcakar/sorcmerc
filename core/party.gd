@@ -27,6 +27,11 @@ var last_long_rest_at: float = -1e12
 # #86: RAW allows two short rests per long rest. Bumped by Visit.rest("short-rest"),
 # cleared by a long rest; Visit.can_short_rest() reads it.
 var short_rests_since_long: int = 0
+# Audit 4.3: an elf's Trance banks one short rest at a long rest, for later
+# that day — this is the world-minute it lapses at, -1.0 when none is banked.
+# Taken before the two counted above, and never counted against them. Owned by
+# core/trance.gd; read by Visit.can_short_rest() and spent by Visit.rest().
+var trance_rest_until := -1.0
 # T9x: who stands for the party on the open-world map — the MEMBER ID of one
 # of the active party (picked on the Party screen), resolved to that
 # character's class figure (figures3d.gd's HERO_MODELS) only at render time,
@@ -43,8 +48,14 @@ var world_now := 0.0        # world-minutes, stamped by world.gd each frame; pot
 var scouted_next := false   # Potion of Clairvoyance / Clairvoyance cast: the next fight starts scouted
 var blessed := false        # a shrine's blessing: temp HP for every hero at the next fight (core/landmarks.gd)
 var swift_until := 0.0      # Fly / Longstrider: forced-march speed, no road penalty, until this world-minute
-var safe_camp := false      # Rope Trick: the next camp needs no kit and can't be jumped
+var safe_camp := false      # Rope Trick (or a landmark's shelter): the next camp needs no kit
 var alarm_set := false      # Alarm: the next camp's ambush is heard coming
+# Audit 1.6: the slots Rope Trick and Alarm were cast from, [{id, level,
+# spell}], held spent through every long rest until the camp they pay for is
+# made — the spell buys the night, and the night does not give the slot back.
+# Written by core/road_spells.gd, re-spent by Visit.rest(), let go by
+# WorldCamp.make_camp().
+var camp_holds: Array = []
 # What members think of each other — "a|b" pair key -> {score, status}. Owned
 # entirely by core/party_opinion.gd (docs/spike-party-opinions.md); read on the
 # road, at camp and in the fight, saved beside the party since 2026-09-21.
@@ -445,6 +456,10 @@ func summary(id: String) -> Dictionary:
 		"skills": trained_skills(s),
 		"equipped": equipped_items(s),
 		"traits": Traits.ids(ch),   # #176: personality trait ids; the names are the UI's business
+		# Audit 4.1: the slots they have left against the sheet's maximum, the
+		# same rows the sheet and the combat pips read (Adapter.slot_table).
+		# [] for anyone who casts nothing from a slot.
+		"slots": Adapter.slot_table(ch),
 	}
 
 # The skills this sheet is actually trained in, best first: [{id, mod, prof}]

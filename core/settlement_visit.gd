@@ -31,6 +31,8 @@ const Ach = preload("res://core/achievements.gd")
 const Party = preload("res://core/party.gd")   # #109: REVIVE_COST, for the healer's raise
 const Ladder = preload("res://core/ladder.gd")
 const Loot = preload("res://core/loot.gd")      # not a cycle: loot.gd only preloads catalog.gd
+const WorldRest = preload("res://core/world_rest.gd")   # audit 1.7: the night is walked, not jumped
+const Trance = preload("res://core/trance.gd")          # audit 4.3: the banked short rest
 
 # World-time is in minutes (scenes/world/world.gd's HUD reads elapsed/60 as hours).
 # Calibration knobs — a party crosses the demo map in ~20 world-minutes, so a
@@ -419,19 +421,97 @@ const LONG_REST_COOLDOWN := 1440.0
 # core/campaign.gd's MAX_SHORT_RESTS, but counted per long rest, not per run.
 const MAX_SHORT_RESTS := 2
 
-static func rest(party, world, kind := "long-rest") -> void:
+# What a rest did, for the line the screen shows after it (rest_note()):
+#   {"kind", "recovered": [{id, cname, levels}],   # Arcane Recovery, a short rest's
+#    "trance": bool,                                # the short rest was Trance's banked one
+#    "banked": bool,                                # this long rest banked one
+#    "held": [{cname, level, spell}],               # slots a camp spell keeps spent
+#    "lines": [raid lines from the night]}
+#
+# Audit 1.7: the long rest's eight hours are walked, not jumped
+# (core/world_rest.gd): bands move, raids advance, opinion drifts. `each` is the
+# screen's per-step hook for off-screen battles; a caller with no screen
+# (downtime, a test) leaves it out and the first frame after catches up.
+static func rest(party, world, kind := "long-rest", each := Callable()) -> Dictionary:
+	var out := {"kind": kind, "recovered": [], "trance": false, "banked": false, "held": [], "lines": []}
+	if kind == "long-rest":
+		out["lines"] = WorldRest.pass_time(world, party, LONG_REST_MINUTES, each)
+	else:
+		# Audit 4.3: Trance's banked rest is taken first, and is not one of the two.
+		out["trance"] = Trance.take(party, world.clock.elapsed)
+		world.clock.elapsed += SHORT_REST_MINUTES
 	for ch in party.roster:   # #108: the bench sleeps under the same roof
-		if not ch.dead:
-			Adapter.rest(ch, kind)
-	world.clock.elapsed += (LONG_REST_MINUTES if kind == "long-rest" else SHORT_REST_MINUTES)
+		if ch.dead:
+			continue
+		var back: Array = Adapter.rest(ch, kind)
+		if not back.is_empty():
+			out["recovered"].append({"id": ch.id, "cname": ch.cname, "levels": back})
 	if kind == "long-rest":
 		party.last_long_rest_at = world.clock.elapsed
 		party.short_rests_since_long = 0
-	else:
+		out["held"] = _hold_camp_slots(party)
+		out["banked"] = Trance.bank(party, world.clock.elapsed)
+	elif not out["trance"]:
 		party.short_rests_since_long += 1
+	return out
 
-static func can_short_rest(party) -> bool:
-	return party.short_rests_since_long < MAX_SHORT_RESTS
+# Audit 1.6: a slot Rope Trick or Alarm was cast from stays spent through the
+# long rest (every one, until the camp it pays for is made — core/world_camp.gd
+# lets the hold go). Re-spent here, after Adapter.rest cleared slots_used.
+static func _hold_camp_slots(party) -> Array:
+	var held: Array = []
+	for h in party.camp_holds:
+		var ch = party.get_member(String(h.get("id", "")))
+		var i: int = int(h.get("level", 1)) - 1
+		if ch == null or ch.dead or i < 0 or i >= 9:
+			continue
+		while ch.slots_used.size() < 9:
+			ch.slots_used.append(0)
+		ch.slots_used[i] += 1
+		ch.dirty()
+		held.append({"cname": ch.cname, "level": i + 1, "spell": String(h.get("spell", ""))})
+	return held
+
+# The sentences a rest adds to its own line, each led by two spaces so the
+# caller can append it to whatever it already says; "" when the rest did
+# nothing worth a word beyond the rest itself.
+const _COUNT := ["no", "a", "two", "three", "four", "five"]
+
+static func rest_note(r: Dictionary) -> String:
+	var bits: Array = []
+	if bool(r.get("trance", false)):
+		bits.append("It is the rest the elf's trance banked, and it does not count against the day's two.")
+	for rec in r.get("recovered", []):
+		bits.append("%s works through the spellbook: Arcane Recovery brings back %s." % [
+			rec["cname"], _slot_words(rec["levels"])])
+	for h in r.get("held", []):
+		bits.append("The level %d slot %s spent on %s stays spent." % [int(h["level"]), h["cname"],
+			Catalog.spell(String(h["spell"])).get("name", String(h["spell"]).capitalize())])
+	return "" if bits.is_empty() else "  " + "  ".join(bits)
+
+# [3, 1, 1] -> "a level 3 slot and two level 1 slots".
+static func _slot_words(levels: Array) -> String:
+	var count := {}
+	var order: Array = []
+	for l in levels:
+		if not count.has(int(l)):
+			order.append(int(l))
+		count[int(l)] = int(count.get(int(l), 0)) + 1
+	var parts: Array = []
+	for l in order:
+		var n: int = count[l]
+		var word: String = _COUNT[n] if n < _COUNT.size() else str(n)
+		parts.append("%s level %d slot%s" % [word, l, "" if n == 1 else "s"])
+	if parts.size() <= 1:
+		return "".join(parts)
+	return "%s and %s" % [", ".join(parts.slice(0, parts.size() - 1)), parts[-1]]
+
+# Audit 4.3: Trance's banked short rest can be taken with the day's two gone.
+# `world` is optional for the callers that have none to hand; the party's own
+# stamp of the clock (world.gd writes it every frame) stands in.
+static func can_short_rest(party, world = null) -> bool:
+	var now: float = world.clock.elapsed if world != null else party.world_now
+	return party.short_rests_since_long < MAX_SHORT_RESTS or Trance.banked(party, now)
 
 static func can_long_rest(party, world) -> bool:
 	return world.clock.elapsed - party.last_long_rest_at >= LONG_REST_COOLDOWN
