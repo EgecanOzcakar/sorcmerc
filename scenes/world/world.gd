@@ -71,6 +71,7 @@ const StoryCard = preload("res://scenes/world/story_card.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
+const WorldChase = preload("res://core/world_chase.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
@@ -312,6 +313,10 @@ var _slipped := {}
 # party's destination is still that point. "" when nobody is being sought.
 var _meet_id := ""
 var _meet_aim := Vector2.INF
+# A chase the party cannot win on legs alone (core/world_chase.gd): when it may
+# next roll to run the band down, and how many of those rolls it has missed.
+var _chase_next_at := 0.0
+var _chase_misses := 0
 var _pace_btn: Button
 var _bottom_bar: HBoxContainer       # the road actions and their messages; _layout_minimap seats it
 var _site_screen: Control = null     # ...and the descent screen drawing it
@@ -1554,6 +1559,8 @@ func _seek(band) -> void:
 		_met_sought(p, band)
 		return
 	_meet_id = band.id
+	_chase_next_at = world.clock.elapsed + WorldChase.INTERVAL
+	_chase_misses = 0
 	_aim_meet(p, band)
 	_camp_msg.text = MEET_MSG % band.id.capitalize()
 
@@ -1575,9 +1582,10 @@ static func _destination(p) -> Vector2:
 	return p.route[-1] if not p.route.is_empty() else p.goal
 
 # One frame of the march: drop the order if the band is gone, out of sight, or
-# the party has been sent somewhere else; meet it if it is in reach; otherwise
-# re-aim at it once it has drifted far enough to matter (set_goal routes round
-# water, which is not a thing to do every frame).
+# the party has been sent somewhere else; meet it if it is in reach; roll to run
+# it down if it is getting away (_chase); otherwise re-aim at it once it has
+# drifted far enough to matter (set_goal routes round water, which is not a
+# thing to do every frame).
 func _follow_meet(p, dt: float) -> void:
 	if _meet_id == "" or _combat != null or _approach_card != null or world.clock.is_paused():
 		return
@@ -1586,24 +1594,74 @@ func _follow_meet(p, dt: float) -> void:
 		if q.id == _meet_id:
 			band = q
 			break
-	if band == null or not world.band_seen(band.position) or _destination(p) != _meet_aim:
+	if band == null or not _in_view(p, band):
+		var who := _meet_id.capitalize()
+		_drop_meet()
+		_camp_msg.text = "Lost sight of %s." % who
+		return
+	if _destination(p) != _meet_aim:
 		_drop_meet()
 		return
 	if band.position.distance_to(p.position) <= _trigger(dt):
 		_met_sought(p, band)
 		return
+	if _chase(p, band):
+		return
 	if band.position.distance_to(_meet_aim) > ENCOUNTER_RADIUS * 0.5:
 		_aim_meet(p, band)
+
+# What the chase can still see: a band the map draws, or one inside the party's
+# sight right now. band_seen() alone is the remembered trail, whose last
+# waypoint can sit EXPLORE_STEP behind a party on the move, so a band a hundred
+# units ahead of the chase could drop out of it while plainly in the open.
+func _in_view(p, band) -> bool:
+	return world.band_seen(band.position) or world.is_visible_now(band.position, p.position)
+
+# A band as fast as the party or faster is never caught by following it, so
+# while it is still in sight the party gets a roll every WorldChase.INTERVAL to
+# run it down. True when the chase ended this frame, caught or lost.
+func _chase(p, band) -> bool:
+	if not WorldChase.outpaced(band.speed, p.speed) \
+			or band.position.distance_to(p.position) > world.sight_radius():
+		return false
+	if world.clock.elapsed < _chase_next_at:
+		return false
+	_chase_next_at = world.clock.elapsed + WorldChase.INTERVAL
+	var r: Dictionary = WorldChase.check(party, band.speed, p.speed,
+		RNG.new(maxi(1, absi(hash("chase|%s|%d" % [band.id, int(world.clock.elapsed)])))))
+	if r.is_empty():
+		return false
+	var who: String = band.id.capitalize()
+	var tally := "%s %d+%d vs DC %d" % [String(r["skill"]).capitalize(), r["nat"], r["bonus"], r["dc"]]
+	if r["ok"]:
+		var caught := "runs %s down" if WorldAI.is_hostile(band, p) else "catches up with %s"
+		_met_sought(p, band, r, "%s %s (%s)." % [r["cname"], caught % who, tally])
+		return true
+	_chase_misses += 1
+	if _chase_misses >= WorldChase.MAX_TRIES:
+		_drop_meet()
+		_map_roll(r, _camp_msg, "%s can't close the gap (%s) — %s get away." % [r["cname"], tally, who])
+		return true
+	_map_roll(r, _camp_msg, "%s can't close the gap yet (%s) — %s keep their lead." % [r["cname"], tally, who])
+	return false
 
 # The party got where it was going, so it stops there the way #70 stops any
 # arrival — a meeting that ends without a fight hands back a halted map
 # (_on_approach_reported), not one that runs on with nobody giving orders.
-func _met_sought(p, band) -> void:
+# `roll` is the chase roll that caught the band, if one did: the card waits
+# for its die to land, with the map held still under it.
+func _met_sought(p, band, roll := {}, text := "") -> void:
 	_drop_meet()
 	world.set_goal(p, p.position)
 	_halted_on_arrival = true
 	_was_travelling = false
-	_meet(band, WorldAI.is_hostile(band, p))
+	var hostile: bool = WorldAI.is_hostile(band, p)
+	if roll.is_empty():
+		_meet(band, hostile)
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_map_roll(roll, _camp_msg, text, "", func(): _meet(band, hostile))
 
 # #85: in the dark a hostile band is on the party before anyone can choose how
 # to meet it — unless someone on watch hears them coming. The same check and the
