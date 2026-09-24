@@ -294,7 +294,7 @@ static func can_gamble(party, world, s) -> bool:
 static func gamble_refusal(party, world, s) -> String:
 	if can_gamble(party, world, s):
 		return ""
-	return "The tables in %s have had the company's coin once today. They will take it again tomorrow." % s.sname
+	return "Played here today. The tables open to the company again tomorrow."
 
 # The payout for a face of the die at a bonus: GAMBLE_MULT's key, or "" for a
 # loss. The whole table in one place, so the EV the header quotes and the test

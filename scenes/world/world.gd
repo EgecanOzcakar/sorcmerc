@@ -2970,7 +2970,8 @@ func _approach_event(r: Dictionary, faction := "") -> Dictionary:
 	e["title"] = String(Approach.WAYS.get(String(r.get("way", "")), {}).get("label", "The meeting"))
 	# "good" is not the same as "the roll passed": walking into a fight you
 	# meant to walk into is not a setback, and a blown ambush is.
-	e["kind"] = "bad" if bool(r.get("forced_ambush", false)) else "good"
+	# A parley that cost the company its standing with a people is a setback too.
+	e["kind"] = "bad" if bool(r.get("forced_ambush", false)) or r.has("opinion") else "good"
 	if r.has("toll"):
 		e["gold"] = -int(r["toll"])
 	return e
