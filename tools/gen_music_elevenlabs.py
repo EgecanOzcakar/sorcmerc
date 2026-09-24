@@ -151,24 +151,34 @@ BEDS = {
 
 # name -> (prompt, seconds). One-shots: a phrase, not a piece, and each ends.
 STINGS = {
-    "music_discovery": ("A short bright discovery sting: a rising harp flourish resolving "
-                        "into a warm string chord with a soft bell on top, wonder, medieval "
-                        "fantasy, ends cleanly.", 6),
-    "music_road": ("A short sting of the road opening up: horns swelling from soft to open "
-                   "over strings, a view from a high place, hopeful and wide, medieval "
-                   "fantasy, ends cleanly.", 8),
-    "music_alarm": ("A short alarm sting: a hard low brass and drum hit, an urgent tolling "
-                    "bell, tense driving strings, a town under attack, medieval fantasy, "
-                    "ends cleanly.", 8),
-    "music_relief": ("A short sting of relief after danger: a held tense chord easing into "
-                     "a warm resolved major chord, soft strings and a single bell, breath let "
-                     "out, medieval fantasy, ends cleanly.", 8),
-    "music_founding": ("A short founding sting: a lone horn joined by strings and a slow "
-                       "proud drum, something built to last, warm and grounded, medieval "
-                       "fantasy, ends cleanly.", 10),
-    "music_deed": ("A short deed-done sting: a brief confident brass phrase over a warm "
-                   "string chord, a job well done, satisfied, medieval fantasy, ends "
-                   "cleanly.", 6),
+    "music_discovery": ("Live orchestral recording of a short discovery phrase: a rising "
+                        "harp glissando into a warm sustained string chord, a soft "
+                        "celesta and small-bell melody on top. Real players in a concert "
+                        "hall, a sense of wonder, slow, no synthesizer, no drums, no "
+                        "vocals, ends cleanly on the held chord.", 6),
+    "music_road": ("Live orchestral recording of a short vista phrase: French horns "
+                   "swelling from soft to full over sustained strings, a broad hopeful "
+                   "rising melody. Real players in a concert hall, wide and cinematic, "
+                   "slow, no synthesizer, no vocals, ends cleanly on a sustained major "
+                   "chord.", 8),
+    "music_alarm": ("Live orchestral recording of a short alarm phrase: a hard low brass "
+                    "and timpani hit, an urgent tolling tubular bell, tense fast staccato"
+                    " strings driving underneath. Real players in a concert hall, no "
+                    "synthesizer, no vocals, ends cleanly on a final brass hit.", 8),
+    "music_relief": ("Live orchestral recording of a short relief phrase: a held tense "
+                     "suspended string chord easing and resolving into a warm major "
+                     "chord, soft strings and one gentle tubular bell. Real players in a "
+                     "concert hall, slow, no synthesizer, no drums, no vocals, ends "
+                     "cleanly.", 8),
+    "music_founding": ("Live orchestral recording of a short founding phrase: a lone "
+                       "French horn melody joined by warm strings and a slow proud "
+                       "timpani beat, grounded and dignified. Real players in a concert "
+                       "hall, no synthesizer, no vocals, ends cleanly on a sustained "
+                       "chord.", 10),
+    "music_deed": ("Live orchestral recording of a short job-done phrase: a brief "
+                   "confident trumpet and horn phrase over a warm sustained string chord,"
+                   " satisfied. Real players in a concert hall, no synthesizer, no "
+                   "vocals, ends cleanly with a short hall ring-out.", 6),
 }
 
 
