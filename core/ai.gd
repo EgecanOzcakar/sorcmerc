@@ -4,6 +4,7 @@ extends RefCounted
 
 const Hex = preload("res://core/hex.gd")
 const Objectives = preload("res://core/objectives.gd")
+const Dice = preload("res://core/dice.gd")
 
 # combat-design.md §7 rule 5: foes won't execute a downed PC while they could
 # instead engage a conscious one this turn. The difference between tense and
@@ -224,20 +225,38 @@ static func _best_area(cb, h, v: Dictionary):
 			best = aim
 	return best
 
+# The direction for a cone verb whose wedge catches the most foes net of allies,
+# or ZERO unless some direction nets at least two. The cone half of _best_area,
+# shared by the party autopilot and a foe caster.
+static func _best_cone(cb, h, v: Dictionary) -> Vector2i:
+	var best_dir := Vector2i.ZERO
+	var best_net := 1
+	for d in Hex.DIRS:
+		var wedge := Hex.cone(h.pos, d, int(v.get("radius", 2)))
+		var f: int = cb.enemies_of(h).filter(func(c): return c.pos in wedge).size()
+		var a: int = cb.allies_of(h).filter(func(c): return c.pos in wedge).size()
+		if f - a > best_net:
+			best_net = f - a
+			best_dir = d
+	return best_dir
+
 # --- foes ------------------------------------------------------------
 
 # A shooter with an enemy adjacent fires at disadvantage. If one move can reach a
 # hex that is clear of every PC and still within range of one, take it (eating
 # the opportunity attack — a bow at full effect is worth more than a free swing
 # avoided) and report true so the caller shoots instead of swinging point-blank.
-static func _step_clear(cb, m, pcs: Array) -> bool:
+# `reach` is how far it can still hit from: the bow's range for an archer (the
+# default), the longest spell's for a caster.
+static func _step_clear(cb, m, pcs: Array, reach := -1) -> bool:
 	var best := Vector2i.ZERO
 	var best_d := -1
+	var r: int = m.atk_range if reach < 0 else reach
 	for h in cb.move_field(m):
 		var near := 1 << 30
 		for c in pcs:
 			near = mini(near, Hex.distance(h, c.pos))
-		if near <= 1 or near > m.atk_range:
+		if near <= 1 or near > r:
 			continue
 		if near > best_d:   # the farthest still-in-range hex: the most room before they close again
 			best_d = near
@@ -260,6 +279,8 @@ static func _foe_turn(cb, m) -> void:
 	if m.has("quarry") and _quarry_runs(cb, m, pcs):
 		return
 	_use_kit(cb, m)
+	if m.caster and await _caster_turn(cb, m, pcs):
+		return
 
 	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.reach)
 	if not adj.is_empty() and m.ranged and _step_clear(cb, m, pcs):
@@ -316,6 +337,125 @@ static func _foe_turn(cb, m) -> void:
 		await _strike(cb, m, now)
 	else:
 		await _use_special(cb, m, pcs)   # closed, but not close enough to swing — a gaze still reaches
+
+# --- the enemy caster (core/enemy_casters.gd) ----------------------------
+#
+# A statblock with real slots fights like one, in this order, and falls through
+# to the melee logic below only if it cast nothing:
+#   1. an enemy in its face: an area or cone that nets two or more is still the
+#      best thing to do; failing that, a caster whose swing is worth more than
+#      its best single-target spell (a cult fanatic's two blades) fights in
+#      melee like the statblock it is — measured 2026-09-24, one that stepped
+#      back to cast Command every turn fought worse than the plain fanatic —
+#      and one whose swing is not (the mage's dagger) steps clear first, to a
+#      hex still in spell range (the archer's _step_clear, the longest spell's
+#      reach);
+#   2. an area or a cone that nets two or more heroes (the autopilot's aims);
+#   3. a control spell, unless it is already holding one — casting a second
+#      concentration spell would only drop the first;
+#   4. the spell that does the most damage on a legal target.
+# Higher slots are tried first, so the fireball goes before the magic missile —
+# the same order core/rules/power.gd prices a caster's casts in. Nothing legal
+# from where it stands: close on the nearest hero and try once more.
+static func _caster_turn(cb, m, pcs: Array) -> bool:
+	var spells: Array = _castable(cb, m)
+	if spells.is_empty():
+		return false
+	var reach := 1
+	for v in spells:
+		reach = maxi(reach, int(v.get("range", 1)))
+	if pcs.any(func(c): return Hex.distance(c.pos, m.pos) <= m.reach):
+		if _cast_area(cb, m, spells):
+			return true
+		if _swing_value(cb, m) >= _best_single(cb, m, spells):
+			return false   # the melee logic below takes it from here
+		_step_clear(cb, m, pcs, reach)
+		if not m.conscious():
+			return true
+	if await _cast_best(cb, m):
+		return true
+	_move_by(cb, m, _toward(cb, _nearest(m.pos, pcs).pos))
+	if not m.conscious():
+		return true
+	return await _cast_best(cb, m)
+
+static func _castable(cb, m) -> Array:
+	var out: Array = cb.available(m).filter(func(v): return v["kind"] == "spell")
+	out.sort_custom(func(a, b): return int(a.get("slot_level", 0)) > int(b.get("slot_level", 0)))
+	return out
+
+# An area or a cone that nets two or more, highest slot first; true if cast.
+static func _cast_area(cb, m, spells: Array) -> bool:
+	for v in spells:
+		if not v.has("dice_count"):
+			continue
+		if v.get("targeting", "") in ["hex", "corner", "line"]:
+			var aim = _best_area(cb, m, v)
+			if aim != null:
+				cb.perform(m, v, aim)
+				return true
+		elif v.get("targeting", "") == "direction":
+			var dir := _best_cone(cb, m, v)
+			if dir != Vector2i.ZERO:
+				cb.perform(m, v, dir)
+				return true
+	return false
+
+static func _avg_dmg(v: Dictionary) -> float:
+	return (int(v["dice_count"]) * (int(v.get("dice_sides", 6)) + 1) / 2.0 + int(v.get("dice_bonus", 0))) \
+		* int(v.get("rays", 1))
+
+# The most a single-target damage spell it can cast right now would deal.
+static func _best_single(cb, m, spells: Array) -> float:
+	var best := 0.0
+	for v in spells:
+		if v.get("targeting", "") == "enemy" and v.has("dice_count"):
+			best = maxf(best, _avg_dmg(v))
+	return best
+
+# What its Attack action is worth: every swing Multiattack buys, at the
+# statblock's own damage.
+static func _swing_value(cb, m) -> float:
+	var swings := 1
+	for v in m.verbs:
+		if v["kind"] == "attacks_per_action":
+			swings = maxi(swings, int(v.get("value", 1)))
+	var p: Dictionary = Dice.parse(String(m.damage))
+	return swings * (int(p["count"]) * (int(p["sides"]) + 1) / 2.0 + int(p["mod"]))
+
+static func _cast_best(cb, m) -> bool:
+	var spells: Array = _castable(cb, m)
+	if _cast_area(cb, m, spells):
+		return true
+	var foes: Array = cb.enemies_of(m).filter(func(c): return c.conscious())
+	foes.sort_custom(func(a, b): return a.hp < b.hp)
+	for v in spells:
+		if v.get("targeting", "") != "enemy" or v.get("conditions", []).is_empty():
+			continue
+		if v.get("concentration", false) and m.has("concentrating"):
+			continue
+		for t in foes:
+			if cb.legal_target(m, v, t) and not _redundant(t, v):
+				await cb.offer_reactions(m, v, t)
+				cb.perform(m, v, t)
+				return true
+	var best := {}
+	var best_d := 0.0
+	for v in spells:
+		if v.get("targeting", "") != "enemy" or not v.has("dice_count"):
+			continue
+		var d: float = _avg_dmg(v)
+		if d > best_d and foes.any(func(t): return cb.legal_target(m, v, t)):
+			best_d = d
+			best = v
+	if best.is_empty():
+		return false
+	for t in foes:
+		if cb.legal_target(m, best, t):
+			await cb.offer_reactions(m, best, t)
+			cb.perform(m, best, t)
+			return true
+	return false
 
 # hunt: the quarry runs for the far edge unless a hero is close enough that
 # running is the worse choice — then it fights this turn like anybody else.
@@ -378,15 +518,7 @@ static func _party_auto(cb, h) -> void:
 	# caster: a cone spell if the wedge catches 2+ foes and no ally
 	var cone := _pick(cb, h, func(v): return v.get("targeting", "") == "direction" and v.has("dice_count"))
 	if not cone.is_empty() and not walking:   # same rule: no stopping to cast on the way out
-		var best_dir := Vector2i.ZERO
-		var best_net := 1
-		for d in Hex.DIRS:
-			var wedge := Hex.cone(h.pos, d, int(cone.get("radius", 2)))
-			var f: int = cb.enemies_of(h).filter(func(c): return c.pos in wedge).size()
-			var a: int = cb.allies_of(h).filter(func(c): return c.pos in wedge).size()
-			if f - a > best_net:
-				best_net = f - a
-				best_dir = d
+		var best_dir := _best_cone(cb, h, cone)
 		if best_dir != Vector2i.ZERO:
 			cb.perform(h, cone, best_dir)
 			return

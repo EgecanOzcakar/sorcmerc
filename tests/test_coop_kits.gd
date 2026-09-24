@@ -42,6 +42,7 @@ func _init() -> void:
 	test_the_detector()
 	test_a_refusal_changes_nothing()
 	test_a_drained_pool_changes_nothing()
+	test_enemy_casters_in_lockstep()
 	var seen := {}
 	var fights := 0
 	for lvl in LEVELS:
@@ -182,3 +183,25 @@ func test_a_drained_pool_changes_nothing() -> void:
 	var r: Dictionary = cb.perform(h, make[0], h)
 	check(r.has("error"), "with no points left, making a slot is refused (%s)" % r)
 	check(var_to_str([h.econ, h.slots, h.pools]) == before, "...and refusing it spent nothing: the Bonus Action is still there")
+
+# Enemy casters (core/enemy_casters.gd) pick their spells on each peer by
+# themselves: AI.take_turn runs on host and guest alike and must choose the
+# same spell, the same target and the same hex. Every caster the cult fields,
+# at every band cap, against the preset party.
+func test_enemy_casters_in_lockstep() -> void:
+	var EnemyCasters = load("res://core/enemy_casters.gd")
+	var ids: Array = EnemyCasters.ids_for("cultist")
+	check(ids.size() >= 3, "the cult fields its casters (%s)" % str(ids))
+	var party = Party.new()
+	for ch in Presets.party():
+		party.add_member(ch)
+	var n := 0
+	for id in ids:
+		for cap in [2, 3, 9]:
+			var sd: int = 300 + n
+			n += 1
+			var spec := {"seed": sd, "monsters": [
+				{"id": id, "count": 1, "mult": 1.0, "caster": true, "caster_cap": cap},
+				{"id": "cultist", "count": 2, "mult": 1.0}]}
+			var r: Dictionary = Harness.lockstep(party, spec, sd)
+			check(not r["drift"], "a %s casting up to level %d stays in lockstep (drifted on %s)" % [id, cap, r["drifted_on"]])

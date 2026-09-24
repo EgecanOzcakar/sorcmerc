@@ -38,9 +38,15 @@ func _world() -> World:
 	w.add_party(World.RoamingParty.new("player", Vector2.ZERO, "human", true))
 	return w
 
+# LEVEL=8 sweeps a boss at the level a party actually meets it (a cult's lair
+# is Frontier country, levels 6-9 — core/regions.gd HOMES); default 3, which is
+# every row measured before 2026-09-24.
+func _level() -> int:
+	return int(OS.get_environment("LEVEL")) if OS.get_environment("LEVEL") != "" else 3
+
 func _party() -> Party:
 	var p = Party.new()
-	for ch in Presets.party():
+	for ch in (Presets.party() if _level() == 3 else Presets.party_at(_level())):
 		p.add_member(ch)
 	return p
 
@@ -97,7 +103,7 @@ func _init() -> void:
 			themed.append(f)
 		else:
 			own.append(f)
-	print("seeds per boss: %d, level-3 preset party at full HP, lair at the origin" % seeds)
+	print("seeds per boss: %d, level-%d preset party at full HP, lair at the origin" % [seeds, _level()])
 	print("%-13s %-6s %6s  %-34s %s" % ["faction", "board", "win", "title", "what it fielded (seed 1)"])
 	for group in [themed, own]:
 		for f in group:

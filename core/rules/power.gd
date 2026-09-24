@@ -49,8 +49,25 @@ static func p_save(dc: int, bonus: int) -> float:
 static func avg(count: int, sides: int, bonus: int) -> float:
 	return count * (sides + 1) / 2.0 + bonus
 
+# How many targets a shaped spell (a cone, a line, a corner circle) is priced
+# as catching. Two when the other side is not known — the party is priced before
+# its foes exist, and the autopilot only throws an area where it nets two, so
+# that stays what every sweep since T23 was measured on. When the other side IS
+# known (a foe priced against the party it is being bought to fight, which is
+# the only side core/scaler.gd knows the size of), the area catches that side,
+# up to AREA_CAP: a Fireball on a party of three that fights shoulder to
+# shoulder lands on all three, and pricing it as two is how a Magister came out
+# at twice its price (tests/sweep_caster.gd, 2026-09-24). The owner's call:
+# "area spells are counted against the other side's actual size".
+const AREA_TARGETS := 2.0
+const AREA_CAP := 4.0
+
+static func area_targets(opponents: int) -> float:
+	return AREA_TARGETS if opponents <= 0 else clampf(float(opponents), 1.0, AREA_CAP)
+
 # {dpr, ehp, control, score}
-static func estimate(c) -> Dictionary:
+# `opponents` is the size of the side this combatant will fight, 0 for unknown.
+static func estimate(c, opponents := 0) -> Dictionary:
 	var dpr := 0.0
 	var attacks: Array = c.attacks
 	if attacks.is_empty() and c.damage != "":
@@ -112,7 +129,7 @@ static func estimate(c) -> Dictionary:
 	var spells: Array = []
 	var best_ctrl := 0.0
 	for sid in c.spell_ids:
-		var s := _spell_power(sid, c)
+		var s := _spell_power(sid, c, opponents)
 		best_ctrl = maxf(best_ctrl, float(s["control"]))
 		if int(s["level"]) == 0:
 			dpr = maxf(dpr, float(s["per_cast"]))
@@ -243,7 +260,7 @@ static func _avg_of(a: Dictionary) -> float:
 	return avg(int(p["count"]), int(p["sides"]), int(p["mod"]))
 
 # {per_cast, uses, level, control} — per-cast damage, not amortized.
-static func _spell_power(sid: String, c) -> Dictionary:
+static func _spell_power(sid: String, c, opponents := 0) -> Dictionary:
 	var Effects = load("res://core/rules/effects.gd")
 	var m: Dictionary = Effects.spell(sid)
 	if m.is_empty():
@@ -255,7 +272,7 @@ static func _spell_power(sid: String, c) -> Dictionary:
 		var amount := avg(int(d.get("count", 1)), int(d.get("sides", 6)), int(d.get("plus", 0)))
 		# A shaped spell: the autopilot only throws one where it nets two, and a
 		# corner circle or a line through a cluster catches about that.
-		var targets: float = 2.0 if m.get("shape", "single") != "single" else 1.0
+		var targets: float = area_targets(opponents) if m.get("shape", "single") != "single" else 1.0
 		var landed: float = 1.0
 		if m.has("save"):
 			landed = 1.0 - p_save(c.save_dc, REF_SAVE)
@@ -293,10 +310,10 @@ static func _held_share(m: Dictionary, c) -> float:
 		stays *= fail
 	return held / ROUNDS
 
-static func team_score(combatants: Array) -> float:
+static func team_score(combatants: Array, opponents := 0) -> float:
 	var t := 0.0
 	for c in combatants:
-		t += float(estimate(c)["score"])
+		t += float(estimate(c, opponents)["score"])
 	return t
 
 static func roster_budget(party: Array, tier: String) -> float:
