@@ -60,6 +60,7 @@ const Site = preload("res://core/site.gd")
 const SiteScreen = preload("res://scenes/world/site_screen.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
 const Regions = preload("res://core/regions.gd")
+const EnemyCasters = preload("res://core/enemy_casters.gd")
 const Travel = preload("res://core/travel.gd")
 const EventCard = preload("res://scenes/world/event_card.gd")
 const DiceRoll = preload("res://scenes/dice_roll.gd")
@@ -1565,7 +1566,8 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 	var spec: Dictionary = Scaler.roster_for(
 		party.party_characters(), difficulty if difficulty != "" else String(threat["difficulty"]),
 		{}, theme, seed_v,
-		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party), [], habitat)
+		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party), [], habitat,
+		EnemyCasters.cap_for_band(String(Regions.at(world, foe.position)["id"])))   # this country's casters
 	spec["theme"] = theme if theme != "" else String(Scaler.BIOME_BOARD.get(biome, DEFAULT_THEME))
 	# What this band is worth robbing for. A caravan is carrying its cargo; a
 	# patrol, a warband and a beast pack are carrying what they stand up in.

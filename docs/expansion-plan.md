@@ -10075,6 +10075,127 @@ Shots, from the new `tests/shot_contracts.gd`: `docs/shots/contracts-board-stran
 - **Co-op.** A guest sees the host's standing and gates, since the offers are
   the host's.
 
+## Enemy casters: real slots for the cult, and what the ruler can't price (2026-09-24)
+
+The owner's call from the skills pass: **enemy magic is rare and named.**
+Ordinary foes keep their limited-use innate abilities, and a slot-based caster
+is an occasional elite or boss, so an enemy caster is an event. It must be
+priced by `Power.estimate` on the same "each slot is one cast of the best
+spell" rule the party is priced on.
+
+**What is built.**
+
+- `data/effects/casters.json` gives three cult statblocks a real spell list
+  and slots:
+  - cult fanatic: WIS, DC 11, 4/3 slots;
+  - priest: WIS, DC 13, 4/3/2;
+  - mage: INT, DC 14, 4/3/3/3/1, from Fire Bolt up to Cone of Cold.
+
+  Each block `replaces` the innate bolt, the old stand-in for Spellcasting, so
+  the magic isn't counted twice.
+- `core/enemy_casters.gd` turns a spawned statblock into the caster. It builds
+  the spell buttons through the **same** `Effects.spell_verbs_for` a hero's come
+  from, via a five-field stand-in sheet. A scaled caster's DC and spell attack
+  rise with its multiplier, the way `_scale` raises its swing.
+- `Encounter.spawn(…, caster, caster_cap)`.
+- The fight log opens with "Othmar the Magister is a spellcaster — up to Cone
+  of Cold."
+- `core/ai.gd` `_caster_turn` works in this order:
+  1. an area or cone that catches two or more heroes (the autopilot's aims, the
+     cone half now shared as `_best_cone`);
+  2. then control, but not a second concentration lock;
+  3. then the biggest single-target spell, highest slot first.
+
+  A hero in reach: a caster whose swing beats its best spell melees, and one
+  whose swing doesn't steps clear first.
+- `Scaler` has two ways in:
+  - a seeded caster-elite roll in `roster_for` (`caster_rolls`,
+    `_caster_elite`), where the lead is bought at mult 1.0 and the rest buys
+    its escort, as `boss_for` does;
+  - `lead_caster` on a boss, which the cult's lair boss now carries.
+
+**The rule the owner chose, and what it bought.** The first sweep
+(`tests/sweep_caster.gd`, cultist rosters, 200 pinned seeds, the roll forced
+off and on) found the ruler wrong both ways:
+
+- a caster fanatic or priest priced above its worth, so its warband lost a
+  body and got **easier**: level-5 hard 56% → 89.5%;
+- a Magister priced far below its worth: level-8 hard 54% → 14%, the level-8
+  lair boss 63% → 22%.
+
+Two fixes were chosen and built:
+
+1. **Area spells are counted against the other side's actual size.**
+   `Power.area_targets(opponents)`: 2 when unknown, as before, and the party's
+   size when a foe is priced against the party it is bought to fight, capped at
+   4. Heroes are priced before their foes exist, so every hero price is
+   unchanged.
+2. **Caster tiers by band.** `EnemyCasters.SLOT_CAP` limits how far up the
+   spell levels a caster reaches:
+
+   | band | highest spell level |
+   |---|---|
+   | Heartland, Marches | 2nd |
+   | Frontier | 3rd |
+   | Far Deeps | anything |
+
+   On the map it's read off the fight's own country (`world.gd`'s
+   `encounter_spec`, `site.gd`'s rooms). Off the map it's the band the party's
+   level belongs to.
+
+It still wasn't enough. Priced like its plain statblock, a Magister won 90–98%
+of level 5–8 fights, and with both fixes:
+
+| cult warband, caster forced on | normal | hard |
+|---|---|---|
+| level 3 (off → on) | 86.5 → 99.5% | 68.0 → 99.0% |
+| level 5 | 86.0 → 93.0% | 56.0 → 86.0% |
+| level 8 | 81.0 → 59.0% | 54.0 → 27.0% |
+
+The remaining error is structural. The ruler's `sqrt(dpr × ehp)` and its
+four-cast `ROUNDS` cap can't see a glass cannon that flattens a party from
+range. So it ships where it measured in line, and nowhere else:
+
+- **Casters are fielded only from the Frontier tier up** (`MIN_FIELD_CAP`).
+  Below that tier the statblock fights exactly as on master.
+- **The cult's lair boss casts at the Frontier tier.** The new
+  `tests/sweep_caster_boss.gd` (150 seeds; the boss sweep's one-town map reads
+  as all Heartland, so it can't ask this) measures level 6 at 79.3% → 63.3% and
+  level 8 at 72.7% → 60.0%. That is a harder climax, inside the 15–85% band and
+  beside `BOSS_POOL`'s own low-60s.
+- **The warband caster roll ships at 0%** (`CASTER_ELITE_CHANCE`). It is built
+  and tested, and a sweep forces it on with `caster_chance_override`.
+
+Shot, from the new `tests/shot_caster.gd`: `docs/shots/enemy-caster-announced.png`,
+showing "Sable the Magister is a spellcaster — up to Fireball."
+
+`test_scaler` is byte-identical to master. `tests/sweep_faction_boss.gd` gained
+`LEVEL=` to sweep a boss at the level a party meets it.
+
+`test_enemy_casters` (new, 196 checks) covers:
+
+- the data;
+- the spawn (slots, buttons, the innate bolt replaced, the title);
+- scaled DCs;
+- the band caps and the least fielded tier;
+- pricing above the plain statblock;
+- the roll: seeded, at most one caster, cultist-only, forced on and off, and
+  near the shipped rate;
+- the Frontier boss as a caster, the Heartland boss as its statblock;
+- the announcement;
+- the AI: areas first, stepping clear, holding one lock.
+
+### Still open
+
+- **Price a glass cannon** (`core/rules/power.gd`), then raise
+  `CASTER_ELITE_CHANCE` and lower `MIN_FIELD_CAP`. Both are marked `ponytail:`.
+- **More casters.** Casters leading other factions (a mage with bandits, a
+  priest with soldiers), and the druid and the acolyte.
+- **Shield, Counterspell, heals and buffs for foes.** Power doesn't price them
+  and the AI doesn't use them.
+- **Breath weapons** are areas too and still priced as one target. That's a
+  separate pass over ~30 statblocks.
+
 ## Keeping co-op and the modding API stable through heavy features (2026-09-24)
 
 The owner's ask: skills and checks that keep co-op and the modding API stable

@@ -14,6 +14,7 @@ const Ach = preload("res://core/achievements.gd")
 const Objectives = preload("res://core/objectives.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Traits = preload("res://core/traits.gd")
+const EnemyCasters = preload("res://core/enemy_casters.gd")
 
 # --- ranges (hexes) — tune here ---------------------------------------
 const REACH_MELEE := 1
@@ -758,7 +759,8 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 			var seen: int = int(copies.get(e["id"], 0))
 			copies[e["id"]] = seen + 1
 			var c = spawn(e["id"], mult, "foe", pos,
-				seen + 1 if (count > 1 or seen > 0) else 0, e.get("features", []))
+				seen + 1 if (count > 1 or seen > 0) else 0, e.get("features", []),
+				n == 0 and e.get("caster", false), int(e.get("caster_cap", 9)))   # one caster per entry: the lead
 			if c != null:
 				if n == 0 and spec.get("named", {}).has(e["id"]):
 					c.cname = "%s the %s" % [spec["named"][e["id"]], Catalog.monster(e["id"])["cname"]]
@@ -787,17 +789,40 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 		cb.log.append(Objectives.brief(o))
 	for n in trait_lines.size():
 		cb.log.insert(n, String(trait_lines[n]))   # ahead of the initiative line they fed
+	# An enemy caster is an event (core/enemy_casters.gd), so the fight says so
+	# before anyone moves: the name, and the biggest spell it walked in with.
+	for c in foes:
+		if c.caster:
+			cb.log.append("%s is a spellcaster — %s." % [c.cname, _strongest_spell(c)])
 	return cb
+
+static func _strongest_spell(c) -> String:
+	var best := ""
+	var top := -1
+	for sid in c.spell_ids:
+		var l := int(Catalog.spell(sid).get("level", 0))
+		if l > top and l <= 9 and (l == 0 or c.slots[l - 1] > 0):
+			top = l
+			best = String(Catalog.spell(sid).get("name", sid))
+	return "up to %s" % best if best != "" else "cantrips only"
 
 # `extra_features` (T18) bolts feature ids onto this one spawn — how a boss gets a
 # second attack out of the existing verb machinery instead of a second stat block.
-static func spawn(id: String, mult: float, team: String, pos: Vector2i, n := 0, extra_features: Array = []):
+# `caster` fields the statblock with its real spell list and slots
+# (core/enemy_casters.gd) in place of the innate stand-in it otherwise carries,
+# up to spell level `caster_cap`; a statblock with no caster block ignores it.
+static func spawn(id: String, mult: float, team: String, pos: Vector2i, n := 0, extra_features: Array = [],
+		caster := false, caster_cap := 9):
 	var m: Dictionary = Catalog.monster(id)
 	if m.is_empty():
 		return null
-	if not extra_features.is_empty():
+	caster = caster and EnemyCasters.has(id)
+	if not extra_features.is_empty() or caster:
 		m = m.duplicate(true)
 		m["features"] = m.get("features", []) + extra_features
+		if caster:
+			var gone: Array = EnemyCasters.replaced(id)
+			m["features"] = m["features"].filter(func(f): return not f in gone)
 	var c = Adapter.from_monster(m, team, pos)
 	c.src_id = id
 	if n > 0:
@@ -812,6 +837,8 @@ static func spawn(id: String, mult: float, team: String, pos: Vector2i, n := 0, 
 		c.cname = "%s %d" % [c.cname, n]
 	if not is_equal_approx(mult, 1.0):
 		_scale(c, mult)
+	if caster:
+		EnemyCasters.give_spells(c, id, mult, caster_cap)   # after _scale: the verbs bake in the scaled DC
 	return c
 
 static func _scale(c, mult: float) -> void:
