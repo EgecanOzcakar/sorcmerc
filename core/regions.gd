@@ -295,11 +295,14 @@ static func ref_score(level: int) -> float:
 # as a lockout landing every round (CTRL_WEIGHT * share) while the party
 # autopilot never casts a spell without dice at all, and a concentration lock
 # holds one target at a time.
-# ponytail: two calls are open. (1) Does regions keep its own exponent (0.90
-# would put the off-diagonal scales back where this design was argued) or
-# accept the steeper country? (2) Is spell control priced for a concentration
-# lock, or given no price, or does the autopilot learn to cast it? Re-run
-# tests/sweep_regions.gd after either.
+# Spell control is settled (the owner's call, 2026-09-24): a control spell is
+# priced as one concentration lock, adding at most +25% to its caster
+# (Power.SPELL_LOCK_CAP, six pricings measured there). The built level-10 party
+# (tests/sweep_built.gd) goes 33.3% -> 73.3%. This table's ruler carries no
+# control spell, so it does not move.
+# ponytail: one call is open. Does regions keep its own exponent (0.90 would
+# put the off-diagonal scales back where this design was argued) or accept the
+# steeper country? Re-run tests/sweep_regions.gd after it.
 
 # --- placement, for the world builders ------------------------------------
 

@@ -9653,11 +9653,32 @@ more goblin hit).
   - **Measured after the fix:** level 10 in band 61.2% → 81.2%; one band out
     17.5%; the deeps 2.5%. Level 3 easy/normal/hard (sweep_tier) is
     96.5/90.0/79.5, back to about master's numbers. Full suite 155/155.
-  - **Open (the owner's):** the rest of the level-10 gap is spell control.
+  - **Was open (settled below):** the rest of the level-10 gap is spell control.
     A built level-10 party wins 33% at easy. With its spells' control priced
     at zero it wins 92%. Hold Person alone is priced as a lockout every round,
     while the party autopilot never casts a spell without dice. Options are
     in `core/regions.gd`.
+  - **Settled the same day: spell control is one concentration lock, capped.**
+    The owner picked a concentration lock. A lock lasts until the target saves;
+    a one-round spell lasts one round; one with no repeat save lasts the whole
+    fight. Priced that way it went the wrong way (built L10 23.3%), because the
+    trouble was the lock's weight, not its length: the multiplier was set for a
+    monster locking one of three heroes. Six pricings, built L3 / built L10:
+    | pricing | built L3 | built L10 |
+    |---|---|---|
+    | uncapped lock | 81.7% | 23.3% |
+    | lock, bonus capped at +50% | 83.3% | 56.7% |
+    | lock / 4 | 91.7% | 68.3% |
+    | lock as the damage the locked foe won't deal | 93.3% | 70.0% |
+    | **lock, bonus capped at +25%** | **95.0%** | **73.3%** |
+    | not priced | 95.0% | 91.7% |
+
+    Shipped: +25% (`Power.SPELL_LOCK_CAP`). Teaching the autopilot to cast
+    its locks made things worse (built L10 13.3%): a failed save-or-nothing
+    spell costs a turn of damage. So it still never casts one, and what stays
+    between 73% and 92% is the sweep charging the party for a lock nobody
+    throws. The preset ruler has no control spell, so sweep_tier (96.5 /
+    90.0 / 79.5) and sweep_regions are unchanged. Full suite 155/155.
   - Found on the way: `test_rules`' `test_power_ranks_the_heroes` and the tail
     of `test_adapter` had not asserted anything since the summon statblocks
     joined `monsters.json`. The helper threw on them, and the file still
