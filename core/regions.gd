@@ -351,6 +351,11 @@ static func ref_score(level: int) -> float:
 # as a lockout landing every round (CTRL_WEIGHT * share) while the party
 # autopilot never casts a spell without dice at all, and a concentration lock
 # holds one target at a time.
+# Every table here was taken with the old party autopilot, which never swung
+# its Extra Attack and spent a Bonus Action only by accident. It does both
+# since 2026-09-24 (core/ai.gd; scaler.gd's header has the level-3/8 effect:
+# L8 hard 58.7% -> 79.3%). The level-10 rows are the ones that move; the retune
+# PR that follows re-runs tests/sweep_regions.gd against the new ruler.
 # Spell control is settled (the owner's call, 2026-09-24): a control spell is
 # priced as one concentration lock, adding at most +25% to its caster
 # (Power.SPELL_LOCK_CAP, six pricings measured there). The built level-10 party
