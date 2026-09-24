@@ -34,7 +34,7 @@ The mercenary-company fantasy is carried by flavour and structure, not by a Batt
   - an inn room costs gold, and camping needs a 150-gold camp kit and carries an 8% ambush risk;
   - none at all inside a site.
 - **Known softener, to be removed:** in the open world the encounter budget reads the party's *remaining* slots, so a drained party is sent a smaller, poorer fight (`core/world_threat.gd`, `core/regions.gd`). Sites already correct for this (`core/site.gd`). Decided: the open world will do the same.
-- **Enemy magic is not slot-based.** No bestiary entry has spell slots. A foe's "magic" is a limited-use feature such as `monster-innate-bolt` (2 uses), a breath weapon, a gaze or life drain, defined in `data/effects/features.json`.
+- **Enemy magic is mostly not slot-based.** An ordinary foe's "magic" is a limited-use feature such as `monster-innate-bolt` (2 uses), a breath weapon, a gaze or life drain (`data/effects/features.json`). The exception is the named casters in `data/effects/casters.json`.
 
 ## Tone
 
@@ -79,7 +79,7 @@ These are direction, not description. The code still does the old thing until ea
   - **Old saves are grandfathered.** Rosters that already exist keep their heroes. The new rule applies to new runs only.
 - **Sorcerer rarity is fiction only.** No recruit odds and no social mechanic. "Uncommon but not rare" lives in the writing.
 - **Sorcerer features follow 2024 RAW.** Implement sorcery points, Font of Magic (slot/point conversion), Metamagic and Innate Sorcery as combat mechanics. Until then, don't let `core/manual.gd` promise them.
-- **Enemy magic is rare and named.** Ordinary enemies keep their limited-use innate abilities. Slot-based casters appear only as an occasional elite or boss, so an enemy caster is an event.
+- **Enemy magic is rare and named.** Ordinary enemies keep their limited-use innate abilities. Built: the cult's lair boss casts from real slots in Frontier country and beyond, and announces itself. Caster elites in ordinary warbands are built but off, until the power model can price a glass cannon.
 - **Factions post contracts.** Factions and towns offer merc jobs (escort, clear a lair, raid a rival), and standing with each faction decides who hires you. Full faction warfare stays deferred.
 - **Armor stays 5e AC.** No damage split, no durability.
 - **Art stays 3D.** Rigged Meshy figures in the house prompt style. The 2D cutout plan is dropped.
