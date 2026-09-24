@@ -1041,3 +1041,17 @@ func test_power_ranks_the_heroes() -> void:
 	cl.slots.assign([20, 0, 0, 0, 0, 0, 0, 0, 0])
 	check(is_equal_approx(four, float(Power.estimate(cl)["dpr"])),
 		"slots past one cast a round buy nothing in a four-round fight")
+	# A control spell is one lock, and a lock adds at most SPELL_LOCK_CAP to the
+	# caster's score. Hold Person used to triple a level-10 cleric.
+	cl.slots.assign([4, 3, 3, 3, 2, 0, 0, 0, 0])
+	cl.spell_ids.assign([])
+	var bare := float(Power.estimate(cl)["score"])
+	cl.spell_ids.assign(["hold-person", "hold-monster", "banishment"])
+	var locked := Power.estimate(cl)
+	check(float(locked["score"]) <= bare * Power.SPELL_LOCK_CAP + 0.01 and float(locked["score"]) > bare,
+		"three lock spells add at most +25%% to the caster (%.1f -> %.1f)" % [bare, float(locked["score"])])
+	check(float(locked["control"]) > 0.0, "...and the estimate still reports the lock as control")
+	check(Power._held_share(Effects.spell("hold-person"), cl) < 1.0,
+		"a lock with a save each turn holds for less than the whole fight (%.2f)" % Power._held_share(Effects.spell("hold-person"), cl))
+	check(is_equal_approx(Power._held_share(Effects.spell("command"), cl), 1.0 / Power.ROUNDS),
+		"a one-round spell holds one round")
