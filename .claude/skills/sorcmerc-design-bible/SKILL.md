@@ -5,7 +5,7 @@ description: SorcMerc's design pillars, tone, setting, art direction and scope r
 
 # SorcMerc design bible
 
-Thin on purpose. The facts behind each line are in the files named next to it, and those files win. `docs/expansion-plan.md` is the dated record of what exists, and `README.md` is the orientation map.
+Thin on purpose. The facts behind each line are in the files named next to it, and those files win. The build log (`docs/expansion-plan.md` to 2026-09-24, then `docs/plan/`) is the dated record of what exists, and `README.md` is the orientation map.
 
 ## What the game is (as built)
 
@@ -65,12 +65,12 @@ Avoid epic-fantasy capitals-and-prophecy prose, jokes that break the scene, and 
 - **Rules gravity** (`docs/brief.md`): every rule pulls in three more. Add a mechanic only when the loop needs it.
 - **New mechanics go in `core/`** (pure, `RefCounted`, headless-testable). Scenes only draw them.
 - **Content packs are data only** (`core/mod/`, `docs/modding.md`). A feature a mod should be able to use goes in the public data schema, not in code.
-- Every feature gets an appended `docs/expansion-plan.md` entry with a `### Still open` section.
+- Every feature gets its own build-log entry: a new file `docs/plan/YYYY-MM-DD-slug.md` with a `### Still open` section (`docs/plan/README.md`). Never append to `docs/expansion-plan.md`; it is closed.
 - A balance number changes only with a re-run sweep (see the `sorcmerc-balancing` skill).
 
 ## Decided 2026-09-24 (owner's calls, not yet built)
 
-These are direction, not description. The code still does the old thing until each one lands with its own `docs/expansion-plan.md` entry.
+These are direction, not description. The code still does the old thing until each one lands with its own `docs/plan/` entry.
 
 - **Recruitment.** The player **creates only the first character**, at the start of a run. Every later merc is **hired** from a pool that towns offer: pre-rolled recruits who come with their own traits.
   - There are **no wages or upkeep**.
