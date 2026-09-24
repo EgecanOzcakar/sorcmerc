@@ -9620,6 +9620,15 @@ together. Every move is within about one and a half standard errors and in
 the predicted direction, and test_scaler's bands hold. TIER did not move. The
 numbers are in `core/scaler.gd`'s header.
 
+The one band this broke: escort's done rate fell to 35.0%, under the
+objective sweep's 40% floor (`tests/test_objectives.gd`). With the old revive
+put back it is 41.2% again, so RAW stable alone moved it: a hero who used to
+stand back up beside the carter now stays down. Per the objective spec, the
+kind's own knob fixes it, never the roster. `CARTER_HP_BASE` went 12 → 15:
+57.5%, and every other kind is unchanged. 14 measured 37.5% and 16 measured
+58.8%, so 15 is the smallest step back into the band (the carter surviving one
+more goblin hit).
+
 ### Still open
 
 - `core/regions.gd`'s win-rate table (2026-09-13, 80 seeds a cell) was not
