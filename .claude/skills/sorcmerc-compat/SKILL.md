@@ -32,11 +32,11 @@ tools/run_tests.sh tests/test_coop.gd tests/test_coop_kits.gd tests/test_mod_api
 Both peers build the same `Combat` from one setup (seed, spec, party as `CharacterSave` dicts) and apply the same intents in the same order. Only intents cross the wire (`Coop.perform/move/end_turn`), and `Coop.state_hash` must agree after every one. So:
 
 1. **Every roll comes from `cb.rng`.** Never use `randi()`, `randf()`, `Time` or `hash()` of an object in anything a fight resolves. Cosmetic randomness (barks, camera) must use its own stream and never touch `cb.rng`.
-2. **A refused intent changes nothing.** If `perform()` would return an error, it returns it **before** spending anything; `Combat._cast_refusal` is the pattern. The harness drops a refused intent unsent, and the AI re-plans after one.
+2. **A refused intent changes nothing.** If `perform()` would return an error, it returns it **before** spending anything: the action, a slot, a pool point. `Combat._cast_refusal` and the pool/slot/Font checks just after it in `perform()` are the pattern; a new kind with its own way to fail adds its check there. The harness drops a refused intent unsent, and the AI re-plans after one.
 3. **New fight state must be hashable and in the hash.** `state_hash` covers the rng, the turn, positions, HP, the economy, **pools** and every status **payload**.
    - A payload may hold a Combatant: `_plain()` writes it as its id. It must not hold a Callable, a Node or a float taken from the clock.
    - New state kept outside `statuses`, `econ` or `pools` must be added to `state_hash`, or drift in it is invisible.
-4. **A new verb needs a stable, unique id.** Intents name verbs by id (`Coop.apply` finds `v["id"]` on the hero). Two verbs sharing an id on one hero is a desync. `test_class_abilities` and `test_coop_kits` both check uniqueness.
+4. **A new verb needs a stable, unique id.** Intents name verbs by id (`Coop.apply` finds `v["id"]` on the hero). Two verbs sharing an id on one hero is a desync; `test_class_abilities` checks every kit for it.
 5. **A new Character field travels with the party.** The guest rebuilds the party from `CharacterSave.to_dict`. A field missing from `to_dict`/`from_dict` differs between peers. The `slots_used` bug of 2026-09-20 was exactly this.
 6. **Anything the fight reads from the party must be in the setup.** Relations and callings ride in `Coop.setup_for` because the fight reads them. A new party-level input to combat goes there too.
 7. **Process-global state (`static var`) is per peer.** Both peers must reach the same value by the same path; never let one screen set it.
