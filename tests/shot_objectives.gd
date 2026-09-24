@@ -107,11 +107,16 @@ func _init() -> void:
 
 	# the site: the pens, picked from the room card; then the room itself
 	var site = Site.for_lair(held, w.party, w.world)
+	var pens_at := 0
 	for d in site.rooms.size():
 		for r in site.rooms[d]:
 			if String(r.get("objective", "")) == "rescue":
-				held.depth_cleared = d
+				pens_at = d
 	w._delve(held)
+	# Every entry starts at the mouth (core/site.gd's for_lair), so the shot
+	# walks the live site down to the pens' floor rather than the lair.
+	w._site.depth = pens_at
+	w._site_screen.refresh()
 	await settle()
 	await shot("site-pens-card")
 	var opts: Array = w._site.options()

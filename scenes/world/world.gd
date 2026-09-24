@@ -2882,7 +2882,8 @@ func _on_site_done() -> void:
 			_delve_haul["cleared_xp"] = bonus
 		_lair_msg.text = "%s is cleared out, all the way to the bottom. +%d XP." % [l.sname, bonus]
 	elif _site.state == "withdrawn":
-		_lair_msg.text = "%s is still down there — %d of %d rooms behind you." % [
+		# core/site.gd: walking out undoes the descent; the next entry is the mouth.
+		_lair_msg.text = "%s is still down there. %d of %d rooms were behind you, and they will fill in again before you are back." % [
 			l.sname, int(l.depth_cleared), Site.depth_for(l)]
 	_site = null
 	if _site_screen != null:

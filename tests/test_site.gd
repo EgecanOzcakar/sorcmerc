@@ -163,9 +163,63 @@ func _init() -> void:
 	check(s3.withdraw(), "between rooms, you can walk out")
 	check(s3.state == "withdrawn" and not lair3.looted,
 		"...and the lair is still standing")
-	check(int(lair3.depth_cleared) == reached, "the lair remembers how far in you got")
+	check(int(lair3.depth_cleared) == reached, "until the next entry, the lair records how far in you got")
+	# The design audit §3.3: leaving undoes the descent. The rooms fill in
+	# again and the next entry is the mouth — a wipe's reset, without its toll.
 	var s4 = Site.for_lair(lair3, party3, w3)
-	check(s4.depth == reached, "coming back resumes rather than restarting")
+	check(reached > 0 and s4.depth == 0 and int(lair3.depth_cleared) == 0,
+		"coming back starts at the mouth, not at room %d" % (reached + 1))
+	check(s4.state == "picking" and str(s4.options()) == str(Site.for_lair(_lair(), _party(), _world()).options()),
+		"...with the first floor's rooms back as they were")
+
+	# No stash loss on a withdrawal: that is the wipe's alone.
+	var lair_w = _lair("goblinoid", "withdraw-bag")
+	var party_w := _party()
+	for id in ["longsword", "leather", "spell-scroll"]:
+		party_w.stash_add(id, 2)
+	var bag_before: String = str(party_w.stash)
+	var sw_ = Site.for_lair(lair_w, party_w, _world())
+	sw_.enter(0)
+	sw_.finish_combat({"outcome": "Victory"})
+	sw_.leave()
+	check(sw_.withdraw(), "walk out after a room")
+	Site.for_lair(lair_w, party_w, _world())
+	check(str(party_w.stash) == bag_before, "walking out and back in costs nothing from the bag")
+
+	# The rooms regrow; the coin already carried out does not. A cache emptied
+	# on one entry is still empty on the next, or walking in and out of the
+	# first floor would be a purse that refills for nothing.
+	var cache_lair = null
+	var cache_i := -1
+	for i in 200:
+		var cl = _lair("goblinoid", "cache-%d" % i)
+		var opts: Array = Site.for_lair(cl, _party(), _world()).options()
+		for j in opts.size():
+			if String(opts[j]["kind"]) == "treasure":
+				cache_lair = cl
+				cache_i = j
+		if cache_lair != null:
+			break
+	check(cache_lair != null, "some lair offers a cache on its first floor")
+	if cache_lair != null:
+		var pc := _party()
+		var sc = Site.for_lair(cache_lair, pc, _world())
+		sc.enter(cache_i)
+		var got: int = sc.take()
+		check(got > 0 and cache_lair.caches_taken.size() == 1, "the cache pays once (%d) and is written down" % got)
+		sc.leave()
+		sc.withdraw()
+		var sc2 = Site.for_lair(cache_lair, pc, _world())
+		check(sc2.depth == 0, "back at the mouth")
+		sc2.enter(cache_i)
+		check(sc2.take() == 0, "...but the cache already carried out stays empty")
+		# Something new moving in brings its own coin.
+		var LairsR = load("res://core/world_lairs.gd")
+		var wr := _world()
+		wr.add_lair(cache_lair)
+		LairsR.mark_cleared(cache_lair, 0.0)
+		LairsR.respawn(wr, LairsR.RESPAWN + 1.0)
+		check(cache_lair.caches_taken.is_empty(), "a respawned lair's caches are full again")
 
 	# --- a wipe -----------------------------------------------------------
 	var lair5 = _lair()
@@ -354,10 +408,23 @@ func _init() -> void:
 			"...and the same room at hp %.0f%%/slots %.0f%% is the same room" % [
 				float(state[0]) * 100.0, float(state[1]) * 100.0])
 	check(sw._held() > 1.0, "...which it is because the correction moved (%.3f)" % sw._held())
-	# Re-entering is a fresh walk in, so the snapshot is re-taken rather than
-	# carrying a drained party's reading into the next visit.
+	# The design audit §1.3: the reading at the mouth is taken with every slot
+	# back (Regions.fresh_score), so a party that walks in drained meets the
+	# same lair — the same boss — as one that walks in rested.
 	var sw2 = Site.for_lair(lw, pw, _world())
-	check(is_equal_approx(sw2._held(), 1.0), "walking back in re-takes the reading (%.3f)" % sw2._held())
+	check(is_equal_approx(sw2.entry_score, Regions.fresh_score(pw)), "the mouth is priced fresh (%.1f)" % sw2.entry_score)
+	check(sw2.entry_score > Scaler.party_score(pw.party_characters()),
+		"...not off the slots the party has left (%.1f vs %.1f)" % [sw2.entry_score, Scaler.party_score(pw.party_characters())])
+	sw2.depth = sw2.depth_total() - 1
+	sw2.enter(0)
+	check(str(sw2.combat_spec()["monsters"]) == str(fresh), "walking in drained: the same boss as walking in rested")
+	# And a first floor, entered drained against entered fresh: the same room.
+	var drained_first = Site.for_lair(_lair("dragon", "held-lair-2"), pw, _world())
+	drained_first.enter(0)
+	var rested_first = Site.for_lair(_lair("dragon", "held-lair-2"), _party(), _world())
+	rested_first.enter(0)
+	check(str(drained_first.combat_spec()["monsters"]) == str(rested_first.combat_spec()["monsters"]),
+		"...and the same first room")
 
 	# A content pack's faction this build has never heard of keeps the old shape
 	# rather than crashing on a missing table row.
