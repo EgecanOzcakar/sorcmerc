@@ -213,9 +213,10 @@ static func level_here(world, pos: Vector2, party) -> int:
 # floor, for anybody.
 #
 # `fresh`, not the current reading, is what the pin divides by: the party at
-# full slots (fresh_score). What the party has spent still thins the fight in
-# the same proportion it does in band (the budget's own `team` is the current
-# reading), and the wounds are core/world_threat.gd's, which composes with this
+# full slots (fresh_score). The budget's own `team` is the current reading, and
+# what the party has spent would thin the fight through it — but
+# core/world_threat.gd's slot_hold() multiplies that back out (spent slots do
+# not buy a smaller fight, 2026-09-24), and its wounds curve composes with this
 # by multiplication, as before. The band says how dangerous this country is;
 # the party's condition still thins whatever the country sends.
 #
