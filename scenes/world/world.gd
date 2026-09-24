@@ -93,6 +93,7 @@ const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const Ladder = preload("res://core/ladder.gd")
 const Callings = preload("res://core/callings.gd")
+const EnemyNames = preload("res://core/enemy_names.gd")   # a band's name, never its id
 const Downtime = preload("res://core/downtime.gd")
 const Lodge = preload("res://core/lodge.gd")   # the company's house: the square's door, the lodge page
 const Recruits = preload("res://core/recruits.gd")   # who is looking for work at the inn, and the fee
@@ -315,6 +316,7 @@ var _slipped := {}
 # point the march was last aimed at — the order is the player's only while the
 # party's destination is still that point. "" when nobody is being sought.
 var _meet_id := ""
+var _meet_name := ""   # what the HUD calls it, kept for the line after it is gone
 var _meet_aim := Vector2.INF
 # A chase the party cannot win on legs alone (core/world_chase.gd): when it may
 # next roll to run the band down, and how many of those rolls it has missed.
@@ -1570,16 +1572,17 @@ func _seek(band) -> void:
 		_met_sought(p, band)
 		return
 	_meet_id = band.id
+	_meet_name = EnemyNames.band_name(band, world)
 	_chase_next_at = world.clock.elapsed + WorldChase.INTERVAL
 	_chase_misses = 0
 	_aim_meet(p, band)
-	_camp_msg.text = MEET_MSG % band.id.capitalize()
+	_camp_msg.text = MEET_MSG % _meet_name
 
 # The HUD line an errand puts up, and takes down again when it ends however it
 # ends — met, called off, or lost in the fog — so it never outlives the march.
 const MEET_MSG := "Marching to meet %s. Click the ground to call it off."
 func _drop_meet() -> void:
-	if _meet_id != "" and _camp_msg != null and _camp_msg.text == MEET_MSG % _meet_id.capitalize():
+	if _meet_id != "" and _camp_msg != null and _camp_msg.text == MEET_MSG % _meet_name:
 		_camp_msg.text = ""
 	_meet_id = ""
 
@@ -1606,7 +1609,7 @@ func _follow_meet(p, dt: float) -> void:
 			band = q
 			break
 	if band == null or not world.band_seen(band.position):
-		var who := _meet_id.capitalize()
+		var who := _meet_name
 		_drop_meet()
 		_camp_msg.text = "Lost sight of %s." % who
 		return
@@ -1635,7 +1638,7 @@ func _chase(p, band) -> bool:
 		RNG.new(maxi(1, absi(hash("chase|%s|%d" % [band.id, int(world.clock.elapsed)])))))
 	if r.is_empty():
 		return false
-	var who: String = band.id.capitalize()
+	var who: String = EnemyNames.band_name(band, world)
 	var tally := "%s %d+%d vs DC %d" % [String(r["skill"]).capitalize(), r["nat"], r["bonus"], r["dc"]]
 	if r["ok"]:
 		var caught := "runs %s down" if WorldAI.is_hostile(band, p) else "catches up with %s"
@@ -1644,9 +1647,9 @@ func _chase(p, band) -> bool:
 	_chase_misses += 1
 	if _chase_misses >= WorldChase.MAX_TRIES:
 		_drop_meet()
-		_map_roll(r, _camp_msg, "%s can't close the gap (%s) — %s get away." % [r["cname"], tally, who])
+		_map_roll(r, _camp_msg, "%s cannot close the gap (%s). %s get away." % [r["cname"], tally, EnemyNames.upper_first(who)])
 		return true
-	_map_roll(r, _camp_msg, "%s can't close the gap yet (%s) — %s keep their lead." % [r["cname"], tally, who])
+	_map_roll(r, _camp_msg, "%s cannot close the gap yet (%s). %s keep their lead." % [r["cname"], tally, EnemyNames.upper_first(who)])
 	return false
 
 # The party got where it was going, so it stops there the way #70 stops any
@@ -1679,12 +1682,13 @@ func _night_jump(foe) -> bool:
 		return true
 	var skill_name: String = String(watch.get("skill", "")).capitalize()
 	var who: String = watch.get("char_id", "")
-	_camp_msg.text = ("%s doesn't catch it in the dark (%s %d+%d vs DC %d) — %s are on the party before anyone can draw!" % [
-		watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"], foe.id.capitalize()]) if who != "" \
-		else "Nobody is watching the dark — %s are on the party before anyone can draw!" % foe.id.capitalize()
+	var them := EnemyNames.upper_first(EnemyNames.band_name(foe, world))
+	_camp_msg.text = ("%s does not catch it in the dark (%s %d+%d vs DC %d). %s are on the company before anyone can draw." % [
+		watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"], them]) if who != "" \
+		else "Nobody is watching the dark. %s are on the company before anyone can draw." % them
 	var rolled: Dictionary = _watch_roll(watch)
 	_camp_card("jumped", "Jumped in the dark", "bad",
-		"%s doesn't catch it in the dark — %s are on the party before anyone can draw!" % [watch.get("cname", ""), foe.id.capitalize()] if not rolled.is_empty() else _camp_msg.text,
+		"%s does not catch it in the dark. %s are on the company before anyone can draw." % [watch.get("cname", ""), them] if not rolled.is_empty() else _camp_msg.text,
 		func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"), "", rolled)
 	return false
 
@@ -1988,7 +1992,7 @@ func _bank(result: Dictionary) -> void:
 # --- issue #30: the spoils page -------------------------------------------
 #
 # A won fight on the map used to pay in silence. The combat screen writes its
-# own after-action lines — "+400 XP, +50 gold", "Taken from the dead: a
+# own after-action lines — "+400 XP, +50 ◉", "Taken from the dead: a
 # handaxe" — but out here the screen is torn down the frame `result` is filled,
 # so nobody ever read them; all that survived was one line on the HUD's lair
 # label, which the next frame's button text could overwrite. The linear
@@ -2015,7 +2019,7 @@ func _show_spoils(result: Dictionary) -> void:
 		var fallen := _spoils_fallen(result.get("kills", []))
 		if fallen != null:
 			rows.append(fallen)
-		rows.append(["+%d XP,  +%d gold" % [int(result.get("xp", 0)), int(result.get("gold", 0))],
+		rows.append(["+%d XP,  +%d ◉" % [int(result.get("xp", 0)), int(result.get("gold", 0))],
 			Icons.COL_GOLD, "tally"])
 		var counts := {}   # a count on a repeat — "×2", not the same tile twice
 		for item in result.get("loot", []):
@@ -2136,7 +2140,7 @@ func _show_delve_spoils(l, cleared: bool) -> void:
 		"" if int(haul.get("fights", 0)) == 1 else "s",
 		"" if not haul.has("cleared_xp") else ", %d of it for reaching the bottom" % int(haul["cleared_xp"])],
 		Icons.COL_GOLD])
-	rows.append(["+%d gold" % maxi(0, party.gold - int(haul.get("gold0", party.gold))),
+	rows.append(["+%d ◉" % maxi(0, party.gold - int(haul.get("gold0", party.gold))),
 		Icons.COL_GOLD, "tally"])
 	var loot: Array = haul.get("loot", [])
 	if loot.is_empty():
@@ -2257,7 +2261,7 @@ func _build_levelup_panel(who: Array) -> void:
 
 	var note := Label.new()
 	note.text = "There is a level waiting on the party screen — pick it up there, per character." if not spectator \
-		else "Your hero, your choices — take the level here; your host's sheet follows."
+		else "Your merc, your choices — take the level here; your host's sheet follows."
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.add_theme_color_override("font_color", Icons.COL_MUTED)
@@ -2733,7 +2737,7 @@ func _lair_sneak_action() -> void:
 		Quest.record_lair_cleared(party, l.id)
 		_calling_check("lair_cleared", l.id, _leader())
 		_earn_from_lair()
-		_map_roll(roll, _lair_msg, "%s +%d gold." % [String(roll["text"]), int(loot.get("gold", 0))])
+		_map_roll(roll, _lair_msg, "%s +%d ◉." % [String(roll["text"]), int(loot.get("gold", 0))])
 	else:
 		# Roused by the attempt itself, not as a side effect of the fight it
 		# falls into: that is what makes this one attempt rather than one per
@@ -2924,7 +2928,7 @@ func _check_forage() -> void:
 	var roll := WorldForage.check(party, RNG.new(maxi(1, absi(hash("forage|%d" % int(world.clock.elapsed))))))
 	if roll.get("ok", false):
 		party.add_gold(int(roll["gold"]))
-		_map_roll(roll, _camp_msg, "%s forages along the way (%s %d+%d vs DC %d) — +%d gold." % [
+		_map_roll(roll, _camp_msg, "%s forages along the way (%s %d+%d vs DC %d) — +%d ◉." % [
 			roll["cname"], String(roll["skill"]).capitalize(), roll["nat"], roll["bonus"], roll["dc"], int(roll["gold"])])
 
 # --- D4: how the party meets a band ---------------------------------------
@@ -2946,7 +2950,7 @@ func _open_approach(foe, hostile := true) -> void:
 	_approach_card.foe_faction = String(foe.faction)
 	var kind := String(_road_objective(foe, "").get("kind", ""))
 	_approach_card.show_approach(Approach.options(party, foe, hostile),
-		"%s (%d)%s" % [foe.id.capitalize(), foe.troops.size(), ("  ·  " + Objectives.title(kind)) if kind != "" else ""])
+		"%s (%d)%s" % [EnemyNames.upper_first(EnemyNames.band_name(foe, world)), foe.troops.size(), ("  ·  " + Objectives.title(kind)) if kind != "" else ""])
 
 func _on_approach_chosen(way: String) -> void:
 	var foe = _approach_foe
@@ -3342,7 +3346,7 @@ func bug_context() -> Dictionary:
 		who.append("%s (%s)" % [ch.cname, state])
 	ctx["Party"] = ", ".join(who) if not who.is_empty() else "nobody standing"
 	if party != null:
-		ctx["Gold"] = "%d gp" % party.gold
+		ctx["Gold"] = "%d ◉" % party.gold
 	if story != null:
 		ctx["Story"] = "%s, chapter %s" % [story.pack_id,
 			story.chapter if story.chapter != "" else "(finished)"]
@@ -3485,7 +3489,7 @@ func _work_healer() -> void:
 
 func _haggle() -> void:
 	if _visit.get("haggled", false):
-		_say("They won't budge on price again today.")
+		_say("They will not budge on price again today.")
 		return
 	var r: Dictionary = Visit.haggle(_visit, party)
 	_visit["haggled"] = true
@@ -3511,7 +3515,7 @@ func _investigate() -> void:
 	var r: Dictionary = Visit.investigate_battle(_visit["settlement"], _visit, party)
 	_visit["investigated"] = true
 	_build_visit_panel()
-	_say_rolled(r, String(r.get("text", "There's nobody here who'd know where to look.")), "pickup")
+	_say_rolled(r, String(r.get("text", "There is nobody here who would know where to look.")), "pickup")
 
 # O9 item 2: the inn. Time is the cost — see SettlementVisit.rest — and the extra
 # hours restock the shelf, so the market is re-read afterwards.
@@ -3519,12 +3523,12 @@ func _investigate() -> void:
 # never enforced before, so a settlement visit could spam free full heals.
 func _rest() -> void:
 	if not Visit.can_long_rest(party, world):
-		_say("The party isn't tired enough for another long rest yet.")
+		_say("The party is not tired enough for another long rest yet.")
 		return
 	var s = _visit["settlement"]
 	var cost := Visit.inn_cost(s, party)
 	if not party.spend_gold(cost):
-		_say("Can't afford a room here (%d ◉)." % cost)
+		_say("The purse cannot cover a room here (%d ◉)." % cost)
 		return
 	var before := _visit
 	var stamp: float = s.last_visited
@@ -3543,7 +3547,7 @@ func _rest() -> void:
 	for ch in party.party_characters():
 		for n in Traits.heal_rest(ch, String(s.kind) == "city"):
 			mended.append("%s is no longer %s." % [ch.cname, n])
-	_say("The party takes a long rest (%s). Eight hours pass and the stalls fill up again.%s%s%s" % [
+	_say("The company takes a long rest (%s). Eight hours pass and the stalls fill up again.%s%s%s" % [
 		"on the house" if cost == 0 else "%d ◉ for the room" % cost, Visit.rest_note(night), _trance_note(trance),
 		(" " + " ".join(mended)) if not mended.is_empty() else ""])
 	# The same fire as a camp's, over the inn page; the panel under it has
@@ -3577,7 +3581,7 @@ func _trance_note(trance: Dictionary) -> String:
 	var id: Dictionary = trance.get("identify", {})
 	if not id.is_empty():
 		if id["ok"]:
-			note += "  They also puzzle out the %s while they're at it (Arcana %d+%d vs DC %d)." % [
+			note += "  They also puzzle out the %s while they are at it (Arcana %d+%d vs DC %d)." % [
 				Campaign.item_name(id["item_id"]), id["nat"], id["bonus"], id["dc"]]
 		else:
 			note += "  They also take a crack at identifying an item, no luck (Arcana %d+%d vs DC %d)." % [
@@ -3620,7 +3624,7 @@ func _short_rest() -> void:
 		return
 	var r: Dictionary = Visit.rest(party, world, "short-rest")
 	Sound.play_sfx("rest")
-	_camp_msg.text = "The party takes a short rest. An hour passes.%s" % Visit.rest_note(r)
+	_camp_msg.text = "The company takes a short rest. An hour passes.%s" % Visit.rest_note(r)
 
 # T9x: the camp-kit item (bought at any settlement, see _build_visit_panel)
 # lets the party long-rest away from town — for a price already paid at
@@ -3664,18 +3668,18 @@ func _make_camp() -> void:
 	# keys and says the rest in words; the HUD line keeps the numbers.
 	var rolled: Dictionary = _watch_roll(watch)
 	if watch["ok"]:
-		_camp_msg.text = "%s hears them coming (%s %d+%d vs DC %d) — the party gets the drop first." % [
+		_camp_msg.text = "%s hears them coming (%s %d+%d vs DC %d). The company gets the drop on them." % [
 			watch.get("cname", "Someone"), skill_name, watch["nat"], watch["bonus"], watch["dc"]]
 		_camp_card("watch", "Something in the dark", "good",
-			"%s hears them coming — the party gets the drop first." % watch.get("cname", "Someone") if not rolled.is_empty() else _camp_msg.text,
+			"%s hears them coming. The company gets the drop on them." % watch.get("cname", "Someone") if not rolled.is_empty() else _camp_msg.text,
 			func(): _on_event_ack(); await _launch_combat(foe, true, false), "", rolled)
 	else:
 		var who: String = watch.get("char_id", "")
-		_camp_msg.text = ("%s doesn't catch it in time (%s %d+%d vs DC %d) — the camp is jumped in the night!" % [
+		_camp_msg.text = ("%s does not catch it in time (%s %d+%d vs DC %d). They are in the camp before anyone can draw." % [
 			watch.get("cname", ""), skill_name, watch["nat"], watch["bonus"], watch["dc"]]) if who != "" \
-			else "Nobody's keeping watch — the camp is jumped in the night!"
+			else "Nobody is watching the dark. They are in the camp before anyone can draw."
 		_camp_card("jumped", "The camp is jumped", "bad",
-			"%s doesn't catch it in time — the camp is jumped in the night!" % watch.get("cname", "") if not rolled.is_empty() else _camp_msg.text,
+			"%s does not catch it in time. They are in the camp before anyone can draw." % watch.get("cname", "") if not rolled.is_empty() else _camp_msg.text,
 			func(): _on_event_ack(); await _launch_combat(foe, false, true, "dark"), "", rolled)
 
 # The night, on the same card the road uses: what the camp did, pictured
@@ -4109,7 +4113,7 @@ func _standing_line(s) -> String:
 		return "Nobody here will deal with you."
 	# The ladder (core/ladder.gd): what the party has DONE here outranks how
 	# they feel this week — unless the guards are already out.
-	var tail := ""   # Famous or better rides on the end of every line
+	var tail := ""   # the fourth title (Asked For by Name) or better rides on the end of every line
 	if Ladder.title_index() >= 3:
 		tail = "  %s, they say." % Ladder.title_cap()
 	match Ladder.rung(s.faction):
@@ -5581,7 +5585,7 @@ func ground_marks() -> Array:
 		# The player's own headcount comes off the real Party (active roster),
 		# everyone else's off their troops[] flavour roster.
 		var count: int = party.active.size() if q.is_player else q.troops.size()
-		var who: String = "You" if q.is_player else q.id.capitalize()
+		var who: String = "You" if q.is_player else EnemyNames.upper_first(EnemyNames.band_name(q, world))
 		out.append({"pos": q.position, "radius": rad,
 			"color": _remembered(faction_color(q.faction, q.is_player), live),
 			"ring": 0.0, "fill": 0.0, "shadow": 1.0,

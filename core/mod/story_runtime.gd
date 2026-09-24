@@ -30,6 +30,7 @@ const Regions = preload("res://core/regions.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
+const EnemyNames = preload("res://core/enemy_names.gd")
 
 const DAY := 1440.0          # world-minutes, same constant the rest of the game counts in
 const NEAR := 60.0           # default radius for {"near": "riverhold"} — a little wider
@@ -404,10 +405,12 @@ static func _spawn(spec, world) -> Array[String]:
 		at = Vector2(float(spec["position"][0]), float(spec["position"][1]))
 	var band = world.add_party(World.RoamingParty.new(id, at,
 		String(spec.get("faction", "bandit"))))
+	band.sname = String(spec.get("name", ""))   # the story's name for it outlives this line
 	for t in _list(spec, "troops"):
 		if t is Dictionary:
 			band.troops.append({"role": String(t.get("role", "heavy")),
 				"level": int(t.get("level", 1))})
 	WorldAI.hunt(band)
-	lines.append("%s takes the field." % String(spec.get("name", id.capitalize())))
+	lines.append(("%s takes the field." % band.sname) if band.sname != ""
+		else "%s take the field." % EnemyNames.upper_first(EnemyNames.band_name(band, world)))
 	return lines

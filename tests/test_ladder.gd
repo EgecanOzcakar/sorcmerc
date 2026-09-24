@@ -42,9 +42,9 @@ func _init() -> void:
 	check(Ladder.title_cap() == "A Company of Note", "...capitalised for the start of a line, not title-cased: %s" % Ladder.title_cap())
 	check(Ladder.people("elf") == "elves" and Ladder.people("goblin") == "goblins", "the plural people")
 	Ladder.deed("human", 22)
-	check(Ladder.title() == "Famous", "forty")
+	check(Ladder.title() == "Asked For by Name", "forty")
 	Ladder.deed("elf", 40)
-	check(Ladder.title() == "Legends" and absf(Ladder.pay_mult() - 1.4) < 0.001, "eighty: Legends, +40 %")
+	check(Ladder.title() == "Sung Wrong in Taverns" and absf(Ladder.pay_mult() - 1.4) < 0.001, "eighty: Sung Wrong in Taverns, +40 %")
 	# audiences
 	check(not Ladder.audience_held("human"), "no audience yet")
 	Ladder.hold_audience("human")
@@ -58,7 +58,7 @@ func _init() -> void:
 	Ladder.reset()
 	check(Ladder.renown() == 0 and not Ladder.audience_held("human"), "reset clears both")
 	Ladder.load(d)
-	check(Ladder.deeds("human") == 37 and Ladder.rung("human") == Ladder.SWORN and Ladder.audience_held("human") and Ladder.title() == "Legends",
+	check(Ladder.deeds("human") == 37 and Ladder.rung("human") == Ladder.SWORN and Ladder.audience_held("human") and Ladder.title() == "Sung Wrong in Taverns",
 		"load() restores them")
 	Ladder.load({})
 	check(Ladder.renown() == 0 and not Ladder.audience_held("human"), "load({}) is a fresh ladder")

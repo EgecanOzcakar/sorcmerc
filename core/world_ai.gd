@@ -32,6 +32,7 @@ const RNG = preload("res://core/rng.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const WorldPath = preload("res://core/world_path.gd")
 const World = preload("res://core/world.gd")   # respawn() builds a RoamingParty; world.gd never preloads this file
+const EnemyNames = preload("res://core/enemy_names.gd")
 const WorldFlee = preload("res://core/world_flee.gd")   # who is too weak to stand; that file never preloads this one
 
 # How close to a waypoint counts as having walked it: slack for a band that
@@ -101,7 +102,7 @@ static func fell(world, band) -> void:
 	if band.is_player or not is_monster(band.faction) \
 			or String(band.ai.get("behavior", "")) == "raid":
 		return
-	world.fallen.append({"id": band.id, "faction": band.faction, "position": band.position,
+	world.fallen.append({"id": band.id, "faction": band.faction, "sname": band.sname, "position": band.position,
 		"troops": band.troops.duplicate(true), "at": world.clock.elapsed})
 
 static func respawn(world, now: float) -> Array:
@@ -113,10 +114,11 @@ static func respawn(world, now: float) -> Array:
 		var home = _home_of(world, String(f["faction"]), f["position"])
 		var at: Vector2 = f["position"] if home == null else home.position
 		var b = world.add_party(World.RoamingParty.new(String(f["id"]), at, String(f["faction"])))
+		b.sname = String(f.get("sname", ""))
 		for t in f["troops"]:
 			b.troops.append(t)
 		hunt(b)
-		lines.append("The %s band is on the roads again%s." % [b.id.capitalize(),   # quest.gd names it the same way
+		lines.append("%s are on the roads again%s." % [EnemyNames.upper_first(EnemyNames.band_name(b, world)),   # the same id, so the same name
 			"" if home == null else ", out of " + home.sname])
 	return lines
 

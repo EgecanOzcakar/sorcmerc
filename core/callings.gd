@@ -20,6 +20,8 @@ const PartyOpinion = preload("res://core/party_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")
 const Ach = preload("res://core/achievements.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const EnemyNames = preload("res://core/enemy_names.gd")
+const Scaler = preload("res://core/scaler.gd")
 
 const CALLING_XP := 120
 
@@ -44,7 +46,7 @@ const TEMPLATES := {  # background -> template
 		"done": "Nobody in %s remembered your face, or nobody said so. You bought the old mark a drink."},
 	"criminal":    {"title": "An old debt", "target": {"kind": "band"}, "done_by": "band_beaten",
 		"item": "cloak-of-elvenkind",
-		"tell": "The band called %s is asking after you by name, town to town. You know what you owe them and you know they will not take coin for it.",
+		"tell": "%s are asking after you by name, town to town. You know what you owe them and you know they will not take coin for it.",
 		"done": "%s will not come asking again. The debt is paid in the only coin they took."},
 	"entertainer": {"title": "A hall worth the song", "target": {"kind": "audience"}, "done_by": "audience",
 		"item": "pipes-of-haunting",
@@ -57,7 +59,7 @@ const TEMPLATES := {  # background -> template
 	"guard":       {"title": "The one that got away", "target": {"kind": "band"}, "done_by": "band_beaten",
 		"item": "shield-1",
 		"tell": "Every guard has one they let past the gate. Yours is riding with %s now, and the company keeps crossing their road.",
-		"done": "%s is finished, and the one that got away did not, this time."},
+		"done": "%s are finished, and the one that got away did not, this time."},
 	"guide":       {"title": "The road not yet walked", "target": {"kind": "landmark", "landmark": "tower"}, "done_by": "landmark_answered",
 		"item": "eyes-of-the-eagle",
 		"tell": "There is one height in this country you have never stood on: %s. A guide who has not seen the whole of it is guessing about the rest.",
@@ -86,7 +88,7 @@ const TEMPLATES := {  # background -> template
 		"item": "helm-of-comprehending-languages",
 		"tell": "The chronicle you copied as an apprentice ended mid-sentence, at a place it called %s. The stones there might say how the sentence ends.",
 		"done": "The stones at %s finished the sentence. You have written it down."},
-	"soldier":     {"title": "The deserters", "target": {"kind": "band"}, "done_by": "band_beaten",
+	"soldier":     {"title": "The deserters", "target": {"kind": "band", "factions": ["bandit", "soldier"]}, "done_by": "band_beaten",
 		"item": "javelin-of-lightning",
 		"tell": "%s are deserters from a company you served in. You know their captain. He knows what you do to deserters.",
 		"done": "%s are accounted for. You did not enjoy it, and you did not pretend to."},
@@ -144,6 +146,14 @@ static func validate(src, own_items := {}) -> Array:
 			errors.append("calling \"%s\": a %s is done by \"%s\", not \"%s\"" % [bg, kind, DONE_BY[kind], t.get("done_by", "")])
 		if kind == "landmark" and not Landmarks.KINDS.has(String(target.get("landmark", ""))):
 			errors.append("calling \"%s\": landmark \"%s\" is not one of %s" % [bg, target.get("landmark", ""), Landmarks.KINDS])
+		if kind == "band" and target.has("factions"):
+			var fs = target["factions"]
+			if not (fs is Array) or fs.is_empty():
+				errors.append("calling \"%s\": factions must be a non-empty list" % bg)
+			else:
+				for f in fs:
+					if not Scaler.FACTIONS.has(String(f)):
+						errors.append("calling \"%s\": faction \"%s\" is not a monster band's faction (%s)" % [bg, f, Scaler.FACTIONS])
 		if kind == "settlement" and not SETTLEMENT_SIZES.has(String(target.get("settlement", ""))):
 			errors.append("calling \"%s\": settlement \"%s\" is not one of %s" % [bg, target.get("settlement", ""), SETTLEMENT_SIZES])
 	return errors
@@ -205,7 +215,10 @@ static func _retarget(world, c: Dictionary, from: Vector2) -> void:
 # looted; a monster band that is people (the copy is about deserters and debt
 # collectors, so bandits before wolves), any monster band when the map has no
 # people, never a raiding band (it is marching at a town and will be gone or
-# dead before the party gets there); a civilized settlement of the kind, or of
+# dead before the party gets there) — and when the template names `factions`,
+# only a band of one of those, or none at all: "deserters" are bandits or
+# soldiers, never a gnoll pack (the design audit, docs/audit-game-design.md
+# §6), so the soldier's calling waits for one rather than reading wrong; a civilized settlement of the kind, or of
 # a larger one when the map has none (a charlatan's old mark can live in a city).
 const PEOPLE := ["bandit", "goblinoid", "orc", "gnoll", "kobold", "cultist"]
 
@@ -220,9 +233,12 @@ static func _nearest(world, spec: Dictionary, from: Vector2):
 			pool = world.lairs.filter(func(l): return not l.looted)
 		"band":
 			var bands: Array = world.parties.filter(func(p): return not p.is_player and WorldAI.is_monster(p.faction) and String(p.ai.get("behavior", "")) != "raid")
-			pool = bands.filter(func(p): return PEOPLE.has(p.faction))
-			if pool.is_empty():
-				pool = bands
+			if spec.has("factions"):
+				pool = bands.filter(func(p): return spec["factions"].has(p.faction))
+			else:
+				pool = bands.filter(func(p): return PEOPLE.has(p.faction))
+				if pool.is_empty():
+					pool = bands
 		"settlement":
 			var civ: Array = world.settlements.filter(func(s): return not WorldAI.is_monster(s.faction))
 			var want: int = SETTLEMENT_SIZES.find(spec["settlement"])
@@ -350,17 +366,28 @@ static func describe(party, char_id: String) -> String:
 			return "%s — done" % t["title"]
 	return ""
 
-# What the tell and the done line call the target. A band has no sname: its id.
+# What the tell and the done line call the target. A band is named by
+# EnemyNames.band_name — and by the done line it is already off the map, so a
+# beaten one is found again in world.fallen (WorldAI.fell keeps its id, faction
+# and name there), which names it the same.
 static func target_name(party, world, char_id: String) -> String:
 	var c: Dictionary = party.callings.get(char_id, {})
 	if String(c.get("target_kind", "")) == "band":
-		return String(c["target_id"]).capitalize()
+		var band = _target(world, c)
+		if band == null:
+			for f in world.fallen:
+				if String(f["id"]) == String(c["target_id"]):
+					band = f
+		return EnemyNames.band_name(band if band != null else {"id": String(c["target_id"])}, world)
 	var target = _target(world, c)
 	return "" if target == null else target.sname
 
-# The audience template has no %s to fill.
+# The audience template has no %s to fill. A name that opens the line is
+# capitalised: "the Low Fen gnolls" is mid-sentence everywhere else.
 static func _fmt(text: String, name: String) -> String:
-	return text % name if "%s" in text else text
+	if not ("%s" in text):
+		return text
+	return text % (EnemyNames.upper_first(name) if text.begins_with("%s") else name)
 
 static func _target(world, c: Dictionary):
 	var pool: Array = {"landmark": world.landmarks, "lair": world.lairs, "band": world.parties,

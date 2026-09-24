@@ -15,6 +15,7 @@ const Callings = preload("res://core/callings.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const WorldSave = preload("res://core/world_save.gd")
 const Visit = preload("res://core/settlement_visit.gd")
+const EnemyNames = preload("res://core/enemy_names.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const RNG = preload("res://core/rng.gd")
 
@@ -168,7 +169,8 @@ func _init() -> void:
 	check(_card_id(main) == "calling-acolyte", "then the resolution, on its own card: %s" % _card_id(main))
 	if main._event_card != null:
 		var e: Dictionary = main._event_card._e
-		check(String(e.get("text", "")) == Callings.TEMPLATES["acolyte"]["done"] % shrine.sname, "the done line names the shrine")
+		check(String(e.get("text", "")) == Callings.TEMPLATES["acolyte"]["done"] % EnemyNames.upper_first(shrine.sname),
+			"the done line names the shrine, capitalised at the head of the line")
 		check(int(e.get("xp", 0)) == Callings.CALLING_XP and String(e.get("item_name", "")) != "", "the XP chip and the heirloom on the card")
 		check(String(e.get("kind", "")) == "good" and w.clock.is_paused(), "a good card, holding the clock")
 	check(party.stash_count(AMULET, true) == 1, "the amulet, identified, in the stash")
@@ -255,6 +257,9 @@ func _init() -> void:
 	await _finish(main, {"outcome": "Victory", "xp": 30, "gold": 5, "loot": [], "kills": [],
 		"deaths": [], "objective": {}})
 	check(party.callings[third.id]["state"] == "done", "the survivor's past completes")
+	var done_text := "" if main._calling_queue.is_empty() else String(main._calling_queue[-1][1].get("text", ""))
+	check(done_text.begins_with(EnemyNames.upper_first(EnemyNames.band_name(band2, w))) and not ("Deserters 2" in done_text),
+		"the done card names the beaten band by its name, not its id: %s" % done_text)
 	check(third.xp > xp_was, "...and is paid")
 	main._close_spoils()
 	await process_frame

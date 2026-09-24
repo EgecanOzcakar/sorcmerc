@@ -24,6 +24,7 @@ const WorldAI = preload("res://core/world_ai.gd")
 const WorldPath = preload("res://core/world_path.gd")
 const Regions = preload("res://core/regions.gd")
 const RNG = preload("res://core/rng.gd")
+const EnemyNames = preload("res://core/enemy_names.gd")
 
 # roles: the troop template; weight: relative frequency. `ai` is "hunt",
 # "patrol" (own faction's towns) or "caravan" (a town to another town, any
@@ -95,7 +96,7 @@ static func refill(world, now: float, rng) -> String:
 		return pos.distance_to(at) >= REFILL_GAP and not world.is_explored(pos))
 	if b == null or b.position.distance_to(at) > NEAR:
 		return ""
-	return "Word on the road: %s, %s of here." % [label(b), _compass(b.position - at)]
+	return "Word on the road: %s, %s of here." % [EnemyNames.band_name(b, world), _compass(b.position - at)]
 
 # The first "<kind>-<n>" nobody holds. The number used to be a count of the
 # live bands of that kind plus one, so with bandit-1 dead and bandit-2 alive the
@@ -138,9 +139,6 @@ static func spawn_one(world, rng, ok: Callable, monster_gap := SETTLEMENT_GAP):
 		b.ai["kind"] = kind["id"]
 		return b
 	return null
-
-static func label(band) -> String:
-	return String(band.ai.get("kind", band.faction)).replace("-", " ")
 
 static func _pick(rng) -> Dictionary:
 	var total := 0

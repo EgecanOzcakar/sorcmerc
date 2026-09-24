@@ -193,6 +193,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 			"is_player": p.is_player, "goal": _v(p.goal), "speed": p.speed,
 			"route": p.route.map(_v),   # #95: the legs still to walk
 			"ai": _enc(p.ai), "troops": p.troops,
+			"sname": p.sname,   # a pack's own name for it; "" is seeded (EnemyNames.band_name)
 		})
 	# T91: lairs weren't a thing when this format was designed -- an old save
 	# without a "lairs" key just loads with none (from_dict below), not a
@@ -242,6 +243,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"settlements": settlements,
 		"parties": parties,
 		"fallen": world.fallen.map(func(f): return {"id": f["id"], "faction": f["faction"],
+			"sname": String(f.get("sname", "")),
 			"position": _v(f["position"]), "troops": f["troops"], "at": f["at"]}),
 		"lairs": lairs,
 		"landmarks": landmarks,
@@ -280,6 +282,7 @@ static func from_dict(d: Dictionary):
 			p.route.append(_vec(wp))
 		p.speed = float(pd.get("speed", World.SPEED))
 		p.ai = _dec(pd.get("ai", {}))
+		p.sname = String(pd.get("sname", ""))   # an old save has none: every band is seeded
 		var troops: Array[Dictionary] = []
 		for t in pd.get("troops", []):
 			troops.append(t)
@@ -287,6 +290,7 @@ static func from_dict(d: Dictionary):
 		world.add_party(p)
 	for fd in d.get("fallen", []):   # #142; an old save has none
 		world.fallen.append({"id": String(fd["id"]), "faction": String(fd["faction"]),
+			"sname": String(fd.get("sname", "")),
 			"position": _vec(fd.get("position")), "troops": fd.get("troops", []), "at": float(fd.get("at", 0.0))})
 	for ld in d.get("lairs", []):
 		var l := World.Lair.new(String(ld["id"]), _vec(ld.get("position")),

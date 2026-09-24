@@ -13,7 +13,7 @@ const TIPS := [
 	"An open job's tile floats over what it names on the map. Off screen, look for the gold chevron at the frame's edge.",
 	"At night the party sees as far as the light it carries. Darkvision does not need it — and neither does whatever is out there.",
 	"A reaction is a question: [1] spends the slot, [2] or Space holds it. An opportunity attack costs nothing and fires on its own.",
-	"Moving out of a foe's reach draws its opportunity attack. The ⚠ on a hex is the engine telling you before you step.",
+	"Moving out of a foe's reach draws its opportunity attack. The ⚠ on a hex says so before you step.",
 	"A downed hero rolls death saves each turn. Damage to a downed body is a failed save; a melee hit from reach is two.",
 	"Concentration ends on a failed Con save when the caster is hit — DC 10, or half the damage if that is more.",
 	"A raid stands at the town's gate for eight hours before it lands. Turn it there and the town remembers.",

@@ -78,20 +78,20 @@ const WAYS := {
 		"win": "A friendly word exchanged, and the road goes on."},
 	"pass": {"label": "Move on", "role": "", "skills": [], "dc": 0,
 		"note": "Keep going without stopping to talk.",
-		"win": "The party keeps its own road; no words exchanged."},
+		"win": "The company keeps its own road; no words exchanged."},
 	"ambush": {"label": "Set an ambush", "role": "scout", "skills": ["stealth", "survival"],
 		"dc": AMBUSH_DC, "note": "Take the first round — or hand it to them.",
 		"win": "The party takes the first round.",
-		"lose": "THEY take the first round, and the fight happens anyway."},
+		"lose": "They take the first round, and the fight happens anyway."},
 	"avoid": {"label": "Slip away", "role": "scout", "skills": ["stealth"], "dc": AVOID_DC,
 		"note": "No fight, and nothing to show for it.",
 		"win": "No fight — and no XP, no loot, nothing.",
 		"lose": "Seen mid-slip: they take the first round, and you fight strung out — get everyone to the road at the far edge, or through them."},
 	"parley": {"label": "Parley", "role": "", "skills": ["persuasion", "deception"],
 		"dc": PARLEY_DC, "note": "Buy your way past. They will want something.",
-		"win": "No fight. The toll is %d gold, and there is no loot.",
+		"win": "No fight. The toll is %d ◉, and there is no loot.",
 		# A purse with nothing in it: _toll() caps at what the party actually has,
-		# so the line has to stop saying "0 gold" and say what that means.
+		# so the line has to stop saying "0 ◉" and say what that means.
 		"win_broke": "No fight. They take what you are carrying, which is nothing.",
 		"lose": "They were never going to be talked to. A plain, even fight.",
 		# A people that keeps an opinion hears about the offer, and the row
@@ -205,7 +205,7 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 		"scouted_ahead": false, "forced_ambush": false}
 	if way == "engage":
 		out["ok"] = true
-		out["text"] = "The party goes straight at them."
+		out["text"] = "The company goes straight at them."
 		return out
 	if way == "greet" or way == "pass":
 		out["ok"] = true
@@ -234,12 +234,12 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 			out["forced_ambush"] = not ok
 			out["text"] = ("%s takes them wide around it. Nobody ever knew they were there."
 				% who["cname"]) if ok else (
-				"%s is seen. They come in fast, and the party is strung out — the road is the far edge."
+				"%s is seen. They come in fast, and the company is strung out — the road is the far edge."
 				% who["cname"])
 		"ambush":
 			out["scouted_ahead"] = ok
 			out["forced_ambush"] = not ok
-			out["text"] = ("%s picks the ground and the party settles in to wait."
+			out["text"] = ("%s picks the ground and the company settles in to wait."
 				% who["cname"]) if ok else (
 				"%s moves too early. They see it coming and turn it around."
 				% who["cname"])
@@ -251,7 +251,7 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 				party.spend_gold(toll)
 				out["toll"] = toll
 				out["text"] = "%s talks them down. They take %s to have seen nobody." % [
-					who["cname"], ("%d gold" % toll) if toll > 0 else "nothing — the purse was empty"]
+					who["cname"], ("%d ◉" % toll) if toll > 0 else "nothing — the purse was empty"]
 			elif parley_costs_opinion(foe):
 				var faction := String(foe.faction)
 				FactionOpinion.lower(faction, FactionOpinion.PARLEY_REFUSED)

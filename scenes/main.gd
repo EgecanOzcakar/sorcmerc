@@ -711,9 +711,9 @@ func _deploy_menu() -> void:
 		opts.append([("Put %s back" % h.cname) if held else "Swap %s" % h.cname,
 			_pick_deploy.bind(h.id)])
 	if _deploy_pick == "":
-		_actor.text = "[b]Unseen — place the party.[/b]  Click a hero, then who they trade places with. Begin when you like it; the enemy loses its first round."
+		_actor.text = "[b]Unseen — place the party.[/b]  Click a merc, then who they trade places with. Begin when you like it; the enemy loses its first round."
 	else:
-		_actor.text = "[b]Unseen.[/b]  %s is picked up — click another hero to trade places, or click them again to put them back." \
+		_actor.text = "[b]Unseen.[/b]  %s is picked up — click another merc to trade places, or click them again to put them back." \
 			% _deploy_name(_deploy_pick)
 	opts.append(["Begin the ambush", func():
 		_deploy_pick = ""
@@ -1337,7 +1337,7 @@ func _slotted(h, opts: Array) -> Array:
 		out.append(["Back", _stop_viewing, "Back\nBack to whoever is acting.", back])
 	elif h.econ["action"] > 0 and not cb.is_over():
 		end_mark["armed"] = _armed == "end"
-		var end_opt := _confirm_opt(h, "end", "End turn (action unspent!)", _end_turn)
+		var end_opt := _confirm_opt(h, "end", "End turn (action unspent)", _end_turn)
 		end_opt.append("End turn\nYour action is still unspent.")
 		end_opt.append(end_mark)
 		out.append(end_opt)
@@ -1793,7 +1793,7 @@ static func _reveal_head(res: Dictionary) -> Array:
 		if not res["hit"]:
 			return ["MISS", Color("8a8a84")]
 		if res.get("crit", false):
-			return ["CRIT!" + tail, Color("ff6a4a")]
+			return ["CRIT" + tail, Color("ff6a4a")]
 		return ["HIT" + tail, Color("8dffb0")]
 	if res.get("saved", false):
 		return [("SAVED" + tail) if dmg > 0 else "SAVED", Color("8fb7d8")]
@@ -2325,7 +2325,7 @@ const COL_DICE := "#8fb7d8"
 const COL_NUM := "#ffd24a"
 
 static var _re_dice := RegEx.create_from_string(r"d20\[[^\]]*\]|\b\d+d\d+\b")
-static var _re_num := RegEx.create_from_string(r"\b(\d+)\s+(?:damage|HP|hp|gold|XP)\b")
+static var _re_num := RegEx.create_from_string(r"\b(\d+)\s+(?:(?:damage|HP|hp|gold|XP)\b|◉)")   # ◉: the coin (ui_icons.gd GP)
 static var _re_verb := RegEx.create_from_string(r"\b(CRITS?|crits?|hits?|misses|miss|moves|casts|uses|heals|healed|revives)\b")
 
 # `name_colors`: combatant name -> html colour. Returns bbcode for one log line.
@@ -2450,7 +2450,7 @@ func _finish() -> void:
 		# took the rest of this function with it — the XP line and the loot line
 		# below never printed in a played game. Headless and FAST set `result`
 		# straight away, which is the whole reason no test saw it.
-		_logbox.append_text("[color=#c9a45a]+%d XP, +%d gold.[/color]\n" % [outcome["xp"], outcome["gold"]])
+		_logbox.append_text("[color=#c9a45a]+%d XP, +%d ◉.[/color]\n" % [outcome["xp"], outcome["gold"]])
 		# What came off the bodies, by name and in its rarity colour. It goes
 		# into the shared stash either way (campaign.gd's finish_combat /
 		# world.gd's _bank) — but loot that lands silently is loot nobody knows
@@ -2507,7 +2507,7 @@ func _draw_wash(res: String) -> void:
 		var dslam := 1.0 + 2.2 * pow(1.0 - clampf(t / 0.30, 0.0, 1.0), 2)
 		Board._centered_on(_wash, "D E F E A T", mid, int(54 * fz * dslam),
 			Color(0.92, 0.22, 0.18, clampf(t / 0.12, 0.0, 1.0)))
-		Board._centered_on(_wash, "the party falls…", mid + Vector2(0, 46 * fz), int(16 * fz),
+		Board._centered_on(_wash, "the company falls…", mid + Vector2(0, 46 * fz), int(16 * fz),
 			Color(0.86, 0.74, 0.68, clampf((t - 0.6) / 0.7, 0.0, 1.0)))
 	else:
 		_wash.draw_rect(Rect2(Vector2.ZERO, _wash.size), Color(0.10, 0.09, 0.02, 0.55 * k))

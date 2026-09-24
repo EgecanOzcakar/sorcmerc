@@ -146,7 +146,7 @@
           "gives": {
             "opinion": -5
           },
-          "text": "−5 with every hero in the company who is not Greedy"
+          "text": "−5 with every merc in the company who is not Greedy"
         }
       ]
     },
@@ -515,7 +515,7 @@
           "gives": {
             "opinion": -5
           },
-          "text": "−5 with every hero in the company"
+          "text": "−5 with every merc in the company"
         }
       ],
       "camp": "%s explains, again, how the fight was won. Nobody asked."
@@ -887,7 +887,7 @@
       "text": "Something happened they cannot put down yet.",
       "kind": "wound",
       "lasts_days": 5,
-      "heals": "Five days (two for a Calm hero)",
+      "heals": "Five days (two for a Calm merc)",
       "effects": [
         {
           "gives": {

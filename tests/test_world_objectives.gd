@@ -95,7 +95,7 @@ func _init() -> void:
 	check(main._combat.spec["objective"]["kind"] == "breakout", "a failed watch is a breakout")
 	await _finish(main, {"outcome": "Victory", "xp": 30, "gold": 5, "loot": [], "kills": [], "deaths": [],
 		"objective": {"kind": "breakout", "done": true, "xp": 20}})
-	check(said(main._spoils_panel, "party got clear"), "the spoils page says so")
+	check(said(main._spoils_panel, "company got clear"), "the spoils page says so")
 	main._close_spoils()
 	await process_frame
 

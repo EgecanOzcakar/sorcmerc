@@ -161,7 +161,7 @@ static func spoils_line(o: Dictionary) -> String:
 	match String(o.get("kind", "")):
 		"hold": text = "the passage held" if done else "the passage was lost"
 		"rescue": text = "the captive is out" if done else "the captive was not saved"
-		"breakout": text = "the party got clear" if done else "nobody got clear"
+		"breakout": text = "the company got clear" if done else "nobody got clear"
 		"hunt": text = "the quarry is down" if done else "the quarry got away"
 		"escort": text = "the carter lived" if done else "the carter is dead"
 	var xp := int(o.get("xp", 0))

@@ -30,6 +30,7 @@ const WorldAI = preload("res://core/world_ai.gd")
 const Ach = preload("res://core/achievements.gd")
 const Ladder = preload("res://core/ladder.gd")
 const Contracts = preload("res://core/contracts.gd")
+const EnemyNames = preload("res://core/enemy_names.gd")
 
 # A fight pays XP at about 6.7x its gold (core/encounter.gd's XP_PER_POWER /
 # GOLD_PER_POWER); a quest pays less per coin because it also hands over gear
@@ -141,7 +142,7 @@ static func _world_quest_pool(world, giver_settlement) -> Array:
 	var pool: Array = []
 	for p in world.parties:
 		if not p.is_player and WorldAI.is_monster(p.faction):
-			pool.append({"kind": "hunt_party", "id": p.id, "name": p.id.capitalize(), "faction": p.faction})
+			pool.append({"kind": "hunt_party", "id": p.id, "name": EnemyNames.band_name(p, world), "faction": p.faction})
 	for s in world.settlements:
 		if s.id != giver_settlement.id and WorldAI.is_monster(s.faction):
 			pool.append({"kind": "raid_settlement", "id": s.id, "name": s.sname, "faction": s.faction})
@@ -156,9 +157,9 @@ static func _world_quest_pool(world, giver_settlement) -> Array:
 # save field) — 0 is the first job, each one after reads tougher and pays
 # more, same target kinds, just relabeled and better rewarded.
 const CHAIN_LABELS := {
-	"hunt_party": ["Hunt down the %s band", "Break the %s warband", "End the %s threat"],
-	"raid_settlement": ["Raid %s", "Sack %s", "Raze %s for good"],
-	"clear_lair": ["Clear out %s", "Purge %s", "Finish %s, once and for all"],
+	"hunt_party": ["Hunt down %s", "Break %s", "See %s off the roads"],
+	"raid_settlement": ["Raid %s", "Sack %s", "Break the gate at %s"],
+	"clear_lair": ["Clear out %s", "Clear %s out to the last room", "Make sure %s stays empty"],
 }
 
 # A lair whose raid stands on the giver's town (core/raids.gd) pays this much

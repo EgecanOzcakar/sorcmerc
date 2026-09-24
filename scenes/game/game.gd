@@ -45,6 +45,14 @@ const MODS_SCENE := "res://scenes/mods/mods.tscn"
 static func linear_campaign() -> bool:
 	return OS.get_environment("SORCMERC_LINEAR_CAMPAIGN") != ""
 
+# The developer's doors on the title screen — today only "Random battle" —
+# are shut for a player (the design audit, docs/audit-game-design.md §6.2: a
+# "(debug)" button is the machine talking in the fiction). SORCMERC_DEBUG=1
+# opens them. Read live, like the switch above. The tutorial's "Quick fight"
+# reaches the same screen and stays: it is a player's door with its own words.
+static func debug_tools() -> bool:
+	return OS.get_environment("SORCMERC_DEBUG") == "1"
+
 var _screen: Control = null      # whatever is on show right now
 # Which screen that is, in words, for the bug reporter: the routing table above
 # is the only thing that knows, and a report filed three screens later still
@@ -160,7 +168,8 @@ func show_title() -> void:
 	# and the panel both shipped with T19 and nothing ever opened it.
 	foot.add_child(_quiet("Achievements", func(): AchievementsOverlay.open(self)))
 	foot.add_child(_quiet("Report a bug", report_bug))
-	foot.add_child(_quiet("Random battle (debug)", show_random_battle))
+	if debug_tools():
+		foot.add_child(_quiet("Random battle (debug)", show_random_battle))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	foot.add_child(spacer)
@@ -363,7 +372,7 @@ func show_coop() -> void:
 	title.theme_type_variation = "Title"
 	col.add_child(title)
 	var tag := Label.new()
-	tag.text = "One party, two players. The host runs the road; you both fight."
+	tag.text = "One company, two players. The host runs the road; you both fight."
 	tag.theme_type_variation = "Serif"
 	tag.add_theme_color_override("font_color", Icons.COL_BODY)
 	col.add_child(tag)
@@ -393,7 +402,7 @@ func show_coop() -> void:
 		code.text_submitted.connect(func(_t): join.call())
 		row.add_child(_button("Join", join))
 		col.add_child(row)
-		col.add_child(_dim("Your friend's code. You play the heroes they hand you."))
+		col.add_child(_dim("Your friend's code. You play the mercs they hand you."))
 	else:
 		var code := Label.new()
 		code.text = " ".join(Coop.link.code.split(""))

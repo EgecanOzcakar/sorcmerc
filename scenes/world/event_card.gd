@@ -95,7 +95,7 @@ const UNKNOWN_GLYPH := "·"
 # rather than an empty gilt box, because a blank card over a paused map reads as
 # a crash and the player's only move is to quit.
 const NO_TITLE := "Something on the road"
-const NO_TEXT := "The party keeps walking."
+const NO_TEXT := "The company keeps walking."
 
 const MINUTES_PER_HOUR := 60.0
 
@@ -481,12 +481,12 @@ func _op(pos: Vector2, text: String, fs: int, col: Color, max_w: float) -> Dicti
 func _chips() -> Array:
 	var out: Array = []
 	# Signed rather than always "+": D3.1 put costs on the purse too (a ford that
-	# takes a pack, a toll post that is paid), and "+-40 gold" is not a number
+	# takes a pack, a toll post that is paid), and "+-40 ◉" is not a number
 	# anybody can read. Colour carries the sign as well, so the direction is
 	# legible before the digits are.
 	var gold := int(_num("gold"))
 	if gold != 0:
-		out.append({"text": "%+d gold" % gold,
+		out.append({"text": "%+d ◉" % gold,
 			"col": Icons.COL_GOLD if gold > 0 else Icons.COL_FOE})
 	var hurt := int(_num("hurt"))
 	if hurt > 0:

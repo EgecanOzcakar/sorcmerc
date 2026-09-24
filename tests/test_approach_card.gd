@@ -373,10 +373,10 @@ func _init() -> void:
 			check(int(o["toll"]) > 0 and String(o["win"]).find(str(int(o["toll"]))) >= 0,
 				"the parley names the actual toll (%s)" % o["win"])
 			check(String(o["win"]) in drawn(rc), "...on the card, before it is chosen")
-	# And an empty purse does not print "0 gold" at somebody.
+	# And an empty purse does not print "0 ◉" at somebody.
 	for o in copts:
 		if String(o["id"]) == "parley":
-			check(int(o["toll"]) == 0 and String(o["win"]).find("0 gold") < 0,
+			check(int(o["toll"]) == 0 and String(o["win"]).find("0 ◉") < 0,
 				"a party with nothing is told what that means (%s)" % o["win"])
 	check("Parley" in drawn(cc), "...and the fourth is the parley")
 	# thrun is the scout the orders below name, so approach.gd's `named` is true

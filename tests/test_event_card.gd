@@ -151,7 +151,7 @@ func _init() -> void:
 	var paid := good()
 	paid["gold"] = 37
 	g.show_event(paid)
-	check("+37 gold" in drawn(g), "gold is shown when it was paid")
+	check("+37 ◉" in drawn(g), "gold is shown when it was paid, beside its ◉")
 	check(chip_count(g) == lean_chips + 1, "...as exactly one chip")
 
 	var hurt := bad()
@@ -183,7 +183,7 @@ func _init() -> void:
 	var robbed := bad()
 	robbed["gold"] = -40
 	b.show_event(robbed)
-	check("-40 gold" in drawn(b), "gold taken renders as a subtraction, not as +-")
+	check("-40 ◉" in drawn(b), "gold taken renders as a subtraction, not as +-")
 	check(not ("+-" in drawn(b)), "...with no doubled sign anywhere on the card")
 
 	var mended := good()

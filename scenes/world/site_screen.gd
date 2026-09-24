@@ -107,7 +107,7 @@ const OUTCOMES := {
 		"sub": "It is still down there. By the time you come back, the rooms behind you will have filled in again.",
 		"btn": "Back to the map"},
 	"wiped": {
-		"head": "The party goes down in the dark.",
+		"head": "The company goes down in the dark.",
 		"sub": "What that costs is settled above ground.",
 		"btn": "Drag them out"},
 }

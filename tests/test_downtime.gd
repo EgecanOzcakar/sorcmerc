@@ -474,7 +474,7 @@ func test_pit() -> void:
 	party.gold = 50
 	r = Downtime.pit_result(party, city, w, 0, false, Downtime.pit_state(party, city, w)["week"])
 	check(r["purse"] == -50 and party.gold == 0, "a loss costs the bout's purse, to zero: the 50 the party had")
-	check("all the party had: 50 ◉ of a %d ◉ stake" % Downtime.PIT_PURSE[0] in r["text"] and not "-" in r["text"].get_slice("keeps", 1),
+	check("all the company had: 50 ◉ of a %d ◉ stake" % Downtime.PIT_PURSE[0] in r["text"] and not "-" in r["text"].get_slice("keeps", 1),
 		"...and the line says what moved, never a signed stake (%s)" % r["text"])
 	st = Downtime.pit_state(party, city, w)
 	check(not st["open"] and st["beaten"] == -1, "...and closes the bracket")

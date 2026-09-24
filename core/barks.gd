@@ -10,10 +10,10 @@ extends RefCounted
 const CHANCE_PCT := 20   # ~1 in 5 eligible triggers speak; more than that is spam
 
 const PARTY := {
-	"hit": ["That's one.", "Hold still!", "Felt that, did you?", "Keep them off Vera!",
+	"hit": ["That's one.", "Hold still!", "Felt that, did you?", "Keep them off the wounded!",
 		"Straight through the guard.", "Down you go — eventually."],
-	"crit": ["Right through the gap!", "Ha! Perfect.", "Bones don't bend that way.",
-		"Now THAT was a swing.", "Couldn't miss if I tried."],
+	"crit": ["Right through the gap!", "Found the gap.", "Bones don't bend that way.",
+		"That went in.", "Couldn't miss if I tried."],
 	"kill": ["One less.", "Stay down this time.", "Next.", "That's the last of your day.",
 		"Rest easy. Or don't."],
 	"low_hp": ["I'm hurt — cover me!", "That's a lot of blood. Mine.", "Someone patch me up!",
@@ -34,8 +34,8 @@ const FOE_GENERIC := {
 
 const FOE := {
 	"goblinoid": {
-		"hit": ["Gotcha, shiny one!", "Poke poke!", "Sharp, yes? Yes!"],
-		"crit": ["OOOH that squirted!", "Boss gonna love this!"],
+		"hit": ["Gotcha, shiny one!", "Stick it! Stick it!", "Sharp, yes? Yes!"],
+		"crit": ["That one leaks!", "Boss gonna love this!"],
 		"kill": ["Mine! I get the boots!", "Squish! Ha ha!"],
 		"low_hp": ["Owww! Not fair!", "Too big! TOO BIG!"],
 		"down": ["No fair… no fair…", "Tell… boss…"],
@@ -77,8 +77,8 @@ const FOE := {
 		"hit": ["Insect.", "You mar my scales?", "Small thing, small sting."],
 		"crit": ["Now you understand.", "Centuries against your moments."],
 		"kill": ["Your hoard is mine.", "Forgotten already."],
-		"low_hp": ["You DARE draw my blood?!", "This ends now, worm."],
-		"down": ["Impossible… mere… mortals…", "My hoard…"],
+		"low_hp": ["Blood. You will not do that twice.", "This ends now, worm."],
+		"down": ["Not… you…", "My hoard…"],
 		"victory": ["As it was always going to be.", "Kneel, or be eaten."],
 	},
 }

@@ -144,7 +144,7 @@ const CARDS := {
 	"shrine": [
 		{"id": "kneel", "label": "Kneel", "skills": ["religion"], "dc": 12,
 			"note": "Whoever kept this place, they kept it for travellers.",
-			"win": "A blessing: every hero fights the next fight with something extra.", "lose": "Nothing answers.",
+			"win": "A blessing: every merc in the company fights the next fight with something extra.", "lose": "Nothing answers.",
 			"reward": "blessing", "snare": "none"},
 		{"id": "offering", "label": "Leave an offering", "skills": [], "dc": 0,
 			"note": "%d ◉ on the stone. No roll.",
@@ -153,7 +153,7 @@ const CARDS := {
 		{"id": "rite", "label": "Say the rite", "skills": [], "dc": 0,
 			"gate": {"backgrounds": ["acolyte"], "classes": ["cleric", "paladin"]},
 			"note": "%s knows the words.",
-			"win": "A blessing: every hero fights the next fight with something extra.", "lose": "",
+			"win": "A blessing: every merc in the company fights the next fight with something extra.", "lose": "",
 			"reward": "blessing", "snare": "none"},
 	],
 	"stones": [
