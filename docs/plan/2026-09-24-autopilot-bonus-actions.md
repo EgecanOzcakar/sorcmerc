@@ -73,6 +73,17 @@ old-ruler numbers.
 - Every kit at levels 3 and 8: fights end, the same seed plays the same
   fight, and the Bonus Action share stays at or above 35%.
 
+**A robot race it exposed.** `drive_completionist`'s lair chapter picked an
+undiscovered lair, walked to it and pressed the lair button. A road event
+(`core/travel.gd`'s refugees and lore) can put the nearest undiscovered lair on
+the map during that walk. Arriving at a lair already discovered, the button is
+Enter, not Search, so the robot walked into the warren: "searching dragon-cave
+said ''", then four more failures. CI hit it once on this branch and passed on
+master 4 of 4 locally. Shorter fights move the clock, so the event now lands in
+that walk more often. The robot now looks again on arrival and tries the next
+hidden lair (up to three). Simulating the event reproduces CI's five failure
+lines exactly on the old robot and passes on the new one; 22 real runs pass.
+
 ### Still open
 
 - ~~The retune question~~ **settled, no knob moved.** `sweep_regions` with the

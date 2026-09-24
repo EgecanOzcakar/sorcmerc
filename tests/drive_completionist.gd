@@ -863,26 +863,51 @@ func _the_road() -> void:
 
 # --- chapter 4: the lair ------------------------------------------------------
 
+# How many hidden lairs the search may try before calling it (see _the_lair).
+const SEARCH_TRIES := 3
+
 func _the_lair() -> void:
 	# Two ways a lair gets onto the map and a completionist uses both: the
 	# Survival check out in the field, and the lead bought at the inn last
 	# chapter. The search goes first, because it needs a lair nobody has named
 	# yet and the lead names one.
-	var hidden = _nearest_hidden_lair()
-	if hidden == null:
-		fail("lair:search — every lair on the %s map was already on it" % MAP)
-	elif await _walk_to(hidden.position, hidden.id):
+	#
+	# The lair can be found on the way to it: a road event (core/travel.gd's
+	# refugees and lore) names the nearest undiscovered lair, and a walk is long
+	# enough for one to fire. Arriving at a lair something else has just put on
+	# the map, the button is Enter, not Search, and pressing it walked into the
+	# warren — the search "said nothing" and the tour was left inside a delve.
+	# That is the map working, not a door failing, so the robot looks again on
+	# arrival and moves on to the next hidden lair, a few times at most. Which
+	# walk a road event lands in follows the clock, which follows how long the
+	# fights before it took: it showed up once the party autopilot started
+	# spending its whole turn and those fights got shorter.
+	var named_first := 0
+	for _try in SEARCH_TRIES:
+		var hidden = _nearest_hidden_lair()
+		if hidden == null:
+			fail("lair:search — every lair on the %s map was already on it" % MAP)
+			break
+		if not await _walk_to(hidden.position, hidden.id):
+			break
 		await _step(4)
+		if hidden.discovered:
+			named_first += 1
+			print("  lair:search — %s was put on the map on the way there; trying the next hidden lair" % hidden.id)
+			continue
 		if screen._lair_btn == null or not screen._lair_btn.visible:
 			fail("lair:search — standing on %s offers no lair button" % hidden.id)
-		else:
-			screen._lair_msg.text = ""
-			screen._lair_btn.pressed.emit()
-			await _step(2)
-			# Whether the roll lands is the dice's business. That the button
-			# rolls at all, and says what it rolled, is this file's.
-			check("lair:search", "Survival" in screen._lair_msg.text,
-				"searching %s said '%s'" % [hidden.id, screen._lair_msg.text])
+			break
+		screen._lair_msg.text = ""
+		screen._lair_btn.pressed.emit()
+		await _step(2)
+		# Whether the roll lands is the dice's business. That the button
+		# rolls at all, and says what it rolled, is this file's.
+		check("lair:search", "Survival" in screen._lair_msg.text,
+			"searching %s said '%s'" % [hidden.id, screen._lair_msg.text])
+		break
+	if named_first == SEARCH_TRIES:
+		fail("lair:search — each of %d hidden lairs was put on the map by something else before the party reached it" % SEARCH_TRIES)
 
 	var known = _nearest_known_lair()
 	if not check("lair:found", known != null,
