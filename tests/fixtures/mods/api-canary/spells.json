@@ -1,0 +1,19 @@
+[
+  {
+    "id": "canary-hexbolt",
+    "name": "Canary Hexbolt",
+    "level": 1,
+    "school": "evocation",
+    "castingTime": "Action",
+    "range": "60 feet",
+    "duration": "Instantaneous",
+    "concentration": false,
+    "ritual": false,
+    "classes": [
+      "wizard",
+      "sorcerer"
+    ],
+    "description": "A bolt the colour of a warning.",
+    "mechanics": null
+  }
+]

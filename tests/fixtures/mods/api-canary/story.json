@@ -1,0 +1,222 @@
+{
+  "format": "sorcmerc-story",
+  "version": 1,
+  "title": "The Canary",
+  "synopsis": "Every condition and every effect a story may use, once.",
+  "cast": [
+    {
+      "id": "pip",
+      "name": "Pip",
+      "role": "Keeper of the Hold",
+      "home": "canary-hold",
+      "about": "Listens for trouble."
+    }
+  ],
+  "chapters": [
+    {
+      "id": "one",
+      "title": "The Hold",
+      "intro": "It begins.",
+      "beats": [
+        {
+          "id": "arrive",
+          "kind": "scene",
+          "speaker": "pip",
+          "when": {},
+          "title": "Pip",
+          "lines": [
+            "\"You came.\""
+          ],
+          "choices": [
+            {
+              "id": "yes",
+              "text": "We did.",
+              "then": {
+                "flags": [
+                  "met"
+                ]
+              }
+            },
+            {
+              "id": "pay",
+              "text": "For a price.",
+              "when": {
+                "gold": 0
+              },
+              "then": {
+                "gold": 10,
+                "flags": [
+                  "met"
+                ]
+              }
+            }
+          ],
+          "then": {
+            "journal": [
+              "Pip keeps the hold."
+            ],
+            "items": [
+              {
+                "id": "canary-draught",
+                "quantity": 1
+              }
+            ],
+            "opinion": [
+              {
+                "faction": "human",
+                "delta": 5
+              }
+            ],
+            "reveal_lair": "canary-crypt"
+          }
+        },
+        {
+          "id": "job",
+          "kind": "quest",
+          "when": {
+            "flag": "met"
+          },
+          "quest": {
+            "id": "canary-job",
+            "kind": "clear_lair",
+            "target_lair_id": "canary-crypt",
+            "title": "Quiet the Crypt",
+            "required": 1,
+            "reward": {
+              "gold": 50
+            }
+          }
+        },
+        {
+          "id": "everything",
+          "kind": "note",
+          "optional": true,
+          "when": {
+            "all": [
+              {
+                "flag": "met"
+              },
+              {
+                "flags": [
+                  "met"
+                ]
+              },
+              {
+                "not_flag": "never"
+              },
+              {
+                "beat": "arrive"
+              },
+              {
+                "chapter": "one"
+              },
+              {
+                "quest": "canary-job",
+                "state": "any"
+              },
+              {
+                "party_level": 1
+              },
+              {
+                "gold": 0
+              },
+              {
+                "has_item": "canary-draught"
+              },
+              {
+                "visited": "canary-hold"
+              },
+              {
+                "near": "canary-hold",
+                "within": 120
+              },
+              {
+                "lair_found": "canary-crypt"
+              },
+              {
+                "lair_cleared": "canary-crypt"
+              },
+              {
+                "region": "heartland"
+              },
+              {
+                "day": 1
+              },
+              {
+                "opinion": {
+                  "faction": "human",
+                  "atleast": 0
+                }
+              }
+            ],
+            "any": [
+              {
+                "flag": "met"
+              },
+              {
+                "flag": "never"
+              }
+            ],
+            "none": [
+              {
+                "flag": "never"
+              }
+            ]
+          },
+          "then": {
+            "xp": 100,
+            "clear_flags": [
+              "met"
+            ],
+            "quest": {
+              "id": "canary-extra",
+              "kind": "deliver_goods",
+              "target_settlement_id": "canary-camp",
+              "title": "A Letter",
+              "required": 1,
+              "reward": {
+                "gold": 20
+              }
+            },
+            "spawn_party": {
+              "id": "canary-late",
+              "near": "canary-hold",
+              "offset": [
+                60,
+                0
+              ],
+              "faction": "bandit",
+              "troops": [
+                {
+                  "role": "heavy",
+                  "level": 1
+                }
+              ]
+            },
+            "next_chapter": "two"
+          }
+        }
+      ],
+      "ends_when": {
+        "beat": "everything"
+      }
+    },
+    {
+      "id": "two",
+      "title": "After",
+      "beats": [
+        {
+          "id": "done",
+          "kind": "note",
+          "when": {},
+          "then": {
+            "end_story": true,
+            "journal": [
+              "It ends."
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

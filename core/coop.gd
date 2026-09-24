@@ -250,11 +250,37 @@ static func apply(cb, i: Dictionary) -> Dictionary:
 
 # Everything a desync would show up in, cheapest first: the rng state alone
 # catches nearly all of them, the rest says where.
+#
+# 2026-09-24: resource pools and what each status CARRIES, not just its name.
+# Most drift reaches the rng within a turn, but not all of it: a sorcery point
+# spent on one peer and not the other, a Metamagic armed with a different
+# option, a Rage's clock — none of those roll a die until later, and a status
+# payload that differs under the same name (Innate Sorcery's +1 on one side
+# only) never showed at all. A payload can hold a Combatant (Vex's target, a
+# hold's caster), whose printed form is its object id — different on every
+# peer — so _plain() writes a combatant as its id.
 static func state_hash(cb) -> int:
 	var parts: Array = [cb.rng._state, cb.turn_idx, cb.round_num, cb.zones.size()]
 	for c in cb.combatants:
-		parts.append([c.id, c.pos, c.hp, c.temp_hp, c.econ, c.statuses.keys(), c.slots, c.init_roll])
+		var pools := {}
+		for pid in c.pools:
+			pools[pid] = int(c.pools[pid].get("cur", 0))
+		parts.append([c.id, c.pos, c.hp, c.temp_hp, _plain(c.econ), _plain(c.statuses), c.slots, c.init_roll, pools])
 	return var_to_str(parts).hash()
+
+# A value as the other peer would print it: a combatant (anything with an id)
+# by its id, containers element by element, everything else as it is.
+static func _plain(v):
+	if v is Object:
+		return "@%s" % String(v.get("id")) if v.get("id") != null else "@" + v.get_class()
+	if v is Dictionary:
+		var out := {}
+		for k in v:
+			out[_plain(k)] = _plain(v[k])
+		return out
+	if v is Array:
+		return v.map(func(x): return _plain(x))
+	return v
 
 # --- the wire ---------------------------------------------------------------
 
