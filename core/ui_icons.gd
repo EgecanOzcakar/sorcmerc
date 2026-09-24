@@ -83,6 +83,15 @@ static func _font(kind: String) -> Font:
 			v.base_font = serif_file
 			v.variation_opentype = {"wght": w}
 			_fonts["serif%d" % w] = v
+		# The lore voice (scenes/skill_card.gd): the serif, slanted. Alegreya's
+		# italic is a separate file this project does not ship, so the slant is
+		# a shear on the roman — 0.2 is where it reads as italic without the
+		# letters starting to look pushed over.
+		var it := FontVariation.new()
+		it.base_font = serif_file
+		it.variation_opentype = {"wght": 400}
+		it.variation_transform = Transform2D(Vector2(1, 0), Vector2(0.2, 1), Vector2.ZERO)
+		_fonts["serif_it"] = it
 		for w in [["", 400], ["-Medium", 500], ["-Bold", 700]]:
 			var f: FontFile = load("res://assets/fonts/AlegreyaSans%s.ttf" % ("-Regular" if w[0] == "" else w[0]))
 			f.fallbacks = [fallback]
@@ -94,6 +103,9 @@ static func serif(weight := 400) -> Font:
 
 static func sans(weight := 400) -> Font:
 	return _font("sans%d" % weight)
+
+static func serif_italic() -> Font:
+	return _font("serif_it")
 
 # A flat leather block with a darker bottom edge — the button, the field, the
 # row. Radius 3 on anything you press, 0 on anything you read.
@@ -606,6 +618,114 @@ const CONDITION_ORDER := ["down", "unconscious", "paralyzed", "petrified", "stun
 static func condition_glyph(id: String) -> String:
 	return String(CONDITION_GLYPHS.get(id, "•"))
 
+# --- damage types and conditions: one colour each, everywhere ----------------
+# Fire is the same orange in the spell's hover card, the combat log, the item
+# card and the foe's resistance line, so a player learns the colour once and
+# reads it without the word. Tuned against COL_INK/COL_PANEL, the two grounds
+# they are drawn on: every one clears 4.5:1 on both (WCAG contrast, measured
+# 2026-09-24: worst 5.12:1, "down" on COL_PANEL).
+#
+# The three physical types are deliberately near-neutral steel. They are the
+# most common line in any log, and a log where every sword swing is a
+# different loud colour stops meaning anything; they still differ enough to
+# tell apart side by side. Healing is not a damage type but rides along, in
+# COL_PARTY's family, since a heal line sits right beside the hurt ones.
+const DAMAGE_COLORS := {
+	"acid": Color("a6d24a"),
+	"bludgeoning": Color("b8b2a6"),
+	"cold": Color("8ed3f0"),
+	"fire": Color("f08a3c"),
+	"force": Color("c792ff"),
+	"lightning": Color("7fb2ff"),
+	"necrotic": Color("9fc27a"),
+	"piercing": Color("c9c1ae"),
+	"poison": Color("7fcf5a"),
+	"psychic": Color("f08fcf"),
+	"radiant": Color("f5d76e"),
+	"slashing": Color("d2c3a2"),
+	"thunder": Color("8f9dff"),
+	"healing": Color("8fe0a0"),
+}
+# The fifteen 2024 conditions and the runtime flags CONDITION_GLYPHS carries.
+# Grouped by what they do to you, so related states share a family: control
+# (can't act) in cold blues, bodily hindrance in ambers, the mind in pinks and
+# violets, sense loss in greys, the good ones (hidden, dodging, helped) in
+# COL_ACCENT's verdigris.
+const CONDITION_COLORS := {
+	"blinded": Color("a3a3a3"),
+	"deafened": Color("a9b4c2"),
+	"charmed": Color("f08fcf"),
+	"frightened": Color("b99af0"),
+	"paralyzed": Color("8ed3f0"),
+	"petrified": Color("b8ab92"),
+	"stunned": Color("f5d76e"),
+	"incapacitated": Color("9fb0d8"),
+	"unconscious": Color("8f9dff"),
+	"down": Color("e06a58"),
+	"grappled": Color("e0a85a"),
+	"restrained": Color("e09a4a"),
+	"prone": Color("d8b37a"),
+	"poisoned": Color("7fcf5a"),
+	"exhaustion": Color("c79a72"),
+	"invisible": Color("bfe6ef"),
+	"hidden": Color("6fc0ae"),
+	"dodging": Color("6fc0ae"),
+	"helped": Color("8fe0a0"),
+	"reckless": Color("f08a3c"),
+	"sapped": Color("b99af0"),
+	"slowed": Color("9fb0d8"),
+}
+
+static func damage_color(kind: String) -> Color:
+	return DAMAGE_COLORS.get(kind.to_lower(), COL_TEXT)
+
+static func condition_color(id: String) -> Color:
+	return CONDITION_COLORS.get(id.to_lower(), COL_ACCENT)
+
+# "fire" as bbcode, in fire's colour. `text` defaults to the type itself.
+static func damage_bb(kind: String, text := "") -> String:
+	return "[color=%s]%s[/color]" % [damage_color(kind).to_html(false), kind if text == "" else text]
+
+static func condition_bb(id: String, text := "") -> String:
+	return "[color=%s]%s[/color]" % [condition_color(id).to_html(false), id if text == "" else text]
+
+# Where the words above sit in running prose — an SRD description, a log line:
+# [start, end, html colour] per whole-word, case-blind match. "down" and
+# "helped" are left out: they are the engine's names for a state, and in a
+# sentence they are just words ("calms down", "helped her up"). Returned as
+# spans rather than bbcode so the combat log's colorizer can merge them with
+# its own (names, dice) without two [color] tags landing on one word.
+static var _re_terms: RegEx = null
+
+static func term_spans(text: String) -> Array:
+	if _re_terms == null:
+		var words: Array = DAMAGE_COLORS.keys().filter(func(k): return k != "healing")
+		for k in CONDITION_COLORS:
+			if not k in ["down", "helped"]:
+				words.append(k)
+		_re_terms = RegEx.create_from_string("(?i)\\b(%s)\\b" % "|".join(words))
+	var out: Array = []
+	for m in _re_terms.search_all(text):
+		var w := m.get_string(1).to_lower()
+		var col: Color = DAMAGE_COLORS[w] if DAMAGE_COLORS.has(w) else CONDITION_COLORS[w]
+		out.append([m.get_start(1), m.get_end(1), "#" + col.to_html(false)])
+	return out
+
+# Plain text in, bbcode out, with every damage type and condition in its
+# colour. Square brackets in the text are escaped, so SRD prose can go
+# straight into a RichTextLabel.
+static func tint_terms(text: String) -> String:
+	var out := ""
+	var cut := 0
+	for s in term_spans(text):
+		out += _bb_escape(text.substr(cut, s[0] - cut))
+		out += "[color=%s]%s[/color]" % [s[2], _bb_escape(text.substr(s[0], s[1] - s[0]))]
+		cut = s[1]
+	return out + _bb_escape(text.substr(cut))
+
+static func _bb_escape(s: String) -> String:
+	return s.replace("[", "[lb]")
+
 # Every glyph a combatant's current statuses earn it, in CONDITION_ORDER.
 static func status_glyphs(c) -> String:
 	var out := ""
@@ -751,11 +871,16 @@ class ItemTile extends Button:
 		while not body.is_empty() and String(body[-1]).strip_edges() == "":
 			body.pop_back()
 		if not body.is_empty():
-			var txt := Label.new()
-			txt.text = "\n".join(body)
+			# Rich, so a weapon's "slashing" and a potion's "poisoned" wear the
+			# colours they wear everywhere else (DAMAGE_COLORS / CONDITION_COLORS).
+			var txt := RichTextLabel.new()
+			txt.bbcode_enabled = true
+			txt.fit_content = true
+			txt.scroll_active = false
+			txt.text = Icons.tint_terms("\n".join(body))
 			txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			txt.custom_minimum_size = Vector2(320, 0)
-			txt.add_theme_color_override("font_color", Icons.COL_TEXT)
+			txt.add_theme_color_override("default_color", Icons.COL_TEXT)
 			v.add_child(txt)
 		card.cmp = Label.new()
 		card.cmp.text = compare.strip_edges()
