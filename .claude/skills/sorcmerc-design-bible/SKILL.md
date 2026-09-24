@@ -56,7 +56,7 @@ Avoid epic-fantasy capitals-and-prophecy prose, jokes that break the scene, and 
 - **Figures are AI-generated 3D models**: Meshy text-to-3D, rigged, with an **Idle** clip, standing on a 3D board and a 3D overworld (`assets/figures/`, `assets/beasts/`, `assets/npcs/`, `assets/troops/`). The house prompt style is *"semi-realistic fantasy, muted earthy palette"*. Portraits are rendered from the same rigs (`scenes/portraits.gd`).
 - Icons are hand-authored SVG from `tools/gen_action_icons.py`, not an image model. Audio is procedural (`tools/gen_audio.py`).
 - **Provenance rule:** AI-generated assets live in their own directories, with a `PROVENANCE.md` giving the tool, model, date and prompt. This keeps Steam's AI-content disclosure answerable (`README.md`, "Assets and provenance").
-- A 2D cutout-rig direction was considered in chat and **dropped** (2026-09-24): the game stays 3D. `data/lpc/*.json` holds LPC layered-sprite recipes that no script loads.
+- A 2D cutout-rig direction was considered in chat and **dropped** (2026-09-24): the game stays 3D. The LPC layered-sprite recipes it left in `data/lpc/`, which no script loaded, were removed on 2026-09-24.
 
 ## Scope rules
 
