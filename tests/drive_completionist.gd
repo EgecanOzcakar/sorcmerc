@@ -63,6 +63,8 @@ const Travel = preload("res://core/travel.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const Rumors = preload("res://core/rumors.gd")
 const AI = preload("res://core/ai.gd")
+const Recruits = preload("res://core/recruits.gd")
+const Leveling = preload("res://core/leveling.gd")
 
 const DT := 0.1
 const PURSE := 4000          # see the header: enough to reach every counter
@@ -111,6 +113,7 @@ const REQUIRED := {
 	"town:steal": "stealing is offered, and only once per visit",
 	"town:haggle": "haggling is offered, and is spent once asked",
 	"town:sortparty": "the inn opens the party screen",
+	"town:hire": "someone looking for work at the inn is settled in and taken on, for the fee",
 	"town:rest": "a night at the inn spends the fee, the hours, and the wounds",
 	"town:rumor": "a lead bought at the inn puts a lair on the map",
 	"town:quest-take": "a posted job can be taken, and lands in the log as active",
@@ -736,6 +739,39 @@ func _the_inn(s) -> void:
 		await _step()
 		_goto_page("inn", "Inn", "town:inn")
 
+	# The common room (core/recruits.gd): take the first one looking for work,
+	# settle them in on their page — every choice the hire left open answered
+	# with its first free option, the way a player in a hurry would — and pay.
+	var looking: Array = Recruits.offers(s, screen.world, party)
+	if looking.is_empty():
+		fail("town:hire — nobody at the inn was looking for work")
+	else:
+		var size0: int = party.roster.size()
+		var gold1: int = party.gold
+		var fee: int = int(looking[0]["fee"])
+		if _must_press("Take them on", screen._visit_panel, "on the inn page"):
+			await _step()
+			var page = screen._party_overlay.get_child(0) if screen._party_overlay != null else null
+			if page == null or not page.has_method("set_recruit"):
+				fail("town:hire — Take them on opened no settle-in page")
+			else:
+				for _i in 60:
+					if Leveling.can_finalize(page.character()):
+						break
+					var key: String = String(Leveling.pending(page.character())[0]["key"])
+					var free: Array = _buttons(page).filter(func(b): return _answers(b, key))
+					if free.is_empty():
+						break
+					free[0].pressed.emit()
+					await _step()
+				if _must_press("Take them on", page, "on the settle-in page"):
+					await _step()
+					check("town:hire", party.roster.size() == size0 + 1 and party.gold == gold1 - fee
+						and screen._party_overlay == null,
+						"roster %d -> %d, paid %d (fee %d), page %s" % [size0, party.roster.size(), gold1 - party.gold, fee,
+							"closed" if screen._party_overlay == null else "still up"])
+		_goto_page("inn", "Inn", "town:inn")
+
 	# A lead on a lair: the second way a lair gets onto the map, and the one the
 	# next chapter leans on. The rows are sorted by distance, so the first Buy
 	# is the first lead.
@@ -767,6 +803,10 @@ func _the_inn(s) -> void:
 			"healed=%s, fee %d (wanted %d), clock +%.0f (wanted %.0f)" % [healed,
 				gold0 - party.gold, Visit.inn_cost(s),
 				screen.world.clock.elapsed - clock0, Visit.LONG_REST_MINUTES])
+
+# A settle-in page's option button for choice `key` that is not picked yet.
+static func _answers(b: Button, key: String) -> bool:
+	return String(b.get_meta("choice_key", "")) == key and not String(b.text).begins_with("●")
 
 func _the_board(s) -> void:
 	if not _goto_page("board", "Notice Board", "town:board"):

@@ -68,7 +68,11 @@ const DATA_FILES := ["classes.json", "subclasses.json", "species.json",
 	# a spell nobody could cast and a potion nobody could drink — the silent
 	# dead-end this allowlist exists to prevent, on the one axis it missed.
 	"effects/spells.json", "effects/potions.json", "effects/features.json",
-	"effects/conditions.json"]
+	"effects/conditions.json",
+	# The inns' hirelings (core/recruits.gd): what they are called, by species,
+	# and what they carry, by class — so a pack's new species is not a common
+	# room full of "default" names, and its new class does not sign on unarmed.
+	"recruit-names.json", "recruit-kits.json"]
 
 # The subset of DATA_FILES that is an object keyed by id rather than a list of
 # records, and whose values core/rules/effects.gd interprets. Listed apart

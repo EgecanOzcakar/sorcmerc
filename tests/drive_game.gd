@@ -1,5 +1,6 @@
 # T17/O8 — headless player for the whole game, from the entry scene: title → new
-# run → make a character → begin → the open world (normal play), then the same
+# run → make the founder (a new run makes one; the rest are hired at an inn) →
+# begin → the open world (normal play), then the same
 # walk again with SORCMERC_LINEAR_CAMPAIGN set, which is the only way to the old
 # linear route: campaign map → retire → run summary → hub → resume.
 # Presses real buttons on the real scenes; the fighting itself is drive_ui's and
@@ -14,6 +15,8 @@ const WorldSave = preload("res://core/world_save.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 
 const SLUG := "drive-gamesworth"
+const SLUG2 := "drive-secondrun"    # the second run's founder
+const Recruits = preload("res://core/recruits.gd")
 
 var main
 var _presses := 0
@@ -29,6 +32,7 @@ func _init() -> void:
 	CampaignSave.clear()                 # a saved run would change the title screen
 	WorldSave.clear()                    # ...and so would a saved open world
 	CharacterSave.delete(SLUG)           # and a leftover from an earlier walk
+	CharacterSave.delete(SLUG2)
 	main = load("res://scenes/game/game.tscn").instantiate()
 	root.add_child(main)
 	_run()
@@ -128,6 +132,14 @@ func _run() -> void:
 		fail("the created character never reached the roster")
 	if CharacterSave.load_slug(SLUG) == null:
 		fail("the created character never saved")
+	# A new run is a founding (core/recruits.gd): one hero made, and then the
+	# door shuts — everyone after is hired at an inn.
+	if not Recruits.hire_only(party_screen.party):
+		fail("a new run did not start under the hiring rule")
+	if party_screen.party.roster.size() != 1:
+		fail("a new run's roster is not just the founder (%d)" % party_screen.party.roster.size())
+	if buttons(main).any(func(b): return "Create new" in b.text):
+		fail("Create new is still open after the founder was made")
 
 	# --- into the open world (O8: the default) ----------------------------
 	# The party screen is freed the moment the map replaces it, so hold on to the
@@ -191,6 +203,27 @@ func _run() -> void:
 	if party_screen == null:
 		fail("New run did not open the party screen for the second playthrough")
 	else:
+		# The first run's founder is in the barracks and stays there: a new run
+		# founds its own company, and Begin waits until it has.
+		if party_screen.party.get_member(SLUG) != null or not party_screen.party.roster.is_empty():
+			fail("the barracks walked into a new run's roster")
+		press("Begin, small world")
+		await process_frame
+		if find_node(main, "res://scenes/world/world.gd") != null:
+			fail("a new run began with no founder")
+		press("Create new")
+		await process_frame
+		var second_creator = find_node(main, "res://scenes/creator/creator.gd")
+		if second_creator == null:
+			fail("the second run's party screen never opened the creator")
+			return _done()
+		second_creator.ch = Party.demo_roster()[0]
+		second_creator.ch.id = ""
+		second_creator.ch.cname = "Drive Secondrun"
+		second_creator._goto(5)
+		second_creator._next.pressed.emit()
+		_presses += 1
+		await process_frame
 		press("Begin, small world")   # the button's own words — see line 104
 		await process_frame
 		await process_frame
@@ -314,6 +347,7 @@ func _run() -> void:
 	CampaignSave.clear()
 	WorldSave.clear()
 	CharacterSave.delete(SLUG)
+	CharacterSave.delete(SLUG2)
 	_done()
 
 func _text_on_screen(needle: String, node: Node = null) -> bool:
