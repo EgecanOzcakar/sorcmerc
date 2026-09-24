@@ -8,7 +8,6 @@ const Character = preload("res://core/character.gd")
 const Presets = preload("res://core/presets.gd")
 const Ach = preload("res://core/achievements.gd")
 const Traits = preload("res://core/traits.gd")
-const Leveling = preload("res://core/leveling.gd")
 
 const MAX_ACTIVE := 4
 
@@ -107,9 +106,9 @@ func is_active(id: String) -> bool:
 	return id in active
 
 # The level the party is actually playing at: the highest among the <= 4 who
-# fight, and 1 while nobody is active. A character created later joins here
-# rather than at the start — join_level() below, and scenes/creator/creator.gd's
-# start_level.
+# fight. 1 while nobody is active, so the very first hero still starts where a
+# first hero starts. A character created later joins here rather than at 1 —
+# see scenes/creator/creator.gd's start_level.
 func active_max_level() -> int:
 	var best := 1
 	for id in active:
@@ -117,11 +116,6 @@ func active_max_level() -> int:
 		if ch != null:
 			best = maxi(best, ch.level())
 	return best
-
-# The level a hero created NOW joins at: the party's, and never under
-# Leveling.START_LEVEL, so the first hero of a run starts where every run starts.
-func join_level() -> int:
-	return maxi(Leveling.START_LEVEL, active_max_level())
 
 func activate(id: String) -> bool:
 	var ch = get_member(id)

@@ -409,21 +409,6 @@ func _catch_up_in_creator() -> void:
 	check(int(scr.ch.xp) == Leveling.xp_for_level(7), "with level 7's XP banked")
 	check(not Leveling.can_finalize(scr.ch), "and the levels above 3 still to choose")
 
-	# A fresh run starts at Leveling.START_LEVEL, presets included: they are
-	# level-3 builds cut to 2, the subclass waiting for the level that asks.
-	scr.set_start_level(Leveling.START_LEVEL)
-	scr._load_preset("ilsa")
-	check(scr.ch.level() == 2, "a preset for a fresh run starts at level 2 (got %d)" % scr.ch.level())
-	check(Leveling.can_finalize(scr.ch), "...with nothing left to choose")
-	check(int(scr.ch.xp) == Leveling.xp_for_level(2), "...and level 2's XP banked")
-	check(String(scr.ch.sheet().subclasses.get("cleric", "")) == "", "...and no subclass yet")
-	Leveling.add_level(scr.ch)
-	check(String(scr.ch.sheet().subclasses.get("cleric", "")) == "lightdomain",
-		"at level 3 its own subclass comes in")
-	scr.set_start_level(1)
-	scr._load_preset("ilsa")
-	check(scr.ch.level() == 2, "a standalone creator's preset is never under level 2 either")
-
 	# #200: a preset is gated like the class list beside it. Vera is a Fighter,
 	# which a fresh profile has not opened; loading her must not hand it over.
 	var Presets = load("res://core/presets.gd")

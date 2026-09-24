@@ -8,7 +8,6 @@
 #     -> docs/shots/audit-wizard-shelf.png     a wizard's simple weapons on the shelf (#192)
 #     -> docs/shots/audit-town-inn.png         the inn page fits a short window (#201);
 #                                              hub, market and board are written too
-#     -> docs/shots/start-level-2.png          a fresh run's first hero starts at level 2
 #     -> docs/shots/audit-settings.png         the settings note that points at the title
 #
 # 760 px tall on purpose: #201 is a short window, and that is where it shows.
@@ -61,12 +60,6 @@ func _init() -> void:
 	cr._goto(cr.STEPS.find("Equipment"))
 	await _frames(6)
 	await _save("docs/shots/audit-wizard-shelf.png")
-	# A fresh run's first hero: built out to Leveling.START_LEVEL, and told so.
-	cr.set_start_level(Party.new().join_level())
-	cr._set_class("cleric")
-	cr._goto(cr.STEPS.find("Class"))
-	await _frames(6)
-	await _save("docs/shots/start-level-2.png")
 	cr.queue_free()
 	await _frames(2)
 

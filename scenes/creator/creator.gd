@@ -758,19 +758,14 @@ func _set_species(sid: String) -> void:
 	ch.dirty()
 	_refresh()
 
-# The presets are level-3 builds with their subclass already chosen. A preset
-# built for a fresh run is cut to START_LEVEL: the subclass decision rides along
-# unused and answers the level-3 choice when it comes, so a new Vera is still a
-# Champion, just not yet. `levels` is 3 by default so the build-lock checks and
-# anything else that asks "what is this preset" see the whole build.
-static func _preset(which: String, levels := 3):
+static func _preset(which: String):
 	match which:
-		"vera": return Presets.vera(levels)
-		"pike": return Presets.pike(levels)
-	return Presets.ilsa(levels)
+		"vera": return Presets.vera()
+		"pike": return Presets.pike()
+	return Presets.ilsa()
 
 func _load_preset(which: String) -> void:
-	var pre = _preset(which, clampi(start_level, Leveling.START_LEVEL, 3))
+	var pre = _preset(which)
 	if build_lock_note(pre) != "":
 		return   # the button is greyed; this is the guard behind it
 	ch = pre
@@ -797,10 +792,7 @@ func _load_user_preset(slug: String) -> void:
 
 func _build_class() -> void:
 	_head("Class")
-	if start_level == Leveling.START_LEVEL and start_level > 1:
-		_note("New heroes start at level %d, with %d XP banked. The heartland's fights take them the rest of the way to 3, where the subclass comes in."
-			% [start_level, Leveling.xp_for_level(start_level)], COL_GOLD)
-	elif start_level > 1:
+	if start_level > 1:
 		_note("Joins at level %d to match the party, with %d XP banked. Catch-up levels are granted, not earned: none of that XP counts toward the lifetime XP that unlocks species and classes."
 			% [start_level, Leveling.xp_for_level(start_level)], COL_GOLD)
 	var entries: Array = []
