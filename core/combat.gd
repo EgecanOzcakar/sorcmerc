@@ -16,6 +16,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Potions = preload("res://core/potions.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Traits = preload("res://core/traits.gd")
+const Metamagic = preload("res://core/metamagic.gd")
 
 const FT_PER_HEX := 6  # adapter.gd's convention
 
@@ -648,6 +649,8 @@ func _font_of_magic(actor, v: Dictionary) -> Dictionary:
 #   careful    up to CHA-mod allies (min 1) in the area are spared outright
 #   subtle     no Counterspell: nobody sees it cast
 #   seeking    a missed spell attack rolls its d20 again, once
+# Those five are core/metamagic.gd's BUILT, the one list the creator's picker
+# also reads; an option not on it never takes a spell here.
 const METAMAGIC := "metamagic"
 
 func _armed(actor) -> String:
@@ -686,6 +689,8 @@ func _take_metamagic(caster, v: Dictionary) -> String:
 # The armed option `v` (already through _cast_view) would take, "" if none.
 func _metamagic_option(caster, v: Dictionary) -> String:
 	var opt := _armed(caster)
+	if not opt in Metamagic.BUILT:
+		return ""
 	var takes := false
 	match opt:
 		"quickened": takes = v.get("quickened", false)

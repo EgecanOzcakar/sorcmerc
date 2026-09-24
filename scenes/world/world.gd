@@ -75,7 +75,7 @@ const WorldChase = preload("res://core/world_chase.gd")
 const WorldFlee = preload("res://core/world_flee.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
-const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
+const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, split_xp and bank_win
 const Dice = preload("res://core/dice.gd")
 const ManualOverlay = preload("res://scenes/manual/manual.gd")
 const SettingsOverlay = preload("res://scenes/settings/settings.gd")
@@ -1948,25 +1948,14 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 	_show_spoils(result)
 	return result
 
-# O9 item 2: a won fight has to actually pay, or the run is a dead end. The same
-# four things core/campaign.gd's finish_combat() banks, minus the linear run's own
-# bookkeeping (node gold, achievements, autosave, the journal):
-#   XP  — Campaign._split_xp(), which is the even split *plus* T22's lifetime/class
-#         progression and the level-up chime. It only touches `party`, so a bare
-#         Campaign.new(party) is enough to reach it.
-#         ponytail: it is an instance method on a file O9 may not edit. Make it
-#         static (and drop the throwaway) the day campaign.gd is in scope.
-#   gold, loot, quest progress — party-level calls, made directly.
+# O9 item 2: a won fight has to actually pay, or the run is a dead end. The rule
+# is core/campaign.gd's bank_win — XP split, the purse with Greedy's cut
+# (rewriting result["gold"] to what was banked, for the spoils page), the loot
+# into the stash. What stays here is this screen's: the delve's running total,
+# the line that says what was taken, and the quest news the spoils page shows.
 func _bank(result: Dictionary) -> void:
-	Campaign.new(party)._split_xp(int(result.get("xp", 0)))
-	# #176 step 4: a Greedy hero goes through the pockets twice (+10%).
-	var gold: int = int(result.get("gold", 0))
-	gold = int(round(gold * (100 + Traits.party_pct(party, "gold")) / 100.0))
-	result["gold"] = gold   # the after-action page's tally says what was banked
-	party.add_gold(gold)
+	Campaign.bank_win(party, result)
 	var taken: Array = result.get("loot", [])
-	for item in taken:
-		party.stash_add(String(item))
 	# Issue #30: a delve is several fights on one set of resources, so what it
 	# paid is a running total, not the last room's.
 	if not _delve_haul.is_empty():
@@ -2180,7 +2169,7 @@ func _close_spoils() -> void:
 
 # --- issue #118: somebody can level up ----------------------------------
 #
-# A level used to arrive as one chime (campaign.gd's _split_xp) and a number on
+# A level used to arrive as one chime (campaign.gd's split_xp) and a number on
 # a screen two clicks away, so parties walked around owing themselves levels
 # for hours. It gets the after-action page's own treatment instead: the map
 # stops, a gilt panel says who is ready, and its button is the trip to the
@@ -2882,7 +2871,7 @@ func _on_site_done() -> void:
 		# out on the road rather than less. Banked through the same split every
 		# other XP award uses, and counted into the delve's own page below.
 		var bonus: int = Site.clear_xp(l)
-		Campaign.new(party)._split_xp(bonus)
+		Campaign.split_xp(party, bonus)
 		if not _delve_haul.is_empty():
 			_delve_haul["xp"] = int(_delve_haul.get("xp", 0)) + bonus
 			_delve_haul["cleared_xp"] = bonus
@@ -4290,7 +4279,7 @@ func _audience_action() -> void:
 	if gift != "":
 		party.stash_add(gift)
 		Campaign._note_rarity(gift)
-	Campaign.new(party)._split_xp(AUDIENCE_XP)
+	Campaign.split_xp(party, AUDIENCE_XP)
 	Ladder.hold_audience(s.faction)
 	Ach.collect("audiences", s.faction)
 	_calling_check("audience", s.faction, _leader())   # shown after the audience's own card

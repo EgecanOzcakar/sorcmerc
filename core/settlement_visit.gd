@@ -299,7 +299,7 @@ static func market(s, gap: float, battle: bool, opinion := 0.0) -> Dictionary:
 		markup *= BATTLE_MARKUP
 	# O7: what they think of you rides on top of the scarcity markup, and past
 	# REFUSE_TRADE they clear the stall rather than deal with you at all.
-	markup *= 1.0 - FactionOpinion.PRICE_SWING * opinion / FactionOpinion.RANGE
+	markup *= FactionOpinion.price_factor(opinion)
 	if opinion <= FactionOpinion.REFUSE_TRADE:
 		return {"steps": steps, "markup": markup, "battle": battle, "gap": gap,
 			"opinion": opinion, "refused": true, "stock": []}

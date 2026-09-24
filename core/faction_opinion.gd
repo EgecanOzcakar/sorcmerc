@@ -88,8 +88,11 @@ static func guards_attack(faction: String) -> bool:
 
 # What O6's markup gets multiplied by: dearer when they dislike you, cheaper when
 # they don't. One line, no branch — 0 opinion is x1.0, which is O6 unchanged.
-static func price_factor(faction: String) -> float:
-	return 1.0 - PRICE_SWING * get_opinion(faction) / RANGE
+# Takes the opinion itself, not the faction, because its one reader
+# (SettlementVisit.market) is pure on the number its caller looked up; the
+# faction form is price_factor(get_opinion(faction)).
+static func price_factor(opinion: float) -> float:
+	return 1.0 - PRICE_SWING * opinion / RANGE
 
 # --- per-frame upkeep --------------------------------------------------------
 

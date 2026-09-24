@@ -314,7 +314,7 @@ static func resolve(l, choice_id: String, party, world, rng) -> Dictionary:
 		e["text"] = String(c["win"]) % price if price > 0 else String(c["win"])
 		_open(String(c["reward"]), l, party, world, rng, e)
 		var xp: int = LANDMARK_XP * (ring(world, l.position) + 1)
-		Campaign.new(party)._split_xp(xp)
+		Campaign.split_xp(party, xp)
 		e["xp"] = xp
 		Ach.collect("landmarks", l.id)
 		Ach.collect("landmark_kinds", l.kind)

@@ -402,7 +402,7 @@ static func turn_in(party, quest: Dictionary, faction := "") -> bool:
 	party.add_gold(int(reward.get("gold", 0)))
 	# A finished job teaches something too: XP pegged to the purse, split the
 	# way a fight's is (load(), not preload — campaign.gd preloads this file).
-	load("res://core/campaign.gd").new(party)._split_xp(int(reward.get("gold", 0)) * XP_PER_GOLD)
+	load("res://core/campaign.gd").split_xp(party, int(reward.get("gold", 0)) * XP_PER_GOLD)
 	if reward.has("item_id"):
 		party.stash_add(String(reward["item_id"]))
 	# The two kinds that are paid for goods hand the goods over.

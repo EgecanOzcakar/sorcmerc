@@ -72,6 +72,10 @@ jobs:
             --search "merged:>$since" \
             --json number,title,body,mergedAt,labels,url,mergeCommit \
             > "$WORK/prs.json"
+          # The build log's entries for the window, as one file: the log is
+          # docs/expansion-plan.md up to 2026-09-24, then one file per entry
+          # under docs/plan/, and tools/plan_log.py prints both as one.
+          python3 tools/plan_log.py --since "${since%%T*}" > "$WORK/log.md"
           n=$(jq length "$WORK/prs.json")
           echo "window: since $since, $n merged PRs"
           if [ "$n" -eq 0 ]; then
@@ -97,8 +101,11 @@ jobs:
 
             1. Read prs.json. Where a title/body is unclear about what a player
                sees, read the merge commit with `git show --stat <sha>` or
-               `git show <sha> -- <path>`, and `docs/expansion-plan.md`'s dated
-               entries for the feature.
+               `git show <sha> -- <path>`, and the build log's dated entry for
+               the feature: `${{ env.WORK }}/log.md` holds every entry dated
+               in this window (the log is `docs/expansion-plan.md` up to
+               2026-09-24, then one file per entry in `docs/plan/`; read
+               those directly for anything older).
             2. Keep ONLY major gameplay changes and fixes: new mechanics, rules,
                classes/spells/monsters, combat or overworld behaviour, balance
                changes, UI a player uses, bugs a player could hit. Drop tests,

@@ -19,7 +19,11 @@ figures_screen.png*
 # shots_<name>/). One pattern, so a PR adding a shot script needs no line here:
 # a line per folder at this spot made every two such PRs conflict.
 shots_*/
-figures_idle_*.png
+# the six *.png.import files these two lines leave behind at the root were
+# committed with no PNG beside them; the trailing * keeps the next ones out
+figures_idle_*.png*
+# tests/shot_settlement_gallery.gd output
+/settlement_gallery_*.png*
 move_sequence.png
 idle_sequence.png
 # tests/shot_settlement_kit.gd output — dev-only renders, same as the rest here

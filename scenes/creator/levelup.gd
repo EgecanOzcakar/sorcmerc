@@ -391,6 +391,7 @@ func _choice_row(p: Dictionary, sheet, locked: bool) -> void:
 		for id in taken.keys():
 			if taken[id] == "already known":
 				taken.erase(id)
+	var unplayed := Creator.unbuilt(p)   # offered by the book, not played by the board (core/metamagic.gd)
 	for o in opts:
 		var count := picks.count(o["id"])
 		var b := Button.new()
@@ -403,6 +404,9 @@ func _choice_row(p: Dictionary, sheet, locked: bool) -> void:
 		elif taken.has(o["id"]):
 			b.disabled = true
 			b.tooltip_text = String(taken[o["id"]]).capitalize()
+		elif unplayed.has(o["id"]):
+			b.disabled = true
+			b.tooltip_text = String(unplayed[o["id"]])
 		b.pressed.connect(_pick.bind(p, o["id"]))
 		b.set_meta("choice_key", p["key"])   # which choice this answers, for tests
 		f.add_child(b)

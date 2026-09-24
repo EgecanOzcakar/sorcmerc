@@ -9,6 +9,7 @@ const Presets = preload("res://core/presets.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Dice = preload("res://core/dice.gd")
 const CampaignSave = preload("res://core/campaign_save.gd")
+const Traits = preload("res://core/traits.gd")
 const Lodge = preload("res://core/lodge.gd")
 
 var _pass = 0
@@ -33,6 +34,7 @@ func _init() -> void:
 	test_boss_pool()
 	test_treasure()
 	test_combat()
+	test_bank_win()
 	test_defeat()
 	test_rest()
 	test_rest_is_limited_per_run()
@@ -191,6 +193,43 @@ func test_treasure() -> void:
 	check(c.party.stash_count(String(n["item_id"])) == 1, "the treasure item lands in the stash")
 
 # --- combat ---------------------------------------------------------------
+
+# The open map's won fight (Campaign.bank_win — scenes/world/world.gd's _bank
+# until the design audit, docs/audit-game-design.md §8.6, moved the rule into
+# core): the even XP split with the remainder dropped, the purse with a Greedy
+# hero's +10% (rewritten into result["gold"] for the spoils page), the loot in
+# the stash, and nothing else — no quest progress, no deaths, no node gold.
+func test_bank_win() -> void:
+	var p := Party.new()
+	for ch in Presets.party():
+		p.add_member(ch)
+	for ch in p.roster:
+		Traits.set_family(ch, "temperament", "brave")   # nobody Greedy to start with
+	var n: int = p.party_characters().size()
+	var xp0: Array = p.party_characters().map(func(ch): return int(ch.xp))
+	var gold0: int = p.gold
+	var total_xp: int = 100 * n + (n - 1)   # a remainder, to be dropped
+	var result := {"outcome": "Victory", "xp": total_xp, "gold": 55, "loot": ["dagger", "dagger"],
+		"kills": ["kritch"], "deaths": []}
+	Campaign.bank_win(p, result)
+	var chars: Array = p.party_characters()
+	for i in n:
+		check(int(chars[i].xp) == int(xp0[i]) + 100, "%s gets an even share, the remainder dropped (%d)" % [chars[i].id, chars[i].xp])
+	check(p.gold == gold0 + 55 and int(result["gold"]) == 55, "no Greedy hero: the purse as it fell (%d)" % (p.gold - gold0))
+	check(p.stash_count("dagger") == 2, "the loot is in the stash")
+	check(int(result["xp"]) == total_xp, "the XP on the result is the fight's, untouched")
+
+	# A Greedy hero goes through the pockets twice; two of them do not stack.
+	Traits.set_family(p.party_characters()[0], "temperament", "greedy")
+	check(Campaign.fight_purse(p, 50) == 55, "Greedy: +10%% of 50 is 55 (%d)" % Campaign.fight_purse(p, 50))
+	check(Campaign.fight_purse(p, 45) == int(round(45 * 110 / 100.0)), "rounded the way _bank rounded it")
+	gold0 = p.gold
+	var r2 := {"outcome": "Victory", "xp": 0, "gold": 50, "loot": []}
+	Campaign.bank_win(p, r2)
+	check(p.gold == gold0 + 55 and int(r2["gold"]) == 55, "the purse banked is the Greedy one, and the page is told so")
+	Traits.set_family(p.party_characters()[1], "temperament", "greedy")
+	check(Campaign.fight_purse(p, 50) == 55, "a second Greedy hero adds nothing")
+	check(Campaign.fight_purse(p, 0) == 0, "an empty purse stays empty")
 
 func test_combat() -> void:
 	var c := _campaign()

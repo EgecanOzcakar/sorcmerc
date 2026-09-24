@@ -359,7 +359,7 @@ static func settle(world, lair, party, now: float):
 	var s = world.add_settlement(World.Settlement.new("way-" + lair.id, lair.position, home.faction, "camp",
 		waystation_name(world, lair)))
 	s.last_visited = now
-	Campaign.new(party)._split_xp(SETTLE_XP * (ring + 1))
+	Campaign.split_xp(party, SETTLE_XP * (ring + 1))
 	FactionOpinion.raise(home.faction, LIFTED_FOR)
 	Ladder.deed(home.faction, 3)   # ...and three deeds on the ladder — the biggest going
 	Ach.collect("waystations", s.id)

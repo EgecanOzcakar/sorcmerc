@@ -106,6 +106,7 @@ static func toggle_group(g: Array, picks_by_key: Dictionary, id: String) -> Dict
 
 static func taken_elsewhere(p: Dictionary, group: Array, points: Array, choices: Dictionary, sheet) -> Dictionary:
 	return ChoicePick.taken_elsewhere(p, group, points, choices, sheet)
+static func unbuilt(p: Dictionary) -> Dictionary: return ChoicePick.unbuilt(p)
 static func toggle(p: Dictionary, picks: Array, id: String) -> Array: return ChoicePick.toggle(p, picks, id)
 
 # T22 gate: "" when the meta-progression has this option open, otherwise the short
@@ -977,6 +978,9 @@ func _choice_widget(p: Dictionary, group: Array = [], points: Array = []) -> voi
 		for id in taken.keys():
 			if taken[id] == "already known":
 				taken.erase(id)
+	# What the board does not play yet is greyed whatever the count says: there
+	# is always a built option left to finish the list with (core/metamagic.gd).
+	var unplayed := unbuilt(p)
 	for o in opts:
 		var id := String(o["id"])
 		var count := picks.count(id)
@@ -990,6 +994,9 @@ func _choice_widget(p: Dictionary, group: Array = [], points: Array = []) -> voi
 		if count == 0 and taken.has(id):
 			b.disabled = true
 			b.tooltip_text = String(taken[id]).capitalize()
+		elif count == 0 and unplayed.has(id):
+			b.disabled = true
+			b.tooltip_text = String(unplayed[id])
 
 func _pick_group(group: Array, id: String) -> void:
 	var by_key := {}

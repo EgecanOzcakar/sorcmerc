@@ -67,7 +67,7 @@ Two house styles, one per dimension. Both are AI output; the README's provenance
 - **Icons:** the action, school, skill, class and path icons are hand-authored SVG from `tools/gen_action_icons.py`, no image model. The ~428 item icons and achievement badges are SDXL paintings (above).
 - **Audio** is ElevenLabs sound-effects takes, 120 of 123 files (`assets/audio/PROVENANCE.md`); `tools/gen_audio.py`'s offline synthesis is the fallback and makes two.
 - **Provenance rule:** AI-generated assets live in their own directories, with a `PROVENANCE.md` giving the tool, model, date and prompt, written the day the asset lands. Where something was not recorded, the file says so rather than guessing. This keeps Steam's AI-content disclosure answerable (`README.md`, "Assets and provenance").
-- A 2D cutout-rig direction was considered in chat and **dropped** (2026-09-24): the game stays 3D. `data/lpc/*.json` holds LPC layered-sprite recipes that no script loads.
+- A 2D cutout-rig direction was considered in chat and **dropped** (2026-09-24): the game stays 3D. The LPC layered-sprite recipes it left in `data/lpc/`, which no script loaded, were removed on 2026-09-24.
 
 ## Scope rules
 
