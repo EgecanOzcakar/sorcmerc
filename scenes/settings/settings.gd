@@ -1,4 +1,5 @@
-# The settings overlay: animation speed, default difficulty, clear autosave.
+# The settings overlay: animation speed, default difficulty, clear autosave (the
+# linear run's; an open-world run is deleted from the title screen).
 # Programmatic UI on the shared dark theme. Every control writes straight through
 # to core/settings.gd and saves; `changed` fires so a live screen can re-read.
 #
@@ -166,10 +167,19 @@ func _ready() -> void:
 	row.add_child(pick)
 	col.add_child(row)
 
-	var wipe := Button.new()
-	wipe.text = "Clear autosave"
-	wipe.pressed.connect(_clear_autosave)
-	col.add_child(wipe)
+	# Open-world runs each keep a slot of their own (core/world_save.gd) and are
+	# deleted one at a time on the title screen, beside the run they are. This
+	# button only ever knew the linear run's single rolling save.
+	if OS.get_environment("SORCMERC_LINEAR_CAMPAIGN") != "":
+		var wipe := Button.new()
+		wipe.text = "Clear autosave"
+		wipe.pressed.connect(_clear_autosave)
+		col.add_child(wipe)
+	else:
+		var where := Label.new()
+		where.text = "Saved runs: delete one from the title screen, with Delete… beside it."
+		where.theme_type_variation = "Dim"
+		col.add_child(where)
 
 	_note.theme_type_variation = "Dim"
 	col.add_child(_note)
@@ -212,19 +222,15 @@ func _apply() -> void:
 	Settings.save_settings(_s)
 	changed.emit()
 
-# T10 owns core/campaign_save.gd and may not have landed it yet, so this stays a
-# no-op with a note rather than a crash when the script (or its delete) is absent.
+# The linear run's one rolling save. clear() returns nothing, so this used to
+# read its result as false and say "No autosave to clear." after clearing one.
 func _clear_autosave() -> void:
-	var script = load(CAMPAIGN_SAVE) if ResourceLoader.exists(CAMPAIGN_SAVE) else null
-	var names := []
-	if script != null:
-		for m in script.get_script_method_list():
-			names.append(m["name"])
-	var fn: String = "delete" if "delete" in names else ("clear" if "clear" in names else "")
-	if fn == "":
-		_note.text = "No autosave system yet — nothing to clear."
+	var CampaignSave = load(CAMPAIGN_SAVE)
+	if not CampaignSave.has_save():
+		_note.text = "No autosave to clear."
 		return
-	_note.text = "Autosave cleared." if script.call(fn) else "No autosave to clear."
+	CampaignSave.clear()
+	_note.text = "Autosave cleared."
 
 func _unhandled_key_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and e.keycode == KEY_ESCAPE:

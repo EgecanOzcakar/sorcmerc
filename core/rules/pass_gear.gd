@@ -71,8 +71,20 @@ static func armor_ac(items: Array, dex_mod: int, armor_profs: Array):
 # is r.proficiencies["weapon"] or ["armor"] to match `kind`.
 static func proficient(kind: String, def: Dictionary, profs: Array) -> bool:
 	if kind == "weapon":
-		return str(def.get("weaponProficiencyId", "")) in profs or str(def.get("category", "")) in profs
+		return weapon_proficient(def, profs)
 	return _armor_prof(str(def.get("category", "")), profs)
+
+# The export names a weapon proficiency three ways: by category ("simple"), by
+# the weapon's own weaponProficiencyId ("longsword"), and — the druid, sorcerer
+# and wizard lists — by the weapon's id with its hyphen dropped ("dagger",
+# "quarterstaff", "lightcrossbow"). A dagger's weaponProficiencyId is "simple",
+# so reading only the first two left a wizard proficient with the light
+# crossbow alone and a druid with nothing but the scimitar: #192 saw it as a
+# one-item weapon shelf in the creator, and the fight saw it as a quarterstaff
+# swung without the proficiency bonus.
+static func weapon_proficient(w: Dictionary, profs: Array) -> bool:
+	return str(w.get("weaponProficiencyId", "")) in profs or str(w.get("category", "")) in profs \
+		or str(w.get("id", "")).replace("-", "") in profs
 
 static func _armor_prof(category: String, profs: Array) -> bool:
 	match category:
@@ -103,7 +115,7 @@ static func attacks(items: Array, abilities: Dictionary, pb: int, weapon_profs: 
 		elif w["range"] == "ranged":
 			ability = "dex"
 		var mod: int = int(abilities[ability]["mod"])
-		var proficient: bool = w["weaponProficiencyId"] in weapon_profs or w["category"] in weapon_profs
+		var proficient: bool = weapon_proficient(w, weapon_profs)
 
 		var to_hit: int = mod + (pb if proficient else 0)
 		if archery and w["range"] == "ranged":
@@ -186,7 +198,7 @@ static func weapon_masteries(bundles: Array, choices: Dictionary, weapon_profs: 
 		var w: Dictionary = Catalog.index("weapons.json")[wid]
 		if w["mastery"] == null:
 			continue
-		if w["weaponProficiencyId"] in weapon_profs or w["category"] in weapon_profs:
+		if weapon_proficient(w, weapon_profs):
 			eligible[wid] = w["mastery"]
 
 	var out := {}

@@ -7,6 +7,7 @@
 # GitHub Actions secret, never in this file.
 *.translation
 combat_screen.png*
+actionbar_screen.png*
 lpc_spike.png*
 lpc_spike_credits.png*
 __pycache__/
@@ -14,12 +15,13 @@ world_screen.png*
 world_turned.png*
 icon_sheet.png*
 figures_screen.png*
-shots_move/
-shots_summons/
+# Every dev screenshot script's output folder (tests/shot_*.gd write to
+# shots_<name>/). One pattern, so a PR adding a shot script needs no line here:
+# a line per folder at this spot made every two such PRs conflict.
+shots_*/
 figures_idle_*.png
 move_sequence.png
 idle_sequence.png
-shots_tmp/
 # tests/shot_settlement_kit.gd output — dev-only renders, same as the rest here
 kit_gallery_*.png*
 kit_variety.png*
@@ -40,9 +42,6 @@ height_board.png*
 combat_strip.png*
 # tests/shot_biomes.gd output
 /biome_*.png*
-/shots_biome_walk/
-# tests/shot_board_pan.gd output
-/shots_pan/
 
 # tests/shot_climb.gd output
 /climb_*.png*

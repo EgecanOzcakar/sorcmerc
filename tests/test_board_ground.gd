@@ -67,6 +67,11 @@ func test_pan_does_not_repaint() -> void:
 	main._zoom *= 1.4
 	board.tick(1.0 / 60.0)
 	check(board._ground_key != before, "a zoom repaints the ground")
+	# #194: and the tick itself re-bases the layer. Only _draw() used to, and
+	# a zoom with nothing animating left the fresh ground at the old offset.
+	check(board._ground.position.is_equal_approx(board._origin - board._ground_at)
+		and board._ground.position.is_equal_approx(Vector2.ZERO),
+		"a repaint is placed by the tick, without waiting for the board's draw (#194) (%s)" % board._ground.position)
 	board._layout(); board._place_layers(Vector2.ZERO)
 	check(board._ground.position.is_equal_approx(Vector2.ZERO),
 		"a repaint re-bases the layer, so it draws at the origin it was painted in")

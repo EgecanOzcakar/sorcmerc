@@ -22,6 +22,8 @@ const BASE_SFX_IDS := ["hit", "crit", "kill", "cast", "heal", "level_up", "victo
 	# below, the same way the weapon and school ids do.
 	"save_made", "save_failed", "down", "burst", "condition", "collapse",
 	"travel", "settlement", "shop", "quest_complete",
+	# The live rolls' die, once per tumble (scenes/dice_roll.gd).
+	"dice_rattle",
 	# The map's new features (docs/audio-pass.md): landmarks found, opened and
 	# searched for; the objective events in a fight; the threat clocks; the
 	# board. The landmark doors come in off Landmarks.DOOR_SFX below.

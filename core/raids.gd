@@ -79,18 +79,35 @@ const WAYSTATION_NAMES := ["Fairstead", "Newhold", "Hollowell", "Whitecross", "L
 static func is_settled(world, lair) -> bool:
 	return Regions.band_of(world, lair.position) in SETTLED_BANDS
 
-# The nearest civilized settlement inside reach, or null.
+# The nearest civilized settlement inside reach that no other lair has a claim
+# on, or null. A town holds one raider (`raided_by`), so a second lair landing
+# there used to overwrite the first: clearing either one lifted the town, and
+# the first lair's job lost its raid premium. A lair now makes for the next town
+# in reach instead, or waits for its next due time.
 static func target_for(world, lair):
 	var best = null
 	var best_d := INF
 	for s in world.settlements:
-		if WorldAI.is_monster(s.faction):
+		if WorldAI.is_monster(s.faction) or _claimed(world, s, lair):
 			continue
 		var d: float = s.position.distance_to(lair.position)
 		if d <= RAID_REACH and d < best_d:
 			best_d = d
 			best = s
 	return best
+
+# Another lair has this town: it has raided it and not been cleared, or its
+# band is out and marching on it or camped at the gate.
+static func _claimed(world, s, lair) -> bool:
+	if s.raided_by != "" and s.raided_by != lair.id:
+		return true
+	for l in world.lairs:
+		if l == lair or l.raid_band == "":
+			continue
+		var b = band_of(world, l)
+		if b != null and String(b.ai.get("target", "")) == s.id and String(b.ai.get("phase", "")) != "home":
+			return true
+	return false
 
 # Seeded off the lair, so the same warren always sets out on the same morning.
 static func due_at(lair) -> float:

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-A D&D 5.5e (2024) CRPG in Godot 4.7 / GDScript: character creation, hex tactical combat, and an open-world campaign layer. `README.md` is the orientation map; `docs/expansion-plan.md` is the authoritative dated log of what exists.
+A D&D 5.5e (2024) CRPG in Godot 4.7 / GDScript: character creation, hex tactical combat, and an open-world campaign layer. `README.md` is the orientation map; the build log is the authoritative dated record of what exists: `docs/expansion-plan.md` up to 2026-09-24, then one file per entry in `docs/plan/` (`python3 tools/plan_log.py` prints both as one).
 
 ## Commands
 
@@ -68,7 +68,8 @@ Tests are plain `extends SceneTree` scripts with their own `_pass`/`_fail` count
 - **Balance numbers in comments are measured, and the comment names the sweep that produced them.** `BOARD_SHELVES` in `core/encounter.gd`, the tier knobs in `core/scaler.gd`, `FT_PER_HEX` in `core/adapter.gd` and the win-rate table in `core/regions.gd` all carry their measurements in capitals. Changing one is a balance pass with a re-run sweep, never an eyeballed edit.
 - **`ponytail:` comments mark deliberate known simplifications** and usually state the condition under which to revisit. There are ~48. Don't silently "fix" one; if you do address it, remove the note.
 - **File headers are long, prose, and explain the *why*** — including what the file deliberately does not own. Match that density rather than writing terse headers.
-- **`docs/expansion-plan.md` is the source of truth** and gets an appended entry per feature, in its `## Title — subtitle (date)` format with a `### Still open` section for deferred work. `docs/improvements.md` marks itself superseded and is archive only.
+- **The build log is the source of truth, and every feature adds a NEW FILE to it: `docs/plan/YYYY-MM-DD-slug.md`**, in the `## Title — subtitle (date)` format with a `### Still open` section for deferred work (`docs/plan/README.md`). Never append to `docs/expansion-plan.md`: it is closed, because every PR appending to one file made every pair of open PRs conflict. `tests/test_plan_entries.gd` fails on an append. `docs/improvements.md` marks itself superseded and is archive only.
 - **Every visible change in a PR needs a screenshot** (`.github/PULL_REQUEST_TEMPLATE.md`). For a non-visual change — a rule, a save format, a balance number — say so and paste test output instead.
+- **Co-op lockstep and the modding API are promises, held by tests.** `tests/test_coop_kits.gd` fights every class in lockstep and `tests/test_mod_api.gd` freezes what a content pack may write (snapshot in `tests/fixtures/mod_api.json`, an API-1 canary pack in `tests/fixtures/mods/`). The `sorcmerc-compat` skill says what each needs from a change, and how to add vocabulary or state without breaking either.
 - **`.github/always-ask.txt` lists paths an automated fix may never touch**: `project.godot`, `export_presets.cfg`, `tools/bug-relay/`, `.github/`, plus the generic security/lockfile rows.
 - **The shipped game holds no credentials.** The bug reporter opens GitHub's own new-issue form in the player's browser; `core/bug_report.gd` argues the case at length. Don't add a token to anything that ships.

@@ -7,6 +7,7 @@ const Bundles = preload("res://core/rules/bundles.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Choice = preload("res://core/rules/choice.gd")
+const PassGear = preload("res://core/rules/pass_gear.gd")
 
 # {pending: Array, warnings: Array[String]}
 static func resolve(bundles: Array, choices: Dictionary, skill_prof: Dictionary,
@@ -87,7 +88,7 @@ static func resolve(bundles: Array, choices: Dictionary, skill_prof: Dictionary,
 	var eligible: Array = []
 	for wid in Catalog.index("weapons.json"):
 		var w: Dictionary = Catalog.index("weapons.json")[wid]
-		if w["mastery"] != null and (w["weaponProficiencyId"] in weapon_profs or w["category"] in weapon_profs):
+		if w["mastery"] != null and PassGear.weapon_proficient(w, weapon_profs):
 			eligible.append(wid)
 	var claimed: Array = []
 	for tg in Bundles.of_type(bundles, "weapon-mastery-choice"):

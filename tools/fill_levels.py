@@ -4,6 +4,11 @@
     python3 tools/fill_levels.py            # apply to data/classes.json + subclasses.json
     python3 tools/fill_levels.py --check    # exit 1 if anything here is not applied
 
+Also the half casters' first level: the export carries the 2014 table, where a
+paladin and a ranger cast nothing until level 2. The 2024 book gives both
+Spellcasting and two 1st-level slots at level 1 (CLASS_SLOTS, CLASS_GRANT_MOVES),
+and three sorcerer grants sit a level or more off the book (CLASS_FEATURE_MOVES).
+
 Idempotent: a feature already present is left alone, so this can be re-run
 after any future edit to confirm the tables still carry everything.
 
@@ -62,6 +67,39 @@ CLASS_FEATURES = {
 CLASS_ASI = {
     "fighter": [12, 14, 16, 19],
     "rogue": [12, 16, 19],
+}
+
+# The 2024 half-caster slot row the export lost. Every other row of both
+# tables already matches the book (checked 2026-09-24, levels 2-20); only
+# level 1 was [] — the 2014 table, where a half caster starts casting at 2.
+# {class_id: {level: slots by spell level}}.
+CLASS_SLOTS = {
+    "paladin": {1: [2]},
+    "ranger": {1: [2]},
+}
+
+# Grants the export files a level late. The 2024 ranger takes Spellcasting at
+# level 1, beside Favored Enemy, and Deft Explorer and the Fighting Style stay
+# at 2. The paladin's Spellcasting and spell pick are already at 1, so this is
+# the ranger catching up to the same shape. Choice keys ride along unchanged
+# (core/rules/choice.gd reads a key, not the level that granted it).
+# {class_id: {grant type: (from level, to level)}}.
+CLASS_GRANT_MOVES = {
+    "ranger": {"spellcasting": (2, 1), "spell-choice": (2, 1)},
+}
+
+# Single grants the export files on the wrong level, named by feature id or by
+# choice key. The sorcerer's are the 2024 book's: Sorcerous Restoration at 5
+# (the export had 20), Arcane Apotheosis at 20 (18), and the third pair of
+# Metamagic picks at 17 (18). Choice keys ride along unchanged.
+# {class_id: {feature id or choice key: (from level, to level)}}.
+CLASS_FEATURE_MOVES = {
+    "sorcerer": {
+        "sorcerer-sorcerous-restoration": (20, 5),
+        "sorcerer-arcane-apotheosis": (18, 20),
+        "feature-choice:class:sorcerer:4": (18, 17),
+        "feature-choice:class:sorcerer:5": (18, 17),
+    },
 }
 
 # --- subclass tiers -------------------------------------------------------
@@ -158,6 +196,34 @@ def fill_classes(classes, log):
             c["levels"][n - 1].extend(asi_grants(cid, nxt))
             log.append("%s level %d + ASI (key index %d)" % (cid, n, nxt))
             nxt += 1
+
+    for cid, rows in CLASS_SLOTS.items():
+        c = by_id[cid]
+        for n, slots in rows.items():
+            if c["spellSlots"][n - 1] == slots:
+                continue
+            log.append("%s level %d slots %s -> %s" % (cid, n, c["spellSlots"][n - 1], slots))
+            c["spellSlots"][n - 1] = list(slots)
+
+    for cid, moves in CLASS_FEATURE_MOVES.items():
+        c = by_id[cid]
+        for name, (frm, to) in moves.items():
+            def named(g):
+                return g.get("key") == name or (g["type"] == "feature" and g["feature"]["id"] == name)
+            moving = [g for g in c["levels"][frm - 1] if named(g)]
+            for g in moving:
+                c["levels"][frm - 1].remove(g)
+                c["levels"][to - 1].append(g)
+                log.append("%s %s moved %d -> %d" % (cid, name, frm, to))
+
+    for cid, moves in CLASS_GRANT_MOVES.items():
+        c = by_id[cid]
+        for gtype, (frm, to) in moves.items():
+            moving = [g for g in c["levels"][frm - 1] if g["type"] == gtype]
+            for g in moving:
+                c["levels"][frm - 1].remove(g)
+                c["levels"][to - 1].append(g)
+                log.append("%s %s moved %d -> %d" % (cid, gtype, frm, to))
 
 
 def fill_subclasses(subclasses, log):

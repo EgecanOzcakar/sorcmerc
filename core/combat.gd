@@ -389,12 +389,21 @@ static func _the(place: String) -> String:
 func _blockers(mover) -> Array:
 	return combatants.filter(func(c): return c.team != mover.team and c.conscious()).map(func(c): return c.pos)
 
+# Every hex a mover may cross but not stop in: anyone else still lying on the
+# board, not just the allies on their feet. A dying hero is still a creature in
+# that space. allies_of() skips them (it answers "who can help"), so a fighter
+# used to walk onto the rogue bleeding out under him. Two tokens on one hex
+# then made the cleric's click pick whichever came first in the list, and the
+# Cure Wounds meant for the rogue went to the fighter (#199). A corpse is an
+# object, not a creature, and can be stood on.
 func _ally_hexes(mover) -> Array:
-	return allies_of(mover).map(func(c): return c.pos)
+	return combatants.filter(func(c): return c != mover and not c.is_dead()).map(func(c): return c.pos)
 
+# Nobody but the dead may already be here. The same rule as _ally_hexes(): a
+# shove, a summon or a wave must not land on a downed hero either.
 func _hex_free(p: Vector2i, ignore = null) -> bool:
 	for c in combatants:
-		if c != ignore and c.conscious() and c.pos == p:
+		if c != ignore and not c.is_dead() and c.pos == p:
 			return false
 	return true
 
@@ -495,7 +504,7 @@ func begin_turn() -> void:
 	# druid who called it has already killed this turn.
 	_kills_this_turn = 0
 	begin_turn_for(c)
-	if c.is_down():
+	if c.is_down() and not c.is_stable():
 		_death_save(c)
 
 func begin_turn_for(c) -> void:
@@ -562,6 +571,146 @@ func _buff_flag(c, key: String) -> bool:
 			return true
 	return false
 
+# The save DC `v` is cast at by `caster` right now: the sheet's, plus what a
+# buff adds (Innate Sorcery's +1). One function, read by cast() and by the
+# action bar's preview, so the number on the button is the number rolled
+# against — the same rule to_hit_bonus() keeps for a swing.
+# Static, so the bar's static tooltip can ask it too.
+static func spell_dc(caster, v: Dictionary) -> int:
+	var dc := int(v.get("save_dc", caster.save_dc))
+	if String(v.get("kind", "")) == "spell":
+		for id in caster.statuses:
+			var s = caster.statuses[id]
+			if s is Dictionary:
+				dc += int(s.get("spell_dc_bonus", 0))
+	return dc
+
+# What a pool-spending verb costs out of its pool: one use, unless it says
+# otherwise (Font of Magic's slot creation, 2-7 sorcery points a slot).
+static func _pool_cost(v: Dictionary) -> int:
+	return maxi(1, int(v.get("pool_cost", 1)))
+
+# --- Font of Magic (2024) ----------------------------------------------------
+#
+# Two directions, one feature. "to_points" spends a slot of `from_slot` for
+# that many sorcery points and costs no action; "to_slot" is a Bonus Action
+# that spends `pool_cost` points (paid in perform(), as any pool is) and makes
+# one slot of `make_slot`. Neither is casting a spell: no slot rule, no
+# Counterspell. A created slot is an ordinary slot from then on; Adapter's
+# write_back carries one that is left unspent out of the fight (slots_used
+# goes negative) and a long rest clears it, which is RAW's "vanishes when you
+# finish a Long Rest".
+const FONT_POOL := "sorcery-points"
+
+func _font_ok(actor, v: Dictionary) -> bool:
+	match String(v.get("font", "")):
+		"to_slot":
+			var l := int(v.get("make_slot", 0))
+			return l >= 1 and l <= actor.slots.size()
+		"to_points":
+			var l := int(v.get("from_slot", 0))
+			if l < 1 or l > actor.slots.size() or actor.slots[l - 1] <= 0:
+				return false
+			var p: Dictionary = actor.pools.get(FONT_POOL, {})
+			# ponytail: RAW caps the points at the Sorcery Points maximum. A
+			# conversion that would overflow it is refused whole rather than
+			# topped up to the cap, so no slot is ever spent for points it loses.
+			return not p.is_empty() and int(p["cur"]) + l <= int(p["max"])
+	return false
+
+func _font_of_magic(actor, v: Dictionary) -> Dictionary:
+	if String(v.get("font", "")) == "to_slot":
+		var l := int(v["make_slot"])
+		actor.slots[l - 1] += 1
+		log.append("%s shapes %d sorcery points into a level-%d slot." % [actor.cname, _pool_cost(v), l])
+		return {"slot": l}
+	var l := int(v["from_slot"])
+	if not _font_ok(actor, v):
+		return {"error": "no room for the points"}
+	actor.slots[l - 1] -= 1
+	actor.pools[FONT_POOL]["cur"] = int(actor.pools[FONT_POOL]["cur"]) + l
+	log.append("%s burns a level-%d slot into %d sorcery points." % [actor.cname, l, l])
+	return {"points": l}
+
+# --- Metamagic (2024) --------------------------------------------------------
+#
+# A Metamagic button ARMS the next spell rather than being a second copy of
+# every spell per option: the bar stays one button per option known, the way
+# Divine Smite's once-buff sits beside the swing it rides on. Arming pays the
+# sorcery points (perform's pool spend, `pool_cost`); the next spell the
+# option can apply to takes it (_take_metamagic); an option still armed when
+# the turn ends is handed back (_refund_metamagic), since RAW spends the points
+# as the spell is cast and a spell never cast spent nothing. One option at a
+# time, as RAW's one-Metamagic-per-spell has it.
+#   quickened  an action spell costs a Bonus Action instead (_cast_view); after
+#              it, no leveled spell this turn — cantrip or not
+#   twinned    a spell that upcasts for more targets gets one more (_twin_step)
+#   careful    up to CHA-mod allies (min 1) in the area are spared outright
+#   subtle     no Counterspell: nobody sees it cast
+#   seeking    a missed spell attack rolls its d20 again, once
+const METAMAGIC := "metamagic"
+
+func _armed(actor) -> String:
+	var s = actor.statuses.get(METAMAGIC)
+	return String(s["option"]) if s is Dictionary else ""
+
+# The spell as it would be cast with the armed option: Quickened turns an
+# action's cost into a bonus action's, so the bar's affordability and the
+# resolver's spend both see the cost the cast will really have. A Quickened
+# spell is not on offer after a leveled spell this turn.
+func _cast_view(actor, v: Dictionary) -> Dictionary:
+	if String(v.get("kind", "")) != "spell" or _armed(actor) != "quickened" \
+			or String(v.get("cost", "")) != "action" or actor.econ.get("cast_leveled_spell", false):
+		return v
+	var q := v.duplicate()
+	q["cost"] = "bonus"
+	q["quickened"] = true
+	return q
+
+static func _twin_step(v: Dictionary) -> int:
+	var m: Dictionary = Effects.spell(String(v.get("spell", "")))
+	return int(m.get("upcast", {}).get("per_level", {}).get("targets", 0))
+
+static func _careful_count(caster) -> int:
+	return maxi(1, caster.sheet.mod("cha") if caster.sheet != null else 0)
+
+# Which option this cast takes, "" if none can apply (it stays armed).
+func _take_metamagic(caster, v: Dictionary) -> String:
+	var opt := _metamagic_option(caster, v)
+	if opt == "":
+		return ""
+	log.append("  (%s)" % String(caster.statuses[METAMAGIC].get("label", opt)))
+	caster.statuses.erase(METAMAGIC)
+	return opt
+
+# The armed option `v` (already through _cast_view) would take, "" if none.
+func _metamagic_option(caster, v: Dictionary) -> String:
+	var opt := _armed(caster)
+	var takes := false
+	match opt:
+		"quickened": takes = v.get("quickened", false)
+		"subtle": takes = true
+		"twinned": takes = _twin_step(v) > 0 and String(v.get("targeting", "")) == "enemy"
+		"careful": takes = String(v.get("save", "")) != "" and String(v.get("targeting", "")) in AREA_KINDS
+		"seeking": takes = v.has("attack_bonus")
+	return opt if takes else ""
+
+# The same question for a bar button, before anything is cast: which armed
+# option would ride on casting `v` now. Asks nothing but the rule, spends nothing.
+func metamagic_for(caster, v: Dictionary) -> String:
+	if String(v.get("kind", "")) != "spell":
+		return ""
+	return _metamagic_option(caster, _cast_view(caster, v))
+
+func _refund_metamagic(c) -> void:
+	var s = c.statuses.get(METAMAGIC)
+	if not s is Dictionary:
+		return
+	c.statuses.erase(METAMAGIC)
+	if c.pools.has(FONT_POOL):
+		c.pools[FONT_POOL]["cur"] = mini(int(c.pools[FONT_POOL]["max"]), int(c.pools[FONT_POOL]["cur"]) + int(s["sp"]))
+	log.append("%s lets %s go unspent." % [c.cname, String(s.get("label", "the Metamagic"))])
+
 # A condition applied with duration "round" lasts until the bearer's next turn:
 # one lost turn, never a permanent lockout (nothing else in the engine ends them).
 func _expire_conditions(c) -> void:
@@ -611,6 +760,7 @@ func _auto_stand(c) -> void:
 func end_turn() -> void:
 	var c0 = current()
 	c0.has_acted = true
+	_refund_metamagic(c0)
 	_repeat_saves(c0, "end_turn")
 	_rage_upkeep(c0)
 	_objective_touch(c0)
@@ -805,13 +955,18 @@ func hit_chance(attacker, target, opts := {}) -> float:
 	return p
 
 # Probability `target` FAILS a DC `dc` save (what a caster wants). UI-only.
-func save_fail_chance(target, dc: int, ability := "dex", ignore_cover := false) -> float:
-	var bonus: int = int(target.saves.get(ability, 0))
-	if is_cover(target.pos) and not ignore_cover:
-		bonus += 2
-	var p_make: float = clampf((21.0 - (dc - bonus)) / 20.0, 0.0, 1.0)
-	if _dodging(target) and ability == "dex":
-		p_make = 1.0 - (1.0 - p_make) * (1.0 - p_make)
+# It reads the same terms _saving_throw() rolls with (_save_terms), so the
+# percentage on a target is the save it will actually make. It used to count the
+# save bonus, cover and Dodge only: a blessed, aura'd, exhausted, restrained or
+# magic-resistant target was previewed as if none of that were there.
+func save_fail_chance(target, dc: int, ability := "dex", ignore_cover := false, magical := false, vs: Array = []) -> float:
+	var t: Dictionary = _save_terms(target, ability, ignore_cover, magical, vs, true)
+	if t["auto_fail"]:
+		return 1.0
+	var p_make: float = clampf((21.0 - (dc - int(t["bonus"]))) / 20.0, 0.0, 1.0)
+	match Dice.combine(t["adv"], t["dis"]):
+		Dice.ADV: p_make = 1.0 - (1.0 - p_make) * (1.0 - p_make)
+		Dice.DIS: p_make = p_make * p_make
 	return 1.0 - p_make
 
 # Probability a Shove or Grapple by `attacker` lands: the target fails its save
@@ -881,7 +1036,12 @@ const OFFERABLE := ["heal_self", "heal_ally", "self_buff", "ally_buff", "grant_a
 	# T-summon. A feature that puts a second token on the board — Primal
 	# Companion, Invoke Duplicity. It aims at nothing (targeting "self"): the
 	# arrival hex is the free one nearest its owner, as a spell's summon is.
-	"summon"]
+	"summon",
+	# Font of Magic (2024): a sorcerer's slots and sorcery points, one into the
+	# other. Two directions, one kind — see _font_ok / _font_of_magic.
+	"font_of_magic",
+	# Metamagic (2024): arms the next spell cast — see _cast_view / _take_metamagic.
+	"metamagic"]
 
 func _basic(id: String) -> Dictionary:
 	for b in BASIC:
@@ -1016,13 +1176,14 @@ func is_button(actor, v: Dictionary) -> bool:
 func _offerable(actor, v: Dictionary) -> bool:
 	if not actor.conscious():
 		return false
+	v = _cast_view(actor, v)
 	if not is_button(actor, v):
 		return false
 	if not can_afford(actor, v):
 		return false
 	if v.get("once_per", "") == "turn" and actor.econ.get("used", {}).has(v["id"]):
 		return false
-	if v.has("pool") and actor.pool_left(v["pool"]) <= 0 and not _flurry_swap(actor, v):
+	if v.has("pool") and actor.pool_left(v["pool"]) < _pool_cost(v) and not _flurry_swap(actor, v):
 		return false
 	var slot := int(v.get("slot_level", 0))
 	if slot > 0:
@@ -1042,6 +1203,8 @@ func _offerable(actor, v: Dictionary) -> bool:
 			and _free_near(actor.pos) != NOWHERE
 		"attack_modifier", "grant_action": return true
 		"escape": return _grappler_of(actor) != null
+		"font_of_magic": return _font_ok(actor, v)
+		"metamagic": return not actor.has(METAMAGIC)
 	match v.get("targeting", "self"):
 		"enemy": return enemies_of(actor).any(func(e): return legal_target(actor, v, e))
 		"ally": return combatants.any(func(a): return legal_target(actor, v, a))
@@ -1128,6 +1291,7 @@ func legal_target(actor, v: Dictionary, c) -> bool:
 
 # Run a verb. `target` is a Combatant, a direction (Vector2i) or null.
 func perform(actor, v: Dictionary, target = null) -> Dictionary:
+	v = _cast_view(actor, v)
 	var kind: String = v["kind"]
 	if on_perform.is_valid():
 		on_perform.call(actor, v, target)
@@ -1139,7 +1303,32 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 		return {"error": "nothing to shove them into"}
 	if kind in ["shove", "grapple"] and target != null and _size_rank(target.size) > _size_rank(actor.size) + 1:
 		return {"error": "too big to %s" % kind}
+	# A cast the resolver would refuse is refused HERE, before a thing is spent.
+	# cast() makes the same checks, but only after this function has already
+	# paid the action (and, for a teleport or a summon, the slot) — so a refused
+	# spell used to cost its caster the turn. The contract every caller leans on
+	# is "an error changed nothing": the co-op harness drops a refused intent
+	# instead of sending it (tests/coop_harness.gd), and the autopilot re-plans
+	# after one. Found by tests/test_coop_kits.gd, a War domain cleric whose
+	# second spell of a turn hit the bonus-action spell rule.
+	if kind == "spell":
+		var why := _cast_refusal(actor, v, target)
+		if why != "":
+			return {"error": why}
 	var swap := _flurry_swap(actor, v)
+	# The same contract for what a button draws on besides the economy: a pool
+	# too short, a slot a smite has none of, a Font of Magic conversion with
+	# no room. These were all asked after the Bonus Action was paid — Font of
+	# Magic's slot-making button, pressed after Metamagic had drained the
+	# points, cost the sorcerer the bonus action and made no slot.
+	if v.has("pool") and not swap and actor.pool_left(v["pool"]) < _pool_cost(v):
+		return {"error": "pool empty"}
+	if kind != "spell" and int(v.get("slot_level", 0)) > 0:
+		var sl := int(v["slot_level"])
+		if sl > actor.slots.size() or actor.slots[sl - 1] <= 0:
+			return {"error": "no slot"}
+	if kind == "font_of_magic" and not _font_ok(actor, v):
+		return {"error": "no room for the points" if String(v.get("font", "")) == "to_points" else "no such slot"}
 	if swap:
 		actor.econ["attacks_left"] = int(actor.econ["attacks_left"]) - 1
 	elif kind in ["shove", "grapple"]:
@@ -1150,9 +1339,9 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 	if v.get("once_per", "") == "turn":
 		actor.econ["used"][v["id"]] = true
 	if v.has("pool") and not swap:
-		if actor.pool_left(v["pool"]) <= 0:
+		if actor.pool_left(v["pool"]) < _pool_cost(v):
 			return {"error": "pool empty"}
-		actor.pools[v["pool"]]["cur"] = actor.pool_left(v["pool"]) - 1
+		actor.pools[v["pool"]]["cur"] = actor.pool_left(v["pool"]) - _pool_cost(v)
 	var slot := int(v.get("slot_level", 0))
 	if kind != "spell" and slot > 0:
 		# Divine Smite (2024) is a spell in all but the button: it spends the
@@ -1203,12 +1392,20 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			# adds a flat bonus to every swing until the fight ends, a Smite is
 			# dice on exactly one of them. Both are self_buffs; the difference is
 			# whether the blow that reads the buff also spends it.
-			actor.statuses[v.get("status", v["id"])] = {
+			var buff := {
 				"bonus_damage": int(v.get("bonus_damage", 0)), "resist": v.get("resist", []),
 				"once": v.get("once", false),
 				"dice_count": int(v.get("dice_count", 0)), "dice_sides": int(v.get("dice_sides", 0)),
 				# duration "rage" lapses on its own (2024 PHB) — see _rage_upkeep
-				"duration": String(v.get("duration", "")), "started_round": round_num, "active_round": round_num}
+				"duration": String(v.get("duration", "")), "started_round": round_num, "active_round": round_num,
+				# Innate Sorcery: what spell_dc() and a spell attack's roll read
+				"spell_dc_bonus": int(v.get("spell_dc_bonus", 0)),
+				"spell_attack_adv": v.get("spell_attack_adv", false)}
+			# A buff with a clock of its own (Innate Sorcery's minute) lapses the
+			# way a condition does, through _expire_conditions.
+			if int(v.get("rounds", 0)) > 0:
+				buff["until_tick"] = _tick() + int(v["rounds"]) * TICK_STRIDE
+			actor.statuses[v.get("status", v["id"])] = buff
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"ally_buff":
 			target.statuses[v.get("status", v["id"])] = {"dice_sides": int(v.get("dice_sides", 6))}
@@ -1223,6 +1420,11 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 				actor.econ["flurry"] = true   # what Hand of Healing may swap into (_flurry_swap)
 			log.append("%s — %s!" % [actor.cname, v["label"]])
 		"save_effect": return _save_effect(actor, v, target)
+		"font_of_magic": return _font_of_magic(actor, v)
+		"metamagic":
+			actor.statuses[METAMAGIC] = {"option": String(v["option"]), "sp": _pool_cost(v),
+				"label": String(v["label"])}
+			log.append("%s readies %s." % [actor.cname, v["label"]])
 		"summon":
 			var called = summon(actor, v)
 			if called == null:
@@ -1281,8 +1483,33 @@ func _hit_riders(attacker, target) -> void:
 
 # --- spells ------------------------------------------------------------
 
+# Why cast() would refuse this spell with this target, "" if it would not: the
+# checks it makes after perform() has paid, asked before. Kept beside cast() so
+# the two stay one rule.
+func _cast_refusal(caster, v: Dictionary, target) -> String:
+	var lvl := int(v.get("slot_level", 0))
+	if lvl > 0 and (lvl > caster.slots.size() or caster.slots[lvl - 1] <= 0):
+		return "no slot"
+	if lvl > 0 and v.get("cost", "") != "reaction" and not _leveled_spell_allowed(caster, v):
+		return "one leveled spell a turn beside a bonus-action one"
+	if v.get("teleport", false):
+		if not (target is Vector2i and target in board["hexes"] and passable(target) and _hex_free(target)
+				and Hex.distance(caster.pos, target) <= int(v.get("range", 1))):
+			return "not a free hex in range"
+	if v.has("summon") and _free_near(caster.pos) == NOWHERE:
+		return "nowhere to appear"
+	return ""
+
 # `target` is a Combatant (single / ally) or a direction (cone).
 func cast(caster, v: Dictionary, target) -> Dictionary:
+	# The DC a spell is cast at is stamped onto the verb here, once, so a zone
+	# or a concentration hold that rereads v["save_dc"] later keeps the DC it
+	# was cast with — Innate Sorcery lapsing mid-hold does not soften a Hold
+	# Person already landed.
+	var stamped := spell_dc(caster, v)
+	if stamped != int(v.get("save_dc", caster.save_dc)):
+		v = v.duplicate()
+		v["save_dc"] = stamped
 	# An upcast Hold Person and kin: the player hands over every target they
 	# picked, primary first. A single Combatant still auto-fills the rest
 	# (extra_targets) for the AI and the autopilot.
@@ -1299,9 +1526,23 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	# announced, and anything holding an answer gets it in before the slot is
 	# spent. A countered spell costs the action already paid for it and nothing
 	# more — the slot survives.
-	var answer := fire_reactions("spell_cast", {"caster": caster, "verb": v, "level": lvl})
+	# Metamagic (2024) is applied as the spell is cast; an armed option this
+	# spell cannot take stays armed for the next one.
+	var meta := _take_metamagic(caster, v)
+	if meta != "":
+		v = v.duplicate()
+		v["metamagic"] = meta
+		if meta == "twinned":
+			v["targets"] = int(v.get("targets", 1)) + _twin_step(v)
+		elif meta == "seeking":
+			v["seeking"] = true
+	# Subtle Spell: no verbal or somatic components, so nobody sees it to answer.
+	var answer := {"countered": false} if meta == "subtle" \
+		else fire_reactions("spell_cast", {"caster": caster, "verb": v, "level": lvl})
 	if answer["countered"]:
 		return {"countered": true, "by": answer["by"]}
+	if v.get("quickened", false):
+		caster.econ["cast_bonus_spell"] = true   # 2024: no leveled spell after a Quickened one, cantrip or not
 	if lvl > 0:
 		caster.slots[lvl - 1] -= 1
 		if v["cost"] == "bonus":
@@ -1373,12 +1614,17 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		return {"area": area, "caught": caught}
 	if not area.is_empty() or v.get("targeting", "") in AREA_KINDS:
 		log.append("%s casts %s — DC %d save." % [caster.cname, v["label"], dc])
+		var careful: int = _careful_count(caster) if v.get("metamagic", "") == "careful" else 0
 		var hit_any := false
 		for c in combatants:
 			if c == caster or not c.conscious() or not (c.pos in area):
 				continue
 			if v.get("spare_allies", false) and c.team == caster.team:
 				continue   # Spirit Guardians picks who it spares; here that is your side
+			if careful > 0 and c.team == caster.team:
+				careful -= 1   # Careful Spell: this one is spared, save made and no damage
+				log.append("  %s is spared (Careful Spell)." % c.cname)
+				continue
 			_spell_hit(c, v, notation, dc, caster)
 			hit_any = true
 		_destroy_in_area(area, caster)
@@ -1474,12 +1720,24 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 		var rays: int = int(v.get("rays", 1))
 		var hits := 0
 		var total := 0
+		# Innate Sorcery's Advantage. ponytail: the only source of advantage a
+		# spell attack reads — the conditions a weapon swing weighs (prone,
+		# dodging, invisible) still never reach a spell attack. Wire them here
+		# through Dice.combine when a spell-attack sweep can measure it.
+		var mode: int = Dice.ADV if caster != null and _buff_flag(caster, "spell_attack_adv") else Dice.NORMAL
 		for i in rays:
-			var r = Dice.d20(rng)
+			var r = Dice.d20(rng, mode)
 			var crit: bool = r.nat == 20
 			var ray_bonus: int = int(v["attack_bonus"]) \
 				+ int(Traits.roll(caster, "to_hit", self, c, String(v.get("damage_type", "")))["n"])   # #176
 			var hit: bool = crit or (r.nat != 1 and r.nat + ray_bonus >= effective_ac(c, caster))
+			if not hit and v.get("seeking", false):
+				v = v.duplicate()
+				v.erase("seeking")   # Seeking Spell: one reroll of the d20, on the first miss
+				log.append("  Seeking Spell — the d20 is rolled again.")
+				r = Dice.d20(rng, mode)
+				crit = r.nat == 20
+				hit = crit or (r.nat != 1 and r.nat + ray_bonus >= effective_ac(c, caster))
 			var d := Dice.roll(rng, notation, crit) if hit else 0
 			var tag := " ray %d/%d" % [i + 1, rays] if rays > 1 else ""
 			# The number on this line is what lands, not what was rolled: five
@@ -1703,6 +1961,12 @@ func _zone_touch(c) -> bool:
 # exhaustion is the odd shape: {"level": N} with per-level numbers, scaled here.
 
 func _cond_effects(c) -> Array:
+	return cond_sources(c).map(func(p): return p[1])
+
+# The same, with the status each effect came from: [[status id, effect], ...].
+# core/active_effects.gd reads it to say on the action bar WHY a swing has
+# Advantage, from exactly the entries the roll itself weighs.
+func cond_sources(c) -> Array:
 	var out: Array = []
 	for id in c.statuses:
 		if id == "dodging" and not _dodging(c):
@@ -1723,9 +1987,9 @@ func _cond_effects(c) -> Array:
 			var scaled := {}
 			for k in e["per_level"]:
 				scaled[k] = int(e["per_level"][k]) * lvl
-			out.append(scaled)
+			out.append([String(id), scaled])
 		else:
-			out.append(e)
+			out.append([String(id), e])
 	return out
 
 func hexes_from_ft(ft: int) -> int:
@@ -2766,7 +3030,10 @@ func _take_damage(target, dmg: int, dtype := "", crit := false) -> void:
 			_kill(target)   # RAW massive damage applies at 0 HP too
 			return
 		# Damage to a downed body is a failed death save; a crit (which any melee
-		# hit from reach is, via _auto_crit) is two.
+		# hit from reach is, via _auto_crit) is two. A stable body hit is no
+		# longer stable: it rolls again from its next turn (RAW).
+		if dmg > 0 and target.statuses.erase("stable"):
+			log.append("%s is no longer stable." % target.cname)
 		target.death_f += (2 if crit else 1) if dmg > 0 else 0
 		if target.death_f >= 3:
 			_kill(target)
@@ -2925,11 +3192,15 @@ func _death_save(c) -> void:
 	if c.death_f >= 3:
 		_kill(c)
 	elif c.death_s >= 3:
-		c.statuses.erase("down")
+		# RAW: three successes make you stable, not conscious. You stay down at 0
+		# HP and stop rolling. Healing, First Aid or a fight's end brings you
+		# round (adapter.write_back: 1 HP). Only a natural 20 stands you up on
+		# the spot. This used to revive at 1 HP too, which the field manual never
+		# said and every other rule here assumed it did not.
+		c.statuses["stable"] = true
 		c.death_s = 0
 		c.death_f = 0
-		c.hp = 1
-		log.append("%s comes round — three saves made, up at 1 HP." % c.cname)
+		log.append("%s is stable — three saves made, still out cold." % c.cname)
 		_survived_down(c)
 	else:
 		log.append("%s death save: rolled %d  [%d ok / %d fail]" % [c.cname, r.nat, c.death_s, c.death_f])
@@ -3241,29 +3512,52 @@ func act_smash(actor) -> Dictionary:
 # `vs`: the conditions a failure would bring, when the caller knows them — a
 # Brave hero saves against being frightened with advantage (#176).
 func _saving_throw(c, dc: int, ability := "dex", ignore_cover := false, magical := false, vs: Array = []) -> bool:
-	var adv: bool = _dodging(c) and ability == "dex"   # Dodge: DEX saves only (RAW)
+	var t: Dictionary = _save_terms(c, ability, ignore_cover, magical, vs, false)
+	if t["auto_fail"]:
+		log.append("%s can't resist — the %s save fails automatically." % [c.cname, ability.to_upper()])
+		return false
+	return Dice.d20(rng, Dice.combine(t["adv"], t["dis"])).nat + int(t["bonus"]) >= dc
+
+# Everything a save is rolled with, read once for the roll and the preview both:
+# {bonus, adv, dis, auto_fail}. `peek` is the preview's: it says nothing to the
+# log and spends nothing, so a Bardic Inspiration die is counted at its average
+# rather than consumed.
+func _save_terms(c, ability: String, ignore_cover: bool, magical: bool, vs: Array, peek: bool) -> Dictionary:
+	var out := {"bonus": 0, "adv": _dodging(c) and ability == "dex", "dis": false, "auto_fail": false}   # Dodge: DEX saves only (RAW)
 	var brave: Dictionary = Traits.save_mode(c, self, vs)
 	if brave["adv"]:
-		adv = true
-		_say_trait(c, {"n": 0, "who": brave["who"]}, "advantage")
-	var dis := false
+		out["adv"] = true
+		if not peek:
+			_say_trait(c, {"n": 0, "who": brave["who"]}, "advantage")
 	if magical:
 		for v in c.verbs:
 			if v["kind"] == "save_modifier" and String(v.get("vs", "")) == "magic" \
 					and String(v.get("self", "")) == "adv":
-				adv = true
+				out["adv"] = true
 	for e in _cond_effects(c):
 		if ability in e.get("auto_fail_saves", []):
-			log.append("%s can't resist — the %s save fails automatically." % [c.cname, ability.to_upper()])
-			return false
-		dis = dis or e.get("saves", {}).get(ability, "") == "dis"
+			out["auto_fail"] = true
+			return out
+		out["dis"] = out["dis"] or e.get("saves", {}).get(ability, "") == "dis"
 	var ts: Dictionary = Traits.roll(c, "save", self, null, "", ability)   # #176
-	_say_trait(c, ts, ability.to_upper() + " saves")
-	var bonus: int = int(c.saves.get(ability, 0)) + _consume_inspired(c) - _d20_penalty(c) \
+	if not peek:
+		_say_trait(c, ts, ability.to_upper() + " saves")
+	var inspired: int = _consume_inspired(c) if not peek else _inspired_average(c)
+	var bonus: int = int(c.saves.get(ability, 0)) + inspired - _d20_penalty(c) \
 		+ _buff_sum(c, "bonus_save") + aura_bonus(c, "save_bonus") + int(ts["n"])
-	if is_cover(c.pos) and not ignore_cover:
+	# Cover is +2 AC and +2 to DEX saves, nothing else (RAW, and combat-design.md
+	# §2's Alcove). It used to be every save, so a caster by a stall kept
+	# concentration on a CON save the rules give no help with, and a wall
+	# stiffened a mind against Hold Person.
+	if ability == "dex" and is_cover(c.pos) and not ignore_cover:
 		bonus += 2
-	return Dice.d20(rng, Dice.combine(adv, dis)).nat + bonus >= dc
+	out["bonus"] = bonus
+	return out
+
+func _inspired_average(c) -> int:
+	if not c.has("inspired"):
+		return 0
+	return int(round((int(c.statuses["inspired"].get("dice_sides", 6)) + 1) / 2.0))
 
 # Bardic Inspiration (and anything shaped like it): a one-shot die added to the
 # bearer's own next attack or save, auto-applied — this engine has no reaction

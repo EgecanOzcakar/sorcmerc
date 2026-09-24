@@ -24,6 +24,14 @@
 # walks round them: every kind moved, escort out of the band (38.8%, 31/80) —
 # monsters that used to stand against the camp's stakes now reach the carter.
 # CARTER_HP_BASE 10 -> 12 put it back. It was 47.5% before.
+# Re-measured 2026-09-24 after RAW death saves (three successes leave a hero
+# stable and down, not up at 1 HP): escort fell to 35.0% (28/80) and every
+# other kind stayed in the band. Bisected: with the old revive put back it is
+# 41.2% again, so it is that rule alone — a hero who used to stand up beside
+# the carter now stays on the ground. CARTER_HP_BASE 12 -> 15 put it back at
+# 57.5% (46/80, won 62/80). 14 was 37.5% and 16 58.8%: there is a cliff at 15,
+# the carter surviving one more goblin hit, so 15 is the smallest step in.
+#   hold 56.2%  rescue 53.8%  breakout 46.2%  hunt 41.2%  escort 57.5%
 # The band is 40–75%: an objective nearly free is a modifier, one nearly
 # impossible is a trap. Tuned by the knobs below and never by the roster.
 extends RefCounted
@@ -42,7 +50,7 @@ const CAPTIVE_HP := 4
 const EXIT_W := 3               # breakout / hunt: how many far-edge hexes are the road out
 const QUARRY_CORNERED := 4      # hunt: a hero this close makes the quarry fight rather than run
 const CARTER_AC := 11
-const CARTER_HP_BASE := 12
+const CARTER_HP_BASE := 15
 const CARTER_HP_PER_LEVEL := 2
 const BONUS_XP_SHARE := 0.5     # an objective done pays this share of the whole roster's worth in XP
 

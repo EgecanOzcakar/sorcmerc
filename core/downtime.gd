@@ -444,11 +444,18 @@ static func pit_result(party, s, world, bout: int, won: bool, week: int) -> Dict
 			text = "%s goes down in the %s bout. The purse is %d ◉, and the %s will remember the name." % [
 				name, ORDINAL[b], purse, Ladder.people(s.faction)]
 	else:
-		party.add_gold(-purse)
-		purse = -purse
+		# The coin that moved, not the nominal stake: a purse lighter than the
+		# stake gives up what it has, and the line says so. It used to print the
+		# signed stake ("keeps its stake: -40 ◉") whatever the party held.
+		var taken: int = clampi(purse, 0, party.gold)
+		party.add_gold(-taken)
 		beaten = -1
-		text = "%s is still standing when the party is carried out. The house keeps its stake: %d ◉, and the bracket is closed for the week." % [
-			name, purse]
+		var kept := ("its stake: %d ◉" % taken) if taken == purse \
+			else ("all the party had: %d ◉ of a %d ◉ stake" % [taken, purse]) if taken > 0 \
+			else "nothing: the party had no coin to lose"
+		purse = -taken
+		text = "%s is still standing when the party is carried out. The house keeps %s, and the bracket is closed for the week." % [
+			name, kept]
 	var pit: Dictionary = party.downtime.get("pit", {})
 	pit[s.id] = {"week": week, "beaten": beaten}
 	party.downtime["pit"] = pit

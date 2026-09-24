@@ -10,6 +10,7 @@ extends Control
 
 const Character = preload("res://core/character.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const ChoicePick = preload("res://core/rules/choice_pick.gd")   # the choice model, see below
 const Effects = preload("res://core/rules/effects.gd")
 const Save = preload("res://core/character_save.gd")
 const Ach = preload("res://core/achievements.gd")
@@ -31,185 +32,81 @@ const COL_TEXT := Icons.COL_TEXT
 const COL_DIM := Icons.COL_MUTED
 const COL_WARN := Icons.COL_FOE
 
-const ABILS := ["str", "dex", "con", "int", "wis", "cha"]
-const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
-const STANDARD_ARRAY := [15, 14, 13, 12, 10, 8]
-const PB_COST := {8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9}   # 2024 point buy
-const PB_BUDGET := 27
+# The choice model's constants, which live in core/rules/choice_pick.gd now.
+const ABILS := ChoicePick.ABILS
+const ABIL_NAME := ChoicePick.ABIL_NAME
+const STANDARD_ARRAY := ChoicePick.STANDARD_ARRAY
+const PB_COST := ChoicePick.PB_COST
+const PB_BUDGET := ChoicePick.PB_BUDGET
 const STEPS := ["Basics", "Class", "Abilities", "Skills & Background", "Equipment", "Review"]
 
-# ponytail: the export has no languages.json (SCHEMA gap) — the PHB standard list,
-# hardcoded. Delete this the day F1 exports one.
-const LANGUAGES := ["common", "common-sign", "draconic", "dwarvish", "elvish", "giant",
-	"gnomish", "goblin", "halfling", "orc", "abyssal", "celestial", "infernal",
-	"deep-speech", "primordial", "sylvan", "undercommon", "thieves-cant"]
-
 # =========================================================================
-# Choice model — static, UI-free, so tests/test_creator.gd drives the same code.
-# A pending entry from the resolver becomes: N picks from a list of options,
-# and a list of picks becomes a decision Dictionary for Character.decide().
+# Choice model — static and UI-free, in core/rules/choice_pick.gd since a core
+# module (core/recruits.gd) needed it. These wrappers keep Creator.* reading the
+# same for this screen, scenes/creator/levelup.gd and every test.
 # =========================================================================
 
-static func pick_count(p: Dictionary) -> int:
-	match p["type"]:
-		"asi": return int(p["points"])
-		"subclass", "lineage-choice", "feature-choice", "feat-choice": return 1
-		_: return int(p.get("count", 1))
+static func pick_count(p: Dictionary) -> int: return ChoicePick.pick_count(p)
+static func allows_repeat(p: Dictionary) -> bool: return ChoicePick.allows_repeat(p)
+static func max_per_option(p: Dictionary) -> int: return ChoicePick.max_per_option(p)
+static func options_for(p: Dictionary, sheet = null, picks: Array = []) -> Array: return ChoicePick.options_for(p, sheet, picks)
+static func label_for(p: Dictionary, id: String) -> String: return ChoicePick.label_for(p, id)
+static func decision_for(p: Dictionary, picks: Array) -> Dictionary: return ChoicePick.decision_for(p, picks)
+static func picks_from_decision(p: Dictionary, d) -> Array: return ChoicePick.picks_from_decision(p, d)
 
-# asi is the only category where the same option may be picked twice (+2 to one).
-static func allows_repeat(p: Dictionary) -> bool:
-	return p["type"] == "asi"
+# #191: several grants can each ask for the same kind of pick. A human's skill
+# and a class's skills, a species' language and a background's, a species
+# cantrip and a class's. Two lists with the same options are one choice in all
+# but bookkeeping, so they show as one list whose count is the sum; the picks
+# are still stored under each grant's own key (toggle_group fills the first
+# one with room). Lists that only overlap stay apart, and an option picked in
+# one is greyed in the others (taken_elsewhere), since the same proficiency
+# twice buys nothing.
+const MERGEABLE := ["skill-choice", "language-choice", "tool-choice", "spell-choice"]
 
-static func max_per_option(p: Dictionary) -> int:
-	return 2 if p["type"] == "asi" else 1
+# The choice points as display groups, each where its first member stood.
+static func choice_groups(points: Array, sheet = null) -> Array:
+	var groups: Array = []
+	var by_opts := {}
+	for p in points:
+		if not p["type"] in MERGEABLE:
+			groups.append([p])
+			continue
+		var ids: Array = options_for(p, sheet).map(func(o): return String(o["id"]))
+		ids.sort()
+		var k := "%s|%s" % [p["type"], ",".join(ids)]
+		if by_opts.has(k):
+			by_opts[k].append(p)
+		else:
+			var g: Array = [p]
+			by_opts[k] = g
+			groups.append(g)
+	return groups
 
-# [{id, label}] — `sheet` narrows the pools that depend on the current build
-# (expertise: only skills you are proficient in). `picks` is what this choice
-# has already been answered with; it only matters for expertise, where a pick
-# changes the very grade the pool is filtered on — see below.
-static func options_for(p: Dictionary, sheet = null, picks: Array = []) -> Array:
-	var ids: Array = []
-	match p["type"]:
-		"skill-choice":
-			ids = p["from"] if p["from"] != null else Catalog.skills().keys()
-		"saving-throw-choice", "asi", "ability-choice":
-			ids = p["from"] if p.get("from") != null else ABILS
-		"language-choice":
-			ids = p["from"] if p["from"] != null else LANGUAGES
-		"tool-choice":
-			ids = p["from"] if p["from"] != null else _all_tools()
-		"expertise-choice":
-			if p["from"] != null:
-				ids = p["from"].duplicate()
-			elif sheet != null:
-				# Proficient — or already expert BECAUSE OF THIS CHOICE. Issue
-				# #119: pass_profs grades a skill this choice picked "expert",
-				# not "prof", so reading only "prof" dropped a decided choice's
-				# own two picks off its own row. The heading said "✓ Expertise
-				# — pick 2 (2 chosen)" and not one button wore the mark, and
-				# clicking any of the rest evicted an invisible pick. A skill
-				# some OTHER grant made expert stays off the list: expertise
-				# twice over buys nothing.
-				for s in sheet.skill_prof:
-					if sheet.skill_prof[s] == "prof" \
-							or (sheet.skill_prof[s] == "expert" and s in picks):
-						ids.append(s)
-			else:
-				ids = Catalog.skills().keys()
-			ids.append_array(p.get("fromTools", []))
-		"fighting-style-choice", "weapon-mastery-choice", "damage-choice", "subclass", "lineage-choice":
-			for i in p["from"]:
-				if not i in p.get("already_chosen", []):
-					ids.append(i)
-		"spell-choice":
-			ids = Effects.pick_pool(p["spellList"], int(p["spellLevel"]))
-		"feature-choice":
-			for o in p["options"]:
-				ids.append(o["optionId"])
-		"feat-choice":
-			if p["from"] != null:
-				ids = p["from"]
-			else:
-				for f in Catalog.all("feats.json"):
-					if f["category"] == p["category"]:
-						ids.append(f["id"])
-	var out: Array = []
-	for i in ids:
-		out.append({"id": i, "label": label_for(p, i)})
-	return out
-
-static func label_for(p: Dictionary, id: String) -> String:
-	match p["type"]:
-		"asi", "ability-choice", "saving-throw-choice":
-			return ABIL_NAME.get(id, humanize(id))
-		"skill-choice":
-			return String(Catalog.skills().get(id, {}).get("name", humanize(id)))
-		"expertise-choice":
-			return String(Catalog.skills().get(id, {}).get("name", humanize(id)))
-		"spell-choice":
-			return String(Catalog.spell(id).get("name", humanize(id)))
-		"feat-choice":
-			return String(Catalog.feat_src(id).get("name", humanize(id)))
-		"subclass":
-			return String(Catalog.subclass_src(id).get("name", humanize(id)))
-		"weapon-mastery-choice":
-			return String(Catalog.weapon(id).get("name", humanize(id)))
-	return humanize(id)
-
-# picks -> the decision Character.decide() stores. Payload keys are the source's
-# (spec §2.1); never rename them.
-static func decision_for(p: Dictionary, picks: Array) -> Dictionary:
-	var t: String = p["type"]
-	match t:
-		"skill-choice": return {"type": t, "skills": picks.duplicate()}
-		"saving-throw-choice": return {"type": t, "savingThrows": picks.duplicate()}
-		"tool-choice": return {"type": t, "tools": picks.duplicate()}
-		"language-choice": return {"type": t, "languages": picks.duplicate()}
-		"ability-choice": return {"type": t, "abilities": picks.duplicate()}
-		"fighting-style-choice": return {"type": t, "styles": picks.duplicate()}
-		"weapon-mastery-choice": return {"type": t, "weaponIds": picks.duplicate()}
-		"damage-choice": return {"type": t, "damageTypes": picks.duplicate()}
-		"spell-choice": return {"type": t, "spellIds": picks.duplicate()}
-		"subclass": return {"type": t, "subclassId": picks[0] if picks else ""}
-		"lineage-choice": return {"type": t, "lineageId": picks[0] if picks else ""}
-		"feature-choice": return {"type": t, "optionId": picks[0] if picks else ""}
-		"feat-choice": return {"type": t, "featId": picks[0] if picks else ""}
-		"expertise-choice":
-			var sk: Array = []
-			var tl: Array = []
-			for i in picks:
-				if Catalog.skills().has(i):
-					sk.append(i)
-				else:
-					tl.append(i)
-			return {"type": t, "skills": sk, "tools": tl}
-		"asi":
-			var alloc := {}
-			for a in picks:
-				alloc[a] = int(alloc.get(a, 0)) + 1
-			return {"type": t, "allocation": alloc}
-	return {"type": t}
-
-# The inverse: a stored decision -> the pick list the UI toggles.
-static func picks_from_decision(p: Dictionary, d) -> Array:
-	if d == null or d.get("type") != p["type"]:
-		return []
-	match p["type"]:
-		"skill-choice": return d["skills"].duplicate()
-		"saving-throw-choice": return d["savingThrows"].duplicate()
-		"tool-choice": return d["tools"].duplicate()
-		"language-choice": return d["languages"].duplicate()
-		"ability-choice": return d["abilities"].duplicate()
-		"fighting-style-choice": return d["styles"].duplicate()
-		"weapon-mastery-choice": return d["weaponIds"].duplicate()
-		"damage-choice": return d["damageTypes"].duplicate()
-		"spell-choice": return d["spellIds"].duplicate()
-		"subclass": return [d["subclassId"]]
-		"lineage-choice": return [d["lineageId"]]
-		"feature-choice": return [d["optionId"]]
-		"feat-choice": return [d["featId"]]
-		"expertise-choice": return d["skills"] + d["tools"]
-		"asi":
-			var out: Array = []
-			for a in d["allocation"]:
-				for _i in int(d["allocation"][a]):
-					out.append(a)
+# One click on a merged list: a picked option comes off whichever grant holds
+# it; a new one goes to the first grant with room; with every grant full, the
+# first gives up its oldest pick, the way a single list evicts.
+static func toggle_group(g: Array, picks_by_key: Dictionary, id: String) -> Dictionary:
+	var out := {}
+	for p in g:
+		out[p["key"]] = (picks_by_key.get(p["key"], []) as Array).duplicate()
+	for p in g:
+		if id in out[p["key"]]:
+			out[p["key"]].erase(id)
 			return out
-	return []
-
-# Toggle one option: adds it, or removes it when already at its per-option cap.
-# Over-picking evicts the oldest, so there is never an invalid state to report.
-static func toggle(p: Dictionary, picks: Array, id: String) -> Array:
-	var out := picks.duplicate()
-	var n := out.count(id)
-	if n >= max_per_option(p):
-		while out.has(id):
-			out.erase(id)
-		return out
-	out.append(id)
-	while out.size() > pick_count(p):
-		out.remove_at(0)
+	for p in g:
+		if out[p["key"]].size() < pick_count(p):
+			out[p["key"]].append(id)
+			return out
+	var first: String = g[0]["key"]
+	if not out[first].is_empty():
+		out[first].remove_at(0)
+	out[first].append(id)
 	return out
+
+static func taken_elsewhere(p: Dictionary, group: Array, points: Array, choices: Dictionary, sheet) -> Dictionary:
+	return ChoicePick.taken_elsewhere(p, group, points, choices, sheet)
+static func toggle(p: Dictionary, picks: Array, id: String) -> Array: return ChoicePick.toggle(p, picks, id)
 
 # T22 gate: "" when the meta-progression has this option open, otherwise the short
 # line its greyed-out button wears. Costs come from core/progression.gd, never from
@@ -230,84 +127,40 @@ static func lock_note(kind: String, id: String) -> String:
 				return _price("class XP", Prog.subclass_remaining(id))
 	return ""
 
+# #200: the same gate, asked of a whole build. A preset used to skip it, so on a
+# fresh profile Vera handed over the Fighter and Pike the Rogue (and the Thief)
+# that the class list beside them still showed as locked. The first lock the
+# build runs into is the one it wears; "" when every part of it is open.
+static func build_lock_note(c) -> String:
+	var note := lock_note("species", c.species_id) if c.species_id != "" else ""
+	if note != "":
+		return note
+	var seen: Array = []
+	for l in c.levels:
+		var cid := String(l["class_id"])
+		if cid in seen:
+			continue
+		seen.append(cid)
+		note = lock_note("class", cid)
+		if note != "":
+			return note
+	for d in c.choices.values():
+		if d is Dictionary and d.get("type", "") == "subclass" and String(d.get("subclassId", "")) != "":
+			note = lock_note("subclass", String(d["subclassId"]))
+			if note != "":
+				return note
+	return ""
+
 static func _price(currency: String, remaining: int) -> String:
 	return "locked — %d more %s" % [remaining, currency] if remaining > 0 else "locked"
 
-# The few ids whose words are not their meaning: an acronym, a run-together
-# subclass, a tool with its apostrophe dropped. Everything else reads fine
-# capitalized.
-const PLAIN := {
-	"asi": "Ability score increase", "asi-choice": "Ability score increase",
-	"skill-choice": "Skill", "spell-choice": "Spell", "language-choice": "Language",
-	"lineage-choice": "Lineage", "feature-choice": "Feature", "fighting-style-choice": "Fighting style",
-	"expertise-choice": "Expertise", "weapon-mastery-choice": "Weapon mastery",
-	"cantrip-choice": "Cantrip", "feat-choice": "Feat", "subclass": "Subclass",
-	"calligrapherstools": "Calligrapher's tools", "thievestools": "Thieves' tools",
-	"artisanstools": "Artisan's tools", "gamingset": "Gaming set", "musicalinstrument": "Musical instrument",
-	"handcrossbow": "Hand crossbow", "lightcrossbow": "Light crossbow", "heavycrossbow": "Heavy crossbow",
-	"simple": "Simple weapons", "martial": "Martial weapons",
-	"light": "Light armor", "medium": "Medium armor", "heavy": "Heavy armor",
-	"medium-nonmetal": "Medium armor (non-metal)", "shields-nonmetal": "Shields (non-metal)",
-}
+static func spell_name(id: String) -> String: return ChoicePick.spell_name(id)
+static func humanize(id: String) -> String: return ChoicePick.humanize(id)
 
-static func humanize(id: String) -> String:
-	if PLAIN.has(id):
-		return PLAIN[id]
-	return id.replace("-", " ").replace("_", " ").capitalize()
-
-static func _all_tools() -> Array:
-	var out: Array = []
-	for f in ["backgrounds.json", "classes.json"]:
-		for r in Catalog.all(f):
-			for t in r.get("toolProficiencies", []):
-				if not t in out:
-					out.append(t)
-	return out
-
-# --- abilities ------------------------------------------------------------
-
-static func point_buy_cost(abilities: Dictionary) -> int:
-	var c := 0
-	for a in ABILS:
-		c += int(PB_COST.get(int(abilities[a]), 99))
-	return c
-
-# Quick-build order from the class catalog: highest ability gets the 15.
-static func recommended_array(class_id: String) -> Dictionary:
-	var q: Dictionary = Catalog.class_src(class_id).get("quickBuild", {}) if class_id != "" else {}
-	var order: Array = []
-	for a in q.get("highestAbility", []):
-		order.append(a)
-	if q.has("secondaryAbility") and not q["secondaryAbility"] in order:
-		order.append(q["secondaryAbility"])
-	for a in ABILS:
-		if not a in order:
-			order.append(a)
-	var out := {}
-	for i in order.size():
-		out[order[i]] = STANDARD_ARRAY[i]
-	return out
-
-# --- equipment ------------------------------------------------------------
-
-static func proficient_weapons(sheet) -> Array:
-	var profs: Array = sheet.proficiencies["weapon"]
-	var out: Array = []
-	for wid in Catalog.index("weapons.json"):
-		var w: Dictionary = Catalog.index("weapons.json")[wid]
-		if w["weaponProficiencyId"] in profs or w["category"] in profs:
-			out.append(wid)
-	return out
-
-static func proficient_armor(sheet) -> Array:
-	var profs: Array = sheet.proficiencies["armor"]
-	var out: Array = []
-	for aid in Catalog.index("armor.json"):
-		var a: Dictionary = Catalog.index("armor.json")[aid]
-		var cat: String = a["category"]
-		if cat in profs or (cat == "shield" and "shields" in profs):
-			out.append(aid)
-	return out
+static func point_buy_cost(abilities: Dictionary) -> int: return ChoicePick.point_buy_cost(abilities)
+static func recommended_array(class_id: String) -> Dictionary: return ChoicePick.recommended_array(class_id)
+static func proficient_weapons(sheet) -> Array: return ChoicePick.proficient_weapons(sheet)
+static func proficient_armor(sheet) -> Array: return ChoicePick.proficient_armor(sheet)
 
 const MAX_WEAPONS := 2
 
@@ -634,7 +487,7 @@ func _build_basics() -> void:
 	var pf := _flow()
 	for pre in [["Vera Kord (Fighter 3)", "vera"], ["Pike Sallow (Rogue 3)", "pike"],
 			["Ilsa Vane (Cleric 3)", "ilsa"]]:
-		_opt(pf, pre[0], false, func(): _load_preset(pre[1]))
+		_gate(_opt(pf, pre[0], false, func(): _load_preset(pre[1])), build_lock_note(_preset(pre[1])))
 	# #104: the player's own, saved from the Review step
 	var mine: Array = Save.list_presets()
 	if not mine.is_empty():
@@ -644,8 +497,8 @@ func _build_basics() -> void:
 			var pre = Save.load_preset(slug)
 			if pre == null:
 				continue
-			_opt(mf, "%s (%s %d)" % [pre.cname, humanize(pre.class_id()), pre.level()], false,
-				func(): _load_user_preset(slug))
+			_gate(_opt(mf, "%s (%s %d)" % [pre.cname, humanize(pre.class_id()), pre.level()], false,
+				func(): _load_user_preset(slug)), build_lock_note(pre))
 
 func _set_species(sid: String) -> void:
 	if ch.species_id == sid:
@@ -655,13 +508,29 @@ func _set_species(sid: String) -> void:
 	ch.dirty()
 	_refresh()
 
-func _load_preset(which: String) -> void:
+# The level a ready-made hero starts a run at (the owner's call, 2026-09-24).
+# The presets are level-3 builds with their subclass already chosen, and level
+# 3 is the heartland's top (core/regions.gd): loaded as they are, they had
+# outgrown home before the first fight. Cut to 2, the subclass decision rides
+# along unused and answers the level-3 choice when it comes, so a new Vera is
+# still a Champion, just not yet. A custom hero still starts at 1.
+const PRESET_START_LEVEL := 2
+
+# `levels` is 3 by default so the build-lock checks, and anything else asking
+# "what is this preset", see the whole build.
+static func _preset(which: String, levels := 3):
 	match which:
-		"vera": ch = Presets.vera()
-		"pike": ch = Presets.pike()
-		"ilsa": ch = Presets.ilsa()
-	# The presets are level-3 builds; a preset joins a higher-level party at its
-	# level too. Topped up rather than rebuilt — what they already are is a real
+		"vera": return Presets.vera(levels)
+		"pike": return Presets.pike(levels)
+	return Presets.ilsa(levels)
+
+func _load_preset(which: String) -> void:
+	var pre = _preset(which, clampi(start_level, PRESET_START_LEVEL, 3))
+	if build_lock_note(pre) != "":
+		return   # the button is greyed; this is the guard behind it
+	ch = pre
+	# A preset starts a run at PRESET_START_LEVEL and joins a higher-level party
+	# at its level. Topped up rather than rebuilt — what they already are is a real
 	# build with its choices made, and only the levels above it are missing.
 	Leveling.grant_levels(ch, start_level)
 	_goto(STEPS.size() - 1)
@@ -670,6 +539,10 @@ func _load_user_preset(slug: String) -> void:
 	var pre = Save.load_preset(slug)
 	if pre == null:
 		_status.text = "That preset is gone."
+		return
+	var locked := build_lock_note(pre)
+	if locked != "":
+		_status.text = "%s is %s on this profile." % [pre.cname, locked]
 		return
 	ch = pre
 	Leveling.grant_levels(ch, start_level)
@@ -934,8 +807,7 @@ func _build_choices() -> void:
 		_note("Nothing to choose.")
 	elif ch.sheet().pending.is_empty():
 		_note("Nothing left to choose — the ones below are made and can be changed.")
-	for p in pts:
-		_choice_widget(p)
+	_choice_widgets(pts)
 
 # #176: personality traits — one temperament and one origin, the background's
 # pre-selected and the player's to change. What each does is spelled out under
@@ -1058,8 +930,7 @@ func _build_review() -> void:
 	keep.tooltip_text = "Keeps this build under its name. Start a new character from it on the Basics page."
 	if not sheet.choice_points.is_empty():
 		_head("Unmade choices" if not sheet.pending.is_empty() else "Choices")
-		for p in _choice_points_of([]):
-			_choice_widget(p)
+		_choice_widgets(_choice_points_of([]))
 
 # --- choice widgets -------------------------------------------------------
 
@@ -1069,30 +940,65 @@ func _build_review() -> void:
 func _choice_points_of(types: Array) -> Array:
 	return ch.sheet().choice_points.filter(func(p): return types.is_empty() or p["type"] in types)
 
-func _choice_widget(p: Dictionary) -> void:
+# The points, grouped (#191): a merged group is one widget, the rest one each.
+func _choice_widgets(points: Array) -> void:
 	var sheet = ch.sheet()
-	var picks := picks_from_decision(p, ch.choices.get(p["key"]))
-	var n := pick_count(p)
-	var src: Dictionary = p["source"]
-	if p["type"] == "spell-choice":   # a pool shorter than the grant asks for all of it
-		n = mini(n, Effects.pick_pool(p["spellList"], int(p["spellLevel"])).size())
-	_head("%s%s — pick %d  (%d chosen)" % ["✓ " if p.get("decided", false) else "",
+	for g in choice_groups(points, sheet):
+		_choice_widget(g[0], g, points)
+
+func _choice_widget(p: Dictionary, group: Array = [], points: Array = []) -> void:
+	if group.is_empty():
+		group = [p]
+	var sheet = ch.sheet()
+	var picks: Array = []
+	var n := 0
+	var froms: Array = []
+	for q in group:
+		picks.append_array(picks_from_decision(q, ch.choices.get(q["key"])))
+		var qn := pick_count(q)
+		if q["type"] == "spell-choice":   # a pool shorter than the grant asks for all of it
+			qn = mini(qn, Effects.pick_pool(q["spellList"], int(q["spellLevel"])).size())
+		n += qn
+		froms.append("%s %s" % [q["source"]["origin"], humanize(q["source"]["id"])])
+	var decided: bool = group.all(func(q): return q.get("decided", false))
+	_head("%s%s — pick %d  (%d chosen)" % ["✓ " if decided else "",
 		humanize(p["type"]).replace(" choice", ""), n, picks.size()])
-	_note("from %s %s%s" % [src["origin"], humanize(src["id"]),
-		"  ·  already chosen, click to change" if p.get("decided", false) else ""])
+	_note("from %s%s" % [" + ".join(froms),
+		"  ·  already chosen, click to change" if decided else ""])
 	var f := _flow()
 	var opts := options_for(p, sheet, picks)
 	if opts.is_empty():
 		_note("No options available.", COL_WARN)
+	var taken: Dictionary = taken_elsewhere(p, group, points, ch.choices, sheet) if p["type"] in MERGEABLE else {}
+	# Never grey a list into one it cannot finish: when too few options are
+	# left, the ones already known come back (a picked-elsewhere one stays out).
+	var free := opts.filter(func(o): return not taken.has(o["id"]) and not o["id"] in picks).size()
+	if free < n - picks.size():
+		for id in taken.keys():
+			if taken[id] == "already known":
+				taken.erase(id)
 	for o in opts:
-		var count := picks.count(o["id"])
+		var id := String(o["id"])
+		var count := picks.count(id)
 		var extra := ""
 		if allows_repeat(p) and count > 0:
 			extra = "  +%d" % count
-		var b := _opt(f, _decorate(p, String(o["id"]), String(o["label"])), count > 0,
-			func(): _pick(p, o["id"]), extra)
+		var b := _opt(f, _decorate(p, id, String(o["label"])), count > 0,
+			(func(): _pick_group(group, id)) if group.size() > 1 else (func(): _pick(p, id)), extra)
 		if p["type"] == "spell-choice":
-			b.tooltip_text = "%s spell" % humanize(Icons.spell_school(String(o["id"])))
+			b.tooltip_text = "%s spell" % humanize(Icons.spell_school(id))
+		if count == 0 and taken.has(id):
+			b.disabled = true
+			b.tooltip_text = String(taken[id]).capitalize()
+
+func _pick_group(group: Array, id: String) -> void:
+	var by_key := {}
+	for q in group:
+		by_key[q["key"]] = picks_from_decision(q, ch.choices.get(q["key"]))
+	var out := toggle_group(group, by_key, id)
+	for q in group:
+		ch.decide(q["key"], decision_for(q, out[q["key"]]))
+	_refresh()
 
 # A pick's icon, where the option has one: spells wear their school's mark.
 func _decorate(p: Dictionary, id: String, label: String) -> String:
@@ -1221,11 +1127,11 @@ func _sheet_bbcode(full: bool) -> String:
 		if full:
 			var known: Array = []
 			for k in sc.get("cantrips", []):
-				known.append(Icons.spell_bb(k, humanize(k)))
+				known.append(Icons.spell_bb(k, spell_name(k)))
 			for k in sc.get("known", []):
-				known.append(Icons.spell_bb(k["id"], humanize(k["id"])))
+				known.append(Icons.spell_bb(k["id"], spell_name(k["id"])))
 			for k in sc.get("always_prepared", []):
-				known.append(Icons.spell_bb(k, humanize(k)))
+				known.append(Icons.spell_bb(k, spell_name(k)))
 			if known:
 				s += "  spells: %s\n" % ", ".join(known)
 	if full:

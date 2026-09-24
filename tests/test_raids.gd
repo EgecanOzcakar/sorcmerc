@@ -109,6 +109,20 @@ func test_gates() -> void:
 	w6.settlements[0].faction = "orc"
 	check(Raids.target_for(w6, w6.lairs[0]) == null, "a monster settlement is not a target")
 
+	# One town, one raider. A second lair in reach used to land on a town the
+	# first already held and overwrite `raided_by`.
+	var w7 := _world()
+	var second = w7.add_lair(World.Lair.new("den", Vector2(-300, 0), "gnoll", "the Gnoll Den"))
+	Raids.set_out(w7, w7.lairs[0], w7.settlements[0], 0.0)
+	check(Raids.target_for(w7, second) == null, "a town another lair is marching on is not a target")
+	check(Raids.target_for(w7, w7.lairs[0]) == w7.settlements[0], "...though it still is for the lair marching on it")
+	var village = w7.add_settlement(World.Settlement.new("millbrook", Vector2(-400, 100), "human", "town"))
+	check(Raids.target_for(w7, second) == village, "the second lair makes for the next town in reach instead")
+	w7.parties.erase(Raids.band_of(w7, w7.lairs[0]))
+	w7.lairs[0].raid_band = ""
+	w7.settlements[0].raided_by = "warren"
+	check(Raids.target_for(w7, second) == village, "a town still raided by another lair is not a target either")
+
 func test_march_siege_land_home() -> void:
 	var w := _world()
 	var l = w.lairs[0]

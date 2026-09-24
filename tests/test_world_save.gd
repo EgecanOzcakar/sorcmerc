@@ -304,6 +304,29 @@ func _done() -> void:
 	WorldSave.clear()
 	check(WorldSave.summary().is_empty(), "and the slot can be cleared from the title")
 
+	# The title's "Delete…" takes one run off the list and leaves the others.
+	var keep_slot := WorldSave.new_slot()
+	WorldSave.set_active_slot(keep_slot)
+	WorldSave.save(w2, p2)
+	var drop_slot := WorldSave.new_slot()
+	WorldSave.set_active_slot(drop_slot)
+	WorldSave.save(w2, p2)
+	var ids := func() -> Array: return WorldSave.list_slots().map(func(r): return String(r["id"]))
+	check(drop_slot in ids.call() and keep_slot in ids.call(), "two runs, two slots on the title")
+	WorldSave.delete_slot(drop_slot)
+	check(not drop_slot in ids.call() and keep_slot in ids.call(), "deleting one slot leaves the other")
+	check(WorldSave.active_slot() == "", "and a deleted active slot is no longer the one saves go to")
+	WorldSave.delete_slot("../settings")
+	check(keep_slot in ids.call(), "a slot id with a path in it deletes nothing")
+	# The legacy slot is a copy of the pre-slots world.json: deleting it must
+	# take the original too, or the next listing copies it straight back.
+	WorldSave.set_active_slot("")
+	WorldSave.save(w2, p2)
+	check("legacy" in ids.call(), "a pre-slots save shows up as the legacy slot")
+	WorldSave.delete_slot("legacy")
+	check(not "legacy" in ids.call(), "and a deleted legacy slot stays deleted")
+	WorldSave.delete_slot(keep_slot)
+
 	# the ladder rides the save beside opinion; an old save is a fresh ladder
 	var Ladder = load("res://core/ladder.gd")
 	Ladder.reset()
@@ -358,6 +381,16 @@ func _done() -> void:
 	check(pr_back.lodge.get("settlement_id", "") == "riverhold" and pr_back.lodge.get("rooms", []) == ["strongroom"] and pr_back.lodge.get("gold", 0) == 250,
 		"...and reads back")
 	check(pr_old.lodge.is_empty(), "an old save with no lodge loads with none")
+
+	# The hiring rule and today's taken chairs (core/recruits.gd) ride there too,
+	# through real JSON so the day and chair numbers come back as floats.
+	pr.hiring = {"rule": "hire", "taken": {"riverhold": {"period": 3, "slots": [0, 2]}}}
+	rd = JSON.parse_string(JSON.stringify(WorldSave.to_dict(wo, pr)))
+	check(rd["party"].get("hiring", {}).get("rule", "") == "hire", "the hiring rule rides the save's party dict")
+	pr_back = WorldSave.from_dict(rd)["party"]
+	check(pr_back.hiring.get("rule", "") == "hire" and pr_back.hiring["taken"]["riverhold"]["period"] is int
+		and pr_back.hiring["taken"]["riverhold"]["slots"] == [0, 2], "...and reads back, as ints")
+	check(pr_old.hiring.is_empty(), "an old save with no hiring key loads grandfathered ({}: Create new still works)")
 
 	print("test_world_save: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

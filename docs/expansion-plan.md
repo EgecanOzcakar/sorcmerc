@@ -9492,3 +9492,994 @@ hand, so `_stream` now falls back to `load()`. Measured on an exported
   license are not recorded anywhere.
 - Six sfx kept their generated take by choice: carter_down, cast_divination,
   click, landmark_open, miss_ranged, wave_arrives.
+
+## An audit pass — the player reports, and what four sweeps of the code found (2026-09-23)
+
+The morning's playtest filed fourteen issues (#188–#201), and four read-only
+audits went over combat, the map, the party and build rules, and the screens.
+This entry is what came of both: the bugs a player can reach, fixed with a test
+each, plus two missing pieces the audits turned up (a way to delete a saved run,
+and the dice's own sound).
+
+**From the playtest:**
+- **#199, a heal went to the wrong hero.** A fighter could end his move on the
+  rogue bleeding out under him. `move_field()` kept a mover off allies on their
+  feet only (`allies_of()` skips the downed). With two tokens on one hex, the
+  cleric's click took the first in the list. Now nobody stops on anyone who is
+  not dead, and `_hex_free()` says the same for shoves, summons and waves. A
+  corpse is an object and can still be stood on.
+- **#198, right-drag cancelled the aim.** The board cancelled on the right
+  button's *press*, so panning with it threw away an open spell list. It now
+  cancels on the release, and only if the button moved no more than a click's
+  wobble (`RMB_CLICK_SLOP`, 6 px).
+- **#193, the wheel zoomed the map through a menu.** A ScrollContainer at its
+  end, or too short to scroll, lets the wheel bubble up to the map. The map now
+  ignores the wheel when the pointer is over any panel or scrolling list
+  (`_wheel_over_ui()`).
+- **#201, long town pages ran off the screen.** Each page's lists scrolled, but
+  the page did not. The page body now scrolls as a whole, fitted a frame after
+  it is built to the smaller of its content and the window's height. Leave is
+  always on screen.
+- **#200, presets skipped the unlocks.** On a fresh profile, Vera (Fighter) and
+  Pike (Rogue, Thief) loaded straight into a class the list beside them showed
+  as locked. `Creator.build_lock_note()` asks the same gate of a whole build
+  (species, every class, every subclass). A locked preset is greyed with its
+  price, and `_load_preset()` refuses it. The player's own presets are gated
+  the same way.
+- **#192, a wizard's shelf held one crossbow.** The export names the wizard,
+  sorcerer and druid weapons one by one (`dagger`, `quarterstaff`), while a
+  dagger's `weaponProficiencyId` is `simple`. Read that way, the druid had
+  nothing but the scimitar. This was not only the shelf: the sheet swung their
+  own quarterstaff **without the proficiency bonus**. `PassGear.weapon_proficient()`
+  is now the one reader for the creator, the attack list and both mastery
+  lists. The creator's armour shelf reads `PassGear.proficient()` too, so the
+  druid's `medium-nonmetal` and `shields-nonmetal` open it.
+
+**From the audits:**
+- **Cover helped every save.** It is +2 AC and +2 to DEX saves (RAW, and
+  combat-design.md's Alcove). It was being added to every save: a caster by a
+  stall held concentration on CON saves more often, and a wall helped a mind
+  against Hold Person. It is DEX only now.
+  **This moves fight numbers** that were measured with the bug in (the
+  win-rate table in `core/regions.gd`, the trait sweeps). The effect is small
+  but not zero. The next balance sweep should re-run them rather than trust the
+  old tables.
+- **The save odds on a target were a different save.** `save_fail_chance()`
+  counted the bonus, cover and Dodge. The roll also counts Bless-style buffs,
+  auras, exhaustion, traits, condition disadvantage, auto-fails and Magic
+  Resistance. Both now read one `_save_terms()`. The preview peeks: it logs
+  nothing and counts an inspiration die at its average instead of spending it.
+- **Goods jobs paid with the goods gone.** `turn_in()` paid in full and then
+  ignored `stash_remove()` failing, so ears sold at a stall or lost to a wiped
+  delve were still paid for. `can_turn_in(quest, party)` now wants the goods
+  in the pack. `record_stash()` also pulls a `collect_item` tally *down* to
+  what is in hand (never up: that tally is what bodies dropped).
+- **Two bands under one name.** A new band's number was "live bands of this
+  kind, plus one". With bandit-1 dead and bandit-2 alive, the next spawn was a
+  second bandit-2, and a fallen band respawns under its old id. `hunt_party`
+  lookups take the first match. `WorldBands._fresh_id()` now takes the first
+  number held by neither a live band nor a fallen one. A freshly seeded map
+  comes out the same as before.
+- **The pit printed a signed, nominal stake.** A loss read "The house keeps
+  its stake: -60 ◉" even from a purse of 50. It now reports the coin that
+  moved, and says "all the party had" when that is less than the stake.
+- **A multiclass caster's slots came off the total level.** A Wizard 2 /
+  Fighter 3 got the level-5 wizard row. The slot and pact tables now read the
+  casting class's level when there is a second class. A single-class build
+  keeps the character level, because `Bundles.class_level()` reads the highest
+  level that granted a feature and could read one short. There is no UI for a
+  second class yet, so this could not be reached in play. Marked `ponytail:`.
+
+**Two pieces that were missing:**
+- **Deleting a saved run.** Every New run mints a slot, and nothing removed
+  one. `_confirm_delete_world_save()` was built and never given a door. Each
+  run on the title now has **Delete…** beside it. `WorldSave.delete_slot()`
+  also removes the legacy `world.json` behind the `legacy` slot, since
+  otherwise the next listing copies it straight back. Settings' "Clear
+  autosave" only ever knew the linear run's save, and it reported "No autosave
+  to clear." even after clearing one (`clear()` returns nothing). It now shows
+  only in the linear mode and tells the truth. The open-world settings point
+  to the title instead.
+- **The die's rattle** (the first two live-roll entries both left it open).
+  `sfx_dice_rattle` in `tools/gen_audio.py` is one strike and eleven bounces,
+  closer and quieter as the die spins down, plus a last flutter. It is
+  rendered at 44.1 kHz like the rest. `scenes/dice_roll.gd` plays it once as
+  the tumble starts, in place of the UI click on each of 14 face changes.
+  There is an ElevenLabs prompt beside it for a recorded take.
+
+Screens: `tests/shot_audit.gd` (needs a display).
+
+### Still open
+
+- **Three death-save successes stand the hero up at 1 HP.** RAW, three
+  successes leave you stable and still unconscious; only a natural 20 wakes you.
+  The engine has a complete "stable" status that nothing ever sets
+  (`is_stable()`, the `heal()` erase, `end_turn()`'s skip). Every balance
+  measurement stands on the revive, so this is the owner's call, not a fix.
+- **Two lairs raiding one town.** `Raids.land()` has one `raided_by` slot, so
+  the second raider overwrites the first. Clearing either lifts the town, and
+  the first lair's job loses its raid premium. Fix it with a raider list, or
+  by not setting out for a town already raided.
+- **`SettlementVisit.check_preview`'s natural-1/20 note** (live rolls, part 1)
+  is stale. The preview already reads plain nat + bonus.
+- **Not touched here:** #179 (new heroes joining at level 1 again) is a
+  balance decision. #191 (merging duplicate choice lists), #188–#190 (the
+  creator's layout) and #194–#197 (the combat board's rendering) are each
+  their own piece of work.
+- `Regions.describe()` is only called by its test.
+
+## The owner's calls on the audit — RAW death saves, one raider a town, merged picks, a board you can see (2026-09-24)
+
+The owner's answers to the last entry's open items: do the calls (all but new
+heroes joining at level 1, #179, which stays as it is), and build items 1, 2
+and 4 of the suggested next work.
+
+- **Three death-save successes: stable, not standing.** RAW, and what the
+  field manual always told the player. The hero stays down at 0 HP and stops
+  rolling. Their turn is skipped (`end_turn` already skipped `is_stable()`;
+  nothing ever set it). A hit knocks them off stable, adds its failure(s), and
+  they roll again from their next turn. Healing, First Aid, or the fight
+  ending (`Adapter.write_back`: 1 HP) brings them round. The token and the
+  combat card read "stable" in place of the save tally. This is items 1 and 2
+  on the owner's list: the call and the "stable state" feature were the same
+  work.
+- **One raider a town.** `Raids.target_for` skips a town another lair has
+  raided and not been cleared from, or is marching on, or is camped outside.
+  The lair makes for the next town in reach, or waits for its next due time.
+- **#191, duplicate choice lists.** Lists of the same kind with the same
+  options (a human soldier's language from the species and one from the
+  background) show as one list whose count is the sum
+  (`Creator.choice_groups`). The picks are still stored under each grant's own
+  key (`toggle_group` fills the first with room). Lists that only overlap
+  (the human's any-skill and the fighter's eleven) stay apart, and
+  `taken_elsewhere` greys, in each list, what the other took and what the
+  build already has from a grant that asked nothing (a background's skills,
+  Common). It never greys a list into one it cannot finish: when too few
+  options are left, the already-known ones come back. The level-up screen
+  greys the same way.
+- **#194, the floor that vanished on a zoom.** Two causes, both fixed:
+  - The cached ground layer (#140) was a zero-size Control, and Godot culls
+    a Control by its own rect. Zoom in, then pan so that rect's origin leaves
+    the window, and the whole floor was culled with every tile of it still
+    on screen. The layer is a Node2D now, culled by what it draws.
+  - A repaint re-based the layer (`_ground_at = _origin`), but only the
+    board's own `_draw()` moved it. Nothing queued that when auto-fit changed
+    the zoom inside `_layout()`, or while nothing on the board was animating,
+    so the new ground sat at the old offset until something redrew the
+    board: "corrects after a few seconds". `tick()` now places it too.
+    `tests/test_board_ground.gd` asserts this without calling `_place_layers`
+    itself, which is how the old check had hidden it.
+- **#197 (and #156's follow-up), height on the board.**
+  - A raised tile now reads the floor texture at its footprint rather than
+    where it is drawn. Before, its pattern ran straight on from the lower
+    tile behind it and the step vanished into one flat picture.
+  - The cut earth under a shelf's edge is textured rock, lit at the lip,
+    dark at the foot, a shade brighter on the side turned to the board's
+    light, with a dark line where it meets the ground. Before, it was a flat
+    near-black band, which read as a hole.
+  - `tests/shot_height_close.gd` frames it close.
+
+**Measured** (`tests/sweep_tier.gd`, 200 seeds a tier, level-3 presets, master
+e50d6c6 against the branch, identical rosters): easy 97.5% → 96.0%, normal
+91.0% → 87.0%, hard 79.5% → 76.5%. That is cover-on-DEX-only and RAW stable
+together. Every move is within about one and a half standard errors and in
+the predicted direction, and test_scaler's bands hold. TIER did not move. The
+numbers are in `core/scaler.gd`'s header.
+
+The one band this broke: escort's done rate fell to 35.0%, under the
+objective sweep's 40% floor (`tests/test_objectives.gd`). With the old revive
+put back it is 41.2% again, so RAW stable alone moved it: a hero who used to
+stand back up beside the carter now stays down. Per the objective spec, the
+kind's own knob fixes it, never the roster. `CARTER_HP_BASE` went 12 → 15:
+57.5%, and every other kind is unchanged. 14 measured 37.5% and 16 measured
+58.8%, so 15 is the smallest step back into the band (the carter surviving one
+more goblin hit).
+
+### Still open
+
+- **Re-run since, and it had drifted on master.** `core/regions.gd`'s table
+  (2026-09-13, 80 seeds a cell) has a committed script now,
+  `tests/sweep_regions.gd`. This branch moves each row 0–5 points. Master was
+  already far off the table: one band out is 11.2% (was 37.5%), the deeps at
+  level 3 are 0.0% (was 27.5%), and in band at level 10 is 66.2% (was 95.0%).
+  Cause: `Regions.power_scale` reads scaler's `CURVE`, which went 0.90 → 1.15
+  in scaler's 2026-09-15 retune, and nothing re-ran this table. Whether
+  regions keeps its own 0.90 exponent is the owner's call. The full table and
+  the options are in the header, marked `ponytail:`.
+- **Level 10 in band, found and half fixed.** `Power.estimate` credited every
+  leveled spell with its level's whole slot count and summed every spell's
+  control, so a caster's score grew with the length of the prepared list. A
+  built level-10 cleric scored 416 (20 without spells). The budget bought
+  against a built level-10 party won 6.7% of easy fights; against the
+  preset-only one, 60%.
+  - **Fixed:** each slot is one cast of the best spell it pays for, at most
+    ROUNDS casts a fight, and control is the best spell's, not the sum.
+    `test_rules` checks it, and the check fails on the old estimator (four
+    first-level spells priced at 36.8 against the best one's 16.8).
+  - **Measured after the fix:** level 10 in band 61.2% → 81.2%; one band out
+    17.5%; the deeps 2.5%. Level 3 easy/normal/hard (sweep_tier) is
+    96.5/90.0/79.5, back to about master's numbers. Full suite 155/155.
+  - **Was open (settled below):** the rest of the level-10 gap is spell control.
+    A built level-10 party wins 33% at easy. With its spells' control priced
+    at zero it wins 92%. Hold Person alone is priced as a lockout every round,
+    while the party autopilot never casts a spell without dice. Options are
+    in `core/regions.gd`.
+  - **Settled the same day: spell control is one concentration lock, capped.**
+    The owner picked a concentration lock. A lock lasts until the target saves;
+    a one-round spell lasts one round; one with no repeat save lasts the whole
+    fight. Priced that way it went the wrong way (built L10 23.3%), because the
+    trouble was the lock's weight, not its length: the multiplier was set for a
+    monster locking one of three heroes. Six pricings, built L3 / built L10:
+    | pricing | built L3 | built L10 |
+    |---|---|---|
+    | uncapped lock | 81.7% | 23.3% |
+    | lock, bonus capped at +50% | 83.3% | 56.7% |
+    | lock / 4 | 91.7% | 68.3% |
+    | lock as the damage the locked foe won't deal | 93.3% | 70.0% |
+    | **lock, bonus capped at +25%** | **95.0%** | **73.3%** |
+    | not priced | 95.0% | 91.7% |
+
+    Shipped: +25% (`Power.SPELL_LOCK_CAP`). Teaching the autopilot to cast
+    its locks made things worse (built L10 13.3%): a failed save-or-nothing
+    spell costs a turn of damage. So it still never casts one, and what stays
+    between 73% and 92% is the sweep charging the party for a lock nobody
+    throws. The preset ruler has no control spell, so sweep_tier (96.5 /
+    90.0 / 79.5) and sweep_regions are unchanged. Full suite 155/155.
+  - Found on the way: `test_rules`' `test_power_ranks_the_heroes` and the tail
+    of `test_adapter` had not asserted anything since the summon statblocks
+    joined `monsters.json`. The helper threw on them, and the file still
+    reported green. 14 checks run again, all passing.
+- The #197 report's screenshot could not be fetched from here. This fixes what
+  its text describes, which is also what the close shot showed. If the
+  owner's board shows a different gap, it wants that board's seed.
+- A hero at 0 HP between fights still can't be stabilised by Medicine or
+  Spare the Dying. There's no verb for it; Help (First Aid) and healing do it.
+
+## Each country keeps its own level range — the band pin (2026-09-24)
+
+The owner's call on the regions exponent, which was the last open item under
+*The owner's calls on the audit*: "keep level scaling in between the zones. so
+heartlands shouldn't scale beyond its max level. that way keep regions stick to
+their own scalers."
+
+What `Regions.power_scale` did: when the party's level was outside a band, it
+multiplied the budget by (ref_score(band level) / ref_score(party level))^CURVE.
+That's a ratio of two *ruler* parties (the presets), applied to the real one.
+Any party that isn't the ruler brought its difference across the border:
+
+- A built level-10 party (choices made, full prepared list) prices at 1.32× the
+  ruler. It met 1.32× of the Heartland's level-3 fight and 1.32× of the
+  Marches' level-6 fight.
+- Four level 10s met 1.35× of the Heartland's fight. Two met 0.45× of it.
+- A lone level 1 in the Deeps met 0.44× of the Deeps' fight.
+- Inside a band nothing capped at all. A built level-3 party at home met 1.13×
+  of the Heartland's top fight.
+
+Now (`core/regions.gd`):
+
+- **Out of band, the fight is pinned to the band's edge.**
+  `Scaler.held_at(ref_score(edge level), fresh_score(party))` lands the budget
+  on exactly what scaler builds for the ruler at that level, whoever walks in.
+  The Heartland is scaler's level-3 fight and the Deeps its level-10 fight.
+- **The ceiling is read in power as well as in levels.** A party inside a band
+  by level that prices above the ruler at the band's top meets that top fight
+  and no more. The floor stays levels only: a thin party inside its band
+  still gets a fight its own size, which is what scaler's measured numbers
+  assume.
+- **`fresh_score`** is the party at full slots. The pin divides by it, so spent
+  slots still thin the fight in the same proportion they do in band. Wounds
+  are still `WorldThreat`'s, multiplied on top as before.
+- **The exponent question goes away.** Regions keeps no exponent of its own: a
+  country is scaler's fight at a level inside it, so it follows `CURVE`
+  wherever `CURVE` goes. For the ruler party, the pin and the old ratio are the
+  same number. `tests/sweep_regions.gd`'s table therefore stands as re-measured
+  on 2026-09-24 (L3 in band 96.2%, L10 in band 81.2%, one band out 17.5%, the
+  Deeps at L3 2.5%). The sweep now calls `held_at` directly.
+
+Measured on the built party (`tests/sweep_built.gd`'s build, 60 seeds, easy),
+with the budget pinned at the top of a band:
+
+| built party | before | pinned |
+|---|---|---|
+| L3 at the top of the Heartland (1.13× → 1.00×) | 95.0% | 95.0% |
+| L10 at the top of the Frontier (1.32× → 1.00×) | 73.3% | 95.0% |
+
+Budgets for a built party, as a share of the ruler's fight at the band's level:
+
+| built party | Heartland | Marches | Frontier | Deeps |
+|---|---|---|---|---|
+| L3 | 1.13 → **1.00** | 1.13 | 1.13 → 1.00 (L6) | 1.13 → 1.00 (L10) |
+| L6 | 1.27 → 1.00 (L3) | 1.27 → **1.00** | 1.27 | 1.27 → 1.00 (L10) |
+| L10 | 1.32 → 1.00 (L3) | 1.32 → 1.00 (L6) | 1.32 → **1.00** | 1.32 |
+
+Bold: capped inside the band. The Deeps' top is level 20, so nothing is capped
+there, and a built L10 in the Deeps still meets its own 1.32×.
+
+`test_regions` checks each case: two level 10s, four level 10s and the ruler in
+the Heartland; a lone level 1 in the Deeps; four level 3s at home against the
+Marches; and a party with its slots spent. The first three fail on the old
+formula (0.447×, 1.352×, 0.444×).
+
+### Still open
+
+- The level-10 party at the top of the Frontier (95.0% capped) and at the
+  bottom of the Deeps (73.3%, not capped) now differ by 22 points at the same
+  level. That seam overlap is intended ("a level 10 party can work either"),
+  but it's wide. If it reads badly in play, narrow it by lowering the
+  Frontier's top, not by adding an exponent back.
+
+## Ready-made heroes start at level 2 (2026-09-24)
+
+The owner's call: "readymades should start at level 2." Vera, Pike and Ilsa
+are level-3 builds, and level 3 is the Heartland's top (the band pin above).
+Loaded as they were, a run that started with them had outgrown home before
+its first fight. A custom hero already starts at level 1 and keeps doing so.
+
+- `scenes/creator/creator.gd`: `PRESET_START_LEVEL = 2`. A preset loads at
+  `clampi(start_level, 2, 3)` and is topped up from there, so it still joins a
+  higher-level party at that party's level.
+- The subclass decision stays on the build unused and answers the level-3
+  choice when it comes. A new Vera is still a Champion, just not yet: no
+  pending choice at 2, and Champion / Thief / Light Domain at 3.
+- `Presets.party_at()`, the ruler every sweep stands on, is untouched.
+  Measured anyway (`tests/sweep_built.gd`, LEVELS=2, 80 seeds, easy): the
+  trio at level 2 wins 98.8%, beside 96.2% at level 3.
+- Order matters. The creator hands a new hero the party's highest level, so a
+  custom hero made after a preset joins at 2, and one made before it at 1.
+- Tested in `test_leveling` (level 2, finished, 100 XP banked, subclass arriving
+  at 3).
+- Found on the way: the creator's Review page listed the cantrip Light as
+  "Light armor". Spell names went through `humanize()`, whose `PLAIN` table
+  also holds armour categories under bare ids. Spells now read their name from
+  the catalogue (`Creator.spell_name`); `test_creator` checks both labels.
+
+## The Frontier stops at level 9 (2026-09-24)
+
+The owner's call on the last *Still open* item of the band pin: "lower
+frontiers top level." `core/regions.gd`'s Frontier goes from levels 6–10 to
+6–9. The Deeps stay 10–20.
+
+With the Frontier at 6–10, a level-10 party was inside its band on both sides
+of the Frontier/Deeps seam, and the two sides built different fights. At the
+Frontier's top, the band pin caps the fight at the preset party's level-10
+fight. At the Deeps' bottom (top 20) nothing caps, so a built party meets its
+own full score. Same level, both bands "yours", 95.0% against 73.3%.
+
+At 6–9, level 10 has outgrown the Frontier and belongs to the Deeps alone.
+Measured (`tests/sweep_built.gd`'s build, 60 seeds, easy):
+
+| built party | where | fight | win |
+|---|---|---|---|
+| L9 | top of the Frontier (capped) | preset L9 | 93.3% |
+| L9 | uncapped, for comparison | own score | 81.7% |
+| L10 | the Frontier, outgrown | preset L9 | 96.7% |
+| L10 | bottom of the Deeps | own score | 73.3% |
+
+**The step at that seam is no smaller.** A level-10 party still wins about 97%
+on one side and 73% on the other. The change is what the step *means*: it's
+now the ordinary border every band has (outgrown behind you, in band ahead),
+not two in-band readings of one level. The last seam is the only one that
+meets without overlapping. Every level is still someone's.
+
+`test_regions`: a level-10 party is in band in the Deeps, has outgrown the
+Frontier (built for level 9), and the band reads "levels 6-9". Proof:
+`docs/shots/frontier-6-9.png`, the crossing card on a real map.
+
+### Still open
+
+- The Deeps' bottom is still uncapped for a strong build. Top 20 means the band
+  pin's ceiling never bites there, so a built level-10 party meets 1.32× of the
+  preset level-10 fight. If that step reads badly in play, the lever is the
+  ceiling (cap every band at the preset party's score for the party's own
+  level, not only at the band's top), not the seams.
+
+## Paladins and rangers cast from level 1 (2026-09-24)
+
+The owner's call from the skills pass: keep the 2024 slot tables as the book
+has them, and fix the one row the export got wrong. `data/classes.json` carried
+the 2014 half-caster table. A paladin and a ranger had no slots at level 1, so
+a level-1 paladin picked spells in the creator and could never cast them. The
+ranger's Spellcasting itself sat at level 2.
+
+The fix lives in `tools/fill_levels.py` beside the other hand-filled level
+tables, so `--check` keeps it applied after any future edit:
+
+- `CLASS_SLOTS`: level 1 is `[2]` for both classes, two 1st-level slots. Levels
+  2–20 of both tables were compared against the book and already matched.
+- `CLASS_GRANT_MOVES`: the ranger's `spellcasting` grant and its spell pick
+  (`spell-choice:class:ranger:0`) move from level 2 to level 1. That is the
+  paladin's existing shape. Choice keys are unchanged, so a saved ranger keeps
+  its pick.
+
+Balance: the level-3 preset party that every win-rate sweep uses contains no
+paladin or ranger, and levels 2–20 are unchanged, so no measured number moves.
+Only a hero *created* at level 1 as a paladin or ranger gains anything: two
+slots. Ready-made heroes start at level 2, where the table was already right.
+
+`test_rules`: paladin and ranger at levels 1/2/3 have 2/2/3 first-level slots,
+and a level-1 one carries both into a fight (`Adapter.slots_left`). Not visual.
+
+### Still open
+
+- The rest of the 2024 half-caster level 1 is still 2014-shaped in places.
+  Divine Smite is a level-2 feature here, where 2024 makes it the always-prepared
+  *Divine Smite* spell. The ranger's Favored Enemy (free Hunter's Mark casts) is
+  catalogue text. Neither blocks casting at level 1.
+
+## Spent slots no longer buy an easier road fight (2026-09-24)
+
+The owner's call from the skills pass: **wounds thin a fight, spent slots do
+not.** Pillar 3 is "magic is powerful but costly", and the open world was
+refunding the cost.
+
+`core/rules/power.gd` prices a party off max HP and the slots it has *left*.
+So `Scaler.roster_for()` sent a party that had cast everything a smaller
+roster, and a smaller roster pays less. `core/site.gd` already corrected for
+this inside a lair: every room is priced off the party at the mouth. The open
+world never did.
+
+`core/world_threat.gd` gains `slot_hold(party)`. It is
+`Scaler.held_at(Regions.fresh_score(party), Scaler.party_score(...))`, the same
+correction a site makes, taken against the party with every slot back.
+`assess()` multiplies it into the `power_scale` it already returns, so every
+caller picks it up unchanged: `encounter_spec()`, the gate hold's waves, the
+pit bouts. It is exactly 1.0 for a party that has spent nothing, so every
+number measured before this still stands. Wounds still thin the fight through
+the condition curve, which is untouched.
+
+Measured with the new `tests/sweep_spent_slots.gd` (level-3 presets,
+wilderness baseline, 200 seeds a cell, fight seed pinned). *Unheld* is exactly
+what master passed:
+
+| slots left | HP | hold | unheld foes | unheld win | held foes | held win |
+|---|---|---|---|---|---|---|
+| all | 100% | ×1.000 | 4.0 | 99.5% | 4.0 | 99.5% |
+| none | 100% | ×1.429 | 3.3 | **100.0%** | 4.0 | 94.5% |
+| all | 50% | ×1.000 | 3.5 | 95.0% | 3.5 | 95.0% |
+| none | 50% | ×1.429 | 3.2 | 99.5% | 3.5 | 90.0% |
+
+Before this, a party with nothing left to cast won *more* often than the same
+party fresh. The budget the spent slots handed back was worth more than the
+spells. Now a drained party meets the fresh party's roster body for body, and
+casting costs something on the road too.
+
+`test_world_threat`: the hold is exactly 1.0 with nothing spent and above 1.0
+with everything spent. A drained party's roster matches the fresh party's on
+all 10 seeds, where the unheld one was smaller. A drained, hurt party is thinned
+by its wounds alone. Not visual.
+
+### Still open
+
+- The payout follows the roster, so a drained party now also earns a fresh
+  party's XP and gold for the same fight. That is the point, but it is worth
+  watching in play for whether "fight on empty" starts to read as a farm.
+- The campaign's linear mode (`core/campaign.gd`) still prices off the current
+  reading. It has its own per-run rest budget and is not the open world. Leave
+  it alone unless `SORCMERC_LINEAR_CAMPAIGN` comes back into use.
+
+## The sorcerer's own two: Innate Sorcery and Font of Magic (2026-09-24)
+
+The owner's call from the skills pass: sorcerer features follow the 2024 book
+as real combat mechanics. Until now `sorcerer-innate-sorcery` and
+`sorcerer-font-of-magic` were catalogue text. `data/effects/features.json` had
+no entry for either, so the sheet listed them and the board never saw them,
+while `core/manual.gd` told players Font of Magic worked. This is the first
+half. Metamagic is the second and gets its own PR.
+
+**Innate Sorcery** is a `self_buff`: a Bonus Action, two uses per **long** rest
+(added to `Adapter.LONG_REST_ONLY_FEATURES`, or it would have come back on a
+short one), lasting ten rounds.
+
+- A `self_buff` may now carry `rounds`. It gets an `until_tick` and lapses
+  through `_expire_conditions` like a condition. Only Innate Sorcery has one,
+  so Rage and every other self-buff behave exactly as before.
+- **+1 spell save DC.** `Combat.spell_dc(caster, v)` is the one function for it.
+  `cast()` stamps it onto the verb, so a zone or a held Hold Person keeps the DC
+  it was cast at. The action bar's tooltip and hit-chance readout read the same
+  function, so the number on the button is the number rolled against.
+- **Advantage on spell attack rolls.** `_spell_hit` rolls 2d20-keep-high while
+  the buff is up.
+
+**Font of Magic** is a new button kind, `font_of_magic`. One authored entry is
+expanded by `Effects._font_verbs` into buttons each way:
+
+- `…-burn@L`: spend a level-L slot for L sorcery points. **No action.**
+  Refused whole if it would overflow the Sorcery Points maximum (`ponytail:`).
+  It never tops up to the cap, so no slot is ever spent for points it loses.
+- `…@slotL`: a **Bonus Action**, spending points for a slot on the Creating
+  Spell Slots table (2/3/5/6/7 points for levels 1–5, from sorcerer level
+  2/3/5/7/9). Pools can now cost more than one use (`pool_cost`).
+- **A made slot outlives the fight.** `Adapter.write_back` no longer floors
+  `slots_used` at zero: an unspent made slot leaves as a *negative* entry, and
+  every reader already works in "full less used". A long rest clears it, which
+  is RAW's "vanishes when you finish a Long Rest". Saves take the negative int
+  as it is. The `character_save.gd` header says so.
+- The two directions wear different badges: burn is the `font_of_magic` kind's
+  cycle, make is the feature's own orb (`tools/gen_action_icons.py`).
+- The party autopilot (`AI._font_up`) makes the biggest slot it can afford once
+  it has none left. It never burns slots.
+
+**Balance.** `core/rules/power.gd` prices neither feature: a `self_buff` with no
+`bonus_damage`, and a kind it has no arm for. The preset trio has no sorcerer,
+so `test_scaler` and `sweep_tier` cannot see this. The new
+`tests/sweep_sorcerer.gd` puts a built sorcerer in the cleric's seat beside the
+preset fighter and rogue, and fights each seed with the two features stripped
+(exactly what master fields) and as shipped. Easy, 200 seeds, pinned:
+
+| level | without | rounds | with | rounds |
+|---|---|---|---|---|
+| 3 | 89.5% | 7.5 | 88.5% | 7.5 |
+| 10 | 96.5% | 9.7 | 96.5% | 9.3 |
+
+Inside one standard error at both levels. Under the autopilot the two features
+are worth about nothing, so leaving them unpriced moves no budget. A player
+using them well gets more out of them than the autopilot does. That is the
+same gap every class feature has.
+
+`test_sorcerer` (new, 56 checks): buttons by level and the cost table,
+Innate Sorcery's DC, Advantage (Fire Bolt against AC 20, 103 against 170 hits
+of 300) and its ten-round clock, both conversions with their refusals, the
+made slot surviving write-back and a short rest but not a long one, Innate
+Sorcery back on a long rest only, and the autopilot's one use.
+`test_class_abilities` presses every new button on its sorcerer teams
+(11677 → 11809 checks). Shots, from `tests/shot_sorcerer.gd`:
+`docs/shots/sorcerer-bonus-bar.png` and `docs/shots/sorcerer-after-font.png`.
+
+### Still open
+
+- **Metamagic.** The option picks at 2/10 are in the creator, and none of
+  them do anything yet. Next PR.
+- **The export files three sorcerer features on the wrong level.** Sorcerous
+  Restoration is at 20 (2024: 5), Arcane Apotheosis at 18 (20), and the third
+  pair of Metamagic picks at 18 (17). Fix in `tools/fill_levels.py` with the
+  Metamagic PR, since the picks are what moves.
+- **Sorcerous Restoration** (short-rest points) and **Sorcery Incarnate**
+  (Innate Sorcery for 2 points, two Metamagics on one spell).
+- **Font of Magic on the road.** Only in a fight for now. A road conversion
+  would follow `Adapter.arcane_recovery`'s shape, and the profile's road panel
+  is where it would sit.
+- **Spell attacks read no other advantage or disadvantage.** Prone, dodging
+  and invisible still never reach a spell attack roll (`ponytail:` at
+  `_spell_hit`). Innate Sorcery's Advantage is the only source wired.
+
+## Factions post contracts: who hires the company (2026-09-24)
+
+The owner's call from the skills pass: factions and towns offer merc jobs, and
+standing with each faction decides who hires you. Most of the jobs already
+existed:
+
+- **Clear a lair** was `clear_lair`.
+- **Escort** was `deliver_goods`, the carter's run.
+- **Raid** was `raid_settlement` against a monster hold.
+
+What was missing was whose job it was.
+
+**The job knows who posted it.** `core/contracts.gd` stamps every job with its
+`issuer` (the people of the settlement that posted it) and, when it is aimed at
+somebody, who it is `against` (the world job's `chain_faction`). `Quest.turn_in`
+credits the issuer's opinion and a ladder deed **wherever the job is handed
+in**. Before this it credited the hand-in town: a human bounty cashed at an
+elven inn pleased the elves and taught the humans nothing. A job posted before
+contracts has no issuer and credits the hand-in town exactly as before.
+
+**Standing opens the work** (`Contracts.GATE`), on the two readings the game
+already keeps:
+
+- **The ladder** (deeds, never lost: what you have done for them). War work,
+  meaning a raid on a settlement, waits for **Known** (4 deeds).
+- **Opinion** (their mood, which drifts). Bounty and war work wait for at least
+  **neutral**. Everything else stays open down to the board's own floor
+  (`QUEST_MIN`), as it was.
+
+A closed kind is not a greyed button. It is a note under the board's header:
+"War work goes to those the humans know — Known, at 4 deeds (you have 0)."
+The robots press the first *Take* they find, and a job you can't take isn't a
+job on the board.
+
+**Regard pays.** `Contracts.pay_mult` scales a job's gold with their opinion:
++25% at +100, −6% at the floor. It sits on top of the renown premium every job
+already gets. `STANDING_PAY` is a TUNING taste number: gold sits outside every
+sweep, as `world.gd`'s `PURSE` ponytail says of a caravan.
+
+**Two bugs fixed on the way.**
+
+- The hand-in crediting above.
+- The `quest_chain` achievement counted the hand-in town's faction, a civilized
+  people no chain is ever against. It could not be earned in the open world.
+  It now counts the job's own `chain_faction`.
+
+`test_contracts` (new, 42 checks) covers:
+
+- the gates opening across Known and neutral, and closing at the floor;
+- pay at neutral, loved, and below the floor, and stacking on the real board;
+- every offer stamped with its issuer, and closed kinds listed only where
+  they'd be posted;
+- turn-in crediting the issuer, not the hand-in town;
+- a pre-contracts job still crediting the hand-in town;
+- a job against a people costing you with them.
+
+`test_quest_posting`: the city posts its raid only once it knows you.
+
+Shots, from the new `tests/shot_contracts.gd`: `docs/shots/contracts-board-stranger.png`,
+`docs/shots/contracts-board-known.png`.
+
+### Still open
+
+- **Raiding a rival people**, and **faction warfare**: the owner's call
+  (2026-09-24) is that the player *and* the factions can fight each other. That
+  lifts the "never civilized-vs-civilized" rule from the Post-T91 gap note. Next:
+  - a `raid_caravan` contract against another people's caravan or patrol, with
+    an Attack option on the friendly approach card when the band is a contract
+    target;
+  - then NPC factions fighting each other.
+
+  `against` and `Contracts.AGAINST_COST` are already in place for it: every
+  current target is a monster faction, so today it never fires.
+- **Factors.** Other peoples' agents posting their own contracts on a city's
+  board, gated by each people's standing.
+- **Turn-in.** Whether it should be limited to the issuer's own towns.
+- **Co-op.** A guest sees the host's standing and gates, since the offers are
+  the host's.
+
+## Enemy casters: real slots for the cult, and what the ruler can't price (2026-09-24)
+
+The owner's call from the skills pass: **enemy magic is rare and named.**
+Ordinary foes keep their limited-use innate abilities, and a slot-based caster
+is an occasional elite or boss, so an enemy caster is an event. It must be
+priced by `Power.estimate` on the same "each slot is one cast of the best
+spell" rule the party is priced on.
+
+**What is built.**
+
+- `data/effects/casters.json` gives three cult statblocks a real spell list
+  and slots:
+  - cult fanatic: WIS, DC 11, 4/3 slots;
+  - priest: WIS, DC 13, 4/3/2;
+  - mage: INT, DC 14, 4/3/3/3/1, from Fire Bolt up to Cone of Cold.
+
+  Each block `replaces` the innate bolt, the old stand-in for Spellcasting, so
+  the magic isn't counted twice.
+- `core/enemy_casters.gd` turns a spawned statblock into the caster. It builds
+  the spell buttons through the **same** `Effects.spell_verbs_for` a hero's come
+  from, via a five-field stand-in sheet. A scaled caster's DC and spell attack
+  rise with its multiplier, the way `_scale` raises its swing.
+- `Encounter.spawn(…, caster, caster_cap)`.
+- The fight log opens with "Othmar the Magister is a spellcaster — up to Cone
+  of Cold."
+- `core/ai.gd` `_caster_turn` works in this order:
+  1. an area or cone that catches two or more heroes (the autopilot's aims, the
+     cone half now shared as `_best_cone`);
+  2. then control, but not a second concentration lock;
+  3. then the biggest single-target spell, highest slot first.
+
+  A hero in reach: a caster whose swing beats its best spell melees, and one
+  whose swing doesn't steps clear first.
+- `Scaler` has two ways in:
+  - a seeded caster-elite roll in `roster_for` (`caster_rolls`,
+    `_caster_elite`), where the lead is bought at mult 1.0 and the rest buys
+    its escort, as `boss_for` does;
+  - `lead_caster` on a boss, which the cult's lair boss now carries.
+
+**The rule the owner chose, and what it bought.** The first sweep
+(`tests/sweep_caster.gd`, cultist rosters, 200 pinned seeds, the roll forced
+off and on) found the ruler wrong both ways:
+
+- a caster fanatic or priest priced above its worth, so its warband lost a
+  body and got **easier**: level-5 hard 56% → 89.5%;
+- a Magister priced far below its worth: level-8 hard 54% → 14%, the level-8
+  lair boss 63% → 22%.
+
+Two fixes were chosen and built:
+
+1. **Area spells are counted against the other side's actual size.**
+   `Power.area_targets(opponents)`: 2 when unknown, as before, and the party's
+   size when a foe is priced against the party it is bought to fight, capped at
+   4. Heroes are priced before their foes exist, so every hero price is
+   unchanged.
+2. **Caster tiers by band.** `EnemyCasters.SLOT_CAP` limits how far up the
+   spell levels a caster reaches:
+
+   | band | highest spell level |
+   |---|---|
+   | Heartland, Marches | 2nd |
+   | Frontier | 3rd |
+   | Far Deeps | anything |
+
+   On the map it's read off the fight's own country (`world.gd`'s
+   `encounter_spec`, `site.gd`'s rooms). Off the map it's the band the party's
+   level belongs to.
+
+It still wasn't enough. Priced like its plain statblock, a Magister won 90–98%
+of level 5–8 fights, and with both fixes:
+
+| cult warband, caster forced on | normal | hard |
+|---|---|---|
+| level 3 (off → on) | 86.5 → 99.5% | 68.0 → 99.0% |
+| level 5 | 86.0 → 93.0% | 56.0 → 86.0% |
+| level 8 | 81.0 → 59.0% | 54.0 → 27.0% |
+
+The remaining error is structural. The ruler's `sqrt(dpr × ehp)` and its
+four-cast `ROUNDS` cap can't see a glass cannon that flattens a party from
+range. So it ships where it measured in line, and nowhere else:
+
+- **Casters are fielded only from the Frontier tier up** (`MIN_FIELD_CAP`).
+  Below that tier the statblock fights exactly as on master.
+- **The cult's lair boss casts at the Frontier tier.** The new
+  `tests/sweep_caster_boss.gd` (150 seeds; the boss sweep's one-town map reads
+  as all Heartland, so it can't ask this) measures level 6 at 79.3% → 63.3% and
+  level 8 at 72.7% → 60.0%. That is a harder climax, inside the 15–85% band and
+  beside `BOSS_POOL`'s own low-60s.
+- **The warband caster roll ships at 0%** (`CASTER_ELITE_CHANCE`). It is built
+  and tested, and a sweep forces it on with `caster_chance_override`.
+
+Shot, from the new `tests/shot_caster.gd`: `docs/shots/enemy-caster-announced.png`,
+showing "Sable the Magister is a spellcaster — up to Fireball."
+
+`test_scaler` is byte-identical to master. `tests/sweep_faction_boss.gd` gained
+`LEVEL=` to sweep a boss at the level a party meets it.
+
+`test_enemy_casters` (new, 196 checks) covers:
+
+- the data;
+- the spawn (slots, buttons, the innate bolt replaced, the title);
+- scaled DCs;
+- the band caps and the least fielded tier;
+- pricing above the plain statblock;
+- the roll: seeded, at most one caster, cultist-only, forced on and off, and
+  near the shipped rate;
+- the Frontier boss as a caster, the Heartland boss as its statblock;
+- the announcement;
+- the AI: areas first, stepping clear, holding one lock.
+
+### Still open
+
+- **Price a glass cannon** (`core/rules/power.gd`), then raise
+  `CASTER_ELITE_CHANCE` and lower `MIN_FIELD_CAP`. Both are marked `ponytail:`.
+- **More casters.** Casters leading other factions (a mage with bandits, a
+  priest with soldiers), and the druid and the acolyte.
+- **Shield, Counterspell, heals and buffs for foes.** Power doesn't price them
+  and the AI doesn't use them.
+- **Breath weapons** are areas too and still priced as one target. That's a
+  separate pass over ~30 statblocks.
+
+## Keeping co-op and the modding API stable through heavy features (2026-09-24)
+
+The owner's ask: skills and checks that keep co-op and the modding API stable
+while big features land. Both are promises, and neither is visible from the
+feature being built:
+
+- two co-op peers stay in lockstep;
+- a pack written against an API level keeps loading.
+
+Until now each was held by tests that only exercised a narrow slice.
+
+**Co-op.**
+
+- **`Coop.state_hash` sees more.** It now covers resource pools and every
+  status *payload*, not just status names. A sorcery point spent on one peer
+  only, or a Metamagic armed with a different option, rolls no die until later,
+  so it was invisible to a hash of the rng. A payload that names a Combatant is
+  written as its id (`_plain()`), since its printed form differs on every peer.
+- **The lockstep harness is shared.** It moved out of `test_coop.gd` into
+  `tests/coop_harness.gd`, which `test_coop.gd` now calls.
+- **New `tests/test_coop_kits.gd`.** It covers all 48 (class, subclass) pairs,
+  built the way a player builds them, dealt into four-hero parties at levels 4
+  and 8, and fought in lockstep. Every hero turn presses every button its bar
+  offers, 60 distinct intents through the JSON codec. It also tests the
+  detector itself: a pool or a payload alone must change the hash.
+- **It found a real rules bug on its first run.** `perform()` paid the action,
+  and for a teleport or a summon the slot, *before* `cast()` checked whether
+  the spell could be cast. So a refused cast cost its caster the turn: a War
+  domain cleric's second spell against the bonus-action spell rule, a Misty Step
+  at a taken hex, a summon with nowhere to stand. `Combat._cast_refusal` now
+  asks first, and `test_coop_kits` checks that every kit's refused cast leaves
+  its economy, slots and pools untouched. Players rarely met it, because the
+  bar only offers legal buttons. The AI and the co-op harness both rely on
+  "a refused intent changed nothing".
+- **It found a second one when metamagic was merged onto it as a trial.**
+  `perform()` asked about the pool, a smite's slot and a Font of Magic
+  conversion only *after* paying the economy. Font of Magic's slot-making
+  button was pressed after Metamagic had drained the points, and the sorcerer
+  lost the Bonus Action and made no slot. On a co-op host that is a desync:
+  the host paid, and the guest never heard of it. These are now asked before
+  the spend too, checked by `test_a_drained_pool_changes_nothing`.
+
+**The modding API.**
+
+- **New `tests/test_mod_api.gd`** holds a snapshot, `tests/fixtures/mod_api.json`.
+  It covers:
+  - every vocabulary a pack can write (manifest kinds, access and data files;
+    effect kinds, feature keys (now the explicit `Effects.VERB_KEYS`) and
+    reaction triggers; quest kinds and target fields; story beat kinds,
+    conditions, effects and quest states; world kinds, behaviours, roles,
+    factions, bands and themes; calling completions);
+  - every id a pack can name, across 15 files.
+- **What fails:**
+  - **A term removed** is a break. Bump `Manifest.API`, keep reading the old
+    form, and write the migration.
+  - **A term added** must be documented in `docs/modding.md` and the snapshot
+    regenerated (`SNAPSHOT_WRITE=1`).
+  - **An id removed** strands packs.
+- **A third party's canary pack**, `tests/fixtures/mods/api-canary/`, is written
+  against API 1. It has:
+  - a monster, a spell, a potion, and four features of four kinds;
+  - a map with every AI behaviour and troop role;
+  - a story using every condition and effect key.
+
+  It must load clean, apply, and fight to a finish.
+- **Docs drift found on the first run.** `rescue` was a quest kind a story could
+  use, and `docs/modding.md` did not list it. It does now.
+- **It held on the first merge.** Master brought in the sorcerer's
+  `font_of_magic` kind and the `spell_dc_bonus`/`spell_attack_adv` keys, and
+  the check refused them until they were written into `docs/modding.md`
+  (§5.1, with an example). The snapshot was then regenerated.
+
+**The skill.** `.claude/skills/sorcmerc-compat/SKILL.md` lists the co-op
+lockstep rules (the rng, refusals, the hash, verb ids, what travels with the
+party), the modding promise (add freely if documented, never remove without an
+API bump, never touch the canary to pass), and a checklist for a heavy PR.
+`CLAUDE.md` points at it.
+
+**Enemy casters in co-op.** After the enemy casters landed, `test_coop_kits`
+gained a lockstep fight for each cult caster at each band cap: a foe's AI
+picks its spell, target and hex on each peer by itself, so this is where a
+caster that read anything but `cb.rng` would show. They cast (slots spent),
+and they stay in lockstep.
+
+### Still open
+
+- **Packs in co-op.** Both peers must run the same pack set; the build stamp
+  doesn't include it yet.
+- **World-map lockstep** (the guest's mirrored map) is covered only by
+  `test_coop_mirror`'s one scenario.
+- **The spell-mechanics keys** a pack can write (`shape`, `upcast`,
+  `cantrip_scale`, ...) are read inline in `_spell_verb` and not yet held by
+  the snapshot. Lift them into a constant the way `VERB_KEYS` was.
+- **A runtime script error inside a test function does not fail the test.**
+  The function stops, its checks never run, and the script still exits 0. One
+  slipped through while this check was being written. `tools/run_tests.sh`
+  could treat `SCRIPT ERROR` in a test's output as a failure. That is a runner
+  change for every test, so it is left for its own PR.
+
+## The action bar's hover card — two voices, drawn dice, colour-coded types (2026-09-24)
+
+The owner: "tidy up the action bar and spell explanations when hovered. there
+should be a set amount of width so overflows go to next line. tag the effect as:
+single target, cone, or aoe. split the lore-ified explanation and the mechanical
+parts of the explanations with different fonts. show the dice rolled with their
+static image as used in the live rolls. damage types and status effects can have
+their color codes for the whole game."
+
+**The card.** A badge's hover used to be the engine's plain tooltip, as wide as
+its longest line: Scorching Ray's SRD paragraph was one 1080 px line across the
+whole board. `scenes/skill_card.gd` builds a card instead, `CARD_W` (340) wide
+at chrome scale 1, every line wrapping inside it. Head: the name in the serif (a
+spell's in its school colour), then school, cost, range and concentration in a
+sans caption. Then one tag for the shape: **Single target**, **Cone**, **AoE**
+(sphere, line, emanation, "your side"), or **Self** for what touches nobody
+else (Dash, Misty Step). Every bar button is a `SkillCard.HoverButton`. Its
+`tooltip_text` is unchanged, because the tests and the drive robots read it,
+and the card is built from the same verb.
+
+**Two voices.** An SRD description opens with a picture and turns into rules.
+`split_prose()` cuts it at the first sentence that names a die, a save, damage,
+hit points, a condition or a distance. The lore half is set in a slanted
+Alegreya (`Icons.serif_italic()`, a 0.2 shear, since the italic file isn't
+shipped). The rules half and every number are in Alegreya Sans. Cure Wounds is
+rules from its first word, so it simply has no lore half. The martial verbs
+never had SRD prose, so each gets one dry line (`main.gd` `KIND_LORE`) over the
+rules blurb it always had.
+
+**The dice.** Each roll is a row: the dice it rolls, drawn, then the notation.
+A d20 for a to-hit or a save, three d6 in fire's orange for Burning Hands, up to
+six dice and then "+N". `scenes/die_icon.gd` is the one die painter.
+`dice_roll.gd`'s live d20 now calls it too, so the still icon and the tumbling
+one are the same drawing. d4 triangle, d6 square, d8 diamond, d10 kite, d12
+pentagon, d20 the hexagon it always was. The live d20 keeps its exact strokes
+(they only thin below 60 px).
+
+**Colour for the whole game.** `Icons.DAMAGE_COLORS` (13 types plus healing)
+and `CONDITION_COLORS` (the 15 conditions plus the runtime flags), grouped by
+family. Physical damage stays near-neutral steel, because it is most of every
+log. Every colour clears 4.5:1 on both dark grounds (worst 5.12:1).
+`Icons.term_spans()` / `tint_terms()` find the words in running text. They are
+used by the hover card, the combat log's colorizer (after names, so a name keeps
+its team colour), the token status strip (each glyph in its condition's colour),
+the combat card's "Right now" and resist/immune lines, the profile's attack
+rows, and the item hover card's body.
+
+`test_skill_card` (73 checks): the palette and tinting, the four tags, the prose
+split on real SRD text, every die outline fits its box, Burning Hands' card
+(Cone, 3 d6 in fire, a DEX-save d20) built through the real bar, the card
+holding its width against 200 words, every bar button carrying a card. Proof:
+`docs/shots/hover-card-*.png` (`tests/shot_actionbar.gd`).
+
+### Still open
+
+- The rules half of a spell repeats numbers the roll rows state exactly
+  ("takes 3d6 Fire damage" over the 3d6 row). It stays, because the prose also
+  carries what the rows can't (cover, repeated saves, who it can't affect).
+  Revisit if a playtest reads it as clutter.
+- A class feature (Second Wind, Rage) has no lore line. `KIND_LORE` is per
+  verb kind, and one line per kind isn't true of every feature of that kind.
+  That wants the feature prose SCHEMA gap #4 is waiting on.
+- The floating damage numbers over a token still use the one gold band. They
+  could wear the damage type's colour, but `_spawn_float` isn't handed the type.
+
+## Metamagic: five of the ten, on the board (2026-09-24)
+
+The second half of the sorcerer pass. The Metamagic picks at levels 2, 10 and
+17 have always been in the creator, and none of them did anything.
+
+**One button per option known, not a copy of every spell per option.** A
+Metamagic button *arms* the next spell. That is the precedent Divine Smite
+already set, a once-buff sitting beside the swing it rides on, and it keeps the
+bar at one button per option.
+
+- Arming pays the sorcery points through the ordinary pool spend (`pool_cost`).
+- The next spell the option can apply to takes it (`combat._take_metamagic`).
+  A spell it can't apply to leaves it armed for the next one.
+- If it's still armed when the turn ends, the points come back
+  (`_refund_metamagic`). RAW spends them as the spell is cast, and a spell never
+  cast spent nothing.
+- Only one option is armed at a time.
+
+Built, at their 2024 costs:
+
+| option | points | here |
+|---|---|---|
+| Quickened | 2 | An action spell costs a bonus action instead (`_cast_view`, so the bar's affordability and the spend agree). No leveled spell after it this turn, cantrip or not. |
+| Twinned | 1 | A spell that upcasts for more targets gets one more. |
+| Careful | 1 | Up to CHA-mod (min 1) allies caught in the area are spared outright. |
+| Subtle | 1 | It can't be Counterspelled. |
+| Seeking | 1 | A missed spell attack rolls its d20 again, once. |
+
+**The level table.** The export filed three sorcerer grants on the wrong level.
+They are fixed in `tools/fill_levels.py`'s new `CLASS_FEATURE_MOVES`, so
+`--check` keeps them applied:
+
+- Sorcerous Restoration: 20 → 5;
+- Arcane Apotheosis: 18 → 20;
+- the third pair of Metamagic picks: 18 → 17.
+
+**Balance.** The autopilot never arms Metamagic, so no sweep sees it, and
+`power.gd` prices none of it: the same state Innate Sorcery and Font of Magic
+shipped in. A player who uses it well gets more than the ruler charges. If a
+sweep that arms it ever measures above noise, price it then.
+
+`test_sorcerer` (now 81 checks) covers:
+
+- the level table;
+- arming and refunding;
+- Quickened's bonus-action cast and its leveled-spell lock;
+- Twinned's extra target, and staying armed through a spell that can't take it;
+- Careful sparing a friend in Burning Hands;
+- Subtle taken by any spell;
+- Seeking's reroll (Fire Bolt against AC 20).
+
+`test_class_abilities` presses the new buttons on its sorcerer teams
+(11,841 checks). Shot: `docs/shots/sorcerer-metamagic-bar.png`, the Bonus list
+with Careful Spell.
+
+### Still open
+
+- **Distant, Empowered, Extended, Heightened, Transmuted.** Still catalogue
+  text.
+  - Distant needs the targeting preview to read the doubled range.
+  - Heightened needs a per-target disadvantage on the first save.
+  - Empowered needs per-die rerolls.
+- **Hiding unbuilt options.** The creator still offers the five unbuilt options
+  as picks; it should grey them or say so.
+- **Sorcerous Restoration** (short-rest points at 5) and **Sorcery Incarnate**
+  (two options on one spell at 7) are still flavour.
+
+## The log continues in docs/plan/
+
+**This file takes no new entries.** From 2026-09-24 on, each entry is its own
+file in `docs/plan/` (`YYYY-MM-DD-slug.md`, the same `## Title — subtitle
+(date)` shape with a `### Still open` section). Every pull request appended to
+the end of this one file, so any two open PRs conflicted and each merge left
+the rest needing a hand-merge. `docs/plan/README.md` has the convention;
+`python3 tools/plan_log.py` prints this file and the folder as one log, oldest
+first. `tests/test_plan_entries.gd` fails on a dated section added below this
+one.

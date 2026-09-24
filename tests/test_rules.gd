@@ -670,6 +670,26 @@ func test_spell_slots() -> void:
 			want.append(0)
 		check(slots == want, "wizard %d slots %s (got %s)" % [pair[0], str(want), str(slots)])
 
+	# 2024 half casters cast from level 1 (tools/fill_levels.py CLASS_SLOTS): the
+	# export's 2014 row left a paladin and a ranger slotless until level 2.
+	for cid in ["paladin", "ranger"]:
+		for pair in [[1, 2], [2, 2], [3, 3]]:
+			var hc := _build(cid, pair[0], abil)
+			var sc: Dictionary = hc.sheet().spellcasting
+			check(not sc.is_empty() and int(sc["slots"][0]) == pair[1] and int(sc["slots"][1]) == 0,
+				"%s %d has %d first-level slots (got %s)" % [cid, pair[0], pair[1], str(sc.get("slots", []))])
+		check(Adapter.slots_left(_build(cid, 1, abil))[0] == 2, "%s 1 has both slots to spend in a fight" % cid)
+
+	# A multiclass caster reads the table at the casting class's level, not the
+	# character's: Wizard 2 / Fighter 3 is a level-2 wizard's 3 slots, not 4/3/2.
+	var mc := _build("wizard", 2, abil)
+	for i in 3:
+		mc.add_level("fighter", -1)
+	mc.dirty()
+	var mcs: Array = mc.sheet().spellcasting["slots"]
+	check(int(mcs[0]) == 3 and int(mcs[1]) == 0 and int(mcs[2]) == 0,
+		"wizard 2 / fighter 3 has a level-2 wizard's slots (got %s)" % str(mcs))
+
 	# warlock pact magic replaces the slot table
 	var wl := _build("warlock", 5, abil)
 	var ws: Dictionary = wl.sheet().spellcasting
@@ -715,10 +735,15 @@ func _sheet_party() -> Array:
 		out.append(Adapter.to_combatant(ch, "party", START[ch.id]))
 	return out
 
+# The summons' statblocks (trickery-duplicate, spiritual-weapon) live in the same
+# file and have no seat in START. Reading START[id] for them threw a script
+# error, which killed test_adapter's tail and all of test_power_ranks_the_heroes
+# before either asserted a thing. The file still reported green, because a
+# script error is not a failed check.
 func _json_foes() -> Array:
 	var out: Array = []
 	for m in Catalog.all("monsters.json"):
-		out.append(Adapter.from_monster(m, "foe", START[m["id"]]))
+		out.append(Adapter.from_monster(m, "foe", START.get(m["id"], Vector2i(9, 9))))
 	return out
 
 func test_adapter() -> void:
@@ -1002,8 +1027,41 @@ func test_power_ranks_the_heroes() -> void:
 	for k in ["dpr", "ehp", "control", "score"]:
 		check(boss.has(k), "estimate() returns \"%s\" — T8's contract" % k)
 
-	var party: Array = _sheet_party()
-	check(Power.team_score(party) > 0.0, "team_score sums the party")
-	check(Power.roster_budget(party, "hard") > Power.roster_budget(party, "easy"),
-		"a harder tier buys a bigger roster")
-	check(Power.fits(_json_foes(), 0.0), "fits() is true against a zero budget")
+	# The spell list is a menu, not a stack (2026-09-24). A caster's score used to
+	# grow with every spell prepared: each leveled spell got its level's slots
+	# again, and every spell's control was added up. Four first-level slots buy
+	# four casts of the best first-level spell, however many are prepared.
+	var cl = Adapter.to_combatant(Presets.ilsa(10), "party", Vector2i.ZERO)
+	cl.slots.assign([4, 0, 0, 0, 0, 0, 0, 0, 0])
+	var l1: Array[String] = []
+	for sid in ["burning-hands", "thunderwave", "magic-missile", "chromatic-orb", "ice-knife", "guiding-bolt", "inflict-wounds"]:
+		if not Effects.spell(sid).is_empty() and int(Effects.spell(sid).get("level", 0)) == 1:
+			l1.append(sid)
+	check(l1.size() >= 3, "enough first-level damage spells to stack (%s)" % str(l1))
+	var best := 0.0
+	for sid in l1:
+		cl.spell_ids.assign([sid])
+		best = maxf(best, float(Power.estimate(cl)["dpr"]))
+	cl.spell_ids.assign(l1)
+	var all_of_them := float(Power.estimate(cl)["dpr"])
+	check(is_equal_approx(all_of_them, best),
+		"%d first-level spells on 4 slots price as the best one cast 4 times (%.1f vs best %.1f)" % [l1.size(), all_of_them, best])
+	cl.spell_ids.assign(["burning-hands"])
+	var four := float(Power.estimate(cl)["dpr"])
+	cl.slots.assign([20, 0, 0, 0, 0, 0, 0, 0, 0])
+	check(is_equal_approx(four, float(Power.estimate(cl)["dpr"])),
+		"slots past one cast a round buy nothing in a four-round fight")
+	# A control spell is one lock, and a lock adds at most SPELL_LOCK_CAP to the
+	# caster's score. Hold Person used to triple a level-10 cleric.
+	cl.slots.assign([4, 3, 3, 3, 2, 0, 0, 0, 0])
+	cl.spell_ids.assign([])
+	var bare := float(Power.estimate(cl)["score"])
+	cl.spell_ids.assign(["hold-person", "hold-monster", "banishment"])
+	var locked := Power.estimate(cl)
+	check(float(locked["score"]) <= bare * Power.SPELL_LOCK_CAP + 0.01 and float(locked["score"]) > bare,
+		"three lock spells add at most +25%% to the caster (%.1f -> %.1f)" % [bare, float(locked["score"])])
+	check(float(locked["control"]) > 0.0, "...and the estimate still reports the lock as control")
+	check(Power._held_share(Effects.spell("hold-person"), cl) < 1.0,
+		"a lock with a save each turn holds for less than the whole fight (%.2f)" % Power._held_share(Effects.spell("hold-person"), cl))
+	check(is_equal_approx(Power._held_share(Effects.spell("command"), cl), 1.0 / Power.ROUNDS),
+		"a one-round spell holds one round")

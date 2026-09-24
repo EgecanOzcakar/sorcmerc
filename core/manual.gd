@@ -26,7 +26,7 @@ const CLASS_BLURB := {
 	"paladin": "Armoured caster. Lay on Hands is a pool of healing spent in any amounts; Divine Smite spends a spell slot on a hit for radiant dice. The oath comes at level 3.",
 	"ranger": "Ranged or two-weapon skirmisher. Hunter's Mark (bonus action, concentration) adds a d6 to every hit on one target; Favored Enemy keeps it free. Archery style is +2 to hit with every bow.",
 	"rogue": "One big hit a turn. Sneak Attack adds dice whenever you have advantage or an ally is adjacent to the target — a shortbow from behind the fighter does it every round. Cunning Action makes Dash, Disengage and Hide bonus actions.",
-	"sorcerer": "Raw arcane damage with Metamagic to bend it. Fewer spells known than a wizard, more slots spent per fight; Font of Magic turns slots into sorcery points and back.",
+	"sorcerer": "Raw arcane damage, fewer spells known than a wizard. Innate Sorcery (a bonus action, twice a day) sharpens every spell for a minute: +1 to the save DC and advantage on spell attacks. From level 2 Font of Magic burns a slot into sorcery points for free, and a bonus action turns points back into a slot. Metamagic arms your next spell for points: Quickened (an action spell on the bonus action), Twinned (one more target), Careful (spare your friends), Subtle (no Counterspell) and Seeking (reroll a miss) work on this board; the rest of the list does not yet.",
 	"warlock": "Two slots that come back on a short rest, and Eldritch Blast every other turn. Hex (bonus action, concentration) adds a d6 per hit; the patron picks the tricks.",
 	"wizard": "The widest spell list and the least HP. Fire Bolt at range, Sleep and Web for control, Fireball when it lands. Arcane Recovery gets slots back on a short rest.",
 }
@@ -117,9 +117,10 @@ static func _mechanics() -> Array:
 	var cap := Adapter.RANGE_CAP
 	var out: Array = []
 	out.append({"id": "turn", "section": "Fighting", "title": "Your turn",
-		"tags": ["action", "bonus action", "reaction", "movement", "economy", "dash", "disengage", "dodge", "help", "hide", "shove", "end turn"],
+		"tags": ["action", "bonus action", "reaction", "movement", "economy", "dash", "disengage", "dodge", "help", "hide", "shove", "end turn", "buff", "effects", "advantage mark", "metamagic"],
 		"body": _h("One action, one bonus action, one reaction, and your speed in movement.") +
 		"Spend them in any order. The action line under the board shows what's left; when the action, bonus and movement are all gone the turn ends itself.\n\n" +
+		"[b]What's riding on you[/b] — to the right of the buttons, one chip for each buff, condition or held spell on the hero whose bar it is: green helps, red hurts, verdigris is something you are holding up (concentration). Each chip says how long it lasts (\"3 rounds\", \"next attack\"), and hovering it says what it does. A button it changes is framed in its colour with a mark on the corner: [b]ADV[/b] or [b]DIS[/b] on an attack, [b]±[/b] where they cancel, [b]✦[/b] on the spells an armed Metamagic will ride, [b]+2d8[/b] where a Smite waits for the next hit. The list buttons (Spells ▸, Bonus actions ▸) carry the mark too when something inside them has one.\n\n" +
 		"[b]Action[/b] — Attack (every swing the Attack action buys), cast a spell, or one of the basics:\n" +
 		_list([_li("Dash", "another full move"),
 			_li("Disengage", "leave reach without provoking"),
@@ -169,7 +170,7 @@ static func _mechanics() -> Array:
 	out.append({"id": "dying", "section": "Fighting", "title": "Dropping to 0 HP",
 		"tags": ["death", "dying", "down", "death save", "death saving throw", "unconscious", "stable", "revive", "first aid", "healing word", "cure wounds", "dead", "mercy"],
 		"body": _h("At 0 HP you're down and unconscious, and the dice decide from there.") +
-		"At the start of each of your turns you roll a [b]death save[/b]: 10 or higher is a success, lower is a failure. A natural 20 puts you back on your feet at 1 HP; a natural 1 counts as two failures. [b]Three failures and you're dead[/b]; three successes and you're stable — still down, no more rolling.\n\n" +
+		"At the start of each of your turns you roll a [b]death save[/b]: 10 or higher is a success, lower is a failure. A natural 20 puts you back on your feet at 1 HP; a natural 1 counts as two failures. [b]Three failures and you're dead[/b]; three successes and you're stable — still down, no more rolling, until a hit knocks you off it and the rolling starts again. A stable hero comes round at 1 HP when the fight ends.\n\n" +
 		"Being [b]unconscious[/b] means attacks against you have advantage, you fail STR and DEX saves automatically, and any melee hit from reach is a critical. Damage while down is a failed save — a crit is two. Enemies won't finish a downed body while they can reach someone standing (the mercy rule), but a creature with nothing else to hit will.\n\n" +
 		"Any healing brings you back up: Cure Wounds, Healing Word, a potion, or an ally's [b]Help[/b] action (First Aid: up at 1 HP, no roll). Healing a corpse does nothing.\n\n" +
 		"Fights end when one side is entirely down or dead, or after %d rounds." % Combat.MAX_ROUNDS})

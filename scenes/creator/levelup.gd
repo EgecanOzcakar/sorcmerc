@@ -5,6 +5,14 @@
 #
 # Opened as a full-screen overlay by scenes/profile/profile.gd's "Level up".
 # Injected, like the profile: set_character(ch), then listen for `finished`.
+#
+# The same page settles a hireling in (set_recruit): core/recruits.gd has
+# already rolled everything a stranger walks in with, so there is no level to
+# add — only the choices the hire leaves to the company (subclass, spells, a
+# fighting style, a class level's ability increase or feat), with what they
+# came with drawn read-only under them. Confirm is the handshake: it asks
+# `hire_check` (world.gd's call into Recruits.hire, which pays the fee) and
+# closes only when that says yes. Cancel hires nobody.
 extends Control
 
 const Creator = preload("res://scenes/creator/creator.gd")
@@ -14,6 +22,7 @@ const Effects = preload("res://core/rules/effects.gd")
 const Save = preload("res://core/character_save.gd")
 const Icons = preload("res://core/ui_icons.gd")
 const Climb = preload("res://core/climb.gd")
+const Traits = preload("res://core/traits.gd")
 
 # leveled = the build actually gained a level (a cancel before Confirm leaves it false).
 signal finished(leveled: bool)
@@ -51,6 +60,11 @@ var _status := Label.new()
 var _confirm := Button.new()
 var _cancel := Button.new()
 var _chrome := false
+# Settle-in mode (set_recruit): the fee on the Confirm button, and the call that
+# takes them on — "" when it went through, else the reason for the status line.
+var _recruit := false
+var _fee := 0
+var hire_check: Callable = Callable()
 
 func set_character(ch) -> void:
 	_ch = ch
@@ -69,6 +83,22 @@ func set_character(ch) -> void:
 		bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 		add_child(bg)
 		_build_chrome()
+	_render()
+
+# A hireling, before the fee. No level is added: the build already stands at
+# the level they are hired at. Every choice it has already answered was
+# answered before they sat down, and all of those are locked, whatever their
+# type. What is still pending is the company's (Recruits.players_pick).
+func set_recruit(ch, fee: int) -> void:
+	_recruit = true
+	_fee = fee
+	persist = false   # the roster is written out by the run; the hire mints the id
+	set_character(ch)
+	_committed = true
+	_locked = {}
+	for p in _before.choice_points:
+		if p.get("decided", false):
+			_locked[p["key"]] = true
 	_render()
 
 func character():
@@ -134,6 +164,11 @@ func _on_confirm() -> void:
 	if not Leveling.can_finalize(_ch):
 		_status.text = "%d choice(s) still unmade." % Leveling.pending(_ch).size()
 		return
+	if _recruit and hire_check.is_valid():
+		var why: String = hire_check.call()
+		if why != "":
+			_status.text = why
+			return
 	if _ch.id != "" and persist:
 		Save.save(_ch)
 	finished.emit(true)
@@ -141,7 +176,8 @@ func _on_confirm() -> void:
 func _on_cancel() -> void:
 	# Before Confirm nothing has changed; after it, the level stands and any choice
 	# left unmade simply stays pending (the build is re-resolvable at any time).
-	finished.emit(_committed)
+	# A hireling's Cancel is "not this one": nobody is hired, whatever was picked.
+	finished.emit(_committed and not _recruit)
 
 func _pick(p: Dictionary, id: String) -> void:
 	if _locked.has(p["key"]):   # #120: an earlier level's pick, here to be read
@@ -160,7 +196,14 @@ func _render() -> void:
 		c.queue_free()
 		_body.remove_child(c)
 	var cls: String = _ch.class_id()
-	if _committed:
+	if _recruit:
+		_title.text = "Settling in: %s" % _ch.cname
+		_confirm.text = "Take them on (%d ◉)" % _fee
+		_cancel.text = "Not this one"
+		_recruit_card()
+		_choices()
+		_climb_panel()
+	elif _committed:
 		_title.text = "%s — level %d" % [_ch.cname, _ch.level()]
 		_confirm.text = "Done"
 		_cancel.text = "Close"
@@ -179,6 +222,42 @@ func _render() -> void:
 	_body.alignment = BoxContainer.ALIGNMENT_BEGIN
 	_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_status.text = ""
+
+# Who is signing: the part of the sheet the hire fixed, in the order a
+# stranger is read — what they are, what they can do, what they carry, what
+# sort they are — and the price. Everything on it came with them.
+func _recruit_card() -> void:
+	var sheet = _ch.sheet()
+	var card := PanelContainer.new()
+	card.theme_type_variation = "Card"
+	card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	card.custom_minimum_size.x = 520
+	card.name = "RecruitCard"
+	_body.add_child(card)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	card.add_child(box)
+	var cap := Label.new()
+	cap.text = "Looking for work"
+	cap.theme_type_variation = "Caption"
+	box.add_child(cap)
+	_gain(box, "%s %d" % [Icons.class_glyph(_ch.class_id()), _ch.level()], "%s %s, %s background" % [
+		Creator.humanize(_ch.species_id), Creator.humanize(_ch.class_id()).to_lower(), Creator.humanize(_ch.background_id).to_lower()])
+	var scores: Array = []
+	for a in Creator.ABILS:
+		scores.append("%s %d" % [Creator.ABIL_NAME[a], int(sheet.abilities[a]["total"]) if sheet.abilities.has(a) else 10])
+	_gain(box, "AC %d" % sheet.ac, "%d hit points.  %s" % [sheet.max_hp, "  ".join(scores)])
+	_gain(box, "⚔", ", ".join(Array(_ch.equipped).map(func(id): return Creator.humanize(id))) if not _ch.equipped.is_empty() else "nothing worn or wielded")
+	var who: Array = Traits.ids(_ch).map(func(t): return Traits.name_of(t))
+	if not who.is_empty():
+		_gain(box, "✦", ", ".join(who))
+	_gain(box, "%d ◉" % _fee, "once, to sign. No wages, no upkeep.")
+	var note := Label.new()
+	note.text = "All of that was settled before they sat down. What is still open below is the company's to decide." \
+		if not Leveling.pending(_ch).is_empty() else "All of that was settled before they sat down, and nothing is left to decide."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.add_theme_color_override("font_color", COL_DIM)
+	box.add_child(note)
 
 # What the level gives, one gain per line with the number set large: this is
 # the good news, and it used to be four dim lines in a corner.
@@ -263,7 +342,7 @@ func _choices() -> void:
 		_choice_row(p, sheet, false)
 	if not earlier.is_empty():
 		var cap := Label.new()
-		cap.text = "Chosen at earlier levels"
+		cap.text = "What they came with" if _recruit else "Chosen at earlier levels"
 		cap.theme_type_variation = "Caption"
 		_body.add_child(cap)
 		for p in earlier:
@@ -303,6 +382,15 @@ func _choice_row(p: Dictionary, sheet, locked: bool) -> void:
 	var opts := Creator.options_for(p, sheet, picks)
 	if opts.is_empty():
 		_note("No options available.", COL_WARN)
+	# #191: a skill, language or tool this build already has, or picked in
+	# another list, is greyed — unless that would leave too few to finish.
+	var taken: Dictionary = Creator.taken_elsewhere(p, [p], sheet.choice_points, _ch.choices, sheet) \
+		if p["type"] in Creator.MERGEABLE else {}
+	var free := opts.filter(func(o): return not taken.has(o["id"]) and not o["id"] in picks).size()
+	if free < n - picks.size():
+		for id in taken.keys():
+			if taken[id] == "already known":
+				taken.erase(id)
 	for o in opts:
 		var count := picks.count(o["id"])
 		var b := Button.new()
@@ -312,6 +400,9 @@ func _choice_row(p: Dictionary, sheet, locked: bool) -> void:
 			b.text += "  +%d" % count
 		if count > 0:
 			b.theme_type_variation = "Picked"
+		elif taken.has(o["id"]):
+			b.disabled = true
+			b.tooltip_text = String(taken[o["id"]]).capitalize()
 		b.pressed.connect(_pick.bind(p, o["id"]))
 		b.set_meta("choice_key", p["key"])   # which choice this answers, for tests
 		f.add_child(b)

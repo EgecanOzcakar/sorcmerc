@@ -1,0 +1,9 @@
+[
+  {
+    "id": "canary-draught",
+    "name": "Canary Draught",
+    "rarity": "common",
+    "type": "potion",
+    "description": "It tastes of nothing, which is the warning."
+  }
+]

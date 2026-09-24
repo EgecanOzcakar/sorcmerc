@@ -353,7 +353,7 @@ func _service_page(service: String, page: VBoxContainer) -> void:
 				b.pressed.connect(func(): run.accept(offer); _refresh())
 				page.add_child(b)
 			for q in Quest.active(party):
-				if not Quest.can_turn_in(q):
+				if not Quest.can_turn_in(q, party):
 					continue
 				var b := Button.new()
 				b.text = "Turn in:  %s   (+%d ◉)" % [q["title"], int(q["reward"].get("gold", 0))]

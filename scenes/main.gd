@@ -20,6 +20,8 @@ const ManualOverlay = preload("res://scenes/manual/manual.gd")
 const BugReportOverlay = preload("res://scenes/bugreport/bug_report.gd")
 const BugReport = preload("res://core/bug_report.gd")
 const Coop = preload("res://core/coop.gd")
+const Combat = preload("res://core/combat.gd")   # spell_dc(), for the static tooltip
+const Active = preload("res://core/active_effects.gd")
 
 # What T5 injects before the scene runs: the live party, the node's spec (empty ->
 # the scaler sizes one) and its difficulty. `result` is resolve_outcome() once the
@@ -111,11 +113,17 @@ var _order_aimed := {}    # ids currently wearing the aim highlight — see _pai
 @onready var _board := Board.new()
 const Figures3D := preload("res://scenes/figures3d.gd")
 const CombatCard := preload("res://scenes/combat_card.gd")   # #173
+const SkillCard := preload("res://scenes/skill_card.gd")     # the bar's hover card
 const Portraits := preload("res://scenes/portraits.gd")
 var _figures
 @onready var _actor := RichTextLabel.new()
 @onready var _buttons := GridContainer.new()
 @onready var _bscroll := ScrollContainer.new()
+@onready var _fx := HFlowContainer.new()   # what is riding on the bar's hero (core/active_effects.gd)
+@onready var _fxscroll := ScrollContainer.new()
+const FX_ROWS := 2   # the strip's fixed height, in chip rows; more than that scrolls
+const FX_ROW_H := 30.0
+var _fx_sig := ""
 @onready var _logbox := RichTextLabel.new()
 @onready var _cap := Label.new()
 @onready var _logwrap := PanelContainer.new()
@@ -383,9 +391,25 @@ func _ready() -> void:
 	# T29: the row wraps, and once it's wrapped past BUTTON_ROWS it scrolls —
 	# a caster with 20 verbs used to push the rest off the bottom of the screen.
 	_bscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_bscroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_bscroll.add_child(_buttons)
-	col.add_child(_bscroll)
+	# The effect strip rides beside the buttons, in the room the fixed row
+	# leaves to its right: the one place a player is always looking when they
+	# choose what to press, and the only place a buff is said for as long as
+	# it lasts (see _show_effects).
+	var barrow := HBoxContainer.new()
+	barrow.add_theme_constant_override("separation", 14)
+	barrow.add_child(_bscroll)
+	# Held at FX_ROWS tall whatever it carries, the way the actor line is held
+	# (#91): a buff arriving must not shove the board up.
+	_fxscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_fxscroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fx.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fx.add_theme_constant_override("h_separation", 5)
+	_fx.add_theme_constant_override("v_separation", 4)
+	_fxscroll.add_child(_fx)
+	_fxscroll.custom_minimum_size.y = (FX_ROW_H * FX_ROWS + 4.0) * Settings.chrome_scale()
+	barrow.add_child(_fxscroll)
+	col.add_child(barrow)
 
 	set_process(true)
 	_apply_ui_scale()
@@ -1108,6 +1132,7 @@ func _build_hero_menu(h, keep_armed := false) -> void:
 	_submenu_page = 0
 	_tier_spell = ""
 	_set_buttons(_slotted(h, _menu_entries(h)["opts"]))
+	_show_effects(h)   # a bar rebuilt after a press: what that press spent or set
 	_paint_order_aim()   # aim dropped: clear any highlight it left on the strip
 	_board.queue_redraw()
 
@@ -1134,6 +1159,7 @@ func _menu_entries(h) -> Dictionary:
 		var label: String = _verb_label(h, v)
 		# The name leads the popup now that it has left the button face.
 		var tip: String = label + "\n" + _verb_tooltip(h, v)
+		var prose := _verb_prose(v)
 		var sid: String = String(v.get("spell", ""))
 		var glyph: String = Icons.school_glyph(Icons.spell_school(sid)) if sid != "" \
 			else Icons.verb_glyph(String(v["kind"]))
@@ -1144,6 +1170,9 @@ func _menu_entries(h) -> Dictionary:
 		# the icons aren't there — see Icons.verb_icon.
 		var meta := _mark(Icons.skill_icon(v), glyph, freq_key)
 		meta["verb"] = v   # #92: hovering the button shows the reach on the board
+		# What the popup draws: the same verb, as a card (scenes/skill_card.gd).
+		# `tip` stays the plain string the tests and the robots read.
+		meta["card"] = SkillCard.from_verb(h, v, prose[0], prose[1], _card_title(h, v))
 		meta["slot_level"] = int(v.get("slot_level", 0))
 		meta["cost"] = String(v.get("cost", "action"))
 		if label.contains("★"):
@@ -1151,6 +1180,14 @@ func _menu_entries(h) -> Dictionary:
 		if _armed == String(v.get("id", "")):
 			meta["armed"] = true
 		meta["disabled"] = not on
+		# What a buff or condition on this hero does to THIS button — ADV from a
+		# Hide, DIS from Poisoned, ✦ where an armed Metamagic will ride. The
+		# mark goes on the face, the reason at the head of the popup.
+		var fx: Array = Active.marks(cb, h, v)
+		if not fx.is_empty():
+			meta["fx"] = fx
+			tip = label + "\n" + "\n".join(fx.map(func(m): return String(m["why"]))) + "\n\n" + _verb_tooltip(h, v)
+			meta["card"]["effects"] = fx.map(func(m): return [String(m["why"]), _tone_color(String(m["tone"]))])
 		var entry: Array
 		match v.get("targeting", "self"):
 			"enemy", "ally":
@@ -1190,9 +1227,12 @@ func _menu_entries(h) -> Dictionary:
 			# while ANY of its tiers is — the picker greys the tiers there are
 			# no slots for, the same way the bar greys anything else spent.
 			var head: Dictionary = base[3].duplicate()
+			head["card"] = (head["card"] as Dictionary).duplicate()
 			var castable: int = tiers.filter(func(t): return not bool(t[3].get("disabled", false))).size()
 			head["disabled"] = castable == 0
 			head["shift_fn"] = func(): _spell_tier_menu(h, sid)   # Shift+number: pick the slot level
+			head["card"]["foot"] = "%d of %d slot levels castable — press to pick one (Shift+key for the levels)" % [
+				castable, tiers.size()]
 			opts[i] = [base[0], func(): _spell_tier_menu(h, sid),
 				"%s\n%d of %d levels castable — pick one (Shift+key for the levels)." % [base[0], castable, tiers.size()], head]
 
@@ -1254,6 +1294,12 @@ func _slotted(h, opts: Array) -> Array:
 		var live: int = mine.filter(func(o): return not bool(o[3].get("disabled", false))).size()
 		if s in LIST_SLOTS and mine.size() > 1:   # one thing to pick from is no pick: the key fires it
 			var meta := _mark(_slot_icon(s), "▸")
+			# A mark inside the list shows on the list's own button too: an
+			# armed Quickened Spell is no use if you have to open [2] to see it.
+			for o in mine:
+				if o[3].has("fx"):
+					meta["fx"] = o[3]["fx"]
+					break
 			meta["disabled"] = mine.is_empty() or (live == 0 and not _viewing)
 			meta["key"] = str(SLOTS.find(s) + 1)
 			var tip := "%s\n%s" % [SLOT_NAMES[s], ("Nothing to pick from." if mine.is_empty()
@@ -1428,7 +1474,46 @@ const KIND_BLURB := {
 	"grant_action": "Gain extra actions this turn.",
 	"save_effect": "The target rolls a saving throw or suffers the effect.",
 	"spell": "Cast the spell.",
+	"font_of_magic": "Font of Magic: burn a spell slot into sorcery points (no action), or spend points on a new slot (a bonus action). A made slot lasts until your next long rest.",
+	"metamagic": "Metamagic: bend the next spell you cast. The points are paid now and come back if no spell takes it this turn.",
 }
+
+# The martial verbs' lore line on the hover card (scenes/skill_card.gd). A
+# spell's comes out of its SRD text; the verbs every character has were never
+# given any, and a card that is all rules for Dash and half story for Fireball
+# reads as two different games. Only the verbs everybody has: a class feature
+# (Second Wind, Rage) is too particular for one line per kind to be true of it,
+# and gets its rules blurb alone.
+const KIND_LORE := {
+	"attack": "Steel, and the arm behind it.",
+	"offhand_attack": "The other hand was never only there for balance.",
+	"dodge": "Stop trying to win for a moment. Just don't get hit.",
+	"dash": "Run now; work out where to later.",
+	"disengage": "Back off a step at a time, blade up, and leave them no opening.",
+	"hide": "Get something solid between you and them, and keep still.",
+	"help": "A feint, an elbow, a shout at the right moment.",
+	"shove": "Some fights go better with the other one on the floor.",
+	"grapple": "Get a hand on them and don't let go.",
+	"escape": "Twist, shove, and get loose.",
+	"smash": "It's a barrel. It won't mind.",
+}
+
+# [lore, rules] for the card: a spell's SRD description cut where its rules
+# start (SkillCard.split_prose), else KIND_LORE over the kind blurb.
+static func _verb_prose(v: Dictionary) -> Array:
+	if v.has("spell"):
+		var desc := String(Catalog.spell(v["spell"]).get("description", ""))
+		if desc != "":
+			return SkillCard.split_prose(desc)
+	return [String(KIND_LORE.get(v["kind"], "")), String(KIND_BLURB.get(v["kind"], ""))]
+
+# The card's title: the verb's plain name — its cost and pool, which the bar
+# label carries as " [bonus]" and " 2/3", have their own lines on the card.
+static func _card_title(h, v: Dictionary) -> String:
+	var t := String(v["label"])
+	if v["kind"] == "attack" and not h.attacks.is_empty():
+		t += " (%s)" % h.attacks[0].get("name", "unarmed")
+	return t
 
 # Prose first (a spell's own SRD text, else the kind blurb), then the resolved
 # numbers. Anything that deals or heals damage always names its dice (T29).
@@ -1468,7 +1553,7 @@ static func _verb_tooltip(h, v: Dictionary) -> String:
 		bits.append("Heals %dd%d%s HP" % [int(v["heal_count"]), int(v.get("heal_sides", 8)),
 			("+%d" % hb) if hb > 0 else ""])
 	if String(v.get("save", "")) != "":
-		bits.append("DC %d %s save%s" % [int(v.get("save_dc", 0)), String(v["save"]).to_upper(),
+		bits.append("DC %d %s save%s" % [Combat.spell_dc(h, v) if v["kind"] == "spell" else int(v.get("save_dc", 0)), String(v["save"]).to_upper(),
 			" for half" if v.get("half_on_save", false) else ""])
 	if not v.get("conditions", []).is_empty():
 		bits.append("Inflicts: %s" % ", ".join(v["conditions"]))
@@ -1575,8 +1660,9 @@ func target_readout(h, c) -> String:
 		var s := int(v.get("heal_sides", v.get("dice_sides", 8)))
 		return "≈%d HP" % int(n * (s + 1) / 2.0 + int(v.get("heal_bonus", v.get("dice_bonus", 0))))
 	if v.get("save", "") != "":
-		return "%d%%" % int(round(cb.save_fail_chance(c, int(v.get("save_dc", h.save_dc)),
-			v["save"], v.get("ignores_cover", false)) * 100.0))
+		return "%d%%" % int(round(cb.save_fail_chance(c, Combat.spell_dc(h, v) if v["kind"] == "spell" else int(v.get("save_dc", h.save_dc)),
+			v["save"], v.get("ignores_cover", false), v.get("magical", v["kind"] == "spell"),
+			v.get("conditions", [])) * 100.0))
 	return ""
 
 # board callbacks -------------------------------------------------------
@@ -1812,7 +1898,7 @@ func _set_buttons(opts: Array) -> void:
 	var count := opts.size()
 	var u := Settings.chrome_scale()
 	for i in count:
-		var b := Button.new()
+		var b := SkillCard.HoverButton.new()
 		var meta: Dictionary = opts[i][3] if opts[i].size() > 3 else {}
 		var hotkey := String(meta.get("key", ""))
 		if hotkey == "":
@@ -1825,10 +1911,16 @@ func _set_buttons(opts: Array) -> void:
 		var tex: Texture2D = meta.get("icon")
 		Icons.icon_button(b, tex, int(Icons.ICON_PX * u))
 		var tip := String(opts[i][2]) if opts[i].size() > 2 else ""
+		# The popup's card: the verb's own when _menu_entries built one, else
+		# one made of the plain text (the slots, Swap, End turn, Cancel).
+		b.card = (meta["card"] as Dictionary).duplicate() if meta.has("card") else SkillCard.from_text(tip)
 		if tex != null:
 			b.custom_minimum_size = BTN_SIZE * u
 			_chip(b, hotkey, Control.PRESET_BOTTOM_RIGHT, Icons.COL_HEAD, u)
 			_chip(b, String(meta.get("tier", "")), Control.PRESET_TOP_LEFT, Icons.COL_GOLD, u)
+			if meta.has("fx"):
+				var fx: Array = meta["fx"]
+				_fx_mark(b, " ".join(fx.map(func(m): return String(m["text"]))), _tone_color(String(fx[0]["tone"])), u)
 		else:
 			# no art in this build: the pre-badge bar, verbatim
 			var glyph: String = String(meta.get("glyph", ""))
@@ -1843,11 +1935,13 @@ func _set_buttons(opts: Array) -> void:
 			# Appended, not prefixed: the skill's NAME leads every tooltip on
 			# this bar, and it is the line that says which badge you are over.
 			tip = tip + "\n\nNot available right now."
+			b.card["alert"] = ["Not available right now.", Icons.COL_FOE]
 		elif meta.get("armed", false):
 			# A two-press verb is armed: with no label to relabel, the badge says
 			# so by going warm, and the popup says it in words.
 			b.modulate = Color("ffb3a8")
 			tip = "Press again to confirm.\n" + tip
+			b.card["alert"] = ["Press again to confirm.", Color("ffb3a8")]
 		b.pressed.connect(opts[i][1])
 		b.set_meta("hotkey", hotkey)
 		if tutorial:
@@ -1865,9 +1959,39 @@ func _set_buttons(opts: Array) -> void:
 					_hover_verb = {}
 					_board.queue_redraw())
 		if tip != "":
-			b.tooltip_text = tip   # native hover popup — the name, then what it does
+			b.tooltip_text = tip   # the popup's trigger, and what tests read; b.card is what it shows
 		_buttons.add_child(b)
 	_apply_ui_scale()
+
+# What an effect does to this button, loud enough to see without hovering: the
+# badge framed in the effect's colour and a filled pill on its top-right
+# corner ("ADV", "DIS", "✦", "+2d8"). The popup says why (_menu_entries).
+func _fx_mark(b: Button, text: String, col: Color, u: float) -> void:
+	var frame := Panel.new()
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var edge := StyleBoxFlat.new()
+	edge.bg_color = Color(0, 0, 0, 0)
+	edge.border_color = col
+	edge.set_border_width_all(maxi(2, int(2 * u)))
+	edge.set_corner_radius_all(int(5 * u))
+	frame.add_theme_stylebox_override("panel", edge)
+	b.add_child(frame)
+	frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var pill := Label.new()
+	pill.text = text
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill.add_theme_font_size_override("font_size", int(12 * u))
+	pill.add_theme_color_override("font_color", Icons.COL_INK)
+	var box := StyleBoxFlat.new()
+	box.bg_color = col
+	box.set_corner_radius_all(int(4 * u))
+	box.content_margin_left = int(4 * u)
+	box.content_margin_right = int(4 * u)
+	box.content_margin_top = 0
+	box.content_margin_bottom = 0
+	pill.add_theme_stylebox_override("normal", box)
+	b.add_child(pill)
+	pill.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, int(-4 * u))
 
 # A corner chip on a badge button: the hotkey, or an upcast tier. A Label child
 # rather than the Button's own text, because Button lays its text out next to
@@ -1914,7 +2038,65 @@ func _refresh() -> void:
 		_actor.text = "[b]%s[/b] — your friend's turn.  Click one of yours to look at their sheet." % (cur.cname if cur else "?")
 	elif _mode == "idle" and not _viewing:
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
+	if not _viewing:
+		_show_effects(cur if cur != null and cur.team == "party" and cur.conscious() else null)
 	_board.queue_redraw()
+
+# --- the effect strip ------------------------------------------------------
+#
+# Beside the action bar: one chip per buff, hindrance or held spell on the
+# hero whose bar it is (core/active_effects.gd says what they are and what they
+# do). Edges first in green, what you are holding up in verdigris, what hurts
+# you in red; the clock says how long ("3 rounds", "next attack"), the popup
+# says what it does. A foe's turn clears it — nothing on it is theirs.
+func _show_effects(c) -> void:
+	var chips: Array = Active.of(cb, c) if c != null and cb != null else []
+	var sig := var_to_str([c.id if c != null else "", chips.map(func(x): return [x["id"], x["label"], x["clock"], x["tone"]]),
+		Settings.chrome_scale()])
+	if sig == _fx_sig:
+		return
+	_fx_sig = sig
+	for n in _fx.get_children():
+		_fx.remove_child(n)
+		n.queue_free()
+	var u := Settings.chrome_scale()
+	_fxscroll.custom_minimum_size.y = (FX_ROW_H * FX_ROWS + 4.0) * u
+	for x in chips:
+		_fx.add_child(_effect_chip(x, u))
+
+func _effect_chip(x: Dictionary, u: float) -> PanelContainer:
+	var col := _tone_color(String(x["tone"]))
+	var box := Icons.box(Color(col, 0.12), col.darkened(0.15), 4, int(7 * u), int(2 * u))
+	box.border_width_left = int(3 * u)
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", box)
+	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", int(5 * u))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lbl := Label.new()
+	lbl.text = String(x["label"])
+	lbl.add_theme_font_size_override("font_size", int(15 * u))
+	lbl.add_theme_color_override("font_color", col.lightened(0.25))
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(lbl)
+	if String(x["clock"]) != "":
+		var clk := Label.new()
+		clk.text = String(x["clock"])
+		clk.add_theme_font_size_override("font_size", int(12 * u))
+		clk.add_theme_color_override("font_color", Icons.COL_MUTED)
+		clk.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(clk)
+	p.add_child(row)
+	p.tooltip_text = "%s%s\n%s" % [x["label"], (" — " + String(x["clock"])) if String(x["clock"]) != "" else "", x["detail"]]
+	return p
+
+static func _tone_color(tone: String) -> Color:
+	match tone:
+		Active.EDGE: return Icons.COL_PARTY
+		Active.HINDRANCE: return Icons.COL_FOE
+		Active.HOLD: return Icons.COL_ACCENT
+	return Icons.COL_GOLD   # mixed
 
 # --- #72: looking at a party member off their turn ------------------------
 #
@@ -1935,6 +2117,7 @@ func view_hero(c) -> void:
 	_build_hero_menu(c)
 	_build_order_strip()
 	var res := _resources(c)
+	_show_effects(c)
 	_actor.text = "%s    [i]not their turn[/i]    AC %d    %s%s" % [
 		"[b]%s[/b]" % c.cname, cb.effective_ac(c), _hp_bb(c), ("    " + res) if res != "" else ""]
 
@@ -2168,6 +2351,12 @@ static func colorize(line: String, name_colors: Dictionary) -> String:
 		claim.call(m.get_start(1), m.get_end(1), COL_NUM)
 	for m in _re_verb.search_all(line):
 		claim.call(m.get_start(1), m.get_end(1), VERB_COLORS.get(m.get_string(1), COL_DICE))
+	# Damage types and conditions, in the one colour each has everywhere
+	# (Icons.DAMAGE_COLORS / CONDITION_COLORS): "fire" here is the orange on
+	# the spell's hover card. Last, so a name that happens to hold one of the
+	# words ("Frost Giant" does not, "Poison Drake" would) keeps its team colour.
+	for t in Icons.term_spans(line):
+		claim.call(t[0], t[1], t[2])
 	spans.sort_custom(func(a, b): return a[0] < b[0])
 	var out := ""
 	var cut := 0
@@ -2707,7 +2896,12 @@ class Board extends Control:
 	# board: 410 repaints in 411 frames. Now the ground is painted once per
 	# board (and per zoom, which really does change the picture) and carried by
 	# _ground.position; see _ground_at.
-	class Ground extends Control:
+	# A Node2D, not a Control: Godot culls a Control by its own rect, and this
+	# one is zero-sized and carried off by a pan (_place_layers). Once its
+	# origin left the window (zoom in, then pan so the top of the board's world
+	# is off-screen) the whole floor vanished under the props standing on it,
+	# though every tile of it was on screen. A Node2D is culled by what it draws.
+	class Ground extends Node2D:
 		var board
 		func _draw() -> void:
 			if board.cb != null:
@@ -2736,7 +2930,8 @@ class Board extends Control:
 		for layer in [_backdrop, _ground]:
 			layer.board = self
 			layer.show_behind_parent = true
-			layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if layer is Control:
+				layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(layer)
 	var _auto_fit := false    # zoom-to-fit each layout until the user zooms (new fight, Home)
 	var _tok := {}        # id -> displayed pixel pos (for slide)
@@ -2753,6 +2948,12 @@ class Board extends Control:
 	var _flash := {}     # id -> ttl
 	var _hover := Vector2i(999, 999)
 	var _hover_pt := Vector2(1e9, 1e9)   # un-iso'd pixel point under the mouse, for corner aiming
+	# #198: the right button both pans (held and dragged) and cancels (clicked).
+	# Cancelling on the press threw away an aimed spell every time the player
+	# only meant to look round the board, so the cancel waits for the release
+	# and is skipped when the button travelled further than a click wobbles.
+	var _rmb_travel := -1.0   # pixels dragged since the right press; < 0 when it is up
+	const RMB_CLICK_SLOP := 6.0
 
 	# The aim for an area verb at the current hover: a hex, a corner (three
 	# hexes) or the aimed hex of a line; null when the mouse is off the board.
@@ -3256,6 +3457,16 @@ class Board extends Control:
 			_ground_key = key
 			_ground_at = _origin
 			_ground.queue_redraw()
+			queue_redraw()   # the tokens, marks and figures are in the new view too
+		# #194: the layer is carried here as well as in _draw(). A repaint above
+		# re-bases it (_ground_at = _origin), but only the board's own _draw()
+		# used to move it, and nothing queues that when the zoom changed inside
+		# a _layout() (auto-fit) or while nothing on the board was animating.
+		# The fresh ground then sat at the OLD offset, out from under the props
+		# and figures, until some animation happened to redraw the board: "the
+		# grid and the ground are off, and correct themselves after a few
+		# seconds".
+		_ground.position = _origin - _ground_at
 		var back := hash([size, cb.board.get("palette", "shrine"), cb.is_night()])
 		if back != _backdrop_key:
 			_backdrop_key = back
@@ -3316,16 +3527,27 @@ class Board extends Control:
 			"%d/%d%s" % [c.hp, c.max_hp, ("+%d" % c.temp_hp) if c.temp_hp > 0 else ""],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * fz), Color("c9ccd6"))
 
-		# condition strip, centred over the token (the shoulder is the class badge's)
-		var tags: String = Icons.status_glyphs(c)
-		if c.is_down(): tags += " %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]
-		if tags != "":
+		# condition strip, centred over the token (the shoulder is the class badge's).
+		# One run per condition, each in its own colour (Icons.CONDITION_COLORS):
+		# a stunned goblin's ✷ is the yellow the log says "stunned" in.
+		var runs: Array = []   # [text, colour]
+		for id in Icons.CONDITION_ORDER:
+			if id != "down" and c.has(id):
+				runs.append([Icons.condition_glyph(id), Icons.condition_color(id)])
+		if c.is_stable(): runs.append([" %s stable" % Icons.condition_glyph("down"), Icons.condition_color("down")])
+		elif c.is_down(): runs.append([" %s%d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f],
+			Icons.condition_color("down")])
+		if not runs.is_empty():
 			var fs := int(13 * fz)
 			var f := ThemeDB.fallback_font
-			var w := f.get_string_size(tags, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-			var at := tp + Vector2(0, -rad * 0.8 - 10)
-			canvas.draw_string(f, at - Vector2(w * 0.5, -fs * 0.36), tags,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("e6c15a"))
+			var w := 0.0
+			for r in runs:
+				w += f.get_string_size(String(r[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var at := tp + Vector2(0, -rad * 0.8 - 10) - Vector2(w * 0.5, -fs * 0.36)
+			for r in runs:
+				canvas.draw_string_outline(f, at, String(r[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 3, Icons.COL_INK)
+				canvas.draw_string(f, at, String(r[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, r[1])
+				at.x += f.get_string_size(String(r[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 
 	# The size is the hit as a fraction of what the body had to lose: 12 damage
 	# ends a goblin and scratches a giant, and the number should not be the same
@@ -3346,6 +3568,8 @@ class Board extends Control:
 			return
 		if e is InputEventMouseMotion:
 			if e.button_mask & (MOUSE_BUTTON_MASK_MIDDLE | MOUSE_BUTTON_MASK_RIGHT):
+				if _rmb_travel >= 0.0:
+					_rmb_travel += e.relative.length()
 				main.pan_by(e.relative)
 				return
 			var hx := _unpix(e.position)
@@ -3357,13 +3581,18 @@ class Board extends Control:
 				main.board_hex_hovered(hx)
 			elif main._mode == "area":
 				queue_redraw()   # a corner can change without the hex changing
+		elif e is InputEventMouseButton and not e.pressed and e.button_index == MOUSE_BUTTON_RIGHT:
+			var click := _rmb_travel >= 0.0 and _rmb_travel <= RMB_CLICK_SLOP
+			_rmb_travel = -1.0
+			if click:
+				main.board_cancel()
 		elif e is InputEventMouseButton and e.pressed:
 			if e.button_index == MOUSE_BUTTON_WHEEL_UP:
 				_zoom_at(e.position, 1.1)
 			elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 				_zoom_at(e.position, 1.0 / 1.1)
 			elif e.button_index == MOUSE_BUTTON_RIGHT:
-				main.board_cancel()
+				_rmb_travel = 0.0
 			elif e.button_index == MOUSE_BUTTON_LEFT:
 				main.board_hex_clicked(_unpix(e.position))
 
@@ -3468,6 +3697,7 @@ class Board extends Control:
 		var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
 		var face: Color = main.shelf_face(fill)
 		var rim: Color = main.shelf_rim(fill)
+		var floor_tex: Texture2D = main.FLOORS.get(cb.board.get("palette", "shrine"))
 		var top := _hex_poly(c, s)
 		var lip: Array = []
 		for i in top.size():
@@ -3479,11 +3709,44 @@ class Board extends Control:
 			var drop: float = RISE * s * float(here - below)
 			if drop <= 0.0:
 				continue
-			canvas.draw_colored_polygon(PackedVector2Array([
-				a, b, b + Vector2(0, drop), a + Vector2(0, drop)]), face)
+			_paint_cliff(canvas, a, b, drop, s, face, floor_tex, hx)
 			lip.append([a, b])
 		for e in lip:
 			canvas.draw_line(e[0], e[1], rim, maxf(1.5, s * 0.07))
+
+	# #197: one face of cut earth. It used to be a flat fill of shelf_face,
+	# which on the dark boards came out near black and read as a hole in the
+	# ground ("empty space between the cells"). It is rock now: the floor's own
+	# texture run down the face, lit at the lip and dark at the foot, a face
+	# turned toward the board's light a shade brighter than one turned away,
+	# and a dark line where it meets the ground so it stands ON something.
+	const CLIFF_TOP := 1.55    # the face's colour at the lip, against shelf_face
+	const CLIFF_FOOT := 0.6    # ...and at the foot
+	const CLIFF_TURN := 0.22   # how much the side turned to the light gains over the side turned away
+	func _paint_cliff(canvas: CanvasItem, a: Vector2, b: Vector2, drop: float, s: float,
+			face: Color, tex: Texture2D, hx: Vector2i) -> void:
+		var down := Vector2(0, drop)
+		var quad := PackedVector2Array([a, b, b + down, a + down])
+		var edge := (b - a).normalized()
+		var toward: float = clampf(Vector2(-edge.y, edge.x).dot(_iso(LIGHT).normalized()) * -1.0, -1.0, 1.0)
+		var k: float = 1.0 + CLIFF_TURN * toward
+		var lit := Color(face.r * CLIFF_TOP * k, face.g * CLIFF_TOP * k, face.b * CLIFF_TOP * k)
+		var foot := Color(face.r * CLIFF_FOOT * k, face.g * CLIFF_FOOT * k, face.b * CLIFF_FOOT * k)
+		canvas.draw_polygon(quad, PackedColorArray([lit, lit, foot, foot]))
+		if tex != null:
+			# u along the edge, v down the face: the strata run level, and each
+			# hex starts the texture somewhere of its own so a long wall does not
+			# repeat one tile's worth of rock.
+			var span: float = s * main.FLOOR_SPAN
+			var u0: float = float(absi(hash(hx)) % 97) / 97.0
+			var w: float = a.distance_to(b) / span
+			var h: float = drop / span
+			var uvs := PackedVector2Array([Vector2(u0, 0.0), Vector2(u0 + w, 0.0),
+				Vector2(u0 + w, h), Vector2(u0, h)])
+			var t: float = main.FLOOR_TONE * 0.55 * k
+			canvas.draw_polygon(quad, PackedColorArray([Color(t, t, t, 0.55), Color(t, t, t, 0.55),
+				Color(t * 0.5, t * 0.5, t * 0.5, 0.55), Color(t * 0.5, t * 0.5, t * 0.5, 0.55)]), uvs, tex)
+		canvas.draw_line(a + down, b + down, Color(0, 0, 0, 0.55), maxf(1.0, s * 0.05))
 
 	# Which neighbour of `hx` lies across an edge, given that edge's midpoint as
 	# an offset from the hex's own centre. Asked this way rather than carried
@@ -3524,7 +3787,12 @@ class Board extends Control:
 	# The floor, laid flat on the board in ground space so it runs continuous
 	# from hex to hex — the same seamless painted texture the map's ground is,
 	# and the whole of what a plain tile is now.
-	func _paint_floor(canvas: CanvasItem, poly: PackedVector2Array, s: float, alpha: float, light := 1.0) -> void:
+	# `lift` is how far up the screen the tile is drawn (_rise). The texture is
+	# read where the tile's FOOTPRINT is, so a shelf carries its own patch of
+	# ground up with it. #197: reading it where the tile is drawn made a raised
+	# top continue the pattern of the lower tile behind it, seamlessly, and the
+	# step vanished into one flat picture.
+	func _paint_floor(canvas: CanvasItem, poly: PackedVector2Array, s: float, alpha: float, light := 1.0, lift := 0.0) -> void:
 		var floor_tex: Texture2D = main.FLOORS.get(cb.board.get("palette", "shrine"))
 		var fill: Color = main.PALETTES.get(cb.board.get("palette", "shrine"), main.COL_HEX)
 		canvas.draw_colored_polygon(poly, Color(fill, alpha))
@@ -3532,7 +3800,7 @@ class Board extends Control:
 			return
 		var uvs := PackedVector2Array()
 		for pt in poly:
-			uvs.append(_iso_inv(pt - _origin) / (s * main.FLOOR_SPAN))
+			uvs.append(_iso_inv(pt - Vector2(0, lift) - _origin) / (s * main.FLOOR_SPAN))
 		var tone: float = main.FLOOR_TONE * light
 		canvas.draw_polygon(poly, PackedColorArray([Color(tone, tone, tone * 1.04, main.FLOOR_ALPHA * alpha)]), uvs, floor_tex)
 
@@ -3544,7 +3812,7 @@ class Board extends Control:
 		var poly := _hex_poly(c, s)   # full size: no gutter between hexes, the texture runs through
 		var obj: Dictionary = cb.object_at(hx)
 		if obj.is_empty():
-			_paint_floor(canvas, poly, s, 1.0, _light_at(c) * (1.0 + SHELF_LIT * float(cb.height_at(hx))))
+			_paint_floor(canvas, poly, s, 1.0, _light_at(c) * (1.0 + SHELF_LIT * float(cb.height_at(hx))), _rise(hx))
 		else:
 			var fill: Color = main.COL_PROP
 			if _is_hazard(obj):

@@ -2,7 +2,7 @@
 # nothing but routing: every screen it shows is an existing scene, instantiated
 # as a full-screen child.
 #
-#   title  →  party setup (party.tscn + creator.tscn)  →  world.tscn (the open world)
+#   title  →  party setup (party.tscn + creator.tscn: the founder)  →  world.tscn (the open world)
 #
 # O8: the open world is normal play. The old linear route is still wired up, but
 # only when SORCMERC_LINEAR_CAMPAIGN is in the environment (same debug-gate shape
@@ -33,6 +33,7 @@ const Tutorial = preload("res://core/tutorial.gd")
 const Registry = preload("res://core/mod/registry.gd")
 const StoryRuntime = preload("res://core/mod/story_runtime.gd")
 const Coop = preload("res://core/coop.gd")
+const Recruits = preload("res://core/recruits.gd")   # a new run's founding: one hero made, the rest hired
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 const CAMPAIGN_SCENE := "res://scenes/campaign/campaign.tscn"
@@ -132,7 +133,13 @@ func show_title() -> void:
 	var slots: Array = WorldSave.list_slots()
 	for i in slots.size():
 		var slot: Dictionary = slots[i]
-		col.add_child(_button("Resume the open world", _resume_world.bind(String(slot["id"])), i == 0))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var resume := _button("Resume the open world", _resume_world.bind(String(slot["id"])), i == 0)
+		resume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(resume)
+		row.add_child(_quiet("Delete…", _confirm_delete_world_save.bind(slot)))
+		col.add_child(row)
 		col.add_child(_dim(slot_lines(slot)))
 		col.add_child(_gap(6))
 	col.add_child(_button("New run", show_party_setup, slots.is_empty()))
@@ -195,8 +202,9 @@ static func slot_lines(slot: Dictionary) -> String:
 	return first + "\n" + second
 
 # Deleting the only copy of a run is not a one-click thing: this is its own
-# screen, and the way back is a button rather than a guess.
-func _confirm_delete_world_save() -> void:
+# screen, and the way back is a button rather than a guess. It was built and
+# never given a door; each slot on the title screen now has one ("Delete…").
+func _confirm_delete_world_save(slot: Dictionary) -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -204,7 +212,7 @@ func _confirm_delete_world_save() -> void:
 	head.text = "Delete the open-world autosave?"
 	head.theme_type_variation = "Title"
 	col.add_child(head)
-	col.add_child(_dim(slot_lines(WorldSave.summary())))
+	col.add_child(_dim(slot_lines(slot)))
 	var body := Label.new()
 	body.text = "The characters stay in the barracks. The map, the purse, the stash and the quests do not. This cannot be undone."
 	body.theme_type_variation = "Serif"
@@ -213,7 +221,7 @@ func _confirm_delete_world_save() -> void:
 	col.add_child(body)
 	col.add_child(_gap(8))
 	col.add_child(_button("Delete it", func():
-		WorldSave.clear()
+		WorldSave.delete_slot(String(slot.get("id", "")))
 		show_title()))
 	col.add_child(_quiet("Keep it", show_title))
 	var centre := CenterContainer.new()
@@ -505,14 +513,24 @@ func _process(_dt: float) -> void:
 # --- party setup ----------------------------------------------------------
 #
 # The party screen does the work (roster, slots, the creator, profiles); this
-# only supplies the saved roster and the door out of it.
+# only supplies the roster and the door out of it.
+#
+# The founding (the owner's call, 2026-09-24; core/recruits.gd): a new run
+# starts with nobody. The player makes ONE hero, who founds the company, and
+# everyone after is hired at an inn — the barracks' heroes from earlier runs do
+# not march in, though an inn may offer one as a veteran. The linear debug
+# campaign keeps the old door, the whole barracks, because its determinism is
+# what the test suite leans on and it has no inns to hire at.
 
 func show_party_setup() -> void:
 	var party := Party.new()
-	for ch in CharacterSave.load_all():
-		ch.dead = false                  # the barracks is for the living
-		ch.hp_current = -1               # ...and rested up — a new run starts at full HP,
-		party.add_member(ch)             # not however hurt/downed they were saved
+	if linear_campaign():
+		for ch in CharacterSave.load_all():
+			ch.dead = false                  # the barracks is for the living
+			ch.hp_current = -1               # ...and rested up — a new run starts at full HP,
+			party.add_member(ch)             # not however hurt/downed they were saved
+	else:
+		Recruits.found(party)
 	var wrap := Control.new()
 	var screen = load(PARTY_SCENE).instantiate()
 	screen.party = party
@@ -528,7 +546,7 @@ func show_party_setup() -> void:
 	# open-world path reads it.
 	var begin := func(size: String) -> void:
 		if party.active.is_empty():
-			screen._hint.text = "Put at least one character in the active party first."
+			screen._hint.text = _nobody_yet(party)
 			return
 		if linear_campaign():
 			_show_campaign(Campaign.new(party, int(OS.get_environment("SORCMERC_SEED"))))
@@ -549,7 +567,7 @@ func show_party_setup() -> void:
 		begin_pack.offset_left = -360; begin_pack.offset_top = 12; begin_pack.offset_right = -16
 		begin_pack.pressed.connect(func():
 			if party.active.is_empty():
-				screen._hint.text = "Put at least one character in the active party first."
+				screen._hint.text = _nobody_yet(party)
 				return
 			_start_pack(party))
 		wrap.add_child(begin_pack)
@@ -596,6 +614,13 @@ func show_party_setup() -> void:
 	back.pressed.connect(show_title)
 	wrap.add_child(back)
 	_swap(wrap, "party setup")
+
+# What Begin says to an empty company: on a founding, the one thing missing is
+# the founder.
+static func _nobody_yet(party) -> String:
+	if Recruits.hire_only(party) and party.roster.is_empty():
+		return "Make the founder first: Create new, then Begin."
+	return "Put at least one character in the active party first."
 
 # M8: a pack run is an ordinary open-world run — the same scene, the same
 # party, the same autosave. The pack supplies the map, and (when it has one) a

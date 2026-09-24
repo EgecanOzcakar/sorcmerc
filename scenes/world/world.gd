@@ -60,6 +60,7 @@ const Site = preload("res://core/site.gd")
 const SiteScreen = preload("res://scenes/world/site_screen.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
 const Regions = preload("res://core/regions.gd")
+const EnemyCasters = preload("res://core/enemy_casters.gd")
 const Travel = preload("res://core/travel.gd")
 const EventCard = preload("res://scenes/world/event_card.gd")
 const DiceRoll = preload("res://scenes/dice_roll.gd")
@@ -70,6 +71,8 @@ const StoryCard = preload("res://scenes/world/story_card.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const Trance = preload("res://core/trance.gd")
 const WorldForage = preload("res://core/world_forage.gd")
+const WorldChase = preload("res://core/world_chase.gd")
+const WorldFlee = preload("res://core/world_flee.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Campaign = preload("res://core/campaign.gd")   # T25 item names/prices, and _split_xp
@@ -92,8 +95,11 @@ const Ladder = preload("res://core/ladder.gd")
 const Callings = preload("res://core/callings.gd")
 const Downtime = preload("res://core/downtime.gd")
 const Lodge = preload("res://core/lodge.gd")   # the company's house: the square's door, the lodge page
+const Recruits = preload("res://core/recruits.gd")   # who is looking for work at the inn, and the fee
+const ChoicePick = preload("res://core/rules/choice_pick.gd")   # humanize(), for a hireling's species and class
 const Catalog = preload("res://core/rules/catalog.gd")   # the trainer's feat names
 const Posting = preload("res://core/quest_posting.gd")
+const Contracts = preload("res://core/contracts.gd")
 const Loot = preload("res://core/loot.gd")
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
@@ -305,6 +311,20 @@ var _halted_on_arrival := false
 var _approach_foe = null
 var _approach_card: Control = null
 var _slipped := {}
+# The band the player clicked on and is marching to meet (see _seek()), and the
+# point the march was last aimed at — the order is the player's only while the
+# party's destination is still that point. "" when nobody is being sought.
+var _meet_id := ""
+var _meet_aim := Vector2.INF
+# A chase the party cannot win on legs alone (core/world_chase.gd): when it may
+# next roll to run the band down, and how many of those rolls it has missed.
+var _chase_next_at := 0.0
+var _chase_misses := 0
+# When core/world_flee.gd last sized every band up against the party. -INF so
+# the first frame gauges; after that every GAUGE_MINUTES of world time, which
+# is soon enough to catch a level-up or a band that has walked into a new
+# country, and far cheaper than pricing the party every frame.
+var _gauged_at := -INF
 var _pace_btn: Button
 var _bottom_bar: HBoxContainer       # the road actions and their messages; _layout_minimap seats it
 var _site_screen: Control = null     # ...and the descent screen drawing it
@@ -547,12 +567,16 @@ func _process(delta: float) -> void:
 	var p0 := world.player()
 	if p0 != null:
 		world.reveal(p0.position)   # T9x fog of war: permanent once seen
+		_follow_meet(p0, dt)        # before the arrival halt, which would pause the clock under it
 		_check_arrival(p0)
 		# D3: the marching order IS the speed, re-read every frame so changing
 		# it on the party screen takes effect the moment you back out.
 		p0.speed = World.SPEED * Travel.speed_mult(party)
 	FactionOpinion.tick(world, dt)
 	PartyOpinion.decay(party, dt)   # spike-party-opinions §7: a paused clock drifts nothing, same contract
+	if world.clock.elapsed >= _gauged_at + WorldFlee.GAUGE_MINUTES:
+		world.band_strength = WorldFlee.gauge(world, party)
+		_gauged_at = world.clock.elapsed
 	WorldAI.update(world, delta)
 	_check_encounter(dt)
 	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not
@@ -1479,10 +1503,13 @@ func _check_encounter(dt := 0.0) -> void:
 			continue
 		# A hostile band (raiders, monsters — WorldAI.is_hostile() makes every
 		# monster faction hostile to the player unconditionally) gets the
-		# fight/parley/ambush card; a civilized one that ISN'T hostile — a
-		# faction patrol, most often — used to be skipped here entirely and
-		# could never be met at all. It now gets the same card with the
-		# friendly-only ways (T9z).
+		# fight/parley/ambush card the moment it closes: it came for you, and
+		# the card is how you answer. A band that ISN'T hostile — a faction
+		# patrol, most often — is never met by bumping into it. It used to be:
+		# T9z gave it the friendly-only card and opened it on contact, so a
+		# party marching past a patrol on the road was stopped to be asked
+		# whether it wanted to stop. Now it is met only when the player clicks
+		# it (_seek() below); standing next to one does nothing.
 		var hostile: bool = WorldAI.is_hostile(q, p)
 		var near: bool = q.position.distance_to(p.position) <= reach
 		# A band already slipped past stays slipped until it is genuinely out of
@@ -1492,13 +1519,153 @@ func _check_encounter(dt := 0.0) -> void:
 			if not near:
 				_slipped.erase(q.id)
 			continue
+		if not hostile:
+			continue   # met by clicking it, never by standing next to it
 		if WorldAI.in_truce(q, world.clock.elapsed):
 			continue   # met and parted without blood: they want nothing from you for a while
 		if near:
-			if hostile and world.clock.is_night() and not _night_jump(q):
-				return
-			_open_approach(q, hostile)
+			_meet(q, hostile)
 			return
+
+# The card, or — for a hostile band in the dark — whatever the watch makes of it.
+func _meet(q, hostile: bool) -> void:
+	if hostile and world.clock.is_night() and not _night_jump(q):
+		return
+	_open_approach(q, hostile)
+
+# --- meeting a band on purpose ------------------------------------------
+#
+# A click on a band's figure is an order to go and meet it: the party marches at
+# it, follows it if it moves, and the approach card opens when the two are in
+# reach — at once if they already are. It is the only way to meet a band that
+# is not hostile, and for a hostile one it overrides the two things that
+# otherwise keep a card shut (a slip or parley's truce, and _slipped): asking
+# for a meeting by name is asking. A click on the ground calls it off, and so
+# does anything else that sends the party somewhere (_follow_meet() checks).
+
+# The band whose figure is under screen point `sp`, or null. Only the bands the
+# map is drawing (Party3D hides the rest under the fog), and the nearest when
+# two figures overlap.
+func _band_at(sp: Vector2):
+	var p := world.player()
+	var best = null
+	var best_d := INF
+	var h: float = Party3D.TARGET_HEIGHT * ISO_GAIN * _zoom
+	for q in world.parties:
+		if q == p or q.is_player or not world.band_seen(q.position):
+			continue
+		var at := _pix(q.position)
+		if _in_model_box(sp, at, h):
+			var d := sp.distance_to(at)
+			if d < best_d:
+				best = q; best_d = d
+	return best
+
+func _seek(band) -> void:
+	var p := world.player()
+	if p == null or band == null or _combat != null or _approach_card != null:
+		return
+	_slipped.erase(band.id)
+	if band.position.distance_to(p.position) <= ENCOUNTER_RADIUS:
+		_met_sought(p, band)
+		return
+	_meet_id = band.id
+	_chase_next_at = world.clock.elapsed + WorldChase.INTERVAL
+	_chase_misses = 0
+	_aim_meet(p, band)
+	_camp_msg.text = MEET_MSG % band.id.capitalize()
+
+# The HUD line an errand puts up, and takes down again when it ends however it
+# ends — met, called off, or lost in the fog — so it never outlives the march.
+const MEET_MSG := "Marching to meet %s. Click the ground to call it off."
+func _drop_meet() -> void:
+	if _meet_id != "" and _camp_msg != null and _camp_msg.text == MEET_MSG % _meet_id.capitalize():
+		_camp_msg.text = ""
+	_meet_id = ""
+
+func _aim_meet(p, band) -> void:
+	world.set_goal(p, band.position)
+	_meet_aim = _destination(p)
+
+# Where the party is ultimately going: the last corner of a routed march, or
+# the goal of a straight one.
+static func _destination(p) -> Vector2:
+	return p.route[-1] if not p.route.is_empty() else p.goal
+
+# One frame of the march: drop the order if the band is gone, out of sight, or
+# the party has been sent somewhere else; meet it if it is in reach; roll to run
+# it down if it is getting away (_chase); otherwise re-aim at it once it has
+# drifted far enough to matter (set_goal routes round water, which is not a
+# thing to do every frame).
+func _follow_meet(p, dt: float) -> void:
+	if _meet_id == "" or _combat != null or _approach_card != null or world.clock.is_paused():
+		return
+	var band = null
+	for q in world.parties:
+		if q.id == _meet_id:
+			band = q
+			break
+	if band == null or not world.band_seen(band.position):
+		var who := _meet_id.capitalize()
+		_drop_meet()
+		_camp_msg.text = "Lost sight of %s." % who
+		return
+	if _destination(p) != _meet_aim:
+		_drop_meet()
+		return
+	if band.position.distance_to(p.position) <= _trigger(dt):
+		_met_sought(p, band)
+		return
+	if _chase(p, band):
+		return
+	if band.position.distance_to(_meet_aim) > ENCOUNTER_RADIUS * 0.5:
+		_aim_meet(p, band)
+
+# A band as fast as the party or faster is never caught by following it, so
+# while it is still in sight the party gets a roll every WorldChase.INTERVAL to
+# run it down. True when the chase ended this frame, caught or lost.
+func _chase(p, band) -> bool:
+	if not WorldChase.outpaced(band.speed, p.speed) \
+			or band.position.distance_to(p.position) > world.sight_radius():
+		return false
+	if world.clock.elapsed < _chase_next_at:
+		return false
+	_chase_next_at = world.clock.elapsed + WorldChase.INTERVAL
+	var r: Dictionary = WorldChase.check(party, band.speed, p.speed,
+		RNG.new(maxi(1, absi(hash("chase|%s|%d" % [band.id, int(world.clock.elapsed)])))))
+	if r.is_empty():
+		return false
+	var who: String = band.id.capitalize()
+	var tally := "%s %d+%d vs DC %d" % [String(r["skill"]).capitalize(), r["nat"], r["bonus"], r["dc"]]
+	if r["ok"]:
+		var caught := "runs %s down" if WorldAI.is_hostile(band, p) else "catches up with %s"
+		_met_sought(p, band, r, "%s %s (%s)." % [r["cname"], caught % who, tally])
+		return true
+	_chase_misses += 1
+	if _chase_misses >= WorldChase.MAX_TRIES:
+		_drop_meet()
+		_map_roll(r, _camp_msg, "%s can't close the gap (%s) — %s get away." % [r["cname"], tally, who])
+		return true
+	_map_roll(r, _camp_msg, "%s can't close the gap yet (%s) — %s keep their lead." % [r["cname"], tally, who])
+	return false
+
+# The party got where it was going, so it stops there the way #70 stops any
+# arrival — a meeting that ends without a fight hands back a halted map
+# (_on_approach_reported), not one that runs on with nobody giving orders.
+# `roll` is the chase roll that caught the band, if one did: the card waits
+# for its die to land, with the map held still under it.
+func _met_sought(p, band, roll := {}, text := "") -> void:
+	_drop_meet()
+	world.set_goal(p, p.position)
+	_halted_on_arrival = true
+	_was_travelling = false
+	var hostile: bool = WorldAI.is_hostile(band, p)
+	if roll.is_empty():
+		_meet(band, hostile)
+		return
+	world.clock.pause()
+	_pause_btn.text = "Resume"
+	_map_roll(roll, _camp_msg, text, "", func(): _meet(band, hostile))
 
 # #85: in the dark a hostile band is on the party before anyone can choose how
 # to meet it — unless someone on watch hears them coming. The same check and the
@@ -1564,7 +1731,8 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 	var spec: Dictionary = Scaler.roster_for(
 		party.party_characters(), difficulty if difficulty != "" else String(threat["difficulty"]),
 		{}, theme, seed_v,
-		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party), [], habitat)
+		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party), [], habitat,
+		EnemyCasters.cap_for_band(String(Regions.at(world, foe.position)["id"])))   # this country's casters
 	spec["theme"] = theme if theme != "" else String(Scaler.BIOME_BOARD.get(biome, DEFAULT_THEME))
 	# What this band is worth robbing for. A caravan is carrying its cargo; a
 	# patrol, a warband and a beast pack are carrying what they stand up in.
@@ -2818,7 +2986,10 @@ func _on_approach_reported(foe, r: Dictionary) -> void:
 		# the moment you step out of reach.
 		_slipped[foe.id] = true
 		WorldAI.truce(foe, world.player(), world.clock.elapsed)
-		world.clock.resume()
+		if _halted_on_arrival:
+			_halt()   # a band the party walked up to on purpose: it arrived, and waits for orders
+		else:
+			world.clock.resume()
 		return
 	await _launch_combat(foe, bool(r.get("scouted_ahead", false)),
 		bool(r.get("forced_ambush", false)), _jumped_for(r))
@@ -3620,8 +3791,9 @@ func _turn_in(quest: Dictionary) -> void:
 		# to. The board's second payout, and the one that is not gold.
 		var lead: Dictionary = Rumors.free_lead(_visit["settlement"], party, world)
 		_build_visit_panel()
-		_say("%s — paid, +%d ◉, +%d XP. They will remember it.%s" % [
-			quest["title"], reward, reward * Quest.XP_PER_GOLD,
+		var who := String(quest.get("issuer", _visit["settlement"].faction))
+		_say("%s — paid, +%d ◉, +%d XP. The %s will remember it.%s" % [
+			quest["title"], reward, reward * Quest.XP_PER_GOLD, Ladder.people(who),
 			("  " + String(lead["text"])) if not lead.is_empty() else ""])
 		_autosave()
 
@@ -3863,12 +4035,24 @@ func _build_visit_panel() -> void:
 	title.theme_type_variation = "Head"
 	box.add_child(title)
 
+	# #201: a page is as long as what the town has — a city's square with every
+	# counter open, a lodge, a battlefield to pick over — and the lists inside a
+	# page were the only part that scrolled. The page body scrolls as a whole
+	# now, capped at what the window has left, so Leave is always on screen.
+	var body_scroll := ScrollContainer.new()
+	body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body_scroll.custom_minimum_size = Vector2(VISIT_PANEL_W, _visit_body_h)
+	var body := VBoxContainer.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body_scroll.add_child(body)
+	box.add_child(body_scroll)
 	match _visit_page:
-		"market": _build_market_page(box, s)
-		"inn": _build_inn_page(box, s)
-		"board": _build_board_page(box, s)
-		"lodge": _build_lodge_page(box, s)
-		_: _build_hub_page(box, s)
+		"market": _build_market_page(body, s)
+		"inn": _build_inn_page(body, s)
+		"board": _build_board_page(body, s)
+		"lodge": _build_lodge_page(body, s)
+		_: _build_hub_page(body, s)
+	_fit_visit_body(body_scroll, body)
 
 	_visit_log = Label.new()
 	_visit_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -3937,6 +4121,24 @@ const VISIT_CHROME_H := 320.0
 func _page_scroll_h(want: float) -> float:
 	return clampf(size.y - VISIT_CHROME_H, 120.0, want)
 
+# What the settlement panel keeps for itself around the page body: the title
+# above it, the log line and the Leave bar below, and the panel's own margins.
+const VISIT_BODY_CHROME_H := 170.0
+# The body's last fitted height. A page is rebuilt on every click, so starting
+# the new one at the old one's height keeps the panel from jumping a frame.
+var _visit_body_h := 360.0
+
+# A container cannot measure an autowrapped label before it has a width, so the
+# body is fitted a frame after it is built: as tall as its content, and never
+# taller than the window can show.
+func _fit_visit_body(body_scroll: ScrollContainer, body: Control) -> void:
+	await get_tree().process_frame
+	if not is_instance_valid(body_scroll) or not is_instance_valid(body):
+		return
+	var cap: float = maxf(160.0, size.y - VISIT_BODY_CHROME_H)
+	_visit_body_h = minf(body.get_combined_minimum_size().y, cap)
+	body_scroll.custom_minimum_size.y = _visit_body_h
+
 const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board", "lodge": "Your Lodge"}
 
 # The town square: where to go, plus the one thing that belongs to no single
@@ -3996,6 +4198,11 @@ func _build_hub_page(box: VBoxContainer, s) -> void:
 	var cost := Visit.inn_cost(s, party)
 	inn_btn.text = (("Inn.  On the house." if cost == 0 else "Inn.  A night is %d ◉" % cost) if wait <= 0.0
 		else "Inn.  Rested recently, a room does nothing for %s yet" % _hours(wait))
+	# The door has to say there are people behind it: on a new run the inn is
+	# the only place the company grows (core/recruits.gd).
+	var looking: int = Recruits.offers(s, world, party).size()
+	if looking > 0:
+		inn_btn.text += ",  %d looking for work" % looking
 	inn_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	inn_btn.pressed.connect(_goto_page.bind("inn"))
 	places.add_child(inn_btn)
@@ -4283,7 +4490,8 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	manage.pressed.connect(func(): _open_party(true))
 	box.add_child(manage)
 	if party.roster.size() <= Party.MAX_ACTIVE:
-		_note(box, "Everyone you have is marching. New faces are made here too.")
+		_note(box, "Everyone you have is marching. New faces are hired here, from whoever is looking for work." if Recruits.hire_only(party)
+			else "Everyone you have is marching. New faces are made here too, or hired from whoever is looking for work.")
 
 	var wait: float = Visit.long_rest_in(party, world)
 	var rest_btn := Button.new()
@@ -4314,6 +4522,7 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(INN_LIST_H)))
 	box.add_child(scroll)
 	var list: VBoxContainer = scroll.get_child(0)   # `rows` is the party-status list above
+	_hiring_rows(list, s)
 	_section(list, "Downtime")
 	_downtime_rows(list, s)
 	var leads: Array = Rumors.offers(s, world)
@@ -4325,6 +4534,58 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 			false, null, String(lead.get("where", "")))
 
 const INN_LIST_H := 300.0
+
+# --- Looking for work (core/recruits.gd): today's common room ----------------
+# One row per chair: who they are in a line, what they are like under it, and
+# the fee on the button. A row the company cannot take says why in its second
+# line — the roster is full for a company of this name, or the purse is short —
+# rather than greying a button and leaving the player to guess.
+func _hiring_rows(rows: VBoxContainer, s) -> void:
+	_section(rows, "Looking for work")
+	var offers: Array = Recruits.offers(s, world, party)
+	if offers.is_empty():
+		_note(rows, "Nobody here will sign with a company this town will not deal with." if FactionOpinion.refuses_trade(s.faction)
+			else "Nobody else here is looking for work today.")
+		return
+	for offer in offers:
+		var ch = Recruits.build(offer)
+		if ch == null:
+			continue
+		var why: String = Recruits.why_not(party, offer)
+		var what := "%s, %s %s %d%s" % [ch.cname, ChoicePick.humanize(ch.species_id).to_lower(),
+			ChoicePick.humanize(ch.class_id()).to_lower(), ch.level(), "  (a veteran)" if String(offer["veteran"]) != "" else ""]
+		var traits: Array = Traits.ids(ch).map(func(t): return Traits.name_of(t).to_lower())
+		var sub := why if why != "" else "%s background%s" % [ChoicePick.humanize(ch.background_id),
+			", " + ", ".join(traits) if not traits.is_empty() else ""]
+		_trade_row(rows, what, "Take them on (%d ◉)" % int(offer["fee"]), _open_settle_in.bind(s, offer),
+			why != "", null, sub)
+
+# The settle-in page (scenes/creator/levelup.gd's recruit mode): the choices the
+# hire leaves to the company, then the fee. It sits where the party screen does
+# over the counter — in _party_overlay, so Esc and every "is something up"
+# guard already treat it as the full-screen page it is — and Cancel hires nobody.
+func _open_settle_in(s, offer: Dictionary) -> void:
+	if _party_overlay != null or spectator:
+		return
+	var ch = Recruits.build(offer)
+	if ch == null:
+		_say("They have gone.")
+		_build_visit_panel()
+		return
+	var overlay := Control.new()
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+	_party_overlay = overlay
+	var page = load(LEVELUP_SCENE).instantiate()
+	overlay.add_child(page)
+	page.hire_check = func() -> String: return Recruits.hire(party, world, s, offer, ch)
+	page.set_recruit(ch, int(offer["fee"]))
+	page.finished.connect(func(hired: bool):
+		_close_party()
+		if hired:
+			_say("%s signs on, for %d ◉." % [ch.cname, int(offer["fee"])])
+			_autosave()
+		_build_visit_panel())
 
 # --- Downtime (core/downtime.gd): the rows in town that take days ------------
 # The trainer, the night out, the game, and at a city the pit. The purse, the
@@ -4703,6 +4964,29 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 		pay.text = "%s — work pays +%d %%." % [Ladder.title_cap(), int(round(Ladder.PAY_PER_TITLE * 100 * Ladder.title_index()))]
 		pay.theme_type_variation = "Dim"
 		box.add_child(pay)
+	# Contracts: what this people's regard is worth on the purse, when it is
+	# worth anything (core/contracts.gd pay_mult).
+	var regard: int = int(round((Contracts.pay_mult(s.faction) - 1.0) * 100.0))
+	if regard != 0:
+		var liked := Label.new()
+		liked.text = "The %s' regard — their work pays %+d %%." % [Ladder.people(s.faction), regard]
+		liked.theme_type_variation = "Dim"
+		box.add_child(liked)
+	# Contracts they will not hand you yet, and why — up here with the other
+	# standing lines, where a scrolled list cannot hide it, and as a note rather
+	# than a greyed Take: the robots press the first "Take" they find, and a job
+	# you cannot take is not a job on the board. Only the board's own kinds; a
+	# specialist's order would say so at its own counter.
+	var here: Array = Visit.services(s)
+	for c in Posting.closed(s, here):
+		if not Posting.counters_for(s, here, String(c["kind"])).any(func(k): return BOARD_COUNTERS.has(k)):
+			continue
+		var note := Label.new()
+		note.text = String(c["why"])
+		note.theme_type_variation = "Dim"
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.custom_minimum_size = Vector2(VISIT_PANEL_W - 40, 0)
+		box.add_child(note)
 	if s.raided_by != "":
 		var raider = Raids.lair_of(world, s.raided_by)
 		var hit := Label.new()
@@ -4822,9 +5106,11 @@ func _counter_offers(s) -> Dictionary:
 func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 	var tier: int = int(offer.get("chain_tier", 0))
 	var tag := "  (tier %d)" % (tier + 1) if tier > 0 else ""
+	var who := String(offer.get("issuer", ""))
 	_trade_row(rows, "%s%s" % [offer["title"], tag], "Take", _take_quest.bind(offer), false,
 		Icons.scene_art("quest-" + String(offer.get("kind", "")), null),
-		"Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0)))
+		("For the %s · " % Ladder.people(who) if who != "" else "")
+		+ "Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0)))
 
 # Issue #33: the label wraps. Without that its minimum width is the whole
 # string, and a job with a long title pushed the row — and with it the counter,
@@ -5037,16 +5323,38 @@ func _gui_input(e: InputEvent) -> void:
 		elif e.button_mask & MOUSE_BUTTON_MASK_RIGHT:
 			pan_by(e.relative)
 			queue_redraw()
+		elif not spectator:
+			# A band's figure is a thing to click (_seek), so it says so.
+			mouse_default_cursor_shape = CURSOR_POINTING_HAND if _band_at(e.position) != null else CURSOR_ARROW
 	elif e is InputEventMouseButton and e.pressed:
+		if e.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and _wheel_over_ui():
+			return
 		if e.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom_at(e.position, 1.1)
 		elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom_at(e.position, 1.0 / 1.1)
 		elif e.button_index == MOUSE_BUTTON_LEFT and not spectator:   # the guest looks; the host orders
 			var p := world.player()
-			if p != null:
+			var band = _band_at(e.position)
+			if band != null:
+				_seek(band)
+			elif p != null:
+				_drop_meet()
 				world.set_goal(p, _click_target(e.position))
 		queue_redraw()
+
+# #193: a ScrollContainer that is already at its end, or a list too short to
+# scroll at all, does not accept the wheel, so the event bubbled on up to this
+# screen and a player reading a town's board zoomed the map behind it instead.
+# The wheel belongs to the map only when the pointer is over the map: anything
+# under a panel or a scrolling list is the panel's, whether or not it moved.
+func _wheel_over_ui() -> bool:
+	var c: Control = get_viewport().gui_get_hovered_control()
+	while c != null and c != self:
+		if c is ScrollContainer or c is PanelContainer:
+			return true
+		c = c.get_parent() as Control
+	return false
 
 # #110/#113: a settlement or lair is drawn as a diorama standing UP from its
 # ground point, so a click on its roofs lands on the ground behind it and the

@@ -4,6 +4,7 @@ extends RefCounted
 
 const Hex = preload("res://core/hex.gd")
 const Objectives = preload("res://core/objectives.gd")
+const Dice = preload("res://core/dice.gd")
 
 # combat-design.md §7 rule 5: foes won't execute a downed PC while they could
 # instead engage a conscious one this turn. The difference between tense and
@@ -224,20 +225,38 @@ static func _best_area(cb, h, v: Dictionary):
 			best = aim
 	return best
 
+# The direction for a cone verb whose wedge catches the most foes net of allies,
+# or ZERO unless some direction nets at least two. The cone half of _best_area,
+# shared by the party autopilot and a foe caster.
+static func _best_cone(cb, h, v: Dictionary) -> Vector2i:
+	var best_dir := Vector2i.ZERO
+	var best_net := 1
+	for d in Hex.DIRS:
+		var wedge := Hex.cone(h.pos, d, int(v.get("radius", 2)))
+		var f: int = cb.enemies_of(h).filter(func(c): return c.pos in wedge).size()
+		var a: int = cb.allies_of(h).filter(func(c): return c.pos in wedge).size()
+		if f - a > best_net:
+			best_net = f - a
+			best_dir = d
+	return best_dir
+
 # --- foes ------------------------------------------------------------
 
 # A shooter with an enemy adjacent fires at disadvantage. If one move can reach a
 # hex that is clear of every PC and still within range of one, take it (eating
 # the opportunity attack — a bow at full effect is worth more than a free swing
 # avoided) and report true so the caller shoots instead of swinging point-blank.
-static func _step_clear(cb, m, pcs: Array) -> bool:
+# `reach` is how far it can still hit from: the bow's range for an archer (the
+# default), the longest spell's for a caster.
+static func _step_clear(cb, m, pcs: Array, reach := -1) -> bool:
 	var best := Vector2i.ZERO
 	var best_d := -1
+	var r: int = m.atk_range if reach < 0 else reach
 	for h in cb.move_field(m):
 		var near := 1 << 30
 		for c in pcs:
 			near = mini(near, Hex.distance(h, c.pos))
-		if near <= 1 or near > m.atk_range:
+		if near <= 1 or near > r:
 			continue
 		if near > best_d:   # the farthest still-in-range hex: the most room before they close again
 			best_d = near
@@ -260,6 +279,8 @@ static func _foe_turn(cb, m) -> void:
 	if m.has("quarry") and _quarry_runs(cb, m, pcs):
 		return
 	_use_kit(cb, m)
+	if m.caster and await _caster_turn(cb, m, pcs):
+		return
 
 	var adj: Array = pcs.filter(func(c): return Hex.distance(c.pos, m.pos) <= m.reach)
 	if not adj.is_empty() and m.ranged and _step_clear(cb, m, pcs):
@@ -317,6 +338,125 @@ static func _foe_turn(cb, m) -> void:
 	else:
 		await _use_special(cb, m, pcs)   # closed, but not close enough to swing — a gaze still reaches
 
+# --- the enemy caster (core/enemy_casters.gd) ----------------------------
+#
+# A statblock with real slots fights like one, in this order, and falls through
+# to the melee logic below only if it cast nothing:
+#   1. an enemy in its face: an area or cone that nets two or more is still the
+#      best thing to do; failing that, a caster whose swing is worth more than
+#      its best single-target spell (a cult fanatic's two blades) fights in
+#      melee like the statblock it is — measured 2026-09-24, one that stepped
+#      back to cast Command every turn fought worse than the plain fanatic —
+#      and one whose swing is not (the mage's dagger) steps clear first, to a
+#      hex still in spell range (the archer's _step_clear, the longest spell's
+#      reach);
+#   2. an area or a cone that nets two or more heroes (the autopilot's aims);
+#   3. a control spell, unless it is already holding one — casting a second
+#      concentration spell would only drop the first;
+#   4. the spell that does the most damage on a legal target.
+# Higher slots are tried first, so the fireball goes before the magic missile —
+# the same order core/rules/power.gd prices a caster's casts in. Nothing legal
+# from where it stands: close on the nearest hero and try once more.
+static func _caster_turn(cb, m, pcs: Array) -> bool:
+	var spells: Array = _castable(cb, m)
+	if spells.is_empty():
+		return false
+	var reach := 1
+	for v in spells:
+		reach = maxi(reach, int(v.get("range", 1)))
+	if pcs.any(func(c): return Hex.distance(c.pos, m.pos) <= m.reach):
+		if _cast_area(cb, m, spells):
+			return true
+		if _swing_value(cb, m) >= _best_single(cb, m, spells):
+			return false   # the melee logic below takes it from here
+		_step_clear(cb, m, pcs, reach)
+		if not m.conscious():
+			return true
+	if await _cast_best(cb, m):
+		return true
+	_move_by(cb, m, _toward(cb, _nearest(m.pos, pcs).pos))
+	if not m.conscious():
+		return true
+	return await _cast_best(cb, m)
+
+static func _castable(cb, m) -> Array:
+	var out: Array = cb.available(m).filter(func(v): return v["kind"] == "spell")
+	out.sort_custom(func(a, b): return int(a.get("slot_level", 0)) > int(b.get("slot_level", 0)))
+	return out
+
+# An area or a cone that nets two or more, highest slot first; true if cast.
+static func _cast_area(cb, m, spells: Array) -> bool:
+	for v in spells:
+		if not v.has("dice_count"):
+			continue
+		if v.get("targeting", "") in ["hex", "corner", "line"]:
+			var aim = _best_area(cb, m, v)
+			if aim != null:
+				cb.perform(m, v, aim)
+				return true
+		elif v.get("targeting", "") == "direction":
+			var dir := _best_cone(cb, m, v)
+			if dir != Vector2i.ZERO:
+				cb.perform(m, v, dir)
+				return true
+	return false
+
+static func _avg_dmg(v: Dictionary) -> float:
+	return (int(v["dice_count"]) * (int(v.get("dice_sides", 6)) + 1) / 2.0 + int(v.get("dice_bonus", 0))) \
+		* int(v.get("rays", 1))
+
+# The most a single-target damage spell it can cast right now would deal.
+static func _best_single(cb, m, spells: Array) -> float:
+	var best := 0.0
+	for v in spells:
+		if v.get("targeting", "") == "enemy" and v.has("dice_count"):
+			best = maxf(best, _avg_dmg(v))
+	return best
+
+# What its Attack action is worth: every swing Multiattack buys, at the
+# statblock's own damage.
+static func _swing_value(cb, m) -> float:
+	var swings := 1
+	for v in m.verbs:
+		if v["kind"] == "attacks_per_action":
+			swings = maxi(swings, int(v.get("value", 1)))
+	var p: Dictionary = Dice.parse(String(m.damage))
+	return swings * (int(p["count"]) * (int(p["sides"]) + 1) / 2.0 + int(p["mod"]))
+
+static func _cast_best(cb, m) -> bool:
+	var spells: Array = _castable(cb, m)
+	if _cast_area(cb, m, spells):
+		return true
+	var foes: Array = cb.enemies_of(m).filter(func(c): return c.conscious())
+	foes.sort_custom(func(a, b): return a.hp < b.hp)
+	for v in spells:
+		if v.get("targeting", "") != "enemy" or v.get("conditions", []).is_empty():
+			continue
+		if v.get("concentration", false) and m.has("concentrating"):
+			continue
+		for t in foes:
+			if cb.legal_target(m, v, t) and not _redundant(t, v):
+				await cb.offer_reactions(m, v, t)
+				cb.perform(m, v, t)
+				return true
+	var best := {}
+	var best_d := 0.0
+	for v in spells:
+		if v.get("targeting", "") != "enemy" or not v.has("dice_count"):
+			continue
+		var d: float = _avg_dmg(v)
+		if d > best_d and foes.any(func(t): return cb.legal_target(m, v, t)):
+			best_d = d
+			best = v
+	if best.is_empty():
+		return false
+	for t in foes:
+		if cb.legal_target(m, best, t):
+			await cb.offer_reactions(m, best, t)
+			cb.perform(m, best, t)
+			return true
+	return false
+
 # hunt: the quarry runs for the far edge unless a hero is close enough that
 # running is the worse choice — then it fights this turn like anybody else.
 # Ending a turn on the edge is the escape (combat.gd's end_turn).
@@ -341,19 +481,42 @@ static func _quarry_runs(cb, m, pcs: Array) -> bool:
 # --- party autopilot (demo / test only) ----------------------------
 
 static func _party_auto(cb, h) -> void:
-	var foes: Array = cb.enemies_of(h)
-	if foes.is_empty():
+	if cb.enemies_of(h).is_empty():
 		return
 	_use_kit(cb, h)
+	_font_up(cb, h)
+	_heal_downed(cb, h)
+	_party_action(cb, h)
+	if h.conscious() and not cb.is_over():
+		_bonus_after(cb, h)
 
-	# healer: a downed ally in range comes first
-	var heal := _pick(cb, h, func(v): return v.has("heal_count") or v["kind"] == "heal_ally")
-	if not heal.is_empty():
-		for c in cb.combatants:
-			if c.team == h.team and c.is_down() and cb.legal_target(h, heal, c):
-				cb.perform(h, heal, c)
-				break
+# A downed ally in range comes first. A Bonus Action heal (Healing Word,
+# Healing Light) before an action one, so the action is still there to swing.
+static func _heal_downed(cb, h) -> void:
+	var heals: Array = cb.available(h).filter(func(v): return v.has("heal_count") or v["kind"] == "heal_ally")
+	heals.sort_custom(func(a, b): return _is_bonus(a) and not _is_bonus(b))
+	for c in cb.combatants:
+		if c.team != h.team or not c.is_down():
+			continue
+		for heal in heals:
+			if _can_aim(cb, h, heal, c) and not cb.perform(h, heal, c).has("error"):
+				return
 
+# Whether `v` reaches ally `c`: an "allies" verb (Mass Healing Word) by its
+# range — legal_target() speaks for one chosen creature, not a burst — a self
+# one only its caster, anything else by legal_target().
+static func _can_aim(cb, h, v: Dictionary, c) -> bool:
+	match String(v.get("targeting", "ally")):
+		"allies": return Hex.distance(h.pos, c.pos) <= int(v.get("range", 1))
+		"self": return c == h
+	return cb.legal_target(h, v, c)
+
+static func _is_bonus(v: Dictionary) -> bool:
+	return String(v.get("cost", "")) == "bonus"
+
+# The action: where to stand, then the one thing the turn is for.
+static func _party_action(cb, h) -> void:
+	var foes: Array = cb.enemies_of(h)
 	# the objective's one rule for where to stand (spec §7), before any chasing
 	var moved := _objective_move(cb, h)
 	var walking: bool = cb.objective_kind() == "breakout"
@@ -364,6 +527,13 @@ static func _party_auto(cb, h) -> void:
 		var t = _nearest(h.pos, foes)
 		_move_by(cb, h, _toward(cb, t.pos))
 		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
+		# still short: a Bonus Action Dash (Cunning Action, Step of the Wind)
+		# buys the rest of the way, and the action is still there to swing
+		if reach.is_empty() and _bonus_basic(cb, h, "dash"):
+			t = _nearest(h.pos, cb.enemies_of(h))
+			if t != null:
+				_move_by(cb, h, _toward(cb, t.pos))
+			reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
 
 	# caster: an area spell (a hex, a corner circle, a line) where it nets 2+ foes
 	# ...that actually hurts: Faerie Fire and friends are the player's call, not a nuke
@@ -377,15 +547,7 @@ static func _party_auto(cb, h) -> void:
 	# caster: a cone spell if the wedge catches 2+ foes and no ally
 	var cone := _pick(cb, h, func(v): return v.get("targeting", "") == "direction" and v.has("dice_count"))
 	if not cone.is_empty() and not walking:   # same rule: no stopping to cast on the way out
-		var best_dir := Vector2i.ZERO
-		var best_net := 1
-		for d in Hex.DIRS:
-			var wedge := Hex.cone(h.pos, d, int(cone.get("radius", 2)))
-			var f: int = cb.enemies_of(h).filter(func(c): return c.pos in wedge).size()
-			var a: int = cb.allies_of(h).filter(func(c): return c.pos in wedge).size()
-			if f - a > best_net:
-				best_net = f - a
-				best_dir = d
+		var best_dir := _best_cone(cb, h, cone)
 		if best_dir != Vector2i.ZERO:
 			cb.perform(h, cone, best_dir)
 			return
@@ -401,12 +563,215 @@ static func _party_auto(cb, h) -> void:
 			targets = q
 	targets.sort_custom(func(a, b): return a.hp < b.hp)
 	if cb.in_reach(h, targets[0]):
-		cb.resolve_attack(h, targets[0])
+		_swing_all(cb, h, targets)
 		return
 	# no weapon reach: a single-target attack spell (a cantrip needs no slot)
 	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count"))
 	if not bolt.is_empty() and cb.legal_target(h, bolt, targets[0]):
 		cb.perform(h, bolt, targets[0])
+
+# Every swing the economy holds, re-targeted between them — the Attack action's
+# Extra Attack, and whatever a Bonus Action banked on top (Flurry of Blows, War
+# Priest). One resolve_attack and a return used to leave all of those unswung:
+# a level-5 fighter fought as a level-4 one. `targets` is the preference order
+# (quarry, then the weakest); only the ones still standing in reach are swung at.
+static func _swing_all(cb, h, targets: Array) -> void:
+	for _swing in MAX_SWINGS:
+		if not h.conscious() or cb.is_over():
+			return
+		var live: Array = targets.filter(func(c): return c.conscious() and cb.in_reach(h, c))
+		if live.is_empty():
+			live = cb.enemies_of(h).filter(func(c): return c.conscious() and cb.in_reach(h, c))
+			live.sort_custom(func(a, b): return a.hp < b.hp)
+		if live.is_empty():
+			return
+		if cb.resolve_attack(h, live[0]).has("error"):
+			return
+
+# --- the Bonus Action --------------------------------------------------
+#
+# The autopilot's second thing each turn, wherever one is reasonable. Before
+# this it only ever spent one by accident of _use_kit (Rage, Second Wind): a
+# monk never flurried, a rogue never hid, a cleric never put up Shield of Faith,
+# a bard never inspired anyone. The rules, first that applies:
+#
+#   1. more swings — Flurry of Blows, War Priest, an off-hand attack — when a
+#      foe is still in reach to take them
+#   2. a heal on an ally at a third of their HP or less
+#   3. a Bonus Action spell that lasts (Shield of Faith, Magic Weapon, Hunter's
+#      Mark, Spiritual Weapon) when it is not already up and would not end a
+#      concentration already held; a smite-like one (Ensnaring Strike) on a foe
+#      in reach
+#   4. Bardic Inspiration on an ally in the thick of it; a summon (Invoke
+#      Duplicity) when none stands
+#   5. getting out: at a third of HP or less with a foe adjacent — Misty Step
+#      away, or Disengage and walk, or Patient Defense's Dodge
+#   6. a rogue out of reach of everything hides, for Advantage next turn
+#
+# Every one comes off cb.available(), the list the bar renders, so the 2024
+# rule that a Bonus Action spell and a leveled action spell never share a turn
+# is the resolver's to enforce, not this function's.
+const BONUS_TRIES := 4
+
+static func _bonus_after(cb, h) -> void:
+	for _try in BONUS_TRIES:
+		if int(h.econ.get("bonus", 0)) <= 0 or not h.conscious() or cb.is_over():
+			return
+		if not _one_bonus(cb, h):
+			return
+
+static func _one_bonus(cb, h) -> bool:
+	var bonus: Array = cb.available(h).filter(_is_bonus)
+	if bonus.is_empty():
+		return false
+	var foes: Array = cb.enemies_of(h)
+	var in_reach: Array = foes.filter(func(c): return c.conscious() and cb.in_reach(h, c))
+	var adjacent: Array = foes.filter(func(c): return c.conscious() and Hex.distance(h.pos, c.pos) <= 1)
+	var low: bool = h.hp * 3 <= h.max_hp
+	# 1. more swings
+	if not in_reach.is_empty() and not low:
+		for v in bonus:
+			if v["kind"] == "grant_action" and int(v.get("extra_attacks", 0)) > 0:
+				if not cb.perform(h, v).has("error"):
+					_swing_all(cb, h, in_reach)
+					return true
+			if v["kind"] == "offhand_attack":
+				var t = _weakest(in_reach.filter(func(c): return cb.legal_target(h, v, c)))
+				if t != null and not cb.perform(h, v, t).has("error"):
+					return true
+	# 2. a heal on someone badly hurt (the downed were seen to before the action)
+	for v in bonus:
+		if not (v.has("heal_count") or v["kind"] in ["heal_ally", "heal_self"]):
+			continue
+		var who = _hurt_ally(cb, h, v)
+		if who != null and not cb.perform(h, v, who).has("error"):
+			return true
+	# 3. a spell that lasts, or a smite-like one on a foe in reach
+	for v in bonus:
+		if v["kind"] != "spell":
+			continue
+		if String(v.get("targeting", "")) == "enemy":
+			if v.has("heal_count"):
+				continue
+			var t = _weakest(in_reach.filter(func(c): return cb.legal_target(h, v, c) and not _redundant(c, v)))
+			if t != null and not cb.perform(h, v, t).has("error"):
+				return true
+			continue
+		if not (v.has("buff") or v.has("summon") or v.has("temp_count")):
+			continue   # a heal is rule 2's, when someone needs it; nothing else lasts
+		if v.get("concentration", false) and h.has("concentrating"):
+			continue   # would end the spell already held
+		var t = _buff_target(cb, h, v)
+		if t == null:
+			continue
+		if not cb.perform(h, v, t).has("error"):
+			return true
+	# 4. inspiring an ally, a summon
+	for v in bonus:
+		if v["kind"] == "ally_buff":
+			var t = _buff_target(cb, h, v)
+			if t != null and not cb.perform(h, v, t).has("error"):
+				return true
+		if v["kind"] == "summon" and not foes.is_empty():
+			if not cb.perform(h, v).has("error"):
+				return true
+	# 5. getting out
+	if low and not adjacent.is_empty():
+		for v in bonus:
+			if v["kind"] == "spell" and v.get("teleport", false):
+				var dest = _escape_hex(cb, h, v, foes)
+				if dest != null and not cb.perform(h, v, dest).has("error"):
+					return true
+		if _bonus_basic(cb, h, "disengage"):
+			_move_by(cb, h, _away(foes), true)
+			return true
+		if _bonus_basic(cb, h, "dodge"):
+			return true
+	# 6. a rogue with nothing in reach of it hides for next turn's Advantage
+	if adjacent.is_empty() and _bonus_basic(cb, h, "hide"):
+		return true
+	return false
+
+# A basic verb (dash, disengage, dodge, hide) at Bonus Action cost, performed.
+static func _bonus_basic(cb, h, kind: String) -> bool:
+	for v in cb.available(h):
+		if v["kind"] == kind and _is_bonus(v):
+			return not cb.perform(h, v).has("error")
+	return false
+
+static func _weakest(list: Array):
+	var best = null
+	for c in list:
+		if best == null or c.hp < best.hp:
+			best = c
+	return best
+
+# The ally (or self, for heal_self) at a third of their HP or less that `v`
+# can reach, the worst off first.
+static func _hurt_ally(cb, h, v: Dictionary):
+	if v["kind"] == "heal_self":
+		return h if h.hp * 3 <= h.max_hp else null
+	var best = null
+	for c in cb.combatants:
+		if c.team != h.team or not c.conscious() or c.hp * 3 > c.max_hp:
+			continue
+		if not _can_aim(cb, h, v, c):
+			continue
+		if best == null or float(c.hp) / c.max_hp < float(best.hp) / best.max_hp:
+			best = c
+	return best
+
+# Who a lasting buff goes on: yourself for a self spell; else the ally in the
+# thick of it (the most foes beside them), not already wearing it.
+static func _buff_target(cb, h, v: Dictionary):
+	var tgt: String = String(v.get("targeting", "self"))
+	var status: String = String(v.get("status", "spell:" + String(v.get("spell", v["id"]))))
+	if tgt in ["self", "allies"]:
+		return h if not h.has(status) else null
+	var best = null
+	var best_n := -1
+	for c in cb.combatants:
+		if c.team != h.team or not c.conscious() or c.has(status) or c.has("summoned"):
+			continue
+		if not cb.legal_target(h, v, c):
+			continue
+		var n: int = cb.enemies_of(c).filter(func(e): return e.conscious() and Hex.distance(c.pos, e.pos) <= 1).size()
+		if n > best_n:
+			best_n = n
+			best = c
+	return best
+
+# Where a Misty Step goes to get out: the free hex in range furthest from every
+# foe, or null if none is further than where they stand now.
+static func _escape_hex(cb, h, v: Dictionary, foes: Array):
+	var best = null
+	var best_d := Hex.distance(h.pos, _nearest(h.pos, foes).pos)
+	var r: int = int(v.get("range", 6))
+	for q in range(-r, r + 1):
+		for rr in range(-r, r + 1):
+			var hx: Vector2i = h.pos + Vector2i(q, rr)
+			if Hex.distance(h.pos, hx) > r or cb._cast_refusal(h, v, hx) != "":
+				continue   # the resolver's own test for a teleport's landing
+			var d: int = Hex.distance(hx, _nearest(hx, foes).pos)
+			if d > best_d:
+				best_d = d
+				best = hx
+	return best
+
+# Font of Magic, the autopilot's one use of it: a sorcerer with no slot left at
+# all and the points for one makes the biggest it can afford, so the sweeps see
+# the points as the spells they become. Burning slots into points is left to a
+# player — the autopilot would only ever be turning a spell into a smaller one.
+static func _font_up(cb, h) -> void:
+	for n in h.slots:
+		if int(n) > 0:
+			return
+	var best := {}
+	for v in cb.available(h):
+		if String(v.get("font", "")) == "to_slot" and int(v["make_slot"]) > int(best.get("make_slot", 0)):
+			best = v
+	if not best.is_empty():
+		cb.perform(h, best)
 
 # One movement preference per kind — not to make the autopilot good, but so
 # the sweep in tests/test_objectives.gd measures a party that is trying.
