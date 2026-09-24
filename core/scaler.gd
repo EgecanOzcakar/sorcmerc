@@ -59,10 +59,11 @@
 #   boss pool  70.0%             72.0%            +2.0
 # Level 3 has no Extra Attack and barely moves. Level 8 is the Extra Attack the
 # old ruler threw away — which every player takes — so the level-8 column was
-# measuring a party weaker than anyone plays, and the curve above level 5 has
-# been easier than its targets for real players all along. The owner's call
-# (2026-09-24): ship the ruler now, retune CURVE/TIER for levels 5+ in the next
-# PR against this ruler, re-running sweep_tier and sweep_regions.
+# measuring a party weaker than anyone plays. It read level 8 as HARDER than
+# the targets (hard 58.7% against 75); with every swing taken it lands on them
+# (96.0 / 84.0 / 79.3 against 95 / 85 / 75). The owner's call (2026-09-24): ship
+# the ruler now, and settle in the next PR whether any band above level 5 still
+# needs CURVE/TIER moved, re-running sweep_tier and sweep_regions.
 #
 # RE-MEASURED 2026-09-16 (T94), and NO KNOB HERE MOVED. T94 gave the bestiary
 # the defences its own catalog had always carried (damage resistance / immunity /

@@ -10412,8 +10412,9 @@ stays the resolver's to enforce.
 
 Level 3 has no Extra Attack and barely moves. Level 8 moves mostly on the
 second swing every player already takes. So above level 5 the old ruler
-measured a party weaker than anyone plays, and the curve there has been easier
-than its targets.
+measured a party weaker than anyone plays, and it read those fights as harder
+than their targets (L8 hard 58.7% against 75%). With every swing taken, level 8
+lands on the targets (96.0 / 84.0 / 79.3% against 95 / 85 / 75%).
 
 **No knob moved.** The owner's call was to ship the ruler now and retune in
 the next PR. `test_scaler`'s biome table was retaken: master had drifted off
@@ -10436,8 +10437,9 @@ old-ruler numbers.
 
 ### Still open
 
-- **The retune** (owed, next PR): CURVE/TIER for levels 5+ against the new
-  ruler, re-running `sweep_tier` and `sweep_regions`.
+- **The retune question** (next PR): re-run `sweep_tier` and `sweep_regions`
+  against the new ruler, and move CURVE/TIER only where a band is still off
+  target. Level 8 already lands on target.
 - **No Metamagic.** The autopilot arms none (it is not on master yet).
 - **No Steady Aim.** The engine has no such verb.
 - **Melee rogues** stay beside their target rather than Disengaging back out;
