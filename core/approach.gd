@@ -21,6 +21,9 @@
 #   parley   talk past it. Anything that wants something can be offered it —
 #            bandits most of all — and the toll is the price of the fight not
 #            happening. The mindless are the exception; see MINDLESS below.
+#            Fail and it is the fight anyway, and a people that keeps an opinion
+#            (WorldAI.CIVILIZED) thinks less of the company for the offer
+#            (FactionOpinion.PARLEY_REFUSED; the design audit §3.1).
 #
 # Every one of them runs on machinery that already exists: the surprise flags
 # are scenes/main.tscn's own `scouted_ahead`/`forced_ambush` (T39), the skill
@@ -29,7 +32,9 @@
 # decide who rolls and at what bonus. Nothing new is invented; it is wiring.
 #
 # What this does NOT own: the fight (scenes/main.tscn, unchanged), what a won
-# fight pays (world.gd's _bank), faction opinion, or any drawing.
+# fight pays (world.gd's _bank), or any drawing. Faction opinion only in the
+# one place a way's own result moves it — a failed parley's PARLEY_REFUSED; a
+# fight's opinion is the world screen's, after the fight.
 extends RefCounted
 const Traits = preload("res://core/traits.gd")   # #176 step 4
 
@@ -37,6 +42,9 @@ const Campaign = preload("res://core/campaign.gd")
 const Dice = preload("res://core/dice.gd")
 const RNG = preload("res://core/rng.gd")
 const Travel = preload("res://core/travel.gd")
+const FactionOpinion = preload("res://core/faction_opinion.gd")
+const WorldAI = preload("res://core/world_ai.gd")
+const Ladder = preload("res://core/ladder.gd")
 
 # The DCs. Flat, not scaled to the band: what the party is rolling against is
 # noticing and being noticed, which is about ground and care rather than about
@@ -85,7 +93,10 @@ const WAYS := {
 		# A purse with nothing in it: _toll() caps at what the party actually has,
 		# so the line has to stop saying "0 ◉" and say what that means.
 		"win_broke": "No fight. They take what you are carrying, which is nothing.",
-		"lose": "They were never going to be talked to. A plain, even fight."},
+		"lose": "They were never going to be talked to. A plain, even fight.",
+		# A people that keeps an opinion hears about the offer, and the row
+		# says so before the press: the cost of a gamble belongs beside it.
+		"lose_opinion": "They take the offer as an insult: a plain, even fight, and the %s think less of the company."},
 }
 # Order they are offered in: the safe one first, the gamble last, so the list
 # reads as an escalation rather than a menu.
@@ -112,6 +123,13 @@ const MINDLESS := ["beast", "undead", "monstrosity", "elemental", "construct"]
 
 static func can_parley(foe) -> bool:
 	return not MINDLESS.has(foe.faction)
+
+# Whether a failed parley costs this band's people anything with the company:
+# only a people that keeps an opinion at all. A monster faction keeps none
+# (the rule core/contracts.gd's credit() and world.gd's KILLED_THEIRS follow),
+# so a bandit who will not be bought is only the fight.
+static func parley_costs_opinion(foe) -> bool:
+	return can_parley(foe) and not WorldAI.is_monster(String(foe.faction))
 
 
 # What this party can try against this band, each with the check it would roll
@@ -149,6 +167,8 @@ static func options(party, foe, hostile := true) -> Array:
 			o["win"] = String(w.get("win", ""))
 		if w.has("lose"):
 			o["lose"] = String(w["lose"])
+		if id == "parley" and parley_costs_opinion(foe):
+			o["lose"] = String(w["lose_opinion"]) % Ladder.people(String(foe.faction))
 		if id == "parley":
 			o["toll"] = _toll(party)
 		out.append(o)
@@ -232,6 +252,12 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 				out["toll"] = toll
 				out["text"] = "%s talks them down. They take %s to have seen nobody." % [
 					who["cname"], ("%d ◉" % toll) if toll > 0 else "nothing — the purse was empty"]
+			elif parley_costs_opinion(foe):
+				var faction := String(foe.faction)
+				FactionOpinion.lower(faction, FactionOpinion.PARLEY_REFUSED)
+				out["opinion"] = -FactionOpinion.PARLEY_REFUSED
+				out["text"] = "%s makes the offer, and it is taken as an insult. It comes to a fight anyway, and the %s will hear that the company tried to buy them." % [
+					who["cname"], Ladder.people(faction)]
 			else:
 				out["text"] = "%s gets nowhere. They were never going to be talked to." % who["cname"]
 	return out

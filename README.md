@@ -120,11 +120,15 @@ tools/run_tests.sh the whole headless suite in one command — the asset import,
 tools/gen_audio_elevenlabs.py
                    the same SFX and bark file names from the ElevenLabs sound-
                    effects API instead, per sound, for anything the synthesis
-                   cannot make sound like a recording. Needs a key; the
-                   synthesized set stays the default and the fallback
+                   cannot make sound like a recording (its sibling
+                   gen_music_elevenlabs.py does the beds and music stings).
+                   Needs a key. These takes are what ships: 120 of the 123
+                   files in assets/audio/ (assets/audio/PROVENANCE.md)
 tools/gen_audio.py procedurally synthesizes every SFX/music/bark asset under
                    assets/audio/ — no external audio assets, run it again
-                   after editing it to regenerate. `--rate`/`--loop` trade
+                   after editing it to regenerate. The offline fallback; two
+                   of its files ship today; run it with `--only` so it does
+                   not overwrite the generated takes. `--rate`/`--loop` trade
                    file size against fidelity; the default 32 kHz stereo is
                    13 MB for all 35 assets
 tools/synth.py     the DSP it is built on: band-limited oscillators, biquads,
@@ -159,20 +163,37 @@ Whoever completes that form months from now needs to know what actually went int
 build — which is the point of the table below.
 
 **Provenance stays decidable per asset.** Generated and hand-made/licensed assets live
-in separate directories, so any file's origin is answerable from its path alone:
+in separate directories, so any file's origin is answerable from its path alone, and
+every directory holding AI output carries a `PROVENANCE.md` giving the tool, model,
+date and prompt for each file, or saying plainly where one was not recorded:
 
 | Path | Origin | Recorded in |
 |---|---|---|
-| `assets/audio/` | procedurally synthesized, stdlib only — **not AI** | `tools/gen_audio.py`, `tools/synth.py` |
+| `assets/figures/` | **AI** — Meshy text-to-3D, rigged, one Idle clip: the 12 class figures and 6 foe-faction figures | `assets/figures/PROVENANCE.md` |
+| `assets/troops/` | **AI** — Meshy text-to-3D, rigged (one static CC0 Meshy Community download) | `assets/troops/PROVENANCE.md` |
+| `assets/npcs/` | **AI** — a Meshy Community download, CC0; unused | `assets/npcs/PROVENANCE.md` |
+| `assets/beasts/` | **AI** — Meshy, 110 monsters named by bestiary id | `assets/beasts/PROVENANCE.md` |
+| `assets/lairs/` | **AI** — Meshy text-to-3D (two) and a CC0 Meshy Community download (one) | `assets/lairs/PROVENANCE.md` |
+| `assets/settlements/` | **AI** — Meshy text-to-3D dioramas, rebuilt low-poly by `tools/lowpoly_glb.py` | `assets/settlements/PROVENANCE.md` |
+| `assets/board/` | **AI** — Meshy props (22) and SDXL floor textures (8) | `assets/board/PROVENANCE.md` |
+| `assets/generated/` | **AI** — SDXL 1.0 through a local ComfyUI: event and room scenes, counter portraits, achievement badges, job tiles | `assets/generated/PROVENANCE.md` |
+| `assets/art/items/` | **AI** — SDXL through a local ComfyUI, one icon per item | `assets/art/items/PROVENANCE.md` |
+| `content/*/portraits/` | **AI** — SDXL 1.0 through a local ComfyUI, the packs' story portraits | `content/<pack>/portraits/PROVENANCE.md` |
+| `assets/world/ground/` | **AI** textures (SDXL); the shaders beside them are written as source | `assets/world/ground/PROVENANCE.md`, `assets/world/README.md` |
+| `assets/audio/` | **AI** — ElevenLabs sound-effects API, 120 of 123 files; `marsh.wav` and `dice_rattle.wav` synthesized by `tools/gen_audio.py`; `title.wav` origin not recorded | `assets/audio/PROVENANCE.md` |
 | `assets/icons/` | SVG path data written as source, stdlib only — **no image model**; the coordinates were authored with a coding assistant, which the disclosure exempts | `tools/gen_action_icons.py` |
-| `assets/world/` | in-house ground textures + shaders written as source | `assets/world/README.md` |
-| `assets/fonts/` | DejaVu | `LICENSE-DejaVu.txt` |
+| `assets/fonts/` | DejaVu and Alegreya, licensed | `LICENSE-DejaVu.txt`, `LICENSE-Alegreya-OFL.txt` |
 
-**As of 2026-09-12 nothing in this repo is AI-generated.** Anything added under the new
-policy goes in its own directory with the tool and date recorded alongside it, the same
-way every directory above already carries its origin. Don't mix generated and licensed
-assets in one folder — that is what makes the disclosure question answerable later
-without archaeology.
+**Most of the game's art and nearly all of its audio are AI-generated** (the table
+above). Two directories mix origins, and each says so in its own file:
+`assets/world/ground/` (generated textures, hand-written shaders) and `assets/audio/`
+(generated takes beside two synthesized files and one of unrecorded origin). Anything
+added from here on goes in a directory whose `PROVENANCE.md` records it the day it
+lands: tool, model, date, prompt and seed. A generator's own metadata is not a record
+on its own — the ComfyUI graph in a PNG goes the first time a file is re-saved through
+a tool that drops it, and 125 of the 362 paintings in `assets/generated/` carry none.
+Don't mix generated and licensed assets in one folder — that is what makes the
+disclosure question answerable later without archaeology.
 
 ## Run
 

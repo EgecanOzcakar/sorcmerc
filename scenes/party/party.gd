@@ -6,6 +6,7 @@
 extends Control
 
 const Party = preload("res://core/party.gd")
+const Adapter = preload("res://core/adapter.gd")   # audit 4.1: slot pips, drawn the way the fight draws them
 const Icons = preload("res://core/ui_icons.gd")
 const Sound = preload("res://core/audio.gd")
 # D3: travel.gd owns every rule about the standing orders — the paces, their
@@ -742,6 +743,11 @@ func _summary_label(sm: Dictionary) -> Control:
 	# tiles you can click stay the profile screen's job.
 	col.add_child(_detail_line("⚔", _gear_text(sm), COL_GOLD, "gear"))
 	col.add_child(_detail_line("◆", _skills_text(sm), COL_PARTY, "skills"))
+	# Audit 4.1: what a caster has left to spend, against the sheet's maximum —
+	# the same pips the fight's actor line draws, so a slot spent on the road
+	# reads as spent here before the next fight starts.
+	if not sm.get("slots", []).is_empty():
+		col.add_child(_detail_line("✧", _slots_text(sm), Icons.COL_ACCENT, "slots"))
 	if not sm.get("traits", []).is_empty():   # #176: who they are, by name
 		col.add_child(_detail_line("✦", ", ".join(sm["traits"].map(func(t): return Traits.name_of(t))), Icons.COL_BODY, "traits"))
 	# #165: the class model's face beside the card when it has rendered; the
@@ -773,6 +779,9 @@ func _detail_line(mark: String, text: String, tint: Color, id: String) -> Label:
 	l.clip_text = true                    # a ledger row keeps its height
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
+
+func _slots_text(sm: Dictionary) -> String:
+	return "  ".join(sm.get("slots", []).map(func(r): return Adapter.slot_pips(r)))
 
 func _gear_text(sm: Dictionary) -> String:
 	var worn: Array = sm.get("equipped", [])

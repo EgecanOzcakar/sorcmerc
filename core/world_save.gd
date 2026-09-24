@@ -204,7 +204,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 			"id": l.id, "sname": l.sname, "position": _v(l.position),
 			"faction": l.faction, "discovered": l.discovered, "looted": l.looted,
 			"cleared_at": l.cleared_at,
-			"depth_cleared": l.depth_cleared,
+			"depth_cleared": l.depth_cleared, "caches_taken": l.caches_taken.duplicate(),
 			"entered_at": l.entered_at, "resolved_as": l.resolved_as,
 			"raid_at": l.raid_at, "raids": l.raids, "raid_band": l.raid_band,
 			"spawned_from": l.spawned_from,
@@ -297,7 +297,9 @@ static func from_dict(d: Dictionary):
 			String(ld.get("faction", "goblinoid")), String(ld.get("sname", "")))
 		l.discovered = bool(ld.get("discovered", false))
 		l.looted = bool(ld.get("looted", false))
-		l.depth_cleared = int(ld.get("depth_cleared", 0))   # D1; an old save just starts at the mouth
+		l.depth_cleared = int(ld.get("depth_cleared", 0))   # D1; a record only — every entry starts at the mouth
+		for k in ld.get("caches_taken", []):               # an old save: no cache emptied yet
+			l.caches_taken.append(String(k))
 		l.entered_at = float(ld.get("entered_at", -1.0))    # ...and has never been disturbed
 		l.resolved_as = String(ld.get("resolved_as", ""))
 		# An old save spent its lairs before the respawn rule existed; -1 leaves
@@ -365,10 +367,12 @@ static func _party_dict(party) -> Dictionary:
 		"stash": party.stash.duplicate(true), "quests": party.quests.duplicate(true),
 		"last_long_rest_at": party.last_long_rest_at,
 		"short_rests_since_long": party.short_rests_since_long,
+		"trance_rest_until": party.trance_rest_until,   # audit 4.3: Trance's banked short rest
 		"overworld_figure": party.overworld_figure,
 		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 		"road": {"scouted_next": party.scouted_next, "swift_until": party.swift_until,
-			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set, "blessed": party.blessed},   # potions / road spells
+			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set, "blessed": party.blessed,
+			"camp_holds": party.camp_holds.duplicate(true)},   # potions / road spells; audit 1.6's held slots
 		"relations": PartyOpinion.to_dict(party),   # spike-party-opinions §8: who thinks what of whom
 		"callings": Callings.to_dict(party),
 		"downtime": Downtime.to_dict(party),
@@ -390,6 +394,7 @@ static func _party_from(pd: Dictionary):
 	party.quests = _ints(pd.get("quests", []))
 	party.last_long_rest_at = float(pd.get("last_long_rest_at", -1e12))
 	party.short_rests_since_long = int(pd.get("short_rests_since_long", 0))
+	party.trance_rest_until = float(pd.get("trance_rest_until", -1.0))   # an old save has none banked
 	party.overworld_figure = String(pd.get("overworld_figure", ""))
 	party.travel_orders = pd.get("travel_orders", {}).duplicate(true)   # D3; an old save marches at the default
 	var road: Dictionary = pd.get("road", {})
@@ -398,6 +403,11 @@ static func _party_from(pd: Dictionary):
 	party.safe_camp = bool(road.get("safe_camp", false))
 	party.alarm_set = bool(road.get("alarm_set", false))
 	party.blessed = bool(road.get("blessed", false))
+	party.camp_holds.clear()   # an old save holds nothing: its Rope Trick was cast before slots were held
+	for h in road.get("camp_holds", []):
+		if h is Dictionary:
+			party.camp_holds.append({"id": String(h.get("id", "")), "level": int(h.get("level", 1)),
+				"spell": String(h.get("spell", ""))})
 	PartyOpinion.from_dict(party, pd.get("relations", {}))   # an old save with no key loads as a fresh party
 	Callings.from_dict(party, pd.get("callings", {}))
 	Downtime.from_dict(party, pd.get("downtime", {}))

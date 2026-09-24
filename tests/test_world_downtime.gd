@@ -158,19 +158,22 @@ func _init() -> void:
 	await process_frame
 	check(main._event_card == null and not main._visit.is_empty() and w.clock.is_paused(), "acked: the inn is still up, and still holds the clock")
 
-	# --- gamble: once a visit -------------------------------------------------
+	# --- gamble: once a day in a town ------------------------------------------
 	gold_before = party.gold
 	var go = buttons_named(main, "Go")[0]
 	check(not go.disabled, "the game is on")
 	go.pressed.emit()
 	await process_frame
-	check(party.gold != gold_before, "the stake moved the purse (%d -> %d)" % [gold_before, party.gold])
+	check(party.gold != gold_before or String(main._visit.get("log", "")).contains("stake comes back"),
+		"the stake moved the purse, or came back even (%d -> %d)" % [gold_before, party.gold])
 	check("DC %d" % Downtime.GAMBLE_DC in String(main._visit.get("log", "")), "the roll is said: %s" % main._visit.get("log", ""))
-	check(buttons_named(main, "Go")[0].disabled, "...and the game is over for this visit")
+	check(buttons_named(main, "Go")[0].disabled, "...and the game is over for today")
+	check(said(main, Downtime.gamble_refusal(party, w, city)) and Downtime.gamble_refusal(party, w, city) != "",
+		"...and the row says why: %s" % Downtime.gamble_refusal(party, w, city))
 	if main._event_card != null:   # a nat 1's insult is a card too; not the point here
 		main._event_card.acknowledged.emit()
 		await process_frame
-	# a rest re-reads the shelf (a fresh last_visited); the game stays played
+	# a rest re-reads the shelf (a fresh last_visited) and takes the night
 	w.clock.elapsed += Visit.LONG_REST_COOLDOWN
 	var stamp_before: float = city.last_visited
 	main._rest()
@@ -179,7 +182,10 @@ func _init() -> void:
 		main._event_card.acknowledged.emit()
 		await process_frame
 	check(city.last_visited != stamp_before, "the rest stamped the visit afresh")
-	check(not Downtime.can_gamble(party, city) and buttons_named(main, "Go")[0].disabled, "...and the game is still over for this visit")
+	# A day on (the rest took one), the table has the company again: once a
+	# day per town, and a new world-day re-arms it however the visit went.
+	check(Downtime.can_gamble(party, w, city) and not buttons_named(main, "Go")[0].disabled,
+		"a day later the game is on again")
 
 	# --- brew at the alchemist, scribe at the librarian -----------------------
 	main._goto_page("market")

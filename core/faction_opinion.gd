@@ -36,6 +36,13 @@ const PRICE_SWING := 0.4        # x1.4 at -100, x0.6 at +100, on top of O6's mar
 const QUEST_DONE := 10.0        # a finished quest, per faction of the giver
 const FOUGHT_FOR := 5.0         # killed a monster band near their settlement
 const KILLED_THEIRS := 8.0      # ...or killed one of their own bands
+# A failed parley with one of their bands (core/approach.gd): the offer was
+# heard as an insult, and the fight that follows is on top of it. Smaller than
+# KILLED_THEIRS because nobody died of it. A taste number, not a measured one,
+# the size of the inn's insult (core/downtime.gd's INSULT). The design audit,
+# docs/audit-game-design.md §3.1: a parley that could not go worse than
+# engaging was a free roll before every fight with anything that talks.
+const PARLEY_REFUSED := 5.0
 const HELP_RADIUS := 140.0      # "near their settlement" — O6's BATTLE_RADIUS
 
 const DECAY_PER_DAY := 2.0      # points of drift back toward 0 per world-day

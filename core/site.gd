@@ -17,14 +17,25 @@
 #   s.leave()              # done with this room -> deeper, or the site is over
 #   s.withdraw()           # walk out part-cleared, keeping everything banked
 #
+# Every entry starts at the mouth, and every entry is priced for the party
+# with every slot back (Regions.fresh_score). Walking out undoes the descent:
+# the rooms fill in again behind you, like a wipe but without a wipe's toll on
+# the bag, and the coin already pocketed stays pocketed (Lair.caches_taken).
+# Until 2026-09-24 a withdrawn delve resumed where it stopped, and the lair was
+# priced for the party as it stood at the door — so walking in drained, or
+# backing out and back in, bought a smaller lair and a smaller boss (the design
+# audit, docs/audit-game-design.md §1.3 and §3.3).
+#
 # What this does NOT own, deliberately:
 #  - the fight itself. combat_spec() feeds the same unchanged scenes/main.tscn
 #    hand-off the open world and the linear campaign both already use.
 #  - what a defeat costs. A wipe sets state to "wiped" and stops; the world
 #    screen's own _retreat() decides the consequences, because a site sits
 #    inside a persistent world rather than ending a run.
-#  - saving. Progress lives on the Lair (depth_cleared), which core/world_save.gd
-#    already round-trips — this object is rebuilt on entry, never serialized.
+#  - saving. How deep this delve got lives on the Lair (depth_cleared) and which
+#    caches are empty (caches_taken), which core/world_save.gd round-trips —
+#    this object is rebuilt on entry, never serialized. depth_cleared is a
+#    record, not a resume point: the next entry starts at the mouth.
 #
 # Why this is not core/campaign.gd with a flag: that file is a *run*. Its
 # terminal states end the game, _conclude() revives the dead for free, and
@@ -157,8 +168,9 @@ var state := "picking"
 var log: Array = []
 var rng
 var _rested := false     # T19: did this delve stop for its short rest?
-# core/rules/power.gd's reading of the party at the MOUTH of this lair, taken
-# once per entry and used to price every room below it. See _held().
+# core/rules/power.gd's reading of the party at the MOUTH of this lair with
+# every slot back, taken once per entry and used to price every room below it.
+# See _held().
 var entry_score := 0.0
 
 
@@ -171,17 +183,37 @@ static func for_lair(lair, party, world):
 	# time it is entered — including after withdrawing and coming back.
 	s.rng = RNG.new(maxi(1, absi(hash("site|%s" % lair.id))))
 	s.rooms = _build(lair, s.rng)
-	s.depth = clampi(int(lair.depth_cleared), 0, s.rooms.size() - 1)
-	# Taken here and nowhere else: this is the party at the mouth. Withdrawing
-	# and coming back calls for_lair() again, which is correct — they walked in
-	# again, and whatever shape they walked in with is what the rest of the
-	# descent is priced for.
-	s.entry_score = Scaler.party_score(party.party_characters())
+	# The mouth, every time. A party that withdrew (or quit mid-delve, or kept
+	# a save from before this rule) finds the rooms it fought through filled in
+	# again: leaving undoes the descent (the design audit §3.3). What the party
+	# already carried out stays carried out — a cache emptied on an earlier
+	# entry is still empty, or walking in and out of the first floor would be a
+	# purse that refills for nothing.
+	lair.depth_cleared = 0
+	s.depth = 0
+	for d in s.rooms.size():
+		for r in s.rooms[d]:
+			if String(r.get("kind", "")) == "treasure" and _cache_key(r) in lair.caches_taken:
+				r["taken"] = true
+	# Taken here and nowhere else, and taken FRESH: the party at the mouth with
+	# every slot back, the same reading the open world pins its fights to
+	# (Regions.fresh_score, WorldThreat.slot_hold). It used to be
+	# Scaler.party_score, which counts only the slots left, so a party that
+	# walked in drained met a smaller lair and a smaller boss — spent slots
+	# bought an easier fight (the design audit §1.3). Wounds still do not
+	# enter it; Power.estimate reads max_hp, never hp.
+	s.entry_score = Regions.fresh_score(party)
 	return s
 
 
-# A lair is priced for the party that WALKED IN, not for the party standing in
-# the doorway of the room it is about to build.
+# Which cache this is, for Lair.caches_taken: its floor and its id, since a
+# room id is unique inside one site only while the pool lasts.
+static func _cache_key(r: Dictionary) -> String:
+	return "%d|%s" % [int(r.get("depth", 0)), String(r.get("id", ""))]
+
+
+# A lair is priced for the party that WALKED IN — with every slot back — not
+# for the party standing in the doorway of the room it is about to build.
 #
 # MEASURED (2026-09-22, tests/sweep_site_depth.gd) — core/rules/power.gd's
 # estimate() reads a combatant's ehp off max_hp and never off hp, so the only
@@ -195,9 +227,14 @@ static func for_lair(lair, party, world):
 # to 18.3%, because the budget it handed back was worth more than the healing.
 #
 # This is the site-local answer to that: hold the entry reading and correct the
-# scale so every room comes out the size it would have been at the mouth. It
-# moves no global number — a party at a lair's mouth is the full-HP party every
-# existing sweep already measures — and it makes the descent say one thing:
+# scale so every room comes out the size it would have been at the mouth. Since
+# 2026-09-24 the entry reading is the FRESH one (for_lair), so the hold pins
+# every room, the first included, to the party with every slot back: slots
+# spent before the door and slots spent on the way down are both invisible to
+# the budget. It moves no global number — a fresh party at a lair's mouth is
+# the full-HP, full-slot party every existing sweep already measures, and for
+# it fresh_score and party_score are the same reading — and it makes the
+# descent say one thing:
 # the lair is what it is, and your condition decides whether you can take it,
 # rather than deciding what is in it. The root fix, teaching estimate() to read
 # hp, is a re-tune of everything and is in the expansion plan's Still open.
@@ -571,6 +608,7 @@ func take() -> int:
 	if state != "visiting" or room.get("kind", "") != "treasure" or room.get("taken", false):
 		return 0
 	room["taken"] = true
+	lair.caches_taken.append(_cache_key(room))   # still empty when they come back
 	var gold := int(room.get("gold", 0))
 	party.add_gold(gold)
 	say("+%d ◉." % gold)
@@ -584,13 +622,13 @@ func take() -> int:
 func short_rest() -> bool:
 	if state != "visiting" or room.get("kind", "") != "rest" or room.get("rested", false):
 		return false
-	if not Visit.can_short_rest(party):
+	if not Visit.can_short_rest(party, world):
 		say("Nobody can rest any more today — only a night's sleep will do now.")
 		return false
 	room["rested"] = true
 	_rested = true
-	Visit.rest(party, world, "short-rest")
-	say("An hour in %s. Not a night's sleep, but it is something." % room.get("title", "the dark"))
+	var r: Dictionary = Visit.rest(party, world, "short-rest")
+	say("An hour in %s. Not a night's sleep, but it is something.%s" % [room.get("title", "the dark"), Visit.rest_note(r)])
 	return true
 
 
@@ -627,8 +665,8 @@ func leave() -> void:
 # not end the save.
 #
 # Three parts, and the world screen applies them alongside its own existing
-# `_retreat()` soft landing (gold tax, free revival, wake at the nearest
-# settlement — unchanged, because the walk home is not the punishment):
+# `_retreat()` (gold tax, the downed come to and the dead stay dead, wake at
+# the nearest settlement — the walk home is not the punishment):
 #
 #  1. **The bag, not the body.** Whatever was loose in the shared stash is
 #     what got dropped when the party was dragged out. `Character.equipped`
@@ -637,9 +675,10 @@ func leave() -> void:
 #     thing a build is made of reads as the game taking your character away
 #     rather than taking your loot.
 #  2. **The lair is reset.** `depth_cleared` goes back to zero: they carried
-#     their dead out, and the warren closed up behind them. This is the real
-#     sting — the rooms you already paid for have to be paid for again — and
-#     it costs nothing the player was holding.
+#     their dead out, and the warren closed up behind them. The rooms already
+#     paid for have to be paid for again. Since 2026-09-24 walking out does
+#     the same (withdraw(), for_lair()), so of the three this is the part a
+#     wipe shares with any exit; the bag is what is a wipe's alone.
 #  3. The stash loss is seeded off the lair and the attempt, so it is not a
 #     reload-until-it-picks-differently lottery.
 const WIPE_STASH_SHARE := 0.34   # a third of what was loose; the rest stayed in the packs
@@ -670,12 +709,17 @@ static func wipe_penalty(party, lair, rng = null) -> Dictionary:
 
 # Walk out with everything already banked, leaving the rest of the lair standing.
 # Only legal between rooms — never mid-fight — which is what makes "press on or
-# get out" a real decision rather than an undo button. The depth reached is
-# remembered on the Lair, so coming back later resumes rather than restarts.
+# get out" a real decision rather than an undo button. And it is not a pause:
+# the rooms fought through fill in again, and the next entry starts at the
+# mouth (for_lair), priced fresh — a wipe's reset without a wipe's toll on the
+# bag (the design audit §3.3). It used to remember the depth and resume there,
+# which made "withdraw, camp, come back" the right answer to every deep lair.
+# depth_cleared keeps how far this delve got until the next entry, for the
+# page that says what the descent paid.
 func withdraw() -> bool:
 	if state != "picking":
 		return false
 	state = "withdrawn"
 	Ach.unlock("lair_withdraw")
-	say("The company backs out of %s, and it is still down there." % lair.sname)
+	say("The company backs out of %s. What it cleared will not stay cleared." % lair.sname)
 	return true

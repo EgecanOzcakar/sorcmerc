@@ -178,7 +178,7 @@ const CARDS := {
 			"reward": "hermit", "snare": "hour"},
 		{"id": "road", "label": "Ask about the road", "skills": ["insight"], "dc": 12,
 			"note": "They know which hollows are safe.",
-			"win": "A safe camp tonight.", "lose": "Nothing they will say.",
+			"win": "A dry hollow to camp in tonight: no camp kit needed.", "lose": "Nothing they will say.",
 			"reward": "safe_camp", "snare": "none"},
 		{"id": "kin", "label": "Talk as one who knows the wild", "skills": [], "dc": 0,
 			"gate": {"backgrounds": ["hermit", "guide"], "classes": ["ranger"]},

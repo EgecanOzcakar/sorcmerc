@@ -244,48 +244,102 @@ func test_gamble() -> void:
 	var who: Dictionary = Downtime.best_of(party, Downtime.GAMBLE_SKILLS)
 	var b: int = who["bonus"]
 	check(who["skill"] in Downtime.GAMBLE_SKILLS, "the party's best at Insight, Deception or Sleight of Hand sits in")
-	check(Downtime.can_gamble(party, city), "a fresh visit has a game on")
+	check(Downtime.can_gamble(party, w, city), "a fresh day has a game on")
+	check(Downtime.gamble_refusal(party, w, city) == "", "...and nothing to refuse")
 
 	# nat 20: treble
 	var before: float = w.clock.elapsed
-	var r: Dictionary = Downtime.gamble(party, city, 100, _rng(20))
+	var r: Dictionary = Downtime.gamble(party, w, city, 100, _rng(20))
 	check(r["ok"] and r["mult"] == 3.0 and r["won"] == 300 and party.gold == 1200, "a 20 trebles the stake")
 	check(w.clock.elapsed == before, "an evening, not a day")
 	check(Ach.count("trebles") == 1 and Ach.is_unlocked("gamble_treble"), "The House Loses")
-	check(not Downtime.can_gamble(party, city) and Downtime.gamble(party, city, 100, _rng(20)).is_empty(), "once a visit")
+
+	# The design audit §1.5: once a DAY per town, not once a visit. Walking out
+	# of the gate and back in (a new visit stamp) used to re-arm the table.
+	check(not Downtime.can_gamble(party, w, city) and Downtime.gamble(party, w, city, 100, _rng(20)).is_empty(),
+		"a second game the same day is refused")
 	w.clock.elapsed += Visit.RESTOCK
 	Visit.visit(city, w)
-	check(Downtime.can_gamble(party, city), "a new visit, a new game")
+	check(Downtime.world_day(w) == int(before / Downtime.DAY), "...still the same day")
+	check(not Downtime.can_gamble(party, w, city), "...and a new visit the same day does not re-arm it")
+	check(Downtime.gamble_refusal(party, w, city).contains("tomorrow"), "the refusal says when: %s" % Downtime.gamble_refusal(party, w, city))
+	check(Downtime.can_gamble(party, w, w.settlements[1]), "another town's table is its own")
+	_next_day(city, w)
+	check(Downtime.can_gamble(party, w, city), "the next day, a new game")
 
-	# >= DC + 5: double
-	var nat: int = clampi(Downtime.GAMBLE_DC + 5 - b, 2, 19)
+	# >= GAMBLE_BIG: half again
+	var nat: int = clampi(Downtime.GAMBLE_BIG - b, 2, 19)
 	party.gold = 1000
-	r = Downtime.gamble(party, city, 50, _rng(nat))
-	check(r["ok"] and r["mult"] == 2.0 and r["won"] == 100 and party.gold == 1050, "five over the DC doubles it")
-	_revisit(city, w)
+	r = Downtime.gamble(party, w, city, 50, _rng(nat))
+	if nat + b >= Downtime.GAMBLE_BIG:
+		check(r["ok"] and r["mult"] == 1.5 and r["won"] == 75 and party.gold == 1025, "the big pot is half again")
+	check(Downtime.gamble_tier(19, 6) == "big" and Downtime.gamble_tier(18, 6) == "even", "25 or better is the big pot")
+	_next_day(city, w)
 
-	# >= DC: half again
+	# >= DC: the stake back, and no more (the owner's call)
 	nat = clampi(Downtime.GAMBLE_DC - b, 2, 19)
 	party.gold = 1000
-	r = Downtime.gamble(party, city, 50, _rng(nat))
-	check(r["ok"] and r["mult"] == 1.5 and r["won"] == 75 and party.gold == 1025, "the DC is half again")
-	_revisit(city, w)
+	r = Downtime.gamble(party, w, city, 50, _rng(nat))
+	check(r["ok"] and r["mult"] == 1.0 and r["won"] == 50 and party.gold == 1000, "the lowest win pays the stake back")
+	check(String(r["text"]).contains("stake comes back"), "...and says so: %s" % r["text"])
+	_next_day(city, w)
 
 	# < DC: gone
 	party.gold = 1000
-	r = Downtime.gamble(party, city, 200, _rng(2))
+	r = Downtime.gamble(party, w, city, 200, _rng(2))
 	check(not r["ok"] and r["mult"] == 0.0 and r["won"] == 0 and party.gold == 800 and r["complication"] == "", "under it the stake is gone")
-	_revisit(city, w)
+	_next_day(city, w)
 
-	# nat 1: gone, and they think you cheated
+	# nat 1: gone, and they think you cheated — whatever the bonus
 	party.gold = 1000
-	r = Downtime.gamble(party, city, 25, _rng(1))
+	r = Downtime.gamble(party, w, city, 25, _rng(1))
 	check(not r["ok"] and r["won"] == 0 and party.gold == 975 and r["complication"] == "insult", "a 1 is the stake and an insult")
-	_revisit(city, w)
+	check(Downtime.gamble_tier(1, 30) == "", "a natural 1 loses at any bonus")
+	_next_day(city, w)
 
-	check(Downtime.gamble(_party(20), city, 25, _rng(20)).is_empty(), "no staking what the purse has not got")
-	check(Downtime.gamble(party, city, 0, _rng(20)).is_empty(), "nor nothing")
+	check(Downtime.gamble(_party(20), w, city, 25, _rng(20)).is_empty(), "no staking what the purse has not got")
+	check(Downtime.gamble(party, w, city, 0, _rng(20)).is_empty(), "nor nothing")
 	check(Downtime.GAMBLE_STAKES == [25, 50, 100, 200], "the stakes")
+
+	# Seeded off the town and the day: the same evening replays the same die.
+	var p1 := _party(1000)
+	var p2 := _party(1000)
+	var r1: Dictionary = Downtime.gamble(p1, w, city, 25)
+	var r2: Dictionary = Downtime.gamble(p2, w, city, 25)
+	check(r1["nat"] == r2["nat"], "the same town and day roll the same die (%d, %d)" % [r1["nat"], r2["nat"]])
+
+	# EV (exact, d20 arithmetic), enumerated here face by face rather than
+	# trusting gamble_ev(): what comes back per 1 staked, by bonus. The header
+	# of core/downtime.gd quotes this table.
+	var want := {0: 0.5, 1: 0.55, 2: 0.6, 3: 0.65, 4: 0.7, 5: 0.75, 6: 0.825, 7: 0.9, 8: 0.975,
+		9: 1.05, 10: 1.125, 11: 1.2, 12: 1.225}
+	var last := 0.0
+	for bonus in range(0, 13):
+		var total := 0.0
+		for face in range(1, 21):
+			var pay := 0.0
+			if face == 20:
+				pay = 3.0
+			elif face == 1:
+				pay = 0.0
+			elif face + bonus >= 25:
+				pay = 1.5
+			elif face + bonus >= 13:
+				pay = 1.0
+			total += pay
+		var ev := total / 20.0
+		check(is_equal_approx(ev, Downtime.gamble_ev(bonus)), "+%d: the game's own EV is the enumerated one (%.3f)" % [bonus, ev])
+		check(is_equal_approx(ev, float(want[bonus])), "+%d: EV %.3f is the header's %.3f" % [bonus, ev, float(want[bonus])])
+		check(ev >= last, "+%d: a better gambler never does worse" % bonus)
+		last = ev
+		if bonus <= 8:
+			check(ev < 1.0, "+%d: the house wins (EV %.3f)" % [bonus, ev])
+	check(Downtime.gamble_ev(5) <= 0.95, "+5 is at most 0.95 (%.3f)" % Downtime.gamble_ev(5))
+	check(Downtime.gamble_ev(9) >= 1.0, "only an exceptional +9 breaks even (%.3f)" % Downtime.gamble_ev(9))
+
+func _next_day(s, w) -> void:
+	w.clock.elapsed += Downtime.DAY
+	Visit.visit(s, w)
 
 # A (stamp, clock) whose first night and the next (one DAY on) draw different
 # nats off Downtime.carouse's own seed — searched, not guessed.
@@ -459,7 +513,8 @@ func test_save() -> void:
 	Visit.visit(city, w)
 	_level(party, 4)
 	Downtime.train(party, w, city, party.get_member("vera"), Downtime.trainable(party.get_member("vera"))[0])
-	Downtime.gamble(party, city, 25, _rng(10))
+	Downtime.gamble(party, w, city, 25, _rng(10))
+	var gamble_day: int = Downtime.world_day(w)   # the bench below takes a day
 	var sid: String = Downtime.scribable(city, {}, party)[0]
 	Downtime.craft(party, w, city, sid, {})
 	Downtime.pit_result(party, city, w, 0, true, 0)
@@ -467,8 +522,13 @@ func test_save() -> void:
 	var back := _party(0)
 	Downtime.from_dict(back, d)
 	check(back.downtime["trained"] == ["vera"], "who trained")
-	check(not Downtime.can_gamble(back, city) and not Downtime.can_craft(back, city, sid),
-		"the once-a-visit stamps survive the file")
+	check(not Downtime.can_craft(back, city, sid), "the once-a-visit stamps survive the file")
+	check(back.downtime["gambled_day"]["riverhold"] is int and back.downtime["gambled_day"]["riverhold"] == gamble_day,
+		"...and the game's day comes back, an int")
+	var old_save := {"gambled": {"riverhold": city.last_visited}}
+	var from_old := _party(0)
+	Downtime.from_dict(from_old, old_save)
+	check(Downtime.can_gamble(from_old, w, city), "an old save's once-a-visit stamp does not block today's game")
 	check(Downtime.pit_state(back, city, w)["beaten"] == 1 and Downtime.pit_state(back, city, w)["open"], "the bracket's progress too")
 	check(back.downtime["pit"]["riverhold"]["week"] is int and back.downtime["pit"]["riverhold"]["beaten"] is int, "ints come back ints")
 	Downtime.from_dict(back, null)

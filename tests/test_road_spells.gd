@@ -143,6 +143,9 @@ func test_road_casts() -> void:
 	RoadSpells.cast(p, ilsa, "alarm", p.world_now)
 	check(p.safe_camp and p.alarm_set and ilsa.slots_used[0] == 2 and ilsa.slots_used[1] == 1,
 		"Rope Trick and Alarm set their camp flags and spend their slots")
+	check(p.camp_holds.size() == 2 and p.camp_holds.all(func(h): return h["id"] == "ilsa"),
+		"...and hold them through the night they pay for (audit 1.6)")
+	check(not RoadSpells.text("rope-trick").contains("no night ambush"), "Rope Trick no longer promises a night without an ambush")
 	# a slot of the spell's level or higher, lowest first; none left = no cast
 	ilsa.slots_used.assign([4, 2, 0, 0, 0, 0, 0, 0, 0])
 	check(RoadSpells.cast(p, ilsa, "alarm", p.world_now) == "", "no slot left, no cast")
@@ -150,3 +153,4 @@ func test_road_casts() -> void:
 	# survives a save
 	var back = WorldSave._party_from(WorldSave._party_dict(p))
 	check(back.safe_camp and back.alarm_set and back.swift_until == 160.0, "the road flags survive a save")
+	check(back.camp_holds.size() == 2, "...and so do the held slots")

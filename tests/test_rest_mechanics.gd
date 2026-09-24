@@ -90,11 +90,13 @@ func test_pact_magic_regens_on_short_rest() -> void:
 	check(c2.slots[lvl - 1] == int(ch.sheet().spellcasting["pact"]["count"]),
 		"Pact Magic: a short rest refills every pact slot (the RAW exception)")
 
+# A cleric, not a wizard: since the design audit's 4.2 a wizard's short rest
+# runs Arcane Recovery (tests/test_rest_and_slots.gd), which is the point of it.
 func test_normal_slots_dont_regen_on_short_rest() -> void:
-	var ch = build("human", "wizard", "sage", 3)
+	var ch = build("human", "cleric", "acolyte", 3)
 	var c = Adapter.to_combatant(ch, "party", Vector2i.ZERO)
 	var slot_idx: int = c.slots.find(c.slots.filter(func(n): return n > 0)[0]) if c.slots.any(func(n): return n > 0) else -1
-	check(slot_idx >= 0, "wizard 3 has at least one spell slot")
+	check(slot_idx >= 0, "cleric 3 has at least one spell slot")
 	c.slots[slot_idx] -= 1
 	Adapter.write_back(c, ch)
 	Adapter.rest(ch, "short-rest")
