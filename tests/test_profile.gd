@@ -50,8 +50,30 @@ func _init() -> void:
 	_equip_legendary()
 	_drink()
 	_shift_compare()
+	_service()
 	print("test_profile: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+# Audit 2.2: the Service panel reads the counts and the trait rules' own
+# thresholds, and an earned trait says why and when.
+func _service() -> void:
+	var Traits = load("res://core/traits.gd")
+	var ch = Presets.vera()
+	ch.traits = []
+	ch.trait_counts = {"fights": 31, "wins": 19, "downed:orc": 2, "kill:goblinoid": 12, "kill:orc": 4, "kill:dragon": 1}
+	Traits.grant(ch, "bane@goblinoid", "10 goblins killed", 1440.0 * 3 + 5.0)
+	var p = _screen(ch)
+	check(p.field("service_fights") == "31, 19 won", "fights and wins: %s" % p.field("service_fights"))
+	check(p.field("service_downs") == "2", "times put down")
+	check(p.field("service_kills") == "17", "kills in all")
+	check(p.field("bane_goblinoid") == "12, Goblin-bane", "a held bane: %s" % p.field("bane_goblinoid"))
+	check(p.field("bane_orc") == "4/%d toward Orc-bane" % Traits.BANE_KILLS, "progress off the rules' own count: %s" % p.field("bane_orc"))
+	check(p.field("bane_dragon") == "1/%d toward Dragon-bane" % Traits.BANE_KILLS_DRAGON, "a dragon's is three: %s" % p.field("bane_dragon"))
+	check(p.field("service_veteran") == "19/%d wins" % Traits.VETERAN_WINS, "Veteran: %s" % p.field("service_veteran"))
+	check(p.field("trait_origin_bane@goblinoid") == "Earned on day 4: 10 goblins killed.",
+		"the trait's origin line: %s" % p.field("trait_origin_bane@goblinoid"))
+	check(p.field("trait_origin_brave") == "", "a trait they were born with has none")
+	p.queue_free()
 
 # Every rendered field is the sheet's number, not a UI-side derivation.
 func _sheet_mirror() -> void:

@@ -34,6 +34,7 @@ const Registry = preload("res://core/mod/registry.gd")
 const StoryRuntime = preload("res://core/mod/story_runtime.gd")
 const Coop = preload("res://core/coop.gd")
 const Recruits = preload("res://core/recruits.gd")   # a new run's founding: one hero made, the rest hired
+const Service = preload("res://core/service.gd")     # audit 2.5: a run served, on the founder's record
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 const CAMPAIGN_SCENE := "res://scenes/campaign/campaign.tscn"
@@ -564,6 +565,7 @@ func show_party_setup() -> void:
 			# happen. Without this a second playthrough marches straight over
 			# the first one's file, which is the whole reason slots exist.
 			WorldSave.new_slot()
+			_enlist(party)
 			show_world(party, null, size)
 
 	# M8: a chosen pack replaces the three built-in maps with its own — there is
@@ -624,6 +626,13 @@ func show_party_setup() -> void:
 	wrap.add_child(back)
 	_swap(wrap, "party setup")
 
+# A run begins: everyone on the roster (on a founding, the founder alone) has
+# served one more company, the count a veteran's record at an inn reads back
+# (core/service.gd). Hires are counted as they sign (Recruits.hire).
+static func _enlist(party) -> void:
+	for ch in party.roster:
+		Service.enlist(ch)
+
 # What Begin says to an empty company: on a founding, the one thing missing is
 # the founder.
 static func _nobody_yet(party) -> String:
@@ -636,6 +645,7 @@ static func _nobody_yet(party) -> String:
 # core/mod/story_runtime.gd that the world screen polls.
 func _start_pack(party) -> void:
 	WorldSave.new_slot()   # a pack run is a new run: its own slot, same as the rest
+	_enlist(party)
 	var world = Registry.world_of(_pack, int(OS.get_environment("SORCMERC_SEED")))
 	var story_def = Registry.story_of(_pack)
 	var run = StoryRuntime.new(story_def, {}, _pack.id()) if story_def != null else null
