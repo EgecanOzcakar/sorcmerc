@@ -110,6 +110,8 @@ const Loot = preload("res://core/loot.gd")
 const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const WorldSave = preload("res://core/world_save.gd")
+const RouteTravel = preload("res://core/route_travel.gd")   # #231: the roads, when this is a route world
+const Grudges = preload("res://core/grudges.gd")
 
 const COMBAT_SCENE := "res://scenes/main.tscn"
 # O4 trigger distance, in world units. A party token draws at 9-11px before the
@@ -295,6 +297,7 @@ var _quest_news: Array = []          # quest progress the last _bank() made, for
 var _lair_btn: Button                # T91: "Search for a lair" / "Attack the lair", or hidden
 var _lair_sneak_btn: Button          # T9x: "Slip past the guardians" — visible once discovered, unlooted
 var _lair_target: World.Lair = null  # whichever lair _check_lairs() last found in range
+var _route_search := false           # #231: the lair button is the Survival check at a fork (RouteTravel.searchable)
 var _lair_settle_btn: Button
 var _settle_target: World.Lair = null   # a cleared lair in range the party could settle (core/raids.gd)
 var _place_btn: Button                # landmarks: "Visit the Nine Sisters" / "Search the ground (Survival)", or hidden
@@ -420,6 +423,13 @@ func _ready() -> void:
 			"large": world = _large_world()
 			"procedural": world = ProceduralWorld.build(int(OS.get_environment("SORCMERC_SEED")))
 			_: world = _small_world()
+		# #231 phase 1: a map built while SORCMERC_ROUTES=1 is set is born a
+		# route world — roads only, nobody on the map but the company. Only a map
+		# built here: a resumed save or a pack's world is what it already was
+		# (core/route_travel.gd says why).
+		if RouteTravel.flag_on():
+			RouteTravel.adopt(world)
+	RouteTravel.clear_met(world)   # #231: a road meeting the game was closed on ended with it
 	if party == null:               # same demo roster scenes/campaign/campaign.gd falls back to
 		party = Party.new()
 		for ch in Party.demo_roster():
@@ -560,6 +570,9 @@ func _process(delta: float) -> void:
 		_spectate(delta)
 		_render()
 		return
+	# #231: where the company stood before the frame's move — the road's
+	# odometer counts what it walked (_check_routes).
+	var route_from: Vector2 = world.player().position if world.player() != null else Vector2.ZERO
 	# O7: the clock's own advance (0 while paused) both drains O6's queued opinion
 	# deltas off the settlements and runs the slow drift back toward neutral.
 	var dt := world.tick(delta)
@@ -585,6 +598,7 @@ func _process(delta: float) -> void:
 		# it on the party screen takes effect the moment you back out.
 		p0.speed = World.SPEED * Travel.speed_mult(party)
 	FactionOpinion.tick(world, dt)
+	Grudges.tick(dt)   # #231: the monster peoples' side, cooling at the same rate
 	PartyOpinion.decay(party, dt)   # spike-party-opinions §7: a paused clock drifts nothing, same contract
 	if world.clock.elapsed >= _gauged_at + WorldFlee.GAUGE_MINUTES:
 		world.band_strength = WorldFlee.gauge(world, party)
@@ -610,6 +624,7 @@ func _process(delta: float) -> void:
 	_check_bench()
 	_check_forage()
 	_check_travel()
+	_check_routes(route_from)
 	_check_region()
 	_check_level_ready()
 	if _camp_btn != null:
@@ -935,7 +950,9 @@ func _build_hud() -> void:
 	_camp_btn.pressed.connect(_make_camp)
 	bar.add_child(_camp_btn)
 	var hint := Label.new()
-	hint.text = "Click marches.  Right-drag pans, middle-drag or Q/E turns, R/F tilts, wheel zooms, Home resets.  Space pauses, 1/2/4/8 speed, P party, I pack, Esc menu."
+	# #231: on the roads a click is a place, not ground. Same opening words, which
+	# the co-op guest's HUD finds this label by (_spectator_hud).
+	hint.text = ("Click marches to a known place, by road." if RouteTravel.on(world) else "Click marches.") + "  Right-drag pans, middle-drag or Q/E turns, R/F tilts, wheel zooms, Home resets.  Space pauses, 1/2/4/8 speed, P party, I pack, Esc menu."
 	hint.theme_type_variation = "Dim"
 	bar.add_child(hint)
 	_region_msg = Label.new()
@@ -1503,7 +1520,9 @@ func _trigger(dt: float) -> float:
 
 # ponytail: linear scan over 3-8 parties once a frame, same as world_ai.gd's hunt.
 func _check_encounter(dt := 0.0) -> void:
-	if _combat != null or world.clock.is_paused():
+	# #231: on the roads nobody closes on the company across the map — the road
+	# sends what it sends (_check_routes), and the band it sent is met at once.
+	if _combat != null or world.clock.is_paused() or RouteTravel.on(world):
 		return
 	var p := world.player()
 	if p == null:
@@ -1906,7 +1925,8 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 			WorldAI.truce(foe, world.player(), world.clock.elapsed)
 			_quest_news.append("Their leader got away — the job is still open.")
 		else:
-			WorldAI.fell(world, foe)      # #142: it comes back in two days
+			if not RouteTravel.on(world):
+				WorldAI.fell(world, foe)  # #142: it comes back in two days (not on the roads: the road sends the next)
 			world.parties.erase(foe)      # beaten; O5 will do the same for NPC-vs-NPC
 			# T91: a no-op for the settlement-guard/lair-raid stand-ins below (their
 			# synthetic ids never match a live hunt_party quest's target), correct
@@ -1928,6 +1948,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 		# brawl at the inn is neither.
 		if not named and WorldAI.is_monster(foe.faction):
 			FactionOpinion.credit_fight(world, foe.position, FactionOpinion.FOUGHT_FOR, foe.faction)
+			Grudges.add(foe.faction, Grudges.BAND)   # #231: and its own people remember
 		elif not named:
 			FactionOpinion.lower(foe.faction, FactionOpinion.KILLED_THEIRS)
 	elif String(result.get("outcome", "")) == Combat.WITHDRAWN:
@@ -1962,6 +1983,9 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 		if not party.finished.is_empty():
 			_end_company()   # nobody is left: the run ends here, not on the map
 			return result
+	# #231: a band the road sent was only ever this meeting; win, withdraw or
+	# lose, it is gone with it.
+	_route_forget(foe)
 	# The carter dead, or the party beaten with the crate on the road: the
 	# delivery is lost either way, and the board can post the run again.
 	if String(obj.get("kind", "")) == "escort" and not bool(obj.get("done", false)):
@@ -2463,6 +2487,11 @@ func _check_visit() -> void:
 			continue
 		if s == _left:
 			continue
+		# #231: on the roads, a town the march only passes through is passed
+		# through — roads run town to town, and every trip across the map would
+		# otherwise stop at every market on the way. The town at the end opens.
+		if RouteTravel.on(world) and not p.at_goal() and _destination(p).distance_to(s.position) > VISIT_RADIUS:
+			continue
 		# O7 effect 3: past FactionOpinion.GUARDS_ATTACK the gate guards come out
 		# instead of the market opening — O4's encounter path, with the garrison
 		# standing in as the party (it is not on the map, so beating it just ends
@@ -2496,7 +2525,11 @@ func _check_lairs() -> void:
 		_lair_sneak_btn.visible = false
 		_lair_settle_btn.visible = false
 		return
-	var undiscovered = WorldLairs.nearby_undiscovered(world, p.position)
+	# #231: on the roads a hidden lair is found at the fork its track leaves
+	# from (RouteTravel.searchable), not by standing near the lair itself — the
+	# company cannot stand anywhere a road does not go.
+	_route_search = RouteTravel.on(world) and not RouteTravel.searchable(world).is_empty()
+	var undiscovered = null if RouteTravel.on(world) else WorldLairs.nearby_undiscovered(world, p.position)
 	var target = undiscovered
 	if target == null:
 		for l in world.lairs:
@@ -2514,6 +2547,12 @@ func _check_lairs() -> void:
 			_settle_target = l
 			break
 	_lair_settle_btn.visible = _settle_target != null
+	if target == null and _route_search:
+		_lair_target = null
+		_lair_btn.visible = true
+		_lair_btn.text = "Search the ground (Survival)"
+		_lair_sneak_btn.visible = false
+		return
 	if _settle_target != null:
 		var cost := Raids.settle_cost(world, _settle_target)
 		_lair_settle_btn.text = "Settle it (%d ◉)" % cost
@@ -2558,6 +2597,10 @@ func _check_expired_lairs() -> void:
 	for l in WorldLairs.respawn(world, world.clock.elapsed):
 		_lair_msg.text = WorldLairs.respawn_text(l)
 		_autosave()
+	# #231: a route world keeps no bands on the map, so none come back and none
+	# are refilled; the road decides who is out there.
+	if RouteTravel.on(world):
+		return
 	# #142: and the bands the party put down, two days on, out of those lairs.
 	var back: Array = WorldAI.respawn(world, world.clock.elapsed)
 	for line in back:
@@ -2575,7 +2618,9 @@ func _check_expired_lairs() -> void:
 # the respawn are; a landing can add a lair to the map, so the dioramas are
 # rebuilt whenever the poll had anything to say.
 func _check_raids() -> void:
-	if _combat != null or _site != null:
+	# #231 phase 1: a raid is a band walking to a town, and a route world has
+	# none. Phase 2 makes a raid a town state (docs/spike-route-travel.md §6).
+	if _combat != null or _site != null or RouteTravel.on(world):
 		return
 	var lines: Array = Raids.tick(world, world.clock.elapsed)
 	if lines.is_empty():
@@ -2751,7 +2796,9 @@ func _calling_done(char_id: String, r: Dictionary, then: Callable) -> void:
 # The lair button's shape again: one button, two states. A found place offers a
 # visit; a hidden one in range offers the same Survival search a lair does.
 func _check_places() -> void:
-	for l in Landmarks.found_on_explore(world):
+	# #231: on the roads a landmark is found by its path (RouteTravel), not by
+	# the fog coming off it, and a hidden one by the search at its fork.
+	for l in ([] if RouteTravel.on(world) else Landmarks.found_on_explore(world)):
 		_lair_msg.text = "%s — a landmark, on the map now." % l.sname
 		Sound.play_sfx("landmark_found")
 	if _combat != null or not _visit.is_empty() or _overlay_up():
@@ -2762,7 +2809,7 @@ func _check_places() -> void:
 		_place_btn.visible = false
 		return
 	var open = Landmarks.nearest_open(world, p.position)
-	var hidden = Landmarks.nearby_hidden(world, p.position) if open == null else null
+	var hidden = Landmarks.nearby_hidden(world, p.position) if open == null and not RouteTravel.on(world) else null
 	_place_target = open if open != null else hidden
 	if _place_target == null:
 		_place_btn.visible = false
@@ -2821,6 +2868,9 @@ func _on_place_chosen(id: String) -> void:
 	_event_card.show_event(e)
 
 func _lair_action() -> void:
+	if _route_search and _lair_target == null and _combat == null:
+		_route_search_action()
+		return
 	var l: World.Lair = _lair_target
 	if l == null or _combat != null:
 		return
@@ -2834,6 +2884,17 @@ func _lair_action() -> void:
 			"search_found" if roll["ok"] else "search_nothing")
 		return
 	await _delve(l)
+
+# #231: the Survival check at a fork — a lair's track, a hut's or a tower's path.
+func _route_search_action() -> void:
+	var roll: Dictionary = RouteTravel.search(world, party)
+	if roll.is_empty():
+		return
+	var names: Array = roll.get("places", [])
+	_map_roll(roll, _lair_msg, ("%s finds a way off the road — to %s (Survival %d+%d vs DC %d)." % [
+		roll["cname"], " and ".join(names) if not names.is_empty() else "somewhere", roll["nat"], roll["bonus"], roll["dc"]]) if roll["ok"] else (
+		"Nothing this time (Survival %d+%d vs DC %d)." % [roll["nat"], roll["bonus"], roll["dc"]]),
+		"search_found" if roll["ok"] else "search_nothing")
 
 # T9x: the quiet alternative to _lair_action()'s attack — a pass loots the
 # lair with no fight; a fail falls straight through to the normal attack
@@ -3127,6 +3188,7 @@ func _on_approach_reported(foe, r: Dictionary) -> void:
 		# the moment you step out of reach.
 		_slipped[foe.id] = true
 		WorldAI.truce(foe, world.player(), world.clock.elapsed)
+		_route_forget(foe)   # #231: a band the road sent goes its way, and is not seen again
 		if _halted_on_arrival:
 			_halt()   # a band the party walked up to on purpose: it arrived, and waits for orders
 		else:
@@ -3176,6 +3238,40 @@ func _check_travel() -> void:
 # (D4's _on_approach_reported, which launches the fight) must emit the signal
 # instead of calling this. A driver that called this directly is exactly how
 # that was found.
+# #231 phase 1 — the road, once a frame on a route world: a path seen leaving it
+# (said on the HUD line, like a landmark coming into view), or what the road
+# sent (RouteTravel.step: one roll per RouteEncounters.STEP walked). A threat is
+# met the way a band closing on the company always was — the approach card, or
+# the watch's roll in the dark (_meet) — and a meeting gets the friendly card.
+# The march is not called off: a meeting that ends without a fight walks on.
+# Same gates as the road's events: nothing while a fight, a town, a site or a
+# card is up, or with the clock stopped.
+func _check_routes(from: Vector2) -> void:
+	if not RouteTravel.on(world) or _combat != null or not _visit.is_empty() or _site != null \
+			or _approach_card != null or _event_card != null or world.clock.is_paused():
+		return
+	for ev in RouteTravel.step(world, from):
+		match String(ev["kind"]):
+			"noticed":
+				var names: Array = ev["places"]
+				_lair_msg.text = ("A way leaves the road here — to %s." % " and ".join(names)) if not names.is_empty() \
+					else "A way leaves the road here."
+				Sound.play_sfx("landmark_found")
+			"threat", "meet":
+				var band = RouteTravel.band_for(world, ev["spec"])
+				_party3d.reset(world)   # a figure is only built on reset (party3d.gd)
+				if ev["kind"] == "threat":
+					_meet(band, bool(ev["spec"]["hostile"]))
+				else:
+					_open_approach(band, false)
+				return
+
+# A met band is gone when its meeting is, however that ended (RouteTravel.forget).
+func _route_forget(band) -> void:
+	if RouteTravel.on(world):
+		RouteTravel.forget(world, band)
+		_party3d.reset(world)
+
 func _on_event_ack() -> void:
 	if _event_card != null:
 		_event_card.queue_free()
@@ -3772,7 +3868,10 @@ func _short_rest() -> void:
 func _make_camp() -> void:
 	if _combat != null or not _visit.is_empty() or _overlay_up():
 		return
-	var r: Dictionary = WorldCamp.make_camp(party, world, ENCOUNTER_RADIUS, _night_step)
+	# #231: a camp anywhere on a road is as risky as its stretch of road.
+	var pct: int = RouteTravel.camp_ambush_pct(world, world.player().position) if RouteTravel.on(world) and world.player() != null \
+		else WorldCamp.AMBUSH_CHANCE_PCT
+	var r: Dictionary = WorldCamp.make_camp(party, world, ENCOUNTER_RADIUS, _night_step, pct)
 	if not bool(r["ok"]):
 		_camp_msg.text = String(r["text"])
 		return
@@ -5529,10 +5628,28 @@ func _gui_input(e: InputEvent) -> void:
 			var band = _band_at(e.position)
 			if band != null:
 				_seek(band)
+			elif p != null and RouteTravel.on(world):
+				_route_click(e.position)
 			elif p != null:
 				_drop_meet()
 				world.set_goal(p, _click_target(e.position))
 		queue_redraw()
+
+# #231: on the roads a click is a place, never ground — the company goes there by
+# the known roads, or not at all (the owner's call: it never leaves the road).
+# The place nearest the click within ROUTE_PICK screen pixels, counted in world
+# units at the current zoom, so a town's diorama and a landmark's stone are both
+# easy to hit.
+const ROUTE_PICK := 28.0
+func _route_click(sp: Vector2) -> void:
+	var id := RouteTravel.place_near(world, _click_target(sp), ROUTE_PICK / maxf(0.01, ISO_GAIN * _zoom))
+	if id == "":
+		_camp_msg.text = "No road you know goes there."
+		return
+	if RouteTravel.go(world, id):
+		_camp_msg.text = "On the road to %s." % RouteTravel.place_name(world, id)
+	else:
+		_camp_msg.text = "No road you know goes to %s yet." % RouteTravel.place_name(world, id)
 
 # #193: a ScrollContainer that is already at its end, or a list too short to
 # scroll at all, does not accept the wheel, so the event bubbled on up to this
@@ -5586,6 +5703,7 @@ static func _in_model_box(sp: Vector2, at: Vector2, h: float) -> bool:
 # it — see ground_marks() below and scenes/world/world_view3d.gd.
 func _draw() -> void:
 	_layout()
+	_draw_roads()
 	var p := world.player()
 	if p != null and not p.at_goal():
 		# #95/#115: the way there — a faint gold thread from the party through
@@ -5607,6 +5725,30 @@ func _draw() -> void:
 	_draw_offscreen_markers(ppos)
 	_draw_quest_marks(ppos)
 
+
+# #231: the roads the company knows, under everything else this draws — the
+# only ground it can walk on a route world, so it is drawn whatever the fog
+# says (a road you have been told of is a road you know). Hidden ones are not
+# drawn at all: finding them is the point. Same inks tests/shot_routes.gd uses,
+# so the spike's diagrams and the map agree.
+const ROAD_INK := {"road": Color(0.80, 0.63, 0.38, 0.9), "track": Color(0.72, 0.35, 0.25, 0.85),
+	"path": Color(0.78, 0.78, 0.72, 0.8), "byway": Color(0.45, 0.62, 0.85, 0.85), "trail": Color(0.45, 0.85, 0.40, 0.9)}
+const ROAD_WIDTH := {"road": 5.0, "track": 3.5, "path": 2.5, "byway": 2.5, "trail": 3.5}
+const ROAD_EDGE := Color(0.10, 0.07, 0.04, 0.75)   # the dark bed each road is drawn on, so it reads over grass and fog alike
+func _draw_roads() -> void:
+	if not RouteTravel.on(world):
+		return
+	for eid in world.routes.edges:
+		var e: Dictionary = world.routes.edges[eid]
+		if not e["known"]:
+			continue
+		var pts := PackedVector2Array()
+		for pt in e["points"]:
+			pts.append(_pix(pt))
+		var kind := String(e["kind"])
+		var width: float = float(ROAD_WIDTH.get(kind, 2.5)) * clampf(_zoom, 0.6, 1.6)
+		draw_polyline(pts, ROAD_EDGE, width + 2.0, true)
+		draw_polyline(pts, ROAD_INK.get(kind, ROAD_INK["road"]), width, true)
 
 # #153: the job's own tile (assets/generated/quest-<kind>.png, the one the
 # offer card shows) floated over whatever it names on the map, gilt-framed; a

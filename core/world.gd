@@ -255,6 +255,17 @@ var landmarks: Array[Landmark] = []
 var fallen: Array[Dictionary] = []
 # #163: when WorldBands.refill last put a band on the map (world-minutes).
 var bands_refilled_at := 0.0
+# #231: the road network (core/world_routes.gd), or null. Non-null is what makes
+# this a route world: the company travels only on known roads and meets what
+# the road sends (core/route_travel.gd), with no bands on the map. Untyped,
+# because core/world_routes.gd reaches this file through core/landmarks.gd and
+# a preload here would be a cycle. A save carries it; a world without it is
+# the free plane it always was.
+var routes = null
+# How far the company has walked on those roads, ever: the odometer the road's
+# rolls are counted off (one per RouteEncounters.STEP), saved so a reload
+# neither skips a roll nor makes one twice.
+var route_walked := 0.0
 # O15 — the only terrain the map has: hand-placed blobs of water, `{position, radius}`
 # each. A circle is the whole vocabulary; a lake is one, a river is a chain of
 # overlapping ones (see scenes/world/world.gd's _demo_world). Plain dictionaries
@@ -597,9 +608,21 @@ func tick(delta: float) -> float:
 func move_toward_goal(p: RoamingParty, delta: float) -> void:
 	if delta <= 0.0:
 		return
-	if waters.is_empty():        # no terrain to respect: the O1 behavior, undisturbed
-		p.position = p.position.move_toward(p.goal, p.speed * delta)
-		p.route = []
+	if waters.is_empty():        # no terrain to respect: straight at the goal...
+		var left := p.speed * delta
+		while left > 0.0:
+			var d := p.position.distance_to(p.goal)
+			p.position = p.position.move_toward(p.goal, left)
+			left -= d
+			# ...and on to the next corner, when one was given. Only a road
+			# (core/route_travel.gd) gives one on a map with no water: set_goal
+			# never routes where there is nothing to route round. This branch
+			# used to drop the route outright, which cut every road trip on a
+			# dry map short at its first corner.
+			if left <= 0.0 or p.route.is_empty():
+				break
+			p.goal = p.route[0]
+			p.route.remove_at(0)
 		return
 	var remaining := p.speed * delta
 	while remaining > 0.0:

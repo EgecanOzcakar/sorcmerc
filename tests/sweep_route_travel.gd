@@ -43,7 +43,6 @@ const RNG = preload("res://core/rng.gd")
 
 const ENCOUNTER_RADIUS := 24.0   # scenes/world/world.gd's
 const DT := 0.25                 # world-minutes a tick: SPEED * 2 * DT stays under the radius
-const RINGS := ["heartland", "marches", "frontier", "deeps"]
 
 var _itins := 4
 var _walk := 30000.0
@@ -84,9 +83,13 @@ func _init() -> void:
 	_proc = _env_int("PROC_SEEDS", 4)
 	var maps := _maps()
 	# --- A ---
-	var a_walk := [0.0, 0.0, 0.0, 0.0]
-	var a_hit := [0, 0, 0, 0]
-	var a_mix := [{}, {}, {}, {}]
+	# One slot per ring, however many Regions.BANDS has (the Unmapped made it
+	# five; a hard-coded four hung the sweep on the first walk that got there).
+	var nr: int = Regions.BANDS.size()
+	var rings: Array = Regions.BANDS.map(func(b): return String(b["id"]))
+	var a_walk := _zeros(nr, 0.0)
+	var a_hit := _zeros(nr, 0)
+	var a_mix := _dicts(nr)
 	var t0 := Time.get_ticks_msec()
 	for m in maps:
 		for it in _itins:
@@ -127,16 +130,16 @@ func _init() -> void:
 					stuck = 0
 	print("A. TODAY — hostile contacts per 1000 units walked (%d maps x %d itineraries x %d units, %.0fs)" % [
 		maps.size(), _itins, int(_walk), (Time.get_ticks_msec() - t0) / 1000.0])
-	var today := [0.0, 0.0, 0.0, 0.0]
-	for ri in 4:
+	var today := _zeros(nr, 0.0)
+	for ri in nr:
 		today[ri] = a_hit[ri] / maxf(1.0, a_walk[ri] / 1000.0)
-		print("  %-9s walked %8d  contacts %4d  rate %.2f  mix %s" % [RINGS[ri], int(a_walk[ri]), a_hit[ri], today[ri], _mix_text(a_mix[ri])])
+		print("  %-9s walked %8d  contacts %4d  rate %.2f  mix %s" % [rings[ri], int(a_walk[ri]), a_hit[ri], today[ri], _mix_text(a_mix[ri])])
 	# --- B and C ---
-	var b_n := [0, 0, 0, 0]
-	var b_factor := [0.0, 0.0, 0.0, 0.0]
-	var b_rate := [0.0, 0.0, 0.0, 0.0]
-	var b_fired := [0, 0, 0, 0]
-	var b_mix := [{}, {}, {}, {}]
+	var b_n := _zeros(nr, 0)
+	var b_factor := _zeros(nr, 0.0)
+	var b_rate := _zeros(nr, 0.0)
+	var b_fired := _zeros(nr, 0)
+	var b_mix := _dicts(nr)
 	print("\nC. THE NETWORK")
 	for m in maps:
 		FactionOpinion.reset()
@@ -181,22 +184,36 @@ func _init() -> void:
 	var f_all := 0.0
 	var r_all := 0.0
 	var fired_all := 0
-	for ri in 4:
+	for ri in nr:
 		var n: int = maxi(1, b_n[ri])
 		n_all += b_n[ri]
 		f_all += b_factor[ri]
 		r_all += b_rate[ri]
 		fired_all += b_fired[ri]
 		print("  %-9s samples %5d  mean cover*lure %.2f  model rate %.2f (today %.2f)  rolled %.2f  mix %s" % [
-			RINGS[ri], b_n[ri], b_factor[ri] / n, b_rate[ri] / n, today[ri],
+			rings[ri], b_n[ri], b_factor[ri] / n, b_rate[ri] / n, today[ri],
 			b_fired[ri] / maxf(1.0, n * RouteEncounters.STEP / 1000.0), _mix_text(b_mix[ri])])
-	var today_all: float = (a_hit[0] + a_hit[1] + a_hit[2] + a_hit[3]) / maxf(1.0, (a_walk[0] + a_walk[1] + a_walk[2] + a_walk[3]) / 1000.0)
+	var hits_all: int = a_hit.reduce(func(acc, x): return acc + x, 0)
+	var walk_all: float = a_walk.reduce(func(acc, x): return acc + x, 0.0)
+	var today_all: float = hits_all / maxf(1.0, walk_all / 1000.0)
 	var mean_f: float = f_all / maxi(1, n_all)
 	print("  all rings: today %.2f (%d contacts in %d units)  model %.2f  rolled %.2f  mean cover*lure %.2f  -> implied BASE %.2f" % [
-		today_all, a_hit[0] + a_hit[1] + a_hit[2] + a_hit[3], int(a_walk[0] + a_walk[1] + a_walk[2] + a_walk[3]),
+		today_all, hits_all, int(walk_all),
 		r_all / maxi(1, n_all), fired_all / maxf(1.0, n_all * RouteEncounters.STEP / 1000.0), mean_f, today_all / maxf(0.001, mean_f)])
 	_scene.free()
 	quit(0)
+
+func _zeros(n: int, v) -> Array:
+	var out: Array = []
+	out.resize(n)
+	out.fill(v)
+	return out
+
+func _dicts(n: int) -> Array:
+	var out: Array = []
+	for i in n:
+		out.append({})
+	return out
 
 # Every STEP along a polyline, starting half a step in.
 func _samples(pts: PackedVector2Array) -> Array:

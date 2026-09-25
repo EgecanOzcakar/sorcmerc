@@ -39,7 +39,10 @@ func test_slower_past_the_marches() -> void:
 	for band in at:
 		w.add_lair(World.Lair.new(band, Vector2(float(at[band]), 0.0), "goblinoid"))
 	for l in w.lairs:
-		check(Regions.band_of(w, l.position) == l.id, "%s's lair stands in %s (%s)" % [l.id, l.id, Regions.band_of(w, l.position)])
+		# The country, not the band: 1000 of a 1000 extent is the Unmapped,
+		# which is part of the Far Deeps (Regions.country_of).
+		var country: String = Regions.country_of(Regions.band_of(w, l.position))
+		check(country == l.id, "%s's lair stands in %s (%s)" % [l.id, l.id, country])
 		WorldLairs.mark_cleared(l, 0.0)
 	check(WorldLairs.respawn_after(w, w.lairs[0]) == 1440.0 and WorldLairs.respawn_after(w, w.lairs[1]) == 1440.0,
 		"a day in the Heartland and the Marches")

@@ -189,7 +189,8 @@ stretch of road is what carries the danger. One roll per 100 units
 
     rate = BASE × cover × lure  +  hunt  +  grudge
 
-- **BASE** — how busy a road is, 0.6 contacts per 1000 units. Measured, not
+- **BASE** — how busy a road is, 0.34 contacts per 1000 units (0.6 when the
+  spike measured it; re-measured in phase 1, §4.1). Measured, not
   chosen, and the same in every ring (§4.1 says why).
 - **cover** — each civilized town within 350 units takes up to 60% off at its
   gate, fading to nothing at the radius, *scaled by what that people thinks of
@@ -238,10 +239,13 @@ keep no opinion of the company in this codebase and never have —
 `KILLED_THEIRS` all say so on purpose — and the owner's call is to give them
 a grudge and only a grudge (§4.2).
 
-**Determinism.** A roll is seeded off the edge, the 100-unit stretch of it and
-the world-day (`step_key()`): the same stretch walked twice in one day meets
-the same thing, a reload cannot reroll a road the player did not like, and
-tomorrow it is a fresh road.
+**Determinism.** A roll is seeded off the edge and the road's odometer — how
+far the company has walked, ever, which the save keeps (`step_key()`): a
+reload cannot reroll a road the player did not like, and every stretch walked
+is a roll of its own. (The spike first keyed it on the stretch and the
+world-day, so the same stretch walked twice in a day met the same thing — a
+band beaten on the way out waiting again on the way back. Phase 1 changed it;
+its build log entry says so.)
 
 ### 4.1 BASE is today's density, measured
 
@@ -277,6 +281,14 @@ Two things in that table:
   level (`Regions.power_scale`) and now sets who is in it. The model's own
   gentle rise outward is the lairs' lure, most of which stand out there.
 
+**Re-measured in phase 1** (2026-09-25, same sweep, same itineraries), after
+"a lair for every people" and the Unmapped (#257) changed the maps: today's
+free roam delivers 0.47 per 1000 units (340 contacts in 720 113 units), and
+with a lair for every people the mean cover × lure along the network rose to
+1.38 — so `BASE` = 0.47 / 1.38 = 0.34. The per-ring shape is still upside
+down (heartland 0.51, marches 0.41, frontier 0.32, deeps 0.18). The table
+above is the spike's measurement, kept as it was taken.
+
 What the sweep leaves out of "today": band-against-band fights
 (`WorldBattle` — every one is a full autoplayed combat, and they thin the map,
 so today's figure is if anything a little high), fleeing (`WorldFlee` needs
@@ -298,7 +310,7 @@ calls `add()` where world.gd already credits a won fight and
 
 | Number | Where | Status |
 |---|---|---|
-| `BASE` 0.6 | `route_encounters.gd` | **measured**, §4.1 |
+| `BASE` 0.34 | `route_encounters.gd` | **measured**, §4.1 (0.6 before #257) |
 | `COVER` 0.6, `COVER_RADIUS` 350 | `route_encounters.gd` | taste — first thing phase 1 measures |
 | `LURE` 1.0, `LURE_RADIUS` 350, `LAIR_MIX` 3, `RAID_PULL` 0.5 | `route_encounters.gd` | taste |
 | `HUNT` 1.5, `HUNT_RADIUS` 500, `GRUDGE_STEP` 20, `GRUDGE_MAX` 2 | `route_encounters.gd` | taste |
@@ -320,21 +332,26 @@ they get their sweep.
 
 - **Phase 0 — this spike.** The two models, their tests, the sweep, the
   pictures. Nothing wired.
-- **Phase 1 — behind `SORCMERC_ROUTES=1`, the next PR.** `World.routes`
-  built with the map and carried by `core/world_save.gd`, with the grudges
-  beside the opinions; the known network drawn on the ground; a click on a
-  known place walks `path_from()`, and a click on open ground does nothing —
-  the company never leaves the road; `notice()` every frame, `searchable()`
-  behind the lair button's Survival roll, made at the fork; under the flag no
-  band is seeded or refilled, `RouteEncounters.roll()` runs once per `STEP`
-  walked and hands its band to the existing approach card, and `meet()` hands
-  a meeting to the friendly card that exists today; `Grudges.add()` on a won
-  fight and an emptied lair; a camp can be made anywhere on a road, and its
-  ambush roll reads that stretch's rate. The ruins' "read the stones" — whose
-  win today marks the nearest undiscovered thing — opens a trail to
-  `lead_target()` instead, the first door that creates a route (§3.1). A
-  drive robot walks every map's network and gives §5's taste numbers their
-  sweep.
+- **Phase 1 — behind `SORCMERC_ROUTES=1`. Landed 2026-09-25**
+  (`core/route_travel.gd`, build log `docs/plan/2026-09-25-route-travel-phase1.md`).
+  A map built with the flag set is born a route world, and the save keeps it
+  one (`world.routes`, the odometer and the grudges ride in
+  `core/world_save.gd`). The known network is drawn on the map; a click on a
+  known place walks `path_from()`, and a click on open ground gives no order —
+  the company never leaves the road. `notice()` runs every frame, and the lair
+  button is the Survival check at a fork. No band is seeded, refilled or
+  respawned. `RouteEncounters.roll()` runs once per `STEP` walked and hands its
+  band to the existing approach card (or the night's watch), `meet()` hands a
+  meeting to the friendly card, and the met band is gone when the meeting is.
+  `Grudges.add()` runs on a won fight and an emptied lair. A camp can be made
+  anywhere on a road, and its ambush roll reads that stretch's rate. The
+  ruins' "read the stones" lays a trail to `lead_target()` — the first door
+  that creates a route (§3.1) — and a place marked found by any other door (a
+  rumour, the road scout, a story) has its hidden way revealed. A town the
+  march only passes through is passed through; the one at the end opens.
+  What it left for later is in its build log entry: the taste-number sweep,
+  raids and bounty jobs (phase 2), the minimap's roads, roads as ground
+  decals, and co-op.
 - **Phase 2 — routes by default.** Authored bands (`world.json` `parties[]`,
   story `spawn_party`, a `hunt_party` job's target) become pinned encounters
   on their edges; raids become the town state plus the pull; `WorldBands`,
