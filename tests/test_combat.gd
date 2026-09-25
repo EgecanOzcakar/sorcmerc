@@ -781,7 +781,8 @@ func test_barks() -> void:
 	cb._bark_rng = _lucky_rng()
 	cb.bark(hero, "hit")
 	check(cb.barks.size() == 1 and cb.barks[0]["id"] == hero.id, "a hit trigger queues a bark")
-	check(cb.barks[0]["text"] in Barks.PARTY["hit"], "the line comes from the party hit pool")
+	check(cb.barks[0]["text"] in Barks.pool_for("party", "", "hit", Barks.temperament(hero.traits)),
+		"the line comes from the hero's own (temperament's) hit pool")
 
 	cb.barks.clear()
 	cb._bark_rng = _lucky_rng()
