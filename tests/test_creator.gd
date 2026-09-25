@@ -195,6 +195,9 @@ func _init() -> void:
 	same_name_is_not_the_same_hero()
 	casters_keep_their_simple_weapons()
 	duplicate_lists_merge()
+	feat_follow_ups_come_after_the_feat()
+	kit_classes_carry_no_warnings()
+	skills_are_rows()
 
 	check(Creator.spell_name("light") == "Light", "the Light cantrip reads as a spell, not as armour (got %s)" % Creator.spell_name("light"))
 	check(Creator.humanize("light") == "Light armor", "...while the armour category keeps its own label")
@@ -314,3 +317,87 @@ func duplicate_lists_merge() -> void:
 	check(taken.get("perception", "") == "picked in another list", "a skill the fighter list took is greyed in the human's (%s)" % str(taken))
 	check(taken.get("athletics", "") == "already known", "and so is one the soldier background already gave")
 	check(not taken.has("stealth"), "a skill nobody has stays open")
+
+# #190: a human's origin feat is a feat-choice, and what the chosen feat asks
+# for next — Magic Initiate's spell list and then its spells, Skilled's three
+# skills — used to be listed with its KIND, which the resolver walks before
+# feats: the follow-up turned up above the feat that asked for it. On the page
+# it now comes straight after the feat, and nothing else moves.
+func feat_follow_ups_come_after_the_feat() -> void:
+	for feat in ["magic-initiate", "skilled"]:
+		var c = Creator.new_character()
+		c.species_id = "human"
+		c.background_id = "soldier"
+		c.add_level("fighter", -1)
+		c.dirty()
+		var fc: Dictionary = {}
+		for p in c.sheet().choice_points:
+			if p["type"] == "feat-choice":
+				fc = p
+		check(not fc.is_empty(), "%s: a human has an origin feat to choose" % feat)
+		if fc.is_empty():
+			continue
+		c.decide(fc["key"], Creator.decision_for(fc, [feat]))
+		if feat == "magic-initiate":   # the list pick brings the spells: they follow it too
+			for p in c.sheet().choice_points:
+				if p["type"] == "feature-choice" and p["source"]["id"] == feat:
+					c.decide(p["key"], Creator.decision_for(p, [Creator.options_for(p)[-1]["id"]]))
+		var raw: Array = c.sheet().choice_points
+		var page: Array = Creator.page_order(raw, c.choices)
+		var keys: Array = page.map(func(p): return String(p["key"]))
+		check(page.size() == raw.size(), "%s: page order keeps every point (%d of %d)" % [feat, page.size(), raw.size()])
+		var at: int = keys.find(fc["key"])
+		var mine: Array = raw.filter(func(p): return p["source"]["origin"] == "feat" and p["source"]["id"] == feat)
+		check(not mine.is_empty(), "%s: the feat asks for something" % feat)
+		if feat == "magic-initiate":
+			check(mine.any(func(p): return p["type"] == "spell-choice"), "magic-initiate: its spells are points too, once the list is picked")
+		# the resolver lists at least one of them above the feat: that was the bug
+		var raw_keys: Array = raw.map(func(p): return String(p["key"]))
+		check(mine.any(func(p): return raw_keys.find(p["key"]) < raw_keys.find(fc["key"])),
+			"%s: the resolver's own order does put a follow-up above the feat (else this test proves nothing)" % feat)
+		for i in mine.size():
+			check(keys.find(mine[i]["key"]) == at + 1 + i,
+				"%s: %s sits right under the feat (at %d, feat at %d)" % [feat, mine[i]["key"], keys.find(mine[i]["key"]), at])
+		var rest_raw: Array = raw_keys.filter(func(k): return not mine.any(func(p): return p["key"] == k))
+		var rest_page: Array = keys.filter(func(k): return not mine.any(func(p): return p["key"] == k))
+		check(rest_raw == rest_page, "%s: every other choice keeps its place" % feat)
+		# Skilled's any-three-skills is the human's any-skill list over again, and
+		# #191 would fold the two into one list — back up where the human's stood.
+		var groups: Array = Creator.choice_groups(page, c.sheet(), c.choices)
+		for g in groups:
+			var feats: Array = g.filter(func(p): return p["source"]["origin"] == "feat")
+			check(feats.is_empty() or feats.size() == g.size(),
+				"%s: a feat's list is not merged into one from outside the feat (%s)" % [feat, str(g.map(func(p): return p["key"]))])
+		var flat: Array = []
+		for g in groups:
+			flat.append(String(g[0]["key"]))
+		check(flat.find(mine[0]["key"]) == flat.find(fc["key"]) + 1,
+			"%s: grouped for display, the follow-up is still the next thing under the feat" % feat)
+
+# #189: the Review page reads sheet.warnings out, and every barbarian, fighter
+# and rogue walked out of the creator with "bundle-choice ... cannot resolve —
+# starting-equipment bundles are not exported (SCHEMA gap #2)" on it, four
+# times for a fighter. The kit is the Equipment step's to pick; nothing is wrong.
+func kit_classes_carry_no_warnings() -> void:
+	for cls in ["barbarian", "fighter", "rogue"]:
+		var c = build("Test " + cls, "human", cls, "soldier", "array")
+		check(c.sheet().warnings.is_empty(), "%s: a finished build carries no warning (%s)" % [cls, str(c.sheet().warnings)])
+
+# #188: the sheet's skills are rows, not a comma paragraph — proficient ones
+# only, by name, the bonus the sheet computed, expertise told apart.
+func skills_are_rows() -> void:
+	var pike = Presets.pike()
+	var s = pike.sheet()
+	var rows: Array = Creator.skill_rows(s)
+	var names: Array = rows.map(func(r): return String(r["name"]))
+	var sorted := names.duplicate()
+	sorted.sort_custom(func(a, b): return a.naturalnocasecmp_to(b) < 0)
+	check(names == sorted, "skill rows read alphabetically (%s)" % str(names))
+	check(rows.size() == s.skill_prof.values().filter(func(g): return g != "none").size(), "one row per proficient skill, and only those")
+	var stealth: Array = rows.filter(func(r): return r["id"] == "stealth")
+	check(stealth.size() == 1 and stealth[0]["grade"] == "expert" and int(stealth[0]["bonus"]) == int(s.skills["stealth"]),
+		"Pike's Stealth is an expert row at the sheet's own bonus (%s)" % str(stealth))
+	var table: String = Creator._pair_table(rows.map(func(r): return [r["name"], "%+d" % int(r["bonus"])]), 2)
+	check(table.begins_with("[table=4]") and table.count("[cell") == ceili(rows.size() / 2.0) * 4,
+		"two pairs a row, the last row padded to full width")
+	check(Creator._pair_table([], 2) == "[table=4][/table]\n", "no rows is an empty table, not a stray cell")
