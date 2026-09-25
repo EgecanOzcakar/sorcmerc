@@ -528,8 +528,8 @@ static func skill_icon(v: Dictionary, who = null) -> Texture2D:
 			tex = _icon("%s/schools/%s.svg" % [ICON_ROOT, spell_school(sid)])
 	elif who != null and String(v.get("id", "")) == "attack" and not who.attacks.is_empty():
 		tex = weapon_icon(String(who.attacks[0].get("id", "")))
-	elif v.has("weapon"):   # the off-hand swing (Adapter._offhand_verb)
-		tex = weapon_icon(String(v["weapon"]))
+	elif v.has("weapon_id") or v.has("weapon"):   # the off-hand swing (Adapter._offhand_verb)
+		tex = weapon_icon(String(v.get("weapon_id", v.get("weapon", ""))))
 	else:
 		tex = _icon("%s/skills/%s.svg" % [ICON_ROOT, id])
 	if tex == null:
