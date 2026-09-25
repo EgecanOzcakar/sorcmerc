@@ -553,9 +553,9 @@ func begin_turn_for(c) -> void:
 	if _buff_sum(c, "speed_mult") > 0:
 		c.econ["move_left"] = int(c.econ["move_left"]) * _buff_sum(c, "speed_mult")
 	_regenerate(c)
+	_release_grapples()   # before the stand: a grip that just let go no longer pins you at Speed 0
 	_auto_stand(c)
 	_release_helps(c)
-	_release_grapples()
 	if round_num == 1:
 		for v in c.verbs:   # Ambusher's Leap: +10 ft on the first turn of a fight
 			if v.has("first_round_speed_ft"):
@@ -780,6 +780,11 @@ func _auto_stand(c) -> void:
 	# Hideous Laughter's prone is the spell holding you down: no getting up
 	# until it ends, and no half-move charged for trying.
 	if c.statuses["prone"] is Dictionary and c.statuses["prone"].has("held_by"):
+		return
+	# #249: standing costs half your Speed, and a Speed of 0 has no half to pay
+	# (2024 Prone: "you can't right yourself if your Speed is 0"). Grappled,
+	# Restrained, Paralyzed, Petrified, Stunned, Unconscious: you stay down.
+	if speed_zero(c):
 		return
 	c.statuses.erase("prone")
 	var mult := 1.0
@@ -1303,6 +1308,31 @@ func _leveled_spell_allowed(actor, v: Dictionary) -> bool:
 		return false
 	return true
 
+# #246: what a leveled spell costs is a slot of its level — or, for a spell a
+# species or feat granted, its once-per-Long-Rest free cast, spent FIRST (the
+# free one is the one any player reaches for). `innate_pool` rides only the
+# base-level verb (Effects.spell_verbs_for); an upcast always takes a slot.
+func innate_left(c, v: Dictionary) -> int:
+	return c.pool_left(String(v["innate_pool"])) if v.has("innate_pool") else 0
+
+func can_pay_spell(c, v: Dictionary) -> bool:
+	var lvl := int(v.get("slot_level", 0))
+	if lvl <= 0 or innate_left(c, v) > 0:
+		return true
+	return lvl <= c.slots.size() and c.slots[lvl - 1] > 0
+
+# Pays for `v`, which can_pay_spell() already said `c` could. True when the
+# free cast paid rather than a slot.
+func _pay_spell(c, v: Dictionary) -> bool:
+	var lvl := int(v.get("slot_level", 0))
+	if lvl <= 0:
+		return false
+	if innate_left(c, v) > 0:
+		c.pools[v["innate_pool"]]["cur"] = innate_left(c, v) - 1
+		return true
+	c.slots[lvl - 1] -= 1
+	return false
+
 func _spend(actor, cost: String) -> bool:
 	if not can_spend(actor, cost):
 		return false
@@ -1337,7 +1367,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 		return false
 	var slot := int(v.get("slot_level", 0))
 	if slot > 0:
-		if slot > actor.slots.size() or actor.slots[slot - 1] <= 0:
+		if not can_pay_spell(actor, v):
 			return false
 		if not _leveled_spell_allowed(actor, v):
 			return false
@@ -1517,7 +1547,7 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			# swing, so it rides the same "free" path Cleave's second swing uses. Mastery
 			# is read off the main hand, so the off-hand swing carries none.
 			return resolve_attack(actor, target, {"free": true, "no_mastery": true,
-				"damage": v["damage"], "atk_bonus": int(v["to_hit"])})
+				"damage": v["damage"], "atk_bonus": int(v["to_hit"]), "weapon": String(v.get("weapon", ""))})
 		"shove": return act_shove(actor, target, v.get("choice", "prone"))
 		"smash": return act_smash(actor)
 		"help": act_help(actor, target)
@@ -1645,7 +1675,7 @@ func _hit_riders(attacker, target) -> void:
 # the two stay one rule.
 func _cast_refusal(caster, v: Dictionary, target) -> String:
 	var lvl := int(v.get("slot_level", 0))
-	if lvl > 0 and (lvl > caster.slots.size() or caster.slots[lvl - 1] <= 0):
+	if not can_pay_spell(caster, v):   # a slot, or a species/feat spell's free cast (#246)
 		return "no slot"
 	if lvl > 0 and v.get("cost", "") != "reaction" and not _leveled_spell_allowed(caster, v):
 		return "one leveled spell a turn beside a bonus-action one"
@@ -1675,7 +1705,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	if hand_picked:
 		target = target[0]
 	var lvl := int(v.get("slot_level", 0))
-	if lvl > 0 and (lvl > caster.slots.size() or caster.slots[lvl - 1] <= 0):
+	if not can_pay_spell(caster, v):
 		return {"error": "no slot"}
 	if lvl > 0 and v.get("cost", "") != "reaction" and not _leveled_spell_allowed(caster, v):
 		return {"error": "one leveled spell a turn beside a bonus-action one"}
@@ -1701,7 +1731,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	if v.get("quickened", false):
 		caster.econ["cast_bonus_spell"] = true   # 2024: no leveled spell after a Quickened one, cantrip or not
 	if lvl > 0:
-		caster.slots[lvl - 1] -= 1
+		_pay_spell(caster, v)
 		if v["cost"] == "bonus":
 			caster.econ["cast_bonus_spell"] = true
 		if v["cost"] != "reaction":
@@ -2266,12 +2296,26 @@ func _source_of(c, key: String):
 
 # Movement left this turn after speed-zeroing conditions and exhaustion.
 func move_left(c) -> int:
+	if speed_zero(c):
+		return 0
 	var mv := int(c.econ.get("move_left", 0))
 	for e in _cond_effects(c):
-		if e.has("speed") and int(e["speed"]) == 0:
-			return 0
 		mv -= hexes_from_ft(int(e.get("speed_penalty_ft", 0)))
 	return maxi(0, mv)
+
+# #249: does something `c` carries set its Speed to 0? In the 2024 rules that is
+# Grappled, Restrained, Paralyzed, Petrified and Unconscious (0 HP is the same
+# entry, "down"), plus Stunned as this repo's SRD export words it ("can't
+# move" — data/conditions.json). Incapacitated ON ITS OWN is deliberately not
+# one: the 2024 condition takes actions, Bonus Actions and Reactions and says
+# nothing about Speed, so Hideous Laughter or a Confusion'd creature can still
+# walk (a laughing one crawls — it is held Prone too). The speed-0 conditions
+# that ARE incapacitating carry both flags in conditions.json.
+func speed_zero(c) -> bool:
+	for e in _cond_effects(c):
+		if e.has("speed") and int(e["speed"]) == 0:
+			return true
+	return false
 
 func _no_economy(actor, cost: String) -> bool:
 	var key: String = {"action": "no_action", "bonus": "no_bonus", "reaction": "no_reaction"}.get(cost, "")
@@ -2577,8 +2621,7 @@ func reaction_verb(c, trigger: String) -> Dictionary:
 # The reaction itself is checked by can_spend(); this is everything else the
 # verb costs. _offerable() asks the same questions of a button.
 func _reaction_affordable(c, v: Dictionary) -> bool:
-	var lvl := int(v.get("slot_level", 0))
-	if lvl > 0 and (lvl > c.slots.size() or c.slots[lvl - 1] <= 0):
+	if not can_pay_spell(c, v):
 		return false
 	if v.has("pool") and c.pool_left(v["pool"]) <= 0:
 		return false
@@ -2668,6 +2711,14 @@ func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
 			Ach.bump("reactions")
 		if v.get("once_per", "") == "turn":
 			c.econ["used"][v["id"]] = true
+		# #247: a feature reaction with uses (Warding Flare: WIS-mod a Long Rest)
+		# pays one here, beside the reaction itself. _reaction_affordable always
+		# refused an empty pool, but nothing ever emptied it, so a Light cleric
+		# flared once every round of every fight. A spell's cost is its slot (or
+		# its free use), which cast() pays; perform()'s pool spend never runs for
+		# a reaction, since a reaction is never pressed.
+		if v.has("pool") and v["kind"] != "spell":
+			c.pools[v["pool"]]["cur"] = c.pool_left(v["pool"]) - 1
 		# What happens next is the verb's business, not the trigger's.
 		if v.get("counter", false):
 			if _counter(c, v, ctx):
@@ -2682,9 +2733,7 @@ func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
 			if v["kind"] == "spell":
 				# Shield: the slot is spent, and the +5 stays up until the caster's
 				# next turn as a buff on top of the one blow it just turned.
-				var lvl := int(v.get("slot_level", 0))
-				if lvl > 0:
-					c.slots[lvl - 1] -= 1
+				_pay_spell(c, v)
 				if v.has("buff"):
 					_apply_buff(c, c, v)
 			break   # the swing is already a miss; a second answer has nothing to stop
@@ -2798,6 +2847,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		opts = opts.duplicate()
 		opts["melee"] = true
 		opts["damage"] = opts.get("damage", "1")
+		opts["weapon"] = opts.get("weapon", UNARMED)   # #245: the log says what it was
 	var free: bool = oa or opts.get("free", false)   # Cleave's second swing costs nothing
 	if not attacker.conscious() or _no_economy(attacker, "action" if not free else "reaction"):
 		return {"error": "cannot act"}   # ai.gd swings without asking available()
@@ -2861,7 +2911,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	if hit and not crit and _auto_crit(attacker, target, opts):
 		crit = true
 	var out = {
-		"attacker": attacker.cname, "target": target.cname,
+		"attacker": attacker.cname, "target": target.cname, "weapon": weapon_name(attacker, opts),
 		"nat": nat, "dice": r.dice, "bonus": atk_bonus, "total": total, "ac": ac,
 		"hit": hit, "crit": crit, "damage": 0, "extras": [], "mode": mode,
 		"high_ground": high,
@@ -3044,10 +3094,36 @@ func _push_away(attacker, target, hexes: int) -> int:
 func _damage_type(attacker) -> String:
 	return str(attacker.attacks[0].get("damage_type", "")) if not attacker.attacks.is_empty() else ""
 
+# #245 — what a blow was struck with, for the log: the hero's main-hand attack
+# off the sheet (attacks[0], the one every derived number already comes from),
+# a monster's own natural attack (bestiary.json's attack_name: Bite, Scimitar,
+# Slam), or whatever the caller says it was (the off-hand blade, an archer's
+# fist on an opportunity attack). "" when nothing names it — a test's bare
+# Combatant — and then the line reads as it always did.
+const UNARMED := "Unarmed Strike"
+
+func weapon_name(attacker, opts := {}) -> String:
+	var named := String(opts.get("weapon", ""))
+	if named != "":
+		return named
+	if not attacker.attacks.is_empty():
+		return String(attacker.attacks[0].get("name", ""))
+	return String(attacker.attack_name)
+
+# " with a Longsword", " with an Unarmed Strike", " with Claws" — a name that
+# reads as a plural (Claws, Bites, Hooves, Tentacles) takes no article.
+static func _with(weapon: String) -> String:
+	if weapon == "":
+		return ""
+	var plural := weapon.ends_with("s") and not weapon.ends_with("ss")
+	var article := "" if plural else ("an " if weapon.substr(0, 1).to_lower() in ["a", "e", "i", "o", "u"] else "a ")
+	return " with %s%s" % [article, weapon]
+
 func _log_attack(o: Dictionary, oa: bool) -> void:
 	var dice_s = str(o.dice[0]) if o.dice.size() == 1 else "%d̶%d" % [o.dice[0], o.dice[1]]
 	var tag = "OA " if oa else ""
 	var roll_s = "d20[%s]%+d = %d vs AC %d" % [dice_s, o.bonus, o.total, o.ac]
+	var with_s := _with(String(o.get("weapon", "")))
 	# #156: the bonus is already inside the total; this says where part of it
 	# came from, the way the damage line names each rider it adds.
 	if int(o.get("high_ground", 0)) > 0:
@@ -3059,9 +3135,9 @@ func _log_attack(o: Dictionary, oa: bool) -> void:
 				"the strike fumbles at the last inch.", "%s twists clear untouched." % o.target,
 			]
 			var pick: int = (str(o.attacker).hash() + round_num) % flavs.size()
-			log.append("%s%s misses %s badly — nat 1, %s" % [tag, o.attacker, o.target, flavs[pick]])
+			log.append("%s%s misses %s badly%s — nat 1, %s" % [tag, o.attacker, o.target, with_s, flavs[pick]])
 		else:
-			log.append("%s%s attacks %s — %s, misses." % [tag, o.attacker, o.target, roll_s])
+			log.append("%s%s attacks %s%s — %s, misses." % [tag, o.attacker, o.target, with_s, roll_s])
 		return
 	var extra = ""
 	for e in o.extras:
@@ -3075,7 +3151,7 @@ func _log_attack(o: Dictionary, oa: bool) -> void:
 	dmg_line += extra
 	if base != int(o.damage):
 		dmg_line += " (%d total)" % o.damage
-	log.append("%s%s %s %s — %s, %s." % [tag, o.attacker, word, o.target, roll_s, dmg_line])
+	log.append("%s%s %s %s%s — %s, %s." % [tag, o.attacker, word, o.target, with_s, roll_s, dmg_line])
 
 # "1d6[4]+2 = 6" / "2d6[4,3]+2 = 9" — "" when the notation had no dice (a flat
 # modifier like an unarmed strike's "1"), so the caller falls back to a bare number.

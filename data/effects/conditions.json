@@ -14,7 +14,7 @@
                   "attacks_against": "adv", "auto_fail_saves": ["str", "dex"]},
   "paralyzed":   {"no_action": true, "no_bonus": true, "no_reaction": true, "speed": 0,
                   "attacks_against": "adv", "auto_fail_saves": ["str", "dex"], "auto_crit_within_ft": 5},
-  "petrified":   {"no_action": true, "speed": 0, "attacks_against": "adv",
+  "petrified":   {"no_action": true, "no_bonus": true, "no_reaction": true, "speed": 0, "attacks_against": "adv",
                   "auto_fail_saves": ["str", "dex"], "resist_all": true},
   "unconscious": {"no_action": true, "no_bonus": true, "no_reaction": true, "speed": 0,
                   "attacks_against": "adv", "auto_fail_saves": ["str", "dex"], "auto_crit_within_ft": 5},

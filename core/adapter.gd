@@ -302,6 +302,7 @@ static func _offhand_verb(offhand: Dictionary, attacks: Array, s) -> Dictionary:
 		reach = mini(RANGE_CAP, hexes(int(offhand["normal_ft"])))
 	return {
 		"id": "offhand_attack", "label": "Off-hand: %s" % offhand["name"],
+		"weapon": String(offhand["name"]),   # #245: the log names the blade that landed
 		"kind": "offhand_attack", "cost": "free" if nick else "bonus",
 		"once_per": "turn", "targeting": "enemy", "range": reach,
 		"to_hit": int(offhand["to_hit"]),
