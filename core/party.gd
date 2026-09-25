@@ -48,7 +48,13 @@ var world_now := 0.0        # world-minutes, stamped by world.gd each frame; pot
 var scouted_next := false   # Potion of Clairvoyance / Clairvoyance cast: the next fight starts scouted
 var blessed := false        # a shrine's blessing: temp HP for every hero at the next fight (core/landmarks.gd)
 var swift_until := 0.0      # Fly / Longstrider: forced-march speed, no road penalty, until this world-minute
-var safe_camp := false      # Rope Trick (or a landmark's shelter): the next camp needs no kit
+var safe_camp := false      # Rope Trick: the next camp needs no kit (the ambush roll stands)
+# A hermit's safe hollow (core/landmarks.gd, the hut's "Ask about the road"):
+# the next camp needs no kit AND is not jumped — the hermit knows a place
+# nothing finds. Its own flag since 2026-09-25: it shared Rope Trick's, so
+# the audit's rule that Rope Trick keeps the ambush roll took the hollow's
+# one promise away with it. Spent by WorldCamp.make_camp().
+var hollow_camp := false
 var alarm_set := false      # Alarm: the next camp's ambush is heard coming
 # Audit 1.6: the slots Rope Trick and Alarm were cast from, [{id, level,
 # spell}], held spent through every long rest until the camp they pay for is

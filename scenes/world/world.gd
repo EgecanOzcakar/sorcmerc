@@ -602,7 +602,7 @@ func _process(delta: float) -> void:
 	_check_region()
 	_check_level_ready()
 	if _camp_btn != null:
-		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0 or party.safe_camp
+		_camp_btn.visible = party.stash_count(WorldCamp.CAMP_KIT_ITEM) > 0 or party.safe_camp or party.hollow_camp
 	_coop_share(delta)
 	_render()
 
@@ -3640,7 +3640,9 @@ func _make_camp() -> void:
 		_after_night(r["rest"])
 		Sound.play_sfx("rest")
 		var trance: Dictionary = Trance.apply_rest_bonus(party, world, p.position)
-		_camp_msg.text = "The camp holds through the night. Eight hours pass.%s%s" % [
+		_camp_msg.text = "%s Eight hours pass.%s%s" % [
+			"Nothing finds the hermit's hollow in the night." if bool(r.get("hollow", false))
+				else "The camp holds through the night.",
 			Visit.rest_note(r["rest"]), _trance_note(trance)]
 		if not _fireside(rng, _on_event_ack):
 			_camp_card("night", "The camp holds", "good", _camp_msg.text, _on_event_ack)

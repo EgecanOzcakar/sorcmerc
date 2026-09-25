@@ -259,7 +259,7 @@ func test_resolve() -> void:
 	check(w.clock.elapsed == 0.0, "sleep: the refund floors at zero, not negative")
 	w = _world(); p = _party()
 	r = _roll(w, "hut", "road", p, _seed_where(null, "hut", "road", null, true))
-	check(p.safe_camp, "road: a safe camp tonight")
+	check(p.hollow_camp and not p.safe_camp, "road: a safe hollow tonight, on its own flag rather than Rope Trick's")
 	w = _world(); p = _party()
 	p.stash_add("adamantine-armor", 1, false)
 	r = _roll(w, "hut", "knock", p, _seed_where(null, "hut", "knock", null, true))

@@ -38,6 +38,7 @@ func _init() -> void:
 	test_camp_refusals()
 	test_rope_trick_holds()
 	test_alarm_holds()
+	test_hermit_hollow()
 	print("test_rest_and_slots: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -357,3 +358,54 @@ func test_alarm_holds() -> void:
 	RoadSpells.cast(p, ilsa, "alarm", t)
 	r = WorldCamp.make_camp(p, w, 24.0)
 	check(r["ambush"] and r["watch"]["ok"] and r["watch"]["char_id"] == "alarm", "Alarm still hears the ambush coming")
+
+# The hermit's hollow (core/landmarks.gd, the hut's "Ask about the road") has
+# its own flag since 2026-09-25: the kit is spared AND the ambush is not rolled,
+# on the very minute a kit's or a roped camp would be jumped. Rope Trick on the
+# same minute keeps the roll (the owner's §1.6 follow-up).
+func test_hermit_hollow() -> void:
+	var w := _world()
+	var p := _party()
+	var t := _minute_for(w, true)
+	check(t >= 0.0, "fixture: an ambush minute exists")
+	w.clock.elapsed = t
+	p.last_long_rest_at = -1e12
+	p.hollow_camp = true
+	var r: Dictionary = WorldCamp.make_camp(p, w, 24.0)
+	check(r["ok"] and r["hollow"] and not r["roped"], "a hollow camp needs no kit and no Rope Trick")
+	check(not r["ambush"] and r.has("rest"), "...and is not jumped on a minute that jumps every other camp")
+	check(not p.hollow_camp, "the hollow is spent by the night it was for")
+	check(is_equal_approx(w.clock.elapsed, t + Visit.LONG_REST_MINUTES), "...and it was a real long rest: eight walked hours (%.0f)" % (w.clock.elapsed - t))
+	# the same minute, with a Rope Trick instead: the roll stands
+	var w2 := _world()
+	var p2 := _party(["rope-trick"])
+	w2.clock.elapsed = t
+	p2.last_long_rest_at = -1e12
+	RoadSpells.cast(p2, p2.get_member("ilsa"), "rope-trick", t)
+	var r2: Dictionary = WorldCamp.make_camp(p2, w2, 24.0)
+	check(r2["roped"] and not r2["hollow"] and r2["ambush"], "Rope Trick on that same minute is still jumped")
+	# a hollow and a rope both up: the hollow is used, and the rope is spent with it
+	var w3 := _world()
+	var p3 := _party(["rope-trick"])
+	w3.clock.elapsed = t
+	p3.last_long_rest_at = -1e12
+	RoadSpells.cast(p3, p3.get_member("ilsa"), "rope-trick", t)
+	p3.hollow_camp = true
+	var r3: Dictionary = WorldCamp.make_camp(p3, w3, 24.0)
+	check(r3["hollow"] and not r3["ambush"] and not p3.safe_camp and p3.camp_holds.is_empty(),
+		"a hollow beats a rope: no roll, and the rope and its hold are spent by the camp it was cast for")
+	# the hollow's gates are the camp's gates: the 24-hour rule and a band in reach
+	var w4 := _world()
+	var p4 := _party()
+	p4.hollow_camp = true
+	p4.last_long_rest_at = w4.clock.elapsed
+	check(WorldCamp.make_camp(p4, w4, 24.0)["why"] == "tired" and p4.hollow_camp, "not tired: refused, and the hollow keeps")
+	p4.last_long_rest_at = -1e12
+	w4.add_party(World.RoamingParty.new("raider", w4.player().position + Vector2(10, 0), "bandit"))
+	check(WorldCamp.make_camp(p4, w4, 24.0)["why"] == "hostile" and p4.hollow_camp, "a band in reach: refused, and the hollow keeps")
+	# it survives a save, and an old save has none
+	var back = WorldSave._party_from(WorldSave._party_dict(p4))
+	check(back.hollow_camp, "the hollow survives a save")
+	var old: Dictionary = WorldSave._party_dict(p4)
+	old["road"].erase("hollow_camp")
+	check(not WorldSave._party_from(old).hollow_camp, "an old save has no hollow")

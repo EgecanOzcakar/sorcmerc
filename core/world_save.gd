@@ -371,7 +371,8 @@ static func _party_dict(party) -> Dictionary:
 		"overworld_figure": party.overworld_figure,
 		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 		"road": {"scouted_next": party.scouted_next, "swift_until": party.swift_until,
-			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set, "blessed": party.blessed,
+			"safe_camp": party.safe_camp, "hollow_camp": party.hollow_camp,   # the hermit's hollow; an old save has none
+			"alarm_set": party.alarm_set, "blessed": party.blessed,
 			"camp_holds": party.camp_holds.duplicate(true)},   # potions / road spells; audit 1.6's held slots
 		"relations": PartyOpinion.to_dict(party),   # spike-party-opinions §8: who thinks what of whom
 		"callings": Callings.to_dict(party),
@@ -401,6 +402,7 @@ static func _party_from(pd: Dictionary):
 	party.scouted_next = bool(road.get("scouted_next", false))
 	party.swift_until = float(road.get("swift_until", 0.0))
 	party.safe_camp = bool(road.get("safe_camp", false))
+	party.hollow_camp = bool(road.get("hollow_camp", false))
 	party.alarm_set = bool(road.get("alarm_set", false))
 	party.blessed = bool(road.get("blessed", false))
 	party.camp_holds.clear()   # an old save holds nothing: its Rope Trick was cast before slots were held
