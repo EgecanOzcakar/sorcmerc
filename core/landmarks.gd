@@ -387,9 +387,9 @@ static func _open(reward: String, l, party, world, rng, e: Dictionary) -> void:
 			party.stash_add("camp-kit")
 			e["item_name"] = Campaign.item_name("camp-kit")
 		"lead":
-			_lead(world, l.position, e)
+			_lead_or_trail(world, l, e)
 		"hermit":
-			_lead(world, l.position, e)
+			_lead_or_trail(world, l, e)
 			var unknown: Array = party.unidentified()
 			if not unknown.is_empty():
 				var item: String = String(unknown[0]["item_id"])
@@ -404,6 +404,16 @@ static func _open(reward: String, l, party, world, rng, e: Dictionary) -> void:
 		"marked":
 			world.marked_until = world.clock.elapsed + FactionOpinion.DAY
 			world.marked_at = l.position
+
+# #231: on the roads a lead is a way, not a mark — a trail from here to wherever
+# RouteTravel.lead() points, which was on no map. load(), not preload: the
+# route files reach this one through core/world_routes.gd.
+static func _lead_or_trail(world, l, e: Dictionary) -> void:
+	if world.routes != null and load("res://core/route_travel.gd").lead(world, l, e):
+		return
+	# Nowhere for a new trail to go: the old lead, and RouteTravel.step() reveals
+	# the hidden way to what it marked on the next frame.
+	_lead(world, l.position, e)
 
 # The nearest unfound lair or hidden landmark gets marked, and the card says which.
 static func _lead(world, from: Vector2, e: Dictionary) -> void:

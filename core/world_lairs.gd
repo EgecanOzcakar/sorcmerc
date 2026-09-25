@@ -82,6 +82,10 @@ static func loot(lair, now := -1.0) -> Dictionary:
 	if lair.looted:
 		return {"gold": 0}
 	mark_cleared(lair, now)
+	# #231: its people remember who emptied it (core/grudges.gd). load(), the
+	# way this file already reaches core/scaler.gd, to stay out of preload cycles.
+	var Grudges = load("res://core/grudges.gd")
+	Grudges.add(lair.faction, Grudges.LAIR)
 	var Scaler = load("res://core/scaler.gd")
 	var idx: int = maxi(0, Scaler.FACTIONS.find(lair.faction))
 	return {"gold": LOOT_BASE + idx * LOOT_PER_FACTION_INDEX}

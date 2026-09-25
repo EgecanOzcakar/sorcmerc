@@ -320,21 +320,26 @@ they get their sweep.
 
 - **Phase 0 — this spike.** The two models, their tests, the sweep, the
   pictures. Nothing wired.
-- **Phase 1 — behind `SORCMERC_ROUTES=1`, the next PR.** `World.routes`
-  built with the map and carried by `core/world_save.gd`, with the grudges
-  beside the opinions; the known network drawn on the ground; a click on a
-  known place walks `path_from()`, and a click on open ground does nothing —
-  the company never leaves the road; `notice()` every frame, `searchable()`
-  behind the lair button's Survival roll, made at the fork; under the flag no
-  band is seeded or refilled, `RouteEncounters.roll()` runs once per `STEP`
-  walked and hands its band to the existing approach card, and `meet()` hands
-  a meeting to the friendly card that exists today; `Grudges.add()` on a won
-  fight and an emptied lair; a camp can be made anywhere on a road, and its
-  ambush roll reads that stretch's rate. The ruins' "read the stones" — whose
-  win today marks the nearest undiscovered thing — opens a trail to
-  `lead_target()` instead, the first door that creates a route (§3.1). A
-  drive robot walks every map's network and gives §5's taste numbers their
-  sweep.
+- **Phase 1 — behind `SORCMERC_ROUTES=1`. Landed 2026-09-25**
+  (`core/route_travel.gd`, build log `docs/plan/2026-09-25-route-travel-phase1.md`).
+  A map built with the flag set is born a route world, and the save keeps it
+  one (`world.routes`, the odometer and the grudges ride in
+  `core/world_save.gd`). The known network is drawn on the map; a click on a
+  known place walks `path_from()`, and a click on open ground gives no order —
+  the company never leaves the road. `notice()` runs every frame, and the lair
+  button is the Survival check at a fork. No band is seeded, refilled or
+  respawned. `RouteEncounters.roll()` runs once per `STEP` walked and hands its
+  band to the existing approach card (or the night's watch), `meet()` hands a
+  meeting to the friendly card, and the met band is gone when the meeting is.
+  `Grudges.add()` runs on a won fight and an emptied lair. A camp can be made
+  anywhere on a road, and its ambush roll reads that stretch's rate. The
+  ruins' "read the stones" lays a trail to `lead_target()` — the first door
+  that creates a route (§3.1) — and a place marked found by any other door (a
+  rumour, the road scout, a story) has its hidden way revealed. A town the
+  march only passes through is passed through; the one at the end opens.
+  What it left for later is in its build log entry: the taste-number sweep,
+  raids and bounty jobs (phase 2), the minimap's roads, roads as ground
+  decals, and co-op.
 - **Phase 2 — routes by default.** Authored bands (`world.json` `parties[]`,
   story `spawn_party`, a `hunt_party` job's target) become pinned encounters
   on their edges; raids become the town state plus the pull; `WorldBands`,

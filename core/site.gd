@@ -648,6 +648,9 @@ func leave() -> void:
 		# starts, so something can move back in a day from now
 		# (core/world_lairs.gd's RESPAWN).
 		WorldLairs.mark_cleared(lair, world.clock.elapsed if world != null else -1.0)
+		# #231: and its people remember who did it (core/grudges.gd).
+		var Grudges = load("res://core/grudges.gd")
+		Grudges.add(lair.faction, Grudges.LAIR)
 		Ach.bump("lairs")
 		Ach.record("deepest_lair", rooms.size())
 		if not _rested:
