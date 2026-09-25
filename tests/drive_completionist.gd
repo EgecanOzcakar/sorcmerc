@@ -599,7 +599,13 @@ func _the_city() -> void:
 	await _step(2)
 	check("town:leave", screen._visit.is_empty() and screen._visit_panel == null,
 		"Leave did not close the market")
-	if screen.world.clock.is_paused() and not screen._halted_on_arrival:
+	# A band waiting at the gate takes the clock straight back, and that is the
+	# map working, not Leave failing: since the design audit's §1.7 a night at
+	# the inn walks the world, and on a slow machine (the frames also run on
+	# real time) a hunter can reach the walls by morning. The walk that follows
+	# answers the card (_walk_into's _meet_them).
+	if screen.world.clock.is_paused() and not screen._halted_on_arrival \
+			and not is_instance_valid(screen._approach_card):
 		fail("town:leave — Leave did not give the world clock back")
 
 func _goto_page(page: String, label: String, deed: String) -> bool:
