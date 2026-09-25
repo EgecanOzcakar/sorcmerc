@@ -246,6 +246,13 @@ func test_carouse() -> void:
 	# the purse
 	var poor := _party(cost + bed - 1)
 	check(not Downtime.carouse(poor, w, city, _rng(15)).get("ok", true) and poor.gold == cost + bed - 1, "a purse short of the night and the bed stays in")
+	# #237: the row's price is the whole night, and a short purse says so before the press
+	var night: Dictionary = Downtime.carouse_cost(poor, city)
+	check(night["drinks"] == cost and night["bed"] == bed and night["total"] == cost + bed, "the night's price is the drinks and the bed (%s)" % night)
+	check(Downtime.carouse_refusal(poor, city) == "A night on the town is %d ◉, and the bed %d more: %d ◉ in the purse." % [cost, bed, cost + bed - 1],
+		"...and the refusal names both, and the purse: %s" % Downtime.carouse_refusal(poor, city))
+	check(Downtime.carouse_refusal(_party(cost + bed), city) == "", "a purse that covers it: no refusal")
+	check(Downtime.carouse_refusal(Party.new(), city) != "", "nobody to go out: a refusal too")
 	check(Downtime.carouse(_party(100), w, w.settlements[2], _rng(15))["cost"] == Downtime.CAROUSE_COST["camp"], "a camp's night is cheaper")
 
 # --- gambling -------------------------------------------------------------
@@ -434,7 +441,7 @@ func test_pit() -> void:
 	var city = w.settlements[0]
 	var party := _party(100)
 	var br: Dictionary = Downtime.pit_bracket(city, w)
-	check(br["week"] == 0 and br["names"].size() == 3 and Downtime.PIT_MULT.size() == 3, "a bracket: three champions, each pumped harder")
+	check(br["week"] == 0 and br["names"].size() == 3 and Downtime.PIT_RATIO.size() == 3, "a bracket: three champions, each priced higher")
 	check(br["names"][0] != br["names"][1] and br["names"][1] != br["names"][2] and br["names"][0] != br["names"][2], "three different names")
 	check(Downtime.pit_bracket(city, w) == br, "seeded: the same week, the same three")
 	w.clock.elapsed += 6 * Downtime.DAY
@@ -447,17 +454,44 @@ func test_pit() -> void:
 	var st: Dictionary = Downtime.pit_state(party, city, w)
 	check(st["open"] and st["beaten"] == 0 and st["week"] == 0, "the bracket stands, nobody beaten")
 
-	# the spec: the strongest humanoid of the roster, alone, pumped, named
-	var base := {"monsters": [{"id": "wolf", "count": 3, "mult": 1.0}, {"id": "bandit", "count": 2, "mult": 1.0},
-		{"id": "bandit-captain", "count": 1, "mult": 1.0}], "seed": 7, "theme": "forest-clearing"}
-	var spec: Dictionary = Downtime.pit_spec(party, city, w, 1, base)
-	check(spec["monsters"].size() == 1 and spec["monsters"][0]["id"] == "bandit-captain" and spec["monsters"][0]["count"] == 1,
-		"one foe: the strongest humanoid on the roster")
-	check(spec["monsters"][0]["mult"] == Downtime.PIT_MULT[1] and spec["theme"] == "city-square" and spec["seed"] == 7, "pumped for the bout, in the square")
-	check(spec["named"] == {"bandit-captain": br["names"][1]}, "...and named for the bracket")
-	check(base["monsters"].size() == 3, "the base spec is not touched")
-	var beasts := {"monsters": [{"id": "wolf", "count": 3, "mult": 1.0}, {"id": "brown-bear", "count": 1, "mult": 1.0}], "theme": "forest-clearing"}
-	check(Downtime.pit_spec(party, city, w, 0, beasts)["monsters"][0]["id"] == "brown-bear", "no humanoid: the strongest of whatever came")
+	# #236: the spec is one champion against one hero, priced for that hero's level
+	var hero = party.party_characters()[0]
+	var spec: Dictionary = Downtime.pit_spec(party, city, w, 1, hero)
+	check(spec["monsters"].size() == 1 and spec["monsters"][0]["count"] == 1 and spec["monsters"][0]["id"] in Downtime.PIT_POOL,
+		"one foe, from the pit's own people: %s" % spec["monsters"])
+	check(spec["theme"] == "city-square" and spec["duel"] == hero.id, "in the square, against the one hero who stands")
+	var id := String(spec["monsters"][0]["id"])
+	check(spec["named"] == {id: br["names"][1]}, "...and named for the bracket")
+	check(Downtime.pit_spec(party, city, w, 1, hero) == spec, "pure: the same hero, the same bout, the same champion")
+	check(Downtime.pit_spec(party, city, w, 0, null).is_empty(), "nobody to stand: no bout")
+	# each bout dearer than the last, and a higher level meets a dearer champion
+	var Power = load("res://core/rules/power.gd")
+	var Encounter = load("res://core/encounter.gd")
+	var worth := func(champ: Dictionary) -> float:
+		return Power.team_score([Encounter.spawn(String(champ["id"]), float(champ["mult"]), "foe", Vector2i.ZERO)], 1)
+	var bouts: Array = [0, 1, 2].map(func(b): return worth.call(Downtime.pit_champion(3, Downtime.PIT_RATIO[b])))
+	check(bouts[0] < bouts[1] and bouts[1] < bouts[2], "the three bouts climb: %s" % [bouts])
+	check(worth.call(Downtime.pit_champion(8, Downtime.PIT_RATIO[0])) > bouts[0], "a level-8 hero's first champion outweighs a level-3's")
+	for b in 3:
+		var m: float = float(Downtime.pit_champion(3, Downtime.PIT_RATIO[b])["mult"])
+		check(m >= 0.6 and m <= 1.6, "the nearest of the pool, so the knob stays near 1 (bout %d: x%.2f)" % [b + 1, m])
+	# the fighters: the marching company on its feet; the bout's order is the hero alone, then put back
+	var fighters: Array = Downtime.pit_fighters(party)
+	check(fighters.size() == party.active.size(), "everyone marching and standing may go in")
+	hero.hp_current = 0
+	check(not hero in Downtime.pit_fighters(party), "...not the downed")
+	hero.hp_current = -1
+	var order_before: Array = Array(party.active).duplicate()
+	var order: Array = Downtime.pit_line_up(party, hero.id)
+	check(Array(party.active) == [hero.id] and party.party_characters() == [hero], "for the bout the hero is the whole marching order")
+	Downtime.pit_stand_down(party, order)
+	check(Array(party.active) == order_before, "...and after it the order is as it was")
+	order = Downtime.pit_line_up(party, hero.id)
+	hero.dead = true
+	Downtime.pit_stand_down(party, order)
+	check(not hero.id in party.active and party.active.size() == order_before.size() - 1, "a hero the bout killed is not put back in the line")
+	hero.dead = false
+	party.active.assign(order_before)
 
 	# the purse, the deed, the bracket
 	var r: Dictionary = Downtime.pit_result(party, city, w, 0, true, 0)
@@ -495,6 +529,11 @@ func test_pit() -> void:
 	check(not st["open"] and st["beaten"] == -1, "...and closes the bracket")
 	w.clock.elapsed += Downtime.PIT_WEEK
 	check(Downtime.pit_state(party, city, w)["open"] and Downtime.pit_state(party, city, w)["beaten"] == 0, "a new week reopens it")
+	# #236: the line names the hero who stood
+	r = Downtime.pit_result(party, city, w, 0, true, Downtime.pit_state(party, city, w)["week"], hero.cname)
+	check(("in the first bout to %s" % hero.cname) in r["text"], "a win names who won it: %s" % r["text"])
+	r = Downtime.pit_result(party, city, w, 1, false, Downtime.pit_state(party, city, w)["week"], hero.cname)
+	check(("when %s is carried out" % hero.cname) in r["text"], "a loss names who was carried out: %s" % r["text"])
 
 # --- complications --------------------------------------------------------
 

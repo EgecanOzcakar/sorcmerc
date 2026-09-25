@@ -9,7 +9,9 @@
 #   Downtime.carouse(party, world, s)                 # a night on the town: a contact, a lead, or a story
 #   Downtime.gamble(party, world, s, 50)              # a stake and a roll; an evening, once a day a town
 #   Downtime.craft(party, world, s, "potion-of-speed", m)   # the alchemist's bench / the librarian's desk
-#   Downtime.pit_bracket(s, world) / pit_spec / pit_result  # a city's three champions, once a week
+#   Downtime.pit_bracket(s, world) / pit_spec / pit_result  # a city's three champions, once a week, one on one
+#   Downtime.pit_line_up(party, char_id) / pit_stand_down(party, order)   # the one hero who stands
+#   Downtime.carouse_cost(party, s) / carouse_refusal(party, s)   # the whole night's price, and why not
 #
 # Static, in settlement_visit.gd's row shape — every activity returns {ok,
 # nat, bonus, dc, text, ...} and the screen shows it the way it shows
@@ -34,6 +36,8 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Bundles = preload("res://core/rules/bundles.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")
 const Abilities = preload("res://core/rules/pass_abilities.gd")
+const Scaler = preload("res://core/scaler.gd")
+const Regions = preload("res://core/regions.gd")
 
 const DAY := 1440.0   # world-minutes
 
@@ -95,10 +99,37 @@ const GAMBLE_SKILLS := ["insight", "deception", "sleightofhand"]
 # Half price for a day.
 const CRAFT_RATE := 0.5
 const CRAFT_DAYS := 1
-# A job, two jobs, a rare item's tenth; each bout harder than a road fight
-# (one champion, pumped: core/scaler.gd's mult).
+# A job, two jobs, a rare item's tenth.
 const PIT_PURSE := [60, 120, 240]
-const PIT_MULT := [1.3, 1.7, 2.2]
+# #236: the pit is one on one — one hero the company puts up against one
+# champion, not the marching four against a lone foe pumped to take them. The
+# champion is priced for a hero of that hero's level (pit_champion, through
+# Scaler.duel_for), drawn from PIT_POOL, the people who fight for money in a
+# square (no archers: a pit is not a range).
+# It used to be the city roster's strongest humanoid at PIT_MULT 1.3/1.7/2.2
+# against the whole party, a number nobody had measured (the design audit's
+# list of unswept knobs).
+#
+# PIT_RATIO is what the champion is worth against the ruler's average hero at
+# the level (pit_champion). MEASURED 2026-09-25, tests/sweep_pit.gd: each
+# preset alone at levels 1, 3, 5, 8, 12 and 16, 40 pinned seeds a cell, both
+# sides on the autopilot. Win % per level, then the mean:
+#   ratio  fighter                               rogue                   cleric
+#   0.6    97.5 92.5 100 100 100 100   98.3      62.5 50 30 7.5 15 7.5   28.8   40 32.5 25 0 0 0  16.3
+#   0.9    95 85 92.5 82.5 95 100      91.7      45 25 2.5 0 0 0         12.1   35 10 0 0 0 0     7.5
+#   1.2    67.5 50 77.5 30 45 92.5     60.4      17.5 0 0 0 0 0           2.9   10 0 0 0 0 0      1.7
+# Set on the FIGHTER's column, the one duellist the presets have: a first bout
+# they nearly always take, a second a little harder than a road fight (~85-90%),
+# a third they lose four times in ten. The rogue's and the cleric's columns are
+# the autopilot's, not the class's — alone, the autopilot cleric never casts, it
+# swings its mace (a level-8 cleric against a bandit captain, replayed on
+# 2026-09-25: nine rounds of +4 swings and not one spell) —
+# so they say "put in your sword-arm", which is the choice the row asks for,
+# and they are not a target. Re-run the sweep when the autopilot learns to
+# duel (docs/plan/2026-09-25-downtime-nights.md, Still open).
+const PIT_RATIO := [0.6, 0.9, 1.2]
+const PIT_POOL := ["bandit", "guard", "tribal-warrior", "scout", "thug", "spy", "berserker",
+	"veteran", "bandit-captain", "knight", "half-red-dragon-veteran", "gladiator"]
 const PIT_WEEK := 7 * DAY
 const PIT_BOUTS := 3
 const PIT_THEME := "city-square"
@@ -244,6 +275,28 @@ static func _skill_name(skill: String) -> String:
 
 # --- carousing --------------------------------------------------------------
 
+# #237: what the night costs, all of it — the drinks and the bed the company
+# sleeps it off in. The row used to name the drinks alone ("A night on the
+# town (30 ◉)"), so a purse that held the 30 and not the 40 for a city bed
+# pressed Go out and got a refusal on the log line at the foot of the panel,
+# under a list that had just jumped back to its top: nothing happened, as far
+# as anyone at the row could see.
+static func carouse_cost(party, s) -> Dictionary:
+	var drinks := int(CAROUSE_COST.get(s.kind, CAROUSE_COST["town"]))
+	var bed := bed_cost(s, 1, party)
+	return {"drinks": drinks, "bed": bed, "total": drinks + bed}
+
+# The line for a night the company cannot have; "" when it can. The screen
+# greys Go out and puts this under the row, the way gamble_refusal does.
+static func carouse_refusal(party, s) -> String:
+	if best_of(party, CAROUSE_SKILLS).is_empty():
+		return "Nobody in the company is fit for a night out."
+	var c := carouse_cost(party, s)
+	if party.gold < int(c["total"]):
+		return "A night on the town is %d ◉, and the bed %d more: %d ◉ in the purse." % [
+			int(c["drinks"]), int(c["bed"]), party.gold]
+	return ""
+
 # Pass: a contact — the faction warms, and the common room tells them the
 # nearest thing it knows for nothing (or, with nothing left to tell, stands a
 # round). Nat 20: the lead and the round both. Fail: a story (`complication`,
@@ -258,8 +311,7 @@ static func carouse(party, world, s, rng = null) -> Dictionary:
 	var cost := int(CAROUSE_COST.get(s.kind, CAROUSE_COST["town"]))
 	var bed := bed_cost(s, 1, party)
 	if party.gold < cost + bed:
-		return {"ok": false, "cost": cost, "bed": bed,
-			"text": "A night on the town is %d ◉, and the bed %d more." % [cost, bed]}
+		return {"ok": false, "cost": cost, "bed": bed, "text": carouse_refusal(party, s)}
 	party.spend_gold(cost)
 	spend_days(party, world, s, 1)
 	# Seeded off the visit and the clock: the day just spent moved it, so each
@@ -486,38 +538,76 @@ static func pit_state(party, s, world) -> Dictionary:
 	var beaten: int = int(e.get("beaten", 0)) if int(e.get("week", -1)) == week else 0
 	return {"week": week, "beaten": beaten, "open": beaten >= 0 and beaten < PIT_BOUTS}
 
-# The screen's ordinary encounter_spec for the city, cut down to one foe: the
-# strongest humanoid on that roster (the strongest of whatever came, when
-# nothing on it is people), alone, pumped for the bout, named for the bracket.
-# Encounter.build reads `named` and puts the name on the card.
-static func pit_spec(_party, s, world, bout: int, base_spec: Dictionary) -> Dictionary:
-	var best := {}
-	var best_key := -1.0
-	for e in base_spec.get("monsters", []):
-		var m: Dictionary = Catalog.monster(String(e["id"]))
-		var key := float(m.get("cr", 0)) + (1000.0 if String(m.get("type", "")) == "humanoid" else 0.0)
-		if key > best_key:
-			best_key = key
-			best = e
-	if best.is_empty():
+# Who may stand in the pit: the marching company's own, alive and on their
+# feet (hp_current 0 is down; -1 is full). The bench is not at the inn's
+# table, and a hero carried out of the last bout at 1 HP may go again — that
+# is the player's call to make, not the pit's.
+static func pit_fighters(party) -> Array:
+	return party.party_characters().filter(func(ch): return not ch.dead and int(ch.hp_current) != 0)
+
+# The champion for a hero of `level`: worth `ratio` of the ruler's average
+# hero at that level (Regions.ref_score is the preset trio; a third of it is
+# one of them), found by Scaler.duel_for. By the level and not by the hero:
+# the house prices a bout the way it would price anyone of that standing, and
+# does not know who is good in a duel. Priced by the hero's own reading of
+# power.gd, a cleric met a champion sized to every spell on their sheet and
+# lost nearly every bout from level 5, while a fighter won nearly every one
+# (tests/sweep_pit.gd, the first grid) — the ruler reads a party's caster,
+# not a duellist. Priced by level, who goes in is the company's edge to find.
+static func pit_champion(level: int, ratio: float) -> Dictionary:
+	return Scaler.duel_for(ratio * Regions.ref_score(level) / RULER_HEROES, PIT_POOL)
+
+const RULER_HEROES := 3.0   # Regions.ref_score reads core/presets.gd's three
+
+# One champion against one hero (#236): priced for `fighter`'s level
+# (pit_champion at the bout's PIT_RATIO), named for the bracket, on the
+# square. `duel` names the hero; the screen fields that hero and nobody else
+# (pit_line_up). Encounter.build reads `named` and puts the name on the card.
+# {} with nobody to stand.
+static func pit_spec(_party, s, world, bout: int, fighter) -> Dictionary:
+	if fighter == null:
 		return {}
 	var b := clampi(bout, 0, PIT_BOUTS - 1)
-	var id := String(best["id"])
-	var spec := base_spec.duplicate(true)
-	spec["monsters"] = [{"id": id, "count": 1, "mult": PIT_MULT[b]}]
-	spec["theme"] = PIT_THEME
-	spec["named"] = {id: pit_bracket(s, world)["names"][b]}
-	return spec
+	var champ: Dictionary = pit_champion(fighter.level(), PIT_RATIO[b])
+	if champ.is_empty():
+		return {}
+	return {"monsters": [champ], "theme": PIT_THEME, "duel": String(fighter.id),
+		"named": {String(champ["id"]): pit_bracket(s, world)["names"][b]}}
+
+# The bout's marching order: the one hero, and nobody else. Everything a fight
+# reads the company through — the board's starts (Party.to_combatants), what
+# the fight writes back, who its XP is split among (Campaign.split_xp), whose
+# traits it can earn (Traits.after_fight) — reads party.active, so a hero
+# standing alone there is alone in all of them. Returns the order to put back
+# with pit_stand_down, which the screen does as soon as the bout is banked.
+# Nothing saves mid-fight (world.gd's _autosave never runs under one), so the
+# one-hero order never reaches a save.
+static func pit_line_up(party, char_id: String) -> Array:
+	var order: Array = Array(party.active).duplicate()
+	if party.get_member(char_id) != null:
+		party.active.clear()
+		party.active.append(char_id)
+	return order
+
+# The order as it was, less anyone the bout killed: the dead are benched
+# (core/fallen.gd), and a hero who died standing alone is no exception.
+static func pit_stand_down(party, order: Array) -> void:
+	party.active.clear()
+	for id in order:
+		var ch = party.get_member(String(id))
+		if ch != null and not ch.dead:
+			party.active.append(String(id))
 
 const ORDINAL := ["first", "second", "third"]
 
 # A win: the bout's purse, a deed with the city's people, the next bout opens;
-# the third is the bracket. A loss: the party is carried out (the screen
+# the third is the bracket. A loss: the hero is carried out (the screen
 # stands the bout's downed up after a lost bout, Party.revive_downed), the house keeps the purse of that bout
 # (to zero), and the bracket is closed until next week. `purse` is signed.
 # `week` is the bracket's, read before the bout: the fight itself moves the
 # clock, and a bout begun on the week's last evening is still that week's.
-static func pit_result(party, s, world, bout: int, won: bool, week: int) -> Dictionary:
+# `who` is the hero who stood (#236), for the line; "" says "the company".
+static func pit_result(party, s, world, bout: int, won: bool, week: int, who := "") -> Dictionary:
 	var b := clampi(bout, 0, PIT_BOUTS - 1)
 	var name: String = _names(s, week)[b]
 	var purse: int = PIT_PURSE[b]
@@ -529,10 +619,11 @@ static func pit_result(party, s, world, bout: int, won: bool, week: int) -> Dict
 		beaten = b + 1
 		if beaten >= PIT_BOUTS:
 			Ach.bump("pit_brackets")
-			text = "%s goes down, and the bracket with them: champions of the pit, this week. The purse is %d ◉." % [name, purse]
+			text = "%s goes down, and the bracket with them: %s, champion%s of the pit this week. The purse is %d ◉." % [
+				name, who if who != "" else "the company", "" if who != "" else "s", purse]
 		else:
-			text = "%s goes down in the %s bout. The purse is %d ◉, and the %s will remember the name." % [
-				name, ORDINAL[b], purse, Ladder.people(s.faction)]
+			text = "%s goes down in the %s bout%s. The purse is %d ◉, and the %s will remember the name." % [
+				name, ORDINAL[b], (" to " + who) if who != "" else "", purse, Ladder.people(s.faction)]
 	else:
 		# The coin that moved, not the nominal stake: a purse lighter than the
 		# stake gives up what it has, and the line says so. It used to print the
@@ -544,8 +635,8 @@ static func pit_result(party, s, world, bout: int, won: bool, week: int) -> Dict
 			else ("all the company had: %d ◉ of a %d ◉ stake" % [taken, purse]) if taken > 0 \
 			else "nothing: the company had no coin to lose"
 		purse = -taken
-		text = "%s is still standing when the company is carried out. The house keeps %s, and the bracket is closed for the week." % [
-			name, kept]
+		text = "%s is still standing when %s is carried out. The house keeps %s, and the bracket is closed for the week." % [
+			name, who if who != "" else "the company", kept]
 	var pit: Dictionary = party.downtime.get("pit", {})
 	pit[s.id] = {"week": week, "beaten": beaten}
 	party.downtime["pit"] = pit
