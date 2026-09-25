@@ -55,6 +55,7 @@ func _init() -> void:
 	test_never_scales_up()
 	test_short_handed_is_not_hurt()
 	test_spent_slots_do_not_shrink_the_fight()
+	test_pressing_on_hurt_costs()
 	print("test_world_threat: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -252,3 +253,26 @@ func test_spent_slots_do_not_shrink_the_fight() -> void:
 		WorldThreat.power_scale(float(both["hp_frac"])) * float(both["slot_hold"])),
 		"a drained, hurt party is thinned by its wounds alone")
 	check(float(both["power_scale"]) < float(drained["power_scale"]), "...and that is still a smaller fight than the unhurt one")
+
+# The owner's call on the design audit §3.2: pressing on hurt carries a real
+# risk. Above half HP the road does not thin a fight for wounds at all (a
+# half-HP company meets the fresh company's roster, body for body), and below it
+# the curve bottoms out near three quarters of the flat discount, not a third.
+# tests/sweep_wounds.gd measured what that costs: 99.0 / 93.0 / 86.5 / 74.5%
+# at 100 / 70 / 50 / 30% HP, level-3 presets (core/world_threat.gd's header).
+func test_pressing_on_hurt_costs() -> void:
+	check(WorldThreat.HURT_AT <= 0.5, "the condition discount waits for half HP (HURT_AT %.2f)" % WorldThreat.HURT_AT)
+	check(WorldThreat.SCALE_FLOOR >= 0.7, "and never thins a fight below 0.7 (floor %.3f)" % WorldThreat.SCALE_FLOOR)
+	var chars := Presets.party()
+	var fresh := WorldThreat.assess(_party())
+	var half := WorldThreat.assess(_hurt(_party(), 0.5))
+	check(is_equal_approx(float(half["power_scale"]), float(fresh["power_scale"])),
+		"a company at half HP is asked for the fresh company's fight (%.3f vs %.3f)" % [
+			float(half["power_scale"]), float(fresh["power_scale"])])
+	for seed_v in range(1, 11):
+		var a := Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", seed_v, float(fresh["power_scale"]))
+		var b := Scaler.roster_for(chars, WorldThreat.BASELINE, {}, "", seed_v, float(half["power_scale"]))
+		check(str(a["monsters"]) == str(b["monsters"]), "seed %d: the same bands, body for body" % seed_v)
+	var low := WorldThreat.assess(_hurt(_party(), 0.3))
+	check(float(low["power_scale"]) < float(fresh["power_scale"]) and float(low["power_scale"]) > 0.75,
+		"at 30%% HP the fight is thinned, but only a little (%.3f)" % float(low["power_scale"]))
