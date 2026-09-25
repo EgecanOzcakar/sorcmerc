@@ -363,6 +363,7 @@ const VERB_GLYPHS := {
 	"attack": "⚔", "offhand_attack": "⚔",
 	"shove": "⇉", "grapple": "⊗", "escape": "⛓", "smash": "⚒", "help": "✚",
 	"dodge": "◈", "dash": "➤", "disengage": "↩", "hide": "☁",
+	"withdraw": "⇥",   # the audit's 3.5: Leave the field
 	"heal_self": "☤", "heal_ally": "☤",
 	"self_buff": "⬆", "ally_buff": "⬆",
 	"grant_action": "⏩", "attack_modifier": "◎", "save_effect": "⚡",

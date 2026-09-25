@@ -174,7 +174,7 @@ func test_death() -> void:
 # The open world's lost fight (the design audit §1.2): the downed come to at
 # 1 HP, the dead stay dead — this fight's and every earlier fight's, benched or
 # not. Nobody left standing puts the living bench on the road; a roster with
-# nobody alive keeps exactly one, so the map is never a save with nobody in it.
+# nobody alive is a finished company, and nobody is stood up to hide it.
 func test_revive_downed() -> void:
 	var p := Party.new()
 	for ch in Party.demo_roster():
@@ -199,7 +199,7 @@ func test_revive_downed() -> void:
 	check(not ilsa.dead and ilsa.hp_current == 1, "the downed come to at 1 HP (%d)" % ilsa.hp_current)
 	check(r["came_to"] == ["ilsa"], "came_to names only the downed (%s)" % [r["came_to"]])
 	check(r["dead"].size() == 2 and "vera" in r["dead"] and "pike" in r["dead"], "dead names both fallen")
-	check(r["spared"] == "", "nobody is spared while somebody lives")
+	check(not r["finished"], "the company is not finished while somebody lives")
 	check(p.gold == gold, "coming to costs nothing here; the retreat's tax is the screen's")
 	var others = p.roster.filter(func(c): return not c.id in ["vera", "pike", "ilsa"])
 	check(not others.is_empty() and others.all(func(c): return c.hp_current == -1), "a hero at full (-1) is not touched")
@@ -229,26 +229,29 @@ func test_revive_downed() -> void:
 	Party.revive_downed(q)
 	check(Array(q.active) == [reserve], "nobody standing: the living bench marches (%s)" % [q.active])
 
-	# The whole roster dead: the company is finished, and the open world has no
-	# end screen, so the highest level of them comes to alone.
+	# The whole roster dead: the company is finished (the owner's call,
+	# 2026-09-25). Nobody is stood up; the caller ends the run.
 	var w := Party.new()
 	for ch in Party.demo_roster():
 		w.add_member(ch)
 	for id in w.active.duplicate():
 		w.bench(id)
-	var best = w.roster[0]
 	for ch in w.roster:
 		ch.dead = true
 		ch.hp_current = 0
-		if ch.level() > best.level():
-			best = ch
 	var rw: Dictionary = Party.revive_downed(w)
-	check(rw["spared"] == best.id and not best.dead and best.hp_current == 1, "one is spared: the highest level (%s)" % rw["spared"])
-	check(w.roster.filter(func(c): return c.dead).size() == w.roster.size() - 1, "everyone else stays dead")
-	check(Array(w.active) == [best.id], "and marches alone")
+	check(rw["finished"], "the whole roster dead: the company is finished")
+	check(w.roster.all(func(c): return c.dead), "...and nobody is stood up to keep it going")
+	check(not rw.has("spared"), "...there is no lone survivor any more")
 	var wl := w.defeat_line(rw, [], "Ashford", 0)
-	check(wl.contains(best.cname) and wl.contains("alone"), "the line says who is left: %s" % wl)
+	check(wl.contains("nobody gets up"), "the line says so: %s" % wl)
 	print("  wiped line: ", wl)
+	# days on the line: the company comes to later (core/defeat.gd)
+	var q2 := Party.new()
+	for ch in Party.demo_roster():
+		q2.add_member(ch)
+	var dl := q2.defeat_line(Party.revive_downed(q2), [], "Ashford", 5, 1)
+	check(dl.contains("Ashford a day later"), "a lost day is on the line: %s" % dl)
 
 # The design audit §5.2: a raise costs 50 ◉ a level, not a flat 300 — the
 # same weight in fights' coin at level 1 as at level 19, whichever door

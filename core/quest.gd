@@ -26,6 +26,10 @@
 #     who are credited at turn-in wherever it is handed in, and the faction it
 #     is aimed at ("" for nobody). Absent on a job posted before contracts,
 #     which then credits the hand-in town, as every job did.
+#   deadline_days (optional) — how many days the job gives you from the day it
+#     is taken; deadline — the world-minute that runs out at, stamped by
+#     accept(). Past it an unfinished job fails (expire(), below; the design
+#     audit §3.4). Absent: the job never expires.
 extends RefCounted
 
 const FactionOpinion = preload("res://core/faction_opinion.gd")
@@ -252,12 +256,62 @@ static func world_quest_offers(world, giver_settlement, party, rng) -> Array:
 			out.append(q)
 	return out
 
-static func accept(party, quest: Dictionary) -> bool:
+# `now` is the world-minute it is taken at — the open world passes its clock;
+# left out, it is the party's own stamp of it (party.world_now, which world.gd
+# keeps every frame), so a story's quest beat gets a deadline too.
+static func accept(party, quest: Dictionary, now := -1.0) -> bool:
 	if quest.is_empty() or not get_quest(party, quest["id"]).is_empty():
 		return false
 	quest["state"] = "active"
+	if float(quest.get("deadline_days", 0.0)) > 0.0 and not quest.has("deadline"):
+		var at: float = now if now >= 0.0 else float(party.world_now)
+		quest["deadline"] = at + float(quest["deadline_days"]) * DAY
 	party.quests.append(quest)
 	return true
+
+# --- the design audit §3.4: deadlines ------------------------------------------
+#
+# Quests never expired: no time field, and the only failure was a lost
+# delivery, so the downtime days a town sells (core/downtime.gd) and a lost
+# day on a defeat (core/defeat.gd) traded against nothing. Now a job may carry
+# `deadline_days` — how long it gives you, from the day it is taken — and a
+# taken one carries `deadline`, the world-minute it runs out at. Past it, a job
+# still being done FAILS: it leaves the log, the way a lost delivery does, so
+# the board can post it again. A job already done keeps: finishing it in time
+# is the deed, and walking it back to a counter is not held against anyone.
+#
+# Who has one is core/quest_posting.gd's call (DEADLINE_DAYS: bounties and
+# rescues; errands and deliveries stay open-ended), and a content pack's story
+# quest may name its own (docs/modding.md). A quest with no deadline — every
+# job taken before this existed, in an old save — never expires.
+const DAY := 1440.0   # world-minutes
+
+# The jobs whose day has passed at `now`, taken out of the log. Returns their
+# titles, for the line that says so.
+static func expire(party, now: float) -> Array:
+	var gone: Array = []
+	for q in party.quests.duplicate():
+		if String(q.get("state", "")) == "active" and q.has("deadline") and now > float(q["deadline"]):
+			gone.append(String(q.get("title", q.get("id", "?"))))
+			party.quests.erase(q)
+	return gone
+
+# How long a job has, in words: "3 days left", "less than a day left", or ""
+# for a job with no deadline or one already done. Before it is taken, the
+# posting's own offer: "4 days to do it".
+static func time_left(q: Dictionary, now: float) -> String:
+	if q.has("deadline"):
+		if String(q.get("state", "")) != "active":
+			return ""
+		var days := (float(q["deadline"]) - now) / DAY
+		if days < 1.0:
+			return "less than a day left"
+		var n := int(floor(days))
+		return "%d day%s left" % [n, "" if n == 1 else "s"]
+	var give := int(q.get("deadline_days", 0))
+	if give > 0:
+		return "%d day%s to do it" % [give, "" if give == 1 else "s"]
+	return ""
 
 static func active(party) -> Array:
 	return party.quests.filter(func(q): return q["state"] in ["active", "complete"])
@@ -467,7 +521,11 @@ static func turn_in(party, quest: Dictionary, faction := "") -> bool:
 		Ach.unlock("quest_chain")
 	return true
 
-# One line for the quest log panel.
-static func describe(quest: Dictionary) -> String:
+# One line for the quest log panel. With `now` (the open world's clock), a job
+# on a deadline says how long it has left (the design audit §3.4).
+static func describe(quest: Dictionary, now := -1.0) -> String:
 	var tail := "  ✔ ready to turn in" if quest["state"] == "complete" else ""
+	var left := time_left(quest, now) if now >= 0.0 and quest.has("deadline") else ""
+	if left != "":
+		tail += "   (%s)" % left
 	return "%s   %d/%d%s" % [quest["title"], int(quest["progress"]), int(quest["required"]), tail]

@@ -123,8 +123,10 @@ func is_stable() -> bool:
 	return statuses.has("stable")
 
 # Can act, be targeted normally, and counts toward its team still being in the fight.
+# A hero who walked off the board's edge (core/combat.gd's _leave_field, the
+# design audit §3.5) is none of those, though alive: `withdrawn`.
 func conscious() -> bool:
-	return hp > 0 and not statuses.has("down") and not statuses.has("dead")
+	return hp > 0 and not statuses.has("down") and not statuses.has("dead") and not statuses.has("withdrawn")
 
 func clone() -> RefCounted:
 	var c = get_script().new()

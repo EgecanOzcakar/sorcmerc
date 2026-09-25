@@ -34,6 +34,7 @@ const Registry = preload("res://core/mod/registry.gd")
 const StoryRuntime = preload("res://core/mod/story_runtime.gd")
 const Coop = preload("res://core/coop.gd")
 const Recruits = preload("res://core/recruits.gd")   # a new run's founding: one hero made, the rest hired
+const Defeat = preload("res://core/defeat.gd")   # the open world's end: a finished company's words
 const Service = preload("res://core/service.gd")     # audit 2.5: a run served, on the founder's record
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
@@ -140,18 +141,27 @@ func show_title() -> void:
 	if linear_campaign() and CampaignSave.has_save():
 		col.add_child(_button("Resume the last run", _resume))
 	var slots: Array = WorldSave.list_slots()
+	var first_live := true   # the gilt goes to the newest run that can still be played
 	for i in slots.size():
 		var slot: Dictionary = slots[i]
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
-		var resume := _button("Resume the open world", _resume_world.bind(String(slot["id"])), i == 0)
+		# A finished company (core/defeat.gd) is listed, and can be read and
+		# deleted, but not resumed: there is nobody left to resume it with.
+		var over: Dictionary = slot.get("finished", {})
+		var resume: Button
+		if over.is_empty():
+			resume = _button("Resume the open world", _resume_world.bind(String(slot["id"])), first_live)
+			first_live = false
+		else:
+			resume = _button("The company is finished: read the roll", show_company_end.bind(over))
 		resume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(resume)
 		row.add_child(_quiet("Delete…", _confirm_delete_world_save.bind(slot)))
 		col.add_child(row)
 		col.add_child(_dim(slot_lines(slot)))
 		col.add_child(_gap(6))
-	col.add_child(_button("New run", show_party_setup, slots.is_empty()))
+	col.add_child(_button("New run", show_party_setup, first_live))
 	if not slots.is_empty():
 		col.add_child(_dim("One autosave per run, written as you play. A new run takes its own."))
 		col.add_child(_gap(6))
@@ -249,13 +259,19 @@ func _resume() -> void:
 		return
 	_show_campaign(saved)
 
-# O13: the open world has no terminal state to check — there is no "finished" world,
-# only the map you left. WorldSave.from_dict re-applies faction opinion itself.
+# O13: the open world had no terminal state to check. It has one now: a company
+# whose whole roster died is finished (core/defeat.gd), and its slot opens on
+# the closing screen instead of the map — the title screen already offers it
+# that way, this is the guard behind it. WorldSave.from_dict re-applies faction
+# opinion itself.
 func _resume_world(slot_id: String) -> void:
 	WorldSave.set_active_slot(slot_id)
 	var saved = WorldSave.load_latest()
 	if saved == null:
 		show_title()
+		return
+	if not saved["party"].finished.is_empty():   # a finished company is read, not played
+		show_company_end(saved["party"].finished)
 		return
 	show_world(saved["party"], saved["world"], "small", _story_from(saved))
 
@@ -763,6 +779,80 @@ func show_summary(run) -> void:
 	var centre := CenterContainer.new()
 	centre.add_child(panel)
 	_swap(centre, "run summary")
+
+# --- the open world's end: the company is finished ------------------------
+#
+# The linear run always had an end (show_summary, above); the open world had
+# none, so a company whose whole roster died kept one hero alive to have a save
+# to play. Since 2026-09-25 it ends (core/defeat.gd): the map hands the record
+# here (scenes/world/world.gd's _end_company, after the barracks and the save
+# are written), and the title screen opens the same page from a finished slot.
+# The same panel as the linear summary, the defeat's art, the same three big
+# numbers in a row, and the roll of everyone who marched. The words are
+# Defeat.end_lines()'s, tested with the record.
+func show_company_end(record: Dictionary) -> void:
+	Sound.set_combat(false)
+	var words: Dictionary = Defeat.end_lines(record)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", Icons.box(Icons.COL_PANEL, Icons.COL_FOE, 0, 24, 20))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	col.custom_minimum_size.x = 560
+	panel.add_child(col)
+	var end_art := Icons.scene_art("summary-defeat", null)
+	if end_art != null:
+		var pic := TextureRect.new()
+		pic.texture = end_art
+		pic.custom_minimum_size = Vector2(480, 180)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.clip_contents = true
+		col.add_child(pic)
+	var head := Label.new()
+	head.text = String(words["head"])
+	head.theme_type_variation = "Title"
+	head.add_theme_color_override("font_color", Icons.COL_FOE)
+	col.add_child(head)
+	for key in ["lead", "lasted"]:
+		var l := Label.new()
+		l.text = String(words[key])
+		l.theme_type_variation = "Serif"
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(l)
+	var stats := HBoxContainer.new()
+	stats.add_theme_constant_override("separation", 36)
+	col.add_child(stats)
+	var roll: Array = record.get("roll", [])
+	for pair in [[str(int(record.get("days", 1))), "days on the road"],
+			[String(record.get("title", "")), "what they were called"],
+			[str(roll.size()), "marched under it"]]:
+		var v := VBoxContainer.new()
+		var big := Label.new()
+		big.text = pair[0]
+		big.theme_type_variation = "Head"
+		big.add_theme_color_override("font_color", Icons.COL_GOLD)
+		v.add_child(big)
+		var cap := Label.new()
+		cap.text = pair[1]
+		cap.theme_type_variation = "Caption"
+		v.add_child(cap)
+		stats.add_child(v)
+	var caption := Label.new()
+	caption.text = "The roll of the company"
+	caption.theme_type_variation = "Head"
+	col.add_child(caption)
+	for i in roll.size():
+		var r: Dictionary = roll[i]
+		var line := Label.new()
+		line.text = "    %s  %s" % [Icons.class_glyph(String(r.get("class_id", ""))), String(words["roll"][i])]
+		line.add_theme_color_override("font_color", Icons.COL_MUTED if bool(r.get("dead", false)) else Icons.COL_BODY)
+		col.add_child(line)
+	col.add_child(_dim("The living go home to the barracks. The dead do not."))
+	col.add_child(_gap(6))
+	col.add_child(_button("Back to the title", show_title, true))
+	var centre := CenterContainer.new()
+	centre.add_child(panel)
+	_swap(centre, "company-finished page")
 
 # Everything off what the run already tracked — no summary-only bookkeeping.
 static func summary_lines(run) -> Array:

@@ -450,6 +450,14 @@ ACTIONS = {
         group([rect(-2.8, -19, 5.6, 38, 2.8, GOLD[1], sw=1.3)], 32, 32, -45),
     ),
 
+    # Off the field (the design audit's 3.5): out through the board's edge,
+    # the hex of ground left behind it.
+    "withdraw": badge(
+        hexagon(24, 32, 15, STEEL[0], sw=1.4),
+        hexagon(24, 32, 9.5, STEEL[2], sw=1.1),
+        arrow(38, 32, 90, 30, 10, GOLD),
+    ),
+
     # Your own wounds closed.
     "heal_self": badge(
         heart(32, 31, 18, LIFE),

@@ -972,6 +972,40 @@ static func after_lair(chars: Array, now: float) -> Dictionary:
 	return out
 
 
+# A lost fight, for every hero it put on the ground who is still alive
+# (core/defeat.gd — a defeat cost that does not read the purse, the design
+# audit §1.8). One CON save each against DEFEAT_DC, seeded off the hero and
+# the minute like every roll here: made, they walk it off; failed, Wounded;
+# failed by DEGREE or a natural 1, Maimed — the one only a city's healers or
+# ten days mend, so a beaten company pays in days as well as coin. A hero
+# already Maimed, or holding WOUND_CAP wounds, takes nothing new.
+# TUNING: DEFEAT_DC 12 is a taste number, not a sweep's: heroes of levels 1-4
+# carry about +1 to +4 on a CON save, so roughly half of them walk it off.
+const DEFEAT_DC := 12
+const DEFEAT_WHY := "Beaten and left for dead"
+
+static func after_defeat(chars: Array, now: float) -> Dictionary:
+	var out := {"moments": [], "lines": []}
+	for ch in chars:
+		if ch == null or ch.dead:
+			continue
+		var sv := _save_roll(ch, {"ability": "con"}, DEFEAT_DC, "defeat|%s|%d" % [ch.id, int(now)])
+		var margin := int(sv["nat"]) + int(sv["bonus"]) - DEFEAT_DC
+		if int(sv["nat"]) != 1 and margin >= 0:
+			out["lines"].append("%s walks it off%s." % [ch.cname, _save_words(sv)])
+			continue
+		var id := "maimed" if int(sv["nat"]) == 1 or margin <= -DEGREE else "wounded"
+		var t := grant(ch, id, DEFEAT_WHY, now)
+		if t.is_empty() and id == "maimed":
+			id = "wounded"   # already Maimed: the lesser wound, if there is room for it
+			t = grant(ch, id, DEFEAT_WHY, now)
+		if t.is_empty():
+			out["lines"].append("%s is hurt again, and no worse for it than before%s." % [ch.cname, _save_words(sv)])
+			continue
+		_gain(out, ch, "wound", id, DEFEAT_WHY, sv, "is")
+	return out
+
+
 # Grief (the design audit, docs/audit-game-design.md §2.1): `ch` was bonded to
 # or in love with `dead` (PartyOpinion.close_to), who has just died. Unlike
 # the witness's "Watched a friend die" it is not asked on chance — it is always

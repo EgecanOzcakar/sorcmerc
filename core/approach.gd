@@ -23,7 +23,16 @@
 #            happening. The mindless are the exception; see MINDLESS below.
 #            Fail and it is the fight anyway, and a people that keeps an opinion
 #            (WorldAI.CIVILIZED) thinks less of the company for the offer
-#            (FactionOpinion.PARLEY_REFUSED; the design audit §3.1).
+#            (FactionOpinion.PARLEY_REFUSED; the design audit §3.1). A people
+#            that keeps none — bandits, goblins, most of what talks on the road
+#            — has nothing to think less with, so it takes the first round
+#            instead: they come in while the company is still talking. The
+#            same surprise a blown ambush hands over (`forced_ambush`), so a
+#            failed parley is never a free roll before Engage (the owner's
+#            call on the audit's §3.1 follow-up, 2026-09-25).
+#            An empty purse does not make the toll free: they take one thing
+#            from the packs instead (toll_item(), seeded, never quest goods;
+#            the audit §1.8).
 #
 # Every one of them runs on machinery that already exists: the surprise flags
 # are scenes/main.tscn's own `scouted_ahead`/`forced_ambush` (T39), the skill
@@ -93,7 +102,11 @@ const WAYS := {
 		# A purse with nothing in it: _toll() caps at what the party actually has,
 		# so the line has to stop saying "0 ◉" and say what that means.
 		"win_broke": "No fight. They take what you are carrying, which is nothing.",
-		"lose": "They were never going to be talked to. A plain, even fight.",
+		# A people that keeps no opinion (bandits, goblins) cannot think less of
+		# the company, so the offer costs the first round instead.
+		"lose": "They take the offer as weakness, and the first round with it.",
+		# An empty purse and something in the packs: they take the thing.
+		"win_item": "No fight. The purse is empty, so they take the %s from the packs, and there is no loot.",
 		# A people that keeps an opinion hears about the offer, and the row
 		# says so before the press: the cost of a gamble belongs beside it.
 		"lose_opinion": "They take the offer as an insult: a plain, even fight, and the %s think less of the company."},
@@ -162,7 +175,14 @@ static func options(party, foe, hostile := true) -> Array:
 		# not a price anybody can weigh against a fight.
 		if id == "parley":
 			var toll: int = _toll(party)
-			o["win"] = String(w["win"]) % toll if toll > 0 else String(w["win_broke"])
+			var item := toll_item(party, foe) if toll <= 0 else ""
+			if toll > 0:
+				o["win"] = String(w["win"]) % toll
+			elif item != "":
+				o["win"] = String(w["win_item"]) % Campaign.item_name(item)
+				o["toll_item"] = item
+			else:
+				o["win"] = String(w["win_broke"])
 		else:
 			o["win"] = String(w.get("win", ""))
 		if w.has("lose"):
@@ -250,8 +270,14 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 				var toll: int = _toll(party)
 				party.spend_gold(toll)
 				out["toll"] = toll
-				out["text"] = "%s talks them down. They take %s to have seen nobody." % [
-					who["cname"], ("%d ◉" % toll) if toll > 0 else "nothing — the purse was empty"]
+				var item := toll_item(party, foe) if toll <= 0 else ""
+				if item != "":
+					party.stash_remove(item, 1)
+					out["toll_item"] = item
+				var paid: String = ("%d ◉" % toll) if toll > 0 else (
+					"the %s out of the packs, since the purse was empty" % Campaign.item_name(item) if item != ""
+					else "nothing, since the purse was empty")
+				out["text"] = "%s talks them down. They take %s to have seen nobody." % [who["cname"], paid]
 			elif parley_costs_opinion(foe):
 				var faction := String(foe.faction)
 				FactionOpinion.lower(faction, FactionOpinion.PARLEY_REFUSED)
@@ -259,7 +285,10 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 				out["text"] = "%s makes the offer, and it is taken as an insult. It comes to a fight anyway, and the %s will hear that the company tried to buy them." % [
 					who["cname"], Ladder.people(faction)]
 			else:
-				out["text"] = "%s gets nowhere. They were never going to be talked to." % who["cname"]
+				# Nobody to think less of the company, so the offer costs the
+				# first round: the same surprise a blown ambush hands over.
+				out["forced_ambush"] = true
+				out["text"] = "%s gets nowhere. They were never going to be talked to, and they come in while the company is still talking." % who["cname"]
 	return out
 
 
@@ -268,6 +297,30 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 # alternative to paying was a fight they just avoided.
 static func _toll(party) -> int:
 	return mini(party.gold, maxi(TOLL_MIN, int(round(party.gold * TOLL_PCT))))
+
+
+# What a band takes when the purse is empty: one thing out of the packs, not
+# nothing (the design audit §1.8 — banking every coin in the strongroom made
+# the toll free). Never quest goods: an item an open job is collecting or
+# supplying stays in the pack, or talking past a band could quietly undo a
+# contract. Seeded off the band and the world-minute, so the card can name the
+# thing before the press and the resolution takes that same thing; a reload
+# does not reroll it. "" when there is nothing they would take.
+static func toll_item(party, foe) -> String:
+	var keep := {}
+	for q in party.quests:
+		if String(q.get("state", "")) in ["active", "complete"] and q.has("target_item_id"):
+			keep[String(q["target_item_id"])] = true
+	var ids: Array = []
+	for e in party.stash:
+		var id := String(e["item_id"])
+		if not keep.has(id) and not ids.has(id) and int(e.get("quantity", 0)) > 0:
+			ids.append(id)
+	if ids.is_empty():
+		return ""
+	ids.sort()
+	var h := absi(hash("toll|%s|%d" % [String(foe.id), int(party.world_now)]))
+	return String(ids[h % ids.size()])
 
 
 # Who rolls: the standing order for the job if one is set (D3), otherwise the

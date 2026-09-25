@@ -51,6 +51,8 @@
 #     "fallen": [{"id": "vera", "name": "Vera Kord", "level": 3, "class": "fighter", "where": "...", "by": "ogre", "day": 6, ...}]  // Fallen.to_dict; [] = nobody lost yet
 #     "bench": {"thrun": {"since": 8640.0, "warned": false}}  // Bench.to_dict; {} = clocks start on load
 #   },
+#   "finished": {"days": 12, "title": "Hirelings", "fell": ["Vera Kord"], "roll": [...]},
+#                                     // the company is finished (core/defeat.gd); {} or no key = still going
 #   "story": {                        // M7: the content pack's story, mid-telling.
 #     "pack": "ashen-road",           //   {} on every run with no story on it.
 #     "chapter": "smoke", "done": false,
@@ -259,6 +261,10 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"explored": explored,
 		"party": _party_dict(party),
 		"story": story.to_dict() if story != null else {},
+		# The company is finished (core/defeat.gd): Defeat.ending()'s record, {}
+		# for a run still going. At the top, not in "party", so list_slots()
+		# can say a slot is over without reading a roster.
+		"finished": party.finished.duplicate(true) if party != null else {},
 	}
 
 # null when the dictionary is not a world save. Applies the saved opinion as a
@@ -364,7 +370,10 @@ static func from_dict(d: Dictionary):
 	# runtime from it needs the pack, which is scenes/game/game.gd's job, not
 	# this file's. An old save (or one with no story) simply has {}.
 	var story = d.get("story", {})
-	return {"world": world, "party": _party_from(d.get("party", {})),
+	var party = _party_from(d.get("party", {}))
+	var fin = d.get("finished", {})   # an old save has none: not finished
+	party.finished = fin if fin is Dictionary else {}
+	return {"world": world, "party": party,
 		"story": story if story is Dictionary else {}}
 
 # --- the player's party ------------------------------------------------------
@@ -386,7 +395,8 @@ static func _party_dict(party) -> Dictionary:
 		"overworld_figure": party.overworld_figure,
 		"travel_orders": party.travel_orders.duplicate(true),   # D3 standing orders
 		"road": {"scouted_next": party.scouted_next, "swift_until": party.swift_until,
-			"safe_camp": party.safe_camp, "alarm_set": party.alarm_set, "blessed": party.blessed,
+			"safe_camp": party.safe_camp, "hollow_camp": party.hollow_camp,   # the hermit's hollow; an old save has none
+			"alarm_set": party.alarm_set, "blessed": party.blessed,
 			"camp_holds": party.camp_holds.duplicate(true)},   # potions / road spells; audit 1.6's held slots
 		"relations": PartyOpinion.to_dict(party),   # spike-party-opinions §8: who thinks what of whom
 		"callings": Callings.to_dict(party),
@@ -418,6 +428,7 @@ static func _party_from(pd: Dictionary):
 	party.scouted_next = bool(road.get("scouted_next", false))
 	party.swift_until = float(road.get("swift_until", 0.0))
 	party.safe_camp = bool(road.get("safe_camp", false))
+	party.hollow_camp = bool(road.get("hollow_camp", false))
 	party.alarm_set = bool(road.get("alarm_set", false))
 	party.blessed = bool(road.get("blessed", false))
 	party.camp_holds.clear()   # an old save holds nothing: its Rope Trick was cast before slots were held
@@ -555,6 +566,9 @@ static func _facts(d: Dictionary, written_at: int) -> Dictionary:
 		"gold": int(pd.get("gold", 0)),
 		"story": String(d.get("story", {}).get("pack", "")),
 		"written_at": written_at,
+		# A finished company's record (core/defeat.gd), {} while the run goes
+		# on: the title screen lists a finished slot, and will not resume it.
+		"finished": d.get("finished", {}) if d.get("finished", {}) is Dictionary else {},
 	}
 
 # "Day 3  14:05" off world-minutes — the same reading scenes/world/world.gd's

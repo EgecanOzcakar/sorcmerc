@@ -43,7 +43,8 @@ const HOLD := "hold"            # something you are keeping up (Concentration)
 # Engine bookkeeping, never a chip: being dead, down or stable is the HP
 # readout's job; the rest are flags other systems hang on a token.
 const HIDDEN := ["dead", "down", "stable", "freed", "escaped", "captive", "bystander",
-	"illusion", "summoned", "quarry"]
+	"illusion", "summoned", "quarry",
+	"withdrawn"]   # off the field (the audit's 3.5): not on the board, so no strip to draw it on
 
 # The engine's own flags (Combat.ENGINE_CONDS and the handful set directly),
 # in words. `clock` overrides the payload's clock, which for most of these is
