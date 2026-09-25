@@ -357,13 +357,25 @@ static func holds(when: Dictionary, where: Dictionary) -> bool:
 		var want = when[k]
 		if not where.has(k):
 			return false        # the fight does not know it, so it does not hold
-		var have = where[k]
-		if want is Array:
-			if not have in want:
-				return false
-		elif want != have:
+		if not _is(String(k), where[k], want):
 			return false
 	return true
+
+
+# One `when` key against where the company is. A band is also asked as a
+# country: "deeps" holds in the Unmapped (core/regions.gd's part_of), so a
+# trait written before the Far Deeps were split keeps holding across all of
+# them, and a pack's trait keeps meaning what it said.
+static func _is(k: String, have, want) -> bool:
+	if k == "band":
+		var R = load("res://core/regions.gd")   # load: regions.gd preloads encounter.gd, which preloads this file
+		for w in (want if want is Array else [want]):
+			if R.holds(String(have), String(w)):
+				return true
+		return false
+	if want is Array:
+		return have in want
+	return want == have
 
 
 # The live terms one hero's traits add in this place: {"ac": 1, "to_hit": 0,
@@ -1118,11 +1130,7 @@ static func _road_holds(when: Dictionary, here: Dictionary) -> bool:
 	for k in when:
 		if not k in ["biome", "band", "site", "night"] or not here.has(k):
 			return false
-		var want = when[k]
-		if want is Array:
-			if not here[k] in want:
-				return false
-		elif want != here[k]:
+		if not _is(String(k), here[k], when[k]):
 			return false
 	return true
 

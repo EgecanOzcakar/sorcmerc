@@ -144,6 +144,13 @@ func test_the_fight_reads_the_place() -> void:
 	check(int(calm[1].saves.get("con", 0)) == plain_con + 1 and calm[1].init_mod == plain_init - 1,
 		"Calm: +1 CON saves and −1 initiative, everywhere")
 	check(_fight_with(bare, "marsh", {"biome": "marsh"})[1].statuses.get(Traits.STATUS) == null, "a hero with no traits is untouched")
+	# A band is asked as a country (2026-09-25): a trait "in the deeps" holds out
+	# in the Unmapped, the Far Deeps' outer half, and not the other way about.
+	check(Traits.holds({"band": ["deeps"]}, {"band": "unmapped"}), "\"in the deeps\" holds in the Unmapped")
+	check(Traits.holds({"band": ["deeps"]}, {"band": "deeps"}), "...and in the deeps")
+	check(not Traits.holds({"band": ["unmapped"]}, {"band": "deeps"}), "\"in the Unmapped\" is only there")
+	check(not Traits.holds({"band": ["deeps"]}, {"band": "frontier"}), "...and the frontier is neither")
+	check(Traits._road_holds({"band": ["deeps"]}, {"band": "unmapped"}), "the road reads it the same way")
 
 func test_the_cap() -> void:
 	Traits.all()["test-a"] = {"name": "A", "family": "mark", "effects": [{"gives": {"ac": 2, "to_hit": -3}}]}

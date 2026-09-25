@@ -8,6 +8,7 @@ extends SceneTree
 const Story = preload("res://core/mod/story.gd")
 const StoryRuntime = preload("res://core/mod/story_runtime.gd")
 const World = preload("res://core/world.gd")
+const Regions = preload("res://core/regions.gd")
 const WorldPack = preload("res://core/mod/world_pack.gd")
 const Registry = preload("res://core/mod/registry.gd")
 const Quest = preload("res://core/quest.gd")
@@ -208,6 +209,16 @@ func test_conditions() -> void:
 	check(run.holds({"day": 4}, w, p), "three days of world-clock make it day four")
 	check(run.holds({"region": "heartland"}, w, p), "the start is in the heartland")
 	check(not run.holds({"region": "deeps"}, w, p), "...which is not the deeps")
+	# A pack's {"region": "deeps"} was written when the Far Deeps were one band;
+	# since the split (2026-09-25) it holds in both halves, and the new band can
+	# be named on its own.
+	var pl = w.player()
+	var was: Vector2 = pl.position
+	pl.position = Regions.anchor(w) + Vector2(Regions.extent(w) * 0.99, 0)
+	check(Regions.band_of(w, pl.position) == "unmapped", "the far edge is the Unmapped")
+	check(run.holds({"region": "deeps"}, w, p), "...and \"deeps\" still holds there")
+	check(run.holds({"region": "unmapped"}, w, p), "...as does its own name")
+	pl.position = was
 	FactionOpinion.reset()
 	FactionOpinion.raise("human", 30.0)
 	check(run.holds({"opinion": {"faction": "human", "atleast": 20}}, w, p), "opinion floor")

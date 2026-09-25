@@ -5,6 +5,7 @@
 # re-argued:
 #   SORCMERC_FAST=1 godot --headless --path . -s tests/sweep_regions.gd
 #   SEEDS=40 godot --headless --path . -s tests/sweep_regions.gd
+#   CELLS=10:15,15:14 SEEDS=200 godot --headless --path . -s tests/sweep_regions.gd
 #
 # Per cell: the preset trio at the party's level (Presets.party_at), a roster
 # from Scaler.roster_for at wilderness tier `easy` (what core/world_threat.gd
@@ -23,14 +24,24 @@ const Regions = preload("res://core/regions.gd")
 
 # [party level, content level] — the rows of the published table: the in-band
 # curve (party and content at the same level, 3 to 15), then one band back and
-# one band out
+# one band out; then the rows the Far Deeps' split (2026-09-25) added — a
+# level 10 and 12 party one band out in the Unmapped (content 15), a level 15
+# and 20 party one band back in the inner Deeps (content 14), and level 3 at
+# the very edge. `CELLS=p:c,p:c` runs only those.
 const CELLS := [[3, 3], [5, 5], [6, 6], [8, 8], [10, 10], [12, 12], [15, 15],
-	[6, 3], [10, 3], [3, 6], [3, 10]]
+	[6, 3], [10, 3], [3, 6], [3, 10],
+	[10, 15], [12, 15], [15, 14], [20, 14], [3, 15]]
 
 func _init() -> void:
 	var seeds := int(OS.get_environment("SEEDS")) if OS.get_environment("SEEDS") != "" else 80
 	print("party  content   scale   win   (%d seeds a cell, tier easy)" % seeds)
-	for cell in CELLS:
+	var cells: Array = CELLS
+	if OS.get_environment("CELLS") != "":
+		cells = []
+		for pair in OS.get_environment("CELLS").split(","):
+			var pc: PackedStringArray = pair.split(":")
+			cells.append([int(pc[0]), int(pc[1])])
+	for cell in cells:
 		var p: int = cell[0]
 		var c: int = cell[1]
 		var scale: float = 1.0 if p == c else Scaler.held_at(Regions.ref_score(c), Regions.ref_score(p))

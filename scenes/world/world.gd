@@ -459,6 +459,7 @@ const LargeWorld = preload("res://scenes/world/large_world.gd")
 const ProceduralWorld = preload("res://scenes/world/procedural_world.gd")
 const Landmarks = preload("res://core/landmarks.gd")
 const WorldBands = preload("res://core/world_bands.gd")
+const WorldHomes = preload("res://core/world_homes.gd")
 var _bands_rng := RNG.new()   # #163: refills are not replayable; a live clock is the seed
 
 func _large_world() -> World:
@@ -537,9 +538,13 @@ func _small_world() -> World:
 	w.add_lair(World.Lair.new("goblin-warren", Vector2(330, 130), "goblinoid"))
 	w.add_lair(World.Lair.new("giant-hold", Vector2(-520, -260), "giant"))
 	w.add_lair(World.Lair.new("sunken-ruins", Vector2(-280, -340), "undead", "Sunken Ruins"))
-	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(300, 620), "undead", "Zombie Graveyard"))
+	# 2026-09-25: was (300, 620), frac 0.87 — a hair past the frontier's seam, so the
+	# undead had no lair in their own country (Regions.HOMES) and core/world_homes.gd
+	# would have dug them a second graveyard. Twenty units in, frac 0.84.
+	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(290, 600), "undead", "Zombie Graveyard"))
 	w.add_lair(World.Lair.new("dragon-cave", Vector2(680, -400), "dragon", "Dragon's Cave"))
 	Landmarks.place(w, 41)   # a fixed seed: the small map is hand-placed, and so are its landmarks
+	WorldHomes.fill(w, 41)   # a lair for every people, after the landmarks (core/world_homes.gd)
 	WorldBands.seed(w, 41)   # #163: fill the roads to the cap, around the bands above
 	return w
 
@@ -3072,7 +3077,9 @@ func _check_region() -> void:
 	# Called every frame: Audio._set_environment() early-returns on an unchanged
 	# theme, so this is a string compare, and coming out of a town restores the
 	# right country's bed without _close_visit() having to know which one it was.
-	Sound.set_environment("settlement" if not _visit.is_empty() else String(band["id"]))
+	# A sub-band plays its country's bed: the Unmapped has no track of its own and
+	# is the Far Deeps' outer half (Regions.country_of).
+	Sound.set_environment("settlement" if not _visit.is_empty() else Regions.country_of(String(band["id"])))
 	if _region_lbl != null:
 		# Short form: this bar already carries nine controls and a hint, and the
 		# long form lives on the lair button, the inn's leads and the crossing card.

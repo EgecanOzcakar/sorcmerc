@@ -143,7 +143,13 @@ room by room. `faction` must be one the bestiary can fill a fight from
 `soldier`) — a lair is *made of* its faction's roster. `"discovered": true`
 puts it on the map from the start. A lair on heartland or marches ground with
 a civilized settlement within 800 runs a raid clock like the built-in maps'
-(`core/raids.gd`); there is no opt-out today.
+(`core/raids.gd`); there is no opt-out today. A lair draws on the map as a
+diorama built for its faction (a stockade for orcs, standing stones for
+elementals, a ruin for a cult), seeded off its `id` so two of yours are two
+places; the built-in maps' five named lairs keep their own. The built-in maps
+also place a lair for every faction in its home country
+(`core/world_homes.gd`); a pack's map is never filled in for you — the lairs
+in your `world.json` are all the lairs there are.
 
 **Landmarks** are places on the map that are not a fight — ruins, a shrine,
 standing stones, a hermit's hut, a wreck, a watchtower (`kind`: `ruins` |
@@ -190,6 +196,11 @@ human settlement out to the furthest thing you placed, in equal-area rings
   elementals in the Deeps. Following that makes a map read right.
 - Widening your map moves the seams. Adding one far-off lair pushes every band
   outward, so place the far things first and check the near ones after.
+- The Far Deeps are two bands (since 2026-09-25): `deeps`, levels 10-14, and
+  past it `unmapped`, levels 15-20, the outermost eighth of the map. The
+  Unmapped is part of the Far Deeps, so anything that names `deeps` — a
+  `{"region": "deeps"}` condition, a `scout_region` job — holds in both;
+  name `unmapped` to mean the far edge alone. Your furthest lair sits there.
 
 `tests/test_world_pack.gd` asserts this on the shipped campaign: three lairs,
 three bands, no region data in the pack at all.
@@ -288,7 +299,7 @@ kills, the turn-in at any merchant, the log panel, the encounter spawn bias. A
 | `clear_lair` | `target_lair_id` | that lair is cleared |
 | `supply_item` | `target_item_id` | that many are in the shared stash |
 | `deliver_goods` | `target_settlement_id` | the party walks into that settlement |
-| `scout_region` | `target_region_id` | the party is standing in that band (`heartland` / `marches` / `frontier` / `deeps`) |
+| `scout_region` | `target_region_id` | the party is standing in that band (`heartland` / `marches` / `frontier` / `deeps` / `unmapped`; `deeps` includes the Unmapped) |
 | `rescue` | `target_lair_id` | the captive in that lair's pens is freed (the room's rescue objective is done) |
 
 ### Conditions (`when`)
@@ -311,7 +322,7 @@ opens".
 | `{"near": "emberwatch", "within": 120}` | the party is that close (default 60). Works on lairs too. |
 | `{"lair_found": "ash-warren"}` | discovered |
 | `{"lair_cleared": "ash-warren"}` | looted |
-| `{"region": "frontier"}` | the party is standing in that band |
+| `{"region": "frontier"}` | the party is standing in that band (`deeps` includes its outer half, `unmapped`) |
 | `{"day": 4}` | world-day 4 or later |
 | `{"opinion": {"faction": "human", "atleast": 20}}` | that faction thinks that well of you |
 | `{"all": [...]}` `{"any": [...]}` `{"none": [...]}` | nesting |
