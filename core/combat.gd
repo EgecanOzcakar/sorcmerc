@@ -1284,6 +1284,31 @@ func _leveled_spell_allowed(actor, v: Dictionary) -> bool:
 		return false
 	return true
 
+# #246: what a leveled spell costs is a slot of its level — or, for a spell a
+# species or feat granted, its once-per-Long-Rest free cast, spent FIRST (the
+# free one is the one any player reaches for). `innate_pool` rides only the
+# base-level verb (Effects.spell_verbs_for); an upcast always takes a slot.
+func innate_left(c, v: Dictionary) -> int:
+	return c.pool_left(String(v["innate_pool"])) if v.has("innate_pool") else 0
+
+func can_pay_spell(c, v: Dictionary) -> bool:
+	var lvl := int(v.get("slot_level", 0))
+	if lvl <= 0 or innate_left(c, v) > 0:
+		return true
+	return lvl <= c.slots.size() and c.slots[lvl - 1] > 0
+
+# Pays for `v`, which can_pay_spell() already said `c` could. True when the
+# free cast paid rather than a slot.
+func _pay_spell(c, v: Dictionary) -> bool:
+	var lvl := int(v.get("slot_level", 0))
+	if lvl <= 0:
+		return false
+	if innate_left(c, v) > 0:
+		c.pools[v["innate_pool"]]["cur"] = innate_left(c, v) - 1
+		return true
+	c.slots[lvl - 1] -= 1
+	return false
+
 func _spend(actor, cost: String) -> bool:
 	if not can_spend(actor, cost):
 		return false
@@ -1318,7 +1343,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 		return false
 	var slot := int(v.get("slot_level", 0))
 	if slot > 0:
-		if slot > actor.slots.size() or actor.slots[slot - 1] <= 0:
+		if not can_pay_spell(actor, v):
 			return false
 		if not _leveled_spell_allowed(actor, v):
 			return false
@@ -1626,7 +1651,7 @@ func _hit_riders(attacker, target) -> void:
 # the two stay one rule.
 func _cast_refusal(caster, v: Dictionary, target) -> String:
 	var lvl := int(v.get("slot_level", 0))
-	if lvl > 0 and (lvl > caster.slots.size() or caster.slots[lvl - 1] <= 0):
+	if not can_pay_spell(caster, v):   # a slot, or a species/feat spell's free cast (#246)
 		return "no slot"
 	if lvl > 0 and v.get("cost", "") != "reaction" and not _leveled_spell_allowed(caster, v):
 		return "one leveled spell a turn beside a bonus-action one"
@@ -1656,7 +1681,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	if hand_picked:
 		target = target[0]
 	var lvl := int(v.get("slot_level", 0))
-	if lvl > 0 and (lvl > caster.slots.size() or caster.slots[lvl - 1] <= 0):
+	if not can_pay_spell(caster, v):
 		return {"error": "no slot"}
 	if lvl > 0 and v.get("cost", "") != "reaction" and not _leveled_spell_allowed(caster, v):
 		return {"error": "one leveled spell a turn beside a bonus-action one"}
@@ -1682,7 +1707,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 	if v.get("quickened", false):
 		caster.econ["cast_bonus_spell"] = true   # 2024: no leveled spell after a Quickened one, cantrip or not
 	if lvl > 0:
-		caster.slots[lvl - 1] -= 1
+		_pay_spell(caster, v)
 		if v["cost"] == "bonus":
 			caster.econ["cast_bonus_spell"] = true
 		if v["cost"] != "reaction":
@@ -2572,8 +2597,7 @@ func reaction_verb(c, trigger: String) -> Dictionary:
 # The reaction itself is checked by can_spend(); this is everything else the
 # verb costs. _offerable() asks the same questions of a button.
 func _reaction_affordable(c, v: Dictionary) -> bool:
-	var lvl := int(v.get("slot_level", 0))
-	if lvl > 0 and (lvl > c.slots.size() or c.slots[lvl - 1] <= 0):
+	if not can_pay_spell(c, v):
 		return false
 	if v.has("pool") and c.pool_left(v["pool"]) <= 0:
 		return false
@@ -2685,9 +2709,7 @@ func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
 			if v["kind"] == "spell":
 				# Shield: the slot is spent, and the +5 stays up until the caster's
 				# next turn as a buff on top of the one blow it just turned.
-				var lvl := int(v.get("slot_level", 0))
-				if lvl > 0:
-					c.slots[lvl - 1] -= 1
+				_pay_spell(c, v)
 				if v.has("buff"):
 					_apply_buff(c, c, v)
 			break   # the swing is already a miss; a second answer has nothing to stop

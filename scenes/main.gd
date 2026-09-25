@@ -916,7 +916,9 @@ func _build_reaction_card(question: String, opts: Array) -> PanelContainer:
 func _reaction_question(reactor, v: Dictionary, trigger: String, ctx: Dictionary) -> String:
 	var lvl := int(v.get("slot_level", 0))
 	var cost := ""
-	if lvl > 0:
+	if cb.innate_left(reactor, v) > 0:
+		cost = " — its free cast (once per long rest), no slot"   # #246
+	elif lvl > 0:
 		cost = " — a level-%d slot (%d left)" % [lvl, reactor.slots[lvl - 1]]
 	elif v.has("pool"):
 		cost = " — %d use%s left" % [reactor.pool_left(v["pool"]),
@@ -1566,7 +1568,9 @@ static func _verb_tooltip(h, v: Dictionary) -> String:
 		bits.append("%d" % int(v["amount"]))
 	if not v.get("resist", []).is_empty():
 		bits.append("Resist: %s" % ", ".join(v["resist"]))
-	if int(v.get("slot_level", 0)) > 0:
+	if v.has("innate_pool") and h.pool_left(String(v["innate_pool"])) > 0:
+		bits.append("free once per long rest, no slot")   # #246: a species/feat spell
+	elif int(v.get("slot_level", 0)) > 0:
 		bits.append("level %d slot" % int(v["slot_level"]))
 	if v.has("pool"):
 		bits.append("%d of %d uses left" % [h.pool_left(v["pool"]), int(h.pools[v["pool"]]["max"])])
