@@ -57,6 +57,8 @@ func _init() -> void:
 	test_lift()
 	test_spread()
 	test_settle()
+	test_cap()
+	test_cap_small_map()
 	print("test_raids: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -370,3 +372,93 @@ func test_settle() -> void:
 	check(Raids.settle(w4, l4, p, w4.clock.elapsed) != null, "settled with the band out")
 	check(not w4.parties.has(b4), "...and the band is gone from the map with it")
 	check(Raids.settle(w, l, p, 1600.0) == null, "a lair no longer on the map cannot be settled twice")
+
+# The map holds half its towns' worth of raids, rounded up (Raids.raid_cap).
+# Four towns and five lairs all due on the same minute: the two with the
+# earliest seeded clocks set out, the other three wait a whole clock, and the
+# same map always picks the same two.
+func _crowded() -> World:
+	var w := World.new()
+	w.add_settlement(World.Settlement.new("riverhold", Vector2.ZERO, "human", "city"))
+	w.add_settlement(World.Settlement.new("oakford", Vector2(0, 250), "human", "town"))
+	w.add_settlement(World.Settlement.new("greenmarch", Vector2(250, -200), "elf", "town"))
+	w.add_settlement(World.Settlement.new("dun-arrow", Vector2(-250, -200), "dwarf", "camp"))
+	w.add_settlement(World.Settlement.new("ashfell", Vector2(-250, 250), "orc", "city"))   # not a town anyone raids
+	w.add_party(World.RoamingParty.new("player", Vector2(0, -600), "human", true))
+	for i in 5:
+		var a := deg_to_rad(float(i) * 72.0)
+		w.add_lair(World.Lair.new("lair-%d" % i, Vector2(cos(a), sin(a)) * 330.0, "goblinoid", "Lair %d" % i))
+	return w
+
+func test_cap() -> void:
+	var w := _crowded()
+	check(Raids.raid_cap(w) == 2, "four towns, one of them orcish: three raid targets, a cap of 2 (%d)" % Raids.raid_cap(w))
+	check(Raids.raid_cap(_world()) == 1, "one town: a cap of 1")
+	check(Raids.raid_cap(World.new()) == 1, "no town at all: never under 1")
+	var now := 0.0
+	for l in w.lairs:
+		now = maxf(now, Raids.due_at(l))
+	w.clock.elapsed = now
+	var lines: Array = Raids.tick(w, now)
+	var out: Array = w.lairs.filter(func(l): return l.raid_band != "")
+	check(out.size() == 2 and lines.size() == 2, "five lairs due, two set out (%d, %s)" % [out.size(), str(lines)])
+	var order: Array = w.lairs.duplicate()
+	order.sort_custom(func(a, b): return Raids.due_at(a) < Raids.due_at(b))
+	check(out.has(order[0]) and out.has(order[1]), "...the two whose seeded clocks ran out first")
+	for l in w.lairs:
+		if not out.has(l):
+			check(l.raid_at == now and Raids.due_at(l) >= now + Raids.RAID_AFTER,
+				"%s waits a whole clock, not a frame" % l.id)
+	check(Raids.tick(w, now + 1.0).is_empty(), "a minute later nothing more sets out")
+	var again := _crowded()
+	again.clock.elapsed = now
+	Raids.tick(again, now)
+	check(str(again.lairs.filter(func(l): return l.raid_band != "").map(func(l): return l.id))
+		== str(out.map(func(l): return l.id)), "the same map picks the same two")
+	# A landed raid still counts: the town stays under it until the lair is cleared.
+	var w2 := _crowded()
+	w2.settlements[0].raided_by = "lair-4"
+	w2.settlements[1].raided_by = "lair-3"
+	w2.clock.elapsed = now
+	Raids.tick(w2, now)
+	var out2: Array = w2.lairs.filter(func(l): return l.raid_band != "").map(func(l): return l.id)
+	check(out2.all(func(id): return id in ["lair-3", "lair-4"]),
+		"two raids standing: only their own lairs may ride again (%s)" % str(out2))
+	WorldLairs.mark_cleared(w2.lairs[4], now)
+	var later: float = now + Raids.RAID_EVERY + Raids.RAID_JITTER
+	w2.clock.elapsed = later
+	Raids.tick(w2, later)
+	check(w2.settlements[0].raided_by == "", "clearing a lair lifts its raid")
+	check(Raids._raiding(w2).size() <= 2, "...and frees a place under the cap, never more (%s)" % str(Raids._raiding(w2).keys()))
+
+# The small map as the world screen builds it: its settled lairs against its
+# three raidable towns, eight days of clock with nobody turning a raid. At no
+# frame are more lairs raiding than the cap, the cap is reached, and the same
+# map runs the same raids.
+func test_cap_small_map() -> void:
+	var first := _small_map_run()
+	var second := _small_map_run()
+	check(int(first["worst"]) <= int(first["cap"]),
+		"the small map never holds more raids than its cap (%d of %d)" % [first["worst"], first["cap"]])
+	check(int(first["worst"]) == int(first["cap"]), "...and it does fill it (%d)" % first["worst"])
+	check(int(first["settled"]) > int(first["cap"]),
+		"more settled lairs (%d) than the cap: the cap is doing something" % first["settled"])
+	check(str(first["log"]) == str(second["log"]) and not first["log"].is_empty(),
+		"the same map runs the same raids (%d set out)" % first["log"].size())
+
+func _small_map_run() -> Dictionary:
+	var scene = load("res://scenes/world/world.tscn").instantiate()
+	var w = scene._small_world()
+	scene.free()
+	var settled := 0
+	for l in w.lairs:
+		if Raids.is_settled(w, l):
+			settled += 1
+	var worst := 0
+	var log: Array = []
+	for i in 8 * 144:
+		for line in _frame(w, 10.0):
+			if String(line).begins_with("Raiders are out"):
+				log.append("%d %s" % [int(w.clock.elapsed), line])
+		worst = maxi(worst, Raids._raiding(w).size())
+	return {"cap": Raids.raid_cap(w), "worst": worst, "log": log, "settled": settled}

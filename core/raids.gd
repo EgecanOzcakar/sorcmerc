@@ -6,7 +6,9 @@
 # to the town's edge, stands there for SIEGE so the player can meet it, and
 # then the raid LANDS: the town's market halves (settlement_visit.gd reads
 # `raided_by`), its board pays more for that lair's work (quest.gd), refugees
-# walk the roads (travel.gd). The second landing seeds a child lair. Clearing
+# walk the roads (travel.gd). The second landing seeds a child lair. A map
+# holds half its towns' worth of raids at once (raid_cap); a lair due past
+# that waits for its next clock. Clearing
 # the lair — however it is cleared — lifts all of it; this module polls for
 # that rather than hooking mark_cleared, so every way of spending a lair is
 # covered. Pure data + math, no scene: scenes/world/world.gd calls tick()
@@ -108,6 +110,33 @@ static func _claimed(world, s, lair) -> bool:
 		if b != null and String(b.ai.get("target", "")) == s.id and String(b.ai.get("phase", "")) != "home":
 			return true
 	return false
+
+# How many lairs may be raiding at once: half the map's towns, rounded up (the
+# owner's call on the far-deeps entry's "more raids", 2026-09-25). A town
+# holds one raider, but that capped pressure per town, not per map, and the
+# small map's seven settled lairs against its four towns could have every town
+# under a raid at once. A lair is RAIDING while its band is out (any phase) or
+# its landed raid still stands on a town, so the cap bounds the towns under
+# pressure as well as the bands on the road. A lair already raiding may set out
+# again — its next raid is not a new one for the map. One lair has no
+# pressure to share: never under 1.
+static func raid_cap(world) -> int:
+	var towns := 0
+	for s in world.settlements:
+		if not WorldAI.is_monster(s.faction):
+			towns += 1
+	return maxi(1, ceili(towns / 2.0))
+
+# The lairs raiding right now, by id: a band out, or a landing that stands.
+static func _raiding(world) -> Dictionary:
+	var out := {}
+	for l in world.lairs:
+		if l.raid_band != "":
+			out[l.id] = true
+	for s in world.settlements:
+		if s.raided_by != "":
+			out[s.raided_by] = true
+	return out
 
 # Seeded off the lair, so the same warren always sets out on the same morning.
 static func due_at(lair) -> float:
@@ -241,14 +270,25 @@ static func tick(world, now: float) -> Array:
 			l.raid_at = now
 			continue
 		_advance(world, l, b, now, lines)
+	var due: Array = []
 	for l in world.lairs:
 		if l.looted or l.entered_at >= 0.0 or l.raid_band != "" or now < due_at(l):
 			continue
-		if not is_settled(world, l):
-			continue
+		if is_settled(world, l):
+			due.append(l)
+	# The earliest clock goes first — due_at is already seeded off each lair —
+	# so when the cap holds two back, which one waits is the map's, not a roll's.
+	due.sort_custom(func(a, b): return due_at(a) < due_at(b) or (due_at(a) == due_at(b) and a.id < b.id))
+	var raiding: Dictionary = _raiding(world)
+	var cap: int = raid_cap(world)
+	for l in due:
 		var s = target_for(world, l)
 		if s == null:
 			continue
+		if not raiding.has(l.id) and raiding.size() >= cap:
+			l.raid_at = now   # the map has all the raids it can hold: wait for the next clock
+			continue
+		raiding[l.id] = true
 		set_out(world, l, s, now)
 		lines.append("Raiders are out from %s, making for %s." % [l.sname, s.sname])
 		Sound.play_sfx("raid_horn")
