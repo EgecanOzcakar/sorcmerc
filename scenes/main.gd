@@ -211,7 +211,7 @@ const FLOOR_ALPHA := 0.9    # the texture is the ground now, not a wash over a s
 const FLOOR_TONE := 0.72    # ...held down to the board's dark palette, the board light on top
 const COL_MOVE := Color(0.30, 0.55, 0.95, 0.35)
 const COL_EXIT := Color(0.85, 0.72, 0.30, 0.32)      # objectives: the road out / the treeline
-const COL_EDGE := Color(0.62, 0.70, 0.86, 0.20)      # the audit's 3.5: the edge a hero can walk off
+const COL_EDGE := Color(0.95, 0.90, 0.72, 0.55)      # the audit's 3.5: the edge a hero can walk off (a rim)
 const COL_BYSTANDER := Color("d8cfae")               # objectives: a captive's or carter's token
 const COL_TARGET := Color(0.95, 0.35, 0.30, 0.9)
 const COL_CONE := Color(0.98, 0.55, 0.15, 0.30)
@@ -4066,8 +4066,12 @@ class Board extends Control:
 			if road.has(hx):
 				draw_colored_polygon(poly, main.COL_EXIT)
 			elif edge.has(hx):
-				draw_colored_polygon(poly, main.COL_EDGE if hx != cur.pos
-					else Color(main.COL_EDGE, 0.45 + 0.15 * pulse))
+				# a pale rim on every edge hex, and the one under the hero filled
+				var erim := _hex_poly(c, s - 4.0)
+				erim.append(erim[0])
+				draw_polyline(erim, main.COL_EDGE, 2.0, true)
+				if hx == cur.pos:
+					draw_colored_polygon(poly, Color(main.COL_EDGE, 0.30 + 0.12 * pulse))
 			if cone_hexes.has(hx):
 				draw_colored_polygon(poly, main.COL_CONE)
 			if provoke.has(hx):

@@ -291,6 +291,15 @@ kills, the turn-in at any merchant, the log panel, the encounter spawn bias. A
 | `scout_region` | `target_region_id` | the party is standing in that band (`heartland` / `marches` / `frontier` / `deeps`) |
 | `rescue` | `target_lair_id` | the captive in that lair's pens is freed (the room's rescue objective is done) |
 
+Any quest may also carry **`deadline_days`** (optional, a number, 1 or more):
+how many days it gives from the moment the beat hands it over. Past that, a
+quest that is not yet complete **fails** — it leaves the log, and a condition
+on it reads it as never taken (`"state": "any"` is false). A quest already
+complete when the time runs out keeps, and can still be turned in. The quest
+log shows the days left. Leave the key out and the quest never expires, which
+is what every quest did before 2026-09-25. A `deadline_days` that is not a
+positive number is a validator error.
+
 ### Conditions (`when`)
 
 Every key in a condition must hold. `{}` is true — "as soon as this chapter
