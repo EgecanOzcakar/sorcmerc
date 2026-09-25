@@ -27,6 +27,7 @@
 #   "grudges": {"gnoll": 20.0},       // Grudges.all() (#231): the monster peoples' side
 #   "routes": { <WorldRoutes.to_dict()> },   // #231: {} on a free-roaming world
 #   "route_walked": 1450.0,           // #231: the road's odometer
+#   "walk_home_from": 742.5,          // core/world_road_home.gd: out of a site at; -1 = not walking home
 #   "ladder": {"deeds": {"human": 13}, "audiences": ["human"]},   // Ladder.all()
 #   "origin": {"kind": "procedural", "seed": 42, "homes": true},   // which builder made this map;
 #                                     // "homes": its lair-for-every-people pass is done (core/world_homes.gd)
@@ -249,6 +250,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"format": FORMAT, "version": VERSION,
 		"elapsed": world.clock.elapsed,
 		"bands_refilled_at": world.bands_refilled_at,   # #163
+		"walk_home_from": world.walk_home_from,   # core/world_road_home.gd's clock
 		"opinion": FactionOpinion.all(),
 		"grudges": Grudges.all(),
 		"routes": world.routes.to_dict() if world.routes != null else {},
@@ -284,6 +286,8 @@ static func from_dict(d: Dictionary):
 	var world := World.new()
 	world.clock.elapsed = float(d.get("elapsed", 0.0))
 	world.bands_refilled_at = float(d.get("bands_refilled_at", 0.0))
+	# An old save has no walk home on it: the road it always was.
+	world.walk_home_from = float(d.get("walk_home_from", -1.0))
 	for sd in d.get("settlements", []):
 		var s := World.Settlement.new(String(sd["id"]), _vec(sd.get("position")),
 			String(sd.get("faction", "soldier")), String(sd.get("kind", "town")),

@@ -255,6 +255,10 @@ var landmarks: Array[Landmark] = []
 var fallen: Array[Dictionary] = []
 # #163: when WorldBands.refill last put a band on the map (world-minutes).
 var bands_refilled_at := 0.0
+# The road home (core/world_road_home.gd): the world-minute the company last
+# came up out of a site it cleared or withdrew from, -1 for never. Only that
+# file reads it; world_save.gd round-trips it.
+var walk_home_from := -1.0
 # #231: the road network (core/world_routes.gd), or null. Non-null is what makes
 # this a route world: the company travels only on known roads and meets what
 # the road sends (core/route_travel.gd), with no bands on the map. Untyped,

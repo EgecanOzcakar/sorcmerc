@@ -59,6 +59,7 @@ const Rumors = preload("res://core/rumors.gd")
 const Site = preload("res://core/site.gd")
 const SiteScreen = preload("res://scenes/world/site_screen.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
+const WorldRoadHome = preload("res://core/world_road_home.gd")
 const Regions = preload("res://core/regions.gd")
 const EnemyCasters = preload("res://core/enemy_casters.gd")
 const Travel = preload("res://core/travel.gd")
@@ -130,6 +131,9 @@ const ENCOUNTER_RADIUS := 24.0
 # It can only ever scale DOWN, and a weaker roster pays proportionally less XP
 # (encounter.gd's xp = power * XP_PER_POWER), so nothing is gained by staying
 # hurt. The old flat "normal" is what world_threat.gd's BASELINE replaces.
+# Since 2026-09-25 the walk out of a site has a gentler floor of its own until
+# dawn or a long rest (core/world_road_home.gd), which is why both assess()
+# calls below pass the world.
 # O6 visit distance. Deliberately wider than ENCOUNTER_RADIUS: a settlement is a
 # fixed landmark drawn at ~26 world units of radius (a city footprint) rather than
 # a 6-unit token, so "close enough to walk in through the gate" is its own number.
@@ -1757,7 +1761,7 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 	var seed_v: int = absi(hash(foe.id))
 	if theme == "":
 		seed_v = Scaler.pin_faction(seed_v, faction)
-	var threat: Dictionary = WorldThreat.assess(party)
+	var threat: Dictionary = WorldThreat.assess(party, world)   # world: the road home's clock
 	# D6: the two knobs compose, and they answer different questions. The band
 	# says how dangerous this country is (1.0 while the party is inside its level
 	# range, which is the common case); the party's condition still thins whatever
@@ -1896,7 +1900,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 	if party.scouted_next:   # Potion of Clairvoyance, spent on this fight
 		scouted_ahead = true
 		party.scouted_next = false
-	var threat: Dictionary = WorldThreat.assess(party)
+	var threat: Dictionary = WorldThreat.assess(party, world)   # world: the road home's clock
 	var named: bool = difficulty != ""
 	var objective: Dictionary = {} if named else _road_objective(foe, jumped)
 	var kind := String(objective.get("kind", ""))
@@ -3081,6 +3085,12 @@ func _on_site_done() -> void:
 		# core/site.gd: walking out undoes the descent; the next entry is the mouth.
 		_lair_msg.text = "%s is still down there. %d of %d rooms were behind you, and they will fill in again before you are back." % [
 			l.sname, int(l.depth_cleared), Site.depth_for(l)]
+	# The road home (core/world_road_home.gd): out of a site on their feet, the
+	# company has until dawn or a night's sleep on the gentler walk-home curve.
+	# A wipe does not start it — the defeat's landing has already carried them in.
+	if ending in ["cleared", "withdrawn"]:
+		WorldRoadHome.set_out(world)
+		_lair_msg.text += "  " + WorldRoadHome.EXIT_LINE
 	_site = null
 	if _site_screen != null:
 		_site_screen.queue_free()
@@ -3324,6 +3334,11 @@ func _check_region() -> void:
 			_region_lbl.text += " · %s" % BIOME_LABEL.get(ground, ground)
 		if Ladder.title_index() > 0:
 			_region_lbl.text += " · %s" % Ladder.title()
+		# The road home's clock, while it runs: said here because it is about
+		# where the company is walking, and gone the moment dawn or a bed ends it.
+		var home_note: String = WorldRoadHome.hud_note(world, party)
+		if home_note != "":
+			_region_lbl.text += " · %s" % home_note
 	if _region.is_empty():
 		_region = band          # first frame: the party is simply somewhere
 		return
