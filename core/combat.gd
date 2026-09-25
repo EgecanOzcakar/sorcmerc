@@ -529,9 +529,9 @@ func begin_turn_for(c) -> void:
 	if _buff_sum(c, "speed_mult") > 0:
 		c.econ["move_left"] = int(c.econ["move_left"]) * _buff_sum(c, "speed_mult")
 	_regenerate(c)
+	_release_grapples()   # before the stand: a grip that just let go no longer pins you at Speed 0
 	_auto_stand(c)
 	_release_helps(c)
-	_release_grapples()
 	if round_num == 1:
 		for v in c.verbs:   # Ambusher's Leap: +10 ft on the first turn of a fight
 			if v.has("first_round_speed_ft"):
@@ -756,6 +756,11 @@ func _auto_stand(c) -> void:
 	# Hideous Laughter's prone is the spell holding you down: no getting up
 	# until it ends, and no half-move charged for trying.
 	if c.statuses["prone"] is Dictionary and c.statuses["prone"].has("held_by"):
+		return
+	# #249: standing costs half your Speed, and a Speed of 0 has no half to pay
+	# (2024 Prone: "you can't right yourself if your Speed is 0"). Grappled,
+	# Restrained, Paralyzed, Petrified, Stunned, Unconscious: you stay down.
+	if speed_zero(c):
 		return
 	c.statuses.erase("prone")
 	var mult := 1.0
@@ -2242,12 +2247,26 @@ func _source_of(c, key: String):
 
 # Movement left this turn after speed-zeroing conditions and exhaustion.
 func move_left(c) -> int:
+	if speed_zero(c):
+		return 0
 	var mv := int(c.econ.get("move_left", 0))
 	for e in _cond_effects(c):
-		if e.has("speed") and int(e["speed"]) == 0:
-			return 0
 		mv -= hexes_from_ft(int(e.get("speed_penalty_ft", 0)))
 	return maxi(0, mv)
+
+# #249: does something `c` carries set its Speed to 0? In the 2024 rules that is
+# Grappled, Restrained, Paralyzed, Petrified and Unconscious (0 HP is the same
+# entry, "down"), plus Stunned as this repo's SRD export words it ("can't
+# move" — data/conditions.json). Incapacitated ON ITS OWN is deliberately not
+# one: the 2024 condition takes actions, Bonus Actions and Reactions and says
+# nothing about Speed, so Hideous Laughter or a Confusion'd creature can still
+# walk (a laughing one crawls — it is held Prone too). The speed-0 conditions
+# that ARE incapacitating carry both flags in conditions.json.
+func speed_zero(c) -> bool:
+	for e in _cond_effects(c):
+		if e.has("speed") and int(e["speed"]) == 0:
+			return true
+	return false
 
 func _no_economy(actor, cost: String) -> bool:
 	var key: String = {"action": "no_action", "bonus": "no_bonus", "reaction": "no_reaction"}.get(cost, "")
