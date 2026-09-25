@@ -498,6 +498,8 @@ func _hostile_settlement(p) -> void:
 	FactionOpinion.reset()
 
 # --- O5: two NPC parties meeting resolve off-screen, no scene, no pause -----
+# #229: and it takes world time — the meeting opens a clash that holds both
+# bands for the fight's rounds, and only then does one of them fall.
 func _offscreen_battle(p) -> void:
 	var World = load("res://core/world.gd")
 	var away: Vector2 = p.position + Vector2(4000, 4000)     # nowhere near the player
@@ -507,7 +509,24 @@ func _offscreen_battle(p) -> void:
 	b.goal = b.position
 	var n: int = screen.world.parties.size()
 	await step(6)     # 0.6s x 40 u/s closes the 40-unit gap into the radius
-	if screen.world.parties.size() != n - 1:
+	var clash: Dictionary = screen.world.clash_of(a)
+	if clash.is_empty() and screen.world.parties.has(a) and screen.world.parties.has(b):
+		fail("the NPC meeting opened no clash")
+	elif not clash.is_empty():
+		if screen.world.clash_of(b) != clash:
+			fail("the two bands that met are not in the same clash")
+		var held: Vector2 = a.position
+		await step(3)
+		if a.position != held:
+			fail("a band locked in a clash kept walking")
+		# Fast-forward THIS fight to its last round. Not the clock: a jump there
+		# would end every other clash on the map and move every clock-driven
+		# thing the rest of this robot checks.
+		clash["until"] = screen.world.clock.elapsed
+		await step(1)
+	# Counted on the two that met, not on the map: another band's clash may
+	# end on its own clock inside these frames.
+	if int(screen.world.parties.has(a)) + int(screen.world.parties.has(b)) != 1:
 		fail("the NPC meeting did not resolve to exactly one dead party (%d -> %d)"
 			% [n, screen.world.parties.size()])
 	if screen.world.parties.has(a) == screen.world.parties.has(b):

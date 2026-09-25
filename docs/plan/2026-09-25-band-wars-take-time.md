@@ -72,6 +72,12 @@ is the same heard or not), and `WorldBattle.fight` turns it off. The player's
 own fights are untouched. Cosmetic only, so outside `Coop.state_hash` on
 purpose.
 
+`tests/drive_world.gd`'s O5 step used to check that one of two bands was
+gone six frames after they met; it now checks that the meeting opens one
+clash holding both, that a held band does not walk, and then fast-forwards
+that clash alone (its own `until`, not the clock, which would end every other
+clash on the map) and counts the dead on the two that met.
+
 `tests/test_world_battle.gd` is rewritten for the new shape (43 checks): a
 meeting opens a clash and nobody falls yet; a minute short of the last round
 both still stand, at the last round the verdict decided at contact lands;
