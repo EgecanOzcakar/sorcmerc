@@ -93,6 +93,7 @@ const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const Ladder = preload("res://core/ladder.gd")
 const Callings = preload("res://core/callings.gd")
+const Bench = preload("res://core/bench.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")   # a band's name, never its id
 const Downtime = preload("res://core/downtime.gd")
 const Lodge = preload("res://core/lodge.gd")   # the company's house: the square's door, the lodge page
@@ -597,6 +598,7 @@ func _process(delta: float) -> void:
 	_check_ladder()
 	_check_moments()
 	_check_callings()
+	_check_bench()
 	_check_forage()
 	_check_travel()
 	_check_region()
@@ -2534,6 +2536,32 @@ func _check_callings() -> void:
 	var still: bool = world.clock.is_paused()
 	_calling_done(String(q[0]), q[1], func(): _on_event_ack(); if still: _halt())
 
+# --- the bench (core/bench.gd; the design audit's §2.4) ---------------------
+#
+# A merc left out of the marching order too long says so, once, on a card —
+# and if they are still left out, one morning they are gone, on another. The
+# clocks are kept every frame (a merc benched under the party page starts
+# counting then, not when the page closes); the beat waits for a clear map the
+# way a calling's card does, which is also what keeps it out of a fight, a
+# site and a visit. A leaver goes back to the barracks file, where an inn may
+# offer them again one day as a veteran (core/recruits.gd).
+func _check_bench() -> void:
+	Bench.sync(party, world.clock.elapsed)
+	if _combat != null or not _visit.is_empty() or _overlay_up() or DiceRoll.in_air():
+		return
+	var b: Dictionary = Bench.tick(party, world.clock.elapsed)
+	if b.is_empty():
+		return
+	var gone := String(b["kind"]) == "leaves"
+	if gone:
+		CharacterSave.save(b["ch"])
+		_lair_msg.text = "%s has left the company." % String(b["name"])
+	_autosave()   # the warning is a mark too: a reload must not tell it twice
+	var still: bool = world.clock.is_paused()
+	_card({"id": "bench-" + String(b["kind"]), "title": "Gone" if gone else "Restless",
+		"kind": "bad", "text": String(b["text"]), "art": "camp-night"},
+		func(): _on_event_ack(); if still: _halt())
+
 # The screen saying what just happened, in callings.gd's one shape; `who` is
 # the member who did it — the row's roller, the fight's leader, the visit's —
 # and is the bond the resolution pays. Paid here and now (core/callings.gd's
@@ -3541,7 +3569,7 @@ func _rest() -> void:
 		(" " + " ".join(mended)) if not mended.is_empty() else ""])
 	# The same fire as a camp's, over the inn page; the panel under it has
 	# already said what the night cost.
-	_fireside(RNG.new(maxi(1, absi(hash("inn|%s|%d" % [s.id, int(world.clock.elapsed)])))), _on_inn_card_ack)
+	_fireside(RNG.new(maxi(1, absi(hash("inn|%s|%d" % [s.id, int(world.clock.elapsed)])))), _on_inn_card_ack, true)
 	# A past told at this very inn can name this very town — the charlatan's
 	# old mark, the noble's envoy. The gate's check ran before it was told;
 	# asked again, it is done, and the card comes down as the party leaves.
@@ -3712,8 +3740,9 @@ func _card(e: Dictionary, then: Callable) -> void:
 # a landmark does, so nothing is applied until the player answers. Returns
 # false when the fire has nothing to say and the caller shows its own night.
 # `then` is the outcome card's ack: the camp's resumes the clock, the inn's
-# leaves it to the visit.
-func _fireside(rng: RNG, then: Callable) -> bool:
+# leaves it to the visit. `bench` is the inn's and the lodge's: under a roof the
+# benched are at the same fire, and can be the pair (the audit's §2.4b).
+func _fireside(rng: RNG, then: Callable, bench := false) -> bool:
 	# A calling outranks a warming: the telling first, once per hero, ever —
 	# beat() marks the target as it speaks, and the map's layers re-read
 	# found/discovered every frame, so the mark is on the map under the card.
@@ -3734,7 +3763,7 @@ func _fireside(rng: RNG, then: Callable) -> bool:
 	if not tb.is_empty():
 		_camp_card("fireside", "At the fire", String(tb["kind"]), String(tb["text"]), then, "camp-night")
 		return true
-	var m: Dictionary = PartyOpinion.camp_moment(party, rng)
+	var m: Dictionary = PartyOpinion.camp_moment(party, rng, bench)
 	if m.is_empty():
 		return false
 	var kind := String(m["kind"])
