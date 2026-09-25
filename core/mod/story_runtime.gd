@@ -239,7 +239,9 @@ func _one(key: String, c: Dictionary, world, party) -> bool:
 			return lf != null and lf.discovered
 		"region":
 			var p = world.player() if world != null else null
-			return p != null and Regions.band_of(world, p.position) == String(c[key])
+			# within(), not band_of() ==: a country holds its sub-bands, so a pack's
+			# {"region": "deeps"} still holds out in the Unmapped (core/regions.gd).
+			return p != null and Regions.within(world, p.position, String(c[key]))
 		"day":
 			return world != null and world.clock.elapsed / DAY >= float(c[key]) - 1.0
 		"opinion":

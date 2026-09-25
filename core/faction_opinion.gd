@@ -94,6 +94,13 @@ static func guards_attack(faction: String) -> bool:
 static func price_factor(opinion: float) -> float:
 	return 1.0 - PRICE_SWING * opinion / RANGE
 
+# The same swing the other way, for what they PAY: x1.4 at +100, x0.6 at -100.
+# Selling used to ride price_factor capped at 1.0, so being liked made every
+# sale worse and a beloved town paid 30% of list against a stranger's 50% (the
+# design audit §5.6). A friend gives you a better price in both directions.
+static func sell_factor(opinion: float) -> float:
+	return 1.0 + PRICE_SWING * opinion / RANGE
+
 # --- per-frame upkeep --------------------------------------------------------
 
 # Drain O6's hook (Settlement.pending_opinion_delta) into the settlement's faction

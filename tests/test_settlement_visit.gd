@@ -54,13 +54,13 @@ func test_bench_rests_and_healer_raises() -> void:
 	check(benched.hp_current == -1, "a long rest heals the benched member too (#108)")
 	benched.dead = true
 	benched.hp_current = 0
-	party.gold = Party.REVIVE_COST - 1
+	party.gold = Party.revive_cost(benched) - 1
 	var r: Dictionary = Visit.raise_dead(party, benched.id)
 	check(not r["ok"] and benched.dead, "a purse short of the fee raises nobody")
-	party.gold = Party.REVIVE_COST
+	party.gold = Party.revive_cost(benched)
 	r = Visit.raise_dead(party, benched.id)
 	check(r["ok"] and not benched.dead and benched.hp_current == 1 and party.gold == 0,
-		"the healer raises the dead for REVIVE_COST, no caster asked (#109)")
+		"the healer raises the dead for the hero's level price, no caster asked (#109)")
 	check(not Visit.raise_dead(party, benched.id)["ok"], "...and only the dead")
 	check(party.summary(benched.id).get("dead", true) == false, "the summary carries the flag the party card reads")
 
@@ -426,10 +426,25 @@ func test_opinion_moves_prices_and_can_refuse_trade() -> void:
 	var id: String = neutral["stock"][0]["item_id"]
 	check(Visit.price_of(hated, id) > Visit.price_of(neutral, id), "the shelf price follows")
 	var full := Visit.RESTOCK * Visit.MAX_STEPS
-	check(Visit.sell_price(Visit.market(s, full, false, 40.0), id) < Visit.sell_price(Visit.market(s, full, false), id),
-		"so does the sell price, off a full shelf")
-	check(Visit.sell_price(hated, id) == Visit.sell_price(neutral, id) and Visit.sell_price(neutral, id) == Visit.sell_price(Visit.market(s, full, false), id),
-		"...but a dear shelf pays list, never a premium")
+	# The design audit §5.6: the sell price turns the other way. A people who
+	# like you pay MORE for your goods, and one that dislikes you less — it
+	# used to ride min(1, markup), so being liked made every sale worse.
+	check(Visit.sell_price(loved, "plate") > Visit.sell_price(neutral, "plate"),
+		"a friendly town pays more for your goods (%d vs %d)" % [Visit.sell_price(loved, "plate"), Visit.sell_price(neutral, "plate")])
+	check(Visit.sell_price(hated, "plate") < Visit.sell_price(neutral, "plate"),
+		"...and a cold one less (%d vs %d)" % [Visit.sell_price(hated, "plate"), Visit.sell_price(neutral, "plate")])
+	check(Visit.sell_price(neutral, "plate") == Visit.sell_price(Visit.market(s, full, false), "plate")
+			and Visit.sell_price(Visit.market(s, full, true), "plate") == Visit.sell_price(neutral, "plate"),
+		"...but a thin or war-struck shelf pays no premium for them")
+	var sword := "plate"
+	var list := Campaign.item_price(sword)
+	check(Visit.sell_price({"opinion": 0.0}, sword) == maxi(1, roundi(list * Campaign.SELL_RATE)),
+		"a stranger pays SELL_RATE of list (%d of %d)" % [Visit.sell_price({"opinion": 0.0}, sword), list])
+	check(Visit.sell_price({"opinion": 100.0}, sword) == maxi(1, roundi(list * Campaign.SELL_RATE * 1.4)),
+		"a people at +100 pays x1.4 of that")
+	check(Visit.sell_price({"opinion": -100.0}, sword) == maxi(1, roundi(list * Campaign.SELL_RATE * 0.6)),
+		"...and one at -100 x0.6")
+	check(is_equal_approx(Campaign.SELL_RATE, 0.2), "loot sells for a fifth of list (audit §5.1a)")
 
 	var refused := Visit.market(s, 120.0, false, FactionOpinion.REFUSE_TRADE - 1.0)
 	check(refused["refused"] and refused["stock"].is_empty(), "below the floor they will not deal")
@@ -505,7 +520,10 @@ func test_persuade_and_investigate() -> void:
 	Visit.apply_haggle(priced, 0.85)
 	check(Visit.price_of(priced, id2) == maxi(1, int(round(before_price * 0.85))),
 		"apply_haggle rescales every shelf price")
-	check(is_equal_approx(priced["markup"], before_markup * 0.85), "...and the markup itself, so sell prices follow too")
+	var sold_before: int = Visit.sell_price(Visit.market(s, 120.0, false), "plate")
+	check(is_equal_approx(priced["markup"], before_markup * 0.85), "...and the markup itself")
+	check(Visit.sell_price(priced, "plate") > sold_before,
+		"...and a won haggle raises what they pay, the other way round (%d vs %d)" % [Visit.sell_price(priced, "plate"), sold_before])
 
 	# --- investigate_battle ---
 	var no_battle := Visit.market(s, 120.0, false)

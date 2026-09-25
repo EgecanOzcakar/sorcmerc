@@ -328,6 +328,11 @@ the log lines with it or not at all.
 - **A lover's death** is not an event yet and should be; the roster keeps
   the dead (`ch.dead`) so the pair survives it, which is right — a
   resurrection restores a relationship that was never removed.
+  *Since 2026-09-25 it is one* (`PartyOpinion.mourn`, called from
+  `core/fallen.gd`; build log `docs/plan/2026-09-25-mercs-remembered.md`):
+  the ones who lose the same person draw together, and the dead's close
+  ones — a lover twice as much — hold it against whoever walked away from
+  that fight. The pair with the dead is still kept.
 - **Not measured:** anything against a human. The numbers in §6 are the
   autopilot against the scaler's rosters, which is what every prior sweep
   measured too, so they compare; they do not say how the effects *feel*.

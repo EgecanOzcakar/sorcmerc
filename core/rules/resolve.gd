@@ -12,6 +12,7 @@ const PassGear = preload("res://core/rules/pass_gear.gd")
 const PassSpells = preload("res://core/rules/pass_spells.gd")
 const PassPools = preload("res://core/rules/pass_pools.gd")
 const PassPending = preload("res://core/rules/pass_pending.gd")
+const PassItems = preload("res://core/rules/pass_items.gd")   # 2026-09-25: magic items on the sheet
 
 static func resolve(ch) -> Resolved:
 	var r := Resolved.new()
@@ -30,10 +31,15 @@ static func resolve(ch) -> Resolved:
 		if d != null and d.get("type") == "subclass":
 			r.subclasses[tg["grant"]["classId"]] = d["subclassId"]
 
-	# 1. abilities
+	# 1. abilities — and a worn item that sets one (gauntlets of ogre power)
+	# before anything reads a modifier off them.
+	var worn := PassItems.worn(ch)
+	for w in worn["warnings"]:
+		r.warnings.append(String(w))
 	var ab := PassAbilities.resolve(ch.base_abilities, b, ch.choices)
 	r.abilities = ab["abilities"]
 	r.warnings.append_array(ab["warnings"])
+	PassItems.apply_abilities(r, worn)
 	r.initiative = r.mod("dex")
 
 	# 2. proficiencies, saves, skills
@@ -46,6 +52,7 @@ static func resolve(ch) -> Resolved:
 	var sk := PassProfs.skills(r.abilities, b, r.proficiency_bonus, ch.choices)
 	r.skills = sk["skills"]
 	r.skill_prof = sk["skill_prof"]
+	PassItems.apply_saves(r, worn)   # a cloak's saves, a luckstone's checks
 	r.passive_perception = 10 + int(r.skills.get("perception", 0))
 
 	# 3/4. hp, speed
@@ -73,6 +80,9 @@ static func resolve(ch) -> Resolved:
 	var acr := PassDefense.ac(b, r.abilities, armor_ac)
 	r.ac = acr["ac"]
 	r.ac_breakdown = acr["breakdown"]
+	for bonus in PassItems.ac_bonuses(worn, armor_ac):   # +N armor, a cloak, a ring
+		r.ac += int(bonus["bonus"])
+		r.ac_breakdown.append(bonus)
 
 	# 7. attacks
 	for tg in Bundles.of_type(b, "fighting-style-choice"):
@@ -85,11 +95,13 @@ static func resolve(ch) -> Resolved:
 	r.attacks = PassGear.attacks(r.equipment, r.abilities, r.proficiency_bonus,
 		r.proficiencies["weapon"], r.fighting_styles, Bundles.class_level(b, "monk"),
 		r.weapon_masteries)
+	PassItems.apply_attacks(r, worn, String(ch.offhand))   # a +N weapon, bracers of archery
 
 	# 8. spells
 	var sp := PassSpells.resolve(b, r.abilities, r.proficiency_bonus, r.level)
 	r.spellcasting = sp["spellcasting"]
 	r.warnings.append_array(sp["warnings"])
+	PassItems.apply_spells(r, worn)   # a wand of the war mage
 
 	# 9. pools
 	var pl := PassPools.resolve(b)
@@ -107,6 +119,7 @@ static func resolve(ch) -> Resolved:
 		var dt: String = tg["grant"]["damageType"]
 		if not dt in r.resistances:
 			r.resistances.append(dt)
+	PassItems.apply_resist(r, worn)   # a brooch of shielding
 
 	# 10. pending
 	var pd := PassPending.resolve(b, ch.choices, r.skill_prof, r.proficiencies["weapon"],

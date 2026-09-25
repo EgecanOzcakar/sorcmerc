@@ -27,7 +27,9 @@ var dead: bool = false                  # died in a fight; benched until revived
 # `traits_offered`: a hero from before traits has been offered the pick once.
 # `trait_counts`: what earns a trait by counting rather than rolling —
 # "kill:<faction>" toward a bane, "wins" toward Veteran, "downed:<faction>"
-# toward the put-down-twice hardship.
+# toward the put-down-twice hardship; plus the two the service record adds
+# (core/service.gd, the design audit §2.2): "fights" and "runs", the companies
+# served with. Read back on the profile's Service panel and at an inn.
 var traits: Array = []
 var traits_offered: bool = false
 var trait_counts: Dictionary = {}

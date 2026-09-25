@@ -33,6 +33,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Manifest = preload("res://core/mod/manifest.gd")
+const PassItems = preload("res://core/rules/pass_items.gd")
 const Quest = preload("res://core/quest.gd")
 const Regions = preload("res://core/regions.gd")
 const Registry = preload("res://core/mod/registry.gd")
@@ -50,12 +51,12 @@ const DOCS := "res://docs/modding.md"
 const DOCUMENTED := ["manifest.kinds", "manifest.access", "manifest.data_files",
 	"effects.kinds", "effects.reaction_triggers", "quest.kinds", "story.beat_kinds",
 	"story.condition_keys", "story.effect_keys", "story.quest_states",
-	"world.kinds", "world.behaviors", "world.factions", "world.bands"]
+	"world.kinds", "world.behaviors", "world.factions", "world.bands", "items.slots", "items.keys"]
 
 const ID_FILES := ["spells.json", "bestiary.json", "monsters.json", "magic-items.json",
 	"classes.json", "subclasses.json", "species.json", "backgrounds.json", "feats.json",
 	"conditions.json", "weapons.json", "armor.json",
-	"effects/features.json", "effects/spells.json", "effects/potions.json"]
+	"effects/features.json", "effects/spells.json", "effects/potions.json", "effects/items.json"]
 
 var _pass := 0
 var _fail := 0
@@ -84,6 +85,7 @@ static func vocab() -> Dictionary:
 		"world.kinds": WorldPack.KINDS, "world.behaviors": WorldPack.BEHAVIORS,
 		"world.roles": WorldPack.ROLES, "world.factions": Scaler.FACTIONS, "world.bands": bands,
 		"encounter.themes": Encounter.THEMES, "callings.done_by": Callings.DONE_BY.keys(),
+		"items.slots": PassItems.SLOTS, "items.keys": PassItems.KEYS,
 	}
 
 static func ids() -> Dictionary:

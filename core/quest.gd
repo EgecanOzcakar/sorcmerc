@@ -18,7 +18,10 @@
 #     target_region_id (scout_region) — D7's three, completing via
 #     record_stash/record_settlement_visited/record_region_reached.
 #   required, progress, state: "offered" | "active" | "complete" | "turned_in",
-#   reward: {gold, item_id (optional)}   — turn-in also pays gold * XP_PER_GOLD in XP
+#   reward: {gold, xp (optional), item_id (optional)} — xp is stamped at posting
+#     (core/quest_posting.gd) off the region's fight XP; a job without one (a
+#     save from before 2026-09-25, a curated job on the linear run, a pack's
+#     story quest) pays gold * XP_PER_GOLD, the old rate. See xp_reward().
 #   issuer, against — contracts (core/contracts.gd): the people who posted it,
 #     who are credited at turn-in wherever it is handed in, and the faction it
 #     is aimed at ("" for nobody). Absent on a job posted before contracts,
@@ -36,10 +39,44 @@ const Ladder = preload("res://core/ladder.gd")
 const Contracts = preload("res://core/contracts.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")
 
-# A fight pays XP at about 6.7x its gold (core/encounter.gd's XP_PER_POWER /
-# GOLD_PER_POWER); a quest pays less per coin because it also hands over gear
-# and reputation. 2x puts a 120-gold job at ~4 early open-country fights.
+# What a finished job teaches, in fights' worth of XP. It used to be the purse
+# x XP_PER_GOLD, after the renown and regard premiums (up to x1.75, x2.6 with
+# a raid's), so a famous company learned more from the same errand and a 200 ◉
+# Heartland job was eight level-1 fights of XP — the Heartland was outgrown on
+# the notice board, and a job paid the same wherever it was posted (the design
+# audit §5.3). Now quest XP is N typical fights of the posting's own country:
+# Regions.fight_xp(level), what an easy open-country fight pays the ruler
+# party at the level that country pins a fight to, which is exactly how a road
+# fight is paid (power x Encounter.XP_PER_POWER). Renown and regard multiply
+# the gold only.
+#
+# N is on top of the fights the job itself holds — a hunt's band pays for its
+# own fight, a lair's rooms for theirs — so it is the job's worth beyond them:
+# a delivery or a scouting ride is two fights of time on the road, a lair or a
+# rescue three, a raid on a city four, an order off a counter one. A chain's
+# later jobs add one fight a tier, the way their purse grows. ESTIMATED (fight
+# XP from tests/sweep_economy.gd): a clear-lair job at level 1 is ~140 XP where
+# the purse rate paid ~300; at level 3 ~370 (about the same as before); in the
+# Deeps at level 10, ~1,240 where it paid ~300.
+const XP_FIGHTS := {"kill_count": 3, "collect_item": 3, "hunt_party": 2,
+	"raid_settlement": 4, "clear_lair": 3, "supply_item": 1, "deliver_goods": 2,
+	"scout_region": 2, "rescue": 3}
+# The old rate, kept for a job that carries no stamped xp: a quest taken before
+# the change, the linear run's curated jobs (no map, so no country to read)
+# and a content pack's story quest. A fight pays XP at about 6.7x its gold.
 const XP_PER_GOLD := 2
+
+# The XP turning this job in pays: the stamped reward.xp, or the old
+# gold-pegged rate for a job that has none.
+static func xp_reward(quest: Dictionary) -> int:
+	var reward: Dictionary = quest.get("reward", {})
+	if reward.has("xp"):
+		return maxi(0, int(reward["xp"]))
+	return int(reward.get("gold", 0)) * XP_PER_GOLD
+
+# N fights of `fight_xp` for this kind of job, plus one a chain tier.
+static func xp_for(kind: String, fight_xp: int, tier := 0) -> int:
+	return (int(XP_FIGHTS.get(kind, 2)) + maxi(0, tier)) * maxi(0, fight_xp)
 
 const BIAS_WEIGHT := 2.0   # what an unfulfilled quest is worth to Scaler.roster_for
 
@@ -369,9 +406,18 @@ static func record_settlement_visited(party, settlement_id: String) -> void:
 # scout_region — ride out into a band (core/regions.gd's rings) and come back
 # able to say what is there. Completes on crossing in, turns in back at the
 # giver; scenes/world/world.gd calls this from _check_region().
+#
+# Standing in a sub-band is standing in its country too (core/regions.gd's
+# part_of): a job sent to "deeps" completes out in the Unmapped, and the
+# regions_4 achievement counts countries, so crossing a seam inside the Far
+# Deeps is not a fifth region.
 static func record_region_reached(party, region_id: String) -> void:
-	Ach.collect("regions", region_id)
+	var Regions = load("res://core/regions.gd")   # load, as story.gd does: its preload chain is long to hang off this file
+	var country: String = Regions.country_of(region_id)
+	Ach.collect("regions", country)
 	_complete_world_target(party, "scout_region", "target_region_id", region_id)
+	if country != region_id:
+		_complete_world_target(party, "scout_region", "target_region_id", country)
 
 # supply_item — a counter wants goods in hand, and does not care how you came by
 # them: bought at the next town, looted, or already in the pack when they asked.
@@ -454,9 +500,11 @@ static func turn_in(party, quest: Dictionary, faction := "") -> bool:
 		Contracts.credit(quest, faction)
 	var reward: Dictionary = quest.get("reward", {})
 	party.add_gold(int(reward.get("gold", 0)))
-	# A finished job teaches something too: XP pegged to the purse, split the
-	# way a fight's is (load(), not preload — campaign.gd preloads this file).
-	load("res://core/campaign.gd").split_xp(party, int(reward.get("gold", 0)) * XP_PER_GOLD)
+	# A finished job teaches something too: the region's fights' worth stamped
+	# at posting (xp_reward), split the way a fight's is (load(), not preload —
+	# campaign.gd preloads this file). It reaches lifetime XP through split_xp,
+	# as a fight's does (the owner's call, audit §5.5).
+	load("res://core/campaign.gd").split_xp(party, xp_reward(quest))
 	if reward.has("item_id"):
 		party.stash_add(String(reward["item_id"]))
 	# The two kinds that are paid for goods hand the goods over.

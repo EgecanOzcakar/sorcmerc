@@ -72,13 +72,17 @@ const DATA_FILES := ["classes.json", "subclasses.json", "species.json",
 	# The inns' hirelings (core/recruits.gd): what they are called, by species,
 	# and what they carry, by class — so a pack's new species is not a common
 	# room full of "default" names, and its new class does not sign on unarmed.
-	"recruit-names.json", "recruit-kits.json"]
+	"recruit-names.json", "recruit-kits.json",
+	# 2026-09-25: what a worn magic item does on the sheet (core/rules/
+	# pass_items.gd). Added, not renamed: every API-1 pack still loads.
+	"effects/items.json"]
 
 # The subset of DATA_FILES that is an object keyed by id rather than a list of
-# records, and whose values core/rules/effects.gd interprets. Listed apart
-# because registry.gd validates them against that vocabulary at scan time.
+# records, and whose values core/rules/effects.gd (or, for items,
+# core/rules/pass_items.gd) interprets. Listed apart because registry.gd
+# validates them against that vocabulary at scan time.
 const EFFECT_FILES := ["effects/spells.json", "effects/potions.json",
-	"effects/features.json", "effects/conditions.json"]
+	"effects/features.json", "effects/conditions.json", "effects/items.json"]
 
 const SLUG := "^[a-z0-9][a-z0-9_-]*$"
 

@@ -17,6 +17,7 @@ const Traits = preload("res://core/traits.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const ChoicePick = preload("res://core/rules/choice_pick.gd")
 const CharacterSave = preload("res://core/character_save.gd")
+const Service = preload("res://core/service.gd")
 
 var _pass := 0
 var _fail := 0
@@ -211,10 +212,17 @@ func _init() -> void:
 	# --- veterans: barracks heroes, at their own level, where the country fits them
 	var vet = _hero("old-hand", 1)
 	vet.cname = "Old Hand"
-	vet.dead = true
+	vet.hp_current = 3   # saved hurt: a returning hero comes back rested
+	vet.trait_counts = {"runs": 2, "fights": 30, "wins": 25, "kill:goblinoid": 14, "kill:orc": 3}
+	vet.traits.append({"id": "burn-shy", "why": "Went down in the fire", "since": 900.0})
 	CharacterSave.save(vet)
 	var giant = _hero("far-too-good", 9)
 	CharacterSave.save(giant)
+	# The design audit §2.1: a hero who died in an earlier run and was never
+	# raised stays dead — filed dead, never offered, never stood back up.
+	var ghost = _hero("fell-at-the-ford", 1)
+	ghost.dead = true
+	CharacterSave.save(ghost)
 	var fresh = Party.new()
 	fresh.add_member(_hero("founder"))
 	fresh.gold = 1000
@@ -223,21 +231,49 @@ func _init() -> void:
 		w.clock.elapsed = 10.0 + Recruits.PERIOD * day
 		for o in Recruits.offers(city, w, fresh):
 			check(String(o["veteran"]) != "far-too-good", "a veteran above the country's level is never offered (day %d)" % day)
+			check(String(o["veteran"]) != "fell-at-the-ford", "the dead are never offered as veterans (day %d)" % day)
 			if String(o["veteran"]) == "old-hand" and vo.is_empty():
 				vo = o
 	check(not vo.is_empty(), "a barracks hero turns up as a veteran within 40 days")
+	check(Recruits.build({"seed": 1, "level": 1, "veteran": "fell-at-the-ford"}) == null,
+		"...and a stale offer naming the dead builds nobody, rather than raising them")
 	if not vo.is_empty():
 		w.clock.elapsed = 10.0 + Recruits.PERIOD * int(vo["period"])
 		var back_ch = Recruits.build(vo)
-		check(back_ch.cname == "Old Hand" and back_ch.level() == 1 and not back_ch.dead and int(vo["level"]) == 1,
-			"...as themselves, at their own level, alive and rested")
+		check(back_ch.cname == "Old Hand" and back_ch.level() == 1 and not back_ch.dead and int(vo["level"]) == 1
+			and back_ch.hp_current == -1, "...as themselves, at their own level, alive and rested")
+		# Audit 2.5: the inn reads their earlier runs back, not just "(a veteran)".
+		var rec := Service.veteran_line(back_ch)
+		check(rec == "Two companies before this one: 30 fights, 17 kills, one scar.", "the veteran's record: %s" % rec)
 		_finish(back_ch)
 		check(Recruits.hire(fresh, w, city, vo, back_ch) == "" and fresh.get_member("old-hand") != null,
 			"...hired under their own barracks id")
+		check(int(fresh.get_member("old-hand").trait_counts.get("runs", 0)) == 3, "...and signing on is one more company served")
 		check(not Recruits.offers(city, w, fresh).any(func(o): return String(o["veteran"]) == "old-hand"),
 			"...and not offered again while they are on the roster")
 	CharacterSave.delete("old-hand")
 	CharacterSave.delete("far-too-good")
+	CharacterSave.delete("fell-at-the-ford")
+	# A barracks hero from before runs were counted served the one that filed them.
+	check(Service.veteran_line(_hero("old-file", 1)) == "One company before this one: 0 fights, 0 kills, no scars.",
+		"an uncounted veteran reads as one run: %s" % Service.veteran_line(_hero("old-file", 1)))
+
+	# --- the intro: who they are in a line (audit 2.5) ----------------------------------
+	var intros := {}
+	for i in 40:
+		var ch = Recruits.build({"seed": absi(hash("intro|%d" % i)) + 1, "level": 1, "veteran": ""})
+		var line := Recruits.intro(ch)
+		check(line != "" and line.ends_with(".") and not "'t " in line and not "!" in line,
+			"every recruit has an intro in the house register: %s" % line)
+		check(Recruits.intro(ch) == line, "...the same one on every look")
+		check(String(Recruits.PAST.get(ch.background_id, [""])[0]) in line or String(Recruits.PAST.get(ch.background_id, ["", ""])[1]) in line,
+			"...built from their background (%s)" % ch.background_id)
+		intros[line] = true
+	check(intros.size() > 25, "...and the table does not say the same thing twice over (%d distinct of 40)" % intros.size())
+	for bg in Recruits.PAST:
+		check(Recruits.PAST[bg].size() >= 2, "%s has two lines of past" % bg)
+	for t in Traits.of_family("temperament"):
+		check(Recruits.TEMPER.get(t, []).size() >= 2, "%s has two lines of temper" % t)
 
 	# --- the settle-in page -----------------------------------------------------------
 	w.clock.elapsed = 100.0

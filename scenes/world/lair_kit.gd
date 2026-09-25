@@ -70,10 +70,16 @@ static func has(id: String) -> bool:
 static func plan(id: String) -> Array:
 	if not has(id):
 		return []
+	return _plan(id, id)
+
+
+# `shape` is which of the five builders; `key` seeds it, so two lairs built on
+# one shape (a kobold pit and an orc camp, both stockades) are still two places.
+static func _plan(shape: String, key: String) -> Array:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("lair/%s" % id)
+	rng.seed = hash("lair/%s" % key)
 	var parts: Array = []
-	match id:
+	match shape:
 		"goblin-warren": _warren(parts, rng)
 		"giant-hold": _hold(parts, rng)
 		"dragon-cave": _cave(parts, rng)
@@ -85,6 +91,72 @@ static func plan(id: String) -> Array:
 
 static func build(id: String) -> Node3D:
 	return KitParts.assemble(plan(id), LAIRS[id], id)
+
+
+# --- every other lair: a kit by faction --------------------------------------
+#
+# A lair id this file has no plan for — the ten core/world_homes.gd places
+# (2026-09-25), a content pack's own ("ash-warren", "the-crown-vault"), a raid's
+# outpost — used to come back null from Lairs3D._build(), and a found lair drew
+# nothing at all: a name label over bare ground. Every lair has a faction, so
+# the faction picks one of the five shapes and a palette of its own, and the
+# lair's id seeds it. Not five more hand-built dioramas; a place that reads as
+# its people's until one is authored (the Still open of the 2026-09-25 entry).
+#
+# `shape` is a key of LAIRS above; `colours` overrides that shape's palette.
+# A faction nobody listed gets the ruins, the one shape that belongs to nobody.
+const FACTION_KITS := {
+	"goblinoid": {"shape": "goblin-warren", "colours": {}},
+	"giant": {"shape": "giant-hold", "colours": {}},
+	"dragon": {"shape": "dragon-cave", "colours": {}},
+	"undead": {"shape": "zombie-graveyard", "colours": {}},
+	# Stockades: the camp-builders, told apart by what their hides and fires are.
+	"bandit": {"shape": "goblin-warren", "colours": {"ground": Color("5a5238"),
+		"hide": Color("6e5a44"), "wood": Color("4a3b2a"), "fire": Color("c8641f")}},
+	"kobold": {"shape": "goblin-warren", "colours": {"ground": Color("5c4a36"),
+		"hide": Color("a0582e"), "wood": Color("4a3626"), "fire": Color("d8a030")}},
+	"orc": {"shape": "goblin-warren", "colours": {"ground": Color("564a34"),
+		"hide": Color("5e6a3a"), "wood": Color("3e3122"), "fire": Color("b8421a")}},
+	"gnoll": {"shape": "goblin-warren", "colours": {"ground": Color("6a5a3a"),
+		"hide": Color("9a8250"), "bone": Color("e0d6b6"), "fire": Color("c0501c")}},
+	# Standing stones: the old and the made.
+	"beast": {"shape": "giant-hold", "colours": {"ground": Color("4f5a3a"),
+		"stone": Color("5f6650"), "moss": Color("4f6b35"), "dark": Color("33382a")}},
+	"elemental": {"shape": "giant-hold", "colours": {"ground": Color("4a4640"),
+		"stone": Color("8a7a66"), "moss": Color("c8641f"), "dark": Color("3a3530")}},
+	"construct": {"shape": "giant-hold", "colours": {"ground": Color("4a4a48"),
+		"stone": Color("6e6e6a"), "moss": Color("8a6a3a"), "dark": Color("2c2c2e")}},
+	# Ruins: somebody else's building, now used for something worse.
+	"cultist": {"shape": "sunken-ruins", "colours": {"ground": Color("3e3a3c"),
+		"stone": Color("7a7270"), "water": Color("3a1618"), "moss": Color("4a3a4a")}},
+	"fey": {"shape": "sunken-ruins", "colours": {"ground": Color("3f5a3c"),
+		"stone": Color("a8b4a0"), "water": Color("2c4a52"), "moss": Color("5e8a3e")}},
+	"monstrosity": {"shape": "dragon-cave", "colours": {"gold": Color("8c7a5a"),
+		"scorch": Color("2e2a24")}},
+}
+
+
+# The plan for any lair: its own if it has one, else its faction's.
+static func plan_for(id: String, faction: String) -> Array:
+	if has(id):
+		return plan(id)
+	return _plan(_faction_kit(faction)["shape"], id)
+
+
+static func build_for(id: String, faction: String) -> Node3D:
+	if has(id):
+		return build(id)
+	var kit: Dictionary = _faction_kit(faction)
+	var palette: Dictionary = LAIRS[kit["shape"]].duplicate()
+	palette.merge(kit["colours"], true)
+	# The material cache is keyed on this name (KitParts.material_for), so the
+	# key is the faction's, not the shape's: an orc camp must not come out in
+	# the goblins' hide because a goblin warren was drawn first.
+	return KitParts.assemble(_plan(kit["shape"], id), palette, "%s@%s" % [kit["shape"], faction])
+
+
+static func _faction_kit(faction: String) -> Dictionary:
+	return FACTION_KITS.get(faction, {"shape": "sunken-ruins", "colours": {}})
 
 
 static func triangles(id: String) -> int:

@@ -32,6 +32,7 @@ const Coop = preload("res://core/coop.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const RelationsWeb = preload("res://scenes/party/relations_web.gd")
 const Callings = preload("res://core/callings.gd")
+const Fallen = preload("res://core/fallen.gd")   # audit 2.1: the roll of the fallen, under the roster
 const Traits = preload("res://core/traits.gd")
 const TraitOffer = preload("res://scenes/party/trait_offer.gd")
 # Whether this company still makes people, or only hires them (a run started
@@ -457,6 +458,19 @@ func _refresh() -> void:
 	_roster_col.add_child(_group_head("Marching", party.active.size(), ""))
 	for id in party.active:
 		_roster_col.add_child(_card(party.summary(id)))
+	# Audit 2.1: the roll of the fallen (core/fallen.gd), under the living,
+	# newest first — who, where and to what. Not drawn until someone is on it.
+	var roll: Array = Fallen.roll(party)
+	if not roll.is_empty():
+		_roster_col.add_child(_group_head("The fallen", roll.size(), ""))
+		for i in range(roll.size() - 1, -1, -1):
+			var l := Label.new()
+			l.text = Fallen.line(roll[i], party)
+			l.theme_type_variation = "Dim"
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size = Vector2(240, 0)
+			l.set_meta("fallen", String(roll[i]["id"]))
+			_roster_col.add_child(l)
 
 	for i in Party.MAX_ACTIVE:
 		if i < party.active.size():
@@ -584,7 +598,7 @@ func _card(sm: Dictionary) -> Control:
 	if sm.get("dead", false):   # #109: say so, and say what brings them back
 		bench.text = "Dead"
 		bench.disabled = true
-		bench.tooltip_text = "Dead. A settlement healer raises them for %d ◉; so does a Revivify caster with a 3rd-level slot, or a Scroll of Resurrection." % Party.REVIVE_COST
+		bench.tooltip_text = "Dead. A settlement healer raises them for %d ◉ (%d ◉ a level); so does a Revivify caster with a 3rd-level slot, or a Scroll of Resurrection, at the same price." % [Party.revive_cost(party.get_member(sm["id"])), Party.REVIVE_PER_LEVEL]
 	bench.pressed.connect(func():
 		if roster_locked:
 			return

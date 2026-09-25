@@ -143,7 +143,13 @@ room by room. `faction` must be one the bestiary can fill a fight from
 `soldier`) — a lair is *made of* its faction's roster. `"discovered": true`
 puts it on the map from the start. A lair on heartland or marches ground with
 a civilized settlement within 800 runs a raid clock like the built-in maps'
-(`core/raids.gd`); there is no opt-out today.
+(`core/raids.gd`); there is no opt-out today. A lair draws on the map as a
+diorama built for its faction (a stockade for orcs, standing stones for
+elementals, a ruin for a cult), seeded off its `id` so two of yours are two
+places; the built-in maps' five named lairs keep their own. The built-in maps
+also place a lair for every faction in its home country
+(`core/world_homes.gd`); a pack's map is never filled in for you — the lairs
+in your `world.json` are all the lairs there are.
 
 **Landmarks** are places on the map that are not a fight — ruins, a shrine,
 standing stones, a hermit's hut, a wreck, a watchtower (`kind`: `ruins` |
@@ -190,6 +196,11 @@ human settlement out to the furthest thing you placed, in equal-area rings
   elementals in the Deeps. Following that makes a map read right.
 - Widening your map moves the seams. Adding one far-off lair pushes every band
   outward, so place the far things first and check the near ones after.
+- The Far Deeps are two bands (since 2026-09-25): `deeps`, levels 10-14, and
+  past it `unmapped`, levels 15-20, the outermost eighth of the map. The
+  Unmapped is part of the Far Deeps, so anything that names `deeps` — a
+  `{"region": "deeps"}` condition, a `scout_region` job — holds in both;
+  name `unmapped` to mean the far edge alone. Your furthest lair sits there.
 
 `tests/test_world_pack.gd` asserts this on the shipped campaign: three lairs,
 three bands, no region data in the pack at all.
@@ -288,7 +299,7 @@ kills, the turn-in at any merchant, the log panel, the encounter spawn bias. A
 | `clear_lair` | `target_lair_id` | that lair is cleared |
 | `supply_item` | `target_item_id` | that many are in the shared stash |
 | `deliver_goods` | `target_settlement_id` | the party walks into that settlement |
-| `scout_region` | `target_region_id` | the party is standing in that band (`heartland` / `marches` / `frontier` / `deeps`) |
+| `scout_region` | `target_region_id` | the party is standing in that band (`heartland` / `marches` / `frontier` / `deeps` / `unmapped`; `deeps` includes the Unmapped) |
 | `rescue` | `target_lair_id` | the captive in that lair's pens is freed (the room's rescue objective is done) |
 
 Any quest may also carry **`deadline_days`** (optional, a number, 1 or more):
@@ -320,7 +331,7 @@ opens".
 | `{"near": "emberwatch", "within": 120}` | the party is that close (default 60). Works on lairs too. |
 | `{"lair_found": "ash-warren"}` | discovered |
 | `{"lair_cleared": "ash-warren"}` | looted |
-| `{"region": "frontier"}` | the party is standing in that band |
+| `{"region": "frontier"}` | the party is standing in that band (`deeps` includes its outer half, `unmapped`) |
 | `{"day": 4}` | world-day 4 or later |
 | `{"opinion": {"faction": "human", "atleast": 20}}` | that faction thinks that well of you |
 | `{"all": [...]}` `{"any": [...]}` `{"none": [...]}` | nesting |
@@ -367,9 +378,9 @@ made aware that packs exist.
 Overlayable files: `classes.json`, `subclasses.json`, `species.json`,
 `backgrounds.json`, `feats.json`, `fighting-styles.json`, `weapons.json`,
 `armor.json`, `magic-items.json`, `spells.json`, `conditions.json`,
-`monsters.json`, `bestiary.json`, `skills.json`, and the four mechanics files
+`monsters.json`, `bestiary.json`, `skills.json`, and the five mechanics files
 of §5.1: `effects/spells.json`, `effects/potions.json`, `effects/features.json`,
-`effects/conditions.json`, and the two the inns' hirelings are rolled from:
+`effects/conditions.json`, `effects/items.json`, and the two the inns' hirelings are rolled from:
 `recruit-names.json` (`{"id": "<species id>", "names": [...]}` — a pack's new
 species gets its own names this way, or falls back to the `default` record)
 and `recruit-kits.json` (`{"id": "<class id>", "kits": [{"ability": "str",
@@ -401,7 +412,7 @@ Turning a pack off takes its records back out, including its retunes.
 `spells.json` says a spell exists. `effects/spells.json` says what casting it
 puts on the board. The split is not tidiness: the game's own catalog is an SRD
 export and the export carries prose, so everything mechanical is hand-authored
-over the top of it — by us, and through these same four files, by you. Without
+over the top of it — by us, and through these same five files, by you. Without
 them a pack could add a spell nobody could cast and a potion nobody could
 drink, which is exactly the silent dead-end the rest of this pipeline exists to
 refuse.
@@ -412,8 +423,9 @@ refuse.
 | `effects/potions.json` | a `magic-items.json` id | the drink: a combat action, or a swallow on the road |
 | `effects/features.json` | a feature id — one named by a monster's `features`, or a class feature | the mechanic, under a closed `kind` |
 | `effects/conditions.json` | a `conditions.json` id | what wearing that condition costs |
+| `effects/items.json` | a `magic-items.json` id | what wearing the item does on the sheet |
 
-All four are **objects keyed by id**, not lists, and they merge by key rather
+All five are **objects keyed by id**, not lists, and they merge by key rather
 than by a record's `id` field. A key beginning with `_` is an authoring comment
 and is skipped. Every id an entry names must be in the catalog or be one your
 own pack adds: a mechanic for a spell nobody wrote is an error, not a silence.
@@ -470,6 +482,33 @@ and `minutes` its life on the world clock when it is drunk on the road, where an
 unexpired buff is carried into the next fight; `road` names something it does
 out of combat. A potion with none of `heal`, `damage`, `condition`, `status` or
 `road` does nothing at all, and is refused.
+
+**A worn item** hangs a mechanic on a `magic-items.json` id, and it does
+something only while a hero has it on (the profile moves it from the stash to
+the hero). An item with no entry here can still be found, bought, worn and
+sold; it just does nothing in a fight. Everything an entry says lands on the
+hero's sheet, so the difficulty curve prices it the way it prices a feat: a
+company in better gear is sent a bigger fight.
+
+```json
+"cloak-of-embers": {"slot": "worn", "ac": 1, "resist": ["fire"],
+                    "text": "+1 AC and resistance to fire"}
+```
+
+`slot` is one of `weapon` (the bonus rides the weapon in the hero's hand, every
+weapon attack but the off-hand one), `armor` (it needs body armor worn),
+`shield` (the item is a shield in its own right, the game's `shield` plus its
+bonus) or `worn` (no condition). The other keys: `attack` and `damage` add to
+weapon attacks, and `weapons` narrows them to a list of `weapons.json` ids;
+`ac` adds to Armor Class, and `unarmored` limits it to a hero with no armor
+and no shield; `saves` adds to all six saving throws and `checks` to every
+skill and to initiative; `set_ability` raises a score to a value
+(`{"str": 19}`) when it is lower; `spell_attack` adds to spell attack rolls;
+`resist` lists damage types; `text` is the line the sheet shows. A key that is
+not one of these, a slot that is not one of the four, or an ability that is
+not one of the six is refused. One of each id counts, the best `weapon`,
+`armor` and `shield` item counts, and at most three items that need attunement
+(`magic-items.json`'s `attunement`) count at once.
 
 **A feature** is a mechanic under a closed `kind`:
 
@@ -557,7 +596,7 @@ Every hero's background hands them a **calling** — a personal quest pointed
 at something the live map holds (`core/callings.gd`: the acolyte's defiled
 shrine, the soldier's deserters, the sage's lost library under a lair), told
 once at the campfire, done on the road, paid in XP, an heirloom and a bond.
-The game ships sixteen, one per background. A pack can add or replace them:
+The game ships two or three for each of the sixteen backgrounds. A pack can add or replace them:
 
 ```json
 "callings": "callings.json"
@@ -578,7 +617,10 @@ The game ships sixteen, one per background. A pack can add or replace them:
 
 Keyed by background id, merged over the built-in table **by background**: a
 background the game already has is replaced, one it does not (a background
-your `backgrounds.json` overlay adds) is added. Each entry:
+your `backgrounds.json` overlay adds) is added. The game ships two or three
+pasts for each background and picks one per hero; a pack's entry for a
+background is *the* past for it, and the built-in alternatives for that
+background step aside while the pack is on. Each entry:
 
 | Key | Meaning |
 |---|---|
@@ -708,6 +750,7 @@ without rewriting the chapter around it.
 | `core/rules/catalog.gd` | where data overlays land |
 | `core/rules/effects.gd` | the `data/effects/*.json` vocabulary, and what reads it |
 | `core/potions.gd` | `effects/potions.json`: the two doors a bottle opens |
+| `core/rules/pass_items.gd` | `effects/items.json`: a worn magic item on the sheet |
 | `core/rules/power.gd` | what a monster's defences and features cost the fight builder |
 | `scenes/mods/mods.gd` | the browser |
 | `scenes/world/story_card.gd` | the card a beat is shown on |

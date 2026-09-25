@@ -25,7 +25,8 @@
 #   "elapsed": 742.5,                 // World.clock.elapsed, world-minutes
 #   "opinion": {"soldier": -12.0},    // FactionOpinion.all()
 #   "ladder": {"deeds": {"human": 13}, "audiences": ["human"]},   // Ladder.all()
-#   "origin": {"kind": "procedural", "seed": 42},   // which builder made this map
+#   "origin": {"kind": "procedural", "seed": 42, "homes": true},   // which builder made this map;
+#                                     // "homes": its lair-for-every-people pass is done (core/world_homes.gd)
 #   "settlements": [
 #     {"id": "riverhold", "sname": "Riverhold", "position": [0, 0], "faction": "soldier",
 #      "kind": "city", "last_visited": 120.0, "battle_at": -1.0, "pending_opinion_delta": 0.0}
@@ -47,6 +48,7 @@
 #     "downtime": {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}  // Downtime.to_dict
 #     "lodge": {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, ...}  // Lodge.to_dict; {} until bought
 #     "hiring": {"rule": "hire", "taken": {"riverhold": {"period": 3, "slots": [0]}}}  // Recruits.to_dict; {} = grandfathered
+#     "fallen": [{"id": "vera", "name": "Vera Kord", "level": 3, "class": "fighter", "where": "...", "by": "ogre", "day": 6, ...}]  // Fallen.to_dict; [] = nobody lost yet
 #     "bench": {"thrun": {"since": 8640.0, "warned": false}}  // Bench.to_dict; {} = clocks start on load
 #   },
 #   "finished": {"days": 12, "title": "Hirelings", "fell": ["Vera Kord"], "roll": [...]},
@@ -72,10 +74,12 @@ const PartyOpinion = preload("res://core/party_opinion.gd")
 const Callings = preload("res://core/callings.gd")
 const Downtime = preload("res://core/downtime.gd")
 const Lodge = preload("res://core/lodge.gd")
+const Fallen = preload("res://core/fallen.gd")
 const Recruits = preload("res://core/recruits.gd")
 const Bench = preload("res://core/bench.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
+const WorldHomes = preload("res://core/world_homes.gd")
 const FORMAT := "sorcmerc-world"
 const VERSION := 1
 
@@ -243,7 +247,8 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"opinion": FactionOpinion.all(),
 		"ladder": Ladder.all(),
 		"origin": {"kind": String(world.origin.get("kind", "small")),
-			"seed": int(world.origin.get("seed", 0))},
+			"seed": int(world.origin.get("seed", 0)),
+			"homes": true},   # core/world_homes.gd has had its say on this map (see from_dict)
 		"settlements": settlements,
 		"parties": parties,
 		"fallen": world.fallen.map(func(f): return {"id": f["id"], "faction": f["faction"],
@@ -345,6 +350,14 @@ static func from_dict(d: Dictionary):
 	var origin: Dictionary = d.get("origin", {})
 	world.origin = {"kind": String(origin.get("kind", "small")),
 		"seed": int(origin.get("seed", 0))}
+	# A save from before every people had a lair (2026-09-25) holds the five old
+	# ones; a map the game built gets the rest, in their home countries, once.
+	# "homes" marks every save written since: a map saved by this build was
+	# either built with them or already backfilled, and is left as it is — a
+	# lair the player has seen does not move, and a test world stays its size.
+	# Never on a pack's map (WorldHomes.BUILT).
+	if not bool(origin.get("homes", false)):
+		WorldHomes.backfill(world)
 
 	FactionOpinion.reset()
 	var opinion: Dictionary = d.get("opinion", {})
@@ -390,6 +403,7 @@ static func _party_dict(party) -> Dictionary:
 		"downtime": Downtime.to_dict(party),
 		"lodge": Lodge.to_dict(party),
 		"hiring": Recruits.to_dict(party),
+		"fallen": Fallen.to_dict(party),   # audit 2.1: the roll of the fallen
 		"bench": Bench.to_dict(party),   # the audit's §2.4: how long each benched merc has sat out
 	}
 
@@ -427,6 +441,7 @@ static func _party_from(pd: Dictionary):
 	Downtime.from_dict(party, pd.get("downtime", {}))
 	Lodge.from_dict(party, pd.get("lodge", {}))
 	Recruits.from_dict(party, pd.get("hiring", {}))   # no key: a run from before hiring, grandfathered
+	Fallen.from_dict(party, pd.get("fallen", []))     # no key: a save from before the roll, nobody on it
 	Bench.from_dict(party, pd.get("bench", {}))   # no key: every clock starts at the first frame after the load
 	return party
 

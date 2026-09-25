@@ -294,9 +294,13 @@ func _init() -> void:
 	# Nothing left to sell says so, rather than showing an empty heading. The
 	# demo world has several lairs inside Rumors.RANGE of this town, so the room
 	# has to actually be talked dry first — one purchase is not the end of it.
+	# (Since 2026-09-25 every people has a lair on this map, core/world_homes.gd,
+	# so there is more to sell: a deeper purse and more rounds than the five
+	# old lairs needed.)
+	main.party.gold = 100000
 	main._open_visit(s)
 	press(main._visit_panel, "Inn")
-	for i in 20:
+	for i in 80:
 		if not press(main._visit_panel, "Buy"):
 			break
 	check(Rumors.offers(s, main.world).is_empty(), "a common room can be talked dry")

@@ -1,0 +1,32 @@
+{
+  "_note": "sorcmerc-authored mechanics for wearable data/magic-items.json ids (the export is prose only, structuredBonuses null on every entry). An item listed here does something on the sheet while it is in a hero's `equipped` list; an unlisted one is carried, worn and sold, and does nothing in a fight. core/rules/pass_items.gd reads it. `slot`: weapon (rides the weapon in hand: every weapon attack but the off-hand one), armor (needs body armor worn), shield (is a shield: counts as armor.json's shield, plus its own bonus), worn (no condition). Keys: attack / damage (weapon attacks; `weapons` narrows them to those weapon ids), ac (`unarmored`: only with no body armor and no shield), saves (all six), checks (skills and initiative), set_ability ({ability: score}, raises a lower score to it), spell_attack, resist (damage types). One of each id counts, the best of each weapon/armor/shield slot counts, and at most three items that need attunement count (magic-items.json's `attunement`), in the order they were put on. `text` is the line the sheet and the tooltip show.",
+
+  "weapon-1": {"slot": "weapon", "attack": 1, "damage": 1, "text": "+1 to attack and damage with the weapon in hand"},
+  "weapon-2": {"slot": "weapon", "attack": 2, "damage": 2, "text": "+2 to attack and damage with the weapon in hand"},
+  "weapon-3": {"slot": "weapon", "attack": 3, "damage": 3, "text": "+3 to attack and damage with the weapon in hand"},
+
+  "armor-1": {"slot": "armor", "ac": 1, "text": "+1 AC while wearing armor"},
+  "armor-2": {"slot": "armor", "ac": 2, "text": "+2 AC while wearing armor"},
+  "armor-3": {"slot": "armor", "ac": 3, "text": "+3 AC while wearing armor"},
+
+  "shield-1": {"slot": "shield", "ac": 1, "text": "A shield: +1 AC on top of the shield's own +2"},
+  "shield-2": {"slot": "shield", "ac": 2, "text": "A shield: +2 AC on top of the shield's own +2"},
+  "shield-3": {"slot": "shield", "ac": 3, "text": "A shield: +3 AC on top of the shield's own +2"},
+
+  "cloak-of-protection": {"slot": "worn", "ac": 1, "saves": 1, "text": "+1 AC and +1 to every saving throw"},
+  "ring-of-protection": {"slot": "worn", "ac": 1, "saves": 1, "text": "+1 AC and +1 to every saving throw"},
+  "stone-of-good-luck-(luckstone)": {"slot": "worn", "saves": 1, "checks": 1, "text": "+1 to every saving throw and ability check"},
+  "bracers-of-defense": {"slot": "worn", "ac": 2, "unarmored": true, "text": "+2 AC with no armor and no shield"},
+
+  "gauntlets-of-ogre-power": {"slot": "worn", "set_ability": {"str": 19}, "text": "Strength 19 while worn"},
+  "headband-of-intellect": {"slot": "worn", "set_ability": {"int": 19}, "text": "Intelligence 19 while worn"},
+  "amulet-of-health": {"slot": "worn", "set_ability": {"con": 19}, "text": "Constitution 19 while worn"},
+
+  "bracers-of-archery": {"slot": "worn", "damage": 2, "weapons": ["longbow", "shortbow"], "text": "+2 damage with a longbow or shortbow"},
+
+  "wand-of-the-war-mage-1": {"slot": "worn", "spell_attack": 1, "text": "+1 to spell attack rolls"},
+  "wand-of-the-war-mage-2": {"slot": "worn", "spell_attack": 2, "text": "+2 to spell attack rolls"},
+  "wand-of-the-war-mage-3": {"slot": "worn", "spell_attack": 3, "text": "+3 to spell attack rolls"},
+
+  "brooch-of-shielding": {"slot": "worn", "resist": ["force"], "text": "Resistance to force damage"}
+}

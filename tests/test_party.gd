@@ -106,6 +106,7 @@ func _init() -> void:
 
 	test_death()
 	test_revive_downed()
+	test_revive_by_level()
 	test_identification()
 	test_overworld_figure()
 	test_active_max_level()
@@ -134,7 +135,8 @@ func test_death() -> void:
 	p.add_gold(1000)
 	check(Party.resurrection_caster(p) == "ilsa", "Ilsa knows Revivify and has a 3rd+ slot")
 	check(not Party.has_resurrection_scroll(p), "no scroll in the stash")
-	check(Party.can_resurrect(p), "a caster plus 300 gp is enough")
+	check(Party.can_resurrect(p), "a caster plus the price is enough")
+	check(Party.revive_cost(vera) == Party.REVIVE_PER_LEVEL * vera.level(), "the price is 50 ◉ a level (%d for a level-%d Vera)" % [Party.revive_cost(vera), vera.level()])
 	check(not Party.resurrect(p, "ilsa", "spell"), "cannot resurrect the living")
 	check(not Party.resurrect(p, "vera", "prayer"), "unknown methods are refused")
 	check(not Party.resurrect(p, "vera", "scroll"), "cannot read a scroll you do not have")
@@ -142,7 +144,7 @@ func test_death() -> void:
 
 	check(Party.resurrect(p, "vera", "spell", "ilsa"), "Revivify raises the dead")
 	check(not vera.dead and vera.hp_current == 1, "back at 1 HP")
-	check(p.gold == 1000 - Party.REVIVE_COST, "300 gp paid")
+	check(p.gold == 1000 - Party.revive_cost(vera), "her level's price paid")
 	check(not p.is_active("vera"), "the raised stay benched until reactivated")
 	check(p.activate("vera"), "and can now be reactivated")
 	var spent := 0
@@ -157,7 +159,7 @@ func test_death() -> void:
 	check(Party.has_resurrection_scroll(p), "scroll in the stash")
 	check(Party.resurrect(p, "vera", "scroll"), "the scroll raises the dead")
 	check(not vera.dead and p.stash_count(Party.REVIVE_SCROLL) == 0, "the scroll is consumed")
-	check(p.gold == 1000 - 2 * Party.REVIVE_COST, "the scroll costs 300 gp too")
+	check(p.gold == 1000 - 2 * Party.revive_cost(vera), "the scroll costs the same")
 
 	# end of run: everyone comes back free
 	vera.dead = true
@@ -250,6 +252,52 @@ func test_revive_downed() -> void:
 		q2.add_member(ch)
 	var dl := q2.defeat_line(Party.revive_downed(q2), [], "Ashford", 5, 1)
 	check(dl.contains("Ashford a day later"), "a lost day is on the line: %s" % dl)
+
+# The design audit §5.2: a raise costs 50 ◉ a level, not a flat 300 — the
+# same weight in fights' coin at level 1 as at level 19, whichever door
+# (healer, Revivify, scroll) it goes through.
+func test_revive_by_level() -> void:
+	var p := Party.new()
+	for ch in Party.demo_roster():
+		p.add_member(ch)
+	var low = p.get_member("vera")
+	var high = p.get_member("pike")
+	while low.level() > 1:
+		low.levels.pop_back()
+	low.dirty()
+	while high.level() < 6:
+		high.add_level(high.class_id())
+	check(Party.revive_cost(low) == 50, "a level-1 hero is raised for 50 ◉ (%d)" % Party.revive_cost(low))
+	check(Party.revive_cost(high) == 300, "a level-6 hero for 300, RAW's diamond (%d)" % Party.revive_cost(high))
+	var twenty = Party.demo_roster()[0]
+	while twenty.level() < 20:
+		twenty.add_level(twenty.class_id())
+	check(Party.revive_cost(twenty) == 1000, "a level-20 hero for 1,000 (%d)" % Party.revive_cost(twenty))
+
+	# The linear run's "can I?" asks about one of the dead, or the cheapest.
+	low.dead = true
+	high.dead = true
+	p.stash_add(Party.REVIVE_SCROLL)
+	p.gold = 100
+	check(Party.can_resurrect(p, low.id), "100 ◉ raises the level-1 hero")
+	check(not Party.can_resurrect(p, high.id), "...but not the level-6 one")
+	check(Party.can_resurrect(p), "...and with no name, the cheapest of the dead decides")
+	check(not Party.resurrect(p, high.id, "scroll") and high.dead and p.gold == 100,
+		"a raise the purse cannot cover changes nothing")
+	check(Party.resurrect(p, low.id, "scroll") and not low.dead and p.gold == 50, "the scroll raises her for 50")
+
+	# The healer's counter charges the same.
+	var Visit = load("res://core/settlement_visit.gd")
+	p.gold = 299
+	check(not Visit.raise_dead(p, high.id)["ok"] and high.dead, "299 ◉ does not buy a level-6 raise")
+	p.gold = 300
+	var r: Dictionary = Visit.raise_dead(p, high.id)
+	check(r["ok"] and int(r["cost"]) == 300 and p.gold == 0 and not high.dead, "300 does: %s" % r.get("text", ""))
+
+	# And the map's line quotes this fight's dead by what they will cost.
+	high.dead = true
+	var line := p.defeat_line({"came_to": [], "dead": [high.id], "spared": ""}, [high.id], "Ashford", 0)
+	check(line.contains("300 ◉"), "the defeat line names the raise's price: %s" % line)
 
 # T13: identified/unidentified units of one item stack apart, identified spend first,
 # and a Scroll of Identification burns itself to reveal one item.

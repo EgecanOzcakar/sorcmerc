@@ -88,6 +88,10 @@ var hiring: Dictionary = {}
 # save as "finished" (core/world_save.gd), which is what stops the title
 # screen resuming the slot. An old save has none, so it is not finished.
 var finished: Dictionary = {}
+# The roll of the fallen — every merc this company has lost, oldest first:
+# [{id, name, level, class, species, where, by, day, at, told}]. Owned entirely
+# by core/fallen.gd (the design audit §2.1); [] for a save from before it.
+var fallen: Array = []
 # How long each benched merc has sat out — id -> {"since": world-minute,
 # "warned": bool}. Owned entirely by core/bench.gd, which keeps it lazily off
 # `active`; {} for a save from before the bench counted.
@@ -330,13 +334,28 @@ func use_identification_scroll(item_id: String) -> bool:
 	return true
 
 # --- death & resurrection -------------------------------------------------
-# 300 gp either way (Revivify's diamond, abstracted to coin — no material item).
-# Statics taking the party, so a scene can ask "can I?" without holding a member.
+# REVIVE_PER_LEVEL x the hero's level, whichever way it is done: a healer's
+# raise, Revivify or a scroll (the diamond, abstracted to coin — no material
+# item). Statics taking the party, so a scene can ask "can I?" without holding
+# a member.
+#
+# It was a flat 300 ◉, which is ~16 level-3 fights of coin and ~3 at level 15
+# (easy open-country purses, Campaign.SELL_RATE's table): death was dearest to
+# undo early, when it is most common, and nearly free late, when gold had
+# nothing else to buy — and below level 6 a fresh hire at the inn came cheaper
+# than raising the veteran (the design audit §5.2). The owner's call: about 50
+# ◉ a level. ESTIMATED, from those purses: a raise is ~7 fights' coin at level
+# 1 (50 ◉), ~8 at 3 (150), ~7 at 6 (300, RAW's diamond), ~8 at 10 (500), ~8 at
+# 15 (750) and ~8 at 19 (950) — the same weight all the way to the end.
 
 const REVIVE_SPELL := "revivify"
 const REVIVE_SCROLL := "scroll-of-resurrection"
-const REVIVE_COST := 300
+const REVIVE_PER_LEVEL := 50
 const REVIVE_SLOT := 3        # Revivify is 3rd level: any free slot of 3+ pays for it
+
+# What raising this hero costs. `ch` is a Character (or anything with level()).
+static func revive_cost(ch) -> int:
+	return REVIVE_PER_LEVEL * maxi(1, int(ch.level())) if ch != null else REVIVE_PER_LEVEL
 
 # The first active member who knows any of `spell_ids`, or null. The road's
 # "a spell you know changes the roll" hook (Revivify's pattern): Pass Without
@@ -385,15 +404,23 @@ static func resurrection_caster(party) -> String:
 static func has_resurrection_scroll(party) -> bool:
 	return party.stash_count(REVIVE_SCROLL) > 0
 
-static func can_resurrect(party) -> bool:
-	return party.gold >= REVIVE_COST \
+# `dead_id` names who; without it, whether the cheapest of the dead could be
+# raised (the linear run's screen asks before it has picked a row).
+static func can_resurrect(party, dead_id := "") -> bool:
+	var cost := -1
+	for ch in party.roster:
+		if ch.dead and (dead_id == "" or ch.id == dead_id):
+			cost = revive_cost(ch) if cost < 0 else mini(cost, revive_cost(ch))
+	if cost < 0:
+		cost = REVIVE_PER_LEVEL
+	return party.gold >= cost \
 		and (resurrection_caster(party) != "" or has_resurrection_scroll(party))
 
 # method: "spell" (spends caster_id's slot) or "scroll" (consumes the stash item).
 # Refuses and changes nothing unless the whole cost is payable.
 static func resurrect(party, dead_id: String, method: String, caster_id: String = "") -> bool:
 	var target = party.get_member(dead_id)
-	if target == null or not target.dead or party.gold < REVIVE_COST:
+	if target == null or not target.dead or party.gold < revive_cost(target):
 		return false
 	var caster = null
 	var slot := 0
@@ -410,7 +437,7 @@ static func resurrect(party, dead_id: String, method: String, caster_id: String 
 	else:
 		return false
 
-	party.spend_gold(REVIVE_COST)
+	party.spend_gold(revive_cost(target))
 	if method == "spell":
 		while caster.slots_used.size() < slot:
 			caster.slots_used.append(0)
@@ -441,8 +468,8 @@ static func auto_revive_all(party) -> void:
 # A lost fight in the open world (scenes/world/world.gd's _retreat, the pit's
 # lost bout): the DOWNED come to, the DEAD stay dead. A dead hero is the price
 # of the loss and comes back only the paid way — a healer's raise
-# (core/settlement_visit.gd) or Revivify/a scroll (resurrect(), above), 300 ◉
-# either way. Until 2026-09-24 this stood up every dead member of the roster,
+# (core/settlement_visit.gd) or Revivify/a scroll (resurrect(), above), at
+# revive_cost() either way. Until 2026-09-24 this stood up every dead member of the roster,
 # benched ones included, so conceding a fight was the cheapest resurrection in
 # the game (the design audit, docs/audit-game-design.md §1.2).
 #
@@ -505,14 +532,17 @@ func defeat_line(revived: Dictionary, fell: Array, where: String, lost: int, day
 	var later := "" if days <= 0 else (" a day later" if days == 1 else " %d days later" % days)
 	var line := "The company is beaten and left for dead. The living come to at %s%s, %d ◉ lighter." % [where, later, lost]
 	var names: Array = []
+	var cost := 0
 	for id in fell:
 		var ch = get_member(String(id))
 		if ch != null and ch.dead:
 			names.append(ch.cname)
+			cost += revive_cost(ch)
 	if not names.is_empty():
 		var who: String = names[0] if names.size() == 1 \
 			else ", ".join(names.slice(0, names.size() - 1)) + " and " + String(names[-1])
-		line += " %s did not get up. A healer can raise the dead, at %d ◉ a head." % [who, REVIVE_COST]
+		line += " %s did not get up. A healer can raise %s for %d ◉." % [who,
+			"them" if names.size() > 1 else "the dead", cost]
 	return line
 
 # --- display --------------------------------------------------------------

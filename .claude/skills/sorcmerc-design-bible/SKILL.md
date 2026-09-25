@@ -48,7 +48,7 @@ Avoid epic-fantasy capitals-and-prophecy prose, jokes that break the scene, and 
 
 ## Setting
 
-- Four concentric countries, each with a level range: **the Heartland** (levels 1–3), **the Marches** (3–6), **the Frontier** (6–9) and **the Far Deeps** (10–20). Each has home factions (`core/regions.gd` `BANDS`/`HOMES`).
+- Four concentric countries, each with a level range: **the Heartland** (levels 1–3), **the Marches** (3–6), **the Frontier** (6–9) and **the Far Deeps** (10–20). Each has home factions (`core/regions.gd` `BANDS`/`HOMES`). Since 2026-09-25 the Far Deeps are two bands: the inner **Deeps** (10–14) and **the Unmapped** (15–20), the map's outermost eighth; `deeps` still names the whole country wherever a pack or a job asks (`Regions.within`). Every faction with a home has a lair in it on the built maps (`core/world_homes.gd`).
 - Factions come from the bestiary's hand-tagged `faction` field. The ones that field rosters are listed in `Scaler.FACTIONS`: goblinoid, beast, undead, bandit, giant, kobold, orc, gnoll, cultist, soldier, monstrosity, fey, elemental, construct and dragon.
 - Settlements have per-faction opinion (`core/faction_opinion.gd`). Persistent faction warfare is deferred (expansion-plan, "Post-T91 gap note").
 - Species-flavoured towns exist: human, dwarf, elf and orc settlement kits.

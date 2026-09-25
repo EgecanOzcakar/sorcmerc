@@ -18928,5 +18928,1669 @@
     "vulnerable": [],
     "cond_immune": [],
     "_notes": "implemented: Bite, Fire Breath; not modeled: action: Claw"
+  },
+  {
+    "id": "behir",
+    "cname": "Behir",
+    "ac": 17,
+    "max_hp": 168,
+    "init_mod": 3,
+    "speed": 8,
+    "atk_bonus": 10,
+    "damage": "2d10+6",
+    "ranged": false,
+    "atk_range": 1,
+    "athletics": 6,
+    "acro": 3,
+    "stealth": 7,
+    "passive_perception": 16,
+    "saves": {
+      "str": 6,
+      "dex": 3,
+      "con": 4,
+      "int": -2,
+      "wis": 2,
+      "cha": 1
+    },
+    "save_dc": 16,
+    "features": [
+      "monster-multiattack-2",
+      "monster-constrict",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 11,
+    "xp": 7200,
+    "size": "Huge",
+    "type": "monstrosity",
+    "faction": "monstrosity",
+    "habitat": "cave",
+    "attack_name": "Constrict",
+    "damage_type": "bludgeoning",
+    "hit_dice": "16d12+64",
+    "abilities": {
+      "str": 23,
+      "dex": 16,
+      "con": 18,
+      "int": 7,
+      "wis": 14,
+      "cha": 12
+    },
+    "speeds_ft": {
+      "walk": 50,
+      "climb": 40
+    },
+    "senses": {
+      "darkvision": "90 ft.",
+      "passive_perception": 16
+    },
+    "resist": [],
+    "immune": [
+      "lightning"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Constrict, Lightning Breath; not modeled: action: Swallow"
+  },
+  {
+    "id": "gynosphinx",
+    "cname": "Gynosphinx",
+    "ac": 17,
+    "max_hp": 136,
+    "init_mod": 2,
+    "speed": 7,
+    "atk_bonus": 9,
+    "damage": "2d8+4",
+    "ranged": false,
+    "atk_range": 1,
+    "athletics": 4,
+    "acro": 2,
+    "stealth": 2,
+    "passive_perception": 18,
+    "saves": {
+      "str": 4,
+      "dex": 2,
+      "con": 3,
+      "int": 4,
+      "wis": 4,
+      "cha": 4
+    },
+    "save_dc": 16,
+    "features": [
+      "monster-multiattack-2",
+      "monster-innate-bolt"
+    ],
+    "cr": 11,
+    "xp": 7200,
+    "size": "Large",
+    "type": "monstrosity",
+    "faction": "monstrosity",
+    "habitat": "wild",
+    "attack_name": "Claw",
+    "damage_type": "slashing",
+    "hit_dice": "16d10+48",
+    "abilities": {
+      "str": 18,
+      "dex": 15,
+      "con": 16,
+      "int": 18,
+      "wis": 18,
+      "cha": 18
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "fly": 60
+    },
+    "senses": {
+      "truesight": "120 ft.",
+      "passive_perception": 18
+    },
+    "resist": [
+      "bludgeoning, piercing, and slashing from nonmagical weapons"
+    ],
+    "immune": [
+      "psychic"
+    ],
+    "vulnerable": [],
+    "cond_immune": [
+      "charmed",
+      "frightened"
+    ],
+    "_notes": "implemented: Spellcasting; not modeled: Inscrutable; Magic Weapons; legendary actions"
+  },
+  {
+    "id": "remorhaz",
+    "cname": "Remorhaz",
+    "ac": 17,
+    "max_hp": 195,
+    "init_mod": 1,
+    "speed": 5,
+    "atk_bonus": 11,
+    "damage": "6d10+7",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 7,
+    "acro": 1,
+    "stealth": 1,
+    "passive_perception": 10,
+    "saves": {
+      "str": 7,
+      "dex": 1,
+      "con": 5,
+      "int": -3,
+      "wis": 0,
+      "cha": -3
+    },
+    "save_dc": 17,
+    "features": [
+      "monster-elemental-rider",
+      "monster-grappling-attack"
+    ],
+    "cr": 11,
+    "xp": 7200,
+    "size": "Huge",
+    "type": "monstrosity",
+    "faction": "monstrosity",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "17d12+85",
+    "abilities": {
+      "str": 24,
+      "dex": 13,
+      "con": 21,
+      "int": 4,
+      "wis": 10,
+      "cha": 5
+    },
+    "speeds_ft": {
+      "walk": 30,
+      "burrow": 20
+    },
+    "senses": {
+      "darkvision": "60 ft.",
+      "tremorsense": "60 ft.",
+      "passive_perception": 10
+    },
+    "resist": [],
+    "immune": [
+      "cold",
+      "fire"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "implemented: Bite; not modeled: Heated Body; action: Swallow"
+  },
+  {
+    "id": "roc",
+    "cname": "Roc",
+    "ac": 15,
+    "max_hp": 248,
+    "init_mod": 0,
+    "speed": 3,
+    "atk_bonus": 13,
+    "damage": "4d8+9",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 9,
+    "acro": 0,
+    "stealth": 0,
+    "passive_perception": 14,
+    "saves": {
+      "str": 9,
+      "dex": 4,
+      "con": 9,
+      "int": -4,
+      "wis": 4,
+      "cha": 3
+    },
+    "save_dc": 19,
+    "features": [
+      "monster-multiattack-2",
+      "monster-grappling-attack",
+      "monster-keen-sight"
+    ],
+    "cr": 11,
+    "xp": 7200,
+    "size": "Gargantuan",
+    "type": "monstrosity",
+    "faction": "monstrosity",
+    "habitat": "wild",
+    "attack_name": "Beak",
+    "damage_type": "piercing",
+    "hit_dice": "16d20+80",
+    "abilities": {
+      "str": 28,
+      "dex": 10,
+      "con": 20,
+      "int": 3,
+      "wis": 10,
+      "cha": 9
+    },
+    "speeds_ft": {
+      "walk": 20,
+      "fly": 120
+    },
+    "senses": {
+      "passive_perception": 14
+    },
+    "resist": [],
+    "immune": [],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Talons, Keen Sight"
+  },
+  {
+    "id": "purple-worm",
+    "cname": "Purple Worm",
+    "ac": 18,
+    "max_hp": 247,
+    "init_mod": -2,
+    "speed": 8,
+    "atk_bonus": 9,
+    "damage": "3d8+9",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 9,
+    "acro": -2,
+    "stealth": -2,
+    "passive_perception": 9,
+    "saves": {
+      "str": 9,
+      "dex": -2,
+      "con": 11,
+      "int": -5,
+      "wis": 4,
+      "cha": -3
+    },
+    "save_dc": 21,
+    "features": [
+      "monster-multiattack-2",
+      "monster-venom-sting"
+    ],
+    "cr": 15,
+    "xp": 13000,
+    "size": "Gargantuan",
+    "type": "monstrosity",
+    "faction": "monstrosity",
+    "habitat": "cave",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "15d20+90",
+    "abilities": {
+      "str": 28,
+      "dex": 7,
+      "con": 22,
+      "int": 1,
+      "wis": 8,
+      "cha": 4
+    },
+    "speeds_ft": {
+      "walk": 50,
+      "burrow": 30
+    },
+    "senses": {
+      "blindsight": "30 ft.",
+      "tremorsense": "60 ft.",
+      "passive_perception": 9
+    },
+    "resist": [],
+    "immune": [],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Tail Stinger; not modeled: Tunneler; swallow"
+  },
+  {
+    "id": "androsphinx",
+    "cname": "Androsphinx",
+    "ac": 17,
+    "max_hp": 199,
+    "init_mod": 0,
+    "speed": 7,
+    "atk_bonus": 12,
+    "damage": "2d10+6",
+    "ranged": false,
+    "atk_range": 1,
+    "athletics": 6,
+    "acro": 0,
+    "stealth": 0,
+    "passive_perception": 20,
+    "saves": {
+      "str": 6,
+      "dex": 6,
+      "con": 11,
+      "int": 9,
+      "wis": 10,
+      "cha": 6
+    },
+    "save_dc": 18,
+    "features": [
+      "monster-multiattack-2",
+      "monster-frightful-presence",
+      "monster-innate-bolt"
+    ],
+    "cr": 17,
+    "xp": 18000,
+    "size": "Large",
+    "type": "monstrosity",
+    "faction": "monstrosity",
+    "habitat": "wild",
+    "attack_name": "Claw",
+    "damage_type": "slashing",
+    "hit_dice": "19d10+95",
+    "abilities": {
+      "str": 22,
+      "dex": 10,
+      "con": 20,
+      "int": 16,
+      "wis": 18,
+      "cha": 23
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "fly": 60
+    },
+    "senses": {
+      "truesight": "120 ft.",
+      "passive_perception": 20
+    },
+    "resist": [],
+    "immune": [
+      "psychic",
+      "bludgeoning, piercing, and slashing from nonmagical weapons"
+    ],
+    "vulnerable": [],
+    "cond_immune": [
+      "charmed",
+      "frightened"
+    ],
+    "_notes": "implemented: Roar, Spellcasting; not modeled: Inscrutable; Magic Weapons; legendary actions"
+  },
+  {
+    "id": "djinni",
+    "cname": "Djinni",
+    "ac": 17,
+    "max_hp": 161,
+    "init_mod": 2,
+    "speed": 5,
+    "atk_bonus": 9,
+    "damage": "2d6+5",
+    "ranged": false,
+    "atk_range": 1,
+    "athletics": 5,
+    "acro": 2,
+    "stealth": 2,
+    "passive_perception": 13,
+    "saves": {
+      "str": 5,
+      "dex": 6,
+      "con": 6,
+      "int": 2,
+      "wis": 7,
+      "cha": 9
+    },
+    "save_dc": 18,
+    "features": [
+      "monster-multiattack-3",
+      "monster-elemental-rider",
+      "monster-innate-bolt"
+    ],
+    "cr": 11,
+    "xp": 7200,
+    "size": "Large",
+    "type": "elemental",
+    "faction": "elemental",
+    "habitat": "wild",
+    "attack_name": "Scimitar",
+    "damage_type": "slashing",
+    "hit_dice": "14d10+84",
+    "abilities": {
+      "str": 21,
+      "dex": 15,
+      "con": 22,
+      "int": 15,
+      "wis": 16,
+      "cha": 20
+    },
+    "speeds_ft": {
+      "walk": 30,
+      "fly": 90
+    },
+    "senses": {
+      "darkvision": "120 ft.",
+      "passive_perception": 13
+    },
+    "resist": [],
+    "immune": [
+      "lightning",
+      "thunder"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "implemented: Scimitar, Innate Spellcasting; not modeled: Elemental Demise; action: Create Whirlwind"
+  },
+  {
+    "id": "efreeti",
+    "cname": "Efreeti",
+    "ac": 17,
+    "max_hp": 200,
+    "init_mod": 1,
+    "speed": 7,
+    "atk_bonus": 10,
+    "damage": "2d6+6",
+    "ranged": false,
+    "atk_range": 1,
+    "athletics": 6,
+    "acro": 1,
+    "stealth": 1,
+    "passive_perception": 12,
+    "saves": {
+      "str": 6,
+      "dex": 1,
+      "con": 7,
+      "int": 7,
+      "wis": 6,
+      "cha": 7
+    },
+    "save_dc": 15,
+    "features": [
+      "monster-multiattack-2",
+      "monster-elemental-rider",
+      "monster-innate-bolt"
+    ],
+    "cr": 11,
+    "xp": 7200,
+    "size": "Large",
+    "type": "elemental",
+    "faction": "elemental",
+    "habitat": "wild",
+    "attack_name": "Scimitar",
+    "damage_type": "slashing",
+    "hit_dice": "16d10+112",
+    "abilities": {
+      "str": 22,
+      "dex": 12,
+      "con": 24,
+      "int": 16,
+      "wis": 15,
+      "cha": 16
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "fly": 60
+    },
+    "senses": {
+      "darkvision": "120 ft.",
+      "passive_perception": 12
+    },
+    "resist": [],
+    "immune": [
+      "fire"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Scimitar, Innate Spellcasting; not modeled: Elemental Demise; action: Hurl Flame"
+  },
+  {
+    "id": "storm-giant",
+    "cname": "Storm Giant",
+    "ac": 16,
+    "max_hp": 230,
+    "init_mod": 2,
+    "speed": 8,
+    "atk_bonus": 14,
+    "damage": "6d6+9",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 14,
+    "acro": 2,
+    "stealth": 2,
+    "passive_perception": 19,
+    "saves": {
+      "str": 14,
+      "dex": 2,
+      "con": 10,
+      "int": 3,
+      "wis": 9,
+      "cha": 9
+    },
+    "save_dc": 17,
+    "features": [
+      "monster-multiattack-2",
+      "monster-innate-bolt"
+    ],
+    "cr": 13,
+    "xp": 10000,
+    "size": "Huge",
+    "type": "giant",
+    "faction": "giant",
+    "habitat": "wild",
+    "attack_name": "Greatsword",
+    "damage_type": "slashing",
+    "hit_dice": "20d12+100",
+    "abilities": {
+      "str": 29,
+      "dex": 14,
+      "con": 20,
+      "int": 16,
+      "wis": 18,
+      "cha": 18
+    },
+    "speeds_ft": {
+      "walk": 50,
+      "swim": 50
+    },
+    "senses": {
+      "passive_perception": 19
+    },
+    "resist": [
+      "cold"
+    ],
+    "immune": [
+      "lightning",
+      "thunder"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "implemented: Innate Spellcasting, Lightning Strike; not modeled: Amphibious"
+  },
+  {
+    "id": "storm-giant-archer",
+    "cname": "Storm Giant Archer",
+    "ac": 16,
+    "max_hp": 230,
+    "init_mod": 2,
+    "speed": 8,
+    "atk_bonus": 14,
+    "damage": "4d12+9",
+    "ranged": true,
+    "atk_range": 8,
+    "athletics": 14,
+    "acro": 2,
+    "stealth": 2,
+    "passive_perception": 19,
+    "saves": {
+      "str": 14,
+      "dex": 2,
+      "con": 10,
+      "int": 3,
+      "wis": 9,
+      "cha": 9
+    },
+    "save_dc": 17,
+    "features": [
+      "monster-multiattack-2",
+      "monster-innate-bolt"
+    ],
+    "cr": 13,
+    "xp": 10000,
+    "size": "Huge",
+    "type": "giant",
+    "faction": "giant",
+    "habitat": "wild",
+    "attack_name": "Rock",
+    "damage_type": "bludgeoning",
+    "hit_dice": "20d12+100",
+    "abilities": {
+      "str": 29,
+      "dex": 14,
+      "con": 20,
+      "int": 16,
+      "wis": 18,
+      "cha": 18
+    },
+    "speeds_ft": {
+      "walk": 50,
+      "swim": 50
+    },
+    "senses": {
+      "passive_perception": 19
+    },
+    "resist": [
+      "cold"
+    ],
+    "immune": [
+      "lightning",
+      "thunder"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "implemented: Innate Spellcasting, Lightning Strike; not modeled: Amphibious",
+    "variant_of": "storm-giant"
+  },
+  {
+    "id": "vampire",
+    "cname": "Vampire",
+    "ac": 16,
+    "max_hp": 144,
+    "init_mod": 4,
+    "speed": 5,
+    "atk_bonus": 9,
+    "damage": "1d6+4",
+    "ranged": false,
+    "atk_range": 1,
+    "athletics": 4,
+    "acro": 4,
+    "stealth": 9,
+    "passive_perception": 17,
+    "saves": {
+      "str": 4,
+      "dex": 9,
+      "con": 4,
+      "int": 3,
+      "wis": 7,
+      "cha": 9
+    },
+    "save_dc": 18,
+    "features": [
+      "monster-multiattack-2",
+      "monster-regeneration",
+      "monster-charm-gaze"
+    ],
+    "cr": 13,
+    "xp": 10000,
+    "size": "Medium",
+    "type": "undead",
+    "faction": "undead",
+    "habitat": "dungeon",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "17d8+68",
+    "abilities": {
+      "str": 18,
+      "dex": 18,
+      "con": 18,
+      "int": 17,
+      "wis": 15,
+      "cha": 18
+    },
+    "speeds_ft": {
+      "walk": 30
+    },
+    "senses": {
+      "darkvision": "120 ft.",
+      "passive_perception": 17
+    },
+    "resist": [
+      "necrotic",
+      "bludgeoning, piercing, and slashing from nonmagical weapons"
+    ],
+    "immune": [],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Regeneration, Charm; not modeled: Shapechanger; Legendary Resistance; Misty Escape; Spider Climb; Vampire Weaknesses; action: Children of the Night; legendary actions"
+  },
+  {
+    "id": "mummy-lord",
+    "cname": "Mummy Lord",
+    "ac": 17,
+    "max_hp": 97,
+    "init_mod": 0,
+    "speed": 3,
+    "atk_bonus": 9,
+    "damage": "3d6+4",
+    "ranged": false,
+    "atk_range": 1,
+    "athletics": 4,
+    "acro": 0,
+    "stealth": 0,
+    "passive_perception": 14,
+    "saves": {
+      "str": 4,
+      "dex": 0,
+      "con": 8,
+      "int": 5,
+      "wis": 9,
+      "cha": 8
+    },
+    "save_dc": 17,
+    "features": [
+      "monster-life-drain",
+      "monster-frightful-presence",
+      "monster-magic-resistance"
+    ],
+    "cr": 15,
+    "xp": 13000,
+    "size": "Medium",
+    "type": "undead",
+    "faction": "undead",
+    "habitat": "dungeon",
+    "attack_name": "Rotting Fist",
+    "damage_type": "bludgeoning",
+    "hit_dice": "13d8+39",
+    "abilities": {
+      "str": 18,
+      "dex": 10,
+      "con": 17,
+      "int": 11,
+      "wis": 18,
+      "cha": 16
+    },
+    "speeds_ft": {
+      "walk": 20
+    },
+    "senses": {
+      "darkvision": "60 ft.",
+      "passive_perception": 14
+    },
+    "resist": [],
+    "immune": [
+      "necrotic",
+      "poison",
+      "bludgeoning, piercing, and slashing from nonmagical weapons"
+    ],
+    "vulnerable": [
+      "fire"
+    ],
+    "cond_immune": [
+      "charmed",
+      "exhaustion",
+      "frightened",
+      "paralyzed",
+      "poisoned"
+    ],
+    "_notes": "flattened to basic attacks; implemented: Rotting Fist, Dreadful Glare, Magic Resistance; not modeled: Rejuvenation; Spellcasting; legendary actions"
+  },
+  {
+    "id": "iron-golem",
+    "cname": "Iron Golem",
+    "ac": 20,
+    "max_hp": 210,
+    "init_mod": -1,
+    "speed": 5,
+    "atk_bonus": 13,
+    "damage": "3d10+7",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 7,
+    "acro": -1,
+    "stealth": -1,
+    "passive_perception": 10,
+    "saves": {
+      "str": 7,
+      "dex": -1,
+      "con": 5,
+      "int": -4,
+      "wis": 0,
+      "cha": -5
+    },
+    "save_dc": 19,
+    "features": [
+      "monster-multiattack-2",
+      "monster-breath-weapon-greater",
+      "monster-magic-resistance"
+    ],
+    "cr": 16,
+    "xp": 15000,
+    "size": "Large",
+    "type": "construct",
+    "faction": "construct",
+    "habitat": "dungeon",
+    "attack_name": "Sword",
+    "damage_type": "slashing",
+    "hit_dice": "20d10+100",
+    "abilities": {
+      "str": 24,
+      "dex": 9,
+      "con": 20,
+      "int": 3,
+      "wis": 11,
+      "cha": 1
+    },
+    "speeds_ft": {
+      "walk": 30
+    },
+    "senses": {
+      "darkvision": "120 ft.",
+      "passive_perception": 10
+    },
+    "resist": [],
+    "immune": [
+      "fire",
+      "poison",
+      "psychic",
+      "bludgeoning, piercing, and slashing from nonmagical weapons that aren't adamantine"
+    ],
+    "vulnerable": [],
+    "cond_immune": [
+      "charmed",
+      "exhaustion",
+      "frightened",
+      "paralyzed",
+      "petrified",
+      "poisoned"
+    ],
+    "_notes": "flattened to basic attacks; implemented: Poison Breath, Magic Resistance; not modeled: Fire Absorption; Immutable Form; Magic Weapons"
+  },
+  {
+    "id": "dragon-turtle",
+    "cname": "Dragon Turtle",
+    "ac": 20,
+    "max_hp": 341,
+    "init_mod": 0,
+    "speed": 3,
+    "atk_bonus": 13,
+    "damage": "3d12+7",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 7,
+    "acro": 0,
+    "stealth": 0,
+    "passive_perception": 11,
+    "saves": {
+      "str": 7,
+      "dex": 6,
+      "con": 11,
+      "int": 0,
+      "wis": 7,
+      "cha": 1
+    },
+    "save_dc": 20,
+    "features": [
+      "monster-multiattack-3",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 17,
+    "xp": 18000,
+    "size": "Gargantuan",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "water",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "22d20+110",
+    "abilities": {
+      "str": 25,
+      "dex": 10,
+      "con": 20,
+      "int": 10,
+      "wis": 12,
+      "cha": 12
+    },
+    "speeds_ft": {
+      "walk": 20,
+      "swim": 40
+    },
+    "senses": {
+      "darkvision": "120 ft.",
+      "passive_perception": 11
+    },
+    "resist": [
+      "fire"
+    ],
+    "immune": [],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Steam Breath; not modeled: Amphibious; action: Tail"
+  },
+  {
+    "id": "adult-white-dragon",
+    "cname": "Adult White Dragon",
+    "ac": 18,
+    "max_hp": 200,
+    "init_mod": 0,
+    "speed": 7,
+    "atk_bonus": 11,
+    "damage": "2d10+6",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 6,
+    "acro": 0,
+    "stealth": 5,
+    "passive_perception": 21,
+    "saves": {
+      "str": 6,
+      "dex": 5,
+      "con": 11,
+      "int": -1,
+      "wis": 6,
+      "cha": 6
+    },
+    "save_dc": 19,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 13,
+    "xp": 10000,
+    "size": "Huge",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "16d12+96",
+    "abilities": {
+      "str": 22,
+      "dex": 10,
+      "con": 22,
+      "int": 8,
+      "wis": 12,
+      "cha": 12
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "burrow": 30,
+      "fly": 80,
+      "swim": 40
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 21
+    },
+    "resist": [],
+    "immune": [
+      "cold"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Cold Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "adult-brass-dragon",
+    "cname": "Adult Brass Dragon",
+    "ac": 18,
+    "max_hp": 172,
+    "init_mod": 0,
+    "speed": 7,
+    "atk_bonus": 11,
+    "damage": "2d10+6",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 6,
+    "acro": 0,
+    "stealth": 5,
+    "passive_perception": 21,
+    "saves": {
+      "str": 6,
+      "dex": 5,
+      "con": 10,
+      "int": 2,
+      "wis": 6,
+      "cha": 8
+    },
+    "save_dc": 19,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 13,
+    "xp": 10000,
+    "size": "Huge",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "15d12+75",
+    "abilities": {
+      "str": 23,
+      "dex": 10,
+      "con": 21,
+      "int": 14,
+      "wis": 13,
+      "cha": 17
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "burrow": 40,
+      "fly": 80
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 21
+    },
+    "resist": [],
+    "immune": [
+      "fire"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Fire Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "adult-black-dragon",
+    "cname": "Adult Black Dragon",
+    "ac": 19,
+    "max_hp": 195,
+    "init_mod": 2,
+    "speed": 7,
+    "atk_bonus": 11,
+    "damage": "2d10+6",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 6,
+    "acro": 2,
+    "stealth": 7,
+    "passive_perception": 21,
+    "saves": {
+      "str": 6,
+      "dex": 7,
+      "con": 10,
+      "int": 2,
+      "wis": 6,
+      "cha": 8
+    },
+    "save_dc": 19,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 14,
+    "xp": 11500,
+    "size": "Huge",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "17d12+85",
+    "abilities": {
+      "str": 23,
+      "dex": 14,
+      "con": 21,
+      "int": 14,
+      "wis": 13,
+      "cha": 17
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "fly": 80,
+      "swim": 40
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 21
+    },
+    "resist": [],
+    "immune": [
+      "acid"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Acid Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "adult-copper-dragon",
+    "cname": "Adult Copper Dragon",
+    "ac": 18,
+    "max_hp": 184,
+    "init_mod": 1,
+    "speed": 7,
+    "atk_bonus": 11,
+    "damage": "2d10+6",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 6,
+    "acro": 1,
+    "stealth": 6,
+    "passive_perception": 22,
+    "saves": {
+      "str": 6,
+      "dex": 6,
+      "con": 10,
+      "int": 4,
+      "wis": 7,
+      "cha": 8
+    },
+    "save_dc": 19,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 14,
+    "xp": 11500,
+    "size": "Huge",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "16d12+80",
+    "abilities": {
+      "str": 23,
+      "dex": 12,
+      "con": 21,
+      "int": 18,
+      "wis": 15,
+      "cha": 17
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "climb": 40,
+      "fly": 80
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 22
+    },
+    "resist": [],
+    "immune": [
+      "acid"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Acid Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "adult-green-dragon",
+    "cname": "Adult Green Dragon",
+    "ac": 19,
+    "max_hp": 207,
+    "init_mod": 1,
+    "speed": 7,
+    "atk_bonus": 11,
+    "damage": "2d10+6",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 6,
+    "acro": 1,
+    "stealth": 6,
+    "passive_perception": 22,
+    "saves": {
+      "str": 6,
+      "dex": 6,
+      "con": 10,
+      "int": 4,
+      "wis": 7,
+      "cha": 8
+    },
+    "save_dc": 19,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 15,
+    "xp": 13000,
+    "size": "Huge",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "18d12+90",
+    "abilities": {
+      "str": 23,
+      "dex": 12,
+      "con": 21,
+      "int": 18,
+      "wis": 15,
+      "cha": 17
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "fly": 80,
+      "swim": 40
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 22
+    },
+    "resist": [],
+    "immune": [
+      "poison"
+    ],
+    "vulnerable": [],
+    "cond_immune": [
+      "poisoned"
+    ],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Poison Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "adult-bronze-dragon",
+    "cname": "Adult Bronze Dragon",
+    "ac": 19,
+    "max_hp": 212,
+    "init_mod": 0,
+    "speed": 7,
+    "atk_bonus": 12,
+    "damage": "2d10+7",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 7,
+    "acro": 0,
+    "stealth": 5,
+    "passive_perception": 22,
+    "saves": {
+      "str": 7,
+      "dex": 5,
+      "con": 11,
+      "int": 3,
+      "wis": 7,
+      "cha": 9
+    },
+    "save_dc": 20,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 15,
+    "xp": 13000,
+    "size": "Huge",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "17d12+102",
+    "abilities": {
+      "str": 25,
+      "dex": 10,
+      "con": 23,
+      "int": 16,
+      "wis": 15,
+      "cha": 19
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "fly": 80,
+      "swim": 40
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 22
+    },
+    "resist": [],
+    "immune": [
+      "lightning"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Lightning Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "adult-blue-dragon",
+    "cname": "Adult Blue Dragon",
+    "ac": 19,
+    "max_hp": 225,
+    "init_mod": 0,
+    "speed": 7,
+    "atk_bonus": 12,
+    "damage": "2d10+7",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 7,
+    "acro": 0,
+    "stealth": 5,
+    "passive_perception": 22,
+    "saves": {
+      "str": 7,
+      "dex": 5,
+      "con": 11,
+      "int": 3,
+      "wis": 7,
+      "cha": 9
+    },
+    "save_dc": 20,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 16,
+    "xp": 15000,
+    "size": "Huge",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "18d12+108",
+    "abilities": {
+      "str": 25,
+      "dex": 10,
+      "con": 23,
+      "int": 16,
+      "wis": 15,
+      "cha": 19
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "burrow": 30,
+      "fly": 80
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 22
+    },
+    "resist": [],
+    "immune": [
+      "lightning"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Lightning Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "adult-silver-dragon",
+    "cname": "Adult Silver Dragon",
+    "ac": 19,
+    "max_hp": 243,
+    "init_mod": 0,
+    "speed": 7,
+    "atk_bonus": 13,
+    "damage": "2d10+8",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 8,
+    "acro": 0,
+    "stealth": 5,
+    "passive_perception": 21,
+    "saves": {
+      "str": 8,
+      "dex": 5,
+      "con": 12,
+      "int": 3,
+      "wis": 6,
+      "cha": 10
+    },
+    "save_dc": 22,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 16,
+    "xp": 15000,
+    "size": "Huge",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "18d12+126",
+    "abilities": {
+      "str": 27,
+      "dex": 10,
+      "con": 25,
+      "int": 16,
+      "wis": 13,
+      "cha": 21
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "fly": 80
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 21
+    },
+    "resist": [],
+    "immune": [
+      "cold"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Cold Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "adult-red-dragon",
+    "cname": "Adult Red Dragon",
+    "ac": 19,
+    "max_hp": 256,
+    "init_mod": 0,
+    "speed": 7,
+    "atk_bonus": 14,
+    "damage": "2d10+8",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 8,
+    "acro": 0,
+    "stealth": 6,
+    "passive_perception": 23,
+    "saves": {
+      "str": 8,
+      "dex": 6,
+      "con": 13,
+      "int": 3,
+      "wis": 7,
+      "cha": 11
+    },
+    "save_dc": 22,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 17,
+    "xp": 18000,
+    "size": "Huge",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "19d12+133",
+    "abilities": {
+      "str": 27,
+      "dex": 10,
+      "con": 25,
+      "int": 16,
+      "wis": 13,
+      "cha": 21
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "climb": 40,
+      "fly": 80
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 23
+    },
+    "resist": [],
+    "immune": [
+      "fire"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Fire Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "adult-gold-dragon",
+    "cname": "Adult Gold Dragon",
+    "ac": 19,
+    "max_hp": 256,
+    "init_mod": 2,
+    "speed": 7,
+    "atk_bonus": 14,
+    "damage": "2d10+8",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 8,
+    "acro": 2,
+    "stealth": 8,
+    "passive_perception": 24,
+    "saves": {
+      "str": 8,
+      "dex": 8,
+      "con": 13,
+      "int": 3,
+      "wis": 8,
+      "cha": 13
+    },
+    "save_dc": 22,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 17,
+    "xp": 18000,
+    "size": "Huge",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "19d12+133",
+    "abilities": {
+      "str": 27,
+      "dex": 14,
+      "con": 25,
+      "int": 16,
+      "wis": 15,
+      "cha": 24
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "fly": 80,
+      "swim": 40
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 24
+    },
+    "resist": [],
+    "immune": [
+      "fire"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Fire Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "ancient-white-dragon",
+    "cname": "Ancient White Dragon",
+    "ac": 20,
+    "max_hp": 333,
+    "init_mod": 0,
+    "speed": 7,
+    "atk_bonus": 14,
+    "damage": "2d10+8",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 8,
+    "acro": 0,
+    "stealth": 6,
+    "passive_perception": 23,
+    "saves": {
+      "str": 8,
+      "dex": 6,
+      "con": 14,
+      "int": 0,
+      "wis": 7,
+      "cha": 8
+    },
+    "save_dc": 22,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 20,
+    "xp": 25000,
+    "size": "Gargantuan",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "18d20+144",
+    "abilities": {
+      "str": 26,
+      "dex": 10,
+      "con": 26,
+      "int": 10,
+      "wis": 13,
+      "cha": 14
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "burrow": 40,
+      "fly": 80,
+      "swim": 40
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 23
+    },
+    "resist": [],
+    "immune": [
+      "cold"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Cold Breath; not modeled: Legendary Resistance; legendary actions"
+  },
+  {
+    "id": "ancient-brass-dragon",
+    "cname": "Ancient Brass Dragon",
+    "ac": 20,
+    "max_hp": 297,
+    "init_mod": 0,
+    "speed": 7,
+    "atk_bonus": 14,
+    "damage": "2d10+8",
+    "ranged": false,
+    "atk_range": 2,
+    "athletics": 8,
+    "acro": 0,
+    "stealth": 6,
+    "passive_perception": 24,
+    "saves": {
+      "str": 8,
+      "dex": 6,
+      "con": 13,
+      "int": 3,
+      "wis": 8,
+      "cha": 10
+    },
+    "save_dc": 22,
+    "features": [
+      "monster-multiattack-3",
+      "monster-frightful-presence",
+      "monster-breath-weapon-greater"
+    ],
+    "cr": 20,
+    "xp": 25000,
+    "size": "Gargantuan",
+    "type": "dragon",
+    "faction": "dragon",
+    "habitat": "wild",
+    "attack_name": "Bite",
+    "damage_type": "piercing",
+    "hit_dice": "17d20+119",
+    "abilities": {
+      "str": 27,
+      "dex": 10,
+      "con": 25,
+      "int": 16,
+      "wis": 15,
+      "cha": 19
+    },
+    "speeds_ft": {
+      "walk": 40,
+      "burrow": 40,
+      "fly": 80
+    },
+    "senses": {
+      "blindsight": "60 ft.",
+      "darkvision": "120 ft.",
+      "passive_perception": 24
+    },
+    "resist": [],
+    "immune": [
+      "fire"
+    ],
+    "vulnerable": [],
+    "cond_immune": [],
+    "_notes": "flattened to basic attacks; implemented: Frightful Presence, Fire Breath; not modeled: Legendary Resistance; legendary actions"
   }
 ]

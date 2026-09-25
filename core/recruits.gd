@@ -21,6 +21,7 @@
 #   Recruits.why_not(party, offer)        # "" when the company can take them on, else the reason, in words
 #   Recruits.hire(party, world, s, offer, ch)   # "" and they are on the roster, else the reason
 #   Recruits.players_pick(p)              # is this pending choice the player's to make?
+#   Recruits.intro(ch)                    # the inn's one line: who they were, what they are like
 #   Recruits.to_dict(party) / from_dict(party, d)   # the save's party["hiring"]
 #
 # THE POOL is seeded off the settlement and the DAY, the way the market's shelf
@@ -47,7 +48,17 @@
 # way out, so a trimmed copy would cost them the levels for good). What keeps
 # that fair is where they turn up: only at an inn whose country fights at
 # their level or higher (their level <= Regions.level_here), so a level-9
-# veteran is a Frontier hire, not a heartland walkover.
+# veteran is a Frontier hire, not a heartland walkover. The dead are not
+# offered at all (the design audit §2.1): a hero who died in an earlier run and
+# was never raised is filed dead, and stays that way — the old two lines that
+# stood a returning hero up whatever their file said are gone. The inn shows a
+# veteran's record from those runs (core/service.gd veteran_line), not just
+# that they are one.
+#
+# WHO THEY ARE, IN A LINE (§2.5): every chair has an intro built from the
+# background they grew up in and the temper they have (intro(), below), in the
+# house voice, seeded off the name and both, so the same face says the same
+# thing on every look.
 #
 # THE FEE is one-time — no wages, no upkeep, ever (owner's call). About 50 ◉ a
 # level, and a name knocks some off it: people want to sign with a company
@@ -78,6 +89,7 @@ const Regions = preload("res://core/regions.gd")
 const Ladder = preload("res://core/ladder.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
 const RNG = preload("res://core/rng.gd")
+const Service = preload("res://core/service.gd")
 
 # TUNING: the owner's figure, "about 50 gold x the recruit's level". Taste, not
 # a sweep: a level-1 hand is two nights at a city inn and a bit, a level-5 one
@@ -120,6 +132,72 @@ static func players_pick(p: Dictionary) -> bool:
 	if String(p["type"]) in PLAYERS_TYPES or origin == "subclass":
 		return true
 	return String(p["type"]) in LEVEL_UP_TYPES and origin == "class"
+
+# --- who they are, in a line (§2.5) --------------------------------------------
+#
+# Two sentences with the subject left off, the way a trait's text reads ("Looks
+# at the floor before stepping on it."): what their background made of them,
+# then what they are like. Two of each so two soldiers at one table are not the
+# same soldier. A pack's new background or temperament has no line here and
+# drops its half; a recruit with neither has no intro.
+const PAST := {
+	"acolyte": ["Kept the lamps lit in a temple that did not pay.",
+		"Knows the rites for the dead by heart, and has said them more than once."],
+	"artisan": ["Has calluses in the places a trade puts them.",
+		"Left a workshop, and a master who is still owed a year."],
+	"charlatan": ["Has been three other people this year, and liked one of them.",
+		"Sold a cure for everything in a town that has since caught on."],
+	"criminal": ["Knows how a lock is made, and how it is unmade.",
+		"Is not welcome in two cities, and will not say which."],
+	"entertainer": ["Has played to rooms that threw things, and rooms that threw coin.",
+		"Can hold a crowd for an hour and a tune for a week."],
+	"farmer": ["Left a field that will go to weeds without them.",
+		"Has buried livestock in a hard winter, and a neighbour too."],
+	"guard": ["Stood a gate for years and saw most of what came through it.",
+		"Walked a wall at night long enough to learn what the dark sounds like."],
+	"guide": ["Knows three ways over every ridge in the country they came from.",
+		"Has brought people home that other guides left behind."],
+	"hermit": ["Spent years alone somewhere, and came back quieter.",
+		"Talks to themselves, and sometimes the answer is useful."],
+	"merchant": ["Can price a sword by looking at the hilt.",
+		"Lost a season's stock on a bad road, and learned from it."],
+	"noble": ["Was raised to give orders, and is still learning to take them.",
+		"Has a name that opens doors, and a family that would rather it did not."],
+	"sage": ["Has read about most of the things that will try to kill the company.",
+		"Carries more books than rations, and knows it."],
+	"sailor": ["Walks like the ground might roll, and ties every knot twice.",
+		"Has seen a ship go down, and swum away from it."],
+	"scribe": ["Copied other people's histories until they wanted one of their own.",
+		"Writes everything down, including what nobody asked them to."],
+	"soldier": ["Served in someone else's war and walked away from it whole.",
+		"Knows how to stand in a line, and what it costs when the line breaks."],
+	"wayfarer": ["Has slept in more ditches than beds, and complains of neither.",
+		"Has walked every road that goes anywhere near here."],
+}
+const TEMPER := {
+	"brave": ["The first through a door, every time.", "Does not step back, and has the scars to show for it."],
+	"craven": ["Finds the way out before the fight.", "Has outlived braver people, and does not apologise for it."],
+	"wrathful": ["Slow to forgive, and quick with everything else.", "Holds a grudge the way other people hold a job."],
+	"calm": ["Speaks quietly, even when the room is on fire.", "Nobody has heard them raise their voice."],
+	"greedy": ["Asks about the pay before the job.", "Counts the purse twice and the company once."],
+	"generous": ["Shares the last of the water and does not mention it.", "Buys the round when it is not their turn."],
+	"curious": ["Wants to know what is behind the door, and the one behind that.", "Asks the questions everyone else thought better of."],
+	"cautious": ["Checks the floor, the ceiling and the way out, in that order.", "Would rather be late than dead, and says so."],
+}
+
+static func intro(ch) -> String:
+	if ch == null:
+		return ""
+	var temper := Traits.of(ch, "temperament")
+	var h := absi(hash("intro|%s|%s|%s" % [ch.cname, ch.background_id, temper]))
+	var parts: Array = []
+	var past: Array = PAST.get(ch.background_id, [])
+	if not past.is_empty():
+		parts.append(String(past[h % past.size()]))
+	var now: Array = TEMPER.get(temper, [])
+	if not now.is_empty():
+		parts.append(String(now[(h / 7) % now.size()]))
+	return " ".join(parts)
 
 # --- the rule ---------------------------------------------------------------
 
@@ -184,7 +262,10 @@ static func _veteran_for(s, p: int, world, party) -> Dictionary:
 		if party != null and party.get_member(String(slug)) != null:
 			continue
 		var ch = CharacterSave.load_slug(String(slug))
-		if ch == null or ch.levels.is_empty() or ch.level() > here:
+		# The dead stay dead across runs (the design audit §2.1): a hero whose
+		# file says dead died and was never raised, and is on a roll of the
+		# fallen somewhere, not in a common room.
+		if ch == null or ch.dead or ch.levels.is_empty() or ch.level() > here:
 			continue
 		fits.append({"id": String(slug), "level": ch.level()})
 	if fits.is_empty():
@@ -223,10 +304,9 @@ static func build(offer: Dictionary):
 	var ch = null
 	if vet != "":
 		ch = CharacterSave.load_slug(vet)
-		if ch == null:
-			return null
-		ch.dead = false        # the barracks is for the living — the same two lines
-		ch.hp_current = -1     # a new run used to put a returning hero through
+		if ch == null or ch.dead:
+			return null        # _veteran_for never offers the dead; a stale offer does not raise them
+		ch.hp_current = -1     # rested: a new run puts a returning hero at full HP
 	else:
 		ch = _roll(int(offer.get("seed", 1)), int(offer.get("level", 1)))
 	if _built.size() >= BUILT_KEEP:
@@ -430,6 +510,7 @@ static func hire(party, world, s, offer: Dictionary, ch) -> String:
 	if not party.spend_gold(int(still[0]["fee"])):
 		return "The purse cannot cover the fee."
 	party.add_member(ch)
+	Service.enlist(ch)   # one more company on their record
 	_mark_taken(party, String(s.id), int(still[0]["period"]), int(still[0]["slot"]))
 	return ""
 

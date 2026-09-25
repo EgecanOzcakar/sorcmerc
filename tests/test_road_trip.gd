@@ -21,7 +21,13 @@ const AI = preload("res://core/ai.gd")
 const Settings = preload("res://core/settings.gd")
 
 const POLICY := "engage"
-const RUNS := 4            # the large map, its bands reseeded each run
+# The large map, its bands reseeded each run. Was 4: eight legs are too few to
+# hold the "not empty" floor below. When the band table gained three kinds
+# (2026-09-25) the same four seeds went from 1.0 bands met a leg to 0.1 with
+# the road's population unchanged — monster bands within 250 units of this
+# road, 40 seeds: 1.20 a map before, 1.15 after — and at twelve runs the two
+# builds read the same, 0.8 a leg each (seeds 1000-1011, back to back).
+const RUNS := 12
 const LEGS := 2            # Riverhold -> Oakford -> Greenmarch: the first road a new company walks
 const FRAMES := 20000      # per leg, before it is called wedged
 

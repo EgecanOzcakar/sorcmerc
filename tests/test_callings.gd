@@ -21,11 +21,17 @@ func check(cond: bool, label: String) -> void:
 func _init() -> void:
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/callings-%d-%d" % [OS.get_process_id(), randi()])
 	test_templates()
+	# These are about each background's first past and the targets it picks,
+	# so the second and third (audit 2.5, test_variants below) are set aside
+	# the way a pack that rewrites every background would set them aside.
+	Callings.set_packs(Callings.TEMPLATES)
 	test_assign()
 	test_beat()
 	test_check()
 	test_complete()
 	test_describe_and_save()
+	Callings.set_packs({})
+	test_variants()
 	print("test_callings: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -405,3 +411,103 @@ func test_describe_and_save() -> void:
 	check(p2.callings.is_empty(), "a missing dict is an empty one")
 	Callings.from_dict(p2, {"vera": "junk", "pike": {"target_id": "x"}})
 	check(p2.callings.is_empty(), "an entry without a background is dropped")
+
+# --- the second and third pasts (the design audit §2.5) ------------------------
+
+func test_variants() -> void:
+	var items: Dictionary = Catalog.index("magic-items.json")
+	var kind_for := {"landmark_answered": "landmark", "lair_cleared": "lair", "band_beaten": "band",
+		"visited": "settlement", "audience": "audience"}
+	for bg in Callings.TEMPLATES:
+		var vs: Array = Callings.variants(bg)
+		check(vs.size() >= 2 and vs.size() <= 3, "%s has two or three pasts (%d)" % [bg, vs.size()])
+		check(vs[0] == Callings.TEMPLATES[bg], "...the first of them the one it always had")
+		var titles := {}
+		for c in vs:
+			titles[String(c["title"])] = true
+			check(items.has(c["item"]) and String(items.get(c["item"], {}).get("rarity", "")) == "uncommon",
+				"%s's %s is a real uncommon item" % [bg, c["item"]])
+			check(kind_for.get(c["done_by"], "") == c["target"]["kind"], "%s / %s: the event matches the target" % [bg, c["title"]])
+			check(("%s" in c["tell"]) == (c["target"]["kind"] != "audience") and ("%s" in c["done"]) == (c["target"]["kind"] != "audience"),
+				"%s / %s: the lines name the target unless it is an audience" % [bg, c["title"]])
+			for line in [String(c["tell"]), String(c["done"])]:
+				check(not "!" in line and not "n't" in line and not "'ll" in line and not "'re" in line,
+					"%s / %s: the house register, no contractions or shouting" % [bg, c["title"]])
+		check(titles.size() == vs.size(), "%s's pasts are different pasts" % bg)
+	var flat := {}
+	for bg in Callings.VARIANTS:
+		for i in Callings.VARIANTS[bg].size():
+			flat["%s/%d" % [bg, i + 1]] = Callings.VARIANTS[bg][i]
+	check(Callings.validate(flat).is_empty(), "the extra pasts validate as a pack's would: %s" % [Callings.validate(flat)])
+	# round one's fix holds in the new ones too: a band past about people who
+	# keep papers or grudges says which people
+	check(Callings.VARIANTS["merchant"][0]["target"]["factions"] == ["bandit", "soldier"], "the bought note is held by bandits or soldiers")
+	check(Callings.variants("soldier")[0]["target"]["factions"] == ["bandit", "soldier"], "...and the deserters are still bandits or soldiers")
+
+	# which past: seeded off the hero, the same on every assign
+	var w := _world()
+	w.add_landmark(World.Landmark.new("old-ruin", "ruins", Vector2(350, 0)))
+	var seen := {}
+	for i in 24:
+		var p := _lone("soldier", "soldier-%d" % i)
+		Callings.assign(p, w)
+		var id := "soldier-%d" % i
+		var c: Dictionary = p.callings.get(id, {})
+		check(not c.is_empty(), "every soldier gets a past on a map with ruins, bandits and a city")
+		if c.is_empty():
+			continue
+		var p2 := _lone("soldier", id)
+		Callings.assign(p2, w)
+		check(int(p2.callings[id]["variant"]) == int(c["variant"]), "...the same one assigned again (%s)" % id)
+		check(Callings.template_for(c) == Callings.variants("soldier")[int(c["variant"])], "...and template_for reads it back")
+		seen[int(c["variant"])] = true
+	check(seen.size() == 3, "over two dozen soldiers, all three pasts turn up (%s)" % [seen.keys()])
+
+	# the chosen past has nothing on this map: the next one in turn that does
+	var wg = World.new()
+	wg.add_party(World.RoamingParty.new("player", Vector2.ZERO, "human", true))
+	wg.add_party(World.RoamingParty.new("gnoll-pack-2", Vector2(100, 0), "gnoll"))
+	wg.add_landmark(World.Landmark.new("old-ruin", "ruins", Vector2(300, 0)))
+	var fell_back := false
+	for i in 12:
+		var id := "lone-%d" % i
+		var ps := _lone("soldier", id)
+		check(Callings.assign(ps, wg) == [id], "gnolls and a ruin: every soldier still has a past (%s)" % id)
+		var c: Dictionary = ps.callings.get(id, {})
+		check(String(c.get("target_id", "")) == "old-ruin" and Callings.template_for(c)["title"] == "The last stand",
+			"...the last stand, the only one this map can point at")
+		if absi(hash("calling|%s" % id)) % 3 != 1:
+			fell_back = true
+	check(fell_back, "...including soldiers whose own first pick had nothing to point at")
+
+	# the save keeps which past; an old save's entry reads as the first
+	var pv := _lone("soldier", "vera")
+	pv.callings["vera"] = {"id": "soldier", "variant": 2, "target_kind": "settlement", "target_id": "riverhold",
+		"state": "told", "told_at": 5.0}
+	var back = JSON.parse_string(JSON.stringify(Callings.to_dict(pv)))
+	var pr := _lone("soldier", "vera")
+	Callings.from_dict(pr, back)
+	check(pr.callings["vera"]["variant"] is int and int(pr.callings["vera"]["variant"]) == 2
+		and Callings.describe(pr, "vera") == "The captain's price — told, marked on the map", "the variant survives a save")
+	Callings.from_dict(pr, {"vera": {"id": "soldier", "target_kind": "band", "target_id": "cutthroats", "state": "told"}})
+	check(not pr.callings["vera"].has("variant") and Callings.describe(pr, "vera") == "The deserters — told, marked on the map",
+		"an entry from before variants is the past it was told, and is kept as it was written")
+
+	# a pack that writes a background's past writes THE past for it
+	Callings.set_packs({"soldier": {"title": "The Vale's deserters", "target": {"kind": "band"}, "done_by": "band_beaten",
+		"item": "javelin-of-lightning", "tell": "%s x", "done": "%s y"}})
+	check(Callings.variants("soldier").size() == 1 and Callings.variants("soldier")[0]["title"] == "The Vale's deserters",
+		"a pack's soldier is every soldier's: the built-in variants step aside")
+	check(Callings.variants("acolyte").size() == 2, "...and only that background's")
+	check(Callings.template_for(pv.callings["vera"])["title"] == "The Vale's deserters", "an entry past the end reads as the first")
+	Callings.set_packs({})
+	check(Callings.variants("soldier").size() == 3, "turning the pack off brings them back")
+
+# A party of one hero with this background and id, marching.
+func _lone(bg: String, id: String) -> Party:
+	var p := _party([bg])
+	var ch = p.get_member("vera")
+	var solo = Party.new()
+	ch.id = id
+	solo.add_member(ch)
+	return solo

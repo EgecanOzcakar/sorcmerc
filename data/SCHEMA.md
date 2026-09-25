@@ -282,7 +282,17 @@ F1 export must keep it.
 
 ---
 
-## bestiary.json — array, 316 records (F1b)
+## bestiary.json — array, 342 records (F1b, and the Far Deeps' 26)
+
+The first 316 are F1b's (below, CR 0–10). On 2026-09-25 the Far Deeps gained
+26 more at CR 11–20 — every SRD statblock of a Deeps home faction in that range
+(dragon, giant, undead, elemental, construct, monstrosity; the SRD has no fey
+above CR 3), appended by `tools/import_srd_monsters.py`, which writes down the
+derivation below: `--check` rebuilds 312 of the 313 original entries the SRD
+still has field for field (the giant elk's damage was hand-corrected), and
+`--write` appends its hand-tagged table (faction, habitat, at most three feature
+templates, `_notes`). One id is not the SRD index: `vampire` (the SRD's
+`vampire-vampire`, one of three forms).
 
 The expanded monster pool. **Same per-entry shape as `data/monsters.json`** (which
 keeps the four hand-tuned Sunken Shrine foes and is left untouched) plus inert

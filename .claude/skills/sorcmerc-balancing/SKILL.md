@@ -13,7 +13,7 @@ The rules are **D&D 5e 2024 (SRD) on a hex board**, not a bespoke stat model. Fa
   - the six abilities (STR, DEX, CON, INT, WIS, CHA), proficiency bonus, AC, max HP (hit die per class) and saving throws;
   - skills, speed in feet and initiative (d20 + DEX mod);
   - resource pools (Rage, Second Wind, Channel Divinity and so on) and spell slots.
-- **Monsters** are `data/bestiary.json` entries (316 of them): `ac`, `max_hp`, `init_mod`, `speed`, `atk_bonus`, `damage`, `saves`, `abilities`, `resist`/`immune`/`vulnerable`/`cond_immune`, `features`, `cr` and `xp`, each tagged with `faction` and `habitat`.
+- **Monsters** are `data/bestiary.json` entries (342 of them: the 316 SRD CR 0–10 entries of F1b, plus 26 at CR 11–20 added 2026-09-25 by `tools/import_srd_monsters.py`): `ac`, `max_hp`, `init_mod`, `speed`, `atk_bonus`, `damage`, `saves`, `abilities`, `resist`/`immune`/`vulnerable`/`cond_immune`, `features`, `cr` and `xp`, each tagged with `faction` and `habitat`.
 - **Conditions** are the 15 official ones (`data/effects/conditions.json`) plus the engine-only states in `combat.gd` `ENGINE_CONDS`: dodging, hidden, helped, reckless, sapped and slowed. Exhaustion exists, and a long rest clears one level.
 - Fatigue, Resolve, Melee/Ranged Skill and Melee/Ranged Defense **don't exist**. The nearest things are AC (defence), attack bonus = proficiency + ability mod (skill), and party opinion/"morale" (`core/party_opinion.gd`), which only touches travel checks and in-fight bonds. It is not a per-merc stat.
 
@@ -68,7 +68,7 @@ Difficulty is a product of **independent multipliers**, each answering its own q
 | Latest measured (2026-09-24, current autopilot) | 96.5 / 93.0 / 81.5%, about 4 foes (the old autopilot read 96.5 / 90.0 / 79.5) | `core/scaler.gd` header, "RE-MEASURED 2026-09-24: the RULER moved" |
 | Fight length, level 3 | about 7–8 rounds (level 8 about 9.6). **Old-autopilot measurements** (the 2026-09-15 retune; level 8 from T-classes-b), not re-measured since the autopilot spends its whole turn | `core/scaler.gd` header |
 | Within the party's band, easy | 93.8–100% at every level 3–15 (the ruler party, new autopilot); a built level-10 party: 73.3% (old autopilot) | `core/regions.gd` header |
-| One band too deep | level 3 in the Marches: 28.8% (new autopilot; 17.5% under the old); in the Deeps: 2.5% | `core/regions.gd` header |
+| One band too deep | level 3 in the Marches: 28.8% (new autopilot; 17.5% under the old; 28.0% re-measured 2026-09-25); in the Deeps: 2.5%; level 10 in the Unmapped (content 15): 71.5% | `core/regions.gd` header |
 
 - Nothing sets a target for early hit rate or for hits-to-kill. The chat's proposed targets (55–70% early hit rate, 3–5 rounds, 3–4 hits to kill) are **not** in the code. Measured fights run longer than 3–5 rounds, and the original MVP brief aimed for 6–15.
 - If you want those metrics, add them to a sweep as measurements before turning them into targets.
