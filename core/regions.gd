@@ -286,6 +286,22 @@ static func ref_score(level: int) -> float:
 	return s
 
 
+# What an easy open-country fight pays at level `level`, for the whole party:
+# scaler's budget for the ruler at that level (_budget at ref_score(L), the
+# "easy" TIER open country defaults to) times Encounter.XP_PER_POWER, which is
+# how a road fight is paid — a roster spends its budget, and XP is its power
+# x XP_PER_POWER. Arithmetic on the same numbers a fight is built from, not a
+# measurement of fights: a real roster lands at or a little under its budget.
+# core/quest_posting.gd prices a job's XP in these (Quest.XP_FIGHTS, the
+# design audit §5.3), at the level the posting's country pins a fight to.
+# ESTIMATED (tests/sweep_economy.gd, 2026-09-25): 48 at level 1, 122 at 3, 275
+# at 6, 412 at 10, 605 at 15, 853 at 20.
+static func fight_xp(level: int) -> int:
+	var budget: float = Scaler.REF_SCORE * pow(ref_score(level) / Scaler.REF_SCORE, Scaler.CURVE) \
+		* float(Scaler.TIER["easy"])
+	return roundi(budget * Encounter.XP_PER_POWER)
+
+
 # MEASURED (2026-09-13), 80 seeds a cell, fight seed pinned (spec["seed"] = s,
 # the omission that made an earlier sweep in this repo unreproducible), preset
 # trio, wilderness tier `easy` — which is what core/world_threat.gd sends into

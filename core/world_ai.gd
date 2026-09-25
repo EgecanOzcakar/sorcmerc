@@ -96,7 +96,7 @@ static func is_hostile(party, other) -> bool:
 # Raiders (ai.behavior == "raid") are NOT kept: their lair sends the next lot
 # on its own clock (core/raids.gd). Civilized patrols are not kept either —
 # that is the town's loss, not a spawn.
-const BAND_RESPAWN := 2880.0   # two in-game days; a lair takes one (WorldLairs.RESPAWN)
+const BAND_RESPAWN := 2880.0   # two in-game days; a lair near home takes one, a Deeps lair five (WorldLairs.respawn_after)
 
 static func fell(world, band) -> void:
 	if band.is_player or not is_monster(band.faction) \

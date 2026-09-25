@@ -41,36 +41,41 @@ static var PATH: String = SaveDir.path("progression.json")
 const FORMAT := "sorcmerc-progression"
 const VERSION := 1
 
-# --- TESTING PACE (temporary) ----------------------------------------------
+# --- THE SHIPPING PACE (restored 2026-09-25) --------------------------------
 #
-# Every threshold below is cut so the whole ladder can be walked in one sitting:
-# roughly one unlock per five fights, measured against what an open-country
-# fight actually pays (core/encounter.gd's power * XP_PER_POWER at
-# WorldThreat's "easy" baseline, resolved for the preset party — 2026-09-17):
+# The ladder spent its first months at a testing pace — every threshold cut so
+# the whole of it could be walked in one sitting, every class open by 8,000
+# lifetime XP, which is partway through a first run (the design audit §5.5).
+# These are the shipping numbers that comment kept, put back:
 #
-#   levels 1-2   55-75 xp a fight
-#   levels 3-5   120-240
-#   level 8      ~350
+#   SPECIES_COST  step 1500, gnome 1500 to aasimar 7500
+#   CLASS_COST    step 5000, rogue 10000 to sorcerer 40000
+#   SUBCLASS_COST 2500 class XP each
 #
-# So a species step is 250 (five early fights) and a class step is 1000 (five
-# fights at the level you reach them). The shipping numbers, to put back when
-# this stops being a testing build, were:
+# ESTIMATED from what the company earns (core/leveling.gd's table, a trio,
+# fight XP only; quests and landmarks come on top): a trio at level 4 has
+# banked ~1,800 lifetime XP between them, so the gnome opens around there; a
+# trio at level 8 ~8,400, at 10 ~13,500, at 20 ~43,500 — so the rogue opens
+# in the Frontier, and the last class, the sorcerer at 40,000, is about one
+# whole run to level 20. A paid subclass is 2,500 of one class's share, which
+# a single hero banks at about level 8, and the second at about level 11.
 #
-#   SUBCLASS_COST 2500
-#   SPECIES_COST  gnome 1500, tiefling 3000, dragonborn 4500, goliath 6000,
-#                 aasimar 7500                                  (step 1500)
-#   CLASS_COST    rogue 10000, fighter 15000, bard 20000, monk 25000,
-#                 druid 30000, paladin 35000, sorcerer 40000    (step 5000)
+# What counts: every XP the company earns — fights, finished jobs, landmarks
+# (Campaign.split_xp is the one door, and all three go through it; the owner
+# kept quests and landmarks counting, 2026-09-24). Catch-up levels handed to
+# a recruit do not (core/leveling.gd's grant_levels): a gift is not a haul.
 #
-# The ORDER and the shape are untouched — same ladder, same "every species
-# costs less than every class" invariant tests/test_progression.gd checks, at
-# a tenth of the distance.
+# Tests and drive robots that need a locked class or species open set their own
+# profile (Prog._current, or SORCMERC_PLAYTEST=1), never lean on a cheap ladder.
+#
+# The ORDER and the shape are what they always were: same ladder, same "every
+# species costs less than every class" invariant tests/test_progression.gd
+# checks.
 
 # Class XP, flat, for each of a class's other 2. Class XP is banked per
-# character share (campaign.gd's split_xp hands each fighter total/4), so this
-# accrues at about a quarter of the lifetime rate — 200 is three fights' worth
-# of it around the levels a player is buying subclasses at.
-const SUBCLASS_COST := 200
+# character share (campaign.gd's split_xp hands each fighter total / party
+# size), so it accrues at a third to a quarter of the lifetime rate.
+const SUBCLASS_COST := 2500
 
 # Open from day one, with every one of their lineages.
 const STARTING_SPECIES := ["human", "orc", "elf", "dwarf"]
@@ -81,11 +86,11 @@ const STARTING_SPECIES := ["human", "orc", "elf", "dwarf"]
 # flashy lineages (dragonborn, goliath) come next, and the celestial-blooded
 # aasimar is the rarest thing on the list, so it costs the most.
 const SPECIES_COST := {
-	"gnome": 250,
-	"tiefling": 500,
-	"dragonborn": 750,
-	"goliath": 1000,
-	"aasimar": 1250,
+	"gnome": 1500,
+	"tiefling": 3000,
+	"dragonborn": 4500,
+	"goliath": 6000,
+	"aasimar": 7500,
 }
 
 # Open from day one, each with exactly 2 of its 4 subclasses pre-chosen.
@@ -102,13 +107,13 @@ const STARTING_CLASSES := {
 # player re-opens familiar ground early, then the rest by how many moving parts
 # they ask a new player to juggle, ending on the sorcerer's metamagic economy.
 const CLASS_COST := {
-	"rogue": 2000,
-	"fighter": 3000,
-	"bard": 4000,
-	"monk": 5000,
-	"druid": 6000,
-	"paladin": 7000,
-	"sorcerer": 8000,
+	"rogue": 10000,
+	"fighter": 15000,
+	"bard": 20000,
+	"monk": 25000,
+	"druid": 30000,
+	"paladin": 35000,
+	"sorcerer": 40000,
 }
 
 var lifetime_xp := 0

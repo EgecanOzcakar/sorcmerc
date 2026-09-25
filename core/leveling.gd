@@ -20,19 +20,39 @@ const AVERAGE := -1
 # a party of four, and open country here pays "easy" fights split three ways
 # (measured 2026-09-17, tests/_tmp_xp sweep: 18 XP each at L1, 39 at L3, 78 at
 # L5, 115 at L8). Against the 5e table that was 17 fights to level 2 and 46 to
-# level 4. Each level here costs XP_PER_LEVEL more than the last, so a level
-# is six or seven open-country fights all the way up; sites and quests pay on
-# top of that.
+# level 4. Each level here costs XP_PER_LEVEL more than the last, up to
+# LATE_LEVEL, so a level is six or seven open-country fights all the way to
+# 10; sites and quests pay on top of that.
+#
+# LATE_LEVEL (2026-09-25, the design audit §5.4): past level 10 every level
+# costs what level 10 did, a flat 1,000. With the step still climbing, the Far
+# Deeps (levels 10-20) held ~73 of a run's fights against the Heartland's ~15
+# — most of the game spent in one country, clearing the same lairs. A flat
+# step lets fight XP (which keeps growing with the party) shorten each level.
+# ESTIMATED, an easy open-country fight's XP (Regions.fight_xp) split three
+# ways, fights to the next level (tests/sweep_economy.gd):
+#
+#   level    1   3   5   8  10  12  14  16  18  19   total 10->20
+#   before  6.2 7.4 6.6 7.0 7.3 7.3 7.3 7.7 7.2 7.3      ~73
+#   after   6.2 7.4 6.6 7.0 7.3 6.0 5.2 4.8 4.0 3.8      ~52
+#
+# Levels 1-10 are untouched (xp_for_level is the same there), so every banked
+# XP total below level 11 reads as the level it always did; a hero past 11 on
+# an old save simply finds a level-up waiting.
 const XP_PER_LEVEL := 100
+const LATE_LEVEL := 10
 const MAX_LEVEL := 20
 # Where a class stops being something a character dabbled in: the subclass is
 # in, the signature feature is on the sheet, and the build reads as that class
 # rather than as a dip. Same number milestones() already calls level_5 at.
 const VETERAN_LEVEL := 5
 
+# Total XP to reach `level`: the sum of the steps below it, each step
+# XP_PER_LEVEL x min(level, LATE_LEVEL).
 static func xp_for_level(level: int) -> int:
 	var l: int = clampi(level, 1, MAX_LEVEL)
-	return XP_PER_LEVEL * l * (l - 1) / 2
+	var early: int = mini(l, LATE_LEVEL + 1)
+	return XP_PER_LEVEL * early * (early - 1) / 2 + XP_PER_LEVEL * LATE_LEVEL * (l - early)
 
 static func can_level_up(ch) -> bool:
 	return ch.level() < MAX_LEVEL and int(ch.xp) >= xp_for_level(ch.level() + 1)
@@ -56,9 +76,12 @@ static func add_level(ch, class_id := "", hp_roll := AVERAGE) -> void:
 # the new arrival is not instantly owed another one.
 #
 # These levels are a gift, not a haul, so nothing here touches core/progression.gd:
-# lifetime XP — and the species/class unlocks it buys — only ever counts XP earned
-# in a fight, which core/campaign.gd banks on its own. Milestone achievements stay
-# out for the same reason: being handed level 5 is not reaching level 5.
+# lifetime XP — and the species/class unlocks it buys — only ever counts XP the
+# company EARNED: a fight's, a finished job's and a landmark's, all banked by
+# core/campaign.gd's split_xp (the owner kept quests and landmarks counting,
+# 2026-09-24; this comment used to say "only fight XP", which was never true).
+# Milestone achievements stay out for the same reason: being handed level 5 is
+# not reaching level 5.
 static func grant_levels(ch, target_level: int, class_id := "") -> void:
 	var cid: String = class_id if class_id != "" else ch.class_id()
 	if cid == "":

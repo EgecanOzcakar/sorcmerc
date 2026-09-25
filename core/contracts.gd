@@ -44,8 +44,9 @@ const GATE := {
 # TUNING — a taste number, not a measured one: gold is outside every sweep this
 # project runs (world.gd's PURSE ponytail says the same of a caravan). +25% at
 # +100 opinion, -6% at the QUEST_MIN floor; with the renown premium's +40% at
-# Legends a job tops out at x1.75. ponytail: re-cut it if contract XP (gold x
-# Quest.XP_PER_GOLD) visibly outpaces the region bands' level ranges in play.
+# Legends a job tops out at x1.75. It moves the gold only: a job's XP is the
+# posting country's fights' worth (Quest.XP_FIGHTS, 2026-09-25), so standing
+# can no longer carry XP past the region bands' level ranges.
 const STANDING_PAY := 0.25
 # What a job against a civilized people costs you with them: a band of theirs
 # killed (FactionOpinion.KILLED_THEIRS), since that is what it was.
