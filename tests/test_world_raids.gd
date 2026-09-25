@@ -163,16 +163,18 @@ func _init() -> void:
 	check(main._settlements3d.footprint(w.settlements[-1]) > 0.0, "the camp is on the 3D map")
 	# A raid that lands while the company stands in the town (a downtime row's
 	# days, a defeat's lost day) re-reads the open shelf, halved.
-	var town = w.settlements[0]
-	town.raided_by = ""
-	main._open_visit(town)
+	var open_town = w.settlements[0]
+	open_town.raided_by = ""
+	open_town.battle_at = -1.0   # no fight nearby either: the only thing to change is the raid
+	main._open_visit(open_town)
 	await process_frame
 	check(not main._visit.is_empty() and not bool(main._visit.get("battle", false)), "an open visit to a quiet town: the full shelf")
-	town.raided_by = "t-warren-raid"
+	var raider = w.lairs.filter(func(l): return not l.looted)[0]   # a lair that stands: Raids.tick lifts a raid whose lair is gone
+	open_town.raided_by = raider.id
 	for i in 2:
 		await process_frame
 	check(bool(main._visit.get("battle", false)), "a raid lands under the open visit: the shelf is read again, halved")
-	check(main._visit.get("settlement") == town, "...and it is still the same visit")
-	town.raided_by = ""
+	check(main._visit.get("settlement") == open_town, "...and it is still the same visit")
+	open_town.raided_by = ""
 	print("test_world_raids: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
