@@ -24,6 +24,9 @@
 #               (WorldThreat.power_scale), with every slot back and with every
 #               slot spent (WorldThreat.assess, slot_hold and all): what a
 #               player pressing on actually meets.
+#
+# Its tables (grid, and the curve master against the 2026-09-25 retune) are in
+# core/world_threat.gd's header and the build log, "The measured pass".
 extends SceneTree
 
 const AI = preload("res://core/ai.gd")

@@ -15,6 +15,7 @@
 # combatant, so a smaller bump is answered by a bigger mult (more HP) at the
 # same budget: the question is not "how strong is the boss" — the budget fixes
 # that — but whether the bumps spend it on something the ruler prices right.
+# Its table is in core/encounter.gd's header, above AC_PER_MULT.
 extends SceneTree
 
 const AI = preload("res://core/ai.gd")

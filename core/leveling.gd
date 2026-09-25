@@ -18,11 +18,32 @@ const AVERAGE := -1
 
 # Total XP to reach a level. Not the 5e table: that assumes medium fights for
 # a party of four, and open country here pays "easy" fights split three ways
-# (measured 2026-09-17, tests/_tmp_xp sweep: 18 XP each at L1, 39 at L3, 78 at
-# L5, 115 at L8). Against the 5e table that was 17 fights to level 2 and 46 to
-# level 4. Each level here costs XP_PER_LEVEL more than the last, up to
-# LATE_LEVEL, so a level is six or seven open-country fights all the way to
-# 10; sites and quests pay on top of that.
+# (measured 2026-09-17 with a throwaway harness that was never committed: 18
+# XP each at L1, 39 at L3, 78 at L5, 115 at L8). Against the 5e table that was
+# 17 fights to level 2 and 46 to level 4. Each level here costs XP_PER_LEVEL
+# more than the last, up to LATE_LEVEL, so a level is six to nine
+# open-country fights all the way to 10; sites and quests pay on top of that.
+#
+# MEASURED 2026-09-25 (tests/sweep_xp.gd, the harness committed; the design
+# audit §7.3): the preset trio at each level, fresh, the road's own roster
+# (easy x0.90), 60 pinned fights a level, paid by Encounter.resolve_outcome
+# and split three ways. XP a hero a fight, and road fights to the next level:
+#
+#   level      1    2    3    4    5    6    7    8    9   10
+#   XP/hero   15   22   39   44   71   87   97  104  118  130
+#   fights   6.8  9.1  7.8  9.2  7.1  6.9  7.2  7.7  7.6  7.7
+#   level     11   12   13   14   15   16   17   18   19
+#   XP/hero  145  154  169  174  181  190  209  226  234
+#   fights   6.9  6.5  5.9  5.7  5.5  5.3  4.8  4.4  4.3
+#
+# A played fight pays 5-10% under the estimate below (the road's x0.90, and a
+# foe that runs or outlives a lost fight pays nothing). By country, road
+# fights to cross its levels: the Heartland (1-3) 24, the Marches (4-6) 23,
+# the Frontier (7-9) 23, the Far Deeps (10-14) 33, the Unmapped (15-19) 24 —
+# about 126 road fights from 1 to 20. With one three-fight job
+# (Quest.XP_FIGHTS' clear_lair) turned in every four road fights it is about
+# 70: 13, 13, 12, 18 and 13. No country is a grind any more; the Deeps are the
+# longest, as the deepest country should be.
 #
 # LATE_LEVEL (2026-09-25, the design audit §5.4): past level 10 every level
 # costs what level 10 did, a flat 1,000. With the step still climbing, the Far

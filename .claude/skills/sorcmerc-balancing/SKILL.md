@@ -54,8 +54,8 @@ Difficulty is a product of **independent multipliers**, each answering its own q
 - **`Scaler.roster_for()`** sets the power budget (`core/scaler.gd`).
   - The budget is `TIER[difficulty]`, currently easy 0.56, normal 0.66 and hard 0.76, times party power raised to `CURVE` 1.15, against `REF_SCORE` 46.6 (the level-3 preset party).
   - The budget buys **body count first**, up to `MAX_FOES` 8 drawn from one faction. A stat `mult` in the range 0.6–2.5 closes whatever gap is left.
-  - Party power comes from `core/rules/power.gd`. It reads max HP, not current HP, so remaining slots are the only part of a hero's condition it sees.
-- **`WorldThreat.assess(party)`** handles the party's condition. Its wounds curve only ever scales **down**, and open country defaults to "easy". Its `slot_hold` multiplies back out whatever the party's spent slots took off the budget, so only wounds thin a fight.
+  - Party power comes from `core/rules/power.gd`. It reads max HP, not current HP, so remaining slots are the only part of a hero's condition it sees. Since 2026-09-25 it also prices **Quickened Spell** (`quickened_turns`) and a **road potion** still running (`road_buffs`: to-hit, damage, AC). A company's **bonds** are priced in `Regions.fresh_score` (`SHOULDER_SHARE` 0.45 of +1 AC), which the road's `slot_hold` and a lair's entry score both hold at. **Weapon mastery and rivals are measured and left unpriced** (build log "The measured pass").
+- **`WorldThreat.assess(party)`** handles the party's condition. Its wounds curve only ever scales **down**: a flat x0.90 down to half HP, then linear to x0.72 at zero (`HURT_AT` 0.50, `CONDITION_FLOOR` 0.80, retuned 2026-09-25 — was x0.35), and open country defaults to "easy". Its `slot_hold` multiplies back out whatever the party's spent slots took off the budget, so only wounds thin a fight.
 - **`Regions.power_scale(world, pos, party)`** clamps the fight to the country's level range.
 - **Payout follows the roster:** `XP_PER_POWER` is 4.0 and `GOLD_PER_POWER` is 0.6 (`core/encounter.gd`). A smaller fight pays less without extra code. Don't add a separate penalty; it would count twice.
 
@@ -69,6 +69,9 @@ Difficulty is a product of **independent multipliers**, each answering its own q
 | Fight length, level 3 | about 7–8 rounds (level 8 about 9.6). **Old-autopilot measurements** (the 2026-09-15 retune; level 8 from T-classes-b), not re-measured since the autopilot spends its whole turn | `core/scaler.gd` header |
 | Within the party's band, easy | 93.8–100% at every level 3–15 (the ruler party, new autopilot); a built level-10 party: 73.3% (old autopilot) | `core/regions.gd` header |
 | One band too deep | level 3 in the Marches: 28.8% (new autopilot; 17.5% under the old; 28.0% re-measured 2026-09-25); in the Deeps: 2.5%; level 10 in the Unmapped (content 15): 71.5% | `core/regions.gd` header |
+| A hurt company on the road (level 3, easy, every slot back) | 99.0 / 93.0 / 86.5 / 74.5% at 100 / 70 / 50 / 30% HP (half HP meets `normal`, 30% meets `hard`); every slot spent: 95.0 / 85.5 / 73.5 / 63.0%; level 8 spent at half HP: 47.5% | `core/world_threat.gd` header (`tests/sweep_wounds.gd`, 2026-09-25) |
+| A whole lair, level 3, in its own country, taking every rest | 18.1% cleared (never resting 5.7%); a rest taken is worth ~25 points; level 5: 58.1% | `core/site.gd` header (`tests/sweep_site_knobs.gd`) |
+| Road fights a level (played) | 7–9 from level 1 to 10, 4–7 from 11 to 19; ~126 from 1 to 20, ~70 with a three-fight job every four fights | `core/leveling.gd` header (`tests/sweep_xp.gd`) |
 
 - Nothing sets a target for early hit rate or for hits-to-kill. The chat's proposed targets (55–70% early hit rate, 3–5 rounds, 3–4 hits to kill) are **not** in the code. Measured fights run longer than 3–5 rounds, and the original MVP brief aimed for 6–15.
 - If you want those metrics, add them to a sweep as measurements before turning them into targets.
@@ -81,7 +84,8 @@ Difficulty is a product of **independent multipliers**, each answering its own q
 3. Use **200 seeds per point**, which gives a standard error of about 3 points. Treat moves inside about 1.5 SE as noise.
 4. Run the sweep **back to back on master and on your branch**, and quote both columns. A number measured against an older base can credit your change with someone else's work.
 5. Prefer fixing the rule over re-tuning `TIER`: "a retune for rules that are now right would only be undone by the next rule that is."
-6. Sweep harnesses: `tests/test_scaler.gd`, `tests/sweep_tier.gd`, `tests/sweep_site_depth.gd`, `tests/sweep_built.gd`, `tests/sweep_range_detail.gd`. Set `SORCMERC_SEED` to replay one fight.
+6. Sweep harnesses: `tests/test_scaler.gd`, `tests/sweep_tier.gd`, `tests/sweep_site_depth.gd`, `tests/sweep_built.gd`, `tests/sweep_range_detail.gd`; since 2026-09-25 also `sweep_wounds.gd` (a hurt company on the road), `sweep_road_day.gd` (days of road on one set of resources: fights a rest, rest gold, the bench), `sweep_site_knobs.gd` (whole delves), `sweep_mult.gd` (the per-mult bumps on boss leads), `sweep_xp.gd` (fights a level), `sweep_metamagic.gd` and `sweep_unpriced.gd` (what power.gd does or does not price; `PRICED=1`/`UNPRICED=1` give both columns). Set `SORCMERC_SEED` to replay one fight.
+   - **Sweeping a constant:** they are `const`, so copy the tree (`git archive origin/master | tar -x`, then `cp -al` it per variant, with `.godot` copied in), `sed` the one constant, and run the same sweep in each copy back to back. That is how `BOARD_SHELVES`, `SPAWN_GAP`, the per-mult bumps and the site knobs were measured on 2026-09-25.
 7. Write the new measurement into the owning file's header and add a build-log entry: a new file in `docs/plan/` (`docs/plan/README.md`), never an append to `docs/expansion-plan.md`.
 
 ## Decided 2026-09-24 (owner's calls, not yet built)
@@ -92,11 +96,23 @@ Each of these is a balance change. Build each one with a re-run sweep and quote 
 
 - **Slot tables stay 2024 RAW — built 2026-09-24.** The export's one data gap is fixed: paladin and ranger get 2 level-1 slots, as the 2024 PHB does (`data/classes.json`; build log "Paladins and rangers cast from level 1").
 - **Built: the open world stops pricing spent slots.** `WorldThreat.slot_hold()` sizes a road fight off the party **with every slot back**, as `core/site.gd` already did for sites, and wounds still thin it. Measured with `tests/sweep_spent_slots.gd` (level-3 presets, easy, 200 seeds): a party with no slots left went from 3.3 foes and 100% wins to 4.0 foes and 94.5%. At 50% HP it went from 99.5% to 90.0%. A fresh party is unchanged at 99.5%.
-- **Sorcerer features follow 2024 RAW.** Built so far: Innate Sorcery (+1 spell DC, Advantage on spell attacks, 2/long rest) and Font of Magic (slots ↔ sorcery points; made slots persist as negative `slots_used` until a long rest). `power.gd` prices neither. `tests/sweep_sorcerer.gd` measures them at about zero win-rate effect under the autopilot (level 3: 89.5 → 88.5%, level 10: 96.5 → 96.5%). Metamagic (five options) is built and also unpriced; the autopilot never arms it, so no sweep sees it. Price it if a sweep that arms it measures above noise.
+- **Sorcerer features follow 2024 RAW.** Built so far: Innate Sorcery (+1 spell DC, Advantage on spell attacks, 2/long rest) and Font of Magic (slots ↔ sorcery points; made slots persist as negative `slots_used` until a long rest). `power.gd` prices neither. `tests/sweep_sorcerer.gd` measures them at about zero win-rate effect under the autopilot (level 3: 89.5 → 88.5%, level 10: 96.5 → 96.5%). Metamagic (five options) is built. **Since 2026-09-25 the autopilot arms Quickened and Twinned** (`core/ai.gd` `_quicken`, `_twin`; Twinned is inert under autoplay, every spell that twins being a control spell), and `power.gd` prices Quickened: a fighter and two Quickened sorcerers went 79.5 → 88.0% at easy, level 10, unpriced, and 83.0% priced (`tests/sweep_metamagic.gd`).
 - **Enemy casters: built, partly shipped.** The cult fanatic, priest and mage have real slots (`core/enemy_casters.gd`). Foes' area spells are priced against the party's size (`Power.area_targets`), and a caster's highest spell level follows the band (Heartland/Marches 2nd, Frontier 3rd, Deeps any). The ruler still misprices glass cannons (`sqrt(dpr×ehp)` plus the `ROUNDS` cap). So casters are fielded only from the Frontier tier up (the cult's lair boss: level 8 72.7 → 60.0%), and the warband roll ships at 0%. See `tests/sweep_caster.gd` and `tests/sweep_caster_boss.gd`.
 - **Armor stays 5e AC.** No damage reduction and no armor HP.
 - **Hired mercs** come with class, species, background and scores fixed; the player keeps subclass, spells and level-up choices. Recommended (not yet decided): pre-roll their scores within the creator's point-buy/standard-array budget, so a hire is never stronger than a built hero at the same level.
 
+## Measured 2026-09-25 (the measured pass)
+
+The audit's §7.2 stale measurements and §7.3 unmeasured knobs, re-run under today's rules; each file's header holds its table, the build log "The measured pass" holds them all.
+
+- **The wounds curve was the one retune** (owner's call §3.2): see the table above. On master a hurt company won as often as a fresh one.
+- **Traits** (`core/traits.gd`): every trait inside noise (largest +2.0 at 300 seeds); the triumph-over-scar rule holds with more room.
+- **`BOARD_SHELVES` and `SPAWN_GAP`** no longer move the win rate (0/1/2 shelves and gaps 3/6/9 all inside 1.5 SE): taste numbers now.
+- **The per-mult bumps** are priced about right at the pool level; on one high-mult lead they are worth more than the ruler credits (level 3 captain 55.0% at 3/4/4 against 70.0% at 2/2/2), still in the boss band.
+- **`BOSS_REF_WIN_RATE`** re-derived 0.86 → 0.89 from today's easy/hard (96.5 / 81.5).
+- **The 24-hour gate binds on the road** (a company lies down at 34–45% HP, 17–35% slots, after 3.3–4.1 fights); a town inn is 24% of the takings between rests at level 3 and 8% at level 10, a camp kit 183% and 57%.
+- **Bench rotation** is noise when swapped only when spent, real when swapped before nearly every fight (level 6: 88.4 → 97.0%), and costs half the levelling pace.
+
 ## Open questions
 
-- None outstanding from the 2026-09-24 pass.
+- **The walk home from a lair** (level 8, half HP, no slots: 47.5% a road fight), **level-3 lairs** (18% cleared), **bench rotation's price** and **weapon mastery at level 8** (−4.3, 1.7 SE, left unpriced) are the owner's calls the measured pass left open.

@@ -77,6 +77,39 @@ const PICK_MAX := 3
 const SUPPORT_CHANCE := 0.45
 const REST_SHARE := 0.4       # of those, how many are a rest rather than a cache
 
+# MEASURED 2026-09-25 (tests/sweep_site_knobs.gd; the design audit §7.3 found
+# MAX_DEPTH, SUPPORT_CHANCE and REST_SHARE with no sweep behind them). Whole
+# delves, walked into fresh: the preset trio at level 3 (in band for the
+# Heartland lair it stands at), one lair per faction per seed, 210 delves a
+# row, each knob moved alone in a copy of master. "rest" takes a rest room
+# whenever one is offered (a player's line); "fight" never rests (the floor).
+#
+#                          cleared  wiped   rests  reach boss  hp/slots   boss
+#                          (rest)   (rest)  /delve  (rest)     at boss    won
+#   as shipped              18.1%   81.9%   0.59     42.9%     60 / 54%   42.2%
+#     never resting          5.7%   94.3%   0.00     24.3%     44 / 38%   23.5%
+#   SUPPORT_CHANCE 0.30     12.9%   87.1%   0.36     36.7%     52 / 48%   35.1%
+#   SUPPORT_CHANCE 0.60     25.7%   74.3%   0.89     55.7%     62 / 57%   46.2%
+#   REST_SHARE 0.20          9.5%   90.5%   0.30     33.3%     52 / 46%   28.6%
+#   REST_SHARE 0.70         31.0%   69.0%   1.09     61.4%     66 / 66%   50.4%
+#   MAX_DEPTH 5             17.6%   82.4%   0.58     46.2%     59 / 55%   38.1%
+#
+#   cleared by depth (rest): 3 rooms 30.4%, 4 rooms 14.3%, 5 rooms 16.1%,
+#   6 rooms 9.5%. The same lairs for a level-5 party (the rooms held to the
+#   Heartland's level, the boss not): 58.1% cleared, 3 rooms 87.5%.
+#
+# What it says. The two support knobs are the lever, and through one thing: a
+# rest taken is worth about twenty-five points of clear rate, whichever knob
+# offers it (REST_SHARE 0.2 -> 0.7 is 0.30 -> 1.09 rests a delve and 9.5 ->
+# 31.0% cleared; a standard error here is ~2.7). MAX_DEPTH is not: capping the
+# deepest lairs at five rooms moves nothing (17.6%), because the boss room, not
+# the sixth floor, is where a delve is lost. And the day is hard: a level-3
+# company that takes every rest it is offered clears one lair in five in its
+# own country and wipes on the rest — the autopilot never withdraws, which a
+# player does, so read these as the floor of a careful player's rate. Nothing
+# moved; whether the Heartland's lairs should be this hard is the owner's call
+# (the build log, "The measured pass", Still open).
+
 # Room gold. A site pays better than world_lairs.gd's flat sneak-past stash
 # (LOOT_BASE 40) because you fought the whole way down for it.
 const TREASURE_GOLD := 55
