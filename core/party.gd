@@ -80,6 +80,10 @@ var hiring: Dictionary = {}
 # [{id, name, level, class, species, where, by, day, at, told}]. Owned entirely
 # by core/fallen.gd (the design audit §2.1); [] for a save from before it.
 var fallen: Array = []
+# How long each benched merc has sat out — id -> {"since": world-minute,
+# "warned": bool}. Owned entirely by core/bench.gd, which keeps it lazily off
+# `active`; {} for a save from before the bench counted.
+var bench_clock: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 

@@ -352,8 +352,10 @@ func _one_line(text: String) -> Label:
 # (docs/spike-party-opinions.md §5 had "Vera Kord and Pike Sallow — rivals
 # (-44)", one line per pair) and are a picture now: scenes/party/relations_web.gd
 # draws the marching party's faces joined by a line per pair, its colour and
-# shape the band, with describe() one hover away. A party of one has nobody to
-# get on with, and the block is not drawn at all.
+# shape the band, with describe() one hover away — and, since the bench shares
+# the fire at an inn (the design audit's §2.4b), the living bench in a row
+# under them. A company of one has nobody to get on with, and the block is not
+# drawn at all.
 func _build_relations() -> void:
 	_clear(_callings_row)
 	_clear(_relations_row)
@@ -374,7 +376,7 @@ func _build_relations() -> void:
 		var l := _one_line("   ·   ".join(lines))
 		l.tooltip_text = "\n".join(lines)
 		_callings_row.add_child(l)
-	_relations_card.visible = not PartyOpinion.active_pairs(party).is_empty()
+	_relations_card.visible = not PartyOpinion.pairs(PartyOpinion.fireside_ids(party, true)).is_empty()
 	if not _relations_card.visible:
 		return
 	var cap := Label.new()
