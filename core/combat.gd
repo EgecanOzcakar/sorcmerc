@@ -2663,6 +2663,14 @@ func fire_reactions(trigger: String, ctx: Dictionary) -> Dictionary:
 			Ach.bump("reactions")
 		if v.get("once_per", "") == "turn":
 			c.econ["used"][v["id"]] = true
+		# #247: a feature reaction with uses (Warding Flare: WIS-mod a Long Rest)
+		# pays one here, beside the reaction itself. _reaction_affordable always
+		# refused an empty pool, but nothing ever emptied it, so a Light cleric
+		# flared once every round of every fight. A spell's cost is its slot (or
+		# its free use), which cast() pays; perform()'s pool spend never runs for
+		# a reaction, since a reaction is never pressed.
+		if v.has("pool") and v["kind"] != "spell":
+			c.pools[v["pool"]]["cur"] = c.pool_left(v["pool"]) - 1
 		# What happens next is the verb's business, not the trigger's.
 		if v.get("counter", false):
 			if _counter(c, v, ctx):
