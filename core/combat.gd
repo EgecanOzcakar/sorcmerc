@@ -302,12 +302,6 @@ func _init(_rng, _combatants: Array, _board: Dictionary) -> void:
 const BARK_SFX := {"hit": "hit", "crit": "crit", "kill": "kill", "down": "down",
 	"low_hp": "", "victory": "victory"}
 
-# #227: the one door every sting in this file goes out through, so `audible`
-# is one check rather than thirteen.
-func _sfx(id: String) -> void:
-	if audible:
-		Sound.play_sfx(id)
-
 # Fire a bark for `c` on `trigger` ("hit" | "crit" | "kill" | "low_hp" | "down" |
 # "victory" | "partner_down"). Cosmetic: never gates, never touches the combat RNG,
 # never fails loudly.
@@ -345,10 +339,13 @@ func bark(c, trigger: String, sfx := "", ally := "") -> void:
 # spot, a killing blow was the death with no weapon in it at all.
 var _sfx_held = null   # Array while _hold_sfx() is collecting, else null
 
+# #227: and _sfx() is the one door every sting in this file goes out through, so
+# `audible` is one check rather than thirteen. A held sting is checked where it
+# is finally played (resolve_attack's play_sfx_then).
 func _sfx(id: String) -> void:
 	if _sfx_held is Array:
 		_sfx_held.append(id)
-	else:
+	elif audible:
 		Sound.play_sfx(id)
 
 # Run `f` and return the stings it asked for instead of playing them. Nests: a
@@ -2998,7 +2995,8 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		var said: Array = _hold_sfx(func(): bark(attacker, trig))
 		if trig == "kill":
 			fell.append_array(said)
-		Sound.play_sfx_then(landing, fell)
+		if audible:   # #227: a band's fight on the map is not heard
+			Sound.play_sfx_then(landing, fell)
 	else:
 		# A miss had no sound at all until now, which made a fight sound like it
 		# was going better than it was: roughly half of all attack rolls resolved
