@@ -181,6 +181,10 @@ static func party_hp_frac(party) -> float:
 # or when there is nobody to read — both readings then floor at the same 1.0.
 # It never makes a fight bigger than the one a fresh party of this build would
 # meet; it only stops the spent slots from making it smaller.
+# Since 2026-09-25 "a fresh party of this build" includes its bonds
+# (Regions.fresh_score prices a bonded pair's shoulder AC, which no single
+# hero's reading can see), so a bonded company's hold is above 1.0 even with
+# every slot in hand: the one place on the road a bond is priced.
 static func slot_hold(party) -> float:
 	return Scaler.held_at(Regions.fresh_score(party), Scaler.party_score(party.party_characters()))
 

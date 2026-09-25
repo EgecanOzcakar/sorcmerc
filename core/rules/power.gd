@@ -84,10 +84,11 @@ static func estimate(c, opponents := 0) -> Dictionary:
 	for v in c.verbs:
 		if v["kind"] == "attack_modifier" and v.get("self", "") == "adv":
 			adv = 2.0
+	var road := road_buffs(c)
 	if not attacks.is_empty():
 		var a: Dictionary = attacks[0]
-		var d := _avg_of(a)
-		var p := 1.0 - pow(1.0 - p_hit(int(a.get("to_hit", c.atk_bonus)), REF_AC, c.crit_range), adv)
+		var d := _avg_of(a) + float(road["damage"])
+		var p := 1.0 - pow(1.0 - p_hit(int(a.get("to_hit", c.atk_bonus)) + int(road["to_hit"]), REF_AC, c.crit_range), adv)
 		var crit: float = 1.0 - pow(1.0 - (21.0 - c.crit_range) / 20.0, adv)
 		dpr = per_action * (p * d + crit * d * 0.5)
 
@@ -142,6 +143,7 @@ static func estimate(c, opponents := 0) -> Dictionary:
 	# cleric's whole score. Owner's call, 2026-09-24, measured with
 	# tests/sweep_built.gd against five other pricings (docs/expansion-plan.md).
 	var lock_mult: float = minf(1.0 + 0.08 * best_ctrl, SPELL_LOCK_CAP)
+	var action_dpr := dpr   # the turn's action with no slot spent: the swing, or the best cantrip
 	var casts: Array = []   # the margin each slot buys over the action it replaces
 	for lvl in range(mini(c.slots.size(), 9), 0, -1):
 		var margin := 0.0
@@ -156,8 +158,11 @@ static func estimate(c, opponents := 0) -> Dictionary:
 	for i in mini(casts.size(), ROUNDS):
 		leveled += float(casts[i])
 	dpr += leveled / ROUNDS
+	# Quickened Spell: a turn that casts its leveled spell as the Bonus Action
+	# still has the action, so each one is a second action's worth of damage.
+	dpr += action_dpr * float(quickened_turns(c, casts.size())) / ROUNDS
 
-	var ehp := float(c.max_hp) * (0.55 / maxf(0.05, p_hit(REF_ATK, c.ac)))
+	var ehp := float(c.max_hp) * (0.55 / maxf(0.05, p_hit(REF_ATK, c.ac + int(road["ac"]))))
 	for v in c.verbs:
 		match v["kind"]:
 			"heal_self", "heal_ally":
@@ -182,6 +187,72 @@ static func estimate(c, opponents := 0) -> Dictionary:
 
 	return {"dpr": dpr, "ehp": ehp, "control": control + best_ctrl,
 		"score": sqrt(maxf(0.0, dpr) * maxf(0.0, ehp)) * (1.0 + 0.08 * control) * lock_mult}
+
+# --- what the ruler did not see (the design audit §7.4) ---------------------
+#
+# Things a hero can carry into a fight that this file used to price at
+# nothing, measured 2026-09-25 against the rosters they were fought on
+# (tests/sweep_metamagic.gd, tests/sweep_unpriced.gd; the build log "The
+# measured pass"). Priced here where a sweep saw them above noise:
+#
+#   Quickened Spell   the autopilot arms it (core/ai.gd's _quicken). A
+#                     fighter beside two sorcerers who know it, against the
+#                     rosters bought for the same party without it, easy:
+#                     85.0 -> 85.5% at level 3, 93.0 -> 98.0% at 5, 79.5 ->
+#                     88.0% at 10, fights a third shorter. Priced as a second
+#                     action on each turn the points and slots can pay for
+#                     (quickened_turns), it comes back to 83.5 / 95.0 / 83.0%:
+#                     inside noise at every level.
+#   road potions      a Potion of Heroism on each of the preset trio, or Giant
+#                     Strength on its fighter, each +8.0 at hard, level 3
+#                     (+4.0 at level 8). The buff's to-hit, damage and AC go on
+#                     the numbers below as if they were the sheet's
+#                     (road_buffs): priced, +3.5 / +0.0 at level 3, +3.3 / +0.7
+#                     at 8. Its saves and a potion of resistance's one element
+#                     stay unpriced, as the sheet's saves are.
+#   bonds             every pair bonded, +8.0 at hard, level 3 — but a bond is
+#                     the company's, not a hero's, so it is priced where the
+#                     company is read: core/regions.gd's fresh_score.
+#
+# Weapon mastery was measured and NOT priced, judged at the noise line: every
+# mastery off the preset trio is -2.5 at hard, level 3 (0.8 SE) and -4.3 at
+# level 8 (300 seeds, 1.7 SE) — a third to a half of what the priced three
+# measured, and each of the eight would need its own model (Vex and Sap are a
+# roll's odds, Graze a miss's damage, Topple a condition) that no sweep has
+# isolated yet. tests/test_power_pricing.gd holds it unpriced.
+
+# The prefix a road-drunk potion's buff is filed under on a Combatant's
+# statuses: core/potions.gd's STATUS_PREFIX (not preloaded; potions.gd pulls in
+# the campaign, and this file prices monsters too).
+const ROAD_BUFF_PREFIX := "potion:"
+
+# {to_hit, damage, ac}: what the potions still running from the road add, summed.
+# Only these three: a status the sheet has a number for. At pricing time a
+# hero's statuses are what the adapter carried in (core/adapter.gd's ch.buffs),
+# so nothing a fight grants is counted twice.
+static func road_buffs(c) -> Dictionary:
+	var out := {"to_hit": 0, "damage": 0, "ac": 0}
+	for id in c.statuses:
+		var s = c.statuses[id]
+		if not (s is Dictionary and String(id).begins_with(ROAD_BUFF_PREFIX)):
+			continue
+		out["to_hit"] += int(s.get("bonus_to_hit", 0))
+		out["damage"] += int(s.get("bonus_damage", 0))
+		out["ac"] += int(s.get("ac", 0))
+	return out
+
+# How many turns of the fight Quickened Spell can buy: one a turn, each paying
+# QUICKENED_POINTS sorcery points and one leveled slot, at most ROUNDS. 0 for
+# anybody who does not know the option.
+const QUICKENED_POINTS := 2
+const SORCERY_POOL := "sorcery-points"
+
+static func quickened_turns(c, leveled_casts: int) -> int:
+	if not c.verbs.any(func(v): return String(v.get("kind", "")) == "metamagic" \
+			and String(v.get("option", "")) == "quickened"):
+		return 0
+	var pts: int = int(c.pools.get(SORCERY_POOL, {}).get("cur", 0))
+	return mini(mini(pts / QUICKENED_POINTS, leveled_casts), ROUNDS)
 
 # T94 — the statblock defences (combatant.resist/immune/vulnerable), priced
 # against what the party actually throws. Every weapon in data/weapons.json is
