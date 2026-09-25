@@ -356,7 +356,8 @@ static func _foe_turn(cb, m) -> void:
 #   4. the spell that does the most damage on a legal target.
 # Higher slots are tried first, so the fireball goes before the magic missile —
 # the same order core/rules/power.gd prices a caster's casts in. Nothing legal
-# from where it stands: close on the nearest hero and try once more.
+# from where it stands: walk the nearest hero's way until a spell reaches — no
+# further (_keep_range, 2026-09-25) — and try once more.
 static func _caster_turn(cb, m, pcs: Array) -> bool:
 	var spells: Array = _castable(cb, m)
 	if spells.is_empty():
@@ -374,7 +375,13 @@ static func _caster_turn(cb, m, pcs: Array) -> bool:
 			return true
 	if await _cast_best(cb, m):
 		return true
-	_move_by(cb, m, _toward(cb, _nearest(m.pos, pcs).pos))
+	# walk until a spell reaches, not up to arm's length (_keep_range): the
+	# longest single-target spell's range, the longest of any if it knows none
+	var aim := 0
+	for v in cb.all_verbs(m):   # the bar hides a spell with no hero in reach
+		if v["kind"] == "spell" and v.get("targeting", "") == "enemy" and _payable(cb, m, v):
+			aim = maxi(aim, int(v.get("range", 1)))
+	_keep_range(cb, m, aim if aim > 1 else reach, pcs)
 	if not m.conscious():
 		return true
 	return await _cast_best(cb, m)
@@ -521,9 +528,16 @@ static func _party_action(cb, h) -> void:
 	var moved := _objective_move(cb, h)
 	var walking: bool = cb.objective_kind() == "breakout"
 
-	# close distance if nothing is in reach and we're not a shooter
+	# a caster keeps its distance (see _caster_bolt); anyone else closes if
+	# nothing is in reach and it is not a shooter
+	var bolt := _caster_bolt(cb, h)
 	var reach: Array = foes.filter(func(c): return cb.in_reach(h, c))
-	if reach.is_empty() and not h.ranged and not moved:
+	if not bolt.is_empty() and not moved and not walking:
+		_keep_range(cb, h, int(bolt.get("range", 1)), foes)
+		if not h.conscious():
+			return
+		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
+	elif reach.is_empty() and not h.ranged and not moved:
 		var t = _nearest(h.pos, foes)
 		_move_by(cb, h, _toward(cb, t.pos))
 		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
@@ -571,14 +585,131 @@ static func _party_action(cb, h) -> void:
 		if not q.is_empty():
 			targets = q
 	targets.sort_custom(func(a, b): return a.hp < b.hp)
+	# a caster casts: at the weakest foe the spell reaches (the quarry first on a
+	# hunt), whether or not a fist would reach one too
+	if not bolt.is_empty():
+		var aimed: Array = foes.filter(func(c): return c.conscious() and cb.legal_target(h, bolt, c))
+		aimed.sort_custom(func(a, b): return a.hp < b.hp)
+		if cb.objective_kind() == "hunt":
+			var q: Array = aimed.filter(func(c): return c.has("quarry"))
+			if not q.is_empty():
+				aimed = q
+		if not aimed.is_empty():
+			_twin(cb, h, bolt, foes)
+			cb.perform(h, bolt, aimed[0])
+			return
 	if cb.in_reach(h, targets[0]):
 		_swing_all(cb, h, targets)
 		return
 	# no weapon reach: a single-target attack spell (a cantrip needs no slot)
-	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count"))
+	bolt = _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count"))
 	if not bolt.is_empty() and cb.legal_target(h, bolt, targets[0]):
 		_twin(cb, h, bolt, foes)
 		cb.perform(h, bolt, targets[0])
+
+# --- casters keep their distance (2026-09-25) ---------------------------
+#
+# Before this the autopilot closed on anything that was not a shooter, so a
+# sorcerer with no bow walked up to the nearest foe and ended its spell turns
+# punching it: the bolt was thrown only when the walk fell short. Every caster
+# sweep read a caster weaker than a player plays one (the measured pass's Still
+# open, docs/plan/2026-09-25-measured-pass.md).
+#
+# A CASTER, for this purpose, is a hero whose best option this turn is a spell
+# with range: the single-target damage spell the autopilot would throw (the
+# first one on the bar that reaches past arm's length, as it always picked)
+# deals more on average than its whole Attack action does — every swing Extra
+# Attack buys, plus the once-a-turn riders a hit carries (Sneak Attack, a
+# Dreadful Strike), so a rogue or a paladin stays at the front. Averages, not
+# odds: a save-for-nothing Sacred Flame and a to-hit mace are compared as dice.
+# A tie goes to the swing, so a level-3 cleric with a mace fights as before, and
+# the same cleric at level 5, whose cantrip has doubled, stands back.
+#
+# A caster then (_keep_range): stands where the spell reaches a foe it can see,
+# as far from the nearest foe as that allows, and never pays an opportunity
+# attack to get there. Pinned in a foe's reach it stays and casts — spell
+# attacks carry no penalty for a foe beside you in this engine, so a free swing
+# is all a step would buy — unless a Bonus Action Disengage is on its bar
+# (Cunning Action), which buys the step for nothing. Out of range of everything
+# it walks the nearest foe's way, and stops at the first hex the spell reaches
+# from rather than at arm's length. And it casts at the weakest foe the spell
+# reaches instead of swinging at whatever is beside it.
+#
+# The enemy caster (_caster_turn) walks in the same way when nothing it knows
+# reaches from where it stands. Misty Step is not spent on it: it would cost a
+# slot and, under the 2024 rule, the turn's leveled spell.
+
+# The spell `h` would throw this turn if it is a caster (above), or {}. Read
+# off every verb it could pay for, not cb.available(): the bar hides a spell
+# with no foe in reach, and a caster out of range is exactly the one that has
+# to know what its range is before it walks.
+static func _caster_bolt(cb, h) -> Dictionary:
+	for v in cb.all_verbs(h):
+		if v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count") \
+				and not v.has("heal_count") and String(v.get("cost", "")) == "action" \
+				and int(v.get("range", 1)) > 1 and _payable(cb, h, v):
+			return v if _avg_dmg(v) > _swing_value(cb, h) + _rider_value(h) else {}
+	return {}
+
+# Everything combat._offerable asks of a spell except that a foe be in reach:
+# a button, affordable, its slot payable and allowed this turn.
+static func _payable(cb, h, v: Dictionary) -> bool:
+	var cv: Dictionary = cb._cast_view(h, v)
+	if not cb.is_button(h, cv) or not cb.can_afford(h, cv) or cb._buff_flag(h, "no_attack"):
+		return false
+	if cv.has("pool") and h.pool_left(cv["pool"]) <= 0:
+		return false
+	return int(cv.get("slot_level", 0)) <= 0 or (cb.can_pay_spell(h, cv) and cb._leveled_spell_allowed(h, cv))
+
+# The once-a-turn dice a weapon hit adds (combat._passive_damage's list), at
+# their average: Sneak Attack, a goblin's Surprise Attack, Dreadful Strike.
+static func _rider_value(h) -> float:
+	var out := 0.0
+	for v in h.verbs:
+		if v["kind"] == "passive_damage" and String(v.get("trigger", "")) == "on_weapon_hit":
+			out += int(v.get("dice_count", 0)) * (int(v.get("dice_sides", 6)) + 1) / 2.0 + int(v.get("dice_bonus", 0))
+	return out
+
+# Stand where a spell of range `r` reaches one of `foes` it can see, as far from
+# the nearest of them as that allows, without provoking. `foes` is the caller's
+# list of who counts (the party's enemies, or a foe caster's heroes). Ties keep
+# the hex it stands on, then the move field's own order, so the same board
+# walks the same way on both co-op peers.
+static func _keep_range(cb, m, r: int, foes: Array) -> void:
+	var live: Array = foes.filter(func(c): return c.conscious())
+	if live.is_empty():
+		return
+	var sees := func(x: Vector2i) -> bool:
+		return live.any(func(f): return Hex.distance(x, f.pos) <= r and cb.has_line_of_sight(x, f.pos))
+	var up: Dictionary = cb.heights()
+	var room := _away(live)
+	var here: float = _spot(cb, up, m, room, m.pos) if sees.call(m.pos) else -INF
+	var field: Dictionary = cb.move_field(m)
+	var cands: Array = []   # [score, flood order, hex]
+	var i := 0
+	for x in field:
+		if sees.call(x):
+			var s: float = _spot(cb, up, m, room, x)
+			if s > here:
+				cands.append([s, i, x])
+		i += 1
+	if cands.is_empty():
+		if here == -INF:   # nowhere in this walk reaches: head for the nearest foe
+			_move_by(cb, m, _toward(cb, _nearest(m.pos, live).pos))
+		return
+	cands.sort_custom(func(a, b): return a[0] > b[0] or (a[0] == b[0] and a[1] < b[1]))
+	var pinned: bool = not m.has("disengaged") and not m.has("hidden") and live.any(func(f): \
+		return Hex.distance(f.pos, m.pos) <= f.reach and cb.can_spend(f, "reaction"))
+	if pinned:
+		# Every hex that is better is out of the pinning foe's reach: only a
+		# free Disengage buys the step.
+		if _bonus_basic(cb, m, "disengage"):
+			cb.move_to(m, cands[0][2], true)
+		return
+	for c in cands:
+		if cb.provokers_for(m, c[2]).is_empty():
+			cb.move_to(m, c[2])
+			return
 
 # --- Metamagic (the design audit §7.4) --------------------------------
 #

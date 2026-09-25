@@ -8,7 +8,9 @@
 # a downed ally lifted by a Bonus Action heal with the action still free, and
 # the two ways out at a third of HP (Misty Step, Disengage-and-walk), and a
 # sorcerer arming Metamagic (Quickened for a Fireball, the action still spent
-# as ever; Twinned only for a spell that twins). Then every
+# as ever; Twinned only for a spell that twins), and a sorcerer with no bow
+# keeping its distance (it casts from range rather than walking up to punch,
+# and steps out of a foe's reach only when the step costs no swing). Then every
 # kit at levels 3 and 8: the fights finish, the same seed plays the same fight,
 # and a kit with a Bonus Action on offer spends it on a fair share of its turns.
 #   godot --headless --path . -s tests/test_autopilot.gd
@@ -45,6 +47,8 @@ func _init() -> void:
 	test_bonus_heal_keeps_the_action()
 	test_ways_out()
 	test_metamagic_armed()
+	test_caster_keeps_its_distance()
+	test_caster_steps_out_when_free()
 	test_every_kit()
 	print("test_autopilot: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -239,6 +243,73 @@ func test_metamagic_armed() -> void:
 	AI._twin(cb, tw, hold, two)
 	check(tw.has("metamagic") and String(tw.statuses["metamagic"]["option"]) == "twinned",
 		"a Hold Person with a second foe standing arms Twinned")
+
+# Casters keep their distance (core/ai.gd _caster_bolt, _keep_range): a
+# sorcerer with no ranged weapon and a goblin six hexes off does not walk up to
+# it and punch — it ends the turn where its cantrip reaches, having cast it, and
+# not beside the goblin. On the forest clearing, whose middle is open.
+func _caster_scene(foe_at: Vector2i) -> Array:
+	var h = Adapter.to_combatant(_metamage(["quickened", "twinned"], []), "party", Vector2i(1, 0))
+	var g = _goblins_at([foe_at])[0]
+	var cb = Combat.new(RNG.new(11), [h, g], Encounter.board_for("forest-clearing"))
+	cb.begin_turn_for(h)
+	h.pools["sorcerer-innate-sorcery"]["cur"] = 0   # keep the scene to the move and the action
+	return [cb, h, g]
+
+func test_caster_keeps_its_distance() -> void:
+	var s := _caster_scene(Vector2i(7, 0))
+	var cb = s[0]; var h = s[1]; var g = s[2]
+	check(not h.ranged, "the scene: the sorcerer carries no ranged weapon")
+	check(Hex.distance(h.pos, g.pos) == 6, "the scene: the goblin is six hexes off")
+	var bolt: Dictionary = AI._caster_bolt(cb, h)
+	check(not bolt.is_empty(), "a sorcerer whose cantrip outdoes its fist is a caster")
+	var n0: int = cb.log.size()
+	AI.take_turn(cb, h)
+	var t := log_since(cb, n0)
+	var d := Hex.distance(h.pos, g.pos)
+	check(t.contains("%s casts" % h.cname), "it casts:\n%s" % t)
+	check(swings(t, h.cname) == 0, "...and throws no punch")
+	check(d > 1 and d <= int(bolt.get("range", 1)),
+		"...and ends the turn at casting range, not adjacent (%d hexes, range %d)" % [d, int(bolt.get("range", 1))])
+	check(d >= 6, "...and did not walk in, since the spell already reached (%d hexes)" % d)
+	check(int(h.econ["action"]) == 0, "...its action spent on the spell")
+	# Three hexes off, a walk would reach the goblin: it casts, and not from beside it.
+	s = _caster_scene(Vector2i(4, 0))
+	cb = s[0]; h = s[1]; g = s[2]
+	n0 = cb.log.size()
+	AI.take_turn(cb, h)
+	t = log_since(cb, n0)
+	check(t.contains("%s casts" % h.cname) and swings(t, h.cname) == 0 and Hex.distance(h.pos, g.pos) > 1,
+		"a goblin within a walk: it casts rather than walking up to punch (%d hexes):\n%s" % [Hex.distance(h.pos, g.pos), t])
+	# A fighter is not a caster: the swing is its best option, so it still closes.
+	var f = Adapter.to_combatant(Kits.hero("fighter", "champion", 3), "party", Vector2i(1, 0))
+	cb = Combat.new(RNG.new(11), [f] + _goblins_at([Vector2i(4, 0)]), Encounter.board_for("forest-clearing"))
+	cb.begin_turn_for(f)
+	check(AI._caster_bolt(cb, f).is_empty(), "a fighter with no spell is no caster")
+
+# The step back: beside a goblin whose reaction is spent, the step out of its
+# reach costs nothing, so it is taken and the spell goes from further off. With
+# the reaction still in hand the same step would buy the goblin a free swing, so
+# the sorcerer stays where it is and casts from there — still not punching.
+func test_caster_steps_out_when_free() -> void:
+	var s := _caster_scene(Vector2i(2, 0))
+	var cb = s[0]; var h = s[1]; var g = s[2]
+	g.econ["reaction"] = 0
+	var hp0: int = h.hp
+	var n0: int = cb.log.size()
+	AI.take_turn(cb, h)
+	var t := log_since(cb, n0)
+	check(Hex.distance(h.pos, g.pos) > 1, "a free step out of reach is taken (%d hexes):\n%s" % [Hex.distance(h.pos, g.pos), t])
+	check(h.hp == hp0 and not t.contains("OA "), "...and costs no opportunity attack")
+	check(t.contains("%s casts" % h.cname) and swings(t, h.cname) == 0, "...and it casts rather than swings")
+	s = _caster_scene(Vector2i(2, 0))
+	cb = s[0]; h = s[1]; g = s[2]
+	var at: Vector2i = h.pos
+	n0 = cb.log.size()
+	AI.take_turn(cb, h)
+	t = log_since(cb, n0)
+	check(h.pos == at and not t.contains("OA "), "with the goblin's reaction in hand it holds its ground:\n%s" % t)
+	check(t.contains("%s casts" % h.cname) and swings(t, h.cname) == 0, "...and casts from there rather than swings")
 
 # Every kit, levels 3 and 8, a normal roster: the fight ends, plays the same
 # twice, and the Bonus Action is spent on a fair share of the turns it is on

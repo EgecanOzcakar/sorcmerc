@@ -40,6 +40,7 @@ func _init() -> void:
 	test_ai_areas_first()
 	test_ai_steps_clear()
 	test_ai_holds_one_lock()
+	test_ai_walks_only_into_range()
 	Scaler.caster_chance_override = -1.0
 	print("test_enemy_casters: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -232,3 +233,23 @@ func test_ai_holds_one_lock() -> void:
 	var said := "\n".join(cb.log.slice(before))
 	check(not said.contains("Hold Person"), "already holding one lock, it does not cast another:\n%s" % said)
 	check(m.has("concentrating"), "and the hold it had is kept")
+
+# Nothing it knows reaches from where it stands: it walks the hero's way until a
+# spell does and casts from there, not from beside the hero (ai.gd _keep_range,
+# 2026-09-25 — it used to walk to arm's length first). Every spell is cut to a
+# three-hex range so a walk is needed on this board.
+func test_ai_walks_only_into_range() -> void:
+	var f := _duel([Vector2i(0, 0)], Vector2i(5, 0))
+	var cb = f[0]
+	var m = f[1]
+	var hero = cb.combatants[0]
+	for v in m.verbs:
+		if v["kind"] == "spell":
+			v["range"] = 3
+	check(Hex.distance(m.pos, hero.pos) > 3 + 1, "the scene: nothing reaches from where the mage stands")
+	var before: int = cb.log.size()
+	AI.take_turn(cb, m)
+	var said := "\n".join(cb.log.slice(before))
+	var d: int = Hex.distance(m.pos, hero.pos)
+	check(d > 1 and d <= 3, "it stops where a spell reaches, not beside the hero (%d away):\n%s" % [d, said])
+	check(said.contains("casts"), "and casts from there:\n%s" % said)
