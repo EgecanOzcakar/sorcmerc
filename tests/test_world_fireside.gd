@@ -207,6 +207,11 @@ func _init() -> void:
 		for q in main.world.parties.duplicate():
 			if not q.is_player and q.position.distance_to(here) < 300.0:
 				main.world.parties.erase(q)
+		# ...and the thirty nights put the benched merc past core/bench.gd's
+		# RESTLESS_DAYS, whose warning is due on the first clear frame after
+		# Leave. That card is test_bench's; this block is about the fire's.
+		for id in main.party.bench_clock:
+			main.party.bench_clock[id]["since"] = main.world.clock.elapsed
 		main._event_card.acknowledged.emit()
 		await process_frame
 		check(not main.world.clock.is_paused(), "acking after Leave does not leave the map paused")
