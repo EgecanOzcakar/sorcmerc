@@ -188,5 +188,39 @@ func _init() -> void:
 	check(WeaponSfx.for_spell("not-a-spell") == "cast", "an unknown spell -> the generic cast")
 	check(WeaponSfx.for_spell("") == "cast", "no spell id -> the generic cast")
 
+	# --- #244: the blow first, then the death ---------------------------------
+	# How long the death waits: all of a short take, capped on a long one, and
+	# nothing at all under SORCMERC_FAST.
+	check(is_equal_approx(Audio.follow_gap(0.2), 0.2), "a short hit is waited out whole")
+	check(is_equal_approx(Audio.follow_gap(3.0), Audio.FOLLOW_MAX), "a long one only up to FOLLOW_MAX")
+	check(Audio.follow_gap(1.0, true) == 0.0, "SORCMERC_FAST waits for nothing")
+	Audio.play_sfx_then("hit_sword", ["down", "kill"])
+	check(true, "play_sfx_then no-ops without the autoload too")
+	# The engine side: what a killing blow sets off is HELD for the attack to
+	# play after its landing, not played in the damage's own frame. Real fight,
+	# real _apply_damage, so a sting added to _kill is covered without a list.
+	var chars: Array = Presets.party()
+	var party: Array = []
+	for i in chars.size():
+		party.append(Adapter.to_combatant(chars[i], "party", Encounter.PARTY_STARTS[i]))
+	var cb = Encounter.build({"monsters": [{"id": "goblin", "count": 2, "mult": 1.0}],
+		"theme": "goblin-camp", "seed": 7}, party)
+	var foes: Array = cb.team_of("foe")
+	var hero = cb.team_of("party")[0]
+	var held: Array = cb._hold_sfx(func(): cb._apply_damage(foes[0], 999, "slashing", false, hero))
+	check(foes[0].is_dead(), "the blow killed the goblin")
+	check("down" in held, "its death sting waited for the weapon (held %s)" % [held])
+	check(cb._sfx_held == null, "and nothing is left holding after it")
+	# Nested: a sting inside an inner hold does not leak into the outer one.
+	var inner: Array = []
+	var outer: Array = cb._hold_sfx(func():
+		cb._sfx("burst")
+		inner.append_array(cb._hold_sfx(func(): cb._sfx("kill"))))
+	check(inner == ["kill"], "an inner hold collects its own sting")
+	check(outer == ["burst"], "...and the outer keeps only its own (got %s)" % [outer])
+	# The last of them: the victory the kill sets off waits too.
+	held = cb._hold_sfx(func(): cb._apply_damage(foes[1], 999, "slashing", false, hero))
+	check("down" in held and "victory" in held, "the last kill's victory waits as well (held %s)" % [held])
+
 	print("test_audio: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

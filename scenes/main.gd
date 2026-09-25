@@ -1168,8 +1168,9 @@ func _menu_entries(h) -> Dictionary:
 		# The drawn badge: a spell wears its school (the disc under the art is
 		# school_color, the same one spell_bb tints its name with), everything
 		# else the martial set. `glyph` stays as the fallback for a build where
-		# the icons aren't there — see Icons.verb_icon.
-		var meta := _mark(Icons.skill_icon(v), glyph, freq_key)
+		# the icons aren't there — see Icons.verb_icon. #241: `h` so the Attack
+		# button wears the weapon it will swing, not a generic sword.
+		var meta := _mark(Icons.skill_icon(v, h), glyph, freq_key)
 		meta["verb"] = v   # #92: hovering the button shows the reach on the board
 		# What the popup draws: the same verb, as a card (scenes/skill_card.gd).
 		# `tip` stays the plain string the tests and the robots read.
@@ -1319,7 +1320,14 @@ func _slotted(h, opts: Array) -> Array:
 			out.append(o)
 	# T29: melee/ranged toggle — the slot is always there, live only for someone carrying both.
 	var swap := _attack_swap(h)
-	var swap_meta := _mark(Icons.verb_icon("swap"), "⇄")
+	# #241: the toggle wears the weapon it would put in your hand — the Attack
+	# badge beside it already shows the one you hold, so the pair reads as
+	# "this, or that". A ⇄ on its corner keeps it reading as a swap and not a
+	# second attack. With nothing to swap to, the plain swap badge, greyed.
+	var swap_tex: Texture2D = Icons.weapon_icon(String(swap.get("id", "")))
+	var swap_meta := _mark(swap_tex if swap_tex != null else Icons.verb_icon("swap"), "⇄")
+	if swap_tex != null:
+		swap_meta["corner"] = "⇄"
 	swap_meta["key"] = "Tab"
 	if swap.is_empty():
 		swap_meta["disabled"] = true
@@ -1919,7 +1927,8 @@ func _set_buttons(opts: Array) -> void:
 		if tex != null:
 			b.custom_minimum_size = BTN_SIZE * u
 			_chip(b, hotkey, Control.PRESET_BOTTOM_RIGHT, Icons.COL_HEAD, u)
-			_chip(b, String(meta.get("tier", "")), Control.PRESET_TOP_LEFT, Icons.COL_GOLD, u)
+			# The upcast tier, or another corner mark (#241's ⇄ on a weapon swap).
+			_chip(b, String(meta.get("tier", meta.get("corner", ""))), Control.PRESET_TOP_LEFT, Icons.COL_GOLD, u)
 			if meta.has("fx"):
 				var fx: Array = meta["fx"]
 				_fx_mark(b, " ".join(fx.map(func(m): return String(m["text"]))), _tone_color(String(fx[0]["tone"])), u)
@@ -2042,6 +2051,7 @@ func _refresh() -> void:
 		_actor.text = "%s is acting…" % (cur.cname if cur else "?")
 	if not _viewing:
 		_show_effects(cur if cur != null and cur.team == "party" and cur.conscious() else null)
+	_card.refresh()   # #238: the sticky card follows what just happened to whoever is on it
 	_board.queue_redraw()
 
 # --- the effect strip ------------------------------------------------------

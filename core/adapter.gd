@@ -306,6 +306,9 @@ static func _offhand_verb(offhand: Dictionary, attacks: Array, s) -> Dictionary:
 		"once_per": "turn", "targeting": "enemy", "range": reach,
 		"to_hit": int(offhand["to_hit"]),
 		"damage": PassGear.notation(int(offhand["dice_count"]), int(offhand["dice_sides"]), dmg),
+		# #241: which weapon swings, so the bar can draw it (Icons.skill_icon).
+		# Display only — resolve_attack reads the damage and to_hit above.
+		"weapon": String(offhand["id"]),
 	}
 
 # Feet -> hexes for every verb, and a pool for the features the export grants none
