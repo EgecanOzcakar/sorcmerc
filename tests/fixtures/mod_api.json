@@ -478,6 +478,29 @@
       "warriorofmercy-hand-of-healing",
       "warrioropenhand-wholeness-of-body"
     ],
+    "effects/items.json": [
+      "amulet-of-health",
+      "armor-1",
+      "armor-2",
+      "armor-3",
+      "bracers-of-archery",
+      "bracers-of-defense",
+      "brooch-of-shielding",
+      "cloak-of-protection",
+      "gauntlets-of-ogre-power",
+      "headband-of-intellect",
+      "ring-of-protection",
+      "shield-1",
+      "shield-2",
+      "shield-3",
+      "stone-of-good-luck-(luckstone)",
+      "wand-of-the-war-mage-1",
+      "wand-of-the-war-mage-2",
+      "wand-of-the-war-mage-3",
+      "weapon-1",
+      "weapon-2",
+      "weapon-3"
+    ],
     "effects/potions.json": [
       "potion-of-animal-friendship",
       "potion-of-clairvoyance",
@@ -1297,6 +1320,26 @@
       "merchant-shop",
       "sunken-shrine"
     ],
+    "items.keys": [
+      "ac",
+      "attack",
+      "checks",
+      "damage",
+      "resist",
+      "saves",
+      "set_ability",
+      "slot",
+      "spell_attack",
+      "text",
+      "unarmored",
+      "weapons"
+    ],
+    "items.slots": [
+      "armor",
+      "shield",
+      "weapon",
+      "worn"
+    ],
     "manifest.access": [
       "free",
       "paid"
@@ -1309,6 +1352,7 @@
       "conditions.json",
       "effects/conditions.json",
       "effects/features.json",
+      "effects/items.json",
       "effects/potions.json",
       "effects/spells.json",
       "feats.json",

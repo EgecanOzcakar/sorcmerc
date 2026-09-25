@@ -381,10 +381,13 @@ static func from_monster(m: Dictionary, team: String, pos: Vector2i):
 # entries carry a type list plus a weapon clause:
 #   "bludgeoning, piercing, and slashing from nonmagical weapons"
 #   "... from nonmagical weapons that aren't silvered" / "... adamantine"
-# Nothing in this game hands out a magical, silvered or adamantine weapon —
-# core/rules/pass_gear.gd builds every attack from data/weapons.json alone — so
-# the clause is always satisfied. If magic weapons ever become gear, this is the
-# one function that has to learn the difference.
+# Until 2026-09-25 nothing in this game handed out a magical, silvered or
+# adamantine weapon. A +N weapon now works on the sheet (core/rules/
+# pass_items.gd: to hit and damage), but its attacks are not marked magical,
+# so the clause is still always satisfied and a +1 sword is still halved by a
+# wraith. ponytail: marking an item-enchanted attack magical, and letting it
+# past these lists, is the next step for magic weapons (the coin-and-xp entry's
+# Still open); this is the one function that has to learn the difference.
 #
 # "Always satisfied" reads differently on the two lists, and reading them the
 # same way was a bug rather than a simplification. On a RESISTANCE (32 entries:

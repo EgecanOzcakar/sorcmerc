@@ -358,9 +358,9 @@ made aware that packs exist.
 Overlayable files: `classes.json`, `subclasses.json`, `species.json`,
 `backgrounds.json`, `feats.json`, `fighting-styles.json`, `weapons.json`,
 `armor.json`, `magic-items.json`, `spells.json`, `conditions.json`,
-`monsters.json`, `bestiary.json`, `skills.json`, and the four mechanics files
+`monsters.json`, `bestiary.json`, `skills.json`, and the five mechanics files
 of §5.1: `effects/spells.json`, `effects/potions.json`, `effects/features.json`,
-`effects/conditions.json`, and the two the inns' hirelings are rolled from:
+`effects/conditions.json`, `effects/items.json`, and the two the inns' hirelings are rolled from:
 `recruit-names.json` (`{"id": "<species id>", "names": [...]}` — a pack's new
 species gets its own names this way, or falls back to the `default` record)
 and `recruit-kits.json` (`{"id": "<class id>", "kits": [{"ability": "str",
@@ -392,7 +392,7 @@ Turning a pack off takes its records back out, including its retunes.
 `spells.json` says a spell exists. `effects/spells.json` says what casting it
 puts on the board. The split is not tidiness: the game's own catalog is an SRD
 export and the export carries prose, so everything mechanical is hand-authored
-over the top of it — by us, and through these same four files, by you. Without
+over the top of it — by us, and through these same five files, by you. Without
 them a pack could add a spell nobody could cast and a potion nobody could
 drink, which is exactly the silent dead-end the rest of this pipeline exists to
 refuse.
@@ -403,8 +403,9 @@ refuse.
 | `effects/potions.json` | a `magic-items.json` id | the drink: a combat action, or a swallow on the road |
 | `effects/features.json` | a feature id — one named by a monster's `features`, or a class feature | the mechanic, under a closed `kind` |
 | `effects/conditions.json` | a `conditions.json` id | what wearing that condition costs |
+| `effects/items.json` | a `magic-items.json` id | what wearing the item does on the sheet |
 
-All four are **objects keyed by id**, not lists, and they merge by key rather
+All five are **objects keyed by id**, not lists, and they merge by key rather
 than by a record's `id` field. A key beginning with `_` is an authoring comment
 and is skipped. Every id an entry names must be in the catalog or be one your
 own pack adds: a mechanic for a spell nobody wrote is an error, not a silence.
@@ -461,6 +462,33 @@ and `minutes` its life on the world clock when it is drunk on the road, where an
 unexpired buff is carried into the next fight; `road` names something it does
 out of combat. A potion with none of `heal`, `damage`, `condition`, `status` or
 `road` does nothing at all, and is refused.
+
+**A worn item** hangs a mechanic on a `magic-items.json` id, and it does
+something only while a hero has it on (the profile moves it from the stash to
+the hero). An item with no entry here can still be found, bought, worn and
+sold; it just does nothing in a fight. Everything an entry says lands on the
+hero's sheet, so the difficulty curve prices it the way it prices a feat: a
+company in better gear is sent a bigger fight.
+
+```json
+"cloak-of-embers": {"slot": "worn", "ac": 1, "resist": ["fire"],
+                    "text": "+1 AC and resistance to fire"}
+```
+
+`slot` is one of `weapon` (the bonus rides the weapon in the hero's hand, every
+weapon attack but the off-hand one), `armor` (it needs body armor worn),
+`shield` (the item is a shield in its own right, the game's `shield` plus its
+bonus) or `worn` (no condition). The other keys: `attack` and `damage` add to
+weapon attacks, and `weapons` narrows them to a list of `weapons.json` ids;
+`ac` adds to Armor Class, and `unarmored` limits it to a hero with no armor
+and no shield; `saves` adds to all six saving throws and `checks` to every
+skill and to initiative; `set_ability` raises a score to a value
+(`{"str": 19}`) when it is lower; `spell_attack` adds to spell attack rolls;
+`resist` lists damage types; `text` is the line the sheet shows. A key that is
+not one of these, a slot that is not one of the four, or an ability that is
+not one of the six is refused. One of each id counts, the best `weapon`,
+`armor` and `shield` item counts, and at most three items that need attunement
+(`magic-items.json`'s `attunement`) count at once.
 
 **A feature** is a mechanic under a closed `kind`:
 
@@ -699,6 +727,7 @@ without rewriting the chapter around it.
 | `core/rules/catalog.gd` | where data overlays land |
 | `core/rules/effects.gd` | the `data/effects/*.json` vocabulary, and what reads it |
 | `core/potions.gd` | `effects/potions.json`: the two doors a bottle opens |
+| `core/rules/pass_items.gd` | `effects/items.json`: a worn magic item on the sheet |
 | `core/rules/power.gd` | what a monster's defences and features cost the fight builder |
 | `scenes/mods/mods.gd` | the browser |
 | `scenes/world/story_card.gd` | the card a beat is shown on |

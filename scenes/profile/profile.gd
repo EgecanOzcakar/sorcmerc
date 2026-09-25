@@ -19,6 +19,7 @@ const Presets = preload("res://core/presets.gd")
 const Leveling = preload("res://core/leveling.gd")
 const Ach = preload("res://core/achievements.gd")
 const Potions = preload("res://core/potions.gd")
+const PassItems = preload("res://core/rules/pass_items.gd")
 const RoadSpells = preload("res://core/road_spells.gd")
 const Adapter = preload("res://core/adapter.gd")   # audit 4.1: the one reading of slots
 const Traits = preload("res://core/traits.gd")
@@ -500,6 +501,10 @@ func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qt
 		g.add_child(m)
 		return
 	tip = Icons.item_tooltip(iid, def, kind)
+	if equipped:   # a worn magic item past the attunement limit, or outclassed (core/rules/pass_items.gd)
+		var note: String = PassItems.worn_note(_ch, iid)
+		if note != "":
+			tip += "\n" + note
 	if not equipped and Potions.is_potion(iid):
 		# A potion is drunk, not worn: heal now, or a buff the next fight inherits.
 		tip += "\n%s\n\nClick: drink" % Potions.text(iid)
