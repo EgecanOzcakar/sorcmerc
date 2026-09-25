@@ -8,6 +8,7 @@ const Creator = preload("res://scenes/creator/creator.gd")
 const Presets = preload("res://core/presets.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Progression = preload("res://core/progression.gd")
+const Traits = preload("res://core/traits.gd")
 
 var _pass := 0
 var _fail := 0
@@ -453,4 +454,16 @@ func _catch_up_in_creator() -> void:
 		var before = scr.ch
 		scr._load_preset("vera")
 		check(scr.ch == before, "a locked preset does not load (#200)")
+	# #200: a preset walks in with its temperament and origin picked, which the
+	# sweeps' Presets.party() never does, and a starting class that had no
+	# preset has one now.
+	scr.set_start_level(1)
+	scr._load_preset("ilsa")
+	check(Traits.of(scr.ch, "temperament") == "generous" and Traits.of(scr.ch, "origin") == "cave-dweller",
+		"a loaded Ilsa is Generous and Cave-dweller (%s)" % [Traits.ids(scr.ch)])
+	check(Presets.party().all(func(c): return c.traits.is_empty()), "...while the sweeps' Ilsa carries no trait")
+	scr._load_preset("brakka")
+	check(scr.ch.class_id() == "barbarian" and scr.ch.level() == 2, "Brakka, a Berserker, loads at level 2")
+	check(Traits.of(scr.ch, "temperament") == "wrathful", "...Wrathful")
+	check(Leveling.can_finalize(scr.ch), "...with nothing left to choose")
 	scr.queue_free()

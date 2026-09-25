@@ -547,11 +547,16 @@ func _build_basics() -> void:
 	_target = null
 
 	_head("Load a preset")
-	_note("Vera, Pike and Ilsa, ready to march — take one of them instead of building your own.")
+	_note("Ready to march, temperament and origin already picked — take one of them instead of building your own. A fresh run starts them at level %d."
+		% PRESET_START_LEVEL)
 	var pf := _flow()
-	for pre in [["Vera Kord (Fighter 3)", "vera"], ["Pike Sallow (Rogue 3)", "pike"],
-			["Ilsa Vane (Cleric 3)", "ilsa"]]:
-		_gate(_opt(pf, pre[0], false, func(): _load_preset(pre[1])), build_lock_note(_preset(pre[1])))
+	for which in Presets.ROSTER:
+		var id: String = which
+		var pre = _preset(id)
+		var b := _opt(pf, "%s (%s %d)" % [pre.cname, humanize(pre.class_id()), pre.level()], false,
+			func(): _load_preset(id))
+		b.tooltip_text = preset_blurb(pre)
+		_gate(b, build_lock_note(pre))
 	# #104: the player's own, saved from the Review step
 	var mine: Array = Save.list_presets()
 	if not mine.is_empty():
@@ -581,12 +586,28 @@ func _set_species(sid: String) -> void:
 const PRESET_START_LEVEL := 2
 
 # `levels` is 3 by default so the build-lock checks, and anything else asking
-# "what is this preset", see the whole build.
+# "what is this preset", see the whole build. #200: through Presets.hero(), so a
+# loaded preset walks in with its temperament and origin picked — never through
+# vera()/party(), which stay bare for the balance sweeps (core/presets.gd).
 static func _preset(which: String, levels := 3):
-	match which:
-		"vera": return Presets.vera(levels)
-		"pike": return Presets.pike(levels)
-	return Presets.ilsa(levels)
+	return Presets.hero(which, levels)
+
+# #200: the preset button's tooltip — who they are, in one line.
+# "Orc Barbarian (Path of the Berserker), Farmer. Wrathful, Downs-rider."
+static func preset_blurb(pre) -> String:
+	var cid: String = pre.class_id()
+	var sub := ""
+	for d in pre.choices.values():
+		if d is Dictionary and d.get("type", "") == "subclass":
+			sub = String(Catalog.subclass_src(String(d.get("subclassId", ""))).get("name", ""))
+	var who := "%s %s%s, %s." % [String(Catalog.species_src(pre.species_id).get("name", humanize(pre.species_id))),
+		String(Catalog.class_src(cid).get("name", humanize(cid))), " (%s)" % sub if sub != "" else "",
+		String(Catalog.background_src(pre.background_id).get("name", humanize(pre.background_id)))]
+	var picks: Array = []
+	for fam in Traits.FAMILIES:
+		if Traits.of(pre, fam) != "":
+			picks.append(Traits.name_of(Traits.of(pre, fam)))
+	return who + (" %s." % ", ".join(picks) if not picks.is_empty() else "")
 
 func _load_preset(which: String) -> void:
 	var pre = _preset(which, clampi(start_level, PRESET_START_LEVEL, 3))
