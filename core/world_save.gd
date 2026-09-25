@@ -27,6 +27,7 @@
 #   "grudges": {"gnoll": 20.0},       // Grudges.all() (#231): the monster peoples' side
 #   "routes": { <WorldRoutes.to_dict()> },   // #231: {} on a free-roaming world
 #   "route_walked": 1450.0,           // #231: the road's odometer
+#   "camp": [310, 212],               // World.camp_spot: a camp the company still stands at; [] on the road
 #   "ladder": {"deeds": {"human": 13}, "audiences": ["human"]},   // Ladder.all()
 #   "origin": {"kind": "procedural", "seed": 42, "homes": true},   // which builder made this map;
 #                                     // "homes": its lair-for-every-people pass is done (core/world_homes.gd)
@@ -253,6 +254,9 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"grudges": Grudges.all(),
 		"routes": world.routes.to_dict() if world.routes != null else {},
 		"route_walked": world.route_walked,
+		# Where the company made camp and still stands (World.camp_spot); [] on
+		# the road. A save from before the camp counted has no key: no camp.
+		"camp": _v(world.camp_spot) if world.camp_spot.is_finite() else [],
 		"ladder": Ladder.all(),
 		"origin": {"kind": String(world.origin.get("kind", "small")),
 			"seed": int(world.origin.get("seed", 0)),
@@ -374,6 +378,9 @@ static func from_dict(d: Dictionary):
 	if routes is Dictionary and not routes.is_empty():
 		world.routes = WorldRoutes.from_dict(routes)
 	world.route_walked = float(d.get("route_walked", 0.0))
+	var camp = d.get("camp", [])
+	if camp is Array and camp.size() == 2:
+		world.camp_spot = _vec(camp)
 
 	FactionOpinion.reset()
 	var opinion: Dictionary = d.get("opinion", {})

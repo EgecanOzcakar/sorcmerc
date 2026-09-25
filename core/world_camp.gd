@@ -28,6 +28,10 @@
 #    short rest has always made (hostile_near()), and the eight hours of a
 #    quiet night are walked by the world (core/world_rest.gd).
 #
+#  - A quiet night leaves the camp standing (World.camp_spot) until the company
+#    walks off it; while it stands, the company may change who marches
+#    (core/bench.gd's rotation_refusal, the owner's call of 2026-09-25).
+#
 # What this file does NOT own: the rest itself (core/settlement_visit.gd),
 # what the world does during the night (core/world_rest.gd), the fight an
 # ambush opens and the cards that tell the night (the map screen).
@@ -110,6 +114,11 @@ static func make_camp(party, world, radius: float, each := Callable(), ambush_pc
 		"ambush": false if hollow else ambush_roll(rng, ambush_pct)}
 	if not out["ambush"]:
 		out["rest"] = Visit.rest(party, world, "long-rest", each)
+		# A quiet night leaves a camp standing, and at a camp the company can
+		# change who marches (core/bench.gd's rotation_refusal) until it walks
+		# on. A jumped camp is a fight, not a night, and leaves none.
+		if p != null:
+			world.camp_spot = p.position
 	else:
 		var watch: Dictionary = watch_check(party, rng)
 		if alarm:   # the ward wakes them whatever the watch rolled

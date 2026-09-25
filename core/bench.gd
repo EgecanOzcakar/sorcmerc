@@ -14,6 +14,7 @@
 #   Bench.restless(party, id)       # warned, and not marched since
 #   Bench.founder(party)            # the one who never leaves
 #   Bench.to_dict(party) / from_dict(party, d)   # the save's party["bench"]
+#   Bench.rotation_refusal(world, under_roof, guest)   # "" where who marches may change, else why not
 #
 # The clock. party.bench_clock is id -> {"since": world-minute, "warned": bool}.
 # It is kept LAZILY rather than stamped in every place the marching order
@@ -36,6 +37,9 @@
 # The leaving is SEEDED off the merc and the world-day — hash("bench-leave|id|day")
 # — so a reload replays the same morning, and a merc who stayed today is asked
 # again tomorrow, not every frame.
+#
+# Where the swap itself may happen is here too (rotation_refusal, the owner's
+# call of 2026-09-25), because it is the bench's price: see that section.
 #
 # What this does NOT own: the marching order itself (core/party.gd), who is
 # hired or what they cost (core/recruits.gd — the fee is one-time and stays
@@ -146,6 +150,43 @@ static func leave(party, id: String) -> void:
 	for k in party.relations.keys():
 		if id in String(k).split("|"):
 			party.relations.erase(k)
+
+# --- where who marches may change (the owner's call, 2026-09-25) --------------
+#
+# The measured pass (core/party.gd's swap, tests/sweep_road_day.gd ROTATE)
+# found the bench a second pool when it is worked: a fresh trio swapped in
+# before nearly every road fight took a level-6 company's win rate from 88.4%
+# to 97.0%, and the only price was the XP a benched hero does not earn. The
+# owner's answer is that rotation costs more than XP: a hero comes into or
+# goes out of the marching company only where the company stops — a camp it
+# made and still stands at (World.camp_spot, set by core/world_camp.gd on a
+# quiet night), or a settlement, which is where the inn and the lodge are —
+# and never on the open road between two fights. Swapping before every fight
+# now means a camp before every fight, and a camp is a long rest behind the
+# 24-hour gate. Marching ORDER is not rotation: who walks first is a travel
+# decision and stays live everywhere.
+#
+# `under_roof` is the caller's to say, because a settlement is a visit the map
+# screen has open rather than a place in the model: world.gd passes true from
+# the inn's and the lodge's own doors. `guest` is a co-op guest's screen, which
+# never changes the host's company: the guest's map is a mirror rebuilt from
+# the host's saves, and the host's inbox takes nothing from the road but a
+# guest's own level-up (scenes/world/world.gd's _coop_share), so a roster
+# change on the guest's side could not reach the host even if a screen allowed
+# one. The refusal says so rather than leaving a button that does nothing.
+#
+# Core deaths, a defeat's reshuffle and a leaver (core/party.gd's
+# revive_downed, core/fallen.gd, leave() above) move people in and out
+# wherever they happen: they are not the player's rotation, and never ask.
+const ROAD_TEXT := "The company changes who marches at a camp, a settlement or the lodge, not on the open road between fights."
+const GUEST_TEXT := "Who marches is the host's to settle. This screen follows the host's company."
+
+static func rotation_refusal(world, under_roof: bool, guest := false) -> String:
+	if guest:
+		return GUEST_TEXT
+	if under_roof or (world != null and world.at_camp()):
+		return ""
+	return ROAD_TEXT
 
 # --- the save -----------------------------------------------------------------
 

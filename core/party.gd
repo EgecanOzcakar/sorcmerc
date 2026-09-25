@@ -193,8 +193,11 @@ func bench(id: String) -> bool:
 # hero earns nothing, so six heroes sharing the road's XP each level at about
 # half the pace, plus the second trio's hire. The bench already sleeps only
 # when the company does (core/settlement_visit.gd's rest walks the whole
-# roster), which is the audit's own remedy, so nothing here moved; whether the
-# XP price is enough is the owner's call (the build log, "The measured pass").
+# roster), which is the audit's own remedy, so nothing here moved. The owner
+# judged the XP price not enough (2026-09-25): a swap now also needs a camp,
+# a settlement or the lodge, which the screens ask core/bench.gd's
+# rotation_refusal before they call this. The table above is the road with no
+# such gate and was not re-run.
 func swap(active_id: String, bench_id: String) -> bool:
 	var i := active.find(active_id)
 	var ch = get_member(bench_id)

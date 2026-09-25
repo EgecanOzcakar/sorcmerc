@@ -4,7 +4,10 @@
 # roster, seeded so a reload replays the same morning. And the bench sits at
 # the fire under a roof (core/party_opinion.gd's camp_moment with `bench`), but
 # not on the open road. Plus the save: the clocks round-trip through the world
-# save, and a save from before them loads with none.
+# save, and a save from before them loads with none. And where the swap may
+# happen (the owner's call, 2026-09-25; Bench.rotation_refusal): at a camp the
+# company made and still stands at, a settlement or the lodge — never on the
+# open road, and never from a co-op guest's screen.
 #   godot --headless --path . -s tests/test_bench.gd
 extends SceneTree
 
@@ -14,6 +17,7 @@ const PartyOpinion = preload("res://core/party_opinion.gd")
 const WorldSave = preload("res://core/world_save.gd")
 const World = preload("res://core/world.gd")
 const RNG = preload("res://core/rng.gd")
+const WorldCamp = preload("res://core/world_camp.gd")
 
 const DAY := Bench.DAY
 
@@ -33,6 +37,7 @@ func _init() -> void:
 	test_marching_is_the_cure()
 	test_fireside_with_the_bench()
 	test_save_round_trip()
+	test_rotation_where()
 	print("test_bench: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -198,3 +203,59 @@ func test_save_round_trip() -> void:
 	Bench.sync(r, 99999.0)
 	check(float(r.bench_clock["gera"]["since"]) == 99999.0 and not Bench.restless(r, "gera"),
 		"...and they start at the first look after the load, nobody restless yet")
+
+func _camp_world() -> World:
+	var w := World.new()
+	w.add_settlement(World.Settlement.new("riverhold", Vector2.ZERO, "human", "city"))
+	w.add_party(World.RoamingParty.new("player", Vector2(400, 40), "human", true))
+	return w
+
+func test_rotation_where() -> void:
+	var w := _camp_world()
+	var p := _party()
+	check(not w.camp_spot.is_finite() and not w.at_camp(), "a fresh map has no camp")
+	check(Bench.rotation_refusal(w, false) == Bench.ROAD_TEXT,
+		"on the open road the swap is refused, and says where it is not: %s" % Bench.rotation_refusal(w, false))
+	check(Bench.ROAD_TEXT.contains("camp") and Bench.ROAD_TEXT.contains("settlement") and Bench.ROAD_TEXT.contains("lodge"),
+		"...and where it can be made instead")
+	check(Bench.rotation_refusal(w, true) == "", "under a roof (an inn, the lodge) it is allowed")
+	check(Bench.rotation_refusal(null, true) == "", "...with no map at all, too (a screen before the road)")
+	# A quiet night leaves a camp standing. The hollow is never rolled for, so
+	# the night is quiet on any minute.
+	p.last_long_rest_at = -1e12
+	p.hollow_camp = true
+	w.clock.elapsed = 5000.0
+	var r: Dictionary = WorldCamp.make_camp(p, w, 24.0)
+	check(r["ok"] and not r["ambush"], "fixture: a quiet night at the hollow")
+	check(w.at_camp() and w.camp_spot == w.player().position, "the night leaves a camp where the company slept")
+	check(Bench.rotation_refusal(w, false) == "", "at the camp the swap is allowed")
+	check(p.swap("pike", "gera") and p.is_active("gera"), "...and core's swap does it")
+	# The camp stands through the save.
+	var d: Dictionary = JSON.parse_string(JSON.stringify(WorldSave.to_dict(w, p)))
+	var back = WorldSave.from_dict(d)
+	check(back != null and back["world"].camp_spot.is_equal_approx(w.camp_spot), "the camp rides the world save")
+	d.erase("camp")
+	var old = WorldSave.from_dict(d)
+	check(old != null and not old["world"].camp_spot.is_finite(), "a save from before the camp counted loads with none")
+	# Standing still keeps it; walking on strikes it.
+	w.tick(60.0)
+	check(w.at_camp(), "an hour by the fire does not strike the camp")
+	var pl = w.player()
+	w.set_goal(pl, pl.position + Vector2(200, 0))
+	for i in 20:
+		w.tick(0.5)
+	check(not w.camp_spot.is_finite() and not w.at_camp(), "walking on strikes the camp (%s)" % str(pl.position))
+	check(Bench.rotation_refusal(w, false) == Bench.ROAD_TEXT, "...and the road refuses the swap again")
+	# Walking back to where it stood does not pitch it again.
+	pl.position = Vector2(400, 40)
+	check(not w.at_camp(), "coming back to the ashes is not a camp")
+	# A co-op guest: refused everywhere, with its own words.
+	w.camp_spot = pl.position
+	check(Bench.rotation_refusal(w, true, true) == Bench.GUEST_TEXT and Bench.rotation_refusal(w, false, true) == Bench.GUEST_TEXT,
+		"a guest's screen is refused under a roof and at a camp alike: %s" % Bench.GUEST_TEXT)
+	# The words are the house register: no contractions, no shouting.
+	for t in [Bench.ROAD_TEXT, Bench.GUEST_TEXT]:
+		var loud: bool = "!" in String(t)
+		for c in ["n't", "'re", "'ll", "'ve", "'m ", "'d ", "it's", "that's"]:
+			loud = loud or c in String(t).to_lower()
+		check(not loud, "the house register: %s" % t)
