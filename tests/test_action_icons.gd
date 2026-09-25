@@ -177,7 +177,7 @@ func _init() -> void:
 			and Icons.weapon_icon("javelin") != null, "a thrown javelin is the javelin")
 		check(Icons.weapon_icon("unarmed-strike") == null and Icons.weapon_icon("") == null,
 			"no weapon, no art: the caller keeps its badge")
-		check(Icons.skill_icon({"id": "offhand_attack", "kind": "offhand_attack", "weapon": "dagger"})
+		check(Icons.skill_icon({"id": "offhand_attack", "kind": "offhand_attack", "weapon_id": "dagger"})
 			== Icons.item_art("dagger"), "the off-hand swing wears the off-hand weapon")
 		check(Icons.skill_icon({"id": "monk-flurry-of-blows:attack", "kind": "attack"}, vera)
 			== Icons.verb_icon("attack"), "a granted attack keeps its own badge, not the main hand's")
