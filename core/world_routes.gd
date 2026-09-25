@@ -17,6 +17,7 @@
 #   net.path_from(party.position, "settlement:oakford")      # from partway down one
 #   net.notice(party.position)                   # hidden paths a passer-by spots
 #   net.reveal_node("landmark:landmark-ruins-0") # a lead: the place, and the way to it
+#   net.open_route(world, from_id, to_id, why)   # a trail nobody laid: see "routes nobody laid"
 #   WorldRoutes.from_dict(net.to_dict())         # the save's round trip
 #
 # THE SHAPE, and why each tier is what it is.
@@ -60,6 +61,12 @@
 #     either end. Found, it is a reason to have gone out there: the next trip
 #     is shorter.
 #
+#  5. TRAILS, laid at runtime. The four tiers above are all there on the first
+#     day, found or not. A trail is not: a landmark's answer or a decision's
+#     outcome opens it where none was (open_route(), open_place()), and a
+#     trail that crosses a road makes a crossroads there. See "routes nobody
+#     laid" below.
+#
 # WHAT THIS DOES NOT OWN. Who you meet on a road (core/route_encounters.gd);
 # walking it (core/world.gd's move_toward_goal already walks a waypoint list,
 # which is what path() returns); the drawing; the save (core/world_save.gd
@@ -78,6 +85,7 @@ extends RefCounted
 const WorldPath = preload("res://core/world_path.gd")
 const Regions = preload("res://core/regions.gd")
 const Landmarks = preload("res://core/landmarks.gd")
+const RNG = preload("res://core/rng.gd")
 
 # A spur that would leave the road this close to one of the road's own ends
 # leaves from that end instead: a fork a stone's throw from a town is the town.
@@ -98,10 +106,10 @@ const BYWAY_DETOUR := 1.8
 const BYWAY_REACH := 0.35
 const BYWAY_PER := 6
 
-const KINDS := ["road", "track", "path", "byway"]
+const KINDS := ["road", "track", "path", "byway", "trail"]
 
-var nodes := {}   # id -> {id, kind, ref, position: Vector2, known: bool}
-var edges := {}   # id -> {id, a, b, kind, points: PackedVector2Array, length, known, notice: Array, search: bool}
+var nodes := {}   # id -> {id, kind, ref, position: Vector2, known: bool, why: String}
+var edges := {}   # id -> {id, a, b, kind, points: PackedVector2Array, length, known, notice: Array, search: bool, why: String}
 var _adj := {}    # node id -> Array of edge ids
 var _forks := 0   # the next fork's number; saved, so a spur attached after a load cannot reuse one
 
@@ -131,8 +139,8 @@ static func build(world):
 	net._byways(world)
 	return net
 
-func _add_node(id: String, kind: String, ref: String, pos: Vector2, known: bool) -> String:
-	nodes[id] = {"id": id, "kind": kind, "ref": ref, "position": pos, "known": known}
+func _add_node(id: String, kind: String, ref: String, pos: Vector2, known: bool, why := "") -> String:
+	nodes[id] = {"id": id, "kind": kind, "ref": ref, "position": pos, "known": known, "why": why}
 	if not _adj.has(id):
 		_adj[id] = []
 	return id
@@ -156,14 +164,16 @@ static func _length(pts: PackedVector2Array) -> float:
 		total += pts[i - 1].distance_to(pts[i])
 	return total
 
+# `why` is empty for the map's own network and names what opened a trail
+# ("landmark:landmark-ruins-3", "event:smugglers-cut") for one that was not.
 func _link(id: String, a: String, b: String, kind: String, pts: PackedVector2Array,
-		known: bool, notice: Array, search := false) -> String:
+		known: bool, notice: Array, search := false, why := "") -> String:
 	# Stored a -> b in id order, so an edge reads the same whichever end built it.
 	if a > b:
 		var t := a; a = b; b = t
 		pts.reverse()
 	edges[id] = {"id": id, "a": a, "b": b, "kind": kind, "points": pts, "length": _length(pts),
-		"known": known, "notice": notice, "search": search}
+		"known": known, "notice": notice, "search": search, "why": why}
 	for n in [a, b]:
 		if not (_adj[n] as Array).has(id):
 			_adj[n].append(id)
@@ -372,13 +382,14 @@ func _split(e: Dictionary, seg: int, point: Vector2) -> String:
 	var known: bool = e["known"]
 	var notice: Array = e["notice"]
 	var search: bool = e["search"]
+	var why: String = e.get("why", "")
 	_unlink(e["id"])
 	# The half nearer the notice point keeps it; the other half is found by
 	# walking the first, so it is noticed from the fork.
 	var na: Array = notice.filter(func(n): return n == a)
 	var nb: Array = notice.filter(func(n): return n == b)
-	_link(edge_id(a, fork), a, fork, kind, first, known, na if not na.is_empty() or notice.is_empty() else [fork], search)
-	_link(edge_id(fork, b), fork, b, kind, second, known, nb if not nb.is_empty() or notice.is_empty() else [fork], search)
+	_link(edge_id(a, fork), a, fork, kind, first, known, na if not na.is_empty() or notice.is_empty() else [fork], search, why)
+	_link(edge_id(fork, b), fork, b, kind, second, known, nb if not nb.is_empty() or notice.is_empty() else [fork], search, why)
 	return fork
 
 # Tier 3: shortcuts. Candidates are pairs of places (never forks) within reach,
@@ -415,6 +426,185 @@ func _byways(world) -> void:
 		_link(edge_id(c["a"], c["b"]), c["a"], c["b"], "byway",
 			PackedVector2Array([nodes[c["a"]]["position"], nodes[c["b"]]["position"]]), false, [c["a"], c["b"]])
 		laid += 1
+
+# --- routes nobody laid ------------------------------------------------------
+#
+# Everything above is the map's own network: built from where the places stand,
+# some of it hidden, all of it there from the first day and found by walking.
+# The owner's follow-up on #231 (2026-09-25): a landmark and a decision must
+# also be able to OPEN a way that was never on the map and was not waiting to be
+# found — the hermit shows you the goat track over the ridge, the smugglers' cut
+# runs where no road does, following the tracks leads to a camp that was not
+# there yesterday. So a TRAIL is an edge an outcome lays at runtime:
+#
+#   net.open_route(world, "landmark:landmark-ruins-3", "lair:giant-hold", "landmark:landmark-ruins-3")
+#   net.lead_target(world, from_id, key)      # where a lead from here should go
+#   net.scout_spot(world, from_id, key)       # a dry spot for a place nobody placed
+#   net.open_place(world, "landmark", "smugglers-cave", spot, from_id, "event:smugglers")
+#
+# A trail goes where the outcome says, not where the neighbourhood graph or the
+# Prim hang would have put a road, so it is the one tier allowed to cross
+# another edge — and where it does, it makes a CROSSROADS there (both edges cut,
+# a node where they meet), keeping the rule the rest of the network holds:
+# nothing crosses without a node. It is saved with its `why`, and only the save
+# keeps it: build() cannot re-derive what a decision did.
+#
+# What this does not own: WHICH landmark answer or event outcome opens a trail,
+# or the new place's own world object (a World.Landmark or World.Lair the caller
+# adds) — the network only needs the node. docs/spike-route-travel.md §3.1 says
+# which phase wires which door.
+const TRAIL := "trail"
+# A lead points somewhere within this fraction of the map's extent...
+const LEAD_REACH := 0.5
+# ...that the known roads join at least this badly (or not at all): a trail to
+# a place already a short walk away is not a discovery.
+const LEAD_DETOUR := 1.4
+# The pick is seeded among the best this many, so two leads read at one place
+# on two occasions (two keys) need not point the same way.
+const LEAD_PICK := 3
+# A place nobody placed keeps this far from every node — Landmarks.LANDMARK_GAP,
+# "a thing of its own" — and is looked for this many times before giving up.
+const SPOT_GAP := 120.0
+const SPOT_TRIES := 60
+const SPOT_NEAR := 200.0
+const SPOT_FAR := 450.0
+
+# Lay a trail from node `from` to node `to`: dry (WorldPath round the water), a
+# crossroads cut wherever it crosses an edge already laid. Known at once by
+# default — it was shown to the company, and both ends become known with it;
+# `known = false` lays it hidden, noticed from `from` like a path. Returns the
+# edge ids laid in walking order ([] when there is no dry way, or when the two
+# are the same node). An edge already joining the two is revealed and returned
+# instead of laid twice.
+func open_route(world, from: String, to: String, why := "", known := true) -> Array:
+	if not nodes.has(from) or not nodes.has(to) or from == to:
+		return []
+	var existing := edge_id(from, to)
+	if edges.has(existing):
+		if known:
+			reveal(existing)
+		return [existing]
+	var pts := _route_points(world, nodes[from]["position"], nodes[to]["position"])
+	if pts.is_empty():
+		return []
+	var laid: Array = []
+	var start := from
+	var rest := pts
+	for _guard in 64:
+		var hit := _first_crossing(rest)
+		if hit.is_empty():
+			laid.append(_link(edge_id(start, to), start, to, TRAIL, rest, known, [] if known else [start], false, why))
+			break
+		var cross: String = hit["node"]
+		if cross == "":
+			var crossed: Dictionary = edges[hit["edge"]]
+			cross = _split(crossed, int(_closest_on(crossed, hit["point"])["seg"]), hit["point"])
+		nodes[cross]["known"] = nodes[cross]["known"] or known
+		var piece := rest.slice(0, int(hit["seg"]) + 1)
+		piece.append(hit["point"])
+		laid.append(_link(edge_id(start, cross), start, cross, TRAIL, piece, known, [] if known else [start], false, why))
+		var tail := PackedVector2Array([hit["point"]])
+		tail.append_array(rest.slice(int(hit["seg"]) + 1))
+		start = cross
+		rest = tail
+	if known:
+		nodes[from]["known"] = true
+		nodes[to]["known"] = true
+	return laid
+
+# The first place along `pts` where it crosses an edge, as {edge, seg, point,
+# node}: `node` is the crossed edge's own end when the crossing lands on it
+# (then no cut is needed), else "". Touching at either end of `pts` is a join.
+func _first_crossing(pts: PackedVector2Array) -> Dictionary:
+	for i in range(1, pts.size()):
+		var best := {}
+		var best_d := INF
+		for eid in edges:
+			var e: Dictionary = edges[eid]
+			var q: PackedVector2Array = e["points"]
+			for j in range(1, q.size()):
+				var hit = Geometry2D.segment_intersects_segment(pts[i - 1], pts[i], q[j - 1], q[j])
+				if hit == null or hit.distance_to(pts[0]) < 1.0 or hit.distance_to(pts[-1]) < 1.0:
+					continue
+				var d: float = pts[i - 1].distance_to(hit)
+				if d < best_d:
+					best_d = d
+					var on_end := ""
+					for n in [e["a"], e["b"]]:
+						if hit.distance_to(nodes[n]["position"]) < 1.0:
+							on_end = n
+					best = {"edge": eid, "seg": i - 1, "point": hit if on_end == "" else nodes[on_end]["position"], "node": on_end}
+		if not best.is_empty():
+			return best
+	return {}
+
+# Where a lead read at node `from` should point: a place (never a fork) within
+# LEAD_REACH of the extent, with a dry way to it, that the known roads join
+# LEAD_DETOUR times worse than the crow flies or not at all — worst first, then
+# seeded among the best LEAD_PICK by `key` (the landmark and the answer, the
+# event and the choice). "" when nothing qualifies: the lead has nowhere to go,
+# and the caller falls back to whatever the answer paid before.
+func lead_target(world, from: String, key: String) -> String:
+	if not nodes.has(from):
+		return ""
+	var here: Vector2 = nodes[from]["position"]
+	var reach: float = LEAD_REACH * Regions.extent(world)
+	var known_d := _distances(from, true)
+	var cands: Array = []
+	for id in nodes:
+		var n: Dictionary = nodes[id]
+		if id == from or n["kind"] == "fork" or edges.has(edge_id(from, id)):
+			continue
+		var d: float = here.distance_to(n["position"])
+		if d > reach or d < 1.0:
+			continue
+		var ratio: float = float(known_d.get(id, INF)) / d
+		if ratio < LEAD_DETOUR or _route_points(world, here, n["position"]).is_empty():
+			continue
+		cands.append({"id": id, "ratio": ratio})
+	if cands.is_empty():
+		return ""
+	cands.sort_custom(func(x, y): return float(x["ratio"]) > float(y["ratio"]) \
+		or (float(x["ratio"]) == float(y["ratio"]) and String(x["id"]) < String(y["id"])))
+	var top: int = mini(LEAD_PICK, cands.size())
+	return String(cands[absi(hash("lead|%s" % key)) % top]["id"])
+
+# A dry spot SPOT_NEAR..SPOT_FAR from node `from`, SPOT_GAP clear of every node,
+# seeded off `key` — for a place an outcome puts on the map that no builder
+# placed. Vector2.INF when SPOT_TRIES spots all fail.
+func scout_spot(world, from: String, key: String) -> Vector2:
+	if not nodes.has(from):
+		return Vector2.INF
+	var rng = RNG.new(maxi(1, absi(hash("spot|%s" % key))))
+	var here: Vector2 = nodes[from]["position"]
+	for _t in SPOT_TRIES:
+		var angle := TAU * float(rng.roll_die(3600) - 1) / 3600.0
+		var dist := lerpf(SPOT_NEAR, SPOT_FAR, float(rng.roll_die(1000) - 1) / 999.0)
+		var pos := here + Vector2.RIGHT.rotated(angle) * dist
+		if world.is_water(pos) or _route_points(world, here, pos).is_empty():
+			continue
+		var clear := true
+		for id in nodes:
+			if pos.distance_to(nodes[id]["position"]) < SPOT_GAP:
+				clear = false
+				break
+		if clear:
+			return pos
+	return Vector2.INF
+
+# Put a place on the network that was not there, with a trail to it from node
+# `from` ("" hangs it off the nearest point instead, the way attach() does).
+# Returns the node id; a place already on the network is left where it is.
+func open_place(world, kind: String, ref: String, pos: Vector2, from := "", why := "", known := true) -> String:
+	var id := poi_id(kind, ref)
+	if nodes.has(id):
+		return id
+	_add_node(id, kind, ref, pos, known, why)
+	if from == "" or open_route(world, from, id, why, known).is_empty():
+		var at := _nearest_on_network(world, pos, id)
+		if not at.is_empty():
+			_hang(world, id, at)
+	return id
 
 # --- walking it ------------------------------------------------------------
 
@@ -672,7 +862,7 @@ func to_dict() -> Dictionary:
 	for id in nodes:
 		var n: Dictionary = nodes[id]
 		ns.append({"id": id, "kind": n["kind"], "ref": n["ref"],
-			"x": n["position"].x, "y": n["position"].y, "known": n["known"]})
+			"x": n["position"].x, "y": n["position"].y, "known": n["known"], "why": n.get("why", "")})
 	var es: Array = []
 	for eid in edges:
 		var e: Dictionary = edges[eid]
@@ -680,7 +870,7 @@ func to_dict() -> Dictionary:
 		for p in e["points"]:
 			pts.append([p.x, p.y])
 		es.append({"a": e["a"], "b": e["b"], "kind": e["kind"], "points": pts,
-			"known": e["known"], "notice": e["notice"].duplicate(), "search": e["search"]})
+			"known": e["known"], "notice": e["notice"].duplicate(), "search": e["search"], "why": e.get("why", "")})
 	return {"nodes": ns, "edges": es, "forks": _forks}
 
 # Missing keys read as defaults, the rule every *_save.gd follows.
@@ -688,7 +878,7 @@ static func from_dict(d: Dictionary):
 	var net = load("res://core/world_routes.gd").new()
 	for n in d.get("nodes", []):
 		net._add_node(String(n["id"]), String(n.get("kind", "fork")), String(n.get("ref", "")),
-			Vector2(float(n.get("x", 0.0)), float(n.get("y", 0.0))), bool(n.get("known", false)))
+			Vector2(float(n.get("x", 0.0)), float(n.get("y", 0.0))), bool(n.get("known", false)), String(n.get("why", "")))
 	for e in d.get("edges", []):
 		var a := String(e["a"])
 		var b := String(e["b"])
@@ -700,6 +890,6 @@ static func from_dict(d: Dictionary):
 		if pts.size() < 2:
 			pts = PackedVector2Array([net.nodes[a]["position"], net.nodes[b]["position"]])
 		net._link(edge_id(a, b), a, b, String(e.get("kind", "road")), pts, bool(e.get("known", true)),
-			Array(e.get("notice", [])), bool(e.get("search", false)))
+			Array(e.get("notice", [])), bool(e.get("search", false)), String(e.get("why", "")))
 	net._forks = int(d.get("forks", 0))
 	return net

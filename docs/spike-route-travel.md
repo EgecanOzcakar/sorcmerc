@@ -7,7 +7,8 @@ headless test of each (`tests/test_world_routes.gd`,
 `tests/test_route_encounters.gd`), a sweep that measures today's free-roaming
 map so the new odds start from the density the game already has
 (`tests/sweep_route_travel.gd`), and a picture of the network on each shipped
-map (`tests/shot_routes.gd` → `docs/shots/route-network-*.png`). §6 is the
+map, plus the small map after play has opened trails on it
+(`tests/shot_routes.gd` → `docs/shots/route-network-*.png`). §6 is the
 order the rest lands in; §7 is what the owner still has to decide.
 
 ## 1. What #231 asks
@@ -128,6 +129,47 @@ A build is 5–20 ms. The small map detours most: four towns make a tree of
 roads with no loop in it, and two of its three roads bend round the lake and
 down the river's bank.
 
+### 3.1 Routes nobody laid
+
+The four tiers are all there on the first day; finding them is walking. The
+owner's follow-up on #231 (2026-09-25) asks for more: **a landmark and a
+decision can create a route that was not on the map at all** — not revealed,
+created. The hermit shows you the goat track over the ridge; the smugglers'
+cut runs where no road does; following the tracks leads to a camp that was
+not there yesterday. That is a fifth tier, the **trail**, laid at runtime:
+
+- `open_route(world, from, to, why, known)` lays a trail between two nodes,
+  dry, round the water. A trail goes where the outcome says rather than where
+  the graph would have put a road, so it is the one tier allowed to cross
+  another edge — and where it does, it **makes a crossroads** there (both
+  edges cut, a node where they meet), so the rule the rest of the network
+  keeps still holds: nothing crosses without a node. Laid known by default,
+  and both ends become known with it; laid hidden, it is noticed from where
+  it starts, like a path. An edge already joining the two is revealed rather
+  than laid twice.
+- `lead_target(world, from, key)` is where a lead should point: a place
+  within half the map's extent that the known roads join at least 1.4× worse
+  than the crow flies, or not at all — worst first, seeded among the best
+  three by the key (the landmark and its answer, the event and its choice),
+  so two leads need not point the same way.
+- `scout_spot(world, from, key)` and `open_place(world, kind, ref, pos, from,
+  why)` put a **place nobody placed** on the network: a dry spot 200–450 units
+  out, 120 clear of every node (a landmark's own gap), with a trail to it.
+  The place's world object — a `World.Landmark`, a `World.Lair` — is the
+  caller's; the network only needs the node.
+
+Every trail and new place carries its `why` ("landmark:…", "event:…"), and
+only the save keeps them: `build()` re-derives the map's own network and
+cannot re-derive what a decision did. The small map after two landmarks'
+leads and one decision (trails green, the new place a green dot north-east of
+Riverhold):
+
+![small, opened](shots/route-network-small-opened.png)
+
+Which doors open trails is the phases' business (§6): a landmark answer in
+phase 1, event and meeting outcomes in phase 3, and a pack's story effect
+with them.
+
 ## 4. Who you meet — `core/route_encounters.gd`
 
 The odds are **per distance walked**, not per world-minute: under routes a
@@ -228,6 +270,8 @@ the world screen's gauge of the party), and the time a fight takes.
 | `STEP` 100 | `route_encounters.gd` | a resolution, not a balance number: halving it halves the chance per roll |
 | `FORK_SNAP` 40, `NOTICE_RADIUS` 30 | `world_routes.gd` | geometry, sized off `VISIT_RADIUS` 34 and `ENCOUNTER_RADIUS` 24 |
 | `BYWAY_DETOUR` 1.8, `BYWAY_REACH` 0.35, `BYWAY_PER` 6 | `world_routes.gd` | taste; the counts they give are in §3 |
+| `LEAD_REACH` 0.5, `LEAD_DETOUR` 1.4, `LEAD_PICK` 3 | `world_routes.gd` | taste |
+| `SPOT_NEAR` 200, `SPOT_FAR` 450, `SPOT_GAP` 120 | `world_routes.gd` | the gap is `Landmarks.LANDMARK_GAP`; the reach is taste |
 
 The taste numbers cannot be measured before a player walks the roads,
 because what they trade is where on a trip the danger sits, not how much of it
@@ -244,8 +288,11 @@ they get their sweep.
   nothing, or halts the march); `notice()` every frame, `searchable()` behind
   the lair button's Survival roll; under the flag no band is seeded or
   refilled and `RouteEncounters.roll()` runs once per `STEP` walked, handing
-  its band to the existing approach card. A drive robot walks every map's
-  network and gives §5's taste numbers their sweep.
+  its band to the existing approach card. The ruins' "read the stones" — whose
+  win today marks the nearest undiscovered thing — opens a trail to
+  `lead_target()` instead, the first door that creates a route (§3.1). A
+  drive robot walks every map's network and gives §5's taste numbers their
+  sweep.
 - **Phase 2 — routes by default.** Authored bands (`world.json` `parties[]`,
   story `spawn_party`, a `hunt_party` job's target) become pinned encounters
   on their edges; raids become the town state plus the pull; `WorldBands`,
@@ -258,8 +305,11 @@ they get their sweep.
   escort job); D3's road events stop resolving themselves and ask, two or
   three choices each — the `options` key `core/travel.gd`'s own `ponytail:`
   has been waiting for; an outcome may pin a follow-up event or encounter on
-  a node or edge, which is what makes events chain. The table moves to data
-  (`data/road_events.json`) so packs can add to it.
+  a node or edge, which is what makes events chain, and may **open a trail
+  or a new place** (`open_route`, `open_place`) — a decision that changes the
+  map. The table moves to data (`data/road_events.json`) so packs can add to
+  it, and story packs get the same door as an effect beside `reveal_lair`
+  (additive vocabulary, through `sorcmerc-compat`).
 - **Phase 4 — #233.** The same network at the scale of a settlement: its
   districts, shops and hidden corners as nodes, found by walking.
 

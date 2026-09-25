@@ -22,6 +22,15 @@ nodes and 22 edges, large 32 and 36, procedural seeds 1–4 22 to 26 and 21 to
 27; a trip between two towns on known roads is 1.07× to 1.47× the crow's
 distance on average. Pictures: `docs/shots/route-network-*.png`.
 
+**Routes nobody laid.** The owner's follow-up: landmarks and decisions must
+be able to create routes that were not on the map, not only reveal ones that
+were. A fifth tier, the **trail**, is laid at runtime: `open_route()` between
+two places (a crossroads cut wherever it crosses an edge, so nothing crosses
+without a node), `lead_target()` picks where a lead should point (a place the
+known roads join badly, seeded by the answer), and `scout_spot()` +
+`open_place()` put a place no builder placed on the map with a trail to it.
+Each carries the `why` that opened it, and the save is what keeps it.
+
 **The odds** (`core/route_encounters.gd`). Per 1000 units walked:
 `BASE × cover × lure + hunt`, one seeded roll per 100 units, keyed on the edge,
 the stretch and the world-day so a reload never rerolls a road. Cover is a
@@ -48,23 +57,24 @@ Hunting bands make for the nearest hostile thing on the map and the towns
 are in the middle. `BASE` is therefore flat rather than copying that shape;
 the ring already sets who is met and how strong the fight is.
 
-Not visible: a model, two tests (`test_world_routes` 1153 checks,
-`test_route_encounters` 56), a sweep, and three diagrams.
+Not visible: a model, two tests (`test_world_routes` 1207 checks,
+`test_route_encounters` 56), a sweep, and four diagrams.
 
 ### Still open
 
 - Phase 1, behind `SORCMERC_ROUTES=1`: `World.routes` in the save, the known
   network drawn, click a place to walk `path_from()`, `notice()` and the
   search, no band seeding under the flag, `roll()` per stretch into the
-  approach card; a drive robot to sweep the taste numbers (cover, lure,
-  hunt).
+  approach card; the ruins' lead opens a trail; a drive robot to sweep the
+  taste numbers (cover, lure, hunt, lead reach).
 - Phase 2, routes by default: authored bands, `spawn_party`, `hunt_party`
   and raids re-homed as pinned encounters and town states; `WorldBands`,
   `WorldAI`'s hunt, `WorldBattle`, `WorldFlee`, `WorldChase` retired; the
   mod API keeps its vocabulary.
 - Phase 3, #232 and #234: road meetings and road events that ask, two or three
-  choices each, and outcomes that pin follow-ups so events chain; the event
-  table as data packs can extend.
+  choices each, and outcomes that pin follow-ups so events chain or open
+  trails and new places; the event table as data packs can extend, and a
+  story effect for the same door.
 - Phase 4, #233: the same network inside a settlement.
 - The owner's six questions in the spike doc's §7 — lairs known as places or
   known outright, off-road travel, friendly meetings, monster memory, where a

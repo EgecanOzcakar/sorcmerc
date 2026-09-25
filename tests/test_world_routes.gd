@@ -239,6 +239,92 @@ func _attach_later() -> void:
 	check(not back.nodes[again].is_empty() and back.stats()["forks"] == 2 and back.nodes.has("fork:1"),
 		"attach: after a load the next fork gets a fresh number")
 
+func _trails() -> void:
+	# A road west to east along y=0, a landmark north of it on a hidden path and
+	# a lair south of it on a track. A trail from the landmark to the lair is on
+	# nobody's map: it crosses the road, and must make a crossroads there.
+	var w := World.new()
+	w.add_settlement(World.Settlement.new("w", Vector2(0, 0), "human"))
+	w.add_settlement(World.Settlement.new("e", Vector2(1000, 0), "elf"))
+	w.add_landmark(World.Landmark.new("landmark-ruins-0", "ruins", Vector2(300, -400)))
+	w.add_lair(World.Lair.new("den", Vector2(700, 400), "goblinoid"))
+	var net = WorldRoutes.build(w)
+	var built: String = JSON.stringify(net.to_dict())
+	var ruins := "landmark:landmark-ruins-0"
+	var before: float = net.path("settlement:w", "lair:den")["length"]
+	check(not net.nodes[ruins]["known"], "trails: the ruins start hidden")
+	var laid: Array = net.open_route(w, ruins, "lair:den", "landmark:%s" % ruins)
+	check(laid.size() == 2, "trails: crossing the road lays two pieces (%d)" % laid.size())
+	for eid in laid:
+		check(net.edges[eid]["kind"] == "trail" and net.edges[eid]["known"], "trails: %s is a known trail" % eid)
+		check(net.edges[eid]["why"] == "landmark:%s" % ruins, "trails: %s says what opened it" % eid)
+	var cross := ""
+	for n in [net.edges[laid[0]]["a"], net.edges[laid[0]]["b"]]:
+		if n != ruins:
+			cross = n
+	check(cross != "" and net.nodes[cross]["position"].distance_to(Vector2(500, 0)) < 1.0, "trails: a crossroads where it meets the road")
+	check(net.neighbours(cross).size() == 4, "trails: four ways out of the crossroads (%d)" % net.neighbours(cross).size())
+	check(net.nodes[ruins]["known"], "trails: the place a trail was opened from is known")
+	var ids: Array = net.edges.keys()
+	var crossings := 0
+	for i in ids.size():
+		for j in range(i + 1, ids.size()):
+			crossings += _crossings(net.edges[ids[i]], net.edges[ids[j]])
+	check(crossings == 0, "trails: still nothing crosses without a node (%d)" % crossings)
+	var after: float = net.path("settlement:w", "lair:den")["length"]
+	check(after < before - 100.0, "trails: the lair is nearer by the crossroads (%.0f -> %.0f)" % [before, after])
+	check(net.stats()["trail"] == 2, "trails: counted as trails")
+	var again: Array = net.open_route(w, cross, "lair:den")
+	check(again.size() == 1 and net.edges.has(again[0]) and net.stats()["trail"] == 2, "trails: an edge already there is returned, not laid twice")
+	check(net.open_route(w, ruins, ruins).is_empty(), "trails: not to itself")
+	check(net.open_route(w, ruins, "nowhere").is_empty(), "trails: not to a node that does not exist")
+	# Only the save keeps it: build() re-derives the map's network, not a decision.
+	var back = WorldRoutes.from_dict(JSON.parse_string(JSON.stringify(net.to_dict())))
+	check(back.stats()["trail"] == 2 and back.edges[laid[0]]["why"] == "landmark:%s" % ruins, "trails: survive a save with their why")
+	check(JSON.stringify(WorldRoutes.build(w).to_dict()) == built, "trails: a rebuild is the map's own network")
+	# Hidden: laid, but found by walking past where it starts.
+	var net2 = WorldRoutes.build(w)
+	var hid: Array = net2.open_route(w, "settlement:e", "lair:den", "event:smugglers", false)
+	check(hid.size() == 1 and not net2.edges[hid[0]]["known"], "trails: a hidden trail")
+	check(net2.notice(Vector2(1000, 0)).has(hid[0]), "trails: noticed at the town it leaves")
+
+func _leads_and_new_places() -> void:
+	var scene = load("res://scenes/world/world.tscn").instantiate()
+	var w = scene._small_world()
+	scene.free()
+	var net = WorldRoutes.build(w)
+	var from := WorldRoutes.poi_id("landmark", w.landmarks[0].id)
+	var target: String = net.lead_target(w, from, "ruins|read")
+	check(target != "" and target == net.lead_target(w, from, "ruins|read"), "leads: a target, the same for the same key (%s)" % target)
+	check(net.nodes[target]["kind"] != "fork" and target != from, "leads: a place, and not here")
+	var here: Vector2 = net.nodes[from]["position"]
+	var d: float = here.distance_to(net.nodes[target]["position"])
+	var around: float = net._distances(from, true).get(target, INF)
+	check(around >= WorldRoutes.LEAD_DETOUR * d, "leads: somewhere the known roads join badly (%.0f vs %.0f)" % [around, d])
+	var picks := {}
+	for k in 12:
+		picks[net.lead_target(w, from, "key|%d" % k)] = true
+	check(picks.size() > 1, "leads: different keys can point different ways (%d)" % picks.size())
+	check(not net.open_route(w, from, target, "lead").is_empty(), "leads: the trail is laid")
+	check(float(net.path(from, target)["length"]) < 1.5 * d, "leads: and now it is a short walk")
+	check(net.lead_target(w, "nowhere", "k") == "", "leads: none from a node that does not exist")
+	# A place nobody placed: a dry spot, clear of everything, a trail to it.
+	var town := WorldRoutes.poi_id("settlement", "riverhold")
+	var spot: Vector2 = net.scout_spot(w, town, "tracks|follow")
+	check(spot != Vector2.INF and spot == net.scout_spot(w, town, "tracks|follow"), "places: a spot, the same for the same key")
+	check(not w.is_water(spot), "places: dry")
+	var dist: float = spot.distance_to(net.nodes[town]["position"])
+	check(dist >= WorldRoutes.SPOT_NEAR - 0.5 and dist <= WorldRoutes.SPOT_FAR + 0.5, "places: within reach (%.0f)" % dist)
+	for id in net.nodes:
+		check(spot.distance_to(net.nodes[id]["position"]) >= WorldRoutes.SPOT_GAP, "places: clear of %s" % id)
+	var camp: String = net.open_place(w, "landmark", "smugglers-cave", spot, town, "event:smugglers")
+	check(camp == "landmark:smugglers-cave" and net.nodes[camp]["known"] and net.nodes[camp]["why"] == "event:smugglers", "places: a known new place, with its why")
+	check(not net.path(town, camp).is_empty(), "places: walkable from the town at once")
+	check(net.open_place(w, "landmark", "smugglers-cave", spot + Vector2(50, 0), town) == camp \
+		and net.nodes[camp]["position"] == spot, "places: opening it twice moves nothing")
+	var orphan: String = net.open_place(w, "lair", "new-den", net.scout_spot(w, town, "other"), "", "event:x")
+	check(not net.path(town, orphan).is_empty(), "places: with no trail named, it hangs off the nearest road")
+
 func _water() -> void:
 	# A lake between two towns: the road goes round it.
 	var w := World.new()
@@ -263,5 +349,7 @@ func _init() -> void:
 	_leads()
 	_attach_later()
 	_water()
+	_trails()
+	_leads_and_new_places()
 	print("test_world_routes: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

@@ -6,7 +6,7 @@
 # What it draws, back to front: the four rings (core/regions.gd), the water,
 # then the network — roads thick and brown, tracks to the lairs thinner and
 # red-brown, hidden paths to the landmarks pale and dashed, hidden byways
-# dotted blue — and the places on top: settlements as white squares (orc holds
+# dotted blue, trails an outcome opened green — and the places on top: settlements as white squares (orc holds
 # orange), lairs as red diamonds, landmarks as blue dots, forks as small dark
 # dots. No labels: an Image has no text, and the doc names what matters.
 extends SceneTree
@@ -22,8 +22,8 @@ const BG := Color(0.13, 0.14, 0.12)
 const RING_INK := [Color(0.20, 0.24, 0.17), Color(0.18, 0.20, 0.15), Color(0.17, 0.16, 0.13), Color(0.16, 0.12, 0.12)]
 const WATER := Color(0.20, 0.33, 0.47)
 const INK := {"road": Color(0.80, 0.63, 0.38), "track": Color(0.72, 0.35, 0.25),
-	"path": Color(0.62, 0.62, 0.58), "byway": Color(0.45, 0.62, 0.85)}
-const WIDTH := {"road": 5, "track": 3, "path": 2, "byway": 2}
+	"path": Color(0.62, 0.62, 0.58), "byway": Color(0.45, 0.62, 0.85), "trail": Color(0.45, 0.85, 0.40)}
+const WIDTH := {"road": 5, "track": 3, "path": 2, "byway": 2, "trail": 3}
 
 var _img: Image
 var _lo := Vector2.ZERO
@@ -32,6 +32,7 @@ var _scale := 1.0
 func _init() -> void:
 	var scene = load("res://scenes/world/world.tscn").instantiate()
 	_shot(scene._small_world(), "small")
+	_opened(scene._small_world())
 	scene.free()
 	_shot(LargeWorld.build(), "large")
 	_shot(ProceduralWorld.build(1), "procedural-1")
@@ -40,8 +41,26 @@ func _init() -> void:
 func _px(p: Vector2) -> Vector2:
 	return (p - _lo) * _scale + Vector2(PAD, PAD)
 
-func _shot(w, name: String) -> void:
+# The small map after play has opened some of it: two landmarks' leads (a
+# trail from each to wherever lead_target() points) and a decision that put a
+# new place on the map (scout_spot() + open_place() from Riverhold). Trails
+# are green; where one crosses a road it makes a crossroads.
+func _opened(w) -> void:
 	var net = WorldRoutes.build(w)
+	for m in w.landmarks.slice(0, 2):
+		var from := WorldRoutes.poi_id("landmark", m.id)
+		var to: String = net.lead_target(w, from, "%s|read" % m.id)
+		if to != "":
+			net.open_route(w, from, to, "landmark:%s" % m.id)
+	var town := WorldRoutes.poi_id("settlement", "riverhold")
+	var spot: Vector2 = net.scout_spot(w, town, "tracks|follow")
+	if spot != Vector2.INF:
+		net.open_place(w, "landmark", "smugglers-cave", spot, town, "event:smugglers")
+	_shot(w, "small-opened", net)
+
+func _shot(w, name: String, net = null) -> void:
+	if net == null:
+		net = WorldRoutes.build(w)
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
 	for id in net.nodes:
@@ -59,7 +78,7 @@ func _shot(w, name: String) -> void:
 		_disc(anchor, float(Regions.BANDS[i]["upto"]) * ext, RING_INK[i])
 	for wat in w.waters:
 		_disc(_px(wat["position"]), float(wat["radius"]) * _scale, WATER)
-	for kind in ["path", "byway", "track", "road"]:
+	for kind in ["path", "byway", "track", "road", "trail"]:
 		for eid in net.edges:
 			var e: Dictionary = net.edges[eid]
 			if e["kind"] != kind:
@@ -81,7 +100,8 @@ func _shot(w, name: String) -> void:
 				_diamond(p, 7, Color(0.85, 0.18, 0.15))
 			"landmark":
 				_disc(p, 6.0, Color.BLACK)
-				_disc(p, 4.5, Color(0.45, 0.65, 0.95))
+				# A place an outcome put on the map is green, like its trail.
+				_disc(p, 4.5, Color(0.45, 0.85, 0.40) if String(n.get("why", "")) != "" else Color(0.45, 0.65, 0.95))
 			"fork":
 				_disc(p, 3.0, Color(0.10, 0.08, 0.06))
 	var out := "res://docs/shots/route-network-%s.png" % name
